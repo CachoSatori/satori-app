@@ -1,0 +1,370 @@
+/* ============================================================
+   SATORI APP — Estilos globales
+   Paleta: negro/blanco, estética japonesa minimalista
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;600&family=Noto+Sans+JP:wght@300;400;500&display=swap');
+
+:root {
+  --black:       #0a0a0a;
+  --white:       #f5f5f0;
+  --gray-dark:   #1a1a1a;
+  --gray-mid:    #444444;
+  --gray-light:  #999999;
+  --gray-pale:   #e8e8e3;
+  --accent:      #c8a96e;   /* dorado tenue — sello japonés */
+  --error:       #c0392b;
+  --success:     #27ae60;
+
+  --font-serif:  'Noto Serif JP', Georgia, serif;
+  --font-sans:   'Noto Sans JP', system-ui, sans-serif;
+
+  --radius:      2px;
+  --transition:  150ms ease;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--black);
+  color: var(--white);
+  font-family: var(--font-sans);
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Loading screen ──────────────────────────────────────── */
+
+.loading-screen {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--black);
+}
+
+.loading-mark {
+  font-family: var(--font-serif);
+  font-size: 3rem;
+  color: var(--accent);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* ── Login ───────────────────────────────────────────────── */
+
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--black);
+  padding: 1.5rem;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.login-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.login-mark {
+  font-family: var(--font-serif);
+  font-size: 3rem;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.login-header h1 {
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  font-weight: 300;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--white);
+}
+
+.login-subtitle {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--gray-light);
+  text-transform: uppercase;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field label {
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--gray-light);
+}
+
+.field input {
+  background: var(--gray-dark);
+  border: 1px solid #2a2a2a;
+  border-radius: var(--radius);
+  color: var(--white);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 300;
+  padding: 0.75rem 1rem;
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.field input:focus {
+  border-color: var(--accent);
+}
+
+.field input::placeholder {
+  color: var(--gray-mid);
+}
+
+.field input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.login-error {
+  font-size: 0.8rem;
+  color: var(--error);
+  text-align: center;
+}
+
+.login-btn {
+  background: var(--white);
+  border: none;
+  border-radius: var(--radius);
+  color: var(--black);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  padding: 0.875rem;
+  text-transform: uppercase;
+  transition: background var(--transition), opacity var(--transition);
+  margin-top: 0.5rem;
+}
+
+.login-btn:hover:not(:disabled) {
+  background: var(--gray-pale);
+}
+
+.login-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.login-footer {
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--gray-mid);
+  letter-spacing: 0.1em;
+}
+
+/* ── App Header ──────────────────────────────────────────── */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #1e1e1e;
+  background: var(--black);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.header-mark {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  color: var(--accent);
+}
+
+.header-title {
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gray-light);
+}
+
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-name {
+  font-size: 0.85rem;
+  color: var(--white);
+}
+
+.user-role {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(200, 169, 110, 0.1);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius);
+}
+
+.btn-signout {
+  background: none;
+  border: 1px solid #2a2a2a;
+  border-radius: var(--radius);
+  color: var(--gray-light);
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0.35rem 0.6rem;
+  transition: border-color var(--transition), color var(--transition);
+}
+
+.btn-signout:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+/* ── Home / Módulos ──────────────────────────────────────── */
+
+.home-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--black);
+}
+
+.home-main {
+  flex: 1;
+  padding: 3rem 1.5rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.modules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px;
+  width: 100%;
+  max-width: 700px;
+  background: #1e1e1e;
+  border: 1px solid #1e1e1e;
+}
+
+.module-card {
+  background: var(--black);
+  border: none;
+  cursor: not-allowed;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1.5rem;
+  position: relative;
+  transition: background var(--transition);
+  text-align: center;
+}
+
+.module-card:not(:disabled) {
+  cursor: pointer;
+}
+
+.module-card:not(:disabled):hover {
+  background: var(--gray-dark);
+}
+
+.module-kanji {
+  font-family: var(--font-serif);
+  font-size: 2.5rem;
+  color: var(--accent);
+  opacity: 0.6;
+  line-height: 1;
+}
+
+.module-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--white);
+}
+
+.module-desc {
+  font-size: 0.7rem;
+  color: var(--gray-light);
+  letter-spacing: 0.05em;
+}
+
+.module-badge {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gray-mid);
+  border: 1px solid #2a2a2a;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius);
+}
+
+/* ── App Footer ──────────────────────────────────────────── */
+
+.app-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #1e1e1e;
+  text-align: center;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--gray-mid);
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 480px) {
+  .modules-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .header-title {
+    display: none;
+  }
+}

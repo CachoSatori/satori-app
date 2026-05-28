@@ -1,93 +1,219 @@
-import type { TipEntry, Employee, RoleTipPoints, UserRole } from '../types/database'
+import type { UserRole } from '../types/database'
 
-export interface TipCalculationRow {
-  employee: Employee
-  hours_worked: number
-  tip_amount_crc: number
-  tip_amount_usd: number
-  points: number
-  payout_crc: number
+// Roles que van al pool de barra (propina extra por horas)
+export const BAR_ROLES: UserRole[] = ['barman', 'barback']
+
+// Roles que NO tienen campo de propina individual (bar + cocina)
+export const NO_PROPINA_ROLES: UserRole[] = ['barman', 'barback', 'cocina']
+
+// Roles que SÍ tienen campo de propina individual
+export const PROPINA_ROLES: UserRole[] = ['salonero', 'runner', 'cajero', 'manager']
+
+// Orden de secciones
+export const ROL_ORDER: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
+
+export const ROL_NAMES: Record<UserRole, string> = {
+  owner:    'Owner',
+  contador: 'Contador',
+  salonero: 'Saloneros',
+  barman:   'Barman',
+  barback:  'Barback',
+  runner:   'Runners',
+  cocina:   'Cocina',
+  cajero:   'Cajeros',
+  manager:  'Manager',
 }
 
-export interface TipCalculationResult {
-  rows: TipCalculationRow[]
-  total_pool_crc: number
-  total_points: number
-  value_per_point: number
+export const ROL_LABELS: Record<UserRole, string> = {
+  owner:    'Propietario',
+  contador: 'Contador',
+  salonero: 'Salonero',
+  barman:   'Barman',
+  barback:  'Barback',
+  runner:   'Runner',
+  cocina:   'Cocina',
+  cajero:   'Cajero',
+  manager:  'Encargado',
 }
 
-// Fórmula Satori:
-// puntos = horas × puntos_rol
-// valor_por_punto = pool_total / suma_puntos
-// take_home = puntos × valor_por_punto
+// ── Línea del draft ────────────────────────────────────────────
 
-export function calculateTips(
-  entries: TipEntry[],
-  employees: Employee[],
-  rolePoints: RoleTipPoints[],
-  exchangeRate: number
-): TipCalculationResult {
-  const pointsMap = new Map(rolePoints.map(r => [r.role, r.points]))
-  const employeeMap = new Map(employees.map(e => [e.id, e]))
+export interface DraftLine {
+  employeeId: string
+  employeeName: string
+  role: UserRole
+  active: boolean
+  hours: number | ''
+  // solo para PROPINA_ROLES:
+  propina_crc: number | ''
+  propina_usd: number | ''
+  // computed:
+  pts_rol: number
+  pts_val: number
+  take_home: number
+}
 
-  // Calcular pool total en CRC
-  const total_pool_crc = entries.reduce((sum, e) => {
-    const usdInCrc = e.tip_amount_usd * exchangeRate
-    return sum + e.tip_amount_crc + usdInCrc
+export interface PoolTotals {
+  generalPool: number
+  barraPool: number
+  totalPool: number
+  totalPoints: number
+  generalRate: number
+}
+
+// ── Cálculo principal — misma lógica que calcTurno() del original ──
+
+export function calcTurno(
+  lines: DraftLine[],
+  pool_efectivo_crc: number,
+  pool_efectivo_usd: number,
+  pool_barra_crc: number,
+  exchange_rate: number,
+): PoolTotals {
+  const worked    = lines.filter(l => l.active)
+  const barWorked = worked.filter(l => BAR_ROLES.includes(l.role))
+  const salaWorked = worked.filter(l => !BAR_ROLES.includes(l.role))
+
+  // Efectivo total en CRC
+  const efectivoCRC = (pool_efectivo_crc || 0) + (pool_efectivo_usd || 0) * exchange_rate
+
+  // Pool general = efectivo + propinas de sala (convertidas a CRC)
+  const propinaSala = salaWorked.reduce((s, l) => {
+    const crc = Number(l.propina_crc) || 0
+    const usd = (Number(l.propina_usd) || 0) * exchange_rate
+    return s + crc + usd
   }, 0)
+  const generalPool = efectivoCRC + propinaSala
 
-  // Calcular puntos por empleado
-  const rows: Array<Omit<TipCalculationRow, 'payout_crc'> & { payout_crc: number }> = entries
-    .map(entry => {
-      const employee = employeeMap.get(entry.employee_id)
-      if (!employee) return null
+  // Puntos de todos
+  worked.forEach(l => {
+    l.pts_val = (Number(l.hours) || 0) * l.pts_rol
+  })
 
-      const rolePointValue = pointsMap.get(employee.role as UserRole) ?? 0
-      const points = entry.hours_worked * rolePointValue
+  const totalPoints = worked.reduce((s, l) => s + l.pts_val, 0)
+  const generalRate = totalPoints > 0 ? generalPool / totalPoints : 0
 
-      return {
-        employee,
-        hours_worked: entry.hours_worked,
-        tip_amount_crc: entry.tip_amount_crc,
-        tip_amount_usd: entry.tip_amount_usd,
-        points,
-        payout_crc: 0, // se calcula abajo
-      }
+  // Take home base: puntos × tasa general
+  worked.forEach(l => {
+    l.take_home = l.pts_val * generalRate
+  })
+
+  // Pool barra: distribuido entre bar workers por horas
+  const totalBarHours = barWorked.reduce((s, l) => s + (Number(l.hours) || 0), 0)
+  if (pool_barra_crc > 0 && totalBarHours > 0) {
+    barWorked.forEach(l => {
+      l.take_home += ((Number(l.hours) || 0) / totalBarHours) * pool_barra_crc
     })
-    .filter((r): r is NonNullable<typeof r> => r !== null)
-
-  const total_points = rows.reduce((sum, r) => sum + r.points, 0)
-  const value_per_point = total_points > 0 ? total_pool_crc / total_points : 0
-
-  // Asignar payout final
-  const finalRows: TipCalculationRow[] = rows.map(r => ({
-    ...r,
-    payout_crc: Math.round(r.points * value_per_point),
-  }))
+  }
 
   return {
-    rows: finalRows,
-    total_pool_crc,
-    total_points,
-    value_per_point,
+    generalPool,
+    barraPool: pool_barra_crc,
+    totalPool: generalPool + pool_barra_crc,
+    totalPoints,
+    generalRate,
   }
 }
 
-// Formatear colones CRC
-export function formatCRC(amount: number): string {
-  return new Intl.NumberFormat('es-CR', {
-    style: 'currency',
-    currency: 'CRC',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
+// ── Formatters ─────────────────────────────────────────────────
+
+export function formatCRC(n: number): string {
+  if (!n && n !== 0) return '—'
+  return '₡ ' + Math.round(n).toLocaleString('es-CR')
 }
 
-// Formatear USD
-export function formatUSD(amount: number): string {
+export function formatNum(n: number): string {
+  return Number(n).toLocaleString('es-CR', { maximumFractionDigits: 1 })
+}
+
+export function formatUSD(n: number): string {
   return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  }).format(amount)
+    style: 'currency', currency: 'USD', minimumFractionDigits: 2,
+  }).format(n)
+}
+
+// ── Para historial (sesiones cerradas) ─────────────────────────
+
+export interface HistoryRow {
+  employeeId: string
+  employeeName: string
+  role: UserRole
+  hours: number
+  propina_crc: number
+  propina_usd: number
+  pts_rol: number
+  pts_val: number
+  payout_crc: number
+}
+
+export interface HistoryCalc {
+  rows: HistoryRow[]
+  generalPool: number
+  barraPool: number
+  totalPool: number
+  totalPoints: number
+  generalRate: number
+}
+
+export function calcHistory(
+  entries: Array<{
+    employee_id: string
+    hours_worked: number
+    tip_amount_crc: number
+    tip_amount_usd: number
+    points: number | null
+    payout_crc: number | null
+  }>,
+  employees: Array<{ id: string; full_name: string; role: UserRole }>,
+  rolePoints: Array<{ role: UserRole; points: number }>,
+  session: {
+    pool_efectivo_crc: number
+    pool_efectivo_usd: number
+    pool_barra_crc: number
+    exchange_rate: number
+  },
+): HistoryCalc {
+  const pointsMap = new Map(rolePoints.map(r => [r.role, r.points]))
+  const empMap    = new Map(employees.map(e => [e.id, e]))
+
+  // Reconstruir DraftLines con los datos de entradas
+  const lines: DraftLine[] = entries.map(e => {
+    const emp = empMap.get(e.employee_id)
+    if (!emp) return null
+    const pts_rol = pointsMap.get(emp.role) ?? 0
+    return {
+      employeeId:   e.employee_id,
+      employeeName: emp.full_name,
+      role:         emp.role,
+      active:       true,
+      hours:        e.hours_worked,
+      propina_crc:  e.tip_amount_crc,
+      propina_usd:  e.tip_amount_usd,
+      pts_rol,
+      pts_val:      0,
+      take_home:    0,
+    } as DraftLine
+  }).filter((l): l is DraftLine => l !== null)
+
+  const totals = calcTurno(
+    lines,
+    session.pool_efectivo_crc,
+    session.pool_efectivo_usd,
+    session.pool_barra_crc,
+    session.exchange_rate,
+  )
+
+  const rows: HistoryRow[] = lines.map(l => ({
+    employeeId:   l.employeeId,
+    employeeName: l.employeeName,
+    role:         l.role,
+    hours:        Number(l.hours),
+    propina_crc:  Number(l.propina_crc),
+    propina_usd:  Number(l.propina_usd),
+    pts_rol:      l.pts_rol,
+    pts_val:      l.pts_val,
+    payout_crc:   Math.round(l.take_home),
+  }))
+
+  return { rows, ...totals }
 }

@@ -48,10 +48,14 @@ export interface Employee {
 export interface TipSession {
   id: string
   session_date: string
+  shift_type: 'AM' | 'PM'
   opened_by: string
   closed_by: string | null
   status: SessionStatus
   exchange_rate: number
+  pool_efectivo_crc: number
+  pool_efectivo_usd: number
+  pool_barra_crc: number
   notes: string | null
   created_at: string
   updated_at: string

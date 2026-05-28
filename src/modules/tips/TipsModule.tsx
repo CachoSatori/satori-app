@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
   getOpenTipSession,
@@ -10,61 +10,127 @@ import {
   closeTipSession,
   upsertTipEntry,
   deleteTipEntry,
+  updateSessionPools,
   savePayouts,
 } from '../../shared/api/tips'
-import { calculateTips, formatCRC, formatUSD } from '../../shared/utils/tipCalculations'
-import type { TipSession, TipEntry, Employee, RoleTipPoints } from '../../shared/types/database'
-import type { TipCalculationResult } from '../../shared/utils/tipCalculations'
-import TipSessionForm from './TipSessionForm'
-import TipEntryRow from './TipEntryRow'
-import TipSummary from './TipSummary'
+import {
+  calcTurno,
+  formatCRC,
+  formatNum,
+  ROL_ORDER,
+  ROL_NAMES,
+  BAR_ROLES,
+  NO_PROPINA_ROLES,
+  type DraftLine,
+  type PoolTotals,
+} from '../../shared/utils/tipCalculations'
+import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import TipHistory from './TipHistory'
 
-type View = 'session' | 'history'
+type View = 'turno' | 'historial'
+
+function todayStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function TipsModule() {
   const { profile } = useAuth()
+  const isManager = profile?.role === 'owner' || profile?.role === 'manager'
 
-  // Estado principal
-  const [view, setView] = useState<View>('session')
-  const [openSession, setOpenSession] = useState<TipSession | null>(null)
-  const [sessions, setSessions] = useState<TipSession[]>([])
-  const [entries, setEntries] = useState<TipEntry[]>([])
+  // ── Vistas ────────────────────────────────────────────────
+  const [view, setView] = useState<View>('turno')
+
+  // ── Datos base ────────────────────────────────────────────
   const [employees, setEmployees] = useState<Employee[]>([])
   const [rolePoints, setRolePoints] = useState<RoleTipPoints[]>([])
-  const [calculation, setCalculation] = useState<TipCalculationResult | null>(null)
+  const [sessions, setSessions] = useState<TipSession[]>([])
+  const [openSession, setOpenSession] = useState<TipSession | null>(null)
 
-  // UI state
+  // ── Estado UI sesión abierta ──────────────────────────────
+  const [fecha, setFecha] = useState(todayStr())
+  const [shiftType, setShiftType] = useState<'AM' | 'PM'>('PM')
+  const [exchangeRate, setExchangeRate] = useState(640)
+  const [efectivoCRC, setEfectivoCRC] = useState<number | ''>('')
+  const [efectivoUSD, setEfectivoUSD] = useState<number | ''>('')
+  const [barraCRC, setBarraCRC] = useState<number | ''>('')
+
+  // Líneas del draft (por empleado)
+  const [lines, setLines] = useState<DraftLine[]>([])
+  // Totales calculados
+  const [totals, setTotals] = useState<PoolTotals | null>(null)
+
+  // ── Estado UI ─────────────────────────────────────────────
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showNewSession, setShowNewSession] = useState(false)
   const [closing, setClosing] = useState(false)
 
-  const isManager = profile?.role === 'owner' || profile?.role === 'manager'
+  // Refs para evitar re-saves infinitos
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Carga inicial
+  // ── Cargar datos ──────────────────────────────────────────
   const loadData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
     try {
-      setLoading(true)
-      setError(null)
-      const [open, allSessions, emps, points] = await Promise.all([
+      const [open, allSessions, emps, pts] = await Promise.all([
         getOpenTipSession(),
         getTipSessions(),
         getActiveEmployees(),
         getRoleTipPoints(),
       ])
-      setOpenSession(open)
-      setSessions(allSessions)
       setEmployees(emps)
-      setRolePoints(points)
+      setRolePoints(pts)
+      setSessions(allSessions)
+      setOpenSession(open)
 
       if (open) {
-        const sessionEntries = await getTipEntriesBySession(open.id)
-        setEntries(sessionEntries)
-        if (sessionEntries.length > 0) {
-          const calc = calculateTips(sessionEntries, emps, points, open.exchange_rate)
-          setCalculation(calc)
-        }
+        // Restaurar pools del session
+        setEfectivoCRC(open.pool_efectivo_crc || '')
+        setEfectivoUSD(open.pool_efectivo_usd || '')
+        setBarraCRC(open.pool_barra_crc || '')
+        setShiftType(open.shift_type)
+        setFecha(open.session_date)
+        setExchangeRate(open.exchange_rate)
+
+        // Cargar entradas
+        const entries = await getTipEntriesBySession(open.id)
+        const ptsMap = new Map(pts.map(r => [r.role, r.points]))
+
+        const draftLines: DraftLine[] = emps.map(emp => {
+          const entry = entries.find(e => e.employee_id === emp.id)
+          const pts_rol = ptsMap.get(emp.role) ?? 0
+          return {
+            employeeId:   emp.id,
+            employeeName: emp.full_name,
+            role:         emp.role,
+            active:       !!entry,
+            hours:        entry?.hours_worked ?? '',
+            propina_crc:  entry?.tip_amount_crc ?? '',
+            propina_usd:  entry?.tip_amount_usd ?? '',
+            pts_rol,
+            pts_val:      0,
+            take_home:    0,
+          }
+        })
+        setLines(draftLines)
+      } else {
+        // Sin sesión: armar líneas vacías para cuando se cree
+        const ptsMap = new Map(pts.map(r => [r.role, r.points]))
+        const draftLines: DraftLine[] = emps.map(emp => ({
+          employeeId:   emp.id,
+          employeeName: emp.full_name,
+          role:         emp.role,
+          active:       false,
+          hours:        '',
+          propina_crc:  '',
+          propina_usd:  '',
+          pts_rol:      ptsMap.get(emp.role) ?? 0,
+          pts_val:      0,
+          take_home:    0,
+        }))
+        setLines(draftLines)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error cargando datos')
@@ -75,90 +141,181 @@ export default function TipsModule() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Recalcular cuando cambian las entradas
+  // ── Recalcular totales en tiempo real ─────────────────────
   useEffect(() => {
-    if (openSession && entries.length > 0) {
-      const calc = calculateTips(entries, employees, rolePoints, openSession.exchange_rate)
-      setCalculation(calc)
-    } else {
-      setCalculation(null)
-    }
-  }, [entries, employees, rolePoints, openSession])
+    if (!openSession) { setTotals(null); return }
+    const linesClone = lines.map(l => ({ ...l }))
+    const t = calcTurno(
+      linesClone,
+      Number(efectivoCRC) || 0,
+      Number(efectivoUSD) || 0,
+      Number(barraCRC) || 0,
+      exchangeRate,
+    )
+    // Actualizar pts_val y take_home en las líneas
+    setLines(prev => prev.map((l, i) => ({
+      ...l,
+      pts_val:   linesClone[i]?.pts_val   ?? l.pts_val,
+      take_home: linesClone[i]?.take_home ?? l.take_home,
+    })))
+    setTotals(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines.map(l => `${l.active}|${l.hours}|${l.propina_crc}|${l.propina_usd}`).join(','),
+      efectivoCRC, efectivoUSD, barraCRC, exchangeRate, openSession?.id])
 
-  // Abrir nueva sesión
-  const handleCreateSession = async (date: string, exchangeRate: number, notes?: string) => {
+  // ── Auto-guardar pools en Supabase ────────────────────────
+  const scheduleSavePools = useCallback(() => {
+    if (!openSession) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      updateSessionPools(openSession.id, {
+        pool_efectivo_crc: Number(efectivoCRC) || 0,
+        pool_efectivo_usd: Number(efectivoUSD) || 0,
+        pool_barra_crc:    Number(barraCRC)    || 0,
+      }).catch(() => {})
+    }, 800)
+  }, [openSession, efectivoCRC, efectivoUSD, barraCRC])
+
+  useEffect(() => { scheduleSavePools() }, [scheduleSavePools])
+
+  // ── Abrir sesión ──────────────────────────────────────────
+  const handleCreateSession = async () => {
     if (!profile) return
     try {
-      const session = await createTipSession(date, exchangeRate, profile.id, notes)
+      const session = await createTipSession({
+        session_date:  fecha,
+        shift_type:    shiftType,
+        exchange_rate: exchangeRate,
+        opened_by:     profile.id,
+      })
       setOpenSession(session)
-      setEntries([])
       setShowNewSession(false)
-      await loadData()
+      // Resetear líneas
+      const ptsMap = new Map(rolePoints.map(r => [r.role, r.points]))
+      setLines(employees.map(emp => ({
+        employeeId:   emp.id,
+        employeeName: emp.full_name,
+        role:         emp.role,
+        active:       false,
+        hours:        '',
+        propina_crc:  '',
+        propina_usd:  '',
+        pts_rol:      ptsMap.get(emp.role) ?? 0,
+        pts_val:      0,
+        take_home:    0,
+      })))
+      setEfectivoCRC('')
+      setEfectivoUSD('')
+      setBarraCRC('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error creando sesión')
     }
   }
 
-  // Guardar entrada de empleado
-  const handleSaveEntry = async (
-    employeeId: string,
-    hoursWorked: number,
-    tipCrc: number,
-    tipUsd: number
-  ) => {
+  // ── Toggle empleado ───────────────────────────────────────
+  const toggleLine = async (employeeId: string, checked: boolean) => {
     if (!openSession) return
-    try {
-      const updated = await upsertTipEntry({
-        session_id: openSession.id,
-        employee_id: employeeId,
-        hours_worked: hoursWorked,
-        tip_amount_crc: tipCrc,
-        tip_amount_usd: tipUsd,
-      })
-      setEntries(prev => {
-        const idx = prev.findIndex(e => e.employee_id === employeeId)
-        if (idx >= 0) { const next = [...prev]; next[idx] = updated; return next }
-        return [...prev, updated]
-      })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error guardando entrada')
+    if (!checked) {
+      // Desmarcar: eliminar entrada
+      await deleteTipEntry(openSession.id, employeeId).catch(() => {})
+      setLines(prev => prev.map(l =>
+        l.employeeId === employeeId
+          ? { ...l, active: false, hours: '', propina_crc: '', propina_usd: '', pts_val: 0, take_home: 0 }
+          : l
+      ))
+    } else {
+      // Marcar: poner horas default
+      const defaultHours = shiftType === 'AM' ? 5 : 8
+      const line = lines.find(l => l.employeeId === employeeId)
+      if (!line) return
+      const h = NO_PROPINA_ROLES.includes(line.role) ? defaultHours : (shiftType === 'AM' ? 5 : 0)
+      setLines(prev => prev.map(l =>
+        l.employeeId === employeeId ? { ...l, active: true, hours: h } : l
+      ))
+      // Persistir
+      await upsertTipEntry({
+        session_id:     openSession.id,
+        employee_id:    employeeId,
+        hours_worked:   h,
+        tip_amount_crc: 0,
+        tip_amount_usd: 0,
+      }).catch(() => {})
     }
   }
 
-  // Eliminar entrada
-  const handleDeleteEntry = async (employeeId: string) => {
-    if (!openSession) return
-    try {
-      await deleteTipEntry(openSession.id, employeeId)
-      setEntries(prev => prev.filter(e => e.employee_id !== employeeId))
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error eliminando entrada')
-    }
+  // ── Cambiar horas ─────────────────────────────────────────
+  const handleHoursChange = (employeeId: string, val: string) => {
+    setLines(prev => prev.map(l =>
+      l.employeeId === employeeId ? { ...l, hours: val === '' ? '' : parseFloat(val) || '' } : l
+    ))
   }
 
-  // Cerrar sesión y guardar payouts
+  // ── Cambiar propina ───────────────────────────────────────
+  const handlePropinaChange = (employeeId: string, field: 'propina_crc' | 'propina_usd', val: string) => {
+    setLines(prev => prev.map(l =>
+      l.employeeId === employeeId ? { ...l, [field]: val === '' ? '' : parseFloat(val) || '' } : l
+    ))
+  }
+
+  // ── Auto-save entrada al dejar campo ─────────────────────
+  const handleLineBlur = async (employeeId: string) => {
+    if (!openSession) return
+    const line = lines.find(l => l.employeeId === employeeId)
+    if (!line || !line.active) return
+    const hours = Number(line.hours) || 0
+    if (hours <= 0) return
+    await upsertTipEntry({
+      session_id:     openSession.id,
+      employee_id:    employeeId,
+      hours_worked:   hours,
+      tip_amount_crc: Number(line.propina_crc) || 0,
+      tip_amount_usd: Number(line.propina_usd) || 0,
+    }).catch(() => {})
+  }
+
+  // ── Cerrar turno ──────────────────────────────────────────
   const handleCloseSession = async () => {
-    if (!openSession || !profile || !calculation) return
+    if (!openSession || !profile) return
+    const workedLines = lines.filter(l => l.active)
+    if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
     setClosing(true)
     try {
-      // Guardar los montos calculados en cada entrada
-      const payoutData = calculation.rows.map(row => {
-        const entry = entries.find(e => e.employee_id === row.employee.id)!
-        return { id: entry.id, points: row.points, payout_crc: row.payout_crc }
+      // Guardar pool final
+      await updateSessionPools(openSession.id, {
+        pool_efectivo_crc: Number(efectivoCRC) || 0,
+        pool_efectivo_usd: Number(efectivoUSD) || 0,
+        pool_barra_crc:    Number(barraCRC)    || 0,
       })
-      await savePayouts(payoutData)
+
+      // Guardar todas las entradas con payout
+      const entries = await getTipEntriesBySession(openSession.id)
+      const payouts = workedLines.map(l => {
+        const entry = entries.find(e => e.employee_id === l.employeeId)
+        if (!entry) return null
+        return { id: entry.id, points: l.pts_val, payout_crc: Math.round(l.take_home) }
+      }).filter((p): p is NonNullable<typeof p> => p !== null)
+
+      await savePayouts(payouts)
       await closeTipSession(openSession.id, profile.id)
+
       setOpenSession(null)
-      setEntries([])
-      setCalculation(null)
+      setTotals(null)
+      setEfectivoCRC('')
+      setEfectivoUSD('')
+      setBarraCRC('')
+      // Resetear líneas
+      setLines(prev => prev.map(l => ({
+        ...l, active: false, hours: '', propina_crc: '', propina_usd: '', pts_val: 0, take_home: 0,
+      })))
       await loadData()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error cerrando sesión')
+      setError(e instanceof Error ? e.message : 'Error cerrando turno')
     } finally {
       setClosing(false)
     }
   }
 
+  // ── Loading ───────────────────────────────────────────────
   if (loading) {
     return (
       <div className="module-loading">
@@ -167,132 +324,200 @@ export default function TipsModule() {
     )
   }
 
+  // ── Render ────────────────────────────────────────────────
   return (
     <div className="tips-module">
-      {/* Header del módulo */}
-      <div className="module-header">
-        <div className="module-header-left">
-          <span className="module-header-kanji">心</span>
+
+      {/* Header */}
+      <div className="tips-header">
+        <div className="tips-header-left">
+          <span className="tips-kanji">心</span>
           <div>
-            <h2 className="module-header-title">Propinas</h2>
-            <p className="module-header-sub">Pool del turno · Satori</p>
+            <h2 className="tips-title">Propinas</h2>
+            <p className="tips-subtitle">Pool del turno · Satori</p>
           </div>
         </div>
-        <div className="module-header-actions">
-          <button
-            className={`tab-btn ${view === 'session' ? 'active' : ''}`}
-            onClick={() => setView('session')}
-          >
+        <div className="tips-tabs">
+          <button className={`tips-tab ${view === 'turno' ? 'active' : ''}`} onClick={() => setView('turno')}>
             Turno actual
           </button>
-          <button
-            className={`tab-btn ${view === 'history' ? 'active' : ''}`}
-            onClick={() => setView('history')}
-          >
+          <button className={`tips-tab ${view === 'historial' ? 'active' : ''}`} onClick={() => setView('historial')}>
             Historial
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="module-error">
+        <div className="tips-error">
           <span>{error}</span>
           <button onClick={() => setError(null)}>✕</button>
         </div>
       )}
 
-      {/* Vista: Turno actual */}
-      {view === 'session' && (
-        <div className="tips-session-view">
+      {/* ─── TURNO ACTUAL ─── */}
+      {view === 'turno' && (
+        <div className="tips-body">
+
+          {/* Sin sesión abierta */}
           {!openSession && !showNewSession && (
-            <div className="tips-empty">
-              <p className="tips-empty-text">No hay sesión abierta</p>
+            <div className="tips-empty-state">
+              <p className="tips-empty-text">No hay turno abierto</p>
               {isManager && (
-                <button className="btn-primary" onClick={() => setShowNewSession(true)}>
+                <button className="tips-btn-primary" onClick={() => setShowNewSession(true)}>
                   Abrir turno
                 </button>
               )}
             </div>
           )}
 
+          {/* Formulario abrir sesión */}
           {!openSession && showNewSession && (
-            <TipSessionForm
-              onSubmit={handleCreateSession}
-              onCancel={() => setShowNewSession(false)}
-            />
+            <div className="tips-new-session">
+              <div className="tips-section-label">Nuevo turno</div>
+              <div className="tips-config-grid">
+                <div className="tips-field">
+                  <div className="tips-field-label">Fecha</div>
+                  <input type="date" className="tips-input-dark" value={fecha}
+                    onChange={e => setFecha(e.target.value)} />
+                </div>
+                <div className="tips-field">
+                  <div className="tips-field-label">Turno</div>
+                  <select className="tips-input-dark" value={shiftType}
+                    onChange={e => setShiftType(e.target.value as 'AM' | 'PM')}>
+                    <option value="PM">PM — Noche</option>
+                    <option value="AM">AM — Mediodía</option>
+                  </select>
+                </div>
+                <div className="tips-field">
+                  <div className="tips-field-label">Tipo de cambio (₡/USD)</div>
+                  <input type="number" className="tips-input-dark" value={exchangeRate} min={1}
+                    onChange={e => setExchangeRate(Number(e.target.value) || 640)} />
+                </div>
+              </div>
+              <div className="tips-new-session-actions">
+                <button className="tips-btn-teal" onClick={handleCreateSession}>
+                  ▶ Abrir turno
+                </button>
+                <button className="tips-btn-ghost" onClick={() => setShowNewSession(false)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
           )}
 
+          {/* Sesión abierta */}
           {openSession && (
             <>
-              {/* Info de sesión */}
-              <div className="session-info-bar">
-                <div className="session-info-item">
-                  <span className="info-label">Fecha</span>
-                  <span className="info-value">{openSession.session_date}</span>
+              {/* Config bar */}
+              <div className="tips-config-bar">
+                <div className="tips-config-meta">
+                  <strong>{openSession.session_date}</strong> · {openSession.shift_type}
                 </div>
-                <div className="session-info-item">
-                  <span className="info-label">Tipo de cambio</span>
-                  <span className="info-value">₡{openSession.exchange_rate.toLocaleString('es-CR')}</span>
+                <div className="tips-config-meta">
+                  Tipo de cambio: <strong>₡{openSession.exchange_rate.toLocaleString('es-CR')}</strong>
                 </div>
-                <div className="session-info-item">
-                  <span className="info-label">Estado</span>
-                  <span className="info-value status-open">Abierto</span>
+                <div className="tips-config-meta tips-status-open">
+                  ● Abierto
                 </div>
               </div>
 
-              {/* Tabla de empleados */}
-              <div className="tips-table-container">
-                <table className="tips-table">
-                  <thead>
-                    <tr>
-                      <th>Empleado</th>
-                      <th>Rol</th>
-                      <th>Horas</th>
-                      <th>Propina CRC</th>
-                      <th>Propina USD</th>
-                      {calculation && <th>Puntos</th>}
-                      {calculation && <th>A cobrar</th>}
-                      {isManager && <th></th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {employees.map(emp => {
-                      const entry = entries.find(e => e.employee_id === emp.id)
-                      const calcRow = calculation?.rows.find(r => r.employee.id === emp.id)
-                      return (
-                        <TipEntryRow
-                          key={emp.id}
-                          employee={emp}
-                          entry={entry}
-                          calcRow={calcRow}
-                          showCalc={!!calculation}
+              {/* Pool efectivo */}
+              <div className="tips-efectivo-row">
+                <span className="tips-efectivo-label">💵 Efectivo</span>
+                <div className="tips-efectivo-inputs">
+                  <div className="tips-money-field">
+                    <span className="tips-money-prefix">₡</span>
+                    <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
+                      value={efectivoCRC}
+                      onChange={e => setEfectivoCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                  </div>
+                  <div className="tips-money-field">
+                    <span className="tips-money-prefix">$</span>
+                    <input type="number" className="tips-money-input" placeholder="0.00" step={0.01} min={0}
+                      value={efectivoUSD}
+                      onChange={e => setEfectivoUSD(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                  </div>
+                </div>
+                <span className="tips-field-hint">Propina en efectivo al pool general</span>
+              </div>
+
+              {/* Empleados por sección */}
+              {ROL_ORDER.filter(rol => {
+                // solo mostrar si hay empleados activos en ese rol
+                return lines.some(l => l.role === rol)
+              }).map(rol => {
+                const rolLines = lines.filter(l => l.role === rol)
+                const isBar = BAR_ROLES.includes(rol)
+                const pts = rolePoints.find(r => r.role === rol)?.points ?? 0
+
+                return (
+                  <div key={rol} className="tips-rol-section">
+                    {/* Sección barra: mostrar pool_barra antes del primer grupo de barra */}
+                    {isBar && rol === 'barman' && (
+                      <div className="tips-barra-row">
+                        <span className="tips-barra-label">🍸 Pool Barra</span>
+                        <div className="tips-money-field">
+                          <span className="tips-money-prefix">₡</span>
+                          <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
+                            value={barraCRC}
+                            onChange={e => setBarraCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                        </div>
+                        <span className="tips-field-hint">Dividido entre barra por horas</span>
+                      </div>
+                    )}
+
+                    <div className="tips-sl">
+                      {ROL_NAMES[rol]}
+                      <span className="tips-sl-pts">{pts} pts/hora</span>
+                    </div>
+                    <div className="tips-emp-rows">
+                      {rolLines.map(line => (
+                        <TipLineRow
+                          key={line.employeeId}
+                          line={line}
+                          isBar={NO_PROPINA_ROLES.includes(line.role)}
                           isManager={isManager}
-                          onSave={handleSaveEntry}
-                          onDelete={handleDeleteEntry}
+                          shiftType={shiftType}
+                          onToggle={checked => toggleLine(line.employeeId, checked)}
+                          onHoursChange={val => handleHoursChange(line.employeeId, val)}
+                          onPropinaChange={(field, val) => handlePropinaChange(line.employeeId, field, val)}
+                          onBlur={() => handleLineBlur(line.employeeId)}
                         />
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
 
-              {/* Resumen */}
-              {calculation && (
-                <TipSummary
-                  calculation={calculation}
-                  exchangeRate={openSession.exchange_rate}
-                />
+              {/* Pool totals */}
+              {totals && (
+                <div className="tips-pool-bar">
+                  <div className="tips-pool-item">
+                    <div className="tips-pool-label">Pool total</div>
+                    <div className="tips-pool-val gold">{formatCRC(totals.totalPool)}</div>
+                  </div>
+                  <div className="tips-pool-item">
+                    <div className="tips-pool-label">Total puntos</div>
+                    <div className="tips-pool-val dim">{formatNum(totals.totalPoints)}</div>
+                  </div>
+                  <div className="tips-pool-item">
+                    <div className="tips-pool-label">Valor por punto</div>
+                    <div className="tips-pool-val teal">{formatCRC(totals.generalRate)}</div>
+                  </div>
+                  <div className="tips-pool-item">
+                    <div className="tips-pool-label">Distribuido</div>
+                    <div className="tips-pool-val gold">
+                      {formatCRC(lines.filter(l => l.active).reduce((s, l) => s + l.take_home, 0))}
+                    </div>
+                  </div>
+                </div>
               )}
 
-              {/* Botón cerrar */}
-              {isManager && entries.length > 0 && (
+              {/* Cerrar turno */}
+              {isManager && lines.some(l => l.active) && (
                 <div className="tips-close-bar">
-                  <button
-                    className="btn-danger"
-                    onClick={handleCloseSession}
-                    disabled={closing}
-                  >
-                    {closing ? 'Cerrando…' : 'Cerrar turno y guardar payouts'}
+                  <button className="tips-btn-danger" onClick={handleCloseSession} disabled={closing}>
+                    {closing ? 'Cerrando…' : '▶ Cerrar turno y guardar payouts'}
                   </button>
                 </div>
               )}
@@ -301,17 +526,117 @@ export default function TipsModule() {
         </div>
       )}
 
-      {/* Vista: Historial */}
-      {view === 'history' && (
-        <TipHistory
-          sessions={sessions}
-          employees={employees}
-          rolePoints={rolePoints}
-        />
+      {/* ─── HISTORIAL ─── */}
+      {view === 'historial' && (
+        <div className="tips-body">
+          <TipHistory
+            sessions={sessions}
+            employees={employees}
+            rolePoints={rolePoints}
+          />
+        </div>
       )}
     </div>
   )
 }
 
-// Re-exportar utilidades para uso externo
-export { formatCRC, formatUSD }
+// ── Componente fila de empleado ────────────────────────────────
+
+interface TipLineRowProps {
+  line: DraftLine
+  isBar: boolean          // bar o cocina = sin campo propina
+  isManager: boolean
+  shiftType: 'AM' | 'PM'
+  onToggle: (checked: boolean) => void
+  onHoursChange: (val: string) => void
+  onPropinaChange: (field: 'propina_crc' | 'propina_usd', val: string) => void
+  onBlur: () => void
+}
+
+function TipLineRow({ line, isBar, isManager, shiftType, onToggle, onHoursChange, onPropinaChange, onBlur }: TipLineRowProps) {
+  const defaultHrs = shiftType === 'AM' ? 5 : (NO_PROPINA_ROLES.includes(line.role) ? 8 : 0)
+
+  return (
+    <div className={`tips-emp-row${line.active ? ' worked' : ''}`}>
+      <label className="tips-emp-label" htmlFor={`chk-${line.employeeId}`}>
+        {isManager ? (
+          <input
+            type="checkbox"
+            id={`chk-${line.employeeId}`}
+            className="tips-emp-chk"
+            checked={line.active}
+            onChange={e => onToggle(e.target.checked)}
+          />
+        ) : (
+          <span className={`tips-emp-dot ${line.active ? 'active' : ''}`} />
+        )}
+        <span className="tips-emp-name">{line.employeeName}</span>
+      </label>
+
+      {line.active && (
+        <div className={`tips-emp-fields ${isBar ? 'three-col' : 'four-col'}`}>
+          {/* Horas */}
+          <div className="tips-emp-field">
+            <div className="tips-emp-field-label">Horas</div>
+            <input
+              type="number" className="tips-emp-input" min={0} max={24} step={0.25}
+              value={line.hours}
+              placeholder={String(defaultHrs)}
+              onChange={e => onHoursChange(e.target.value)}
+              onBlur={onBlur}
+              disabled={!isManager}
+            />
+          </div>
+
+          {/* Propina CRC+USD — solo para roles de sala */}
+          {!isBar && (
+            <>
+              <div className="tips-emp-field">
+                <div className="tips-emp-field-label">Propina ₡</div>
+                <div className="tips-money-wrap">
+                  <span className="tips-money-sm-prefix">₡</span>
+                  <input
+                    type="number" className="tips-emp-input-money" min={0} step={100}
+                    value={line.propina_crc} placeholder="0"
+                    onChange={e => onPropinaChange('propina_crc', e.target.value)}
+                    onBlur={onBlur}
+                    disabled={!isManager}
+                  />
+                </div>
+              </div>
+              <div className="tips-emp-field">
+                <div className="tips-emp-field-label">Propina $</div>
+                <div className="tips-money-wrap">
+                  <span className="tips-money-sm-prefix">$</span>
+                  <input
+                    type="number" className="tips-emp-input-money" min={0} step={0.01}
+                    value={line.propina_usd} placeholder="0"
+                    onChange={e => onPropinaChange('propina_usd', e.target.value)}
+                    onBlur={onBlur}
+                    disabled={!isManager}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Puntos */}
+          <div className="tips-emp-field">
+            <div className="tips-emp-field-label">Puntos</div>
+            <div className="tips-pts-badge">
+              {line.pts_val > 0 ? formatNum(line.pts_val) : '—'}
+            </div>
+          </div>
+
+          {/* Take home */}
+          <div className="tips-emp-field">
+            <div className="tips-emp-field-label">Take Home</div>
+            <div className={`tips-take-badge${line.take_home > 0 ? '' : ' zero'}`}>
+              {line.take_home > 0 ? formatCRC(line.take_home) : '₡ —'}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

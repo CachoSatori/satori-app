@@ -8,7 +8,7 @@ export async function getTipSessions(): Promise<TipSession[]> {
     .from('tip_sessions')
     .select('*')
     .order('session_date', { ascending: false })
-    .limit(30)
+    .limit(60)
   if (error) throw new Error(error.message)
   return data as TipSession[]
 }
@@ -25,26 +25,41 @@ export async function getOpenTipSession(): Promise<TipSession | null> {
   return data as TipSession | null
 }
 
-export async function createTipSession(
-  sessionDate: string,
-  exchangeRate: number,
-  openedBy: string,
+export async function createTipSession(params: {
+  session_date: string
+  shift_type: 'AM' | 'PM'
+  exchange_rate: number
+  opened_by: string
   notes?: string
-): Promise<TipSession> {
-  const payload = {
-    session_date: sessionDate,
-    exchange_rate: exchangeRate,
-    opened_by: openedBy,
-    status: 'open',
-    notes: notes ?? null,
-  }
+}): Promise<TipSession> {
   const { data, error } = await supabase
     .from('tip_sessions')
-    .insert(payload as never)
+    .insert({
+      session_date:      params.session_date,
+      shift_type:        params.shift_type,
+      exchange_rate:     params.exchange_rate,
+      opened_by:         params.opened_by,
+      status:            'open',
+      pool_efectivo_crc: 0,
+      pool_efectivo_usd: 0,
+      pool_barra_crc:    0,
+      notes:             params.notes ?? null,
+    } as never)
     .select()
     .single()
   if (error) throw new Error(error.message)
   return data as TipSession
+}
+
+export async function updateSessionPools(
+  sessionId: string,
+  pools: { pool_efectivo_crc: number; pool_efectivo_usd: number; pool_barra_crc: number }
+): Promise<void> {
+  const { error } = await supabase
+    .from('tip_sessions')
+    .update(pools as never)
+    .eq('id', sessionId)
+  if (error) throw new Error(error.message)
 }
 
 export async function closeTipSession(sessionId: string, closedBy: string): Promise<void> {
@@ -55,7 +70,7 @@ export async function closeTipSession(sessionId: string, closedBy: string): Prom
   if (error) throw new Error(error.message)
 }
 
-// ── Entradas de propinas ────────────────────────────────────
+// ── Entradas ────────────────────────────────────────────────
 
 export async function getTipEntriesBySession(sessionId: string): Promise<TipEntry[]> {
   const { data, error } = await supabase
@@ -94,13 +109,13 @@ export async function deleteTipEntry(sessionId: string, employeeId: string): Pro
 export async function savePayouts(
   entries: Array<{ id: string; points: number; payout_crc: number }>
 ): Promise<void> {
-  for (const entry of entries) {
-    const { error } = await supabase
+  await Promise.all(entries.map(e =>
+    supabase
       .from('tip_entries')
-      .update({ points: entry.points, payout_crc: entry.payout_crc } as never)
-      .eq('id', entry.id)
-    if (error) throw new Error(error.message)
-  }
+      .update({ points: e.points, payout_crc: e.payout_crc } as never)
+      .eq('id', e.id)
+      .then(({ error }) => { if (error) throw new Error(error.message) })
+  ))
 }
 
 // ── Empleados ───────────────────────────────────────────────
@@ -113,24 +128,6 @@ export async function getActiveEmployees(): Promise<Employee[]> {
     .order('full_name')
   if (error) throw new Error(error.message)
   return data as Employee[]
-}
-
-export async function createEmployee(employee: { full_name: string; role: string }): Promise<Employee> {
-  const { data, error } = await supabase
-    .from('employees')
-    .insert(employee as never)
-    .select()
-    .single()
-  if (error) throw new Error(error.message)
-  return data as Employee
-}
-
-export async function deactivateEmployee(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('employees')
-    .update({ is_active: false } as never)
-    .eq('id', id)
-  if (error) throw new Error(error.message)
 }
 
 // ── Puntos por rol ──────────────────────────────────────────

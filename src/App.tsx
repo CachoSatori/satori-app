@@ -2,56 +2,26 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './shared/hooks/useAuth'
 import LoginPage from './pages/auth/LoginPage'
 import HomePage from './pages/HomePage'
+import TipsModule from './modules/tips/TipsModule'
 
-// Guard: redirige a login si no hay sesión
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div className="loading-screen">
-        <span className="loading-mark">祭</span>
-      </div>
-    )
-  }
-
+  if (loading) return <div className="loading-screen"><span className="loading-mark">祭</span></div>
   return user ? <>{children}</> : <Navigate to="/login" replace />
 }
 
-// Guard: redirige al home si ya hay sesión
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
-
-  if (loading) {
-    return (
-      <div className="loading-screen">
-        <span className="loading-mark">祭</span>
-      </div>
-    )
-  }
-
+  if (loading) return <div className="loading-screen"><span className="loading-mark">祭</span></div>
   return user ? <Navigate to="/" replace /> : <>{children}</>
 }
 
 function AppRoutes() {
   return (
     <Routes>
-      <Route
-        path="/login"
-        element={
-          <PublicRoute>
-            <LoginPage />
-          </PublicRoute>
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <PrivateRoute>
-            <HomePage />
-          </PrivateRoute>
-        }
-      />
+      <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+      <Route path="/" element={<PrivateRoute><HomePage /></PrivateRoute>} />
+      <Route path="/propinas" element={<PrivateRoute><TipsModule /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

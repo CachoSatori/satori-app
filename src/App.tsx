@@ -40,7 +40,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/satori-app">
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>

@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Employee, Profile, RoleTipPoints, UserRole } from '../types/database'
+import type { Employee, Profile, UserRole } from '../types/database'
 
 // ── Empleados ───────────────────────────────────────────────
 

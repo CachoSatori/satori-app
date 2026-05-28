@@ -829,3 +829,98 @@ html, body, #root {
 }
 
 .history-summary strong { color: var(--white); }
+
+/* ── Admin Module ────────────────────────────────────────── */
+
+.admin-section {
+  max-width: 640px;
+}
+
+.admin-section + .admin-section {
+  margin-top: 2.5rem;
+}
+
+.admin-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #1e1e1e;
+}
+
+.admin-section-title {
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--gray-light);
+}
+
+.admin-form {
+  background: var(--gray-dark);
+  border: 1px solid #2a2a2a;
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.admin-table th {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gray-light);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #1e1e1e;
+}
+
+.admin-row td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #111;
+  vertical-align: middle;
+}
+
+.admin-row.inactive td { opacity: 0.5; }
+
+.admin-emp-name {
+  font-size: 0.9rem;
+  color: var(--white);
+}
+
+.admin-row-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* select en admin */
+.admin-form select,
+.admin-row select {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: var(--radius);
+  color: var(--white);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.admin-form select {
+  background: #0d0d0d;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+  border-color: #2a2a2a;
+}
+
+.admin-form select:focus { border-color: var(--accent); }

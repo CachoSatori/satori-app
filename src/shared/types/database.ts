@@ -2,6 +2,7 @@
 
 export type UserRole =
   | 'owner'
+  | 'contador'
   | 'manager'
   | 'cajero'
   | 'salonero'

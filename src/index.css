@@ -1534,19 +1534,19 @@ html, body, #root {
   justify-content: space-between;
   margin-bottom: 1.25rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid rgba(0,0,0,0.1);
 }
 
 .admin-section-title {
   font-size: 0.7rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--gray-light);
+  color: var(--t-teal);
 }
 
 .admin-form {
-  background: var(--gray-dark);
-  border: 1px solid #2a2a2a;
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.1);
   border-radius: var(--radius);
   padding: 1.25rem;
   margin-bottom: 1.25rem;
@@ -1565,15 +1565,15 @@ html, body, #root {
   font-size: 0.65rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--gray-light);
+  color: var(--t-teal);
   padding: 0.5rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid #1e1e1e;
+  border-bottom: 1px solid rgba(0,0,0,0.12);
 }
 
 .admin-row td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #111;
+  border-bottom: 1px solid rgba(0,0,0,0.07);
   vertical-align: middle;
 }
 
@@ -1581,7 +1581,8 @@ html, body, #root {
 
 .admin-emp-name {
   font-size: 0.9rem;
-  color: var(--white);
+  font-weight: 500;
+  color: var(--t-ink);
 }
 
 .admin-row-actions {
@@ -1593,10 +1594,10 @@ html, body, #root {
 /* select en admin */
 .admin-form select,
 .admin-row select {
-  background: #111;
-  border: 1px solid #2a2a2a;
+  background: var(--t-paper);
+  border: 1px solid rgba(0,0,0,0.2);
   border-radius: var(--radius);
-  color: var(--white);
+  color: var(--t-ink);
   font-family: var(--font-sans);
   font-size: 0.85rem;
   padding: 0.35rem 0.5rem;
@@ -1605,10 +1606,10 @@ html, body, #root {
 }
 
 .admin-form select {
-  background: #0d0d0d;
+  background: #fff;
   padding: 0.75rem 1rem;
   font-size: 0.95rem;
-  border-color: #2a2a2a;
+  border-color: rgba(0,0,0,0.15);
 }
 
-.admin-form select:focus { border-color: var(--accent); }
+.admin-form select:focus { border-color: var(--t-teal); }

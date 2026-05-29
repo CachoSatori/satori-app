@@ -33,10 +33,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession()
-      .then(({ data: { session } }) => {
+      .then(async ({ data: { session } }) => {
         setSession(session)
         setUser(session?.user ?? null)
-        if (session?.user) loadProfile(session.user.id)
+        if (session?.user) await loadProfile(session.user.id)
       })
       .catch(err => console.error('getSession error:', err))
       .finally(() => setLoading(false))

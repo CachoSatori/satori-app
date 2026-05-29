@@ -37,7 +37,7 @@ const MODULES: Module[] = [
   },
   {
     id: 'dashboard', path: '/ventas', label: 'Ventas', kanji: '売',
-    description: 'KPIs y metas', ready: false,
+    description: 'KPIs y metas', ready: true,
     roles: ['owner', 'manager', 'contador'],
   },
   {

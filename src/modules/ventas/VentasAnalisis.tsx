@@ -114,12 +114,12 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                   const varPct = vals[1] ? ((vals[0] - vals[1]) / vals[1] * 100) : null
                   return (
                     <tr key={m}>
-                      <td>{mNames[m-1]}</td>
+                      <td style={{ fontWeight: 600 }}>{mNames[m-1]}</td>
                       {vals.map((v, i) => (
-                        <td key={i} className="r">{v > 0 ? fi(v) : '—'}</td>
+                        <td key={i} className="r vt-bold">{v > 0 ? fi(v) : '—'}</td>
                       ))}
                       {years.length >= 2 && (
-                        <td className="r" style={{ color: varPct && varPct >= 0 ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+                        <td className="r" style={{ color: varPct !== null ? (varPct >= 0 ? 'var(--vt-green)' : 'var(--vt-red)') : 'var(--vt-muted)' }}>
                           {varPct !== null ? (varPct >= 0 ? '+' : '') + varPct.toFixed(1) + '%' : '—'}
                         </td>
                       )}
@@ -201,19 +201,19 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                   const margenCRC = margenPct > 0 ? d.ventaBruta * margenPct / 100 : 0
                   return (
                     <tr key={m}>
-                      <td>{mNames[m-1]}</td>
+                      <td style={{ fontWeight: 600 }}>{mNames[m-1]}</td>
                       <td className="r vt-bold">{fi(d.ventaNeta)}</td>
-                      <td className="r" style={{ color: varAnt !== null ? (varAnt >= 0 ? 'var(--vt-green)' : 'var(--vt-red)') : '#888' }}>
+                      <td className="r" style={{ color: varAnt !== null ? (varAnt >= 0 ? 'var(--vt-green)' : 'var(--vt-red)') : 'var(--vt-muted)' }}>
                         {varAnt !== null ? (varAnt >= 0 ? '+' : '') + varAnt.toFixed(1) + '%' : '—'}
                       </td>
                       <td className="r">{fi(d.ventaBruta)}</td>
-                      <td className="r" style={{ color: '#888', fontSize: '0.75rem' }}>{fi(d.iva)}</td>
-                      <td className="r" style={{ color: '#888', fontSize: '0.75rem' }}>{fi(d.serv)}</td>
+                      <td className="r vt-muted" style={{ fontSize: '0.8rem' }}>{fi(d.iva)}</td>
+                      <td className="r vt-muted" style={{ fontSize: '0.8rem' }}>{fi(d.serv)}</td>
                       <td className="r">{d.pax}</td>
-                      <td className="r" style={{ color: margenPct > 0 ? 'var(--vt-gold)' : '#555' }}>
+                      <td className="r" style={{ color: margenPct > 0 ? 'var(--vt-gold-dark)' : 'var(--vt-muted)' }}>
                         {margenPct > 0 ? margenPct.toFixed(1) + '%' : '—'}
                       </td>
-                      <td className="r" style={{ color: 'var(--vt-gold)' }}>
+                      <td className="r" style={{ color: margenCRC > 0 ? 'var(--vt-gold-dark)' : 'var(--vt-muted)' }}>
                         {margenCRC > 0 ? fi(margenCRC) : '—'}
                       </td>
                     </tr>

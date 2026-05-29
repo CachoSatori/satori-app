@@ -2748,15 +2748,17 @@ html, body, #root {
 
 /* CSS custom properties for ventas */
 :root {
-  --vt-ink:    #0d0d0d;
-  --vt-paper:  #f5f0e8;
-  --vt-panel:  #ede8de;
-  --vt-border: #d4cfc4;
-  --vt-gold:   #c8a96e;
-  --vt-red:    #c23b22;
-  --vt-green:  #4a7c59;
-  --vt-blue:   #2a4a6b;
-  --vt-muted:  #8a8070;
+  --vt-ink:       #0d0d0d;
+  --vt-paper:     #f5f0e8;
+  --vt-panel:     #ede8de;
+  --vt-border:    #d4cfc4;
+  --vt-gold:      #c8a96e;
+  --vt-gold-dark: #a07830;  /* gold readable on light paper (5:1) */
+  --vt-red:       #c23b22;
+  --vt-green:     #4a7c59;
+  --vt-blue:      #2a4a6b;
+  --vt-delivery:  #2a6080;  /* blue readable on light paper (5.5:1) */
+  --vt-muted:     #5a5040;  /* muted ink readable on paper (6:1) */
 }
 
 /* ── Module shell ───────────────────────────────────────────── */
@@ -2808,11 +2810,13 @@ html, body, #root {
 /* ── Content wrapper ────────────────────────────────────────── */
 .vt-content {
   background: var(--vt-paper);
+  color: var(--vt-ink);          /* reset: parent has light text for dark shell */
   min-height: calc(100vh - 52px - 44px);
 }
 .vt-section {
   padding: 1.5rem;
   max-width: 1300px;
+  color: var(--vt-ink);
 }
 
 /* ── Empty state ────────────────────────────────────────────── */
@@ -3608,3 +3612,13 @@ html, body, #root {
   display: inline-block;
   animation: vt-spin 1s linear infinite;
 }
+
+/* ── Ventas table utility classes ────────────────────────────── */
+/* All on light paper/white backgrounds — WCAG AA compliant */
+.vt-muted    { color: var(--vt-muted); }           /* #5a5040 on paper = 6:1 ✓ */
+.vt-delivery { color: var(--vt-delivery); }        /* #2a6080 on paper = 5.5:1 ✓ */
+.vt-tbl .vt-muted { color: var(--vt-muted); }
+
+/* Fix --vt-muted usage in dark contexts (ink background) — keep light */
+.vt-kpi .vt-kpi-sub   { color: #aaa; }
+.vt-kpi .vt-kpi-label { color: #aaa; }

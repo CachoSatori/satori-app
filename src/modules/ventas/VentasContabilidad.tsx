@@ -192,15 +192,15 @@ export default function VentasContabilidad({ dias, hist, metas }: Props) {
               const isWorst = d.ventaNeta === minVenta && minVenta > 0 && minVenta !== maxVenta
               return (
                 <tr key={d.fecha} className={isBest ? 'tr-best' : isWorst ? 'tr-worst' : ''}>
-                  <td style={{ color: '#555' }}>{i + 1}</td>
+                  <td className="vt-muted">{i + 1}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(d.fecha)}</td>
-                  <td style={{ color: '#888' }}>{dowLabel(dayOfWeek(d.fecha))}</td>
+                  <td className="vt-muted">{dowLabel(dayOfWeek(d.fecha))}</td>
                   <td className="r">{fi(d.ventaBruta)}</td>
-                  <td className="r" style={{ color: '#888', fontSize: '0.75rem' }}>{fi(d.iva)}</td>
-                  <td className="r" style={{ color: '#888', fontSize: '0.75rem' }}>{fi(d.serv)}</td>
+                  <td className="r vt-muted" style={{ fontSize: '0.8rem' }}>{fi(d.iva)}</td>
+                  <td className="r vt-muted" style={{ fontSize: '0.8rem' }}>{fi(d.serv)}</td>
                   <td className="r vt-bold">{fi(d.ventaNeta)}</td>
                   <td className="r">{fi(d.salon)}</td>
-                  <td className="r" style={{ color: '#7ab4d4' }}>{fi(d.delivery)}</td>
+                  <td className="r vt-delivery">{fi(d.delivery)}</td>
                   <td className="r">{d.pax}</td>
                   <td className="r">{fi(d.promPax)}</td>
                 </tr>

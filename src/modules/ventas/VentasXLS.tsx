@@ -11,82 +11,121 @@ interface Props {
 }
 
 interface QueueItem {
-  file:   File
+  name:   string
   date:   string | null
   status: 'pending' | 'processing' | 'done' | 'error'
   error?: string
 }
 
 export default function VentasXLS({ dias, onRefresh }: Props) {
-  const { profile }   = useAuth()
-  const [queue, setQueue] = useState<QueueItem[]>([])
+  const { profile }     = useAuth()
+  const fileInputRef    = useRef<HTMLInputElement>(null)
+  const [queue, setQueue]         = useState<QueueItem[]>([])
   const [processing, setProcessing] = useState(false)
-  const [dateModal, setDateModal]   = useState<{ file: File; resolve: (d: string) => void } | null>(null)
+  const [dragOver, setDragOver]   = useState(false)
+
+  // Date modal state
+  const [pendingModal, setPendingModal] = useState<{
+    name: string
+    file: File
+    resolve: (d: string) => void
+  } | null>(null)
   const [manualDate, setManualDate] = useState('')
-  const dropRef = useRef<HTMLDivElement>(null)
 
+  // ── Ask user for date (returns '' if cancelled) ──────────────
+  const askDate = useCallback((file: File): Promise<string> => {
+    return new Promise(resolve => {
+      setManualDate('')
+      setPendingModal({ name: file.name, file, resolve })
+    })
+  }, [])
+
+  // ── Process file list ─────────────────────────────────────────
   const processFiles = useCallback(async (files: File[]) => {
-    const items: QueueItem[] = files.map(f => ({
-      file:   f,
-      date:   extractDateFromFilename(f.name),
-      status: 'pending',
-    }))
+    const xls = files.filter(f =>
+      f.name.toLowerCase().endsWith('.xls') || f.name.toLowerCase().endsWith('.xlsx')
+    )
+    if (!xls.length) return
 
-    // For files without a detected date, ask user
-    const confirmed: QueueItem[] = []
-    for (const item of items) {
-      if (!item.date) {
-        const date = await new Promise<string>(resolve => {
-          setManualDate('')
-          setDateModal({ file: item.file, resolve })
-        })
-        if (!date) continue
-        confirmed.push({ ...item, date })
+    // Build queue items, asking date for files without detectable date
+    const items: Array<{ file: File; date: string }> = []
+    for (const file of xls) {
+      const detected = extractDateFromFilename(file.name)
+      if (detected) {
+        items.push({ file, date: detected })
       } else {
-        confirmed.push(item)
+        const date = await askDate(file)
+        if (date) items.push({ file, date })
+        // if user cancelled, skip file
       }
     }
+    if (!items.length) return
 
-    setQueue(prev => [...prev, ...confirmed])
+    // Show all items as pending
+    setQueue(items.map(it => ({ name: it.file.name, date: it.date, status: 'pending' })))
     setProcessing(true)
 
-    for (const item of confirmed) {
+    for (const { file, date } of items) {
+      // Mark as processing
       setQueue(prev => prev.map(q =>
-        q.file === item.file ? { ...q, status: 'processing' } : q
+        q.name === file.name ? { ...q, status: 'processing' } : q
       ))
+
       try {
-        const buf    = await item.file.arrayBuffer()
-        const data   = parseVentasFile(buf, item.file.name)
-        await saveVentasDia(item.date!, data, profile?.id ?? '')
+        // Timeout: abort if takes more than 30 seconds
+        await Promise.race([
+          (async () => {
+            const buf  = await file.arrayBuffer()
+            const data = parseVentasFile(buf, file.name)
+            await saveVentasDia(date, data, profile?.id ?? '')
+            return 'ok'
+          })(),
+          new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error('Tiempo de espera agotado (30s)')), 30_000)
+          ),
+        ])
+
         setQueue(prev => prev.map(q =>
-          q.file === item.file ? { ...q, status: 'done' } : q
+          q.name === file.name ? { ...q, status: 'done' } : q
         ))
       } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Error desconocido'
         setQueue(prev => prev.map(q =>
-          q.file === item.file
-            ? { ...q, status: 'error', error: e instanceof Error ? e.message : 'Error' }
-            : q
+          q.name === file.name ? { ...q, status: 'error', error: msg } : q
         ))
       }
     }
 
     setProcessing(false)
     onRefresh()
-  }, [profile, onRefresh])
+  }, [profile, askDate, onRefresh])
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    const files = Array.from(e.dataTransfer.files)
-      .filter(f => f.name.endsWith('.xls') || f.name.endsWith('.xlsx'))
-    if (files.length) processFiles(files)
-  }, [processFiles])
-
+  // ── File input change ─────────────────────────────────────────
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
+    e.target.value = '' // reset so same file can be re-selected
     if (files.length) processFiles(files)
-    e.target.value = ''
   }
 
+  // ── Drag & Drop ───────────────────────────────────────────────
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(true)
+  }
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if leaving the drop zone entirely (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOver(false)
+    }
+  }
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length) processFiles(files)
+  }
+
+  // ── Delete ────────────────────────────────────────────────────
   const handleDelete = async (date: string) => {
     if (!window.confirm(`¿Eliminar datos del ${fmtDate(date)}?`)) return
     await deleteVentasDia(date)
@@ -94,40 +133,67 @@ export default function VentasXLS({ dias, onRefresh }: Props) {
   }
 
   const sortedDates = Object.keys(dias).sort().reverse()
+
   return (
     <div className="vt-section">
+
       {/* Drop zone */}
       <div
-        ref={dropRef}
-        className="vt-drop-zone"
-        onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
-        onDragLeave={e => e.currentTarget.classList.remove('drag-over')}
-        onDrop={e => { e.currentTarget.classList.remove('drag-over'); handleDrop(e) }}
+        className={`vt-drop-zone ${dragOver ? 'drag-over' : ''}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <div className="vt-drop-icon">📂</div>
         <div className="vt-drop-title">Arrastrá los archivos XLS aquí</div>
         <div className="vt-drop-sub">.xls y .xlsx — POS de turnos diarios</div>
-        <label className="tips-btn-teal" style={{ cursor: 'pointer', marginTop: '0.75rem' }}>
-          Seleccionar archivos
-          <input type="file" accept=".xls,.xlsx" multiple onChange={handleFileInput} style={{ display: 'none' }} />
-        </label>
+
+        {/* Button triggers the hidden input via ref — more reliable than label click */}
+        <button
+          className="tips-btn-teal"
+          style={{ marginTop: '0.75rem' }}
+          disabled={processing}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {processing ? '⟳ Procesando…' : 'Seleccionar archivos'}
+        </button>
+
+        {/* Hidden file input — outside button to avoid click propagation issues */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xls,.xlsx"
+          multiple
+          onChange={handleFileInput}
+          style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+          tabIndex={-1}
+        />
       </div>
 
       {/* Queue */}
       {queue.length > 0 && (
-        <>
-          <div className="vt-sl" style={{ marginTop: '1.5rem' }}>Procesando archivos</div>
+        <div style={{ marginTop: '1.25rem' }}>
+          <div className="vt-sl">Archivos procesados</div>
           {queue.map((q, i) => (
             <div key={i} className={`vt-queue-item ${q.status}`}>
               <div>
-                <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{q.file.name}</div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{q.name}</div>
                 {q.date && <div style={{ fontSize: '0.72rem', color: '#888' }}>{fmtDate(q.date)}</div>}
+                {q.status === 'error' && q.error && (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--vt-red)', marginTop: '0.2rem' }}>
+                    {q.error}
+                  </div>
+                )}
               </div>
-              <div>
-                {q.status === 'pending'    && <span style={{ color: '#888' }}>En espera</span>}
-                {q.status === 'processing' && <span style={{ color: 'var(--vt-gold)' }}>⟳ Procesando...</span>}
-                {q.status === 'done'       && <span style={{ color: 'var(--vt-green)' }}>✓ Listo</span>}
-                {q.status === 'error'      && <span style={{ color: 'var(--vt-red)' }}>✗ {q.error}</span>}
+              <div style={{ flexShrink: 0 }}>
+                {q.status === 'pending'    && <span style={{ color: '#888', fontSize: '0.78rem' }}>En espera…</span>}
+                {q.status === 'processing' && (
+                  <span style={{ color: 'var(--vt-gold)', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <span className="vt-spin">⟳</span> Procesando…
+                  </span>
+                )}
+                {q.status === 'done'  && <span style={{ color: 'var(--vt-green)', fontSize: '0.78rem' }}>✓ Guardado</span>}
+                {q.status === 'error' && <span style={{ color: 'var(--vt-red)', fontSize: '0.78rem' }}>✗ Error</span>}
               </div>
             </div>
           ))}
@@ -137,55 +203,68 @@ export default function VentasXLS({ dias, onRefresh }: Props) {
               Limpiar lista
             </button>
           )}
-        </>
+        </div>
       )}
 
-      {/* Storage stats */}
-      <div className="vt-sl" style={{ marginTop: '1.5rem' }}>Datos cargados ({sortedDates.length} días)</div>
+      {/* Loaded files */}
+      <div className="vt-sl" style={{ marginTop: '1.5rem' }}>
+        Datos cargados ({sortedDates.length} días)
+      </div>
       <div className="vt-file-list">
         {sortedDates.map(date => {
-          const dia = dias[date]
+          const dia  = dias[date]
           const nSals = Object.keys(dia.saloneros).length
           return (
             <div key={date} className="vt-file-row">
               <div>
                 <div style={{ fontWeight: 600, fontSize: '0.88rem' }}>{fmtDate(date)}</div>
                 <div style={{ fontSize: '0.72rem', color: '#888' }}>
-                  {dia.fileName} · {nSals} empleados
+                  {dia.fileName} · {nSals} empleado{nSals !== 1 ? 's' : ''}
                 </div>
               </div>
-              <button className="cd-mov-del" onClick={() => handleDelete(date)}>×</button>
+              <button className="cd-mov-del" onClick={() => handleDelete(date)} title="Eliminar">×</button>
             </div>
           )
         })}
         {sortedDates.length === 0 && (
           <div style={{ color: '#888', padding: '1rem', textAlign: 'center', fontSize: '0.85rem' }}>
-            Sin archivos cargados
+            Sin archivos cargados — arrastrá un XLS para empezar
           </div>
         )}
       </div>
 
-      {/* Date modal */}
-      {dateModal && (
-        <div className="cd-modal-overlay" onClick={() => { setDateModal(null); dateModal.resolve('') }}>
+      {/* Date modal for files without detectable date */}
+      {pendingModal && (
+        <div className="cd-modal-overlay"
+          onClick={() => { setPendingModal(null); pendingModal.resolve('') }}>
           <div className="cd-modal" onClick={e => e.stopPropagation()}>
-            <div className="cd-modal-title">Fecha del archivo</div>
+            <div className="cd-modal-title">¿Qué fecha es este archivo?</div>
             <p style={{ fontSize: '0.85rem', marginBottom: '1rem', color: '#888' }}>
-              No se pudo detectar la fecha de <strong>{dateModal.file.name}</strong>.<br/>
-              Ingresala manualmente.
+              No se pudo detectar la fecha de <strong>{pendingModal.name}</strong>.<br />
+              Ingresala manualmente para continuar.
             </p>
             <div className="tips-field">
-              <div className="tips-field-label">Fecha</div>
-              <input type="date" className="tips-input-dark" value={manualDate}
-                onChange={e => setManualDate(e.target.value)} />
+              <div className="tips-field-label">Fecha del turno</div>
+              <input
+                type="date"
+                className="tips-input-dark"
+                value={manualDate}
+                onChange={e => setManualDate(e.target.value)}
+                autoFocus
+              />
             </div>
-            <div className="cd-modal-actions">
-              <button className="tips-btn-ghost" onClick={() => { setDateModal(null); dateModal.resolve('') }}>
-                Cancelar
+            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+              <button className="tips-btn-ghost"
+                onClick={() => { setPendingModal(null); pendingModal.resolve('') }}>
+                Saltar archivo
               </button>
               <button className="tips-btn-teal" disabled={!manualDate}
-                onClick={() => { const d = manualDate; setDateModal(null); dateModal.resolve(d) }}>
-                Confirmar
+                onClick={() => {
+                  const d = manualDate
+                  setPendingModal(null)
+                  pendingModal.resolve(d)
+                }}>
+                Confirmar fecha
               </button>
             </div>
           </div>

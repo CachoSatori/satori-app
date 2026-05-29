@@ -3598,3 +3598,13 @@ html, body, #root {
   0%,100% { background: #fdf0ee; }
   50%     { background: #fad6d0; }
 }
+
+/* ── XLS spinner ────────────────────────────────────────────── */
+@keyframes vt-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.vt-spin {
+  display: inline-block;
+  animation: vt-spin 1s linear infinite;
+}

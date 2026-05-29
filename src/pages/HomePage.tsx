@@ -32,7 +32,7 @@ const MODULES: Module[] = [
   },
   {
     id: 'cash', path: '/caja', label: 'Caja', kanji: '金',
-    description: 'Turnos y movimientos', ready: false,
+    description: 'Turnos y movimientos', ready: true,
     roles: ['owner', 'manager', 'cajero', 'contador'],
   },
   {

@@ -4,6 +4,7 @@ import LoginPage from './pages/auth/LoginPage'
 import HomePage from './pages/HomePage'
 import TipsModule from './modules/tips/TipsModule'
 import AdminModule from './modules/admin/AdminModule'
+import CashModule from './modules/cash/CashModule'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -31,6 +32,7 @@ function AppRoutes() {
       <Route path="/login"    element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/"         element={<PrivateRoute><HomePage /></PrivateRoute>} />
       <Route path="/propinas" element={<PrivateRoute><TipsModule /></PrivateRoute>} />
+      <Route path="/caja"     element={<PrivateRoute><CashModule /></PrivateRoute>} />
       <Route path="/admin"    element={<OwnerRoute><AdminModule /></OwnerRoute>} />
       <Route path="*"         element={<Navigate to="/" replace />} />
     </Routes>

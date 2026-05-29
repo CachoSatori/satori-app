@@ -42,12 +42,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         setSession(session)
         setUser(session?.user ?? null)
         if (session?.user) { await loadProfile(session.user.id) }
         else { setProfile(null) }
-        setLoading(false)
+        // INITIAL_SESSION fires before getSession() refreshes the token.
+        // Let getSession().finally() own the initial loading=false so we
+        // always clear loading with a valid, refreshed session (and profile).
+        if (event !== 'INITIAL_SESSION') setLoading(false)
       }
     )
     return () => subscription.unsubscribe()

@@ -525,7 +525,7 @@ html, body, #root {
   font-size: 0.6rem;
   letter-spacing: 0.25em;
   text-transform: uppercase;
-  color: #555;
+  color: #bbb;
 }
 
 .tips-tabs {
@@ -722,7 +722,7 @@ html, body, #root {
 
 .tips-field-hint {
   font-size: 0.65rem;
-  color: #444;
+  color: #999;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   flex: 1;
@@ -952,7 +952,7 @@ html, body, #root {
   font-family: var(--font-sans);
 }
 
-.tips-take-badge.zero { color: #333; }
+.tips-take-badge.zero { color: #888; }
 
 /* ── Pool bar ── */
 .tips-pool-bar {
@@ -972,7 +972,7 @@ html, body, #root {
   font-size: 0.55rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #444;
+  color: #aaa;
 }
 
 .tips-pool-val {
@@ -984,7 +984,7 @@ html, body, #root {
 
 .tips-pool-val.gold  { color: var(--t-gold); }
 .tips-pool-val.teal  { color: #7ec8b8; }
-.tips-pool-val.dim   { color: #555; font-size: 0.9rem; }
+.tips-pool-val.dim   { color: #bbb; font-size: 0.9rem; }
 
 /* ── Close bar ── */
 .tips-close-bar {
@@ -1876,7 +1876,7 @@ html, body, #root {
   text-transform: uppercase;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
-  color: #7a7060;
+  color: #4a4030;
   transition: all 0.15s;
   white-space: nowrap;
   font-weight: 600;
@@ -1924,7 +1924,7 @@ html, body, #root {
   font-size: 0.72rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #555;
+  color: #aaa;
   margin-top: 0.25rem;
 }
 .cd-apertura-body {
@@ -2061,7 +2061,7 @@ html, body, #root {
   gap: 0.5rem;
 }
 .cd-status-title { font-family: var(--font-serif); font-size: 1.1rem; font-weight: 700; }
-.cd-status-sub { font-size: 0.82rem; color: #888; margin-top: 0.15rem; }
+.cd-status-sub { font-size: 0.82rem; color: #5a5040; margin-top: 0.15rem; }
 .cd-badge-open {
   background: #e8f5ec;
   color: #2a7a4a;
@@ -2111,8 +2111,8 @@ html, body, #root {
   color: var(--t-ink);
   line-height: 1;
 }
-.cd-tc-usd { font-size: 0.8rem; color: #7ab4d4; font-weight: 600; margin-top: 0.2rem; }
-.cd-tc-sub { font-size: 0.7rem; color: #aaa; margin-top: 0.3rem; }
+.cd-tc-usd { font-size: 0.8rem; color: #2a6080; font-weight: 600; margin-top: 0.2rem; }
+.cd-tc-sub { font-size: 0.7rem; color: #666; margin-top: 0.3rem; }
 
 /* ── Sections ───────────────────────────────────────────────── */
 .cd-section {
@@ -2142,7 +2142,7 @@ html, body, #root {
   flex-shrink: 0;
 }
 .cd-section-title { font-size: 0.9rem; font-weight: 600; letter-spacing: 0.03em; }
-.cd-section-sub   { font-size: 0.72rem; color: #888; margin-top: 0.15rem; }
+.cd-section-sub   { font-size: 0.72rem; color: #5a5040; margin-top: 0.15rem; }
 .cd-section-add {
   font-size: 0.75rem;
   padding: 0.35rem 0.875rem;
@@ -2188,7 +2188,7 @@ html, body, #root {
   flex-shrink: 0;
 }
 .cd-pago-nombre { font-size: 0.85rem; font-weight: 700; color: var(--t-ink); }
-.cd-pago-cat    { font-size: 0.7rem; color: #888; }
+.cd-pago-cat    { font-size: 0.7rem; color: #5a5040; }
 .cd-badge-pend {
   background: #fff3cd;
   color: #856404;
@@ -2384,12 +2384,12 @@ html, body, #root {
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #888;
+  color: #5a5040;
   margin-bottom: 1.25rem;
 }
 .cd-modal-note {
   font-size: 0.75rem;
-  color: #888;
+  color: #5a5040;
   margin-bottom: 1.25rem;
 }
 .cd-modal-actions {
@@ -2448,7 +2448,7 @@ html, body, #root {
   font-size: 0.62rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #555;
+  color: #aaa;
   margin-bottom: 0.375rem;
 }
 .cd-saldo-val {
@@ -2557,7 +2557,7 @@ html, body, #root {
   font-size: 0.65rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #555;
+  color: #aaa;
   font-weight: 700;
 }
 .cd-tbl-footer td.r { text-align: right; }
@@ -2797,7 +2797,7 @@ html, body, #root {
   text-transform: uppercase;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
-  color: #7a7060;
+  color: #4a4030;
   transition: all 0.15s;
   white-space: nowrap;
   font-weight: 600;
@@ -2873,7 +2873,7 @@ html, body, #root {
   font-size: 0.62rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #555;
+  color: #aaa;
   margin-bottom: 0.4rem;
 }
 .vt-kpi-val {
@@ -2892,7 +2892,7 @@ html, body, #root {
 }
 .vt-kpi-sub {
   font-size: 0.65rem;
-  color: #555;
+  color: #aaa;
   margin-top: 0.2rem;
 }
 
@@ -3007,7 +3007,7 @@ html, body, #root {
   display: flex;
   justify-content: space-between;
   font-size: 0.68rem;
-  color: #666;
+  color: #bbb;
   margin-top: 0.4rem;
 }
 .vt-progress-track {
@@ -3074,7 +3074,7 @@ html, body, #root {
   font-size: 0.7rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #555;
+  color: #aaa;
   font-weight: 700;
 }
 .vt-tbl-footer td.r {
@@ -3107,9 +3107,9 @@ html, body, #root {
 }
 .vt-dow-card.best  { border-top: 2px solid var(--vt-green); }
 .vt-dow-card.worst { border-top: 2px solid var(--vt-red); }
-.vt-dow-label { font-size: 0.65rem; color: #555; letter-spacing: 0.1em; text-transform: uppercase; }
+.vt-dow-label { font-size: 0.65rem; color: #aaa; letter-spacing: 0.1em; text-transform: uppercase; }
 .vt-dow-val   { font-family: 'Syne', sans-serif; font-size: 0.88rem; font-weight: 700; color: var(--vt-gold); margin-top: 0.2rem; }
-.vt-dow-sub   { font-size: 0.6rem; color: #444; margin-top: 0.15rem; }
+.vt-dow-sub   { font-size: 0.6rem; color: #999; margin-top: 0.15rem; }
 
 /* ── Sort tabs ──────────────────────────────────────────────── */
 .vt-sort-tabs { display: inline-flex; gap: 0.25rem; }
@@ -3162,7 +3162,7 @@ html, body, #root {
 .vt-prod-rank {
   width: 20px;
   text-align: right;
-  color: #444;
+  color: #888;
   font-size: 0.7rem;
   flex-shrink: 0;
 }
@@ -3188,7 +3188,7 @@ html, body, #root {
 .vt-prod-tipo.cortesia   { background: #fdf7ec; color: #a07030; }
 .vt-prod-tipo.personal   { background: #f5e0e8; color: #7a1a4a; }
 .vt-prod-tipo.nofood     { background: #e8e0f5; color: #4a1a7a; }
-.vt-prod-tipo.desconocido{ background: #f0f0f0; color: #888; }
+.vt-prod-tipo.desconocido{ background: #e8e8e8; color: #555; }
 
 /* ── Salonero cards ─────────────────────────────────────────── */
 .vt-sal-cards {
@@ -3223,7 +3223,7 @@ html, body, #root {
 .vt-medal { font-size: 1rem; }
 .vt-sal-days {
   font-size: 0.65rem;
-  color: #888;
+  color: #5a5040;
   font-weight: 400;
   margin-left: 0.2rem;
 }
@@ -3242,7 +3242,7 @@ html, body, #root {
   margin-top: 0.5rem;
 }
 .vt-pct-fill { height: 100%; background: var(--vt-ink); border-radius: 2px; transition: width 0.4s; }
-.vt-sal-pct { font-size: 0.65rem; color: #888; margin-top: 0.2rem; }
+.vt-sal-pct { font-size: 0.65rem; color: #5a5040; margin-top: 0.2rem; }
 .vt-vs-gen  { font-size: 0.72rem; font-weight: 700; }
 .vt-sal-kpis {
   display: grid;
@@ -3256,7 +3256,7 @@ html, body, #root {
   text-align: center;
 }
 .vt-sal-kpi:last-child { border-right: none; }
-.vt-sal-kpi-label { font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: #888; }
+.vt-sal-kpi-label { font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: #555; }
 .vt-sal-kpi-val   { font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; color: var(--vt-ink); margin-top: 0.2rem; }
 .vt-sal-detail {
   padding: 0.875rem 1.1rem;

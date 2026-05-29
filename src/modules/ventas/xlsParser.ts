@@ -75,45 +75,55 @@ interface ColIdx {
 }
 
 function buildColIndex(headerRow: (string | number | null | undefined)[]): ColIdx {
-  // Default positional indices matching the real POS export
+  // Default positional indices — confirmed from real Satori POS exports
+  // These are used as fallback if header detection fails
   const idx: ColIdx = {
     salonero: 0,
     producto: 1,
     cantidad: 2,
-    monto:    3,
+    monto:    3,   // MontoTotal  (per-product net amount)
     iva:      4,
     serv:     5,
-    iCom:     8,
-    iBeb:     9,
-    vBeb:     11,
-    vCom:     12,
-    tipo:     29,
+    iCom:     8,   // ComidasMesero (cumulative — read from PAX row)
+    iBeb:     9,   // BebidasMesero (cumulative — read from PAX row)
+    vBeb:     11,  // VentasBebidasMesero (cumulative)
+    vCom:     12,  // VentasComidasMesero (cumulative)
+    tipo:     29,  // TipoVenta
   }
 
   if (!headerRow.length) return idx
 
-  const ALIASES: Record<keyof ColIdx, string[]> = {
-    salonero: ['salonero','mesero','empleado'],
-    producto: ['producto','item','concepto','nombre'],
-    cantidad: ['cantidad','qty','unidades','cant'],
-    monto:    ['montototal','monto','neto','venta'],
-    iva:      ['iva','impuestoventas'],
-    serv:     ['servicio','impuestoservicio'],
-    iCom:     ['comidasmesero'],
-    iBeb:     ['bebidasmesero'],
-    vBeb:     ['ventasbebidasmesero'],
-    vCom:     ['ventascomidasmesero'],
-    tipo:     ['tipoventa','tipo','canal','tipodeventa'],
+  // EXACT header matching only — the POS has many columns containing "venta",
+  // "total", "mesero" as SUBSTRINGS (e.g. VentasComidasMesero, TotalPersonas,
+  // PromVentaPersonaMesero). Substring/fuzzy matching causes ci.monto to end up
+  // as col 29 (TipoVenta) because "tipoventa" contains "venta". Use exact names.
+  const EXACT_MAP: Record<string, keyof ColIdx> = {
+    'salonero':            'salonero',
+    'mesero':              'salonero',
+    'empleado':            'salonero',
+    'producto':            'producto',
+    'concepto':            'producto',
+    'cantidad':            'cantidad',
+    'montototal':          'monto',   // ONLY this exact name for the per-product amount
+    'montoneto':           'monto',
+    'iva':                 'iva',
+    'impuestoventas':      'iva',
+    'servicio':            'serv',
+    'impuestoservicio':    'serv',
+    'comidasmesero':       'iCom',
+    'bebidasmesero':       'iBeb',
+    'ventasbebidasmesero': 'vBeb',
+    'ventascomidasmesero': 'vCom',
+    'tipoventa':           'tipo',
+    'tipodeventa':         'tipo',
+    'canal':               'tipo',
   }
 
   headerRow.forEach((h, colIdx) => {
     if (h == null) return
     const norm = String(h).toLowerCase().replace(/[^a-z0-9]/g, '')
-    for (const [key, aliases] of Object.entries(ALIASES) as [keyof ColIdx, string[]][]) {
-      if (aliases.some(a => norm.includes(a.replace(/[^a-z0-9]/g, '')))) {
-        idx[key] = colIdx
-      }
-    }
+    const key = EXACT_MAP[norm]
+    if (key !== undefined) idx[key] = colIdx
   })
 
   return idx

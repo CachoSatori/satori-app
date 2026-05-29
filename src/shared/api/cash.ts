@@ -15,31 +15,38 @@ export async function getOpenCashSession(): Promise<CashSession | null> {
   return data as CashSession | null
 }
 
-export async function getCashSessions(): Promise<CashSession[]> {
+export async function getCashSessions(limit = 60): Promise<CashSession[]> {
   const { data, error } = await supabase
     .from('cash_sessions')
     .select('*')
     .order('session_date', { ascending: false })
-    .limit(60)
+    .order('created_at', { ascending: false })
+    .limit(limit)
   if (error) throw new Error(error.message)
   return data as CashSession[]
 }
 
 export async function createCashSession(params: {
   session_date: string
+  shift_type: string
   opened_by: string
-  initial_service_crc: number
-  initial_suppliers_crc: number
+  cajero_name: string
+  initial_cash_crc: number
+  initial_cash_usd: number
   notes?: string
 }): Promise<CashSession> {
   const { data, error } = await supabase
     .from('cash_sessions')
     .insert({
       session_date:          params.session_date,
+      shift_type:            params.shift_type,
       opened_by:             params.opened_by,
+      cajero_name:           params.cajero_name,
       status:                'open',
-      initial_service_crc:   params.initial_service_crc,
-      initial_suppliers_crc: params.initial_suppliers_crc,
+      initial_cash_crc:      params.initial_cash_crc,
+      initial_cash_usd:      params.initial_cash_usd,
+      initial_service_crc:   0,
+      initial_suppliers_crc: 0,
       notes:                 params.notes ?? null,
     } as never)
     .select()
@@ -51,10 +58,10 @@ export async function createCashSession(params: {
 export async function closeCashSession(
   sessionId: string,
   finalData: {
-    final_service_crc: number
-    final_suppliers_crc: number
-    final_safe_crc: number
-    final_bank_crc: number
+    final_cash_crc: number
+    final_cash_usd: number
+    final_safe_crc?: number
+    final_bank_crc?: number
     notes?: string
   },
   closedBy: string,
@@ -62,12 +69,12 @@ export async function closeCashSession(
   const { error } = await supabase
     .from('cash_sessions')
     .update({
-      status:              'closed',
-      closed_by:           closedBy,
-      final_service_crc:   finalData.final_service_crc,
-      final_suppliers_crc: finalData.final_suppliers_crc,
-      final_safe_crc:      finalData.final_safe_crc,
-      final_bank_crc:      finalData.final_bank_crc,
+      status:         'closed',
+      closed_by:      closedBy,
+      final_cash_crc: finalData.final_cash_crc,
+      final_cash_usd: finalData.final_cash_usd,
+      final_safe_crc: finalData.final_safe_crc ?? null,
+      final_bank_crc: finalData.final_bank_crc ?? null,
       ...(finalData.notes ? { notes: finalData.notes } : {}),
     } as never)
     .eq('id', sessionId)
@@ -86,27 +93,65 @@ export async function getCashMovements(sessionId: string): Promise<CashMovement[
   return data as CashMovement[]
 }
 
+export async function getAllCashMovements(): Promise<CashMovement[]> {
+  const q = supabase.from('cash_movements').select('*')
+    .order('created_at', { ascending: false }).limit(500)
+  const { data, error } = await q
+  if (error) throw new Error(error.message)
+  return data as CashMovement[]
+}
+
 export async function createCashMovement(movement: {
   session_id: string
   created_by: string
   movement_type: MovementType
   amount_crc: number
+  amount_usd: number
   currency: 'CRC' | 'USD'
   exchange_rate: number | null
   description: string
+  subcategory?: string
   supplier_id?: string | null
+  supplier_name?: string
+  employee_name?: string
+  method: string
+  shift?: string
+  caja_origen: string
 }): Promise<CashMovement> {
   const { data, error } = await supabase
     .from('cash_movements')
     .insert({
       ...movement,
-      supplier_id: movement.supplier_id ?? null,
-      status:      'aprobado',
+      subcategory:   movement.subcategory   ?? '',
+      supplier_id:   movement.supplier_id   ?? null,
+      supplier_name: movement.supplier_name ?? '',
+      employee_name: movement.employee_name ?? '',
+      shift:         movement.shift         ?? '',
+      status:        movement.method === 'Transferencia' ? 'pendiente' : 'aprobado',
     } as never)
     .select()
     .single()
   if (error) throw new Error(error.message)
   return data as CashMovement
+}
+
+export async function updateCashMovement(
+  id: string,
+  updates: Partial<CashMovement>,
+): Promise<void> {
+  const { error } = await supabase
+    .from('cash_movements')
+    .update(updates as never)
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function updateMovementStatus(id: string, status: 'aprobado' | 'pendiente' | 'rechazado'): Promise<void> {
+  const { error } = await supabase
+    .from('cash_movements')
+    .update({ status } as never)
+    .eq('id', id)
+  if (error) throw new Error(error.message)
 }
 
 export async function deleteCashMovement(id: string): Promise<void> {
@@ -129,21 +174,39 @@ export async function getSuppliers(): Promise<Supplier[]> {
   return data as Supplier[]
 }
 
-export async function createSupplier(params: {
+export async function upsertSupplier(params: {
+  id?: string
   name: string
   category?: string
   contact?: string
+  moneda?: string
+  ciclo_pago?: string
+  metodo_pago?: string
+  cuenta_iban?: string
 }): Promise<Supplier> {
-  const { data, error } = await supabase
-    .from('suppliers')
-    .insert({
-      name:     params.name,
-      category: params.category ?? null,
-      contact:  params.contact ?? null,
-      is_active: true,
-    } as never)
-    .select()
-    .single()
+  const payload: Record<string, unknown> = {
+    name:        params.name,
+    category:    params.category    ?? null,
+    contact:     params.contact     ?? null,
+    moneda:      params.moneda      ?? 'CRC',
+    ciclo_pago:  params.ciclo_pago  ?? 'Semanal',
+    metodo_pago: params.metodo_pago ?? 'Efectivo',
+    cuenta_iban: params.cuenta_iban ?? '',
+    is_active:   true,
+  }
+  if (params.id) payload.id = params.id
+
+  const { data, error } = params.id
+    ? await supabase.from('suppliers').update(payload as never).eq('id', params.id).select().single()
+    : await supabase.from('suppliers').insert(payload as never).select().single()
   if (error) throw new Error(error.message)
   return data as Supplier
+}
+
+export async function deactivateSupplier(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('suppliers')
+    .update({ is_active: false } as never)
+    .eq('id', id)
+  if (error) throw new Error(error.message)
 }

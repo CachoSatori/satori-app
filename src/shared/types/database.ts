@@ -82,11 +82,17 @@ export interface RoleTipPoints {
 export interface CashSession {
   id: string
   session_date: string
+  shift_type: string                // 'Mediodía' | 'Noche'
   opened_by: string
   closed_by: string | null
   status: SessionStatus
+  cajero_name: string
+  initial_cash_crc: number
+  initial_cash_usd: number
   initial_service_crc: number
   initial_suppliers_crc: number
+  final_cash_crc: number | null
+  final_cash_usd: number | null
   final_service_crc: number | null
   final_suppliers_crc: number | null
   final_safe_crc: number | null
@@ -102,10 +108,17 @@ export interface CashMovement {
   created_by: string
   movement_type: MovementType
   amount_crc: number
+  amount_usd: number
   currency: Currency
   exchange_rate: number | null
   description: string
+  subcategory: string
   supplier_id: string | null
+  supplier_name: string
+  employee_name: string
+  method: string                    // 'Efectivo' | 'Transferencia' | 'SINPE' | 'Bitcoin'
+  shift: string                     // 'Mediodía' | 'Noche' | 'General' | ''
+  caja_origen: string               // 'Caja Proveedores' | 'Caja Fuerte' | 'Registradora' | 'Banco'
   status: MovementStatus
   approved_by: string | null
   approved_at: string | null
@@ -118,6 +131,10 @@ export interface Supplier {
   name: string
   category: string | null
   contact: string | null
+  moneda: string
+  ciclo_pago: string
+  metodo_pago: string
+  cuenta_iban: string
   is_active: boolean
   created_at: string
   updated_at: string

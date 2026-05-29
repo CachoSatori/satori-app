@@ -3,14 +3,7 @@
 
 import * as XLSX from 'xlsx'
 import type { DiaData, SaloneroDay, CajeroDay } from '../../shared/types/ventas'
-
-const CAJEROS_IDS = [
-  'cajero turno mañana','cajero turno manana','cajero turno tarde',
-  'cajero turno mediodia','cajero turno mediodía',
-]
-function isCajero(name: string): boolean {
-  return CAJEROS_IDS.includes(name.toLowerCase().trim())
-}
+import { isCajeroName as isCajero } from '../../shared/utils'
 
 // ── Extract date from filename ────────────────────────────────
 export function extractDateFromFilename(name: string): string | null {
@@ -104,9 +97,12 @@ export function parseVentasFile(buffer: ArrayBuffer, fileName: string): DiaData 
     }
     const s = sal[salonero]
 
-    // PAX row
+    // PAX row — counts unique tables/orders per salonero
     if (producto === 'PAX' || producto === 'PAXS') {
       s.pax += cantidad
+      // Each PAX row = one table/order
+      if (isDelivery) s.ordenes += cantidad
+      else if (!isCajero(salonero)) s.ordenes += cantidad
       continue
     }
 
@@ -117,8 +113,8 @@ export function parseVentasFile(buffer: ArrayBuffer, fileName: string): DiaData 
     s.iBeb  += iBeb
     s.com   += vCom
     s.beb   += vBeb
-    if (isDelivery) { s.delivery += monto; s.ordenes++ }
-    else            { s.salon    += monto; if (!isCajero(salonero)) s.ordenes++ }
+    if (isDelivery) s.delivery += monto
+    else s.salon += monto
 
     if (!s.prods[producto]) s.prods[producto] = [0, 0]
     s.prods[producto][0] += cantidad

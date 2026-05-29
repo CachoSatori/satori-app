@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import type { CashMovement, CashSession, MovementType } from '../../shared/types/database'
 import { updateCashMovement, deleteCashMovement } from '../../shared/api/cash'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, todayStr } from './cashUtils'
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function CashMovimientos({ movements, sessions, onRefresh }: Props) {
-  const sesionMap = new Map(sessions.map(s => [s.id, s]))
+  const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
 
   const defaultFrom = (() => { const d = new Date(); d.setDate(d.getDate() - 60); return d.toISOString().slice(0, 10) })()
   const [from,    setFrom]    = useState(defaultFrom)
@@ -212,31 +212,34 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                     </select>
                   </td>
                   <td>
-                    <input className="cd-tbl-input" value={m.description}
+                    {/* Uncontrolled inputs — edits committed on blur to avoid re-render per keystroke */}
+                    <input key={m.id + '-desc'} className="cd-tbl-input"
+                      defaultValue={m.description}
                       onBlur={e => handleFieldChange(m.id, 'description', e.target.value)}
-                      onChange={() => {}} // controlled by blur only
-                      defaultValue={m.description} disabled={saving === m.id} />
+                      disabled={saving === m.id} />
                   </td>
                   <td>
-                    <input className="cd-tbl-input" value={m.supplier_name || m.employee_name}
+                    <input key={m.id + '-pe'} className="cd-tbl-input"
+                      defaultValue={m.supplier_name || m.employee_name}
                       onBlur={e => {
                         handleFieldChange(m.id, 'supplier_name', e.target.value)
                         handleFieldChange(m.id, 'employee_name', e.target.value)
                       }}
-                      onChange={() => {}}
-                      defaultValue={m.supplier_name || m.employee_name} disabled={saving === m.id} />
+                      disabled={saving === m.id} />
                   </td>
                   <td className="r">
-                    <input className="cd-tbl-input r" type="number" defaultValue={m.amount_crc || ''}
+                    <input key={m.id + '-crc'} className="cd-tbl-input r" type="number"
+                      defaultValue={m.amount_crc || ''}
                       style={{ color: col, fontWeight: 600 }}
                       onBlur={e => handleFieldChange(m.id, 'amount_crc', Number(e.target.value) || 0)}
-                      onChange={() => {}} disabled={saving === m.id} />
+                      disabled={saving === m.id} />
                   </td>
                   <td className="r">
-                    <input className="cd-tbl-input r" type="number" defaultValue={m.amount_usd || ''}
+                    <input key={m.id + '-usd'} className="cd-tbl-input r" type="number"
+                      defaultValue={m.amount_usd || ''}
                       style={{ color: '#7ab4d4' }}
                       onBlur={e => handleFieldChange(m.id, 'amount_usd', Number(e.target.value) || 0)}
-                      onChange={() => {}} disabled={saving === m.id} />
+                      disabled={saving === m.id} />
                   </td>
                   <td>
                     <select className="cd-tbl-select" value={m.method ?? 'Efectivo'}

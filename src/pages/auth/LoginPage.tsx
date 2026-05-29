@@ -14,7 +14,11 @@ export default function LoginPage() {
     setError(null)
     setLoading(true)
     const { error } = await signIn(email, password)
-    if (error) { setError('Email o contraseña incorrectos'); setLoading(false) }
+    if (error) {
+      setError('Email o contraseña incorrectos')
+      setLoading(false)
+    }
+    // On success: useAuth's onAuthStateChange fires, App re-renders and unmounts this page
   }
 
   return (

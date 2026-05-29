@@ -7,11 +7,8 @@ import {
   createCashMovement,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr } from './cashUtils'
-
-const CAJEROS_DEFAULT = [
-  'Alan','Dolores','Guido','Guille','Ignacio','Jaime','Joaquina',
-  'Maxi','Nacho','Rosaura','Rocío','Cajero turno mañana','Cajero turno tarde',
-]
+import { getActiveEmployees } from '../../shared/api/tips'
+import type { Employee } from '../../shared/types/database'
 
 interface Props {
   openSession:    CashSession | null
@@ -56,8 +53,11 @@ export default function CashTurno({
 
   // Apertura form
   const [apFecha,   setApFecha]   = useState(today)
-  const [apTurno]   = useState(defaultShift)
+  // apTurno derived from sessions — auto-detects Mediodía vs Noche
+  const apTurno = defaultShift
   const [apCajero,  setApCajero]  = useState(profile?.full_name ?? '')
+  const [employees, setEmployees] = useState<Employee[]>([])
+  useState(() => { getActiveEmployees().then(setEmployees).catch(() => {}) })
   const [apCRC,     setApCRC]     = useState<number | ''>(0)
   const [apUSD,     setApUSD]     = useState<number | ''>(0)
   const [saving,    setSaving]    = useState(false)
@@ -69,8 +69,8 @@ export default function CashTurno({
   // Cierre form
   const [cierreCRC,   setCierreCRC]   = useState<number | ''>(0)
   const [cierreUSD,   setCierreUSD]   = useState<number | ''>(0)
-  const [cierreSafe]  = useState<number | ''>(0)
-  const [cierreBank]  = useState<number | ''>(0)
+  const [cierreSafe,  setCierreSafe]  = useState<number | ''>(0)
+  const [cierreBank,  setCierreBank]  = useState<number | ''>(0)
   const [cierreNotas, setCierreNotas] = useState('')
   const [showResumen, setShowResumen] = useState(false)
 
@@ -233,7 +233,7 @@ export default function CashTurno({
                   <select className="tips-input-dark" value={apCajero}
                     onChange={e => setApCajero(e.target.value)}>
                     <option value="">-- Seleccioná --</option>
-                    {CAJEROS_DEFAULT.map(c => <option key={c} value={c}>{c}</option>)}
+                    {employees.map(e => <option key={e.id} value={e.full_name}>{e.full_name}</option>)}
                   </select>
                 </div>
                 <div className="tips-field">
@@ -435,6 +435,22 @@ export default function CashTurno({
                   <span className="cd-prefix">$</span>
                   <input type="number" className="cd-monto-input" value={cierreUSD} min={0}
                     placeholder="0" onChange={e => setCierreUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                </div>
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">Caja fuerte (₡)</div>
+                <div className="cd-monto-wrap">
+                  <span className="cd-prefix">₡</span>
+                  <input type="number" className="cd-monto-input" value={cierreSafe} min={0}
+                    placeholder="0" onChange={e => setCierreSafe(e.target.value === '' ? '' : Number(e.target.value))} />
+                </div>
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">Depósito banco (₡)</div>
+                <div className="cd-monto-wrap">
+                  <span className="cd-prefix">₡</span>
+                  <input type="number" className="cd-monto-input" value={cierreBank} min={0}
+                    placeholder="0" onChange={e => setCierreBank(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>
             </div>

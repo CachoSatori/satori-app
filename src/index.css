@@ -3499,3 +3499,102 @@ html, body, #root {
   .vt-kpi-grid { grid-template-columns: 1fr; }
   .vt-nav-tab  { padding: 0.6rem 0.75rem; font-size: 0.6rem; }
 }
+
+/* ============================================================
+   OPTIMIZACIONES GLOBALES v2
+   Focus-visible, mobile, QoL improvements
+   ============================================================ */
+
+/* ── Focus-visible accesibility ─────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--t-teal, #2a7a6a);
+  outline-offset: 2px;
+}
+.tips-btn-ghost:focus-visible,
+.tips-btn-teal:focus-visible,
+.tips-btn-primary:focus-visible,
+.tips-btn-danger:focus-visible,
+.cd-nav-tab:focus-visible,
+.vt-nav-tab:focus-visible {
+  outline: 2px solid var(--t-teal, #2a7a6a);
+  outline-offset: 2px;
+}
+
+/* ── Mobile: cash movements table ───────────────────────────── */
+@media (max-width: 760px) {
+  .cd-tbl thead th:nth-child(n+8),
+  .cd-tbl td:nth-child(n+8) { display: none; }
+  .cd-content { padding: 0.75rem; }
+}
+
+/* ── Module card hover — better affordance ───────────────────── */
+.module-card {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.module-card:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.module-card:not(:disabled):focus-visible {
+  outline: 2px solid var(--t-teal);
+  outline-offset: 2px;
+}
+
+/* ── Tips confirm button safer size ─────────────────────────── */
+.tips-btn-danger {
+  min-height: 44px;
+}
+
+/* ── Pending badge CashModule ────────────────────────────────── */
+.cd-pend-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #c23b22;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 99px;
+  padding: 0 0.25rem;
+  margin-left: 0.4rem;
+}
+
+/* ── Loading screen — no layout shift ──────────────────────── */
+.loading-screen,
+.module-loading {
+  min-height: 100dvh;
+}
+
+/* ── Tips/Cash input dark — fix for iOS zoom ────────────────── */
+.tips-input-dark,
+.cd-monto-input,
+.tips-emp-input,
+.tips-emp-input-money {
+  font-size: max(16px, 0.85rem); /* iOS won't zoom on 16px+ */
+}
+
+/* ── VentasXLS drop zone — clearer visual ────────────────────── */
+.vt-drop-zone {
+  min-height: 180px;
+}
+
+/* ── Confirm tip close button — more visible warning ────────── */
+.tips-btn-danger {
+  background: var(--t-red, #c23b22);
+  color: #fff;
+  border: none;
+}
+.tips-btn-danger:hover:not(:disabled) {
+  background: #a02d1a;
+}
+
+/* ── CashTurno verificación delta color ─────────────────────── */
+.cd-cierre-resultado.ok   { font-weight: 600; }
+.cd-cierre-resultado.fail { font-weight: 600; animation: pulse-red 0.5s; }
+@keyframes pulse-red {
+  0%,100% { background: #fdf0ee; }
+  50%     { background: #fad6d0; }
+}

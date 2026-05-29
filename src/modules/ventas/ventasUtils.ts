@@ -3,15 +3,10 @@ import type {
   AggSalonero, AggGeneral, AggCajero, ContabilidadDay,
   ProductMap, HistMap, Meta,
 } from '../../shared/types/ventas'
+import { isCajeroName, fi as _fi, todayCR } from '../../shared/utils'
 
 // ── Cajeros detection ────────────────────────────────────────
-const CAJEROS_IDS = [
-  'cajero turno mañana','cajero turno manana','cajero turno tarde',
-  'cajero turno mediodia','cajero turno mediodía',
-]
-export function esCajero(name: string) {
-  return CAJEROS_IDS.includes(name.toLowerCase().trim())
-}
+export function esCajero(name: string): boolean { return isCajeroName(name) }
 
 // ── Formatters ───────────────────────────────────────────────
 export function fi(n: number | null | undefined): string {
@@ -41,9 +36,8 @@ export function fmtMonthLabel(ym: string): string {
     'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
   return `${months[Number(m)-1]} ${y}`
 }
-export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10)
-}
+// Timezone-safe today (Costa Rica UTC-6)
+export function todayISO(): string { return todayCR() }
 export function monthKey(date: string): string {
   return date.slice(0, 7)
 }

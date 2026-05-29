@@ -63,21 +63,25 @@ export interface PoolTotals {
 
 // ── Cálculo principal — misma lógica que calcTurno() del original ──
 
+// Returns updated lines (non-mutating) + pool totals
 export function calcTurno(
   lines: DraftLine[],
   pool_efectivo_crc: number,
   pool_efectivo_usd: number,
   pool_barra_crc: number,
   exchange_rate: number,
-): PoolTotals {
-  const worked    = lines.filter(l => l.active)
+): { totals: PoolTotals; updatedLines: DraftLine[] } {
+  // Work on copies — never mutate caller's array
+  const copies = lines.map(l => ({ ...l }))
+  const worked    = copies.filter(l => l.active)
   const barWorked = worked.filter(l => BAR_ROLES.includes(l.role))
   const salaWorked = worked.filter(l => !BAR_ROLES.includes(l.role))
 
   // Efectivo total en CRC
   const efectivoCRC = (pool_efectivo_crc || 0) + (pool_efectivo_usd || 0) * exchange_rate
 
-  // Pool general = efectivo + propinas de sala (convertidas a CRC)
+  // Pool general = efectivo + propinas individuales de sala (ya recolectadas por el salonero)
+  // NOTA: el efectivo del pool NO debe incluir las propinas individuales — son streams separados
   const propinaSala = salaWorked.reduce((s, l) => {
     const crc = Number(l.propina_crc) || 0
     const usd = (Number(l.propina_usd) || 0) * exchange_rate
@@ -85,7 +89,7 @@ export function calcTurno(
   }, 0)
   const generalPool = efectivoCRC + propinaSala
 
-  // Puntos de todos
+  // Calcular pts_val para todos (sigue necesario para la tasa)
   worked.forEach(l => {
     l.pts_val = (Number(l.hours) || 0) * l.pts_rol
   })
@@ -98,7 +102,8 @@ export function calcTurno(
     l.take_home = l.pts_val * generalRate
   })
 
-  // Pool barra: distribuido entre bar workers por horas
+  // Pool barra (adicional): distribuido entre bar workers por horas
+  // Bar workers participan del pool general Y del pool de barra separado
   const totalBarHours = barWorked.reduce((s, l) => s + (Number(l.hours) || 0), 0)
   if (pool_barra_crc > 0 && totalBarHours > 0) {
     barWorked.forEach(l => {
@@ -107,20 +112,19 @@ export function calcTurno(
   }
 
   return {
-    generalPool,
-    barraPool: pool_barra_crc,
-    totalPool: generalPool + pool_barra_crc,
-    totalPoints,
-    generalRate,
+    totals: {
+      generalPool,
+      barraPool: pool_barra_crc,
+      totalPool: generalPool + pool_barra_crc,
+      totalPoints,
+      generalRate,
+    },
+    updatedLines: copies,
   }
 }
 
 // ── Formatters ─────────────────────────────────────────────────
-
-export function formatCRC(n: number): string {
-  if (!n && n !== 0) return '—'
-  return '₡ ' + Math.round(n).toLocaleString('es-CR')
-}
+export { fi as formatCRC } from '../utils/index'
 
 export function formatNum(n: number): string {
   return Number(n).toLocaleString('es-CR', { maximumFractionDigits: 1 })
@@ -195,7 +199,7 @@ export function calcHistory(
     } as DraftLine
   }).filter((l): l is DraftLine => l !== null)
 
-  const totals = calcTurno(
+  const { totals, updatedLines } = calcTurno(
     lines,
     session.pool_efectivo_crc,
     session.pool_efectivo_usd,
@@ -203,7 +207,7 @@ export function calcHistory(
     session.exchange_rate,
   )
 
-  const rows: HistoryRow[] = lines.map(l => ({
+  const rows: HistoryRow[] = updatedLines.map(l => ({
     employeeId:   l.employeeId,
     employeeName: l.employeeName,
     role:         l.role,
@@ -217,3 +221,6 @@ export function calcHistory(
 
   return { rows, ...totals }
 }
+
+// Re-export shared formatters so existing imports don't break
+export { fi, fd, todayCR as todayStr } from '../utils/index'

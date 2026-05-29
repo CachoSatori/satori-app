@@ -26,13 +26,9 @@ import {
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import TipHistory from './TipHistory'
+import { todayCR } from '../../shared/utils'
 
 type View = 'turno' | 'historial'
-
-function todayStr() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 export default function TipsModule() {
   const { profile } = useAuth()
@@ -48,7 +44,7 @@ export default function TipsModule() {
   const [openSession, setOpenSession] = useState<TipSession | null>(null)
 
   // ── Estado UI sesión abierta ──────────────────────────────
-  const [fecha, setFecha] = useState(todayStr())
+  const [fecha, setFecha] = useState(todayCR())
   const [shiftType, setShiftType] = useState<'AM' | 'PM'>('PM')
   const [exchangeRate, setExchangeRate] = useState(640)
   const [efectivoCRC, setEfectivoCRC] = useState<number | ''>('')
@@ -144,19 +140,18 @@ export default function TipsModule() {
   // ── Recalcular totales en tiempo real ─────────────────────
   useEffect(() => {
     if (!openSession) { setTotals(null); return }
-    const linesClone = lines.map(l => ({ ...l }))
-    const t = calcTurno(
-      linesClone,
+    const { totals: t, updatedLines } = calcTurno(
+      lines,
       Number(efectivoCRC) || 0,
       Number(efectivoUSD) || 0,
       Number(barraCRC) || 0,
       exchangeRate,
     )
-    // Actualizar pts_val y take_home en las líneas
+    // Merge pts_val y take_home back — updatedLines are already copies
     setLines(prev => prev.map((l, i) => ({
       ...l,
-      pts_val:   linesClone[i]?.pts_val   ?? l.pts_val,
-      take_home: linesClone[i]?.take_home ?? l.take_home,
+      pts_val:   updatedLines[i]?.pts_val   ?? l.pts_val,
+      take_home: updatedLines[i]?.take_home ?? l.take_home,
     })))
     setTotals(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -278,6 +273,14 @@ export default function TipsModule() {
     if (!openSession || !profile) return
     const workedLines = lines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
+    const poolCRC = Math.round((Number(efectivoCRC)||0) + (Number(efectivoUSD)||0)*exchangeRate + (Number(barraCRC)||0))
+    const ok = window.confirm(
+      `¿Cerrar turno y guardar payouts?\n\n` +
+      `Empleados: ${workedLines.length}\n` +
+      `Pool total: ₡ ${poolCRC.toLocaleString('es-CR')}\n\n` +
+      `Esta acción no se puede deshacer.`
+    )
+    if (!ok) return
     setClosing(true)
     try {
       // Guardar pool final

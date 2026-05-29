@@ -92,7 +92,7 @@ export default function HomePage() {
       </main>
 
       <footer className="app-footer">
-        <span>Satori App v1.0 · Módulo 1</span>
+        <span>Satori App v2.0 · Propinas · Caja · Ventas</span>
       </footer>
     </div>
   )

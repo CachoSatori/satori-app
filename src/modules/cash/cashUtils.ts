@@ -57,20 +57,8 @@ export function tipoColor(t: MovementType | string): string {
   return '#888'
 }
 
-export function todayStr(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-export function fi(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—'
-  return '₡ ' + Math.round(n).toLocaleString('es-CR')
-}
-
-export function fd(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—'
-  return '$ ' + Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+// Re-export from shared utils (single source of truth)
+export { todayCR as todayStr, fi, fd } from '../../shared/utils'
 
 export function formatDate(s: string): string {
   if (!s) return ''

@@ -109,13 +109,15 @@ export async function deleteTipEntry(sessionId: string, employeeId: string): Pro
 export async function savePayouts(
   entries: Array<{ id: string; points: number; payout_crc: number }>
 ): Promise<void> {
-  await Promise.all(entries.map(e =>
-    supabase
-      .from('tip_entries')
-      .update({ points: e.points, payout_crc: e.payout_crc } as never)
-      .eq('id', e.id)
-      .then(({ error }) => { if (error) throw new Error(error.message) })
-  ))
+  if (!entries.length) return
+  // Batch upsert instead of N individual updates
+  const { error } = await supabase
+    .from('tip_entries')
+    .upsert(
+      entries.map(e => ({ id: e.id, points: e.points, payout_crc: e.payout_crc })) as never[],
+      { onConflict: 'id' },
+    )
+  if (error) throw new Error(error.message)
 }
 
 // ── Empleados ───────────────────────────────────────────────

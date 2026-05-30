@@ -27,6 +27,8 @@ import {
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import TipHistory from './TipHistory'
 import { todayCR } from '../../shared/utils'
+import { getCurrentRate } from '../../shared/api/exchangeRate'
+import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 
 type View = 'turno' | 'historial'
 
@@ -70,12 +72,15 @@ export default function TipsModule() {
     setLoading(true)
     setError(null)
     try {
-      const [open, allSessions, emps, pts] = await Promise.all([
+      const [open, allSessions, emps, pts, currentRate] = await Promise.all([
         getOpenTipSession(),
         getTipSessions(),
         getActiveEmployees(),
         getRoleTipPoints(),
+        getCurrentRate(),
       ])
+      // Use DB rate as default if no session is open
+      if (!open) setExchangeRate(currentRate)
       setEmployees(emps)
       setRolePoints(pts)
       setSessions(allSessions)
@@ -283,6 +288,10 @@ export default function TipsModule() {
     if (!ok) return
     setClosing(true)
     try {
+      // Flush any unsaved line state to DB before reading back
+      // (handles the case where a field was edited but not blurred before clicking close)
+      await Promise.all(workedLines.map(l => handleLineBlur(l.employeeId)))
+
       // Guardar pool final
       await updateSessionPools(openSession.id, {
         pool_efectivo_crc: Number(efectivoCRC) || 0,
@@ -300,6 +309,34 @@ export default function TipsModule() {
 
       await savePayouts(payouts)
       await closeTipSession(openSession.id, profile.id)
+
+      // ── Integración Caja↔Propinas ──────────────────────────
+      // Si hay un turno de caja abierto, registrar el pago de propinas
+      // como egreso_personal para que cuadre en el cierre de caja
+      const totalPayout = payouts.reduce((s, p) => s + p.payout_crc, 0)
+      if (totalPayout > 0) {
+        try {
+          const cashSession = await getOpenCashSession()
+          if (cashSession) {
+            await createCashMovement({
+              session_id:    cashSession.id,
+              created_by:    profile.id,
+              movement_type: 'egreso_personal',
+              amount_crc:    totalPayout,
+              amount_usd:    0,
+              currency:      'CRC',
+              exchange_rate: null,
+              description:   `Propinas turno ${openSession.session_date} ${openSession.shift_type}`,
+              subcategory:   'Propinas por turno',
+              method:        'Efectivo',
+              caja_origen:   'Registradora',
+              shift:         openSession.shift_type,
+            })
+          }
+        } catch {
+          // No bloquear el cierre de propinas si la integración falla silenciosamente
+        }
+      }
 
       setOpenSession(null)
       setTotals(null)

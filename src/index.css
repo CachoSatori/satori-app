@@ -3622,3 +3622,68 @@ html, body, #root {
 /* Fix --vt-muted usage in dark contexts (ink background) — keep light */
 .vt-kpi .vt-kpi-sub   { color: #aaa; }
 .vt-kpi .vt-kpi-label { color: #aaa; }
+
+/* ── Exchange Rate Widget ────────────────────────────────────── */
+.xr-widget {
+  max-width: 560px;
+}
+.xr-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.xr-title {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--t-ink);
+  margin-bottom: 0.2rem;
+}
+.xr-subtitle {
+  font-size: 0.72rem;
+  color: #888;
+  letter-spacing: 0.04em;
+}
+.xr-current {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  background: var(--t-ink);
+  padding: 0.625rem 0.875rem;
+  border-radius: 2px;
+  border-left: 3px solid var(--t-gold);
+}
+.xr-current-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #555;
+}
+.xr-current-val {
+  font-family: 'Syne', var(--font-serif);
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--t-gold);
+  line-height: 1;
+}
+.xr-current-unit {
+  font-size: 0.65rem;
+  color: #666;
+}
+.xr-form {
+  margin-bottom: 1.5rem;
+  padding: 1.25rem;
+  background: rgba(0,0,0,0.03);
+  border: 1px solid var(--t-border);
+  border-radius: 2px;
+}
+.xr-history {
+  padding: 1rem;
+  background: #fff;
+  border: 1px solid var(--t-border);
+  border-radius: 2px;
+}

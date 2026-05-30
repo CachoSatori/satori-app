@@ -4,8 +4,9 @@ import { getAllEmployees } from '../../shared/api/admin'
 import { getRoleTipPoints } from '../../shared/api/tips'
 import EmployeeList from './EmployeeList'
 import RolePointsConfig from './RolePointsConfig'
+import ExchangeRateWidget from './ExchangeRateWidget'
 
-type Tab = 'employees' | 'rolepoints'
+type Tab = 'employees' | 'rolepoints' | 'exchange'
 
 export default function AdminModule() {
   const [tab, setTab] = useState<Tab>('employees')
@@ -64,6 +65,12 @@ export default function AdminModule() {
           >
             Puntos por rol
           </button>
+          <button
+            className={`tab-btn ${tab === 'exchange' ? 'active' : ''}`}
+            onClick={() => setTab('exchange')}
+          >
+            Tipo de cambio
+          </button>
         </div>
       </div>
 
@@ -80,6 +87,9 @@ export default function AdminModule() {
         )}
         {tab === 'rolepoints' && (
           <RolePointsConfig rolePoints={rolePoints} onRefresh={loadData} />
+        )}
+        {tab === 'exchange' && (
+          <ExchangeRateWidget />
         )}
       </div>
     </div>

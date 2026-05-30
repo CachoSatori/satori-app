@@ -150,13 +150,11 @@ export async function getComps(): Promise<Comp[]> {
 }
 
 export async function saveComp(comp: Comp): Promise<void> {
-  const existing = await supabase.from('ventas_comps' as never).select('id').eq('data->>id', comp.id)
-  if (existing.data && existing.data.length > 0) {
-    await supabase.from('ventas_comps' as never).update({ data: comp as never, updated_at: new Date().toISOString() } as never)
-      .eq('data->>id', comp.id)
-  } else {
-    await supabase.from('ventas_comps' as never).insert({ data: comp as never } as never)
-  }
+  // Delete-then-insert: avoids unreliable JSONB path filtering on UPDATE
+  await supabase.from('ventas_comps' as never).delete().filter('data->>id', 'eq', comp.id)
+  const { error } = await supabase.from('ventas_comps' as never)
+    .insert({ data: comp as never } as never)
+  if (error) throw new Error(error.message)
 }
 
 export async function deleteComp(compId: string): Promise<void> {

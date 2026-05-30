@@ -4,6 +4,7 @@ import {
   allDates, availableMonths,
   fi, fmtMonthLabel,
 } from './ventasUtils'
+import { isCajeroName } from '../../shared/utils'
 
 interface PM_Item {
   nombre: string
@@ -16,12 +17,25 @@ interface PM_Item {
   monto: number
 }
 
-function buildPM(dates: string[], dias: DiasMap, pm: ProductMap): Record<string, PM_Item> {
+function buildPM(
+  dates: string[],
+  dias: DiasMap,
+  pm: ProductMap,
+  canal: 'todos' | 'salon' | 'delivery',
+): Record<string, PM_Item> {
   const result: Record<string, PM_Item> = {}
   for (const date of dates) {
     const dia = dias[date]
     if (!dia) continue
-    for (const [, s] of Object.entries(dia.saloneros)) {
+    for (const [salName, s] of Object.entries(dia.saloneros)) {
+      const isCaj = isCajeroName(salName)
+      // Canal filter:
+      // 'salon'    → saloneros only (all MESA) — skip cajero entries
+      // 'delivery' → cajero entries only (DELIVERY/LLEVAR)
+      // 'todos'    → everything
+      if (canal === 'salon'    && isCaj)  continue
+      if (canal === 'delivery' && !isCaj) continue
+
       const prods = (s as { prods?: [string, number, number][] }).prods ?? []
       for (const [name, qty, monto] of prods) {
         if (!result[name]) {
@@ -31,12 +45,17 @@ function buildPM(dates: string[], dias: DiasMap, pm: ProductMap): Record<string,
             tipo:   info?.tipo ?? 'desconocido',
             clas:   info?.clasificacion ?? '',
             subcl:  info?.subclasificacion ?? '',
-            salon:  0, delivery: 0, unidades: 0, monto: 0,
+            salon:    0,
+            delivery: 0,
+            unidades: 0,
+            monto:    0,
           }
         }
         const mult = pm[name]?.multiplicador ?? 1
         result[name].monto    += monto
         result[name].unidades += qty * mult
+        if (isCaj) result[name].delivery += monto
+        else       result[name].salon    += monto
       }
     }
   }
@@ -61,7 +80,7 @@ export default function VentasMix({ dias, pm }: Props) {
     return all.filter(d => d.startsWith(selected))
   }, [dias, selected])
 
-  const pmData = useMemo(() => buildPM(dates, dias, pm), [dates, dias, pm])
+  const pmData = useMemo(() => buildPM(dates, dias, pm, canal), [dates, dias, pm, canal])
 
   const totalMonto = Object.values(pmData).reduce((s, p) => s + p.monto, 0)
   const totBeb     = Object.values(pmData).filter(p => p.tipo === 'bebida').reduce((s, p) => s + p.monto, 0)

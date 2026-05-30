@@ -46,19 +46,17 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
     // Ventas
     supabase.from('ventas_dias' as never).select('data').eq('session_date', date).maybeSingle(),
 
-    // Caja
+    // Caja — load ALL sessions for the day (BUG-8 FIX: was only loading latest)
     supabase.from('cash_sessions' as never)
       .select('id, status, cajero_name, initial_cash_crc, initial_suppliers_crc')
       .eq('session_date', date)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .order('created_at', { ascending: false }),
 
-    // Tips
+    // Tips — show open OR closed sessions (INT-4 FIX)
     supabase.from('tip_sessions' as never)
       .select('id, status, pool_efectivo_crc, pool_efectivo_usd, exchange_rate, pool_barra_crc')
       .eq('session_date', date)
-      .eq('status', 'closed')
+      .order('status', { ascending: true }) // 'closed' before 'open' alphabetically → prefer closed
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -92,24 +90,31 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
     snap.promPax    = pax > 0 ? salon / pax : 0
   }
 
-  // Process caja
+  // Process caja — now handles ALL sessions for the day (BUG-8 FIX)
   if (cajaRes.status === 'fulfilled' && cajaRes.value.data) {
-    const session = cajaRes.value.data as { id: string; status: string; cajero_name: string; initial_cash_crc: number; initial_suppliers_crc: number }
-    snap.hasCaja     = true
-    snap.cajaStatus  = session.status
-    snap.cajeroName  = session.cajero_name ?? ''
+    const sessions = cajaRes.value.data as { id: string; status: string; cajero_name: string }[]
+    if (sessions.length > 0) {
+      snap.hasCaja    = true
+      // Show most recent cajero name; prefer open session if any
+      const openSess  = sessions.find(s => s.status === 'open') ?? sessions[0]
+      snap.cajaStatus = openSess.status
+      snap.cajeroName = openSess.cajero_name ?? ''
 
-    // Get movements for this session
-    const { data: movs } = await supabase
-      .from('cash_movements' as never)
-      .select('movement_type, amount_crc')
-      .eq('session_id', session.id)
-      .neq('status', 'rechazado')
-    if (movs) {
-      const ms = movs as { movement_type: string; amount_crc: number }[]
-      snap.cajaIngresos = ms.filter(m => m.movement_type === 'ingreso').reduce((s, m) => s + m.amount_crc, 0)
-      snap.cajaEgresos  = ms.filter(m => m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso').reduce((s, m) => s + m.amount_crc, 0)
-      snap.cajaSaldo    = snap.cajaIngresos - snap.cajaEgresos
+      // Get movements for ALL sessions of the day
+      const sessionIds = sessions.map(s => s.id)
+      for (const sid of sessionIds) {
+        const { data: movs } = await supabase
+          .from('cash_movements' as never)
+          .select('movement_type, amount_crc')
+          .eq('session_id', sid)
+          .neq('status', 'rechazado')
+        if (movs) {
+          const ms = movs as { movement_type: string; amount_crc: number }[]
+          snap.cajaIngresos += ms.filter(m => m.movement_type === 'ingreso').reduce((s, m) => s + m.amount_crc, 0)
+          snap.cajaEgresos  += ms.filter(m => m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso').reduce((s, m) => s + m.amount_crc, 0)
+        }
+      }
+      snap.cajaSaldo = snap.cajaIngresos - snap.cajaEgresos
     }
   }
 

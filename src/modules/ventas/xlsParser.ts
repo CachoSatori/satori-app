@@ -8,7 +8,7 @@
 
 import * as XLSX from 'xlsx'
 import type { DiaData, SaloneroDay, CajeroDay } from '../../shared/types/ventas'
-import { isCajeroName } from '../../shared/utils'
+import { isCajeroName, todayCR } from '../../shared/utils'
 
 // ── Date from filename ─────────────────────────────────────────
 export function extractDateFromFilename(name: string): string | null {
@@ -44,7 +44,7 @@ export function parseVentasFile(buffer: ArrayBuffer, fileName: string): DiaData 
 
   return {
     fileName,
-    uploadedAt: new Date().toISOString().slice(0, 10),
+    uploadedAt: todayCR(),  // Costa Rica timezone
     saloneros,
   }
 }

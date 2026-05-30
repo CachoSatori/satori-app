@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { todayCR } from '../../shared/utils'
 import type { DiasMap } from '../../shared/types/ventas'
 import {
   aggCajero,
@@ -12,7 +13,7 @@ interface Props {
 function nDaysAgo(n: number): string {
   const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0,10)
 }
-function todayStr(): string { return new Date().toISOString().slice(0,10) }
+
 
 const PRESETS = [
   { label: '7 días',  from: () => nDaysAgo(7) },
@@ -24,7 +25,7 @@ const PRESETS = [
 export default function VentasCajeros({ dias }: Props) {
   const [preset, setPreset] = useState(2)
   const [from, setFrom] = useState(PRESETS[2].from())
-  const [to,   setTo]   = useState(todayStr())
+  const [to,   setTo]   = useState(todayCR())
 
   const dates = useMemo(() => allDates(dias), [dias])
   const range = useMemo(() => datesInRange(dates, from, to), [dates, from, to])
@@ -79,7 +80,7 @@ export default function VentasCajeros({ dias }: Props) {
       <div className="vt-range-bar">
         {PRESETS.map((p, i) => (
           <button key={i} className={`vt-range-btn ${preset === i ? 'active' : ''}`}
-            onClick={() => { setFrom(p.from()); setTo(todayStr()); setPreset(i) }}>
+            onClick={() => { setFrom(p.from()); setTo(todayCR()); setPreset(i) }}>
             {p.label}
           </button>
         ))}

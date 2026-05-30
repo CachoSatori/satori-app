@@ -159,38 +159,43 @@ export async function getAttendanceHistory(months = 3): Promise<AttendanceRow[]>
   since.setMonth(since.getMonth() - months)
   const sinceStr = since.toISOString().slice(0, 10)
 
+  // BUG-2 FIX: filter by session_date (CR timezone) not entry created_at (UTC)
+  // Join through tip_sessions to get session_date correctly
   const { data, error } = await supabase
-    .from('tip_entries')
+    .from('tip_sessions')
     .select(`
-      employee_id,
-      hours_worked,
-      payout_crc,
-      points,
-      tip_sessions!session_id (
-        session_date,
-        shift_type
+      id,
+      session_date,
+      shift_type,
+      tip_entries (
+        employee_id,
+        hours_worked,
+        payout_crc,
+        points
       )
     `)
-    .gte('created_at', sinceStr + 'T00:00:00Z')
-    .order('created_at', { ascending: false })
-    .limit(1000)
+    .eq('status', 'closed')
+    .gte('session_date', sinceStr)
+    .order('session_date', { ascending: false })
+    .limit(200)
   if (error) throw new Error(error.message)
 
-  return ((data ?? []) as unknown as Array<{
-    employee_id: string
-    hours_worked: number
-    payout_crc: number | null
-    points: number | null
-    tip_sessions: { session_date: string; shift_type: string } | null
-  }>)
-    .filter(r => r.tip_sessions)
-    .map(r => ({
-      session_date: r.tip_sessions!.session_date,
-      shift_type:   r.tip_sessions!.shift_type,
-      employee_id:  r.employee_id,
-      hours_worked: r.hours_worked,
-      payout_crc:   r.payout_crc,
-      points:       r.points,
-    }))
-    .sort((a, b) => b.session_date.localeCompare(a.session_date))
+  // Flatten sessions → entries
+  const rows: AttendanceRow[] = []
+  for (const session of (data ?? []) as unknown as Array<{
+    id: string; session_date: string; shift_type: string
+    tip_entries: Array<{ employee_id: string; hours_worked: number; payout_crc: number | null; points: number | null }>
+  }>) {
+    for (const entry of session.tip_entries ?? []) {
+      rows.push({
+        session_date: session.session_date,
+        shift_type:   session.shift_type,
+        employee_id:  entry.employee_id,
+        hours_worked: entry.hours_worked,
+        payout_crc:   entry.payout_crc,
+        points:       entry.points,
+      })
+    }
+  }
+  return rows.sort((a, b) => b.session_date.localeCompare(a.session_date))
 }

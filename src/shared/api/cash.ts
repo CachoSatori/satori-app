@@ -94,12 +94,19 @@ export async function getCashMovements(sessionId: string): Promise<CashMovement[
   return data as CashMovement[]
 }
 
-export async function getAllCashMovements(): Promise<CashMovement[]> {
-  const q = supabase.from('cash_movements').select('*')
-    .order('created_at', { ascending: false }).limit(500)
-  const { data, error } = await q
+// PERF FIX: filter by date range instead of hard limit
+export async function getAllCashMovements(days = 90): Promise<CashMovement[]> {
+  const since = new Date()
+  since.setDate(since.getDate() - days)
+  const sinceStr = since.toISOString().slice(0, 10)
+
+  const { data, error } = await supabase
+    .from('cash_movements')
+    .select('*')
+    .gte('created_at', sinceStr + 'T00:00:00Z')
+    .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
-  return data as CashMovement[]
+  return (data ?? []) as CashMovement[]
 }
 
 export async function createCashMovement(movement: {

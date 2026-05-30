@@ -4276,3 +4276,132 @@ html, body, #root {
   margin-top: 2rem; padding-top: 0.625rem; border-top: 1px solid #e0e0e0;
   font-size: 0.65rem; color: #aaa; text-align: center;
 }
+
+/* ============================================================
+   SPRINT 3 — Mobile optimizations
+   ============================================================ */
+
+/* ── Caja Movimientos — card layout on mobile ────────────────── */
+@media (max-width: 760px) {
+  /* Hide the complex table, show card list instead */
+  .cd-tbl-wrap { display: none; }
+
+  /* Mobile card view for movements */
+  .cd-mov-mobile-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .cd-mov-mobile-card {
+    background: #fff;
+    border: 1px solid var(--t-border);
+    border-radius: 2px;
+    padding: 0.75rem 1rem;
+  }
+  .cd-mov-mobile-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.4rem;
+  }
+  .cd-mov-mobile-card-type {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 99px;
+  }
+  .cd-mov-mobile-card-amount {
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+  }
+}
+
+/* Only show mobile list on small screens */
+.cd-mov-mobile-list { display: none; }
+@media (max-width: 760px) {
+  .cd-mov-mobile-list { display: flex; }
+}
+
+/* ── Tips entry on mobile ────────────────────────────────────── */
+@media (max-width: 500px) {
+  .tips-emp-row { flex-direction: column; align-items: stretch; }
+  .tips-emp-fields.four-col { grid-template-columns: 1fr 1fr; }
+  .tips-emp-fields.three-col { grid-template-columns: 1fr 1fr; }
+  .tips-emp-input, .tips-emp-input-money {
+    font-size: 1rem;      /* Prevent iOS zoom on input focus */
+    min-height: 44px;     /* Apple HIG touch target */
+    padding: 0.6rem 0.75rem;
+  }
+  .tips-emp-field-label { font-size: 0.68rem; }
+}
+
+/* ── Safe area for iPhone notch/home bar ────────────────────── */
+.cd-modal-overlay,
+.sop-overlay,
+.rpt-overlay,
+.cd-modal,
+.sop-detail,
+.sop-editor,
+.rpt-paper {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.cd-modal-actions,
+.sop-editor-footer,
+.sop-detail-footer,
+.rpt-toolbar {
+  padding-bottom: max(0.875rem, env(safe-area-inset-bottom));
+}
+
+/* ── Sticky tab bars ─────────────────────────────────────────── */
+.cd-nav-tabs,
+.vt-nav-tabs,
+.tips-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* ── VentasModule tabs — compact on mobile ───────────────────── */
+@media (max-width: 760px) {
+  .vt-nav-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    padding: 0;
+    overflow-x: visible;
+    flex-wrap: wrap;
+  }
+  .vt-nav-tab {
+    padding: 0.6rem 0.4rem;
+    font-size: 0.58rem;
+    text-align: center;
+    border-bottom: 2px solid transparent;
+    border-right: 1px solid rgba(0,0,0,0.06);
+  }
+  /* Show only first 8 tabs, others in overflow */
+  .vt-nav-tab:nth-child(n+9) { display: none; }
+}
+
+/* ── Module card status badge ────────────────────────────────── */
+.module-card .module-status {
+  margin-top: 0.4rem;
+}
+
+/* ── Pool bar horizontal scroll on narrow ────────────────────── */
+@media (max-width: 500px) {
+  .tips-pool-bar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .tips-pool-item { min-width: 40%; }
+}
+
+/* ── Buttons: min 44px touch target ─────────────────────────── */
+@media (max-width: 760px) {
+  .tips-btn-teal,
+  .tips-btn-primary,
+  .tips-btn-danger,
+  .tips-btn-ghost,
+  .cd-btn-green {
+    min-height: 44px;
+    font-size: 0.88rem;
+  }
+  .module-card { min-height: 110px; }
+}

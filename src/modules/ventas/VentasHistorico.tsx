@@ -2,6 +2,12 @@ import { useState, useMemo } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
+import { todayCR } from '../../shared/utils'
+
+function nDaysAgo(n: number): string {
+  const d = new Date(todayCR() + 'T12:00:00'); d.setDate(d.getDate() - n)
+  return d.toISOString().slice(0, 10)
+}
 import type { DiasMap, HistMap, ProductMap } from '../../shared/types/ventas'
 import {
   aggGeneral, aggSalonero,
@@ -15,25 +21,22 @@ interface Props {
   pm:    ProductMap
 }
 
-function todayISO(): string { return new Date().toISOString().slice(0, 10) }
-function nDaysAgo(n: number): string {
-  const d = new Date(); d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
+
+
 
 export default function VentasHistorico({ dias, hist, pm }: Props) {
   const [from, setFrom] = useState(nDaysAgo(30))
-  const [to,   setTo]   = useState(todayISO())
+  const [to,   setTo]   = useState(todayCR())
   const [preset, setPreset] = useState(2)
 
   const dates  = useMemo(() => allDates(dias, hist), [dias, hist])
   const sals   = useMemo(() => allSaloneros(dias), [dias])
 
   const PRESETS = [
-    { label: '7 días',  f: () => [nDaysAgo(7),  todayISO()] },
-    { label: '15 días', f: () => [nDaysAgo(15), todayISO()] },
-    { label: '30 días', f: () => [nDaysAgo(30), todayISO()] },
-    { label: '3 meses', f: () => [nDaysAgo(90), todayISO()] },
+    { label: '7 días',  f: () => [nDaysAgo(7),  todayCR()] },
+    { label: '15 días', f: () => [nDaysAgo(15), todayCR()] },
+    { label: '30 días', f: () => [nDaysAgo(30), todayCR()] },
+    { label: '3 meses', f: () => [nDaysAgo(90), todayCR()] },
     { label: 'Todo',    f: () => [dates[0] ?? '', dates[dates.length-1] ?? ''] },
   ]
 

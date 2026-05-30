@@ -3,7 +3,27 @@ import type { DiaData, HistDay, ProductInfo, Meta, Comp } from '../types/ventas'
 
 // ── Días ────────────────────────────────────────────────────
 
-export async function getVentasDias(): Promise<Record<string, DiaData>> {
+// PERF FIX: eager load only recent 90 days; older data loaded on demand
+export async function getVentasDias(days = 90): Promise<Record<string, DiaData>> {
+  const since = new Date()
+  since.setDate(since.getDate() - days)
+  const sinceStr = since.toISOString().slice(0, 10)
+
+  const { data, error } = await supabase
+    .from('ventas_dias' as never)
+    .select('session_date, data')
+    .gte('session_date', sinceStr)
+    .order('session_date', { ascending: true })
+  if (error) throw new Error(error.message)
+  const result: Record<string, DiaData> = {}
+  for (const row of (data as { session_date: string; data: DiaData }[]) ?? []) {
+    result[row.session_date] = row.data
+  }
+  return result
+}
+
+// Load ALL historical data (used by VentasAnalisis year-over-year)
+export async function getAllVentasDias(): Promise<Record<string, DiaData>> {
   const { data, error } = await supabase
     .from('ventas_dias' as never)
     .select('session_date, data')

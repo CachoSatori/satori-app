@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import type { CashMovement, CashSession, MovementType } from '../../shared/types/database'
 import { updateCashMovement, deleteCashMovement } from '../../shared/api/cash'
+import { todayCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, todayStr } from './cashUtils'
 
 interface Props {
@@ -12,7 +13,7 @@ interface Props {
 export default function CashMovimientos({ movements, sessions, onRefresh }: Props) {
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
 
-  const defaultFrom = (() => { const d = new Date(); d.setDate(d.getDate() - 60); return d.toISOString().slice(0, 10) })()
+  const defaultFrom = (() => { const d = new Date(todayCR() + 'T12:00:00'); d.setDate(d.getDate() - 60); return d.toISOString().slice(0, 10) })()
   const [from,    setFrom]    = useState(defaultFrom)
   const [to,      setTo]      = useState(todayStr())
   const [tipo,    setTipo]    = useState('')
@@ -47,11 +48,12 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   })
 
   // ── Saldos ───────────────────────────────────────────────
+  // BUG-2 FIX: filter both entradas AND salidas by caja_origen='Caja Fuerte'
   const cfEntradas = movements
     .filter(m => m.movement_type === 'ingreso' && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
     .reduce((s, m) => s + m.amount_crc, 0)
   const cfSalidas = movements
-    .filter(m => isEgreso(m.movement_type as MovementType) && m.status !== 'pendiente')
+    .filter(m => isEgreso(m.movement_type as MovementType) && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
     .reduce((s, m) => s + m.amount_crc, 0)
   const cfSaldo = cfEntradas - cfSalidas
 

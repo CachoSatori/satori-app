@@ -1,4 +1,10 @@
 import { useState, useMemo } from 'react'
+import { todayCR } from '../../shared/utils'
+
+function addDays(date: string, n: number): string {
+  const d = new Date(date + 'T12:00:00'); d.setDate(d.getDate() - n + 1)
+  return d.toISOString().slice(0, 10)
+}
 import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
   aggSalonero, aggGeneral, allSaloneros,
@@ -20,17 +26,13 @@ const PRESETS = [
   { label: 'Todo',       days: 999 },
 ]
 
-function todayISO(): string { return new Date().toISOString().slice(0, 10) }
-function addDays(date: string, n: number): string {
-  const d = new Date(date + 'T12:00:00')
-  d.setDate(d.getDate() - n + 1)
-  return d.toISOString().slice(0, 10)
-}
+
+
 
 export default function VentasSaloneros({ dias, pm, metas }: Props) {
   const [preset, setPreset] = useState(1)
   const [from, setFrom]     = useState('')
-  const [to,   setTo]       = useState(todayISO())
+  const [to,   setTo]       = useState(todayCR())
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const dates = useMemo(() => allDates(dias), [dias])
@@ -38,7 +40,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
 
   const rangeDates = useMemo(() => {
     if (preset < PRESETS.length - 1) {
-      const last = [...dates].pop() ?? todayISO()
+      const last = [...dates].pop() ?? todayCR()
       const f = addDays(last, PRESETS[preset].days)
       return datesInRange(dates, f, last)
     }

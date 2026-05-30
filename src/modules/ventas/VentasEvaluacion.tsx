@@ -9,6 +9,7 @@
  * - % de meta: how close to the target each metric is
  */
 import { useMemo } from 'react'
+import { todayCR } from '../../shared/utils'
 import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
   aggSalonero, aggGeneral,
@@ -22,38 +23,37 @@ interface Props {
   metas: Meta
 }
 
-// ── Compute advanced metrics ───────────────────────────────────
+// ── Compute advanced metrics (uses pre-built cache to avoid O(n²)) ────────────
 function calcAdvanced(
   name: string,
   dates: string[],
   dias: DiasMap,
   pm: ProductMap,
   metas: Meta,
+  dayAggCache: Record<string, ReturnType<typeof aggSalonero>>,
+  dayGenCache: Record<string, ReturnType<typeof aggGeneral>>,
 ) {
   if (!dates.length) return null
+
+  const getDay    = (d: string) => dayAggCache[`${name}|${d}`] ?? aggSalonero(name, [d], dias, pm)
+  const getGenDay = (d: string) => dayGenCache[d] ?? aggGeneral([d], dias, pm)
 
   const metaPP  = getMeta(metas, name, 'promPax')
   const metaBP  = getMeta(metas, name, 'bebPax')
   const metaRat = getMeta(metas, name, 'ratioCB')
 
-  // Daily promPax values
+  // Daily promPax values — uses cache
   const dailyVals = dates
-    .map(d => {
-      const s = aggSalonero(name, [d], dias, pm)
-      return s.days > 0 ? s.promPax : null
-    })
+    .map(d => { const s = getDay(d); return s.days > 0 ? s.promPax : null })
     .filter((v): v is number => v !== null)
 
   if (!dailyVals.length) return null
 
   const mean = dailyVals.reduce((s, v) => s + v, 0) / dailyVals.length
 
-  // General average per day (for consistency reference)
+  // General average per day
   const genDailyVals = dates
-    .map(d => {
-      const g = aggGeneral([d], dias, pm)
-      return g.pax > 0 ? g.promPax : null
-    })
+    .map(d => { const g = getGenDay(d); return g.pax > 0 ? g.promPax : null })
     .filter((v): v is number => v !== null)
 
   const genMean = genDailyVals.length > 0
@@ -61,29 +61,25 @@ function calcAdvanced(
 
   // Consistencia: % days above daily general average
   const daysAboveAvg = dates.filter(d => {
-    const s  = aggSalonero(name, [d], dias, pm)
-    const g  = aggGeneral([d], dias, pm)
+    const s = getDay(d); const g = getGenDay(d)
     return s.days > 0 && g.pax > 0 && s.promPax >= g.promPax
   }).length
-  const totalWorked = dailyVals.length
+  const totalWorked  = dailyVals.length
   const consistencia = totalWorked > 0 ? (daysAboveAvg / totalWorked) * 100 : 0
 
   // Tendencia: last 7 worked days vs prior 7 worked days
-  const workedDates = dates.filter(d => aggSalonero(name, [d], dias, pm).days > 0)
+  const workedDates = dates.filter(d => getDay(d).days > 0)
   const last7  = workedDates.slice(-7)
   const prev7  = workedDates.slice(-14, -7)
-  const avgL7  = last7.length  > 0 ? last7.reduce((s, d) => s + aggSalonero(name, [d], dias, pm).promPax, 0) / last7.length : 0
-  const avgP7  = prev7.length  > 0 ? prev7.reduce((s, d) => s + aggSalonero(name, [d], dias, pm).promPax, 0) / prev7.length : 0
+  const avgL7  = last7.length > 0 ? last7.reduce((s, d) => s + getDay(d).promPax, 0) / last7.length : 0
+  const avgP7  = prev7.length > 0 ? prev7.reduce((s, d) => s + getDay(d).promPax, 0) / prev7.length : 0
   const tendencia = avgP7 > 0 ? ((avgL7 - avgP7) / avgP7) * 100 : 0
 
   // Racha: consecutive days at/above promPax meta
   let racha = 0
   if (metaPP > 0) {
-    const reversed = [...workedDates].reverse()
-    for (const d of reversed) {
-      const dayVal = aggSalonero(name, [d], dias, pm).promPax
-      if (dayVal >= metaPP) racha++
-      else break
+    for (const d of [...workedDates].reverse()) {
+      if (getDay(d).promPax >= metaPP) racha++; else break
     }
   }
 
@@ -116,11 +112,32 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
   const dates = useMemo(() => allDates(dias), [dias])
   const sals  = useMemo(() => allSaloneros(dias), [dias])
 
+  // PERF FIX: pre-compute per-day aggSalonero for ALL saloneros × dates ONCE
+  // This avoids O(n²) repeated calls inside calcAdvanced and its trend loops
+  const dayAggCache = useMemo(() => {
+    const cache: Record<string, ReturnType<typeof aggSalonero>> = {}
+    for (const date of dates) {
+      for (const name of sals) {
+        cache[`${name}|${date}`] = aggSalonero(name, [date], dias, pm)
+      }
+    }
+    return cache
+  }, [dates, sals, dias, pm])
+
+  // Also pre-compute general per day
+  const dayGenCache = useMemo(() => {
+    const cache: Record<string, ReturnType<typeof aggGeneral>> = {}
+    for (const date of dates) {
+      cache[date] = aggGeneral([date], dias, pm)
+    }
+    return cache
+  }, [dates, dias, pm])
+
   // Use last 30 days for evaluation (or all data if less)
   const evalDates = useMemo(() => {
     if (!dates.length) return []
     const last = dates[dates.length - 1]
-    const d30ago = new Date(last + 'T12:00:00')
+    const d30ago = new Date((last || todayCR()) + 'T12:00:00')
     d30ago.setDate(d30ago.getDate() - 30)
     const from = d30ago.toISOString().slice(0, 10)
     return datesInRange(dates, from, last)
@@ -128,10 +145,10 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
 
   const results = useMemo(() =>
     sals
-      .map(name => ({ name, data: calcAdvanced(name, evalDates, dias, pm, metas) }))
+      .map(name => ({ name, data: calcAdvanced(name, evalDates, dias, pm, metas, dayAggCache, dayGenCache) }))
       .filter(r => r.data !== null)
       .sort((a, b) => (b.data!.agg.promPax - a.data!.agg.promPax)),
-  [sals, evalDates, dias, pm, metas])
+  [sals, evalDates, dias, pm, metas, dayAggCache, dayGenCache])
 
   if (!results.length) {
     return (

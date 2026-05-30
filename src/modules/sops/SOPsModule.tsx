@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import DOMPurify from 'dompurify'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getSOPs, saveSOPItem, deleteSOPItem, SOP_CATEGORIES } from '../../shared/api/sops'
@@ -222,9 +223,7 @@ export default function SOPsModule() {
             </div>
             <div className="sop-detail-body">
               <div className="sop-content"
-                dangerouslySetInnerHTML={{
-                  __html: '<p class="sop-p">' + renderContent(selectedSOP.content) + '</p>'
-                }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize('<p class="sop-p">' + renderContent(selectedSOP.content) + '</p>') }}
               />
             </div>
             {canEdit && (
@@ -303,9 +302,7 @@ export default function SOPsModule() {
                   </div>
                   <div className="sop-preview-box">
                     <div className="sop-content"
-                      dangerouslySetInnerHTML={{
-                        __html: '<p class="sop-p">' + renderContent(editSOP.content ?? '') + '</p>'
-                      }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize('<p class="sop-p">' + renderContent(editSOP.content ?? '') + '</p>') }}
                     />
                   </div>
                 </div>

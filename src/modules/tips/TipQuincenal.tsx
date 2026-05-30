@@ -1,11 +1,13 @@
 /**
  * TipQuincenal — Vista quincenal de propinas (Q1: días 1-15, Q2: días 16-fin)
- * Para liquidación de nómina quincenal
+ * BUG-4 FIX: now fetches its own data independently from calcCache.
+ * No longer requires Historial to be opened first.
  */
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
-import { formatCRC } from '../../shared/utils/tipCalculations'
+import { calcHistory, formatCRC } from '../../shared/utils/tipCalculations'
+import { getTipEntriesBySession } from '../../shared/api/tips'
 
 interface Props {
   sessions:   TipSession[]
@@ -14,52 +16,84 @@ interface Props {
   rolePoints: RoleTipPoints[]
 }
 
-interface EmpQuincenal {
-  id:      string
-  name:    string
-  role:    string
-  q1Days:  number
-  q1Hours: number
-  q1Earn:  number
-  q2Days:  number
-  q2Hours: number
-  q2Earn:  number
-  total:   number
-  promDia: number
-}
-
-// Build available month list from closed sessions
 function getMonths(sessions: TipSession[]): string[] {
   const m = new Set<string>()
   sessions.filter(s => s.status === 'closed').forEach(s => m.add(s.session_date.slice(0, 7)))
   return [...m].sort().reverse()
 }
 
-export default function TipQuincenal({ sessions, calcCache, employees }: Props) {
+const MONTH_NAMES: Record<string, string> = {
+  '01':'Ene','02':'Feb','03':'Mar','04':'Abr','05':'May','06':'Jun',
+  '07':'Jul','08':'Ago','09':'Sep','10':'Oct','11':'Nov','12':'Dic',
+}
+
+export default function TipQuincenal({ sessions, calcCache, employees, rolePoints }: Props) {
   const months     = useMemo(() => getMonths(sessions), [sessions])
   const [month, setMonth] = useState(months[0] ?? '')
-
-  const MONTH_NAMES: Record<string, string> = {
-    '01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio',
-    '07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre',
-  }
+  // Local cache so we can load independently of TipHistory
+  const [localCache, setLocalCache] = useState<Record<string, HistoryCalc>>({})
+  const [loading, setLoading] = useState(false)
 
   const empMap = useMemo(() => new Map(employees.map(e => [e.id, e])), [employees])
 
-  // Sessions for selected month, split into Q1/Q2
-  const { q1Sessions, q2Sessions } = useMemo(() => {
-    const closed = sessions.filter(s => s.status === 'closed' && s.session_date.startsWith(month))
-    const q1 = closed.filter(s => Number(s.session_date.slice(8, 10)) <= 15)
-    const q2 = closed.filter(s => Number(s.session_date.slice(8, 10)) > 15)
-    return { q1Sessions: q1, q2Sessions: q2 }
-  }, [sessions, month])
+  // Merge parent cache + local cache
+  const mergedCache = useMemo(() => ({ ...calcCache, ...localCache }), [calcCache, localCache])
+
+  // Sessions for selected month
+  const monthSessions = useMemo(() =>
+    sessions.filter(s => s.status === 'closed' && s.session_date.startsWith(month)),
+  [sessions, month])
+
+  // Auto-load any sessions not yet in either cache
+  useEffect(() => {
+    const missing = monthSessions.filter(s => !mergedCache[s.id])
+    if (!missing.length) return
+    setLoading(true)
+    Promise.all(missing.map(async s => {
+      const entries = await getTipEntriesBySession(s.id)
+      const calc = calcHistory(
+        entries.map(e => ({
+          employee_id:    e.employee_id,
+          hours_worked:   e.hours_worked,
+          tip_amount_crc: e.tip_amount_crc,
+          tip_amount_usd: e.tip_amount_usd,
+          points:         e.points,
+          payout_crc:     e.payout_crc,
+        })),
+        employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
+        rolePoints,
+        {
+          pool_efectivo_crc: s.pool_efectivo_crc,
+          pool_efectivo_usd: s.pool_efectivo_usd,
+          pool_barra_crc:    s.pool_barra_crc,
+          exchange_rate:     s.exchange_rate,
+        },
+      )
+      return [s.id, calc] as [string, HistoryCalc]
+    }))
+    .then(results => {
+      const newEntries = Object.fromEntries(results)
+      setLocalCache(prev => ({ ...prev, ...newEntries }))
+    })
+    .catch(console.error)
+    .finally(() => setLoading(false))
+  }, [month, monthSessions, mergedCache, employees, rolePoints])
+
+  // Q1/Q2 split
+  const q1Sessions = monthSessions.filter(s => Number(s.session_date.slice(8, 10)) <= 15)
+  const q2Sessions = monthSessions.filter(s => Number(s.session_date.slice(8, 10)) > 15)
 
   // Aggregate per employee
   const empData = useMemo(() => {
-    const acc: Record<string, EmpQuincenal> = {}
+    const acc: Record<string, {
+      id: string; name: string; role: string
+      q1Days:0; q1Hours:0; q1Earn:0
+      q2Days:0; q2Hours:0; q2Earn:0
+      total:0; promDia:0
+    }> = {}
 
     const processSession = (s: TipSession, isQ1: boolean) => {
-      const calc = calcCache[s.id]
+      const calc = mergedCache[s.id]
       if (!calc) return
       for (const row of calc.rows) {
         const emp = empMap.get(row.employeeId)
@@ -67,13 +101,10 @@ export default function TipQuincenal({ sessions, calcCache, employees }: Props) 
         if (!acc[emp.id]) acc[emp.id] = {
           id: emp.id, name: emp.full_name, role: emp.role,
           q1Days:0, q1Hours:0, q1Earn:0, q2Days:0, q2Hours:0, q2Earn:0, total:0, promDia:0,
-        }
+        } as typeof acc[string]
         const e = acc[emp.id]
-        if (isQ1) {
-          e.q1Days++;  e.q1Hours += row.hours; e.q1Earn += row.payout_crc
-        } else {
-          e.q2Days++;  e.q2Hours += row.hours; e.q2Earn += row.payout_crc
-        }
+        if (isQ1) { e.q1Days++; e.q1Hours += row.hours; e.q1Earn += row.payout_crc }
+        else      { e.q2Days++; e.q2Hours += row.hours; e.q2Earn += row.payout_crc }
         e.total += row.payout_crc
       }
     }
@@ -81,15 +112,13 @@ export default function TipQuincenal({ sessions, calcCache, employees }: Props) 
     q1Sessions.forEach(s => processSession(s, true))
     q2Sessions.forEach(s => processSession(s, false))
 
-    const results = Object.values(acc)
+    return Object.values(acc)
       .map(e => ({ ...e, promDia: (e.q1Days + e.q2Days) > 0 ? e.total / (e.q1Days + e.q2Days) : 0 }))
       .sort((a, b) => b.total - a.total)
+  }, [q1Sessions, q2Sessions, mergedCache, empMap])
 
-    return results
-  }, [q1Sessions, q2Sessions, calcCache, empMap])
-
-  const q1Total = q1Sessions.reduce((s, sess) => s + (calcCache[sess.id]?.totalPool ?? 0), 0)
-  const q2Total = q2Sessions.reduce((s, sess) => s + (calcCache[sess.id]?.totalPool ?? 0), 0)
+  const q1Total    = q1Sessions.reduce((s, ss) => s + (mergedCache[ss.id]?.totalPool ?? 0), 0)
+  const q2Total    = q2Sessions.reduce((s, ss) => s + (mergedCache[ss.id]?.totalPool ?? 0), 0)
   const grandTotal = empData.reduce((s, e) => s + e.total, 0)
 
   if (!months.length) {
@@ -110,8 +139,7 @@ export default function TipQuincenal({ sessions, calcCache, employees }: Props) 
         {months.slice(0, 12).map(mo => {
           const [my, mm] = mo.split('-')
           return (
-            <button key={mo}
-              onClick={() => setMonth(mo)}
+            <button key={mo} onClick={() => setMonth(mo)}
               className={`vt-range-btn ${month === mo ? 'active' : ''}`}
               style={{ fontSize: '0.72rem' }}>
               {(MONTH_NAMES[mm] ?? mm).slice(0, 3)} {my}
@@ -119,6 +147,12 @@ export default function TipQuincenal({ sessions, calcCache, employees }: Props) 
           )
         })}
       </div>
+
+      {loading && (
+        <div style={{ padding: '1rem', color: '#888', fontSize: '0.82rem' }}>
+          ⟳ Cargando datos del mes…
+        </div>
+      )}
 
       {/* Summary header */}
       <div style={{ background: 'var(--t-ink)', borderRadius: 2, padding: '1rem 1.25rem', marginBottom: '1rem', color: 'var(--t-paper)' }}>
@@ -140,14 +174,12 @@ export default function TipQuincenal({ sessions, calcCache, employees }: Props) 
         </div>
       </div>
 
-      {empData.length === 0 ? (
+      {empData.length === 0 && !loading ? (
         <div className="tips-empty-state">
-          <p className="tips-empty-text">No hay datos completos para este mes</p>
-          <p style={{ fontSize: '0.78rem', color: '#888', marginTop: '0.25rem' }}>Los cálculos requieren que los turnos estén cerrados y calculados</p>
+          <p className="tips-empty-text">No hay datos para este mes</p>
         </div>
       ) : (
         <>
-          {/* Quincenal table */}
           <div style={{ overflowX: 'auto' }}>
             <table className="admin-table" style={{ width: '100%', fontSize: '0.82rem' }}>
               <thead>
@@ -179,54 +211,37 @@ export default function TipQuincenal({ sessions, calcCache, employees }: Props) 
                         {e.q1Days + e.q2Days} días · {(e.q1Hours + e.q2Hours).toFixed(1)}h
                       </div>
                     </td>
-                    {/* Q1 */}
                     <td style={{ textAlign: 'right', background: 'rgba(42,122,106,0.04)', color: '#5a5040' }}>{e.q1Days || '—'}</td>
                     <td style={{ textAlign: 'right', background: 'rgba(42,122,106,0.04)', color: '#5a5040' }}>{e.q1Hours > 0 ? e.q1Hours.toFixed(1)+'h' : '—'}</td>
                     <td style={{ textAlign: 'right', background: 'rgba(42,122,106,0.04)', fontWeight: 700, color: 'var(--t-teal)', borderRight: '1px solid var(--t-border)' }}>
                       {e.q1Earn > 0 ? formatCRC(e.q1Earn) : '—'}
                     </td>
-                    {/* Q2 */}
                     <td style={{ textAlign: 'right', background: 'rgba(200,169,110,0.04)', color: '#5a5040' }}>{e.q2Days || '—'}</td>
                     <td style={{ textAlign: 'right', background: 'rgba(200,169,110,0.04)', color: '#5a5040' }}>{e.q2Hours > 0 ? e.q2Hours.toFixed(1)+'h' : '—'}</td>
                     <td style={{ textAlign: 'right', background: 'rgba(200,169,110,0.04)', fontWeight: 700, color: 'var(--t-gold)', borderRight: '1px solid var(--t-border)' }}>
                       {e.q2Earn > 0 ? formatCRC(e.q2Earn) : '—'}
                     </td>
-                    {/* Totals */}
-                    <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '0.9rem', color: 'var(--t-ink)' }}>
-                      {formatCRC(e.total)}
-                    </td>
-                    <td style={{ textAlign: 'right', color: '#5a5040', fontSize: '0.78rem' }}>
-                      {formatCRC(e.promDia)}/día
-                    </td>
+                    <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '0.9rem', color: 'var(--t-ink)' }}>{formatCRC(e.total)}</td>
+                    <td style={{ textAlign: 'right', color: '#5a5040', fontSize: '0.78rem' }}>{formatCRC(e.promDia)}/día</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr style={{ background: 'var(--t-ink)', color: 'var(--t-gold)', fontWeight: 700 }}>
                   <td style={{ padding: '0.6rem 0.75rem' }}>TOTAL</td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem' }}></td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem' }}></td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid #333' }}>
-                    {formatCRC(empData.reduce((s,e) => s + e.q1Earn, 0))}
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem' }}></td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem' }}></td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid #333' }}>
-                    {formatCRC(empData.reduce((s,e) => s + e.q2Earn, 0))}
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '0.6rem 0.75rem', fontSize: '1rem' }}>
-                    {formatCRC(grandTotal)}
-                  </td>
+                  <td colSpan={2} style={{ padding: '0.6rem 0.5rem' }}></td>
+                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid #333' }}>{formatCRC(empData.reduce((s,e) => s + e.q1Earn, 0))}</td>
+                  <td colSpan={2} style={{ padding: '0.6rem 0.5rem' }}></td>
+                  <td style={{ textAlign: 'right', padding: '0.6rem 0.5rem', borderRight: '1px solid #333' }}>{formatCRC(empData.reduce((s,e) => s + e.q2Earn, 0))}</td>
+                  <td style={{ textAlign: 'right', padding: '0.6rem 0.75rem', fontSize: '1rem' }}>{formatCRC(grandTotal)}</td>
                   <td></td>
                 </tr>
               </tfoot>
             </table>
           </div>
-
-          {/* Export hint */}
           <div style={{ marginTop: '0.75rem', fontSize: '0.72rem', color: '#888', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
             <span>💡</span>
-            <span>Usá Ctrl+P (o Cmd+P) para imprimir / guardar como PDF para nómina</span>
+            <span>Ctrl+P (o Cmd+P) para imprimir / guardar como PDF para nómina</span>
           </div>
         </>
       )}

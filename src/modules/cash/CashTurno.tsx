@@ -13,11 +13,12 @@ import type { Employee } from '../../shared/types/database'
 interface Props {
   openSession:    CashSession | null
   suppliers:      Supplier[]
-  sessions:       CashSession[]         // to detect if Mediodía/Noche already exists today
-  onSessionOpen:  (s: CashSession) => void
-  onSessionClose: () => void
-  onMovAdded:     (m: CashMovement) => void
-  onError:        (msg: string) => void
+  sessions:           CashSession[]         // to detect if Mediodía/Noche already exists today
+  sessionMovements:   CashMovement[]        // DB movements for current open session
+  onSessionOpen:      (s: CashSession) => void
+  onSessionClose:     () => void
+  onMovAdded:         (m: CashMovement) => void
+  onError:            (msg: string) => void
 }
 
 type ViewState = 'apertura' | 'turno' | 'cierre'
@@ -34,7 +35,7 @@ interface PagoRow {
 }
 
 export default function CashTurno({
-  openSession, suppliers, sessions,
+  openSession, suppliers, sessions, sessionMovements,
   onSessionOpen, onSessionClose, onMovAdded, onError,
 }: Props) {
   const { profile } = useAuth()
@@ -85,7 +86,16 @@ export default function CashTurno({
                         .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
   const ingresosTotal = ingresos.reduce((s, i) => s + (Number(i.crc) || 0), 0)
   const totalAsig = initCRC + ingresosTotal
-  const deberiaCRC = totalAsig - pagosEf
+
+  // BUG-1 FIX: subtract DB egresos (efectivo) already registered in this session.
+  // This includes propinas paid out via Caja↔Propinas integration and any other
+  // egreso_personal/operativo/socios registered as Efectivo.
+  const dbEgresosEfectivo = sessionMovements
+    .filter(m => m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso'
+              && m.method === 'Efectivo' && m.status !== 'pendiente' && m.status !== 'rechazado')
+    .reduce((s, m) => s + m.amount_crc, 0)
+
+  const deberiaCRC = totalAsig - pagosEf - dbEgresosEfectivo
   const cierreVal  = Number(cierreCRC) || 0
   const diferencia = cierreVal ? cierreVal - deberiaCRC : null
   const cuadra     = diferencia !== null && Math.abs(diferencia) < 500

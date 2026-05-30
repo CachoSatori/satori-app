@@ -113,18 +113,37 @@ export default function CashResumen({ movements, sessions }: Props) {
             const movs = movements.filter(m => m.session_id === s.id && m.status !== 'rechazado')
             const ing  = movs.filter(m => m.movement_type === 'ingreso').reduce((a, m) => a + m.amount_crc, 0)
             const egr  = movs.filter(m => isEgreso(m.movement_type as MovementType)).reduce((a, m) => a + m.amount_crc, 0)
+            // Final amounts stored at close
+            const hasFinal = s.final_cash_crc != null || s.final_safe_crc != null || s.final_bank_crc != null
             return (
-              <div key={s.id} className="cd-resumen-row">
-                <div>
-                  <span style={{ fontWeight: 600 }}>{s.session_date}</span>
-                  <span style={{ color: '#888', marginLeft: '0.5rem', fontSize: '0.8rem' }}>
-                    {s.shift_type} · {s.cajero_name}
-                  </span>
+              <div key={s.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.07)', paddingBottom: '0.75rem', marginBottom: '0.75rem' }}>
+                <div className="cd-resumen-row" style={{ marginBottom: hasFinal ? '0.4rem' : 0 }}>
+                  <div>
+                    <span style={{ fontWeight: 600 }}>{s.session_date}</span>
+                    <span style={{ color: '#888', marginLeft: '0.5rem', fontSize: '0.8rem' }}>
+                      {s.shift_type} · {s.cajero_name}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                    <span style={{ color: '#27874f', fontSize: '0.85rem' }}>+{fi(ing)}</span>
+                    <span style={{ color: '#c0392b', fontSize: '0.85rem' }}>-{fi(egr)}</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                  <span style={{ color: '#27874f', fontSize: '0.85rem' }}>+{fi(ing)}</span>
-                  <span style={{ color: '#c0392b', fontSize: '0.85rem' }}>-{fi(egr)}</span>
-                </div>
+                {/* Final close amounts */}
+                {hasFinal && (
+                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', paddingLeft: '0.5rem', fontSize: '0.72rem' }}>
+                    {[
+                      { label: 'Caja inicial', val: s.initial_cash_crc, color: '#5a5040' },
+                      { label: 'Final registradora', val: s.final_cash_crc, color: '#5a5040' },
+                      { label: 'Caja fuerte', val: s.final_safe_crc, color: 'var(--t-teal)' },
+                      { label: 'Depósito banco', val: s.final_bank_crc, color: 'var(--t-teal)' },
+                    ].filter(k => k.val != null && k.val > 0).map(k => (
+                      <span key={k.label} style={{ color: k.color }}>
+                        {k.label}: <strong>{fi(k.val!)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}

@@ -333,6 +333,12 @@ html, body, #root {
   letter-spacing: 0.05em;
 }
 
+.module-status {
+  margin-top: 0.3rem;
+  display: flex;
+  align-items: center;
+}
+
 .module-badge {
   position: absolute;
   top: 0.75rem;

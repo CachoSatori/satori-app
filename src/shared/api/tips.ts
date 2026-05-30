@@ -141,3 +141,56 @@ export async function getRoleTipPoints(): Promise<RoleTipPoints[]> {
   if (error) throw new Error(error.message)
   return data as RoleTipPoints[]
 }
+
+// ── Historial de asistencia (horas por turno, todos los empleados) ──
+
+export interface AttendanceRow {
+  session_date:  string
+  shift_type:    string
+  employee_id:   string
+  hours_worked:  number
+  payout_crc:    number | null
+  points:        number | null
+}
+
+export async function getAttendanceHistory(months = 3): Promise<AttendanceRow[]> {
+  // Calculate date limit
+  const since = new Date()
+  since.setMonth(since.getMonth() - months)
+  const sinceStr = since.toISOString().slice(0, 10)
+
+  const { data, error } = await supabase
+    .from('tip_entries')
+    .select(`
+      employee_id,
+      hours_worked,
+      payout_crc,
+      points,
+      tip_sessions!session_id (
+        session_date,
+        shift_type
+      )
+    `)
+    .gte('created_at', sinceStr + 'T00:00:00Z')
+    .order('created_at', { ascending: false })
+    .limit(1000)
+  if (error) throw new Error(error.message)
+
+  return ((data ?? []) as unknown as Array<{
+    employee_id: string
+    hours_worked: number
+    payout_crc: number | null
+    points: number | null
+    tip_sessions: { session_date: string; shift_type: string } | null
+  }>)
+    .filter(r => r.tip_sessions)
+    .map(r => ({
+      session_date: r.tip_sessions!.session_date,
+      shift_type:   r.tip_sessions!.shift_type,
+      employee_id:  r.employee_id,
+      hours_worked: r.hours_worked,
+      payout_crc:   r.payout_crc,
+      points:       r.points,
+    }))
+    .sort((a, b) => b.session_date.localeCompare(a.session_date))
+}

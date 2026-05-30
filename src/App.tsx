@@ -6,6 +6,7 @@ import TipsModule from './modules/tips/TipsModule'
 import AdminModule from './modules/admin/AdminModule'
 import CashModule from './modules/cash/CashModule'
 import VentasModule from './modules/ventas/VentasModule'
+import ResumenDiario from './modules/resumen/ResumenDiario'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -35,6 +36,7 @@ function AppRoutes() {
       <Route path="/propinas" element={<PrivateRoute><TipsModule /></PrivateRoute>} />
       <Route path="/caja"     element={<PrivateRoute><CashModule /></PrivateRoute>} />
       <Route path="/ventas"   element={<PrivateRoute><VentasModule /></PrivateRoute>} />
+      <Route path="/resumen"  element={<PrivateRoute><ResumenDiario /></PrivateRoute>} />
       <Route path="/admin"    element={<OwnerRoute><AdminModule /></OwnerRoute>} />
       <Route path="*"         element={<Navigate to="/" replace />} />
     </Routes>

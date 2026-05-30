@@ -3734,3 +3734,155 @@ html, body, #root {
   color: var(--vt-ink);
   line-height: 1.5;
 }
+
+/* ── Resumen Diario module ───────────────────────────────────── */
+.resumen-module {
+  min-height: 100vh;
+  background: var(--t-ink);
+  font-family: 'DM Mono', monospace;
+}
+.resumen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.75rem;
+  height: 52px;
+  background: var(--t-ink);
+  border-bottom: 1px solid #1a1a1a;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.resumen-body {
+  background: var(--t-paper);
+  min-height: calc(100vh - 52px);
+  padding: 1.75rem;
+  color: var(--t-ink);
+}
+.resumen-date-label {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--t-ink);
+  margin-bottom: 1.5rem;
+  text-transform: capitalize;
+}
+.resumen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.resumen-card {
+  background: var(--t-ink);
+  border-radius: 3px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.resumen-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+.resumen-card.empty { opacity: 0.7; }
+.resumen-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #1a1a1a;
+}
+.resumen-card-kanji {
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  color: var(--t-gold);
+  flex-shrink: 0;
+}
+.resumen-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--t-gold);
+}
+.resumen-card-sub {
+  font-size: 0.62rem;
+  color: #555;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 0.1rem;
+}
+.resumen-status {
+  margin-left: auto;
+  font-size: 0.68rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 99px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+.resumen-status.ok      { background: rgba(78,164,126,0.15); color: #7ec8a0; }
+.resumen-status.open    { background: rgba(200,169,110,0.15); color: var(--t-gold); }
+.resumen-status.pending { background: rgba(255,255,255,0.06); color: #555; }
+.resumen-card-body { padding: 1rem 1.25rem; }
+.resumen-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+.resumen-kpi { display: flex; flex-direction: column; gap: 0.2rem; }
+.resumen-kpi-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #555;
+}
+.resumen-kpi-val {
+  font-family: 'Syne', var(--font-serif);
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--t-paper);
+  line-height: 1;
+}
+.resumen-kpi-val.gold { color: var(--t-gold); }
+.resumen-split-bar { margin-top: 0.75rem; }
+.resumen-empty-hint {
+  padding: 1rem 1.25rem;
+  font-size: 0.78rem;
+  color: #444;
+  text-align: center;
+}
+/* Reconciliation block */
+.resumen-reconcile {
+  background: var(--t-ink);
+  border-radius: 3px;
+  padding: 1.25rem;
+  max-width: 420px;
+  color: var(--t-paper);
+}
+.resumen-reconcile-title {
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-gold);
+  margin-bottom: 0.875rem;
+  font-weight: 700;
+}
+.resumen-reconcile-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #1a1a1a;
+  font-size: 0.82rem;
+}
+.resumen-reconcile-row span { color: #888; }
+.resumen-reconcile-row.resumen-reconcile-total {
+  border-bottom: none;
+  border-top: 1px solid #333;
+  margin-top: 0.25rem;
+  padding-top: 0.5rem;
+  font-weight: 700;
+}
+.resumen-reconcile-total span { color: #aaa; }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .resumen-body { padding: 1rem; }
+  .resumen-grid { grid-template-columns: 1fr; }
+  .resumen-kpi-row { grid-template-columns: repeat(2, 1fr); }
+}

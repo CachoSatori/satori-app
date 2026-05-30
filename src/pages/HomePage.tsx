@@ -26,6 +26,11 @@ interface Module {
 
 const MODULES: Module[] = [
   {
+    id: 'resumen', path: '/resumen', label: 'Resumen', kanji: '日',
+    description: 'Cuadre del día', ready: true,
+    roles: ['owner', 'manager', 'contador'],
+  },
+  {
     id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
     description: 'Pool del turno', ready: true,
     roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],

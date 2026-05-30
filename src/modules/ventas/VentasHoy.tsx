@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react'
 import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
-  aggGeneral, aggSalonero, getDayStats,
+  aggGeneral, aggSalonero, aggCajero, getDayStats,
   fi, fmtDate, metaColor, getMeta,
   topProds, metaProgress, ratioCBClass,
-  allSaloneros,
+  allSaloneros, esCajero,
 } from './ventasUtils'
 
 interface Props {
@@ -19,21 +19,29 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   const [salFiltro, setSalFiltro] = useState<string>('')
   const [sortBy, setSortBy]       = useState<'promPax'|'total'|'pax'>('promPax')
 
-  const lastDate = useMemo(() => {
-    const keys = Object.keys(dias).sort()
-    return keys[keys.length - 1] ?? null
-  }, [dias])
+  // Date picker — defaults to last loaded date
+  const allDates = useMemo(() => Object.keys(dias).sort(), [dias])
+  const lastDate = allDates[allDates.length - 1] ?? null
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const activeDate = selectedDate ?? lastDate
 
-  const dia = lastDate ? dias[lastDate] : null
-  const sals = useMemo(() => dia ? allSaloneros({ [lastDate!]: dia }) : [], [dia, lastDate])
+  const dia  = activeDate ? dias[activeDate] : null
+  const sals = useMemo(() => dia ? allSaloneros({ [activeDate!]: dia }) : [], [dia, activeDate])
+  const cajs = useMemo(() => dia
+    ? Object.keys(dia.saloneros).filter(n => esCajero(n))
+    : [], [dia])
 
   const gen = useMemo(() =>
-    lastDate ? aggGeneral([lastDate], dias, pm) : null,
-  [lastDate, dias, pm])
+    activeDate ? aggGeneral([activeDate], dias, pm) : null,
+  [activeDate, dias, pm])
 
   const salAggs = useMemo(() =>
-    sals.map(n => aggSalonero(n, lastDate ? [lastDate] : [], dias, pm)),
-  [sals, lastDate, dias, pm])
+    sals.map(n => aggSalonero(n, activeDate ? [activeDate] : [], dias, pm)),
+  [sals, activeDate, dias, pm])
+
+  const cajAggs = useMemo(() =>
+    cajs.map(n => aggCajero(n, activeDate ? [activeDate] : [], dias)),
+  [cajs, activeDate, dias])
 
   const sorted = useMemo(() =>
     [...salAggs].sort((a, b) => {
@@ -43,10 +51,10 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
     }),
   [salAggs, sortBy])
 
-  const metaMonth = lastDate?.slice(0, 7) ?? ''
+  const metaMonth = activeDate?.slice(0, 7) ?? ''
   const progress  = metaProgress(metas, dias, {}, metaMonth)
 
-  if (!lastDate || !dia || !gen) {
+  if (!allDates.length) {
     return (
       <div className="vt-empty">
         <div className="vt-empty-icon">売</div>
@@ -56,12 +64,22 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
     )
   }
 
-  const stats = getDayStats(dia)
-  const hasCajeros = Object.values(dia.saloneros).some(s => (s as { esCajero?: boolean }).esCajero)
+  if (!activeDate || !dia || !gen) {
+    return (
+      <div className="vt-empty">
+        <div className="vt-empty-icon">日</div>
+        <div className="vt-empty-title">Sin datos para esa fecha</div>
+        <div className="vt-empty-sub">Elegí otra fecha o cargá el archivo correspondiente</div>
+      </div>
+    )
+  }
+
+  const stats      = getDayStats(dia)
+  const hasCajeros = cajAggs.length > 0
 
   // Top products for this day
   const allProds = salFiltro
-    ? (aggSalonero(salFiltro, [lastDate], dias, pm).prods)
+    ? aggSalonero(salFiltro, [activeDate], dias, pm).prods
     : gen.prods
   const prodsToShow = topProds(
     allProds,
@@ -73,10 +91,45 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
 
   return (
     <div className="vt-section">
+
+      {/* Header + date picker */}
       <div className="vt-hoy-header">
         <div>
-          <div className="vt-hoy-fecha">{fmtDate(lastDate)}</div>
-          <div className="vt-hoy-sub">Último día cargado</div>
+          <div className="vt-hoy-fecha">{fmtDate(activeDate)}</div>
+          <div className="vt-hoy-sub">
+            {activeDate === lastDate ? 'Último día cargado' : 'Día seleccionado'}
+          </div>
+        </div>
+        <div className="vt-hoy-nav">
+          {/* Previous day */}
+          <button className="vt-day-nav-btn"
+            disabled={allDates.indexOf(activeDate) <= 0}
+            onClick={() => { const i = allDates.indexOf(activeDate); if (i > 0) setSelectedDate(allDates[i-1]) }}>
+            ‹
+          </button>
+          <input
+            type="date"
+            className="vt-date-input"
+            value={activeDate}
+            min={allDates[0]}
+            max={allDates[allDates.length - 1]}
+            onChange={e => {
+              const d = e.target.value
+              if (dias[d]) setSelectedDate(d)
+            }}
+          />
+          {/* Next day */}
+          <button className="vt-day-nav-btn"
+            disabled={allDates.indexOf(activeDate) >= allDates.length - 1}
+            onClick={() => { const i = allDates.indexOf(activeDate); if (i < allDates.length-1) setSelectedDate(allDates[i+1]) }}>
+            ›
+          </button>
+          {selectedDate && selectedDate !== lastDate && (
+            <button className="vt-range-btn" onClick={() => setSelectedDate(null)}
+              style={{ fontSize: '0.68rem' }}>
+              Hoy
+            </button>
+          )}
         </div>
       </div>
 
@@ -102,24 +155,36 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
         </div>
       )}
 
-      {/* Restaurant KPIs */}
+      {/* Restaurant total KPIs (with cajeros) */}
       {hasCajeros && (
-        <div className="vt-kpi-grid">
-          <div className="vt-kpi red">
-            <div className="vt-kpi-label">Venta Total Restaurante</div>
-            <div className="vt-kpi-val">{fi(stats.ventaNeta)}</div>
+        <>
+          <div className="vt-sl">Restaurante</div>
+          <div className="vt-kpi-grid">
+            <div className="vt-kpi red">
+              <div className="vt-kpi-label">Venta Total Restaurante</div>
+              <div className="vt-kpi-val">{fi(stats.ventaNeta)}</div>
+            </div>
+            <div className="vt-kpi">
+              <div className="vt-kpi-label">Salón</div>
+              <div className="vt-kpi-val">{fi(gen.total + gen.cajSalon)}</div>
+              <div className="vt-kpi-sub">{gen.totalRest > 0 ? ((gen.total + gen.cajSalon) / gen.totalRest * 100).toFixed(1) : 0}%</div>
+            </div>
+            <div className="vt-kpi blue">
+              <div className="vt-kpi-label">Delivery</div>
+              <div className="vt-kpi-val">{fi(gen.cajDelivery)}</div>
+              <div className="vt-kpi-sub">{gen.totalRest > 0 ? (gen.cajDelivery / gen.totalRest * 100).toFixed(1) : 0}%</div>
+            </div>
+            {cajAggs.map(c => (
+              <div key={c.nombre} className="vt-kpi">
+                <div className="vt-kpi-label">{c.nombre}</div>
+                <div className="vt-kpi-val" style={{ fontSize: '0.9rem' }}>{fi(c.total)}</div>
+                <div className="vt-kpi-sub">
+                  S: {fi(c.salon)} · D: {fi(c.delivery)}
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="vt-kpi">
-            <div className="vt-kpi-label">Salón</div>
-            <div className="vt-kpi-val">{fi(gen.total + gen.cajSalon)}</div>
-            <div className="vt-kpi-sub">{((gen.total + gen.cajSalon) / gen.totalRest * 100).toFixed(1)}%</div>
-          </div>
-          <div className="vt-kpi blue">
-            <div className="vt-kpi-label">Delivery</div>
-            <div className="vt-kpi-val">{fi(gen.cajDelivery)}</div>
-            <div className="vt-kpi-sub">{(gen.cajDelivery / gen.totalRest * 100).toFixed(1)}%</div>
-          </div>
-        </div>
+        </>
       )}
 
       {/* Saloneros KPIs */}
@@ -139,9 +204,11 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Bebidas/PAX</div>
-          <div className="vt-kpi-val" style={{ color: metaColor(gen.bebPax, getMeta(metas,'','bebPax')) }}>{gen.bebPax.toFixed(2)}</div>
+          <div className="vt-kpi-val" style={{ color: metaColor(gen.bebPax, getMeta(metas,'','bebPax')) }}>
+            {gen.bebPax.toFixed(2)}
+          </div>
         </div>
-        <div className={`vt-kpi`}>
+        <div className="vt-kpi">
           <div className="vt-kpi-label">Ratio C/B (₡)</div>
           <div className={`vt-kpi-val ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</div>
         </div>
@@ -151,7 +218,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
         </div>
       </div>
 
-      {/* Ranking table */}
+      {/* Ranking */}
       <div className="vt-sl" style={{ marginTop: '1.5rem' }}>
         Ranking del día
         <div className="vt-sort-tabs" style={{ marginLeft: '1rem' }}>
@@ -182,7 +249,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               const metaBP = getMeta(metas, s.nombre, 'bebPax')
               return (
                 <tr key={s.nombre} className={i === 0 ? 'tr-best' : ''}>
-                  <td style={{ color: '#555', fontWeight: 700 }}>{i + 1}</td>
+                  <td className="vt-muted" style={{ fontWeight: 700 }}>{i + 1}</td>
                   <td style={{ fontWeight: 600 }}>{s.nombre}</td>
                   <td className="r">{s.pax}</td>
                   <td className="r" style={{ color: metaColor(s.total, getMeta(metas,s.nombre,'ventas')) }}>

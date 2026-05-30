@@ -58,9 +58,10 @@ export default function CashTurno({
   const [apCajero,  setApCajero]  = useState(profile?.full_name ?? '')
   const [employees, setEmployees] = useState<Employee[]>([])
   useState(() => { getActiveEmployees().then(setEmployees).catch(() => {}) })
-  const [apCRC,     setApCRC]     = useState<number | ''>(0)
-  const [apUSD,     setApUSD]     = useState<number | ''>(0)
-  const [saving,    setSaving]    = useState(false)
+  const [apCRC,      setApCRC]      = useState<number | ''>(0)   // fondo servicio (registradora)
+  const [apProvCRC,  setApProvCRC]  = useState<number | ''>(0)   // fondo proveedores (caja separada)
+  const [apUSD,      setApUSD]      = useState<number | ''>(0)
+  const [saving,     setSaving]     = useState(false)
 
   // Turno state: pagos + ingresos adicionales
   const [pagos,    setPagos]    = useState<PagoRow[]>([])
@@ -75,8 +76,9 @@ export default function CashTurno({
   const [showResumen, setShowResumen] = useState(false)
 
   // ── Calculated totals ────────────────────────────────────
-  const initCRC  = openSession ? openSession.initial_cash_crc : 0
-  const initUSD  = openSession ? openSession.initial_cash_usd : 0
+  const initCRC     = openSession ? openSession.initial_cash_crc : 0
+  const initProvCRC = openSession ? openSession.initial_suppliers_crc : 0
+  const initUSD     = openSession ? openSession.initial_cash_usd : 0
   const pagosEf  = pagos.filter(p => p.supplier_id && p.method === 'Efectivo')
                         .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
   const pagosTr  = pagos.filter(p => p.supplier_id && p.method === 'Transferencia')
@@ -99,12 +101,13 @@ export default function CashTurno({
     setSaving(true)
     try {
       const session = await createCashSession({
-        session_date:     apFecha,
-        shift_type:       apTurno,
-        opened_by:        profile.id,
-        cajero_name:      apCajero,
-        initial_cash_crc: Number(apCRC) || 0,
-        initial_cash_usd: Number(apUSD) || 0,
+        session_date:          apFecha,
+        shift_type:            apTurno,
+        opened_by:             profile.id,
+        cajero_name:           apCajero,
+        initial_cash_crc:      Number(apCRC) || 0,
+        initial_cash_usd:      Number(apUSD) || 0,
+        initial_suppliers_crc: Number(apProvCRC) || 0,
       })
       onSessionOpen(session)
       setView('turno')
@@ -115,7 +118,7 @@ export default function CashTurno({
     } finally {
       setSaving(false)
     }
-  }, [profile, apCajero, apTurno, apFecha, apCRC, apUSD, sessions, onSessionOpen, onError])
+  }, [profile, apCajero, apTurno, apFecha, apCRC, apProvCRC, apUSD, sessions, onSessionOpen, onError])
 
   // ── Add pago ──────────────────────────────────────────────
   const addPago = () => {
@@ -250,9 +253,9 @@ export default function CashTurno({
               </div>
 
               <div className="cd-ap-saldo-label">Saldo inicial en caja</div>
-              <div className="cd-grid2">
+              <div className="cd-grid2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
                 <div className="tips-field">
-                  <div className="tips-field-label">₡ Colones</div>
+                  <div className="tips-field-label">Registradora / Servicio (₡)</div>
                   <div className="cd-monto-wrap">
                     <span className="cd-prefix">₡</span>
                     <input type="number" className="cd-monto-input" value={apCRC} min={0} step={1000}
@@ -260,7 +263,15 @@ export default function CashTurno({
                   </div>
                 </div>
                 <div className="tips-field">
-                  <div className="tips-field-label">$ Dólares</div>
+                  <div className="tips-field-label">Caja Proveedores (₡)</div>
+                  <div className="cd-monto-wrap">
+                    <span className="cd-prefix">₡</span>
+                    <input type="number" className="cd-monto-input" value={apProvCRC} min={0} step={1000}
+                      placeholder="0" onChange={e => setApProvCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                  </div>
+                </div>
+                <div className="tips-field">
+                  <div className="tips-field-label">$ Dólares (efectivo)</div>
                   <div className="cd-monto-wrap usd">
                     <span className="cd-prefix">$</span>
                     <input type="number" className="cd-monto-input" value={apUSD} min={0} step={1}
@@ -303,11 +314,18 @@ export default function CashTurno({
       {/* Top cards */}
       <div className="cd-top-cards">
         <div className="cd-top-card green">
-          <div className="cd-tc-label">Asignado</div>
+          <div className="cd-tc-label">Fondo servicio</div>
           <div className="cd-tc-val">{fi(initCRC)}</div>
           {initUSD > 0 && <div className="cd-tc-usd">{fd(initUSD)}</div>}
-          <div className="cd-tc-sub">caja inicial del turno</div>
+          <div className="cd-tc-sub">registradora / cambio</div>
         </div>
+        {initProvCRC > 0 && (
+          <div className="cd-top-card" style={{ borderLeftColor: '#8a5210' }}>
+            <div className="cd-tc-label">Fondo proveedores</div>
+            <div className="cd-tc-val" style={{ color: '#8a5210' }}>{fi(initProvCRC)}</div>
+            <div className="cd-tc-sub">caja pagos</div>
+          </div>
+        )}
         <div className="cd-top-card gold">
           <div className="cd-tc-label">Gastado efectivo</div>
           <div className="cd-tc-val" style={{ color: pagosEf > 0 ? '#a07030' : '#aaa' }}>{fi(pagosEf)}</div>

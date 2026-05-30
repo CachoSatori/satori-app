@@ -33,6 +33,7 @@ export async function createCashSession(params: {
   cajero_name: string
   initial_cash_crc: number
   initial_cash_usd: number
+  initial_suppliers_crc?: number
   notes?: string
 }): Promise<CashSession> {
   const { data, error } = await supabase
@@ -45,8 +46,8 @@ export async function createCashSession(params: {
       status:                'open',
       initial_cash_crc:      params.initial_cash_crc,
       initial_cash_usd:      params.initial_cash_usd,
-      initial_service_crc:   0,
-      initial_suppliers_crc: 0,
+      initial_service_crc:   params.initial_cash_crc,         // mirror to legacy field
+      initial_suppliers_crc: params.initial_suppliers_crc ?? 0,
       notes:                 params.notes ?? null,
     } as never)
     .select()

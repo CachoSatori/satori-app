@@ -3687,3 +3687,50 @@ html, body, #root {
   border: 1px solid var(--t-border);
   border-radius: 2px;
 }
+
+/* ── VentasHoy date navigation ───────────────────────────────── */
+.vt-hoy-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--vt-border);
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.vt-hoy-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.vt-day-nav-btn {
+  background: transparent;
+  border: 1px solid var(--vt-border);
+  border-radius: 2px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--vt-muted);
+  transition: all 0.1s;
+}
+.vt-day-nav-btn:hover:not(:disabled) {
+  border-color: var(--vt-ink);
+  color: var(--vt-ink);
+}
+.vt-day-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── VentasConfig info box ───────────────────────────────────── */
+.vt-config-info {
+  padding: 0.75rem 1rem;
+  background: rgba(42,122,106,0.07);
+  border-left: 3px solid var(--vt-green);
+  border-radius: 0 2px 2px 0;
+  font-size: 0.82rem;
+  color: var(--vt-ink);
+  line-height: 1.5;
+}

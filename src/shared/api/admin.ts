@@ -67,3 +67,22 @@ export async function updateProfileRole(id: string, role: UserRole): Promise<voi
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
+
+// ── Vincular perfil a empleado ──────────────────────────────
+export async function linkProfileToEmployee(employeeId: string, profileId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('employees')
+    .update({ profile_id: profileId } as never)
+    .eq('id', employeeId)
+  if (error) throw new Error(error.message)
+}
+
+export async function getEmployeeByProfileId(profileId: string): Promise<Employee | null> {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('*')
+    .eq('profile_id', profileId)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return data as Employee | null
+}

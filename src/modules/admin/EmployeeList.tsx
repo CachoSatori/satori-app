@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import type { Employee, UserRole } from '../../shared/types/database'
-import { createEmployee, updateEmployee, toggleEmployeeActive } from '../../shared/api/admin'
+import { useState, useEffect } from 'react'
+import type { Employee, UserRole, Profile } from '../../shared/types/database'
+import { createEmployee, updateEmployee, toggleEmployeeActive, getAllProfiles, linkProfileToEmployee } from '../../shared/api/admin'
 
 const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
@@ -16,7 +16,23 @@ interface Props {
 }
 
 export default function EmployeeList({ employees, onRefresh }: Props) {
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [linkingId, setLinkingId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+
+  useEffect(() => {
+    getAllProfiles().then(setProfiles).catch(() => {})
+  }, [])
+
+  const handleLink = async (empId: string, profileId: string) => {
+    setLinkingId(empId)
+    try {
+      await linkProfileToEmployee(empId, profileId || null)
+      await onRefresh()
+    } finally {
+      setLinkingId(null)
+    }
+  }
   const [name, setName] = useState('')
   const [role, setRole] = useState<UserRole>('salonero')
   const [saving, setSaving] = useState(false)
@@ -124,6 +140,7 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
           <tr>
             <th>Nombre</th>
             <th>Rol</th>
+            <th>Perfil de usuario</th>
             <th></th>
           </tr>
         </thead>
@@ -166,6 +183,20 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                 <>
                   <td className="admin-emp-name">{emp.full_name}</td>
                   <td><span className="role-tag">{ROLE_LABELS[emp.role] ?? emp.role}</span></td>
+                  <td style={{ fontSize: '0.72rem', color: '#5a5040' }}>
+                    {/* Profile link selector */}
+                    <select
+                      style={{ fontSize: '0.72rem', background: 'var(--t-paper)', border: '1px solid var(--t-border)', borderRadius: 2, padding: '0.2rem 0.4rem', color: emp.profile_id ? 'var(--t-teal)' : '#888' }}
+                      value={emp.profile_id ?? ''}
+                      onChange={e => handleLink(emp.id, e.target.value)}
+                      disabled={linkingId === emp.id}
+                    >
+                      <option value="">— Sin perfil —</option>
+                      {profiles.filter(p => !['owner','contador'].includes(p.role)).map(p => (
+                        <option key={p.id} value={p.id}>{p.full_name}</option>
+                      ))}
+                    </select>
+                  </td>
                   <td className="admin-row-actions">
                     <button className="btn-delete-inline" onClick={() => handleEdit(emp)}>
                       Editar

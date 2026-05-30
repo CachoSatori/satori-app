@@ -12,6 +12,7 @@ const CashModule    = lazy(() => import('./modules/cash/CashModule'))
 const VentasModule  = lazy(() => import('./modules/ventas/VentasModule'))
 const ResumenDiario = lazy(() => import('./modules/resumen/ResumenDiario'))
 const SOPsModule    = lazy(() => import('./modules/sops/SOPsModule'))
+const MisPropinas   = lazy(() => import('./modules/tips/MisPropinas'))
 
 // ── Loading fallback — same spinner used for auth ──────────────
 function ModuleLoading({ kanji = '祭' }: { kanji?: string }) {
@@ -49,7 +50,8 @@ function AppRoutes() {
         <Route path="/propinas" element={<PrivateRoute><TipsModule /></PrivateRoute>} />
         <Route path="/caja"     element={<PrivateRoute><CashModule /></PrivateRoute>} />
         <Route path="/ventas"   element={<PrivateRoute><VentasModule /></PrivateRoute>} />
-        <Route path="/sops"     element={<PrivateRoute><SOPsModule /></PrivateRoute>} />
+        <Route path="/sops"          element={<PrivateRoute><SOPsModule /></PrivateRoute>} />
+        <Route path="/mis-propinas"  element={<PrivateRoute><MisPropinas /></PrivateRoute>} />
         <Route path="/admin"    element={<OwnerRoute><AdminModule /></OwnerRoute>} />
         <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>

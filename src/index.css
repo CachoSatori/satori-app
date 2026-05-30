@@ -4077,3 +4077,121 @@ html, body, #root {
   .sop-body { padding: 1rem; }
   .sop-editor-row { flex-direction: column; }
 }
+
+/* ── VentasEvaluacion — evaluation cards ────────────────────── */
+.vt-eval-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+.vt-eval-card {
+  background: var(--vt-ink);
+  border-radius: 3px;
+  overflow: hidden;
+  color: var(--vt-paper);
+}
+.vt-eval-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #1a1a1a;
+}
+.vt-eval-rank {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+.vt-eval-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--vt-paper);
+}
+.vt-eval-sub {
+  font-size: 0.62rem;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 0.1rem;
+}
+.vt-eval-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid #1a1a1a;
+}
+.vt-eval-metric {
+  padding: 0.6rem 0.5rem;
+  border-right: 1px solid #1a1a1a;
+  text-align: center;
+}
+.vt-eval-metric:last-child { border-right: none; }
+.vt-eval-metric-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #444;
+  margin-bottom: 0.2rem;
+}
+.vt-eval-metric-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--vt-paper);
+  line-height: 1.1;
+}
+.vt-eval-metric-pct {
+  font-size: 0.6rem;
+  margin-top: 0.15rem;
+}
+.vt-eval-consistencia {
+  padding: 0.75rem 1rem;
+}
+
+/* ── VentasMetas — proyección card ──────────────────────────── */
+.vt-meta-proyeccion {
+  background: var(--vt-ink);
+  border-radius: 3px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  color: var(--vt-paper);
+}
+.vt-meta-proy-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+.vt-meta-proy-title {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--vt-gold);
+}
+.vt-meta-proy-sub {
+  font-size: 0.62rem;
+  color: #555;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top: 0.1rem;
+}
+.vt-meta-proy-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.625rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #1a1a1a;
+}
+.vt-meta-proy-stat { display: flex; flex-direction: column; gap: 0.1rem; }
+.vt-meta-proy-stat-label {
+  font-size: 0.6rem;
+  color: #555;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.vt-meta-proy-stat-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--vt-paper);
+}

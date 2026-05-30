@@ -26,11 +26,13 @@ import {
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import TipHistory from './TipHistory'
+import TipQuincenal from './TipQuincenal'
 import { todayCR } from '../../shared/utils'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
+import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 
-type View = 'turno' | 'historial'
+type View = 'turno' | 'historial' | 'quincenal'
 
 export default function TipsModule() {
   const { profile } = useAuth()
@@ -38,6 +40,8 @@ export default function TipsModule() {
 
   // ── Vistas ────────────────────────────────────────────────
   const [view, setView] = useState<View>('turno')
+  // Cache calculos de historial para reutilizar en vista quincenal
+  const [tipCalcCache, setTipCalcCache] = useState<Record<string, HistoryCalc>>({})
 
   // ── Datos base ────────────────────────────────────────────
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -384,6 +388,11 @@ export default function TipsModule() {
           <button className={`tips-tab ${view === 'historial' ? 'active' : ''}`} onClick={() => setView('historial')}>
             Historial
           </button>
+          {isManager && (
+            <button className={`tips-tab ${view === 'quincenal' ? 'active' : ''}`} onClick={() => setView('quincenal')}>
+              Quincenal
+            </button>
+          )}
         </div>
       </div>
 
@@ -571,6 +580,19 @@ export default function TipsModule() {
         <div className="tips-body">
           <TipHistory
             sessions={sessions}
+            employees={employees}
+            rolePoints={rolePoints}
+            onCalcReady={(id, calc) => setTipCalcCache(prev => ({ ...prev, [id]: calc }))}
+          />
+        </div>
+      )}
+
+      {/* ─── QUINCENAL ─── */}
+      {view === 'quincenal' && (
+        <div className="tips-body">
+          <TipQuincenal
+            sessions={sessions}
+            calcCache={tipCalcCache}
             employees={employees}
             rolePoints={rolePoints}
           />

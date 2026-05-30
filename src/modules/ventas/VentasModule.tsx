@@ -16,13 +16,15 @@ import VentasCompetencias from './VentasCompetencias'
 import VentasXLS         from './VentasXLS'
 import VentasConfig      from './VentasConfig'
 import VentasCajeros     from './VentasCajeros'
+import VentasEvaluacion  from './VentasEvaluacion'
 
-type Tab = 'hoy'|'ventas'|'saloneros'|'cajeros'|'historico'|'mix'|'analisis'|'metas'|'competencias'|'xls'|'config'
+type Tab = 'hoy'|'ventas'|'saloneros'|'evaluacion'|'cajeros'|'historico'|'mix'|'analisis'|'metas'|'competencias'|'xls'|'config'
 
 interface TabDef { id: Tab; label: string; group: string; roles: string[] }
 const TABS: TabDef[] = [
   { id: 'hoy',          label: 'Hoy',          group: 'ops',   roles: ['owner','manager','contador'] },
   { id: 'saloneros',    label: 'Saloneros',     group: 'ops',   roles: ['owner','manager'] },
+  { id: 'evaluacion',   label: 'Evaluación',    group: 'team',  roles: ['owner','manager'] },
   { id: 'cajeros',      label: 'Cajeros',       group: 'ops',   roles: ['owner','manager','contador'] },
   { id: 'ventas',       label: 'Ventas',        group: 'fin',   roles: ['owner','manager','contador'] },
   { id: 'historico',    label: 'Histórico',     group: 'fin',   roles: ['owner','manager','contador'] },
@@ -142,6 +144,7 @@ export default function VentasModule() {
         {tab === 'hoy'         && <VentasHoy         dias={dias} pm={pm} metas={metas} />}
         {tab === 'ventas'      && <VentasContabilidad dias={dias} hist={hist} metas={metas} />}
         {tab === 'saloneros'   && <VentasSaloneros    dias={dias} pm={pm} metas={metas} />}
+        {tab === 'evaluacion'  && <VentasEvaluacion   dias={dias} pm={pm} metas={metas} />}
         {tab === 'cajeros'     && <VentasCajeros      dias={dias} />}
         {tab === 'historico'   && <VentasHistorico    dias={dias} hist={hist} pm={pm} />}
         {tab === 'mix'         && <VentasMix          dias={dias} pm={pm} />}

@@ -4,12 +4,13 @@ import { getTipEntriesBySession } from '../../shared/api/tips'
 import { calcHistory, formatCRC, formatNum, ROL_LABELS, type HistoryCalc } from '../../shared/utils/tipCalculations'
 
 interface Props {
-  sessions: TipSession[]
-  employees: Employee[]
+  sessions:   TipSession[]
+  employees:  Employee[]
   rolePoints: RoleTipPoints[]
+  onCalcReady?: (sessionId: string, calc: HistoryCalc) => void
 }
 
-export default function TipHistory({ sessions, employees, rolePoints }: Props) {
+export default function TipHistory({ sessions, employees, rolePoints, onCalcReady }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [calcCache, setCalcCache] = useState<Record<string, HistoryCalc>>({})
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -42,6 +43,7 @@ export default function TipHistory({ sessions, employees, rolePoints }: Props) {
         },
       )
       setCalcCache(prev => ({ ...prev, [s.id]: calc }))
+      onCalcReady?.(s.id, calc)
     } finally {
       setLoadingId(null)
     }

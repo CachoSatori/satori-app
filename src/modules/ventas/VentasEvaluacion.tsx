@@ -1,0 +1,345 @@
+/**
+ * VentasEvaluacion — Gestión del Equipo
+ * Ported from SATORI DASHBOARD standalone app (renderEvaluacion2 / renderEquipoGestion)
+ *
+ * Per-salonero performance metrics:
+ * - Consistencia: % of days at/above the daily general average (0-100)
+ * - Tendencia: last 7 days promPax vs prior 7 days promPax
+ * - Racha: consecutive days at/above promPax meta
+ * - % de meta: how close to the target each metric is
+ */
+import { useMemo } from 'react'
+import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
+import {
+  aggSalonero, aggGeneral,
+  fi, metaColor, getMeta, ratioCBClass,
+  allSaloneros, datesInRange, allDates,
+} from './ventasUtils'
+
+interface Props {
+  dias:  DiasMap
+  pm:    ProductMap
+  metas: Meta
+}
+
+// ── Compute advanced metrics ───────────────────────────────────
+function calcAdvanced(
+  name: string,
+  dates: string[],
+  dias: DiasMap,
+  pm: ProductMap,
+  metas: Meta,
+) {
+  if (!dates.length) return null
+
+  const metaPP  = getMeta(metas, name, 'promPax')
+  const metaBP  = getMeta(metas, name, 'bebPax')
+  const metaRat = getMeta(metas, name, 'ratioCB')
+
+  // Daily promPax values
+  const dailyVals = dates
+    .map(d => {
+      const s = aggSalonero(name, [d], dias, pm)
+      return s.days > 0 ? s.promPax : null
+    })
+    .filter((v): v is number => v !== null)
+
+  if (!dailyVals.length) return null
+
+  const mean = dailyVals.reduce((s, v) => s + v, 0) / dailyVals.length
+
+  // General average per day (for consistency reference)
+  const genDailyVals = dates
+    .map(d => {
+      const g = aggGeneral([d], dias, pm)
+      return g.pax > 0 ? g.promPax : null
+    })
+    .filter((v): v is number => v !== null)
+
+  const genMean = genDailyVals.length > 0
+    ? genDailyVals.reduce((s, v) => s + v, 0) / genDailyVals.length : 0
+
+  // Consistencia: % days above daily general average
+  const daysAboveAvg = dates.filter(d => {
+    const s  = aggSalonero(name, [d], dias, pm)
+    const g  = aggGeneral([d], dias, pm)
+    return s.days > 0 && g.pax > 0 && s.promPax >= g.promPax
+  }).length
+  const totalWorked = dailyVals.length
+  const consistencia = totalWorked > 0 ? (daysAboveAvg / totalWorked) * 100 : 0
+
+  // Tendencia: last 7 worked days vs prior 7 worked days
+  const workedDates = dates.filter(d => aggSalonero(name, [d], dias, pm).days > 0)
+  const last7  = workedDates.slice(-7)
+  const prev7  = workedDates.slice(-14, -7)
+  const avgL7  = last7.length  > 0 ? last7.reduce((s, d) => s + aggSalonero(name, [d], dias, pm).promPax, 0) / last7.length : 0
+  const avgP7  = prev7.length  > 0 ? prev7.reduce((s, d) => s + aggSalonero(name, [d], dias, pm).promPax, 0) / prev7.length : 0
+  const tendencia = avgP7 > 0 ? ((avgL7 - avgP7) / avgP7) * 100 : 0
+
+  // Racha: consecutive days at/above promPax meta
+  let racha = 0
+  if (metaPP > 0) {
+    const reversed = [...workedDates].reverse()
+    for (const d of reversed) {
+      const dayVal = aggSalonero(name, [d], dias, pm).promPax
+      if (dayVal >= metaPP) racha++
+      else break
+    }
+  }
+
+  // Full period agg
+  const agg = aggSalonero(name, dates, dias, pm)
+
+  return {
+    agg, mean, genMean, consistencia, tendencia, racha,
+    totalWorked,
+    pctMetaPP:  metaPP  > 0 ? (agg.promPax / metaPP  * 100) : null,
+    pctMetaBP:  metaBP  > 0 ? (agg.bebPax  / metaBP  * 100) : null,
+    pctMetaRat: metaRat > 0 ? (agg.ratioCB / metaRat * 100) : null,
+  }
+}
+
+function pctColor(pct: number | null): string {
+  if (pct === null) return ''
+  if (pct >= 100)   return 'var(--vt-green)'
+  if (pct >= 85)    return 'var(--vt-gold-dark,#a07830)'
+  return 'var(--vt-red)'
+}
+
+function consistenciaColor(c: number): string {
+  if (c >= 70) return 'var(--vt-green)'
+  if (c >= 40) return 'var(--vt-gold-dark,#a07830)'
+  return 'var(--vt-red)'
+}
+
+export default function VentasEvaluacion({ dias, pm, metas }: Props) {
+  const dates = useMemo(() => allDates(dias), [dias])
+  const sals  = useMemo(() => allSaloneros(dias), [dias])
+
+  // Use last 30 days for evaluation (or all data if less)
+  const evalDates = useMemo(() => {
+    if (!dates.length) return []
+    const last = dates[dates.length - 1]
+    const d30ago = new Date(last + 'T12:00:00')
+    d30ago.setDate(d30ago.getDate() - 30)
+    const from = d30ago.toISOString().slice(0, 10)
+    return datesInRange(dates, from, last)
+  }, [dates])
+
+  const results = useMemo(() =>
+    sals
+      .map(name => ({ name, data: calcAdvanced(name, evalDates, dias, pm, metas) }))
+      .filter(r => r.data !== null)
+      .sort((a, b) => (b.data!.agg.promPax - a.data!.agg.promPax)),
+  [sals, evalDates, dias, pm, metas])
+
+  if (!results.length) {
+    return (
+      <div className="vt-empty">
+        <div className="vt-empty-icon">評</div>
+        <div className="vt-empty-title">Sin datos suficientes</div>
+        <div className="vt-empty-sub">Cargá al menos 2 semanas de XLS para ver la evaluación</div>
+      </div>
+    )
+  }
+
+  const genAgg = aggGeneral(evalDates, dias, pm)
+
+  return (
+    <div className="vt-section">
+      <div className="vt-sl" style={{ marginBottom: '0.5rem' }}>
+        Evaluación de equipo — últimos {evalDates.length} días
+      </div>
+      <div style={{ fontSize: '0.72rem', color: 'var(--vt-muted)', marginBottom: '1.25rem' }}>
+        Consistencia = % días sobre el promedio general del restaurante.
+        Tendencia = últimos 7 días trabajados vs 7 anteriores.
+        Racha = días consecutivos sobre la meta de Prom/PAX.
+      </div>
+
+      {/* General stats */}
+      <div className="vt-kpi-grid" style={{ marginBottom: '1.5rem' }}>
+        <div className="vt-kpi">
+          <div className="vt-kpi-label">Equipo activo</div>
+          <div className="vt-kpi-val">{results.length} saloneros</div>
+        </div>
+        <div className="vt-kpi green">
+          <div className="vt-kpi-label">Prom/PAX general</div>
+          <div className="vt-kpi-val">{fi(genAgg.promPax)}</div>
+        </div>
+        <div className="vt-kpi">
+          <div className="vt-kpi-label">Mejor del período</div>
+          <div className="vt-kpi-val" style={{ fontSize: '0.85rem' }}>
+            {results[0]?.name ?? '—'}
+          </div>
+          <div className="vt-kpi-sub">{fi(results[0]?.data?.agg.promPax ?? 0)}</div>
+        </div>
+      </div>
+
+      {/* Evaluation cards grid */}
+      <div className="vt-eval-grid">
+        {results.map(({ name, data }, rank) => {
+          if (!data) return null
+          const { agg, consistencia, tendencia, racha, totalWorked,
+                  pctMetaPP, pctMetaBP, pctMetaRat } = data
+          const metaPP  = getMeta(metas, name, 'promPax')
+          const metaBP  = getMeta(metas, name, 'bebPax')
+          const metaRat = getMeta(metas, name, 'ratioCB')
+
+          return (
+            <div key={name} className="vt-eval-card">
+              {/* Header */}
+              <div className="vt-eval-card-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div className="vt-eval-rank">
+                    {rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : `#${rank + 1}`}
+                  </div>
+                  <div>
+                    <div className="vt-eval-name">{name}</div>
+                    <div className="vt-eval-sub">{totalWorked} días trabajados</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  {/* Tendencia badge */}
+                  {Math.abs(tendencia) > 0.5 && (
+                    <div style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      color: tendencia >= 0 ? 'var(--vt-green)' : 'var(--vt-red)',
+                    }}>
+                      {tendencia >= 0 ? '▲' : '▼'} {Math.abs(tendencia).toFixed(1)}% vs sem ant
+                    </div>
+                  )}
+                  {/* Racha badge */}
+                  {racha >= 3 && (
+                    <div style={{ fontSize: '0.72rem', color: 'var(--vt-gold-dark,#a07830)', marginTop: '0.1rem' }}>
+                      🔥 {racha} días seguidos
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 4 KPI mini-cards */}
+              <div className="vt-eval-metrics">
+                {[
+                  {
+                    label: 'Prom/PAX',
+                    val:   fi(agg.promPax),
+                    meta:  metaPP,
+                    pct:   pctMetaPP,
+                    color: metaColor(agg.promPax, metaPP),
+                  },
+                  {
+                    label: 'Beb/PAX',
+                    val:   agg.bebPax.toFixed(2),
+                    meta:  metaBP,
+                    pct:   pctMetaBP,
+                    color: metaColor(agg.bebPax, metaBP),
+                  },
+                  {
+                    label: 'Ratio C/B',
+                    val:   agg.ratioCB.toFixed(2) + ':1',
+                    meta:  metaRat,
+                    pct:   pctMetaRat,
+                    color: 'inherit',
+                    cls:   ratioCBClass(agg.ratioCB),
+                  },
+                  {
+                    label: 'Ticket/item',
+                    val:   fi(agg.promTicket),
+                    meta:  getMeta(metas, name, 'ticketItem'),
+                    pct:   getMeta(metas, name, 'ticketItem') > 0
+                      ? agg.promTicket / getMeta(metas, name, 'ticketItem') * 100 : null,
+                    color: metaColor(agg.promTicket, getMeta(metas, name, 'ticketItem')),
+                  },
+                ].map(kpi => (
+                  <div key={kpi.label} className="vt-eval-metric">
+                    <div className="vt-eval-metric-label">{kpi.label}</div>
+                    <div className={`vt-eval-metric-val ${kpi.cls ?? ''}`}
+                      style={kpi.color && kpi.color !== 'inherit' ? { color: kpi.color } : {}}>
+                      {kpi.val}
+                    </div>
+                    {kpi.pct !== null && (
+                      <div className="vt-eval-metric-pct"
+                        style={{ color: pctColor(kpi.pct) }}>
+                        {kpi.pct.toFixed(0)}% meta
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Consistencia bar */}
+              <div className="vt-eval-consistencia">
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                  <span className="vt-eval-metric-label">Consistencia</span>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: consistenciaColor(consistencia) }}>
+                    {consistencia.toFixed(0)}%
+                  </span>
+                </div>
+                <div className="vt-progress-track">
+                  <div className="vt-progress-fill" style={{
+                    width: `${consistencia}%`,
+                    background: consistenciaColor(consistencia),
+                  }} />
+                </div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--vt-muted)', marginTop: '0.2rem' }}>
+                  {Math.round(consistencia / 100 * totalWorked)} de {totalWorked} días sobre promedio general
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Ranking table */}
+      <div className="vt-sl" style={{ marginTop: '2rem' }}>Ranking comparativo</div>
+      <div className="vt-tbl-wrap">
+        <table className="vt-tbl">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Salonero</th>
+              <th className="r">Días</th>
+              <th className="r">Prom/PAX</th>
+              <th className="r">vs General</th>
+              <th className="r">% Meta</th>
+              <th className="r">Consistencia</th>
+              <th className="r">Tendencia</th>
+              <th className="r">Racha</th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.map(({ name, data }, i) => {
+              if (!data) return null
+              const { agg, consistencia, tendencia, racha, totalWorked, pctMetaPP } = data
+              const vsGen = agg.promPax - genAgg.promPax
+              return (
+                <tr key={name} className={i === 0 ? 'tr-best' : ''}>
+                  <td className="vt-muted" style={{ fontWeight: 700 }}>{i + 1}</td>
+                  <td style={{ fontWeight: 600 }}>{name}</td>
+                  <td className="r vt-muted">{totalWorked}</td>
+                  <td className="r vt-bold">{fi(agg.promPax)}</td>
+                  <td className="r" style={{ color: vsGen >= 0 ? 'var(--vt-green)' : 'var(--vt-red)', fontWeight: 600 }}>
+                    {vsGen >= 0 ? '+' : ''}{fi(vsGen)}
+                  </td>
+                  <td className="r" style={{ color: pctColor(pctMetaPP) }}>
+                    {pctMetaPP !== null ? pctMetaPP.toFixed(0) + '%' : '—'}
+                  </td>
+                  <td className="r" style={{ color: consistenciaColor(consistencia), fontWeight: 600 }}>
+                    {consistencia.toFixed(0)}%
+                  </td>
+                  <td className="r" style={{ color: tendencia >= 0 ? 'var(--vt-green)' : 'var(--vt-red)', fontWeight: 600 }}>
+                    {Math.abs(tendencia) > 0.5 ? (tendencia >= 0 ? '▲ ' : '▼ ') + Math.abs(tendencia).toFixed(1) + '%' : '→'}
+                  </td>
+                  <td className="r">
+                    {racha >= 3 ? `🔥 ${racha}d` : racha > 0 ? `${racha}d` : '—'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

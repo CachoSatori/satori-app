@@ -6,14 +6,19 @@ import {
   topProds, metaProgress, ratioCBClass,
   allSaloneros, esCajero,
 } from './ventasUtils'
+import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
+import { useAuth } from '../../shared/hooks/useAuth'
 
 interface Props {
-  dias:  DiasMap
-  pm:    ProductMap
+  dias:   DiasMap
+  pm:     ProductMap
   metas: Meta
 }
 
 export default function VentasHoy({ dias, pm, metas }: Props) {
+  const { profile } = useAuth()
+  const [registrando, setRegistrando] = useState(false)
+  const [regMsg,      setRegMsg]      = useState<string | null>(null)
   const [prodView, setProdView]   = useState<'general'|'comidas'|'bebidas'>('general')
   const [prodBy, setProdBy]       = useState<'monto'|'unidades'>('monto')
   const [salFiltro, setSalFiltro] = useState<string>('')
@@ -130,8 +135,52 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               Hoy
             </button>
           )}
+          {/* Auto-register ventas in Caja */}
+          {(profile?.role === 'owner' || profile?.role === 'manager') && gen && gen.totalRest > 0 && (
+            <button
+              className="vt-range-btn"
+              disabled={registrando}
+              title="Crea un movimiento de ingreso en la Caja con el total de ventas del día"
+              style={{ fontSize: '0.68rem', borderColor: 'var(--vt-green)', color: 'var(--vt-green)' }}
+              onClick={async () => {
+                if (!profile) return
+                setRegistrando(true); setRegMsg(null)
+                try {
+                  const cashSession = await getOpenCashSession()
+                  if (!cashSession) { setRegMsg('⚠ No hay turno de caja abierto'); return }
+                  await createCashMovement({
+                    session_id:    cashSession.id,
+                    created_by:    profile.id,
+                    movement_type: 'ingreso',
+                    amount_crc:    Math.round(gen.totalRest),
+                    amount_usd:    0,
+                    currency:      'CRC',
+                    exchange_rate: null,
+                    description:   `Ventas del día ${activeDate}`,
+                    subcategory:   'Ventas diarias',
+                    method:        'Efectivo',
+                    caja_origen:   'Registradora',
+                    shift:         cashSession.shift_type ?? '',
+                  })
+                  setRegMsg(`✓ ₡${Math.round(gen.totalRest).toLocaleString('es-CR')} registrado en Caja`)
+                  setTimeout(() => setRegMsg(null), 4000)
+                } catch (e) {
+                  setRegMsg(`✗ ${e instanceof Error ? e.message : 'Error'}`)
+                } finally {
+                  setRegistrando(false)
+                }
+              }}
+            >
+              {registrando ? '⟳' : '→ Caja'}
+            </button>
+          )}
         </div>
       </div>
+      {regMsg && (
+        <div style={{ fontSize: '0.78rem', padding: '0.4rem 0', color: regMsg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+          {regMsg}
+        </div>
+      )}
 
       {/* Meta progress */}
       {progress && (

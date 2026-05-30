@@ -53,10 +53,11 @@ export interface HistDay {
 export type HistMap = Record<string, HistDay>
 
 export interface ProductInfo {
-  tipo:           string  // 'comida'|'bebida'|'cortesia'|'personal'|'nofood'|'desconocido'
-  clasificacion:  string
+  tipo:             string  // 'comida'|'bebida'|'cortesia'|'personal'|'nofood'|'desconocido'
+  clasificacion:    string
   subclasificacion: string
-  multiplicador:  number
+  multiplicador:    number
+  costo_unitario:   number  // costo de insumos por unidad vendida (food cost)
 }
 
 export type ProductMap = Record<string, ProductInfo>

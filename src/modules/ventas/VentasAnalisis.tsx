@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import type { DiasMap, HistMap, Meta } from '../../shared/types/ventas'
 import {
   getContabilidadDays, availableYears, yearlyTotals,
-  fi,
+  fi, todayISO, daysInMonth, metaProgress,
 } from './ventasUtils'
 
 interface Props {
@@ -13,7 +13,7 @@ interface Props {
 
 export default function VentasAnalisis({ dias, hist, metas }: Props) {
   const years = useMemo(() => availableYears(dias, hist), [dias, hist])
-  const [mode, setMode] = useState<'compare'|'year'>('compare')
+  const [mode, setMode] = useState<'compare'|'year'|'proyeccion'>('compare')
   const [selYear, setSelYear] = useState(years[0] ?? new Date().getFullYear())
 
   const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12]
@@ -70,6 +70,8 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
           onClick={() => setMode('compare')}>Año vs Año</button>
         <button className={`vt-tab-btn ${mode === 'year' ? 'active' : ''}`}
           onClick={() => setMode('year')}>Detalle anual</button>
+        <button className={`vt-tab-btn ${mode === 'proyeccion' ? 'active' : ''}`}
+          onClick={() => setMode('proyeccion')}>Proyección</button>
       </div>
 
       {mode === 'compare' && (
@@ -224,6 +226,143 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
           </div>
         </>
       )}
+
+      {/* ── PROYECCIÓN ANUAL ─────────────────────────────── */}
+      {mode === 'proyeccion' && (() => {
+        const curYear    = new Date().getFullYear()
+        const today      = todayISO()
+        const curMonth   = today.slice(0, 7)
+        const dayOfYear  = Math.ceil((new Date().getTime() - new Date(`${curYear}-01-01`).getTime()) / 86400000)
+        const daysInYear = (curYear % 4 === 0 && (curYear % 100 !== 0 || curYear % 400 === 0)) ? 366 : 365
+        const ytdDays    = getContabilidadDays(curYear, null, dias, hist)
+        const ytdVentas  = ytdDays.reduce((s, d) => s + d.ventaNeta, 0)
+        const avgPerDay  = ytdDays.length > 0 ? ytdVentas / ytdDays.length : 0
+        const projection = avgPerDay * daysInYear
+        const pctYear    = (dayOfYear / daysInYear) * 100
+
+        // Monthly breakdown for current year with projections
+        const monthlyData = [1,2,3,4,5,6,7,8,9,10,11,12].map(m => {
+          const ym     = `${curYear}-${String(m).padStart(2,'0')}`
+          const isPast = ym < curMonth
+          const isCur  = ym === curMonth
+          const days   = getContabilidadDays(curYear, m, dias, hist)
+          const actual = days.reduce((s, d) => s + d.ventaNeta, 0)
+          const dIM    = daysInMonth(ym)
+          const daysPassed = isPast ? dIM : isCur ? Math.min(new Date().getDate(), days.length) : 0
+          const projected  = isPast || isCur
+            ? (daysPassed > 0 ? (actual / daysPassed) * dIM : 0)
+            : avgPerDay * dIM
+          const metaAmt = metas.restaurante?.[ym] ?? 0
+          const prog    = metaProgress(metas, dias, hist, ym)
+          return { m, ym, actual, projected, metaAmt, prog, isPast, isCur }
+        })
+
+        const projectedTotal = monthlyData.reduce((s, m) => s + (m.actual || m.projected), 0)
+        const metaYear       = Object.entries(metas.restaurante ?? {})
+          .filter(([ym]) => ym.startsWith(String(curYear)))
+          .reduce((s, [, v]) => s + v, 0)
+
+        const mNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+        return (
+          <div>
+            {/* Main projection card */}
+            <div style={{ background: 'var(--vt-ink)', borderRadius: 3, padding: '1.25rem', marginBottom: '1.5rem', color: 'var(--vt-paper)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '1rem' }}>
+                {[
+                  { label: `YTD ${curYear} (${ytdDays.length} días)`, val: fi(ytdVentas), color: 'var(--vt-gold)' },
+                  { label: 'Proyección año completo', val: fi(projection), color: projectedTotal >= metaYear ? 'var(--vt-green)' : '#f08070' },
+                  { label: 'Promedio por día', val: fi(avgPerDay), color: '' },
+                  { label: 'Mes en curso — meta', val: fi(metaYear), color: 'var(--vt-muted)' },
+                ].map(k => (
+                  <div key={k.label}>
+                    <div style={{ fontSize: '0.62rem', color: '#555', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{k.label}</div>
+                    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.1rem', fontWeight: 800, color: k.color || 'var(--vt-paper)' }}>{k.val}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Progress bar: % of year elapsed */}
+              <div style={{ marginTop: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#555', marginBottom: '0.3rem' }}>
+                  <span>Año transcurrido: {pctYear.toFixed(0)}%</span>
+                  <span>Día {dayOfYear} de {daysInYear}</span>
+                </div>
+                <div style={{ height: 6, background: '#2a2a2a', borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${pctYear}%`, background: 'var(--vt-gold)', borderRadius: 3 }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Monthly bar chart */}
+            <div className="vt-sl">Ventas reales vs proyección — {curYear}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem', height: 140, marginBottom: '0.5rem', padding: '0 0.25rem' }}>
+              {monthlyData.map(d => {
+                const maxVal = Math.max(...monthlyData.map(x => Math.max(x.actual, x.projected, x.metaAmt)))
+                const actH   = maxVal > 0 ? Math.round((d.actual / maxVal) * 100) : 0
+                const projH  = maxVal > 0 ? Math.round(((d.projected || 0) / maxVal) * 100) : 0
+                const metaH  = maxVal > 0 && d.metaAmt > 0 ? Math.round((d.metaAmt / maxVal) * 100) : 0
+                return (
+                  <div key={d.m} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    {d.actual > 0 && (
+                      <div style={{ width: '100%', height: `${actH}%`, background: d.isCur ? 'var(--vt-gold)' : 'var(--vt-green)', borderRadius: 2, opacity: d.isPast ? 1 : 0.6 }} />
+                    )}
+                    {!d.actual && d.projected > 0 && (
+                      <div style={{ width: '100%', height: `${projH}%`, background: '#333', borderRadius: 2, borderTop: '2px dashed var(--vt-muted)' }} />
+                    )}
+                    {metaH > 0 && (
+                      <div style={{ position: 'relative', width: '100%', height: 0 }}>
+                        <div style={{ position: 'absolute', bottom: 0, width: '100%', borderBottom: '1px solid var(--vt-red)', opacity: 0.6 }} />
+                      </div>
+                    )}
+                    <div style={{ fontSize: '0.55rem', color: d.isCur ? 'var(--vt-gold)' : '#555', fontWeight: d.isCur ? 700 : 400 }}>
+                      {mNames[d.m - 1]}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Monthly table */}
+            <div className="vt-tbl-wrap">
+              <table className="vt-tbl">
+                <thead>
+                  <tr>
+                    <th>Mes</th>
+                    <th className="r">Real</th>
+                    <th className="r">Proyectado</th>
+                    <th className="r">Meta</th>
+                    <th className="r">vs Meta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyData.map(d => (
+                    <tr key={d.m} style={{ fontWeight: d.isCur ? 700 : 400 }}>
+                      <td style={{ color: d.isCur ? 'var(--vt-gold-dark,#a07830)' : undefined }}>
+                        {mNames[d.m - 1]} {d.isCur ? '← hoy' : ''}
+                      </td>
+                      <td className="r vt-bold">{d.actual > 0 ? fi(d.actual) : '—'}</td>
+                      <td className="r vt-muted" style={{ fontStyle: !d.isPast && !d.isCur ? 'italic' : undefined }}>
+                        {fi(d.projected || d.actual)}
+                      </td>
+                      <td className="r vt-muted">{d.metaAmt > 0 ? fi(d.metaAmt) : '—'}</td>
+                      <td className="r" style={{ color: d.prog ? (d.prog.onTrack ? 'var(--vt-green)' : 'var(--vt-red)') : undefined }}>
+                        {d.prog ? d.prog.pct.toFixed(0) + '%' : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="vt-tbl-footer" style={{ fontWeight: 700 }}>
+                    <td>PROYECCIÓN TOTAL</td>
+                    <td className="r">{fi(ytdVentas)}</td>
+                    <td className="r" style={{ color: projectedTotal >= metaYear ? 'var(--vt-green)' : 'var(--vt-red)' }}>{fi(projectedTotal)}</td>
+                    <td className="r">{metaYear > 0 ? fi(metaYear) : '—'}</td>
+                    <td className="r">{metaYear > 0 ? (projectedTotal / metaYear * 100).toFixed(0) + '%' : '—'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

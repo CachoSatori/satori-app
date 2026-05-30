@@ -96,10 +96,11 @@ export async function getProductMap(): Promise<Record<string, ProductInfo>> {
   const result: Record<string, ProductInfo> = {}
   for (const row of (data as { nombre: string; tipo: string; clasificacion: string; subclasificacion: string; multiplicador: number }[]) ?? []) {
     result[row.nombre] = {
-      tipo:            row.tipo,
-      clasificacion:   row.clasificacion ?? '',
+      tipo:             row.tipo,
+      clasificacion:    row.clasificacion ?? '',
       subclasificacion: row.subclasificacion ?? '',
-      multiplicador:   row.multiplicador ?? 1,
+      multiplicador:    row.multiplicador ?? 1,
+      costo_unitario:   (row as { costo_unitario?: number }).costo_unitario ?? 0,
     }
   }
   return result
@@ -113,12 +114,13 @@ export async function saveProductMapItems(
       .from('product_map' as never)
       .upsert(
         items.slice(i, i + 100).map(it => ({
-          nombre:          it.nombre,
-          tipo:            it.tipo,
-          clasificacion:   it.clasificacion,
+          nombre:           it.nombre,
+          tipo:             it.tipo,
+          clasificacion:    it.clasificacion,
           subclasificacion: it.subclasificacion,
-          multiplicador:   it.multiplicador,
-          updated_at:      new Date().toISOString(),
+          multiplicador:    it.multiplicador,
+          costo_unitario:   it.costo_unitario ?? 0,
+          updated_at:       new Date().toISOString(),
         })) as never[],
         { onConflict: 'nombre' },
       )
@@ -126,7 +128,7 @@ export async function saveProductMapItems(
   }
 }
 
-export async function updateProductInfo(nombre: string, info: Partial<ProductInfo>): Promise<void> {
+export async function updateProductInfo(nombre: string, info: Partial<ProductInfo & { costo_unitario?: number }>): Promise<void> {
   const { error } = await supabase
     .from('product_map' as never)
     .upsert({ nombre, ...info, updated_at: new Date().toISOString() } as never, { onConflict: 'nombre' })

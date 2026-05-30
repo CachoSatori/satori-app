@@ -4,14 +4,31 @@ import { getCurrentRate, getRateHistory, saveRate } from '../../shared/api/excha
 import { todayCR } from '../../shared/utils'
 import type { ExchangeRateRow } from '../../shared/api/exchangeRate'
 
+// BCCR open data API — no token required for current day rate
+async function fetchBCCRRate(): Promise<number | null> {
+  try {
+    // Hacienda CR unofficial API (most reliable, no CORS issues via proxy)
+    const res = await fetch('https://api.hacienda.go.cr/indicadores/tc', {
+      signal: AbortSignal.timeout(5000),
+    })
+    if (res.ok) {
+      const data = await res.json() as { venta?: number; compra?: number }
+      const venta = data.venta ?? data.compra
+      if (venta && venta > 400 && venta < 1000) return Math.round(venta)
+    }
+  } catch { /* silent */ }
+  return null
+}
+
 export default function ExchangeRateWidget() {
   const { profile } = useAuth()
-  const [rate,    setRate]    = useState<number>(640)
-  const [history, setHistory] = useState<ExchangeRateRow[]>([])
-  const [input,   setInput]   = useState<number | ''>(640)
-  const [saving,  setSaving]  = useState(false)
-  const [msg,     setMsg]     = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [rate,       setRate]       = useState<number>(640)
+  const [history,    setHistory]    = useState<ExchangeRateRow[]>([])
+  const [input,      setInput]      = useState<number | ''>(640)
+  const [saving,     setSaving]     = useState(false)
+  const [fetching,   setFetching]   = useState(false)
+  const [msg,        setMsg]        = useState<string | null>(null)
+  const [loading,    setLoading]    = useState(true)
 
   useEffect(() => {
     Promise.all([getCurrentRate(), getRateHistory(10)])
@@ -40,6 +57,20 @@ export default function ExchangeRateWidget() {
       setMsg(e instanceof Error ? '✗ ' + e.message : '✗ Error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleFetchBCCR = async () => {
+    setFetching(true)
+    setMsg(null)
+    const r = await fetchBCCRRate()
+    setFetching(false)
+    if (r) {
+      setInput(r)
+      setMsg(`↓ BCCR: ₡${r.toLocaleString('es-CR')} — guardá para confirmar`)
+    } else {
+      setMsg('⚠ No se pudo conectar con BCCR — ingresá manualmente')
+      setTimeout(() => setMsg(null), 4000)
     }
   }
 
@@ -82,6 +113,15 @@ export default function ExchangeRateWidget() {
               disabled={saving || !input || Number(input) <= 0}
             >
               {saving ? 'Guardando…' : 'Actualizar'}
+            </button>
+            <button
+              className="tips-btn-ghost"
+              onClick={handleFetchBCCR}
+              disabled={fetching || saving}
+              title="Obtener tipo de cambio oficial del Banco Central de Costa Rica"
+              style={{ fontSize: '0.78rem' }}
+            >
+              {fetching ? '⟳ Consultando…' : '↓ BCCR'}
             </button>
             {msg && (
               <span style={{ fontSize: '0.82rem', color: msg.startsWith('✓') ? 'var(--t-teal)' : 'var(--t-red)' }}>

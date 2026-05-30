@@ -239,9 +239,39 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
               </tfoot>
             </table>
           </div>
-          <div style={{ marginTop: '0.75rem', fontSize: '0.72rem', color: '#888', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span>💡</span>
-            <span>Ctrl+P (o Cmd+P) para imprimir / guardar como PDF para nómina</span>
+          <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              className="tips-btn-ghost"
+              style={{ fontSize: '0.78rem' }}
+              onClick={() => {
+                const BOM = '﻿'
+                const [y, m2] = month.split('-')
+                const hdrs = ['Empleado','Rol','Q1 Días','Q1 Horas','Q1 Propinas (₡)','Q2 Días','Q2 Horas','Q2 Propinas (₡)','Total Mes (₡)','Prom/Día (₡)']
+                const rows = empData.map(e => [
+                  e.name, e.role,
+                  e.q1Days, e.q1Hours.toFixed(1), e.q1Earn,
+                  e.q2Days, e.q2Hours.toFixed(1), e.q2Earn,
+                  e.total, e.promDia.toFixed(0),
+                ].map(v => `"${v}"`).join(','))
+                const csv = BOM + [hdrs.join(','), ...rows].join('\n')
+                const a = document.createElement('a')
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+                a.download = `propinas_${y}_${m2}_quincenal.csv`
+                a.click()
+              }}
+            >
+              ⬇ CSV planilla
+            </button>
+            <button
+              className="tips-btn-ghost"
+              style={{ fontSize: '0.78rem' }}
+              onClick={() => window.print()}
+            >
+              🖨 Imprimir / PDF
+            </button>
+            <span style={{ fontSize: '0.72rem', color: '#888' }}>
+              💡 Ctrl+P para guardar como PDF para nómina
+            </span>
           </div>
         </>
       )}

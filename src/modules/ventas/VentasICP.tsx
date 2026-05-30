@@ -65,18 +65,30 @@ export default function VentasICP({ dias, pm }: Props) {
       .finally(() => setLoading(false))
   }, [])
 
-  // Tip data indexed by employee_id → { total_payout, total_propina_gen }
+  // Tip data indexed by normalized name — prefers pos_name (exact POS match)
   const empTipMap = useMemo(() => {
     const m: Record<string, { payout: number; gen: number; shifts: number }> = {}
+    const add = (key: string, payout: number) => {
+      if (!m[key]) m[key] = { payout: 0, gen: 0, shifts: 0 }
+      m[key].payout += payout
+      m[key].shifts++
+    }
     for (const r of tipData) {
-      // Filter to selected month
       if (month && !r.session_date.startsWith(month)) continue
       const emp = employees.find(e => e.id === r.employee_id)
       if (!emp) continue
-      const key = normName(emp.full_name)
-      if (!m[key]) m[key] = { payout: 0, gen: 0, shifts: 0 }
-      m[key].payout += r.payout_crc ?? 0
-      m[key].shifts++
+      const payout = r.payout_crc ?? 0
+      // pos_name takes priority — exact POS export name for reliable matching
+      const posName = (emp as { pos_name?: string | null }).pos_name
+      if (posName) {
+        add(normName(posName), payout)
+      }
+      // Also index by full_name (fallback if pos_name not set or different)
+      const fullKey = normName(emp.full_name)
+      const posKey  = posName ? normName(posName) : null
+      if (!posKey || fullKey !== posKey) {
+        add(fullKey, payout)
+      }
     }
     return m
   }, [tipData, employees, month])

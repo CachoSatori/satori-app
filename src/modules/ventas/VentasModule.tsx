@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
-  getVentasDias, getVentasHist, getProductMap, getMetas, getComps,
+  getVentasDias, getAllVentasDias, getVentasHist, getProductMap, getMetas, getComps,
 } from '../../shared/api/ventas'
 import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
 import VentasHoy         from './VentasHoy'
@@ -55,7 +55,8 @@ export default function VentasModule() {
   const [loading, setLoading] = useState(true)
   const [error, setError]   = useState<string | null>(null)
 
-  const [dias,  setDias]  = useState<DiasMap>({})
+  const [dias,     setDias]     = useState<DiasMap>({})
+  const [diasFull, setDiasFull] = useState<DiasMap>({})
   const [hist,  setHist]  = useState<HistMap>({})
   const [pm,    setPm]    = useState<ProductMap>({})
   const [metas, setMetas] = useState<Meta>({
@@ -70,7 +71,7 @@ export default function VentasModule() {
     setError(null)
     try {
       const [d, h, p, m, c] = await Promise.all([
-        getVentasDias(),
+        getVentasDias(),        // last 90 days eager
         getVentasHist(),
         getProductMap(),
         getMetas(),
@@ -81,6 +82,8 @@ export default function VentasModule() {
       setPm(p)
       setMetas(m)
       setComps(c)
+      // Load full history lazily in background for Análisis year-over-year
+      getAllVentasDias().then(setDiasFull).catch(() => setDiasFull(d))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error cargando datos')
     } finally {
@@ -151,7 +154,7 @@ export default function VentasModule() {
         {tab === 'cajeros'     && <VentasCajeros      dias={dias} />}
         {tab === 'historico'   && <VentasHistorico    dias={dias} hist={hist} pm={pm} />}
         {tab === 'mix'         && <VentasMix          dias={dias} pm={pm} />}
-        {tab === 'analisis'    && <VentasAnalisis     dias={dias} hist={hist} metas={metas} />}
+        {tab === 'analisis'    && <VentasAnalisis     dias={Object.keys(diasFull).length > 0 ? diasFull : dias} hist={hist} metas={metas} />}
         {tab === 'metas'       && <VentasMetas        dias={dias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
         {tab === 'competencias'&& <VentasCompetencias dias={dias} pm={pm} comps={comps} onRefresh={loadAll} />}
         {tab === 'xls'         && <VentasXLS          dias={dias} onRefresh={loadAll} />}

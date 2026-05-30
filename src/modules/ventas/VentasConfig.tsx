@@ -46,10 +46,10 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
     return c
   }, [allProds, pm])
 
-  const handleUpdate = async (nombre: string, tipo: string, clas: string, subcl: string, mult: number) => {
+  const handleUpdate = async (nombre: string, tipo: string, clas: string, subcl: string, mult: number, costo: number) => {
     setSaving(nombre)
     try {
-      await updateProductInfo(nombre, { tipo, clasificacion: clas, subclasificacion: subcl, multiplicador: mult })
+      await updateProductInfo(nombre, { tipo, clasificacion: clas, subclasificacion: subcl, multiplicador: mult, costo_unitario: costo })
       onRefresh()
     } finally {
       setSaving(null)
@@ -85,6 +85,9 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
               <th className="r" title="Para bebidas: cuántas unidades equivale este ítem (vino botella=5, cerveza=1)">
                 Mult. ×
               </th>
+              <th className="r" title="Costo de insumos por unidad vendida (food cost)">
+                Costo ₡
+              </th>
               <th></th>
             </tr>
           </thead>
@@ -93,7 +96,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
               <ProductRow key={n} nombre={n} info={pm[n]}
                 clasSugeridas={CLAS_SUGERIDAS[pm[n]?.tipo ?? ''] ?? []}
                 saving={saving === n}
-                onSave={handleUpdate} />
+                onSave={(nombre, tipo, clas, subcl, mult, costo) => handleUpdate(nombre, tipo, clas, subcl, mult, costo)} />
             ))}
             {filtered.length === 0 && (
               <tr>
@@ -111,10 +114,10 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
 
 interface RowProps {
   nombre: string
-  info:   { tipo?: string; clasificacion?: string; subclasificacion?: string; multiplicador?: number } | undefined
+  info:   { tipo?: string; clasificacion?: string; subclasificacion?: string; multiplicador?: number; costo_unitario?: number } | undefined
   clasSugeridas: string[]
   saving: boolean
-  onSave: (nombre: string, tipo: string, clas: string, subcl: string, mult: number) => void
+  onSave: (nombre: string, tipo: string, clas: string, subcl: string, mult: number, costo: number) => void
 }
 
 function ProductRow({ nombre, info, clasSugeridas, saving, onSave }: RowProps) {
@@ -122,12 +125,14 @@ function ProductRow({ nombre, info, clasSugeridas, saving, onSave }: RowProps) {
   const [clas,  setClas]  = useState(info?.clasificacion ?? '')
   const [subcl, setSubcl] = useState(info?.subclasificacion ?? '')
   const [mult,  setMult]  = useState(info?.multiplicador ?? 1)
+  const [costo, setCosto] = useState(info?.costo_unitario ?? 0)
 
   const changed =
-    tipo  !== (info?.tipo          ?? 'desconocido') ||
-    clas  !== (info?.clasificacion  ?? '')            ||
-    subcl !== (info?.subclasificacion ?? '')          ||
-    mult  !== (info?.multiplicador  ?? 1)
+    tipo  !== (info?.tipo             ?? 'desconocido') ||
+    clas  !== (info?.clasificacion    ?? '')             ||
+    subcl !== (info?.subclasificacion ?? '')             ||
+    mult  !== (info?.multiplicador    ?? 1)              ||
+    costo !== (info?.costo_unitario   ?? 0)
 
   return (
     <tr style={{ background: saving ? '#fffdf5' : '' }}>
@@ -174,10 +179,27 @@ function ProductRow({ nombre, info, clasSugeridas, saving, onSave }: RowProps) {
           title={tipo !== 'bebida' ? 'Solo aplica a bebidas' : 'Unidades equivalentes (ej: botella vino = 5)'}
         />
       </td>
+      <td className="r">
+        {/* Costo de insumos por unidad (food cost) */}
+        <input
+          type="number"
+          className="cd-tbl-input r"
+          value={costo || ''}
+          min={0} step={100}
+          style={{
+            width: 70,
+            color: costo > 0 ? 'var(--vt-red)' : undefined,
+          }}
+          placeholder="0"
+          onChange={e => setCosto(Math.max(0, Number(e.target.value) || 0))}
+          disabled={saving}
+          title="Costo de insumos por unidad vendida (₡)"
+        />
+      </td>
       <td style={{ textAlign: 'center' }}>
         {changed && (
           <button className="tips-btn-ghost" style={{ fontSize: '0.7rem', padding: '0.2rem 0.6rem' }}
-            onClick={() => onSave(nombre, tipo, clas, subcl, mult)} disabled={saving}>
+            onClick={() => onSave(nombre, tipo, clas, subcl, mult, costo)} disabled={saving}>
             {saving ? '⟳' : '✓ Guardar'}
           </button>
         )}

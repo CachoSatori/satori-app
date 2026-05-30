@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { Employee, UserRole, Profile } from '../../shared/types/database'
 import { createEmployee, updateEmployee, toggleEmployeeActive, getAllProfiles, linkProfileToEmployee } from '../../shared/api/admin'
+// pos_name added to Employee type via DB migration — exact name as it appears in POS XLS
 
 const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
@@ -62,17 +63,24 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
     }
   }
 
+  const [editPosName, setEditPosName] = useState('')
+
   const handleEdit = (emp: Employee) => {
     setEditId(emp.id)
     setEditName(emp.full_name)
     setEditRole(emp.role)
+    setEditPosName((emp as { pos_name?: string }).pos_name ?? '')
   }
 
   const handleSaveEdit = async (id: string) => {
     setSaving(true)
     setError(null)
     try {
-      await updateEmployee(id, { full_name: editName.trim().toUpperCase(), role: editRole })
+      await updateEmployee(id, {
+        full_name: editName.trim().toUpperCase(),
+        role: editRole,
+        ...(editPosName.trim() ? { pos_name: editPosName.trim().toUpperCase() } : { pos_name: null }),
+      } as Parameters<typeof updateEmployee>[1])
       setEditId(null)
       await onRefresh()
     } catch (err) {
@@ -155,8 +163,18 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                       value={editName}
                       onChange={e => setEditName(e.target.value)}
                       disabled={saving}
-                      style={{ width: '140px' }}
+                      style={{ width: '130px', marginBottom: '2px' }}
                     />
+                    <div>
+                      <input
+                        className="tip-input"
+                        value={editPosName}
+                        onChange={e => setEditPosName(e.target.value)}
+                        disabled={saving}
+                        placeholder="Nombre en POS…"
+                        style={{ width: '130px', fontSize: '0.72rem', opacity: 0.7 }}
+                      />
+                    </div>
                   </td>
                   <td>
                     <select
@@ -181,7 +199,14 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                 </>
               ) : (
                 <>
-                  <td className="admin-emp-name">{emp.full_name}</td>
+                  <td className="admin-emp-name">
+                    {emp.full_name}
+                    {(emp as { pos_name?: string }).pos_name && (
+                      <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '1px' }}>
+                        POS: {(emp as { pos_name?: string }).pos_name}
+                      </div>
+                    )}
+                  </td>
                   <td><span className="role-tag">{ROLE_LABELS[emp.role] ?? emp.role}</span></td>
                   <td style={{ fontSize: '0.72rem', color: '#5a5040' }}>
                     {/* Profile link selector */}

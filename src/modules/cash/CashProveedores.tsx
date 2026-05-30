@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import { upsertSupplier, deactivateSupplier } from '../../shared/api/cash'
 import { fi, todayStr } from './cashUtils'
@@ -69,6 +69,9 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
 
   const overdueCount = supplierStatus.filter(x => x.isOverdue || x.isDueSoon).length
   const pendingTotal = supplierStatus.reduce((s, x) => s + x.pendingCRC, 0)
+  const [expandedProv, setExpandedProv] = useState<string | null>(null)
+  const toggleProv = useCallback((id: string) =>
+    setExpandedProv(prev => prev === id ? null : id), [])
 
   const openEdit = (s: Supplier) => {
     setForm({ id: s.id, name: s.name, category: s.category ?? 'Otros',
@@ -221,6 +224,40 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
                     <div className="cd-prov-deuda-val">{fi(pendingCRC)}</div>
                   </div>
                 )}
+
+                {/* Payment history toggle */}
+                {(() => {
+                  const provPayments = movements
+                    .filter(m => m.supplier_id === s.id && m.movement_type === 'egreso_mercaderia')
+                    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+                    .slice(0, 8)
+                  if (!provPayments.length) return null
+                  return (
+                    <div style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--t-border)' }}>
+                      <button
+                        onClick={() => toggleProv(s.id)}
+                        style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--t-teal)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                      >
+                        {expandedProv === s.id ? '▼' : '▶'} Historial pagos ({provPayments.length})
+                      </button>
+                      {expandedProv === s.id && (
+                        <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          {provPayments.map(pmt => (
+                            <div key={pmt.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.25rem 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                              <div>
+                                <span style={{ color: '#888' }}>{pmt.created_at?.slice(0, 10)}</span>
+                                {pmt.method !== 'Efectivo' && <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? '#c8a030' : '#888' }}>· {pmt.method}</span>}
+                              </div>
+                              <span style={{ fontWeight: 600, color: pmt.status === 'pendiente' ? '#c8a030' : 'var(--t-teal)' }}>
+                                {fi(pmt.amount_crc)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             </div>
           </div>

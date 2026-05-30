@@ -288,6 +288,49 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           )}
         </table>
       </div>
+
+      {/* ── Mobile card list (shown instead of table on <760px) ── */}
+      <div className="cd-mov-mobile-list" style={{ flexDirection: 'column', gap: '0.5rem' }}>
+        {filtered.map(m => {
+          const ses = sesionMap.get(m.session_id)
+          const isIng  = m.movement_type === 'ingreso'
+          const isEg   = isEgreso(m.movement_type as MovementType)
+          const amtColor = isIng ? '#27874f' : isEg ? '#c0392b' : '#5a5040'
+          const typeBg   = isIng ? '#d4edda' : isEg ? '#f8d7da' : 'rgba(0,0,0,0.06)'
+          const typeCol  = isIng ? '#155724' : isEg ? '#721c24' : 'var(--t-ink)'
+          const isPend   = m.status === 'pendiente'
+          return (
+            <div key={m.id} style={{
+              background: isPend ? '#fffdf5' : '#fff',
+              border: `1px solid ${isPend ? '#e0c878' : 'var(--t-border)'}`,
+              borderRadius: 2, padding: '0.75rem 0.875rem',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.3rem' }}>
+                <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: 99, background: typeBg, color: typeCol }}>
+                  {MOVEMENT_LABELS[m.movement_type as MovementType] ?? m.movement_type}
+                </span>
+                <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: '0.95rem', color: amtColor }}>
+                  {isIng ? '+' : isEg ? '−' : ''}{fi(m.amount_crc)}
+                </span>
+              </div>
+              <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--t-ink)', marginBottom: '0.15rem' }}>
+                {m.description || m.supplier_name || m.employee_name || '—'}
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.68rem', color: '#5a5040' }}>
+                <span>{ses?.session_date ?? '—'}</span>
+                <span>{m.method}</span>
+                <span>{m.caja_origen}</span>
+                {isPend && <span style={{ color: '#c8a030', fontWeight: 700 }}>Pendiente</span>}
+              </div>
+            </div>
+          )
+        })}
+        {filtered.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '2rem', color: '#888', fontSize: '0.85rem' }}>
+            Sin movimientos en el período
+          </div>
+        )}
+      </div>
     </div>
   )
 }

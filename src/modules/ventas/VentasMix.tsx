@@ -82,6 +82,22 @@ export default function VentasMix({ dias, pm }: Props) {
 
   const pmData = useMemo(() => buildPM(dates, dias, pm, canal), [dates, dias, pm, canal])
 
+  // Food cost: sum(costo_unitario × unidades_vendidas) per product
+  const foodCostData = useMemo(() => {
+    let totalCosto = 0, totalMonto = 0
+    const byTipo: Record<string, { costo: number; monto: number }> = {}
+    for (const [name, item] of Object.entries(pmData)) {
+      const costo = (pm[name]?.costo_unitario ?? 0) * item.unidades
+      totalCosto += costo
+      totalMonto += item.monto
+      const tipo = item.tipo
+      if (!byTipo[tipo]) byTipo[tipo] = { costo: 0, monto: 0 }
+      byTipo[tipo].costo += costo
+      byTipo[tipo].monto += item.monto
+    }
+    return { totalCosto, totalMonto, byTipo, fcPct: totalMonto > 0 ? totalCosto / totalMonto * 100 : 0 }
+  }, [pmData, pm])
+
   const totalMonto = Object.values(pmData).reduce((s, p) => s + p.monto, 0)
   const totBeb     = Object.values(pmData).filter(p => p.tipo === 'bebida').reduce((s, p) => s + p.monto, 0)
   const totCom     = Object.values(pmData).filter(p => p.tipo === 'comida').reduce((s, p) => s + p.monto, 0)
@@ -154,6 +170,17 @@ export default function VentasMix({ dias, pm }: Props) {
           <div className="vt-kpi-label">Unidades</div>
           <div className="vt-kpi-val">{totUds.toLocaleString('es-CR')}</div>
         </div>
+        {foodCostData.totalCosto > 0 && (
+          <div className="vt-kpi" style={{ borderLeftColor: foodCostData.fcPct > 35 ? 'var(--vt-red)' : foodCostData.fcPct > 25 ? 'var(--vt-gold-dark,#a07830)' : 'var(--vt-green)' }}>
+            <div className="vt-kpi-label">Food Cost</div>
+            <div className="vt-kpi-val" style={{ color: foodCostData.fcPct > 35 ? 'var(--vt-red)' : foodCostData.fcPct > 25 ? 'var(--vt-gold-dark,#a07830)' : 'var(--vt-green)' }}>
+              {foodCostData.fcPct.toFixed(1)}%
+            </div>
+            <div className="vt-kpi-sub">
+              {fi(foodCostData.totalCosto)} en insumos
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Hierarchical product table */}
@@ -172,7 +199,14 @@ export default function VentasMix({ dias, pm }: Props) {
               {/* Tipo header */}
               <div className="vt-mix-tipo-hdr" onClick={() => toggle(tipoKey)}>
                 <span>{collapsed[tipoKey] ? '▶' : '▼'} {tipo.toUpperCase()}</span>
-                <span>{fi(tipoTotal)} · {tipoUds.toLocaleString('es-CR')} uds · {totalMonto > 0 ? (tipoTotal/totalMonto*100).toFixed(1) : 0}%</span>
+                <span>
+                  {fi(tipoTotal)} · {tipoUds.toLocaleString('es-CR')} uds · {totalMonto > 0 ? (tipoTotal/totalMonto*100).toFixed(1) : 0}%
+                  {foodCostData.byTipo[tipo]?.costo > 0 && (
+                    <span style={{ marginLeft: '0.5rem', color: foodCostData.byTipo[tipo].monto > 0 ? (foodCostData.byTipo[tipo].costo / foodCostData.byTipo[tipo].monto > 0.35 ? 'var(--vt-red)' : '#7ec8a0') : undefined }}>
+                      · FC {(foodCostData.byTipo[tipo].costo / foodCostData.byTipo[tipo].monto * 100).toFixed(0)}%
+                    </span>
+                  )}
+                </span>
               </div>
 
               {!collapsed[tipoKey] && Object.entries(byTipo[tipo]).sort().map(([clas, subclMap]) => {

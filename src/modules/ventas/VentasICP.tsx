@@ -18,6 +18,15 @@ import {
   aggSalonero, allSaloneros, allDates,
   fi, availableMonths, fmtMonthLabel,
 } from './ventasUtils'
+
+// Local normName since ventasUtils doesn't export it — keeps ICP self-contained
+function normName(s: string): string {
+  return s.toLowerCase()
+    .replace(/[áàâä]/g, 'a').replace(/[éèêë]/g, 'e')
+    .replace(/[íìîï]/g, 'i').replace(/[óòôö]/g, 'o')
+    .replace(/[úùûü]/g, 'u').replace(/[ñ]/g, 'n')
+    .replace(/[^a-z0-9]/g, '')
+}
 import { getAttendanceHistory } from '../../shared/api/tips'
 import { getAllEmployees } from '../../shared/api/admin'
 import type { AttendanceRow } from '../../shared/api/tips'
@@ -26,15 +35,6 @@ import type { ProductMap } from '../../shared/types/ventas'
 interface Props {
   dias: DiasMap
   pm:   ProductMap
-}
-
-// ── Name normalization for cross-system matching ───────────────
-function normName(s: string): string {
-  return s.toLowerCase()
-    .replace(/[áàâä]/g, 'a').replace(/[éèêë]/g, 'e')
-    .replace(/[íìîï]/g, 'i').replace(/[óòôö]/g, 'o')
-    .replace(/[úùûü]/g, 'u').replace(/[ñ]/g, 'n')
-    .replace(/[^a-z0-9]/g, '')
 }
 
 // ── ICP color thresholds ───────────────────────────────────────
@@ -305,11 +305,67 @@ export default function VentasICP({ dias, pm }: Props) {
         </table>
       </div>
 
+      {/* Per-salonero monthly ICP sparklines */}
+      {icpData.filter(d => d.days > 0 && d.icp > 0).length > 0 && months.length > 1 && (
+        <>
+          <div className="vt-sl" style={{ marginTop: '1.5rem' }}>Tendencia ICP por salonero</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+            {icpData.filter(d => d.icp > 0).map(d => {
+              const sparkData = months.slice(0, 6).map(ym => {
+                const mDates = allDates(dias).filter(date => date.startsWith(ym))
+                const mAgg   = aggSalonero(d.name, mDates, dias, pm)
+                const mPay   = (() => {
+                  const m: Record<string, number> = {}
+                  tipData.filter(r => r.session_date.startsWith(ym)).forEach(r => {
+                    const emp = employees.find(e => e.id === r.employee_id)
+                    if (!emp) return
+                    const posName = (emp as { pos_name?: string | null }).pos_name
+                    const keys = posName ? [normName(posName), normName(emp.full_name)] : [normName(emp.full_name)]
+                    keys.forEach(k => { m[k] = (m[k] ?? 0) + (r.payout_crc ?? 0) })
+                  })
+                  return m[normName(d.name)] ?? 0
+                })()
+                return { ym, icp: mAgg.total > 0 ? mPay / mAgg.total * 100 : 0 }
+              }).reverse()
+              const hasData = sparkData.some(s => s.icp > 0)
+              if (!hasData) return null
+              const MNAMES: Record<string, string> = { '01':'E','02':'F','03':'M','04':'A','05':'M','06':'J','07':'J','08':'A','09':'S','10':'O','11':'N','12':'D' }
+              return (
+                <div key={d.name} style={{ background: 'var(--vt-ink)', borderRadius: 2, padding: '0.75rem 0.875rem' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--vt-paper)', marginBottom: '0.5rem' }}>
+                    {d.name}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'flex-end', height: 32 }}>
+                    {sparkData.map(s => {
+                      const h = s.icp > 0 ? Math.min(100, (s.icp / 20) * 100) : 0
+                      const [, mm] = s.ym.split('-')
+                      return (
+                        <div key={s.ym} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                          <div style={{ width: '100%', height: `${h}%`, minHeight: s.icp > 0 ? 2 : 0, background: icpColor(s.icp), borderRadius: 1, transition: 'height 0.3s' }} />
+                          <div style={{ fontSize: '0.5rem', color: '#444' }}>{MNAMES[mm] ?? mm}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div style={{ fontSize: '0.65rem', color: icpColor(d.icp), fontWeight: 700, marginTop: '0.3rem' }}>
+                    {d.icp.toFixed(1)}% — {icpLabel(d.icp)}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
       {/* Info note about matching */}
       {icpData.some(d => !d.matched) && (
         <div style={{ marginTop: '0.75rem', fontSize: '0.72rem', color: '#888', display: 'flex', gap: '0.4rem' }}>
           <span>⚠</span>
-          <span>Algunos saloneros no se encontraron en los registros de propinas. El ICP se calcula cruzando nombres del POS con nombres en el sistema de propinas. Verificá que los nombres coincidan en Admin → Empleados.</span>
+          <span>
+            Algunos saloneros no matchearon con el sistema de propinas.
+            Configurá el campo <strong>Nombre en POS</strong> en Admin → Empleados
+            con el nombre exacto del archivo XLS (ej: "JOTA" si en el POS aparece así).
+          </span>
         </div>
       )}
     </div>

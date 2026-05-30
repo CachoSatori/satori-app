@@ -3886,3 +3886,194 @@ html, body, #root {
   .resumen-grid { grid-template-columns: 1fr; }
   .resumen-kpi-row { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ── SOPs Module ─────────────────────────────────────────────── */
+.sop-module {
+  min-height: 100vh;
+  background: var(--t-ink);
+  font-family: var(--font-sans);
+}
+.sop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  height: 52px;
+  background: var(--t-ink);
+  border-bottom: 1px solid #1a1a1a;
+  position: sticky; top: 0; z-index: 100;
+  flex-wrap: wrap; gap: 0.5rem;
+}
+.sop-filters {
+  background: var(--t-panel);
+  border-bottom: 1px solid var(--t-border);
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sop-search {
+  border: 1px solid var(--t-border);
+  border-radius: 2px;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.88rem;
+  background: var(--t-paper);
+  color: var(--t-ink);
+  outline: none;
+  width: 100%;
+  max-width: 360px;
+  font-family: var(--font-sans);
+}
+.sop-search:focus { border-color: var(--t-teal); }
+.sop-cat-tabs {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+.sop-cat-tab {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--t-border);
+  background: var(--t-paper);
+  color: #5a5040;
+  border-radius: 99px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: var(--font-sans);
+}
+.sop-cat-tab:hover  { border-color: var(--t-teal); color: var(--t-teal); }
+.sop-cat-tab.active { background: var(--t-ink); color: var(--t-gold); border-color: var(--t-ink); }
+.sop-body {
+  background: var(--t-paper);
+  min-height: calc(100vh - 52px - 80px);
+  padding: 1.5rem;
+  color: var(--t-ink);
+}
+.sop-empty {
+  padding: 4rem;
+  text-align: center;
+  background: var(--t-ink);
+  border-radius: 3px;
+  color: var(--t-paper);
+  max-width: 480px;
+  margin: 0 auto;
+}
+.sop-category-section { margin-bottom: 2rem; }
+.sop-category-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #4a4030;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--t-border);
+}
+.sop-category-count {
+  margin-left: auto;
+  background: rgba(0,0,0,0.08);
+  color: #888;
+  padding: 0.1rem 0.4rem;
+  border-radius: 99px;
+  font-size: 0.65rem;
+}
+.sop-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+.sop-card {
+  background: #fff;
+  border: 1px solid var(--t-border);
+  border-radius: 3px;
+  padding: 1rem 1.1rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.sop-card:hover { border-color: var(--t-teal); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.sop-card-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.4rem; color: var(--t-ink); }
+.sop-card-preview { font-size: 0.75rem; color: #5a5040; line-height: 1.5; }
+.sop-card-actions {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.75rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--t-border);
+}
+.sop-edit-btn {
+  font-size: 0.72rem; padding: 0.2rem 0.6rem; border: 1px solid var(--t-border);
+  background: var(--t-paper); border-radius: 2px; cursor: pointer; color: #5a5040;
+  transition: all 0.1s;
+}
+.sop-edit-btn:hover { border-color: var(--t-teal); color: var(--t-teal); }
+.sop-del-btn {
+  font-size: 0.72rem; padding: 0.2rem 0.5rem; border: 1px solid #f0b0b0;
+  background: transparent; border-radius: 2px; cursor: pointer; color: #c0392b;
+}
+/* Detail / Editor overlays */
+.sop-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000;
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.sop-detail {
+  background: var(--t-paper); border-radius: 3px; width: 100%; max-width: 640px;
+  max-height: 90vh; display: flex; flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.sop-editor {
+  background: var(--t-paper); border-radius: 3px; width: 100%; max-width: 760px;
+  max-height: 95vh; display: flex; flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.sop-detail-header, .sop-editor-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--t-border);
+  background: var(--t-ink);
+}
+.sop-detail-cat {
+  font-size: 0.62rem; letter-spacing: 0.15em; text-transform: uppercase;
+  color: #555; margin-bottom: 0.25rem;
+}
+.sop-detail-title { font-family: var(--font-serif); font-size: 1.1rem; font-weight: 700; color: var(--t-gold); }
+.sop-close-btn {
+  background: transparent; border: none; color: #555; cursor: pointer;
+  font-size: 1rem; padding: 0.2rem; transition: color 0.1s; flex-shrink: 0; margin-left: 1rem;
+}
+.sop-close-btn:hover { color: var(--t-gold); }
+.sop-detail-body, .sop-editor-body {
+  padding: 1.5rem; overflow-y: auto; flex: 1;
+}
+.sop-detail-footer, .sop-editor-footer {
+  display: flex; justify-content: flex-end; gap: 0.625rem;
+  padding: 0.875rem 1.5rem; border-top: 1px solid var(--t-border);
+}
+/* SOP content styles */
+.sop-content { line-height: 1.7; color: var(--t-ink); font-size: 0.88rem; }
+.sop-content .sop-h3 { font-family: var(--font-serif); font-size: 1rem; font-weight: 700; margin: 1rem 0 0.4rem; }
+.sop-content .sop-h4 { font-size: 0.88rem; font-weight: 700; margin: 0.75rem 0 0.3rem; color: var(--t-teal); text-transform: uppercase; letter-spacing: 0.08em; }
+.sop-content li { margin-left: 1.25rem; margin-bottom: 0.25rem; }
+.sop-content .sop-ol { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem; margin-left: 0; }
+.sop-content .sop-ol span { color: var(--t-teal); font-weight: 700; }
+.sop-content .sop-p { margin-bottom: 0.75rem; }
+.sop-editor-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.sop-textarea {
+  width: 100%; border: 1px solid var(--t-border); border-radius: 2px;
+  padding: 0.75rem 0.875rem; font-family: 'DM Mono', monospace; font-size: 0.82rem;
+  background: var(--t-paper); color: var(--t-ink); outline: none; resize: vertical;
+  line-height: 1.6;
+}
+.sop-textarea:focus { border-color: var(--t-teal); }
+.sop-preview-box {
+  border: 1px solid var(--t-border); border-radius: 2px; padding: 1rem 1.25rem;
+  background: #fff; margin-top: 0.5rem;
+}
+@media (max-width: 600px) {
+  .sop-cards { grid-template-columns: 1fr; }
+  .sop-body { padding: 1rem; }
+  .sop-editor-row { flex-direction: column; }
+}

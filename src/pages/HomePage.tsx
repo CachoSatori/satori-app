@@ -47,7 +47,7 @@ const MODULES: Module[] = [
   },
   {
     id: 'sops', path: '/sops', label: 'SOPs', kanji: '書',
-    description: 'Procedimientos', ready: false,
+    description: 'Procedimientos', ready: true,
     roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],
   },
   {

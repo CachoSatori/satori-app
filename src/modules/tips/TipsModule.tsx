@@ -27,12 +27,13 @@ import {
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import TipHistory from './TipHistory'
 import TipQuincenal from './TipQuincenal'
+import TipStats from './TipStats'
 import { todayCR } from '../../shared/utils'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 
-type View = 'turno' | 'historial' | 'quincenal'
+type View = 'turno' | 'historial' | 'quincenal' | 'stats'
 
 export default function TipsModule() {
   const { profile } = useAuth()
@@ -393,6 +394,11 @@ export default function TipsModule() {
               Quincenal
             </button>
           )}
+          {isManager && (
+            <button className={`tips-tab ${view === 'stats' ? 'active' : ''}`} onClick={() => setView('stats')}>
+              Estadísticas
+            </button>
+          )}
         </div>
       </div>
 
@@ -595,6 +601,17 @@ export default function TipsModule() {
             calcCache={tipCalcCache}
             employees={employees}
             rolePoints={rolePoints}
+          />
+        </div>
+      )}
+
+      {/* ─── ESTADÍSTICAS ─── */}
+      {view === 'stats' && (
+        <div className="tips-body">
+          <TipStats
+            sessions={sessions}
+            calcCache={tipCalcCache}
+            employees={employees}
           />
         </div>
       )}

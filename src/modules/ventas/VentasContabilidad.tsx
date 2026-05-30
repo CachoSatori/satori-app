@@ -1,21 +1,25 @@
-import { useState, useMemo } from 'react'
-import type { DiasMap, HistMap, Meta } from '../../shared/types/ventas'
+import { useState, useMemo, lazy, Suspense } from 'react'
+import type { DiasMap, HistMap, Meta, ProductMap } from '../../shared/types/ventas'
 import {
   getContabilidadDays, availableMonths, availableYears,
   fi, fmtDate, metaProgress,
   dowAverages, dowLabel, dayOfWeek,
 } from './ventasUtils'
 
+const ReporteMensual = lazy(() => import('./ReporteMensual'))
+
 interface Props {
   dias:  DiasMap
   hist:  HistMap
   metas: Meta
+  pm:    ProductMap
 }
 
-export default function VentasContabilidad({ dias, hist, metas }: Props) {
+export default function VentasContabilidad({ dias, hist, metas, pm }: Props) {
   const months = useMemo(() => availableMonths(dias, hist), [dias, hist])
   const years  = useMemo(() => availableYears(dias, hist), [dias, hist])
   const [selected, setSelected] = useState<string>(months[0] ?? '')
+  const [showReport, setShowReport] = useState(false)
 
   const isYear = selected.startsWith('todo-')
   const yearNum = isYear ? Number(selected.slice(5)) : Number(selected.slice(0, 4))
@@ -167,7 +171,15 @@ export default function VentasContabilidad({ dias, hist, metas }: Props) {
         <div className="vt-sl" style={{ margin: 0, flex: 1 }}>
           Detalle por día ({days.length} días)
         </div>
-        <button className="tips-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={exportCSV}>⬇ CSV</button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {!isYear && (
+            <button className="tips-btn-teal" style={{ fontSize: '0.8rem' }}
+              onClick={() => setShowReport(true)}>
+              🖨 Reporte
+            </button>
+          )}
+          <button className="tips-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={exportCSV}>⬇ CSV</button>
+        </div>
       </div>
       <div className="vt-tbl-wrap">
         <table className="vt-tbl">
@@ -222,6 +234,20 @@ export default function VentasContabilidad({ dias, hist, metas }: Props) {
           </tfoot>
         </table>
       </div>
+
+      {/* Reporte modal */}
+      {showReport && !isYear && (
+        <Suspense fallback={null}>
+          <ReporteMensual
+            ym={selected}
+            dias={dias}
+            hist={hist}
+            pm={pm}
+            metas={metas}
+            onClose={() => setShowReport(false)}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

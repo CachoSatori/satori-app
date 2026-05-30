@@ -142,7 +142,7 @@ export default function VentasModule() {
       {/* Content */}
       <div className="vt-content">
         {tab === 'hoy'         && <VentasHoy         dias={dias} pm={pm} metas={metas} />}
-        {tab === 'ventas'      && <VentasContabilidad dias={dias} hist={hist} metas={metas} />}
+        {tab === 'ventas'      && <VentasContabilidad dias={dias} hist={hist} metas={metas} pm={pm} />}
         {tab === 'saloneros'   && <VentasSaloneros    dias={dias} pm={pm} metas={metas} />}
         {tab === 'evaluacion'  && <VentasEvaluacion   dias={dias} pm={pm} metas={metas} />}
         {tab === 'cajeros'     && <VentasCajeros      dias={dias} />}

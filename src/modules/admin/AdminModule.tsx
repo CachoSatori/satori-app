@@ -11,11 +11,11 @@ type Tab = 'employees' | 'rolepoints' | 'exchange' | 'hours'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
-async function sendMonthlyReport(month?: string): Promise<{ ok: boolean; month?: string; error?: string }> {
+async function sendMonthlyReport(month?: string, tipo?: string): Promise<{ ok: boolean; month?: string; results?: string[]; error?: string }> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/monthly-report`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(month ? { month } : {}),
+    body:    JSON.stringify({ ...(month ? { month } : {}), ...(tipo ? { tipo } : {}) }),
   })
   return res.json()
 }
@@ -95,31 +95,34 @@ export default function AdminModule() {
       </div>
 
       {/* Email report button */}
-      <div style={{ padding: '0.625rem 1.5rem', borderBottom: '1px solid var(--t-border)', background: 'var(--t-panel)', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.72rem', color: '#5a5040', letterSpacing: '0.06em' }}>
-          📧 Reporte mensual automático — día 1 de cada mes a satorisushibar@gmail.com
+      <div style={{ padding: '0.625rem 1.5rem', borderBottom: '1px solid var(--t-border)', background: 'var(--t-panel)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.68rem', color: '#5a5040', letterSpacing: '0.04em', marginRight: '0.25rem' }}>
+          📧 Reportes automáticos — día 1 cada mes:
         </span>
-        <button
-          className="tips-btn-ghost"
-          style={{ fontSize: '0.78rem', marginLeft: 'auto' }}
-          disabled={sendingReport}
-          onClick={async () => {
-            setSendingReport(true)
-            setReportMsg(null)
-            const result = await sendMonthlyReport()
-            if (result.ok) {
-              setReportMsg(`✓ Reporte de ${result.month} enviado`)
-            } else {
-              setReportMsg(`✗ Error: ${result.error?.slice(0, 80)}`)
-            }
-            setSendingReport(false)
-            setTimeout(() => setReportMsg(null), 6000)
-          }}
-        >
-          {sendingReport ? '⟳ Enviando…' : '📧 Enviar reporte ahora'}
-        </button>
+        {(['ventas','propinas','ambos'] as const).map(tipo => (
+          <button
+            key={tipo}
+            className="tips-btn-ghost"
+            style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}
+            disabled={sendingReport}
+            onClick={async () => {
+              setSendingReport(true)
+              setReportMsg(null)
+              const result = await sendMonthlyReport(undefined, tipo)
+              if (result.ok) {
+                setReportMsg(`✓ ${tipo === 'ambos' ? 'Ambos reportes' : 'Reporte '+tipo} enviado — ${result.month}`)
+              } else {
+                setReportMsg(`✗ ${result.error?.slice(0, 80)}`)
+              }
+              setSendingReport(false)
+              setTimeout(() => setReportMsg(null), 6000)
+            }}
+          >
+            {sendingReport ? '⟳' : tipo === 'ventas' ? '📈 Ventas' : tipo === 'propinas' ? '💰 Propinas' : '📧 Ambos'}
+          </button>
+        ))}
         {reportMsg && (
-          <span style={{ fontSize: '0.78rem', color: reportMsg.startsWith('✓') ? 'var(--t-teal)' : 'var(--t-red)', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.78rem', color: reportMsg.startsWith('✓') ? 'var(--t-teal)' : 'var(--t-red)', fontWeight: 600, marginLeft: '0.5rem' }}>
             {reportMsg}
           </span>
         )}

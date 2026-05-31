@@ -9,12 +9,25 @@ import EmployeeHours from './EmployeeHours'
 
 type Tab = 'employees' | 'rolepoints' | 'exchange' | 'hours'
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+
+async function sendMonthlyReport(month?: string): Promise<{ ok: boolean; month?: string; error?: string }> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/monthly-report`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(month ? { month } : {}),
+  })
+  return res.json()
+}
+
 export default function AdminModule() {
   const [tab, setTab] = useState<Tab>('employees')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [rolePoints, setRolePoints] = useState<RoleTipPoints[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sendingReport, setSendingReport] = useState(false)
+  const [reportMsg, setReportMsg] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     try {
@@ -79,6 +92,37 @@ export default function AdminModule() {
             Horas trabajadas
           </button>
         </div>
+      </div>
+
+      {/* Email report button */}
+      <div style={{ padding: '0.625rem 1.5rem', borderBottom: '1px solid var(--t-border)', background: 'var(--t-panel)', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.72rem', color: '#5a5040', letterSpacing: '0.06em' }}>
+          📧 Reporte mensual automático — día 1 de cada mes a satorisushibar@gmail.com
+        </span>
+        <button
+          className="tips-btn-ghost"
+          style={{ fontSize: '0.78rem', marginLeft: 'auto' }}
+          disabled={sendingReport}
+          onClick={async () => {
+            setSendingReport(true)
+            setReportMsg(null)
+            const result = await sendMonthlyReport()
+            if (result.ok) {
+              setReportMsg(`✓ Reporte de ${result.month} enviado`)
+            } else {
+              setReportMsg(`✗ Error: ${result.error?.slice(0, 80)}`)
+            }
+            setSendingReport(false)
+            setTimeout(() => setReportMsg(null), 6000)
+          }}
+        >
+          {sendingReport ? '⟳ Enviando…' : '📧 Enviar reporte ahora'}
+        </button>
+        {reportMsg && (
+          <span style={{ fontSize: '0.78rem', color: reportMsg.startsWith('✓') ? 'var(--t-teal)' : 'var(--t-red)', fontWeight: 600 }}>
+            {reportMsg}
+          </span>
+        )}
       </div>
 
       {error && (

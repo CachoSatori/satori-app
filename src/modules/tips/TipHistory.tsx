@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import { getTipEntriesBySession } from '../../shared/api/tips'
 import { calcHistory, formatCRC, formatNum, ROL_LABELS, type HistoryCalc } from '../../shared/utils/tipCalculations'
+import { shiftLabel } from '../../shared/utils'
 
 interface Props {
   sessions:   TipSession[]
@@ -68,7 +69,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
           <div key={s.id} className={`hist-item${isOpen ? ' open' : ''}`} onClick={() => handleExpand(s)}>
             <div className="hist-header">
               <div>
-                <div className="hist-fecha">{s.session_date} · {s.shift_type}</div>
+                <div className="hist-fecha">{s.session_date} · {shiftLabel(s.shift_type)}</div>
                 <div className="hist-meta">
                   {calc ? `${calc.rows.length} empleados` : ''}
                 </div>

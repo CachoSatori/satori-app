@@ -56,3 +56,17 @@ export function daysInMonth(ym: string): number {
   const [y, m] = ym.split('-').map(Number)
   return new Date(y, m, 0).getDate()
 }
+
+// ── Shift type normalization ──────────────────────────────────
+// tip_sessions uses 'AM'/'PM'; cash_sessions uses 'Mediodía'/'Noche'
+// Always display as the Spanish label for consistency.
+export function shiftLabel(shift: string): string {
+  if (shift === 'AM' || shift === 'Mediodía' || shift === 'Mañana') return 'Mediodía'
+  if (shift === 'PM' || shift === 'Noche')    return 'Noche'
+  return shift
+}
+
+// Convert tip session shift_type to Caja shift_type for cross-module matching
+export function tipShiftToCaja(shift: string): string {
+  return shiftLabel(shift)  // 'AM'→'Mediodía', 'PM'→'Noche'
+}

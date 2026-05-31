@@ -3,7 +3,6 @@ import type { DiaData, HistDay, ProductInfo, Meta, Comp } from '../types/ventas'
 
 // ── Días ────────────────────────────────────────────────────
 
-// PERF FIX: eager load only recent 90 days; older data loaded on demand
 export async function getVentasDias(days = 90): Promise<Record<string, DiaData>> {
   const since = new Date()
   since.setDate(since.getDate() - days)
@@ -16,13 +15,12 @@ export async function getVentasDias(days = 90): Promise<Record<string, DiaData>>
     .order('session_date', { ascending: true })
   if (error) throw new Error(error.message)
   const result: Record<string, DiaData> = {}
-  for (const row of (data as { session_date: string; data: DiaData }[]) ?? []) {
+  for (const row of (data as Array<{ session_date: string; data: DiaData }> ?? [])) {
     result[row.session_date] = row.data
   }
   return result
 }
 
-// Load ALL historical data (used by VentasAnalisis year-over-year)
 export async function getAllVentasDias(): Promise<Record<string, DiaData>> {
   const { data, error } = await supabase
     .from('ventas_dias' as never)
@@ -30,7 +28,7 @@ export async function getAllVentasDias(): Promise<Record<string, DiaData>> {
     .order('session_date', { ascending: true })
   if (error) throw new Error(error.message)
   const result: Record<string, DiaData> = {}
-  for (const row of (data as { session_date: string; data: DiaData }[]) ?? []) {
+  for (const row of (data as Array<{ session_date: string; data: DiaData }> ?? [])) {
     result[row.session_date] = row.data
   }
   return result
@@ -66,7 +64,7 @@ export async function getVentasHist(): Promise<Record<string, HistDay>> {
     .select('session_date, data')
   if (error) throw new Error(error.message)
   const result: Record<string, HistDay> = {}
-  for (const row of (data as { session_date: string; data: HistDay }[]) ?? []) {
+  for (const row of (data as Array<{ session_date: string; data: HistDay }> ?? [])) {
     result[row.session_date] = row.data
   }
   return result
@@ -75,11 +73,10 @@ export async function getVentasHist(): Promise<Record<string, HistDay>> {
 export async function saveVentasHist(hist: Record<string, HistDay>): Promise<void> {
   const rows = Object.entries(hist).map(([date, d]) => ({
     session_date: date,
-    data:         d as never,
+    data:         d as never,  // HistDay → JSONB
     source:       'hist',
   }))
   if (!rows.length) return
-  // Insert in batches of 100
   for (let i = 0; i < rows.length; i += 100) {
     const { error } = await supabase
       .from('ventas_hist' as never)
@@ -91,16 +88,16 @@ export async function saveVentasHist(hist: Record<string, HistDay>): Promise<voi
 // ── Product Map ──────────────────────────────────────────────
 
 export async function getProductMap(): Promise<Record<string, ProductInfo>> {
-  const { data, error } = await supabase.from('product_map' as never).select('*')
+  const { data, error } = await supabase.from('product_map').select('*')
   if (error) throw new Error(error.message)
   const result: Record<string, ProductInfo> = {}
-  for (const row of (data as { nombre: string; tipo: string; clasificacion: string; subclasificacion: string; multiplicador: number }[]) ?? []) {
+  for (const row of (data as Array<{nombre:string;tipo:string;clasificacion:string;subclasificacion:string;multiplicador:number;costo_unitario:number}> ?? [])) {
     result[row.nombre] = {
       tipo:             row.tipo,
       clasificacion:    row.clasificacion ?? '',
       subclasificacion: row.subclasificacion ?? '',
       multiplicador:    row.multiplicador ?? 1,
-      costo_unitario:   (row as { costo_unitario?: number }).costo_unitario ?? 0,
+      costo_unitario:   row.costo_unitario ?? 0,
     }
   }
   return result
@@ -111,9 +108,8 @@ export async function saveProductMapItems(
 ): Promise<void> {
   for (let i = 0; i < items.length; i += 100) {
     const { error } = await supabase
-      .from('product_map' as never)
-      .upsert(
-        items.slice(i, i + 100).map(it => ({
+      .from('product_map')
+      .upsert(items.slice(i, i + 100).map(it => ({
           nombre:           it.nombre,
           tipo:             it.tipo,
           clasificacion:    it.clasificacion,
@@ -128,10 +124,13 @@ export async function saveProductMapItems(
   }
 }
 
-export async function updateProductInfo(nombre: string, info: Partial<ProductInfo & { costo_unitario?: number }>): Promise<void> {
+export async function updateProductInfo(nombre: string, info: Partial<ProductInfo>): Promise<void> {
   const { error } = await supabase
-    .from('product_map' as never)
-    .upsert({ nombre, ...info, updated_at: new Date().toISOString() } as never, { onConflict: 'nombre' })
+    .from('product_map')
+    .upsert(
+      { nombre, ...info, updated_at: new Date().toISOString() } as never,
+      { onConflict: 'nombre' },
+    )
   if (error) throw new Error(error.message)
 }
 
@@ -146,8 +145,8 @@ export async function getMetas(): Promise<Meta> {
     global: { promPax: 15000, bebPax: 1.2, ratioCB: 3.0, ticketItem: 7500, ventas: 800000 },
     salMetas:    {},
   }
-  for (const row of data ?? []) {
-    if ((row as { key: string; value: Meta }).key === 'all') return (row as { key: string; value: Meta }).value
+  for (const row of (data as Array<{ key: string; value: Meta }> ?? [])) {
+    if (row.key === 'all') return row.value
   }
   return defaults
 }
@@ -155,8 +154,10 @@ export async function getMetas(): Promise<Meta> {
 export async function saveMetas(metas: Meta): Promise<void> {
   const { error } = await supabase
     .from('ventas_metas' as never)
-    .upsert({ key: 'all', value: metas as never, updated_at: new Date().toISOString() } as never,
-      { onConflict: 'key' })
+    .upsert(
+      { key: 'all', value: metas as never, updated_at: new Date().toISOString() } as never,
+      { onConflict: 'key' },
+    )
   if (error) throw new Error(error.message)
 }
 
@@ -168,17 +169,18 @@ export async function getComps(): Promise<Comp[]> {
     .select('*')
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
-  return (data ?? []).map(r => (r as { data: Comp }).data)
+  return ((data as Array<{ data: Comp }> ?? [])).map(r => r.data)
 }
 
 export async function saveComp(comp: Comp): Promise<void> {
   // Delete-then-insert: avoids unreliable JSONB path filtering on UPDATE
   await supabase.from('ventas_comps' as never).delete().filter('data->>id', 'eq', comp.id)
-  const { error } = await supabase.from('ventas_comps' as never)
+  const { error } = await supabase
+    .from('ventas_comps' as never)
     .insert({ data: comp as never } as never)
   if (error) throw new Error(error.message)
 }
 
 export async function deleteComp(compId: string): Promise<void> {
-  await supabase.from('ventas_comps' as never).delete().eq('data->>id', compId)
+  await supabase.from('ventas_comps' as never).delete().filter('data->>id', 'eq', compId)
 }

@@ -44,16 +44,16 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
   // Run all 3 queries in parallel
   const [ventasRes, cajaRes, tipsRes] = await Promise.allSettled([
     // Ventas
-    supabase.from('ventas_dias' as never).select('data').eq('session_date', date).maybeSingle(),
+    supabase.from('ventas_dias').select('data').eq('session_date', date).maybeSingle(),
 
     // Caja — load ALL sessions for the day (BUG-8 FIX: was only loading latest)
-    supabase.from('cash_sessions' as never)
+    supabase.from('cash_sessions')
       .select('id, status, cajero_name, initial_cash_crc, initial_suppliers_crc')
       .eq('session_date', date)
       .order('created_at', { ascending: false }),
 
     // Tips — show open OR closed sessions (INT-4 FIX)
-    supabase.from('tip_sessions' as never)
+    supabase.from('tip_sessions')
       .select('id, status, pool_efectivo_crc, pool_efectivo_usd, exchange_rate, pool_barra_crc')
       .eq('session_date', date)
       .order('status', { ascending: true }) // 'closed' before 'open' alphabetically → prefer closed
@@ -104,7 +104,7 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
       const sessionIds = sessions.map(s => s.id)
       for (const sid of sessionIds) {
         const { data: movs } = await supabase
-          .from('cash_movements' as never)
+          .from('cash_movements')
           .select('movement_type, amount_crc')
           .eq('session_id', sid)
           .neq('status', 'rechazado')
@@ -128,7 +128,7 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
       + (ts.pool_barra_crc ?? 0)
 
     const { data: entries } = await supabase
-      .from('tip_entries' as never)
+      .from('tip_entries')
       .select('payout_crc')
       .eq('session_id', ts.id)
     if (entries) {

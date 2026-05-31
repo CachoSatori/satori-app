@@ -28,7 +28,7 @@ import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/dat
 import TipHistory from './TipHistory'
 import TipQuincenal from './TipQuincenal'
 import TipStats from './TipStats'
-import { todayCR } from '../../shared/utils'
+import { todayCR, shiftLabel, tipShiftToCaja } from '../../shared/utils'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
@@ -331,11 +331,11 @@ export default function TipsModule() {
               amount_usd:    0,
               currency:      'CRC',
               exchange_rate: null,
-              description:   `Propinas turno ${openSession.session_date} ${openSession.shift_type}`,
+              description:   `Propinas turno ${openSession.session_date} ${shiftLabel(openSession.shift_type)}`,
               subcategory:   'Propinas por turno',
               method:        'Efectivo',
               caja_origen:   'Registradora',
-              shift:         openSession.shift_type,
+              shift:         tipShiftToCaja(openSession.shift_type),
             })
           }
         } catch {
@@ -466,7 +466,7 @@ export default function TipsModule() {
               {/* Config bar */}
               <div className="tips-config-bar">
                 <div className="tips-config-meta">
-                  <strong>{openSession.session_date}</strong> · {openSession.shift_type}
+                  <strong>{openSession.session_date}</strong> · {shiftLabel(openSession.shift_type)}
                 </div>
                 <div className="tips-config-meta">
                   Tipo de cambio: <strong>₡{openSession.exchange_rate.toLocaleString('es-CR')}</strong>

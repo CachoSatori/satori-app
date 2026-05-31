@@ -1,4 +1,7 @@
-// Tipos generados del schema de Supabase — Satori App v1.0
+// Tipos del schema de Supabase — Satori App v2.0
+
+// Supabase Json type (required for JSONB columns in Database generic)
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type UserRole =
   | 'owner'
@@ -149,6 +152,58 @@ export interface ExchangeRate {
   created_at: string
 }
 
+// ── Tablas de Ventas (JSONB) ─────────────────────────────────
+
+export interface VentasDia {
+  id:          string
+  session_date: string       // DATE
+  file_name:   string | null
+  data:        Json           // DiaData as JSONB
+  uploaded_by: string | null
+  uploaded_at: string
+}
+
+export interface VentasHist {
+  session_date: string
+  data:         Json          // HistDay as JSONB
+  source:       string
+}
+
+export interface VentasMeta {
+  key:        string
+  value:      Json
+  updated_at: string
+}
+
+export interface VentasComp {
+  id:         string
+  data:       Json            // Comp as JSONB
+  created_at: string
+  updated_at: string
+}
+
+export interface ProductMapRow {
+  nombre:           string
+  tipo:             string
+  clasificacion:    string
+  subclasificacion: string
+  multiplicador:    number
+  costo_unitario:   number
+  updated_at:       string
+}
+
+export interface SOP {
+  id:            string
+  title:         string
+  category:      string
+  content:       string
+  display_order: number
+  is_active:     boolean
+  created_by:    string | null
+  created_at:    string
+  updated_at:    string
+}
+
 // ── Tipo Database para el cliente de Supabase ────────────────
 
 export interface Database {
@@ -199,6 +254,12 @@ export interface Database {
         Insert: Omit<ExchangeRate, 'id' | 'created_at'>
         Update: Partial<Omit<ExchangeRate, 'id' | 'created_at'>>
       }
+      // Note: ventas_dias, ventas_hist, ventas_metas, ventas_comps, product_map, sops
+      // are intentionally excluded from this generic because:
+      //   1. JSONB columns (Json type) cause Supabase query builder inference issues
+      //   2. Their TypeScript shapes are defined above (VentasDia, SOP, etc.) and used
+      //      directly via .returns<T>() or explicit casting at the call site
+      //   3. The correct approach is to use supabase gen types for production accuracy
     }
   }
 }

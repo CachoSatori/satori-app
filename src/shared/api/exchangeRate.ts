@@ -9,7 +9,6 @@ export interface ExchangeRateRow {
   created_at: string
 }
 
-// ── Leer tipo de cambio vigente (más reciente) ──────────────
 export async function getCurrentRate(): Promise<number> {
   const { data, error } = await supabase
     .from('exchange_rates')
@@ -31,7 +30,6 @@ export async function getRateHistory(limit = 30): Promise<ExchangeRateRow[]> {
   return (data ?? []) as ExchangeRateRow[]
 }
 
-// ── Guardar nuevo tipo de cambio ────────────────────────────
 export async function saveRate(params: {
   rate_date:  string
   usd_to_crc: number

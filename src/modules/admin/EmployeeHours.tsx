@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { Employee } from '../../shared/types/database'
 import { getAttendanceHistory } from '../../shared/api/tips'
 import type { AttendanceRow } from '../../shared/api/tips'
+import { shiftLabel } from '../../shared/utils'
 
 interface Props {
   employees: Employee[]
@@ -231,7 +232,7 @@ export default function EmployeeHours({ employees }: Props) {
                 return (
                   <tr key={i} className="admin-row">
                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.session_date)}</td>
-                    <td><span className="role-tag" style={{ background: r.shift_type === 'PM' ? 'rgba(42,122,106,0.12)' : 'rgba(200,169,110,0.12)', color: r.shift_type === 'PM' ? 'var(--t-teal)' : '#a07830' }}>{r.shift_type}</span></td>
+                    <td><span className="role-tag" style={{ background: (r.shift_type === 'PM' || r.shift_type === 'Noche') ? 'rgba(42,122,106,0.12)' : 'rgba(200,169,110,0.12)', color: (r.shift_type === 'PM' || r.shift_type === 'Noche') ? 'var(--t-teal)' : '#a07830' }}>{shiftLabel(r.shift_type)}</span></td>
                     {selected === 'all' && <td className="admin-emp-name">{emp?.full_name ?? '—'}</td>}
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>
                       {r.hours_worked}h

@@ -1,27 +1,11 @@
 import { supabase } from './supabase'
-
-export interface SOP {
-  id:            string
-  title:         string
-  category:      string
-  content:       string
-  display_order: number
-  is_active:     boolean
-  created_by:    string | null
-  created_at:    string
-  updated_at:    string
-}
+// SOP interface — same shape as the sops table
+export type { SOP } from '../types/database'
+import type { SOP } from '../types/database'
 
 export const SOP_CATEGORIES = [
-  'Apertura',
-  'Cierre',
-  'Servicio',
-  'Barra',
-  'Cocina',
-  'Delivery',
-  'Propinas',
-  'Emergencias',
-  'General',
+  'Apertura', 'Cierre', 'Servicio', 'Barra', 'Cocina',
+  'Delivery', 'Propinas', 'Emergencias', 'General',
 ]
 
 export async function getSOPs(): Promise<SOP[]> {

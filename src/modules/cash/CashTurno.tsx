@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import type { CashSession, CashMovement, Supplier, MovementType } from '../../shared/types/database'
 import {
@@ -7,6 +7,7 @@ import {
   createCashMovement,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr } from './cashUtils'
+import { tipShiftToCaja } from '../../shared/utils'
 import { getActiveEmployees } from '../../shared/api/tips'
 import type { Employee } from '../../shared/types/database'
 
@@ -32,6 +33,8 @@ interface PagoRow {
   amount_usd:    number | ''
   method:        'Efectivo' | 'Transferencia'
   reference:     string
+  // persistedId: movement ID in DB — set once saved, null if unsaved
+  persistedId:   string | null
 }
 
 export default function CashTurno({
@@ -62,7 +65,8 @@ export default function CashTurno({
   const [apCRC,      setApCRC]      = useState<number | ''>(0)   // fondo servicio (registradora)
   const [apProvCRC,  setApProvCRC]  = useState<number | ''>(0)   // fondo proveedores (caja separada)
   const [apUSD,      setApUSD]      = useState<number | ''>(0)
-  const [saving,     setSaving]     = useState(false)
+  const [saving,       setSaving]       = useState(false)
+  const persistTimers  = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // Turno state: pagos + ingresos adicionales
   const [pagos,    setPagos]    = useState<PagoRow[]>([])
@@ -131,6 +135,44 @@ export default function CashTurno({
   }, [profile, apCajero, apTurno, apFecha, apCRC, apProvCRC, apUSD, sessions, onSessionOpen, onError])
 
   // ── Add pago ──────────────────────────────────────────────
+  // ── Crash-safe pago persistence ──────────────────────────
+  // Pagos are persisted to DB as soon as supplier + amount are set.
+  // This means they survive browser crashes / phone dying.
+  const persistPago = useCallback(async (pago: PagoRow) => {
+    if (!openSession || !profile) return
+    if (!pago.supplier_id || !Number(pago.amount_crc)) return
+    if (pago.persistedId) return  // already in DB
+
+    try {
+      const mov = await createCashMovement({
+        session_id:    openSession.id,
+        created_by:    profile.id,
+        movement_type: 'egreso_mercaderia',
+        amount_crc:    Number(pago.amount_crc) || 0,
+        amount_usd:    Number(pago.amount_usd) || 0,
+        currency:      'CRC',
+        exchange_rate: null,
+        description:   pago.reference || pago.supplier_name || 'Proveedor',
+        subcategory:   'Proveedor mercadería',
+        supplier_id:   pago.supplier_id || null,
+        supplier_name: pago.supplier_name,
+        method:        pago.method,
+        caja_origen:   'Caja Proveedores',
+        shift:         tipShiftToCaja(openSession.shift_type),
+      })
+      setPagos(prev => prev.map(p =>
+        p.id === pago.id ? { ...p, persistedId: mov.id } : p
+      ))
+      onMovAdded(mov)
+    } catch { /* silent — will retry on close */ }
+  }, [openSession, profile, onMovAdded])
+
+  // Schedule persistence with 600ms debounce after user stops typing
+  const schedulePersist = useCallback((pago: PagoRow) => {
+    if (persistTimers.current[pago.id]) clearTimeout(persistTimers.current[pago.id])
+    persistTimers.current[pago.id] = setTimeout(() => persistPago(pago), 600)
+  }, [persistPago])
+
   const addPago = () => {
     setPagos(prev => [...prev, {
       id:            crypto.randomUUID(),
@@ -141,11 +183,32 @@ export default function CashTurno({
       amount_usd:    '',
       method:        'Efectivo',
       reference:     '',
+      persistedId:   null,
     }])
   }
-  const removePago = (id: string) => setPagos(prev => prev.filter(p => p.id !== id))
-  const updatePago = (id: string, field: keyof PagoRow, value: unknown) =>
-    setPagos(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
+  const removePago = async (id: string) => {
+    // If pago was persisted to DB, delete the movement first
+    const pago = pagos.find(p => p.id === id)
+    if (pago?.persistedId) {
+      try {
+        const { deleteCashMovement } = await import('../../shared/api/cash')
+        await deleteCashMovement(pago.persistedId)
+        onMovAdded({ ...pago } as never)  // trigger refresh
+      } catch { /* silent */ }
+    }
+    if (persistTimers.current[id]) clearTimeout(persistTimers.current[id])
+    setPagos(prev => prev.filter(p => p.id !== id))
+  }
+  const updatePago = (id: string, field: keyof PagoRow, value: unknown) => {
+    setPagos(prev => {
+      const updated = prev.map(p => p.id === id ? { ...p, [field]: value } : p)
+      const pago = updated.find(p => p.id === id)
+      if (pago && pago.supplier_id && Number(pago.amount_crc) > 0 && !pago.persistedId) {
+        schedulePersist(pago)
+      }
+      return updated
+    })
+  }
 
   // ── Add ingreso ───────────────────────────────────────────
   const addIngreso = () => setIngresos(prev => [...prev, { id: crypto.randomUUID(), crc: '', usd: '', nota: '' }])
@@ -158,8 +221,16 @@ export default function CashTurno({
     if (!openSession || !profile) return
     setSaving(true)
     try {
-      // Save all pagos as movements
-      await Promise.all(pagos.filter(p => p.supplier_id).map(p =>
+      // Flush any pending persist timers first
+      await Promise.all(pagos
+        .filter(p => p.supplier_id && Number(p.amount_crc) > 0 && !p.persistedId)
+        .map(p => persistPago(p))
+      )
+
+      // Save only pagos not yet in DB (persistedId === null)
+      // Crash-safe pagos were already saved via auto-persist on field change
+      const unpersisted = pagos.filter(p => p.supplier_id && Number(p.amount_crc) > 0 && !p.persistedId)
+      await Promise.all(unpersisted.map(p =>
         createCashMovement({
           session_id:    openSession.id,
           created_by:    profile.id,
@@ -174,7 +245,7 @@ export default function CashTurno({
           supplier_name: p.supplier_name,
           method:        p.method,
           caja_origen:   'Caja Proveedores',
-          shift:         openSession.shift_type,
+          shift:         tipShiftToCaja(openSession.shift_type),
         }).then(m => onMovAdded(m))
       ))
       // Save ingresos adicionales
@@ -190,7 +261,7 @@ export default function CashTurno({
           description:   i.nota || 'Ingreso adicional',
           method:        'Efectivo',
           caja_origen:   'Registradora',
-          shift:         openSession.shift_type,
+          shift:         tipShiftToCaja(openSession.shift_type),
         }).then(m => onMovAdded(m))
       ))
       // Close session

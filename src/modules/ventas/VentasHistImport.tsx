@@ -21,7 +21,33 @@ function parseCSV(text: string): ParsedRow[] {
   const lines = text.trim().split('\n').filter(l => l.trim())
   if (!lines.length) return []
 
-  // Detect header
+  // ── Detect Google Sheets JSON format (key,data / hist,"{...}")  ──────────
+  const histLine = lines.find(l => l.startsWith('hist,'))
+  if (histLine) {
+    try {
+      const jsonStr = histLine.slice(5).replace(/^"|"$/g, '').replace(/""/g, '"')
+      const hist = JSON.parse(jsonStr) as Record<string, HistDay>
+      return Object.entries(hist)
+        .filter(([fecha]) => /^\d{4}-\d{2}-\d{2}$/.test(fecha))
+        .map(([fecha, d]) => ({
+          fecha,
+          data: {
+            ventaBruta: +(d.ventaBruta ?? 0),
+            ventaNeta:  +(d.ventaNeta  ?? 0),
+            iva:        +(d.iva        ?? 0),
+            serv:       +(d.serv       ?? 0),
+            salon:      +(d.salon      ?? 0),
+            delivery:   +(d.delivery   ?? 0),
+            pax:        Math.round(+(d.pax ?? 0)),
+            promPax:    +(d.promPax    ?? 0),
+            source:     'hist' as const,
+          },
+        }))
+        .sort((a, b) => a.fecha.localeCompare(b.fecha))
+    } catch { /* fall through to CSV parser */ }
+  }
+
+  // ── Standard CSV rows ──────────────────────────────────────────────────────
   const first = lines[0].toLowerCase()
   const hasHeader = first.includes('fecha') || first.includes('date') || first.includes('ventaneta')
   const dataLines = hasHeader ? lines.slice(1) : lines

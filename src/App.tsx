@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './shared/hooks/useAuth'
 import LoginPage from './pages/auth/LoginPage'
 import HomePage from './pages/HomePage'
@@ -41,6 +41,45 @@ function OwnerRoute({ children }: { children: React.ReactNode }) {
   return profile.role === 'owner' ? <>{children}</> : <Navigate to="/" replace />
 }
 
+// ── Floating home button — always visible on sub-routes ────────
+function FloatingHomeBtn() {
+  const location = useLocation()
+  const navigate  = useNavigate()
+  const { user }  = useAuth()
+  // Don't show on home, login, or when not logged in
+  if (!user || location.pathname === '/' || location.pathname === '/login') return null
+  return (
+    <button
+      onClick={() => navigate('/')}
+      aria-label="Volver al inicio"
+      style={{
+        position:     'fixed',
+        bottom:       '1.25rem',
+        right:        '1rem',
+        zIndex:       9999,
+        background:   '#1a1a1a',
+        border:       '1px solid #333',
+        borderRadius: '50%',
+        width:        44,
+        height:       44,
+        display:      'flex',
+        alignItems:   'center',
+        justifyContent:'center',
+        cursor:       'pointer',
+        fontSize:     '1.1rem',
+        boxShadow:    '0 2px 12px rgba(0,0,0,0.6)',
+        color:        '#c8a96e',
+        transition:   'opacity .2s, transform .2s',
+        opacity:      0.85,
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.08)' }}
+      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)' }}
+    >
+      🏠
+    </button>
+  )
+}
+
 // ── App ────────────────────────────────────────────────────────
 function AppRoutes() {
   return (
@@ -68,6 +107,7 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter basename="/satori-app">
         <AppRoutes />
+        <FloatingHomeBtn />
       </BrowserRouter>
     </AuthProvider>
   )

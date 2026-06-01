@@ -422,6 +422,10 @@ html, body, #root {
   justify-content: space-between;
   padding: 1.25rem 1.5rem;
   border-bottom: 1px solid #1e1e1e;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--t-ink, #0a0a0a);
 }
 
 .module-header-left {
@@ -500,11 +504,14 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
-  height: 52px;
+  min-height: 52px;
   background: var(--t-ink);
   border-bottom: 1px solid #1a1a1a;
   flex-wrap: wrap;
   gap: 0.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .tips-header-left {
@@ -1863,6 +1870,9 @@ html, body, #root {
   padding: 0.75rem 1.5rem;
   background: var(--t-ink);
   border-bottom: 1px solid rgba(255,255,255,0.07);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 /* ── Nav tabs (dark header bar) ─────────────────────────────── */

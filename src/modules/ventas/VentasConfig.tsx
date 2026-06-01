@@ -326,6 +326,13 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
         {pendingCount > 0 && (
           <span style={{ fontSize:'0.72rem', color:'#c8a96e' }}>{pendingCount} pendiente{pendingCount>1?'s':''}</span>
         )}
+        {/* Reload button — forces fresh fetch from Supabase */}
+        <button
+          onClick={onRefresh}
+          title="Recargar clasificaciones desde la base de datos"
+          style={{ marginLeft:'auto', padding:'5px 12px', borderRadius:2, background:'transparent', border:'1px solid #2a2a2a', color:'#888', fontSize:'0.78rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.3rem' }}>
+          ↺ Recargar
+        </button>
       </div>
 
       {/* Type filter tabs */}

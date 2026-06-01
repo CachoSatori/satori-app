@@ -10,21 +10,21 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
-import type { DiasMap, ProductMap } from '../../shared/types/ventas'
+import type { DiasMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
 import {
   aggSalonero, aggGeneral, allSaloneros, allDates,
-  fi, fmtDate,
+  fi, fmtDate, getMeta,
   topProds, ratioCBClass,
 } from './ventasUtils'
 import { todayCR } from '../../shared/utils'
 
-interface Props { dias: DiasMap; pm: ProductMap }
+interface Props { dias: DiasMap; pm: ProductMap; metas?: Meta; comps?: Comp[] }
 
-type Tab = 'hoy' | 'historial' | 'semana'
+type Tab = 'hoy' | 'historial' | 'semana' | 'competencias'
 
 const DAYS_SHORT = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
 
-export default function MiRendimiento({ dias, pm }: Props) {
+export default function MiRendimiento({ dias, pm, metas, comps = [] }: Props) {
   const { profile } = useAuth()
   const navigate    = useNavigate()
   const [tab, setTab] = useState<Tab>('hoy')
@@ -152,9 +152,10 @@ export default function MiRendimiento({ dias, pm }: Props) {
       {/* Tabs */}
       <div className="vt-nav-tabs">
         {([
-          { id:'hoy',      label:'🌅 Hoy' },
-          { id:'historial',label:'📈 Historial' },
-          { id:'semana',   label:'📅 Semana' },
+          { id:'hoy',          label:'🌅 Hoy' },
+          { id:'historial',    label:'📈 Historial' },
+          { id:'semana',       label:'📅 Semana' },
+          { id:'competencias', label:'🏆 Competencias' },
         ] as const).map(t => (
           <div key={t.id}
             className={`vt-nav-tab ${tab === t.id ? 'active' : ''}`}
@@ -221,6 +222,57 @@ export default function MiRendimiento({ dias, pm }: Props) {
                       )}
                     </div>
                   </div>
+
+                  {/* Metas personales */}
+                  {metas && todayAgg && todayAgg.days > 0 && (() => {
+                    const metaPP  = getMeta(metas, activeName, 'promPax')
+                    const metaBP  = getMeta(metas, activeName, 'bebPax')
+                    const metaVt  = getMeta(metas, activeName, 'ventas')
+                    if (!metaPP && !metaBP && !metaVt) return null
+                    return (
+                      <>
+                        <div className="vt-sl">Mis metas del día</div>
+                        <div className="vt-kpi-grid" style={{ gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))' }}>
+                          {metaPP && (() => {
+                            const ok = todayAgg.promPax >= metaPP
+                            return (
+                              <div className="vt-kpi" style={{ borderLeftColor: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+                                <div className="vt-kpi-label">Meta Prom/PAX</div>
+                                <div className="vt-kpi-val" style={{ color: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+                                  {ok ? '✓' : '✗'} {fi(metaPP)}
+                                </div>
+                                <div className="vt-kpi-sub">Actual: {fi(todayAgg.promPax)}</div>
+                              </div>
+                            )
+                          })()}
+                          {metaBP && (() => {
+                            const ok = todayAgg.bebPax >= metaBP
+                            return (
+                              <div className="vt-kpi" style={{ borderLeftColor: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+                                <div className="vt-kpi-label">Meta Beb/PAX</div>
+                                <div className="vt-kpi-val" style={{ color: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+                                  {ok ? '✓' : '✗'} {metaBP.toFixed(2)}
+                                </div>
+                                <div className="vt-kpi-sub">Actual: {todayAgg.bebPax.toFixed(2)}</div>
+                              </div>
+                            )
+                          })()}
+                          {metaVt && (() => {
+                            const ok = todayAgg.total >= metaVt
+                            return (
+                              <div className="vt-kpi" style={{ borderLeftColor: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+                                <div className="vt-kpi-label">Meta ventas</div>
+                                <div className="vt-kpi-val" style={{ color: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+                                  {ok ? '✓' : '✗'} {fi(metaVt)}
+                                </div>
+                                <div className="vt-kpi-sub">Actual: {fi(todayAgg.total)}</div>
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </>
+                    )
+                  })()}
 
                   {/* Top 5 productos del día */}
                   {top5Today.length > 0 && (
@@ -421,6 +473,144 @@ export default function MiRendimiento({ dias, pm }: Props) {
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* ══ COMPETENCIAS ══ */}
+          {tab === 'competencias' && (
+            <div className="vt-section">
+              <div className="vt-sl">Mis competencias — {activeName}</div>
+
+              {(() => {
+                const today = todayCR()
+                // Competitions the salonero participates in
+                const myComps = comps.filter(c => c.parts?.includes(activeName))
+                if (!myComps.length) {
+                  return (
+                    <div style={{ padding:'2rem', textAlign:'center', color:'#666', fontSize:'0.85rem' }}>
+                      No estás participando en ninguna competencia activa.<br/>
+                      <span style={{ fontSize:'0.72rem', color:'#444' }}>El encargado puede crear competencias en Ventas → Competencias.</span>
+                    </div>
+                  )
+                }
+
+                // Sort: active first, then upcoming, then finished
+                const sorted = [...myComps].sort((a, b) => {
+                  const status = (c: Comp) => today > c.fin ? 2 : today < c.inicio ? 1 : 0
+                  return status(a) - status(b)
+                })
+
+                return sorted.map(comp => {
+                  const status  = today > comp.fin ? 'finished' : today < comp.inicio ? 'upcoming' : 'active'
+                  const total   = Math.max(1, Math.ceil((new Date(comp.fin).getTime() - new Date(comp.inicio).getTime()) / 86400000))
+                  const elapsed = Math.min(Math.max(Math.ceil((new Date(today).getTime() - new Date(comp.inicio).getTime()) / 86400000), 0), total)
+                  const pct     = (elapsed / total * 100).toFixed(0)
+
+                  // Build ranking
+                  const ranking = (comp.parts ?? []).map(sal => {
+                    const compDates = dates.filter(d => d >= comp.inicio && d <= comp.fin)
+                    const salAgg    = aggSalonero(sal, compDates, dias, pm)
+                    let pts = 0
+                    for (const prod of (comp.prods ?? [])) {
+                      const q = Object.entries(salAgg.prods).find(([n]) => n === (typeof prod === 'string' ? prod : prod.name))?.[1]?.q ?? 0
+                      pts += q * (typeof prod === 'string' ? 1 : prod.pts)
+                    }
+                    return { sal, pts }
+                  }).sort((a, b) => b.pts - a.pts)
+
+                  const myRank = ranking.findIndex(r => r.sal === activeName) + 1
+                  const myPts  = ranking.find(r => r.sal === activeName)?.pts ?? 0
+                  const leader = ranking[0]
+
+                  const statusColor = status === 'active' ? 'var(--vt-green)' : status === 'upcoming' ? '#c8a96e' : '#555'
+                  const statusLabel = status === 'active' ? '● En curso' : status === 'upcoming' ? '○ Próxima' : '✓ Finalizada'
+
+                  return (
+                    <div key={comp.id} style={{ background:'var(--vt-ink)', borderRadius:2, padding:'1rem', marginBottom:'0.75rem', borderLeft:`3px solid ${statusColor}` }}>
+                      {/* Header */}
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.625rem' }}>
+                        <div>
+                          <div style={{ fontFamily:'Syne,sans-serif', fontSize:'0.95rem', fontWeight:800, color:'var(--vt-paper)' }}>{comp.nombre}</div>
+                          <div style={{ fontSize:'0.68rem', color:'#555', marginTop:2 }}>
+                            {comp.inicio} → {comp.fin}
+                            {comp.premio && <span style={{ color:'var(--vt-gold)', marginLeft:'0.5rem' }}>🏅 {comp.premio}</span>}
+                          </div>
+                        </div>
+                        <span style={{ fontSize:'0.68rem', color:statusColor, fontWeight:600 }}>{statusLabel}</span>
+                      </div>
+
+                      {/* My position */}
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.5rem', marginBottom:'0.75rem' }}>
+                        <div style={{ background:'#111', borderRadius:2, padding:'0.5rem', textAlign:'center' }}>
+                          <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>Mi posición</div>
+                          <div style={{ fontFamily:'Syne,sans-serif', fontSize:'1.4rem', fontWeight:800, color: myRank === 1 ? 'var(--vt-gold)' : myRank <= 3 ? '#7ec8a0' : '#888' }}>
+                            {myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : `#${myRank}`}
+                          </div>
+                        </div>
+                        <div style={{ background:'#111', borderRadius:2, padding:'0.5rem', textAlign:'center' }}>
+                          <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>Mis puntos</div>
+                          <div style={{ fontFamily:'Syne,sans-serif', fontSize:'1.4rem', fontWeight:800, color:'var(--vt-gold)' }}>{myPts}</div>
+                        </div>
+                        <div style={{ background:'#111', borderRadius:2, padding:'0.5rem', textAlign:'center' }}>
+                          <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>Líder</div>
+                          <div style={{ fontSize:'0.75rem', fontWeight:700, color:'#c8a96e', marginTop:4 }}>{leader?.sal ?? '—'}</div>
+                          <div style={{ fontSize:'0.7rem', color:'#888' }}>{leader?.pts ?? 0} pts</div>
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      {status === 'active' && (
+                        <div style={{ marginBottom:'0.75rem' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.65rem', color:'#555', marginBottom:4 }}>
+                            <span>Progreso · día {elapsed} de {total}</span>
+                            <span>{pct}%</span>
+                          </div>
+                          <div style={{ height:4, background:'#1a1a1a', borderRadius:2, overflow:'hidden' }}>
+                            <div style={{ height:'100%', width:`${pct}%`, background:'var(--vt-gold)', borderRadius:2 }}/>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Productos a vender */}
+                      <div style={{ display:'flex', gap:'0.3rem', flexWrap:'wrap', marginBottom:'0.5rem' }}>
+                        {(comp.prods ?? []).map((p, i) => (
+                          <span key={i} style={{ fontSize:'0.68rem', background:'#1a1a1a', color:'#c8a96e', padding:'2px 8px', borderRadius:2, border:'1px solid #2a2a2a' }}>
+                            📦 {typeof p === 'string' ? p : p.name} · {typeof p === 'string' ? 1 : p.pts} pts
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Full ranking */}
+                      {ranking.length > 0 && (
+                        <div className="vt-tbl-wrap" style={{ marginTop:'0.5rem' }}>
+                          <table className="vt-tbl" style={{ fontSize:'0.8rem' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width:32 }}>#</th>
+                                <th>Salonero</th>
+                                <th className="r">Puntos</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {ranking.map((r, i) => (
+                                <tr key={r.sal} style={{ background: r.sal === activeName ? 'rgba(200,169,110,.08)' : undefined, fontWeight: r.sal === activeName ? 700 : 400 }}>
+                                  <td style={{ color: i === 0 ? 'var(--vt-gold)' : '#666', fontWeight:700 }}>
+                                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                                  </td>
+                                  <td style={{ color: r.sal === activeName ? 'var(--vt-gold)' : undefined }}>
+                                    {r.sal === activeName ? `▶ ${r.sal}` : r.sal}
+                                  </td>
+                                  <td className="r" style={{ fontWeight:700, color: r.sal === activeName ? 'var(--vt-gold)' : 'var(--vt-paper)' }}>{r.pts}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              })()}
             </div>
           )}
 

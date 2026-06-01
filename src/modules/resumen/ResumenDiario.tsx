@@ -141,6 +141,59 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
   return snap
 }
 
+// ── Share helper ──────────────────────────────────────────────
+function buildShareText(date: string, snap: DaySnapshot): string {
+  const dayLabel = new Date(date + 'T12:00:00').toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' })
+  const lines: string[] = [
+    `🍣 *SATORI — ${dayLabel}*`,
+    '━━━━━━━━━━━━━━━━━━━━━',
+  ]
+  if (snap.hasVentas) {
+    lines.push(`💰 Ventas: *${fi(snap.ventaNeta)}*`)
+    if (snap.pax > 0) {
+      lines.push(`👥 PAX: ${snap.pax}  •  Prom/PAX: *${fi(snap.promPax)}*`)
+    }
+    if (snap.delivery > 0) {
+      lines.push(`🛵 Delivery: ${fi(snap.delivery)}  •  Salón: ${fi(snap.salon)}`)
+    }
+  } else {
+    lines.push('📂 Ventas: sin datos cargados')
+  }
+  lines.push('━━━━━━━━━━━━━━━━━━━━━')
+  if (snap.hasTips) {
+    const status = snap.tipsStatus === 'closed' ? '✅ cerrado' : '🔴 abierto'
+    lines.push(`💵 Propinas: *${fi(snap.tipPool)}* (${snap.tipWorkers} emps) ${status}`)
+  } else {
+    lines.push('💵 Propinas: sin turno')
+  }
+  if (snap.hasCaja) {
+    const status = snap.cajaStatus === 'closed' ? '✅ cerrado' : '🔴 abierto'
+    lines.push(`🏦 Caja: +${fi(snap.cajaIngresos)} / -${fi(snap.cajaEgresos)} ${status}`)
+    if (snap.cajaSaldo !== 0) lines.push(`   Saldo neto: *${fi(snap.cajaSaldo)}*`)
+  } else {
+    lines.push('🏦 Caja: sin turno')
+  }
+  lines.push('━━━━━━━━━━━━━━━━━━━━━')
+  lines.push('_Satori Sushi Bar · Santa Teresa, CR_')
+  return lines.join('\n')
+}
+
+async function shareResumen(text: string, setCopied: (v: boolean) => void) {
+  // Try Web Share API (mobile)
+  if (navigator.share) {
+    try { await navigator.share({ text }); return } catch (_) { /* fallback */ }
+  }
+  // Fallback: clipboard
+  try {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  } catch (_) {
+    // Last resort: prompt
+    window.prompt('Copiá el texto:', text)
+  }
+}
+
 // ── Component ─────────────────────────────────────────────────
 export default function ResumenDiario() {
   const { profile } = useAuth()
@@ -148,6 +201,7 @@ export default function ResumenDiario() {
   const [date, setDate]         = useState(todayCR())
   const [snap, setSnap]         = useState<DaySnapshot | null>(null)
   const [loading, setLoading]   = useState(true)
+  const [copied, setCopied]     = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -182,6 +236,13 @@ export default function ResumenDiario() {
             onChange={e => setDate(e.target.value)}
             style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 2, padding: '0.35rem 0.5rem', color: '#f0ece4', fontSize: '0.82rem', fontFamily: 'DM Mono, monospace' }}
           />
+          {snap && (snap.hasVentas || snap.hasTips || snap.hasCaja) && (
+            <button
+              onClick={() => shareResumen(buildShareText(date, snap), setCopied)}
+              style={{ padding:'0.35rem 0.75rem', borderRadius:2, border:'1px solid #2a4a2a', background: copied ? 'rgba(74,154,106,.2)' : 'transparent', color: copied ? '#4a9a6a' : '#7aaa7a', fontSize:'0.75rem', cursor:'pointer', whiteSpace:'nowrap', transition:'all .2s' }}>
+              {copied ? '✓ Copiado' : '📤 Compartir'}
+            </button>
+          )}
           <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888' }}
             onClick={() => navigate('/')}>← Inicio</button>
         </div>

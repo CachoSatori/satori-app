@@ -15,10 +15,22 @@ interface Props {
   metas: Meta
 }
 
+// ── Share helper ──────────────────────────────────────────────
+async function shareText(text: string, setCopied: (v: boolean) => void) {
+  if (navigator.share) {
+    try { await navigator.share({ text }); return } catch (_) { /* fallback */ }
+  }
+  try {
+    await navigator.clipboard.writeText(text)
+    setCopied(true); setTimeout(() => setCopied(false), 2500)
+  } catch (_) { window.prompt('Copiá el texto:', text) }
+}
+
 export default function VentasHoy({ dias, pm, metas }: Props) {
   const { profile } = useAuth()
   const [registrando, setRegistrando] = useState(false)
   const [regMsg,      setRegMsg]      = useState<string | null>(null)
+  const [copied,      setCopied]      = useState(false)
   const [prodView, setProdView]   = useState<'general'|'comidas'|'bebidas'>('general')
   const [prodBy, setProdBy]       = useState<'monto'|'unidades'>('monto')
   const [salFiltro, setSalFiltro] = useState<string>('')
@@ -171,6 +183,32 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               Hoy
             </button>
           )}
+          {/* Share / Compartir */}
+          {gen && gen.totalRest > 0 && (() => {
+            const dayLabel = new Date(activeDate + 'T12:00:00').toLocaleDateString('es-CR', { weekday:'short', day:'numeric', month:'short' })
+            const sorted = [...salAggs].sort((a,b) => b.promPax - a.promPax)
+            const topLines = sorted.slice(0,3).map((s,i) =>
+              `${['🥇','🥈','🥉'][i]} ${s.nombre}: ${fi(s.total)} · ${fi(s.promPax)}/PAX`
+            ).join('\n')
+            const text = [
+              `🍣 *SATORI — ${dayLabel}*`,
+              '━━━━━━━━━━━━━━━━━━━━',
+              `💰 Ventas: *${fi(gen.totalRest)}*`,
+              gen.pax > 0 ? `👥 PAX: ${gen.pax}  •  Prom/PAX: *${fi(gen.promPax)}*` : '',
+              gen.cajDelivery > 0 ? `🛵 Delivery: ${fi(gen.cajDelivery)}` : '',
+              `🍺 Beb/PAX: ${gen.bebPax.toFixed(2)}  •  Ratio C/B: ${gen.ratioCB.toFixed(1)}`,
+              topLines ? '━━━━━━━━━━━━━━━━━━━━\n' + topLines : '',
+              '━━━━━━━━━━━━━━━━━━━━',
+              '_Satori · Santa Teresa, CR_',
+            ].filter(Boolean).join('\n')
+            return (
+              <button
+                onClick={() => shareText(text, setCopied)}
+                style={{ padding:'4px 10px', borderRadius:2, border:'1px solid #2a4a2a', background: copied ? 'rgba(74,154,106,.2)' : 'transparent', color: copied ? 'var(--vt-green)' : '#7aaa7a', fontSize:'0.72rem', cursor:'pointer', whiteSpace:'nowrap' }}>
+                {copied ? '✓ Copiado' : '📤'}
+              </button>
+            )
+          })()}
           {/* Auto-register ventas in Caja */}
           {(profile?.role === 'owner' || profile?.role === 'manager') && gen && gen.totalRest > 0 && (
             <button

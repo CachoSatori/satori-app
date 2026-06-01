@@ -144,6 +144,30 @@ export default function ResumenSemanal() {
     : null
 
   const isManager = ['owner','manager','contador'].includes(profile?.role ?? '')
+  const [copied, setCopied] = useState(false)
+
+  const buildWeekShare = () => {
+    if (!thisWeek) return ''
+    const pctV = varVenta !== null ? ` (${varVenta >= 0 ? '▲' : '▼'}${Math.abs(varVenta).toFixed(1)}% vs sem ant)` : ''
+    const pctP = varProp !== null ? ` (${varProp >= 0 ? '▲' : '▼'}${Math.abs(varProp).toFixed(1)}% vs sem ant)` : ''
+    return [
+      `📅 *SATORI — Semana ${fmtShort(thisWeek.from)} al ${fmtShort(thisWeek.to)}*`,
+      '━━━━━━━━━━━━━━━━━━━━',
+      `💰 Ventas: *${fi(thisWeek.ventaNeta)}*${pctV}`,
+      thisWeek.pax > 0 ? `👥 PAX: ${thisWeek.pax}  •  Prom/PAX: *${fi(thisWeek.ventaNeta / thisWeek.pax)}*` : '',
+      thisWeek.propinas > 0 ? `💵 Propinas: *${fi(thisWeek.propinas)}*${pctP}` : '',
+      thisWeek.days.length > 0 ? `📆 ${thisWeek.days.length} días trabajados` : '',
+      '━━━━━━━━━━━━━━━━━━━━',
+      '_Satori · Santa Teresa, CR_',
+    ].filter(Boolean).join('\n')
+  }
+
+  async function doShare() {
+    const text = buildWeekShare()
+    if (navigator.share) { try { await navigator.share({ text }); return } catch (_) {} }
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2500) }
+    catch (_) { window.prompt('Copiá:', text) }
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#0d0d0d', fontFamily: 'DM Mono, monospace', color: '#f5f0e8' }}>
@@ -162,6 +186,12 @@ export default function ResumenSemanal() {
             <span style={{ fontSize: '0.72rem', color: '#666' }}>
               {fmtShort(thisWeek.from)} — {fmtShort(thisWeek.to)}
             </span>
+          )}
+          {thisWeek && thisWeek.ventaNeta > 0 && (
+            <button onClick={doShare}
+              style={{ padding:'4px 10px', borderRadius:2, border:'1px solid #2a4a2a', background: copied ? 'rgba(74,154,106,.15)' : 'transparent', color: copied ? '#4a9a6a' : '#888', fontSize:'0.72rem', cursor:'pointer' }}>
+              {copied ? '✓ Copiado' : '📤 Compartir'}
+            </button>
           )}
           <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888' }} onClick={() => navigate('/')}>← Inicio</button>
         </div>

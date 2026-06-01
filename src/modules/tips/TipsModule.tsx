@@ -71,6 +71,11 @@ export default function TipsModule() {
   const [showNewSession, setShowNewSession] = useState(false)
   const [closing, setClosing] = useState(false)
   const [verifTotal, setVerifTotal] = useState<number | ''>('')  // Pool verification
+  // Coberturas: employeeId → role they're covering (overrides their natural role for this shift)
+  const [coberturas, setCoberturas] = useState<Record<string, string>>({})
+  const [showCobPicker, setShowCobPicker] = useState(false)
+  const [cobEmpId, setCobEmpId] = useState('')
+  const [cobRole,  setCobRole]  = useState('')
 
   // Refs para evitar re-saves infinitos
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -256,6 +261,29 @@ export default function TipsModule() {
     setLines(prev => prev.map(l =>
       l.employeeId === employeeId ? { ...l, hours: val === '' ? '' : parseFloat(val) || '' } : l
     ))
+  }
+
+  // ── Coberturas ────────────────────────────────────────────
+  // Assign a cobertura: employee works in a different role this shift
+  const addCobertura = (empId: string, coveredRole: string) => {
+    if (!empId || !coveredRole) return
+    const ptsMap = new Map(rolePoints.map(r => [r.role, r.points]))
+    setCoberturas(prev => ({ ...prev, [empId]: coveredRole }))
+    const defaultHours = shiftType === 'AM' ? 5 : 8
+    setLines(prev => prev.map(l => {
+      if (l.employeeId !== empId) return l
+      return { ...l, active: true, hours: defaultHours, pts_rol: ptsMap.get(coveredRole as import('../../shared/types/database').UserRole) ?? l.pts_rol }
+    }))
+    setShowCobPicker(false); setCobEmpId(''); setCobRole('')
+  }
+
+  const removeCobertura = (empId: string) => {
+    const ptsMap = new Map(rolePoints.map(r => [r.role, r.points]))
+    setCoberturas(prev => { const n = { ...prev }; delete n[empId]; return n })
+    setLines(prev => prev.map(l => {
+      if (l.employeeId !== empId) return l
+      return { ...l, active: false, hours: '', pts_rol: ptsMap.get(l.role) ?? l.pts_rol }
+    }))
   }
 
   // ── Cambiar propina ───────────────────────────────────────
@@ -523,10 +551,16 @@ export default function TipsModule() {
 
               {/* Empleados por sección */}
               {ROL_ORDER.filter(rol => {
-                // solo mostrar si hay empleados activos en ese rol
-                return lines.some(l => l.role === rol)
+                return lines.some(l => l.role === rol) ||
+                  Object.entries(coberturas).some(([, cr]) => cr === rol)
               }).map(rol => {
-                const rolLines = lines.filter(l => l.role === rol)
+                // Natural role employees (excluding those who are coberturas in a different role)
+                // Cobertura employees in THIS role
+                const rolLines = lines.filter(l =>
+                  coberturas[l.employeeId]
+                    ? coberturas[l.employeeId] === rol   // show under covered role
+                    : l.role === rol                      // show under natural role
+                )
                 const isBar = BAR_ROLES.includes(rol)
                 const pts = rolePoints.find(r => r.role === rol)?.points ?? 0
 
@@ -551,23 +585,82 @@ export default function TipsModule() {
                       <span className="tips-sl-pts">{pts} pts/hora</span>
                     </div>
                     <div className="tips-emp-rows">
-                      {rolLines.map(line => (
-                        <TipLineRow
-                          key={line.employeeId}
-                          line={line}
-                          isBar={NO_PROPINA_ROLES.includes(line.role)}
-                          isManager={isManager}
-                          shiftType={shiftType}
-                          onToggle={checked => toggleLine(line.employeeId, checked)}
-                          onHoursChange={val => handleHoursChange(line.employeeId, val)}
-                          onPropinaChange={(field, val) => handlePropinaChange(line.employeeId, field, val)}
-                          onBlur={() => handleLineBlur(line.employeeId)}
-                        />
-                      ))}
+                      {rolLines.map(line => {
+                        const isCob = !!coberturas[line.employeeId]
+                        return (
+                          <div key={line.employeeId} style={{ position:'relative' }}>
+                            {isCob && (
+                              <div style={{ position:'absolute', top:8, right:8, zIndex:2, display:'flex', alignItems:'center', gap:'0.3rem' }}>
+                                <span style={{ fontSize:'0.6rem', background:'#c8a030', color:'#0a0a0a', padding:'1px 6px', borderRadius:10, fontWeight:800, letterSpacing:'0.08em' }}>COB</span>
+                                <button onClick={() => removeCobertura(line.employeeId)}
+                                  style={{ background:'none', border:'none', color:'#c23b22', cursor:'pointer', fontSize:'0.75rem', lineHeight:1, padding:'0 2px' }} title="Quitar cobertura">×</button>
+                              </div>
+                            )}
+                            <TipLineRow
+                              line={line}
+                              isBar={NO_PROPINA_ROLES.includes(coberturas[line.employeeId] as import('../../shared/types/database').UserRole ?? line.role)}
+                              isManager={isManager}
+                              shiftType={shiftType}
+                              onToggle={checked => !isCob && toggleLine(line.employeeId, checked)}
+                              onHoursChange={val => handleHoursChange(line.employeeId, val)}
+                              onPropinaChange={(field, val) => handlePropinaChange(line.employeeId, field, val)}
+                              onBlur={() => handleLineBlur(line.employeeId)}
+                            />
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )
               })}
+
+              {/* ── Sección coberturas ── */}
+              {isManager && (
+                <div style={{ marginTop:'0.75rem', background:'rgba(200,169,110,.05)', border:'1px solid rgba(200,169,110,.2)', borderRadius:2, padding:'0.75rem' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: showCobPicker ? '0.75rem' : 0 }}>
+                    <div style={{ fontSize:'0.72rem', fontWeight:700, color:'#c8a030', letterSpacing:'0.08em', textTransform:'uppercase' }}>
+                      👥 Coberturas {Object.keys(coberturas).length > 0 && `(${Object.keys(coberturas).length})`}
+                    </div>
+                    <button onClick={() => setShowCobPicker(p => !p)}
+                      style={{ fontSize:'0.72rem', padding:'3px 10px', border:'1px solid #c8a030', background:'transparent', color:'#c8a030', borderRadius:2, cursor:'pointer' }}>
+                      {showCobPicker ? '✕ Cancelar' : '+ Agregar cobertura'}
+                    </button>
+                  </div>
+                  {showCobPicker && (
+                    <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'flex-end' }}>
+                      <div>
+                        <div style={{ fontSize:'0.62rem', color:'#888', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.1em' }}>Empleado</div>
+                        <select value={cobEmpId} onChange={e => setCobEmpId(e.target.value)}
+                          style={{ background:'#111', border:'1px solid #2a2a2a', color: cobEmpId ? 'var(--t-gold)' : '#888', padding:'5px 8px', borderRadius:2, fontSize:'0.78rem' }}>
+                          <option value="">— seleccionar —</option>
+                          {employees.filter(e => !coberturas[e.id]).map(e => (
+                            <option key={e.id} value={e.id}>{e.full_name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:'0.62rem', color:'#888', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.1em' }}>Cubre rol de</div>
+                        <select value={cobRole} onChange={e => setCobRole(e.target.value)}
+                          style={{ background:'#111', border:'1px solid #2a2a2a', color: cobRole ? 'var(--t-gold)' : '#888', padding:'5px 8px', borderRadius:2, fontSize:'0.78rem' }}>
+                          <option value="">— seleccionar rol —</option>
+                          {ROL_ORDER.map(r => <option key={r} value={r}>{ROL_NAMES[r]}</option>)}
+                        </select>
+                      </div>
+                      <button
+                        onClick={() => addCobertura(cobEmpId, cobRole)}
+                        disabled={!cobEmpId || !cobRole}
+                        style={{ padding:'5px 14px', borderRadius:2, background: cobEmpId && cobRole ? '#c8a030' : '#2a2a2a', color: cobEmpId && cobRole ? '#0a0a0a' : '#555', fontWeight:700, fontSize:'0.78rem', border:'none', cursor: cobEmpId && cobRole ? 'pointer' : 'not-allowed' }}>
+                        Agregar
+                      </button>
+                    </div>
+                  )}
+                  {Object.keys(coberturas).length === 0 && !showCobPicker && (
+                    <div style={{ fontSize:'0.72rem', color:'#555', marginTop:'0.25rem' }}>
+                      Sin coberturas este turno · "Juan cubre a María en barra" → usá este picker
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Pool totals */}
               {totals && (

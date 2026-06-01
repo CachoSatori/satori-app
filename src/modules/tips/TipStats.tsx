@@ -66,18 +66,21 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
     return acc
   }, [monthSessions, calcCache])
 
-  // Top earners
+  // Top earners with AM/PM split
   const earners = useMemo(() => {
-    const acc: Record<string, { name: string; role: string; total: number; shifts: number }> = {}
+    const acc: Record<string, { name: string; role: string; total: number; shifts: number; amTotal: number; amShifts: number; pmTotal: number; pmShifts: number }> = {}
     for (const s of monthSessions) {
       const calc = calcCache[s.id]
       if (!calc) continue
+      const isAM = s.shift_type === 'AM'
       for (const row of calc.rows) {
         const emp = empMap.get(row.employeeId)
         if (!emp || row.payout_crc <= 0) continue
-        if (!acc[emp.id]) acc[emp.id] = { name: emp.full_name, role: emp.role, total: 0, shifts: 0 }
+        if (!acc[emp.id]) acc[emp.id] = { name: emp.full_name, role: emp.role, total: 0, shifts: 0, amTotal: 0, amShifts: 0, pmTotal: 0, pmShifts: 0 }
         acc[emp.id].total  += row.payout_crc
         acc[emp.id].shifts++
+        if (isAM) { acc[emp.id].amTotal += row.payout_crc; acc[emp.id].amShifts++ }
+        else       { acc[emp.id].pmTotal += row.payout_crc; acc[emp.id].pmShifts++ }
       }
     }
     return Object.values(acc).sort((a, b) => b.total - a.total)
@@ -211,20 +214,22 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
             </div>
           </div>
 
-          {/* Top earners */}
+          {/* Top earners with AM/PM split */}
           {earners.length > 0 && (
             <>
               <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a5040', marginBottom: '0.625rem' }}>
-                Top empleados del mes
+                Empleados del mes — detalle AM/PM
               </div>
-              <table className="admin-table" style={{ width: '100%', fontSize: '0.82rem' }}>
+              <table className="admin-table" style={{ width: '100%', fontSize: '0.78rem' }}>
                 <thead>
                   <tr>
                     <th style={{ textAlign: 'left' }}>#</th>
                     <th style={{ textAlign: 'left' }}>Empleado</th>
                     <th style={{ textAlign: 'right' }}>Turnos</th>
-                    <th style={{ textAlign: 'right' }}>Total cobrado</th>
-                    <th style={{ textAlign: 'right' }}>Promedio/turno</th>
+                    <th style={{ textAlign: 'right', color: '#c8a030' }}>AM</th>
+                    <th style={{ textAlign: 'right', color: 'var(--t-teal)' }}>PM</th>
+                    <th style={{ textAlign: 'right' }}>Total</th>
+                    <th style={{ textAlign: 'right' }}>Prom/turno</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -235,6 +240,12 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
                       </td>
                       <td className="admin-emp-name">{e.name}</td>
                       <td style={{ textAlign: 'right', color: '#5a5040' }}>{e.shifts}</td>
+                      <td style={{ textAlign: 'right', color: '#c8a030', fontSize: '0.72rem' }}>
+                        {e.amShifts > 0 ? `${formatCRC(e.amTotal)} (${e.amShifts}t)` : '—'}
+                      </td>
+                      <td style={{ textAlign: 'right', color: 'var(--t-teal)', fontSize: '0.72rem' }}>
+                        {e.pmShifts > 0 ? `${formatCRC(e.pmTotal)} (${e.pmShifts}t)` : '—'}
+                      </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--t-teal)' }}>
                         {formatCRC(e.total)}
                       </td>

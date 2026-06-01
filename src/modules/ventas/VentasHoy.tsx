@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
   aggGeneral, aggSalonero, aggCajero, getDayStats,
@@ -39,6 +39,28 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   const gen = useMemo(() =>
     activeDate ? aggGeneral([activeDate], dias, pm) : null,
   [activeDate, dias, pm])
+
+  // Previous day for delta comparison
+  const prevDate = useMemo(() => {
+    if (!activeDate) return null
+    const i = allDates.indexOf(activeDate)
+    return i > 0 ? allDates[i - 1] : null
+  }, [activeDate, allDates])
+
+  const genPrev = useMemo(() =>
+    prevDate ? aggGeneral([prevDate], dias, pm) : null,
+  [prevDate, dias, pm])
+
+  // Derived metrics not in aggGeneral
+  const com  = useMemo(() => gen ? Object.entries(gen.prods).reduce((s,[n,v]) => s + (pm[n]?.tipo==='comida' ? v.m : 0), 0) : 0, [gen, pm])
+  const beb  = useMemo(() => gen ? Object.entries(gen.prods).reduce((s,[n,v]) => s + (pm[n]?.tipo==='bebida' ? v.m : 0), 0) : 0, [gen, pm])
+  const promPlato   = gen && gen.iCom > 0 ? com   / gen.iCom : 0
+  const promBebida  = gen && gen.iBeb > 0 ? beb   / gen.iBeb : 0
+
+  // Special product categories for bottom section
+  const cortProds = useMemo(() => gen ? topProds(gen.prods, 'monto', 8, ['cortesia'],    pm) : [], [gen, pm])
+  const persProds = useMemo(() => gen ? topProds(gen.prods, 'monto', 8, ['personal'],    pm) : [], [gen, pm])
+  const descProds = useMemo(() => gen ? topProds(gen.prods, 'monto', 8, ['desconocido'], pm) : [], [gen, pm])
 
   const salAggs = useMemo(() =>
     sals.map(n => aggSalonero(n, activeDate ? [activeDate] : [], dias, pm)),
@@ -81,6 +103,19 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
 
   const stats      = getDayStats(dia)
   const hasCajeros = cajAggs.length > 0
+
+  // ▲/▼ delta vs día anterior
+  function delta(cur: number, prev: number | undefined, isInt = false): React.ReactNode {
+    if (!prev || prev === 0) return null
+    const pct = (cur - prev) / prev * 100
+    const col = pct > 0 ? 'var(--vt-green)' : pct < 0 ? 'var(--vt-red)' : '#666'
+    const abs = isInt ? Math.round(cur - prev).toLocaleString('es-CR') : fi(Math.abs(cur - prev))
+    return (
+      <div style={{ fontSize:'0.68rem', color:col, marginTop:2 }}>
+        {pct >= 0 ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}% ({pct >= 0 ? '+' : ''}{isInt ? (Math.round(cur - prev)) : abs})
+      </div>
+    )
+  }
 
   // Top products for this day
   const allProds = salFiltro
@@ -237,33 +272,55 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
       )}
 
       {/* Saloneros KPIs */}
-      <div className="vt-sl">Saloneros</div>
-      <div className="vt-kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
-        <div className="vt-kpi">
+      <div className="vt-sl">
+        Saloneros
+        {prevDate && <span style={{ fontSize:'0.65rem', color:'#555', marginLeft:'0.5rem', fontWeight:400 }}>vs {prevDate}</span>}
+      </div>
+      <div className="vt-kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))' }}>
+        <div className="vt-kpi red">
           <div className="vt-kpi-label">Ventas Salón</div>
           <div className="vt-kpi-val">{fi(gen.total)}</div>
+          {delta(gen.total, genPrev?.total)}
         </div>
         <div className="vt-kpi">
-          <div className="vt-kpi-label">PAX Ticket</div>
+          <div className="vt-kpi-label">PAX</div>
           <div className="vt-kpi-val">{gen.pax}</div>
+          {delta(gen.pax, genPrev?.pax, true)}
         </div>
         <div className="vt-kpi" style={{ borderLeftColor: metaColor(gen.promPax, getMeta(metas, '', 'promPax')) || 'var(--vt-gold)' }}>
           <div className="vt-kpi-label">Prom/PAX</div>
           <div className="vt-kpi-val">{fi(gen.promPax)}</div>
+          {delta(gen.promPax, genPrev?.promPax)}
+        </div>
+        <div className="vt-kpi">
+          <div className="vt-kpi-label">Prom/Plato</div>
+          <div className="vt-kpi-val">{fi(promPlato)}</div>
+          {delta(promPlato, genPrev && genPrev.iCom > 0 ? Object.entries(genPrev.prods).reduce((s,[n,v]) => s+(pm[n]?.tipo==='comida'?v.m:0),0) / genPrev.iCom : undefined)}
+        </div>
+        <div className="vt-kpi">
+          <div className="vt-kpi-label">Prom/Bebida</div>
+          <div className="vt-kpi-val">{fi(promBebida)}</div>
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Bebidas/PAX</div>
           <div className="vt-kpi-val" style={{ color: metaColor(gen.bebPax, getMeta(metas,'','bebPax')) }}>
             {gen.bebPax.toFixed(2)}
           </div>
+          {delta(gen.bebPax, genPrev?.bebPax)}
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Ratio C/B (₡)</div>
           <div className={`vt-kpi-val ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</div>
         </div>
         <div className="vt-kpi">
-          <div className="vt-kpi-label">Ratio C/B (uds)</div>
-          <div className="vt-kpi-val">{gen.ratioU.toFixed(2)}:1</div>
+          <div className="vt-kpi-label">Comidas</div>
+          <div className="vt-kpi-val" style={{ fontSize:'0.85rem' }}>{fi(com)}</div>
+          <div className="vt-kpi-sub">{gen.iCom} platos</div>
+        </div>
+        <div className="vt-kpi blue">
+          <div className="vt-kpi-label">Bebidas</div>
+          <div className="vt-kpi-val" style={{ fontSize:'0.85rem' }}>{fi(beb)}</div>
+          <div className="vt-kpi-sub">{gen.iBeb} bebidas</div>
         </div>
       </div>
 
@@ -372,6 +429,55 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           </div>
         )}
       </div>
+
+      {/* ── Regalías, Personal & Desconocidos ── */}
+      {(gen.cortTotal > 0 || gen.persTotal > 0 || descProds.length > 0) && (
+        <>
+          <div className="vt-sl" style={{ marginTop: '1.75rem' }}>Regalías, Personal & Desconocidos</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))', gap:'0.75rem' }}>
+            {gen.cortTotal > 0 && (
+              <SpecialCard
+                icon="🎁" title="Regalías / Cortesías" color="#e8a838"
+                total={gen.cortTotal} prods={cortProds} />
+            )}
+            {gen.persTotal > 0 && (
+              <SpecialCard
+                icon="👨‍🍳" title="Comida Personal" color="#7b9fc7"
+                total={gen.persTotal} prods={persProds} />
+            )}
+            {descProds.length > 0 && (
+              <SpecialCard
+                icon="❓" title="Desconocidos" color="#888"
+                total={descProds.reduce((s,p)=>s+p.m,0)} prods={descProds} />
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function SpecialCard({ icon, title, color, total, prods }: {
+  icon: string; title: string; color: string
+  total: number; prods: Array<{ nombre: string; q: number; m: number }>
+}) {
+  return (
+    <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.875rem', borderLeft:`3px solid ${color}` }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem' }}>
+        <div style={{ fontSize:'0.82rem', fontWeight:700, color }}>{icon} {title}</div>
+        <div style={{ fontFamily:'Syne,sans-serif', fontSize:'1rem', fontWeight:800, color }}>
+          {new Intl.NumberFormat('es-CR',{style:'currency',currency:'CRC',minimumFractionDigits:0}).format(total)}
+        </div>
+      </div>
+      {prods.map(p => (
+        <div key={p.nombre} style={{ display:'flex', gap:'0.5rem', alignItems:'baseline', padding:'0.25rem 0', borderBottom:'1px solid #1a1a1a' }}>
+          <span style={{ flex:1, fontSize:'0.78rem', color:'#aaa', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.nombre}</span>
+          <span style={{ fontSize:'0.72rem', color:'#555', whiteSpace:'nowrap' }}>{p.q} uds</span>
+          <span style={{ fontSize:'0.78rem', color, fontWeight:600, whiteSpace:'nowrap' }}>
+            {new Intl.NumberFormat('es-CR',{style:'currency',currency:'CRC',minimumFractionDigits:0}).format(p.m)}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }

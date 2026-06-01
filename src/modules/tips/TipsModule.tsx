@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
   getOpenTipSession,
@@ -25,9 +25,9 @@ import {
   type PoolTotals,
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
-import TipHistory from './TipHistory'
-import TipQuincenal from './TipQuincenal'
-import TipStats from './TipStats'
+const TipHistory   = lazy(() => import('./TipHistory'))
+const TipQuincenal = lazy(() => import('./TipQuincenal'))
+const TipStats     = lazy(() => import('./TipStats'))
 import { todayCR, shiftLabel, tipShiftToCaja } from '../../shared/utils'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
@@ -581,40 +581,40 @@ export default function TipsModule() {
         </div>
       )}
 
-      {/* ─── HISTORIAL ─── */}
-      {view === 'historial' && (
-        <div className="tips-body">
-          <TipHistory
-            sessions={sessions}
-            employees={employees}
-            rolePoints={rolePoints}
-            onCalcReady={(id, calc) => setTipCalcCache(prev => ({ ...prev, [id]: calc }))}
-          />
-        </div>
-      )}
+      {/* ─── HISTORIAL / QUINCENAL / STATS — lazy-loaded ─── */}
+      <Suspense fallback={<div style={{ padding:'3rem', textAlign:'center', opacity:0.4 }}>⏳</div>}>
+        {view === 'historial' && (
+          <div className="tips-body">
+            <TipHistory
+              sessions={sessions}
+              employees={employees}
+              rolePoints={rolePoints}
+              onCalcReady={(id, calc) => setTipCalcCache(prev => ({ ...prev, [id]: calc }))}
+            />
+          </div>
+        )}
 
-      {/* ─── QUINCENAL ─── */}
-      {view === 'quincenal' && (
-        <div className="tips-body">
-          <TipQuincenal
-            sessions={sessions}
-            calcCache={tipCalcCache}
-            employees={employees}
-            rolePoints={rolePoints}
-          />
-        </div>
-      )}
+        {view === 'quincenal' && (
+          <div className="tips-body">
+            <TipQuincenal
+              sessions={sessions}
+              calcCache={tipCalcCache}
+              employees={employees}
+              rolePoints={rolePoints}
+            />
+          </div>
+        )}
 
-      {/* ─── ESTADÍSTICAS ─── */}
-      {view === 'stats' && (
-        <div className="tips-body">
-          <TipStats
-            sessions={sessions}
-            calcCache={tipCalcCache}
-            employees={employees}
-          />
-        </div>
-      )}
+        {view === 'stats' && (
+          <div className="tips-body">
+            <TipStats
+              sessions={sessions}
+              calcCache={tipCalcCache}
+              employees={employees}
+            />
+          </div>
+        )}
+      </Suspense>
     </div>
   )
 }

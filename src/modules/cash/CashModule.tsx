@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
@@ -8,11 +8,12 @@ import {
   getSuppliers,
 } from '../../shared/api/cash'
 import type { CashSession, CashMovement, Supplier } from '../../shared/types/database'
-import CashTurno from './CashTurno'
-import CashMovimientos from './CashMovimientos'
-import CashProveedores from './CashProveedores'
-import CashPendientes from './CashPendientes'
-import CashResumen from './CashResumen'
+
+const CashTurno       = lazy(() => import('./CashTurno'))
+const CashMovimientos = lazy(() => import('./CashMovimientos'))
+const CashProveedores = lazy(() => import('./CashProveedores'))
+const CashPendientes  = lazy(() => import('./CashPendientes'))
+const CashResumen     = lazy(() => import('./CashResumen'))
 
 type Tab = 'turno' | 'movimientos' | 'proveedores' | 'pendientes' | 'resumen'
 
@@ -138,6 +139,7 @@ export default function CashModule() {
       )}
 
       {/* Tab content */}
+      <Suspense fallback={<div style={{ padding:'3rem', textAlign:'center', opacity:0.4 }}>⏳</div>}>
       <div className="cd-content">
         {tab === 'turno' && (
           <CashTurno
@@ -181,6 +183,7 @@ export default function CashModule() {
           />
         )}
       </div>
+      </Suspense>
     </div>
   )
 }

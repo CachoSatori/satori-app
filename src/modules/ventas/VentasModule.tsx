@@ -1,24 +1,26 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
   getVentasDias, getAllVentasDias, getVentasHist, getProductMap, getMetas, getComps,
 } from '../../shared/api/ventas'
 import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
-import VentasHoy         from './VentasHoy'
-import VentasContabilidad from './VentasContabilidad'
-import VentasSaloneros   from './VentasSaloneros'
-import VentasHistorico   from './VentasHistorico'
-import VentasMix         from './VentasMix'
-import VentasAnalisis    from './VentasAnalisis'
-import VentasMetas       from './VentasMetas'
-import VentasCompetencias from './VentasCompetencias'
-import VentasXLS         from './VentasXLS'
-import VentasConfig      from './VentasConfig'
-import VentasCajeros     from './VentasCajeros'
-import VentasEvaluacion  from './VentasEvaluacion'
-import VentasICP         from './VentasICP'
-import VentasCalendario  from './VentasCalendario'
+
+// Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
+const VentasHoy          = lazy(() => import('./VentasHoy'))
+const VentasContabilidad = lazy(() => import('./VentasContabilidad'))
+const VentasSaloneros    = lazy(() => import('./VentasSaloneros'))
+const VentasHistorico    = lazy(() => import('./VentasHistorico'))
+const VentasMix          = lazy(() => import('./VentasMix'))
+const VentasAnalisis     = lazy(() => import('./VentasAnalisis'))
+const VentasMetas        = lazy(() => import('./VentasMetas'))
+const VentasCompetencias = lazy(() => import('./VentasCompetencias'))
+const VentasXLS          = lazy(() => import('./VentasXLS'))
+const VentasConfig       = lazy(() => import('./VentasConfig'))
+const VentasCajeros      = lazy(() => import('./VentasCajeros'))
+const VentasEvaluacion   = lazy(() => import('./VentasEvaluacion'))
+const VentasICP          = lazy(() => import('./VentasICP'))
+const VentasCalendario   = lazy(() => import('./VentasCalendario'))
 
 type Tab = 'hoy'|'ventas'|'saloneros'|'evaluacion'|'icp'|'cajeros'|'historico'|'mix'|'analisis'|'calendario'|'metas'|'competencias'|'xls'|'config'
 
@@ -150,24 +152,35 @@ export default function VentasModule() {
       {(() => {
         const allDias = Object.keys(diasFull).length > 0 ? diasFull : dias
         return (
-          <div className="vt-content">
-            {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
-            {tab === 'ventas'      && <VentasContabilidad dias={allDias} hist={hist} metas={metas} pm={pm} />}
-            {tab === 'saloneros'   && <VentasSaloneros    dias={allDias} pm={pm} metas={metas} />}
-            {tab === 'evaluacion'  && <VentasEvaluacion   dias={allDias} pm={pm} metas={metas} />}
-            {tab === 'icp'         && <VentasICP          dias={allDias} pm={pm} />}
-            {tab === 'cajeros'     && <VentasCajeros      dias={allDias} />}
-            {tab === 'historico'   && <VentasHistorico    dias={allDias} hist={hist} pm={pm} />}
-            {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} hist={hist} />}
-            {tab === 'analisis'    && <VentasAnalisis     dias={allDias} hist={hist} metas={metas} />}
-            {tab === 'calendario'  && <VentasCalendario   dias={allDias} hist={hist} pm={pm} />}
-            {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
-            {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} />}
-            {tab === 'xls'         && <VentasXLS          dias={allDias} onRefresh={loadAll} />}
-            {tab === 'config'      && <VentasConfig       dias={allDias} pm={pm} onRefresh={loadAll} />}
-          </div>
+          <Suspense fallback={<TabLoader />}>
+            <div className="vt-content">
+              {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
+              {tab === 'ventas'      && <VentasContabilidad dias={allDias} hist={hist} metas={metas} pm={pm} />}
+              {tab === 'saloneros'   && <VentasSaloneros    dias={allDias} pm={pm} metas={metas} />}
+              {tab === 'evaluacion'  && <VentasEvaluacion   dias={allDias} pm={pm} metas={metas} />}
+              {tab === 'icp'         && <VentasICP          dias={allDias} pm={pm} />}
+              {tab === 'cajeros'     && <VentasCajeros      dias={allDias} />}
+              {tab === 'historico'   && <VentasHistorico    dias={allDias} hist={hist} pm={pm} />}
+              {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} hist={hist} />}
+              {tab === 'analisis'    && <VentasAnalisis     dias={allDias} hist={hist} metas={metas} />}
+              {tab === 'calendario'  && <VentasCalendario   dias={allDias} hist={hist} pm={pm} />}
+              {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
+              {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} />}
+              {tab === 'xls'         && <VentasXLS          dias={allDias} onRefresh={loadAll} />}
+              {tab === 'config'      && <VentasConfig       dias={allDias} pm={pm} onRefresh={loadAll} />}
+            </div>
+          </Suspense>
         )
       })()}
+    </div>
+  )
+}
+
+// Minimal inline spinner shown while a lazy tab chunk downloads (first access only)
+function TabLoader() {
+  return (
+    <div style={{ display:'flex', justifyContent:'center', alignItems:'center', padding:'3rem', opacity:0.4 }}>
+      <span className="loading-mark" style={{ fontSize:'1.5rem' }}>売</span>
     </div>
   )
 }

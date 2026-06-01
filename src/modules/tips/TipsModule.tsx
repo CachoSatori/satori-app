@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
   getOpenTipSession,
@@ -37,6 +38,7 @@ type View = 'turno' | 'historial' | 'quincenal' | 'stats'
 
 export default function TipsModule() {
   const { profile } = useAuth()
+  const navigate    = useNavigate()
   const isManager = profile?.role === 'owner' || profile?.role === 'manager'
 
   // ── Vistas ────────────────────────────────────────────────
@@ -382,6 +384,7 @@ export default function TipsModule() {
             <p className="tips-subtitle">Pool del turno · Satori</p>
           </div>
         </div>
+        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
         <div className="tips-tabs">
           <button className={`tips-tab ${view === 'turno' ? 'active' : ''}`} onClick={() => setView('turno')}>
             Turno actual
@@ -399,6 +402,9 @@ export default function TipsModule() {
               Estadísticas
             </button>
           )}
+        </div>
+        <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888', whiteSpace:'nowrap' }}
+          onClick={() => navigate('/')}>← Inicio</button>
         </div>
       </div>
 

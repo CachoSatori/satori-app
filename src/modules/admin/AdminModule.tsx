@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { Employee, RoleTipPoints } from '../../shared/types/database'
 import { getAllEmployees } from '../../shared/api/admin'
 import { getRoleTipPoints } from '../../shared/api/tips'
@@ -21,6 +22,7 @@ async function sendMonthlyReport(month?: string, tipo?: string): Promise<{ ok: b
 }
 
 export default function AdminModule() {
+  const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('employees')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [rolePoints, setRolePoints] = useState<RoleTipPoints[]>([])
@@ -67,6 +69,8 @@ export default function AdminModule() {
           </div>
         </div>
         <div className="module-header-actions">
+          <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888' }}
+            onClick={() => navigate('/')}>← Inicio</button>
           <button
             className={`tab-btn ${tab === 'employees' ? 'active' : ''}`}
             onClick={() => setTab('employees')}

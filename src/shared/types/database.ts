@@ -129,6 +129,41 @@ export interface CashMovement {
   updated_at: string
 }
 
+// ── Cierre del día (2 fases) ──────────────────────────────────
+export interface CashCierreDia {
+  id:                   string
+  session_date:         string
+  manager:              string
+  tipo:                 'parcial_mediodia' | 'completo'
+  // Fase 1 — mediodía
+  vm_crc:               number
+  vm_usd:               number
+  propinas_m_crc:       number
+  otros_m_crc:          number
+  ef_real_m_crc:        number
+  // Fase 2 — noche
+  vn_crc:               number
+  vn_usd:               number
+  propinas_n_crc:       number
+  otros_n_crc:          number
+  ef_real_n_crc:        number
+  // Separaciones (conteo físico)
+  sep_diaria_crc:       number
+  sep_diaria_usd:       number
+  sep_registradora_crc: number
+  sep_registradora_usd: number
+  remanente_crc:        number
+  remanente_usd:        number
+  // Verificación
+  diferencia_crc:       number
+  ajuste_tipo:          string
+  ajuste_motivo:        string
+  notas:                string
+  tipo_cambio:          number
+  created_at:           string
+  updated_at:           string
+}
+
 export interface Supplier {
   id: string
   name: string

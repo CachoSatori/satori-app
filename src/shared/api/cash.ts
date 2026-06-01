@@ -218,3 +218,31 @@ export async function deactivateSupplier(id: string): Promise<void> {
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
+
+// ── Cierres del día (2 fases) ─────────────────────────────────
+import type { CashCierreDia } from '../types/database'
+
+export async function getCierresDia(date?: string): Promise<CashCierreDia[]> {
+  let q = supabase.from('cash_cierres_dia' as never).select('*').order('created_at', { ascending: false })
+  if (date) q = q.eq('session_date', date)
+  const { data, error } = await q
+  if (error) throw new Error(error.message)
+  return (data ?? []) as CashCierreDia[]
+}
+
+export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created_at'|'updated_at'>): Promise<CashCierreDia> {
+  const { data, error } = await supabase
+    .from('cash_cierres_dia' as never)
+    .insert({ ...cierre, updated_at: new Date().toISOString() } as never)
+    .select().single()
+  if (error) throw new Error(error.message)
+  return data as CashCierreDia
+}
+
+export async function updateCierreCompleto(id: string, updates: Partial<CashCierreDia>): Promise<void> {
+  const { error } = await supabase
+    .from('cash_cierres_dia' as never)
+    .update({ ...updates, updated_at: new Date().toISOString() } as never)
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}

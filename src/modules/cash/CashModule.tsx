@@ -14,8 +14,9 @@ const CashMovimientos = lazy(() => import('./CashMovimientos'))
 const CashProveedores = lazy(() => import('./CashProveedores'))
 const CashPendientes  = lazy(() => import('./CashPendientes'))
 const CashResumen     = lazy(() => import('./CashResumen'))
+const CashCierre      = lazy(() => import('./CashCierre'))
 
-type Tab = 'turno' | 'movimientos' | 'proveedores' | 'pendientes' | 'resumen'
+type Tab = 'turno' | 'cierre' | 'movimientos' | 'proveedores' | 'pendientes' | 'resumen'
 
 function getTabs(role: string): { id: Tab; label: string }[] {
   if (role === 'cajero') return [
@@ -31,6 +32,7 @@ function getTabs(role: string): { id: Tab; label: string }[] {
   // owner / manager
   return [
     { id: 'turno',       label: 'Caja Diaria' },
+    { id: 'cierre',      label: '🔒 Cierre del día' },
     { id: 'movimientos', label: 'Movimientos' },
     { id: 'proveedores', label: 'Proveedores' },
     { id: 'pendientes',  label: 'Pendientes' },
@@ -154,6 +156,9 @@ export default function CashModule() {
             onMovAdded={handleMovAdded}
             onError={setError}
           />
+        )}
+        {tab === 'cierre' && (
+          <CashCierre onRefresh={loadAll} />
         )}
         {tab === 'movimientos' && (
           <CashMovimientos

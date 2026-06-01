@@ -144,22 +144,27 @@ export default function VentasModule() {
         </div>
       )}
 
-      {/* Content */}
-      <div className="vt-content">
-        {tab === 'hoy'         && <VentasHoy         dias={dias} pm={pm} metas={metas} />}
-        {tab === 'ventas'      && <VentasContabilidad dias={dias} hist={hist} metas={metas} pm={pm} />}
-        {tab === 'saloneros'   && <VentasSaloneros    dias={dias} pm={pm} metas={metas} />}
-        {tab === 'evaluacion'  && <VentasEvaluacion   dias={dias} pm={pm} metas={metas} />}
-        {tab === 'icp'         && <VentasICP          dias={dias} pm={pm} />}
-        {tab === 'cajeros'     && <VentasCajeros      dias={dias} />}
-        {tab === 'historico'   && <VentasHistorico    dias={dias} hist={hist} pm={pm} />}
-        {tab === 'mix'         && <VentasMix          dias={dias} pm={pm} />}
-        {tab === 'analisis'    && <VentasAnalisis     dias={Object.keys(diasFull).length > 0 ? diasFull : dias} hist={hist} metas={metas} />}
-        {tab === 'metas'       && <VentasMetas        dias={dias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
-        {tab === 'competencias'&& <VentasCompetencias dias={dias} pm={pm} comps={comps} onRefresh={loadAll} />}
-        {tab === 'xls'         && <VentasXLS          dias={dias} onRefresh={loadAll} />}
-        {tab === 'config'      && <VentasConfig       dias={dias} pm={pm} onRefresh={loadAll} />}
-      </div>
+      {/* Content — allDias: full history (diasFull when loaded, else 400-day dias) */}
+      {(() => {
+        const allDias = Object.keys(diasFull).length > 0 ? diasFull : dias
+        return (
+          <div className="vt-content">
+            {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
+            {tab === 'ventas'      && <VentasContabilidad dias={allDias} hist={hist} metas={metas} pm={pm} />}
+            {tab === 'saloneros'   && <VentasSaloneros    dias={allDias} pm={pm} metas={metas} />}
+            {tab === 'evaluacion'  && <VentasEvaluacion   dias={allDias} pm={pm} metas={metas} />}
+            {tab === 'icp'         && <VentasICP          dias={allDias} pm={pm} />}
+            {tab === 'cajeros'     && <VentasCajeros      dias={allDias} />}
+            {tab === 'historico'   && <VentasHistorico    dias={allDias} hist={hist} pm={pm} />}
+            {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} />}
+            {tab === 'analisis'    && <VentasAnalisis     dias={allDias} hist={hist} metas={metas} />}
+            {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
+            {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} />}
+            {tab === 'xls'         && <VentasXLS          dias={allDias} onRefresh={loadAll} />}
+            {tab === 'config'      && <VentasConfig       dias={allDias} pm={pm} onRefresh={loadAll} />}
+          </div>
+        )
+      })()}
     </div>
   )
 }

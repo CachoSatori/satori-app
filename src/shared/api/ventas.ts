@@ -3,7 +3,10 @@ import type { DiaData, HistDay, ProductInfo, Meta, Comp } from '../types/ventas'
 
 // ── Días ────────────────────────────────────────────────────
 
-export async function getVentasDias(days = 90): Promise<Record<string, DiaData>> {
+// 400 days = ~13 months, covers full current + previous year
+// At ~5.5KB/day × 400 = ~2.2MB initial load (acceptable)
+// Previous 90-day limit was silently cutting off Jan-Feb when loading in June
+export async function getVentasDias(days = 400): Promise<Record<string, DiaData>> {
   const since = new Date()
   since.setDate(since.getDate() - days)
   const sinceStr = since.toISOString().slice(0, 10)

@@ -156,7 +156,7 @@ export default function VentasModule() {
             {tab === 'icp'         && <VentasICP          dias={allDias} pm={pm} />}
             {tab === 'cajeros'     && <VentasCajeros      dias={allDias} />}
             {tab === 'historico'   && <VentasHistorico    dias={allDias} hist={hist} pm={pm} />}
-            {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} />}
+            {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} hist={hist} />}
             {tab === 'analisis'    && <VentasAnalisis     dias={allDias} hist={hist} metas={metas} />}
             {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
             {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} />}

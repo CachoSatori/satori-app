@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import type { DiasMap, ProductMap } from '../../shared/types/ventas'
 import { updateProductInfo } from '../../shared/api/ventas'
 
@@ -95,6 +95,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
             {filtered.map(n => (
               <ProductRow key={n} nombre={n} info={pm[n]}
                 clasSugeridas={CLAS_SUGERIDAS[pm[n]?.tipo ?? ''] ?? []}
+                pm={pm}
                 saving={saving === n}
                 onSave={(nombre, tipo, clas, subcl, mult, costo) => handleUpdate(nombre, tipo, clas, subcl, mult, costo)} />
             ))}
@@ -116,16 +117,33 @@ interface RowProps {
   nombre: string
   info:   { tipo?: string; clasificacion?: string; subclasificacion?: string; multiplicador?: number; costo_unitario?: number } | undefined
   clasSugeridas: string[]
+  pm:            ProductMap  // full product map for dynamic subcl options
   saving: boolean
   onSave: (nombre: string, tipo: string, clas: string, subcl: string, mult: number, costo: number) => void
 }
 
-function ProductRow({ nombre, info, clasSugeridas, saving, onSave }: RowProps) {
+function ProductRow({ nombre, info, clasSugeridas, pm, saving, onSave }: RowProps) {
   const [tipo,  setTipo]  = useState(info?.tipo ?? 'desconocido')
   const [clas,  setClas]  = useState(info?.clasificacion ?? '')
   const [subcl, setSubcl] = useState(info?.subclasificacion ?? '')
   const [mult,  setMult]  = useState(info?.multiplicador ?? 1)
   const [costo, setCosto] = useState(info?.costo_unitario ?? 0)
+
+  // Dynamic subcl options — recomputed whenever clas changes
+  const subclOptions = useMemo(() =>
+    [...new Set(
+      Object.values(pm)
+        .filter(p => p.clasificacion === clas && p.subclasificacion)
+        .map(p => p.subclasificacion)
+    )].sort()
+  , [clas, pm])
+
+  // When clas changes and current subcl is no longer in the list, reset it
+  useEffect(() => {
+    if (subcl && subclOptions.length > 0 && !subclOptions.includes(subcl)) {
+      setSubcl('')
+    }
+  }, [clas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const changed =
     tipo  !== (info?.tipo             ?? 'desconocido') ||
@@ -158,9 +176,21 @@ function ProductRow({ nombre, info, clasSugeridas, saving, onSave }: RowProps) {
         )}
       </td>
       <td>
-        <input className="cd-tbl-input" value={subcl}
-          onChange={e => setSubcl(e.target.value)}
-          placeholder="ej: NIGIRIS" disabled={saving} />
+        {/* Subclasificacion: dropdown of existing values for this clasificacion, free-text if none */}
+        {subclOptions.length > 0 ? (
+          <select className="cd-tbl-select" value={subcl}
+            onChange={e => setSubcl(e.target.value)} disabled={saving}>
+            <option value="">— sin subcl. —</option>
+            {subclOptions.map(s => <option key={s}>{s}</option>)}
+            {subcl && !subclOptions.includes(subcl) && (
+              <option value={subcl}>{subcl}</option>
+            )}
+          </select>
+        ) : (
+          <input className="cd-tbl-input" value={subcl}
+            onChange={e => setSubcl(e.target.value)}
+            placeholder="ej: NIGIRIS" disabled={saving} />
+        )}
       </td>
       <td className="r">
         {/* Multiplicador: solo relevante para bebidas */}

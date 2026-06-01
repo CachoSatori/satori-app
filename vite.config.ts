@@ -29,10 +29,15 @@ export default defineConfig({
           { name: 'Caja',            url: '/satori-app/caja',     icons: [{ src: '/satori-app/icon-192.png', sizes: '192x192' }] },
         ],
       },
+      // Force immediate SW activation — skip waiting when new version is detected
+      injectRegister: 'auto',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/satori-app/index.html',
         navigateFallbackAllowlist: [/^\/satori-app/],
+        // Claim clients immediately so new SW takes over all tabs right away
+        clientsClaim: true,
+        skipWaiting: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com/,

@@ -59,9 +59,13 @@ export async function deleteVentasDia(date: string): Promise<void> {
 // ── Histórico ────────────────────────────────────────────────
 
 export async function getVentasHist(): Promise<Record<string, HistDay>> {
+  // PostgREST default limit is 1000 rows — override to avoid silently truncating
+  // historical data (we have 1096 days: 2023–2025)
   const { data, error } = await supabase
     .from('ventas_hist' as never)
     .select('session_date, data')
+    .order('session_date', { ascending: true })
+    .limit(5000)
   if (error) throw new Error(error.message)
   const result: Record<string, HistDay> = {}
   for (const row of (data as Array<{ session_date: string; data: HistDay }> ?? [])) {

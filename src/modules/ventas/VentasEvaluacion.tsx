@@ -357,6 +357,76 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
           </tbody>
         </table>
       </div>
+
+      {/* 12-week Prom/PAX trend per salonero */}
+      {(() => {
+        // Build weekly buckets — last 12 weeks
+        const weeks: string[] = []
+        const refDate = dates[dates.length - 1] ?? todayCR()
+        for (let w = 11; w >= 0; w--) {
+          const d = new Date(refDate + 'T12:00:00')
+          d.setDate(d.getDate() - w * 7)
+          weeks.push(d.toISOString().slice(0, 10))
+        }
+
+        // For each week, get the 7 days ending on that date
+        const weekRanges = weeks.map(end => {
+          const d = new Date(end + 'T12:00:00')
+          const start = new Date(d); start.setDate(d.getDate() - 6)
+          return { end, dates: datesInRange(dates, start.toISOString().slice(0,10), end) }
+        })
+
+        // Only include saloneros with enough data
+        const trendSals = results.filter(r => r.data && r.data.totalWorked >= 3)
+        if (trendSals.length === 0) return null
+
+        return (
+          <div style={{ marginTop: '2rem' }}>
+            <div className="vt-sl" style={{ marginBottom: '0.5rem' }}>Tendencia Prom/PAX — últimas 12 semanas</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.75rem' }}>
+              {trendSals.slice(0, 6).map(({ name }) => {
+                const weeklyVals = weekRanges.map(({ dates: wDates }) => {
+                  if (!wDates.length) return 0
+                  const agg = aggSalonero(name, wDates, dias, pm)
+                  return agg.days > 0 ? agg.promPax : 0
+                })
+                const nonZero = weeklyVals.filter(v => v > 0)
+                if (nonZero.length < 2) return null
+                const maxVal = Math.max(...weeklyVals, 1)
+                const minNonZero = Math.min(...nonZero)
+                const latest = nonZero[nonZero.length - 1]
+                const prev    = nonZero[nonZero.length - 2]
+                const trend   = prev > 0 ? ((latest - prev) / prev * 100) : 0
+
+                return (
+                  <div key={name} style={{ background: 'var(--vt-ink)', borderRadius: 2, padding: '0.75rem 0.875rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--vt-paper)' }}>{name}</div>
+                      <div style={{ fontSize: '0.65rem', fontWeight: 700, color: trend >= 0 ? 'var(--vt-green)' : 'var(--vt-red)' }}>
+                        {trend >= 0 ? '▲' : '▼'}{Math.abs(trend).toFixed(0)}%
+                      </div>
+                    </div>
+                    {/* Sparkline */}
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 36 }}>
+                      {weeklyVals.map((v, i) => {
+                        const h = v > 0 ? Math.max(4, Math.round((v - minNonZero * 0.8) / (maxVal - minNonZero * 0.8) * 100)) : 2
+                        const isLast = i === weeklyVals.length - 1
+                        const col = isLast ? 'var(--vt-gold)' : v > 0 ? '#3a6a9a' : '#1a1a1a'
+                        return <div key={i} style={{ flex: 1, height: `${Math.min(h,100)}%`, background: col, borderRadius: 1, transition: 'height 0.3s', minHeight: 2 }} />
+                      })}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', fontSize: '0.6rem', color: '#555' }}>
+                      <span>12 sem</span>
+                      <span style={{ color: 'var(--vt-gold)', fontWeight: 700 }}>Ahora: {fi(latest)}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
+

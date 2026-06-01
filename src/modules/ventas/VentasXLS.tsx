@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 import type { DiasMap } from '../../shared/types/ventas'
+import VentasHistImport from './VentasHistImport'
 import { parseVentasFile, extractDateFromFilename } from './xlsParser'
 import { saveVentasDia, deleteVentasDia } from '../../shared/api/ventas'
 import { fmtDate } from './ventasUtils'
@@ -270,6 +271,11 @@ export default function VentasXLS({ dias, onRefresh }: Props) {
           </div>
         </div>
       )}
+
+      {/* ── Historical import separator ── */}
+      <div style={{ marginTop: '2.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--vt-border)' }}>
+        <VentasHistImport />
+      </div>
     </div>
   )
 }

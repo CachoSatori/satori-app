@@ -22,7 +22,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   const [prodView, setProdView]   = useState<'general'|'comidas'|'bebidas'>('general')
   const [prodBy, setProdBy]       = useState<'monto'|'unidades'>('monto')
   const [salFiltro, setSalFiltro] = useState<string>('')
-  const [sortBy, setSortBy]       = useState<'promPax'|'total'|'pax'>('promPax')
+  const [sortBy, setSortBy]       = useState<'promPax'|'total'|'pax'|'ticket'>('promPax')
 
   // Date picker — defaults to last loaded date
   const allDates = useMemo(() => Object.keys(dias).sort(), [dias])
@@ -74,6 +74,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
     [...salAggs].sort((a, b) => {
       if (sortBy === 'promPax') return b.promPax - a.promPax
       if (sortBy === 'total')   return b.total - a.total
+      if (sortBy === 'ticket')  return b.promTicket - a.promTicket
       return b.pax - a.pax
     }),
   [salAggs, sortBy])
@@ -328,10 +329,10 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
       <div className="vt-sl" style={{ marginTop: '1.5rem' }}>
         Ranking del día
         <div className="vt-sort-tabs" style={{ marginLeft: '1rem' }}>
-          {(['promPax','total','pax'] as const).map(k => (
+          {(['promPax','total','pax','ticket'] as const).map(k => (
             <button key={k} className={`vt-sort-tab ${sortBy === k ? 'active' : ''}`}
               onClick={() => setSortBy(k)}>
-              {k === 'promPax' ? 'Prom/PAX' : k === 'total' ? 'Ventas' : 'PAX'}
+              {k === 'promPax' ? 'Prom/PAX' : k === 'total' ? 'Ventas' : k === 'ticket' ? 'Ticket/item' : 'PAX'}
             </button>
           ))}
         </div>
@@ -345,8 +346,10 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               <th className="r">PAX</th>
               <th className="r">Ventas</th>
               <th className="r">Prom/PAX</th>
+              <th className="r">Ticket/item</th>
               <th className="r">Beb/PAX</th>
               <th className="r">Ratio C/B</th>
+              <th className="r" style={{ color:'#555', fontSize:'0.65rem' }}>vs General</th>
             </tr>
           </thead>
           <tbody>
@@ -364,11 +367,22 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
                   <td className="r" style={{ color: metaColor(s.promPax, metaPP) }}>
                     {fi(s.promPax)}
                   </td>
+                  <td className="r" style={{ fontSize:'0.8rem', color: s.promTicket >= (gen.promTicket ?? 0) ? 'var(--vt-green)' : '#888' }}>
+                    {fi(s.promTicket)}
+                  </td>
                   <td className="r" style={{ color: metaColor(s.bebPax, metaBP) }}>
                     {s.bebPax.toFixed(2)}
                   </td>
                   <td className={`r ${ratioCBClass(s.ratioCB)}`}>
                     {s.ratioCB.toFixed(2)}:1
+                  </td>
+                  <td className="r">
+                    {gen.promPax > 0 && (() => {
+                      const diff = s.promPax - gen.promPax
+                      const pct  = diff / gen.promPax * 100
+                      const col  = diff >= 0 ? 'var(--vt-green)' : 'var(--vt-red)'
+                      return <span style={{ fontSize:'0.72rem', color:col, fontWeight:600 }}>{diff >= 0 ? '▲ +' : '▼ '}{Math.abs(pct).toFixed(1)}%</span>
+                    })()}
                   </td>
                 </tr>
               )

@@ -14,7 +14,8 @@ const ResumenDiario  = lazy(() => import('./modules/resumen/ResumenDiario'))
 const ResumenSemanal = lazy(() => import('./modules/resumen/ResumenSemanal'))
 const SOPsModule       = lazy(() => import('./modules/sops/SOPsModule'))
 const MisPropinas      = lazy(() => import('./modules/tips/MisPropinas'))
-const InventarioModule = lazy(() => import('./modules/inventario/InventarioModule'))
+const InventarioModule  = lazy(() => import('./modules/inventario/InventarioModule'))
+const MiRendimientoWrap = lazy(() => import('./modules/ventas/MiRendimientoWrap'))
 
 // ── Loading fallback — same spinner used for auth ──────────────
 function ModuleLoading({ kanji = '祭' }: { kanji?: string }) {
@@ -95,6 +96,7 @@ function AppRoutes() {
         <Route path="/sops"          element={<PrivateRoute><SOPsModule /></PrivateRoute>} />
         <Route path="/mis-propinas"  element={<PrivateRoute><MisPropinas /></PrivateRoute>} />
         <Route path="/inventario"    element={<PrivateRoute><InventarioModule /></PrivateRoute>} />
+        <Route path="/mi-rendimiento" element={<PrivateRoute><MiRendimientoWrap /></PrivateRoute>} />
         <Route path="/admin"    element={<OwnerRoute><AdminModule /></OwnerRoute>} />
         <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>

@@ -311,6 +311,9 @@ export default function VentasMix({ dias, pm, hist = {} }: Props) {
               Sin datos para este período.
             </div>
           )}
+
+          {/* ⚠ Productos sin ventas en el período */}
+          <NoVendidos PM={verPM} pm={pm} />
         </>
       )}
 
@@ -990,6 +993,48 @@ function CmpTable({ cmpData, masterCM, masterPM, canal, search, openClas, openSu
           </tr>
         </tfoot>
       </table>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ⚠ Productos sin ventas en el período seleccionado
+// ═══════════════════════════════════════════════════════════════
+function NoVendidos({ PM, pm }: { PM: Record<string, PMItem>; pm: ProductMap }) {
+  const [open, setOpen] = useState(false)
+  const vendidos = new Set(Object.keys(PM))
+  const noVendidos = Object.entries(pm)
+    .filter(([n, info]) => !vendidos.has(n) && info.tipo !== 'cortesia' && info.tipo !== 'personal' && info.tipo !== 'comensales')
+    .map(([nombre, info]) => ({ nombre, tipo: info.tipo ?? 'desconocido' }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre))
+  if (!noVendidos.length) return null
+  const byTipo: Record<string, string[]> = {}
+  for (const p of noVendidos) {
+    if (!byTipo[p.tipo]) byTipo[p.tipo] = []
+    byTipo[p.tipo].push(p.nombre)
+  }
+  const tipCol = (tipo: string) => ({ bebida:'#7ec8a0', comida:'#c8a96e', merchandising:'#c890e8', nofood:'#c890e8' }[tipo] ?? '#555')
+  return (
+    <div style={{ marginTop:'0.75rem', marginBottom:'1.5rem' }}>
+      <div onClick={() => setOpen(o => !o)}
+        style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.5rem 0.75rem', background:'#0d0d0d', borderTop:'3px solid #2a2a2a', cursor:'pointer', userSelect:'none' }}>
+        <span style={{ fontSize:'0.65rem', letterSpacing:'0.2em', textTransform:'uppercase', color:'#555', fontWeight:700 }}>
+          ⚠ PRODUCTOS SIN VENTAS EN ESTE PERÍODO
+        </span>
+        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+          <span style={{ fontSize:'0.68rem', color:'#666', background:'#1a1a1a', padding:'2px 8px', borderRadius:10, border:'1px solid #2a2a2a' }}>{noVendidos.length} productos</span>
+          <span style={{ fontSize:'0.72rem', color:'#555' }}>{open ? '▼ ocultar' : '▶ mostrar'}</span>
+        </div>
+      </div>
+      {open && (
+        <div style={{ padding:'0.625rem 0.75rem', background:'#080808', display:'flex', flexWrap:'wrap', gap:'0.3rem' }}>
+          {Object.entries(byTipo).sort().map(([tipo, nombres]) =>
+            nombres.map(n => (
+              <span key={n} style={{ fontSize:'0.68rem', color:tipCol(tipo), background:'#0a0a0a', padding:'2px 8px', border:`1px solid ${tipCol(tipo)}22`, borderRadius:2 }}>{n}</span>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

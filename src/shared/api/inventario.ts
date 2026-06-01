@@ -1,0 +1,111 @@
+import { supabase } from './supabase'
+import type { Ingredient, Recipe, RecipeIngredient, InventoryMovement } from '../types/inventario'
+
+// ── Ingredients ──────────────────────────────────────────────────
+
+export async function getIngredients(): Promise<Ingredient[]> {
+  const { data, error } = await supabase
+    .from('ingredients' as never)
+    .select('*')
+    .order('category')
+    .order('name')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as Ingredient[]
+}
+
+export async function upsertIngredient(ing: Partial<Ingredient> & { name: string }): Promise<void> {
+  const { error } = await supabase
+    .from('ingredients' as never)
+    .upsert({ ...ing, updated_at: new Date().toISOString() } as never, { onConflict: 'name' })
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteIngredient(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('ingredients' as never)
+    .delete()
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+// ── Recipes ──────────────────────────────────────────────────────
+
+export async function getRecipes(): Promise<Recipe[]> {
+  const { data, error } = await supabase
+    .from('recipes' as never)
+    .select('*')
+    .order('product_name')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as Recipe[]
+}
+
+export async function upsertRecipe(recipe: Partial<Recipe> & { product_name: string }): Promise<Recipe> {
+  const { data, error } = await supabase
+    .from('recipes' as never)
+    .upsert({ ...recipe, updated_at: new Date().toISOString() } as never, { onConflict: 'product_name' })
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return data as Recipe
+}
+
+export async function getRecipeIngredients(recipeId: string): Promise<RecipeIngredient[]> {
+  const { data, error } = await supabase
+    .from('recipe_ingredients' as never)
+    .select('*, ingredient:ingredients(*)')
+    .eq('recipe_id', recipeId)
+    .order('ingredient_id')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as RecipeIngredient[]
+}
+
+export async function upsertRecipeIngredient(ri: Omit<RecipeIngredient, 'id' | 'ingredient'>): Promise<void> {
+  const { error } = await supabase
+    .from('recipe_ingredients' as never)
+    .upsert(ri as never, { onConflict: 'recipe_id,ingredient_id' })
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteRecipeIngredient(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('recipe_ingredients' as never)
+    .delete()
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+// ── Inventory Movements ──────────────────────────────────────────
+
+export async function getMovements(limit = 100): Promise<InventoryMovement[]> {
+  const { data, error } = await supabase
+    .from('inventory_movements' as never)
+    .select('*, ingredient:ingredients(name, unit)')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as InventoryMovement[]
+}
+
+export async function addMovement(mov: Omit<InventoryMovement, 'id' | 'created_at' | 'ingredient'>): Promise<void> {
+  const { error } = await supabase
+    .from('inventory_movements' as never)
+    .insert(mov as never)
+  if (error) throw new Error(error.message)
+  // Trigger in DB auto-updates current_stock
+}
+
+// Bulk: set absolute stock level (count_adjustment = new - current)
+export async function setStockLevel(ingredientId: string, newLevel: number, currentLevel: number, unit: string, by: string): Promise<void> {
+  const delta = newLevel - currentLevel
+  if (delta === 0) return
+  await addMovement({
+    ingredient_id: ingredientId,
+    movement_type: 'count_adjustment',
+    qty_delta:     delta,
+    unit,
+    unit_cost:     null,
+    reference_id:  new Date().toISOString().slice(0, 10),
+    notes:         `Ajuste manual a ${newLevel} ${unit}`,
+    created_by:    by,
+  })
+}

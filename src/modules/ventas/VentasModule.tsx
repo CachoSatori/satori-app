@@ -18,8 +18,9 @@ import VentasConfig      from './VentasConfig'
 import VentasCajeros     from './VentasCajeros'
 import VentasEvaluacion  from './VentasEvaluacion'
 import VentasICP         from './VentasICP'
+import VentasCalendario  from './VentasCalendario'
 
-type Tab = 'hoy'|'ventas'|'saloneros'|'evaluacion'|'icp'|'cajeros'|'historico'|'mix'|'analisis'|'metas'|'competencias'|'xls'|'config'
+type Tab = 'hoy'|'ventas'|'saloneros'|'evaluacion'|'icp'|'cajeros'|'historico'|'mix'|'analisis'|'calendario'|'metas'|'competencias'|'xls'|'config'
 
 interface TabDef { id: Tab; label: string; group: string; roles: string[] }
 const TABS: TabDef[] = [
@@ -32,6 +33,7 @@ const TABS: TabDef[] = [
   { id: 'historico',    label: 'Histórico',     group: 'fin',   roles: ['owner','manager','contador'] },
   { id: 'mix',          label: 'Mix Ventas',    group: 'fin',   roles: ['owner','manager','contador'] },
   { id: 'analisis',     label: 'Análisis',      group: 'fin',   roles: ['owner','manager','contador'] },
+  { id: 'calendario',   label: 'Calendario',    group: 'fin',   roles: ['owner','manager','contador'] },
   { id: 'metas',        label: 'Metas',         group: 'fin',   roles: ['owner','manager','contador'] },
   { id: 'competencias', label: 'Competencias',  group: 'team',  roles: ['owner','manager'] },
   { id: 'xls',          label: 'Cargar XLS',    group: 'ops',   roles: ['owner','manager'] },
@@ -158,6 +160,7 @@ export default function VentasModule() {
             {tab === 'historico'   && <VentasHistorico    dias={allDias} hist={hist} pm={pm} />}
             {tab === 'mix'         && <VentasMix          dias={allDias} pm={pm} hist={hist} />}
             {tab === 'analisis'    && <VentasAnalisis     dias={allDias} hist={hist} metas={metas} />}
+            {tab === 'calendario'  && <VentasCalendario   dias={allDias} hist={hist} pm={pm} />}
             {tab === 'metas'       && <VentasMetas        dias={allDias} hist={hist} metas={metas} onMetasUpdated={setMetas} />}
             {tab === 'competencias'&& <VentasCompetencias dias={allDias} pm={pm} comps={comps} onRefresh={loadAll} />}
             {tab === 'xls'         && <VentasXLS          dias={allDias} onRefresh={loadAll} />}

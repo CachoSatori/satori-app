@@ -1,9 +1,20 @@
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo } from 'react'
 import type { DiasMap, HistMap, Meta } from '../../shared/types/ventas'
 import {
   getContabilidadDays, availableYears, yearlyTotals,
   fi, todayISO, daysInMonth, metaProgress,
 } from './ventasUtils'
+
+const MN_FULL = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                 'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+const QUARTERS: [number, number, number][] = [[1,2,3],[4,5,6],[7,8,9],[10,11,12]]
+
+function varStr(pct: number | null, big = false): { text: string; color: string } {
+  if (pct === null) return { text: '—', color: '#444' }
+  const c = pct > 0 ? 'var(--vt-green)' : pct < 0 ? 'var(--vt-red)' : '#888'
+  const t = `${pct >= 0 ? '▲ +' : '▼ '}${Math.abs(pct).toFixed(big ? 0 : 1)}%`
+  return { text: t, color: c }
+}
 
 interface Props {
   dias:  DiasMap
@@ -77,59 +88,102 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
       {mode === 'compare' && (
         <>
           {/* Annual KPI cards */}
-          <div className="vt-kpi-grid" style={{ gridTemplateColumns: `repeat(${years.length}, 1fr)` }}>
+          <div className="vt-kpi-grid" style={{ gridTemplateColumns: `repeat(${Math.min(years.length, 4)}, 1fr)` }}>
             {years.map((y, i) => {
-              const d = yearData[y]
+              const d    = yearData[y]
               const prev = years[i + 1] ? yearData[years[i + 1]] : null
-              const varPct = prev?.ventaNeta ? ((d.ventaNeta - prev.ventaNeta) / prev.ventaNeta * 100) : null
+              const vp   = prev?.ventaNeta ? ((d.ventaNeta - prev.ventaNeta) / prev.ventaNeta * 100) : null
+              const vs   = varStr(vp, true)
+              const promPAX = d.pax > 0 ? d.ventaNeta / d.pax : 0
               return (
-                <div key={y} className="vt-kpi red">
-                  <div className="vt-kpi-label">{y}</div>
+                <div key={y} className="vt-kpi" style={{ borderLeft: '3px solid var(--vt-gold)' }}>
+                  <div className="vt-kpi-label">{y} · {d.days} días</div>
                   <div className="vt-kpi-val">{fi(d.ventaNeta)}</div>
-                  {varPct !== null && (
-                    <div className="vt-kpi-delta" style={{ color: varPct >= 0 ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                      {varPct >= 0 ? '▲' : '▼'} {Math.abs(varPct).toFixed(1)}% vs {years[i+1]}
-                    </div>
+                  {vp !== null && (
+                    <div className="vt-kpi-delta" style={{ color: vs.color }}>{vs.text} vs {years[i+1]}</div>
                   )}
-                  <div className="vt-kpi-sub">{d.days} días</div>
+                  <div className="vt-kpi-sub">{d.pax.toLocaleString('es-CR')} PAX · {fi(promPAX)}/PAX</div>
                 </div>
               )
             })}
           </div>
 
           {/* Monthly comparison table */}
-          <div className="vt-sl">Comparación mensual</div>
+          <div className="vt-sl">Comparativo mensual</div>
           <div className="vt-tbl-wrap">
             <table className="vt-tbl">
               <thead>
                 <tr>
                   <th>Mes</th>
                   {years.map(y => <th key={y} className="r">{y}</th>)}
-                  {years.length >= 2 && <th className="r">Var %</th>}
+                  {years.map((y, i) => i > 0 ? <th key={`v${y}`} className="r" style={{ color:'#555', fontSize:'0.65rem' }}>vs {years[i-1]}</th> : null)}
                 </tr>
               </thead>
               <tbody>
                 {MONTHS.map(m => {
                   const hasAny = years.some(y => monthData[y]?.[m])
                   if (!hasAny) return null
-                  const vals = years.map(y => monthData[y]?.[m]?.ventaNeta ?? 0)
-                  const varPct = vals[1] ? ((vals[0] - vals[1]) / vals[1] * 100) : null
                   return (
                     <tr key={m}>
-                      <td style={{ fontWeight: 600 }}>{mNames[m-1]}</td>
-                      {vals.map((v, i) => (
-                        <td key={i} className="r vt-bold">{v > 0 ? fi(v) : '—'}</td>
-                      ))}
-                      {years.length >= 2 && (
-                        <td className="r" style={{ color: varPct !== null ? (varPct >= 0 ? 'var(--vt-green)' : 'var(--vt-red)') : 'var(--vt-muted)' }}>
-                          {varPct !== null ? (varPct >= 0 ? '+' : '') + varPct.toFixed(1) + '%' : '—'}
-                        </td>
-                      )}
+                      <td style={{ fontWeight: 600 }}>{MN_FULL[m]}</td>
+                      {years.map(y => {
+                        const v = monthData[y]?.[m]?.ventaNeta ?? 0
+                        return <td key={y} className="r vt-bold">{v > 0 ? fi(v) : '—'}</td>
+                      })}
+                      {years.map((y, i) => {
+                        if (i === 0) return null
+                        const curr = monthData[years[i-1]]?.[m]?.ventaNeta ?? 0
+                        const prev = monthData[y]?.[m]?.ventaNeta ?? 0
+                        const vp   = prev > 0 ? (curr - prev) / prev * 100 : null
+                        const vs   = varStr(vp)
+                        return <td key={`v${y}`} className="r" style={{ color: vs.color, fontSize:'0.8rem' }}>{vs.text}</td>
+                      })}
                     </tr>
                   )
                 })}
               </tbody>
+              <tfoot>
+                <tr className="vt-tbl-footer">
+                  <td>TOTAL</td>
+                  {years.map(y => <td key={y} className="r">{fi(yearData[y].ventaNeta)}</td>)}
+                  {years.map((y, i) => {
+                    if (i === 0) return null
+                    const curr = yearData[years[i-1]].ventaNeta
+                    const prev = yearData[y].ventaNeta
+                    const vp   = prev > 0 ? (curr - prev) / prev * 100 : null
+                    const vs   = varStr(vp, true)
+                    return <td key={`v${y}`} className="r" style={{ color: vs.color, fontWeight: 700 }}>{vs.text}</td>
+                  })}
+                </tr>
+              </tfoot>
             </table>
+          </div>
+
+          {/* Quarterly grid */}
+          <div className="vt-sl">Por trimestre (Q1–Q4)</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'0.75rem', marginBottom:'1.5rem' }}>
+            {QUARTERS.map((qMonths, qi) => (
+              <div key={qi} style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.875rem' }}>
+                <div style={{ fontSize:'0.65rem', letterSpacing:'0.15em', textTransform:'uppercase', color:'#555', marginBottom:'0.625rem', fontWeight:700 }}>
+                  Q{qi+1} · {mNames[qMonths[0]-1]}–{mNames[qMonths[2]-1]}
+                </div>
+                {years.map((y, i) => {
+                  const tot = qMonths.reduce((s, m) => s + (monthData[y]?.[m]?.ventaNeta ?? 0), 0)
+                  const prev = i < years.length-1 ? qMonths.reduce((s, m) => s + (monthData[years[i+1]]?.[m]?.ventaNeta ?? 0), 0) : 0
+                  const vp  = prev > 0 ? (tot - prev) / prev * 100 : null
+                  const vs  = varStr(vp)
+                  return (
+                    <div key={y} style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'0.4rem', paddingBottom:'0.4rem', borderBottom:'1px solid #111' }}>
+                      <span style={{ fontSize:'0.78rem', color:'#666' }}>{y}</span>
+                      <div style={{ textAlign:'right' }}>
+                        <div style={{ fontSize:'0.85rem', fontWeight:700, color:'var(--vt-gold)' }}>{fi(tot)}</div>
+                        {vp !== null && <div style={{ fontSize:'0.68rem', color:vs.color }}>{vs.text}</div>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
           </div>
         </>
       )}
@@ -146,31 +200,30 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
 
           {/* Annual KPIs */}
           {(() => {
-            const d = yearData[selYear]
+            const d    = yearData[selYear]
             const prev = yearData[selYear - 1]
+            const promPAX = d.pax > 0 ? d.ventaNeta / d.pax : 0
+            function vpKPI(curr: number, p: number | undefined) {
+              if (!p) return null
+              const vp = (curr - p) / p * 100
+              return { vp, color: vp >= 0 ? 'var(--vt-green)' : 'var(--vt-red)', text: `${vp >= 0 ? '▲' : '▼'} ${Math.abs(vp).toFixed(1)}%` }
+            }
             return (
               <div className="vt-kpi-grid">
-                <div className="vt-kpi red">
-                  <div className="vt-kpi-label">Venta Neta {selYear}</div>
-                  <div className="vt-kpi-val">{fi(d.ventaNeta)}</div>
-                  {prev?.ventaNeta > 0 && (
-                    <div className="vt-kpi-delta" style={{ color: d.ventaNeta >= prev.ventaNeta ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                      {d.ventaNeta >= prev.ventaNeta ? '▲' : '▼'} {Math.abs((d.ventaNeta - prev.ventaNeta) / prev.ventaNeta * 100).toFixed(1)}%
-                    </div>
-                  )}
-                </div>
-                <div className="vt-kpi">
-                  <div className="vt-kpi-label">Venta Bruta</div>
-                  <div className="vt-kpi-val">{fi(d.ventaBruta)}</div>
-                </div>
-                <div className="vt-kpi">
-                  <div className="vt-kpi-label">PAX</div>
-                  <div className="vt-kpi-val">{d.pax.toLocaleString('es-CR')}</div>
-                </div>
-                <div className="vt-kpi green">
-                  <div className="vt-kpi-label">Días</div>
-                  <div className="vt-kpi-val">{d.days}</div>
-                </div>
+                {[
+                  { label:`Venta Neta ${selYear}`, val:d.ventaNeta, pp:vpKPI(d.ventaNeta, prev?.ventaNeta), color:'var(--vt-gold)' },
+                  { label:'Venta Bruta', val:d.ventaBruta, pp:vpKPI(d.ventaBruta, prev?.ventaBruta) },
+                  { label:'PAX', val:d.pax, pp:vpKPI(d.pax, prev?.pax), fmt:(v:number)=>v.toLocaleString('es-CR') },
+                  { label:'Prom/PAX', val:promPAX, pp:null },
+                  { label:'Salón', val:d.salon, pp:vpKPI(d.salon, prev?.salon) },
+                  { label:'Delivery', val:d.delivery, pp:vpKPI(d.delivery, prev?.delivery) },
+                ].map(k => (
+                  <div key={k.label} className="vt-kpi">
+                    <div className="vt-kpi-label">{k.label}</div>
+                    <div className="vt-kpi-val" style={{ color:k.color }}>{k.fmt ? k.fmt(k.val) : fi(k.val)}</div>
+                    {k.pp && <div className="vt-kpi-delta" style={{ color:k.pp.color }}>{k.pp.text} vs {selYear-1}</div>}
+                  </div>
+                ))}
               </div>
             )
           })()}
@@ -183,44 +236,133 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                 <tr>
                   <th>Mes</th>
                   <th className="r">Venta Neta</th>
-                  <th className="r">vs Ant. Año</th>
+                  <th className="r">vs Mes Ant</th>
+                  <th className="r">vs {selYear-1}</th>
                   <th className="r">Bruta</th>
                   <th className="r">IVA</th>
                   <th className="r">Servicio</th>
                   <th className="r">PAX</th>
+                  <th className="r">Prom/PAX</th>
                   <th className="r">Margen%</th>
                   <th className="r">Margen ₡</th>
                 </tr>
               </thead>
               <tbody>
-                {MONTHS.map(m => {
-                  const d = monthData[selYear]?.[m]
-                  if (!d) return null
-                  const prev = monthData[selYear - 1]?.[m]
-                  const varAnt = prev?.ventaNeta ? ((d.ventaNeta - prev.ventaNeta) / prev.ventaNeta * 100) : null
-                  const ym = `${selYear}-${String(m).padStart(2,'0')}`
-                  const margenPct = metas.margen?.[ym] ?? 0
-                  const margenCRC = margenPct > 0 ? d.ventaBruta * margenPct / 100 : 0
-                  return (
-                    <tr key={m}>
-                      <td style={{ fontWeight: 600 }}>{mNames[m-1]}</td>
-                      <td className="r vt-bold">{fi(d.ventaNeta)}</td>
-                      <td className="r" style={{ color: varAnt !== null ? (varAnt >= 0 ? 'var(--vt-green)' : 'var(--vt-red)') : 'var(--vt-muted)' }}>
-                        {varAnt !== null ? (varAnt >= 0 ? '+' : '') + varAnt.toFixed(1) + '%' : '—'}
-                      </td>
-                      <td className="r">{fi(d.ventaBruta)}</td>
-                      <td className="r vt-muted" style={{ fontSize: '0.8rem' }}>{fi(d.iva)}</td>
-                      <td className="r vt-muted" style={{ fontSize: '0.8rem' }}>{fi(d.serv)}</td>
-                      <td className="r">{d.pax}</td>
-                      <td className="r" style={{ color: margenPct > 0 ? 'var(--vt-gold-dark)' : 'var(--vt-muted)' }}>
-                        {margenPct > 0 ? margenPct.toFixed(1) + '%' : '—'}
-                      </td>
-                      <td className="r" style={{ color: margenCRC > 0 ? 'var(--vt-gold-dark)' : 'var(--vt-muted)' }}>
-                        {margenCRC > 0 ? fi(margenCRC) : '—'}
-                      </td>
-                    </tr>
-                  )
-                })}
+                {(() => {
+                  let prevM: typeof monthData[number][number] | null = null
+                  return MONTHS.map(m => {
+                    const d = monthData[selYear]?.[m]
+                    if (!d) { prevM = null; return null }
+                    const prevY   = monthData[selYear - 1]?.[m]
+                    const vaMA    = prevM?.ventaNeta  ? ((d.ventaNeta - prevM.ventaNeta) / prevM.ventaNeta * 100) : null
+                    const vaYA    = prevY?.ventaNeta  ? ((d.ventaNeta - prevY.ventaNeta) / prevY.ventaNeta * 100) : null
+                    const ym      = `${selYear}-${String(m).padStart(2,'0')}`
+                    const mPct    = metas.margen?.[ym] ?? 0
+                    const mCRC    = mPct > 0 ? d.ventaBruta * mPct / 100 : 0
+                    const pp      = d.pax > 0 ? d.ventaNeta / d.pax : 0
+                    const vMA     = varStr(vaMA)
+                    const vYA     = varStr(vaYA)
+                    prevM = d
+                    return (
+                      <tr key={m}>
+                        <td style={{ fontWeight:600 }}>{MN_FULL[m]}</td>
+                        <td className="r vt-bold">{fi(d.ventaNeta)}</td>
+                        <td className="r" style={{ color:vMA.color, fontSize:'0.8rem' }}>{vMA.text}</td>
+                        <td className="r" style={{ color:vYA.color, fontSize:'0.8rem' }}>{vYA.text}</td>
+                        <td className="r" style={{ color:'#888', fontSize:'0.8rem' }}>{fi(d.ventaBruta)}</td>
+                        <td className="r vt-muted" style={{ fontSize:'0.78rem' }}>{fi(d.iva)}</td>
+                        <td className="r vt-muted" style={{ fontSize:'0.78rem' }}>{fi(d.serv)}</td>
+                        <td className="r">{d.pax.toLocaleString('es-CR')}</td>
+                        <td className="r">{fi(pp)}</td>
+                        <td className="r" style={{ color:mPct>0?'var(--vt-gold-dark)':'var(--vt-muted)' }}>
+                          {mPct>0 ? mPct.toFixed(1)+'%' : '—'}
+                        </td>
+                        <td className="r" style={{ color:mCRC>0?'var(--vt-gold-dark)':'var(--vt-muted)' }}>
+                          {mCRC>0 ? fi(mCRC) : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })
+                })()}
+              </tbody>
+              <tfoot>
+                <tr className="vt-tbl-footer">
+                  <td>TOTAL {selYear}</td>
+                  <td className="r">{fi(yearData[selYear].ventaNeta)}</td>
+                  <td/><td/>
+                  <td className="r" style={{ color:'#888' }}>{fi(yearData[selYear].ventaBruta)}</td>
+                  <td className="r vt-muted" style={{ fontSize:'0.78rem' }}>{fi(MONTHS.reduce((s,m)=>s+(monthData[selYear]?.[m]?.iva??0),0))}</td>
+                  <td className="r vt-muted" style={{ fontSize:'0.78rem' }}>{fi(MONTHS.reduce((s,m)=>s+(monthData[selYear]?.[m]?.serv??0),0))}</td>
+                  <td className="r">{yearData[selYear].pax.toLocaleString('es-CR')}</td>
+                  <td className="r">{fi(yearData[selYear].pax>0?yearData[selYear].ventaNeta/yearData[selYear].pax:0)}</td>
+                  <td/><td/>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Quincenal table */}
+          <div className="vt-sl">Quincenal {selYear}</div>
+          <div className="vt-tbl-wrap">
+            <table className="vt-tbl">
+              <thead>
+                <tr>
+                  <th>Período</th>
+                  <th className="r">Venta Neta</th>
+                  <th className="r">vs Quinc. Ant</th>
+                  <th className="r">vs {selYear-1}</th>
+                  <th className="r">PAX</th>
+                  <th className="r">Prom/PAX</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const allD   = [...new Set([...Object.keys(dias), ...Object.keys(hist)])].sort()
+                  const rows: React.ReactElement[] = []
+                  let prevQ: { ventaNeta: number; pax: number } | null = null
+                  for (let m = 1; m <= 12; m++) {
+                    const mm = String(m).padStart(2,'0')
+                    for (let half = 1; half <= 2; half++) {
+                      const days  = allD.filter(d => {
+                        if (!d.startsWith(`${selYear}-${mm}`)) return false
+                        const day = Number(d.slice(8)); return half === 1 ? day <= 15 : day > 15
+                      })
+                      if (!days.length) continue
+                      const items = getContabilidadDays(selYear, m, dias, hist).filter(d => {
+                        const day = Number(d.fecha.slice(8)); return half === 1 ? day <= 15 : day > 15
+                      })
+                      if (!items.length) continue
+                      const vn  = items.reduce((s, d) => s + d.ventaNeta, 0)
+                      const pax = items.reduce((s, d) => s + d.pax, 0)
+                      if (!vn) continue
+
+                      // vs same half prev year
+                      const prevYDays = getContabilidadDays(selYear - 1, m, dias, hist).filter(d => {
+                        const day = Number(d.fecha.slice(8)); return half === 1 ? day <= 15 : day > 15
+                      })
+                      const prevYVN = prevYDays.reduce((s, d) => s + d.ventaNeta, 0)
+
+                      const vQA = prevQ?.ventaNeta ? (vn - prevQ.ventaNeta) / prevQ.ventaNeta * 100 : null
+                      const vYA = prevYVN > 0 ? (vn - prevYVN) / prevYVN * 100 : null
+                      const vsQ = varStr(vQA); const vsY = varStr(vYA)
+                      prevQ = { ventaNeta: vn, pax }
+
+                      rows.push(
+                        <tr key={`${m}-${half}`}>
+                          <td style={{ fontWeight:600, fontSize:'0.82rem' }}>
+                            {mNames[m-1]} {half===1?'1–15':'16–fin'}
+                          </td>
+                          <td className="r vt-bold">{fi(vn)}</td>
+                          <td className="r" style={{ color:vsQ.color, fontSize:'0.8rem' }}>{vsQ.text}</td>
+                          <td className="r" style={{ color:vsY.color, fontSize:'0.8rem' }}>{vsY.text}</td>
+                          <td className="r">{pax.toLocaleString('es-CR')}</td>
+                          <td className="r">{fi(pax>0?vn/pax:0)}</td>
+                        </tr>
+                      )
+                    }
+                  }
+                  return rows
+                })()}
               </tbody>
             </table>
           </div>

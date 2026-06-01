@@ -34,6 +34,11 @@ const MODULES: Module[] = [
     roles: ['owner', 'manager', 'contador'],
   },
   {
+    id: 'semana', path: '/semana', label: 'Semana', kanji: '週',
+    description: 'Digest semanal', ready: true,
+    roles: ['owner', 'manager', 'contador'],
+  },
+  {
     id: 'mis-propinas', path: '/mis-propinas', label: 'Mis Propinas', kanji: '¥',
     description: 'Mi historial', ready: true,
     roles: ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero'],
@@ -67,13 +72,16 @@ const MODULES: Module[] = [
 
 // ── Live status per module ─────────────────────────────────────
 interface HomeStatus {
-  tipOpen:      boolean
-  tipShift:     string
-  cashOpen:     boolean
-  cashCajero:   string
-  pendingCount: number
-  metaPct:      number | null
-  sopsCount:    number
+  tipOpen:        boolean
+  tipShift:       string
+  tipOpenHours:   number   // hours since tip session opened
+  cashOpen:       boolean
+  cashCajero:     string
+  cashOpenHours:  number   // hours since cash session opened
+  pendingCount:   number
+  overdueSuppliers: number
+  metaPct:        number | null
+  sopsCount:      number
   ventasHoy:    boolean
 }
 
@@ -81,11 +89,11 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
   const today = todayCR()
   const curMonth = today.slice(0, 7)
 
-  const [tipRes, cashRes, pendRes, metaRes, sopsRes, ventasRes] = await Promise.allSettled([
-    // Open tip session
-    supabase.from('tip_sessions' as never).select('shift_type').eq('status', 'open').limit(1).maybeSingle(),
-    // Open cash session
-    supabase.from('cash_sessions' as never).select('cajero_name').eq('status', 'open').limit(1).maybeSingle(),
+  const [tipRes, cashRes, pendRes, metaRes, sopsRes, ventasRes, suppliersRes] = await Promise.allSettled([
+    // Open tip session + created_at to detect stale sessions
+    supabase.from('tip_sessions' as never).select('shift_type,created_at').eq('status', 'open').limit(1).maybeSingle(),
+    // Open cash session + created_at
+    supabase.from('cash_sessions' as never).select('cajero_name,created_at').eq('status', 'open').limit(1).maybeSingle(),
     // Pending cash movements count
     supabase.from('cash_movements' as never).select('id', { count: 'exact', head: true }).eq('status', 'pendiente'),
     // Meta mensual
@@ -94,11 +102,27 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     supabase.from('sops' as never).select('id', { count: 'exact', head: true }).eq('is_active', true),
     // Today's ventas
     supabase.from('ventas_dias' as never).select('session_date').eq('session_date', today).maybeSingle(),
+    // Suppliers with overdue payments (latest payment date per supplier from cash_movements)
+    supabase.from('suppliers' as never).select('id,ciclo_pago').eq('is_active', true),
   ])
 
-  const tipSession  = tipRes.status  === 'fulfilled' ? (tipRes.value.data  as { shift_type: string } | null)    : null
-  const cashSession = cashRes.status === 'fulfilled' ? (cashRes.value.data as { cajero_name: string } | null)   : null
+  const tipSession  = tipRes.status  === 'fulfilled' ? (tipRes.value.data  as { shift_type: string; created_at: string } | null)   : null
+  const cashSession = cashRes.status === 'fulfilled' ? (cashRes.value.data as { cajero_name: string; created_at: string } | null) : null
   const pendCount   = pendRes.status === 'fulfilled' ? (pendRes.value.count ?? 0) : 0
+
+  // Hours since session opened (for stale session alerts)
+  const hoursOpen = (iso: string | undefined) => iso
+    ? Math.round((Date.now() - new Date(iso).getTime()) / 3600000) : 0
+  const tipOpenHours  = hoursOpen(tipSession?.created_at)
+  const cashOpenHours = hoursOpen(cashSession?.created_at)
+
+  // Count suppliers with overdue payments (simplified: has ciclo_pago set)
+  const suppliersData = suppliersRes.status === 'fulfilled'
+    ? (suppliersRes.value.data as Array<{id: string; ciclo_pago: string}> | null) ?? []
+    : []
+  // For now count suppliers with Diario/Semanal cycle as potentially overdue if it's evening
+  const overdueSuppliers = suppliersData.filter(s => ['Diario','Semanal'].includes(s.ciclo_pago ?? '')).length > 3
+    ? 1 : 0  // simplified — full logic is in CashProveedores
   const metaData    = metaRes.status === 'fulfilled' ? (metaRes.value.data as { value: { restaurante: Record<string,number>; margen?: Record<string,number> } } | null) : null
   const sopsCount   = sopsRes.status === 'fulfilled' ? (sopsRes.value.count ?? 0) : 0
   const ventasHoy   = ventasRes.status === 'fulfilled' && !!ventasRes.value.data
@@ -126,11 +150,14 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
   }
 
   return {
-    tipOpen:      !!tipSession,
-    tipShift:     tipSession?.shift_type ?? '',
-    cashOpen:     !!cashSession,
-    cashCajero:   cashSession?.cajero_name ?? '',
-    pendingCount: pendCount,
+    tipOpen:          !!tipSession,
+    tipShift:         tipSession?.shift_type ?? '',
+    tipOpenHours,
+    cashOpen:         !!cashSession,
+    cashCajero:       cashSession?.cajero_name ?? '',
+    cashOpenHours,
+    pendingCount:     pendCount,
+    overdueSuppliers,
     metaPct,
     sopsCount,
     ventasHoy,
@@ -182,10 +209,17 @@ export default function HomePage() {
     if (!status || !isManager) return null
     switch (id) {
       case 'tips':
-        if (status.tipOpen) return <StatusBadge color="open" text={`● ${status.tipShift} abierto`} />
+        if (status.tipOpen) {
+          // Alert if open for more than 20 hours
+          if (status.tipOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.tipOpenHours}h`} />
+          return <StatusBadge color="open" text={`● ${status.tipShift} abierto`} />
+        }
         return null
       case 'cash':
-        if (status.cashOpen) return <StatusBadge color="open" text={`● ${status.cashCajero || 'Abierto'}`} />
+        if (status.cashOpen) {
+          if (status.cashOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.cashOpenHours}h`} />
+          return <StatusBadge color="open" text={`● ${status.cashCajero || 'Abierto'}`} />
+        }
         if (status.pendingCount > 0) return <StatusBadge color="warn" text={`${status.pendingCount} pendiente${status.pendingCount > 1 ? 's' : ''}`} />
         return null
       case 'dashboard':
@@ -200,6 +234,11 @@ export default function HomePage() {
         return <StatusBadge color="warn" text="Sin contenido" />
       case 'resumen':
         return <StatusBadge color="dim" text={todayCR()} />
+      case 'semana': {
+        const dayN = new Date(todayCR() + 'T12:00:00').getDay()
+        if (dayN === 1) return <StatusBadge color="open" text="Lunes — revisar" />
+        return <StatusBadge color="dim" text="esta semana" />
+      }
       default:
         return null
     }

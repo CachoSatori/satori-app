@@ -104,6 +104,11 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                         </div>
                       ))}
                     </div>
+                    {s.notes && (
+                      <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.04)', borderRadius: 2, fontSize: '0.78rem', color: '#5a5040', borderLeft: '2px solid var(--t-gold)' }}>
+                        📝 {s.notes}
+                      </div>
+                    )}
                   </>
                 )}
               </div>

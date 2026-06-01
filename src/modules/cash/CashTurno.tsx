@@ -65,6 +65,7 @@ export default function CashTurno({
   const [apCRC,      setApCRC]      = useState<number | ''>(0)   // fondo servicio (registradora)
   const [apProvCRC,  setApProvCRC]  = useState<number | ''>(0)   // fondo proveedores (caja separada)
   const [apUSD,      setApUSD]      = useState<number | ''>(0)
+  const [tc,         setTc]         = useState<number>(640)       // tipo de cambio USD→CRC
   const [saving,       setSaving]       = useState(false)
   const persistTimers  = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
@@ -151,7 +152,7 @@ export default function CashTurno({
         amount_crc:    Number(pago.amount_crc) || 0,
         amount_usd:    Number(pago.amount_usd) || 0,
         currency:      'CRC',
-        exchange_rate: null,
+        exchange_rate: tc,
         description:   pago.reference || pago.supplier_name || 'Proveedor',
         subcategory:   'Proveedor mercadería',
         supplier_id:   pago.supplier_id || null,
@@ -238,7 +239,7 @@ export default function CashTurno({
           amount_crc:    Number(p.amount_crc) || 0,
           amount_usd:    Number(p.amount_usd) || 0,
           currency:      'CRC',
-          exchange_rate: null,
+          exchange_rate: tc,
           description:   p.supplier_name || 'Proveedor',
           subcategory:   'Proveedor mercadería',
           supplier_id:   p.supplier_id || null,
@@ -257,7 +258,7 @@ export default function CashTurno({
           amount_crc:    Number(i.crc) || 0,
           amount_usd:    Number(i.usd) || 0,
           currency:      'CRC',
-          exchange_rate: null,
+          exchange_rate: tc,
           description:   i.nota || 'Ingreso adicional',
           method:        'Efectivo',
           caja_origen:   'Registradora',
@@ -357,6 +358,22 @@ export default function CashTurno({
                     <span className="cd-prefix">$</span>
                     <input type="number" className="cd-monto-input" value={apUSD} min={0} step={1}
                       placeholder="0" onChange={e => setApUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                  </div>
+                  {Number(apUSD) > 0 && (
+                    <div style={{ fontSize:'0.68rem', color:'#888', marginTop:2 }}>
+                      ≈ ₡{(Number(apUSD) * tc).toLocaleString('es-CR')} al TC {tc}
+                    </div>
+                  )}
+                </div>
+                <div className="tips-field">
+                  <div className="tips-field-label" style={{ display:'flex', alignItems:'center', gap:'0.4rem' }}>
+                    Tipo de cambio (₡/$)
+                    <span style={{ fontSize:'0.6rem', color:'#888' }}>para conversiones</span>
+                  </div>
+                  <div className="cd-monto-wrap">
+                    <span className="cd-prefix">₡</span>
+                    <input type="number" className="cd-monto-input" value={tc} min={400} max={900} step={5}
+                      onChange={e => setTc(Number(e.target.value) || 640)} />
                   </div>
                 </div>
               </div>

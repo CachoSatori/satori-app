@@ -257,6 +257,95 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
           )}
         </tbody>
       </table>
+
+      {/* ── Importar en masa ── */}
+      <BulkImport employees={employees} onRefresh={onRefresh} />
+    </div>
+  )
+}
+
+function BulkImport({ employees, onRefresh }: { employees: Employee[]; onRefresh: () => Promise<void> }) {
+  const [open,    setOpen]    = useState(false)
+  const [text,    setText]    = useState('')
+  const [role,    setRole]    = useState<UserRole>('salonero')
+  const [saving,  setSaving]  = useState(false)
+  const [msg,     setMsg]     = useState<string | null>(null)
+
+  const existingNames = new Set(employees.map(e => e.full_name.toUpperCase()))
+
+  const preview = text
+    .split('\n')
+    .map(l => l.trim().toUpperCase())
+    .filter(l => l.length > 1)
+
+  const newOnes  = preview.filter(n => !existingNames.has(n))
+  const dupOnes  = preview.filter(n =>  existingNames.has(n))
+
+  const handleImport = async () => {
+    if (!newOnes.length) return
+    setSaving(true)
+    setMsg(null)
+    try {
+      for (const name of newOnes) {
+        await createEmployee({ full_name: name, role })
+      }
+      await onRefresh()
+      setMsg(`✓ ${newOnes.length} empleado${newOnes.length > 1 ? 's' : ''} importado${newOnes.length > 1 ? 's' : ''}`)
+      setText('')
+      setTimeout(() => { setMsg(null); setOpen(false) }, 3000)
+    } catch (e) {
+      setMsg(`✗ ${e instanceof Error ? e.message : 'Error'}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ marginTop:'1.5rem', borderTop:'1px solid #eee', paddingTop:'1rem' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ fontSize:'0.78rem', padding:'6px 14px', border:'1px solid #ddd', borderRadius:2, background:'transparent', cursor:'pointer', color:'#888' }}>
+        {open ? '▲ Cerrar' : '📋 Importar empleados en masa'}
+      </button>
+
+      {open && (
+        <div style={{ marginTop:'0.75rem', background:'#f9f7f2', border:'1px solid #ddd', borderRadius:2, padding:'1rem' }}>
+          <div style={{ fontSize:'0.72rem', color:'#888', marginBottom:'0.5rem' }}>
+            Pegá los nombres, uno por línea. Se agregarán los que no existan (los duplicados se ignoran).
+          </div>
+          <div style={{ display:'flex', gap:'0.75rem', alignItems:'flex-start', flexWrap:'wrap' }}>
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder={'FRANCISCO\nMARIA\nJUAN\n...'}
+              rows={6}
+              style={{ flex:1, minWidth:180, padding:'8px 10px', border:'1px solid #ccc', borderRadius:2, fontFamily:'monospace', fontSize:'0.82rem', resize:'vertical', background:'#fff' }}
+            />
+            <div style={{ minWidth:160 }}>
+              <div style={{ fontSize:'0.68rem', color:'#888', marginBottom:4, textTransform:'uppercase', letterSpacing:'0.1em' }}>Rol para todos</div>
+              <select value={role} onChange={e => setRole(e.target.value as UserRole)}
+                style={{ width:'100%', padding:'6px 8px', border:'1px solid #ccc', borderRadius:2, fontSize:'0.82rem', marginBottom:'0.75rem' }}>
+                {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
+              </select>
+
+              {preview.length > 0 && (
+                <div style={{ fontSize:'0.72rem', marginBottom:'0.75rem' }}>
+                  {newOnes.length > 0 && <div style={{ color:'#2a7a4a' }}>+ {newOnes.length} nuevo{newOnes.length > 1 ? 's' : ''}</div>}
+                  {dupOnes.length > 0 && <div style={{ color:'#888' }}>⊘ {dupOnes.length} ya exist{dupOnes.length > 1 ? 'en' : 'e'}</div>}
+                </div>
+              )}
+
+              <button
+                onClick={handleImport}
+                disabled={saving || newOnes.length === 0}
+                style={{ width:'100%', padding:'7px', borderRadius:2, background: newOnes.length > 0 ? '#2a7a4a' : '#ccc', color:'#fff', fontWeight:700, fontSize:'0.82rem', border:'none', cursor: newOnes.length > 0 ? 'pointer' : 'not-allowed' }}>
+                {saving ? 'Importando…' : `Importar ${newOnes.length}`}
+              </button>
+              {msg && <div style={{ marginTop:'0.5rem', fontSize:'0.75rem', color: msg.startsWith('✓') ? '#2a7a4a' : '#c23b22' }}>{msg}</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

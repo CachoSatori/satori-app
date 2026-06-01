@@ -70,6 +70,7 @@ export default function TipsModule() {
   const [error, setError] = useState<string | null>(null)
   const [showNewSession, setShowNewSession] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [verifTotal, setVerifTotal] = useState<number | ''>('')  // Pool verification
 
   // Refs para evitar re-saves infinitos
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -469,6 +470,24 @@ export default function TipsModule() {
           {/* Sesión abierta */}
           {openSession && (
             <>
+              {/* ── Banner turno activo ── */}
+              <div style={{ background:'rgba(74,154,106,.12)', borderBottom:'2px solid #2a4a2a', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
+                  <span style={{ fontSize:'0.72rem', color:'#4a9a6a', fontWeight:700, letterSpacing:'0.1em', textTransform:'uppercase' }}>
+                    ● TURNO ACTIVO
+                  </span>
+                  <span style={{ fontSize:'0.88rem', color:'var(--t-gold)', fontWeight:700 }}>
+                    {openSession.session_date}
+                  </span>
+                  <span style={{ fontSize:'0.78rem', color:'#888', background:'#1a2a1a', padding:'2px 8px', borderRadius:10, border:'1px solid #2a3a2a' }}>
+                    {shiftLabel(openSession.shift_type)}
+                  </span>
+                </div>
+                <div style={{ fontSize:'0.72rem', color:'#555' }}>
+                  TC: ₡{openSession.exchange_rate?.toLocaleString('es-CR') ?? '—'} · {lines.filter(l=>l.active).length} empleados activos
+                </div>
+              </div>
+
               {/* Config bar */}
               <div className="tips-config-bar">
                 <div className="tips-config-meta">
@@ -570,6 +589,39 @@ export default function TipsModule() {
                     <div className="tips-pool-val gold">
                       {formatCRC(lines.filter(l => l.active).reduce((s, l) => s + l.take_home, 0))}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Verificación del pool antes de cerrar */}
+              {isManager && lines.some(l => l.active) && totals && (
+                <div style={{ margin:'1rem 0', padding:'0.875rem', background:'#0d0f0d', border:'1px solid #1a2a1a', borderRadius:2 }}>
+                  <div style={{ fontSize:'0.68rem', color:'#555', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:'0.5rem' }}>
+                    ✓ Verificar monto total del pool antes de cerrar
+                  </div>
+                  <div style={{ display:'flex', gap:'0.75rem', alignItems:'center', flexWrap:'wrap' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+                      <span style={{ fontSize:'0.78rem', color:'#888' }}>Monto contado:</span>
+                      <input
+                        type="number" min={0} step={100}
+                        value={verifTotal}
+                        onChange={e => setVerifTotal(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="₡ Ingresar total..."
+                        style={{ width:140, background:'#111', border:'1px solid #2a2a2a', color:'var(--t-gold)', padding:'5px 10px', borderRadius:2, fontSize:'0.85rem', fontFamily:'DM Mono, monospace' }}
+                      />
+                    </div>
+                    {verifTotal !== '' && (() => {
+                      const diff = Math.abs(Number(verifTotal) - totals.totalPool)
+                      const ok   = diff <= 100
+                      return (
+                        <div style={{ display:'flex', alignItems:'center', gap:'0.4rem', padding:'4px 12px', borderRadius:2, background: ok ? 'rgba(74,154,106,.15)' : 'rgba(194,59,34,.15)', border:`1px solid ${ok ? '#4a9a6a' : '#c23b22'}` }}>
+                          <span style={{ fontSize:'1rem' }}>{ok ? '✅' : '⚠️'}</span>
+                          <span style={{ fontSize:'0.78rem', color: ok ? '#4a9a6a' : '#c23b22', fontWeight:700 }}>
+                            {ok ? 'Pool verificado — cuadra' : `Diferencia: ₡ ${diff.toLocaleString('es-CR')}`}
+                          </span>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
               )}

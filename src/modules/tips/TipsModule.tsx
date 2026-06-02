@@ -13,6 +13,7 @@ import {
   upsertTipEntry,
   deleteTipEntry,
   updateSessionPools,
+  updateTipSessionNotes,
   savePayouts,
 } from '../../shared/api/tips'
 import {
@@ -72,6 +73,8 @@ export default function TipsModule() {
   const [showNewSession, setShowNewSession] = useState(false)
   const [closing, setClosing] = useState(false)
   const [verifTotal, setVerifTotal] = useState<number | ''>('')  // Pool verification
+  const [verifTipo,  setVerifTipo]  = useState('')               // tipo de diferencia (>₡500)
+  const [verifMotivo,setVerifMotivo]= useState('')               // motivo de la diferencia
   const [reopening, setReopening] = useState(false)              // Editing closed session
   // Coberturas: employeeId → role they're covering (overrides their natural role for this shift)
   const [coberturas, setCoberturas] = useState<Record<string, string>>({})
@@ -335,6 +338,16 @@ export default function TipsModule() {
     const workedLines = lines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
     const poolCRC = Math.round((Number(efectivoCRC)||0) + (Number(efectivoUSD)||0)*exchangeRate + (Number(barraCRC)||0))
+
+    // ── Verificación del pool: si se contó un monto y la diferencia con el pool
+    // declarado supera ₡500, exigir tipo + motivo antes de permitir cerrar ──
+    const diff = verifTotal !== '' ? Math.abs(Number(verifTotal) - poolCRC) : 0
+    if (verifTotal !== '' && diff > 500) {
+      if (!verifTipo || !verifMotivo.trim()) {
+        setError(`Diferencia de ₡${diff.toLocaleString('es-CR')} en el pool — indicá tipo y motivo antes de cerrar`)
+        return
+      }
+    }
     const ok = window.confirm(
       `¿Cerrar turno y guardar payouts?\n\n` +
       `Empleados: ${workedLines.length}\n` +
@@ -364,6 +377,13 @@ export default function TipsModule() {
       }).filter((p): p is NonNullable<typeof p> => p !== null)
 
       await savePayouts(payouts)
+
+      // Persistir motivo de diferencia de pool (si la hubo) en las notas
+      if (verifTotal !== '' && diff > 500 && verifTipo) {
+        const note = `Diferencia pool: ${verifTipo} de ₡${diff.toLocaleString('es-CR')} (contado ₡${Number(verifTotal).toLocaleString('es-CR')} vs pool ₡${poolCRC.toLocaleString('es-CR')}). Motivo: ${verifMotivo.trim()}`
+        await updateTipSessionNotes(openSession.id, note).catch(() => {})
+      }
+
       await closeTipSession(openSession.id, profile.id)
 
       // ── Integración Caja↔Propinas ──────────────────────────
@@ -399,6 +419,9 @@ export default function TipsModule() {
       setEfectivoCRC('')
       setEfectivoUSD('')
       setBarraCRC('')
+      setVerifTotal('')
+      setVerifTipo('')
+      setVerifMotivo('')
       // Resetear líneas
       setLines(prev => prev.map(l => ({
         ...l, active: false, hours: '', propina_crc: '', propina_usd: '', pts_val: 0, take_home: 0,
@@ -725,7 +748,7 @@ export default function TipsModule() {
                     </div>
                     {verifTotal !== '' && (() => {
                       const diff = Math.abs(Number(verifTotal) - totals.totalPool)
-                      const ok   = diff <= 100
+                      const ok   = diff <= 500
                       return (
                         <div style={{ display:'flex', alignItems:'center', gap:'0.4rem', padding:'4px 12px', borderRadius:2, background: ok ? 'rgba(74,154,106,.15)' : 'rgba(194,59,34,.15)', border:`1px solid ${ok ? '#4a9a6a' : '#c23b22'}` }}>
                           <span style={{ fontSize:'1rem' }}>{ok ? '✅' : '⚠️'}</span>
@@ -736,6 +759,29 @@ export default function TipsModule() {
                       )
                     })()}
                   </div>
+
+                  {/* Si la diferencia supera ₡500 → exigir tipo + motivo antes de cerrar */}
+                  {verifTotal !== '' && Math.abs(Number(verifTotal) - totals.totalPool) > 500 && (
+                    <div style={{ marginTop:'0.75rem', display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'flex-end' }}>
+                      <div>
+                        <div style={{ fontSize:'0.62rem', color:'#888', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.1em' }}>Tipo de diferencia *</div>
+                        <select value={verifTipo} onChange={e => setVerifTipo(e.target.value)}
+                          style={{ background:'#111', border:`1px solid ${verifTipo ? '#c23b22' : '#2a2a2a'}`, color: verifTipo ? 'var(--t-gold)' : '#888', padding:'5px 8px', borderRadius:2, fontSize:'0.78rem' }}>
+                          <option value="">— seleccionar —</option>
+                          <option value="Sobrante">Sobrante (contado &gt; pool)</option>
+                          <option value="Faltante">Faltante (contado &lt; pool)</option>
+                          <option value="Error de conteo">Error de conteo</option>
+                          <option value="Otro">Otro</option>
+                        </select>
+                      </div>
+                      <div style={{ flex:1, minWidth:180 }}>
+                        <div style={{ fontSize:'0.62rem', color:'#888', marginBottom:3, textTransform:'uppercase', letterSpacing:'0.1em' }}>Motivo *</div>
+                        <input type="text" value={verifMotivo} onChange={e => setVerifMotivo(e.target.value)}
+                          placeholder="Explicá la diferencia…"
+                          style={{ width:'100%', background:'#111', border:`1px solid ${verifMotivo.trim() ? '#c23b22' : '#2a2a2a'}`, color:'#e8e2d8', padding:'5px 10px', borderRadius:2, fontSize:'0.82rem' }} />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

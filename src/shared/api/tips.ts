@@ -70,6 +70,15 @@ export async function closeTipSession(sessionId: string, closedBy: string): Prom
   if (error) throw new Error(error.message)
 }
 
+// Guardar notas de la sesión (p.ej. motivo de diferencia de pool al cerrar)
+export async function updateTipSessionNotes(sessionId: string, notes: string): Promise<void> {
+  const { error } = await supabase
+    .from('tip_sessions')
+    .update({ notes } as never)
+    .eq('id', sessionId)
+  if (error) throw new Error(error.message)
+}
+
 // Reopen a closed session for editing
 export async function reopenTipSession(sessionId: string): Promise<void> {
   const { error } = await supabase

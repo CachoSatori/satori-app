@@ -101,7 +101,7 @@ export default function AdminModule() {
       {/* Email report button */}
       <div style={{ padding: '0.625rem 1.5rem', borderBottom: '1px solid var(--t-border)', background: 'var(--t-panel)', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
         <span style={{ fontSize: '0.68rem', color: '#5a5040', letterSpacing: '0.04em', marginRight: '0.25rem' }}>
-          📧 Reportes automáticos — día 1 cada mes:
+          📧 Reportes automáticos — día 1 (mes anterior) · día 15 (propinas quincenal):
         </span>
         {(['ventas','propinas','ambos'] as const).map(tipo => (
           <button

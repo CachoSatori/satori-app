@@ -8,9 +8,11 @@
  *  - Individual row editing inline
  *  - Filtros por tipo, search, y "solo con cambios pendientes"
  */
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { DiasMap, ProductMap } from '../../shared/types/ventas'
 import { saveProductMapItems } from '../../shared/api/ventas'
+
+const PAGE_SIZE = 50
 
 interface Props {
   dias:      DiasMap
@@ -59,8 +61,11 @@ function useCascadeOptions(pm: ProductMap) {
 export default function VentasConfig({ dias, pm, onRefresh }: Props) {
   // ── Filters ─────────────────────────────────────────────────
   const [typeFilter,   setTypeFilter]   = useState('desconocido')
+  const [clasFilter,   setClasFilter]   = useState('')
   const [search,       setSearch]       = useState('')
   const [showPending,  setShowPending]  = useState(false)
+  const [page,         setPage]         = useState(0)
+  const [importMsg,    setImportMsg]    = useState<string | null>(null)
 
   // ── Pending edits queue ──────────────────────────────────────
   const [pending,  setPending]  = useState<Record<string, PendingEdit>>({})
@@ -109,12 +114,88 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
     return allProds.filter(n => {
       const info = effective(n)
       const matchType   = typeFilter === 'todos' || info.tipo === typeFilter
+      const matchClas   = !clasFilter || info.clasificacion === clasFilter
       const matchSearch = !search || n.toLowerCase().includes(search.toLowerCase())
       const matchPend   = !showPending || hasPending(n)
-      return matchType && matchSearch && matchPend
+      return matchType && matchClas && matchSearch && matchPend
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allProds, typeFilter, search, showPending, pending, pm])
+  }, [allProds, typeFilter, clasFilter, search, showPending, pending, pm])
+
+  // Reset a la primera página cuando cambian los filtros
+  useEffect(() => { setPage(0) }, [typeFilter, clasFilter, search, showPending])
+
+  // Página actual (50 por página)
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage  = Math.min(page, pageCount - 1)
+  const paged     = useMemo(
+    () => filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
+    [filtered, safePage],
+  )
+
+  // Clasificaciones disponibles para el filtro (según tipo activo)
+  const clasOptions = useMemo(
+    () => (typeFilter === 'todos' ? [] : clasForTipo(typeFilter)),
+    [typeFilter, clasForTipo],
+  )
+
+  // ── Import de costos desde CSV ───────────────────────────────
+  // Columnas esperadas: producto_id, nombre, costo_unitario (con o sin encabezado)
+  function handleCostCsv(file: File) {
+    setImportMsg(null)
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const text  = String(reader.result)
+        const lines = text.split(/\r?\n/).filter(l => l.trim())
+        if (!lines.length) { setImportMsg('✗ Archivo vacío'); return }
+
+        const splitRow = (l: string) => l.split(',').map(c => c.trim().replace(/^"|"$/g, ''))
+        const header   = splitRow(lines[0]).map(h => h.toLowerCase())
+        let nombreIdx  = header.findIndex(h => h === 'nombre' || h === 'producto' || h === 'product')
+        let costoIdx   = header.findIndex(h => h.includes('costo') || h.includes('cost'))
+        let startRow   = 1
+        if (nombreIdx === -1 || costoIdx === -1) {
+          // sin encabezado reconocible → asumir orden producto_id, nombre, costo_unitario
+          nombreIdx = 1; costoIdx = 2; startRow = 0
+        }
+
+        // mapa uppercase → key real del product_map / lista de productos
+        const keyByUpper = new Map<string, string>()
+        for (const k of [...Object.keys(pm), ...allProds]) keyByUpper.set(k.toUpperCase().trim(), k)
+
+        const updates: Record<string, number> = {}
+        let matched = 0, unmatched = 0
+        for (let i = startRow; i < lines.length; i++) {
+          const cols = splitRow(lines[i])
+          const rawNombre = cols[nombreIdx]
+          const rawCosto  = cols[costoIdx]
+          if (!rawNombre) continue
+          const costo = Number(String(rawCosto).replace(/[^\d.-]/g, ''))
+          if (!isFinite(costo)) continue
+          const key = keyByUpper.get(rawNombre.toUpperCase().trim())
+          if (key) { updates[key] = costo; matched++ } else { unmatched++ }
+        }
+
+        if (!matched) { setImportMsg(`✗ Ningún producto coincidió (${unmatched} sin match)`); return }
+
+        setPending(prev => {
+          const next = { ...prev }
+          for (const [nombre, costo] of Object.entries(updates)) {
+            const curr = next[nombre] ?? effective(nombre)
+            next[nombre] = { ...curr, costo_unitario: costo }
+          }
+          return next
+        })
+        setShowPending(true)
+        setImportMsg(`✓ ${matched} costo${matched !== 1 ? 's' : ''} cargado${matched !== 1 ? 's' : ''} a la cola${unmatched ? ` · ${unmatched} sin match` : ''} — revisá y guardá`)
+        setTimeout(() => setImportMsg(null), 8000)
+      } catch (e) {
+        setImportMsg(`✗ ${e instanceof Error ? e.message : 'Error leyendo CSV'}`)
+      }
+    }
+    reader.readAsText(file)
+  }
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { todos: allProds.length }
@@ -345,6 +426,29 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
         ))}
       </div>
 
+      {/* ── Costos de productos: filtro por clasificación + import CSV ─ */}
+      <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.75rem', padding:'0.6rem 0.75rem', background:'rgba(126,200,160,0.05)', border:'1px solid rgba(126,200,160,0.2)', borderRadius:2 }}>
+        <span style={{ fontSize:'0.72rem', fontWeight:700, color:'#7ec8a0', letterSpacing:'0.06em', textTransform:'uppercase' }}>₡ Costos</span>
+        {clasOptions.length > 0 && (
+          <select value={clasFilter} onChange={e => setClasFilter(e.target.value)}
+            style={{ background:'var(--vt-ink)', color:'var(--vt-paper)', border:'1px solid #2a2a2a', padding:'4px 8px', fontSize:'0.78rem', borderRadius:2 }}>
+            <option value="">Toda clasificación</option>
+            {clasOptions.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        )}
+        <label style={{ fontSize:'0.78rem', color:'#7ec8a0', cursor:'pointer', padding:'4px 10px', border:'1px solid rgba(126,200,160,0.4)', borderRadius:2 }}>
+          📄 Importar costos CSV
+          <input type="file" accept=".csv,text/csv" style={{ display:'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleCostCsv(f); e.target.value = '' }} />
+        </label>
+        <span style={{ fontSize:'0.68rem', color:'#666' }}>columnas: producto_id, nombre, costo_unitario</span>
+        {importMsg && (
+          <span style={{ fontSize:'0.78rem', fontWeight:600, color: importMsg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)', marginLeft:'auto' }}>
+            {importMsg}
+          </span>
+        )}
+      </div>
+
       {/* ── Table ────────────────────────────────────────────── */}
       <div className="vt-tbl-wrap">
         <table className="vt-tbl">
@@ -366,7 +470,7 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(nombre => {
+            {paged.map(nombre => {
               const info = effective(nombre)
               const dirty = hasPending(nombre)
               const isSel = selected.has(nombre)
@@ -435,6 +539,23 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
           </tbody>
         </table>
       </div>
+
+      {/* ── Pagination ───────────────────────────────────────── */}
+      {filtered.length > PAGE_SIZE && (
+        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:'0.75rem', marginTop:'0.75rem' }}>
+          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={safePage === 0}
+            style={{ padding:'4px 12px', borderRadius:2, background:'transparent', border:'1px solid #2a2a2a', color: safePage === 0 ? '#444' : '#aaa', fontSize:'0.78rem', cursor: safePage === 0 ? 'default' : 'pointer' }}>
+            ← Anterior
+          </button>
+          <span style={{ fontSize:'0.75rem', color:'#888' }}>
+            Página {safePage + 1} de {pageCount} · {filtered.length} productos
+          </span>
+          <button onClick={() => setPage(p => Math.min(pageCount - 1, p + 1))} disabled={safePage >= pageCount - 1}
+            style={{ padding:'4px 12px', borderRadius:2, background:'transparent', border:'1px solid #2a2a2a', color: safePage >= pageCount - 1 ? '#444' : '#aaa', fontSize:'0.78rem', cursor: safePage >= pageCount - 1 ? 'default' : 'pointer' }}>
+            Siguiente →
+          </button>
+        </div>
+      )}
 
       {/* Bottom save button (also sticky at bottom) */}
       {pendingCount > 0 && (

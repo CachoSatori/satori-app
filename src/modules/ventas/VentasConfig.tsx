@@ -197,6 +197,30 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
     reader.readAsText(file)
   }
 
+  // ── Exportar plantilla de costos (todos los productos) ───────
+  // Genera un CSV con columnas nombre,tipo,clasificacion,costo_unitario que
+  // round-trip con el importador: el usuario llena la columna y lo re-importa.
+  function exportCostsTemplate() {
+    const safe = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s)
+    const header = 'nombre,tipo,clasificacion,costo_unitario'
+    const rows = allProds.map(n => {
+      const e = effective(n)
+      return [safe(n), e.tipo, safe(e.clasificacion), e.costo_unitario].join(',')
+    })
+    const csv  = [header, ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url  = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `satori-costos-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    setImportMsg(`✓ Plantilla con ${allProds.length} productos descargada — llená la columna costo_unitario y re-importá`)
+    setTimeout(() => setImportMsg(null), 8000)
+  }
+
   const counts = useMemo(() => {
     const c: Record<string, number> = { todos: allProds.length }
     for (const n of allProds) {
@@ -436,12 +460,16 @@ export default function VentasConfig({ dias, pm, onRefresh }: Props) {
             {clasOptions.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         )}
+        <button onClick={exportCostsTemplate}
+          style={{ fontSize:'0.78rem', color:'#c8a96e', cursor:'pointer', padding:'4px 10px', border:'1px solid rgba(200,169,110,0.4)', borderRadius:2, background:'transparent' }}>
+          ⬇ Exportar plantilla CSV
+        </button>
         <label style={{ fontSize:'0.78rem', color:'#7ec8a0', cursor:'pointer', padding:'4px 10px', border:'1px solid rgba(126,200,160,0.4)', borderRadius:2 }}>
           📄 Importar costos CSV
           <input type="file" accept=".csv,text/csv" style={{ display:'none' }}
             onChange={e => { const f = e.target.files?.[0]; if (f) handleCostCsv(f); e.target.value = '' }} />
         </label>
-        <span style={{ fontSize:'0.68rem', color:'#666' }}>columnas: producto_id, nombre, costo_unitario</span>
+        <span style={{ fontSize:'0.68rem', color:'#666' }}>exportá → llená costo_unitario → importá</span>
         {importMsg && (
           <span style={{ fontSize:'0.78rem', fontWeight:600, color: importMsg.startsWith('✓') ? 'var(--vt-green)' : 'var(--vt-red)', marginLeft:'auto' }}>
             {importMsg}

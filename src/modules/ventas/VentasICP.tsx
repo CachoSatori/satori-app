@@ -59,7 +59,7 @@ export default function VentasICP({ dias, pm }: Props) {
   const [month, setMonth] = useState(months[0] ?? '')
 
   useEffect(() => {
-    Promise.all([getAttendanceHistory(6), getAllEmployees()])
+    Promise.all([getAttendanceHistory(12), getAllEmployees()])
       .then(([tips, emps]) => { setTipData(tips); setEmployees(emps) })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -67,10 +67,11 @@ export default function VentasICP({ dias, pm }: Props) {
 
   // Tip data indexed by normalized name — prefers pos_name (exact POS match)
   const empTipMap = useMemo(() => {
-    const m: Record<string, { payout: number; gen: number; shifts: number }> = {}
-    const add = (key: string, payout: number) => {
-      if (!m[key]) m[key] = { payout: 0, gen: 0, shifts: 0 }
+    const m: Record<string, { payout: number; hours: number; shifts: number }> = {}
+    const add = (key: string, payout: number, hours: number) => {
+      if (!m[key]) m[key] = { payout: 0, hours: 0, shifts: 0 }
       m[key].payout += payout
+      m[key].hours  += hours
       m[key].shifts++
     }
     for (const r of tipData) {
@@ -78,17 +79,12 @@ export default function VentasICP({ dias, pm }: Props) {
       const emp = employees.find(e => e.id === r.employee_id)
       if (!emp) continue
       const payout = r.payout_crc ?? 0
-      // pos_name takes priority — exact POS export name for reliable matching
+      const hours  = r.hours_worked ?? 0
       const posName = (emp as { pos_name?: string | null }).pos_name
-      if (posName) {
-        add(normName(posName), payout)
-      }
-      // Also index by full_name (fallback if pos_name not set or different)
+      if (posName) add(normName(posName), payout, hours)
       const fullKey = normName(emp.full_name)
       const posKey  = posName ? normName(posName) : null
-      if (!posKey || fullKey !== posKey) {
-        add(fullKey, payout)
-      }
+      if (!posKey || fullKey !== posKey) add(fullKey, payout, hours)
     }
     return m
   }, [tipData, employees, month])
@@ -108,19 +104,25 @@ export default function VentasICP({ dias, pm }: Props) {
       const agg  = aggSalonero(name, monthDates, dias, pm)
       const key  = normName(name)
       const tips = empTipMap[key]
-      const payout = tips?.payout ?? 0
-      const shifts = tips?.shifts ?? 0
-      const icp   = agg.total > 0 ? (payout / agg.total * 100) : 0
+      const payout  = tips?.payout ?? 0
+      const shifts  = tips?.shifts ?? 0
+      const hours   = tips?.hours  ?? 0
+      const icp     = agg.total > 0 ? (payout / agg.total * 100) : 0
+      const propTurno = shifts > 0 ? payout / shifts : 0
+      const propHora  = hours  > 0 ? payout / hours  : 0
       return {
         name,
-        ventas:   agg.total,
-        pax:      agg.pax,
-        promPax:  agg.promPax,
-        days:     agg.days,
+        ventas:    agg.total,
+        pax:       agg.pax,
+        promPax:   agg.promPax,
+        days:      agg.days,
         payout,
         shifts,
+        hours,
         icp,
-        matched:  !!tips,
+        propTurno,
+        propHora,
+        matched:   !!tips,
       }
     })
     .filter(d => d.days > 0)
@@ -242,6 +244,9 @@ export default function VentasICP({ dias, pm }: Props) {
               <th className="r">ICP</th>
               <th className="r">Nivel</th>
               <th className="r">Turnos</th>
+              <th className="r">Horas</th>
+              <th className="r">Prop/turno</th>
+              <th className="r">Prop/hora</th>
               <th className="r">Prom/PAX</th>
             </tr>
           </thead>
@@ -285,6 +290,13 @@ export default function VentasICP({ dias, pm }: Props) {
                   )}
                 </td>
                 <td className="r vt-muted">{d.shifts > 0 ? d.shifts : '—'}</td>
+                <td className="r vt-muted">{d.hours > 0 ? d.hours.toFixed(0) + 'h' : '—'}</td>
+                <td className="r" style={{ fontSize:'0.8rem', color: d.propTurno > 0 ? '#7ec8a0' : '#555' }}>
+                  {d.propTurno > 0 ? fi(d.propTurno) : '—'}
+                </td>
+                <td className="r" style={{ fontSize:'0.8rem', color: d.propHora > 0 ? '#c8a96e' : '#555' }}>
+                  {d.propHora > 0 ? fi(d.propHora) : '—'}
+                </td>
                 <td className="r">{fi(d.promPax)}</td>
               </tr>
             ))}

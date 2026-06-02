@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../shared/hooks/useAuth'
 import type { UserRole } from '../shared/types/database'
 import { supabase } from '../shared/api/supabase'
-import { todayCR } from '../shared/utils'
+import { todayCR, fi } from '../shared/utils'
 
 const ROLE_LABELS: Record<UserRole, string> = {
   owner:    'Propietario',
@@ -82,38 +82,65 @@ const MODULES: Module[] = [
 
 // ── Live status per module ─────────────────────────────────────
 interface HomeStatus {
-  tipOpen:        boolean
-  tipShift:       string
-  tipOpenHours:   number   // hours since tip session opened
-  cashOpen:       boolean
-  cashCajero:     string
-  cashOpenHours:  number   // hours since cash session opened
-  pendingCount:   number
+  tipOpen:          boolean
+  tipShift:         string
+  tipOpenHours:     number
+  cashOpen:         boolean
+  cashCajero:       string
+  cashOpenHours:    number
+  pendingCount:     number
   overdueSuppliers: number
-  metaPct:        number | null
-  sopsCount:      number
-  ventasHoy:    boolean
+  metaPct:          number | null
+  sopsCount:        number
+  ventasHoy:        boolean
+  // Actual numbers for today
+  ventaNeta:        number
+  ventaPax:         number
+  ventaPromPax:     number
+  tipPool:          number
+  tipWorkers:       number
+  tipStatus:        string  // 'open'|'closed'|''
+  cajaIngresos:     number
+  cajaEgresos:      number
+  cajaSaldo:        number
+  cajaStatus:       string  // 'open'|'closed'|''
 }
 
 async function fetchHomeStatus(): Promise<HomeStatus> {
   const today = todayCR()
   const curMonth = today.slice(0, 7)
 
-  const [tipRes, cashRes, pendRes, metaRes, sopsRes, ventasRes, suppliersRes] = await Promise.allSettled([
-    // Open tip session + created_at to detect stale sessions
+  const [tipRes, cashRes, pendRes, metaRes, sopsRes, ventasRes, suppliersRes,
+         tipDetailRes, cashSessionsRes, cashMovsRes] = await Promise.allSettled([
+    // Open tip session
     supabase.from('tip_sessions' as never).select('shift_type,created_at').eq('status', 'open').limit(1).maybeSingle(),
-    // Open cash session + created_at
+    // Open cash session
     supabase.from('cash_sessions' as never).select('cajero_name,created_at').eq('status', 'open').limit(1).maybeSingle(),
-    // Pending cash movements count
+    // Pending cash movements
     supabase.from('cash_movements' as never).select('id', { count: 'exact', head: true }).eq('status', 'pendiente'),
     // Meta mensual
     supabase.from('ventas_metas' as never).select('value').eq('key', 'all').maybeSingle(),
     // SOPs count
     supabase.from('sops' as never).select('id', { count: 'exact', head: true }).eq('is_active', true),
-    // Today's ventas
-    supabase.from('ventas_dias' as never).select('session_date').eq('session_date', today).maybeSingle(),
-    // Suppliers with overdue payments (latest payment date per supplier from cash_movements)
+    // Today's ventas with salonero data
+    supabase.from('ventas_dias' as never).select('data').eq('session_date', today).maybeSingle(),
+    // Suppliers
     supabase.from('suppliers' as never).select('id,ciclo_pago').eq('is_active', true),
+    // Today's tip session (open OR closed) for pool total
+    supabase.from('tip_sessions' as never)
+      .select('id,status,pool_efectivo_crc,pool_efectivo_usd,pool_barra_crc,exchange_rate')
+      .eq('session_date', today)
+      .order('status', { ascending: true })  // 'closed' < 'open' alphabetically
+      .limit(1).maybeSingle(),
+    // Today's cash sessions
+    supabase.from('cash_sessions' as never)
+      .select('id,status,cajero_name').eq('session_date', today)
+      .order('created_at', { ascending: false }),
+    // Today's cash movements (need session IDs — will filter below)
+    supabase.from('cash_movements' as never)
+      .select('session_id,movement_type,amount_crc')
+      .gte('created_at', today + 'T00:00:00')
+      .neq('status', 'rechazado'),
   ])
 
   const tipSession  = tipRes.status  === 'fulfilled' ? (tipRes.value.data  as { shift_type: string; created_at: string } | null)   : null
@@ -135,7 +162,6 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     ? 1 : 0  // simplified — full logic is in CashProveedores
   const metaData    = metaRes.status === 'fulfilled' ? (metaRes.value.data as { value: { restaurante: Record<string,number>; margen?: Record<string,number> } } | null) : null
   const sopsCount   = sopsRes.status === 'fulfilled' ? (sopsRes.value.count ?? 0) : 0
-  const ventasHoy   = ventasRes.status === 'fulfilled' && !!ventasRes.value.data
 
   // Calculate meta progress
   let metaPct: number | null = null
@@ -159,6 +185,46 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     }
   }
 
+  // ── Ventas numbers ──────────────────────────────────────────
+  let ventaNeta = 0, ventaPax = 0
+  const ventasData = ventasRes.status === 'fulfilled' ? ventasRes.value.data : null
+  if (ventasData) {
+    const sals = Object.values((ventasData as { data: { saloneros: Record<string,{ total?:number; pax?:number; esCajero?:boolean }> } }).data?.saloneros ?? {})
+    ventaNeta = sals.reduce((s, sl) => s + (sl.total ?? 0), 0)
+    ventaPax  = sals.filter(sl => !(sl as { esCajero?: boolean }).esCajero).reduce((s, sl) => s + (sl.pax ?? 0), 0)
+  }
+  const ventaPromPax = ventaPax > 0 ? ventaNeta / ventaPax : 0
+
+  // ── Tip numbers ─────────────────────────────────────────────
+  const tipDetail = tipDetailRes.status === 'fulfilled'
+    ? (tipDetailRes.value.data as { id:string; status:string; pool_efectivo_crc:number; pool_efectivo_usd:number; pool_barra_crc:number; exchange_rate:number } | null)
+    : null
+  let tipPool = 0, tipWorkers = 0
+  const tipStatus = tipDetail?.status ?? ''
+  if (tipDetail) {
+    const rate = tipDetail.exchange_rate ?? 640
+    tipPool = (tipDetail.pool_efectivo_crc ?? 0) + (tipDetail.pool_efectivo_usd ?? 0) * rate + (tipDetail.pool_barra_crc ?? 0)
+    // Load tip entries to count workers
+    if (tipDetail.status === 'closed') {
+      const { data: entries } = await supabase.from('tip_entries' as never).select('payout_crc').eq('session_id', tipDetail.id)
+      tipWorkers = ((entries ?? []) as { payout_crc: number | null }[]).filter(e => (e.payout_crc ?? 0) > 0).length
+    }
+  }
+
+  // ── Caja numbers ─────────────────────────────────────────────
+  const todaySessions = cashSessionsRes.status === 'fulfilled'
+    ? (cashSessionsRes.value.data as Array<{ id:string; status:string; cajero_name:string }> ?? [])
+    : []
+  const todaySessionIds = new Set(todaySessions.map(s => s.id))
+  const cajaStatus = todaySessions.find(s => s.status === 'open') ? 'open'
+    : todaySessions.length > 0 ? 'closed' : ''
+  const todayMovs = cashMovsRes.status === 'fulfilled'
+    ? (cashMovsRes.value.data as Array<{ session_id:string; movement_type:string; amount_crc:number }> ?? []).filter(m => todaySessionIds.has(m.session_id))
+    : []
+  const cajaIngresos = todayMovs.filter(m => m.movement_type === 'ingreso').reduce((s,m) => s + m.amount_crc, 0)
+  const cajaEgresos  = todayMovs.filter(m => m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso').reduce((s,m) => s + m.amount_crc, 0)
+  const cajaSaldo    = cajaIngresos - cajaEgresos
+
   return {
     tipOpen:          !!tipSession,
     tipShift:         tipSession?.shift_type ?? '',
@@ -170,7 +236,17 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     overdueSuppliers,
     metaPct,
     sopsCount,
-    ventasHoy,
+    ventasHoy:        ventaNeta > 0,
+    ventaNeta,
+    ventaPax,
+    ventaPromPax,
+    tipPool,
+    tipWorkers,
+    tipStatus,
+    cajaIngresos,
+    cajaEgresos,
+    cajaSaldo,
+    cajaStatus,
   }
 }
 
@@ -219,13 +295,24 @@ export default function HomePage() {
     if (!status || !isManager) return null
     switch (id) {
       case 'tips':
+        if (status.tipPool > 0) {
+          if (status.tipStatus === 'closed') {
+            return <StatusBadge color="ok" text={`${fi(status.tipPool)} · ${status.tipWorkers} emps`} />
+          }
+          if (status.tipOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.tipOpenHours}h`} />
+          return <StatusBadge color="open" text={`● ${status.tipShift} · ${fi(status.tipPool)}`} />
+        }
         if (status.tipOpen) {
-          // Alert if open for more than 20 hours
           if (status.tipOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.tipOpenHours}h`} />
           return <StatusBadge color="open" text={`● ${status.tipShift} abierto`} />
         }
         return null
       case 'cash':
+        if (status.cajaSaldo !== 0 || status.cajaIngresos > 0) {
+          const saldoColor = status.cajaStatus === 'closed' ? 'ok' : status.cashOpenHours >= 20 ? 'warn' : 'open'
+          const prefix = status.cajaStatus === 'closed' ? '' : '● '
+          return <StatusBadge color={saldoColor} text={`${prefix}Saldo ${status.cajaSaldo >= 0 ? '+' : ''}${fi(status.cajaSaldo)}`} />
+        }
         if (status.cashOpen) {
           if (status.cashOpenHours >= 20) return <StatusBadge color="warn" text={`⚠ Abierto ${status.cashOpenHours}h`} />
           return <StatusBadge color="open" text={`● ${status.cashCajero || 'Abierto'}`} />
@@ -233,9 +320,10 @@ export default function HomePage() {
         if (status.pendingCount > 0) return <StatusBadge color="warn" text={`${status.pendingCount} pendiente${status.pendingCount > 1 ? 's' : ''}`} />
         return null
       case 'dashboard':
-        if (status.metaPct !== null) {
-          const color = status.metaPct >= 100 ? 'ok' : status.metaPct >= 70 ? 'open' : 'warn'
-          return <StatusBadge color={color} text={`Meta ${status.metaPct.toFixed(0)}%`} />
+        if (status.ventaNeta > 0) {
+          const metaTxt = status.metaPct !== null ? ` · Meta ${status.metaPct.toFixed(0)}%` : ''
+          const color = status.metaPct !== null ? (status.metaPct >= 100 ? 'ok' : status.metaPct >= 70 ? 'open' : 'warn') : 'ok'
+          return <StatusBadge color={color} text={`${fi(status.ventaNeta)}${metaTxt}`} />
         }
         if (status.ventasHoy) return <StatusBadge color="ok" text="Hoy cargado" />
         return <StatusBadge color="dim" text="Sin datos hoy" />

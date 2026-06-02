@@ -48,13 +48,26 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
   }, [dates, preset, from, to])
 
   const gen = useMemo(() => aggGeneral(rangeDates, dias, pm), [rangeDates, dias, pm])
-  const salAggs = useMemo(() =>
-    sals.map(n => aggSalonero(n, rangeDates, dias, pm))
-      .sort((a, b) => b.total - a.total),
-  [sals, rangeDates, dias, pm])
+  const [viewMode, setViewMode] = useState<'cards' | 'tabla'>('cards')
+  const [sortCol,  setSortCol]  = useState<string>('promPax')
+
+  const salAggs = useMemo(() => {
+    const base = sals.map(n => aggSalonero(n, rangeDates, dias, pm)).filter(s => s.total > 0)
+    return base.sort((a, b) => {
+      if (sortCol === 'total')    return b.total    - a.total
+      if (sortCol === 'pax')      return b.pax      - a.pax
+      if (sortCol === 'bebPax')   return b.bebPax   - a.bebPax
+      if (sortCol === 'ratioCB')  return b.ratioCB  - a.ratioCB
+      if (sortCol === 'promPlato')return b.promPlato - a.promPlato
+      if (sortCol === 'ticket')   return b.promTicket - a.promTicket
+      return b.promPax - a.promPax
+    })
+  }, [sals, rangeDates, dias, pm, sortCol])
 
   const firstDate = rangeDates[0] ?? ''
   const lastDate  = rangeDates[rangeDates.length - 1] ?? ''
+
+  function toggleSort(col: string) { setSortCol(col) }
 
   return (
     <div className="vt-section">
@@ -105,8 +118,88 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
         </div>
       </div>
 
+      {/* View toggle */}
+      <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginBottom:'0.75rem' }}>
+        <div className="vt-tab-group">
+          <button className={`vt-tab-btn ${viewMode==='cards'?'active':''}`} onClick={() => setViewMode('cards')}>🃏 Tarjetas</button>
+          <button className={`vt-tab-btn ${viewMode==='tabla'?'active':''}`} onClick={() => setViewMode('tabla')}>⊞ Tabla</button>
+        </div>
+      </div>
+
+      {/* ── TABLA MODE ── */}
+      {viewMode === 'tabla' && (
+        <div className="vt-tbl-wrap" style={{ marginBottom:'1.5rem' }}>
+          <table className="vt-tbl" style={{ fontSize:'0.8rem' }}>
+            <thead>
+              <tr>
+                <th style={{ width:32 }}>#</th>
+                <th style={{ textAlign:'left' }}>Salonero</th>
+                {[
+                  { id:'total',    label:'Ventas' },
+                  { id:'pax',      label:'PAX' },
+                  { id:'promPax',  label:'Prom/PAX' },
+                  { id:'ticket',   label:'Ticket/item' },
+                  { id:'bebPax',   label:'Beb/PAX' },
+                  { id:'ratioCB',  label:'Ratio C/B' },
+                  { id:'promPlato',label:'Prom/plato' },
+                ].map(col => (
+                  <th key={col.id} className="r"
+                    style={{ cursor:'pointer', color: sortCol===col.id ? 'var(--vt-gold)' : undefined, whiteSpace:'nowrap' }}
+                    onClick={() => toggleSort(col.id)}>
+                    {col.label}{sortCol===col.id ? ' ▼' : ''}
+                  </th>
+                ))}
+                <th className="r" style={{ color:'#555', fontSize:'0.65rem', whiteSpace:'nowrap' }}>vs Gral</th>
+              </tr>
+            </thead>
+            <tbody>
+              {salAggs.map((s, i) => {
+                const metaPP = getMeta(metas, s.nombre, 'promPax')
+                const metaBP = getMeta(metas, s.nombre, 'bebPax')
+                const diff   = s.promPax - gen.promPax
+                const diffCol = diff >= 0 ? 'var(--vt-green)' : 'var(--vt-red)'
+                const pctTot = gen.total > 0 ? s.total / gen.total * 100 : 0
+                return (
+                  <tr key={s.nombre}>
+                    <td style={{ textAlign:'center', fontWeight:700, color: i===0?'var(--vt-gold)':i===1?'#aaa':i===2?'#c8a030':'#555' }}>
+                      {i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight:600 }}>{s.nombre}</div>
+                      <div style={{ fontSize:'0.65rem', color:'#555' }}>{s.days} días · {pctTot.toFixed(1)}%</div>
+                    </td>
+                    <td className="r vt-bold">{fi(s.total)}</td>
+                    <td className="r">{s.pax}</td>
+                    <td className="r" style={{ color: metaColor(s.promPax, metaPP), fontWeight:700 }}>{fi(s.promPax)}</td>
+                    <td className="r" style={{ fontSize:'0.75rem' }}>{fi(s.promTicket)}</td>
+                    <td className="r" style={{ color: metaColor(s.bebPax, metaBP) }}>{s.bebPax.toFixed(2)}</td>
+                    <td className={`r ${ratioCBClass(s.ratioCB)}`}>{s.ratioCB.toFixed(2)}:1</td>
+                    <td className="r" style={{ fontSize:'0.75rem' }}>{s.promPlato > 0 ? fi(s.promPlato) : '—'}</td>
+                    <td className="r" style={{ color:diffCol, fontSize:'0.72rem', fontWeight:600 }}>
+                      {diff >= 0 ? '▲ +' : '▼ '}{Math.abs(diff / gen.promPax * 100).toFixed(1)}%
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="vt-tbl-footer">
+                <td colSpan={2}>GENERAL</td>
+                <td className="r">{fi(gen.total)}</td>
+                <td className="r">{gen.pax}</td>
+                <td className="r vt-bold">{fi(gen.promPax)}</td>
+                <td className="r" style={{ fontSize:'0.75rem' }}>{fi(gen.promTicket)}</td>
+                <td className="r">{gen.bebPax.toFixed(2)}</td>
+                <td className={`r ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</td>
+                <td colSpan={2}/>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+
       {/* Salonero cards */}
-      <div className="vt-sal-cards">
+      {viewMode === 'cards' && <div className="vt-sal-cards">
         {salAggs.map((s, i) => {
           const metaPP  = getMeta(metas, s.nombre, 'promPax')
           const metaBP  = getMeta(metas, s.nombre, 'bebPax')
@@ -186,7 +279,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
             </div>
           )
         })}
-      </div>
+      </div>}
     </div>
   )
 }

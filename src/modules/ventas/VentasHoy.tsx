@@ -59,6 +59,21 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
     return i > 0 ? allDates[i - 1] : null
   }, [activeDate, allDates])
 
+  // Same weekday context: average of same day-of-week over last 4 occurrences
+  const sameWeekdayAvg = useMemo(() => {
+    if (!activeDate) return null
+    const dow    = new Date(activeDate + 'T12:00:00').getDay()
+    const sameD  = allDates
+      .filter(d => d < activeDate && new Date(d + 'T12:00:00').getDay() === dow)
+      .slice(-4)  // last 4 occurrences
+    if (!sameD.length) return null
+    const vals  = sameD.map(d => aggGeneral([d], dias, pm)).filter(g => g.pax > 0)
+    if (!vals.length) return null
+    const avgPP = vals.reduce((s,g) => s + g.promPax, 0) / vals.length
+    const avgVt = vals.reduce((s,g) => s + g.total, 0)   / vals.length
+    return { promPax: avgPP, total: avgVt, n: vals.length, dow }
+  }, [activeDate, allDates, dias, pm])
+
   const genPrev = useMemo(() =>
     prevDate ? aggGeneral([prevDate], dias, pm) : null,
   [prevDate, dias, pm])
@@ -309,6 +324,31 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           </div>
         </>
       )}
+
+      {/* Weekday context banner */}
+      {sameWeekdayAvg && gen && gen.pax > 0 && (() => {
+        const DAYS = ['domingos','lunes','martes','miércoles','jueves','viernes','sábados']
+        const diffPP  = gen.promPax - sameWeekdayAvg.promPax
+        const pctPP   = sameWeekdayAvg.promPax > 0 ? diffPP / sameWeekdayAvg.promPax * 100 : 0
+        const diffVt  = (gen.total + gen.cajTotal) - sameWeekdayAvg.total
+        const colPP   = diffPP >= 0 ? 'var(--vt-green)' : 'var(--vt-red)'
+        return (
+          <div style={{ background:'rgba(200,169,110,.06)', border:'1px solid rgba(200,169,110,.15)', borderRadius:2, padding:'0.5rem 0.875rem', marginBottom:'0.75rem', display:'flex', alignItems:'center', gap:'1rem', flexWrap:'wrap', fontSize:'0.75rem' }}>
+            <span style={{ color:'#555', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.08em', fontSize:'0.62rem' }}>
+              📅 Contexto {DAYS[sameWeekdayAvg.dow]}
+            </span>
+            <span style={{ color:'#888' }}>
+              Promedio {sameWeekdayAvg.n} {DAYS[sameWeekdayAvg.dow]} anteriores:
+              <strong style={{ color:'#c8a96e', marginLeft:'0.3rem' }}>{fi(sameWeekdayAvg.promPax)}/PAX</strong>
+              <strong style={{ color:'#888', marginLeft:'0.5rem' }}>{fi(sameWeekdayAvg.total)} ventas</strong>
+            </span>
+            <span style={{ color:colPP, fontWeight:700 }}>
+              {diffPP >= 0 ? '▲ +' : '▼ '}{Math.abs(pctPP).toFixed(1)}% Prom/PAX
+              {Math.abs(diffVt) > 1000 && <span style={{ marginLeft:'0.4rem', color: diffVt >= 0 ? 'var(--vt-green)' : 'var(--vt-red)' }}>· {diffVt >= 0 ? '+' : ''}{fi(diffVt)} ventas</span>}
+            </span>
+          </div>
+        )
+      })()}
 
       {/* Saloneros KPIs */}
       <div className="vt-sl">

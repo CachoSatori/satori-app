@@ -198,10 +198,26 @@ async function shareResumen(text: string, setCopied: (v: boolean) => void) {
 export default function ResumenDiario() {
   const { profile } = useAuth()
   const navigate    = useNavigate()
-  const [date, setDate]         = useState(todayCR())
+  const today       = todayCR()
+  const [date, setDate]         = useState(today)
   const [snap, setSnap]         = useState<DaySnapshot | null>(null)
   const [loading, setLoading]   = useState(true)
   const [copied, setCopied]     = useState(false)
+  // Available dates with ventas data for prev/next navigation
+  const [availDates, setAvailDates] = useState<string[]>([])
+
+  useEffect(() => {
+    // Load available dates once on mount
+    import('../../shared/api/supabase').then(({ supabase }) => {
+      supabase.from('ventas_dias' as never)
+        .select('session_date')
+        .order('session_date', { ascending: true })
+        .then(({ data }) => {
+          const dates = ((data ?? []) as { session_date: string }[]).map(r => r.session_date)
+          setAvailDates(dates)
+        })
+    })
+  }, [])
 
   useEffect(() => {
     setLoading(true)
@@ -210,6 +226,13 @@ export default function ResumenDiario() {
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [date])
+
+  const dateIdx  = availDates.indexOf(date)
+  const hasPrev  = dateIdx > 0
+  const hasNext  = dateIdx < availDates.length - 1 && date < today
+  const goPrev   = () => { if (hasPrev) setDate(availDates[dateIdx - 1]) }
+  const goNext   = () => { if (hasNext) setDate(availDates[dateIdx + 1]) }
+  const goToday  = () => setDate(today)
 
   const isOwner = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'contador'
 
@@ -248,13 +271,34 @@ export default function ResumenDiario() {
         </div>
       </div>
 
+      {/* Day navigation bar */}
+      <div style={{ background:'#0d0d0d', borderBottom:'1px solid #1a1a1a', padding:'0.4rem 1rem', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem' }}>
+        <button onClick={goPrev} disabled={!hasPrev}
+          style={{ padding:'4px 12px', borderRadius:2, border:'1px solid #2a2a2a', background:'transparent', color: hasPrev ? '#888' : '#333', cursor: hasPrev ? 'pointer' : 'default', fontSize:'0.8rem' }}>
+          ‹ Anterior
+        </button>
+        <div style={{ fontSize:'0.72rem', color:'#555', textAlign:'center' }}>
+          {new Date(date + 'T12:00:00').toLocaleDateString('es-CR', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}
+          {date !== today && (
+            <button onClick={goToday}
+              style={{ marginLeft:'0.75rem', fontSize:'0.65rem', padding:'2px 8px', border:'1px solid #2a2a2a', background:'transparent', color:'#c8a030', borderRadius:10, cursor:'pointer' }}>
+              Hoy
+            </button>
+          )}
+        </div>
+        <button onClick={goNext} disabled={!hasNext}
+          style={{ padding:'4px 12px', borderRadius:2, border:'1px solid #2a2a2a', background:'transparent', color: hasNext ? '#888' : '#333', cursor: hasNext ? 'pointer' : 'default', fontSize:'0.8rem' }}>
+          Siguiente ›
+        </button>
+      </div>
+
       {loading ? (
         <div className="resumen-body">
           <div style={{ padding: '4rem', textAlign: 'center', color: '#555' }}>Cargando…</div>
         </div>
       ) : snap ? (
         <div className="resumen-body">
-          <div className="resumen-date-label">
+          <div className="resumen-date-label" style={{ display:'none' }}>
             {new Date(date + 'T12:00:00').toLocaleDateString('es-CR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
 

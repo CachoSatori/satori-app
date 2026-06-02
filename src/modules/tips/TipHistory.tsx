@@ -5,15 +5,17 @@ import { calcHistory, formatCRC, formatNum, ROL_LABELS, type HistoryCalc } from 
 import { shiftLabel } from '../../shared/utils'
 
 interface Props {
-  sessions:   TipSession[]
-  employees:  Employee[]
-  rolePoints: RoleTipPoints[]
-  onCalcReady?: (sessionId: string, calc: HistoryCalc) => void
+  sessions:      TipSession[]
+  employees:     Employee[]
+  rolePoints:    RoleTipPoints[]
+  onCalcReady?:  (sessionId: string, calc: HistoryCalc) => void
+  onEditSession?: (session: TipSession) => void
+  isManager?:    boolean
 }
 
 const MSHORT = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
-export default function TipHistory({ sessions, employees, rolePoints, onCalcReady }: Props) {
+export default function TipHistory({ sessions, employees, rolePoints, onCalcReady, onEditSession, isManager }: Props) {
   const [expandedId,  setExpandedId]  = useState<string | null>(null)
   const [calcCache,   setCalcCache]   = useState<Record<string, HistoryCalc>>({})
   const [loadingId,   setLoadingId]   = useState<string | null>(null)
@@ -156,8 +158,16 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                     })()}
                   </div>
                 </div>
-                <div className="hist-right">
+                <div className="hist-right" style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
                   {calc && <div className="hist-total">{formatCRC(calc.totalPool)}</div>}
+                  {isManager && onEditSession && (
+                    <button
+                      onClick={e => { e.stopPropagation(); onEditSession(s) }}
+                      style={{ fontSize:'0.65rem', padding:'2px 8px', border:'1px solid #2a4a2a', background:'transparent', color:'#7aaa7a', borderRadius:2, cursor:'pointer', whiteSpace:'nowrap' }}
+                      title="Reabrir para editar">
+                      ✏
+                    </button>
+                  )}
                   <span className="hist-toggle">{isOpen ? '▲' : '▼'}</span>
                 </div>
               </div>

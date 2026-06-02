@@ -70,6 +70,15 @@ export async function closeTipSession(sessionId: string, closedBy: string): Prom
   if (error) throw new Error(error.message)
 }
 
+// Reopen a closed session for editing
+export async function reopenTipSession(sessionId: string): Promise<void> {
+  const { error } = await supabase
+    .from('tip_sessions')
+    .update({ status: 'open', closed_by: null } as never)
+    .eq('id', sessionId)
+  if (error) throw new Error(error.message)
+}
+
 // ── Entradas ────────────────────────────────────────────────
 
 export async function getTipEntriesBySession(sessionId: string): Promise<TipEntry[]> {

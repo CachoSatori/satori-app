@@ -13,6 +13,10 @@ const ROLE_LABELS: Record<string, string> = {
   runner: 'Runner', cocina: 'Cocina', cajero: 'Cajero', manager: 'Encargado',
 }
 
+// Cuántos meses de historia traemos del backend. 24 cubre el año en curso + el anterior
+// (suficiente para comparar 2025 vs 2026 con el selector de año).
+const FETCH_MONTHS = 24
+
 function fi(n: number) { return '₡ ' + Math.round(n).toLocaleString('es-CR') }
 function fmtDate(d: string) {
   if (!d) return ''
@@ -22,21 +26,33 @@ function fmtDate(d: string) {
 }
 
 export default function EmployeeHours({ employees }: Props) {
-  const [rows, setRows]       = useState<AttendanceRow[]>([])
+  const [allRows, setAllRows] = useState<AttendanceRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [months, setMonths]   = useState(3)
+  const [year, setYear]         = useState<string>('all')   // 'all' | 'YYYY'
   const [selected, setSelected] = useState<string | 'all'>('all')
-  const [view, setView]       = useState<'resumen'|'detalle'>('resumen')
+  const [view, setView]         = useState<'resumen'|'detalle'>('resumen')
 
   useEffect(() => {
     setLoading(true)
-    getAttendanceHistory(months)
-      .then(setRows)
+    getAttendanceHistory(FETCH_MONTHS)
+      .then(setAllRows)
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [months])
+  }, [])
 
   const empMap = useMemo(() => new Map(employees.map(e => [e.id, e])), [employees])
+
+  // Años disponibles en los datos (desc)
+  const years = useMemo(() => {
+    const s = new Set<string>()
+    allRows.forEach(r => s.add(r.session_date.slice(0, 4)))
+    return [...s].sort().reverse()
+  }, [allRows])
+
+  // Filtrar por año seleccionado
+  const rows = useMemo(() => (
+    year === 'all' ? allRows : allRows.filter(r => r.session_date.startsWith(year))
+  ), [allRows, year])
 
   // Build summary per employee
   const summary = useMemo(() => {
@@ -66,6 +82,12 @@ export default function EmployeeHours({ employees }: Props) {
     return Object.values(acc).sort((a, b) => b.hours - a.hours)
   }, [rows, empMap])
 
+  // Totales del período (para la fila de totales)
+  const totals = useMemo(() => summary.reduce(
+    (t, s) => ({ shifts: t.shifts + s.shifts, hours: t.hours + s.hours, payout: t.payout + s.payout }),
+    { shifts: 0, hours: 0, payout: 0 },
+  ), [summary])
+
   // Available months in data
   const months_in_data = useMemo(() => {
     const s = new Set<string>()
@@ -77,12 +99,16 @@ export default function EmployeeHours({ employees }: Props) {
     '01':'Ene','02':'Feb','03':'Mar','04':'Abr','05':'May','06':'Jun',
     '07':'Jul','08':'Ago','09':'Sep','10':'Oct','11':'Nov','12':'Dic',
   }
+  // Etiqueta de mes con año cuando hay varios años en vista (evita ambigüedad)
+  const monthHdr = (ym: string) => year === 'all'
+    ? `${MONTH_NAMES[ym.slice(5, 7)]} '${ym.slice(2, 4)}`
+    : `${MONTH_NAMES[ym.slice(5, 7)]} Hs`
 
   if (loading) {
     return <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>Cargando historial…</div>
   }
 
-  if (rows.length === 0) {
+  if (allRows.length === 0) {
     return (
       <div className="admin-section">
         <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>
@@ -100,6 +126,8 @@ export default function EmployeeHours({ employees }: Props) {
     ? rows
     : rows.filter(r => r.employee_id === selected)
 
+  const monthCols = months_in_data.slice(0, 3)
+
   return (
     <div className="admin-section">
       {/* Controls */}
@@ -110,13 +138,11 @@ export default function EmployeeHours({ employees }: Props) {
         <select
           className="tips-input-dark"
           style={{ fontSize: '0.8rem', padding: '0.35rem 0.6rem' }}
-          value={months}
-          onChange={e => setMonths(Number(e.target.value))}
+          value={year}
+          onChange={e => setYear(e.target.value)}
         >
-          <option value={1}>Último mes</option>
-          <option value={3}>Últimos 3 meses</option>
-          <option value={6}>Últimos 6 meses</option>
-          <option value={12}>Último año</option>
+          <option value="all">Todos los años</option>
+          {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
         <div style={{ display: 'flex', border: '1px solid var(--t-border)', borderRadius: 2, overflow: 'hidden' }}>
           {(['resumen','detalle'] as const).map(v => (
@@ -140,10 +166,8 @@ export default function EmployeeHours({ employees }: Props) {
                 <th style={{ textAlign: 'right' }}>Turnos</th>
                 <th style={{ textAlign: 'right' }}>Horas total</th>
                 <th style={{ textAlign: 'right' }}>Hs/turno prom</th>
-                {months_in_data.slice(0, 3).map(ym => (
-                  <th key={ym} style={{ textAlign: 'right' }}>
-                    {MONTH_NAMES[ym.slice(5, 7)]} Hs
-                  </th>
+                {monthCols.map(ym => (
+                  <th key={ym} style={{ textAlign: 'right' }}>{monthHdr(ym)}</th>
                 ))}
                 <th style={{ textAlign: 'right' }}>Propinas cobradas</th>
               </tr>
@@ -162,7 +186,7 @@ export default function EmployeeHours({ employees }: Props) {
                   <td style={{ textAlign: 'right', color: '#5a5040' }}>
                     {shifts > 0 ? (hours / shifts).toFixed(1) : '—'}h
                   </td>
-                  {months_in_data.slice(0, 3).map(ym => (
+                  {monthCols.map(ym => (
                     <td key={ym} style={{ textAlign: 'right', fontSize: '0.82rem', color: '#5a5040' }}>
                       {byMonth[ym]?.hours.toFixed(1) ?? '—'}
                     </td>
@@ -173,9 +197,27 @@ export default function EmployeeHours({ employees }: Props) {
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr style={{ borderTop: '2px solid var(--t-border, #2a2a2a)', fontWeight: 700 }}>
+                <td className="admin-emp-name">TOTAL{year !== 'all' ? ` ${year}` : ''}</td>
+                <td style={{ color: '#888', fontSize: '0.72rem' }}>{summary.length} empl.</td>
+                <td style={{ textAlign: 'right' }}>{totals.shifts}</td>
+                <td style={{ textAlign: 'right', color: 'var(--t-teal)' }}>
+                  {totals.hours.toLocaleString('es-CR', { maximumFractionDigits: 1 })}h
+                </td>
+                <td style={{ textAlign: 'right', color: '#5a5040' }}>
+                  {totals.shifts > 0 ? (totals.hours / totals.shifts).toFixed(1) : '—'}h
+                </td>
+                {monthCols.map(ym => {
+                  const mh = summary.reduce((s, x) => s + (x.byMonth[ym]?.hours ?? 0), 0)
+                  return <td key={ym} style={{ textAlign: 'right', fontSize: '0.82rem', color: '#5a5040' }}>{mh > 0 ? mh.toFixed(1) : '—'}</td>
+                })}
+                <td style={{ textAlign: 'right', color: 'var(--t-teal)' }}>{totals.payout > 0 ? fi(totals.payout) : '—'}</td>
+              </tr>
+            </tfoot>
           </table>
           <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '0.5rem' }}>
-            Hacé click en un empleado para ver el detalle por turno
+            Hacé click en un empleado para ver el detalle por turno · Datos: últimos {FETCH_MONTHS} meses
           </div>
         </>
       )}
@@ -250,7 +292,7 @@ export default function EmployeeHours({ employees }: Props) {
           </table>
           {filteredRows.length > 200 && (
             <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '0.5rem' }}>
-              Mostrando primeros 200 registros — reducí el período para ver todo
+              Mostrando primeros 200 registros — filtrá por año o empleado para ver todo
             </div>
           )}
         </>

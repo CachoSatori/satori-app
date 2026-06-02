@@ -17,13 +17,15 @@ const InvDashboard    = lazy(() => import('./InvDashboard'))
 const InvIngredientes = lazy(() => import('./InvIngredientes'))
 const InvRecetas      = lazy(() => import('./InvRecetas'))
 const InvMovimientos  = lazy(() => import('./InvMovimientos'))
+const InvConsumo      = lazy(() => import('./InvConsumo'))
 
-type Tab = 'dashboard' | 'ingredientes' | 'recetas' | 'movimientos'
+type Tab = 'dashboard' | 'ingredientes' | 'recetas' | 'consumo' | 'movimientos'
 
 const TABS: { id: Tab; label: string; roles: string[] }[] = [
   { id: 'dashboard',    label: '📊 Stock',       roles: ['owner','manager','contador'] },
   { id: 'ingredientes', label: '🧂 Ingredientes', roles: ['owner','manager'] },
   { id: 'recetas',      label: '📋 Recetas',      roles: ['owner','manager'] },
+  { id: 'consumo',      label: '🍽 Consumo',      roles: ['owner','manager'] },
   { id: 'movimientos',  label: '📦 Movimientos',  roles: ['owner','manager','contador'] },
 ]
 
@@ -101,6 +103,7 @@ export default function InventarioModule() {
             {tab === 'dashboard'    && <InvDashboard    ingredients={ingredients} movements={movements} onRefresh={reload} />}
             {tab === 'ingredientes' && <InvIngredientes ingredients={ingredients} onRefresh={reload} profile={profile} />}
             {tab === 'recetas'      && <InvRecetas      ingredients={ingredients} onRefresh={reload} />}
+            {tab === 'consumo'      && <InvConsumo      ingredients={ingredients} onRefresh={reload} profile={profile} />}
             {tab === 'movimientos'  && <InvMovimientos  ingredients={ingredients} movements={movements} onRefresh={reload} profile={profile} />}
           </div>
         </Suspense>

@@ -94,6 +94,26 @@ export async function addMovement(mov: Omit<InventoryMovement, 'id' | 'created_a
   // Trigger in DB auto-updates current_stock
 }
 
+// ¿Ya se procesó el consumo por venta de una fecha? (idempotencia)
+export async function countDeductionsForRef(reference_id: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('inventory_movements' as never)
+    .select('id', { count: 'exact', head: true })
+    .eq('movement_type', 'sale_deduction')
+    .eq('reference_id', reference_id)
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
+// Todos los ingredientes de todas las recetas en una sola llamada (para el motor de consumo)
+export async function getAllRecipeIngredients(): Promise<RecipeIngredient[]> {
+  const { data, error } = await supabase
+    .from('recipe_ingredients' as never)
+    .select('*')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as RecipeIngredient[]
+}
+
 // Bulk: set absolute stock level (count_adjustment = new - current)
 export async function setStockLevel(ingredientId: string, newLevel: number, currentLevel: number, unit: string, by: string): Promise<void> {
   const delta = newLevel - currentLevel

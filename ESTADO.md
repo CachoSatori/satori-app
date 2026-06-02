@@ -1,7 +1,7 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa, Costa Rica
-> Última actualización: 2026-06-02
+> Última actualización: 2026-06-02 (post-sprint: 6 tareas)
 
 ## Stack & deploy
 - React 19 + TypeScript + Vite · Supabase (PostgreSQL + PostgREST + Auth + RLS) · PWA
@@ -21,9 +21,10 @@ ICP (índice conversión propina), Saloneros (tarjetas + tabla ordenable),
 Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bulk edit cascading), Histórico
 
 ### Propinas / Tips (心)
-- Turno: coberturas dinámicas (picker + badge COB), verificación pool (✅/⚠), banner turno activo
+- Turno: coberturas dinámicas (picker + badge COB), verificación pool con tipo+motivo si dif >₡500 (bloquea cierre + persiste en notas), banner turno activo
 - Historial: filtros (mes + empleado), editar/reabrir sesión cerrada (reopenTipSession)
 - Quincenal, Stats (desglose AM/PM por empleado + top earners)
+- Cocina (admin): pool semanal de cocina, reparto por semana ISO, Selena entra al pool pero no recibe (TipCocina.tsx)
 
 ### Caja / Cash (金)
 - Turno (apertura con TC dinámico ₡/$)
@@ -36,6 +37,7 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
 - MiRendimiento (人): vista salonero — Hoy/Historial/Semana/Competencias + metas personales
 - MisPropinas (¥): tabla mensual histórica por empleado + Q1/Q2
 - Resumen Diario (navegación días ‹›  + botón compartir WhatsApp) + Resumen Semanal (compartir)
+- Reporte Mensual unificado (/reporte-mensual): ventas+propinas+caja de un mes en 1 vista, selector de mes, compartir + imprimir (ReporteMensual.tsx en resumen/)
 - Admin: Empleados (bulk import en masa), Puntos por rol, Tipo cambio, Horas trabajadas, Email reports (cron día 1)
 - SOPs (CRUD + búsqueda + categorías), Inventario (Stock/Ingredientes/Recetas/Movimientos — VACÍO sin datos)
 - HomePage: dashboard con métricas reales en vivo (ventas/propinas/caja del día en las tarjetas)
@@ -43,7 +45,7 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
 ## Datos cargados en DB (migración histórica COMPLETA)
 - ventas_dias: 151 días (2026, vía XLS)
 - ventas_hist: 1096 días (2023-2025)
-- product_map: 695 productos clasificados (tipo→clas→subcl)  ·  costo_unitario = 0 (PENDIENTE)
+- product_map: 695 productos clasificados (tipo→clas→subcl)  ·  costo_unitario: UI de carga lista (inline + import CSV en Ventas→Config); food cost se activa solo al cargar
 - tip_sessions: 137 cerradas (Ene-May 2026) + actuales  ·  tip_entries: 878 = ₡10,611,341
 - cash_movements: 1116 (1106 históricos Ene-May + 10 actuales) — created_at corregido a fecha real
 - cash_sessions: 137 históricas  ·  suppliers: 38  ·  employees: 24
@@ -54,40 +56,24 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
 - Cascading dropdowns derivados de product_map (no hardcoded)
 - Pending-changes queue pattern para batch saves
 - Sticky headers + botón 🏠 flotante universal (navegación en todos los módulos)
-- Email cron: pg_net extension + net.http_post (corregido). Próximos: 15 Jun y 1 Jul 8am
+- Email cron: pg_net + net.http_post. Edge fn `monthly-report` envía ventas Y propinas.
+  Cron día 1 08:00 CR (mes anterior, ambos) + día 15 08:00 CR (propinas quincenal mes en curso).
+  Migration `supabase/migrations/003_tips_email_cron.sql` — APLICAR con acceso Supabase (service_role_key en Vault)
 - Compartir: navigator.share (mobile→WhatsApp) con fallback clipboard
 
-## ── TAREA EN CURSO: 4 mejoras post-migración ──
-Orden de prioridad, ejecutar todas y avisar al terminar:
+## ── SPRINT COMPLETADO (6 tareas) ──
+Todas ✅ HECHO · build verde · pusheadas a main
 
-### 1. ✅ HECHO — VentasICP extendido
-Archivo: src/modules/ventas/VentasICP.tsx
-- getAttendanceHistory(6→12) meses
-- empTipMap ahora acumula hours además de payout/shifts
-- icpData agrega: hours, propTurno (payout/shifts), propHora (payout/hours)
-- Tabla: nuevas columnas Horas, Prop/turno (teal), Prop/hora (gold)
-- BUILD OK
+1. ✅ ReporteMensual unificado — src/modules/resumen/ReporteMensual.tsx (ruta /reporte-mensual, card en Home)
+2. ✅ EmployeeHours — fetch 24 meses, selector de año, fila de totales (src/modules/admin/EmployeeHours.tsx)
+3. ✅ Registro de turno propinas — verificación ₡500 con tipo+motivo que bloquea cierre + persiste en notas
+4. ✅ Email propinas día 1/15 — Edge fn ya tenía template; migration 003 programa el cron (APLICAR en Supabase)
+5. ✅ Pool semanal cocina — TipCocina.tsx (pestaña Cocina admin, exclusión Selena)
+6. ✅ UI carga costos — VentasConfig: import CSV + tabla paginada 50/pág + filtro clasificación; food cost se activa solo
 
-### 2. ⏳ EN PROGRESO — Reporte mensual unificado
-Crear página nueva que combine ventas + propinas + caja de un mes en 1 vista.
-- Selector de mes
-- Sección ventas (total, PAX, prom/PAX, mejor día), propinas (pool, top earners),
-  caja (ingresos/egresos/neto, por subcategoría)
-- Botón compartir + imprimir
-- Ruta nueva en App.tsx, lazy loaded. Sugerencia: src/modules/resumen/ReporteMensual.tsx
-- Considerar agregar al HomePage o como tab en Resumen
-
-### 3. ⏳ PENDIENTE — Verificar EmployeeHours
-Archivo: src/modules/admin/EmployeeHours.tsx (ya existe, 260 líneas)
-- Usa getAttendanceHistory + tip_entries.hours_worked — confirmar que con los datos
-  históricos ahora cargados (878 entries) muestre bien las horas por empleado/mes
-- Posible: extender meses cargados, agregar totales
-
-### 4. ⏳ PENDIENTE — Costo unitario / Food cost
-- product_map.costo_unitario está en 0 para los 483 productos comida/bebida
-- Crear UI o guía para que el usuario cargue costos (en VentasConfig o nueva tab)
-- Una vez con costos: activar food cost % en VentasMenuEng (ya tiene la lógica preparada)
+(Previo: ✅ VentasICP extendido — Horas, Prop/turno, Prop/hora)
 
 ## Pendientes generales (necesitan acción del usuario)
 - DNS SiteGround para email desde @satoricostarica.com (hoy sale de onboarding@resend.dev)
-- Cargar costos unitarios de productos
+- APLICAR migration 003_tips_email_cron.sql en Supabase (cron de emails de propinas día 1/15)
+- Cargar los costos unitarios reales (la UI ya está: Ventas→Config→Costos, inline o import CSV)

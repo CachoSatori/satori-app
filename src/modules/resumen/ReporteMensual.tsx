@@ -24,9 +24,6 @@ import {
 } from '../../modules/ventas/ventasUtils'
 import { isEgreso } from '../../modules/cash/cashUtils'
 
-const MONTHS_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
-  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-
 // ── Types for the assembled report ──────────────────────────────
 interface VentasBlock {
   totVN: number; pax: number; promPax: number; days: number

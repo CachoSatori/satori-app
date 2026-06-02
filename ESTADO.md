@@ -39,7 +39,13 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
 - Resumen Diario (navegación días ‹›  + botón compartir WhatsApp) + Resumen Semanal (compartir)
 - Reporte Mensual unificado (/reporte-mensual): ventas+propinas+caja de un mes en 1 vista, selector de mes, compartir + imprimir (ReporteMensual.tsx en resumen/)
 - Admin: Empleados (bulk import en masa), Puntos por rol, Tipo cambio, Horas trabajadas, Email reports (cron día 1)
-- SOPs (CRUD + búsqueda + categorías), Inventario (Stock/Ingredientes/Recetas/Movimientos — VACÍO sin datos)
+- SOPs (CRUD + búsqueda + categorías)
+- Inventario (Fase 1 activa, falta cargar datos reales):
+  · Ingredientes: CRUD + import/export CSV masivo (1.1)
+  · Recetas: BOM + costo teórico + ⇄ sincroniza costo_unitario a product_map → enciende food cost (1.2)
+  · Consumo: motor de deducción por ventas del día, idempotente, preview + procesar (1.3)
+  · Stock dashboard: KPIs, alertas stock bajo/crítico, valor por categoría, movimientos
+  · Pendiente 1.4: alerta stock en HomePage, orden de compra sugerida, integración con Caja (egreso_mercaderia)
 - HomePage: dashboard con métricas reales en vivo (ventas/propinas/caja del día en las tarjetas)
 
 ## Datos cargados en DB (migración histórica COMPLETA)

@@ -31,12 +31,13 @@ import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/dat
 const TipHistory   = lazy(() => import('./TipHistory'))
 const TipQuincenal = lazy(() => import('./TipQuincenal'))
 const TipStats     = lazy(() => import('./TipStats'))
+const TipCocina    = lazy(() => import('./TipCocina'))
 import { todayCR, shiftLabel, tipShiftToCaja } from '../../shared/utils'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 
-type View = 'turno' | 'historial' | 'quincenal' | 'stats'
+type View = 'turno' | 'historial' | 'quincenal' | 'stats' | 'cocina'
 
 export default function TipsModule() {
   const { profile } = useAuth()
@@ -474,6 +475,11 @@ export default function TipsModule() {
               Estadísticas
             </button>
           )}
+          {isManager && (
+            <button className={`tips-tab ${view === 'cocina' ? 'active' : ''}`} onClick={() => setView('cocina')}>
+              Cocina
+            </button>
+          )}
         </div>
         <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888', whiteSpace:'nowrap' }}
           onClick={() => navigate('/')}>← Inicio</button>
@@ -831,6 +837,12 @@ export default function TipsModule() {
               calcCache={tipCalcCache}
               employees={employees}
             />
+          </div>
+        )}
+
+        {view === 'cocina' && isManager && (
+          <div className="tips-body">
+            <TipCocina employees={employees} />
           </div>
         )}
       </Suspense>

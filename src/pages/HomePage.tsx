@@ -39,6 +39,11 @@ const MODULES: Module[] = [
     roles: ['owner', 'manager', 'contador'],
   },
   {
+    id: 'reporte-mensual', path: '/reporte-mensual', label: 'Reporte Mensual', kanji: '月',
+    description: 'Ventas · Propinas · Caja', ready: true,
+    roles: ['owner', 'manager', 'contador'],
+  },
+  {
     id: 'mi-rendimiento', path: '/mi-rendimiento', label: 'Mi Rendimiento', kanji: '人',
     description: 'Mis stats del turno', ready: true,
     roles: ['salonero', 'barman', 'barback', 'runner', 'cocina'],

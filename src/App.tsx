@@ -12,6 +12,7 @@ const CashModule    = lazy(() => import('./modules/cash/CashModule'))
 const VentasModule  = lazy(() => import('./modules/ventas/VentasModule'))
 const ResumenDiario  = lazy(() => import('./modules/resumen/ResumenDiario'))
 const ResumenSemanal = lazy(() => import('./modules/resumen/ResumenSemanal'))
+const ReporteMensual = lazy(() => import('./modules/resumen/ReporteMensual'))
 const SOPsModule       = lazy(() => import('./modules/sops/SOPsModule'))
 const MisPropinas      = lazy(() => import('./modules/tips/MisPropinas'))
 const InventarioModule  = lazy(() => import('./modules/inventario/InventarioModule'))
@@ -90,6 +91,7 @@ function AppRoutes() {
         <Route path="/"         element={<PrivateRoute><HomePage /></PrivateRoute>} />
         <Route path="/resumen"  element={<PrivateRoute><ResumenDiario /></PrivateRoute>} />
         <Route path="/semana"   element={<PrivateRoute><ResumenSemanal /></PrivateRoute>} />
+        <Route path="/reporte-mensual" element={<PrivateRoute><ReporteMensual /></PrivateRoute>} />
         <Route path="/propinas" element={<PrivateRoute><TipsModule /></PrivateRoute>} />
         <Route path="/caja"     element={<PrivateRoute><CashModule /></PrivateRoute>} />
         <Route path="/ventas"   element={<PrivateRoute><VentasModule /></PrivateRoute>} />

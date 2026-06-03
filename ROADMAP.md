@@ -365,6 +365,44 @@ Bot: "✅ Confirmado — Satori Santa Teresa · 20 jun · 7:30PM · 4 personas �
 
 ---
 
+### FASE 2C — Finanzas / Contabilidad (P&L estilo QuickBooks) · L
+
+> **Contexto (sesión 2026-06-03):** Hoy los gastos/costos se manejan en QuickBooks. Objetivo:
+> traer ese P&L a Satori App para tener **presupuesto vs real** dentro del mismo sistema y
+> migrar los históricos. Punto de partida: `budget 2026.xlsx` (export QB) — Net Earnings
+> proyectado ₡66.2M/2026.
+
+#### 2C.1 Plan de cuentas + presupuesto · ✅ HECHO (foundation)
+- Migration `006_finance.sql`: tablas `finance_accounts` (plan de cuentas jerárquico con códigos
+  5200/5320/7150…), `finance_budget` (presupuesto × cuenta × mes), `finance_actuals` (reales). RLS.
+- **Budget 2026 importado** desde QuickBooks: 60 cuentas, 516 líneas (43 hojas × 12 meses).
+- Módulo `/finanzas` (財): vista P&L — Ingresos → Costo de ventas → Utilidad bruta → Gastos →
+  Utilidad neta, por mes o año, con columnas **Presupuesto · Real · Variación** (FinanzasModule.tsx).
+- APLICAR migration 006 en Supabase para activar el módulo.
+
+#### 2C.2 Migrar reales históricos (años anteriores) · M
+- Import de transacciones reales por cuenta/mes a `finance_actuals` (CSV/Excel desde QB).
+- Mapear las cuentas QB → `finance_accounts` (matching por código/nombre).
+- Cargar 2023/2024/2025 para comparar año contra año.
+
+#### 2C.3 Conexión con datos vivos de Satori · M
+- **Ingresos automáticos**: `ventas_dias` → Ventas Salón/Delivery reales por mes.
+- **Costo de ventas**: food cost de Inventario (Fase 1) → líneas 5200/5320 reales.
+- **Egresos de Caja**: `cash_movements` (egreso_mercaderia/operativo/personal/socios) → cuentas de gasto.
+- **Nómina**: salarios + propinas + CCSS → Payroll Expenses.
+- Así el "Real" se llena solo desde lo que ya registra la app, sin doble carga.
+
+#### 2C.4 Edición y reportes · M
+- Editar presupuesto inline (por cuenta/mes), crear cuentas nuevas.
+- Export del P&L (PDF/imprimir), comparativo presupuesto vs real con alertas de desvío.
+- Estado de resultados anual + mensual; márgenes (%) por línea como QuickBooks.
+
+**Valor:** P&L y control de costos dentro de Satori, presupuesto vs real automático, base para
+decisiones financieras sin depender de QuickBooks.
+**Depende de:** nada para arrancar (2C.1 ya hecho). El "Real" automático se potencia con Fase 1 (food cost) y la Caja ya existente.
+
+---
+
 ### FASE 3 — POS nativo (el gran salto) · XL
 
 Convierte a Satori en el sistema de registro. Reemplaza el import XLS: las ventas, propinas y caja se generan dentro de la app en tiempo real.

@@ -217,11 +217,12 @@ export default function FinanzasModule() {
           </div>
 
           <div style={{ fontSize: '0.7rem', color: MUTED, marginTop: '0.75rem', lineHeight: 1.5 }}>
-            Presupuesto 2026 importado de QuickBooks. El <strong>Real</strong> se calcula automáticamente
-            desde los datos de la app: <strong>Ventas Salón/Delivery</strong> desde ventas_dias, y los
-            <strong> egresos de Caja</strong> → COGS/gastos (mapeo aproximado por tipo: mercadería→Food,
-            personal→Staff Wages, operativo→Insumos, socios→Consumos Dueños). Refinable con mapeo por subcategoría.
-            También suma cualquier carga manual en finance_actuals.
+            Presupuesto 2026 importado de QuickBooks. El <strong>Real</strong> se calcula automáticamente:
+            <strong> Ventas Salón/Delivery</strong> desde ventas, y los <strong>egresos de Caja</strong> mapeados
+            a su cuenta por <strong>subcategoría</strong> (Gas→7780, Agua→7760, Luz→7770, Músicos→7500,
+            Seguridad→7200, Mantenimiento→Repairs, Mercadería→Food 5200, Salarios→6200…). Las
+            <strong> propinas por tarjeta se excluyen</strong> (son pass-through, no gasto). Lo ambiguo cae en el
+            catch-all del tipo. También suma cargas manuales en finance_actuals.
           </div>
         </div>
       )}

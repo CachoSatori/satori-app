@@ -390,8 +390,12 @@ Bot: "✅ Confirmado — Satori Santa Teresa · 20 jun · 7:30PM · 4 personas �
 - **Egresos de Caja** ✅: `cash_movements` mapeados por tipo (mercadería→Food 5200, personal→Staff
   Wages 6200, operativo→Insumos 7120, socios→Consumos Dueños). getLiveActuals(year).
 - La columna "Real" del P&L ya se llena sola desde lo que registra la app (+ suma manual si la hay).
-- **Pendiente (v2)**: mapeo fino por subcategoría de caja → cada cuenta QB; food cost desde Inventario
-  (Fase 1) en vez de mercadería; nómina detallada (CCSS/INS/aguinaldos) desde la fuente de salarios.
+- **v2 ✅ HECHO**: mapeo FINO por subcategoría → cuenta QB exacta (Gas→7780, Agua→7760, Luz→7770,
+  Músicos→7500, Seguridad→7200, Mantenimiento→Repairs, Licor→5330, Salarios→6200…). Correcciones:
+  propinas por tarjeta EXCLUIDAS (pass-through, no gasto); Músicos van a Música, no a Operativo.
+- **Pendiente (v3)**: food cost desde Inventario (recetas, Fase 1) en vez de "mercadería" de caja;
+  separar CCSS/INS/aguinaldos de salarios cuando la nómina tenga su propia fuente; opción de elegir
+  la cuenta del P&L directamente al cargar un gasto en Caja (mapeo 100% contable).
 
 #### 2C.4 Edición y reportes · M
 - Editar presupuesto inline (por cuenta/mes), crear cuentas nuevas.

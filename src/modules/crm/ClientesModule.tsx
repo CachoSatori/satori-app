@@ -295,7 +295,7 @@ export default function ClientesModule() {
               )}
               {filtered.map(c => (
                 <div key={c.id} onClick={() => { setSelId(c.id); setEditing(false) }}
-                  style={{ padding: '0.6rem 0.75rem', borderRadius: 2, cursor: 'pointer', border: '1px solid', borderColor: selId === c.id ? TIER_COLORS[c.tier] : 'var(--t-border,#d4cfc4)', background: selId === c.id ? 'rgba(160,120,48,0.12)' : '#faf7f0' }}>
+                  style={{ padding: '0.6rem 0.75rem', borderRadius: 2, cursor: 'pointer', border: '1px solid', borderColor: selId === c.id ? TIER_COLORS[c.tier] : 'var(--t-border,#d4cfc4)', background: selId === c.id ? 'rgba(160,120,48,0.12)' : 'var(--t-paper)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{c.name || '(sin nombre)'}</span>
                     <span style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: TIER_COLORS[c.tier] }}>{TIER_LABELS[c.tier]}</span>
@@ -313,7 +313,7 @@ export default function ClientesModule() {
               {editing ? (
                 <CustomerForm form={form} setForm={setForm} onSave={handleSave} onCancel={() => setEditing(false)} saving={saving} />
               ) : selected ? (
-                <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: '#faf7f0' }}>
+                <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: 'var(--t-paper)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                     <div>
                       <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{selected.name || '(sin nombre)'}</div>
@@ -477,7 +477,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 function Kpi({ label, val, color }: { label: string; val: string; color?: string }) {
   return (
-    <div style={{ background: '#faf7f0', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 3, padding: '0.5rem 0.85rem', minWidth: 80 }}>
+    <div style={{ background: 'var(--t-paper)', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 3, padding: '0.5rem 0.85rem', minWidth: 80 }}>
       <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5a5040' }}>{label}</div>
       <div style={{ fontSize: '1.1rem', fontWeight: 700, color: color ?? 'var(--t-ink,#0d0d0d)' }}>{val}</div>
     </div>
@@ -499,7 +499,7 @@ function CustomerForm({ form, setForm, onSave, onCancel, saving }: {
 }) {
   const set = (k: keyof typeof EMPTY_FORM, v: string) => setForm(p => ({ ...p, [k]: v }))
   return (
-    <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: '#faf7f0' }}>
+    <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: 'var(--t-paper)' }}>
       <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--t-teal,#2a7a6a)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>
         {form.phone ? 'Cliente' : 'Nuevo cliente'}
       </div>

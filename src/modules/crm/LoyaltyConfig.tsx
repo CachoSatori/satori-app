@@ -82,7 +82,7 @@ export default function LoyaltyConfig() {
       {error && <div className="tips-error" style={{ gridColumn: '1/-1' }}><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}
 
       {/* Reglas */}
-      <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: '#faf7f0' }}>
+      <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: 'var(--t-paper)' }}>
         <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#a07830', marginBottom: '0.875rem' }}>⚙ Reglas de puntos</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
           {RULE_FIELDS.map(f => (
@@ -105,7 +105,7 @@ export default function LoyaltyConfig() {
       </div>
 
       {/* Recompensas */}
-      <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: '#faf7f0' }}>
+      <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: 'var(--t-paper)' }}>
         <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#a07830', marginBottom: '0.875rem' }}>🎁 Catálogo de recompensas</div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>

@@ -18,7 +18,7 @@ import { TIER_LABELS, TIER_COLORS } from '../../shared/types/crm'
 interface Props { customers: Customer[] }
 
 // Paleta papel
-const PAPER = '#faf7f0', BORDER = 'var(--t-border,#d4cfc4)', MUTED = '#5a5040', INK = 'var(--t-ink,#0d0d0d)'
+const PAPER = 'var(--t-paper)', BORDER = 'var(--t-border,#d4cfc4)', MUTED = '#5a5040', INK = 'var(--t-ink,#0d0d0d)'
 const GOLD = '#a07830', TEAL = '#2a7a6a'
 
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']

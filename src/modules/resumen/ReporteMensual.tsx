@@ -244,7 +244,7 @@ export default function ReporteMensual() {
   const prevYM = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
 
   return (
-    <div className="rm-page" style={{ minHeight: '100vh', background: 'var(--t-paper, #f5f0e8)', color: 'var(--t-ink, #0d0d0d)', fontFamily: "'DM Mono', 'Courier New', monospace" }}>
+    <div className="rm-page" style={{ minHeight: '100vh', background: 'var(--t-paper, #f5f0e8)', color: 'var(--t-ink, #0d0d0d)', fontFamily: 'var(--font-sans)' }}>
       {/* Header / controls — hidden on print */}
       <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0d0d0d', borderBottom: '1px solid #1a1a1a', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -390,7 +390,7 @@ export default function ReporteMensual() {
 // ── Small presentational helpers ────────────────────────────────
 function Section({ title, color, children }: { title: string; color: string; children: React.ReactNode }) {
   return (
-    <div className="rm-section" style={{ marginBottom: '1.5rem', background: '#faf7f0', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1.1rem 1.25rem' }}>
+    <div className="rm-section" style={{ marginBottom: '1.5rem', background: 'var(--t-paper)', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1.1rem 1.25rem' }}>
       <div style={{ fontSize: '1rem', fontWeight: 700, color, borderBottom: `2px solid ${color}`, paddingBottom: '0.5rem', marginBottom: '0.875rem' }}>
         {title}
       </div>

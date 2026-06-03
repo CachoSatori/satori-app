@@ -32,6 +32,7 @@ export type MovementStatus = 'pendiente' | 'aprobado' | 'rechazado'
 export interface Profile {
   id: string
   full_name: string
+  email: string | null
   role: UserRole
   is_active: boolean
   created_at: string

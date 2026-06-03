@@ -68,6 +68,15 @@ export async function updateProfileRole(id: string, role: UserRole): Promise<voi
   if (error) throw new Error(error.message)
 }
 
+// Activar / desactivar una cuenta (aprobación del owner)
+export async function setProfileActive(id: string, is_active: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ is_active } as never)
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
 // ── Vincular perfil a empleado ──────────────────────────────
 export async function linkProfileToEmployee(employeeId: string, profileId: string | null): Promise<void> {
   const { error } = await supabase

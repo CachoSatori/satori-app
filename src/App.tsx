@@ -26,11 +26,35 @@ function ModuleLoading({ kanji = '祭' }: { kanji?: string }) {
   return <div className="loading-screen"><span className="loading-mark">{kanji}</span></div>
 }
 
+// ── Pantalla: cuenta creada pero pendiente de aprobación ───────
+function PendingApproval() {
+  const { profile, signOut } = useAuth()
+  return (
+    <div className="login-container">
+      <div className="pending-card">
+        <div className="pending-mark">承</div>
+        <h1>Cuenta pendiente</h1>
+        <p>
+          Hola{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}. Tu cuenta se creó
+          correctamente pero todavía no está habilitada.<br />
+          La gerencia debe asignarte un rol para darte acceso. Probá de nuevo más tarde.
+        </p>
+        <button className="login-btn" style={{ maxWidth: 200 }} onClick={() => signOut()}>
+          Cerrar sesión
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Route guards ───────────────────────────────────────────────
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, profile, loading } = useAuth()
   if (loading) return <ModuleLoading />
-  return user ? <>{children}</> : <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/login" replace />
+  // Cuenta creada pero aún no aprobada por la gerencia → sin acceso
+  if (profile && !profile.is_active) return <PendingApproval />
+  return <>{children}</>
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {

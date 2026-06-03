@@ -33,6 +33,18 @@ Tema **papel claro** dentro de los módulos (NO oscuro). Tokens en src/index.css
   blanco con borde `--t-border`, filas separadas por línea + hover, nombre en negrita. Aplica a Admin →
   Empleados / Puntos por rol / Horas, y a las tablas de Stats de Propinas.
 
+## Autenticación / Usuarios (2026-06-03)
+- Login por correo + contraseña (Supabase Auth). LoginPage tiene toggle **Ingresar / Crear cuenta**.
+- **Auto-registro**: el empleado se registra solo (nombre completo + correo + contraseña, `supabase.auth.signUp`).
+  La cuenta **nace pendiente** (`profiles.is_active=false`, migration 009) → ve la pantalla "Cuenta pendiente"
+  (App.tsx `PendingApproval`) y NO accede a nada hasta que la gerencia la habilite. Protege la página pública de registro.
+- **Aprobación del owner**: Admin → pestaña **Usuarios** (UserApprovals.tsx): lista cuentas pendientes y activas,
+  asigna **rol** y **Habilita/Deshabilita**. No te podés deshabilitar a vos mismo. Vincular a empleado (para "Mis
+  Propinas") se hace en Admin → Empleados.
+- Confirmación por correo **desactivada** en Auth (la cuenta entra al instante; el acceso lo da la aprobación).
+- El correo queda en `profiles.email` para enviar reportes de pago a futuro.
+- Cuenta de la compu principal (caja+propinas): rol **cajero** (solo operar).
+
 ## Módulos (TODOS completos y en producción)
 ### Ventas (売)
 Hoy (delta vs ayer + Regalías + Ticket/item + vs General + contexto día-semana + compartir),
@@ -171,6 +183,7 @@ Lo que sigue necesita acción del dueño (trámites externos o decisión estrat�
 - ✅ 004_customers (Clientes/CRM) · ✅ 005_loyalty (puntos+recompensas) · ✅ 006_finance (P&L + budget 2026)
 - ✅ 007_customer_selfsignup (insert anónimo para auto-registro por QR) — probado HTTP 201
 - ✅ 008_tips_covered_role (columna `tip_entries.covered_role` para persistir la cobertura de rol en propinas) — aplicada 2026-06-03
+- ✅ 009_user_selfsignup (columna `profiles.email` + trigger: cuentas nuevas nacen `is_active=false` pendientes) — aplicada 2026-06-03. Además se desactivó la confirmación por correo en Auth (`mailer_autoconfirm=true`) vía Management API.
 - ⚠️ 003_tips_email_cron: era REDUNDANTE — ya existían crons `satori-monthly-report` (día 1) y
   `satori-quincenal-report` (día 15) que llaman a la edge fn `monthly-report` con body {} (tipo='ambos',
   envían ventas Y propinas, sin auth porque la fn es pública). Se eliminaron los crons duplicados de 003.

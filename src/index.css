@@ -193,6 +193,48 @@ html, body, #root {
   letter-spacing: 0.1em;
 }
 
+/* ── Auth toggle (Ingresar / Crear cuenta) ───────────────── */
+.auth-toggle {
+  display: flex;
+  gap: 0;
+  border: 1px solid #2a2a2a;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.auth-toggle-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--gray-light);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.7rem 0.5rem;
+  transition: background var(--transition), color var(--transition);
+}
+.auth-toggle-btn.active {
+  background: var(--white);
+  color: var(--black);
+}
+.auth-toggle-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+
+/* ── Pantalla cuenta pendiente de aprobación ─────────────── */
+.pending-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  text-align: center;
+}
+.pending-card .pending-mark { font-family: var(--font-serif); font-size: 2.5rem; color: var(--accent); }
+.pending-card h1 { font-family: var(--font-serif); font-size: 1.25rem; font-weight: 300; letter-spacing: 0.15em; color: var(--white); }
+.pending-card p { font-size: 0.82rem; color: var(--gray-light); line-height: 1.6; }
+
 /* ── App Header ──────────────────────────────────────────── */
 
 .app-header {

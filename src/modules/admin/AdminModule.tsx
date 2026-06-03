@@ -7,8 +7,10 @@ import EmployeeList from './EmployeeList'
 import RolePointsConfig from './RolePointsConfig'
 import ExchangeRateWidget from './ExchangeRateWidget'
 import EmployeeHours from './EmployeeHours'
+import UserApprovals from './UserApprovals'
+import { useAuth } from '../../shared/hooks/useAuth'
 
-type Tab = 'employees' | 'rolepoints' | 'exchange' | 'hours'
+type Tab = 'employees' | 'users' | 'rolepoints' | 'exchange' | 'hours'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -23,6 +25,7 @@ async function sendMonthlyReport(month?: string, tipo?: string): Promise<{ ok: b
 
 export default function AdminModule() {
   const navigate = useNavigate()
+  const { profile } = useAuth()
   const [tab, setTab] = useState<Tab>('employees')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [rolePoints, setRolePoints] = useState<RoleTipPoints[]>([])
@@ -78,6 +81,7 @@ export default function AdminModule() {
       {/* Nav tabs — barra estilo dashboard */}
       <div className="vt-nav-tabs">
         <div className={`vt-nav-tab ${tab === 'employees' ? 'active' : ''}`} onClick={() => setTab('employees')}>Empleados</div>
+        <div className={`vt-nav-tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>Usuarios</div>
         <div className={`vt-nav-tab ${tab === 'rolepoints' ? 'active' : ''}`} onClick={() => setTab('rolepoints')}>Puntos por rol</div>
         <div className={`vt-nav-tab ${tab === 'exchange' ? 'active' : ''}`} onClick={() => setTab('exchange')}>Tipo de cambio</div>
         <div className={`vt-nav-tab ${tab === 'hours' ? 'active' : ''}`} onClick={() => setTab('hours')}>Horas trabajadas</div>
@@ -127,6 +131,9 @@ export default function AdminModule() {
       <div style={{ padding: '1.5rem' }}>
         {tab === 'employees' && (
           <EmployeeList employees={employees} onRefresh={loadData} />
+        )}
+        {tab === 'users' && (
+          <UserApprovals employees={employees} currentUserId={profile?.id} />
         )}
         {tab === 'rolepoints' && (
           <RolePointsConfig rolePoints={rolePoints} onRefresh={loadData} />

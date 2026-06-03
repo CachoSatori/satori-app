@@ -10,6 +10,7 @@ import {
   createTipSession,
   closeTipSession,
   reopenTipSession,
+  deleteTipSession,
   upsertTipEntry,
   deleteTipEntry,
   updateSessionPools,
@@ -330,6 +331,19 @@ export default function TipsModule() {
       setError(e instanceof Error ? e.message : 'Error reabriendo sesión')
     } finally {
       setReopening(false)
+    }
+  }
+
+  // ── Eliminar sesión (desde el historial) ──────────────────
+  const handleDeleteSession = async (session: TipSession) => {
+    if (!isManager) return
+    if (!window.confirm(`¿Estás seguro de eliminar el turno ${session.session_date} ${shiftLabel(session.shift_type)}?\n\nSe borra la sesión y todas sus propinas. No se puede deshacer.`)) return
+    setError(null)
+    try {
+      await deleteTipSession(session.id)
+      await loadData()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error eliminando turno')
     }
   }
 
@@ -801,6 +815,7 @@ export default function TipsModule() {
               rolePoints={rolePoints}
               onCalcReady={(id, calc) => setTipCalcCache(prev => ({ ...prev, [id]: calc }))}
               onEditSession={handleEditSession}
+              onDeleteSession={handleDeleteSession}
               isManager={isManager}
             />
           </div>

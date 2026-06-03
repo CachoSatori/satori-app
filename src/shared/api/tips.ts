@@ -90,6 +90,13 @@ export async function reopenTipSession(sessionId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+// Eliminar una sesión completa (entradas + sesión)
+export async function deleteTipSession(sessionId: string): Promise<void> {
+  await supabase.from('tip_entries').delete().eq('session_id', sessionId)
+  const { error } = await supabase.from('tip_sessions').delete().eq('id', sessionId)
+  if (error) throw new Error(error.message)
+}
+
 // ── Entradas ────────────────────────────────────────────────
 
 export async function getTipEntriesBySession(sessionId: string): Promise<TipEntry[]> {

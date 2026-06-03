@@ -201,12 +201,15 @@ export default function VentasMenuEng({ dias, pm }: Props) {
           <div key={y} style={{ display:'flex', gap:'0.3rem', flexWrap:'wrap', alignItems:'center', marginBottom:'0.3rem' }}>
             <span style={{ fontSize:'0.62rem', color:'#555', minWidth:42, textTransform:'uppercase', letterSpacing:'0.1em' }}>{y}:</span>
             <button className={`vt-range-btn ${period===`todo-${y}`?'active':''}`} onClick={() => setPeriod(`todo-${y}`)}>Todo {y}</button>
-            {allMonths.filter(m => m.startsWith(String(y))).map(m => (
-              <button key={m} className={`vt-range-btn ${period===m?'active':''}`}
-                onClick={() => setPeriod(m)}>
-                {MSHORT[Number(m.split('-')[1])-1]}
-              </button>
-            ))}
+            <select
+              className={`date-filter ${!period.startsWith('todo-') && period.startsWith(String(y)) ? 'active' : ''}`}
+              value={!period.startsWith('todo-') && period.startsWith(String(y)) ? period : ''}
+              onChange={e => { if (e.target.value) setPeriod(e.target.value) }}>
+              <option value="">mes ▾</option>
+              {allMonths.filter(m => m.startsWith(String(y))).map(m => (
+                <option key={m} value={m}>{MSHORT[Number(m.split('-')[1]) - 1]}</option>
+              ))}
+            </select>
           </div>
         ))}
       </div>

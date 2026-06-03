@@ -201,17 +201,18 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
               onClick={() => setPeriod(p.id)}>{p.label}</button>
           ))}
         </div>
-        {/* Month buttons */}
+        {/* Month picker — desplegable */}
         <div style={{ display:'flex', gap:'0.25rem', flexWrap:'wrap' }}>
-          {months.slice(0,6).map(m => {
-            const mo = Number(m.split('-')[1])
-            return (
-              <button key={m} className={`vt-range-btn ${period === m ? 'active' : ''}`}
-                onClick={() => setPeriod(m)} style={{ fontSize:'0.68rem' }}>
-                {MSHORT[mo-1]} {m.slice(0,4)}
-              </button>
-            )
-          })}
+          <select
+            className={`date-filter ${months.includes(period) ? 'active' : ''}`}
+            value={months.includes(period) ? period : ''}
+            onChange={e => { if (e.target.value) setPeriod(e.target.value) }}>
+            <option value="">Mes ▾</option>
+            {months.map(m => {
+              const mo = Number(m.split('-')[1])
+              return <option key={m} value={m}>{MSHORT[mo-1]} {m.slice(0,4)}</option>
+            })}
+          </select>
         </div>
 
         {/* View toggle + print */}

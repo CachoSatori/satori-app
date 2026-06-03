@@ -182,14 +182,11 @@ export default function VentasICP({ dias, pm }: Props) {
         ICP = propinas cobradas / ventas × 100 · Thresholds: ≥13% excelente · 10-13% bueno · &lt;10% a mejorar
       </div>
 
-      {/* Month picker */}
+      {/* Month picker — desplegable */}
       <div className="vt-range-bar" style={{ marginBottom: '1.25rem' }}>
-        {months.slice(0, 8).map(m => (
-          <button key={m} className={`vt-range-btn ${month === m ? 'active' : ''}`}
-            onClick={() => setMonth(m)}>
-            {fmtMonthLabel(m).slice(0, 8)}
-          </button>
-        ))}
+        <select className="date-filter active" value={month} onChange={e => setMonth(e.target.value)}>
+          {months.map(m => <option key={m} value={m}>{fmtMonthLabel(m)}</option>)}
+        </select>
       </div>
 
       {/* Restaurant ICP + historical trend */}

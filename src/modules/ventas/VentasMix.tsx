@@ -383,16 +383,15 @@ function PeriodSelector({ allYears, allMonths, selected, onSelect }: {
             onClick={() => onSelect(`todo-${y}`)}>
             Todo {y}
           </button>
-          {allMonths.filter(m => m.startsWith(String(y))).map(m => {
-            const mo = Number(m.split('-')[1])
-            return (
-              <button key={m}
-                className={`vt-range-btn ${selected === m ? 'active' : ''}`}
-                onClick={() => onSelect(m)}>
-                {MSHORT[mo-1]}
-              </button>
-            )
-          })}
+          <select
+            className={`date-filter ${!selected.startsWith('todo-') && selected.startsWith(String(y)) ? 'active' : ''}`}
+            value={!selected.startsWith('todo-') && selected.startsWith(String(y)) ? selected : ''}
+            onChange={e => { if (e.target.value) onSelect(e.target.value) }}>
+            <option value="">mes ▾</option>
+            {allMonths.filter(m => m.startsWith(String(y))).map(m => (
+              <option key={m} value={m}>{MSHORT[Number(m.split('-')[1]) - 1]}</option>
+            ))}
+          </select>
         </div>
       ))}
     </div>

@@ -633,6 +633,8 @@ export default function TipsModule() {
                             <TipLineRow
                               line={line}
                               isBar={NO_PROPINA_ROLES.includes(coberturas[line.employeeId] as import('../../shared/types/database').UserRole ?? line.role)}
+                              isBarra={BAR_ROLES.includes((coberturas[line.employeeId] as import('../../shared/types/database').UserRole) ?? line.role)}
+                              generalRate={totals?.generalRate ?? 0}
                               isManager={isManager}
                               shiftType={shiftType}
                               onToggle={checked => !isCob && toggleLine(line.employeeId, checked)}
@@ -840,6 +842,8 @@ export default function TipsModule() {
 interface TipLineRowProps {
   line: DraftLine
   isBar: boolean          // bar o cocina = sin campo propina
+  isBarra: boolean        // SOLO barra (barman/barback) — tiene desglose pool barra + servicio
+  generalRate: number     // ₡ por punto del pool general (para separar servicio)
   isManager: boolean
   shiftType: 'AM' | 'PM'
   onToggle: (checked: boolean) => void
@@ -848,8 +852,11 @@ interface TipLineRowProps {
   onBlur: () => void
 }
 
-function TipLineRow({ line, isBar, isManager, shiftType, onToggle, onHoursChange, onPropinaChange, onBlur }: TipLineRowProps) {
+function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, onToggle, onHoursChange, onPropinaChange, onBlur }: TipLineRowProps) {
   const defaultHrs = shiftType === 'AM' ? 5 : (NO_PROPINA_ROLES.includes(line.role) ? 8 : 0)
+  // Desglose para barra: servicio = puntos × ₡/pto del pool general; pool barra = resto del take home
+  const servicio = Math.round((line.pts_val || 0) * generalRate)
+  const poolBarra = Math.max(0, Math.round(line.take_home) - servicio)
 
   return (
     <div className={`tips-emp-row${line.active ? ' worked' : ''}`}>
@@ -929,6 +936,13 @@ function TipLineRow({ line, isBar, isManager, shiftType, onToggle, onHoursChange
             <div className={`tips-take-badge${line.take_home > 0 ? '' : ' zero'}`}>
               {line.take_home > 0 ? formatCRC(line.take_home) : '₡ —'}
             </div>
+            {/* Desglose de barra: pool barra exclusivo + parte del servicio general */}
+            {isBarra && line.take_home > 0 && (
+              <div style={{ fontSize: '0.6rem', color: '#5a5040', marginTop: 3, lineHeight: 1.4, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <div>🍸 Pool barra <strong style={{ color: '#a07830' }}>{formatCRC(poolBarra)}</strong></div>
+                <div>Servicio <strong style={{ color: '#2a7a6a' }}>{formatCRC(servicio)}</strong></div>
+              </div>
+            )}
           </div>
         </div>
       )}

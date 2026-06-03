@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
+import { useState, useEffect, useCallback, Suspense, lazy, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
@@ -50,6 +50,15 @@ const GROUP_COLORS: Record<string, string> = {
   team:  '#6a9a6a',
   admin: '#8a8aaa',
 }
+
+// Etiquetas y orden de los grupos en el índice (como en el dashboard)
+const GROUP_NAMES: Record<string, string> = {
+  ops:   'Operaciones',
+  team:  'Equipo',
+  fin:   'Finanzas',
+  admin: 'Config',
+}
+const GROUP_ORDER = ['ops', 'team', 'fin', 'admin']
 
 export default function VentasModule() {
   const { profile } = useAuth()
@@ -114,14 +123,14 @@ export default function VentasModule() {
       <div className="vt-module-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.5rem', color: 'var(--vt-gold)' }}>里</span>
-          <div>
-            <div style={{ fontFamily: 'Syne, var(--font-serif)', fontSize: '0.9rem', fontWeight: 800, color: 'var(--vt-gold)', letterSpacing: '0.1em' }}>
-              SATORI
-            </div>
-            <div style={{ fontSize: '0.6rem', letterSpacing: '0.3em', color: '#444', textTransform: 'uppercase' }}>
-              Ventas
-            </div>
+          <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.15rem', fontWeight: 700, color: 'var(--vt-gold)', letterSpacing: '0.18em' }}>
+            SATORI
           </div>
+          {role && (
+            <span style={{ fontSize: '0.58rem', letterSpacing: '0.18em', color: '#9a8ac8', textTransform: 'uppercase', border: '1px solid #3a3658', borderRadius: 3, padding: '3px 9px', fontWeight: 700 }}>
+              {role}
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888' }}
@@ -129,18 +138,27 @@ export default function VentasModule() {
         </div>
       </div>
 
-      {/* Nav tabs */}
+      {/* Nav tabs — agrupadas con etiqueta de grupo (estilo dashboard) */}
       <div className="vt-nav-tabs">
-        {visibleTabs.map(t => (
-          <div
-            key={t.id}
-            className={`vt-nav-tab ${tab === t.id ? 'active' : ''}`}
-            style={tab === t.id ? { borderBottomColor: GROUP_COLORS[t.group], color: GROUP_COLORS[t.group] } : {}}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-          </div>
-        ))}
+        {GROUP_ORDER.map(g => {
+          const groupTabs = visibleTabs.filter(t => t.group === g)
+          if (!groupTabs.length) return null
+          return (
+            <Fragment key={g}>
+              <span className="vt-nav-group">{GROUP_NAMES[g]}</span>
+              {groupTabs.map(t => (
+                <div
+                  key={t.id}
+                  className={`vt-nav-tab ${tab === t.id ? 'active' : ''}`}
+                  style={tab === t.id ? { borderBottomColor: GROUP_COLORS[t.group], color: GROUP_COLORS[t.group] } : {}}
+                  onClick={() => setTab(t.id)}
+                >
+                  {t.label}
+                </div>
+              ))}
+            </Fragment>
+          )
+        })}
       </div>
 
       {error && (

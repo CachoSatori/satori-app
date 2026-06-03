@@ -2801,26 +2801,39 @@ html, body, #root {
 /* ── Nav tabs ───────────────────────────────────────────────── */
 .vt-nav-tabs {
   display: flex;
-  background: var(--vt-panel);
-  border-bottom: 2px solid var(--vt-border);
+  align-items: center;
+  background: var(--vt-ink);
+  border-bottom: 1px solid #242424;
   padding: 0 1.5rem;
   overflow-x: auto;
   gap: 0;
 }
+/* Etiqueta de grupo (Operaciones, Equipo, Finanzas…) — estilo dashboard */
+.vt-nav-group {
+  font-size: 0.58rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6a5a32;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 0 0.85rem 0 0.4rem;
+  align-self: center;
+}
+.vt-nav-group:not(:first-child) { border-left: 1px solid #242424; padding-left: 1rem; }
 .vt-nav-tab {
-  padding: 0.8rem 1.25rem;
+  padding: 0.8rem 1rem;
   cursor: pointer;
   font-size: 0.68rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  color: #4a4030;
+  margin-bottom: -1px;
+  color: #8a8278;
   transition: all 0.15s;
   white-space: nowrap;
   font-weight: 600;
 }
-.vt-nav-tab:hover { color: var(--vt-ink); }
+.vt-nav-tab:hover { color: #e8e2d8; }
 .vt-nav-tab.active { font-weight: 700; }
 
 /* ── Content wrapper ────────────────────────────────────────── */

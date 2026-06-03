@@ -92,22 +92,19 @@ export default function CashResumen({ movements, sessions }: Props) {
   return (
     <div className="cd-resumen">
 
-      {/* Month filter */}
+      {/* Month filter — desplegable estilo Propinas */}
       {availableMonths.length > 1 && (
-        <div style={{ display:'flex', gap:'0.4rem', flexWrap:'wrap', marginBottom:'1.25rem', alignItems:'center' }}>
+        <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', marginBottom:'1.25rem', alignItems:'center' }}>
           <span style={{ fontSize:'0.68rem', color:'#888', letterSpacing:'0.1em', textTransform:'uppercase' }}>Período:</span>
-          <button
-            onClick={() => setSelMonth('all')}
-            style={{ padding:'4px 12px', borderRadius:2, fontSize:'0.72rem', cursor:'pointer', border:`1px solid ${selMonth==='all'?'#c8a96e':'#2a2a2a'}`, background: selMonth==='all'?'rgba(200,169,110,.12)':'transparent', color: selMonth==='all'?'#c8a96e':'#888' }}>
-            Todo
-          </button>
-          {availableMonths.map(ym => (
-            <button key={ym}
-              onClick={() => setSelMonth(ym)}
-              style={{ padding:'4px 10px', borderRadius:2, fontSize:'0.72rem', cursor:'pointer', border:`1px solid ${selMonth===ym?'#c8a96e':'#2a2a2a'}`, background: selMonth===ym?'rgba(200,169,110,.12)':'transparent', color: selMonth===ym?'#c8a96e':'#888' }}>
-              {fmtMonth(ym)}
-            </button>
-          ))}
+          <select
+            className={`date-filter ${selMonth !== 'all' ? 'active' : ''}`}
+            value={selMonth}
+            onChange={e => setSelMonth(e.target.value)}>
+            <option value="all">Todos los meses</option>
+            {availableMonths.map(ym => (
+              <option key={ym} value={ym}>{fmtMonth(ym)}</option>
+            ))}
+          </select>
         </div>
       )}
 

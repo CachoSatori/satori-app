@@ -157,9 +157,9 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
   const handleSaveEdit = async (session: TipSession, prevCalc: HistoryCalc | null) => {
     const rate  = session.exchange_rate
     const draft = eRows.map(r => {
-      const eff = (r.coveredRole || r.role) as UserRole
+      const eff = (r.coveredRole || r.role) as UserRole  // solo para puntos
       return {
-        employeeId: r.employeeId, employeeName: r.employeeName, role: eff,
+        employeeId: r.employeeId, employeeName: r.employeeName, role: r.role,
         active: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd,
         pts_rol: ptsMap.get(eff) ?? 0, pts_val: 0, take_home: 0,
       }
@@ -334,9 +334,9 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         // Preview en vivo del reparto mientras se edita
         const preview = editMode ? calcTurno(
           eRows.map(r => {
-            const eff = (r.coveredRole || r.role) as UserRole
+            const eff = (r.coveredRole || r.role) as UserRole  // solo para puntos
             return {
-              employeeId: r.employeeId, employeeName: r.employeeName, role: eff,
+              employeeId: r.employeeId, employeeName: r.employeeName, role: r.role,
               active: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd,
               pts_rol: ptsMap.get(eff) ?? 0, pts_val: 0, take_home: 0,
             }

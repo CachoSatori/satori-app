@@ -130,12 +130,16 @@ Lo que sigue necesita acción del dueño (trámites externos o decisión estrat�
 
 (Previo: ✅ VentasICP extendido — Horas, Prop/turno, Prop/hora)
 
+## Migraciones — TODAS APLICADAS en Supabase (2026-06-03, vía Management API)
+- ✅ 004_customers (Clientes/CRM) · ✅ 005_loyalty (puntos+recompensas) · ✅ 006_finance (P&L + budget 2026)
+- ⚠️ 003_tips_email_cron: era REDUNDANTE — ya existían crons `satori-monthly-report` (día 1) y
+  `satori-quincenal-report` (día 15) que llaman a la edge fn `monthly-report` con body {} (tipo='ambos',
+  envían ventas Y propinas, sin auth porque la fn es pública). Se eliminaron los crons duplicados de 003.
+  · Mejora futura opcional: el cron día 15 manda body {} (mes anterior); para "quincenal del mes en curso"
+    habría que pasarle month=mes actual. No crítico.
+
 ## Pendientes generales (necesitan acción del usuario)
 - DNS SiteGround para email desde @satoricostarica.com (hoy sale de onboarding@resend.dev)
-- APLICAR migration 003_tips_email_cron.sql en Supabase (cron de emails de propinas día 1/15)
-- APLICAR migration 004_customers.sql en Supabase (activa el módulo Clientes/CRM)
-- APLICAR migration 005_loyalty.sql en Supabase (activa reglas de puntos + recompensas)
-- APLICAR migration 006_finance.sql en Supabase (activa módulo Finanzas/P&L + budget 2026)
 - Cargar los costos unitarios reales (la UI ya está: Ventas→Config→Costos, inline o import CSV)
 - Definir meta mensual del mes en curso (Ventas→Metas) → enciende el bloque de proyección en HOY y Ventas
 - Cargar datos de inventario reales (Inventario→Ingredientes import CSV, luego Recetas) → enciende COGS/food cost/consumo

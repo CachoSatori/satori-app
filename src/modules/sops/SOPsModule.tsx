@@ -385,13 +385,13 @@ export default function SOPsModule() {
 
               <div className="tips-field">
                 <div className="tips-field-label">
-                  Contenido * — soporta **negrita**, *cursiva*, # Título, - lista, 1. numerado
+                  Contenido * — **negrita**, ## Sección, ### Subsección, 1. pasos, - viñetas, &gt; nota, | tablas |
                 </div>
                 <textarea
                   className="sop-textarea"
                   value={editSOP.content ?? ''}
                   onChange={e => setEditSOP(p => ({ ...p, content: e.target.value }))}
-                  placeholder={`# Pasos a seguir\n\n1. Paso uno del proceso\n2. Paso dos\n3. Paso tres\n\n## Notas importantes\n\n- **Siempre** verificar que...\n- En caso de duda, consultar al encargado`}
+                  placeholder={`## Objetivo\nQué se busca con este procedimiento.\n\n## Procedimiento\n1. Primer paso del proceso\n2. Segundo paso\n3. Tercer paso\n\n### Detalle\n- **Siempre** verificar que...\n- En caso de duda, consultar al encargado\n\n> Nota importante destacada.`}
                   rows={14}
                 />
               </div>

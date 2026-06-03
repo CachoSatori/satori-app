@@ -1,4 +1,4 @@
-import { useState, useMemo, lazy, Suspense } from 'react'
+import { useState, useMemo, lazy, Suspense, Fragment } from 'react'
 import type { DiasMap, HistMap, Meta, ProductMap } from '../../shared/types/ventas'
 import {
   getContabilidadDays, availableMonths, availableYears,
@@ -64,28 +64,31 @@ export default function VentasContabilidad({ dias, hist, metas, pm }: Props) {
 
   return (
     <div className="vt-section">
-      {/* Period picker */}
-      <div className="vt-period-picker">
-        {years.map(y => (
-          <div key={y} style={{ marginBottom: '0.5rem' }}>
-            <button
-              className={`vt-period-btn year ${selected === `todo-${y}` ? 'active' : ''}`}
-              onClick={() => setSelected(`todo-${y}`)}>
-              Todo {y}
-            </button>
-            {months.filter(m => m.startsWith(String(y))).map(m => {
-              const [, mo] = m.split('-')
-              const mNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-              return (
-                <button key={m}
-                  className={`vt-period-btn ${selected === m ? 'active' : ''}`}
-                  onClick={() => setSelected(m)}>
-                  {mNames[Number(mo)-1]}
-                </button>
-              )
-            })}
-          </div>
-        ))}
+      {/* Period picker — por año: botón "Todo {año}" + desplegable de meses */}
+      <div className="vt-period-picker" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+        {years.map(y => {
+          const mNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+          const yearMonths = months.filter(m => m.startsWith(String(y)))
+          const selMonthThisYear = !isYear && selected.startsWith(String(y)) ? selected : ''
+          return (
+            <Fragment key={y}>
+              <button
+                className={`vt-period-btn year ${selected === `todo-${y}` ? 'active' : ''}`}
+                onClick={() => setSelected(`todo-${y}`)}>
+                Todo {y}
+              </button>
+              <select
+                className={`date-filter ${selMonthThisYear ? 'active' : ''}`}
+                value={selMonthThisYear}
+                onChange={e => { if (e.target.value) setSelected(e.target.value) }}>
+                <option value="">{y} · mes ▾</option>
+                {yearMonths.map(m => (
+                  <option key={m} value={m}>{mNames[Number(m.slice(5, 7)) - 1]} {y}</option>
+                ))}
+              </select>
+            </Fragment>
+          )
+        })}
       </div>
 
       {/* Meta progress + proyección (bloque completo) */}

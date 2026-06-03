@@ -3,7 +3,7 @@
    Paleta: negro/blanco, estética japonesa minimalista
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;600&family=Noto+Sans+JP:wght@300;400;500&family=DM+Mono:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;600&family=Noto+Sans+JP:wght@300;400;500&family=DM+Mono:wght@300;400;500&family=Syne:wght@500;600;700;800&display=swap');
 
 :root {
   --black:       #0a0a0a;
@@ -2897,7 +2897,7 @@ html, body, #root {
   margin-bottom: 0.4rem;
 }
 .vt-kpi-val {
-  font-family: 'DM Mono', monospace;
+  font-family: 'Syne', var(--font-serif);
   font-size: 1.1rem;
   font-weight: 800;
   color: var(--vt-gold);
@@ -3049,7 +3049,7 @@ html, body, #root {
   border-bottom: 1px solid var(--vt-border);
 }
 .vt-hoy-fecha {
-  font-family: 'DM Mono', monospace;
+  font-family: 'Syne', var(--font-serif);
   font-size: 1.25rem;
   font-weight: 800;
   color: var(--vt-ink);
@@ -3083,7 +3083,7 @@ html, body, #root {
 .vt-tbl tbody tr   { border-bottom: 1px solid var(--vt-border); transition: background 0.1s; }
 .vt-tbl tbody tr:hover { background: var(--vt-panel); }
 .vt-tbl td { padding: 0.6rem 0.75rem; }
-.vt-tbl td.r { text-align: right; font-family: 'DM Mono', monospace; font-weight: 600; }
+.vt-tbl td.r { text-align: right; font-family: 'Syne', sans-serif; font-weight: 600; }
 .vt-bold { font-weight: 700; }
 .vt-tbl tbody tr.tr-best  { background: #f0fbf4; }
 .vt-tbl tbody tr.tr-worst { background: #fdf4f2; }
@@ -3099,7 +3099,7 @@ html, body, #root {
 }
 .vt-tbl-footer td.r {
   text-align: right;
-  font-family: 'DM Mono', monospace;
+  font-family: 'Syne', sans-serif;
   font-size: 0.88rem;
 }
 
@@ -3128,7 +3128,7 @@ html, body, #root {
 .vt-dow-card.best  { border-top: 2px solid var(--vt-green); }
 .vt-dow-card.worst { border-top: 2px solid var(--vt-red); }
 .vt-dow-label { font-size: 0.65rem; color: #aaa; letter-spacing: 0.1em; text-transform: uppercase; }
-.vt-dow-val   { font-family: 'DM Mono', monospace; font-size: 0.88rem; font-weight: 700; color: var(--vt-gold); margin-top: 0.2rem; }
+.vt-dow-val   { font-family: 'Syne', sans-serif; font-size: 0.88rem; font-weight: 700; color: var(--vt-gold); margin-top: 0.2rem; }
 .vt-dow-sub   { font-size: 0.6rem; color: #999; margin-top: 0.15rem; }
 
 /* ── Sort tabs ──────────────────────────────────────────────── */
@@ -3248,7 +3248,7 @@ html, body, #root {
   margin-left: 0.2rem;
 }
 .vt-sal-total {
-  font-family: 'DM Mono', monospace;
+  font-family: 'Syne', sans-serif;
   font-size: 1.2rem;
   font-weight: 800;
   color: var(--vt-ink);
@@ -3277,7 +3277,7 @@ html, body, #root {
 }
 .vt-sal-kpi:last-child { border-right: none; }
 .vt-sal-kpi-label { font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: #555; }
-.vt-sal-kpi-val   { font-family: 'DM Mono', monospace; font-size: 0.75rem; font-weight: 700; color: var(--vt-ink); margin-top: 0.2rem; }
+.vt-sal-kpi-val   { font-family: 'Syne', sans-serif; font-size: 0.75rem; font-weight: 700; color: var(--vt-ink); margin-top: 0.2rem; }
 .vt-sal-detail {
   padding: 0.875rem 1.1rem;
   background: var(--vt-panel);
@@ -3438,7 +3438,7 @@ html, body, #root {
 }
 .vt-comp-rank-row:last-child { border-bottom: none; }
 .vt-comp-rank-num {
-  font-family: 'DM Mono', monospace;
+  font-family: 'Syne', sans-serif;
   font-size: 1rem;
   font-weight: 800;
   width: 24px;
@@ -3680,7 +3680,7 @@ html, body, #root {
   color: #555;
 }
 .xr-current-val {
-  font-family: 'DM Mono', monospace;
+  font-family: 'Syne', var(--font-serif);
   font-size: 1.3rem;
   font-weight: 800;
   color: var(--t-gold);
@@ -3849,7 +3849,7 @@ html, body, #root {
   color: #555;
 }
 .resumen-kpi-val {
-  font-family: 'DM Mono', monospace;
+  font-family: 'Syne', var(--font-serif);
   font-size: 0.95rem;
   font-weight: 800;
   color: var(--t-paper);
@@ -4149,7 +4149,7 @@ html, body, #root {
   margin-bottom: 0.2rem;
 }
 .vt-eval-metric-val {
-  font-family: 'DM Mono', monospace;
+  font-family: 'Syne', sans-serif;
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--vt-paper);
@@ -4206,7 +4206,7 @@ html, body, #root {
   text-transform: uppercase;
 }
 .vt-meta-proy-stat-val {
-  font-family: 'DM Mono', monospace;
+  font-family: 'Syne', sans-serif;
   font-size: 0.9rem;
   font-weight: 800;
   color: var(--vt-paper);
@@ -4317,7 +4317,7 @@ html, body, #root {
     border-radius: 99px;
   }
   .cd-mov-mobile-card-amount {
-    font-family: 'DM Mono', monospace;
+    font-family: 'Syne', sans-serif;
     font-size: 1rem;
     font-weight: 800;
   }
@@ -4414,4 +4414,19 @@ html, body, #root {
     font-size: 0.88rem;
   }
   .module-card { min-height: 110px; }
+}
+
+/* ── Fondo crema único en Ventas: sin recuadros blancos ──────────
+   Las tablas y tarjetas de ventas estaban en #fff (blanco) sobre el papel crema.
+   Se unifican a --vt-paper para que el crema sea el único fondo (header de tabla
+   queda oscuro por su propia regla, dando el contraste). */
+.vt-tbl,
+.vt-sal-card,
+.vt-mix-table,
+.vt-comp-card,
+.vt-comp-form,
+.vt-queue-item,
+.vt-file-row,
+.xr-history {
+  background: var(--vt-paper);
 }

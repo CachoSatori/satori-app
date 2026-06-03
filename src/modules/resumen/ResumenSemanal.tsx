@@ -170,7 +170,7 @@ export default function ResumenSemanal() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0d0d0d', fontFamily: 'DM Mono, monospace', color: '#f5f0e8' }}>
+    <div style={{ minHeight: '100vh', background: '#0d0d0d', fontFamily: 'var(--font-sans)', color: '#f5f0e8' }}>
 
       {/* Header */}
       <div style={{ background: '#0d0d0d', borderBottom: '1px solid #1a1a1a', padding: '0 1.75rem', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
@@ -236,7 +236,7 @@ export default function ResumenSemanal() {
                   border: '#555',
                 },
               ].map(k => (
-                <div key={k.label} style={{ background: '#0d0d0d', borderRadius: 3, padding: '1rem 1.1rem', borderLeft: `3px solid ${k.border}` }}>
+                <div key={k.label} style={{ background: '#0d0d0d', color: '#e8e2d8', borderRadius: 3, padding: '1rem 1.1rem', borderLeft: `3px solid ${k.border}` }}>
                   <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555', marginBottom: '0.3rem' }}>{k.label}</div>
                   <div style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.1rem', fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.val}</div>
                   {k.sub && <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '0.2rem' }}>{k.sub}</div>}
@@ -251,7 +251,7 @@ export default function ResumenSemanal() {
 
             {/* Day-by-day bars */}
             {thisWeek.days.filter(d => d.ventaNeta > 0).length > 0 && (
-              <div style={{ background: '#0d0d0d', borderRadius: 3, padding: '1.1rem', marginBottom: '1.25rem' }}>
+              <div style={{ background: '#0d0d0d', color: '#e8e2d8', borderRadius: 3, padding: '1.1rem', marginBottom: '1.25rem' }}>
                 <div style={{ fontSize: '0.68rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#c8a96e', marginBottom: '0.75rem', fontWeight: 700 }}>Ventas por día</div>
                 {(() => {
                   const maxV = Math.max(...thisWeek.days.map(d => d.ventaNeta), 1)
@@ -293,7 +293,7 @@ export default function ResumenSemanal() {
 
               {/* Top saloneros */}
               {thisWeek.topSal.length > 0 && (
-                <div style={{ background: '#0d0d0d', borderRadius: 3, padding: '1.1rem' }}>
+                <div style={{ background: '#0d0d0d', color: '#e8e2d8', borderRadius: 3, padding: '1.1rem' }}>
                   <div style={{ fontSize: '0.68rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#c8a96e', marginBottom: '0.75rem', fontWeight: 700 }}>
                     🏆 Top Prom/PAX
                   </div>
@@ -314,7 +314,7 @@ export default function ResumenSemanal() {
 
               {/* vs last week */}
               {lastWeek && lastWeek.ventaNeta > 0 && (
-                <div style={{ background: '#0d0d0d', borderRadius: 3, padding: '1.1rem' }}>
+                <div style={{ background: '#0d0d0d', color: '#e8e2d8', borderRadius: 3, padding: '1.1rem' }}>
                   <div style={{ fontSize: '0.68rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#555', marginBottom: '0.75rem', fontWeight: 700 }}>
                     vs Semana anterior ({fmtShort(lastWeek.from)}–{fmtShort(lastWeek.to)})
                   </div>

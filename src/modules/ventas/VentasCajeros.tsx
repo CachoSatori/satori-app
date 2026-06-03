@@ -122,7 +122,7 @@ export default function VentasCajeros({ dias }: Props) {
       <div className="vt-sl">Por cajero</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
         {cajAggs.filter(c => c.total > 0).map(c => (
-          <div key={c.nombre} style={{ background: '#fff', border: '1px solid var(--vt-border)', borderRadius: 3, overflow: 'hidden' }}>
+          <div key={c.nombre} style={{ background: 'var(--vt-paper)', border: '1px solid var(--vt-border)', borderRadius: 3, overflow: 'hidden' }}>
             <div style={{ background: 'var(--vt-ink)', padding: '0.75rem 1rem', borderBottom: '2px solid var(--vt-gold)' }}>
               <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, color: 'var(--vt-gold)', fontSize: '0.95rem' }}>
                 {c.nombre}

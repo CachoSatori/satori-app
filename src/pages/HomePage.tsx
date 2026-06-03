@@ -51,17 +51,17 @@ const MODULES: Module[] = [
   {
     id: 'mis-propinas', path: '/mis-propinas', label: 'Mis Propinas', kanji: '¥',
     description: 'Mi historial', ready: true,
-    roles: ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero'],
-  },
-  {
-    id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
-    description: 'Pool del turno', ready: true,
-    roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],
+    roles: ['salonero', 'barman', 'barback', 'runner', 'cocina'],
   },
   {
     id: 'cash', path: '/caja', label: 'Caja', kanji: '金',
     description: 'Turnos y movimientos', ready: true,
     roles: ['owner', 'manager', 'cajero', 'contador'],
+  },
+  {
+    id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
+    description: 'Pool del turno', ready: true,
+    roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],
   },
   {
     id: 'dashboard', path: '/ventas', label: 'Ventas', kanji: '売',

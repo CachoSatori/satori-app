@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
-  getFinanceAccounts, getFinanceBudget, getFinanceActuals,
+  getFinanceAccounts, getFinanceBudget, getFinanceActuals, getLiveActuals,
   type FinanceAccount, type FinanceCell,
 } from '../../shared/api/finance'
 
@@ -39,10 +39,18 @@ export default function FinanzasModule() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const [acc, bud, act] = await Promise.all([
+      const [acc, bud, act, live] = await Promise.all([
         getFinanceAccounts(), getFinanceBudget(year), getFinanceActuals(year),
+        getLiveActuals(year).catch(() => [] as FinanceCell[]),
       ])
-      setAccounts(acc); setBudget(bud); setActuals(act); setNeedsMigration(false)
+      // Merge "Real" manual + automático (datos vivos de la app) por cuenta/mes
+      const merged: Record<string, FinanceCell> = {}
+      for (const c of [...act, ...live]) {
+        const k = `${c.account_id}|${c.month}`
+        if (!merged[k]) merged[k] = { account_id: c.account_id, year, month: c.month, amount: 0 }
+        merged[k].amount += Number(c.amount) || 0
+      }
+      setAccounts(acc); setBudget(bud); setActuals(Object.values(merged)); setNeedsMigration(false)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error'
       if (/relation|does not exist|finance_/i.test(msg)) setNeedsMigration(true)
@@ -208,9 +216,12 @@ export default function FinanzasModule() {
             </table>
           </div>
 
-          <div style={{ fontSize: '0.7rem', color: MUTED, marginTop: '0.75rem' }}>
-            Presupuesto 2026 importado de QuickBooks. El "Real" se llena migrando los datos históricos
-            (próximo paso: import de transacciones por cuenta/mes en finance_actuals).
+          <div style={{ fontSize: '0.7rem', color: MUTED, marginTop: '0.75rem', lineHeight: 1.5 }}>
+            Presupuesto 2026 importado de QuickBooks. El <strong>Real</strong> se calcula automáticamente
+            desde los datos de la app: <strong>Ventas Salón/Delivery</strong> desde ventas_dias, y los
+            <strong> egresos de Caja</strong> → COGS/gastos (mapeo aproximado por tipo: mercadería→Food,
+            personal→Staff Wages, operativo→Insumos, socios→Consumos Dueños). Refinable con mapeo por subcategoría.
+            También suma cualquier carga manual en finance_actuals.
           </div>
         </div>
       )}

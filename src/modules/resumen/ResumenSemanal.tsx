@@ -238,7 +238,7 @@ export default function ResumenSemanal() {
               ].map(k => (
                 <div key={k.label} style={{ background: '#0d0d0d', color: '#e8e2d8', borderRadius: 3, padding: '1rem 1.1rem', borderLeft: `3px solid ${k.border}` }}>
                   <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555', marginBottom: '0.3rem' }}>{k.label}</div>
-                  <div style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.1rem', fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.val}</div>
+                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.1rem', fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.val}</div>
                   {k.sub && <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '0.2rem' }}>{k.sub}</div>}
                   {k.var !== null && k.var !== undefined && (
                     <div style={{ fontSize: '0.72rem', fontWeight: 700, marginTop: '0.2rem', color: k.var >= 0 ? '#7ec8a0' : '#f08070' }}>
@@ -269,7 +269,7 @@ export default function ResumenSemanal() {
                           transition: 'width 0.4s',
                         }} />
                       </div>
-                      <div style={{ width: 100, fontSize: '0.72rem', textAlign: 'right', fontFamily: "'Syne',sans-serif", fontWeight: 600, color: d.fecha === thisWeek.bestDay?.fecha ? '#c8a96e' : '#aaa' }}>
+                      <div style={{ width: 100, fontSize: '0.72rem', textAlign: 'right', fontFamily: "'DM Mono',monospace", fontWeight: 600, color: d.fecha === thisWeek.bestDay?.fecha ? '#c8a96e' : '#aaa' }}>
                         {fi(d.ventaNeta)}
                       </div>
                     </div>
@@ -304,7 +304,7 @@ export default function ResumenSemanal() {
                         <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>{s.nombre}</span>
                         <span style={{ fontSize: '0.62rem', color: '#555' }}>{s.days}d</span>
                       </div>
-                      <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 700, fontSize: '0.85rem', color: '#c8a96e' }}>
+                      <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.85rem', color: '#c8a96e' }}>
                         {fi(s.promPax)}
                       </span>
                     </div>
@@ -330,7 +330,7 @@ export default function ResumenSemanal() {
                       <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.35rem 0', borderBottom: '1px solid #1a1a1a', fontSize: '0.8rem' }}>
                         <span style={{ color: '#888' }}>{row.label}</span>
                         <div style={{ textAlign: 'right' }}>
-                          <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 600 }}>{fi(row.cur)}</span>
+                          <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{fi(row.cur)}</span>
                           {diff !== null && (
                             <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 700, color: col }}>
                               {diff >= 0 ? '▲' : '▼'}{Math.abs(diff).toFixed(0)}%

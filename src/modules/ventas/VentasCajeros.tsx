@@ -124,7 +124,7 @@ export default function VentasCajeros({ dias }: Props) {
         {cajAggs.filter(c => c.total > 0).map(c => (
           <div key={c.nombre} style={{ background: 'var(--vt-paper)', border: '1px solid var(--vt-border)', borderRadius: 3, overflow: 'hidden' }}>
             <div style={{ background: 'var(--vt-ink)', padding: '0.75rem 1rem', borderBottom: '2px solid var(--vt-gold)' }}>
-              <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, color: 'var(--vt-gold)', fontSize: '0.95rem' }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: 'var(--vt-gold)', fontSize: '0.95rem' }}>
                 {c.nombre}
               </div>
               <div style={{ fontSize: '0.62rem', color: '#555', textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '0.15rem' }}>
@@ -140,7 +140,7 @@ export default function VentasCajeros({ dias }: Props) {
                 ].map(kpi => (
                   <div key={kpi.label} style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#888', marginBottom: '0.2rem' }}>{kpi.label}</div>
-                    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: '0.82rem', fontWeight: 700, color: kpi.color }}>{kpi.val}</div>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '0.82rem', fontWeight: 700, color: kpi.color }}>{kpi.val}</div>
                   </div>
                 ))}
               </div>

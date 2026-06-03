@@ -67,7 +67,7 @@ export default function InventarioModule() {
         <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
           <span style={{ fontFamily:'var(--font-serif)', fontSize:'1.5rem', color:'var(--vt-gold)' }}>庫</span>
           <div>
-            <div style={{ fontFamily:'Syne,var(--font-serif)', fontSize:'0.9rem', fontWeight:800, color:'var(--vt-gold)', letterSpacing:'0.1em' }}>
+            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.9rem', fontWeight:800, color:'var(--vt-gold)', letterSpacing:'0.1em' }}>
               INVENTARIO
             </div>
             <div style={{ fontSize:'0.6rem', letterSpacing:'0.3em', color:'#444', textTransform:'uppercase' }}>

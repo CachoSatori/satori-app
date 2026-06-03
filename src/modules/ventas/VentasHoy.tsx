@@ -539,7 +539,7 @@ function SpecialCard({ icon, title, color, total, prods }: {
     <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.875rem', borderLeft:`3px solid ${color}` }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem' }}>
         <div style={{ fontSize:'0.82rem', fontWeight:700, color }}>{icon} {title}</div>
-        <div style={{ fontFamily:'Syne,sans-serif', fontSize:'1rem', fontWeight:800, color }}>
+        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1rem', fontWeight:800, color }}>
           {new Intl.NumberFormat('es-CR',{style:'currency',currency:'CRC',minimumFractionDigits:0}).format(total)}
         </div>
       </div>

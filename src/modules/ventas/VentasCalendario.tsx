@@ -103,7 +103,7 @@ export default function VentasCalendario({ dias, hist }: Props) {
               {data ? (
                 <>
                   <div style={{ fontSize:'0.6rem', color:'#555', marginBottom:2 }}>{data.cnt}×</div>
-                  <div style={{ fontFamily:'Syne,sans-serif', fontSize:'clamp(0.7rem,1.2vw,0.88rem)', fontWeight:800, color:valColor }}>
+                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'clamp(0.7rem,1.2vw,0.88rem)', fontWeight:800, color:valColor }}>
                     {fi(data.neta)}
                   </div>
                   <div style={{ fontSize:'0.62rem', color:'#888', marginTop:3 }}>

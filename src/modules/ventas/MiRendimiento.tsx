@@ -125,7 +125,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [] }: Props) {
         <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
           <span style={{ fontFamily:'var(--font-serif)', fontSize:'1.5rem', color:'var(--vt-gold)' }}>人</span>
           <div>
-            <div style={{ fontFamily:'Syne,var(--font-serif)', fontSize:'0.9rem', fontWeight:800, color:'var(--vt-gold)', letterSpacing:'0.1em' }}>
+            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.9rem', fontWeight:800, color:'var(--vt-gold)', letterSpacing:'0.1em' }}>
               MI RENDIMIENTO
             </div>
             <div style={{ fontSize:'0.6rem', letterSpacing:'0.3em', color:'#444', textTransform:'uppercase' }}>
@@ -426,7 +426,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [] }: Props) {
                         </div>
                         {w.days > 0 ? (
                           <>
-                            <div style={{ fontFamily:'Syne,sans-serif', fontSize:'1rem', fontWeight:800, color:'var(--vt-gold)', marginBottom:4 }}>{fi(w.total)}</div>
+                            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1rem', fontWeight:800, color:'var(--vt-gold)', marginBottom:4 }}>{fi(w.total)}</div>
                             <div style={{ fontSize:'0.72rem', color:'#888' }}>{w.days} días · {w.pax} PAX</div>
                             <div style={{ fontSize:'0.75rem', color:'#aaa', marginTop:4 }}>
                               {fi(w.promPax)}/PAX · {w.bebPax.toFixed(2)} beb/PAX
@@ -530,7 +530,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [] }: Props) {
                       {/* Header */}
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.625rem' }}>
                         <div>
-                          <div style={{ fontFamily:'Syne,sans-serif', fontSize:'0.95rem', fontWeight:800, color:'var(--vt-paper)' }}>{comp.nombre}</div>
+                          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.95rem', fontWeight:800, color:'var(--vt-paper)' }}>{comp.nombre}</div>
                           <div style={{ fontSize:'0.68rem', color:'#555', marginTop:2 }}>
                             {comp.inicio} → {comp.fin}
                             {comp.premio && <span style={{ color:'var(--vt-gold)', marginLeft:'0.5rem' }}>🏅 {comp.premio}</span>}
@@ -543,13 +543,13 @@ export default function MiRendimiento({ dias, pm, metas, comps = [] }: Props) {
                       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.5rem', marginBottom:'0.75rem' }}>
                         <div style={{ background:'#111', borderRadius:2, padding:'0.5rem', textAlign:'center' }}>
                           <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>Mi posición</div>
-                          <div style={{ fontFamily:'Syne,sans-serif', fontSize:'1.4rem', fontWeight:800, color: myRank === 1 ? 'var(--vt-gold)' : myRank <= 3 ? '#7ec8a0' : '#888' }}>
+                          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.4rem', fontWeight:800, color: myRank === 1 ? 'var(--vt-gold)' : myRank <= 3 ? '#7ec8a0' : '#888' }}>
                             {myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : `#${myRank}`}
                           </div>
                         </div>
                         <div style={{ background:'#111', borderRadius:2, padding:'0.5rem', textAlign:'center' }}>
                           <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>Mis puntos</div>
-                          <div style={{ fontFamily:'Syne,sans-serif', fontSize:'1.4rem', fontWeight:800, color:'var(--vt-gold)' }}>{myPts}</div>
+                          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.4rem', fontWeight:800, color:'var(--vt-gold)' }}>{myPts}</div>
                         </div>
                         <div style={{ background:'#111', borderRadius:2, padding:'0.5rem', textAlign:'center' }}>
                           <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>Líder</div>

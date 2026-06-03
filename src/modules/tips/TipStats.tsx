@@ -154,7 +154,7 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
             ].map(k => (
               <div key={k.label} style={{ background: 'var(--t-ink)', padding: '0.875rem 1rem', borderRadius: 2, borderLeft: '3px solid var(--t-gold)' }}>
                 <div style={{ fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#555', marginBottom: '0.4rem' }}>{k.label}</div>
-                <div style={{ fontFamily: "'Syne',sans-serif", fontSize: '1rem', fontWeight: 800, color: k.color || 'var(--t-gold)' }}>{k.val}</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1rem', fontWeight: 800, color: k.color || 'var(--t-gold)' }}>{k.val}</div>
               </div>
             ))}
           </div>

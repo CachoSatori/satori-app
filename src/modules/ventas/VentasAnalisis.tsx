@@ -419,7 +419,7 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
                 ].map(k => (
                   <div key={k.label}>
                     <div style={{ fontSize: '0.62rem', color: '#555', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{k.label}</div>
-                    <div style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.1rem', fontWeight: 800, color: k.color || 'var(--vt-paper)' }}>{k.val}</div>
+                    <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.1rem', fontWeight: 800, color: k.color || 'var(--vt-paper)' }}>{k.val}</div>
                   </div>
                 ))}
               </div>

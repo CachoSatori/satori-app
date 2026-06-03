@@ -417,7 +417,7 @@ function VerKPIs({ tots }: { tots: Tots }) {
       {kpis.map(k => (
         <div key={k.label} style={{ background:'var(--vt-ink)', padding:'0.625rem 0.75rem', borderRadius:2 }}>
           <div style={{ fontSize:'0.6rem', letterSpacing:'0.12em', textTransform:'uppercase', color:'#555', marginBottom:4 }}>{k.label}</div>
-          <div style={{ fontFamily:'Syne,sans-serif', fontSize:'clamp(0.65rem,1.1vw,0.85rem)', fontWeight:800, color:k.color }}>{k.val}</div>
+          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'clamp(0.65rem,1.1vw,0.85rem)', fontWeight:800, color:k.color }}>{k.val}</div>
         </div>
       ))}
     </div>

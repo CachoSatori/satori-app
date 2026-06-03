@@ -72,7 +72,7 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
               <div style={{ fontSize: '0.7rem', color: '#aaa', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
                 Meta
               </div>
-              <div style={{ fontFamily: "'Syne',sans-serif", fontSize: '1.1rem', fontWeight: 800, color: 'var(--vt-gold)' }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.1rem', fontWeight: 800, color: 'var(--vt-gold)' }}>
                 {fi(curProg.meta)}
               </div>
             </div>

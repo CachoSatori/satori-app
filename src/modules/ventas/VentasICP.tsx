@@ -264,7 +264,7 @@ export default function VentasICP({ dias, pm }: Props) {
                 </td>
                 <td className="r">
                   <span style={{
-                    fontFamily: "'Syne',sans-serif",
+                    fontFamily: "'DM Mono',monospace",
                     fontSize: '1rem',
                     fontWeight: 800,
                     color: d.icp > 0 ? icpColor(d.icp) : '#555',

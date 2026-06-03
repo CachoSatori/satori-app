@@ -309,7 +309,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                 <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '0.15rem 0.5rem', borderRadius: 99, background: typeBg, color: typeCol }}>
                   {MOVEMENT_LABELS[m.movement_type as MovementType] ?? m.movement_type}
                 </span>
-                <span style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: '0.95rem', color: amtColor }}>
+                <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, fontSize: '0.95rem', color: amtColor }}>
                   {isIng ? '+' : isEg ? '−' : ''}{fi(m.amount_crc)}
                 </span>
               </div>

@@ -128,7 +128,7 @@ export default function MisPropinas() {
               ].map(k => (
                 <div key={k.label} style={{ background: 'var(--t-ink)', padding: '0.875rem 1rem', borderRadius: 2 }}>
                   <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555', marginBottom: '0.3rem' }}>{k.label}</div>
-                  <div style={{ fontFamily: "'Syne',sans-serif", fontSize: '1rem', fontWeight: 800, color: k.color || 'var(--t-paper)' }}>{k.val}</div>
+                  <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1rem', fontWeight: 800, color: k.color || 'var(--t-paper)' }}>{k.val}</div>
                 </div>
               ))}
             </div>
@@ -179,7 +179,7 @@ export default function MisPropinas() {
                         <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#888' }}>{totalShifts}</td>
                         <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', color: '#888', fontSize: '0.75rem' }}>{totalHours.toFixed(0)}h</td>
                         <td colSpan={2}/>
-                        <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 800, fontFamily: "'Syne',sans-serif", color: 'var(--t-gold)' }}>{formatCRC(totalEarned)}</td>
+                        <td style={{ padding: '0.5rem 0.75rem', textAlign: 'right', fontWeight: 800, fontFamily: "'DM Mono',monospace", color: 'var(--t-gold)' }}>{formatCRC(totalEarned)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -196,7 +196,7 @@ export default function MisPropinas() {
                     <div key={ym} style={{ background: '#fff', border: '1px solid var(--t-border)', borderRadius: 3, marginBottom: '0.75rem', overflow: 'hidden' }}>
                       <div style={{ background: 'var(--t-panel)', padding: '0.625rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{MONTH_NAMES[m] ?? m} {y}</div>
-                        <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, color: 'var(--t-teal)' }}>{formatCRC(total)}</div>
+                        <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: 'var(--t-teal)' }}>{formatCRC(total)}</div>
                       </div>
                       <div style={{ padding: '0.625rem 1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                         {[
@@ -205,7 +205,7 @@ export default function MisPropinas() {
                         ].map(q => (
                           <div key={q.label} style={{ background: 'var(--t-panel)', borderRadius: 2, padding: '0.5rem 0.75rem' }}>
                             <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#888', marginBottom: '0.2rem' }}>{q.label}</div>
-                            <div style={{ fontFamily: "'Syne',sans-serif", fontWeight: 800, fontSize: '0.95rem', color: q.textColor }}>
+                            <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, fontSize: '0.95rem', color: q.textColor }}>
                               {q.earn > 0 ? formatCRC(q.earn) : '—'}
                             </div>
                             <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '0.15rem' }}>{q.days} turnos · {q.hours.toFixed(1)}h</div>

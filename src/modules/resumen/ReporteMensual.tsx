@@ -248,7 +248,7 @@ export default function ReporteMensual() {
       {/* Header / controls — hidden on print */}
       <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0d0d0d', borderBottom: '1px solid #1a1a1a', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          <span style={{ fontFamily: 'Georgia, serif', fontSize: '1.2rem', color: '#c8a96e', fontWeight: 700 }}>里</span>
+          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.2rem', color: '#c8a96e', fontWeight: 700 }}>里</span>
           <div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>Reporte mensual</div>
             <div style={{ fontSize: '0.68rem', color: '#888', letterSpacing: '0.06em' }}>Ventas · Propinas · Caja</div>

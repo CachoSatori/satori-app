@@ -229,7 +229,7 @@ export default function CashCierre({ onRefresh }: Props) {
             ].map(k => (
               <div key={k.label} style={{ background:'#111', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
                 <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>{k.label}</div>
-                <div style={{ fontFamily:'Syne,sans-serif', fontSize:'1.1rem', fontWeight:800, color:k.color }}>
+                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.1rem', fontWeight:800, color:k.color }}>
                   {fi2(k.val)}
                 </div>
               </div>
@@ -303,7 +303,7 @@ export default function CashCierre({ onRefresh }: Props) {
               ))}
               <div style={{ display:'flex', justifyContent:'space-between', padding:'0.5rem 0.875rem', background:'#111', fontSize:'0.8rem' }}>
                 <span style={{ color:'#888', fontSize:'0.68rem', textTransform:'uppercase', letterSpacing:'0.08em' }}>Efectivo neto mediodía</span>
-                <span style={{ fontFamily:'Syne,sans-serif', fontSize:'0.9rem', fontWeight:700, color:'#c8a030' }}>
+                <span style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.9rem', fontWeight:700, color:'#c8a030' }}>
                   {fi2((parcial.ef_real_m_crc||0) - (parcial.propinas_m_crc||0) - (parcial.otros_m_crc||0))}
                 </span>
               </div>
@@ -371,7 +371,7 @@ export default function CashCierre({ onRefresh }: Props) {
                     ))}
                     <tr style={{ background:'#0d0d0d', borderTop:'2px solid #2a2a2a' }}>
                       <td style={{ padding:'0.625rem 0.75rem', fontSize:'0.78rem', color:'#888', borderRight:'1px solid #111' }}>Total contado</td>
-                      <td style={{ padding:'0.625rem 0.5rem', fontFamily:'Syne,sans-serif', fontSize:'0.95rem', fontWeight:800, color:'#4a9a6a', borderRight:'1px solid #111', textAlign:'center' }}>
+                      <td style={{ padding:'0.625rem 0.5rem', fontFamily:"'DM Mono',monospace", fontSize:'0.95rem', fontWeight:800, color:'#4a9a6a', borderRight:'1px solid #111', textAlign:'center' }}>
                         {totalContadoCRC > 0 ? fi2(totalContadoCRC) : '—'}
                       </td>
                       <td style={{ padding:'0.625rem 0.5rem', fontSize:'0.82rem', color:'#888', textAlign:'center' }}>

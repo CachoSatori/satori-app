@@ -167,7 +167,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
           ].map(k => (
             <div key={k.label}>
               <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555' }}>{k.label}</div>
-              <div style={{ fontFamily: "'Syne',sans-serif", fontSize: '1rem', fontWeight: 800, color: 'var(--t-gold)', lineHeight: 1.2 }}>{k.val}</div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1rem', fontWeight: 800, color: 'var(--t-gold)', lineHeight: 1.2 }}>{k.val}</div>
               <div style={{ fontSize: '0.65rem', color: '#555' }}>{k.sub}</div>
             </div>
           ))}

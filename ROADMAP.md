@@ -385,12 +385,13 @@ Bot: "✅ Confirmado — Satori Santa Teresa · 20 jun · 7:30PM · 4 personas �
 - Mapear las cuentas QB → `finance_accounts` (matching por código/nombre).
 - Cargar 2023/2024/2025 para comparar año contra año.
 
-#### 2C.3 Conexión con datos vivos de Satori · M
-- **Ingresos automáticos**: `ventas_dias` → Ventas Salón/Delivery reales por mes.
-- **Costo de ventas**: food cost de Inventario (Fase 1) → líneas 5200/5320 reales.
-- **Egresos de Caja**: `cash_movements` (egreso_mercaderia/operativo/personal/socios) → cuentas de gasto.
-- **Nómina**: salarios + propinas + CCSS → Payroll Expenses.
-- Así el "Real" se llena solo desde lo que ya registra la app, sin doble carga.
+#### 2C.3 Conexión con datos vivos de Satori · ✅ HECHO (v1)
+- **Ingresos automáticos** ✅: `ventas_dias` → Ventas Salón/Delivery reales por mes.
+- **Egresos de Caja** ✅: `cash_movements` mapeados por tipo (mercadería→Food 5200, personal→Staff
+  Wages 6200, operativo→Insumos 7120, socios→Consumos Dueños). getLiveActuals(year).
+- La columna "Real" del P&L ya se llena sola desde lo que registra la app (+ suma manual si la hay).
+- **Pendiente (v2)**: mapeo fino por subcategoría de caja → cada cuenta QB; food cost desde Inventario
+  (Fase 1) en vez de mercadería; nómina detallada (CCSS/INS/aguinaldos) desde la fuente de salarios.
 
 #### 2C.4 Edición y reportes · M
 - Editar presupuesto inline (por cuenta/mes), crear cuentas nuevas.

@@ -39,16 +39,24 @@ Evaluación (consistencia/tendencia/racha + tabla scorecard + selector período 
 ICP (índice conversión propina), Saloneros (tarjetas + tabla ordenable),
 Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bulk edit cascading), Histórico
 
-### Propinas / Tips (心)
+### Propinas / Tips (心) — ✅ AUDITADO CONTRA FLUJO OPERATIVO REAL — listo para reemplazar Excel
 - Turno: coberturas dinámicas (picker + badge COB), verificación pool con tipo+motivo si dif >₡500 (bloquea cierre + persiste en notas), banner turno activo
-- Historial: filtros (mes + empleado), editar/reabrir sesión cerrada (reopenTipSession)
-- Quincenal, Stats (desglose AM/PM por empleado + top earners)
+- Datáfono individual por empleado de sala (propina ₡/$); bar/cocina reciben del pool
+- Pool: general por puntos (efectivo + datáfonos de sala) **+** pool barra repartido por horas entre bartenders del turno. Barra muestra desglose Pool barra + Servicio en la fila
+- Cierre AM/PM independiente (cada sesión se abre y cierra por separado)
+- Historial: monto visible sin click + botón Ver → modal con desglose por empleado y acciones (editar/eliminar/copiar). Sesiones pre-mayo sin datáfono se manejan sin romper (generado ₡0)
+- Quincenal, Stats (desglose AM/PM por empleado + top earners + **datáfono Generó vs Recibió** del mes)
 - Cocina (admin): pool semanal de cocina, reparto por semana ISO, Selena entra al pool pero no recibe (TipCocina.tsx)
 
-### Caja / Cash (金)
-- Turno (apertura con TC dinámico ₡/$)
-- Cierre del día (2 FASES): mediodía se sella → noche con separaciones (Caja Diaria/Registradora/Remanente CF)
+### Caja / Cash (金) — ✅ AUDITADO CONTRA FLUJO OPERATIVO REAL — listo para reemplazar Excel
+- Turno: apertura **dual** (registradora/servicio + caja proveedores) con TC dinámico ₡/$
+- Dos cajas físicas separadas: los pagos a proveedor en efectivo salen de la **Caja Proveedores**, no de la registradora. Conciliación en vivo (fondo − pagos = restante)
+- Caja proveedores abierta todo el día (AM y PM registran pagos); no se cierra por turno — se concilia en el Cierre del día
+- Pago a proveedor por **modal** (proveedor/monto ₡-$/método/factura); lista más reciente arriba con editar/eliminar
+- Cierre por turno: verificación de la registradora (fondo + ingresos − egresos efectivo) vs conteo
+- Cierre del día (2 FASES): mediodía se sella → noche con separaciones (Caja Diaria mañana/Registradora/Remanente CF)
   + verificación automática (diferencia >₡500 exige tipo+motivo). Tabla: cash_cierres_dia
+- Integración Caja↔Propinas: al cerrar propinas se registra egreso_personal (Registradora) por el payout
 - Movimientos, Proveedores, Pendientes
 - Resumen (filtro mes + ingresos por método + egresos por subcategoría + tendencia mensual 6m)
 
@@ -88,6 +96,27 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
   · plan de cuentas jerárquico + budget 2026 importado de QB (Net proyectado ₡66.2M), por mes/año
   · columnas Presupuesto·Real·Variación. Falta: migrar reales históricos + conectar datos vivos (ventas/caja/inventario)
   · tablas finance_accounts, finance_budget, finance_actuals · src/modules/finanzas/
+
+## Flujo operativo validado (2026-06-03)
+Recorrido mental del día completo (Caja + Propinas) contra el flujo real del restaurante
+(2 turnos AM/PM, encargado cierra cada uno, caja proveedores abierta todo el día, cada
+salonero/bartender con su datáfono). Caja y Propinas quedan **listos para reemplazar el Excel**.
+
+Pasos de prueba para confirmar en producción:
+1. **Apertura AM** — abrir turno de caja: registrar fondo de registradora **y** fondo de caja
+   proveedores por separado + TC. Verificar que aparecen las dos cajas en las top cards.
+2. **Pagos a proveedor (AM y PM)** — agregar pagos por el modal (efectivo y transferencia).
+   El efectivo descuenta de la **caja proveedores** (no de la registradora); la transferencia
+   queda pendiente. La lista muestra el más reciente arriba; editar/eliminar funciona.
+3. **Propinas del turno** — abrir sesión de propinas, cargar efectivo + datáfonos de sala +
+   pool barra + horas. Confirmar que bartenders reciben pool general (por puntos) **+** pool
+   barra (por horas) y que la fila muestra el desglose Pool barra / Servicio. Cerrar AM.
+4. **Cierre de turno (registradora)** — contar la registradora: "debería quedar" = fondo +
+   ingresos − egresos efectivo (propinas tarjeta/otros), **sin** pagos a proveedor. La caja
+   proveedores se muestra como informativa (restante), no se cierra por turno.
+5. **Cierre del día** — Fase 1 mediodía se sella; Fase 2 noche + conteo físico (separaciones:
+   Caja Diaria mañana / Registradora / Remanente CF) + verificación. El resumen final muestra
+   el Remanente de Caja Fuerte esperado y asigna el efectivo del día siguiente.
 
 ## Datos cargados en DB (migración histórica COMPLETA)
 - ventas_dias: 151 días (2026, vía XLS)

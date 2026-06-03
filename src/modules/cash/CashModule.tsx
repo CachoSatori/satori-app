@@ -111,6 +111,7 @@ export default function CashModule() {
               Satori · Santa Teresa
             </div>
           </div>
+          {profile?.role && <span className="role-badge">{profile.role}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button className="cash-back-btn" onClick={() => navigate('/')}>← Inicio</button>

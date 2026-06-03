@@ -224,6 +224,7 @@ export default function ClientesModule() {
             <h2 className="tips-title">Clientes</h2>
             <p className="tips-subtitle">CRM · Fidelización · Satori</p>
           </div>
+          {profile?.role && <span className="role-badge">{profile.role}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           {canManage && (

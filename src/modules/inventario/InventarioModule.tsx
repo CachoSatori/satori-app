@@ -74,6 +74,7 @@ export default function InventarioModule() {
               Satori · Ingredientes &amp; Recetas
             </div>
           </div>
+          {role && <span className="role-badge">{role}</span>}
         </div>
         <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888' }}
           onClick={() => navigate('/')}>← Inicio</button>

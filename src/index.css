@@ -474,8 +474,8 @@ html, body, #root {
 
 .tab-btn.active,
 .tab-btn:hover {
-  border-color: var(--white);
-  color: var(--white);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* ── Tips Module — paleta paper/ink/gold/teal ─────────────── */
@@ -563,8 +563,8 @@ html, body, #root {
 
 .tips-tab.active,
 .tips-tab:hover {
-  border-color: var(--t-teal);
-  color: var(--t-teal);
+  border-color: var(--t-gold);
+  color: var(--t-gold);
 }
 
 /* ── Body ── */
@@ -1878,28 +1878,29 @@ html, body, #root {
 /* ── Nav tabs (dark header bar) ─────────────────────────────── */
 .cd-nav-tabs {
   display: flex;
-  background: var(--t-panel, #ede8de);
-  border-bottom: 2px solid var(--t-border, #d4cfc4);
+  align-items: center;
+  background: var(--vt-ink, #0d0d0d);
+  border-bottom: 1px solid #242424;
   padding: 0 1.5rem;
   overflow-x: auto;
   gap: 0;
 }
 .cd-nav-tab {
-  padding: 0.85rem 1.25rem;
+  padding: 0.85rem 1.1rem;
   cursor: pointer;
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  color: #4a4030;
+  margin-bottom: -1px;
+  color: #8a8278;
   transition: all 0.15s;
   white-space: nowrap;
   font-weight: 600;
   position: relative;
 }
-.cd-nav-tab:hover { color: var(--t-ink); }
-.cd-nav-tab.active { color: var(--t-red, #c23b22); border-bottom-color: var(--t-red, #c23b22); font-weight: 700; }
+.cd-nav-tab:hover { color: #e8e2d8; }
+.cd-nav-tab.active { color: var(--t-gold, #c8a96e); border-bottom-color: var(--t-gold, #c8a96e); font-weight: 700; }
 
 .cd-pend-badge {
   display: inline-flex;
@@ -2820,6 +2821,20 @@ html, body, #root {
   align-self: center;
 }
 .vt-nav-group:not(:first-child) { border-left: 1px solid #242424; padding-left: 1rem; }
+
+/* Badge de rol en el header (estilo dashboard) */
+.role-badge {
+  font-size: 0.56rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #9a8ac8;
+  border: 1px solid #3a3658;
+  border-radius: 3px;
+  padding: 3px 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  align-self: center;
+}
 .vt-nav-tab {
   padding: 0.8rem 1rem;
   cursor: pointer;

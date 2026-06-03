@@ -456,6 +456,7 @@ export default function TipsModule() {
             <h2 className="tips-title">Propinas</h2>
             <p className="tips-subtitle">Pool del turno · Satori</p>
           </div>
+          {profile?.role && <span className="role-badge">{profile.role}</span>}
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
         <div className="tips-tabs">

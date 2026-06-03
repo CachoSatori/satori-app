@@ -67,6 +67,7 @@ export default function AdminModule() {
             <h2 className="module-header-title">Administración</h2>
             <p className="module-header-sub">Empleados · Configuración</p>
           </div>
+          <span className="role-badge">Owner</span>
         </div>
         <div className="module-header-actions">
           <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888' }}

@@ -126,11 +126,7 @@ export default function VentasModule() {
           <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.15rem', fontWeight: 700, color: 'var(--vt-gold)', letterSpacing: '0.18em' }}>
             SATORI
           </div>
-          {role && (
-            <span style={{ fontSize: '0.58rem', letterSpacing: '0.18em', color: '#9a8ac8', textTransform: 'uppercase', border: '1px solid #3a3658', borderRadius: 3, padding: '3px 9px', fontWeight: 700 }}>
-              {role}
-            </span>
-          )}
+          {role && <span className="role-badge">{role}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888' }}

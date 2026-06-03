@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react'
+import MetaProgressBar from './MetaProgressBar'
 import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
   aggGeneral, aggSalonero, aggCajero, getDayStats,
@@ -271,27 +272,8 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
         </div>
       )}
 
-      {/* Meta progress */}
-      {progress && (
-        <div className="vt-meta-bar">
-          <div className="vt-meta-bar-top">
-            <span>Meta {metaMonth} — {fi(progress.meta)}</span>
-            <span style={{ color: progress.onTrack ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-              {progress.pct.toFixed(1)}% completado
-            </span>
-          </div>
-          <div className="vt-progress-track">
-            <div className="vt-progress-fill" style={{
-              width: `${Math.min(progress.pct, 100)}%`,
-              background: progress.onTrack ? 'var(--vt-green)' : 'var(--vt-red)',
-            }} />
-          </div>
-          <div className="vt-meta-bar-bottom">
-            <span>Proyección: <strong style={{ color: progress.onTrack ? 'var(--vt-green)' : 'var(--vt-red)' }}>{fi(progress.projection)}</strong></span>
-            <span>Esfuerzo diario restante: <strong>{fi(progress.effort)}</strong></span>
-          </div>
-        </div>
-      )}
+      {/* Meta progress + proyección (bloque completo) */}
+      {progress && <MetaProgressBar ym={metaMonth} p={progress} />}
 
       {/* Restaurant total KPIs (with cajeros) */}
       {hasCajeros && (

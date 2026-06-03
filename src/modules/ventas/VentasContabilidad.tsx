@@ -7,6 +7,7 @@ import {
 } from './ventasUtils'
 
 const ReporteMensual = lazy(() => import('./ReporteMensual'))
+import MetaProgressBar from './MetaProgressBar'
 
 interface Props {
   dias:  DiasMap
@@ -87,23 +88,8 @@ export default function VentasContabilidad({ dias, hist, metas, pm }: Props) {
         ))}
       </div>
 
-      {/* Meta progress bar */}
-      {progress && (
-        <div className="vt-meta-bar">
-          <div className="vt-meta-bar-top">
-            <span>Meta {selected} — {fi(progress.meta)}</span>
-            <span style={{ color: progress.onTrack ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-              {progress.pct.toFixed(1)}% · Proyección: {fi(progress.projection)}
-            </span>
-          </div>
-          <div className="vt-progress-track">
-            <div className="vt-progress-fill" style={{
-              width: `${Math.min(progress.pct, 100)}%`,
-              background: progress.onTrack ? 'var(--vt-green)' : 'var(--vt-red)',
-            }} />
-          </div>
-        </div>
-      )}
+      {/* Meta progress + proyección (bloque completo) */}
+      {progress && <MetaProgressBar ym={selected} p={progress} />}
 
       {/* KPIs */}
       <div className="vt-kpi-grid">

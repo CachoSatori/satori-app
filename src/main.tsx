@@ -3,19 +3,21 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
-// Force SW to activate immediately if a new version is waiting
-// This ensures users always get the latest JS on next reload
+// Auto-actualización del PWA: al abrir la app se busca una versión nueva; si
+// el nuevo service worker toma control, se recarga UNA vez automáticamente para
+// servir la versión actual. El chequeo es solo al abrir (no en medio del turno),
+// así la recarga cae al inicio y no interrumpe la carga de datos en curso.
 if ('serviceWorker' in navigator) {
+  let reloaded = false
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // New SW took control — the page will use new cached assets on next navigation
-    // (no forced reload to avoid interrupting active sessions)
+    if (reloaded) return
+    reloaded = true
+    window.location.reload()
   })
   navigator.serviceWorker.getRegistrations().then(regs => {
     regs.forEach(reg => {
-      reg.update()
-      if (reg.waiting) {
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' })
-      }
+      reg.update().catch(() => {})
+      if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' })
     })
   })
 }

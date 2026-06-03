@@ -47,13 +47,16 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
   · Food Cost: teórico (COGS recetas) vs real (compras Caja) + merma + ajustes, por mes (1.3)
   · Movimientos: compra→Caja (genera egreso_mercaderia en turno abierto) (1.4)
   · Stock dashboard + alerta de stock en HomePage (sin stock / stock bajo) (1.4)
-  · Pendiente menor: orden de compra sugerida por proveedor (no crítico)
+  · Orden de compra sugerida por proveedor (agrupa bajo-mínimo, qty a 2× min, copiar pedido) (1.4)
+  → FASE 1 COMPLETA en código
 - HomePage: dashboard con métricas reales en vivo (ventas/propinas/caja/stock del día en las tarjetas)
 - Clientes / CRM (客) — Fase 2.1+2.2 (requiere migrations 004 y 005 aplicadas):
   · /clientes — búsqueda por teléfono/nombre, alta/edición rápida, perfil con agregados
   · puntos/visitas/gasto por interacción, tier sugerido (nuevo/regular/vip/embajador), historial
   · Fidelización (gerencia): reglas de puntos configurables (puntos/₡, bonus 1ª visita/cumple)
     + catálogo de recompensas; motor computeEarnedPoints; canje en el perfil (descuenta saldo)
+  · Segmentos (2.3 parcial): cumpleañeros del mes, frecuentes/VIP, dormidos, nuevos
+    + copiar lista + link wa.me por cliente (sin APIs externas)
   · tablas customers, customer_interactions, loyalty_config, loyalty_rewards · src/modules/crm/
 
 ## Datos cargados en DB (migración histórica COMPLETA)

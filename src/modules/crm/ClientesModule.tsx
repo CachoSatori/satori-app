@@ -8,17 +8,19 @@
  *
  * Requiere la migración 004_customers.sql aplicada en Supabase.
  */
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import {
   getCustomers, upsertCustomer, deactivateCustomer,
-  getInteractions, addInteraction,
+  getInteractions, addInteraction, getLoyaltyRules, getRewards,
 } from '../../shared/api/crm'
-import type { Customer, CustomerInteraction, CustomerTier } from '../../shared/types/crm'
+import type { Customer, CustomerInteraction, CustomerTier, LoyaltyRules, LoyaltyReward } from '../../shared/types/crm'
 import {
   TIER_LABELS, TIER_COLORS, INTERACTION_TYPES, INTERACTION_CHANNELS, suggestedTier,
+  computeEarnedPoints, DEFAULT_RULES,
 } from '../../shared/types/crm'
+const LoyaltyConfig = lazy(() => import('./LoyaltyConfig'))
 
 function fi(n: number) { return '₡ ' + Math.round(n).toLocaleString('es-CR') }
 function fmtDate(s: string | null) {
@@ -34,10 +36,14 @@ export default function ClientesModule() {
   const navigate = useNavigate()
   const canManage = ['owner', 'manager', 'cajero'].includes(profile?.role ?? '')
 
+  const [view, setView]           = useState<'clientes' | 'config'>('clientes')
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [rules, setRules]         = useState<LoyaltyRules>(DEFAULT_RULES)
+  const [rewards, setRewards]     = useState<LoyaltyReward[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
   const [needsMigration, setNeedsMigration] = useState(false)
+  const [showRedeem, setShowRedeem] = useState(false)
 
   const [search, setSearch]       = useState('')
   const [selId, setSelId]         = useState<string | null>(null)
@@ -60,7 +66,12 @@ export default function ClientesModule() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      setCustomers(await getCustomers())
+      const [cs, rl, rw] = await Promise.all([
+        getCustomers(),
+        getLoyaltyRules().catch(() => DEFAULT_RULES),
+        getRewards(true).catch(() => [] as LoyaltyReward[]),
+      ])
+      setCustomers(cs); setRules(rl); setRewards(rw)
       setNeedsMigration(false)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error'
@@ -131,11 +142,44 @@ export default function ClientesModule() {
     catch (e) { setError(e instanceof Error ? e.message : 'Error') }
   }
 
-  // Default de puntos al cargar monto (1 pt por ₡1000)
+  // Default de puntos según las reglas configuradas (gasto + bonus de contexto)
   function onAmountChange(v: string) {
     setIAmount(v)
     const amt = Number(v) || 0
-    if (!iEarned || iEarned === '0') setIEarned(String(Math.floor(amt / 1000)))
+    if (!selected) return
+    const now = new Date()
+    const lastSeen = selected.last_seen ? new Date(selected.last_seen) : null
+    const firstVisitThisMonth = !lastSeen || lastSeen.getMonth() !== now.getMonth() || lastSeen.getFullYear() !== now.getFullYear()
+    const birthdayMonth = !!selected.birth_date && Number(selected.birth_date.slice(5, 7)) === now.getMonth() + 1
+    setIEarned(String(computeEarnedPoints(amt, rules, { firstVisitThisMonth, birthdayMonth })))
+  }
+
+  // ── Canje de recompensa ──────────────────────────────────────
+  async function redeem(reward: LoyaltyReward) {
+    if (!selected) return
+    if (selected.points < reward.points_cost) { setError('Puntos insuficientes'); return }
+    if (!window.confirm(`Canjear "${reward.name}" por ${reward.points_cost} puntos?`)) return
+    setSaving(true); setError(null)
+    try {
+      await addInteraction({
+        customer_id:   selected.id,
+        type:          'puntos_canje',
+        channel:       'presencial',
+        amount_crc:    0,
+        points_earned: 0,
+        points_spent:  reward.points_cost,
+        reference_id:  reward.id,
+        notes:         `Canje: ${reward.name}`,
+        created_by:    profile?.id ?? null,
+      }, selected)
+      const [ints] = await Promise.all([getInteractions(selected.id), load()])
+      setInteractions(ints)
+      setShowRedeem(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleAddInteraction() {
@@ -165,7 +209,8 @@ export default function ClientesModule() {
     }
   }
 
-  const sugTier = selected ? suggestedTier(selected.total_visits, selected.total_spent_crc) : 'nuevo'
+  const sugTier = selected ? suggestedTier(selected.total_visits, selected.total_spent_crc, rules) : 'nuevo'
+  const affordable = selected ? rewards.filter(r => r.active && r.points_cost <= selected.points) : []
 
   return (
     <div className="tips-module">
@@ -178,11 +223,25 @@ export default function ClientesModule() {
             <p className="tips-subtitle">CRM · Fidelización · Satori</p>
           </div>
         </div>
-        <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888' }}
-          onClick={() => navigate('/')}>← Inicio</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {canManage && (
+            <div className="tips-tabs">
+              <button className={`tips-tab ${view === 'clientes' ? 'active' : ''}`} onClick={() => setView('clientes')}>Clientes</button>
+              <button className={`tips-tab ${view === 'config' ? 'active' : ''}`} onClick={() => setView('config')}>Fidelización</button>
+            </div>
+          )}
+          <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888', whiteSpace: 'nowrap' }}
+            onClick={() => navigate('/')}>← Inicio</button>
+        </div>
       </div>
 
       {error && <div className="tips-error"><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}
+
+      {view === 'config' && canManage && !needsMigration && (
+        <Suspense fallback={<div style={{ padding: '3rem', textAlign: 'center', opacity: 0.4 }}>⏳</div>}>
+          <LoyaltyConfig />
+        </Suspense>
+      )}
 
       {needsMigration ? (
         <div style={{ padding: '2rem', maxWidth: 620, margin: '2rem auto', textAlign: 'center', color: '#aaa' }}>
@@ -195,7 +254,7 @@ export default function ClientesModule() {
         </div>
       ) : loading ? (
         <div className="module-loading"><span className="loading-mark">客</span></div>
-      ) : (
+      ) : view === 'clientes' ? (
         <div className="tips-body">
           {/* KPIs */}
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
@@ -283,6 +342,10 @@ export default function ClientesModule() {
                         style={{ padding: '5px 12px', borderRadius: 2, background: 'var(--t-teal,#2a7a6a)', color: '#fff', border: 'none', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
                         + Registrar interacción
                       </button>
+                      <button onClick={() => setShowRedeem(s => !s)}
+                        style={{ padding: '5px 12px', borderRadius: 2, background: 'transparent', color: 'var(--t-gold,#c8a96e)', border: '1px solid var(--t-gold,#c8a96e)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                        🎁 Canjear ({affordable.length})
+                      </button>
                       <button onClick={() => startEdit(selected)}
                         style={{ padding: '5px 12px', borderRadius: 2, background: 'transparent', color: '#aaa', border: '1px solid #2a2a2a', fontSize: '0.78rem', cursor: 'pointer' }}>
                         Editar
@@ -330,6 +393,33 @@ export default function ClientesModule() {
                     </div>
                   )}
 
+                  {/* Panel de canje */}
+                  {showRedeem && (
+                    <div style={{ border: '1px solid #3a3320', borderRadius: 2, padding: '0.75rem', marginBottom: '1rem', background: '#0c0c0c' }}>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--t-gold,#c8a96e)', fontWeight: 700, marginBottom: '0.5rem' }}>
+                        🎁 Recompensas disponibles · saldo {selected.points} pts
+                      </div>
+                      {rewards.filter(r => r.active).length === 0 ? (
+                        <div style={{ fontSize: '0.78rem', color: '#777' }}>No hay recompensas activas. Cargalas en la pestaña Fidelización.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          {rewards.filter(r => r.active).map(r => {
+                            const can = selected.points >= r.points_cost
+                            return (
+                              <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', opacity: can ? 1 : 0.45 }}>
+                                <span>{r.name} <span style={{ color: '#666', fontSize: '0.7rem' }}>· {r.category}</span></span>
+                                <button onClick={() => redeem(r)} disabled={!can || saving}
+                                  style={{ padding: '3px 10px', borderRadius: 2, border: '1px solid var(--t-gold,#c8a96e)', background: can ? 'rgba(200,169,110,0.12)' : 'transparent', color: 'var(--t-gold,#c8a96e)', fontSize: '0.72rem', fontWeight: 700, cursor: can ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
+                                  {r.points_cost} pts
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Historial */}
                   <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#666', marginBottom: '0.4rem' }}>Historial</div>
                   {loadingInter ? <div style={{ color: '#666', fontSize: '0.8rem' }}>Cargando…</div> : interactions.length === 0 ? (
@@ -361,7 +451,7 @@ export default function ClientesModule() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -53,9 +53,56 @@ export const TIER_COLORS: Record<CustomerTier, string> = {
 export const INTERACTION_TYPES = ['visita', 'delivery', 'reserva', 'puntos_canje', 'nota'] as const
 export const INTERACTION_CHANNELS = ['presencial', 'whatsapp', 'qr_scan', 'manual'] as const
 
-// Tier sugerido según visitas / gasto acumulado (regla simple, ajustable)
-export function suggestedTier(visits: number, spent: number): CustomerTier {
-  if (visits >= 10 || spent >= 80000) return 'vip'
-  if (visits >= 3  || spent >= 25000) return 'regular'
+// ── Programa de puntos (Fase 2.2) ────────────────────────────────
+export interface LoyaltyRules {
+  points_per_1000:         number   // puntos por cada ₡1.000 gastados
+  bonus_first_visit_month: number   // bonus en la primera visita del mes
+  bonus_birthday:          number   // bonus en el mes de cumpleaños
+  bonus_referral:          number   // bonus por referido
+  tier_regular_visits:     number
+  tier_regular_spent:      number
+  tier_vip_visits:         number
+  tier_vip_spent:          number
+}
+
+export const DEFAULT_RULES: LoyaltyRules = {
+  points_per_1000:         10,
+  bonus_first_visit_month: 50,
+  bonus_birthday:          100,
+  bonus_referral:          100,
+  tier_regular_visits:     3,
+  tier_regular_spent:      25000,
+  tier_vip_visits:         10,
+  tier_vip_spent:          80000,
+}
+
+export interface LoyaltyReward {
+  id:          string
+  name:        string
+  description: string | null
+  points_cost: number
+  category:    string      // 'descuento' | 'cortesia' | 'experiencia'
+  active:      boolean
+  created_at:  string
+}
+
+export const REWARD_CATEGORIES = ['cortesia', 'descuento', 'experiencia'] as const
+
+// Motor de puntos: cuántos puntos gana una interacción según las reglas
+export function computeEarnedPoints(
+  amountCrc: number,
+  rules: LoyaltyRules,
+  opts: { firstVisitThisMonth?: boolean; birthdayMonth?: boolean } = {},
+): number {
+  let pts = Math.floor((amountCrc / 1000) * rules.points_per_1000)
+  if (opts.firstVisitThisMonth) pts += rules.bonus_first_visit_month
+  if (opts.birthdayMonth)       pts += rules.bonus_birthday
+  return Math.max(0, pts)
+}
+
+// Tier sugerido según visitas / gasto acumulado y las reglas configuradas
+export function suggestedTier(visits: number, spent: number, rules: LoyaltyRules = DEFAULT_RULES): CustomerTier {
+  if (visits >= rules.tier_vip_visits     || spent >= rules.tier_vip_spent)     return 'vip'
+  if (visits >= rules.tier_regular_visits || spent >= rules.tier_regular_spent) return 'regular'
   return 'nuevo'
 }

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
-import type { Customer, CustomerInteraction } from '../types/crm'
+import type { Customer, CustomerInteraction, LoyaltyRules, LoyaltyReward } from '../types/crm'
+import { DEFAULT_RULES } from '../types/crm'
 
 // ── Customers ────────────────────────────────────────────────────
 
@@ -82,4 +83,45 @@ export async function addInteraction(
     .update(updates as never)
     .eq('id', customer.id)
   if (uErr) throw new Error(uErr.message)
+}
+
+// ── Loyalty config (reglas de puntos) ────────────────────────────
+
+export async function getLoyaltyRules(): Promise<LoyaltyRules> {
+  const { data, error } = await supabase
+    .from('loyalty_config' as never)
+    .select('rules')
+    .eq('id', 1)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return { ...DEFAULT_RULES, ...((data as { rules?: Partial<LoyaltyRules> } | null)?.rules ?? {}) }
+}
+
+export async function saveLoyaltyRules(rules: LoyaltyRules): Promise<void> {
+  const { error } = await supabase
+    .from('loyalty_config' as never)
+    .upsert({ id: 1, rules, updated_at: new Date().toISOString() } as never, { onConflict: 'id' })
+  if (error) throw new Error(error.message)
+}
+
+// ── Recompensas (catálogo de canje) ──────────────────────────────
+
+export async function getRewards(onlyActive = false): Promise<LoyaltyReward[]> {
+  let q = supabase.from('loyalty_rewards' as never).select('*').order('points_cost')
+  if (onlyActive) q = q.eq('active', true)
+  const { data, error } = await q
+  if (error) throw new Error(error.message)
+  return (data ?? []) as LoyaltyReward[]
+}
+
+export async function upsertReward(r: Partial<LoyaltyReward> & { name: string; points_cost: number }): Promise<void> {
+  const payload: Record<string, unknown> = { ...r }
+  delete payload.created_at
+  const { error } = await supabase.from('loyalty_rewards' as never).upsert(payload as never)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteReward(id: string): Promise<void> {
+  const { error } = await supabase.from('loyalty_rewards' as never).delete().eq('id', id)
+  if (error) throw new Error(error.message)
 }

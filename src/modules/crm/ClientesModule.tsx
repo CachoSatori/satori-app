@@ -22,6 +22,7 @@ import {
 } from '../../shared/types/crm'
 const LoyaltyConfig = lazy(() => import('./LoyaltyConfig'))
 const CrmSegmentos  = lazy(() => import('./CrmSegmentos'))
+const CrmMetricas   = lazy(() => import('./CrmMetricas'))
 
 function fi(n: number) { return '₡ ' + Math.round(n).toLocaleString('es-CR') }
 function fmtDate(s: string | null) {
@@ -37,7 +38,7 @@ export default function ClientesModule() {
   const navigate = useNavigate()
   const canManage = ['owner', 'manager', 'cajero'].includes(profile?.role ?? '')
 
-  const [view, setView]           = useState<'clientes' | 'segmentos' | 'config'>('clientes')
+  const [view, setView]           = useState<'clientes' | 'segmentos' | 'metricas' | 'config'>('clientes')
   const [customers, setCustomers] = useState<Customer[]>([])
   const [rules, setRules]         = useState<LoyaltyRules>(DEFAULT_RULES)
   const [rewards, setRewards]     = useState<LoyaltyReward[]>([])
@@ -229,6 +230,7 @@ export default function ClientesModule() {
             <div className="tips-tabs">
               <button className={`tips-tab ${view === 'clientes' ? 'active' : ''}`} onClick={() => setView('clientes')}>Clientes</button>
               <button className={`tips-tab ${view === 'segmentos' ? 'active' : ''}`} onClick={() => setView('segmentos')}>Segmentos</button>
+              <button className={`tips-tab ${view === 'metricas' ? 'active' : ''}`} onClick={() => setView('metricas')}>Métricas</button>
               <button className={`tips-tab ${view === 'config' ? 'active' : ''}`} onClick={() => setView('config')}>Fidelización</button>
             </div>
           )}
@@ -248,6 +250,12 @@ export default function ClientesModule() {
       {view === 'segmentos' && canManage && !needsMigration && !loading && (
         <Suspense fallback={<div style={{ padding: '3rem', textAlign: 'center', opacity: 0.4 }}>⏳</div>}>
           <CrmSegmentos customers={customers} />
+        </Suspense>
+      )}
+
+      {view === 'metricas' && canManage && !needsMigration && !loading && (
+        <Suspense fallback={<div style={{ padding: '3rem', textAlign: 'center', opacity: 0.4 }}>⏳</div>}>
+          <CrmMetricas customers={customers} />
         </Suspense>
       )}
 

@@ -125,3 +125,20 @@ export async function deleteReward(id: string): Promise<void> {
   const { error } = await supabase.from('loyalty_rewards' as never).delete().eq('id', id)
   if (error) throw new Error(error.message)
 }
+
+// ── Métricas de fidelización: agregados de interacciones ─────────
+export interface InteractionAgg {
+  type:          string
+  channel:       string
+  points_earned: number
+  points_spent:  number
+  amount_crc:    number
+}
+
+export async function getAllInteractionAggs(): Promise<InteractionAgg[]> {
+  const { data, error } = await supabase
+    .from('customer_interactions' as never)
+    .select('type, channel, points_earned, points_spent, amount_crc')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as InteractionAgg[]
+}

@@ -72,31 +72,15 @@ export default function AdminModule() {
         <div className="module-header-actions">
           <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888' }}
             onClick={() => navigate('/')}>← Inicio</button>
-          <button
-            className={`tab-btn ${tab === 'employees' ? 'active' : ''}`}
-            onClick={() => setTab('employees')}
-          >
-            Empleados
-          </button>
-          <button
-            className={`tab-btn ${tab === 'rolepoints' ? 'active' : ''}`}
-            onClick={() => setTab('rolepoints')}
-          >
-            Puntos por rol
-          </button>
-          <button
-            className={`tab-btn ${tab === 'exchange' ? 'active' : ''}`}
-            onClick={() => setTab('exchange')}
-          >
-            Tipo de cambio
-          </button>
-          <button
-            className={`tab-btn ${tab === 'hours' ? 'active' : ''}`}
-            onClick={() => setTab('hours')}
-          >
-            Horas trabajadas
-          </button>
         </div>
+      </div>
+
+      {/* Nav tabs — barra estilo dashboard */}
+      <div className="vt-nav-tabs">
+        <div className={`vt-nav-tab ${tab === 'employees' ? 'active' : ''}`} onClick={() => setTab('employees')}>Empleados</div>
+        <div className={`vt-nav-tab ${tab === 'rolepoints' ? 'active' : ''}`} onClick={() => setTab('rolepoints')}>Puntos por rol</div>
+        <div className={`vt-nav-tab ${tab === 'exchange' ? 'active' : ''}`} onClick={() => setTab('exchange')}>Tipo de cambio</div>
+        <div className={`vt-nav-tab ${tab === 'hours' ? 'active' : ''}`} onClick={() => setTab('hours')}>Horas trabajadas</div>
       </div>
 
       {/* Email report button */}

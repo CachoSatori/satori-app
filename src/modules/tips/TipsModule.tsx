@@ -458,33 +458,17 @@ export default function TipsModule() {
           </div>
           {profile?.role && <span className="role-badge">{profile.role}</span>}
         </div>
-        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', flexWrap:'wrap' }}>
-        <div className="tips-tabs">
-          <button className={`tips-tab ${view === 'turno' ? 'active' : ''}`} onClick={() => setView('turno')}>
-            Turno actual
-          </button>
-          <button className={`tips-tab ${view === 'historial' ? 'active' : ''}`} onClick={() => setView('historial')}>
-            Historial
-          </button>
-          {isManager && (
-            <button className={`tips-tab ${view === 'quincenal' ? 'active' : ''}`} onClick={() => setView('quincenal')}>
-              Quincenal
-            </button>
-          )}
-          {isManager && (
-            <button className={`tips-tab ${view === 'stats' ? 'active' : ''}`} onClick={() => setView('stats')}>
-              Estadísticas
-            </button>
-          )}
-          {isManager && (
-            <button className={`tips-tab ${view === 'cocina' ? 'active' : ''}`} onClick={() => setView('cocina')}>
-              Cocina
-            </button>
-          )}
-        </div>
         <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888', whiteSpace:'nowrap' }}
           onClick={() => navigate('/')}>← Inicio</button>
-        </div>
+      </div>
+
+      {/* Nav tabs — barra estilo dashboard */}
+      <div className="vt-nav-tabs">
+        <div className={`vt-nav-tab ${view === 'turno' ? 'active' : ''}`} onClick={() => setView('turno')}>Turno actual</div>
+        <div className={`vt-nav-tab ${view === 'historial' ? 'active' : ''}`} onClick={() => setView('historial')}>Historial</div>
+        {isManager && <div className={`vt-nav-tab ${view === 'quincenal' ? 'active' : ''}`} onClick={() => setView('quincenal')}>Quincenal</div>}
+        {isManager && <div className={`vt-nav-tab ${view === 'stats' ? 'active' : ''}`} onClick={() => setView('stats')}>Estadísticas</div>}
+        {isManager && <div className={`vt-nav-tab ${view === 'cocina' ? 'active' : ''}`} onClick={() => setView('cocina')}>Cocina</div>}
       </div>
 
       {error && (

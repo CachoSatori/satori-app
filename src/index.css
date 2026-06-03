@@ -2863,7 +2863,7 @@ html, body, #root {
   font-weight: 600;
 }
 .vt-nav-tab:hover { color: #e8e2d8; }
-.vt-nav-tab.active { font-weight: 700; }
+.vt-nav-tab.active { font-weight: 700; color: var(--vt-gold, #c8a96e); border-bottom-color: var(--vt-gold, #c8a96e); }
 
 /* ── Content wrapper ────────────────────────────────────────── */
 .vt-content {

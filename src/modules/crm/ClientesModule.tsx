@@ -226,19 +226,19 @@ export default function ClientesModule() {
           </div>
           {profile?.role && <span className="role-badge">{profile.role}</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {canManage && (
-            <div className="tips-tabs">
-              <button className={`tips-tab ${view === 'clientes' ? 'active' : ''}`} onClick={() => setView('clientes')}>Clientes</button>
-              <button className={`tips-tab ${view === 'segmentos' ? 'active' : ''}`} onClick={() => setView('segmentos')}>Segmentos</button>
-              <button className={`tips-tab ${view === 'metricas' ? 'active' : ''}`} onClick={() => setView('metricas')}>Métricas</button>
-              <button className={`tips-tab ${view === 'config' ? 'active' : ''}`} onClick={() => setView('config')}>Fidelización</button>
-            </div>
-          )}
-          <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888', whiteSpace: 'nowrap' }}
-            onClick={() => navigate('/')}>← Inicio</button>
-        </div>
+        <button className="cash-back-btn" style={{ borderColor: '#333', color: '#888', whiteSpace: 'nowrap' }}
+          onClick={() => navigate('/')}>← Inicio</button>
       </div>
+
+      {/* Nav tabs — barra estilo dashboard */}
+      {canManage && (
+        <div className="vt-nav-tabs">
+          <div className={`vt-nav-tab ${view === 'clientes' ? 'active' : ''}`} onClick={() => setView('clientes')}>Clientes</div>
+          <div className={`vt-nav-tab ${view === 'segmentos' ? 'active' : ''}`} onClick={() => setView('segmentos')}>Segmentos</div>
+          <div className={`vt-nav-tab ${view === 'metricas' ? 'active' : ''}`} onClick={() => setView('metricas')}>Métricas</div>
+          <div className={`vt-nav-tab ${view === 'config' ? 'active' : ''}`} onClick={() => setView('config')}>Fidelización</div>
+        </div>
+      )}
 
       {error && <div className="tips-error"><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}
 

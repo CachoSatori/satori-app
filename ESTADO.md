@@ -49,10 +49,12 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
   · Stock dashboard + alerta de stock en HomePage (sin stock / stock bajo) (1.4)
   · Pendiente menor: orden de compra sugerida por proveedor (no crítico)
 - HomePage: dashboard con métricas reales en vivo (ventas/propinas/caja/stock del día en las tarjetas)
-- Clientes / CRM (客) — Fase 2.1 (requiere migration 004 aplicada):
+- Clientes / CRM (客) — Fase 2.1+2.2 (requiere migrations 004 y 005 aplicadas):
   · /clientes — búsqueda por teléfono/nombre, alta/edición rápida, perfil con agregados
   · puntos/visitas/gasto por interacción, tier sugerido (nuevo/regular/vip/embajador), historial
-  · tablas customers + customer_interactions (RLS gerencia+cajero) · src/modules/crm/
+  · Fidelización (gerencia): reglas de puntos configurables (puntos/₡, bonus 1ª visita/cumple)
+    + catálogo de recompensas; motor computeEarnedPoints; canje en el perfil (descuenta saldo)
+  · tablas customers, customer_interactions, loyalty_config, loyalty_rewards · src/modules/crm/
 
 ## Datos cargados en DB (migración histórica COMPLETA)
 - ventas_dias: 151 días (2026, vía XLS)
@@ -89,4 +91,5 @@ Todas ✅ HECHO · build verde · pusheadas a main
 - DNS SiteGround para email desde @satoricostarica.com (hoy sale de onboarding@resend.dev)
 - APLICAR migration 003_tips_email_cron.sql en Supabase (cron de emails de propinas día 1/15)
 - APLICAR migration 004_customers.sql en Supabase (activa el módulo Clientes/CRM)
+- APLICAR migration 005_loyalty.sql en Supabase (activa reglas de puntos + recompensas)
 - Cargar los costos unitarios reales (la UI ya está: Ventas→Config→Costos, inline o import CSV)

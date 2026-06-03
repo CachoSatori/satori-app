@@ -73,6 +73,7 @@ export interface TipEntry {
   tip_amount_usd: number
   points: number | null
   payout_crc: number | null
+  covered_role: UserRole | null
   created_at: string
   updated_at: string
 }

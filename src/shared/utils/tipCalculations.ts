@@ -141,7 +141,8 @@ export function formatUSD(n: number): string {
 export interface HistoryRow {
   employeeId: string
   employeeName: string
-  role: UserRole
+  role: UserRole          // rol efectivo del turno (cubierto si hubo cobertura, si no el natural)
+  coveredRole: UserRole | null  // rol cubierto (null = trabajó en su propio rol)
   hours: number
   propina_crc: number
   propina_usd: number
@@ -167,6 +168,7 @@ export function calcHistory(
     tip_amount_usd: number
     points: number | null
     payout_crc: number | null
+    covered_role?: UserRole | null
   }>,
   employees: Array<{ id: string; full_name: string; role: UserRole }>,
   rolePoints: Array<{ role: UserRole; points: number }>,
@@ -180,15 +182,19 @@ export function calcHistory(
   const pointsMap = new Map(rolePoints.map(r => [r.role, r.points]))
   const empMap    = new Map(employees.map(e => [e.id, e]))
 
-  // Reconstruir DraftLines con los datos de entradas
+  // Reconstruir DraftLines con los datos de entradas.
+  // Si hubo cobertura, el rol EFECTIVO (puntos + pool barra) es el cubierto.
+  const coveredOf = new Map<string, UserRole | null>()
   const lines: DraftLine[] = entries.map(e => {
     const emp = empMap.get(e.employee_id)
     if (!emp) return null
-    const pts_rol = pointsMap.get(emp.role) ?? 0
+    const effectiveRole = (e.covered_role ?? emp.role) as UserRole
+    coveredOf.set(e.employee_id, e.covered_role ?? null)
+    const pts_rol = pointsMap.get(effectiveRole) ?? 0
     return {
       employeeId:   e.employee_id,
       employeeName: emp.full_name,
-      role:         emp.role,
+      role:         effectiveRole,
       active:       true,
       hours:        e.hours_worked,
       propina_crc:  e.tip_amount_crc,
@@ -211,6 +217,7 @@ export function calcHistory(
     employeeId:   l.employeeId,
     employeeName: l.employeeName,
     role:         l.role,
+    coveredRole:  coveredOf.get(l.employeeId) ?? null,
     hours:        Number(l.hours),
     propina_crc:  Number(l.propina_crc),
     propina_usd:  Number(l.propina_usd),

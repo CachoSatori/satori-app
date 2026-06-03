@@ -1,7 +1,7 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-02**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-03**
 
 ---
 
@@ -14,7 +14,7 @@ Satori App no es un POS. Hoy es una capa de inteligencia de negocio que se monta
 | Dominio | Estado |
 |---|---|
 | Ventas / analítica | ✅ 16 vistas (Hoy, Mix, Análisis, MenuEng, Evaluación, ICP, Saloneros, Metas…) |
-| Propinas | ✅ pool por turno, coberturas, verificación, quincenal, pool cocina, stats |
+| Propinas | ✅ pool por turno, coberturas (persistidas en DB), verificación, quincenal, pool cocina, stats, registro de turnos atrasados (fecha+turno) con bloqueo de duplicados, edición completa desde Historial (modal, incl. cobertura) |
 | Caja | ✅ turnos, cierre 2 fases, movimientos, proveedores, resumen mensual |
 | Reportes | ✅ diario, semanal, mensual unificado, emails automáticos (ventas+propinas) |
 | Admin | ✅ empleados, puntos por rol, tipo de cambio, horas trabajadas |

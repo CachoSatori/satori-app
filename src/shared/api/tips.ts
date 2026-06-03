@@ -114,10 +114,11 @@ export async function upsertTipEntry(entry: {
   hours_worked: number
   tip_amount_crc: number
   tip_amount_usd: number
+  covered_role?: string | null
 }): Promise<TipEntry> {
   const { data, error } = await supabase
     .from('tip_entries')
-    .upsert(entry as never, { onConflict: 'session_id,employee_id' })
+    .upsert({ ...entry, covered_role: entry.covered_role ?? null } as never, { onConflict: 'session_id,employee_id' })
     .select()
     .single()
   if (error) throw new Error(error.message)

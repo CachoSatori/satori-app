@@ -117,9 +117,15 @@ export default function TipsModule() {
         const entries = await getTipEntriesBySession(open.id)
         const ptsMap = new Map(pts.map(r => [r.role, r.points]))
 
+        // Reconstruir coberturas guardadas (rol cubierto por entrada)
+        const cobMap: Record<string, string> = {}
+        entries.forEach(e => { if (e.covered_role) cobMap[e.employee_id] = e.covered_role })
+        setCoberturas(cobMap)
+
         const draftLines: DraftLine[] = emps.map(emp => {
           const entry = entries.find(e => e.employee_id === emp.id)
-          const pts_rol = ptsMap.get(emp.role) ?? 0
+          const effRole = (entry?.covered_role ?? emp.role)
+          const pts_rol = ptsMap.get(effRole) ?? 0
           return {
             employeeId:   emp.id,
             employeeName: emp.full_name,
@@ -264,6 +270,7 @@ export default function TipsModule() {
         hours_worked:   h,
         tip_amount_crc: 0,
         tip_amount_usd: 0,
+        covered_role:   coberturas[employeeId] ?? null,
       }).catch(() => {})
     }
   }
@@ -318,6 +325,7 @@ export default function TipsModule() {
       hours_worked:   hours,
       tip_amount_crc: Number(line.propina_crc) || 0,
       tip_amount_usd: Number(line.propina_usd) || 0,
+      covered_role:   coberturas[employeeId] ?? null,
     }).catch(() => {})
   }
 
@@ -845,6 +853,7 @@ export default function TipsModule() {
               sessions={sessions}
               calcCache={tipCalcCache}
               employees={employees}
+              rolePoints={rolePoints}
             />
           </div>
         )}

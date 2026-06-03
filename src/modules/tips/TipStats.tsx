@@ -3,15 +3,17 @@
  * Pool analytics, AM vs PM, distribución por día de semana,
  * top earners, tendencia semanal dentro del mes
  */
-import { useState, useMemo } from 'react'
-import type { TipSession, Employee } from '../../shared/types/database'
+import { useState, useMemo, useEffect } from 'react'
+import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
-import { formatCRC } from '../../shared/utils/tipCalculations'
+import { formatCRC, calcHistory } from '../../shared/utils/tipCalculations'
+import { getTipEntriesBySession } from '../../shared/api/tips'
 
 interface Props {
-  sessions:  TipSession[]
-  calcCache: Record<string, HistoryCalc>
-  employees: Employee[]
+  sessions:   TipSession[]
+  calcCache:  Record<string, HistoryCalc>
+  employees:  Employee[]
+  rolePoints: RoleTipPoints[]
 }
 
 function getMonths(sessions: TipSession[]): string[] {
@@ -26,7 +28,7 @@ const MONTH_NAMES: Record<string, string> = {
   '07':'Jul','08':'Ago','09':'Sep','10':'Oct','11':'Nov','12':'Dic',
 }
 
-export default function TipStats({ sessions, calcCache, employees }: Props) {
+export default function TipStats({ sessions, calcCache, employees, rolePoints }: Props) {
   const months = useMemo(() => getMonths(sessions), [sessions])
   const [month, setMonth] = useState(months[0] ?? '')
 
@@ -37,13 +39,49 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
     sessions.filter(s => s.status === 'closed' && s.session_date.startsWith(month)),
   [sessions, month])
 
+  // ── Auto-carga: calcular el reparto de las sesiones del mes que no estén
+  // ya en el cache compartido (antes Stats quedaba vacío si no se visitaba
+  // Historial primero). Solo carga lo necesario del mes seleccionado.
+  const [localCache, setLocalCache] = useState<Record<string, HistoryCalc>>({})
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const missing = monthSessions.filter(s => !calcCache[s.id] && !localCache[s.id])
+    if (!missing.length) return
+    let cancelled = false
+    setLoading(true)
+    ;(async () => {
+      const out: Record<string, HistoryCalc> = {}
+      for (const s of missing) {
+        try {
+          const entries = await getTipEntriesBySession(s.id)
+          out[s.id] = calcHistory(
+            entries.map(e => ({
+              employee_id: e.employee_id, hours_worked: e.hours_worked,
+              tip_amount_crc: e.tip_amount_crc, tip_amount_usd: e.tip_amount_usd,
+              points: e.points, payout_crc: e.payout_crc,
+            })),
+            employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
+            rolePoints,
+            { pool_efectivo_crc: s.pool_efectivo_crc, pool_efectivo_usd: s.pool_efectivo_usd, pool_barra_crc: s.pool_barra_crc, exchange_rate: s.exchange_rate },
+          )
+        } catch { /* ignorar sesión con error y seguir */ }
+      }
+      if (!cancelled) { setLocalCache(prev => ({ ...prev, ...out })); setLoading(false) }
+    })()
+    return () => { cancelled = true }
+  }, [monthSessions, calcCache, localCache, employees, rolePoints])
+
+  // Cache efectivo = compartido + el cargado localmente
+  const cache = useMemo(() => ({ ...calcCache, ...localCache }), [calcCache, localCache])
+
   // AM vs PM split
   const amSessions = monthSessions.filter(s => s.shift_type === 'AM')
   const pmSessions = monthSessions.filter(s => s.shift_type === 'PM')
 
   const getPoolTotal = (ss: TipSession[]) =>
     ss.reduce((t, s) => {
-      const c = calcCache[s.id]
+      const c = cache[s.id]
       return t + (c?.totalPool ?? 0)
     }, 0)
 
@@ -56,7 +94,7 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
   const dowData = useMemo(() => {
     const acc: Record<number, { sum: number; cnt: number }> = {}
     for (const s of monthSessions) {
-      const calc = calcCache[s.id]
+      const calc = cache[s.id]
       if (!calc) continue
       const d = new Date(s.session_date + 'T12:00:00').getDay()
       if (!acc[d]) acc[d] = { sum: 0, cnt: 0 }
@@ -64,14 +102,14 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
       acc[d].cnt++
     }
     return acc
-  }, [monthSessions, calcCache])
+  }, [monthSessions, cache])
 
   // Top earners with AM/PM split + datáfono generado (lo que ingresó cada uno
   // por su datáfono) vs recibido (lo que se llevó del pool).
   const earners = useMemo(() => {
     const acc: Record<string, { name: string; role: string; total: number; generated: number; shifts: number; amTotal: number; amShifts: number; pmTotal: number; pmShifts: number }> = {}
     for (const s of monthSessions) {
-      const calc = calcCache[s.id]
+      const calc = cache[s.id]
       if (!calc) continue
       const isAM = s.shift_type === 'AM'
       for (const row of calc.rows) {
@@ -88,7 +126,7 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
       }
     }
     return Object.values(acc).sort((a, b) => b.total - a.total)
-  }, [monthSessions, calcCache, empMap])
+  }, [monthSessions, cache, empMap])
 
   // Datáfono del mes: generado (tarjeta/efectivo individual) vs pool recibido.
   // Las sesiones viejas (pre-mayo) no tienen datáfono → generado = 0; el KPI
@@ -102,12 +140,12 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
       const day = parseInt(s.session_date.slice(8, 10))
       const week = Math.ceil(day / 7)
       if (!weeks[week]) weeks[week] = { pool: 0, shifts: 0 }
-      const c = calcCache[s.id]
+      const c = cache[s.id]
       weeks[week].pool   += c?.totalPool ?? 0
       weeks[week].shifts++
     }
     return Object.entries(weeks).map(([w, d]) => ({ week: Number(w), ...d })).sort((a, b) => a.week - b.week)
-  }, [monthSessions, calcCache])
+  }, [monthSessions, cache])
 
   if (!months.length) {
     return (
@@ -139,6 +177,10 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
       {monthSessions.length === 0 ? (
         <div className="tips-empty-state">
           <p className="tips-empty-text">Sin datos para este mes</p>
+        </div>
+      ) : loading && totalPool === 0 ? (
+        <div className="tips-empty-state">
+          <p className="tips-empty-text">Calculando estadísticas…</p>
         </div>
       ) : (
         <>

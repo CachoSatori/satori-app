@@ -17,7 +17,8 @@ interface Props {
 interface EditRow {
   employeeId:   string
   employeeName: string
-  role:         UserRole
+  role:         UserRole          // rol natural del empleado
+  coveredRole:  UserRole | ''     // rol cubierto este turno ('' = trabajó en su rol)
   active:       boolean
   hours:        number | ''
   propina_crc:  number | ''
@@ -85,7 +86,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         entries.map(e => ({
           employee_id: e.employee_id, hours_worked: e.hours_worked,
           tip_amount_crc: e.tip_amount_crc, tip_amount_usd: e.tip_amount_usd,
-          points: e.points, payout_crc: e.payout_crc,
+          points: e.points, payout_crc: e.payout_crc, covered_role: e.covered_role,
         })),
         employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
         rolePoints,
@@ -125,17 +126,20 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
     const rows: EditRow[] = [...ids].map((id): EditRow => {
       const emp = empById.get(id)
       const r   = existing.get(id)
+      // rol natural: el del empleado; si no está en la lista, caer al efectivo guardado
+      const naturalRole = (emp?.role ?? r?.coveredRole ?? r?.role) as UserRole
       return {
         employeeId:   id,
         employeeName: emp?.full_name ?? r?.employeeName ?? '—',
-        role:         (emp?.role ?? r?.role) as UserRole,
+        role:         naturalRole,
+        coveredRole:  (r?.coveredRole ?? '') as UserRole | '',
         active:       !!r,
         hours:        r ? r.hours : '',
         propina_crc:  r ? r.propina_crc : '',
         propina_usd:  r ? r.propina_usd : '',
       }
     }).sort((a, b) => {
-      const ra = ROL_ORDER.indexOf(a.role), rb = ROL_ORDER.indexOf(b.role)
+      const ra = ROL_ORDER.indexOf(a.coveredRole || a.role), rb = ROL_ORDER.indexOf(b.coveredRole || b.role)
       return ra !== rb ? ra - rb : a.employeeName.localeCompare(b.employeeName)
     })
     setERows(rows)
@@ -152,11 +156,14 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
   // ── Guardar cambios (replica exacta del cierre de turno) ──
   const handleSaveEdit = async (session: TipSession, prevCalc: HistoryCalc | null) => {
     const rate  = session.exchange_rate
-    const draft = eRows.map(r => ({
-      employeeId: r.employeeId, employeeName: r.employeeName, role: r.role,
-      active: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd,
-      pts_rol: ptsMap.get(r.role) ?? 0, pts_val: 0, take_home: 0,
-    })) as DraftLine[]
+    const draft = eRows.map(r => {
+      const eff = (r.coveredRole || r.role) as UserRole
+      return {
+        employeeId: r.employeeId, employeeName: r.employeeName, role: eff,
+        active: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd,
+        pts_rol: ptsMap.get(eff) ?? 0, pts_val: 0, take_home: 0,
+      }
+    }) as DraftLine[]
     const { updatedLines } = calcTurno(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, Number(ePoolBarra) || 0, rate)
     if (!updatedLines.some(l => l.active)) { setEditErr('Marcá al menos un empleado que trabajó'); return }
 
@@ -171,6 +178,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
             hours_worked: Number(r.hours) || 0,
             tip_amount_crc: Number(r.propina_crc) || 0,
             tip_amount_usd: Number(r.propina_usd) || 0,
+            covered_role: r.coveredRole || null,
           })
         } else if (prevIds.has(r.employeeId)) {
           await deleteTipEntry(sid, r.employeeId)
@@ -325,11 +333,14 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
       {modalSession && (() => {
         // Preview en vivo del reparto mientras se edita
         const preview = editMode ? calcTurno(
-          eRows.map(r => ({
-            employeeId: r.employeeId, employeeName: r.employeeName, role: r.role,
-            active: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd,
-            pts_rol: ptsMap.get(r.role) ?? 0, pts_val: 0, take_home: 0,
-          })) as DraftLine[],
+          eRows.map(r => {
+            const eff = (r.coveredRole || r.role) as UserRole
+            return {
+              employeeId: r.employeeId, employeeName: r.employeeName, role: eff,
+              active: r.active, hours: r.hours, propina_crc: r.propina_crc, propina_usd: r.propina_usd,
+              pts_rol: ptsMap.get(eff) ?? 0, pts_val: 0, take_home: 0,
+            }
+          }) as DraftLine[],
           Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, Number(ePoolBarra) || 0, modalSession.exchange_rate,
         ) : null
         const payoutMap = new Map(preview?.updatedLines.map(l => [l.employeeId, Math.round(l.take_home)]) ?? [])
@@ -381,6 +392,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                               <div style={{ fontWeight: 600 }}>{row.employeeName}</div>
                               <div style={{ fontSize: '0.66rem', color: MUTED }}>
                                 {ROL_LABELS[row.role]}
+                                {row.coveredRole && <span style={{ color: TEAL }}> · 👥 cobertura</span>}
                                 {split && <span> · 🍸 barra <strong style={{ color: GOLD }}>{formatCRC(split.barra)}</strong> · serv <strong style={{ color: TEAL }}>{formatCRC(split.serv)}</strong></span>}
                               </div>
                             </td>
@@ -418,7 +430,8 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                   {/* Empleados */}
                   <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 2 }}>
                     {eRows.map(r => {
-                      const hasPropina = !NO_PROPINA_ROLES.includes(r.role)
+                      const eff = (r.coveredRole || r.role) as UserRole
+                      const hasPropina = !NO_PROPINA_ROLES.includes(eff)
                       const pay = payoutMap.get(r.employeeId) ?? 0
                       return (
                         <div key={r.employeeId} style={{ borderBottom: `1px solid ${BORDER}`, padding: '0.5rem 0.7rem', background: r.active ? 'rgba(42,122,106,0.05)' : undefined }}>
@@ -427,18 +440,37 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                               style={{ width: 15, height: 15, accentColor: TEAL, cursor: 'pointer', flexShrink: 0 }} />
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ fontSize: '0.82rem', fontWeight: 700, letterSpacing: '0.02em' }}>{r.employeeName}</div>
-                              <div style={{ fontSize: '0.62rem', color: MUTED }}>{ROL_LABELS[r.role]}</div>
+                              <div style={{ fontSize: '0.62rem', color: MUTED }}>
+                                {ROL_LABELS[r.role]}
+                                {r.coveredRole && <span style={{ color: TEAL, fontWeight: 700 }}> → 👥 {ROL_LABELS[r.coveredRole]}</span>}
+                              </div>
                             </div>
                             {r.active && (
                               <div style={{ fontSize: '0.82rem', fontWeight: 700, color: GOLD, whiteSpace: 'nowrap' }}>{formatCRC(pay)}</div>
                             )}
                           </div>
                           {r.active && (
-                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.45rem', paddingLeft: '1.6rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.45rem', paddingLeft: '1.6rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
                               <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>Horas</span>
                                 <input type="number" className="tips-input-dark" min={0} step={0.5} value={r.hours} style={{ width: 70 }}
                                   onChange={e => setRow(r.employeeId, { hours: e.target.value === '' ? '' : Number(e.target.value) })} />
+                              </label>
+                              <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>👥 Cubrió como</span>
+                                <select className="tips-input-dark" value={r.coveredRole} style={{ minWidth: 110 }}
+                                  onChange={e => {
+                                    const nv = (e.target.value || '') as UserRole | ''
+                                    const newEff = (nv || r.role) as UserRole
+                                    setRow(r.employeeId, NO_PROPINA_ROLES.includes(newEff)
+                                      ? { coveredRole: nv, propina_crc: '', propina_usd: '' }
+                                      : { coveredRole: nv })
+                                  }}>
+                                  <option value="">Su rol ({ROL_LABELS[r.role]})</option>
+                                  {ROL_ORDER.filter(role => role !== r.role).map(role => (
+                                    <option key={role} value={role}>{ROL_LABELS[role]}</option>
+                                  ))}
+                                </select>
                               </label>
                               {hasPropina && (
                                 <>

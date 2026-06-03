@@ -66,18 +66,22 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
     return acc
   }, [monthSessions, calcCache])
 
-  // Top earners with AM/PM split
+  // Top earners with AM/PM split + datáfono generado (lo que ingresó cada uno
+  // por su datáfono) vs recibido (lo que se llevó del pool).
   const earners = useMemo(() => {
-    const acc: Record<string, { name: string; role: string; total: number; shifts: number; amTotal: number; amShifts: number; pmTotal: number; pmShifts: number }> = {}
+    const acc: Record<string, { name: string; role: string; total: number; generated: number; shifts: number; amTotal: number; amShifts: number; pmTotal: number; pmShifts: number }> = {}
     for (const s of monthSessions) {
       const calc = calcCache[s.id]
       if (!calc) continue
       const isAM = s.shift_type === 'AM'
       for (const row of calc.rows) {
         const emp = empMap.get(row.employeeId)
-        if (!emp || row.payout_crc <= 0) continue
-        if (!acc[emp.id]) acc[emp.id] = { name: emp.full_name, role: emp.role, total: 0, shifts: 0, amTotal: 0, amShifts: 0, pmTotal: 0, pmShifts: 0 }
-        acc[emp.id].total  += row.payout_crc
+        if (!emp) continue
+        const gen = Math.round((row.propina_crc || 0) + (row.propina_usd || 0) * (s.exchange_rate || 0))
+        if (row.payout_crc <= 0 && gen <= 0) continue
+        if (!acc[emp.id]) acc[emp.id] = { name: emp.full_name, role: emp.role, total: 0, generated: 0, shifts: 0, amTotal: 0, amShifts: 0, pmTotal: 0, pmShifts: 0 }
+        acc[emp.id].total     += row.payout_crc
+        acc[emp.id].generated += gen
         acc[emp.id].shifts++
         if (isAM) { acc[emp.id].amTotal += row.payout_crc; acc[emp.id].amShifts++ }
         else       { acc[emp.id].pmTotal += row.payout_crc; acc[emp.id].pmShifts++ }
@@ -85,6 +89,11 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
     }
     return Object.values(acc).sort((a, b) => b.total - a.total)
   }, [monthSessions, calcCache, empMap])
+
+  // Datáfono del mes: generado (tarjeta/efectivo individual) vs pool recibido.
+  // Las sesiones viejas (pre-mayo) no tienen datáfono → generado = 0; el KPI
+  // simplemente queda en ₡0 sin romper nada.
+  const totalGenerated = useMemo(() => earners.reduce((s, e) => s + e.generated, 0), [earners])
 
   // Weekly trend within month
   const weeklyData = useMemo(() => {
@@ -141,6 +150,7 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
               { label: 'Promedio/turno',  val: formatCRC(avgPerShift), color: 'var(--t-teal)' },
               { label: `AM (${amSessions.length} turnos)`, val: formatCRC(amPool), color: '#c8a030' },
               { label: `PM (${pmSessions.length} turnos)`, val: formatCRC(pmPool), color: 'var(--t-teal)' },
+              { label: 'Datáfono generado', val: formatCRC(totalGenerated), color: '#a07830' },
             ].map(k => (
               <div key={k.label} style={{ background: 'var(--t-ink)', padding: '0.875rem 1rem', borderRadius: 2, borderLeft: '3px solid var(--t-gold)' }}>
                 <div style={{ fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#555', marginBottom: '0.4rem' }}>{k.label}</div>
@@ -228,7 +238,8 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
                     <th style={{ textAlign: 'right' }}>Turnos</th>
                     <th style={{ textAlign: 'right', color: '#c8a030' }}>AM</th>
                     <th style={{ textAlign: 'right', color: 'var(--t-teal)' }}>PM</th>
-                    <th style={{ textAlign: 'right' }}>Total</th>
+                    <th style={{ textAlign: 'right', color: '#a07830' }} title="Lo que ingresó por su datáfono">Generó</th>
+                    <th style={{ textAlign: 'right' }} title="Lo que recibió del pool">Recibió</th>
                     <th style={{ textAlign: 'right' }}>Prom/turno</th>
                   </tr>
                 </thead>
@@ -245,6 +256,9 @@ export default function TipStats({ sessions, calcCache, employees }: Props) {
                       </td>
                       <td style={{ textAlign: 'right', color: 'var(--t-teal)', fontSize: '0.72rem' }}>
                         {e.pmShifts > 0 ? `${formatCRC(e.pmTotal)} (${e.pmShifts}t)` : '—'}
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#a07830', fontSize: '0.72rem' }}>
+                        {e.generated > 0 ? formatCRC(e.generated) : '—'}
                       </td>
                       <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--t-teal)' }}>
                         {formatCRC(e.total)}

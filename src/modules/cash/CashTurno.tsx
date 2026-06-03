@@ -1,10 +1,11 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import type { CashSession, CashMovement, Supplier, MovementType } from '../../shared/types/database'
 import {
   createCashSession,
   closeCashSession,
   createCashMovement,
+  deleteCashMovement,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr } from './cashUtils'
 import { tipShiftToCaja } from '../../shared/utils'
@@ -33,6 +34,7 @@ interface PagoRow {
   amount_usd:    number | ''
   method:        'Efectivo' | 'Transferencia'
   reference:     string
+  at:            number          // hora de registro (para ordenar más reciente primero)
   // persistedId: movement ID in DB — set once saved, null if unsaved
   persistedId:   string | null
 }
@@ -67,7 +69,6 @@ export default function CashTurno({
   const [apUSD,      setApUSD]      = useState<number | ''>(0)
   const [tc,         setTc]         = useState<number>(640)       // tipo de cambio USD→CRC
   const [saving,       setSaving]       = useState(false)
-  const persistTimers  = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   // Turno state: pagos + ingresos adicionales
   const [pagos,    setPagos]    = useState<PagoRow[]>([])
@@ -168,48 +169,65 @@ export default function CashTurno({
     } catch { /* silent — will retry on close */ }
   }, [openSession, profile, onMovAdded])
 
-  // Schedule persistence with 600ms debounce after user stops typing
-  const schedulePersist = useCallback((pago: PagoRow) => {
-    if (persistTimers.current[pago.id]) clearTimeout(persistTimers.current[pago.id])
-    persistTimers.current[pago.id] = setTimeout(() => persistPago(pago), 600)
-  }, [persistPago])
+  // ── Modal de pago a proveedor ──────────────────────────────
+  const [pagoModal,   setPagoModal]   = useState(false)
+  const [editId,      setEditId]      = useState<string | null>(null)
+  const [draftSup,    setDraftSup]    = useState('')
+  const [draftCRC,    setDraftCRC]    = useState<number | ''>('')
+  const [draftUSD,    setDraftUSD]    = useState<number | ''>('')
+  const [draftMethod, setDraftMethod] = useState<'Efectivo' | 'Transferencia'>('Efectivo')
+  const [draftRef,    setDraftRef]    = useState('')
 
-  const addPago = () => {
-    setPagos(prev => [...prev, {
-      id:            crypto.randomUUID(),
-      supplier_id:   '',
-      supplier_name: '',
-      supplier_cat:  '',
-      amount_crc:    '',
-      amount_usd:    '',
-      method:        'Efectivo',
-      reference:     '',
-      persistedId:   null,
-    }])
+  const openNewPago = () => {
+    setEditId(null); setDraftSup(''); setDraftCRC(''); setDraftUSD(''); setDraftMethod('Efectivo'); setDraftRef('')
+    setPagoModal(true)
   }
+  const openEditPago = (p: PagoRow) => {
+    setEditId(p.id); setDraftSup(p.supplier_id); setDraftCRC(p.amount_crc); setDraftUSD(p.amount_usd)
+    setDraftMethod(p.method); setDraftRef(p.reference); setPagoModal(true)
+  }
+
   const removePago = async (id: string) => {
-    // If pago was persisted to DB, delete the movement first
     const pago = pagos.find(p => p.id === id)
     if (pago?.persistedId) {
-      try {
-        const { deleteCashMovement } = await import('../../shared/api/cash')
-        await deleteCashMovement(pago.persistedId)
-        onMovAdded({ ...pago } as never)  // trigger refresh
-      } catch { /* silent */ }
+      try { await deleteCashMovement(pago.persistedId); onMovAdded({ ...pago } as never) } catch { /* silent */ }
     }
-    if (persistTimers.current[id]) clearTimeout(persistTimers.current[id])
     setPagos(prev => prev.filter(p => p.id !== id))
   }
-  const updatePago = (id: string, field: keyof PagoRow, value: unknown) => {
-    setPagos(prev => {
-      const updated = prev.map(p => p.id === id ? { ...p, [field]: value } : p)
-      const pago = updated.find(p => p.id === id)
-      if (pago && pago.supplier_id && Number(pago.amount_crc) > 0 && !pago.persistedId) {
-        schedulePersist(pago)
-      }
-      return updated
-    })
+
+  const confirmPago = async () => {
+    if (!draftSup || !Number(draftCRC)) return  // proveedor + monto requeridos
+    const prov = suppliers.find(s => s.id === draftSup)
+    // Si edito uno ya persistido, borro su movimiento viejo antes de re-crear
+    const old = editId ? pagos.find(p => p.id === editId) : null
+    if (old?.persistedId) {
+      try { await deleteCashMovement(old.persistedId); onMovAdded({ ...old } as never) } catch { /* silent */ }
+    }
+    const pago: PagoRow = {
+      id:            editId ?? crypto.randomUUID(),
+      supplier_id:   draftSup,
+      supplier_name: prov?.name ?? '',
+      supplier_cat:  prov?.category ?? '',
+      amount_crc:    Number(draftCRC) || 0,
+      amount_usd:    Number(draftUSD) || 0,
+      method:        draftMethod,
+      reference:     draftRef,
+      at:            old?.at ?? Date.now(),
+      persistedId:   null,
+    }
+    // más reciente arriba
+    setPagos(prev => [pago, ...prev.filter(p => p.id !== pago.id)])
+    setPagoModal(false)
+    await persistPago(pago)
   }
+
+  // Cerrar modal con Escape
+  useEffect(() => {
+    if (!pagoModal) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPagoModal(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pagoModal])
 
   // ── Add ingreso ───────────────────────────────────────────
   const addIngreso = () => setIngresos(prev => [...prev, { id: crypto.randomUUID(), crc: '', usd: '', nota: '' }])
@@ -452,19 +470,35 @@ export default function CashTurno({
             </div>
           </div>
           {canManage && (
-            <button className="cd-section-add" onClick={addPago}>+ Agregar</button>
+            <button className="cd-section-add" onClick={openNewPago}>+ Agregar pago</button>
           )}
         </div>
         <div className="cd-section-body">
-          {pagos.map((p, idx) => (
-            <PagoCard
-              key={p.id}
-              pago={p}
-              idx={idx}
-              suppliers={suppliers}
-              onChange={(field, val) => updatePago(p.id, field as keyof PagoRow, val)}
-              onRemove={() => removePago(p.id)}
-            />
+          {pagos.length === 0 && <div className="cd-empty-row">ℹ Sin pagos registrados</div>}
+          {pagos.map(p => (
+            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.supplier_name || 'Proveedor'}</div>
+                <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>
+                  {p.method === 'Efectivo' ? '💵 Efectivo' : '🏦 Transferencia'}
+                  {p.reference ? ` · ${p.reference}` : ''}
+                  {` · ${new Date(p.at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`}
+                  {p.method === 'Transferencia' && <span style={{ color: '#a07030' }}> · pendiente</span>}
+                  {!p.persistedId && <span style={{ color: '#c0392b' }}> · sin guardar</span>}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: 700, fontFamily: 'var(--font-serif)' }}>{fi(Number(p.amount_crc) || 0)}</span>
+                {canManage && (
+                  <>
+                    <button onClick={() => openEditPago(p)} title="Editar"
+                      style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 3, padding: '2px 7px', fontSize: '0.72rem', cursor: 'pointer' }}>✏</button>
+                    <button onClick={() => removePago(p.id)} title="Eliminar"
+                      style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                  </>
+                )}
+              </div>
+            </div>
           ))}
           {pagos.filter(p => p.supplier_id).length > 0 && (
             <div className="cd-pagos-total">
@@ -681,103 +715,67 @@ export default function CashTurno({
           </div>
         </div>
       )}
+
+      {/* Modal: agregar / editar pago a proveedor */}
+      {pagoModal && (
+        <div className="cd-modal-overlay" onClick={() => setPagoModal(false)}>
+          <div className="cd-modal" onClick={e => e.stopPropagation()}>
+            <div className="cd-modal-title">{editId ? 'Editar pago' : 'Agregar pago a proveedor'}</div>
+
+            <div className="tips-field" style={{ marginTop: '0.5rem' }}>
+              <div className="tips-field-label">Proveedor</div>
+              <select className="tips-input-dark" value={draftSup} onChange={e => setDraftSup(e.target.value)}>
+                <option value="">-- elegir proveedor --</option>
+                {suppliers.filter(s => s.is_active).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+
+            <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field">
+                <div className="tips-field-label">Monto ₡ colones</div>
+                <div className="cd-monto-wrap">
+                  <span className="cd-prefix">₡</span>
+                  <input type="number" className="cd-monto-input" value={draftCRC} placeholder="0" autoFocus
+                    onChange={e => setDraftCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                </div>
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">Monto $ dólares</div>
+                <div className="cd-monto-wrap usd">
+                  <span className="cd-prefix">$</span>
+                  <input type="number" className="cd-monto-input" value={draftUSD} placeholder="0"
+                    onChange={e => setDraftUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                </div>
+              </div>
+            </div>
+
+            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field-label">Método de pago</div>
+              <div className="cd-metodo-tabs">
+                <div className={`cd-metodo-tab ef ${draftMethod === 'Efectivo' ? 'active' : ''}`} onClick={() => setDraftMethod('Efectivo')}>💵 Efectivo</div>
+                <div className={`cd-metodo-tab tr ${draftMethod === 'Transferencia' ? 'active' : ''}`} onClick={() => setDraftMethod('Transferencia')}>🏦 Transferencia</div>
+              </div>
+              {draftMethod === 'Transferencia' && <div className="cd-method-info pend">→ Transferencia — queda como pendiente hasta confirmar</div>}
+            </div>
+
+            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field-label">Nota / Nº Factura</div>
+              <input type="text" className="tips-input-dark" value={draftRef} placeholder="Nº factura, descripción del pago..."
+                onChange={e => setDraftRef(e.target.value)} />
+            </div>
+
+            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+              <button className="tips-btn-ghost" onClick={() => setPagoModal(false)}>Cancelar</button>
+              <button className="cd-btn-green" onClick={confirmPago} disabled={!draftSup || !Number(draftCRC)}>
+                {editId ? '✓ Guardar cambios' : '✓ Confirmar pago'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-// ── PagoCard ──────────────────────────────────────────────────
+// ── (PagoCard eliminado: el alta/edición de pagos ahora se hace por modal) ──
 
-interface PagoCardProps {
-  pago: PagoRow
-  idx: number
-  suppliers: Supplier[]
-  onChange: (field: string, val: unknown) => void
-  onRemove: () => void
-}
-
-function PagoCard({ pago, idx, suppliers, onChange, onRemove }: PagoCardProps) {
-  const provActivos = suppliers.filter(s => s.is_active)
-
-  const handleSelectProv = (id: string) => {
-    const prov = provActivos.find(s => s.id === id)
-    onChange('supplier_id',   id)
-    onChange('supplier_name', prov?.name ?? '')
-    onChange('supplier_cat',  prov?.category ?? '')
-  }
-
-  return (
-    <div className="cd-pago-card">
-      <div className="cd-pago-head">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div className="cd-pago-num">{idx + 1}</div>
-          <div>
-            <div className="cd-pago-nombre">{pago.supplier_name || 'Proveedor'}</div>
-            <div className="cd-pago-cat">{pago.supplier_cat}</div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          {pago.method === 'Transferencia' && (
-            <span className="cd-badge-pend">→ Pendiente</span>
-          )}
-          <button className="tips-btn-ghost" style={{ fontSize: '0.75rem', color: '#c0392b', borderColor: '#f0b0b0' }}
-            onClick={onRemove}>× Quitar</button>
-        </div>
-      </div>
-
-      <div className="tips-field">
-        <div className="tips-field-label">Proveedor</div>
-        <select className="tips-input-dark" value={pago.supplier_id}
-          onChange={e => handleSelectProv(e.target.value)}>
-          <option value="">-- elegir proveedor --</option>
-          {provActivos.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-      </div>
-
-      <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
-        <div className="tips-field">
-          <div className="tips-field-label">Monto ₡ colones</div>
-          <div className="cd-monto-wrap">
-            <span className="cd-prefix">₡</span>
-            <input type="number" className="cd-monto-input" value={pago.amount_crc} placeholder="0"
-              onChange={e => onChange('amount_crc', e.target.value === '' ? '' : Number(e.target.value))} />
-          </div>
-        </div>
-        <div className="tips-field">
-          <div className="tips-field-label">Monto $ dólares</div>
-          <div className="cd-monto-wrap usd">
-            <span className="cd-prefix">$</span>
-            <input type="number" className="cd-monto-input" value={pago.amount_usd} placeholder="0"
-              onChange={e => onChange('amount_usd', e.target.value === '' ? '' : Number(e.target.value))} />
-          </div>
-        </div>
-      </div>
-
-      <div className="tips-field" style={{ marginTop: '0.75rem' }}>
-        <div className="tips-field-label">Método de pago</div>
-        <div className="cd-metodo-tabs">
-          <div className={`cd-metodo-tab ef ${pago.method === 'Efectivo' ? 'active' : ''}`}
-            onClick={() => onChange('method', 'Efectivo')}>
-            💵 Efectivo
-          </div>
-          <div className={`cd-metodo-tab tr ${pago.method === 'Transferencia' ? 'active' : ''}`}
-            onClick={() => onChange('method', 'Transferencia')}>
-            🏦 Transferencia
-          </div>
-        </div>
-        {pago.method === 'Efectivo' && (
-          <div className="cd-method-info ok">✓ Efectivo — se descuenta del total asignado</div>
-        )}
-        {pago.method === 'Transferencia' && (
-          <div className="cd-method-info pend">→ Transferencia — queda como pendiente hasta confirmar</div>
-        )}
-      </div>
-
-      <div className="tips-field" style={{ marginTop: '0.75rem' }}>
-        <div className="tips-field-label">Nota / Nº Factura</div>
-        <input type="text" className="tips-input-dark" value={pago.reference}
-          placeholder="Nº factura, descripción del pago..."
-          onChange={e => onChange('reference', e.target.value)} />
-      </div>
-    </div>
-  )
-}

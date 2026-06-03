@@ -82,7 +82,13 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
 - Resumen Diario (navegación días ‹›  + botón compartir WhatsApp) + Resumen Semanal (compartir)
 - Reporte Mensual unificado (/reporte-mensual): ventas+propinas+caja de un mes en 1 vista, selector de mes, compartir + imprimir (ReporteMensual.tsx en resumen/)
 - Admin: Empleados (bulk import en masa), Puntos por rol, Tipo cambio, Horas trabajadas, Email reports (cron día 1)
-- SOPs (CRUD + búsqueda + categorías)
+- SOPs / Procedimientos (書): CRUD + búsqueda + categorías. **19 SOPs reales migrados** (2026-06-03)
+  desde Drive + carpeta local, estandarizados al formato Claude e insertados en la tabla `sops`
+  (Montaje, Bienvenida, Servicio, Cobro/Separación, Créditos, Local Club, Link de Pago, SINPE/Bitcoin,
+  Reservas, Pizarra, Delivery, SIPP, Cierre de Caja, Planilla Proveedores, Transferencias, Factura
+  Electrónica, Reporte de Horas, Reportes de Ventas, Regalías). Demos placeholder desactivados.
+  Render de markdown reescrito como parser real (encabezados, listas numeradas/viñetas, tablas, notas,
+  negrita/código) — formato limpio de uso diario. created_by = owner.
 - Inventario (Fase 1 COMPLETA en código, falta cargar datos reales):
   · Ingredientes: CRUD + import/export CSV masivo (1.1)
   · Recetas: BOM + costo teórico + ⇄ sincroniza costo_unitario a product_map → enciende food cost (1.2)

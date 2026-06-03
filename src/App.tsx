@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './shared/hooks/useAuth'
+import type { UserRole } from './shared/types/database'
 import LoginPage from './pages/auth/LoginPage'
 import HomePage from './pages/HomePage'
 
@@ -48,12 +49,15 @@ function PendingApproval() {
 }
 
 // ── Route guards ───────────────────────────────────────────────
-function PrivateRoute({ children }: { children: React.ReactNode }) {
+// `roles` opcional: si se pasa, el rol del perfil debe estar incluido,
+// si no → redirige al inicio (defensa por URL, además de ocultar tiles).
+function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: UserRole[] }) {
   const { user, profile, loading } = useAuth()
   if (loading) return <ModuleLoading />
   if (!user) return <Navigate to="/login" replace />
   // Cuenta creada pero aún no aprobada por la gerencia → sin acceso
   if (profile && !profile.is_active) return <PendingApproval />
+  if (roles && profile && !roles.includes(profile.role)) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -117,18 +121,18 @@ function AppRoutes() {
         <Route path="/login"    element={<PublicRoute><LoginPage /></PublicRoute>} />
         <Route path="/registro" element={<RegistroCliente />} />
         <Route path="/"         element={<PrivateRoute><HomePage /></PrivateRoute>} />
-        <Route path="/resumen"  element={<PrivateRoute><ResumenDiario /></PrivateRoute>} />
-        <Route path="/semana"   element={<PrivateRoute><ResumenSemanal /></PrivateRoute>} />
-        <Route path="/reporte-mensual" element={<PrivateRoute><ReporteMensual /></PrivateRoute>} />
-        <Route path="/propinas" element={<PrivateRoute><TipsModule /></PrivateRoute>} />
-        <Route path="/caja"     element={<PrivateRoute><CashModule /></PrivateRoute>} />
-        <Route path="/ventas"   element={<PrivateRoute><VentasModule /></PrivateRoute>} />
+        <Route path="/resumen"  element={<PrivateRoute roles={['owner','manager','contador']}><ResumenDiario /></PrivateRoute>} />
+        <Route path="/semana"   element={<PrivateRoute roles={['owner','manager','contador']}><ResumenSemanal /></PrivateRoute>} />
+        <Route path="/reporte-mensual" element={<PrivateRoute roles={['owner','manager','contador']}><ReporteMensual /></PrivateRoute>} />
+        <Route path="/propinas" element={<PrivateRoute roles={['owner','manager','cajero','salonero','barman','barback','runner','cocina']}><TipsModule /></PrivateRoute>} />
+        <Route path="/caja"     element={<PrivateRoute roles={['owner','manager','cajero','contador']}><CashModule /></PrivateRoute>} />
+        <Route path="/ventas"   element={<PrivateRoute roles={['owner','manager','contador']}><VentasModule /></PrivateRoute>} />
         <Route path="/sops"          element={<PrivateRoute><SOPsModule /></PrivateRoute>} />
-        <Route path="/mis-propinas"  element={<PrivateRoute><MisPropinas /></PrivateRoute>} />
-        <Route path="/inventario"    element={<PrivateRoute><InventarioModule /></PrivateRoute>} />
-        <Route path="/clientes"      element={<PrivateRoute><ClientesModule /></PrivateRoute>} />
-        <Route path="/finanzas"      element={<PrivateRoute><FinanzasModule /></PrivateRoute>} />
-        <Route path="/mi-rendimiento" element={<PrivateRoute><MiRendimientoWrap /></PrivateRoute>} />
+        <Route path="/mis-propinas"  element={<PrivateRoute roles={['salonero','barman','barback','runner','cocina']}><MisPropinas /></PrivateRoute>} />
+        <Route path="/inventario"    element={<PrivateRoute roles={['owner','manager','contador']}><InventarioModule /></PrivateRoute>} />
+        <Route path="/clientes"      element={<PrivateRoute roles={['owner','manager','cajero']}><ClientesModule /></PrivateRoute>} />
+        <Route path="/finanzas"      element={<PrivateRoute roles={['owner','manager','contador']}><FinanzasModule /></PrivateRoute>} />
+        <Route path="/mi-rendimiento" element={<PrivateRoute roles={['salonero','barman','barback','runner','cocina']}><MiRendimientoWrap /></PrivateRoute>} />
         <Route path="/admin"    element={<OwnerRoute><AdminModule /></OwnerRoute>} />
         <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>

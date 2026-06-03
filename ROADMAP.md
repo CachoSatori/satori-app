@@ -19,7 +19,8 @@ Satori App no es un POS. Hoy es una capa de inteligencia de negocio que se monta
 | Reportes | ✅ diario, semanal, mensual unificado, emails automáticos (ventas+propinas) |
 | Admin | ✅ empleados, puntos por rol, tipo de cambio, horas trabajadas |
 | Datos históricos | ✅ 2023→hoy migrados y verificados |
-| SOPs | ✅ CRUD de procedimientos |
+| SOPs | ✅ CRUD + **19 procedimientos reales migrados** (caja, servicio, delivery, pagos, manager) con render legible |
+| Usuarios / Auth | ✅ login + **auto-registro de empleados** + aprobación del owner (rol + activación) por pantalla Admin |
 | Inventario / Recetas | 🟡 UI completa pero VACÍA — tablas sin datos ni lógica de consumo |
 
 **Arquitectura:** React 19 + TS + Vite · Supabase (Postgres + RLS + Edge Functions) · PWA.

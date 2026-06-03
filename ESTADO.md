@@ -48,7 +48,11 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
   · Movimientos: compra→Caja (genera egreso_mercaderia en turno abierto) (1.4)
   · Stock dashboard + alerta de stock en HomePage (sin stock / stock bajo) (1.4)
   · Pendiente menor: orden de compra sugerida por proveedor (no crítico)
-- HomePage: dashboard con métricas reales en vivo (ventas/propinas/caja del día en las tarjetas)
+- HomePage: dashboard con métricas reales en vivo (ventas/propinas/caja/stock del día en las tarjetas)
+- Clientes / CRM (客) — Fase 2.1 (requiere migration 004 aplicada):
+  · /clientes — búsqueda por teléfono/nombre, alta/edición rápida, perfil con agregados
+  · puntos/visitas/gasto por interacción, tier sugerido (nuevo/regular/vip/embajador), historial
+  · tablas customers + customer_interactions (RLS gerencia+cajero) · src/modules/crm/
 
 ## Datos cargados en DB (migración histórica COMPLETA)
 - ventas_dias: 151 días (2026, vía XLS)
@@ -84,4 +88,5 @@ Todas ✅ HECHO · build verde · pusheadas a main
 ## Pendientes generales (necesitan acción del usuario)
 - DNS SiteGround para email desde @satoricostarica.com (hoy sale de onboarding@resend.dev)
 - APLICAR migration 003_tips_email_cron.sql en Supabase (cron de emails de propinas día 1/15)
+- APLICAR migration 004_customers.sql en Supabase (activa el módulo Clientes/CRM)
 - Cargar los costos unitarios reales (la UI ya está: Ventas→Config→Costos, inline o import CSV)

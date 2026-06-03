@@ -78,6 +78,10 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
     + copiar lista + link wa.me por cliente (sin APIs externas)
   · Métricas (2.5): dashboard de fidelización — adquisición, retención, valor/LTV,
     puntos (emitidos/canjeados), comportamiento (CrmMetricas.tsx)
+  · QR auto-registro (2.4): pestaña "QR registro" (gerencia) genera el QR del formulario
+    público /registro (CrmQR.tsx, lib qrcode) para compartir por WhatsApp. El cliente
+    escanea → formulario público RegistroCliente.tsx (sin login) → se crea en customers
+    (channel_origin='whatsapp'). Policy de insert anónimo (migration 007). PROBADO end-to-end.
   · tablas customers, customer_interactions, loyalty_config, loyalty_rewards · src/modules/crm/
 - Finanzas / P&L (財) — Fase 2C (requiere migration 006 aplicada):
   · /finanzas — Estado de Resultados estilo QuickBooks (Ingresos→COGS→Utilidad bruta→Gastos→Neta)
@@ -132,6 +136,7 @@ Lo que sigue necesita acción del dueño (trámites externos o decisión estrat�
 
 ## Migraciones — TODAS APLICADAS en Supabase (2026-06-03, vía Management API)
 - ✅ 004_customers (Clientes/CRM) · ✅ 005_loyalty (puntos+recompensas) · ✅ 006_finance (P&L + budget 2026)
+- ✅ 007_customer_selfsignup (insert anónimo para auto-registro por QR) — probado HTTP 201
 - ⚠️ 003_tips_email_cron: era REDUNDANTE — ya existían crons `satori-monthly-report` (día 1) y
   `satori-quincenal-report` (día 15) que llaman a la edge fn `monthly-report` con body {} (tipo='ambos',
   envían ventas Y propinas, sin auth porque la fn es pública). Se eliminaron los crons duplicados de 003.

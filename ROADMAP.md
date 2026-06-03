@@ -188,7 +188,17 @@ customer_interactions (
 
 **Implementación recomendada:** empezar con PassKit para validar adopción, migrar a desarrollo propio si el volumen lo justifica.
 
-#### 2.4 Lector QR en Satori App (pantalla del encargado) · S
+#### 2.4a QR de auto-registro de clientes · ✅ HECHO (2026-06-03)
+
+El cliente se registra solo escaneando un QR (no requiere Wallet ni app):
+- Pestaña **"QR registro"** en Clientes (gerencia): genera el QR del formulario público
+  `/registro` (CrmQR.tsx + lib qrcode), descargar PNG / copiar link → compartir por WhatsApp.
+- Página pública **`/registro`** (RegistroCliente.tsx, sin login, mobile-first): nombre + teléfono
+  (email/cumple opcionales) → crea el cliente con channel_origin='whatsapp'. Maneja duplicados.
+- Migration 007: policy de insert anónimo. **Probado end-to-end (HTTP 201).**
+- Es el arranque de la base de clientes SIN depender de WhatsApp API ni Wallet.
+
+#### 2.4b Lector QR en Satori App (pantalla del encargado) · S — pendiente (necesita Wallet 2.3)
 
 Pantalla dedicada en la app para el encargado de turno:
 - Abre la cámara del iPhone desde la app

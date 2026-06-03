@@ -19,6 +19,7 @@ const InventarioModule  = lazy(() => import('./modules/inventario/InventarioModu
 const MiRendimientoWrap = lazy(() => import('./modules/ventas/MiRendimientoWrap'))
 const ClientesModule    = lazy(() => import('./modules/crm/ClientesModule'))
 const FinanzasModule    = lazy(() => import('./modules/finanzas/FinanzasModule'))
+const RegistroCliente   = lazy(() => import('./pages/RegistroCliente'))
 
 // ── Loading fallback — same spinner used for auth ──────────────
 function ModuleLoading({ kanji = '祭' }: { kanji?: string }) {
@@ -90,6 +91,7 @@ function AppRoutes() {
     <Suspense fallback={<ModuleLoading />}>
       <Routes>
         <Route path="/login"    element={<PublicRoute><LoginPage /></PublicRoute>} />
+        <Route path="/registro" element={<RegistroCliente />} />
         <Route path="/"         element={<PrivateRoute><HomePage /></PrivateRoute>} />
         <Route path="/resumen"  element={<PrivateRoute><ResumenDiario /></PrivateRoute>} />
         <Route path="/semana"   element={<PrivateRoute><ResumenSemanal /></PrivateRoute>} />

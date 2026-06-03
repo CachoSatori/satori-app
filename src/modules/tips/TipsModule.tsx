@@ -9,7 +9,6 @@ import {
   getRoleTipPoints,
   createTipSession,
   closeTipSession,
-  reopenTipSession,
   deleteTipSession,
   upsertTipEntry,
   deleteTipEntry,
@@ -77,7 +76,6 @@ export default function TipsModule() {
   const [verifTotal, setVerifTotal] = useState<number | ''>('')  // Pool verification
   const [verifTipo,  setVerifTipo]  = useState('')               // tipo de diferencia (>₡500)
   const [verifMotivo,setVerifMotivo]= useState('')               // motivo de la diferencia
-  const [reopening, setReopening] = useState(false)              // Editing closed session
   // Coberturas: employeeId → role they're covering (overrides their natural role for this shift)
   const [coberturas, setCoberturas] = useState<Record<string, string>>({})
   const [showCobPicker, setShowCobPicker] = useState(false)
@@ -323,24 +321,6 @@ export default function TipsModule() {
     }).catch(() => {})
   }
 
-  // ── Editar sesión cerrada ─────────────────────────────────
-  const handleEditSession = async (session: TipSession) => {
-    if (!isManager) return
-    if (!window.confirm(`¿Reabrir el turno ${session.session_date} ${shiftLabel(session.shift_type)} para editar?\n\nLos datos existentes se preservan. Podrás hacer cambios y volver a cerrar.`)) return
-    setReopening(true)
-    setError(null)
-    try {
-      await reopenTipSession(session.id)
-      // Reload to pick up the now-open session
-      await loadData()
-      setView('turno')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error reabriendo sesión')
-    } finally {
-      setReopening(false)
-    }
-  }
-
   // ── Eliminar sesión (desde el historial) ──────────────────
   const handleDeleteSession = async (session: TipSession) => {
     if (!isManager) return
@@ -576,8 +556,8 @@ export default function TipsModule() {
               {/* ── Banner turno activo / editando ── */}
               <div style={{ background: openSession?.session_date !== (fecha ?? '') ? 'rgba(200,144,232,.12)' : 'rgba(74,154,106,.12)', borderBottom:'2px solid #2a4a2a', padding:'0.5rem 1.25rem', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'0.5rem' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
-                  <span style={{ fontSize:'0.72rem', color: reopening ? '#c890e8' : '#4a9a6a', fontWeight:700, letterSpacing:'0.1em', textTransform:'uppercase' }}>
-                    {reopening ? '✏ REABRIENDO…' : '● TURNO ACTIVO'}
+                  <span style={{ fontSize:'0.72rem', color: '#4a9a6a', fontWeight:700, letterSpacing:'0.1em', textTransform:'uppercase' }}>
+                    ● TURNO ACTIVO
                   </span>
                   <span style={{ fontSize:'0.88rem', color:'var(--t-gold)', fontWeight:700 }}>
                     {openSession.session_date}
@@ -841,8 +821,8 @@ export default function TipsModule() {
               employees={employees}
               rolePoints={rolePoints}
               onCalcReady={(id, calc) => setTipCalcCache(prev => ({ ...prev, [id]: calc }))}
-              onEditSession={handleEditSession}
               onDeleteSession={handleDeleteSession}
+              onSaved={loadData}
               isManager={isManager}
             />
           </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Employee, RoleTipPoints } from '../../shared/types/database'
-import { getAllEmployees } from '../../shared/api/admin'
+import { getAllEmployees, getAllProfiles } from '../../shared/api/admin'
 import { getRoleTipPoints } from '../../shared/api/tips'
 import EmployeeList from './EmployeeList'
 import RolePointsConfig from './RolePointsConfig'
@@ -29,6 +29,7 @@ export default function AdminModule() {
   const [tab, setTab] = useState<Tab>('employees')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [rolePoints, setRolePoints] = useState<RoleTipPoints[]>([])
+  const [pendingUsers, setPendingUsers] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sendingReport, setSendingReport] = useState(false)
@@ -38,12 +39,14 @@ export default function AdminModule() {
     try {
       setLoading(true)
       setError(null)
-      const [emps, points] = await Promise.all([
+      const [emps, points, profiles] = await Promise.all([
         getAllEmployees(),
         getRoleTipPoints(),
+        getAllProfiles().catch(() => []),
       ])
       setEmployees(emps)
       setRolePoints(points)
+      setPendingUsers(profiles.filter(p => !p.is_active).length)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error cargando datos')
     } finally {
@@ -81,7 +84,13 @@ export default function AdminModule() {
       {/* Nav tabs — barra estilo dashboard */}
       <div className="vt-nav-tabs">
         <div className={`vt-nav-tab ${tab === 'employees' ? 'active' : ''}`} onClick={() => setTab('employees')}>Empleados</div>
-        <div className={`vt-nav-tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>Usuarios</div>
+        <div className={`vt-nav-tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>
+          Usuarios{pendingUsers > 0 && (
+            <span style={{ marginLeft: '0.4rem', background: 'var(--t-red)', color: '#fff', borderRadius: 10, fontSize: '0.6rem', fontWeight: 700, padding: '0.05rem 0.4rem' }}>
+              {pendingUsers}
+            </span>
+          )}
+        </div>
         <div className={`vt-nav-tab ${tab === 'rolepoints' ? 'active' : ''}`} onClick={() => setTab('rolepoints')}>Puntos por rol</div>
         <div className={`vt-nav-tab ${tab === 'exchange' ? 'active' : ''}`} onClick={() => setTab('exchange')}>Tipo de cambio</div>
         <div className={`vt-nav-tab ${tab === 'hours' ? 'active' : ''}`} onClick={() => setTab('hours')}>Horas trabajadas</div>

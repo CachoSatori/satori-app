@@ -81,6 +81,33 @@ function renderContent(text: string): string {
   return out.join('\n')
 }
 
+// Imprimir un SOP en una ventana limpia (útil para pegarlo en la pared / caja)
+function printSOP(sop: SOP): void {
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${sop.title}</title>
+  <style>
+    body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:2rem auto;padding:0 1.5rem;color:#1a1a1a;line-height:1.55}
+    h1{font-size:1.4rem;border-bottom:2px solid #c8a96e;padding-bottom:.4rem;margin:.2rem 0 .3rem}
+    .cat{font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:#999}
+    .sop-meta{color:#888;font-size:.82rem;margin-bottom:1rem}
+    .sop-h2{font-size:1.05rem;font-weight:700;border-bottom:1px solid #ddd;padding-bottom:.2rem;margin:1.2rem 0 .5rem}
+    .sop-h3{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#2a7a6a;margin:1rem 0 .3rem}
+    .sop-h4{font-weight:700;margin:.7rem 0 .2rem}
+    p{margin:.1rem 0 .6rem} ol,ul{padding-left:1.5rem;margin:.2rem 0 .8rem} li{margin-bottom:.3rem}
+    .sop-note{background:#faf6ec;border-left:3px solid #c8a96e;padding:.5rem .8rem;margin:.5rem 0 .8rem}
+    table{border-collapse:collapse;width:100%;margin:.3rem 0 .9rem} th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left;font-size:.85rem}
+    th{background:#f3efe6} code{background:#eee;padding:.05rem .3rem;border-radius:3px;font-family:monospace}
+    .ftr{margin-top:2rem;border-top:1px solid #ddd;padding-top:.5rem;font-size:.65rem;color:#aaa}
+  </style></head><body>
+  <div class="cat">${sop.category}</div><h1>${sop.title}</h1>
+  ${renderContent(sop.content)}
+  <div class="ftr">Satori Sushi Bar · Procedimiento operativo · ${new Date().toLocaleDateString('es-CR')}</div>
+  </body></html>`
+  const w = window.open('', '_blank')
+  if (!w) { window.alert('Permití las ventanas emergentes para imprimir.'); return }
+  w.document.write(html); w.document.close(); w.focus()
+  setTimeout(() => w.print(), 350)
+}
+
 // Resumen plano para la tarjeta (sin markdown ni título)
 function cardPreview(content: string): string {
   const text = content.split('\n').map(l => l.trim())
@@ -290,7 +317,11 @@ export default function SOPsModule() {
                 </div>
                 <div className="sop-detail-title">{selectedSOP.title}</div>
               </div>
-              <button className="sop-close-btn" onClick={() => setSelectedSOP(null)}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                <button className="sop-close-btn" title="Imprimir" style={{ fontSize: '0.95rem' }}
+                  onClick={() => printSOP(selectedSOP)}>🖨</button>
+                <button className="sop-close-btn" onClick={() => setSelectedSOP(null)}>✕</button>
+              </div>
             </div>
             <div className="sop-detail-body">
               <div className="sop-content"

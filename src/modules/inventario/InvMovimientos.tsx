@@ -5,6 +5,7 @@ import { useState } from 'react'
 import type { Ingredient, InventoryMovement } from '../../shared/types/inventario'
 import { MOVEMENT_LABELS } from '../../shared/types/inventario'
 import { addMovement, setStockLevel } from '../../shared/api/inventario'
+import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 
 interface Props {
   ingredients: Ingredient[]
@@ -28,6 +29,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
   const [unitCost, setUnitCost] = useState('')
   const [notes,    setNotes]    = useState('')
   const [newStock, setNewStock] = useState('')   // for count_adjustment absolute mode
+  const [linkCaja, setLinkCaja] = useState(true)  // purchase → registrar egreso en Caja
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
   const [success,  setSuccess]  = useState<string | null>(null)
@@ -58,19 +60,51 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
     if (!qty || isNaN(parseFloat(qty)) || parseFloat(qty) <= 0) { setError('Ingresá una cantidad válida'); return }
     setSaving(true); setError(null)
     try {
+      const q = parseFloat(qty)
       await addMovement({
         ingredient_id: ingId,
         movement_type: movType,
-        qty_delta:     parseFloat(qty) * deltaSign,
+        qty_delta:     q * deltaSign,
         unit:          selectedIng?.unit ?? 'unidad',
         unit_cost:     isPurchase && unitCost ? parseFloat(unitCost) : null,
         reference_id:  new Date().toISOString().slice(0, 10),
         notes,
         created_by:    profile?.full_name ?? '',
       })
-      setSuccess(`✓ ${MOVEMENT_LABELS[movType]} registrado: ${parseFloat(qty)} ${selectedIng?.unit}`)
+
+      // ── Integración Compra → Caja ──────────────────────────────
+      // Si es compra con costo y el usuario lo pidió, registrar el egreso_mercaderia
+      // en el turno de caja abierto (mismo patrón que Propinas→Caja).
+      let cajaMsg = ''
+      const purchaseValue = isPurchase && unitCost ? Math.round(q * parseFloat(unitCost)) : 0
+      if (isPurchase && linkCaja && purchaseValue > 0) {
+        try {
+          const cashSession = await getOpenCashSession()
+          if (cashSession) {
+            await createCashMovement({
+              session_id:    cashSession.id,
+              created_by:    profile?.id ?? '',
+              movement_type: 'egreso_mercaderia',
+              amount_crc:    purchaseValue,
+              amount_usd:    0,
+              currency:      'CRC',
+              exchange_rate: null,
+              description:   `Compra ${selectedIng?.name ?? ''} (${q} ${selectedIng?.unit ?? ''})`.trim(),
+              subcategory:   'Proveedor mercadería',
+              supplier_name: selectedIng?.supplier ?? '',
+              method:        'Efectivo',
+              caja_origen:   'Caja Proveedores',
+            })
+            cajaMsg = ` · egreso de ₡${purchaseValue.toLocaleString('es-CR')} registrado en Caja`
+          } else {
+            cajaMsg = ' · ⚠ sin turno de caja abierto: no se registró el egreso'
+          }
+        } catch { cajaMsg = ' · ⚠ no se pudo registrar el egreso en Caja' }
+      }
+
+      setSuccess(`✓ ${MOVEMENT_LABELS[movType]} registrado: ${q} ${selectedIng?.unit}${cajaMsg}`)
       setQty(''); setUnitCost(''); setNotes('')
-      setTimeout(() => setSuccess(null), 4000)
+      setTimeout(() => setSuccess(null), 5000)
       onRefresh()
     } catch(e) { setError(e instanceof Error ? e.message : 'Error') }
     finally { setSaving(false) }
@@ -153,6 +187,20 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
               value={notes} onChange={e => setNotes(e.target.value)} />
           </div>
         </div>
+
+        {/* Compra → Caja */}
+        {isPurchase && (
+          <label style={{ display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.75rem', color:'#aaa', marginBottom:'0.625rem', cursor:'pointer' }}>
+            <input type="checkbox" checked={linkCaja} onChange={e => setLinkCaja(e.target.checked)} />
+            Registrar egreso en Caja (egreso_mercaderia)
+            {unitCost && qty && (
+              <span style={{ color:'#c8a96e', fontWeight:600 }}>
+                · ₡{Math.round((parseFloat(qty)||0) * (parseFloat(unitCost)||0)).toLocaleString('es-CR')}
+              </span>
+            )}
+            <span style={{ color:'#555', fontSize:'0.68rem' }}>(requiere turno de caja abierto)</span>
+          </label>
+        )}
 
         {/* Preview */}
         {selectedIng && (

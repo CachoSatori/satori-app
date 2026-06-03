@@ -109,6 +109,9 @@ interface HomeStatus {
   cajaEgresos:      number
   cajaSaldo:        number
   cajaStatus:       string  // 'open'|'closed'|''
+  invTotal:         number
+  invLowStock:      number
+  invOutStock:      number
 }
 
 async function fetchHomeStatus(): Promise<HomeStatus> {
@@ -116,7 +119,7 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
   const curMonth = today.slice(0, 7)
 
   const [tipRes, cashRes, pendRes, metaRes, sopsRes, ventasRes, suppliersRes,
-         tipDetailRes, cashSessionsRes, cashMovsRes] = await Promise.allSettled([
+         tipDetailRes, cashSessionsRes, cashMovsRes, ingredientsRes] = await Promise.allSettled([
     // Open tip session
     supabase.from('tip_sessions' as never).select('shift_type,created_at').eq('status', 'open').limit(1).maybeSingle(),
     // Open cash session
@@ -146,6 +149,8 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
       .select('session_id,movement_type,amount_crc')
       .gte('created_at', today + 'T00:00:00')
       .neq('status', 'rechazado'),
+    // Ingredients (stock levels for low-stock alert)
+    supabase.from('ingredients' as never).select('current_stock,min_stock'),
   ])
 
   const tipSession  = tipRes.status  === 'fulfilled' ? (tipRes.value.data  as { shift_type: string; created_at: string } | null)   : null
@@ -230,6 +235,14 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
   const cajaEgresos  = todayMovs.filter(m => m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso').reduce((s,m) => s + m.amount_crc, 0)
   const cajaSaldo    = cajaIngresos - cajaEgresos
 
+  // ── Inventario: stock bajo / sin stock ──────────────────────
+  const ingData = ingredientsRes.status === 'fulfilled'
+    ? (ingredientsRes.value.data as Array<{ current_stock: number; min_stock: number }> ?? [])
+    : []
+  const invTotal    = ingData.length
+  const invOutStock = ingData.filter(i => i.current_stock <= 0).length
+  const invLowStock = ingData.filter(i => i.min_stock > 0 && i.current_stock > 0 && i.current_stock <= i.min_stock).length
+
   return {
     tipOpen:          !!tipSession,
     tipShift:         tipSession?.shift_type ?? '',
@@ -252,6 +265,9 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     cajaEgresos,
     cajaSaldo,
     cajaStatus,
+    invTotal,
+    invLowStock,
+    invOutStock,
   }
 }
 
@@ -332,6 +348,11 @@ export default function HomePage() {
         }
         if (status.ventasHoy) return <StatusBadge color="ok" text="Hoy cargado" />
         return <StatusBadge color="dim" text="Sin datos hoy" />
+      case 'inventario':
+        if (status.invOutStock > 0) return <StatusBadge color="warn" text={`${status.invOutStock} sin stock`} />
+        if (status.invLowStock > 0) return <StatusBadge color="warn" text={`${status.invLowStock} stock bajo`} />
+        if (status.invTotal > 0)    return <StatusBadge color="ok" text="Stock OK" />
+        return <StatusBadge color="dim" text="Sin datos" />
       case 'sops':
         if (status.sopsCount > 0) return <StatusBadge color="dim" text={`${status.sopsCount} procedimientos`} />
         return <StatusBadge color="warn" text="Sin contenido" />

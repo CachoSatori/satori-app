@@ -201,6 +201,13 @@ export default function TipsModule() {
   // ── Abrir sesión ──────────────────────────────────────────
   const handleCreateSession = async () => {
     if (!profile) return
+    // Guard: nunca crear si ya existe un registro (abierto o cerrado) para esa fecha + turno
+    const dup = sessions.find(s => s.session_date === fecha && s.shift_type === shiftType)
+    if (dup) {
+      setError(`Ya existe un registro para ${fecha} · ${shiftLabel(shiftType)}. Para modificarlo, andá a Historial.`)
+      setShowNewSession(false)
+      return
+    }
     try {
       const session = await createTipSession({
         session_date:  fecha,
@@ -509,9 +516,14 @@ export default function TipsModule() {
           )}
 
           {/* Formulario abrir sesión */}
-          {!openSession && showNewSession && (
+          {!openSession && showNewSession && (() => {
+            const dupSession = sessions.find(s => s.session_date === fecha && s.shift_type === shiftType)
+            return (
             <div className="tips-new-session">
               <div className="tips-section-label">Nuevo turno</div>
+              <p style={{ fontSize: '0.72rem', color: 'var(--t-muted)', marginBottom: '0.75rem', lineHeight: 1.4 }}>
+                Elegí la fecha y el turno de la propina que vas a ingresar. Si te atrasaste, podés registrar un turno de otro día.
+              </p>
               <div className="tips-config-grid">
                 <div className="tips-field">
                   <div className="tips-field-label">Fecha</div>
@@ -532,8 +544,22 @@ export default function TipsModule() {
                     onChange={e => setExchangeRate(Number(e.target.value) || 640)} />
                 </div>
               </div>
+
+              {/* Aviso: ya existe registro para esa fecha + turno */}
+              {dupSession && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', background: 'rgba(194,59,34,0.08)', border: '1px solid rgba(194,59,34,0.35)', borderRadius: 2, padding: '0.6rem 0.85rem', marginBottom: '0.75rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--t-red)', lineHeight: 1.4 }}>
+                    Ya hay un registro para <strong>{fecha} · {shiftLabel(shiftType)}</strong> ({dupSession.status === 'open' ? 'abierto' : 'cerrado'}). No se puede crear otro. Para modificarlo, andá a Historial.
+                  </span>
+                  <button className="tips-btn-ghost" onClick={() => { setShowNewSession(false); setView('historial') }}>
+                    Ir a Historial →
+                  </button>
+                </div>
+              )}
+
               <div className="tips-new-session-actions">
-                <button className="tips-btn-teal" onClick={handleCreateSession}>
+                <button className="tips-btn-teal" onClick={handleCreateSession} disabled={!!dupSession}
+                  style={dupSession ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
                   ▶ Abrir turno
                 </button>
                 <button className="tips-btn-ghost" onClick={() => setShowNewSession(false)}>
@@ -541,7 +567,8 @@ export default function TipsModule() {
                 </button>
               </div>
             </div>
-          )}
+            )
+          })()}
 
           {/* Sesión abierta */}
           {openSession && (

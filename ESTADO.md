@@ -1,7 +1,7 @@
 # Satori App — Estado del proyecto
 
-> Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa, Costa Rica
-> Última actualización: 2026-06-02 (post-sprint: 6 tareas)
+> Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
+> Última actualización: 2026-06-03 (Fase 1 completa · Fase 2.1/2.2/2.3/2.5 · overhaul de UI)
 
 ## Stack & deploy
 - React 19 + TypeScript + Vite · Supabase (PostgreSQL + PostgREST + Auth + RLS) · PWA
@@ -10,6 +10,25 @@
 - Management token (para queries SQL directas): guardado en sesiones previas
 - Owner profile id: 48ef8af5-25d9-4990-a0b0-5140026da2ba (Cacho)
 - Build/verificar: `cd /Users/ismaelgutierrezpechemiel/Downloads/satori-app && npm run build`
+
+## ⚠️ SISTEMA DE DISEÑO (NO romper — costó iteraciones)
+Tema **papel claro** dentro de los módulos (NO oscuro). Tokens en src/index.css :root.
+- Fondos: `--t-paper`/`--vt-paper` (#f5f0e8 crema) = ÚNICO fondo de contenido. NO usar #fff ni #faf7f0 (tarjetas blancas se ven mal).
+- Tarjetas oscuras de acento (KPI): `--t-ink`/`--vt-ink` (#0d0d0d) CON texto claro explícito.
+- Texto: principal = ink (oscuro); muteado = `#5a5040`; NO usar #aaa (muy claro sobre papel).
+- **Fuentes**: LETRAS en `var(--font-sans)` (Noto Sans JP, la "vieja"/elegante). NÚMEROS en `'Syne'` (NO cargarla en el @import — cae a Noto Serif JP, que es el look correcto que le gusta al dueño). NO forzar DM Mono en texto.
+- Dorado sobre papel: `#a07830` (no #c8a96e, muy claro). Teal `#2a7a6a`. Rojo `#c23b22`. Bordes `--t-border` (#d4cfc4).
+- Inputs oscuros (#111 + texto claro) sobre papel = patrón OK probado.
+
+## Estética unificada (estilo "dashboard") en TODOS los módulos
+- Header: kanji + título (serif) + **badge de rol** (.role-badge) + botón ← Inicio.
+- Nav: **barra oscura separada** (.vt-nav-tabs / .cd-nav-tabs) con tabs gris, activo dorado + subrayado.
+  Ventas además tiene **etiquetas de grupo** (Operaciones/Equipo/Finanzas/Config) — .vt-nav-group.
+- Selección de fecha: desplegable **.date-filter** (estilo del filtro de Propinas) en TODAS las pantallas
+  con selección de mes (Ventas/Contabilidad, Mix, Ing.Menú, ICP, Evaluación, Caja/Resumen, Propinas, Food Cost).
+  En Ventas/Mix/MenuEng: por año → botón "Todo {año}" + desplegable de meses, en horizontal.
+- Proyección de ventas: componente MetaProgressBar.tsx (días, ₡actual/meta, %, proyección, meta diaria,
+  promedio/día, esfuerzo req.) en pestaña HOY y Ventas — aparece si hay meta del mes cargada.
 
 ## Módulos (TODOS completos y en producción)
 ### Ventas (売)
@@ -80,9 +99,23 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
   Migration `supabase/migrations/003_tips_email_cron.sql` — APLICAR con acceso Supabase (service_role_key en Vault)
 - Compartir: navigator.share (mobile→WhatsApp) con fallback clipboard
 
-## ── SPRINT COMPLETADO (6 tareas) ──
-Todas ✅ HECHO · build verde · pusheadas a main
+## ── ROADMAP — estado por fase (para revisar y decidir qué profundizar) ──
+Detalle completo en ROADMAP.md. Resumen:
 
+- **Fase 0 — Pendientes**: ⏳ depende del dueño (ver "Pendientes" abajo).
+- **Fase 1 — Inventario/Recetas/COGS**: ✅ COMPLETA en código (1.1–1.4 + food cost teórico vs real).
+  Falta sólo cargar datos reales (ingredientes/recetas/stock) — la UI ya está toda.
+- **Fase 2 — Fidelización/CRM**:
+  · 2.1 Base de clientes ✅ · 2.2 Programa de puntos ✅ · 2.3 Segmentos ✅ (parcial) · 2.5 Métricas ✅
+  · 2.3 Tarjeta Apple/Google Wallet 🔴 (credenciales Apple Developer / Google Wallet API)
+  · 2.4 Lector QR 🔴 (cámara real + deep-links GitHub Pages — testeo en dispositivo)
+  · 2B Chatbot WhatsApp 🔴 (Twilio + Meta + OpenTable + Stripe)
+- **Fase 3 — POS nativo**: 🔴 decisión buy-vs-build + factura electrónica Hacienda CR.
+
+**Conclusión:** todo lo que NO depende de cuentas/credenciales externas está construido.
+Lo que sigue necesita acción del dueño (trámites externos o decisión estratégica).
+
+## ── SPRINT inicial (histórico, ✅ todo hecho) ──
 1. ✅ ReporteMensual unificado — src/modules/resumen/ReporteMensual.tsx (ruta /reporte-mensual, card en Home)
 2. ✅ EmployeeHours — fetch 24 meses, selector de año, fila de totales (src/modules/admin/EmployeeHours.tsx)
 3. ✅ Registro de turno propinas — verificación ₡500 con tipo+motivo que bloquea cierre + persiste en notas
@@ -98,3 +131,5 @@ Todas ✅ HECHO · build verde · pusheadas a main
 - APLICAR migration 004_customers.sql en Supabase (activa el módulo Clientes/CRM)
 - APLICAR migration 005_loyalty.sql en Supabase (activa reglas de puntos + recompensas)
 - Cargar los costos unitarios reales (la UI ya está: Ventas→Config→Costos, inline o import CSV)
+- Definir meta mensual del mes en curso (Ventas→Metas) → enciende el bloque de proyección en HOY y Ventas
+- Cargar datos de inventario reales (Inventario→Ingredientes import CSV, luego Recetas) → enciende COGS/food cost/consumo

@@ -4162,14 +4162,62 @@ html, body, #root {
   display: flex; justify-content: flex-end; gap: 0.625rem;
   padding: 0.875rem 1.5rem; border-top: 1px solid var(--t-border);
 }
-/* SOP content styles */
-.sop-content { line-height: 1.7; color: var(--t-ink); font-size: 0.88rem; }
-.sop-content .sop-h3 { font-family: var(--font-serif); font-size: 1rem; font-weight: 700; margin: 1rem 0 0.4rem; }
-.sop-content .sop-h4 { font-size: 0.88rem; font-weight: 700; margin: 0.75rem 0 0.3rem; color: var(--t-teal); text-transform: uppercase; letter-spacing: 0.08em; }
-.sop-content li { margin-left: 1.25rem; margin-bottom: 0.25rem; }
-.sop-content .sop-ol { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem; margin-left: 0; }
-.sop-content .sop-ol span { color: var(--t-teal); font-weight: 700; }
-.sop-content .sop-p { margin-bottom: 0.75rem; }
+/* SOP content styles — formato limpio de uso diario */
+.sop-content { line-height: 1.6; color: var(--t-ink); font-size: 0.92rem; }
+.sop-content > *:first-child { margin-top: 0; }
+.sop-content .sop-meta {
+  font-size: 0.74rem; color: var(--t-muted); margin-bottom: 1rem;
+  padding-bottom: 0.6rem; border-bottom: 1px solid var(--t-border);
+}
+/* ## Sección principal */
+.sop-content .sop-h2 {
+  font-family: var(--font-serif); font-size: 1.02rem; font-weight: 700;
+  color: var(--t-ink); margin: 1.4rem 0 0.6rem; padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--t-border);
+}
+/* ### Subsección */
+.sop-content .sop-h3 {
+  font-size: 0.72rem; font-weight: 700; color: var(--t-teal);
+  text-transform: uppercase; letter-spacing: 0.1em; margin: 1.1rem 0 0.4rem;
+}
+/* #### menor */
+.sop-content .sop-h4 { font-size: 0.88rem; font-weight: 700; color: var(--t-ink); margin: 0.8rem 0 0.3rem; }
+.sop-content .sop-p { margin: 0 0 0.7rem; }
+.sop-content .sop-ol, .sop-content .sop-ul { margin: 0 0 0.9rem; padding-left: 0; list-style: none; }
+.sop-content .sop-ol { counter-reset: sop; }
+.sop-content .sop-ol > li {
+  counter-increment: sop; position: relative; padding-left: 2rem; margin-bottom: 0.5rem;
+}
+.sop-content .sop-ol > li::before {
+  content: counter(sop); position: absolute; left: 0; top: 0;
+  width: 1.4rem; height: 1.4rem; border-radius: 50%;
+  background: var(--t-teal-dim); color: var(--t-teal);
+  font-family: 'DM Mono', monospace; font-size: 0.72rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.sop-content .sop-ul > li { position: relative; padding-left: 1.1rem; margin-bottom: 0.35rem; }
+.sop-content .sop-ul > li::before {
+  content: '·'; position: absolute; left: 0.2rem; top: -0.05rem;
+  color: var(--t-gold); font-weight: 700; font-size: 1.1rem;
+}
+.sop-content strong { font-weight: 700; color: var(--t-ink); }
+.sop-content code {
+  font-family: 'DM Mono', monospace; font-size: 0.82rem;
+  background: rgba(0,0,0,0.05); padding: 0.05rem 0.35rem; border-radius: 3px;
+}
+.sop-content a { color: var(--t-teal); text-decoration: underline; word-break: break-all; }
+.sop-content .sop-note {
+  background: rgba(200,169,110,0.1); border-left: 3px solid var(--t-gold);
+  border-radius: 2px; padding: 0.55rem 0.85rem; margin: 0 0 0.9rem;
+  font-size: 0.85rem; color: var(--t-ink);
+}
+.sop-content .sop-table { width: 100%; border-collapse: collapse; margin: 0 0 1rem; font-size: 0.84rem; }
+.sop-content .sop-table th {
+  text-align: left; padding: 0.45rem 0.6rem; background: var(--t-panel);
+  border: 1px solid var(--t-border); color: var(--t-teal);
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.sop-content .sop-table td { padding: 0.45rem 0.6rem; border: 1px solid var(--t-border); vertical-align: top; }
 .sop-editor-row { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .sop-textarea {
   width: 100%; border: 1px solid var(--t-border); border-radius: 2px;

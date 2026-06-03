@@ -5,18 +5,89 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { getSOPs, saveSOPItem, deleteSOPItem, SOP_CATEGORIES } from '../../shared/api/sops'
 import type { SOP } from '../../shared/api/sops'
 
-// ── Simple markdown-like renderer ─────────────────────────────
+// ── Markdown renderer (parser por líneas → HTML limpio) ───────
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+function inline(s: string): string {
+  return escapeHtml(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+    .replace(/\[(.+?)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+}
 function renderContent(text: string): string {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/__(.*?)__/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/^# (.*)/gm, '<h3 class="sop-h3">$1</h3>')
-    .replace(/^## (.*)/gm, '<h4 class="sop-h4">$1</h4>')
-    .replace(/^- (.*)/gm, '<li>$1</li>')
-    .replace(/^(\d+)\. (.*)/gm, '<li class="sop-ol"><span>$1.</span> $2</li>')
-    .replace(/\n\n/g, '</p><p class="sop-p">')
-    .replace(/^(?!<[hlip])/gm, '')
+  const lines = text.replace(/\r/g, '').split('\n')
+  const out: string[] = []
+  let i = 0
+  let h1done = false
+  let list: 'ul' | 'ol' | null = null
+  const closeList = () => { if (list) { out.push(list === 'ul' ? '</ul>' : '</ol>'); list = null } }
+
+  while (i < lines.length) {
+    const t = lines[i].trim()
+    if (t === '') { closeList(); i++; continue }
+
+    // Saltar el primer "# Título" (ya se muestra en el encabezado del modal)
+    if (/^#\s+/.test(t) && !h1done) { h1done = true; i++; continue }
+
+    // Línea meta: **Categoría:** … · **Aplica a:** …  → subtítulo "Aplica a"
+    if (/^\*\*(Categoría|Aplica a)/.test(t)) {
+      closeList()
+      const m = t.match(/\*\*Aplica a:\*\*\s*(.+)$/)
+      if (m) out.push(`<div class="sop-meta">👥 ${inline(m[1].replace(/\s*·\s*$/, ''))}</div>`)
+      i++; continue
+    }
+
+    // Encabezados ## ### ####
+    const h = t.match(/^(#{2,5})\s+(.*)/)
+    if (h) { closeList(); const cls = h[1].length === 2 ? 'sop-h2' : h[1].length === 3 ? 'sop-h3' : 'sop-h4'; out.push(`<div class="${cls}">${inline(h[2])}</div>`); i++; continue }
+
+    // Cita / nota (>)
+    if (t.startsWith('>')) {
+      closeList()
+      const parts: string[] = []
+      while (i < lines.length && lines[i].trim().startsWith('>')) { parts.push(lines[i].trim().replace(/^>\s?/, '')); i++ }
+      out.push(`<div class="sop-note">${inline(parts.join(' '))}</div>`)
+      continue
+    }
+
+    // Tabla
+    if (t.startsWith('|') && i + 1 < lines.length && /^\|[\s:|-]+\|$/.test(lines[i + 1].trim())) {
+      closeList()
+      const head = t.split('|').slice(1, -1).map(c => c.trim())
+      i += 2
+      const body: string[][] = []
+      while (i < lines.length && lines[i].trim().startsWith('|')) { body.push(lines[i].trim().split('|').slice(1, -1).map(c => c.trim())); i++ }
+      let tb = '<table class="sop-table"><thead><tr>' + head.map(c => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>'
+      for (const r of body) tb += '<tr>' + r.map(c => `<td>${inline(c)}</td>`).join('') + '</tr>'
+      out.push(tb + '</tbody></table>'); continue
+    }
+
+    // Lista numerada
+    const ol = t.match(/^\d+\.\s+(.*)/)
+    if (ol) { if (list !== 'ol') { closeList(); out.push('<ol class="sop-ol">'); list = 'ol' } out.push(`<li>${inline(ol[1])}</li>`); i++; continue }
+
+    // Lista con viñetas
+    const ul = t.match(/^[-*]\s+(.*)/)
+    if (ul) { if (list !== 'ul') { closeList(); out.push('<ul class="sop-ul">'); list = 'ul' } out.push(`<li>${inline(ul[1])}</li>`); i++; continue }
+
+    // Párrafo
+    closeList()
+    out.push(`<p class="sop-p">${inline(t)}</p>`)
+    i++
+  }
+  closeList()
+  return out.join('\n')
+}
+
+// Resumen plano para la tarjeta (sin markdown ni título)
+function cardPreview(content: string): string {
+  const text = content.split('\n').map(l => l.trim())
+    .filter(l => l && !l.startsWith('#') && !/^\*\*(Categoría|Aplica a)/.test(l))
+    .join(' ')
+    .replace(/[*#>`|]/g, '').replace(/\s+/g, ' ').trim()
+  return text.slice(0, 120)
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -189,7 +260,7 @@ export default function SOPsModule() {
                     onClick={() => setSelectedSOP(sop)}>
                     <div className="sop-card-title">{sop.title}</div>
                     <div className="sop-card-preview">
-                      {sop.content.replace(/#+ /g, '').replace(/\*\*/g, '').slice(0, 100)}…
+                      {cardPreview(sop.content)}…
                     </div>
                     {canEdit && (
                       <div className="sop-card-actions" onClick={e => e.stopPropagation()}>
@@ -223,7 +294,7 @@ export default function SOPsModule() {
             </div>
             <div className="sop-detail-body">
               <div className="sop-content"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize('<p class="sop-p">' + renderContent(selectedSOP.content) + '</p>') }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderContent(selectedSOP.content), { ADD_ATTR: ['target'] }) }}
               />
             </div>
             {canEdit && (
@@ -302,7 +373,7 @@ export default function SOPsModule() {
                   </div>
                   <div className="sop-preview-box">
                     <div className="sop-content"
-                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize('<p class="sop-p">' + renderContent(editSOP.content ?? '') + '</p>') }}
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderContent(editSOP.content ?? ''), { ADD_ATTR: ['target'] }) }}
                     />
                   </div>
                 </div>

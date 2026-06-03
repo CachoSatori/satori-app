@@ -57,6 +57,8 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
     + catálogo de recompensas; motor computeEarnedPoints; canje en el perfil (descuenta saldo)
   · Segmentos (2.3 parcial): cumpleañeros del mes, frecuentes/VIP, dormidos, nuevos
     + copiar lista + link wa.me por cliente (sin APIs externas)
+  · Métricas (2.5): dashboard de fidelización — adquisición, retención, valor/LTV,
+    puntos (emitidos/canjeados), comportamiento (CrmMetricas.tsx)
   · tablas customers, customer_interactions, loyalty_config, loyalty_rewards · src/modules/crm/
 
 ## Datos cargados en DB (migración histórica COMPLETA)

@@ -141,7 +141,7 @@ export default function TipCocina({ employees }: Props) {
     <div style={{ padding: '0.5rem 0' }}>
       {/* Header + selector de mes */}
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem' }}>
-        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--t-gold)' }}>🍳 Pool semanal de cocina</div>
+        <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#a07830' }}>🍳 Pool semanal de cocina</div>
         <select value={month} onChange={e => setMonth(e.target.value)}
           style={{ background: '#111', border: '1px solid #2a2a2a', color: 'var(--t-gold)', padding: '5px 10px', borderRadius: 2, fontSize: '0.78rem', marginLeft: 'auto' }}>
           {availableMonths.map(m => <option key={m} value={m}>{fmtMonth(m)}</option>)}
@@ -166,14 +166,14 @@ export default function TipCocina({ employees }: Props) {
           </thead>
           <tbody>
             {weeks.map((w, i) => (
-              <tr key={w.key} style={{ borderBottom: '1px solid #161616' }}>
+              <tr key={w.key} style={{ borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
                 <td style={{ padding: '0.45rem 0.5rem', fontWeight: 600 }}>Sem. {i + 1}</td>
-                <td style={{ padding: '0.45rem 0.5rem', color: '#aaa' }}>{fmtShort(w.start)} – {fmtShort(w.end)}</td>
+                <td style={{ padding: '0.45rem 0.5rem', color: '#5a5040' }}>{fmtShort(w.start)} – {fmtShort(w.end)}</td>
                 <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: 'var(--t-teal)', fontWeight: 600 }}>{fi(w.pool)}</td>
-                <td style={{ padding: '0.45rem 0.5rem', textAlign: 'center', color: '#aaa' }} title={w.receptores.map(r => r.name).join(', ')}>
+                <td style={{ padding: '0.45rem 0.5rem', textAlign: 'center', color: '#5a5040' }} title={w.receptores.map(r => r.name).join(', ')}>
                   {w.receptores.length || '—'}
                 </td>
-                <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: 'var(--t-gold)', fontWeight: 700 }}>
+                <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: '#a07830', fontWeight: 700 }}>
                   {w.perPerson > 0 ? fi(w.perPerson) : '—'}
                 </td>
               </tr>
@@ -206,10 +206,10 @@ export default function TipCocina({ employees }: Props) {
             </thead>
             <tbody>
               {byEmp.map(e => (
-                <tr key={e.name} style={{ borderBottom: '1px solid #161616' }}>
+                <tr key={e.name} style={{ borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
                   <td style={{ padding: '0.45rem 0.5rem', fontWeight: 600 }}>{e.name}</td>
-                  <td style={{ padding: '0.45rem 0.5rem', textAlign: 'center', color: '#aaa' }}>{e.weeks}</td>
-                  <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: 'var(--t-gold)', fontWeight: 700 }}>{fi(e.total)}</td>
+                  <td style={{ padding: '0.45rem 0.5rem', textAlign: 'center', color: '#5a5040' }}>{e.weeks}</td>
+                  <td style={{ padding: '0.45rem 0.5rem', textAlign: 'right', color: '#a07830', fontWeight: 700 }}>{fi(e.total)}</td>
                 </tr>
               ))}
             </tbody>

@@ -154,8 +154,8 @@ export default function InvFoodCost({ ingredients }: Props) {
 
           {/* Merma + ajustes */}
           <div style={{ display:'flex', gap:'1.5rem', flexWrap:'wrap', fontSize:'0.82rem', marginBottom:'1.25rem' }}>
-            <span style={{ color:'#aaa' }}>🗑 Merma registrada: <strong style={{ color:'#c23b22' }}>{fi(calc.merma)}</strong></span>
-            <span style={{ color:'#aaa' }}>📋 Ajustes de conteo: <strong style={{ color: calc.ajustes < 0 ? '#c23b22' : '#4a9a6a' }}>{calc.ajustes >= 0 ? '+' : ''}{fi(calc.ajustes)}</strong></span>
+            <span style={{ color:'#5a5040' }}>🗑 Merma registrada: <strong style={{ color:'#c23b22' }}>{fi(calc.merma)}</strong></span>
+            <span style={{ color:'#5a5040' }}>📋 Ajustes de conteo: <strong style={{ color: calc.ajustes < 0 ? '#c23b22' : '#4a9a6a' }}>{calc.ajustes >= 0 ? '+' : ''}{fi(calc.ajustes)}</strong></span>
           </div>
 
           {/* Interpretación */}

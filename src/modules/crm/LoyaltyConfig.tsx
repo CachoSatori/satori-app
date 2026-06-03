@@ -8,7 +8,7 @@ import {
 import type { LoyaltyRules, LoyaltyReward } from '../../shared/types/crm'
 import { DEFAULT_RULES, REWARD_CATEGORIES } from '../../shared/types/crm'
 
-const selStyle: React.CSSProperties = { background: '#111', border: '1px solid #2a2a2a', color: '#e8e2d8', padding: '5px 8px', borderRadius: 2, fontSize: '0.82rem' }
+const selStyle: React.CSSProperties = { background: 'var(--t-ink,#111)', border: '1px solid #2a2a2a', color: '#f0ece4', padding: '5px 8px', borderRadius: 2, fontSize: '0.82rem' }
 
 const RULE_FIELDS: Array<{ key: keyof LoyaltyRules; label: string; hint: string }> = [
   { key: 'points_per_1000',         label: 'Puntos por ₡1.000',        hint: 'acumulación base por gasto' },
@@ -82,8 +82,8 @@ export default function LoyaltyConfig() {
       {error && <div className="tips-error" style={{ gridColumn: '1/-1' }}><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>}
 
       {/* Reglas */}
-      <div style={{ border: '1px solid #1c1c1c', borderRadius: 4, padding: '1rem', background: '#0e0e0e' }}>
-        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--t-gold,#c8a96e)', marginBottom: '0.875rem' }}>⚙ Reglas de puntos</div>
+      <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: '#faf7f0' }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#a07830', marginBottom: '0.875rem' }}>⚙ Reglas de puntos</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
           {RULE_FIELDS.map(f => (
             <div key={f.key}>
@@ -100,27 +100,27 @@ export default function LoyaltyConfig() {
             style={{ padding: '6px 16px', borderRadius: 2, background: 'var(--t-teal,#2a7a6a)', color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
             {savingRules ? '⟳ Guardando…' : '✓ Guardar reglas'}
           </button>
-          {msg && <span style={{ color: '#7ec8a0', fontSize: '0.8rem', fontWeight: 600 }}>{msg}</span>}
+          {msg && <span style={{ color: '#2a7a6a', fontSize: '0.8rem', fontWeight: 600 }}>{msg}</span>}
         </div>
       </div>
 
       {/* Recompensas */}
-      <div style={{ border: '1px solid #1c1c1c', borderRadius: 4, padding: '1rem', background: '#0e0e0e' }}>
-        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--t-gold,#c8a96e)', marginBottom: '0.875rem' }}>🎁 Catálogo de recompensas</div>
+      <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: '#faf7f0' }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#a07830', marginBottom: '0.875rem' }}>🎁 Catálogo de recompensas</div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '1rem' }}>
           {rewards.length === 0 && <div style={{ color: '#666', fontSize: '0.8rem' }}>Sin recompensas. Agregá la primera abajo.</div>}
           {rewards.map(r => (
-            <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0.6rem', borderRadius: 2, background: '#111', opacity: r.active ? 1 : 0.5 }}>
+            <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.45rem 0.6rem', borderRadius: 2, background: 'rgba(0,0,0,0.04)', border: '1px solid var(--t-border,#d4cfc4)', opacity: r.active ? 1 : 0.5 }}>
               <div>
                 <span style={{ fontWeight: 600, fontSize: '0.84rem' }}>{r.name}</span>
                 <span style={{ fontSize: '0.66rem', color: '#777', marginLeft: 6, textTransform: 'uppercase' }}>{r.category}</span>
                 {r.description && <div style={{ fontSize: '0.72rem', color: '#888' }}>{r.description}</div>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}>
-                <span style={{ color: 'var(--t-gold,#c8a96e)', fontWeight: 700, fontSize: '0.84rem' }}>{r.points_cost} pts</span>
+                <span style={{ color: '#a07830', fontWeight: 700, fontSize: '0.84rem' }}>{r.points_cost} pts</span>
                 <button onClick={() => toggleReward(r)} title={r.active ? 'Desactivar' : 'Activar'}
-                  style={{ background: 'none', border: '1px solid #2a2a2a', color: r.active ? '#7ec8a0' : '#888', borderRadius: 2, padding: '2px 8px', fontSize: '0.66rem', cursor: 'pointer' }}>
+                  style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', color: r.active ? '#2a7a6a' : '#8a8170', borderRadius: 2, padding: '2px 8px', fontSize: '0.66rem', cursor: 'pointer' }}>
                   {r.active ? 'activa' : 'inactiva'}
                 </button>
                 <button onClick={() => removeReward(r)} style={{ background: 'none', border: '1px solid #3a1a1a', color: '#c0392b', borderRadius: 2, padding: '2px 7px', fontSize: '0.66rem', cursor: 'pointer' }}>✕</button>

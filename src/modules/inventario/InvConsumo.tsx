@@ -131,10 +131,10 @@ export default function InvConsumo({ ingredients, onRefresh, profile }: Props) {
       {/* Resumen */}
       {result && (
         <>
-          <div style={{ display:'flex', gap:'1.5rem', flexWrap:'wrap', fontSize:'0.8rem', color:'#aaa', marginBottom:'0.75rem' }}>
-            <span><strong style={{ color:'#e8e2d8' }}>{result.productsMatched}</strong> productos con receta</span>
-            <span><strong style={{ color:'#e8e2d8' }}>{n3(result.unitsConsidered)}</strong> unidades consideradas</span>
-            <span><strong style={{ color:'#e8e2d8' }}>{result.lines.length}</strong> ingredientes afectados</span>
+          <div style={{ display:'flex', gap:'1.5rem', flexWrap:'wrap', fontSize:'0.8rem', color:'#5a5040', marginBottom:'0.75rem' }}>
+            <span><strong style={{ color:'var(--vt-ink,#0d0d0d)' }}>{result.productsMatched}</strong> productos con receta</span>
+            <span><strong style={{ color:'var(--vt-ink,#0d0d0d)' }}>{n3(result.unitsConsidered)}</strong> unidades consideradas</span>
+            <span><strong style={{ color:'var(--vt-ink,#0d0d0d)' }}>{result.lines.length}</strong> ingredientes afectados</span>
             {totalShort > 0 && <span style={{ color:'#c23b22' }}>⚠ {totalShort} quedarían en negativo</span>}
             {mismatch > 0 && <span style={{ color:'#c8a030' }}>⚠ {mismatch} con unidad distinta</span>}
           </div>

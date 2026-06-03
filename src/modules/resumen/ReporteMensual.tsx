@@ -244,7 +244,7 @@ export default function ReporteMensual() {
   const prevYM = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
 
   return (
-    <div className="rm-page" style={{ minHeight: '100vh', background: 'var(--t-ink, #0d0d0d)', color: '#e8e2d8' }}>
+    <div className="rm-page" style={{ minHeight: '100vh', background: 'var(--t-paper, #f5f0e8)', color: 'var(--t-ink, #0d0d0d)', fontFamily: "'DM Mono', 'Courier New', monospace" }}>
       {/* Header / controls — hidden on print */}
       <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0d0d0d', borderBottom: '1px solid #1a1a1a', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -265,13 +265,13 @@ export default function ReporteMensual() {
         </select>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {copied && <span style={{ fontSize: '0.72rem', color: '#7ec8a0' }}>✓ Copiado</span>}
+          {copied && <span style={{ fontSize: '0.72rem', color: '#2a7a6a' }}>✓ Copiado</span>}
           <button onClick={() => shareReport(shareText, setCopied)} disabled={!shareText}
             style={{ fontSize: '0.8rem', padding: '6px 14px', border: '1px solid #2a4a6b', background: 'transparent', color: '#8ab0d8', borderRadius: 2, cursor: 'pointer' }}>
             ↗ Compartir
           </button>
           <button onClick={() => window.print()}
-            style={{ fontSize: '0.8rem', padding: '6px 14px', border: '1px solid #2a7a6a', background: 'transparent', color: '#7ec8a0', borderRadius: 2, cursor: 'pointer' }}>
+            style={{ fontSize: '0.8rem', padding: '6px 14px', border: '1px solid #2a7a6a', background: 'transparent', color: '#2a7a6a', borderRadius: 2, cursor: 'pointer' }}>
             🖨 Imprimir
           </button>
           <button onClick={() => navigate('/')}
@@ -284,8 +284,8 @@ export default function ReporteMensual() {
       {/* Report body */}
       <div className="rm-body" style={{ maxWidth: 880, margin: '0 auto', padding: '1.5rem 1.25rem 4rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#c8a96e' }}>{fmtMonthLabel(ym)}</div>
-          <div style={{ fontSize: '0.72rem', color: '#777' }}>Satori Sushi Bar · Santa Teresa, CR</div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#a07830' }}>{fmtMonthLabel(ym)}</div>
+          <div style={{ fontSize: '0.72rem', color: '#5a5040' }}>Satori Sushi Bar · Santa Teresa, CR</div>
         </div>
 
         {loading ? (
@@ -293,7 +293,7 @@ export default function ReporteMensual() {
         ) : (
           <>
             {/* ── VENTAS ── */}
-            <Section title="📈 Ventas" color="#8ab0d8">
+            <Section title="📈 Ventas" color="#2a4a6b">
               {ventas && (
                 <>
                   <KpiGrid items={[
@@ -303,13 +303,13 @@ export default function ReporteMensual() {
                     { label: 'Días trabajados', val: `${ventas.days} de ${daysInMonth(ym)}` },
                   ]} />
                   <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.82rem' }}>
-                    {ventas.maxDay && <span>Mejor día: <strong style={{ color: '#7ec8a0' }}>{fmtDate(ventas.maxDay.fecha)}</strong> · {fi(ventas.maxDay.ventaNeta)}</span>}
-                    {ventas.minDay && <span>Peor día: <strong style={{ color: '#c89a9a' }}>{fmtDate(ventas.minDay.fecha)}</strong> · {fi(ventas.minDay.ventaNeta)}</span>}
+                    {ventas.maxDay && <span>Mejor día: <strong style={{ color: '#2a7a6a' }}>{fmtDate(ventas.maxDay.fecha)}</strong> · {fi(ventas.maxDay.ventaNeta)}</span>}
+                    {ventas.minDay && <span>Peor día: <strong style={{ color: '#c23b22' }}>{fmtDate(ventas.minDay.fecha)}</strong> · {fi(ventas.minDay.ventaNeta)}</span>}
                   </div>
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#aaa' }}>
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#5a5040' }}>
                     vs {fmtMonthLabel(prevYM)}:{' '}
                     {ventas.varPct !== null ? (
-                      <strong style={{ color: ventas.varPct >= 0 ? '#7ec8a0' : '#c89a9a' }}>
+                      <strong style={{ color: ventas.varPct >= 0 ? '#2a7a6a' : '#c23b22' }}>
                         {ventas.varPct >= 0 ? '▲ +' : '▼ '}{ventas.varPct.toFixed(1)}%
                       </strong>
                     ) : <span style={{ color: '#777' }}>— sin datos previos</span>}
@@ -320,7 +320,7 @@ export default function ReporteMensual() {
             </Section>
 
             {/* ── PROPINAS ── */}
-            <Section title="💰 Propinas" color="#7ec8a0">
+            <Section title="💰 Propinas" color="#2a7a6a">
               {propinas && (
                 <>
                   <KpiGrid items={[
@@ -333,9 +333,9 @@ export default function ReporteMensual() {
                     <div style={{ marginTop: '0.75rem' }}>
                       <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#777', marginBottom: '0.4rem' }}>Top earners</div>
                       {propinas.top.map((t, i) => (
-                        <div key={t.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #161616', fontSize: '0.85rem' }}>
+                        <div key={t.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--t-border,#d4cfc4)', fontSize: '0.85rem' }}>
                           <span><span style={{ color: '#777', marginRight: '0.5rem' }}>{i + 1}</span>{t.name}</span>
-                          <strong style={{ color: '#c8a96e' }}>{fi(t.payout)}</strong>
+                          <strong style={{ color: '#a07830' }}>{fi(t.payout)}</strong>
                         </div>
                       ))}
                     </div>
@@ -345,7 +345,7 @@ export default function ReporteMensual() {
             </Section>
 
             {/* ── CAJA ── */}
-            <Section title="金 Caja" color="#c8a96e">
+            <Section title="金 Caja" color="#a07830">
               {caja && (
                 <>
                   <KpiGrid items={[
@@ -357,9 +357,9 @@ export default function ReporteMensual() {
                     <div style={{ marginTop: '0.75rem' }}>
                       <div style={{ fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#777', marginBottom: '0.4rem' }}>Top egresos por categoría</div>
                       {caja.topEgresos.map(e => (
-                        <div key={e.subcat} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #161616', fontSize: '0.85rem' }}>
+                        <div key={e.subcat} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--t-border,#d4cfc4)', fontSize: '0.85rem' }}>
                           <span>{e.subcat}</span>
-                          <strong style={{ color: '#c89a9a' }}>{fi(e.amt)}</strong>
+                          <strong style={{ color: '#c23b22' }}>{fi(e.amt)}</strong>
                         </div>
                       ))}
                     </div>
@@ -390,7 +390,7 @@ export default function ReporteMensual() {
 // ── Small presentational helpers ────────────────────────────────
 function Section({ title, color, children }: { title: string; color: string; children: React.ReactNode }) {
   return (
-    <div className="rm-section" style={{ marginBottom: '1.5rem', background: '#111', border: '1px solid #1c1c1c', borderRadius: 4, padding: '1.1rem 1.25rem' }}>
+    <div className="rm-section" style={{ marginBottom: '1.5rem', background: '#faf7f0', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1.1rem 1.25rem' }}>
       <div style={{ fontSize: '1rem', fontWeight: 700, color, borderBottom: `2px solid ${color}`, paddingBottom: '0.5rem', marginBottom: '0.875rem' }}>
         {title}
       </div>
@@ -403,9 +403,9 @@ function KpiGrid({ items }: { items: Array<{ label: string; val: string; bold?: 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem' }}>
       {items.map(k => (
-        <div key={k.label} style={{ background: '#0c0c0c', border: '1px solid #1a1a1a', borderRadius: 3, padding: '0.6rem 0.75rem' }}>
-          <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#777', marginBottom: '0.25rem' }}>{k.label}</div>
-          <div style={{ fontSize: k.bold ? '1.05rem' : '0.92rem', fontWeight: k.bold ? 700 : 500, color: k.bold ? '#e8e2d8' : '#cfc8ba', fontFamily: 'DM Mono, monospace' }}>{k.val}</div>
+        <div key={k.label} style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 3, padding: '0.6rem 0.75rem' }}>
+          <div style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5a5040', marginBottom: '0.25rem' }}>{k.label}</div>
+          <div style={{ fontSize: k.bold ? '1.05rem' : '0.92rem', fontWeight: k.bold ? 700 : 500, color: k.bold ? 'var(--t-ink,#0d0d0d)' : '#5a5040', fontFamily: 'DM Mono, monospace' }}>{k.val}</div>
         </div>
       ))}
     </div>

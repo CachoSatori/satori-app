@@ -244,9 +244,9 @@ export default function ClientesModule() {
       )}
 
       {needsMigration ? (
-        <div style={{ padding: '2rem', maxWidth: 620, margin: '2rem auto', textAlign: 'center', color: '#aaa' }}>
+        <div style={{ padding: '2rem', maxWidth: 620, margin: '2rem auto', textAlign: 'center', color: '#5a5040' }}>
           <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🗄</div>
-          <div style={{ fontWeight: 700, color: '#e8e2d8', marginBottom: '0.5rem' }}>Falta aplicar la migración del CRM</div>
+          <div style={{ fontWeight: 700, color: 'var(--t-ink,#0d0d0d)', marginBottom: '0.5rem' }}>Falta aplicar la migración del CRM</div>
           <div style={{ fontSize: '0.85rem', lineHeight: 1.5 }}>
             Las tablas de clientes todavía no existen. Aplicá <code>supabase/migrations/004_customers.sql</code> en
             Supabase (SQL Editor o <code>supabase db push</code>) y recargá esta pantalla.
@@ -287,7 +287,7 @@ export default function ClientesModule() {
               )}
               {filtered.map(c => (
                 <div key={c.id} onClick={() => { setSelId(c.id); setEditing(false) }}
-                  style={{ padding: '0.6rem 0.75rem', borderRadius: 2, cursor: 'pointer', border: '1px solid', borderColor: selId === c.id ? TIER_COLORS[c.tier] : '#1a1a1a', background: selId === c.id ? 'rgba(255,255,255,0.03)' : '#0e0e0e' }}>
+                  style={{ padding: '0.6rem 0.75rem', borderRadius: 2, cursor: 'pointer', border: '1px solid', borderColor: selId === c.id ? TIER_COLORS[c.tier] : 'var(--t-border,#d4cfc4)', background: selId === c.id ? 'rgba(160,120,48,0.12)' : '#faf7f0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{c.name || '(sin nombre)'}</span>
                     <span style={{ fontSize: '0.6rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: TIER_COLORS[c.tier] }}>{TIER_LABELS[c.tier]}</span>
@@ -305,7 +305,7 @@ export default function ClientesModule() {
               {editing ? (
                 <CustomerForm form={form} setForm={setForm} onSave={handleSave} onCancel={() => setEditing(false)} saving={saving} />
               ) : selected ? (
-                <div style={{ border: '1px solid #1c1c1c', borderRadius: 4, padding: '1rem', background: '#0e0e0e' }}>
+                <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: '#faf7f0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                     <div>
                       <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{selected.name || '(sin nombre)'}</div>
@@ -318,9 +318,9 @@ export default function ClientesModule() {
 
                   {/* Agregados */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                    <Mini label="Puntos" val={String(selected.points)} color="#c8a96e" />
+                    <Mini label="Puntos" val={String(selected.points)} color="#a07830" />
                     <Mini label="Visitas" val={String(selected.total_visits)} />
-                    <Mini label="Gastado" val={fi(selected.total_spent_crc)} color="#7ec8a0" />
+                    <Mini label="Gastado" val={fi(selected.total_spent_crc)} color="#2a7a6a" />
                     <Mini label="Últ. visita" val={fmtDate(selected.last_seen)} />
                   </div>
 
@@ -334,7 +334,7 @@ export default function ClientesModule() {
                     </div>
                   )}
 
-                  {selected.notes && <div style={{ fontSize: '0.78rem', color: '#aaa', background: '#111', borderRadius: 2, padding: '0.5rem 0.75rem', marginBottom: '0.75rem' }}>📝 {selected.notes}</div>}
+                  {selected.notes && <div style={{ fontSize: '0.78rem', color: '#5a5040', background: 'rgba(0,0,0,0.04)', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 2, padding: '0.5rem 0.75rem', marginBottom: '0.75rem' }}>📝 {selected.notes}</div>}
 
                   {canManage && (
                     <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
@@ -343,11 +343,11 @@ export default function ClientesModule() {
                         + Registrar interacción
                       </button>
                       <button onClick={() => setShowRedeem(s => !s)}
-                        style={{ padding: '5px 12px', borderRadius: 2, background: 'transparent', color: 'var(--t-gold,#c8a96e)', border: '1px solid var(--t-gold,#c8a96e)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                        style={{ padding: '5px 12px', borderRadius: 2, background: 'transparent', color: '#a07830', border: '1px solid #a07830', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
                         🎁 Canjear ({affordable.length})
                       </button>
                       <button onClick={() => startEdit(selected)}
-                        style={{ padding: '5px 12px', borderRadius: 2, background: 'transparent', color: '#aaa', border: '1px solid #2a2a2a', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        style={{ padding: '5px 12px', borderRadius: 2, background: 'transparent', color: '#5a5040', border: '1px solid #2a2a2a', fontSize: '0.78rem', cursor: 'pointer' }}>
                         Editar
                       </button>
                       <button onClick={() => handleDelete(selected)}
@@ -359,7 +359,7 @@ export default function ClientesModule() {
 
                   {/* Form interacción */}
                   {showInter && (
-                    <div style={{ border: '1px solid #2a3a2a', borderRadius: 2, padding: '0.75rem', marginBottom: '1rem', background: '#0c0c0c' }}>
+                    <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 2, padding: '0.75rem', marginBottom: '1rem', background: '#f0ece4' }}>
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
                         <Field label="Tipo">
                           <select value={iType} onChange={e => setIType(e.target.value)} style={selStyle}>
@@ -395,8 +395,8 @@ export default function ClientesModule() {
 
                   {/* Panel de canje */}
                   {showRedeem && (
-                    <div style={{ border: '1px solid #3a3320', borderRadius: 2, padding: '0.75rem', marginBottom: '1rem', background: '#0c0c0c' }}>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--t-gold,#c8a96e)', fontWeight: 700, marginBottom: '0.5rem' }}>
+                    <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 2, padding: '0.75rem', marginBottom: '1rem', background: '#f0ece4' }}>
+                      <div style={{ fontSize: '0.7rem', color: '#a07830', fontWeight: 700, marginBottom: '0.5rem' }}>
                         🎁 Recompensas disponibles · saldo {selected.points} pts
                       </div>
                       {rewards.filter(r => r.active).length === 0 ? (
@@ -409,7 +409,7 @@ export default function ClientesModule() {
                               <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', opacity: can ? 1 : 0.45 }}>
                                 <span>{r.name} <span style={{ color: '#666', fontSize: '0.7rem' }}>· {r.category}</span></span>
                                 <button onClick={() => redeem(r)} disabled={!can || saving}
-                                  style={{ padding: '3px 10px', borderRadius: 2, border: '1px solid var(--t-gold,#c8a96e)', background: can ? 'rgba(200,169,110,0.12)' : 'transparent', color: 'var(--t-gold,#c8a96e)', fontSize: '0.72rem', fontWeight: 700, cursor: can ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
+                                  style={{ padding: '3px 10px', borderRadius: 2, border: '1px solid #a07830', background: can ? 'rgba(200,169,110,0.12)' : 'transparent', color: '#a07830', fontSize: '0.72rem', fontWeight: 700, cursor: can ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}>
                                   {r.points_cost} pts
                                 </button>
                               </div>
@@ -434,8 +434,8 @@ export default function ClientesModule() {
                             {it.notes && <span style={{ color: '#777', marginLeft: 6 }}>· {it.notes}</span>}
                           </div>
                           <div style={{ whiteSpace: 'nowrap' }}>
-                            {it.amount_crc > 0 && <span style={{ color: '#7ec8a0', marginRight: 8 }}>{fi(it.amount_crc)}</span>}
-                            {it.points_earned > 0 && <span style={{ color: '#c8a96e' }}>+{it.points_earned}</span>}
+                            {it.amount_crc > 0 && <span style={{ color: '#2a7a6a', marginRight: 8 }}>{fi(it.amount_crc)}</span>}
+                            {it.points_earned > 0 && <span style={{ color: '#a07830' }}>+{it.points_earned}</span>}
                             {it.points_spent > 0 && <span style={{ color: '#c0392b', marginLeft: 4 }}>−{it.points_spent}</span>}
                           </div>
                         </div>
@@ -444,7 +444,7 @@ export default function ClientesModule() {
                   )}
                 </div>
               ) : (
-                <div style={{ color: '#666', fontSize: '0.85rem', padding: '2rem', textAlign: 'center', border: '1px dashed #222', borderRadius: 4 }}>
+                <div style={{ color: '#5a5040', fontSize: '0.85rem', padding: '2rem', textAlign: 'center', border: '1px dashed var(--t-border,#d4cfc4)', borderRadius: 4 }}>
                   Elegí un cliente de la lista{canManage ? ' o creá uno nuevo' : ''}.
                 </div>
               )}
@@ -462,24 +462,24 @@ const selStyle: React.CSSProperties = { background: '#111', border: '1px solid #
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize: '0.58rem', color: '#777', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
+      <div style={{ fontSize: '0.58rem', color: '#5a5040', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</div>
       {children}
     </div>
   )
 }
 function Kpi({ label, val, color }: { label: string; val: string; color?: string }) {
   return (
-    <div style={{ background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: 3, padding: '0.5rem 0.85rem', minWidth: 80 }}>
-      <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#777' }}>{label}</div>
-      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: color ?? '#e8e2d8' }}>{val}</div>
+    <div style={{ background: '#faf7f0', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 3, padding: '0.5rem 0.85rem', minWidth: 80 }}>
+      <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5a5040' }}>{label}</div>
+      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: color ?? 'var(--t-ink,#0d0d0d)' }}>{val}</div>
     </div>
   )
 }
 function Mini({ label, val, color }: { label: string; val: string; color?: string }) {
   return (
-    <div style={{ background: '#111', borderRadius: 2, padding: '0.4rem 0.5rem' }}>
-      <div style={{ fontSize: '0.56rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#666' }}>{label}</div>
-      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: color ?? '#cfc8ba', fontFamily: 'DM Mono, monospace' }}>{val}</div>
+    <div style={{ background: 'rgba(0,0,0,0.04)', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 2, padding: '0.4rem 0.5rem' }}>
+      <div style={{ fontSize: '0.56rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#5a5040' }}>{label}</div>
+      <div style={{ fontSize: '0.82rem', fontWeight: 600, color: color ?? 'var(--t-ink,#0d0d0d)', fontFamily: 'DM Mono, monospace' }}>{val}</div>
     </div>
   )
 }
@@ -491,7 +491,7 @@ function CustomerForm({ form, setForm, onSave, onCancel, saving }: {
 }) {
   const set = (k: keyof typeof EMPTY_FORM, v: string) => setForm(p => ({ ...p, [k]: v }))
   return (
-    <div style={{ border: '1px solid #2a3a3a', borderRadius: 4, padding: '1rem', background: '#0e0e0e' }}>
+    <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '1rem', background: '#faf7f0' }}>
       <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--t-teal,#2a7a6a)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.75rem' }}>
         {form.phone ? 'Cliente' : 'Nuevo cliente'}
       </div>

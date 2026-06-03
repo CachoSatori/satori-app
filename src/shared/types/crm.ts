@@ -43,11 +43,12 @@ export const TIER_LABELS: Record<CustomerTier, string> = {
   embajador: 'Embajador',
 }
 
+// Colores legibles sobre el papel claro del tema (no usar tonos pálidos)
 export const TIER_COLORS: Record<CustomerTier, string> = {
-  nuevo:     '#888',
-  regular:   '#7ec8a0',
-  vip:       '#c8a96e',
-  embajador: '#c890e8',
+  nuevo:     '#8a8170',
+  regular:   '#2a7a6a',
+  vip:       '#a07830',
+  embajador: '#8a4ea0',
 }
 
 export const INTERACTION_TYPES = ['visita', 'delivery', 'reserva', 'puntos_canje', 'nota'] as const

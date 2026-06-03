@@ -43,7 +43,15 @@ Tema **papel claro** dentro de los módulos (NO oscuro). Tokens en src/index.css
   Propinas") se hace en Admin → Empleados.
 - Confirmación por correo **desactivada** en Auth (la cuenta entra al instante; el acceso lo da la aprobación).
 - El correo queda en `profiles.email` para enviar reportes de pago a futuro.
-- Cuenta de la compu principal (caja+propinas): rol **cajero** (solo operar).
+- Cuenta de la compu principal (caja+propinas): rol **cajero** (solo operar). "Mis Propinas" oculto para cajero.
+- **Rutas gateadas por rol** (App.tsx `PrivateRoute roles={...}`): además de ocultar tiles, cada ruta valida
+  el rol del perfil y redirige al inicio si no corresponde (defensa por URL, sobre la RLS de la base).
+- Admin → pestaña Usuarios muestra **badge rojo** con la cantidad de cuentas pendientes.
+
+## PWA / Versionado
+- `registerType: autoUpdate` + main.tsx: al abrir la app se busca versión nueva y, si el nuevo service
+  worker toma control, **recarga una sola vez automáticamente** (guard anti-loop). Ya no hace falta "abrir y
+  cerrar 2 veces" para ver lo último. El chequeo es solo al iniciar, no interrumpe el turno en curso.
 
 ## Módulos (TODOS completos y en producción)
 ### Ventas (売)

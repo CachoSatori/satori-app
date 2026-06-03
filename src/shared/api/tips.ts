@@ -4,11 +4,13 @@ import type { TipSession, TipEntry, Employee, RoleTipPoints } from '../types/dat
 // ── Sesiones ────────────────────────────────────────────────
 
 export async function getTipSessions(): Promise<TipSession[]> {
+  // limit alto: cubre años de turnos (138+ históricos y creciendo). Antes era 60,
+  // por eso al filtrar meses viejos no aparecían datos.
   const { data, error } = await supabase
     .from('tip_sessions')
     .select('*')
     .order('session_date', { ascending: false })
-    .limit(60)
+    .limit(3000)
   if (error) throw new Error(error.message)
   return data as TipSession[]
 }
@@ -195,7 +197,7 @@ export async function getAttendanceHistory(months = 3): Promise<AttendanceRow[]>
     .eq('status', 'closed')
     .gte('session_date', sinceStr)
     .order('session_date', { ascending: false })
-    .limit(200)
+    .limit(2000)
   if (error) throw new Error(error.message)
 
   // Flatten sessions → entries

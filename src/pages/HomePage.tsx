@@ -74,6 +74,11 @@ const MODULES: Module[] = [
     roles: ['owner', 'manager', 'contador'],
   },
   {
+    id: 'clientes', path: '/clientes', label: 'Clientes', kanji: '客',
+    description: 'CRM · Fidelización', ready: true,
+    roles: ['owner', 'manager', 'cajero'],
+  },
+  {
     id: 'sops', path: '/sops', label: 'SOPs', kanji: '書',
     description: 'Procedimientos', ready: true,
     roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],

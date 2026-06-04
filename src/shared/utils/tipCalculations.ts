@@ -188,15 +188,15 @@ export function calcHistory(
   const lines: DraftLine[] = entries.map(e => {
     const emp = empMap.get(e.employee_id)
     if (!emp) return null
-    // Cobertura = solo cambia los PUNTOS (rol cubierto). La membresía del pool
-    // de barra sigue por el rol NATURAL (igual que el cierre del formulario).
+    // Cobertura = trabajó ese puesto: el rol EFECTIVO (cubierto) define puntos
+    // Y la membresía del pool de barra (igual que el cierre del formulario).
     const effectiveRole = (e.covered_role ?? emp.role) as UserRole
     coveredOf.set(e.employee_id, e.covered_role ?? null)
     const pts_rol = pointsMap.get(effectiveRole) ?? 0
     return {
       employeeId:   e.employee_id,
       employeeName: emp.full_name,
-      role:         emp.role,
+      role:         effectiveRole,
       active:       true,
       hours:        e.hours_worked,
       propina_crc:  e.tip_amount_crc,

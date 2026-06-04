@@ -169,8 +169,14 @@ export default function TipsModule() {
   // ── Recalcular totales en tiempo real ─────────────────────
   useEffect(() => {
     if (!openSession) { setTotals(null); return }
+    // Cobertura = trabajó ese puesto: el rol EFECTIVO (cubierto) define puntos
+    // Y la membresía del pool de barra.
+    const linesForCalc = lines.map(l => {
+      const cov = coberturas[l.employeeId]
+      return cov ? { ...l, role: cov as import('../../shared/types/database').UserRole } : l
+    })
     const { totals: t, updatedLines } = calcTurno(
-      lines,
+      linesForCalc,
       Number(efectivoCRC) || 0,
       Number(efectivoUSD) || 0,
       Number(barraCRC) || 0,
@@ -185,7 +191,7 @@ export default function TipsModule() {
     setTotals(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines.map(l => `${l.active}|${l.hours}|${l.propina_crc}|${l.propina_usd}`).join(','),
-      efectivoCRC, efectivoUSD, barraCRC, exchangeRate, openSession?.id])
+      JSON.stringify(coberturas), efectivoCRC, efectivoUSD, barraCRC, exchangeRate, openSession?.id])
 
   // ── Auto-guardar pools en Supabase ────────────────────────
   const scheduleSavePools = useCallback(() => {

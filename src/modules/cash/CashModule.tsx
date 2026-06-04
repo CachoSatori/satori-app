@@ -143,7 +143,7 @@ export default function CashModule() {
 
       {/* Tab content */}
       <Suspense fallback={<div style={{ padding:'3rem', textAlign:'center', opacity:0.4 }}>⏳</div>}>
-      <div className="cd-content">
+      <div className={`cd-content ${['movimientos', 'proveedores', 'resumen', 'pendientes'].includes(tab) ? 'cd-content-wide' : ''}`}>
         {tab === 'turno' && (
           <CashTurno
             openSession={openSession}

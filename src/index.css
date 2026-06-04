@@ -1994,6 +1994,8 @@ html, body, #root {
   padding: 1.5rem;
   max-width: 720px;
 }
+/* Vistas con tablas anchas (Movimientos/Proveedores/Resumen/Pendientes) */
+.cd-content.cd-content-wide { max-width: 1200px; }
 
 /* ── Apertura de turno ──────────────────────────────────────── */
 .cd-wrap { max-width: 680px; }
@@ -2608,8 +2610,14 @@ html, body, #root {
 }
 .cd-tbl thead th.r { text-align: right; }
 .cd-tbl tbody tr { border-bottom: 1px solid var(--t-border, #d4cfc4); }
-.cd-tbl tbody tr:hover { background: var(--t-panel, #ede8de); }
+.cd-tbl tbody td { background: var(--t-paper); }
+.cd-tbl tbody tr.cd-mov-pend td { background: #fffdf5; }
+.cd-tbl tbody tr:hover td { background: var(--t-panel, #ede8de); }
 .cd-tbl td { padding: 0.55rem 0.625rem; vertical-align: middle; }
+/* Fijar Fecha (1ª col) y acción eliminar (última) al hacer scroll horizontal */
+.cd-tbl thead th:first-child, .cd-tbl tbody td:first-child { position: sticky; left: 0; z-index: 2; }
+.cd-tbl thead th:last-child,  .cd-tbl tbody td:last-child  { position: sticky; right: 0; z-index: 2; }
+.cd-tbl thead th:first-child, .cd-tbl thead th:last-child  { background: var(--t-ink); z-index: 3; }
 .cd-tbl td.r { text-align: right; }
 .cd-tbl-input {
   border: none;

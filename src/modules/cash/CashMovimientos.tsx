@@ -197,7 +197,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               const isPend = m.status === 'pendiente'
 
               return (
-                <tr key={m.id} style={{ background: isPend ? '#fffdf5' : '' }}>
+                <tr key={m.id} className={isPend ? 'cd-mov-pend' : undefined}>
                   <td style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{ses?.session_date ?? '—'}</td>
                   <td style={{ fontSize: '0.78rem' }}>
                     <select className="cd-tbl-select" value={m.shift ?? ''}

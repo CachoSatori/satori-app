@@ -198,14 +198,19 @@ export default function CashTurno({
   const [draftUSD,    setDraftUSD]    = useState<number | ''>('')
   const [draftMethod, setDraftMethod] = useState<'Efectivo' | 'Transferencia'>('Efectivo')
   const [draftRef,    setDraftRef]    = useState('')
+  const [supSearch,   setSupSearch]   = useState('')   // texto de búsqueda del proveedor
+  const [supOpen,     setSupOpen]     = useState(false) // dropdown de proveedores abierto
 
   const openNewPago = () => {
     setEditId(null); setDraftSup(''); setDraftCRC(''); setDraftUSD(''); setDraftMethod('Efectivo'); setDraftRef('')
+    setSupSearch(''); setSupOpen(false)
     setPagoModal(true)
   }
   const openEditPago = (p: PagoRow) => {
     setEditId(p.id); setDraftSup(p.supplier_id); setDraftCRC(p.amount_crc); setDraftUSD(p.amount_usd)
-    setDraftMethod(p.method); setDraftRef(p.reference); setPagoModal(true)
+    setDraftMethod(p.method); setDraftRef(p.reference)
+    setSupSearch(suppliers.find(s => s.id === p.supplier_id)?.name ?? ''); setSupOpen(false)
+    setPagoModal(true)
   }
 
   const removePago = async (id: string) => {
@@ -252,11 +257,18 @@ export default function CashTurno({
     return () => window.removeEventListener('keydown', onKey)
   }, [pagoModal])
 
-  // ── Add ingreso ───────────────────────────────────────────
-  const addIngreso = () => setIngresos(prev => [...prev, { id: crypto.randomUUID(), crc: '', usd: '', nota: '' }])
+  // ── Ingreso adicional (por modal + confirmar) ──────────────
+  const [ingresoModal, setIngresoModal] = useState(false)
+  const [draftIngCRC,  setDraftIngCRC]  = useState<number | ''>('')
+  const [draftIngUSD,  setDraftIngUSD]  = useState<number | ''>('')
+  const [draftIngNota, setDraftIngNota] = useState('')
+  const openNewIngreso = () => { setDraftIngCRC(''); setDraftIngUSD(''); setDraftIngNota(''); setIngresoModal(true) }
+  const confirmIngreso = () => {
+    if (!Number(draftIngCRC) && !Number(draftIngUSD)) return
+    setIngresos(prev => [...prev, { id: crypto.randomUUID(), crc: Number(draftIngCRC) || '', usd: Number(draftIngUSD) || '', nota: draftIngNota.trim() }])
+    setIngresoModal(false)
+  }
   const removeIngreso = (id: string) => setIngresos(prev => prev.filter(i => i.id !== id))
-  const updateIngreso = (id: string, field: string, value: unknown) =>
-    setIngresos(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i))
 
   // ── Confirmar cierre ──────────────────────────────────────
   const handleCierre = useCallback(async () => {
@@ -529,7 +541,7 @@ export default function CashTurno({
             <div className="cd-section-sub">Aceite, otros ingresos en efectivo</div>
           </div>
           {canManage && (
-            <button className="cd-section-add" onClick={addIngreso}>+ Agregar</button>
+            <button className="cd-section-add" onClick={openNewIngreso}>+ Agregar</button>
           )}
         </div>
         <div className="cd-section-body">
@@ -537,21 +549,18 @@ export default function CashTurno({
             <div className="cd-empty-row">ℹ Sin ingresos adicionales registrados</div>
           )}
           {ingresos.map(i => (
-            <div key={i.id} className="cd-ingreso-row">
-              <div className="cd-monto-wrap">
-                <span className="cd-prefix">₡</span>
-                <input type="number" className="cd-monto-input" value={i.crc} min={0} step={100}
-                  placeholder="0" onChange={e => updateIngreso(i.id, 'crc', e.target.value === '' ? '' : Number(e.target.value))} />
+            <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+                  {Number(i.crc) > 0 && fi(Number(i.crc))}
+                  {Number(i.usd) > 0 && <span style={{ color: '#1a4a7a' }}>{Number(i.crc) > 0 ? ' · ' : ''}${Number(i.usd)}</span>}
+                </div>
+                <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>{i.nota || 'Ingreso adicional'}</div>
               </div>
-              <div className="cd-monto-wrap usd">
-                <span className="cd-prefix">$</span>
-                <input type="number" className="cd-monto-input" value={i.usd} min={0} step={1}
-                  placeholder="0" onChange={e => updateIngreso(i.id, 'usd', e.target.value === '' ? '' : Number(e.target.value))} />
-              </div>
-              <input type="text" className="cd-nota-input" value={i.nota}
-                placeholder="Motivo del ingreso..."
-                onChange={e => updateIngreso(i.id, 'nota', e.target.value)} />
-              <button className="cd-btn-remove" onClick={() => removeIngreso(i.id)}>×</button>
+              {canManage && (
+                <button onClick={() => removeIngreso(i.id)} title="Quitar"
+                  style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+              )}
             </div>
           ))}
           {ingresosTotal > 0 && (
@@ -757,12 +766,28 @@ export default function CashTurno({
           <div className="cd-modal" onClick={e => e.stopPropagation()}>
             <div className="cd-modal-title">{editId ? 'Editar pago' : 'Agregar pago a proveedor'}</div>
 
-            <div className="tips-field" style={{ marginTop: '0.5rem' }}>
+            <div className="tips-field" style={{ marginTop: '0.5rem', position: 'relative' }}>
               <div className="tips-field-label">Proveedor</div>
-              <select className="tips-input-dark" value={draftSup} onChange={e => setDraftSup(e.target.value)}>
-                <option value="">-- elegir proveedor --</option>
-                {suppliers.filter(s => s.is_active).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <input type="text" className="tips-input-dark" style={{ width: '100%' }}
+                placeholder="Escribí para buscar proveedor…"
+                value={supSearch}
+                onChange={e => { setSupSearch(e.target.value); setDraftSup(''); setSupOpen(true) }}
+                onFocus={() => setSupOpen(true)}
+                onBlur={() => setTimeout(() => setSupOpen(false), 150)} />
+              {supOpen && (() => {
+                const matches = suppliers.filter(s => s.is_active && s.name.toLowerCase().includes(supSearch.toLowerCase()))
+                return (
+                  <div className="cd-sup-dropdown">
+                    {matches.length === 0 && <div className="cd-sup-empty">Sin coincidencias</div>}
+                    {matches.slice(0, 10).map(s => (
+                      <div key={s.id} className="cd-sup-option"
+                        onMouseDown={() => { setDraftSup(s.id); setSupSearch(s.name); setSupOpen(false) }}>
+                        {s.name}{s.category && <span className="cd-sup-cat"> · {s.category}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
 
             <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
@@ -803,6 +828,47 @@ export default function CashTurno({
               <button className="tips-btn-ghost" onClick={() => setPagoModal(false)}>Cancelar</button>
               <button className="cd-btn-green" onClick={confirmPago} disabled={!draftSup || !Number(draftCRC)}>
                 {editId ? '✓ Guardar cambios' : '✓ Confirmar pago'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: agregar ingreso adicional */}
+      {ingresoModal && (
+        <div className="cd-modal-overlay" onClick={() => setIngresoModal(false)}>
+          <div className="cd-modal" onClick={e => e.stopPropagation()}>
+            <div className="cd-modal-title">Agregar ingreso adicional</div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--t-muted)', margin: '0.25rem 0 0' }}>
+              Ingresos en efectivo no relacionados a ventas (ej: venta de aceite, otros).
+            </p>
+            <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field">
+                <div className="tips-field-label">Monto ₡ colones</div>
+                <div className="cd-monto-wrap">
+                  <span className="cd-prefix">₡</span>
+                  <input type="number" className="cd-monto-input" value={draftIngCRC} placeholder="0" autoFocus
+                    onChange={e => setDraftIngCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                </div>
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">Monto $ dólares</div>
+                <div className="cd-monto-wrap usd">
+                  <span className="cd-prefix">$</span>
+                  <input type="number" className="cd-monto-input" value={draftIngUSD} placeholder="0"
+                    onChange={e => setDraftIngUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                </div>
+              </div>
+            </div>
+            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field-label">Motivo / nota</div>
+              <input type="text" className="tips-input-dark" value={draftIngNota} placeholder="Motivo del ingreso…"
+                style={{ width: '100%' }} onChange={e => setDraftIngNota(e.target.value)} />
+            </div>
+            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+              <button className="tips-btn-ghost" onClick={() => setIngresoModal(false)}>Cancelar</button>
+              <button className="cd-btn-green" onClick={confirmIngreso} disabled={!Number(draftIngCRC) && !Number(draftIngUSD)}>
+                ✓ Confirmar ingreso
               </button>
             </div>
           </div>

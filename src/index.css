@@ -1997,6 +1997,21 @@ html, body, #root {
 /* Vistas con tablas anchas (Movimientos/Proveedores/Resumen/Pendientes) */
 .cd-content.cd-content-wide { max-width: 1200px; }
 
+/* Buscador de proveedor (dropdown filtrable en el modal de pago) */
+.cd-sup-dropdown {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 20; margin-top: 2px;
+  background: #fff; border: 1px solid var(--t-border); border-radius: 2px;
+  max-height: 220px; overflow-y: auto; box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+}
+.cd-sup-option {
+  padding: 0.5rem 0.7rem; font-size: 0.85rem; cursor: pointer; color: var(--t-ink);
+  border-bottom: 1px solid var(--t-border);
+}
+.cd-sup-option:last-child { border-bottom: none; }
+.cd-sup-option:hover { background: var(--t-panel); }
+.cd-sup-cat { color: var(--t-muted); font-size: 0.72rem; }
+.cd-sup-empty { padding: 0.6rem 0.7rem; font-size: 0.82rem; color: var(--t-muted); }
+
 /* ── Apertura de turno ──────────────────────────────────────── */
 .cd-wrap { max-width: 680px; }
 .cd-apertura-header {

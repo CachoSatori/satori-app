@@ -201,6 +201,7 @@ Lo que sigue necesita acción del dueño (trámites externos o decisión estrat�
 - ✅ 007_customer_selfsignup (insert anónimo para auto-registro por QR) — probado HTTP 201
 - ✅ 008_tips_covered_role (columna `tip_entries.covered_role` para persistir la cobertura de rol en propinas) — aplicada 2026-06-03
 - ✅ 009_user_selfsignup (columna `profiles.email` + trigger: cuentas nuevas nacen `is_active=false` pendientes) — aplicada 2026-06-03. Además se desactivó la confirmación por correo en Auth (`mailer_autoconfirm=true`) vía Management API.
+- ✅ 012_cajero_operativo_rls — el cajero puede escribir (operar) cash_sessions/movements/suppliers/tip_sessions/entries. Arregla que no podía registrar pagos/abrir turnos/agregar proveedores/borrar. Aplicada 2026-06-03.
 - ✅ 011_ventas_exchange_rls — RLS de exchange_rates/product_map/ventas_* : lectura abierta, escritura solo owner/manager/contador. Aplicada 2026-06-03.
 - ✅ 010_sops_rls — RLS de `sops`: lectura para todos, escritura solo owner/manager (antes cualquier autenticado podía escribir). Aplicada 2026-06-03.
 

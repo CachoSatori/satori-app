@@ -17,6 +17,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import type { CashCierreDia, CashSession } from '../../shared/types/database'
 import { getCierresDia, saveCierreParcial, updateCierreCompleto } from '../../shared/api/cash'
+import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { fi, todayStr } from './cashUtils'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
@@ -55,22 +56,32 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
   const manager = profile?.full_name ?? ''
 
+  // Tipo de cambio configurado (último de exchange_rates). Editable por el
+  // manager en el cierre. Default 640 hasta que cargue.
+  const [tc, setTc] = useState<number>(640)
+  useEffect(() => {
+    const saved = parcial?.tipo_cambio
+    if (saved && saved > 0) { setTc(saved); return }
+    getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parcial?.tipo_cambio])
+
   // ── FASE 1 state ──────────────────────────────────────────────
   const [vmCRC,       setVmCRC]       = useState<number | ''>('')
   const [vmUSD,       setVmUSD]       = useState<number | ''>('')
   const [propM,       setPropM]       = useState<number | ''>('')
-  const [otrosM,      setOtrosM]      = useState<number | ''>('')
-  const tc = 640  // use fixed or from last session
 
-  const efRealM = Math.round(N(vmCRC) + N(vmUSD) * tc)
+  // Efectivo real en COLONES del mediodía = ventas PoS ₡ − dólares al TC.
+  // (El PoS registra toda venta en colones; los dólares físicos se cuentan
+  // aparte, así que se restan de la parte en colones.)
+  const efRealM = Math.round(N(vmCRC) - N(vmUSD) * tc)
 
   // ── FASE 2 state ──────────────────────────────────────────────
   const [vnCRC,       setVnCRC]       = useState<number | ''>('')
   const [vnUSD,       setVnUSD]       = useState<number | ''>('')
   const [propN,       setPropN]       = useState<number | ''>('')
-  const [otrosN,      setOtrosN]      = useState<number | ''>('')
 
-  const efRealN = Math.round(N(vnCRC) + N(vnUSD) * tc)
+  const efRealN = Math.round(N(vnCRC) - N(vnUSD) * tc)
 
   // Separaciones
   const [sepDiariaCRC,  setSepDiariaCRC]  = useState<number | ''>('')
@@ -83,16 +94,21 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const totalContadoCRC = N(sepDiariaCRC) + N(sepRegCRC) + N(remCRC)
   const totalContadoUSD = N(sepDiariaUSD) + N(sepRegUSD) + N(remUSD)
 
-  // Verification calculation
+  // Verification calculation — único egreso del cierre = propinas.
   const efRealMFromParcial = parcial ? parcial.ef_real_m_crc : efRealM
   const propMFromParcial   = parcial ? parcial.propinas_m_crc : N(propM)
-  const otrosMFromParcial  = parcial ? parcial.otros_m_crc    : N(otrosM)
+  const vmUSDFromParcial   = parcial ? parcial.vm_usd : N(vmUSD)
 
-  const netoM    = efRealMFromParcial - propMFromParcial - otrosMFromParcial
-  const netoN    = efRealN - N(propN) - N(otrosN)
+  const netoM    = efRealMFromParcial - propMFromParcial
+  const netoN    = efRealN - N(propN)
   const deberia  = netoM + netoN
   const diferencia = totalContadoCRC > 0 ? totalContadoCRC - deberia : null
   const cuadra     = diferencia !== null && Math.abs(diferencia) < 500
+
+  // Dólares: lo que debería haber físicamente = dólares de ventas (mediodía + noche).
+  const deberiaUSD   = vmUSDFromParcial + N(vnUSD)
+  const difUSD       = totalContadoUSD > 0 || deberiaUSD > 0 ? totalContadoUSD - deberiaUSD : null
+  const cuadraUSD    = difUSD === null || Math.abs(difUSD) < 1
 
   // Ajuste
   const [ajusteTipo,   setAjusteTipo]   = useState('Faltante')
@@ -114,7 +130,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         vm_crc:          N(vmCRC),
         vm_usd:          N(vmUSD),
         propinas_m_crc:  N(propM),
-        otros_m_crc:     N(otrosM),
+        otros_m_crc:     0,
         ef_real_m_crc:   efRealM,
         // Fase 2 vacía
         vn_crc:0, vn_usd:0, propinas_n_crc:0, otros_n_crc:0, ef_real_n_crc:0,
@@ -149,7 +165,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
           vn_crc:               N(vnCRC),
           vn_usd:               N(vnUSD),
           propinas_n_crc:       N(propN),
-          otros_n_crc:          N(otrosN),
+          otros_n_crc:          0,
           ef_real_n_crc:        efRealN,
           sep_diaria_crc:       N(sepDiariaCRC),
           sep_diaria_usd:       N(sepDiariaUSD),
@@ -183,7 +199,14 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.25rem', flexWrap:'wrap', gap:'0.5rem' }}>
         <div>
           <div style={{ fontSize:'0.95rem', fontWeight:700, letterSpacing:'0.03em' }}>Cierre del día</div>
-          <div style={{ fontSize:'0.72rem', color:'#888', marginTop:2 }}>TC: ₡{tc.toLocaleString('es-CR')} / $1</div>
+          <div style={{ fontSize:'0.72rem', color:'#888', marginTop:4, display:'flex', alignItems:'center', gap:'0.4rem' }}>
+            <span>TC ₡/$</span>
+            <input type="number" min={300} max={900} step={5} value={tc}
+              disabled={!!parcial}
+              onChange={e => setTc(Number(e.target.value) || tc)}
+              title={parcial ? 'Sellado en Fase 1' : 'Tipo de cambio del día'}
+              style={{ width:64, background:'#1a1a1a', border:'1px solid #333', color:'var(--t-gold)', padding:'2px 6px', borderRadius:2, fontSize:'0.74rem', fontFamily:'DM Mono, monospace', opacity: parcial ? 0.6 : 1 }} />
+          </div>
         </div>
         <input type="date" value={fecha} max={today}
           onChange={e => setFecha(e.target.value)}
@@ -267,17 +290,16 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 </Field>
               </Row2>
               {(N(vmCRC) > 0 || N(vmUSD) > 0) && (
-                <div style={{ background:'rgba(200,169,110,.1)', border:'1px solid #c8a030', borderRadius:2, padding:'0.5rem 0.75rem', fontSize:'0.82rem', color:'#c8a030', marginBottom:'0.75rem' }}>
-                  Efectivo real mediodía: <strong>{fi2(efRealM)}</strong>
+                <div style={{ background:'rgba(200,169,110,.1)', border:'1px solid #c8a030', borderRadius:2, padding:'0.5rem 0.75rem', fontSize:'0.78rem', color:'#c8a030', marginBottom:'0.75rem' }}>
+                  Efectivo real ₡ (ventas − dólares): <strong>{fi2(efRealM)}</strong>
+                  {N(vmUSD) > 0 && <span style={{ color:'#888' }}> · dólares físicos: <strong>${N(vmUSD).toFixed(2)}</strong></span>}
                 </div>
               )}
               <Row2>
-                <Field label="Propinas ₡">
+                <Field label="Propinas ₡ (único egreso)">
                   <MontoInput prefix="₡" value={propM} onChange={setPropM} />
                 </Field>
-                <Field label="Otros egresos ₡">
-                  <MontoInput prefix="₡" value={otrosM} onChange={setOtrosM} />
-                </Field>
+                <div />
               </Row2>
               <button
                 onClick={handleConfirmParcial} disabled={saving || turnoAbierto}
@@ -332,17 +354,16 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   </Field>
                 </Row2>
                 {(N(vnCRC) > 0 || N(vnUSD) > 0) && (
-                  <div style={{ background:'rgba(122,180,212,.1)', border:'1px solid #7ab4d4', borderRadius:2, padding:'0.5rem 0.75rem', fontSize:'0.82rem', color:'#7ab4d4', marginBottom:'0.75rem' }}>
-                    Efectivo real noche: <strong>{fi2(efRealN)}</strong>
+                  <div style={{ background:'rgba(122,180,212,.1)', border:'1px solid #7ab4d4', borderRadius:2, padding:'0.5rem 0.75rem', fontSize:'0.78rem', color:'#7ab4d4', marginBottom:'0.75rem' }}>
+                    Efectivo real ₡ (ventas − dólares): <strong>{fi2(efRealN)}</strong>
+                    {N(vnUSD) > 0 && <span style={{ color:'#888' }}> · dólares físicos: <strong>${N(vnUSD).toFixed(2)}</strong></span>}
                   </div>
                 )}
                 <Row2>
-                  <Field label="Propinas noche ₡">
+                  <Field label="Propinas noche ₡ (único egreso)">
                     <MontoInput prefix="₡" value={propN} onChange={setPropN} />
                   </Field>
-                  <Field label="Otros egresos noche ₡">
-                    <MontoInput prefix="₡" value={otrosN} onChange={setOtrosN} />
-                  </Field>
+                  <div />
                 </Row2>
               </Section>
 
@@ -406,8 +427,14 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                       ))}
                     </div>
                     <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', justifyContent:'center', fontSize:'0.82rem', fontWeight:700, color: cuadra ? '#4a9a6a' : '#c23b22' }}>
-                      {cuadra ? '✅ Cuadra correctamente' : `⚠️ Diferencia: ${diferencia! >= 0 ? '+' : ''}${fi2(diferencia ?? 0)}`}
+                      {cuadra ? '✅ Cuadra correctamente (₡)' : `⚠️ Diferencia ₡: ${diferencia! >= 0 ? '+' : ''}${fi2(diferencia ?? 0)}`}
                     </div>
+                    {deberiaUSD > 0 && (
+                      <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', justifyContent:'center', fontSize:'0.74rem', fontWeight:600, marginTop:'0.4rem', color: cuadraUSD ? '#4a9a6a' : '#c23b22' }}>
+                        Dólares: debería ${deberiaUSD.toFixed(2)} · contado ${totalContadoUSD.toFixed(2)}
+                        {cuadraUSD ? ' ✅' : ` ⚠️ ${difUSD! >= 0 ? '+' : ''}$${(difUSD ?? 0).toFixed(2)}`}
+                      </div>
+                    )}
                   </div>
                 )}
 

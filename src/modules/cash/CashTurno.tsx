@@ -69,8 +69,7 @@ export default function CashTurno({
   const [apCajero,  setApCajero]  = useState(profile?.full_name ?? '')
   const [employees, setEmployees] = useState<Employee[]>([])
   useState(() => { getActiveEmployees().then(setEmployees).catch(() => {}) })
-  const [apCRC,      setApCRC]      = useState<number | ''>(0)   // fondo servicio (registradora)
-  const [apProvCRC,  setApProvCRC]  = useState<number | ''>(0)   // fondo proveedores (caja separada)
+  const [apProvCRC,  setApProvCRC]  = useState<number | ''>(0)   // fondo de la Caja Diaria (proveedores)
   const [apUSD,      setApUSD]      = useState<number | ''>(0)
   const [tc,         setTc]         = useState<number>(640)       // tipo de cambio USD→CRC
   const [saving,       setSaving]       = useState(false)
@@ -103,16 +102,14 @@ export default function CashTurno({
   const [showResumen, setShowResumen] = useState(false)
 
   // ── Calculated totals ────────────────────────────────────
-  const initCRC     = openSession ? openSession.initial_cash_crc : 0
+  // Caja Diaria = ÚNICA caja física de efectivo (uso: pagos a proveedores).
+  // La registradora la maneja el PoS, no se cuenta acá. El fondo inicial viene
+  // del carryover del cierre del día anterior (initial_suppliers_crc).
   const initProvCRC = openSession ? openSession.initial_suppliers_crc : 0
   const initUSD     = openSession ? openSession.initial_cash_usd : 0
 
-  // ── Caja Proveedores (caja separada, abierta todo el día) ──────────────
-  // Los pagos a proveedor en efectivo salen de la CAJA PROVEEDORES, no de la
-  // registradora. Fuente de verdad: movimientos persistidos (caja_origen
-  // 'Caja Proveedores') + los que aún están en memoria sin guardar. Así no se
-  // cuentan dos veces — bug previo: un pago persistido se restaba en pagosEf
-  // y otra vez en dbEgresosEfectivo, descuadrando la registradora.
+  // Pagos a proveedor en efectivo. Fuente de verdad: movimientos persistidos
+  // (caja_origen 'Caja Proveedores') + los que aún están en memoria sin guardar.
   const provEfDB = sessionMovements
     .filter(m => m.caja_origen === 'Caja Proveedores' && m.method === 'Efectivo' && m.status !== 'rechazado')
     .reduce((s, m) => s + m.amount_crc, 0)
@@ -120,7 +117,6 @@ export default function CashTurno({
     .filter(p => p.supplier_id && p.method === 'Efectivo' && !p.persistedId)
     .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
   const provGastadoEf = provEfDB + provEfMem
-  const provRestante  = initProvCRC - provGastadoEf
 
   // Pagos visibles en esta vista (lista en memoria) — para totales del panel
   const pagosEf  = pagos.filter(p => p.supplier_id && p.method === 'Efectivo')
@@ -128,22 +124,21 @@ export default function CashTurno({
   const pagosTr  = pagos.filter(p => p.supplier_id && p.method === 'Transferencia')
                         .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
   const ingresosTotal = ingresos.reduce((s, i) => s + (Number(i.crc) || 0), 0)
-  const totalAsig = initCRC + ingresosTotal
+  const totalAsig = initProvCRC + ingresosTotal
 
-  // ── Registradora / Caja de servicio ───────────────────────────────────
-  // Lo que debe quedar = fondo + ingresos − egresos en efectivo de la
-  // registradora (propinas por tarjeta, operativos, etc.). NO incluye pagos a
-  // proveedor: esos salen de la Caja Proveedores (cálculo aparte arriba).
-  const regEgresosEf = sessionMovements
+  // Otros egresos en efectivo operativos (no proveedores, no ingreso/traspaso)
+  // registrados en esta caja. Salen de la misma Caja Diaria.
+  const otrosEgresosEf = sessionMovements
     .filter(m => m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso'
               && m.caja_origen !== 'Caja Proveedores'
               && m.method === 'Efectivo' && m.status !== 'pendiente' && m.status !== 'rechazado')
     .reduce((s, m) => s + m.amount_crc, 0)
 
-  const deberiaCRC = totalAsig - regEgresosEf
-  const cierreVal  = Number(cierreCRC) || 0
-  const diferencia = cierreVal ? cierreVal - deberiaCRC : null
-  const cuadra     = diferencia !== null && Math.abs(diferencia) < 500
+  // Lo que debería quedar físicamente en la Caja Diaria al cierre.
+  const cajaDeberia  = totalAsig - provGastadoEf - otrosEgresosEf
+  const cierreVal    = Number(cierreCRC) || 0
+  const diferencia   = cierreVal ? cierreVal - cajaDeberia : null
+  const cuadra       = diferencia !== null && Math.abs(diferencia) < 500
 
   // ── Apertura ─────────────────────────────────────────────
   const handleApertura = useCallback(async () => {
@@ -160,7 +155,7 @@ export default function CashTurno({
         shift_type:            apTurno,
         opened_by:             profile.id,
         cajero_name:           apCajero,
-        initial_cash_crc:      Number(apCRC) || 0,
+        initial_cash_crc:      0,                                 // registradora deshabilitada (la maneja el PoS)
         initial_cash_usd:      Number(apUSD) || 0,
         initial_suppliers_crc: Number(apProvCRC) || 0,
       })
@@ -173,7 +168,7 @@ export default function CashTurno({
     } finally {
       setSaving(false)
     }
-  }, [profile, apCajero, apTurno, apFecha, apCRC, apProvCRC, apUSD, sessions, onSessionOpen, onError])
+  }, [profile, apCajero, apTurno, apFecha, apProvCRC, apUSD, sessions, onSessionOpen, onError])
 
   // ── Add pago ──────────────────────────────────────────────
   // ── Crash-safe pago persistence ──────────────────────────
@@ -388,18 +383,10 @@ export default function CashTurno({
           ) : (
             <>
 
-              <div className="cd-ap-saldo-label">Saldo inicial en caja</div>
+              <div className="cd-ap-saldo-label">Saldo inicial de la Caja Diaria</div>
               <div className="cd-grid2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
                 <div className="tips-field">
-                  <div className="tips-field-label">Registradora / Servicio (₡)</div>
-                  <div className="cd-monto-wrap">
-                    <span className="cd-prefix">₡</span>
-                    <input type="number" className="cd-monto-input" value={apCRC} min={0} step={1000}
-                      placeholder="0" onChange={e => setApCRC(e.target.value === '' ? '' : Number(e.target.value))} />
-                  </div>
-                </div>
-                <div className="tips-field">
-                  <div className="tips-field-label">Caja Proveedores (₡)</div>
+                  <div className="tips-field-label">Caja Diaria — Proveedores (₡)</div>
                   <div className="cd-monto-wrap">
                     <span className="cd-prefix">₡</span>
                     <input type="number" className="cd-monto-input" value={apProvCRC} min={0} step={1000}
@@ -471,18 +458,11 @@ export default function CashTurno({
       {/* Top cards */}
       <div className="cd-top-cards">
         <div className="cd-top-card green">
-          <div className="cd-tc-label">Fondo servicio</div>
-          <div className="cd-tc-val">{fi(initCRC)}</div>
+          <div className="cd-tc-label">Caja Diaria — fondo</div>
+          <div className="cd-tc-val">{fi(initProvCRC)}</div>
           {initUSD > 0 && <div className="cd-tc-usd">{fd(initUSD)}</div>}
-          <div className="cd-tc-sub">registradora / cambio</div>
+          <div className="cd-tc-sub">para pago de proveedores</div>
         </div>
-        {(initProvCRC > 0 || provGastadoEf > 0) && (
-          <div className="cd-top-card" style={{ borderLeftColor: '#8a5210' }}>
-            <div className="cd-tc-label">Caja proveedores</div>
-            <div className="cd-tc-val" style={{ color: provRestante < 0 ? '#c0392b' : '#8a5210' }}>{fi(provRestante)}</div>
-            <div className="cd-tc-sub">de {fi(initProvCRC)} · restante</div>
-          </div>
-        )}
         <div className="cd-top-card gold">
           <div className="cd-tc-label">Gastado efectivo</div>
           <div className="cd-tc-val" style={{ color: provGastadoEf > 0 ? '#a07030' : '#aaa' }}>{fi(provGastadoEf)}</div>
@@ -490,10 +470,10 @@ export default function CashTurno({
         </div>
         <div className="cd-top-card red">
           <div className="cd-tc-label">Disponible</div>
-          <div className="cd-tc-val" style={{ color: deberiaCRC < 0 ? '#c0392b' : deberiaCRC < 10000 ? '#a07030' : '#444' }}>
-            {fi(deberiaCRC)}
+          <div className="cd-tc-val" style={{ color: cajaDeberia < 0 ? '#c0392b' : cajaDeberia < 10000 ? '#a07030' : '#444' }}>
+            {fi(cajaDeberia)}
           </div>
-          <div className="cd-tc-sub">{deberiaCRC < 0 ? '⚠ déficit en caja' : 'restante en caja'}</div>
+          <div className="cd-tc-sub">{cajaDeberia < 0 ? '⚠ déficit en caja' : 'restante en caja'}</div>
         </div>
       </div>
 
@@ -643,46 +623,33 @@ export default function CashTurno({
               </div>
             </div>
 
-            {/* Verificación — Registradora */}
+            {/* Verificación — Caja Diaria */}
             <div className="cd-verificacion">
-              <div className="cd-verif-header">Verificación — Registradora</div>
+              <div className="cd-verif-header">Verificación — Caja Diaria</div>
               <div className="cd-verif-row">
-                <span>Fondo + ingresos</span>
+                <span>Fondo inicial{ingresosTotal > 0 ? ' + ingresos' : ''}</span>
                 <strong>{fi(totalAsig)}</strong>
               </div>
-              {regEgresosEf > 0 && (
+              {provGastadoEf > 0 && (
                 <div className="cd-verif-row">
-                  <span>− Egresos efectivo (propinas/otros)</span>
-                  <strong style={{ color: '#c0392b' }}>− {fi(regEgresosEf)}</strong>
+                  <span>− Pagos a proveedores (efectivo)</span>
+                  <strong style={{ color: '#c0392b' }}>− {fi(provGastadoEf)}</strong>
+                </div>
+              )}
+              {otrosEgresosEf > 0 && (
+                <div className="cd-verif-row">
+                  <span>− Otros egresos efectivo</span>
+                  <strong style={{ color: '#c0392b' }}>− {fi(otrosEgresosEf)}</strong>
                 </div>
               )}
               <div className="cd-verif-row">
-                <span>Debería quedar en registradora</span>
-                <strong>{fi(deberiaCRC)}</strong>
+                <span>Debería quedar en la Caja Diaria</span>
+                <strong>{fi(cajaDeberia)}</strong>
+              </div>
+              <div style={{ fontSize: '0.68rem', color: '#888', marginTop: 4 }}>
+                ℹ La registradora la maneja el PoS — acá solo se cuenta la caja de proveedores.
               </div>
             </div>
-
-            {/* Caja Proveedores — informativo (se concilia en el Cierre del día) */}
-            {(initProvCRC > 0 || provGastadoEf > 0) && (
-              <div className="cd-verificacion" style={{ marginTop: '0.75rem' }}>
-                <div className="cd-verif-header">Caja Proveedores</div>
-                <div className="cd-verif-row">
-                  <span>Fondo proveedores</span>
-                  <strong>{fi(initProvCRC)}</strong>
-                </div>
-                <div className="cd-verif-row">
-                  <span>− Pagos en efectivo</span>
-                  <strong style={{ color: '#c0392b' }}>− {fi(provGastadoEf)}</strong>
-                </div>
-                <div className="cd-verif-row">
-                  <span>Restante en caja proveedores</span>
-                  <strong style={{ color: provRestante < 0 ? '#c0392b' : '#8a5210' }}>{fi(provRestante)}</strong>
-                </div>
-                <div style={{ fontSize: '0.68rem', color: '#888', marginTop: 4 }}>
-                  ℹ La caja proveedores no se cierra por turno — se concilia en el Cierre del día.
-                </div>
-              </div>
-            )}
 
             {cierreVal > 0 && (
               <div className={`cd-cierre-resultado ${cuadra ? 'ok' : 'fail'}`}>
@@ -727,8 +694,8 @@ export default function CashTurno({
 
             <div className="cd-resumen-block">
               <div className="cd-resumen-row">
-                <span>Caja inicial asignada</span>
-                <strong>{fi(initCRC)}{initUSD ? ' / ' + fd(initUSD) : ''}</strong>
+                <span>Caja Diaria inicial</span>
+                <strong>{fi(initProvCRC)}{initUSD ? ' / ' + fd(initUSD) : ''}</strong>
               </div>
               {ingresosTotal > 0 && (
                 <div className="cd-resumen-row">
@@ -752,15 +719,9 @@ export default function CashTurno({
                   <span>{fi(Number(p.amount_crc) || 0)}</span>
                 </div>
               ))}
-              {(initProvCRC > 0 || provGastadoEf > 0) && (
-                <div className="cd-resumen-row">
-                  <span>Caja proveedores restante</span>
-                  <strong style={{ color: '#8a5210' }}>{fi(provRestante)}</strong>
-                </div>
-              )}
               <div className="cd-resumen-row">
-                <span>Efectivo que debería quedar (registradora)</span>
-                <strong style={{ color: '#27874f' }}>{fi(deberiaCRC)}</strong>
+                <span>Efectivo que debería quedar (Caja Diaria)</span>
+                <strong style={{ color: '#27874f' }}>{fi(cajaDeberia)}</strong>
               </div>
             </div>
 

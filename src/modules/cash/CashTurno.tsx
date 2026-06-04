@@ -49,18 +49,20 @@ export default function CashTurno({
   const canManage = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'cajero'
   const canClose  = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'cajero'
 
-  // Determine if Mediodía/Noche already exists today for apertura
   const today = todayStr()
-  const hoyTurnos = sessions.filter(s => s.session_date === today && s.status === 'closed')
-  const tieneMediodia = hoyTurnos.some(s => s.shift_type === 'Mediodía')
-  const tieneNoche    = hoyTurnos.some(s => s.shift_type === 'Noche')
+  // Fecha de apertura (default hoy, editable). El turno disponible y "ambos
+  // turnos cerrados" se calculan según la FECHA ELEGIDA — así se puede abrir
+  // un día distinto (ej. el día siguiente) aunque hoy ya esté completo.
+  const [apFecha,   setApFecha]   = useState(today)
+  const diaTurnos = sessions.filter(s => s.session_date === apFecha && s.status === 'closed')
+  const tieneMediodia = diaTurnos.some(s => s.shift_type === 'Mediodía')
+  const tieneNoche    = diaTurnos.some(s => s.shift_type === 'Noche')
   const defaultShift  = !tieneMediodia ? 'Mediodía' : !tieneNoche ? 'Noche' : ''
   const bothDone      = tieneMediodia && tieneNoche
 
   const [view, setView] = useState<ViewState>(openSession ? 'turno' : 'apertura')
 
   // Apertura form
-  const [apFecha,   setApFecha]   = useState(today)
   // apTurno derived from sessions — auto-detects Mediodía vs Noche
   const apTurno = defaultShift
   const [apCajero,  setApCajero]  = useState(profile?.full_name ?? '')
@@ -339,35 +341,36 @@ export default function CashTurno({
         </div>
         <div className="cd-apertura-body">
 
-          {bothDone && (
-            <div className="cd-warn">
-              ⚠ Ambos turnos del día ({today}) ya fueron registrados
+          {/* Cajero · Turno · Fecha — siempre visibles (para elegir/cambiar la fecha) */}
+          <div className="cd-grid3">
+            <div className="tips-field">
+              <div className="tips-field-label">Cajero</div>
+              <select className="tips-input-dark" value={apCajero}
+                onChange={e => setApCajero(e.target.value)}>
+                <option value="">-- Seleccioná --</option>
+                {employees.map(e => <option key={e.id} value={e.full_name}>{e.full_name}</option>)}
+              </select>
             </div>
-          )}
-
-          {!bothDone && (
-            <>
-              <div className="cd-grid3">
-                <div className="tips-field">
-                  <div className="tips-field-label">Cajero</div>
-                  <select className="tips-input-dark" value={apCajero}
-                    onChange={e => setApCajero(e.target.value)}>
-                    <option value="">-- Seleccioná --</option>
-                    {employees.map(e => <option key={e.id} value={e.full_name}>{e.full_name}</option>)}
-                  </select>
-                </div>
-                <div className="tips-field">
-                  <div className="tips-field-label">Turno</div>
-                  <div className={`cd-turno-display ${apTurno ? 'ok' : 'blocked'}`}>
-                    {apTurno || '⚠ Sin turno disponible'}
-                  </div>
-                </div>
-                <div className="tips-field">
-                  <div className="tips-field-label">Fecha</div>
-                  <input type="date" className="tips-input-dark" value={apFecha}
-                    onChange={e => setApFecha(e.target.value)} />
-                </div>
+            <div className="tips-field">
+              <div className="tips-field-label">Turno</div>
+              <div className={`cd-turno-display ${apTurno ? 'ok' : 'blocked'}`}>
+                {apTurno || '⚠ Sin turno disponible'}
               </div>
+            </div>
+            <div className="tips-field">
+              <div className="tips-field-label">Fecha</div>
+              <input type="date" className="tips-input-dark" value={apFecha}
+                onChange={e => setApFecha(e.target.value)}
+                onClick={e => { try { (e.currentTarget as HTMLInputElement).showPicker?.() } catch { /* noop */ } }} />
+            </div>
+          </div>
+
+          {bothDone ? (
+            <div className="cd-warn" style={{ marginTop: '1rem' }}>
+              ⚠ Ambos turnos del {apFecha} ya fueron registrados. Elegí otra fecha para abrir un turno.
+            </div>
+          ) : (
+            <>
 
               <div className="cd-ap-saldo-label">Saldo inicial en caja</div>
               <div className="cd-grid2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>

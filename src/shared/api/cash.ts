@@ -229,7 +229,7 @@ export async function recordCierreSales(params: {
       supplier_name: '',
       employee_name: '',
       shift:         r.turno,
-      caja_origen:   'Ventas',
+      caja_origen:   'Caja Fuerte',   // las ventas en efectivo entran a la Caja Fuerte (+saldo)
       method:        'Efectivo',
       status:        'aprobado',
     })) as never,
@@ -265,7 +265,7 @@ export async function recordCierreRetiro(params: {
     supplier_name: '',
     employee_name: '',
     shift:         '',
-    caja_origen:   'Banco',
+    caja_origen:   'Caja Fuerte',   // sale de la Caja Fuerte (traspaso al Banco) → descuenta el saldo
     method:        'Transferencia',
     status:        'aprobado',
   } as never)

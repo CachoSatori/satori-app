@@ -67,7 +67,12 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const cfSalidas = movements
     .filter(m => isEgreso(m.movement_type as MovementType) && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
     .reduce((s, m) => s + m.amount_crc, 0)
-  const cfSaldo = cfEntradas - cfSalidas
+  // Traspasos que SALEN de la Caja Fuerte (ej. retiro de dueños Caja Fuerte → Banco):
+  // no son gasto del P&L pero sí descuentan el saldo físico de la caja fuerte.
+  const cfTraspasosOut = movements
+    .filter(m => m.movement_type === 'traspaso' && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
+    .reduce((s, m) => s + m.amount_crc, 0)
+  const cfSaldo = cfEntradas - cfSalidas - cfTraspasosOut
 
   const pendTotal = movements.filter(m => m.status === 'pendiente').reduce((s, m) => s + m.amount_crc, 0)
   const pendCount = movements.filter(m => m.status === 'pendiente').length

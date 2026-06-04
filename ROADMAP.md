@@ -532,7 +532,7 @@ Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya
 - **Recategorizar histórico `egreso_socios`**: separar *deliverys* (repartidor externo → operativo `7100`/direct operating) de *retiros reales de socios*. ~105 movimientos importados bajo `egreso_socios`; requiere criterio del dueño/contador.
 - Separar Gerencia (`6100`) de Staff (`6200`) en `egreso_personal`.
 - Confirmar `caja_origen='Banco'` en compras por transferencia (PMT, guayafrut, Isleña, Pescados…) para que no toquen la caja física.
-- (Opcional) Retiro de dueños: que además **descuente de Caja Fuerte** al asentarse (hoy es traspaso a Banco; no reduce el saldo físico de CF automáticamente).
+- ✅ Retiro de dueños **descuenta de Caja Fuerte** (traspaso Caja Fuerte → Banco; el saldo de CF resta los traspasos salientes). Las ventas en efectivo del cierre entran a Caja Fuerte.
 
 #### 🔭 Fase B — Bandeja + ingesta IA (núcleo del salto de eficiencia)
 > La foto de una factura/comprobante (hoy va a un grupo de WhatsApp) entra a la app, la IA la lee y **rutea sola**; el humano confirma de un toque.

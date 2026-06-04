@@ -17,7 +17,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const MODEL             = Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-3-5-sonnet-20241022'
+// Modelo de visión. Haiku 4.5 = el más barato. Cambialo a 'claude-sonnet-4-5'
+// si querés más precisión (más caro). Override por env ANTHROPIC_MODEL.
+const MODEL             = Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-haiku-4-5'
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',

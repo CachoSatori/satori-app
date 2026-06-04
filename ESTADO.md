@@ -23,6 +23,13 @@
 ### Caja → Pendientes (vista nueva)
 - **Facturas agrupadas por proveedor** (fecha, turno, ₡/$, referencia/nota, total). Pagar **individual**, **seleccionar cuáles** (checkbox) o **marcar todos**. **Descargar comprobante PNG** (Canvas) de las seleccionadas o todas, para enviar al proveedor. A prueba de NaN.
 
+### Bandeja de documentos — ingesta por foto con IA (Fase 2D-B)
+- Nuevo módulo **Bandeja** (`/inbox`, tile en Home con badge): subís/compartís una foto de factura o comprobante, la IA de visión la lee y deja un movimiento **pre-llenado** que confirmás de un toque (nunca auto-commit).
+- **Migración 016**: tabla `documents` + bucket Storage privado `documents` + RLS (owner/manager/contador/cajero) + `suppliers.aliases[]`.
+- **Edge Function `extract-document`** (Deno → Anthropic visión, JSON estricto). La API key vive solo en el Vault. **Pendiente de operación**: `supabase secrets set ANTHROPIC_API_KEY` + `supabase functions deploy extract-document`. Hasta entonces la Bandeja funciona en **modo carga manual**.
+- **PWA Share Target**: compartir foto desde WhatsApp → Satori (lo intercepta `public/sw-share.js`). Subida manual/cámara como fallback.
+- Anti-duplicado por SHA-256 / clave FE. Factura → cuenta por pagar; comprobante → concilia un pendiente o egreso directo.
+
 ### Fase A finanzas (modelo de pagos/P&L) — ver ROADMAP Fase 2D
 - Retiro a banco = **traspaso** (fuera del P&L). `egreso_socios` ya no alimenta el P&L. **Ingresos de caja selectos** (aceite/reciclaje) → cuenta `otros_ingresos` (mig. 014). **`cash_movements.account_id`** (mig. 015) + selector "Cuenta P&L". **Bitcoin** en métodos de proveedor.
 - **Pendiente** (en ROADMAP): recategorizar histórico `egreso_socios` (deliverys vs retiros), separar gerencia/staff, y todo el sistema de **ingesta por foto** (Fases B/C/D).

@@ -534,13 +534,19 @@ Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya
 - Confirmar `caja_origen='Banco'` en compras por transferencia (PMT, guayafrut, Isleña, Pescados…) para que no toquen la caja física.
 - ✅ Retiro de dueños **descuenta de Caja Fuerte** (traspaso Caja Fuerte → Banco; el saldo de CF resta los traspasos salientes). Las ventas en efectivo del cierre entran a Caja Fuerte.
 
-#### 🔭 Fase B — Bandeja + ingesta IA (núcleo del salto de eficiencia)
+#### ✅ Fase B — Bandeja + ingesta IA (código en producción, 2026-06-04)
 > La foto de una factura/comprobante (hoy va a un grupo de WhatsApp) entra a la app, la IA la lee y **rutea sola**; el humano confirma de un toque.
-- Tabla `documents` + bucket Storage `documents` con RLS (owner/manager/contador/cajero) + `suppliers.aliases[]`.
-- **Entrada de foto**: PWA **Share Target** (`manifest.share_target`, POST multipart `image/*`) → ruta `/inbox/share` que sube a Storage. Fallback: subida manual. Futuro: webhook WhatsApp Cloud API (Meta).
-- **Extracción IA de visión (Claude)**: imagen → JSON estricto (tipo, proveedor, fecha, moneda, totales, ítems, método, banco, referencia, `clave_fe` 50 díg. FE-CR, `cuenta_qb_sugerida`, confianza). Lee FE electrónica, tiquetes, capturas SINPE, comprobantes BAC/BN/Lafise, facturas físicas.
-- **Pantalla Bandeja**: lista de `documents` nuevos + tarjeta de confirmación pre-llenada → commit (nunca auto-commit).
-- **Anti-duplicado**: llave por `clave_fe`; si no, SHA-256 imagen + (proveedor, total, fecha).
+- ✅ Tabla `documents` + bucket Storage `documents` con RLS (owner/manager/contador/cajero) + `suppliers.aliases[]` (mig. 016).
+- ✅ **Entrada de foto**: PWA **Share Target** (`manifest.share_target` POST multipart) interceptado por `public/sw-share.js` → `/inbox?shared=1`. Subida manual/cámara como fallback (iOS).
+- ✅ **Extracción IA**: Edge Function `extract-document` (Deno) → Anthropic visión, JSON estricto. Anti-duplicado por SHA-256 / `clave_fe`.
+- ✅ **Pantalla Bandeja** (`/inbox`) + tile en Home con badge: lista con miniatura + tarjeta de confirmación pre-llenada → commit a `cash_movements` (nunca auto-commit). Factura → cuenta por pagar; comprobante → concilia un pendiente (proveedor+total±2%+fecha±7d) o egreso directo.
+- 🟡 **Pendiente de operación (lo hace el dueño):** desplegar la Edge Function y setear la key:
+  ```
+  supabase secrets set ANTHROPIC_API_KEY=sk-ant-...  --project-ref yiczgdtirrkdvohdquzf
+  supabase functions deploy extract-document         --project-ref yiczgdtirrkdvohdquzf
+  ```
+  Hasta entonces la Bandeja funciona en modo **carga manual** (subís la foto y completás los campos a mano; la IA no autocompleta).
+- 🔭 Futuro: webhook WhatsApp Cloud API (Meta) como entrada alternativa.
 
 #### 🔭 Fase C — Auto-inventario + cuentas por pagar
 - **factura** → fuzzy-match proveedor (+ alias) · match ítems → `ingredientes` vía `product_map` → propone **entrada de inventario** · crea **cuenta por pagar** (`egreso_mercaderia` pendiente).

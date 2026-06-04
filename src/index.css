@@ -2633,6 +2633,10 @@ html, body, #root {
 .cd-tbl thead th:first-child, .cd-tbl tbody td:first-child { position: sticky; left: 0; z-index: 2; }
 .cd-tbl thead th:last-child,  .cd-tbl tbody td:last-child  { position: sticky; right: 0; z-index: 2; }
 .cd-tbl thead th:first-child, .cd-tbl thead th:last-child  { background: var(--t-ink); z-index: 3; }
+/* Tabla con columna de selección: checkbox (1ª) + Fecha (2ª) fijas */
+.cd-tbl-sel thead th:nth-child(2), .cd-tbl-sel tbody td:nth-child(2) { position: sticky; left: 34px; z-index: 2; }
+.cd-tbl-sel thead th:nth-child(2) { background: var(--t-ink); z-index: 3; }
+.cd-tbl tbody tr.cd-mov-sel td { background: rgba(194,59,34,0.08); }
 .cd-tbl td.r { text-align: right; }
 .cd-tbl-input {
   border: none;

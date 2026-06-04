@@ -22,6 +22,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const [busq,    setBusq]    = useState('')
   const [estado,  setEstado]  = useState('')
   const [saving,  setSaving]  = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())  // selección múltiple para borrado masivo
+
+  const toggleSel = (id: string) => setSelected(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
+  })
 
   // ── Filter ───────────────────────────────────────────────
   const filtered = movements.filter(m => {
@@ -92,6 +97,21 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
       setSaving(null)
     }
   }, [onRefresh, requireManager])
+
+  const handleBulkDelete = async () => {
+    const ids = [...selected]
+    if (ids.length === 0) return
+    if (!window.confirm(`¿Eliminar ${ids.length} movimiento(s) seleccionado(s)? No se puede deshacer.`)) return
+    if (!(await requireManager())) return
+    setSaving('bulk')
+    try {
+      await Promise.all(ids.map(id => deleteCashMovement(id).catch(() => {})))
+      setSelected(new Set())
+      onRefresh()
+    } finally {
+      setSaving(null)
+    }
+  }
 
   const exportCSV = () => {
     const BOM = '﻿'
@@ -167,11 +187,31 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         <button className="tips-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={exportCSV}>⬇ CSV</button>
       </div>
 
+      {/* Barra de acción masiva */}
+      {selected.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 0.85rem', marginBottom: '0.75rem', background: 'rgba(194,59,34,0.08)', border: '1px solid rgba(194,59,34,0.3)', borderRadius: 3 }}>
+          <span style={{ fontSize: '0.82rem', color: 'var(--t-ink)', fontWeight: 600 }}>{selected.size} seleccionado(s)</span>
+          <button onClick={handleBulkDelete} disabled={saving === 'bulk'}
+            style={{ background: 'var(--t-red)', color: '#fff', border: 'none', borderRadius: 3, padding: '4px 12px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
+            {saving === 'bulk' ? 'Eliminando…' : `🗑 Eliminar ${selected.size}`}
+          </button>
+          <button onClick={() => setSelected(new Set())}
+            style={{ background: 'none', border: '1px solid var(--t-border)', color: 'var(--t-muted)', borderRadius: 3, padding: '4px 10px', fontSize: '0.78rem', cursor: 'pointer' }}>
+            Limpiar selección
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="cd-tbl-wrap">
-        <table className="cd-tbl">
+        <table className="cd-tbl cd-tbl-sel">
           <thead>
             <tr>
+              <th style={{ width: 34, textAlign: 'center' }}>
+                <input type="checkbox"
+                  checked={filtered.length > 0 && filtered.every(m => selected.has(m.id))}
+                  onChange={e => setSelected(e.target.checked ? new Set(filtered.map(m => m.id)) : new Set())} />
+              </th>
               <th>Fecha</th>
               <th>Turno</th>
               <th>Tipo</th>
@@ -187,7 +227,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={11} style={{ textAlign: 'center', padding: '2rem', color: '#888', fontSize: '0.85rem' }}>
+              <tr><td colSpan={12} style={{ textAlign: 'center', padding: '2rem', color: '#888', fontSize: '0.85rem' }}>
                 Sin movimientos en el período
               </td></tr>
             )}
@@ -197,7 +237,10 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               const isPend = m.status === 'pendiente'
 
               return (
-                <tr key={m.id} className={isPend ? 'cd-mov-pend' : undefined}>
+                <tr key={m.id} className={`${isPend ? 'cd-mov-pend' : ''} ${selected.has(m.id) ? 'cd-mov-sel' : ''}`}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleSel(m.id)} />
+                  </td>
                   <td style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{ses?.session_date ?? '—'}</td>
                   <td style={{ fontSize: '0.78rem' }}>
                     <select className="cd-tbl-select" value={m.shift ?? ''}
@@ -281,7 +324,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           {filtered.length > 0 && (
             <tfoot>
               <tr className="cd-tbl-footer">
-                <td colSpan={5}>{filtered.length} movimientos · Resultado del período</td>
+                <td colSpan={6}>{filtered.length} movimientos · Resultado del período</td>
                 <td className="r" style={{ color: totIngresos - totEgresos >= 0 ? '#7ec8a0' : '#c23b22', fontWeight: 800 }}>
                   {totIngresos - totEgresos >= 0 ? '+' : ''}{fi(totIngresos - totEgresos)}
                 </td>

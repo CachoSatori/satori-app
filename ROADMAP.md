@@ -25,6 +25,8 @@ Satori App no es un POS. Hoy es una capa de inteligencia de negocio que se monta
 
 **Arquitectura:** React 19 + TS + Vite · Supabase (Postgres + RLS + Edge Functions) · PWA.
 Code-splitting por módulo. Despliegue automático en push a main.
+**Hardening (2026-06-03):** TS `strict` activado · ErrorBoundary raíz · tokens de diseño globales ·
+RLS endurecida (escritura por rol en sops/ventas/exchange) · rutas gateadas por rol · auto-update PWA.
 
 **El gran límite estructural:** la app consume datos del POS, no los genera. Por eso depende de un import manual y no tiene control sobre la operación en tiempo real. El roadmap apunta a cerrar ese círculo.
 

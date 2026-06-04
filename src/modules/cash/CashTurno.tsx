@@ -7,6 +7,7 @@ import {
   closeCashSession,
   createCashMovement,
   deleteCashMovement,
+  getPreviousCierre,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr } from './cashUtils'
 import { tipShiftToCaja } from '../../shared/utils'
@@ -73,6 +74,21 @@ export default function CashTurno({
   const [apUSD,      setApUSD]      = useState<number | ''>(0)
   const [tc,         setTc]         = useState<number>(640)       // tipo de cambio USD→CRC
   const [saving,       setSaving]       = useState(false)
+  const [carryFrom,  setCarryFrom]  = useState<string | null>(null) // fecha del cierre que asignó el fondo
+
+  // Carryover: la Caja Proveedores arranca con lo que dejó el cierre del día
+  // anterior (sep_diaria del último cierre completo). Se sugiere y es editable.
+  useEffect(() => {
+    if (openSession) return
+    let cancelled = false
+    getPreviousCierre(apFecha).then(c => {
+      if (cancelled) return
+      if (c) { setApProvCRC(c.sep_diaria_crc || 0); setApUSD(c.sep_diaria_usd || 0); setCarryFrom(c.session_date) }
+      else { setCarryFrom(null) }
+    }).catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apFecha, openSession])
 
   // Turno state: pagos + ingresos adicionales
   const [pagos,    setPagos]    = useState<PagoRow[]>([])
@@ -389,6 +405,11 @@ export default function CashTurno({
                     <input type="number" className="cd-monto-input" value={apProvCRC} min={0} step={1000}
                       placeholder="0" onChange={e => setApProvCRC(e.target.value === '' ? '' : Number(e.target.value))} />
                   </div>
+                  {carryFrom && (
+                    <div style={{ fontSize: '0.66rem', color: 'var(--t-teal)', marginTop: 2 }}>
+                      ↻ viene del cierre del {carryFrom}
+                    </div>
+                  )}
                 </div>
                 <div className="tips-field">
                   <div className="tips-field-label">$ Dólares (efectivo)</div>

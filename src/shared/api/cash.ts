@@ -250,6 +250,21 @@ export async function getCierresDia(date?: string): Promise<CashCierreDia[]> {
   return (data ?? []) as CashCierreDia[]
 }
 
+// Último cierre COMPLETO anterior a una fecha — para el carryover de la
+// caja de proveedores (sep_diaria) a la apertura del día siguiente.
+export async function getPreviousCierre(beforeDate: string): Promise<CashCierreDia | null> {
+  const { data, error } = await supabase
+    .from('cash_cierres_dia' as never)
+    .select('*')
+    .eq('tipo', 'completo')
+    .lt('session_date', beforeDate)
+    .order('session_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) return null
+  return (data as CashCierreDia | null) ?? null
+}
+
 export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created_at'|'updated_at'>): Promise<CashCierreDia> {
   const { data, error } = await supabase
     .from('cash_cierres_dia' as never)

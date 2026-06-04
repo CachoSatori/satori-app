@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './shared/hooks/useAuth'
+import ErrorBoundary from './shared/ErrorBoundary'
 import type { UserRole } from './shared/types/database'
 import LoginPage from './pages/auth/LoginPage'
 import HomePage from './pages/HomePage'
@@ -144,7 +145,9 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter basename="/satori-app">
-        <AppRoutes />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
         <FloatingHomeBtn />
       </BrowserRouter>
     </AuthProvider>

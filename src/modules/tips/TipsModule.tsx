@@ -613,7 +613,7 @@ export default function TipsModule() {
                   </span>
                   {canOperate && (
                     <button onClick={handleDiscardSession}
-                      style={{ background:'none', border:'1px solid #555', color:'#bbb', borderRadius:3, fontSize:'0.7rem', padding:'3px 10px', cursor:'pointer', whiteSpace:'nowrap' }}
+                      style={{ background:'#3a352c', border:'1px solid #5a5040', color:'#e8e2d6', borderRadius:3, fontSize:'0.7rem', fontWeight:600, padding:'3px 10px', cursor:'pointer', whiteSpace:'nowrap' }}
                       title="Descartar este turno y volver a elegir fecha/turno">
                       ← Cambiar fecha/turno
                     </button>

@@ -71,6 +71,7 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
 - Historial: monto visible sin click + botón Ver → modal con desglose. **Edición dentro del mismo modal** (mini-formulario tipo creación: pools efectivo ₡/$, pool barra, por empleado check+horas+datáfono **+ selector "Cubrió como"**, reparto recalculado en vivo) — sin salir de Historial ni reabrir el turno. Acciones: editar/eliminar/copiar. Sesiones pre-mayo sin datáfono se manejan sin romper (generado ₡0)
 - Quincenal, Stats (desglose AM/PM por empleado + top earners + **datáfono Generó vs Recibió** del mes). Ambos **cargan sus propios cálculos** del mes (fetch entradas + calcHistory) — ya NO dependen de visitar Historial primero (antes Stats salía vacío)
 - Cocina (admin): pool semanal de cocina, reparto por semana ISO, Selena entra al pool pero no recibe (TipCocina.tsx)
+- **Permisos**: `canOperate` (owner/manager/**cajero**) abre/edita/cierra el turno y carga coberturas — la cuenta de caja diaria opera propinas. `isManager` (owner/manager) queda para gestión: borrar sesiones, tabs Quincenal/Stats/Cocina, editar/eliminar en Historial. El cajero ve Historial en solo lectura.
 
 ### Caja / Cash (金) — ✅ AUDITADO CONTRA FLUJO OPERATIVO REAL — listo para reemplazar Excel
 - Turno: apertura **dual** (registradora/servicio + caja proveedores) con TC dinámico ₡/$

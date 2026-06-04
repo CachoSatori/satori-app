@@ -43,6 +43,9 @@ export default function TipsModule() {
   const { profile } = useAuth()
   const navigate    = useNavigate()
   const isManager = profile?.role === 'owner' || profile?.role === 'manager'
+  // Operar el turno (abrir, cargar horas/datáfono, coberturas, cerrar): también el cajero.
+  // isManager queda para gestión (borrar sesiones, reportes, editar historial).
+  const canOperate = isManager || profile?.role === 'cajero'
 
   // ── Vistas ────────────────────────────────────────────────
   const [view, setView] = useState<View>('turno')
@@ -501,7 +504,7 @@ export default function TipsModule() {
           {!openSession && !showNewSession && (
             <div className="tips-empty-state">
               <p className="tips-empty-text">No hay turno abierto</p>
-              {isManager && (
+              {canOperate && (
                 <button className="tips-btn-primary" onClick={() => setShowNewSession(true)}>
                   Abrir turno
                 </button>
@@ -670,7 +673,7 @@ export default function TipsModule() {
                               isBar={NO_PROPINA_ROLES.includes(coberturas[line.employeeId] as import('../../shared/types/database').UserRole ?? line.role)}
                               isBarra={BAR_ROLES.includes((coberturas[line.employeeId] as import('../../shared/types/database').UserRole) ?? line.role)}
                               generalRate={totals?.generalRate ?? 0}
-                              isManager={isManager}
+                              isManager={canOperate}
                               shiftType={shiftType}
                               onToggle={checked => !isCob && toggleLine(line.employeeId, checked)}
                               onHoursChange={val => handleHoursChange(line.employeeId, val)}
@@ -686,7 +689,7 @@ export default function TipsModule() {
               })}
 
               {/* ── Sección coberturas ── */}
-              {isManager && (
+              {canOperate && (
                 <div style={{ marginTop:'0.75rem', background:'rgba(200,169,110,.05)', border:'1px solid rgba(200,169,110,.2)', borderRadius:2, padding:'0.75rem' }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: showCobPicker ? '0.75rem' : 0 }}>
                     <div style={{ fontSize:'0.72rem', fontWeight:700, color:'#c8a030', letterSpacing:'0.08em', textTransform:'uppercase' }}>
@@ -758,7 +761,7 @@ export default function TipsModule() {
               )}
 
               {/* Verificación del pool antes de cerrar */}
-              {isManager && lines.some(l => l.active) && totals && (
+              {canOperate && lines.some(l => l.active) && totals && (
                 <div style={{ margin:'1rem 0', padding:'0.875rem', background:'#0d0f0d', border:'1px solid #1a2a1a', borderRadius:2 }}>
                   <div style={{ fontSize:'0.68rem', color:'#555', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:'0.5rem' }}>
                     ✓ Verificar monto total del pool antes de cerrar
@@ -814,7 +817,7 @@ export default function TipsModule() {
               )}
 
               {/* Cerrar turno */}
-              {isManager && lines.some(l => l.active) && (
+              {canOperate && lines.some(l => l.active) && (
                 <div className="tips-close-bar">
                   <button className="tips-btn-danger" onClick={handleCloseSession} disabled={closing}>
                     {closing ? 'Cerrando…' : '▶ Cerrar turno y guardar payouts'}

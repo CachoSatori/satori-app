@@ -7,7 +7,8 @@ import { useState, useMemo, useEffect } from 'react'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 import { formatCRC, calcHistory } from '../../shared/utils/tipCalculations'
-import { getTipEntriesBySession } from '../../shared/api/tips'
+import { getTipEntriesBySession, getAttendanceHistory } from '../../shared/api/tips'
+import type { AttendanceRow } from '../../shared/api/tips'
 
 interface Props {
   sessions:   TipSession[]
@@ -33,6 +34,38 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
   const [month, setMonth] = useState(months[0] ?? '')
 
   const empMap = useMemo(() => new Map(employees.map(e => [e.id, e])), [employees])
+
+  // ── Filtro por empleado (ver propinas de una persona por quincena/mes) ──
+  const [selEmp, setSelEmp] = useState('')                 // '' = todos (vista agregada)
+  const [attendance, setAttendance] = useState<AttendanceRow[]>([])
+  useEffect(() => {
+    getAttendanceHistory(12).then(setAttendance).catch(() => {})
+  }, [])
+
+  // Resumen por mes (Q1/Q2) del empleado seleccionado — como en "Mis Propinas".
+  const empByMonth = useMemo(() => {
+    if (!selEmp) return []
+    const acc: Record<string, { q1Days:number; q1Hours:number; q1Earn:number; q2Days:number; q2Hours:number; q2Earn:number }> = {}
+    for (const r of attendance) {
+      if (r.employee_id !== selEmp) continue
+      const ym = r.session_date.slice(0, 7)
+      const day = Number(r.session_date.slice(8, 10))
+      if (!acc[ym]) acc[ym] = { q1Days:0, q1Hours:0, q1Earn:0, q2Days:0, q2Hours:0, q2Earn:0 }
+      const e = acc[ym]
+      if (day <= 15) { e.q1Days++; e.q1Hours += r.hours_worked; e.q1Earn += r.payout_crc ?? 0 }
+      else           { e.q2Days++; e.q2Hours += r.hours_worked; e.q2Earn += r.payout_crc ?? 0 }
+    }
+    return Object.entries(acc).sort((a, b) => b[0].localeCompare(a[0]))
+  }, [selEmp, attendance])
+
+  const empTotals = useMemo(() => {
+    const rows = attendance.filter(r => r.employee_id === selEmp)
+    return {
+      earn:   rows.reduce((s, r) => s + (r.payout_crc ?? 0), 0),
+      hours:  rows.reduce((s, r) => s + r.hours_worked, 0),
+      shifts: rows.length,
+    }
+  }, [selEmp, attendance])
 
   // Sessions for selected month
   const monthSessions = useMemo(() =>
@@ -159,6 +192,70 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
 
   return (
     <div>
+      {/* Filtro por empleado */}
+      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.72rem', color: '#5a5040', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Empleado:</span>
+        <select className="tips-input-dark" value={selEmp} onChange={e => setSelEmp(e.target.value)}
+          style={{ minWidth: 200 }}>
+          <option value="">— Todos (vista general) —</option>
+          {[...employees].sort((a, b) => a.full_name.localeCompare(b.full_name)).map(e => (
+            <option key={e.id} value={e.id}>{e.full_name}{e.is_active ? '' : ' (inactivo)'}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* ── Vista por empleado (quincena/mes) ── */}
+      {selEmp && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.625rem', marginBottom: '1rem' }}>
+            {[
+              { label: 'Total (12m)', val: formatCRC(empTotals.earn),  color: 'var(--t-gold)' },
+              { label: 'Turnos',      val: String(empTotals.shifts),    color: '' },
+              { label: 'Horas',       val: empTotals.hours.toFixed(1) + 'h', color: 'var(--t-teal)' },
+            ].map(k => (
+              <div key={k.label} style={{ background: 'var(--t-ink)', padding: '0.875rem 1rem', borderRadius: 2, borderLeft: '3px solid var(--t-gold)' }}>
+                <div style={{ fontSize: '0.62rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#555', marginBottom: '0.4rem' }}>{k.label}</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1rem', fontWeight: 800, color: k.color || 'var(--t-paper)' }}>{k.val}</div>
+              </div>
+            ))}
+          </div>
+
+          {empByMonth.length === 0 ? (
+            <div className="tips-empty-state"><p className="tips-empty-text">Sin propinas registradas para este empleado</p></div>
+          ) : (
+            <table className="admin-table" style={{ width: '100%', fontSize: '0.8rem' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left' }}>Mes</th>
+                  <th style={{ textAlign: 'right' }}>Turnos</th>
+                  <th style={{ textAlign: 'right' }}>Horas</th>
+                  <th style={{ textAlign: 'right', color: 'var(--t-teal)' }}>Q1 (1-15)</th>
+                  <th style={{ textAlign: 'right', color: 'var(--t-gold)' }}>Q2 (16-fin)</th>
+                  <th style={{ textAlign: 'right' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {empByMonth.map(([ym, d]) => {
+                  const [y, mm] = ym.split('-')
+                  const total = d.q1Earn + d.q2Earn
+                  return (
+                    <tr key={ym} className="admin-row">
+                      <td style={{ fontWeight: 600 }}>{MONTH_NAMES[mm] ?? mm} {y}</td>
+                      <td style={{ textAlign: 'right', color: '#5a5040' }}>{d.q1Days + d.q2Days}</td>
+                      <td style={{ textAlign: 'right', color: '#5a5040', fontSize: '0.74rem' }}>{(d.q1Hours + d.q2Hours).toFixed(0)}h</td>
+                      <td style={{ textAlign: 'right', color: 'var(--t-teal)', fontSize: '0.76rem' }}>{d.q1Earn > 0 ? formatCRC(d.q1Earn) : '—'}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--t-gold)', fontSize: '0.76rem' }}>{d.q2Earn > 0 ? formatCRC(d.q2Earn) : '—'}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatCRC(total)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {!selEmp && (<>
       {/* Month picker */}
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
         <span style={{ fontSize: '0.72rem', color: '#5a5040', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>Mes:</span>
@@ -316,6 +413,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
           )}
         </>
       )}
+      </>)}
     </div>
   )
 }

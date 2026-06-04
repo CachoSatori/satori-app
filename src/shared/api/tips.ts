@@ -160,6 +160,18 @@ export async function getActiveEmployees(): Promise<Employee[]> {
   return data as Employee[]
 }
 
+// Todos los empleados (activos e inactivos). Para Historial / Estadísticas /
+// Quincenal: ahí siempre tienen que aparecer todos los del período aunque ya
+// no estén activos.
+export async function getAllEmployees(): Promise<Employee[]> {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('*')
+    .order('full_name')
+  if (error) throw new Error(error.message)
+  return data as Employee[]
+}
+
 // ── Puntos por rol ──────────────────────────────────────────
 
 export async function getRoleTipPoints(): Promise<RoleTipPoints[]> {

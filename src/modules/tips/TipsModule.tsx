@@ -6,6 +6,7 @@ import {
   getTipSessions,
   getTipEntriesBySession,
   getActiveEmployees,
+  getAllEmployees,
   getRoleTipPoints,
   createTipSession,
   closeTipSession,
@@ -53,7 +54,8 @@ export default function TipsModule() {
   const [tipCalcCache, setTipCalcCache] = useState<Record<string, HistoryCalc>>({})
 
   // ── Datos base ────────────────────────────────────────────
-  const [employees, setEmployees] = useState<Employee[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])         // activos — para crear turno
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([])   // todos — para Historial/Estadísticas/Quincenal
   const [rolePoints, setRolePoints] = useState<RoleTipPoints[]>([])
   const [sessions, setSessions] = useState<TipSession[]>([])
   const [openSession, setOpenSession] = useState<TipSession | null>(null)
@@ -93,16 +95,18 @@ export default function TipsModule() {
     setLoading(true)
     setError(null)
     try {
-      const [open, allSessions, emps, pts, currentRate] = await Promise.all([
+      const [open, allSessions, emps, allEmps, pts, currentRate] = await Promise.all([
         getOpenTipSession(),
         getTipSessions(),
         getActiveEmployees(),
+        getAllEmployees(),
         getRoleTipPoints(),
         getCurrentRate(),
       ])
       // Use DB rate as default if no session is open
       if (!open) setExchangeRate(currentRate)
       setEmployees(emps)
+      setAllEmployees(allEmps)
       setRolePoints(pts)
       setSessions(allSessions)
       setOpenSession(open)
@@ -868,7 +872,7 @@ export default function TipsModule() {
           <div className="tips-body">
             <TipHistory
               sessions={sessions}
-              employees={employees}
+              employees={allEmployees}
               rolePoints={rolePoints}
               onCalcReady={(id, calc) => setTipCalcCache(prev => ({ ...prev, [id]: calc }))}
               onDeleteSession={handleDeleteSession}
@@ -883,7 +887,7 @@ export default function TipsModule() {
             <TipQuincenal
               sessions={sessions}
               calcCache={tipCalcCache}
-              employees={employees}
+              employees={allEmployees}
               rolePoints={rolePoints}
             />
           </div>
@@ -894,7 +898,7 @@ export default function TipsModule() {
             <TipStats
               sessions={sessions}
               calcCache={tipCalcCache}
-              employees={employees}
+              employees={allEmployees}
               rolePoints={rolePoints}
             />
           </div>

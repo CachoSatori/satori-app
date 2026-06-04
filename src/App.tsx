@@ -39,11 +39,16 @@ function PendingApproval() {
         <p>
           Hola{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}. Tu cuenta se creó
           correctamente pero todavía no está habilitada.<br />
-          La gerencia debe asignarte un rol para darte acceso. Probá de nuevo más tarde.
+          La gerencia debe asignarte un rol para darte acceso. Cuando te avisen que ya está, tocá "Reintentar".
         </p>
-        <button className="login-btn" style={{ maxWidth: 200 }} onClick={() => signOut()}>
-          Cerrar sesión
-        </button>
+        <div style={{ display: 'flex', gap: '0.625rem' }}>
+          <button className="login-btn" style={{ maxWidth: 160 }} onClick={() => window.location.reload()}>
+            Reintentar
+          </button>
+          <button className="login-btn" style={{ maxWidth: 160, background: 'var(--gray-pale)' }} onClick={() => signOut()}>
+            Cerrar sesión
+          </button>
+        </div>
       </div>
     </div>
   )

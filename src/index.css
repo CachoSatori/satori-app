@@ -707,6 +707,14 @@ html, body, #root {
   padding: 0.5rem 0.75rem;
   transition: border-color 0.15s;
 }
+/* Ícono del calendario visible sobre input oscuro + abre al hacer click */
+.tips-input-dark[type="date"] { cursor: pointer; }
+.tips-input-dark::-webkit-calendar-picker-indicator {
+  filter: invert(0.9);
+  opacity: 0.85;
+  cursor: pointer;
+}
+.tips-input-dark::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 
 .tips-input-dark:focus { border-color: var(--t-teal); }
 

@@ -252,6 +252,22 @@ export default function TipsModule() {
     }
   }
 
+  // ── Volver al selector (descartar el turno recién abierto) ──────
+  const handleDiscardSession = async () => {
+    if (!openSession) return
+    const hasData = lines.some(l => l.active)
+    const msg = hasData
+      ? '¿Volver a elegir fecha/turno? Se DESCARTA este turno y lo que cargaste (no se guarda).'
+      : '¿Volver a elegir fecha/turno? Se descarta este turno vacío.'
+    if (!window.confirm(msg)) return
+    try { await deleteTipSession(openSession.id) } catch { /* ignore */ }
+    setOpenSession(null)
+    setEfectivoCRC(''); setEfectivoUSD(''); setBarraCRC('')
+    setCoberturas({})
+    setShowNewSession(true)
+    await loadData()
+  }
+
   // ── Toggle empleado ───────────────────────────────────────
   const toggleLine = async (employeeId: string, checked: boolean) => {
     if (!openSession) return
@@ -531,8 +547,9 @@ export default function TipsModule() {
               <div className="tips-config-grid">
                 <div className="tips-field">
                   <div className="tips-field-label">Fecha</div>
-                  <input type="date" className="tips-input-dark" value={fecha}
-                    onChange={e => setFecha(e.target.value)} />
+                  <input type="date" className="tips-input-dark" value={fecha} max={todayCR()}
+                    onChange={e => setFecha(e.target.value)}
+                    onClick={e => { try { (e.currentTarget as HTMLInputElement).showPicker?.() } catch { /* noop */ } }} />
                 </div>
                 <div className="tips-field">
                   <div className="tips-field-label">Turno</div>
@@ -590,8 +607,17 @@ export default function TipsModule() {
                     {shiftLabel(openSession.shift_type)}
                   </span>
                 </div>
-                <div style={{ fontSize:'0.72rem', color:'#555' }}>
-                  TC: ₡{openSession.exchange_rate?.toLocaleString('es-CR') ?? '—'} · {lines.filter(l=>l.active).length} empleados activos
+                <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
+                  <span style={{ fontSize:'0.72rem', color:'#555' }}>
+                    TC: ₡{openSession.exchange_rate?.toLocaleString('es-CR') ?? '—'} · {lines.filter(l=>l.active).length} empleados activos
+                  </span>
+                  {canOperate && (
+                    <button onClick={handleDiscardSession}
+                      style={{ background:'none', border:'1px solid #555', color:'#bbb', borderRadius:3, fontSize:'0.7rem', padding:'3px 10px', cursor:'pointer', whiteSpace:'nowrap' }}
+                      title="Descartar este turno y volver a elegir fecha/turno">
+                      ← Cambiar fecha/turno
+                    </button>
+                  )}
                 </div>
               </div>
 

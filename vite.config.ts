@@ -28,13 +28,23 @@ export default defineConfig({
           { name: 'Propinas',        url: '/satori-app/propinas', icons: [{ src: '/satori-app/icon-192.png', sizes: '192x192' }] },
           { name: 'Caja',            url: '/satori-app/caja',     icons: [{ src: '/satori-app/icon-192.png', sizes: '192x192' }] },
         ],
+        // Compartir una foto desde WhatsApp/galería → Satori (Bandeja). El POST
+        // lo intercepta sw-share.js y redirige a /inbox?shared=1.
+        share_target: {
+          action:  '/satori-app/inbox/share',
+          method:  'POST',
+          enctype: 'multipart/form-data',
+          params: { files: [{ name: 'image', accept: ['image/*'] }] },
+        },
       },
       // Force immediate SW activation — skip waiting when new version is detected
       injectRegister: 'auto',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        importScripts: ['/satori-app/sw-share.js'],   // handler del Share Target
         navigateFallback: '/satori-app/index.html',
         navigateFallbackAllowlist: [/^\/satori-app/],
+        navigateFallbackDenylist: [/\/inbox\/share$/],   // el POST de compartir lo maneja sw-share.js
         // Claim clients immediately so new SW takes over all tabs right away
         clientsClaim: true,
         skipWaiting: true,

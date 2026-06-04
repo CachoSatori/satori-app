@@ -237,6 +237,39 @@ export async function recordCierreSales(params: {
   if (error) throw new Error(error.message)
 }
 
+// Registra (idempotente) el retiro de dueños a banco de un Cierre del día como
+// egreso a nivel día. Es el único egreso administrativo del cierre además de
+// propinas. Borra el previo del mismo día antes de re-crear.
+export async function recordCierreRetiro(params: {
+  session_date:  string
+  created_by:    string
+  exchange_rate: number
+  amount_crc:    number
+}): Promise<void> {
+  const desc = `Retiro dueños a banco ${params.session_date}`
+  await supabase.from('cash_movements').delete().eq('description', desc)
+  if (!params.amount_crc) return
+  const { error } = await supabase.from('cash_movements').insert({
+    session_id:    null,
+    created_by:    params.created_by,
+    movement_type: 'egreso_socios',
+    amount_crc:    params.amount_crc,
+    amount_usd:    0,
+    currency:      'CRC',
+    exchange_rate: params.exchange_rate,
+    description:   desc,
+    subcategory:   'Retiro de socios',
+    supplier_id:   null,
+    supplier_name: '',
+    employee_name: '',
+    shift:         '',
+    caja_origen:   'Banco',
+    method:        'Transferencia',
+    status:        'aprobado',
+  } as never)
+  if (error) throw new Error(error.message)
+}
+
 // ── Proveedores ─────────────────────────────────────────────
 
 export async function getSuppliers(): Promise<Supplier[]> {

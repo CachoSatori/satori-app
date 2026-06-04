@@ -16,7 +16,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import type { CashCierreDia, CashSession } from '../../shared/types/database'
-import { getCierresDia, saveCierreParcial, updateCierreCompleto, recordCierreSales } from '../../shared/api/cash'
+import { getCierresDia, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { fi, todayStr } from './cashUtils'
 
@@ -80,6 +80,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const [vnCRC,       setVnCRC]       = useState<number | ''>('')
   const [vnUSD,       setVnUSD]       = useState<number | ''>('')
   const [propN,       setPropN]       = useState<number | ''>('')
+  const [retiroN,     setRetiroN]     = useState<number | ''>('')   // retiro de dueños a banco (egreso administrativo)
 
   const efRealN = Math.round(N(vnCRC) - N(vnUSD) * tc)
 
@@ -100,7 +101,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const vmUSDFromParcial   = parcial ? parcial.vm_usd : N(vmUSD)
 
   const netoM    = efRealMFromParcial - propMFromParcial
-  const netoN    = efRealN - N(propN)
+  const netoN    = efRealN - N(propN) - N(retiroN)
   const deberia  = netoM + netoN
   const diferencia = totalContadoCRC > 0 ? totalContadoCRC - deberia : null
   const cuadra     = diferencia !== null && Math.abs(diferencia) < 500
@@ -165,7 +166,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
           vn_crc:               N(vnCRC),
           vn_usd:               N(vnUSD),
           propinas_n_crc:       N(propN),
-          otros_n_crc:          0,
+          otros_n_crc:          N(retiroN),
           ef_real_n_crc:        efRealN,
           sep_diaria_crc:       N(sepDiariaCRC),
           sep_diaria_usd:       N(sepDiariaUSD),
@@ -189,6 +190,12 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
           exchange_rate: tc,
           mediodia: { crc: efRealMFromParcial, usd: vmUSDFromParcial },
           noche:    { crc: efRealN,            usd: N(vnUSD) },
+        })
+        await recordCierreRetiro({
+          session_date:  fecha,
+          created_by:    profile?.id ?? '',
+          exchange_rate: tc,
+          amount_crc:    N(retiroN),
         })
       } catch { /* el cierre ya quedó guardado; el ledger es complementario */ }
       setMsg('✓ Día cerrado completamente')
@@ -371,11 +378,18 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   </div>
                 )}
                 <Row2>
-                  <Field label="Propinas noche ₡ (único egreso)">
+                  <Field label="Propinas noche ₡">
                     <MontoInput prefix="₡" value={propN} onChange={setPropN} />
                   </Field>
-                  <div />
+                  <Field label="Retiro dueños → banco ₡">
+                    <MontoInput prefix="₡" value={retiroN} onChange={setRetiroN} />
+                  </Field>
                 </Row2>
+                {N(retiroN) > 0 && (
+                  <div style={{ background:'rgba(194,59,34,.08)', border:'1px solid #c23b22', borderRadius:2, padding:'0.4rem 0.7rem', fontSize:'0.72rem', color:'#c23b22', marginTop:'-0.25rem', marginBottom:'0.5rem' }}>
+                    Retiro de dueños a banco: <strong>−{fi2(N(retiroN))}</strong> · queda registrado como egreso (Retiro de socios) en Movimientos.
+                  </div>
+                )}
               </Section>
 
               {/* Separaciones */}

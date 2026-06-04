@@ -96,8 +96,6 @@ export default function CashTurno({
   // Cierre form
   const [cierreCRC,   setCierreCRC]   = useState<number | ''>(0)
   const [cierreUSD,   setCierreUSD]   = useState<number | ''>(0)
-  const [cierreSafe,  setCierreSafe]  = useState<number | ''>(0)
-  const [cierreBank,  setCierreBank]  = useState<number | ''>(0)
   const [cierreNotas, setCierreNotas] = useState('')
   const [showResumen, setShowResumen] = useState(false)
 
@@ -319,8 +317,8 @@ export default function CashTurno({
         {
           final_cash_crc: Number(cierreCRC) || 0,
           final_cash_usd: Number(cierreUSD) || 0,
-          final_safe_crc: Number(cierreSafe) || 0,
-          final_bank_crc: Number(cierreBank) || 0,
+          final_safe_crc: 0,
+          final_bank_crc: 0,
           notes:          cierreNotas || undefined,
         },
         profile.id,
@@ -337,7 +335,7 @@ export default function CashTurno({
     } finally {
       setSaving(false)
     }
-  }, [openSession, profile, pagos, ingresos, cierreCRC, cierreUSD, cierreSafe, cierreBank, cierreNotas,
+  }, [openSession, profile, pagos, ingresos, cierreCRC, cierreUSD, cierreNotas,
       onSessionClose, onMovAdded, onError])
 
   // ────────────────────────────────────────────────────────
@@ -603,22 +601,6 @@ export default function CashTurno({
                   <span className="cd-prefix">$</span>
                   <input type="number" className="cd-monto-input" value={cierreUSD} min={0}
                     placeholder="0" onChange={e => setCierreUSD(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
-              <div className="tips-field">
-                <div className="tips-field-label">Caja fuerte (₡)</div>
-                <div className="cd-monto-wrap">
-                  <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" value={cierreSafe} min={0}
-                    placeholder="0" onChange={e => setCierreSafe(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
-              <div className="tips-field">
-                <div className="tips-field-label">Depósito banco (₡)</div>
-                <div className="cd-monto-wrap">
-                  <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" value={cierreBank} min={0}
-                    placeholder="0" onChange={e => setCierreBank(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>
             </div>

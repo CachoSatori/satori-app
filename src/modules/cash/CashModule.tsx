@@ -18,6 +18,10 @@ const CashCierre      = lazy(() => import('./CashCierre'))
 
 type Tab = 'turno' | 'cierre' | 'movimientos' | 'proveedores' | 'pendientes' | 'resumen'
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Propietario', contador: 'Contador', manager: 'Encargado', cajero: 'Cajero',
+}
+
 function getTabs(role: string): { id: Tab; label: string }[] {
   if (role === 'cajero') return [
     { id: 'turno',       label: 'Caja Diaria' },
@@ -111,7 +115,7 @@ export default function CashModule() {
               Satori · Santa Teresa
             </div>
           </div>
-          {profile?.role && <span className="role-badge">{profile.role}</span>}
+          {profile?.role && <span className="role-badge">{ROLE_LABELS[profile.role] ?? profile.role}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button className="cash-back-btn" onClick={() => navigate('/')}>← Inicio</button>

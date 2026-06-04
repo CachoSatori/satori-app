@@ -122,6 +122,10 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
   const amPool     = getPoolTotal(amSessions)
   const pmPool     = getPoolTotal(pmSessions)
   const avgPerShift = monthSessions.length > 0 ? totalPool / monthSessions.length : 0
+  // Promedio separado por turno — AM y PM tienen pools muy distintos y el
+  // promedio general solo distorsiona la métrica.
+  const avgAM = amSessions.length > 0 ? amPool / amSessions.length : 0
+  const avgPM = pmSessions.length > 0 ? pmPool / pmSessions.length : 0
 
   // Day of week averages
   const dowData = useMemo(() => {
@@ -286,9 +290,11 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
             {[
               { label: 'Pool total',      val: formatCRC(totalPool),   color: 'var(--t-gold)' },
               { label: 'Turnos',          val: String(monthSessions.length), color: '' },
-              { label: 'Promedio/turno',  val: formatCRC(avgPerShift), color: 'var(--t-teal)' },
-              { label: `AM (${amSessions.length} turnos)`, val: formatCRC(amPool), color: '#c8a030' },
-              { label: `PM (${pmSessions.length} turnos)`, val: formatCRC(pmPool), color: 'var(--t-teal)' },
+              { label: 'Promedio general', val: formatCRC(avgPerShift), color: '' },
+              { label: `Prom. AM (${amSessions.length}t)`, val: formatCRC(avgAM), color: '#c8a030' },
+              { label: `Prom. PM (${pmSessions.length}t)`, val: formatCRC(avgPM), color: 'var(--t-teal)' },
+              { label: 'AM — pool total', val: formatCRC(amPool), color: '#c8a030' },
+              { label: 'PM — pool total', val: formatCRC(pmPool), color: 'var(--t-teal)' },
               { label: 'Datáfono generado', val: formatCRC(totalGenerated), color: '#a07830' },
             ].map(k => (
               <div key={k.label} style={{ background: 'var(--t-ink)', padding: '0.875rem 1rem', borderRadius: 2, borderLeft: '3px solid var(--t-gold)' }}>

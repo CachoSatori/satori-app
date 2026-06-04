@@ -3,6 +3,7 @@ import type { CashMovement, CashSession, MovementType } from '../../shared/types
 import { updateCashMovement, deleteCashMovement } from '../../shared/api/cash'
 import { todayCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, todayStr } from './cashUtils'
+import { useManagerOverride } from '../../shared/ManagerOverride'
 
 interface Props {
   movements: CashMovement[]
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function CashMovimientos({ movements, sessions, onRefresh }: Props) {
+  const requireManager = useManagerOverride()
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
 
   const defaultFrom = (() => { const d = new Date(todayCR() + 'T12:00:00'); d.setDate(d.getDate() - 60); return d.toISOString().slice(0, 10) })()
@@ -81,6 +83,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
 
   const handleDelete = useCallback(async (id: string) => {
     if (!window.confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) return
+    if (!(await requireManager())) return
     setSaving(id)
     try {
       await deleteCashMovement(id)
@@ -88,7 +91,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     } finally {
       setSaving(null)
     }
-  }, [onRefresh])
+  }, [onRefresh, requireManager])
 
   const exportCSV = () => {
     const BOM = '﻿'

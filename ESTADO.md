@@ -81,6 +81,8 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
 - Cierre del día (2 FASES): mediodía se sella → noche con separaciones (Caja Diaria mañana/Registradora/Remanente CF)
   + verificación automática (diferencia >₡500 exige tipo+motivo). Tabla: cash_cierres_dia
 - Integración Caja↔Propinas: al cerrar propinas se registra egreso_personal (Registradora) por el payout
+- **Cajero con acceso completo**: el rol cajero ve y opera TODAS las pestañas (Caja Diaria, Cierre del día, Movimientos, Proveedores, Pendientes, Resumen) — puede cerrar turnos/día y agregar proveedores. Lo único restringido: **eliminar registros guardados**.
+- **Override de gerencia para eliminar** (src/shared/ManagerOverride.tsx): borrar un movimiento, desactivar un proveedor o quitar un pago YA guardado pide correo+contraseña de un owner/manager. Se verifica con un cliente Supabase temporal (persistSession=false) **sin tocar la sesión del cajero**. Para owner/manager logueado es instantáneo (sin pedir nada). Provider envuelve la app; hook `useManagerOverride()`.
 - Movimientos, Proveedores, Pendientes
 - Resumen (filtro mes + ingresos por método + egresos por subcategoría + tendencia mensual 6m)
 

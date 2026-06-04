@@ -23,10 +23,6 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 function getTabs(role: string): { id: Tab; label: string }[] {
-  if (role === 'cajero') return [
-    { id: 'turno',       label: 'Caja Diaria' },
-    { id: 'pendientes',  label: 'Pendientes' },
-  ]
   if (role === 'contador') return [
     { id: 'movimientos', label: 'Movimientos' },
     { id: 'proveedores', label: 'Proveedores' },

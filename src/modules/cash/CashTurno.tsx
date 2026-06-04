@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashSession, CashMovement, Supplier, MovementType } from '../../shared/types/database'
 import {
   createCashSession,
@@ -44,8 +45,9 @@ export default function CashTurno({
   onSessionOpen, onSessionClose, onMovAdded, onError,
 }: Props) {
   const { profile } = useAuth()
+  const requireManager = useManagerOverride()
   const canManage = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'cajero'
-  const canClose  = profile?.role === 'owner' || profile?.role === 'manager'
+  const canClose  = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'cajero'
 
   // Determine if Mediodía/Noche already exists today for apertura
   const today = todayStr()
@@ -209,6 +211,8 @@ export default function CashTurno({
   const removePago = async (id: string) => {
     const pago = pagos.find(p => p.id === id)
     if (pago?.persistedId) {
+      // Borrado de un pago YA guardado → requiere autorización de gerencia
+      if (!(await requireManager())) return
       try { await deleteCashMovement(pago.persistedId); onMovAdded({ ...pago } as never) } catch { /* silent */ }
     }
     setPagos(prev => prev.filter(p => p.id !== id))

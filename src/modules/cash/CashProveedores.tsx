@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import { upsertSupplier, deactivateSupplier } from '../../shared/api/cash'
 import { fi, todayStr } from './cashUtils'
+import { useManagerOverride } from '../../shared/ManagerOverride'
 
 const CATEGORIAS_PROV = [
   'Pescados y Mariscos','Bebidas y Licores','Verduras y Frutas',
@@ -38,6 +39,7 @@ function daysBetween(a: string, b: string): number {
 }
 
 export default function CashProveedores({ suppliers, movements, onRefresh }: Props) {
+  const requireManager = useManagerOverride()
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<FormState>(empty)
   const [saving, setSaving] = useState(false)
@@ -91,6 +93,7 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('¿Desactivar este proveedor?')) return
+    if (!(await requireManager())) return
     try { await deactivateSupplier(id); onRefresh() }
     catch { /* noop */ }
   }

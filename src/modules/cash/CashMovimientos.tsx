@@ -14,6 +14,10 @@ interface Props {
 export default function CashMovimientos({ movements, sessions, onRefresh }: Props) {
   const requireManager = useManagerOverride()
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
+  // Fecha del movimiento: la del turno si lo tiene; si es un movimiento a nivel
+  // día (sin turno, ej. ventas del cierre) cae a su created_at.
+  const movFecha = (m: CashMovement) =>
+    sesionMap.get(m.session_id ?? '')?.session_date ?? (m.created_at ? m.created_at.slice(0, 10) : '')
 
   const defaultFrom = (() => { const d = new Date(todayCR() + 'T12:00:00'); d.setDate(d.getDate() - 60); return d.toISOString().slice(0, 10) })()
   const [from,    setFrom]    = useState(defaultFrom)
@@ -30,8 +34,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
 
   // ── Filter ───────────────────────────────────────────────
   const filtered = movements.filter(m => {
-    const ses = sesionMap.get(m.session_id)
-    const fecha = ses?.session_date ?? ''
+    const fecha = movFecha(m)
     if (from   && fecha < from)  return false
     if (to     && fecha > to)    return false
     if (tipo   && m.movement_type !== tipo) return false
@@ -49,9 +52,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     }
     return true
   }).sort((a, b) => {
-    const da = sesionMap.get(a.session_id)?.session_date ?? ''
-    const db = sesionMap.get(b.session_id)?.session_date ?? ''
-    return db.localeCompare(da) || b.created_at.localeCompare(a.created_at)
+    return movFecha(b).localeCompare(movFecha(a)) || b.created_at.localeCompare(a.created_at)
   })
 
   // ── Saldos ───────────────────────────────────────────────
@@ -117,9 +118,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     const BOM = '﻿'
     const hdrs = ['Fecha','Turno','Tipo','Descripción','Proveedor/Empleado','₡','$','Método','Caja','Estado']
     const rows = filtered.map(m => {
-      const ses = sesionMap.get(m.session_id)
+      const ses = sesionMap.get(m.session_id ?? '')
       return [
-        ses?.session_date ?? '',
+        movFecha(m),
         ses?.shift_type ?? '',
         MOVEMENT_LABELS[m.movement_type as MovementType] ?? m.movement_type,
         m.description,
@@ -232,7 +233,6 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               </td></tr>
             )}
             {filtered.map(m => {
-              const ses = sesionMap.get(m.session_id)
               const col = tipoColor(m.movement_type)
               const isPend = m.status === 'pendiente'
 
@@ -241,7 +241,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                   <td style={{ textAlign: 'center' }}>
                     <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleSel(m.id)} />
                   </td>
-                  <td style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{ses?.session_date ?? '—'}</td>
+                  <td style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{movFecha(m) || '—'}</td>
                   <td style={{ fontSize: '0.78rem' }}>
                     <select className="cd-tbl-select" value={m.shift ?? ''}
                       onChange={e => handleFieldChange(m.id, 'shift', e.target.value)}
@@ -338,7 +338,6 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
       {/* ── Mobile card list (shown instead of table on <760px) ── */}
       <div className="cd-mov-mobile-list" style={{ flexDirection: 'column', gap: '0.5rem' }}>
         {filtered.map(m => {
-          const ses = sesionMap.get(m.session_id)
           const isIng  = m.movement_type === 'ingreso'
           const isEg   = isEgreso(m.movement_type as MovementType)
           const amtColor = isIng ? '#27874f' : isEg ? '#c0392b' : '#5a5040'
@@ -363,7 +362,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                 {m.description || m.supplier_name || m.employee_name || '—'}
               </div>
               <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.68rem', color: '#5a5040' }}>
-                <span>{ses?.session_date ?? '—'}</span>
+                <span>{movFecha(m) || '—'}</span>
                 <span>{m.method}</span>
                 <span>{m.caja_origen}</span>
                 {isPend && <span style={{ color: '#c8a030', fontWeight: 700 }}>Pendiente</span>}

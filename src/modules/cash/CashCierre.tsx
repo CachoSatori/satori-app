@@ -16,7 +16,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import type { CashCierreDia, CashSession } from '../../shared/types/database'
-import { getCierresDia, saveCierreParcial, updateCierreCompleto } from '../../shared/api/cash'
+import { getCierresDia, saveCierreParcial, updateCierreCompleto, recordCierreSales } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { fi, todayStr } from './cashUtils'
 
@@ -180,6 +180,17 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
           tipo_cambio:          tc,
         })
       }
+      // Fase 3 — registrar las ventas en EFECTIVO en el ledger de movimientos
+      // (a nivel día). Idempotente: re-cerrar reemplaza, no duplica.
+      try {
+        await recordCierreSales({
+          session_date:  fecha,
+          created_by:    profile?.id ?? '',
+          exchange_rate: tc,
+          mediodia: { crc: efRealMFromParcial, usd: vmUSDFromParcial },
+          noche:    { crc: efRealN,            usd: N(vnUSD) },
+        })
+      } catch { /* el cierre ya quedó guardado; el ledger es complementario */ }
       setMsg('✓ Día cerrado completamente')
       await loadCierres()
       onRefresh()

@@ -190,6 +190,53 @@ export async function reconcilePropinaEgreso(description: string, newTotalCRC: n
   await supabase.from('cash_movements').update({ amount_crc: newTotalCRC } as never).eq('id', mov.id)
 }
 
+// Registra (idempotente) las ventas en EFECTIVO de un Cierre del día como
+// movimientos de ingreso a nivel día (session_id null). Borra los previos del
+// mismo día antes de re-crear, así re-cerrar el día no duplica el ledger.
+// Sólo efectivo: las ventas con tarjeta vienen del XLS de ventas, no del cierre.
+export async function recordCierreSales(params: {
+  session_date:  string
+  created_by:    string
+  exchange_rate: number
+  mediodia: { crc: number; usd: number }
+  noche:    { crc: number; usd: number }
+}): Promise<void> {
+  // Limpiar ventas-de-cierre previas de este día (idempotencia).
+  await supabase
+    .from('cash_movements')
+    .delete()
+    .eq('subcategory', 'Ventas cierre')
+    .like('description', `%${params.session_date}`)
+
+  const rows = [
+    { turno: 'Mediodía', ...params.mediodia },
+    { turno: 'Noche',    ...params.noche },
+  ].filter(r => r.crc !== 0 || r.usd !== 0)
+  if (rows.length === 0) return
+
+  const { error } = await supabase.from('cash_movements').insert(
+    rows.map(r => ({
+      session_id:    null,
+      created_by:    params.created_by,
+      movement_type: 'ingreso',
+      amount_crc:    r.crc,
+      amount_usd:    r.usd,
+      currency:      'CRC',
+      exchange_rate: params.exchange_rate,
+      description:   `Ventas efectivo ${r.turno} ${params.session_date}`,
+      subcategory:   'Ventas cierre',
+      supplier_id:   null,
+      supplier_name: '',
+      employee_name: '',
+      shift:         r.turno,
+      caja_origen:   'Ventas',
+      method:        'Efectivo',
+      status:        'aprobado',
+    })) as never,
+  )
+  if (error) throw new Error(error.message)
+}
+
 // ── Proveedores ─────────────────────────────────────────────
 
 export async function getSuppliers(): Promise<Supplier[]> {

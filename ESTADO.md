@@ -63,7 +63,7 @@ ICP (índice conversión propina), Saloneros (tarjetas + tabla ordenable),
 Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bulk edit cascading), Histórico
 
 ### Propinas / Tips (心) — ✅ AUDITADO CONTRA FLUJO OPERATIVO REAL — listo para reemplazar Excel
-- Turno: coberturas dinámicas (picker + badge COB) **persistidas en DB** (columna `tip_entries.covered_role`, migration 008) → el rol cubierto y sus puntos sobreviven al recargar y en el Historial. Verificación pool con tipo+motivo si dif >₡500 (bloquea cierre + persiste en notas), banner turno activo
+- Turno: coberturas dinámicas (picker + badge COB) **persistidas en DB** (columna `tip_entries.covered_role`, migration 008). Regla: la cobertura usa el **rol efectivo (cubierto)** en TODO el cálculo → recibe los puntos de ese rol **Y entra al pool de barra** si cubrió en barra. Sobrevive al recargar, en el Historial y al editar. Verificación pool con tipo+motivo si dif >₡500 (bloquea cierre + persiste en notas), banner turno activo
 - Datáfono individual por empleado de sala (propina ₡/$); bar/cocina reciben del pool
 - Pool: general por puntos (efectivo + datáfonos de sala) **+** pool barra repartido por horas entre bartenders del turno. Barra muestra desglose Pool barra + Servicio en la fila
 - Cierre AM/PM independiente (cada sesión se abre y cierra por separado)
@@ -90,7 +90,7 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
 - Resumen Diario (navegación días ‹›  + botón compartir WhatsApp) + Resumen Semanal (compartir)
 - Reporte Mensual unificado (/reporte-mensual): ventas+propinas+caja de un mes en 1 vista, selector de mes, compartir + imprimir (ReporteMensual.tsx en resumen/)
 - Admin: Empleados (bulk import en masa), Puntos por rol, Tipo cambio, Horas trabajadas, Email reports (cron día 1)
-- SOPs / Procedimientos (書): CRUD + búsqueda + categorías. **19 SOPs reales migrados** (2026-06-03)
+- SOPs / Procedimientos (書): CRUD + búsqueda + categorías. **20 SOPs reales migrados** (2026-06-03)
   desde Drive + carpeta local, estandarizados al formato Claude e insertados en la tabla `sops`
   (Montaje, Bienvenida, Servicio, Cobro/Separación, Créditos, Local Club, Link de Pago, SINPE/Bitcoin,
   Reservas, Pizarra, Delivery, SIPP, Cierre de Caja, Planilla Proveedores, Transferencias, Factura

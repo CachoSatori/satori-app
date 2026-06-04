@@ -504,10 +504,17 @@ export default function TipsModule() {
           {!openSession && !showNewSession && (
             <div className="tips-empty-state">
               <p className="tips-empty-text">No hay turno abierto</p>
-              {canOperate && (
-                <button className="tips-btn-primary" onClick={() => setShowNewSession(true)}>
-                  Abrir turno
-                </button>
+              {canOperate ? (
+                <>
+                  <button className="tips-btn-primary" onClick={() => setShowNewSession(true)}>
+                    + Cargar turno
+                  </button>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--t-muted)', marginTop: '0.6rem', lineHeight: 1.4, maxWidth: 320, textAlign: 'center' }}>
+                    Acá registrás el turno de hoy <strong>o de un día anterior</strong> — al abrirlo elegís la fecha y el turno (AM/PM).
+                  </p>
+                </>
+              ) : (
+                <p style={{ fontSize: '0.75rem', color: 'var(--t-muted)' }}>Pedile al encargado que abra el turno.</p>
               )}
             </div>
           )}

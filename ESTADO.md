@@ -26,7 +26,7 @@
 ### Bandeja de documentos — ingesta por foto con IA (Fase 2D-B)
 - Nuevo módulo **Bandeja** (`/inbox`, tile en Home con badge): subís/compartís una foto de factura o comprobante, la IA de visión la lee y deja un movimiento **pre-llenado** que confirmás de un toque (nunca auto-commit).
 - **Migración 016**: tabla `documents` + bucket Storage privado `documents` + RLS (owner/manager/contador/cajero) + `suppliers.aliases[]`.
-- **Edge Function `extract-document`** (Deno → Anthropic visión, JSON estricto). La API key vive solo en el Vault. **Pendiente de operación**: `supabase secrets set ANTHROPIC_API_KEY` + `supabase functions deploy extract-document`. Hasta entonces la Bandeja funciona en **modo carga manual**.
+- **Edge Function `extract-document`** (Deno → Anthropic visión, JSON estricto). La API key vive solo en el Vault. Edge Function **desplegada**; falta solo cargar el secret `ANTHROPIC_API_KEY` (panel Supabase). Hasta entonces, **modo carga manual**.
 - **PWA Share Target**: compartir foto desde WhatsApp → Satori (lo intercepta `public/sw-share.js`). Subida manual/cámara como fallback.
 - Anti-duplicado por SHA-256 / clave FE. Factura → cuenta por pagar; comprobante → concilia un pendiente o egreso directo.
 

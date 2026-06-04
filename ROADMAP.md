@@ -540,12 +540,8 @@ Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya
 - ✅ **Entrada de foto**: PWA **Share Target** (`manifest.share_target` POST multipart) interceptado por `public/sw-share.js` → `/inbox?shared=1`. Subida manual/cámara como fallback (iOS).
 - ✅ **Extracción IA**: Edge Function `extract-document` (Deno) → Anthropic visión, JSON estricto. Anti-duplicado por SHA-256 / `clave_fe`.
 - ✅ **Pantalla Bandeja** (`/inbox`) + tile en Home con badge: lista con miniatura + tarjeta de confirmación pre-llenada → commit a `cash_movements` (nunca auto-commit). Factura → cuenta por pagar; comprobante → concilia un pendiente (proveedor+total±2%+fecha±7d) o egreso directo.
-- 🟡 **Pendiente de operación (lo hace el dueño):** desplegar la Edge Function y setear la key:
-  ```
-  supabase secrets set ANTHROPIC_API_KEY=sk-ant-...  --project-ref yiczgdtirrkdvohdquzf
-  supabase functions deploy extract-document         --project-ref yiczgdtirrkdvohdquzf
-  ```
-  Hasta entonces la Bandeja funciona en modo **carga manual** (subís la foto y completás los campos a mano; la IA no autocompleta).
+- ✅ Edge Function `extract-document` **desplegada** (2026-06-04).
+- 🟡 **Único paso pendiente (lo hace el dueño):** cargar la API key de Anthropic como secret `ANTHROPIC_API_KEY` (panel Supabase → Edge Functions → Secrets, o `supabase secrets set`). Hasta entonces la Bandeja funciona en modo **carga manual** (la IA no autocompleta).
 - 🔭 Futuro: webhook WhatsApp Cloud API (Meta) como entrada alternativa.
 
 #### 🔭 Fase C — Auto-inventario + cuentas por pagar

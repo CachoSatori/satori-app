@@ -170,6 +170,26 @@ export async function deleteCashMovement(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+// Reconciliar el egreso de caja de propinas cuando se EDITA un turno cerrado.
+// Al cerrar propinas se crea un movimiento (subcategory 'Propinas por turno',
+// description 'Propinas turno {fecha} {turno}') por el payout total. Si luego se
+// edita ese turno y cambia el total, actualizamos el monto del egreso para que la
+// caja siga cuadrando. Si no existe (el turno se cerró sin caja abierta), no hace
+// nada. Solo toca el más reciente que coincida.
+export async function reconcilePropinaEgreso(description: string, newTotalCRC: number): Promise<void> {
+  const { data, error } = await supabase
+    .from('cash_movements')
+    .select('id, amount_crc')
+    .eq('subcategory', 'Propinas por turno')
+    .eq('description', description)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (error) return
+  const mov = (data as { id: string; amount_crc: number }[] | null)?.[0]
+  if (!mov || mov.amount_crc === newTotalCRC) return
+  await supabase.from('cash_movements').update({ amount_crc: newTotalCRC } as never).eq('id', mov.id)
+}
+
 // ── Proveedores ─────────────────────────────────────────────
 
 export async function getSuppliers(): Promise<Supplier[]> {

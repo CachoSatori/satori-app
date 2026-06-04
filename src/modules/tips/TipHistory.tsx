@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { TipSession, Employee, RoleTipPoints, UserRole } from '../../shared/types/database'
 import { getTipEntriesBySession, upsertTipEntry, deleteTipEntry, updateSessionPools, savePayouts } from '../../shared/api/tips'
+import { reconcilePropinaEgreso } from '../../shared/api/cash'
 import { calcHistory, calcTurno, formatCRC, formatNum, ROL_LABELS, ROL_ORDER, NO_PROPINA_ROLES, type HistoryCalc, type HistoryRow, type DraftLine } from '../../shared/utils/tipCalculations'
 import { shiftLabel } from '../../shared/utils'
 
@@ -197,6 +198,13 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         .map(l => { const id = idMap.get(l.employeeId); return id ? { id, points: l.pts_val, payout_crc: Math.round(l.take_home) } : null })
         .filter((p): p is { id: string; points: number; payout_crc: number } => p !== null)
       await savePayouts(payouts)
+
+      // Reconciliar el egreso de caja de propinas (si existe) con el nuevo total
+      const newTotal = payouts.reduce((s, p) => s + p.payout_crc, 0)
+      await reconcilePropinaEgreso(
+        `Propinas turno ${session.session_date} ${shiftLabel(session.shift_type)}`,
+        newTotal,
+      ).catch(() => {})
 
       // Refrescar: limpiar cache de cálculo y recargar datos del padre
       setCalcCache(prev => { const n = { ...prev }; delete n[sid]; return n })

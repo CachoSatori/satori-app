@@ -198,6 +198,7 @@ Lo que sigue necesita acción del dueño (trámites externos o decisión estrat�
 - ✅ 007_customer_selfsignup (insert anónimo para auto-registro por QR) — probado HTTP 201
 - ✅ 008_tips_covered_role (columna `tip_entries.covered_role` para persistir la cobertura de rol en propinas) — aplicada 2026-06-03
 - ✅ 009_user_selfsignup (columna `profiles.email` + trigger: cuentas nuevas nacen `is_active=false` pendientes) — aplicada 2026-06-03. Además se desactivó la confirmación por correo en Auth (`mailer_autoconfirm=true`) vía Management API.
+- ✅ 011_ventas_exchange_rls — RLS de exchange_rates/product_map/ventas_* : lectura abierta, escritura solo owner/manager/contador. Aplicada 2026-06-03.
 - ✅ 010_sops_rls — RLS de `sops`: lectura para todos, escritura solo owner/manager (antes cualquier autenticado podía escribir). Aplicada 2026-06-03.
 
 ## Auditoría de calidad / hardening (2026-06-03)
@@ -205,8 +206,8 @@ Lo que sigue necesita acción del dueño (trámites externos o decisión estrat�
 - **ErrorBoundary** a nivel raíz (src/shared/ErrorBoundary.tsx) — un módulo que tire excepción ya no deja la app en blanco.
 - **Tokens `--t-*` movidos a `:root`** (eran solo de `.tips-module`) — arregla el módulo SOPs (se veía oscuro/ilegible) y previene el bug para módulos futuros.
 - **RLS SOPs endurecida** (migration 010).
+- **RLS Ventas/exchange endurecida** (migration 011): `exchange_rates`, `product_map`, `ventas_dias/hist/comps/metas` → lectura abierta (intacta), escritura solo owner/manager/contador. Antes cualquier autenticado escribía.
 - Código limpio: 0 console.log, 0 `as any`, lazy-loading + code-splitting, queries en paralelo (Promise.all).
-- **⚠️ Pendiente (necesita revisión con el dueño):** tablas `exchange_rates`, `product_map`, `ventas_dias/hist/comps/metas` tienen policy `ALL ... USING true` (cualquier autenticado escribe). Endurecer con cuidado: `exchange_rates` DEBE seguir siendo legible por todos (Caja/Propinas la usan para convertir USD).
 - ⚠️ 003_tips_email_cron: era REDUNDANTE — ya existían crons `satori-monthly-report` (día 1) y
   `satori-quincenal-report` (día 15) que llaman a la edge fn `monthly-report` con body {} (tipo='ambos',
   envían ventas Y propinas, sin auth porque la fn es pública). Se eliminaron los crons duplicados de 003.

@@ -1,7 +1,19 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CashMovement, CashSession, MovementType } from '../../shared/types/database'
-import { updateCashMovement, deleteCashMovement } from '../../shared/api/cash'
+import { updateCashMovement, deleteCashMovement, getCierresDia, createDayMovement } from '../../shared/api/cash'
+import type { CashCierreDia } from '../../shared/types/database'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
+import { useAuth } from '../../shared/hooks/useAuth'
+
+// Conceptos para "Nuevo movimiento" manual (administrativo, sin foto/turno)
+const CONCEPTOS = [
+  { id: 'banco_cf', label: 'Ingreso de Banco → Caja Fuerte', type: 'traspaso',          caja: 'Caja Fuerte',       sub: 'Banco → Caja Fuerte', method: 'Transferencia' },
+  { id: 'cf_banco', label: 'Retiro Caja Fuerte → Banco',      type: 'traspaso',          caja: 'Caja Fuerte',       sub: 'Caja Fuerte → Banco', method: 'Transferencia' },
+  { id: 'egr_merc', label: 'Egreso · Mercadería',             type: 'egreso_mercaderia', caja: 'Caja Proveedores',  sub: '',                    method: 'Efectivo' },
+  { id: 'egr_oper', label: 'Egreso · Operativo',              type: 'egreso_operativo',  caja: 'Caja Proveedores',  sub: '',                    method: 'Efectivo' },
+  { id: 'egr_pers', label: 'Egreso · Personal / Salario',     type: 'egreso_personal',   caja: 'Caja Fuerte',       sub: '',                    method: 'Efectivo' },
+  { id: 'ing_otro', label: 'Ingreso · Otro (aceite, etc.)',   type: 'ingreso',           caja: 'Caja Fuerte',       sub: 'Otros ingresos',      method: 'Efectivo' },
+] as const
 import { todayCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
@@ -14,6 +26,29 @@ interface Props {
 
 export default function CashMovimientos({ movements, sessions, onRefresh }: Props) {
   const requireManager = useManagerOverride()
+  const { profile } = useAuth()
+  // Modal "Nuevo movimiento"
+  const [nmOpen, setNmOpen] = useState(false)
+  const [nmConcepto, setNmConcepto] = useState<typeof CONCEPTOS[number]['id']>('banco_cf')
+  const [nmCRC, setNmCRC] = useState<number | ''>('')
+  const [nmUSD, setNmUSD] = useState<number | ''>('')
+  const [nmDesc, setNmDesc] = useState('')
+  const [nmFecha, setNmFecha] = useState(todayStr())
+  const [nmSaving, setNmSaving] = useState(false)
+  const [nmErr, setNmErr] = useState<string | null>(null)
+  const guardarNuevo = async () => {
+    const c = CONCEPTOS.find(x => x.id === nmConcepto)!
+    if (!Number(nmCRC) && !Number(nmUSD)) { setNmErr('Ingresá un monto'); return }
+    setNmSaving(true); setNmErr(null)
+    try {
+      await createDayMovement({
+        created_by: profile?.id ?? '', movement_type: c.type, amount_crc: Number(nmCRC) || 0, amount_usd: Number(nmUSD) || 0,
+        description: nmDesc || c.label, subcategory: c.sub, method: c.method, caja_origen: c.caja, status: 'aprobado', fecha: nmFecha,
+      })
+      setNmOpen(false); setNmCRC(''); setNmUSD(''); setNmDesc('')
+      onRefresh()
+    } catch (e) { setNmErr(e instanceof Error ? e.message : 'Error'); setNmSaving(false) }
+  }
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
   // Fecha del movimiento: la del turno si lo tiene; si es un movimiento a nivel
   // día (sin turno, ej. ventas del cierre) cae a su created_at.
@@ -31,6 +66,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   // Cuentas contables (hojas) para asignar la cuenta del P&L por movimiento (FIX 4)
   const [accounts, setAccounts] = useState<FinanceAccount[]>([])
   useEffect(() => { getFinanceAccounts().then(a => setAccounts(a.filter(x => x.is_leaf))).catch(() => {}) }, [])
+  // Cierres del día → para la tarjeta de Ajustes (diferencias del encargado)
+  const [cierres, setCierres] = useState<CashCierreDia[]>([])
+  useEffect(() => { getCierresDia().then(setCierres).catch(() => {}) }, [])
 
   const toggleSel = (id: string) => setSelected(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
@@ -67,36 +105,39 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const cfSalidas = movements
     .filter(m => isEgreso(m.movement_type as MovementType) && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
     .reduce((s, m) => s + m.amount_crc, 0)
-  // Traspasos que SALEN de la Caja Fuerte (ej. retiro de dueños Caja Fuerte → Banco):
-  // no son gasto del P&L pero sí descuentan el saldo físico de la caja fuerte.
-  const cfTraspasosOut = movements
-    .filter(m => m.movement_type === 'traspaso' && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
-    .reduce((s, m) => s + m.amount_crc, 0)
-  const cfSaldo = cfEntradas - cfSalidas - cfTraspasosOut
+  // Traspasos de la Caja Fuerte. Por dirección (subcategoría):
+  //  - "Banco → Caja Fuerte" = entra plata a la caja (suma).
+  //  - "Caja Fuerte → Banco" (retiro) = sale plata (resta).
+  const cfTrasp = movements.filter(m => m.movement_type === 'traspaso' && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
+  const cfTraspIn  = cfTrasp.filter(m => /banco\s*→\s*caja fuerte|→\s*caja fuerte/i.test(m.subcategory || '')).reduce((s, m) => s + m.amount_crc, 0)
+  const cfTraspOut = cfTrasp.filter(m => !/banco\s*→\s*caja fuerte|→\s*caja fuerte/i.test(m.subcategory || '')).reduce((s, m) => s + m.amount_crc, 0)
+  const cfSaldo = cfEntradas - cfSalidas - cfTraspOut + cfTraspIn
 
   // Caja Fuerte en DÓLARES (mismo criterio, sobre amount_usd)
   const cfCF = (pred: (m: CashMovement) => boolean) =>
     movements.filter(m => m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente' && pred(m)).reduce((s, m) => s + (m.amount_usd || 0), 0)
+  const isTraspIn = (m: CashMovement) => /→\s*caja fuerte/i.test(m.subcategory || '')
   const cfSaldoUSD = cfCF(m => m.movement_type === 'ingreso')
     - cfCF(m => isEgreso(m.movement_type as MovementType))
-    - cfCF(m => m.movement_type === 'traspaso')
+    - cfCF(m => m.movement_type === 'traspaso' && !isTraspIn(m))
+    + cfCF(m => m.movement_type === 'traspaso' && isTraspIn(m))
 
   const pendTotal = movements.filter(m => m.status === 'pendiente').reduce((s, m) => s + m.amount_crc, 0)
   const pendCount = movements.filter(m => m.status === 'pendiente').length
 
-  // Ajustes (de siempre): movimientos marcados como ajuste — ej. el ajuste de
-  // apertura. No son ingreso/egreso real del negocio, por eso van aparte.
-  const isAjuste = (m: CashMovement) => /ajuste/i.test(m.subcategory || '') || /ajuste/i.test(m.description || '')
-  // Solo ajustes de balance reales (ingreso/egreso); los traspasos "Ajuste" del
-  // import son float de registradora y no cuentan como balance de ajustes.
-  const ajusteMovs = movements.filter(m => isAjuste(m) && m.status !== 'rechazado' && m.movement_type !== 'traspaso')
-  const ajustesNet = ajusteMovs.reduce((s, m) => s + (m.movement_type === 'ingreso' ? m.amount_crc : isEgreso(m.movement_type as MovementType) ? -m.amount_crc : 0), 0)
-  const ajustesCount = ajusteMovs.length
+  // Ajustes = diferencias de los CIERRES del día (lo que el encargado ajusta
+  // cuando el conteo físico no cuadra). A veces + y a veces −; sirve para ver
+  // si a fin de mes netean a cero o si son errores a investigar.
+  const cierresPeriodo = cierres.filter(c => (!from || c.session_date >= from) && (!to || c.session_date <= to) && Number(c.diferencia_crc) !== 0)
+  const ajustesNet   = cierresPeriodo.reduce((s, c) => s + (Number(c.diferencia_crc) || 0), 0)
+  const ajustesCount = cierresPeriodo.length
 
-  // Ingresos/Egresos del período EXCLUYEN los ajustes (para que reflejen
-  // actividad real del negocio, no la reconciliación de apertura).
-  const totIngresos = filtered.filter(m => m.movement_type === 'ingreso' && !isAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
-  const totEgresos  = filtered.filter(m => isEgreso(m.movement_type as MovementType) && !isAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
+  // El ajuste de APERTURA (reconciliación del saldo real) no es ingreso/egreso
+  // real del negocio → se excluye de Ingresos/Egresos del período (pero sí
+  // afecta el saldo de Caja Fuerte).
+  const isAperturaAjuste = (m: CashMovement) => /ajuste apertura/i.test(m.subcategory || '') || /ajuste apertura/i.test(m.description || '')
+  const totIngresos = filtered.filter(m => m.movement_type === 'ingreso' && !isAperturaAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
+  const totEgresos  = filtered.filter(m => isEgreso(m.movement_type as MovementType) && !isAperturaAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
 
   // ── Actions ──────────────────────────────────────────────
   const handleFieldChange = useCallback(async (id: string, field: string, value: unknown) => {
@@ -191,11 +232,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           <div className="cd-saldo-val" style={{ color: '#c0392b' }}>{fi(totEgresos)}</div>
         </div>
         <div className="cd-saldo-card" style={{ borderLeftColor: '#8a7a4a' }}>
-          <div className="cd-saldo-label">Ajustes</div>
+          <div className="cd-saldo-label">Ajustes de cierre</div>
           <div className="cd-saldo-val" style={{ color: ajustesNet < 0 ? '#c0392b' : ajustesNet > 0 ? '#27874f' : '#555', fontSize: ajustesCount ? '17px' : '13px' }}>
-            {ajustesCount ? `${ajustesNet >= 0 ? '+' : ''}${fi(ajustesNet)}` : 'Sin ajustes'}
+            {ajustesCount ? `${ajustesNet >= 0 ? '+' : ''}${fi(ajustesNet)}` : 'Sin diferencias'}
           </div>
-          {ajustesCount > 0 && <div style={{ fontSize: '9px', color: '#888', marginTop: '3px' }}>{ajustesCount} registro{ajustesCount !== 1 ? 's' : ''}</div>}
+          {ajustesCount > 0 && <div style={{ fontSize: '9px', color: '#888', marginTop: '3px' }}>{ajustesCount} cierre{ajustesCount !== 1 ? 's' : ''} con diferencia</div>}
         </div>
       </div>
 
@@ -220,8 +261,52 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           <input className="cd-filter-input" style={{ minWidth: 140 }} value={busq} placeholder="Buscar..."
             onChange={e => setBusq(e.target.value)} />
         </div>
+        <button className="cd-btn-green" style={{ fontSize: '0.8rem' }} onClick={() => { setNmErr(null); setNmOpen(true) }}>+ Nuevo movimiento</button>
         <button className="tips-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={exportCSV}>⬇ CSV</button>
       </div>
+
+      {/* Modal: nuevo movimiento manual */}
+      {nmOpen && (
+        <div className="cd-modal-overlay" onClick={() => setNmOpen(false)}>
+          <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div className="cd-modal-title">Nuevo movimiento</div>
+            <p style={{ fontSize: '0.74rem', color: 'var(--t-muted)', margin: '0.2rem 0 0.75rem' }}>
+              Movimientos administrativos sin foto ni turno (ej. ingreso de banco a caja fuerte, gasto suelto).
+            </p>
+            {nmErr && <div className="tips-error" style={{ marginBottom: '0.75rem' }}><span>{nmErr}</span><button onClick={() => setNmErr(null)}>✕</button></div>}
+            <div className="tips-field">
+              <div className="tips-field-label">Concepto</div>
+              <select className="tips-input-dark" value={nmConcepto} onChange={e => setNmConcepto(e.target.value as typeof nmConcepto)}>
+                {CONCEPTOS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+            </div>
+            <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field">
+                <div className="tips-field-label">Monto ₡</div>
+                <input type="number" className="tips-input-dark" value={nmCRC} placeholder="0" onChange={e => setNmCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">Monto $ (opcional)</div>
+                <input type="number" className="tips-input-dark" value={nmUSD} placeholder="0" onChange={e => setNmUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">Fecha</div>
+                <input type="date" className="tips-input-dark" value={nmFecha} max={todayStr()} onChange={e => setNmFecha(e.target.value)} />
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">Descripción / nota</div>
+                <input className="tips-input-dark" value={nmDesc} placeholder="Opcional" onChange={e => setNmDesc(e.target.value)} />
+              </div>
+            </div>
+            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+              <button className="tips-btn-ghost" onClick={() => setNmOpen(false)} disabled={nmSaving}>Cancelar</button>
+              <button className="cd-btn-green" onClick={guardarNuevo} disabled={nmSaving || (!Number(nmCRC) && !Number(nmUSD))}>
+                {nmSaving ? 'Guardando…' : '✓ Registrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Barra de acción masiva */}
       {selected.size > 0 && (

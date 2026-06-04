@@ -162,6 +162,34 @@ export async function updateMovementStatus(id: string, status: 'aprobado' | 'pen
   if (error) throw new Error(error.message)
 }
 
+// Inserta un movimiento a nivel día (sin turno) — para movimientos manuales
+// administrativos: Banco→Caja Fuerte, retiros, gastos sin foto, etc.
+export async function createDayMovement(m: {
+  created_by: string
+  movement_type: string
+  amount_crc: number
+  amount_usd?: number
+  description: string
+  subcategory?: string
+  supplier_name?: string
+  method: string
+  caja_origen: string
+  status?: 'aprobado' | 'pendiente'
+  account_id?: string | null
+  fecha?: string | null
+}): Promise<string> {
+  const ts = m.fecha ? `${m.fecha}T12:00:00Z` : new Date().toISOString()
+  const { data, error } = await supabase.from('cash_movements').insert({
+    session_id: null, created_by: m.created_by, movement_type: m.movement_type,
+    amount_crc: m.amount_crc, amount_usd: m.amount_usd ?? 0, currency: 'CRC',
+    description: m.description, subcategory: m.subcategory ?? '', supplier_name: m.supplier_name ?? '',
+    method: m.method, caja_origen: m.caja_origen, status: m.status ?? 'aprobado',
+    account_id: m.account_id ?? null, created_at: ts, updated_at: ts,
+  } as never).select('id').single()
+  if (error) throw new Error(error.message)
+  return (data as { id: string }).id
+}
+
 export async function deleteCashMovement(id: string): Promise<void> {
   const { error } = await supabase
     .from('cash_movements')

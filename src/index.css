@@ -21,6 +21,18 @@
 
   --radius:      2px;
   --transition:  150ms ease;
+
+  /* Tokens del sistema de diseño (paper/ink/gold/teal) — GLOBALES para que
+     CUALQUIER módulo los herede. .tips-module los redefine igual por compat. */
+  --t-paper:    #f5f0e8;
+  --t-panel:    #ede8de;
+  --t-border:   #d4cfc4;
+  --t-ink:      #0d0d0d;
+  --t-muted:    #8a8070;
+  --t-gold:     #c8a96e;
+  --t-teal:     #2a7a6a;
+  --t-teal-dim: rgba(42,122,106,0.13);
+  --t-red:      #c23b22;
 }
 
 *, *::before, *::after {

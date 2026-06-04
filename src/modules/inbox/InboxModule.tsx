@@ -15,6 +15,14 @@ import { fi } from '../cash/cashUtils'
 const ROLE_LABELS: Record<string, string> = { owner: 'Propietario', contador: 'Contador', manager: 'Encargado', cajero: 'Cajero' }
 const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 
+// Evita que una request colgada (token vencido / red) deje el botón en "Guardando…" para siempre.
+function withTimeout<T>(p: Promise<T>, ms = 15000): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error('Tiempo de espera agotado — recargá la app (sesión vencida) y reintentá.')), ms)),
+  ])
+}
+
 export default function InboxModule() {
   const { profile } = useAuth()
   const navigate = useNavigate()
@@ -58,10 +66,10 @@ export default function InboxModule() {
     setBusy('upload'); setError(null)
     try {
       const sha = await sha256File(file)
-      const dup = await findDuplicate(sha, null)
+      const dup = await withTimeout(findDuplicate(sha, null))
       if (dup) { setError('Este documento ya fue cargado (duplicado).'); setBusy(null); return }
-      const { doc } = await uploadDocument(file, profile.id, filename)
-      await extractDocument(doc)   // si la función no está desplegada, queda 'nuevo' para carga manual
+      const { doc } = await withTimeout(uploadDocument(file, profile.id, filename), 30000)
+      await extractDocument(doc)   // tiene su propio manejo de error; si falla queda 'nuevo' para carga manual
       await loadAll()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error procesando la imagen')
@@ -218,15 +226,15 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
       let movementId: string
       if (tipo === 'comprobante_pago' && candidato) {
         // Marcar el pendiente como pagado
-        await updateMovementStatus(candidato.id, 'aprobado')
+        await withTimeout(updateMovementStatus(candidato.id, 'aprobado'))
         movementId = candidato.id
       } else {
         // Factura (cuenta por pagar) o comprobante sin match → egreso directo
-        movementId = await insertInboxMovement({
+        movementId = await withTimeout(insertInboxMovement({
           created_by: createdBy,
           movement_type: 'egreso_mercaderia',
           amount_crc: N2(total),
-          description: prov || (tipo === 'factura' ? 'Factura' : 'Pago'),
+          description: ref ? `${prov || 'Factura'} · ${ref}` : (prov || (tipo === 'factura' ? 'Factura' : 'Pago')),
           subcategory: prov || '',
           supplier_name: prov || '',
           method: metodo,
@@ -234,9 +242,9 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
           status,
           account_id: accountId || null,
           fecha,
-        })
+        }))
       }
-      await setDocEstado(doc.id, 'procesado', movementId)
+      await withTimeout(setDocEstado(doc.id, 'procesado', movementId))
       onDone()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error al confirmar')

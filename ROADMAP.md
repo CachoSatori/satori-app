@@ -514,6 +514,45 @@ Fase 2B (Chatbot WhatsApp) ─────────┼──▶ Fase 3 (POS n
 
 ---
 
+---
+
+### FASE 2D — Pagos, conciliación e ingesta por foto · L  ◀ NUEVO (2026-06-04)
+
+Objetivo: **que no falte ningún pago** y que la operación pase de *digitar* a *confirmar*.
+Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya está en producción.
+
+#### ✅ Fase A — Correcciones de modelo (hecha, 2026-06-04)
+- **Retiro a banco = traspaso** (Caja Fuerte → Banco), fuera del P&L (antes `egreso_socios`).
+- **`egreso_socios` no alimenta el P&L** (retiros/distribución = equity). "Consumos Dueños" solo por carga manual del contador.
+- **Ingresos de caja selectos al P&L** (aceite/reciclaje/otros → cuenta nueva `otros_ingresos`, mig. 014). Ventas efectivo e "Ingreso de cambio" excluidos (no duplicar con POS / float).
+- **Cuenta contable explícita** `cash_movements.account_id` (mig. 015) + selector "Cuenta P&L" en Movimientos. `getLiveActuals` la usa si está; si no, mapea por subcategoría. Cierra el hueco de alquiler/patentes/lavandería/suscripciones/etc.
+- **Bitcoin** disponible como método de pago en proveedores (lista unificada `cashUtils.METODOS_PAGO`).
+
+#### 🟡 Fase A — Pendiente (cleanup de datos)
+- **Recategorizar histórico `egreso_socios`**: separar *deliverys* (repartidor externo → operativo `7100`/direct operating) de *retiros reales de socios*. ~105 movimientos importados bajo `egreso_socios`; requiere criterio del dueño/contador.
+- Separar Gerencia (`6100`) de Staff (`6200`) en `egreso_personal`.
+- Confirmar `caja_origen='Banco'` en compras por transferencia (PMT, guayafrut, Isleña, Pescados…) para que no toquen la caja física.
+- (Opcional) Retiro de dueños: que además **descuente de Caja Fuerte** al asentarse (hoy es traspaso a Banco; no reduce el saldo físico de CF automáticamente).
+
+#### 🔭 Fase B — Bandeja + ingesta IA (núcleo del salto de eficiencia)
+> La foto de una factura/comprobante (hoy va a un grupo de WhatsApp) entra a la app, la IA la lee y **rutea sola**; el humano confirma de un toque.
+- Tabla `documents` + bucket Storage `documents` con RLS (owner/manager/contador/cajero) + `suppliers.aliases[]`.
+- **Entrada de foto**: PWA **Share Target** (`manifest.share_target`, POST multipart `image/*`) → ruta `/inbox/share` que sube a Storage. Fallback: subida manual. Futuro: webhook WhatsApp Cloud API (Meta).
+- **Extracción IA de visión (Claude)**: imagen → JSON estricto (tipo, proveedor, fecha, moneda, totales, ítems, método, banco, referencia, `clave_fe` 50 díg. FE-CR, `cuenta_qb_sugerida`, confianza). Lee FE electrónica, tiquetes, capturas SINPE, comprobantes BAC/BN/Lafise, facturas físicas.
+- **Pantalla Bandeja**: lista de `documents` nuevos + tarjeta de confirmación pre-llenada → commit (nunca auto-commit).
+- **Anti-duplicado**: llave por `clave_fe`; si no, SHA-256 imagen + (proveedor, total, fecha).
+
+#### 🔭 Fase C — Auto-inventario + cuentas por pagar
+- **factura** → fuzzy-match proveedor (+ alias) · match ítems → `ingredientes` vía `product_map` → propone **entrada de inventario** · crea **cuenta por pagar** (`egreso_mercaderia` pendiente).
+- **comprobante_pago** → busca pendiente (proveedor + total±tol + fecha) → lo marca pagado (método, referencia, banco); si no hay match → egreso directo (resuelve pagos que no pasan por caja).
+
+#### 🔭 Fase D — Conciliación bancaria
+- Import del resumen bancario → cada línea matchea comprobante/pendiente (monto+fecha+referencia) → **conciliación automática**: marca pagados y detecta pagos sin comprobante.
+
+**Tablas/cambios pendientes:** `documents`, `suppliers.aliases[]`, bucket Storage. (`cash_movements.account_id` y `otros_ingresos` ya aplicados.)
+
+---
+
 ## 5. Matriz impacto / esfuerzo
 
 | Iniciativa | Impacto | Esfuerzo | Prioridad |
@@ -523,6 +562,7 @@ Fase 2B (Chatbot WhatsApp) ─────────┼──▶ Fase 3 (POS n
 | Fase 2 — Fidelización / CRM | Alto | L | ⭐ Alta (paralelo) |
 | Fase 2B — Chatbot WhatsApp | Alto | L | ⭐ Alta (paralelo) |
 | Fase 2 + 2B juntas | Muy alto | L | ✨ Sinergia máxima |
+| **Fase 2D — Pagos/conciliación + ingesta por foto** | **Muy alto** | **L** | **🔥 Alta (Fase A ✅; B/C/D pendientes)** |
 | Fase 3 — POS nativo | Muy alto | XL | 🧭 Estratégica |
 | Fase 3.6 — Factura electrónica | Crítico (legal) | L | 🧭 con POS |
 | Fase 4 — Canales | Alto | L | Después de POS |

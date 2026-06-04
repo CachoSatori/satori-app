@@ -1,7 +1,31 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> Última actualización: 2026-06-03 (Fase 1 completa · Fase 2.1/2.2/2.3/2.5 · overhaul de UI)
+> Última actualización: 2026-06-04 (Caja v2 · ledger real importado · ajuste apertura · Pendientes agrupados · Fase A finanzas)
+
+## 🆕 Novedades 2026-06-04
+
+### Caja v2 (rediseño operativo)
+- **Caja Diaria = solo proveedores** (se quitó "Registradora"; la maneja el PoS). Top cards y verificación del turno unificados en una sola caja física. Fondo inicial viene por carryover del cierre anterior.
+- **Cierre del turno**: solo pide efectivo ₡/$ (se quitaron Caja Fuerte y Depósito banco).
+- **Cierre del día**: efectivo real ₡ = ventas PoS ₡ − dólares al **TC configurable** (último de `exchange_rates`, editable, sellado en Fase 1). Único egreso = **propinas** + **retiro de dueños a banco**. Verificación de dólares. Bloqueado si hay un turno abierto. Genera movimientos de ventas en el ledger (Fase 3).
+- `cash_movements.session_id` nullable → movimientos a nivel día (ventas del cierre, retiros, importación).
+
+### Datos reales cargados (vía Management API)
+- **Ledger real importado**: 1234 movimientos (ene–jun 2026) verificados contra Excel (₡54.884.640 / $70.614). Sesiones placeholder "Importado histórico" por fecha para que el Resumen mensual los agrupe.
+- **Ajuste de apertura Caja Fuerte**: saldo real al 04/06 = **₡534.750 / $1.054** (egreso de ajuste por el histórico pre-2022 no capturado).
+- **Proveedores**: 39 activos de la planilla (upsert sin duplicar) + 14 deudas pendientes reales (₡641.904). Pendientes anteriores saldados por transferencia.
+- **Propinas mayo**: empleados duplicados fusionados (12 vacíos borrados); turnos faltantes pendientes de cargar (ver archivo `filas_faltantes_mayo`). MAXI reactivado (barman).
+
+### Propinas
+- **Estadísticas**: promedio de pool separado por turno (Prom. general / Prom. AM / Prom. PM) — los pools AM/PM son muy distintos y el promedio general distorsionaba.
+
+### Caja → Pendientes (vista nueva)
+- **Facturas agrupadas por proveedor** (fecha, turno, ₡/$, referencia/nota, total). Pagar **individual**, **seleccionar cuáles** (checkbox) o **marcar todos**. **Descargar comprobante PNG** (Canvas) de las seleccionadas o todas, para enviar al proveedor. A prueba de NaN.
+
+### Fase A finanzas (modelo de pagos/P&L) — ver ROADMAP Fase 2D
+- Retiro a banco = **traspaso** (fuera del P&L). `egreso_socios` ya no alimenta el P&L. **Ingresos de caja selectos** (aceite/reciclaje) → cuenta `otros_ingresos` (mig. 014). **`cash_movements.account_id`** (mig. 015) + selector "Cuenta P&L". **Bitcoin** en métodos de proveedor.
+- **Pendiente** (en ROADMAP): recategorizar histórico `egreso_socios` (deliverys vs retiros), separar gerencia/staff, y todo el sistema de **ingesta por foto** (Fases B/C/D).
 
 ## Stack & deploy
 - React 19 + TypeScript + Vite · Supabase (PostgreSQL + PostgREST + Auth + RLS) · PWA

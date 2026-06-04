@@ -15,19 +15,20 @@
  */
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
-import type { CashCierreDia } from '../../shared/types/database'
+import type { CashCierreDia, CashSession } from '../../shared/types/database'
 import { getCierresDia, saveCierreParcial, updateCierreCompleto } from '../../shared/api/cash'
 import { fi, todayStr } from './cashUtils'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
-interface Props { onRefresh: () => void }
+interface Props { onRefresh: () => void; openSession?: CashSession | null }
 
 function N(v: number | ''): number { return Number(v) || 0 }
 
-export default function CashCierre({ onRefresh }: Props) {
+export default function CashCierre({ onRefresh, openSession }: Props) {
   const { profile } = useAuth()
   const today       = todayStr()
+  const turnoAbierto = !!openSession  // no se puede cerrar el día con un turno abierto
 
   const [cierres,  setCierres]  = useState<CashCierreDia[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -102,6 +103,7 @@ export default function CashCierre({ onRefresh }: Props) {
 
   // ── Confirmar cierre parcial (Fase 1) ─────────────────────────
   const handleConfirmParcial = async () => {
+    if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
     if (!N(vmCRC) && !N(vmUSD)) { setError('Ingresá las ventas de mediodía'); return }
     setSaving(true); setError(null)
     try {
@@ -132,6 +134,7 @@ export default function CashCierre({ onRefresh }: Props) {
 
   // ── Confirmar cierre completo (Fase 2) ───────────────────────
   const handleConfirmCompleto = async () => {
+    if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
     if (!N(vnCRC) && !N(vnUSD)) { setError('Ingresá las ventas de noche'); return }
     if (totalContadoCRC === 0) { setError('Completá el conteo físico (separaciones)'); return }
     if (requiresAjuste && !ajusteMotivo.trim()) {
@@ -186,6 +189,12 @@ export default function CashCierre({ onRefresh }: Props) {
           onChange={e => setFecha(e.target.value)}
           style={{ background:'#1a1a1a', border:'1px solid #333', color:'var(--t-gold)', padding:'5px 10px', borderRadius:2, fontSize:'0.82rem' }} />
       </div>
+
+      {turnoAbierto && (
+        <div className="cd-warn" style={{ marginBottom:'1rem' }}>
+          ⚠ Hay un turno de caja abierto{openSession?.cajero_name ? ` (${openSession.cajero_name})` : ''}. Cerralo en <strong>Caja Diaria</strong> antes de hacer el cierre del día.
+        </div>
+      )}
 
       {/* Messages */}
       {error && (
@@ -271,7 +280,7 @@ export default function CashCierre({ onRefresh }: Props) {
                 </Field>
               </Row2>
               <button
-                onClick={handleConfirmParcial} disabled={saving}
+                onClick={handleConfirmParcial} disabled={saving || turnoAbierto}
                 style={{ width:'100%', marginTop:'0.75rem', padding:'0.75rem', fontSize:'0.82rem', fontWeight:700, borderRadius:2, cursor:'pointer', background:'rgba(200,169,110,.15)', color:'#c8a030', border:'1.5px solid #c8a030', display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem' }}>
                 💾 Confirmar cierre mediodía → sellar Fase 1
               </button>
@@ -436,7 +445,7 @@ export default function CashCierre({ onRefresh }: Props) {
 
               <button
                 onClick={handleConfirmCompleto}
-                disabled={saving || !N(vnCRC) || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())}
+                disabled={saving || turnoAbierto || !N(vnCRC) || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())}
                 style={{ width:'100%', padding:'0.875rem', fontSize:'0.82rem', fontWeight:800, letterSpacing:'0.1em', textTransform:'uppercase', borderRadius:2, cursor:'pointer', background:'rgba(74,154,106,.15)', color:'#4a9a6a', border:'2px solid #4a9a6a', display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem', opacity: saving ? 0.6 : 1 }}>
                 ✓ CONFIRMAR CIERRE DEL DÍA
               </button>

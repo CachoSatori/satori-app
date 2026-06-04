@@ -159,7 +159,7 @@ export default function CashModule() {
           />
         )}
         {tab === 'cierre' && (
-          <CashCierre onRefresh={loadAll} />
+          <CashCierre onRefresh={loadAll} openSession={openSession} />
         )}
         {tab === 'movimientos' && (
           <CashMovimientos

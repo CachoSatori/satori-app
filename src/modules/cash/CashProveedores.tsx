@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import { upsertSupplier, deactivateSupplier } from '../../shared/api/cash'
-import { fi, todayStr } from './cashUtils'
+import { fi, todayStr, METODOS_PAGO } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 
 const CATEGORIAS_PROV = [
@@ -301,7 +301,7 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
               <div className="tips-field">
                 <div className="tips-field-label">Método de pago</div>
                 <select className="tips-input-dark" value={form.metodo_pago} onChange={e => up('metodo_pago', e.target.value)}>
-                  {['Efectivo','Transferencia','SINPE','Ambos'].map(m => <option key={m}>{m}</option>)}
+                  {[...METODOS_PAGO, 'Ambos'].map(m => <option key={m}>{m}</option>)}
                 </select>
               </div>
               <div className="tips-field">

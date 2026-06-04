@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CashMovement, CashSession, MovementType } from '../../shared/types/database'
 import { updateCashMovement, deleteCashMovement } from '../../shared/api/cash'
+import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { todayCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, todayStr } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
@@ -27,6 +28,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const [estado,  setEstado]  = useState('')
   const [saving,  setSaving]  = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())  // selección múltiple para borrado masivo
+  // Cuentas contables (hojas) para asignar la cuenta del P&L por movimiento (FIX 4)
+  const [accounts, setAccounts] = useState<FinanceAccount[]>([])
+  useEffect(() => { getFinanceAccounts().then(a => setAccounts(a.filter(x => x.is_leaf))).catch(() => {}) }, [])
 
   const toggleSel = (id: string) => setSelected(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
@@ -222,13 +226,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               <th className="r">$</th>
               <th>Método</th>
               <th>Caja</th>
+              <th>Cuenta P&L</th>
               <th>Estado</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={12} style={{ textAlign: 'center', padding: '2rem', color: '#888', fontSize: '0.85rem' }}>
+              <tr><td colSpan={13} style={{ textAlign: 'center', padding: '2rem', color: '#888', fontSize: '0.85rem' }}>
                 Sin movimientos en el período
               </td></tr>
             )}
@@ -304,6 +309,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                     </select>
                   </td>
                   <td>
+                    <select className="cd-tbl-select" value={m.account_id ?? ''}
+                      onChange={e => handleFieldChange(m.id, 'account_id', e.target.value || null)}
+                      disabled={saving === m.id} title="Cuenta contable del P&L (opcional; si se deja vacío se mapea por subcategoría)">
+                      <option value="">— auto —</option>
+                      {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </td>
+                  <td>
                     <select className="cd-tbl-select"
                       style={{ fontWeight: 700, color: isPend ? '#c8a030' : '#4a7c59' }}
                       value={isPend ? 'Pendiente' : 'Pagado'}
@@ -328,7 +341,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                 <td className="r" style={{ color: totIngresos - totEgresos >= 0 ? '#7ec8a0' : '#c23b22', fontWeight: 800 }}>
                   {totIngresos - totEgresos >= 0 ? '+' : ''}{fi(totIngresos - totEgresos)}
                 </td>
-                <td colSpan={5}></td>
+                <td colSpan={6}></td>
               </tr>
             </tfoot>
           )}

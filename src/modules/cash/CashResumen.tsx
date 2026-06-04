@@ -32,14 +32,14 @@ export default function CashResumen({ movements, sessions }: Props) {
   const filteredSessionIds = useMemo(() => new Set(filteredSessions.map(s => s.id)), [filteredSessions])
 
   const filteredMovements = useMemo(() =>
-    movements.filter(m => filteredSessionIds.has(m.session_id) && m.status !== 'rechazado'),
+    movements.filter(m => filteredSessionIds.has(m.session_id ?? '') && m.status !== 'rechazado'),
   [movements, filteredSessionIds])
 
   // ── Totals ──────────────────────────────────────────────────
   const totalIngresos  = filteredMovements.filter(m => m.movement_type === 'ingreso').reduce((s, m) => s + m.amount_crc, 0)
   const totalEgresos   = filteredMovements.filter(m => isEgreso(m.movement_type as MovementType)).reduce((s, m) => s + m.amount_crc, 0)
   const resultado      = totalIngresos - totalEgresos
-  const totalPendiente = movements.filter(m => filteredSessionIds.has(m.session_id) && m.status === 'pendiente').reduce((s, m) => s + m.amount_crc, 0)
+  const totalPendiente = movements.filter(m => filteredSessionIds.has(m.session_id ?? '') && m.status === 'pendiente').reduce((s, m) => s + m.amount_crc, 0)
 
   // By movement type
   const byType: Record<string, { crc: number; usd: number }> = {}
@@ -78,7 +78,7 @@ export default function CashResumen({ movements, sessions }: Props) {
   const monthlyTrend = useMemo(() => {
     return availableMonths.slice(0, 6).map(ym => {
       const monthSessions = new Set(sessions.filter(s => s.session_date?.startsWith(ym)).map(s => s.id))
-      const monthMovs = movements.filter(m => monthSessions.has(m.session_id) && m.status !== 'rechazado')
+      const monthMovs = movements.filter(m => monthSessions.has(m.session_id ?? '') && m.status !== 'rechazado')
       const ing = monthMovs.filter(m => m.movement_type === 'ingreso').reduce((s, m) => s + m.amount_crc, 0)
       const egr = monthMovs.filter(m => isEgreso(m.movement_type as MovementType)).reduce((s, m) => s + m.amount_crc, 0)
       return { ym, ing, egr, neto: ing - egr }

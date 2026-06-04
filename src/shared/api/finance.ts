@@ -94,9 +94,23 @@ function mapCashToAccount(type: string, subcat: string): string | null {
     case 'egreso_mercaderia': return 'a5200'           // Food Costs
     case 'egreso_operativo':  return 'a7120'           // Insumos operativos (catch-all)
     case 'egreso_personal':   return 'a6200'           // Staff Wages
-    case 'egreso_socios':     return 'consumos_duenos' // Consumos Dueños
+    // egreso_socios: retiros/distribución de socios = equity, NO gasto del P&L.
+    // "Consumos Dueños" (costo de producto) lo carga el contador a mano vía
+    // finance_actuals; no se alimenta automáticamente desde caja.
+    case 'egreso_socios':     return null
     default:                  return null
   }
+}
+
+// Subcategoría de un INGRESO de caja → cuenta de ingreso del P&L.
+// Solo ingresos reales: aceite/reciclaje/otros. Excluye explícitamente las
+// ventas en efectivo (ya entran por el POS, evitar doble conteo) y el
+// "Ingreso de cambio" (float, no es venta).
+function mapCashIncomeToAccount(subcat: string): string | null {
+  const s = norm(subcat)
+  if (/venta(s)? efectivo|ingreso de cambio|cambio/.test(s)) return null
+  if (/aceite|reciclaj|otros ingreso|chatarra|reembolso/.test(s)) return 'otros_ingresos'
+  return null
 }
 
 export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
@@ -106,7 +120,7 @@ export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
       .select('session_date, data')
       .gte('session_date', from).lte('session_date', to),
     supabase.from('cash_movements' as never)
-      .select('movement_type, subcategory, amount_crc, status, created_at')
+      .select('movement_type, subcategory, amount_crc, status, created_at, account_id')
       .gte('created_at', `${from}T00:00:00Z`).lte('created_at', `${to}T23:59:59Z`),
   ])
 
@@ -130,14 +144,26 @@ export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
     add('ventas_delivery', month, delivery)
   }
 
-  // Egresos de Caja → cuentas del P&L por subcategoría (mapeo fino)
-  for (const m of (cashRes.data ?? []) as Array<{ movement_type: string; subcategory: string; amount_crc: number; status: string; created_at: string }>) {
+  // Movimientos de Caja → cuentas del P&L
+  for (const m of (cashRes.data ?? []) as Array<{ movement_type: string; subcategory: string; amount_crc: number; status: string; created_at: string; account_id: string | null }>) {
     if (m.status === 'rechazado') continue
-    if (!String(m.movement_type).startsWith('egreso')) continue
-    const acc = mapCashToAccount(m.movement_type, m.subcategory)
-    if (!acc) continue   // null = excluido (propinas pass-through)
     const month = Number(m.created_at.slice(5, 7))
-    add(acc, month, Number(m.amount_crc) || 0)
+    const amount = Number(m.amount_crc) || 0
+    const type = String(m.movement_type)
+
+    // Cuenta contable explícita → manda sobre cualquier mapeo (FIX 4)
+    if (m.account_id) { add(m.account_id, month, amount); continue }
+
+    if (type.startsWith('egreso')) {
+      const acc = mapCashToAccount(type, m.subcategory)
+      if (acc) add(acc, month, amount)          // null = excluido (propinas, retiros socios)
+    } else if (type === 'ingreso') {
+      // Ingresos de caja SELECTOS al P&L (aceite/reciclaje/otros). Ventas
+      // efectivo e "Ingreso de cambio" quedan excluidos para no duplicar.
+      const acc = mapCashIncomeToAccount(m.subcategory)
+      if (acc) add(acc, month, amount)
+    }
+    // traspaso / ajuste → fuera del P&L
   }
 
   return Object.values(cells)

@@ -237,9 +237,11 @@ export async function recordCierreSales(params: {
   if (error) throw new Error(error.message)
 }
 
-// Registra (idempotente) el retiro de dueños a banco de un Cierre del día como
-// egreso a nivel día. Es el único egreso administrativo del cierre además de
-// propinas. Borra el previo del mismo día antes de re-crear.
+// Registra (idempotente) el retiro de dueños a banco de un Cierre del día.
+// NO es un gasto: es un TRASPASO de efectivo de Caja Fuerte al Banco (para luego
+// pagar transferencias/servicios). Por eso movement_type='traspaso' y queda
+// FUERA del P&L (getLiveActuals solo procesa egreso*). Borra el previo del
+// mismo día antes de re-crear.
 export async function recordCierreRetiro(params: {
   session_date:  string
   created_by:    string
@@ -252,13 +254,13 @@ export async function recordCierreRetiro(params: {
   const { error } = await supabase.from('cash_movements').insert({
     session_id:    null,
     created_by:    params.created_by,
-    movement_type: 'egreso_socios',
+    movement_type: 'traspaso',
     amount_crc:    params.amount_crc,
     amount_usd:    0,
     currency:      'CRC',
     exchange_rate: params.exchange_rate,
     description:   desc,
-    subcategory:   'Retiro de socios',
+    subcategory:   'Caja Fuerte → Banco',
     supplier_id:   null,
     supplier_name: '',
     employee_name: '',

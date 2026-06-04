@@ -109,7 +109,7 @@ export interface CashSession {
 
 export interface CashMovement {
   id: string
-  session_id: string
+  session_id: string | null         // null = movimiento a nivel día (sin turno)
   created_by: string
   movement_type: MovementType
   amount_crc: number
@@ -127,6 +127,7 @@ export interface CashMovement {
   status: MovementStatus
   approved_by: string | null
   approved_at: string | null
+  account_id: string | null         // cuenta contable explícita del P&L (FIX 4)
   created_at: string
   updated_at: string
 }

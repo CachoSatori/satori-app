@@ -60,6 +60,8 @@ const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[�
 // Subcategoría de Caja → cuenta del P&L. Devuelve null para EXCLUIR (ej. propinas pass-through).
 function mapCashToAccount(type: string, subcat: string): string | null {
   const s = norm(subcat)
+  // Ajustes de caja (ej. ajuste de apertura) → no son gasto real del negocio
+  if (/ajuste/.test(s)) return null
   // Propinas por tarjeta/SINPE: el cliente las pagó y se entregan al staff → NO es gasto del P&L
   if (/\btips?\b|propina/.test(s)) return null
   // Por palabra clave de subcategoría (lo que calza claro)

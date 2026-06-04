@@ -12,6 +12,7 @@ import {
 import { fi, fd, todayStr } from './cashUtils'
 import { tipShiftToCaja } from '../../shared/utils'
 import { getActiveEmployees } from '../../shared/api/tips'
+import { getCurrentRate } from '../../shared/api/exchangeRate'
 import type { Employee } from '../../shared/types/database'
 
 interface Props {
@@ -71,7 +72,9 @@ export default function CashTurno({
   useState(() => { getActiveEmployees().then(setEmployees).catch(() => {}) })
   const [apProvCRC,  setApProvCRC]  = useState<number | ''>(0)   // fondo de la Caja Diaria (proveedores)
   const [apUSD,      setApUSD]      = useState<number | ''>(0)
-  const [tc,         setTc]         = useState<number>(640)       // tipo de cambio USD→CRC
+  const [tc,         setTc]         = useState<number>(640)       // tipo de cambio USD→CRC (del módulo Admin)
+  // TC por defecto = el configurado en Admin (exchange_rates). Editable.
+  useEffect(() => { getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {}) }, [])
   const [saving,       setSaving]       = useState(false)
   const [carryFrom,  setCarryFrom]  = useState<string | null>(null) // fecha del cierre que asignó el fondo
 

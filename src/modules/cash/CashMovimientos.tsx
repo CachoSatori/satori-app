@@ -3,7 +3,7 @@ import type { CashMovement, CashSession, MovementType } from '../../shared/types
 import { updateCashMovement, deleteCashMovement } from '../../shared/api/cash'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { todayCR } from '../../shared/utils'
-import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, todayStr } from './cashUtils'
+import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 
 interface Props {
@@ -74,11 +74,29 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     .reduce((s, m) => s + m.amount_crc, 0)
   const cfSaldo = cfEntradas - cfSalidas - cfTraspasosOut
 
+  // Caja Fuerte en DÓLARES (mismo criterio, sobre amount_usd)
+  const cfCF = (pred: (m: CashMovement) => boolean) =>
+    movements.filter(m => m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente' && pred(m)).reduce((s, m) => s + (m.amount_usd || 0), 0)
+  const cfSaldoUSD = cfCF(m => m.movement_type === 'ingreso')
+    - cfCF(m => isEgreso(m.movement_type as MovementType))
+    - cfCF(m => m.movement_type === 'traspaso')
+
   const pendTotal = movements.filter(m => m.status === 'pendiente').reduce((s, m) => s + m.amount_crc, 0)
   const pendCount = movements.filter(m => m.status === 'pendiente').length
 
-  const totIngresos = filtered.filter(m => m.movement_type === 'ingreso').reduce((s, m) => s + m.amount_crc, 0)
-  const totEgresos  = filtered.filter(m => isEgreso(m.movement_type as MovementType)).reduce((s, m) => s + m.amount_crc, 0)
+  // Ajustes (de siempre): movimientos marcados como ajuste — ej. el ajuste de
+  // apertura. No son ingreso/egreso real del negocio, por eso van aparte.
+  const isAjuste = (m: CashMovement) => /ajuste/i.test(m.subcategory || '') || /ajuste/i.test(m.description || '')
+  // Solo ajustes de balance reales (ingreso/egreso); los traspasos "Ajuste" del
+  // import son float de registradora y no cuentan como balance de ajustes.
+  const ajusteMovs = movements.filter(m => isAjuste(m) && m.status !== 'rechazado' && m.movement_type !== 'traspaso')
+  const ajustesNet = ajusteMovs.reduce((s, m) => s + (m.movement_type === 'ingreso' ? m.amount_crc : isEgreso(m.movement_type as MovementType) ? -m.amount_crc : 0), 0)
+  const ajustesCount = ajusteMovs.length
+
+  // Ingresos/Egresos del período EXCLUYEN los ajustes (para que reflejen
+  // actividad real del negocio, no la reconciliación de apertura).
+  const totIngresos = filtered.filter(m => m.movement_type === 'ingreso' && !isAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
+  const totEgresos  = filtered.filter(m => isEgreso(m.movement_type as MovementType) && !isAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
 
   // ── Actions ──────────────────────────────────────────────
   const handleFieldChange = useCallback(async (id: string, field: string, value: unknown) => {
@@ -155,6 +173,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         <div className={`cd-saldo-card ${cfSaldo < 0 ? 'red' : ''}`} style={{ borderLeftColor: '#c8a96e' }}>
           <div className="cd-saldo-label">Caja Fuerte</div>
           <div className={`cd-saldo-val ${cfSaldo < 0 ? 'red' : ''}`}>{fi(cfSaldo)}</div>
+          {cfSaldoUSD !== 0 && <div style={{ fontSize: '13px', color: '#3a7bd5', fontFamily: "'DM Mono', monospace", marginTop: '2px' }}>{fd(cfSaldoUSD)}</div>}
         </div>
         <div className="cd-saldo-card" style={{ borderLeftColor: pendTotal > 0 ? '#c8a030' : '#444' }}>
           <div className="cd-saldo-label">Pend. Transferencia</div>
@@ -170,6 +189,13 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         <div className="cd-saldo-card" style={{ borderLeftColor: '#c0392b' }}>
           <div className="cd-saldo-label">Egresos (período)</div>
           <div className="cd-saldo-val" style={{ color: '#c0392b' }}>{fi(totEgresos)}</div>
+        </div>
+        <div className="cd-saldo-card" style={{ borderLeftColor: '#8a7a4a' }}>
+          <div className="cd-saldo-label">Ajustes</div>
+          <div className="cd-saldo-val" style={{ color: ajustesNet < 0 ? '#c0392b' : ajustesNet > 0 ? '#27874f' : '#555', fontSize: ajustesCount ? '17px' : '13px' }}>
+            {ajustesCount ? `${ajustesNet >= 0 ? '+' : ''}${fi(ajustesNet)}` : 'Sin ajustes'}
+          </div>
+          {ajustesCount > 0 && <div style={{ fontSize: '9px', color: '#888', marginTop: '3px' }}>{ajustesCount} registro{ajustesCount !== 1 ? 's' : ''}</div>}
         </div>
       </div>
 

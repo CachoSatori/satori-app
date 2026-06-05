@@ -12,8 +12,11 @@ const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string
  * localStorage ni reemplaza la sesión del cajero logueado).
  */
 async function verifyManager(email: string, password: string): Promise<boolean> {
+  // storageKey propio: aísla este cliente del principal para no compartir el
+  // namespace de localStorage ni el nombre del lock de refresh de token (evita
+  // el warning "Multiple GoTrueClient instances" y la contención del lock).
   const tmp = createClient(URL, ANON, {
-    auth: { persistSession: false, autoRefreshToken: false },
+    auth: { persistSession: false, autoRefreshToken: false, storageKey: 'sb-satori-manager-override' },
   })
   try {
     const { data, error } = await tmp.auth.signInWithPassword({ email: email.trim(), password })

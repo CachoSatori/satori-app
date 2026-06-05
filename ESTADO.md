@@ -4,7 +4,7 @@
 > Última actualización: 2026-06-04 (Caja v2 · ledger real · Fase A finanzas · Bandeja IA multi-doc desplegada)
 
 ## 🧹 Auditoría de limpieza (rama `audit/cleanup-nocturna`, sin mergear)
-Auditoría nocturna autónoma: el proyecto está sano (TS strict sin `any`/`ts-ignore`, sin `console.log`, sin TODOs). Cambios seguros aplicados en rama aparte (NO en main, sin tocar la base): −3 deps sin uso (Capacitor x2, date-fns), `@types/dompurify` a devDeps, removidos 2 exports muertos + dedup del formateador `fi` en 3 módulos no-financieros. **Caja/Propinas/Finanzas intactos** (diff vacío). Documentado para hacer con supervisión: regenerar tipos Supabase (151 `as never`), unificar `ROLE_LABELS` (×8), causa raíz del hang de token. Detalle en `AUDITORIA.md` y `RESUMEN-MAÑANA.md`.
+Auditoría nocturna autónoma (Pase 1 + Pase 2), rama aparte, sin tocar la base (excepto generar tipos read-only). Aplicado seguro: −4 deps sin uso, exports muertos, dedup de `fi`/`ROLE_LABELS`(8→1)/helper day-level. **Titular A:** tipos Supabase regenerados del esquema vivo → `as never` **151→2** (los 2 son bug-candidatos documentados en Caja). **Titular B:** RCA del "se queda pensando" en `HANG-RCA.md` (refresh de token frágil) + fix seguro (storageKey propio del cliente de ManagerOverride) + diseño de fondo para aprobar. Caja/Propinas sin cambio de cálculo. Detalle: `AUDITORIA.md`, `HANG-RCA.md`, `RESUMEN-MAÑANA.md`.
 
 ## 🆕 Novedades 2026-06-04
 

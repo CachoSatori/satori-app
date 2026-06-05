@@ -96,3 +96,71 @@ Patrón `.from('tabla' as never)` / `.insert({...} as never)` porque el tipo `Da
 
 ## Bugs encontrados
 - Ninguno **inequívoco** que rompa cálculos. El proyecto está sano (TS strict sin `any`, sin `console.log`, sin TODOs). El único riesgo operativo conocido es el **hang del refresh de token** (ya mitigado con timeouts), no un bug de lógica.
+
+---
+
+# PASE 2 — Profundidad (los dos titulares + checklist)
+
+## Números reales (antes Pase 1 → después Pase 2)
+| Métrica | Pase 1 (baseline) | Pase 2 (final) |
+|---|---|---|
+| `as never` (capa de datos sin tipar) | **151** | **2** (solo 2 bug-candidatos documentados) |
+| dependencies | 12 | **8** |
+| errores `tsc --noEmit` (strict) | 0 | 0 |
+| Tipos Supabase | hechos a mano, 8 tablas (drift) | **generados del esquema vivo, 30+ tablas** |
+| LOC hand-written (excl. `supabase.gen.ts`) | 24.834 | 24.757 |
+| `supabase.gen.ts` (autogenerado) | — | 1.524 (no se mantiene a mano) |
+
+> **Bundle:** el trabajo de tipos es 100% compile-time → **el bundle runtime no cambia** (sería deshonesto afirmar "más liviano" por esto). El peso real se redujo en *dependencias* (−4) y *código duplicado* (ROLE_LABELS ×8→1, `fi` ×3, helper day-level ×2→1, exports muertos). Chunks grandes siguen siendo `index` (~458 KB) y `VentasHistorico`/`VentasXLS` (~351 KB c/u) dominados por `xlsx` + `recharts` (ya lazy por ruta) — optimización documentada, no aplicada.
+
+## TITULAR A — Tipos de Supabase: triage de la regeneración
+Se generó `supabase.gen.ts` (introspección read-only) y se cableó el cliente. Se quitaron los `as never` **archivo por archivo, build+tsc entre cada uno**. Resultado del triage:
+
+| Categoría | Qué pasó | Cantidad |
+|---|---|---|
+| **(b) tipo viejo resuelto limpio** | el tipo generado valida el insert/update/select sin error → se aplicó la remoción | **148** |
+| **(c) cast preciso** | `CashMovimientos.tsx:146` `{[field]:value}` → `as Partial<CashMovement>` (en vez de `as never`) | **1** |
+| **(a) bug candidato — NO tocado** | `CashTurno.tsx` `onMovAdded({...pago} as never)` ×2: se pasa un **`PagoRow` como `CashMovement`** solo para forzar refresh → inyecta un objeto que no es un movimiento en `allMovements`. Dejado con `// TODO(types)` (cambiar = comportamiento de Caja). | **2** |
+
+**Hallazgo de fondo (tranquilizador):** la regeneración **no destapó ningún drift de esquema** — todas las columnas/tipos que usa el código (incl. Caja y Propinas) **coinciden con la base viva**. El único problema real escondido por un `as never` fue el hack de `onMovAdded` (lógica, no esquema).
+
+## TITULAR B — "Se queda pensando": ver `HANG-RCA.md`
+Causa raíz confirmada (no es lentitud): refresh de token que se cuelga, en un setup frágil (lock no-op sin timeout + 2º GoTrueClient compartiendo namespace + escritura justo al volver de segundo plano). **Aplicado seguro:** `storageKey` propio para el cliente temporal de ManagerOverride (elimina el warning "Multiple GoTrueClient instances" y la contención de lock). **Diseño de fondo** (refresco proactivo en foco, revisar el no-op lock, mover la verificación de manager a una RPC server-side, AbortController) documentado para aprobación — NO aplicado a ciegas. El timeout-wrapper queda como red de última instancia, no como cura.
+
+## TITULAR C — `ROLE_LABELS`: tabla comparativa
+Los 8 lugares y su valor por rol (extraído del código):
+
+| Rol | Home | CashModule | Inbox | MisProp | UserAppr | RolePts | EmpHours | EmpList |
+|---|---|---|---|---|---|---|---|---|
+| owner | Propietario | Propietario | Propietario | — | Propietario | Propietario | — | Propietario |
+| contador | Contador | Contador | Contador | — | Contador | Contador | — | Contador |
+| manager | Encargado | Encargado | Encargado | Encargado | Encargado | Encargado | Encargado | Encargado |
+| cajero | Cajero | Cajero | Cajero | Cajero | Cajero | Cajero | Cajero | Cajero |
+| salonero | Salonero | — | — | Salonero | Salonero | Salonero | Salonero | Salonero |
+| barman/barback/runner/cocina | iguales | — | — | iguales | iguales | iguales | iguales | iguales |
+
+**Veredicto:** los valores **NO divergen** — cada rol muestra la misma etiqueta en todos lados. La única diferencia era qué subconjunto de roles incluía cada copia (con fallback `?? role`). Por eso fue **seguro unificar** a `shared/constants.ts` (8 copias → 1, cero cambio visible). ✅ aplicado.
+
+## TASK 4 — Checklist cerrada ítem por ítem
+- **CSS muerto/duplicado/tokens:** 🟡 *parcialmente auditado.* `index.css` = 4.621 líneas, ~514 clases. No se encontró duplicación obvia en muestreo, pero **la detección exhaustiva de clases sin uso no se hizo** (requiere cruzar cada `className` del JSX, propenso a falsos negativos por clases dinámicas). Recomendado: herramienta de cobertura CSS con supervisión. No tocado (riesgo de borrar clases usadas dinámicamente).
+- **Bundle / code-splitting / libs duplicadas:** ✅ *auditado.* Code-splitting por ruta ya existe (50 chunks lazy). No hay libs redundantes (`xlsx`, `recharts`, `qrcode`, `dompurify` cada una con un único propósito; `date-fns`/`@capacitor` ya removidas). Chunks grandes = `xlsx`+`recharts`, esperable; optimización (cargar `xlsx` solo al importar XLS) documentada, no aplicada.
+- **Queries secuenciales / N+1:** ✅ *auditado.* `HomePage.fetchHomeStatus` usa `Promise.allSettled` (bien). `commitInventoryForDocument` hace awaits secuenciales por línea de factura (N chico, independientes) → se podría `Promise.all`, bajo impacto; documentado. No hay N+1 grave.
+- **Re-renders evitables:** ✅ *auditado.* Uso de `useMemo`/`useCallback` razonable; no se detectó sobre-render costoso que justifique tocar. `useAuth.onAuthStateChange` re-dispara `loadProfile` en cada refresh/foco (ver HANG-RCA) — es el único re-fetch llamativo, ligado al titular B.
+- **Solapamiento alta manual vs Bandeja:** ✅ *auditado y corregido.* `insertInboxMovement` (Bandeja) y `createDayMovement` (alta manual) eran inserts day-level casi idénticos → ahora `insertInboxMovement` **delega** en `createDayMovement` (una sola fuente, no pueden divergir). ✅ aplicado.
+- **RLS por tabla/rol:** 🟡 *documentado desde migraciones* (no se consultó la DB viva más allá de la generación de tipos). Las RLS viven en migs 010-017 (sops, ventas/exchange, cajero operativo, documents, inventory). Patrón consistente vía `get_my_role()`. Inconsistencia menor ya conocida: algunas tablas legacy tienen policies `authenticated`-amplias en lectura. Revisar con el contador; no tocado.
+- **Migraciones vs DB viva:** ✅ *auditado.* Numeración 001→017 **sin huecos**. La `003` (cron emails) figura redundante/aplicada aparte. Varias migraciones (013-017) se aplicaron por Management API y el repo las refleja. La generación de tipos confirmó que el esquema vivo tiene todas las tablas esperadas. No se migra nada.
+
+## Commits del Pase 2 (rama `audit/cleanup-nocturna`)
+`chore(types): generar tipos Supabase` · `refactor(types): cliente usa Database generado` · `refactor(types): documents/inventoryIngest/shared-api/cash/tips/componentes/Caja sin as never` (varios) · `fix(auth): storageKey propio ManagerOverride` · `refactor: unificar ROLE_LABELS (8→1)` · `refactor: insertInboxMovement delega en createDayMovement`.
+
+## Matriz Pase 2 (severidad × riesgo × acción)
+| Hallazgo | Sev | Riesgo | Acción |
+|---|---|---|---|
+| Capa de datos sin tipar (151 `as never`) | **alta** | medio | ✅ resuelto (151→2) con tipos generados |
+| Hang de refresh de token | **alta** | alto (fix de fondo) | 🟡 mitigado (storageKey) + 📋 diseñado (HANG-RCA) |
+| `onMovAdded(PagoRow)` (bug candidato Caja) | media | alto (sagrado) | 📋 documentado, TODO(types) |
+| `ROLE_LABELS` ×8 | media | bajo (valores idénticos) | ✅ unificado |
+| `insertInboxMovement`/`createDayMovement` dup | media | bajo | ✅ unificado |
+| Chunks grandes (xlsx/recharts) | baja | medio | 📋 documentado |
+| Clases CSS sin uso | baja | medio (dinámicas) | 📋 documentado, no tocado |
+| RLS legacy amplia en lectura | baja | alto (auth) | 📋 documentado, no tocado |

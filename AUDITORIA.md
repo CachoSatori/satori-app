@@ -195,7 +195,43 @@ válido es **`npm run build`** (`tsc -b && vite build`).
 **Lección (queda escrita):** toda afirmación de "verde" va con el output real del build pegado.
 `tsc --noEmit` sobre el tsconfig raíz NO es un gate.
 
-**Antes de mergear esta rama:** reconciliar `savePayouts` de `tips.ts` con `main` — en `main`
-es un **UPDATE por id** (fix de prod del NOT NULL `session_id`); en esta rama quedó como
-`upsert` (solo se le quitó el `[]` y se le puso el cast). Si se mergea tal cual, reintroduce
-el bug de producción de Propinas. (Ver también la nota inline en `tips.ts:savePayouts`.)
+## ✅ RECONCILIACIÓN CON `main` — HECHA (commit `37f7ee2`)
+
+La rama se mergeó con `origin/main` (`d1b56f2`), trayendo los 2 hotfixes de producción de
+Propinas que faltaban. Criterio aplicado: **`main` gana en TODO lo de comportamiento.**
+
+- **`savePayouts` (tips.ts):** ahora es el **UPDATE por id** de `main` (fix prod del NOT NULL
+  `session_id`). NO se volvió al `upsert`. Único cambio de la rama encima: se quitó el `as never`
+  (el cliente tipado generado acepta el `.update` sin cast).
+- **Verificación/conteo de pool:** **quitada** (como `main`). No revivió.
+- **Limpieza de tipos re-aplicada encima:** los `as never` de `tips.ts` (×7) quedaron eliminados
+  apoyándose en los tipos generados; `MisPropinas.tsx` usa el `ROLE_LABELS` compartido (valores
+  idénticos a la copia local que tenía).
+
+**PRUEBA de que Propinas NO cambió de runtime** — `git diff origin/main -- src/modules/tips src/shared/api/tips.ts`
+es **solo tipos/imports/formato, CERO lógica**:
+- `tips.ts`: únicamente remoción de `as never` (×7). `savePayouts` UPDATE idéntico a `main`.
+- `MisPropinas.tsx`: constante local `ROLE_LABELS` → `import { ROLE_LABELS } from '../../shared/constants'`
+  (mismos valores para salonero/barman/barback/runner/cocina/cajero/manager → cero cambio visible).
+
+**Build (gate real) tras reconciliar:** `npm run build` → `BUILD_EXIT=0`, **0 errores TS**, `vite build` OK.
+`as never` global = **2** (los documentados de Caja).
+
+## Pendientes (estado tras la reconciliación)
+- **Hang de refresh de token:** mitigado (storageKey propio del cliente de ManagerOverride, ya
+  aplicado). El fix de fondo (refresco proactivo en foco, revisar el lock no-op, RPC server-side,
+  AbortController) **cambia comportamiento → NO aplicado**, diseñado en `HANG-RCA.md` para aprobación.
+- **Bug-candidato de Caja (`onMovAdded` con `PagoRow`, ×2 `as never`):** confirmado — `handleMovAdded`
+  hace `setAllMovements(prev => [m, ...prev])`, así que pasarle un `PagoRow` tras un delete inyecta un
+  objeto-fantasma en `allMovements`. El fix limpio sería usar `onRefresh` (`loadAll`, re-fetch completo),
+  pero **cambia comportamiento** (re-fetch + estado de carga) en módulo sagrado → **NO aplicado**, queda
+  con `TODO(types)` para que lo decida el dueño.
+- **Export muerto `updateTipSessionNotes` (tips.ts):** quedó sin llamadores tras quitar la verificación
+  en `main`. NO se remueve (tips.ts congelado + mantendría limpio el diff de Propinas). Limpieza futura
+  fuera del freeze.
+- **CSS sin uso / RLS legacy / migraciones-vs-DB:** documentados arriba; no se tocan (riesgo / fuera de alcance).
+
+## Para el dueño (pasos manuales, NO automatizados)
+1. **Revocar el token de Supabase** usado para generar tipos (si sigue activo).
+2. **Mergear esta rama a `main`** — es el gate de producción, lo aprieta el dueño. La rama ya contiene
+   `main` + la limpieza encima, build verde, Propinas demostrablemente intacta.

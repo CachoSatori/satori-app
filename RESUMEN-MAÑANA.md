@@ -2,6 +2,8 @@
 
 **Rama:** `audit/cleanup-nocturna` (pusheada · NO está en producción · NO se tocó la base de datos). Revisás y mergeás vos.
 
+> ✅ **Reconciliada con `main` (`d1b56f2`)** — commit de merge `37f7ee2`. Ya contiene los 2 hotfixes de Propinas de producción (`savePayouts` UPDATE por id + verificación de pool quitada). **Propinas quedó EXACTAMENTE como en `main`**: el diff de `src/modules/tips` + `tips.ts` vs `main` es **solo tipos/imports/formato, cero lógica** (probado). Build real verde (`npm run build` exit 0, 0 errores). Lista para merge de un clic.
+
 ## Los dos titulares (que en el Pase 1 quedaron flojos)
 
 ### 1. Tipos de Supabase — RESUELTO ✅
@@ -27,7 +29,7 @@ Encontré la **causa raíz** (en `HANG-RCA.md`): no es lentitud — es el **refr
 > Aclaración honesta: el **bundle (peso que descarga el navegador) NO bajó** con el trabajo de tipos (es compile-time). Lo que bajó es deuda de código y dependencias. El peso del navegador lo dominan `xlsx` y `recharts` (ya se cargan solo cuando hacen falta) — optimizarlo más queda documentado.
 
 ## Decisiones que quedan para vos
-1. **Mergear la rama** a `main` — ahora sí compila con el gate real (`npm run build` verde, 0 errores) y Caja/Propinas sin cambios de cálculo. **OJO antes de mergear:** reconciliar `savePayouts` de `tips.ts` con `main` — en `main` es un UPDATE por id (fix de prod del NOT NULL `session_id`); en esta rama quedó como `upsert`, y mergear tal cual reintroduciría ese bug de Propinas. (Detalle en ERRATA de `AUDITORIA.md`.)
+1. **Mergear la rama** a `main` — ya reconciliada con `main` (`37f7ee2`): compila con el gate real (`npm run build` verde, 0 errores), contiene los 2 hotfixes de Propinas, y el diff de Propinas vs `main` es solo tipos/imports (cero lógica, probado). Es el último paso manual (gate de producción). + **Revocar el token de Supabase** si sigue activo.
 2. El **bug candidato de Caja** (`onMovAdded` con un dato que no es movimiento): decidir si lo arreglamos (cambia un detalle interno de Caja).
 3. El **fix de fondo del "se queda pensando"**: aprobar el diseño de `HANG-RCA.md` para implementarlo y probarlo juntos.
 

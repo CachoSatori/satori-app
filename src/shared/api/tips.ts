@@ -1,5 +1,8 @@
 import { supabase } from './supabase'
 import type { TipSession, TipEntry, Employee, RoleTipPoints } from '../types/database'
+import type { Database } from '../types/supabase.gen'
+
+type TipEntryInsert = Database['public']['Tables']['tip_entries']['Insert']
 
 // ── Sesiones ────────────────────────────────────────────────
 
@@ -142,7 +145,11 @@ export async function savePayouts(
   const { error } = await supabase
     .from('tip_entries')
     .upsert(
-      entries.map(e => ({ id: e.id, points: e.points, payout_crc: e.payout_crc }))[],
+      // upsert parcial (sólo points/payout_crc): no satisface el Insert completo
+      // de tip_entries (employee_id, hours_worked, etc. son requeridos), por eso
+      // el cast vía unknown. NOTA: en `main` esto es un UPDATE por id (fix prod del
+      // NOT NULL session_id); reconciliar antes de mergear esta rama.
+      entries.map(e => ({ id: e.id, points: e.points, payout_crc: e.payout_crc })) as unknown as TipEntryInsert[],
       { onConflict: 'id' },
     )
   if (error) throw new Error(error.message)

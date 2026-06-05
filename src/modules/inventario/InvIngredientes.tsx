@@ -41,7 +41,7 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
 
   function startEdit(ing: Ingredient) { setEditId(ing.id); setForm({ ...ing }); setError(null) }
   function startNew()                  { setEditId(null);   setForm({ ...EMPTY }); setError(null) }
-  function cancelEdit()                { setEditId(undefined); setForm(EMPTY); setError(null) }
+  function cancelEdit()                { setEditId(null); setForm(EMPTY); setError(null) }
 
   async function handleSave() {
     if (!form.name?.trim()) { setError('El nombre es obligatorio'); return }

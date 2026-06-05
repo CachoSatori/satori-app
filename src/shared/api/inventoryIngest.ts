@@ -65,8 +65,8 @@ async function upsertSupplierItemMap(m: Omit<SupplierItemMap, 'id'>): Promise<vo
   // Match manual por (supplier, codigo) o (supplier, descripción) — los índices
   // únicos son parciales, así que resolvemos a mano.
   const hasCode = !!(m.codigo && m.codigo.trim())
-  let q = supabase.from('supplier_item_map').select('id').eq('supplier_id', m.supplier_id)
-  q = hasCode ? q.eq('codigo', m.codigo) : q.ilike('descripcion_factura', (m.descripcion_factura || ''))
+  let q = supabase.from('supplier_item_map').select('id').eq('supplier_id', m.supplier_id ?? '')
+  q = hasCode ? q.eq('codigo', m.codigo!) : q.ilike('descripcion_factura', (m.descripcion_factura || ''))
   const { data } = await q.limit(1)
   const existing = (data as { id: string }[] | null)?.[0]
   const payload = { ...m, updated_at: new Date().toISOString() }

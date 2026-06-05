@@ -1,5 +1,8 @@
 import { supabase } from './supabase'
 import type { CashSession, CashMovement, Supplier, MovementType } from '../types/database'
+import type { Database } from '../types/supabase.gen'
+
+type Tables = Database['public']['Tables']
 
 // ── Sesiones ────────────────────────────────────────────────
 
@@ -345,8 +348,8 @@ export async function upsertSupplier(params: {
   if (params.id) payload.id = params.id
 
   const { data, error } = params.id
-    ? await supabase.from('suppliers').update(payload).eq('id', params.id).select().single()
-    : await supabase.from('suppliers').insert(payload).select().single()
+    ? await supabase.from('suppliers').update(payload as unknown as Tables['suppliers']['Update']).eq('id', params.id).select().single()
+    : await supabase.from('suppliers').insert(payload as unknown as Tables['suppliers']['Insert']).select().single()
   if (error) throw new Error(error.message)
   return data as Supplier
 }

@@ -1,6 +1,9 @@
 import { supabase } from './supabase'
 import type { Customer, CustomerInteraction, LoyaltyRules, LoyaltyReward } from '../types/crm'
 import { DEFAULT_RULES } from '../types/crm'
+import type { Database, Json } from '../types/supabase.gen'
+
+type Tables = Database['public']['Tables']
 
 // ── Customers ────────────────────────────────────────────────────
 
@@ -32,7 +35,7 @@ export async function upsertCustomer(c: Partial<Customer> & { phone: string }): 
   delete payload.updated_at
   const { data, error } = await supabase
     .from('customers')
-    .upsert(payload, { onConflict: 'phone' })
+    .upsert(payload as unknown as Tables['customers']['Insert'], { onConflict: 'phone' })
     .select()
     .single()
   if (error) throw new Error(error.message)
@@ -80,7 +83,7 @@ export async function addInteraction(
 
   const { error: uErr } = await supabase
     .from('customers')
-    .update(updates)
+    .update(updates as unknown as Tables['customers']['Update'])
     .eq('id', customer.id)
   if (uErr) throw new Error(uErr.message)
 }
@@ -100,7 +103,7 @@ export async function getLoyaltyRules(): Promise<LoyaltyRules> {
 export async function saveLoyaltyRules(rules: LoyaltyRules): Promise<void> {
   const { error } = await supabase
     .from('loyalty_config')
-    .upsert({ id: 1, rules, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+    .upsert({ id: 1, rules: rules as unknown as Json, updated_at: new Date().toISOString() }, { onConflict: 'id' })
   if (error) throw new Error(error.message)
 }
 
@@ -117,7 +120,7 @@ export async function getRewards(onlyActive = false): Promise<LoyaltyReward[]> {
 export async function upsertReward(r: Partial<LoyaltyReward> & { name: string; points_cost: number }): Promise<void> {
   const payload: Record<string, unknown> = { ...r }
   delete payload.created_at
-  const { error } = await supabase.from('loyalty_rewards').upsert(payload)
+  const { error } = await supabase.from('loyalty_rewards').upsert(payload as unknown as Tables['loyalty_rewards']['Insert'])
   if (error) throw new Error(error.message)
 }
 

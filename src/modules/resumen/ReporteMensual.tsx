@@ -18,7 +18,7 @@ import { supabase } from '../../shared/api/supabase'
 import { getVentasDias, getVentasHist, getProductMap } from '../../shared/api/ventas'
 import { getActiveEmployees } from '../../shared/api/tips'
 import type { DiasMap, HistMap, ProductMap } from '../../shared/types/ventas'
-import type { Employee } from '../../shared/types/database'
+import type { Employee, MovementType } from '../../shared/types/database'
 import {
   getContabilidadDays, fi, fmtDate, fmtMonthLabel, daysInMonth, todayISO,
 } from '../../modules/ventas/ventasUtils'
@@ -119,7 +119,7 @@ async function fetchCaja(ym: string): Promise<CajaBlock> {
     .lte('created_at', `${ym}-31T23:59:59Z`)
 
   const movs = ((data ?? []) as Array<{
-    movement_type: string; amount_crc: number; subcategory: string; status: string
+    movement_type: MovementType; amount_crc: number; subcategory: string; status: string
   }>).filter(m => m.status !== 'rechazado')
 
   let ingresos = 0, egresos = 0

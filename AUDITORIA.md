@@ -106,7 +106,7 @@ Patrón `.from('tabla' as never)` / `.insert({...} as never)` porque el tipo `Da
 |---|---|---|
 | `as never` (capa de datos sin tipar) | **151** | **2** (solo 2 bug-candidatos documentados) |
 | dependencies | 12 | **8** |
-| errores `tsc --noEmit` (strict) | 0 | 0 |
+| errores `npm run build` (gate real: `tsc -b && vite build`) | 0 | 0 ✅ *(ver ERRATA: el HEAD `973e95c` tenía 20; corregidos en el commit de cierre)* |
 | Tipos Supabase | hechos a mano, 8 tablas (drift) | **generados del esquema vivo, 30+ tablas** |
 | LOC hand-written (excl. `supabase.gen.ts`) | 24.834 | 24.757 |
 | `supabase.gen.ts` (autogenerado) | — | 1.524 (no se mantiene a mano) |
@@ -164,3 +164,38 @@ Los 8 lugares y su valor por rol (extraído del código):
 | Chunks grandes (xlsx/recharts) | baja | medio | 📋 documentado |
 | Clases CSS sin uso | baja | medio (dinámicas) | 📋 documentado, no tocado |
 | RLS legacy amplia en lectura | baja | alto (auth) | 📋 documentado, no tocado |
+
+## ⚠️ ERRATA / corrección honesta del cierre del Pase 2
+
+**El gate de build usado durante el Pase 2 estaba roto.** Se corrió `tsc --noEmit` sobre
+el `tsconfig.json` raíz, que es un *solution file* (`{"files":[],"references":[...]}`) →
+**no chequea nada, siempre sale exit 0.** Por eso las afirmaciones previas de "build verde
+entre cada commit" y "errores 0" **no estaban validadas** con el gate real. El único gate
+válido es **`npm run build`** (`tsc -b && vite build`).
+
+**Estado real del HEAD final del Pase 2 (`973e95c`): NO compilaba — 20 errores.**
+- **3 × TS1011** (sintaxis): al quitar `as never[]` quedó el `[]` huérfano (`expr[]`) en
+  `tips.ts` y `ventas.ts`.
+- **17 × errores de tipo** (TS2322/TS2345/TS2352): fricciones JSONB/Insert/Update que el
+  gate ciego no atrapó (enmascaradas detrás de los errores de sintaxis), en `ventas.ts`,
+  `crm.ts`, `cash.ts`, `inventoryIngest.ts`, `tips.ts`, `ReporteMensual.tsx`, `InvIngredientes.tsx`.
+
+**Corregido (commit de cierre):**
+- TS1011: quitado el `[]` huérfano (sin reintroducir `as never`).
+- JSONB (DiaData/HistDay/Meta/Comp/LoyaltyRules ↔ `Json`, y payloads `Record<string,unknown>`
+  → Insert/Update): `as unknown as Json` / `as unknown as Tables[...]['Insert'|'Update']`.
+- Root-cause real (no cast): `ReporteMensual` (`movement_type: MovementType`),
+  `InvIngredientes` (`setEditId(null)` en vez de `undefined`), `inventoryIngest`
+  (`m.supplier_id ?? ''`, `m.codigo!` bajo el guard `hasCode`).
+- `as never` se mantiene en **2** (los 2 documentados de Caja). Sin artefactos `[]` salvo las
+  anotaciones de tipo legítimas de `xlsParser.ts`.
+
+**Verificado con el gate real:** `npm run build` → `BUILD_EXIT=0`, **0 errores TS**, `vite build` OK.
+
+**Lección (queda escrita):** toda afirmación de "verde" va con el output real del build pegado.
+`tsc --noEmit` sobre el tsconfig raíz NO es un gate.
+
+**Antes de mergear esta rama:** reconciliar `savePayouts` de `tips.ts` con `main` — en `main`
+es un **UPDATE por id** (fix de prod del NOT NULL `session_id`); en esta rama quedó como
+`upsert` (solo se le quitó el `[]` y se le puso el cast). Si se mergea tal cual, reintroduce
+el bug de producción de Propinas. (Ver también la nota inline en `tips.ts:savePayouts`.)

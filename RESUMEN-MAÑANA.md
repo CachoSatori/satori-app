@@ -6,7 +6,7 @@
 
 ### 1. Tipos de Supabase — RESUELTO ✅
 La capa de datos no estaba realmente tipada: había **151 `as never`** (un "tapón" que apaga el chequeo de tipos en cada consulta a la base). 
-- Regeneré los tipos **desde la base viva** (solo lectura) y reemplacé los tapones **archivo por archivo**, con build verde entre cada uno.
+- Regeneré los tipos **desde la base viva** (solo lectura) y reemplacé los tapones **archivo por archivo**. ⚠️ *Corrección honesta:* el "build verde entre cada uno" se validó con un gate roto (`tsc --noEmit` sobre el tsconfig raíz, que no chequea nada). El estado final NO compilaba (20 errores); ya está corregido y verificado con el gate real `npm run build`. Ver ERRATA en `AUDITORIA.md`.
 - **Resultado: 151 → 2.** Los 2 que quedan están **documentados a propósito**: esconden un *bug candidato* en Caja (se pasa un dato que no es un movimiento para forzar un refresh) — no lo toqué porque arreglarlo cambia comportamiento de Caja; queda marcado para decidir.
 - **Buena noticia:** al tipar todo contra la base real, **no apareció ningún desajuste** entre el código y la base (ni en Caja ni en Propinas). El código está alineado con el esquema vivo.
 
@@ -22,12 +22,12 @@ Encontré la **causa raíz** (en `HANG-RCA.md`): no es lentitud — es el **refr
 | Dependencias | 12 | **8** |
 | `ROLE_LABELS` (copiado) | 8 lugares | **1 fuente** |
 | Helper de movimiento de caja day-level | 2 copias | **1** |
-| Errores de TypeScript | 0 | 0 |
+| Errores `npm run build` (gate real) | 0 | 0 ✅ *(el HEAD `973e95c` tenía 20; corregidos en el commit de cierre — ver ERRATA en AUDITORIA.md)* |
 
 > Aclaración honesta: el **bundle (peso que descarga el navegador) NO bajó** con el trabajo de tipos (es compile-time). Lo que bajó es deuda de código y dependencias. El peso del navegador lo dominan `xlsx` y `recharts` (ya se cargan solo cuando hacen falta) — optimizarlo más queda documentado.
 
 ## Decisiones que quedan para vos
-1. **Mergear la rama** a `main` (es seguro: todo compila, Caja/Propinas sin cambios de cálculo — lo verifiqué).
+1. **Mergear la rama** a `main` — ahora sí compila con el gate real (`npm run build` verde, 0 errores) y Caja/Propinas sin cambios de cálculo. **OJO antes de mergear:** reconciliar `savePayouts` de `tips.ts` con `main` — en `main` es un UPDATE por id (fix de prod del NOT NULL `session_id`); en esta rama quedó como `upsert`, y mergear tal cual reintroduciría ese bug de Propinas. (Detalle en ERRATA de `AUDITORIA.md`.)
 2. El **bug candidato de Caja** (`onMovAdded` con un dato que no es movimiento): decidir si lo arreglamos (cambia un detalle interno de Caja).
 3. El **fix de fondo del "se queda pensando"**: aprobar el diseño de `HANG-RCA.md` para implementarlo y probarlo juntos.
 

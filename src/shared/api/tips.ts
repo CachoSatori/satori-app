@@ -46,7 +46,7 @@ export async function createTipSession(params: {
       pool_efectivo_usd: 0,
       pool_barra_crc:    0,
       notes:             params.notes ?? null,
-    } as never)
+    })
     .select()
     .single()
   if (error) throw new Error(error.message)
@@ -59,7 +59,7 @@ export async function updateSessionPools(
 ): Promise<void> {
   const { error } = await supabase
     .from('tip_sessions')
-    .update(pools as never)
+    .update(pools)
     .eq('id', sessionId)
   if (error) throw new Error(error.message)
 }
@@ -67,7 +67,7 @@ export async function updateSessionPools(
 export async function closeTipSession(sessionId: string, closedBy: string): Promise<void> {
   const { error } = await supabase
     .from('tip_sessions')
-    .update({ status: 'closed', closed_by: closedBy } as never)
+    .update({ status: 'closed', closed_by: closedBy })
     .eq('id', sessionId)
   if (error) throw new Error(error.message)
 }
@@ -76,7 +76,7 @@ export async function closeTipSession(sessionId: string, closedBy: string): Prom
 export async function updateTipSessionNotes(sessionId: string, notes: string): Promise<void> {
   const { error } = await supabase
     .from('tip_sessions')
-    .update({ notes } as never)
+    .update({ notes })
     .eq('id', sessionId)
   if (error) throw new Error(error.message)
 }
@@ -85,7 +85,7 @@ export async function updateTipSessionNotes(sessionId: string, notes: string): P
 export async function reopenTipSession(sessionId: string): Promise<void> {
   const { error } = await supabase
     .from('tip_sessions')
-    .update({ status: 'open', closed_by: null } as never)
+    .update({ status: 'open', closed_by: null })
     .eq('id', sessionId)
   if (error) throw new Error(error.message)
 }
@@ -118,7 +118,7 @@ export async function upsertTipEntry(entry: {
 }): Promise<TipEntry> {
   const { data, error } = await supabase
     .from('tip_entries')
-    .upsert({ ...entry, covered_role: entry.covered_role ?? null } as never, { onConflict: 'session_id,employee_id' })
+    .upsert({ ...entry, covered_role: entry.covered_role ?? null }, { onConflict: 'session_id,employee_id' })
     .select()
     .single()
   if (error) throw new Error(error.message)
@@ -142,7 +142,7 @@ export async function savePayouts(
   const { error } = await supabase
     .from('tip_entries')
     .upsert(
-      entries.map(e => ({ id: e.id, points: e.points, payout_crc: e.payout_crc })) as never[],
+      entries.map(e => ({ id: e.id, points: e.points, payout_crc: e.payout_crc }))[],
       { onConflict: 'id' },
     )
   if (error) throw new Error(error.message)

@@ -1,7 +1,7 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> Última actualización: 2026-06-04 (Caja v2 · ledger real importado · ajuste apertura · Pendientes agrupados · Fase A finanzas)
+> Última actualización: 2026-06-04 (Caja v2 · ledger real · Fase A finanzas · Bandeja IA multi-doc desplegada)
 
 ## 🆕 Novedades 2026-06-04
 
@@ -23,12 +23,23 @@
 ### Caja → Pendientes (vista nueva)
 - **Facturas agrupadas por proveedor** (fecha, turno, ₡/$, referencia/nota, total). Pagar **individual**, **seleccionar cuáles** (checkbox) o **marcar todos**. **Descargar comprobante PNG** (Canvas) de las seleccionadas o todas, para enviar al proveedor. A prueba de NaN.
 
-### Bandeja de documentos — ingesta por foto con IA (Fase 2D-B)
-- Nuevo módulo **Bandeja** (`/inbox`, tile en Home con badge): subís/compartís una foto de factura o comprobante, la IA de visión la lee y deja un movimiento **pre-llenado** que confirmás de un toque (nunca auto-commit).
-- **Migración 016**: tabla `documents` + bucket Storage privado `documents` + RLS (owner/manager/contador/cajero) + `suppliers.aliases[]`.
-- **Edge Function `extract-document`** (Deno → Anthropic visión, JSON estricto). La API key vive solo en el Vault. Edge Function **desplegada**; falta solo cargar el secret `ANTHROPIC_API_KEY` (panel Supabase). Hasta entonces, **modo carga manual**.
-- **PWA Share Target**: compartir foto desde WhatsApp → Satori (lo intercepta `public/sw-share.js`). Subida manual/cámara como fallback.
-- Anti-duplicado por SHA-256 / clave FE. Factura → cuenta por pagar; comprobante → concilia un pendiente o egreso directo.
+### Bandeja de documentos — ingesta por foto con IA (Fase 2D-B v2) — OPERATIVA ✅
+- Módulo **Bandeja** (`/inbox`, tile en Home con badge): subís/compartís foto de factura/comprobante → la IA de visión la lee.
+- **Migración 016**: tabla `documents` + bucket Storage `documents` + RLS + `suppliers.aliases[]`.
+- **Edge Function `extract-document`** (Deno → Anthropic visión, **Claude Haiku 4.5**, JSON estricto). **Desplegada** + secret `ANTHROPIC_API_KEY` cargado + **probada end-to-end** (lee proveedor/total/ítems/clave FE/método). Modelo por env `ANTHROPIC_MODEL`.
+- **Multi-documento**: una foto puede traer varias facturas → `documentos[]` → N filas en `documents`. Esquema CR rico: factura/proforma/comprobante/propinas/otro, clave FE 50 díg., IVA 1%/13% por línea, ítems en 2 líneas, unidades (K/UN/CJ/GL), `condicion_pago`, banco/referencia, moneda USD.
+- **Auto-genera el movimiento al subir** (lo pidió el dueño): si confianza ≥0.4, cuadra y no requiere revisión → crea el movimiento solo (factura→cuenta por pagar; crédito→pendiente; comprobante→concilia pendiente único o egreso). El encargado revisa todo en Caja → Movimientos con las facturas físicas. Manuscritas/baja confianza/no cuadra → quedan en Bandeja con aviso **⚠ revisar** + checkbox de validación obligatorio.
+- **PWA Share Target** (WhatsApp → Satori, `public/sw-share.js`) + subida manual/cámara. Anti-duplicado SHA-256 / clave FE.
+- **Propinas** (recibo de tips) → no es gasto del P&L. **USD** → guarda dólares + TC del día.
+
+### Caja — mejoras operativas (2026-06-04)
+- **Caja Fuerte** muestra ₡ **y** $. Tarjeta **"Ajustes de cierre"** = suma de las diferencias de los cierres del día (ver si netean a cero a fin de mes); el ajuste de apertura ya no la ensucia.
+- **Pagos operativos** en el turno (delivery → cuenta 7100, operativo, salario en efectivo) — salen de la Caja Diaria. Orden de Caja Diaria: Ingresos adicionales (compacto) → Pagos a proveedores → Pagos operativos.
+- **"+ Nuevo movimiento"** en Movimientos: Banco→Caja Fuerte (suma al saldo), retiro, egresos sueltos. Selector **Cuenta P&L** por movimiento.
+- **Pendientes agrupados por proveedor** (fecha/turno/₡/$/ref, total) con pago individual/selectivo/total y **descarga de comprobante PNG**.
+- **TC al abrir turno** = el de Admin (`exchange_rates`). **Cajero** agregado a Puntos por rol (propinas).
+- **Descartar turno** (Caja Diaria) y **Deshacer cierre** (Cierre del día) con contraseña de manager — para errores de fecha / empezar de 0.
+- **Datos**: deliverys históricos recategorizados a operativo (7100); directorio de proveedores depurado (no-proveedores desactivados).
 
 ### Fase A finanzas (modelo de pagos/P&L) — ver ROADMAP Fase 2D
 - Retiro a banco = **traspaso** (fuera del P&L). `egreso_socios` ya no alimenta el P&L. **Ingresos de caja selectos** (aceite/reciclaje) → cuenta `otros_ingresos` (mig. 014). **`cash_movements.account_id`** (mig. 015) + selector "Cuenta P&L". **Bitcoin** en métodos de proveedor.

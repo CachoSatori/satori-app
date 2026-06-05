@@ -15,7 +15,9 @@ Satori App no es un POS. Hoy es una capa de inteligencia de negocio que se monta
 |---|---|
 | Ventas / analítica | ✅ 16 vistas (Hoy, Mix, Análisis, MenuEng, Evaluación, ICP, Saloneros, Metas…) |
 | Propinas | ✅ pool por turno, coberturas (persistidas en DB), verificación, quincenal, pool cocina, stats, registro de turnos atrasados (fecha+turno) con bloqueo de duplicados, edición completa desde Historial (modal, incl. cobertura) |
-| Caja | ✅ turnos, cierre 2 fases, movimientos, proveedores, resumen mensual |
+| Caja | ✅ turnos (Caja Diaria: proveedores + pagos operativos), cierre del día 2 fases (TC config, retiro a banco), movimientos (Cuenta P&L por mov., Banco→Caja Fuerte, ajustes de cierre), pendientes agrupados por proveedor + comprobante PNG, resumen mensual, descartar turno / deshacer cierre |
+| **Ingesta por foto (IA)** | ✅ **Bandeja operativa**: foto de factura/comprobante → Claude Haiku 4.5 (multi-doc, esquema CR) → genera el movimiento solo; revisión humana en manuscritas/baja confianza |
+| Finanzas / P&L | ✅ presupuesto vs real automático desde caja/ventas; cuenta contable explícita por movimiento; retiros/ajustes fuera del P&L |
 | Reportes | ✅ diario, semanal, mensual unificado, emails automáticos (ventas+propinas) |
 | Admin | ✅ empleados, puntos por rol, tipo de cambio, horas trabajadas |
 | Datos históricos | ✅ 2023→hoy migrados y verificados |
@@ -534,14 +536,14 @@ Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya
 - Confirmar `caja_origen='Banco'` en compras por transferencia (PMT, guayafrut, Isleña, Pescados…) para que no toquen la caja física.
 - ✅ Retiro de dueños **descuenta de Caja Fuerte** (traspaso Caja Fuerte → Banco; el saldo de CF resta los traspasos salientes). Las ventas en efectivo del cierre entran a Caja Fuerte.
 
-#### ✅ Fase B — Bandeja + ingesta IA (código en producción, 2026-06-04)
-> La foto de una factura/comprobante (hoy va a un grupo de WhatsApp) entra a la app, la IA la lee y **rutea sola**; el humano confirma de un toque.
-- ✅ Tabla `documents` + bucket Storage `documents` con RLS (owner/manager/contador/cajero) + `suppliers.aliases[]` (mig. 016).
-- ✅ **Entrada de foto**: PWA **Share Target** (`manifest.share_target` POST multipart) interceptado por `public/sw-share.js` → `/inbox?shared=1`. Subida manual/cámara como fallback (iOS).
-- ✅ **Extracción IA**: Edge Function `extract-document` (Deno) → Anthropic visión, JSON estricto. Anti-duplicado por SHA-256 / `clave_fe`.
-- ✅ **Pantalla Bandeja** (`/inbox`) + tile en Home con badge: lista con miniatura + tarjeta de confirmación pre-llenada → commit a `cash_movements` (nunca auto-commit). Factura → cuenta por pagar; comprobante → concilia un pendiente (proveedor+total±2%+fecha±7d) o egreso directo.
-- ✅ Edge Function `extract-document` **desplegada** (2026-06-04).
-- 🟡 **Único paso pendiente (lo hace el dueño):** cargar la API key de Anthropic como secret `ANTHROPIC_API_KEY` (panel Supabase → Edge Functions → Secrets, o `supabase secrets set`). Hasta entonces la Bandeja funciona en modo **carga manual** (la IA no autocompleta).
+#### ✅ Fase B — Bandeja + ingesta IA — **OPERATIVA EN PRODUCCIÓN** (2026-06-04)
+> La foto de una factura/comprobante entra a la app, la IA la lee y **genera el movimiento solo**; el encargado revisa en Caja con las facturas físicas.
+- ✅ Tabla `documents` + bucket Storage + RLS + `suppliers.aliases[]` (mig. 016).
+- ✅ Edge Function `extract-document` (**Claude Haiku 4.5**, JSON estricto) **desplegada** + secret `ANTHROPIC_API_KEY` cargado + **probada end-to-end**. Modelo configurable por env `ANTHROPIC_MODEL` (Sonnet para más precisión).
+- ✅ **Multi-documento**: una foto → `documentos[]` → N filas. Esquema CR rico (factura/proforma/comprobante/propinas/otro, clave FE, IVA 1%/13%, ítems 2 líneas, unidades, condicion_pago, banco, moneda USD).
+- ✅ **Auto-genera el movimiento al subir** (si confianza ≥0.4 + cuadra + no requiere revisión). Manuscritas/baja confianza → quedan en Bandeja con aviso ⚠ + validación obligatoria. Crédito→pendiente; comprobante→concilia pendiente único o egreso; propinas→excluido del P&L; USD→TC del día.
+- ✅ PWA **Share Target** (`public/sw-share.js`) + subida manual/cámara. Anti-duplicado SHA-256 / `clave_fe`.
+- 🟡 Afinar el prompt con 8–10 fotos reales variadas por proveedor (BELCA, Isleña, PMT, Guayafrut, SINPE, LAFISE/BN, mariscos manuscritos).
 - 🔭 Futuro: webhook WhatsApp Cloud API (Meta) como entrada alternativa.
 
 #### 🔭 Fase C — Auto-inventario + cuentas por pagar
@@ -564,7 +566,7 @@ Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya
 | Fase 2 — Fidelización / CRM | Alto | L | ⭐ Alta (paralelo) |
 | Fase 2B — Chatbot WhatsApp | Alto | L | ⭐ Alta (paralelo) |
 | Fase 2 + 2B juntas | Muy alto | L | ✨ Sinergia máxima |
-| **Fase 2D — Pagos/conciliación + ingesta por foto** | **Muy alto** | **L** | **🔥 Alta (Fase A ✅; B/C/D pendientes)** |
+| **Fase 2D — Pagos/conciliación + ingesta por foto** | **Muy alto** | **L** | **🔥 Fases A ✅ + B ✅ operativas; C/D pendientes** |
 | Fase 3 — POS nativo | Muy alto | XL | 🧭 Estratégica |
 | Fase 3.6 — Factura electrónica | Crítico (legal) | L | 🧭 con POS |
 | Fase 4 — Canales | Alto | L | Después de POS |

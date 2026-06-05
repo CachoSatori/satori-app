@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { updateMovementStatus } from './cash'
+import { updateMovementStatus, createDayMovement } from './cash'
 import type { CashMovement, Json } from '../types/database'
 
 export interface DocItem {
@@ -187,7 +187,9 @@ export async function setDocEstado(id: string, estado: 'procesado' | 'descartado
   if (error) throw new Error(error.message)
 }
 
-// Inserta un movimiento de caja a nivel día (sin turno) desde la Bandeja
+// Inserta un movimiento de caja a nivel día (sin turno) desde la Bandeja.
+// Delega en createDayMovement (cash.ts) — misma lógica de inserción, una sola
+// fuente, para que el alta manual y la auto-generada por la Bandeja no diverjan.
 export async function insertInboxMovement(m: {
   created_by: string
   movement_type: string
@@ -202,14 +204,5 @@ export async function insertInboxMovement(m: {
   account_id?: string | null
   fecha?: string | null
 }): Promise<string> {
-  const ts = m.fecha ? `${m.fecha}T12:00:00Z` : new Date().toISOString()
-  const { data, error } = await supabase.from('cash_movements').insert({
-    session_id: null, created_by: m.created_by, movement_type: m.movement_type,
-    amount_crc: m.amount_crc, amount_usd: m.amount_usd ?? 0, currency: 'CRC',
-    description: m.description, subcategory: m.subcategory ?? '', supplier_name: m.supplier_name ?? '',
-    method: m.method, caja_origen: m.caja_origen, status: m.status,
-    account_id: m.account_id ?? null, created_at: ts, updated_at: ts,
-  }).select('id').single()
-  if (error) throw new Error(error.message)
-  return (data as { id: string }).id
+  return createDayMovement(m)
 }

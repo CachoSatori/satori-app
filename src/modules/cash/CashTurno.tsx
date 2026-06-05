@@ -251,6 +251,10 @@ export default function CashTurno({
     if (pago?.persistedId) {
       // Borrado de un pago YA guardado → requiere autorización de gerencia
       if (!(await requireManager())) return
+      // TODO(types): onMovAdded espera un CashMovement pero acá se le pasa un PagoRow
+      // solo para disparar un refresh. Es un bug candidato (ver AUDITORIA.md): inyecta
+      // un objeto que no es un movimiento real en allMovements. Reemplazar por un
+      // onRefresh dedicado — NO se toca en la auditoría (cambiaría comportamiento de Caja).
       try { await deleteCashMovement(pago.persistedId); onMovAdded({ ...pago } as never) } catch { /* silent */ }
     }
     setPagos(prev => prev.filter(p => p.id !== id))
@@ -262,6 +266,7 @@ export default function CashTurno({
     // Si edito uno ya persistido, borro su movimiento viejo antes de re-crear
     const old = editId ? pagos.find(p => p.id === editId) : null
     if (old?.persistedId) {
+      // TODO(types): ídem removePago — PagoRow pasado como CashMovement (bug candidato, ver AUDITORIA.md).
       try { await deleteCashMovement(old.persistedId); onMovAdded({ ...old } as never) } catch { /* silent */ }
     }
     const pago: PagoRow = {

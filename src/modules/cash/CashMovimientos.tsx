@@ -143,7 +143,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const handleFieldChange = useCallback(async (id: string, field: string, value: unknown) => {
     setSaving(id)
     try {
-      await updateCashMovement(id, { [field]: value } as never)
+      await updateCashMovement(id, { [field]: value } as Partial<CashMovement>)
       if (field === 'status') {
         // just update status
       }

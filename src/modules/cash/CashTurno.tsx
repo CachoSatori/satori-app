@@ -24,7 +24,17 @@ interface Props {
   onSessionClose:     () => void
   onMovAdded:         (m: CashMovement) => void
   onError:            (msg: string) => void
+  onRefresh:          () => void
 }
+
+// Otros egresos del turno que salen de la Caja Diaria (no son mercadería).
+// Las propinas NO van acá — se pagan en el cierre del turno.
+const CONCEPTOS_EGRESO = [
+  { id: 'delivery',  label: 'Delivery',                       type: 'egreso_operativo', sub: 'Delivery (direct operating)', account: 'a7100' },
+  { id: 'operativo', label: 'Operativo (gas, luz, etc.)',     type: 'egreso_operativo', sub: 'Operativo',                   account: null },
+  { id: 'salario',   label: 'Salario / adelanto en efectivo', type: 'egreso_personal',  sub: 'Salario',                    account: 'a6200' },
+  { id: 'otro',      label: 'Otro egreso',                    type: 'egreso_operativo', sub: 'Otro',                       account: null },
+] as const
 
 type ViewState = 'apertura' | 'turno' | 'cierre'
 
@@ -44,7 +54,7 @@ interface PagoRow {
 
 export default function CashTurno({
   openSession, suppliers, sessions, sessionMovements,
-  onSessionOpen, onSessionClose, onMovAdded, onError,
+  onSessionOpen, onSessionClose, onMovAdded, onError, onRefresh,
 }: Props) {
   const { profile } = useAuth()
   const requireManager = useManagerOverride()
@@ -284,6 +294,51 @@ export default function CashTurno({
   }
   const removeIngreso = (id: string) => setIngresos(prev => prev.filter(i => i.id !== id))
 
+  // ── Otros egresos del turno (delivery, operativo, salario) ──
+  // Salen de la Caja Diaria. Se persisten al instante (como los pagos).
+  const [egresoModal,    setEgresoModal]    = useState(false)
+  const [draftEgConcepto, setDraftEgConcepto] = useState<typeof CONCEPTOS_EGRESO[number]['id']>('delivery')
+  const [draftEgCRC,     setDraftEgCRC]     = useState<number | ''>('')
+  const [draftEgMethod,  setDraftEgMethod]  = useState<'Efectivo' | 'Transferencia'>('Efectivo')
+  const [draftEgNota,    setDraftEgNota]    = useState('')
+  const [egSaving,       setEgSaving]       = useState(false)
+  const openNewEgreso = () => { setDraftEgConcepto('delivery'); setDraftEgCRC(''); setDraftEgMethod('Efectivo'); setDraftEgNota(''); setEgresoModal(true) }
+  const confirmEgreso = async () => {
+    if (!openSession || !profile || !Number(draftEgCRC)) return
+    const c = CONCEPTOS_EGRESO.find(x => x.id === draftEgConcepto)!
+    setEgSaving(true)
+    try {
+      const mov = await createCashMovement({
+        session_id:    openSession.id,
+        created_by:    profile.id,
+        movement_type: c.type as MovementType,
+        amount_crc:    Number(draftEgCRC) || 0,
+        amount_usd:    0,
+        currency:      'CRC',
+        exchange_rate: tc,
+        description:   draftEgNota || c.label,
+        subcategory:   c.sub,
+        supplier_name: draftEgNota || c.label,
+        method:        draftEgMethod,
+        caja_origen:   draftEgMethod === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
+        account_id:    c.account,
+        shift:         tipShiftToCaja(openSession.shift_type),
+      })
+      onMovAdded(mov)
+      setEgresoModal(false); setDraftEgCRC(''); setDraftEgNota('')
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Error registrando egreso')
+    } finally { setEgSaving(false) }
+  }
+  // Egresos del turno que NO son mercadería (los pagos a proveedor van aparte)
+  const otrosEgresosList = sessionMovements.filter(m =>
+    m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso'
+    && m.movement_type !== 'egreso_mercaderia' && m.status !== 'rechazado')
+  const removeEgreso = async (id: string) => {
+    if (!(await requireManager())) return
+    try { await deleteCashMovement(id); onRefresh() } catch { /* silent */ }
+  }
+
   // ── Confirmar cierre ──────────────────────────────────────
   const handleCierre = useCallback(async () => {
     if (!openSession || !profile) return
@@ -467,7 +522,7 @@ export default function CashTurno({
         <div className="cd-top-card gold">
           <div className="cd-tc-label">Gastado efectivo</div>
           <div className="cd-tc-val" style={{ color: provGastadoEf > 0 ? '#a07030' : '#aaa' }}>{fi(provGastadoEf)}</div>
-          <div className="cd-tc-sub">pagos a proveedores</div>
+          <div className="cd-tc-sub">proveedores + otros egresos</div>
         </div>
         <div className="cd-top-card red">
           <div className="cd-tc-label">Disponible</div>
@@ -577,6 +632,42 @@ export default function CashTurno({
         </div>
       </div>
 
+      {/* Otros egresos del turno (delivery, operativo, salario) */}
+      <div className="cd-section">
+        <div className="cd-section-head">
+          <div className="cd-section-icon">🛵</div>
+          <div>
+            <div className="cd-section-title">Otros egresos del turno</div>
+            <div className="cd-section-sub">Delivery, operativo, salario en efectivo — salen de la Caja Diaria</div>
+          </div>
+          {canManage && (
+            <button className="cd-section-add" onClick={openNewEgreso}>+ Agregar egreso</button>
+          )}
+        </div>
+        <div className="cd-section-body">
+          {otrosEgresosList.length === 0 && <div className="cd-empty-row">ℹ Sin otros egresos registrados</div>}
+          {otrosEgresosList.map(m => (
+            <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{m.subcategory || m.description}</div>
+                <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>
+                  {m.method === 'Efectivo' ? '💵 Efectivo' : '🏦 Transferencia'}
+                  {m.description && m.description !== m.subcategory ? ` · ${m.description}` : ''}
+                  {m.status === 'pendiente' && <span style={{ color: '#a07030' }}> · pendiente</span>}
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: 700, color: '#c0392b' }}>{fi(m.amount_crc)}</span>
+                {canManage && (
+                  <button onClick={() => removeEgreso(m.id)} title="Eliminar"
+                    style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Cierre del turno */}
       {canClose && view !== 'cierre' && (
         <div className="cd-section" style={{ borderColor: '#2a4a7a', borderWidth: 2 }}>
@@ -617,7 +708,7 @@ export default function CashTurno({
               </div>
               {provGastadoEf > 0 && (
                 <div className="cd-verif-row">
-                  <span>− Pagos a proveedores (efectivo)</span>
+                  <span>− Pagos efectivo (proveedores + otros)</span>
                   <strong style={{ color: '#c0392b' }}>− {fi(provGastadoEf)}</strong>
                 </div>
               )}
@@ -839,6 +930,52 @@ export default function CashTurno({
               <button className="tips-btn-ghost" onClick={() => setIngresoModal(false)}>Cancelar</button>
               <button className="cd-btn-green" onClick={confirmIngreso} disabled={!Number(draftIngCRC) && !Number(draftIngUSD)}>
                 ✓ Confirmar ingreso
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: otro egreso del turno */}
+      {egresoModal && (
+        <div className="cd-modal-overlay" onClick={() => setEgresoModal(false)}>
+          <div className="cd-modal" onClick={e => e.stopPropagation()}>
+            <div className="cd-modal-title">Otro egreso del turno</div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--t-muted)', margin: '0.25rem 0 0' }}>
+              Sale de la Caja Diaria. (Las propinas se pagan en el cierre del turno, no acá.)
+            </p>
+            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field-label">Concepto</div>
+              <select className="tips-input-dark" value={draftEgConcepto} onChange={e => setDraftEgConcepto(e.target.value as typeof draftEgConcepto)} style={{ width: '100%' }}>
+                {CONCEPTOS_EGRESO.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+            </div>
+            <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field">
+                <div className="tips-field-label">Monto ₡ colones</div>
+                <div className="cd-monto-wrap">
+                  <span className="cd-prefix">₡</span>
+                  <input type="number" className="cd-monto-input" value={draftEgCRC} placeholder="0" autoFocus
+                    onChange={e => setDraftEgCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                </div>
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">Método</div>
+                <div className="cd-metodo-tabs">
+                  <div className={`cd-metodo-tab ef ${draftEgMethod === 'Efectivo' ? 'active' : ''}`} onClick={() => setDraftEgMethod('Efectivo')}>💵 Efectivo</div>
+                  <div className={`cd-metodo-tab tr ${draftEgMethod === 'Transferencia' ? 'active' : ''}`} onClick={() => setDraftEgMethod('Transferencia')}>🏦 Transf.</div>
+                </div>
+              </div>
+            </div>
+            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field-label">Beneficiario / nota</div>
+              <input type="text" className="tips-input-dark" value={draftEgNota} placeholder="Ej: repartidor, empleado, detalle…"
+                style={{ width: '100%' }} onChange={e => setDraftEgNota(e.target.value)} />
+            </div>
+            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+              <button className="tips-btn-ghost" onClick={() => setEgresoModal(false)} disabled={egSaving}>Cancelar</button>
+              <button className="cd-btn-green" onClick={confirmEgreso} disabled={egSaving || !Number(draftEgCRC)}>
+                {egSaving ? 'Guardando…' : '✓ Registrar egreso'}
               </button>
             </div>
           </div>

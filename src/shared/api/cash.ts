@@ -125,6 +125,7 @@ export async function createCashMovement(movement: {
   method: string
   shift?: string
   caja_origen: string
+  account_id?: string | null
 }): Promise<CashMovement> {
   const { data, error } = await supabase
     .from('cash_movements')
@@ -135,6 +136,7 @@ export async function createCashMovement(movement: {
       supplier_name: movement.supplier_name ?? '',
       employee_name: movement.employee_name ?? '',
       shift:         movement.shift         ?? '',
+      account_id:    movement.account_id    ?? null,
       status:        movement.method === 'Transferencia' ? 'pendiente' : 'aprobado',
     } as never)
     .select()

@@ -156,6 +156,7 @@ export default function CashModule() {
             onSessionClose={handleSessionClose}
             onMovAdded={handleMovAdded}
             onError={setError}
+            onRefresh={loadAll}
           />
         )}
         {tab === 'cierre' && (

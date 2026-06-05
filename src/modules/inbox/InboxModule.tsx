@@ -270,7 +270,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
 
   return (
     <div className="cd-modal-overlay" onClick={onClose}>
-      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 680 }}>
         <div className="cd-modal-title">Confirmar documento</div>
         <p style={{ fontSize: '0.74rem', color: 'var(--t-muted)', margin: '0.2rem 0 0.75rem' }}>
           Revisá los datos que leyó la IA y confirmá. Nada se guarda hasta que toques Confirmar.
@@ -278,39 +278,39 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
         {err && <div className="tips-error" style={{ marginBottom: '0.75rem' }}><span>{err}</span><button onClick={() => setErr(null)}>✕</button></div>}
 
         <div className="cd-grid2">
-          <Field label="Tipo">
-            <select className="tips-input-dark" value={tipo} onChange={e => setTipo(e.target.value as DocExtract['tipo'])}>
+          <Field label="Tipo" full>
+            <select className="tips-input-dark" style={{ width: '100%' }} value={tipo} onChange={e => setTipo(e.target.value as DocExtract['tipo'])}>
               <option value="factura">Factura (cuenta por pagar)</option>
               <option value="comprobante_pago">Comprobante de pago</option>
               <option value="otro">Otro</option>
             </select>
           </Field>
-          <Field label="Proveedor">
-            <input className="tips-input-dark" list="inbox-sups" value={prov} onChange={e => setProv(e.target.value)} placeholder="Proveedor" />
+          <Field label="Proveedor" full>
+            <input className="tips-input-dark" style={{ width: '100%' }} list="inbox-sups" value={prov} onChange={e => setProv(e.target.value)} placeholder="Nombre del proveedor" />
             <datalist id="inbox-sups">{suppliers.map(s => <option key={s.id} value={s.name} />)}</datalist>
           </Field>
           <Field label="Fecha">
-            <input type="date" className="tips-input-dark" value={fecha} onChange={e => setFecha(e.target.value)} />
+            <input type="date" className="tips-input-dark" style={{ width: '100%' }} value={fecha} onChange={e => setFecha(e.target.value)} />
           </Field>
           <Field label="Monto ₡">
-            <input type="number" className="tips-input-dark" value={total} onChange={e => setTotal(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" />
+            <input type="number" className="tips-input-dark" style={{ width: '100%' }} value={total} onChange={e => setTotal(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" />
+          </Field>
+          <Field label="Referencia / Nº de factura" full>
+            <input className="tips-input-dark" style={{ width: '100%' }} value={ref} onChange={e => setRef(e.target.value)} placeholder="Nº de factura / referencia" />
           </Field>
           <Field label="Método">
-            <select className="tips-input-dark" value={metodo} onChange={e => setMetodo(e.target.value)}>
+            <select className="tips-input-dark" style={{ width: '100%' }} value={metodo} onChange={e => setMetodo(e.target.value)}>
               {['Efectivo', 'Transferencia', 'SINPE', 'Bitcoin'].map(m => <option key={m}>{m}</option>)}
             </select>
           </Field>
-          <Field label="Referencia / Nº">
-            <input className="tips-input-dark" value={ref} onChange={e => setRef(e.target.value)} placeholder="Nº factura / referencia" />
-          </Field>
           <Field label="Cuenta P&L (opcional)">
-            <select className="tips-input-dark" value={accountId} onChange={e => setAccountId(e.target.value)}>
+            <select className="tips-input-dark" style={{ width: '100%' }} value={accountId} onChange={e => setAccountId(e.target.value)}>
               <option value="">— auto —</option>
               {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </Field>
-          <Field label="Asiento">
-            <div style={{ fontSize: '0.78rem', color: 'var(--t-muted)', padding: '0.4rem 0' }}>
+          <Field label="Asiento contable" full>
+            <div style={{ fontSize: '0.82rem', color: 'var(--t-muted)', padding: '0.4rem 0' }}>
               {cajaOrigen} · {status === 'pendiente' ? 'Pendiente' : 'Pagado'}
             </div>
           </Field>
@@ -336,8 +336,8 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="tips-field"><div className="tips-field-label">{label}</div>{children}</div>
+function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  return <div className="tips-field" style={full ? { gridColumn: '1 / -1' } : undefined}><div className="tips-field-label">{label}</div>{children}</div>
 }
 function N2(v: number | ''): number { return Number(v) || 0 }
 function daysBetween(a: string, b: string): number { return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000) }

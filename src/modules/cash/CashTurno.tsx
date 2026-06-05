@@ -37,6 +37,14 @@ const CONCEPTOS_EGRESO = [
   { id: 'otro',      label: 'Otro egreso',                    type: 'egreso_operativo', sub: 'Otro',                       account: null },
 ] as const
 
+// Evita que una request colgada (token vencido / red) deje "Cerrando…" para siempre.
+function withTimeout<T>(p: Promise<T>, ms = 15000): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(new Error('Tardó demasiado — recargá la app (sesión vencida) y reintentá.')), ms)),
+  ])
+}
+
 type ViewState = 'apertura' | 'turno' | 'cierre'
 
 interface PagoRow {
@@ -162,7 +170,7 @@ export default function CashTurno({
 
     setSaving(true)
     try {
-      const session = await createCashSession({
+      const session = await withTimeout(createCashSession({
         session_date:          apFecha,
         shift_type:            apTurno,
         opened_by:             profile.id,
@@ -170,7 +178,7 @@ export default function CashTurno({
         initial_cash_crc:      0,                                 // registradora deshabilitada (la maneja el PoS)
         initial_cash_usd:      Number(apUSD) || 0,
         initial_suppliers_crc: Number(apProvCRC) || 0,
-      })
+      }))
       onSessionOpen(session)
       setView('turno')
       setPagos([])
@@ -358,13 +366,13 @@ export default function CashTurno({
       // persistPago tiene guarda (if persistedId return) y crea el movimiento
       // egreso_mercaderia en Caja Proveedores. No re-crear aparte: hacerlo
       // duplicaba el movimiento al cerrar.
-      await Promise.all(pagos
+      await withTimeout(Promise.all(pagos
         .filter(p => p.supplier_id && Number(p.amount_crc) > 0 && !p.persistedId)
         .map(p => persistPago(p))
-      )
+      ))
 
       // Save ingresos adicionales
-      await Promise.all(ingresos.filter(i => Number(i.crc) > 0 || Number(i.usd) > 0).map(i =>
+      await withTimeout(Promise.all(ingresos.filter(i => Number(i.crc) > 0 || Number(i.usd) > 0).map(i =>
         createCashMovement({
           session_id:    openSession.id,
           created_by:    profile.id,
@@ -378,9 +386,9 @@ export default function CashTurno({
           caja_origen:   'Registradora',
           shift:         tipShiftToCaja(openSession.shift_type),
         }).then(m => onMovAdded(m))
-      ))
+      )))
       // Close session
-      await closeCashSession(
+      await withTimeout(closeCashSession(
         openSession.id,
         {
           final_cash_crc: Number(cierreCRC) || 0,
@@ -390,7 +398,7 @@ export default function CashTurno({
           notes:          cierreNotas || undefined,
         },
         profile.id,
-      )
+      ))
       onSessionClose()
       setPagos([])
       setIngresos([])

@@ -3,13 +3,9 @@ import type { Employee, UserRole, Profile } from '../../shared/types/database'
 import { createEmployee, updateEmployee, toggleEmployeeActive, getAllProfiles, linkProfileToEmployee } from '../../shared/api/admin'
 // pos_name added to Employee type via DB migration — exact name as it appears in POS XLS
 
-const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
+import { ROLE_LABELS } from '../../shared/constants'
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Propietario', contador: 'Contador', manager: 'Encargado',
-  cajero: 'Cajero', salonero: 'Salonero', barman: 'Barman',
-  barback: 'Barback', runner: 'Runner', cocina: 'Cocina',
-}
+const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
 interface Props {
   employees: Employee[]

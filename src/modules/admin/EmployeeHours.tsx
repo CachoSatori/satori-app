@@ -3,15 +3,12 @@ import type { Employee } from '../../shared/types/database'
 import { getAttendanceHistory } from '../../shared/api/tips'
 import type { AttendanceRow } from '../../shared/api/tips'
 import { shiftLabel, fi } from '../../shared/utils'
+import { ROLE_LABELS } from '../../shared/constants'
 
 interface Props {
   employees: Employee[]
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  salonero: 'Salonero', barman: 'Barman', barback: 'Barback',
-  runner: 'Runner', cocina: 'Cocina', cajero: 'Cajero', manager: 'Encargado',
-}
 
 // Cuántos meses de historia traemos del backend. 24 cubre el año en curso + el anterior
 // (suficiente para comparar 2025 vs 2026 con el selector de año).

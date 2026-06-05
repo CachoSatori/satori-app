@@ -2,11 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import type { Profile, Employee, UserRole } from '../../shared/types/database'
 import { getAllProfiles, updateProfileRole, setProfileActive } from '../../shared/api/admin'
 
+import { ROLE_LABELS } from '../../shared/constants'
+
 const ROLES: UserRole[] = ['owner', 'contador', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina']
-const ROLE_LABELS: Record<UserRole, string> = {
-  owner: 'Propietario', contador: 'Contador', manager: 'Encargado', cajero: 'Cajero',
-  salonero: 'Salonero', barman: 'Barman', barback: 'Barback', runner: 'Runner', cocina: 'Cocina',
-}
 
 interface Props {
   employees: Employee[]

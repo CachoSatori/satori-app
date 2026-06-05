@@ -12,11 +12,7 @@ import type { AttendanceRow } from '../../shared/api/tips'
 import type { Employee } from '../../shared/types/database'
 import { formatCRC } from '../../shared/utils/tipCalculations'
 import { todayCR } from '../../shared/utils'
-
-const ROLE_LABELS: Record<string, string> = {
-  salonero: 'Salonero', barman: 'Barman', barback: 'Barback',
-  runner: 'Runner', cocina: 'Cocina', cajero: 'Cajero', manager: 'Encargado',
-}
+import { ROLE_LABELS } from '../../shared/constants'
 
 const MONTH_NAMES: Record<string, string> = {
   '01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio',

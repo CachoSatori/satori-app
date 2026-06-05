@@ -1,12 +1,7 @@
 import { useState } from 'react'
 import type { RoleTipPoints, UserRole } from '../../shared/types/database'
 import { updateRoleTipPoints } from '../../shared/api/admin'
-
-const ROLE_LABELS: Record<string, string> = {
-  salonero: 'Salonero', barman: 'Barman', barback: 'Barback',
-  runner: 'Runner', cocina: 'Cocina', manager: 'Encargado',
-  cajero: 'Cajero', owner: 'Propietario', contador: 'Contador',
-}
+import { ROLE_LABELS } from '../../shared/constants'
 
 // Roles que participan en el pool de propinas
 const TIP_ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']

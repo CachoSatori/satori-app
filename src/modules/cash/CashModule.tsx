@@ -18,9 +18,7 @@ const CashCierre      = lazy(() => import('./CashCierre'))
 
 type Tab = 'turno' | 'cierre' | 'movimientos' | 'proveedores' | 'pendientes' | 'resumen'
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Propietario', contador: 'Contador', manager: 'Encargado', cajero: 'Cajero',
-}
+import { ROLE_LABELS } from '../../shared/constants'
 
 function getTabs(role: string): { id: Tab; label: string }[] {
   if (role === 'contador') return [

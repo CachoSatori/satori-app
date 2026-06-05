@@ -17,7 +17,7 @@ import InventoryStep from './InventoryStep'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import { fi } from '../cash/cashUtils'
 
-const ROLE_LABELS: Record<string, string> = { owner: 'Propietario', contador: 'Contador', manager: 'Encargado', cajero: 'Cajero' }
+import { ROLE_LABELS } from '../../shared/constants'
 const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 const esFacturaTipo = (t?: string | null) => t === 'factura' || t === 'proforma'
 

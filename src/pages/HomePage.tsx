@@ -4,18 +4,7 @@ import { useAuth } from '../shared/hooks/useAuth'
 import type { UserRole } from '../shared/types/database'
 import { supabase } from '../shared/api/supabase'
 import { todayCR, fi } from '../shared/utils'
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  owner:    'Propietario',
-  contador: 'Contador',
-  manager:  'Encargado',
-  cajero:   'Cajero',
-  salonero: 'Salonero',
-  barman:   'Barman',
-  barback:  'Barback',
-  runner:   'Runner',
-  cocina:   'Cocina',
-}
+import { ROLE_LABELS } from '../shared/constants'
 
 interface Module {
   id:          string

@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { updateMovementStatus } from './cash'
-import type { CashMovement } from '../types/database'
+import type { CashMovement, Json } from '../types/database'
 
 export interface DocItem {
   codigo?: string | null; descripcion: string; cantidad?: number | null; unidad?: string | null
@@ -90,8 +90,8 @@ export async function createDocumentRow(path: string, sha: string, ex: DocExtrac
   const { data, error } = await supabase.from('documents')
     .insert({
       image_path: path, sha256: sha, estado: 'nuevo', created_by: createdBy,
-      raw_json: (ex ?? null) as never, tipo: ex?.tipo ?? null, clave_fe: ex?.clave_fe ?? null,
-    } as never)
+      raw_json: (ex ?? null) as unknown as Json, tipo: ex?.tipo ?? null, clave_fe: ex?.clave_fe ?? null,
+    })
     .select().single()
   if (error) throw new Error(error.message)
   return data as DocumentRow
@@ -181,9 +181,9 @@ export async function signedUrl(path: string): Promise<string | null> {
 }
 
 export async function setDocEstado(id: string, estado: 'procesado' | 'descartado', linkedMovementId?: string): Promise<void> {
-  const patch: Record<string, unknown> = { estado }
-  if (linkedMovementId) patch.linked_movement_id = linkedMovementId
-  const { error } = await supabase.from('documents').update(patch as never).eq('id', id)
+  const { error } = await supabase.from('documents')
+    .update({ estado, ...(linkedMovementId ? { linked_movement_id: linkedMovementId } : {}) })
+    .eq('id', id)
   if (error) throw new Error(error.message)
 }
 
@@ -209,7 +209,7 @@ export async function insertInboxMovement(m: {
     description: m.description, subcategory: m.subcategory ?? '', supplier_name: m.supplier_name ?? '',
     method: m.method, caja_origen: m.caja_origen, status: m.status,
     account_id: m.account_id ?? null, created_at: ts, updated_at: ts,
-  } as never).select('id').single()
+  }).select('id').single()
   if (error) throw new Error(error.message)
   return (data as { id: string }).id
 }

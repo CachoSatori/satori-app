@@ -15,8 +15,9 @@
  */
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession } from '../../shared/types/database'
-import { getCierresDia, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro } from '../../shared/api/cash'
+import { getCierresDia, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, discardCierreDia } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { fi, todayStr } from './cashUtils'
 
@@ -28,6 +29,7 @@ function N(v: number | ''): number { return Number(v) || 0 }
 
 export default function CashCierre({ onRefresh, openSession }: Props) {
   const { profile } = useAuth()
+  const requireManager = useManagerOverride()
   const today       = todayStr()
   const turnoAbierto = !!openSession  // no se puede cerrar el día con un turno abierto
 
@@ -208,6 +210,21 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     }
   }
 
+  // Deshacer el cierre del día (error de fecha / empezar de nuevo)
+  const handleDeshacer = async () => {
+    if (!parcial && !completo) return
+    if (!window.confirm(`¿Deshacer el cierre del ${fecha}?\nSe borran los datos del cierre y los movimientos que generó (ventas + retiro). No se puede deshacer.`)) return
+    if (!(await requireManager())) return
+    setSaving(true); setError(null)
+    try {
+      await discardCierreDia(fecha)
+      setMsg('✓ Cierre deshecho — podés empezar de nuevo.')
+      await loadCierres(); onRefresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al deshacer')
+    } finally { setSaving(false) }
+  }
+
   if (loading) return <div style={{ padding:'2rem', textAlign:'center', color:'#888' }}>Cargando…</div>
 
   return (
@@ -226,9 +243,17 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
               style={{ width:64, background:'#1a1a1a', border:'1px solid #333', color:'var(--t-gold)', padding:'2px 6px', borderRadius:2, fontSize:'0.74rem', fontFamily:'DM Mono, monospace', opacity: parcial ? 0.6 : 1 }} />
           </div>
         </div>
-        <input type="date" value={fecha} max={today}
-          onChange={e => setFecha(e.target.value)}
-          style={{ background:'#1a1a1a', border:'1px solid #333', color:'var(--t-gold)', padding:'5px 10px', borderRadius:2, fontSize:'0.82rem' }} />
+        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+          {(parcial || completo) && (
+            <button onClick={handleDeshacer} disabled={saving} title="Deshacer el cierre de esta fecha y empezar de 0"
+              style={{ background:'none', border:'1px solid #c23b22', color:'#c23b22', borderRadius:2, padding:'5px 10px', fontSize:'0.76rem', cursor:'pointer' }}>
+              ↩ Deshacer cierre
+            </button>
+          )}
+          <input type="date" value={fecha} max={today}
+            onChange={e => setFecha(e.target.value)}
+            style={{ background:'#1a1a1a', border:'1px solid #333', color:'var(--t-gold)', padding:'5px 10px', borderRadius:2, fontSize:'0.82rem' }} />
+        </div>
       </div>
 
       {turnoAbierto && (

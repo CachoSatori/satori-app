@@ -8,6 +8,7 @@ import {
   createCashMovement,
   deleteCashMovement,
   getPreviousCierre,
+  discardCashSession,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr } from './cashUtils'
 import { tipShiftToCaja } from '../../shared/utils'
@@ -339,6 +340,15 @@ export default function CashTurno({
     try { await deleteCashMovement(id); onRefresh() } catch { /* silent */ }
   }
 
+  // Descartar el turno (apertura por error / fecha equivocada) → empezar de 0
+  const descartarTurno = async () => {
+    if (!openSession) return
+    if (!window.confirm(`¿Descartar el turno ${openSession.shift_type} del ${openSession.session_date}?\nSe borra el turno y todos sus movimientos. No se puede deshacer.`)) return
+    if (!(await requireManager())) return
+    try { await discardCashSession(openSession.id); onSessionClose() }
+    catch (e) { onError(e instanceof Error ? e.message : 'Error al descartar') }
+  }
+
   // ── Confirmar cierre ──────────────────────────────────────
   const handleCierre = useCallback(async () => {
     if (!openSession || !profile) return
@@ -508,7 +518,15 @@ export default function CashTurno({
             {openSession.cajero_name} · {openSession.shift_type} · {openSession.session_date}
           </div>
         </div>
-        <span className="cd-badge-open">Turno activo</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          {canManage && (
+            <button onClick={descartarTurno} title="Descartar turno (error de fecha) y empezar de 0"
+              style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 4, padding: '4px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>
+              ↩ Descartar turno
+            </button>
+          )}
+          <span className="cd-badge-open">Turno activo</span>
+        </div>
       </div>
 
       {/* Top cards */}

@@ -200,6 +200,14 @@ export async function deleteCashMovement(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+// Descartar un turno (apertura por error, fecha equivocada): borra sus
+// movimientos y la sesión. Empezás de cero.
+export async function discardCashSession(sessionId: string): Promise<void> {
+  await supabase.from('cash_movements').delete().eq('session_id', sessionId)
+  const { error } = await supabase.from('cash_sessions').delete().eq('id', sessionId)
+  if (error) throw new Error(error.message)
+}
+
 // Reconciliar el egreso de caja de propinas cuando se EDITA un turno cerrado.
 // Al cerrar propinas se crea un movimiento (subcategory 'Propinas por turno',
 // description 'Propinas turno {fecha} {turno}') por el payout total. Si luego se
@@ -384,6 +392,15 @@ export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created
     .select().single()
   if (error) throw new Error(error.message)
   return data as CashCierreDia
+}
+
+// Deshacer el cierre del día (error de fecha / empezar de nuevo): borra los
+// cierres de esa fecha y los movimientos que generó (ventas del cierre + retiro).
+export async function discardCierreDia(date: string): Promise<void> {
+  await supabase.from('cash_movements').delete().eq('subcategory', 'Ventas cierre').like('description', `%${date}`)
+  await supabase.from('cash_movements').delete().eq('description', `Retiro dueños a banco ${date}`)
+  const { error } = await supabase.from('cash_cierres_dia' as never).delete().eq('session_date', date)
+  if (error) throw new Error(error.message)
 }
 
 export async function updateCierreCompleto(id: string, updates: Partial<CashCierreDia>): Promise<void> {

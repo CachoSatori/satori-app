@@ -546,9 +546,12 @@ Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya
 - 🟡 Afinar el prompt con 8–10 fotos reales variadas por proveedor (BELCA, Isleña, PMT, Guayafrut, SINPE, LAFISE/BN, mariscos manuscritos).
 - 🔭 Futuro: webhook WhatsApp Cloud API (Meta) como entrada alternativa.
 
-#### 🔭 Fase C — Auto-inventario + cuentas por pagar
-- **factura** → fuzzy-match proveedor (+ alias) · match ítems → `ingredientes` vía `product_map` → propone **entrada de inventario** · crea **cuenta por pagar** (`egreso_mercaderia` pendiente).
-- **comprobante_pago** → busca pendiente (proveedor + total±tol + fecha) → lo marca pagado (método, referencia, banco); si no hay match → egreso directo (resuelve pagos que no pasan por caja).
+#### ✅ Fase C — Auto-inventario (2026-06-04, en producción)
+- ✅ Migración 017: `supplier_item_map` (mapeo aprendido proveedor↔ingrediente), `ingredient_prices` (historial), trazas `inventory_movements.document_id/cash_movement_id`, RLS (cajero carga inventario).
+- ✅ **Inventario pendiente** en la Bandeja: facturas con el gasto ya creado → `InventoryStep` empareja cada ítem (mapeo aprendido por código → fuzzy → vincular/crear/no-inventario), **factor de conversión explícito**, entra stock + actualiza costo + guarda historial de precios, y **aprende** el mapeo para auto-emparejar la próxima factura del proveedor.
+- ✅ Idempotente por `document_id` (no suma stock dos veces). El gasto NO se rehace (es de Fase B); pagar un comprobante no vuelve a tocar el stock.
+- ✅ Trazabilidad: badge "📄 factura" en Movimientos de inventario; mini-historial de precios al editar un ingrediente. Catálogo de ingredientes se construye al vuelo.
+- 🟡 Refinar `factor_conversion` por proveedor con uso real; cargar los ~30-40 insumos frecuentes acelera las primeras facturas.
 
 #### 🔭 Fase D — Conciliación bancaria
 - Import del resumen bancario → cada línea matchea comprobante/pendiente (monto+fecha+referencia) → **conciliación automática**: marca pagados y detecta pagos sin comprobante.
@@ -566,7 +569,7 @@ Diseño técnico completo acordado con el dueño. La Fase A (modelo de datos) ya
 | Fase 2 — Fidelización / CRM | Alto | L | ⭐ Alta (paralelo) |
 | Fase 2B — Chatbot WhatsApp | Alto | L | ⭐ Alta (paralelo) |
 | Fase 2 + 2B juntas | Muy alto | L | ✨ Sinergia máxima |
-| **Fase 2D — Pagos/conciliación + ingesta por foto** | **Muy alto** | **L** | **🔥 Fases A ✅ + B ✅ operativas; C/D pendientes** |
+| **Fase 2D — Pagos/conciliación + ingesta por foto** | **Muy alto** | **L** | **🔥 Fases A+B+C ✅ operativas; D (banco) pendiente** |
 | Fase 3 — POS nativo | Muy alto | XL | 🧭 Estratégica |
 | Fase 3.6 — Factura electrónica | Crítico (legal) | L | 🧭 con POS |
 | Fase 4 — Canales | Alto | L | Después de POS |

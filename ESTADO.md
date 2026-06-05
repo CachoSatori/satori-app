@@ -32,6 +32,10 @@
 - **PWA Share Target** (WhatsApp → Satori, `public/sw-share.js`) + subida manual/cámara. Anti-duplicado SHA-256 / clave FE.
 - **Propinas** (recibo de tips) → no es gasto del P&L. **USD** → guarda dólares + TC del día.
 
+### Auto-inventario desde la Bandeja (Fase 2D-C) ✅
+- Migración 017: `supplier_item_map` (mapeo aprendido), `ingredient_prices` (historial), trazas en `inventory_movements`.
+- Bandeja → **"Inventario pendiente"**: facturas con gasto creado → `InventoryStep` empareja ítem↔ingrediente (mapeo aprendido por código del proveedor → fuzzy → vincular/crear/no-inventario), **factor de conversión explícito**, entra stock + costo + historial de precios, y **aprende** para auto-emparejar la próxima. Idempotente por `document_id`. Trazas: badge "📄 factura" en movimientos + historial de precios al editar ingrediente. El catálogo se construye al vuelo.
+
 ### Caja — mejoras operativas (2026-06-04)
 - **Caja Fuerte** muestra ₡ **y** $. Tarjeta **"Ajustes de cierre"** = suma de las diferencias de los cierres del día (ver si netean a cero a fin de mes); el ajuste de apertura ya no la ensucia.
 - **Pagos operativos** en el turno (delivery → cuenta 7100, operativo, salario en efectivo) — salen de la Caja Diaria. Orden de Caja Diaria: Ingresos adicionales (compacto) → Pagos a proveedores → Pagos operativos.

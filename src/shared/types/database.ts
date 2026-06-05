@@ -244,61 +244,7 @@ export interface SOP {
 }
 
 // ── Tipo Database para el cliente de Supabase ────────────────
-
-export interface Database {
-  public: {
-    Tables: {
-      profiles: {
-        Row: Profile
-        Insert: Omit<Profile, 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Profile, 'id' | 'created_at' | 'updated_at'>>
-      }
-      employees: {
-        Row: Employee
-        Insert: Omit<Employee, 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Employee, 'id' | 'created_at' | 'updated_at'>>
-      }
-      tip_sessions: {
-        Row: TipSession
-        Insert: Omit<TipSession, 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<TipSession, 'id' | 'created_at' | 'updated_at'>>
-      }
-      tip_entries: {
-        Row: TipEntry
-        Insert: Omit<TipEntry, 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<TipEntry, 'id' | 'created_at' | 'updated_at'>>
-      }
-      role_tip_points: {
-        Row: RoleTipPoints
-        Insert: RoleTipPoints
-        Update: Partial<RoleTipPoints>
-      }
-      cash_sessions: {
-        Row: CashSession
-        Insert: Omit<CashSession, 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<CashSession, 'id' | 'created_at' | 'updated_at'>>
-      }
-      cash_movements: {
-        Row: CashMovement
-        Insert: Omit<CashMovement, 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<CashMovement, 'id' | 'created_at' | 'updated_at'>>
-      }
-      suppliers: {
-        Row: Supplier
-        Insert: Omit<Supplier, 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Omit<Supplier, 'id' | 'created_at' | 'updated_at'>>
-      }
-      exchange_rates: {
-        Row: ExchangeRate
-        Insert: Omit<ExchangeRate, 'id' | 'created_at'>
-        Update: Partial<Omit<ExchangeRate, 'id' | 'created_at'>>
-      }
-      // Note: ventas_dias, ventas_hist, ventas_metas, ventas_comps, product_map, sops
-      // are intentionally excluded from this generic because:
-      //   1. JSONB columns (Json type) cause Supabase query builder inference issues
-      //   2. Their TypeScript shapes are defined above (VentasDia, SOP, etc.) and used
-      //      directly via .returns<T>() or explicit casting at the call site
-      //   3. The correct approach is to use supabase gen types for production accuracy
-    }
-  }
-}
+// El `Database` real lo genera Supabase desde el esquema vivo → `supabase.gen.ts`
+// (lo usa el cliente en `shared/api/supabase.ts`). Acá solo quedan los tipos de
+// dominio (interfaces) que usa la app.
+export type { Database } from './supabase.gen'

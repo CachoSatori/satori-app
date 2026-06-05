@@ -63,6 +63,7 @@ Lo que ya está construido pero necesita un último paso para rendir.
 - Cargar costos unitarios reales (UI lista: Ventas → Config → Costos, inline o CSV) → enciende food cost en MenuEng
 - DNS SiteGround para enviar emails desde `@satoricostarica.com` (hoy sale de `onboarding@resend.dev`)
 - Definir metas mensuales en todos los meses para que el reporte mensual compare contra objetivo
+- **Hardening: hang del refresh de token** — cuando la sesión vence, el cliente Supabase puede colgar una request (escrituras de caja/bandeja). Mitigado con timeouts + aviso; falta la causa raíz (auto-refresh/reconexión o re-login transparente). Optimizar también la recarga post-cierre (hoy refetch de ~1.2k movimientos).
 
 **Valor:** completa el círculo de lo ya invertido. Esfuerzo casi nulo.
 

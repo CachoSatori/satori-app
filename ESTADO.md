@@ -44,6 +44,7 @@
 - **TC al abrir turno** = el de Admin (`exchange_rates`). **Cajero** agregado a Puntos por rol (propinas).
 - **Descartar turno** (Caja Diaria) y **Deshacer cierre** (Cierre del día) con contraseña de manager — para errores de fecha / empezar de 0.
 - **Datos**: deliverys históricos recategorizados a operativo (7100); directorio de proveedores depurado (no-proveedores desactivados).
+- **Timeout en apertura/cierre del turno** (15s) + en la Bandeja: si la sesión de login vence, el cliente Supabase puede colgar una request (refresh de token); ahora surge un aviso "recargá la app y reintentá" en vez de quedar girando. ⚠️ Pendiente de fondo: investigar el hang del refresh de token (afecta cualquier escritura tras sesión vencida).
 
 ### Fase A finanzas (modelo de pagos/P&L) — ver ROADMAP Fase 2D
 - Retiro a banco = **traspaso** (fuera del P&L). `egreso_socios` ya no alimenta el P&L. **Ingresos de caja selectos** (aceite/reciclaje) → cuenta `otros_ingresos` (mig. 014). **`cash_movements.account_id`** (mig. 015) + selector "Cuenta P&L". **Bitcoin** en métodos de proveedor.

@@ -1,8 +1,5 @@
 import { supabase } from './supabase'
 import type { TipSession, TipEntry, Employee, RoleTipPoints } from '../types/database'
-import type { Database } from '../types/supabase.gen'
-
-type TipEntryInsert = Database['public']['Tables']['tip_entries']['Insert']
 
 // ── Sesiones ────────────────────────────────────────────────
 
@@ -141,18 +138,25 @@ export async function savePayouts(
   entries: Array<{ id: string; points: number; payout_crc: number }>
 ): Promise<void> {
   if (!entries.length) return
-  // Batch upsert instead of N individual updates
-  const { error } = await supabase
-    .from('tip_entries')
-    .upsert(
-      // upsert parcial (sólo points/payout_crc): no satisface el Insert completo
-      // de tip_entries (employee_id, hours_worked, etc. son requeridos), por eso
-      // el cast vía unknown. NOTA: en `main` esto es un UPDATE por id (fix prod del
-      // NOT NULL session_id); reconciliar antes de mergear esta rama.
-      entries.map(e => ({ id: e.id, points: e.points, payout_crc: e.payout_crc })) as unknown as TipEntryInsert[],
-      { onConflict: 'id' },
-    )
-  if (error) throw new Error(error.message)
+  // FIX (prod): estas entradas YA existen — se crean con su session_id al
+  // togglear/editar la línea. Acá sólo se actualizan points/payout_crc del
+  // reparto del pool.
+  //
+  // Antes era upsert(onConflict:'id'): Postgres evalúa las restricciones
+  // NOT NULL sobre la tupla de INSERT propuesta ANTES de resolver el conflicto,
+  // así que omitir session_id (NOT NULL, sin default) reventaba con
+  // "null value in column session_id violates not-null constraint" AUNQUE la
+  // fila ya existiera. UPDATE por id evita el INSERT y, por tanto, la violación.
+  const results = await Promise.all(
+    entries.map(e =>
+      supabase
+        .from('tip_entries')
+        .update({ points: e.points, payout_crc: e.payout_crc })
+        .eq('id', e.id),
+    ),
+  )
+  const failed = results.find(r => r.error)
+  if (failed?.error) throw new Error(failed.error.message)
 }
 
 // ── Empleados ───────────────────────────────────────────────

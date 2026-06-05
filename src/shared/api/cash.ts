@@ -49,7 +49,7 @@ export async function createCashSession(params: {
       initial_service_crc:   params.initial_cash_crc,         // mirror to legacy field
       initial_suppliers_crc: params.initial_suppliers_crc ?? 0,
       notes:                 params.notes ?? null,
-    } as never)
+    })
     .select()
     .single()
   if (error) throw new Error(error.message)
@@ -77,7 +77,7 @@ export async function closeCashSession(
       final_safe_crc: finalData.final_safe_crc ?? null,
       final_bank_crc: finalData.final_bank_crc ?? null,
       ...(finalData.notes ? { notes: finalData.notes } : {}),
-    } as never)
+    })
     .eq('id', sessionId)
   if (error) throw new Error(error.message)
 }
@@ -138,7 +138,7 @@ export async function createCashMovement(movement: {
       shift:         movement.shift         ?? '',
       account_id:    movement.account_id    ?? null,
       status:        movement.method === 'Transferencia' ? 'pendiente' : 'aprobado',
-    } as never)
+    })
     .select()
     .single()
   if (error) throw new Error(error.message)
@@ -151,7 +151,7 @@ export async function updateCashMovement(
 ): Promise<void> {
   const { error } = await supabase
     .from('cash_movements')
-    .update(updates as never)
+    .update(updates)
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
@@ -159,7 +159,7 @@ export async function updateCashMovement(
 export async function updateMovementStatus(id: string, status: 'aprobado' | 'pendiente' | 'rechazado'): Promise<void> {
   const { error } = await supabase
     .from('cash_movements')
-    .update({ status } as never)
+    .update({ status })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
@@ -187,7 +187,7 @@ export async function createDayMovement(m: {
     description: m.description, subcategory: m.subcategory ?? '', supplier_name: m.supplier_name ?? '',
     method: m.method, caja_origen: m.caja_origen, status: m.status ?? 'aprobado',
     account_id: m.account_id ?? null, created_at: ts, updated_at: ts,
-  } as never).select('id').single()
+  }).select('id').single()
   if (error) throw new Error(error.message)
   return (data as { id: string }).id
 }
@@ -225,7 +225,7 @@ export async function reconcilePropinaEgreso(description: string, newTotalCRC: n
   if (error) return
   const mov = (data as { id: string; amount_crc: number }[] | null)?.[0]
   if (!mov || mov.amount_crc === newTotalCRC) return
-  await supabase.from('cash_movements').update({ amount_crc: newTotalCRC } as never).eq('id', mov.id)
+  await supabase.from('cash_movements').update({ amount_crc: newTotalCRC }).eq('id', mov.id)
 }
 
 // Registra (idempotente) las ventas en EFECTIVO de un Cierre del día como
@@ -270,7 +270,7 @@ export async function recordCierreSales(params: {
       caja_origen:   'Caja Fuerte',   // las ventas en efectivo entran a la Caja Fuerte (+saldo)
       method:        'Efectivo',
       status:        'aprobado',
-    })) as never,
+    })),
   )
   if (error) throw new Error(error.message)
 }
@@ -306,7 +306,7 @@ export async function recordCierreRetiro(params: {
     caja_origen:   'Caja Fuerte',   // sale de la Caja Fuerte (traspaso al Banco) → descuenta el saldo
     method:        'Transferencia',
     status:        'aprobado',
-  } as never)
+  })
   if (error) throw new Error(error.message)
 }
 
@@ -345,8 +345,8 @@ export async function upsertSupplier(params: {
   if (params.id) payload.id = params.id
 
   const { data, error } = params.id
-    ? await supabase.from('suppliers').update(payload as never).eq('id', params.id).select().single()
-    : await supabase.from('suppliers').insert(payload as never).select().single()
+    ? await supabase.from('suppliers').update(payload).eq('id', params.id).select().single()
+    : await supabase.from('suppliers').insert(payload).select().single()
   if (error) throw new Error(error.message)
   return data as Supplier
 }
@@ -354,7 +354,7 @@ export async function upsertSupplier(params: {
 export async function deactivateSupplier(id: string): Promise<void> {
   const { error } = await supabase
     .from('suppliers')
-    .update({ is_active: false } as never)
+    .update({ is_active: false })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
@@ -363,7 +363,7 @@ export async function deactivateSupplier(id: string): Promise<void> {
 import type { CashCierreDia } from '../types/database'
 
 export async function getCierresDia(date?: string): Promise<CashCierreDia[]> {
-  let q = supabase.from('cash_cierres_dia' as never).select('*').order('created_at', { ascending: false })
+  let q = supabase.from('cash_cierres_dia').select('*').order('created_at', { ascending: false })
   if (date) q = q.eq('session_date', date)
   const { data, error } = await q
   if (error) throw new Error(error.message)
@@ -374,7 +374,7 @@ export async function getCierresDia(date?: string): Promise<CashCierreDia[]> {
 // caja de proveedores (sep_diaria) a la apertura del día siguiente.
 export async function getPreviousCierre(beforeDate: string): Promise<CashCierreDia | null> {
   const { data, error } = await supabase
-    .from('cash_cierres_dia' as never)
+    .from('cash_cierres_dia')
     .select('*')
     .eq('tipo', 'completo')
     .lt('session_date', beforeDate)
@@ -387,8 +387,8 @@ export async function getPreviousCierre(beforeDate: string): Promise<CashCierreD
 
 export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created_at'|'updated_at'>): Promise<CashCierreDia> {
   const { data, error } = await supabase
-    .from('cash_cierres_dia' as never)
-    .insert({ ...cierre, updated_at: new Date().toISOString() } as never)
+    .from('cash_cierres_dia')
+    .insert({ ...cierre, updated_at: new Date().toISOString() })
     .select().single()
   if (error) throw new Error(error.message)
   return data as CashCierreDia
@@ -399,14 +399,14 @@ export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created
 export async function discardCierreDia(date: string): Promise<void> {
   await supabase.from('cash_movements').delete().eq('subcategory', 'Ventas cierre').like('description', `%${date}`)
   await supabase.from('cash_movements').delete().eq('description', `Retiro dueños a banco ${date}`)
-  const { error } = await supabase.from('cash_cierres_dia' as never).delete().eq('session_date', date)
+  const { error } = await supabase.from('cash_cierres_dia').delete().eq('session_date', date)
   if (error) throw new Error(error.message)
 }
 
 export async function updateCierreCompleto(id: string, updates: Partial<CashCierreDia>): Promise<void> {
   const { error } = await supabase
-    .from('cash_cierres_dia' as never)
-    .update({ ...updates, updated_at: new Date().toISOString() } as never)
+    .from('cash_cierres_dia')
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }

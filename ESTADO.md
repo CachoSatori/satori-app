@@ -3,6 +3,9 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-04 (Caja v2 · ledger real · Fase A finanzas · Bandeja IA multi-doc desplegada)
 
+## 🧹 Auditoría de limpieza (rama `audit/cleanup-nocturna`, sin mergear)
+Auditoría nocturna autónoma: el proyecto está sano (TS strict sin `any`/`ts-ignore`, sin `console.log`, sin TODOs). Cambios seguros aplicados en rama aparte (NO en main, sin tocar la base): −3 deps sin uso (Capacitor x2, date-fns), `@types/dompurify` a devDeps, removidos 2 exports muertos + dedup del formateador `fi` en 3 módulos no-financieros. **Caja/Propinas/Finanzas intactos** (diff vacío). Documentado para hacer con supervisión: regenerar tipos Supabase (151 `as never`), unificar `ROLE_LABELS` (×8), causa raíz del hang de token. Detalle en `AUDITORIA.md` y `RESUMEN-MAÑANA.md`.
+
 ## 🆕 Novedades 2026-06-04
 
 ### Caja v2 (rediseño operativo)

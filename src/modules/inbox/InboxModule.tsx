@@ -3,17 +3,19 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import {
-  listInbox, uploadDocument, extractDocument, signedUrl, setDocEstado,
-  insertInboxMovement, findDuplicate, sha256File, autoCommitDocument,
+  listInbox, uploadImage, extractImage, createDocumentRow, signedUrl, setDocEstado,
+  insertInboxMovement, findDuplicate, sha256File, autoCommitDocument, cuadra,
   type DocumentRow, type DocExtract,
 } from '../../shared/api/documents'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { getSuppliers, getAllCashMovements, updateMovementStatus } from '../../shared/api/cash'
+import { getCurrentRate } from '../../shared/api/exchangeRate'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import { fi } from '../cash/cashUtils'
 
 const ROLE_LABELS: Record<string, string> = { owner: 'Propietario', contador: 'Contador', manager: 'Encargado', cajero: 'Cajero' }
 const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
+const esFacturaTipo = (t?: string | null) => t === 'factura' || t === 'proforma'
 
 // Evita que una request colgada (token vencido / red) deje el botón en "Guardando…" para siempre.
 function withTimeout<T>(p: Promise<T>, ms = 15000): Promise<T> {
@@ -34,6 +36,8 @@ export default function InboxModule() {
   const [accounts, setAccounts] = useState<FinanceAccount[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [pendientes, setPendientes] = useState<CashMovement[]>([])
+  const [tc, setTc] = useState(640)
+  useEffect(() => { getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {}) }, [])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState<string | null>(null)
   const [error, setError]     = useState<string | null>(null)
@@ -68,24 +72,29 @@ export default function InboxModule() {
     try {
       const sha = await sha256File(file)
       const dup = await withTimeout(findDuplicate(sha, null))
-      if (dup) { setError('Este documento ya fue cargado (duplicado).'); setBusy(null); return }
-      const { doc } = await withTimeout(uploadDocument(file, profile.id, filename), 30000)
-      const ex = await extractDocument(doc)   // si falla queda 'nuevo' para carga manual
-      // Auto-genera el movimiento si la IA leyó lo suficiente; si no, queda para confirmar a mano.
-      if (ex) {
-        const validAccs = new Set(accounts.map(a => a.id))
-        const res = await autoCommitDocument(doc, ex, profile.id, pendientes, validAccs).catch(() => null)
-        setInfo(res
-          ? (res.reconciled ? '✓ Comprobante conciliado — pendiente marcado pagado.' : '✓ Movimiento generado. Revisalo en Caja → Movimientos.')
-          : 'Cargado. La IA no leyó lo suficiente — abrilo y completá los datos a mano.')
-      } else {
+      if (dup) { setError('Esta foto ya fue cargada (duplicado).'); setBusy(null); return }
+      const { path } = await withTimeout(uploadImage(file, filename), 30000)
+      const docs = await extractImage(path)   // una foto puede traer varios documentos
+      const validAccs = new Set(accounts.map(a => a.id))
+      if (docs.length === 0) {
+        await createDocumentRow(path, sha, null, profile.id)
         setInfo('Cargado en modo manual — abrilo y completá los datos.')
+      } else {
+        let auto = 0, rev = 0
+        for (const ex of docs) {
+          const row = await createDocumentRow(path, sha, ex, profile.id)
+          const res = await autoCommitDocument(row, ex, profile.id, pendientes, validAccs, tc).catch(() => null)
+          if (res) auto++; else rev++
+        }
+        setInfo(`${docs.length} documento(s) detectado(s)` +
+          (auto ? ` · ${auto} generado(s) automáticamente (revisá en Caja → Movimientos)` : '') +
+          (rev ? ` · ${rev} para confirmar/revisar en la Bandeja` : ''))
       }
       await loadAll()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error procesando la imagen')
     } finally { setBusy(null) }
-  }, [profile, loadAll, accounts, pendientes])
+  }, [profile, loadAll, accounts, pendientes, tc])
 
   // ── Imagen compartida desde WhatsApp (Share Target) ───────────
   useEffect(() => {
@@ -166,15 +175,18 @@ export default function InboxModule() {
                   {thumbs[doc.id] && <img src={thumbs[doc.id]} alt="" style={{ width: '100%', height: 150, objectFit: 'cover', display: 'block' }} />}
                   <div style={{ padding: '0.7rem 0.9rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className={`inbox-badge ${tipo}`} style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 7px', borderRadius: 99, background: tipo === 'factura' ? '#fbeede' : tipo === 'comprobante_pago' ? '#e0edf8' : 'rgba(0,0,0,.06)', color: tipo === 'factura' ? '#a07030' : tipo === 'comprobante_pago' ? '#2a4a7a' : '#777' }}>
+                      <span className={`inbox-badge ${tipo}`} style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '2px 7px', borderRadius: 99, background: esFacturaTipo(tipo) ? '#fbeede' : tipo === 'comprobante_pago' ? '#e0edf8' : tipo === 'propinas' ? '#efe6f8' : 'rgba(0,0,0,.06)', color: esFacturaTipo(tipo) ? '#a07030' : tipo === 'comprobante_pago' ? '#2a4a7a' : tipo === 'propinas' ? '#6a4a8a' : '#777' }}>
                         {tipo === 'comprobante_pago' ? 'comprobante' : tipo}
                       </span>
-                      {ex?.confianza != null && <span style={{ fontSize: '0.62rem', color: '#999' }}>{Math.round(N(ex.confianza) * 100)}%</span>}
+                      <span style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        {ex?.requiere_revision && <span style={{ fontSize: '0.6rem', fontWeight: 700, color: '#c23b22' }}>⚠ revisar</span>}
+                        {ex?.confianza != null && <span style={{ fontSize: '0.62rem', color: '#999' }}>{Math.round(N(ex.confianza) * 100)}%</span>}
+                      </span>
                     </div>
                     <div style={{ fontWeight: 700, fontSize: '0.92rem', marginTop: '0.4rem', color: 'var(--t-ink)' }}>{ex?.proveedor || '— sin leer —'}</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#5a5040', marginTop: '0.2rem' }}>
                       <span>{ex?.fecha || doc.created_at.slice(0, 10)}</span>
-                      <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>{ex?.total ? fi(N(ex.total)) : '—'}</span>
+                      <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>{ex?.total ? `${ex.moneda === 'USD' ? '$' : '₡'}${N(ex.total).toLocaleString('es-CR')}` : '—'}</span>
                     </div>
                   </div>
                 </div>
@@ -186,7 +198,7 @@ export default function InboxModule() {
 
       {active && (
         <ConfirmCard
-          doc={active} accounts={accounts} suppliers={suppliers} pendientes={pendientes}
+          doc={active} accounts={accounts} suppliers={suppliers} pendientes={pendientes} tc={tc}
           createdBy={profile?.id ?? ''}
           onClose={() => setActive(null)}
           onDone={async () => { setActive(null); await loadAll() }}
@@ -198,11 +210,12 @@ export default function InboxModule() {
 }
 
 // ────────────────────────────────────────────────────────────────
-function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose, onDone, onDiscard }: {
+function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, onClose, onDone, onDiscard }: {
   doc: DocumentRow
   accounts: FinanceAccount[]
   suppliers: Supplier[]
   pendientes: CashMovement[]
+  tc: number
   createdBy: string
   onClose: () => void
   onDone: () => void
@@ -213,51 +226,65 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
   const [prov, setProv]     = useState(ex?.proveedor ?? '')
   const [fecha, setFecha]   = useState(ex?.fecha ?? new Date().toISOString().slice(0, 10))
   const [total, setTotal]   = useState<number | ''>(ex?.total ? N2(ex.total) : '')
+  const [moneda, setMoneda] = useState<'CRC' | 'USD'>(ex?.moneda === 'USD' ? 'USD' : 'CRC')
+  const [condicion, setCondicion] = useState<'contado' | 'credito'>(ex?.condicion_pago === 'credito' ? 'credito' : 'contado')
   const [metodo, setMetodo] = useState<string>(ex?.metodo_pago ?? 'Transferencia')
-  const [ref, setRef]       = useState(ex?.referencia ?? '')
+  const [ref, setRef]       = useState(ex?.referencia ?? ex?.numero_documento ?? '')
   const [accountId, setAccountId] = useState<string>(ex?.cuenta_qb_sugerida && accounts.some(a => a.id === ex.cuenta_qb_sugerida) ? ex.cuenta_qb_sugerida! : '')
+  const [validado, setValidado] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState<string | null>(null)
 
+  const esFactura  = tipo === 'factura' || tipo === 'proforma'
   const esTransfer = metodo === 'Transferencia' || metodo === 'SINPE' || metodo === 'Bitcoin'
-  const cajaOrigen = esTransfer ? 'Banco' : 'Caja Proveedores'
-  const status: 'aprobado' | 'pendiente' = tipo === 'factura' ? (esTransfer ? 'pendiente' : 'aprobado') : 'aprobado'
+  const status: 'aprobado' | 'pendiente' =
+    tipo === 'comprobante_pago' ? 'aprobado'
+    : esFactura && condicion === 'credito' ? 'pendiente'
+    : esFactura && condicion === 'contado' ? 'aprobado'
+    : (esTransfer ? 'pendiente' : 'aprobado')
+  const cajaOrigen = tipo === 'propinas' ? 'Caja Fuerte' : (esTransfer || status === 'pendiente' ? 'Banco' : 'Caja Proveedores')
+  // Necesita validación humana: manuscrito/borroso/no cuadra (la IA lo marcó o el cruce falla)
+  const revisar = !!(ex && (ex.requiere_revision || !cuadra(ex)))
+
+  const amountCRC = moneda === 'USD' ? Math.round(N2(total) * (tc || 1)) : N2(total)
+  const amountUSD = moneda === 'USD' ? N2(total) : 0
 
   // Candidato a conciliar (solo comprobante): proveedor parecido + total ±2% + fecha ±7d
   const candidato = useMemo(() => {
     if (tipo !== 'comprobante_pago' || !total) return null
-    const t = N2(total), pn = (prov || '').toLowerCase()
+    const t = amountCRC, pn = (prov || '').toLowerCase()
     return pendientes.find(m => {
       const okTotal = Math.abs(N(m.amount_crc) - t) <= t * 0.02
       const okProv  = pn && (m.supplier_name || '').toLowerCase().includes(pn.slice(0, 4))
       const okFecha = !fecha || Math.abs(daysBetween(m.created_at.slice(0, 10), fecha)) <= 7
       return okTotal && (okProv || !pn) && okFecha
     }) ?? null
-  }, [tipo, total, prov, fecha, pendientes])
+  }, [tipo, total, prov, fecha, pendientes, amountCRC])
 
   const confirmar = async () => {
     if (!total) { setErr('Ingresá el monto'); return }
+    if (tipo === 'otro') { setErr('Elegí un tipo (factura / comprobante / propinas) o descartá el documento.'); return }
+    if (revisar && !validado) { setErr('Revisá los montos y marcá "Validé los datos" antes de confirmar.'); return }
     setSaving(true); setErr(null)
     try {
       let movementId: string
       if (tipo === 'comprobante_pago' && candidato) {
-        // Marcar el pendiente como pagado
         await withTimeout(updateMovementStatus(candidato.id, 'aprobado'))
         movementId = candidato.id
-      } else {
-        // Factura (cuenta por pagar) o comprobante sin match → egreso directo
+      } else if (tipo === 'propinas') {
+        // Propinas: pass-through, NO es gasto del P&L (subcategoría 'Propinas' se excluye)
         movementId = await withTimeout(insertInboxMovement({
-          created_by: createdBy,
-          movement_type: 'egreso_mercaderia',
-          amount_crc: N2(total),
-          description: ref ? `${prov || 'Factura'} · ${ref}` : (prov || (tipo === 'factura' ? 'Factura' : 'Pago')),
-          subcategory: prov || '',
-          supplier_name: prov || '',
-          method: metodo,
-          caja_origen: cajaOrigen,
-          status,
-          account_id: accountId || null,
-          fecha,
+          created_by: createdBy, movement_type: 'egreso_personal', amount_crc: amountCRC, amount_usd: amountUSD,
+          description: prov ? `Propinas · ${prov}` : 'Propinas', subcategory: 'Propinas', supplier_name: prov || '',
+          method: metodo, caja_origen: 'Caja Fuerte', status: 'aprobado', account_id: null, fecha,
+        }))
+      } else {
+        // Factura/proforma (cuenta por pagar) o comprobante sin match → egreso directo
+        movementId = await withTimeout(insertInboxMovement({
+          created_by: createdBy, movement_type: 'egreso_mercaderia', amount_crc: amountCRC, amount_usd: amountUSD,
+          description: ref ? `${prov || 'Factura'} · ${ref}` : (prov || 'Factura'),
+          subcategory: prov || '', supplier_name: prov || '', method: metodo,
+          caja_origen: cajaOrigen, status, account_id: accountId || null, fecha,
         }))
       }
       await withTimeout(setDocEstado(doc.id, 'procesado', movementId))
@@ -281,7 +308,9 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
           <Field label="Tipo" full>
             <select className="tips-input-dark" style={{ width: '100%' }} value={tipo} onChange={e => setTipo(e.target.value as DocExtract['tipo'])}>
               <option value="factura">Factura (cuenta por pagar)</option>
+              <option value="proforma">Proforma (= factura)</option>
               <option value="comprobante_pago">Comprobante de pago</option>
+              <option value="propinas">Propinas (no es gasto)</option>
               <option value="otro">Otro</option>
             </select>
           </Field>
@@ -292,9 +321,24 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
           <Field label="Fecha">
             <input type="date" className="tips-input-dark" style={{ width: '100%' }} value={fecha} onChange={e => setFecha(e.target.value)} />
           </Field>
-          <Field label="Monto ₡">
+          <Field label={`Monto ${moneda === 'USD' ? '$' : '₡'}`}>
             <input type="number" className="tips-input-dark" style={{ width: '100%' }} value={total} onChange={e => setTotal(e.target.value === '' ? '' : Number(e.target.value))} placeholder="0" />
+            {moneda === 'USD' && <div style={{ fontSize: '0.66rem', color: 'var(--t-muted)', marginTop: 2 }}>≈ {fi(amountCRC)} al TC {tc}</div>}
           </Field>
+          <Field label="Moneda">
+            <select className="tips-input-dark" style={{ width: '100%' }} value={moneda} onChange={e => setMoneda(e.target.value as 'CRC' | 'USD')}>
+              <option value="CRC">₡ Colones</option>
+              <option value="USD">$ Dólares</option>
+            </select>
+          </Field>
+          {esFactura && (
+            <Field label="Condición de pago">
+              <select className="tips-input-dark" style={{ width: '100%' }} value={condicion} onChange={e => setCondicion(e.target.value as 'contado' | 'credito')}>
+                <option value="contado">Contado (pagado)</option>
+                <option value="credito">Crédito (cuenta por pagar)</option>
+              </select>
+            </Field>
+          )}
           <Field label="Referencia / Nº de factura" full>
             <input className="tips-input-dark" style={{ width: '100%' }} value={ref} onChange={e => setRef(e.target.value)} placeholder="Nº de factura / referencia" />
           </Field>
@@ -303,18 +347,30 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
               {['Efectivo', 'Transferencia', 'SINPE', 'Bitcoin'].map(m => <option key={m}>{m}</option>)}
             </select>
           </Field>
-          <Field label="Cuenta P&L (opcional)">
-            <select className="tips-input-dark" style={{ width: '100%' }} value={accountId} onChange={e => setAccountId(e.target.value)}>
-              <option value="">— auto —</option>
-              {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </Field>
+          {tipo !== 'propinas' && (
+            <Field label="Cuenta P&L (opcional)">
+              <select className="tips-input-dark" style={{ width: '100%' }} value={accountId} onChange={e => setAccountId(e.target.value)}>
+                <option value="">— auto —</option>
+                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </Field>
+          )}
           <Field label="Asiento contable" full>
             <div style={{ fontSize: '0.82rem', color: 'var(--t-muted)', padding: '0.4rem 0' }}>
-              {cajaOrigen} · {status === 'pendiente' ? 'Pendiente' : 'Pagado'}
+              {tipo === 'propinas' ? 'Propinas (excluido del P&L)' : `${cajaOrigen} · ${status === 'pendiente' ? 'Pendiente (cuenta por pagar)' : 'Pagado'}`}
             </div>
           </Field>
         </div>
+
+        {revisar && (
+          <div style={{ marginTop: '0.75rem', padding: '0.7rem 0.85rem', borderRadius: 4, background: 'rgba(194,59,34,.08)', border: '1px solid #c23b22' }}>
+            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#c23b22', marginBottom: '0.4rem' }}>⚠ Requiere revisión (manuscrito / baja confianza / no cuadra)</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={validado} onChange={e => setValidado(e.target.checked)} />
+              Revisé los montos contra la factura y están correctos
+            </label>
+          </div>
+        )}
 
         {tipo === 'comprobante_pago' && (
           <div style={{ marginTop: '0.75rem', padding: '0.6rem 0.8rem', borderRadius: 4, background: candidato ? 'rgba(74,154,106,.1)' : 'rgba(200,160,48,.08)', border: `1px solid ${candidato ? '#4a9a6a' : '#c8a030'}`, fontSize: '0.8rem' }}>
@@ -327,7 +383,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, createdBy, onClose,
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
           <button className="tips-btn-ghost" style={{ color: '#c0392b', borderColor: '#f0b0b0' }} onClick={onDiscard} disabled={saving}>Descartar</button>
           <button className="tips-btn-ghost" onClick={onClose} disabled={saving}>Cancelar</button>
-          <button className="cd-btn-green" onClick={confirmar} disabled={saving || !total}>
+          <button className="cd-btn-green" onClick={confirmar} disabled={saving || !total || tipo === 'otro' || (revisar && !validado)}>
             {saving ? 'Guardando…' : '✓ Confirmar'}
           </button>
         </div>

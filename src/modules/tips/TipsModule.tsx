@@ -232,6 +232,13 @@ export default function TipsModule() {
         exchange_rate: exchangeRate,
         opened_by:     profile.id,
       })
+      // Guard: si por algún motivo el turno no volvió con id, NO seguimos.
+      // Cargar líneas sin un turno persistido haría que cada entrada se guarde
+      // con session_id nulo → viola la restricción NOT NULL de tip_entries.
+      if (!session?.id) {
+        setError('No se pudo crear el turno (sin id). Recargá la app y reintentá.')
+        return
+      }
       setOpenSession(session)
       setShowNewSession(false)
       // Resetear líneas
@@ -274,7 +281,7 @@ export default function TipsModule() {
 
   // ── Toggle empleado ───────────────────────────────────────
   const toggleLine = async (employeeId: string, checked: boolean) => {
-    if (!openSession) return
+    if (!openSession?.id) return  // nunca persistir entradas sin turno con id
     if (!checked) {
       // Desmarcar: eliminar entrada
       await deleteTipEntry(openSession.id, employeeId).catch(() => {})
@@ -343,7 +350,7 @@ export default function TipsModule() {
 
   // ── Auto-save entrada al dejar campo ─────────────────────
   const handleLineBlur = async (employeeId: string) => {
-    if (!openSession) return
+    if (!openSession?.id) return  // nunca persistir entradas sin turno con id
     const line = lines.find(l => l.employeeId === employeeId)
     if (!line || !line.active) return
     const hours = Number(line.hours) || 0

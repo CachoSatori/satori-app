@@ -9,7 +9,7 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 // Roles que participan en el pool de propinas
-const TIP_ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'manager']
+const TIP_ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
 interface Props {
   rolePoints: RoleTipPoints[]

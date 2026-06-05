@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { Employee } from '../../shared/types/database'
 import { getAttendanceHistory } from '../../shared/api/tips'
 import type { AttendanceRow } from '../../shared/api/tips'
-import { shiftLabel } from '../../shared/utils'
+import { shiftLabel, fi } from '../../shared/utils'
 
 interface Props {
   employees: Employee[]
@@ -17,7 +17,6 @@ const ROLE_LABELS: Record<string, string> = {
 // (suficiente para comparar 2025 vs 2026 con el selector de año).
 const FETCH_MONTHS = 24
 
-function fi(n: number) { return '₡ ' + Math.round(n).toLocaleString('es-CR') }
 function fmtDate(d: string) {
   if (!d) return ''
   const [y, m, dd] = d.split('-')

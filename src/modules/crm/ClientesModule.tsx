@@ -20,12 +20,11 @@ import {
   TIER_LABELS, TIER_COLORS, INTERACTION_TYPES, INTERACTION_CHANNELS, suggestedTier,
   computeEarnedPoints, DEFAULT_RULES,
 } from '../../shared/types/crm'
+import { fi } from '../../shared/utils'
 const LoyaltyConfig = lazy(() => import('./LoyaltyConfig'))
 const CrmSegmentos  = lazy(() => import('./CrmSegmentos'))
 const CrmMetricas   = lazy(() => import('./CrmMetricas'))
 const CrmQR         = lazy(() => import('./CrmQR'))
-
-function fi(n: number) { return '₡ ' + Math.round(n).toLocaleString('es-CR') }
 function fmtDate(s: string | null) {
   if (!s) return '—'
   const d = new Date(s)

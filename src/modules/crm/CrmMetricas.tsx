@@ -7,12 +7,12 @@ import { useState, useEffect, useMemo } from 'react'
 import type { Customer, CustomerTier } from '../../shared/types/crm'
 import { TIER_LABELS, TIER_COLORS } from '../../shared/types/crm'
 import { getAllInteractionAggs, type InteractionAgg } from '../../shared/api/crm'
+import { fi } from '../../shared/utils'
 
 interface Props { customers: Customer[] }
 
 const MUTED = '#5a5040', BORDER = 'var(--t-border,#d4cfc4)'
 const SERIF = 'var(--font-serif)'
-function fi(n: number) { return '₡ ' + Math.round(n).toLocaleString('es-CR') }
 function daysSince(iso: string | null) { return iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null }
 
 // Tarjeta KPI oscura (estilo foto 1) con número en serif

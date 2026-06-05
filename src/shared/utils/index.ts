@@ -8,10 +8,6 @@ export function todayCR(): string {
   // returns YYYY-MM-DD in Costa Rica time
 }
 
-export function monthKeyCR(): string {
-  return todayCR().slice(0, 7)
-}
-
 // ── Currency formatters ────────────────────────────────────────
 export function fi(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return '—'

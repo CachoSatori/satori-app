@@ -175,11 +175,6 @@ export async function listInbox(estado: 'nuevo' | 'procesado' | 'descartado' = '
   return (data ?? []) as DocumentRow[]
 }
 
-export async function countInbox(): Promise<number> {
-  const { count } = await supabase.from('documents').select('id', { count: 'exact', head: true }).eq('estado', 'nuevo')
-  return count ?? 0
-}
-
 export async function signedUrl(path: string): Promise<string | null> {
   const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600)
   return data?.signedUrl ?? null

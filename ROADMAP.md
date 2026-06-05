@@ -1,7 +1,7 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-03**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-05**
 
 ---
 
@@ -29,6 +29,8 @@ Satori App no es un POS. Hoy es una capa de inteligencia de negocio que se monta
 Code-splitting por módulo. Despliegue automático en push a main.
 **Hardening (2026-06-03):** TS `strict` activado · ErrorBoundary raíz · tokens de diseño globales ·
 RLS endurecida (escritura por rol en sops/ventas/exchange) · rutas gateadas por rol · auto-update PWA.
+
+**Hotfixes y limpieza (2026-06-05):** Propinas — fix del cierre (`savePayouts` UPDATE por id, bug NOT NULL `session_id`) + quitada la verificación de pool (Propinas = solo cálculo/reparto), **en producción**. Auditoría `audit/cleanup-nocturna` reconciliada y **mergeada** (`as never`→0). Caja — fix `onMovAdded` (refresca en vez de inyectar fila fantasma al borrar/editar pago) en `chore/limpiar-y-docs`. **Cierre del día:** la lógica correcta es el **saldo de Caja Fuerte por ledger** (canónico `satori-caja`); el intento `fix/caja-cierre-cf` (snapshot del remanente previo) se **descartó** por doble-conteo y la rama se borró. El fix real se valida primero en el **módulo Prueba** (simulador read-only) con un helper compartido `saldoCajaFuerte`.
 
 **El gran límite estructural:** la app consume datos del POS, no los genera. Por eso depende de un import manual y no tiene control sobre la operación en tiempo real. El roadmap apunta a cerrar ese círculo.
 
@@ -63,7 +65,11 @@ Lo que ya está construido pero necesita un último paso para rendir.
 - Cargar costos unitarios reales (UI lista: Ventas → Config → Costos, inline o CSV) → enciende food cost en MenuEng
 - DNS SiteGround para enviar emails desde `@satoricostarica.com` (hoy sale de `onboarding@resend.dev`)
 - Definir metas mensuales en todos los meses para que el reporte mensual compare contra objetivo
-- **Hardening: hang del refresh de token** — cuando la sesión vence, el cliente Supabase puede colgar una request (escrituras de caja/bandeja). Mitigado con timeouts + aviso; falta la causa raíz (auto-refresh/reconexión o re-login transparente). Optimizar también la recarga post-cierre (hoy refetch de ~1.2k movimientos).
+- **Hardening: hang del refresh de token** — cuando la sesión vence, el cliente Supabase puede colgar una request (escrituras de caja/bandeja). Mitigado con timeouts + aviso; **RCA en `HANG-RCA.md`, fix de fondo diseñado, pendiente de aprobación**. Optimizar también la recarga post-cierre (hoy refetch de ~1.2k movimientos).
+- **Cierre del día por ledger** — implementar el helper compartido `saldoCajaFuerte(movements)` (regla del canónico `satori-caja`) y enchufarlo al "debería quedar" del cierre, **previa validación en el módulo Prueba**. Que `CashResumen` use el mismo helper (una sola verdad del saldo).
+- **Módulo "Prueba" (admin-only)** — simulador read-only con datos reales, sin escribir; primer uso: cierre de Caja Fuerte.
+- **Tipos de movimiento faltantes en el turno de Caja** — definir con el dueño cuáles agregar.
+- (Opcional) **entorno preview/staging** para pruebas visuales antes de producción.
 
 **Valor:** completa el círculo de lo ya invertido. Esfuerzo casi nulo.
 

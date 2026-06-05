@@ -1,10 +1,31 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> Última actualización: 2026-06-04 (Caja v2 · ledger real · Fase A finanzas · Bandeja IA multi-doc desplegada)
+> Última actualización: 2026-06-05 (hotfixes Propinas en prod · auditoría MERGEADA · fix Caja onMovAdded · cierre por ledger en módulo Prueba)
 
-## 🧹 Auditoría de limpieza (rama `audit/cleanup-nocturna`, sin mergear)
-Auditoría nocturna autónoma (Pase 1 + Pase 2), rama aparte, sin tocar la base (excepto generar tipos read-only). Aplicado seguro: −4 deps sin uso, exports muertos, dedup de `fi`/`ROLE_LABELS`(8→1)/helper day-level. **Titular A:** tipos Supabase regenerados del esquema vivo → `as never` **151→2** (los 2 son bug-candidatos documentados en Caja). **Titular B:** RCA del "se queda pensando" en `HANG-RCA.md` (refresh de token frágil) + fix seguro (storageKey propio del cliente de ManagerOverride) + diseño de fondo para aprobar. Caja/Propinas sin cambio de cálculo. Detalle: `AUDITORIA.md`, `HANG-RCA.md`, `RESUMEN-MAÑANA.md`.
+## 🧹 Auditoría de limpieza (`audit/cleanup-nocturna` — MERGEADA a `main` en `4fca841`)
+Auditoría nocturna autónoma (Pase 1 + Pase 2), sin tocar la base (excepto generar tipos read-only). Aplicado seguro: −4 deps sin uso, exports muertos, dedup de `fi`/`ROLE_LABELS`(8→1)/helper day-level. **Titular A:** tipos Supabase regenerados del esquema vivo → `as never` **151→2**, luego **→0** (ver Novedades 06-05). **Titular B:** RCA del "se queda pensando" en `HANG-RCA.md` (refresh de token frágil) + fix seguro (storageKey propio del cliente de ManagerOverride) + diseño de fondo para aprobar. Caja/Propinas sin cambio de cálculo.
+**Errata honesta (06-05):** el gate del Pase 2 estaba roto (`tsc --noEmit` sobre el tsconfig raíz = no-op); el HEAD tenía 20 errores reales (3 TS1011 + 17 de tipo) → corregidos con el gate real `npm run build`, reconciliada con `main` y **mergeada**. Detalle: `AUDITORIA.md`, `HANG-RCA.md`, `RESUMEN-MAÑANA.md`.
+
+## 🆕 Novedades 2026-06-05
+
+### Propinas — hotfixes EN PRODUCCIÓN (`main`)
+- **Bug crítico al cerrar turno** (`tip_entries.session_id` viola NOT NULL): `savePayouts` hacía un `upsert` parcial y Postgres evalúa el NOT NULL sobre la tupla de INSERT **antes** de resolver el conflicto → reventaba el cierre aunque la fila ya existiera. Fix: **UPDATE por id** (las entradas ya existen con su `session_id`) + guardas (nunca persistir entradas sin turno con id).
+- **Quitada la verificación/conteo de pool**: Propinas es **solo el cálculo de cuánta propina se generó y su reparto** entre empleados — no maneja ingreso/egreso de plata. Se removió "Monto contado" y la alerta de "Diferencia en el pool" que trababa el cierre con falsos positivos (el pool ya contabiliza efectivo + propinas individuales/datáfono). Flujo: ingresar montos → calcular → repartir → cerrar.
+
+### Caja — fix `onMovAdded` (en `chore/limpiar-y-docs`, pendiente de merge)
+- Al borrar/editar un pago a proveedor **ya persistido** se inyectaba un `PagoRow` fantasma en la lista de movimientos (se pasaba a `onMovAdded`, que agrega en memoria). Ahora **refresca desde la fuente de verdad** (`onRefresh`). `as never` en todo `src` → **0**.
+
+### Caja — cierre del día: la lógica correcta es el SALDO DE CAJA FUERTE por LEDGER
+- El "debería quedar" debe partir del **saldo corrido de Caja Fuerte derivado del ledger** (canónico de `satori-caja`): `+ ingresos efectivo que entran a Caja Fuerte − egresos efectivo no pendientes ± ajustes`; traspasos internos y transferencias **no** afectan el saldo. Eso ya contempla el arrastre de noches anteriores y los pagos/ingresos del turno (ya están en el ledger): no hay que sumar nada a mano.
+- ⚠️ El intento previo `fix/caja-cierre-cf` (sumar a mano el **remanente del cierre anterior**, un snapshot) queda **DESCARTADO** por riesgo de doble-conteo. El fix real usará un helper compartido `saldoCajaFuerte(movements)`.
+- **Plan:** validar primero en el **módulo Prueba** (simulador read-only, con datos reales, sin guardar) y luego enchufar el mismo helper al cierre real.
+
+### Módulo "Prueba" (admin-only) — EN DESARROLLO
+- Entorno de **simulación de solo lectura** para validar lógica con datos reales **sin escribir** en la base. Contenedor reutilizable: hoy aloja el **simulador del cierre de Caja Fuerte** (helper `saldoCajaFuerte`); a futuro se reusa para lo que el desarrollo necesite probar.
+
+### Limpieza de ramas
+- `audit/cleanup-nocturna` (ya en `main`) y `fix/caja-cierre-cf` (obsoleta) **eliminadas** en origin. El fix de Caja + estas docs viven en `chore/limpiar-y-docs` (un solo branch para que el dueño mergee).
 
 ## 🆕 Novedades 2026-06-04
 

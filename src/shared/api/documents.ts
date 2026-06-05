@@ -1,4 +1,6 @@
 import { supabase } from './supabase'
+import { updateMovementStatus } from './cash'
+import type { CashMovement } from '../types/database'
 
 export interface DocExtract {
   tipo: 'factura' | 'comprobante_pago' | 'otro'
@@ -77,6 +79,53 @@ export async function extractDocument(doc: DocumentRow): Promise<DocExtract | nu
   } catch {
     return null  // función no desplegada o sin key → el doc queda 'nuevo' para carga manual
   }
+}
+
+// Commit AUTOMÁTICO de un documento leído por la IA → genera el movimiento de
+// caja (cuenta por pagar / pago) sin intervención. Si la IA no leyó lo
+// suficiente (tipo 'otro', total 0, confianza baja) devuelve null y el doc
+// queda 'nuevo' para carga manual. El encargado revisa todo en Caja → Movimientos.
+const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
+export async function autoCommitDocument(
+  doc: DocumentRow, ex: DocExtract, createdBy: string, pendientes: CashMovement[], validAccountIds: Set<string>,
+): Promise<{ movementId: string; reconciled: boolean } | null> {
+  if (!ex || ex.tipo === 'otro') return null
+  const total = N(ex.total)
+  if (total <= 0 || N(ex.confianza) < 0.4) return null
+
+  const metodo = ex.metodo_pago || 'Transferencia'
+  const esTransfer = metodo === 'Transferencia' || metodo === 'SINPE' || metodo === 'Bitcoin'
+  const prov = (ex.proveedor || '').trim()
+  const fecha = ex.fecha || new Date().toISOString().slice(0, 10)
+  const accId = ex.cuenta_qb_sugerida && validAccountIds.has(ex.cuenta_qb_sugerida) ? ex.cuenta_qb_sugerida : null
+
+  // Comprobante: si hay un único pendiente que matchee → marcar pagado.
+  if (ex.tipo === 'comprobante_pago') {
+    const pn = prov.toLowerCase()
+    const matches = pendientes.filter(m => {
+      const okTotal = Math.abs(N(m.amount_crc) - total) <= total * 0.02
+      const okProv = pn && (m.supplier_name || '').toLowerCase().includes(pn.slice(0, 4))
+      const okFecha = Math.abs((new Date(fecha).getTime() - new Date(m.created_at.slice(0, 10)).getTime()) / 86400000) <= 7
+      return okTotal && (okProv || !pn) && okFecha
+    })
+    if (matches.length === 1) {
+      await updateMovementStatus(matches[0].id, 'aprobado')
+      await setDocEstado(doc.id, 'procesado', matches[0].id)
+      return { movementId: matches[0].id, reconciled: true }
+    }
+  }
+
+  // Factura o comprobante sin match único → egreso directo.
+  const movementId = await insertInboxMovement({
+    created_by: createdBy, movement_type: 'egreso_mercaderia', amount_crc: total,
+    description: ex.referencia ? `${prov || 'Factura'} · ${ex.referencia}` : (prov || 'Factura'),
+    subcategory: prov || '', supplier_name: prov || '', method: metodo,
+    caja_origen: esTransfer ? 'Banco' : 'Caja Proveedores',
+    status: ex.tipo === 'comprobante_pago' ? 'aprobado' : (esTransfer ? 'pendiente' : 'aprobado'),
+    account_id: accId, fecha,
+  })
+  await setDocEstado(doc.id, 'procesado', movementId)
+  return { movementId, reconciled: false }
 }
 
 export async function listInbox(estado: 'nuevo' | 'procesado' | 'descartado' = 'nuevo'): Promise<DocumentRow[]> {

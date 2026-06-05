@@ -533,6 +533,39 @@ export default function CashTurno({
         </div>
       </div>
 
+      {/* Ingresos adicionales (compacto, arriba) */}
+      <div className="cd-section" style={{ maxWidth: 460 }}>
+        <div className="cd-section-head" style={{ padding: '0.5rem 0.75rem' }}>
+          <div className="cd-section-icon">💵</div>
+          <div>
+            <div className="cd-section-title" style={{ fontSize: '0.85rem' }}>Ingresos adicionales</div>
+            <div className="cd-section-sub" style={{ fontSize: '0.66rem' }}>Aceite, otros ingresos en efectivo</div>
+          </div>
+          {canManage && (
+            <button className="cd-section-add" onClick={openNewIngreso}>+ Agregar</button>
+          )}
+        </div>
+        {(ingresos.length > 0 || ingresosTotal > 0) && (
+          <div className="cd-section-body">
+            {ingresos.map(i => (
+              <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>
+                    {Number(i.crc) > 0 && fi(Number(i.crc))}
+                    {Number(i.usd) > 0 && <span style={{ color: '#1a4a7a' }}>{Number(i.crc) > 0 ? ' · ' : ''}${Number(i.usd)}</span>}
+                  </div>
+                  <div style={{ fontSize: '0.66rem', color: '#5a5040' }}>{i.nota || 'Ingreso adicional'}</div>
+                </div>
+                {canManage && (
+                  <button onClick={() => removeIngreso(i.id)} title="Quitar"
+                    style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Pagos a proveedores */}
       <div className="cd-section">
         <div className="cd-section-head">
@@ -592,52 +625,12 @@ export default function CashTurno({
         </div>
       </div>
 
-      {/* Ingresos adicionales */}
-      <div className="cd-section">
-        <div className="cd-section-head">
-          <div className="cd-section-icon">💵</div>
-          <div>
-            <div className="cd-section-title">Ingresos adicionales del turno</div>
-            <div className="cd-section-sub">Aceite, otros ingresos en efectivo</div>
-          </div>
-          {canManage && (
-            <button className="cd-section-add" onClick={openNewIngreso}>+ Agregar</button>
-          )}
-        </div>
-        <div className="cd-section-body">
-          {ingresos.length === 0 && (
-            <div className="cd-empty-row">ℹ Sin ingresos adicionales registrados</div>
-          )}
-          {ingresos.map(i => (
-            <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>
-                  {Number(i.crc) > 0 && fi(Number(i.crc))}
-                  {Number(i.usd) > 0 && <span style={{ color: '#1a4a7a' }}>{Number(i.crc) > 0 ? ' · ' : ''}${Number(i.usd)}</span>}
-                </div>
-                <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>{i.nota || 'Ingreso adicional'}</div>
-              </div>
-              {canManage && (
-                <button onClick={() => removeIngreso(i.id)} title="Quitar"
-                  style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 8px', fontSize: '0.8rem', cursor: 'pointer', lineHeight: 1 }}>×</button>
-              )}
-            </div>
-          ))}
-          {ingresosTotal > 0 && (
-            <div className="cd-pagos-total" style={{ borderTopColor: '#cce5ff' }}>
-              <span className="cd-tc-label" style={{ color: '#1a4a7a' }}>Total ingresos adicionales</span>
-              <span className="cd-total-val" style={{ color: '#1a4a7a' }}>{fi(ingresosTotal)}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Otros egresos del turno (delivery, operativo, salario) */}
+      {/* Pagos operativos del turno (delivery, operativo, salario) */}
       <div className="cd-section">
         <div className="cd-section-head">
           <div className="cd-section-icon">🛵</div>
           <div>
-            <div className="cd-section-title">Otros egresos del turno</div>
+            <div className="cd-section-title">Pagos operativos</div>
             <div className="cd-section-sub">Delivery, operativo, salario en efectivo — salen de la Caja Diaria</div>
           </div>
           {canManage && (

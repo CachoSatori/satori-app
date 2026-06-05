@@ -4,7 +4,7 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import {
   listInbox, uploadDocument, extractDocument, signedUrl, setDocEstado,
-  insertInboxMovement, findDuplicate, sha256File,
+  insertInboxMovement, findDuplicate, sha256File, autoCommitDocument,
   type DocumentRow, type DocExtract,
 } from '../../shared/api/documents'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
@@ -37,6 +37,7 @@ export default function InboxModule() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState<string | null>(null)
   const [error, setError]     = useState<string | null>(null)
+  const [info, setInfo]       = useState<string | null>(null)
   const [active, setActive]   = useState<DocumentRow | null>(null)
 
   const loadAll = useCallback(async () => {
@@ -63,18 +64,28 @@ export default function InboxModule() {
   // ── Procesar una imagen (subida manual o compartida) ──────────
   const processFile = useCallback(async (file: Blob, filename: string) => {
     if (!profile) return
-    setBusy('upload'); setError(null)
+    setBusy('upload'); setError(null); setInfo(null)
     try {
       const sha = await sha256File(file)
       const dup = await withTimeout(findDuplicate(sha, null))
       if (dup) { setError('Este documento ya fue cargado (duplicado).'); setBusy(null); return }
       const { doc } = await withTimeout(uploadDocument(file, profile.id, filename), 30000)
-      await extractDocument(doc)   // tiene su propio manejo de error; si falla queda 'nuevo' para carga manual
+      const ex = await extractDocument(doc)   // si falla queda 'nuevo' para carga manual
+      // Auto-genera el movimiento si la IA leyó lo suficiente; si no, queda para confirmar a mano.
+      if (ex) {
+        const validAccs = new Set(accounts.map(a => a.id))
+        const res = await autoCommitDocument(doc, ex, profile.id, pendientes, validAccs).catch(() => null)
+        setInfo(res
+          ? (res.reconciled ? '✓ Comprobante conciliado — pendiente marcado pagado.' : '✓ Movimiento generado. Revisalo en Caja → Movimientos.')
+          : 'Cargado. La IA no leyó lo suficiente — abrilo y completá los datos a mano.')
+      } else {
+        setInfo('Cargado en modo manual — abrilo y completá los datos.')
+      }
       await loadAll()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error procesando la imagen')
     } finally { setBusy(null) }
-  }, [profile, loadAll])
+  }, [profile, loadAll, accounts, pendientes])
 
   // ── Imagen compartida desde WhatsApp (Share Target) ───────────
   useEffect(() => {
@@ -127,6 +138,11 @@ export default function InboxModule() {
       <div style={{ padding: '1rem 1.5rem' }}>
         {error && (
           <div className="tips-error" style={{ marginBottom: '1rem' }}><span>{error}</span><button onClick={() => setError(null)}>✕</button></div>
+        )}
+        {info && (
+          <div style={{ marginBottom: '1rem', padding: '0.6rem 0.85rem', borderRadius: 4, background: 'rgba(42,122,106,.1)', border: '1px solid var(--t-teal)', color: 'var(--t-teal)', fontSize: '0.82rem', display: 'flex', justifyContent: 'space-between' }}>
+            <span>{info}</span><button onClick={() => setInfo(null)} style={{ background: 'none', border: 'none', color: 'var(--t-teal)', cursor: 'pointer' }}>✕</button>
+          </div>
         )}
 
         {/* Subir foto */}

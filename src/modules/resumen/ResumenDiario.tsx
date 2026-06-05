@@ -209,7 +209,7 @@ export default function ResumenDiario() {
   useEffect(() => {
     // Load available dates once on mount
     import('../../shared/api/supabase').then(({ supabase }) => {
-      supabase.from('ventas_dias' as never)
+      supabase.from('ventas_dias')
         .select('session_date')
         .order('session_date', { ascending: true })
         .then(({ data }) => {

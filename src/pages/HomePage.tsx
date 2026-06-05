@@ -137,38 +137,38 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
   const [tipRes, cashRes, pendRes, metaRes, sopsRes, ventasRes, suppliersRes,
          tipDetailRes, cashSessionsRes, cashMovsRes, ingredientsRes, inboxRes] = await Promise.allSettled([
     // Open tip session
-    supabase.from('tip_sessions' as never).select('shift_type,created_at').eq('status', 'open').limit(1).maybeSingle(),
+    supabase.from('tip_sessions').select('shift_type,created_at').eq('status', 'open').limit(1).maybeSingle(),
     // Open cash session
-    supabase.from('cash_sessions' as never).select('cajero_name,created_at').eq('status', 'open').limit(1).maybeSingle(),
+    supabase.from('cash_sessions').select('cajero_name,created_at').eq('status', 'open').limit(1).maybeSingle(),
     // Pending cash movements
-    supabase.from('cash_movements' as never).select('id', { count: 'exact', head: true }).eq('status', 'pendiente'),
+    supabase.from('cash_movements').select('id', { count: 'exact', head: true }).eq('status', 'pendiente'),
     // Meta mensual
-    supabase.from('ventas_metas' as never).select('value').eq('key', 'all').maybeSingle(),
+    supabase.from('ventas_metas').select('value').eq('key', 'all').maybeSingle(),
     // SOPs count
-    supabase.from('sops' as never).select('id', { count: 'exact', head: true }).eq('is_active', true),
+    supabase.from('sops').select('id', { count: 'exact', head: true }).eq('is_active', true),
     // Today's ventas with salonero data
-    supabase.from('ventas_dias' as never).select('data').eq('session_date', today).maybeSingle(),
+    supabase.from('ventas_dias').select('data').eq('session_date', today).maybeSingle(),
     // Suppliers
-    supabase.from('suppliers' as never).select('id,ciclo_pago').eq('is_active', true),
+    supabase.from('suppliers').select('id,ciclo_pago').eq('is_active', true),
     // Today's tip session (open OR closed) for pool total
-    supabase.from('tip_sessions' as never)
+    supabase.from('tip_sessions')
       .select('id,status,pool_efectivo_crc,pool_efectivo_usd,pool_barra_crc,exchange_rate')
       .eq('session_date', today)
       .order('status', { ascending: true })  // 'closed' < 'open' alphabetically
       .limit(1).maybeSingle(),
     // Today's cash sessions
-    supabase.from('cash_sessions' as never)
+    supabase.from('cash_sessions')
       .select('id,status,cajero_name').eq('session_date', today)
       .order('created_at', { ascending: false }),
     // Today's cash movements (need session IDs — will filter below)
-    supabase.from('cash_movements' as never)
+    supabase.from('cash_movements')
       .select('session_id,movement_type,amount_crc')
       .gte('created_at', today + 'T00:00:00')
       .neq('status', 'rechazado'),
     // Ingredients (stock levels for low-stock alert)
-    supabase.from('ingredients' as never).select('current_stock,min_stock'),
+    supabase.from('ingredients').select('current_stock,min_stock'),
     // Bandeja: documentos nuevos sin procesar
-    supabase.from('documents' as never).select('id', { count: 'exact', head: true }).eq('estado', 'nuevo'),
+    supabase.from('documents').select('id', { count: 'exact', head: true }).eq('estado', 'nuevo'),
   ])
   const inboxCount = inboxRes.status === 'fulfilled' ? (inboxRes.value.count ?? 0) : 0
 
@@ -199,7 +199,7 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     if (meta > 0) {
       // Get current month ventas total
       const { data: dias } = await supabase
-        .from('ventas_dias' as never)
+        .from('ventas_dias')
         .select('data')
         .gte('session_date', curMonth + '-01')
         .lte('session_date', curMonth + '-31')
@@ -235,7 +235,7 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     tipPool = (tipDetail.pool_efectivo_crc ?? 0) + (tipDetail.pool_efectivo_usd ?? 0) * rate + (tipDetail.pool_barra_crc ?? 0)
     // Load tip entries to count workers
     if (tipDetail.status === 'closed') {
-      const { data: entries } = await supabase.from('tip_entries' as never).select('payout_crc').eq('session_id', tipDetail.id)
+      const { data: entries } = await supabase.from('tip_entries').select('payout_crc').eq('session_id', tipDetail.id)
       tipWorkers = ((entries ?? []) as { payout_crc: number | null }[]).filter(e => (e.payout_crc ?? 0) > 0).length
     }
   }

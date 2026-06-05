@@ -126,7 +126,7 @@ async function fetchCaja(ym: string): Promise<CajaBlock> {
   const bySub: Record<string, number> = {}
   for (const m of movs) {
     if (m.movement_type === 'ingreso') ingresos += m.amount_crc
-    else if (isEgreso(m.movement_type as never)) {
+    else if (isEgreso(m.movement_type)) {
       egresos += m.amount_crc
       if (m.amount_crc > 0) {
         const k = m.subcategory?.trim() || m.movement_type

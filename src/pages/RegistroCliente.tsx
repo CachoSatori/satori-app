@@ -25,13 +25,13 @@ export default function RegistroCliente() {
     if (phoneDigits.length < 8) { setError('Poné un teléfono válido (8 dígitos)'); return }
     setState('saving')
     try {
-      const { error } = await supabase.from('customers' as never).insert({
+      const { error } = await supabase.from('customers').insert({
         phone:          phoneDigits,
         name:           name.trim(),
         email:          email.trim() || null,
         birth_date:     bday || null,
         channel_origin: 'whatsapp',
-      } as never)
+      })
       if (error) {
         if (/duplicate|unique|23505/i.test(error.message)) { setState('dup'); return }
         throw new Error(error.message)

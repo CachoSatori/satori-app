@@ -55,14 +55,14 @@ export default function InvFoodCost({ ingredients }: Props) {
       try {
         const from = `${ym}-01`, to = `${ym}-31`
         const [movsRes, cashRes, diasRes] = await Promise.all([
-          supabase.from('inventory_movements' as never)
+          supabase.from('inventory_movements')
             .select('ingredient_id, movement_type, qty_delta, created_at')
             .gte('created_at', `${from}T00:00:00Z`).lte('created_at', `${to}T23:59:59Z`),
-          supabase.from('cash_movements' as never)
+          supabase.from('cash_movements')
             .select('amount_crc, movement_type, status, created_at')
             .eq('movement_type', 'egreso_mercaderia')
             .gte('created_at', `${from}T00:00:00Z`).lte('created_at', `${to}T23:59:59Z`),
-          supabase.from('ventas_dias' as never)
+          supabase.from('ventas_dias')
             .select('data').gte('session_date', from).lte('session_date', to),
         ])
         if (cancel) return

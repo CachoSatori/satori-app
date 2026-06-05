@@ -43,7 +43,7 @@ export default function InvConsumo({ ingredients, onRefresh, profile }: Props) {
 
       // Ventas del día
       const { data: dia, error: dErr } = await supabase
-        .from('ventas_dias' as never)
+        .from('ventas_dias')
         .select('data')
         .eq('session_date', date)
         .maybeSingle()

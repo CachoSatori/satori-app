@@ -12,7 +12,7 @@ export async function getVentasDias(days = 400): Promise<Record<string, DiaData>
   const sinceStr = since.toISOString().slice(0, 10)
 
   const { data, error } = await supabase
-    .from('ventas_dias' as never)
+    .from('ventas_dias')
     .select('session_date, data')
     .gte('session_date', sinceStr)
     .order('session_date', { ascending: true })
@@ -26,7 +26,7 @@ export async function getVentasDias(days = 400): Promise<Record<string, DiaData>
 
 export async function getAllVentasDias(): Promise<Record<string, DiaData>> {
   const { data, error } = await supabase
-    .from('ventas_dias' as never)
+    .from('ventas_dias')
     .select('session_date, data')
     .order('session_date', { ascending: true })
   if (error) throw new Error(error.message)
@@ -43,19 +43,19 @@ export async function saveVentasDia(
   uploadedBy: string,
 ): Promise<void> {
   const { error } = await supabase
-    .from('ventas_dias' as never)
+    .from('ventas_dias')
     .upsert({
       session_date: date,
       file_name:    data.fileName,
-      data:         data as never,
+      data:         data,
       uploaded_by:  uploadedBy,
       uploaded_at:  new Date().toISOString(),
-    } as never, { onConflict: 'session_date' })
+    }, { onConflict: 'session_date' })
   if (error) throw new Error(error.message)
 }
 
 export async function deleteVentasDia(date: string): Promise<void> {
-  const { error } = await supabase.from('ventas_dias' as never).delete().eq('session_date', date)
+  const { error } = await supabase.from('ventas_dias').delete().eq('session_date', date)
   if (error) throw new Error(error.message)
 }
 
@@ -65,7 +65,7 @@ export async function getVentasHist(): Promise<Record<string, HistDay>> {
   // PostgREST default limit is 1000 rows — override to avoid silently truncating
   // historical data (we have 1096 days: 2023–2025)
   const { data, error } = await supabase
-    .from('ventas_hist' as never)
+    .from('ventas_hist')
     .select('session_date, data')
     .order('session_date', { ascending: true })
     .limit(5000)
@@ -80,14 +80,14 @@ export async function getVentasHist(): Promise<Record<string, HistDay>> {
 export async function saveVentasHist(hist: Record<string, HistDay>): Promise<void> {
   const rows = Object.entries(hist).map(([date, d]) => ({
     session_date: date,
-    data:         d as never,  // HistDay → JSONB
+    data:         d,  // HistDay → JSONB
     source:       'hist',
   }))
   if (!rows.length) return
   for (let i = 0; i < rows.length; i += 100) {
     const { error } = await supabase
-      .from('ventas_hist' as never)
-      .upsert(rows.slice(i, i + 100) as never[], { onConflict: 'session_date' })
+      .from('ventas_hist')
+      .upsert(rows.slice(i, i + 100)[], { onConflict: 'session_date' })
     if (error) throw new Error(error.message)
   }
 }
@@ -124,7 +124,7 @@ export async function saveProductMapItems(
           multiplicador:    it.multiplicador,
           costo_unitario:   it.costo_unitario ?? 0,
           updated_at:       new Date().toISOString(),
-        })) as never[],
+        }))[],
         { onConflict: 'nombre' },
       )
     if (error) throw new Error(error.message)
@@ -135,7 +135,7 @@ export async function updateProductInfo(nombre: string, info: Partial<ProductInf
   const { error } = await supabase
     .from('product_map')
     .upsert(
-      { nombre, ...info, updated_at: new Date().toISOString() } as never,
+      { nombre, ...info, updated_at: new Date().toISOString() },
       { onConflict: 'nombre' },
     )
   if (error) throw new Error(error.message)
@@ -144,7 +144,7 @@ export async function updateProductInfo(nombre: string, info: Partial<ProductInf
 // ── Metas ────────────────────────────────────────────────────
 
 export async function getMetas(): Promise<Meta> {
-  const { data, error } = await supabase.from('ventas_metas' as never).select('*')
+  const { data, error } = await supabase.from('ventas_metas').select('*')
   if (error) throw new Error(error.message)
   const defaults: Meta = {
     restaurante: {},
@@ -160,9 +160,9 @@ export async function getMetas(): Promise<Meta> {
 
 export async function saveMetas(metas: Meta): Promise<void> {
   const { error } = await supabase
-    .from('ventas_metas' as never)
+    .from('ventas_metas')
     .upsert(
-      { key: 'all', value: metas as never, updated_at: new Date().toISOString() } as never,
+      { key: 'all', value: metas, updated_at: new Date().toISOString() },
       { onConflict: 'key' },
     )
   if (error) throw new Error(error.message)
@@ -172,7 +172,7 @@ export async function saveMetas(metas: Meta): Promise<void> {
 
 export async function getComps(): Promise<Comp[]> {
   const { data, error } = await supabase
-    .from('ventas_comps' as never)
+    .from('ventas_comps')
     .select('*')
     .order('created_at', { ascending: false })
   if (error) throw new Error(error.message)
@@ -181,13 +181,13 @@ export async function getComps(): Promise<Comp[]> {
 
 export async function saveComp(comp: Comp): Promise<void> {
   // Delete-then-insert: avoids unreliable JSONB path filtering on UPDATE
-  await supabase.from('ventas_comps' as never).delete().filter('data->>id', 'eq', comp.id)
+  await supabase.from('ventas_comps').delete().filter('data->>id', 'eq', comp.id)
   const { error } = await supabase
-    .from('ventas_comps' as never)
-    .insert({ data: comp as never } as never)
+    .from('ventas_comps')
+    .insert({ data: comp })
   if (error) throw new Error(error.message)
 }
 
 export async function deleteComp(compId: string): Promise<void> {
-  await supabase.from('ventas_comps' as never).delete().filter('data->>id', 'eq', compId)
+  await supabase.from('ventas_comps').delete().filter('data->>id', 'eq', compId)
 }

@@ -43,6 +43,6 @@ export async function saveRate(params: {
       usd_to_crc: params.usd_to_crc,
       source:     params.source ?? 'manual',
       created_by: params.created_by,
-    } as never, { onConflict: 'rate_date' })
+    }, { onConflict: 'rate_date' })
   if (error) throw new Error(error.message)
 }

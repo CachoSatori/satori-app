@@ -5,7 +5,7 @@ import type { Ingredient, Recipe, RecipeIngredient, InventoryMovement } from '..
 
 export async function getIngredients(): Promise<Ingredient[]> {
   const { data, error } = await supabase
-    .from('ingredients' as never)
+    .from('ingredients')
     .select('*')
     .order('category')
     .order('name')
@@ -15,14 +15,14 @@ export async function getIngredients(): Promise<Ingredient[]> {
 
 export async function upsertIngredient(ing: Partial<Ingredient> & { name: string }): Promise<void> {
   const { error } = await supabase
-    .from('ingredients' as never)
-    .upsert({ ...ing, updated_at: new Date().toISOString() } as never, { onConflict: 'name' })
+    .from('ingredients')
+    .upsert({ ...ing, updated_at: new Date().toISOString() }, { onConflict: 'name' })
   if (error) throw new Error(error.message)
 }
 
 export async function deleteIngredient(id: string): Promise<void> {
   const { error } = await supabase
-    .from('ingredients' as never)
+    .from('ingredients')
     .delete()
     .eq('id', id)
   if (error) throw new Error(error.message)
@@ -32,7 +32,7 @@ export async function deleteIngredient(id: string): Promise<void> {
 
 export async function getRecipes(): Promise<Recipe[]> {
   const { data, error } = await supabase
-    .from('recipes' as never)
+    .from('recipes')
     .select('*')
     .order('product_name')
   if (error) throw new Error(error.message)
@@ -41,8 +41,8 @@ export async function getRecipes(): Promise<Recipe[]> {
 
 export async function upsertRecipe(recipe: Partial<Recipe> & { product_name: string }): Promise<Recipe> {
   const { data, error } = await supabase
-    .from('recipes' as never)
-    .upsert({ ...recipe, updated_at: new Date().toISOString() } as never, { onConflict: 'product_name' })
+    .from('recipes')
+    .upsert({ ...recipe, updated_at: new Date().toISOString() }, { onConflict: 'product_name' })
     .select()
     .single()
   if (error) throw new Error(error.message)
@@ -51,7 +51,7 @@ export async function upsertRecipe(recipe: Partial<Recipe> & { product_name: str
 
 export async function getRecipeIngredients(recipeId: string): Promise<RecipeIngredient[]> {
   const { data, error } = await supabase
-    .from('recipe_ingredients' as never)
+    .from('recipe_ingredients')
     .select('*, ingredient:ingredients(*)')
     .eq('recipe_id', recipeId)
     .order('ingredient_id')
@@ -61,14 +61,14 @@ export async function getRecipeIngredients(recipeId: string): Promise<RecipeIngr
 
 export async function upsertRecipeIngredient(ri: Omit<RecipeIngredient, 'id' | 'ingredient'>): Promise<void> {
   const { error } = await supabase
-    .from('recipe_ingredients' as never)
-    .upsert(ri as never, { onConflict: 'recipe_id,ingredient_id' })
+    .from('recipe_ingredients')
+    .upsert(ri, { onConflict: 'recipe_id,ingredient_id' })
   if (error) throw new Error(error.message)
 }
 
 export async function deleteRecipeIngredient(id: string): Promise<void> {
   const { error } = await supabase
-    .from('recipe_ingredients' as never)
+    .from('recipe_ingredients')
     .delete()
     .eq('id', id)
   if (error) throw new Error(error.message)
@@ -78,7 +78,7 @@ export async function deleteRecipeIngredient(id: string): Promise<void> {
 
 export async function getMovements(limit = 100): Promise<InventoryMovement[]> {
   const { data, error } = await supabase
-    .from('inventory_movements' as never)
+    .from('inventory_movements')
     .select('*, ingredient:ingredients(name, unit)')
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -88,8 +88,8 @@ export async function getMovements(limit = 100): Promise<InventoryMovement[]> {
 
 export async function addMovement(mov: Omit<InventoryMovement, 'id' | 'created_at' | 'ingredient'>): Promise<void> {
   const { error } = await supabase
-    .from('inventory_movements' as never)
-    .insert(mov as never)
+    .from('inventory_movements')
+    .insert(mov)
   if (error) throw new Error(error.message)
   // Trigger in DB auto-updates current_stock
 }
@@ -97,7 +97,7 @@ export async function addMovement(mov: Omit<InventoryMovement, 'id' | 'created_a
 // ¿Ya se procesó el consumo por venta de una fecha? (idempotencia)
 export async function countDeductionsForRef(reference_id: string): Promise<number> {
   const { count, error } = await supabase
-    .from('inventory_movements' as never)
+    .from('inventory_movements')
     .select('id', { count: 'exact', head: true })
     .eq('movement_type', 'sale_deduction')
     .eq('reference_id', reference_id)
@@ -108,7 +108,7 @@ export async function countDeductionsForRef(reference_id: string): Promise<numbe
 // Todos los ingredientes de todas las recetas en una sola llamada (para el motor de consumo)
 export async function getAllRecipeIngredients(): Promise<RecipeIngredient[]> {
   const { data, error } = await supabase
-    .from('recipe_ingredients' as never)
+    .from('recipe_ingredients')
     .select('*')
   if (error) throw new Error(error.message)
   return (data ?? []) as RecipeIngredient[]

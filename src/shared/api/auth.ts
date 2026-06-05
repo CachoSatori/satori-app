@@ -16,7 +16,7 @@ export async function updateProfileName(id: string, fullName: string) {
   // Usamos query directa para evitar conflicto de tipos con el cliente genérico
   const { error } = await supabase
     .from('profiles')
-    .update({ full_name: fullName } as never)
+    .update({ full_name: fullName })
     .eq('id', id)
   return { error: error?.message ?? null }
 }

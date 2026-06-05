@@ -6,7 +6,7 @@ import { DEFAULT_RULES } from '../types/crm'
 
 export async function getCustomers(limit = 500): Promise<Customer[]> {
   const { data, error } = await supabase
-    .from('customers' as never)
+    .from('customers')
     .select('*')
     .eq('active', true)
     .order('last_seen', { ascending: false, nullsFirst: false })
@@ -18,7 +18,7 @@ export async function getCustomers(limit = 500): Promise<Customer[]> {
 
 export async function findCustomerByPhone(phone: string): Promise<Customer | null> {
   const { data, error } = await supabase
-    .from('customers' as never)
+    .from('customers')
     .select('*')
     .eq('phone', phone.trim())
     .maybeSingle()
@@ -31,8 +31,8 @@ export async function upsertCustomer(c: Partial<Customer> & { phone: string }): 
   delete payload.created_at
   delete payload.updated_at
   const { data, error } = await supabase
-    .from('customers' as never)
-    .upsert(payload as never, { onConflict: 'phone' })
+    .from('customers')
+    .upsert(payload, { onConflict: 'phone' })
     .select()
     .single()
   if (error) throw new Error(error.message)
@@ -41,8 +41,8 @@ export async function upsertCustomer(c: Partial<Customer> & { phone: string }): 
 
 export async function deactivateCustomer(id: string): Promise<void> {
   const { error } = await supabase
-    .from('customers' as never)
-    .update({ active: false } as never)
+    .from('customers')
+    .update({ active: false })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
@@ -51,7 +51,7 @@ export async function deactivateCustomer(id: string): Promise<void> {
 
 export async function getInteractions(customerId: string): Promise<CustomerInteraction[]> {
   const { data, error } = await supabase
-    .from('customer_interactions' as never)
+    .from('customer_interactions')
     .select('*')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
@@ -65,8 +65,8 @@ export async function addInteraction(
   customer: Customer,
 ): Promise<void> {
   const { error } = await supabase
-    .from('customer_interactions' as never)
-    .insert(i as never)
+    .from('customer_interactions')
+    .insert(i)
   if (error) throw new Error(error.message)
 
   // Actualizar agregados del cliente
@@ -79,8 +79,8 @@ export async function addInteraction(
   if (isVisit) updates.total_visits = (customer.total_visits ?? 0) + 1
 
   const { error: uErr } = await supabase
-    .from('customers' as never)
-    .update(updates as never)
+    .from('customers')
+    .update(updates)
     .eq('id', customer.id)
   if (uErr) throw new Error(uErr.message)
 }
@@ -89,7 +89,7 @@ export async function addInteraction(
 
 export async function getLoyaltyRules(): Promise<LoyaltyRules> {
   const { data, error } = await supabase
-    .from('loyalty_config' as never)
+    .from('loyalty_config')
     .select('rules')
     .eq('id', 1)
     .maybeSingle()
@@ -99,15 +99,15 @@ export async function getLoyaltyRules(): Promise<LoyaltyRules> {
 
 export async function saveLoyaltyRules(rules: LoyaltyRules): Promise<void> {
   const { error } = await supabase
-    .from('loyalty_config' as never)
-    .upsert({ id: 1, rules, updated_at: new Date().toISOString() } as never, { onConflict: 'id' })
+    .from('loyalty_config')
+    .upsert({ id: 1, rules, updated_at: new Date().toISOString() }, { onConflict: 'id' })
   if (error) throw new Error(error.message)
 }
 
 // ── Recompensas (catálogo de canje) ──────────────────────────────
 
 export async function getRewards(onlyActive = false): Promise<LoyaltyReward[]> {
-  let q = supabase.from('loyalty_rewards' as never).select('*').order('points_cost')
+  let q = supabase.from('loyalty_rewards').select('*').order('points_cost')
   if (onlyActive) q = q.eq('active', true)
   const { data, error } = await q
   if (error) throw new Error(error.message)
@@ -117,12 +117,12 @@ export async function getRewards(onlyActive = false): Promise<LoyaltyReward[]> {
 export async function upsertReward(r: Partial<LoyaltyReward> & { name: string; points_cost: number }): Promise<void> {
   const payload: Record<string, unknown> = { ...r }
   delete payload.created_at
-  const { error } = await supabase.from('loyalty_rewards' as never).upsert(payload as never)
+  const { error } = await supabase.from('loyalty_rewards').upsert(payload)
   if (error) throw new Error(error.message)
 }
 
 export async function deleteReward(id: string): Promise<void> {
-  const { error } = await supabase.from('loyalty_rewards' as never).delete().eq('id', id)
+  const { error } = await supabase.from('loyalty_rewards').delete().eq('id', id)
   if (error) throw new Error(error.message)
 }
 
@@ -137,7 +137,7 @@ export interface InteractionAgg {
 
 export async function getAllInteractionAggs(): Promise<InteractionAgg[]> {
   const { data, error } = await supabase
-    .from('customer_interactions' as never)
+    .from('customer_interactions')
     .select('type, channel, points_earned, points_spent, amount_crc')
   if (error) throw new Error(error.message)
   return (data ?? []) as InteractionAgg[]

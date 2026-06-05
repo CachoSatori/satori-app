@@ -13,7 +13,7 @@ export interface FinanceCell { account_id: string; year: number; month: number; 
 
 export async function getFinanceAccounts(): Promise<FinanceAccount[]> {
   const { data, error } = await supabase
-    .from('finance_accounts' as never)
+    .from('finance_accounts')
     .select('*')
     .order('sort')
   if (error) throw new Error(error.message)
@@ -22,7 +22,7 @@ export async function getFinanceAccounts(): Promise<FinanceAccount[]> {
 
 export async function getFinanceBudget(year: number): Promise<FinanceCell[]> {
   const { data, error } = await supabase
-    .from('finance_budget' as never)
+    .from('finance_budget')
     .select('account_id, year, month, amount')
     .eq('year', year)
   if (error) throw new Error(error.message)
@@ -32,7 +32,7 @@ export async function getFinanceBudget(year: number): Promise<FinanceCell[]> {
 export async function getFinanceActuals(year: number): Promise<FinanceCell[]> {
   // Suma de reales por cuenta/mes (puede haber varias filas por cuenta/mes)
   const { data, error } = await supabase
-    .from('finance_actuals' as never)
+    .from('finance_actuals')
     .select('account_id, year, month, amount')
     .eq('year', year)
   if (error) throw new Error(error.message)
@@ -47,8 +47,8 @@ export async function getFinanceActuals(year: number): Promise<FinanceCell[]> {
 
 export async function upsertActual(a: { account_id: string; year: number; month: number; amount: number; note?: string; source?: string }): Promise<void> {
   const { error } = await supabase
-    .from('finance_actuals' as never)
-    .insert({ ...a, source: a.source ?? 'manual' } as never)
+    .from('finance_actuals')
+    .insert({ ...a, source: a.source ?? 'manual' })
   if (error) throw new Error(error.message)
 }
 
@@ -118,10 +118,10 @@ function mapCashIncomeToAccount(subcat: string): string | null {
 export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
   const from = `${year}-01-01`, to = `${year}-12-31`
   const [ventasRes, cashRes] = await Promise.all([
-    supabase.from('ventas_dias' as never)
+    supabase.from('ventas_dias')
       .select('session_date, data')
       .gte('session_date', from).lte('session_date', to),
-    supabase.from('cash_movements' as never)
+    supabase.from('cash_movements')
       .select('movement_type, subcategory, amount_crc, status, created_at, account_id')
       .gte('created_at', `${from}T00:00:00Z`).lte('created_at', `${to}T23:59:59Z`),
   ])

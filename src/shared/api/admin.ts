@@ -18,7 +18,7 @@ export async function createEmployee(payload: {
 }): Promise<Employee> {
   const { data, error } = await supabase
     .from('employees')
-    .insert(payload as never)
+    .insert(payload)
     .select()
     .single()
   if (error) throw new Error(error.message)
@@ -31,7 +31,7 @@ export async function updateEmployee(
 ): Promise<void> {
   const { error } = await supabase
     .from('employees')
-    .update(payload as never)
+    .update(payload)
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
@@ -45,7 +45,7 @@ export async function toggleEmployeeActive(id: string, is_active: boolean): Prom
 export async function updateRoleTipPoints(role: UserRole, points: number): Promise<void> {
   const { error } = await supabase
     .from('role_tip_points')
-    .upsert({ role, points } as never, { onConflict: 'role' })
+    .upsert({ role, points }, { onConflict: 'role' })
   if (error) throw new Error(error.message)
 }
 
@@ -63,7 +63,7 @@ export async function getAllProfiles(): Promise<Profile[]> {
 export async function updateProfileRole(id: string, role: UserRole): Promise<void> {
   const { error } = await supabase
     .from('profiles')
-    .update({ role } as never)
+    .update({ role })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
@@ -72,7 +72,7 @@ export async function updateProfileRole(id: string, role: UserRole): Promise<voi
 export async function setProfileActive(id: string, is_active: boolean): Promise<void> {
   const { error } = await supabase
     .from('profiles')
-    .update({ is_active } as never)
+    .update({ is_active })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
@@ -81,7 +81,7 @@ export async function setProfileActive(id: string, is_active: boolean): Promise<
 export async function linkProfileToEmployee(employeeId: string, profileId: string | null): Promise<void> {
   const { error } = await supabase
     .from('employees')
-    .update({ profile_id: profileId } as never)
+    .update({ profile_id: profileId })
     .eq('id', employeeId)
   if (error) throw new Error(error.message)
 }

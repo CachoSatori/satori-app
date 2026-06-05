@@ -10,7 +10,7 @@ export const SOP_CATEGORIES = [
 
 export async function getSOPs(): Promise<SOP[]> {
   const { data, error } = await supabase
-    .from('sops' as never)
+    .from('sops')
     .select('*')
     .eq('is_active', true)
     .order('category')
@@ -39,8 +39,8 @@ export async function saveSOPItem(sop: {
 
   if (sop.id) {
     const { data, error } = await supabase
-      .from('sops' as never)
-      .update(payload as never)
+      .from('sops')
+      .update(payload)
       .eq('id', sop.id)
       .select()
       .single()
@@ -48,8 +48,8 @@ export async function saveSOPItem(sop: {
     return data as SOP
   } else {
     const { data, error } = await supabase
-      .from('sops' as never)
-      .insert({ ...payload, is_active: true } as never)
+      .from('sops')
+      .insert({ ...payload, is_active: true })
       .select()
       .single()
     if (error) throw new Error(error.message)
@@ -59,8 +59,8 @@ export async function saveSOPItem(sop: {
 
 export async function deleteSOPItem(id: string): Promise<void> {
   const { error } = await supabase
-    .from('sops' as never)
-    .update({ is_active: false } as never)
+    .from('sops')
+    .update({ is_active: false })
     .eq('id', id)
   if (error) throw new Error(error.message)
 }

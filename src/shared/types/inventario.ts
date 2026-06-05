@@ -46,6 +46,8 @@ export interface InventoryMovement {
   notes:         string
   created_by:    string
   created_at:    string
+  document_id?:      string | null   // traza a la factura escaneada (Fase 2D-C)
+  cash_movement_id?: string | null   // traza al gasto
   // Joined
   ingredient?:   Ingredient
 }

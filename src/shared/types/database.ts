@@ -176,6 +176,7 @@ export interface Supplier {
   ciclo_pago: string
   metodo_pago: string
   cuenta_iban: string
+  aliases: string[] | null
   is_active: boolean
   created_at: string
   updated_at: string

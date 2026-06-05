@@ -1,10 +1,11 @@
 /**
  * InvIngredientes — CRUD for ingredients + inline stock level editor
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Ingredient } from '../../shared/types/inventario'
 import { INGREDIENT_CATEGORIES, INGREDIENT_UNITS } from '../../shared/types/inventario'
 import { upsertIngredient, deleteIngredient } from '../../shared/api/inventario'
+import { getIngredientPrices, type IngredientPrice } from '../../shared/api/inventoryIngest'
 
 interface Props {
   ingredients: Ingredient[]
@@ -31,6 +32,11 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
   const [catFilter,setCatFilter]= useState('')
   const [importMsg,setImportMsg]= useState<string | null>(null)
   const [importing,setImporting]= useState(false)
+  const [prices,   setPrices]   = useState<IngredientPrice[]>([])
+  useEffect(() => {
+    if (!editId) { setPrices([]); return }
+    getIngredientPrices(editId).then(setPrices).catch(() => setPrices([]))
+  }, [editId])
   const isOwnerMgr = profile?.role === 'owner' || profile?.role === 'manager'
 
   function startEdit(ing: Ingredient) { setEditId(ing.id); setForm({ ...ing }); setError(null) }
@@ -219,6 +225,17 @@ export default function InvIngredientes({ ingredients, onRefresh, profile }: Pro
               </div>
             ))}
           </div>
+          {editId && prices.length > 0 && (
+            <div style={{ marginTop:'0.5rem', marginBottom:'0.75rem', padding:'0.5rem 0.75rem', background:'#0d0d0d', borderRadius:4 }}>
+              <div style={{ fontSize:'0.62rem', letterSpacing:'0.1em', textTransform:'uppercase', color:'#777', marginBottom:'0.35rem' }}>Historial de precios (unidad base)</div>
+              {prices.slice(0, 6).map(p => (
+                <div key={p.id} style={{ display:'flex', justifyContent:'space-between', fontSize:'0.72rem', color:'#bbb', padding:'1px 0' }}>
+                  <span>{p.fecha ?? '—'}</span>
+                  <span style={{ fontFamily:"'DM Mono', monospace", fontWeight:700, color:'var(--t-gold,#c8a96e)' }}>₡ {Number(p.precio_unitario).toLocaleString('es-CR')}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ display:'flex', gap:'0.5rem' }}>
             <button className="vt-range-btn"
               style={{ borderColor:'var(--vt-green)', color:'var(--vt-green)' }}

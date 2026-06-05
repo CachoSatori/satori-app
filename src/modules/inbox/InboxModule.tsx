@@ -10,6 +10,10 @@ import {
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { getSuppliers, getAllCashMovements, updateMovementStatus } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
+import { getIngredients } from '../../shared/api/inventario'
+import type { Ingredient } from '../../shared/types/inventario'
+import { listDocsNeedingInventory } from '../../shared/api/inventoryIngest'
+import InventoryStep from './InventoryStep'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import { fi } from '../cash/cashUtils'
 
@@ -38,6 +42,9 @@ export default function InboxModule() {
   const [pendientes, setPendientes] = useState<CashMovement[]>([])
   const [tc, setTc] = useState(640)
   useEffect(() => { getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {}) }, [])
+  const [ingredients, setIngredients] = useState<Ingredient[]>([])
+  const [invDocs, setInvDocs] = useState<DocumentRow[]>([])
+  const [invActive, setInvActive] = useState<DocumentRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState<string | null>(null)
   const [error, setError]     = useState<string | null>(null)
@@ -47,13 +54,16 @@ export default function InboxModule() {
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [d, accs, sups, movs] = await Promise.all([
+      const [d, accs, sups, movs, ings, invd] = await Promise.all([
         listInbox('nuevo'), getFinanceAccounts(), getSuppliers(), getAllCashMovements(),
+        getIngredients().catch(() => []), listDocsNeedingInventory().catch(() => []),
       ])
       setDocs(d)
       setAccounts(accs.filter(a => a.is_leaf))
       setSuppliers(sups)
       setPendientes(movs.filter(m => m.status === 'pendiente'))
+      setIngredients(ings)
+      setInvDocs(invd)
       // miniaturas firmadas
       const t: Record<string, string> = {}
       await Promise.all(d.map(async doc => { const u = await signedUrl(doc.image_path); if (u) t[doc.id] = u }))
@@ -160,12 +170,12 @@ export default function InboxModule() {
           <input type="file" accept="image/*" capture="environment" hidden onChange={onPick} disabled={busy === 'upload'} />
         </label>
 
-        {docs.length === 0 ? (
+        {docs.length === 0 && invDocs.length === 0 ? (
           <div className="tips-empty-state">
             <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📥</div>
             <p className="tips-empty-text">Bandeja vacía — compartí una foto desde WhatsApp o subila acá.</p>
           </div>
-        ) : (
+        ) : docs.length === 0 ? null : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
             {docs.map(doc => {
               const ex = doc.raw_json
@@ -194,7 +204,39 @@ export default function InboxModule() {
             })}
           </div>
         )}
+
+        {/* Facturas con gasto ya creado, pendientes de ingresar a inventario */}
+        {invDocs.length > 0 && (
+          <div style={{ marginTop: '2rem' }}>
+            <div style={{ fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t-muted)', marginBottom: '0.6rem' }}>
+              📦 Inventario pendiente ({invDocs.length}) — el gasto ya está registrado
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {invDocs.map(d => {
+                const e = d.raw_json
+                return (
+                  <div key={d.id} onClick={() => setInvActive(d)}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.9rem', background: '#fff', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{e?.proveedor || 'Factura'}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--t-muted)' }}>{e?.fecha || d.created_at.slice(0, 10)} · {e?.items?.length ?? 0} ítem(s)</div>
+                    </div>
+                    <span className="cd-btn-primary" style={{ fontSize: '0.74rem' }}>Ingresar a inventario →</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
+
+      {invActive && (
+        <InventoryStep
+          doc={invActive} ingredients={ingredients} suppliers={suppliers} createdBy={profile?.id ?? ''}
+          onClose={() => setInvActive(null)}
+          onDone={async () => { setInvActive(null); setInfo('✓ Inventario ingresado.'); await loadAll() }}
+        />
+      )}
 
       {active && (
         <ConfirmCard

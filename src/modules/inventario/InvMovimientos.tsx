@@ -263,6 +263,7 @@ export default function InvMovimientos({ ingredients, movements, onRefresh, prof
                      m.movement_type === 'waste' ? '🗑 Merma' :
                      m.movement_type === 'count_adjustment' ? '📋 Ajuste' :
                      m.movement_type === 'sale_deduction' ? '🍽 Venta' : '↔ Transfer'}
+                    {m.document_id && <span title="Generado desde factura escaneada" style={{ marginLeft: 6, fontSize: '0.58rem', fontWeight: 700, color: '#6a4a8a', background: '#efe6f8', padding: '1px 5px', borderRadius: 99 }}>📄 factura</span>}
                   </td>
                   <td className="r" style={{ color: isIn ? '#4a9a6a' : '#c23b22', fontWeight:700 }}>
                     {isIn ? '+' : ''}{m.qty_delta.toLocaleString('es-CR')} {m.unit}

@@ -10,7 +10,7 @@ import {
   getPreviousCierre,
   discardCashSession,
 } from '../../shared/api/cash'
-import { fi, fd, todayStr, formatDate } from './cashUtils'
+import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE } from './cashUtils'
 import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
@@ -182,7 +182,8 @@ export default function CashTurno({
     allMovements
       .filter(m => m.subcategory === 'Propinas por turno' && m.status !== 'rechazado')
       .map(m => m.description))
-  const propinasPorPagar = propinasPagables.filter(p => !propinasRegistradas.has(propKey(p)))
+  const propinasPorPagar = propinasPagables.filter(p =>
+    p.session_date >= PROPINAS_POR_PAGAR_DESDE && !propinasRegistradas.has(propKey(p)))
   const pagarPropina = async (p: TipPayoutSummary, status: 'aprobado' | 'pendiente') => {
     if (!openSession || !profile || payingProp) return   // anti doble-registro
     const accion = status === 'aprobado' ? 'PAGAR ahora' : 'dejar PENDIENTE'

@@ -68,6 +68,12 @@ export function isEgreso(t: MovementType): boolean {
   return EGRESO_TYPES.includes(t)
 }
 
+// Fecha de corte de "Propinas por pagar": las sesiones de propinas con fecha ANTERIOR
+// a ésta ya se pagaron por el flujo viejo (antes de que existiera este módulo), así que
+// NO se muestran como pendientes. No se tocan datos históricos — es sólo un límite de
+// visualización. Las del 2026-06-06 en adelante entran al flujo nuevo (pagar/pendiente).
+export const PROPINAS_POR_PAGAR_DESDE = '2026-06-06'
+
 // ── Saldo de Caja Fuerte derivado del LEDGER (regla del canónico satori-caja) ──
 // Caja Fuerte = el efectivo físico del restaurante, arrastrado día a día.
 //   + ingresos en efectivo (no pendientes)

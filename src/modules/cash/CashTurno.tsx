@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashSession, CashMovement, Supplier, MovementType } from '../../shared/types/database'
@@ -120,9 +120,42 @@ export default function CashTurno({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apFecha, openSession])
 
-  // Turno state: pagos + ingresos adicionales
+  // Turno state: pagos + ingresos adicionales.
+  // BUG A FIX: estos arrays guardan SÓLO borradores aún NO persistidos. Las listas
+  // que se muestran (displayPagos/displayIngresos) se derivan SIEMPRE de la base
+  // (sessionMovements) + estos borradores → al recargar nada se pierde ni se duplica.
+  type IngresoRow = { id: string; crc: number | ''; usd: number | ''; nota: string; persistedId: string | null }
   const [pagos,    setPagos]    = useState<PagoRow[]>([])
-  const [ingresos, setIngresos] = useState<Array<{ id: string; crc: number | ''; usd: number | ''; nota: string }>>([])
+  const [ingresos, setIngresos] = useState<IngresoRow[]>([])
+
+  // Pagos a proveedor ya persistidos en la base (fuente de verdad)
+  const dbPagos: PagoRow[] = useMemo(() => sessionMovements
+    .filter(m => m.movement_type === 'egreso_mercaderia' && m.caja_origen === 'Caja Proveedores' && m.status !== 'rechazado')
+    .map(m => ({
+      id:            m.id,
+      supplier_id:   m.supplier_id ?? '',
+      supplier_name: m.supplier_name ?? '',
+      supplier_cat:  suppliers.find(s => s.id === m.supplier_id)?.category ?? '',
+      amount_crc:    m.amount_crc,
+      amount_usd:    m.amount_usd,
+      method:        m.method === 'Transferencia' ? 'Transferencia' : 'Efectivo',
+      reference:     m.description ?? '',
+      at:            new Date(m.created_at).getTime(),
+      persistedId:   m.id,
+    })), [sessionMovements, suppliers])
+  // Lista mostrada = borradores no persistidos + persistidos de la base, más reciente primero
+  const displayPagos = useMemo(
+    () => [...pagos.filter(p => !p.persistedId), ...dbPagos].sort((a, b) => b.at - a.at),
+    [pagos, dbPagos])
+
+  // Ingresos adicionales ya persistidos en la base
+  const dbIngresos: IngresoRow[] = useMemo(() => sessionMovements
+    .filter(m => m.movement_type === 'ingreso' && m.status !== 'rechazado')
+    .map(m => ({ id: m.id, crc: m.amount_crc || '', usd: m.amount_usd || '', nota: m.description ?? '', persistedId: m.id })),
+    [sessionMovements])
+  const displayIngresos = useMemo(
+    () => [...ingresos.filter(i => !i.persistedId), ...dbIngresos],
+    [ingresos, dbIngresos])
 
   // Cierre form
   const [cierreCRC,   setCierreCRC]   = useState<number | ''>(0)
@@ -148,11 +181,11 @@ export default function CashTurno({
   const provGastadoEf = provEfDB + provEfMem
 
   // Pagos visibles en esta vista (lista en memoria) — para totales del panel
-  const pagosEf  = pagos.filter(p => p.supplier_id && p.method === 'Efectivo')
+  const pagosEf  = displayPagos.filter(p => p.supplier_id && p.method === 'Efectivo')
                         .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
-  const pagosTr  = pagos.filter(p => p.supplier_id && p.method === 'Transferencia')
+  const pagosTr  = displayPagos.filter(p => p.supplier_id && p.method === 'Transferencia')
                         .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
-  const ingresosTotal = ingresos.reduce((s, i) => s + (Number(i.crc) || 0), 0)
+  const ingresosTotal = displayIngresos.reduce((s, i) => s + (Number(i.crc) || 0), 0)
   const totalAsig = initProvCRC + ingresosTotal
 
   // Otros egresos en efectivo operativos (no proveedores, no ingreso/traspaso)
@@ -225,12 +258,11 @@ export default function CashTurno({
         caja_origen:   'Caja Proveedores',
         shift:         tipShiftToCaja(openSession.shift_type),
       })
-      setPagos(prev => prev.map(p =>
-        p.id === pago.id ? { ...p, persistedId: mov.id } : p
-      ))
+      // Ya está en la base → se mostrará vía dbPagos; quitamos el borrador en memoria.
+      setPagos(prev => prev.filter(p => p.id !== pago.id))
       onMovAdded(mov)
-    } catch { /* silent — will retry on close */ }
-  }, [openSession, profile, onMovAdded])
+    } catch { /* silent — queda como borrador y se reintenta al cierre */ }
+  }, [openSession, profile, tc, onMovAdded])
 
   // ── Modal de pago a proveedor ──────────────────────────────
   const [pagoModal,   setPagoModal]   = useState(false)
@@ -256,28 +288,29 @@ export default function CashTurno({
   }
 
   const removePago = async (id: string) => {
-    const pago = pagos.find(p => p.id === id)
+    const pago = displayPagos.find(p => p.id === id)
     if (pago?.persistedId) {
       // Borrado de un pago YA guardado → requiere autorización de gerencia
       if (!(await requireManager())) return
       // Refrescar desde la fuente de verdad (re-fetch en el padre). Antes se pasaba un
       // PagoRow a onMovAdded, que lo agregaba en memoria → fila fantasma tras el borrado.
       try { await deleteCashMovement(pago.persistedId); onRefresh() } catch { /* silent */ }
+    } else {
+      setPagos(prev => prev.filter(p => p.id !== id))
     }
-    setPagos(prev => prev.filter(p => p.id !== id))
   }
 
   const confirmPago = async () => {
     if (!draftSup || !Number(draftCRC)) return  // proveedor + monto requeridos
     const prov = suppliers.find(s => s.id === draftSup)
     // Si edito uno ya persistido, borro su movimiento viejo antes de re-crear
-    const old = editId ? pagos.find(p => p.id === editId) : null
+    const old = editId ? displayPagos.find(p => p.id === editId) : null
     if (old?.persistedId) {
       // ídem removePago: refrescar desde la fuente de verdad, no inyectar fila fantasma.
       try { await deleteCashMovement(old.persistedId); onRefresh() } catch { /* silent */ }
     }
     const pago: PagoRow = {
-      id:            editId ?? crypto.randomUUID(),
+      id:            old && !old.persistedId ? old.id : crypto.randomUUID(),
       supplier_id:   draftSup,
       supplier_name: prov?.name ?? '',
       supplier_cat:  prov?.category ?? '',
@@ -308,12 +341,42 @@ export default function CashTurno({
   const [draftIngUSD,  setDraftIngUSD]  = useState<number | ''>('')
   const [draftIngNota, setDraftIngNota] = useState('')
   const openNewIngreso = () => { setDraftIngCRC(''); setDraftIngUSD(''); setDraftIngNota(''); setIngresoModal(true) }
-  const confirmIngreso = () => {
+  // BUG A FIX: persistir el ingreso adicional AL INSTANTE (antes sólo se guardaba al
+  // cerrar el turno → si recargabas antes del cierre, se perdía).
+  const confirmIngreso = async () => {
+    if (!openSession || !profile) return
     if (!Number(draftIngCRC) && !Number(draftIngUSD)) return
-    setIngresos(prev => [...prev, { id: crypto.randomUUID(), crc: Number(draftIngCRC) || '', usd: Number(draftIngUSD) || '', nota: draftIngNota.trim() }])
+    const draft: IngresoRow = { id: crypto.randomUUID(), crc: Number(draftIngCRC) || '', usd: Number(draftIngUSD) || '', nota: draftIngNota.trim(), persistedId: null }
+    setIngresos(prev => [...prev, draft])
     setIngresoModal(false)
+    try {
+      const mov = await createCashMovement({
+        session_id:    openSession.id,
+        created_by:    profile.id,
+        movement_type: 'ingreso',
+        amount_crc:    Number(draft.crc) || 0,
+        amount_usd:    Number(draft.usd) || 0,
+        currency:      'CRC',
+        exchange_rate: tc,
+        description:   draft.nota || 'Ingreso adicional',
+        subcategory:   'Ingreso adicional',
+        method:        'Efectivo',
+        caja_origen:   'Registradora',
+        shift:         tipShiftToCaja(openSession.shift_type),
+      })
+      setIngresos(prev => prev.filter(i => i.id !== draft.id))  // ahora vive en la base (dbIngresos)
+      onMovAdded(mov)
+    } catch { /* queda como borrador y se reintenta al cierre */ }
   }
-  const removeIngreso = (id: string) => setIngresos(prev => prev.filter(i => i.id !== id))
+  const removeIngreso = async (id: string) => {
+    const row = displayIngresos.find(i => i.id === id)
+    if (row?.persistedId) {
+      if (!(await requireManager())) return
+      try { await deleteCashMovement(row.persistedId); onRefresh() } catch { /* silent */ }
+    } else {
+      setIngresos(prev => prev.filter(i => i.id !== id))
+    }
+  }
 
   // ── Otros egresos del turno (delivery, operativo, salario) ──
   // Salen de la Caja Diaria. Se persisten al instante (como los pagos).
@@ -383,8 +446,9 @@ export default function CashTurno({
         .map(p => persistPago(p))
       ))
 
-      // Save ingresos adicionales
-      await withTimeout(Promise.all(ingresos.filter(i => Number(i.crc) > 0 || Number(i.usd) > 0).map(i =>
+      // Persistir SÓLO ingresos que quedaron como borrador (p.ej. falló la
+      // persistencia instantánea por red). Los ya persistidos NO se recrean → no duplica.
+      await withTimeout(Promise.all(ingresos.filter(i => !i.persistedId && (Number(i.crc) > 0 || Number(i.usd) > 0)).map(i =>
         createCashMovement({
           session_id:    openSession.id,
           created_by:    profile.id,
@@ -394,6 +458,7 @@ export default function CashTurno({
           currency:      'CRC',
           exchange_rate: tc,
           description:   i.nota || 'Ingreso adicional',
+          subcategory:   'Ingreso adicional',
           method:        'Efectivo',
           caja_origen:   'Registradora',
           shift:         tipShiftToCaja(openSession.shift_type),
@@ -583,9 +648,9 @@ export default function CashTurno({
             <button className="cd-section-add" onClick={openNewIngreso}>+ Agregar</button>
           )}
         </div>
-        {(ingresos.length > 0 || ingresosTotal > 0) && (
+        {displayIngresos.length > 0 && (
           <div className="cd-section-body">
-            {ingresos.map(i => (
+            {displayIngresos.map(i => (
               <div key={i.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>
@@ -611,9 +676,9 @@ export default function CashTurno({
           <div>
             <div className="cd-section-title">Pagos a proveedores</div>
             <div className="cd-section-sub">
-              {pagos.filter(p => p.supplier_id).length === 0
+              {displayPagos.filter(p => p.supplier_id).length === 0
                 ? 'Sin pagos registrados'
-                : `${pagos.filter(p => p.supplier_id).length} registrado${pagos.filter(p => p.supplier_id).length !== 1 ? 's' : ''} · efectivo: ${fi(pagosEf)}`
+                : `${displayPagos.filter(p => p.supplier_id).length} registrado${displayPagos.filter(p => p.supplier_id).length !== 1 ? 's' : ''} · efectivo: ${fi(pagosEf)}`
               }
             </div>
           </div>
@@ -622,8 +687,8 @@ export default function CashTurno({
           )}
         </div>
         <div className="cd-section-body">
-          {pagos.length === 0 && <div className="cd-empty-row">ℹ Sin pagos registrados</div>}
-          {pagos.map(p => (
+          {displayPagos.length === 0 && <div className="cd-empty-row">ℹ Sin pagos registrados</div>}
+          {displayPagos.map(p => (
             <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.supplier_name || 'Proveedor'}</div>
@@ -648,7 +713,7 @@ export default function CashTurno({
               </div>
             </div>
           ))}
-          {pagos.filter(p => p.supplier_id).length > 0 && (
+          {displayPagos.filter(p => p.supplier_id).length > 0 && (
             <div className="cd-pagos-total">
               <span className="cd-tc-label">Pagado en efectivo</span>
               <span className="cd-total-val">{fi(pagosEf)}</span>
@@ -817,7 +882,7 @@ export default function CashTurno({
             </div>
 
             <div className="cd-resumen-block">
-              {pagos.filter(p => p.supplier_id).map(p => (
+              {displayPagos.filter(p => p.supplier_id).map(p => (
                 <div key={p.id} className="cd-resumen-pago">
                   <div>
                     <span>{p.supplier_name || '—'}</span>

@@ -32,9 +32,8 @@ const TipHistory   = lazy(() => import('./TipHistory'))
 const TipQuincenal = lazy(() => import('./TipQuincenal'))
 const TipStats     = lazy(() => import('./TipStats'))
 const TipCocina    = lazy(() => import('./TipCocina'))
-import { todayCR, shiftLabel, tipShiftToCaja } from '../../shared/utils'
+import { todayCR, shiftLabel } from '../../shared/utils'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
-import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 
 type View = 'turno' | 'historial' | 'quincenal' | 'stats' | 'cocina'
@@ -413,33 +412,9 @@ export default function TipsModule() {
 
       await closeTipSession(openSession.id, profile.id)
 
-      // ── Integración Caja↔Propinas ──────────────────────────
-      // Si hay un turno de caja abierto, registrar el pago de propinas
-      // como egreso_personal para que cuadre en el cierre de caja
-      const totalPayout = payouts.reduce((s, p) => s + p.payout_crc, 0)
-      if (totalPayout > 0) {
-        try {
-          const cashSession = await getOpenCashSession()
-          if (cashSession) {
-            await createCashMovement({
-              session_id:    cashSession.id,
-              created_by:    profile.id,
-              movement_type: 'egreso_personal',
-              amount_crc:    totalPayout,
-              amount_usd:    0,
-              currency:      'CRC',
-              exchange_rate: null,
-              description:   `Propinas turno ${openSession.session_date} ${shiftLabel(openSession.shift_type)}`,
-              subcategory:   'Propinas por turno',
-              method:        'Efectivo',
-              caja_origen:   'Registradora',
-              shift:         tipShiftToCaja(openSession.shift_type),
-            })
-          }
-        } catch {
-          // No bloquear el cierre de propinas si la integración falla silenciosamente
-        }
-      }
+      // BUG C: cerrar Propinas YA NO crea el egreso en Caja automáticamente.
+      // En Caja aparece como "Propinas por pagar"; el cajero lo paga (ahora) o lo
+      // deja pendiente (como un proveedor). Ver CashTurno → "Propinas por pagar".
 
       setOpenSession(null)
       setTotals(null)

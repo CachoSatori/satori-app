@@ -11,8 +11,8 @@ import {
   discardCashSession,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr } from './cashUtils'
-import { tipShiftToCaja } from '../../shared/utils'
-import { getActiveEmployees } from '../../shared/api/tips'
+import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
+import { getActiveEmployees, getTipPayoutsForDate, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import type { Employee } from '../../shared/types/database'
 
@@ -156,6 +156,48 @@ export default function CashTurno({
   const displayIngresos = useMemo(
     () => [...ingresos.filter(i => !i.persistedId), ...dbIngresos],
     [ingresos, dbIngresos])
+
+  // ── Propinas por pagar (Bug C) ──────────────────────────────
+  // Cerrar Propinas ya NO crea el egreso solo. Acá se listan las sesiones de
+  // propinas CERRADAS de la fecha del turno cuyo payout aún no se registró en Caja.
+  const [propinasPagables, setPropinasPagables] = useState<TipPayoutSummary[]>([])
+  useEffect(() => {
+    if (!openSession) { setPropinasPagables([]); return }
+    let cancelled = false
+    getTipPayoutsForDate(openSession.session_date)
+      .then(r => { if (!cancelled) setPropinasPagables(r) })
+      .catch(() => { if (!cancelled) setPropinasPagables([]) })
+    return () => { cancelled = true }
+  }, [openSession])
+  // Clave del movimiento de propinas (misma convención que reconcilePropinaEgreso)
+  const propKey = (p: TipPayoutSummary) => `Propinas turno ${p.session_date} ${shiftLabel(p.shift_type)}`
+  // Ya registradas (pagadas o dejadas pendientes) en este turno → no mostrar
+  const propinasRegistradas = new Set(
+    sessionMovements
+      .filter(m => m.subcategory === 'Propinas por turno' && m.status !== 'rechazado')
+      .map(m => m.description))
+  const propinasPorPagar = propinasPagables.filter(p => !propinasRegistradas.has(propKey(p)))
+  const pagarPropina = async (p: TipPayoutSummary, status: 'aprobado' | 'pendiente') => {
+    if (!openSession || !profile) return
+    try {
+      const mov = await createCashMovement({
+        session_id:    openSession.id,
+        created_by:    profile.id,
+        movement_type: 'egreso_personal',
+        amount_crc:    p.total_payout_crc,
+        amount_usd:    0,
+        currency:      'CRC',
+        exchange_rate: null,
+        description:   propKey(p),
+        subcategory:   'Propinas por turno',   // → finance.ts lo excluye del P&L (pass-through)
+        method:        'Efectivo',
+        caja_origen:   'Registradora',
+        status,                                 // 'pendiente' = el efectivo sigue en caja hasta pagarse
+        shift:         tipShiftToCaja(p.shift_type),
+      })
+      onMovAdded(mov)
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error registrando propinas') }
+  }
 
   // Cierre form
   const [cierreCRC,   setCierreCRC]   = useState<number | ''>(0)
@@ -763,6 +805,38 @@ export default function CashTurno({
           ))}
         </div>
       </div>
+
+      {/* Propinas por pagar (Bug C) */}
+      {propinasPorPagar.length > 0 && (
+        <div className="cd-section">
+          <div className="cd-section-head">
+            <div className="cd-section-icon">🎁</div>
+            <div>
+              <div className="cd-section-title">Propinas por pagar</div>
+              <div className="cd-section-sub">Cerradas en Propinas — pagá ahora o dejá pendiente (como un proveedor)</div>
+            </div>
+          </div>
+          <div className="cd-section-body">
+            {propinasPorPagar.map(p => (
+              <div key={p.session_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>Propinas {shiftLabel(p.shift_type)}</div>
+                  <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>{fi(p.total_payout_crc)} a entregar al staff</div>
+                </div>
+                {canManage && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontWeight: 700, color: '#c0392b', marginRight: '0.25rem' }}>{fi(p.total_payout_crc)}</span>
+                    <button onClick={() => pagarPropina(p, 'aprobado')} title="Registrar el pago ahora"
+                      style={{ background: 'var(--t-ink,#0d0d0d)', border: 'none', color: 'var(--t-gold,#c8a96e)', borderRadius: 3, padding: '4px 10px', fontSize: '0.72rem', cursor: 'pointer' }}>Pagar ahora</button>
+                    <button onClick={() => pagarPropina(p, 'pendiente')} title="Dejar pendiente (se paga después, como un proveedor)"
+                      style={{ background: 'none', border: '1px solid #a07030', color: '#a07030', borderRadius: 3, padding: '4px 8px', fontSize: '0.72rem', cursor: 'pointer' }}>Dejar pendiente</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Cierre del turno */}
       {canClose && view !== 'cierre' && (

@@ -97,6 +97,37 @@ export async function deleteTipSession(sessionId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+// ── Propinas por pagar en Caja (Bug C) ──────────────────────
+// Sesiones de propinas CERRADAS de una fecha, con el total de payout a entregar.
+// Caja las muestra como "Propinas por pagar" para que el cajero las pague o las
+// deje pendientes (no se crea el egreso solo al cerrar Propinas).
+export interface TipPayoutSummary {
+  session_id:       string
+  session_date:     string
+  shift_type:       string   // 'AM' | 'PM'
+  total_payout_crc: number
+}
+
+export async function getTipPayoutsForDate(date: string): Promise<TipPayoutSummary[]> {
+  const { data, error } = await supabase
+    .from('tip_sessions')
+    .select('id, session_date, shift_type, tip_entries ( payout_crc )')
+    .eq('session_date', date)
+    .eq('status', 'closed')
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as unknown as Array<{
+    id: string; session_date: string; shift_type: string
+    tip_entries: Array<{ payout_crc: number | null }>
+  }>)
+    .map(s => ({
+      session_id:       s.id,
+      session_date:     s.session_date,
+      shift_type:       s.shift_type,
+      total_payout_crc: (s.tip_entries ?? []).reduce((a, e) => a + (e.payout_crc || 0), 0),
+    }))
+    .filter(s => s.total_payout_crc > 0)
+}
+
 // ── Entradas ────────────────────────────────────────────────
 
 export async function getTipEntriesBySession(sessionId: string): Promise<TipEntry[]> {

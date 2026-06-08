@@ -131,11 +131,10 @@ export async function createCashMovement(movement: {
   account_id?: string | null
   status?: 'aprobado' | 'pendiente' | 'rechazado'   // override; por defecto se deriva del método
 }): Promise<CashMovement> {
-  const { status: _omitStatus, ...rest } = movement
   const { data, error } = await supabase
     .from('cash_movements')
     .insert({
-      ...rest,
+      ...movement,   // la clave `status` de abajo pisa el status del spread
       subcategory:   movement.subcategory   ?? '',
       supplier_id:   movement.supplier_id   ?? null,
       supplier_name: movement.supplier_name ?? '',

@@ -162,7 +162,7 @@ export default function CashTurno({
   // propinas CERRADAS de la fecha del turno cuyo payout aún no se registró en Caja.
   const [propinasPagables, setPropinasPagables] = useState<TipPayoutSummary[]>([])
   useEffect(() => {
-    if (!openSession) { setPropinasPagables([]); return }
+    if (!openSession) return   // la sección sólo se muestra con turno abierto
     let cancelled = false
     getTipPayoutsForDate(openSession.session_date)
       .then(r => { if (!cancelled) setPropinasPagables(r) })

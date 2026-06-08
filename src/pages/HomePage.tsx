@@ -87,6 +87,11 @@ const MODULES: Module[] = [
     description: 'Empleados · Config', ready: true,
     roles: ['owner'],
   },
+  {
+    id: 'prueba', path: '/prueba', label: 'Prueba', kanji: '試',
+    description: '🧪 Simulador · solo lectura', ready: true,
+    roles: ['owner'],
+  },
 ]
 
 // ── Live status per module ─────────────────────────────────────

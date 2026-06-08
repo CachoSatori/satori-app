@@ -23,6 +23,7 @@ const MiRendimientoWrap = lazy(() => import('./modules/ventas/MiRendimientoWrap'
 const ClientesModule    = lazy(() => import('./modules/crm/ClientesModule'))
 const FinanzasModule    = lazy(() => import('./modules/finanzas/FinanzasModule'))
 const InboxModule       = lazy(() => import('./modules/inbox/InboxModule'))
+const PruebaModule      = lazy(() => import('./modules/prueba/PruebaModule'))
 const RegistroCliente   = lazy(() => import('./pages/RegistroCliente'))
 
 // ── Loading fallback — same spinner used for auth ──────────────
@@ -144,6 +145,7 @@ function AppRoutes() {
         <Route path="/inbox/share"   element={<Navigate to="/inbox" replace />} />
         <Route path="/mi-rendimiento" element={<PrivateRoute roles={['salonero','barman','barback','runner','cocina']}><MiRendimientoWrap /></PrivateRoute>} />
         <Route path="/admin"    element={<OwnerRoute><AdminModule /></OwnerRoute>} />
+        <Route path="/prueba"   element={<OwnerRoute><PruebaModule /></OwnerRoute>} />
         <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

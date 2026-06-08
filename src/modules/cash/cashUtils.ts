@@ -80,24 +80,21 @@ export function isEgreso(t: MovementType): boolean {
 // visualización. Las del 2026-06-06 en adelante entran al flujo nuevo (pagar/pendiente).
 export const PROPINAS_POR_PAGAR_DESDE = '2026-06-06'
 
-// ── Saldo de Caja Fuerte derivado del LEDGER (lógica del canónico satori-caja) ──
-// Caja Fuerte = el efectivo físico del restaurante, arrastrado día a día. Validado en
-// el módulo Prueba con datos reales y usado por el cierre del día (CashCierre).
-//   + ingresos en efectivo que ENTRAN a Caja Fuerte → caja_origen 'Caja Fuerte'
-//     (las ventas de cierre; NO los "ingresos adicionales" que entran por Registradora).
-//   − egresos NO pendientes con caja_origen 'Caja Fuerte' OR method 'Efectivo'
-//     (salen del efectivo físico).
-//   Excluye: pendientes, rechazados, traspasos internos y transferencias (no afectan el efectivo).
+// ── Saldo de Caja Fuerte — ÚNICA fuente de verdad ──────────────────────────────
+// MISMA lógica que la tarjeta "Caja Fuerte" de CashMovimientos (validada con datos
+// reales por el dueño). Solo movimientos con caja_origen='Caja Fuerte' y status != pendiente:
+//   + ingresos · − egresos · traspasos por DIRECCIÓN ("→ Caja Fuerte" suma, el resto resta).
+// Los traspasos SÍ cuentan — incluido el ajuste de saldo inicial (cargado como traspaso a
+// Caja Fuerte). La usan la tarjeta, el cierre del día y el simulador → siempre el mismo número.
 export function saldoCajaFuerte(movements: CashMovement[]): { crc: number; usd: number } {
+  const isTraspIn = (m: CashMovement) => /→\s*caja fuerte/i.test(m.subcategory || '')
   let crc = 0, usd = 0
   for (const m of movements) {
-    if (m.status === 'pendiente' || m.status === 'rechazado') continue
-    if (m.movement_type === 'traspaso') continue
-    if (m.movement_type === 'ingreso') {
-      if (m.caja_origen === 'Caja Fuerte') { crc += m.amount_crc || 0; usd += m.amount_usd || 0 }
-    } else if (isEgreso(m.movement_type)) {
-      if (m.caja_origen === 'Caja Fuerte' || m.method === 'Efectivo') { crc -= m.amount_crc || 0; usd -= m.amount_usd || 0 }
-    }
+    if (m.caja_origen !== 'Caja Fuerte' || m.status === 'pendiente') continue
+    const c = m.amount_crc || 0, u = m.amount_usd || 0
+    if (m.movement_type === 'ingreso')        { crc += c; usd += u }
+    else if (isEgreso(m.movement_type))       { crc -= c; usd -= u }
+    else if (m.movement_type === 'traspaso')  { if (isTraspIn(m)) { crc += c; usd += u } else { crc -= c; usd -= u } }
   }
   return { crc, usd }
 }

@@ -474,7 +474,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   <div style={{ background: cuadra ? 'rgba(74,154,106,.1)' : 'rgba(194,59,34,.1)', border:`1.5px solid ${cuadra ? '#4a9a6a' : '#c23b22'}`, borderRadius:2, padding:'0.75rem', marginBottom:'0.75rem' }}>
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'0.5rem', marginBottom:'0.5rem', textAlign:'center' }}>
                       {[
-                        { l:'Saldo CF (ledger)', v: saldoBase.crc },
+                        { l:'Saldo Caja Fuerte (según sistema)', v: saldoBase.crc },
                         { l:'Mediodía neto',  v: netoM },
                         { l:'Noche neto',     v: netoN },
                         { l:'Debería quedar', v: deberia },

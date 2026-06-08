@@ -107,7 +107,7 @@ export default function CierreSimulator() {
         <>
           {/* Saldo Caja Fuerte según sistema */}
           <div style={{ ...card, background: 'var(--t-ink,#0d0d0d)', border: 'none', marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9a9488' }}>Saldo Caja Fuerte según sistema (ledger)</div>
+            <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9a9488' }}>Saldo Caja Fuerte (según sistema)</div>
             <div style={{ ...num, fontSize: '1.6rem', color: 'var(--t-gold,#c8a96e)' }}>
               {fi(saldoLedgerFull.crc)}{saldoLedgerFull.usd ? <span style={{ fontSize: '1rem', color: '#7ab4d4', marginLeft: 8 }}>{fd(saldoLedgerFull.usd)}</span> : null}
             </div>

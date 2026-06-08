@@ -15,7 +15,7 @@ const CONCEPTOS = [
   { id: 'ing_otro', label: 'Ingreso · Otro (aceite, etc.)',   type: 'ingreso',           caja: 'Caja Fuerte',       sub: 'Otros ingresos',      method: 'Efectivo' },
 ] as const
 import { todayCR } from '../../shared/utils'
-import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr } from './cashUtils'
+import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr, saldoCajaFuerte } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 
 interface Props {
@@ -98,29 +98,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   })
 
   // ── Saldos ───────────────────────────────────────────────
-  // BUG-2 FIX: filter both entradas AND salidas by caja_origen='Caja Fuerte'
-  const cfEntradas = movements
-    .filter(m => m.movement_type === 'ingreso' && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
-    .reduce((s, m) => s + m.amount_crc, 0)
-  const cfSalidas = movements
-    .filter(m => isEgreso(m.movement_type as MovementType) && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
-    .reduce((s, m) => s + m.amount_crc, 0)
-  // Traspasos de la Caja Fuerte. Por dirección (subcategoría):
-  //  - "Banco → Caja Fuerte" = entra plata a la caja (suma).
-  //  - "Caja Fuerte → Banco" (retiro) = sale plata (resta).
-  const cfTrasp = movements.filter(m => m.movement_type === 'traspaso' && m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente')
-  const cfTraspIn  = cfTrasp.filter(m => /banco\s*→\s*caja fuerte|→\s*caja fuerte/i.test(m.subcategory || '')).reduce((s, m) => s + m.amount_crc, 0)
-  const cfTraspOut = cfTrasp.filter(m => !/banco\s*→\s*caja fuerte|→\s*caja fuerte/i.test(m.subcategory || '')).reduce((s, m) => s + m.amount_crc, 0)
-  const cfSaldo = cfEntradas - cfSalidas - cfTraspOut + cfTraspIn
-
-  // Caja Fuerte en DÓLARES (mismo criterio, sobre amount_usd)
-  const cfCF = (pred: (m: CashMovement) => boolean) =>
-    movements.filter(m => m.caja_origen === 'Caja Fuerte' && m.status !== 'pendiente' && pred(m)).reduce((s, m) => s + (m.amount_usd || 0), 0)
-  const isTraspIn = (m: CashMovement) => /→\s*caja fuerte/i.test(m.subcategory || '')
-  const cfSaldoUSD = cfCF(m => m.movement_type === 'ingreso')
-    - cfCF(m => isEgreso(m.movement_type as MovementType))
-    - cfCF(m => m.movement_type === 'traspaso' && !isTraspIn(m))
-    + cfCF(m => m.movement_type === 'traspaso' && isTraspIn(m))
+  // Saldo de Caja Fuerte — ÚNICA fuente de verdad (cashUtils.saldoCajaFuerte).
+  // La tarjeta, el cierre del día y el simulador usan exactamente esta función.
+  const { crc: cfSaldo, usd: cfSaldoUSD } = saldoCajaFuerte(movements)
 
   const pendTotal = movements.filter(m => m.status === 'pendiente').reduce((s, m) => s + m.amount_crc, 0)
   const pendCount = movements.filter(m => m.status === 'pendiente').length

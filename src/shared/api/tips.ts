@@ -108,12 +108,16 @@ export interface TipPayoutSummary {
   total_payout_crc: number
 }
 
-export async function getTipPayoutsForDate(date: string): Promise<TipPayoutSummary[]> {
+// Desde `sinceDate` (inclusive) hacia adelante → así una propina impaga de un día
+// anterior NO se pierde: sigue apareciendo en el turno del día siguiente hasta que
+// se pague o se deje pendiente. (Caja la filtra contra los movimientos ya registrados.)
+export async function getTipPayoutsSince(sinceDate: string): Promise<TipPayoutSummary[]> {
   const { data, error } = await supabase
     .from('tip_sessions')
     .select('id, session_date, shift_type, tip_entries ( payout_crc )')
-    .eq('session_date', date)
+    .gte('session_date', sinceDate)
     .eq('status', 'closed')
+    .order('session_date', { ascending: false })
   if (error) throw new Error(error.message)
   return ((data ?? []) as unknown as Array<{
     id: string; session_date: string; shift_type: string

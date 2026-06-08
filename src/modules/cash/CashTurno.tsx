@@ -10,9 +10,9 @@ import {
   getPreviousCierre,
   discardCashSession,
 } from '../../shared/api/cash'
-import { fi, fd, todayStr } from './cashUtils'
+import { fi, fd, todayStr, formatDate } from './cashUtils'
 import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
-import { getActiveEmployees, getTipPayoutsForDate, type TipPayoutSummary } from '../../shared/api/tips'
+import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import type { Employee } from '../../shared/types/database'
 
@@ -159,14 +159,17 @@ export default function CashTurno({
     [ingresos, dbIngresos])
 
   // ── Propinas por pagar (Bug C) ──────────────────────────────
-  // Cerrar Propinas ya NO crea el egreso solo. Acá se listan las sesiones de
-  // propinas CERRADAS de la fecha del turno cuyo payout aún no se registró en Caja.
+  // Cerrar Propinas ya NO crea el egreso solo. Acá se listan las sesiones de propinas
+  // CERRADAS cuyo payout aún no se registró en Caja, desde 30 días atrás de la fecha del
+  // turno → una propina impaga de un día anterior NO se pierde, reaparece hasta pagarla.
   const [propinasPagables, setPropinasPagables] = useState<TipPayoutSummary[]>([])
   const [payingProp, setPayingProp] = useState<string | null>(null)   // session_id en curso (anti doble-click)
   useEffect(() => {
     if (!openSession) return   // la sección sólo se muestra con turno abierto
     let cancelled = false
-    getTipPayoutsForDate(openSession.session_date)
+    const since = new Date(openSession.session_date + 'T12:00:00')
+    since.setDate(since.getDate() - 30)
+    getTipPayoutsSince(since.toISOString().slice(0, 10))
       .then(r => { if (!cancelled) setPropinasPagables(r) })
       .catch(() => { if (!cancelled) setPropinasPagables([]) })
     return () => { cancelled = true }
@@ -832,7 +835,7 @@ export default function CashTurno({
             {propinasPorPagar.map(p => (
               <div key={p.session_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>Propinas {shiftLabel(p.shift_type)}</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>Propinas {shiftLabel(p.shift_type)} · {formatDate(p.session_date)}</div>
                   <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>{fi(p.total_payout_crc)} a entregar al staff</div>
                 </div>
                 {canManage && (

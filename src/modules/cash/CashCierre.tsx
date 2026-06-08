@@ -16,10 +16,10 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
-import type { CashCierreDia, CashSession } from '../../shared/types/database'
-import { getCierresDia, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, discardCierreDia } from '../../shared/api/cash'
+import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
+import { getCierresDia, getAllCashMovements, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, discardCierreDia } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
-import { fi, todayStr } from './cashUtils'
+import { fi, todayStr, saldoCajaFuerte } from './cashUtils'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
@@ -39,11 +39,14 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const [error,    setError]    = useState<string | null>(null)
   const [msg,      setMsg]      = useState<string | null>(null)
   const [fecha,    setFecha]    = useState(today)
+  const [movs,     setMovs]     = useState<CashMovement[]>([])   // ledger para saldoCajaFuerte
 
   const loadCierres = async () => {
     setLoading(true)
     try {
-      setCierres(await getCierresDia(fecha))
+      const [cs, ms] = await Promise.all([getCierresDia(fecha), getAllCashMovements()])
+      setCierres(cs)
+      setMovs(ms)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
     } finally {
@@ -102,9 +105,14 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const propMFromParcial   = parcial ? parcial.propinas_m_crc : N(propM)
   const vmUSDFromParcial   = parcial ? parcial.vm_usd : N(vmUSD)
 
+  // Saldo de Caja Fuerte según el ledger, EXCLUYENDO las ventas-de-cierre de esta fecha
+  // (esas se re-suman desde el formulario → evitar doble conteo). Idempotente al re-cerrar.
+  const saldoBase = saldoCajaFuerte(
+    movs.filter(m => !(m.subcategory === 'Ventas cierre' && (m.description || '').includes(fecha))))
   const netoM    = efRealMFromParcial - propMFromParcial
   const netoN    = efRealN - N(propN) - N(retiroN)
-  const deberia  = netoM + netoN
+  // Debería quedar en Caja Fuerte = saldo del ledger + ventas efectivo − propinas − retiro.
+  const deberia  = saldoBase.crc + netoM + netoN
   const diferencia = totalContadoCRC > 0 ? totalContadoCRC - deberia : null
   const cuadra     = diferencia !== null && Math.abs(diferencia) < 500
 
@@ -464,8 +472,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 {/* Verificación */}
                 {totalContadoCRC > 0 && (
                   <div style={{ background: cuadra ? 'rgba(74,154,106,.1)' : 'rgba(194,59,34,.1)', border:`1.5px solid ${cuadra ? '#4a9a6a' : '#c23b22'}`, borderRadius:2, padding:'0.75rem', marginBottom:'0.75rem' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.5rem', marginBottom:'0.5rem', textAlign:'center' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'0.5rem', marginBottom:'0.5rem', textAlign:'center' }}>
                       {[
+                        { l:'Saldo CF (ledger)', v: saldoBase.crc },
                         { l:'Mediodía neto',  v: netoM },
                         { l:'Noche neto',     v: netoN },
                         { l:'Debería quedar', v: deberia },

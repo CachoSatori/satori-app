@@ -163,10 +163,9 @@ export default function CierreSimulator() {
           </div>
 
           <div style={{ fontSize: '0.66rem', color: '#888', marginTop: '0.75rem', lineHeight: 1.5 }}>
-            ⚠️ A validar: el helper <code>saldoCajaFuerte</code> suma <strong>todos</strong> los ingresos en efectivo;
-            el canónico suma a Caja Fuerte solo los de <code>caja_origen='Caja Fuerte'</code>. Las ventas-de-cierre
-            sí entran con <code>caja_origen='Caja Fuerte'</code> (coinciden); la diferencia aparecería si hay
-            "ingresos adicionales" (caja_origen 'Registradora'). Compará este número con la realidad y avisá si hay que filtrar por <code>caja_origen</code>.
+            <code>saldoCajaFuerte</code> ya usa la lógica canónica: + ingresos efectivo con <code>caja_origen='Caja Fuerte'</code>
+            (ventas de cierre), − egresos no pendientes (caja_origen 'Caja Fuerte' o método 'Efectivo'); excluye pendientes,
+            traspasos y transferencias. Es el mismo helper que usa el cierre real del día.
           </div>
         </>
       )}

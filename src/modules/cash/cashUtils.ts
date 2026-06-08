@@ -74,24 +74,24 @@ export function isEgreso(t: MovementType): boolean {
 // visualización. Las del 2026-06-06 en adelante entran al flujo nuevo (pagar/pendiente).
 export const PROPINAS_POR_PAGAR_DESDE = '2026-06-06'
 
-// ── Saldo de Caja Fuerte derivado del LEDGER (regla del canónico satori-caja) ──
-// Caja Fuerte = el efectivo físico del restaurante, arrastrado día a día.
-//   + ingresos en efectivo (no pendientes)
-//   − egresos en efectivo (no pendientes; los `pendiente` aún no salieron de la caja)
-//   traspasos internos y movimientos no-efectivo (Transferencia/SINPE/Bitcoin) NO afectan
-//   el efectivo físico. (Ajustes faltante/sobrante se registran como ingreso/egreso → ya cuentan.)
-//
-// ⚠️ SCAFFOLD: helper puro, SIN cablear a ningún cálculo todavía. Se valida primero en el
-// módulo "Prueba" (simulador read-only con datos reales) y recién ahí se enchufa al cierre
-// y a CashResumen como única fuente de verdad. No usar como número visible sin validar.
+// ── Saldo de Caja Fuerte derivado del LEDGER (lógica del canónico satori-caja) ──
+// Caja Fuerte = el efectivo físico del restaurante, arrastrado día a día. Validado en
+// el módulo Prueba con datos reales y usado por el cierre del día (CashCierre).
+//   + ingresos en efectivo que ENTRAN a Caja Fuerte → caja_origen 'Caja Fuerte'
+//     (las ventas de cierre; NO los "ingresos adicionales" que entran por Registradora).
+//   − egresos NO pendientes con caja_origen 'Caja Fuerte' OR method 'Efectivo'
+//     (salen del efectivo físico).
+//   Excluye: pendientes, rechazados, traspasos internos y transferencias (no afectan el efectivo).
 export function saldoCajaFuerte(movements: CashMovement[]): { crc: number; usd: number } {
   let crc = 0, usd = 0
   for (const m of movements) {
     if (m.status === 'pendiente' || m.status === 'rechazado') continue
     if (m.movement_type === 'traspaso') continue
-    if (m.method !== 'Efectivo') continue
-    if (m.movement_type === 'ingreso') { crc += m.amount_crc || 0; usd += m.amount_usd || 0 }
-    else if (isEgreso(m.movement_type)) { crc -= m.amount_crc || 0; usd -= m.amount_usd || 0 }
+    if (m.movement_type === 'ingreso') {
+      if (m.caja_origen === 'Caja Fuerte') { crc += m.amount_crc || 0; usd += m.amount_usd || 0 }
+    } else if (isEgreso(m.movement_type)) {
+      if (m.caja_origen === 'Caja Fuerte' || m.method === 'Efectivo') { crc -= m.amount_crc || 0; usd -= m.amount_usd || 0 }
+    }
   }
   return { crc, usd }
 }

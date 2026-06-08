@@ -1,7 +1,21 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> Última actualización: 2026-06-05 (hotfixes Propinas en prod · auditoría MERGEADA · fix Caja onMovAdded · cierre por ledger en módulo Prueba)
+> Última actualización: 2026-06-08 (Caja: Bug A/C + taxonomía + 4 mejoras · validado build/lint/contrato-esquema · pendiente smoke-test del dueño)
+
+## 🆕 Novedades 2026-06-08
+
+### Caja — 4 mejoras (rama `feat/caja-datos-propinas-tipos`)
+1. **Propinas pagadas cross-turno:** la detección de "propina ya registrada" mira **todos** los movimientos del día (no solo el turno actual) → evita doble pago entre turnos. (`allMovements` pasa a `CashTurno`.)
+2. **Anti doble-click + confirmación** al pagar propinas (botones se deshabilitan + `confirm` con monto) → evita doble-registro de plata.
+3. **`saldoCajaFuerte(movements)`** — helper puro (regla del canónico: +ingresos efectivo −egresos efectivo no-pendientes, traspasos/no-efectivo no afectan). **SCAFFOLD sin cablear**: se valida primero en el módulo Prueba antes de usarlo como número visible.
+4. **Guard anti doble-submit** en `confirmPago`/`confirmIngreso`. Además: **CashPendientes ya maneja las propinas dejadas pendientes** (agrupa por `description` → aparecen como "Propinas turno…" y se pagan con el botón normal) — verificado, sin cambios.
+
+### Validación (2026-06-08)
+- ✅ `npm run build` (tsc -b + vite build) verde · `eslint` limpio en los archivos tocados (los errores que quedan son pre-existentes en `TipsModule`/`CashModule`, no introducidos acá).
+- ✅ **Contrato con la base viva**: `supabase.gen.ts` está generado del esquema real → el build tipado confirma que las columnas/campos que usa Caja/Propinas existen (`cash_movements`, `tip_sessions`, `tip_entries`).
+- ⏳ **Runtime con sesión (Caja/Propinas logueado) + escritura de prueba en el ledger = lo corre el dueño** (no tipeo contraseñas ni escribo datos de prueba en producción). Checklist de smoke-test en el reporte y abajo.
+
 
 ## 🧹 Auditoría de limpieza (`audit/cleanup-nocturna` — MERGEADA a `main` en `4fca841`)
 Auditoría nocturna autónoma (Pase 1 + Pase 2), sin tocar la base (excepto generar tipos read-only). Aplicado seguro: −4 deps sin uso, exports muertos, dedup de `fi`/`ROLE_LABELS`(8→1)/helper day-level. **Titular A:** tipos Supabase regenerados del esquema vivo → `as never` **151→2**, luego **→0** (ver Novedades 06-05). **Titular B:** RCA del "se queda pensando" en `HANG-RCA.md` (refresh de token frágil) + fix seguro (storageKey propio del cliente de ManagerOverride) + diseño de fondo para aprobar. Caja/Propinas sin cambio de cálculo.

@@ -1,4 +1,4 @@
-import type { MovementType } from '../../shared/types/database'
+import type { MovementType, CashMovement } from '../../shared/types/database'
 
 export const MOVEMENT_LABELS: Record<MovementType, string> = {
   ingreso:           'Ingreso',
@@ -66,6 +66,28 @@ export const CATEGORIAS_DEFAULT: Record<MovementType, string[]> = {
 
 export function isEgreso(t: MovementType): boolean {
   return EGRESO_TYPES.includes(t)
+}
+
+// ── Saldo de Caja Fuerte derivado del LEDGER (regla del canónico satori-caja) ──
+// Caja Fuerte = el efectivo físico del restaurante, arrastrado día a día.
+//   + ingresos en efectivo (no pendientes)
+//   − egresos en efectivo (no pendientes; los `pendiente` aún no salieron de la caja)
+//   traspasos internos y movimientos no-efectivo (Transferencia/SINPE/Bitcoin) NO afectan
+//   el efectivo físico. (Ajustes faltante/sobrante se registran como ingreso/egreso → ya cuentan.)
+//
+// ⚠️ SCAFFOLD: helper puro, SIN cablear a ningún cálculo todavía. Se valida primero en el
+// módulo "Prueba" (simulador read-only con datos reales) y recién ahí se enchufa al cierre
+// y a CashResumen como única fuente de verdad. No usar como número visible sin validar.
+export function saldoCajaFuerte(movements: CashMovement[]): { crc: number; usd: number } {
+  let crc = 0, usd = 0
+  for (const m of movements) {
+    if (m.status === 'pendiente' || m.status === 'rechazado') continue
+    if (m.movement_type === 'traspaso') continue
+    if (m.method !== 'Efectivo') continue
+    if (m.movement_type === 'ingreso') { crc += m.amount_crc || 0; usd += m.amount_usd || 0 }
+    else if (isEgreso(m.movement_type)) { crc -= m.amount_crc || 0; usd -= m.amount_usd || 0 }
+  }
+  return { crc, usd }
 }
 
 export function tipoColor(t: MovementType | string): string {

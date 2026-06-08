@@ -323,6 +323,7 @@ export default function CashTurno({
   const [draftRef,    setDraftRef]    = useState('')
   const [supSearch,   setSupSearch]   = useState('')   // texto de búsqueda del proveedor
   const [supOpen,     setSupOpen]     = useState(false) // dropdown de proveedores abierto
+  const [movSaving,   setMovSaving]   = useState(false) // anti doble-submit (pago/ingreso)
 
   const openNewPago = () => {
     setEditId(null); setDraftSup(''); setDraftCRC(''); setDraftUSD(''); setDraftMethod('Efectivo'); setDraftRef('')
@@ -350,7 +351,8 @@ export default function CashTurno({
   }
 
   const confirmPago = async () => {
-    if (!draftSup || !Number(draftCRC)) return  // proveedor + monto requeridos
+    if (!draftSup || !Number(draftCRC) || movSaving) return  // proveedor + monto requeridos · anti doble-submit
+    setMovSaving(true)
     const prov = suppliers.find(s => s.id === draftSup)
     // Si edito uno ya persistido, borro su movimiento viejo antes de re-crear
     const old = editId ? displayPagos.find(p => p.id === editId) : null
@@ -374,6 +376,7 @@ export default function CashTurno({
     setPagos(prev => [pago, ...prev.filter(p => p.id !== pago.id)])
     setPagoModal(false)
     await persistPago(pago)
+    setMovSaving(false)
   }
 
   // Cerrar modal con Escape
@@ -393,8 +396,9 @@ export default function CashTurno({
   // BUG A FIX: persistir el ingreso adicional AL INSTANTE (antes sólo se guardaba al
   // cerrar el turno → si recargabas antes del cierre, se perdía).
   const confirmIngreso = async () => {
-    if (!openSession || !profile) return
+    if (!openSession || !profile || movSaving) return
     if (!Number(draftIngCRC) && !Number(draftIngUSD)) return
+    setMovSaving(true)
     const draft: IngresoRow = { id: crypto.randomUUID(), crc: Number(draftIngCRC) || '', usd: Number(draftIngUSD) || '', nota: draftIngNota.trim(), persistedId: null }
     setIngresos(prev => [...prev, draft])
     setIngresoModal(false)
@@ -416,6 +420,7 @@ export default function CashTurno({
       setIngresos(prev => prev.filter(i => i.id !== draft.id))  // ahora vive en la base (dbIngresos)
       onMovAdded(mov)
     } catch { /* queda como borrador y se reintenta al cierre */ }
+    finally { setMovSaving(false) }
   }
   const removeIngreso = async (id: string) => {
     const row = displayIngresos.find(i => i.id === id)

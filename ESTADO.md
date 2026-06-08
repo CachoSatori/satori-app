@@ -13,8 +13,14 @@ Auditoría nocturna autónoma (Pase 1 + Pase 2), sin tocar la base (excepto gene
 - **Bug crítico al cerrar turno** (`tip_entries.session_id` viola NOT NULL): `savePayouts` hacía un `upsert` parcial y Postgres evalúa el NOT NULL sobre la tupla de INSERT **antes** de resolver el conflicto → reventaba el cierre aunque la fila ya existiera. Fix: **UPDATE por id** (las entradas ya existen con su `session_id`) + guardas (nunca persistir entradas sin turno con id).
 - **Quitada la verificación/conteo de pool**: Propinas es **solo el cálculo de cuánta propina se generó y su reparto** entre empleados — no maneja ingreso/egreso de plata. Se removió "Monto contado" y la alerta de "Diferencia en el pool" que trababa el cierre con falsos positivos (el pool ya contabiliza efectivo + propinas individuales/datáfono). Flujo: ingresar montos → calcular → repartir → cerrar.
 
-### Caja — fix `onMovAdded` (en `chore/limpiar-y-docs`, pendiente de merge)
+### Caja — fix `onMovAdded` (✅ en `main`)
 - Al borrar/editar un pago a proveedor **ya persistido** se inyectaba un `PagoRow` fantasma en la lista de movimientos (se pasaba a `onMovAdded`, que agrega en memoria). Ahora **refresca desde la fuente de verdad** (`onRefresh`). `as never` en todo `src` → **0**.
+
+### Caja — Bug A / Bug C / taxonomía (rama `feat/caja-datos-propinas-tipos`, pendiente de merge)
+- **Bug A — no perder datos al recargar:** las listas del turno (pagos a proveedores, ingresos adicionales) se **derivan de la base** (`sessionMovements`) + borradores en memoria no persistidos → recargar nunca pierde ni duplica. Los **ingresos adicionales se persisten al instante** (antes sólo al cierre → se perdían). Dedup por `persistedId`.
+- **Bug C — propinas por pagar:** cerrar Propinas **ya no crea el egreso solo**; en Caja aparece **"Propinas por pagar"** → el cajero **Paga ahora** (egreso `aprobado`) o **Deja pendiente** (`pendiente`, va a Pendientes; el efectivo sigue en caja hasta pagarse). `getTipPayoutsForDate` (nuevo) + `status` opcional en `createCashMovement`. Pass-through P&L = `null`. `reconcilePropinaEgreso` intacto.
+- **Taxonomía de movimientos:** categorías completas + **pass-through electrónico** (propinas/delivery por SINPE/Lafise/Bitcoin = retiro de efectivo, **no P&L**). Lafise = canal de cobro, no método. Delivery dueños = Egreso-Socios. (`cashUtils`, `CONCEPTOS_EGRESO`, `finance.ts`.)
+- ⚠️ *Conservador/documentado:* "propina ya registrada" se detecta contra los movimientos del **turno actual** (no de todo el día); `caja_origen 'Registradora'` por consistencia con el flujo previo; `ajuste` (faltante/sobrante) no se agregó como `movement_type` (requeriría enum nuevo en DB).
 
 ### Caja — cierre del día: la lógica correcta es el SALDO DE CAJA FUERTE por LEDGER
 - El "debería quedar" debe partir del **saldo corrido de Caja Fuerte derivado del ledger** (canónico de `satori-caja`): `+ ingresos efectivo que entran a Caja Fuerte − egresos efectivo no pendientes ± ajustes`; traspasos internos y transferencias **no** afectan el saldo. Eso ya contempla el arrastre de noches anteriores y los pagos/ingresos del turno (ya están en el ledger): no hay que sumar nada a mano.

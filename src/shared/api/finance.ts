@@ -64,6 +64,10 @@ function mapCashToAccount(type: string, subcat: string): string | null {
   if (/ajuste/.test(s)) return null
   // Propinas por tarjeta/SINPE: el cliente las pagó y se entregan al staff → NO es gasto del P&L
   if (/\btips?\b|propina/.test(s)) return null
+  // Delivery cobrado por medio electrónico (SINPE/Lafise/Bitcoin) = pass-through:
+  // el cliente ya pagó, la caja sólo retira efectivo para el repartidor → NO es gasto del P&L.
+  // (Pendiente aparte: recategorizar el histórico viejo "delivery x sinpe → operativo 7100".)
+  if (/delivery.*(sinpe|lafise|bitcoin)/.test(s)) return null
   // Por palabra clave de subcategoría (lo que calza claro)
   if (/music|musico/.test(s))                 return 'a7500'                    // Música y entretenimiento
   if (/\bgas\b/.test(s))                       return 'a7780'                    // Gas

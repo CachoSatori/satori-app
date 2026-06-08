@@ -34,17 +34,35 @@ export const CAJAS_ORIGEN = [
 
 export const METODOS_PAGO = ['Efectivo', 'Transferencia', 'SINPE', 'Bitcoin']
 
+// Taxonomía de categorías por tipo (decisiones de negocio 2026-06-05).
+// PASS-THROUGH = el cliente ya pagó por medio electrónico (SINPE/Lafise/Bitcoin);
+// la caja sólo RETIRA efectivo para entregarlo al staff/repartidor → reduce el
+// efectivo PERO no es gasto del P&L. En finance.ts, las subcategorías con "propina"
+// ya mapean a null. ⚠️ Las de "Delivery por <electrónico>" deben mapear a null también
+// (pendiente: corregir el mapeo QuickBooks en un pase aparte — ver ROADMAP).
+// NOTA: "Faltante/Sobrante de caja" (ajuste) requeriría un movement_type 'ajuste'
+// (cambio de enum en DB) → fuera de alcance ahora; se registran como egreso/ingreso.
 export const CATEGORIAS_DEFAULT: Record<MovementType, string[]> = {
   ingreso: [
-    'Ventas efectivo mediodía','Ventas efectivo noche','SINPE delivery',
-    'Bitcoin','Ingreso de cambio','Otros ingresos',
+    'Ventas efectivo mediodía','Ventas efectivo noche','Cambio en caja','Otros ingresos (Varios)',
   ],
-  egreso_mercaderia: ['Proveedor mercadería'],
-  egreso_personal:   ['Adelanto de salario','Salario pendiente','Propinas por tarjeta','Otros pagos personal'],
-  egreso_operativo:  ['Mantenimiento','Servicios','Gas','Seguridad','Librería','Decoración','Herramientas','Otros operativos'],
-  egreso_socios:     ['Retiro de socios','Gastos de socios'],
+  egreso_mercaderia: ['Proveedor'],
+  egreso_personal:   [
+    'Adelanto de salario','Salario / pago a empleado','Pruebas de empleados','Propinas por tarjeta',
+    // pass-through (retiro de efectivo, no P&L):
+    'Propinas por SINPE','Propinas por Lafise','Propinas por Bitcoin',
+  ],
+  egreso_operativo:  [
+    'Mantenimiento','Gas','Seguridad','Gráfica','Comisión concierge (10% cash)','Promotoras',
+    'Alquiler','Servicios públicos','Impuestos / Patentes','Lavandería','Comisiones apps delivery','Equipo',
+    // pass-through (retiro de efectivo, no P&L — ver nota de mapeo arriba):
+    'Delivery por SINPE','Delivery por Lafise','Delivery por Bitcoin',
+  ],
+  egreso_socios:     ['Retiro de socios','Delivery dueños'],
   traspaso:          ['Registradora → Caja Fuerte','Caja Fuerte → Banco','Caja Fuerte → Caja Proveedores','Banco → Caja Fuerte','Otro traspaso'],
 }
+// Las 9 categorías de proveedor ya viven en CashProveedores.tsx (CATEGORIAS_PROV) —
+// no se duplican acá.
 
 export function isEgreso(t: MovementType): boolean {
   return EGRESO_TYPES.includes(t)

@@ -30,11 +30,20 @@ interface Props {
 
 // Otros egresos del turno que salen de la Caja Diaria (no son mercadería).
 // Las propinas NO van acá — se pagan en el cierre del turno.
+// PASS-THROUGH (id deliv_*/prop_*): el cliente pagó por SINPE/Lafise/Bitcoin; la caja
+// sólo retira efectivo para entregarlo → reduce efectivo pero account=null (no P&L).
 const CONCEPTOS_EGRESO = [
-  { id: 'delivery',  label: 'Delivery',                       type: 'egreso_operativo', sub: 'Delivery (direct operating)', account: 'a7100' },
-  { id: 'operativo', label: 'Operativo (gas, luz, etc.)',     type: 'egreso_operativo', sub: 'Operativo',                   account: null },
-  { id: 'salario',   label: 'Salario / adelanto en efectivo', type: 'egreso_personal',  sub: 'Salario',                    account: 'a6200' },
-  { id: 'otro',      label: 'Otro egreso',                    type: 'egreso_operativo', sub: 'Otro',                       account: null },
+  { id: 'delivery',     label: 'Delivery (pago a repartidor en efectivo)', type: 'egreso_operativo', sub: 'Delivery',              account: 'a7100' },
+  { id: 'deliv_sinpe',  label: 'Delivery por SINPE (retiro efectivo)',     type: 'egreso_operativo', sub: 'Delivery por SINPE',    account: null },
+  { id: 'deliv_lafise', label: 'Delivery por Lafise (retiro efectivo)',    type: 'egreso_operativo', sub: 'Delivery por Lafise',   account: null },
+  { id: 'deliv_btc',    label: 'Delivery por Bitcoin (retiro efectivo)',   type: 'egreso_operativo', sub: 'Delivery por Bitcoin',  account: null },
+  { id: 'deliv_duenos', label: 'Delivery dueños',                          type: 'egreso_socios',    sub: 'Delivery dueños',       account: null },
+  { id: 'prop_sinpe',   label: 'Propinas por SINPE (retiro efectivo)',     type: 'egreso_personal',  sub: 'Propinas por SINPE',    account: null },
+  { id: 'prop_lafise',  label: 'Propinas por Lafise (retiro efectivo)',    type: 'egreso_personal',  sub: 'Propinas por Lafise',   account: null },
+  { id: 'prop_btc',     label: 'Propinas por Bitcoin (retiro efectivo)',   type: 'egreso_personal',  sub: 'Propinas por Bitcoin',  account: null },
+  { id: 'operativo',    label: 'Operativo (gas, luz, mantenim…)',          type: 'egreso_operativo', sub: 'Operativo',             account: null },
+  { id: 'salario',      label: 'Salario / adelanto en efectivo',           type: 'egreso_personal',  sub: 'Salario',               account: 'a6200' },
+  { id: 'otro',         label: 'Otro egreso',                              type: 'egreso_operativo', sub: 'Otro',                  account: null },
 ] as const
 
 // Evita que una request colgada (token vencido / red) deje "Cerrando…" para siempre.

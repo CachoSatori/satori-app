@@ -9,8 +9,9 @@ import {
   deleteCashMovement,
   getPreviousCierre,
   discardCashSession,
+  upsertSupplier,
 } from '../../shared/api/cash'
-import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE } from './cashUtils'
+import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO, CATEGORIAS_PROV } from './cashUtils'
 import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
@@ -44,7 +45,7 @@ const CONCEPTOS_EGRESO = [
   { id: 'prop_btc',     label: 'Propinas por Bitcoin (retiro efectivo)',   type: 'egreso_personal',  sub: 'Propinas por Bitcoin',  account: null },
   { id: 'operativo',    label: 'Operativo (gas, luz, mantenim…)',          type: 'egreso_operativo', sub: 'Operativo',             account: null },
   { id: 'salario',      label: 'Salario / adelanto en efectivo',           type: 'egreso_personal',  sub: 'Salario',               account: 'a6200' },
-  { id: 'otro',         label: 'Otro egreso',                              type: 'egreso_operativo', sub: 'Otro',                  account: null },
+  { id: 'otro',         label: 'Otro (especificar)',                       type: 'egreso_operativo', sub: 'Otro',                  account: null },
 ] as const
 
 // Evita que una request colgada (token vencido / red) deje "Cerrando…" para siempre.
@@ -342,6 +343,24 @@ export default function CashTurno({
   const [supSearch,   setSupSearch]   = useState('')   // texto de búsqueda del proveedor
   const [supOpen,     setSupOpen]     = useState(false) // dropdown de proveedores abierto
   const [movSaving,   setMovSaving]   = useState(false) // anti doble-submit (pago/ingreso)
+
+  // Alta rápida de proveedor desde la caja (cuando llega uno no registrado)
+  const [addSupOpen,   setAddSupOpen]   = useState(false)
+  const [newSupName,   setNewSupName]   = useState('')
+  const [newSupCat,    setNewSupCat]    = useState('Otros')
+  const [newSupMethod, setNewSupMethod] = useState('Transferencia')
+  const [addSupSaving, setAddSupSaving] = useState(false)
+  const crearProveedor = async () => {
+    if (!newSupName.trim() || addSupSaving) return
+    setAddSupSaving(true)
+    try {
+      const s = await upsertSupplier({ name: newSupName.trim(), category: newSupCat, metodo_pago: newSupMethod, moneda: 'CRC' })
+      setDraftSup(s.id); setSupSearch(s.name); setSupOpen(false)
+      setAddSupOpen(false); setNewSupName('')
+      onRefresh()  // recargar la lista de proveedores en el padre
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error creando proveedor') }
+    finally { setAddSupSaving(false) }
+  }
 
   const openNewPago = () => {
     setEditId(null); setDraftSup(''); setDraftCRC(''); setDraftUSD(''); setDraftMethod('Efectivo'); setDraftRef('')
@@ -1034,9 +1053,9 @@ export default function CashTurno({
               {supOpen && (() => {
                 const matches = suppliers.filter(s => s.is_active && s.name.toLowerCase().includes(supSearch.toLowerCase()))
                 return (
-                  <div className="cd-sup-dropdown">
+                  <div className="cd-sup-dropdown" style={{ maxHeight: 260, overflowY: 'auto' }}>
                     {matches.length === 0 && <div className="cd-sup-empty">Sin coincidencias</div>}
-                    {matches.slice(0, 10).map(s => (
+                    {matches.map(s => (
                       <div key={s.id} className="cd-sup-option"
                         onMouseDown={() => { setDraftSup(s.id); setSupSearch(s.name); setSupOpen(false) }}>
                         {s.name}{s.category && <span className="cd-sup-cat"> · {s.category}</span>}
@@ -1045,6 +1064,38 @@ export default function CashTurno({
                   </div>
                 )
               })()}
+            </div>
+
+            {/* Alta rápida de proveedor (sin salir de la caja) */}
+            <div style={{ marginTop: '0.5rem' }}>
+              {!addSupOpen ? (
+                <button type="button" onClick={() => { setAddSupOpen(true); setNewSupName(supSearch) }}
+                  style={{ background: 'none', border: '1px dashed var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 3, padding: '5px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>
+                  + Proveedor nuevo
+                </button>
+              ) : (
+                <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '0.625rem' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: 6, fontWeight: 700 }}>Nuevo proveedor</div>
+                  <input type="text" className="tips-input-dark" style={{ width: '100%', marginBottom: 6 }} placeholder="Nombre del proveedor"
+                    value={newSupName} onChange={e => setNewSupName(e.target.value)} />
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: 6 }}>
+                    <select className="tips-input-dark" style={{ flex: 1 }} value={newSupCat} onChange={e => setNewSupCat(e.target.value)}>
+                      {CATEGORIAS_PROV.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select className="tips-input-dark" style={{ flex: 1 }} value={newSupMethod} onChange={e => setNewSupMethod(e.target.value)}>
+                      {METODOS_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    <button type="button" onClick={() => setAddSupOpen(false)}
+                      style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 3, padding: '5px 10px', fontSize: '0.74rem', cursor: 'pointer' }}>Cancelar</button>
+                    <button type="button" onClick={crearProveedor} disabled={addSupSaving || !newSupName.trim()}
+                      style={{ background: 'var(--t-ink,#0d0d0d)', border: 'none', color: 'var(--t-gold,#c8a96e)', borderRadius: 3, padding: '5px 12px', fontSize: '0.74rem', cursor: 'pointer', opacity: addSupSaving || !newSupName.trim() ? 0.5 : 1 }}>
+                      {addSupSaving ? 'Creando…' : 'Crear y usar'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>

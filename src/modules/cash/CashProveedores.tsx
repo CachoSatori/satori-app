@@ -1,13 +1,8 @@
 import { useState, useMemo, useCallback } from 'react'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import { upsertSupplier, deactivateSupplier } from '../../shared/api/cash'
-import { fi, todayStr, METODOS_PAGO } from './cashUtils'
+import { fi, todayStr, METODOS_PAGO, CATEGORIAS_PROV } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
-
-const CATEGORIAS_PROV = [
-  'Pescados y Mariscos','Bebidas y Licores','Verduras y Frutas',
-  'Lácteos y Huevos','Carnes','Abarrotes','Limpieza y Suministros','Servicios','Otros',
-]
 
 const CICLO_DIAS: Record<string, number> = {
   'Diario': 1, 'Semanal': 7, 'Quincenal': 14, 'Mensual': 30,

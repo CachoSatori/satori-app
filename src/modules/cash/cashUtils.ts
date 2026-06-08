@@ -34,6 +34,12 @@ export const CAJAS_ORIGEN = [
 
 export const METODOS_PAGO = ['Efectivo', 'Transferencia', 'SINPE', 'Bitcoin']
 
+// Categorías de proveedor (las 9). Fuente única — la usan CashProveedores y CashTurno.
+export const CATEGORIAS_PROV = [
+  'Pescados y Mariscos', 'Bebidas y Licores', 'Verduras y Frutas',
+  'Lácteos y Huevos', 'Carnes', 'Abarrotes', 'Limpieza y Suministros', 'Servicios', 'Otros',
+]
+
 // Taxonomía de categorías por tipo (decisiones de negocio 2026-06-05).
 // PASS-THROUGH = el cliente ya pagó por medio electrónico (SINPE/Lafise/Bitcoin);
 // la caja sólo RETIRA efectivo para entregarlo al staff/repartidor → reduce el

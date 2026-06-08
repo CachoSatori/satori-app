@@ -150,6 +150,7 @@ export default function CashModule() {
             sessionMovements={openSession
               ? allMovements.filter(m => m.session_id === openSession.id)
               : []}
+            allMovements={allMovements}
             onSessionOpen={handleSessionOpen}
             onSessionClose={handleSessionClose}
             onMovAdded={handleMovAdded}

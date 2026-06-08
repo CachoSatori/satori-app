@@ -21,6 +21,7 @@ interface Props {
   suppliers:      Supplier[]
   sessions:           CashSession[]         // to detect if Mediodía/Noche already exists today
   sessionMovements:   CashMovement[]        // DB movements for current open session
+  allMovements:       CashMovement[]        // todos los movimientos (para detección cross-turno)
   onSessionOpen:      (s: CashSession) => void
   onSessionClose:     () => void
   onMovAdded:         (m: CashMovement) => void
@@ -71,7 +72,7 @@ interface PagoRow {
 }
 
 export default function CashTurno({
-  openSession, suppliers, sessions, sessionMovements,
+  openSession, suppliers, sessions, sessionMovements, allMovements,
   onSessionOpen, onSessionClose, onMovAdded, onError, onRefresh,
 }: Props) {
   const { profile } = useAuth()
@@ -161,6 +162,7 @@ export default function CashTurno({
   // Cerrar Propinas ya NO crea el egreso solo. Acá se listan las sesiones de
   // propinas CERRADAS de la fecha del turno cuyo payout aún no se registró en Caja.
   const [propinasPagables, setPropinasPagables] = useState<TipPayoutSummary[]>([])
+  const [payingProp, setPayingProp] = useState<string | null>(null)   // session_id en curso (anti doble-click)
   useEffect(() => {
     if (!openSession) return   // la sección sólo se muestra con turno abierto
     let cancelled = false
@@ -171,14 +173,18 @@ export default function CashTurno({
   }, [openSession])
   // Clave del movimiento de propinas (misma convención que reconcilePropinaEgreso)
   const propKey = (p: TipPayoutSummary) => `Propinas turno ${p.session_date} ${shiftLabel(p.shift_type)}`
-  // Ya registradas (pagadas o dejadas pendientes) en este turno → no mostrar
+  // Ya registradas (pagadas o pendientes) en CUALQUIER turno del día → no mostrar.
+  // La description incluye fecha+turno, así que el match es específico de esa propina.
   const propinasRegistradas = new Set(
-    sessionMovements
+    allMovements
       .filter(m => m.subcategory === 'Propinas por turno' && m.status !== 'rechazado')
       .map(m => m.description))
   const propinasPorPagar = propinasPagables.filter(p => !propinasRegistradas.has(propKey(p)))
   const pagarPropina = async (p: TipPayoutSummary, status: 'aprobado' | 'pendiente') => {
-    if (!openSession || !profile) return
+    if (!openSession || !profile || payingProp) return   // anti doble-registro
+    const accion = status === 'aprobado' ? 'PAGAR ahora' : 'dejar PENDIENTE'
+    if (!window.confirm(`¿${accion} las propinas de ${shiftLabel(p.shift_type)} por ${fi(p.total_payout_crc)}?`)) return
+    setPayingProp(p.session_id)
     try {
       const mov = await createCashMovement({
         session_id:    openSession.id,
@@ -197,6 +203,7 @@ export default function CashTurno({
       })
       onMovAdded(mov)
     } catch (e) { onError(e instanceof Error ? e.message : 'Error registrando propinas') }
+    finally { setPayingProp(null) }
   }
 
   // Cierre form
@@ -826,10 +833,11 @@ export default function CashTurno({
                 {canManage && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
                     <span style={{ fontWeight: 700, color: '#c0392b', marginRight: '0.25rem' }}>{fi(p.total_payout_crc)}</span>
-                    <button onClick={() => pagarPropina(p, 'aprobado')} title="Registrar el pago ahora"
-                      style={{ background: 'var(--t-ink,#0d0d0d)', border: 'none', color: 'var(--t-gold,#c8a96e)', borderRadius: 3, padding: '4px 10px', fontSize: '0.72rem', cursor: 'pointer' }}>Pagar ahora</button>
-                    <button onClick={() => pagarPropina(p, 'pendiente')} title="Dejar pendiente (se paga después, como un proveedor)"
-                      style={{ background: 'none', border: '1px solid #a07030', color: '#a07030', borderRadius: 3, padding: '4px 8px', fontSize: '0.72rem', cursor: 'pointer' }}>Dejar pendiente</button>
+                    <button onClick={() => pagarPropina(p, 'aprobado')} disabled={payingProp === p.session_id} title="Registrar el pago ahora"
+                      style={{ background: 'var(--t-ink,#0d0d0d)', border: 'none', color: 'var(--t-gold,#c8a96e)', borderRadius: 3, padding: '4px 10px', fontSize: '0.72rem', cursor: payingProp === p.session_id ? 'wait' : 'pointer', opacity: payingProp === p.session_id ? 0.5 : 1 }}>
+                      {payingProp === p.session_id ? 'Guardando…' : 'Pagar ahora'}</button>
+                    <button onClick={() => pagarPropina(p, 'pendiente')} disabled={payingProp === p.session_id} title="Dejar pendiente (se paga después, como un proveedor)"
+                      style={{ background: 'none', border: '1px solid #a07030', color: '#a07030', borderRadius: 3, padding: '4px 8px', fontSize: '0.72rem', cursor: payingProp === p.session_id ? 'wait' : 'pointer', opacity: payingProp === p.session_id ? 0.5 : 1 }}>Dejar pendiente</button>
                   </div>
                 )}
               </div>

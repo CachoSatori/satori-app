@@ -106,16 +106,21 @@ export default function CashTurno({
   useEffect(() => { getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {}) }, [])
   const [saving,       setSaving]       = useState(false)
   const [carryFrom,  setCarryFrom]  = useState<string | null>(null) // fecha del cierre que asignó el fondo
+  const [carrySugerido, setCarrySugerido] = useState<number | null>(null) // ₡ asignado a Caja Proveedores por ese cierre
 
   // Carryover: la Caja Proveedores arranca con lo que dejó el cierre del día
-  // anterior (sep_diaria del último cierre completo). Se sugiere y es editable.
+  // anterior (sep_diaria del último cierre completo). Se sugiere, se precarga, y se
+  // valida al confirmar si el cajero ingresa un monto distinto.
   useEffect(() => {
     if (openSession) return
     let cancelled = false
     getPreviousCierre(apFecha).then(c => {
       if (cancelled) return
-      if (c) { setApProvCRC(c.sep_diaria_crc || 0); setApUSD(c.sep_diaria_usd || 0); setCarryFrom(c.session_date) }
-      else { setCarryFrom(null) }
+      if (c) {
+        const x = c.sep_diaria_crc || 0
+        setApProvCRC(x); setApUSD(c.sep_diaria_usd || 0)
+        setCarryFrom(c.session_date); setCarrySugerido(x)
+      } else { setCarryFrom(null); setCarrySugerido(null) }
     }).catch(() => {})
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -263,6 +268,15 @@ export default function CashTurno({
     const dup = sessions.find(s => s.session_date === apFecha && s.shift_type === apTurno)
     if (dup) { onError(`Ya existe un turno ${apTurno} del ${apFecha}`); return }
 
+    // Validación: el monto de Caja Proveedores debe coincidir con lo que asignó el
+    // cierre anterior. Si difiere, exigir confirmación explícita (no avanzar en silencio).
+    if (carrySugerido != null && carryFrom && Math.abs((Number(apProvCRC) || 0) - carrySugerido) > 0) {
+      const ok = window.confirm(
+        `El cierre del ${carryFrom} asignó ₡${carrySugerido.toLocaleString('es-CR')} a Caja Proveedores ` +
+        `y estás ingresando ₡${(Number(apProvCRC) || 0).toLocaleString('es-CR')}. Revisá. ¿Continuar con ese monto?`)
+      if (!ok) return
+    }
+
     setSaving(true)
     try {
       const session = await withTimeout(createCashSession({
@@ -283,7 +297,7 @@ export default function CashTurno({
     } finally {
       setSaving(false)
     }
-  }, [profile, apCajero, apTurno, apFecha, apProvCRC, apUSD, sessions, onSessionOpen, onError])
+  }, [profile, apCajero, apTurno, apFecha, apProvCRC, apUSD, carrySugerido, carryFrom, sessions, onSessionOpen, onError])
 
   // ── Add pago ──────────────────────────────────────────────
   // ── Crash-safe pago persistence ──────────────────────────
@@ -592,6 +606,12 @@ export default function CashTurno({
           ) : (
             <>
 
+              {carrySugerido != null && carryFrom && (
+                <div style={{ padding: '0.625rem 0.875rem', background: 'rgba(42,122,106,.1)', border: '1px solid var(--t-teal,#2a7a6a)', borderRadius: 4, marginBottom: '0.75rem', fontSize: '0.82rem' }}>
+                  El cierre del <strong>{carryFrom}</strong> asignó a Caja Proveedores: <strong style={{ fontFamily: "'DM Mono', monospace" }}>₡{carrySugerido.toLocaleString('es-CR')}</strong>. Confirmá que es el efectivo con el que arrancás (si es otro monto, te va a pedir confirmar).
+                </div>
+              )}
+
               <div className="cd-ap-saldo-label">Saldo inicial de la Caja Diaria</div>
               <div className="cd-grid2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
                 <div className="tips-field">
@@ -603,7 +623,7 @@ export default function CashTurno({
                   </div>
                   {carryFrom && (
                     <div style={{ fontSize: '0.66rem', color: 'var(--t-teal)', marginTop: 2 }}>
-                      ↻ viene del cierre del {carryFrom}
+                      ↻ asignado en el cierre del {carryFrom}{carrySugerido != null ? `: ₡${carrySugerido.toLocaleString('es-CR')}` : ''}
                     </div>
                   )}
                 </div>
@@ -619,17 +639,6 @@ export default function CashTurno({
                       ≈ ₡{(Number(apUSD) * tc).toLocaleString('es-CR')} al TC {tc}
                     </div>
                   )}
-                </div>
-                <div className="tips-field">
-                  <div className="tips-field-label" style={{ display:'flex', alignItems:'center', gap:'0.4rem' }}>
-                    Tipo de cambio (₡/$)
-                    <span style={{ fontSize:'0.6rem', color:'#888' }}>para conversiones</span>
-                  </div>
-                  <div className="cd-monto-wrap">
-                    <span className="cd-prefix">₡</span>
-                    <input type="number" className="cd-monto-input" value={tc} min={400} max={900} step={5}
-                      onChange={e => setTc(Number(e.target.value) || 640)} />
-                  </div>
                 </div>
               </div>
 

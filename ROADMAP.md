@@ -57,6 +57,23 @@ Orden por dependencia + retorno.
 
 ---
 
+### PRIORIDADES EN CURSO (2026-06-05) — Caja robusta → tiempo real → offline
+
+Orden acordado (cada uno es base del siguiente):
+
+1. **Caja: no perder datos + propinas por pagar + tipos de movimiento** · M — *EN CURSO* (rama `feat/caja-datos-propinas-tipos`).
+   - **Bug A — no perder lo cargado al recargar:** rehidratar pagos/ingresos/egresos del turno desde la base (`sessionMovements`) y persistir los ingresos adicionales al instante (hoy se pierden hasta el cierre). *Pendiente de implementar con smoke-test.*
+   - **Bug C — propinas por pagar:** cerrar Propinas ya **no** crea el egreso solo; en Caja aparece "Propinas por pagar" → el cajero **Paga ahora** (egreso aprobado) o **Deja pendiente** (status `pendiente`, no descuenta del cierre hasta pagarse). *Pendiente de implementar con smoke-test.*
+   - **Tipos de movimiento (taxonomía):** ✅ aplicado — categorías completas + **pass-through electrónico** (propinas/delivery por SINPE/Lafise/Bitcoin = retiro de efectivo, **no P&L**). Lafise = canal de cobro (motivo de retiro), **no** método de pago. Delivery dueños = Egreso-Socios.
+2. **Sesión sólida** · M — fix de raíz del "se queda pensando" (RCA en `HANG-RCA.md`): refresco proactivo en foco, revisar el lock no-op, verificación de manager por RPC server-side, AbortController. **Base de todo lo demás.**
+3. **Tiempo real multi-dispositivo** · L — Supabase Realtime: dos dispositivos (caja + manager) ven lo mismo en vivo. Depende de (2).
+4. **Offline-first** · L/XL — fase dedicada: base local + cola de sincronización + resolución de conflictos; evaluar un motor de sync probado. Depende de (2)/(3).
+5. **Entorno preview/staging** · S/M — necesario para probar (2)–(4) con varios dispositivos antes de producción.
+
+> ⚠️ **Pendiente (pase aparte, no tocar datos ahora):** revisar el mapeo a QuickBooks de los deliverys/propinas cobrados por medio electrónico — la recategorización vieja "delivery x sinpe → operativo 7100" quedó mal (son **pass-through**, no gasto). El mapeo nuevo ya los excluye (`finance.ts`); falta recategorizar el **histórico**.
+
+---
+
 ### FASE 0 — Cierre de pendientes actuales · S
 
 Lo que ya está construido pero necesita un último paso para rendir.

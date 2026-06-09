@@ -38,6 +38,17 @@ Verificar el esquema (que staging tenga las tablas/columnas clave): `cash_sessio
 (con `midday_check_by`/`midday_check_at`), `cash_movements`, `cash_cierres_dia`, `tip_sessions`,
 `tip_entries`, `documents`, etc.
 
+> **Drift baseline (`migrations/0095_drift_baseline.sql`):** crea SOLO las tablas que en prod
+> existen fuera de migraciones (estructura). **No** trae RLS/policies a propósito — así, si
+> alguna vez corre contra prod por error, los `create table if not exists` no tocan nada y
+> **no puede debilitar la seguridad de prod**.
+>
+> **RLS permisiva de staging (`staging-rls.sql`, en la raíz, NO en migrations/):** después de
+> aplicar las migraciones a staging, corré **SOLO contra STAGING** el contenido de `staging-rls.sql`
+> (SQL Editor de staging o vía la Management API con el ref de staging) para habilitar el acceso
+> `authenticated` a esas tablas y poder probar. **NUNCA correrlo en producción.** Reconciliar a la
+> RLS-por-rol exacta de prod = deuda técnica (requiere pg_dump).
+
 ## PASO 3 — Conectar el host de staging (lo hace el dueño — consola externa)
 **Recomendado: Cloudflare Pages o Netlify** (GitHub Pages no sirve para 2 sitios desde un repo).
 1. Crear un sitio nuevo conectado a este repo, **rama `staging`**.

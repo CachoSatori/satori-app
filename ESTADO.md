@@ -1,7 +1,38 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> Última actualización: 2026-06-08 (Caja: Bug A/C + taxonomía + 4 mejoras · validado build/lint/contrato-esquema · pendiente smoke-test del dueño)
+> Última actualización: 2026-06-09 (Caja: rediseño Caja Diaria única/día · cierre por ledger · saldo unificado · módulo Prueba · cierre robusto)
+
+## 🆕 Novedades 2026-06-09
+
+> Todo lo de abajo está **en producción** (`main`). ⚠️ **Pendiente del dueño:** correr la **migración 018** (`supabase/migrations/018_caja_dia_unico.sql`) en Supabase → SQL Editor (columnas `midday_check_by/at`); el check de mediodía no funciona hasta correrla. Y **rotar el token de Supabase**.
+
+### Caja — rediseño de flujo: Caja Diaria de proveedores ÚNICA por día
+- **Una caja por día** (no más turnos Mediodía/Noche separados): se abre UNA vez a la mañana con el carryover del saldo inicial y corre todo el día (`shift_type='Día'`). Si ya hay sesión de esa fecha, no abre otra.
+- **Check de proveedores (mediodía)**: botón de gerencia que registra el visto (quién + cuándo, mig. 018) sin cerrar la caja. Muestra "✓ Revisado dd/mm HH:MM".
+- **Cierre de la Caja Diaria de proveedores**: paso propio EOD, obligatorio aunque esté en cero.
+- **Cierre del día / bóveda**: gateado → solo se habilita si la Caja Diaria de proveedores de esa fecha está cerrada ("Cerrá primero la Caja Diaria de proveedores del día").
+- Las **ventas** siguen igual (dos cargas POS Mediodía/Noche). Días viejos quedan como legacy (turnos separados).
+
+### Caja — cierre por LEDGER + saldo de Caja Fuerte unificado
+- **Cierre del día usa `saldoCajaFuerte`** (Paso 2): `Debería quedar = saldo Caja Fuerte (según sistema) + ventas − propinas − retiro`. Idempotente (excluye las ventas-de-cierre de la fecha, que se re-suman del formulario).
+- **Una sola fórmula del saldo de Caja Fuerte** (bug de doble cálculo resuelto): la tarjeta de Movimientos, el cierre y el simulador usan el **mismo** `saldoCajaFuerte` → siempre el mismo número. Lógica canónica: solo `caja_origen='Caja Fuerte'`, traspasos por dirección, incluye el ajuste de saldo inicial. Label "Saldo Caja Fuerte (según sistema)".
+- **Carryover en la apertura**: muestra "El cierre del {fecha} asignó a Caja Proveedores ₡X", lo precarga y **valida** (confirma si el cajero ingresa otro monto). TC fuera de la apertura (automático).
+
+### Caja — cierre robusto (no perder ventas)
+- El registro de ventas en el ledger (Fase 3) **ya no traga el error**: si falla, avisa explícito ("El día se guardó pero las VENTAS no se registraron: {error}") y no reporta cierre limpio.
+- **Orden de fases obligatorio**: no se cierra la noche sin el Mediodía (Fase 1).
+- **"Deshacer cierre"** avisa que no borra los movimientos del día; botón aparte **"🗑 Borrar TODO el día"** (doble confirmación + gerencia) para recargar de cero sin duplicar. No toca propinas.
+
+### Caja — taxonomía + pass-through electrónico
+- Tipos/categorías completas. **Pass-through**: propinas/delivery por **SINPE/Lafise/Bitcoin** = retiro de efectivo → reducen caja pero **no son P&L** (`account_id=null` / regla en `finance.ts`). Lafise = canal de cobro, no método. Delivery dueños = Egreso-Socios. Alta rápida de proveedor desde la caja; dropdown completo+scrollable; "Otro (especificar)".
+
+### Propinas — por pagar en Caja (no se pierden)
+- "Propinas por pagar" muestra la **fecha** y persiste **30 días** (no se pierde si se cierra caja sin pagarla; reaparece hasta pagar/dejar pendiente, sin duplicar).
+- **Corte:** las propinas cerradas **hasta el 2026-06-05** se dan por pagadas (corte de visualización, sin tocar datos). Constante `PROPINAS_POR_PAGAR_DESDE`.
+
+### Módulo "Prueba" (admin-only)
+- Simulador de cierre de Caja Fuerte, **solo lectura** (datos reales, no guarda nada). Usa el mismo `saldoCajaFuerte` que el cierre real → validar ahí = validar el cierre.
 
 ## 🆕 Novedades 2026-06-08
 

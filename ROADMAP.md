@@ -1,7 +1,7 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-05**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-09**
 
 ---
 
@@ -61,12 +61,13 @@ Orden por dependencia + retorno.
 
 Orden acordado (cada uno es base del siguiente):
 
-1. **Caja: no perder datos + propinas por pagar + tipos de movimiento** · M — ✅ **IMPLEMENTADO** (rama `feat/caja-datos-propinas-tipos`, build+lint verdes, pendiente smoke-test del dueño + merge).
+1. **Caja: no perder datos + propinas por pagar + tipos de movimiento** · M — ✅ **MERGEADO a `main`** (en producción).
    - **Bug A — no perder lo cargado al recargar:** ✅ pagos/ingresos del turno se derivan de la base (`sessionMovements`) + borradores; ingresos adicionales se persisten al instante. Dedup por `persistedId`.
    - **Bug C — propinas por pagar:** ✅ cerrar Propinas ya **no** crea el egreso solo; en Caja aparece "Propinas por pagar" → **Paga ahora** (aprobado) o **Deja pendiente** (`pendiente`, no descuenta hasta pagarse).
    - **Tipos de movimiento (taxonomía):** ✅ categorías completas + **pass-through electrónico** (propinas/delivery por SINPE/Lafise/Bitcoin = retiro de efectivo, **no P&L**). Lafise = canal de cobro, **no** método. Delivery dueños = Egreso-Socios.
    - **+ 4 mejoras de robustez (2026-06-08):** ✅ (1) detección de propinas pagadas cross-turno, (2) anti doble-click + confirm al pagar propinas, (3) helper `saldoCajaFuerte` (scaffold para el módulo Prueba), (4) guard anti doble-submit en pago/ingreso. **Validado:** build + lint + contrato de esquema (tipos generados del esquema vivo). Runtime logueado = smoke-test del dueño.
-2. **Sesión sólida** · M — fix de raíz del "se queda pensando" (RCA en `HANG-RCA.md`): refresco proactivo en foco, revisar el lock no-op, verificación de manager por RPC server-side, AbortController. **Base de todo lo demás.**
+1b. **Caja: cierre por ledger + saldo unificado + Caja Diaria única/día** · M — ✅ **MERGEADO** (2026-06-09, en producción). Cierre del día usa `saldoCajaFuerte`; **una sola fórmula** del saldo de Caja Fuerte (tarjeta=cierre=simulador); **Caja Diaria de proveedores única por día** (apertura única, check de mediodía, cierre de proveedores como paso propio, bóveda gateada); cierre robusto (error de ventas visible, orden de fases, "Borrar TODO el día"); **módulo Prueba** (simulador read-only); carryover validado en apertura. ⚠️ **Pendiente del dueño:** correr la **migración 018** (columnas `midday_check_by/at`).
+2. **Sesión sólida** · M — fix de raíz del "se queda pensando" (RCA en `HANG-RCA.md`): refresco proactivo en foco, revisar el lock no-op, verificación de manager por RPC server-side, AbortController. **Base de todo lo demás.** ◀── PRÓXIMO
 3. **Tiempo real multi-dispositivo** · L — Supabase Realtime: dos dispositivos (caja + manager) ven lo mismo en vivo. Depende de (2).
 4. **Offline-first** · L/XL — fase dedicada: base local + cola de sincronización + resolución de conflictos; evaluar un motor de sync probado. Depende de (2)/(3).
 5. **Entorno preview/staging** · S/M — necesario para probar (2)–(4) con varios dispositivos antes de producción.

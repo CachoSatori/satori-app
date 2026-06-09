@@ -17,7 +17,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, discardCierreDia, discardDiaCompleto } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, discardCierreDia, discardDiaCompleto } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { fi, todayStr, saldoCajaFuerte } from './cashUtils'
 
@@ -40,13 +40,15 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const [msg,      setMsg]      = useState<string | null>(null)
   const [fecha,    setFecha]    = useState(today)
   const [movs,     setMovs]     = useState<CashMovement[]>([])   // ledger para saldoCajaFuerte
+  const [sessions, setSessions] = useState<CashSession[]>([])    // para gatear: caja de proveedores cerrada
 
   const loadCierres = async () => {
     setLoading(true)
     try {
-      const [cs, ms] = await Promise.all([getCierresDia(fecha), getAllCashMovements()])
+      const [cs, ms, ss] = await Promise.all([getCierresDia(fecha), getAllCashMovements(), getCashSessions()])
       setCierres(cs)
       setMovs(ms)
+      setSessions(ss)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
     } finally {
@@ -58,6 +60,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   // Find partial (mediodía) and full (completo) for selected date
   const parcial  = cierres.find(c => c.tipo === 'parcial_mediodia')
   const completo = cierres.find(c => c.tipo === 'completo')
+  // El cierre de bóveda (Fase 2) requiere que la Caja Diaria de proveedores del día
+  // ya esté CERRADA (paso propio en Caja Diaria), aunque haya estado en cero.
+  const cajaProvCerrada = sessions.some(s => s.session_date === fecha && s.status === 'closed')
 
   const manager = profile?.full_name ?? ''
 
@@ -162,6 +167,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   // ── Confirmar cierre completo (Fase 2) ───────────────────────
   const handleConfirmCompleto = async () => {
     if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
+    if (!cajaProvCerrada) { setError('Cerrá primero la Caja Diaria de proveedores del día.'); return }
     if (!N(vnCRC) && !N(vnUSD)) { setError('Ingresá las ventas de noche'); return }
     if (totalContadoCRC === 0) { setError('Completá el conteo físico (separaciones)'); return }
     if (requiresAjuste && !ajusteMotivo.trim()) {

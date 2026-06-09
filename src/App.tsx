@@ -152,11 +152,29 @@ function AppRoutes() {
   )
 }
 
+// Banner persistente de STAGING (solo si VITE_APP_ENV='staging'). Fijo, no-cerrable,
+// pointer-events:none para no bloquear clicks. En producción no se renderiza nunca.
+const IS_STAGING = import.meta.env.VITE_APP_ENV === 'staging'
+function StagingBanner() {
+  if (!IS_STAGING) return null
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+      background: '#c23b22', color: '#fff', textAlign: 'center',
+      fontSize: '12px', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
+      padding: '4px 8px', boxShadow: '0 2px 8px rgba(0,0,0,.4)', pointerEvents: 'none',
+    }}>
+      ⚠ STAGING — DATOS DE PRUEBA · NO ES PRODUCCIÓN
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <ManagerOverrideProvider>
         <BrowserRouter basename="/satori-app">
+          <StagingBanner />
           <ErrorBoundary>
             <AppRoutes />
           </ErrorBoundary>

@@ -173,7 +173,7 @@ export default function App() {
   return (
     <AuthProvider>
       <ManagerOverrideProvider>
-        <BrowserRouter basename="/satori-app">
+        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <StagingBanner />
           <ErrorBoundary>
             <AppRoutes />

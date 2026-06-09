@@ -37,7 +37,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               Recargar
             </button>
             <button className="login-btn" style={{ maxWidth: 160, background: 'var(--gray-pale)' }}
-              onClick={() => { window.location.href = '/satori-app/' }}>
+              onClick={() => { window.location.href = import.meta.env.BASE_URL }}>
               Ir al inicio
             </button>
           </div>

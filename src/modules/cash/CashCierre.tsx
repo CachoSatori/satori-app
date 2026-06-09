@@ -17,7 +17,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, discardCierreDia } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, discardCierreDia, discardDiaCompleto } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { fi, todayStr, saldoCajaFuerte } from './cashUtils'
 
@@ -167,32 +167,34 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     if (requiresAjuste && !ajusteMotivo.trim()) {
       setError('⚠ Hay diferencia — el motivo es obligatorio antes de cerrar'); return
     }
+    // Orden de fases: la noche NO se puede cerrar sin el Mediodía confirmado (Fase 1).
+    // Sin `parcial`, las ventas de mediodía se perderían y el cierre quedaría a medias.
+    if (!parcial) { setError('Cerrá primero el Mediodía (Fase 1) antes de cerrar la noche.'); return }
     setSaving(true); setError(null)
     try {
-      if (parcial) {
-        // Update existing parcial to completo
-        await updateCierreCompleto(parcial.id, {
-          tipo:                 'completo',
-          vn_crc:               N(vnCRC),
-          vn_usd:               N(vnUSD),
-          propinas_n_crc:       N(propN),
-          otros_n_crc:          N(retiroN),
-          ef_real_n_crc:        efRealN,
-          sep_diaria_crc:       N(sepDiariaCRC),
-          sep_diaria_usd:       N(sepDiariaUSD),
-          sep_registradora_crc: N(sepRegCRC),
-          sep_registradora_usd: N(sepRegUSD),
-          remanente_crc:        N(remCRC),
-          remanente_usd:        N(remUSD),
-          diferencia_crc:       diferencia ?? 0,
-          ajuste_tipo:          requiresAjuste ? ajusteTipo : '',
-          ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
-          notas,
-          tipo_cambio:          tc,
-        })
-      }
-      // Fase 3 — registrar las ventas en EFECTIVO en el ledger de movimientos
-      // (a nivel día). Idempotente: re-cerrar reemplaza, no duplica.
+      // Fase 1 ya confirmada → pasar el cierre a 'completo'.
+      await updateCierreCompleto(parcial.id, {
+        tipo:                 'completo',
+        vn_crc:               N(vnCRC),
+        vn_usd:               N(vnUSD),
+        propinas_n_crc:       N(propN),
+        otros_n_crc:          N(retiroN),
+        ef_real_n_crc:        efRealN,
+        sep_diaria_crc:       N(sepDiariaCRC),
+        sep_diaria_usd:       N(sepDiariaUSD),
+        sep_registradora_crc: N(sepRegCRC),
+        sep_registradora_usd: N(sepRegUSD),
+        remanente_crc:        N(remCRC),
+        remanente_usd:        N(remUSD),
+        diferencia_crc:       diferencia ?? 0,
+        ajuste_tipo:          requiresAjuste ? ajusteTipo : '',
+        ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
+        notas,
+        tipo_cambio:          tc,
+      })
+      // Fase 3 — registrar las ventas en EFECTIVO en el ledger. ES PARTE ESENCIAL del
+      // cierre (alimenta el saldo de Caja Fuerte), NO es complementario. Si falla, el día
+      // quedó guardado pero las ventas NO están → avisar explícito, nunca ocultar.
       try {
         await recordCierreSales({
           session_date:  fecha,
@@ -207,7 +209,11 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
           exchange_rate: tc,
           amount_crc:    N(retiroN),
         })
-      } catch { /* el cierre ya quedó guardado; el ledger es complementario */ }
+      } catch (e3) {
+        await loadCierres(); onRefresh()
+        setError(`El día se guardó pero las VENTAS no se registraron en movimientos: ${e3 instanceof Error ? e3.message : String(e3)}. Deshacé el cierre y volvé a cerrarlo.`)
+        return
+      }
       setMsg('✓ Día cerrado completamente')
       await loadCierres()
       onRefresh()
@@ -218,18 +224,41 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     }
   }
 
-  // Deshacer el cierre del día (error de fecha / empezar de nuevo)
+  // Deshacer SOLO el cierre del día (no toca los movimientos del día).
   const handleDeshacer = async () => {
     if (!parcial && !completo) return
-    if (!window.confirm(`¿Deshacer el cierre del ${fecha}?\nSe borran los datos del cierre y los movimientos que generó (ventas + retiro). No se puede deshacer.`)) return
+    if (!window.confirm(
+      `¿Deshacer el cierre del ${fecha}?\n\n` +
+      `Se borran SOLO los datos del cierre y lo que generó (ventas del cierre + retiro).\n\n` +
+      `⚠ NO se borran los pagos a proveedores, gastos ni ingresos manuales del día — esos quedan. ` +
+      `Si querés recargar el día desde cero (sin duplicar), usá el botón "Borrar TODO el día".`)) return
     if (!(await requireManager())) return
     setSaving(true); setError(null)
     try {
       await discardCierreDia(fecha)
-      setMsg('✓ Cierre deshecho — podés empezar de nuevo.')
+      setMsg('✓ Cierre deshecho — los movimientos del día se mantienen.')
       await loadCierres(); onRefresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al deshacer')
+    } finally { setSaving(false) }
+  }
+
+  // Acción EXPLÍCITA y aparte: deshacer el cierre Y borrar TODOS los movimientos del día
+  // (para recargar el día de cero sin duplicar pagos). Destructivo — confirmación doble.
+  const handleBorrarDia = async () => {
+    if (!window.confirm(
+      `¿BORRAR TODO el día ${fecha}?\n\n` +
+      `Esto borra el cierre, las ventas, el retiro, los PAGOS A PROVEEDORES, gastos, ingresos manuales ` +
+      `y los turnos de caja del ${fecha}. Sirve para recargar el día desde cero.\n\n` +
+      `NO toca propinas. NO se puede deshacer.`)) return
+    if (!(await requireManager())) return
+    setSaving(true); setError(null)
+    try {
+      await discardDiaCompleto(fecha)
+      setMsg('✓ Día borrado completo — podés recargar desde cero.')
+      await loadCierres(); onRefresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al borrar el día')
     } finally { setSaving(false) }
   }
 
@@ -253,11 +282,15 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
           {(parcial || completo) && (
-            <button onClick={handleDeshacer} disabled={saving} title="Deshacer el cierre de esta fecha y empezar de 0"
+            <button onClick={handleDeshacer} disabled={saving} title="Deshacer SOLO el cierre (no borra los movimientos del día)"
               style={{ background:'none', border:'1px solid #c23b22', color:'#c23b22', borderRadius:2, padding:'5px 10px', fontSize:'0.76rem', cursor:'pointer' }}>
               ↩ Deshacer cierre
             </button>
           )}
+          <button onClick={handleBorrarDia} disabled={saving} title="Deshacer el cierre Y borrar TODOS los movimientos del día (recargar de cero)"
+            style={{ background:'#c23b22', border:'none', color:'#fff', borderRadius:2, padding:'5px 10px', fontSize:'0.76rem', cursor:'pointer' }}>
+            🗑 Borrar TODO el día
+          </button>
           <input type="date" value={fecha} max={today}
             onChange={e => setFecha(e.target.value)}
             style={{ background:'#1a1a1a', border:'1px solid #333', color:'var(--t-gold)', padding:'5px 10px', borderRadius:2, fontSize:'0.82rem' }} />

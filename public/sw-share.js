@@ -1,7 +1,7 @@
 /* Satori · PWA Share Target handler (Fase 2D-B)
  * Se importa dentro del Service Worker de Workbox (importScripts).
- * Intercepta SOLO el POST de "Compartir" hacia /satori-app/inbox/share,
- * guarda la imagen en Cache Storage y redirige a /inbox?shared=1.
+ * Intercepta SOLO el POST de "Compartir" hacia {BASE}inbox/share (base-agnóstico),
+ * guarda la imagen en Cache Storage y redirige a {BASE}inbox?shared=1.
  * El resto del fetch lo maneja Workbox normalmente.
  */
 self.addEventListener('fetch', (event) => {
@@ -18,7 +18,8 @@ self.addEventListener('fetch', (event) => {
             await cache.put('/__shared__', new Response(file, { headers }))
           }
         } catch (_e) { /* noop */ }
-        return Response.redirect('/satori-app/inbox?shared=1', 303)
+        // Relativo al scope del SW → respeta el base (/satori-app/ en prod, / en staging)
+        return Response.redirect(new URL('inbox?shared=1', self.registration.scope).toString(), 303)
       })())
     }
   } catch (_e) { /* dejar pasar al handler por defecto */ }

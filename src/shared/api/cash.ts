@@ -407,6 +407,32 @@ export async function discardCierreDia(date: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+// Reset COMPLETO de un día (recargar de cero SIN duplicar): borra el cierre + TODOS los
+// movimientos del día (los de los turnos de esa fecha + los a nivel día) + los turnos de
+// caja de esa fecha. NO toca propinas (tip_sessions / tip_entries). Acción destructiva
+// explícita (la dispara el usuario con confirmación + autorización de gerencia).
+export async function discardDiaCompleto(date: string): Promise<void> {
+  // 1) Movimientos ligados a turnos de esa fecha
+  const { data: sess } = await supabase.from('cash_sessions').select('id').eq('session_date', date)
+  const ids = ((sess ?? []) as { id: string }[]).map(s => s.id)
+  if (ids.length) {
+    const { error } = await supabase.from('cash_movements').delete().in('session_id', ids)
+    if (error) throw new Error(error.message)
+  }
+  // 2) Movimientos a nivel día (sin turno) de esa fecha — rango horario de Costa Rica (UTC-6)
+  const next = new Date(date + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + 1)
+  const nextStr = next.toISOString().slice(0, 10)
+  const { error: e2 } = await supabase.from('cash_movements').delete()
+    .is('session_id', null)
+    .gte('created_at', `${date}T06:00:00Z`).lt('created_at', `${nextStr}T06:00:00Z`)
+  if (e2) throw new Error(e2.message)
+  // 3) Cierre del día
+  await supabase.from('cash_cierres_dia').delete().eq('session_date', date)
+  // 4) Turnos de caja de esa fecha
+  const { error: e4 } = await supabase.from('cash_sessions').delete().eq('session_date', date)
+  if (e4) throw new Error(e4.message)
+}
+
 export async function updateCierreCompleto(id: string, updates: Partial<CashCierreDia>): Promise<void> {
   const { error } = await supabase
     .from('cash_cierres_dia')

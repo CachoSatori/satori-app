@@ -4,6 +4,19 @@ import type { Database } from '../types/supabase.gen'
 
 type Tables = Database['public']['Tables']
 
+// Red de seguridad para escrituras críticas: si una operación se cuelga (token venciendo
+// + refresh inline sin timeout, reconexión tras suspensión, red intermitente), falla VISIBLE
+// en vez de quedar "pensando" para siempre. La cura de fondo es el refresh proactivo en foco
+// (useAuth) — esto es el cinturón. Solo para ops idempotentes o que el usuario reintenta a mano.
+const WRITE_TIMEOUT_MS = 15000
+function withWriteTimeout<T>(p: PromiseLike<T>, ms = WRITE_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error('Se cortó la conexión (la operación tardó demasiado). Reintentá.')), ms)),
+  ])
+}
+
 // ── Sesiones ────────────────────────────────────────────────
 
 export async function getOpenCashSession(): Promise<CashSession | null> {
@@ -39,7 +52,7 @@ export async function createCashSession(params: {
   initial_suppliers_crc?: number
   notes?: string
 }): Promise<CashSession> {
-  const { data, error } = await supabase
+  const { data, error } = await withWriteTimeout(supabase
     .from('cash_sessions')
     .insert({
       session_date:          params.session_date,
@@ -54,7 +67,7 @@ export async function createCashSession(params: {
       notes:                 params.notes ?? null,
     })
     .select()
-    .single()
+    .single())
   if (error) throw new Error(error.message)
   return data as CashSession
 }
@@ -81,7 +94,7 @@ export async function closeCashSession(
   },
   closedBy: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await withWriteTimeout(supabase
     .from('cash_sessions')
     .update({
       status:         'closed',
@@ -92,7 +105,7 @@ export async function closeCashSession(
       final_bank_crc: finalData.final_bank_crc ?? null,
       ...(finalData.notes ? { notes: finalData.notes } : {}),
     })
-    .eq('id', sessionId)
+    .eq('id', sessionId))
   if (error) throw new Error(error.message)
 }
 
@@ -142,7 +155,7 @@ export async function createCashMovement(movement: {
   account_id?: string | null
   status?: 'aprobado' | 'pendiente' | 'rechazado'   // override; por defecto se deriva del método
 }): Promise<CashMovement> {
-  const { data, error } = await supabase
+  const { data, error } = await withWriteTimeout(supabase
     .from('cash_movements')
     .insert({
       ...movement,   // la clave `status` de abajo pisa el status del spread
@@ -155,7 +168,7 @@ export async function createCashMovement(movement: {
       status:        movement.status ?? (movement.method === 'Transferencia' ? 'pendiente' : 'aprobado'),
     })
     .select()
-    .single()
+    .single())
   if (error) throw new Error(error.message)
   return data as CashMovement
 }
@@ -267,7 +280,7 @@ export async function recordCierreSales(params: {
   ].filter(r => r.crc !== 0 || r.usd !== 0)
   if (rows.length === 0) return
 
-  const { error } = await supabase.from('cash_movements').insert(
+  const { error } = await withWriteTimeout(supabase.from('cash_movements').insert(
     rows.map(r => ({
       session_id:    null,
       created_by:    params.created_by,
@@ -286,7 +299,7 @@ export async function recordCierreSales(params: {
       method:        'Efectivo',
       status:        'aprobado',
     })),
-  )
+  ))
   if (error) throw new Error(error.message)
 }
 
@@ -304,7 +317,7 @@ export async function recordCierreRetiro(params: {
   const desc = `Retiro dueños a banco ${params.session_date}`
   await supabase.from('cash_movements').delete().eq('description', desc)
   if (!params.amount_crc) return
-  const { error } = await supabase.from('cash_movements').insert({
+  const { error } = await withWriteTimeout(supabase.from('cash_movements').insert({
     session_id:    null,
     created_by:    params.created_by,
     movement_type: 'traspaso',
@@ -321,7 +334,7 @@ export async function recordCierreRetiro(params: {
     caja_origen:   'Caja Fuerte',   // sale de la Caja Fuerte (traspaso al Banco) → descuenta el saldo
     method:        'Transferencia',
     status:        'aprobado',
-  })
+  }))
   if (error) throw new Error(error.message)
 }
 

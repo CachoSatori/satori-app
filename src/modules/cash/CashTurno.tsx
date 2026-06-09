@@ -82,21 +82,17 @@ export default function CashTurno({
   const canClose  = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'cajero'
 
   const today = todayStr()
-  // Fecha de apertura (default hoy, editable). El turno disponible y "ambos
-  // turnos cerrados" se calculan según la FECHA ELEGIDA — así se puede abrir
-  // un día distinto (ej. el día siguiente) aunque hoy ya esté completo.
+  // Modelo nuevo: la Caja Diaria de proveedores es ÚNICA por día (no hay turno
+  // Mediodía/Noche). Se abre UNA vez por fecha. Si ya hay una sesión (abierta o
+  // cerrada) de esa fecha, no se abre otra.
   const [apFecha,   setApFecha]   = useState(today)
-  const diaTurnos = sessions.filter(s => s.session_date === apFecha && s.status === 'closed')
-  const tieneMediodia = diaTurnos.some(s => s.shift_type === 'Mediodía')
-  const tieneNoche    = diaTurnos.some(s => s.shift_type === 'Noche')
-  const defaultShift  = !tieneMediodia ? 'Mediodía' : !tieneNoche ? 'Noche' : ''
-  const bothDone      = tieneMediodia && tieneNoche
+  const apTurno = 'Día'
+  const sesionDelDia = sessions.find(s => s.session_date === apFecha)
+  const yaExisteDia  = !!sesionDelDia   // abierta → se continúa (es openSession); cerrada → bloquear
 
   const [view, setView] = useState<ViewState>(openSession ? 'turno' : 'apertura')
 
   // Apertura form
-  // apTurno derived from sessions — auto-detects Mediodía vs Noche
-  const apTurno = defaultShift
   const [apCajero,  setApCajero]  = useState(profile?.full_name ?? '')
   const [employees, setEmployees] = useState<Employee[]>([])
   useState(() => { getActiveEmployees().then(setEmployees).catch(() => {}) })
@@ -265,9 +261,14 @@ export default function CashTurno({
   const handleApertura = useCallback(async () => {
     if (!profile) return
     if (!apCajero) { onError('Seleccioná un cajero'); return }
-    if (!apTurno)  { onError('El turno está bloqueado — ambos turnos del día ya fueron registrados'); return }
-    const dup = sessions.find(s => s.session_date === apFecha && s.shift_type === apTurno)
-    if (dup) { onError(`Ya existe un turno ${apTurno} del ${apFecha}`); return }
+    // Caja única por día: si ya hay una sesión de esa fecha, no abrir otra.
+    const dup = sessions.find(s => s.session_date === apFecha)
+    if (dup) {
+      onError(dup.status === 'open'
+        ? `Ya hay una Caja Diaria abierta el ${apFecha}.`
+        : `La Caja Diaria del ${apFecha} ya está cerrada. Para rehacerla, usá "Borrar TODO el día" en el Cierre del día.`)
+      return
+    }
 
     // Validación: el monto de Caja Proveedores debe coincidir con lo que asignó el
     // cierre anterior. Si difiere, exigir confirmación explícita (no avanzar en silencio).
@@ -589,26 +590,20 @@ export default function CashTurno({
     return (
       <div className="cd-wrap">
         <div className="cd-apertura-header">
-          <div className="cd-apertura-title">Apertura de Turno</div>
-          <div className="cd-apertura-sub">Confirmá el saldo inicial antes de empezar</div>
+          <div className="cd-apertura-title">Apertura de Caja Diaria</div>
+          <div className="cd-apertura-sub">Una caja por día · confirmá el saldo inicial antes de empezar</div>
         </div>
         <div className="cd-apertura-body">
 
-          {/* Cajero · Turno · Fecha — siempre visibles (para elegir/cambiar la fecha) */}
-          <div className="cd-grid3">
+          {/* Cajero · Fecha (la Caja Diaria es única por día — sin turno) */}
+          <div className="cd-grid2" style={{ gridTemplateColumns: '1fr 1fr' }}>
             <div className="tips-field">
-              <div className="tips-field-label">Cajero</div>
+              <div className="tips-field-label">Cajero / encargado</div>
               <select className="tips-input-dark" value={apCajero}
                 onChange={e => setApCajero(e.target.value)}>
                 <option value="">-- Seleccioná --</option>
                 {employees.map(e => <option key={e.id} value={e.full_name}>{e.full_name}</option>)}
               </select>
-            </div>
-            <div className="tips-field">
-              <div className="tips-field-label">Turno</div>
-              <div className={`cd-turno-display ${apTurno ? 'ok' : 'blocked'}`}>
-                {apTurno || '⚠ Sin turno disponible'}
-              </div>
             </div>
             <div className="tips-field">
               <div className="tips-field-label">Fecha</div>
@@ -618,9 +613,9 @@ export default function CashTurno({
             </div>
           </div>
 
-          {bothDone ? (
+          {yaExisteDia ? (
             <div className="cd-warn" style={{ marginTop: '1rem' }}>
-              ⚠ Ambos turnos del {apFecha} ya fueron registrados. Elegí otra fecha para abrir un turno.
+              ⚠ Ya existe la Caja Diaria del {apFecha} ({sesionDelDia?.status === 'open' ? 'abierta' : 'cerrada'}). Elegí otra fecha.
             </div>
           ) : (
             <>
@@ -664,9 +659,9 @@ export default function CashTurno({
               <button
                 className="cd-btn-green"
                 onClick={handleApertura}
-                disabled={saving || !apTurno || !apCajero}
+                disabled={saving || !apCajero}
               >
-                {saving ? 'Abriendo…' : '✓ CONFIRMAR APERTURA Y EMPEZAR TURNO'}
+                {saving ? 'Abriendo…' : '✓ CONFIRMAR APERTURA Y EMPEZAR EL DÍA'}
               </button>
             </>
           )}

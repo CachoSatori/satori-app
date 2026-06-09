@@ -913,14 +913,14 @@ export default function CashTurno({
         </div>
       )}
 
-      {/* Cierre del turno */}
+      {/* Cierre de la Caja Diaria de proveedores (paso propio, EOD) */}
       {canClose && view !== 'cierre' && (
         <div className="cd-section" style={{ borderColor: '#2a4a7a', borderWidth: 2 }}>
           <div className="cd-section-head" style={{ background: '#e0edf8', borderBottomColor: '#8ab0d0' }}>
             <div className="cd-section-icon" style={{ background: '#b0cce8' }}>🔒</div>
             <div>
-              <div className="cd-section-title" style={{ color: '#1a4a7a' }}>Cierre del turno</div>
-              <div className="cd-section-sub" style={{ color: '#3a6a9a' }}>Solo el encargado puede cerrar</div>
+              <div className="cd-section-title" style={{ color: '#1a4a7a' }}>Cerrar Caja Diaria de proveedores</div>
+              <div className="cd-section-sub" style={{ color: '#3a6a9a' }}>Una vez al final del día (obligatorio aunque esté en cero) · solo el encargado</div>
             </div>
             <span className="cd-badge-manager">Manager</span>
           </div>

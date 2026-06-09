@@ -57,6 +57,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Refresco PROACTIVO del token al volver el foco/visibilidad. Si la pestaña estuvo
+  // en segundo plano y el token venció, getSession() lo refresca ANTES de que el usuario
+  // dispare una acción crítica → elimina la carrera click-vs-refresh que colgaba las
+  // escrituras de caja ("se queda pensando", ver HANG-RCA.md). Si falla, NO bloquea la UI
+  // (la red de seguridad de los timeouts en las escrituras actúa).
+  useEffect(() => {
+    const refreshOnFocus = () => {
+      if (document.visibilityState !== 'visible') return
+      supabase.auth.getSession().catch(err => console.error('refresh on focus:', err))
+    }
+    document.addEventListener('visibilitychange', refreshOnFocus)
+    window.addEventListener('focus', refreshOnFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', refreshOnFocus)
+      window.removeEventListener('focus', refreshOnFocus)
+    }
+  }, [])
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return { error: error.message }

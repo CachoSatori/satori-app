@@ -87,7 +87,7 @@ export interface RoleTipPoints {
 export interface CashSession {
   id: string
   session_date: string
-  shift_type: string                // 'Mediodía' | 'Noche'
+  shift_type: string                // 'Día' (modelo nuevo: 1 caja/día) · legacy: 'Mediodía' | 'Noche'
   opened_by: string
   closed_by: string | null
   status: SessionStatus
@@ -103,6 +103,8 @@ export interface CashSession {
   final_safe_crc: number | null
   final_bank_crc: number | null
   notes: string | null
+  midday_check_by?: string | null   // mig. 018 — visto del check de mediodía (quién)
+  midday_check_at?: string | null   // mig. 018 — visto del check de mediodía (cuándo)
   created_at: string
   updated_at: string
 }

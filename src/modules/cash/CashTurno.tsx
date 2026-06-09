@@ -10,6 +10,7 @@ import {
   getPreviousCierre,
   discardCashSession,
   upsertSupplier,
+  updateMiddayCheck,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO, CATEGORIAS_PROV } from './cashUtils'
 import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
@@ -524,6 +525,20 @@ export default function CashTurno({
     catch (e) { onError(e instanceof Error ? e.message : 'Error al descartar') }
   }
 
+  // ── Check de proveedores (mediodía) — registra el visto, NO cierra la caja ──
+  const [checking, setChecking] = useState(false)
+  const handleMiddayCheck = async () => {
+    if (!openSession || !profile || checking) return
+    if (!(await requireManager())) return
+    setChecking(true)
+    try {
+      await updateMiddayCheck(openSession.id, profile.id)
+      onRefresh()
+    } catch (e) {
+      onError((e instanceof Error ? e.message : 'Error') + ' — ¿corriste la migración 018 (midday_check)?')
+    } finally { setChecking(false) }
+  }
+
   // ── Confirmar cierre ──────────────────────────────────────
   const handleCierre = useCallback(async () => {
     if (!openSession || !profile) return
@@ -714,6 +729,26 @@ export default function CashTurno({
             {fi(cajaDeberia)}
           </div>
           <div className="cd-tc-sub">{cajaDeberia < 0 ? '⚠ déficit en caja' : 'restante en caja'}</div>
+        </div>
+      </div>
+
+      {/* Check de proveedores (mediodía) — visto, NO cierra la caja */}
+      <div className="cd-section" style={{ marginBottom: '0.75rem' }}>
+        <div className="cd-section-head" style={{ padding: '0.5rem 0.75rem' }}>
+          <div className="cd-section-icon">✅</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="cd-section-title" style={{ fontSize: '0.85rem' }}>Check de proveedores (mediodía)</div>
+            <div className="cd-section-sub" style={{ fontSize: '0.66rem' }}>
+              {openSession.midday_check_at
+                ? `✓ Revisado ${new Date(openSession.midday_check_at).toLocaleString('es-CR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${openSession.midday_check_by === profile?.id ? ` · ${profile?.full_name}` : ''}`
+                : 'Sin revisar — el gerente AM da el visto (no cierra la caja)'}
+            </div>
+          </div>
+          {canManage && (
+            <button className="cd-section-add" onClick={handleMiddayCheck} disabled={checking}>
+              {checking ? '…' : openSession.midday_check_at ? 'Re-revisar' : 'Dar visto'}
+            </button>
+          )}
         </div>
       </div>
 

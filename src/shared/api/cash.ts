@@ -59,6 +59,17 @@ export async function createCashSession(params: {
   return data as CashSession
 }
 
+// Check de proveedores a mediodía: registra el "visto" (quién + cuándo) SIN cerrar la
+// caja. Columnas de la mig. 018 — el cast vía unknown evita el error de tipos hasta que
+// se regeneren los tipos; si la migración no corrió aún, el update falla y se avisa arriba.
+export async function updateMiddayCheck(sessionId: string, profileId: string): Promise<void> {
+  const { error } = await supabase
+    .from('cash_sessions')
+    .update({ midday_check_by: profileId, midday_check_at: new Date().toISOString() } as unknown as Tables['cash_sessions']['Update'])
+    .eq('id', sessionId)
+  if (error) throw new Error(error.message)
+}
+
 export async function closeCashSession(
   sessionId: string,
   finalData: {

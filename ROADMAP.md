@@ -1,7 +1,7 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-09**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-10**
 
 ---
 
@@ -67,10 +67,12 @@ Orden acordado (cada uno es base del siguiente):
    - **Tipos de movimiento (taxonomía):** ✅ categorías completas + **pass-through electrónico** (propinas/delivery por SINPE/Lafise/Bitcoin = retiro de efectivo, **no P&L**). Lafise = canal de cobro, **no** método. Delivery dueños = Egreso-Socios.
    - **+ 4 mejoras de robustez (2026-06-08):** ✅ (1) detección de propinas pagadas cross-turno, (2) anti doble-click + confirm al pagar propinas, (3) helper `saldoCajaFuerte` (scaffold para el módulo Prueba), (4) guard anti doble-submit en pago/ingreso. **Validado:** build + lint + contrato de esquema (tipos generados del esquema vivo). Runtime logueado = smoke-test del dueño.
 1b. **Caja: cierre por ledger + saldo unificado + Caja Diaria única/día** · M — ✅ **MERGEADO** (2026-06-09, en producción). Cierre del día usa `saldoCajaFuerte`; **una sola fórmula** del saldo de Caja Fuerte (tarjeta=cierre=simulador); **Caja Diaria de proveedores única por día** (apertura única, check de mediodía, cierre de proveedores como paso propio, bóveda gateada); cierre robusto (error de ventas visible, orden de fases, "Borrar TODO el día"); **módulo Prueba** (simulador read-only); carryover validado en apertura. ⚠️ **Pendiente del dueño:** correr la **migración 018** (columnas `midday_check_by/at`).
-2. **Sesión sólida** · M — fix de raíz del "se queda pensando" (RCA en `HANG-RCA.md`): refresco proactivo en foco, revisar el lock no-op, verificación de manager por RPC server-side, AbortController. **Base de todo lo demás.** ◀── PRÓXIMO
+2. **Sesión sólida** · M — fix del "se queda pensando" (RCA en `HANG-RCA.md`):
+   - **Fase 1 ✅ MERGEADA a `main`** (2026-06-09): refresco proactivo del token en foco/visibilidad + timeout 15s (`withWriteTimeout`) en todas las escrituras críticas de caja (apertura/cierre/movimiento/ventas/retiro/borrar día) — falla visible, nunca cuelga.
+   - **Fase 2 (cirugía de auth)** ⏳ — reemplazar el `noLock` no-op por lock real + verificación de manager por Edge Function. Se desarrolla y prueba **en STAGING** antes de tocar prod. ◀── PRÓXIMO (cuando staging esté operativo)
 3. **Tiempo real multi-dispositivo** · L — Supabase Realtime: dos dispositivos (caja + manager) ven lo mismo en vivo. Depende de (2).
 4. **Offline-first** · L/XL — fase dedicada: base local + cola de sincronización + resolución de conflictos; evaluar un motor de sync probado. Depende de (2)/(3).
-5. **Entorno preview/staging** · S/M — necesario para probar (2)–(4) con varios dispositivos antes de producción.
+5. **Entorno preview/staging** · S/M — 🟡 **CASI LISTO** (2026-06-10): Supabase staging separado (`hwiatgicyyqyezqwldia`) con migraciones + baseline de drift aplicadas (prod solo-lectura, nunca tocado), banner STAGING, `build:staging`, rama `staging` con base dinámico (PWA/Router). **Falta solo el dueño**: crear el proyecto Cloudflare **Pages** (rama `staging`) + borrar el Worker autoconfigurado + rotar tokens. Detalle en `STAGING.md` y `ESTADO.md`.
 
 > ⚠️ **Pendiente (pase aparte, no tocar datos ahora):** revisar el mapeo a QuickBooks de los deliverys/propinas cobrados por medio electrónico — la recategorización vieja "delivery x sinpe → operativo 7100" quedó mal (son **pass-through**, no gasto). El mapeo nuevo ya los excluye (`finance.ts`); falta recategorizar el **histórico**.
 

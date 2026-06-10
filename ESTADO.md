@@ -1,7 +1,28 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> Última actualización: 2026-06-09 (Caja: rediseño Caja Diaria única/día · cierre por ledger · saldo unificado · módulo Prueba · cierre robusto)
+> Última actualización: 2026-06-10 (Sesión sólida Fase 1 · entorno STAGING · fix base dinámico PWA)
+
+## 🆕 Novedades 2026-06-10 — Sesión sólida (Fase 1) + entorno STAGING
+
+### Sesión sólida — Fase 1 ✅ (en producción, `main`)
+Fixes de bajo riesgo del "se queda pensando" (RCA en `HANG-RCA.md`):
+- **Refresco proactivo del token** en `visibilitychange`/`focus` (`useAuth`): al volver a la app tras tenerla en background, `getSession()` refresca antes de que el usuario escriba → cura la causa principal del hang.
+- **Timeout de 15s** (`withWriteTimeout` en `cash.ts`) en TODAS las escrituras críticas de caja: apertura, cierre, movimiento, ventas de cierre, retiro y "Borrar TODO el día" → si algo cuelga, falla visible con aviso, nunca se queda girando.
+- **Fase 2 (cirugía de auth) DIFERIDA a staging**: reemplazar el `noLock` no-op por lock real y la verificación de manager por Edge Function se desarrollan y prueban en el entorno staging antes de tocar producción.
+
+### Entorno STAGING ✅ (construido) — deploy Cloudflare Pages ⏳ pendiente del dueño
+- **Proyecto Supabase staging separado**: ref `hwiatgicyyqyezqwldia`. **Producción (`yiczgdtirrkdvohdquzf`) nunca se tocó** — solo SELECTs de lectura para detectar drift.
+- **Migraciones aplicadas en staging** + **baseline de drift `0095`**: 11 tablas que existían en prod fuera de migraciones (sops, cash_cierres_dia, ventas_*, product_map, recipes, ingredients, inventory_movements…) reconstruidas **solo estructura** — el archivo tiene **CERO sentencias de RLS/políticas** para que jamás pueda debilitar la RLS de prod. La RLS permisiva de staging vive en `staging-rls.sql` (raíz, FUERA de `migrations/`, solo para staging).
+- **Banner rojo STAGING** (no-cerrable, `VITE_APP_ENV=staging`) + script `build:staging` + guía `STAGING.md`.
+- **Rama `staging`** creada + **fix de base dinámico** (3 commits, solo en `staging`): `vite.config` computa `BASE` (`/` staging, `/satori-app/` prod) para base + manifest PWA completo (start_url/scope/iconos/shortcuts/share_target/workbox); Router `basename` y ErrorBoundary vía `import.meta.env.BASE_URL`; `sw-share.js` relativo al scope; `public/_redirects` (SPA fallback Cloudflare, GitHub Pages lo ignora). **Ambos builds verificados verdes**; prod sigue idéntico en `/satori-app/`.
+- ⚠️ **Deuda técnica**: baseline 0095 es aproximado (sin Docker no hubo `pg_dump`); FKs/índices/RLS exactos por reconciliar a futuro.
+
+### ⚠️ Pendientes del DUEÑO (bloquean lo de arriba)
+1. **Migración 018 en PROD** (Supabase → SQL Editor, `supabase/migrations/018_caja_dia_unico.sql`) — el check de mediodía no funciona hasta correrla.
+2. **Rotar/revocar credenciales**: token staging `sbp_262f…`, contraseña DB staging, y el token de prod de sesiones anteriores.
+3. **Cloudflare (consola)**: borrar el Worker `satori-app` auto-creado + su integración (la rama `cloudflare/workers-autoconfig` reaparece hasta hacerlo), y crear el proyecto **Pages**: repo `CachoSatori/satori-app`, rama de producción `staging`, build `npm run build:staging`, output `dist`, env vars `VITE_SUPABASE_URL=https://hwiatgicyyqyezqwldia.supabase.co`, `VITE_SUPABASE_ANON_KEY` (de staging), `VITE_APP_ENV=staging`. **Nunca poner el ref de prod ahí.**
+4. Pasarme la URL `*.pages.dev` → verifico carga + banner + que el bundle apunte a staging.
 
 ## 🆕 Novedades 2026-06-09
 
@@ -127,8 +148,9 @@ Auditoría nocturna autónoma (Pase 1 + Pase 2), sin tocar la base (excepto gene
 
 ## Stack & deploy
 - React 19 + TypeScript + Vite · Supabase (PostgreSQL + PostgREST + Auth + RLS) · PWA
-- Repo: github.com/CachoSatori/satori-app — push a `main` despliega
-- Supabase project ref: `yiczgdtirrkdvohdquzf`
+- Repo: github.com/CachoSatori/satori-app — push a `main` despliega (GitHub Pages, base `/satori-app/`)
+- Supabase project ref PROD: `yiczgdtirrkdvohdquzf`
+- **STAGING**: rama `staging` → Cloudflare Pages (base `/`, pendiente de crear) · Supabase ref `hwiatgicyyqyezqwldia` · `npm run build:staging` · ver `STAGING.md`
 - Management token (para queries SQL directas): guardado en sesiones previas
 - Owner profile id: 48ef8af5-25d9-4990-a0b0-5140026da2ba (Cacho)
 - Build/verificar: `cd /Users/ismaelgutierrezpechemiel/Downloads/satori-app && npm run build`

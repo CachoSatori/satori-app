@@ -645,7 +645,15 @@ export default function TipsModule() {
                             value={barraCRC}
                             onChange={e => setBarraCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
                         </div>
-                        <span className="tips-field-hint">Dividido entre barra por horas</span>
+                        <span className="tips-field-hint">
+                          Dividido entre barra por horas
+                          {Number(barraCRC) > 0 && (() => {
+                            const sub = lines.filter(l =>
+                              l.active && BAR_ROLES.includes((coberturas[l.employeeId] as import('../../shared/types/database').UserRole) ?? l.role)
+                            ).reduce((s, l) => s + l.take_home, 0)
+                            return sub > 0 ? ` · barra recibe ${formatCRC(sub)} (pool gral + barra)` : ''
+                          })()}
+                        </span>
                       </div>
                     )}
 
@@ -748,6 +756,16 @@ export default function TipsModule() {
                     <div className="tips-pool-label">Valor por punto</div>
                     <div className="tips-pool-val teal">{formatCRC(totals.generalRate)}</div>
                   </div>
+                  {totals.barraPool > 0 && (
+                    <div className="tips-pool-item">
+                      <div className="tips-pool-label">Subtotal barra</div>
+                      <div className="tips-pool-val teal">
+                        {formatCRC(lines.filter(l =>
+                          l.active && BAR_ROLES.includes((coberturas[l.employeeId] as import('../../shared/types/database').UserRole) ?? l.role)
+                        ).reduce((s, l) => s + l.take_home, 0))}
+                      </div>
+                    </div>
+                  )}
                   <div className="tips-pool-item">
                     <div className="tips-pool-label">Distribuido</div>
                     <div className="tips-pool-val gold">

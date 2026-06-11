@@ -16,7 +16,14 @@ Fixes de bajo riesgo del "se queda pensando" (RCA en `HANG-RCA.md`):
 - **Migraciones aplicadas en staging** + **baseline de drift `0095`**: 11 tablas que existían en prod fuera de migraciones (sops, cash_cierres_dia, ventas_*, product_map, recipes, ingredients, inventory_movements…) reconstruidas **solo estructura** — el archivo tiene **CERO sentencias de RLS/políticas** para que jamás pueda debilitar la RLS de prod. La RLS permisiva de staging vive en `staging-rls.sql` (raíz, FUERA de `migrations/`, solo para staging).
 - **Banner rojo STAGING** (no-cerrable, `VITE_APP_ENV=staging`) + script `build:staging` + guía `STAGING.md`.
 - **Rama `staging`** creada + **fix de base dinámico** (3 commits, solo en `staging`): `vite.config` computa `BASE` (`/` staging, `/satori-app/` prod) para base + manifest PWA completo (start_url/scope/iconos/shortcuts/share_target/workbox); Router `basename` y ErrorBoundary vía `import.meta.env.BASE_URL`; `sw-share.js` relativo al scope; `public/_redirects` (SPA fallback Cloudflare, GitHub Pages lo ignora). **Ambos builds verificados verdes**; prod sigue idéntico en `/satori-app/`.
-- ⚠️ **Deuda técnica**: baseline 0095 es aproximado (sin Docker no hubo `pg_dump`); FKs/índices/RLS exactos por reconciliar a futuro.
+- ⚠️ ~~**Deuda técnica**: baseline 0095 es aproximado~~ → **RESUELTO con `staging-drift-sync.sql`** (ver abajo).
+
+### Drift prod→staging RECONCILIADO (2026-06-10, `staging-drift-sync.sql`)
+- **Síntoma**: staging daba 500 en `profiles` (policies `owner_select/update_all_profiles` con `EXISTS (select from profiles)` = **recursión infinita de RLS**; prod las corrigió a mano usando `get_my_role()` SECURITY DEFINER) y 400 por **18 columnas faltantes** (`cash_sessions.status/shift_type/initial_*`, `cash_movements.caja_origen/method/subcategory/...`, `suppliers.metodo_pago/...`, `employees.pos_name`).
+- **Diff completo prod vs staging** (columnas/policies/índices/constraints/funciones/triggers/enums): **223 diferencias** → parche idempotente `staging-drift-sync.sql` (raíz del repo) aplicado a staging: columnas, enums→text+CHECK (prod usa text), `currency_type`→`currency`, constraints/FKs/uniques, funciones (`update_ingredient_stock` faltaba), triggers renombrados a `trg_*`, y **espejo exacto de las 63 policies de prod** (74 de staging dropeadas, incluida la RLS permisiva `_all` de las 11 tablas drift → ya no hace falta `staging-rls.sql`).
+- **Resultado: 223 → 8 diferencias, todas intencionales**: 7 índices de performance extra en staging (inocuos) + orden interno del enum `user_role` (valores idénticos, no se puede reordenar).
+- **Verificado como usuario autenticado** (`set local role authenticated` + JWT claims): el perfil del owner carga sin 500, el owner ve todos los perfiles, y las queries con `status='open'`/`caja_origen`/`is_active` responden sin 400.
+- Prod fue **solo lectura** en todo el proceso (information_schema/pg_catalog).
 
 ### ⚠️ Pendientes del DUEÑO (bloquean lo de arriba)
 1. **Migración 018 en PROD** (Supabase → SQL Editor, `supabase/migrations/018_caja_dia_unico.sql`) — el check de mediodía no funciona hasta correrla.

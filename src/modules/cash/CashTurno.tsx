@@ -66,7 +66,7 @@ interface PagoRow {
   supplier_cat:  string
   amount_crc:    number | ''
   amount_usd:    number | ''
-  method:        'Efectivo' | 'Transferencia'
+  method:        string   // uno de METODOS_PAGO (Efectivo/Transferencia/SINPE/Bitcoin)
   reference:     string
   at:            number          // hora de registro (para ordenar más reciente primero)
   // persistedId: movement ID in DB — set once saved, null if unsaved
@@ -142,7 +142,7 @@ export default function CashTurno({
       supplier_cat:  suppliers.find(s => s.id === m.supplier_id)?.category ?? '',
       amount_crc:    m.amount_crc,
       amount_usd:    m.amount_usd,
-      method:        m.method === 'Transferencia' ? 'Transferencia' : 'Efectivo',
+      method:        m.method || 'Efectivo',
       reference:     m.description ?? '',
       at:            new Date(m.created_at).getTime(),
       persistedId:   m.id,
@@ -241,6 +241,9 @@ export default function CashTurno({
                         .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
   const pagosTr  = displayPagos.filter(p => p.supplier_id && p.method === 'Transferencia')
                         .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
+  // SINPE/Bitcoin: pagados al instante desde el Banco (no tocan la caja física)
+  const pagosElec = displayPagos.filter(p => p.supplier_id && p.method !== 'Efectivo' && p.method !== 'Transferencia')
+                        .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
   const ingresosTotal = displayIngresos.reduce((s, i) => s + (Number(i.crc) || 0), 0)
   const totalAsig = initProvCRC + ingresosTotal
 
@@ -325,7 +328,9 @@ export default function CashTurno({
         supplier_id:   pago.supplier_id || null,
         supplier_name: pago.supplier_name,
         method:        pago.method,
-        caja_origen:   'Caja Proveedores',
+        // Efectivo sale de la caja física; lo electrónico (Transferencia/SINPE/
+        // Bitcoin) sale del Banco y NO toca la caja (ROADMAP Fase 2D-A).
+        caja_origen:   pago.method === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
         shift:         tipShiftToCaja(openSession.shift_type),
       })
       // Ya está en la base → se mostrará vía dbPagos; quitamos el borrador en memoria.
@@ -340,7 +345,7 @@ export default function CashTurno({
   const [draftSup,    setDraftSup]    = useState('')
   const [draftCRC,    setDraftCRC]    = useState<number | ''>('')
   const [draftUSD,    setDraftUSD]    = useState<number | ''>('')
-  const [draftMethod, setDraftMethod] = useState<'Efectivo' | 'Transferencia'>('Efectivo')
+  const [draftMethod, setDraftMethod] = useState<string>('Efectivo')
   const [draftRef,    setDraftRef]    = useState('')
   const [supSearch,   setSupSearch]   = useState('')   // texto de búsqueda del proveedor
   const [supOpen,     setSupOpen]     = useState(false) // dropdown de proveedores abierto
@@ -809,10 +814,11 @@ export default function CashTurno({
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.supplier_name || 'Proveedor'}</div>
                 <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>
-                  {p.method === 'Efectivo' ? '💵 Efectivo' : '🏦 Transferencia'}
+                  {p.method === 'Efectivo' ? '💵 Efectivo' : p.method === 'Transferencia' ? '🏦 Transferencia' : p.method === 'SINPE' ? '📲 SINPE' : `₿ ${p.method}`}
                   {p.reference ? ` · ${p.reference}` : ''}
                   {` · ${new Date(p.at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`}
                   {p.method === 'Transferencia' && <span style={{ color: '#a07030' }}> · pendiente</span>}
+                  {p.method !== 'Efectivo' && p.method !== 'Transferencia' && <span style={{ color: '#2a7a6a' }}> · banco</span>}
                   {!p.persistedId && <span style={{ color: '#c0392b' }}> · sin guardar</span>}
                 </div>
               </div>
@@ -839,6 +845,12 @@ export default function CashTurno({
             <div className="cd-pend-bar">
               <span>🕐</span>
               <div><strong>{fi(pagosTr)}</strong> por transferencia — pendiente de confirmación</div>
+            </div>
+          )}
+          {pagosElec > 0 && (
+            <div className="cd-pend-bar">
+              <span>📲</span>
+              <div><strong>{fi(pagosElec)}</strong> electrónico (SINPE/Bitcoin) — pagado desde el Banco, no toca la caja</div>
             </div>
           )}
         </div>
@@ -1087,8 +1099,13 @@ export default function CashTurno({
                     {matches.length === 0 && <div className="cd-sup-empty">Sin coincidencias</div>}
                     {matches.map(s => (
                       <div key={s.id} className="cd-sup-option"
-                        onMouseDown={() => { setDraftSup(s.id); setSupSearch(s.name); setSupOpen(false) }}>
+                        onMouseDown={() => {
+                          setDraftSup(s.id); setSupSearch(s.name); setSupOpen(false)
+                          // Prefill con las preferencias guardadas del proveedor
+                          if (!editId && s.metodo_pago && METODOS_PAGO.includes(s.metodo_pago)) setDraftMethod(s.metodo_pago)
+                        }}>
                         {s.name}{s.category && <span className="cd-sup-cat"> · {s.category}</span>}
+                        {s.metodo_pago && s.metodo_pago !== 'Efectivo' && <span className="cd-sup-cat"> · {s.metodo_pago}{s.moneda === 'USD' ? ' · USD' : ''}</span>}
                       </div>
                     ))}
                   </div>
@@ -1150,10 +1167,20 @@ export default function CashTurno({
             <div className="tips-field" style={{ marginTop: '0.75rem' }}>
               <div className="tips-field-label">Método de pago</div>
               <div className="cd-metodo-tabs">
-                <div className={`cd-metodo-tab ef ${draftMethod === 'Efectivo' ? 'active' : ''}`} onClick={() => setDraftMethod('Efectivo')}>💵 Efectivo</div>
-                <div className={`cd-metodo-tab tr ${draftMethod === 'Transferencia' ? 'active' : ''}`} onClick={() => setDraftMethod('Transferencia')}>🏦 Transferencia</div>
+                {METODOS_PAGO.map(m => {
+                  const icon = m === 'Efectivo' ? '💵' : m === 'Transferencia' ? '🏦' : m === 'SINPE' ? '📲' : '₿'
+                  return (
+                    <div key={m} className={`cd-metodo-tab ${m === 'Efectivo' ? 'ef' : 'tr'} ${draftMethod === m ? 'active' : ''}`}
+                      onClick={() => setDraftMethod(m)}>{icon} {m}</div>
+                  )
+                })}
               </div>
-              {draftMethod === 'Transferencia' && <div className="cd-method-info pend">→ Transferencia — queda como pendiente hasta confirmar</div>}
+              {draftMethod === 'Transferencia' && <div className="cd-method-info pend">→ Transferencia — queda como pendiente hasta confirmar · sale del Banco</div>}
+              {draftMethod !== 'Efectivo' && draftMethod !== 'Transferencia' &&
+                <div className="cd-method-info pend">→ Pago electrónico — sale del Banco, no descuenta la caja física</div>}
+              <div style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: 4 }}>
+                Caja origen: <strong>{draftMethod === 'Efectivo' ? 'Caja Proveedores' : 'Banco'}</strong>
+              </div>
             </div>
 
             <div className="tips-field" style={{ marginTop: '0.75rem' }}>

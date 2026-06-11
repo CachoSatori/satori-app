@@ -393,3 +393,48 @@ create policy "ventas_metas_read" on public.ventas_metas for select to authentic
 create policy "ventas_metas_write" on public.ventas_metas for all to authenticated using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role])));
 
 commit;
+
+-- ── 10. Precisión/escala numérica exacta de prod (2026-06-11) ──
+-- El diff original comparó solo data_type; estas 40 columnas redondeaban
+-- plata en staging (amount_crc 12,0 vs 12,2 de prod, hours_worked, points...).
+begin;
+alter table public.cash_cierres_dia alter column diferencia_crc type numeric(12,2) using diferencia_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column ef_real_m_crc type numeric(12,2) using ef_real_m_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column ef_real_n_crc type numeric(12,2) using ef_real_n_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column otros_m_crc type numeric(12,2) using otros_m_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column otros_n_crc type numeric(12,2) using otros_n_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column propinas_m_crc type numeric(12,2) using propinas_m_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column propinas_n_crc type numeric(12,2) using propinas_n_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column remanente_crc type numeric(12,2) using remanente_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column remanente_usd type numeric(8,2) using remanente_usd::numeric(8,2);
+alter table public.cash_cierres_dia alter column sep_diaria_crc type numeric(12,2) using sep_diaria_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column sep_diaria_usd type numeric(8,2) using sep_diaria_usd::numeric(8,2);
+alter table public.cash_cierres_dia alter column sep_registradora_crc type numeric(12,2) using sep_registradora_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column sep_registradora_usd type numeric(8,2) using sep_registradora_usd::numeric(8,2);
+alter table public.cash_cierres_dia alter column tipo_cambio type numeric(8,2) using tipo_cambio::numeric(8,2);
+alter table public.cash_cierres_dia alter column vm_crc type numeric(12,2) using vm_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column vm_usd type numeric(8,2) using vm_usd::numeric(8,2);
+alter table public.cash_cierres_dia alter column vn_crc type numeric(12,2) using vn_crc::numeric(12,2);
+alter table public.cash_cierres_dia alter column vn_usd type numeric(8,2) using vn_usd::numeric(8,2);
+alter table public.cash_movements alter column amount_crc type numeric(12,2) using amount_crc::numeric(12,2);
+alter table public.cash_sessions alter column final_bank_crc type numeric(12,2) using final_bank_crc::numeric(12,2);
+alter table public.cash_sessions alter column final_safe_crc type numeric(12,2) using final_safe_crc::numeric(12,2);
+alter table public.cash_sessions alter column final_service_crc type numeric(12,2) using final_service_crc::numeric(12,2);
+alter table public.cash_sessions alter column final_suppliers_crc type numeric(12,2) using final_suppliers_crc::numeric(12,2);
+alter table public.cash_sessions alter column initial_service_crc type numeric(12,2) using initial_service_crc::numeric(12,2);
+alter table public.cash_sessions alter column initial_suppliers_crc type numeric(12,2) using initial_suppliers_crc::numeric(12,2);
+alter table public.ingredients alter column cost_per_unit type numeric(12,2) using cost_per_unit::numeric(12,2);
+alter table public.ingredients alter column current_stock type numeric(12,3) using current_stock::numeric(12,3);
+alter table public.ingredients alter column min_stock type numeric(12,3) using min_stock::numeric(12,3);
+alter table public.inventory_movements alter column qty_delta type numeric(12,3) using qty_delta::numeric(12,3);
+alter table public.inventory_movements alter column unit_cost type numeric(12,2) using unit_cost::numeric(12,2);
+alter table public.recipe_ingredients alter column quantity type numeric(12,4) using quantity::numeric(12,4);
+alter table public.recipe_ingredients alter column waste_factor type numeric(5,4) using waste_factor::numeric(5,4);
+alter table public.recipes alter column yield_qty type numeric(10,3) using yield_qty::numeric(10,3);
+alter table public.role_tip_points alter column points type numeric(4,1) using points::numeric(4,1);
+alter table public.tip_entries alter column hours_worked type numeric(4,2) using hours_worked::numeric(4,2);
+alter table public.tip_entries alter column payout_crc type numeric(12,2) using payout_crc::numeric(12,2);
+alter table public.tip_entries alter column points type numeric(10,4) using points::numeric(10,4);
+alter table public.tip_entries alter column tip_amount_crc type numeric(12,2) using tip_amount_crc::numeric(12,2);
+alter table public.tip_entries alter column tip_amount_usd type numeric(10,2) using tip_amount_usd::numeric(10,2);
+commit;

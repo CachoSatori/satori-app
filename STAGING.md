@@ -17,6 +17,25 @@ riesgoso (cirugía de auth, tiempo real, offline) sin tocar plata real.
 - **Build de staging**: `npm run build:staging` (= `tsc -b && VITE_APP_ENV=staging vite build`).
   No toca el `npm run build` de producción.
 
+## 📦 Datos: staging es un ESPEJO de los datos reales de prod (2026-06-11)
+- Staging contiene una **COPIA completa de los datos de producción** (ventas, caja, propinas,
+  proveedores, etc.), clonada con `scripts/clone-prod-to-staging.sh`. **Sigue siendo descartable**:
+  cualquier cosa que rompas se re-clona con un solo comando:
+  ```bash
+  SUPABASE_ACCESS_TOKEN=sbp_xxx ./scripts/clone-prod-to-staging.sh --yes
+  ```
+- El script tiene los guardrails ADENTRO: prod (`yiczgdtirrkdvohdquzf`) es **solo lectura**
+  (aborta ante cualquier sentencia no-SELECT) y la escritura va **únicamente** a
+  `hwiatgicyyqyezqwldia` (aborta si el destino no es ese ref). Hace backup corto previo en
+  `.staging-backups/`, trunca public, copia todo + `auth.users`/`auth.identities`, restaura el
+  owner (`satorisushibar@gmail.com` = owner activo), re-sincroniza secuencias y **verifica**
+  (conteos por tabla + 3 spot-checks financieros idénticos).
+- **Logins en staging = credenciales de PROD** (los usuarios se clonan con su hash de contraseña).
+- El banner "DATOS DE PRUEBA" **sigue siendo correcto**: es una copia desechable, no el original —
+  nada de lo que se haga en staging toca producción.
+- **No se clona**: Storage (las fotos de la Bandeja no se ven en staging) ni la config de Auth
+  (staging usa autoconfirm + site_url propio, a propósito).
+
 ---
 
 ## PASO 0 — Lo que hace el dueño (2 clics, una vez)

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
 import {
   getOpenTipSession,
   getTipSessions,
@@ -86,8 +87,8 @@ export default function TipsModule() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Cargar datos ──────────────────────────────────────────
-  const loadData = useCallback(async () => {
-    setLoading(true)
+  const loadData = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
     setError(null)
     try {
       const [open, allSessions, emps, allEmps, pts, currentRate] = await Promise.all([
@@ -167,6 +168,12 @@ export default function TipsModule() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Tiempo real: si otro dispositivo abre/cierra el turno o edita entradas,
+  // este recarga en silencio. pauseWhileTyping: si el cajero está escribiendo
+  // en un campo, el refetch se pospone hasta que lo suelte (no se pisa nada).
+  useRealtimeRefetch('rt-propinas', ['tip_sessions', 'tip_entries'],
+    () => { loadData({ silent: true }) }, { pauseWhileTyping: true })
 
   // ── Recalcular totales en tiempo real ─────────────────────
   useEffect(() => {

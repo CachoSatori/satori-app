@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
 import {
   getOpenCashSession,
   getCashSessions,
@@ -55,8 +56,8 @@ export default function CashModule() {
 
   const pendCount = allMovements.filter(m => m.status === 'pendiente').length
 
-  const loadAll = useCallback(async () => {
-    setLoading(true)
+  const loadAll = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
     setError(null)
     try {
       const [open, all, supps, allMovs] = await Promise.all([
@@ -77,6 +78,12 @@ export default function CashModule() {
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  // Tiempo real: otro dispositivo registra un pago / abre o cierra la caja →
+  // este recarga solo, en silencio (sin spinner). Los borradores locales de
+  // CashTurno no se pisan: sus listas se derivan de sessionMovements + drafts.
+  useRealtimeRefetch('rt-caja', ['cash_movements', 'cash_sessions', 'cash_cierres_dia'],
+    () => { loadAll({ silent: true }) })
 
   const handleSessionOpen = (s: CashSession) => {
     setOpenSession(s)

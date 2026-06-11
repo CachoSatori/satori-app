@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import { upsertSupplier, deactivateSupplier } from '../../shared/api/cash'
-import { fi, todayStr, METODOS_PAGO, CATEGORIAS_PROV } from './cashUtils'
+import { fi, todayStr, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 
 const CICLO_DIAS: Record<string, number> = {
@@ -296,7 +296,9 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
               <div className="tips-field">
                 <div className="tips-field-label">Método de pago</div>
                 <select className="tips-input-dark" value={form.metodo_pago} onChange={e => up('metodo_pago', e.target.value)}>
-                  {[...METODOS_PAGO, 'Ambos'].map(m => <option key={m}>{m}</option>)}
+                  {/* Proveedores: solo Efectivo/Transferencia (corrección 06-11). Si el proveedor
+                      ya tenía SINPE/Bitcoin guardado, se muestra para no romper el valor actual. */}
+                  {[...METODOS_PAGO_PROVEEDOR, 'Ambos', ...(form.metodo_pago && !['Efectivo','Transferencia','Ambos'].includes(form.metodo_pago) ? [form.metodo_pago] : [])].map(m => <option key={m}>{m}</option>)}
                 </select>
               </div>
               <div className="tips-field">

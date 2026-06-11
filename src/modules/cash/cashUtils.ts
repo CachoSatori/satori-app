@@ -34,6 +34,11 @@ export const CAJAS_ORIGEN = [
 
 export const METODOS_PAGO = ['Efectivo', 'Transferencia', 'SINPE', 'Bitcoin']
 
+// Pagos a PROVEEDORES: la dueña definió que solo se pagan en Efectivo (caja física)
+// o Transferencia (queda pendiente). SINPE/Bitcoin NO son opciones para proveedores;
+// los movimientos históricos con esos métodos quedan intactos y se siguen mostrando.
+export const METODOS_PAGO_PROVEEDOR = ['Efectivo', 'Transferencia']
+
 // Categorías de proveedor (las 9). Fuente única — la usan CashProveedores y CashTurno.
 export const CATEGORIAS_PROV = [
   'Pescados y Mariscos', 'Bebidas y Licores', 'Verduras y Frutas',

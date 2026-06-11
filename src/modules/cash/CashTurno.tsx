@@ -12,7 +12,7 @@ import {
   upsertSupplier,
   updateMiddayCheck,
 } from '../../shared/api/cash'
-import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO, CATEGORIAS_PROV } from './cashUtils'
+import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
 import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
@@ -66,7 +66,7 @@ interface PagoRow {
   supplier_cat:  string
   amount_crc:    number | ''
   amount_usd:    number | ''
-  method:        string   // uno de METODOS_PAGO (Efectivo/Transferencia/SINPE/Bitcoin)
+  method:        string   // 'Efectivo' | 'Transferencia' para pagos nuevos; históricos pueden traer SINPE/Bitcoin
   reference:     string
   at:            number          // hora de registro (para ordenar más reciente primero)
   // persistedId: movement ID in DB — set once saved, null if unsaved
@@ -1101,8 +1101,9 @@ export default function CashTurno({
                       <div key={s.id} className="cd-sup-option"
                         onMouseDown={() => {
                           setDraftSup(s.id); setSupSearch(s.name); setSupOpen(false)
-                          // Prefill con las preferencias guardadas del proveedor
-                          if (!editId && s.metodo_pago && METODOS_PAGO.includes(s.metodo_pago)) setDraftMethod(s.metodo_pago)
+                          // Prefill con la preferencia del proveedor; SINPE/Bitcoin ya no son
+                          // opciones de pago a proveedor → defaultean a Transferencia.
+                          if (!editId && s.metodo_pago) setDraftMethod(s.metodo_pago === 'Efectivo' ? 'Efectivo' : 'Transferencia')
                         }}>
                         {s.name}{s.category && <span className="cd-sup-cat"> · {s.category}</span>}
                         {s.metodo_pago && s.metodo_pago !== 'Efectivo' && <span className="cd-sup-cat"> · {s.metodo_pago}{s.moneda === 'USD' ? ' · USD' : ''}</span>}
@@ -1130,7 +1131,7 @@ export default function CashTurno({
                       {CATEGORIAS_PROV.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <select className="tips-input-dark" style={{ flex: 1 }} value={newSupMethod} onChange={e => setNewSupMethod(e.target.value)}>
-                      {METODOS_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
+                      {METODOS_PAGO_PROVEEDOR.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
@@ -1167,17 +1168,12 @@ export default function CashTurno({
             <div className="tips-field" style={{ marginTop: '0.75rem' }}>
               <div className="tips-field-label">Método de pago</div>
               <div className="cd-metodo-tabs">
-                {METODOS_PAGO.map(m => {
-                  const icon = m === 'Efectivo' ? '💵' : m === 'Transferencia' ? '🏦' : m === 'SINPE' ? '📲' : '₿'
-                  return (
-                    <div key={m} className={`cd-metodo-tab ${m === 'Efectivo' ? 'ef' : 'tr'} ${draftMethod === m ? 'active' : ''}`}
-                      onClick={() => setDraftMethod(m)}>{icon} {m}</div>
-                  )
-                })}
+                {METODOS_PAGO_PROVEEDOR.map(m => (
+                  <div key={m} className={`cd-metodo-tab ${m === 'Efectivo' ? 'ef' : 'tr'} ${draftMethod === m ? 'active' : ''}`}
+                    onClick={() => setDraftMethod(m)}>{m === 'Efectivo' ? '💵' : '🏦'} {m}</div>
+                ))}
               </div>
               {draftMethod === 'Transferencia' && <div className="cd-method-info pend">→ Transferencia — queda como pendiente hasta confirmar · sale del Banco</div>}
-              {draftMethod !== 'Efectivo' && draftMethod !== 'Transferencia' &&
-                <div className="cd-method-info pend">→ Pago electrónico — sale del Banco, no descuenta la caja física</div>}
               <div style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: 4 }}>
                 Caja origen: <strong>{draftMethod === 'Efectivo' ? 'Caja Proveedores' : 'Banco'}</strong>
               </div>

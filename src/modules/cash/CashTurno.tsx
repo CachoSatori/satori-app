@@ -33,20 +33,21 @@ interface Props {
 
 // Otros egresos del turno que salen de la Caja Diaria (no son mercadería).
 // Las propinas NO van acá — se pagan en el cierre del turno.
-// PASS-THROUGH (id deliv_*/prop_*): el cliente pagó por SINPE/Lafise/Bitcoin; la caja
-// sólo retira efectivo para entregarlo → reduce efectivo pero account=null (no P&L).
+// Categorías ÚNICAS (corrección de la dueña 06-11): un solo "Delivery" y un solo
+// "Propinas" — el detalle (SINPE/tarjeta/turno AM-PM/dueños) va en la NOTA.
+// El destino contable se deriva de la nota al guardar (ver confirmEgreso):
+//  · Delivery con nota electrónica (sinpe/lafise/bitcoin/tarjeta) = pass-through, no P&L
+//  · Delivery con nota "dueños" = egreso_socios (equity, no P&L)
+//  · Delivery normal (repartidor en efectivo) = operativo a7100
+//  · Propinas = SIEMPRE pass-through (la plata es del staff, no gasto del negocio)
+// Los movimientos históricos con las subcategorías viejas ("Delivery por SINPE",
+// "Propinas por Lafise", "Delivery dueños"…) quedan intactos en datos y reportes.
 const CONCEPTOS_EGRESO = [
-  { id: 'delivery',     label: 'Delivery (pago a repartidor en efectivo)', type: 'egreso_operativo', sub: 'Delivery',              account: 'a7100' },
-  { id: 'deliv_sinpe',  label: 'Delivery por SINPE (retiro efectivo)',     type: 'egreso_operativo', sub: 'Delivery por SINPE',    account: null },
-  { id: 'deliv_lafise', label: 'Delivery por Lafise (retiro efectivo)',    type: 'egreso_operativo', sub: 'Delivery por Lafise',   account: null },
-  { id: 'deliv_btc',    label: 'Delivery por Bitcoin (retiro efectivo)',   type: 'egreso_operativo', sub: 'Delivery por Bitcoin',  account: null },
-  { id: 'deliv_duenos', label: 'Delivery dueños',                          type: 'egreso_socios',    sub: 'Delivery dueños',       account: null },
-  { id: 'prop_sinpe',   label: 'Propinas por SINPE (retiro efectivo)',     type: 'egreso_personal',  sub: 'Propinas por SINPE',    account: null },
-  { id: 'prop_lafise',  label: 'Propinas por Lafise (retiro efectivo)',    type: 'egreso_personal',  sub: 'Propinas por Lafise',   account: null },
-  { id: 'prop_btc',     label: 'Propinas por Bitcoin (retiro efectivo)',   type: 'egreso_personal',  sub: 'Propinas por Bitcoin',  account: null },
-  { id: 'operativo',    label: 'Operativo (gas, luz, mantenim…)',          type: 'egreso_operativo', sub: 'Operativo',             account: null },
-  { id: 'salario',      label: 'Salario / adelanto en efectivo',           type: 'egreso_personal',  sub: 'Salario',               account: 'a6200' },
-  { id: 'otro',         label: 'Otro (especificar)',                       type: 'egreso_operativo', sub: 'Otro',                  account: null },
+  { id: 'delivery',  label: 'Delivery (detalle en la nota)',     type: 'egreso_operativo', sub: 'Delivery',  account: 'a7100' },
+  { id: 'propinas',  label: 'Propinas (detalle en la nota)',     type: 'egreso_personal',  sub: 'Propinas',  account: null },
+  { id: 'operativo', label: 'Operativo (gas, luz, mantenim…)',   type: 'egreso_operativo', sub: 'Operativo', account: null },
+  { id: 'salario',   label: 'Salario / adelanto en efectivo',    type: 'egreso_personal',  sub: 'Salario',   account: 'a6200' },
+  { id: 'otro',      label: 'Otro (especificar)',                type: 'egreso_operativo', sub: 'Otro',      account: null },
 ] as const
 
 // Evita que una request colgada (token vencido / red) deje "Cerrando…" para siempre.
@@ -489,11 +490,19 @@ export default function CashTurno({
     if (!openSession || !profile || !Number(draftEgCRC)) return
     const c = CONCEPTOS_EGRESO.find(x => x.id === draftEgConcepto)!
     setEgSaving(true)
+    // El detalle vive en la nota → de ahí se deriva el destino contable del Delivery:
+    // electrónico (el cliente ya pagó, la caja solo retira efectivo) = pass-through;
+    // "dueños" = egreso_socios (equity). El resto: repartidor en efectivo → a7100.
+    const notaNorm = draftEgNota.toLowerCase()
+    const esElectronico = /sinpe|lafise|bitcoin|tarjeta|datafono|datáfono/.test(notaNorm)
+    const esDuenos = /due[nñ]o/.test(notaNorm)
+    const movType: MovementType = c.id === 'delivery' && esDuenos ? 'egreso_socios' : (c.type as MovementType)
+    const movAccount = c.id === 'delivery' ? (esElectronico || esDuenos ? null : c.account) : c.account
     try {
       const mov = await createCashMovement({
         session_id:    openSession.id,
         created_by:    profile.id,
-        movement_type: c.type as MovementType,
+        movement_type: movType,
         amount_crc:    Number(draftEgCRC) || 0,
         amount_usd:    0,
         currency:      'CRC',
@@ -503,7 +512,7 @@ export default function CashTurno({
         supplier_name: draftEgNota || c.label,
         method:        draftEgMethod,
         caja_origen:   draftEgMethod === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
-        account_id:    c.account,
+        account_id:    movAccount,
         shift:         tipShiftToCaja(openSession.shift_type),
       })
       onMovAdded(mov)
@@ -1271,6 +1280,15 @@ export default function CashTurno({
               <div className="tips-field-label">Beneficiario / nota</div>
               <input type="text" className="tips-input-dark" value={draftEgNota} placeholder="Ej: repartidor, empleado, detalle…"
                 style={{ width: '100%' }} onChange={e => setDraftEgNota(e.target.value)} />
+              {(draftEgConcepto === 'delivery' || draftEgConcepto === 'propinas') && (
+                <div style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: 4 }}>
+                  El detalle va acá: <em>"por SINPE", "tarjeta", "turno AM", "dueños"…</em> — la nota se ve en el listado
+                  {draftEgConcepto === 'delivery' && /sinpe|lafise|bitcoin|tarjeta|datafono|datáfono/.test(draftEgNota.toLowerCase()) &&
+                    <strong> · cobrado electrónico → no cuenta como gasto (retiro de efectivo)</strong>}
+                  {draftEgConcepto === 'delivery' && /due[nñ]o/.test(draftEgNota.toLowerCase()) &&
+                    <strong> · dueños → se registra como egreso de socios</strong>}
+                </div>
+              )}
             </div>
             <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
               <button className="tips-btn-ghost" onClick={() => setEgresoModal(false)} disabled={egSaving}>Cancelar</button>

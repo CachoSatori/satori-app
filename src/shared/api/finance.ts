@@ -58,7 +58,9 @@ export async function upsertActual(a: { account_id: string; year: number; month:
 const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
 // Subcategoría de Caja → cuenta del P&L. Devuelve null para EXCLUIR (ej. propinas pass-through).
-function mapCashToAccount(type: string, subcat: string): string | null {
+// `desc` (la nota) solo participa para la categoría única "Delivery" (06-11) — el resto de las
+// reglas sigue mirando únicamente la subcategoría, para no reclasificar históricos.
+function mapCashToAccount(type: string, subcat: string, desc = ''): string | null {
   const s = norm(subcat)
   // Ajustes de caja (ej. ajuste de apertura) → no son gasto real del negocio
   if (/ajuste/.test(s)) return null
@@ -68,6 +70,12 @@ function mapCashToAccount(type: string, subcat: string): string | null {
   // el cliente ya pagó, la caja sólo retira efectivo para el repartidor → NO es gasto del P&L.
   // (Pendiente aparte: recategorizar el histórico viejo "delivery x sinpe → operativo 7100".)
   if (/delivery.*(sinpe|lafise|bitcoin)/.test(s)) return null
+  // Categoría única "Delivery" (06-11): el detalle viene en la NOTA. Electrónico =
+  // pass-through (el cliente ya pagó); si no, repartidor en efectivo → a7100.
+  // Los delivery históricos tienen account_id explícito y no pasan por acá.
+  if (s === 'delivery') {
+    return /(sinpe|lafise|bitcoin|tarjeta|datafono)/.test(norm(desc)) ? null : 'a7100'
+  }
   // Por palabra clave de subcategoría (lo que calza claro)
   if (/music|musico/.test(s))                 return 'a7500'                    // Música y entretenimiento
   if (/\bgas\b/.test(s))                       return 'a7780'                    // Gas
@@ -126,7 +134,7 @@ export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
       .select('session_date, data')
       .gte('session_date', from).lte('session_date', to),
     supabase.from('cash_movements')
-      .select('movement_type, subcategory, amount_crc, status, created_at, account_id')
+      .select('movement_type, subcategory, description, amount_crc, status, created_at, account_id')
       .gte('created_at', `${from}T00:00:00Z`).lte('created_at', `${to}T23:59:59Z`),
   ])
 
@@ -151,7 +159,7 @@ export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
   }
 
   // Movimientos de Caja → cuentas del P&L
-  for (const m of (cashRes.data ?? []) as Array<{ movement_type: string; subcategory: string; amount_crc: number; status: string; created_at: string; account_id: string | null }>) {
+  for (const m of (cashRes.data ?? []) as Array<{ movement_type: string; subcategory: string; description: string | null; amount_crc: number; status: string; created_at: string; account_id: string | null }>) {
     if (m.status === 'rechazado') continue
     const month = Number(m.created_at.slice(5, 7))
     const amount = Number(m.amount_crc) || 0
@@ -161,7 +169,7 @@ export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
     if (m.account_id) { add(m.account_id, month, amount); continue }
 
     if (type.startsWith('egreso')) {
-      const acc = mapCashToAccount(type, m.subcategory)
+      const acc = mapCashToAccount(type, m.subcategory, m.description ?? '')
       if (acc) add(acc, month, amount)          // null = excluido (propinas, retiros socios)
     } else if (type === 'ingreso') {
       // Ingresos de caja SELECTOS al P&L (aceite/reciclaje/otros). Ventas

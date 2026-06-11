@@ -32,3 +32,35 @@ El `setTimeout`-wrapper agregado antes **no es la cura**: es una red de segurida
 
 ## Cómo reproducir / validar
 Abrir el cierre de caja, **mandar la pestaña a segundo plano > 1 h** (o suspender el equipo), volver y tocar "Cerrar" inmediatamente. Con la causa raíz: cuelga. Con el diseño (1+2): el token ya está fresco al volver → guarda sin colgarse.
+
+---
+
+## Fase 2 APLICADA (sprint 2026-06-11, rama sprint-junio-11 — staging)
+
+**a) `noLock` → `safeNavigatorLock`** (`src/shared/api/supabase.ts`): lock real sobre
+`navigator.locks` (serializa refreshes entre pestañas — el noLock permitía refreshes
+concurrentes y un refresh token de un solo uso podía invalidar la sesión de otra pestaña),
+con tope de adquisición de 10s: si el lock está colgado (el escenario de este RCA), aborta
+la espera y ejecuta sin lock (= comportamiento noLock como peor caso). El refresco proactivo
+en foco (Fase 1) queda como complemento.
+
+**b) ManagerOverride server-side** (`migración 019` + `src/shared/ManagerOverride.tsx`):
+RPC `verify_manager(email, password)` SECURITY DEFINER que valida contra `auth.users` con
+pgcrypto y exige owner/manager **activo**. Reemplaza el cliente Supabase temporal del
+navegador (signInWithPassword paralelo que podía colgarse en el refresh). Cliente con
+timeout de 10s y errores diferenciados (credenciales vs red). `anon` tiene EXECUTE revocado.
+
+**c) Cómo se probó el ciclo del RCA** (staging local, bundle build:staging servido estático,
+sesión real de un usuario de prueba `test-cajero@staging.satori`):
+1. Lock del SDK (`lock:sb-<ref>-auth-token`) retenido por una promesa que nunca resuelve +
+   `expires_at` de la sesión forzado al pasado en localStorage + eventos
+   `visibilitychange`/`focus` (= "volver a la app") → la sesión terminó refrescada
+   (expires_at futuro), locks limpios y la app respondiendo. Sin hang.
+2. Prueba determinística del escape-hatch (misma función, lock retenido por otro contexto):
+   lock libre → ejecuta CON lock en 1ms; lock colgado → aborta a los ~10.5s y ejecuta sin
+   lock. Nunca se queda esperando indefinidamente.
+3. RPC desde el navegador con el JWT real del cajero: creds de manager OK → `true`;
+   password mala → `false`; `anon` → 401 permission denied.
+
+Pendiente de validación física (dueña): flujo completo del modal (cajero intenta eliminar
+un registro guardado → modal → credenciales de gerencia) en un dispositivo real.

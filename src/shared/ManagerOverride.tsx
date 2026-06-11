@@ -1,32 +1,32 @@
 import { createContext, useContext, useState, useCallback } from 'react'
 import type { ReactNode, FormEvent } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './api/supabase'
 import { useAuth } from './hooks/useAuth'
 
-const URL  = import.meta.env.VITE_SUPABASE_URL as string
-const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+const VERIFY_TIMEOUT_MS = 10_000
+
+type VerifyResult = { ok: boolean; error?: string }
 
 /**
- * Verifica credenciales de un owner/manager SIN tocar la sesión actual:
- * usa un cliente Supabase temporal con persistSession=false (no escribe en
- * localStorage ni reemplaza la sesión del cajero logueado).
+ * Verifica credenciales de gerencia SERVER-SIDE vía RPC `verify_manager`
+ * (SECURITY DEFINER, migración 019): valida email+contraseña contra auth.users
+ * y exige owner/manager activo. No crea ninguna sesión paralela en el navegador
+ * (el cliente temporal anterior podía colgarse en el refresh de token) y corre
+ * con timeout de 10s → si la red falla, el error es visible, nunca se cuelga.
  */
-async function verifyManager(email: string, password: string): Promise<boolean> {
-  // storageKey propio: aísla este cliente del principal para no compartir el
-  // namespace de localStorage ni el nombre del lock de refresh de token (evita
-  // el warning "Multiple GoTrueClient instances" y la contención del lock).
-  const tmp = createClient(URL, ANON, {
-    auth: { persistSession: false, autoRefreshToken: false, storageKey: 'sb-satori-manager-override' },
-  })
+async function verifyManager(email: string, password: string): Promise<VerifyResult> {
+  // El RPC no está en los tipos generados todavía (se regeneran post-merge).
+  const rpc = supabase.rpc.bind(supabase) as unknown as
+    (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('timeout')), VERIFY_TIMEOUT_MS))
   try {
-    const { data, error } = await tmp.auth.signInWithPassword({ email: email.trim(), password })
-    if (error || !data.user) return false
-    const { data: prof } = await tmp.from('profiles').select('role').eq('id', data.user.id).single()
-    const role = (prof as { role?: string } | null)?.role
-    await tmp.auth.signOut().catch(() => {})
-    return role === 'owner' || role === 'manager'
+    const { data, error } = await Promise.race([rpc('verify_manager', { p_email: email.trim(), p_password: password }), timeout])
+    if (error) return { ok: false, error: `No se pudo verificar: ${error.message}. Reintentá.` }
+    if (data !== true) return { ok: false, error: 'Credenciales inválidas o sin permiso de gerencia' }
+    return { ok: true }
   } catch {
-    return false
+    return { ok: false, error: 'No se pudo verificar (sin conexión o demoró >10s). Revisá la red y reintentá.' }
   }
 }
 
@@ -68,9 +68,9 @@ function ManagerModal({ onResult }: { onResult: (ok: boolean) => void }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setChecking(true); setError(null)
-    const ok = await verifyManager(email, password)
-    if (ok) { onResult(true) }
-    else { setError('Credenciales inválidas o sin permiso de gerencia'); setChecking(false) }
+    const res = await verifyManager(email, password)
+    if (res.ok) { onResult(true) }
+    else { setError(res.error ?? 'Credenciales inválidas o sin permiso de gerencia'); setChecking(false) }
   }
 
   return (

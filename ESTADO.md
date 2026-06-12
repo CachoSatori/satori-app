@@ -28,7 +28,7 @@ Ejecutadas con autorización única de la dueña vía Management API (`MIGRACION
 La dueña confirmó que el **Historial de propinas** actual y el **tracking de datáfono por empleado** (Propinas→Stats, "Generó vs Recibió") son exactamente lo esperado — no se requiere ningún cambio. No reabrir sin pedido nuevo.
 
 ### Próxima gran meta técnica
-**Offline-first** (base local + cola de sincronización + resolución de conflictos) — prerequisito del futuro módulo PoS. Se desarrolla y prueba en staging. Pendientes menores: P3c (estados vacíos — único ítem del backlog P3 sin iniciar; P3b errores visibles y P3d bundle ya están en main). ✅ Token de staging ROTADO (2026-06-12, el viejo devuelve 401); queda rotar la password de la DB de staging si no se hizo.
+**Offline-first** (base local + cola de sincronización + resolución de conflictos) — prerequisito del futuro módulo PoS. Se desarrolla y prueba en staging. Pendientes menores: P3c (estados vacíos — único ítem del backlog P3 sin iniciar; P3b errores visibles y P3d bundle ya están en main). ✅ Credenciales ROTADAS (2026-06-12): token de staging (el viejo devuelve 401) y contraseña de la DB de staging — checklist de seguridad del ciclo CERRADO.
 
 ## 🆕 Novedades 2026-06-10 — Sesión sólida (Fase 1) + entorno STAGING
 
@@ -54,7 +54,7 @@ Fixes de bajo riesgo del "se queda pensando" (RCA en `HANG-RCA.md`):
 
 ### ⚠️ Pendientes del DUEÑO (bloquean lo de arriba)
 1. **Migración 018 en PROD** (Supabase → SQL Editor, `supabase/migrations/018_caja_dia_unico.sql`) — el check de mediodía no funciona hasta correrla.
-2. ✅ ~~Rotar token de staging~~ (hecho 2026-06-12). Queda: contraseña DB staging y el token de prod de sesiones anteriores, si aún existen.
+2. ✅ ~~Rotar credenciales~~ (hecho 2026-06-12): token de staging y contraseña DB staging rotados.
 3. **Cloudflare (consola)**: borrar el Worker `satori-app` auto-creado + su integración (la rama `cloudflare/workers-autoconfig` reaparece hasta hacerlo), y crear el proyecto **Pages**: repo `CachoSatori/satori-app`, rama de producción `staging`, build `npm run build:staging`, output `dist`, env vars `VITE_SUPABASE_URL=https://hwiatgicyyqyezqwldia.supabase.co`, `VITE_SUPABASE_ANON_KEY` (de staging), `VITE_APP_ENV=staging`. **Nunca poner el ref de prod ahí.**
 4. Pasarme la URL `*.pages.dev` → verifico carga + banner + que el bundle apunte a staging.
 

@@ -1,4 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// outbox.ts importa el cliente supabase (para el executor real), que exige las
+// env vars VITE_SUPABASE_*. El núcleo testeado acá (flushOutbox) NO lo usa →
+// se mockea para que `npx vitest run` pase sin variables de entorno ni .env.
+vi.mock('../api/supabase', () => ({ supabase: {} }))
+
 import { flushOutbox } from './outbox'
 import type { OutboxOp, OutboxStore, ExecResult } from './outbox'
 

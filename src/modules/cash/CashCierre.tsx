@@ -135,6 +135,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
   // ── Confirmar cierre parcial (Fase 1) ─────────────────────────
   const handleConfirmParcial = async () => {
+    if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
     if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
     if (!N(vmCRC) && !N(vmUSD)) { setError('Ingresá las ventas de mediodía'); return }
     setSaving(true); setError(null)
@@ -166,6 +167,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
   // ── Confirmar cierre completo (Fase 2) ───────────────────────
   const handleConfirmCompleto = async () => {
+    if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
     if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
     if (!cajaProvCerrada) { setError('Cerrá primero la Caja Diaria de proveedores del día.'); return }
     if (!N(vnCRC) && !N(vnUSD)) { setError('Ingresá las ventas de noche'); return }

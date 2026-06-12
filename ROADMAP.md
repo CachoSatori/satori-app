@@ -119,6 +119,18 @@ Orden acordado (cada uno es base del siguiente):
 - **Modo contingencia**: si el KDS cae, las comandas salen **en papel por LAN** (mismo puente) —
   el servicio nunca se detiene.
 
+### Modelo fiscal del PoS (spec de la dueña, 2026-06-12 — estándar gastronomía CR)
+- **Precio final con IVA incluido** por producto (lo que ve el cliente en la carta) + tipo de
+  impuesto (default **IVA 13%**, opciones exento/otras tasas). El **desglose neto/IVA se deriva
+  automáticamente** (neto = precio/1.13) y es solo-lectura en Admin.
+- Los **deltas de modificadores también son precios finales** (IVA incluido) y heredan el tipo
+  de impuesto del producto.
+- **Servicio 10% por CANAL**, no por producto: salón y barra SÍ, delivery NO. Se aplica al armar
+  la cuenta/cobro, con desglose visible (consumo · servicio 10% · IVA · total).
+- Toda la matemática fiscal vive en **una sola función pura** (`computeTotals(items, canal)`)
+  con tests. ⏳ **PENDIENTE-CONTADORA**: base exacta del 10% (¿neto o total con IVA?) y si el
+  servicio lleva IVA — default implementado: 10% sobre el subtotal neto, parámetro centralizado.
+
 ### F3 — Cobro completo + Modo Evento · L
 - **Previas desde la tablet** (impresas en SALÓN), **splits** por cliente / por productos /
   partes iguales / por montos; cobro **₡/$ al TC de admin**; cierre de cuenta **desde la tablet

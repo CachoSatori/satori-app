@@ -256,7 +256,7 @@ function ItemPicker({ product, pax, orderId, onDone, onCancel, onError }: {
       await addOrderItem({
         order_id: orderId, product_name: product.nombre, qty: 1,
         base_price_crc: 0, modifiers: chosen.map(m => ({ id: m.id, name: m.name, price_delta_crc: m.price_delta_crc })),
-        price_crc: price, seat, course,
+        price_crc: price, tax_type: 'iva13', seat, course,
       })
       onDone()
     } catch (e) { onError(e instanceof Error ? e.message : 'Error agregando ítem'); setSaving(false) }

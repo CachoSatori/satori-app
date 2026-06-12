@@ -137,7 +137,69 @@ export async function searchProducts(term: string, limit = 15): Promise<Array<{ 
   return (data ?? []) as Array<{ nombre: string; tipo: string }>
 }
 
+// Todos los productos del catálogo (para la grilla de precios en Admin)
+export async function getAllProducts(): Promise<Array<{ nombre: string; tipo: string }>> {
+  const { data, error } = await sb.from('product_map').select('nombre, tipo').order('tipo').order('nombre')
+  fail(error)
+  return (data ?? []) as Array<{ nombre: string; tipo: string }>
+}
+
+// ── F3: precio de venta (modelo fiscal CR) ────────────────────
+import type { TaxType } from '../utils/posFiscal'
+
+export interface PosPrice {
+  product_name: string
+  location_id: string
+  price_final_crc: number | null   // IVA incluido; null = sin precio
+  tax_type: TaxType
+  is_demo: boolean
+}
+
+export async function getPrices(locationId: string): Promise<PosPrice[]> {
+  const { data, error } = await sb.from('pos_prices').select('*').eq('location_id', locationId)
+  fail(error)
+  return (data ?? []) as PosPrice[]
+}
+
+/** Mapa producto → precio para el comandero (lookup O(1) al armar el pedido). */
+export async function getPriceMap(locationId: string): Promise<Map<string, PosPrice>> {
+  return new Map((await getPrices(locationId)).map(p => [p.product_name, p]))
+}
+
+export async function upsertPrice(p: { product_name: string; location_id: string; price_final_crc: number | null; tax_type: TaxType }): Promise<void> {
+  const { error } = await sb.from('pos_prices').upsert({ ...p, is_demo: false, updated_at: new Date().toISOString() })
+  fail(error)
+}
+
+// ── F3: config del KDS (orden de categorías + umbrales por curso) ──
+export interface KdsSettings {
+  location_id: string
+  category_order: string[]
+  course_thresholds: Record<string, number>   // segundos verde→rojo por curso
+}
+
+export async function getKdsSettings(locationId: string): Promise<KdsSettings> {
+  const { data, error } = await sb.from('pos_kds_settings').select('*').eq('location_id', locationId).maybeSingle()
+  fail(error)
+  return (data as KdsSettings) ?? { location_id: locationId, category_order: [], course_thresholds: { bebida: 300, entrada: 600, principal: 900 } }
+}
+
+export async function saveKdsSettings(s: { location_id: string; category_order: string[]; course_thresholds: Record<string, number> }): Promise<void> {
+  const { error } = await sb.from('pos_kds_settings').upsert({ ...s, updated_at: new Date().toISOString() })
+  fail(error)
+}
+
 // ── F2: pedidos del comandero ─────────────────────────────────
+export type PosChannel = 'salon' | 'barra' | 'delivery'
+
+export interface TransferTrace {
+  at: string
+  from_id: string | null
+  from_name: string
+  to_id: string
+  to_name: string
+}
+
 export interface PosOrder {
   id: string
   location_id: string
@@ -145,8 +207,11 @@ export interface PosOrder {
   table_name: string
   opened_by: string
   salonero_name: string
+  current_salonero_id: string | null   // dueño VIGENTE tras transferencias (atribución de métricas)
   pax: number
+  channel: PosChannel
   status: 'open' | 'closed' | 'cancelled'
+  transfers: TransferTrace[]
   created_at: string
 }
 
@@ -158,6 +223,7 @@ export interface PosOrderItem {
   base_price_crc: number
   modifiers: Array<{ id: string; name: string; price_delta_crc: number }>
   price_crc: number
+  tax_type: 'iva13' | 'iva4' | 'iva2' | 'iva1' | 'exento'
   seat: number
   course: 'bebida' | 'entrada' | 'principal'
   kitchen_status: 'pendiente' | 'marchado' | 'listo' | 'entregado'
@@ -172,11 +238,30 @@ export async function getOpenOrders(locationId: string): Promise<PosOrder[]> {
   return (data ?? []) as PosOrder[]
 }
 
-export async function openOrder(p: { location_id: string; table_id: string | null; table_name: string; opened_by: string; salonero_name: string; pax: number }): Promise<PosOrder> {
+export async function openOrder(p: { location_id: string; table_id: string | null; table_name: string; opened_by: string; salonero_name: string; pax: number; channel?: PosChannel }): Promise<PosOrder> {
   if (!Number.isInteger(p.pax) || p.pax < 1) throw new Error('Pax obligatorio: mínimo 1 — el 0 no existe')
-  const { data, error } = await sb.from('pos_orders').insert(p).select().single()
+  // current_salonero_id arranca = opened_by; las transferencias lo reasignan.
+  const row = { ...p, channel: p.channel ?? 'salon', current_salonero_id: p.opened_by }
+  const { data, error } = await sb.from('pos_orders').insert(row).select().single()
   fail(error)
   return data as PosOrder
+}
+
+/**
+ * Transfiere una mesa abierta a otro salonero. Deja traza inmutable en el jsonb
+ * `transfers` y reasigna `current_salonero_id` (las métricas siguen al receptor
+ * desde este momento). `opened_by`/`salonero_name` quedan como histórico de apertura.
+ */
+export async function transferOrder(order: PosOrder, to: { id: string; name: string }, from: { id: string | null; name: string }): Promise<void> {
+  if (to.id === (order.current_salonero_id ?? order.opened_by)) throw new Error('La mesa ya es de ese salonero')
+  const trace: TransferTrace = { at: new Date().toISOString(), from_id: from.id, from_name: from.name, to_id: to.id, to_name: to.name }
+  const { error } = await sb.from('pos_orders').update({
+    current_salonero_id: to.id,
+    salonero_name: to.name,            // el nombre visible pasa al receptor (la apertura vive en transfers)
+    transfers: [...(order.transfers ?? []), trace],
+    updated_at: new Date().toISOString(),
+  }).eq('id', order.id)
+  fail(error)
 }
 
 export async function updateOrderPax(orderId: string, pax: number): Promise<void> {
@@ -213,6 +298,45 @@ export async function marchar(orderId: string, course: PosOrderItem['course'] | 
     .eq('order_id', orderId).eq('kitchen_status', 'pendiente')
   if (course) qy = qy.eq('course', course)
   const { error } = await qy
+  fail(error)
+}
+
+// ── F3: KDS (pantalla de cocina) ──────────────────────────────
+export interface KdsTicket {
+  order: PosOrder
+  items: PosOrderItem[]   // solo los enviados a cocina (marchado/listo), por curso
+}
+
+/**
+ * Comandas vivas para el KDS: pedidos abiertos del local con ítems ya marchados
+ * (o listos, hasta que se entregan). Dos queries (orders + items) — a escala
+ * piloto es barato y evita los embebidos de PostgREST. El KDS refetch-ea por realtime.
+ */
+export async function getKdsTickets(locationId: string): Promise<KdsTicket[]> {
+  const orders = await getOpenOrders(locationId)
+  if (!orders.length) return []
+  const ids = orders.map(o => o.id)
+  const { data, error } = await sb.from('pos_order_items').select('*')
+    .in('order_id', ids).in('kitchen_status', ['marchado', 'listo']).order('marched_at')
+  fail(error)
+  const items = (data ?? []) as PosOrderItem[]
+  return orders
+    .map(o => ({ order: o, items: items.filter(i => i.order_id === o.id) }))
+    .filter(t => t.items.length > 0)
+}
+
+/** Bump desde el KDS: marca un ítem como listo (o lo regresa a marchado). */
+export async function bumpItem(itemId: string, listo: boolean): Promise<void> {
+  const { error } = await sb.from('pos_order_items')
+    .update({ kitchen_status: listo ? 'listo' : 'marchado', updated_at: new Date().toISOString() }).eq('id', itemId)
+  fail(error)
+}
+
+/** Bump de toda una comanda (todos los ítems marchados → listos). */
+export async function bumpTicket(orderId: string): Promise<void> {
+  const { error } = await sb.from('pos_order_items')
+    .update({ kitchen_status: 'listo', updated_at: new Date().toISOString() })
+    .eq('order_id', orderId).eq('kitchen_status', 'marchado')
   fail(error)
 }
 

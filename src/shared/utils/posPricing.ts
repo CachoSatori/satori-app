@@ -59,3 +59,17 @@ export function defaultCourseForTipo(tipo: string): PosCourse {
 export function nextCourse(c: PosCourse): PosCourse {
   return COURSE_ORDER[(COURSE_ORDER.indexOf(c) + 1) % COURSE_ORDER.length]
 }
+
+// ── Reglas de turno (F3) ──────────────────────────────────────
+// Regla de la dueña: el turno de la MAÑANA puede cerrar con mesas abiertas
+// (pasan al turno de la noche); el ÚLTIMO turno NO (el día no cierra con mesas vivas).
+export type Turno = 'mañana' | 'noche'
+
+export function canCloseShift(turno: Turno, openTableNames: string[]): { ok: boolean; message: string } {
+  const n = openTableNames.length
+  if (turno === 'mañana') {
+    return { ok: true, message: n ? `Turno mañana: cierre permitido con ${n} mesa(s) abierta(s) — pasan al turno noche.` : 'Turno mañana: sin mesas abiertas.' }
+  }
+  if (n === 0) return { ok: true, message: 'Último turno: sin mesas abiertas, se puede cerrar el día.' }
+  return { ok: false, message: `No se puede cerrar el último turno con ${n} mesa(s) abierta(s): ${openTableNames.join(', ')}. Cerralas o transferilas antes de cerrar el día.` }
+}

@@ -64,3 +64,20 @@ describe('cursos (F2) — default por tipo y ciclo de un tap', () => {
     expect(nextCourse('principal')).toBe('bebida')
   })
 })
+
+describe('reglas de turno (F3) — cierre con mesas abiertas', () => {
+  it('turno mañana SÍ puede cerrar con mesas abiertas', async () => {
+    const { canCloseShift } = await import('./posPricing')
+    expect(canCloseShift('mañana', ['Mesa 1', 'Mesa 3']).ok).toBe(true)
+  })
+  it('último turno (noche) NO puede cerrar con mesas abiertas y lista cuáles', async () => {
+    const { canCloseShift } = await import('./posPricing')
+    const r = canCloseShift('noche', ['Mesa 1', 'Mesa 3'])
+    expect(r.ok).toBe(false)
+    expect(r.message).toMatch(/Mesa 1, Mesa 3/)
+  })
+  it('último turno sin mesas abiertas SÍ puede cerrar', async () => {
+    const { canCloseShift } = await import('./posPricing')
+    expect(canCloseShift('noche', []).ok).toBe(true)
+  })
+})

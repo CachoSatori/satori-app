@@ -308,16 +308,17 @@ export interface KdsTicket {
 }
 
 /**
- * Comandas vivas para el KDS: pedidos abiertos del local con ítems ya marchados
- * (o listos, hasta que se entregan). Dos queries (orders + items) — a escala
- * piloto es barato y evita los embebidos de PostgREST. El KDS refetch-ea por realtime.
+ * Comandas vivas para el KDS: pedidos abiertos del local con ítems EN COCINA
+ * (kitchen_status='marchado'). El bump los pasa a 'listo' → salen del KDS (la
+ * comanda desaparece cuando todo está listo). Dos queries (orders + items): a
+ * escala piloto es barato y evita los embebidos de PostgREST; refetch por realtime.
  */
 export async function getKdsTickets(locationId: string): Promise<KdsTicket[]> {
   const orders = await getOpenOrders(locationId)
   if (!orders.length) return []
   const ids = orders.map(o => o.id)
   const { data, error } = await sb.from('pos_order_items').select('*')
-    .in('order_id', ids).in('kitchen_status', ['marchado', 'listo']).order('marched_at')
+    .in('order_id', ids).eq('kitchen_status', 'marchado').order('marched_at')
   fail(error)
   const items = (data ?? []) as PosOrderItem[]
   return orders

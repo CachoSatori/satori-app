@@ -26,6 +26,7 @@ const FinanzasModule    = lazy(() => import('./modules/finanzas/FinanzasModule')
 const InboxModule       = lazy(() => import('./modules/inbox/InboxModule'))
 const PruebaModule      = lazy(() => import('./modules/prueba/PruebaModule'))
 const ComanderoModule   = lazy(() => import('./modules/pos/ComanderoModule'))
+const KdsModule         = lazy(() => import('./modules/pos/KdsModule'))
 const RegistroCliente   = lazy(() => import('./pages/RegistroCliente'))
 
 // ── Loading fallback — same spinner used for auth ──────────────
@@ -149,6 +150,7 @@ function AppRoutes() {
         <Route path="/admin"    element={<OwnerRoute><AdminModule /></OwnerRoute>} />
         <Route path="/prueba"   element={<OwnerRoute><PruebaModule /></OwnerRoute>} />
         <Route path="/comandero" element={<PrivateRoute roles={['owner','manager','cajero','salonero','barman']}><ComanderoModule /></PrivateRoute>} />
+        <Route path="/kds" element={<PrivateRoute roles={['owner','manager','cajero','barman','cocina','runner']}><KdsModule /></PrivateRoute>} />
         <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

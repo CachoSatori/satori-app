@@ -1,7 +1,31 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> Última actualización: 2026-06-10 (Sesión sólida Fase 1 · entorno STAGING · fix base dinámico PWA)
+> Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
+
+## 🆕 Novedades 2026-06-11/12 — Sprint validado por la dueña y EN PRODUCCIÓN (`main`)
+
+### En producción (todo validado físicamente por la dueña en staging antes del merge)
+- **Auth Fase 2 (cirugía de sesión)**: `noLock` → `safeNavigatorLock` (lock real de `navigator.locks` con escape a los 10s — serializa pestañas sin poder colgarse jamás; detalle y prueba del RCA en `HANG-RCA.md`). **ManagerOverride server-side**: RPC `verify_manager` (mig 019, SECURITY DEFINER + pgcrypto, exige owner/manager ACTIVO, anon bloqueado) con timeout de 10s y errores visibles — se eliminó el cliente Supabase temporal del navegador.
+- **Tiempo real multi-dispositivo** (mig 020 + `useRealtimeRefetch`): dos dispositivos con Caja/Propinas abiertas se ven sin recargar. Reconexión con backoff, refetch al volver el foco, `pauseWhileTyping` en Propinas (no pisa lo que se está tipeando), recarga silenciosa (sin spinner).
+- **Correcciones de pago (decisión de la dueña)**: pagos a PROVEEDORES solo **Efectivo o Transferencia** (SINPE/Bitcoin fuera del modal; prefill viejo defaultea a Transferencia; históricos intactos). Gasto operativo con **categorías únicas**: Delivery (detalle en la nota) · Delivery dueños · Propinas (detalle en la nota) · Operativo · Salario · Otro. La nota deriva la contabilidad del Delivery (electrónico = pass-through sin P&L) y es visible en los listados. Verificado: los 97 deliveries históricos tienen `account_id` explícito → cero reclasificación.
+- **UX**: subtotal de barra visible en el turno de Propinas; modal de pago con caja origen derivada (Efectivo→Caja Proveedores, Transferencia→Banco, ROADMAP 2D-A).
+- **Tests** (`npm test`, vitest): `saldoCajaFuerte` (8 casos) y `calcTurno` (6 casos) — 14/14 verdes. Las fórmulas sagradas ahora tienen red.
+- **Base dinámica PWA**: prod sigue en `/satori-app/` (GitHub Pages), staging sirve en `/` (Cloudflare Pages) — un solo código.
+
+### Migraciones 018+019+020 APLICADAS EN PROD ✅ (2026-06-12)
+Ejecutadas con autorización única de la dueña vía Management API (`MIGRACIONES-PROD-JUN11.sql`, archivo exacto del repo, guardia anti-staging probada). Verificación: 3 filas `ok=true`. El **check de mediodía (018) ya funciona en producción**. ⚠️ Housekeeping: 018-020 no quedaron anotadas en `schema_migrations` de prod (si algún día se corre `db push` contra prod, las re-intenta — son idempotentes).
+
+### Staging = ESPEJO de datos reales + entorno operativo completo
+- `scripts/clone-prod-to-staging.sh --yes` re-sincroniza todo con un comando (guardrails adentro; verificación 30/30 tablas + 3 spot-checks financieros al centavo). Login en staging = credenciales de prod. Usuarios de prueba: `test-cajero@staging.satori` / `test-manager@staging.satori` (pass `staging-test-2026`).
+- En el camino se arregló el **drift de precisión numérica**: 40 columnas de staging redondeaban plata (`amount_crc` 12,0 vs 12,2) — corregidas en `staging-drift-sync.sql`.
+
+### Esperando spec de la dueña (no arrancar sin definición)
+- **P1c — Historial de propinas estilo standalone**: ¿qué 2-3 comportamientos exactos del app viejo se extrañan?
+- **P1d — Tracking de datáfono por empleado**: ya existe en Propinas→Stats (Generó vs Recibió); falta definir qué más ("campo en el cierre" ¿de caja o de propinas?).
+
+### Próxima gran meta técnica
+**Offline-first** (base local + cola de sincronización + resolución de conflictos) — prerequisito del futuro módulo PoS. Se desarrolla y prueba en staging. Pendientes menores: P3 b/c/d del sprint (catch silenciosos restantes, estados vacíos, lazy-load de chunks pesados de Ventas) y rotar credenciales (token `sbp_262f…`, password DB staging).
 
 ## 🆕 Novedades 2026-06-10 — Sesión sólida (Fase 1) + entorno STAGING
 

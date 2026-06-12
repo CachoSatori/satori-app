@@ -1,0 +1,12 @@
+{
+  "name": "satori-print-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Puente de impresión LAN del PoS Satori (embrión del HUB LOCAL F5) — ESC/POS a 3nStar RPT004 por red, con modo simulación.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "smoke": "node smoke.js"
+  },
+  "engines": { "node": ">=18" }
+}

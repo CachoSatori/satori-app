@@ -24,12 +24,11 @@ Ejecutadas con autorización única de la dueña vía Management API (`MIGRACION
 - `scripts/clone-prod-to-staging.sh --yes` re-sincroniza todo con un comando (guardrails adentro; verificación 30/30 tablas + 3 spot-checks financieros al centavo). Login en staging = credenciales de prod. Usuarios de prueba: `test-cajero@staging.satori` / `test-manager@staging.satori` (pass `staging-test-2026`).
 - En el camino se arregló el **drift de precisión numérica**: 40 columnas de staging redondeaban plata (`amount_crc` 12,0 vs 12,2) — corregidas en `staging-drift-sync.sql`.
 
-### Esperando spec de la dueña (no arrancar sin definición)
-- **P1c — Historial de propinas estilo standalone**: ¿qué 2-3 comportamientos exactos del app viejo se extrañan?
-- **P1d — Tracking de datáfono por empleado**: ya existe en Propinas→Stats (Generó vs Recibió); falta definir qué más ("campo en el cierre" ¿de caja o de propinas?).
+### P1c y P1d — ✅ CERRADOS (2026-06-12, confirmación de la dueña)
+La dueña confirmó que el **Historial de propinas** actual y el **tracking de datáfono por empleado** (Propinas→Stats, "Generó vs Recibió") son exactamente lo esperado — no se requiere ningún cambio. No reabrir sin pedido nuevo.
 
 ### Próxima gran meta técnica
-**Offline-first** (base local + cola de sincronización + resolución de conflictos) — prerequisito del futuro módulo PoS. Se desarrolla y prueba en staging. Pendientes menores: P3 b/c/d del sprint (catch silenciosos restantes, estados vacíos, lazy-load de chunks pesados de Ventas) y rotar credenciales (token `sbp_262f…`, password DB staging).
+**Offline-first** (base local + cola de sincronización + resolución de conflictos) — prerequisito del futuro módulo PoS. Se desarrolla y prueba en staging. Pendientes menores: P3c (estados vacíos — único ítem del backlog P3 sin iniciar; P3b errores visibles y P3d bundle ya están en main) y rotar credenciales (token `sbp_262f…`, password DB staging).
 
 ## 🆕 Novedades 2026-06-10 — Sesión sólida (Fase 1) + entorno STAGING
 

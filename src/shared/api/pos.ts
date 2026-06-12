@@ -136,3 +136,94 @@ export async function searchProducts(term: string, limit = 15): Promise<Array<{ 
   fail(error)
   return (data ?? []) as Array<{ nombre: string; tipo: string }>
 }
+
+// ── F2: pedidos del comandero ─────────────────────────────────
+export interface PosOrder {
+  id: string
+  location_id: string
+  table_id: string | null
+  table_name: string
+  opened_by: string
+  salonero_name: string
+  pax: number
+  status: 'open' | 'closed' | 'cancelled'
+  created_at: string
+}
+
+export interface PosOrderItem {
+  id: string
+  order_id: string
+  product_name: string
+  qty: number
+  base_price_crc: number
+  modifiers: Array<{ id: string; name: string; price_delta_crc: number }>
+  price_crc: number
+  seat: number
+  course: 'bebida' | 'entrada' | 'principal'
+  kitchen_status: 'pendiente' | 'marchado' | 'listo' | 'entregado'
+  marched_at: string | null
+  created_at: string
+}
+
+export async function getOpenOrders(locationId: string): Promise<PosOrder[]> {
+  const { data, error } = await sb.from('pos_orders').select('*')
+    .eq('location_id', locationId).eq('status', 'open').order('created_at')
+  fail(error)
+  return (data ?? []) as PosOrder[]
+}
+
+export async function openOrder(p: { location_id: string; table_id: string | null; table_name: string; opened_by: string; salonero_name: string; pax: number }): Promise<PosOrder> {
+  if (!Number.isInteger(p.pax) || p.pax < 1) throw new Error('Pax obligatorio: mínimo 1 — el 0 no existe')
+  const { data, error } = await sb.from('pos_orders').insert(p).select().single()
+  fail(error)
+  return data as PosOrder
+}
+
+export async function updateOrderPax(orderId: string, pax: number): Promise<void> {
+  if (!Number.isInteger(pax) || pax < 1) throw new Error('Pax obligatorio: mínimo 1 — el 0 no existe')
+  const { error } = await sb.from('pos_orders').update({ pax, updated_at: new Date().toISOString() }).eq('id', orderId)
+  fail(error)
+}
+
+export async function getOrderItems(orderId: string): Promise<PosOrderItem[]> {
+  const { data, error } = await sb.from('pos_order_items').select('*').eq('order_id', orderId).order('created_at')
+  fail(error)
+  return (data ?? []) as PosOrderItem[]
+}
+
+export async function addOrderItem(item: Omit<PosOrderItem, 'id' | 'kitchen_status' | 'marched_at' | 'created_at'>): Promise<void> {
+  const { error } = await sb.from('pos_order_items').insert(item)
+  fail(error)
+}
+
+export async function updateItemCourse(itemId: string, course: PosOrderItem['course']): Promise<void> {
+  const { error } = await sb.from('pos_order_items').update({ course, updated_at: new Date().toISOString() }).eq('id', itemId)
+  fail(error)
+}
+
+export async function deleteOrderItem(itemId: string): Promise<void> {
+  const { error } = await sb.from('pos_order_items').delete().eq('id', itemId).eq('kitchen_status', 'pendiente')
+  fail(error)
+}
+
+/** Marchar: manda a cocina los ítems pendientes del curso (o todos con course=null). */
+export async function marchar(orderId: string, course: PosOrderItem['course'] | null): Promise<void> {
+  let qy = sb.from('pos_order_items')
+    .update({ kitchen_status: 'marchado', marched_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('order_id', orderId).eq('kitchen_status', 'pendiente')
+  if (course) qy = qy.eq('course', course)
+  const { error } = await qy
+  fail(error)
+}
+
+/** Grupos de modificadores de un producto, listos para el comandero. */
+export async function getProductGroups(productName: string): Promise<Array<ModifierGroupRow & { modifiers: ModifierRow[] }>> {
+  const { data: links, error: e1 } = await sb.from('product_modifier_groups').select('group_id').eq('product_name', productName)
+  fail(e1)
+  const ids = ((links ?? []) as Array<{ group_id: string }>).map(l => l.group_id)
+  if (!ids.length) return []
+  const { data: groups, error: e2 } = await sb.from('modifier_groups').select('*').in('id', ids).eq('is_active', true)
+  fail(e2)
+  const mods = await getModifiers(ids)
+  return ((groups ?? []) as ModifierGroupRow[]).map(g => ({ ...g, modifiers: mods.filter(m => m.group_id === g.id && m.is_active) }))
+}

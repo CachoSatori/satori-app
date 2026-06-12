@@ -44,3 +44,23 @@ describe('posPricing — caso de referencia: Mojito + Licor obligatorio', () => 
     expect(computeItemPrice(NaN as unknown as number, [{ id: 'x', name: 'x', price_delta_crc: NaN as unknown as number }])).toBe(0)
   })
 })
+
+describe('cursos (F2) — default por tipo y ciclo de un tap', () => {
+  it('tipos de bebida → curso bebida', async () => {
+    const { defaultCourseForTipo } = await import('./posPricing')
+    expect(defaultCourseForTipo('Bebidas')).toBe('bebida')
+    expect(defaultCourseForTipo('LICORES')).toBe('bebida')
+  })
+  it('entradas → entrada; el resto → principal', async () => {
+    const { defaultCourseForTipo } = await import('./posPricing')
+    expect(defaultCourseForTipo('Entradas')).toBe('entrada')
+    expect(defaultCourseForTipo('Rolls')).toBe('principal')
+    expect(defaultCourseForTipo('')).toBe('principal')
+  })
+  it('nextCourse cicla bebida→entrada→principal→bebida', async () => {
+    const { nextCourse } = await import('./posPricing')
+    expect(nextCourse('bebida')).toBe('entrada')
+    expect(nextCourse('entrada')).toBe('principal')
+    expect(nextCourse('principal')).toBe('bebida')
+  })
+})

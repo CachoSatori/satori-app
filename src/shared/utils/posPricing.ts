@@ -42,3 +42,20 @@ export function validateItemSelections(groups: PosModifierGroup[], selectedByGro
   }
   return null
 }
+
+// ── Cursos (F2) ───────────────────────────────────────────────
+export type PosCourse = 'bebida' | 'entrada' | 'principal'
+export const COURSE_ORDER: PosCourse[] = ['bebida', 'entrada', 'principal']
+
+/** Curso default según el tipo del catálogo (product_map.tipo). Un tap lo cambia. */
+export function defaultCourseForTipo(tipo: string): PosCourse {
+  const t = (tipo || '').toLowerCase()
+  if (/bebida|licor|cervez|vino|cocktail|coctel|cafe|café|refresco/.test(t)) return 'bebida'
+  if (/entrada|appetizer|tapa/.test(t)) return 'entrada'
+  return 'principal'
+}
+
+/** Siguiente curso al tocar el chip (cicla bebida → entrada → principal → bebida). */
+export function nextCourse(c: PosCourse): PosCourse {
+  return COURSE_ORDER[(COURSE_ORDER.indexOf(c) + 1) % COURSE_ORDER.length]
+}

@@ -1,0 +1,8 @@
+MODO AUTÓNOMO — TRAMO 3 (próxima ventana de uso). Mismos GUARDRAILS NOCTURNOS: nada a main, cero contacto con prod, Tarea A en pausa hasta confirmación diurna de la dueña, staging solo con trabajo completo, DDL aditivo a staging, sagrados intactos, ambigüedades = DECISIÓN-NOCTURNA y seguir.
+
+AUDITORÍA PRIMERO: leé REPORTE-NOCHE.md y el estado real de ramas/builds/tests. Lo que el tramo 2 dejó a medias se completa o revierte ANTES de empezar nada nuevo.
+COMPLETAR F2: lo que falte del comandero + KDS según PROMPT-TRAMO-2.md, hasta dejarlo probable de punta a punta en staging (abrir mesa → pedido con modificadores → marchar → verlo en el KDS con timer).
+PRECIO DE VENTA PoS (resuelve la DECISIÓN-NOCTURNA #7): migración aditiva con precio de venta por producto (nullable) + edición inline en Admin → Catálogo PoS + indicador visible de "productos sin precio cargado". El PoS no permite enviar ítems sin precio. Los PRECIOS REALES los carga la dueña — vos dejá 3-4 de ejemplo en seeds marcados como demo.
+SPIKE PUENTE DE IMPRESIÓN (F0 del plan PoS, diseñado como EMBRIÓN DEL HUB LOCAL F5): servicio local mínimo (Node) en carpeta print-bridge/ del repo: recibe trabajos de impresión por HTTP en LAN y habla ESC/POS con la 3nStar RPT004 por red. SIN hardware esta noche: incluí modo simulación (render del ticket a texto/log) + README con instalación en la mini-PC y cómo probarlo con la impresora real. La prueba física queda para la dueña.
+P3c — estados vacíos elegantes en los módulos existentes (el pendiente eterno).
+REPORTE CONSOLIDADO: actualizá REPORTE-NOCHE.md con TODO (tramos 1+2+3), todas las DECISIÓN-NOCTURNA, y el "Checklist de la mañana" completo y actualizado para la dueña.

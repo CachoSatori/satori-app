@@ -49,6 +49,11 @@ export default defineConfig({
       injectRegister: 'auto',
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // 404.html es el fallback SERVER-SIDE de GitHub Pages — la app nunca lo pide.
+        // En staging además se borra del dist post-build (Cloudflare usa su propio
+        // fallback): si quedara en el manifest, el SW pediría un archivo inexistente
+        // al instalar → instalación fallida → SW 'redundant' (bug encontrado 06-12).
+        globIgnores: ['404.html'],
         importScripts: [`${BASE}sw-share.js`],   // handler del Share Target
         navigateFallback: `${BASE}index.html`,
         navigateFallbackAllowlist: [new RegExp('^' + BASE)],

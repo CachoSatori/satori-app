@@ -3,6 +3,19 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — Hardening del update de la PWA (incidente prod) — EN STAGING
+- **Bug real encontrado**: el `rm -f dist/404.html` del fix de deep links dejaba `404.html` en el
+  manifest del SW de staging → instalación fallaba → SW `redundant` (PWA de staging muerta desde la
+  mañana). Fix: `globIgnores: ['404.html']` (prod no lo precachea tampoco — es fallback server-side).
+- **Watchdog de arranque** (index.html): si la app no marca boot OK en 15s y hay un SW controlando,
+  se des-registra el SW + se vacía Cache Storage + recarga UNA vez (guard sessionStorage anti-loop).
+  IndexedDB (outbox/caché de datos offline) intacto. Señal de boot: useAuth al resolver la sesión.
+- **Anti-loop del auto-reload** por controllerchange (máx 1 recarga/60s) + **chequeo de updates
+  cada 60 min** (tablets/TVs abiertas días enteros también actualizan).
+- **Probado con harness local de 2 versiones + SW saboteado** (Playwright): SW de staging instala y
+  controla ✓ · deploy nuevo se recupera solo ✓ · cliente con SW roto se auto-sana al llegar el
+  deploy bueno ✓. Pase a main PREPARADO, gateado a validación en staging.
+
 ## 🆕 Novedades 2026-06-12 (tarde) — Operación por roles EN STAGING (rama `operacion-roles` → staging)
 - **Foto de factura de proveedor — guardada y visible** (prioridad máxima de la dueña): bucket
   privado `facturas` (creado vía API, sin pasos manuales), fotos vinculadas al pago

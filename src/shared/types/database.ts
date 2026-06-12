@@ -132,6 +132,8 @@ export interface CashMovement {
   account_id: string | null         // cuenta contable explícita del P&L (FIX 4)
   created_at: string
   updated_at: string
+  client_op_id?: string | null      // idempotencia del replay offline (mig 021)
+  _pending?: boolean                // SOLO cliente: encolado en la outbox, sin sincronizar
 }
 
 // ── Cierre del día (2 fases) ──────────────────────────────────

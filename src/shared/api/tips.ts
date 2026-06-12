@@ -1,30 +1,41 @@
 import { supabase } from './supabase'
 import type { TipSession, TipEntry, Employee, RoleTipPoints } from '../types/database'
+import { cachedFetch } from '../offline/cache'
+import { enqueue } from '../offline/outbox'
+
+// ── Offline (FASE A/B — ver OFFLINE.md) ─────────────────────
+const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false
+const NETWORK_ERR = /failed to fetch|networkerror|load failed|fetch failed|timeout de red|se cortó la conexión/i
+const isNetErr = (e: unknown) => isOffline() || NETWORK_ERR.test(e instanceof Error ? e.message : String(e))
 
 // ── Sesiones ────────────────────────────────────────────────
 
 export async function getTipSessions(): Promise<TipSession[]> {
   // limit alto: cubre años de turnos (138+ históricos y creciendo). Antes era 60,
   // por eso al filtrar meses viejos no aparecían datos.
-  const { data, error } = await supabase
-    .from('tip_sessions')
-    .select('*')
-    .order('session_date', { ascending: false })
-    .limit(3000)
-  if (error) throw new Error(error.message)
-  return data as TipSession[]
+  return cachedFetch('tips:sessions', async () => {
+    const { data, error } = await supabase
+      .from('tip_sessions')
+      .select('*')
+      .order('session_date', { ascending: false })
+      .limit(3000)
+    if (error) throw new Error(error.message)
+    return data as TipSession[]
+  })
 }
 
 export async function getOpenTipSession(): Promise<TipSession | null> {
-  const { data, error } = await supabase
-    .from('tip_sessions')
-    .select('*')
-    .eq('status', 'open')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  return data as TipSession | null
+  return cachedFetch('tips:open-session', async () => {
+    const { data, error } = await supabase
+      .from('tip_sessions')
+      .select('*')
+      .eq('status', 'open')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    return data as TipSession | null
+  })
 }
 
 export async function createTipSession(params: {
@@ -135,12 +146,14 @@ export async function getTipPayoutsSince(sinceDate: string): Promise<TipPayoutSu
 // ── Entradas ────────────────────────────────────────────────
 
 export async function getTipEntriesBySession(sessionId: string): Promise<TipEntry[]> {
-  const { data, error } = await supabase
-    .from('tip_entries')
-    .select('*')
-    .eq('session_id', sessionId)
-  if (error) throw new Error(error.message)
-  return data as TipEntry[]
+  return cachedFetch(`tips:entries:${sessionId}`, async () => {
+    const { data, error } = await supabase
+      .from('tip_entries')
+      .select('*')
+      .eq('session_id', sessionId)
+    if (error) throw new Error(error.message)
+    return data as TipEntry[]
+  })
 }
 
 export async function upsertTipEntry(entry: {
@@ -151,22 +164,51 @@ export async function upsertTipEntry(entry: {
   tip_amount_usd: number
   covered_role?: string | null
 }): Promise<TipEntry> {
-  const { data, error } = await supabase
-    .from('tip_entries')
-    .upsert({ ...entry, covered_role: entry.covered_role ?? null }, { onConflict: 'session_id,employee_id' })
-    .select()
-    .single()
-  if (error) throw new Error(error.message)
-  return data as TipEntry
+  const row = { ...entry, covered_role: entry.covered_role ?? null }
+  const queueAndReturn = async (): Promise<TipEntry> => {
+    const client_op_id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    await enqueue({
+      client_op_id, table: 'tip_entries', op: 'upsert',
+      payload: { onConflict: 'session_id,employee_id', row: { ...row, client_op_id } },
+      created_at: now,
+    })
+    // Optimista local: el replay del upsert converge por (session_id, employee_id).
+    return { id: client_op_id, ...row, points: 0, payout_crc: 0, created_at: now, updated_at: now, _pending: true } as unknown as TipEntry
+  }
+  if (isOffline()) return queueAndReturn()
+  try {
+    const { data, error } = await supabase
+      .from('tip_entries')
+      .upsert(row, { onConflict: 'session_id,employee_id' })
+      .select()
+      .single()
+    if (error) throw new Error(error.message)
+    return data as TipEntry
+  } catch (e) {
+    if (isNetErr(e)) return queueAndReturn()
+    throw e
+  }
 }
 
 export async function deleteTipEntry(sessionId: string, employeeId: string): Promise<void> {
-  const { error } = await supabase
-    .from('tip_entries')
-    .delete()
-    .eq('session_id', sessionId)
-    .eq('employee_id', employeeId)
-  if (error) throw new Error(error.message)
+  const queueOp = () => enqueue({
+    client_op_id: crypto.randomUUID(), table: 'tip_entries', op: 'delete',
+    payload: { match: { session_id: sessionId, employee_id: employeeId } },
+    created_at: new Date().toISOString(),
+  })
+  if (isOffline()) { await queueOp(); return }
+  try {
+    const { error } = await supabase
+      .from('tip_entries')
+      .delete()
+      .eq('session_id', sessionId)
+      .eq('employee_id', employeeId)
+    if (error) throw new Error(error.message)
+  } catch (e) {
+    if (isNetErr(e)) { await queueOp(); return }
+    throw e
+  }
 }
 
 export async function savePayouts(
@@ -197,13 +239,15 @@ export async function savePayouts(
 // ── Empleados ───────────────────────────────────────────────
 
 export async function getActiveEmployees(): Promise<Employee[]> {
-  const { data, error } = await supabase
-    .from('employees')
-    .select('*')
-    .eq('is_active', true)
-    .order('full_name')
-  if (error) throw new Error(error.message)
-  return data as Employee[]
+  return cachedFetch('tips:employees-active', async () => {
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('is_active', true)
+      .order('full_name')
+    if (error) throw new Error(error.message)
+    return data as Employee[]
+  })
 }
 
 // Todos los empleados (activos e inactivos). Para Historial / Estadísticas /
@@ -221,11 +265,13 @@ export async function getAllEmployees(): Promise<Employee[]> {
 // ── Puntos por rol ──────────────────────────────────────────
 
 export async function getRoleTipPoints(): Promise<RoleTipPoints[]> {
-  const { data, error } = await supabase
-    .from('role_tip_points')
-    .select('*')
-  if (error) throw new Error(error.message)
-  return data as RoleTipPoints[]
+  return cachedFetch('tips:role-points', async () => {
+    const { data, error } = await supabase
+      .from('role_tip_points')
+      .select('*')
+    if (error) throw new Error(error.message)
+    return data as RoleTipPoints[]
+  })
 }
 
 // ── Historial de asistencia (horas por turno, todos los empleados) ──

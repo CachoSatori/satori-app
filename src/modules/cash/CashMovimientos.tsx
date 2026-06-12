@@ -342,7 +342,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                   <td style={{ textAlign: 'center' }}>
                     <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleSel(m.id)} />
                   </td>
-                  <td style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{movFecha(m) || '—'}</td>
+                  <td style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                    {movFecha(m) || '—'}
+                    {m._pending && <span title="En cola offline — se sincroniza al volver la red"
+                      style={{ marginLeft: 4, color: '#a07830', fontWeight: 700 }}>⏳</span>}
+                  </td>
                   <td style={{ fontSize: '0.78rem' }}>
                     <select className="cd-tbl-select" value={m.shift ?? ''}
                       onChange={e => handleFieldChange(m.id, 'shift', e.target.value)}

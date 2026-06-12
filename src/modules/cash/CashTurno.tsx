@@ -72,6 +72,7 @@ interface PagoRow {
   at:            number          // hora de registro (para ordenar más reciente primero)
   // persistedId: movement ID in DB — set once saved, null if unsaved
   persistedId:   string | null
+  pending?:      boolean        // en la cola offline, esperando sincronizar
 }
 
 export default function CashTurno({
@@ -147,6 +148,7 @@ export default function CashTurno({
       reference:     m.description ?? '',
       at:            new Date(m.created_at).getTime(),
       persistedId:   m.id,
+      pending:       m._pending === true,
     })), [sessionMovements, suppliers])
   // Lista mostrada = borradores no persistidos + persistidos de la base, más reciente primero
   const displayPagos = useMemo(
@@ -561,6 +563,10 @@ export default function CashTurno({
   // ── Confirmar cierre ──────────────────────────────────────
   const handleCierre = useCallback(async () => {
     if (!openSession || !profile) return
+    if (!navigator.onLine) {
+      onError('El cierre de la Caja Diaria requiere conexión — los pagos quedan guardados en cola; cerrá cuando vuelva la señal.')
+      return
+    }
     setSaving(true)
     try {
       // Persistir cualquier pago a proveedor que aún no esté en DB.
@@ -834,6 +840,7 @@ export default function CashTurno({
                   {p.method === 'Transferencia' && <span style={{ color: '#a07030' }}> · pendiente</span>}
                   {p.method !== 'Efectivo' && p.method !== 'Transferencia' && <span style={{ color: '#2a7a6a' }}> · banco</span>}
                   {!p.persistedId && <span style={{ color: '#c0392b' }}> · sin guardar</span>}
+                  {p.pending && <span style={{ color: '#a07830', fontWeight: 700 }}> · ⏳ por sincronizar</span>}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>

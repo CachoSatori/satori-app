@@ -1,8 +1,39 @@
 import { supabase } from './supabase'
 import type { CashSession, CashMovement, Supplier, MovementType } from '../types/database'
 import type { Database } from '../types/supabase.gen'
+import { cachedFetch } from '../offline/cache'
+import { enqueue, pendingOps } from '../offline/outbox'
 
 type Tables = Database['public']['Tables']
+
+// ── Offline (FASE A/B — ver OFFLINE.md) ─────────────────────
+const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false
+const NETWORK_ERR = /failed to fetch|networkerror|load failed|fetch failed|timeout de red|se cortó la conexión/i
+const isNetErr = (e: unknown) => isOffline() || NETWORK_ERR.test(e instanceof Error ? e.message : String(e))
+
+// Proyección local-first: aplica la cola pendiente sobre las filas leídas
+// (insert pendiente → aparece con _pending; update → se pisa; delete → se quita).
+// Así los ítems encolados se ven en las listas aun tras cerrar y reabrir la app.
+async function applyPendingCash(rows: CashMovement[]): Promise<CashMovement[]> {
+  let ops
+  try { ops = await pendingOps() } catch { return rows }
+  const cashOps = ops.filter(o => o.table === 'cash_movements')
+  if (!cashOps.length) return rows
+  let out = rows.slice()
+  for (const o of cashOps) {
+    if (o.op === 'insert') {
+      const row = o.payload as unknown as CashMovement
+      if (!out.some(r => r.id === row.id)) out = [{ ...row, _pending: true } as CashMovement, ...out]
+    } else if (o.op === 'update') {
+      const { match, updates } = o.payload as { match: { id: string }; updates: Partial<CashMovement> }
+      out = out.map(r => r.id === match.id ? ({ ...r, ...updates, _pending: true } as CashMovement) : r)
+    } else if (o.op === 'delete') {
+      const { match } = o.payload as { match: { id: string } }
+      out = out.filter(r => r.id !== match.id)
+    }
+  }
+  return out
+}
 
 // Red de seguridad para escrituras críticas: si una operación se cuelga (token venciendo
 // + refresh inline sin timeout, reconexión tras suspensión, red intermitente), falla VISIBLE
@@ -20,26 +51,30 @@ function withWriteTimeout<T>(p: PromiseLike<T>, ms = WRITE_TIMEOUT_MS): Promise<
 // ── Sesiones ────────────────────────────────────────────────
 
 export async function getOpenCashSession(): Promise<CashSession | null> {
-  const { data, error } = await supabase
-    .from('cash_sessions')
-    .select('*')
-    .eq('status', 'open')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  return data as CashSession | null
+  return cachedFetch('cash:open-session', async () => {
+    const { data, error } = await supabase
+      .from('cash_sessions')
+      .select('*')
+      .eq('status', 'open')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    return data as CashSession | null
+  })
 }
 
 export async function getCashSessions(limit = 3000): Promise<CashSession[]> {
-  const { data, error } = await supabase
-    .from('cash_sessions')
-    .select('*')
-    .order('session_date', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(limit)
-  if (error) throw new Error(error.message)
-  return data as CashSession[]
+  return cachedFetch(`cash:sessions:${limit}`, async () => {
+    const { data, error } = await supabase
+      .from('cash_sessions')
+      .select('*')
+      .order('session_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(limit)
+    if (error) throw new Error(error.message)
+    return data as CashSession[]
+  })
 }
 
 export async function createCashSession(params: {
@@ -112,13 +147,16 @@ export async function closeCashSession(
 // ── Movimientos ─────────────────────────────────────────────
 
 export async function getCashMovements(sessionId: string): Promise<CashMovement[]> {
-  const { data, error } = await supabase
-    .from('cash_movements')
-    .select('*')
-    .eq('session_id', sessionId)
-    .order('created_at', { ascending: true })
-  if (error) throw new Error(error.message)
-  return data as CashMovement[]
+  const rows = await cachedFetch(`cash:movements:${sessionId}`, async () => {
+    const { data, error } = await supabase
+      .from('cash_movements')
+      .select('*')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true })
+    if (error) throw new Error(error.message)
+    return data as CashMovement[]
+  })
+  return (await applyPendingCash(rows)).filter(r => r.session_id === sessionId)
 }
 
 // PERF FIX: filter by date range instead of hard limit
@@ -127,13 +165,16 @@ export async function getAllCashMovements(days = 1000): Promise<CashMovement[]> 
   since.setDate(since.getDate() - days)
   const sinceStr = since.toISOString().slice(0, 10)
 
-  const { data, error } = await supabase
-    .from('cash_movements')
-    .select('*')
-    .gte('created_at', sinceStr + 'T00:00:00Z')
-    .order('created_at', { ascending: false })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as CashMovement[]
+  const rows = await cachedFetch(`cash:all-movements:${days}`, async () => {
+    const { data, error } = await supabase
+      .from('cash_movements')
+      .select('*')
+      .gte('created_at', sinceStr + 'T00:00:00Z')
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (data ?? []) as CashMovement[]
+  })
+  return applyPendingCash(rows)
 }
 
 export async function createCashMovement(movement: {
@@ -155,41 +196,71 @@ export async function createCashMovement(movement: {
   account_id?: string | null
   status?: 'aprobado' | 'pendiente' | 'rechazado'   // override; por defecto se deriva del método
 }): Promise<CashMovement> {
-  const { data, error } = await withWriteTimeout(supabase
-    .from('cash_movements')
-    .insert({
-      ...movement,   // la clave `status` de abajo pisa el status del spread
-      subcategory:   movement.subcategory   ?? '',
-      supplier_id:   movement.supplier_id   ?? null,
-      supplier_name: movement.supplier_name ?? '',
-      employee_name: movement.employee_name ?? '',
-      shift:         movement.shift         ?? '',
-      account_id:    movement.account_id    ?? null,
-      status:        movement.status ?? (movement.method === 'Transferencia' ? 'pendiente' : 'aprobado'),
-    })
-    .select()
-    .single())
-  if (error) throw new Error(error.message)
-  return data as CashMovement
+  // id y client_op_id se generan en el CLIENTE: así el replay offline es
+  // idempotente (021: client_op_id UNIQUE) y las ediciones/borrados encolados
+  // después referencian un id que será el mismo en el servidor.
+  const id = crypto.randomUUID()
+  const now = new Date().toISOString()
+  const row = {
+    id,
+    client_op_id:  id,
+    ...movement,   // la clave `status` de abajo pisa el status del spread
+    subcategory:   movement.subcategory   ?? '',
+    supplier_id:   movement.supplier_id   ?? null,
+    supplier_name: movement.supplier_name ?? '',
+    employee_name: movement.employee_name ?? '',
+    shift:         movement.shift         ?? '',
+    account_id:    movement.account_id    ?? null,
+    status:        movement.status ?? (movement.method === 'Transferencia' ? 'pendiente' : 'aprobado'),
+    created_at:    now,
+    updated_at:    now,
+  }
+  const queueAndReturn = async (): Promise<CashMovement> => {
+    await enqueue({ client_op_id: id, table: 'cash_movements', op: 'insert', payload: row, created_at: now })
+    return { ...row, _pending: true } as unknown as CashMovement
+  }
+  if (isOffline()) return queueAndReturn()
+  try {
+    const { data, error } = await withWriteTimeout(supabase
+      .from('cash_movements')
+      .insert(row as unknown as Tables['cash_movements']['Insert'])
+      .select()
+      .single())
+    if (error) throw new Error(error.message)
+    return data as CashMovement
+  } catch (e) {
+    if (isNetErr(e)) return queueAndReturn()
+    throw e
+  }
+}
+
+// Encola una mutación de caja (update/delete) si no hay red o la red falló.
+async function queueCashMutation(op: 'update' | 'delete', payload: Record<string, unknown>): Promise<void> {
+  await enqueue({ client_op_id: crypto.randomUUID(), table: 'cash_movements', op, payload, created_at: new Date().toISOString() })
 }
 
 export async function updateCashMovement(
   id: string,
   updates: Partial<CashMovement>,
 ): Promise<void> {
-  const { error } = await supabase
-    .from('cash_movements')
-    .update(updates)
-    .eq('id', id)
-  if (error) throw new Error(error.message)
+  // _pending es un flag SOLO de cliente (proyección de la cola) — nunca viaja a la DB.
+  const { _pending, ...clean } = updates
+  void _pending
+  if (isOffline()) return queueCashMutation('update', { match: { id }, updates: clean })
+  try {
+    const { error } = await withWriteTimeout(supabase
+      .from('cash_movements')
+      .update(clean as unknown as Tables['cash_movements']['Update'])
+      .eq('id', id))
+    if (error) throw new Error(error.message)
+  } catch (e) {
+    if (isNetErr(e)) return queueCashMutation('update', { match: { id }, updates: clean })
+    throw e
+  }
 }
 
 export async function updateMovementStatus(id: string, status: 'aprobado' | 'pendiente' | 'rechazado'): Promise<void> {
-  const { error } = await supabase
-    .from('cash_movements')
-    .update({ status })
-    .eq('id', id)
-  if (error) throw new Error(error.message)
+  return updateCashMovement(id, { status } as Partial<CashMovement>)
 }
 
 // Inserta un movimiento a nivel día (sin turno) — para movimientos manuales
@@ -221,11 +292,17 @@ export async function createDayMovement(m: {
 }
 
 export async function deleteCashMovement(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('cash_movements')
-    .delete()
-    .eq('id', id)
-  if (error) throw new Error(error.message)
+  if (isOffline()) return queueCashMutation('delete', { match: { id } })
+  try {
+    const { error } = await withWriteTimeout(supabase
+      .from('cash_movements')
+      .delete()
+      .eq('id', id))
+    if (error) throw new Error(error.message)
+  } catch (e) {
+    if (isNetErr(e)) return queueCashMutation('delete', { match: { id } })
+    throw e
+  }
 }
 
 // Descartar un turno (apertura por error, fecha equivocada): borra sus
@@ -341,13 +418,15 @@ export async function recordCierreRetiro(params: {
 // ── Proveedores ─────────────────────────────────────────────
 
 export async function getSuppliers(): Promise<Supplier[]> {
-  const { data, error } = await supabase
-    .from('suppliers')
-    .select('*')
-    .eq('is_active', true)
-    .order('name')
-  if (error) throw new Error(error.message)
-  return data as Supplier[]
+  return cachedFetch('cash:suppliers', async () => {
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
+    if (error) throw new Error(error.message)
+    return data as Supplier[]
+  })
 }
 
 export async function upsertSupplier(params: {

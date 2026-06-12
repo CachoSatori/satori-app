@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import { AuthProvider, useAuth } from './shared/hooks/useAuth'
 import { ManagerOverrideProvider } from './shared/ManagerOverride'
 import ErrorBoundary from './shared/ErrorBoundary'
+import OfflineBanner from './shared/offline/OfflineBanner'
 import type { UserRole } from './shared/types/database'
 import LoginPage from './pages/auth/LoginPage'
 import HomePage from './pages/HomePage'
@@ -179,6 +180,7 @@ export default function App() {
             <AppRoutes />
           </ErrorBoundary>
           <FloatingHomeBtn />
+          <OfflineBanner />
         </BrowserRouter>
       </ManagerOverrideProvider>
     </AuthProvider>

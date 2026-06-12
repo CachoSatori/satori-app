@@ -14,7 +14,11 @@
 - **Base dinámica PWA**: prod sigue en `/satori-app/` (GitHub Pages), staging sirve en `/` (Cloudflare Pages) — un solo código.
 
 ### Migraciones 018+019+020 APLICADAS EN PROD ✅ (2026-06-12)
-Ejecutadas con autorización única de la dueña vía Management API (`MIGRACIONES-PROD-JUN11.sql`, archivo exacto del repo, guardia anti-staging probada). Verificación: 3 filas `ok=true`. El **check de mediodía (018) ya funciona en producción**. ⚠️ Housekeeping: 018-020 no quedaron anotadas en `schema_migrations` de prod (si algún día se corre `db push` contra prod, las re-intenta — son idempotentes).
+Ejecutadas con autorización única de la dueña vía Management API (`MIGRACIONES-PROD-JUN11.sql`, archivo exacto del repo, guardia anti-staging probada). Verificación: 3 filas `ok=true`. El **check de mediodía (018) ya funciona en producción**.
+
+> ⚠️ **Housekeeping pendiente (instrucción de la dueña):** las versiones **018/019/020 NO quedaron registradas** en `supabase_migrations.schema_migrations` de prod (se corrió solo el archivo consolidado). **El día que se use `supabase db push` contra prod, ANTES anotarlas**:
+> `insert into supabase_migrations.schema_migrations(version) values ('018'),('019'),('020') on conflict do nothing;`
+> Si se olvida, `db push` las re-intenta — son idempotentes, no rompe, pero ensucia el log.
 
 ### Staging = ESPEJO de datos reales + entorno operativo completo
 - `scripts/clone-prod-to-staging.sh --yes` re-sincroniza todo con un comando (guardrails adentro; verificación 30/30 tablas + 3 spot-checks financieros al centavo). Login en staging = credenciales de prod. Usuarios de prueba: `test-cajero@staging.satori` / `test-manager@staging.satori` (pass `staging-test-2026`).

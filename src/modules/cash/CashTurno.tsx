@@ -134,9 +134,15 @@ export default function CashTurno({
   const [pagos,    setPagos]    = useState<PagoRow[]>([])
   const [ingresos, setIngresos] = useState<IngresoRow[]>([])
 
-  // Pagos a proveedor ya persistidos en la base (fuente de verdad)
+  // Pagos a proveedor ya persistidos en la base (fuente de verdad).
+  // VISIBILIDAD (fix 06-12): desde la corrección de pagos del 06-11 las
+  // Transferencias se guardan con caja_origen='Banco' (no tocan la caja física)
+  // y el filtro viejo (solo 'Caja Proveedores') las dejaba fuera de esta lista.
+  // El manager necesita ver TODOS los pagos del día (efectivo Y transferencia).
+  // La matemática NO cambia: provEfDB/pagosEf/restante filtran por method='Efectivo'.
   const dbPagos: PagoRow[] = useMemo(() => sessionMovements
-    .filter(m => m.movement_type === 'egreso_mercaderia' && m.caja_origen === 'Caja Proveedores' && m.status !== 'rechazado')
+    .filter(m => m.movement_type === 'egreso_mercaderia' && m.status !== 'rechazado'
+      && (m.caja_origen === 'Caja Proveedores' || (m.caja_origen === 'Banco' && m.method !== 'Efectivo')))
     .map(m => ({
       id:            m.id,
       supplier_id:   m.supplier_id ?? '',
@@ -242,8 +248,8 @@ export default function CashTurno({
   // Pagos visibles en esta vista (lista en memoria) — para totales del panel
   const pagosEf  = displayPagos.filter(p => p.supplier_id && p.method === 'Efectivo')
                         .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
-  const pagosTr  = displayPagos.filter(p => p.supplier_id && p.method === 'Transferencia')
-                        .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
+  const pagosTrList = displayPagos.filter(p => p.supplier_id && p.method === 'Transferencia')
+  const pagosTr  = pagosTrList.reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
   // SINPE/Bitcoin: pagados al instante desde el Banco (no tocan la caja física)
   const pagosElec = displayPagos.filter(p => p.supplier_id && p.method !== 'Efectivo' && p.method !== 'Transferencia')
                         .reduce((s, p) => s + (Number(p.amount_crc) || 0), 0)
@@ -837,7 +843,7 @@ export default function CashTurno({
                   {p.method === 'Efectivo' ? '💵 Efectivo' : p.method === 'Transferencia' ? '🏦 Transferencia' : p.method === 'SINPE' ? '📲 SINPE' : `₿ ${p.method}`}
                   {p.reference ? ` · ${p.reference}` : ''}
                   {` · ${new Date(p.at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`}
-                  {p.method === 'Transferencia' && <span style={{ color: '#a07030' }}> · pendiente</span>}
+                  {p.method === 'Transferencia' && <span style={{ color: '#a07030' }}> · pendiente · no descuenta efectivo</span>}
                   {p.method !== 'Efectivo' && p.method !== 'Transferencia' && <span style={{ color: '#2a7a6a' }}> · banco</span>}
                   {!p.persistedId && <span style={{ color: '#c0392b' }}> · sin guardar</span>}
                   {p.pending && <span style={{ color: '#a07830', fontWeight: 700 }}> · ⏳ por sincronizar</span>}
@@ -865,7 +871,7 @@ export default function CashTurno({
           {pagosTr > 0 && (
             <div className="cd-pend-bar">
               <span>🕐</span>
-              <div><strong>{fi(pagosTr)}</strong> por transferencia — pendiente de confirmación</div>
+              <div>Pagos por transferencia (pendientes): <strong>{pagosTrList.length}</strong> por <strong>{fi(pagosTr)}</strong> — no descuentan efectivo (se confirman en Pendientes)</div>
             </div>
           )}
           {pagosElec > 0 && (

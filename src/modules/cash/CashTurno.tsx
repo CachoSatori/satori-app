@@ -34,20 +34,20 @@ interface Props {
 // Otros egresos del turno que salen de la Caja Diaria (no son mercadería).
 // Las propinas NO van acá — se pagan en el cierre del turno.
 // Categorías ÚNICAS (corrección de la dueña 06-11): un solo "Delivery" y un solo
-// "Propinas" — el detalle (SINPE/tarjeta/turno AM-PM/dueños) va en la NOTA.
-// El destino contable se deriva de la nota al guardar (ver confirmEgreso):
-//  · Delivery con nota electrónica (sinpe/lafise/bitcoin/tarjeta) = pass-through, no P&L
-//  · Delivery con nota "dueños" = egreso_socios (equity, no P&L)
-//  · Delivery normal (repartidor en efectivo) = operativo a7100
-//  · Propinas = SIEMPRE pass-through (la plata es del staff, no gasto del negocio)
+// "Propinas" — el detalle (SINPE/tarjeta/turno AM-PM…) va en la NOTA. "Delivery
+// dueños" queda como opción propia (decisión de la dueña: es egreso de socios,
+// contabilidad distinta). El destino contable del Delivery se deriva de la nota
+// al guardar (ver confirmEgreso): electrónico = pass-through sin P&L; si no, a7100.
+// Propinas = SIEMPRE pass-through (la plata es del staff, no gasto del negocio).
 // Los movimientos históricos con las subcategorías viejas ("Delivery por SINPE",
-// "Propinas por Lafise", "Delivery dueños"…) quedan intactos en datos y reportes.
+// "Propinas por Lafise"…) quedan intactos en datos y reportes.
 const CONCEPTOS_EGRESO = [
-  { id: 'delivery',  label: 'Delivery (detalle en la nota)',     type: 'egreso_operativo', sub: 'Delivery',  account: 'a7100' },
-  { id: 'propinas',  label: 'Propinas (detalle en la nota)',     type: 'egreso_personal',  sub: 'Propinas',  account: null },
-  { id: 'operativo', label: 'Operativo (gas, luz, mantenim…)',   type: 'egreso_operativo', sub: 'Operativo', account: null },
-  { id: 'salario',   label: 'Salario / adelanto en efectivo',    type: 'egreso_personal',  sub: 'Salario',   account: 'a6200' },
-  { id: 'otro',      label: 'Otro (especificar)',                type: 'egreso_operativo', sub: 'Otro',      account: null },
+  { id: 'delivery',     label: 'Delivery (detalle en la nota)',   type: 'egreso_operativo', sub: 'Delivery',        account: 'a7100' },
+  { id: 'deliv_duenos', label: 'Delivery dueños',                 type: 'egreso_socios',    sub: 'Delivery dueños', account: null },
+  { id: 'propinas',     label: 'Propinas (detalle en la nota)',   type: 'egreso_personal',  sub: 'Propinas',        account: null },
+  { id: 'operativo',    label: 'Operativo (gas, luz, mantenim…)', type: 'egreso_operativo', sub: 'Operativo',       account: null },
+  { id: 'salario',      label: 'Salario / adelanto en efectivo',  type: 'egreso_personal',  sub: 'Salario',         account: 'a6200' },
+  { id: 'otro',         label: 'Otro (especificar)',              type: 'egreso_operativo', sub: 'Otro',            account: null },
 ] as const
 
 // Evita que una request colgada (token vencido / red) deje "Cerrando…" para siempre.
@@ -492,12 +492,10 @@ export default function CashTurno({
     setEgSaving(true)
     // El detalle vive en la nota → de ahí se deriva el destino contable del Delivery:
     // electrónico (el cliente ya pagó, la caja solo retira efectivo) = pass-through;
-    // "dueños" = egreso_socios (equity). El resto: repartidor en efectivo → a7100.
-    const notaNorm = draftEgNota.toLowerCase()
-    const esElectronico = /sinpe|lafise|bitcoin|tarjeta|datafono|datáfono/.test(notaNorm)
-    const esDuenos = /due[nñ]o/.test(notaNorm)
-    const movType: MovementType = c.id === 'delivery' && esDuenos ? 'egreso_socios' : (c.type as MovementType)
-    const movAccount = c.id === 'delivery' ? (esElectronico || esDuenos ? null : c.account) : c.account
+    // el resto (repartidor en efectivo) → a7100. "Delivery dueños" es opción propia.
+    const esElectronico = /sinpe|lafise|bitcoin|tarjeta|datafono|datáfono/.test(draftEgNota.toLowerCase())
+    const movType = c.type as MovementType
+    const movAccount = c.id === 'delivery' && esElectronico ? null : c.account
     try {
       const mov = await createCashMovement({
         session_id:    openSession.id,
@@ -1282,11 +1280,9 @@ export default function CashTurno({
                 style={{ width: '100%' }} onChange={e => setDraftEgNota(e.target.value)} />
               {(draftEgConcepto === 'delivery' || draftEgConcepto === 'propinas') && (
                 <div style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: 4 }}>
-                  El detalle va acá: <em>"por SINPE", "tarjeta", "turno AM", "dueños"…</em> — la nota se ve en el listado
+                  El detalle va acá: <em>"por SINPE", "tarjeta", "turno AM"…</em> — la nota se ve en el listado
                   {draftEgConcepto === 'delivery' && /sinpe|lafise|bitcoin|tarjeta|datafono|datáfono/.test(draftEgNota.toLowerCase()) &&
                     <strong> · cobrado electrónico → no cuenta como gasto (retiro de efectivo)</strong>}
-                  {draftEgConcepto === 'delivery' && /due[nñ]o/.test(draftEgNota.toLowerCase()) &&
-                    <strong> · dueños → se registra como egreso de socios</strong>}
                 </div>
               )}
             </div>

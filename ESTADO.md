@@ -3,6 +3,41 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche, sprint largo) — COMANDERO PROFESIONAL — EN STAGING (rama `comandero-pro`)
+Investigación de PoS comerciales + auditoría de callejones sin salida + implementación. SPEC en
+`SPEC-COMANDERO-UX.md` (Lavu/Toast/TouchBistro/Square con fuentes, mapeo, 8 dead-ends con severidad,
+backlog P0/P1/P2, decisiones D1-D4). Smoke E2E completo verde en staging, 63/63 tests, builds OK.
+- **P0-a Numpad pax pro**: dígitos ≥56px, ⌫ (borra último), C (limpia), tope 99, valor grande,
+  confirmación "✓ Confirmar N pax". Pax **editable post-apertura con traza** en `pos_orders.notes`
+  (cero DDL). Verificado E2E: 1→2→⌫→C→5 y edición 5→3 con traza `pax 5→3 · usuario · hora`.
+- **P0-b Menú visual en grid**: pestañas de categoría (subclasificación→tipo→Otros) + tiles grandes
+  con nombre y **precio final**, borde de color por estación (teal cocina / dorado barra), solo
+  productos activos con precio. **Tap directo agrega** (2 taps) si no hay modificadores obligatorios;
+  si los hay, abre el picker (D1). Búsqueda por texto sigue arriba. Helper puro `comanderoMenu.ts` + 3 tests.
+- **P1 callejones sin salida**: cancelar mesa vacía (C1) · **deshacer marchar** con ventana de 20s
+  que solo revierte lo aún 'marchado' (C2, el KDS lo saca por realtime) · **editar ítem no marchado**
+  (✎ → picker prefilled, reemplazo seguro: entra el nuevo y sale el viejo) (C3) · confirmación al
+  descartar selección (C6). Todo con traza en notes.
+- **P1-b táctil**: targets ≥44-48px en numpad/grid/marchar/×/✎, feedback `:active` (.cm-tap),
+  **total de la mesa siempre visible** en el header mientras se comanda (C5, mismo `computeTotals`).
+- **API** (`pos.ts`): `marchar` devuelve ids · `unmarchar` · `cancelEmptyOrder` · `appendOrderNote`.
+  Cero DDL nuevo, sagrados intactos, `computeTotals` solo se reusa.
+- **Pendiente (P2, presupuesto)**: cantidad rápida ×N, repetir ítem, favoritos/más-vendidos,
+  void post-cocina con motivo (necesita F3/impresión). Anotado en `SPEC-COMANDERO-UX.md` §4 y en
+  `PROMPT-CONTINUACION.md`.
+
+### Plan de prueba física para la dueña (comandero pro, en staging)
+1. **Comandero** → tocá una mesa libre. **Numpad nuevo**: marcá 1, 2, tocá ⌫ (queda 1), tocá C
+   (se limpia), marcá tu número real, Confirmar. Probá pasar de 99 (no deja).
+2. **Menú grid**: tocá una **categoría** (pestañas arriba) y un **producto** — si no tiene
+   obligatorios entra de una; si los tiene, se abre el detalle. Mirá el **total arriba** subir.
+3. **Corregir**: tocá `👥 N pax ✎` y cambiá el número. Tocá `✎` en un ítem para cambiar
+   asiento/curso/modificadores. Tocá `×` para quitar un ítem que aún no mandaste.
+4. **Marchar y arrepentirte**: tocá "Marchar TODO" → aparece **↩ DESHACER (20s)** → tocalo:
+   el ítem vuelve a "por marchar" y desaparece del KDS.
+5. **Mesa por error**: abrí una mesa sin cargar nada → botón **✕ Cancelar mesa** la borra del plano.
+6. Confirmá que todo se siente **grande y con respuesta al tocar** en la tablet.
+
 ## 🆕 2026-06-12 (noche) — Hardening del update de la PWA (incidente prod) — EN STAGING
 - **Bug real encontrado**: el `rm -f dist/404.html` del fix de deep links dejaba `404.html` en el
   manifest del SW de staging → instalación fallaba → SW `redundant` (PWA de staging muerta desde la

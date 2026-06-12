@@ -5,7 +5,7 @@ import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
 import {
   getLocations, getSalonTables, getOpenOrders, openOrder, updateOrderPax,
   getOrderItems, addOrderItem, updateItemCourse, deleteOrderItem, marchar,
-  searchProducts, getProductGroups, getPriceMap, transferOrder,
+  searchProducts, getProductGroups, getPriceMap, transferOrder, getProductMetaMap,
 } from '../../shared/api/pos'
 import type { PosLocation, SalonTable, PosOrder, PosOrderItem, ModifierGroupRow, ModifierRow, PosPrice } from '../../shared/api/pos'
 import { getAllProfiles } from '../../shared/api/admin'
@@ -21,7 +21,7 @@ function toBillItem(it: PosOrderItem): BillItem {
   return {
     product_name: it.product_name, qty: it.qty, price_final_crc: it.base_price_crc,
     modifiers: it.modifiers.map(m => ({ name: m.name, price_delta_crc: m.price_delta_crc })),
-    tax_type: it.tax_type, seat: it.seat,
+    tax_type: it.tax_type, seat: it.seat, applies_service: it.aplica_servicio !== false,
   }
 }
 
@@ -191,8 +191,11 @@ function PaxModal({ initial, onCancel, onConfirm }: { initial: number | null; on
 }
 
 function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
+  // (meta de productos para snapshots de estación/subcategoría/servicio)
   order: PosOrder; priceMap: Map<string, PosPrice>; onBack: () => void; onError: (e: string) => void; onEditPax: () => void
 }) {
+  const [metaMap, setMetaMap] = useState<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean }>>(new Map())
+  useEffect(() => { getProductMetaMap().then(setMetaMap).catch(() => { /* snapshots con defaults */ }) }, [])
   const [items, setItems]   = useState<PosOrderItem[]>([])
   const [search, setSearch] = useState('')
   const [opts, setOpts]     = useState<Array<{ nombre: string; tipo: string }>>([])
@@ -299,6 +302,7 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
 
       {picking && (
         <ItemPicker product={picking} price={priceMap.get(picking.nombre) ?? null} pax={order.pax} orderId={order.id}
+          meta={metaMap.get(picking.nombre) ?? null}
           onDone={() => { setPicking(null); load() }} onCancel={() => setPicking(null)} onError={onError} />
       )}
 
@@ -436,7 +440,8 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
 }
 
 /** Modal de ítem: modificadores (obligatorios bloquean), curso y asiento. */
-function ItemPicker({ product, price, pax, orderId, onDone, onCancel, onError }: {
+function ItemPicker({ product, price, pax, orderId, meta, onDone, onCancel, onError }: {
+  meta: { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean } | null
   product: { nombre: string; tipo: string }; price: PosPrice | null; pax: number; orderId: string
   onDone: () => void; onCancel: () => void; onError: (e: string) => void
 }) {
@@ -466,6 +471,10 @@ function ItemPicker({ product, price, pax, orderId, onDone, onCancel, onError }:
         order_id: orderId, product_name: product.nombre, qty: 1,
         base_price_crc: base ?? 0, modifiers: chosen.map(m => ({ id: m.id, name: m.name, price_delta_crc: m.price_delta_crc })),
         price_crc: total, tax_type: taxType, seat, course,
+        // Snapshots de la ficha (refinamiento 06-12): ruteo KDS + orden + fiscal
+        station: (meta?.station as 'cocina' | 'barra' | 'ninguna') ?? 'cocina',
+        subcategory: meta?.subclasificacion ?? '',
+        aplica_servicio: meta?.aplica_servicio ?? true,
       })
       onDone()
     } catch (e) { onError(e instanceof Error ? e.message : 'Error agregando ítem'); setSaving(false) }

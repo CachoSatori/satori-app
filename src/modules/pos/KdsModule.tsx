@@ -5,7 +5,7 @@ import {
   getLocations, getKdsTickets, getKdsSettings, getAllProducts, bumpItem, bumpTicket,
 } from '../../shared/api/pos'
 import type { PosLocation, KdsTicket, KdsSettings, PosOrderItem } from '../../shared/api/pos'
-import { timerColor, fmtElapsed, sortByCategory } from '../../shared/utils/kds'
+import { timerColor, fmtElapsed, sortForTicket, thresholdFor, isPostre } from '../../shared/utils/kds'
 import type { KdsColor } from '../../shared/utils/kds'
 
 const COURSE_LABEL: Record<string, string> = { bebida: '🥤', entrada: '🥢', principal: '🍣' }
@@ -20,9 +20,11 @@ export default function KdsModule() {
   const [locations, setLocations] = useState<PosLocation[]>([])
   const [loc, setLoc] = useState('santa-teresa')
   const [tickets, setTickets] = useState<KdsTicket[]>([])
-  const [settings, setSettings] = useState<KdsSettings>({ location_id: 'santa-teresa', category_order: [], course_thresholds: { bebida: 300, entrada: 600, principal: 900 } })
+  const [settings, setSettings] = useState<KdsSettings>({ location_id: 'santa-teresa', category_order: [], course_thresholds: { bebida: 300, entrada: 600, principal: 900 }, subcategory_order: [], postres_priority: true, postres_threshold: 240 })
   const [tipos, setTipos] = useState<Map<string, string>>(new Map())
   const [view, setView] = useState<'salon' | 'delivery'>('salon')
+  // Estación de ESTA pantalla: cocina solo recibe comida; barra solo bebida (refinamiento 06-12)
+  const [station, setStation] = useState<'cocina' | 'barra'>('cocina')
   const [now, setNow] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
 
@@ -42,10 +44,16 @@ export default function KdsModule() {
   useEffect(() => { const id = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(id) }, [])
 
   const channels = view === 'salon' ? ['salon', 'barra'] : ['delivery']
-  const shown = useMemo(() => tickets.filter(t => channels.includes(t.order.channel)), [tickets, view]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Ruteo por estación: filtra los ÍTEMS de cada comanda; nada cruzado llega acá.
+  // Compatibilidad: ítems viejos sin snapshot ('cocina' default) caen en cocina.
+  const shown = useMemo(() => tickets
+    .filter(t => channels.includes(t.order.channel))
+    .map(t => ({ ...t, items: t.items.filter(it => (it.station ?? 'cocina') === station) }))
+    .filter(t => t.items.length > 0), [tickets, view, station]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const elapsed = (it: PosOrderItem) => it.marched_at ? Math.floor((now - new Date(it.marched_at).getTime()) / 1000) : 0
-  const colorOf = (it: PosOrderItem): KdsColor => timerColor(elapsed(it), settings.course_thresholds[it.course] ?? 0)
+  const colorOf = (it: PosOrderItem): KdsColor =>
+    timerColor(elapsed(it), thresholdFor(it.course, it.subcategory ?? '', settings.course_thresholds, settings.postres_threshold ?? 240))
   const worstColor = (items: PosOrderItem[]): KdsColor => {
     const rank: KdsColor[] = ['verde', 'ambar', 'rojo']
     return items.reduce<KdsColor>((w, it) => rank.indexOf(colorOf(it)) > rank.indexOf(w) ? colorOf(it) : w, 'verde')
@@ -58,7 +66,16 @@ export default function KdsModule() {
     <div style={{ minHeight: '100vh', background: '#0d0d0d', color: '#f0ead8' }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.6rem 1rem', borderBottom: '1px solid #333' }}>
         <span style={{ fontFamily: 'var(--font-serif)', fontSize: '1.5rem', color: '#c8a96e' }}>厨</span>
-        <h1 style={{ fontSize: '1.1rem', margin: 0 }}>KDS · Cocina</h1>
+        <h1 style={{ fontSize: '1.1rem', margin: 0 }}>KDS · {station === 'cocina' ? 'Cocina' : 'Barra'}</h1>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['cocina', 'barra'] as const).map(st => (
+            <button key={st} onClick={() => setStation(st)}
+              style={{ padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem',
+                border: '1px solid #444', background: station === st ? '#2a7a6a' : 'transparent', color: station === st ? '#fff' : '#7fb8a8' }}>
+              {st === 'cocina' ? '🔪 Cocina' : '🍸 Barra'}
+            </button>
+          ))}
+        </div>
         <div style={{ display: 'flex', gap: 4, marginLeft: '0.5rem' }}>
           {(['salon', 'delivery'] as const).map(v => (
             <button key={v} onClick={() => setView(v)}
@@ -86,7 +103,8 @@ export default function KdsModule() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem', padding: '0.75rem' }}>
         {shown.map(({ order, items }) => {
-          const ordered = sortByCategory(items, settings.category_order, it => tipos.get(it.product_name) ?? '')
+          const ordered = sortForTicket(items, settings.subcategory_order ?? [], settings.postres_priority ?? true,
+            it => it.subcategory ?? '', it => tipos.get(it.product_name) ?? '')
           const wc = worstColor(items)
           const oldest = items.reduce((m, it) => Math.max(m, elapsed(it)), 0)
           return (
@@ -102,9 +120,10 @@ export default function KdsModule() {
                   return (
                     <div key={it.id} onClick={() => onBump(it.id)}
                       style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '5px 0', borderBottom: '1px solid #262626', cursor: 'pointer' }}>
-                      <span style={{ fontSize: '0.8rem' }}>{COURSE_LABEL[it.course] ?? '·'}</span>
+                      <span style={{ fontSize: '0.8rem' }}>{isPostre(it.subcategory ?? '') ? '🍰' : (COURSE_LABEL[it.course] ?? '·')}</span>
                       <span style={{ flex: 1, fontSize: '0.92rem' }}>
-                        {it.qty > 1 && <strong>{it.qty}× </strong>}{it.product_name}
+                        {it.qty > 1 && <strong>{it.qty}× </strong>}{isPostre(it.subcategory ?? '')
+                          ? <strong style={{ color: '#f2c14e' }}>{it.product_name} · POSTRE ⚡</strong> : it.product_name}
                         {it.modifiers.length > 0 && <span style={{ color: '#c8a96e', fontSize: '0.78rem' }}> · {it.modifiers.map(m => m.name).join(', ')}</span>}
                         <span style={{ color: '#777', fontSize: '0.72rem' }}> · as.{it.seat}</span>
                       </span>

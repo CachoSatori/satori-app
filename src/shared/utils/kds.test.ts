@@ -36,3 +36,26 @@ describe('sortByCategory — orden configurable de Admin', () => {
     expect(sorted).toEqual(['Bebidas', 'Entradas', 'SinCategoria', 'Sushi'])
   })
 })
+
+describe('refinamiento 06-12 — orden escalonado y postres', () => {
+  it('postres suben primero y el resto sigue el orden de subcategoría', async () => {
+    const { sortForTicket } = await import('./kds')
+    const items = [
+      { n: 'ROLL', sc: 'Rolls', t: 'Sushi' },
+      { n: 'FLAN', sc: 'Postres', t: 'Dulces' },
+      { n: 'TIRADITO', sc: 'Crudos', t: 'Sushi' },
+    ]
+    const out = sortForTicket(items, ['Crudos', 'Rolls', 'Postres'], true, i => i.sc, i => i.t)
+    expect(out.map(i => i.n)).toEqual(['FLAN', 'TIRADITO', 'ROLL'])
+  })
+  it('sin prioridad de postres, manda el orden configurado', async () => {
+    const { sortForTicket } = await import('./kds')
+    const items = [{ n: 'FLAN', sc: 'Postres', t: '' }, { n: 'TIRADITO', sc: 'Crudos', t: '' }]
+    expect(sortForTicket(items, ['Crudos', 'Postres'], false, i => i.sc, i => i.t).map(i => i.n)).toEqual(['TIRADITO', 'FLAN'])
+  })
+  it('thresholdFor: postre usa el umbral corto propio', async () => {
+    const { thresholdFor } = await import('./kds')
+    expect(thresholdFor('principal', 'Postres', { principal: 900 }, 240)).toBe(240)
+    expect(thresholdFor('principal', 'Rolls', { principal: 900 }, 240)).toBe(900)
+  })
+})

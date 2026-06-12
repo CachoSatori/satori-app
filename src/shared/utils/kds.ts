@@ -36,3 +36,31 @@ export function sortByCategory<T>(items: T[], categoryOrder: string[], tipoOf: (
     return d !== 0 ? d : ta.localeCompare(tb)
   })
 }
+
+/** ¿Es postre? (la marca de prioridad usa la subcategoría de la ficha) */
+export const isPostre = (subcat: string) => /postre/i.test(subcat || '')
+
+/**
+ * Orden escalonado del refinamiento 06-12: postres primero si postresPriority
+ * (no pueden quedar al fondo en rush), después por subcategoría según el orden
+ * de Admin, con la categoría como desempate. Fuera de lista → al final.
+ */
+export function sortForTicket<T>(
+  items: T[], subcatOrder: string[], postresPriority: boolean,
+  subcatOf: (it: T) => string, tipoOf: (it: T) => string,
+): T[] {
+  const rank = new Map(subcatOrder.map((c, i) => [c.toLowerCase(), i]))
+  const idx = (sc: string) => rank.get((sc || '').toLowerCase()) ?? subcatOrder.length
+  return [...items].sort((a, b) => {
+    const pa = postresPriority && isPostre(subcatOf(a)) ? -1 : 0
+    const pb = postresPriority && isPostre(subcatOf(b)) ? -1 : 0
+    if (pa !== pb) return pa - pb
+    const d = idx(subcatOf(a)) - idx(subcatOf(b))
+    return d !== 0 ? d : (tipoOf(a) || '').localeCompare(tipoOf(b) || '')
+  })
+}
+
+/** Umbral del timer por ítem: postres usan su umbral corto propio. */
+export function thresholdFor(course: string, subcat: string, courseThresholds: Record<string, number>, postresThreshold: number): number {
+  return isPostre(subcat) ? (Number(postresThreshold) || 0) : (Number(courseThresholds[course]) || 0)
+}

@@ -176,15 +176,18 @@ export interface KdsSettings {
   location_id: string
   category_order: string[]
   course_thresholds: Record<string, number>   // segundos verde→rojo por curso
+  subcategory_order: string[]                 // orden escalonado dentro de la comanda (refinamiento 06-12)
+  postres_priority: boolean                   // postres destacados + arriba (no quedan al fondo en rush)
+  postres_threshold: number                   // timer propio más corto (seg)
 }
 
 export async function getKdsSettings(locationId: string): Promise<KdsSettings> {
   const { data, error } = await sb.from('pos_kds_settings').select('*').eq('location_id', locationId).maybeSingle()
   fail(error)
-  return (data as KdsSettings) ?? { location_id: locationId, category_order: [], course_thresholds: { bebida: 300, entrada: 600, principal: 900 } }
+  return (data as KdsSettings) ?? { location_id: locationId, category_order: [], course_thresholds: { bebida: 300, entrada: 600, principal: 900 }, subcategory_order: [], postres_priority: true, postres_threshold: 240 }
 }
 
-export async function saveKdsSettings(s: { location_id: string; category_order: string[]; course_thresholds: Record<string, number> }): Promise<void> {
+export async function saveKdsSettings(s: { location_id: string; category_order: string[]; course_thresholds: Record<string, number>; subcategory_order?: string[]; postres_priority?: boolean; postres_threshold?: number }): Promise<void> {
   const { error } = await sb.from('pos_kds_settings').upsert({ ...s, updated_at: new Date().toISOString() })
   fail(error)
 }
@@ -224,6 +227,9 @@ export interface PosOrderItem {
   modifiers: Array<{ id: string; name: string; price_delta_crc: number }>
   price_crc: number
   tax_type: 'iva13' | 'iva4' | 'iva2' | 'iva1' | 'exento'
+  station: 'cocina' | 'barra' | 'ninguna'    // snapshot de la ficha: ruteo del KDS
+  subcategory: string                        // snapshot: orden escalonado
+  aplica_servicio: boolean                   // snapshot fiscal (servicio 10%)
   seat: number
   course: 'bebida' | 'entrada' | 'principal'
   kitchen_status: 'pendiente' | 'marchado' | 'listo' | 'entregado'

@@ -34,7 +34,18 @@
 6. **`test-manager@staging.satori` quedó promovido a OWNER en staging** (para smoke-test de Admin y para que mañana puedas probar sin tus credenciales reales). `verify_manager` sigue aceptándolo para el override. Si lo querés de vuelta como manager: `update profiles set role='manager' where email='test-manager@staging.satori'`.
 7. **Vista previa del catálogo usa base de ejemplo ₡4.500** — `product_map` no tiene precio de venta (solo costo); el precio de venta del PoS se definirá en F2/F3 (columna nueva o tabla `pos_prices`). Anotado como decisión de producto pendiente.
 
-## Tramo 2 programado — ⚠️ requiere lanzamiento manual
+## Job de las 05:00 — ACTUALIZADO AL TRAMO 3 (cierre de ventana)
+- El job `com.satori.tramo2` ahora ejecuta **PROMPT-TRAMO-3.md** (el 2 ya se hizo a mano) con la
+  ruta completa del binario (`~/.local/bin/claude`, launchd no lee .zshrc), `-p` no-interactivo,
+  `--dangerously-skip-permissions`, PATH explícito y log en `/tmp/satori-tramo3.log`. **Cargado y
+  verificado** (`launchctl list | grep satori`).
+- ⚠️ **Falta UN paso de la dueña**: la prueba headless devolvió "Not logged in" (el keychain tiene
+  credenciales pero el CLI 2.1.175 no las toma en `-p`). **Antes de dormir o al despertar**: abrir
+  Terminal → `claude` → `/login` (una vez). Con eso el job de las 05:00 corre solo. Si no, lanzalo
+  a mano: `cd ~/Downloads/satori-app && claude -p "$(cat PROMPT-TRAMO-3.md)" --dangerously-skip-permissions`
+- Prueba inofensiva ejecutada: el binario corre por la misma vía del job (la única falla es el login).
+
+## (histórico tramo 1) Tramo 2 programado — ⚠️ requiere lanzamiento manual
 - `PROMPT-TRAMO-2.md` en la raíz (contenido exacto de la dueña).
 - Job `launchd` **cargado y verificado** (`com.satori.tramo2`, 05:00 hora local = hora CR; log en `/tmp/satori-tramo2.log`). **PERO**: esta Mac **no tiene el CLI `claude` instalado** (esta sesión corre dentro de la app de escritorio, que no expone el binario) → a las 05:00 el job va a dejar en el log el aviso "claude CLI no instalado" y nada más. **El TRAMO 2 hay que lanzarlo a mano al despertar**: abrí Claude Code (app) en este repo y pegale el contenido de `PROMPT-TRAMO-2.md`.
 - Alternativa permanente: instalar el CLI (`npm install -g @anthropic-ai/claude-code`, requiere sesión iniciada con `claude login`) y el job de las 05:00 corre solo de ahí en más. Para quitar el job: `launchctl unload ~/Library/LaunchAgents/com.satori.tramo2.plist`.

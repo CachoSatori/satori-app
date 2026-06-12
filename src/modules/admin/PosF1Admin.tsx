@@ -242,10 +242,24 @@ function CatalogoSection({ locationId, onError }: { locationId: string; onError:
 }
 
 // ── Editor de Salón ──────────────────────────────────────────
-const STEP = 20  // px por toque — controles +/- robustos en tablet (sin drag)
+// Editor de Salón (refinamiento 06-12): drag por pointer events (tablet) con
+// fallback de flechas (paso grueso/fino) + elementos decorativos (barra,
+// maceteros, estaciones, paredes) movibles y redimensionables — no abren pedidos.
+const STEP_GRUESO = 20
+const STEP_FINO = 5
+const DECOR_PRESETS = [
+  { label: 'Barra', w: 220, h: 50 }, { label: 'Macetero', w: 44, h: 44 },
+  { label: 'Estación de servicio', w: 90, h: 60 }, { label: 'Pared / divisor', w: 240, h: 14 },
+]
+function sizeOf(t: SalonTable): { w: number; h: number } {
+  if (t.width && t.height) return { w: t.width, h: t.height }
+  return t.shape === 'bar' ? { w: 96, h: 40 } : { w: 64, h: 64 }
+}
 function SalonSection({ locationId, onError }: { locationId: string; onError: (e: string) => void }) {
   const [tables, setTables] = useState<SalonTable[]>([])
   const [sel, setSel]       = useState<string | null>(null)
+  const [fino, setFino]     = useState(false)
+  const [drag, setDrag]     = useState<{ id: string; dx: number; dy: number; x: number; y: number } | null>(null)
 
   const load = useCallback(() => {
     getSalonTables(locationId).then(setTables).catch(e => onError(e.message))
@@ -253,56 +267,100 @@ function SalonSection({ locationId, onError }: { locationId: string; onError: (e
   useEffect(() => { load() }, [load])
 
   const save = (t: Partial<SalonTable> & { location_id: string; name: string }) =>
-    saveSalonTable(t).then(load).catch(e => onError(e instanceof Error ? e.message : 'Error guardando mesa'))
+    saveSalonTable(t).then(load).catch(e => onError(e instanceof Error ? e.message : 'Error guardando elemento'))
 
   const t = tables.find(x => x.id === sel) ?? null
+  const step = fino ? STEP_FINO : STEP_GRUESO
   const move = (dx: number, dy: number) => {
     if (!t) return
-    save({ ...t, pos_x: Math.max(0, t.pos_x + dx * STEP), pos_y: Math.max(0, t.pos_y + dy * STEP) })
+    save({ ...t, pos_x: Math.max(0, t.pos_x + dx * step), pos_y: Math.max(0, t.pos_y + dy * step) })
   }
 
+  // Drag: posición local fluida mientras se arrastra; persiste al soltar.
+  const onDown = (el: SalonTable) => (e: React.PointerEvent) => {
+    e.preventDefault()
+    setSel(el.id)
+    setDrag({ id: el.id, dx: e.clientX - el.pos_x, dy: e.clientY - el.pos_y, x: el.pos_x, y: el.pos_y })
+  }
+  const onMove = (e: React.PointerEvent) => {
+    if (!drag) return
+    setDrag({ ...drag, x: Math.max(0, e.clientX - drag.dx), y: Math.max(0, e.clientY - drag.dy) })
+  }
+  const onUp = () => {
+    if (!drag) return
+    const el = tables.find(x => x.id === drag.id)
+    if (el && (el.pos_x !== drag.x || el.pos_y !== drag.y)) save({ ...el, pos_x: Math.round(drag.x), pos_y: Math.round(drag.y) })
+    setDrag(null)
+  }
+  const posOf = (el: SalonTable) => (drag && drag.id === el.id) ? { x: drag.x, y: drag.y } : { x: el.pos_x, y: el.pos_y }
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '3fr minmax(220px, 1fr)', gap: '0.875rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '3fr minmax(230px, 1fr)', gap: '0.875rem' }}>
       {/* Plano (vista previa del salón) */}
-      <div className="admin-table" style={{ position: 'relative', minHeight: 460, overflow: 'auto', background: '#f5f0e8' }}>
-        {tables.filter(x => x.is_active).map(x => (
-          <div key={x.id} onClick={() => setSel(x.id)}
-            style={{ position: 'absolute', left: x.pos_x, top: x.pos_y, cursor: 'pointer',
-              width: x.shape === 'bar' ? 96 : 64, height: x.shape === 'bar' ? 36 : 64,
-              borderRadius: x.shape === 'round' ? '50%' : 8,
-              border: `2px solid ${sel === x.id ? '#a07830' : '#0d0d0d'}`,
-              background: sel === x.id ? '#a07830' : '#0d0d0d', color: '#f5f0e8',
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              fontSize: '0.66rem', fontWeight: 700, userSelect: 'none' }}>
-            <div>{x.name}</div>
-            <div style={{ fontWeight: 400 }}>{x.capacity} pax</div>
-          </div>
-        ))}
+      <div className="admin-table" style={{ position: 'relative', minHeight: 460, overflow: 'auto', background: '#f5f0e8', touchAction: 'none' }}
+        onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp}>
+        {tables.filter(x => x.is_active).map(x => {
+          const { w, h } = sizeOf(x)
+          const { x: px, y: py } = posOf(x)
+          const decor = x.kind === 'decor'
+          return (
+            <div key={x.id} onPointerDown={onDown(x)}
+              style={{ position: 'absolute', left: px, top: py, width: w, height: h, cursor: 'grab',
+                borderRadius: decor ? 4 : (x.shape === 'round' ? '50%' : 8),
+                border: `2px ${decor ? 'dashed' : 'solid'} ${sel === x.id ? '#a07830' : decor ? '#8a8378' : '#0d0d0d'}`,
+                background: decor ? '#d8d2c4' : (sel === x.id ? '#a07830' : '#0d0d0d'),
+                color: decor ? '#5a5040' : '#f5f0e8',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.64rem', fontWeight: 700, userSelect: 'none', overflow: 'hidden' }}>
+              <div>{x.name}</div>
+              {!decor && <div style={{ fontWeight: 400 }}>{x.capacity} pax</div>}
+            </div>
+          )
+        })}
         {tables.filter(x => x.is_active).length === 0 && (
-          <div style={{ padding: '2rem', color: '#5a5040', fontSize: '0.8rem' }}>Sin mesas en este local — agregá la primera con "+ Mesa".</div>
+          <div style={{ padding: '2rem', color: '#5a5040', fontSize: '0.8rem' }}>Salón vacío — agregá mesas y elementos con los botones.</div>
         )}
       </div>
 
       {/* Controles */}
       <div className="admin-table" style={{ padding: '0.75rem' }}>
-        <button className="cd-btn-green" style={{ width: '100%', marginBottom: '0.625rem' }}
-          onClick={() => save({ location_id: locationId, name: `Mesa ${tables.length + 1}`, capacity: 4, shape: 'square', pos_x: 20, pos_y: 20 })}>
+        <button className="cd-btn-green" style={{ width: '100%', marginBottom: 4 }}
+          onClick={() => save({ location_id: locationId, name: `Mesa ${tables.filter(x => x.kind !== 'decor').length + 1}`, capacity: 4, shape: 'square', pos_x: 20, pos_y: 20, kind: 'table' })}>
           + Mesa
         </button>
-        {!t && <div style={{ fontSize: '0.74rem', color: '#5a5040' }}>Tocá una mesa del plano para editarla.</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 8 }}>
+          {DECOR_PRESETS.map(d => (
+            <button key={d.label} className="tips-btn-ghost" style={{ fontSize: '0.68rem' }}
+              onClick={() => save({ location_id: locationId, name: d.label, capacity: 1, shape: 'square', pos_x: 30, pos_y: 30, kind: 'decor', width: d.w, height: d.h })}>
+              + {d.label}
+            </button>
+          ))}
+        </div>
+        {!t && <div style={{ fontSize: '0.74rem', color: '#5a5040' }}>Tocá un elemento del plano: lo podés <strong>arrastrar</strong> directo, o moverlo con las flechas.</div>}
         {t && (
           <>
             <input className="tips-input-dark" style={{ width: '100%' }} defaultValue={t.name} key={t.id}
               onBlur={e => e.target.value !== t.name && save({ ...t, name: e.target.value })} />
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: '0.5rem 0' }}>
-              <label style={{ fontSize: '0.74rem' }}>pax
-                <input type="number" className="tips-input-dark" style={{ width: 60, marginLeft: 4 }} value={t.capacity}
-                  onChange={e => save({ ...t, capacity: Math.max(1, Number(e.target.value) || 1) })} /></label>
-              <select className="tips-input-dark" value={t.shape} onChange={e => save({ ...t, shape: e.target.value as SalonTable['shape'] })}>
-                <option value="square">cuadrada</option><option value="round">redonda</option><option value="bar">barra</option>
-              </select>
+            {t.kind !== 'decor' && (
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', margin: '0.5rem 0' }}>
+                <label style={{ fontSize: '0.74rem' }}>pax
+                  <input type="number" className="tips-input-dark" style={{ width: 60, marginLeft: 4 }} value={t.capacity}
+                    onChange={e => save({ ...t, capacity: Math.max(1, Number(e.target.value) || 1) })} /></label>
+                <select className="tips-input-dark" value={t.shape} onChange={e => save({ ...t, shape: e.target.value as SalonTable['shape'] })}>
+                  <option value="square">cuadrada</option><option value="round">redonda</option><option value="bar">barra</option>
+                </select>
+              </div>
+            )}
+            {/* Tamaño (redimensionable básico — clave para decorativos) */}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '0.5rem 0', fontSize: '0.74rem' }}>
+              ancho <input type="number" className="tips-input-dark" style={{ width: 60 }} defaultValue={sizeOf(t).w} key={'w' + t.id + t.width}
+                onBlur={e => { const v = Math.max(10, Number(e.target.value) || 10); if (v !== sizeOf(t).w) save({ ...t, width: v, height: sizeOf(t).h }) }} />
+              alto <input type="number" className="tips-input-dark" style={{ width: 60 }} defaultValue={sizeOf(t).h} key={'h' + t.id + t.height}
+                onBlur={e => { const v = Math.max(10, Number(e.target.value) || 10); if (v !== sizeOf(t).h) save({ ...t, width: sizeOf(t).w, height: v }) }} />
             </div>
-            {/* Posición con botones (robusto en tablet, sin drag) */}
+            <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: 4 }}>
+              <input type="checkbox" checked={fino} onChange={e => setFino(e.target.checked)} /> paso fino ({STEP_FINO}px) — sino {STEP_GRUESO}px
+            </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 4, justifyContent: 'center', margin: '0.5rem 0' }}>
               <span /><button className="tips-btn-ghost" onClick={() => move(0, -1)}>↑</button><span />
               <button className="tips-btn-ghost" onClick={() => move(-1, 0)}>←</button>
@@ -312,7 +370,7 @@ function SalonSection({ locationId, onError }: { locationId: string; onError: (e
             </div>
             <button onClick={() => deactivateSalonTable(t.id).then(() => { setSel(null); load() }).catch(e => onError(e.message))}
               style={{ width: '100%', background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '5px', fontSize: '0.74rem', cursor: 'pointer' }}>
-              Quitar mesa del plano
+              Quitar del plano
             </button>
           </>
         )}

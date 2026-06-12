@@ -48,6 +48,16 @@ const MODULES: Module[] = [
     roles: ['owner', 'manager', 'cajero', 'contador'],
   },
   {
+    id: 'comandero', path: '/comandero', label: 'Comandero', kanji: '卓',
+    description: 'Mesas y pedidos (PoS)', ready: true,
+    roles: ['owner', 'manager', 'salonero', 'barman', 'cajero'],
+  },
+  {
+    id: 'kds', path: '/kds', label: 'KDS', kanji: '厨',
+    description: 'Pantalla de cocina/barra', ready: true,
+    roles: ['owner', 'manager', 'cocina', 'barman'],
+  },
+  {
     id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
     description: 'Pool del turno', ready: true,
     roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],

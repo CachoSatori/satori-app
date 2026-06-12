@@ -46,6 +46,9 @@ export interface SalonTable {
   pos_x: number
   pos_y: number
   is_active: boolean
+  kind: 'table' | 'decor'          // decor = barra/macetero/estación/pared (no abre pedidos)
+  width: number | null             // null = tamaño default por forma
+  height: number | null
 }
 
 function fail(error: { message: string } | null): void {

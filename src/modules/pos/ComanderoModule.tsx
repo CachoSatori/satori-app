@@ -96,17 +96,22 @@ export default function ComanderoModule() {
         <div style={{ position: 'relative', minHeight: 520, margin: '0.75rem', background: '#f5f0e8', borderRadius: 6, overflow: 'auto' }}>
           {tables.filter(t => t.is_active).map(t => {
             const o = orderByTable.get(t.id)
+            const decor = t.kind === 'decor'   // barra/macetero/pared: decorativo, NO abre pedidos
+            const w = t.width ?? (t.shape === 'bar' ? 96 : 72)
+            const h = t.height ?? (t.shape === 'bar' ? 40 : 72)
             return (
               <div key={t.id}
-                onClick={() => o ? setSel(o) : setPaxModal({ table: t, editOrder: null })}
-                style={{ position: 'absolute', left: t.pos_x, top: t.pos_y, cursor: 'pointer',
-                  width: t.shape === 'bar' ? 96 : 72, height: t.shape === 'bar' ? 40 : 72,
-                  borderRadius: t.shape === 'round' ? '50%' : 8,
-                  background: o ? '#a04030' : '#2a7a6a', color: '#fff', border: '2px solid #0d0d0d',
+                onClick={decor ? undefined : () => o ? setSel(o) : setPaxModal({ table: t, editOrder: null })}
+                style={{ position: 'absolute', left: t.pos_x, top: t.pos_y, cursor: decor ? 'default' : 'pointer',
+                  width: w, height: h,
+                  borderRadius: decor ? 4 : (t.shape === 'round' ? '50%' : 8),
+                  background: decor ? '#d8d2c4' : o ? '#a04030' : '#2a7a6a',
+                  color: decor ? '#5a5040' : '#fff',
+                  border: decor ? '2px dashed #8a8378' : '2px solid #0d0d0d',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.68rem', fontWeight: 700, userSelect: 'none' }}>
+                  fontSize: '0.66rem', fontWeight: 700, userSelect: 'none', overflow: 'hidden' }}>
                 <div>{t.name}</div>
-                <div style={{ fontWeight: 400 }}>{o ? `${o.pax} pax · abierta` : `${t.capacity} pax`}</div>
+                {!decor && <div style={{ fontWeight: 400 }}>{o ? `${o.pax} pax · abierta` : `${t.capacity} pax`}</div>}
               </div>
             )
           })}

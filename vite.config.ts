@@ -70,4 +70,19 @@ export default defineConfig({
     }),
   ],
   base: BASE,
+  build: {
+    rollupOptions: {
+      output: {
+        // xlsx (~300KB) lo importan VentasXLS y VentasHistorico — sin esto se
+        // duplica dentro de ambos chunks. Como chunk propio se descarga UNA vez
+        // y solo cuando se entra a esas pestañas (siguen siendo lazy).
+        manualChunks(id: string) {
+          if (id.includes('node_modules/xlsx')) return 'xlsx'
+          // recharts pesa ~300KB y solo lo usa VentasHistorico: chunk propio para
+          // que el resto de Ventas no lo arrastre y la gráfica cargue aparte.
+          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-')) return 'recharts'
+        },
+      },
+    },
+  },
 })

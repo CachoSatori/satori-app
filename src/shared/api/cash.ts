@@ -195,6 +195,7 @@ export async function createCashMovement(movement: {
   caja_origen: string
   account_id?: string | null
   status?: 'aprobado' | 'pendiente' | 'rechazado'   // override; por defecto se deriva del método
+  attachments?: string[]                            // fotos de factura ya subidas al bucket 'facturas' (mig 026)
 }): Promise<CashMovement> {
   // id y client_op_id se generan en el CLIENTE: así el replay offline es
   // idempotente (021: client_op_id UNIQUE) y las ediciones/borrados encolados
@@ -211,6 +212,7 @@ export async function createCashMovement(movement: {
     employee_name: movement.employee_name ?? '',
     shift:         movement.shift         ?? '',
     account_id:    movement.account_id    ?? null,
+    attachments:   movement.attachments   ?? [],
     status:        movement.status ?? (movement.method === 'Transferencia' ? 'pendiente' : 'aprobado'),
     created_at:    now,
     updated_at:    now,

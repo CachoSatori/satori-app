@@ -33,6 +33,11 @@ const MODULES: Module[] = [
     roles: ['owner', 'manager', 'contador'],
   },
   {
+    id: 'mi-turno', path: '/mi-turno', label: 'Mi Turno', kanji: '番',
+    description: 'Mis ventas · propinas · cierre', ready: true,
+    roles: ['salonero', 'barman'],
+  },
+  {
     id: 'mi-rendimiento', path: '/mi-rendimiento', label: 'Mi Rendimiento', kanji: '人',
     description: 'Mis stats del turno', ready: true,
     roles: ['salonero', 'barman', 'barback', 'runner', 'cocina'],
@@ -56,6 +61,11 @@ const MODULES: Module[] = [
     id: 'kds', path: '/kds', label: 'KDS', kanji: '厨',
     description: 'Pantalla de cocina/barra', ready: true,
     roles: ['owner', 'manager', 'cocina', 'barman'],
+  },
+  {
+    id: 'proveedor', path: '/proveedor', label: 'Bandeja Proveedores', kanji: '納',
+    description: 'Registrar pago con foto', ready: true,
+    roles: ['owner', 'manager', 'cajero', 'proveedor'],
   },
   {
     id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
@@ -320,17 +330,43 @@ function StatusBadge({ color, text }: { color: 'open' | 'ok' | 'warn' | 'dim'; t
   )
 }
 
+// ── Aterrizaje por rol (operación por roles, 06-12) ───────────
+// Al ABRIR la app, cada puesto cae directo en SU pantalla: la compu del cajero en
+// Caja, la tablet del salonero en el Comandero, el teléfono de la bandeja en
+// Registrar proveedor. Sucede UNA vez por sesión de pestaña (clave = profile.id,
+// así un cambio de usuario en la misma pestaña re-aterriza) — el botón Home sigue
+// navegando normal después. El rol proveedor redirige SIEMPRE: su única pantalla
+// es la bandeja.
+const ROLE_LANDING: Partial<Record<UserRole, string>> = {
+  cajero:    '/caja',
+  salonero:  '/comandero',
+  proveedor: '/proveedor',
+}
+
 // ── Main component ─────────────────────────────────────────────
 export default function HomePage() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
   const [status, setStatus] = useState<HomeStatus | null>(null)
 
+  const landing = profile ? ROLE_LANDING[profile.role] : undefined
+  const landKey = profile ? `satori-landed-${profile.id}` : ''
+  const mustLand = !!profile && !!landing
+    && (profile.role === 'proveedor' || sessionStorage.getItem(landKey) !== '1')
+
   useEffect(() => {
+    if (!mustLand || !landing) return
+    sessionStorage.setItem(landKey, '1')
+    navigate(landing, { replace: true })
+  }, [mustLand, landing, landKey, navigate])
+
+  useEffect(() => {
+    if (mustLand) return   // nos vamos ya — no dispares las consultas del Home
     fetchHomeStatus().then(setStatus).catch(() => {})
-  }, [])
+  }, [mustLand])
 
   if (!profile) return null
+  if (mustLand) return null   // redirigiendo al aterrizaje del rol
 
   const available = MODULES.filter(m => m.roles.includes(profile.role))
   const isManager = ['owner', 'manager', 'contador'].includes(profile.role)

@@ -16,6 +16,8 @@ import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO_PR
 import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
+import { uploadFacturaPhoto, movementAttachments } from '../../shared/api/facturas'
+import FacturaThumbs from '../../shared/FacturaThumbs'
 import type { Employee } from '../../shared/types/database'
 
 interface Props {
@@ -70,6 +72,7 @@ interface PagoRow {
   method:        string   // 'Efectivo' | 'Transferencia' para pagos nuevos; históricos pueden traer SINPE/Bitcoin
   reference:     string
   at:            number          // hora de registro (para ordenar más reciente primero)
+  attachments:   string[]        // paths de fotos de factura (bucket 'facturas', mig 026)
   // persistedId: movement ID in DB — set once saved, null if unsaved
   persistedId:   string | null
   pending?:      boolean        // en la cola offline, esperando sincronizar
@@ -153,6 +156,7 @@ export default function CashTurno({
       method:        m.method || 'Efectivo',
       reference:     m.description ?? '',
       at:            new Date(m.created_at).getTime(),
+      attachments:   movementAttachments(m),
       persistedId:   m.id,
       pending:       m._pending === true,
     })), [sessionMovements, suppliers])
@@ -341,6 +345,7 @@ export default function CashTurno({
         // Bitcoin) sale del Banco y NO toca la caja (ROADMAP Fase 2D-A).
         caja_origen:   pago.method === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
         shift:         tipShiftToCaja(openSession.shift_type),
+        attachments:   pago.attachments,
       })
       // Ya está en la base → se mostrará vía dbPagos; quitamos el borrador en memoria.
       setPagos(prev => prev.filter(p => p.id !== pago.id))
@@ -362,6 +367,13 @@ export default function CashTurno({
   const [supSearch,   setSupSearch]   = useState('')   // texto de búsqueda del proveedor
   const [supOpen,     setSupOpen]     = useState(false) // dropdown de proveedores abierto
   const [movSaving,   setMovSaving]   = useState(false) // anti doble-submit (pago/ingreso)
+  // Fotos de la factura: las nuevas (File, aún sin subir) + las ya subidas (paths,
+  // al editar un pago existente). Se suben al confirmar — Storage requiere red.
+  const [draftFotos,     setDraftFotos]     = useState<File[]>([])
+  const [draftFotosPrev, setDraftFotosPrev] = useState<string[]>([])
+  // Previews locales de las fotos nuevas (objectURL); se revocan al cambiar la lista.
+  const fotoPreviews = useMemo(() => draftFotos.map(f => URL.createObjectURL(f)), [draftFotos])
+  useEffect(() => () => { fotoPreviews.forEach(u => URL.revokeObjectURL(u)) }, [fotoPreviews])
 
   // Alta rápida de proveedor desde la caja (cuando llega uno no registrado)
   const [addSupOpen,   setAddSupOpen]   = useState(false)
@@ -384,12 +396,14 @@ export default function CashTurno({
   const openNewPago = () => {
     setEditId(null); setDraftSup(''); setDraftCRC(''); setDraftUSD(''); setDraftMethod('Efectivo'); setDraftRef('')
     setSupSearch(''); setSupOpen(false)
+    setDraftFotos([]); setDraftFotosPrev([])
     setPagoModal(true)
   }
   const openEditPago = (p: PagoRow) => {
     setEditId(p.id); setDraftSup(p.supplier_id); setDraftCRC(p.amount_crc); setDraftUSD(p.amount_usd)
     setDraftMethod(p.method); setDraftRef(p.reference)
     setSupSearch(suppliers.find(s => s.id === p.supplier_id)?.name ?? ''); setSupOpen(false)
+    setDraftFotos([]); setDraftFotosPrev(p.attachments)
     setPagoModal(true)
   }
 
@@ -411,6 +425,17 @@ export default function CashTurno({
     if (!draftSup || !Number(draftCRC) || movSaving) return  // proveedor + monto requeridos · anti doble-submit
     setMovSaving(true)
     const prov = suppliers.find(s => s.id === draftSup)
+    // Subir las fotos nuevas ANTES de tocar el movimiento. Si una falla (sin red),
+    // el pago entra igual sin esa foto y se avisa — la plata no espera a Storage.
+    const fotoPaths: string[] = [...draftFotosPrev]
+    let fotosFallidas = 0
+    for (const f of draftFotos) {
+      try { fotoPaths.push(await uploadFacturaPhoto(f)) }
+      catch { fotosFallidas++ }
+    }
+    if (fotosFallidas > 0) {
+      onError(`${fotosFallidas} foto(s) de la factura no se pudieron subir (¿sin conexión?). El pago se registra igual — volvé a editarlo con red para reintentar la foto.`)
+    }
     // Si edito uno ya persistido, borro su movimiento viejo antes de re-crear
     const old = editId ? displayPagos.find(p => p.id === editId) : null
     if (old?.persistedId) {
@@ -428,6 +453,7 @@ export default function CashTurno({
       method:        draftMethod,
       reference:     draftRef,
       at:            old?.at ?? Date.now(),
+      attachments:   fotoPaths,
       persistedId:   null,
     }
     // más reciente arriba
@@ -850,6 +876,7 @@ export default function CashTurno({
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
+                {p.attachments.length > 0 && <FacturaThumbs paths={p.attachments} />}
                 <span style={{ fontWeight: 700, fontFamily: 'var(--font-serif)' }}>{fi(Number(p.amount_crc) || 0)}</span>
                 {canManage && (
                   <>
@@ -1212,10 +1239,51 @@ export default function CashTurno({
                 onChange={e => setDraftRef(e.target.value)} />
             </div>
 
+            {/* Fotos de la factura — en móvil abre la cámara directo (capture).
+                Quedan guardadas en el bucket 'facturas' y vinculadas al pago (mig 026). */}
+            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field-label">Fotos de la factura</div>
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                border: '2px dashed var(--t-border,#d4cfc4)', borderRadius: 6, padding: '0.8rem',
+                cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, color: '#5a5040' }}>
+                📷 Sacar foto / agregar imagen
+                <input type="file" accept="image/*" capture="environment" multiple
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    const files = Array.from(e.target.files ?? [])
+                    if (files.length) setDraftFotos(prev => [...prev, ...files])
+                    e.target.value = ''   // permite re-sacar la misma foto
+                  }} />
+              </label>
+              {(draftFotosPrev.length > 0 || draftFotos.length > 0) && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
+                  {draftFotosPrev.length > 0 && <FacturaThumbs paths={draftFotosPrev} size={52} />}
+                  {draftFotosPrev.length > 0 && (
+                    <button type="button" onClick={() => setDraftFotosPrev([])} title="Quitar las fotos ya guardadas de este pago"
+                      style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 7px', fontSize: '0.68rem', cursor: 'pointer' }}>
+                      quitar guardadas
+                    </button>
+                  )}
+                  {draftFotos.map((f, i) => (
+                    <span key={i} style={{ position: 'relative', display: 'inline-block' }}>
+                      <img src={fotoPreviews[i]} alt={f.name}
+                        style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--t-border,#d4cfc4)' }} />
+                      <button type="button" onClick={() => setDraftFotos(prev => prev.filter((_, j) => j !== i))}
+                        style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%',
+                          background: '#c0392b', color: '#fff', border: 'none', fontSize: '0.62rem', lineHeight: 1, cursor: 'pointer' }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 4 }}>
+                Se suben al confirmar el pago (necesitan conexión). Después se ven como miniatura en la lista — tap para verla completa.
+              </div>
+            </div>
+
             <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
               <button className="tips-btn-ghost" onClick={() => setPagoModal(false)}>Cancelar</button>
-              <button className="cd-btn-green" onClick={confirmPago} disabled={!draftSup || !Number(draftCRC)}>
-                {editId ? '✓ Guardar cambios' : '✓ Confirmar pago'}
+              <button className="cd-btn-green" onClick={confirmPago} disabled={!draftSup || !Number(draftCRC) || movSaving}>
+                {movSaving ? 'Guardando…' : editId ? '✓ Guardar cambios' : '✓ Confirmar pago'}
               </button>
             </div>
           </div>

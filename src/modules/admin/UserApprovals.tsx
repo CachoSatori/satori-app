@@ -4,7 +4,7 @@ import { getAllProfiles, updateProfileRole, setProfileActive } from '../../share
 
 import { ROLE_LABELS } from '../../shared/constants'
 
-const ROLES: UserRole[] = ['owner', 'contador', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina']
+const ROLES: UserRole[] = ['owner', 'contador', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina', 'proveedor']
 
 interface Props {
   employees: Employee[]
@@ -89,6 +89,18 @@ export default function UserApprovals({ employees, currentUserId }: Props) {
   return (
     <div className="admin-section" style={{ maxWidth: 720 }}>
       {error && <p className="field-error" style={{ marginBottom: '0.75rem' }}>{error}</p>}
+
+      {/* Flujo de alta (operación por roles 06-12): acá NO se crean cuentas — el
+          empleado se registra solo y el owner le da rol + acceso desde esta pantalla. */}
+      <div style={{ border: '1px solid var(--t-border)', borderRadius: 4, padding: '0.75rem 0.875rem',
+        marginBottom: '1.25rem', fontSize: '0.74rem', lineHeight: 1.6, color: 'var(--t-muted)' }}>
+        <strong style={{ color: 'var(--t-ink)' }}>¿Cómo dar de alta a alguien?</strong><br />
+        1. La persona abre la app en su dispositivo y toca <strong>Crear cuenta</strong> con su correo real
+        (o un alias <code>satorisushibar+nombre@gmail.com</code> — los correos llegan a la casilla principal).<br />
+        2. Su cuenta aparece acá en <strong>Cuentas pendientes</strong>.<br />
+        3. Le asignás el rol y tocás <strong>Habilitar</strong> — al reintentar ya entra, y aterriza directo
+        en su pantalla (cajero → Caja, salonero → Comandero, bandeja proveedores → Registrar pago).
+      </div>
 
       <div className="admin-section-header">
         <span className="admin-section-title">Cuentas pendientes {pending.length > 0 && `(${pending.length})`}</span>

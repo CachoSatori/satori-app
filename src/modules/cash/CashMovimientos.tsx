@@ -17,6 +17,8 @@ const CONCEPTOS = [
 import { todayCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr, saldoCajaFuerte } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
+import { movementAttachments } from '../../shared/api/facturas'
+import FacturaThumbs from '../../shared/FacturaThumbs'
 
 interface Props {
   movements: CashMovement[]
@@ -370,6 +372,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                       defaultValue={m.description}
                       onBlur={e => handleFieldChange(m.id, 'description', e.target.value)}
                       disabled={saving === m.id} />
+                    {movementAttachments(m).length > 0 && (
+                      <div style={{ marginTop: 2 }}><FacturaThumbs paths={movementAttachments(m)} size={26} /></div>
+                    )}
                   </td>
                   <td>
                     <input key={m.id + '-pe'} className="cd-tbl-input"
@@ -474,6 +479,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--t-ink)', marginBottom: '0.15rem' }}>
                 {m.description || m.supplier_name || m.employee_name || '—'}
               </div>
+              {movementAttachments(m).length > 0 && (
+                <div style={{ marginBottom: '0.3rem' }}><FacturaThumbs paths={movementAttachments(m)} size={40} /></div>
+              )}
               <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.68rem', color: '#5a5040' }}>
                 <span>{movFecha(m) || '—'}</span>
                 <span>{m.method}</span>

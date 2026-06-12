@@ -3,7 +3,26 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
-## 🆕 Novedades 2026-06-12 (mañana) — PoS F1+F2+F3 completos EN STAGING · prod preparado para offline
+## 🆕 Novedades 2026-06-12 (tarde) — Operación por roles EN STAGING (rama `operacion-roles` → staging)
+- **Foto de factura de proveedor — guardada y visible** (prioridad máxima de la dueña): bucket
+  privado `facturas` (creado vía API, sin pasos manuales), fotos vinculadas al pago
+  (`cash_movements.attachments`, mig 026), miniatura → tap = foto completa en Caja Diaria,
+  historial y bandeja. Cámara directa en móvil (`capture`), múltiples fotos por pago. Sin red:
+  el pago entra igual y avisa que la foto no subió (se reintenta editando el pago).
+- **Aterrizaje por rol**: cajero → `/caja`, salonero → `/comandero`, **rol nuevo `proveedor`**
+  (bandeja) → `/proveedor` (siempre; única pantalla, botón de foto gigante), manager/owner →
+  Home. Una vez por sesión de pestaña; rutas fuera del rol bloqueadas también por URL.
+- **Mi Turno (`/mi-turno`)**: ventas/ticket promedio/propinas PROPIAS del salonero + cierre con
+  `canCloseShift`. RPC `my_turno_stats` SECURITY DEFINER — solo computa `auth.uid()` (verificado
+  con JWT simulado en staging).
+- **Admin → Usuarios** ya cubría rol + habilitar/deshabilitar; se agregó `proveedor` y el flujo
+  de alta documentado en pantalla (registro con alias `satorisushibar+nombre@gmail.com` → owner
+  asigna rol). Crear cuentas server-side requeriría Edge Function con service key — innecesario.
+- **PWA**: shortcuts nuevos (Registrar proveedor / Comandero / Caja / Propinas).
+- **Migración 026** aplicada y registrada SOLO en staging (rol+bucket+políticas+RPC+attachments).
+- ROADMAP: spec del sprint + fase futura "reportes quincenales por correo" (Resend + Edge Function).
+
+## Novedades 2026-06-12 (mañana) — PoS F1+F2+F3 completos EN STAGING · prod preparado para offline
 
 ### En STAGING esperando validación física de la dueña (rama `staging` = `8697226`+)
 - **PoS completo de la noche** (tramos 1-3, verificado por el asesor: 54/54 tests, sagrados intactos):

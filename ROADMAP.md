@@ -185,6 +185,43 @@ Orden acordado (cada uno es base del siguiente):
 5. **Acceso por tile en Home** (cierra DECISIÓN-NOCTURNA #10): salonero/manager/owner ven "Comandero";
    cocina ve "KDS" — nadie tipea rutas.
 
+### 👥 Operación por roles — pedido de la dueña (2026-06-12, rama `operacion-roles`)
+**Objetivo: cada puesto físico (compu del cajero, tablet del salonero, teléfono de la bandeja
+de proveedores) abre la app y aterriza DIRECTO en su pantalla, viendo solo lo suyo.**
+1. **Foto de factura de proveedor — guardada y visible (prioridad máxima)**: bucket de Storage
+   `facturas` (privado, RLS por rol), al registrar un pago a proveedor las fotos se suben y quedan
+   vinculadas al movimiento (`cash_movements.attachments`); en Caja Diaria y en el historial el pago
+   muestra miniatura → tap abre la foto completa (para revisar nombres de productos y precios).
+   Múltiples fotos por pago; en móvil la cámara abre directo (input `capture`). Si no hay red al
+   registrar, el pago entra igual y la foto se avisa como no subida (la foto requiere conexión).
+2. **Aterrizaje y permisos por rol**: cajero → Caja Diaria; salonero → Comandero; **rol nuevo
+   `proveedor`** (la "bandeja": teléfono fijo en recepción de mercadería) → pantalla dedicada de
+   registrar pago con botón de foto gigante, y NADA más; manager/owner → Home completo. El
+   aterrizaje ocurre al abrir la app (una vez por sesión de pestaña); el botón Home sigue
+   funcionando para navegar lo permitido. Rutas fuera del rol: ni tile ni acceso por URL.
+3. **Cierre de turno del salonero + métricas propias**: pantalla "Mi Turno" — ventas del turno,
+   ticket promedio (por mesa y por pax), propinas propias y el cierre respetando `canCloseShift`
+   (el último turno no cierra con mesas abiertas). Los datos salen de un **RPC `my_turno_stats`
+   SECURITY DEFINER** que solo computa `auth.uid()` — garantía estructural de que cada salonero
+   ve únicamente lo suyo.
+4. **Gestión de usuarios desde Admin** (ya existía Admin → Usuarios: rol + habilitar/deshabilitar;
+   se extiende con el rol `proveedor` y el flujo documentado): **crear cuentas** = el empleado se
+   registra (correo real o alias `satorisushibar+nombre@gmail.com`) → queda "pendiente" → el owner
+   le asigna rol y lo habilita desde esta pantalla. Crear cuentas server-side requeriría la
+   service key en un backend (Edge Function) — innecesario por ahora.
+5. **PWA por puesto**: shortcuts del manifest (Registrar proveedor, Comandero, Caja) + guía de
+   instalación por dispositivo en el reporte. Con el aterrizaje por rol, el mismo ícono abre lo
+   correcto para cada quien.
+
+#### 📬 Fase futura — Reportes quincenales por correo a saloneros · M (NO implementado)
+Cada quincena, un correo automático a cada salonero con SUS métricas (ventas, promedios, propinas
+del período) al correo de su cuenta. Requiere: (a) servicio de email transaccional (Resend/Postmark
+— Resend tiene tier gratis 100 mails/día y DX simple), (b) **Edge Function** programada
+(`supabase functions deploy` + cron via pg_cron o Scheduled Functions) que computa las métricas por
+salonero (mismas consultas que `my_turno_stats`, agregadas por quincena) y dispara los correos,
+(c) plantilla HTML simple con la identidad Satori. Decisiones pendientes: día/hora de corte
+(1 y 16 de cada mes, 9am CR sugerido), y si el correo incluye comparativa vs quincena anterior.
+
 ### Reglas transversales (valen para TODAS las fases)
 - El **turno de la mañana puede cerrar con mesas abiertas**; el **último turno NO** (el día no
   cierra con mesas vivas).

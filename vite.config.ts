@@ -28,10 +28,13 @@ export default defineConfig({
           { src: `${BASE}icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: `${BASE}icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
+        // Long-press del ícono (Android/desktop) → atajo directo al puesto.
+        // iOS no soporta shortcuts, pero el aterrizaje por rol cubre lo mismo.
         shortcuts: [
-          { name: 'Resumen del Día', url: `${BASE}resumen`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
-          { name: 'Propinas',        url: `${BASE}propinas`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
-          { name: 'Caja',            url: `${BASE}caja`,     icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Registrar proveedor', url: `${BASE}proveedor`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Comandero',           url: `${BASE}comandero`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Caja',                url: `${BASE}caja`,      icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Propinas',            url: `${BASE}propinas`,  icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
         ],
         // Compartir una foto desde WhatsApp/galería → Satori (Bandeja). El POST
         // lo intercepta sw-share.js y redirige a {BASE}inbox?shared=1.

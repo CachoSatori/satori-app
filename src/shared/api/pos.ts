@@ -300,14 +300,50 @@ export async function deleteOrderItem(itemId: string): Promise<void> {
   fail(error)
 }
 
-/** Marchar: manda a cocina los ítems pendientes del curso (o todos con course=null). */
-export async function marchar(orderId: string, course: PosOrderItem['course'] | null): Promise<void> {
+/** Marchar: manda a cocina los ítems pendientes del curso (o todos con course=null).
+ *  Devuelve los ids marchados — el comandero los usa para la ventana de DESHACER. */
+export async function marchar(orderId: string, course: PosOrderItem['course'] | null): Promise<string[]> {
   let qy = sb.from('pos_order_items')
     .update({ kitchen_status: 'marchado', marched_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('order_id', orderId).eq('kitchen_status', 'pendiente')
   if (course) qy = qy.eq('course', course)
-  const { error } = await qy
+  const { data, error } = await qy.select('id')
   fail(error)
+  return ((data ?? []) as Array<{ id: string }>).map(r => r.id)
+}
+
+/** DESHACER marchar (ventana de gracia del comandero, SPEC C2): revierte a 'pendiente'
+ *  SOLO ítems aún en 'marchado' — si cocina ya los bumpeó a 'listo', no se tocan.
+ *  El KDS los saca solo (su query filtra marchado + refetch por realtime). */
+export async function unmarchar(itemIds: string[]): Promise<void> {
+  if (!itemIds.length) return
+  const { error } = await sb.from('pos_order_items')
+    .update({ kitchen_status: 'pendiente', marched_at: null, updated_at: new Date().toISOString() })
+    .in('id', itemIds).eq('kitchen_status', 'marchado')
+  fail(error)
+}
+
+/** Cancelar una mesa abierta POR ERROR (SPEC C1). Solo sin ítems: si hay pendientes se
+ *  borran explícitamente antes; si hay marchados, esto no aplica (void = F3 con gerencia). */
+export async function cancelEmptyOrder(orderId: string): Promise<void> {
+  const { data, error } = await sb.from('pos_order_items').select('id').eq('order_id', orderId).limit(1)
+  fail(error)
+  if ((data ?? []).length > 0) throw new Error('La mesa tiene ítems — borralos antes de cancelarla')
+  const { error: e2 } = await sb.from('pos_orders')
+    .update({ status: 'cancelled', closed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', orderId).eq('status', 'open')
+  fail(e2)
+}
+
+/** Traza liviana del pedido (pax editado, deshacer marchar…): append a notes — cero DDL (D3). */
+export async function appendOrderNote(orderId: string, note: string): Promise<void> {
+  const { data, error } = await sb.from('pos_orders').select('notes').eq('id', orderId).single()
+  fail(error)
+  const prev = ((data as { notes?: string } | null)?.notes ?? '').trim()
+  const { error: e2 } = await sb.from('pos_orders')
+    .update({ notes: (prev ? prev + '\n' : '') + note, updated_at: new Date().toISOString() })
+    .eq('id', orderId)
+  fail(e2)
 }
 
 // ── F3: KDS (pantalla de cocina) ──────────────────────────────

@@ -3,6 +3,34 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 Novedades 2026-06-12 (mañana) — PoS F1+F2+F3 completos EN STAGING · prod preparado para offline
+
+### En STAGING esperando validación física de la dueña (rama `staging` = `8697226`+)
+- **PoS completo de la noche** (tramos 1-3, verificado por el asesor: 54/54 tests, sagrados intactos):
+  F1 (locales/catálogo con modificadores/editor de salón en Admin → 🍣 PoS) · F2 (comandero `/comandero`
+  con pax ≥1 obligatorio, modificadores, cursos, marchar) · F3 (KDS `/kds` con timers y bump, precios
+  con **modelo fiscal CR** — final IVA incluido, desglose derivado, servicio 10% por canal vía
+  `computeTotals` único —, cuenta de mesa, transferencia de mesas + reglas de turno, `print-bridge/`
+  en modo simulación). Migraciones **022/023/024** aplicadas SOLO en staging.
+- **Offline-first** (caché + outbox idempotente) y **fix de transferencias visibles** también en staging.
+- Login de prueba: `test-manager@staging.satori` / `staging-test-2026` (rol owner en staging).
+
+### PROD: DDL listo, código gateado
+- **Migración 021 + housekeeping 018-021 APLICADOS en prod** (autorización única, 3 ok=true).
+- **A.3 (merge a `main` hasta `f06c6d3`** — offline + transferencias, NADA del PoS): ⏸ **EN PAUSA**
+  hasta que la dueña confirme la prueba física de transferencias en staging.
+
+### ⏳ PENDIENTE-CONTADORA (decisión fiscal, parámetro centralizado en `posFiscal.ts`)
+- Base exacta del **servicio 10%** (¿sobre neto o sobre total con IVA?) y si el servicio lleva IVA.
+  Default implementado: 10% sobre subtotal neto, desglose visible. CIIU/CABYS del menú (combos 4.4).
+  Informe de proveedores de facturación electrónica: `~/Desktop/investigacion-fiscal-cr.md`.
+
+### 🧹 Housekeeping de baja prioridad
+- **Historial de migraciones de staging (009)**: `db push` choca con una discrepancia vieja del
+  historial — las migraciones se aplican por Management API (patrón establecido); reconciliar el
+  historial cuando haya un rato. No bloquea nada.
+- Fábrica nocturna cerrada: job launchd eliminado, ramas mergeadas borradas (quedan `main`+`staging`).
+
 ## 🆕 Novedades 2026-06-11/12 — Sprint validado por la dueña y EN PRODUCCIÓN (`main`)
 
 ### En producción (todo validado físicamente por la dueña en staging antes del merge)

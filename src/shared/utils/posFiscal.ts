@@ -7,10 +7,11 @@
 //  - Los deltas de modificadores también son precios FINALES y heredan el tax_type.
 //  - Servicio 10% por CANAL (salón/barra SÍ, delivery NO), aplicado al armar la cuenta.
 //
-// PENDIENTE-CONTADORA (DECISIÓN-NOCTURNA-FISCAL): la base exacta del 10% (¿neto o
-// total con IVA?) y si el servicio lleva IVA quedan por confirmar. Default
-// implementado: 10% sobre el subtotal NETO, servicio sin IVA. TODO ese criterio
-// vive en SERVICE_CONFIG — un solo lugar para ajustarlo cuando la dueña confirme.
+// ✅ CALIBRADO CONFIRMADO (2026-06-12, documentos reales de Nube de Fuego —
+// pre-cuenta + factura electrónica del mismo sistema, idénticas en cálculo):
+// servicio = 10% del subtotal NETO · IVA = 13% solo del neto (el servicio NO
+// lleva IVA) · total = neto × 1,23. El criterio vive en SERVICE_CONFIG.
+// PENDIENTE-CONTADORA: solo CIIU/CABYS del menú.
 
 export type TaxType = 'iva13' | 'iva4' | 'iva2' | 'iva1' | 'exento'
 export type Canal = 'salon' | 'barra' | 'delivery'
@@ -25,11 +26,13 @@ export const TAX_LABEL: Record<TaxType, string> = {
 }
 
 /**
- * PARÁMETRO CENTRALIZADO del impuesto de servicio (PENDIENTE-CONTADORA).
- * Cambiar acá — y solo acá — cuando la contadora confirme el criterio.
+ * PARÁMETRO CENTRALIZADO del impuesto de servicio.
+ * ✅ CALIBRADO contra factura real de Nube de Fuego (2026-06-12): base 'neto',
+ * servicio sin IVA — ver test de regresión "ticket real" en posFiscal.test.ts.
+ * PENDIENTE solo CIIU/CABYS de la contadora (no afecta esta matemática).
  *  - rate:     10% estándar de gastronomía.
- *  - base:     'neto' (default) | 'total' (sobre el consumo con IVA).
- *  - taxed:    ¿el servicio lleva IVA 13%? Default false.
+ *  - base:     'neto' (CONFIRMADO) | 'total' (sobre el consumo con IVA).
+ *  - taxed:    ¿el servicio lleva IVA 13%? CONFIRMADO: false.
  *  - channels: canales que cobran servicio (salón y barra; delivery NO).
  */
 export const SERVICE_CONFIG = {

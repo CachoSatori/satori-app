@@ -70,8 +70,28 @@ describe('computeTotals — servicio 10% por canal', () => {
   })
 })
 
-describe('SERVICE_CONFIG — parámetro centralizado PENDIENTE-CONTADORA', () => {
-  it('default documentado: 10% sobre el neto, sin IVA, salón+barra', () => {
+describe('REGRESIÓN — ticket real de Nube de Fuego (calibración 2026-06-12)', () => {
+  // Pre-cuenta + factura electrónica reales del sistema actual (idénticas en cálculo):
+  // subtotal neto 314.250,37 → servicio 31.425,04 · IVA 40.852,55 · total 386.527,94.
+  // La factura redondea POR LÍNEA; acá reconstruimos el consumo final equivalente
+  // (neto × 1,13) en una línea → tolerancia de ±0,05 en el total agregado.
+  it('reproduce servicio, IVA y total de la factura real', () => {
+    const finalConIva = 355102.92   // = 314250.37 × 1.13 (precio final IVA incluido)
+    const t = computeTotals([
+      { product_name: 'CONSUMO MESA REAL', qty: 1, price_final_crc: finalConIva, modifiers: [], tax_type: 'iva13' },
+    ], 'salon')
+    expect(t.neto).toBeCloseTo(314250.37, 2)        // subtotal neto exacto
+    expect(t.servicio).toBeCloseTo(31425.04, 2)     // 10% del NETO (no del total con IVA)
+    expect(t.iva).toBeCloseTo(40852.55, 2)          // 13% solo del neto
+    expect(t.servicioIva).toBe(0)                   // el servicio NO lleva IVA
+    expect(Math.abs(t.total - 386527.94)).toBeLessThan(0.05)  // redondeo por línea de la factura
+    // identidad del modelo confirmado: total = neto × 1,23
+    expect(t.total).toBeCloseTo(314250.37 * 1.23, 1)
+  })
+})
+
+describe('SERVICE_CONFIG — calibrado contra factura real (solo CIIU/CABYS pendiente)', () => {
+  it('criterio confirmado: 10% sobre el neto, sin IVA, salón+barra', () => {
     expect(SERVICE_CONFIG.rate).toBe(0.10)
     expect(SERVICE_CONFIG.base).toBe('neto')
     expect(SERVICE_CONFIG.taxed).toBe(false)

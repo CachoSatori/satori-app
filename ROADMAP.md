@@ -132,6 +132,15 @@ Orden acordado (cada uno es base del siguiente):
   servicio lleva IVA — default implementado: 10% sobre el subtotal neto, parámetro centralizado.
 
 ### F3 — Cobro completo + Modo Evento · L
+- **Flujo de cobro CONFIRMADO con la operación actual (2026-06-12, documentos reales de Nube
+  de Fuego)**: la **pre-cuenta** (🧾 cuenta de mesa, ya construida en el comandero) es el
+  documento PREVIO **no fiscal** que se lleva a la mesa; la **factura electrónica se emite e
+  imprime SOLO al confirmar el método de pago** (tarjeta / efectivo / transferencia-SINPE).
+  El cobro de F3 replica ese orden exacto: **cuenta → método → emisión → impresión**.
+  Calibración fiscal confirmada con esos mismos documentos: servicio = 10% del subtotal NETO,
+  IVA = 13% solo del neto (el servicio NO lleva IVA), total = neto × 1,23 — el default de
+  `SERVICE_CONFIG` ya coincidía; test de regresión "ticket real" en `posFiscal.test.ts`.
+  Pendiente de la contadora: solo CIIU/CABYS.
 - **Previas desde la tablet** (impresas en SALÓN), **splits** por cliente / por productos /
   partes iguales / por montos; cobro **₡/$ al TC de admin**; cierre de cuenta **desde la tablet
   o desde caja**; **descuentos con `verify_manager`** (autorización de gerencia server-side, ya

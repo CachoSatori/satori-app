@@ -4619,3 +4619,7 @@ html, body, #root {
 .xr-history {
   background: var(--vt-paper);
 }
+
+/* ── Comandero pro (SPEC P1-b): feedback táctil de cada tap ───────────── */
+.cm-tap { transition: transform .06s ease, filter .06s ease; touch-action: manipulation; }
+.cm-tap:active { transform: scale(.95); filter: brightness(1.12); }

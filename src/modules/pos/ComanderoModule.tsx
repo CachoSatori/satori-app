@@ -6,6 +6,7 @@ import {
   getLocations, getSalonTables, getOpenOrders, openOrder, updateOrderPax,
   getOrderItems, addOrderItem, updateItemCourse, deleteOrderItem, marchar,
   searchProducts, getProductGroups, getPriceMap, transferOrder, getProductMetaMap,
+  unmarchar, cancelEmptyOrder, appendOrderNote,
 } from '../../shared/api/pos'
 import type { PosLocation, SalonTable, PosOrder, PosOrderItem, ModifierGroupRow, ModifierRow, PosPrice } from '../../shared/api/pos'
 import { getAllProfiles } from '../../shared/api/admin'
@@ -15,6 +16,7 @@ import type { PosCourse, Turno } from '../../shared/utils/posPricing'
 import { computeTotals, groupBySeat } from '../../shared/utils/posFiscal'
 import type { BillItem } from '../../shared/utils/posFiscal'
 import { fi } from '../../shared/utils'
+import { buildMenu } from '../../shared/utils/comanderoMenu'
 
 /** PosOrderItem → BillItem para la matemática fiscal (única verdad: computeTotals). */
 function toBillItem(it: PosOrderItem): BillItem {
@@ -64,7 +66,14 @@ export default function ComanderoModule() {
     if (!paxModal || !profile) return
     try {
       if (paxModal.editOrder) {
+        const oldPax = paxModal.editOrder.pax
         await updateOrderPax(paxModal.editOrder.id, pax)
+        // Traza liviana (SPEC C4/D3): quién y cuándo corrigió el pax — en notes, cero DDL.
+        if (oldPax !== pax) {
+          appendOrderNote(paxModal.editOrder.id,
+            `pax ${oldPax}→${pax} · ${profile.full_name ?? ''} · ${new Date().toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`,
+          ).catch(() => { /* la traza nunca bloquea la operación */ })
+        }
       } else if (paxModal.table) {
         const o = await openOrder({
           location_id: loc, table_id: paxModal.table.id, table_name: paxModal.table.name,
@@ -168,27 +177,29 @@ function CierreTurnoModal({ openTables, onClose }: { openTables: string[]; onClo
 /** Pax obligatorio ≥1 — teclado numérico, confirmar deshabilitado sin pax válido. */
 function PaxModal({ initial, onCancel, onConfirm }: { initial: number | null; onCancel: () => void; onConfirm: (pax: number) => void }) {
   const [pax, setPax] = useState<number | null>(initial)
-  const valid = pax !== null && Number.isInteger(pax) && pax >= 1
+  const valid = pax !== null && Number.isInteger(pax) && pax >= 1 && pax <= 99
   return (
     <div className="cd-modal-overlay" onClick={onCancel}>
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 320, textAlign: 'center' }}>
         <div className="cd-modal-title">¿Cuántas personas? (pax)</div>
-        <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.5rem 0', minHeight: 44 }}>{pax ?? '—'}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+        <div style={{ fontSize: '2.6rem', fontWeight: 800, margin: '0.5rem 0', minHeight: 52, fontVariantNumeric: 'tabular-nums' }}>{pax ?? '—'}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
-            <button key={n} className="tips-btn-ghost" style={{ padding: '12px 0', fontSize: '1.1rem' }}
-              onClick={() => setPax(p => (p && p < 10 ? p * 10 + n : n))}>{n}</button>
+            <button key={n} className="tips-btn-ghost cm-tap" style={{ minHeight: 56, fontSize: '1.35rem', fontWeight: 700 }}
+              onClick={() => setPax(p => (p == null ? n : p < 10 ? p * 10 + n : p))}>{n}</button>
           ))}
-          <button className="tips-btn-ghost" onClick={() => setPax(null)}>C</button>
-          <button className="tips-btn-ghost" style={{ padding: '12px 0', fontSize: '1.1rem' }}
-            onClick={() => setPax(p => (p ? p * 10 : null))}>0</button>
-          <button className="tips-btn-ghost" onClick={() => setPax(p => (p && p >= 10 ? Math.floor(p / 10) : null))}>⌫</button>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 56, fontSize: '1.1rem', color: '#c0392b', fontWeight: 800 }}
+            onClick={() => setPax(null)} title="Limpiar">C</button>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 56, fontSize: '1.35rem', fontWeight: 700 }}
+            onClick={() => setPax(p => (p ? Math.min(p * 10, 99) : null))}>0</button>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 56, fontSize: '1.2rem' }}
+            onClick={() => setPax(p => (p && p >= 10 ? Math.floor(p / 10) : null))} title="Borrar último dígito">⌫</button>
         </div>
-        <div style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: 6 }}>El pax es obligatorio — mínimo 1, el 0 no existe.</div>
+        <div style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: 6 }}>El pax es obligatorio — mínimo 1, máximo 99. ⌫ borra el último dígito · C limpia todo.</div>
         <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>
-          <button className="tips-btn-ghost" onClick={onCancel}>Cancelar</button>
-          <button className="cd-btn-green" disabled={!valid} style={{ opacity: valid ? 1 : 0.4 }}
-            onClick={() => valid && onConfirm(pax)}>✓ Confirmar</button>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={onCancel}>Cancelar</button>
+          <button className="cd-btn-green cm-tap" disabled={!valid} style={{ opacity: valid ? 1 : 0.4, minHeight: 48, fontSize: '1rem' }}
+            onClick={() => valid && onConfirm(pax)}>✓ Confirmar {valid ? `${pax} pax` : ''}</button>
         </div>
       </div>
     </div>
@@ -207,6 +218,22 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
   const [picking, setPicking] = useState<{ nombre: string; tipo: string } | null>(null)
   const [showBill, setShowBill] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
+  // Comandero pro (SPEC): grid por categorías, deshacer marchar, edición de ítems
+  const [cat, setCat]           = useState<string | null>(null)   // categoría activa del grid
+  const [lastSeat]              = useState(1)                     // asiento default del quick-add (P2: recordar el último)
+  const [undo, setUndo]         = useState<{ ids: string[]; until: number } | null>(null)
+  const [nowTs, setNowTs]       = useState(() => Date.now())
+  const [editItem, setEditItem] = useState<PosOrderItem | null>(null)
+  const [adding, setAdding]     = useState<string | null>(null)   // tile en quick-add (feedback)
+  useEffect(() => {
+    if (!undo) return
+    const t = window.setInterval(() => setNowTs(Date.now()), 500)
+    return () => window.clearInterval(t)
+  }, [undo])
+  const menu = useMemo(() => buildMenu(metaMap, priceMap), [metaMap, priceMap])
+  const activeCat = cat && menu.byCategory.has(cat) ? cat : (menu.categories[0] ?? null)
+  // Total SIEMPRE visible mientras se comanda (SPEC C5) — misma matemática que la cuenta.
+  const totals = computeTotals(items.map(toBillItem), order.channel)
 
   const load = useCallback(() => { getOrderItems(order.id).then(setItems).catch(e => onError(e.message)) }, [order.id, onError])
   useEffect(() => { load() }, [load])
@@ -219,8 +246,49 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
   }, [search])
 
   const pendientes = (c: PosCourse | null) => items.filter(i => i.kitchen_status === 'pendiente' && (!c || i.course === c)).length
+  // Marchar devuelve los ids → ventana de gracia de 20s para DESHACER (SPEC C2).
   const doMarchar = (c: PosCourse | null) =>
-    marchar(order.id, c).then(load).catch(e => onError(e instanceof Error ? e.message : 'Error al marchar'))
+    marchar(order.id, c)
+      .then(ids => { if (ids.length) setUndo({ ids, until: Date.now() + 20_000 }); load() })
+      .catch(e => onError(e instanceof Error ? e.message : 'Error al marchar'))
+  const doUndo = async () => {
+    if (!undo) return
+    try {
+      await unmarchar(undo.ids)
+      appendOrderNote(order.id, `deshizo marchar (${undo.ids.length} ítem/s) · ${new Date().toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`)
+        .catch(() => { /* la traza nunca bloquea */ })
+      setUndo(null); load()
+    } catch (e) { onError(e instanceof Error ? e.message : 'No se pudo deshacer el marchar') }
+  }
+
+  // SPEC D1: tap en el tile agrega DIRECTO si el producto no tiene modificadores
+  // OBLIGATORIOS (2 taps: categoría → ítem); si los tiene, abre el picker.
+  const quickAdd = async (nombre: string) => {
+    const m = metaMap.get(nombre); const pr = priceMap.get(nombre)
+    if (!m || !pr || pr.price_final_crc == null || adding) return
+    setAdding(nombre)
+    try {
+      const groups = await getProductGroups(nombre)
+      if (groups.some(g => g.required)) { setPicking({ nombre, tipo: m.tipo }); return }
+      await addOrderItem({
+        order_id: order.id, product_name: nombre, qty: 1,
+        base_price_crc: pr.price_final_crc, modifiers: [],
+        price_crc: pr.price_final_crc, tax_type: pr.tax_type ?? 'iva13', seat: lastSeat,
+        course: defaultCourseForTipo(m.tipo),
+        station: (m.station as 'cocina' | 'barra' | 'ninguna') ?? 'cocina',
+        subcategory: m.subclasificacion ?? '', aplica_servicio: m.aplica_servicio ?? true,
+      })
+      load()
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error agregando el ítem') }
+    finally { setAdding(null) }
+  }
+
+  // Cancelar una mesa abierta por error (SPEC C1) — solo sin ítems (D2).
+  const cancelMesa = async () => {
+    if (!window.confirm(`¿Cancelar ${order.table_name}? La mesa no tiene ítems y desaparece del plano.`)) return
+    try { await cancelEmptyOrder(order.id); onBack() }
+    catch (e) { onError(e instanceof Error ? e.message : 'No se pudo cancelar la mesa') }
+  }
 
   return (
     <div style={{ padding: '0.75rem' }}>
@@ -236,10 +304,21 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
           style={{ marginLeft: 'auto', background: 'none', border: '1px solid #5a5040', color: '#5a5040', borderRadius: 4, padding: '4px 10px', fontWeight: 700, cursor: 'pointer' }}>
           ↔ Transferir
         </button>
-        <button onClick={() => setShowBill(true)} disabled={!items.length} title="Ver la cuenta de la mesa"
-          style={{ background: '#2a7a6a', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontWeight: 700, cursor: 'pointer', opacity: items.length ? 1 : 0.4 }}>
+        <button className="cm-tap" onClick={() => setShowBill(true)} disabled={!items.length} title="Ver la cuenta de la mesa"
+          style={{ background: '#2a7a6a', color: '#fff', border: 'none', borderRadius: 4, padding: '10px 14px', minHeight: 44, fontWeight: 700, cursor: 'pointer', opacity: items.length ? 1 : 0.4 }}>
           🧾 Cuenta
         </button>
+        {/* Total SIEMPRE visible mientras se comanda (SPEC C5) */}
+        <span title="Total con servicio e IVA — igual que la cuenta"
+          style={{ background: '#0d0d0d', color: '#c8a96e', borderRadius: 4, padding: '8px 12px', fontWeight: 800, fontSize: '0.92rem', fontVariantNumeric: 'tabular-nums' }}>
+          {fi(totals.total)}
+        </span>
+        {items.length === 0 && (
+          <button className="cm-tap" onClick={cancelMesa} title="La mesa se abrió por error — cancelarla (solo sin ítems)"
+            style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 4, padding: '8px 12px', minHeight: 44, fontWeight: 700, cursor: 'pointer' }}>
+            ✕ Cancelar mesa
+          </button>
+        )}
       </div>
 
       <div style={{ position: 'relative', margin: '0.625rem 0' }}>
@@ -265,7 +344,38 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
         )}
       </div>
 
-      {items.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem', padding: '0.75rem 0' }}>Mesa sin ítems — buscá un producto para empezar el pedido.</div>}
+      {/* Menú visual (SPEC P0-b): pestañas de categoría + tiles grandes con precio.
+          Color del borde por estación (D4): teal = cocina · dorado = barra. */}
+      {menu.categories.length > 0 && (
+        <>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '2px 0 6px', WebkitOverflowScrolling: 'touch' }}>
+            {menu.categories.map(c => (
+              <button key={c} className="cm-tap" onClick={() => setCat(c)}
+                style={{ minHeight: 48, padding: '8px 16px', borderRadius: 8, whiteSpace: 'nowrap', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer',
+                  border: '1px solid var(--t-border,#d4cfc4)',
+                  background: activeCat === c ? '#0d0d0d' : '#fff', color: activeCat === c ? '#c8a96e' : '#5a5040' }}>
+                {c}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
+            {(activeCat ? menu.byCategory.get(activeCat) ?? [] : []).map(t => (
+              <button key={t.nombre} className="cm-tap" disabled={adding === t.nombre} onClick={() => quickAdd(t.nombre)}
+                title={`Agregar ${t.nombre}`}
+                style={{ minHeight: 64, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                  border: '1px solid var(--t-border,#d4cfc4)',
+                  borderLeft: `5px solid ${t.station === 'barra' ? '#c8a96e' : '#2a7a6a'}`,
+                  background: adding === t.nombre ? 'rgba(42,122,106,.18)' : '#fff',
+                  display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 4 }}>
+                <span style={{ fontWeight: 700, fontSize: '0.8rem', lineHeight: 1.15 }}>{t.nombre}</span>
+                <span style={{ fontSize: '0.74rem', color: '#5a5040', fontVariantNumeric: 'tabular-nums' }}>{fi(t.price_final_crc)}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {items.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem', padding: '0.75rem 0' }}>Mesa sin ítems — tocá una categoría y un producto del menú (o buscá arriba).</div>}
       {(['bebida', 'entrada', 'principal'] as PosCourse[]).map(c => {
         const list = items.filter(i => i.course === c)
         if (!list.length) return null
@@ -280,15 +390,19 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
                   <span style={{ color: '#5a5040', fontSize: '0.7rem' }}> · asiento {i.seat}</span>
                 </span>
                 {i.kitchen_status === 'pendiente' && (
-                  <button onClick={() => updateItemCourse(i.id, nextCourse(i.course)).then(load).catch(e => onError(e.message))}
-                    style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 10, padding: '1px 8px', fontSize: '0.66rem', cursor: 'pointer', color: '#5a5040' }}>
+                  <button className="cm-tap" onClick={() => updateItemCourse(i.id, nextCourse(i.course)).then(load).catch(e => onError(e.message))}
+                    style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 10, padding: '8px 12px', minHeight: 40, fontSize: '0.7rem', cursor: 'pointer', color: '#5a5040' }}>
                     curso ⟳
                   </button>
                 )}
                 <span style={{ fontSize: '0.68rem', color: i.kitchen_status === 'marchado' ? '#a04030' : '#2a7a6a' }}>{KS_LABEL[i.kitchen_status]}</span>
                 {i.kitchen_status === 'pendiente' && (
-                  <button onClick={() => deleteOrderItem(i.id).then(load).catch(e => onError(e.message))}
-                    style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '1px 7px', cursor: 'pointer' }}>×</button>
+                  <button className="cm-tap" onClick={() => setEditItem(i)} title="Editar modificadores, asiento o curso (SPEC C3)"
+                    style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 4, padding: '8px 12px', minHeight: 40, cursor: 'pointer' }}>✎</button>
+                )}
+                {i.kitchen_status === 'pendiente' && (
+                  <button className="cm-tap" onClick={() => deleteOrderItem(i.id).then(load).catch(e => onError(e.message))} title="Quitar el ítem (aún no marchado)"
+                    style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 4, padding: '8px 14px', minHeight: 40, cursor: 'pointer', fontWeight: 700 }}>×</button>
                 )}
               </div>
             ))}
@@ -298,18 +412,38 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
 
       <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
         {(['bebida', 'entrada', 'principal'] as PosCourse[]).map(c => (
-          <button key={c} className="cd-btn-green" disabled={!pendientes(c)} style={{ opacity: pendientes(c) ? 1 : 0.35 }}
+          <button key={c} className="cd-btn-green cm-tap" disabled={!pendientes(c)} style={{ opacity: pendientes(c) ? 1 : 0.35, minHeight: 48 }}
             onClick={() => doMarchar(c)}>🔥 Marchar {c}s ({pendientes(c)})</button>
         ))}
-        <button className="cd-btn-green" disabled={!pendientes(null)} style={{ opacity: pendientes(null) ? 1 : 0.35 }}
+        <button className="cd-btn-green cm-tap" disabled={!pendientes(null)} style={{ opacity: pendientes(null) ? 1 : 0.35, minHeight: 48 }}
           onClick={() => doMarchar(null)}>🔥🔥 Marchar TODO ({pendientes(null)})</button>
       </div>
 
-      {picking && (
-        <ItemPicker product={picking} price={priceMap.get(picking.nombre) ?? null} pax={order.pax} orderId={order.id}
-          meta={metaMap.get(picking.nombre) ?? null}
-          onDone={() => { setPicking(null); load() }} onCancel={() => setPicking(null)} onError={onError} />
+      {/* Ventana de gracia del marchar (SPEC C2): 20s para deshacer un toque por error.
+          Solo revierte lo aún 'marchado' (si cocina ya lo bumpeó, no se toca). */}
+      {undo && undo.until > nowTs && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, padding: '0.6rem 0.8rem',
+          borderRadius: 6, background: 'rgba(160,64,48,.1)', border: '1px solid #a04030', fontSize: '0.84rem' }}>
+          <span>🔥 Marchado ✓ ({undo.ids.length} ítem/s)</span>
+          <button className="cm-tap" onClick={doUndo}
+            style={{ marginLeft: 'auto', background: '#a04030', color: '#fff', border: 'none', borderRadius: 5,
+              padding: '10px 16px', minHeight: 44, fontWeight: 800, cursor: 'pointer' }}>
+            ↩ DESHACER ({Math.max(0, Math.ceil((undo.until - nowTs) / 1000))}s)
+          </button>
+        </div>
       )}
+
+      {(picking || editItem) && (() => {
+        const nombre = picking?.nombre ?? editItem!.product_name
+        return (
+          <ItemPicker
+            product={picking ?? { nombre, tipo: metaMap.get(nombre)?.tipo ?? '' }}
+            price={priceMap.get(nombre) ?? null} pax={order.pax} orderId={order.id}
+            meta={metaMap.get(nombre) ?? null} editItem={editItem}
+            onDone={() => { setPicking(null); setEditItem(null); load() }}
+            onCancel={() => { setPicking(null); setEditItem(null) }} onError={onError} />
+        )
+      })()}
 
       {showBill && <CuentaView order={order} items={items} onClose={() => setShowBill(false)} />}
       {showTransfer && <TransferModal order={order} onClose={() => setShowTransfer(false)}
@@ -444,26 +578,45 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
   )
 }
 
-/** Modal de ítem: modificadores (obligatorios bloquean), curso y asiento. */
-function ItemPicker({ product, price, pax, orderId, meta, onDone, onCancel, onError }: {
+/** Modal de ítem: modificadores (obligatorios bloquean), curso y asiento.
+ *  Con editItem (SPEC C3) edita un ítem NO marchado: prefill de todo, y al guardar
+ *  reemplaza el ítem (agrega el nuevo y borra el viejo). */
+function ItemPicker({ product, price, pax, orderId, meta, editItem, onDone, onCancel, onError }: {
   meta: { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean } | null
   product: { nombre: string; tipo: string }; price: PosPrice | null; pax: number; orderId: string
+  editItem?: PosOrderItem | null
   onDone: () => void; onCancel: () => void; onError: (e: string) => void
 }) {
   const [groups, setGroups] = useState<Array<ModifierGroupRow & { modifiers: ModifierRow[] }>>([])
   const [picked, setPicked] = useState<Record<string, string[]>>({})
-  const [course, setCourse] = useState<PosCourse>(defaultCourseForTipo(product.tipo))
-  const [seat, setSeat]     = useState(1)
+  const [course, setCourse] = useState<PosCourse>(editItem?.course ?? defaultCourseForTipo(product.tipo))
+  const [seat, setSeat]     = useState(editItem?.seat ?? 1)
   const [saving, setSaving] = useState(false)
+  const [dirty, setDirty]   = useState(false)   // SPEC C6: tocar fuera no descarta sin avisar
 
-  useEffect(() => { getProductGroups(product.nombre).then(setGroups).catch(e => onError(e.message)) }, [product.nombre, onError])
+  useEffect(() => {
+    getProductGroups(product.nombre).then(gs => {
+      setGroups(gs)
+      if (editItem) {
+        // prefill: marcar los modificadores que el ítem ya tiene
+        const ids = new Set(editItem.modifiers.map(m => m.id))
+        setPicked(Object.fromEntries(gs.map(g => [g.id, g.modifiers.filter(m => ids.has(m.id)).map(m => m.id)])))
+      }
+    }).catch(e => onError(e.message))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product.nombre, onError])
+
+  const tryCancel = () => {
+    if (dirty && !window.confirm('¿Descartar los cambios de este ítem?')) return
+    onCancel()
+  }
 
   const chosen = groups.flatMap(g => g.modifiers.filter(m => (picked[g.id] ?? []).includes(m.id)))
   const counts = Object.fromEntries(groups.map(g => [g.id, (picked[g.id] ?? []).length]))
   const valErr = validateItemSelections(groups.map(g => ({ ...g, modifiers: g.modifiers })), counts)
   // TRAMO 3: el precio de venta es FINAL (IVA incluido) y vive en pos_prices.
   // Sin precio → no se puede enviar (el comandero no manda ítems sin precio).
-  const base = price?.price_final_crc ?? null
+  const base = price?.price_final_crc ?? editItem?.base_price_crc ?? null
   const taxType = price?.tax_type ?? 'iva13'
   const sinPrecio = base == null
   const total = computeItemPrice(base ?? 0, chosen)
@@ -481,24 +634,27 @@ function ItemPicker({ product, price, pax, orderId, meta, onDone, onCancel, onEr
         subcategory: meta?.subclasificacion ?? '',
         aplica_servicio: meta?.aplica_servicio ?? true,
       })
+      // Edición (C3) = reemplazo: primero entra el nuevo (no se pierde nada), después
+      // sale el viejo (solo borra pendientes; si falló, queda visible y se quita a mano).
+      if (editItem) await deleteOrderItem(editItem.id).catch(() => onError('El ítem editado quedó duplicado — quitá la versión vieja con ×'))
       onDone()
     } catch (e) { onError(e instanceof Error ? e.message : 'Error agregando ítem'); setSaving(false) }
   }
 
   return (
-    <div className="cd-modal-overlay" onClick={onCancel}>
+    <div className="cd-modal-overlay" onClick={tryCancel}>
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
-        <div className="cd-modal-title">{product.nombre}</div>
+        <div className="cd-modal-title">{editItem ? '✎ ' : ''}{product.nombre}</div>
         {groups.map(g => (
           <div key={g.id} style={{ marginBottom: 8 }}>
             <div style={{ fontSize: '0.74rem', fontWeight: 700 }}>{g.name}{g.required && <span style={{ color: '#c23b22' }}> * obligatorio</span>}</div>
             {g.modifiers.map(m => {
               const on = (picked[g.id] ?? []).includes(m.id)
               return (
-                <button key={m.id} onClick={() => setPicked(prev => {
+                <button key={m.id} className="cm-tap" onClick={() => { setDirty(true); setPicked(prev => {
                   const cur = prev[g.id] ?? []
                   return { ...prev, [g.id]: on ? cur.filter(x => x !== m.id) : (g.max_selections === 1 ? [m.id] : [...cur, m.id]) }
-                })}
+                }) }}
                   style={{ margin: '2px 4px 2px 0', padding: '6px 12px', borderRadius: 14, fontSize: '0.78rem', cursor: 'pointer',
                     border: `1px solid ${on ? '#2a7a6a' : 'var(--t-border,#d4cfc4)'}`, background: on ? 'rgba(42,122,106,.15)' : 'transparent' }}>
                   {m.name}{m.price_delta_crc > 0 ? ` +${fi(m.price_delta_crc)}` : ''}
@@ -508,12 +664,12 @@ function ItemPicker({ product, price, pax, orderId, meta, onDone, onCancel, onEr
           </div>
         ))}
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
-          <button onClick={() => setCourse(nextCourse(course))}
+          <button className="cm-tap" onClick={() => { setDirty(true); setCourse(nextCourse(course)) }}
             style={{ border: '1px solid var(--t-border,#d4cfc4)', background: 'none', borderRadius: 12, padding: '4px 12px', fontSize: '0.76rem', cursor: 'pointer' }}>
             {COURSE_LABEL[course]} ⟳
           </button>
           <label style={{ fontSize: '0.76rem' }}>asiento
-            <select className="tips-input-dark" style={{ marginLeft: 4 }} value={seat} onChange={e => setSeat(Number(e.target.value))}>
+            <select className="tips-input-dark" style={{ marginLeft: 4, minHeight: 40 }} value={seat} onChange={e => { setDirty(true); setSeat(Number(e.target.value)) }}>
               {Array.from({ length: pax }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
@@ -522,9 +678,9 @@ function ItemPicker({ product, price, pax, orderId, meta, onDone, onCancel, onEr
         {sinPrecio && <div style={{ color: '#c23b22', fontSize: '0.74rem', marginTop: 6 }}>⚠ Sin precio cargado — cargalo en Admin → 🍣 PoS → Precios para poder enviarlo.</div>}
         {valErr && <div style={{ color: '#c23b22', fontSize: '0.74rem', marginTop: 6 }}>⛔ {valErr}</div>}
         <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>
-          <button className="tips-btn-ghost" onClick={onCancel}>Cancelar</button>
-          <button className="cd-btn-green" disabled={!!valErr || saving || sinPrecio} style={{ opacity: valErr || saving || sinPrecio ? 0.4 : 1 }} onClick={enviar}>
-            {saving ? 'Agregando…' : '✓ Agregar al pedido'}
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={tryCancel}>Cancelar</button>
+          <button className="cd-btn-green cm-tap" disabled={!!valErr || saving || sinPrecio} style={{ opacity: valErr || saving || sinPrecio ? 0.4 : 1, minHeight: 48 }} onClick={enviar}>
+            {saving ? 'Guardando…' : editItem ? '✓ Guardar cambios' : '✓ Agregar al pedido'}
           </button>
         </div>
       </div>

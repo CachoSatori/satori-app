@@ -5,9 +5,9 @@ import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
 import {
   getLocations, getSalonTables, getOpenOrders, openOrder, updateOrderPax,
   getOrderItems, addOrderItem, updateItemCourse, deleteOrderItem, marchar,
-  searchProducts, getProductGroups,
+  searchProducts, getProductGroups, getPriceMap,
 } from '../../shared/api/pos'
-import type { PosLocation, SalonTable, PosOrder, PosOrderItem, ModifierGroupRow, ModifierRow } from '../../shared/api/pos'
+import type { PosLocation, SalonTable, PosOrder, PosOrderItem, ModifierGroupRow, ModifierRow, PosPrice } from '../../shared/api/pos'
 import { computeItemPrice, validateItemSelections, defaultCourseForTipo, nextCourse } from '../../shared/utils/posPricing'
 import type { PosCourse } from '../../shared/utils/posPricing'
 import { fi } from '../../shared/utils'
@@ -27,6 +27,7 @@ export default function ComanderoModule() {
   const [sel, setSel]             = useState<PosOrder | null>(null)   // pedido abierto en pantalla
   const [error, setError]         = useState<string | null>(null)
   const [paxModal, setPaxModal]   = useState<{ table: SalonTable | null; editOrder: PosOrder | null } | null>(null)
+  const [priceMap, setPriceMap]   = useState<Map<string, PosPrice>>(new Map())
 
   const load = useCallback(async () => {
     try {
@@ -36,7 +37,11 @@ export default function ComanderoModule() {
       setSel(prev => prev ? os.find(o => o.id === prev.id) ?? null : prev)
     } catch (e) { setError(e instanceof Error ? e.message : 'Error cargando salón') }
   }, [loc])
-  useEffect(() => { getLocations().then(setLocations).catch(() => { /* selector queda con default */ }); load() }, [load])
+  useEffect(() => {
+    getLocations().then(setLocations).catch(() => { /* selector queda con default */ })
+    getPriceMap(loc).then(setPriceMap).catch(() => { /* sin precios: el ítem se bloquea al enviar */ })
+    load()
+  }, [load, loc])
   useRealtimeRefetch('rt-comandero', ['pos_orders', 'pos_order_items', 'salon_tables'], load)
 
   const orderByTable = useMemo(() => new Map(orders.map(o => [o.table_id, o])), [orders])
@@ -94,7 +99,7 @@ export default function ComanderoModule() {
       )}
 
       {sel && (
-        <OrderScreen order={sel} onBack={() => { setSel(null); load() }} onError={setError}
+        <OrderScreen order={sel} priceMap={priceMap} onBack={() => { setSel(null); load() }} onError={setError}
           onEditPax={() => setPaxModal({ table: null, editOrder: sel })} />
       )}
 
@@ -133,8 +138,8 @@ function PaxModal({ initial, onCancel, onConfirm }: { initial: number | null; on
   )
 }
 
-function OrderScreen({ order, onBack, onError, onEditPax }: {
-  order: PosOrder; onBack: () => void; onError: (e: string) => void; onEditPax: () => void
+function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
+  order: PosOrder; priceMap: Map<string, PosPrice>; onBack: () => void; onError: (e: string) => void; onEditPax: () => void
 }) {
   const [items, setItems]   = useState<PosOrderItem[]>([])
   const [search, setSearch] = useState('')
@@ -172,11 +177,20 @@ function OrderScreen({ order, onBack, onError, onEditPax }: {
           value={search} onChange={e => setSearch(e.target.value)} />
         {opts.length > 0 && (
           <div className="cd-sup-dropdown" style={{ maxHeight: 220, overflowY: 'auto' }}>
-            {opts.map(p => (
-              <div key={p.nombre} className="cd-sup-option" onMouseDown={() => { setPicking(p); setSearch(''); setOpts([]) }}>
-                {p.nombre} <span className="cd-sup-cat">· {p.tipo}</span>
-              </div>
-            ))}
+            {opts.map(p => {
+              const pr = priceMap.get(p.nombre)
+              const noPrice = !pr || pr.price_final_crc == null
+              return (
+                <div key={p.nombre} className="cd-sup-option"
+                  onMouseDown={() => { if (!noPrice) { setPicking(p); setSearch(''); setOpts([]) } }}
+                  style={noPrice ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+                  title={noPrice ? 'Sin precio — cargalo en Admin → 🍣 PoS → Precios' : undefined}>
+                  {p.nombre} <span className="cd-sup-cat">· {p.tipo}</span>
+                  {noPrice ? <span style={{ color: '#c23b22', fontSize: '0.66rem' }}> · ⚠ sin precio</span>
+                    : <span style={{ color: '#2a7a6a', fontSize: '0.7rem' }}> · {fi(pr!.price_final_crc!)}</span>}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -222,7 +236,7 @@ function OrderScreen({ order, onBack, onError, onEditPax }: {
       </div>
 
       {picking && (
-        <ItemPicker product={picking} pax={order.pax} orderId={order.id}
+        <ItemPicker product={picking} price={priceMap.get(picking.nombre) ?? null} pax={order.pax} orderId={order.id}
           onDone={() => { setPicking(null); load() }} onCancel={() => setPicking(null)} onError={onError} />
       )}
     </div>
@@ -230,8 +244,8 @@ function OrderScreen({ order, onBack, onError, onEditPax }: {
 }
 
 /** Modal de ítem: modificadores (obligatorios bloquean), curso y asiento. */
-function ItemPicker({ product, pax, orderId, onDone, onCancel, onError }: {
-  product: { nombre: string; tipo: string }; pax: number; orderId: string
+function ItemPicker({ product, price, pax, orderId, onDone, onCancel, onError }: {
+  product: { nombre: string; tipo: string }; price: PosPrice | null; pax: number; orderId: string
   onDone: () => void; onCancel: () => void; onError: (e: string) => void
 }) {
   const [groups, setGroups] = useState<Array<ModifierGroupRow & { modifiers: ModifierRow[] }>>([])
@@ -245,18 +259,21 @@ function ItemPicker({ product, pax, orderId, onDone, onCancel, onError }: {
   const chosen = groups.flatMap(g => g.modifiers.filter(m => (picked[g.id] ?? []).includes(m.id)))
   const counts = Object.fromEntries(groups.map(g => [g.id, (picked[g.id] ?? []).length]))
   const valErr = validateItemSelections(groups.map(g => ({ ...g, modifiers: g.modifiers })), counts)
-  // DECISIÓN-NOCTURNA: product_map no tiene precio de venta → base 0 por ahora;
-  // el precio real llega en el TRAMO 3 (el ticket guarda los deltas igual).
-  const price = computeItemPrice(0, chosen)
+  // TRAMO 3: el precio de venta es FINAL (IVA incluido) y vive en pos_prices.
+  // Sin precio → no se puede enviar (el comandero no manda ítems sin precio).
+  const base = price?.price_final_crc ?? null
+  const taxType = price?.tax_type ?? 'iva13'
+  const sinPrecio = base == null
+  const total = computeItemPrice(base ?? 0, chosen)
 
   const enviar = async () => {
-    if (valErr || saving) return
+    if (valErr || saving || sinPrecio) return
     setSaving(true)
     try {
       await addOrderItem({
         order_id: orderId, product_name: product.nombre, qty: 1,
-        base_price_crc: 0, modifiers: chosen.map(m => ({ id: m.id, name: m.name, price_delta_crc: m.price_delta_crc })),
-        price_crc: price, tax_type: 'iva13', seat, course,
+        base_price_crc: base ?? 0, modifiers: chosen.map(m => ({ id: m.id, name: m.name, price_delta_crc: m.price_delta_crc })),
+        price_crc: total, tax_type: taxType, seat, course,
       })
       onDone()
     } catch (e) { onError(e instanceof Error ? e.message : 'Error agregando ítem'); setSaving(false) }
@@ -294,12 +311,13 @@ function ItemPicker({ product, pax, orderId, onDone, onCancel, onError }: {
               {Array.from({ length: pax }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
-          {chosen.length > 0 && <span style={{ fontSize: '0.76rem' }}>extras: <strong>{fi(price)}</strong></span>}
+          {!sinPrecio && <span style={{ fontSize: '0.82rem' }}>precio: <strong>{fi(total)}</strong></span>}
         </div>
+        {sinPrecio && <div style={{ color: '#c23b22', fontSize: '0.74rem', marginTop: 6 }}>⚠ Sin precio cargado — cargalo en Admin → 🍣 PoS → Precios para poder enviarlo.</div>}
         {valErr && <div style={{ color: '#c23b22', fontSize: '0.74rem', marginTop: 6 }}>⛔ {valErr}</div>}
         <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>
           <button className="tips-btn-ghost" onClick={onCancel}>Cancelar</button>
-          <button className="cd-btn-green" disabled={!!valErr || saving} style={{ opacity: valErr || saving ? 0.4 : 1 }} onClick={enviar}>
+          <button className="cd-btn-green" disabled={!!valErr || saving || sinPrecio} style={{ opacity: valErr || saving || sinPrecio ? 0.4 : 1 }} onClick={enviar}>
             {saving ? 'Agregando…' : '✓ Agregar al pedido'}
           </button>
         </div>

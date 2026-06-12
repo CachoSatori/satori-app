@@ -4,13 +4,17 @@ import {
   getModifierGroups, saveModifierGroup, getModifiers, saveModifier, deleteModifier,
   getProductGroupLinks, linkProductGroup, unlinkProductGroup, searchProducts,
   getSalonTables, saveSalonTable, deactivateSalonTable,
+  getAllProducts, getPrices, upsertPrice, getKdsSettings, saveKdsSettings,
 } from '../../shared/api/pos'
-import type { PosLocation, ModifierGroupRow, ModifierRow, ProductGroupLink, SalonTable } from '../../shared/api/pos'
+import type { PosLocation, ModifierGroupRow, ModifierRow, ProductGroupLink, SalonTable, PosPrice, KdsSettings } from '../../shared/api/pos'
 import { computeItemPrice, validateItemSelections } from '../../shared/utils/posPricing'
 import type { PosModifierGroup } from '../../shared/utils/posPricing'
+import { splitNetIva, TAX_LABEL, TAX_RATES } from '../../shared/utils/posFiscal'
+import type { TaxType } from '../../shared/utils/posFiscal'
+import { fmtElapsed } from '../../shared/utils/kds'
 import { fi } from '../../shared/utils'
 
-type Section = 'locales' | 'catalogo' | 'salon'
+type Section = 'locales' | 'catalogo' | 'salon' | 'precios' | 'kds'
 
 /** PoS F1 (ROADMAP "PoS Satori + KDS"): locales, catálogo con modificadores y
  *  editor de salón. Solo gerencia (la pestaña vive en Admin, ruta OwnerRoute). */
@@ -25,13 +29,14 @@ export default function PosF1Admin() {
   return (
     <div>
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.875rem' }}>
-        {(['salon', 'catalogo', 'locales'] as Section[]).map(s => (
+        {(['salon', 'catalogo', 'precios', 'kds', 'locales'] as Section[]).map(s => (
           <button key={s} onClick={() => setSection(s)}
             style={{ padding: '5px 14px', borderRadius: 3, fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
               border: '1px solid var(--t-border,#d4cfc4)',
               background: section === s ? 'var(--t-ink,#0d0d0d)' : 'transparent',
               color: section === s ? 'var(--t-gold,#c8a96e)' : '#5a5040' }}>
-            {s === 'salon' ? '🪑 Editor de Salón' : s === 'catalogo' ? '🍹 Catálogo PoS' : '🏝 Locales'}
+            {s === 'salon' ? '🪑 Editor de Salón' : s === 'catalogo' ? '🍹 Catálogo PoS'
+              : s === 'precios' ? '🏷 Precios' : s === 'kds' ? '🖥 KDS' : '🏝 Locales'}
           </button>
         ))}
         <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#5a5040' }}>Local activo:</span>
@@ -43,6 +48,8 @@ export default function PosF1Admin() {
       {section === 'locales'  && <LocalesSection locations={locations} onChange={setLocations} onError={setError} />}
       {section === 'catalogo' && <CatalogoSection locationId={activeLoc} onError={setError} />}
       {section === 'salon'    && <SalonSection locationId={activeLoc} onError={setError} />}
+      {section === 'precios'  && <PreciosSection locationId={activeLoc} onError={setError} />}
+      {section === 'kds'      && <KdsSection locationId={activeLoc} onError={setError} />}
     </div>
   )
 }
@@ -310,6 +317,174 @@ function SalonSection({ locationId, onError }: { locationId: string; onError: (e
             </button>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Precios (modelo fiscal CR) ───────────────────────────────
+// El precio cargado es FINAL (IVA incluido). El neto/IVA se DERIVA y es solo-lectura.
+const TAX_TYPES: TaxType[] = ['iva13', 'iva4', 'iva2', 'iva1', 'exento']
+function PreciosSection({ locationId, onError }: { locationId: string; onError: (e: string) => void }) {
+  const [products, setProducts] = useState<Array<{ nombre: string; tipo: string }>>([])
+  const [prices, setPrices]     = useState<Map<string, PosPrice>>(new Map())
+  const [q, setQ]               = useState('')
+  const [onlyMissing, setOnlyMissing] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const [ps, pr] = await Promise.all([getAllProducts(), getPrices(locationId)])
+      setProducts(ps)
+      setPrices(new Map(pr.map(p => [p.product_name, p])))
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error cargando precios') }
+  }, [locationId, onError])
+  useEffect(() => { load() }, [load])
+
+  const priceOf = (nombre: string): PosPrice | undefined => prices.get(nombre)
+  const hasPrice = (nombre: string) => { const p = priceOf(nombre); return !!p && p.price_final_crc != null }
+  const missingCount = products.filter(p => !hasPrice(p.nombre)).length
+
+  const save = async (nombre: string, patch: { price_final_crc?: number | null; tax_type?: TaxType }) => {
+    const cur = priceOf(nombre)
+    try {
+      await upsertPrice({
+        product_name: nombre, location_id: locationId,
+        price_final_crc: patch.price_final_crc !== undefined ? patch.price_final_crc : (cur?.price_final_crc ?? null),
+        tax_type: patch.tax_type ?? cur?.tax_type ?? 'iva13',
+      })
+      await load()
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error guardando precio') }
+  }
+
+  const shown = products.filter(p =>
+    (!q.trim() || p.nombre.toLowerCase().includes(q.toLowerCase()) || p.tipo.toLowerCase().includes(q.toLowerCase()))
+    && (!onlyMissing || !hasPrice(p.nombre)))
+
+  return (
+    <div className="admin-table" style={{ padding: '0.875rem' }}>
+      <div style={{ fontSize: '0.72rem', color: '#5a5040', marginBottom: '0.5rem' }}>
+        Cargá el <strong>precio de venta FINAL</strong> (lo que ve el cliente en la carta — IVA incluido). El sistema
+        deriva neto e IVA automáticamente. El comandero <strong>no deja enviar</strong> productos sin precio.
+      </div>
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.625rem' }}>
+        <input className="tips-input-dark" placeholder="Buscar producto o categoría…" value={q} onChange={e => setQ(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+        <label style={{ fontSize: '0.74rem', color: missingCount ? '#c23b22' : '#2a7a6a', fontWeight: 700 }}>
+          <input type="checkbox" checked={onlyMissing} onChange={e => setOnlyMissing(e.target.checked)} />{' '}
+          {missingCount ? `⚠ ${missingCount} sin precio` : '✓ todos con precio'}
+        </label>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.1fr 1.1fr 1fr 1fr', gap: '0.25rem 0.5rem', alignItems: 'center', fontSize: '0.72rem', fontWeight: 700, color: '#5a5040', borderBottom: '1px solid var(--t-border,#d4cfc4)', paddingBottom: 4 }}>
+        <span>Producto</span><span>Precio final (IVA incl.)</span><span>Impuesto</span><span>Neto</span><span>IVA</span>
+      </div>
+      {shown.map(p => {
+        const pr = priceOf(p.nombre)
+        const tax = pr?.tax_type ?? 'iva13'
+        const final = pr?.price_final_crc ?? null
+        const { neto, iva } = final != null ? splitNetIva(final, tax) : { neto: 0, iva: 0 }
+        return (
+          <div key={p.nombre} style={{ display: 'grid', gridTemplateColumns: '2fr 1.1fr 1.1fr 1fr 1fr', gap: '0.25rem 0.5rem', alignItems: 'center', padding: '0.3rem 0', borderBottom: '1px solid var(--t-border,#eee)', fontSize: '0.8rem' }}>
+            <span style={{ minWidth: 0 }}>
+              {final == null && <span title="sin precio" style={{ color: '#c23b22' }}>⚠ </span>}
+              <strong>{p.nombre}</strong>
+              <span style={{ color: '#5a5040', fontSize: '0.68rem' }}> · {p.tipo}</span>
+              {pr?.is_demo && <span style={{ background: '#e8d8b0', color: '#5a5040', fontSize: '0.6rem', borderRadius: 8, padding: '0 6px', marginLeft: 4 }}>demo</span>}
+            </span>
+            <span>₡<input type="number" className="tips-input-dark" style={{ width: 90 }} defaultValue={final ?? ''} key={p.nombre + (final ?? 'x')} placeholder="—"
+              onBlur={e => {
+                const v = e.target.value.trim() === '' ? null : Math.max(0, Number(e.target.value) || 0)
+                if (v !== final) save(p.nombre, { price_final_crc: v })
+              }} /></span>
+            <select className="tips-input-dark" value={tax} onChange={e => save(p.nombre, { tax_type: e.target.value as TaxType })}>
+              {TAX_TYPES.map(t => <option key={t} value={t}>{TAX_LABEL[t]}</option>)}
+            </select>
+            <span style={{ color: '#5a5040', fontVariantNumeric: 'tabular-nums' }}>{final != null ? fi(neto) : '—'}</span>
+            <span style={{ color: '#5a5040', fontVariantNumeric: 'tabular-nums' }}>{final != null ? fi(iva) : '—'}</span>
+          </div>
+        )
+      })}
+      {shown.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem', padding: '1rem 0' }}>Sin productos que coincidan.</div>}
+      <div style={{ fontSize: '0.66rem', color: '#5a5040', marginTop: '0.5rem' }}>
+        Neto e IVA son <strong>solo-lectura</strong> (se derivan del precio final · IVA 13% → neto = precio/1.13). Tasas: {TAX_TYPES.map(t => `${TAX_LABEL[t]} ${(TAX_RATES[t] * 100)}%`).join(' · ')}.
+      </div>
+    </div>
+  )
+}
+
+// ── KDS: orden de categorías + umbrales del timer por curso ──
+function KdsSection({ locationId, onError }: { locationId: string; onError: (e: string) => void }) {
+  const [settings, setSettings] = useState<KdsSettings | null>(null)
+  const [allTipos, setAllTipos] = useState<string[]>([])
+
+  const load = useCallback(async () => {
+    try {
+      const [s, ps] = await Promise.all([getKdsSettings(locationId), getAllProducts()])
+      setSettings(s)
+      setAllTipos([...new Set(ps.map(p => p.tipo).filter(Boolean))].sort())
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error cargando config del KDS') }
+  }, [locationId, onError])
+  useEffect(() => { load() }, [load])
+
+  const persist = async (next: KdsSettings) => {
+    setSettings(next)
+    try { await saveKdsSettings({ location_id: locationId, category_order: next.category_order, course_thresholds: next.course_thresholds }) }
+    catch (e) { onError(e instanceof Error ? e.message : 'Error guardando config del KDS'); load() }
+  }
+
+  if (!settings) return <div style={{ padding: '1rem', color: '#5a5040', fontSize: '0.8rem' }}>Cargando…</div>
+  const order = settings.category_order
+  const notInOrder = allTipos.filter(t => !order.includes(t))
+
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir
+    if (j < 0 || j >= order.length) return
+    const next = [...order];[next[i], next[j]] = [next[j], next[i]]
+    persist({ ...settings, category_order: next })
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) 1fr', gap: '0.875rem' }}>
+      <div className="admin-table" style={{ padding: '0.875rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: 4 }}>Orden de categorías en el KDS</div>
+        <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: '0.625rem' }}>Define en qué orden aparecen los ítems dentro de cada comanda (por categoría del catálogo).</div>
+        {order.map((c, i) => (
+          <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.3rem 0', borderBottom: '1px solid var(--t-border,#eee)' }}>
+            <span style={{ width: 18, color: '#5a5040', fontSize: '0.72rem' }}>{i + 1}.</span>
+            <strong style={{ flex: 1, fontSize: '0.82rem' }}>{c}</strong>
+            <button className="tips-btn-ghost" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+            <button className="tips-btn-ghost" disabled={i === order.length - 1} onClick={() => move(i, 1)}>↓</button>
+            <button onClick={() => persist({ ...settings, category_order: order.filter(x => x !== c) })}
+              style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '1px 7px', cursor: 'pointer' }}>×</button>
+          </div>
+        ))}
+        {order.length === 0 && <div style={{ fontSize: '0.74rem', color: '#5a5040' }}>Sin orden configurado — los ítems salen por categoría alfabética.</div>}
+        {notInOrder.length > 0 && (
+          <div style={{ marginTop: '0.625rem' }}>
+            <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: 4 }}>Agregar categoría:</div>
+            {notInOrder.map(t => (
+              <button key={t} onClick={() => persist({ ...settings, category_order: [...order, t] })}
+                style={{ margin: '0 4px 4px 0', padding: '3px 10px', borderRadius: 12, fontSize: '0.72rem', cursor: 'pointer', border: '1px dashed var(--t-border,#d4cfc4)', background: 'transparent', color: '#5a5040' }}>+ {t}</button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="admin-table" style={{ padding: '0.875rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: 4 }}>Umbrales del timer (verde→rojo) por curso</div>
+        <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: '0.625rem' }}>Segundos desde que se marcha hasta ponerse en rojo. Ámbar al 66%.</div>
+        {(['bebida', 'entrada', 'principal'] as const).map(course => {
+          const v = settings.course_thresholds[course] ?? 0
+          return (
+            <div key={course} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.35rem 0' }}>
+              <strong style={{ width: 90, fontSize: '0.8rem', textTransform: 'capitalize' }}>{course}</strong>
+              <input type="number" className="tips-input-dark" style={{ width: 90 }} defaultValue={v} key={course + v}
+                onBlur={e => {
+                  const n = Math.max(0, Number(e.target.value) || 0)
+                  if (n !== v) persist({ ...settings, course_thresholds: { ...settings.course_thresholds, [course]: n } })
+                }} />
+              <span style={{ fontSize: '0.72rem', color: '#5a5040' }}>seg · {fmtElapsed(v)} min</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

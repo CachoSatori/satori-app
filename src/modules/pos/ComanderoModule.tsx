@@ -5,11 +5,13 @@ import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
 import {
   getLocations, getSalonTables, getOpenOrders, openOrder, updateOrderPax,
   getOrderItems, addOrderItem, updateItemCourse, deleteOrderItem, marchar,
-  searchProducts, getProductGroups, getPriceMap,
+  searchProducts, getProductGroups, getPriceMap, transferOrder,
 } from '../../shared/api/pos'
 import type { PosLocation, SalonTable, PosOrder, PosOrderItem, ModifierGroupRow, ModifierRow, PosPrice } from '../../shared/api/pos'
-import { computeItemPrice, validateItemSelections, defaultCourseForTipo, nextCourse } from '../../shared/utils/posPricing'
-import type { PosCourse } from '../../shared/utils/posPricing'
+import { getAllProfiles } from '../../shared/api/admin'
+import type { Profile } from '../../shared/types/database'
+import { computeItemPrice, validateItemSelections, defaultCourseForTipo, nextCourse, canCloseShift } from '../../shared/utils/posPricing'
+import type { PosCourse, Turno } from '../../shared/utils/posPricing'
 import { computeTotals, groupBySeat } from '../../shared/utils/posFiscal'
 import type { BillItem } from '../../shared/utils/posFiscal'
 import { fi } from '../../shared/utils'
@@ -39,6 +41,7 @@ export default function ComanderoModule() {
   const [error, setError]         = useState<string | null>(null)
   const [paxModal, setPaxModal]   = useState<{ table: SalonTable | null; editOrder: PosOrder | null } | null>(null)
   const [priceMap, setPriceMap]   = useState<Map<string, PosPrice>>(new Map())
+  const [showCierre, setShowCierre] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -81,7 +84,11 @@ export default function ComanderoModule() {
         <select className="tips-input-dark" value={loc} onChange={e => { setSel(null); setLoc(e.target.value) }}>
           {(locations.length ? locations : [{ id: loc, name: loc, is_active: true }]).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
-        <button onClick={() => navigate('/')} style={{ marginLeft: 'auto', background: 'none', border: '1px solid #333', color: '#c8a96e', borderRadius: 3, padding: '4px 12px', cursor: 'pointer' }}>← Inicio</button>
+        <button onClick={() => setShowCierre(true)} title="Chequear cierre de turno"
+          style={{ marginLeft: 'auto', background: 'none', border: '1px solid #333', color: '#c8a96e', borderRadius: 3, padding: '4px 12px', cursor: 'pointer' }}>
+          🔒 Cierre de turno
+        </button>
+        <button onClick={() => navigate('/')} style={{ background: 'none', border: '1px solid #333', color: '#c8a96e', borderRadius: 3, padding: '4px 12px', cursor: 'pointer' }}>← Inicio</button>
       </header>
       {error && <div style={{ color: '#c23b22', padding: '0.5rem 1rem', fontSize: '0.8rem' }} onClick={() => setError(null)}>⚠ {error} (tocá para cerrar)</div>}
 
@@ -115,6 +122,40 @@ export default function ComanderoModule() {
       )}
 
       {paxModal && <PaxModal initial={paxModal.editOrder?.pax ?? null} onCancel={() => setPaxModal(null)} onConfirm={abrirMesa} />}
+      {showCierre && <CierreTurnoModal openTables={orders.map(o => o.table_name)} onClose={() => setShowCierre(false)} />}
+    </div>
+  )
+}
+
+/** Chequeo de cierre de turno (regla de la dueña): el turno mañana puede cerrar
+ *  con mesas abiertas; el último turno NO. Informativo — no toca la Caja. */
+function CierreTurnoModal({ openTables, onClose }: { openTables: string[]; onClose: () => void }) {
+  const [turno, setTurno] = useState<Turno>('noche')
+  const r = canCloseShift(turno, openTables)
+  return (
+    <div className="cd-modal-overlay" onClick={onClose}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+        <div className="cd-modal-title">🔒 Cierre de turno</div>
+        <div style={{ display: 'flex', gap: 6, margin: '0.5rem 0' }}>
+          {(['mañana', 'noche'] as Turno[]).map(t => (
+            <button key={t} onClick={() => setTurno(t)}
+              style={{ flex: 1, padding: '8px', borderRadius: 4, cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem',
+                border: '1px solid var(--t-border,#d4cfc4)', background: turno === t ? '#0d0d0d' : 'transparent', color: turno === t ? '#c8a96e' : '#5a5040' }}>
+              {t === 'mañana' ? '☀️ Turno mañana' : '🌙 Último turno'}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize: '0.78rem', color: '#5a5040', marginBottom: 6 }}>
+          {openTables.length ? `${openTables.length} mesa(s) abierta(s): ${openTables.join(', ')}` : 'Sin mesas abiertas.'}
+        </div>
+        <div style={{ padding: '0.6rem', borderRadius: 4, fontSize: '0.82rem', fontWeight: 600,
+          background: r.ok ? 'rgba(42,122,106,.12)' : 'rgba(194,59,34,.1)', color: r.ok ? '#1f6f3f' : '#c23b22', border: `1px solid ${r.ok ? '#2a7a6a' : '#c23b22'}` }}>
+          {r.ok ? '✓ ' : '⛔ '}{r.message}
+        </div>
+        <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>
+          <button className="cd-btn-green" onClick={onClose}>Entendido</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -157,6 +198,7 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
   const [opts, setOpts]     = useState<Array<{ nombre: string; tipo: string }>>([])
   const [picking, setPicking] = useState<{ nombre: string; tipo: string } | null>(null)
   const [showBill, setShowBill] = useState(false)
+  const [showTransfer, setShowTransfer] = useState(false)
 
   const load = useCallback(() => { getOrderItems(order.id).then(setItems).catch(e => onError(e.message)) }, [order.id, onError])
   useEffect(() => { load() }, [load])
@@ -181,9 +223,13 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
           style={{ background: '#0d0d0d', color: '#c8a96e', border: 'none', borderRadius: 12, padding: '3px 12px', fontWeight: 800, cursor: 'pointer' }}>
           👥 {order.pax} pax ✎
         </button>
-        <span style={{ fontSize: '0.7rem', color: '#5a5040' }}>{order.salonero_name}</span>
+        <span style={{ fontSize: '0.7rem', color: '#5a5040' }} title="Salonero a cargo (atribución de métricas)">{order.salonero_name}</span>
+        <button onClick={() => setShowTransfer(true)} title="Transferir la mesa a otro salonero"
+          style={{ marginLeft: 'auto', background: 'none', border: '1px solid #5a5040', color: '#5a5040', borderRadius: 4, padding: '4px 10px', fontWeight: 700, cursor: 'pointer' }}>
+          ↔ Transferir
+        </button>
         <button onClick={() => setShowBill(true)} disabled={!items.length} title="Ver la cuenta de la mesa"
-          style={{ marginLeft: 'auto', background: '#2a7a6a', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontWeight: 700, cursor: 'pointer', opacity: items.length ? 1 : 0.4 }}>
+          style={{ background: '#2a7a6a', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontWeight: 700, cursor: 'pointer', opacity: items.length ? 1 : 0.4 }}>
           🧾 Cuenta
         </button>
       </div>
@@ -257,6 +303,59 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
       )}
 
       {showBill && <CuentaView order={order} items={items} onClose={() => setShowBill(false)} />}
+      {showTransfer && <TransferModal order={order} onClose={() => setShowTransfer(false)}
+        onDone={() => { setShowTransfer(false); onBack() }} onError={onError} />}
+    </div>
+  )
+}
+
+/** Transferir mesa abierta a otro salonero: traza en jsonb + las métricas (ventas,
+ *  propinas, ICP) siguen al receptor desde este momento (current_salonero_id). */
+function TransferModal({ order, onClose, onDone, onError }: {
+  order: PosOrder; onClose: () => void; onDone: () => void; onError: (e: string) => void
+}) {
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [saving, setSaving] = useState(false)
+  const currentId = order.current_salonero_id ?? order.opened_by
+
+  useEffect(() => {
+    getAllProfiles()
+      .then(ps => setProfiles(ps.filter(p => ['owner', 'manager', 'cajero', 'salonero', 'barman'].includes(p.role))))
+      .catch(e => onError(e instanceof Error ? e.message : 'Error cargando saloneros'))
+  }, [onError])
+
+  const transfer = async (to: Profile) => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await transferOrder(order, { id: to.id, name: to.full_name }, { id: currentId, name: order.salonero_name })
+      onDone()
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error transfiriendo la mesa'); setSaving(false) }
+  }
+
+  return (
+    <div className="cd-modal-overlay" onClick={onClose}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380, maxHeight: '80vh', overflowY: 'auto' }}>
+        <div className="cd-modal-title">↔ Transferir {order.table_name}</div>
+        <div style={{ fontSize: '0.74rem', color: '#5a5040', marginBottom: 8 }}>
+          A cargo ahora: <strong>{order.salonero_name}</strong>. Desde la transferencia, las métricas van al receptor.
+        </div>
+        {order.transfers?.length > 0 && (
+          <div style={{ fontSize: '0.68rem', color: '#5a5040', marginBottom: 8, borderLeft: '2px solid #d4cfc4', paddingLeft: 6 }}>
+            {order.transfers.map((t, i) => <div key={i}>↪ {t.from_name} → {t.to_name}</div>)}
+          </div>
+        )}
+        {profiles.filter(p => p.id !== currentId).map(p => (
+          <button key={p.id} disabled={saving} onClick={() => transfer(p)}
+            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.55rem 0.75rem', marginBottom: 4, borderRadius: 4, cursor: 'pointer',
+              border: '1px solid var(--t-border,#d4cfc4)', background: 'transparent', fontSize: '0.84rem' }}>
+            <strong>{p.full_name}</strong> <span style={{ color: '#5a5040', fontSize: '0.7rem' }}>· {p.role}</span>
+          </button>
+        ))}
+        <div className="cd-modal-actions" style={{ marginTop: '0.5rem' }}>
+          <button className="tips-btn-ghost" onClick={onClose}>Cancelar</button>
+        </div>
+      </div>
     </div>
   )
 }

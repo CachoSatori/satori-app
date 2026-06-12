@@ -1,3 +1,0 @@
-# Cloudflare Pages — SPA fallback: servir index.html para rutas de cliente (deep links).
-# GitHub Pages (producción) ignora este archivo, así que no afecta prod.
-/*    /index.html   200

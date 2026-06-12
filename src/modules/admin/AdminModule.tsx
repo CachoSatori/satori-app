@@ -8,9 +8,10 @@ import RolePointsConfig from './RolePointsConfig'
 import ExchangeRateWidget from './ExchangeRateWidget'
 import EmployeeHours from './EmployeeHours'
 import UserApprovals from './UserApprovals'
+import PosF1Admin from './PosF1Admin'
 import { useAuth } from '../../shared/hooks/useAuth'
 
-type Tab = 'employees' | 'users' | 'rolepoints' | 'exchange' | 'hours'
+type Tab = 'employees' | 'users' | 'rolepoints' | 'exchange' | 'hours' | 'pos'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -94,6 +95,7 @@ export default function AdminModule() {
         <div className={`vt-nav-tab ${tab === 'rolepoints' ? 'active' : ''}`} onClick={() => setTab('rolepoints')}>Puntos por rol</div>
         <div className={`vt-nav-tab ${tab === 'exchange' ? 'active' : ''}`} onClick={() => setTab('exchange')}>Tipo de cambio</div>
         <div className={`vt-nav-tab ${tab === 'hours' ? 'active' : ''}`} onClick={() => setTab('hours')}>Horas trabajadas</div>
+        <div className={`vt-nav-tab ${tab === 'pos' ? 'active' : ''}`} onClick={() => setTab('pos')}>🍣 PoS</div>
       </div>
 
       {/* Email report button */}
@@ -153,6 +155,7 @@ export default function AdminModule() {
         {tab === 'hours' && (
           <EmployeeHours employees={employees} />
         )}
+        {tab === 'pos' && <PosF1Admin />}
       </div>
     </div>
   )

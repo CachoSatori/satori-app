@@ -156,6 +156,35 @@ Orden acordado (cada uno es base del siguiente):
 - El puente de impresión de F0/F2 **es** el embrión de este hub: mismo proceso, misma mini-PC,
   primero imprime, después sirve.
 
+### 🔄 Refinamiento PoS — feedback de la dueña tras la primera prueba física (2026-06-12)
+**Fuente de verdad de este ciclo (rama `pos-refinamiento`):**
+1. **Gestor de Productos unificado** (reemplaza la pestaña "Precios"): Admin → Productos con TODO el
+   ciclo de vida — crear/editar (nombre, categoría, subcategoría), precio final IVA incl. con desglose
+   derivado, tipo de impuesto, **flag "aplica servicio 10%"** (default SÍ, destildable p.ej.
+   merchandising; se combina con la regla por canal: delivery nunca lo aplica), costo visible (receta
+   o carga rápida) con **margen calculado**, botón crear/editar receta, activo/desactivado y
+   eliminación. Filtros (default solo activos; desactivados/todos), búsqueda, **export CSV** según
+   filtro. Campos estándar gastronómicos: **implementados** estación de preparación (cocina/barra/
+   ninguna), tiempo estimado de preparación (min) y alérgenos; **DECISIÓN-PRODUCTO (pendiente)**:
+   código PLU/SKU, visibilidad por canal (salón/delivery/QR), foto del plato, descripción para carta
+   QR. **DECISIÓN**: el nombre del producto es inmutable post-creación (es la llave del histórico de
+   ventas); "eliminar" = desactivar (el histórico lo referencia).
+2. **Modificadores desde el producto** (modelo de la dueña): los grupos se definen UNA vez (ej. "Ron"
+   con sus variantes y deltas default); la asignación vive EN el producto — al editar "Mojito" se
+   elige el grupo y CUÁLES variantes aplican, con **override de delta por producto**. El comandero
+   respeta variantes habilitadas y overrides.
+3. **KDS — ruteo por estación y orden escalonado**: (a) cocina SOLO comida, barra SOLO bebida (campo
+   estación de la ficha; nada cruzado); (b) orden escalonado configurable por SUBCATEGORÍA en Admin →
+   KDS (ej.: 1° crudos/pesca local, 2° nigiris y sashimis, 3° rolls/principales); (c) **postres**: en
+   rush no pueden quedar al fondo — marca de prioridad visual + suben en la comanda + timer propio más
+   corto configurable. **Evolución documentada**: "carril propio de postres" (columna dedicada en el
+   KDS) cuando el volumen lo pida.
+4. **Editor de salón — realismo**: mover mesas por el plano (drag en tablet con fallback de flechas
+   paso grande/chico) + **elementos no-mesa** (barra, maceteros, estaciones, paredes/divisores)
+   agregables, movibles y redimensionables — decorativos, no abren pedidos.
+5. **Acceso por tile en Home** (cierra DECISIÓN-NOCTURNA #10): salonero/manager/owner ven "Comandero";
+   cocina ve "KDS" — nadie tipea rutas.
+
 ### Reglas transversales (valen para TODAS las fases)
 - El **turno de la mañana puede cerrar con mesas abiertas**; el **último turno NO** (el día no
   cierra con mesas vivas).

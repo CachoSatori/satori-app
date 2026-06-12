@@ -69,12 +69,93 @@ Orden acordado (cada uno es base del siguiente):
 1b. **Caja: cierre por ledger + saldo unificado + Caja Diaria única/día** · M — ✅ **MERGEADO** (2026-06-09, en producción). Cierre del día usa `saldoCajaFuerte`; **una sola fórmula** del saldo de Caja Fuerte (tarjeta=cierre=simulador); **Caja Diaria de proveedores única por día** (apertura única, check de mediodía, cierre de proveedores como paso propio, bóveda gateada); cierre robusto (error de ventas visible, orden de fases, "Borrar TODO el día"); **módulo Prueba** (simulador read-only); carryover validado en apertura. ⚠️ **Pendiente del dueño:** correr la **migración 018** (columnas `midday_check_by/at`).
 2. **Sesión sólida** · M — ✅ **COMPLETA Y EN PRODUCCIÓN** (Fase 1: 06-09 · Fase 2: 06-12, validada por la dueña). Refresco proactivo + timeouts (F1); lock real `safeNavigatorLock` con escape de 10s + `verify_manager` server-side (mig 019) (F2). RCA cerrado — detalle en `HANG-RCA.md`.
 3. **Tiempo real multi-dispositivo** · L — ✅ **EN PRODUCCIÓN** (2026-06-12, mig 020 + `useRealtimeRefetch`): caja y propinas se ven en vivo entre dispositivos, con reconexión, refetch al foco y pause-while-typing.
-4. **Offline-first** · L/XL — base local + cola de sincronización + resolución de conflictos; evaluar un motor de sync probado. **Prerequisito del módulo PoS (Fase 3).** Se desarrolla en staging. ◀── PRÓXIMO
+4. **Offline-first** · L/XL — ✅ **CONSTRUIDO en rama `offline-first`** (2026-06-12, en verificación del asesor + prueba física): caché de lectura IndexedDB + outbox idempotente (`client_op_id`, mig 021) + política documentada en `OFFLINE.md`. **Es la F0 del plan PoS (sección siguiente).**
 5. **Entorno preview/staging** · S/M — ✅ **OPERATIVO** (2026-06-11): Cloudflare Pages desde rama `staging` + Supabase staging con **espejo de datos reales de prod** re-clonable con un comando (`scripts/clone-prod-to-staging.sh`). Detalle en `STAGING.md`.
 
 > ✅ **Correcciones de pago de la dueña (06-11, en prod):** proveedores solo Efectivo/Transferencia; categorías únicas Delivery/Propinas con detalle en la nota (+ Delivery dueños como opción propia). ✅ **P1c y P1d CERRADOS** (06-12): la dueña confirmó que el historial de propinas y el tracking de datáfono actuales son exactamente lo esperado. ✅ **P3b/P3d en prod** (errores visibles en Caja; bundle: VentasXLS 350→19KB, VentasHistorico 351→5KB). ⏳ **Deuda menor:** P3c (estados vacíos).
 
 > ⚠️ **Pendiente (pase aparte, no tocar datos ahora):** revisar el mapeo a QuickBooks de los deliverys/propinas cobrados por medio electrónico — la recategorización vieja "delivery x sinpe → operativo 7100" quedó mal (son **pass-through**, no gasto). El mapeo nuevo ya los excluye (`finance.ts`); falta recategorizar el **histórico**.
+
+---
+
+## 🍣 PoS Satori + KDS — Piloto Santa Teresa (plan completo, pedido de la dueña 2026-06-12)
+
+> Decisión estratégica tomada: **construir el PoS propio** (no comprar/integrar), arrancando con
+> un **piloto en Santa Teresa** y multi-local desde el diseño (Nosara + franquicias después).
+> Este plan reemplaza la discusión abierta de la vieja "FASE 3 — buy vs build".
+> Nada de esto vive solo en chats: este documento es la fuente de verdad del plan.
+
+### F0 — Fundaciones (en curso)
+- ✅ **Offline-first** (este sprint, rama `offline-first`): caché de lectura + outbox idempotente.
+  El PoS opera en un local con internet inestable — esta capa es el piso de todo lo que sigue.
+- 🔎 **Investigación de proveedores de facturación electrónica CR** (obligatoria para operar un
+  PoS): comparar APIs/costos/SLAs de los emisores certificados ante Hacienda, requisitos de
+  comprobante (FE/TE), contingencia. Entregable: matriz de decisión para la dueña.
+- 🔌 **Spike del puente de impresión** con la térmica **3nStar RPT004**: probar impresión por LAN
+  (ESC/POS) desde un proceso local en la mini-PC. ⚠️ Este puente se diseña desde el día 1 como
+  **embrión del HUB LOCAL de F5** (no un script descartable).
+
+### F1 — Catálogo + salón + multi-local · M
+- **Catálogo con modificadores**: precio base + modificador **obligatorio** donde aplique
+  (ej. mojito → elegir licor), modificadores opcionales (extra/sin/término), combos.
+- **Editor de salón**: mapa de mesas editable por la gerencia (zonas, uniones).
+- **Tabla `locations`**: multi-local desde el diseño — todo lo nuevo (catálogo, salón, tickets,
+  KDS, impresoras) cuelga de un `location_id`. Piloto = Santa Teresa; Nosara y franquicias se
+  agregan como filas, no como refactor.
+
+### F2 — Comandero (tablet) + KDS + impresión · L
+- **Comandero en tablet**:
+  - **PAX OBLIGATORIO ≥ 1 al abrir la mesa — nunca 0** —, siempre visible y **editable**
+    durante el servicio; **pax por ticket** al cerrar (alimenta las métricas de ICP/saloneros).
+  - **Asignación de ítems a asiento/cliente** (la base de los splits de F3).
+  - **Cursos** con un tap: bebida / entrada / principal — y **"marchar" por partes**
+    (la cocina recibe cada curso cuando el salonero lo dispara).
+- **KDS web** en TVs/mini-PC:
+  - Orden de categorías **configurable** por la gerencia.
+  - **Timers** por comanda verde→rojo, umbrales **configurables por curso**.
+  - Pantallas de **salón** y **delivery** separadas.
+- **Ruteo de impresión configurable por admin** sobre las 3 impresoras: **CAJA / BARRA / SALÓN**
+  (las **previas** salen en SALÓN). Vía el puente de impresión LAN de F0.
+- **Modo contingencia**: si el KDS cae, las comandas salen **en papel por LAN** (mismo puente) —
+  el servicio nunca se detiene.
+
+### F3 — Cobro completo + Modo Evento · L
+- **Previas desde la tablet** (impresas en SALÓN), **splits** por cliente / por productos /
+  partes iguales / por montos; cobro **₡/$ al TC de admin**; cierre de cuenta **desde la tablet
+  o desde caja**; **descuentos con `verify_manager`** (autorización de gerencia server-side, ya
+  en producción).
+- **Facturación electrónica integrada** (el proveedor elegido en F0) → **retiro de Nube de
+  Fuego** (fin del sistema actual).
+- **Modo Evento — doble ticket**: el mismo **código corto** se imprime en **BARRA y CAJA**;
+  la barra **solo produce contra su impresora** (control anti-pérdida en eventos de volumen).
+- Venta → `ventas_dias` directo · propina del cobro → `tip_sessions` · efectivo → caja
+  (se elimina el import XLS — el círculo del ROADMAP original se cierra acá).
+
+### F4 — Loyalty en mesa + réplica Nosara · M
+- **QR individual de miembro** (CRM/loyalty ya construido) **leído en la mesa** desde el
+  comandero → identifica al cliente, suma puntos al cobrar.
+- **Réplica en Nosara**: segundo `location_id` con su salón, impresoras y KDS — la prueba de
+  fuego del diseño multi-local de F1.
+
+### F5 — HUB LOCAL (importante para la dueña) · L
+- La **mini-PC como servidor local**: las tablets hablan con el **hub por LAN**, el **KDS
+  funciona SIN internet**, y el hub **sincroniza a la nube al reconectar** (la outbox de F0 es
+  el mismo patrón, elevado al hub).
+- El puente de impresión de F0/F2 **es** el embrión de este hub: mismo proceso, misma mini-PC,
+  primero imprime, después sirve.
+
+### Reglas transversales (valen para TODAS las fases)
+- El **turno de la mañana puede cerrar con mesas abiertas**; el **último turno NO** (el día no
+  cierra con mesas vivas).
+- **Transferencia de mesas entre saloneros** con **atribución correcta de métricas** (ventas,
+  propinas e ICP siguen al salonero correcto en cada tramo).
+- Todo lo offline respeta la política de `OFFLINE.md` (cierres y aperturas requieren conexión
+  al servidor que corresponda — en F5, el "servidor" pasa a ser el hub local).
+
+### Infraestructura del piloto (recomendación)
+- **Router con backup LTE** (failover a datos móviles): el offline-first salva la operación,
+  pero la facturación electrónica y la sincronización agradecen un segundo camino a internet.
+- Mini-PC (hub/KDS) + 3 térmicas 3nStar RPT004 (CAJA/BARRA/SALÓN) + tablets de comandero + TVs.
 
 ---
 
@@ -453,9 +534,11 @@ decisiones financieras sin depender de QuickBooks.
 
 ### FASE 3 — POS nativo (el gran salto) · XL
 
-Convierte a Satori en el sistema de registro. Reemplaza el import XLS: las ventas, propinas y caja se generan dentro de la app en tiempo real.
+> ➡️ **SUPERSEDIDA (2026-06-12): la decisión build-vs-buy está tomada (BUILD) y el plan
+> completo y vigente vive arriba en "PoS Satori + KDS — Piloto Santa Teresa".**
+> Esta sección queda como referencia histórica del alcance original.
 
-> ⚠️ **Decisión estratégica previa (buy vs build):** construir un POS es un programa grande y conlleva factura electrónica de Hacienda CR (obligatoria). Alternativa: integrarse vía API con el POS actual en vez de reemplazarlo. Definir esto antes de arrancar la Fase 3.
+Convierte a Satori en el sistema de registro. Reemplaza el import XLS: las ventas, propinas y caja se generan dentro de la app en tiempo real.
 
 #### 3.1 Catálogo / Menú · M
 - Productos vendibles desde `product_map` (precio, categoría, modificadores, disponibilidad)

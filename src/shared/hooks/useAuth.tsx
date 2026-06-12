@@ -40,7 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) await loadProfile(session.user.id)
       })
       .catch(err => console.error('getSession error:', err))
-      .finally(() => setLoading(false))
+      .finally(() => {
+        setLoading(false)
+        // Señal para el SW-WATCHDOG de index.html: el bootstrap resolvió (con o sin
+        // sesión) — la app NO está colgada, no hace falta auto-sanar el service worker.
+        ;(window as unknown as { __satoriBootOk?: boolean }).__satoriBootOk = true
+      })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {

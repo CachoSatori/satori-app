@@ -3,6 +3,19 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — Hardening del update de la PWA — EN PRODUCCIÓN (`main`)
+Incidente del 06-12 (clientes con service worker viejo colgados en el spinner tras un deploy;
+"borrar caché" no elimina SWs). Validado por la dueña en staging y verificado por el asesor.
+- **Watchdog de arranque** (index.html): si la app no marca boot OK en 15s y hay un SW controlando,
+  se des-registra el SW + se vacía Cache Storage + recarga UNA vez (guard sessionStorage anti-loop).
+  IndexedDB (outbox/caché de datos offline) intacto. Señal de boot: useAuth al resolver la sesión.
+- **Anti-loop del auto-reload** por controllerchange (máx 1 recarga/60s) + **chequeo de updates
+  cada 60 min** (tablets/TVs abiertas días enteros también actualizan).
+- **404.html fuera del precache del SW** (`globIgnores`): en staging el archivo se borra post-build
+  y el SW moría 'redundant' pidiéndolo; prod no lo necesita precacheado (fallback server-side).
+- **Probado con harness local de 2 versiones + SW saboteado** (Playwright): SW instala y controla ✓ ·
+  deploy nuevo se recupera solo ✓ · cliente con SW roto se auto-sana al llegar el deploy bueno ✓.
+
 ## 🆕 Novedades 2026-06-11/12 — Sprint validado por la dueña y EN PRODUCCIÓN (`main`)
 
 ### En producción (todo validado físicamente por la dueña en staging antes del merge)

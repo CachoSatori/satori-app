@@ -18,6 +18,29 @@
         }
       }(window.location));
     </script>
+    <script>
+      // SW-WATCHDOG (incidente 06-12: clientes con service worker viejo/roto quedaban
+      // colgados en el spinner tras un deploy; "borrar caché" no elimina SWs).
+      // Si la app no marca arranque OK (__satoriBootOk, lo setea useAuth al resolver
+      // la sesión) en 15s Y hay un SW controlando la página, se auto-sana UNA vez:
+      // des-registra los SWs, vacía Cache Storage y recarga. El guard de sessionStorage
+      // evita loops; IndexedDB (outbox offline y caché de datos) NO se toca.
+      (function() {
+        if (!('serviceWorker' in navigator)) return;
+        setTimeout(function() {
+          if (window.__satoriBootOk) return;
+          if (sessionStorage.getItem('satori-sw-rescued')) return;
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            if (!regs.length && !navigator.serviceWorker.controller) return;
+            sessionStorage.setItem('satori-sw-rescued', '1');
+            Promise.all(regs.map(function(r) { return r.unregister(); }))
+              .then(function() { return window.caches ? caches.keys() : []; })
+              .then(function(keys) { return Promise.all(keys.map(function(k) { return caches.delete(k); })); })
+              .finally(function() { window.location.reload(); });
+          }).catch(function() {});
+        }, 15000);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

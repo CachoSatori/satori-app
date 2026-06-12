@@ -88,3 +88,20 @@ describe('groupBySeat — vista por cliente de la cuenta', () => {
 })
 
 function round(n: number) { return Math.round(n * 100) / 100 }
+
+describe('flag aplica_servicio por ítem (refinamiento 06-12)', () => {
+  it('un ítem sin servicio (merchandising) NO aporta a la base del 10%', async () => {
+    const { computeTotals } = await import('./posFiscal')
+    const r = computeTotals([
+      { product_name: 'ROLL', qty: 1, price_final_crc: 11300, modifiers: [], tax_type: 'iva13' },                          // neto 10000
+      { product_name: 'GORRA SATORI', qty: 1, price_final_crc: 11300, modifiers: [], tax_type: 'iva13', applies_service: false },
+    ], 'salon')
+    expect(r.servicio).toBe(1000)        // 10% SOLO sobre el neto del roll
+    expect(r.consumo).toBe(22600)        // el consumo sí incluye ambos
+  })
+  it('en delivery nadie paga servicio aunque el flag esté en true', async () => {
+    const { computeTotals } = await import('./posFiscal')
+    const r = computeTotals([{ product_name: 'ROLL', qty: 1, price_final_crc: 11300, modifiers: [], tax_type: 'iva13', applies_service: true }], 'delivery')
+    expect(r.servicio).toBe(0)
+  })
+})

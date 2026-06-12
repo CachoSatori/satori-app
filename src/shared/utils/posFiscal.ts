@@ -57,6 +57,9 @@ export interface BillItem {
   modifiers: BillModifier[]        // deltas finales (IVA incluido), heredan tax_type
   tax_type: TaxType
   seat?: number
+  /** Flag de la ficha del producto: ¿lleva impuesto de servicio 10%? (default SÍ;
+   *  ej. merchandising NO). Se combina con la regla por canal: delivery nunca. */
+  applies_service?: boolean
 }
 
 /** Precio FINAL de una línea = (base + Σ deltas) × qty. Todo IVA incluido. */
@@ -97,7 +100,11 @@ export function computeTotals(items: BillItem[], canal: Canal): BillTotals {
 
   const servicioAplica = SERVICE_CONFIG.channels.includes(canal)
   const servicioBase = SERVICE_CONFIG.base
-  const baseAmount = servicioBase === 'neto' ? neto : consumo
+  // Solo los ítems con applies_service (default true) aportan a la base del 10%
+  const svcLines = lines.filter(l => l.applies_service !== false)
+  const baseAmount = servicioBase === 'neto'
+    ? round2(svcLines.reduce((s, l) => s + l.neto, 0))
+    : round2(svcLines.reduce((s, l) => s + l.final, 0))
   const servicio = servicioAplica ? round2(baseAmount * SERVICE_CONFIG.rate) : 0
   const servicioIva = servicioAplica && SERVICE_CONFIG.taxed ? round2(servicio * TAX_RATES.iva13) : 0
   const total = round2(consumo + servicio + servicioIva)

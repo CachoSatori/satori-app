@@ -24,6 +24,7 @@ create table if not exists public.product_modifier_options (
 -- ── 3. KDS: snapshots para ruteo/orden + settings nuevos ──
 alter table public.pos_order_items add column if not exists station text not null default 'cocina';
 alter table public.pos_order_items add column if not exists subcategory text not null default '';
+alter table public.pos_order_items add column if not exists aplica_servicio boolean not null default true;  -- snapshot fiscal del producto al enviar
 alter table public.pos_kds_settings add column if not exists subcategory_order jsonb not null default '[]'::jsonb;
 alter table public.pos_kds_settings add column if not exists postres_priority boolean not null default true;
 alter table public.pos_kds_settings add column if not exists postres_threshold int not null default 240;  -- timer corto (s)

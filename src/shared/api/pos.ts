@@ -350,5 +350,77 @@ export async function getProductGroups(productName: string): Promise<Array<Modif
   const { data: groups, error: e2 } = await sb.from('modifier_groups').select('*').in('id', ids).eq('is_active', true)
   fail(e2)
   const mods = await getModifiers(ids)
-  return ((groups ?? []) as ModifierGroupRow[]).map(g => ({ ...g, modifiers: mods.filter(m => m.group_id === g.id && m.is_active) }))
+  // Refinamiento 06-12: el producto elige QUÉ variantes del grupo aplican y puede
+  // pisar el delta (product_modifier_options). Sin fila = habilitada con delta default.
+  const opts = await getProductOptions(productName)
+  const omap = new Map(opts.map(o => [o.modifier_id, o]))
+  return ((groups ?? []) as ModifierGroupRow[]).map(g => ({
+    ...g,
+    modifiers: mods
+      .filter(m => m.group_id === g.id && m.is_active && (omap.get(m.id)?.enabled ?? true))
+      .map(m => {
+        const ov = omap.get(m.id)?.price_delta_override_crc
+        return ov === null || ov === undefined ? m : { ...m, price_delta_crc: ov }
+      }),
+  })).filter(g => g.modifiers.length > 0)
+}
+
+// ── Refinamiento: ficha de producto + opciones por producto ──
+export interface PosProduct {
+  nombre: string
+  tipo: string
+  clasificacion: string
+  subclasificacion: string
+  costo_unitario: number | null
+  is_active: boolean
+  station: 'cocina' | 'barra' | 'ninguna'
+  aplica_servicio: boolean
+  prep_time_min: number | null
+  allergens: string
+}
+
+export async function getProductsFull(): Promise<PosProduct[]> {
+  const { data, error } = await sb.from('product_map')
+    .select('nombre, tipo, clasificacion, subclasificacion, costo_unitario, is_active, station, aplica_servicio, prep_time_min, allergens')
+    .order('tipo').order('nombre')
+  fail(error)
+  return (data ?? []) as PosProduct[]
+}
+
+/** Crea un producto nuevo en el catálogo (el nombre es inmutable después: es la PK del histórico). */
+export async function createProduct(p: { nombre: string; tipo: string; clasificacion?: string; subclasificacion?: string }): Promise<void> {
+  const { error } = await sb.from('product_map').insert({
+    nombre: p.nombre.trim().toUpperCase(), tipo: p.tipo, clasificacion: p.clasificacion ?? '', subclasificacion: p.subclasificacion ?? '',
+  })
+  fail(error)
+}
+
+export async function saveProductFicha(nombre: string, fields: Partial<Omit<PosProduct, 'nombre'>>): Promise<void> {
+  const { error } = await sb.from('product_map').update({ ...fields, updated_at: new Date().toISOString() }).eq('nombre', nombre)
+  fail(error)
+}
+
+export interface ProductModifierOption {
+  product_name: string
+  modifier_id: string
+  enabled: boolean
+  price_delta_override_crc: number | null
+}
+
+export async function getProductOptions(productName: string): Promise<ProductModifierOption[]> {
+  const { data, error } = await sb.from('product_modifier_options').select('*').eq('product_name', productName)
+  fail(error)
+  return (data ?? []) as ProductModifierOption[]
+}
+
+export async function saveProductOption(o: ProductModifierOption): Promise<void> {
+  const { error } = await sb.from('product_modifier_options').upsert(o)
+  fail(error)
+}
+
+/** Meta liviana de productos para el comandero (snapshots de estación/subcat/servicio). */
+export async function getProductMetaMap(): Promise<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean }>> {
+  const { data, error } = await sb.from('product_map').select('nombre, tipo, subclasificacion, station, aplica_servicio').eq('is_active', true)
+  fail(error)
+  return new Map(((data ?? []) as Array<{ nombre: string; tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean }>).map(r => [r.nombre, r]))
 }

@@ -10,7 +10,18 @@ import {
 import type { PosLocation, SalonTable, PosOrder, PosOrderItem, ModifierGroupRow, ModifierRow, PosPrice } from '../../shared/api/pos'
 import { computeItemPrice, validateItemSelections, defaultCourseForTipo, nextCourse } from '../../shared/utils/posPricing'
 import type { PosCourse } from '../../shared/utils/posPricing'
+import { computeTotals, groupBySeat } from '../../shared/utils/posFiscal'
+import type { BillItem } from '../../shared/utils/posFiscal'
 import { fi } from '../../shared/utils'
+
+/** PosOrderItem → BillItem para la matemática fiscal (única verdad: computeTotals). */
+function toBillItem(it: PosOrderItem): BillItem {
+  return {
+    product_name: it.product_name, qty: it.qty, price_final_crc: it.base_price_crc,
+    modifiers: it.modifiers.map(m => ({ name: m.name, price_delta_crc: m.price_delta_crc })),
+    tax_type: it.tax_type, seat: it.seat,
+  }
+}
 
 const COURSE_LABEL: Record<PosCourse, string> = { bebida: '🥤 Bebida', entrada: '🥢 Entrada', principal: '🍣 Principal' }
 const KS_LABEL: Record<string, string> = { pendiente: '· por marchar', marchado: '🔥 en cocina', listo: '✅ listo', entregado: '✓ entregado' }
@@ -145,6 +156,7 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
   const [search, setSearch] = useState('')
   const [opts, setOpts]     = useState<Array<{ nombre: string; tipo: string }>>([])
   const [picking, setPicking] = useState<{ nombre: string; tipo: string } | null>(null)
+  const [showBill, setShowBill] = useState(false)
 
   const load = useCallback(() => { getOrderItems(order.id).then(setItems).catch(e => onError(e.message)) }, [order.id, onError])
   useEffect(() => { load() }, [load])
@@ -170,6 +182,10 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
           👥 {order.pax} pax ✎
         </button>
         <span style={{ fontSize: '0.7rem', color: '#5a5040' }}>{order.salonero_name}</span>
+        <button onClick={() => setShowBill(true)} disabled={!items.length} title="Ver la cuenta de la mesa"
+          style={{ marginLeft: 'auto', background: '#2a7a6a', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', fontWeight: 700, cursor: 'pointer', opacity: items.length ? 1 : 0.4 }}>
+          🧾 Cuenta
+        </button>
       </div>
 
       <div style={{ position: 'relative', margin: '0.625rem 0' }}>
@@ -239,6 +255,83 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
         <ItemPicker product={picking} price={priceMap.get(picking.nombre) ?? null} pax={order.pax} orderId={order.id}
           onDone={() => { setPicking(null); load() }} onCancel={() => setPicking(null)} onError={onError} />
       )}
+
+      {showBill && <CuentaView order={order} items={items} onClose={() => setShowBill(false)} />}
+    </div>
+  )
+}
+
+/** Cuenta de mesa (pre-F3, solo lectura): consumo + servicio 10% por canal + IVA
+ *  + total, con vista por mesa completa o por asiento/cliente. SIN cobro, SIN impresión. */
+function CuentaView({ order, items, onClose }: { order: PosOrder; items: PosOrderItem[]; onClose: () => void }) {
+  const [porAsiento, setPorAsiento] = useState(false)
+  const bill = items.map(toBillItem)
+  const totals = computeTotals(bill, order.channel)
+  const seats = [...groupBySeat(bill).entries()].sort((a, b) => a[0] - b[0])
+
+  const Linea = ({ b }: { b: BillItem }) => (
+    <div style={{ display: 'flex', gap: 8, padding: '0.25rem 0', borderBottom: '1px solid var(--t-border,#e6e1d6)', fontSize: '0.82rem' }}>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        {b.qty > 1 && <strong>{b.qty}× </strong>}{b.product_name}
+        {b.modifiers.length > 0 && <span style={{ color: '#5a5040', fontSize: '0.72rem' }}> · {b.modifiers.map(m => m.name).join(', ')}</span>}
+      </span>
+      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fi((b.price_final_crc + b.modifiers.reduce((s, m) => s + m.price_delta_crc, 0)) * b.qty)}</span>
+    </div>
+  )
+
+  return (
+    <div className="cd-modal-overlay" onClick={onClose}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 460, maxHeight: '88vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="cd-modal-title" style={{ flex: 1 }}>🧾 Cuenta · {order.table_name}</div>
+          <span style={{ fontSize: '0.68rem', color: '#5a5040' }}>{order.channel} · {order.pax}p</span>
+        </div>
+        <div style={{ display: 'flex', gap: 4, margin: '0.25rem 0 0.5rem' }}>
+          {([['mesa', false], ['por asiento', true]] as const).map(([label, val]) => (
+            <button key={label} onClick={() => setPorAsiento(val)}
+              style={{ padding: '3px 12px', borderRadius: 12, fontSize: '0.72rem', cursor: 'pointer',
+                border: '1px solid var(--t-border,#d4cfc4)', background: porAsiento === val ? '#0d0d0d' : 'transparent', color: porAsiento === val ? '#c8a96e' : '#5a5040' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {!porAsiento && bill.map((b, i) => <Linea key={i} b={b} />)}
+        {porAsiento && seats.map(([seat, its]) => (
+          <div key={seat} style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#5a5040', textTransform: 'uppercase', marginTop: 6 }}>Asiento {seat || '—'}</div>
+            {its.map((b, i) => <Linea key={i} b={b} />)}
+            <div style={{ textAlign: 'right', fontSize: '0.74rem', color: '#5a5040' }}>subtotal asiento: <strong>{fi(computeTotals(its, order.channel).consumo)}</strong></div>
+          </div>
+        ))}
+
+        <div style={{ marginTop: '0.75rem', borderTop: '2px solid #0d0d0d', paddingTop: 8, fontSize: '0.86rem' }}>
+          <Row label="Consumo (IVA incl.)" value={fi(totals.consumo)} />
+          <Row label="— Neto" value={fi(totals.neto)} muted />
+          <Row label="— IVA" value={fi(totals.iva)} muted />
+          {totals.servicioAplica
+            ? <Row label={`Servicio 10% (s/ ${totals.servicioBase})`} value={fi(totals.servicio)} />
+            : <Row label="Servicio 10%" value="no aplica (delivery)" muted />}
+          {totals.servicioIva > 0 && <Row label="— IVA servicio" value={fi(totals.servicioIva)} muted />}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: '1.05rem', marginTop: 6, borderTop: '1px solid var(--t-border,#d4cfc4)', paddingTop: 6 }}>
+            <span>TOTAL</span><span>{fi(totals.total)}</span>
+          </div>
+        </div>
+        <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: 6 }}>
+          Solo lectura — sin cobro ni impresión (eso llega en F3). Base del servicio y si lleva IVA: PENDIENTE-CONTADORA.
+        </div>
+        <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>
+          <button className="cd-btn-green" onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Row({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', color: muted ? '#5a5040' : 'inherit', fontSize: muted ? '0.76rem' : '0.86rem', padding: '1px 0' }}>
+      <span>{label}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   )
 }

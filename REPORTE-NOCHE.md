@@ -42,6 +42,31 @@
 
 ---
 
+# REPORTE NOCTURNO — TRAMO 2 (2026-06-12, ~00:30)
+
+> Guardrails intactos: nada a main · cero contacto con prod · Tarea A sigue EN PAUSA ·
+> staging solo recibió trabajo completo (builds prod+staging EXIT=0, tests 32/32).
+
+## Tabla de ítems del tramo 2
+
+| Ítem | Estado |
+|---|---|
+| PROMPT-TRAMO-3.md (guardar, no ejecutar) | ✅ COMPLETO (`7523f42`, contenido exacto de la dueña) |
+| Migración pos_orders/pos_order_items + realtime | ✅ COMPLETO (mig 023 aplicada y registrada en staging; pax con CHECK >= 1 en la base) |
+| Comandero (tablet) | ✅ COMPLETO mínimo viable (`/comandero`): plano del salón con mesas libres/ocupadas en vivo, pax obligatorio ≥1 (teclado numérico, confirmar bloqueado), badge pax editable, pedido con modificadores (obligatorios bloquean), curso con un tap (default por tipo), asiento 1..pax, marchar por curso o todo, realtime multi-dispositivo |
+| KDS | ⏭ NO INICIADO — decisión de presupuesto (orden del prompt: "si solo entra una cosa completa, que sea migración + comandero mínimo"). **Handoff TRAMO 3**: todo lo que necesita ya existe — `pos_order_items.kitchen_status/marched_at` + realtime activo; falta solo la pantalla (ruta /kds, agrupar por comanda, timers verde→rojo, bump → kitchen_status='listo') y el orden de categorías configurable en Admin |
+| Tests | ✅ 32/32 (29 + 3 de cursos) |
+| Seed demo F2 | ✅ Mesa 1 abierta (pax 4, Test Manager) con MOJITO + Zacapa marchado — verificado en DB |
+
+**Smoke E2E real en navegador**: Mesa 1 → pax 4 (sin pax el botón no deja) → MOJITO → el grupo Licor bloqueó hasta elegir → Zacapa → agregado con asiento y curso Bebida → "Marchar bebidas (1)" → quedó "🔥 en cocina" (DB: kitchen_status='marchado').
+
+## DECISIONES-NOCTURNAS del tramo 2
+8. **`base_price_crc = 0` en los ítems** — `product_map` no tiene precio de venta; el TRAMO 3 lo resuelve (su prompt ya lo incluye). El ítem guarda los deltas de modificadores igual (₡3.000 del Zacapa quedó en el pedido).
+9. **`product_name` sin FK** en pos_order_items (snapshot): renombrar un producto del catálogo no debe romper pedidos históricos.
+10. **Sin tile en Home para /comandero** — la ruta existe y está gateada por rol (owner/manager/cajero/salonero/barman); el tile se decide de día (es la pantalla principal de las tablets, quizá merezca layout propio).
+
+---
+
 # ☀️ CHECKLIST DE LA MAÑANA (dueña)
 1. **PROD**: correr `MIGRACIONES-PROD-OFFLINE.sql` en el SQL Editor de PROD → confirmar **3 filas ok=true**.
 2. **Confirmar A.3**: el merge a `main` va **solo hasta `f06c6d3`** (offline + SQL; el fix de transferencias y la F1 quedan en staging para su propio ciclo). Decímelo y lo ejecuto.
@@ -50,3 +75,7 @@
    (a) **Editor de Salón**: ves TUS 20 mesas; tocá una, movela con las flechas, cambiale pax;
    (b) **Catálogo PoS**: grupo "Licor" → vista previa: sin licor te bloquea, con Zacapa suma ₡3.000;
    (c) **Locales**: cambiá el selector a Nosara → salón vacío (correcto, sin mesas aún).
+5. **F2 comandero en staging** (mismo login): entrá a `satori-staging.pages.dev/comandero` →
+   Mesa 1 ya está abierta con el MOJITO de demo; abrí otra mesa (probá confirmar SIN pax — no
+   deja), pedí un MOJITO (sin licor te bloquea), marchalo, y mirá la mesa ponerse roja en el
+   plano desde otro dispositivo (realtime).

@@ -473,11 +473,11 @@ export async function saveProductOption(o: ProductModifierOption): Promise<void>
   fail(error)
 }
 
-/** Meta liviana de productos para el comandero (snapshots de estación/subcat/servicio + foto). */
-export async function getProductMetaMap(): Promise<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; photo_url: string | null }>> {
-  const { data, error } = await sb.from('product_map').select('nombre, tipo, subclasificacion, station, aplica_servicio, photo_url').eq('is_active', true)
+/** Meta liviana de productos para el comandero (snapshots de estación/subcat/servicio + foto + alérgenos). */
+export async function getProductMetaMap(): Promise<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; photo_url: string | null; allergens: string }>> {
+  const { data, error } = await sb.from('product_map').select('nombre, tipo, subclasificacion, station, aplica_servicio, photo_url, allergens').eq('is_active', true)
   fail(error)
-  return new Map(((data ?? []) as Array<{ nombre: string; tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; photo_url: string | null }>).map(r => [r.nombre, r]))
+  return new Map(((data ?? []) as Array<{ nombre: string; tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; photo_url: string | null; allergens: string | null }>).map(r => [r.nombre, { ...r, allergens: r.allergens ?? '' }]))
 }
 
 // ── F3: Cobro (mig 027) ───────────────────────────────────────
@@ -626,63 +626,35 @@ export async function reorderRound(orderId: string, picks: Array<{ src: PosOrder
  *  (uno por mesa) para cobrarlas por separado y poder des-combinar. Traza de quién. */
 export async function mergeOrders(into: PosOrder, from: PosOrder, by: { id: string; name: string }, channel: PosChannel): Promise<void> {
   if (into.id === from.id) throw new Error('No se puede combinar una mesa consigo misma')
-  // 1) mover los ítems de `from` a `into`, marcando su origen
-  const { error: e1 } = await sb.from('pos_order_items')
-    .update({ merged_from_order: from.id, order_id: into.id, updated_at: new Date().toISOString() })
-    .eq('order_id', from.id)
-  fail(e1)
-  // 2) `from` queda combinada (fuera del plano) con traza
-  const trace = [...(from.merge_trace ?? []), { from_table: from.table_name, from_order: from.id, by: by.name, at: new Date().toISOString() }]
-  const { error: e2 } = await sb.from('pos_orders')
-    .update({ status: 'merged', merged_into: into.id, merge_trace: trace, updated_at: new Date().toISOString() })
-    .eq('id', from.id).eq('status', 'open')
-  fail(e2)
-  // 3) traza en la mesa receptora
-  await appendOrderNote(into.id, `combinó ${from.table_name} · ${by.name} · ${new Date().toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`)
-  // 4) checks separados por mesa (kind 'merge') — sin pisar un split previo no pagado.
-  //    Se valoran con splitByGroup (mismo prorrateo de los splits): INVARIANTE Σ = total
-  //    al colón garantizado (el último grupo reconcilia el redondeo).
-  const existing = await getOrderChecks(into.id)
-  if (!existing.some(c => c.paid)) {
-    const { error: ed } = await sb.from('pos_checks').delete().eq('order_id', into.id)
-    fail(ed)
-    const items = (await getOrderItems(into.id)).filter(i => i.kitchen_status !== 'anulado')
-    const toBill = (it: PosOrderItem) => ({ product_name: it.product_name, qty: it.qty, price_final_crc: it.base_price_crc, modifiers: it.modifiers.map(m => ({ name: m.name, price_delta_crc: m.price_delta_crc })), tax_type: it.tax_type, seat: it.seat, aplica_servicio: it.aplica_servicio })
-    // import dinámico evita ciclo con utils
-    const { splitByGroup } = await import('../utils/posSplit')
-    const origin = (it: PosOrderItem) => it.merged_from_order ?? into.id
-    const snapByOrigin = new Map<string, PosOrderItem[]>()
-    for (const it of items) {
-      const k = origin(it)
-      if (!snapByOrigin.has(k)) snapByOrigin.set(k, [])
-      snapByOrigin.get(k)!.push(it)
-    }
-    const labelOf = (k: string) => k === into.id ? into.table_name : k === from.id ? from.table_name : 'Mesa combinada'
-    const { checks } = splitByGroup(items.map(toBill), (_b, i) => origin(items[i]), labelOf, channel)
-    const rows = checks.map((c, idx) => ({
-      order_id: into.id, idx: idx + 1, label: c.label, kind: 'merge' as const, amount_crc: c.amount_crc,
-      items_snapshot: (snapByOrigin.get(c.key) ?? []).map(it => ({ product_name: it.product_name, qty: it.qty, line_total_crc: (it.base_price_crc + it.modifiers.reduce((s, m) => s + m.price_delta_crc, 0)) * it.qty, modifiers: it.modifiers.map(m => m.name) })),
-    }))
-    const { error: ec } = await sb.from('pos_checks').insert(rows)
-    fail(ec)
-  }
+  // La matemática (splitByGroup) se calcula ACÁ (igual que antes); la RPC solo persiste
+  // de forma ATÓMICA (mover ítems + marcar merged + traza + checks) — mig 034.
+  // Para los checks por mesa primero necesitamos los ítems que QUEDARÁN en `into`:
+  // los actuales de `into` + los de `from` (que la RPC moverá). Los unimos acá para
+  // calcular montos sin depender del orden de las escrituras.
+  const itemsInto = (await getOrderItems(into.id)).filter(i => i.kitchen_status !== 'anulado')
+  const itemsFrom = (await getOrderItems(from.id)).filter(i => i.kitchen_status !== 'anulado')
+    .map(i => ({ ...i, merged_from_order: from.id }))
+  const items = [...itemsInto, ...itemsFrom]
+  const toBill = (it: PosOrderItem) => ({ product_name: it.product_name, qty: it.qty, price_final_crc: it.base_price_crc, modifiers: it.modifiers.map(m => ({ name: m.name, price_delta_crc: m.price_delta_crc })), tax_type: it.tax_type, seat: it.seat, aplica_servicio: it.aplica_servicio })
+  const { splitByGroup } = await import('../utils/posSplit')
+  const origin = (it: PosOrderItem) => it.merged_from_order ?? into.id
+  const snapByOrigin = new Map<string, PosOrderItem[]>()
+  for (const it of items) { const k = origin(it); if (!snapByOrigin.has(k)) snapByOrigin.set(k, []); snapByOrigin.get(k)!.push(it) }
+  const labelOf = (k: string) => k === into.id ? into.table_name : k === from.id ? from.table_name : 'Mesa combinada'
+  const { checks } = splitByGroup(items.map(toBill), (_b, i) => origin(items[i]), labelOf, channel)
+  const checksPayload = checks.map(c => ({
+    label: c.label, amount_crc: c.amount_crc,
+    items_snapshot: (snapByOrigin.get(c.key) ?? []).map(it => ({ product_name: it.product_name, qty: it.qty, line_total_crc: (it.base_price_crc + it.modifiers.reduce((s, m) => s + m.price_delta_crc, 0)) * it.qty, modifiers: it.modifiers.map(m => m.name) })),
+  }))
+  const { error } = await sb.rpc('pos_merge_orden', { p_into: into.id, p_from: from.id, p_by_name: by.name, p_checks: checksPayload })
+  fail(error)
 }
 
-/** Des-combinar: devuelve los ítems de la mesa `fromOrderId` a su mesa original y la
- *  reabre. Solo si no hay checks pagos. Borra los checks de merge. */
+/** Des-combinar (atómico vía RPC, mig 034): devuelve los ítems a su mesa, la reabre y
+ *  borra los checks de merge. Solo si no hay checks pagos. */
 export async function unmergeOrder(intoOrderId: string, fromOrderId: string): Promise<void> {
-  const checks = await getOrderChecks(intoOrderId)
-  if (checks.some(c => c.paid)) throw new Error('No se puede des-combinar: ya hay un check pagado')
-  const { error: e1 } = await sb.from('pos_order_items')
-    .update({ order_id: fromOrderId, merged_from_order: null, updated_at: new Date().toISOString() })
-    .eq('merged_from_order', fromOrderId)
-  fail(e1)
-  const { error: e2 } = await sb.from('pos_orders')
-    .update({ status: 'open', merged_into: null, updated_at: new Date().toISOString() })
-    .eq('id', fromOrderId).eq('status', 'merged')
-  fail(e2)
-  const { error: e3 } = await sb.from('pos_checks').delete().eq('order_id', intoOrderId)
-  fail(e3)
+  const { error } = await sb.rpc('pos_unmerge_orden', { p_into: intoOrderId, p_from: fromOrderId })
+  fail(error)
 }
 
 // ── F3 paridad: reabrir / recerrar orden (F20, mig 029 reusa closed_by) ───────
@@ -703,15 +675,10 @@ export async function getClosedOrdersToday(locationId: string): Promise<PosOrder
  * reembolsar es alcance aparte). Limpia los checks para un re-cobro limpio. Traza obligatoria.
  */
 export async function reopenOrder(orderId: string, by: string, reason: string): Promise<void> {
-  // borra los checks (split/merge) para que el re-cobro arranque limpio; los pagos
-  // previos quedan con check_id en null (ON DELETE SET NULL) como historial.
-  const { error: ec } = await sb.from('pos_checks').delete().eq('order_id', orderId)
-  fail(ec)
-  const { error } = await sb.from('pos_orders')
-    .update({ status: 'open', closed_at: null, closed_by: null, updated_at: new Date().toISOString() })
-    .eq('id', orderId).eq('status', 'closed')
+  // Atómico vía RPC (mig 034): borra checks + reabre + traza en una transacción. Los
+  // pagos previos quedan como historial (check_id → null por ON DELETE SET NULL).
+  const { error } = await sb.rpc('pos_reopen_orden', { p_order_id: orderId, p_by: by, p_reason: reason })
   fail(error)
-  await appendOrderNote(orderId, `REABRIÓ la mesa · ${by} · ${reason} · ${new Date().toLocaleString('es-CR')}`)
 }
 
 // ── F: Jerarquía de menú — familias (mig 032) ─────────────────

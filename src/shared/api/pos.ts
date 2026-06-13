@@ -216,8 +216,10 @@ export interface PosOrder {
   current_salonero_id: string | null   // dueño VIGENTE tras transferencias (atribución de métricas)
   pax: number
   channel: PosChannel
-  status: 'open' | 'closed' | 'cancelled'
+  status: 'open' | 'closed' | 'cancelled' | 'merged'
   transfers: TransferTrace[]
+  merged_into?: string | null           // si fue combinada EN otra mesa (mig 029)
+  merge_trace?: Array<{ from_table: string; from_order: string; by: string; at: string }>
   created_at: string
 }
 
@@ -235,8 +237,12 @@ export interface PosOrderItem {
   aplica_servicio: boolean                   // snapshot fiscal (servicio 10%)
   seat: number
   course: 'bebida' | 'entrada' | 'principal'
-  kitchen_status: 'pendiente' | 'marchado' | 'listo' | 'entregado'
+  kitchen_status: 'pendiente' | 'marchado' | 'listo' | 'entregado' | 'anulado'
   marched_at: string | null
+  merged_from_order?: string | null      // si vino de otra mesa al combinar (mig 029)
+  void_reason?: string | null
+  voided_by?: string | null
+  voided_at?: string | null
   created_at: string
 }
 
@@ -589,4 +595,100 @@ export async function cobrarCheck(checkId: string, payment: PosPayment, closedBy
     fail(e3)
   }
   return { orderClosed: allPaid }
+}
+
+// ── F3 paridad: anular ítem enviado (void, mig 029) ───────────
+export const VOID_REASONS = ['Error de toma', 'Cliente cambió', 'Producto agotado', 'Otro'] as const
+
+/** Anula un ítem YA enviado a cocina (marchado/listo/entregado). Permiso de gerencia
+ *  lo valida el caller (requireManager). Sale del KDS (deja de estar 'marchado') y no
+ *  cuenta en la cuenta. Queda traza (quién, motivo, cuándo). NO toca caja. */
+export async function voidOrderItem(itemId: string, reason: string, voidedBy: string): Promise<void> {
+  const { error } = await sb.from('pos_order_items')
+    .update({ kitchen_status: 'anulado', void_reason: reason, voided_by: voidedBy, voided_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', itemId)
+    .in('kitchen_status', ['marchado', 'listo', 'entregado'])
+  fail(error)
+}
+
+// ── F3 paridad: reordenar ronda (reenviar ítems como nuevos) ──
+/** Clona ítems ya enviados como ítems NUEVOS (pendiente) para "otra ronda". Conserva
+ *  producto, modificadores, asiento, curso y snapshots. qty por ítem desde el caller. */
+export async function reorderRound(orderId: string, picks: Array<{ src: PosOrderItem; qty: number }>): Promise<void> {
+  const now = new Date().toISOString()
+  const rows = picks.filter(p => p.qty > 0).map(({ src, qty }) => ({
+    order_id: orderId, product_name: src.product_name, qty,
+    base_price_crc: src.base_price_crc, modifiers: src.modifiers, price_crc: src.price_crc,
+    tax_type: src.tax_type, station: src.station, subcategory: src.subcategory,
+    aplica_servicio: src.aplica_servicio, seat: src.seat, course: src.course,
+    kitchen_status: 'pendiente', created_at: now, updated_at: now,
+  }))
+  if (!rows.length) return
+  const { error } = await sb.from('pos_order_items').insert(rows)
+  fail(error)
+}
+
+// ── F3 paridad: combinar mesas (merge con deshacer, mig 029) ──
+/** Combina la mesa `from` EN la mesa `into`: los ítems de `from` pasan a `into`
+ *  marcados con su origen; `from` queda 'merged' (sale del plano). Se crean 2 checks
+ *  (uno por mesa) para cobrarlas por separado y poder des-combinar. Traza de quién. */
+export async function mergeOrders(into: PosOrder, from: PosOrder, by: { id: string; name: string }, channel: PosChannel): Promise<void> {
+  if (into.id === from.id) throw new Error('No se puede combinar una mesa consigo misma')
+  // 1) mover los ítems de `from` a `into`, marcando su origen
+  const { error: e1 } = await sb.from('pos_order_items')
+    .update({ merged_from_order: from.id, order_id: into.id, updated_at: new Date().toISOString() })
+    .eq('order_id', from.id)
+  fail(e1)
+  // 2) `from` queda combinada (fuera del plano) con traza
+  const trace = [...(from.merge_trace ?? []), { from_table: from.table_name, from_order: from.id, by: by.name, at: new Date().toISOString() }]
+  const { error: e2 } = await sb.from('pos_orders')
+    .update({ status: 'merged', merged_into: into.id, merge_trace: trace, updated_at: new Date().toISOString() })
+    .eq('id', from.id).eq('status', 'open')
+  fail(e2)
+  // 3) traza en la mesa receptora
+  await appendOrderNote(into.id, `combinó ${from.table_name} · ${by.name} · ${new Date().toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`)
+  // 4) checks separados por mesa (kind 'merge') — sin pisar un split previo no pagado.
+  //    Se valoran con splitByGroup (mismo prorrateo de los splits): INVARIANTE Σ = total
+  //    al colón garantizado (el último grupo reconcilia el redondeo).
+  const existing = await getOrderChecks(into.id)
+  if (!existing.some(c => c.paid)) {
+    const { error: ed } = await sb.from('pos_checks').delete().eq('order_id', into.id)
+    fail(ed)
+    const items = (await getOrderItems(into.id)).filter(i => i.kitchen_status !== 'anulado')
+    const toBill = (it: PosOrderItem) => ({ product_name: it.product_name, qty: it.qty, price_final_crc: it.base_price_crc, modifiers: it.modifiers.map(m => ({ name: m.name, price_delta_crc: m.price_delta_crc })), tax_type: it.tax_type, seat: it.seat, aplica_servicio: it.aplica_servicio })
+    // import dinámico evita ciclo con utils
+    const { splitByGroup } = await import('../utils/posSplit')
+    const origin = (it: PosOrderItem) => it.merged_from_order ?? into.id
+    const snapByOrigin = new Map<string, PosOrderItem[]>()
+    for (const it of items) {
+      const k = origin(it)
+      if (!snapByOrigin.has(k)) snapByOrigin.set(k, [])
+      snapByOrigin.get(k)!.push(it)
+    }
+    const labelOf = (k: string) => k === into.id ? into.table_name : k === from.id ? from.table_name : 'Mesa combinada'
+    const { checks } = splitByGroup(items.map(toBill), (_b, i) => origin(items[i]), labelOf, channel)
+    const rows = checks.map((c, idx) => ({
+      order_id: into.id, idx: idx + 1, label: c.label, kind: 'merge' as const, amount_crc: c.amount_crc,
+      items_snapshot: (snapByOrigin.get(c.key) ?? []).map(it => ({ product_name: it.product_name, qty: it.qty, line_total_crc: (it.base_price_crc + it.modifiers.reduce((s, m) => s + m.price_delta_crc, 0)) * it.qty, modifiers: it.modifiers.map(m => m.name) })),
+    }))
+    const { error: ec } = await sb.from('pos_checks').insert(rows)
+    fail(ec)
+  }
+}
+
+/** Des-combinar: devuelve los ítems de la mesa `fromOrderId` a su mesa original y la
+ *  reabre. Solo si no hay checks pagos. Borra los checks de merge. */
+export async function unmergeOrder(intoOrderId: string, fromOrderId: string): Promise<void> {
+  const checks = await getOrderChecks(intoOrderId)
+  if (checks.some(c => c.paid)) throw new Error('No se puede des-combinar: ya hay un check pagado')
+  const { error: e1 } = await sb.from('pos_order_items')
+    .update({ order_id: fromOrderId, merged_from_order: null, updated_at: new Date().toISOString() })
+    .eq('merged_from_order', fromOrderId)
+  fail(e1)
+  const { error: e2 } = await sb.from('pos_orders')
+    .update({ status: 'open', merged_into: null, updated_at: new Date().toISOString() })
+    .eq('id', fromOrderId).eq('status', 'merged')
+  fail(e2)
+  const { error: e3 } = await sb.from('pos_checks').delete().eq('order_id', intoOrderId)
+  fail(e3)
 }

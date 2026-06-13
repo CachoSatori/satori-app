@@ -72,3 +72,17 @@ describe('INVARIANTE — suma de checks == total (al colón), todos los modos', 
     expect(checksReconcile(splitByItem(big, i => (i % 4 === 0 ? null : i % 3), 3, 'salon').checks, t)).toBe(true)
   })
 })
+
+describe('INVARIANTE merge — checks por mesa de origen reconcilian (T1)', () => {
+  // Mesa A (asiento como proxy de origen "into") + Mesa B combinada → 2 grupos por origen.
+  const itemsA: BillItem[] = [item('ROLL A', 7500, 1), item('AGUA', 3900, 1)]
+  const itemsB: BillItem[] = [item('ROLL B', 6500, 1), item('CERVEZA', 2500, 1), item('POSTRE', 4200, 1)]
+  const all = [...itemsA, ...itemsB]
+  const origin = (_b: BillItem, i: number) => (i < itemsA.length ? 'A' : 'B')
+  it('Σ de los 2 checks de merge = total combinado al colón', () => {
+    const { checks, total } = splitByGroup(all, origin, k => `Mesa ${k}`, 'salon')
+    expect(checks).toHaveLength(2)
+    expect(checksReconcile(checks, total)).toBe(true)
+    expect(total).toBe(computeTotals(all, 'salon').total)
+  })
+})

@@ -432,11 +432,13 @@ export interface PosProduct {
   prep_time_min: number | null
   allergens: string
   photo_url: string | null         // foto del menú (mig 030); null = tile sin foto
+  ciiu: string | null              // FE: actividad económica (mig 036); null = pendiente
+  cabys: string | null             // FE: código CABYS Hacienda (mig 036); null = pendiente
 }
 
 export async function getProductsFull(): Promise<PosProduct[]> {
   const { data, error } = await sb.from('product_map')
-    .select('nombre, tipo, clasificacion, subclasificacion, costo_unitario, is_active, station, aplica_servicio, prep_time_min, allergens, photo_url')
+    .select('nombre, tipo, clasificacion, subclasificacion, costo_unitario, is_active, station, aplica_servicio, prep_time_min, allergens, photo_url, ciiu, cabys')
     .order('tipo').order('nombre')
   fail(error)
   return (data ?? []) as PosProduct[]
@@ -525,6 +527,14 @@ export async function getOrderPayments(orderId: string): Promise<PosPayment[]> {
   const { data, error } = await sb.from('pos_payments').select('*').eq('order_id', orderId).order('created_at')
   fail(error)
   return (data ?? []) as PosPayment[]
+}
+
+/** Busca el pago por su client_op_id (único, mig 033) — para enlazar el documento
+ *  fiscal al pago recién registrado sin depender de la forma del retorno de la RPC. */
+export async function getPaymentByClientOpId(clientOpId: string): Promise<PosPayment | null> {
+  const { data, error } = await sb.from('pos_payments').select('*').eq('client_op_id', clientOpId).maybeSingle()
+  fail(error)
+  return (data as PosPayment | null) ?? null
 }
 
 // ── F3: Dividir cuenta (mig 028) ──────────────────────────────

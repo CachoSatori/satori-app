@@ -29,6 +29,16 @@ export interface TicketPago {
   check_label?: string      // si es el cobro de un check de un split
   check_amount_crc?: number // monto del check (si difiere del total de la mesa)
 }
+/** Datos fiscales del documento electrónico (estructura; SIM por ahora). */
+export interface TicketFiscal {
+  tipo: 'tiquete' | 'factura'
+  estado: 'pendiente' | 'emitido' | 'error'
+  consecutivo?: string | null
+  clave?: string | null
+  provider_ref?: string | null   // 'emitido-sim' cuando es simulado
+  receptor_nombre?: string | null
+  receptor_id?: string | null
+}
 export interface TicketData {
   table: string
   channel: string
@@ -39,6 +49,7 @@ export interface TicketData {
   lines: TicketLine[]
   totals: BillTotals
   pago: TicketPago
+  fiscal?: TicketFiscal | null   // FE estructura: si viene, se imprime el bloque fiscal
 }
 
 const METHOD_LABEL: Record<string, string> = {
@@ -88,6 +99,27 @@ export function renderTicketCobro(d: TicketData): string {
     L.push(row('Vuelto', money(p.change_crc)))
   }
   L.push(rule())
+  // Bloque fiscal (FE estructura). El header dice si es tiquete/factura y si va por SIM.
+  if (d.fiscal) {
+    const f = d.fiscal
+    const esSim = f.provider_ref === 'emitido-sim'
+    L.push(center((f.tipo === 'factura' ? 'FACTURA ELECTRÓNICA' : 'TIQUETE ELECTRÓNICO') + (esSim ? ' (SIM)' : '')))
+    if (f.estado === 'emitido') {
+      if (f.receptor_nombre) L.push('Receptor: ' + f.receptor_nombre + (f.receptor_id ? ` (${f.receptor_id})` : ''))
+      if (f.consecutivo) L.push('Consecutivo: ' + f.consecutivo)
+      if (f.clave) { L.push('Clave:'); L.push(f.clave) }
+      L.push(row('Neto', money(t.neto)))
+      L.push(row('IVA', money(t.iva)))
+      if (t.servicioAplica) L.push(row('Servicio', money(t.servicio)))
+      L.push(row('Total', money(t.total)))
+      if (esSim) L.push(center('documento simulado — no fiscal'))
+    } else if (f.estado === 'error') {
+      L.push(center('⚠ documento NO emitido (error)'))
+    } else {
+      L.push(center('documento pendiente de emisión'))
+    }
+    L.push(rule())
+  }
   L.push(center('¡Gracias! Pura vida 🌺'))
   L.push('')
   return L.join('\n')

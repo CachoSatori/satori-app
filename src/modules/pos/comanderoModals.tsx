@@ -5,10 +5,13 @@ import {
   addOrderItem, deleteOrderItem,
   transferOrder, cobrarOrden, setOrderChecks, cobrarCheck,
   reorderRound, mergeOrders, getOpenOrders, getClosedOrdersToday, reopenOrder, getProductGroups,
+  getPaymentByClientOpId,
 } from '../../shared/api/pos'
+import { emitirFeDocumento } from '../../shared/api/fe'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { calcularVuelto, vueltoPagoUsd, convertirCrcAUsd, convertirUsdACrc } from '../../shared/utils/posCobro'
 import { renderTicketCobro } from '../../shared/utils/posTicket'
+import type { TicketFiscal } from '../../shared/utils/posTicket'
 import type { PosPayment, PosCheck, PosOrder, PosOrderItem, ModifierGroupRow, ModifierRow, PosPrice } from '../../shared/api/pos'
 import { splitEven, splitByGroup, splitByItem } from '../../shared/utils/posSplit'
 import type { SplitCheck } from '../../shared/utils/posSplit'
@@ -474,6 +477,31 @@ export function CheckoutModal({ order, items, cajero, check, onClose, onDone, on
         ? await cobrarCheck(check.id, payment, profile.id)
         : (await cobrarOrden(payment, profile.id), { orderClosed: true })
       setClosed(res.orderClosed)
+
+      // FE estructura: generar el documento electrónico (SIM) del cobro. NO llama a
+      // Hacienda. Si algo falla acá, el cobro YA quedó hecho → no se revierte; el ticket
+      // sale con el bloque fiscal en error/pendiente. Totales fiscales DERIVADOS de
+      // computeTotals (para un check, escalados al monto cobrado).
+      let fiscal: TicketFiscal | null = null
+      try {
+        const pago = payment.client_op_id ? await getPaymentByClientOpId(payment.client_op_id) : null
+        // Escala neto/IVA/servicio al monto del check si es un split; full order = 1.
+        const factor = check && totals.total > 0 ? payTotal / totals.total : 1
+        const r2 = (n: number) => Math.round(n * factor * 100) / 100
+        const fe = await emitirFeDocumento({
+          order_id: order.id, payment_id: pago?.id ?? null, check_id: check?.id ?? null,
+          tipo: 'tiquete',
+          total_neto: r2(totals.neto), total_iva: r2(totals.iva),
+          total_servicio: r2(totals.servicio), total: payTotal,
+        })
+        fiscal = { tipo: fe.tipo, estado: fe.estado, consecutivo: fe.consecutivo, clave: fe.clave,
+          provider_ref: fe.provider_ref, receptor_nombre: fe.receptor_nombre, receptor_id: fe.receptor_id }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('FE SIM no emitió (cobro ya registrado):', e)
+        fiscal = { tipo: 'tiquete', estado: 'error' }
+      }
+
       // Ticket SIM (D4): texto en pantalla + log; impresora real = futuro.
       const txt = renderTicketCobro({
         table: order.table_name, channel: order.channel, pax: order.pax,
@@ -487,6 +515,7 @@ export function CheckoutModal({ order, items, cajero, check, onClose, onDone, on
         pago: { method, currency: payment.currency, exchange_rate_used: payment.exchange_rate_used,
           received_crc: payment.received_crc, received_usd: payment.received_usd, change_crc: payment.change_crc,
           tip_crc: tipCrc, check_label: check?.label, check_amount_crc: check?.amount_crc },
+        fiscal,
       })
       // eslint-disable-next-line no-console
       console.log('🖨️ TICKET SIM\n' + txt)

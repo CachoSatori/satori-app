@@ -32,11 +32,11 @@ sigue respeta esa regla.
 | F7 | **Marchar (fire)** | por curso, send | ✅ por curso y total → KDS realtime | — |
 | F8 | **Deshacer marchar** | (void posterior) | ✅ ventana 20s revierte lo aún marchado | — |
 | F9 | **Editar/anular NO enviado** | delete simple | ✅ editar (✎ reemplazo) + quitar (×) pendientes | — |
-| F10 | **Anular ENVIADO (void)** | void con motivo + permiso | ❌ | **P1** void con motivo + `verify_manager` + ticket anulación |
-| F11 | **Reordenar ronda / repetir** | "repeat round" | ❌ | **P1** repetir ítem / repetir ronda |
-| F12 | **Cantidad (qty)** | numpad qty | ⚠ modelo soporta qty, UI agrega de a 1 | **P1** qty rápida / merge filas |
+| F10 | **Anular ENVIADO (void)** | void con motivo + permiso | ✅ void con `requireManager` + motivo + sale del KDS + traza (mig 029) | ticket de anulación (con impresión real) |
+| F11 | **Reordenar ronda / repetir** | "repeat round" | ✅ "Otra ronda" reenvía enviados con ± (mig 029) | — |
+| F12 | **Cantidad (qty)** | numpad qty | ✅ ± en el picker (×N), agrupa idénticos en una fila | — |
 | F13 | **Transferir servidor** | sí | ✅ transferOrder + atribución de métricas + traza | — |
-| F14 | **Combinar mesas** | merge con deshacer | ❌ | **P2** merge de órdenes con undo |
+| F14 | **Combinar mesas** | merge con deshacer | ✅ combinar/separar, checks por mesa (invariante Σ=total), traza (mig 029) | — |
 | F15 | **Dividir cuenta (split)** | por asiento / por ítems / equitativo (3 modos) | ✅ **3 modos + des-dividir** (mig 028, posSplit, invariante Σ=total) | — |
 | F16 | **Cobro: cuenta→método→emisión→impresión** | sí | ✅ (mig 027, checkout reusa computeTotals, ticket SIM) | impresora/fiscal real (futuro) |
 | F17 | **Doble moneda + TC ajustable por orden** | "dual currency" + Checkout→Exchange Rate | ✅ ₡ primario + $ secundario, TC override por orden con traza | — |
@@ -82,8 +82,15 @@ Cuenta de mesa (🧾) → [Cobrar] → Checkout (reusa computeTotals: consumo·s
 ## 3. Backlog priorizado (post-cobro)
 - **Sprint 1 ✅**: F16 cobro base, F17 doble moneda, F18 vuelto.
 - **Sprint 2 ✅**: F15 split (3 modos + des-dividir), F19 propina (CAPTURA; distribución pendiente).
-- **P1 restante**: F19 integración propina↔tipCalculations (sagrado, sprint propio) · F10 void de
-  enviados con permiso · F11/F12 repetir ronda y qty rápida.
+- **Sprint 3 ✅** (paridad final): F10 void de enviados, F11 reordenar ronda, F12 qty rápida,
+  F14 combinar mesas con deshacer.
+- **Lo único que queda**: F19 integración propina↔tipCalculations (SAGRADO, sprint propio) ·
+  F20 reabrir/re-cerrar orden con permiso · pase a producción de todo el PoS (migraciones 022-029).
+
+**Estado de paridad: el flujo de mesa de Satori cubre las 21 funciones del estándar Lavu
+(F1-F18 + F13 transferencia ✅; F19 capturada; F20 y la integración fiscal/propina quedan como
+trabajo dedicado). Diferenciales Satori presentes: pax obligatorio, atribución de métricas por
+salonero en transferencias, modelo fiscal CR calibrado, offline-first.**
 - **P2**: F14 combinar mesas con undo · F20 reabrir/re-cerrar con permiso · F3 nombres de invitado ·
   F4 hold real · F6 favoritos/top.
 - **Futuro**: F21 factura electrónica fiscal (Almendro/Alanube) sobre `pos_payments`.

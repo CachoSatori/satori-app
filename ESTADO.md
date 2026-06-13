@@ -3,6 +3,35 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — F3 PARIDAD FINAL (combinar + anular + ronda + cantidad) — EN STAGING (rama `f3-paridad`)
+Cierra el estándar de mesa: el comandero de Satori cubre las 21 funciones del flujo Lavu (semáforo
+de `SPEC-LAVU-FLUJO-MESA.md` casi todo ✅). 90/90 tests, builds OK, smoke E2E verde en las 4 tareas
+(verificado en DB; Mesa 8 demo combinada y restaurada intacta).
+- **Migración 029** (staging): combinar (`pos_orders.merged_into/merge_trace`, status `merged`,
+  `pos_order_items.merged_from_order`) · anular (`kitchen_status='anulado'` + `void_reason/voided_by/
+  voided_at`) · check kind `merge`. **NO en prod.**
+- **T1 Combinar mesas (F14)**: desde el menú maestro de la orden, ⧉ Combinar → mesa abierta → sus
+  ítems pasan acá marcados "combinada" y quedan como **checks separados por mesa** (cobrables aparte,
+  invariante Σ=total garantizado vía `splitByGroup`). ↩ Separar deshace mientras nada esté pago.
+  Traza de quién combinó. Reusa transferencias y splits ya construidos.
+- **T2 Anular ítem enviado (F10)**: ⊘ anular en ítems ya marchados → **`requireManager`** (owner/
+  manager directo; otros piden credenciales) + **motivo obligatorio** (error de toma / cliente
+  cambió / producto agotado / otro). Sale del KDS (deja de estar 'marchado') y **no cuenta en la
+  cuenta**; traza completa (quién, motivo, cuándo). NO toca caja.
+- **T3 Otra ronda (F11)**: 🔁 lista los ítems ya enviados (únicos por producto+modificadores+asiento)
+  con ± → los reenvía como nuevos (pendientes) con sus modificadores. Pensado para la barra.
+- **T4 Cantidad rápida (F12)**: ± en el picker (×N) → una sola fila con la cantidad; modificadores
+  distintos siguen separados. El grid de 2-taps mantiene el alta rápida de a 1.
+- **SAGRADOS intactos**: cashUtils, tipCalculations, computeTotals, cierres. La integración
+  propina↔tipCalculations sigue **sin tocarse** (sprint propio). Invariante de splits/merge probado
+  al colón (test nuevo de merge por origen).
+
+### Plan de prueba física para la dueña (paridad, en staging)
+1. **Cantidad**: comandá un ítem y subí la cantidad con ± (×2, ×3) → entra como una sola línea con la cantidad.
+2. **Otra ronda** (barra): con ítems ya enviados, tocá 🔁 Otra ronda → elegí cuántos repetir → se reenvían a barra/cocina.
+3. **Anular enviado**: en un ítem ya en cocina tocá ⊘ anular → (si no sos gerente, pide credenciales) → elegí el motivo → desaparece del KDS y de la cuenta.
+4. **Combinar**: en una mesa, ⧉ Combinar → elegí otra mesa abierta → sus ítems se suman como una cuenta aparte; cobralas por separado o tocá ↩ Separar para deshacer (si no cobraste nada).
+
 ## 🆕 2026-06-12 (noche) — F3 SPLITS + PROPINA — EN STAGING (rama `f3-splits`)
 Paridad con PoS profesional: **dividir cuenta en 3 modos** + **captura de propina** en el cobro.
 89/89 tests, builds OK, smoke E2E verde (split por ítem → 2 checks → cobro check1 efectivo ₡ con

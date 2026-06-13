@@ -469,3 +469,51 @@ export async function getProductMetaMap(): Promise<Map<string, { tipo: string; s
   fail(error)
   return new Map(((data ?? []) as Array<{ nombre: string; tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean }>).map(r => [r.nombre, r]))
 }
+
+// ── F3: Cobro (mig 027) ───────────────────────────────────────
+export interface PosPayment {
+  id?: string
+  order_id: string
+  method: 'efectivo' | 'tarjeta' | 'transferencia'
+  amount_crc: number
+  currency: 'CRC' | 'USD'
+  exchange_rate_used: number | null
+  received_crc: number
+  received_usd: number
+  change_crc: number
+  note?: string
+  created_by: string | null
+}
+
+/**
+ * Cobra y CIERRA la mesa en una sola operación (SPEC §2, decisión D1):
+ *  1) registra el pago en pos_payments, 2) marca la orden closed.
+ * El total ya viene calculado por computeTotals (no se recalcula acá). El cierre
+ * de la mesa individual no depende de canCloseShift — ese gate es del cierre de
+ * TURNO; cobrar una mesa es justamente cómo se vacía el salón.
+ */
+export async function cobrarOrden(payment: PosPayment, closedBy: string): Promise<void> {
+  const { error: e1 } = await sb.from('pos_payments').insert({
+    order_id:           payment.order_id,
+    method:             payment.method,
+    amount_crc:         payment.amount_crc,
+    currency:           payment.currency,
+    exchange_rate_used: payment.exchange_rate_used,
+    received_crc:       payment.received_crc,
+    received_usd:       payment.received_usd,
+    change_crc:         payment.change_crc,
+    note:               payment.note ?? '',
+    created_by:         payment.created_by,
+  })
+  fail(e1)
+  const { error: e2 } = await sb.from('pos_orders')
+    .update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: closedBy, updated_at: new Date().toISOString() })
+    .eq('id', payment.order_id).eq('status', 'open')
+  fail(e2)
+}
+
+export async function getOrderPayments(orderId: string): Promise<PosPayment[]> {
+  const { data, error } = await sb.from('pos_payments').select('*').eq('order_id', orderId).order('created_at')
+  fail(error)
+  return (data ?? []) as PosPayment[]
+}

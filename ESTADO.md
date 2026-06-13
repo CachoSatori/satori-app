@@ -3,6 +3,26 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — AUDITORÍA + CONSOLIDACIÓN — EN STAGING (rama `consolidacion`)
+Auditoría de staff engineer (`AUDITORIA-CONSOLIDACION.md`) + limpieza segura. **Comportamiento
+preservado**: 93/93 tests, tsc y build verdes; sagrados intocados. El `AUDITORIA.md` raíz es una
+auditoría ANTERIOR (5 jun, otra rama) — se conservó intacta; la de este sprint va en archivo aparte.
+- **Ejecutado (seguro, verificado)**: extracción de 8 piezas hoja del comandero a
+  `comanderoShared.tsx` (toBillItem, COURSE_LABEL, KS_LABEL, CierreTurnoModal, PaxModal, Tile,
+  QtyPopup, Row) → **ComanderoModule 1406→1281 líneas**, mover + importar, sin cambio de conducta.
+- **Hallazgos clave para DECISIÓN HUMANA (no se tocaron)**:
+  - 🔴 **Cobro concurrente de la misma mesa desde 2 cajas** → el `UPDATE` de cierre es idempotente
+    pero el `INSERT` en `pos_payments` no, puede duplicar la fila de pago. Fix = precondición/UNIQUE
+    server-side o RPC transaccional (cambia esquema → requiere acuerdo).
+  - 🔴 `react-hooks/rules-of-hooks` en `MiRendimiento.tsx` (módulo viejo de ventas): `useMemo`
+    condicionales — bug latente, sprint propio con validación física.
+  - 🟡 Atomicidad de merge/reopen (envolver en RPC plpgsql) + pausar el refetch de Realtime mientras
+    hay un modal abierto (patrón `pauseWhileTyping` de Propinas).
+  - 🟡 Seguir extrayendo los modales autónomos del comandero (CheckoutModal/SplitModal/ItemPicker/…)
+    → ~500 líneas; mecánico y verificable por tsc, queda listo para el próximo paso.
+- **Confirmado sano**: outbox offline (lock multi-pestaña + idempotencia + orden estricto), RLS de
+  todas las tablas nuevas, 0 `any`, lazy-load ya implementado, migraciones 022-032 registradas.
+
 ## 🆕 2026-06-12 (noche) — JERARQUÍA DE MENÚ (3 niveles) + CANTIDAD EN TODO PRODUCTO — EN STAGING (rama `menu-jerarquia`)
 93/93 tests, builds OK, smoke E2E verde (navegación 3 niveles + ×2 verificados + DB). Sagrados intactos.
 - **Migración 032 — modelo de familia EDITABLE** (no hardcodeado): `menu_families` (4: 🍱Comida /

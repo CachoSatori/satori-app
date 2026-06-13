@@ -61,6 +61,11 @@ export interface TipSession {
   pool_efectivo_crc: number
   pool_efectivo_usd: number
   pool_barra_crc: number
+  // P1: propinas capturadas en el cobro del PoS (pos_payments.tip_crc), campo SEPARADO
+  // del manual (pool_efectivo_crc). Se sincroniza con syncPosTipsToPool (SET idempotente).
+  // El pool EFECTIVO que recibe el reparto = pool_efectivo_crc + pool_pos_crc.
+  pool_pos_crc?: number
+  pool_pos_usd?: number
   notes: string | null
   created_at: string
   updated_at: string

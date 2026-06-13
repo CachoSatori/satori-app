@@ -16,7 +16,9 @@ import {
   deleteTipEntry,
   updateSessionPools,
   savePayouts,
+  syncPosTipsToPool,
 } from '../../shared/api/tips'
+import { efectivoPoolConPos } from '../../shared/utils/posTips'
 import {
   calcTurno,
   formatCRC,
@@ -66,6 +68,13 @@ export default function TipsModule() {
   const [efectivoCRC, setEfectivoCRC] = useState<number | ''>('')
   const [efectivoUSD, setEfectivoUSD] = useState<number | ''>('')
   const [barraCRC, setBarraCRC] = useState<number | ''>('')
+  // P1: propinas del PoS (pos_payments.tip_crc) sincronizadas al pool del turno.
+  // Campo SEPARADO del manual — se SUMA al efectivo que recibe el reparto, sin tocar
+  // la matemática (tipCalculations). poolPosBy = atribución por salonero (auditoría).
+  const [poolPosCrc, setPoolPosCrc] = useState(0)
+  const [poolPosUsd, setPoolPosUsd] = useState(0)
+  const [poolPosBy, setPoolPosBy] = useState<Record<string, number>>({})
+  const [syncingPos, setSyncingPos] = useState(false)
 
   // Líneas del draft (por empleado)
   const [lines, setLines] = useState<DraftLine[]>([])
@@ -112,6 +121,8 @@ export default function TipsModule() {
         setEfectivoCRC(open.pool_efectivo_crc || '')
         setEfectivoUSD(open.pool_efectivo_usd || '')
         setBarraCRC(open.pool_barra_crc || '')
+        setPoolPosCrc(open.pool_pos_crc || 0)
+        setPoolPosUsd(open.pool_pos_usd || 0)
         setShiftType(open.shift_type)
         setFecha(open.session_date)
         setExchangeRate(open.exchange_rate)
@@ -184,10 +195,12 @@ export default function TipsModule() {
       const cov = coberturas[l.employeeId]
       return cov ? { ...l, role: cov as import('../../shared/types/database').UserRole } : l
     })
+    // El pool EFECTIVO que recibe el reparto = manual (frasco) + propinas del PoS.
+    // efectivoPoolConPos solo SUMA; NO cambia cómo tipCalculations reparte.
     const { totals: t, updatedLines } = calcTurno(
       linesForCalc,
-      Number(efectivoCRC) || 0,
-      Number(efectivoUSD) || 0,
+      efectivoPoolConPos(Number(efectivoCRC) || 0, poolPosCrc),
+      efectivoPoolConPos(Number(efectivoUSD) || 0, poolPosUsd),
       Number(barraCRC) || 0,
       exchangeRate,
     )
@@ -200,7 +213,7 @@ export default function TipsModule() {
     setTotals(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines.map(l => `${l.active}|${l.hours}|${l.propina_crc}|${l.propina_usd}`).join(','),
-      JSON.stringify(coberturas), efectivoCRC, efectivoUSD, barraCRC, exchangeRate, openSession?.id])
+      JSON.stringify(coberturas), efectivoCRC, efectivoUSD, barraCRC, poolPosCrc, poolPosUsd, exchangeRate, openSession?.id])
 
   // ── Auto-guardar pools en Supabase ────────────────────────
   const scheduleSavePools = useCallback(() => {
@@ -216,6 +229,23 @@ export default function TipsModule() {
   }, [openSession, efectivoCRC, efectivoUSD, barraCRC])
 
   useEffect(() => { scheduleSavePools() }, [scheduleSavePools])
+
+  // ── Traer propinas del PoS al pool (P1) ───────────────────
+  // Suma las propinas capturadas en el cobro (pos_payments.tip_crc) de los pedidos
+  // CERRADOS de la fecha del turno y las guarda en pool_pos_crc (SET idempotente:
+  // re-tocar el botón NO duplica). NO toca el reparto ni el pool manual.
+  const handleSyncPos = useCallback(async () => {
+    if (!openSession) return
+    setSyncingPos(true); setError(null)
+    try {
+      const r = await syncPosTipsToPool(openSession.id, openSession.session_date)
+      setPoolPosCrc(r.pool_pos_crc)
+      setPoolPosUsd(r.pool_pos_usd)
+      setPoolPosBy(r.por_salonero)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudieron traer las propinas del PoS')
+    } finally { setSyncingPos(false) }
+  }, [openSession])
 
   // ── Abrir sesión ──────────────────────────────────────────
   const handleCreateSession = async () => {
@@ -260,6 +290,7 @@ export default function TipsModule() {
       setEfectivoCRC('')
       setEfectivoUSD('')
       setBarraCRC('')
+      setPoolPosCrc(0); setPoolPosUsd(0); setPoolPosBy({})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error creando sesión')
     }
@@ -276,6 +307,7 @@ export default function TipsModule() {
     try { await deleteTipSession(openSession.id) } catch { /* ignore */ }
     setOpenSession(null)
     setEfectivoCRC(''); setEfectivoUSD(''); setBarraCRC('')
+    setPoolPosCrc(0); setPoolPosUsd(0); setPoolPosBy({})
     setCoberturas({})
     setShowNewSession(true)
     await loadData()
@@ -385,7 +417,11 @@ export default function TipsModule() {
     if (!openSession || !profile) return
     const workedLines = lines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
-    const poolCRC = Math.round((Number(efectivoCRC)||0) + (Number(efectivoUSD)||0)*exchangeRate + (Number(barraCRC)||0))
+    // El pool total mostrado incluye las propinas del PoS (ya sumadas al reparto)
+    const poolCRC = Math.round(
+      efectivoPoolConPos(Number(efectivoCRC)||0, poolPosCrc)
+      + (efectivoPoolConPos(Number(efectivoUSD)||0, poolPosUsd))*exchangeRate
+      + (Number(barraCRC)||0))
 
     const ok = window.confirm(
       `¿Cerrar turno y guardar payouts?\n\n` +
@@ -428,6 +464,7 @@ export default function TipsModule() {
       setEfectivoCRC('')
       setEfectivoUSD('')
       setBarraCRC('')
+      setPoolPosCrc(0); setPoolPosUsd(0); setPoolPosBy({})
       // Resetear líneas
       setLines(prev => prev.map(l => ({
         ...l, active: false, hours: '', propina_crc: '', propina_usd: '', pts_val: 0, take_home: 0,
@@ -623,6 +660,30 @@ export default function TipsModule() {
                   </div>
                 </div>
                 <span className="tips-field-hint">Propina en efectivo al pool general</span>
+              </div>
+
+              {/* P1: Propinas capturadas en el cobro del PoS → al MISMO pool, etiquetadas */}
+              <div className="tips-efectivo-row" style={{ alignItems: 'center' }}>
+                <span className="tips-efectivo-label">📲 Propinas PoS</span>
+                <div className="tips-efectivo-inputs" style={{ alignItems: 'center', gap: '0.75rem' }}>
+                  <strong style={{ fontVariantNumeric: 'tabular-nums', fontSize: '1.05rem' }}>
+                    {formatCRC(poolPosCrc)}
+                    {poolPosUsd > 0 && <span style={{ color: '#888', fontWeight: 400, fontSize: '0.8rem' }}> · de ahí {formatCRC(poolPosUsd)} en $</span>}
+                  </strong>
+                  <button type="button" onClick={handleSyncPos} disabled={syncingPos}
+                    style={{ padding: '6px 12px', borderRadius: 4, cursor: syncingPos ? 'wait' : 'pointer',
+                      border: '1px solid #c8a96e', background: 'transparent', color: '#c8a96e', fontWeight: 700, fontSize: '0.82rem' }}>
+                    {syncingPos ? 'Trayendo…' : '↻ Traer del PoS'}
+                  </button>
+                </div>
+                <span className="tips-field-hint">
+                  Propinas cobradas en el PoS de este día — se suman al pool de efectivo (no duplica al re-tocar).
+                  {Object.keys(poolPosBy).length > 0 && (
+                    <span style={{ display: 'block', color: '#888', fontSize: '0.78rem', marginTop: 2 }}>
+                      Por salonero: {Object.entries(poolPosBy).map(([s, m]) => `${s.slice(0, 8)}: ${formatCRC(m)}`).join(' · ')}
+                    </span>
+                  )}
+                </span>
               </div>
 
               {/* Empleados por sección */}

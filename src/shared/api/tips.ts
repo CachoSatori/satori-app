@@ -331,3 +331,16 @@ export async function getAttendanceHistory(months = 3): Promise<AttendanceRow[]>
   }
   return rows.sort((a, b) => b.session_date.localeCompare(a.session_date))
 }
+
+// ── Propina PoS → pool del turno (P1, mig 035) ───────────────
+/** Sincroniza (idempotente, SET no ADD) las propinas capturadas en el cobro del PoS de
+ *  una FECHA al campo pool_pos_crc de la sesión de propinas. NO toca pool_efectivo_crc
+ *  (el frasco manual) ni el reparto. Devuelve total + atribución por salonero. */
+export async function syncPosTipsToPool(sessionId: string, date: string): Promise<{ pool_pos_crc: number; pool_pos_usd: number; por_salonero: Record<string, number> }> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as
+    (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
+  const { data, error } = await rpc('sync_pos_tips_to_pool', { p_session_id: sessionId, p_date: date })
+  if (error) throw new Error(error.message)
+  const d = (data ?? {}) as { pool_pos_crc?: number; pool_pos_usd?: number; por_salonero?: Record<string, number> }
+  return { pool_pos_crc: Number(d.pool_pos_crc) || 0, pool_pos_usd: Number(d.pool_pos_usd) || 0, por_salonero: d.por_salonero ?? {} }
+}

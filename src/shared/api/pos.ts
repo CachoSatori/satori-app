@@ -725,3 +725,29 @@ export async function reopenOrder(orderId: string, by: string, reason: string): 
   fail(error)
   await appendOrderNote(orderId, `REABRIÓ la mesa · ${by} · ${reason} · ${new Date().toLocaleString('es-CR')}`)
 }
+
+// ── F: Jerarquía de menú — familias (mig 032) ─────────────────
+export interface MenuFamily { id: string; label: string; icon: string; sort_order: number }
+export interface MenuCategory { category: string; family_id: string | null; subfamily: string; hidden_comandero: boolean; sort_order: number }
+
+export async function getMenuFamilies(): Promise<MenuFamily[]> {
+  const { data, error } = await sb.from('menu_families').select('*').order('sort_order')
+  fail(error)
+  return (data ?? []) as MenuFamily[]
+}
+
+export async function getMenuCategories(): Promise<MenuCategory[]> {
+  const { data, error } = await sb.from('menu_categories').select('*').order('sort_order')
+  fail(error)
+  return (data ?? []) as MenuCategory[]
+}
+
+/** Reasigna la familia (y opcionalmente oculto/orden) de una categoría — editable
+ *  desde el Gestor. Upsert por si la categoría aún no estaba mapeada. */
+export async function saveMenuCategory(c: { category: string; family_id: string | null; subfamily?: string; hidden_comandero?: boolean; sort_order?: number }): Promise<void> {
+  const { error } = await sb.from('menu_categories').upsert({
+    category: c.category, family_id: c.family_id, subfamily: c.subfamily ?? '',
+    hidden_comandero: c.hidden_comandero ?? false, sort_order: c.sort_order ?? 0,
+  })
+  fail(error)
+}

@@ -5,8 +5,9 @@ import {
   getPrices, upsertPrice,
   getModifierGroups, getModifiers, getProductGroupLinks, linkProductGroup, unlinkProductGroup,
   getProductOptions, saveProductOption,
+  getMenuFamilies, getMenuCategories, saveMenuCategory,
 } from '../../shared/api/pos'
-import type { PosProduct, PosPrice, ModifierGroupRow, ModifierRow, ProductModifierOption } from '../../shared/api/pos'
+import type { PosProduct, PosPrice, ModifierGroupRow, ModifierRow, ProductModifierOption, MenuFamily, MenuCategory } from '../../shared/api/pos'
 import { splitNetIva, TAX_LABEL } from '../../shared/utils/posFiscal'
 import type { TaxType } from '../../shared/utils/posFiscal'
 import { uploadProductPhoto, deleteProductPhoto } from '../../shared/api/productPhoto'
@@ -30,14 +31,24 @@ export default function ProductosAdmin({ locationId, onError }: { locationId: st
   const [sel, setSel]           = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
 
+  const [families, setFamilies] = useState<MenuFamily[]>([])
+  const [catMap, setCatMap]     = useState<Map<string, MenuCategory>>(new Map())
   const load = useCallback(async () => {
     try {
-      const [ps, pr] = await Promise.all([getProductsFull(), getPrices(locationId)])
+      const [ps, pr, fam, cats] = await Promise.all([getProductsFull(), getPrices(locationId), getMenuFamilies(), getMenuCategories()])
       setProducts(ps)
       setPrices(new Map(pr.map(p => [p.product_name, p])))
+      setFamilies(fam)
+      setCatMap(new Map(cats.map(c => [c.category.trim().toUpperCase(), c])))
     } catch (e) { onError(e instanceof Error ? e.message : 'Error cargando productos') }
   }, [locationId, onError])
   useEffect(() => { load() }, [load])
+
+  const setCatFamily = async (category: string, family_id: string | null) => {
+    const cur = catMap.get(category.trim().toUpperCase())
+    try { await saveMenuCategory({ category, family_id, subfamily: cur?.subfamily ?? '', hidden_comandero: cur?.hidden_comandero ?? false, sort_order: cur?.sort_order ?? 0 }); await load() }
+    catch (e) { onError(e instanceof Error ? e.message : 'Error guardando familia') }
+  }
 
   const shown = useMemo(() => products.filter(p =>
     (filtro === 'todos' || (filtro === 'activos' ? p.is_active : !p.is_active))
@@ -47,6 +58,26 @@ export default function ProductosAdmin({ locationId, onError }: { locationId: st
 
   const product = products.find(p => p.nombre === sel) ?? null
   const sinPrecio = shown.filter(p => p.is_active && (prices.get(p.nombre)?.price_final_crc ?? null) == null).length
+
+  // Árbol familia → categoría → productos (mig 032). Familias en su orden; 'Sin familia' al final.
+  const tree = useMemo(() => {
+    const famOrder = [...families].sort((a, b) => a.sort_order - b.sort_order)
+    const byCat = new Map<string, PosProduct[]>()
+    for (const p of shown) {
+      const cat = p.tipo.trim() || 'Otros'
+      if (!byCat.has(cat)) byCat.set(cat, [])
+      byCat.get(cat)!.push(p)
+    }
+    const famOf = (cat: string) => catMap.get(cat.trim().toUpperCase())?.family_id ?? null
+    const groups: Array<{ family: MenuFamily | null; cats: string[] }> = []
+    for (const f of famOrder) {
+      const cats = [...byCat.keys()].filter(c => famOf(c) === f.id).sort((a, b) => a.localeCompare(b, 'es-CR'))
+      if (cats.length) groups.push({ family: f, cats })
+    }
+    const sinFam = [...byCat.keys()].filter(c => !famOf(c)).sort((a, b) => a.localeCompare(b, 'es-CR'))
+    if (sinFam.length) groups.push({ family: null, cats: sinFam })
+    return { groups, byCat }
+  }, [shown, families, catMap])
 
   const ficha = async (nombre: string, fields: Partial<Omit<PosProduct, 'nombre'>>) => {
     try { await saveProductFicha(nombre, fields); await load() }
@@ -86,21 +117,43 @@ export default function ProductosAdmin({ locationId, onError }: { locationId: st
         <input className={inp} placeholder="Buscar nombre / categoría / subcategoría…" value={q} onChange={e => setQ(e.target.value)} style={{ width: '100%', marginBottom: 6 }} />
         {sinPrecio > 0 && <div style={{ fontSize: '0.7rem', color: '#c23b22', fontWeight: 700, marginBottom: 4 }}>⚠ {sinPrecio} activos sin precio (el comandero no los envía)</div>}
         <button className="cd-btn-green" style={{ width: '100%', marginBottom: 6 }} onClick={() => setCreating(true)}>+ Producto nuevo</button>
-        <div style={{ maxHeight: 480, overflowY: 'auto' }}>
-          {shown.map(p => {
-            const pr = prices.get(p.nombre)
-            const noPrice = (pr?.price_final_crc ?? null) == null
-            return (
-              <div key={p.nombre} onClick={() => setSel(p.nombre)}
-                style={{ padding: '0.35rem 0.4rem', cursor: 'pointer', borderBottom: '1px solid var(--t-border,#eee)', fontSize: '0.8rem',
-                  background: sel === p.nombre ? 'rgba(160,120,48,.12)' : 'transparent', opacity: p.is_active ? 1 : 0.5 }}>
-                {noPrice && p.is_active && <span style={{ color: '#c23b22' }}>⚠ </span>}
-                <strong>{p.nombre}</strong>
-                <span style={{ color: '#5a5040', fontSize: '0.66rem' }}> · {p.tipo}{p.subclasificacion ? ` / ${p.subclasificacion}` : ''}
-                  {pr?.price_final_crc != null && ` · ${fi(pr.price_final_crc)}`}{!p.is_active && ' · DESACTIVADO'}</span>
+        {/* Árbol FAMILIA → categoría → productos (mig 032). La familia de cada
+            categoría es editable acá mismo (la dueña reacomoda sin tocar código). */}
+        <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+          {tree.groups.map(({ family, cats }) => (
+            <div key={family?.id ?? 'sin'} style={{ marginBottom: 4 }}>
+              <div style={{ position: 'sticky', top: 0, background: '#0d0d0d', color: '#c8a96e', padding: '0.3rem 0.4rem', fontWeight: 800, fontSize: '0.78rem', borderRadius: 3 }}>
+                {family ? `${family.icon} ${family.label}` : '📦 Sin familia'}
               </div>
-            )
-          })}
+              {cats.map(cat => (
+                <div key={cat} style={{ marginBottom: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.25rem 0.4rem', background: 'rgba(0,0,0,.04)' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.72rem', flex: 1 }}>{cat} <span style={{ color: '#5a5040', fontWeight: 400 }}>({tree.byCat.get(cat)!.length})</span></span>
+                    <select value={catMap.get(cat.trim().toUpperCase())?.family_id ?? ''} title="Familia de esta categoría"
+                      onChange={e => setCatFamily(cat, e.target.value || null)}
+                      style={{ fontSize: '0.66rem', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 3, padding: '1px 3px', background: 'var(--t-paper,#fff)' }}>
+                      <option value="">— sin familia —</option>
+                      {families.map(f => <option key={f.id} value={f.id}>{f.icon} {f.label}</option>)}
+                    </select>
+                  </div>
+                  {tree.byCat.get(cat)!.map(p => {
+                    const pr = prices.get(p.nombre)
+                    const noPrice = (pr?.price_final_crc ?? null) == null
+                    return (
+                      <div key={p.nombre} onClick={() => setSel(p.nombre)}
+                        style={{ padding: '0.3rem 0.4rem 0.3rem 0.8rem', cursor: 'pointer', borderBottom: '1px solid var(--t-border,#eee)', fontSize: '0.8rem',
+                          background: sel === p.nombre ? 'rgba(160,120,48,.12)' : 'transparent', opacity: p.is_active ? 1 : 0.5 }}>
+                        {noPrice && p.is_active && <span style={{ color: '#c23b22' }}>⚠ </span>}
+                        <strong>{p.nombre}</strong>
+                        <span style={{ color: '#5a5040', fontSize: '0.66rem' }}>{p.subclasificacion ? ` · ${p.subclasificacion}` : ''}
+                          {pr?.price_final_crc != null && ` · ${fi(pr.price_final_crc)}`}{!p.is_active && ' · DESACTIVADO'}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+          ))}
           {shown.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.78rem', padding: '0.75rem 0' }}>Sin productos en esta vista.</div>}
         </div>
       </div>

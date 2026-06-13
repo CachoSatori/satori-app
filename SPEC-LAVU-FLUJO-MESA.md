@@ -37,11 +37,11 @@ sigue respeta esa regla.
 | F12 | **Cantidad (qty)** | numpad qty | ⚠ modelo soporta qty, UI agrega de a 1 | **P1** qty rápida / merge filas |
 | F13 | **Transferir servidor** | sí | ✅ transferOrder + atribución de métricas + traza | — |
 | F14 | **Combinar mesas** | merge con deshacer | ❌ | **P2** merge de órdenes con undo |
-| F15 | **Dividir cuenta (split)** | por asiento / por ítems / equitativo (3 modos) | ⚠ cuenta por asiento (solo lectura) | **P1** split real en cobro: por asiento / por ítem / equitativo N |
-| F16 | **Cobro: cuenta→método→emisión→impresión** | sí | 🟢 **ESTE SPRINT** | — |
-| F17 | **Doble moneda + TC ajustable por orden** | "dual currency" + Checkout→Exchange Rate | 🟢 **ESTE SPRINT** | — |
-| F18 | **Vuelto (efectivo)** | numpad recibido → cambio | 🟢 **ESTE SPRINT** (función pura) | — |
-| F19 | **Propina en el cobro** | tip line | ❌ (propinas viven en `tip_sessions`) | **P1** línea de propina → pool del turno |
+| F15 | **Dividir cuenta (split)** | por asiento / por ítems / equitativo (3 modos) | ✅ **3 modos + des-dividir** (mig 028, posSplit, invariante Σ=total) | — |
+| F16 | **Cobro: cuenta→método→emisión→impresión** | sí | ✅ (mig 027, checkout reusa computeTotals, ticket SIM) | impresora/fiscal real (futuro) |
+| F17 | **Doble moneda + TC ajustable por orden** | "dual currency" + Checkout→Exchange Rate | ✅ ₡ primario + $ secundario, TC override por orden con traza | — |
+| F18 | **Vuelto (efectivo)** | numpad recibido → cambio | ✅ función pura testeada (₡ y $→₡) | — |
+| F19 | **Propina en el cobro** | tip line | ⚠ **CAPTURA ✅** (10/15/manual → `pos_payments.tip_crc`); **distribución pendiente** | integrar con tipCalculations (sprint aparte, sagrado) |
 | F20 | **Reabrir / re-cerrar cuenta** | con permiso | ❌ (cierre simple este sprint) | **P2** reopen con `verify_manager` + traza |
 | F21 | **Factura electrónica fiscal** | integración país | ❌ (ticket SIM interno) | **futuro** Almendro/Alanube — `pos_payments` ya deja el hueco |
 
@@ -80,9 +80,10 @@ Cuenta de mesa (🧾) → [Cobrar] → Checkout (reusa computeTotals: consumo·s
 ---
 
 ## 3. Backlog priorizado (post-cobro)
-- **P0 (este sprint)**: F16 cobro base, F17 doble moneda, F18 vuelto. ✅
-- **P1**: F15 split real (3 modos) · F10 void de enviados con permiso · F19 propina en el cobro →
-  pool · F11/F12 repetir ronda y qty rápida.
+- **Sprint 1 ✅**: F16 cobro base, F17 doble moneda, F18 vuelto.
+- **Sprint 2 ✅**: F15 split (3 modos + des-dividir), F19 propina (CAPTURA; distribución pendiente).
+- **P1 restante**: F19 integración propina↔tipCalculations (sagrado, sprint propio) · F10 void de
+  enviados con permiso · F11/F12 repetir ronda y qty rápida.
 - **P2**: F14 combinar mesas con undo · F20 reabrir/re-cerrar con permiso · F3 nombres de invitado ·
   F4 hold real · F6 favoritos/top.
 - **Futuro**: F21 factura electrónica fiscal (Almendro/Alanube) sobre `pos_payments`.

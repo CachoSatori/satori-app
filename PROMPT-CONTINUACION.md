@@ -5,15 +5,23 @@ nada a PROD, DDL solo migraciones aditivas en staging, sagrados intactos (cashUt
 tipCalculations, cierres, `computeTotals` no cambia su fórmula), builds+tests verdes por commit.
 Fuente de verdad del flujo: `SPEC-LAVU-FLUJO-MESA.md`.
 
-## Próximo sprint sugerido — "F3 cobro avanzado" (P1, en orden)
-1. **Split de cuenta (F15, 3 modos como Lavu)**: por asiento / por ítems / equitativo entre N.
-   `pos_payments` ya admite varias filas por `order_id` (no hay deuda de schema). La cuenta cierra
-   cuando la suma de pagos cubre el total. Función pura `splitTotalCrc` (firma reservada en SPEC).
-2. **Propina en el cobro (F19)**: línea de propina (monto o %) que va al **pool del turno**
-   (`tip_sessions`/`tip_entries`) — respetar la matemática sagrada de tipCalculations, solo alimentar.
-3. **Anular ítem ENVIADO / void (F10)**: con motivo + `verify_manager` (server-side, ya existe) +
+## ✅ Hecho (Sprint 1 + 2)
+- F16 cobro base, F17 doble moneda, F18 vuelto (rama `f3-cobro`, mig 027).
+- F15 split 3 modos + des-dividir, F19 **captura** de propina (rama `f3-splits`, mig 028).
+
+## ⭐ Próximo sprint sugerido — "Propina → pool" (P1, SAGRADO, va solo y con cuidado)
+Integrar `pos_payments.tip_crc` con el sistema de propinas existente (`tip_sessions`/`tip_entries`,
+reparto por `tipCalculations`). **No reimplementar el reparto** — solo alimentar el `pool_*` del
+turno. Pasos: (1) al cerrar el turno (o en tiempo real), sumar las `tip_crc` de los pagos del
+período al pool del `tip_session`; (2) decisión de la dueña: ¿propina de tarjeta/SINPE al mismo pool
+que efectivo o separada?; (3) conservar atribución por `current_salonero_id` para reportes.
+Tests dedicados + validación física antes de mergear (es plata del equipo). Ver "Cómo conecta" en
+ESTADO.md.
+
+## Otros P1 (en orden)
+1. **Anular ítem ENVIADO / void (F10)**: con motivo + `verify_manager` (server-side, ya existe) +
    ticket de anulación (cuando llegue impresión real). Hoy solo se deshace marchar dentro de 20s.
-4. **Repetir ronda / qty rápida (F11/F12)**: re-tocar tile suma qty; "repetir ítem" clona fila.
+2. **Repetir ronda / qty rápida (F11/F12)**: re-tocar tile suma qty; "repetir ítem" clona fila.
 
 ## Backlog P2 (Comandero pro — SPEC-COMANDERO-UX.md §4)
 - Cantidad rápida (qty) con merge de filas idénticas no marchadas; "repetir ítem".

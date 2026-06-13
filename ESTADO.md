@@ -3,6 +3,54 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — F3 SPLITS + PROPINA — EN STAGING (rama `f3-splits`)
+Paridad con PoS profesional: **dividir cuenta en 3 modos** + **captura de propina** en el cobro.
+89/89 tests, builds OK, smoke E2E verde (split por ítem → 2 checks → cobro check1 efectivo ₡ con
+propina 10% → cobro check2 en $ → mesa cerró; verificado en DB: propina ₡425 capturada, cierre al
+pagar todo). **SAGRADOS intactos**: `tipCalculations` NO se tocó (la propina se CAPTURA, no se
+distribuye); `computeTotals` solo se reutiliza por grupo.
+- **Migración 028** (staging): `pos_checks` (checks congelados con monto + snapshot de líneas) +
+  `pos_payments.check_id` + `pos_payments.tip_crc/tip_currency`; RLS y realtime. **NO en prod.**
+- **Modelo de datos elegido — "checks congelados"**: cada check guarda el MONTO que debe (ya con
+  servicio+IVA prorrateados) y un snapshot de sus líneas. Evita tocar `pos_order_items` y resuelve
+  el ítem compartido (se prorratea como monto). **Invariante garantizado en código y test:
+  Σ checks = total de la mesa al colón** (el último check absorbe el redondeo).
+- **Dividir (SPEC F15)**: 3 modos — **parejo** en N (numpad ±), **por asiento** (usa los asientos
+  del comandero), **por ítem** (asignar cada ítem a una cuenta; sin asignar = compartido,
+  prorrateado). **Des-dividir** vuelve a un solo check (solo si nada está pago). Cada check se cobra
+  independiente con el flujo F3 (método, doble moneda, vuelto, ticket); **la mesa cierra cuando
+  TODOS los checks están pagos**. Funciones puras `posSplit.ts` (splitEven/splitByGroup/splitByItem)
+  con 10 tests incl. el invariante en los 3 modos.
+- **Propina (SPEC F19, CAPTURA — no distribución)**: en el checkout, 10% / 15% / manual en la
+  moneda del pago → se guarda en `pos_payments.tip_crc`; suma al efectivo a cobrar y sale en el
+  ticket. La propina queda registrada por pago/cajero/salonero. **La integración con el sistema de
+  propinas (`tipCalculations`) NO se implementó** (es sagrado) — ver "Cómo conecta" abajo y
+  `PROMPT-CONTINUACION.md`.
+- **Decisiones**: split limpio (no se redivide ni des-divide con un check ya pago); un pago por
+  check; el cobro de un check que no cierra la mesa **vuelve a la Cuenta** para cobrar el resto
+  (hallazgo del smoke).
+
+### Cómo conecta la propina capturada con el flujo de propinas actual (diseño para después)
+Hoy el pool de propinas vive en `tip_sessions`/`tip_entries` y se reparte con `tipCalculations`
+(por puntos de rol: salonero/barman/barback/runner/cajero…). La propina capturada en el cobro queda
+en `pos_payments.tip_crc` con `created_by` (cajero) y la orden tiene `current_salonero_id` (a quién
+atribuir). **La integración futura** (sprint propio, con tests dedicados) debe: (1) sumar las
+`tip_crc` del turno al pool del `tip_session` correspondiente SIN reimplementar el reparto —
+solo alimentar el `pool_*`; (2) decidir si la propina de tarjeta/SINPE entra al mismo pool que la de
+efectivo o se separa (decisión de la dueña); (3) conservar la atribución por salonero para reportes.
+NADA de esto toca la matemática de `tipCalculations`: es solo un ingreso al pool.
+
+### Plan de prueba física para la dueña (splits + propina, en staging)
+1. **Comandero** → mesa con varios ítems → **🧾 Cuenta** → **🔀 Dividir**.
+2. **Parejo**: elegí en cuántas (± ) → mirá que las cuentas sumen exacto el total → Dividir.
+3. **Por asiento**: usa los asientos que pusiste al comandar (cada asiento, una cuenta).
+4. **Por ítem**: tocá los números para mandar cada ítem a una cuenta; lo que dejes sin asignar se
+   reparte entre todas. Verificá que la suma cuadre.
+5. **Cobrar cada cuenta por separado** (💳 al lado de cada una): la mesa recién se cierra cuando
+   pagás la última. **Des-dividir** vuelve atrás si todavía no cobraste ninguna.
+6. **Propina**: en el cobro tocá 10% / 15% / Otro → mirá cómo suma a lo que el cliente paga y sale
+   en el ticket. (La propina queda registrada; el reparto al equipo es el siguiente paso.)
+
 ## 🆕 2026-06-12 (noche) — F3 COBRO BASE + DOBLE MONEDA — EN STAGING (rama `f3-cobro`)
 Cierra el lazo que faltaba del PoS: **cuenta → método → emisión → impresión → cierre** (orden real
 de Nube de Fuego). SPEC en `SPEC-LAVU-FLUJO-MESA.md` (21 funciones Lavu vs Satori, backlog, pax

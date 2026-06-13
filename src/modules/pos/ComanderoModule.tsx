@@ -7,11 +7,14 @@ import {
   getOrderItems, addOrderItem, updateItemCourse, deleteOrderItem, marchar,
   searchProducts, getProductGroups, getPriceMap, transferOrder, getProductMetaMap,
   unmarchar, cancelEmptyOrder, appendOrderNote, cobrarOrden,
+  getOrderChecks, setOrderChecks, clearOrderChecks, cobrarCheck,
 } from '../../shared/api/pos'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
-import { calcularVuelto, vueltoPagoUsd, convertirCrcAUsd } from '../../shared/utils/posCobro'
+import { calcularVuelto, vueltoPagoUsd, convertirCrcAUsd, convertirUsdACrc } from '../../shared/utils/posCobro'
 import { renderTicketCobro } from '../../shared/utils/posTicket'
-import type { PosPayment } from '../../shared/api/pos'
+import type { PosPayment, PosCheck } from '../../shared/api/pos'
+import { splitEven, splitByGroup, splitByItem } from '../../shared/utils/posSplit'
+import type { SplitCheck } from '../../shared/utils/posSplit'
 import type { PosLocation, SalonTable, PosOrder, PosOrderItem, ModifierGroupRow, ModifierRow, PosPrice } from '../../shared/api/pos'
 import { getAllProfiles } from '../../shared/api/admin'
 import type { Profile } from '../../shared/types/database'
@@ -221,8 +224,10 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
   const [opts, setOpts]     = useState<Array<{ nombre: string; tipo: string }>>([])
   const [picking, setPicking] = useState<{ nombre: string; tipo: string } | null>(null)
   const [showBill, setShowBill] = useState(false)
-  const [showCheckout, setShowCheckout] = useState(false)
+  const [showCheckout, setShowCheckout] = useState<{ check: PosCheck | null } | null>(null)
   const [showTransfer, setShowTransfer] = useState(false)
+  const [checks, setChecks] = useState<PosCheck[]>([])
+  const [showSplit, setShowSplit] = useState(false)
   // Comandero pro (SPEC): grid por categorías, deshacer marchar, edición de ítems
   const [cat, setCat]           = useState<string | null>(null)   // categoría activa del grid
   const [lastSeat]              = useState(1)                     // asiento default del quick-add (P2: recordar el último)
@@ -240,9 +245,12 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
   // Total SIEMPRE visible mientras se comanda (SPEC C5) — misma matemática que la cuenta.
   const totals = computeTotals(items.map(toBillItem), order.channel)
 
-  const load = useCallback(() => { getOrderItems(order.id).then(setItems).catch(e => onError(e.message)) }, [order.id, onError])
+  const load = useCallback(() => {
+    getOrderItems(order.id).then(setItems).catch(e => onError(e.message))
+    getOrderChecks(order.id).then(setChecks).catch(() => { /* sin split */ })
+  }, [order.id, onError])
   useEffect(() => { load() }, [load])
-  useRealtimeRefetch(`rt-order-${order.id}`, ['pos_order_items'], load)
+  useRealtimeRefetch(`rt-order-${order.id}`, ['pos_order_items', 'pos_checks'], load)
 
   useEffect(() => {
     if (search.trim().length < 2) { setOpts([]); return }
@@ -450,12 +458,18 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
         )
       })()}
 
-      {showBill && <CuentaView order={order} items={items}
+      {showBill && <CuentaView order={order} items={items} checks={checks}
         onClose={() => setShowBill(false)}
-        onCobrar={() => { setShowBill(false); setShowCheckout(true) }} />}
-      {showCheckout && <CheckoutModal order={order} items={items} cajero={cajeroName}
-        onClose={() => setShowCheckout(false)}
-        onDone={() => { setShowCheckout(false); onBack() }} onError={onError} />}
+        onCobrar={() => { setShowBill(false); setShowCheckout({ check: null }) }}
+        onCobrarCheck={c => { setShowBill(false); setShowCheckout({ check: c }) }}
+        onSplit={() => { setShowBill(false); setShowSplit(true) }}
+        onUnsplit={async () => { try { await clearOrderChecks(order.id); load() } catch (e) { onError(e instanceof Error ? e.message : 'Error') } }} />}
+      {showSplit && <SplitModal order={order} items={items}
+        onClose={() => setShowSplit(false)}
+        onDone={() => { setShowSplit(false); load(); setShowBill(true) }} onError={onError} />}
+      {showCheckout && <CheckoutModal order={order} items={items} cajero={cajeroName} check={showCheckout.check}
+        onClose={() => setShowCheckout(null)}
+        onDone={({ orderClosed }) => { setShowCheckout(null); if (orderClosed) onBack(); else load() }} onError={onError} />}
       {showTransfer && <TransferModal order={order} onClose={() => setShowTransfer(false)}
         onDone={() => { setShowTransfer(false); onBack() }} onError={onError} />}
     </div>
@@ -515,7 +529,12 @@ function TransferModal({ order, onClose, onDone, onError }: {
 
 /** Cuenta de mesa (pre-F3, solo lectura): consumo + servicio 10% por canal + IVA
  *  + total, con vista por mesa completa o por asiento/cliente. SIN cobro, SIN impresión. */
-function CuentaView({ order, items, onClose, onCobrar }: { order: PosOrder; items: PosOrderItem[]; onClose: () => void; onCobrar: () => void }) {
+function CuentaView({ order, items, checks, onClose, onCobrar, onCobrarCheck, onSplit, onUnsplit }: {
+  order: PosOrder; items: PosOrderItem[]; checks: PosCheck[]
+  onClose: () => void; onCobrar: () => void; onCobrarCheck: (c: PosCheck) => void; onSplit: () => void; onUnsplit: () => void
+}) {
+  const dividido = checks.length > 0
+  const algunPago = checks.some(c => c.paid)
   const [porAsiento, setPorAsiento] = useState(false)
   const bill = items.map(toBillItem)
   const totals = computeTotals(bill, order.channel)
@@ -569,12 +588,128 @@ function CuentaView({ order, items, onClose, onCobrar }: { order: PosOrder; item
             <span>TOTAL</span><span>{fi(totals.total)}</span>
           </div>
         </div>
+        {/* Split: lista de checks (cada uno se cobra aparte) o botón Dividir */}
+        {dividido && (
+          <div style={{ marginTop: '0.75rem', borderTop: '1px dashed #5a5040', paddingTop: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <strong style={{ fontSize: '0.8rem' }}>Dividida en {checks.length} cuentas</strong>
+              {!algunPago && <button className="cm-tap" onClick={onUnsplit}
+                style={{ marginLeft: 'auto', background: 'none', border: '1px solid #5a5040', color: '#5a5040', borderRadius: 4, padding: '4px 10px', fontSize: '0.7rem', cursor: 'pointer' }}>↩ Des-dividir</button>}
+            </div>
+            {checks.map(c => (
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.4rem 0', borderBottom: '1px solid var(--t-border,#e6e1d6)' }}>
+                <span style={{ flex: 1, fontSize: '0.84rem' }}>{c.label} <span style={{ color: '#5a5040', fontVariantNumeric: 'tabular-nums' }}>{fi(c.amount_crc)}</span></span>
+                {c.paid
+                  ? <span style={{ color: '#1f6f3f', fontWeight: 800, fontSize: '0.8rem' }}>✓ pagada</span>
+                  : <button className="cd-btn-green cm-tap" style={{ minHeight: 40, fontWeight: 700, fontSize: '0.78rem' }} onClick={() => onCobrarCheck(c)}>💳 Cobrar</button>}
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: 6 }}>
-          Solo lectura — sin cobro ni impresión (eso llega en F3). Base del servicio y si lleva IVA: PENDIENTE-CONTADORA.
+          Ticket en modo SIM (impresora real y factura electrónica: futuro). Base del servicio y si lleva IVA: PENDIENTE-CONTADORA.
         </div>
-        <div className="cd-modal-actions" style={{ marginTop: '0.75rem', gap: 8 }}>
+        <div className="cd-modal-actions" style={{ marginTop: '0.75rem', gap: 8, flexWrap: 'wrap' }}>
           <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={onClose}>Cerrar</button>
-          <button className="cd-btn-green cm-tap" style={{ minHeight: 48, fontWeight: 800 }} onClick={onCobrar}>💳 Cobrar {fi(totals.total)}</button>
+          {!dividido && <button className="cm-tap" style={{ minHeight: 48, padding: '0 14px', borderRadius: 6, border: '1px solid #5a5040', background: '#fff', color: '#5a5040', fontWeight: 700, cursor: 'pointer' }} onClick={onSplit}>🔀 Dividir</button>}
+          {!dividido && <button className="cd-btn-green cm-tap" style={{ minHeight: 48, fontWeight: 800 }} onClick={onCobrar}>💳 Cobrar {fi(totals.total)}</button>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** F3 — Dividir cuenta (SPEC F15): 3 modos (parejo N / por asiento / por ítem),
+ *  todo prorrateado por posSplit (invariante: Σ checks = total). Crea los pos_checks. */
+function SplitModal({ order, items, onClose, onDone, onError }: {
+  order: PosOrder; items: PosOrderItem[]; onClose: () => void; onDone: () => void; onError: (e: string) => void
+}) {
+  const bill = useMemo(() => items.map(toBillItem), [items])
+  const [mode, setMode] = useState<'even' | 'seat' | 'item'>('even')
+  const [n, setN] = useState(2)
+  const [assign, setAssign] = useState<Record<number, number | null>>({})  // ítem idx → check idx (null = compartido)
+  const [saving, setSaving] = useState(false)
+  const total = computeTotals(bill, order.channel).total
+
+  // Preview de los checks según el modo
+  const preview: SplitCheck[] = useMemo(() => {
+    if (mode === 'even') return splitEven(total, n).map((amt, i) => ({ key: String(i), label: `Cuenta ${i + 1}`, amount_crc: amt, lines: [] }))
+    if (mode === 'seat') return splitByGroup(bill, b => String(b.seat ?? 0), k => `Asiento ${k}`, order.channel).checks
+    return splitByItem(bill, i => assign[i] ?? null, n, order.channel).checks
+  }, [mode, n, assign, bill, total, order.channel])
+
+  const guardar = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const lineLabel = (b: BillItem) => ({ product_name: b.product_name, qty: b.qty, line_total_crc: (b.price_final_crc + b.modifiers.reduce((s, m) => s + m.price_delta_crc, 0)) * b.qty, modifiers: b.modifiers.map(m => m.name) })
+      await setOrderChecks(order.id, preview.map((c, i) => ({ idx: i + 1, label: c.label, kind: mode, amount_crc: c.amount_crc, items_snapshot: c.lines.map(lineLabel) })))
+      onDone()
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error al dividir'); setSaving(false) }
+  }
+
+  return (
+    <div className="cd-modal-overlay" onClick={onClose}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, maxHeight: '88vh', overflowY: 'auto' }}>
+        <div className="cd-modal-title">🔀 Dividir · {order.table_name}</div>
+        <div style={{ display: 'flex', gap: 6, margin: '0.5rem 0' }}>
+          {([['even', 'Parejo'], ['seat', 'Por asiento'], ['item', 'Por ítem']] as const).map(([m, label]) => (
+            <button key={m} className="cm-tap" onClick={() => setMode(m)}
+              style={{ flex: 1, minHeight: 44, borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem',
+                border: '1px solid var(--t-border,#d4cfc4)', background: mode === m ? '#0d0d0d' : '#fff', color: mode === m ? '#c8a96e' : '#5a5040' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {(mode === 'even' || mode === 'item') && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: '0.8rem' }}>¿En cuántas cuentas?</span>
+            <button className="cm-tap" style={{ minWidth: 44, minHeight: 44, borderRadius: 6, border: '1px solid #5a5040', background: '#fff', fontSize: '1.2rem', cursor: 'pointer' }} onClick={() => setN(v => Math.max(2, v - 1))}>−</button>
+            <strong style={{ fontSize: '1.3rem', minWidth: 24, textAlign: 'center' }}>{n}</strong>
+            <button className="cm-tap" style={{ minWidth: 44, minHeight: 44, borderRadius: 6, border: '1px solid #5a5040', background: '#fff', fontSize: '1.2rem', cursor: 'pointer' }} onClick={() => setN(v => Math.min(12, v + 1))}>+</button>
+          </div>
+        )}
+
+        {mode === 'item' && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: '0.72rem', color: '#5a5040', marginBottom: 4 }}>Tocá cada ítem para asignarlo a una cuenta (volvé a tocar para compartir):</div>
+            {bill.map((b, i) => {
+              const cur = assign[i] ?? null
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0.3rem 0', borderBottom: '1px solid var(--t-border,#e6e1d6)' }}>
+                  <span style={{ flex: 1, fontSize: '0.8rem' }}>{b.product_name} <span style={{ color: '#5a5040' }}>{fi((b.price_final_crc + b.modifiers.reduce((s, m) => s + m.price_delta_crc, 0)) * b.qty)}</span></span>
+                  <div style={{ display: 'flex', gap: 3 }}>
+                    {Array.from({ length: n }, (_, c) => (
+                      <button key={c} className="cm-tap" onClick={() => setAssign(a => ({ ...a, [i]: cur === c ? null : c }))}
+                        style={{ minWidth: 32, minHeight: 32, borderRadius: 4, cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem',
+                          border: '1px solid var(--t-border,#d4cfc4)', background: cur === c ? '#2a7a6a' : '#fff', color: cur === c ? '#fff' : '#5a5040' }}>
+                        {c + 1}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+            <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 2 }}>Sin asignar = compartido (se prorratea entre todas).</div>
+          </div>
+        )}
+
+        {/* Preview con reconciliación */}
+        <div style={{ borderTop: '1px solid #0d0d0d', paddingTop: 8 }}>
+          {preview.map(c => (
+            <div key={c.key} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', padding: '2px 0' }}>
+              <span>{c.label}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{fi(c.amount_crc)}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, marginTop: 4, borderTop: '1px solid var(--t-border,#d4cfc4)', paddingTop: 4 }}>
+            <span>Σ = total</span><span>{fi(preview.reduce((s, c) => s + c.amount_crc, 0))} / {fi(total)}</span>
+          </div>
+        </div>
+
+        <div className="cd-modal-actions" style={{ marginTop: '0.75rem', gap: 8 }}>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={onClose}>Cancelar</button>
+          <button className="cd-btn-green cm-tap" style={{ minHeight: 48, fontWeight: 800 }} disabled={saving} onClick={guardar}>{saving ? 'Dividiendo…' : '✓ Dividir cuenta'}</button>
         </div>
       </div>
     </div>
@@ -584,28 +719,39 @@ function CuentaView({ order, items, onClose, onCobrar }: { order: PosOrder; item
 /** F3 — Checkout: reúsa computeTotals (sin recalcular), método de pago, doble moneda
  *  con TC ajustable por orden, vuelto (función pura), registra el pago + cierra la
  *  mesa + muestra el ticket SIM. */
-function CheckoutModal({ order, items, cajero, onClose, onDone, onError }: {
-  order: PosOrder; items: PosOrderItem[]; cajero: string
-  onClose: () => void; onDone: () => void; onError: (e: string) => void
+function CheckoutModal({ order, items, cajero, check, onClose, onDone, onError }: {
+  order: PosOrder; items: PosOrderItem[]; cajero: string; check: PosCheck | null
+  onClose: () => void; onDone: (r: { orderClosed: boolean }) => void; onError: (e: string) => void
 }) {
   const { profile } = useAuth()
   const totals = useMemo(() => computeTotals(items.map(toBillItem), order.channel), [items, order.channel])
+  // Monto a cobrar: el del check si es un split, si no el total de la mesa.
+  const payTotal = check ? check.amount_crc : totals.total
   const [method, setMethod] = useState<'efectivo' | 'tarjeta' | 'transferencia'>('efectivo')
   const [tc, setTc] = useState<number>(0)               // TC del día (editable por orden)
   const [tcEdit, setTcEdit] = useState(false)
   const [efMoneda, setEfMoneda] = useState<'CRC' | 'USD'>('CRC')
   const [recibido, setRecibido] = useState<number | null>(null)  // en la moneda elegida
+  const [tipMode, setTipMode] = useState<0 | 10 | 15 | 'manual'>(0)   // propina: %, manual o sin
+  const [tipManual, setTipManual] = useState<number | null>(null)     // monto manual en moneda del pago
   const [saving, setSaving] = useState(false)
   const [ticket, setTicket] = useState<string | null>(null)
+  const [closed, setClosed] = useState(false)
 
   useEffect(() => { getCurrentRate().then(setTc).catch(() => setTc(640)) }, [])
+
+  // Propina capturada (F19, NO se distribuye acá). En la moneda del pago → convertida a ₡.
+  const tipInPayCcy = tipMode === 'manual' ? (tipManual ?? 0) : tipMode === 0 ? 0 : Math.round(payTotal * tipMode / 100)
+  const tipCrc = (method === 'efectivo' && efMoneda === 'USD') ? convertirUsdACrc(tipInPayCcy, tc) : Math.round(tipInPayCcy)
+  // Si hay propina en efectivo, el cliente debe cubrir total + propina.
+  const aCobrar = payTotal + (method === 'efectivo' ? tipCrc : 0)
 
   // Vuelto según moneda del efectivo recibido (funciones puras testeadas).
   const calc = (() => {
     if (method !== 'efectivo' || recibido == null) return null
-    return efMoneda === 'USD' ? vueltoPagoUsd(totals.total, recibido, tc) : { recibido_crc: Math.round(recibido), ...calcularVuelto(totals.total, recibido) }
+    return efMoneda === 'USD' ? vueltoPagoUsd(aCobrar, recibido, tc) : { recibido_crc: Math.round(recibido), ...calcularVuelto(aCobrar, recibido) }
   })()
-  const totalUsd = tc > 0 ? convertirCrcAUsd(totals.total, tc) : 0
+  const totalUsd = tc > 0 ? convertirCrcAUsd(payTotal, tc) : 0
 
   const confirmar = async () => {
     if (saving || !profile) return
@@ -614,14 +760,18 @@ function CheckoutModal({ order, items, cajero, onClose, onDone, onError }: {
     try {
       const payment: PosPayment = {
         order_id: order.id, method,
-        amount_crc: totals.total, currency: method === 'efectivo' ? efMoneda : 'CRC',
+        amount_crc: payTotal, currency: method === 'efectivo' ? efMoneda : 'CRC',
         exchange_rate_used: (method === 'efectivo' && efMoneda === 'USD') ? tc : (tcEdit ? tc : null),
         received_crc: method === 'efectivo' ? (calc?.recibido_crc ?? 0) : 0,
         received_usd: method === 'efectivo' && efMoneda === 'USD' ? (recibido ?? 0) : 0,
         change_crc: method === 'efectivo' ? (calc?.vuelto_crc ?? 0) : 0,
+        tip_crc: tipCrc, tip_currency: method === 'efectivo' ? efMoneda : 'CRC',
         created_by: profile.id,
       }
-      await cobrarOrden(payment, profile.id)
+      const res = check
+        ? await cobrarCheck(check.id, payment, profile.id)
+        : (await cobrarOrden(payment, profile.id), { orderClosed: true })
+      setClosed(res.orderClosed)
       // Ticket SIM (D4): texto en pantalla + log; impresora real = futuro.
       const txt = renderTicketCobro({
         table: order.table_name, channel: order.channel, pax: order.pax,
@@ -633,7 +783,8 @@ function CheckoutModal({ order, items, cajero, onClose, onDone, onError }: {
         })),
         totals,
         pago: { method, currency: payment.currency, exchange_rate_used: payment.exchange_rate_used,
-          received_crc: payment.received_crc, received_usd: payment.received_usd, change_crc: payment.change_crc },
+          received_crc: payment.received_crc, received_usd: payment.received_usd, change_crc: payment.change_crc,
+          tip_crc: tipCrc, check_label: check?.label, check_amount_crc: check?.amount_crc },
       })
       // eslint-disable-next-line no-console
       console.log('🖨️ TICKET SIM\n' + txt)
@@ -641,15 +792,17 @@ function CheckoutModal({ order, items, cajero, onClose, onDone, onError }: {
     } catch (e) { onError(e instanceof Error ? e.message : 'Error al cobrar'); setSaving(false) }
   }
 
-  // Pantalla del ticket emitido → cerrar vuelve al plano (la mesa ya está cobrada).
+  // Pantalla del ticket emitido → cerrar vuelve al plano (si la mesa cerró) o a la cuenta.
   if (ticket) return (
-    <div className="cd-modal-overlay" onClick={onDone}>
+    <div className="cd-modal-overlay" onClick={() => onDone({ orderClosed: closed })}>
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
-        <div className="cd-modal-title">✅ Cobrado · {order.table_name}</div>
+        <div className="cd-modal-title">✅ Cobrado{check ? ` · ${check.label}` : ''} · {order.table_name}</div>
         <pre style={{ background: '#0d0d0d', color: '#e8e2d0', padding: '0.75rem', borderRadius: 6, fontSize: '0.7rem', lineHeight: 1.35, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>{ticket}</pre>
-        <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: 4 }}>Ticket en modo SIM (impresora real y factura electrónica: integración futura).</div>
+        <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: 4 }}>
+          {closed ? 'Mesa cerrada.' : 'Quedan cuentas por cobrar en esta mesa.'} Ticket SIM (impresora/factura real: futuro).
+        </div>
         <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>
-          <button className="cd-btn-green cm-tap" style={{ minHeight: 48 }} onClick={onDone}>Listo</button>
+          <button className="cd-btn-green cm-tap" style={{ minHeight: 48 }} onClick={() => onDone({ orderClosed: closed })}>Listo</button>
         </div>
       </div>
     </div>
@@ -658,11 +811,11 @@ function CheckoutModal({ order, items, cajero, onClose, onDone, onError }: {
   return (
     <div className="cd-modal-overlay" onClick={onClose}>
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
-        <div className="cd-modal-title">💳 Cobrar · {order.table_name}</div>
+        <div className="cd-modal-title">💳 Cobrar{check ? ` · ${check.label}` : ''} · {order.table_name}</div>
 
         {/* Total: ₡ primario + $ secundario con TC */}
         <div style={{ background: '#0d0d0d', color: '#c8a96e', borderRadius: 8, padding: '0.75rem', textAlign: 'center', margin: '0.25rem 0 0.5rem' }}>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{fi(totals.total)}</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{fi(payTotal)}</div>
           <div style={{ fontSize: '0.82rem', opacity: 0.85 }}>
             ≈ ${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · TC ₡{tc}/$
             <button className="cm-tap" onClick={() => setTcEdit(v => !v)} style={{ marginLeft: 6, background: 'none', border: '1px solid #5a5040', color: '#c8a96e', borderRadius: 4, padding: '2px 8px', fontSize: '0.68rem', cursor: 'pointer' }}>ajustar TC</button>
@@ -671,6 +824,26 @@ function CheckoutModal({ order, items, cajero, onClose, onDone, onError }: {
             <input type="number" className="tips-input-dark" value={tc} onChange={e => setTc(Number(e.target.value) || 0)}
               style={{ marginTop: 6, width: 120, textAlign: 'center' }} placeholder="TC ₡/$" />
           )}
+        </div>
+
+        {/* Propina (F19): se CAPTURA acá; la distribución al pool es sprint aparte (sagrado) */}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: '0.72rem', color: '#5a5040', marginBottom: 3 }}>Propina (opcional)</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {([[0, 'Sin'], [10, '10%'], [15, '15%'], ['manual', 'Otro']] as const).map(([v, label]) => (
+              <button key={String(v)} className="cm-tap" onClick={() => { setTipMode(v); if (v !== 'manual') setTipManual(null) }}
+                style={{ flex: 1, minHeight: 40, borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: '0.76rem',
+                  border: '1px solid var(--t-border,#d4cfc4)', background: tipMode === v ? '#c8a96e' : '#fff', color: tipMode === v ? '#0d0d0d' : '#5a5040' }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {tipMode === 'manual' && (
+            <input type="number" className="tips-input-dark" value={tipManual ?? ''} placeholder={`Monto propina (${method === 'efectivo' && efMoneda === 'USD' ? '$' : '₡'})`}
+              onChange={e => setTipManual(e.target.value === '' ? null : Number(e.target.value))}
+              style={{ marginTop: 6, width: '100%' }} />
+          )}
+          {tipCrc > 0 && <div style={{ fontSize: '0.72rem', color: '#1f6f3f', marginTop: 4 }}>Propina: {fi(tipCrc)}{method === 'efectivo' && efMoneda === 'USD' ? ` (${'$' + tipInPayCcy})` : ''} → a cobrar {fi(aCobrar)}</div>}
         </div>
 
         {/* Método */}
@@ -717,7 +890,7 @@ function CheckoutModal({ order, items, cajero, onClose, onDone, onError }: {
                   {efMoneda === 'CRC' ? fi(b) : '$' + b}
                 </button>
               ))}
-              <button className="cm-tap" onClick={() => setRecibido(efMoneda === 'CRC' ? totals.total : Math.ceil(convertirCrcAUsd(totals.total, tc)))}
+              <button className="cm-tap" onClick={() => setRecibido(efMoneda === 'CRC' ? aCobrar : Math.ceil(convertirCrcAUsd(aCobrar, tc)))}
                 style={{ flex: 1, minHeight: 40, borderRadius: 6, cursor: 'pointer', border: '1px solid #2a7a6a', background: 'rgba(42,122,106,.12)', fontSize: '0.76rem', fontWeight: 700 }}>
                 exacto
               </button>
@@ -742,7 +915,7 @@ function CheckoutModal({ order, items, cajero, onClose, onDone, onError }: {
           <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={onClose}>Cancelar</button>
           <button className="cd-btn-green cm-tap" style={{ minHeight: 48, fontWeight: 800, opacity: saving || (method === 'efectivo' && !calc?.alcanza) ? 0.5 : 1 }}
             disabled={saving || (method === 'efectivo' && !calc?.alcanza)} onClick={confirmar}>
-            {saving ? 'Cobrando…' : `✓ Confirmar cobro ${fi(totals.total)}`}
+            {saving ? 'Cobrando…' : `✓ Confirmar cobro ${fi(aCobrar)}`}
           </button>
         </div>
       </div>

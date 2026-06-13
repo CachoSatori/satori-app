@@ -129,7 +129,7 @@ export default function ComanderoModule() {
             <EmptyState icon="⏳" title="Cargando salón…" />
           )}
           {!loadingPlano && tables.filter(t => t.is_active).length === 0 && (
-            <EmptyState icon="🪑" title="Sin mesas en este local" hint="Armá el salón en Admin → 🍣 PoS → Editor de Salón." />
+            <EmptyState tone="satori" icon="🪑" title="Sin mesas en este local" hint="Armá el salón en Admin → 🍣 PoS → Editor de Salón." />
           )}
         </div>
       )}
@@ -385,7 +385,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
                   <span style={{ fontSize: '1.6rem' }}>{f.icon}</span>{f.label}
                 </button>
               ))}
-              {tree.families.length === 0 && <EmptyState icon="🍱" title="Carta sin productos con precio" hint="Cargá precios en Admin → 🍣 PoS → Productos." />}
+              {tree.families.length === 0 && <EmptyState tone="satori" icon="🍱" title="Carta sin productos con precio" hint="Cargá precios en Admin → 🍣 PoS → Productos." />}
             </div>
           )}
 

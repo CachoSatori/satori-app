@@ -3,6 +3,38 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — F3 COBRO BASE + DOBLE MONEDA — EN STAGING (rama `f3-cobro`)
+Cierra el lazo que faltaba del PoS: **cuenta → método → emisión → impresión → cierre** (orden real
+de Nube de Fuego). SPEC en `SPEC-LAVU-FLUJO-MESA.md` (21 funciones Lavu vs Satori, backlog, pax
+obligatorio firme). 79/79 tests, builds OK, smoke E2E verde (2 casos cobrados, verificados en DB).
+- **Migración 027** (staging): `pos_payments` (método, monto, moneda, TC usado, recibido, vuelto,
+  created_by) + `pos_orders.closed_by`; RLS y realtime. **NO aplicada en prod** (gateada).
+- **Cobro** desde la Cuenta de mesa (🧾 → 💳 Cobrar): pantalla que **reusa `computeTotals`** (no
+  recalcula nada), método efectivo/tarjeta/transferencia-SINPE, numpad de recibido con ⌫/C +
+  atajos de billetes + "exacto", **vuelto en vivo**; al confirmar registra el pago, **cierra la
+  mesa** y muestra el **ticket SIM** (texto en pantalla + log; impresora/factura fiscal = futuro,
+  con el hueco hecho en `pos_payments`).
+- **Doble moneda** (patrón Lavu): total en **₡ primario + $ secundario** con el TC de
+  `exchange_rates` (la última registrada), **TC ajustable por orden** (se guarda en el pago, NO
+  toca el TC del día). Efectivo en **$ con vuelto en ₡** (turista) — verificado en DB:
+  $20 × TC470 = ₡9.400, total ₡4.245, vuelto ₡5.155 ✓.
+- **Funciones puras nuevas, todas testeadas** (la plata): `posCobro.ts` (calcularVuelto,
+  convertir CRC↔USD, vueltoPagoUsd) + `posTicket.ts` (renderTicketCobro). **SAGRADOS intactos**:
+  cashUtils, tipCalculations, cierres y `computeTotals` (solo se reutiliza).
+- **Decisiones**: el cobro cierra la mesa siempre (el gate `canCloseShift` es del cierre de TURNO,
+  no del cobro individual); un pago por orden (splits/parciales = P1, la tabla ya los admite); TC
+  override por-orden con traza; ticket SIM (impresora real y factura electrónica = futuro).
+
+### Plan de prueba física para la dueña (cobro, en staging)
+1. **Comandero** → mesa → comandá algunos ítems → tocá **🧾 Cuenta** → **💳 Cobrar**.
+2. **Efectivo ₡**: tecleá lo que te dio el cliente (o tocá un billete / "exacto") → mirá el
+   **vuelto**. Confirmá → sale el **ticket** y la mesa se cierra (desaparece del plano).
+3. **Turista paga en $**: en el cobro tocá **$ Dólares**, tecleá los dólares → te muestra a cuánto
+   equivale en ₡ y el **vuelto en colones**. Si el TC del día no es el que querés para esa cuenta,
+   tocá **ajustar TC** y ponelo — queda guardado solo en ese pago.
+4. **Tarjeta / Transferencia-SINPE**: elegí el método y confirmá (sin numpad de vuelto).
+5. Revisá que el **total del ticket** coincida con la cuenta (consumo + servicio 10% + IVA).
+
 ## 🆕 2026-06-12 (noche, sprint largo) — COMANDERO PROFESIONAL — EN STAGING (rama `comandero-pro`)
 Investigación de PoS comerciales + auditoría de callejones sin salida + implementación. SPEC en
 `SPEC-COMANDERO-UX.md` (Lavu/Toast/TouchBistro/Square con fuentes, mapeo, 8 dead-ends con severidad,

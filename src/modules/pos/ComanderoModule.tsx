@@ -10,6 +10,7 @@ import {
   unmarchar, cancelEmptyOrder, appendOrderNote, cobrarOrden,
   getOrderChecks, setOrderChecks, clearOrderChecks, cobrarCheck,
   voidOrderItem, reorderRound, mergeOrders, unmergeOrder, VOID_REASONS,
+  getClosedOrdersToday, reopenOrder,
 } from '../../shared/api/pos'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { calcularVuelto, vueltoPagoUsd, convertirCrcAUsd, convertirUsdACrc } from '../../shared/utils/posCobro'
@@ -53,6 +54,7 @@ export default function ComanderoModule() {
   const [paxModal, setPaxModal]   = useState<{ table: SalonTable | null; editOrder: PosOrder | null } | null>(null)
   const [priceMap, setPriceMap]   = useState<Map<string, PosPrice>>(new Map())
   const [showCierre, setShowCierre] = useState(false)
+  const [showReabrir, setShowReabrir] = useState(false)   // reabrir orden cerrada (F20)
 
   const load = useCallback(async () => {
     try {
@@ -102,8 +104,12 @@ export default function ComanderoModule() {
         <select className="tips-input-dark" value={loc} onChange={e => { setSel(null); setLoc(e.target.value) }}>
           {(locations.length ? locations : [{ id: loc, name: loc, is_active: true }]).map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
-        <button onClick={() => setShowCierre(true)} title="Chequear cierre de turno"
+        <button onClick={() => setShowReabrir(true)} title="Reabrir una mesa ya cerrada (requiere gerencia)"
           style={{ marginLeft: 'auto', background: 'none', border: '1px solid #333', color: '#c8a96e', borderRadius: 3, padding: '4px 12px', cursor: 'pointer' }}>
+          ↺ Reabrir
+        </button>
+        <button onClick={() => setShowCierre(true)} title="Chequear cierre de turno"
+          style={{ background: 'none', border: '1px solid #333', color: '#c8a96e', borderRadius: 3, padding: '4px 12px', cursor: 'pointer' }}>
           🔒 Cierre de turno
         </button>
         <button onClick={() => navigate('/')} style={{ background: 'none', border: '1px solid #333', color: '#c8a96e', borderRadius: 3, padding: '4px 12px', cursor: 'pointer' }}>← Inicio</button>
@@ -146,12 +152,62 @@ export default function ComanderoModule() {
 
       {paxModal && <PaxModal initial={paxModal.editOrder?.pax ?? null} onCancel={() => setPaxModal(null)} onConfirm={abrirMesa} />}
       {showCierre && <CierreTurnoModal openTables={orders.map(o => o.table_name)} onClose={() => setShowCierre(false)} />}
+      {showReabrir && <ReabrirModal loc={loc} onClose={() => setShowReabrir(false)}
+        onReopened={o => { setShowReabrir(false); load(); setSel(o) }} onError={setError} />}
     </div>
   )
 }
 
 /** Chequeo de cierre de turno (regla de la dueña): el turno mañana puede cerrar
  *  con mesas abiertas; el último turno NO. Informativo — no toca la Caja. */
+/** F20 — Reabrir una orden cerrada (patrón Lavu): lista las cerradas de hoy → permiso
+ *  de gerencia + motivo → reabre (los pagos previos quedan como historial). Recierre
+ *  manual cobrando de nuevo. */
+function ReabrirModal({ loc, onClose, onReopened, onError }: {
+  loc: string; onClose: () => void; onReopened: (o: PosOrder) => void; onError: (e: string) => void
+}) {
+  const { profile } = useAuth()
+  const requireManager = useManagerOverride()
+  const [cerradas, setCerradas] = useState<PosOrder[]>([])
+  const [motivo, setMotivo] = useState('')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { getClosedOrdersToday(loc).then(setCerradas).catch(e => onError(e instanceof Error ? e.message : 'Error')) }, [loc, onError])
+
+  const reabrir = async (o: PosOrder) => {
+    if (busy || !profile) return
+    if (!motivo.trim()) { onError('Indicá el motivo para reabrir'); return }
+    if (!(await requireManager())) return
+    setBusy(true)
+    try {
+      await reopenOrder(o.id, profile.full_name ?? '', motivo.trim())
+      onReopened({ ...o, status: 'open' })
+    } catch (e) { onError(e instanceof Error ? e.message : 'No se pudo reabrir'); setBusy(false) }
+  }
+
+  return (
+    <div className="cd-modal-overlay" onClick={onClose}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, maxHeight: '82vh', overflowY: 'auto' }}>
+        <div className="cd-modal-title">↺ Reabrir mesa cerrada</div>
+        <div style={{ fontSize: '0.74rem', color: '#5a5040', margin: '0.25rem 0 0.5rem' }}>
+          Para corregir o reimprimir. Los pagos anteriores quedan como historial (no se revierten). Requiere gerencia. La mesa se recierra cobrando de nuevo.
+        </div>
+        <input className="tips-input-dark" style={{ width: '100%', marginBottom: 8 }} placeholder="Motivo (obligatorio)…" value={motivo} onChange={e => setMotivo(e.target.value)} />
+        {cerradas.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.82rem' }}>No hay mesas cerradas hoy en este local.</div>}
+        {cerradas.map(o => (
+          <button key={o.id} disabled={busy} className="cm-tap" onClick={() => reabrir(o)}
+            style={{ display: 'block', width: '100%', textAlign: 'left', minHeight: 48, marginBottom: 6, borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--t-border,#d4cfc4)', background: '#fff', padding: '0 12px', fontWeight: 700, fontSize: '0.84rem' }}>
+            {o.table_name} <span style={{ color: '#5a5040', fontWeight: 400, fontSize: '0.72rem' }}>· {o.pax}p · {o.salonero_name}{o.closed_at ? ` · cerró ${new Date(o.closed_at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+          </button>
+        ))}
+        <div className="cd-modal-actions" style={{ marginTop: 6 }}>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={onClose}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CierreTurnoModal({ openTables, onClose }: { openTables: string[]; onClose: () => void }) {
   const [turno, setTurno] = useState<Turno>('noche')
   const r = canCloseShift(turno, openTables)

@@ -220,6 +220,8 @@ export interface PosOrder {
   transfers: TransferTrace[]
   merged_into?: string | null           // si fue combinada EN otra mesa (mig 029)
   merge_trace?: Array<{ from_table: string; from_order: string; by: string; at: string }>
+  closed_at?: string | null             // cierre del cobro (mig 027)
+  closed_by?: string | null
   created_at: string
 }
 
@@ -692,4 +694,33 @@ export async function unmergeOrder(intoOrderId: string, fromOrderId: string): Pr
   fail(e2)
   const { error: e3 } = await sb.from('pos_checks').delete().eq('order_id', intoOrderId)
   fail(e3)
+}
+
+// ── F3 paridad: reabrir / recerrar orden (F20, mig 029 reusa closed_by) ───────
+/** Órdenes cerradas HOY del local (para el listado de "Reabrir"). */
+export async function getClosedOrdersToday(locationId: string): Promise<PosOrder[]> {
+  const today = new Date().toISOString().slice(0, 10)
+  const { data, error } = await sb.from('pos_orders').select('*')
+    .eq('location_id', locationId).eq('status', 'closed')
+    .gte('closed_at', today + 'T00:00:00').order('closed_at', { ascending: false })
+  fail(error)
+  return (data ?? []) as PosOrder[]
+}
+
+/**
+ * Reabre una orden cerrada (F20, patrón Lavu): vuelve a 'open' para corregir/reimprimir/
+ * re-cobrar. NO se cierra sola — se recierra manualmente cobrando de nuevo. Los pagos
+ * previos quedan en pos_payments como HISTORIAL/auditoría (no se revierten: revertir/
+ * reembolsar es alcance aparte). Limpia los checks para un re-cobro limpio. Traza obligatoria.
+ */
+export async function reopenOrder(orderId: string, by: string, reason: string): Promise<void> {
+  // borra los checks (split/merge) para que el re-cobro arranque limpio; los pagos
+  // previos quedan con check_id en null (ON DELETE SET NULL) como historial.
+  const { error: ec } = await sb.from('pos_checks').delete().eq('order_id', orderId)
+  fail(ec)
+  const { error } = await sb.from('pos_orders')
+    .update({ status: 'open', closed_at: null, closed_by: null, updated_at: new Date().toISOString() })
+    .eq('id', orderId).eq('status', 'closed')
+  fail(error)
+  await appendOrderNote(orderId, `REABRIÓ la mesa · ${by} · ${reason} · ${new Date().toLocaleString('es-CR')}`)
 }

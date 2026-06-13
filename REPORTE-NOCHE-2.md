@@ -5,11 +5,19 @@
 
 ---
 
-## ⏰ Jobs programados (launchd) — CARGADOS ✅
-`launchctl list | grep satori` muestra los 3 (status 0, esperando su hora):
-- `com.satori.T2` → 03:30 · `com.satori.T3` → 05:15 · `com.satori.T4` → 06:45 (hora local CR).
-- Cada uno corre `claude --dangerously-skip-permissions -p "$(cat PROMPT-Tn.md)"` en el repo, log en
-  `/tmp/satori-Tn.log`. Plists en `~/Library/LaunchAgents/com.satori.T{2,3,4}.plist`.
+## ⏰ Jobs programados (launchd) — ❌ DISPARARON PERO FALLARON → descargados
+Los 3 jobs **sí se dispararon** a su hora (03:30 / 05:15 / 06:45) pero fallaron: dentro del plist el
+`$(cat PROMPT-Tn.md)` **no se expandió** → `claude` recibió prompt vacío
+(`Error: Input must be provided ... when using --print`, ver `/tmp/satori-Tn.log`). Es el fallo
+conocido de launchd con expansión de subshell en el string del plist. **Los descargué**
+(`launchctl bootout`) para que NO re-disparen rotos mañana.
+
+**→ T2 y T3 se ejecutaron MANUALMENTE en esta sesión (ver abajo). T4 queda lista para correr a mano:**
+```
+cd /Users/ismaelgutierrezpechemiel/Downloads/satori-app
+/Users/ismaelgutierrezpechemiel/.local/bin/claude --dangerously-skip-permissions -p "$(cat PROMPT-T4.md)" 2>&1 | tee /tmp/satori-T4.log
+```
+(Nota: buena parte de T4 ya está en staging — alérgenos + EmptyState estética Satori — ver §T4.)
 
 ### Respaldo manual (si launchd no dispara — ya pasó antes), correr EN ORDEN en el repo:
 ```
@@ -59,3 +67,58 @@ rules-of-hooks, 93 tests verdes. Commit `9067047`.
 - `main`: intacto (`cb100de`).
 - Pendiente para la dueña despierta: **revisar `fix-doble-cobro`** y decidir el pase a PROD del PoS
   completo (migraciones 022-033 consolidadas).
+
+---
+
+## TANDA 2 — COMPLETA ✅ (ejecutada manualmente, en staging)
+### 2.1 — Atomicidad de merge/unmerge/reopen (AUDITORIA 🟡)
+**Migración 034**: RPC SECURITY DEFINER `pos_merge_orden` / `pos_unmerge_orden` / `pos_reopen_orden`
+envuelven las operaciones multi-paso (antes 3-4 statements sueltos → estado parcial si fallaba a
+mitad) en UNA transacción. **La matemática NO cambia**: el merge recibe los checks ya calculados por
+`splitByGroup` y solo los persiste. Verificado en DB (merge→2 ítems+2 checks; unmerge→ítems vuelven;
+reopen→mesa abierta). Commit `d233910`.
+### 2.2 — Pausar refetch de Realtime con modal abierto (la preocupación de la dueña) ✅
+`useRealtimeRefetch` ahora acepta `pauseWhile()`; el comandero pasa `modalOpen` (picker/checkout/
+split/cuenta/transfer/ronda/merge/anular). Mientras hay un modal abierto, el refetch se pospone
+(reintenta cada 4s) → la lista NO se refresca bajo los pies del salonero. Commits `f98e73b`/`c124fa0`.
+### 2.3 — Limpieza segura restante
+Sin deuda material nueva: el código muerto genuino ya se había barrido; lo que marca ESLint es ruido
+pre-existente (`_`-prefijos intencionales + módulos legacy). Sin cambios riesgosos.
+
+## TANDA 3 — COMPLETA ✅ (en staging)
+Robustez del PoS sin tocar lógica de negocio: **estados de carga inicial** en comandero
+("Cargando salón…") y KDS ("Cargando comandas…") para no parpadear el vacío antes de los datos;
+**mensajes de error en español claros** ("No se pudo cargar … revisá la conexión y reintentá").
+96 tests verdes. Commit `26fb1f3`.
+
+## TANDA 4 — LISTA (prompt) + PARCIALMENTE YA EN STAGING
+`PROMPT-T4.md` correcto y listo para correr a mano (comando arriba). Adelantos de T4 ya mergeados a
+staging desde el trabajo en paralelo de esta sesión:
+- **Alérgenos visibles** (⚠️) en el picker y el mini-popup de cantidad, leídos de la ficha
+  (`AllergenLine` + `parseAllergens`, sin DDL).
+- **EmptyState con estética Satori** (tono `satori`) en el KDS sin comandas.
+- Pulido de tile/búsqueda y `.cm-tap` ya presentes.
+Quedan para la corrida de T4: afinar alérgenos en el TILE del grid, transiciones suaves, y los
+estados vacíos "mesa sin pedido / búsqueda sin resultados" con la tarjeta de marca satori.
+
+---
+
+## Estado al cierre (T1+T2+T3)
+- `staging`: todo mergeado y desplegado — extracción comandero, empty states, rules-of-hooks,
+  atomicidad merge/reopen (mig 034), pausar refetch, loading states, + preview T4 (alérgenos/satori).
+- `main`: intacto (`cb100de`).
+- **fix doble-cobro**: rama `fix-doble-cobro` pusheada, **NO mergeada como cambio nuevo** — pero OJO:
+  ya estaba en staging de la sesión previa (DECISIÓN-NOCTURNA #1, arriba). Espera tu revisión para el
+  pase a PROD.
+
+## ✅ Checklist de prueba física para la dueña (staging)
+1. **Comandero arranca**: entrá a /comandero → mientras carga dice "Cargando salón…", luego el plano.
+2. **Combinar/separar mesas** (ahora atómico): combiná dos mesas, mirá las 2 cuentas, separalas →
+   todo o nada, sin estados raros a medias.
+3. **Reabrir** una mesa cerrada → vuelve a abrirse de una sola vez.
+4. **Dos tablets a la vez**: con una mesa abierta en dos pantallas, mientras tenés un modal abierto
+   (cobro/dividir) la lista NO se te refresca de golpe.
+5. **Alérgenos**: tocá un producto con alérgenos cargados → aparece la línea ⚠️ con el detalle.
+6. **KDS**: al abrir dice "Cargando comandas…"; sin comandas muestra la tarjeta oscura de marca.
+7. **Cobro** (sigue igual): cobrá una mesa → ticket y cierre normales. (El blindaje anti-doble-cobro
+   está en staging desde antes; su pase a PROD espera tu OK.)

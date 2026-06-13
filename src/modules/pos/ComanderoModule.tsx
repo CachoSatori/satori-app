@@ -6,7 +6,7 @@ import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
 import {
   getLocations, getSalonTables, getOpenOrders, openOrder, updateOrderPax,
   getOrderItems, addOrderItem, updateItemCourse, deleteOrderItem, marchar,
-  searchProducts, getProductGroups, getPriceMap, transferOrder, getProductMetaMap,
+  getProductGroups, getPriceMap, transferOrder, getProductMetaMap,
   unmarchar, cancelEmptyOrder, appendOrderNote, cobrarOrden,
   getOrderChecks, setOrderChecks, clearOrderChecks, cobrarCheck,
   voidOrderItem, reorderRound, mergeOrders, unmergeOrder, VOID_REASONS,
@@ -26,7 +26,9 @@ import type { PosCourse, Turno } from '../../shared/utils/posPricing'
 import { computeTotals, groupBySeat } from '../../shared/utils/posFiscal'
 import type { BillItem } from '../../shared/utils/posFiscal'
 import { fi } from '../../shared/utils'
-import { buildMenu } from '../../shared/utils/comanderoMenu'
+import { buildMenuTree, searchTiles } from '../../shared/utils/comanderoMenu'
+import type { CatMap, FamilyDef } from '../../shared/utils/comanderoMenu'
+import { getMenuFamilies, getMenuCategories } from '../../shared/api/pos'
 
 /** PosOrderItem → BillItem para la matemática fiscal (única verdad: computeTotals). */
 function toBillItem(it: PosOrderItem): BillItem {
@@ -271,25 +273,81 @@ function PaxModal({ initial, onCancel, onConfirm }: { initial: number | null; on
   )
 }
 
+/** Tile de producto del grid (foto si hay + fallback color por estación + nombre + precio). */
+function Tile({ t, busy, onAdd }: { t: import('../../shared/utils/comanderoMenu').MenuTile; busy: boolean; onAdd: () => void }) {
+  return (
+    <button className="cm-tap" disabled={busy} onClick={onAdd} title={`Agregar ${t.nombre}`}
+      style={{ minHeight: 64, padding: 0, borderRadius: 8, cursor: 'pointer', textAlign: 'left', overflow: 'hidden',
+        border: '1px solid var(--t-border,#d4cfc4)', borderLeft: `5px solid ${t.station === 'barra' ? '#c8a96e' : '#2a7a6a'}`,
+        background: busy ? 'rgba(42,122,106,.18)' : '#fff', display: 'flex', flexDirection: 'column' }}>
+      {t.photo_url && (
+        <img src={t.photo_url} alt="" loading="lazy"
+          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+          style={{ width: '100%', height: 72, objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+      )}
+      <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 4, padding: '8px 10px', flex: 1 }}>
+        <span style={{ fontWeight: 700, fontSize: '0.8rem', lineHeight: 1.15 }}>{t.nombre}</span>
+        <span style={{ fontSize: '0.74rem', color: '#5a5040', fontVariantNumeric: 'tabular-nums' }}>{fi(t.price_final_crc)}</span>
+      </span>
+    </button>
+  )
+}
+
+/** T3 — mini-popup de cantidad para alta directa: default 1, un tap en "Agregar"
+ *  confirma (caso común rápido); ± para pedir varios sin tocar N veces. */
+function QtyPopup({ nombre, precio, onCancel, onConfirm }: {
+  nombre: string; precio: number; onCancel: () => void; onConfirm: (qty: number) => void
+}) {
+  const [qty, setQty] = useState(1)
+  const [saving, setSaving] = useState(false)
+  const confirm = () => { if (saving) return; setSaving(true); onConfirm(qty) }
+  return (
+    <div className="cd-modal-overlay" onClick={onCancel}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 320, textAlign: 'center' }}>
+        <div className="cd-modal-title" style={{ fontSize: '0.95rem' }}>{nombre}</div>
+        <div style={{ fontSize: '0.78rem', color: '#5a5040', marginBottom: 8 }}>{fi(precio)} c/u</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, margin: '0.5rem 0' }}>
+          <button className="cm-tap" onClick={() => setQty(q => Math.max(1, q - 1))} style={{ minWidth: 56, minHeight: 56, borderRadius: 8, border: '1px solid #5a5040', background: '#fff', fontSize: '1.6rem', cursor: 'pointer' }}>−</button>
+          <strong style={{ fontSize: '2rem', minWidth: 40 }}>{qty}</strong>
+          <button className="cm-tap" onClick={() => setQty(q => Math.min(99, q + 1))} style={{ minWidth: 56, minHeight: 56, borderRadius: 8, border: '1px solid #5a5040', background: '#fff', fontSize: '1.6rem', cursor: 'pointer' }}>+</button>
+        </div>
+        <div className="cd-modal-actions" style={{ marginTop: '0.5rem', gap: 8 }}>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 52 }} onClick={onCancel}>Cancelar</button>
+          <button className="cd-btn-green cm-tap" style={{ minHeight: 52, fontWeight: 800, flex: 1 }} disabled={saving} onClick={confirm}>
+            {saving ? 'Agregando…' : `✓ Agregar${qty > 1 ? ` ×${qty}` : ''} · ${fi(precio * qty)}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }: {
   // (meta de productos para snapshots de estación/subcategoría/servicio)
   order: PosOrder; priceMap: Map<string, PosPrice>; cajeroName: string; onBack: () => void; onError: (e: string) => void; onEditPax: () => void
 }) {
   const { profile } = useAuth()
   const profileId = profile?.id ?? null
-  const [metaMap, setMetaMap] = useState<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean }>>(new Map())
-  useEffect(() => { getProductMetaMap().then(setMetaMap).catch(() => { /* snapshots con defaults */ }) }, [])
+  const [metaMap, setMetaMap] = useState<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; photo_url: string | null }>>(new Map())
+  // Jerarquía de menú (mig 032): familias + mapeo categoría→familia
+  const [families, setFamilies] = useState<FamilyDef[]>([])
+  const [catMap, setCatMap]     = useState<Map<string, CatMap>>(new Map())
+  useEffect(() => {
+    getProductMetaMap().then(setMetaMap).catch(() => { /* snapshots con defaults */ })
+    getMenuFamilies().then(setFamilies).catch(() => { /* sin familias: cae a 'otros' */ })
+    getMenuCategories().then(cs => setCatMap(new Map(cs.map(c => [c.category.trim().toUpperCase(), { family_id: c.family_id, hidden_comandero: c.hidden_comandero, sort_order: c.sort_order }])))).catch(() => {})
+  }, [])
   const [items, setItems]   = useState<PosOrderItem[]>([])
   const [search, setSearch] = useState('')
-  const [opts, setOpts]     = useState<Array<{ nombre: string; tipo: string }>>([])
   const [picking, setPicking] = useState<{ nombre: string; tipo: string } | null>(null)
   const [showBill, setShowBill] = useState(false)
   const [showCheckout, setShowCheckout] = useState<{ check: PosCheck | null } | null>(null)
   const [showTransfer, setShowTransfer] = useState(false)
   const [checks, setChecks] = useState<PosCheck[]>([])
   const [showSplit, setShowSplit] = useState(false)
-  // Comandero pro (SPEC): grid por categorías, deshacer marchar, edición de ítems
-  const [cat, setCat]           = useState<string | null>(null)   // categoría activa del grid
+  // Navegación 3 niveles (mig 032): familia → categoría → productos
+  const [fam, setFam]           = useState<string | null>(null)   // familia activa (null = mostrar familias)
+  const [cat, setCat]           = useState<string | null>(null)   // categoría activa dentro de la familia
   // Asiento/curso ACTIVO global (patrón Lavu "Active Seat/Course"): el quick-add del
   // grid lo respeta, así CUALQUIER producto (con o sin modificadores) cae en el asiento
   // y curso elegidos sin abrir el picker. T2 del sprint carta-real.
@@ -299,6 +357,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
   const [nowTs, setNowTs]       = useState(() => Date.now())
   const [editItem, setEditItem] = useState<PosOrderItem | null>(null)
   const [adding, setAdding]     = useState<string | null>(null)   // tile en quick-add (feedback)
+  const [qtyPopup, setQtyPopup] = useState<{ nombre: string; tipo: string } | null>(null)  // mini-popup cantidad (T3)
   const [voiding, setVoiding]   = useState<PosOrderItem | null>(null)  // ítem enviado a anular (T2)
   const [showReorder, setShowReorder] = useState(false)               // otra ronda (T3)
   const [showMerge, setShowMerge]     = useState(false)               // combinar mesas (T1)
@@ -308,8 +367,8 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
     const t = window.setInterval(() => setNowTs(Date.now()), 500)
     return () => window.clearInterval(t)
   }, [undo])
-  const menu = useMemo(() => buildMenu(metaMap, priceMap), [metaMap, priceMap])
-  const activeCat = cat && menu.byCategory.has(cat) ? cat : (menu.categories[0] ?? null)
+  const tree = useMemo(() => buildMenuTree(metaMap, priceMap, families, catMap), [metaMap, priceMap, families, catMap])
+  const searchResults = useMemo(() => searchTiles(metaMap, priceMap, catMap, search), [metaMap, priceMap, catMap, search])
   // Total SIEMPRE visible mientras se comanda (SPEC C5) — misma matemática que la cuenta.
   const totals = computeTotals(items.map(toBillItem), order.channel)
   // Mesas combinadas EN esta: ids de origen presentes en los ítems (para des-combinar).
@@ -335,12 +394,6 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
     } catch (e) { onError(e instanceof Error ? e.message : 'No se pudo anular el ítem') }
   }
 
-  useEffect(() => {
-    if (search.trim().length < 2) { setOpts([]); return }
-    const t = setTimeout(() => searchProducts(search).then(setOpts).catch(() => setOpts([])), 300)
-    return () => clearTimeout(t)
-  }, [search])
-
   const pendientes = (c: PosCourse | null) => items.filter(i => i.kitchen_status === 'pendiente' && (!c || i.course === c)).length
   // Marchar devuelve los ids → ventana de gracia de 20s para DESHACER (SPEC C2).
   const doMarchar = (c: PosCourse | null) =>
@@ -357,8 +410,9 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
     } catch (e) { onError(e instanceof Error ? e.message : 'No se pudo deshacer el marchar') }
   }
 
-  // SPEC D1: tap en el tile agrega DIRECTO si el producto no tiene modificadores
-  // OBLIGATORIOS (2 taps: categoría → ítem); si los tiene, abre el picker.
+  // Tap en el tile: si el producto tiene modificadores OBLIGATORIOS abre el picker
+  // (que ya trae cantidad); si NO, abre el mini-popup de cantidad (default 1, un tap
+  // confirma). Así CUALQUIER producto deja elegir cantidad — un solo comportamiento.
   const quickAdd = async (nombre: string) => {
     const m = metaMap.get(nombre); const pr = priceMap.get(nombre)
     if (!m || !pr || pr.price_final_crc == null || adding) return
@@ -366,18 +420,27 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
     try {
       const groups = await getProductGroups(nombre)
       if (groups.some(g => g.required)) { setPicking({ nombre, tipo: m.tipo }); return }
+      setQtyPopup({ nombre, tipo: m.tipo })   // mini-popup de cantidad (T3)
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error abriendo el producto') }
+    finally { setAdding(null) }
+  }
+
+  // Alta directa con cantidad (desde el mini-popup): respeta asiento/curso activo.
+  const addDirect = async (nombre: string, qty: number) => {
+    const m = metaMap.get(nombre); const pr = priceMap.get(nombre)
+    if (!m || !pr || pr.price_final_crc == null) return
+    try {
       await addOrderItem({
-        order_id: order.id, product_name: nombre, qty: 1,
+        order_id: order.id, product_name: nombre, qty: Math.max(1, qty),
         base_price_crc: pr.price_final_crc, modifiers: [],
         price_crc: pr.price_final_crc, tax_type: pr.tax_type ?? 'iva13',
-        seat: Math.min(activeSeat, order.pax),                              // asiento activo (Lavu)
-        course: activeCourse ?? defaultCourseForTipo(m.tipo),              // curso activo, o por tipo
+        seat: Math.min(activeSeat, order.pax),
+        course: activeCourse ?? defaultCourseForTipo(m.tipo),
         station: (m.station as 'cocina' | 'barra' | 'ninguna') ?? 'cocina',
         subcategory: m.subclasificacion ?? '', aplica_servicio: m.aplica_servicio ?? true,
       })
-      load()
+      setQtyPopup(null); load()
     } catch (e) { onError(e instanceof Error ? e.message : 'Error agregando el ítem') }
-    finally { setAdding(null) }
   }
 
   // Cancelar una mesa abierta por error (SPEC C1) — solo sin ítems (D2).
@@ -457,70 +520,68 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
         </div>
       </div>
 
+      {/* Búsqueda transversal (a todas las familias) */}
       <div style={{ position: 'relative', margin: '0.625rem 0' }}>
-        <input className="tips-input-dark" style={{ width: '100%' }} placeholder="Buscar producto (ej: MOJITO, SATORI ROLL)…"
+        <input className="tips-input-dark" style={{ width: '100%' }} placeholder="Buscar producto en toda la carta…"
           value={search} onChange={e => setSearch(e.target.value)} />
-        {opts.length > 0 && (
-          <div className="cd-sup-dropdown" style={{ maxHeight: 220, overflowY: 'auto' }}>
-            {opts.map(p => {
-              const pr = priceMap.get(p.nombre)
-              const noPrice = !pr || pr.price_final_crc == null
-              return (
-                <div key={p.nombre} className="cd-sup-option"
-                  onMouseDown={() => { if (!noPrice) { setPicking(p); setSearch(''); setOpts([]) } }}
-                  style={noPrice ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-                  title={noPrice ? 'Sin precio — cargalo en Admin → 🍣 PoS → Precios' : undefined}>
-                  {p.nombre} <span className="cd-sup-cat">· {p.tipo}</span>
-                  {noPrice ? <span style={{ color: '#c23b22', fontSize: '0.66rem' }}> · ⚠ sin precio</span>
-                    : <span style={{ color: '#2a7a6a', fontSize: '0.7rem' }}> · {fi(pr!.price_final_crc!)}</span>}
-                </div>
-              )
-            })}
-          </div>
-        )}
       </div>
 
-      {/* Menú visual (SPEC P0-b): pestañas de categoría + tiles grandes con precio.
-          Color del borde por estación (D4): teal = cocina · dorado = barra. */}
-      {menu.categories.length > 0 && (
+      {/* Navegación 3 niveles (mig 032): FAMILIA → categoría → productos.
+          Si hay búsqueda activa, muestra resultados transversales (ignora la navegación). */}
+      {search.trim().length >= 2 ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
+          {searchResults.map(t => <Tile key={t.nombre} t={t} busy={adding === t.nombre} onAdd={() => { quickAdd(t.nombre); setSearch('') }} />)}
+          {searchResults.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem' }}>Sin resultados para «{search}».</div>}
+        </div>
+      ) : (
         <>
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '2px 0 6px', WebkitOverflowScrolling: 'touch' }}>
-            {menu.categories.map(c => (
-              <button key={c} className="cm-tap" onClick={() => setCat(c)}
-                style={{ minHeight: 48, padding: '8px 16px', borderRadius: 8, whiteSpace: 'nowrap', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer',
-                  border: '1px solid var(--t-border,#d4cfc4)',
-                  background: activeCat === c ? '#0d0d0d' : '#fff', color: activeCat === c ? '#c8a96e' : '#5a5040' }}>
-                {c}
-              </button>
-            ))}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
-            {(activeCat ? menu.byCategory.get(activeCat) ?? [] : []).map(t => (
-              <button key={t.nombre} className="cm-tap" disabled={adding === t.nombre} onClick={() => quickAdd(t.nombre)}
-                title={`Agregar ${t.nombre}`}
-                style={{ minHeight: 64, padding: 0, borderRadius: 8, cursor: 'pointer', textAlign: 'left', overflow: 'hidden',
-                  border: '1px solid var(--t-border,#d4cfc4)',
-                  borderLeft: `5px solid ${t.station === 'barra' ? '#c8a96e' : '#2a7a6a'}`,
-                  background: adding === t.nombre ? 'rgba(42,122,106,.18)' : '#fff',
-                  display: 'flex', flexDirection: 'column' }}>
-                {/* Foto del menú si existe; si no, cae al diseño actual (color + nombre).
-                    Lazy + onError → si la imagen falla (offline sin caché), se oculta sola. */}
-                {t.photo_url && (
-                  <img src={t.photo_url} alt="" loading="lazy"
-                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-                    style={{ width: '100%', height: 72, objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
-                )}
-                <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 4, padding: '8px 10px', flex: 1 }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.8rem', lineHeight: 1.15 }}>{t.nombre}</span>
-                  <span style={{ fontSize: '0.74rem', color: '#5a5040', fontVariantNumeric: 'tabular-nums' }}>{fi(t.price_final_crc)}</span>
-                </span>
-              </button>
-            ))}
-          </div>
+          {/* Breadcrumb / volver */}
+          {(fam || cat) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+              <button className="cm-tap" onClick={() => { setFam(null); setCat(null) }}
+                style={{ minHeight: 40, padding: '0 12px', borderRadius: 6, border: '1px solid var(--t-border,#d4cfc4)', background: '#fff', cursor: 'pointer', fontWeight: 700 }}>← Familias</button>
+              {fam && <><span style={{ color: '#5a5040' }}>{tree.families.find(f => f.id === fam)?.icon} {tree.families.find(f => f.id === fam)?.label}</span>
+                {cat && <button className="cm-tap" onClick={() => setCat(null)} style={{ minHeight: 40, padding: '0 12px', borderRadius: 6, border: '1px solid var(--t-border,#d4cfc4)', background: '#fff', cursor: 'pointer' }}>‹ {cat}</button>}</>}
+            </div>
+          )}
+
+          {/* Nivel 1: familias */}
+          {!fam && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
+              {tree.families.map(f => (
+                <button key={f.id} className="cm-tap" onClick={() => setFam(f.id)}
+                  style={{ minHeight: 72, borderRadius: 10, cursor: 'pointer', fontWeight: 800, fontSize: '1rem',
+                    border: '1px solid var(--t-border,#d4cfc4)', background: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                  <span style={{ fontSize: '1.6rem' }}>{f.icon}</span>{f.label}
+                </button>
+              ))}
+              {tree.families.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem' }}>Sin productos con precio en la carta — cargá precios en Admin → 🍣 PoS → Productos.</div>}
+            </div>
+          )}
+
+          {/* Nivel 2: categorías de la familia */}
+          {fam && !cat && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
+              {(tree.byFamily.get(fam) ?? []).map(c => (
+                <button key={c} className="cm-tap" onClick={() => setCat(c)}
+                  style={{ minHeight: 60, borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: '0.86rem',
+                    border: '1px solid var(--t-border,#d4cfc4)', background: '#fff', padding: '8px 10px', textAlign: 'left' }}>
+                  {c} <span style={{ color: '#5a5040', fontSize: '0.7rem' }}>({(tree.byCategory.get(c) ?? []).length})</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Nivel 3: productos de la categoría */}
+          {fam && cat && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
+              {(tree.byCategory.get(cat) ?? []).map(t => <Tile key={t.nombre} t={t} busy={adding === t.nombre} onAdd={() => quickAdd(t.nombre)} />)}
+            </div>
+          )}
         </>
       )}
 
-      {items.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem', padding: '0.75rem 0' }}>Mesa sin ítems — tocá una categoría y un producto del menú (o buscá arriba).</div>}
+      {items.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem', padding: '0.75rem 0' }}>Mesa sin ítems — elegí una familia y un producto (o buscá arriba).</div>}
       {(['bebida', 'entrada', 'principal'] as PosCourse[]).map(c => {
         const list = items.filter(i => i.course === c)
         if (!list.length) return null
@@ -586,6 +647,12 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
             ↩ DESHACER ({Math.max(0, Math.ceil((undo.until - nowTs) / 1000))}s)
           </button>
         </div>
+      )}
+
+      {/* T3 — mini-popup de cantidad para alta directa (productos sin obligatorios) */}
+      {qtyPopup && (
+        <QtyPopup nombre={qtyPopup.nombre} precio={priceMap.get(qtyPopup.nombre)?.price_final_crc ?? 0}
+          onCancel={() => setQtyPopup(null)} onConfirm={qty => addDirect(qtyPopup.nombre, qty)} />
       )}
 
       {(picking || editItem) && (() => {

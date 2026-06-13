@@ -48,17 +48,9 @@ export default function MiRendimiento({ dias, pm, metas, comps = [] }: Props) {
   const [salName, setSalName] = useState<string>('')
   const activeName = salName || inferredName || ''
 
-  if (!activeName && allSals.length === 0) {
-    return (
-      <div className="vt-empty">
-        <div className="vt-empty-icon">👤</div>
-        <div className="vt-empty-title">Sin datos de saloneros</div>
-        <div className="vt-empty-sub">Cargá los XLS del turno para ver tu rendimiento</div>
-      </div>
-    )
-  }
-
   // ── Data for the active salonero ─────────────────────────────
+  // (Los hooks de abajo se llaman SIEMPRE — guardan internamente con activeName —
+  //  para no violar rules-of-hooks; el early-return va DESPUÉS de todos los hooks.)
   const todayAgg = useMemo(() =>
     activeName ? aggSalonero(activeName, dates.filter(d => d === today), dias, pm) : null,
   [activeName, dates, dias, pm, today])
@@ -114,6 +106,17 @@ export default function MiRendimiento({ dias, pm, metas, comps = [] }: Props) {
   const top5Today = useMemo(() =>
     todayAgg ? topProds(todayAgg.prods, 'monto', 5, undefined, pm) : [],
   [todayAgg, pm])
+
+  // Early-return DESPUÉS de todos los hooks (rules-of-hooks): sin datos → estado vacío.
+  if (!activeName && allSals.length === 0) {
+    return (
+      <div className="vt-empty">
+        <div className="vt-empty-icon">👤</div>
+        <div className="vt-empty-title">Sin datos de saloneros</div>
+        <div className="vt-empty-sub">Cargá los XLS del turno para ver tu rendimiento</div>
+      </div>
+    )
+  }
 
   // Max promPax for mini bar chart
   const maxPromPax = Math.max(...histData.map(d => d.promPax), 1)

@@ -284,6 +284,22 @@ function FichaProducto({ p, price, locationId, onFicha, onPriceSaved, onError, o
         </label>
       </div>
 
+      {/* Códigos fiscales (FE estructura, mig 036) — los confirma la contadora */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' }}>
+        <span style={{ fontSize: '0.74rem', fontWeight: 700 }}>Fiscal</span>
+        <label style={{ fontSize: '0.74rem' }}>CIIU
+          <input className={inp} style={{ width: 90, marginLeft: 4 }} defaultValue={p.ciiu ?? ''} placeholder="—"
+            onBlur={e => { const v = e.target.value.trim() === '' ? null : e.target.value.trim(); if (v !== p.ciiu) onFicha({ ciiu: v }) }} />
+        </label>
+        <label style={{ fontSize: '0.74rem' }}>CABYS
+          <input className={inp} style={{ width: 130, marginLeft: 4 }} defaultValue={p.cabys ?? ''} placeholder="—"
+            onBlur={e => { const v = e.target.value.trim() === '' ? null : e.target.value.trim(); if (v !== p.cabys) onFicha({ cabys: v }) }} />
+        </label>
+        {(!p.ciiu || !p.cabys) && (
+          <span style={{ fontSize: '0.72rem', color: '#c2861f', fontWeight: 700 }}>⚠ pendiente de código fiscal</span>
+        )}
+      </div>
+
       <ModificadoresDelProducto productName={p.nombre} locationId={locationId} onError={onError} />
     </div>
   )

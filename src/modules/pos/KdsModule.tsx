@@ -126,6 +126,7 @@ export default function KdsModule() {
                           ? <strong style={{ color: '#f2c14e' }}>{it.product_name} · POSTRE ⚡</strong> : it.product_name}
                         {it.modifiers.length > 0 && <span style={{ color: '#c8a96e', fontSize: '0.78rem' }}> · {it.modifiers.map(m => m.name).join(', ')}</span>}
                         <span style={{ color: '#777', fontSize: '0.72rem' }}> · as.{it.seat}</span>
+                        {it.note ? <span style={{ color: '#f2c14e', fontSize: '0.8rem', display: 'block' }}>📝 {it.note}</span> : null}
                       </span>
                       <span style={{ fontSize: '0.68rem', fontVariantNumeric: 'tabular-nums', color: COLOR_BORDER[c] }}>{fmtElapsed(elapsed(it))}</span>
                       <span style={{ fontSize: '0.85rem', color: '#2a7a6a' }}>✓</span>

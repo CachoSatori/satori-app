@@ -239,6 +239,7 @@ export interface PosOrderItem {
   aplica_servicio: boolean                   // snapshot fiscal (servicio 10%)
   seat: number
   course: 'bebida' | 'entrada' | 'principal'
+  note?: string                          // nota por ítem (mig 031): sin cebolla, término, etc.
   kitchen_status: 'pendiente' | 'marchado' | 'listo' | 'entregado' | 'anulado'
   marched_at: string | null
   merged_from_order?: string | null      // si vino de otra mesa al combinar (mig 029)

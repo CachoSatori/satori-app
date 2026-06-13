@@ -290,7 +290,11 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
   const [showSplit, setShowSplit] = useState(false)
   // Comandero pro (SPEC): grid por categorías, deshacer marchar, edición de ítems
   const [cat, setCat]           = useState<string | null>(null)   // categoría activa del grid
-  const [lastSeat]              = useState(1)                     // asiento default del quick-add (P2: recordar el último)
+  // Asiento/curso ACTIVO global (patrón Lavu "Active Seat/Course"): el quick-add del
+  // grid lo respeta, así CUALQUIER producto (con o sin modificadores) cae en el asiento
+  // y curso elegidos sin abrir el picker. T2 del sprint carta-real.
+  const [activeSeat, setActiveSeat]     = useState(1)
+  const [activeCourse, setActiveCourse] = useState<PosCourse | null>(null)  // null = curso por tipo
   const [undo, setUndo]         = useState<{ ids: string[]; until: number } | null>(null)
   const [nowTs, setNowTs]       = useState(() => Date.now())
   const [editItem, setEditItem] = useState<PosOrderItem | null>(null)
@@ -365,8 +369,9 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
       await addOrderItem({
         order_id: order.id, product_name: nombre, qty: 1,
         base_price_crc: pr.price_final_crc, modifiers: [],
-        price_crc: pr.price_final_crc, tax_type: pr.tax_type ?? 'iva13', seat: lastSeat,
-        course: defaultCourseForTipo(m.tipo),
+        price_crc: pr.price_final_crc, tax_type: pr.tax_type ?? 'iva13',
+        seat: Math.min(activeSeat, order.pax),                              // asiento activo (Lavu)
+        course: activeCourse ?? defaultCourseForTipo(m.tipo),              // curso activo, o por tipo
         station: (m.station as 'cocina' | 'barra' | 'ninguna') ?? 'cocina',
         subcategory: m.subclasificacion ?? '', aplica_servicio: m.aplica_servicio ?? true,
       })
@@ -427,6 +432,29 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
             ✕ Cancelar mesa
           </button>
         )}
+      </div>
+
+      {/* Asiento/curso ACTIVO (Lavu): aplica a lo que agregás desde el grid o la búsqueda,
+          tenga o no modificadores. Editable después tocando el ítem. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '0.5rem 0', padding: '0.4rem 0.6rem', background: 'rgba(200,169,110,.1)', borderRadius: 6 }}>
+        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#5a5040' }}>Asiento</span>
+        <div style={{ display: 'flex', gap: 3 }}>
+          {Array.from({ length: order.pax }, (_, i) => i + 1).map(n => (
+            <button key={n} className="cm-tap" onClick={() => setActiveSeat(n)}
+              style={{ minWidth: 36, minHeight: 36, borderRadius: 6, cursor: 'pointer', fontWeight: 800, fontSize: '0.8rem',
+                border: '1px solid var(--t-border,#d4cfc4)', background: activeSeat === n ? '#2a7a6a' : '#fff', color: activeSeat === n ? '#fff' : '#5a5040' }}>{n}</button>
+          ))}
+        </div>
+        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#5a5040', marginLeft: 6 }}>Curso</span>
+        <div style={{ display: 'flex', gap: 3 }}>
+          {([['auto', null], ['bebida', 'bebida'], ['entrada', 'entrada'], ['principal', 'principal']] as const).map(([label, val]) => (
+            <button key={label} className="cm-tap" onClick={() => setActiveCourse(val)}
+              style={{ minHeight: 36, padding: '0 10px', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: '0.74rem',
+                border: '1px solid var(--t-border,#d4cfc4)', background: activeCourse === val ? '#0d0d0d' : '#fff', color: activeCourse === val ? '#c8a96e' : '#5a5040' }}>
+              {val ? COURSE_LABEL[val] : 'auto'}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{ position: 'relative', margin: '0.625rem 0' }}>
@@ -501,10 +529,15 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
             <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#5a5040', textTransform: 'uppercase' }}>{COURSE_LABEL[c]}</div>
             {list.map(i => (
               <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0', borderBottom: '1px solid var(--t-border,#d4cfc4)', fontSize: '0.82rem' }}>
-                <span style={{ minWidth: 0, flex: 1 }}>
+                {/* Tocar el nombre abre el popup de detalles (asiento/curso/nota) para
+                    CUALQUIER ítem pendiente, tenga o no modificadores (T2 carta-real). */}
+                <span style={{ minWidth: 0, flex: 1, cursor: i.kitchen_status === 'pendiente' ? 'pointer' : 'default' }}
+                  onClick={i.kitchen_status === 'pendiente' ? () => setEditItem(i) : undefined}
+                  title={i.kitchen_status === 'pendiente' ? 'Tocá para editar asiento, curso o nota' : undefined}>
                   {i.qty > 1 && <strong style={{ color: '#a04030' }}>{i.qty}× </strong>}<strong>{i.product_name}</strong>
                   {i.modifiers.length > 0 && <span style={{ color: '#5a5040', fontSize: '0.72rem' }}> · {i.modifiers.map(m => m.name).join(', ')}</span>}
                   <span style={{ color: '#5a5040', fontSize: '0.7rem' }}> · asiento {i.seat}{i.merged_from_order ? ' · combinada' : ''}</span>
+                  {i.note ? <span style={{ color: '#a07030', fontSize: '0.7rem', display: 'block' }}>📝 {i.note}</span> : null}
                 </span>
                 {i.kitchen_status === 'pendiente' && (
                   <button className="cm-tap" onClick={() => updateItemCourse(i.id, nextCourse(i.course)).then(load).catch(e => onError(e.message))}
@@ -562,6 +595,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
             product={picking ?? { nombre, tipo: metaMap.get(nombre)?.tipo ?? '' }}
             price={priceMap.get(nombre) ?? null} pax={order.pax} orderId={order.id}
             meta={metaMap.get(nombre) ?? null} editItem={editItem}
+            defaultSeat={Math.min(activeSeat, order.pax)} defaultCourse={activeCourse}
             onDone={() => { setPicking(null); setEditItem(null); load() }}
             onCancel={() => { setPicking(null); setEditItem(null) }} onError={onError} />
         )
@@ -1182,17 +1216,19 @@ function Row({ label, value, muted }: { label: string; value: string; muted?: bo
 /** Modal de ítem: modificadores (obligatorios bloquean), curso y asiento.
  *  Con editItem (SPEC C3) edita un ítem NO marchado: prefill de todo, y al guardar
  *  reemplaza el ítem (agrega el nuevo y borra el viejo). */
-function ItemPicker({ product, price, pax, orderId, meta, editItem, onDone, onCancel, onError }: {
+function ItemPicker({ product, price, pax, orderId, meta, editItem, defaultSeat, defaultCourse, onDone, onCancel, onError }: {
   meta: { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean } | null
   product: { nombre: string; tipo: string }; price: PosPrice | null; pax: number; orderId: string
   editItem?: PosOrderItem | null
+  defaultSeat?: number; defaultCourse?: PosCourse | null
   onDone: () => void; onCancel: () => void; onError: (e: string) => void
 }) {
   const [groups, setGroups] = useState<Array<ModifierGroupRow & { modifiers: ModifierRow[] }>>([])
   const [picked, setPicked] = useState<Record<string, string[]>>({})
-  const [course, setCourse] = useState<PosCourse>(editItem?.course ?? defaultCourseForTipo(product.tipo))
-  const [seat, setSeat]     = useState(editItem?.seat ?? 1)
+  const [course, setCourse] = useState<PosCourse>(editItem?.course ?? defaultCourse ?? defaultCourseForTipo(product.tipo))
+  const [seat, setSeat]     = useState(editItem?.seat ?? defaultSeat ?? 1)
   const [qty, setQty]       = useState(editItem?.qty ?? 1)   // T4: cantidad rápida (no en edición)
+  const [note, setNote]     = useState(editItem?.note ?? '')   // T2 carta-real: nota por ítem
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty]   = useState(false)   // SPEC C6: tocar fuera no descarta sin avisar
 
@@ -1230,7 +1266,7 @@ function ItemPicker({ product, price, pax, orderId, meta, editItem, onDone, onCa
       await addOrderItem({
         order_id: orderId, product_name: product.nombre, qty: editItem ? (editItem.qty ?? 1) : qty,
         base_price_crc: base ?? 0, modifiers: chosen.map(m => ({ id: m.id, name: m.name, price_delta_crc: m.price_delta_crc })),
-        price_crc: total, tax_type: taxType, seat, course,
+        price_crc: total, tax_type: taxType, seat, course, note: note.trim(),
         // Snapshots de la ficha (refinamiento 06-12): ruteo KDS + orden + fiscal
         station: (meta?.station as 'cocina' | 'barra' | 'ninguna') ?? 'cocina',
         subcategory: meta?.subclasificacion ?? '',
@@ -1285,6 +1321,10 @@ function ItemPicker({ product, price, pax, orderId, meta, editItem, onDone, onCa
           )}
           {!sinPrecio && <span style={{ fontSize: '0.82rem' }}>precio: <strong>{fi(total * (editItem ? 1 : qty))}</strong></span>}
         </div>
+        {/* T2 carta-real: nota por ítem (sin cebolla, término, etc.) → va a cocina */}
+        <input className="tips-input-dark" style={{ width: '100%', marginTop: 8 }} value={note}
+          placeholder="Nota para cocina (opcional): sin cebolla, término…"
+          onChange={e => { setDirty(true); setNote(e.target.value) }} />
         {sinPrecio && <div style={{ color: '#c23b22', fontSize: '0.74rem', marginTop: 6 }}>⚠ Sin precio cargado — cargalo en Admin → 🍣 PoS → Precios para poder enviarlo.</div>}
         {valErr && <div style={{ color: '#c23b22', fontSize: '0.74rem', marginTop: 6 }}>⛔ {valErr}</div>}
         <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>

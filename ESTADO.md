@@ -3,6 +3,40 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — JERARQUÍA DE MENÚ (3 niveles) + CANTIDAD EN TODO PRODUCTO — EN STAGING (rama `menu-jerarquia`)
+93/93 tests, builds OK, smoke E2E verde (navegación 3 niveles + ×2 verificados + DB). Sagrados intactos.
+- **Migración 032 — modelo de familia EDITABLE** (no hardcodeado): `menu_families` (4: 🍱Comida /
+  🍹Bebida / 🛍️Merch / 🏠Interno, con orden e ícono) + `menu_categories` (categoría→familia,
+  subfamilia, oculto, orden). Mapeo exacto del sprint sembrado; **A PAX oculto** del comandero;
+  **bebidas → estación barra** (328 productos; el XLS no traía estación). La dueña reasigna familias
+  desde el Gestor (RLS gerencia).
+- **T2 — Navegación de 3 niveles en el comandero**: FAMILIA → categoría → productos, con
+  **breadcrumb/volver** siempre visible y **búsqueda transversal** arriba (a toda la carta).
+  Respeta tiles con precio, color por estación, foto y el selector de asiento/curso activo. Solo
+  activos con precio se comandan; A PAX no aparece.
+- **T3 — Cantidad para TODOS los productos** (bug de la dueña): tocar un producto **sin
+  modificadores** abre un **mini-popup de cantidad** (default 1, un tap en "Agregar" confirma —
+  el caso común sigue siendo rápido; ± para pedir varios en un gesto, no N toques). Unificado con
+  la cantidad del ItemPicker (productos con obligatorios) → **un solo comportamiento**. Ítems
+  idénticos se agrupan con su cantidad; con modificadores distintos siguen separados.
+- **T4 — Árbol de familia en el Gestor**: la lista de Productos se agrupa por FAMILIA → categoría →
+  productos, con los filtros activos/inactivos/todos dentro del árbol; **la familia de cada
+  categoría se reasigna inline** (selector → guarda al instante), sin tocar código.
+- **Decisiones**: familia y estación son **dato editable** (la dueña reacomoda desde el Gestor);
+  categorías sin familia mapeada caen en "Otros" al final (no se pierden); el mini-popup de cantidad
+  agrega 1 tap al caso común a cambio de que pedir 3 sea un gesto (decisión avalada por el prompt).
+
+### Plan de prueba física para la dueña (jerarquía + cantidad, en staging)
+1. **Navegar**: Comandero → abrí una mesa → vas a ver **4 familias** (Comida/Bebida/Merch/Interno).
+   Tocá **Comida → Sushi Rolls** y elegí un roll; usá **← Familias** / el breadcrumb para volver.
+2. **Cantidad**: tocá un producto simple (ej. una cerveza) → aparece el **±**; dejá 1 y "Agregar"
+   (rápido), o subí a 3 y agregá → entra como una sola línea con la cantidad.
+3. **Buscar**: escribí arriba (ej. "mojito") → busca en toda la carta sin importar la familia.
+4. **A PAX**: confirmá que NO aparece en el comandero (el pax se pide al abrir la mesa).
+5. **Familias en el Gestor**: Admin → 🍣 PoS → Productos → la lista está agrupada por familia; si
+   algo quedó en la familia equivocada, cambiala con el selector de cada categoría.
+6. **Bebidas al bar**: marchá una bebida y verificá que cae en el KDS de **barra** (no cocina).
+
 ## 🆕 2026-06-12 (noche) — CARTA REAL IMPORTADA + ASIENTO/CURSO PARA TODOS — EN STAGING (rama `carta-real`)
 90/90 tests, builds OK, smoke E2E verde. Sagrados intactos. La carta va SOLO a staging.
 - **T1 — Carta real importada** (542 productos, `import/productos.csv` → script idempotente

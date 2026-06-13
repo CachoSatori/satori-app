@@ -6,8 +6,12 @@ import {
   getLocations, getSalonTables, getOpenOrders, openOrder, updateOrderPax,
   getOrderItems, addOrderItem, updateItemCourse, deleteOrderItem, marchar,
   searchProducts, getProductGroups, getPriceMap, transferOrder, getProductMetaMap,
-  unmarchar, cancelEmptyOrder, appendOrderNote,
+  unmarchar, cancelEmptyOrder, appendOrderNote, cobrarOrden,
 } from '../../shared/api/pos'
+import { getCurrentRate } from '../../shared/api/exchangeRate'
+import { calcularVuelto, vueltoPagoUsd, convertirCrcAUsd } from '../../shared/utils/posCobro'
+import { renderTicketCobro } from '../../shared/utils/posTicket'
+import type { PosPayment } from '../../shared/api/pos'
 import type { PosLocation, SalonTable, PosOrder, PosOrderItem, ModifierGroupRow, ModifierRow, PosPrice } from '../../shared/api/pos'
 import { getAllProfiles } from '../../shared/api/admin'
 import type { Profile } from '../../shared/types/database'
@@ -131,7 +135,7 @@ export default function ComanderoModule() {
       )}
 
       {sel && (
-        <OrderScreen order={sel} priceMap={priceMap} onBack={() => { setSel(null); load() }} onError={setError}
+        <OrderScreen order={sel} priceMap={priceMap} cajeroName={profile?.full_name ?? ''} onBack={() => { setSel(null); load() }} onError={setError}
           onEditPax={() => setPaxModal({ table: null, editOrder: sel })} />
       )}
 
@@ -206,9 +210,9 @@ function PaxModal({ initial, onCancel, onConfirm }: { initial: number | null; on
   )
 }
 
-function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
+function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }: {
   // (meta de productos para snapshots de estación/subcategoría/servicio)
-  order: PosOrder; priceMap: Map<string, PosPrice>; onBack: () => void; onError: (e: string) => void; onEditPax: () => void
+  order: PosOrder; priceMap: Map<string, PosPrice>; cajeroName: string; onBack: () => void; onError: (e: string) => void; onEditPax: () => void
 }) {
   const [metaMap, setMetaMap] = useState<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean }>>(new Map())
   useEffect(() => { getProductMetaMap().then(setMetaMap).catch(() => { /* snapshots con defaults */ }) }, [])
@@ -217,6 +221,7 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
   const [opts, setOpts]     = useState<Array<{ nombre: string; tipo: string }>>([])
   const [picking, setPicking] = useState<{ nombre: string; tipo: string } | null>(null)
   const [showBill, setShowBill] = useState(false)
+  const [showCheckout, setShowCheckout] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
   // Comandero pro (SPEC): grid por categorías, deshacer marchar, edición de ítems
   const [cat, setCat]           = useState<string | null>(null)   // categoría activa del grid
@@ -445,7 +450,12 @@ function OrderScreen({ order, priceMap, onBack, onError, onEditPax }: {
         )
       })()}
 
-      {showBill && <CuentaView order={order} items={items} onClose={() => setShowBill(false)} />}
+      {showBill && <CuentaView order={order} items={items}
+        onClose={() => setShowBill(false)}
+        onCobrar={() => { setShowBill(false); setShowCheckout(true) }} />}
+      {showCheckout && <CheckoutModal order={order} items={items} cajero={cajeroName}
+        onClose={() => setShowCheckout(false)}
+        onDone={() => { setShowCheckout(false); onBack() }} onError={onError} />}
       {showTransfer && <TransferModal order={order} onClose={() => setShowTransfer(false)}
         onDone={() => { setShowTransfer(false); onBack() }} onError={onError} />}
     </div>
@@ -505,7 +515,7 @@ function TransferModal({ order, onClose, onDone, onError }: {
 
 /** Cuenta de mesa (pre-F3, solo lectura): consumo + servicio 10% por canal + IVA
  *  + total, con vista por mesa completa o por asiento/cliente. SIN cobro, SIN impresión. */
-function CuentaView({ order, items, onClose }: { order: PosOrder; items: PosOrderItem[]; onClose: () => void }) {
+function CuentaView({ order, items, onClose, onCobrar }: { order: PosOrder; items: PosOrderItem[]; onClose: () => void; onCobrar: () => void }) {
   const [porAsiento, setPorAsiento] = useState(false)
   const bill = items.map(toBillItem)
   const totals = computeTotals(bill, order.channel)
@@ -562,8 +572,178 @@ function CuentaView({ order, items, onClose }: { order: PosOrder; items: PosOrde
         <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: 6 }}>
           Solo lectura — sin cobro ni impresión (eso llega en F3). Base del servicio y si lleva IVA: PENDIENTE-CONTADORA.
         </div>
+        <div className="cd-modal-actions" style={{ marginTop: '0.75rem', gap: 8 }}>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={onClose}>Cerrar</button>
+          <button className="cd-btn-green cm-tap" style={{ minHeight: 48, fontWeight: 800 }} onClick={onCobrar}>💳 Cobrar {fi(totals.total)}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** F3 — Checkout: reúsa computeTotals (sin recalcular), método de pago, doble moneda
+ *  con TC ajustable por orden, vuelto (función pura), registra el pago + cierra la
+ *  mesa + muestra el ticket SIM. */
+function CheckoutModal({ order, items, cajero, onClose, onDone, onError }: {
+  order: PosOrder; items: PosOrderItem[]; cajero: string
+  onClose: () => void; onDone: () => void; onError: (e: string) => void
+}) {
+  const { profile } = useAuth()
+  const totals = useMemo(() => computeTotals(items.map(toBillItem), order.channel), [items, order.channel])
+  const [method, setMethod] = useState<'efectivo' | 'tarjeta' | 'transferencia'>('efectivo')
+  const [tc, setTc] = useState<number>(0)               // TC del día (editable por orden)
+  const [tcEdit, setTcEdit] = useState(false)
+  const [efMoneda, setEfMoneda] = useState<'CRC' | 'USD'>('CRC')
+  const [recibido, setRecibido] = useState<number | null>(null)  // en la moneda elegida
+  const [saving, setSaving] = useState(false)
+  const [ticket, setTicket] = useState<string | null>(null)
+
+  useEffect(() => { getCurrentRate().then(setTc).catch(() => setTc(640)) }, [])
+
+  // Vuelto según moneda del efectivo recibido (funciones puras testeadas).
+  const calc = (() => {
+    if (method !== 'efectivo' || recibido == null) return null
+    return efMoneda === 'USD' ? vueltoPagoUsd(totals.total, recibido, tc) : { recibido_crc: Math.round(recibido), ...calcularVuelto(totals.total, recibido) }
+  })()
+  const totalUsd = tc > 0 ? convertirCrcAUsd(totals.total, tc) : 0
+
+  const confirmar = async () => {
+    if (saving || !profile) return
+    if (method === 'efectivo' && (!calc || !calc.alcanza)) { onError('El efectivo recibido no cubre el total'); return }
+    setSaving(true)
+    try {
+      const payment: PosPayment = {
+        order_id: order.id, method,
+        amount_crc: totals.total, currency: method === 'efectivo' ? efMoneda : 'CRC',
+        exchange_rate_used: (method === 'efectivo' && efMoneda === 'USD') ? tc : (tcEdit ? tc : null),
+        received_crc: method === 'efectivo' ? (calc?.recibido_crc ?? 0) : 0,
+        received_usd: method === 'efectivo' && efMoneda === 'USD' ? (recibido ?? 0) : 0,
+        change_crc: method === 'efectivo' ? (calc?.vuelto_crc ?? 0) : 0,
+        created_by: profile.id,
+      }
+      await cobrarOrden(payment, profile.id)
+      // Ticket SIM (D4): texto en pantalla + log; impresora real = futuro.
+      const txt = renderTicketCobro({
+        table: order.table_name, channel: order.channel, pax: order.pax,
+        salonero: order.salonero_name, cajero,
+        lines: items.map(it => ({
+          name: it.product_name, qty: it.qty,
+          line_total_crc: (it.base_price_crc + it.modifiers.reduce((a, m) => a + m.price_delta_crc, 0)) * it.qty,
+          modifiers: it.modifiers.map(m => m.name),
+        })),
+        totals,
+        pago: { method, currency: payment.currency, exchange_rate_used: payment.exchange_rate_used,
+          received_crc: payment.received_crc, received_usd: payment.received_usd, change_crc: payment.change_crc },
+      })
+      // eslint-disable-next-line no-console
+      console.log('🖨️ TICKET SIM\n' + txt)
+      setTicket(txt)
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error al cobrar'); setSaving(false) }
+  }
+
+  // Pantalla del ticket emitido → cerrar vuelve al plano (la mesa ya está cobrada).
+  if (ticket) return (
+    <div className="cd-modal-overlay" onClick={onDone}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+        <div className="cd-modal-title">✅ Cobrado · {order.table_name}</div>
+        <pre style={{ background: '#0d0d0d', color: '#e8e2d0', padding: '0.75rem', borderRadius: 6, fontSize: '0.7rem', lineHeight: 1.35, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>{ticket}</pre>
+        <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: 4 }}>Ticket en modo SIM (impresora real y factura electrónica: integración futura).</div>
         <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>
-          <button className="cd-btn-green" onClick={onClose}>Cerrar</button>
+          <button className="cd-btn-green cm-tap" style={{ minHeight: 48 }} onClick={onDone}>Listo</button>
+        </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="cd-modal-overlay" onClick={onClose}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+        <div className="cd-modal-title">💳 Cobrar · {order.table_name}</div>
+
+        {/* Total: ₡ primario + $ secundario con TC */}
+        <div style={{ background: '#0d0d0d', color: '#c8a96e', borderRadius: 8, padding: '0.75rem', textAlign: 'center', margin: '0.25rem 0 0.5rem' }}>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{fi(totals.total)}</div>
+          <div style={{ fontSize: '0.82rem', opacity: 0.85 }}>
+            ≈ ${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · TC ₡{tc}/$
+            <button className="cm-tap" onClick={() => setTcEdit(v => !v)} style={{ marginLeft: 6, background: 'none', border: '1px solid #5a5040', color: '#c8a96e', borderRadius: 4, padding: '2px 8px', fontSize: '0.68rem', cursor: 'pointer' }}>ajustar TC</button>
+          </div>
+          {tcEdit && (
+            <input type="number" className="tips-input-dark" value={tc} onChange={e => setTc(Number(e.target.value) || 0)}
+              style={{ marginTop: 6, width: 120, textAlign: 'center' }} placeholder="TC ₡/$" />
+          )}
+        </div>
+
+        {/* Método */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          {(['efectivo', 'tarjeta', 'transferencia'] as const).map(m => (
+            <button key={m} className="cm-tap" onClick={() => setMethod(m)}
+              style={{ flex: 1, minHeight: 48, borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem',
+                border: '1px solid var(--t-border,#d4cfc4)', background: method === m ? '#0d0d0d' : '#fff', color: method === m ? '#c8a96e' : '#5a5040' }}>
+              {m === 'efectivo' ? '💵 Efectivo' : m === 'tarjeta' ? '💳 Tarjeta' : '📲 Transf/SINPE'}
+            </button>
+          ))}
+        </div>
+
+        {/* Efectivo: moneda + numpad de recibido + vuelto */}
+        {method === 'efectivo' && (
+          <>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+              {(['CRC', 'USD'] as const).map(c => (
+                <button key={c} className="cm-tap" onClick={() => { setEfMoneda(c); setRecibido(null) }}
+                  style={{ flex: 1, minHeight: 40, borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem',
+                    border: '1px solid var(--t-border,#d4cfc4)', background: efMoneda === c ? '#2a7a6a' : '#fff', color: efMoneda === c ? '#fff' : '#5a5040' }}>
+                  {c === 'CRC' ? '₡ Colones' : '$ Dólares'}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: '0.72rem', color: '#5a5040' }}>Recibido ({efMoneda === 'CRC' ? '₡' : '$'})</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, textAlign: 'center', minHeight: 40, fontVariantNumeric: 'tabular-nums' }}>
+              {recibido == null ? '—' : (efMoneda === 'CRC' ? fi(recibido) : '$' + recibido)}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+              {[1,2,3,4,5,6,7,8,9].map(n => (
+                <button key={n} className="tips-btn-ghost cm-tap" style={{ minHeight: 48, fontSize: '1.2rem', fontWeight: 700 }}
+                  onClick={() => setRecibido(p => (p == null ? n : p * 10 + n))}>{n}</button>
+              ))}
+              <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48, color: '#c0392b', fontWeight: 800 }} onClick={() => setRecibido(null)}>C</button>
+              <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48, fontSize: '1.2rem', fontWeight: 700 }} onClick={() => setRecibido(p => (p == null ? 0 : p * 10))}>0</button>
+              <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={() => setRecibido(p => (p == null ? null : Math.floor(p / 10) || null))}>⌫</button>
+            </div>
+            {/* atajos de billetes frecuentes */}
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+              {(efMoneda === 'CRC' ? [5000, 10000, 20000, 50000] : [20, 50, 100]).map(b => (
+                <button key={b} className="cm-tap" onClick={() => setRecibido(b)}
+                  style={{ flex: 1, minHeight: 40, borderRadius: 6, cursor: 'pointer', border: '1px solid var(--t-border,#d4cfc4)', background: '#fff', fontSize: '0.76rem', fontWeight: 700 }}>
+                  {efMoneda === 'CRC' ? fi(b) : '$' + b}
+                </button>
+              ))}
+              <button className="cm-tap" onClick={() => setRecibido(efMoneda === 'CRC' ? totals.total : Math.ceil(convertirCrcAUsd(totals.total, tc)))}
+                style={{ flex: 1, minHeight: 40, borderRadius: 6, cursor: 'pointer', border: '1px solid #2a7a6a', background: 'rgba(42,122,106,.12)', fontSize: '0.76rem', fontWeight: 700 }}>
+                exacto
+              </button>
+            </div>
+            {calc && (
+              <div style={{ marginTop: 8, padding: '0.5rem 0.75rem', borderRadius: 6, fontWeight: 800,
+                background: calc.alcanza ? 'rgba(42,122,106,.12)' : 'rgba(194,59,34,.1)', color: calc.alcanza ? '#1f6f3f' : '#c23b22' }}>
+                {efMoneda === 'USD' && <div style={{ fontWeight: 400, fontSize: '0.74rem' }}>= {fi(calc.recibido_crc)} al TC ₡{tc}</div>}
+                {calc.alcanza ? `Vuelto: ${fi(calc.vuelto_crc)}` : `Falta: ${fi(calc.falta_crc)}`}
+              </div>
+            )}
+          </>
+        )}
+
+        {method !== 'efectivo' && (
+          <div style={{ fontSize: '0.78rem', color: '#5a5040', padding: '0.5rem 0' }}>
+            {method === 'tarjeta' ? 'Cobro con datáfono — pasá la tarjeta por el POS físico y confirmá acá.' : 'Transferencia / SINPE — confirmá la recepción y registrá acá.'}
+          </div>
+        )}
+
+        <div className="cd-modal-actions" style={{ marginTop: '0.75rem', gap: 8 }}>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={onClose}>Cancelar</button>
+          <button className="cd-btn-green cm-tap" style={{ minHeight: 48, fontWeight: 800, opacity: saving || (method === 'efectivo' && !calc?.alcanza) ? 0.5 : 1 }}
+            disabled={saving || (method === 'efectivo' && !calc?.alcanza)} onClick={confirmar}>
+            {saving ? 'Cobrando…' : `✓ Confirmar cobro ${fi(totals.total)}`}
+          </button>
         </div>
       </div>
     </div>

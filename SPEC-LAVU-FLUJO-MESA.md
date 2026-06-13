@@ -42,8 +42,9 @@ sigue respeta esa regla.
 | F17 | **Doble moneda + TC ajustable por orden** | "dual currency" + Checkout→Exchange Rate | ✅ ₡ primario + $ secundario, TC override por orden con traza | — |
 | F18 | **Vuelto (efectivo)** | numpad recibido → cambio | ✅ función pura testeada (₡ y $→₡) | — |
 | F19 | **Propina en el cobro** | tip line | ⚠ **CAPTURA ✅** (10/15/manual → `pos_payments.tip_crc`); **distribución pendiente** | integrar con tipCalculations (sprint aparte, sagrado) |
-| F20 | **Reabrir / re-cerrar cuenta** | con permiso | ❌ (cierre simple este sprint) | **P2** reopen con `verify_manager` + traza |
+| F20 | **Reabrir / re-cerrar cuenta** | con permiso | ✅ reabrir cerrada con `requireManager` + motivo + traza; recierre manual (mig 029) | revertir/reembolsar el pago previo (futuro) |
 | F21 | **Factura electrónica fiscal** | integración país | ❌ (ticket SIM interno) | **futuro** Almendro/Alanube — `pos_payments` ya deja el hueco |
+| F6b | **Foto en el tile del menú** | sí | ✅ foto de producto en el grid + fallback (mig 030) | — |
 
 ---
 
@@ -84,8 +85,9 @@ Cuenta de mesa (🧾) → [Cobrar] → Checkout (reusa computeTotals: consumo·s
 - **Sprint 2 ✅**: F15 split (3 modos + des-dividir), F19 propina (CAPTURA; distribución pendiente).
 - **Sprint 3 ✅** (paridad final): F10 void de enviados, F11 reordenar ronda, F12 qty rápida,
   F14 combinar mesas con deshacer.
+- **Sprint 4 ✅**: foto de producto en el tile (mig 030), F20 reabrir/recerrar con permiso (mig 029).
 - **Lo único que queda**: F19 integración propina↔tipCalculations (SAGRADO, sprint propio) ·
-  F20 reabrir/re-cerrar orden con permiso · pase a producción de todo el PoS (migraciones 022-029).
+  pase a producción de todo el PoS (migraciones 022-030).
 
 **Estado de paridad: el flujo de mesa de Satori cubre las 21 funciones del estándar Lavu
 (F1-F18 + F13 transferencia ✅; F19 capturada; F20 y la integración fiscal/propina quedan como

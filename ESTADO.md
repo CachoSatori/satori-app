@@ -3,6 +3,33 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — FOTO DE PRODUCTO + REABRIR ORDEN — EN STAGING (rama `pos-fotos`)
+90/90 tests, builds OK, smoke E2E verde (verificado en DB). **Sagrados intactos.**
+- **Migración 030** (staging): `product_map.photo_url` + bucket **público** `productos` con RLS
+  (admin sube / todos leen), creado vía API. **NO en prod.**
+- **T1 Foto de producto (patrón Lavu)**: en Admin → Productos, subir/cambiar/quitar foto con
+  preview (cámara directa en móvil + archivo en desktop), **comprimida a thumbnail 480px** antes de
+  subir (las tablets no cargan imágenes pesadas). En el **comandero**, el tile del grid muestra la
+  foto si existe; **fallback con gracia** al diseño actual (color por estación + nombre) si no hay —
+  no rompe el "2-taps" ni el target táctil. `loading="lazy"` + `onError` (se oculta sola si falla).
+  URL **pública cacheable** → sirve offline una vez vista. Verificado: tile AGUA con foto, 11 tiles
+  sin foto con fallback intacto, quick-add funciona.
+- **T2 Reabrir/recerrar orden (F20, cierra la paridad Lavu)**: ↺ Reabrir en el comandero → lista las
+  mesas **cerradas de hoy** → **`requireManager`** (owner/manager directo; otros piden credenciales)
+  + **motivo obligatorio** → reabre (status→open, limpia cierre y checks para re-cobro limpio). **Los
+  pagos previos quedan como historial/auditoría — NO se revierten** (revertir/reembolsar = alcance
+  futuro, ver PROMPT-CONTINUACION). Recierre manual cobrando de nuevo (no auto-cierra). Traza
+  completa (quién/motivo/cuándo). Verificado en DB.
+- **Paridad Lavu: completa** (incluye F20 + foto en tile). Solo queda la integración propina→pool
+  (sagrado) y el pase a producción.
+
+### Plan de prueba física para la dueña (fotos + reabrir, en staging)
+1. **Foto**: Admin → 🍣 PoS → Productos → elegí un producto → 📷 Agregar foto (en el cel abre la
+   cámara) → mirá el preview. Después, en el **Comandero**, abrí una mesa y mirá el grid del menú:
+   ese producto sale con su foto; los demás siguen con su color y nombre.
+2. **Reabrir**: cobrá una mesa (se cierra). Tocá **↺ Reabrir** arriba → escribí el motivo → elegí la
+   mesa → (si no sos gerente, pide credenciales) → la mesa vuelve a abrirse para corregir/recobrar.
+
 ## 🆕 2026-06-12 (noche) — F3 PARIDAD FINAL (combinar + anular + ronda + cantidad) — EN STAGING (rama `f3-paridad`)
 Cierra el estándar de mesa: el comandero de Satori cubre las 21 funciones del flujo Lavu (semáforo
 de `SPEC-LAVU-FLUJO-MESA.md` casi todo ✅). 90/90 tests, builds OK, smoke E2E verde en las 4 tareas

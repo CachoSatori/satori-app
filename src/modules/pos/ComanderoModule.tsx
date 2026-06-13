@@ -150,7 +150,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
 }) {
   const { profile } = useAuth()
   const profileId = profile?.id ?? null
-  const [metaMap, setMetaMap] = useState<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; photo_url: string | null }>>(new Map())
+  const [metaMap, setMetaMap] = useState<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; photo_url: string | null; allergens: string }>>(new Map())
   // Jerarquía de menú (mig 032): familias + mapeo categoría→familia
   const [families, setFamilies] = useState<FamilyDef[]>([])
   const [catMap, setCatMap]     = useState<Map<string, CatMap>>(new Map())
@@ -203,7 +203,10 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
     getOrderChecks(order.id).then(setChecks).catch(() => { /* sin split */ })
   }, [order.id, onError])
   useEffect(() => { load() }, [load])
-  useRealtimeRefetch(`rt-order-${order.id}`, ['pos_order_items', 'pos_checks'], load)
+  // T2.2: NO refrescar la lista mientras hay un modal abierto (no pisarle al salonero lo
+  // que está editando). El refetch se pospone hasta cerrar el modal (reintenta cada 4s).
+  const modalOpen = !!(picking || editItem || qtyPopup || showBill || showCheckout || showTransfer || showSplit || showReorder || showMerge || voiding)
+  useRealtimeRefetch(`rt-order-${order.id}`, ['pos_order_items', 'pos_checks'], load, { pauseWhile: () => modalOpen })
 
   // T2 — anular un ítem ya enviado: permiso de gerencia + motivo obligatorio.
   const doVoid = async (it: PosOrderItem, reason: string) => {
@@ -353,7 +356,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
       {search.trim().length >= 2 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
           {searchResults.map(t => <Tile key={t.nombre} t={t} busy={adding === t.nombre} onAdd={() => { quickAdd(t.nombre); setSearch('') }} />)}
-          {searchResults.length === 0 && <EmptyState icon="🔍" title={`Sin resultados para «${search}»`} hint="Probá con otro nombre o mirá las familias." />}
+          {searchResults.length === 0 && <EmptyState tone="satori" icon="🔍" title={`Sin resultados para «${search}»`} hint="Probá con otro nombre o mirá las familias." />}
         </div>
       ) : (
         <>
@@ -369,7 +372,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
 
           {/* Nivel 1: familias */}
           {!fam && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
+            <div className="cm-fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
               {tree.families.map(f => (
                 <button key={f.id} className="cm-tap" onClick={() => setFam(f.id)}
                   style={{ minHeight: 72, borderRadius: 10, cursor: 'pointer', fontWeight: 800, fontSize: '1rem',
@@ -383,7 +386,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
 
           {/* Nivel 2: categorías de la familia */}
           {fam && !cat && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
+            <div className="cm-fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
               {(tree.byFamily.get(fam) ?? []).map(c => (
                 <button key={c} className="cm-tap" onClick={() => setCat(c)}
                   style={{ minHeight: 60, borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: '0.86rem',
@@ -396,14 +399,14 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
 
           {/* Nivel 3: productos de la categoría */}
           {fam && cat && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
+            <div className="cm-fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
               {(tree.byCategory.get(cat) ?? []).map(t => <Tile key={t.nombre} t={t} busy={adding === t.nombre} onAdd={() => quickAdd(t.nombre)} />)}
             </div>
           )}
         </>
       )}
 
-      {items.length === 0 && <EmptyState icon="🧾" title="Mesa sin pedido" hint="Elegí una familia y un producto, o buscá arriba." />}
+      {items.length === 0 && <EmptyState tone="satori" icon="🧾" title="Mesa sin pedido" hint="Elegí una familia y un producto, o buscá arriba." />}
       {(['bebida', 'entrada', 'principal'] as PosCourse[]).map(c => {
         const list = items.filter(i => i.course === c)
         if (!list.length) return null
@@ -471,9 +474,21 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
         </div>
       )}
 
+      {/* T4 — barra de total SIEMPRE visible al pie: queda pegada abajo aunque el
+          pedido sea largo (estética Satori oscuro+dorado). Solo presentación. */}
+      {items.length > 0 && (
+        <div className="cm-total-bar">
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, opacity: 0.85 }}>
+            🧾 {order.table_name} · {items.reduce((n, i) => n + (i.qty ?? 1), 0)} ítem{items.reduce((n, i) => n + (i.qty ?? 1), 0) === 1 ? '' : 's'}
+          </span>
+          <span className="cm-total-val" title="Total con servicio e IVA — igual que la cuenta">{fi(totals.total)}</span>
+        </div>
+      )}
+
       {/* T3 — mini-popup de cantidad para alta directa (productos sin obligatorios) */}
       {qtyPopup && (
         <QtyPopup nombre={qtyPopup.nombre} precio={priceMap.get(qtyPopup.nombre)?.price_final_crc ?? 0}
+          allergens={metaMap.get(qtyPopup.nombre)?.allergens}
           onCancel={() => setQtyPopup(null)} onConfirm={qty => addDirect(qtyPopup.nombre, qty)} />
       )}
 

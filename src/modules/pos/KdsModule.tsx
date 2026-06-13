@@ -96,7 +96,7 @@ export default function KdsModule() {
       {error && <div style={{ color: '#e23b22', padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => setError(null)}>⚠ {error} (tocá para cerrar)</div>}
 
       {shown.length === 0 && (
-        <EmptyState tone="dark" icon={station === 'cocina' ? '🔪' : '🍸'}
+        <EmptyState tone="satori" icon={station === 'cocina' ? '🔪' : '🍸'}
           title={`Cocina al día — sin comandas en ${view === 'salon' ? 'salón/barra' : 'delivery'}`}
           hint="Marchá un pedido desde el comandero y aparece acá al instante." />
       )}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildMenu, categoryOf } from './comanderoMenu'
+import { buildMenu, categoryOf, parseAllergens } from './comanderoMenu'
 
 const meta = (tipo: string, sub: string, station = 'cocina') => ({ tipo, subclasificacion: sub, station })
 
@@ -105,5 +105,21 @@ describe('searchTiles — búsqueda transversal (no incluye ocultos ni sin preci
   it('encuentra por nombre, excluye ocultos y sin precio', () => {
     const r = searchTiles(meta, prices, catMap, 'roll')
     expect(r.map(t => t.nombre)).toEqual(['SATORI ROLL'])
+  })
+})
+
+describe('parseAllergens — lectura de la ficha (T4, solo lectura, sin DDL)', () => {
+  it('vacío / null / undefined → []', () => {
+    expect(parseAllergens('')).toEqual([])
+    expect(parseAllergens(null)).toEqual([])
+    expect(parseAllergens(undefined)).toEqual([])
+  })
+  it('separa por coma y por «;», recorta y descarta vacíos', () => {
+    expect(parseAllergens('maní, gluten , mariscos')).toEqual(['maní', 'gluten', 'mariscos'])
+    expect(parseAllergens('soja; sésamo')).toEqual(['soja', 'sésamo'])
+    expect(parseAllergens('huevo,, , lácteos,')).toEqual(['huevo', 'lácteos'])
+  })
+  it('un solo alérgeno sin separadores', () => {
+    expect(parseAllergens('gluten')).toEqual(['gluten'])
   })
 })

@@ -21,7 +21,7 @@ import type { BillItem } from '../../shared/utils/posFiscal'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { fi } from '../../shared/utils'
-import { toBillItem, COURSE_LABEL, Row } from './comanderoShared'
+import { toBillItem, COURSE_LABEL, Row, AllergenLine } from './comanderoShared'
 
 /** F20 — Reabrir una orden cerrada (patrón Lavu): lista las cerradas de hoy → permiso
  *  de gerencia + motivo → reabre (los pagos previos quedan como historial). Recierre
@@ -630,7 +630,7 @@ export function CheckoutModal({ order, items, cajero, check, onClose, onDone, on
  *  Con editItem (SPEC C3) edita un ítem NO marchado: prefill de todo, y al guardar
  *  reemplaza el ítem (agrega el nuevo y borra el viejo). */
 export function ItemPicker({ product, price, pax, orderId, meta, editItem, defaultSeat, defaultCourse, onDone, onCancel, onError }: {
-  meta: { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean } | null
+  meta: { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; allergens?: string } | null
   product: { nombre: string; tipo: string }; price: PosPrice | null; pax: number; orderId: string
   editItem?: PosOrderItem | null
   defaultSeat?: number; defaultCourse?: PosCourse | null
@@ -696,6 +696,7 @@ export function ItemPicker({ product, price, pax, orderId, meta, editItem, defau
     <div className="cd-modal-overlay" onClick={tryCancel}>
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
         <div className="cd-modal-title">{editItem ? '✎ ' : ''}{product.nombre}</div>
+        <AllergenLine raw={meta?.allergens} />
         {groups.map(g => (
           <div key={g.id} style={{ marginBottom: 8 }}>
             <div style={{ fontSize: '0.74rem', fontWeight: 700 }}>{g.name}{g.required && <span style={{ color: '#c23b22' }}> * obligatorio</span>}</div>

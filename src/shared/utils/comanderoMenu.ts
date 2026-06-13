@@ -6,6 +6,7 @@ export interface MenuMeta {
   subclasificacion: string
   station: string
   photo_url?: string | null
+  allergens?: string           // alérgenos de la ficha (mig 025), solo lectura para el tile
 }
 export interface MenuPrice { price_final_crc: number | null }
 
@@ -15,6 +16,7 @@ export interface MenuTile {
   station: string
   price_final_crc: number
   photo_url: string | null
+  allergens: string            // '' si la ficha no tiene alérgenos cargados
 }
 
 // Mapeo categoría → familia (mig 032). category en MAYÚSCULA-trim como llave.
@@ -26,6 +28,15 @@ export interface CatMap {
 export interface FamilyDef { id: string; label: string; icon: string; sort_order: number }
 
 const norm = (s: string) => (s || '').trim().toUpperCase()
+
+/** Alérgenos de la ficha (texto libre separado por coma/«;») → lista limpia para mostrar.
+ *  Solo lectura del dato existente (mig 025); sin DDL. '' → []. */
+export function parseAllergens(raw: string | null | undefined): string[] {
+  return (raw ?? '')
+    .split(/[,;]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+}
 
 /** Categoría del tile dentro de una familia: la categoría (tipo); subcategoría es el
  *  3er nivel real de productos. Mantengo categoryOf por compatibilidad de tests previos. */
@@ -61,7 +72,7 @@ export function buildMenuTree(
     const category = m.tipo.trim() || 'Otros'
     const family = cm?.family_id ?? 'otros'
     if (!byCategory.has(category)) { byCategory.set(category, []); catOf.set(category, { family, sort: cm?.sort_order ?? 999 }) }
-    byCategory.get(category)!.push({ nombre, category, station: m.station, price_final_crc: price, photo_url: m.photo_url ?? null })
+    byCategory.get(category)!.push({ nombre, category, station: m.station, price_final_crc: price, photo_url: m.photo_url ?? null, allergens: m.allergens ?? '' })
   }
   for (const tiles of byCategory.values()) tiles.sort((a, b) => collator.compare(a.nombre, b.nombre))
 
@@ -101,7 +112,7 @@ export function searchTiles(
     if (price == null) continue
     if (catMap.get(norm(m.tipo))?.hidden_comandero) continue
     if (!nombre.toLowerCase().includes(q) && !m.tipo.toLowerCase().includes(q) && !(m.subclasificacion || '').toLowerCase().includes(q)) continue
-    out.push({ nombre, category: m.tipo.trim() || 'Otros', station: m.station, price_final_crc: price, photo_url: m.photo_url ?? null })
+    out.push({ nombre, category: m.tipo.trim() || 'Otros', station: m.station, price_final_crc: price, photo_url: m.photo_url ?? null, allergens: m.allergens ?? '' })
     if (out.length >= limit) break
   }
   return out.sort((a, b) => new Intl.Collator('es-CR').compare(a.nombre, b.nombre))
@@ -118,7 +129,7 @@ export function buildMenu(
     if (price == null) continue
     const category = categoryOf(m)
     if (!byCategory.has(category)) byCategory.set(category, [])
-    byCategory.get(category)!.push({ nombre, category, station: m.station, price_final_crc: price, photo_url: m.photo_url ?? null })
+    byCategory.get(category)!.push({ nombre, category, station: m.station, price_final_crc: price, photo_url: m.photo_url ?? null, allergens: m.allergens ?? '' })
   }
   const collator = new Intl.Collator('es-CR')
   for (const tiles of byCategory.values()) tiles.sort((a, b) => collator.compare(a.nombre, b.nombre))

@@ -4623,3 +4623,19 @@ html, body, #root {
 /* ── Comandero pro (SPEC P1-b): feedback táctil de cada tap ───────────── */
 .cm-tap { transition: transform .06s ease, filter .06s ease; touch-action: manipulation; }
 .cm-tap:active { transform: scale(.95); filter: brightness(1.12); }
+
+/* ── T4: entrada suave (estados vacíos, grid de productos) ───────────── */
+@keyframes cmFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.cm-fade-in { animation: cmFadeIn .22s ease both; }
+@media (prefers-reduced-motion: reduce) { .cm-fade-in { animation: none; } }
+
+/* ── T4: barra de total siempre visible al pie del pedido ───────────── */
+.cm-total-bar {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  margin: 0.75rem -0.75rem 0; padding: 0.6rem 1rem;
+  background: #0d0f0e; color: #b48e50;
+  border-top: 1px solid rgba(180,142,80,.35);
+  box-shadow: 0 -4px 16px rgba(0,0,0,.14);
+}
+.cm-total-bar .cm-total-val { margin-left: auto; font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums; }

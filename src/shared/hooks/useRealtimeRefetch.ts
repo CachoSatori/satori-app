@@ -20,11 +20,15 @@ export function useRealtimeRefetch(
   channelName: string,
   tables: string[],
   onChange: () => void,
-  opts?: { pauseWhileTyping?: boolean },
+  opts?: { pauseWhileTyping?: boolean; pauseWhile?: () => boolean },
 ) {
   const cbRef = useRef(onChange)
   cbRef.current = onChange
   const pause = opts?.pauseWhileTyping ?? false
+  // Predicado de pausa (ej. "hay un modal abierto"): si devuelve true, el refetch se
+  // pospone para no refrescar la lista bajo los pies del salonero. Ref para no re-suscribir.
+  const pauseWhileRef = useRef(opts?.pauseWhile)
+  pauseWhileRef.current = opts?.pauseWhile
 
   useEffect(() => {
     let debounce: number | undefined
@@ -40,7 +44,7 @@ export function useRealtimeRefetch(
     }
     const fire = () => {
       if (disposed) return
-      if (pause && isTyping()) {
+      if ((pause && isTyping()) || pauseWhileRef.current?.()) {
         window.clearTimeout(retry)
         retry = window.setTimeout(fire, 4_000)
         return

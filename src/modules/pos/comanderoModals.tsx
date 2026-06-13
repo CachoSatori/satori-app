@@ -8,6 +8,7 @@ import {
   getPaymentByClientOpId,
 } from '../../shared/api/pos'
 import { emitirFeDocumento } from '../../shared/api/fe'
+import { depleteOrderInventory } from '../../shared/api/inventario'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { calcularVuelto, vueltoPagoUsd, convertirCrcAUsd, convertirUsdACrc } from '../../shared/utils/posCobro'
 import { renderTicketCobro } from '../../shared/utils/posTicket'
@@ -439,6 +440,7 @@ export function CheckoutModal({ order, items, cajero, check, onClose, onDone, on
   const [saving, setSaving] = useState(false)
   const [ticket, setTicket] = useState<string | null>(null)
   const [closed, setClosed] = useState(false)
+  const [invMsg, setInvMsg] = useState<string | null>(null)   // resumen depleción de inventario (F1)
   // Idempotencia del cobro (mig 033): UN client_op_id por pantalla de checkout (no por tap)
   // → un doble-tap o reintento colapsa en una sola fila de pago.
   const [clientOpId] = useState(() => crypto.randomUUID())
@@ -502,6 +504,26 @@ export function CheckoutModal({ order, items, cajero, check, onClose, onDone, on
         fiscal = { tipo: 'tiquete', estado: 'error' }
       }
 
+      // Inventario Activo F1: al CERRAR el pedido, descontar stock por receta (idempotente
+      // por order.id). Best-effort: si falla, el cobro YA quedó hecho (no se revierte).
+      // Solo cuando se cierra la mesa entera (no en cobros parciales de un split).
+      if (res.orderClosed) {
+        try {
+          const dep = await depleteOrderInventory(order, items, profile.id)
+          if (dep.alreadyDone) setInvMsg(null)
+          else {
+            const parts: string[] = []
+            if (dep.movements > 0) parts.push(`📉 ${dep.movements} ingrediente${dep.movements === 1 ? '' : 's'} descontado${dep.movements === 1 ? '' : 's'} · COGS ₡${Math.round(dep.cogs_crc).toLocaleString('es-CR')}`)
+            if (dep.noRecipe.length > 0) parts.push(`⚠ ${dep.noRecipe.length} producto${dep.noRecipe.length === 1 ? '' : 's'} sin receta (no descontó)`)
+            if (dep.lowStock.length > 0) parts.push(`🟡 bajo stock: ${dep.lowStock.map(l => l.name).slice(0, 4).join(', ')}`)
+            setInvMsg(parts.length ? parts.join(' · ') : null)
+          }
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('Depleción de inventario falló (cobro ya registrado):', e)
+        }
+      }
+
       // Ticket SIM (D4): texto en pantalla + log; impresora real = futuro.
       const txt = renderTicketCobro({
         table: order.table_name, channel: order.channel, pax: order.pax,
@@ -532,6 +554,11 @@ export function CheckoutModal({ order, items, cajero, check, onClose, onDone, on
         <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: 4 }}>
           {closed ? 'Mesa cerrada.' : 'Quedan cuentas por cobrar en esta mesa.'} Ticket SIM (impresora/factura real: futuro).
         </div>
+        {invMsg && (
+          <div style={{ fontSize: '0.64rem', color: '#7a6a2a', marginTop: 4, background: '#1a1808', borderRadius: 4, padding: '4px 6px' }}>
+            {invMsg}
+          </div>
+        )}
         <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>
           <button className="cd-btn-green cm-tap" style={{ minHeight: 48 }} onClick={() => onDone({ orderClosed: closed })}>Listo</button>
         </div>

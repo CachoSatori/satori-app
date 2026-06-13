@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useManagerOverride } from '../../shared/ManagerOverride'
 import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
 import {
   getLocations, getSalonTables, getOpenOrders, openOrder, updateOrderPax,
@@ -8,6 +9,7 @@ import {
   searchProducts, getProductGroups, getPriceMap, transferOrder, getProductMetaMap,
   unmarchar, cancelEmptyOrder, appendOrderNote, cobrarOrden,
   getOrderChecks, setOrderChecks, clearOrderChecks, cobrarCheck,
+  voidOrderItem, reorderRound, mergeOrders, unmergeOrder, VOID_REASONS,
 } from '../../shared/api/pos'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { calcularVuelto, vueltoPagoUsd, convertirCrcAUsd, convertirUsdACrc } from '../../shared/utils/posCobro'
@@ -217,6 +219,8 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
   // (meta de productos para snapshots de estación/subcategoría/servicio)
   order: PosOrder; priceMap: Map<string, PosPrice>; cajeroName: string; onBack: () => void; onError: (e: string) => void; onEditPax: () => void
 }) {
+  const { profile } = useAuth()
+  const profileId = profile?.id ?? null
   const [metaMap, setMetaMap] = useState<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean }>>(new Map())
   useEffect(() => { getProductMetaMap().then(setMetaMap).catch(() => { /* snapshots con defaults */ }) }, [])
   const [items, setItems]   = useState<PosOrderItem[]>([])
@@ -235,6 +239,10 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
   const [nowTs, setNowTs]       = useState(() => Date.now())
   const [editItem, setEditItem] = useState<PosOrderItem | null>(null)
   const [adding, setAdding]     = useState<string | null>(null)   // tile en quick-add (feedback)
+  const [voiding, setVoiding]   = useState<PosOrderItem | null>(null)  // ítem enviado a anular (T2)
+  const [showReorder, setShowReorder] = useState(false)               // otra ronda (T3)
+  const [showMerge, setShowMerge]     = useState(false)               // combinar mesas (T1)
+  const requireManager = useManagerOverride()
   useEffect(() => {
     if (!undo) return
     const t = window.setInterval(() => setNowTs(Date.now()), 500)
@@ -244,13 +252,28 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
   const activeCat = cat && menu.byCategory.has(cat) ? cat : (menu.categories[0] ?? null)
   // Total SIEMPRE visible mientras se comanda (SPEC C5) — misma matemática que la cuenta.
   const totals = computeTotals(items.map(toBillItem), order.channel)
+  // Mesas combinadas EN esta: ids de origen presentes en los ítems (para des-combinar).
+  const mergedFrom = useMemo(() => [...new Set(items.map(i => i.merged_from_order).filter((x): x is string => !!x))], [items])
+  const enviados = items.filter(i => i.kitchen_status !== 'pendiente')   // elegibles para ronda/void
 
   const load = useCallback(() => {
-    getOrderItems(order.id).then(setItems).catch(e => onError(e.message))
+    // Los ítems ANULADOS (T2) no se muestran ni cuentan; la traza queda en la base.
+    getOrderItems(order.id).then(rows => setItems(rows.filter(r => r.kitchen_status !== 'anulado'))).catch(e => onError(e.message))
     getOrderChecks(order.id).then(setChecks).catch(() => { /* sin split */ })
   }, [order.id, onError])
   useEffect(() => { load() }, [load])
   useRealtimeRefetch(`rt-order-${order.id}`, ['pos_order_items', 'pos_checks'], load)
+
+  // T2 — anular un ítem ya enviado: permiso de gerencia + motivo obligatorio.
+  const doVoid = async (it: PosOrderItem, reason: string) => {
+    if (!(await requireManager())) { setVoiding(null); return }
+    if (!profileId) return
+    try {
+      await voidOrderItem(it.id, reason, profileId)
+      appendOrderNote(order.id, `anuló ${it.product_name} (enviado) · ${reason} · ${new Date().toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`).catch(() => {})
+      setVoiding(null); load()
+    } catch (e) { onError(e instanceof Error ? e.message : 'No se pudo anular el ítem') }
+  }
 
   useEffect(() => {
     if (search.trim().length < 2) { setOpts([]); return }
@@ -313,8 +336,24 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
           👥 {order.pax} pax ✎
         </button>
         <span style={{ fontSize: '0.7rem', color: '#5a5040' }} title="Salonero a cargo (atribución de métricas)">{order.salonero_name}</span>
-        <button onClick={() => setShowTransfer(true)} title="Transferir la mesa a otro salonero"
+        {/* Menú maestro de la orden (patrón Lavu): combinar / otra ronda / transferir */}
+        <button onClick={() => setShowMerge(true)} title="Combinar con otra mesa abierta"
           style={{ marginLeft: 'auto', background: 'none', border: '1px solid #5a5040', color: '#5a5040', borderRadius: 4, padding: '4px 10px', fontWeight: 700, cursor: 'pointer' }}>
+          ⧉ Combinar
+        </button>
+        {mergedFrom.length > 0 && (
+          <button onClick={async () => { try { for (const f of mergedFrom) await unmergeOrder(order.id, f); load() } catch (e) { onError(e instanceof Error ? e.message : 'Error') } }}
+            title="Deshacer la combinación de mesas"
+            style={{ background: 'none', border: '1px solid #a07030', color: '#a07030', borderRadius: 4, padding: '4px 10px', fontWeight: 700, cursor: 'pointer' }}>
+            ↩ Separar
+          </button>
+        )}
+        <button onClick={() => setShowReorder(true)} disabled={!enviados.length} title="Otra ronda de lo ya enviado (barra)"
+          style={{ background: 'none', border: '1px solid #5a5040', color: '#5a5040', borderRadius: 4, padding: '4px 10px', fontWeight: 700, cursor: 'pointer', opacity: enviados.length ? 1 : 0.4 }}>
+          🔁 Otra ronda
+        </button>
+        <button onClick={() => setShowTransfer(true)} title="Transferir la mesa a otro salonero"
+          style={{ background: 'none', border: '1px solid #5a5040', color: '#5a5040', borderRadius: 4, padding: '4px 10px', fontWeight: 700, cursor: 'pointer' }}>
           ↔ Transferir
         </button>
         <button className="cm-tap" onClick={() => setShowBill(true)} disabled={!items.length} title="Ver la cuenta de la mesa"
@@ -398,9 +437,9 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
             {list.map(i => (
               <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0', borderBottom: '1px solid var(--t-border,#d4cfc4)', fontSize: '0.82rem' }}>
                 <span style={{ minWidth: 0, flex: 1 }}>
-                  <strong>{i.product_name}</strong>
+                  {i.qty > 1 && <strong style={{ color: '#a04030' }}>{i.qty}× </strong>}<strong>{i.product_name}</strong>
                   {i.modifiers.length > 0 && <span style={{ color: '#5a5040', fontSize: '0.72rem' }}> · {i.modifiers.map(m => m.name).join(', ')}</span>}
-                  <span style={{ color: '#5a5040', fontSize: '0.7rem' }}> · asiento {i.seat}</span>
+                  <span style={{ color: '#5a5040', fontSize: '0.7rem' }}> · asiento {i.seat}{i.merged_from_order ? ' · combinada' : ''}</span>
                 </span>
                 {i.kitchen_status === 'pendiente' && (
                   <button className="cm-tap" onClick={() => updateItemCourse(i.id, nextCourse(i.course)).then(load).catch(e => onError(e.message))}
@@ -416,6 +455,11 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
                 {i.kitchen_status === 'pendiente' && (
                   <button className="cm-tap" onClick={() => deleteOrderItem(i.id).then(load).catch(e => onError(e.message))} title="Quitar el ítem (aún no marchado)"
                     style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 4, padding: '8px 14px', minHeight: 40, cursor: 'pointer', fontWeight: 700 }}>×</button>
+                )}
+                {/* T2: anular un ítem YA enviado (void con permiso + motivo) */}
+                {i.kitchen_status !== 'pendiente' && (
+                  <button className="cm-tap" onClick={() => setVoiding(i)} title="Anular este ítem enviado (requiere gerencia)"
+                    style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 4, padding: '8px 12px', minHeight: 40, cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700 }}>⊘ anular</button>
                 )}
               </div>
             ))}
@@ -477,6 +521,140 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
         }} onError={onError} />}
       {showTransfer && <TransferModal order={order} onClose={() => setShowTransfer(false)}
         onDone={() => { setShowTransfer(false); onBack() }} onError={onError} />}
+
+      {/* T2 — motivo de anulación (tras el OK de gerencia) */}
+      {voiding && (
+        <div className="cd-modal-overlay" onClick={() => setVoiding(null)}>
+          <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 340 }}>
+            <div className="cd-modal-title">⊘ Anular · {voiding.product_name}</div>
+            <div style={{ fontSize: '0.74rem', color: '#5a5040', margin: '0.25rem 0 0.5rem' }}>Ya fue a cocina. Elegí el motivo (lo autoriza gerencia):</div>
+            {VOID_REASONS.map(r => (
+              <button key={r} className="cm-tap" onClick={() => doVoid(voiding, r)}
+                style={{ display: 'block', width: '100%', textAlign: 'left', minHeight: 48, marginBottom: 6, borderRadius: 6, cursor: 'pointer',
+                  border: '1px solid var(--t-border,#d4cfc4)', background: '#fff', padding: '0 12px', fontWeight: 700, fontSize: '0.84rem' }}>
+                {r}
+              </button>
+            ))}
+            <div className="cd-modal-actions" style={{ marginTop: 6 }}>
+              <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={() => setVoiding(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* T3 — otra ronda */}
+      {showReorder && <ReorderModal order={order} enviados={enviados}
+        onClose={() => setShowReorder(false)}
+        onDone={() => { setShowReorder(false); load() }} onError={onError} />}
+
+      {/* T1 — combinar mesas */}
+      {showMerge && <MergeModal order={order} cajero={cajeroName}
+        onClose={() => setShowMerge(false)}
+        onDone={() => { setShowMerge(false); load() }} onError={onError} />}
+    </div>
+  )
+}
+
+/** T3 — Otra ronda (SPEC F11): reenvía ítems ya enviados como nuevos (pendientes),
+ *  con cantidad ± por ítem. Pensado para la barra (otra vuelta sin navegar el menú). */
+function ReorderModal({ order, enviados, onClose, onDone, onError }: {
+  order: PosOrder; enviados: PosOrderItem[]; onClose: () => void; onDone: () => void; onError: (e: string) => void
+}) {
+  // Ítems únicos por (producto + modificadores + asiento) → cantidad a repetir.
+  const base = useMemo(() => {
+    const seen = new Map<string, PosOrderItem>()
+    for (const it of enviados) {
+      const k = it.product_name + '|' + it.modifiers.map(m => m.id).sort().join(',') + '|' + it.seat
+      if (!seen.has(k)) seen.set(k, it)
+    }
+    return [...seen.values()]
+  }, [enviados])
+  const [qty, setQty] = useState<Record<string, number>>({})
+  const [saving, setSaving] = useState(false)
+  const total = Object.values(qty).reduce((a, b) => a + b, 0)
+
+  const confirmar = async () => {
+    if (saving || !total) return
+    setSaving(true)
+    try {
+      await reorderRound(order.id, base.filter(it => (qty[it.id] ?? 0) > 0).map(it => ({ src: it, qty: qty[it.id] })))
+      onDone()
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error al reordenar'); setSaving(false) }
+  }
+
+  return (
+    <div className="cd-modal-overlay" onClick={onClose}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420, maxHeight: '85vh', overflowY: 'auto' }}>
+        <div className="cd-modal-title">🔁 Otra ronda · {order.table_name}</div>
+        <div style={{ fontSize: '0.74rem', color: '#5a5040', margin: '0.25rem 0 0.5rem' }}>Elegí cuántos repetir (se reenvían a cocina/barra como nuevos):</div>
+        {base.map(it => {
+          const q = qty[it.id] ?? 0
+          return (
+            <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.4rem 0', borderBottom: '1px solid var(--t-border,#e6e1d6)' }}>
+              <span style={{ flex: 1, fontSize: '0.84rem' }}>{it.product_name}
+                {it.modifiers.length > 0 && <span style={{ color: '#5a5040', fontSize: '0.72rem' }}> · {it.modifiers.map(m => m.name).join(', ')}</span>}
+                <span style={{ color: '#5a5040', fontSize: '0.7rem' }}> · as.{it.seat}</span>
+              </span>
+              <button className="cm-tap" onClick={() => setQty(p => ({ ...p, [it.id]: Math.max(0, q - 1) }))} style={{ minWidth: 40, minHeight: 40, borderRadius: 6, border: '1px solid #5a5040', background: '#fff', fontSize: '1.1rem', cursor: 'pointer' }}>−</button>
+              <strong style={{ minWidth: 20, textAlign: 'center' }}>{q}</strong>
+              <button className="cm-tap" onClick={() => setQty(p => ({ ...p, [it.id]: q + 1 }))} style={{ minWidth: 40, minHeight: 40, borderRadius: 6, border: '1px solid #5a5040', background: '#fff', fontSize: '1.1rem', cursor: 'pointer' }}>+</button>
+            </div>
+          )
+        })}
+        <div className="cd-modal-actions" style={{ marginTop: '0.75rem', gap: 8 }}>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={onClose}>Cancelar</button>
+          <button className="cd-btn-green cm-tap" style={{ minHeight: 48, fontWeight: 800, opacity: total && !saving ? 1 : 0.4 }} disabled={!total || saving} onClick={confirmar}>
+            {saving ? 'Reenviando…' : `🔁 Reenviar ${total} ítem${total === 1 ? '' : 's'}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** T1 — Combinar mesas (SPEC F14, patrón Lavu con deshacer): trae los ítems de otra
+ *  mesa abierta a esta; quedan como checks separados (cobrables aparte) y se puede
+ *  des-combinar mientras nada esté pago. */
+function MergeModal({ order, cajero, onClose, onDone, onError }: {
+  order: PosOrder; cajero: string; onClose: () => void; onDone: () => void; onError: (e: string) => void
+}) {
+  const { profile } = useAuth()
+  const [abiertas, setAbiertas] = useState<PosOrder[]>([])
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    getOpenOrders(order.location_id)
+      .then(os => setAbiertas(os.filter(o => o.id !== order.id)))
+      .catch(e => onError(e instanceof Error ? e.message : 'Error cargando mesas'))
+  }, [order.id, order.location_id, onError])
+
+  const combinar = async (from: PosOrder) => {
+    if (saving || !profile) return
+    setSaving(true)
+    try {
+      await mergeOrders(order, from, { id: profile.id, name: cajero || profile.full_name || '' }, order.channel)
+      onDone()
+    } catch (e) { onError(e instanceof Error ? e.message : 'Error al combinar'); setSaving(false) }
+  }
+
+  return (
+    <div className="cd-modal-overlay" onClick={onClose}>
+      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380, maxHeight: '80vh', overflowY: 'auto' }}>
+        <div className="cd-modal-title">⧉ Combinar en {order.table_name}</div>
+        <div style={{ fontSize: '0.74rem', color: '#5a5040', margin: '0.25rem 0 0.5rem' }}>
+          Los ítems de la otra mesa pasan acá como una cuenta separada (se puede separar de nuevo si no cobraste nada).
+        </div>
+        {abiertas.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.82rem' }}>No hay otras mesas abiertas en este local.</div>}
+        {abiertas.map(o => (
+          <button key={o.id} disabled={saving} className="cm-tap" onClick={() => combinar(o)}
+            style={{ display: 'block', width: '100%', textAlign: 'left', minHeight: 48, marginBottom: 6, borderRadius: 6, cursor: 'pointer',
+              border: '1px solid var(--t-border,#d4cfc4)', background: '#fff', padding: '0 12px', fontWeight: 700, fontSize: '0.84rem' }}>
+            {o.table_name} <span style={{ color: '#5a5040', fontWeight: 400, fontSize: '0.72rem' }}>· {o.pax}p · {o.salonero_name}</span>
+          </button>
+        ))}
+        <div className="cd-modal-actions" style={{ marginTop: 6 }}>
+          <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={onClose}>Cancelar</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -949,6 +1127,7 @@ function ItemPicker({ product, price, pax, orderId, meta, editItem, onDone, onCa
   const [picked, setPicked] = useState<Record<string, string[]>>({})
   const [course, setCourse] = useState<PosCourse>(editItem?.course ?? defaultCourseForTipo(product.tipo))
   const [seat, setSeat]     = useState(editItem?.seat ?? 1)
+  const [qty, setQty]       = useState(editItem?.qty ?? 1)   // T4: cantidad rápida (no en edición)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty]   = useState(false)   // SPEC C6: tocar fuera no descarta sin avisar
 
@@ -984,7 +1163,7 @@ function ItemPicker({ product, price, pax, orderId, meta, editItem, onDone, onCa
     setSaving(true)
     try {
       await addOrderItem({
-        order_id: orderId, product_name: product.nombre, qty: 1,
+        order_id: orderId, product_name: product.nombre, qty: editItem ? (editItem.qty ?? 1) : qty,
         base_price_crc: base ?? 0, modifiers: chosen.map(m => ({ id: m.id, name: m.name, price_delta_crc: m.price_delta_crc })),
         price_crc: total, tax_type: taxType, seat, course,
         // Snapshots de la ficha (refinamiento 06-12): ruteo KDS + orden + fiscal
@@ -1031,14 +1210,22 @@ function ItemPicker({ product, price, pax, orderId, meta, editItem, onDone, onCa
               {Array.from({ length: pax }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
-          {!sinPrecio && <span style={{ fontSize: '0.82rem' }}>precio: <strong>{fi(total)}</strong></span>}
+          {/* T4: cantidad rápida (×N). En edición el qty no cambia (es reemplazo 1:1). */}
+          {!editItem && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.76rem' }}>cant.
+              <button className="cm-tap" onClick={() => setQty(q => Math.max(1, q - 1))} style={{ minWidth: 36, minHeight: 36, borderRadius: 6, border: '1px solid #5a5040', background: '#fff', fontSize: '1.05rem', cursor: 'pointer' }}>−</button>
+              <strong style={{ minWidth: 18, textAlign: 'center' }}>{qty}</strong>
+              <button className="cm-tap" onClick={() => setQty(q => Math.min(99, q + 1))} style={{ minWidth: 36, minHeight: 36, borderRadius: 6, border: '1px solid #5a5040', background: '#fff', fontSize: '1.05rem', cursor: 'pointer' }}>+</button>
+            </span>
+          )}
+          {!sinPrecio && <span style={{ fontSize: '0.82rem' }}>precio: <strong>{fi(total * (editItem ? 1 : qty))}</strong></span>}
         </div>
         {sinPrecio && <div style={{ color: '#c23b22', fontSize: '0.74rem', marginTop: 6 }}>⚠ Sin precio cargado — cargalo en Admin → 🍣 PoS → Precios para poder enviarlo.</div>}
         {valErr && <div style={{ color: '#c23b22', fontSize: '0.74rem', marginTop: 6 }}>⛔ {valErr}</div>}
         <div className="cd-modal-actions" style={{ marginTop: '0.75rem' }}>
           <button className="tips-btn-ghost cm-tap" style={{ minHeight: 48 }} onClick={tryCancel}>Cancelar</button>
           <button className="cd-btn-green cm-tap" disabled={!!valErr || saving || sinPrecio} style={{ opacity: valErr || saving || sinPrecio ? 0.4 : 1, minHeight: 48 }} onClick={enviar}>
-            {saving ? 'Guardando…' : editItem ? '✓ Guardar cambios' : '✓ Agregar al pedido'}
+            {saving ? 'Guardando…' : editItem ? '✓ Guardar cambios' : `✓ Agregar${qty > 1 ? ` ×${qty}` : ''}`}
           </button>
         </div>
       </div>

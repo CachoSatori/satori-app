@@ -83,6 +83,48 @@ export function computeDepletion(
 }
 
 /**
+ * Inventario Activo F1 — unidades vendidas por producto desde los ÍTEMS de un pedido
+ * del PoS. Suma qty por product_name; ignora ítems anulados (no se cocinaron).
+ * Puro y testeable (no toca DB).
+ */
+export function unitsFromOrderItems(
+  items: Array<{ product_name: string; qty: number; kitchen_status?: string }>,
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const it of items ?? []) {
+    if (it.kitchen_status === 'anulado') continue   // anulado = no consume inventario
+    const k = String(it.product_name)
+    out[k] = (out[k] ?? 0) + (Number(it.qty) || 0)
+  }
+  return out
+}
+
+/**
+ * COGS real de una depleción = Σ (cantidad descontada × costo_unitario del ingrediente).
+ * Recibe las líneas que devolvió computeDepletion + el costo por ingrediente. Puro.
+ */
+export function cogsFromDepletion(
+  lines: DepletionLine[],
+  costByIngredient: Map<string, number>,
+): number {
+  const total = (lines ?? []).reduce((s, l) => s + l.deduct * (costByIngredient.get(l.ingredientId) ?? 0), 0)
+  return Math.round(total * 100) / 100
+}
+
+/** Ingredientes que, tras la depleción, quedan en/bajo su mínimo (alerta de bajo stock). */
+export function lowStockCrossings(
+  lines: DepletionLine[],
+  minByIngredient: Map<string, number>,
+): Array<{ ingredientId: string; name: string; after: number; min: number }> {
+  const out: Array<{ ingredientId: string; name: string; after: number; min: number }> = []
+  for (const l of lines ?? []) {
+    const min = minByIngredient.get(l.ingredientId) ?? 0
+    if (min > 0 && l.after <= min) out.push({ ingredientId: l.ingredientId, name: l.name, after: l.after, min })
+  }
+  return out
+}
+
+/**
  * Extrae unidades vendidas por producto desde el JSON de un día de ventas.
  * Suma qty de prods[] de todos los saloneros/cajeros.
  */

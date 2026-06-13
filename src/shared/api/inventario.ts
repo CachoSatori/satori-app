@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { Ingredient, Recipe, RecipeIngredient, InventoryMovement } from '../types/inventario'
+import { computeDepletion, unitsFromOrderItems, cogsFromDepletion, lowStockCrossings } from '../../modules/inventario/depletion'
 
 // ── Ingredients ──────────────────────────────────────────────────
 
@@ -128,4 +129,76 @@ export async function setStockLevel(ingredientId: string, newLevel: number, curr
     notes:         `Ajuste manual a ${newLevel} ${unit}`,
     created_by:    by,
   })
+}
+
+// ── Inventario Activo F1: depleción por venta al cerrar un pedido del PoS ──────
+export interface OrderDepletionResult {
+  applied: boolean                  // ¿se registraron movimientos en esta llamada?
+  alreadyDone: boolean              // ya se había deplecionado este pedido (idempotente)
+  movements: number                 // # de ingredientes descontados
+  cogs_crc: number                  // COGS real del pedido (Σ deducción × costo)
+  noRecipe: Array<{ nombre: string; units: number }>   // vendidos SIN receta (no descuentan)
+  lowStock: Array<{ ingredientId: string; name: string; after: number; min: number }>
+}
+
+/**
+ * Descuenta inventario por la venta de UN pedido del PoS, según las recetas.
+ * IDEMPOTENTE: usa reference_id = order.id; si ya hay movimientos 'sale_deduction'
+ * de ese pedido, no vuelve a descontar (countDeductionsForRef). Productos SIN receta
+ * NO descuentan y se reportan en `noRecipe`. Escribe el COGS real en pos_orders.cogs_crc.
+ * Best-effort desde el cobro: si falla, el cobro YA quedó hecho (no se revierte).
+ */
+export async function depleteOrderInventory(
+  order: { id: string },
+  items: Array<{ product_name: string; qty: number; kitchen_status?: string }>,
+  by: string,
+): Promise<OrderDepletionResult> {
+  // Idempotencia: ¿ya se deplecionó este pedido?
+  const already = await countDeductionsForRef(order.id)
+  if (already > 0) {
+    return { applied: false, alreadyDone: true, movements: 0, cogs_crc: 0, noRecipe: [], lowStock: [] }
+  }
+
+  const [recipes, allRis, ingredients] = await Promise.all([
+    getRecipes(), getAllRecipeIngredients(), getIngredients(),
+  ])
+  const riByRecipe: Record<string, RecipeIngredient[]> = {}
+  for (const ri of allRis) (riByRecipe[ri.recipe_id] ??= []).push(ri)
+
+  const result = computeDepletion(unitsFromOrderItems(items), recipes, riByRecipe, ingredients)
+
+  const costById = new Map(ingredients.map(i => [i.id, i.cost_per_unit]))
+  const minById  = new Map(ingredients.map(i => [i.id, i.min_stock]))
+  const cogs = cogsFromDepletion(result.lines, costById)
+  const lowStock = lowStockCrossings(result.lines, minById)
+
+  // Registrar un movimiento de salida por ingrediente (el trigger baja current_stock).
+  for (const l of result.lines) {
+    if (l.deduct <= 0) continue
+    await addMovement({
+      ingredient_id: l.ingredientId,
+      movement_type: 'sale_deduction',
+      qty_delta:     -l.deduct,                  // salida = negativo
+      unit:          l.unit,
+      unit_cost:     costById.get(l.ingredientId) ?? null,
+      reference_id:  order.id,                    // idempotencia por pedido
+      notes:         `Venta PoS · pedido ${order.id.slice(0, 8)}`,
+      created_by:    by,
+    })
+  }
+
+  // COGS real del pedido (solo si hubo recetas que descontaron)
+  if (result.lines.length > 0) {
+    const { error } = await supabase.from('pos_orders').update({ cogs_crc: cogs }).eq('id', order.id)
+    if (error) throw new Error(error.message)
+  }
+
+  return {
+    applied: result.lines.length > 0,
+    alreadyDone: false,
+    movements: result.lines.length,
+    cogs_crc: cogs,
+    noRecipe: result.noRecipe,
+    lowStock,
+  }
 }

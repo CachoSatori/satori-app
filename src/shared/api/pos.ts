@@ -481,6 +481,8 @@ export interface PosPayment {
   received_crc: number
   received_usd: number
   change_crc: number
+  tip_crc?: number
+  tip_currency?: 'CRC' | 'USD'
   note?: string
   created_by: string | null
 }
@@ -502,6 +504,8 @@ export async function cobrarOrden(payment: PosPayment, closedBy: string): Promis
     received_crc:       payment.received_crc,
     received_usd:       payment.received_usd,
     change_crc:         payment.change_crc,
+    tip_crc:            payment.tip_crc ?? 0,
+    tip_currency:       payment.tip_currency ?? 'CRC',
     note:               payment.note ?? '',
     created_by:         payment.created_by,
   })
@@ -516,4 +520,73 @@ export async function getOrderPayments(orderId: string): Promise<PosPayment[]> {
   const { data, error } = await sb.from('pos_payments').select('*').eq('order_id', orderId).order('created_at')
   fail(error)
   return (data ?? []) as PosPayment[]
+}
+
+// ── F3: Dividir cuenta (mig 028) ──────────────────────────────
+export interface PosCheck {
+  id: string
+  order_id: string
+  idx: number
+  label: string
+  kind: 'even' | 'item' | 'seat'
+  amount_crc: number
+  items_snapshot: Array<{ product_name: string; qty: number; line_total_crc: number; modifiers?: string[] }>
+  paid: boolean
+  paid_at: string | null
+}
+
+export async function getOrderChecks(orderId: string): Promise<PosCheck[]> {
+  const { data, error } = await sb.from('pos_checks').select('*').eq('order_id', orderId).order('idx')
+  fail(error)
+  return (data ?? []) as PosCheck[]
+}
+
+/** Crea el split: reemplaza cualquier check NO pagado y escribe los nuevos. Solo se
+ *  permite si NINGÚN check está pagado todavía (un split limpio, como Lavu). */
+export async function setOrderChecks(orderId: string, checks: Array<Omit<PosCheck, 'id' | 'order_id' | 'paid' | 'paid_at'>>): Promise<void> {
+  const existing = await getOrderChecks(orderId)
+  if (existing.some(c => c.paid)) throw new Error('No se puede redividir: ya hay un check pagado')
+  const { error: del } = await sb.from('pos_checks').delete().eq('order_id', orderId)
+  fail(del)
+  if (!checks.length) return
+  const { error } = await sb.from('pos_checks').insert(
+    checks.map(c => ({ order_id: orderId, idx: c.idx, label: c.label, kind: c.kind, amount_crc: c.amount_crc, items_snapshot: c.items_snapshot })),
+  )
+  fail(error)
+}
+
+/** Des-dividir (un-split): vuelve a un solo check de orden. Solo sin pagos. */
+export async function clearOrderChecks(orderId: string): Promise<void> {
+  const existing = await getOrderChecks(orderId)
+  if (existing.some(c => c.paid)) throw new Error('No se puede des-dividir: ya hay un check pagado')
+  const { error } = await sb.from('pos_checks').delete().eq('order_id', orderId)
+  fail(error)
+}
+
+/**
+ * Cobra UN check (split). Registra el pago apuntando al check, lo marca pagado y
+ * CIERRA la orden solo cuando TODOS los checks están pagos (SPEC F15). El gate
+ * canCloseShift sigue siendo del cierre de TURNO, no del cobro (decisión D1).
+ */
+export async function cobrarCheck(checkId: string, payment: PosPayment, closedBy: string): Promise<{ orderClosed: boolean }> {
+  const { error: e1 } = await sb.from('pos_payments').insert({
+    order_id: payment.order_id, check_id: checkId, method: payment.method,
+    amount_crc: payment.amount_crc, currency: payment.currency, exchange_rate_used: payment.exchange_rate_used,
+    received_crc: payment.received_crc, received_usd: payment.received_usd, change_crc: payment.change_crc,
+    tip_crc: payment.tip_crc ?? 0, tip_currency: payment.tip_currency ?? 'CRC',
+    note: payment.note ?? '', created_by: payment.created_by,
+  })
+  fail(e1)
+  const { error: e2 } = await sb.from('pos_checks').update({ paid: true, paid_at: new Date().toISOString() }).eq('id', checkId)
+  fail(e2)
+  // ¿quedan checks sin pagar?
+  const remaining = await getOrderChecks(payment.order_id)
+  const allPaid = remaining.length > 0 && remaining.every(c => c.paid)
+  if (allPaid) {
+    const { error: e3 } = await sb.from('pos_orders')
+      .update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: closedBy, updated_at: new Date().toISOString() })
+      .eq('id', payment.order_id).eq('status', 'open')
+    fail(e3)
+  }
+  return { orderClosed: allPaid }
 }

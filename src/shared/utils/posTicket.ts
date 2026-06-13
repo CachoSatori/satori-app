@@ -25,6 +25,9 @@ export interface TicketPago {
   received_crc: number
   received_usd: number
   change_crc: number
+  tip_crc?: number          // propina capturada (F19) — solo informativa en el ticket
+  check_label?: string      // si es el cobro de un check de un split
+  check_amount_crc?: number // monto del check (si difiere del total de la mesa)
 }
 export interface TicketData {
   table: string
@@ -69,7 +72,12 @@ export function renderTicketCobro(d: TicketData): string {
   L.push(rule())
   // Pago
   const p = d.pago
+  // Si es el cobro de un check de un split, el monto a pagar es el del check.
+  if (p.check_label && p.check_amount_crc != null) {
+    L.push(row(p.check_label, money(p.check_amount_crc)))
+  }
   L.push(row('Método', METHOD_LABEL[p.method] ?? p.method))
+  if (p.tip_crc && p.tip_crc > 0) L.push(row('Propina', money(p.tip_crc)))
   if (p.exchange_rate_used) {
     L.push(row('TC usado', '₡' + p.exchange_rate_used + '/$'))
     L.push(row('Total en $', moneyUsd(p.exchange_rate_used > 0 ? t.total / p.exchange_rate_used : 0)))

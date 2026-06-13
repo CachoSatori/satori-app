@@ -17,7 +17,7 @@ import { defaultCourseForTipo, nextCourse } from '../../shared/utils/posPricing'
 import type { PosCourse } from '../../shared/utils/posPricing'
 import { computeTotals } from '../../shared/utils/posFiscal'
 import { fi } from '../../shared/utils'
-import { toBillItem, COURSE_LABEL, KS_LABEL, CierreTurnoModal, PaxModal, Tile, QtyPopup } from './comanderoShared'
+import { toBillItem, COURSE_LABEL, KS_LABEL, CierreTurnoModal, PaxModal, Tile, QtyPopup, EmptyState } from './comanderoShared'
 import { ReabrirModal, ReorderModal, MergeModal, TransferModal, CuentaView, SplitModal, CheckoutModal, ItemPicker } from './comanderoModals'
 import { buildMenuTree, searchTiles } from '../../shared/utils/comanderoMenu'
 import type { CatMap, FamilyDef } from '../../shared/utils/comanderoMenu'
@@ -124,7 +124,7 @@ export default function ComanderoModule() {
             )
           })}
           {tables.filter(t => t.is_active).length === 0 && (
-            <div style={{ padding: '2rem', color: '#5a5040' }}>Sin mesas en este local — armalas en Admin → 🍣 PoS → Editor de Salón.</div>
+            <EmptyState icon="🪑" title="Sin mesas en este local" hint="Armá el salón en Admin → 🍣 PoS → Editor de Salón." />
           )}
         </div>
       )}
@@ -353,7 +353,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
       {search.trim().length >= 2 ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 8, marginBottom: '0.75rem' }}>
           {searchResults.map(t => <Tile key={t.nombre} t={t} busy={adding === t.nombre} onAdd={() => { quickAdd(t.nombre); setSearch('') }} />)}
-          {searchResults.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem' }}>Sin resultados para «{search}».</div>}
+          {searchResults.length === 0 && <EmptyState icon="🔍" title={`Sin resultados para «${search}»`} hint="Probá con otro nombre o mirá las familias." />}
         </div>
       ) : (
         <>
@@ -377,7 +377,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
                   <span style={{ fontSize: '1.6rem' }}>{f.icon}</span>{f.label}
                 </button>
               ))}
-              {tree.families.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem' }}>Sin productos con precio en la carta — cargá precios en Admin → 🍣 PoS → Productos.</div>}
+              {tree.families.length === 0 && <EmptyState icon="🍱" title="Carta sin productos con precio" hint="Cargá precios en Admin → 🍣 PoS → Productos." />}
             </div>
           )}
 
@@ -403,7 +403,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
         </>
       )}
 
-      {items.length === 0 && <div style={{ color: '#5a5040', fontSize: '0.8rem', padding: '0.75rem 0' }}>Mesa sin ítems — elegí una familia y un producto (o buscá arriba).</div>}
+      {items.length === 0 && <EmptyState icon="🧾" title="Mesa sin pedido" hint="Elegí una familia y un producto, o buscá arriba." />}
       {(['bebida', 'entrada', 'principal'] as PosCourse[]).map(c => {
         const list = items.filter(i => i.course === c)
         if (!list.length) return null

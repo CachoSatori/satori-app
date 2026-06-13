@@ -142,3 +142,17 @@ export function Row({ label, value, muted }: { label: string; value: string; mut
     </div>
   )
 }
+
+/** Estado vacío elegante reutilizable (P3c). `tone` 'light' para el comandero (papel)
+ *  o 'dark' para el KDS. Solo presentación. */
+export function EmptyState({ icon, title, hint, tone = 'light' }: { icon: string; title: string; hint?: string; tone?: 'light' | 'dark' }) {
+  const fg = tone === 'dark' ? '#b48e50' : '#5a5040'
+  const sub = tone === 'dark' ? '#7a7468' : '#8a8378'
+  return (
+    <div style={{ textAlign: 'center', padding: '2.5rem 1.5rem', color: fg }}>
+      <div style={{ fontSize: '2.4rem', lineHeight: 1, marginBottom: 8, opacity: 0.85 }}>{icon}</div>
+      <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{title}</div>
+      {hint && <div style={{ fontSize: '0.8rem', color: sub, marginTop: 4, lineHeight: 1.5 }}>{hint}</div>}
+    </div>
+  )
+}

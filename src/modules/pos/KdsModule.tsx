@@ -7,6 +7,7 @@ import {
 import type { PosLocation, KdsTicket, KdsSettings, PosOrderItem } from '../../shared/api/pos'
 import { timerColor, fmtElapsed, sortForTicket, thresholdFor, isPostre } from '../../shared/utils/kds'
 import type { KdsColor } from '../../shared/utils/kds'
+import { EmptyState } from './comanderoShared'
 
 const COURSE_LABEL: Record<string, string> = { bebida: '🥤', entrada: '🥢', principal: '🍣' }
 const COLOR_BG: Record<KdsColor, string> = { verde: '#1f6f3f', ambar: '#9a6b00', rojo: '#9a1f1f' }
@@ -95,10 +96,9 @@ export default function KdsModule() {
       {error && <div style={{ color: '#e23b22', padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => setError(null)}>⚠ {error} (tocá para cerrar)</div>}
 
       {shown.length === 0 && (
-        <div style={{ padding: '4rem 2rem', textAlign: 'center', color: '#666', fontSize: '1.1rem' }}>
-          Cocina al día — sin comandas en {view === 'salon' ? 'salón/barra' : 'delivery'}. <br />
-          <span style={{ fontSize: '0.85rem' }}>Marchá un pedido desde el comandero y aparece acá al instante.</span>
-        </div>
+        <EmptyState tone="dark" icon={station === 'cocina' ? '🔪' : '🍸'}
+          title={`Cocina al día — sin comandas en ${view === 'salon' ? 'salón/barra' : 'delivery'}`}
+          hint="Marchá un pedido desde el comandero y aparece acá al instante." />
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem', padding: '0.75rem' }}>

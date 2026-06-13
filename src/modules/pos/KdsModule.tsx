@@ -28,12 +28,14 @@ export default function KdsModule() {
   const [station, setStation] = useState<'cocina' | 'barra'>('cocina')
   const [now, setNow] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)   // T3: estado de carga inicial
 
   const load = useCallback(async () => {
     try {
       const [t, s] = await Promise.all([getKdsTickets(loc), getKdsSettings(loc)])
       setTickets(t); setSettings(s)
-    } catch (e) { setError(e instanceof Error ? e.message : 'Error cargando KDS') }
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo cargar el KDS. Revisá la conexión y reintentá.') }
+    finally { setLoading(false) }
   }, [loc])
 
   useEffect(() => {
@@ -95,7 +97,10 @@ export default function KdsModule() {
       </header>
       {error && <div style={{ color: '#e23b22', padding: '0.5rem 1rem', fontSize: '0.85rem' }} onClick={() => setError(null)}>⚠ {error} (tocá para cerrar)</div>}
 
-      {shown.length === 0 && (
+      {loading && tickets.length === 0 && (
+        <EmptyState tone="satori" icon="⏳" title="Cargando comandas…" />
+      )}
+      {!loading && shown.length === 0 && (
         <EmptyState tone="satori" icon={station === 'cocina' ? '🔪' : '🍸'}
           title={`Cocina al día — sin comandas en ${view === 'salon' ? 'salón/barra' : 'delivery'}`}
           hint="Marchá un pedido desde el comandero y aparece acá al instante." />

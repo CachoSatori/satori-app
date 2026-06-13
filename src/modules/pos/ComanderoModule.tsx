@@ -39,6 +39,7 @@ export default function ComanderoModule() {
   const [priceMap, setPriceMap]   = useState<Map<string, PosPrice>>(new Map())
   const [showCierre, setShowCierre] = useState(false)
   const [showReabrir, setShowReabrir] = useState(false)   // reabrir orden cerrada (F20)
+  const [loadingPlano, setLoadingPlano] = useState(true)  // T3: estado de carga del plano
 
   const load = useCallback(async () => {
     try {
@@ -46,7 +47,8 @@ export default function ComanderoModule() {
       const os = await getOpenOrders(loc)
       setOrders(os)
       setSel(prev => prev ? os.find(o => o.id === prev.id) ?? null : prev)
-    } catch (e) { setError(e instanceof Error ? e.message : 'Error cargando salón') }
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo cargar el salón. Revisá la conexión y reintentá.') }
+    finally { setLoadingPlano(false) }
   }, [loc])
   useEffect(() => {
     getLocations().then(setLocations).catch(() => { /* selector queda con default */ })
@@ -123,7 +125,10 @@ export default function ComanderoModule() {
               </div>
             )
           })}
-          {tables.filter(t => t.is_active).length === 0 && (
+          {loadingPlano && tables.length === 0 && (
+            <EmptyState icon="⏳" title="Cargando salón…" />
+          )}
+          {!loadingPlano && tables.filter(t => t.is_active).length === 0 && (
             <EmptyState icon="🪑" title="Sin mesas en este local" hint="Armá el salón en Admin → 🍣 PoS → Editor de Salón." />
           )}
         </div>

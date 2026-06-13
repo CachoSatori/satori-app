@@ -3,6 +3,34 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — FIX 🔴 DOBLE COBRO — EN STAGING (rama `fix-doble-cobro`)
+Resuelto el hallazgo crítico de la auditoría. **La matemática del cobro NO se tocó** (computeTotals,
+vuelto, conversión, splits intactos y testeados); solo cambió **cómo se persiste** el pago. 93/93
+tests + script de idempotencia 10/10 + smoke E2E verdes. **NO en prod** (gateado).
+- **Diagnóstico**: `cobrarOrden`/`cobrarCheck` hacían INSERT pago + UPDATE cierre como statements
+  separados (no atómicos); `pos_payments` sin candado → dos cajas podían dejar 2 filas de pago.
+  Modelo: 1 pago por check / 1 por orden entera; split PAYMENT (varias tarjetas/cuenta) NO existe hoy
+  (es backlog) — por eso el candado es por INTENTO (client_op_id), no "máx 1 fila por check".
+- **Mecanismo (doble capa)**: (1) `pos_payments.client_op_id` + **UNIQUE parcial** → un reenvío del
+  MISMO intento (doble-tap / dos dispositivos con el mismo cobro) colapsa en una fila; (2) **RPC
+  SECURITY DEFINER atómica** `pos_cobrar_orden` / `pos_cobrar_check` (mig 033) con `FOR UPDATE` +
+  precondición → dos cajas DISTINTAS sobre la misma mesa: una gana, la otra recibe **"Esta cuenta ya
+  fue cobrada"**. La RPC **no recalcula montos**: recibe los totales ya calculados y solo persiste.
+- **Cliente**: el checkout genera el `client_op_id` UNA vez al abrir la pantalla (no por tap) y lo
+  manda; `cobrarOrden`/`cobrarCheck` ahora invocan la RPC. El camino feliz se comporta idéntico a hoy.
+- **Tests de concurrencia** (`scripts/test-cobro-idempotente.py`, reproducible): cobro normal → 1
+  fila + mesa cerrada ✓ · doble-tap (mismo cop) → idempotente, sigue 1 fila ✓ · otra caja sobre
+  cuenta cobrada → ERROR claro sin fila nueva ✓ · split 2 checks → 2 pagos legítimos, mesa cierra al
+  último ✓ · doble-tap de un check → idempotente ✓ · otra caja sobre check pagado → ERROR ✓.
+- **Migración 033** aplicada y registrada SOLO en staging.
+
+### Plan de prueba física para la dueña (doble cobro)
+1. Cobrá una mesa normal → funciona igual que siempre (ticket, mesa cerrada).
+2. Pedile a otra persona que intente cobrar la MISMA mesa desde otra tablet (o reintentá vos tras
+   cerrarla) → debe aparecer **"Esta cuenta ya fue cobrada"**, sin duplicar el pago.
+3. En una mesa dividida, cobrá cada cuenta por separado → cada una se cobra una sola vez; la mesa
+   recién cierra al pagar la última.
+
 ## 🆕 2026-06-12 (noche) — AUDITORÍA + CONSOLIDACIÓN — EN STAGING (rama `consolidacion`)
 Auditoría de staff engineer (`AUDITORIA-CONSOLIDACION.md`) + limpieza segura. **Comportamiento
 preservado**: 93/93 tests, tsc y build verdes; sagrados intocados. El `AUDITORIA.md` raíz es una

@@ -968,6 +968,9 @@ function CheckoutModal({ order, items, cajero, check, onClose, onDone, onError }
   const [saving, setSaving] = useState(false)
   const [ticket, setTicket] = useState<string | null>(null)
   const [closed, setClosed] = useState(false)
+  // Idempotencia del cobro (mig 033): UN client_op_id por pantalla de checkout (no por tap)
+  // → un doble-tap o reintento colapsa en una sola fila de pago.
+  const [clientOpId] = useState(() => crypto.randomUUID())
 
   useEffect(() => { getCurrentRate().then(setTc).catch(() => setTc(640)) }, [])
 
@@ -997,7 +1000,7 @@ function CheckoutModal({ order, items, cajero, check, onClose, onDone, onError }
         received_usd: method === 'efectivo' && efMoneda === 'USD' ? (recibido ?? 0) : 0,
         change_crc: method === 'efectivo' ? (calc?.vuelto_crc ?? 0) : 0,
         tip_crc: tipCrc, tip_currency: method === 'efectivo' ? efMoneda : 'CRC',
-        created_by: profile.id,
+        created_by: profile.id, client_op_id: clientOpId,
       }
       const res = check
         ? await cobrarCheck(check.id, payment, profile.id)

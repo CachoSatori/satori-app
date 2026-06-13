@@ -495,6 +495,7 @@ export interface PosPayment {
   tip_currency?: 'CRC' | 'USD'
   note?: string
   created_by: string | null
+  client_op_id?: string   // idempotencia del cobro (mig 033): 1 por pantalla de checkout
 }
 
 /**
@@ -504,26 +505,20 @@ export interface PosPayment {
  * de la mesa individual no depende de canCloseShift — ese gate es del cierre de
  * TURNO; cobrar una mesa es justamente cómo se vacía el salón.
  */
+/** Cobra la ORDEN entera de forma ATÓMICA e idempotente (mig 033, RPC `pos_cobrar_orden`).
+ *  La matemática viene ya calculada en `payment`; la RPC solo persiste. Doble-tap del
+ *  mismo intento (mismo client_op_id) colapsa en una fila; otra caja sobre cuenta ya
+ *  cobrada recibe "Esta cuenta ya fue cobrada". */
 export async function cobrarOrden(payment: PosPayment, closedBy: string): Promise<void> {
-  const { error: e1 } = await sb.from('pos_payments').insert({
-    order_id:           payment.order_id,
-    method:             payment.method,
-    amount_crc:         payment.amount_crc,
-    currency:           payment.currency,
-    exchange_rate_used: payment.exchange_rate_used,
-    received_crc:       payment.received_crc,
-    received_usd:       payment.received_usd,
-    change_crc:         payment.change_crc,
-    tip_crc:            payment.tip_crc ?? 0,
-    tip_currency:       payment.tip_currency ?? 'CRC',
-    note:               payment.note ?? '',
-    created_by:         payment.created_by,
+  const { error } = await sb.rpc('pos_cobrar_orden', {
+    p_order_id: payment.order_id, p_client_op_id: payment.client_op_id ?? crypto.randomUUID(),
+    p_method: payment.method, p_amount_crc: payment.amount_crc, p_currency: payment.currency,
+    p_exchange_rate_used: payment.exchange_rate_used, p_received_crc: payment.received_crc,
+    p_received_usd: payment.received_usd, p_change_crc: payment.change_crc,
+    p_tip_crc: payment.tip_crc ?? 0, p_tip_currency: payment.tip_currency ?? 'CRC',
+    p_note: payment.note ?? '', p_closed_by: closedBy,
   })
-  fail(e1)
-  const { error: e2 } = await sb.from('pos_orders')
-    .update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: closedBy, updated_at: new Date().toISOString() })
-    .eq('id', payment.order_id).eq('status', 'open')
-  fail(e2)
+  fail(error)
 }
 
 export async function getOrderPayments(orderId: string): Promise<PosPayment[]> {
@@ -578,27 +573,20 @@ export async function clearOrderChecks(orderId: string): Promise<void> {
  * CIERRA la orden solo cuando TODOS los checks están pagos (SPEC F15). El gate
  * canCloseShift sigue siendo del cierre de TURNO, no del cobro (decisión D1).
  */
+/** Cobra UN check (split) de forma ATÓMICA e idempotente (mig 033, RPC `pos_cobrar_check`).
+ *  Marca el check pagado + cierra la mesa solo cuando TODOS los checks están pagos, en una
+ *  transacción. Doble-tap colapsa; check ya pagado por otra caja → rechazo claro. */
 export async function cobrarCheck(checkId: string, payment: PosPayment, closedBy: string): Promise<{ orderClosed: boolean }> {
-  const { error: e1 } = await sb.from('pos_payments').insert({
-    order_id: payment.order_id, check_id: checkId, method: payment.method,
-    amount_crc: payment.amount_crc, currency: payment.currency, exchange_rate_used: payment.exchange_rate_used,
-    received_crc: payment.received_crc, received_usd: payment.received_usd, change_crc: payment.change_crc,
-    tip_crc: payment.tip_crc ?? 0, tip_currency: payment.tip_currency ?? 'CRC',
-    note: payment.note ?? '', created_by: payment.created_by,
+  const { data, error } = await sb.rpc('pos_cobrar_check', {
+    p_check_id: checkId, p_order_id: payment.order_id, p_client_op_id: payment.client_op_id ?? crypto.randomUUID(),
+    p_method: payment.method, p_amount_crc: payment.amount_crc, p_currency: payment.currency,
+    p_exchange_rate_used: payment.exchange_rate_used, p_received_crc: payment.received_crc,
+    p_received_usd: payment.received_usd, p_change_crc: payment.change_crc,
+    p_tip_crc: payment.tip_crc ?? 0, p_tip_currency: payment.tip_currency ?? 'CRC',
+    p_note: payment.note ?? '', p_closed_by: closedBy,
   })
-  fail(e1)
-  const { error: e2 } = await sb.from('pos_checks').update({ paid: true, paid_at: new Date().toISOString() }).eq('id', checkId)
-  fail(e2)
-  // ¿quedan checks sin pagar?
-  const remaining = await getOrderChecks(payment.order_id)
-  const allPaid = remaining.length > 0 && remaining.every(c => c.paid)
-  if (allPaid) {
-    const { error: e3 } = await sb.from('pos_orders')
-      .update({ status: 'closed', closed_at: new Date().toISOString(), closed_by: closedBy, updated_at: new Date().toISOString() })
-      .eq('id', payment.order_id).eq('status', 'open')
-    fail(e3)
-  }
-  return { orderClosed: allPaid }
+  fail(error)
+  return { orderClosed: (data as { order_closed?: boolean } | null)?.order_closed ?? false }
 }
 
 // ── F3 paridad: anular ítem enviado (void, mig 029) ───────────

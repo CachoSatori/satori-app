@@ -9,6 +9,7 @@ import {
 import type { PosProduct, PosPrice, ModifierGroupRow, ModifierRow, ProductModifierOption } from '../../shared/api/pos'
 import { splitNetIva, TAX_LABEL } from '../../shared/utils/posFiscal'
 import type { TaxType } from '../../shared/utils/posFiscal'
+import { uploadProductPhoto, deleteProductPhoto } from '../../shared/api/productPhoto'
 
 const TAX_TYPES: TaxType[] = ['iva13', 'iva4', 'iva2', 'iva1', 'exento']
 import { fi } from '../../shared/utils'
@@ -181,6 +182,10 @@ function FichaProducto({ p, price, locationId, onFicha, onPriceSaved, onError, o
         <input className={inp} style={{ flex: 1 }} defaultValue={p.subclasificacion} placeholder="Subcategoría" onBlur={e => e.target.value !== p.subclasificacion && onFicha({ subclasificacion: e.target.value })} />
       </div>
 
+      {/* Foto del menú (mig 030) — se ve en el tile del comandero. Cámara en móvil. */}
+      <FotoProducto p={p} onFicha={onFicha} onError={onError} />
+
+
       {/* Precio fiscal */}
       <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, padding: '0.5rem', margin: '6px 0' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -291,6 +296,44 @@ function ModificadoresDelProducto({ productName, locationId, onError }: { produc
         )
       })}
       <div style={{ fontSize: '0.64rem', color: '#5a5040' }}>El comandero solo ofrece las variantes habilitadas; el override pisa el delta default SOLO en este producto.</div>
+    </div>
+  )
+}
+
+/** Foto del producto (mig 030): preview + subir/cambiar/quitar. Cámara directa en
+ *  móvil (capture) y archivo en desktop; se comprime a thumbnail antes de subir. */
+function FotoProducto({ p, onFicha, onError }: {
+  p: PosProduct; onFicha: (f: Partial<Omit<PosProduct, 'nombre'>>) => void; onError: (e: string) => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const onPick = async (file: File | undefined) => {
+    if (!file || busy) return
+    setBusy(true)
+    try {
+      const url = await uploadProductPhoto(p.nombre, file)
+      if (p.photo_url) deleteProductPhoto(p.photo_url).catch(() => {})   // best-effort: borra la anterior
+      onFicha({ photo_url: url })
+    } catch (e) { onError(e instanceof Error ? e.message : 'No se pudo subir la foto') }
+    finally { setBusy(false) }
+  }
+  const quitar = async () => {
+    if (!p.photo_url || busy) return
+    setBusy(true)
+    try { deleteProductPhoto(p.photo_url).catch(() => {}); onFicha({ photo_url: null }) }
+    finally { setBusy(false) }
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '6px 0' }}>
+      {p.photo_url
+        ? <img src={p.photo_url} alt={p.nombre} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--t-border,#d4cfc4)' }} />
+        : <span style={{ width: 56, height: 56, borderRadius: 6, border: '1px dashed var(--t-border,#d4cfc4)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', color: '#8a8378' }}>🍽️</span>}
+      <label style={{ cursor: 'pointer', fontSize: '0.76rem', fontWeight: 700, color: '#5a5040', border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 6, padding: '8px 12px', minHeight: 40, display: 'inline-flex', alignItems: 'center' }}>
+        {busy ? 'Subiendo…' : p.photo_url ? '📷 Cambiar foto' : '📷 Agregar foto'}
+        <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} disabled={busy}
+          onChange={e => { onPick(e.target.files?.[0]); e.target.value = '' }} />
+      </label>
+      {p.photo_url && <button type="button" onClick={quitar} disabled={busy}
+        style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 6, padding: '8px 12px', minHeight: 40, fontSize: '0.74rem', cursor: 'pointer' }}>Quitar</button>}
     </div>
   )
 }

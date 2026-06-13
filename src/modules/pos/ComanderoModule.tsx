@@ -414,13 +414,22 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
             {(activeCat ? menu.byCategory.get(activeCat) ?? [] : []).map(t => (
               <button key={t.nombre} className="cm-tap" disabled={adding === t.nombre} onClick={() => quickAdd(t.nombre)}
                 title={`Agregar ${t.nombre}`}
-                style={{ minHeight: 64, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', textAlign: 'left',
+                style={{ minHeight: 64, padding: 0, borderRadius: 8, cursor: 'pointer', textAlign: 'left', overflow: 'hidden',
                   border: '1px solid var(--t-border,#d4cfc4)',
                   borderLeft: `5px solid ${t.station === 'barra' ? '#c8a96e' : '#2a7a6a'}`,
                   background: adding === t.nombre ? 'rgba(42,122,106,.18)' : '#fff',
-                  display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: '0.8rem', lineHeight: 1.15 }}>{t.nombre}</span>
-                <span style={{ fontSize: '0.74rem', color: '#5a5040', fontVariantNumeric: 'tabular-nums' }}>{fi(t.price_final_crc)}</span>
+                  display: 'flex', flexDirection: 'column' }}>
+                {/* Foto del menú si existe; si no, cae al diseño actual (color + nombre).
+                    Lazy + onError → si la imagen falla (offline sin caché), se oculta sola. */}
+                {t.photo_url && (
+                  <img src={t.photo_url} alt="" loading="lazy"
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                    style={{ width: '100%', height: 72, objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                )}
+                <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 4, padding: '8px 10px', flex: 1 }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.8rem', lineHeight: 1.15 }}>{t.nombre}</span>
+                  <span style={{ fontSize: '0.74rem', color: '#5a5040', fontVariantNumeric: 'tabular-nums' }}>{fi(t.price_final_crc)}</span>
+                </span>
               </button>
             ))}
           </div>

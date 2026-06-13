@@ -5,6 +5,7 @@ export interface MenuMeta {
   tipo: string
   subclasificacion: string
   station: string
+  photo_url?: string | null
 }
 export interface MenuPrice { price_final_crc: number | null }
 
@@ -13,6 +14,7 @@ export interface MenuTile {
   category: string
   station: string
   price_final_crc: number
+  photo_url: string | null
 }
 
 /** Categoría del tile: subclasificación (la misma que ordena el KDS, D4);
@@ -36,7 +38,7 @@ export function buildMenu(
     if (price == null) continue
     const category = categoryOf(m)
     if (!byCategory.has(category)) byCategory.set(category, [])
-    byCategory.get(category)!.push({ nombre, category, station: m.station, price_final_crc: price })
+    byCategory.get(category)!.push({ nombre, category, station: m.station, price_final_crc: price, photo_url: m.photo_url ?? null })
   }
   const collator = new Intl.Collator('es-CR')
   for (const tiles of byCategory.values()) tiles.sort((a, b) => collator.compare(a.nombre, b.nombre))

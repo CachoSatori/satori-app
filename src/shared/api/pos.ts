@@ -428,11 +428,12 @@ export interface PosProduct {
   aplica_servicio: boolean
   prep_time_min: number | null
   allergens: string
+  photo_url: string | null         // foto del menú (mig 030); null = tile sin foto
 }
 
 export async function getProductsFull(): Promise<PosProduct[]> {
   const { data, error } = await sb.from('product_map')
-    .select('nombre, tipo, clasificacion, subclasificacion, costo_unitario, is_active, station, aplica_servicio, prep_time_min, allergens')
+    .select('nombre, tipo, clasificacion, subclasificacion, costo_unitario, is_active, station, aplica_servicio, prep_time_min, allergens, photo_url')
     .order('tipo').order('nombre')
   fail(error)
   return (data ?? []) as PosProduct[]
@@ -469,11 +470,11 @@ export async function saveProductOption(o: ProductModifierOption): Promise<void>
   fail(error)
 }
 
-/** Meta liviana de productos para el comandero (snapshots de estación/subcat/servicio). */
-export async function getProductMetaMap(): Promise<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean }>> {
-  const { data, error } = await sb.from('product_map').select('nombre, tipo, subclasificacion, station, aplica_servicio').eq('is_active', true)
+/** Meta liviana de productos para el comandero (snapshots de estación/subcat/servicio + foto). */
+export async function getProductMetaMap(): Promise<Map<string, { tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; photo_url: string | null }>> {
+  const { data, error } = await sb.from('product_map').select('nombre, tipo, subclasificacion, station, aplica_servicio, photo_url').eq('is_active', true)
   fail(error)
-  return new Map(((data ?? []) as Array<{ nombre: string; tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean }>).map(r => [r.nombre, r]))
+  return new Map(((data ?? []) as Array<{ nombre: string; tipo: string; subclasificacion: string; station: string; aplica_servicio: boolean; photo_url: string | null }>).map(r => [r.nombre, r]))
 }
 
 // ── F3: Cobro (mig 027) ───────────────────────────────────────

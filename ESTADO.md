@@ -3,6 +3,38 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-12 (noche) — CARTA REAL IMPORTADA + ASIENTO/CURSO PARA TODOS — EN STAGING (rama `carta-real`)
+90/90 tests, builds OK, smoke E2E verde. Sagrados intactos. La carta va SOLO a staging.
+- **T1 — Carta real importada** (542 productos, `import/productos.csv` → script idempotente
+  `scripts/import-carta.py` vía Management API): **520 actualizados** (precio final IVA incl. — sin
+  re-multiplicar — + costo + categoría/subcategoría, conservando is_active) · **22 nuevos INACTIVOS**
+  para revisión en el Gestor · **57 sin precio** (cortesías/dueños/personal, precio null) · IVA 13%
+  a todos · servicio 10% según flag (**142 merch/giftcards = false**; canal igual manda, delivery
+  nunca). Re-correr no duplica (verificado: 717/542 estables). **Spot-checks OK**: Coca ₡1.900,
+  Pilsen ₡2.800, Mojito ₡5.800, Merlot ₡4.000. Conteo por categoría: BEBIDAS 235, TSHIRTS 121,
+  SUSHI ROLLS 42, PERSONAL 24, TAPAS ASIATICAS 23, GREENSEASON 22, XX DUEÑOS 18, POKES 10, X
+  CORTESIAS 8, T-GORRAS 8, REMERAS 7, KIDS 6, POSTRES 5, A PAX 4, GIFT CARDS 3, T-STICKERS 2, otros.
+- **T2 — Asiento/curso/nota para TODOS los productos** (bug de la dueña: antes solo los productos
+  CON modificadores dejaban elegir asiento/curso, porque el selector vivía dentro del flujo de
+  modificadores): (1) **selector de asiento/curso ACTIVO global** (patrón Lavu) sobre el menú — el
+  quick-add del grid lo respeta, así CUALQUIER producto cae en el asiento/curso elegidos sin abrir
+  nada; (2) **tocar el nombre del ítem** en la comanda abre el popup de detalles (asiento/curso/nota)
+  para cualquier pendiente, con o sin modificadores; (3) **nota por ítem** (mig 031) visible en la
+  comanda y el **KDS** (📝). Verificado E2E + DB: COCA COLA (sin mods) → asiento 2 + principal + nota
+  → marchado al KDS con todo.
+- **Nota de datos**: el import no trae `station` (no estaba en el CSV) → los productos nuevos quedan
+  con station por defecto 'cocina'; la dueña la ajusta en el Gestor (Productos → estación) para el
+  ruteo correcto del KDS (bebidas→barra). No es regresión.
+
+### Plan de prueba física para la dueña (carta + asiento/curso, en staging)
+1. **Carta**: Admin → 🍣 PoS → Productos → vas a ver toda la carta con precios. Los **22 nuevos** salen
+   como *desactivados* (revisá y activá los que correspondan); los de **cortesías/dueños** quedan sin
+   precio a propósito. Ajustá la **estación** (cocina/barra) de los productos para que el KDS rutee bien.
+2. **Asiento/curso para todo**: en el Comandero, arriba del menú, fijá **Asiento** (1/2/3…) y **Curso**
+   (auto/bebida/entrada/principal). Tocá un producto **sin modificadores** (ej. una gaseosa) → entra
+   en ese asiento y curso. Tocá el **nombre del ítem** en la comanda para cambiarle asiento/curso o
+   ponerle una **nota** (ej. "sin hielo"). Marchá y verificá que la nota aparece en el KDS.
+
 ## 🆕 2026-06-12 (noche) — FOTO DE PRODUCTO + REABRIR ORDEN — EN STAGING (rama `pos-fotos`)
 90/90 tests, builds OK, smoke E2E verde (verificado en DB). **Sagrados intactos.**
 - **Migración 030** (staging): `product_map.photo_url` + bucket **público** `productos` con RLS

@@ -469,7 +469,12 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
         onDone={() => { setShowSplit(false); load(); setShowBill(true) }} onError={onError} />}
       {showCheckout && <CheckoutModal order={order} items={items} cajero={cajeroName} check={showCheckout.check}
         onClose={() => setShowCheckout(null)}
-        onDone={({ orderClosed }) => { setShowCheckout(null); if (orderClosed) onBack(); else load() }} onError={onError} />}
+        onDone={({ orderClosed }) => {
+          const eraCheck = !!showCheckout.check
+          setShowCheckout(null); load()
+          if (orderClosed) onBack()
+          else if (eraCheck) setShowBill(true)   // split a medias → volver a la cuenta para cobrar el resto
+        }} onError={onError} />}
       {showTransfer && <TransferModal order={order} onClose={() => setShowTransfer(false)}
         onDone={() => { setShowTransfer(false); onBack() }} onError={onError} />}
     </div>

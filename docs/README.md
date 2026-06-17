@@ -28,5 +28,13 @@ profundizar/decidir; nada acá implementa nada por sí solo.
 - 🟢 ya implementado en Satori · 🟡 valioso y razonable de hacer · 🔵 futuro / depende de decisión.
 - ⏳ pendiente de profundizar/decidir (aplica a todo: nada se implementa desde estos docs).
 
-> Relacionados fuera de `docs/`: `ROADMAP.md` (plan por fases), `ESTADO.md` (estado actual),
-> `AUDITORIA-CONSOLIDACION.md` (auditoría técnica), `PROMPT-CONTINUACION.md` (handoff).
+## 🧭 Handoff — leer en este orden para ponerse al día
+1. **[../ESTADO.md](../ESTADO.md)** — foto compacta: ramas, prod vs staging, migraciones, pendientes.
+2. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases con estado real (✅/🟢/⏳/🔲).
+3. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — backlog priorizado (qué sigue, qué espera validación, qué espera decisión).
+4. **[../SPEC-LAVU-FLUJO-MESA.md](../SPEC-LAVU-FLUJO-MESA.md)** — fuente de verdad del flujo de mesa/comanda (semáforo de paridad).
+5. **[../REPORTE-NOCHE-2.md](../REPORTE-NOCHE-2.md)** — último trabajo (PoS pro + FE estructura + inventario activo) + checklist de prueba física.
+
+> Otros relacionados: `ESTADO-ARCHIVO.md` (changelog histórico detallado), `ESTADO-PROPINA-POOL.md`
+> (solo en la rama `propina-pool`, sin merge), `AUDITORIA-CONSOLIDACION.md` (auditoría técnica),
+> `OFFLINE.md` / `STAGING.md` / `HANG-RCA.md` (notas de infraestructura).

@@ -1,7 +1,31 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-12**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-17**
+
+---
+
+## 📍 Estado real de las fases (handoff 2026-06-17)
+
+Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
+
+| Fase | Estado | Dónde |
+|---|---|---|
+| Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021) |
+| PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
+| PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
+| PoS F2 — Comandero + KDS + impresión (impresión real = F5) | 🟢 | STAGING (023–025) |
+| PoS F3 — Cobro + splits + propina capturada + ticket SIM | 🟢 | STAGING (027–034) |
+| FE — **estructura** (SIM, sin Hacienda) | 🟢 | STAGING (036) |
+| FE — **real** (emisor certificado CR) | 🔲 | bloqueado por CIIU/CABYS |
+| Inventario activo F1 — depleción por venta + COGS real | 🟢 | STAGING (037) |
+| Inventario F1 — orden de compra + puente compra→caja→stock | 🔲 | — |
+| Propina PoS → pool del turno | ⏳ | rama `propina-pool` (sin merge, espera decisión dueña) |
+| Pase del PoS a PROD (consolidar 022–037) | 🔲 | espera validación de la dueña |
+| F4 Loyalty en mesa + Nosara · F5 Hub local | 🔲 | futuro |
+
+> Detalle de cada fase abajo. Lo nuevo de junio (FE estructura, inventario activo, comandero pro)
+> vive en `staging`. Backlog priorizado: [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
 ---
 
@@ -23,7 +47,7 @@ Satori App no es un POS. Hoy es una capa de inteligencia de negocio que se monta
 | Datos históricos | ✅ 2023→hoy migrados y verificados |
 | SOPs | ✅ CRUD + **19 procedimientos reales migrados** (caja, servicio, delivery, pagos, manager) con render legible |
 | Usuarios / Auth | ✅ login + **auto-registro de empleados** + aprobación del owner (rol + activación) por pantalla Admin |
-| Inventario / Recetas | 🟡 UI completa pero VACÍA — tablas sin datos ni lógica de consumo |
+| Inventario / Recetas | 🟢 (staging) depleción por venta + COGS real al cerrar pedido PoS (mig 037); UI de carga/recetas/food-cost existe. Falta: orden de compra + puente compra→caja. En PROD sigue 🟡 (UI vacía) |
 
 **Arquitectura:** React 19 + TS + Vite · Supabase (Postgres + RLS + Edge Functions) · PWA.
 Code-splitting por módulo. Despliegue automático en push a main.

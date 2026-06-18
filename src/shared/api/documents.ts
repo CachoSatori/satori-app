@@ -86,11 +86,22 @@ export async function extractImage(imagePath: string): Promise<DocExtract[]> {
 }
 
 // Crea una fila en documents para un documento detectado (o vacía si ex es null).
-export async function createDocumentRow(path: string, sha: string, ex: DocExtract | null, createdBy: string): Promise<DocumentRow> {
+// `linkedMovementId` + `estado` permiten adjuntar una foto a un movimiento ya creado
+// (p. ej. "Agregar foto" a un pago manual sin factura): se enlaza directo y queda
+// 'procesado'. Por defecto (carga normal en la Bandeja) entra como 'nuevo' sin enlace.
+export async function createDocumentRow(
+  path: string,
+  sha: string,
+  ex: DocExtract | null,
+  createdBy: string,
+  linkedMovementId?: string | null,
+  estado: 'nuevo' | 'procesado' = 'nuevo',
+): Promise<DocumentRow> {
   const { data, error } = await supabase.from('documents')
     .insert({
-      image_path: path, sha256: sha, estado: 'nuevo', created_by: createdBy,
+      image_path: path, sha256: sha, estado, created_by: createdBy,
       raw_json: (ex ?? null) as unknown as Json, tipo: ex?.tipo ?? null, clave_fe: ex?.clave_fe ?? null,
+      ...(linkedMovementId ? { linked_movement_id: linkedMovementId } : {}),
     })
     .select().single()
   if (error) throw new Error(error.message)
@@ -160,6 +171,7 @@ export async function insertInboxMovement(m: {
   amount_usd?: number
   description: string
   subcategory?: string
+  supplier_id?: string | null
   supplier_name?: string
   method: string
   caja_origen: string

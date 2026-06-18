@@ -8,7 +8,7 @@ import {
   type DocumentRow, type DocExtract,
 } from '../../shared/api/documents'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
-import { getSuppliers, getAllCashMovements, updateMovementStatus, getOpenCashSession, createCashMovement } from '../../shared/api/cash'
+import { getSuppliers, getAllCashMovements, updateMovementStatus, getOpenCashSession, createCashMovement, upsertSupplier } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getIngredients } from '../../shared/api/inventario'
 import type { Ingredient } from '../../shared/types/inventario'
@@ -275,6 +275,20 @@ const PAGO_META: Record<Pago, { method: string; status: 'aprobado' | 'pendiente'
   banco:     { method: 'Transferencia', status: 'aprobado',  caja: 'Banco',            label: 'Pagado desde Banco (no toca el efectivo)' },
 }
 
+// Defaults para dar de alta un proveedor al vuelo desde la Bandeja — espejo del
+// `empty` de CashProveedores para que el alta sea idéntica a la del modal manual.
+const NEW_SUPPLIER_DEFAULTS = {
+  category: 'Pescados y Mariscos', moneda: 'CRC',
+  ciclo_pago: 'Semanal', metodo_pago: 'Efectivo', cuenta_iban: '',
+} as const
+
+// Match de proveedor por nombre (trim + case-insensitive) contra los existentes.
+function matchSupplierByName(name: string, suppliers: Supplier[]): Supplier | null {
+  const key = name.trim().toLowerCase()
+  if (!key) return null
+  return suppliers.find(s => s.name.trim().toLowerCase() === key) ?? null
+}
+
 function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role, onClose, onDone, onDiscard }: {
   doc: DocumentRow
   accounts: FinanceAccount[]
@@ -311,6 +325,20 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
   // Necesita validación humana: manuscrito/borroso/no cuadra (la IA lo marcó o el cruce falla)
   const revisar = !!(ex && (ex.requiere_revision || !cuadra(ex)))
 
+  // Proveedor: ¿matchea uno existente o se creará nuevo? (la IA puede equivocarse,
+  // el cajero confirma el nombre a mano). El indicador de abajo refleja esto en vivo.
+  const matchedSupplier = useMemo(() => matchSupplierByName(prov, suppliers), [prov, suppliers])
+
+  // Resuelve el supplier_id real al confirmar: usa el match o da de alta el proveedor
+  // nuevo con los defaults del modal manual. Sin nombre → null (no se fuerza alta).
+  const resolveSupplierId = async (): Promise<string | null> => {
+    const name = prov.trim()
+    if (!name) return null
+    if (matchedSupplier) return matchedSupplier.id
+    const created = await withTimeout(upsertSupplier({ name, ...NEW_SUPPLIER_DEFAULTS }))
+    return created.id
+  }
+
   const amountCRC = moneda === 'USD' ? Math.round(N2(total) * (tc || 1)) : N2(total)
   const amountUSD = moneda === 'USD' ? N2(total) : 0
 
@@ -340,6 +368,13 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
       const descripcion = ref ? `${prov || 'Factura'} · ${ref}` : (prov || 'Factura')
       let movementId: string
 
+      // Resolver el proveedor (match o alta) ANTES de crear el movimiento, así el pago
+      // queda enlazado por supplier_id y aparece bajo su proveedor en Caja → Proveedores.
+      // Salvo: propinas (no es proveedor) y la conciliación de un pendiente existente
+      // (ese movimiento ya tiene su supplier_id).
+      const needsSupplier = tipo !== 'propinas' && !(tipo === 'comprobante_pago' && candidato)
+      const supplierId = needsSupplier ? await resolveSupplierId() : null
+
       if (tipo === 'comprobante_pago' && candidato) {
         // El comprobante concilia un pendiente → se marca pagado.
         await withTimeout(updateMovementStatus(candidato.id, 'aprobado'))
@@ -348,7 +383,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
         // Comprobante sin pendiente que matchee → egreso ya pagado (desde Banco).
         movementId = await withTimeout(insertInboxMovement({
           created_by: createdBy, movement_type: 'egreso_mercaderia', amount_crc: amountCRC, amount_usd: amountUSD,
-          description: descripcion, subcategory: prov || '', supplier_name: prov || '',
+          description: descripcion, subcategory: prov || '', supplier_id: supplierId, supplier_name: prov || '',
           method: 'Transferencia', caja_origen: 'Banco', status: 'aprobado', account_id: accountId || null, fecha,
         }))
       } else if (tipo === 'propinas') {
@@ -368,7 +403,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
         const mv = await withTimeout(createCashMovement({
           session_id: session.id, created_by: createdBy, movement_type: 'egreso_mercaderia',
           amount_crc: amountCRC, amount_usd: amountUSD, currency: moneda, exchange_rate: moneda === 'USD' ? tc : null,
-          description: descripcion, subcategory: prov || '', supplier_name: prov || '',
+          description: descripcion, subcategory: prov || '', supplier_id: supplierId, supplier_name: prov || '',
           method: 'Efectivo', caja_origen: 'Caja Proveedores', status: 'aprobado',
           account_id: accountId || null, shift: tipShiftToCaja(session.shift_type),
         }))
@@ -379,7 +414,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
         const { method, status, caja } = PAGO_META[pago]
         movementId = await withTimeout(insertInboxMovement({
           created_by: createdBy, movement_type: 'egreso_mercaderia', amount_crc: amountCRC, amount_usd: amountUSD,
-          description: descripcion, subcategory: prov || '', supplier_name: prov || '',
+          description: descripcion, subcategory: prov || '', supplier_id: supplierId, supplier_name: prov || '',
           method, caja_origen: caja, status, account_id: accountId || null, fecha,
         }))
       }
@@ -431,6 +466,13 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
               <Field label="Proveedor" full>
                 <input className="tips-input-dark" style={{ width: '100%' }} list="inbox-sups" value={prov} onChange={e => setProv(e.target.value)} placeholder="Nombre del proveedor" />
                 <datalist id="inbox-sups">{suppliers.map(s => <option key={s.id} value={s.name} />)}</datalist>
+                {/* Indicador en vivo: la IA puede equivocarse — el cajero confirma el nombre.
+                    Editá para mapear a uno existente o dejá el nombre nuevo. */}
+                {prov.trim() && tipo !== 'propinas' && (
+                  matchedSupplier
+                    ? <div style={{ fontSize: '0.7rem', color: 'var(--t-teal)', marginTop: 3, fontWeight: 600 }}>✓ Proveedor existente: {matchedSupplier.name}</div>
+                    : <div style={{ fontSize: '0.7rem', color: '#a07030', marginTop: 3, fontWeight: 600 }}>➕ Se creará proveedor nuevo: {prov.trim()}</div>
+                )}
               </Field>
               <Field label="Fecha">
                 <input type="date" className="tips-input-dark" style={{ width: '100%' }} value={fecha} onChange={e => setFecha(e.target.value)} />

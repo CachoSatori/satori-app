@@ -274,6 +274,7 @@ export async function createDayMovement(m: {
   amount_usd?: number
   description: string
   subcategory?: string
+  supplier_id?: string | null
   supplier_name?: string
   method: string
   caja_origen: string
@@ -285,7 +286,8 @@ export async function createDayMovement(m: {
   const { data, error } = await supabase.from('cash_movements').insert({
     session_id: null, created_by: m.created_by, movement_type: m.movement_type,
     amount_crc: m.amount_crc, amount_usd: m.amount_usd ?? 0, currency: 'CRC',
-    description: m.description, subcategory: m.subcategory ?? '', supplier_name: m.supplier_name ?? '',
+    description: m.description, subcategory: m.subcategory ?? '',
+    supplier_id: m.supplier_id ?? null, supplier_name: m.supplier_name ?? '',
     method: m.method, caja_origen: m.caja_origen, status: m.status ?? 'aprobado',
     account_id: m.account_id ?? null, created_at: ts, updated_at: ts,
   }).select('id').single()

@@ -19,6 +19,8 @@ import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, 
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { movementAttachments } from '../../shared/api/facturas'
 import FacturaThumbs from '../../shared/FacturaThumbs'
+import FacturaVerify from '../../shared/FacturaVerify'
+import { listLinkedDocs, type DocumentRow } from '../../shared/api/documents'
 
 interface Props {
   movements: CashMovement[]
@@ -71,6 +73,16 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   // Cierres del día → para la tarjeta de Ajustes (diferencias del encargado)
   const [cierres, setCierres] = useState<CashCierreDia[]>([])
   useEffect(() => { getCierresDia().then(setCierres).catch(() => {}) }, [])
+  // Facturas enlazadas (verificado) — map movimiento→documento, una sola consulta.
+  const [docMap, setDocMap] = useState<Record<string, DocumentRow>>({})
+  const [docsLoaded, setDocsLoaded] = useState(false)
+  useEffect(() => {
+    listLinkedDocs().then(ds => {
+      const m: Record<string, DocumentRow> = {}
+      for (const d of ds) if (d.linked_movement_id) m[d.linked_movement_id] = d
+      setDocMap(m)
+    }).catch(() => {}).finally(() => setDocsLoaded(true))
+  }, [])
 
   const toggleSel = (id: string) => setSelected(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
@@ -375,6 +387,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                     {movementAttachments(m).length > 0 && (
                       <div style={{ marginTop: 2 }}><FacturaThumbs paths={movementAttachments(m)} size={26} /></div>
                     )}
+                    {docsLoaded && isEgreso(m.movement_type as MovementType) && (
+                      <div style={{ marginTop: 2 }}><FacturaVerify movement={m} doc={docMap[m.id] ?? null} compact onVerified={onRefresh} /></div>
+                    )}
                   </td>
                   <td>
                     <input key={m.id + '-pe'} className="cd-tbl-input"
@@ -481,6 +496,9 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               </div>
               {movementAttachments(m).length > 0 && (
                 <div style={{ marginBottom: '0.3rem' }}><FacturaThumbs paths={movementAttachments(m)} size={40} /></div>
+              )}
+              {docsLoaded && isEg && (
+                <div style={{ marginBottom: '0.3rem' }}><FacturaVerify movement={m} doc={docMap[m.id] ?? null} onVerified={onRefresh} /></div>
               )}
               <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.68rem', color: '#5a5040' }}>
                 <span>{movFecha(m) || '—'}</span>

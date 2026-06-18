@@ -135,6 +135,8 @@ export interface CashMovement {
   updated_at: string
   client_op_id?: string | null      // idempotencia del replay offline (mig 021)
   attachments?: string[]            // paths de fotos de factura en el bucket 'facturas' (mig 026)
+  factura_verified_by?: string | null  // quién verificó la factura contra el movimiento (mig 038)
+  factura_verified_at?: string | null  // cuándo se verificó (mig 038)
   _pending?: boolean                // SOLO cliente: encolado en la outbox, sin sincronizar
 }
 

@@ -28,7 +28,6 @@ const PruebaModule      = lazy(() => import('./modules/prueba/PruebaModule'))
 const ComanderoModule   = lazy(() => import('./modules/pos/ComanderoModule'))
 const KdsModule         = lazy(() => import('./modules/pos/KdsModule'))
 const MiTurno           = lazy(() => import('./modules/pos/MiTurno'))
-const ProveedorBandeja  = lazy(() => import('./modules/proveedor/ProveedorBandeja'))
 const RegistroCliente   = lazy(() => import('./pages/RegistroCliente'))
 
 // ── Loading fallback — same spinner used for auth ──────────────
@@ -153,9 +152,9 @@ function AppRoutes() {
         <Route path="/prueba"   element={<OwnerRoute><PruebaModule /></OwnerRoute>} />
         <Route path="/comandero" element={<PrivateRoute roles={['owner','manager','cajero','salonero','barman']}><ComanderoModule /></PrivateRoute>} />
         <Route path="/kds" element={<PrivateRoute roles={['owner','manager','cajero','barman','cocina','runner']}><KdsModule /></PrivateRoute>} />
-        {/* Operación por roles (06-12): métricas propias del salonero + bandeja de proveedores */}
+        {/* Operación por roles (06-12): métricas propias del salonero. La bandeja de
+            proveedores se fusionó en /inbox (feat/bandeja-fusion) — ruta /proveedor retirada. */}
         <Route path="/mi-turno" element={<PrivateRoute roles={['owner','manager','salonero','barman']}><MiTurno /></PrivateRoute>} />
-        <Route path="/proveedor" element={<PrivateRoute roles={['owner','manager','cajero','proveedor']}><ProveedorBandeja /></PrivateRoute>} />
         <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

@@ -63,11 +63,6 @@ const MODULES: Module[] = [
     roles: ['owner', 'manager', 'cocina', 'barman'],
   },
   {
-    id: 'proveedor', path: '/proveedor', label: 'Bandeja Proveedores', kanji: '納',
-    description: 'Registrar pago con foto', ready: true,
-    roles: ['owner', 'manager', 'cajero', 'proveedor'],
-  },
-  {
     id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
     description: 'Pool del turno', ready: true,
     roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],
@@ -332,15 +327,12 @@ function StatusBadge({ color, text }: { color: 'open' | 'ok' | 'warn' | 'dim'; t
 
 // ── Aterrizaje por rol (operación por roles, 06-12) ───────────
 // Al ABRIR la app, cada puesto cae directo en SU pantalla: la compu del cajero en
-// Caja, la tablet del salonero en el Comandero, el teléfono de la bandeja en
-// Registrar proveedor. Sucede UNA vez por sesión de pestaña (clave = profile.id,
-// así un cambio de usuario en la misma pestaña re-aterriza) — el botón Home sigue
-// navegando normal después. El rol proveedor redirige SIEMPRE: su única pantalla
-// es la bandeja.
+// Caja, la tablet del salonero en el Comandero. Sucede UNA vez por sesión de pestaña
+// (clave = profile.id, así un cambio de usuario en la misma pestaña re-aterriza) — el
+// botón Home sigue navegando normal después.
 const ROLE_LANDING: Partial<Record<UserRole, string>> = {
   cajero:    '/caja',
   salonero:  '/comandero',
-  proveedor: '/proveedor',
 }
 
 // ── Main component ─────────────────────────────────────────────
@@ -351,8 +343,7 @@ export default function HomePage() {
 
   const landing = profile ? ROLE_LANDING[profile.role] : undefined
   const landKey = profile ? `satori-landed-${profile.id}` : ''
-  const mustLand = !!profile && !!landing
-    && (profile.role === 'proveedor' || sessionStorage.getItem(landKey) !== '1')
+  const mustLand = !!profile && !!landing && sessionStorage.getItem(landKey) !== '1'
 
   useEffect(() => {
     if (!mustLand || !landing) return

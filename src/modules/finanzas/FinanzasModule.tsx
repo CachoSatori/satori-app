@@ -10,6 +10,10 @@ import {
   getFinanceAccounts, getFinanceBudget, getFinanceActuals, getLiveActuals,
   type FinanceAccount, type FinanceCell,
 } from '../../shared/api/finance'
+import { getAllCashMovements } from '../../shared/api/cash'
+import { listLinkedDocs, type DocumentRow } from '../../shared/api/documents'
+import FacturaVerify from '../../shared/FacturaVerify'
+import type { CashMovement } from '../../shared/types/database'
 
 const MN = ['Total año','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const MUTED = '#5a5040', BORDER = 'var(--t-border,#d4cfc4)', INK = 'var(--t-ink,#0d0d0d)'
@@ -35,6 +39,9 @@ export default function FinanzasModule() {
   const [loading, setLoading]   = useState(true)
   const [needsMigration, setNeedsMigration] = useState(false)
   const [error, setError]       = useState<string | null>(null)
+  // Gastos con factura enlazada → verificado de factura (feat/bandeja-fusion)
+  const [gastos, setGastos]     = useState<CashMovement[]>([])
+  const [gastoDocs, setGastoDocs] = useState<Record<string, DocumentRow>>({})
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
@@ -58,6 +65,20 @@ export default function FinanzasModule() {
     } finally { setLoading(false) }
   }, [year])
   useEffect(() => { load() }, [load])
+
+  // Gastos con factura cargada (linked_movement_id) → para que el contador/owner
+  // verifique la factura desde Finanzas. Una sola consulta de movimientos + docs.
+  useEffect(() => {
+    let on = true
+    Promise.all([getAllCashMovements(), listLinkedDocs()]).then(([movs, docs]) => {
+      if (!on) return
+      const m: Record<string, DocumentRow> = {}
+      for (const d of docs) if (d.linked_movement_id) m[d.linked_movement_id] = d
+      setGastoDocs(m)
+      setGastos(movs.filter(mv => m[mv.id]).sort((a, b) => b.created_at.localeCompare(a.created_at)))
+    }).catch(() => {})
+    return () => { on = false }
+  }, [])
 
   // amount por cuenta hoja para el período elegido
   const amount = useMemo(() => {
@@ -224,6 +245,28 @@ export default function FinanzasModule() {
             <strong> propinas por tarjeta se excluyen</strong> (son pass-through, no gasto). Lo ambiguo cae en el
             catch-all del tipo. También suma cargas manuales en finance_actuals.
           </div>
+
+          {/* Verificado de factura — el contador/owner abre la foto y la marca verificada */}
+          {gastos.length > 0 && (
+            <div style={{ marginTop: '1.5rem' }}>
+              <div style={{ fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: MUTED, marginBottom: '0.6rem' }}>
+                🧾 Facturas para verificar ({gastos.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {gastos.map(g => (
+                  <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', padding: '0.55rem 0.8rem', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 4 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: INK }}>{g.supplier_name || g.description || 'Gasto'}</div>
+                      <div style={{ fontSize: '0.7rem', color: MUTED }}>
+                        {g.created_at.slice(0, 10)} · {fi(g.amount_crc)} · {g.method} · {g.status === 'pendiente' ? 'Pendiente' : 'Pagado'}
+                      </div>
+                    </div>
+                    <FacturaVerify movement={g} doc={gastoDocs[g.id] ?? null} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

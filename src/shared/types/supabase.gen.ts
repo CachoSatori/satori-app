@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       cash_cierres_dia: {
@@ -111,7 +136,9 @@ export type Database = {
           amount_usd: number | null
           approved_at: string | null
           approved_by: string | null
+          attachments: Json
           caja_origen: string | null
+          client_op_id: string | null
           created_at: string
           created_by: string
           currency: Database["public"]["Enums"]["currency"]
@@ -135,7 +162,9 @@ export type Database = {
           amount_usd?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          attachments?: Json
           caja_origen?: string | null
+          client_op_id?: string | null
           created_at?: string
           created_by: string
           currency?: Database["public"]["Enums"]["currency"]
@@ -159,7 +188,9 @@ export type Database = {
           amount_usd?: number | null
           approved_at?: string | null
           approved_by?: string | null
+          attachments?: Json
           caja_origen?: string | null
+          client_op_id?: string | null
           created_at?: string
           created_by?: string
           currency?: Database["public"]["Enums"]["currency"]
@@ -231,6 +262,8 @@ export type Database = {
           initial_cash_usd: number | null
           initial_service_crc: number
           initial_suppliers_crc: number
+          midday_check_at: string | null
+          midday_check_by: string | null
           notes: string | null
           opened_by: string
           session_date: string
@@ -253,6 +286,8 @@ export type Database = {
           initial_cash_usd?: number | null
           initial_service_crc?: number
           initial_suppliers_crc?: number
+          midday_check_at?: string | null
+          midday_check_by?: string | null
           notes?: string | null
           opened_by: string
           session_date: string
@@ -275,6 +310,8 @@ export type Database = {
           initial_cash_usd?: number | null
           initial_service_crc?: number
           initial_suppliers_crc?: number
+          midday_check_at?: string | null
+          midday_check_by?: string | null
           notes?: string | null
           opened_by?: string
           session_date?: string
@@ -286,6 +323,13 @@ export type Database = {
           {
             foreignKeyName: "cash_sessions_closed_by_fkey"
             columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_sessions_midday_check_by_fkey"
+            columns: ["midday_check_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -535,6 +579,97 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fe_documentos: {
+        Row: {
+          check_id: string | null
+          clave: string | null
+          consecutivo: string | null
+          created_at: string
+          error_msg: string | null
+          estado: string
+          id: string
+          order_id: string
+          payment_id: string | null
+          provider: string
+          provider_ref: string | null
+          receptor_email: string | null
+          receptor_id: string | null
+          receptor_nombre: string | null
+          tipo: string
+          total: number
+          total_iva: number
+          total_neto: number
+          total_servicio: number
+          updated_at: string
+        }
+        Insert: {
+          check_id?: string | null
+          clave?: string | null
+          consecutivo?: string | null
+          created_at?: string
+          error_msg?: string | null
+          estado?: string
+          id?: string
+          order_id: string
+          payment_id?: string | null
+          provider?: string
+          provider_ref?: string | null
+          receptor_email?: string | null
+          receptor_id?: string | null
+          receptor_nombre?: string | null
+          tipo?: string
+          total?: number
+          total_iva?: number
+          total_neto?: number
+          total_servicio?: number
+          updated_at?: string
+        }
+        Update: {
+          check_id?: string | null
+          clave?: string | null
+          consecutivo?: string | null
+          created_at?: string
+          error_msg?: string | null
+          estado?: string
+          id?: string
+          order_id?: string
+          payment_id?: string | null
+          provider?: string
+          provider_ref?: string | null
+          receptor_email?: string | null
+          receptor_id?: string | null
+          receptor_nombre?: string | null
+          tipo?: string
+          total?: number
+          total_iva?: number
+          total_neto?: number
+          total_servicio?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fe_documentos_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "pos_checks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fe_documentos_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "pos_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fe_documentos_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "pos_payments"
             referencedColumns: ["id"]
           },
         ]
@@ -811,6 +946,30 @@ export type Database = {
           },
         ]
       }
+      locations: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       loyalty_config: {
         Row: {
           id: number
@@ -859,35 +1018,671 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_categories: {
+        Row: {
+          category: string
+          family_id: string | null
+          hidden_comandero: boolean
+          sort_order: number
+          subfamily: string
+        }
+        Insert: {
+          category: string
+          family_id?: string | null
+          hidden_comandero?: boolean
+          sort_order?: number
+          subfamily?: string
+        }
+        Update: {
+          category?: string
+          family_id?: string | null
+          hidden_comandero?: boolean
+          sort_order?: number
+          subfamily?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_categories_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "menu_families"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_families: {
+        Row: {
+          icon: string
+          id: string
+          label: string
+          sort_order: number
+        }
+        Insert: {
+          icon?: string
+          id: string
+          label: string
+          sort_order?: number
+        }
+        Update: {
+          icon?: string
+          id?: string
+          label?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      modifier_groups: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          location_id: string
+          max_selections: number
+          min_selections: number
+          name: string
+          required: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          location_id?: string
+          max_selections?: number
+          min_selections?: number
+          name: string
+          required?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          location_id?: string
+          max_selections?: number
+          min_selections?: number
+          name?: string
+          required?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "modifier_groups_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      modifiers: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          is_active: boolean
+          name: string
+          price_delta_crc: number
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          price_delta_crc?: number
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          price_delta_crc?: number
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "modifiers_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "modifier_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_checks: {
+        Row: {
+          amount_crc: number
+          created_at: string
+          id: string
+          idx: number
+          items_snapshot: Json
+          kind: string
+          label: string
+          order_id: string
+          paid: boolean
+          paid_at: string | null
+        }
+        Insert: {
+          amount_crc: number
+          created_at?: string
+          id?: string
+          idx: number
+          items_snapshot?: Json
+          kind: string
+          label?: string
+          order_id: string
+          paid?: boolean
+          paid_at?: string | null
+        }
+        Update: {
+          amount_crc?: number
+          created_at?: string
+          id?: string
+          idx?: number
+          items_snapshot?: Json
+          kind?: string
+          label?: string
+          order_id?: string
+          paid?: boolean
+          paid_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_checks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "pos_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_kds_settings: {
+        Row: {
+          category_order: Json
+          course_thresholds: Json
+          location_id: string
+          postres_priority: boolean
+          postres_threshold: number
+          subcategory_order: Json
+          updated_at: string
+        }
+        Insert: {
+          category_order?: Json
+          course_thresholds?: Json
+          location_id: string
+          postres_priority?: boolean
+          postres_threshold?: number
+          subcategory_order?: Json
+          updated_at?: string
+        }
+        Update: {
+          category_order?: Json
+          course_thresholds?: Json
+          location_id?: string
+          postres_priority?: boolean
+          postres_threshold?: number
+          subcategory_order?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_kds_settings_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: true
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_order_items: {
+        Row: {
+          aplica_servicio: boolean
+          base_price_crc: number
+          course: string
+          created_at: string
+          id: string
+          kitchen_status: string
+          marched_at: string | null
+          merged_from_order: string | null
+          modifiers: Json
+          note: string
+          order_id: string
+          price_crc: number
+          product_name: string
+          qty: number
+          ready_at: string | null
+          seat: number
+          station: string
+          subcategory: string
+          tax_type: string
+          updated_at: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          aplica_servicio?: boolean
+          base_price_crc?: number
+          course?: string
+          created_at?: string
+          id?: string
+          kitchen_status?: string
+          marched_at?: string | null
+          merged_from_order?: string | null
+          modifiers?: Json
+          note?: string
+          order_id: string
+          price_crc?: number
+          product_name: string
+          qty?: number
+          ready_at?: string | null
+          seat?: number
+          station?: string
+          subcategory?: string
+          tax_type?: string
+          updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          aplica_servicio?: boolean
+          base_price_crc?: number
+          course?: string
+          created_at?: string
+          id?: string
+          kitchen_status?: string
+          marched_at?: string | null
+          merged_from_order?: string | null
+          modifiers?: Json
+          note?: string
+          order_id?: string
+          price_crc?: number
+          product_name?: string
+          qty?: number
+          ready_at?: string | null
+          seat?: number
+          station?: string
+          subcategory?: string
+          tax_type?: string
+          updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "pos_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_order_items_voided_by_fkey"
+            columns: ["voided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_orders: {
+        Row: {
+          channel: string
+          closed_at: string | null
+          closed_by: string | null
+          cogs_crc: number | null
+          created_at: string
+          current_salonero_id: string | null
+          id: string
+          location_id: string
+          merge_trace: Json
+          merged_into: string | null
+          notes: string
+          opened_by: string
+          pax: number
+          salonero_name: string
+          status: string
+          table_id: string | null
+          table_name: string
+          transfers: Json
+          updated_at: string
+        }
+        Insert: {
+          channel?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          cogs_crc?: number | null
+          created_at?: string
+          current_salonero_id?: string | null
+          id?: string
+          location_id: string
+          merge_trace?: Json
+          merged_into?: string | null
+          notes?: string
+          opened_by: string
+          pax: number
+          salonero_name?: string
+          status?: string
+          table_id?: string | null
+          table_name: string
+          transfers?: Json
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          cogs_crc?: number | null
+          created_at?: string
+          current_salonero_id?: string | null
+          id?: string
+          location_id?: string
+          merge_trace?: Json
+          merged_into?: string | null
+          notes?: string
+          opened_by?: string
+          pax?: number
+          salonero_name?: string
+          status?: string
+          table_id?: string | null
+          table_name?: string
+          transfers?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_orders_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_orders_current_salonero_id_fkey"
+            columns: ["current_salonero_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_orders_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_orders_merged_into_fkey"
+            columns: ["merged_into"]
+            isOneToOne: false
+            referencedRelation: "pos_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_orders_opened_by_fkey"
+            columns: ["opened_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_orders_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "salon_tables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_payments: {
+        Row: {
+          amount_crc: number
+          change_crc: number
+          check_id: string | null
+          client_op_id: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          exchange_rate_used: number | null
+          id: string
+          method: string
+          note: string
+          order_id: string
+          received_crc: number
+          received_usd: number
+          tip_crc: number
+          tip_currency: string
+        }
+        Insert: {
+          amount_crc: number
+          change_crc?: number
+          check_id?: string | null
+          client_op_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          exchange_rate_used?: number | null
+          id?: string
+          method: string
+          note?: string
+          order_id: string
+          received_crc?: number
+          received_usd?: number
+          tip_crc?: number
+          tip_currency?: string
+        }
+        Update: {
+          amount_crc?: number
+          change_crc?: number
+          check_id?: string | null
+          client_op_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          exchange_rate_used?: number | null
+          id?: string
+          method?: string
+          note?: string
+          order_id?: string
+          received_crc?: number
+          received_usd?: number
+          tip_crc?: number
+          tip_currency?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_payments_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "pos_checks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "pos_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pos_prices: {
+        Row: {
+          is_demo: boolean
+          location_id: string
+          price_final_crc: number | null
+          product_name: string
+          tax_type: string
+          updated_at: string
+        }
+        Insert: {
+          is_demo?: boolean
+          location_id: string
+          price_final_crc?: number | null
+          product_name: string
+          tax_type?: string
+          updated_at?: string
+        }
+        Update: {
+          is_demo?: boolean
+          location_id?: string
+          price_final_crc?: number | null
+          product_name?: string
+          tax_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pos_prices_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pos_prices_product_name_fkey"
+            columns: ["product_name"]
+            isOneToOne: false
+            referencedRelation: "product_map"
+            referencedColumns: ["nombre"]
+          },
+        ]
+      }
       product_map: {
         Row: {
+          allergens: string
+          aplica_servicio: boolean
+          cabys: string | null
+          ciiu: string | null
           clasificacion: string | null
           costo_unitario: number | null
+          is_active: boolean
           multiplicador: number | null
           nombre: string
+          photo_url: string | null
+          prep_time_min: number | null
+          station: string
           subclasificacion: string | null
           tipo: string
           updated_at: string | null
         }
         Insert: {
+          allergens?: string
+          aplica_servicio?: boolean
+          cabys?: string | null
+          ciiu?: string | null
           clasificacion?: string | null
           costo_unitario?: number | null
+          is_active?: boolean
           multiplicador?: number | null
           nombre: string
+          photo_url?: string | null
+          prep_time_min?: number | null
+          station?: string
           subclasificacion?: string | null
           tipo?: string
           updated_at?: string | null
         }
         Update: {
+          allergens?: string
+          aplica_servicio?: boolean
+          cabys?: string | null
+          ciiu?: string | null
           clasificacion?: string | null
           costo_unitario?: number | null
+          is_active?: boolean
           multiplicador?: number | null
           nombre?: string
+          photo_url?: string | null
+          prep_time_min?: number | null
+          station?: string
           subclasificacion?: string | null
           tipo?: string
           updated_at?: string | null
         }
         Relationships: []
+      }
+      product_modifier_groups: {
+        Row: {
+          group_id: string
+          product_name: string
+          sort_order: number
+        }
+        Insert: {
+          group_id: string
+          product_name: string
+          sort_order?: number
+        }
+        Update: {
+          group_id?: string
+          product_name?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_modifier_groups_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "modifier_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_modifier_groups_product_name_fkey"
+            columns: ["product_name"]
+            isOneToOne: false
+            referencedRelation: "product_map"
+            referencedColumns: ["nombre"]
+          },
+        ]
+      }
+      product_modifier_options: {
+        Row: {
+          enabled: boolean
+          modifier_id: string
+          price_delta_override_crc: number | null
+          product_name: string
+        }
+        Insert: {
+          enabled?: boolean
+          modifier_id: string
+          price_delta_override_crc?: number | null
+          product_name: string
+        }
+        Update: {
+          enabled?: boolean
+          modifier_id?: string
+          price_delta_override_crc?: number | null
+          product_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_modifier_options_modifier_id_fkey"
+            columns: ["modifier_id"]
+            isOneToOne: false
+            referencedRelation: "modifiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_modifier_options_product_name_fkey"
+            columns: ["product_name"]
+            isOneToOne: false
+            referencedRelation: "product_map"
+            referencedColumns: ["nombre"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -1005,6 +1800,62 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
         }
         Relationships: []
+      }
+      salon_tables: {
+        Row: {
+          capacity: number
+          created_at: string
+          height: number | null
+          id: string
+          is_active: boolean
+          kind: string
+          location_id: string
+          name: string
+          pos_x: number
+          pos_y: number
+          shape: string
+          updated_at: string
+          width: number | null
+        }
+        Insert: {
+          capacity?: number
+          created_at?: string
+          height?: number | null
+          id?: string
+          is_active?: boolean
+          kind?: string
+          location_id: string
+          name: string
+          pos_x?: number
+          pos_y?: number
+          shape?: string
+          updated_at?: string
+          width?: number | null
+        }
+        Update: {
+          capacity?: number
+          created_at?: string
+          height?: number | null
+          id?: string
+          is_active?: boolean
+          kind?: string
+          location_id?: string
+          name?: string
+          pos_x?: number
+          pos_y?: number
+          shape?: string
+          updated_at?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salon_tables_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sops: {
         Row: {
@@ -1148,6 +1999,7 @@ export type Database = {
       }
       tip_entries: {
         Row: {
+          client_op_id: string | null
           covered_role: string | null
           created_at: string
           employee_id: string
@@ -1161,6 +2013,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          client_op_id?: string | null
           covered_role?: string | null
           created_at?: string
           employee_id: string
@@ -1174,6 +2027,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          client_op_id?: string | null
           covered_role?: string | null
           created_at?: string
           employee_id?: string
@@ -1214,6 +2068,8 @@ export type Database = {
           pool_barra_crc: number
           pool_efectivo_crc: number
           pool_efectivo_usd: number
+          pool_pos_crc: number
+          pool_pos_usd: number
           session_date: string
           shift_type: string
           status: string
@@ -1229,6 +2085,8 @@ export type Database = {
           pool_barra_crc?: number
           pool_efectivo_crc?: number
           pool_efectivo_usd?: number
+          pool_pos_crc?: number
+          pool_pos_usd?: number
           session_date: string
           shift_type?: string
           status?: string
@@ -1244,6 +2102,8 @@ export type Database = {
           pool_barra_crc?: number
           pool_efectivo_crc?: number
           pool_efectivo_usd?: number
+          pool_pos_crc?: number
+          pool_pos_usd?: number
           session_date?: string
           shift_type?: string
           status?: string
@@ -1367,11 +2227,75 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      my_turno_stats: { Args: { p_date?: string }; Returns: Json }
+      pos_cobrar_check: {
+        Args: {
+          p_amount_crc: number
+          p_change_crc: number
+          p_check_id: string
+          p_client_op_id: string
+          p_closed_by: string
+          p_currency: string
+          p_exchange_rate_used: number
+          p_method: string
+          p_note: string
+          p_order_id: string
+          p_received_crc: number
+          p_received_usd: number
+          p_tip_crc: number
+          p_tip_currency: string
+        }
+        Returns: Json
+      }
+      pos_cobrar_orden: {
+        Args: {
+          p_amount_crc: number
+          p_change_crc: number
+          p_client_op_id: string
+          p_closed_by: string
+          p_currency: string
+          p_exchange_rate_used: number
+          p_method: string
+          p_note: string
+          p_order_id: string
+          p_received_crc: number
+          p_received_usd: number
+          p_tip_crc: number
+          p_tip_currency: string
+        }
+        Returns: Json
+      }
+      pos_merge_orden: {
+        Args: {
+          p_by_name: string
+          p_checks: Json
+          p_from: string
+          p_into: string
+        }
+        Returns: undefined
+      }
+      pos_reopen_orden: {
+        Args: { p_by: string; p_order_id: string; p_reason: string }
+        Returns: undefined
+      }
+      pos_unmerge_orden: {
+        Args: { p_from: string; p_into: string }
+        Returns: undefined
+      }
+      sync_pos_tips_to_pool: {
+        Args: { p_date: string; p_session_id: string }
+        Returns: Json
+      }
+      verify_manager: {
+        Args: { p_email: string; p_password: string }
+        Returns: boolean
+      }
     }
     Enums: {
       currency: "CRC" | "USD"
       user_role:
         | "owner"
+        | "contador"
         | "manager"
         | "cajero"
         | "salonero"
@@ -1379,7 +2303,6 @@ export type Database = {
         | "barback"
         | "runner"
         | "cocina"
-        | "contador"
         | "proveedor"
     }
     CompositeTypes: {
@@ -1506,11 +2429,15 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       currency: ["CRC", "USD"],
       user_role: [
         "owner",
+        "contador",
         "manager",
         "cajero",
         "salonero",
@@ -1518,7 +2445,6 @@ export const Constants = {
         "barback",
         "runner",
         "cocina",
-        "contador",
         "proveedor",
       ],
     },

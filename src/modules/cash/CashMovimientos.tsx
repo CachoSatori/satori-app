@@ -14,7 +14,7 @@ const CONCEPTOS = [
   { id: 'egr_pers', label: 'Egreso · Personal / Salario',     type: 'egreso_personal',   caja: 'Caja Fuerte',       sub: '',                    method: 'Efectivo' },
   { id: 'ing_otro', label: 'Ingreso · Otro (aceite, etc.)',   type: 'ingreso',           caja: 'Caja Fuerte',       sub: 'Otros ingresos',      method: 'Efectivo' },
 ] as const
-import { todayCR } from '../../shared/utils'
+import { todayCR, dateCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr, saldoCajaFuerte } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { movementAttachments } from '../../shared/api/facturas'
@@ -55,9 +55,10 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   }
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
   // Fecha del movimiento: la del turno si lo tiene; si es un movimiento a nivel
-  // día (sin turno, ej. ventas del cierre) cae a su created_at.
+  // día (sin turno, ej. ventas del cierre) cae a su created_at, en fecha LOCAL CR
+  // (dateCR) — no slice UTC — para que un registro de noche caiga en el día correcto.
   const movFecha = (m: CashMovement) =>
-    sesionMap.get(m.session_id ?? '')?.session_date ?? (m.created_at ? m.created_at.slice(0, 10) : '')
+    sesionMap.get(m.session_id ?? '')?.session_date ?? dateCR(m.created_at)
 
   const defaultFrom = (() => { const d = new Date(todayCR() + 'T12:00:00'); d.setDate(d.getDate() - 60); return d.toISOString().slice(0, 10) })()
   const [from,    setFrom]    = useState(defaultFrom)

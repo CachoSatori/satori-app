@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { dateCR } from '../utils'
 
 export interface FinanceAccount {
   id: string
@@ -161,7 +162,12 @@ export async function getLiveActuals(year: number): Promise<FinanceCell[]> {
   // Movimientos de Caja → cuentas del P&L
   for (const m of (cashRes.data ?? []) as Array<{ movement_type: string; subcategory: string; description: string | null; amount_crc: number; status: string; created_at: string; account_id: string | null }>) {
     if (m.status === 'rechazado') continue
-    const month = Number(m.created_at.slice(5, 7))
+    // Mes en hora LOCAL CR (dateCR) — no slice UTC — para que un gasto de noche del
+    // último día del mes caiga en el mes CR correcto. Si el timestamp es inválido,
+    // dateCR devuelve '' → salteamos la fila para no atribuirla a un mes falso.
+    const fechaCR = dateCR(m.created_at)
+    if (!fechaCR) continue
+    const month = Number(fechaCR.slice(5, 7))
     const amount = Number(m.amount_crc) || 0
     const type = String(m.movement_type)
 

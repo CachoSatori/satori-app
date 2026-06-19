@@ -80,3 +80,34 @@ función mark_factura_verified.
 ================================================================
 FIN. Estado de la base de STAGING: SIN CAMBIOS (no se aplicó 038).
 ================================================================
+
+================================================================
+INTENTO 2 — 2026-06-19 (dueña FIRMÓ, autoriza aplicar 038) — PARADO: falta connection string
+================================================================
+Chequeo de seguridad: proyecto linkeado = hwiatgicyyqyezqwldia (STAGING) ✓  (NO prod yiczgdtirrkdvohdquzf)
+
+Búsqueda de la connection string de STAGING (sin adivinar):
+- supabase/.temp/pooler-url: postgresql://postgres.hwiatgicyyqyezqwldia@aws-1-us-east-1.pooler.supabase.com:5432/postgres  → SIN password.
+- .env.local: solo VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY / VITE_APP_ENV (claves de frontend, no password de DB).
+- supabase/config.toml: sin bloque [db] de conexión remota.
+- ~/.supabase, ~/.pgpass: sin password.
+- grep de 'postgres://user:pass@' en repo + dotfiles: sin resultados.
+- psql / libpq instalado: NO.
+
+Por qué no avancé:
+- No hay password de la DB de staging en el entorno → no puedo construir la conexión psql sin adivinar.
+- `supabase db push` está PROHIBIDO por la tarea (y bloqueado por historial 035/009).
+- No existe en el CLI 2.105 un comando para correr un .sql suelto contra el remoto sin db push.
+- La password de DB NO se puede recuperar por API (Supabase solo permite RESETEARLA, no leerla).
+- NO toqué el historial (009/035) ni ejecuté repair. NO adiviné credenciales. La base de STAGING quedó SIN cambios.
+
+QUÉ NECESITO DE UN HUMANO (una de las dos):
+  A) La connection string de la DB de STAGING con password, formato:
+     postgresql://postgres.hwiatgicyyqyezqwldia:<DB_PASSWORD>@aws-1-us-east-1.pooler.supabase.com:5432/postgres
+     (o solo el <DB_PASSWORD> de la base de staging). Con eso instalo libpq y aplico 038 por psql.
+  B) Alternativa sin pasarme la password: aplicar el SQL de supabase/migrations/038_bandeja_fusion.sql
+     desde el dashboard de STAGING → SQL Editor (es aditiva e idempotente). Yo después corro
+     `supabase migration repair --status applied 038`, regenero tipos y verifico.
+
+Estado: 038 NO aplicada. Sin mutaciones en la base.
+================================================================

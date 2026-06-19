@@ -29,11 +29,11 @@ profundizar/decidir; nada acá implementa nada por sí solo.
 - ⏳ pendiente de profundizar/decidir (aplica a todo: nada se implementa desde estos docs).
 
 ## 🧭 Handoff — leer en este orden para ponerse al día
-1. **[../ESTADO.md](../ESTADO.md)** — foto compacta: ramas, prod vs staging, migraciones, pendientes.
-2. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases con estado real (✅/🟢/⏳/🔲).
-3. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — backlog priorizado (qué sigue, qué espera validación, qué espera decisión).
+1. **[../ESTADO.md](../ESTADO.md)** — foto compacta: ramas (staging `cb25672`), prod vs staging, migraciones (⚠ mig 038 sin aplicar, espera firma), pendientes. **Incluye la Bandeja fusionada (Etapa 1).**
+2. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases con estado real (✅/🟢/⏳/🔲); Bandeja Etapa 1 (🟢 validada) + Etapa 2 (diseñada) + backlog nuevo de junio.
+3. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — backlog priorizado (mig 038 → Etapa 2 → PWA urgente → deudas a futuro); marca qué espera firma vs validación física.
 4. **[../SPEC-LAVU-FLUJO-MESA.md](../SPEC-LAVU-FLUJO-MESA.md)** — fuente de verdad del flujo de mesa/comanda (semáforo de paridad).
-5. **[../REPORTE-NOCHE-2.md](../REPORTE-NOCHE-2.md)** — último trabajo (PoS pro + FE estructura + inventario activo) + checklist de prueba física.
+5. **[../REPORTE-NOCHE-2.md](../REPORTE-NOCHE-2.md)** — trabajo previo (PoS pro + FE estructura + inventario activo) + checklist de prueba física.
 
 > Otros relacionados: `ESTADO-ARCHIVO.md` (changelog histórico detallado), `ESTADO-PROPINA-POOL.md`
 > (solo en la rama `propina-pool`, sin merge), `AUDITORIA-CONSOLIDACION.md` (auditoría técnica),

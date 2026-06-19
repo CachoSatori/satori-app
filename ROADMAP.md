@@ -1,17 +1,19 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-17**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-18**
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-06-17)
+## 📍 Estado real de las fases (handoff 2026-06-18)
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 
 | Fase | Estado | Dónde |
 |---|---|---|
 | Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021) |
+| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | 🟢 **validada por la dueña en staging** | STAGING (necesita **mig 038** para contador/verificado) |
+| **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
 | PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
 | PoS F2 — Comandero + KDS + impresión (impresión real = F5) | 🟢 | STAGING (023–025) |
@@ -21,11 +23,51 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | Inventario activo F1 — depleción por venta + COGS real | 🟢 | STAGING (037) |
 | Inventario F1 — orden de compra + puente compra→caja→stock | 🔲 | — |
 | Propina PoS → pool del turno | ⏳ | rama `propina-pool` (sin merge, espera decisión dueña) |
-| Pase del PoS a PROD (consolidar 022–037) | 🔲 | espera validación de la dueña |
+| Pase del PoS a PROD (consolidar 022–038) | 🔲 | espera validación de la dueña + firma mig 038 |
 | F4 Loyalty en mesa + Nosara · F5 Hub local | 🔲 | futuro |
 
-> Detalle de cada fase abajo. Lo nuevo de junio (FE estructura, inventario activo, comandero pro)
-> vive en `staging`. Backlog priorizado: [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+> Detalle de cada fase abajo. Lo nuevo de junio (Bandeja fusionada, FE estructura, inventario activo,
+> comandero pro) vive en `staging`. Backlog priorizado: [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+
+---
+
+## 🧾 Bandeja / Caja — Etapa 1 (🟢 staging, validada) y Etapa 2 (🔲 diseñada)
+
+**Etapa 1 — en staging, validada físicamente por la dueña.** Se fusionaron las dos bandejas en una
+sola (`/inbox`, foto-primero, con IA Claude). Se eliminó "Bandeja Proveedores" (`/proveedor` +
+`ProveedorBandeja.tsx` + tile + ROLE_LANDING); el rol `proveedor` queda muerto en el enum (DDL solo
+aditivo). Matriz de pago por rol (cajero/manager: Efectivo con caja abierta · Transferencia→Pendiente
+o Pagado-desde-Banco; contador/owner: solo Pendiente o Banco, nunca efectivo). Verificado de factura
+(`FacturaVerify`) en Caja→Movimientos y Finanzas. Sobre eso:
+- **Enlace proveedor↔caja:** la Bandeja resuelve `supplier_id` (match por nombre o alta mínima) en
+  los 4 caminos → el pago aparece bajo su proveedor en Caja→Proveedores con estado + indicador de
+  foto (📷 / "⚠ falta factura" + agregar foto → bucket `documents` + IA + inventario).
+- **Visibilidad pendientes en Caja Diaria:** los pagos transferencia-pendiente nivel-día se muestran
+  (solo-lectura, no tocan la matemática del efectivo). `created_at` = día de registro; la fecha de
+  factura va a la descripción.
+- **Fechas/mes en hora CR** (`dateCR`) en Movimientos/Pendientes/P&L — **MERGEADO a staging**
+  (`cb25672`). **Pendiente validación física:** Movimientos de noche + P&L borde de mes.
+- **Depende de la mig 038** (sin firma): hasta aplicarla, el contador no registra y "✓ Verificar"
+  falla por RLS (gating intencional).
+
+**Etapa 2 — diseñada, pendiente.** Entrada única **foto-primero 100% dentro de Caja Diaria**: se
+retira el camino `facturas` (queda legacy); **foto obligatoria**; la IA lee todo y **sugiere**
+tipo/categoría (mercadería/operativo/personal/socios) mapeando a las categorías existentes, el humano
+confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian el pendiente;
+**offline Opción A** (se registra el pago igual, la IA procesa al volver la red).
+
+## 🆕 Backlog nuevo (junio 18) — además de las fases de arriba
+
+- **🔴 URGENTE — Estabilidad de la PWA:** la app se traba y hay que **borrar caché** para ver datos
+  nuevos (service worker). Atacar ciclo de vida del SW / cache / auto-update. (Ver `HANG-RCA.md`.)
+- **Cuentas por pagar / crédito a proveedores 7-15-30 días** (fecha de PAGO ≠ fecha de registro).
+- **Alerta de cambio de precio** de un producto (que el contador la detecte y se ajuste la receta).
+- **Offline robusto** con base local que sincroniza con Supabase al volver internet.
+- **P&L — borde de año en UTC:** `getLiveActuals` todavía acota la consulta por `created_at` en UTC →
+  el 31-dic de noche puede caer en el año/mes equivocado; pasar también ese filtro a CR (el mes ya se
+  atribuye con `dateCR`).
+- **Unidades de inventario por presentación** (kilo/litro/gramos; huevos por maple/caja) editables por
+  ingrediente, recordadas por proveedor.
 
 ---
 

@@ -13,7 +13,7 @@ import {
   updateMiddayCheck,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
-import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
+import { tipShiftToCaja, shiftLabel, dateCR } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { uploadFacturaPhoto, movementAttachments } from '../../shared/api/facturas'
@@ -76,6 +76,7 @@ interface PagoRow {
   // persistedId: movement ID in DB — set once saved, null if unsaved
   persistedId:   string | null
   pending?:      boolean        // en la cola offline, esperando sincronizar
+  readonly?:     boolean        // nivel-día (Bandeja): se muestra pero no se edita/borra acá
 }
 
 export default function CashTurno({
@@ -160,10 +161,44 @@ export default function CashTurno({
       persistedId:   m.id,
       pending:       m._pending === true,
     })), [sessionMovements, suppliers])
-  // Lista mostrada = borradores no persistidos + persistidos de la base, más reciente primero
+  // VISIBILIDAD (fix nivel-día): la Bandeja crea los pagos por transferencia como
+  // pendientes a NIVEL-DÍA (session_id=null) → no están en sessionMovements y por eso
+  // no aparecían en la Caja Diaria (sí en Proveedores y Pendientes). Acá los derivamos
+  // de allMovements, acotados al DÍA DE REGISTRO del turno abierto. Son SOLO-LECTURA: NO
+  // entran en ningún cómputo de efectivo (method≠Efectivo) — solo suman al aviso amarillo
+  // de transferencias pendientes (pagosTr), igual que las del propio turno.
+  // Comparamos por fecha LOCAL CR (dateCR) — no slice UTC — para que un pago registrado de
+  // noche (después de 18:00 CR) caiga en la Caja Diaria del día correcto y no en el siguiente.
+  const dayPendientesPagos: PagoRow[] = useMemo(() => {
+    if (!openSession) return []
+    const fechaTurno = openSession.session_date
+    return allMovements
+      .filter(m => m.movement_type === 'egreso_mercaderia' && m.session_id === null
+        && m.status !== 'rechazado' && m.caja_origen === 'Banco' && m.method !== 'Efectivo'
+        && dateCR(m.created_at) === fechaTurno)
+      .map(m => ({
+        id:            m.id,
+        supplier_id:   m.supplier_id ?? '',
+        supplier_name: m.supplier_name ?? '',
+        supplier_cat:  suppliers.find(s => s.id === m.supplier_id)?.category ?? '',
+        amount_crc:    m.amount_crc,
+        amount_usd:    m.amount_usd,
+        method:        m.method || 'Transferencia',
+        reference:     m.description ?? '',
+        at:            new Date(m.created_at).getTime(),
+        attachments:   movementAttachments(m),
+        persistedId:   m.id,
+        pending:       m._pending === true,
+        readonly:      true,
+      }))
+  }, [openSession, allMovements, suppliers])
+
+  // Lista mostrada = borradores no persistidos + persistidos del turno + pendientes
+  // nivel-día (Bandeja), más reciente primero. Ids disjuntos (sesión vs session_id=null)
+  // → sin duplicados.
   const displayPagos = useMemo(
-    () => [...pagos.filter(p => !p.persistedId), ...dbPagos].sort((a, b) => b.at - a.at),
-    [pagos, dbPagos])
+    () => [...pagos.filter(p => !p.persistedId), ...dbPagos, ...dayPendientesPagos].sort((a, b) => b.at - a.at),
+    [pagos, dbPagos, dayPendientesPagos])
 
   // Ingresos adicionales ya persistidos en la base
   const dbIngresos: IngresoRow[] = useMemo(() => sessionMovements
@@ -871,6 +906,7 @@ export default function CashTurno({
                   {` · ${new Date(p.at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`}
                   {p.method === 'Transferencia' && <span style={{ color: '#a07030' }}> · pendiente · no descuenta efectivo</span>}
                   {p.method !== 'Efectivo' && p.method !== 'Transferencia' && <span style={{ color: '#2a7a6a' }}> · banco</span>}
+                  {p.readonly && <span style={{ color: '#a07030' }}> · desde Bandeja (se gestiona en Pendientes)</span>}
                   {!p.persistedId && <span style={{ color: '#c0392b' }}> · sin guardar</span>}
                   {p.pending && <span style={{ color: '#a07830', fontWeight: 700 }}> · ⏳ por sincronizar</span>}
                 </div>
@@ -878,7 +914,7 @@ export default function CashTurno({
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
                 {p.attachments.length > 0 && <FacturaThumbs paths={p.attachments} />}
                 <span style={{ fontWeight: 700, fontFamily: 'var(--font-serif)' }}>{fi(Number(p.amount_crc) || 0)}</span>
-                {canManage && (
+                {canManage && !p.readonly && (
                   <>
                     <button onClick={() => openEditPago(p)} title="Editar"
                       style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 3, padding: '2px 7px', fontSize: '0.72rem', cursor: 'pointer' }}>✏</button>

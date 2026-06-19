@@ -8,6 +8,16 @@ export function todayCR(): string {
   // returns YYYY-MM-DD in Costa Rica time
 }
 
+// Fecha local de Costa Rica (YYYY-MM-DD) de un instante cualquiera — misma
+// convención que todayCR(). Para comparar el día de REGISTRO de un movimiento
+// (created_at, en UTC) contra un session_date sin desfasarse de noche (UTC-6).
+export function dateCR(d: Date | string | number | null | undefined): string {
+  if (d == null || d === '') return ''
+  const dt = new Date(d)
+  if (isNaN(dt.getTime())) return ''
+  return new Intl.DateTimeFormat('en-CA', { timeZone: CR_TZ }).format(dt)
+}
+
 // ── Currency formatters ────────────────────────────────────────
 export function fi(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return '—'

@@ -13,7 +13,7 @@ import {
   updateMiddayCheck,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
-import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
+import { tipShiftToCaja, shiftLabel, dateCR } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { uploadFacturaPhoto, movementAttachments } from '../../shared/api/facturas'
@@ -164,16 +164,18 @@ export default function CashTurno({
   // VISIBILIDAD (fix nivel-día): la Bandeja crea los pagos por transferencia como
   // pendientes a NIVEL-DÍA (session_id=null) → no están en sessionMovements y por eso
   // no aparecían en la Caja Diaria (sí en Proveedores y Pendientes). Acá los derivamos
-  // de allMovements, acotados a la FECHA del turno abierto. Son SOLO-LECTURA: NO entran
-  // en ningún cómputo de efectivo (method≠Efectivo) — solo suman al aviso amarillo de
-  // transferencias pendientes (pagosTr), igual que las del propio turno.
+  // de allMovements, acotados al DÍA DE REGISTRO del turno abierto. Son SOLO-LECTURA: NO
+  // entran en ningún cómputo de efectivo (method≠Efectivo) — solo suman al aviso amarillo
+  // de transferencias pendientes (pagosTr), igual que las del propio turno.
+  // Comparamos por fecha LOCAL CR (dateCR) — no slice UTC — para que un pago registrado de
+  // noche (después de 18:00 CR) caiga en la Caja Diaria del día correcto y no en el siguiente.
   const dayPendientesPagos: PagoRow[] = useMemo(() => {
     if (!openSession) return []
     const fechaTurno = openSession.session_date
     return allMovements
       .filter(m => m.movement_type === 'egreso_mercaderia' && m.session_id === null
         && m.status !== 'rechazado' && m.caja_origen === 'Banco' && m.method !== 'Efectivo'
-        && (m.created_at?.slice(0, 10) === fechaTurno))
+        && dateCR(m.created_at) === fechaTurno)
       .map(m => ({
         id:            m.id,
         supplier_id:   m.supplier_id ?? '',

@@ -365,7 +365,11 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
     if (revisar && !validado) { setErr('Revisá los montos contra la factura y marcá "Validé los datos" antes de confirmar.'); return }
     setSaving(true); setErr(null)
     try {
-      const descripcion = ref ? `${prov || 'Factura'} · ${ref}` : (prov || 'Factura')
+      // created_at de las altas nivel-día = día de REGISTRO (no se pasa `fecha` → now()),
+      // así el pago cae en la Caja Diaria del día en que se registra. La fecha de la
+      // factura (que puede ser de otro día) se conserva como referencia en la descripción.
+      const baseDesc = ref ? `${prov || 'Factura'} · ${ref}` : (prov || 'Factura')
+      const descripcion = fecha ? `${baseDesc} · fact ${fecha}` : baseDesc
       let movementId: string
 
       // Resolver el proveedor (match o alta) ANTES de crear el movimiento, así el pago
@@ -384,7 +388,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
         movementId = await withTimeout(insertInboxMovement({
           created_by: createdBy, movement_type: 'egreso_mercaderia', amount_crc: amountCRC, amount_usd: amountUSD,
           description: descripcion, subcategory: prov || '', supplier_id: supplierId, supplier_name: prov || '',
-          method: 'Transferencia', caja_origen: 'Banco', status: 'aprobado', account_id: accountId || null, fecha,
+          method: 'Transferencia', caja_origen: 'Banco', status: 'aprobado', account_id: accountId || null,
         }))
       } else if (tipo === 'propinas') {
         // Propinas: pass-through, NO es gasto del P&L (subcategoría 'Propinas' se excluye)
@@ -415,7 +419,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
         movementId = await withTimeout(insertInboxMovement({
           created_by: createdBy, movement_type: 'egreso_mercaderia', amount_crc: amountCRC, amount_usd: amountUSD,
           description: descripcion, subcategory: prov || '', supplier_id: supplierId, supplier_name: prov || '',
-          method, caja_origen: caja, status, account_id: accountId || null, fecha,
+          method, caja_origen: caja, status, account_id: accountId || null,
         }))
       }
       await withTimeout(setDocEstado(doc.id, 'procesado', movementId))

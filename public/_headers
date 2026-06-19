@@ -1,0 +1,28 @@
+# Cloudflare Pages — control de caché del Service Worker y del shell de la PWA.
+# Objetivo: que la PWA vea lo nuevo SIN tener que "borrar caché" — el SW y el HTML
+# se revalidan siempre, así un deploy nuevo se toma al recargar.
+#
+# Nombres exactos confirmados contra el dist real de `npm run build:staging`
+# (raíz de dist): sw.js · sw-share.js · registerSW.js · manifest.webmanifest · index.html.
+# Los assets con hash (assets/*, workbox-*.js) NO se tocan: son inmutables y se cachean bien.
+#
+# NOTA: en PROD/GitHub Pages este archivo se IGNORA (Pages no lee _headers) — es inofensivo.
+# Solo aplica en el deploy de Cloudflare Pages (staging).
+
+/sw.js
+  Cache-Control: no-cache, must-revalidate
+
+/sw-share.js
+  Cache-Control: no-cache, must-revalidate
+
+/registerSW.js
+  Cache-Control: no-cache, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: no-cache, must-revalidate
+
+/index.html
+  Cache-Control: no-cache, must-revalidate
+
+/
+  Cache-Control: no-cache, must-revalidate

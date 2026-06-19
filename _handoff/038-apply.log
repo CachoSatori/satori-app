@@ -1,0 +1,82 @@
+================================================================
+038 APPLY — STAGING (hwiatgicyyqyezqwldia) — 2026-06-19
+RESULTADO: BLOQUEADO. NO se aplicó. Sin mutaciones en la base.
+================================================================
+
+Entorno verificado ANTES de tocar nada:
+- supabase CLI: 2.105.0
+- proyecto linkeado (supabase/.temp/project-ref): hwiatgicyyqyezqwldia  → STAGING ✓ (NO prod yiczgdtirrkdvohdquzf)
+- pooler-url (supabase/.temp/pooler-url): postgresql://postgres.hwiatgicyyqyezqwldia@aws-1-us-east-1.pooler.supabase.com:5432/postgres  (sin password embebido)
+- psql instalado: NO
+- SUPABASE_DB_PASSWORD en env: NO
+
+----------------------------------------------------------------
+PASO 1 (read-only) — supabase migration list --linked
+----------------------------------------------------------------
+Local 038 figura SIN par en Remote → 038 es la única migración local pendiente de aplicar.
+PERO el remoto tiene migraciones que el local NO tiene:
+  - 035  (vive solo en la rama propina-pool, sin merge a staging; es la integración propina→pool = PLATA)
+  - 009  (fantasma de ordenamiento por el baseline 0095_drift_baseline; aparece desalineado)
+
+Extracto relevante (Local | Remote | Time):
+   034   | 034    | 034
+         | 035    | 035        <-- remoto tiene 035, local no
+   036   | 036    | 036
+   037   | 037    | 037
+   038   |        | 038        <-- local tiene 038, remoto no (lo que queremos aplicar)
+
+----------------------------------------------------------------
+PASO 2 (read-only) — supabase db push --linked --dry-run
+----------------------------------------------------------------
+Salida:
+  Initialising login role...
+  DRY RUN: migrations will *not* be pushed to the database.
+  Connecting to remote database...
+  Remote migration versions not found in local migrations directory.
+
+  Make sure your local git repo is up-to-date. If the error persists, try repairing the migration history table:
+  supabase migration repair --status reverted 009 035
+
+  And update local migrations to match remote database:
+  supabase db pull
+
+=> db push se NIEGA a proceder porque el historial diverge (remoto 009/035 no están en local).
+   El chequeo de consistencia ocurre ANTES de aplicar cualquier migración → no hubo ninguna mutación.
+
+----------------------------------------------------------------
+PASO 3 — ¿hay forma de aplicar SOLO 038 sin tocar el historial?
+----------------------------------------------------------------
+- supabase db push --help: la única bandera relacionada es --include-all (incluye migraciones locales
+  no presentes en remoto). NO resuelve el bloqueo, que es el caso inverso (remoto-no-en-local). No hay
+  bandera para saltar el chequeo de consistencia.
+- Apply directo del SQL de 038 (psql / db-url): NO posible — no hay psql ni password de la DB de staging.
+
+----------------------------------------------------------------
+POR QUÉ NO EJECUTÉ LA REMEDIACIÓN QUE SUGIERE EL CLI
+----------------------------------------------------------------
+`supabase migration repair --status reverted 009 035` marcaría 009 y 035 como REVERTIDAS en el historial
+remoto. Pero 035 SÍ está aplicada en staging (es la migración de propina→pool, PLATA). Reescribir el
+historial / marcar como revertida una migración de plata aplicada es:
+  (a) riesgoso (deja el historial mintiendo sobre el estado real),
+  (b) fuera del alcance de esta tarea,
+  (c) contrario al guardrail de no tocar lo de plata ni "mejorar" estado existente.
+`supabase db pull` tampoco: traería esquema remoto al repo, fuera de alcance.
+
+----------------------------------------------------------------
+QUÉ NECESITA UN HUMANO PARA DESBLOQUEAR (elegir UNA, con criterio):
+----------------------------------------------------------------
+OPCIÓN A (recomendada, mínima): aplicar SOLO el SQL de 038 por fuera de db push:
+   - Dashboard de Supabase STAGING → SQL Editor → pegar supabase/migrations/038_bandeja_fusion.sql
+     (es ADITIVA e IDEMPOTENTE) → Run. Luego registrar en historial:
+     supabase migration repair --status applied 038   (esto sí es honesto: 038 quedó aplicada).
+   - O dar el password de la DB de staging para aplicar 038 vía `psql "<conn>" -f .../038...sql`.
+OPCIÓN B: decidir explícitamente sobre el historial 009/035 (¿035 debe seguir en staging? viene de
+   propina-pool sin merge) y, con esa decisión tomada por la dueña, recién ahí usar db push.
+
+Tras aplicar 038, regenerar tipos: `supabase gen types typescript --linked > src/shared/types/supabase.gen.ts`
+y verificar: columnas cash_movements.factura_verified_by/at, policy cash_movements_contador_insert,
+función mark_factura_verified.
+
+================================================================
+FIN. Estado de la base de STAGING: SIN CAMBIOS (no se aplicó 038).
+================================================================

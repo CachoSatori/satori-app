@@ -23,8 +23,14 @@ El `setTimeout`-wrapper agregado antes **no es la cura**: es una red de segurida
 ## Aplicado en esta auditoría (inequívocamente seguro)
 - **`storageKey` propio para el cliente temporal de ManagerOverride** (`sb-satori-manager-override`). Aísla el 2º cliente → elimina el warning "Multiple GoTrueClient instances" y la contención del lock de refresh. Cero cambio de comportamiento (ese cliente ya usa `persistSession:false`). — commit `fix(auth): storageKey propio…`.
 
-## Diseño de la solución de fondo (para aprobar — NO aplicado)
-1. **Refresco proactivo en foco/visibilidad**: en `visibilitychange`→visible, `await supabase.auth.getSession()` (refresca si hace falta) **antes** de habilitar acciones críticas, para que al hacer click el token ya esté fresco. Evita la carrera click-vs-refresh.
+## Diseño de la solución de fondo (estado por ítem)
+1. **Refresco proactivo en foco/visibilidad** — ✅ **APLICADO** (`src/shared/hooks/useAuth.tsx`,
+   efecto `refreshOnFocus`): en `visibilitychange`→visible **y** `focus`, dispara
+   `supabase.auth.getSession()` (refresca el token si venció) al volver a la app, para que al hacer
+   click ya esté fresco. Evita la carrera click-vs-refresh. Es no-bloqueante (fire-and-forget con
+   `.catch`): si el refresh falla, NO traba la UI — la red de seguridad de los timeouts en las
+   escrituras sigue actuando. Complementa a `safeNavigatorLock` (ítem 2). Ver detalle en "Fase 2
+   APLICADA" abajo.
 2. **Revisar el `noLock`**: en vez de un lock no-op, usar el lock por defecto de supabase-js (basado en `navigator.locks`, que se auto-libera al cerrar la pestaña y tiene timeout interno) **o** un lock con timeout acotado. El no-op fue un parche; el lock con timeout es la opción robusta. Requiere prueba (no flipear a ciegas).
 3. **Eliminar el 2º cliente**: verificar la contraseña del manager por una **RPC / Edge Function server-side** (chequeo de credenciales del lado servidor) en vez de un `signInWithPassword` en un cliente aparte. Quita por completo el 2º GoTrueClient. Requiere una function nueva.
 4. **Cancelación + reintento idempotente** en escrituras críticas: `AbortController` con timeout corto + reintento (las operaciones ya son casi idempotentes: `createCashSession` tiene guarda de duplicados; `closeCashSession` es un UPDATE; conviene revisar `recordCierreSales`/inventario que ya son idempotentes por `document_id`).
@@ -41,8 +47,12 @@ Abrir el cierre de caja, **mandar la pestaña a segundo plano > 1 h** (o suspend
 `navigator.locks` (serializa refreshes entre pestañas — el noLock permitía refreshes
 concurrentes y un refresh token de un solo uso podía invalidar la sesión de otra pestaña),
 con tope de adquisición de 10s: si el lock está colgado (el escenario de este RCA), aborta
-la espera y ejecuta sin lock (= comportamiento noLock como peor caso). El refresco proactivo
-en foco (Fase 1) queda como complemento.
+la espera y ejecuta sin lock (= comportamiento noLock como peor caso).
+
+**a-bis) Refresco proactivo en foco/visibilidad** (`src/shared/hooks/useAuth.tsx`, efecto
+`refreshOnFocus`) — **ítem 1 del diseño, APLICADO**: al volver el foco/visibilidad de la pestaña
+se dispara `supabase.auth.getSession()` para que el token ya esté fresco antes del próximo click.
+No-bloqueante (no traba la UI si falla). Es el complemento de `safeNavigatorLock`.
 
 **b) ManagerOverride server-side** (`migración 019` + `src/shared/ManagerOverride.tsx`):
 RPC `verify_manager(email, password)` SECURITY DEFINER que valida contra `auth.users` con

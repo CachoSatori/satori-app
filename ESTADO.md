@@ -58,6 +58,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) pero **si
 | Ingesta por foto (IA) — bandeja vieja | ✅ | prod | Claude Haiku, esquema CR |
 | Finanzas / P&L · Reportes · Admin · Auth · Realtime · Offline | ✅ | prod | — |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja** | ✅ **Etapa 1 COMPLETA** | staging | Foto-primero, matriz de pago por rol, supplier_id real, pendientes nivel-día visibles. **mig 038 APLICADA** (commit `0205654`) y **VALIDADA físicamente por la dueña** con usuario rol **contador**: registra egresos no-efectivo desde la Bandeja y el botón **"✓ Verificar"** funciona. Etapa 1 cerrada en staging. |
+| **Estabilidad PWA (Fases 1 + 2)** | ✅ **COMPLETA y VALIDADA** | staging | **F1** — `public/_headers` `no-cache` para SW/shell en Cloudflare Pages: ya **no hace falta borrar caché** para ver lo nuevo. **F2** — refresco proactivo de token en foco/visibilidad (`useAuth.tsx` `refreshOnFocus`, ítem 1 de `HANG-RCA.md`): tras PC en pausa con token vencido, al volver la app responde y **guarda sin trabarse**. Ambas validadas físicamente por la dueña. |
 | PoS — catálogo/salón/multi-local (022) | 🟢 | staging | — |
 | PoS — comandero tablet + "pro" T4 | 🟢 | staging | alérgenos en tile, búsqueda en vivo, total sticky, estética Satori |
 | PoS — KDS web | 🟢 | staging | impresión real ESC/POS = futuro (F5) |

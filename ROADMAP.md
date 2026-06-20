@@ -61,8 +61,13 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
 
 ## 🆕 Backlog nuevo (junio 18) — además de las fases de arriba
 
-- **🔴 URGENTE — Estabilidad de la PWA:** la app se traba y hay que **borrar caché** para ver datos
-  nuevos (service worker). Atacar ciclo de vida del SW / cache / auto-update. (Ver `HANG-RCA.md`.)
+- **✅ COMPLETA y VALIDADA — Estabilidad de la PWA (Fases 1 + 2, en staging):**
+  - **F1 — caché del SW:** `public/_headers` con `no-cache, must-revalidate` para `sw.js`/`registerSW.js`/
+    `manifest`/shell en Cloudflare Pages → **ya no hace falta borrar caché** para ver lo nuevo (verificado
+    por curl ANTES/DESPUÉS, ver `_handoff/NOCTURNO.md`).
+  - **F2 — refresco proactivo de token en foco:** `useAuth.tsx` `refreshOnFocus` (ítem 1 de `HANG-RCA.md`)
+    → tras dejar la PC en pausa con el token vencido, al volver la app responde y **guarda sin trabarse**.
+  - Ambas **validadas físicamente por la dueña en staging**. (Pendiente solo el pase a prod.)
 - **Cuentas por pagar / crédito a proveedores 7-15-30 días** (fecha de PAGO ≠ fecha de registro).
 - **Alerta de cambio de precio** de un producto (que el contador la detecte y se ajuste la receta).
 - **Offline robusto** con base local que sincroniza con Supabase al volver internet.

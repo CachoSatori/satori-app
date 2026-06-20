@@ -130,3 +130,55 @@ canónica y de menor riesgo. Mientras prod siga en GitHub Pages, el arreglo tien
 - [CSS-Tricks — Using the VitePWA Plugin for an Offline Site](https://css-tricks.com/vitepwa-plugin-offline-service-worker/)
 
 > Evidencia de headers: `curl -sI` a prod y staging el 2026-06-19 (pegada en sección (a)). Solo-lectura; no se tocó prod.
+
+---
+
+## Implementación (rama `fix/pwa-sw-update-prod` — 2026-06-20, SIN merge)
+
+Se construyeron #1 y #2. Commits discretos. Sagrados intactos (esto es SW/registro). Sin migraciones.
+
+### #1 — `updateViaCache: 'none'` — VÍA ELEGIDA: registro manual (`injectRegister: null`)
+- **Por qué esa vía:** se verificó que **vite-plugin-pwa ^1.3.0 NO expone `updateViaCache`** por config
+  (su `registerSW` generado hace `navigator.serviceWorker.register(path, { scope, type })`, sin esa
+  opción — confirmado en `node_modules/vite-plugin-pwa/dist/*`). Por eso la vía de **menor diff y limpia**
+  es `injectRegister: null` + registro manual en `main.tsx`, que ya tenía la lógica de SW.
+- **`vite.config.ts`:** `injectRegister: 'auto'` → `injectRegister: null` (deja de inyectar `registerSW.js`;
+  el `sw.js`/workbox NO cambian → siguen `skipWaiting`+`clientsClaim`).
+- **`src/main.tsx`:** `navigator.serviceWorker.register(`${BASE}sw.js`, { updateViaCache: 'none', scope: BASE })`
+  (BASE = `import.meta.env.BASE_URL`). Toda la lógica previa se preserva (controllerchange→reload con guard,
+  checkUpdate, SKIP_WAITING al waiting).
+
+### version.json (infra de build)
+- **`vite.config.ts`:** `appCommit()` = `GITHUB_SHA[:7]` en CI · `git rev-parse --short HEAD` en local ·
+  timestamp como fallback. `define: { __APP_COMMIT__ }` (identidad embebida en el bundle) + plugin
+  `versionJsonPlugin` que emite `dist/version.json` = `{ commit, builtAt }`. NO entra al precache
+  (`globPatterns` no incluye `.json`) → siempre se pide a red.
+- **`src/vite-env.d.ts`** (nuevo): `declare const __APP_COMMIT__: string` (+ `vite/client`).
+
+### #2 — chequeo de version.json con cache-bust (`src/main.tsx`)
+- Helper `nudgeUpdate()` (reg.update + SKIP_WAITING al waiting). `checkUpdate()` = `nudgeUpdate()` +
+  `fetch(`${BASE}version.json?t=${Date.now()}`, { cache:'no-store' })`; si `commit !== __APP_COMMIT__`
+  → `nudgeUpdate()`. **La recarga la hace SOLO el `controllerchange` existente (guard de 60s);** NO se
+  agregó un segundo mecanismo de recarga (evita ciclos). Errores (offline/404/json inválido) → silencio.
+- **Limitación honesta:** #2 es **señal + empuje**, no un bypass del `sw.js` cacheado por Fastly. Si Fastly
+  aún sirve `sw.js` viejo (ventana ~10 min post-deploy, ya con purge), el siguiente `nudgeUpdate` lo toma
+  cuando el edge refresca. No fuerza unregister+reload en mismatch (sería un 2º mecanismo de recarga).
+
+### Verificación local (build artifact, `vite preview`) — funcional, NO final
+- `build:staging` y build prod (base `/satori-app/`): **verdes**. `lint` 78/66 (= baseline, sin nuevos errores).
+  `tests` 105/105.
+- Servido con `vite preview` (base `/satori-app/`, = prod): `GET {BASE}version.json` → 200
+  `{"commit":"…","builtAt":"…"}`; `GET {BASE}sw.js` → 200; `GET {BASE}registerSW.js` → **404** (ya no se
+  inyecta); el bundle contiene refs `updateViaCache` y `version.json?t=`. `__APP_COMMIT__` == `version.json.commit`
+  en el mismo build (no dispara falso "stale").
+- **NO verificado localmente (requiere navegador real sobre un deploy):** install/activate del SW en cliente,
+  el ciclo "redeploy → se toma sin loop", el intervalo de 60 min, y offline. El dev server de vite tiene
+  `devOptions.enabled:false` → no corre el SW; y el merge a staging está prohibido en esta tarea.
+
+### Cómo validar de verdad (lo decide la dueña)
+1. **Staging primero:** mergear esta rama a staging (otra tarea), abrir la PWA instalada, hacer un cambio
+   visible + redeploy, y confirmar SIN borrar caché: el SW nuevo se toma, recarga UNA vez (sin loop),
+   `version.json` se sirve y compara, y offline sigue andando.
+2. **Validación REAL = canario en PROD (GitHub Pages):** el comportamiento de Fastly (max-age=600 + purge
+   en deploy) **NO se reproduce en Cloudflare/staging**. Probar en 1 dispositivo de prod tras un deploy:
+   ¿el SW nuevo se toma solo, sin "borrar caché"? Eso es lo único que cierra el RCA.

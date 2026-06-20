@@ -33,16 +33,16 @@
   - **Enlace proveedor↔caja** (`b44e004`): la Bandeja resuelve `supplier_id` (match por nombre trim+case-insensitive o alta mínima) en los 4 caminos; el pago aparece bajo su proveedor en Caja→Proveedores con estado + foto (📷 / "⚠ falta factura" + agregar foto → bucket `documents` + IA + inventario). Cambio aditivo `cash.ts`: `createDayMovement` acepta `supplier_id`.
   - **Visibilidad pendientes Caja Diaria** (`66686d7`): muestra los pagos transferencia-pendiente nivel-día (solo-lectura, NO tocan la matemática del efectivo). `created_at` de altas nivel-día = **día de registro** (la fecha de factura va a la descripción como `· fact <fecha>`). Helper `dateCR` (compara en hora CR). **Opción A** elegida por la dueña: el P&L cuenta el gasto por fecha de registro.
   - **Fechas en hora CR** (merge `cb25672`): Movimientos (filtro día), Pendientes (fecha mostrada) y finance.ts (mes del P&L) atribuyen día/mes en hora de Costa Rica (`dateCR`) — corrige el desfase UTC de noche. Solo cambia la atribución en las vistas, no la matemática.
-- **En rama aparte (ni prod ni staging):** integración propina→pool (mig 035, rama `propina-pool`, sin merge).
+- **En rama aparte (sin merge):** la integración propina→pool (código) vive solo en `propina-pool`, no está en prod ni staging. Ojo: su **mig 035 figura como aplicada en el ledger de staging** pese a que el archivo no está mergeado → discrepancia a investigar (ver tabla de migraciones y `_handoff/038-apply.log`).
 
 ## (c) Migraciones
 
 | Entorno | Hasta | Notas |
 |---|---|---|
 | **PROD** | **021** | 001–020 = inteligencia/caja/auth/realtime. 021 = offline idempotencia. |
-| **STAGING** | **037** | 022–034 PoS · 036 FE estructura · 037 inventario COGS. **035 NO** (vive en `propina-pool`). **038 NO** (ver abajo). |
+| **STAGING** | **038** | 022–034 PoS · 036 FE estructura · 037 inventario COGS · **038 Bandeja fusión APLICADA** (ver abajo). ⚠️ **035:** el ledger de staging la tiene registrada como **aplicada**, pero el archivo 035 **solo vive en `propina-pool`** (sin merge) → **discrepancia A INVESTIGAR** (no resuelta acá; NO se tocó el historial). Detalle en [_handoff/038-apply.log](_handoff/038-apply.log). |
 
-> ⚠️ **Migración 038 (`supabase/migrations/038_bandeja_fusion.sql`) EXISTE en el repo pero NO está aplicada a NINGUNA base (ni staging ni prod). Espera FIRMA de la dueña** (es permiso de PLATA). Agrega: columnas `cash_movements.factura_verified_by/at`, policy RLS de INSERT no-efectivo para el rol `contador`, y RPC `mark_factura_verified` (SECURITY DEFINER). **Hasta aplicarla:** el contador NO puede registrar desde la Bandeja y el botón "✓ Verificar" falla por RLS (gating intencional, no es bug). El salto 021→037 (todo el PoS) es lo que falta consolidar y pasar a prod cuando la dueña valide.
+> ✅ **Migración 038 (`supabase/migrations/038_bandeja_fusion.sql`) APLICADA a STAGING** (la dueña firmó y la corrió por el SQL Editor; cierre por CLI + tipos regenerados en commit `0205654`). **NO en prod.** Agrega: columnas `cash_movements.factura_verified_by/at`, policy RLS de INSERT no-efectivo para el rol `contador`, y RPC `mark_factura_verified` (SECURITY DEFINER). Verificado en el esquema vivo: columnas + función presentes; la policy es del mismo archivo aplicado (no consultada de forma independiente — ver [_handoff/038-apply.log](_handoff/038-apply.log)). Esto **enciende** los dos caminos que estaban apagados: el contador ya puede registrar egresos no-efectivo desde la Bandeja y el botón "✓ Verificar" ya tiene su RPC. El salto 021→038 (PoS + Bandeja) es lo que falta consolidar y pasar a prod cuando la dueña valide.
 
 > **Edge Function `extract-document`:** desplegada al proyecto **STAGING** (ref `hwiatgicyyqyezqwldia`), con `ANTHROPIC_API_KEY` seteado por la dueña → la lectura por IA de facturas ya opera en staging. NO en prod.
 
@@ -57,7 +57,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) pero **si
 | Caja + cierre del día | ✅ | prod | `cashUtils` SAGRADO |
 | Ingesta por foto (IA) — bandeja vieja | ✅ | prod | Claude Haiku, esquema CR |
 | Finanzas / P&L · Reportes · Admin · Auth · Realtime · Offline | ✅ | prod | — |
-| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja** | ✅ **Etapa 1** | staging | **Validada físicamente por la dueña en staging.** Foto-primero, matriz de pago por rol, supplier_id real, pendientes nivel-día visibles. Depende de **mig 038** para que el contador registre/verifique. |
+| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja** | 🟢 **Etapa 1** | staging | Foto-primero, matriz de pago por rol, supplier_id real, pendientes nivel-día visibles — validado por la dueña. **mig 038 ya APLICADA** (commit `0205654`). **Pendiente solo de validación física** de los dos caminos recién encendidos: el **contador registra** desde la Bandeja y el botón **"✓ Verificar"**. |
 | PoS — catálogo/salón/multi-local (022) | 🟢 | staging | — |
 | PoS — comandero tablet + "pro" T4 | 🟢 | staging | alérgenos en tile, búsqueda en vivo, total sticky, estética Satori |
 | PoS — KDS web | 🟢 | staging | impresión real ESC/POS = futuro (F5) |
@@ -70,14 +70,14 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) pero **si
 
 ## (e) Pendientes de PLATA — sin firma de la dueña (NO mergear/aplicar sin OK)
 
-1. **Migración 038** (Bandeja fusión) → **espera FIRMA.** Sin ella, el contador no registra desde la Bandeja y "✓ Verificar" falla por RLS. Aplicar SOLO en staging tras firma; luego regenerar tipos de Supabase.
+1. **Migración 038** (Bandeja fusión) → ✅ **FIRMADA y APLICADA a staging** (commit `0205654`). Ya NO está pendiente de plata. Queda solo la **validación física** de los dos caminos que enciende (contador registra + "✓ Verificar"). Aplicar a **prod** sigue pendiente (parte del pase del PoS).
 2. **`propina-pool`** (rama, sin merge) → conecta `pos_payments.tip_crc` al pool del turno **sin tocar `tipCalculations`**. **DECISIÓN-PRODUCTO abierta:** propina de tarjeta/SINPE ¿al mismo pool que efectivo (implementado, conservador) o separada? Reporte `ESTADO-PROPINA-POOL.md` (vive en la rama: `git show propina-pool:ESTADO-PROPINA-POOL.md`).
 3. **`fix-doble-cobro`** → ya está en staging (mig 033). Falta validación física + decisión de pase a PROD. La matemática del cobro NO se tocó; solo la persistencia (RPC atómica + `client_op_id` UNIQUE).
 4. **`fix/fecha-cr-consistente`** — **MERGEADO a staging** (`cb25672`). Cambia la atribución de **mes CR** de gastos de noche en el P&L. **Pendiente validación física:** Movimientos de noche + P&L borde de mes (validar contra un cierre mensual conocido).
 
 ## (f) Pendientes humanos / fiscales
 
-- **Firma de la mig 038** (la dueña): habilita contador + verificado de factura en la Bandeja.
+- **Validación física de los caminos de la 038** (la dueña): el **contador** confirma un egreso no-efectivo desde la Bandeja y un usuario toca **"✓ Verificar"** en una factura. (La mig 038 ya está aplicada a staging — commit `0205654`; el gating de RLS ya no está.)
 - **Contadora:** códigos **CIIU/CABYS** del menú (campos ya existen en Gestor con aviso "pendiente"). Necesarios antes de FE real.
 - **FE real:** elegir emisor certificado CR (Hacienda 4.4) e implementar `FeProvider` real (hoy solo SIM).
 - **Pase del PoS a PROD:** consolidar migraciones 022–038 con guard anti-staging, crear buckets `facturas`/`productos`/`documents` en prod, regenerar tipos post-merge. Requiere autorización única + verificación de hash.

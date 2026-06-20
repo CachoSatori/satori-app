@@ -12,7 +12,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | Fase | Estado | Dónde |
 |---|---|---|
 | Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021) |
-| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | 🟢 **validada por la dueña en staging** | STAGING (necesita **mig 038** para contador/verificado) |
+| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | 🟢 staging · **mig 038 APLICADA** (`0205654`) | STAGING — pendiente solo de validación física: contador registra + "✓ Verificar" |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
 | PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
@@ -23,7 +23,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | Inventario activo F1 — depleción por venta + COGS real | 🟢 | STAGING (037) |
 | Inventario F1 — orden de compra + puente compra→caja→stock | 🔲 | — |
 | Propina PoS → pool del turno | ⏳ | rama `propina-pool` (sin merge, espera decisión dueña) |
-| Pase del PoS a PROD (consolidar 022–038) | 🔲 | espera validación de la dueña + firma mig 038 |
+| Pase del PoS a PROD (consolidar 022–038) | 🔲 | espera validación de la dueña (038 ya firmada y aplicada en **staging**; a prod va con el pase) |
 | F4 Loyalty en mesa + Nosara · F5 Hub local | 🔲 | futuro |
 
 > Detalle de cada fase abajo. Lo nuevo de junio (Bandeja fusionada, FE estructura, inventario activo,
@@ -47,8 +47,10 @@ o Pagado-desde-Banco; contador/owner: solo Pendiente o Banco, nunca efectivo). V
   factura va a la descripción.
 - **Fechas/mes en hora CR** (`dateCR`) en Movimientos/Pendientes/P&L — **MERGEADO a staging**
   (`cb25672`). **Pendiente validación física:** Movimientos de noche + P&L borde de mes.
-- **Depende de la mig 038** (sin firma): hasta aplicarla, el contador no registra y "✓ Verificar"
-  falla por RLS (gating intencional).
+- **mig 038 APLICADA a staging** (la dueña firmó y la corrió; cierre por CLI + tipos en `0205654`):
+  enciende los dos caminos que estaban gateados por RLS — el **contador registra** egresos no-efectivo
+  desde la Bandeja y el botón **"✓ Verificar"** ya tiene su RPC `mark_factura_verified`. Falta solo la
+  **validación física** de ambos por la dueña. (No en prod: la 038 va a prod con el pase del PoS.)
 
 **Etapa 2 — diseñada, pendiente.** Entrada única **foto-primero 100% dentro de Caja Diaria**: se
 retira el camino `facturas` (queda legacy); **foto obligatoria**; la IA lee todo y **sugiere**

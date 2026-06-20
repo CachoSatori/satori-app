@@ -145,6 +145,8 @@ export type Database = {
           description: string
           employee_name: string | null
           exchange_rate: number | null
+          factura_verified_at: string | null
+          factura_verified_by: string | null
           id: string
           method: string | null
           movement_type: string
@@ -171,6 +173,8 @@ export type Database = {
           description: string
           employee_name?: string | null
           exchange_rate?: number | null
+          factura_verified_at?: string | null
+          factura_verified_by?: string | null
           id?: string
           method?: string | null
           movement_type: string
@@ -197,6 +201,8 @@ export type Database = {
           description?: string
           employee_name?: string | null
           exchange_rate?: number | null
+          factura_verified_at?: string | null
+          factura_verified_by?: string | null
           id?: string
           method?: string | null
           movement_type?: string
@@ -226,6 +232,13 @@ export type Database = {
           {
             foreignKeyName: "cash_movements_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_movements_factura_verified_by_fkey"
+            columns: ["factura_verified_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -2226,6 +2239,10 @@ export type Database = {
       get_my_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
+      }
+      mark_factura_verified: {
+        Args: { p_movement_id: string }
+        Returns: undefined
       }
       my_turno_stats: { Args: { p_date?: string }; Returns: Json }
       pos_cobrar_check: {

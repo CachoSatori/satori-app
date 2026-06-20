@@ -43,7 +43,13 @@ export default defineConfig({
         },
       },
       // Force immediate SW activation — skip waiting when new version is detected
-      injectRegister: 'auto',
+      // injectRegister:null → NO inyectamos el registerSW.js del plugin (registra sin
+      // `updateViaCache`). Registramos a mano en main.tsx con updateViaCache:'none' para
+      // que en GitHub Pages (max-age=600, sin _headers posibles) el SW nuevo se detecte
+      // sin "borrar caché". vite-plugin-pwa ^1.3.0 NO expone updateViaCache por config
+      // (genera register(path,{scope,type})) → el registro manual es la vía de menor diff.
+      // Ver _handoff/PROD-SW-RCA.md. La generación del sw.js (workbox) NO cambia.
+      injectRegister: null,
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // 404.html es el fallback SERVER-SIDE de GitHub Pages — la app nunca lo pide.

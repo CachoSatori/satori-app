@@ -11,6 +11,16 @@ import App from './App.tsx'
 //  - chequeo periódico (60 min): las tablets/TVs que quedan abiertas días enteros
 //    también reciben la versión nueva, no solo al reabrir la app.
 if ('serviceWorker' in navigator) {
+  // Registro manual del SW (antes lo hacía el registerSW.js que inyectaba el plugin, que
+  // NO setea updateViaCache). updateViaCache:'none' obliga al navegador a revalidar el
+  // script del SW y sus imports en CADA chequeo de update, sin usar su HTTP-cache → en
+  // GitHub Pages (Cache-Control: max-age=600, headers no configurables) el SW nuevo se
+  // detecta y se toma sin tener que "borrar caché". No cambia install/activación
+  // (skipWaiting/clientsClaim siguen en el sw.js). Ver _handoff/PROD-SW-RCA.md.
+  const swUrl = `${import.meta.env.BASE_URL}sw.js`
+  navigator.serviceWorker.register(swUrl, { updateViaCache: 'none', scope: import.meta.env.BASE_URL })
+    .catch(err => console.error('SW register falló:', err))
+
   let reloaded = false
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (reloaded) return

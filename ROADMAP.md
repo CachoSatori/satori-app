@@ -12,7 +12,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | Fase | Estado | Dónde |
 |---|---|---|
 | Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021) |
-| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | 🟢 staging · **mig 038 APLICADA** (`0205654`) | STAGING — pendiente solo de validación física: contador registra + "✓ Verificar" |
+| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
 | PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
@@ -31,7 +31,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 
 ---
 
-## 🧾 Bandeja / Caja — Etapa 1 (🟢 staging, validada) y Etapa 2 (🔲 diseñada)
+## 🧾 Bandeja / Caja — Etapa 1 (✅ COMPLETA y validada en staging) y Etapa 2 (🔲 diseñada)
 
 **Etapa 1 — en staging, validada físicamente por la dueña.** Se fusionaron las dos bandejas en una
 sola (`/inbox`, foto-primero, con IA Claude). Se eliminó "Bandeja Proveedores" (`/proveedor` +
@@ -49,8 +49,9 @@ o Pagado-desde-Banco; contador/owner: solo Pendiente o Banco, nunca efectivo). V
   (`cb25672`). **Pendiente validación física:** Movimientos de noche + P&L borde de mes.
 - **mig 038 APLICADA a staging** (la dueña firmó y la corrió; cierre por CLI + tipos en `0205654`):
   enciende los dos caminos que estaban gateados por RLS — el **contador registra** egresos no-efectivo
-  desde la Bandeja y el botón **"✓ Verificar"** ya tiene su RPC `mark_factura_verified`. Falta solo la
-  **validación física** de ambos por la dueña. (No en prod: la 038 va a prod con el pase del PoS.)
+  desde la Bandeja y el botón **"✓ Verificar"** (RPC `mark_factura_verified`). Ambos **VALIDADOS
+  físicamente por la dueña** con usuario rol contador → **Etapa 1 cerrada en staging**. (No en prod:
+  la 038 va a prod con el pase del PoS.)
 
 **Etapa 2 — diseñada, pendiente.** Entrada única **foto-primero 100% dentro de Caja Diaria**: se
 retira el camino `facturas` (queda legacy); **foto obligatoria**; la IA lee todo y **sugiere**

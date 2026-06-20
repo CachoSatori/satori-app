@@ -57,7 +57,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) pero **si
 | Caja + cierre del día | ✅ | prod | `cashUtils` SAGRADO |
 | Ingesta por foto (IA) — bandeja vieja | ✅ | prod | Claude Haiku, esquema CR |
 | Finanzas / P&L · Reportes · Admin · Auth · Realtime · Offline | ✅ | prod | — |
-| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja** | 🟢 **Etapa 1** | staging | Foto-primero, matriz de pago por rol, supplier_id real, pendientes nivel-día visibles — validado por la dueña. **mig 038 ya APLICADA** (commit `0205654`). **Pendiente solo de validación física** de los dos caminos recién encendidos: el **contador registra** desde la Bandeja y el botón **"✓ Verificar"**. |
+| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja** | ✅ **Etapa 1 COMPLETA** | staging | Foto-primero, matriz de pago por rol, supplier_id real, pendientes nivel-día visibles. **mig 038 APLICADA** (commit `0205654`) y **VALIDADA físicamente por la dueña** con usuario rol **contador**: registra egresos no-efectivo desde la Bandeja y el botón **"✓ Verificar"** funciona. Etapa 1 cerrada en staging. |
 | PoS — catálogo/salón/multi-local (022) | 🟢 | staging | — |
 | PoS — comandero tablet + "pro" T4 | 🟢 | staging | alérgenos en tile, búsqueda en vivo, total sticky, estética Satori |
 | PoS — KDS web | 🟢 | staging | impresión real ESC/POS = futuro (F5) |
@@ -70,14 +70,13 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) pero **si
 
 ## (e) Pendientes de PLATA — sin firma de la dueña (NO mergear/aplicar sin OK)
 
-1. **Migración 038** (Bandeja fusión) → ✅ **FIRMADA y APLICADA a staging** (commit `0205654`). Ya NO está pendiente de plata. Queda solo la **validación física** de los dos caminos que enciende (contador registra + "✓ Verificar"). Aplicar a **prod** sigue pendiente (parte del pase del PoS).
+1. **Migración 038** (Bandeja fusión) → ✅ **FIRMADA, APLICADA y VALIDADA en staging** (commit `0205654`). Ya NO está pendiente de plata; sus dos caminos (contador registra + "✓ Verificar") quedaron **validados físicamente por la dueña** con rol contador. Aplicar a **prod** sigue pendiente (parte del pase del PoS).
 2. **`propina-pool`** (rama, sin merge) → conecta `pos_payments.tip_crc` al pool del turno **sin tocar `tipCalculations`**. **DECISIÓN-PRODUCTO abierta:** propina de tarjeta/SINPE ¿al mismo pool que efectivo (implementado, conservador) o separada? Reporte `ESTADO-PROPINA-POOL.md` (vive en la rama: `git show propina-pool:ESTADO-PROPINA-POOL.md`).
 3. **`fix-doble-cobro`** → ya está en staging (mig 033). Falta validación física + decisión de pase a PROD. La matemática del cobro NO se tocó; solo la persistencia (RPC atómica + `client_op_id` UNIQUE).
 4. **`fix/fecha-cr-consistente`** — **MERGEADO a staging** (`cb25672`). Cambia la atribución de **mes CR** de gastos de noche en el P&L. **Pendiente validación física:** Movimientos de noche + P&L borde de mes (validar contra un cierre mensual conocido).
 
 ## (f) Pendientes humanos / fiscales
 
-- **Validación física de los caminos de la 038** (la dueña): el **contador** confirma un egreso no-efectivo desde la Bandeja y un usuario toca **"✓ Verificar"** en una factura. (La mig 038 ya está aplicada a staging — commit `0205654`; el gating de RLS ya no está.)
 - **Contadora:** códigos **CIIU/CABYS** del menú (campos ya existen en Gestor con aviso "pendiente"). Necesarios antes de FE real.
 - **FE real:** elegir emisor certificado CR (Hacienda 4.4) e implementar `FeProvider` real (hoy solo SIM).
 - **Pase del PoS a PROD:** consolidar migraciones 022–038 con guard anti-staging, crear buckets `facturas`/`productos`/`documents` en prod, regenerar tipos post-merge. Requiere autorización única + verificación de hash.

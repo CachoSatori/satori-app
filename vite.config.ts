@@ -1,11 +1,36 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { execSync } from 'node:child_process'
 
 // Base dinámico: producción (GitHub Pages) sirve bajo /satori-app/; staging (Cloudflare
 // Pages) sirve en la raíz /. Se decide por VITE_APP_ENV (build:staging lo setea).
 // Todo lo del PWA (manifest, iconos, scope, fallback) usa BASE → no más rutas clavadas.
 const BASE = process.env.VITE_APP_ENV === 'staging' ? '/' : '/satori-app/'
+
+// Identidad del build, para el chequeo de versión con cache-bust (ver main.tsx + _handoff/
+// PROD-SW-RCA.md). En CI usamos GITHUB_SHA; en local, el hash corto de git; si nada, timestamp.
+function appCommit(): string {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7)
+  try { return execSync('git rev-parse --short HEAD').toString().trim() } catch { return String(Date.now()) }
+}
+const APP_COMMIT = appCommit()
+const BUILT_AT = new Date().toISOString()
+
+// Emite dist/version.json (servido en {BASE}version.json) con la identidad del build.
+// NO entra al precache de workbox (globPatterns no incluye .json) → siempre se pide a red.
+function versionJsonPlugin(): Plugin {
+  return {
+    name: 'satori-version-json',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ commit: APP_COMMIT, builtAt: BUILT_AT }),
+      })
+    },
+  }
+}
 
 export default defineConfig({
   plugins: [
@@ -43,7 +68,13 @@ export default defineConfig({
         },
       },
       // Force immediate SW activation — skip waiting when new version is detected
-      injectRegister: 'auto',
+      // injectRegister:null → NO inyectamos el registerSW.js del plugin (registra sin
+      // `updateViaCache`). Registramos a mano en main.tsx con updateViaCache:'none' para
+      // que en GitHub Pages (max-age=600, sin _headers posibles) el SW nuevo se detecte
+      // sin "borrar caché". vite-plugin-pwa ^1.3.0 NO expone updateViaCache por config
+      // (genera register(path,{scope,type})) → el registro manual es la vía de menor diff.
+      // Ver _handoff/PROD-SW-RCA.md. La generación del sw.js (workbox) NO cambia.
+      injectRegister: null,
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // 404.html es el fallback SERVER-SIDE de GitHub Pages — la app nunca lo pide.
@@ -73,7 +104,12 @@ export default defineConfig({
       },
       devOptions: { enabled: false },
     }),
+    versionJsonPlugin(),
   ],
+  define: {
+    // Identidad del build embebida en el bundle, para comparar contra version.json.
+    __APP_COMMIT__: JSON.stringify(APP_COMMIT),
+  },
   base: BASE,
   build: {
     rollupOptions: {

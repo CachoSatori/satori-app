@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../shared/api/supabase'
 import { getVentasDias, getVentasHist, getProductMap } from '../../shared/api/ventas'
 import { getActiveEmployees } from '../../shared/api/tips'
+import { monthRangeBounds } from '../../shared/utils/dateRange'
 import type { DiasMap, HistMap, ProductMap } from '../../shared/types/ventas'
 import type { Employee, MovementType } from '../../shared/types/database'
 import {
@@ -73,8 +74,9 @@ async function fetchPropinas(ym: string, emps: Employee[]): Promise<PropinasBloc
     .from('tip_sessions')
     .select('id, session_date, pool_efectivo_crc, pool_efectivo_usd, pool_barra_crc, exchange_rate')
     .eq('status', 'closed')
-    .gte('session_date', `${ym}-01`)
-    .lte('session_date', `${ym}-31`)
+    // Límite superior EXCLUSIVO = 1° del mes siguiente (no `${ym}-31`, fecha inválida → 400).
+    .gte('session_date', monthRangeBounds(ym).start)
+    .lt('session_date', monthRangeBounds(ym).endExclusive)
 
   const rows = (sessions ?? []) as Array<{
     id: string; session_date: string
@@ -115,8 +117,9 @@ async function fetchCaja(ym: string): Promise<CajaBlock> {
   const { data } = await supabase
     .from('cash_movements')
     .select('movement_type, amount_crc, subcategory, status, created_at')
-    .gte('created_at', `${ym}-01T00:00:00Z`)
-    .lte('created_at', `${ym}-31T23:59:59Z`)
+    // Límite superior EXCLUSIVO = 1° del mes siguiente 00:00Z (no `${ym}-31T23:59:59Z`, inválido → 400).
+    .gte('created_at', monthRangeBounds(ym).startTs)
+    .lt('created_at', monthRangeBounds(ym).endExclusiveTs)
 
   const movs = ((data ?? []) as Array<{
     movement_type: MovementType; amount_crc: number; subcategory: string; status: string

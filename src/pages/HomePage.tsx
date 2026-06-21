@@ -4,6 +4,7 @@ import { useAuth } from '../shared/hooks/useAuth'
 import type { UserRole } from '../shared/types/database'
 import { supabase } from '../shared/api/supabase'
 import { todayCR, fi } from '../shared/utils'
+import { monthRangeBounds } from '../shared/utils/dateRange'
 import { ROLE_LABELS } from '../shared/constants'
 
 interface Module {
@@ -206,12 +207,14 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
   if (metaData?.value?.restaurante) {
     const meta = metaData.value.restaurante[curMonth]
     if (meta > 0) {
-      // Get current month ventas total
+      // Get current month ventas total. Límite superior EXCLUSIVO = 1° del mes siguiente
+      // (no `${curMonth}-31`, que es fecha inválida y daba 400 en meses de 30 días/feb).
+      const { start, endExclusive } = monthRangeBounds(curMonth)
       const { data: dias } = await supabase
         .from('ventas_dias')
         .select('data')
-        .gte('session_date', curMonth + '-01')
-        .lte('session_date', curMonth + '-31')
+        .gte('session_date', start)
+        .lt('session_date', endExclusive)
       if (dias) {
         const ventas = (dias as { data: { saloneros: Record<string, { total?: number; esCajero?: boolean }> } }[])
           .reduce((s, row) => {

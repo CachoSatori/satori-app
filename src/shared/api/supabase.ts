@@ -39,3 +39,15 @@ const safeNavigatorLock = async <R>(name: string, _acquireTimeout: number, fn: (
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: { lock: safeNavigatorLock },
 })
+
+// Realtime se autentica con el JWT del usuario SOLO al crear/unir el canal. Cuando
+// supabase-js refresca el token (cada hora, o al volver el foco), el socket ya abierto
+// se queda con el token VIEJO; al vencer, el join falla con InvalidJWTToken ("Token has
+// expired") y el SDK reintenta con el mismo token muerto → loop de CHANNEL_ERROR → "se
+// cuelga" (ver HANG-RCA.md / RCA de Realtime). Acá propagamos CADA cambio de sesión al
+// socket para que se re-autentique con el token fresco. En signout (session null) se pasa
+// null → Realtime vuelve a la anon key. Listener global, registrado una sola vez (este
+// módulo es singleton). El .catch evita un unhandled rejection si el socket aún no abrió.
+supabase.auth.onAuthStateChange((_event, session) => {
+  supabase.realtime.setAuth(session?.access_token ?? null).catch(() => { /* socket no listo */ })
+})

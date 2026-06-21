@@ -29,12 +29,16 @@ profundizar/decidir; nada acá implementa nada por sí solo.
 - ⏳ pendiente de profundizar/decidir (aplica a todo: nada se implementa desde estos docs).
 
 ## 🧭 Handoff — leer en este orden para ponerse al día
-1. **[../ESTADO.md](../ESTADO.md)** — foto compacta: ramas (staging `cb25672`), prod vs staging, migraciones (⚠ mig 038 sin aplicar, espera firma), pendientes. **Incluye la Bandeja fusionada (Etapa 1).**
-2. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases con estado real (✅/🟢/⏳/🔲); Bandeja Etapa 1 (🟢 validada) + Etapa 2 (diseñada) + backlog nuevo de junio.
-3. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — backlog priorizado (mig 038 → Etapa 2 → PWA urgente → deudas a futuro); marca qué espera firma vs validación física.
+1. **[../ESTADO.md](../ESTADO.md)** — foto compacta: ramas (main `ff836a0`, staging `e0404a9`), prod vs staging, migraciones (038 aplicada en staging; ⚠ 035 flaggeada), pendientes. **Incluye los 2 fixes ya en PROD (SW + fechas).**
+2. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases con estado real (✅/🟢/⏳/🔲); fixes SW+fechas ✅ en prod, Bandeja Etapa 1 ✅ en staging, Etapa 2 diseñada.
+3. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — backlog priorizado (hora-CR bordes → 404 menor → mig 035 → Etapa 2); marca qué espera firma/decisión vs validación física.
 4. **[../SPEC-LAVU-FLUJO-MESA.md](../SPEC-LAVU-FLUJO-MESA.md)** — fuente de verdad del flujo de mesa/comanda (semáforo de paridad).
-5. **[../REPORTE-NOCHE-2.md](../REPORTE-NOCHE-2.md)** — trabajo previo (PoS pro + FE estructura + inventario activo) + checklist de prueba física.
+5. **[../REPORTE-NOCHE-2.md](../REPORTE-NOCHE-2.md)** — trabajo PoS previo (pro + FE estructura + inventario activo) + checklist de prueba física.
 
-> Otros relacionados: `ESTADO-ARCHIVO.md` (changelog histórico detallado), `ESTADO-PROPINA-POOL.md`
-> (solo en la rama `propina-pool`, sin merge), `AUDITORIA-CONSOLIDACION.md` (auditoría técnica),
-> `OFFLINE.md` / `STAGING.md` / `HANG-RCA.md` (notas de infraestructura).
+> **RCA cerrados (jun-21):** [../_handoff/PROD-SW-RCA.md](../_handoff/PROD-SW-RCA.md) (SW viejo en prod →
+> updateViaCache + version.json) · [../_handoff/RCA-FECHAS-BORDE.md](../_handoff/RCA-FECHAS-BORDE.md)
+> (400 por `-31` en reportes → helper `monthRangeBounds`). Ambos arreglos en prod.
+>
+> Otros relacionados: `ESTADO-ARCHIVO.md` (changelog histórico), `ESTADO-PROPINA-POOL.md` (solo en la rama
+> `propina-pool`), `_handoff/038-apply.log` (aplicación mig 038 + discrepancia 035), `AUDITORIA-CONSOLIDACION.md`,
+> `OFFLINE.md` / `STAGING.md` / `HANG-RCA.md` (infraestructura).

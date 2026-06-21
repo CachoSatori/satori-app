@@ -1,17 +1,19 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-18**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-21**
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-06-18)
+## 📍 Estado real de las fases (handoff 2026-06-21)
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 
 | Fase | Estado | Dónde |
 |---|---|---|
 | Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021) |
+| **Estabilidad PWA — fix del SW viejo en prod** (updateViaCache:'none' + version.json cache-bust) | ✅ **VALIDADA en PROD** | PROD (`fde9264`) — RCA `_handoff/PROD-SW-RCA.md` |
+| **Fix de fechas de borde de mes** (`-31`→400; helper `monthRangeBounds`, result-preserving) | ✅ **VALIDADA en PROD** | PROD (`ff836a0`) — RCA `_handoff/RCA-FECHAS-BORDE.md` |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
@@ -61,19 +63,25 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
 
 ## 🆕 Backlog nuevo (junio 18) — además de las fases de arriba
 
-- **✅ COMPLETA y VALIDADA — Estabilidad de la PWA (Fases 1 + 2, en staging):**
-  - **F1 — caché del SW:** `public/_headers` con `no-cache, must-revalidate` para `sw.js`/`registerSW.js`/
-    `manifest`/shell en Cloudflare Pages → **ya no hace falta borrar caché** para ver lo nuevo (verificado
-    por curl ANTES/DESPUÉS, ver `_handoff/NOCTURNO.md`).
-  - **F2 — refresco proactivo de token en foco:** `useAuth.tsx` `refreshOnFocus` (ítem 1 de `HANG-RCA.md`)
-    → tras dejar la PC en pausa con el token vencido, al volver la app responde y **guarda sin trabarse**.
-  - Ambas **validadas físicamente por la dueña en staging**. (Pendiente solo el pase a prod.)
+- **✅ RESUELTO y EN PROD (jun-21) — Estabilidad de la PWA (SW viejo):** registro manual con
+  `updateViaCache:'none'` + `injectRegister:null` + chequeo de `version.json` con cache-bust (`fde9264`).
+  Funciona en GitHub Pages (donde `_headers` no aplica). Validado Mac/iPhone/Lenovo. En staging además
+  está el `public/_headers` no-cache (Cloudflare) y el refresco de token en foco (`useAuth refreshOnFocus`).
+- **✅ RESUELTO y EN PROD (jun-21) — Fechas de borde de mes (400 por `-31`):** helper `monthRangeBounds`
+  (límite superior exclusivo = 1° del mes siguiente) en Inicio/Reporte Mensual/Food Cost; result-preserving
+  para meses de 31 días (`ff836a0`). RCA `_handoff/RCA-FECHAS-BORDE.md`.
+- **⏳ PENDIENTE (cambia números, valida la dueña) — hora-CR en bordes de período:** el fix del `-31`
+  resolvió el 400, pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`). `finance.ts:132/139`
+  (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el 31-dic de noche cae en el año equivocado por
+  el offset +6h) y similares. Pasar los límites a hora CR. Misma familia que el `-31`, **NO tocada** porque
+  cambia atribuciones → requiere validación física. Ver `_handoff/RCA-FECHAS-BORDE.md` §5.
+- **🔲 404 menor en prod sobre `propinas:1`** (recurso faltante, probablemente icono o source-map; **NO afecta
+  operación**). Prolijidad, baja prioridad — falta identificar el archivo exacto (Network con filtro vacío).
+- **🔲 Discrepancia mig 035** en el ledger de staging (registrada como aplicada sin merge) — sesión dedicada
+  de propinas, **sin tocar el historial** hasta entender el origen.
 - **Cuentas por pagar / crédito a proveedores 7-15-30 días** (fecha de PAGO ≠ fecha de registro).
 - **Alerta de cambio de precio** de un producto (que el contador la detecte y se ajuste la receta).
 - **Offline robusto** con base local que sincroniza con Supabase al volver internet.
-- **P&L — borde de año en UTC:** `getLiveActuals` todavía acota la consulta por `created_at` en UTC →
-  el 31-dic de noche puede caer en el año/mes equivocado; pasar también ese filtro a CR (el mes ya se
-  atribuye con `dateCR`).
 - **Unidades de inventario por presentación** (kilo/litro/gramos; huevos por maple/caja) editables por
   ingrediente, recordadas por proveedor.
 

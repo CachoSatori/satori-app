@@ -13,6 +13,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { Ingredient } from '../../shared/types/inventario'
 import { supabase } from '../../shared/api/supabase'
 import { todayCR } from '../../shared/utils'
+import { monthRangeBounds } from '../../shared/utils/dateRange'
 
 interface Props { ingredients: Ingredient[] }
 
@@ -53,17 +54,19 @@ export default function InvFoodCost({ ingredients }: Props) {
     async function run() {
       setLoad(true); setError(null)
       try {
-        const from = `${ym}-01`, to = `${ym}-31`
+        // Límite superior EXCLUSIVO = 1° del mes siguiente (no `${ym}-31`, inválido → 400).
+        // Cubre los TRES usos: created_at (timestamptz) en inventory/cash y session_date (DATE) en ventas.
+        const mb = monthRangeBounds(ym)
         const [movsRes, cashRes, diasRes] = await Promise.all([
           supabase.from('inventory_movements')
             .select('ingredient_id, movement_type, qty_delta, created_at')
-            .gte('created_at', `${from}T00:00:00Z`).lte('created_at', `${to}T23:59:59Z`),
+            .gte('created_at', mb.startTs).lt('created_at', mb.endExclusiveTs),
           supabase.from('cash_movements')
             .select('amount_crc, movement_type, status, created_at')
             .eq('movement_type', 'egreso_mercaderia')
-            .gte('created_at', `${from}T00:00:00Z`).lte('created_at', `${to}T23:59:59Z`),
+            .gte('created_at', mb.startTs).lt('created_at', mb.endExclusiveTs),
           supabase.from('ventas_dias')
-            .select('data').gte('session_date', from).lte('session_date', to),
+            .select('data').gte('session_date', mb.start).lt('session_date', mb.endExclusive),
         ])
         if (cancel) return
 

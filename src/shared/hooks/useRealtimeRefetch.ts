@@ -81,7 +81,9 @@ export function useRealtimeRefetch(
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, schedule)
       }
       ch.subscribe((status, err) => {
-        if (disposed) return
+        // ch !== channel ⇒ este callback es de un canal ya reemplazado (join tardío): ignorarlo,
+        // para no disparar recreate() sobre el canal nuevo (repone el guard original channel===ch).
+        if (disposed || ch !== channel) return
         if (status !== 'SUBSCRIBED') console.warn(`[rt] canal ${channelName}: ${status}`, err?.message ?? '')
         if (status === 'SUBSCRIBED') {
           reconnectDelay = 2_000

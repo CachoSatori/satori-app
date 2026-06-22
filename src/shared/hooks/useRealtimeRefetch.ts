@@ -37,7 +37,6 @@ export function useRealtimeRefetch(
     let reconnectDelay = 2_000
     let disposed = false
     let channel: RealtimeChannel | null = null
-    let subscribed = false   // ¿el canal está vivo? (lo consulta onVis para forzar recuperación)
     let authErrors = 0       // CHANNEL_ERROR/TIMED_OUT seguidos sin JWT → recrea al 2º (el 1º suele ser transitorio)
 
     const isTyping = () => {
@@ -90,7 +89,6 @@ export function useRealtimeRefetch(
         if (status === 'SUBSCRIBED') {
           reconnectDelay = 2_000
           authErrors = 0
-          subscribed = true
           schedule()  // ponerse al día con lo que pasó mientras no había canal
         } else if (status === 'CLOSED') {
           recreate()
@@ -100,7 +98,6 @@ export function useRealtimeRefetch(
           // Recreamos el canal (la Capa 1 ya repuso el JWT fresco en el socket). PERO el primer
           // CHANNEL_ERROR suelto suele ser un parpadeo transitorio del join → lo dejamos pasar:
           // recreamos si el error es de JWT, o si ya van 2 errores seguidos.
-          subscribed = false
           const msg = err?.message ?? ''
           if (/jwt|token|expired/i.test(msg) || ++authErrors >= 2) recreate()
         }
@@ -111,24 +108,29 @@ export function useRealtimeRefetch(
     const onVis = () => {
       if (document.visibilityState !== 'visible') return
       schedule()  // refetch de seguridad por si el websocket murió en background
-      // Si el canal NO está suscripto (murió en background con el token vencido), forzá la
-      // recuperación en el acto en vez de esperar el backoff: volver el foco ya disparó el
-      // refresh del token (useAuth) → la Capa 1 re-autenticó el socket → re-suscribimos ya.
-      if (!subscribed) {
-        window.clearTimeout(reconnect)
-        if (channel) {
-          supabase.removeChannel(channel).catch(() => { /* ya removido */ })
-          channel = null
-        }
-        reconnectDelay = 2_000
-        subscribe()
-      }
     }
     document.addEventListener('visibilitychange', onVis)
+
+    // 'rt:healthy' lo emite el singleton de supabase.ts (ensureRealtimeHealthy) DESPUÉS de
+    // forzar refreshSession() + setAuth + revivir el socket. Recién entonces re-suscribimos:
+    // recreación limpia con token fresco y socket vivo. Antes esto lo intentaba onVis sobre
+    // el JWT muerto y loopeaba; ahora el re-subscribe ocurre con la sesión ya garantizada.
+    const onHealthy = () => {
+      if (disposed) return
+      if (channel) {
+        supabase.removeChannel(channel).catch(() => { /* ya removido */ })
+        channel = null
+      }
+      reconnectDelay = 2_000
+      window.clearTimeout(reconnect)
+      subscribe()
+    }
+    window.addEventListener('rt:healthy', onHealthy)
 
     return () => {
       disposed = true
       document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('rt:healthy', onHealthy)
       window.clearTimeout(debounce)
       window.clearTimeout(retry)
       window.clearTimeout(reconnect)

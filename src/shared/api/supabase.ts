@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '../types/supabase.gen'
+import type { Session } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -51,3 +52,62 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 supabase.auth.onAuthStateChange((_event, session) => {
   supabase.realtime.setAuth(session?.access_token ?? null).catch(() => { /* socket no listo */ })
 })
+
+const EXPIRY_MARGIN_S = 60
+let healthInFlight: Promise<void> | null = null
+
+const tokenNeedsRefresh = (session: Session | null): boolean => {
+  if (!session) return false
+  const exp = session.expires_at
+  if (!exp) return true
+  return exp - Math.floor(Date.now() / 1000) <= EXPIRY_MARGIN_S
+}
+
+// Recuperación de sesión + socket al volver de background. Single-flight: N disparos
+// concurrentes (varios hooks + useAuth) colapsan en UNA operación → no apila el candado
+// de auth ni martilla el endpoint de token. Fuerza refreshSession() (getSession NO
+// refresca un token vencido), propaga el token fresco al socket, y revive el WebSocket
+// si quedó caído. Solo emite 'rt:healthy' si hubo recuperación real (refresh o revive),
+// para no recrear canales en cada cambio de pestaña.
+export const ensureRealtimeHealthy = (): Promise<void> => {
+  if (healthInFlight) return healthInFlight
+  healthInFlight = (async () => {
+    let recovered = false
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      let token = session?.access_token ?? null
+      if (tokenNeedsRefresh(session)) {
+        const { data, error } = await supabase.auth.refreshSession()
+        if (!error && data.session) { token = data.session.access_token; recovered = true }
+      }
+      if (!token) return            // deslogueado: nada que revivir
+      await supabase.realtime.setAuth(token).catch(() => { /* socket no listo */ })
+      if (!supabase.realtime.isConnected()) {
+        supabase.realtime.disconnect()
+        supabase.realtime.connect()
+        recovered = true
+      }
+      if (recovered) window.dispatchEvent(new Event('rt:healthy'))
+    } catch (e) {
+      console.warn('[rt] ensureRealtimeHealthy falló', e)
+    } finally {
+      healthInFlight = null
+    }
+  })()
+  return healthInFlight
+}
+
+// Disparadores globales, registrados UNA sola vez (este módulo es singleton).
+if (typeof window !== 'undefined') {
+  const onResume = () => {
+    if (document.visibilityState === 'visible') {
+      supabase.auth.startAutoRefresh().catch(() => {})
+      void ensureRealtimeHealthy()
+    } else {
+      supabase.auth.stopAutoRefresh().catch(() => {})
+    }
+  }
+  document.addEventListener('visibilitychange', onResume)
+  window.addEventListener('online', () => { void ensureRealtimeHealthy() })
+  window.addEventListener('focus', () => { void ensureRealtimeHealthy() })
+}

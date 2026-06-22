@@ -42,13 +42,20 @@ async function applyPendingCash(rows: CashMovement[]): Promise<CashMovement[]> {
 // en vez de quedar "pensando" para siempre. La cura de fondo es el refresh proactivo en foco
 // (useAuth) — esto es el cinturón. Solo para ops idempotentes o que el usuario reintenta a mano.
 const WRITE_TIMEOUT_MS = 15000
-function withWriteTimeout<T>(p: PromiseLike<T>, ms = WRITE_TIMEOUT_MS): Promise<T> {
+function withWriteTimeout<T>(
+  run: (signal: AbortSignal) => PromiseLike<T>,
+  ms = WRITE_TIMEOUT_MS,
+): Promise<T> {
+  const controller = new AbortController()
   return Promise.race([
-    Promise.resolve(p),
+    Promise.resolve(run(controller.signal)),
     new Promise<T>((_, reject) =>
       setTimeout(() => {
-        // Marcado DISTINGUIBLE: un timeout NO es "sin red". El socket pudo despertar zombi
-        // tras suspensión y colgar la 1ª op teniendo red. isTimeout deja que el caller
+        // No alcanza con dejar de esperar: el fetch colgado sigue vivo ocupando el socket
+        // TCP zombi del pool, y el retry podría reusar ESE socket muerto. abort() cierra el
+        // socket (RST/FIN) → lo saca del pool → el retry abre una conexión TCP fresca.
+        controller.abort()
+        // Marcado DISTINGUIBLE: un timeout NO es "sin red". isTimeout deja que el caller
         // reintente una vez en vez de encolar un falso "sin guardar".
         const err = new Error('La operación tardó demasiado. Reintentá.')
         ;(err as { isTimeout?: boolean }).isTimeout = true
@@ -96,7 +103,7 @@ export async function createCashSession(params: {
   initial_suppliers_crc?: number
   notes?: string
 }): Promise<CashSession> {
-  const { data, error } = await withWriteTimeout(supabase
+  const { data, error } = await withWriteTimeout(signal => supabase
     .from('cash_sessions')
     .insert({
       session_date:          params.session_date,
@@ -111,6 +118,7 @@ export async function createCashSession(params: {
       notes:                 params.notes ?? null,
     })
     .select()
+    .abortSignal(signal)
     .single())
   if (error) throw new Error(error.message)
   return data as CashSession
@@ -138,7 +146,7 @@ export async function closeCashSession(
   },
   closedBy: string,
 ): Promise<void> {
-  const { error } = await withWriteTimeout(supabase
+  const { error } = await withWriteTimeout(signal => supabase
     .from('cash_sessions')
     .update({
       status:         'closed',
@@ -149,7 +157,8 @@ export async function closeCashSession(
       final_bank_crc: finalData.final_bank_crc ?? null,
       ...(finalData.notes ? { notes: finalData.notes } : {}),
     })
-    .eq('id', sessionId))
+    .eq('id', sessionId)
+    .abortSignal(signal))
   if (error) throw new Error(error.message)
 }
 
@@ -232,15 +241,17 @@ export async function createCashMovement(movement: {
   }
   if (isOffline()) return queueAndReturn()
   try {
-    const { data, error } = await withWriteTimeout(supabase
+    const { data, error } = await withWriteTimeout(signal => supabase
       .from('cash_movements')
       .insert(row as unknown as Tables['cash_movements']['Insert'])
       .select()
+      .abortSignal(signal)
       .single())
     if (error) throw new Error(error.message)
     return data as CashMovement
   } catch (e) {
     const timedOut = (e as { isTimeout?: boolean })?.isTimeout === true
+                  || (e as { name?: string })?.name === 'AbortError'
     if (timedOut) {
       // El socket pudo despertar zombi y colgar la 1ª op. Reintentar UNA vez:
       // el heartbeatCallback ya está reconectando en paralelo. El reintento usa el MISMO
@@ -275,13 +286,15 @@ export async function updateCashMovement(
   void _pending
   if (isOffline()) return queueCashMutation('update', { match: { id }, updates: clean })
   try {
-    const { error } = await withWriteTimeout(supabase
+    const { error } = await withWriteTimeout(signal => supabase
       .from('cash_movements')
       .update(clean as unknown as Tables['cash_movements']['Update'])
-      .eq('id', id))
+      .eq('id', id)
+      .abortSignal(signal))
     if (error) throw new Error(error.message)
   } catch (e) {
     const timedOut = (e as { isTimeout?: boolean })?.isTimeout === true
+                  || (e as { name?: string })?.name === 'AbortError'
     if (timedOut) {
       // Reintento único (socket zombi tras suspensión). El update por id es idempotente.
       try {
@@ -336,13 +349,15 @@ export async function createDayMovement(m: {
 export async function deleteCashMovement(id: string): Promise<void> {
   if (isOffline()) return queueCashMutation('delete', { match: { id } })
   try {
-    const { error } = await withWriteTimeout(supabase
+    const { error } = await withWriteTimeout(signal => supabase
       .from('cash_movements')
       .delete()
-      .eq('id', id))
+      .eq('id', id)
+      .abortSignal(signal))
     if (error) throw new Error(error.message)
   } catch (e) {
     const timedOut = (e as { isTimeout?: boolean })?.isTimeout === true
+                  || (e as { name?: string })?.name === 'AbortError'
     if (timedOut) {
       // Reintento único (socket zombi tras suspensión). El delete por id es idempotente.
       try {
@@ -411,7 +426,7 @@ export async function recordCierreSales(params: {
   ].filter(r => r.crc !== 0 || r.usd !== 0)
   if (rows.length === 0) return
 
-  const { error } = await withWriteTimeout(supabase.from('cash_movements').insert(
+  const { error } = await withWriteTimeout(signal => supabase.from('cash_movements').insert(
     rows.map(r => ({
       session_id:    null,
       created_by:    params.created_by,
@@ -430,7 +445,7 @@ export async function recordCierreSales(params: {
       method:        'Efectivo',
       status:        'aprobado',
     })),
-  ))
+  ).abortSignal(signal))
   if (error) throw new Error(error.message)
 }
 
@@ -448,7 +463,7 @@ export async function recordCierreRetiro(params: {
   const desc = `Retiro dueños a banco ${params.session_date}`
   await supabase.from('cash_movements').delete().eq('description', desc)
   if (!params.amount_crc) return
-  const { error } = await withWriteTimeout(supabase.from('cash_movements').insert({
+  const { error } = await withWriteTimeout(signal => supabase.from('cash_movements').insert({
     session_id:    null,
     created_by:    params.created_by,
     movement_type: 'traspaso',
@@ -465,7 +480,7 @@ export async function recordCierreRetiro(params: {
     caja_origen:   'Caja Fuerte',   // sale de la Caja Fuerte (traspaso al Banco) → descuenta el saldo
     method:        'Transferencia',
     status:        'aprobado',
-  }))
+  }).abortSignal(signal))
   if (error) throw new Error(error.message)
 }
 
@@ -570,23 +585,24 @@ export async function discardCierreDia(date: string): Promise<void> {
 // explícita (la dispara el usuario con confirmación + autorización de gerencia).
 export async function discardDiaCompleto(date: string): Promise<void> {
   // 1) Movimientos ligados a turnos de esa fecha
-  const { data: sess } = await withWriteTimeout(supabase.from('cash_sessions').select('id').eq('session_date', date))
+  const { data: sess } = await withWriteTimeout(signal => supabase.from('cash_sessions').select('id').eq('session_date', date).abortSignal(signal))
   const ids = ((sess ?? []) as { id: string }[]).map(s => s.id)
   if (ids.length) {
-    const { error } = await withWriteTimeout(supabase.from('cash_movements').delete().in('session_id', ids))
+    const { error } = await withWriteTimeout(signal => supabase.from('cash_movements').delete().in('session_id', ids).abortSignal(signal))
     if (error) throw new Error(error.message)
   }
   // 2) Movimientos a nivel día (sin turno) de esa fecha — rango horario de Costa Rica (UTC-6)
   const next = new Date(date + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + 1)
   const nextStr = next.toISOString().slice(0, 10)
-  const { error: e2 } = await withWriteTimeout(supabase.from('cash_movements').delete()
+  const { error: e2 } = await withWriteTimeout(signal => supabase.from('cash_movements').delete()
     .is('session_id', null)
-    .gte('created_at', `${date}T06:00:00Z`).lt('created_at', `${nextStr}T06:00:00Z`))
+    .gte('created_at', `${date}T06:00:00Z`).lt('created_at', `${nextStr}T06:00:00Z`)
+    .abortSignal(signal))
   if (e2) throw new Error(e2.message)
   // 3) Cierre del día
-  await withWriteTimeout(supabase.from('cash_cierres_dia').delete().eq('session_date', date))
+  await withWriteTimeout(signal => supabase.from('cash_cierres_dia').delete().eq('session_date', date).abortSignal(signal))
   // 4) Turnos de caja de esa fecha
-  const { error: e4 } = await withWriteTimeout(supabase.from('cash_sessions').delete().eq('session_date', date))
+  const { error: e4 } = await withWriteTimeout(signal => supabase.from('cash_sessions').delete().eq('session_date', date).abortSignal(signal))
   if (e4) throw new Error(e4.message)
 }
 

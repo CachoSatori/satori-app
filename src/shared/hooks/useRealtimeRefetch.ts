@@ -89,22 +89,33 @@ export function useRealtimeRefetch(
         // para no disparar recreate() sobre el canal nuevo (repone el guard original channel===ch).
         if (disposed || ch !== channel) return
         if (status !== 'SUBSCRIBED') console.warn(`[rt] canal ${channelName}: ${status}`, err?.message ?? '')
+        // Distinguimos problema de SOCKET (global: el WebSocket compartido murió, lo cura el revive
+        // global de supabase.ts + el rejoin automático del SDK) de problema de CANAL (eso sí lo recrea
+        // este hook). Si el socket está caído, recrear el canal acá sería pelear contra un transporte
+        // muerto y alimentar el loop CHANNEL_ERROR/TIMED_OUT/CLOSED: dejamos el canal en pie para que
+        // el SDK lo re-una solo cuando el socket vuelva.
+        const socketDown = !supabase.realtime.isConnected()
         if (status === 'SUBSCRIBED') {
           reconnectDelay = 2_000
           authErrors = 0
           subscribed = true
           schedule()  // ponerse al día con lo que pasó mientras no había canal
         } else if (status === 'CLOSED') {
-          recreate()
+          if (socketDown) subscribed = false  // socket muerto: NO recreate ni removeChannel; el SDK re-une el canal al revivir el socket
+          else recreate()                     // canal cerrado con socket sano: problema de canal → recrear
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          // Token JWT vencido (InvalidJWTToken: "Token has expired") o error persistente:
-          // el rejoin automático del SDK reintenta con el MISMO token muerto → loop infinito.
-          // Recreamos el canal (la Capa 1 ya repuso el JWT fresco en el socket). PERO el primer
-          // CHANNEL_ERROR suelto suele ser un parpadeo transitorio del join → lo dejamos pasar:
-          // recreamos si el error es de JWT, o si ya van 2 errores seguidos.
           subscribed = false
-          const msg = err?.message ?? ''
-          if (/jwt|token|expired/i.test(msg) || ++authErrors >= 2) recreate()
+          if (socketDown) {
+            // Socket caído: no es problema de canal. No recreamos ni contamos authErrors; esperamos a
+            // que el revive global resucite el socket y el SDK re-una este canal automáticamente.
+          } else {
+            // Socket sano pero el canal falla: token JWT vencido (InvalidJWTToken: "Token has expired")
+            // o error persistente. El rejoin del SDK reintenta con el MISMO token muerto → loop. Recreamos
+            // el canal (la Capa 1 ya repuso el JWT fresco). El primer CHANNEL_ERROR suelto suele ser un
+            // parpadeo transitorio del join → recreamos si el error es de JWT, o si ya van 2 seguidos.
+            const msg = err?.message ?? ''
+            if (/jwt|token|expired/i.test(msg) || ++authErrors >= 2) recreate()
+          }
         }
       })
     }

@@ -51,27 +51,3 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 supabase.auth.onAuthStateChange((_event, session) => {
   supabase.realtime.setAuth(session?.access_token ?? null).catch(() => { /* socket no listo */ })
 })
-
-// Revivir el SOCKET de Realtime (Round 2). El round 1 (setAuth de arriba) curó el JWT vencido,
-// pero tras un sleep largo (~5h) o una caída de red el WebSocket EN SÍ muere con un cierre sucio
-// (1006). El SDK marca los canales como "errored" y reintenta el rejoin sobre un socket muerto en
-// loop (CHANNEL_ERROR → TIMED_OUT → CLOSED, sin fin): recrear el canal NO alcanza porque el problema
-// es el transporte. Hay que revivir el socket COMPARTIDO una sola vez, a nivel global (el socket de
-// Realtime es único para toda la app; si cada hook intentara revivirlo se pelearían). Al reconectar,
-// phoenix re-une solo los canales "errored" sobre el socket sano (onConnOpen → channel.rejoin()).
-// Se dispara al volver el foco (visibilitychange→visible) y al recuperar la red (online), que es
-// justo cuando el socket muerto en background necesita resucitar. disconnect() devuelve una Promise
-// (la ignoramos con .catch; nunca rechaza) y deja closeWasClean=true para que el auto-reconnect de
-// phoenix no pelee con nuestro connect() inmediato.
-if (typeof document !== 'undefined' && typeof window !== 'undefined') {
-  const reviveSocket = () => {
-    if (!supabase.realtime.isConnected()) {
-      supabase.realtime.disconnect().catch(() => { /* nunca rechaza; teardown del socket muerto */ })
-      supabase.realtime.connect()
-    }
-  }
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') reviveSocket()
-  })
-  window.addEventListener('online', reviveSocket)
-}

@@ -70,15 +70,13 @@ export function useRealtimeRefetch(
       reconnect = window.setTimeout(subscribe, reconnectDelay)
       reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
     }
-    const subscribe = async () => {
+    const subscribe = () => {
       if (disposed) return
-      // postgres_changes respeta RLS: el socket necesita el JWT del usuario
-      // (sin esto el join va con la anon key y el canal queda en error).
-      try {
-        const { data } = await supabase.auth.getSession()
-        if (data.session?.access_token) supabase.realtime.setAuth(data.session.access_token)
-      } catch { /* sin sesión: el canal igual se intenta con la anon key */ }
-      if (disposed) return
+      // postgres_changes respeta RLS: el socket necesita el JWT del usuario. NO lo pedimos acá:
+      // el onAuthStateChange global de supabase.ts ya hace realtime.setAuth en cada cambio de sesión,
+      // así que el socket (único y compartido) viene autenticado. El getSession() por-hook que vivía
+      // acá tomaba el candado de auth (navigator.locks) en cada subscribe/recreate → con varios módulos
+      // y reconexiones se apilaban pedidos al candado ("[auth] lock no adquirido en 10s" → app trabada).
       const ch = supabase.channel(channelName)
       channel = ch
       for (const table of tables) {
@@ -89,33 +87,22 @@ export function useRealtimeRefetch(
         // para no disparar recreate() sobre el canal nuevo (repone el guard original channel===ch).
         if (disposed || ch !== channel) return
         if (status !== 'SUBSCRIBED') console.warn(`[rt] canal ${channelName}: ${status}`, err?.message ?? '')
-        // Distinguimos problema de SOCKET (global: el WebSocket compartido murió, lo cura el revive
-        // global de supabase.ts + el rejoin automático del SDK) de problema de CANAL (eso sí lo recrea
-        // este hook). Si el socket está caído, recrear el canal acá sería pelear contra un transporte
-        // muerto y alimentar el loop CHANNEL_ERROR/TIMED_OUT/CLOSED: dejamos el canal en pie para que
-        // el SDK lo re-una solo cuando el socket vuelva.
-        const socketDown = !supabase.realtime.isConnected()
         if (status === 'SUBSCRIBED') {
           reconnectDelay = 2_000
           authErrors = 0
           subscribed = true
           schedule()  // ponerse al día con lo que pasó mientras no había canal
         } else if (status === 'CLOSED') {
-          if (socketDown) subscribed = false  // socket muerto: NO recreate ni removeChannel; el SDK re-une el canal al revivir el socket
-          else recreate()                     // canal cerrado con socket sano: problema de canal → recrear
+          recreate()
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          // Token JWT vencido (InvalidJWTToken: "Token has expired") o error persistente:
+          // el rejoin automático del SDK reintenta con el MISMO token muerto → loop infinito.
+          // Recreamos el canal (la Capa 1 ya repuso el JWT fresco en el socket). PERO el primer
+          // CHANNEL_ERROR suelto suele ser un parpadeo transitorio del join → lo dejamos pasar:
+          // recreamos si el error es de JWT, o si ya van 2 errores seguidos.
           subscribed = false
-          if (socketDown) {
-            // Socket caído: no es problema de canal. No recreamos ni contamos authErrors; esperamos a
-            // que el revive global resucite el socket y el SDK re-una este canal automáticamente.
-          } else {
-            // Socket sano pero el canal falla: token JWT vencido (InvalidJWTToken: "Token has expired")
-            // o error persistente. El rejoin del SDK reintenta con el MISMO token muerto → loop. Recreamos
-            // el canal (la Capa 1 ya repuso el JWT fresco). El primer CHANNEL_ERROR suelto suele ser un
-            // parpadeo transitorio del join → recreamos si el error es de JWT, o si ya van 2 seguidos.
-            const msg = err?.message ?? ''
-            if (/jwt|token|expired/i.test(msg) || ++authErrors >= 2) recreate()
-          }
+          const msg = err?.message ?? ''
+          if (/jwt|token|expired/i.test(msg) || ++authErrors >= 2) recreate()
         }
       })
     }

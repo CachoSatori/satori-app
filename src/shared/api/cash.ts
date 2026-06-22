@@ -8,7 +8,9 @@ type Tables = Database['public']['Tables']
 
 // ── Offline (FASE A/B — ver OFFLINE.md) ─────────────────────
 const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false
-const NETWORK_ERR = /failed to fetch|networkerror|load failed|fetch failed|timeout de red|se cortó la conexión/i
+// Solo fallos de red REALES. "se cortó la conexión" salió: era el timeout de escritura
+// disfrazado de red (encolaba falso-offline teniendo red — el "sin guardar" fantasma).
+const NETWORK_ERR = /failed to fetch|networkerror|load failed|fetch failed|timeout de red/i
 const isNetErr = (e: unknown) => isOffline() || NETWORK_ERR.test(e instanceof Error ? e.message : String(e))
 
 // Proyección local-first: aplica la cola pendiente sobre las filas leídas
@@ -44,7 +46,14 @@ function withWriteTimeout<T>(p: PromiseLike<T>, ms = WRITE_TIMEOUT_MS): Promise<
   return Promise.race([
     Promise.resolve(p),
     new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error('Se cortó la conexión (la operación tardó demasiado). Reintentá.')), ms)),
+      setTimeout(() => {
+        // Marcado DISTINGUIBLE: un timeout NO es "sin red". El socket pudo despertar zombi
+        // tras suspensión y colgar la 1ª op teniendo red. isTimeout deja que el caller
+        // reintente una vez en vez de encolar un falso "sin guardar".
+        const err = new Error('La operación tardó demasiado. Reintentá.')
+        ;(err as { isTimeout?: boolean }).isTimeout = true
+        reject(err)
+      }, ms)),
   ])
 }
 
@@ -231,6 +240,22 @@ export async function createCashMovement(movement: {
     if (error) throw new Error(error.message)
     return data as CashMovement
   } catch (e) {
+    const timedOut = (e as { isTimeout?: boolean })?.isTimeout === true
+    if (timedOut) {
+      // El socket pudo despertar zombi y colgar la 1ª op. Reintentar UNA vez:
+      // el heartbeatCallback ya está reconectando en paralelo. El reintento usa el MISMO
+      // row (mismo id/client_op_id) → si la 1ª sí entró pese al timeout, la 2ª rebota con
+      // 23505 (idempotente, no duplica plata); si no, recién ahí decidimos.
+      try {
+        const { data, error } = await supabase.from('cash_movements')
+          .insert(row as unknown as Tables['cash_movements']['Insert']).select().single()
+        if (error) throw new Error(error.message)
+        return data as CashMovement
+      } catch (e2) {
+        if (isOffline()) return queueAndReturn()   // ahora SÍ, sin red real
+        throw e2                                   // error visible, NO falso "sin guardar"
+      }
+    }
     if (isNetErr(e)) return queueAndReturn()
     throw e
   }
@@ -256,6 +281,19 @@ export async function updateCashMovement(
       .eq('id', id))
     if (error) throw new Error(error.message)
   } catch (e) {
+    const timedOut = (e as { isTimeout?: boolean })?.isTimeout === true
+    if (timedOut) {
+      // Reintento único (socket zombi tras suspensión). El update por id es idempotente.
+      try {
+        const { error } = await supabase.from('cash_movements')
+          .update(clean as unknown as Tables['cash_movements']['Update']).eq('id', id)
+        if (error) throw new Error(error.message)
+        return
+      } catch (e2) {
+        if (isOffline()) return queueCashMutation('update', { match: { id }, updates: clean })
+        throw e2
+      }
+    }
     if (isNetErr(e)) return queueCashMutation('update', { match: { id }, updates: clean })
     throw e
   }
@@ -304,6 +342,18 @@ export async function deleteCashMovement(id: string): Promise<void> {
       .eq('id', id))
     if (error) throw new Error(error.message)
   } catch (e) {
+    const timedOut = (e as { isTimeout?: boolean })?.isTimeout === true
+    if (timedOut) {
+      // Reintento único (socket zombi tras suspensión). El delete por id es idempotente.
+      try {
+        const { error } = await supabase.from('cash_movements').delete().eq('id', id)
+        if (error) throw new Error(error.message)
+        return
+      } catch (e2) {
+        if (isOffline()) return queueCashMutation('delete', { match: { id } })
+        throw e2
+      }
+    }
     if (isNetErr(e)) return queueCashMutation('delete', { match: { id } })
     throw e
   }

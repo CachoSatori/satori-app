@@ -1,16 +1,48 @@
-# Continuación — backlog priorizado (handoff 2026-06-21)
+# Continuación — backlog priorizado (handoff 2026-06-22)
 
 Estado: PROD (`main` `ff836a0`) = capa de inteligencia + **fix del SW viejo** + **fix de fechas-borde**
-(ambos validados en prod). STAGING (`e0404a9`) = todo el PoS + Bandeja Etapa 1 + ambos fixes. Guardrails
-de siempre: **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos**
-(`cashUtils`, `tipCalculations`, `computeTotals`, cierres, cobro/vuelto), builds+tests+eslint verdes por
-commit. Estado completo → [ESTADO.md](ESTADO.md) · Fases → [ROADMAP.md](ROADMAP.md).
+(ambos validados en prod). STAGING (`23c6bc8`) = todo el PoS + Bandeja Etapa 1 + ambos fixes + **la saga
+Realtime/candado de auth (jun-22, solo staging)**. Guardrails de siempre: **nada a `main`/PROD sin orden
+explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`, `tipCalculations`,
+`computeTotals`, cierres, cobro/vuelto), builds+tests+eslint verdes por commit. Estado completo →
+[ESTADO.md](ESTADO.md) · Fases → [ROADMAP.md](ROADMAP.md).
 
 Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 👁️ espera VALIDACIÓN FÍSICA ·
-🟢 ingeniería lista para arrancar.
+🟢 ingeniería lista para arrancar · 🔴 bloqueante / urgente.
 
 > **Ya resuelto y EN PROD (jun-21):** SW viejo (`fde9264`, RCA `_handoff/PROD-SW-RCA.md`) y fechas de
-> borde de mes (`ff836a0`, RCA `_handoff/RCA-FECHAS-BORDE.md`). El "se traba" eran esas DOS causas.
+> borde de mes (`ff836a0`, RCA `_handoff/RCA-FECHAS-BORDE.md`). Eran DOS de las tres causas del "se traba";
+> la tercera (candado de auth) está resuelta **solo en staging** → ver ítem 0.
+
+---
+
+## 0. 🔴 INMEDIATO — Pase a PROD del fix de Realtime/candado vía CANARIO en 1 dispositivo
+
+**PROD tiene el bug de trabarse VIVO.** La tercera causa del "se traba" (contención del candado de auth,
+`navigator.locks`, disparada por el `getSession()` por-hook de `useRealtimeRefetch`) está **resuelta solo
+en staging** (`fix/auth-lock-contention`, `09480a6`, ya mergeado a `23c6bc8`). Validado físicamente en
+staging con Mac+iPhone simultáneos: consola limpia (sin `[auth] lock no adquirido en 10s`, sin
+`rt-caja CHANNEL_ERROR`), todos los módulos abren, Network 200, performance sana.
+
+**Plan de pase:** llevar a `main` el **round 1** (`onAuthStateChange`→`realtime.setAuth` global) **+ el fix
+final** (saca el `getSession()` redundante). **NO** llevar el **round 2** (revive del socket): se mergeó y
+se **revirtió** porque subía la contención sin beneficio probado. Es **100% client-side, sin migración** →
+no depende del pase del PoS, puede ir solo. **Canario:** desplegar en 1 dispositivo, observar consola +
+maduración **+1h en background** (token/socket), luego rollout. Detalle de la saga → `HANG-RCA.md`, ESTADO.md §(d)/(f).
+
+---
+
+## 🚧 PILAR BLOQUEANTE — Arquitectura de sesión/auth escalable y multi-tenant (ALTA prioridad)
+
+> **🔴 BLOQUEA el pase del PoS a PROD (ítem 5).**
+
+La app hoy usa un **candado de sesión** (`navigator.locks`) que se contiende con pocos dispositivos.
+El PoS llevará **~10 dispositivos concurrentes** (5 tablets salón + 2 cajas + 2 KDS + 1 cocina),
+distintos usuarios al mismo tiempo. Antes del rollout del PoS hay que **rediseñar cómo cada dispositivo
+mantiene su sesión sin pelear por el refresh del token**. **Objetivo de diseño:** escalable a
+**HOTELERÍA con MÚLTIPLES restaurantes** y a **FRANQUICIAS** (multi-local / multi-tenant). **NO es un
+parche:** es **diseño + prueba de carga simulando N dispositivos** antes de tocar prod. **Bloquea el
+pase del PoS a producción.**
 
 ---
 

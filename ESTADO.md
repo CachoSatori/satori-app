@@ -1,15 +1,17 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-06-21.** Foto compacta para ponerse al día de un vistazo.
+> **Handoff: 2026-06-22.** Foto compacta para ponerse al día de un vistazo.
 > Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Plan por fases → [ROADMAP.md](ROADMAP.md) · Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
 **Stack:** React 19 + TS strict + Vite + PWA · Supabase (Postgres + RLS + Edge Functions) · realtime.
 **Despliegue:** push a `main` → GitHub Pages (PROD, base `/satori-app/`) · `staging` → Cloudflare Pages (`satori-staging.pages.dev`).
 
-> **Diagnóstico cerrado (jun-21):** el "se traba" eran DOS causas independientes, ambas RESUELTAS y en
-> prod — (a) **SW viejo pegado** (no actualizaba sin "borrar caché") y (b) **bug de fechas de borde de
-> mes** (400 por `-31`). NO era el equipo, ni la red, ni el login.
+> **Diagnóstico del "se traba" — TRES causas independientes:** (a) **SW viejo pegado** y (b) **fechas de
+> borde de mes** (400 por `-31`) → ambas RESUELTAS y EN PROD. (c) **Contención del candado de auth**
+> (`navigator.locks`) disparada por Realtime → RESUELTA **solo en STAGING** (saga Realtime/candado, jun-22).
+> **⚠️ PROD (`ff836a0`) todavía NO tiene el arreglo (c): el bug de trabarse sigue VIVO en producción**
+> hasta el pase por canario. NO era el equipo, ni la red, ni el login. Detalle de (c) → §(d) y §(f).
 
 ---
 
@@ -17,10 +19,10 @@
 
 | Rama | Hash | Qué es |
 |---|---|---|
-| `main` | `ff836a0` | **PRODUCCIÓN.** Capa de inteligencia (ventas/propinas/caja/reportes) **+ fix del SW viejo** (`fde9264`) **+ fix de fechas-borde** (`ff836a0`). El PoS y la Bandeja fusionada NO están acá. |
-| `staging` | `e0404a9` | **Fuente de verdad del trabajo nuevo.** Todo el PoS + KDS + comandero pro + FE estructura + inventario activo + Bandeja fusionada + enlace proveedor + visibilidad pendientes + fechas CR + **los dos fixes que ya están en prod**. |
+| `main` | `ff836a0` | **PRODUCCIÓN.** Capa de inteligencia (ventas/propinas/caja/reportes) **+ fix del SW viejo** (`fde9264`) **+ fix de fechas-borde** (`ff836a0`). El PoS, la Bandeja fusionada y **el arreglo Realtime/candado de auth NO están acá**. |
+| `staging` | `23c6bc8` | **Fuente de verdad del trabajo nuevo.** Todo el PoS + KDS + comandero pro + FE estructura + inventario activo + Bandeja fusionada + enlace proveedor + visibilidad pendientes + fechas CR + **los dos fixes que ya están en prod** + **la saga Realtime/candado de auth (jun-22, solo acá)**. |
 
-**Ramas de referencia (ya mergeadas o sin merge):** `fix/pwa-sw-update-prod` (SW fix, en staging `5beb8ff` y prod `fde9264`) · `fix/fechas-borde-mes` (fechas, en staging `e0404a9` y prod `ff836a0`) · `fix/fecha-cr-consistente` (`cb25672`, en staging, **pendiente validación física**) · `propina-pool` (`312f5df`, **SIN merge**, espera decisión dueña) · `fix-doble-cobro`/`fix/proveedor-link`/`fix/caja-diaria-pendientes-vis` (ya en staging).
+**Ramas de referencia (ya mergeadas o sin merge):** `fix/pwa-sw-update-prod` (SW fix, en staging `5beb8ff` y prod `fde9264`) · `fix/fechas-borde-mes` (fechas, en staging `e0404a9` y prod `ff836a0`) · `fix/fecha-cr-consistente` (`cb25672`, en staging, **pendiente validación física**) · **saga Realtime/candado (todas mergeadas a staging):** `fix/realtime-jwt-refresh` (round 1) · `fix/realtime-socket-revive` (round 2, **luego REVERTIDO**) · `fix/auth-lock-contention` (fix final, `09480a6`) · `propina-pool` (`312f5df`, **SIN merge**, espera decisión dueña) · `fix-doble-cobro`/`fix/proveedor-link`/`fix/caja-diaria-pendientes-vis` (ya en staging).
 
 > Supabase refs: **PROD** = `yiczgdtirrkdvohdquzf` (intocable, solo lectura, OK explícito + verificación de hash) · **STAGING** = `hwiatgicyyqyezqwldia`.
 
@@ -32,6 +34,7 @@
 - **Solo en STAGING (no en prod):**
   - **Todo el sistema PoS** — catálogo+salón multi-local, comandero tablet, KDS web, cobro+doble moneda+vuelto, splits, propina capturada, paridad Lavu, foto de producto, jerarquía de menú 3 niveles, carta real (542 productos), `computeTotals`, **FE estructura (SIM)**, **inventario activo (depleción + COGS)**. Migraciones **022–037**.
   - **Bandeja fusionada** (`/inbox`, IA, merge `da53466`) + **enlace proveedor↔caja** (`b44e004`) + **visibilidad pendientes Caja Diaria** (`66686d7`) + **fechas en hora CR** en Movimientos/Pendientes/P&L (`cb25672`). Ver changelog para el detalle.
+  - **🔴 Arreglo Realtime/candado de auth (saga jun-22, SOLO staging)** — es la causa (c) del "se traba". **PROD no lo tiene → el bug sigue vivo en producción.** Round 1 (`onAuthStateChange` global propaga el JWT al socket) + fix final (`fix/auth-lock-contention`: saca el `getSession()` por-hook redundante de `useRealtimeRefetch`). Round 2 (revive del socket) se mergeó y se **revirtió**. Validado en staging con 2 dispositivos; **pendiente canario a prod**. Ver §(d) y §(f).
   - **mig 038** (Bandeja fusión) **aplicada SOLO en staging** (ver (c)).
 - **En rama aparte (sin merge):** integración propina→pool (código en `propina-pool`). Su **mig 035 figura aplicada en el ledger de staging** pese a no estar mergeada → discrepancia a investigar (ver (c)).
 
@@ -55,6 +58,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) **sin val
 | **Fechas de borde de mes (fix `-31`→400)** | ✅ **VALIDADA en PROD** | prod (`ff836a0`) | `monthRangeBounds`; Inicio/Reporte Mensual/Food Cost/Quincenal cargan en junio sin 400 |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes** | ✅ **Etapa 1 COMPLETA** | staging | mig 038 aplicada + validada con rol contador (registra + "✓ Verificar"). Cerrada en staging. |
 | **Estabilidad PWA (Fases 1+2, staging)** | ✅ validada | staging | F1 `_headers` no-cache (Cloudflare) · F2 refresco de token en foco (`useAuth refreshOnFocus`) |
+| **🔴 Saga Realtime / candado de auth** | 🟡 **validada en staging (2 disp.), PENDIENTE canario a PROD** | **solo staging** (`23c6bc8`) | **Causa (c) del "se traba". PROD no lo tiene.** R1 `onAuthStateChange`→`realtime.setAuth` global (cura loop `InvalidJWTToken`/"Token has expired") · R2 revive del socket **REVERTIDO** (subía contención sin beneficio probado) · fix final saca `getSession()` por-hook de `useRealtimeRefetch` (era la causa del `[auth] lock no adquirido en 10s`). Validado Mac+iPhone: consola limpia, sin `CHANNEL_ERROR`, Network 200. **Falta:** maduración +1h en background + canario 1 dispositivo a prod. Hist. → [HANG-RCA.md](HANG-RCA.md) |
 | PoS — catálogo/salón (022) · comandero+KDS · cobro+splits+ticket SIM (027–034) · foto/nota/menú (030–032) · carta real | 🟢 | staging | sin validación física; pase a prod pendiente |
 | FE — estructura (SIM, sin Hacienda) (036) | 🟢 | staging | no emite real |
 | Inventario activo F1 — depleción + COGS (037) | 🟢 | staging | descuenta stock por receta al cerrar; COGS real; alertas por mínimo |
@@ -68,6 +72,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) **sin val
 
 ## (f) Pendientes humanos / fiscales / prolijidad
 
+- **🔴 INMEDIATO — Pase a PROD del fix de Realtime/candado (`fix/auth-lock-contention`) vía CANARIO en 1 dispositivo.** Es **100% client-side, sin migración** → no toca la base; puede ir a prod independiente del pase del PoS. **PROD tiene el bug de trabarse VIVO** hasta que esto pase. Plan: cherry-pick/merge del fix a `main`, canario en 1 equipo, observar consola (sin `[auth] lock…`, sin `CHANNEL_ERROR`) + maduración +1h en background, luego rollout. Round 1 + fix final juntos; **NO** llevar el round 2 (revertido).
 - **Pase del PoS + Bandeja a PROD:** consolidar migraciones **022–038** con guard anti-staging, crear buckets `facturas`/`productos`/`documents` en prod, regenerar tipos post-merge. Autorización única + verificación de hash. (Es el gran salto 021→038.)
 - **Discrepancia mig 035** en el ledger de staging → sesión dedicada de propinas, **sin tocar el historial** hasta entender el origen.
 - **404 menor en prod sobre `propinas:1`** (recurso faltante, probablemente icono o source-map; **NO afecta operación**, las pantallas cargan). Prolijidad, baja prioridad — falta identificar el archivo exacto (Network con filtro vacío).

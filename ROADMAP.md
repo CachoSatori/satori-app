@@ -1,7 +1,7 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-21**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-22**
 
 ---
 
@@ -14,6 +14,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021) |
 | **Estabilidad PWA — fix del SW viejo en prod** (updateViaCache:'none' + version.json cache-bust) | ✅ **VALIDADA en PROD** | PROD (`fde9264`) — RCA `_handoff/PROD-SW-RCA.md` |
 | **Fix de fechas de borde de mes** (`-31`→400; helper `monthRangeBounds`, result-preserving) | ✅ **VALIDADA en PROD** | PROD (`ff836a0`) — RCA `_handoff/RCA-FECHAS-BORDE.md` |
+| **🔴 Fix Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook; R2 revive REVERTIDO) | 🟢 **validado en staging (2 disp.) · PENDIENTE canario a PROD** | STAGING (`23c6bc8`). **PROD NO lo tiene → bug de trabarse vivo.** Hist. `HANG-RCA.md` |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
@@ -30,6 +31,23 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 
 > Detalle de cada fase abajo. Lo nuevo de junio (Bandeja fusionada, FE estructura, inventario activo,
 > comandero pro) vive en `staging`. Backlog priorizado: [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+
+---
+
+## 🚧 PILAR BLOQUEANTE — Arquitectura de sesión/auth escalable y multi-tenant (alta prioridad)
+
+> **🔴 BLOQUEA EL PASE DEL PoS A PRODUCCIÓN.**
+
+La app hoy usa un **candado de sesión** (`navigator.locks`) que se contiende con pocos dispositivos.
+El PoS llevará **~10 dispositivos concurrentes** (5 tablets salón + 2 cajas + 2 KDS + 1 cocina),
+distintos usuarios al mismo tiempo. Antes del rollout del PoS hay que **rediseñar cómo cada dispositivo
+mantiene su sesión sin pelear por el refresh del token**.
+
+**Objetivo de diseño:** escalable a **HOTELERÍA con MÚLTIPLES restaurantes** y a **FRANQUICIAS**
+(multi-local / multi-tenant).
+
+**NO es un parche:** es **diseño + prueba de carga simulando N dispositivos** antes de tocar prod.
+**Bloquea el pase del PoS a producción.**
 
 ---
 
@@ -70,6 +88,15 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
 - **✅ RESUELTO y EN PROD (jun-21) — Fechas de borde de mes (400 por `-31`):** helper `monthRangeBounds`
   (límite superior exclusivo = 1° del mes siguiente) en Inicio/Reporte Mensual/Food Cost; result-preserving
   para meses de 31 días (`ff836a0`). RCA `_handoff/RCA-FECHAS-BORDE.md`.
+- **🔴 RESUELTO en STAGING, PENDIENTE canario a PROD (jun-22) — Contención del candado de auth (tercera causa
+  del "se traba"):** el `getSession()` por-hook de `useRealtimeRefetch` tomaba `navigator.locks` en cada
+  (re)suscripción → con varios módulos/dispositivos se apilaban pedidos → `[auth] lock no adquirido en 10s` →
+  app trabada. **Saga (3 tandas, todas en staging):** R1 `onAuthStateChange` global propaga el JWT al socket
+  (cura el loop `InvalidJWTToken`/"Token has expired"); R2 revive del socket en `visibilitychange`/`online`
+  **mergeado y luego REVERTIDO** (subía la contención sin beneficio probado); fix final (`fix/auth-lock-contention`,
+  `09480a6`) **saca el `getSession()` redundante** (el socket ya queda autenticado por R1). Validado Mac+iPhone:
+  consola limpia, sin `CHANNEL_ERROR`, Network 200. **PROD (`ff836a0`) NO lo tiene → el bug sigue vivo ahí.**
+  Es client-side sin migración. Hist. `HANG-RCA.md`.
 - **⏳ PENDIENTE (cambia números, valida la dueña) — hora-CR en bordes de período:** el fix del `-31`
   resolvió el 400, pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`). `finance.ts:132/139`
   (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el 31-dic de noche cae en el año equivocado por

@@ -33,6 +33,8 @@ export function useRealtimeRefetch(
     let reconnectDelay = 2_000
     let disposed = false
     let channel: RealtimeChannel | null = null
+    let subscribed = false   // ¿el canal está vivo? (lo consulta onVis para forzar recuperación)
+    let authErrors = 0       // CHANNEL_ERROR/TIMED_OUT seguidos sin JWT → recrea al 2º (el 1º suele ser transitorio)
 
     const isTyping = () => {
       const el = document.activeElement
@@ -51,42 +53,73 @@ export function useRealtimeRefetch(
       window.clearTimeout(debounce)
       debounce = window.setTimeout(fire, 600)
     }
-    const subscribe = async () => {
+    // Recrea el canal con backoff exponencial (2s → 30s máx): lo saca, lo nulea y agenda un
+    // re-subscribe. Antes esto vivía sólo en el branch 'CLOSED'; ahora también cura el canal
+    // clavado por JWT vencido (CHANNEL_ERROR/TIMED_OUT en loop).
+    const recreate = () => {
       if (disposed) return
-      // postgres_changes respeta RLS: el socket necesita el JWT del usuario
-      // (sin esto el join va con la anon key y el canal queda en error).
-      try {
-        const { data } = await supabase.auth.getSession()
-        if (data.session?.access_token) supabase.realtime.setAuth(data.session.access_token)
-      } catch { /* sin sesión: el canal igual se intenta con la anon key */ }
+      if (channel) {
+        supabase.removeChannel(channel).catch(() => { /* canal ya muerto */ })
+        channel = null
+      }
+      window.clearTimeout(reconnect)
+      reconnect = window.setTimeout(subscribe, reconnectDelay)
+      reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
+    }
+    const subscribe = () => {
       if (disposed) return
+      // postgres_changes respeta RLS: el socket necesita el JWT del usuario. NO lo pedimos acá:
+      // el onAuthStateChange global de supabase.ts ya hace realtime.setAuth en cada cambio de sesión,
+      // así que el socket (único y compartido) viene autenticado. El getSession() por-hook que vivía
+      // acá tomaba el candado de auth (navigator.locks) en cada subscribe/recreate → con varios módulos
+      // y reconexiones se apilaban pedidos al candado ("[auth] lock no adquirido en 10s" → app trabada).
       const ch = supabase.channel(channelName)
       channel = ch
       for (const table of tables) {
         ch.on('postgres_changes', { event: '*', schema: 'public', table }, schedule)
       }
       ch.subscribe((status, err) => {
-        if (disposed) return
+        // ch !== channel ⇒ este callback es de un canal ya reemplazado (join tardío): ignorarlo,
+        // para no disparar recreate() sobre el canal nuevo (repone el guard original channel===ch).
+        if (disposed || ch !== channel) return
         if (status !== 'SUBSCRIBED') console.warn(`[rt] canal ${channelName}: ${status}`, err?.message ?? '')
         if (status === 'SUBSCRIBED') {
           reconnectDelay = 2_000
+          authErrors = 0
+          subscribed = true
           schedule()  // ponerse al día con lo que pasó mientras no había canal
         } else if (status === 'CLOSED') {
-          // CHANNEL_ERROR/TIMED_OUT NO desmontan el canal: el primer join suele dar
-          // un error transitorio y el rejoin automático del SDK lo resuelve solo
-          // (desmontarlo acá mataba ese reintento). Solo un cierre definitivo
-          // recrea el canal, con backoff.
-          supabase.removeChannel(ch).catch(() => { /* canal ya muerto */ })
-          if (channel === ch) channel = null
-          window.clearTimeout(reconnect)
-          reconnect = window.setTimeout(subscribe, reconnectDelay)
-          reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
+          recreate()
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          // Token JWT vencido (InvalidJWTToken: "Token has expired") o error persistente:
+          // el rejoin automático del SDK reintenta con el MISMO token muerto → loop infinito.
+          // Recreamos el canal (la Capa 1 ya repuso el JWT fresco en el socket). PERO el primer
+          // CHANNEL_ERROR suelto suele ser un parpadeo transitorio del join → lo dejamos pasar:
+          // recreamos si el error es de JWT, o si ya van 2 errores seguidos.
+          subscribed = false
+          const msg = err?.message ?? ''
+          if (/jwt|token|expired/i.test(msg) || ++authErrors >= 2) recreate()
         }
       })
     }
     subscribe()
 
-    const onVis = () => { if (document.visibilityState === 'visible') schedule() }
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return
+      schedule()  // refetch de seguridad por si el websocket murió en background
+      // Si el canal NO está suscripto (murió en background con el token vencido), forzá la
+      // recuperación en el acto en vez de esperar el backoff: volver el foco ya disparó el
+      // refresh del token (useAuth) → la Capa 1 re-autenticó el socket → re-suscribimos ya.
+      if (!subscribed) {
+        window.clearTimeout(reconnect)
+        if (channel) {
+          supabase.removeChannel(channel).catch(() => { /* ya removido */ })
+          channel = null
+        }
+        reconnectDelay = 2_000
+        subscribe()
+      }
+    }
     document.addEventListener('visibilitychange', onVis)
 
     return () => {

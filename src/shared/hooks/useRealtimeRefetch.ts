@@ -66,15 +66,13 @@ export function useRealtimeRefetch(
       reconnect = window.setTimeout(subscribe, reconnectDelay)
       reconnectDelay = Math.min(reconnectDelay * 2, 30_000)
     }
-    const subscribe = async () => {
+    const subscribe = () => {
       if (disposed) return
-      // postgres_changes respeta RLS: el socket necesita el JWT del usuario
-      // (sin esto el join va con la anon key y el canal queda en error).
-      try {
-        const { data } = await supabase.auth.getSession()
-        if (data.session?.access_token) supabase.realtime.setAuth(data.session.access_token)
-      } catch { /* sin sesión: el canal igual se intenta con la anon key */ }
-      if (disposed) return
+      // postgres_changes respeta RLS: el socket necesita el JWT del usuario. NO lo pedimos acá:
+      // el onAuthStateChange global de supabase.ts ya hace realtime.setAuth en cada cambio de sesión,
+      // así que el socket (único y compartido) viene autenticado. El getSession() por-hook que vivía
+      // acá tomaba el candado de auth (navigator.locks) en cada subscribe/recreate → con varios módulos
+      // y reconexiones se apilaban pedidos al candado ("[auth] lock no adquirido en 10s" → app trabada).
       const ch = supabase.channel(channelName)
       channel = ch
       for (const table of tables) {

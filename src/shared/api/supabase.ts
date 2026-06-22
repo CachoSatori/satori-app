@@ -39,6 +39,22 @@ const safeNavigatorLock = async <R>(name: string, _acquireTimeout: number, fn: (
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: { lock: safeNavigatorLock },
+  // El heartbeat del WebSocket vivía en el hilo principal → el browser lo throttlea en
+  // background (pestaña oculta / suspensión profunda de la máquina) → el socket muere
+  // (1006 / heartbeat timeout) y la 1ª escritura al despertar se cuelga. worker:true mueve
+  // el heartbeat a un Web Worker que el browser NO throttlea (solución oficial Supabase,
+  // doc 2026-01-16); heartbeatCallback revive el socket si igual se desconecta.
+  realtime: {
+    worker: true,
+    heartbeatIntervalMs: 15_000,
+    heartbeatCallback: (status) => {
+      if (status === 'disconnected' || status === 'error') {
+        // socket caído (suspensión/red): revivir explícitamente. El onAuthStateChange
+        // global ya re-propaga el JWT fresco al reconectar.
+        supabase.realtime.connect()
+      }
+    },
+  },
 })
 
 // Realtime se autentica con el JWT del usuario SOLO al crear/unir el canal. Cuando

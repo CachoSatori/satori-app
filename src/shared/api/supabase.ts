@@ -75,8 +75,23 @@ const EXPIRY_MARGIN_S = 60
 // puede estar roto por JWT vencido en el socket. Forzamos refresh+setAuth, pero como mucho 1 vez
 // por ventana, para NO martillar token?grant_type=refresh_token.
 const FORCED_REFRESH_MIN_INTERVAL_MS = 30_000
+// Tope por operación de auth/socket (getSession/refreshSession/disconnect). Tras suspensión profunda
+// el fetch del refresh queda sobre una conexión zombi y NUNCA settlea → sin tope, el async de
+// ensureRealtimeHealthy no termina, el finally no corre y healthInFlight queda clavado PARA SIEMPRE
+// (toda recuperación posterior —freno 'channel-stuck' y resume visibility/online/focus— sale temprano
+// por el guard y no hace nada). Con tope, cada operación resuelve en pocos segundos (éxito o degradado)
+// y el in-flight SIEMPRE se libera.
+const AUTH_OP_TIMEOUT_MS = 8_000
+// Cinturón anti-clavado (segunda línea de defensa): edad máxima del in-flight. Si una corrida quedó
+// pegada más de esto (p. ej. una op que igual no settleó, o timers congelados durante la suspensión),
+// la próxima llamada la IGNORA y arranca una nueva en vez de quedar rehén del guard de concurrencia.
+// 40s y no 20s: el peor caso LEGÍTIMO es getSession(8s)+refreshSession(8s)+disconnect(8s) ≈ 24s; con
+// 20s el cinturón abandonaría una corrida válida en curso y dispararía una concurrente sobre el socket
+// compartido. 40s queda por encima de esos 24s y por debajo del objetivo de recuperación (<60s).
+const HEALTH_MAX_AGE_MS = 40_000
 let lastForcedRefresh = 0
 let healthInFlight: Promise<void> | null = null
+let healthStartedAt = 0
 
 type RealtimeHealthReason = 'resume' | 'channel-stuck'
 
@@ -87,6 +102,22 @@ const tokenNeedsRefresh = (session: Session | null): boolean => {
   return exp - Math.floor(Date.now() / 1000) <= EXPIRY_MARGIN_S
 }
 
+// Promise.race con tope: si `p` no settlea en `ms`, RESUELVE con `fallback` (no rechaza — seguimos
+// en modo degradado) y deja rastro en consola. Es lo que evita que ensureRealtimeHealthy quede
+// colgada esperando un await que nunca vuelve (la conexión zombi tras suspensión).
+const withTimeout = <T>(p: Promise<T>, ms: number, label: string, fallback: T): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => {
+      // Incluimos ms + estado del socket para ver, en la validación física, EN QUÉ operación se
+      // colgó y cómo estaba el WebSocket en ese momento (isConnected puede ser el zombi true).
+      console.warn(`[rt-diag] withTimeout EXPIRÓ: ${label} (${ms}ms, connected=${supabase.realtime.isConnected()})`)
+      resolve(fallback)
+    }, ms)
+  })
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer))
+}
+
 // reason='resume' (visibilitychange/online/focus): conservador — refresca solo si el token está
 // por vencer, revive solo si el socket cayó, emite 'rt:healthy' solo si hubo recuperación real.
 // NO recrea canales en cada cambio de pestaña.
@@ -95,34 +126,76 @@ const tokenNeedsRefresh = (session: Session | null): boolean => {
 // refresh+setAuth (gateado por backoff) y SIEMPRE emitimos 'rt:healthy' para que el hook
 // re-suscriba con joinPayload fresco. La recuperación real la valida el hook: solo resetea su
 // freno cuando el canal llega a SUBSCRIBED (evidencia, no isConnected()).
+// BLINDAJE anti-clavado: cada await de auth/socket tiene tope (withTimeout) y el guard se descarta
+// por edad (HEALTH_MAX_AGE_MS), así esta función SIEMPRE settlea en pocos segundos y healthInFlight
+// SIEMPRE se libera → los caminos de recuperación vuelven a correr (auto y al volver a primer plano).
 export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): Promise<void> => {
-  if (healthInFlight) return healthInFlight
-  healthInFlight = (async () => {
+  // Guard de concurrencia + cinturón por edad: reusamos el in-flight solo si sigue VIGENTE; si quedó
+  // clavado (más viejo que HEALTH_MAX_AGE_MS) lo abandonamos y arrancamos uno nuevo.
+  if (healthInFlight && Date.now() - healthStartedAt < HEALTH_MAX_AGE_MS) return healthInFlight
+  healthStartedAt = Date.now()
+  const myStart = healthStartedAt   // identidad de ESTA corrida (el guard impide dos en el mismo ms)
+  const run = (async () => {
     let recovered = false
     const stuck = reason === 'channel-stuck'
     try {
       console.log('[rt-diag] ensureRealtimeHealthy: start reason=', reason)
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session } } = await withTimeout(
+        supabase.auth.getSession(),
+        AUTH_OP_TIMEOUT_MS,
+        'getSession',
+        { data: { session: null }, error: null },
+      )
       let token = session?.access_token ?? null
       const forceRefresh = stuck && (Date.now() - lastForcedRefresh >= FORCED_REFRESH_MIN_INTERVAL_MS)
       if (tokenNeedsRefresh(session) || forceRefresh) {
-        lastForcedRefresh = Date.now()
-        const { data, error } = await supabase.auth.refreshSession()
-        if (!error && data.session) { token = data.session.access_token; recovered = true }
+        // El gate (lastForcedRefresh) se consume SOLO si el refresh COMPLETÓ (resolvió, con éxito o
+        // error real), NO si expiró por timeout: así un cuelgue se reintenta pronto en vez de quemar
+        // la ventana de 30s sobre un refresh que nunca volvió.
+        let refreshCompleted = false
+        const refresh = await withTimeout(
+          supabase.auth.refreshSession().then((r) => { refreshCompleted = true; return r }),
+          AUTH_OP_TIMEOUT_MS,
+          'refreshSession',
+          { data: { session: null, user: null }, error: null },
+        )
+        if (refreshCompleted) lastForcedRefresh = Date.now()
+        if (!refresh.error && refresh.data.session) { token = refresh.data.session.access_token; recovered = true }
       }
-      if (!token) { console.log('[rt-diag] ensureRealtimeHealthy: sin token (deslogueado) → abort'); return }
+      if (!token) {
+        // token null NO siempre = deslogueado: getSession pudo EXPIRAR por timeout (fallback sesión
+        // nula) o el lock de auth (safeNavigatorLock, tope 10s) no rindió antes de nuestros 8s.
+        // En 'channel-stuck' eso dejaría al hook esperando rt:healthy para siempre = el deadlock otra
+        // vez. Emitimos rt:healthy IGUAL para que re-suscriba y siga reintentando; el onAuthStateChange
+        // global / autoRefresh repondrán el token. NO hacemos setAuth(null) ni disconnect: tumbaría
+        // canales sanos del socket compartido. En 'resume' (cambio de pestaña) sí abortamos sin emitir:
+        // si de verdad no hay sesión, no hay nada que hacer.
+        if (stuck) {
+          console.log('[rt-diag] ensureRealtimeHealthy: sin token (timeout/deslogueado) → emit rt:healthy igual (stuck)')
+          window.dispatchEvent(new Event('rt:healthy'))
+        } else {
+          console.log('[rt-diag] ensureRealtimeHealthy: sin token (deslogueado) → abort')
+        }
+        return
+      }
       await supabase.realtime.setAuth(token).catch(() => { /* socket no listo */ })
       const connected = supabase.realtime.isConnected()
       console.log('[rt-diag] ensureRealtimeHealthy: isConnected=', connected)
       if (!connected) {
         console.log('[rt-diag] ensureRealtimeHealthy: revive socket (await disconnect → connect)')
-        await supabase.realtime.disconnect()
+        await withTimeout(
+          (async () => { await supabase.realtime.disconnect() })(),
+          AUTH_OP_TIMEOUT_MS,
+          'realtime.disconnect',
+          undefined,
+        )
         supabase.realtime.connect()
         recovered = true
       }
       // 'channel-stuck': canal roto por evidencia del hook → re-suscribir es la cura (setAuth ya
       // dejó el joinPayload fresco; un JOIN nuevo se autentica bien). Emitimos aunque HTTP/isConnected
-      // parezcan sanos: ese es justo el zombi de isConnected()=true.
+      // parezcan sanos: ese es justo el zombi de isConnected()=true. Vale incluso si el refresh expiró
+      // por timeout: mientras haya algún token (de getSession o del refresh), llegamos hasta acá.
       if (recovered || stuck) {
         console.log('[rt-diag] ensureRealtimeHealthy: emit rt:healthy (recovered=', recovered, 'stuck=', stuck, ')')
         window.dispatchEvent(new Event('rt:healthy'))
@@ -130,10 +203,14 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
     } catch (e) {
       console.warn('[rt-diag] ensureRealtimeHealthy: catch', e)
     } finally {
-      healthInFlight = null
+      // Solo limpiamos si seguimos siendo el in-flight vigente: si el cinturón por edad ya arrancó
+      // otra corrida (healthStartedAt cambió), NO le pisamos su referencia (evita que una corrida
+      // vieja-y-tardía anule el in-flight de la nueva).
+      if (healthStartedAt === myStart) healthInFlight = null
     }
   })()
-  return healthInFlight
+  healthInFlight = run
+  return run
 }
 
 // Disparadores globales, registrados UNA sola vez (este módulo es singleton).

@@ -140,8 +140,12 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
     const stuck = reason === 'channel-stuck'
     try {
       console.log('[rt-diag] ensureRealtimeHealthy: start reason=', reason)
+      // sessionRead distingue "getSession COMPLETÓ" de "expiró por timeout": se marca dentro del .then
+      // real (mismo patrón que refreshCompleted). Si el withTimeout cae al fallback (sesión nula),
+      // sessionRead queda false → sabemos que el token null vino de la red zombi, no de un deslogueo.
+      let sessionRead = false
       const { data: { session } } = await withTimeout(
-        supabase.auth.getSession(),
+        supabase.auth.getSession().then((r) => { sessionRead = true; return r }),
         AUTH_OP_TIMEOUT_MS,
         'getSession',
         { data: { session: null }, error: null },
@@ -163,18 +167,36 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
         if (!refresh.error && refresh.data.session) { token = refresh.data.session.access_token; recovered = true }
       }
       if (!token) {
-        // token null NO siempre = deslogueado: getSession pudo EXPIRAR por timeout (fallback sesión
-        // nula) o el lock de auth (safeNavigatorLock, tope 10s) no rindió antes de nuestros 8s.
-        // En 'channel-stuck' eso dejaría al hook esperando rt:healthy para siempre = el deadlock otra
-        // vez. Emitimos rt:healthy IGUAL para que re-suscriba y siga reintentando; el onAuthStateChange
-        // global / autoRefresh repondrán el token. NO hacemos setAuth(null) ni disconnect: tumbaría
-        // canales sanos del socket compartido. En 'resume' (cambio de pestaña) sí abortamos sin emitir:
-        // si de verdad no hay sesión, no hay nada que hacer.
+        if (!sessionRead) {
+          // getSession EXPIRÓ por timeout (red zombi tras suspensión) → token null NO es deslogueo. La
+          // cura validada es revivir la conexión física: disconnect→connect fuerza un socket TCP nuevo
+          // sobre red sana, y el onAuthStateChange global re-propaga el token fresco al reconectar → el
+          // canal vuelve a SUBSCRIBED. Lo hacemos en AMBOS reason. NO setAuth(null): no tenemos token y
+          // tumbaría la auth del socket compartido.
+          console.log('[rt-diag] ensureRealtimeHealthy: getSession timeout → renuevo conexión (disconnect→connect)')
+          await withTimeout(
+            (async () => { await supabase.realtime.disconnect() })(),
+            AUTH_OP_TIMEOUT_MS,
+            'realtime.disconnect (token-timeout)',
+            undefined,
+          )
+          supabase.realtime.connect()
+          if (stuck) {
+            // stuck: el hook está frenado esperando el evento → lo emitimos para que re-suscriba.
+            console.log('[rt-diag] ensureRealtimeHealthy: token timeout + stuck → emit rt:healthy')
+            window.dispatchEvent(new Event('rt:healthy'))
+          }
+          // resume: NO emitimos — el reconnect + el onAuthStateChange disparan la re-suscripción solos.
+          return
+        }
+        // sessionRead === true: getSession COMPLETÓ y confirmó que NO hay sesión = deslogueo real. No hay
+        // nada que reconectar. Comportamiento de siempre: stuck emite igual (el hook sigue reintentando;
+        // autoRefresh/onAuthStateChange repondrán el token), resume aborta.
         if (stuck) {
-          console.log('[rt-diag] ensureRealtimeHealthy: sin token (timeout/deslogueado) → emit rt:healthy igual (stuck)')
+          console.log('[rt-diag] ensureRealtimeHealthy: sin token (deslogueado real) → emit rt:healthy igual (stuck)')
           window.dispatchEvent(new Event('rt:healthy'))
         } else {
-          console.log('[rt-diag] ensureRealtimeHealthy: sin token (deslogueado) → abort')
+          console.log('[rt-diag] ensureRealtimeHealthy: sin token (deslogueado real) → abort')
         }
         return
       }

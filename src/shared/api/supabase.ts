@@ -48,6 +48,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     worker: true,
     heartbeatIntervalMs: 15_000,
     heartbeatCallback: (status) => {
+      console.log('[rt-diag] heartbeat', status, 'connected=', supabase.realtime.isConnected(), 'workerRef=', !!supabase.realtime.workerRef)
       if (status === 'disconnected' || status === 'error') {
         // socket caído (suspensión/red): revivir explícitamente. El onAuthStateChange
         // global ya re-propaga el JWT fresco al reconectar.
@@ -90,22 +91,33 @@ export const ensureRealtimeHealthy = (): Promise<void> => {
   healthInFlight = (async () => {
     let recovered = false
     try {
+      console.log('[rt-diag] ensureRealtimeHealthy: start')
       const { data: { session } } = await supabase.auth.getSession()
       let token = session?.access_token ?? null
       if (tokenNeedsRefresh(session)) {
         const { data, error } = await supabase.auth.refreshSession()
         if (!error && data.session) { token = data.session.access_token; recovered = true }
       }
-      if (!token) return            // deslogueado: nada que revivir
+      if (!token) { console.log('[rt-diag] ensureRealtimeHealthy: sin token (deslogueado) → abort'); return }
       await supabase.realtime.setAuth(token).catch(() => { /* socket no listo */ })
-      if (!supabase.realtime.isConnected()) {
-        supabase.realtime.disconnect()
+      const connected = supabase.realtime.isConnected()
+      console.log('[rt-diag] ensureRealtimeHealthy: isConnected=', connected)
+      if (!connected) {
+        // BUG confirmado (R2): el orden previo `disconnect(); connect()` dejaba el socket en
+        // estado "disconnecting" de forma síncrona (WebSocket.close → readyState CLOSING) y el
+        // connect() inmediato hacía early-return por el guard isDisconnecting() → NO-OP, el
+        // socket no revivía. Ahora ESPERAMOS a que el disconnect cierre antes de reconectar.
+        console.log('[rt-diag] ensureRealtimeHealthy: revive socket (await disconnect → connect)')
+        await supabase.realtime.disconnect()
         supabase.realtime.connect()
         recovered = true
       }
-      if (recovered) window.dispatchEvent(new Event('rt:healthy'))
+      if (recovered) {
+        console.log('[rt-diag] ensureRealtimeHealthy: emit rt:healthy')
+        window.dispatchEvent(new Event('rt:healthy'))
+      }
     } catch (e) {
-      console.warn('[rt] ensureRealtimeHealthy falló', e)
+      console.warn('[rt-diag] ensureRealtimeHealthy: catch', e)
     } finally {
       healthInFlight = null
     }
@@ -115,7 +127,12 @@ export const ensureRealtimeHealthy = (): Promise<void> => {
 
 // Disparadores globales, registrados UNA sola vez (este módulo es singleton).
 if (typeof window !== 'undefined') {
+  // worker:true mueve el heartbeat a un Web Worker (no throttleado). `worker` es el flag de
+  // config; `workerRef` recién se puebla cuando el socket abre y arranca el worker, así que
+  // en load puede estar vacío todavía — se confirma activo en el primer '[rt-diag] heartbeat'.
+  console.log('[rt-diag] worker config=', supabase.realtime.worker, 'workerRef ya activo=', !!supabase.realtime.workerRef)
   const onResume = () => {
+    console.log('[rt-diag] onResume vis=', document.visibilityState)
     if (document.visibilityState === 'visible') {
       supabase.auth.startAutoRefresh().catch(() => {})
       void ensureRealtimeHealthy()

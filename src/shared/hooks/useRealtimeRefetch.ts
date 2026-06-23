@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import { supabase } from '../api/supabase'
+import { supabase, ensureRealtimeHealthy } from '../api/supabase'
+
+// R1 (freno anti-loop): tras N fallos seguidos (CLOSED/CHANNEL_ERROR/TIMED_OUT) sin lograr
+// SUBSCRIBED, dejamos de recrear el canal automáticamente y esperamos 'rt:healthy' (que llega
+// de ensureRealtimeHealthy con token+socket sanos). Evita los cientos de recreate que trababan
+// la app tras suspensión profunda. Se resetea en SUBSCRIBED y en onHealthy.
+const MAX_FAIL_STREAK = 5
 
 /**
  * Tiempo real multi-dispositivo (estrategia refetch): se suscribe a cambios de
@@ -38,6 +44,19 @@ export function useRealtimeRefetch(
     let disposed = false
     let channel: RealtimeChannel | null = null
     let authErrors = 0       // CHANNEL_ERROR/TIMED_OUT seguidos sin JWT → recrea al 2º (el 1º suele ser transitorio)
+    let failStreak = 0       // R1: fallos seguidos sin SUBSCRIBED → al llegar a MAX_FAIL_STREAK, freno
+
+    // R1: recrea, pero si ya van demasiados fallos seguidos, FRENA (no recrea más) y patea la
+    // recuperación de fondo (ensureRealtimeHealthy) — el re-subscribe vendrá por 'rt:healthy'.
+    const recreateOrFreno = () => {
+      failStreak++
+      if (failStreak >= MAX_FAIL_STREAK) {
+        console.warn('[rt-diag]', channelName, `FRENO: ${failStreak} fallos seguidos sin SUBSCRIBED → paro recreate, espero rt:healthy`)
+        void ensureRealtimeHealthy()
+        return
+      }
+      recreate()
+    }
 
     const isTyping = () => {
       const el = document.activeElement
@@ -89,9 +108,11 @@ export function useRealtimeRefetch(
         if (status === 'SUBSCRIBED') {
           reconnectDelay = 2_000
           authErrors = 0
+          failStreak = 0   // R1: recuperado → reset del freno
           schedule()  // ponerse al día con lo que pasó mientras no había canal
         } else if (status === 'CLOSED') {
-          recreate()
+          console.log('[rt-diag]', channelName, 'CLOSED → recreate, intento', failStreak + 1)
+          recreateOrFreno()
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           // Token JWT vencido (InvalidJWTToken: "Token has expired") o error persistente:
           // el rejoin automático del SDK reintenta con el MISMO token muerto → loop infinito.
@@ -99,7 +120,7 @@ export function useRealtimeRefetch(
           // CHANNEL_ERROR suelto suele ser un parpadeo transitorio del join → lo dejamos pasar:
           // recreamos si el error es de JWT, o si ya van 2 errores seguidos.
           const msg = err?.message ?? ''
-          if (/jwt|token|expired/i.test(msg) || ++authErrors >= 2) recreate()
+          if (/jwt|token|expired/i.test(msg) || ++authErrors >= 2) recreateOrFreno()
         }
       })
     }
@@ -117,11 +138,13 @@ export function useRealtimeRefetch(
     // el JWT muerto y loopeaba; ahora el re-subscribe ocurre con la sesión ya garantizada.
     const onHealthy = () => {
       if (disposed) return
+      console.log('[rt-diag]', channelName, 're-subscribe por rt:healthy')
       if (channel) {
         supabase.removeChannel(channel).catch(() => { /* ya removido */ })
         channel = null
       }
       reconnectDelay = 2_000
+      failStreak = 0   // R1: rt:healthy llegó (socket sano) → reset del freno
       window.clearTimeout(reconnect)
       subscribe()
     }

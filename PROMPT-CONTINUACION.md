@@ -1,8 +1,8 @@
 # Continuación — backlog priorizado (handoff 2026-06-22)
 
 Estado: **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Tiene capa de inteligencia +
-fix SW viejo + fix fechas-borde + **canario Realtime/candado de auth** (R1 + fix final). STAGING (`71768d6`) =
-todo el PoS + Bandeja Etapa 1 + esos fixes + **la saga Realtime/suspensión completa**. Guardrails de siempre:
+fix SW viejo + fix fechas-borde + **canario Realtime/candado de auth** (R1 + fix final). STAGING (`90099fb`) =
+todo el PoS + Bandeja Etapa 1 + esos fixes + **la saga Realtime/suspensión completa, incl. el fix de re-auth de jun-23**. Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
 Estado completo → [ESTADO.md](ESTADO.md) · Fases → [ROADMAP.md](ROADMAP.md) · RCA Realtime →
@@ -12,30 +12,43 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 🟢 ingeniería lista para arrancar · 🔴 bloqueante / urgente.
 
 > **Ya resuelto y EN PROD:** SW viejo (`fde9264`), fechas de borde de mes (`ff836a0`), y el **canario
-> Realtime/candado de auth** (`04b1a32`). Eran las tres causas viejas del "se traba". Queda la causa NUEVA
-> (Realtime tras suspensión profunda) → ítem 0.
+> Realtime/candado de auth** (`04b1a32`). Eran las tres causas viejas del "se traba". La causa NUEVA (Realtime
+> tras suspensión profunda) ya tiene **fix implementado en staging `90099fb`**, blindaje validado; resta la
+> validación limpia del revive-on-timeout → ítem 0.
 
 ---
 
-## 0. 🔴 PENDIENTE TÉCNICO #1 — Diseñar el fix de RE-AUTH de Realtime (raíz ya identificada)
+## 0. 🟡 PENDIENTE TÉCNICO #1 — Cerrar el fix de Realtime tras suspensión (fix YA en staging, falta validación limpia)
 
-**Raíz FINAL identificada CON DATOS** (instrumentación `[rt-diag]`, prueba física): **desincronización entre el
-token HTTP de la sesión y el token del socket Realtime.** Tras ~25 min suspendido el socket queda con **JWT vencido**
-(`InvalidJWTToken: "Token has expired N sec ago"`) pero `isConnected()=true` y el heartbeat late ok →
-`ensureRealtimeHealthy` decide sobre `getSession()`/`tokenNeedsRefresh` (HTTP sano) → **nunca re-autentica el socket,
-nunca emite `'rt:healthy'`**; el freno R1 corta el loop pero espera un `'rt:healthy'` que no llega → Realtime muerto,
-módulos no abren, escrituras de caja "pendiente/cargando". El refresh HTTP **da 200** — el token nuevo existe, nunca
-se inyecta al socket.
+**Contexto:** el fix de re-auth está **implementado y mergeado a staging `90099fb`** (3 ramas, 100% client-side). La
+raíz tenía dos capas: (1) desync token HTTP↔socket, y (2) las auth-ops (`getSession`/`refreshSession`) que la
+recuperación usa **se cuelgan sobre la conexión zombi y nunca settlean** → `ensureRealtimeHealthy` quedaba clavado
+(`healthInFlight` nunca liberado) → app muerta hasta recargar. El **blindaje anti-clavado** (`withTimeout` 8s por
+auth-op + cinturón por edad 40s + emit por evidencia del hook) **está VALIDADO físicamente: el deadlock permanente
+ya no pasa**. Detalle + cronología → **`docs/rca/2026-06-22-realtime-suspension.md`**.
 
-**Diseño del fix (NO implementado — requiere cabeza fresca):** `ensureRealtimeHealthy` debe **re-autenticar el socket**
-con `setAuth(tokenFresco)` y **emitir `'rt:healthy'`** basándose en el **estado REAL del canal** (CHANNEL_ERROR /
-InvalidJWT), **no** en `isConnected()` ni solo en `tokenNeedsRefresh` HTTP. **Cuidado:** (1) **NO crear loop de refresh**
-que martille `token?grant_type=refresh_token` — gatear por evidencia (estado real del canal) + single-flight + backoff;
-(2) no confiar en `isConnected()` (zombi: OPEN + heartbeat ok pero token muerto). Detalle completo + cronología de la
-saga + qué NO revertir → **`docs/rca/2026-06-22-realtime-suspension.md`**.
+Lo que queda, en orden:
 
-> ⚠️ La instrumentación `[rt-diag]` (en `supabase.ts` y `useRealtimeRefetch.ts`) es **temporal**: **borrar por
-> prefijo `[rt-diag]`** al implementar y validar este fix.
+**(a) 🟡 Validación limpia del revive-on-timeout.** `fix/realtime-resume-revive` (`cf6c77a`): cuando `getSession`
+expira por timeout (red zombi, distinto de deslogueo real vía flag `sessionRead`), renueva la conexión física
+(disconnect→connect) para que el canal suba a **SUBSCRIBED**. La última prueba **no fue concluyente**: la sesión
+venció de verdad (>1h suspendida) → `getSession` COMPLETÓ y reportó "deslogueado real" → login (comportamiento
+CORRECTO, no bug). **Falta** reproducir con **sesión TODAVÍA VIVA pero red zombi** (suspensión más corta o token con
+TTL largo) y confirmar en los logs `[rt-diag]` que tras el timeout el canal vuelve a **SUBSCRIBED**.
+
+**(b) 🟢 Si (a) pasa → limpieza + pase a main.** **Borrar los logs `[rt-diag]`** por prefijo (en `supabase.ts` y
+`useRealtimeRefetch.ts`), y planear el **pase a PROD (`main`) con ritual** (canario / verificación de hash; recordar
+que `main` está fuera de uso → el pase es de bajo riesgo pero igual se hace con el ritual de siempre). Es 100%
+client-side, sin migración.
+
+**(c) 📋 Plan B documentado (si el revive no bastara) — NO tocado, código sensible de auth.** Hoy `safeNavigatorLock`
+solo le pone tope a la **adquisición** del lock (10s), **no a la operación** (`fn()`, que envuelve el `getSession`/
+`refreshSession` reales). Si tras (a) el canal siguiera sin subir porque el `fn()` cuelga DENTRO del lock, el plan B
+es ponerle un tope al `fn()` dentro de `safeNavigatorLock`. **Es auth sensible** (un tope mal puesto puede correr el
+refresh sin lock o abortar una sesión válida) → requiere diseño cuidadoso y prueba, no es un parche de una línea.
+
+> ⚠️ La instrumentación `[rt-diag]` (en `supabase.ts` y `useRealtimeRefetch.ts`) **SIGUE ACTIVA**: **NO borrar** hasta
+> cerrar (a). Recién ahí se borra por prefijo `[rt-diag]` (paso (b)).
 
 ---
 

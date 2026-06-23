@@ -1,7 +1,7 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-06-22** (cierre de la saga Realtime/suspensión). Foto compacta para ponerse al día de un vistazo.
+> **Handoff: 2026-06-23** (fix de re-auth de Realtime IMPLEMENTADO y mergeado a staging; blindaje validado, revive-on-timeout en validación). Foto compacta para ponerse al día de un vistazo.
 > Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Plan por fases → [ROADMAP.md](ROADMAP.md) · Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · RCA Realtime → [docs/rca/2026-06-22-realtime-suspension.md](docs/rca/2026-06-22-realtime-suspension.md).
 
 **Stack:** React 19 + TS strict + Vite + PWA · Supabase (Postgres + RLS + Edge Functions) · realtime.
@@ -16,32 +16,35 @@
 | Rama | Hash | Qué es |
 |---|---|---|
 | `main` | `04b1a32` | **PROD (fuera de uso).** Capa de inteligencia + fix SW viejo (`fde9264`) + fix fechas-borde (`ff836a0`) + **canario Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook + guard `channel===ch`; sin round 2). **NO** tiene el PoS, ni la Bandeja, ni la saga Realtime/suspensión nueva. |
-| `staging` | `71768d6` | **Fuente de verdad del trabajo nuevo.** Todo lo de `main` + PoS/KDS/comandero + FE estructura + inventario activo + Bandeja Etapa 1 + **saga Realtime/suspensión completa** (worker:true, abort/retry caja, await-disconnect, freno anti-loop, instrumentación `[rt-diag]`). |
+| `staging` | `90099fb` | **Fuente de verdad del trabajo nuevo.** Todo lo de `main` + PoS/KDS/comandero + FE estructura + inventario activo + Bandeja Etapa 1 + **saga Realtime/suspensión completa, incluido el fix de re-auth de jun-23** (blindaje por timeout + revive-on-timeout). Instrumentación `[rt-diag]` **sigue activa** (no borrar hasta validación final, ver §b). |
 
 > Supabase refs: **PROD** = `yiczgdtirrkdvohdquzf` (intocable) · **STAGING** = `hwiatgicyyqyezqwldia`.
-> Ramas de la saga Realtime (todas mergeadas a staging): `fix/realtime-jwt-refresh` (R1) · `fix/realtime-socket-revive` (R2, **REVERTIDO**) · `fix/auth-lock-contention` (`09480a6`) · `fix/realtime-resume-refresh` (`97d9c75`) · `fix/realtime-worker-heartbeat` (`b7cf327`/`7cd7760`) · `fix/realtime-resume-diagnostics` (`28901c4`).
+> Ramas de la saga Realtime (todas mergeadas a staging): `fix/realtime-jwt-refresh` (R1) · `fix/realtime-socket-revive` (R2, **REVERTIDO**) · `fix/auth-lock-contention` (`09480a6`) · `fix/realtime-resume-refresh` (`97d9c75`) · `fix/realtime-worker-heartbeat` (`b7cf327`/`7cd7760`) · `fix/realtime-resume-diagnostics` (`28901c4`) · **jun-23:** `fix/realtime-reauth-emit` (path channel-stuck fuerza refresh+setAuth y emite `rt:healthy`) · `fix/realtime-reauth-timeout` (`withTimeout` 8s + cinturón por edad 40s + test del hang) · `fix/realtime-resume-revive` (`cf6c77a`: revive la conexión cuando `getSession` expira por timeout).
 
-## (b) 🔴 PENDIENTE TÉCNICO PRINCIPAL — Realtime se cuelga tras suspensión profunda
+## (b) 🟡 Realtime tras suspensión profunda — fix IMPLEMENTADO (blindaje validado · revive-on-timeout en validación)
 
-**Raíz FINAL identificada CON DATOS** (instrumentación `[rt-diag]` en prueba física). **NO** es el token-loop viejo
-(resuelto), ni el TCP zombi, ni el heartbeat throttleado (`worker:true` ya lo cubre). Es **DESINCRONIZACIÓN entre
-el token HTTP de la sesión y el token del socket Realtime**:
+**Raíz final (dos capas).** (1) Desincronización token HTTP↔socket: tras ~25 min suspendido el socket queda con
+**JWT vencido** pero `isConnected()=true` y heartbeat ok → el SDK lo cree vivo. (2) **Más grave:** la conexión TCP
+queda **zombi** y las operaciones de auth (`getSession`/`refreshSession`) que `ensureRealtimeHealthy` usa para
+recuperarse **se cuelgan y nunca settlean** → el `await` no vuelve, el `finally` no corre y el singleton
+`healthInFlight` queda **clavado para siempre** → TODA recuperación posterior (freno del hook y resume
+visibility/online/focus) sale temprano por el guard y no hace nada. La app queda muerta hasta recargar.
 
-- Tras ~25 min suspendido, el socket queda con **JWT vencido** (`InvalidJWTToken: "Token has expired N sec ago"`),
-  **pero** `isConnected()=true` y el heartbeat late ok → el SDK lo cree vivo.
-- `ensureRealtimeHealthy` decide sobre `getSession()` (HTTP sano / `tokenNeedsRefresh=false`) → concluye "todo bien",
-  **nunca** `recovered=true`, **nunca** emite `'rt:healthy'`.
-- El **freno anti-loop (R1)** corta a los 5 `recreate` pero **espera un `'rt:healthy'` que jamás llega** → Realtime
-  muerto, la app no abre módulos, las escrituras de caja quedan "pendiente/cargando".
-- El refresh HTTP (`grant_type=refresh_token`) **da 200** — el token nuevo existe, **nunca se inyecta al socket**.
+**Fix (jun-23, 3 ramas mergeadas a staging `90099fb`, 100% client-side):**
+1. **Blindaje anti-clavado** (`fix/realtime-reauth-emit` + `fix/realtime-reauth-timeout`): `ensureRealtimeHealthy`
+   ahora fuerza refresh+`setAuth` y emite `'rt:healthy'` por evidencia (path `channel-stuck` del hook); cada `await`
+   de auth/socket tiene **tope de 8s** (`withTimeout`, resuelve en modo degradado, no cuelga); **cinturón por edad**
+   del in-flight (`HEALTH_MAX_AGE_MS=40s`) por si algo igual no settlea; el gate del refresh se consume solo si
+   completó. **VALIDADO físicamente: el deadlock permanente (app muerta hasta recargar) está resuelto.**
+2. **Revive-on-timeout** (`fix/realtime-resume-revive`): cuando `getSession` expira por timeout (red zombi, distinto
+   de deslogueo real vía flag `sessionRead`), renueva la conexión física (disconnect→connect) en vez de abortar,
+   para que el canal vuelva a **SUBSCRIBED**. **Validación PARCIAL:** en la última prueba la sesión venció de verdad
+   (>1h) → `getSession` completó y reportó "deslogueado real" → login (correcto, no bug). **Falta** una prueba limpia
+   con **sesión aún viva pero red zombi** para confirmar SUBSCRIBED. → pendiente técnico #1 en PROMPT-CONTINUACION.
 
-**FIX PENDIENTE DE DISEÑO (no implementado — requiere cabeza fresca):** `ensureRealtimeHealthy` debe re-autenticar el
-socket con `setAuth(tokenFresco)` y emitir `'rt:healthy'` según el **estado REAL del canal** (CHANNEL_ERROR/InvalidJWT),
-**no** según `isConnected()` ni solo `tokenNeedsRefresh` HTTP. **Sin crear loop** que martille el endpoint de auth.
-Detalle completo y diseño → [docs/rca/2026-06-22-realtime-suspension.md](docs/rca/2026-06-22-realtime-suspension.md).
-
-> **Instrumentación `[rt-diag]` es TEMPORAL** (en `supabase.ts` y `useRealtimeRefetch.ts`): **borrar por prefijo
-> `[rt-diag]`** cuando se implemente y valide el fix de re-auth.
+> **Instrumentación `[rt-diag]` SIGUE ACTIVA** en `supabase.ts` y `useRealtimeRefetch.ts` — **NO borrar** hasta la
+> validación limpia del revive-on-timeout. Recién entonces se borra por prefijo `[rt-diag]` y se planea el pase a main.
+> Diagnóstico y cronología completos → [docs/rca/2026-06-22-realtime-suspension.md](docs/rca/2026-06-22-realtime-suspension.md).
 
 ## (c) PROD vs STAGING
 
@@ -51,7 +54,8 @@ Detalle completo y diseño → [docs/rca/2026-06-22-realtime-suspension.md](docs
 - **Solo en STAGING (no en prod):** todo el **PoS** (catálogo+salón multi-local, comandero, KDS, cobro+splits+ticket
   SIM, `computeTotals`, FE estructura SIM, inventario activo depleción+COGS) · **Bandeja fusionada Etapa 1** + enlace
   proveedor↔caja + visibilidad pendientes + fechas CR · **saga Realtime/suspensión** (worker:true, abort/retry caja,
-  await-disconnect, freno, `[rt-diag]`). Migraciones **022–038**.
+  await-disconnect, freno, `[rt-diag]`) **+ fix de re-auth jun-23** (blindaje por timeout + revive-on-timeout, §b).
+  Migraciones **022–038**.
 - **En rama aparte (sin merge):** `propina-pool` (espera decisión de la dueña).
 
 ## (d) Migraciones
@@ -71,7 +75,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
 | Estabilidad PWA — SW viejo | ✅ **en PROD** | prod (`fde9264`) | updateViaCache:'none' + version.json cache-bust |
 | Fechas de borde de mes (`-31`→400) | ✅ **en PROD** | prod (`ff836a0`) | `monthRangeBounds`, result-preserving |
 | Realtime/candado de auth (R1 + fix final) | ✅ **en PROD vía canario** | prod (`04b1a32`) | `setAuth` global + saca `getSession` por-hook. Round 2 REVERTIDO. |
-| **🔴 Realtime tras suspensión profunda** | 🟡 **mitigado en staging, raíz hallada, fix de re-auth PENDIENTE** | solo staging (`71768d6`) | Ver §(b) + RCA. worker:true + abort/retry + freno cortan el síntoma; falta la re-auth del socket. |
+| **Realtime tras suspensión profunda** | 🟡 **fix implementado; blindaje VALIDADO, revive-on-timeout en validación** | solo staging (`90099fb`) | Ver §(b) + RCA. Deadlock permanente resuelto y validado; falta prueba limpia de SUBSCRIBED con sesión viva + red zombi. `[rt-diag]` activo. |
 | Caja — escrituras robustas (abort/retry timeout) | 🟢 | staging | `withWriteTimeout` aborta el fetch zombi + reintenta 1 vez; ya no encola falso-offline |
 | Bandeja fusionada Etapa 1 + enlace proveedor + visibilidad pendientes | ✅ Etapa 1 COMPLETA | staging | mig 038, validada con rol contador |
 | PoS — catálogo/comandero/KDS/cobro/ticket SIM · FE estructura SIM · Inventario activo F1 | 🟢 | staging | sin validación física; pase a prod pendiente |
@@ -85,7 +89,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
 
 ## (g) Pendientes humanos / operativos / prolijidad
 
-- **🔴 Diseñar el fix de re-auth de Realtime** (raíz ya identificada, §b) — pendiente técnico #1.
+- **🟡 Validar limpio el revive-on-timeout de Realtime** (§b) — pendiente técnico #1: suspender con **sesión aún viva** (red zombi) y confirmar que el canal sube a **SUBSCRIBED**. Si pasa → **borrar logs `[rt-diag]`** y planear el **pase a main** con ritual. Plan B si no basta (no tocado): poner tope al `fn()` DENTRO de `safeNavigatorLock` (hoy solo la adquisición tiene tope, no la operación) — código sensible de auth. Detalle en PROMPT-CONTINUACION ítem 0.
 - **🔐 Rotar 2 tokens de GitHub:** (a) `gh auth refresh -s repo,read:org,workflow` (el `gho_` que estaba embebido en el remote de `SATORI PROPINAS` ya fue limpiado del config, pero sigue válido en GitHub hasta rotarlo); (b) **regenerar el PAT classic `ghp_` "Claude CLI" sin scope `admin:org`** — su valor quedó en un transcript local; rotar **antes del 27-jun**.
 - **Pase del PoS + Bandeja a PROD:** consolidar migraciones 022–038 con guard anti-staging, crear buckets `facturas`/`productos`/`documents` en prod, regenerar tipos. Autorización única + verificación de hash.
 - **Discrepancia mig 035** en el ledger de staging → sesión dedicada de propinas, sin tocar el historial.

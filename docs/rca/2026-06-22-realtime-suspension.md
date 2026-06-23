@@ -1,6 +1,7 @@
 # RCA — "Se traba tras suspensión profunda" (Realtime / Caja)
 
-> **Fecha:** 2026-06-22 · **Estado:** raíz final IDENTIFICADA CON DATOS, **fix de re-auth pendiente de diseño**.
+> **Fecha:** 2026-06-22 (diagnóstico) · **Actualizado:** 2026-06-23 (fix implementado) · **Estado:** **fix IMPLEMENTADO
+> y mergeado a staging `90099fb`** — blindaje anti-clavado VALIDADO físicamente; revive-on-timeout en validación (ver §8).
 > **Alcance:** 100% client-side. PROD (`main`) fuera de uso y sin estos cambios. Toda la saga vive en `staging`.
 > Foto del proyecto → [../../ESTADO.md](../../ESTADO.md) · Backlog → [../../PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) · RCA del candado viejo → [../../HANG-RCA.md](../../HANG-RCA.md).
 
@@ -29,6 +30,22 @@ de Chino Cobano). En consola: **cientos** de `[rt] canal rt-caja: CLOSED`.
 autenticado con un JWT vencido; nuestra recuperación decide sobre el estado HTTP/`isConnected`, no sobre el
 **estado real del canal** (CHANNEL_ERROR / InvalidJWT), así que nunca dispara la re-autenticación.
 
+## 2bis. Segunda capa (hallada al implementar el fix, jun-23) — la recuperación misma se cuelga
+
+Al darle a `ensureRealtimeHealthy` la lógica para re-autenticar, apareció una capa más profunda que explicaba por
+qué la app quedaba **muerta hasta recargar** (no solo "Realtime caído"):
+
+- Tras la suspensión la **conexión TCP queda zombi**: las propias auth-ops que la recuperación usa —
+  `supabase.auth.getSession()` y `refreshSession()` — **se cuelgan sobre esa conexión y NUNCA settlean**.
+- `ensureRealtimeHealthy` es un singleton single-flight: marca `healthInFlight` y lo limpia en un `finally`. Si el
+  `await getSession()` no vuelve **nunca**, el `finally` **no corre** → `healthInFlight` queda **clavado para siempre**.
+- A partir de ahí **TODA** llamada posterior (el freno del hook **y** los disparadores de resume
+  visibility/online/focus) sale temprano por el guard `if (healthInFlight) return` → la recuperación no vuelve a
+  intentarse **jamás**, ni automáticamente ni al volver a primer plano. De ahí el "muerto hasta recargar".
+- Es el mismo patrón del **candado de auth envenenado**: `safeNavigatorLock` le pone tope a la **adquisición** del
+  lock (10s) pero **no a la operación** (`fn()`, que envuelve el `getSession`/`refresh` reales); si la operación
+  cuelga dentro del lock, la adquisición ya rindió pero el `await` interno no vuelve nunca.
+
 ## 3. Lo que NO era (hipótesis descartadas durante la saga)
 
 | Hipótesis | Veredicto | Por qué |
@@ -50,29 +67,36 @@ autenticado con un JWT vencido; nuestra recuperación decide sobre el estado HTT
 | Worker + abort/retry | `b7cf327`,`7cd7760` | `worker:true` + `heartbeatCallback` (revive en disconnect/error) + `withWriteTimeout` que **aborta** el fetch colgado y reintenta una vez (cash.ts) | El heartbeat deja de morir por throttle; las escrituras dejan de encolar falso-offline. **Pero el socket queda zombi con JWT vencido.** |
 | Diagnóstico + refuerzos | `28901c4` | Instrumentación `[rt-diag]`; **R1 freno anti-loop** (5 fallos → para de recrear, espera `rt:healthy`); **R2** `await disconnect()` antes de `connect()` (arregla el no-op) | **Reveló la raíz final** (§2). El freno corta el loop caliente, pero queda esperando un `rt:healthy` que no llega. |
 
-## 5. El fix PENDIENTE (diseño — NO implementado)
+## 5. El fix IMPLEMENTADO (jun-23, staging `90099fb`, 3 ramas, 100% client-side)
 
-`ensureRealtimeHealthy()` debe **re-autenticar el socket** con `setAuth(tokenFresco)` y **emitir `'rt:healthy'`**
-basándose en el **estado REAL del canal** (`CHANNEL_ERROR` / `InvalidJWT` / "Token has expired"), **NO** en
-`isConnected()` ni solo en `tokenNeedsRefresh` del lado HTTP.
+`ensureRealtimeHealthy()` ahora **re-autentica por evidencia y nunca queda clavado**. Dos partes:
 
-**Idea de diseño (a refinar con cabeza fresca):**
-- Detectar la condición "socket con JWT vencido pese a `isConnected()=true`": p. ej. el hook pasa al singleton la
-  señal de que el canal está en `CHANNEL_ERROR`/`InvalidJWT` (estado real), o el singleton fuerza un
-  `refreshSession()` + `setAuth(token)` + verifica que el join vuelva a `SUBSCRIBED`.
-- Tras re-autenticar de verdad, **emitir `'rt:healthy'`** para que el hook re-suscriba (el freno R1 ya espera ese evento).
-- **Cuidado n°1 — NO crear un loop de refresh** que martille `token?grant_type=refresh_token`: gatear por evidencia
-  (estado real del canal + single-flight + backoff), no por cada `visibilitychange`.
-- **Cuidado n°2 — el zombi de `isConnected()`:** no confiar en `isConnected()` como prueba de salud; un socket con
-  `readyState=OPEN` y heartbeat ok puede tener el token muerto.
+**A. Re-auth + emit por evidencia** (`fix/realtime-reauth-emit`): el hook, cuando su freno corta (5 fallos sin
+`SUBSCRIBED`), llama a la recuperación con `reason='channel-stuck'`. En ese path el singleton **fuerza
+`refreshSession()` + `setAuth(token)`** (gateado por backoff de 30s para no martillar el endpoint) y **emite
+`'rt:healthy'` igual** —aunque HTTP/`isConnected` parezcan sanos— para que el hook re-suscriba con `joinPayload`
+fresco. La recuperación REAL la valida el hook: solo resetea su freno cuando el canal llega a `SUBSCRIBED`
+(evidencia, no `isConnected()`).
 
-> **Requiere sesión dedicada con cabeza fresca.** No es un parche de una línea.
+**B. Blindaje anti-clavado** (`fix/realtime-reauth-timeout` + ajustes): cierra la 2ª capa (§2bis).
+- `withTimeout(p, ms, label, fallback)`: `Promise.race` con tope que **resuelve con fallback** (modo degradado, no
+  cuelga) si la op no settlea. Aplicado a `getSession` (8s), `refreshSession` (8s) y `realtime.disconnect` (8s).
+- **Cinturón por edad** del in-flight (`HEALTH_MAX_AGE_MS=40s`, > el peor caso legítimo ≈24s): si una corrida quedó
+  pegada, la próxima la abandona y arranca otra → `healthInFlight` **nunca** queda rehén.
+- El **gate del refresh** se consume solo si el refresh **completó** (no si expiró por timeout) → un cuelgue se
+  reintenta pronto. En `channel-stuck` se emite `'rt:healthy'` aunque el refresh expire.
+- **Revive-on-timeout** (`fix/realtime-resume-revive`): si `getSession` expira por timeout (red zombi, distinto de
+  deslogueo real vía flag `sessionRead`), **renueva la conexión física** (`disconnect→connect`) en vez de abortar →
+  el `onAuthStateChange` global re-propaga el token fresco al reconectar y el canal vuelve a `SUBSCRIBED`.
 
-## 6. Instrumentación temporal a remover
+**Cuidados cumplidos:** no se confía en `isConnected()` (el zombi); no se crea loop de refresh (single-flight +
+backoff + gate por completitud). Cubierto con un test del hang en `src/shared/api/supabase.timeout.test.ts`.
+
+## 6. Instrumentación temporal — SIGUE ACTIVA (no borrar todavía)
 
 Los logs con prefijo **`[rt-diag]`** (en `src/shared/api/supabase.ts` y `src/shared/hooks/useRealtimeRefetch.ts`)
-son **temporales**, para la prueba física que confirmó esta RCA. **Borrarlos por prefijo `[rt-diag]`** cuando se
-implemente y valide el fix de re-auth.
+**siguen activos** para la validación física en piso del revive-on-timeout (§8). **Borrarlos por prefijo
+`[rt-diag]`** recién cuando esa validación cierre limpio (paso (b) del ítem 0 de PROMPT-CONTINUACION).
 
 ## 7. Qué quedó vivo y útil de la saga (no revertir)
 
@@ -81,3 +105,18 @@ implemente y valide el fix de re-auth.
 - **R1 freno anti-loop** — corta los cientos de `recreate` (la app deja de estar "trabada caliente"); queda
   esperando el `rt:healthy` que el fix de re-auth va a emitir.
 - `await disconnect()` antes de `connect()` — arregla el no-op del revive.
+
+## 8. Estado de validación (jun-23) y qué falta
+
+- ✅ **Blindaje anti-clavado — VALIDADO físicamente.** El deadlock permanente (app muerta hasta recargar) ya no
+  ocurre: `ensureRealtimeHealthy` siempre settlea en pocos segundos y `healthInFlight` siempre se libera, así que la
+  recuperación vuelve a correr (sola o al volver a primer plano).
+- 🟡 **Revive-on-timeout — validación PARCIAL.** En la última prueba la sesión venció de verdad (>1h suspendida) →
+  `getSession` COMPLETÓ y reportó "deslogueado real" → login. **Comportamiento correcto, NO bug.** Falta una prueba
+  **limpia** con **sesión todavía viva pero red zombi** (suspensión más corta / token con TTL largo) para confirmar
+  en los logs `[rt-diag]` que tras el timeout el canal vuelve a `SUBSCRIBED`.
+- **Plan B (si no bastara), NO tocado — código sensible de auth:** ponerle tope al `fn()` DENTRO de
+  `safeNavigatorLock` (hoy solo la adquisición tiene tope de 10s, no la operación). Ver §2bis y el ítem 0 de
+  PROMPT-CONTINUACION. No es un parche de una línea.
+- **Pase a main:** tras la validación limpia → borrar `[rt-diag]` por prefijo y planear el pase con el ritual de
+  siempre (es 100% client-side, sin migración).

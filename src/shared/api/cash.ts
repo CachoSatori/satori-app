@@ -258,13 +258,22 @@ export async function createCashMovement(movement: {
       // row (mismo id/client_op_id) → si la 1ª sí entró pese al timeout, la 2ª rebota con
       // 23505 (idempotente, no duplica plata); si no, recién ahí decidimos.
       try {
-        const { data, error } = await supabase.from('cash_movements')
-          .insert(row as unknown as Tables['cash_movements']['Insert']).select().single()
+        const { data, error } = await withWriteTimeout(signal => supabase
+          .from('cash_movements')
+          .insert(row as unknown as Tables['cash_movements']['Insert'])
+          .select()
+          .abortSignal(signal)
+          .single())
         if (error) throw new Error(error.message)
         return data as CashMovement
       } catch (e2) {
-        if (isOffline()) return queueAndReturn()   // ahora SÍ, sin red real
-        throw e2                                   // error visible, NO falso "sin guardar"
+        // Zombi tras suspensión: navigator.onLine MIENTE (=true) con la red muerta. Si el reintento
+        // también venció o es error de red, NUNCA abandonar → encolar (durable + idempotente por
+        // client_op_id). Solo errores reales del server suben.
+        const timedOut2 = (e2 as { isTimeout?: boolean })?.isTimeout === true
+                       || (e2 as { name?: string })?.name === 'AbortError'
+        if (timedOut2 || isNetErr(e2)) return queueAndReturn()
+        throw e2                                   // error real del server, NO falso "sin guardar"
       }
     }
     if (isNetErr(e)) return queueAndReturn()
@@ -298,12 +307,20 @@ export async function updateCashMovement(
     if (timedOut) {
       // Reintento único (socket zombi tras suspensión). El update por id es idempotente.
       try {
-        const { error } = await supabase.from('cash_movements')
-          .update(clean as unknown as Tables['cash_movements']['Update']).eq('id', id)
+        const { error } = await withWriteTimeout(signal => supabase
+          .from('cash_movements')
+          .update(clean as unknown as Tables['cash_movements']['Update'])
+          .eq('id', id)
+          .abortSignal(signal))
         if (error) throw new Error(error.message)
         return
       } catch (e2) {
-        if (isOffline()) return queueCashMutation('update', { match: { id }, updates: clean })
+        // Zombi tras suspensión: navigator.onLine MIENTE (=true) con la red muerta. Si el reintento
+        // también venció o es error de red, NUNCA abandonar → encolar (durable + idempotente).
+        // Solo errores reales del server suben.
+        const timedOut2 = (e2 as { isTimeout?: boolean })?.isTimeout === true
+                       || (e2 as { name?: string })?.name === 'AbortError'
+        if (timedOut2 || isNetErr(e2)) return queueCashMutation('update', { match: { id }, updates: clean })
         throw e2
       }
     }
@@ -361,11 +378,20 @@ export async function deleteCashMovement(id: string): Promise<void> {
     if (timedOut) {
       // Reintento único (socket zombi tras suspensión). El delete por id es idempotente.
       try {
-        const { error } = await supabase.from('cash_movements').delete().eq('id', id)
+        const { error } = await withWriteTimeout(signal => supabase
+          .from('cash_movements')
+          .delete()
+          .eq('id', id)
+          .abortSignal(signal))
         if (error) throw new Error(error.message)
         return
       } catch (e2) {
-        if (isOffline()) return queueCashMutation('delete', { match: { id } })
+        // Zombi tras suspensión: navigator.onLine MIENTE (=true) con la red muerta. Si el reintento
+        // también venció o es error de red, NUNCA abandonar → encolar (durable + idempotente).
+        // Solo errores reales del server suben.
+        const timedOut2 = (e2 as { isTimeout?: boolean })?.isTimeout === true
+                       || (e2 as { name?: string })?.name === 'AbortError'
+        if (timedOut2 || isNetErr(e2)) return queueCashMutation('delete', { match: { id } })
         throw e2
       }
     }

@@ -5,16 +5,19 @@ De dashboard de analítica a sistema operativo del restaurante.
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-06-21)
+## 📍 Estado real de las fases (handoff 2026-06-22)
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
+
+> **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Todo el trabajo vivo es `staging` (`71768d6`).
 
 | Fase | Estado | Dónde |
 |---|---|---|
 | Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021) |
 | **Estabilidad PWA — fix del SW viejo en prod** (updateViaCache:'none' + version.json cache-bust) | ✅ **VALIDADA en PROD** | PROD (`fde9264`) — RCA `_handoff/PROD-SW-RCA.md` |
 | **Fix de fechas de borde de mes** (`-31`→400; helper `monthRangeBounds`, result-preserving) | ✅ **VALIDADA en PROD** | PROD (`ff836a0`) — RCA `_handoff/RCA-FECHAS-BORDE.md` |
-| **🔴 Fix Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook; R2 revive REVERTIDO) | 🟢 **validado en staging (2 disp.) · PENDIENTE canario a PROD** | STAGING (`23c6bc8`). **PROD NO lo tiene → bug de trabarse vivo.** Hist. `HANG-RCA.md` |
+| **Fix Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook; R2 revive REVERTIDO) | ✅ **en PROD vía canario** | PROD (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`). Hist. `HANG-RCA.md` |
+| **🔴 Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket) | 🟡 **raíz hallada CON DATOS · mitigado en staging · fix de re-auth PENDIENTE de diseño** | STAGING (`71768d6`): worker:true + abort/retry caja + await-disconnect + freno R1 + `[rt-diag]`. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
@@ -88,15 +91,22 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
 - **✅ RESUELTO y EN PROD (jun-21) — Fechas de borde de mes (400 por `-31`):** helper `monthRangeBounds`
   (límite superior exclusivo = 1° del mes siguiente) en Inicio/Reporte Mensual/Food Cost; result-preserving
   para meses de 31 días (`ff836a0`). RCA `_handoff/RCA-FECHAS-BORDE.md`.
-- **🔴 RESUELTO en STAGING, PENDIENTE canario a PROD (jun-22) — Contención del candado de auth (tercera causa
+- **✅ RESUELTO y EN PROD vía canario (jun-22) — Contención del candado de auth (tercera causa
   del "se traba"):** el `getSession()` por-hook de `useRealtimeRefetch` tomaba `navigator.locks` en cada
   (re)suscripción → con varios módulos/dispositivos se apilaban pedidos → `[auth] lock no adquirido en 10s` →
-  app trabada. **Saga (3 tandas, todas en staging):** R1 `onAuthStateChange` global propaga el JWT al socket
-  (cura el loop `InvalidJWTToken`/"Token has expired"); R2 revive del socket en `visibilitychange`/`online`
-  **mergeado y luego REVERTIDO** (subía la contención sin beneficio probado); fix final (`fix/auth-lock-contention`,
-  `09480a6`) **saca el `getSession()` redundante** (el socket ya queda autenticado por R1). Validado Mac+iPhone:
-  consola limpia, sin `CHANNEL_ERROR`, Network 200. **PROD (`ff836a0`) NO lo tiene → el bug sigue vivo ahí.**
-  Es client-side sin migración. Hist. `HANG-RCA.md`.
+  app trabada. R1 `onAuthStateChange` global propaga el JWT al socket (cura el loop `InvalidJWTToken`/"Token has
+  expired"); R2 revive del socket **mergeado y luego REVERTIDO** (subía la contención sin beneficio probado); fix
+  final (`fix/auth-lock-contention`, `09480a6`) **saca el `getSession()` redundante**. Pasó a PROD por canario
+  (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`; sin round 2). Es client-side sin migración. Hist. `HANG-RCA.md`.
+- **🔴 RAÍZ HALLADA CON DATOS, FIX PENDIENTE DE DISEÑO (jun-22) — Realtime se cuelga tras suspensión profunda:**
+  tras ~25 min suspendido, el socket queda con **JWT vencido** (`InvalidJWTToken: "Token has expired"`) pero
+  `isConnected()=true` y el heartbeat late ok → **desincronización token HTTP↔socket**. `ensureRealtimeHealthy`
+  decide sobre `getSession()`/`tokenNeedsRefresh` (HTTP sano) → nunca re-autentica el socket, nunca emite
+  `'rt:healthy'`; el freno R1 corta el loop pero espera un `'rt:healthy'` que no llega → Realtime muerto, módulos
+  no abren. **Mitigado en staging** (worker:true, abort/retry caja, await-disconnect, freno R1, instrumentación
+  `[rt-diag]`) pero **falta el fix de fondo**: re-autenticar el socket con `setAuth(tokenFresco)` y emitir
+  `'rt:healthy'` según el **estado REAL del canal** (no `isConnected()`), sin loop de refresh. Detalle + diseño →
+  **`docs/rca/2026-06-22-realtime-suspension.md`**. ⚠️ Los logs `[rt-diag]` son temporales (borrar por prefijo al validar el fix).
 - **⏳ PENDIENTE (cambia números, valida la dueña) — hora-CR en bordes de período:** el fix del `-31`
   resolvió el 400, pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`). `finance.ts:132/139`
   (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el 31-dic de noche cae en el año equivocado por

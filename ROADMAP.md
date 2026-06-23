@@ -9,7 +9,7 @@ De dashboard de analítica a sistema operativo del restaurante.
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 
-> **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Todo el trabajo vivo es `staging` (`71768d6`).
+> **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Todo el trabajo vivo es `staging` (`90099fb`).
 
 | Fase | Estado | Dónde |
 |---|---|---|
@@ -17,7 +17,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **Estabilidad PWA — fix del SW viejo en prod** (updateViaCache:'none' + version.json cache-bust) | ✅ **VALIDADA en PROD** | PROD (`fde9264`) — RCA `_handoff/PROD-SW-RCA.md` |
 | **Fix de fechas de borde de mes** (`-31`→400; helper `monthRangeBounds`, result-preserving) | ✅ **VALIDADA en PROD** | PROD (`ff836a0`) — RCA `_handoff/RCA-FECHAS-BORDE.md` |
 | **Fix Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook; R2 revive REVERTIDO) | ✅ **en PROD vía canario** | PROD (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`). Hist. `HANG-RCA.md` |
-| **🔴 Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket) | 🟡 **raíz hallada CON DATOS · mitigado en staging · fix de re-auth PENDIENTE de diseño** | STAGING (`71768d6`): worker:true + abort/retry caja + await-disconnect + freno R1 + `[rt-diag]`. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
+| **Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket + auth-ops zombi que cuelgan la recuperación) | 🟡 **fix IMPLEMENTADO; blindaje VALIDADO, revive-on-timeout en validación** | STAGING (`90099fb`): blindaje por timeout (withTimeout 8s + cinturón 40s) + revive-on-timeout + `[rt-diag]` activo. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
@@ -98,15 +98,16 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
   expired"); R2 revive del socket **mergeado y luego REVERTIDO** (subía la contención sin beneficio probado); fix
   final (`fix/auth-lock-contention`, `09480a6`) **saca el `getSession()` redundante**. Pasó a PROD por canario
   (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`; sin round 2). Es client-side sin migración. Hist. `HANG-RCA.md`.
-- **🔴 RAÍZ HALLADA CON DATOS, FIX PENDIENTE DE DISEÑO (jun-22) — Realtime se cuelga tras suspensión profunda:**
-  tras ~25 min suspendido, el socket queda con **JWT vencido** (`InvalidJWTToken: "Token has expired"`) pero
-  `isConnected()=true` y el heartbeat late ok → **desincronización token HTTP↔socket**. `ensureRealtimeHealthy`
-  decide sobre `getSession()`/`tokenNeedsRefresh` (HTTP sano) → nunca re-autentica el socket, nunca emite
-  `'rt:healthy'`; el freno R1 corta el loop pero espera un `'rt:healthy'` que no llega → Realtime muerto, módulos
-  no abren. **Mitigado en staging** (worker:true, abort/retry caja, await-disconnect, freno R1, instrumentación
-  `[rt-diag]`) pero **falta el fix de fondo**: re-autenticar el socket con `setAuth(tokenFresco)` y emitir
-  `'rt:healthy'` según el **estado REAL del canal** (no `isConnected()`), sin loop de refresh. Detalle + diseño →
-  **`docs/rca/2026-06-22-realtime-suspension.md`**. ⚠️ Los logs `[rt-diag]` son temporales (borrar por prefijo al validar el fix).
+- **🟡 FIX IMPLEMENTADO (jun-23), VALIDACIÓN PARCIAL — Realtime se cuelga tras suspensión profunda:**
+  raíz en dos capas — (1) desync token HTTP↔socket (socket con JWT vencido pero `isConnected()=true`), y (2) la más
+  grave: las auth-ops (`getSession`/`refreshSession`) que la recuperación usa **se cuelgan sobre la conexión zombi y
+  nunca settlean** → `ensureRealtimeHealthy` queda clavado (singleton `healthInFlight` nunca se libera) → app muerta
+  hasta recargar. **Fix en staging `90099fb`** (3 ramas, 100% client-side): **blindaje anti-clavado** (`withTimeout`
+  8s en cada auth-op + cinturón por edad 40s + emit `rt:healthy` por evidencia del hook) — **VALIDADO: el deadlock
+  permanente está resuelto**; y **revive-on-timeout** (cuando `getSession` expira por red zombi, renueva la conexión
+  disconnect→connect en vez de abortar, para que el canal suba a SUBSCRIBED) — **validación PARCIAL**, falta una
+  prueba limpia con sesión aún viva + red zombi. Detalle + cronología → **`docs/rca/2026-06-22-realtime-suspension.md`**.
+  ⚠️ Logs `[rt-diag]` **siguen activos** (borrar por prefijo recién tras la validación limpia).
 - **⏳ PENDIENTE (cambia números, valida la dueña) — hora-CR en bordes de período:** el fix del `-31`
   resolvió el 400, pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`). `finance.ts:132/139`
   (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el 31-dic de noche cae en el año equivocado por

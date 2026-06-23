@@ -121,6 +121,17 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
 - **Offline robusto** con base local que sincroniza con Supabase al volver internet.
 - **Unidades de inventario por presentación** (kilo/litro/gramos; huevos por maple/caja) editables por
   ingrediente, recordadas por proveedor.
+- **🔲 Deuda de lint (69 err + 12 warn preexistentes) — PRIORIDAD BAJA, debajo de la estabilización de
+  caja/bandeja/propinas/ventas.** `npm run lint` (eslint .) reporta 81 problemas repartidos en ~30 archivos;
+  es deuda preexistente, NO de ningún fix reciente. **NO hacer barrido masivo:** 68 de los 69 errores son
+  manuales (solo 1 es autofixable con `--fix`) y caen en módulos en uso → riesgo sin ganancia funcional.
+  **Estrategia:** absorber la limpieza POR ARCHIVO dentro de la estabilización módulo-por-módulo ya planeada
+  (al tocar un módulo, se limpia su lint). Desglose:
+  - **Grupo A (~28: `no-unused-vars`, `preserve-caught-error`, `react-refresh/only-export-components`,
+    `eslint-disable` muertos)** = cosmético, seguro. *(Los 3 `preserve-caught-error` están en `cash.ts` y son
+    solo observabilidad — NO tocan matemática.)*
+  - **Grupo B (~41: `react-hooks/set-state-in-effect`, `react-hooks/refs`, `react-hooks/preserve-manual-memoization`)**
+    = correctness/perf-adjacent, requiere revisión por archivo, **NO `--fix` a ciegas.**
 
 ---
 

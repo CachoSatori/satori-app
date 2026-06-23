@@ -110,3 +110,13 @@ Checklist en [REPORTE-NOCHE-2.md](REPORTE-NOCHE-2.md): **cobro + anti-doble-cobr
 - **Offline robusto** con base local que sincroniza al volver internet.
 - **Unidades de inventario por presentación** (kilo/litro/gramos; huevos por maple/caja) por ingrediente.
 - **FE real:** emisor certificado CR (Hacienda 4.4) detrás de `FeProvider`. Bloqueado por CIIU/CABYS de la contadora.
+
+## 9. 🟢 Deuda de lint del repo (ingeniería lista, baja prioridad)
+`npm run lint` (eslint .) reporta **81 problemas (69 err + 12 warn) preexistentes** repartidos en ~30 archivos —
+NO de ningún fix reciente. **Se absorbe en la estabilización por módulo:** al tocar un módulo, se limpia su lint
+ahí; **NO barrido masivo** (68/69 son manuales — solo 1 autofixable con `--fix` — y caen en módulos en uso →
+riesgo sin ganancia funcional). Dos grupos:
+- **Grupo A (~28, cosmético/seguro):** `no-unused-vars`, `preserve-caught-error` (3 en `cash.ts`, solo
+  observabilidad — NO matemática), `react-refresh/only-export-components`, `eslint-disable` muertos.
+- **Grupo B (~41, correctness/perf-adjacent — revisar por archivo, NO `--fix` a ciegas):**
+  `react-hooks/set-state-in-effect`, `react-hooks/refs`, `react-hooks/preserve-manual-memoization`.

@@ -52,7 +52,7 @@ export function useRealtimeRefetch(
       failStreak++
       if (failStreak >= MAX_FAIL_STREAK) {
         console.warn('[rt-diag]', channelName, `FRENO: ${failStreak} fallos seguidos sin SUBSCRIBED → paro recreate, espero rt:healthy`)
-        void ensureRealtimeHealthy()
+        void ensureRealtimeHealthy('channel-stuck')
         return
       }
       recreate()

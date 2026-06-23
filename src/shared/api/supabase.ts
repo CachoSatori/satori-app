@@ -71,7 +71,14 @@ supabase.auth.onAuthStateChange((_event, session) => {
 })
 
 const EXPIRY_MARGIN_S = 60
+// Backoff del refresh FORZADO (path 'channel-stuck'): aunque getSession() esté sano, el canal
+// puede estar roto por JWT vencido en el socket. Forzamos refresh+setAuth, pero como mucho 1 vez
+// por ventana, para NO martillar token?grant_type=refresh_token.
+const FORCED_REFRESH_MIN_INTERVAL_MS = 30_000
+let lastForcedRefresh = 0
 let healthInFlight: Promise<void> | null = null
+
+type RealtimeHealthReason = 'resume' | 'channel-stuck'
 
 const tokenNeedsRefresh = (session: Session | null): boolean => {
   if (!session) return false
@@ -80,21 +87,26 @@ const tokenNeedsRefresh = (session: Session | null): boolean => {
   return exp - Math.floor(Date.now() / 1000) <= EXPIRY_MARGIN_S
 }
 
-// Recuperación de sesión + socket al volver de background. Single-flight: N disparos
-// concurrentes (varios hooks + useAuth) colapsan en UNA operación → no apila el candado
-// de auth ni martilla el endpoint de token. Fuerza refreshSession() (getSession NO
-// refresca un token vencido), propaga el token fresco al socket, y revive el WebSocket
-// si quedó caído. Solo emite 'rt:healthy' si hubo recuperación real (refresh o revive),
-// para no recrear canales en cada cambio de pestaña.
-export const ensureRealtimeHealthy = (): Promise<void> => {
+// reason='resume' (visibilitychange/online/focus): conservador — refresca solo si el token está
+// por vencer, revive solo si el socket cayó, emite 'rt:healthy' solo si hubo recuperación real.
+// NO recrea canales en cada cambio de pestaña.
+// reason='channel-stuck' (el FRENO del hook, 5 fallos sin SUBSCRIBED): evidencia dura de canal
+// trabado pese a isConnected()=true (zombi token-vencido). Acá NO alcanza mirar HTTP: forzamos
+// refresh+setAuth (gateado por backoff) y SIEMPRE emitimos 'rt:healthy' para que el hook
+// re-suscriba con joinPayload fresco. La recuperación real la valida el hook: solo resetea su
+// freno cuando el canal llega a SUBSCRIBED (evidencia, no isConnected()).
+export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): Promise<void> => {
   if (healthInFlight) return healthInFlight
   healthInFlight = (async () => {
     let recovered = false
+    const stuck = reason === 'channel-stuck'
     try {
-      console.log('[rt-diag] ensureRealtimeHealthy: start')
+      console.log('[rt-diag] ensureRealtimeHealthy: start reason=', reason)
       const { data: { session } } = await supabase.auth.getSession()
       let token = session?.access_token ?? null
-      if (tokenNeedsRefresh(session)) {
+      const forceRefresh = stuck && (Date.now() - lastForcedRefresh >= FORCED_REFRESH_MIN_INTERVAL_MS)
+      if (tokenNeedsRefresh(session) || forceRefresh) {
+        lastForcedRefresh = Date.now()
         const { data, error } = await supabase.auth.refreshSession()
         if (!error && data.session) { token = data.session.access_token; recovered = true }
       }
@@ -103,17 +115,16 @@ export const ensureRealtimeHealthy = (): Promise<void> => {
       const connected = supabase.realtime.isConnected()
       console.log('[rt-diag] ensureRealtimeHealthy: isConnected=', connected)
       if (!connected) {
-        // BUG confirmado (R2): el orden previo `disconnect(); connect()` dejaba el socket en
-        // estado "disconnecting" de forma síncrona (WebSocket.close → readyState CLOSING) y el
-        // connect() inmediato hacía early-return por el guard isDisconnecting() → NO-OP, el
-        // socket no revivía. Ahora ESPERAMOS a que el disconnect cierre antes de reconectar.
         console.log('[rt-diag] ensureRealtimeHealthy: revive socket (await disconnect → connect)')
         await supabase.realtime.disconnect()
         supabase.realtime.connect()
         recovered = true
       }
-      if (recovered) {
-        console.log('[rt-diag] ensureRealtimeHealthy: emit rt:healthy')
+      // 'channel-stuck': canal roto por evidencia del hook → re-suscribir es la cura (setAuth ya
+      // dejó el joinPayload fresco; un JOIN nuevo se autentica bien). Emitimos aunque HTTP/isConnected
+      // parezcan sanos: ese es justo el zombi de isConnected()=true.
+      if (recovered || stuck) {
+        console.log('[rt-diag] ensureRealtimeHealthy: emit rt:healthy (recovered=', recovered, 'stuck=', stuck, ')')
         window.dispatchEvent(new Event('rt:healthy'))
       }
     } catch (e) {

@@ -350,17 +350,60 @@ export async function createDayMovement(m: {
   account_id?: string | null
   fecha?: string | null
 }): Promise<string> {
+  // ts = fecha del MOVIMIENTO (puede venir backdateada al mediodía). NO confundir con el
+  // created_at del SOBRE de la cola, que debe ser el reloj real para ordenar bien el outbox.
   const ts = m.fecha ? `${m.fecha}T12:00:00Z` : new Date().toISOString()
-  const { data, error } = await supabase.from('cash_movements').insert({
+  const now = new Date().toISOString()
+  // id y client_op_id en el CLIENTE → replay offline idempotente (021: client_op_id UNIQUE).
+  const id = crypto.randomUUID()
+  const row = {
+    id,
+    client_op_id: id,
     session_id: null, created_by: m.created_by, movement_type: m.movement_type,
     amount_crc: m.amount_crc, amount_usd: m.amount_usd ?? 0, currency: 'CRC',
     description: m.description, subcategory: m.subcategory ?? '',
     supplier_id: m.supplier_id ?? null, supplier_name: m.supplier_name ?? '',
     method: m.method, caja_origen: m.caja_origen, status: m.status ?? 'aprobado',
     account_id: m.account_id ?? null, created_at: ts, updated_at: ts,
-  }).select('id').single()
-  if (error) throw new Error(error.message)
-  return (data as { id: string }).id
+  }
+  const queueAndReturn = async (): Promise<string> => {
+    await enqueue({ client_op_id: id, table: 'cash_movements', op: 'insert', payload: row, created_at: now })
+    return id
+  }
+  if (isOffline()) return queueAndReturn()
+  try {
+    const { error } = await withWriteTimeout(signal => supabase
+      .from('cash_movements')
+      .insert(row as unknown as Tables['cash_movements']['Insert'])
+      .abortSignal(signal))
+    if (error) throw new Error(error.message)
+    return id
+  } catch (e) {
+    const timedOut = (e as { isTimeout?: boolean })?.isTimeout === true
+                  || (e as { name?: string })?.name === 'AbortError'
+    if (timedOut) {
+      // El socket pudo despertar zombi y colgar la 1ª op. Reintento único con el MISMO row
+      // (mismo id/client_op_id) → si la 1ª entró pese al timeout, la 2ª rebota con 23505
+      // (idempotente, no duplica plata).
+      try {
+        const { error } = await withWriteTimeout(signal => supabase
+          .from('cash_movements')
+          .insert(row as unknown as Tables['cash_movements']['Insert'])
+          .abortSignal(signal))
+        if (error) throw new Error(error.message)
+        return id
+      } catch (e2) {
+        // Zombi: navigator.onLine MIENTE (=true) con la red muerta. Si el reintento también
+        // venció o es error de red, NUNCA abandonar → encolar. Solo errores reales del server suben.
+        const timedOut2 = (e2 as { isTimeout?: boolean })?.isTimeout === true
+                       || (e2 as { name?: string })?.name === 'AbortError'
+        if (timedOut2 || isNetErr(e2)) return queueAndReturn()
+        throw e2
+      }
+    }
+    if (isNetErr(e)) return queueAndReturn()
+    throw e
+  }
 }
 
 export async function deleteCashMovement(id: string): Promise<void> {

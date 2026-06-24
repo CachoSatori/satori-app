@@ -1,9 +1,14 @@
 # RCA — "Se traba tras suspensión profunda" (Realtime / Caja)
 
-> **Fecha:** 2026-06-22 (diagnóstico) · **Actualizado:** 2026-06-23 (fix implementado) · **Estado:** **fix IMPLEMENTADO
-> y mergeado a staging `90099fb`** — blindaje anti-clavado VALIDADO físicamente; revive-on-timeout en validación (ver §8).
-> **Alcance:** 100% client-side. PROD (`main`) fuera de uso y sin estos cambios. Toda la saga vive en `staging`.
+> **Fecha:** 2026-06-22 (diagnóstico) · **Actualizado:** 2026-06-24 (resolución final) · **Estado:** **✅ CERRADO —
+> RESUELTO Y VALIDADO en staging `3a0fd20`.** La saga se cerró con la **MÁQUINA DE 3 ESTADOS** (`63ef0bb`) + **gateo del
+> emit y endurecimiento de `SESSION_EXPIRED`** (`3a0fd20`), AMBOS validados físicamente con `window.__satoriDiag`. El
+> approach intermedio de re-auth (emit-on-timeout + revive-on-timeout, §5) **dejaba un loop `InvalidJWT` y fue REEMPLAZADO**
+> (ver §9). **Alcance:** 100% client-side. PROD (`main`) fuera de uso y sin estos cambios. La saga vive en `staging`.
 > Foto del proyecto → [../../ESTADO.md](../../ESTADO.md) · Backlog → [../../PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) · RCA del candado viejo → [../../HANG-RCA.md](../../HANG-RCA.md).
+>
+> **⚠️ Nota de lectura:** las §1–§4 (síntoma, causa raíz, descartadas, cronología) son historia vigente. La **§5 es un
+> approach INTERMEDIO que fue REEMPLAZADO**; la **resolución final está en §9**. La §8 quedó superada por la §9.
 
 ## 1. Síntoma
 
@@ -67,9 +72,14 @@ qué la app quedaba **muerta hasta recargar** (no solo "Realtime caído"):
 | Worker + abort/retry | `b7cf327`,`7cd7760` | `worker:true` + `heartbeatCallback` (revive en disconnect/error) + `withWriteTimeout` que **aborta** el fetch colgado y reintenta una vez (cash.ts) | El heartbeat deja de morir por throttle; las escrituras dejan de encolar falso-offline. **Pero el socket queda zombi con JWT vencido.** |
 | Diagnóstico + refuerzos | `28901c4` | Instrumentación `[rt-diag]`; **R1 freno anti-loop** (5 fallos → para de recrear, espera `rt:healthy`); **R2** `await disconnect()` antes de `connect()` (arregla el no-op) | **Reveló la raíz final** (§2). El freno corta el loop caliente, pero queda esperando un `rt:healthy` que no llega. |
 
-## 5. El fix IMPLEMENTADO (jun-23, staging `90099fb`, 3 ramas, 100% client-side)
+## 5. Approach INTERMEDIO de re-auth (jun-23, staging `90099fb`) — ⚠️ REEMPLAZADO (dejaba un loop). Ver §9.
 
-`ensureRealtimeHealthy()` ahora **re-autentica por evidencia y nunca queda clavado**. Dos partes:
+> **Este approach ya NO es la solución.** Resolvió el deadlock *permanente* (parte B, blindaje anti-clavado — eso SÍ
+> sobrevive), pero su parte A **emitía `rt:healthy` en el TIMEOUT del refresh** → el hook re-suscribía con el token
+> VENCIDO → `InvalidJWTToken` → **loop infinito de CHANNEL_ERROR** (visto en una suspensión de 3–5 h). Se conserva acá
+> como historia; la **resolución final (máquina de 3 estados + gateo + endurecimiento) está en §9**.
+
+`ensureRealtimeHealthy()` re-autenticaba por evidencia y nunca quedaba clavado. Dos partes:
 
 **A. Re-auth + emit por evidencia** (`fix/realtime-reauth-emit`): el hook, cuando su freno corta (5 fallos sin
 `SUBSCRIBED`), llama a la recuperación con `reason='channel-stuck'`. En ese path el singleton **fuerza
@@ -106,7 +116,10 @@ Los logs con prefijo **`[rt-diag]`** (en `src/shared/api/supabase.ts` y `src/sha
   esperando el `rt:healthy` que el fix de re-auth va a emitir.
 - `await disconnect()` antes de `connect()` — arregla el no-op del revive.
 
-## 8. Estado de validación (jun-23) y qué falta
+## 8. Estado de validación (jun-23) — ⚠️ SUPERADO por §9 (snapshot histórico del approach intermedio)
+
+> Este era el estado del approach intermedio (§5). La validación "limpia" que faltaba acá la cerró el rediseño de §9.
+> Se conserva como historia.
 
 - ✅ **Blindaje anti-clavado — VALIDADO físicamente.** El deadlock permanente (app muerta hasta recargar) ya no
   ocurre: `ensureRealtimeHealthy` siempre settlea en pocos segundos y `healthInFlight` siempre se libera, así que la
@@ -120,3 +133,41 @@ Los logs con prefijo **`[rt-diag]`** (en `src/shared/api/supabase.ts` y `src/sha
   PROMPT-CONTINUACION. No es un parche de una línea.
 - **Pase a main:** tras la validación limpia → borrar `[rt-diag]` por prefijo y planear el pase con el ritual de
   siempre (es 100% client-side, sin migración).
+
+## 9. ✅ RESOLUCIÓN FINAL — MÁQUINA DE 3 ESTADOS + gateo del emit + endurecimiento de `SESSION_EXPIRED` (jun-24, staging `3a0fd20`)
+
+El approach de §5 (emit-on-timeout) dejaba un **loop `InvalidJWT`**: emitir `rt:healthy` sin token fresco hacía
+re-suscribir con el token vencido. Se **reemplazó** por un rediseño estructural, **validado físicamente**.
+
+**`63ef0bb` — Máquina de 3 estados.** `ensureRealtimeHealthy` clasifica el resultado de las auth-ops (con tope
+`withTimeout` 8s; discrimina timeout vs completado con los flags `sessionRead`/`refreshCompleted`, **no** con
+`isConnected()` que es el zombi) en EXACTAMENTE uno de:
+- **`ONLINE_SUBSCRIBED`** (token fresco CONFIRMADO) → `setAuth(freshToken)`, revive el socket si `!isConnected()`, y es
+  la **ÚNICA** rama que emite `rt:healthy`.
+- **`OFFLINE_WAITING`** (getSession/refresh por timeout, red zombi) → **NO emite, NO `setAuth`, NO re-suscribe**; renueva
+  el TCP físico (`disconnect→connect`) y reintenta con **backoff 3s→30s** (un único timer cancelable a nivel módulo).
+- **`SESSION_EXPIRED`** → NO toca el socket; deja actuar el deslogueo declarativo (`onAuthStateChange` → `useAuth` →
+  `<Navigate to="/login">`).
+
+**Regla madre:** nunca emitir `rt:healthy` ni re-suscribir sin token fresco confirmado; ningún camino termina en loop.
+`useRealtimeRefetch` quedó **byte-idéntico** (su contrato `rt:healthy`→re-suscribe no cambió; solo cambió *cuándo* se emite).
+
+**`3a0fd20` — dos fixes sobre la máquina:**
+- **FIX 1 (gateo del emit):** flag de módulo `healthyAwaited`. La emisión de `rt:healthy` corre **solo si hay una
+  recuperación pendiente** (se enciende en `channel-stuck` o al caer en `OFFLINE_WAITING`; se apaga al volver a
+  `ONLINE_SUBSCRIBED`/`SESSION_EXPIRED`). Arregla la **regresión de arranque**: el emit incondicional re-suscribía el
+  canal recién creado → `CLOSED` ×5 → FRENO → tiempo real muerto al abrir. Ahora un `'resume'` rutinario sano hace
+  `setAuth` SIN emit y el canal inicial se asienta solo.
+- **FIX 2 (endurecimiento de `SESSION_EXPIRED`):** `getSession→null` ya **no** es deslogueo directo (en el arranque puede
+  dar `null` un tick antes de hidratar desde storage). El **árbitro único** de `SESSION_EXPIRED` es `refresh.error`.
+
+**Validación física (staging desplegado, `window.__satoriDiag`):**
+- `armZombie()` → `OFFLINE_WAITING` + backoff, **sin loop de CHANNEL_ERROR ni `InvalidJWT`**; la app espera.
+- `disarm()` → `ONLINE_SUBSCRIBED` emite `rt:healthy` → el canal vuelve a `SUBSCRIBED` (recupera).
+- `armExpired()` → `SESSION_EXPIRED` (el simulador no dispara `SIGNED_OUT`; hacer `disarm()`/recargar antes de cerrar sesión).
+- **Arranque** sin cascada `CLOSED→recreate`; **foco rutinario** sin `re-subscribe por rt:healthy`.
+Asesor: build + lint (81 baseline) + test 122/122 verdes; diff solo en `supabase.ts` + su test; hook byte-idéntico.
+
+**Pendiente (no urgente):** ver §0.1(d) de PROMPT-CONTINUACION — el `SESSION_EXPIRED` transitorio del primer tick del
+arranque (inofensivo por FIX 2). **Logs `[rt-diag]`/`[diag-repro]` siguen ACTIVOS**; se borran en el **pase quirúrgico de
+estabilidad a main** (PROMPT-CONTINUACION §1A).

@@ -10,7 +10,7 @@ De dashboard de analítica a sistema operativo del restaurante.
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: en este bloque ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod).
 
-> **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Todo el trabajo vivo es `staging` (`c9e0a24`).
+> **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Todo el trabajo vivo es `staging` (`3a0fd20`).
 
 | Fase | Estado | Dónde |
 |---|---|---|
@@ -18,8 +18,8 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **Estabilidad PWA — fix del SW viejo en prod** (updateViaCache:'none' + version.json cache-bust) | ✅ **VALIDADA en PROD** | PROD (`fde9264`) — RCA `_handoff/PROD-SW-RCA.md` |
 | **Fix de fechas de borde de mes** (`-31`→400; helper `monthRangeBounds`, result-preserving) | ✅ **VALIDADA en PROD** | PROD (`ff836a0`) — RCA `_handoff/RCA-FECHAS-BORDE.md` |
 | **Fix Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook; R2 revive REVERTIDO) | ✅ **en PROD vía canario** | PROD (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`). Hist. `HANG-RCA.md` |
-| **Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket + auth-ops zombi que cuelgan la recuperación) | 🟡 **blindaje VALIDADO (no más deadlock); recuperación se REDISEÑA** | STAGING (`c9e0a24`): blindaje 8s + cinturón 40s validados; el emit-on-timeout deja loop `InvalidJWT` → rediseño 3-estados (↓). `[rt-diag]` activo. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
-| **REDISEÑO recuperación Realtime — máquina de 3 estados** (`ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`) | ⏳ **EN CURSO / diseñado** | backlog **PRIORIDAD 1** (PROMPT-CONTINUACION). Regla madre: nunca `rt:healthy` sin token fresco confirmado; ningún camino en loop. Validar con `__satoriDiag` |
+| **Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket + auth-ops zombi que cuelgan la recuperación) | ✅ **RESUELTO Y VALIDADO** en staging | STAGING (`3a0fd20`): saga cerrada con la máquina de 3 estados (↓). `[rt-diag]` activo hasta el pase quirúrgico. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
+| **REDISEÑO recuperación Realtime — máquina de 3 estados** (`ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`) **+ gateo del emit + endurecimiento `SESSION_EXPIRED`** | ✅ **HECHO Y VALIDADO** en staging | STAGING (`63ef0bb` máquina + `3a0fd20` gateo/endurecimiento). Regla madre: nunca `rt:healthy` sin token fresco confirmado; ningún camino en loop. **Validado físico con `__satoriDiag`** (armZombie→OFFLINE_WAITING sin loop; disarm→recupera; arranque sin cascada CLOSED) |
 | **Durabilidad de escritura de Caja** (reintento con tope + encola SIEMPRE en outbox ante timeout/red-zombi) | ✅ **en STAGING** (mergeado, test verde) | STAGING (`0dd258b`) — root cause: confiar en `navigator.onLine` (miente en zombi). Test `cash.durability.test.ts` |
 | **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
@@ -113,17 +113,19 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
   `realtimeReproSwitch.ts` expone `window.__satoriDiag` (`armZombie`/`armExpired`/`disarm`/`status`). Reproduce el
   cuelgue de Realtime **a demanda en ~30 s** (antes 3+ h): `armZombie` dispara CHANNEL_ERROR al instante. Gateado por
   `VITE_APP_ENV==='staging'` (DCE lo borra de prod). Es la herramienta para validar el rediseño de Realtime. Logs `[diag-repro]`.
-- **🟡 BLINDAJE VALIDADO, RECUPERACIÓN SE REDISEÑA (jun-23) — Realtime se cuelga tras suspensión profunda:** raíz en
-  dos capas — (1) desync token HTTP↔socket (socket con JWT vencido pero `isConnected()=true`), y (2) la más grave: las
-  auth-ops (`getSession`/`refreshSession`) que la recuperación usa **se cuelgan sobre la conexión zombi y nunca
-  settlean** → `ensureRealtimeHealthy` queda clavado → app muerta hasta recargar. El **blindaje anti-clavado**
-  (`withTimeout` 8s + cinturón 40s, en staging `c9e0a24`) **resolvió el deadlock permanente — VALIDADO**. **PERO** el
-  approach **emite `rt:healthy` en el TIMEOUT del refresh** → re-suscribe con token VENCIDO → `InvalidJWTToken` →
-  **loop infinito** (confirmado en log de suspensión 3–5 h). → **PRIORIDAD 1: rediseñar `ensureRealtimeHealthy` +
-  `useRealtimeRefetch` como MÁQUINA DE 3 ESTADOS** (`ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`); nunca
-  `rt:healthy` sin token fresco confirmado; ningún camino en loop. Validar con `__satoriDiag`. Detalle →
-  PROMPT-CONTINUACION ítem PRIORIDAD 1 + **`docs/rca/2026-06-22-realtime-suspension.md`**. ⚠️ Logs `[rt-diag]`/`[diag-repro]`
-  **siguen activos** (borrar recién tras resolver+validar el rediseño).
+- **✅ RESUELTO Y VALIDADO EN STAGING (jun-24) — Realtime se cuelga tras suspensión profunda:** raíz en dos capas —
+  (1) desync token HTTP↔socket (socket con JWT vencido pero `isConnected()=true`), y (2) la más grave: las auth-ops
+  (`getSession`/`refreshSession`) que la recuperación usa **se colgaban sobre la conexión zombi y nunca settleaban** →
+  `ensureRealtimeHealthy` clavado → app muerta hasta recargar. **Solución cerrada:** `ensureRealtimeHealthy` rediseñada
+  como **MÁQUINA DE 3 ESTADOS** (`63ef0bb`: `ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`; regla madre — nunca
+  `rt:healthy` sin token fresco confirmado, ningún camino en loop → mató el **loop `InvalidJWT`** del viejo
+  emit-on-timeout), más **gateo del emit** (flag `healthyAwaited`: emite solo si hay recuperación pendiente → arregla la
+  regresión de arranque) y **endurecimiento de `SESSION_EXPIRED`** (`getSession→null` transitorio del arranque ya no
+  desloguea; árbitro único = `refresh.error`) — `3a0fd20`. **Validado físicamente** con `window.__satoriDiag`
+  (armZombie→OFFLINE_WAITING + backoff sin loop; disarm→recupera a SUBSCRIBED; arranque sin cascada CLOSED; foco
+  rutinario sin re-subscribe). `useRealtimeRefetch` byte-idéntico (su contrato no cambió). Detalle →
+  **`docs/rca/2026-06-22-realtime-suspension.md`** + `ESTADO-ARCHIVO.md` (2026-06-24). ⚠️ Logs `[rt-diag]`/`[diag-repro]`
+  **siguen activos** (se borran en el **pase quirúrgico de estabilidad a main**, PROMPT-CONTINUACION ítem 1a).
 - **⏳ PENDIENTE (cambia números, valida la dueña) — hora-CR en bordes de período:** el fix del `-31`
   resolvió el 400, pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`). `finance.ts:132/139`
   (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el 31-dic de noche cae en el año equivocado por

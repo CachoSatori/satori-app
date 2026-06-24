@@ -1,9 +1,10 @@
-# Continuación — backlog priorizado (handoff 2026-06-23)
+# Continuación — backlog priorizado (handoff 2026-06-24)
 
 Estado: **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Tiene capa de inteligencia +
-fix SW viejo + fix fechas-borde + **canario Realtime/candado de auth** (R1 + fix final). STAGING (`c9e0a24`) =
-todo el PoS + Bandeja Etapa 1 + esos fixes + la saga Realtime/suspensión + **durabilidad de escritura de caja (jun-23)** +
-**switch de diagnóstico de Realtime solo-staging (jun-23)**. Guardrails de siempre:
+fix SW viejo + fix fechas-borde + **canario Realtime/candado de auth** (R1 + fix final). STAGING (`3a0fd20`) =
+todo el PoS + Bandeja Etapa 1 + esos fixes + la **saga Realtime/suspensión CERRADA** (máquina de 3 estados + gateo del
+emit + endurecimiento `SESSION_EXPIRED`) + **durabilidad de escritura de caja (jun-23)** +
+**switch de diagnóstico de Realtime solo-staging**. Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
 Estado completo → [ESTADO.md](ESTADO.md) · Fases → [ROADMAP.md](ROADMAP.md) · RCA Realtime →
@@ -13,56 +14,57 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 🟢 ingeniería lista para arrancar · 🔴 bloqueante / urgente.
 
 > **Ya resuelto y EN PROD:** SW viejo (`fde9264`), fechas de borde de mes (`ff836a0`), y el **canario
-> Realtime/candado de auth** (`04b1a32`). Eran las tres causas viejas del "se traba". La causa NUEVA (Realtime
-> tras suspensión profunda) tiene el **blindaje anti-deadlock VALIDADO en staging `c9e0a24`**, pero el approach
-> emite `rt:healthy` en el timeout del refresh → **loop `InvalidJWT`** → se **REDISEÑA como máquina de 3 estados**
-> (ítem 0 / PRIORIDAD 1). Reproducible a demanda con `window.__satoriDiag`. La **durabilidad de escritura de caja** quedó ✅ en staging.
+> Realtime/candado de auth** (`04b1a32`). Eran las tres causas viejas del "se traba". **La causa NUEVA (Realtime tras
+> suspensión profunda) quedó RESUELTA Y VALIDADA en staging (`3a0fd20`):** máquina de 3 estados (`63ef0bb`) + gateo del
+> emit + endurecimiento de `SESSION_EXPIRED` (`3a0fd20`), validado físico con `window.__satoriDiag` (ver §0). La
+> **durabilidad de escritura de caja** quedó ✅ en staging. **El foco AHORA son los DOS pases a producción (§1A y §1B).**
 
 ---
 
-## 0. 🔴 PRIORIDAD 1 — Rediseñar la recuperación de Realtime como MÁQUINA DE 3 ESTADOS
+## 0. ✅ RESUELTO esta sesión — Realtime tras suspensión profunda (máquina de 3 estados + gateo + endurecimiento)
 
-**Qué.** Rediseñar `ensureRealtimeHealthy` (en `src/shared/api/supabase.ts`) + `useRealtimeRefetch`
-(`src/shared/hooks/useRealtimeRefetch.ts`) como una **máquina de 3 estados explícita**:
-- **`ONLINE_SUBSCRIBED`** — token fresco confirmado, socket conectado, canal en SUBSCRIBED.
-- **`OFFLINE_WAITING`** — sin red / socket caído / red zombi: **NO** se re-suscribe; se espera y se reintenta con backoff.
-- **`SESSION_EXPIRED`** — `getSession` CONFIRMÓ que no hay sesión: deslogueo real → a login, sin tocar el socket.
+`ensureRealtimeHealthy` (en `src/shared/api/supabase.ts`) quedó rediseñada como **MÁQUINA DE 3 ESTADOS** y **validada
+físicamente** en el staging desplegado. **Ya NO es un pendiente** — queda acá como referencia para el pase quirúrgico (§1A).
+- **`ONLINE_SUBSCRIBED`** (token fresco CONFIRMADO) → `setAuth` + revive socket si cayó + **única** emisión de `rt:healthy`.
+- **`OFFLINE_WAITING`** (red zombi / refresh colgado) → NO emite, renueva el TCP, reintenta con backoff (3s→30s, un único timer).
+- **`SESSION_EXPIRED`** (solo si `refresh.error`) → NO toca el socket; deja actuar el deslogueo declarativo.
 
-**Regla madre (inquebrantable):** **NUNCA emitir `rt:healthy` ni re-suscribir el canal sin un token válido FRESCO
-CONFIRMADO. Ningún camino puede terminar en loop.**
+**Regla madre cumplida:** nunca `rt:healthy` ni re-suscribir sin token fresco confirmado; ningún camino en loop. Esto
+mató el **loop `InvalidJWT`** del viejo emit-on-timeout (`63ef0bb`). Encima: **gateo del emit** (flag `healthyAwaited`:
+emite solo si hay recuperación pendiente → arregla la regresión de arranque) y **endurecimiento de `SESSION_EXPIRED`**
+(`getSession→null` transitorio del arranque ya no desloguea; árbitro único = `refresh.error`) — `3a0fd20`.
+**Validado con `window.__satoriDiag`:** `armZombie`→`OFFLINE_WAITING` + backoff sin loop ni `InvalidJWT`; `disarm`→`ONLINE_SUBSCRIBED`
+emite y recupera a SUBSCRIBED; **arranque sin cascada CLOSED**; **foco rutinario → `setAuth` SIN emit**. `useRealtimeRefetch`
+byte-idéntico (su contrato no cambió). Cronología → **`docs/rca/2026-06-22-realtime-suspension.md`** + `ESTADO-ARCHIVO.md` (2026-06-24).
 
-**El bug que obliga el rediseño (causa raíz confirmada).** Hoy se **emite `rt:healthy` en el TIMEOUT del refresh**
-(cuando `getSession`/`refreshSession` no settlean sobre la red zombi y el `withTimeout` cae al fallback). El hook, al
-recibir `rt:healthy`, **re-suscribe con el token VENCIDO** → el join falla con `InvalidJWTToken` ("Token has expired")
-→ el SDK reintenta con el mismo token muerto → **loop infinito de CHANNEL_ERROR** (confirmado en el log de una
-suspensión de **3–5 h**). El blindaje anti-clavado (`withTimeout` 8s + cinturón 40s) ya evita el cuelgue *permanente*
-—VALIDADO—, pero NO evita este *loop*: **emitir "sano" sin token fresco es el error de diseño**. El rediseño lo cierra
-estructuralmente: `OFFLINE_WAITING` no emite `rt:healthy` ni re-suscribe; solo se transiciona a `ONLINE_SUBSCRIBED`
-(y se emite) cuando hay un token fresco confirmado.
+---
 
-**Cómo validar (sin esperar 3 h):** con el switch de diagnóstico ya mergeado — `window.__satoriDiag` en el staging
-desplegado:
-- `armZombie()` → reproduce el cuelgue/loop (auth-ops que no settlean + socket caído) **al instante**.
-- `armExpired()` → reproduce el deslogueo real (`getSession`→`session:null`, `refreshSession`→AuthError) → debe llevar
-  a `SESSION_EXPIRED`/login, **no** a loop.
-- `disarm()` → vuelve a la normalidad → debe recuperar a `ONLINE_SUBSCRIBED`.
-Criterio de éxito: en ningún arm/disarm queda un loop de CHANNEL_ERROR; la recuperación llega a SUBSCRIBED **solo** con
-token fresco. Detalle + cronología → **`docs/rca/2026-06-22-realtime-suspension.md`**.
+## 1A. 🔴🟢 PASE QUIRÚRGICO de estabilidad a MAIN (NO incluye el PoS) — PRIORIDAD AHORA
+**Qué:** devolver la **app vieja estable** a producción sin que se trabe — **cherry-pick de la saga Realtime/suspensión
+(ya resuelta y validada, §0) + la durabilidad de escritura de caja (§0.2)**, SIN el PoS ni la Bandeja ni las migraciones
+022–038. Es client-side puro (sin migración). **Distinto del gran pase del PoS (§1B): no confundir.**
+**Antes de pasar (checklist):**
+- **Borrar la instrumentación temporal por prefijo:** logs `[rt-diag]` (en `src/shared/api/supabase.ts` y
+  `src/shared/hooks/useRealtimeRefetch.ts`) y `[diag-repro]`. **Decidir** si el switch de diagnóstico se queda como
+  herramienta permanente de staging o se remueve (removible de un golpe: borrar `src/shared/diag/realtimeReproSwitch.ts`
+  + su test + el bloque gateado en `supabase.ts`).
+- **Confirmar tree-shaking del código solo-staging:** que `window.__satoriDiag` quede `undefined` en un build prod real.
+  ⚠️ **OJO con el footgun de `.env.local`** (§0bis-A): un `npm run build` local compila como STAGING e **incluye** el diag;
+  verificar con `VITE_APP_ENV=production npm run build` (o como CI).
+- **Ritual de pase** con **firma física de la dueña** + verificación de hash. Cherry-pick selectivo, no merge de staging.
 
-**Plan B documentado (si hiciera falta — código sensible de auth, NO tocado).** `safeNavigatorLock` (en `supabase.ts`)
-hoy solo le pone tope a la **adquisición** del lock (10s), **no a la operación** (`fn()`, que envuelve el `getSession`/
-`refreshSession` reales). Si el `fn()` cuelga DENTRO del lock, ponerle un tope ahí. **Es auth sensible** (un tope mal
-puesto corre el refresh sin lock o aborta una sesión válida) → diseño cuidadoso + prueba, no parche de una línea.
+## 1B. 🖊️ GRAN PASE del PoS + Bandeja a PROD (proyecto aparte, DESPUÉS del quirúrgico)
+**Qué:** consolidar migraciones **022–038** con guard anti-staging; crear buckets `facturas`/`productos`/`documents` en
+prod; regenerar tipos post-merge (es 021→038 en una). **Requiere validar TODO el PoS en piso primero** (§6) y resolver el
+**PILAR de escalabilidad de sesión/auth** (abajo, lo bloquea). Autorización única + verificación de hash. Decisión de la dueña.
 
-> ⚠️ La instrumentación `[rt-diag]` (`supabase.ts` + `useRealtimeRefetch.ts`) y `[diag-repro]` (el switch) **SIGUEN
-> ACTIVAS — NO borrar** hasta que el rediseño esté resuelto y validado con `__satoriDiag`. Recién ahí: borrar logs por
-> prefijo, y **decidir si el switch se queda como herramienta permanente de staging o se remueve** (es removible de un
-> golpe: borrar `src/shared/diag/realtimeReproSwitch.ts` + su test + el bloque gateado en `supabase.ts`).
-
-### 0.1 — Pendientes secundarios anotados (relacionados, fuera del rediseño en sí)
+### 0.1 — Pendientes secundarios anotados (del trabajo de Realtime/caja)
 - **(a) UX — el revive tarda hasta ~30 s en encolar tras suspensión.** Con la red zombi, la primera escritura de caja
   puede tardar hasta ~30 s en caer al outbox (suma de topes de 8s + reintentos). **Funciona** (no se pierde el pago,
-  ver durabilidad de caja, ítem 0.2), pero la espera se nota. Revisar al rediseñar la máquina de estados.
+  ver durabilidad de caja, ítem 0.2), pero la espera se nota. Ya con la máquina de 3 estados; re-evaluar la UX si molesta.
+- **(d) 🆕 Menor — `SESSION_EXPIRED` transitorio en el arranque (inofensivo).** En el primer tick del arranque
+  `getSession()` puede dar `null` → se ve un `SESSION_EXPIRED` transitorio en los logs `[rt-diag]`. **Inofensivo por el
+  FIX 2** (no desloguea ni emite; lo arbitra `refresh.error`). Revisar al limpiar los `[rt-diag]` en el pase quirúrgico (§1A); no urgente.
 - **(b) `createDayMovement` no tiene tope ni cola.** Mismo hueco que ya se tapó en `registerCashMovement`/
   `updateCashMovement`/`deleteCashMovement`, pero `createDayMovement` (movimientos de Caja Diaria nivel-día) quedó
   **fuera de alcance hasta ahora**: si su escritura cae sobre el socket zombi, se cuelga sin tope y sin encolar.
@@ -72,7 +74,7 @@ puesto corre el refresh sin lock o aborta una sesión válida) → diseño cuida
   ruta de Caja deja la app trabada (no termina de cargar). **Investigar:** reproducir, mirar consola/network, aislar si
   es Realtime/auth en el arranque de `/caja` o el SW/precache. Sin RCA todavía.
 
-### 0.2 — ✅ Durabilidad de escritura de Caja (ya en staging `c9e0a24`, contexto para el rediseño)
+### 0.2 — ✅ Durabilidad de escritura de Caja (ya en staging `0dd258b`)
 `registerCashMovement`/`updateCashMovement`/`deleteCashMovement`: el reintento ahora corre con `withWriteTimeout` (no
 puede colgar) y, ante timeout o error de red, **encola INCONDICIONALMENTE en el outbox** (idempotente por
 `client_op_id`); solo errores reales del server (RLS/FK/constraint) suben con throw. **Root cause** del bug viejo:
@@ -145,8 +147,9 @@ La Bandeja Etapa 1 ya está validada. Etapa 2:
 - **Offline — Opción A:** se registra el pago igual sin red; la IA procesa la foto al volver internet.
 
 ## 5. 🖊️ Pase del PoS + Bandeja a PROD (gran salto, decisión de la dueña)
-Consolidar migraciones **022–038** con guard anti-staging; crear buckets `facturas`/`productos`/`documents`
-en prod; regenerar tipos post-merge. Requiere autorización única + verificación de hash. Es 021→038 en una.
+**→ Movido arriba como §1B** (gran pase del PoS, distinto del pase quirúrgico §1A). Resumen: consolidar migraciones
+**022–038** con guard anti-staging; crear buckets `facturas`/`productos`/`documents` en prod; regenerar tipos post-merge
+(021→038 en una). Bloqueado por el PILAR de escalabilidad de sesión/auth + validación física del PoS (§6).
 
 ## 6. 👁️ Validación física pendiente en staging (construido, verde, sin probar en piso)
 Checklist en [REPORTE-NOCHE-2.md](REPORTE-NOCHE-2.md): **cobro + anti-doble-cobro** (mig 033), **comandero pro**,

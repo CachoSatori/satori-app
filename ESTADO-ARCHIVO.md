@@ -3,6 +3,47 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-24 — REALTIME tras suspensión profunda: SAGA CERRADA ✅ (resuelta y validada en staging `3a0fd20`)
+> Histórico archivado de `ESTADO.md` §(b). El estado vivo y compacto quedó en `ESTADO.md`; el RCA completo
+> (diagnóstico + cronología + resolución) en `docs/rca/2026-06-22-realtime-suspension.md`. **100% client-side.**
+
+**El problema (dos capas).** (1) Desync token HTTP↔socket: tras ~25 min suspendido el socket Realtime queda con
+**JWT vencido** pero `isConnected()=true` y heartbeat ok → el SDK lo cree vivo y el join falla con
+`InvalidJWTToken`. (2) Más grave: la conexión TCP queda **zombi** y las auth-ops (`getSession`/`refreshSession`)
+que la recuperación usaba **se colgaban y nunca settleaban** → `ensureRealtimeHealthy` quedaba clavado
+(`healthInFlight` rehén) → app muerta hasta recargar.
+
+**Cómo se cerró, en orden:**
+1. **Blindaje anti-clavado** (jun-23): `withTimeout` 8s por auth-op + cinturón por edad `HEALTH_MAX_AGE_MS=40s` +
+   single-flight con liberación en `finally`. Resolvió el **deadlock permanente** (la app ya no quedaba muerta).
+   PERO el approach de entonces **emitía `rt:healthy` en el TIMEOUT del refresh** → el hook re-suscribía con el
+   token **VENCIDO** → `InvalidJWTToken` → **loop infinito de CHANNEL_ERROR** (visto en una suspensión de 3–5 h).
+   Ese emit-on-timeout (+ revive-on-timeout) fue un approach **intermedio que dejaba un loop** → **reemplazado**.
+2. **Máquina de 3 estados** (`63ef0bb`): se rediseñó `ensureRealtimeHealthy` para clasificar el resultado de las
+   auth-ops en EXACTAMENTE uno de `ONLINE_SUBSCRIBED` / `OFFLINE_WAITING` / `SESSION_EXPIRED`. **Regla madre:
+   nunca emitir `rt:healthy` ni re-suscribir sin token fresco CONFIRMADO; ningún camino termina en loop.** Mató
+   el loop `InvalidJWT`: `OFFLINE_WAITING` no emite, renueva el TCP y reintenta con backoff (3s→30s, un único
+   timer cancelable); solo `ONLINE_SUBSCRIBED` (token fresco) emite. `useRealtimeRefetch` quedó byte-idéntico
+   (su contrato `rt:healthy`→re-suscribe no cambió).
+3. **Gateo del emit + endurecimiento de SESSION_EXPIRED** (`3a0fd20`): (FIX 1) flag `healthyAwaited` — la emisión
+   de `rt:healthy` corre SOLO si hay recuperación pendiente (`channel-stuck` previo u `OFFLINE_WAITING`); arregló
+   la **regresión de arranque** (el emit incondicional re-suscribía el canal inicial → CLOSED ×5 → FRENO → tiempo
+   real muerto al abrir). (FIX 2) `getSession→null` ya **no** es deslogueo directo (en el arranque puede dar null
+   un tick antes de hidratar desde storage); el árbitro ÚNICO de `SESSION_EXPIRED` es `refresh.error`.
+
+**Validación física (staging desplegado, `window.__satoriDiag`):** `armZombie` → `OFFLINE_WAITING` + backoff, sin
+loop ni `InvalidJWT`; `disarm` → `ONLINE_SUBSCRIBED` emite y recupera a `SUBSCRIBED`; ARRANQUE sin cascada CLOSED;
+foco rutinario → `setAuth` SIN emit (sin churn). Asesor: build/lint(81 baseline)/test 122/122 verdes.
+
+**Saga de ramas (todas mergeadas a staging):** `fix/realtime-jwt-refresh` (R1, en prod vía canario) ·
+`fix/realtime-socket-revive` (R2, **REVERTIDO**) · `fix/auth-lock-contention` (en prod vía canario) ·
+`fix/realtime-resume-refresh` · `fix/realtime-worker-heartbeat` (`worker:true`) · `fix/realtime-resume-diagnostics`
+(`[rt-diag]` + R1 freno) · `fix/realtime-reauth-emit` + `fix/realtime-reauth-timeout` + `fix/realtime-resume-revive`
+(blindaje, **approach intermedio reemplazado**) · **`fix/realtime-3state-machine` (`63ef0bb`)** ·
+**`fix/realtime-emit-gating` (`3a0fd20`)**. Switch de reproducción solo-staging: `fix/realtime-resume-diagnostics`
+(`window.__satoriDiag`, logs `[diag-repro]`). **Logs `[rt-diag]`/`[diag-repro]` siguen ACTIVOS** hasta el pase
+quirúrgico a main.
+
 ## 🆕 2026-06-12 (noche) — FIX 🔴 DOBLE COBRO — EN STAGING (rama `fix-doble-cobro`)
 Resuelto el hallazgo crítico de la auditoría. **La matemática del cobro NO se tocó** (computeTotals,
 vuelto, conversión, splits intactos y testeados); solo cambió **cómo se persiste** el pago. 93/93

@@ -115,12 +115,12 @@ function okBuilder() {
 describe('outbox — durabilidad del flush (socket zombi: timeout → retry, nunca fatal)', () => {
   afterEach(() => {
     vi.useRealTimers()
-    delete (supabase as Record<string, unknown>).from
+    delete (supabase as unknown as Record<string, unknown>).from
   })
 
   it('insert que NUNCA resuelve: al cumplirse WRITE_TIMEOUT_MS el executor devuelve "retry" (no se cuelga)', async () => {
     vi.useFakeTimers()
-    ;(supabase as Record<string, unknown>).from = () => hangingBuilder()
+    ;(supabase as unknown as Record<string, unknown>).from = () => hangingBuilder()
     const result = supabaseExecutor(op(1))
     await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS)
     await expect(result).resolves.toBe('retry')
@@ -130,7 +130,7 @@ describe('outbox — durabilidad del flush (socket zombi: timeout → retry, nun
     const store = memStore()
     await store.add(op(1)); await store.add(op(2))
     vi.useFakeTimers()
-    ;(supabase as Record<string, unknown>).from = () => hangingBuilder()
+    ;(supabase as unknown as Record<string, unknown>).from = () => hangingBuilder()
     const flush = flushOutbox(store, supabaseExecutor, noAudit)
     await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS)
     const res = await flush
@@ -145,14 +145,14 @@ describe('outbox — durabilidad del flush (socket zombi: timeout → retry, nun
     await store.add(op(1)); await store.add(op(2))
     // 1ª pasada: la red está zombi → todo se cuelga → retry, nada se drena
     vi.useFakeTimers()
-    ;(supabase as Record<string, unknown>).from = () => hangingBuilder()
+    ;(supabase as unknown as Record<string, unknown>).from = () => hangingBuilder()
     const flush1 = flushOutbox(store, supabaseExecutor, noAudit)
     await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS)
     await flush1
     expect(await store.count()).toBe(2)
     vi.useRealTimers()
     // recuperado: Supabase responde ok → la cola se vacía en orden
-    ;(supabase as Record<string, unknown>).from = () => okBuilder()
+    ;(supabase as unknown as Record<string, unknown>).from = () => okBuilder()
     const res2 = await flushOutbox(store, supabaseExecutor, noAudit)
     expect(res2).toMatchObject({ applied: 2, remaining: 0, stopped: false })
     expect(await store.count()).toBe(0)

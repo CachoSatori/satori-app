@@ -83,39 +83,63 @@ function classifyError(e: unknown): 'retry' | 'fatal' {
   return NETWORK_ERR.test(msg) ? 'retry' : 'fatal'
 }
 
+// Mismo cinturón que cash.ts: si una escritura del flush se cuelga sobre un socket TCP
+// zombi (tras suspensión profunda), abort() cierra el socket (RST/FIN) → lo saca del pool
+// → el próximo intento abre una conexión fresca. El error queda marcado isTimeout para que
+// el ejecutor lo trate como 'retry' (NUNCA fatal: fatal borra la op = pago perdido).
+const WRITE_TIMEOUT_MS = 15000
+function withWriteTimeout<T>(run: (signal: AbortSignal) => PromiseLike<T>, ms = WRITE_TIMEOUT_MS): Promise<T> {
+  const controller = new AbortController()
+  return Promise.race([
+    Promise.resolve(run(controller.signal)),
+    new Promise<T>((_, reject) => setTimeout(() => {
+      controller.abort()  // cierra el socket zombi → lo saca del pool
+      const err = new Error('Outbox flush: la operación tardó demasiado.')
+      ;(err as { isTimeout?: boolean }).isTimeout = true
+      reject(err)
+    }, ms)),
+  ])
+}
+
 /** Ejecutor real contra Supabase, con auditoría LWW en updates (ver OFFLINE.md). */
 export const supabaseExecutor: OpExecutor = async op => {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'retry'
   try {
     if (op.op === 'insert') {
-      const { error } = await supabase.from(op.table).insert(op.payload as never)
+      const { error } = await withWriteTimeout(signal =>
+        supabase.from(op.table).insert(op.payload as never).abortSignal(signal))
       if (!error) return 'ok'
       if (error.code === '23505') return 'duplicate'   // client_op_id/id UNIQUE → ya aplicada
       return classifyError(new Error(error.message))
     }
     if (op.op === 'upsert') {
       const { onConflict, row } = op.payload as { onConflict: string; row: Record<string, unknown> }
-      const { error } = await supabase.from(op.table).upsert(row as never, { onConflict })
+      const { error } = await withWriteTimeout(signal =>
+        supabase.from(op.table).upsert(row as never, { onConflict }).abortSignal(signal))
       return error ? classifyError(new Error(error.message)) : 'ok'
     }
     if (op.op === 'update') {
       const { match, updates } = op.payload as { match: Record<string, string>; updates: Record<string, unknown> }
       // Auditoría LWW: si otro dispositivo tocó la fila DESPUÉS de esta op local,
       // se aplica igual (last-write-wins) pero queda warning + registro de auditoría.
-      const { data: cur } = await supabase.from(op.table).select('updated_at').match(match).maybeSingle()
+      const { data: cur } = await withWriteTimeout(signal =>
+        supabase.from(op.table).select('updated_at').match(match).abortSignal(signal).maybeSingle())
       const serverTs = (cur as { updated_at?: string } | null)?.updated_at
       if (serverTs && serverTs > op.created_at) {
         console.warn(`[outbox] CONFLICTO LWW en ${op.table}: el servidor tenía una versión más nueva (${serverTs}) que la op local (${op.created_at}). Se aplica igual (last-write-wins).`, match)
         await idbAudit({ op, reason: `conflicto LWW: server updated_at=${serverTs} > local`, at: new Date().toISOString() })
       }
-      const { error } = await supabase.from(op.table).update(updates as never).match(match)
+      const { error } = await withWriteTimeout(signal =>
+        supabase.from(op.table).update(updates as never).match(match).abortSignal(signal))
       return error ? classifyError(new Error(error.message)) : 'ok'
     }
     // delete — si la fila ya no existe, el delete es no-op y eso es éxito
     const { match } = op.payload as { match: Record<string, string> }
-    const { error } = await supabase.from(op.table).delete().match(match)
+    const { error } = await withWriteTimeout(signal =>
+      supabase.from(op.table).delete().match(match).abortSignal(signal))
     return error ? classifyError(new Error(error.message)) : 'ok'
   } catch (e) {
+    if ((e as { isTimeout?: boolean })?.isTimeout === true) return 'retry'  // timeout → retry, NUNCA fatal
     return classifyError(e)
   }
 }

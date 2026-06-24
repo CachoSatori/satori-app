@@ -81,4 +81,52 @@ describe('cash.ts — durabilidad de escritura (socket zombi: el pago termina en
     expect(op.payload.id).toBe(resolved!.id)
     expect(op.payload.client_op_id).toBe(resolved!.id)
   })
+
+  it('createDayMovement: ambos intentos vencen por timeout → RESUELVE con el id y encola en el outbox', async () => {
+    const { createDayMovement } = await import('./cash')
+
+    let resolvedId: string | undefined
+    const p = createDayMovement({
+      created_by: 'u1', movement_type: 'egreso', amount_crc: 5000,
+      description: 'Banco a Caja Fuerte', method: 'Efectivo', caja_origen: 'Caja Fuerte',
+    }).then(r => { resolvedId = r })
+
+    // 1er intento (tope 15s) vence → reintento (tope 15s) vence. Avanzamos más allá de ambos.
+    await vi.advanceTimersByTimeAsync(15_100)   // vence el 1er withWriteTimeout
+    await vi.advanceTimersByTimeAsync(15_100)   // vence el reintento envuelto en withWriteTimeout
+    await p
+
+    // No tiró y resolvió un id string: el movimiento de día se salvó en el outbox.
+    expect(typeof resolvedId).toBe('string')
+    expect(resolvedId).toBeTruthy()
+
+    // Encoló UNA vez, como insert de cash_movements, con el MISMO id/client_op_id que devolvió.
+    expect(enqueueSpy).toHaveBeenCalledTimes(1)
+    const op = enqueueSpy.mock.calls[0][0]
+    expect(op.table).toBe('cash_movements')
+    expect(op.op).toBe('insert')
+    expect(op.client_op_id).toBe(resolvedId)
+    expect(op.payload.id).toBe(resolvedId)
+    expect(op.payload.client_op_id).toBe(resolvedId)
+  })
+
+  it('createDayMovement: navigator offline → encola directo sin tocar la red', async () => {
+    // El navegador SÍ sabe que no hay red (onLine=false) → encolar directo, sin intentar la 1ª op.
+    Object.defineProperty(globalThis, 'navigator', { value: { onLine: false }, configurable: true, writable: true })
+    const { createDayMovement } = await import('./cash')
+
+    const id = await createDayMovement({
+      created_by: 'u1', movement_type: 'egreso', amount_crc: 5000,
+      description: 'Banco a Caja Fuerte', method: 'Efectivo', caja_origen: 'Caja Fuerte',
+    })
+
+    // Devolvió el id y encoló UNA vez como insert, sin tocar el builder de red.
+    expect(typeof id).toBe('string')
+    expect(enqueueSpy).toHaveBeenCalledTimes(1)
+    const op = enqueueSpy.mock.calls[0][0]
+    expect(op.table).toBe('cash_movements')
+    expect(op.op).toBe('insert')
+    expect(op.client_op_id).toBe(id)
+    expect(op.payload.id).toBe(id)
+  })
 })

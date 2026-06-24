@@ -1,12 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 
 // outbox.ts importa el cliente supabase (para el executor real), que exige las
 // env vars VITE_SUPABASE_*. El núcleo testeado acá (flushOutbox) NO lo usa →
 // se mockea para que `npx vitest run` pase sin variables de entorno ni .env.
 vi.mock('../api/supabase', () => ({ supabase: {} }))
 
-import { flushOutbox } from './outbox'
+import { flushOutbox, supabaseExecutor } from './outbox'
 import type { OutboxOp, OutboxStore, ExecResult } from './outbox'
+import { supabase } from '../api/supabase'
 
 // Store en memoria con el mismo contrato que el de IndexedDB (seq autoincremental)
 function memStore(): OutboxStore & { ops: OutboxOp[] } {
@@ -85,5 +86,75 @@ describe('outbox — replay ordenado e idempotente (FASE B)', () => {
     const order: string[] = []
     await flushOutbox(store, async o => { order.push(o.op); return 'ok' }, noAudit)
     expect(order).toEqual(['insert', 'update'])
+  })
+})
+
+// ── Durabilidad del flush: socket TCP zombi → timeout+abort → retry (no pierde plata) ──
+const WRITE_TIMEOUT_MS = 15000
+
+// Builder de Supabase encadenable: terminales (then/maybeSingle) NUNCA resuelven → simula
+// el fetch colgado sobre el socket zombi tras suspensión.
+function hangingBuilder() {
+  const never = new Promise<never>(() => { /* nunca settlea */ })
+  const b: Record<string, unknown> = {}
+  for (const m of ['insert', 'upsert', 'update', 'delete', 'select', 'match', 'abortSignal']) b[m] = () => b
+  b.maybeSingle = () => never
+  b.then = (res: unknown, rej: unknown) => never.then(res as never, rej as never)
+  return b
+}
+// Builder que responde OK ({ error: null }) — la red "se recuperó".
+function okBuilder() {
+  const ok = Promise.resolve({ data: null, error: null })
+  const b: Record<string, unknown> = {}
+  for (const m of ['insert', 'upsert', 'update', 'delete', 'select', 'match', 'abortSignal']) b[m] = () => b
+  b.maybeSingle = () => ok
+  b.then = (res: unknown, rej: unknown) => ok.then(res as never, rej as never)
+  return b
+}
+
+describe('outbox — durabilidad del flush (socket zombi: timeout → retry, nunca fatal)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    delete (supabase as Record<string, unknown>).from
+  })
+
+  it('insert que NUNCA resuelve: al cumplirse WRITE_TIMEOUT_MS el executor devuelve "retry" (no se cuelga)', async () => {
+    vi.useFakeTimers()
+    ;(supabase as Record<string, unknown>).from = () => hangingBuilder()
+    const result = supabaseExecutor(op(1))
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS)
+    await expect(result).resolves.toBe('retry')
+  })
+
+  it('GUARDARRAÍL: el timeout es "retry" y NUNCA "fatal" → la op NO se elimina de la cola (plata a salvo)', async () => {
+    const store = memStore()
+    await store.add(op(1)); await store.add(op(2))
+    vi.useFakeTimers()
+    ;(supabase as Record<string, unknown>).from = () => hangingBuilder()
+    const flush = flushOutbox(store, supabaseExecutor, noAudit)
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS)
+    const res = await flush
+    expect(res.stopped).toBe(true)        // frenó el flush, preservando el orden
+    expect(res.fatals).toBe(0)            // NUNCA fatal (fatal borraría la op = pago perdido)
+    expect(res.applied).toBe(0)
+    expect(await store.count()).toBe(2)   // nada se borró de la cola
+  })
+
+  it('tras recuperar (Supabase responde ok), un segundo flush drena la cola entera', async () => {
+    const store = memStore()
+    await store.add(op(1)); await store.add(op(2))
+    // 1ª pasada: la red está zombi → todo se cuelga → retry, nada se drena
+    vi.useFakeTimers()
+    ;(supabase as Record<string, unknown>).from = () => hangingBuilder()
+    const flush1 = flushOutbox(store, supabaseExecutor, noAudit)
+    await vi.advanceTimersByTimeAsync(WRITE_TIMEOUT_MS)
+    await flush1
+    expect(await store.count()).toBe(2)
+    vi.useRealTimers()
+    // recuperado: Supabase responde ok → la cola se vacía en orden
+    ;(supabase as Record<string, unknown>).from = () => okBuilder()
+    const res2 = await flushOutbox(store, supabaseExecutor, noAudit)
+    expect(res2).toMatchObject({ applied: 2, remaining: 0, stopped: false })
+    expect(await store.count()).toBe(0)
   })
 })

@@ -101,6 +101,12 @@ let healthInFlight: Promise<void> | null = null
 let healthStartedAt = 0
 let resumeRetryTimer: ReturnType<typeof setTimeout> | null = null
 let resumeRetryDelay = RESUME_RETRY_MIN_MS
+// ¿Hay un suscriptor esperando una recuperación? Solo entonces ONLINE_SUBSCRIBED emite 'rt:healthy'.
+// Se enciende cuando el hook frenó y llama con reason='channel-stuck', o cuando caímos en OFFLINE_WAITING
+// (red zombi / socket caído). Se apaga al volver a ONLINE_SUBSCRIBED (recuperación servida) o a
+// SESSION_EXPIRED. Sin este gate, un 'resume' rutinario (arranque / foco con todo sano) emitiría y haría
+// re-suscribir el canal que recién se estaba estableciendo → CLOSED → recreate ×5 → FRENO → tiempo real muerto.
+let healthyAwaited = false
 
 type RealtimeHealthReason = 'resume' | 'channel-stuck'
 
@@ -172,15 +178,19 @@ const classifyRealtime = async (reason: RealtimeHealthReason): Promise<RealtimeD
   )
   // getSession EXPIRÓ por timeout (red zombi): no sabemos si la sesión vive → esperar, no desloguear.
   if (!sessionRead) return { state: 'OFFLINE_WAITING' }
-  // getSession COMPLETÓ con session=null → deslogueo real confirmado.
-  if (!session) return { state: 'SESSION_EXPIRED' }
+  // getSession COMPLETÓ con session=null NO se trata como deslogueo: al arrancar puede dar null un instante
+  // antes de hidratar la sesión desde storage (falso positivo). El árbitro ÚNICO de SESSION_EXPIRED es el
+  // refreshSession de abajo (refresh.error). Con session=null caemos a ese refresh y él decide.
   const forceRefresh = stuck && (Date.now() - lastForcedRefresh >= FORCED_REFRESH_MIN_INTERVAL_MS)
   // Token vigente confirmado y sin necesidad de forzar refresh → online con ESE token (fresco confirmado).
-  if (!tokenNeedsRefresh(session) && !forceRefresh) {
+  // El guard `session &&` es necesario: si es null ya no es ONLINE (cae al refresh) y no accedemos a
+  // access_token sobre null.
+  if (session && !tokenNeedsRefresh(session) && !forceRefresh) {
     return { state: 'ONLINE_SUBSCRIBED', freshToken: session.access_token }
   }
-  // Token vencido (o forceRefresh por stuck): hay que renovarlo. El gate (lastForcedRefresh) se consume
-  // SOLO si el refresh COMPLETÓ (no si expiró por timeout) → un cuelgue se reintenta pronto.
+  // Token vencido, getSession dio null (sin confirmar deslogueo), o forceRefresh por stuck: hay que ir al
+  // refresh. El gate (lastForcedRefresh) se consume SOLO si el refresh COMPLETÓ (no si expiró por timeout)
+  // → un cuelgue se reintenta pronto.
   let refreshCompleted = false
   const refresh = await withTimeout(
     supabase.auth.refreshSession().then((r) => { refreshCompleted = true; return r }),
@@ -215,6 +225,9 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
   const run = (async () => {
     try {
       console.log('[rt-diag] ensureRealtimeHealthy: start reason=', reason)
+      // channel-stuck = el hook frenó (5 fallos sin SUBSCRIBED) y llama esperando 'rt:healthy' para
+      // re-suscribir → marcamos la espera ya, aunque esta corrida termine en OFFLINE_WAITING.
+      if (reason === 'channel-stuck') healthyAwaited = true
       const decision = await classifyRealtime(reason)
       console.log('[rt-diag] ensureRealtimeHealthy: estado=', decision.state)
       if (decision.state === 'ONLINE_SUBSCRIBED') {
@@ -232,9 +245,16 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
           supabase.realtime.connect()
         }
         cancelResumeRetry()
-        // ÚNICA emisión de 'rt:healthy' en todo el módulo: solo con token fresco confirmado.
-        console.log('[rt-diag] ensureRealtimeHealthy: ONLINE_SUBSCRIBED → emit rt:healthy (token fresco)')
-        window.dispatchEvent(new Event('rt:healthy'))
+        // ÚNICA emisión de 'rt:healthy' en todo el módulo: solo con token fresco confirmado Y solo si hay
+        // una recuperación pendiente (healthyAwaited). Un 'resume' rutinario sano (arranque/foco) llega acá
+        // con healthyAwaited=false → NO emite → el canal inicial se asienta solo (no lo re-suscribimos).
+        if (healthyAwaited) {
+          console.log('[rt-diag] ensureRealtimeHealthy: ONLINE_SUBSCRIBED → emit rt:healthy (recuperación servida)')
+          window.dispatchEvent(new Event('rt:healthy'))
+        } else {
+          console.log('[rt-diag] ensureRealtimeHealthy: ONLINE_SUBSCRIBED → setAuth, SIN emit (nada que recuperar)')
+        }
+        healthyAwaited = false   // recuperación servida (o no había nada pendiente)
       } else if (decision.state === 'OFFLINE_WAITING') {
         // Sin token fresco confirmado (red zombi / refresh colgado): NO emitir, NO setAuth con token
         // vencido/null, NO re-suscribir. Renovar el TCP físico (cura validada del path token-timeout) y
@@ -247,12 +267,16 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
           undefined,
         )
         supabase.realtime.connect()
+        // Quedó una recuperación pendiente: cuando una próxima corrida llegue a ONLINE_SUBSCRIBED con token
+        // fresco, ESA emite 'rt:healthy' para que el hook re-suscriba. Acá NO emitimos.
+        healthyAwaited = true
         scheduleResumeRetry()
       } else {
-        // SESSION_EXPIRED: deslogueo real confirmado. NO emitir, NO re-suscribir, NO disconnect/connect en
-        // loop. El deslogueo declarativo (onAuthStateChange → useAuth → <Navigate to="/login">) hace su
-        // trabajo. Cancelamos el backoff: no tiene sentido reintentar sin sesión.
+        // SESSION_EXPIRED: deslogueo real confirmado (refresh.error). NO emitir, NO re-suscribir, NO
+        // disconnect/connect en loop. El deslogueo declarativo (onAuthStateChange → useAuth → <Navigate
+        // to="/login">) hace su trabajo. Cancelamos el backoff y la espera: no hay nada que recuperar.
         console.log('[rt-diag] ensureRealtimeHealthy: SESSION_EXPIRED → deslogueo declarativo, sin emit')
+        healthyAwaited = false
         cancelResumeRetry()
       }
     } catch (e) {

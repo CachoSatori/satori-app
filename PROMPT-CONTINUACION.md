@@ -1,10 +1,11 @@
 # Continuación — backlog priorizado (handoff 2026-06-24)
 
-Estado: **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Tiene capa de inteligencia +
-fix SW viejo + fix fechas-borde + **canario Realtime/candado de auth** (R1 + fix final). STAGING (`3a0fd20`) =
-todo el PoS + Bandeja Etapa 1 + esos fixes + la **saga Realtime/suspensión CERRADA** (máquina de 3 estados + gateo del
-emit + endurecimiento `SESSION_EXPIRED`) + **durabilidad de escritura de caja (jun-23)** +
-**switch de diagnóstico de Realtime solo-staging**. Guardrails de siempre:
+Estado: **PROD (`main` `483d29c`) recibió las OLAS 1 y 1.1 de estabilidad (validadas físicamente) → la app vuelve a ser
+usable sin cuelgues.** main = capa de inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado de auth
++ **Ola 1** (saga Realtime/suspensión + durabilidad de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush
+del outbox). STAGING (`4805e23`) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga Realtime/suspensión + durabilidad
+de caja + **timeout/abort del flush del outbox** + **switch de diagnóstico de Realtime solo-staging** (con `[rt-diag]`).
+Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
 Estado completo → [ESTADO.md](ESTADO.md) · Fases → [ROADMAP.md](ROADMAP.md) · RCA Realtime →
@@ -13,11 +14,11 @@ Estado completo → [ESTADO.md](ESTADO.md) · Fases → [ROADMAP.md](ROADMAP.md)
 Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 👁️ espera VALIDACIÓN FÍSICA ·
 🟢 ingeniería lista para arrancar · 🔴 bloqueante / urgente.
 
-> **Ya resuelto y EN PROD:** SW viejo (`fde9264`), fechas de borde de mes (`ff836a0`), y el **canario
-> Realtime/candado de auth** (`04b1a32`). Eran las tres causas viejas del "se traba". **La causa NUEVA (Realtime tras
-> suspensión profunda) quedó RESUELTA Y VALIDADA en staging (`3a0fd20`):** máquina de 3 estados (`63ef0bb`) + gateo del
-> emit + endurecimiento de `SESSION_EXPIRED` (`3a0fd20`), validado físico con `window.__satoriDiag` (ver §0). La
-> **durabilidad de escritura de caja** quedó ✅ en staging. **El foco AHORA es el plan de pase a prod en 3 OLAS (§1).**
+> **Ya resuelto y EN PROD:** SW viejo (`fde9264`), fechas de borde de mes (`ff836a0`), y el canario
+> Realtime/candado de auth. Eran las tres causas viejas del "se traba". **La causa NUEVA (Realtime tras suspensión
+> profunda) + la durabilidad de escritura de caja + el timeout/abort del flush del outbox YA ESTÁN EN PROD y validadas
+> físicamente** vía **OLA 1 (`2358f6c`)** y **OLA 1.1 (`ead4727`+`483d29c`)** — la cola del outbox drena sola.
+> **El foco AHORA es la OLA 2: Bandeja Etapa 1 + mig 038 a prod (§1).**
 
 ---
 
@@ -39,24 +40,23 @@ byte-idéntico (su contrato no cambió). Cronología → **`docs/rca/2026-06-22-
 
 ---
 
-## 1. 🔴 PLAN DE PASE A PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS (cabecera del backlog)
-**Principio:** PROD (`main` `04b1a32`) está **FUERA DE USO** → la **estabilidad (Ola 1) va ANTES que cualquier feature**.
+## 1. 🟢 PLAN DE PASE A PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS — **Ola 1 y 1.1 ✅ HECHAS**
+**Principio:** la **estabilidad (Olas 1 + 1.1) fue ANTES que cualquier feature** y **ya está en prod, validada**.
 ⚠️ **Staging está ~143 commits y ~16 migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod se va por
-_cherry-pick selectivo_.** Hacer las olas EN ORDEN.
+_cherry-pick selectivo_.** Hacer las olas EN ORDEN → **la SIGUIENTE es la Ola 2**.
 
-### Ola 1 🔴🟢 — PRIORIDAD 1 — pase QUIRÚRGICO de estabilidad a MAIN (cherry-pick, SIN el PoS)
-**Qué:** devolver la **app estable** a prod sin cuelgues — cherry-pick de la **cadena de la saga Realtime** (worker:true +
-blindaje por timeout + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`, ya resueltos y validados,
-§0) **+ la durabilidad de escritura de caja (§0.2)**. SIN el PoS, sin la Bandeja, sin migraciones. Client-side puro.
-**Checklist antes de pasar:**
-- **Borrar la instrumentación temporal por prefijo:** logs `[rt-diag]` (en `src/shared/api/supabase.ts` y
-  `src/shared/hooks/useRealtimeRefetch.ts`) y `[diag-repro]`. **Decidir** si el switch de diagnóstico se queda como
-  herramienta permanente de staging o se remueve (removible de un golpe: borrar `src/shared/diag/realtimeReproSwitch.ts`
-  + su test + el bloque gateado en `supabase.ts`).
-- **Confirmar tree-shaking del código solo-staging:** que `window.__satoriDiag` quede `undefined` en un build prod real.
-  ⚠️ **OJO con el footgun de `.env.local`** (§0bis-A): un `npm run build` local compila como STAGING e **incluye** el diag;
-  verificar con `VITE_APP_ENV=production npm run build` (o como CI).
-- **Ritual de pase** con **firma física de la dueña** + verificación de hash. Cherry-pick selectivo, **no** merge de staging.
+### Ola 1 ✅ HECHA (en prod `2358f6c`, validada físicamente) — pase QUIRÚRGICO de estabilidad a MAIN
+**Qué se hizo:** cherry-pick/port de la **cadena de la saga Realtime** (worker:true + blindaje por timeout + máquina de 3
+estados + gateo del emit + endurecimiento `SESSION_EXPIRED`) **+ la durabilidad de escritura de caja (§0.2)**, SIN el PoS,
+sin la Bandeja, sin migraciones (client-side puro). **La instrumentación se borró por prefijo:** logs `[rt-diag]` +
+módulo `realtimeReproSwitch` fuera de main; tree-shaking confirmado (grep del dist de prod por `__satoriDiag|rt-diag|armZombie`
+→ VACÍO). En `staging` el diag sigue activo por diseño. Caja/propinas/ventas de vuelta en prod **sin cuelgues**.
+
+### Ola 1.1 ✅ HECHA (en prod `ead4727`+`483d29c`, validada físicamente) — timeout/abort del flush del outbox
+**Qué se hizo:** las 5 llamadas de red del `supabaseExecutor` (`src/shared/offline/outbox.ts`) envueltas en
+`withWriteTimeout` + `.abortSignal()` (mismo patrón que `cash.ts`), con **GUARDARRAÍL DE PLATA**: un timeout devuelve
+`'retry'`, NUNCA `'fatal'` (fatal borra la op de la cola = pago perdido). **La cola del outbox drena sola tras suspender
+la máquina** (antes el flush quedaba colgado en "por sincronizar" sobre el socket TCP zombi). Tests en `outbox.test.ts`.
 
 ### Ola 2 🟢🖊️ — (tras Ola 1) — Bandeja ETAPA 1 a prod con la mig 038
 **Qué:** la **Etapa 1** (bandeja unificada `/inbox`, foto+IA Claude, enlace proveedor↔caja, visibilidad de pendientes)
@@ -78,9 +78,9 @@ limpio de las migraciones del PoS (022–037)** o vienen acopladas (define si se
 - **(a) UX — el revive tarda hasta ~30 s en encolar tras suspensión.** Con la red zombi, la primera escritura de caja
   puede tardar hasta ~30 s en caer al outbox (suma de topes de 8s + reintentos). **Funciona** (no se pierde el pago,
   ver durabilidad de caja, ítem 0.2), pero la espera se nota. Ya con la máquina de 3 estados; re-evaluar la UX si molesta.
-- **(d) 🆕 Menor — `SESSION_EXPIRED` transitorio en el arranque (inofensivo).** En el primer tick del arranque
-  `getSession()` puede dar `null` → se ve un `SESSION_EXPIRED` transitorio en los logs `[rt-diag]`. **Inofensivo por el
-  FIX 2** (no desloguea ni emite; lo arbitra `refresh.error`). Revisar al limpiar los `[rt-diag]` en la Ola 1 (pase quirúrgico); no urgente.
+- **(d) Menor — `SESSION_EXPIRED` transitorio en el arranque (inofensivo).** En el primer tick del arranque
+  `getSession()` puede dar `null` → se ve un `SESSION_EXPIRED` transitorio en los logs `[rt-diag]` (**solo en staging**;
+  en prod los `[rt-diag]` ya no existen tras la Ola 1). **Inofensivo** (no desloguea ni emite; lo arbitra `refresh.error`); no urgente.
 - **(b) `createDayMovement` no tiene tope ni cola.** Mismo hueco que ya se tapó en `registerCashMovement`/
   `updateCashMovement`/`deleteCashMovement`, pero `createDayMovement` (movimientos de Caja Diaria nivel-día) quedó
   **fuera de alcance hasta ahora**: si su escritura cae sobre el socket zombi, se cuelga sin tope y sin encolar.
@@ -106,6 +106,14 @@ tree-shakea. **Para verificar tree-shaking / un build prod real:** forzar el val
 `VITE_APP_ENV=production npm run build` (process.env gana sobre `.env.local`) o mover `.env.local` aparte. Verificado
 en esta sesión: con `VITE_APP_ENV` ≠ staging (explícito **o** sin setear, como en CI) el DCE **elimina** el bloque +
 su `import()` → no queda chunk del diag y `window.__satoriDiag` es `undefined`.
+
+## 0bis-B. ⚠️ GOTCHA DE VERIFICACIÓN — `tsc --noEmit` es un FALSO VERDE (usar `npm run build`)
+El `tsconfig.json` raíz tiene `"files": []` + `references` (estilo solución) → **`npx tsc --noEmit` no chequea NINGÚN
+archivo** (es no-op). El typecheck REAL es **`npm run build`** = `tsc -b` (compila los proyectos referenciados, incl. los
+`*.test.ts` vía `tsconfig.app.json`). En el pase de la Ola 1.1 un cast en un test (`SupabaseClient as Record<…>`) pasó
+`tsc --noEmit` pero **rompió `tsc -b`** (TS2352); quedó latente en staging y solo apareció en el pase a prod. **Regla:
+toda verificación de un pase corre `VITE_APP_ENV=production npm run build`, NUNCA `tsc --noEmit`.** Castear tipos
+incompatibles en tests: `x as unknown as T`.
 
 ---
 
@@ -142,10 +150,15 @@ pase del PoS a producción.**
 `dateCR` ya usado). **Bloqueado por:** validación física de la dueña contra un cierre conocido (cambia números).
 Ver `_handoff/RCA-FECHAS-BORDE.md` §5 + `fix/fecha-cr-consistente` (ya en staging, también pendiente de validar).
 
-## 2. 🔲 404 menor en prod sobre `propinas:1` (prolijidad, baja prioridad)
-Un recurso falta en prod (`propinas:1` en Network) — probablemente un icono o un source-map. **NO afecta la
-operación** (las pantallas cargan). Identificar el archivo exacto (DevTools → Network, filtro vacío, recargar)
-y agregarlo o quitar la referencia. No urgente.
+## 2. 🔲 Pendientes menores en PROD (prolijidad, NO bloquean — detectados en la validación física de las Olas)
+- **404 de un recurso en la ruta `/caja`** (🆕 esta sesión) — aparece en consola, no rompe el flujo. Identificar el
+  recurso (asset/manifest/SW/icono) en DevTools → Network y agregarlo o quitar la referencia. *(Relacionado, a mirar
+  junto: §0.1(c) "Cmd+Shift+R en `/caja` deja la app colgada".)*
+- **404 menor sobre `propinas:1`** — probablemente un icono o source-map; las pantallas cargan igual.
+- **Warning cosmético de recharts** (🆕) — `width(-1)/height(-1)` con contenedor de 0px al montar; solo ruido en consola,
+  sin impacto visual. Envolver el chart para que no renderice con tamaño 0, o suprimir.
+- **La Lenovo del restaurante (KDS de cocina) quedó con bundle viejo** (🆕) — requiere **Unregister SW + Clear site data**
+  una vez en ese equipo para tomar el deploy nuevo (el watchdog de arranque debería curarlo solo; si no, a mano).
 
 ## 3. 🖊️ Migraciones — discrepancia 035 + verificar 038
 - **035:** el ledger de staging la tiene **como aplicada** aunque el archivo solo vive en `propina-pool` (sin merge).

@@ -1,7 +1,7 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-23**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-24**
 
 ---
 
@@ -10,7 +10,7 @@ De dashboard de analítica a sistema operativo del restaurante.
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: en este bloque ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod).
 
-> **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Todo el trabajo vivo es `staging` (`3a0fd20`).
+> **PROD (`main` `483d29c`) recibió las Olas 1 y 1.1 de estabilidad (validadas) → la app vuelve a ser usable.** El trabajo de FEATURES vive en `staging` (`4805e23`); a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`.
 
 | Fase | Estado | Dónde |
 |---|---|---|
@@ -18,9 +18,10 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **Estabilidad PWA — fix del SW viejo en prod** (updateViaCache:'none' + version.json cache-bust) | ✅ **VALIDADA en PROD** | PROD (`fde9264`) — RCA `_handoff/PROD-SW-RCA.md` |
 | **Fix de fechas de borde de mes** (`-31`→400; helper `monthRangeBounds`, result-preserving) | ✅ **VALIDADA en PROD** | PROD (`ff836a0`) — RCA `_handoff/RCA-FECHAS-BORDE.md` |
 | **Fix Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook; R2 revive REVERTIDO) | ✅ **en PROD vía canario** | PROD (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`). Hist. `HANG-RCA.md` |
-| **Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket + auth-ops zombi que cuelgan la recuperación) | ✅ **RESUELTO Y VALIDADO** en staging | STAGING (`3a0fd20`): saga cerrada con la máquina de 3 estados (↓). `[rt-diag]` activo hasta el pase quirúrgico. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
-| **REDISEÑO recuperación Realtime — máquina de 3 estados** (`ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`) **+ gateo del emit + endurecimiento `SESSION_EXPIRED`** | ✅ **HECHO Y VALIDADO** en staging | STAGING (`63ef0bb` máquina + `3a0fd20` gateo/endurecimiento). Regla madre: nunca `rt:healthy` sin token fresco confirmado; ningún camino en loop. **Validado físico con `__satoriDiag`** (armZombie→OFFLINE_WAITING sin loop; disarm→recupera; arranque sin cascada CLOSED) |
-| **Durabilidad de escritura de Caja** (reintento con tope + encola SIEMPRE en outbox ante timeout/red-zombi) | ✅ **en STAGING** (mergeado, test verde) | STAGING (`0dd258b`) — root cause: confiar en `navigator.onLine` (miente en zombi). Test `cash.durability.test.ts` |
+| **Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket + auth-ops zombi que cuelgan la recuperación) | ✅ **RESUELTO Y VALIDADO — EN PROD (Ola 1)** | **PROD (`2358f6c`)** + staging (`3a0fd20`): saga cerrada con la máquina de 3 estados (↓). En prod SIN diag; en staging `[rt-diag]` activo. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
+| **REDISEÑO recuperación Realtime — máquina de 3 estados** (`ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`) **+ gateo del emit + endurecimiento `SESSION_EXPIRED`** | ✅ **HECHO Y VALIDADO — EN PROD (Ola 1)** | **PROD (`2358f6c`)** + staging (`63ef0bb`+`3a0fd20`). Regla madre: nunca `rt:healthy` sin token fresco confirmado; ningún camino en loop. **Validado físico con `__satoriDiag`** (armZombie→OFFLINE_WAITING sin loop; disarm→recupera; arranque sin cascada CLOSED) |
+| **Durabilidad de escritura de Caja** (reintento con tope + encola SIEMPRE en outbox ante timeout/red-zombi) | ✅ **EN PROD y VALIDADA (Ola 1)** | **PROD (`2358f6c`)** + staging (`0dd258b`) — root cause: confiar en `navigator.onLine` (miente en zombi). Tests `cash.durability.test.ts` + `supabase.timeout.test.ts` |
+| **Outbox — timeout/abort del flush** (`supabaseExecutor` con `withWriteTimeout`+`.abortSignal()`; **guardarraíl: timeout→retry, NUNCA fatal**) | ✅ **EN PROD y VALIDADA (Ola 1.1) — la cola drena sola** | **PROD (`ead4727`+`483d29c`)** + staging (`4805e23`). Antes el flush quedaba colgado en "por sincronizar" sobre el socket zombi. Test `outbox.test.ts` (9 casos) |
 | **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
@@ -33,7 +34,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | Inventario activo F1 — depleción por venta + COGS real | 🟢 | STAGING (037) |
 | Inventario F1 — orden de compra + puente compra→caja→stock | 🔲 | — |
 | Propina PoS → pool del turno | ⏳ | rama `propina-pool` (sin merge, espera decisión dueña) |
-| **Pase a PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS** (ver §"Plan de pase a prod") | ⏳ **Ola 1 = PRIORIDAD 1** | Ola 1 estabilidad (cherry-pick, sin PoS) → Ola 2 Bandeja Etapa 1 + mig 038 → Ola 3 construir Etapa 2 (si hace falta). ⚠️ NUNCA `staging`→`main` (143 commits / 16 migs adelante): solo cherry-pick |
+| **Pase a PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS** (ver §"Plan de pase a prod") | 🟢 **Ola 1 + 1.1 ✅ EN PROD** · Ola 2 = siguiente | ✅ Ola 1 estabilidad (`2358f6c`, sin PoS, sin diag) + ✅ Ola 1.1 flush del outbox (`483d29c`) → ⏳ Ola 2 Bandeja Etapa 1 + mig 038 → 🔲 Ola 3 construir Etapa 2 (si hace falta). ⚠️ NUNCA `staging`→`main` (143 commits / 16 migs adelante): solo cherry-pick |
 | GRAN pase del PoS a PROD (migs PoS 022–037) | 🔲 **DIFERIDO** | NO es parte de las 3 olas; proyecto aparte y posterior, bloqueado por el PILAR de sesión/auth |
 | F4 Loyalty en mesa + Nosara · F5 Hub local | 🔲 | futuro |
 
@@ -44,17 +45,19 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 
 ## 🚀 PLAN DE PASE A PROD — OPCIÓN A de la dueña (estabilidad primero, 3 OLAS)
 
-> **Principio:** PROD (`main` `04b1a32`) está FUERA DE USO → primero **devolver la app estable**, recién después
-> features. ⚠️ **Staging está ~143 commits y ~16 migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod
-> se va por _cherry-pick selectivo_.** La saga de Realtime tras suspensión ya está ✅ RESUELTA Y VALIDADA en staging.
+> **Principio:** primero **devolver la app estable** a prod, recién después features. ✅ **Ola 1 + 1.1 YA están en prod y
+> validadas** (`main` pasó de `04b1a32` a `483d29c`; la cola del outbox drena sola). ⚠️ **Staging está ~143 commits y ~16
+> migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod se va por _cherry-pick selectivo_.**
 
-- **OLA 1 — PRIORIDAD 1 — pase QUIRÚRGICO de estabilidad a `main` (cherry-pick, SIN el PoS).** La cadena de la saga
-  Realtime (worker:true + blindaje por timeout + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`)
-  **+ la durabilidad de escritura de caja**. Client-side, **sin migración**. **Pre-requisitos:** borrar logs
-  `[rt-diag]`/`[diag-repro]` por prefijo · confirmar **tree-shaking del código solo-staging** en un build de prod real
-  (`window.__satoriDiag` debe quedar `undefined`; ojo footgun `.env.local`) · ritual de pase con **firma física**.
-  **Objetivo:** caja/propinas/ventas de vuelta en prod **sin cuelgues**.
-- **OLA 2 — (alta prioridad, tras Ola 1) — llevar la Bandeja ETAPA 1 a prod con la mig 038.** La Etapa 1 (unificada
+- **OLA 1 — ✅ HECHA (en prod `2358f6c`, validada físicamente).** Pase QUIRÚRGICO de estabilidad a `main` (cherry-pick,
+  SIN el PoS): cadena de la saga Realtime (worker:true + blindaje por timeout + máquina de 3 estados + gateo del emit +
+  endurecimiento `SESSION_EXPIRED`) **+ durabilidad de escritura de caja**. Client-side, sin migración. Se borró la
+  instrumentación por prefijo (`[rt-diag]`/`realtimeReproSwitch` fuera de main; tree-shaking confirmado: grep del dist de
+  prod → VACÍO). Caja/propinas/ventas de vuelta en prod **sin cuelgues**.
+- **OLA 1.1 — ✅ HECHA (en prod `ead4727`+`483d29c`, validada físicamente).** Timeout/abort en el ejecutor del flush del
+  outbox (`supabaseExecutor`), con **guardarraíl de plata** (timeout → `'retry'`, NUNCA `'fatal'`). **La cola del outbox
+  drena sola tras suspender la máquina** (antes el flush quedaba colgado en "por sincronizar" sobre el socket zombi).
+- **OLA 2 — (SIGUIENTE) — llevar la Bandeja ETAPA 1 a prod con la mig 038.** La Etapa 1 (unificada
   `/inbox`, foto+IA, enlace proveedor↔caja) **ya está construida y validada en staging**; esto la activa en prod. Es
   esquema → **firma de la dueña**. ⚠️ **A verificar al planearla:** si la **mig 038 / Etapa 1 se separan limpio de las
   migraciones del PoS (022–037)** o vienen acopladas. Da **foto+IA real sin construir nada nuevo**.
@@ -150,8 +153,9 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
   desloguea; árbitro único = `refresh.error`) — `3a0fd20`. **Validado físicamente** con `window.__satoriDiag`
   (armZombie→OFFLINE_WAITING + backoff sin loop; disarm→recupera a SUBSCRIBED; arranque sin cascada CLOSED; foco
   rutinario sin re-subscribe). `useRealtimeRefetch` byte-idéntico (su contrato no cambió). Detalle →
-  **`docs/rca/2026-06-22-realtime-suspension.md`** + `ESTADO-ARCHIVO.md` (2026-06-24). ⚠️ Logs `[rt-diag]`/`[diag-repro]`
-  **siguen activos** (se borran en el **pase quirúrgico de estabilidad a main** — Ola 1, PROMPT-CONTINUACION §1).
+  **`docs/rca/2026-06-22-realtime-suspension.md`** + `ESTADO-ARCHIVO.md` (2026-06-24). ✅ **YA EN PROD vía la Ola 1
+  (`2358f6c`), SIN diag** (los `[rt-diag]`/`realtimeReproSwitch` se borraron por prefijo en el pase; grep del dist de
+  prod → VACÍO). En `staging` los `[rt-diag]`/`[diag-repro]` siguen activos por diseño (gateados por `VITE_APP_ENV`).
 - **⏳ PENDIENTE (cambia números, valida la dueña) — hora-CR en bordes de período:** el fix del `-31`
   resolvió el 400, pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`). `finance.ts:132/139`
   (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el 31-dic de noche cae en el año equivocado por

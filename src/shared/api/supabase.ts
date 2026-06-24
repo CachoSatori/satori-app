@@ -254,3 +254,18 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', () => { void ensureRealtimeHealthy() })
   window.addEventListener('focus', () => { void ensureRealtimeHealthy() })
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DIAGNÓSTICO SOLO-STAGING (removible de un golpe): switch para reproducir A DEMANDA
+// el cuelgue de Realtime tras suspensión, sin suspender la máquina por horas. Todo lo
+// de arriba queda BYTE-POR-BYTE intacto. Para REMOVERLO: borrar este bloque + el módulo
+// src/shared/diag/realtimeReproSwitch.ts (y su test).
+//
+// En prod (VITE_APP_ENV != 'staging') Vite reemplaza import.meta.env.VITE_APP_ENV por su
+// string literal → este `if` queda en `if (false)` y el bundler lo elimina por DCE junto
+// con su import() dinámico → el código de diagnóstico NUNCA corre fuera de staging.
+if (import.meta.env.VITE_APP_ENV === 'staging') {
+  import('../diag/realtimeReproSwitch')
+    .then((m) => m.installRealtimeReproSwitch?.(supabase))
+    .catch(() => { /* diagnóstico no crítico */ })
+}

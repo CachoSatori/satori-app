@@ -1,15 +1,16 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-22**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-23**
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-06-22)
+## 📍 Estado real de las fases (handoff 2026-06-23)
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
+> Nota: en este bloque ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod).
 
-> **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Todo el trabajo vivo es `staging` (`90099fb`).
+> **PROD (`main` `04b1a32`) está FUERA DE USO — riesgo cero, NO tocar.** Todo el trabajo vivo es `staging` (`c9e0a24`).
 
 | Fase | Estado | Dónde |
 |---|---|---|
@@ -17,7 +18,10 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **Estabilidad PWA — fix del SW viejo en prod** (updateViaCache:'none' + version.json cache-bust) | ✅ **VALIDADA en PROD** | PROD (`fde9264`) — RCA `_handoff/PROD-SW-RCA.md` |
 | **Fix de fechas de borde de mes** (`-31`→400; helper `monthRangeBounds`, result-preserving) | ✅ **VALIDADA en PROD** | PROD (`ff836a0`) — RCA `_handoff/RCA-FECHAS-BORDE.md` |
 | **Fix Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook; R2 revive REVERTIDO) | ✅ **en PROD vía canario** | PROD (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`). Hist. `HANG-RCA.md` |
-| **Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket + auth-ops zombi que cuelgan la recuperación) | 🟡 **fix IMPLEMENTADO; blindaje VALIDADO, revive-on-timeout en validación** | STAGING (`90099fb`): blindaje por timeout (withTimeout 8s + cinturón 40s) + revive-on-timeout + `[rt-diag]` activo. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
+| **Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket + auth-ops zombi que cuelgan la recuperación) | 🟡 **blindaje VALIDADO (no más deadlock); recuperación se REDISEÑA** | STAGING (`c9e0a24`): blindaje 8s + cinturón 40s validados; el emit-on-timeout deja loop `InvalidJWT` → rediseño 3-estados (↓). `[rt-diag]` activo. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
+| **REDISEÑO recuperación Realtime — máquina de 3 estados** (`ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`) | ⏳ **EN CURSO / diseñado** | backlog **PRIORIDAD 1** (PROMPT-CONTINUACION). Regla madre: nunca `rt:healthy` sin token fresco confirmado; ningún camino en loop. Validar con `__satoriDiag` |
+| **Durabilidad de escritura de Caja** (reintento con tope + encola SIEMPRE en outbox ante timeout/red-zombi) | ✅ **en STAGING** (mergeado, test verde) | STAGING (`0dd258b`) — root cause: confiar en `navigator.onLine` (miente en zombi). Test `cash.durability.test.ts` |
+| **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
@@ -98,16 +102,28 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
   expired"); R2 revive del socket **mergeado y luego REVERTIDO** (subía la contención sin beneficio probado); fix
   final (`fix/auth-lock-contention`, `09480a6`) **saca el `getSession()` redundante**. Pasó a PROD por canario
   (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`; sin round 2). Es client-side sin migración. Hist. `HANG-RCA.md`.
-- **🟡 FIX IMPLEMENTADO (jun-23), VALIDACIÓN PARCIAL — Realtime se cuelga tras suspensión profunda:**
-  raíz en dos capas — (1) desync token HTTP↔socket (socket con JWT vencido pero `isConnected()=true`), y (2) la más
-  grave: las auth-ops (`getSession`/`refreshSession`) que la recuperación usa **se cuelgan sobre la conexión zombi y
-  nunca settlean** → `ensureRealtimeHealthy` queda clavado (singleton `healthInFlight` nunca se libera) → app muerta
-  hasta recargar. **Fix en staging `90099fb`** (3 ramas, 100% client-side): **blindaje anti-clavado** (`withTimeout`
-  8s en cada auth-op + cinturón por edad 40s + emit `rt:healthy` por evidencia del hook) — **VALIDADO: el deadlock
-  permanente está resuelto**; y **revive-on-timeout** (cuando `getSession` expira por red zombi, renueva la conexión
-  disconnect→connect en vez de abortar, para que el canal suba a SUBSCRIBED) — **validación PARCIAL**, falta una
-  prueba limpia con sesión aún viva + red zombi. Detalle + cronología → **`docs/rca/2026-06-22-realtime-suspension.md`**.
-  ⚠️ Logs `[rt-diag]` **siguen activos** (borrar por prefijo recién tras la validación limpia).
+- **✅ EN STAGING (jun-23) — Durabilidad de escritura de Caja:** en `registerCashMovement`/`updateCashMovement`/
+  `deleteCashMovement` el **reintento** corría SIN tope sobre el TCP zombi → la promesa nunca settleaba → la fila se
+  perdía al navegar; y el encolado dependía de `isOffline()` (`navigator.onLine`), que en zombi vale `true` → nunca
+  encolaba. Fix (`0dd258b`/`283f86e`): el reintento va con `withWriteTimeout` y, ante timeout o error de red, **encola
+  INCONDICIONALMENTE en el outbox** (idempotente por `client_op_id`); solo errores reales del server (RLS/FK) suben.
+  Invariante: **toda escritura de caja termina confirmada en el server o encolada — nunca colgada, nunca descartada en
+  silencio.** Test `cash.durability.test.ts`.
+- **✅ VALIDADO EN STAGING (jun-23) — Switch de diagnóstico de Realtime (solo-staging):** `src/shared/diag/`
+  `realtimeReproSwitch.ts` expone `window.__satoriDiag` (`armZombie`/`armExpired`/`disarm`/`status`). Reproduce el
+  cuelgue de Realtime **a demanda en ~30 s** (antes 3+ h): `armZombie` dispara CHANNEL_ERROR al instante. Gateado por
+  `VITE_APP_ENV==='staging'` (DCE lo borra de prod). Es la herramienta para validar el rediseño de Realtime. Logs `[diag-repro]`.
+- **🟡 BLINDAJE VALIDADO, RECUPERACIÓN SE REDISEÑA (jun-23) — Realtime se cuelga tras suspensión profunda:** raíz en
+  dos capas — (1) desync token HTTP↔socket (socket con JWT vencido pero `isConnected()=true`), y (2) la más grave: las
+  auth-ops (`getSession`/`refreshSession`) que la recuperación usa **se cuelgan sobre la conexión zombi y nunca
+  settlean** → `ensureRealtimeHealthy` queda clavado → app muerta hasta recargar. El **blindaje anti-clavado**
+  (`withTimeout` 8s + cinturón 40s, en staging `c9e0a24`) **resolvió el deadlock permanente — VALIDADO**. **PERO** el
+  approach **emite `rt:healthy` en el TIMEOUT del refresh** → re-suscribe con token VENCIDO → `InvalidJWTToken` →
+  **loop infinito** (confirmado en log de suspensión 3–5 h). → **PRIORIDAD 1: rediseñar `ensureRealtimeHealthy` +
+  `useRealtimeRefetch` como MÁQUINA DE 3 ESTADOS** (`ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`); nunca
+  `rt:healthy` sin token fresco confirmado; ningún camino en loop. Validar con `__satoriDiag`. Detalle →
+  PROMPT-CONTINUACION ítem PRIORIDAD 1 + **`docs/rca/2026-06-22-realtime-suspension.md`**. ⚠️ Logs `[rt-diag]`/`[diag-repro]`
+  **siguen activos** (borrar recién tras resolver+validar el rediseño).
 - **⏳ PENDIENTE (cambia números, valida la dueña) — hora-CR en bordes de período:** el fix del `-31`
   resolvió el 400, pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`). `finance.ts:132/139`
   (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el 31-dic de noche cae en el año equivocado por

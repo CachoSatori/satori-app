@@ -17,14 +17,14 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 > Realtime/candado de auth** (`04b1a32`). Eran las tres causas viejas del "se traba". **La causa NUEVA (Realtime tras
 > suspensión profunda) quedó RESUELTA Y VALIDADA en staging (`3a0fd20`):** máquina de 3 estados (`63ef0bb`) + gateo del
 > emit + endurecimiento de `SESSION_EXPIRED` (`3a0fd20`), validado físico con `window.__satoriDiag` (ver §0). La
-> **durabilidad de escritura de caja** quedó ✅ en staging. **El foco AHORA son los DOS pases a producción (§1A y §1B).**
+> **durabilidad de escritura de caja** quedó ✅ en staging. **El foco AHORA es el plan de pase a prod en 3 OLAS (§1).**
 
 ---
 
 ## 0. ✅ RESUELTO esta sesión — Realtime tras suspensión profunda (máquina de 3 estados + gateo + endurecimiento)
 
 `ensureRealtimeHealthy` (en `src/shared/api/supabase.ts`) quedó rediseñada como **MÁQUINA DE 3 ESTADOS** y **validada
-físicamente** en el staging desplegado. **Ya NO es un pendiente** — queda acá como referencia para el pase quirúrgico (§1A).
+físicamente** en el staging desplegado. **Ya NO es un pendiente** — queda acá como referencia para la Ola 1 (pase quirúrgico, §1).
 - **`ONLINE_SUBSCRIBED`** (token fresco CONFIRMADO) → `setAuth` + revive socket si cayó + **única** emisión de `rt:healthy`.
 - **`OFFLINE_WAITING`** (red zombi / refresh colgado) → NO emite, renueva el TCP, reintenta con backoff (3s→30s, un único timer).
 - **`SESSION_EXPIRED`** (solo si `refresh.error`) → NO toca el socket; deja actuar el deslogueo declarativo.
@@ -39,11 +39,16 @@ byte-idéntico (su contrato no cambió). Cronología → **`docs/rca/2026-06-22-
 
 ---
 
-## 1A. 🔴🟢 PASE QUIRÚRGICO de estabilidad a MAIN (NO incluye el PoS) — PRIORIDAD AHORA
-**Qué:** devolver la **app vieja estable** a producción sin que se trabe — **cherry-pick de la saga Realtime/suspensión
-(ya resuelta y validada, §0) + la durabilidad de escritura de caja (§0.2)**, SIN el PoS ni la Bandeja ni las migraciones
-022–038. Es client-side puro (sin migración). **Distinto del gran pase del PoS (§1B): no confundir.**
-**Antes de pasar (checklist):**
+## 1. 🔴 PLAN DE PASE A PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS (cabecera del backlog)
+**Principio:** PROD (`main` `04b1a32`) está **FUERA DE USO** → la **estabilidad (Ola 1) va ANTES que cualquier feature**.
+⚠️ **Staging está ~143 commits y ~16 migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod se va por
+_cherry-pick selectivo_.** Hacer las olas EN ORDEN.
+
+### Ola 1 🔴🟢 — PRIORIDAD 1 — pase QUIRÚRGICO de estabilidad a MAIN (cherry-pick, SIN el PoS)
+**Qué:** devolver la **app estable** a prod sin cuelgues — cherry-pick de la **cadena de la saga Realtime** (worker:true +
+blindaje por timeout + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`, ya resueltos y validados,
+§0) **+ la durabilidad de escritura de caja (§0.2)**. SIN el PoS, sin la Bandeja, sin migraciones. Client-side puro.
+**Checklist antes de pasar:**
 - **Borrar la instrumentación temporal por prefijo:** logs `[rt-diag]` (en `src/shared/api/supabase.ts` y
   `src/shared/hooks/useRealtimeRefetch.ts`) y `[diag-repro]`. **Decidir** si el switch de diagnóstico se queda como
   herramienta permanente de staging o se remueve (removible de un golpe: borrar `src/shared/diag/realtimeReproSwitch.ts`
@@ -51,12 +56,23 @@ byte-idéntico (su contrato no cambió). Cronología → **`docs/rca/2026-06-22-
 - **Confirmar tree-shaking del código solo-staging:** que `window.__satoriDiag` quede `undefined` en un build prod real.
   ⚠️ **OJO con el footgun de `.env.local`** (§0bis-A): un `npm run build` local compila como STAGING e **incluye** el diag;
   verificar con `VITE_APP_ENV=production npm run build` (o como CI).
-- **Ritual de pase** con **firma física de la dueña** + verificación de hash. Cherry-pick selectivo, no merge de staging.
+- **Ritual de pase** con **firma física de la dueña** + verificación de hash. Cherry-pick selectivo, **no** merge de staging.
 
-## 1B. 🖊️ GRAN PASE del PoS + Bandeja a PROD (proyecto aparte, DESPUÉS del quirúrgico)
-**Qué:** consolidar migraciones **022–038** con guard anti-staging; crear buckets `facturas`/`productos`/`documents` en
-prod; regenerar tipos post-merge (es 021→038 en una). **Requiere validar TODO el PoS en piso primero** (§6) y resolver el
-**PILAR de escalabilidad de sesión/auth** (abajo, lo bloquea). Autorización única + verificación de hash. Decisión de la dueña.
+### Ola 2 🟢🖊️ — (tras Ola 1) — Bandeja ETAPA 1 a prod con la mig 038
+**Qué:** la **Etapa 1** (bandeja unificada `/inbox`, foto+IA Claude, enlace proveedor↔caja, visibilidad de pendientes)
+**ya está construida y validada en staging** — esta ola la **activa en prod**. Da **foto+IA real sin construir nada nuevo**.
+Es **esquema → firma de la dueña** (mig 038). ⚠️ **A verificar al planearla:** si la **mig 038 / la Etapa 1 se separan
+limpio de las migraciones del PoS (022–037)** o vienen acopladas (define si se puede pasar la Bandeja sin arrastrar el PoS).
+
+### Ola 3 🔲 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2
+**Qué:** entrada **foto-primero 100% dentro de Caja Diaria** — hoy **🔲 DISEÑADA, SIN código** (no hay nada en
+`src/modules/cash` ni `inbox`). Se construye **solo si** tras usar la Etapa 1 sigue haciendo falta.
+> **🖊️ DECISIÓN ABIERTA de la dueña (define si la Ola 3 se hace):** *¿la Bandeja **Etapa 1** (unificada con IA, ya lista
+> y validada) ALCANZA, o se necesita la **Etapa 2** (integración foto-primero dentro de Caja Diaria, a construir)?*
+
+> **NO confundir con el GRAN PASE del PoS** (migs 022–037, comandero/KDS/cobro): es un **proyecto aparte y DIFERIDO**,
+> posterior a estas olas y **bloqueado por el PILAR de escalabilidad de sesión/auth** (abajo) + validación física del PoS (§6).
+> La dueña eligió OPCIÓN A (estabilidad), **no** el gran pase del PoS.
 
 ### 0.1 — Pendientes secundarios anotados (del trabajo de Realtime/caja)
 - **(a) UX — el revive tarda hasta ~30 s en encolar tras suspensión.** Con la red zombi, la primera escritura de caja
@@ -64,7 +80,7 @@ prod; regenerar tipos post-merge (es 021→038 en una). **Requiere validar TODO 
   ver durabilidad de caja, ítem 0.2), pero la espera se nota. Ya con la máquina de 3 estados; re-evaluar la UX si molesta.
 - **(d) 🆕 Menor — `SESSION_EXPIRED` transitorio en el arranque (inofensivo).** En el primer tick del arranque
   `getSession()` puede dar `null` → se ve un `SESSION_EXPIRED` transitorio en los logs `[rt-diag]`. **Inofensivo por el
-  FIX 2** (no desloguea ni emite; lo arbitra `refresh.error`). Revisar al limpiar los `[rt-diag]` en el pase quirúrgico (§1A); no urgente.
+  FIX 2** (no desloguea ni emite; lo arbitra `refresh.error`). Revisar al limpiar los `[rt-diag]` en la Ola 1 (pase quirúrgico); no urgente.
 - **(b) `createDayMovement` no tiene tope ni cola.** Mismo hueco que ya se tapó en `registerCashMovement`/
   `updateCashMovement`/`deleteCashMovement`, pero `createDayMovement` (movimientos de Caja Diaria nivel-día) quedó
   **fuera de alcance hasta ahora**: si su escritura cae sobre el socket zombi, se cuelga sin tope y sin encolar.
@@ -138,18 +154,21 @@ y agregarlo o quitar la referencia. No urgente.
   anotada para **confirmar su estado real en el ledger** antes de actuar. A **PROD va con el pase del PoS** (sin aplicar aún ahí).
 - Detalle en `_handoff/038-apply.log`. (No puedo verificar el estado del ledger desde acá — cero contacto con la base.)
 
-## 4. 🟢 ETAPA 2 — entrada única foto-primero 100% dentro de Caja Diaria (diseñada, sin arrancar)
-La Bandeja Etapa 1 ya está validada. Etapa 2:
+## 4. 🔲 Bandeja ETAPA 2 — entrada única foto-primero 100% dentro de Caja Diaria (DISEÑADA, SIN código → es la Ola 3)
+**= la Ola 3 de §1, y solo si la DECISIÓN ABIERTA de la dueña dice que la Etapa 1 no alcanza.** Hoy no hay código en
+`src/modules/cash` ni `inbox`. La Bandeja **Etapa 1** (lo que SÍ está hecho y validado en staging) es distinta. Diseño de la Etapa 2:
 - **Una sola entrada foto-primero** dentro de **Caja Diaria**; se **retira** el camino `facturas` (queda legacy).
 - **Foto OBLIGATORIA** por pago. La **IA lee y SUGIERE** tipo/categoría (mercadería/operativo/personal/socios)
   mapeando a las categorías existentes; el **humano confirma** (nunca auto-commit de montos).
 - **Propinas:** pide **turno (AM/PM)+fecha** en vez de proveedor y **concilia el pendiente**.
 - **Offline — Opción A:** se registra el pago igual sin red; la IA procesa la foto al volver internet.
 
-## 5. 🖊️ Pase del PoS + Bandeja a PROD (gran salto, decisión de la dueña)
-**→ Movido arriba como §1B** (gran pase del PoS, distinto del pase quirúrgico §1A). Resumen: consolidar migraciones
-**022–038** con guard anti-staging; crear buckets `facturas`/`productos`/`documents` en prod; regenerar tipos post-merge
-(021→038 en una). Bloqueado por el PILAR de escalabilidad de sesión/auth + validación física del PoS (§6).
+## 5. 🖊️ GRAN PASE del PoS a PROD — DIFERIDO (NO es una de las 3 olas)
+La dueña eligió OPCIÓN A (estabilidad, §1). El gran pase del PoS es un **proyecto aparte y posterior**: consolidar las
+migraciones del PoS (**022–037**) con guard anti-staging; crear buckets `facturas`/`productos`/`documents` en prod;
+regenerar tipos. Bloqueado por el **PILAR de escalabilidad de sesión/auth** (abajo) + validación física del PoS (§6).
+(La **Bandeja Etapa 1 + mig 038** NO espera a esto: va sola en la **Ola 2** — ver §1, sujeto a verificar que la 038 se
+separe limpio de 022–037.)
 
 ## 6. 👁️ Validación física pendiente en staging (construido, verde, sin probar en piso)
 Checklist en [REPORTE-NOCHE-2.md](REPORTE-NOCHE-2.md): **cobro + anti-doble-cobro** (mig 033), **comandero pro**,

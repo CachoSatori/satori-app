@@ -33,11 +33,37 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | Inventario activo F1 — depleción por venta + COGS real | 🟢 | STAGING (037) |
 | Inventario F1 — orden de compra + puente compra→caja→stock | 🔲 | — |
 | Propina PoS → pool del turno | ⏳ | rama `propina-pool` (sin merge, espera decisión dueña) |
-| Pase del PoS a PROD (consolidar 022–038) | 🔲 | espera validación de la dueña (038 ya firmada y aplicada en **staging**; a prod va con el pase) |
+| **Pase a PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS** (ver §"Plan de pase a prod") | ⏳ **Ola 1 = PRIORIDAD 1** | Ola 1 estabilidad (cherry-pick, sin PoS) → Ola 2 Bandeja Etapa 1 + mig 038 → Ola 3 construir Etapa 2 (si hace falta). ⚠️ NUNCA `staging`→`main` (143 commits / 16 migs adelante): solo cherry-pick |
+| GRAN pase del PoS a PROD (migs PoS 022–037) | 🔲 **DIFERIDO** | NO es parte de las 3 olas; proyecto aparte y posterior, bloqueado por el PILAR de sesión/auth |
 | F4 Loyalty en mesa + Nosara · F5 Hub local | 🔲 | futuro |
 
 > Detalle de cada fase abajo. Lo nuevo de junio (Bandeja fusionada, FE estructura, inventario activo,
 > comandero pro) vive en `staging`. Backlog priorizado: [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+
+---
+
+## 🚀 PLAN DE PASE A PROD — OPCIÓN A de la dueña (estabilidad primero, 3 OLAS)
+
+> **Principio:** PROD (`main` `04b1a32`) está FUERA DE USO → primero **devolver la app estable**, recién después
+> features. ⚠️ **Staging está ~143 commits y ~16 migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod
+> se va por _cherry-pick selectivo_.** La saga de Realtime tras suspensión ya está ✅ RESUELTA Y VALIDADA en staging.
+
+- **OLA 1 — PRIORIDAD 1 — pase QUIRÚRGICO de estabilidad a `main` (cherry-pick, SIN el PoS).** La cadena de la saga
+  Realtime (worker:true + blindaje por timeout + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`)
+  **+ la durabilidad de escritura de caja**. Client-side, **sin migración**. **Pre-requisitos:** borrar logs
+  `[rt-diag]`/`[diag-repro]` por prefijo · confirmar **tree-shaking del código solo-staging** en un build de prod real
+  (`window.__satoriDiag` debe quedar `undefined`; ojo footgun `.env.local`) · ritual de pase con **firma física**.
+  **Objetivo:** caja/propinas/ventas de vuelta en prod **sin cuelgues**.
+- **OLA 2 — (alta prioridad, tras Ola 1) — llevar la Bandeja ETAPA 1 a prod con la mig 038.** La Etapa 1 (unificada
+  `/inbox`, foto+IA, enlace proveedor↔caja) **ya está construida y validada en staging**; esto la activa en prod. Es
+  esquema → **firma de la dueña**. ⚠️ **A verificar al planearla:** si la **mig 038 / Etapa 1 se separan limpio de las
+  migraciones del PoS (022–037)** o vienen acopladas. Da **foto+IA real sin construir nada nuevo**.
+- **OLA 3 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro
+  de Caja Diaria; hoy **🔲 diseñada, SIN código**). **Solo si** tras usar la Etapa 1 sigue haciendo falta. → **DECISIÓN
+  ABIERTA de la dueña:** ¿alcanza la Etapa 1 o se necesita la Etapa 2?
+
+> El **gran pase del PoS** (migs 022–037, comandero/KDS/cobro) es un **proyecto aparte y DIFERIDO**, posterior a estas
+> olas y bloqueado por el PILAR de sesión/auth (abajo). No confundir con la Ola 2 (que lleva **solo** la Bandeja Etapa 1).
 
 ---
 
@@ -125,7 +151,7 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
   (armZombie→OFFLINE_WAITING + backoff sin loop; disarm→recupera a SUBSCRIBED; arranque sin cascada CLOSED; foco
   rutinario sin re-subscribe). `useRealtimeRefetch` byte-idéntico (su contrato no cambió). Detalle →
   **`docs/rca/2026-06-22-realtime-suspension.md`** + `ESTADO-ARCHIVO.md` (2026-06-24). ⚠️ Logs `[rt-diag]`/`[diag-repro]`
-  **siguen activos** (se borran en el **pase quirúrgico de estabilidad a main**, PROMPT-CONTINUACION ítem 1a).
+  **siguen activos** (se borran en el **pase quirúrgico de estabilidad a main** — Ola 1, PROMPT-CONTINUACION §1).
 - **⏳ PENDIENTE (cambia números, valida la dueña) — hora-CR en bordes de período:** el fix del `-31`
   resolvió el 400, pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`). `finance.ts:132/139`
   (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el 31-dic de noche cae en el año equivocado por

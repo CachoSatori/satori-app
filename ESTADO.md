@@ -46,7 +46,7 @@ CLOSED**; **foco rutinario → `setAuth` SIN emit** (sin churn). Cronología com
 
 > **Instrumentación `[rt-diag]` (en `supabase.ts` y `useRealtimeRefetch.ts`) y `[diag-repro]` (switch
 > `src/shared/diag/realtimeReproSwitch.ts`, `window.__satoriDiag`) SIGUEN ACTIVAS — NO borrar** todavía: se remueven
-> por prefijo en el **pase quirúrgico de estabilidad a main** (PROMPT-CONTINUACION ítem 1a). El switch está gateado por
+> por prefijo en el **pase quirúrgico de estabilidad a main** (Ola 1 — PROMPT-CONTINUACION §1). El switch está gateado por
 > `VITE_APP_ENV==='staging'` (el DCE lo elimina de prod).
 
 ## (c) PROD vs STAGING
@@ -82,7 +82,8 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
 | **Realtime tras suspensión profunda** | ✅ **RESUELTO Y VALIDADO** (máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`) | solo staging (`63ef0bb`+`3a0fd20`) | Ver §(b) + RCA. Validado físico con `__satoriDiag`. `[rt-diag]`/`[diag-repro]` activos hasta el pase quirúrgico a main. |
 | **Caja — durabilidad de escritura** (reintento con tope + outbox) | ✅ **en staging** (mergeado, test verde) | staging (`0dd258b`) | El reintento corre con `withWriteTimeout` y, ante timeout/red-zombi, **encola SIEMPRE en el outbox** (idempotente por `client_op_id`). Antes el reintento corría sin tope y el encolado dependía de `navigator.onLine` (miente en zombi) → se perdía el pago. Test `cash.durability.test.ts`. |
 | **Diagnóstico Realtime — switch de reproducción** (solo-staging) | ✅ **validado en staging** (se usó para cerrar la saga) | staging | `window.__satoriDiag` (`armZombie`/`armExpired`/`disarm`/`status`); `armZombie` dispara CHANNEL_ERROR al instante → reproduce el cuelgue de 3+ h en ~30 s. DCE lo elimina de prod. Logs `[diag-repro]`. |
-| Bandeja fusionada Etapa 1 + enlace proveedor + visibilidad pendientes | ✅ Etapa 1 COMPLETA | staging | mig 038, validada con rol contador |
+| **Bandeja ETAPA 1** (unificada `/inbox`, foto+IA + enlace proveedor↔caja + visibilidad pendientes) | ✅ **COMPLETA y validada** | staging | mig 038, validada con rol contador. **= candidata de la Ola 2.** |
+| **Bandeja ETAPA 2** (entrada foto-primero 100% dentro de Caja Diaria) | 🔲 **DISEÑADA, SIN código** | — | NO hay nada en `src/modules/cash` ni `inbox`. = Ola 3, gated por decisión de la dueña (¿alcanza la Etapa 1?). |
 | PoS — catálogo/comandero/KDS/cobro/ticket SIM · FE estructura SIM · Inventario activo F1 | 🟢 | staging | sin validación física; pase a prod pendiente |
 
 ## (f) Pendientes de PLATA — sin firma/decisión de la dueña (NO mergear/aplicar sin OK)
@@ -94,9 +95,12 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
 
 ## (g) Pendientes humanos / operativos / prolijidad
 
-- **🟢 PRIORIDAD 1 — Pase QUIRÚRGICO de estabilidad a MAIN** (Realtime/suspensión ✅ ya resuelto y validado en staging, §b): cherry-pick de la saga Realtime + durabilidad de caja **SIN el PoS** → devuelve la app vieja estable a prod sin que se trabe. Requiere: **borrar logs `[rt-diag]`/`[diag-repro]` por prefijo**, confirmar tree-shaking del código solo-staging (`window.__satoriDiag`; ojo footgun de `.env.local`, ver PROMPT-CONTINUACION), y el ritual de pase con firma física de la dueña. **Distinto del gran pase del PoS** (abajo). Detalle → PROMPT-CONTINUACION ítem 1a.
+- **🔴 PLAN DE PASE A PROD — decisión de la dueña: OPCIÓN A (estabilidad primero, 3 OLAS).** Prod (`main`) está FUERA DE USO → primero **devolver la app estable**, recién después features. ⚠️ **Staging está ~143 commits y ~16 migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod se va por _cherry-pick selectivo_.** Detalle por ola → PROMPT-CONTINUACION (cabecera).
+  - **OLA 1 (PRIORIDAD 1) — pase QUIRÚRGICO de estabilidad a main:** cherry-pick de la cadena Realtime (worker:true + blindaje + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`) **+ durabilidad de escritura de caja**, **SIN el PoS**. Client-side, sin migración. Pre-req: **borrar logs `[rt-diag]`/`[diag-repro]` por prefijo**, confirmar tree-shaking del código solo-staging en build de prod (`window.__satoriDiag`; ojo footgun `.env.local`), ritual de pase con firma física. Objetivo: caja/propinas/ventas de vuelta en prod **sin cuelgues**.
+  - **OLA 2 (tras Ola 1) — Bandeja ETAPA 1 a prod** (ya construida y validada en staging) **con la mig 038** (esquema → firma de la dueña). ⚠️ A verificar al planearla: si la **mig 038 / Etapa 1 se separan limpio de las migraciones del PoS (022–037)** o vienen acopladas. Da **foto+IA real** sin construir nada nuevo.
+  - **OLA 3 (cuando la base esté sólida) — CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro de Caja Diaria; hoy **🔲 diseñada, SIN código**). **Solo si** tras usar la Etapa 1 sigue haciendo falta → **DECISIÓN ABIERTA de la dueña**.
 - **🔐 Rotar 2 tokens de GitHub:** (a) `gh auth refresh -s repo,read:org,workflow` (el `gho_` que estaba embebido en el remote de `SATORI PROPINAS` ya fue limpiado del config, pero sigue válido en GitHub hasta rotarlo); (b) **regenerar el PAT classic `ghp_` "Claude CLI" sin scope `admin:org`** — su valor quedó en un transcript local; rotar **antes del 27-jun**.
-- **GRAN PASE del PoS + Bandeja a PROD** (proyecto aparte, DESPUÉS del quirúrgico): consolidar migraciones 022–038 con guard anti-staging, crear buckets `facturas`/`productos`/`documents` en prod, regenerar tipos. Requiere validar TODO el PoS en piso primero. Autorización única + verificación de hash. Detalle → PROMPT-CONTINUACION ítem 1b.
+- **GRAN PASE del PoS a PROD — DIFERIDO** (NO es parte de las 3 olas; la dueña eligió estabilidad primero): consolidar migraciones del PoS (022–037) con guard anti-staging, buckets, tipos, validar TODO el PoS en piso. Es un proyecto aparte y posterior, bloqueado además por el PILAR de escalabilidad de sesión/auth. No confundir con la Ola 2 (que lleva **solo** la Bandeja Etapa 1 + mig 038).
 - **Discrepancia mig 035** en el ledger de staging → sesión dedicada de propinas, sin tocar el historial.
 - **Contadora:** códigos **CIIU/CABYS** (bloquean FE real). **FE real:** emisor certificado CR (Hacienda 4.4) tras `FeProvider` (hoy SIM).
 - **Validación física en staging:** comandero pro, FE-SIM, inventario que baja al cerrar. Checklist en [REPORTE-NOCHE-2.md](REPORTE-NOCHE-2.md).
@@ -104,7 +108,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
 > **Ruido conocido:** (1) errores de consola tipo *"message channel closed"* son de EXTENSIONES de Chrome, no de la app.
 > (2) En el arranque, `getSession()` puede dar `null` en el primer tick → se ve un `SESSION_EXPIRED` transitorio en los
 > logs `[rt-diag]`. **Inofensivo por el FIX 2** (no desloguea ni emite; lo arbitra `refresh.error`). Revisar al limpiar
-> los `[rt-diag]` en el pase quirúrgico; no urgente.
+> los `[rt-diag]` en la Ola 1 (pase quirúrgico); no urgente.
 
 ---
 

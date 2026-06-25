@@ -23,12 +23,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const loadProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    // El SELECT a profiles también puede colgarse sobre el socket zombi tras suspensión (getSession
+    // pudo volver rápido con sesión cacheada). CON tope + 1 reintento: si ambos vencen, dejamos profile
+    // en null (NO seteamos) y retornamos → el .then del bootstrap resuelve igual → .finally baja loading
+    // → PrivateRoute manda a /login (el relogueo recarga el perfil). Cierra el 2º camino al splash eterno.
+    const fetchProfile = () => {
+      const q = supabase.from('profiles').select('*').eq('id', userId).single()
+      return withTimeout(
+        Promise.resolve(q),
+        AUTH_OP_TIMEOUT_MS,
+        'loadProfile (bootstrap)',
+        { data: null, error: null } as unknown as Awaited<typeof q>,
+      )
+    }
+    let { data, error } = await fetchProfile()
+    if (!data && !error) ({ data, error } = await fetchProfile())   // venció (fallback) → 1 reintento
     if (error) { console.error('Error cargando perfil:', error); return }
+    if (!data) return   // venció dos veces (sin error real) → profile queda null
     setProfile(data)
   }
 

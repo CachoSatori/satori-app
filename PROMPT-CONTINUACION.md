@@ -1,10 +1,12 @@
-# Continuación — backlog priorizado (handoff 2026-06-24)
+# Continuación — backlog priorizado (handoff 2026-06-25)
 
 Estado: **PROD (`main` `483d29c`) recibió las OLAS 1 y 1.1 de estabilidad (validadas físicamente) → la app vuelve a ser
 usable sin cuelgues.** main = capa de inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado de auth
 + **Ola 1** (saga Realtime/suspensión + durabilidad de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush
-del outbox). STAGING (`4805e23`) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga Realtime/suspensión + durabilidad
-de caja + **timeout/abort del flush del outbox** + **switch de diagnóstico de Realtime solo-staging** (con `[rt-diag]`).
+del outbox). STAGING (`14e4546`) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga Realtime/suspensión + durabilidad
+de caja + **timeout/abort del flush del outbox** + **switch de diagnóstico de Realtime solo-staging** (con `[rt-diag]`)
++ **🆕 esta sesión:** durabilidad de `createDayMovement` (`dea9486`) + **fix del loop `OFFLINE_WAITING` tras suspensión
+larga** (`e0df9ae`+`14e4546`, 🟡 SOLO unit tests — gate físico pendiente, ver **§0-bis**).
 Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
@@ -37,6 +39,30 @@ emite solo si hay recuperación pendiente → arregla la regresión de arranque)
 **Validado con `window.__satoriDiag`:** `armZombie`→`OFFLINE_WAITING` + backoff sin loop ni `InvalidJWT`; `disarm`→`ONLINE_SUBSCRIBED`
 emite y recupera a SUBSCRIBED; **arranque sin cascada CLOSED**; **foco rutinario → `setAuth` SIN emit**. `useRealtimeRefetch`
 byte-idéntico (su contrato no cambió). Cronología → **`docs/rca/2026-06-22-realtime-suspension.md`** + `ESTADO-ARCHIVO.md` (2026-06-24).
+
+---
+
+## 0-bis. 🆕 RESUELTO esta sesión (SOLO en staging, GATED) — el loop `OFFLINE_WAITING` tras suspensión LARGA
+
+La máquina de 3 estados (§0, EN PROD) cubría el caso validado, pero **quedaba un modo de falla distinto**: tras una
+suspensión **larga**, `getSession`/`refreshSession` **no vuelven** (el fetch interno queda sobre el socket zombi) y
+`classifyRealtime` caía en `if (!sessionRead) return OFFLINE_WAITING` **sin escape** → loop eterno, el token no se
+refresca y **el outbox no drena**. **El primer intento (bajar el lock 10s→5s, `ccef5f1`) fue un RED HERRING:** el escape
+`no adquirido` disparó **0 veces** en TODOS los logs (incl. suspensión real ~4h) → el cuelgue es el fetch de auth, no la
+adquisición del lock. Queda como hardening inofensivo.
+
+**Fix real (client-side, solo staging):**
+- `e0df9ae` — contador de timeouts consecutivos de `getSession`; tras **N=3** → `SESSION_EXPIRED` + `signOut({scope:'local'})`
+  → `/login` → reingreso → el outbox drena (el signOut local NO toca el IndexedDB del outbox).
+- `14e4546` — `signOut` SOLO en el path forzado (`forced:true`); el `refresh.error` vuelve a su comportamiento original
+  (sin logout espurio) + **latch one-shot** (se limpia con sesión fresca en `onAuthStateChange`) → mata el ping-pong.
+
+> ⚠️ **VALIDADO SOLO POR UNIT TESTS** (suite 133/133; `supabase.timeout.test.ts` 13/13). **NO** en la app corriendo
+> (el último intento usó comando mal escrito + bundle viejo). **GATE antes de prod:** (a) repro con
+> `__satoriDiag.armZombie()` sobre el bundle del latch (`14e4546` → `supabase-BjfeOB6h.js`): **UN solo** `signOut`→`/login`
+> sin ping-pong + `disarm()`→`ONLINE_SUBSCRIBED`+drain; (b) **suspensión real >1h**. **El pase a prod del fix de auth está
+> GATEADO a que (b) pase.** El fix de auth a prod **NO tiene rama todavía**: hotfix nuevo desde `main` con
+> `e0df9ae`+`14e4546` (NO `ccef5f1` solo). Diagnóstico corregido completo → **`docs/HANG-RCA-2.md`**.
 
 ---
 
@@ -81,11 +107,11 @@ limpio de las migraciones del PoS (022–037)** o vienen acopladas (define si se
 - **(d) Menor — `SESSION_EXPIRED` transitorio en el arranque (inofensivo).** En el primer tick del arranque
   `getSession()` puede dar `null` → se ve un `SESSION_EXPIRED` transitorio en los logs `[rt-diag]` (**solo en staging**;
   en prod los `[rt-diag]` ya no existen tras la Ola 1). **Inofensivo** (no desloguea ni emite; lo arbitra `refresh.error`); no urgente.
-- **(b) `createDayMovement` no tiene tope ni cola.** Mismo hueco que ya se tapó en `registerCashMovement`/
-  `updateCashMovement`/`deleteCashMovement`, pero `createDayMovement` (movimientos de Caja Diaria nivel-día) quedó
-  **fuera de alcance hasta ahora**: si su escritura cae sobre el socket zombi, se cuelga sin tope y sin encolar.
-  Aplicarle el mismo patrón (`withWriteTimeout` + outbox incondicional ante timeout/red). **Es escritura de plata** →
-  con test, sin tocar sagrados.
+- **(b) ✅ HECHO esta sesión — `createDayMovement` blindado** (`dea9486`, en staging). Mismo patrón que
+  `registerCashMovement`: id+`client_op_id` en el cliente, `withWriteTimeout`+`.abortSignal()`, reintento único, y ante
+  timeout/red-zombi **encola incondicionalmente en el outbox** (idempotente por `client_op_id`). Contrato intacto
+  (`Promise<string>`); sin tocar sagrados. Test en `cash.durability.test.ts` (2 casos nuevos). **Hotfix de prod listo y
+  verificado:** `hotfix/createdaymovement-durability-prod` (`399fc0b`, cherry-pick sobre `main` SIN `supplier_id`, sin mergear).
 - **(c) 🆕 BUG NUEVO (descubierto hoy) — `Cmd+Shift+R` estando en `/caja` deja la app colgada.** Un hard-reload en la
   ruta de Caja deja la app trabada (no termina de cargar). **Investigar:** reproducir, mirar consola/network, aislar si
   es Realtime/auth en el arranque de `/caja` o el SW/precache. Sin RCA todavía.

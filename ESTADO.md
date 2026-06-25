@@ -1,8 +1,8 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-06-24** (🚀 **OLA 1 + OLA 1.1 EN PROD y validadas físicamente — la cola del outbox drena sola**: estabilidad de escritura de caja + recuperación de Realtime tras suspensión + timeout/abort del flush del outbox. `main` pasó de `04b1a32` a `483d29c`. Realtime tras suspensión ✅ RESUELTO — máquina de 3 estados + gateo de `rt:healthy` + endurecimiento de `SESSION_EXPIRED`). Foto compacta para ponerse al día de un vistazo.
-> Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Plan por fases → [ROADMAP.md](ROADMAP.md) · Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · RCA Realtime → [docs/rca/2026-06-22-realtime-suspension.md](docs/rca/2026-06-22-realtime-suspension.md).
+> **Handoff: 2026-06-25** (🟢 **PROD intacto en `483d29c`** (Olas 1 + 1.1 ya validadas allí). En **STAGING (`14e4546`)** esta sesión: (1) `createDayMovement` blindado con durabilidad (outbox + `withWriteTimeout`); (2) **el bug de auth recovery — loop `OFFLINE_WAITING` tras suspensión LARGA — diagnosticado de nuevo y arreglado.** El fix del lock (`ccef5f1`, 10s→5s) era un **red herring** (no era la causa); causa real = `getSession`/`refreshSession` no vuelven tras suspensión + la máquina no tenía escape. Fix real = escape a `SESSION_EXPIRED` tras N=3 timeouts (`e0df9ae`) + `signOut` acotado al path forzado + latch one-shot (`14e4546`). ⚠️ **VALIDADO SOLO POR UNIT TESTS** — falta repro físico + suspensión real >1h ANTES de cualquier pase a prod.) Foto compacta para ponerse al día de un vistazo.
+> Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Plan por fases → [ROADMAP.md](ROADMAP.md) · Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · RCA Realtime → [docs/rca/2026-06-22-realtime-suspension.md](docs/rca/2026-06-22-realtime-suspension.md) · **RCA auth recovery (corregido) → [docs/HANG-RCA-2.md](docs/HANG-RCA-2.md)**.
 
 **Stack:** React 19 + TS strict + Vite + PWA · Supabase (Postgres + RLS + Edge Functions) · realtime.
 **Despliegue:** `main` → PROD (GitHub Pages, base `/satori-app/`) · `staging` → Cloudflare Pages.
@@ -16,7 +16,7 @@
 | Rama | Hash | Qué es |
 |---|---|---|
 | `main` | `483d29c` | **PROD (estable, en uso).** Capa de inteligencia + fix SW viejo (`fde9264`) + fix fechas-borde (`ff836a0`) + canario Realtime/candado de auth + **OLA 1 (`2358f6c`)** = saga Realtime/suspensión (worker:true + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`) **+ durabilidad de escritura de caja**, **SIN diag** (los `[rt-diag]`/`realtimeReproSwitch` se borraron en el pase) + **OLA 1.1 (`ead4727`+`483d29c`)** = timeout/abort del flush del outbox con guardarraíl de plata. **NO** tiene el PoS ni la Bandeja. |
-| `staging` | `4805e23` | **Fuente de verdad del trabajo nuevo (FEATURES).** Todo lo de `main` + PoS/KDS/comandero + FE estructura + inventario activo + Bandeja Etapa 1 + **saga Realtime/suspensión CERRADA** (máquina de 3 estados `63ef0bb` + gateo del emit y endurecimiento `SESSION_EXPIRED` `3a0fd20`) + **durabilidad de escritura de caja (`0dd258b`)** + **timeout/abort del flush del outbox (`4805e23`)** + switch de diagnóstico de Realtime solo-staging. La estabilidad (saga Realtime + durabilidad caja + flush outbox) **ya se pasó a main** vía Ola 1/1.1; en staging la instrumentación `[rt-diag]`/`[diag-repro]` **sigue activa por diseño** (gateada por `VITE_APP_ENV`). |
+| `staging` | `14e4546` | **Fuente de verdad del trabajo nuevo (FEATURES).** Todo lo de `main` + PoS/KDS/comandero + FE estructura + inventario activo + Bandeja Etapa 1 + **saga Realtime/suspensión** (máquina de 3 estados `63ef0bb` + gateo del emit y endurecimiento `SESSION_EXPIRED` `3a0fd20`) + **durabilidad de escritura de caja (`0dd258b`)** + **timeout/abort del flush del outbox (`4805e23`)** + switch de diagnóstico de Realtime solo-staging + **🆕 esta sesión:** `createDayMovement` con durabilidad (`dea9486`) · **fix REAL del loop `OFFLINE_WAITING` tras suspensión larga** — escape `SESSION_EXPIRED` tras N=3 timeouts (`e0df9ae`) + `signOut` acotado + latch one-shot (`14e4546`); el lock 10s→5s (`ccef5f1`) es hardening, NO el fix (ver §b-bis + `docs/HANG-RCA-2.md`). En staging `[rt-diag]`/`[diag-repro]` **siguen activos por diseño** (gateado por `VITE_APP_ENV`). |
 
 > Supabase refs: **PROD** = `yiczgdtirrkdvohdquzf` (intocable) · **STAGING** = `hwiatgicyyqyezqwldia`.
 > Ramas de la saga Realtime (todas mergeadas a staging): `fix/realtime-jwt-refresh` (R1) · `fix/realtime-socket-revive` (R2, **REVERTIDO**) · `fix/auth-lock-contention` (`09480a6`) · `fix/realtime-resume-refresh` (`97d9c75`) · `fix/realtime-worker-heartbeat` (`b7cf327`/`7cd7760`) · `fix/realtime-resume-diagnostics` (`28901c4`) · `fix/realtime-reauth-emit` + `fix/realtime-reauth-timeout` + `fix/realtime-resume-revive` (blindaje 8s + cinturón 40s; **approach intermedio que dejaba un loop `InvalidJWT` → REEMPLAZADO**) · **`fix/realtime-3state-machine` (`63ef0bb`)** = máquina de 3 estados · **`fix/realtime-emit-gating` (`3a0fd20`)** = gateo del emit + endurecimiento `SESSION_EXPIRED`. Cronología completa → RCA + `ESTADO-ARCHIVO.md` (2026-06-24).
@@ -48,6 +48,29 @@ CLOSED**; **foco rutinario → `setAuth` SIN emit** (sin churn). Cronología com
 > módulo `realtimeReproSwitch` se borraron por prefijo en el cherry-pick). **En `staging` la instrumentación `[rt-diag]` /
 > `[diag-repro]` (`window.__satoriDiag`) SIGUE ACTIVA por diseño** (gateada por `VITE_APP_ENV==='staging'`; el DCE la elimina
 > de cualquier build de prod). Verificado: grep del `dist` de prod por `__satoriDiag|rt-diag|armZombie` → VACÍO.
+
+## (b-bis) 🆕 Auth recovery — el loop `OFFLINE_WAITING` tras suspensión LARGA (corregido esta sesión, SOLO en staging)
+
+La máquina de 3 estados (§b, **EN PROD**) resolvió el caso validado, pero quedaba un modo de falla **distinto**: tras una
+suspensión **larga**, el fetch interno de `getSession`/`refreshSession` **no vuelve** (socket zombi) y `classifyRealtime`
+caía en `if (!sessionRead) return OFFLINE_WAITING` **sin escape** → loop `OFFLINE_WAITING` eterno, nunca refresca el token,
+el outbox no drena. **El fix del lock (`ccef5f1`, 10s→5s) fue un RED HERRING:** el escape `no adquirido` disparó **0 veces**
+en todos los logs (incl. una suspensión real de ~4h) → el cuelgue es el fetch de auth, no la adquisición del lock. Queda
+como hardening inofensivo, NO es el fix de este bug.
+
+**Fix real (client-side, solo en staging):**
+- `e0df9ae` — contador de timeouts consecutivos de `getSession`; tras **N=3** escala a `SESSION_EXPIRED` y fuerza
+  `signOut({scope:'local'})` → `onAuthStateChange(null)` → `/login` → el usuario reingresa y el **outbox drena** (el
+  `signOut` local NO toca el IndexedDB del outbox).
+- `14e4546` — `signOut` SOLO en el path forzado por N-timeouts (`forced:true`); el path `refresh.error` vuelve a su
+  comportamiento original (gotrue ya limpia) → sin logout espurio. **Latch one-shot** (`forcedLogoutLatch`): se fuerza UNA
+  vez; se limpia solo con sesión fresca confirmada en `onAuthStateChange` → mata el ping-pong de logout cada ~30 s.
+
+> ⚠️ **VALIDADO SOLO POR UNIT TESTS** (suite 133/133; máquina de auth en `supabase.timeout.test.ts` 13/13). **NO** se validó
+> en la app corriendo (el último intento usó comando mal escrito y bundle viejo). **GATE antes de prod:** (a) repro con
+> `__satoriDiag.armZombie()` sobre el bundle del latch (`14e4546` → `supabase-BjfeOB6h.js`): **UN solo** `signOut`→`/login`
+> sin ping-pong + `disarm()`→`ONLINE_SUBSCRIBED`+drain; (b) **suspensión real >1h** sobre ese build. **El pase a prod del fix
+> de auth está GATEADO a que (b) pase.** Diagnóstico corregido completo → **`docs/HANG-RCA-2.md`**.
 
 ## (c) PROD vs STAGING
 
@@ -83,6 +106,8 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
 | **Caja — durabilidad de escritura** (reintento con tope + outbox) | ✅ **EN PROD y VALIDADA** (OLA 1) | **prod** (`2358f6c`) + staging (`0dd258b`) | `withWriteTimeout` con AbortController + abort del socket zombi; ante timeout/red-zombi **encola SIEMPRE en el outbox** (idempotente por `client_op_id`). Test `cash.durability.test.ts` + `supabase.timeout.test.ts`. |
 | **Outbox — timeout/abort del flush** (OLA 1.1) | ✅ **EN PROD y VALIDADA** — la cola drena sola | **prod** (`ead4727`+`483d29c`) + staging (`4805e23`) | Las 5 llamadas de red del `supabaseExecutor` con `withWriteTimeout`+`.abortSignal()`. **Guardarraíl de plata:** un timeout → `'retry'`, NUNCA `'fatal'` (fatal borra la op = pago perdido). Test `outbox.test.ts` (9 casos). |
 | **Diagnóstico Realtime — switch de reproducción** (solo-staging) | ✅ **validado en staging** (se usó para cerrar la saga) | staging | `window.__satoriDiag` (`armZombie`/`armExpired`/`disarm`/`status`); `armZombie` dispara CHANNEL_ERROR al instante → reproduce el cuelgue de 3+ h en ~30 s. DCE lo elimina de prod. Logs `[diag-repro]`. |
+| **🆕 `createDayMovement` — durabilidad** (id+`client_op_id`+`withWriteTimeout`+outbox) | 🟢 **en staging** (`dea9486`) · hotfix prod listo (`399fc0b`, sin mergear) | staging + `hotfix/createdaymovement-durability-prod` | Cierra el hueco nivel-día de Caja Diaria. Test `cash.durability.test.ts` (2 casos). El hotfix de prod NO arrastra `supplier_id` (solo-staging). |
+| **🆕 Auth recovery — escape del loop `OFFLINE_WAITING`** (N=3 timeouts → `SESSION_EXPIRED`+signOut local + latch one-shot) | 🟡 **solo unit tests** — falta validación física | staging (`e0df9ae`+`14e4546`) | Ver §(b-bis) + `docs/HANG-RCA-2.md`. **GATE a prod: suspensión real >1h.** El lock `ccef5f1` fue red herring (hardening). |
 | **Bandeja ETAPA 1** (unificada `/inbox`, foto+IA + enlace proveedor↔caja + visibilidad pendientes) | ✅ **COMPLETA y validada** | staging | mig 038, validada con rol contador. **= candidata de la Ola 2.** |
 | **Bandeja ETAPA 2** (entrada foto-primero 100% dentro de Caja Diaria) | 🔲 **DISEÑADA, SIN código** | — | NO hay nada en `src/modules/cash` ni `inbox`. = Ola 3, gated por decisión de la dueña (¿alcanza la Etapa 1?). |
 | PoS — catálogo/comandero/KDS/cobro/ticket SIM · FE estructura SIM · Inventario activo F1 | 🟢 | staging | sin validación física; pase a prod pendiente |
@@ -101,6 +126,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
   - **OLA 1.1 — ✅ HECHA (en prod, validada físicamente):** timeout/abort en el ejecutor del flush del outbox (`ead4727`+`483d29c`) con **guardarraíl de plata** (timeout → retry, nunca fatal). **La cola del outbox drena sola tras suspender la máquina.**
   - **OLA 2 (SIGUIENTE) — Bandeja ETAPA 1 a prod** (ya construida y validada en staging) **con la mig 038** (esquema → firma de la dueña). ⚠️ A verificar al planearla: si la **mig 038 / Etapa 1 se separan limpio de las migraciones del PoS (022–037)** o vienen acopladas. Da **foto+IA real** sin construir nada nuevo.
   - **OLA 3 (cuando la base esté sólida) — CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro de Caja Diaria; hoy **🔲 diseñada, SIN código**). **Solo si** tras usar la Etapa 1 sigue haciendo falta → **DECISIÓN ABIERTA de la dueña**.
+- **🆕 Ramas de pase a prod preparadas esta sesión (NO mergeadas, `main` intacto):** (1) `hotfix/createdaymovement-durability-prod` (`399fc0b`, cherry-pick de `dea9486` sobre `main`, **verificada y lista** — sin `supplier_id`, build + tests verdes). (2) El **fix de auth recovery a prod NO está creado**: necesita un hotfix NUEVO desde `main` cherry-pickeando **`e0df9ae` + `14e4546`** (NO el lock `ccef5f1` solo). **Gateado** a que pase la suspensión real >1h (§b-bis). El orden de pase lo decide la dueña.
 - **🔐 Rotar 2 tokens de GitHub:** (a) `gh auth refresh -s repo,read:org,workflow` (el `gho_` que estaba embebido en el remote de `SATORI PROPINAS` ya fue limpiado del config, pero sigue válido en GitHub hasta rotarlo); (b) **regenerar el PAT classic `ghp_` "Claude CLI" sin scope `admin:org`** — su valor quedó en un transcript local; rotar **antes del 27-jun**.
 - **GRAN PASE del PoS a PROD — DIFERIDO** (NO es parte de las 3 olas; la dueña eligió estabilidad primero): consolidar migraciones del PoS (022–037) con guard anti-staging, buckets, tipos, validar TODO el PoS en piso. Es un proyecto aparte y posterior, bloqueado además por el PILAR de escalabilidad de sesión/auth. No confundir con la Ola 2 (que lleva **solo** la Bandeja Etapa 1 + mig 038).
 - **Discrepancia mig 035** en el ledger de staging → sesión dedicada de propinas, sin tocar el historial.

@@ -58,6 +58,8 @@ export interface RealtimeReproSwitch {
   armExpired: () => void
   disarm: () => void
   status: () => void
+  armBootHang: (which?: 'getSession' | 'loadProfile') => void
+  disarmBootHang: () => void
 }
 
 export function installRealtimeReproSwitch(client: DiagSupabaseClient): RealtimeReproSwitch {
@@ -105,6 +107,18 @@ export function installRealtimeReproSwitch(client: DiagSupabaseClient): Realtime
     console.warn(`${LOG} armExpired: getSession→session:null, refreshSession→AuthError (no timeout) + socket tumbado`)
   }
 
+  // BOOT HANG (solo-diag): arma un flag ONE-SHOT en sessionStorage para que la PRÓXIMA carga fuerce
+  // que la llamada nombrada del bootstrap (getSession o loadProfile) se cuelgue → dispara el withTimeout
+  // del fix → /login. Lo consume y limpia useAuth (gateado por VITE_APP_ENV==='staging', DCE en prod).
+  const armBootHang = (which: 'getSession' | 'loadProfile' = 'loadProfile'): void => {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('satori-diag-boot-hang', which)
+    console.warn(`${LOG} BOOT HANG armado (${which}, one-shot). Recargá (Cmd+R): debe caer a /login a los ~8s SIN loop. La recarga siguiente vuelve a la normalidad.`)
+  }
+  const disarmBootHang = (): void => {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('satori-diag-boot-hang')
+    console.log(`${LOG} BOOT HANG desarmado.`)
+  }
+
   const disarm = (): void => {
     // Restaura EXACTAMENTE los métodos originales (mismas referencias) y reconecta el socket,
     // para verificar que el sistema RECUPERA al volver a la normalidad.
@@ -116,10 +130,11 @@ export function installRealtimeReproSwitch(client: DiagSupabaseClient): Realtime
   }
 
   const status = (): void => {
-    console.log(`${LOG} status: modo actual = '${mode}'`)
+    const bootHang = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('satori-diag-boot-hang') : null
+    console.log(`${LOG} status: modo actual = '${mode}'` + (bootHang ? ` · boot-hang one-shot armado: ${bootHang}` : ''))
   }
 
-  const api: RealtimeReproSwitch = { armZombie, armExpired, disarm, status }
+  const api: RealtimeReproSwitch = { armZombie, armExpired, disarm, status, armBootHang, disarmBootHang }
 
   // Expuesto en window para manejarlo desde la consola del navegador (mismo patrón que
   // __satoriOutbox en outbox.ts). En entornos sin window (Node/test) no rompe y se usa el
@@ -128,6 +143,6 @@ export function installRealtimeReproSwitch(client: DiagSupabaseClient): Realtime
     ;(window as unknown as Record<string, unknown>).__satoriDiag = api
   }
 
-  console.log(`${LOG} instalado. Uso: __satoriDiag.armZombie() | .armExpired() | .disarm() | .status()`)
+  console.log(`${LOG} instalado. Uso: __satoriDiag.armZombie() | .armExpired() | .armBootHang('getSession'|'loadProfile') | .disarmBootHang() | .disarm() | .status()`)
   return api
 }

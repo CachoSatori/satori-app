@@ -23,6 +23,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const loadProfile = async (userId: string) => {
+    // DIAG SOLO-STAGING (DCE en prod): si __satoriDiag.armBootHang('loadProfile') armó el flag one-shot,
+    // forzamos UN withTimeout vencido sobre una promesa colgada y retornamos SIN setear profile (queda
+    // null, NO reintenta-y-carga el perfil real) → PrivateRoute → /login → PublicRoute muestra el form
+    // (sin parpadeo/loop). Reproduce a pedido el caso del loop-fix. En prod este bloque se elimina por DCE.
+    if (import.meta.env.VITE_APP_ENV === 'staging') {
+      if (sessionStorage.getItem('satori-diag-boot-hang') === 'loadProfile') {
+        sessionStorage.removeItem('satori-diag-boot-hang')   // one-shot
+        console.warn('[diag-repro] BOOT HANG: loadProfile colgado')
+        await withTimeout(new Promise<null>(() => { /* nunca settlea */ }), AUTH_OP_TIMEOUT_MS, 'loadProfile (bootstrap)', null)
+        return   // NO setea profile → queda null
+      }
+    }
     // El SELECT a profiles también puede colgarse sobre el socket zombi tras suspensión (getSession
     // pudo volver rápido con sesión cacheada). CON tope + 1 reintento: si ambos vencen, dejamos profile
     // en null (NO seteamos) y retornamos → el .then del bootstrap resuelve igual → .finally baja loading
@@ -49,8 +61,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // negra). withTimeout NO rechaza: RESUELVE con sesión nula al vencer → setUser(null) → loading=false
     // → RequireAuth manda a /login. (Ver HANG-RCA-2; la máquina de 3 estados de supabase.ts no cubría
     // esta capa de arranque.) NO confundir con el caso "getSession FALLA", que ya cubría el .catch.
+    // DIAG SOLO-STAGING (DCE en prod): si __satoriDiag.armBootHang('getSession') armó el flag one-shot,
+    // forzamos que el getSession del bootstrap se cuelgue → el withTimeout de abajo vence a los 8s →
+    // sesión null → /login. NO cambia el flujo normal. En prod (VITE_APP_ENV!=='staging') se elimina por DCE.
+    let bootSessionP = supabase.auth.getSession()
+    if (import.meta.env.VITE_APP_ENV === 'staging') {
+      if (sessionStorage.getItem('satori-diag-boot-hang') === 'getSession') {
+        sessionStorage.removeItem('satori-diag-boot-hang')   // one-shot
+        console.warn('[diag-repro] BOOT HANG: getSession colgado')
+        bootSessionP = new Promise<never>(() => { /* nunca settlea */ }) as unknown as typeof bootSessionP
+      }
+    }
     withTimeout(
-      supabase.auth.getSession(),
+      bootSessionP,
       AUTH_OP_TIMEOUT_MS,
       'getSession (bootstrap useAuth)',
       { data: { session: null }, error: null },

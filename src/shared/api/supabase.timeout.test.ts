@@ -27,7 +27,7 @@ const mock = vi.hoisted(() => {
   const hang = <T>(): Promise<T> => new Promise<T>(() => { /* nunca settlea (zombi) */ })
   return {
     hang,
-    calls: { connect: 0, disconnect: 0, setAuth: 0 },
+    calls: { connect: 0, disconnect: 0, setAuth: 0, signOut: 0 },
     isConnected: true,
     getSession: hang as () => Promise<GetSessionResult>,
     refreshSession: hang as () => Promise<RefreshSessionResult>,
@@ -40,6 +40,7 @@ vi.mock('@supabase/supabase-js', () => ({
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe() { /* noop */ } } } }),
       getSession: () => mock.getSession(),
       refreshSession: () => mock.refreshSession(),
+      signOut: (_opts?: { scope?: string }) => { mock.calls.signOut++; return Promise.resolve({ error: null }) },
       startAutoRefresh: async () => { /* noop */ },
       stopAutoRefresh: async () => { /* noop */ },
     },
@@ -84,6 +85,7 @@ describe('ensureRealtimeHealthy — máquina de 3 estados + gating de la emisió
     mock.calls.connect = 0
     mock.calls.disconnect = 0
     mock.calls.setAuth = 0
+    mock.calls.signOut = 0
     mock.isConnected = true
     mock.getSession = mock.hang as () => Promise<GetSessionResult>
     mock.refreshSession = mock.hang as () => Promise<RefreshSessionResult>
@@ -194,6 +196,20 @@ describe('ensureRealtimeHealthy — máquina de 3 estados + gating de la emisió
     expect(b).toBe(a)
     await vi.advanceTimersByTimeAsync(8_100)   // destraba ambas (OFFLINE_WAITING)
     await a
+  })
+
+  // EL FIX REAL (HANG-RCA-2): getSession wedgeada (nunca completa) ya NO loopea eterno en
+  // OFFLINE_WAITING — tras N timeouts consecutivos escala a SESSION_EXPIRED y fuerza signOut local.
+  it('getSession wedgeada: escala a SESSION_EXPIRED (signOut local) recién tras N timeouts, no antes', async () => {
+    // getSession cuelga siempre (default zombi). El backoff encadena reintentos solos.
+    const { ensureRealtimeHealthy, healthyEvents } = await loadModule()
+    const p = ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(8_100)        // 1er timeout
+    await p
+    expect(mock.calls.signOut).toBe(0)              // NO escala al primer timeout
+    await vi.advanceTimersByTimeAsync(60_000)       // deja correr los reintentos hasta cubrir N ciclos
+    expect(mock.calls.signOut).toBe(1)              // escaló UNA vez (SESSION_EXPIRED corta el backoff)
+    expect(healthyEvents()).toBe(0)                 // nunca emitió rt:healthy
   })
 })
 

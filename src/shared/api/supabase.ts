@@ -119,6 +119,12 @@ let resumeRetryDelay = RESUME_RETRY_MIN_MS
 // re-suscribir el canal que recién se estaba estableciendo → CLOSED → recreate ×5 → FRENO → tiempo real muerto.
 let healthyAwaited = false
 
+// Tras N timeouts consecutivos de getSession (auth wedgeada: el fetch del refresh no vuelve tras
+// suspensión larga — ver HANG-RCA-2), esperar es inútil (la op nunca completa). Escalamos a
+// SESSION_EXPIRED para forzar el re-login; el outbox sobrevive y drena al reingresar.
+const MAX_GETSESSION_TIMEOUTS = 3
+let consecutiveGetSessionTimeouts = 0
+
 type RealtimeHealthReason = 'resume' | 'channel-stuck'
 
 // Máquina de 3 estados. La regla madre: NUNCA emitir 'rt:healthy' ni re-suscribir sin un token válido
@@ -187,8 +193,20 @@ const classifyRealtime = async (reason: RealtimeHealthReason): Promise<RealtimeD
     'getSession',
     { data: { session: null }, error: null },
   )
-  // getSession EXPIRÓ por timeout (red zombi): no sabemos si la sesión vive → esperar, no desloguear.
-  if (!sessionRead) return { state: 'OFFLINE_WAITING' }
+  // getSession EXPIRÓ por timeout (red/auth zombi): no sabemos si la sesión vive. Esperamos… pero con
+  // tope: tras N timeouts consecutivos la op nunca volverá (auth wedgeada) → escapamos a expirar.
+  if (!sessionRead) {
+    // getSession no completó (auth wedgeada). Contamos timeouts consecutivos: tras N, escapamos a
+    // SESSION_EXPIRED (la op nunca volverá). Un blip transitorio completaría antes de N y resetea abajo.
+    consecutiveGetSessionTimeouts++
+    if (consecutiveGetSessionTimeouts >= MAX_GETSESSION_TIMEOUTS) {
+      consecutiveGetSessionTimeouts = 0
+      return { state: 'SESSION_EXPIRED' }
+    }
+    return { state: 'OFFLINE_WAITING' }
+  }
+  // getSession COMPLETÓ → racha de timeouts rota.
+  consecutiveGetSessionTimeouts = 0
   // getSession COMPLETÓ con session=null NO se trata como deslogueo: al arrancar puede dar null un instante
   // antes de hidratar la sesión desde storage (falso positivo). El árbitro ÚNICO de SESSION_EXPIRED es el
   // refreshSession de abajo (refresh.error). Con session=null caemos a ese refresh y él decide.
@@ -283,9 +301,13 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
         healthyAwaited = true
         scheduleResumeRetry()
       } else {
-        // SESSION_EXPIRED: deslogueo real confirmado (refresh.error). NO emitir, NO re-suscribir, NO
-        // disconnect/connect en loop. El deslogueo declarativo (onAuthStateChange → useAuth → <Navigate
-        // to="/login">) hace su trabajo. Cancelamos el backoff y la espera: no hay nada que recuperar.
+        // SESSION_EXPIRED por DOS orígenes: (1) refresh.error → gotrue YA deslogueó; (2) N timeouts de
+        // getSession (auth wedgeada, ver HANG-RCA-2) → gotrue NO limpió la sesión local. Para (2) forzamos
+        // un signOut LOCAL: dispara onAuthStateChange(session=null) → useAuth → <Navigate to="/login">, así
+        // el usuario reingresa y el outbox drena (signOut local NO toca el IndexedDB del outbox). Sin red no
+        // se cuelga (scope:'local' es client-side) y es idempotente si ya no había sesión. NO emitir, NO
+        // re-suscribir, NO disconnect/connect en loop. Cancelamos el backoff y la espera: no hay qué recuperar.
+        void supabase.auth.signOut({ scope: 'local' }).catch(() => { /* ya deslogueado / sin sesión */ })
         console.log('[rt-diag] ensureRealtimeHealthy: SESSION_EXPIRED → deslogueo declarativo, sin emit')
         healthyAwaited = false
         cancelResumeRetry()

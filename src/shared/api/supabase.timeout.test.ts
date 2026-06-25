@@ -196,3 +196,85 @@ describe('ensureRealtimeHealthy — máquina de 3 estados + gating de la emisió
     await a
   })
 })
+
+// ── safeNavigatorLock: el escape del lock muerto y su INVARIANTE de timeouts ──────────────────
+// Bug en prod (Ola 1): LOCK_ACQUIRE_TIMEOUT_MS (10s) era > AUTH_OP_TIMEOUT_MS (8s). Tras suspensión
+// larga, getSession/refreshSession piden el lock (muerto, retenido para siempre) y withTimeout los
+// rinde a los 8s ANTES de que el escape "correr sin lock" de safeNavigatorLock alcance a dispararse
+// (10s) → loop OFFLINE_WAITING eterno, nunca refresca el token, el outbox no drena. El fix invierte
+// los topes (lock < op). Estos tests fijan la invariante y el comportamiento del escape.
+describe('safeNavigatorLock — escape del lock muerto + invariante de timeouts', () => {
+  beforeEach(() => {
+    // supabase.ts exige las env al importar; se stubean ANTES del import dinámico.
+    vi.stubEnv('VITE_SUPABASE_URL', 'http://localhost:54321')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-anon-key')
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllEnvs()
+    vi.resetModules()
+    Reflect.deleteProperty(globalThis, 'navigator')   // restaurar el navigator mockeado
+  })
+
+  // (a) GUARD anti-regresión EXACTA del bug. Import dinámico (no estático arriba) porque supabase.ts
+  // exige env al cargar y resetModules aísla el estado de módulo entre tests.
+  it('INVARIANTE: el escape del lock dispara antes del tope por-op', async () => {
+    const { LOCK_ACQUIRE_TIMEOUT_MS, AUTH_OP_TIMEOUT_MS } = await import('./supabase')
+    expect(LOCK_ACQUIRE_TIMEOUT_MS).toBeLessThan(AUTH_OP_TIMEOUT_MS)
+  })
+
+  // (b1) Lock RETENIDO (muerto): navigator.locks.request nunca adquiere (jamás llama al callback); solo
+  // rechaza con AbortError cuando el signal aborta. El escape debe correr fn SIN lock al vencer el tope.
+  it('lock retenido (muerto): corre fn SIN lock al vencer el tope, antes del tope por-op', async () => {
+    let fnRan = false
+    const sentinel = Symbol('corrió-sin-lock')
+    // Lock muerto: el request queda pendiente hasta que el AbortController del propio safeNavigatorLock lo aborta.
+    const heldLocks = {
+      request: (_name: string, options: { signal: AbortSignal }, _cb: () => Promise<unknown>): Promise<unknown> =>
+        new Promise<unknown>((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            const err = new Error('lock request aborted'); err.name = 'AbortError'; reject(err)
+          })
+        }),
+    }
+    Object.defineProperty(globalThis, 'navigator', { value: { locks: heldLocks }, configurable: true, writable: true })
+    const { safeNavigatorLock, LOCK_ACQUIRE_TIMEOUT_MS, AUTH_OP_TIMEOUT_MS } = await import('./supabase')
+
+    let result: symbol | undefined
+    const p = safeNavigatorLock('test', LOCK_ACQUIRE_TIMEOUT_MS, async (): Promise<symbol> => { fnRan = true; return sentinel })
+      .then((r) => { result = r })
+
+    // Antes de avanzar el reloj: sigue esperando el lock → fn NO corrió todavía.
+    await Promise.resolve()
+    expect(fnRan).toBe(false)
+    expect(result).toBeUndefined()
+
+    // Justo ANTES del tope del lock: el escape aún no dispara (no penaliza antes de tiempo).
+    await vi.advanceTimersByTimeAsync(LOCK_ACQUIRE_TIMEOUT_MS - 1)
+    expect(fnRan).toBe(false)
+
+    // AL tope del lock: el AbortController dispara → fn corre SIN lock → resuelve con el sentinel.
+    await vi.advanceTimersByTimeAsync(1)
+    await p
+    expect(fnRan).toBe(true)
+    expect(result).toBe(sentinel)
+    // Margen real: el escape ocurrió a los LOCK_ACQUIRE_TIMEOUT_MS, ANTES del tope por-op (si no, loop eterno).
+    expect(LOCK_ACQUIRE_TIMEOUT_MS).toBeLessThan(AUTH_OP_TIMEOUT_MS)
+  })
+
+  // (b2) Lock LIBRE: el callback corre de inmediato → fn ya, sin esperar el timeout (cero penalidad en el camino sano).
+  it('lock libre: corre fn de inmediato, sin esperar el timeout', async () => {
+    let fnRan = false
+    const sentinel = Symbol('corrió-con-lock')
+    const freeLocks = {
+      request: (_name: string, _options: { signal: AbortSignal }, cb: () => Promise<unknown>): Promise<unknown> => cb(),
+    }
+    Object.defineProperty(globalThis, 'navigator', { value: { locks: freeLocks }, configurable: true, writable: true })
+    const { safeNavigatorLock, LOCK_ACQUIRE_TIMEOUT_MS } = await import('./supabase')
+
+    const result = await safeNavigatorLock('test', LOCK_ACQUIRE_TIMEOUT_MS, async (): Promise<symbol> => { fnRan = true; return sentinel })
+    expect(fnRan).toBe(true)
+    expect(result).toBe(sentinel)
+  })
+})

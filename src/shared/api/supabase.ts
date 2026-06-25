@@ -14,11 +14,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // pero permitía refreshes concurrentes entre pestañas (refresh tokens de un solo
 // uso → una pestaña podía invalidar la sesión de la otra). Este lock usa
 // navigator.locks (serialización real entre pestañas) con un tope de adquisición:
-// si en 10s no se consigue (lock colgado, el caso del RCA), se ejecuta SIN lock
+// si en 5s no se consigue (lock colgado, el caso del RCA), se ejecuta SIN lock
 // en vez de colgar la UI — el peor caso vuelve a ser el comportamiento anterior.
-const LOCK_ACQUIRE_TIMEOUT_MS = 10_000
+// INVARIANTE CRÍTICA: LOCK_ACQUIRE_TIMEOUT_MS DEBE ser < AUTH_OP_TIMEOUT_MS (8s). Si no, getSession/
+// refreshSession se rinden por withTimeout ANTES de que el fallback "correr sin lock" de
+// safeNavigatorLock alcance a dispararse → tras suspensión larga (lock muerto retenido) la máquina
+// queda en loop OFFLINE_WAITING eterno, nunca refresca el token y el outbox NO drena.
+// VALOR 5_000: deja ~3s de slack para la op lock-free (refreshSession es una llamada de red ~1-2s)
+// dentro del presupuesto de 8s; más conservador que 4s frente a falsos "lock no adquirido" en redes/
+// dispositivos lentos.
+// TRADE-OFF: este tope cumple doble función — paciencia para el refresh legítimo de OTRA pestaña
+// (querría ser largo) vs escape de un lock muerto (debe ser < tope por-op). 5s favorece el escape;
+// solo un refresh cross-tab legítimo que tarde >5s correría sin lock (red patológica; en estaciones
+// de un-dispositivo-por-navegador no aplica).
+export const LOCK_ACQUIRE_TIMEOUT_MS = 5_000
 
-const safeNavigatorLock = async <R>(name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
+export const safeNavigatorLock = async <R>(name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
   if (typeof navigator === 'undefined' || !navigator.locks) return fn()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LOCK_ACQUIRE_TIMEOUT_MS)
@@ -81,7 +92,7 @@ const FORCED_REFRESH_MIN_INTERVAL_MS = 30_000
 // (toda recuperación posterior —freno 'channel-stuck' y resume visibility/online/focus— sale temprano
 // por el guard y no hace nada). Con tope, cada operación resuelve en pocos segundos (éxito o degradado)
 // y el in-flight SIEMPRE se libera.
-const AUTH_OP_TIMEOUT_MS = 8_000
+export const AUTH_OP_TIMEOUT_MS = 8_000
 // Cinturón anti-clavado (segunda línea de defensa): edad máxima del in-flight. Si una corrida quedó
 // pegada más de esto (p. ej. una op que igual no settleó, o timers congelados durante la suspensión),
 // la próxima llamada la IGNORA y arranca una nueva en vez de quedar rehén del guard de concurrencia.

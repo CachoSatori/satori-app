@@ -31,13 +31,19 @@ const mock = vi.hoisted(() => {
     isConnected: true,
     getSession: hang as () => Promise<GetSessionResult>,
     refreshSession: hang as () => Promise<RefreshSessionResult>,
+    // Capturamos el callback del onAuthStateChange GLOBAL de supabase.ts para simular, desde el test,
+    // la llegada de una sesión fresca (login/refresh OK) que limpia el latch del logout forzado.
+    authCallback: null as ((event: string, session: SessionLike | null) => void) | null,
   }
 })
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     auth: {
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() { /* noop */ } } } }),
+      onAuthStateChange: (cb: (event: string, session: SessionLike | null) => void) => {
+        mock.authCallback = cb
+        return { data: { subscription: { unsubscribe() { /* noop */ } } } }
+      },
       getSession: () => mock.getSession(),
       refreshSession: () => mock.refreshSession(),
       signOut: (_opts?: { scope?: string }) => { mock.calls.signOut++; return Promise.resolve({ error: null }) },
@@ -87,6 +93,7 @@ describe('ensureRealtimeHealthy — máquina de 3 estados + gating de la emisió
     mock.calls.setAuth = 0
     mock.calls.signOut = 0
     mock.isConnected = true
+    mock.authCallback = null
     mock.getSession = mock.hang as () => Promise<GetSessionResult>
     mock.refreshSession = mock.hang as () => Promise<RefreshSessionResult>
   })
@@ -159,6 +166,7 @@ describe('ensureRealtimeHealthy — máquina de 3 estados + gating de la emisió
     expect(mock.calls.setAuth).toBe(0)         // SESSION_EXPIRED → NO setAuth
     expect(mock.calls.disconnect).toBe(0)      // NO toca el socket
     expect(mock.calls.connect).toBe(0)
+    expect(mock.calls.signOut).toBe(0)         // refresh.error (forced≠true) → gotrue ya limpió: NO forzamos signOut
   })
 
   // Mantenido — zombi puro: RESUELVE (no se cuelga), 0 emit, renueva el socket y libera el in-flight.
@@ -210,6 +218,40 @@ describe('ensureRealtimeHealthy — máquina de 3 estados + gating de la emisió
     await vi.advanceTimersByTimeAsync(60_000)       // deja correr los reintentos hasta cubrir N ciclos
     expect(mock.calls.signOut).toBe(1)              // escaló UNA vez (SESSION_EXPIRED corta el backoff)
     expect(healthyEvents()).toBe(0)                 // nunca emitió rt:healthy
+  })
+
+  // LATCH one-shot: tras forzar el signOut una vez, nuevos resumes con la auth aún wedgeada NO vuelven a
+  // forzarlo (se acabó el ping-pong de logout cada ~30s).
+  it('one-shot: con el latch puesto, nuevos ciclos de N timeouts NO vuelven a forzar signOut', async () => {
+    const { ensureRealtimeHealthy } = await loadModule()   // getSession cuelga (zombi)
+    // 1ª escalada → signOut 1, latch puesto, backoff cancelado.
+    ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(8_100)               // 1er timeout
+    await vi.advanceTimersByTimeAsync(60_000)              // backoff hasta escalar
+    expect(mock.calls.signOut).toBe(1)
+    // Reactivamos el resume (la escalada canceló el backoff) y dejamos correr varios ciclos más de N
+    // timeouts: con el latch puesto siguen dando OFFLINE_WAITING, sin re-disparar signOut.
+    ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(mock.calls.signOut).toBe(1)                     // sigue 1: one-shot
+  })
+
+  // El latch se limpia SOLO con sesión fresca confirmada (login/refresh OK) vía el onAuthStateChange
+  // global → un wedge POSTERIOR puede volver a escalar (nuevo signOut).
+  it('sesión fresca limpia el latch → un wedge posterior vuelve a escalar (signOut otra vez)', async () => {
+    const { ensureRealtimeHealthy } = await loadModule()
+    // 1ª escalada → signOut 1, latch puesto.
+    ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(8_100)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mock.calls.signOut).toBe(1)
+    // Llega sesión fresca (login/refresh OK) → el onAuthStateChange global limpia latch + contador.
+    mock.authCallback?.('SIGNED_IN', sessionExpiringIn(3_600))
+    // Nuevo wedge: vuelve a poder forzar → signOut 2.
+    ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(8_100)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mock.calls.signOut).toBe(2)
   })
 })
 

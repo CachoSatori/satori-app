@@ -79,6 +79,10 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 // módulo es singleton). El .catch evita un unhandled rejection si el socket aún no abrió.
 supabase.auth.onAuthStateChange((_event, session) => {
   supabase.realtime.setAuth(session?.access_token ?? null).catch(() => { /* socket no listo */ })
+  // Sesión fresca confirmada (login / refresh OK) → limpiar el latch del logout forzado y el contador de
+  // timeouts: recién acá un wedge POSTERIOR puede volver a escalar. Un signOut emite session=null → NO
+  // limpia (correcto: seguimos deslogueados sin re-machacar el signOut). Ver HANG-RCA-2 (latch one-shot).
+  if (session) { forcedLogoutLatch = false; consecutiveGetSessionTimeouts = 0 }
 })
 
 const EXPIRY_MARGIN_S = 60
@@ -124,6 +128,10 @@ let healthyAwaited = false
 // SESSION_EXPIRED para forzar el re-login; el outbox sobrevive y drena al reingresar.
 const MAX_GETSESSION_TIMEOUTS = 3
 let consecutiveGetSessionTimeouts = 0
+// Latch terminal one-shot: una vez escalado a SESSION_EXPIRED FORZADO (auth wedgeada) NO volvemos a forzar
+// el signOut en cada resume. Solo lo limpia un onAuthStateChange con sesión fresca (login/refresh OK); un
+// signOut emite session=null → NO lo limpia (correcto: seguimos deslogueados sin re-machacar el logout).
+let forcedLogoutLatch = false
 
 type RealtimeHealthReason = 'resume' | 'channel-stuck'
 
@@ -132,7 +140,7 @@ type RealtimeHealthReason = 'resume' | 'channel-stuck'
 type RealtimeDecision =
   | { state: 'ONLINE_SUBSCRIBED'; freshToken: string }
   | { state: 'OFFLINE_WAITING' }
-  | { state: 'SESSION_EXPIRED' }
+  | { state: 'SESSION_EXPIRED'; forced?: boolean }
 
 const tokenNeedsRefresh = (session: Session | null): boolean => {
   if (!session) return false
@@ -201,7 +209,11 @@ const classifyRealtime = async (reason: RealtimeHealthReason): Promise<RealtimeD
     consecutiveGetSessionTimeouts++
     if (consecutiveGetSessionTimeouts >= MAX_GETSESSION_TIMEOUTS) {
       consecutiveGetSessionTimeouts = 0
-      return { state: 'SESSION_EXPIRED' }
+      // One-shot: forzamos el signOut SOLO la 1ª vez (latch). Si ya está latcheado, seguimos esperando
+      // (renovamos TCP) sin re-disparar el logout en cada resume → evita el ping-pong eterno de logout.
+      if (forcedLogoutLatch) return { state: 'OFFLINE_WAITING' }
+      forcedLogoutLatch = true
+      return { state: 'SESSION_EXPIRED', forced: true }
     }
     return { state: 'OFFLINE_WAITING' }
   }
@@ -301,13 +313,17 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
         healthyAwaited = true
         scheduleResumeRetry()
       } else {
-        // SESSION_EXPIRED por DOS orígenes: (1) refresh.error → gotrue YA deslogueó; (2) N timeouts de
-        // getSession (auth wedgeada, ver HANG-RCA-2) → gotrue NO limpió la sesión local. Para (2) forzamos
-        // un signOut LOCAL: dispara onAuthStateChange(session=null) → useAuth → <Navigate to="/login">, así
-        // el usuario reingresa y el outbox drena (signOut local NO toca el IndexedDB del outbox). Sin red no
-        // se cuelga (scope:'local' es client-side) y es idempotente si ya no había sesión. NO emitir, NO
-        // re-suscribir, NO disconnect/connect en loop. Cancelamos el backoff y la espera: no hay qué recuperar.
-        void supabase.auth.signOut({ scope: 'local' }).catch(() => { /* ya deslogueado / sin sesión */ })
+        // SESSION_EXPIRED por DOS orígenes, tratados distinto:
+        //  (1) refresh.error (forced ≠ true) → gotrue YA limpió la sesión → SOLO deslogueo declarativo;
+        //      NO forzamos signOut (evita logout espurio ante hipos transitorios del refresh).
+        //  (2) N timeouts de getSession (forced=true, auth wedgeada, ver HANG-RCA-2) → gotrue NO limpió →
+        //      forzamos UN signOut LOCAL (one-shot por el latch): dispara onAuthStateChange(session=null) →
+        //      useAuth → <Navigate to="/login">; el usuario reingresa y el outbox drena (signOut local NO
+        //      toca el IndexedDB del outbox). Sin red no se cuelga (scope:'local' es client-side), idempotente.
+        // En ambos: NO emitir, NO re-suscribir, NO disconnect/connect en loop. Cancelamos backoff y espera.
+        if (decision.forced === true) {
+          void supabase.auth.signOut({ scope: 'local' }).catch(() => { /* ya deslogueado / sin sesión */ })
+        }
         console.log('[rt-diag] ensureRealtimeHealthy: SESSION_EXPIRED → deslogueo declarativo, sin emit')
         healthyAwaited = false
         cancelResumeRetry()

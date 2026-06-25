@@ -80,7 +80,7 @@ const FORCED_REFRESH_MIN_INTERVAL_MS = 30_000
 // (toda recuperación posterior —freno 'channel-stuck' y resume visibility/online/focus— sale temprano
 // por el guard y no hace nada). Con tope, cada operación resuelve en pocos segundos (éxito o degradado)
 // y el in-flight SIEMPRE se libera.
-const AUTH_OP_TIMEOUT_MS = 8_000
+export const AUTH_OP_TIMEOUT_MS = 8_000
 // Cinturón anti-clavado (segunda línea de defensa): edad máxima del in-flight. Si una corrida quedó
 // pegada más de esto (p. ej. una op que igual no settleó, o timers congelados durante la suspensión),
 // la próxima llamada la IGNORA y arranca una nueva en vez de quedar rehén del guard de concurrencia.
@@ -126,7 +126,7 @@ const tokenNeedsRefresh = (session: Session | null): boolean => {
 // Promise.race con tope: si `p` no settlea en `ms`, RESUELVE con `fallback` (no rechaza — seguimos
 // en modo degradado). Es lo que evita que ensureRealtimeHealthy quede colgada esperando un await
 // que nunca vuelve (la conexión zombi tras suspensión).
-const withTimeout = <T>(p: Promise<T>, ms: number, _label: string, fallback: T): Promise<T> => {
+export const withTimeout = <T>(p: Promise<T>, ms: number, _label: string, fallback: T): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<T>((resolve) => {
     timer = setTimeout(() => {

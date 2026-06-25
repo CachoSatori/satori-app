@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
-import { supabase } from '../api/supabase'
+import { supabase, withTimeout, AUTH_OP_TIMEOUT_MS } from '../api/supabase'
 import type { Profile } from '../types/database'
 
 interface AuthContextType {
@@ -33,7 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession()
+    // getSession del bootstrap CON tope: tras suspensión larga el fetch puede quedar sobre el socket
+    // zombi y NUNCA settlear → el .finally(setLoading(false)) no corría → splash 祭 eterno (pantalla
+    // negra). withTimeout NO rechaza: RESUELVE con sesión nula al vencer → setUser(null) → loading=false
+    // → RequireAuth manda a /login. (Ver HANG-RCA-2; la máquina de 3 estados de supabase.ts no cubría
+    // esta capa de arranque.) NO confundir con el caso "getSession FALLA", que ya cubría el .catch.
+    withTimeout(
+      supabase.auth.getSession(),
+      AUTH_OP_TIMEOUT_MS,
+      'getSession (bootstrap useAuth)',
+      { data: { session: null }, error: null },
+    )
       .then(async ({ data: { session } }) => {
         setSession(session)
         setUser(session?.user ?? null)

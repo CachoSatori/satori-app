@@ -3,15 +3,15 @@
 Estado: **PROD (`main` `483d29c`) recibió las OLAS 1 y 1.1 de estabilidad (validadas físicamente) → la app vuelve a ser
 usable sin cuelgues.** main = capa de inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado de auth
 + **Ola 1** (saga Realtime/suspensión + durabilidad de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush
-del outbox). STAGING (`14e4546`) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga Realtime/suspensión + durabilidad
-de caja + **timeout/abort del flush del outbox** + **switch de diagnóstico de Realtime solo-staging** (con `[rt-diag]`)
-+ **🆕 esta sesión:** durabilidad de `createDayMovement` (`dea9486`) + **fix del loop `OFFLINE_WAITING` tras suspensión
-larga** (`e0df9ae`+`14e4546`, 🟡 SOLO unit tests — gate físico pendiente, ver **§0-bis**).
+del outbox). STAGING (`ee5878a`) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga Realtime/suspensión + durabilidad
+de caja + **flush del outbox con tope** + **switch de diag solo-staging** (`[rt-diag]`, ahora con `armBootHang`)
++ **🆕 esta sesión:** **fix de la PANTALLA NEGRA del bootstrap (✅ VALIDADO en staging — §0-ter; PRIORIDAD 1 de pase a prod)**
++ durabilidad de `createDayMovement` (`dea9486`) + fix de auth-recovery (`e0df9ae`+`14e4546`, 🟡 pendiente físico — §0-bis).
 Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
-Estado completo → [ESTADO.md](ESTADO.md) · Fases → [ROADMAP.md](ROADMAP.md) · RCA Realtime →
-[docs/rca/2026-06-22-realtime-suspension.md](docs/rca/2026-06-22-realtime-suspension.md).
+Estado completo → [ESTADO.md](ESTADO.md) · Fases → [ROADMAP.md](ROADMAP.md) · Hallazgos de auditoría → [HALLAZGOS.md](HALLAZGOS.md) ·
+RCA Realtime → [docs/rca/2026-06-22-realtime-suspension.md](docs/rca/2026-06-22-realtime-suspension.md) · RCA auth → [docs/HANG-RCA-2.md](docs/HANG-RCA-2.md).
 
 Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 👁️ espera VALIDACIÓN FÍSICA ·
 🟢 ingeniería lista para arrancar · 🔴 bloqueante / urgente.
@@ -57,12 +57,40 @@ adquisición del lock. Queda como hardening inofensivo.
 - `14e4546` — `signOut` SOLO en el path forzado (`forced:true`); el `refresh.error` vuelve a su comportamiento original
   (sin logout espurio) + **latch one-shot** (se limpia con sesión fresca en `onAuthStateChange`) → mata el ping-pong.
 
-> ⚠️ **VALIDADO SOLO POR UNIT TESTS** (suite 133/133; `supabase.timeout.test.ts` 13/13). **NO** en la app corriendo
-> (el último intento usó comando mal escrito + bundle viejo). **GATE antes de prod:** (a) repro con
-> `__satoriDiag.armZombie()` sobre el bundle del latch (`14e4546` → `supabase-BjfeOB6h.js`): **UN solo** `signOut`→`/login`
-> sin ping-pong + `disarm()`→`ONLINE_SUBSCRIBED`+drain; (b) **suspensión real >1h**. **El pase a prod del fix de auth está
-> GATEADO a que (b) pase.** El fix de auth a prod **NO tiene rama todavía**: hotfix nuevo desde `main` con
-> `e0df9ae`+`14e4546` (NO `ccef5f1` solo). Diagnóstico corregido completo → **`docs/HANG-RCA-2.md`**.
+> ⚠️ **VALIDADO SOLO POR UNIT TESTS** (`supabase.timeout.test.ts`). **NO** físicamente aún. **GATE antes de prod:**
+> (a) repro con `__satoriDiag.armZombie()` → **UN solo** `signOut`→`/login` sin ping-pong + `disarm()`→`ONLINE`+drain;
+> (b) **suspensión real >1h** sobre el build de staging. **El pase a prod de este fix está GATEADO a que (b) pase.** Hotfix
+> nuevo desde `main` con `e0df9ae`+`14e4546` (NO `ccef5f1` solo). Diagnóstico → **`docs/HANG-RCA-2.md`**.
+> 🔧 **Identidad de build = `{base}version.json`→`.commit`**, NO un hash de chunk (el doc previo anotó mal `supabase-BjfeOB6h.js`).
+
+---
+
+## 0-ter. ✅ RESUELTO Y VALIDADO esta sesión — PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch)
+
+**Causa raíz (capa de ARRANQUE, NO realtime):** en `useAuth.tsx` el bootstrap llamaba `getSession()` **y** `loadProfile()`
+**sin tope**; sus `.finally(setLoading(false))`/`await` solo corren si la promesa SETTLEA → sobre el socket zombi se
+colgaban → `loading` quedaba `true` para siempre → splash negro. Ningún fix de realtime tocaba esta capa de arranque
+(Hallazgo A; por eso fallaba hace una semana). **Fix (3 commits sobre `692055d`):** `0adf30e` getSession con `withTimeout`
+(→/login al vencer ~8s) · `f0f8127` loadProfile con `withTimeout`+1 reintento + `PrivateRoute` corta perfil nulo ·
+`8bed794` `PublicRoute` exige `user&&profile` (corrige un LOOP `/`↔`/login` que introdujo `f0f8127`). Palanca de diag
+`ee5878a` (`__satoriDiag.armBootHang('getSession'|'loadProfile')`, solo-staging). **✅ VALIDADO en staging** (determinístico
+con `armBootHang` + natural; Service Worker Clients mostró `…/login`; build prod EXIT 0 + 138/138 tests).
+
+---
+
+## ★ PRIORIDAD 1 (pase a prod) — fix de PANTALLA NEGRA + coordinación de los 3 hotfixes
+**Hotfix NUEVO desde `main`** (NUNCA mergear `staging`→`main`): cherry-pick **`0adf30e`+`f0f8127`+`8bed794`** en ese orden.
+**NO** incluir `ee5878a` (la palanca de diag no va a prod). Verificación del pase: `VITE_APP_ENV=production npm run build`
+(EXIT 0) + `grep -rE "armBootHang|boot-hang|BOOT HANG" dist/` **VACÍO** + suite verde + ritual de identidad
+(`{base}version.json`→`.commit`). Requiere **firma de la dueña**. **Coordinar** con los otros 2 pendientes de prod (orden
+y agrupación los decide la dueña): (2) `createDayMovement` (`hotfix/createdaymovement-durability-prod` `399fc0b`, ya
+verificado, sin `supplier_id`); (3) auth-recovery (`e0df9ae`+`14e4546`, **gateado** a la suspensión real >1h, §0-bis). Los
+tres son client-side, **sin migración**.
+
+## ★ PRIORIDAD 2 — Hallazgo B: drain del outbox en `SIGNED_IN` (PLATA)
+`outbox.ts` hoy flushea por `'online'` / arranque / un backoff que **se apaga con la cola vacía**; **NO** hay flush atado a
+`SIGNED_IN`/re-login → "el outbox drena al reloguear" (premisa del fix de auth-recovery, §0-bis) **NO está garantizado**.
+Es plata. Próxima rama: disparar `flushNow()` desde el `onAuthStateChange` con sesión fresca. Detalle → [HALLAZGOS.md](HALLAZGOS.md) §B.
 
 ---
 

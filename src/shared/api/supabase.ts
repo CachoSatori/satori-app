@@ -152,7 +152,7 @@ const tokenNeedsRefresh = (session: Session | null): boolean => {
 // Promise.race con tope: si `p` no settlea en `ms`, RESUELVE con `fallback` (no rechaza — seguimos
 // en modo degradado) y deja rastro en consola. Es lo que evita que ensureRealtimeHealthy quede
 // colgada esperando un await que nunca vuelve (la conexión zombi tras suspensión).
-const withTimeout = <T>(p: Promise<T>, ms: number, label: string, fallback: T): Promise<T> => {
+export const withTimeout = <T>(p: Promise<T>, ms: number, label: string, fallback: T): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<T>((resolve) => {
     timer = setTimeout(() => {

@@ -1,13 +1,13 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-06-25 (cierre).** 🚀 **PROD avanzó a `5f22754` — la PANTALLA NEGRA YA ESTÁ EN PROD** (deploy confirmado: `version.json.commit = 5f22754`). STAGING en **`1c8c2b4`** (código `ee5878a`; lineal: `692055d`→`0adf30e`→`f0f8127`→`8bed794`→`ee5878a`→docs `1c8c2b4`). **HEADLINE:** se diagnosticó y **arregló la PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch de la PWA)** y se pasó a prod por hotfix. Causa raíz: `getSession` **y** `loadProfile` del **BOOTSTRAP** (`useAuth.tsx`) no tenían tope → se colgaban sobre el socket zombi → `loading` nunca bajaba. NINGÚN fix de realtime (máquina de 3 estados de `supabase.ts`) tocaba esta capa de arranque — por eso fallaba hace una semana (Hallazgo A). **✅ validado en staging** (determinístico con `__satoriDiag.armBootHang` + natural) y **deploy a prod confirmado; ⏳ VALIDACIÓN FÍSICA EN DISPOSITIVO PENDIENTE — esperando OK de la dueña.** Próximos pases a prod desde staging: durabilidad de `createDayMovement` (`399fc0b`) y el fix de auth-recovery (gateado a suspensión real >1h).
+> **Handoff: 2026-06-25 (cierre).** 🚀 **PROD avanzó a `5f22754` — la PANTALLA NEGRA YA ESTÁ EN PROD** (deploy confirmado: `version.json.commit = 5f22754`). STAGING en **`1c8c2b4`** (código `ee5878a`; lineal: `692055d`→`0adf30e`→`f0f8127`→`8bed794`→`ee5878a`→docs `1c8c2b4`). **HEADLINE:** se diagnosticó y **arregló la PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch de la PWA)** y se pasó a prod por hotfix. Causa raíz: `getSession` **y** `loadProfile` del **BOOTSTRAP** (`useAuth.tsx`) no tenían tope → se colgaban sobre el socket zombi → `loading` nunca bajaba. NINGÚN fix de realtime (máquina de 3 estados de `supabase.ts`) tocaba esta capa de arranque — por eso fallaba hace una semana (Hallazgo A). **✅ validado en staging** (determinístico con `__satoriDiag.armBootHang` + natural) y **✅ EN PROD, VALIDADO FÍSICAMENTE POR LA DUEÑA** (la app se sostiene abierta sin el cuelgue/splash negro; antes no aguantaba ~3 min). Próximos pases a prod desde staging: durabilidad de `createDayMovement` (`399fc0b`) y el fix de auth-recovery (gateado a suspensión real >1h).
 > Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Fases → [ROADMAP.md](ROADMAP.md) · Backlog/PASE A PROD → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos de auditoría → [HALLAZGOS.md](HALLAZGOS.md) · RCA Realtime → [docs/rca/2026-06-22-realtime-suspension.md](docs/rca/2026-06-22-realtime-suspension.md) · RCA auth recovery → [docs/HANG-RCA-2.md](docs/HANG-RCA-2.md).
 
 **Stack:** React 19 + TS strict + Vite + PWA · Supabase (Postgres + RLS + Edge Functions) · realtime.
 **Despliegue:** `main` → PROD (GitHub Pages, base `/satori-app/`) · `staging` → Cloudflare Pages.
 
-> **PROD (`main` `5f22754`) tiene las OLAS 1 y 1.1 de estabilidad (validadas) + el fix de la PANTALLA NEGRA del bootstrap (deploy confirmado, validación física en dispositivo pendiente) → la app vuelve a ser usable sin cuelgues.** El trabajo de FEATURES (PoS, Bandeja) sigue viviendo en `staging`; a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`.
+> **PROD (`main` `5f22754`) tiene las OLAS 1 y 1.1 de estabilidad (validadas) + el fix de la PANTALLA NEGRA del bootstrap (✅ EN PROD, validado físicamente por la dueña) → la app vuelve a ser usable sin cuelgues.** El trabajo de FEATURES (PoS, Bandeja) sigue viviendo en `staging`; a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`.
 
 ---
 
@@ -15,7 +15,7 @@
 
 | Rama | Hash | Qué es |
 |---|---|---|
-| `main` | `5f22754` | **PROD (estable, en uso).** Capa de inteligencia + fix SW viejo (`fde9264`) + fix fechas-borde (`ff836a0`) + canario Realtime/candado de auth + **OLA 1 (`2358f6c`)** = saga Realtime/suspensión (worker:true + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`) **+ durabilidad de escritura de caja**, **SIN diag** + **OLA 1.1 (`ead4727`+`483d29c`)** = timeout/abort del flush del outbox con guardarraíl de plata + **🆕 FIX PANTALLA NEGRA del bootstrap** (FF `483d29c`→`5f22754`, 3 commits `a1342c8`+`fd2755c`+`5f22754` = cherry-picks de `0adf30e`/`f0f8127`/`8bed794`, **+ 2 exports en `supabase.ts`** — ver receta en §(b-ter)). Deploy confirmado (`version.json=5f22754`); validación física en dispositivo pendiente. **NO** tiene el PoS ni la Bandeja. |
+| `main` | `5f22754` | **PROD (estable, en uso).** Capa de inteligencia + fix SW viejo (`fde9264`) + fix fechas-borde (`ff836a0`) + canario Realtime/candado de auth + **OLA 1 (`2358f6c`)** = saga Realtime/suspensión (worker:true + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`) **+ durabilidad de escritura de caja**, **SIN diag** + **OLA 1.1 (`ead4727`+`483d29c`)** = timeout/abort del flush del outbox con guardarraíl de plata + **🆕 FIX PANTALLA NEGRA del bootstrap** (FF `483d29c`→`5f22754`, 3 commits `a1342c8`+`fd2755c`+`5f22754` = cherry-picks de `0adf30e`/`f0f8127`/`8bed794`, **+ 2 exports en `supabase.ts`** — ver receta en §(b-ter)). Deploy confirmado (`version.json=5f22754`); **✅ validado físicamente por la dueña en prod**. **NO** tiene el PoS ni la Bandeja. |
 | `staging` | `ee5878a` | **Fuente de verdad del trabajo nuevo (FEATURES).** Todo lo de `main` + PoS/KDS/comandero + FE estructura + inventario activo + Bandeja Etapa 1 + saga Realtime/suspensión (`3a0fd20`) + durabilidad de caja (`0dd258b`) + flush del outbox con tope (`4805e23`) + diag de Realtime solo-staging + **🆕 esta sesión:** durabilidad `createDayMovement` (`dea9486`) · auth-recovery (escape `SESSION_EXPIRED` N=3 + signOut acotado + latch, `e0df9ae`+`14e4546`; el lock 10s→5s `ccef5f1` es hardening, NO el fix — ver §b-bis) · **fix PANTALLA NEGRA: bootstrap con tope** (`0adf30e` getSession + `f0f8127` loadProfile+PrivateRoute + `8bed794` PublicRoute anti-loop — §b-ter) · **palanca diag `armBootHang`** (`ee5878a`, solo-staging, DCE en prod). `[rt-diag]`/`[diag-repro]` activos por diseño (gateado por `VITE_APP_ENV`). |
 
 > Supabase refs: **PROD** = `yiczgdtirrkdvohdquzf` (intocable) · **STAGING** = `hwiatgicyyqyezqwldia`.
@@ -57,7 +57,7 @@ como hardening inofensivo, NO es el fix de este bug.
 > de chunk adivinado. (Corrección: el doc previo anotó mal `supabase-BjfeOB6h.js`; los chunks reales fueron
 > `8bed794`→`supabase-BkyNvEiL.js`, `ee5878a`→`supabase-DljVXxoG.js` — pero el hash de chunk cambia por build; usá `version.json`.)
 
-## (b-ter) ✅ PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch) — RESUELTO Y EN PROD (`5f22754`); validación física pendiente
+## (b-ter) ✅ PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch) — RESUELTO, EN PROD (`5f22754`) y VALIDADO POR LA DUEÑA
 
 **Síntoma:** tras suspender la máquina (o cold-launch de la PWA), la app quedaba en el splash negro para siempre.
 **Causa raíz (capa de ARRANQUE, distinta de realtime):** en `useAuth.tsx` el bootstrap llamaba `getSession()` **y**
@@ -74,7 +74,7 @@ socket zombi se colgaban → `loading` quedaba `true` para siempre. Ningún fix 
 > (logs `BOOT HANG: … colgado` → `withTimeout EXPIRÓ: … (bootstrap)` → cae a `/login` SIN negro eterno y SIN loop; Service
 > Worker Clients mostró `…/login`) **y naturalmente** (cuelgues reales del bootstrap atrapados → `/login`).
 > 🚀 **YA EN PROD** (`main` `5f22754`, FF `483d29c`→`5f22754`): deploy confirmado por `version.json.commit=5f22754`.
-> ⏳ **VALIDACIÓN FÍSICA EN DISPOSITIVO PENDIENTE** (la dueña la hace en el restaurante — NO marcar validado hasta su OK).
+> ✅ **VALIDADO FÍSICAMENTE POR LA DUEÑA EN PROD** (2026-06-25): la app se sostiene abierta sin el cuelgue/splash negro — antes no aguantaba ~3 min.
 >
 > ### ⚠️ RECETA DE PROD (REGISTRADA para NO redescubrirla) — NO es "cherry-pick de los 3 commits y listo"
 > Cherry-pickear `0adf30e`+`f0f8127`+`8bed794` sobre `main` da **1 conflicto + 1 build break**. La receta correcta es
@@ -95,8 +95,8 @@ socket zombi se colgaban → `loading` quedaba `true` para siempre. Ningún fix 
   movimientos + pendientes), ingesta foto vieja, finanzas/P&L, reportes+emails, admin, auth Fase 2, realtime, offline.
   Migraciones **001–021**. **+** fix SW viejo, fix fechas-borde, el canario Realtime/candado, **las OLAS 1 + 1.1 de
   estabilidad** (saga Realtime/suspensión + durabilidad de escritura de caja + timeout/abort del flush del outbox con
-  guardarraíl de plata; **SIN diag**), y **🆕 el fix de la PANTALLA NEGRA del bootstrap** (`5f22754`; deploy confirmado,
-  validación física en dispositivo pendiente — §b-ter). Todo es client-only (sin migración).
+  guardarraíl de plata; **SIN diag**), y **🆕 el fix de la PANTALLA NEGRA del bootstrap** (`5f22754`; ✅ validado
+  físicamente por la dueña — §b-ter). Todo es client-only (sin migración).
 - **Solo en STAGING (no en prod):** todo el **PoS** (catálogo+salón multi-local, comandero, KDS, cobro+splits+ticket
   SIM, `computeTotals`, FE estructura SIM, inventario activo depleción+COGS) · **Bandeja fusionada Etapa 1** + enlace
   proveedor↔caja + visibilidad pendientes + fechas CR · **switch de diagnóstico de Realtime solo-staging**
@@ -126,7 +126,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
 | **Caja — durabilidad de escritura** (reintento con tope + outbox) | ✅ **EN PROD y VALIDADA** (OLA 1) | **prod** (`2358f6c`) + staging (`0dd258b`) | `withWriteTimeout` con AbortController + abort del socket zombi; ante timeout/red-zombi **encola SIEMPRE en el outbox** (idempotente por `client_op_id`). Test `cash.durability.test.ts` + `supabase.timeout.test.ts`. |
 | **Outbox — timeout/abort del flush** (OLA 1.1) | ✅ **EN PROD y VALIDADA** — la cola drena sola | **prod** (`ead4727`+`483d29c`) + staging (`4805e23`) | Las 5 llamadas de red del `supabaseExecutor` con `withWriteTimeout`+`.abortSignal()`. **Guardarraíl de plata:** un timeout → `'retry'`, NUNCA `'fatal'` (fatal borra la op = pago perdido). Test `outbox.test.ts` (9 casos). |
 | **Diagnóstico — switch de reproducción** (solo-staging) | ✅ **validado en staging** | staging (`ee5878a`) | `window.__satoriDiag`: `armZombie`/`armExpired` (realtime) + **`armBootHang('getSession'\|'loadProfile')`/`disarmBootHang`** (pantalla negra del bootstrap, one-shot) + `disarm`/`status`. DCE lo elimina de prod (grep VACÍO). Logs `[diag-repro]`. |
-| **🆕 PANTALLA NEGRA — bootstrap con tope** (getSession + loadProfile + guards) | ✅ **EN PROD (`5f22754`)** — validado en staging; ⏳ validación física en dispositivo pendiente | **prod** (`a1342c8`+`fd2755c`+`5f22754`) + staging (`0adf30e`+`f0f8127`+`8bed794`) | Ver §(b-ter) (incluye la **receta de prod**: 3 commits + 2 exports). Deploy confirmado (`version.json=5f22754`). |
+| **🆕 PANTALLA NEGRA — bootstrap con tope** (getSession + loadProfile + guards) | ✅ **EN PROD (`5f22754`), VALIDADO POR LA DUEÑA** | **prod** (`a1342c8`+`fd2755c`+`5f22754`) + staging (`0adf30e`+`f0f8127`+`8bed794`) | Ver §(b-ter) (incluye la **receta de prod**: 3 commits + 2 exports). La app se sostiene abierta sin el cuelgue (antes ~3 min). |
 | **🆕 `createDayMovement` — durabilidad** (id+`client_op_id`+`withWriteTimeout`+outbox) | 🟢 **en staging** (`dea9486`) · hotfix prod listo (`399fc0b`, sin mergear) | staging + `hotfix/createdaymovement-durability-prod` | Cierra el hueco nivel-día de Caja Diaria. Test `cash.durability.test.ts` (2 casos). El hotfix de prod NO arrastra `supplier_id` (solo-staging). |
 | **🆕 Auth recovery — escape del loop `OFFLINE_WAITING`** (N=3 timeouts → `SESSION_EXPIRED`+signOut local + latch one-shot) | 🟡 **solo unit tests** — falta validación física | staging (`e0df9ae`+`14e4546`) | Ver §(b-bis) + `docs/HANG-RCA-2.md`. **GATE a prod: suspensión real >1h.** El lock `ccef5f1` fue red herring (hardening). |
 | **Bandeja ETAPA 1** (unificada `/inbox`, foto+IA + enlace proveedor↔caja + visibilidad pendientes) | ✅ **COMPLETA y validada** | staging | mig 038, validada con rol contador. **= candidata de la Ola 2.** |
@@ -148,7 +148,7 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
   - **OLA 2 (SIGUIENTE) — Bandeja ETAPA 1 a prod** (ya construida y validada en staging) **con la mig 038** (esquema → firma de la dueña). ⚠️ A verificar al planearla: si la **mig 038 / Etapa 1 se separan limpio de las migraciones del PoS (022–037)** o vienen acopladas. Da **foto+IA real** sin construir nada nuevo.
   - **OLA 3 (cuando la base esté sólida) — CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro de Caja Diaria; hoy **🔲 diseñada, SIN código**). **Solo si** tras usar la Etapa 1 sigue haciendo falta → **DECISIÓN ABIERTA de la dueña**.
 - **PASE A PROD — estado (detalle + orden → PROMPT-CONTINUACION §1):**
-  1. ✅ **PANTALLA NEGRA — HECHA, EN PROD (`5f22754`).** Hotfix `hotfix/pantalla-negra-prod` mergeado por FF a `main`; deploy confirmado (`version.json=5f22754`). **⏳ validación física en dispositivo pendiente** (esperando OK de la dueña). Receta registrada en §(b-ter).
+  1. ✅ **PANTALLA NEGRA — HECHA, EN PROD (`5f22754`), VALIDADA POR LA DUEÑA.** Hotfix `hotfix/pantalla-negra-prod` mergeado por FF a `main`; deploy confirmado (`version.json=5f22754`) y **✅ validación física en dispositivo OK** (la app se sostiene abierta sin el cuelgue). Receta registrada en §(b-ter).
   2. 🟢 **`createDayMovement` durabilidad — PENDIENTE de pase:** `hotfix/createdaymovement-durability-prod` (`399fc0b`) **verificada y lista** (sin `supplier_id`).
   3. 🟡 **Auth-recovery (`e0df9ae`+`14e4546`) — PENDIENTE, GATEADO:** hotfix nuevo desde `main` (NO el lock `ccef5f1` solo), **gateado a la suspensión real >1h** (§b-bis).
   El orden y la coordinación los decide la dueña.

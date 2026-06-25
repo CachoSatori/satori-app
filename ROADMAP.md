@@ -10,7 +10,7 @@ De dashboard de analítica a sistema operativo del restaurante.
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: en este bloque ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod).
 
-> **PROD (`main` `483d29c`, intacto) recibió las Olas 1 y 1.1 de estabilidad (validadas) → la app vuelve a ser usable.** El trabajo de FEATURES vive en `staging` (`ee5878a`); a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`. **🆕 Esta sesión (solo staging):** **fix de la PANTALLA NEGRA — bootstrap de `useAuth` con tope (✅ validado en staging; PRIORIDAD 1 de pase a prod)** + durabilidad de `createDayMovement` + fix de auth-recovery (🟡 pendiente de validación física). Ver ESTADO §b-ter + `docs/HANG-RCA-2.md`.
+> **PROD (`main` `5f22754`) tiene las Olas 1 y 1.1 de estabilidad (validadas) + el fix de la PANTALLA NEGRA del bootstrap (✅ EN PROD, deploy confirmado `version.json=5f22754`; ⏳ validación física en dispositivo pendiente) → la app vuelve a ser usable.** El trabajo de FEATURES vive en `staging` (código `ee5878a`); a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`. **🆕 Pendientes de pase a prod (en staging):** durabilidad de `createDayMovement` (`399fc0b`) + fix de auth-recovery (🟡 gateado a suspensión real >1h). Ver ESTADO §b-ter + `docs/HANG-RCA-2.md`.
 
 | Fase | Estado | Dónde |
 |---|---|---|
@@ -24,7 +24,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **Outbox — timeout/abort del flush** (`supabaseExecutor` con `withWriteTimeout`+`.abortSignal()`; **guardarraíl: timeout→retry, NUNCA fatal**) | ✅ **EN PROD y VALIDADA (Ola 1.1) — la cola drena sola** | **PROD (`ead4727`+`483d29c`)** + staging (`4805e23`). Antes el flush quedaba colgado en "por sincronizar" sobre el socket zombi. Test `outbox.test.ts` (9 casos) |
 | **🆕 Auth recovery — loop `OFFLINE_WAITING` tras suspensión LARGA** (el caso que la máquina de 3 estados NO cubría: `getSession`/`refreshSession` no vuelven → sin escape) | 🟡 **en STAGING, SOLO unit tests** (gate físico pendiente) | STAGING (`e0df9ae` escape N=3 + `14e4546` signOut acotado + latch one-shot). El lock 10s→5s (`ccef5f1`) fue **red herring** (hardening). **RCA → `docs/HANG-RCA-2.md`**. Gate a prod: **suspensión real >1h** |
 | **🆕 `createDayMovement` — durabilidad** (id+`client_op_id`+`withWriteTimeout`+outbox; cierra el hueco nivel-día de Caja) | 🟢 **en STAGING** (`dea9486`) · hotfix prod listo (`399fc0b`, sin mergear) | STAGING + `hotfix/createdaymovement-durability-prod`. Test `cash.durability.test.ts` |
-| **🆕 PANTALLA NEGRA — bootstrap de `useAuth` con tope** (getSession + loadProfile sin tope se colgaban → splash 祭 eterno; capa de arranque que ningún fix de realtime tocaba — Hallazgo A) | ✅ **VALIDADO en STAGING** (determinístico con `__satoriDiag.armBootHang` + natural; build prod + 138/138) | STAGING (`0adf30e` getSession + `f0f8127` loadProfile+PrivateRoute + `8bed794` PublicRoute anti-loop). **PRIORIDAD 1 de pase a prod** (hotfix desde `main`, sin `ee5878a`). Ver ESTADO §b-ter |
+| **🆕 PANTALLA NEGRA — bootstrap de `useAuth` con tope** (getSession + loadProfile sin tope se colgaban → splash 祭 eterno; capa de arranque que ningún fix de realtime tocaba — Hallazgo A) | ✅ **EN PROD (`5f22754`)** — validado en staging; ⏳ validación física en dispositivo pendiente | **PROD (`a1342c8`+`fd2755c`+`5f22754`)** + STAGING (`0adf30e`+`f0f8127`+`8bed794`). Deploy confirmado (`version.json=5f22754`). **Receta de prod = 3 commits + 2 exports en `supabase.ts`** (ver ESTADO §b-ter) |
 | **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
@@ -48,9 +48,10 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 
 ## 🚀 PLAN DE PASE A PROD — OPCIÓN A de la dueña (estabilidad primero, 3 OLAS)
 
-> **Principio:** primero **devolver la app estable** a prod, recién después features. ✅ **Ola 1 + 1.1 YA están en prod y
-> validadas** (`main` pasó de `04b1a32` a `483d29c`; la cola del outbox drena sola). ⚠️ **Staging está ~143 commits y ~16
-> migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod se va por _cherry-pick selectivo_.**
+> **Principio:** primero **devolver la app estable** a prod, recién después features. ✅ **Ola 1 + 1.1 + fix de la PANTALLA
+> NEGRA YA están en prod** (`main` `04b1a32`→`483d29c` (Olas) →`5f22754` (pantalla negra); la cola del outbox drena sola).
+> ⚠️ **Staging está ~143 commits y ~16 migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod se va por
+> _cherry-pick selectivo_.**
 
 - **OLA 1 — ✅ HECHA (en prod `2358f6c`, validada físicamente).** Pase QUIRÚRGICO de estabilidad a `main` (cherry-pick,
   SIN el PoS): cadena de la saga Realtime (worker:true + blindaje por timeout + máquina de 3 estados + gateo del emit +
@@ -67,10 +68,10 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 - **OLA 3 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro
   de Caja Diaria; hoy **🔲 diseñada, SIN código**). **Solo si** tras usar la Etapa 1 sigue haciendo falta. → **DECISIÓN
   ABIERTA de la dueña:** ¿alcanza la Etapa 1 o se necesita la Etapa 2?
-- **🆕 PASE A PROD pendiente (NO mergeado; `main` intacto en `483d29c`) — 3 cosas, detalle/orden en PROMPT-CONTINUACION §1:**
-  1. **PANTALLA NEGRA — PRIORIDAD 1, ✅ validado en staging:** hotfix NUEVO desde `main`, cherry-pick `0adf30e`+`f0f8127`+`8bed794` (**NO** `ee5878a`, la palanca de diag no va a prod). Firma de la dueña + ritual (`version.json.commit`).
-  2. **`createDayMovement`:** `hotfix/createdaymovement-durability-prod` (`399fc0b`), **verificada y lista** (sin `supplier_id`).
-  3. **Auth-recovery** (`e0df9ae`+`14e4546`, NO el lock `ccef5f1` solo): hotfix nuevo desde `main`, **gateado** a la suspensión real >1h (`docs/HANG-RCA-2.md`). El orden lo decide la dueña.
+- **🆕 PASE A PROD — estado (detalle/orden en PROMPT-CONTINUACION §1):**
+  1. ✅ **PANTALLA NEGRA — HECHA, EN PROD (`5f22754`).** Hotfix FF a `main`; deploy confirmado (`version.json=5f22754`). ⏳ validación física en dispositivo pendiente. **Receta = 3 commits + 2 exports** (ESTADO §b-ter).
+  2. 🟢 **`createDayMovement` — PENDIENTE:** `hotfix/createdaymovement-durability-prod` (`399fc0b`), **verificada y lista** (sin `supplier_id`).
+  3. 🟡 **Auth-recovery** (`e0df9ae`+`14e4546`, NO el lock `ccef5f1` solo) — **PENDIENTE, gateado** a la suspensión real >1h (`docs/HANG-RCA-2.md`). El orden lo decide la dueña.
 
 > El **gran pase del PoS** (migs 022–037, comandero/KDS/cobro) es un **proyecto aparte y DIFERIDO**, posterior a estas
 > olas y bloqueado por el PILAR de sesión/auth (abajo). No confundir con la Ola 2 (que lleva **solo** la Bandeja Etapa 1).

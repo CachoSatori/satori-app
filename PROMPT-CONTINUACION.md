@@ -1,12 +1,13 @@
 # Continuación — backlog priorizado (handoff 2026-06-25)
 
-Estado: **PROD (`main` `483d29c`) recibió las OLAS 1 y 1.1 de estabilidad (validadas físicamente) → la app vuelve a ser
-usable sin cuelgues.** main = capa de inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado de auth
+Estado: **PROD (`main` `5f22754`) tiene las OLAS 1 y 1.1 de estabilidad (validadas) + el fix de la PANTALLA NEGRA del
+bootstrap (✅ EN PROD, deploy confirmado `version.json=5f22754`; ⏳ validación física en dispositivo pendiente) → la app
+vuelve a ser usable sin cuelgues.** main = capa de inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado
 + **Ola 1** (saga Realtime/suspensión + durabilidad de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush
-del outbox). STAGING (`ee5878a`) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga Realtime/suspensión + durabilidad
-de caja + **flush del outbox con tope** + **switch de diag solo-staging** (`[rt-diag]`, ahora con `armBootHang`)
-+ **🆕 esta sesión:** **fix de la PANTALLA NEGRA del bootstrap (✅ VALIDADO en staging — §0-ter; PRIORIDAD 1 de pase a prod)**
-+ durabilidad de `createDayMovement` (`dea9486`) + fix de auth-recovery (`e0df9ae`+`14e4546`, 🟡 pendiente físico — §0-bis).
+del outbox) + **fix PANTALLA NEGRA** (`a1342c8`+`fd2755c`+`5f22754`). STAGING (código `ee5878a`) = todo el PoS + Bandeja
+Etapa 1 + esos fixes + la saga Realtime/suspensión + durabilidad de caja + **flush del outbox con tope** + **switch de diag
+solo-staging** (`[rt-diag]`, con `armBootHang`) + **🆕 pendientes de pase a prod:** durabilidad de `createDayMovement`
+(`dea9486`; hotfix `399fc0b`) + fix de auth-recovery (`e0df9ae`+`14e4546`, 🟡 gateado a suspensión real >1h — §0-bis).
 Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
@@ -19,8 +20,10 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 > **Ya resuelto y EN PROD:** SW viejo (`fde9264`), fechas de borde de mes (`ff836a0`), y el canario
 > Realtime/candado de auth. Eran las tres causas viejas del "se traba". **La causa NUEVA (Realtime tras suspensión
 > profunda) + la durabilidad de escritura de caja + el timeout/abort del flush del outbox YA ESTÁN EN PROD y validadas
-> físicamente** vía **OLA 1 (`2358f6c`)** y **OLA 1.1 (`ead4727`+`483d29c`)** — la cola del outbox drena sola.
-> **El foco AHORA es la OLA 2: Bandeja Etapa 1 + mig 038 a prod (§1).**
+> físicamente** vía **OLA 1 (`2358f6c`)** y **OLA 1.1 (`ead4727`+`483d29c`)** — la cola del outbox drena sola. **🆕 También
+> EN PROD: el fix de la PANTALLA NEGRA del bootstrap** (`5f22754`, deploy confirmado; ⏳ validación física en dispositivo
+> pendiente — §0-ter). **El foco AHORA es la OLA 2: Bandeja Etapa 1 + mig 038 a prod (§1), con el prerequisito de
+> seguridad #1 (IDOR en `extract-document`) ANTES de subir la Bandeja.**
 
 ---
 
@@ -65,7 +68,7 @@ adquisición del lock. Queda como hardening inofensivo.
 
 ---
 
-## 0-ter. ✅ RESUELTO Y VALIDADO esta sesión — PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch)
+## 0-ter. ✅ PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch) — RESUELTO y EN PROD (`5f22754`)
 
 **Causa raíz (capa de ARRANQUE, NO realtime):** en `useAuth.tsx` el bootstrap llamaba `getSession()` **y** `loadProfile()`
 **sin tope**; sus `.finally(setLoading(false))`/`await` solo corren si la promesa SETTLEA → sobre el socket zombi se
@@ -76,16 +79,35 @@ colgaban → `loading` quedaba `true` para siempre → splash negro. Ningún fix
 `ee5878a` (`__satoriDiag.armBootHang('getSession'|'loadProfile')`, solo-staging). **✅ VALIDADO en staging** (determinístico
 con `armBootHang` + natural; Service Worker Clients mostró `…/login`; build prod EXIT 0 + 138/138 tests).
 
+> 🚀 **YA EN PROD** (`main` `5f22754`, FF `483d29c`→`5f22754`, commits `a1342c8`+`fd2755c`+`5f22754`): deploy confirmado
+> por `version.json.commit=5f22754`. ⏳ **VALIDACIÓN FÍSICA EN DISPOSITIVO PENDIENTE** — la dueña la hace en el restaurante;
+> NO marcar validado hasta su OK.
+>
+> ### ⚠️ RECETA DE PROD (registrada para NO redescubrirla) — NO es "cherry-pick de los 3 y listo"
+> Cherry-pickear `0adf30e`+`f0f8127`+`8bed794` sobre `main` da **1 conflicto + 1 build break**. Receta correcta =
+> **esos 3 commits + DOS `export` en `src/shared/api/supabase.ts`**, nada más:
+> 1. **Conflicto en `withTimeout`:** quedarse con el **cuerpo de MAIN** (`_label`, SIN traza/`console.warn`) **+ `export`** →
+>    `export const withTimeout = <T>(p: Promise<T>, ms: number, _label: string, fallback: T) => {`. **NO** la versión de
+>    staging (la que dice "y deja rastro en consola" / usa `label` + loguea).
+> 2. **Build break:** `useAuth.tsx` importa `withTimeout` **y** `AUTH_OP_TIMEOUT_MS` (en main existen pero NO exportados) →
+>    `export const AUTH_OP_TIMEOUT_MS = 8_000` (sin cambiar el valor). En staging el `export` venía de `ccef5f1` (lock
+>    10s→5s, **red herring que NO va a prod**); en el hotfix se exporta a mano sin traerlo.
+> **NO traer** `ee5878a` (palanca `armBootHang`) ni `ccef5f1` (lock). Verificado: build prod **EXIT 0**, **vitest 42/42**,
+> dist sin diag, diff = **4 archivos (+205/−11)**.
+
 ---
 
-## ★ PRIORIDAD 1 (pase a prod) — fix de PANTALLA NEGRA + coordinación de los 3 hotfixes
-**Hotfix NUEVO desde `main`** (NUNCA mergear `staging`→`main`): cherry-pick **`0adf30e`+`f0f8127`+`8bed794`** en ese orden.
-**NO** incluir `ee5878a` (la palanca de diag no va a prod). Verificación del pase: `VITE_APP_ENV=production npm run build`
-(EXIT 0) + `grep -rE "armBootHang|boot-hang|BOOT HANG" dist/` **VACÍO** + suite verde + ritual de identidad
-(`{base}version.json`→`.commit`). Requiere **firma de la dueña**. **Coordinar** con los otros 2 pendientes de prod (orden
-y agrupación los decide la dueña): (2) `createDayMovement` (`hotfix/createdaymovement-durability-prod` `399fc0b`, ya
-verificado, sin `supplier_id`); (3) auth-recovery (`e0df9ae`+`14e4546`, **gateado** a la suspensión real >1h, §0-bis). Los
-tres son client-side, **sin migración**.
+## ★ PRIORIDAD 1 (pases a prod pendientes) — `createDayMovement` + auth-recovery
+> ✅ La **PANTALLA NEGRA ya pasó a prod** (`5f22754`, §0-ter) — sale de esta lista; queda su validación física en dispositivo.
+
+Quedan 2 hotfixes para prod (cada uno **NUEVO desde `main`**, NUNCA mergear `staging`→`main`; client-side, **sin migración**;
+verificación: `VITE_APP_ENV=production npm run build` EXIT 0 + suite verde + ritual de identidad `{base}version.json`→`.commit`;
+firma de la dueña). Orden y agrupación los decide la dueña:
+1. **`createDayMovement` durabilidad** — `hotfix/createdaymovement-durability-prod` (`399fc0b`), **ya verificado**, sin
+   `supplier_id` (solo-staging). Cierra el hueco nivel-día de Caja Diaria.
+2. **Auth-recovery** (`e0df9ae`+`14e4546`, **NO** el lock `ccef5f1` solo) — **GATEADO** a la suspensión real >1h (§0-bis);
+   no pasar hasta que esa validación física pase. Antes, ojo con la **PRIORIDAD 2** (drain del outbox en `SIGNED_IN`), de la
+   que depende su premisa "el outbox drena al reloguear".
 
 ## ★ PRIORIDAD 2 — Hallazgo B: drain del outbox en `SIGNED_IN` (PLATA)
 `outbox.ts` hoy flushea por `'online'` / arranque / un backoff que **se apaga con la cola vacía**; **NO** hay flush atado a
@@ -112,11 +134,13 @@ módulo `realtimeReproSwitch` fuera de main; tree-shaking confirmado (grep del d
 `'retry'`, NUNCA `'fatal'` (fatal borra la op de la cola = pago perdido). **La cola del outbox drena sola tras suspender
 la máquina** (antes el flush quedaba colgado en "por sincronizar" sobre el socket TCP zombi). Tests en `outbox.test.ts`.
 
-### Ola 2 🟢🖊️ — (tras Ola 1) — Bandeja ETAPA 1 a prod con la mig 038
+### Ola 2 🟢🖊️ — (SIGUIENTE foco de features, tras la estabilidad ya pasada) — Bandeja ETAPA 1 a prod con la mig 038
 **Qué:** la **Etapa 1** (bandeja unificada `/inbox`, foto+IA Claude, enlace proveedor↔caja, visibilidad de pendientes)
 **ya está construida y validada en staging** — esta ola la **activa en prod**. Da **foto+IA real sin construir nada nuevo**.
 Es **esquema → firma de la dueña** (mig 038). ⚠️ **A verificar al planearla:** si la **mig 038 / la Etapa 1 se separan
 limpio de las migraciones del PoS (022–037)** o vienen acopladas (define si se puede pasar la Bandeja sin arrastrar el PoS).
+> 🔴 **PREREQUISITO DE SEGURIDAD #1 — ANTES de subir la Bandeja a prod:** corregir el **IDOR en la Edge Function
+> `extract-document`** (acceso a documentos sin verificar el dueño). No subir la Bandeja a prod hasta cerrarlo. Detalle → [HALLAZGOS.md](HALLAZGOS.md).
 
 ### Ola 3 🔲 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2
 **Qué:** entrada **foto-primero 100% dentro de Caja Diaria** — hoy **🔲 DISEÑADA, SIN código** (no hay nada en

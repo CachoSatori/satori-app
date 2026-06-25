@@ -65,6 +65,9 @@ function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: 
   const { user, profile, loading } = useAuth()
   if (loading) return <ModuleLoading />
   if (!user) return <Navigate to="/login" replace />
+  // Sesión presente pero perfil NO cargado (p. ej. loadProfile venció tras suspensión): NO renderizar
+  // el módulo a ciegas → /login; el relogueo recarga el perfil. Espejo de OwnerRoute (Fix A addendum).
+  if (!profile) return <Navigate to="/login" replace />
   // Cuenta creada pero aún no aprobada por la gerencia → sin acceso
   if (profile && !profile.is_active) return <PendingApproval />
   if (roles && profile && !roles.includes(profile.role)) return <Navigate to="/" replace />

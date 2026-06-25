@@ -75,9 +75,12 @@ function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: 
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, profile, loading } = useAuth()
   if (loading) return <ModuleLoading />
-  return user ? <Navigate to="/" replace /> : <>{children}</>
+  // "Autenticado" = sesión Y perfil. Si hay user pero el perfil no cargó (loadProfile venció tras
+  // suspensión), NO rebotar a "/": mostrar el login para que el relogueo recargue el perfil. Sin
+  // esto, PrivateRoute manda a /login y PublicRoute rebota a / → loop de redirección.
+  return user && profile ? <Navigate to="/" replace /> : <>{children}</>
 }
 
 function OwnerRoute({ children }: { children: React.ReactNode }) {

@@ -205,9 +205,14 @@ que el **contador/manager** lo revise y complete en el módulo de **Inventarios*
   (`Promise<string>`); sin tocar sagrados. Test en `cash.durability.test.ts` (2 casos nuevos). **🆕 YA EN PROD (`79d8004`),
   VALIDADA:** el cherry-pick `399fc0b` se **re-cortó** sobre `5f22754` (rama `hotfix/createdaymovement-durability-prod-v2`)
   porque la rama vieja `hotfix/createdaymovement-durability-prod` había quedado stale sobre el main pre-pantalla-negra; FF limpio, sin `supplier_id`.
-- **(c) 🆕 BUG NUEVO (descubierto hoy) — `Cmd+Shift+R` estando en `/caja` deja la app colgada.** Un hard-reload en la
-  ruta de Caja deja la app trabada (no termina de cargar). **Investigar:** reproducir, mirar consola/network, aislar si
-  es Realtime/auth en el arranque de `/caja` o el SW/precache. Sin RCA todavía.
+- **(c) 🔽 RIESGO LATENTE — baja prioridad — `Cmd+Shift+R` estando en `/caja`.** **Síntoma observado (corregido):**
+  NO es un cuelgue infinito. En **staging Y prod** la app **redirige a `/login` tras ~20 s** y es **recuperable, SIN
+  pérdida de datos** (el arranque de auth está acotado: `getSession`/`loadProfile` con `withTimeout` → al vencer cae a
+  `/login`; el outbox preserva cualquier escritura). **RCA:** `docs/rca/RCA-caja-hardreload-hang.md` (rama
+  `rca/caja-hardreload-hang`). El RCA documenta **dos debilidades latentes reales** que **NO son el síntoma observado**
+  pero conviene blindar a futuro: el **`import()` de chunks sin tope** y el **`idbGet` (fallback de `cachedFetch`) sin
+  tope** — bajo red zombi podrían colgar en vez de redirigir. **Decisión de la dueña:** registrado, **diferido, NO
+  bloquea el módulo nuevo.**
 
 ### 0.2 — ✅ Durabilidad de escritura de Caja (ya en staging `0dd258b`)
 `registerCashMovement`/`updateCashMovement`/`deleteCashMovement`: el reintento ahora corre con `withWriteTimeout` (no
@@ -272,7 +277,7 @@ Ver `_handoff/RCA-FECHAS-BORDE.md` §5 + `fix/fecha-cr-consistente` (ya en stagi
 ## 2. 🔲 Pendientes menores en PROD (prolijidad, NO bloquean — detectados en la validación física de las Olas)
 - **404 de un recurso en la ruta `/caja`** (🆕 esta sesión) — aparece en consola, no rompe el flujo. Identificar el
   recurso (asset/manifest/SW/icono) en DevTools → Network y agregarlo o quitar la referencia. *(Relacionado, a mirar
-  junto: §0.1(c) "Cmd+Shift+R en `/caja` deja la app colgada".)*
+  junto: §0.1(c) "Cmd+Shift+R en `/caja` → redirige a /login tras ~20s, riesgo latente".)*
 - **404 menor sobre `propinas:1`** — probablemente un icono o source-map; las pantallas cargan igual.
 - **Warning cosmético de recharts** (🆕) — `width(-1)/height(-1)` con contenedor de 0px al montar; solo ruido en consola,
   sin impacto visual. Envolver el chart para que no renderice con tamaño 0, o suprimir.

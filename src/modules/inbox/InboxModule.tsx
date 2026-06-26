@@ -10,10 +10,7 @@ import {
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { getSuppliers, getAllCashMovements, updateMovementStatus, getOpenCashSession, createCashMovement, upsertSupplier } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
-import { getIngredients } from '../../shared/api/inventario'
-import type { Ingredient } from '../../shared/types/inventario'
 import { listDocsNeedingInventory } from '../../shared/api/inventoryIngest'
-import InventoryStep from './InventoryStep'
 import type { Supplier, CashMovement, UserRole } from '../../shared/types/database'
 import { fi } from '../cash/cashUtils'
 import { tipShiftToCaja } from '../../shared/utils'
@@ -43,9 +40,7 @@ export default function InboxModule() {
   const [pendientes, setPendientes] = useState<CashMovement[]>([])
   const [tc, setTc] = useState(640)
   useEffect(() => { getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {}) }, [])
-  const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [invDocs, setInvDocs] = useState<DocumentRow[]>([])
-  const [invActive, setInvActive] = useState<DocumentRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState<string | null>(null)
   const [error, setError]     = useState<string | null>(null)
@@ -55,15 +50,14 @@ export default function InboxModule() {
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [d, accs, sups, movs, ings, invd] = await Promise.all([
+      const [d, accs, sups, movs, invd] = await Promise.all([
         listInbox('nuevo'), getFinanceAccounts(), getSuppliers(), getAllCashMovements(),
-        getIngredients().catch(() => []), listDocsNeedingInventory().catch(() => []),
+        listDocsNeedingInventory().catch(() => []),
       ])
       setDocs(d)
       setAccounts(accs.filter(a => a.is_leaf))
       setSuppliers(sups)
       setPendientes(movs.filter(m => m.status === 'pendiente'))
-      setIngredients(ings)
       setInvDocs(invd)
       // miniaturas firmadas
       const t: Record<string, string> = {}
@@ -223,19 +217,20 @@ export default function InboxModule() {
         {invDocs.length > 0 && (
           <div style={{ marginTop: '2rem' }}>
             <div style={{ fontSize: '0.72rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t-muted)', marginBottom: '0.6rem' }}>
-              📦 Inventario pendiente ({invDocs.length}) — el gasto ya está registrado
+              📦 Inventario pendiente ({invDocs.length}) — el gasto ya está registrado · se procesa en Inventario → Revisión
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {invDocs.map(d => {
                 const e = d.raw_json
                 return (
-                  <div key={d.id} onClick={() => setInvActive(d)}
-                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.9rem', background: '#fff', border: '1px solid var(--t-border)', borderRadius: 4, cursor: 'pointer' }}>
+                  <div key={d.id}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.6rem 0.9rem', background: '#fff', border: '1px solid var(--t-border)', borderRadius: 4 }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{e?.proveedor || 'Factura'}</div>
                       <div style={{ fontSize: '0.72rem', color: 'var(--t-muted)' }}>{e?.fecha || d.created_at.slice(0, 10)} · {e?.items?.length ?? 0} ítem(s)</div>
                     </div>
-                    <span className="cd-btn-primary" style={{ fontSize: '0.74rem' }}>Ingresar a inventario →</span>
+                    {/* F4: el ingreso a inventario ya no se hace acá — la tarea vive en Inventario → Revisión (solo lectura). */}
+                    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--t-muted)', whiteSpace: 'nowrap' }}>Inventario: pendiente de revisión</span>
                   </div>
                 )
               })}
@@ -243,14 +238,6 @@ export default function InboxModule() {
           </div>
         )}
       </div>
-
-      {invActive && (
-        <InventoryStep
-          doc={invActive} ingredients={ingredients} suppliers={suppliers} createdBy={profile?.id ?? ''}
-          onClose={() => setInvActive(null)}
-          onDone={async () => { setInvActive(null); setInfo('✓ Inventario ingresado.'); await loadAll() }}
-        />
-      )}
 
       {active && (
         <ConfirmCard
@@ -274,6 +261,11 @@ const PAGO_META: Record<Pago, { method: string; status: 'aprobado' | 'pendiente'
   pendiente: { method: 'Transferencia', status: 'pendiente', caja: 'Banco',            label: 'Transferencia — Pendiente (cuenta por pagar, no descuenta)' },
   banco:     { method: 'Transferencia', status: 'aprobado',  caja: 'Banco',            label: 'Pagado desde Banco (no toca el efectivo)' },
 }
+
+// Unificación Bandeja↔Caja (040-043): la vía de la Bandeja ES mercadería por definición. Marcamos
+// cada egreso_mercaderia con classification='mercaderia' → el trigger del server crea la tarea de
+// Revisión de inventario (inventory_review_task PENDIENTE). No afecta montos/forma de pago.
+const MERCADERIA_CLASS = { classification: 'mercaderia', suggested_classification: 'mercaderia', suggested_confidence: 1 } as const
 
 // Defaults para dar de alta un proveedor al vuelo desde la Bandeja — espejo del
 // `empty` de CashProveedores para que el alta sea idéntica a la del modal manual.
@@ -389,6 +381,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
           created_by: createdBy, movement_type: 'egreso_mercaderia', amount_crc: amountCRC, amount_usd: amountUSD,
           description: descripcion, subcategory: prov || '', supplier_id: supplierId, supplier_name: prov || '',
           method: 'Transferencia', caja_origen: 'Banco', status: 'aprobado', account_id: accountId || null,
+          ...MERCADERIA_CLASS,
         }))
       } else if (tipo === 'propinas') {
         // Propinas: pass-through, NO es gasto del P&L (subcategoría 'Propinas' se excluye)
@@ -410,6 +403,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
           description: descripcion, subcategory: prov || '', supplier_id: supplierId, supplier_name: prov || '',
           method: 'Efectivo', caja_origen: 'Caja Proveedores', status: 'aprobado',
           account_id: accountId || null, shift: tipShiftToCaja(session.shift_type),
+          ...MERCADERIA_CLASS,
         }))
         movementId = mv.id
       } else {
@@ -420,6 +414,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
           created_by: createdBy, movement_type: 'egreso_mercaderia', amount_crc: amountCRC, amount_usd: amountUSD,
           description: descripcion, subcategory: prov || '', supplier_id: supplierId, supplier_name: prov || '',
           method, caja_origen: caja, status, account_id: accountId || null,
+          ...MERCADERIA_CLASS,
         }))
       }
       await withTimeout(setDocEstado(doc.id, 'procesado', movementId))

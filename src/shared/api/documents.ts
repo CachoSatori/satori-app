@@ -178,6 +178,10 @@ export async function insertInboxMovement(m: {
   status: 'aprobado' | 'pendiente'
   account_id?: string | null
   fecha?: string | null
+  // Unificación Bandeja↔Caja (040-043): clasificación de mercadería → tarea de Revisión (pass-through).
+  classification?: string
+  suggested_classification?: string
+  suggested_confidence?: number
 }): Promise<string> {
   return createDayMovement(m)
 }

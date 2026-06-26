@@ -78,6 +78,19 @@ async function upsertSupplierItemMap(m: Omit<SupplierItemMap, 'id'>): Promise<vo
   }
 }
 
+// Persistir el mapeo aprendido (supplier_item_map) sin ingresar inventario — lo usa la Revisión
+// (F4) al Guardar/Completar para recordar el emparejamiento la próxima vez. Mismo upsert que el
+// commit viejo (commitInventoryForDocument), extraído para no duplicar la lógica.
+export async function learnSupplierMappings(supplierId: string, lines: InvLine[]): Promise<void> {
+  for (const l of lines) {
+    await upsertSupplierItemMap({
+      supplier_id: supplierId, codigo: l.codigo, descripcion_factura: l.descripcion,
+      ingredient_id: l.es_inventario ? l.ingredient_id : null, es_inventario: l.es_inventario,
+      unidad_factura: l.unidad_factura, factor_conversion: l.factor_conversion || 1,
+    })
+  }
+}
+
 // ── Proveedor / ingrediente al vuelo ─────────────────────────
 export async function findOrCreateSupplier(name: string, suppliers: Supplier[]): Promise<string | null> {
   const n = name.trim().toLowerCase()

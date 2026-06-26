@@ -214,6 +214,11 @@ export async function createCashMovement(movement: {
   account_id?: string | null
   status?: 'aprobado' | 'pendiente' | 'rechazado'   // override; por defecto se deriva del método
   attachments?: string[]                            // fotos de factura ya subidas al bucket 'facturas' (mig 026)
+  // Unificación Bandeja↔Caja (040-043): la Bandeja marca los egresos de mercadería para que el
+  // trigger del server cree la tarea de Revisión de inventario. Opcionales → fluyen por ...movement.
+  classification?: string
+  suggested_classification?: string
+  suggested_confidence?: number
 }): Promise<CashMovement> {
   // id y client_op_id se generan en el CLIENTE: así el replay offline es
   // idempotente (021: client_op_id UNIQUE) y las ediciones/borrados encolados
@@ -333,6 +338,16 @@ export async function updateMovementStatus(id: string, status: 'aprobado' | 'pen
   return updateCashMovement(id, { status } as Partial<CashMovement>)
 }
 
+// Edición de SOLO metadatos de un movimiento desde la Revisión de inventario (F4 unificación).
+// Acotada POR TIPOS: el llamador no puede tocar amount_crc/amount_usd/method/caja_origen/status/
+// classification (plata o disparadores del trigger). Reusa el plumbing offline-safe de updateCashMovement.
+export async function updateMovementMetadata(
+  id: string,
+  meta: { supplier_id?: string | null; supplier_name?: string; description?: string },
+): Promise<void> {
+  return updateCashMovement(id, meta as Partial<CashMovement>)
+}
+
 // Inserta un movimiento a nivel día (sin turno) — para movimientos manuales
 // administrativos: Banco→Caja Fuerte, retiros, gastos sin foto, etc.
 export async function createDayMovement(m: {
@@ -349,6 +364,10 @@ export async function createDayMovement(m: {
   status?: 'aprobado' | 'pendiente'
   account_id?: string | null
   fecha?: string | null
+  // Unificación Bandeja↔Caja (040-043): clasificación que dispara la tarea de Revisión en el server.
+  classification?: string
+  suggested_classification?: string
+  suggested_confidence?: number
 }): Promise<string> {
   // ts = fecha del MOVIMIENTO (puede venir backdateada al mediodía). NO confundir con el
   // created_at del SOBRE de la cola, que debe ser el reloj real para ordenar bien el outbox.
@@ -365,6 +384,10 @@ export async function createDayMovement(m: {
     supplier_id: m.supplier_id ?? null, supplier_name: m.supplier_name ?? '',
     method: m.method, caja_origen: m.caja_origen, status: m.status ?? 'aprobado',
     account_id: m.account_id ?? null, created_at: ts, updated_at: ts,
+    // Solo se incluyen cuando la Bandeja los pasa (egreso_mercaderia) → los demás callers van sin clasificación.
+    ...(m.classification ? { classification: m.classification } : {}),
+    ...(m.suggested_classification ? { suggested_classification: m.suggested_classification } : {}),
+    ...(m.suggested_confidence != null ? { suggested_confidence: m.suggested_confidence } : {}),
   }
   const queueAndReturn = async (): Promise<string> => {
     await enqueue({ client_op_id: id, table: 'cash_movements', op: 'insert', payload: row, created_at: now })

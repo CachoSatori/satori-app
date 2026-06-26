@@ -4,13 +4,10 @@ Estado: **PROD (`main` `79d8004`) tiene las OLAS 1 y 1.1 de estabilidad + el fix
 durabilidad de `createDayMovement` (todo ✅ validado físicamente) → la app vuelve a ser usable sin cuelgues.** main = capa de
 inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado + **Ola 1** (saga Realtime/suspensión + durabilidad
 de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush del outbox) + **fix PANTALLA NEGRA** (`5f22754`) +
-**🆕 durabilidad `createDayMovement`** (FF `5f22754`→`79d8004`, cherry-pick `399fc0b` re-cortado sobre `5f22754` — la rama vieja
-quedó stale sobre el main pre-pantalla-negra). STAGING (`a3dfacf`) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga
-Realtime/suspensión + durabilidad de caja + flush del outbox con tope + auth-recovery + switch de diag solo-staging
-(`[rt-diag]`) + **🆕 esta sesión: IDOR de `extract-document` cerrado** (`c38a252`, desplegado a staging Supabase, §0-quater)
-**+ borrado de caja → cascada de inventario + auditoría (mig 039)** (`82d55cd`+tipos `a3dfacf`, aplicada a la base de staging
-por dashboard). **🆕 pendientes de pase a prod:** auth-recovery (`e0df9ae`+`14e4546`, 🟡 gateado a suspensión real >1h — §0-bis)
-**+ el IDOR y la mig 039** (cherry-pick sobre main limpio, con firma).
+**🆕 durabilidad `createDayMovement`** (FF `5f22754`→`79d8004`). STAGING (**`69d7749`**) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga
+Realtime/suspensión + durabilidad de caja + flush del outbox con tope + auth-recovery (mergeado) + switch de diag solo-staging
+(`[rt-diag]`) + IDOR de `extract-document` cerrado (`c38a252`) + borrado de caja → cascada de inventario (mig 039)
++ **🆕 esta sesión (2026-06-26): esquema 040–043 de la unificación APLICADO a la base de staging** (vía `db query`, no en `schema_migrations`; archivos en la rama `feat/unif-migrations-040-043` `3c534f4`, sin mergear) + **entorno de tests DOM** (happy-dom+RTL, smoke anti-loop). **🆕 pendientes de pase a prod:** el IDOR y la mig 039 (cherry-pick sobre main limpio, con firma). Auth-recovery quedó **DIFERIDO** (gate >1h pasó; ya mergeado — §0-bis).
 Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
@@ -32,6 +29,36 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 
 ---
 
+## ★ PRÓXIMO (2026-06-26) — construcción del módulo de unificación Bandeja↔Caja
+
+El **diseño** (SPEC firmado) y el **esquema** (migraciones 040–043) ya están: las 4 fueron **firmadas y aplicadas a la
+base de staging** vía `supabase db query` (NO `db push` → no en `schema_migrations`; archivos en la rama
+`feat/unif-migrations-040-043` `3c534f4`, **sin mergear**). Decisión **OPCIÓN A** firmada: `accounting_entries` es
+auditoría/reversión, **no alimenta el P&L** (ver SPEC §19). Lo que sigue:
+
+1. **🟢 PRIMER PASO — regenerar los tipos TS contra staging.** Ya existen en la base `accounting_entries`,
+   `inventory_review_task`, las RPCs (`post_accounting_entry`, `complete_inventory_review`, `discard_inventory_review`,
+   `unif_on_cash_movement`) y las 3 columnas de `cash_movements`. ⚠️ **RITUAL del link primero** (ver abajo y HALLAZGOS):
+   confirmar `cat supabase/.temp/linked-project.json` → ref `hwiatgicyyqyezqwldia` ANTES de cualquier comando de Supabase.
+2. **🟢 Construir F3–F5 del SPEC:** módulo de Inventarios (cola + completar revisión vía `complete_inventory_review`),
+   el **"Agregar" único** en Caja Diaria con clasificación advisory, y la cascada extendida en la UI.
+3. **🖊️ DECISIÓN ABIERTA — ¿mergear los archivos `040–043*.sql` a `staging`?** Ya firmados + aplicados a la base; mergearlos
+   haría el repo **fiel** a lo que corre en staging (hoy hay drift archivo↔base). Recomendado antes de construir encima.
+
+> 🛑 **RITUAL OBLIGATORIO antes de CUALQUIER comando de base** (aprendizaje crítico de esta sesión, ver HALLAZGOS.md):
+> `cat supabase/.temp/linked-project.json` → el `"ref"` DEBE ser `hwiatgicyyqyezqwldia` (staging). El CLI estaba
+> **enlazado a PROD** (`yiczgdtirrkdvohdquzf`) sin avisar; lo cazó el guardrail. Nunca correr DB sin confirmar el ref.
+
+### DIFERIDOS (sesiones dedicadas, no bloquean lo de arriba)
+- **Reconciliación del ledger de migraciones** (009 drift · 035 fantasma en `propina-pool` · 039 dashboard · 040–043 por
+  `db query`): `db push` se frena por 009/035; NO usar `push`/`repair` hasta una **sesión dedicada de infraestructura**
+  (resolver 035/`propina-pool` primero). Todo es idempotente. Ver ESTADO §d.
+- **Auth-recovery** (§0-bis): DIFERIDO; su **precondición es cerrar el Hallazgo B** (outbox drena en `SIGNED_IN`) — PRIORIDAD 2.
+- **Riesgo latente `/caja` + Cmd+Shift+R** → ya registrado (RCA en la rama `rca/caja-hardreload-hang`, sin mergear); redirige a `/login` ~20s,
+  recuperable. No bloquea el módulo nuevo. (No re-investigar salvo que la dueña lo priorice.)
+
+---
+
 ## 0. ✅ RESUELTO esta sesión — Realtime tras suspensión profunda (máquina de 3 estados + gateo + endurecimiento)
 
 `ensureRealtimeHealthy` (en `src/shared/api/supabase.ts`) quedó rediseñada como **MÁQUINA DE 3 ESTADOS** y **validada
@@ -50,7 +77,7 @@ byte-idéntico (su contrato no cambió). Cronología → **`docs/rca/2026-06-22-
 
 ---
 
-## 0-bis. 🆕 RESUELTO esta sesión (SOLO en staging, GATED) — el loop `OFFLINE_WAITING` tras suspensión LARGA
+## 0-bis. ✅ Auth-recovery — el loop `OFFLINE_WAITING` tras suspensión LARGA (MERGEADO en staging · DIFERIDO)
 
 La máquina de 3 estados (§0, EN PROD) cubría el caso validado, pero **quedaba un modo de falla distinto**: tras una
 suspensión **larga**, `getSession`/`refreshSession` **no vuelven** (el fetch interno queda sobre el socket zombi) y
@@ -65,11 +92,12 @@ adquisición del lock. Queda como hardening inofensivo.
 - `14e4546` — `signOut` SOLO en el path forzado (`forced:true`); el `refresh.error` vuelve a su comportamiento original
   (sin logout espurio) + **latch one-shot** (se limpia con sesión fresca en `onAuthStateChange`) → mata el ping-pong.
 
-> ⚠️ **VALIDADO SOLO POR UNIT TESTS** (`supabase.timeout.test.ts`). **NO** físicamente aún. **GATE antes de prod:**
-> (a) repro con `__satoriDiag.armZombie()` → **UN solo** `signOut`→`/login` sin ping-pong + `disarm()`→`ONLINE`+drain;
-> (b) **suspensión real >1h** sobre el build de staging. **El pase a prod de este fix está GATEADO a que (b) pase.** Hotfix
-> nuevo desde `main` con `e0df9ae`+`14e4546` (NO `ccef5f1` solo). Diagnóstico → **`docs/HANG-RCA-2.md`**.
-> 🔧 **Identidad de build = `{base}version.json`→`.commit`**, NO un hash de chunk (el doc previo anotó mal `supabase-BjfeOB6h.js`).
+> ✅ **ESTADO CORREGIDO (2026-06-26):** está **MERGEADO en staging** (no vive "solo en una rama") y el **gate de
+> suspensión real >1h PASÓ** — validado físicamente por la dueña: **la app desplegada se recupera sin este fix** → queda
+> **DIFERIDO (posiblemente innecesario)**, NO es un pendiente bloqueante. **Si se retoma**, su precondición es **cerrar el
+> Hallazgo B** (el outbox debe drenar en `SIGNED_IN`; hoy NO está garantizado — PRIORIDAD 2). El lock `ccef5f1` fue red
+> herring (hardening). Diagnóstico → **`docs/HANG-RCA-2.md`**.
+> 🔧 **Identidad de build = `{base}version.json`→`.commit`**, NO un hash de chunk.
 
 ---
 
@@ -134,9 +162,9 @@ en CashMovimientos y CashTurno. Test `cash.cascade.test.ts`. NO toca sagrados.
 
 Cada pase es **NUEVO desde `main`**, NUNCA mergear `staging`→`main`; verificación: `VITE_APP_ENV=production npm run build`
 EXIT 0 + suite verde + ritual de identidad `{base}version.json`→`.commit`; firma de la dueña. Orden lo decide la dueña:
-1. **Auth-recovery** (`e0df9ae`+`14e4546`, **NO** el lock `ccef5f1` solo) — **GATEADO** a la suspensión real >1h (§0-bis);
-   no pasar hasta que esa validación física pase. Ojo con la **PRIORIDAD 2** (drain del outbox en `SIGNED_IN`), de la que
-   depende su premisa "el outbox drena al reloguear". Client-side, sin migración.
+1. **Auth-recovery** (`e0df9ae`+`14e4546`) — **DIFERIDO, NO bloqueante** (§0-bis): el gate de suspensión >1h **pasó** y la app
+   se recupera sin él → posiblemente innecesario. Si se retoma, su precondición es la **PRIORIDAD 2** (drain del outbox en
+   `SIGNED_IN`). No es candidato de pase salvo que reaparezca el síntoma. Client-side, sin migración.
 2. **🆕 IDOR `extract-document`** (`c38a252`) — cherry-pick a main + **re-deploy de la Edge Function a la Supabase de PROD**
    (`yiczgdtirrkdvohdquzf`). Es el prerequisito de seguridad #1 de la Bandeja.
 3. **🆕 Integridad borrado→inventario** (`82d55cd` código + **mig 039 sobre la BASE de prod**, hoy NO aplicada) — pase de

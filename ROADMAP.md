@@ -30,7 +30,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 **SUBSUMIDA** por [docs/SPEC-unificacion-bandeja-caja.md](docs/SPEC-unificacion-bandeja-caja.md) (D6) | — (ver §1ter) |
-| **🆕 Unificación Bandeja↔Caja** (un único "Agregar" en Caja Diaria; auto-clasificar Proveedores/Operativa como ayuda visual; sacar "Ingresar a inventario" del cajero → contador/manager lo completa en Inventarios; asiento contable automático) | 🔲 **PRÓXIMO — arranca por DISEÑO, sin código** | — (ver §1ter). Primer entregable = documento de diseño; **NO construir todavía** |
+| **🆕 Unificación Bandeja↔Caja** (un único "Agregar" en Caja Diaria; auto-clasificar Proveedores/Operativa como ayuda visual; sacar "Ingresar a inventario" del cajero → contador/manager lo completa en Inventarios; asiento contable automático) | ✅ diseño firmado · ✅ **esquema 040–043 aplicado a STAGING** (no en ledger; archivos en rama suelta) · 🔲 código sin construir | ver §1ter. Próximo: regenerar tipos TS → F3–F5 |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
 | PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
 | PoS F2 — Comandero + KDS + impresión (impresión real = F5) | 🟢 | STAGING (023–025) |
@@ -128,7 +128,7 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
 
 ## §1ter. 🆕 PRÓXIMO PROYECTO — SPEC de la unificación Bandeja↔Caja (arranca por DISEÑO, NO construir todavía)
 
-> **Estado: ✅ primer entregable (documento de diseño) ENTREGADO Y FIRMADO — [SPEC v1](docs/SPEC-unificacion-bandeja-caja.md) (2026-06-26). 🔲 construcción NO empezada: no escribir código hasta cumplir las precondiciones del SPEC + firma SEPARADA por migración.**
+> **Estado (2026-06-26): ✅ diseño FIRMADO ([SPEC v1](docs/SPEC-unificacion-bandeja-caja.md)) · ✅ ESQUEMA (migraciones 040–043) FIRMADO y APLICADO a la base de STAGING** (vía `supabase db query`, no en `schema_migrations`; archivos en la rama `feat/unif-migrations-040-043` `3c534f4`, sin mergear) · ✅ entorno de tests DOM en staging. **🔲 Construcción de código NO empezada.** Decisión OPCIÓN A firmada: `accounting_entries` es auditoría/reversión, NO alimenta el P&L (ver SPEC §19). Próximo paso = **regenerar tipos TS** contra staging, luego F3–F5 (módulo de Inventarios + "Agregar" único + cascada en UI).
 
 Objetivo: colapsar Bandeja y Caja Diaria en **un solo flujo de entrada** para el cajero, moviendo el trabajo
 contable a quien corresponde. Alcance a especificar:

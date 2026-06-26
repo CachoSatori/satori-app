@@ -8,14 +8,22 @@
 -- FUENTE DE VERDAD: docs/SPEC-unificacion-bandeja-caja.md §11.3 (reversión), §12 (extensión del borrado,
 -- D5 foto), §7.2 (transiciones COMPLETADA/DESCARTADA), §8 (INV-2 cero huérfanos, INV-7 atomicidad).
 --
+-- ✅ OPCIÓN A (FIRMADA) — accounting_entries es libro de AUDITORÍA/REVERSIÓN únicamente; NO alimenta el
+-- P&L (el P&L se deriva en vivo de cash_movements vía getLiveActuals + carga manual). Por eso acá:
+--   · complete_inventory_review REGISTRA su asiento de COGS en el libro (traza auditada), pero como en 042
+--     ya NO existe el rollup, ese asiento NO impacta el P&L.
+--   · la cascada revierte en el libro (contra-asiento + status='reversed'); al no haber rollup, tampoco
+--     impacta el P&L.
+-- Propagación automática al P&L = visión futura (SPEC §19).
+--
 -- create or replace SOBRE la RPC de mig 039: CONSERVA todo su comportamiento (rol owner/manager, nota
 -- obligatoria, snapshot+auditoría, borrado de inventario ligado + del movimiento, idempotencia) y AGREGA,
--- en la MISMA transacción: reversión de asientos + descarte de la tarea + (D5) borrado del documento.
+-- en la MISMA transacción: reversión de asientos (en el libro) + descarte de la tarea + (D5) borrado del documento.
 -- CERO backfill: solo actúa sobre el movimiento que se borra.
 
 -- ── 1. RPC: completar revisión de inventario (PENDIENTE/EN_REVISION → COMPLETADA) ──
--- Crea inventory_movements 'purchase' por línea + postea asiento 'compra_inventario' (§11.2). Online.
--- Idempotente: si la tarea ya está COMPLETADA, no hace nada.
+-- Crea inventory_movements 'purchase' por línea + registra el asiento 'compra_inventario' EN EL LIBRO
+-- (auditoría; NO impacta el P&L — Opción A). Online. Idempotente: si ya está COMPLETADA, no hace nada.
 create or replace function public.complete_inventory_review(p_task_id uuid, p_lines jsonb, p_note text)
 returns void
 language plpgsql
@@ -64,7 +72,8 @@ begin
       + coalesce((v_line->>'qty_delta')::numeric, 0) * coalesce((v_line->>'unit_cost')::numeric, 0);
   end loop;
 
-  -- Asiento de compra de inventario (COGS). Cuenta: 'a5200' (Food Costs) por defecto.
+  -- Asiento de compra de inventario (COGS) EN EL LIBRO (auditoría; NO impacta el P&L — Opción A).
+  -- Cuenta: 'a5200' (Food Costs) por defecto.
   -- (Asunción de borrador: una sola cuenta COGS por tarea; el split por categoría de ingrediente
   --  —food vs beverage— es un refinamiento posterior. Ver reporte.)
   v_acct := 'a5200';

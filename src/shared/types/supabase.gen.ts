@@ -1166,6 +1166,41 @@ export type Database = {
           },
         ]
       }
+      movement_deletions: {
+        Row: {
+          deleted_at: string
+          deleted_by: string | null
+          id: string
+          inventory_snapshot: Json | null
+          movement_snapshot: Json
+          note: string
+        }
+        Insert: {
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: string
+          inventory_snapshot?: Json | null
+          movement_snapshot: Json
+          note: string
+        }
+        Update: {
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: string
+          inventory_snapshot?: Json | null
+          movement_snapshot?: Json
+          note?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "movement_deletions_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pos_checks: {
         Row: {
           amount_crc: number
@@ -2236,6 +2271,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_movement_cascade: {
+        Args: { p_movement_id: string; p_note: string }
+        Returns: undefined
+      }
       get_my_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]

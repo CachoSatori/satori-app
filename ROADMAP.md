@@ -147,6 +147,9 @@ Primer entregable = **documento de diseño** ✅ **ENTREGADO Y FIRMADO (v1, 2026
 esquema/migraciones, sagrados que NO se tocan). Con el SPEC firmado se planifica construcción (recién tras cumplir
 las precondiciones del propio SPEC; cada migración exige firma separada).
 
+- 🔲 P&L granular a nivel de línea de factura + alertas inteligentes — ver
+  [docs/SPEC-unificacion-bandeja-caja.md](docs/SPEC-unificacion-bandeja-caja.md) §19 (fase posterior, fuera de v1).
+
 ## 🆕 Backlog nuevo (junio 18) — además de las fases de arriba
 
 - **✅ RESUELTO y EN PROD (jun-21) — Estabilidad de la PWA (SW viejo):** registro manual con

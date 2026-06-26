@@ -449,3 +449,43 @@ Todo **DDL aditivo**, numerado **040+**, idempotente (`if not exists` / `create 
 
 *Fin del SPEC v1 — decisiones de diseño firmadas. La construcción exige cumplir F0 (§17); cada migración 040+
 exige firma separada antes de aplicarse a una base. Este documento NO autoriza código.*
+
+---
+
+## 19. Visión de fases futuras — P&L granular y alertas inteligentes (FUERA DE ALCANCE v1)
+
+> Registrada a pedido de la dueña (2026-06-26) como objetivo de fases posteriores. NO se construye en v1.
+> v1 mantiene el P&L como está (derivación en vivo de getLiveActuals a nivel de movimiento + carga manual
+> del contador). Esta sección describe la evolución hacia un P&L a nivel de línea de factura.
+
+### 19.1 Problema que resuelve
+Hoy muchos proveedores facturan rubros distintos en una sola factura (carnes, limpieza, insumos de cocina…).
+Para clasificar correctamente en el P&L se piden facturas separadas por rubro, lo que duplica/triplica las
+fotos a cargar, multiplica el trabajo de revisión del contador y obliga a diferenciar gastos a mano.
+
+### 19.2 Visión: clasificación a nivel de LÍNEA
+- Cada producto/ingrediente se crea con su categoría y subcategoría (= cuenta del P&L) definida.
+- Al cargar UNA sola factura multi-rubro, la IA extrae las líneas y propone la clasificación por línea; el
+  contador confirma (mismo principio advisory del v1, pero a nivel de línea).
+- Una factura única alimenta el P&L granular automáticamente — se elimina la necesidad de facturas separadas.
+
+### 19.3 Gastos operativos no-mercadería, estructurados
+Registrar de forma estructurada electricidad, alquiler, suscripciones, etc., distinguiendo el medio de pago
+(caja vs transferencia bancaria), para que también alimenten el P&L granular y las alertas.
+
+### 19.4 Alertas inteligentes (capa sobre P&L granular + budget)
+Con datos a nivel de línea + el finance_budget existente (proyección 2026): variación de precio de un
+ingrediente entre facturas, faltantes/excesos de inventario (cruzando inventory_movements), anomalías y
+desviaciones de costo vs proyección (actual vs budget por cuenta/mes).
+
+### 19.5 Cómo encaja con v1 (relación con el doble-conteo)
+Es la Opción B del análisis de doble-conteo, pero hecha bien: cuando exista clasificación a nivel de línea,
+accounting_entries (o una estructura de líneas asociada) puede pasar a ser la fuente granular del P&L,
+reemplazando la derivación gruesa de getLiveActuals. En v1 NO se hace porque getLiveActuals no tiene datos a
+nivel de línea; meterlo ahora duplicaría el conteo. El accounting_entries de v1 (auditoría/reversión) es la
+semilla de esa fuente granular futura.
+
+### 19.6 Precondiciones técnicas
+Catálogo de productos/ingredientes con categoría+subcategoría (cuenta P&L) por ítem; extracción IA a nivel de
+línea de factura; supplier_item_map enriquecido (línea→ingrediente→cuenta); confirmación del contador por
+línea; migración de getLiveActuals a la fuente granular (resolviendo el doble-conteo de raíz).

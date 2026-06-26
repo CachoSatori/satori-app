@@ -13,6 +13,7 @@ import {
   updateMiddayCheck,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
+import { askDeletionNote } from './deletionNote'
 import { tipShiftToCaja, shiftLabel, dateCR } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
@@ -447,9 +448,12 @@ export default function CashTurno({
     if (pago?.persistedId) {
       // Borrado de un pago YA guardado → requiere autorización de gerencia
       if (!(await requireManager())) return
+      // Motivo obligatorio: el borrado arrastra el inventario ligado y queda en la auditoría (mig 039).
+      const note = askDeletionNote('pago a proveedor')
+      if (!note) return
       // Refrescar desde la fuente de verdad (re-fetch en el padre). Antes se pasaba un
       // PagoRow a onMovAdded, que lo agregaba en memoria → fila fantasma tras el borrado.
-      try { await deleteCashMovement(pago.persistedId); onRefresh() }
+      try { await deleteCashMovement(pago.persistedId, note); onRefresh() }
       catch (e) { onError(`No se pudo eliminar el pago: ${e instanceof Error ? e.message : 'reintentá'}`) }
     } else {
       setPagos(prev => prev.filter(p => p.id !== id))
@@ -474,8 +478,9 @@ export default function CashTurno({
     // Si edito uno ya persistido, borro su movimiento viejo antes de re-crear
     const old = editId ? displayPagos.find(p => p.id === editId) : null
     if (old?.persistedId) {
-      // ídem removePago: refrescar desde la fuente de verdad, no inyectar fila fantasma.
-      try { await deleteCashMovement(old.persistedId); onRefresh() }
+      // Edición = reemplazo: borra el movimiento viejo (cascada de inventario incluida) y re-crea.
+      // Nota automática (no es un borrado "a mano" del usuario, es parte del flujo de editar).
+      try { await deleteCashMovement(old.persistedId, 'Reemplazo por edición de pago a proveedor'); onRefresh() }
       catch (e) { onError(`No se pudo reemplazar el pago anterior: ${e instanceof Error ? e.message : 'reintentá'}`); setMovSaving(false); return }
     }
     const pago: PagoRow = {
@@ -545,7 +550,9 @@ export default function CashTurno({
     const row = displayIngresos.find(i => i.id === id)
     if (row?.persistedId) {
       if (!(await requireManager())) return
-      try { await deleteCashMovement(row.persistedId); onRefresh() }
+      const note = askDeletionNote('ingreso')
+      if (!note) return
+      try { await deleteCashMovement(row.persistedId, note); onRefresh() }
       catch (e) { onError(`No se pudo eliminar el ingreso: ${e instanceof Error ? e.message : 'reintentá'}`) }
     } else {
       setIngresos(prev => prev.filter(i => i.id !== id))
@@ -600,7 +607,9 @@ export default function CashTurno({
     && m.movement_type !== 'egreso_mercaderia' && m.status !== 'rechazado')
   const removeEgreso = async (id: string) => {
     if (!(await requireManager())) return
-    try { await deleteCashMovement(id); onRefresh() }
+    const note = askDeletionNote('egreso')
+    if (!note) return
+    try { await deleteCashMovement(id, note); onRefresh() }
     catch (e) { onError(`No se pudo eliminar el egreso: ${e instanceof Error ? e.message : 'reintentá'}`) }
   }
 

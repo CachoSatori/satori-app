@@ -406,39 +406,43 @@ export async function createDayMovement(m: {
   }
 }
 
-export async function deleteCashMovement(id: string): Promise<void> {
-  if (isOffline()) return queueCashMutation('delete', { match: { id } })
+// Borrar un movimiento de caja NO es un delete plano: arrastra el inventario ligado y deja
+// auditoría, todo en UNA transacción vía la RPC delete_movement_cascade (mig 039). Antes era
+// un `.delete()` directo y, con inventory_movements.cash_movement_id ON DELETE SET NULL (mig
+// 017), la entrada de inventario quedaba HUÉRFANA → inventario inflado + asientos duplicados.
+//
+// A DIFERENCIA del resto de mutaciones de caja, esto NO se encola offline: es una CORRECCIÓN
+// de integridad, no una escritura operativa. Encolar un borrado sin poder correr la cascada
+// dejaría exactamente el inventario huérfano que esto arregla → si no hay red, se BLOQUEA con
+// mensaje claro. La RPC es idempotente (si el movimiento ya no existe, no hace nada) → el
+// reintento único tras un socket zombi es seguro. `note` (motivo) es obligatorio para la auditoría.
+export async function deleteCashMovement(id: string, note: string): Promise<void> {
+  if (isOffline()) {
+    throw new Error('El borrado requiere conexión: arrastra el inventario ligado y no puede encolarse a medias. Reintentá con internet.')
+  }
+  // delete_movement_cascade no está en los tipos generados hasta aplicar la mig 039 y regenerar
+  // → cast acotado (mismo patrón que FacturaVerify con mark_factura_verified). Termina en
+  // .abortSignal(signal) para que withWriteTimeout pueda cancelar el fetch colgado.
+  const runCascade = (signal: AbortSignal) => (supabase.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => { abortSignal: (s: AbortSignal) => PromiseLike<{ error: { message: string } | null }> })(
+    'delete_movement_cascade', { p_movement_id: id, p_note: note },
+  ).abortSignal(signal)
   try {
-    const { error } = await withWriteTimeout(signal => supabase
-      .from('cash_movements')
-      .delete()
-      .eq('id', id)
-      .abortSignal(signal))
+    const { error } = await withWriteTimeout(runCascade)
     if (error) throw new Error(error.message)
   } catch (e) {
     const timedOut = (e as { isTimeout?: boolean })?.isTimeout === true
                   || (e as { name?: string })?.name === 'AbortError'
     if (timedOut) {
-      // Reintento único (socket zombi tras suspensión). El delete por id es idempotente.
-      try {
-        const { error } = await withWriteTimeout(signal => supabase
-          .from('cash_movements')
-          .delete()
-          .eq('id', id)
-          .abortSignal(signal))
-        if (error) throw new Error(error.message)
-        return
-      } catch (e2) {
-        // Zombi tras suspensión: navigator.onLine MIENTE (=true) con la red muerta. Si el reintento
-        // también venció o es error de red, NUNCA abandonar → encolar (durable + idempotente).
-        // Solo errores reales del server suben.
-        const timedOut2 = (e2 as { isTimeout?: boolean })?.isTimeout === true
-                       || (e2 as { name?: string })?.name === 'AbortError'
-        if (timedOut2 || isNetErr(e2)) return queueCashMutation('delete', { match: { id } })
-        throw e2
-      }
+      // Reintento único (socket zombi tras suspensión). La RPC es idempotente.
+      const { error } = await withWriteTimeout(runCascade)
+      if (error) throw new Error(error.message)
+      return
     }
-    if (isNetErr(e)) return queueCashMutation('delete', { match: { id } })
+    // Red caída o error real del server → NO encolar (sería un borrado parcial sin cascada);
+    // se propaga para que la UI avise y el usuario reintente con red.
     throw e
   }
 }

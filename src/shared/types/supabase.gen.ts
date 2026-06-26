@@ -39,6 +39,88 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounting_entries: {
+        Row: {
+          account_id: string
+          amount_crc: number
+          client_op_id: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          entry_date: string
+          fx_rate: number
+          id: string
+          kind: string
+          month: number
+          note: string | null
+          reverses_entry_id: string | null
+          source_id: string | null
+          source_type: string
+          status: string
+          year: number
+        }
+        Insert: {
+          account_id: string
+          amount_crc: number
+          client_op_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          entry_date: string
+          fx_rate?: number
+          id?: string
+          kind: string
+          month: number
+          note?: string | null
+          reverses_entry_id?: string | null
+          source_id?: string | null
+          source_type: string
+          status?: string
+          year: number
+        }
+        Update: {
+          account_id?: string
+          amount_crc?: number
+          client_op_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          entry_date?: string
+          fx_rate?: number
+          id?: string
+          kind?: string
+          month?: number
+          note?: string | null
+          reverses_entry_id?: string | null
+          source_id?: string | null
+          source_type?: string
+          status?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accounting_entries_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "finance_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accounting_entries_reverses_entry_id_fkey"
+            columns: ["reverses_entry_id"]
+            isOneToOne: false
+            referencedRelation: "accounting_entries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cash_cierres_dia: {
         Row: {
           ajuste_motivo: string | null
@@ -138,6 +220,7 @@ export type Database = {
           approved_by: string | null
           attachments: Json
           caja_origen: string | null
+          classification: string | null
           client_op_id: string | null
           created_at: string
           created_by: string
@@ -154,6 +237,8 @@ export type Database = {
           shift: string | null
           status: string
           subcategory: string | null
+          suggested_classification: string | null
+          suggested_confidence: number | null
           supplier_id: string | null
           supplier_name: string | null
           updated_at: string
@@ -166,6 +251,7 @@ export type Database = {
           approved_by?: string | null
           attachments?: Json
           caja_origen?: string | null
+          classification?: string | null
           client_op_id?: string | null
           created_at?: string
           created_by: string
@@ -182,6 +268,8 @@ export type Database = {
           shift?: string | null
           status?: string
           subcategory?: string | null
+          suggested_classification?: string | null
+          suggested_confidence?: number | null
           supplier_id?: string | null
           supplier_name?: string | null
           updated_at?: string
@@ -194,6 +282,7 @@ export type Database = {
           approved_by?: string | null
           attachments?: Json
           caja_origen?: string | null
+          classification?: string | null
           client_op_id?: string | null
           created_at?: string
           created_by?: string
@@ -210,6 +299,8 @@ export type Database = {
           shift?: string | null
           status?: string
           subcategory?: string | null
+          suggested_classification?: string | null
+          suggested_confidence?: number | null
           supplier_id?: string | null
           supplier_name?: string | null
           updated_at?: string
@@ -955,6 +1046,128 @@ export type Database = {
             columns: ["ingredient_id"]
             isOneToOne: false
             referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_review_task: {
+        Row: {
+          amount_crc: number | null
+          cash_movement_id: string | null
+          claimed_at: string | null
+          claimed_by: string | null
+          classification: string | null
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          discard_reason: string | null
+          discarded_at: string | null
+          discarded_by: string | null
+          document_id: string | null
+          entry_date: string | null
+          fx_rate: number
+          id: string
+          status: string
+          suggested_classification: string | null
+          suggested_confidence: number | null
+          supplier_id: string | null
+        }
+        Insert: {
+          amount_crc?: number | null
+          cash_movement_id?: string | null
+          claimed_at?: string | null
+          claimed_by?: string | null
+          classification?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          discard_reason?: string | null
+          discarded_at?: string | null
+          discarded_by?: string | null
+          document_id?: string | null
+          entry_date?: string | null
+          fx_rate?: number
+          id?: string
+          status?: string
+          suggested_classification?: string | null
+          suggested_confidence?: number | null
+          supplier_id?: string | null
+        }
+        Update: {
+          amount_crc?: number | null
+          cash_movement_id?: string | null
+          claimed_at?: string | null
+          claimed_by?: string | null
+          classification?: string | null
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          discard_reason?: string | null
+          discarded_at?: string | null
+          discarded_by?: string | null
+          document_id?: string | null
+          entry_date?: string | null
+          fx_rate?: number
+          id?: string
+          status?: string
+          suggested_classification?: string | null
+          suggested_confidence?: number | null
+          supplier_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_review_task_cash_movement_id_fkey"
+            columns: ["cash_movement_id"]
+            isOneToOne: false
+            referencedRelation: "cash_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_review_task_claimed_by_fkey"
+            columns: ["claimed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_review_task_completed_by_fkey"
+            columns: ["completed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_review_task_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_review_task_discarded_by_fkey"
+            columns: ["discarded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_review_task_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_review_task_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]
@@ -2271,8 +2484,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      complete_inventory_review: {
+        Args: { p_lines: Json; p_note: string; p_task_id: string }
+        Returns: undefined
+      }
       delete_movement_cascade: {
         Args: { p_movement_id: string; p_note: string }
+        Returns: undefined
+      }
+      discard_inventory_review: {
+        Args: { p_reason: string; p_task_id: string }
         Returns: undefined
       }
       get_my_role: {
@@ -2337,6 +2558,21 @@ export type Database = {
       pos_unmerge_orden: {
         Args: { p_from: string; p_into: string }
         Returns: undefined
+      }
+      post_accounting_entry: {
+        Args: {
+          p_account_id: string
+          p_amount_crc: number
+          p_client_op_id?: string
+          p_currency?: string
+          p_entry_date: string
+          p_fx_rate?: number
+          p_kind: string
+          p_note?: string
+          p_source_id: string
+          p_source_type: string
+        }
+        Returns: string
       }
       sync_pos_tips_to_pool: {
         Args: { p_date: string; p_session_id: string }

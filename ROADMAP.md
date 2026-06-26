@@ -1,16 +1,16 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-25**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-26**
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-06-25)
+## 📍 Estado real de las fases (handoff 2026-06-26)
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: en este bloque ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod).
 
-> **PROD (`main` `5f22754`) tiene las Olas 1 y 1.1 de estabilidad (validadas) + el fix de la PANTALLA NEGRA del bootstrap (✅ EN PROD, deploy confirmado `version.json=5f22754`; **✅ validado físicamente por la dueña**) → la app vuelve a ser usable.** El trabajo de FEATURES vive en `staging` (código `ee5878a`); a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`. **🆕 Pendientes de pase a prod (en staging):** durabilidad de `createDayMovement` (`399fc0b`) + fix de auth-recovery (🟡 gateado a suspensión real >1h). Ver ESTADO §b-ter + `docs/HANG-RCA-2.md`.
+> **PROD (`main` `79d8004`) tiene las Olas 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la durabilidad de `createDayMovement` (todo ✅ validado físicamente) → la app vuelve a ser usable.** El trabajo de FEATURES y los fixes de seguridad/integridad viven en `staging` (`a3dfacf`); a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`. **🆕 Esta sesión en staging:** IDOR de `extract-document` cerrado (validado los 2 lados) + borrado de caja → cascada de inventario + auditoría (mig 039, validada end-to-end por la dueña). **🆕 Pendientes de pase a prod (en staging):** auth-recovery (🟡 gateado a suspensión real >1h) + IDOR + mig 039. Ver ESTADO §b-quater + §b-ter + `docs/HANG-RCA-2.md`.
 
 | Fase | Estado | Dónde |
 |---|---|---|
@@ -23,11 +23,14 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **Durabilidad de escritura de Caja** (reintento con tope + encola SIEMPRE en outbox ante timeout/red-zombi) | ✅ **EN PROD y VALIDADA (Ola 1)** | **PROD (`2358f6c`)** + staging (`0dd258b`) — root cause: confiar en `navigator.onLine` (miente en zombi). Tests `cash.durability.test.ts` + `supabase.timeout.test.ts` |
 | **Outbox — timeout/abort del flush** (`supabaseExecutor` con `withWriteTimeout`+`.abortSignal()`; **guardarraíl: timeout→retry, NUNCA fatal**) | ✅ **EN PROD y VALIDADA (Ola 1.1) — la cola drena sola** | **PROD (`ead4727`+`483d29c`)** + staging (`4805e23`). Antes el flush quedaba colgado en "por sincronizar" sobre el socket zombi. Test `outbox.test.ts` (9 casos) |
 | **🆕 Auth recovery — loop `OFFLINE_WAITING` tras suspensión LARGA** (el caso que la máquina de 3 estados NO cubría: `getSession`/`refreshSession` no vuelven → sin escape) | 🟡 **en STAGING, SOLO unit tests** (gate físico pendiente) | STAGING (`e0df9ae` escape N=3 + `14e4546` signOut acotado + latch one-shot). El lock 10s→5s (`ccef5f1`) fue **red herring** (hardening). **RCA → `docs/HANG-RCA-2.md`**. Gate a prod: **suspensión real >1h** |
-| **🆕 `createDayMovement` — durabilidad** (id+`client_op_id`+`withWriteTimeout`+outbox; cierra el hueco nivel-día de Caja) | 🟢 **en STAGING** (`dea9486`) · hotfix prod listo (`399fc0b`, sin mergear) | STAGING + `hotfix/createdaymovement-durability-prod`. Test `cash.durability.test.ts` |
+| **🆕 `createDayMovement` — durabilidad** (id+`client_op_id`+`withWriteTimeout`+outbox; cierra el hueco nivel-día de Caja) | ✅ **EN PROD (`79d8004`), VALIDADA** | **PROD** (`399fc0b` re-cortado→`79d8004`) + STAGING (`dea9486`). Cherry-pick re-cortado sobre `5f22754` (la rama vieja quedó stale); sin `supplier_id`. Test `cash.durability.test.ts` |
+| **🆕 IDOR `extract-document` (Edge Function)** — bajaba del bucket privado con service_role sin verificar al dueño → cualquiera bajaba cualquier factura | ✅ **CERRADO y VALIDADO los 2 lados — en STAGING** (`c38a252`, desplegado a staging Supabase) | STAGING: exige JWT + download bajo RLS (mig 016) sin service_role + CORS por allowlist. Positivo (extracción OK) + negativo (`401` sin Authorization). **Prerequisito de seguridad #1 de la Ola 2.** Pase a prod por cherry-pick con firma |
+| **🆕 Borrado de caja → cascada de inventario + auditoría** (mig 039 + RPC `delete_movement_cascade`; nota obligatoria + `requireManager`) | ✅ **VALIDADO end-to-end por la dueña — en STAGING** (`82d55cd`+tipos `a3dfacf`; **mig 039 aplicada** por dashboard) | STAGING: cierra el inventario huérfano del `ON DELETE SET NULL` de mig 017 (inventario inflado + asientos duplicados). Requiere conexión (offline BLOQUEA, no encola). Test `cash.cascade.test.ts`. Pase a prod (código + mig 039 sobre base de prod) con firma |
 | **🆕 PANTALLA NEGRA — bootstrap de `useAuth` con tope** (getSession + loadProfile sin tope se colgaban → splash 祭 eterno; capa de arranque que ningún fix de realtime tocaba — Hallazgo A) | ✅ **EN PROD (`5f22754`), VALIDADO POR LA DUEÑA** | **PROD (`a1342c8`+`fd2755c`+`5f22754`)** + STAGING (`0adf30e`+`f0f8127`+`8bed794`). Deploy confirmado (`version.json=5f22754`); la app se sostiene abierta sin el cuelgue (antes ~3 min). **Receta de prod = 3 commits + 2 exports en `supabase.ts`** (ver ESTADO §b-ter) |
 | **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
+| **🆕 Unificación Bandeja↔Caja** (un único "Agregar" en Caja Diaria; auto-clasificar Proveedores/Operativa como ayuda visual; sacar "Ingresar a inventario" del cajero → contador/manager lo completa en Inventarios; asiento contable automático) | 🔲 **PRÓXIMO — arranca por DISEÑO, sin código** | — (ver §1ter). Primer entregable = documento de diseño; **NO construir todavía** |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
 | PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
 | PoS F2 — Comandero + KDS + impresión (impresión real = F5) | 🟢 | STAGING (023–025) |
@@ -122,6 +125,25 @@ retira el camino `facturas` (queda legacy); **foto obligatoria**; la IA lee todo
 tipo/categoría (mercadería/operativo/personal/socios) mapeando a las categorías existentes, el humano
 confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian el pendiente;
 **offline Opción A** (se registra el pago igual, la IA procesa al volver la red).
+
+## §1ter. 🆕 PRÓXIMO PROYECTO — SPEC de la unificación Bandeja↔Caja (arranca por DISEÑO, NO construir todavía)
+
+> **Estado: 🔲 documento de diseño primero. NO escribir código hasta tener el SPEC y la firma de la dueña.**
+
+Objetivo: colapsar Bandeja y Caja Diaria en **un solo flujo de entrada** para el cajero, moviendo el trabajo
+contable a quien corresponde. Alcance a especificar:
+- **Un único botón "Agregar"** en Caja Diaria (en vez de caminos separados Bandeja vs movimiento de caja).
+- **Auto-clasificar** el ítem (Proveedores / Operativa) como **ayuda visual** — sugerencia, el humano confirma; no
+  decide solo.
+- **Sacar "Ingresar a inventario" del cajero** → el cajero solo registra el pago/foto; el **contador/manager** revisa
+  y **completa la entrada de inventario en el módulo de Inventarios** (separación de responsabilidades).
+- **Asiento contable automático** al confirmar (puente factura→inventario→costo, sin pegarlo a mano).
+- Encaje con lo que ya existe: la Bandeja Etapa 1 (`/inbox`, foto+IA, enlace proveedor↔caja), el inventario activo
+  (mig 037) y la cascada de borrado (mig 039, que ya mantiene la integridad al deshacer). Define si esto **reemplaza**
+  o **envuelve** la Etapa 2 diseñada arriba.
+
+Primer entregable = **documento de diseño** (flujos, roles, estados, impacto en esquema/migraciones, sagrados que NO
+se tocan). Recién con el SPEC firmado se planifica construcción.
 
 ## 🆕 Backlog nuevo (junio 18) — además de las fases de arriba
 

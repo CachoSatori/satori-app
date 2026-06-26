@@ -1,13 +1,16 @@
-# Continuación — backlog priorizado (handoff 2026-06-25)
+# Continuación — backlog priorizado (handoff 2026-06-26)
 
-Estado: **PROD (`main` `5f22754`) tiene las OLAS 1 y 1.1 de estabilidad (validadas) + el fix de la PANTALLA NEGRA del
-bootstrap (✅ EN PROD, deploy confirmado `version.json=5f22754`; ⏳ validación física en dispositivo pendiente) → la app
-vuelve a ser usable sin cuelgues.** main = capa de inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado
-+ **Ola 1** (saga Realtime/suspensión + durabilidad de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush
-del outbox) + **fix PANTALLA NEGRA** (`a1342c8`+`fd2755c`+`5f22754`). STAGING (código `ee5878a`) = todo el PoS + Bandeja
-Etapa 1 + esos fixes + la saga Realtime/suspensión + durabilidad de caja + **flush del outbox con tope** + **switch de diag
-solo-staging** (`[rt-diag]`, con `armBootHang`) + **🆕 pendientes de pase a prod:** durabilidad de `createDayMovement`
-(`dea9486`; hotfix `399fc0b`) + fix de auth-recovery (`e0df9ae`+`14e4546`, 🟡 gateado a suspensión real >1h — §0-bis).
+Estado: **PROD (`main` `79d8004`) tiene las OLAS 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la
+durabilidad de `createDayMovement` (todo ✅ validado físicamente) → la app vuelve a ser usable sin cuelgues.** main = capa de
+inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado + **Ola 1** (saga Realtime/suspensión + durabilidad
+de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush del outbox) + **fix PANTALLA NEGRA** (`5f22754`) +
+**🆕 durabilidad `createDayMovement`** (FF `5f22754`→`79d8004`, cherry-pick `399fc0b` re-cortado sobre `5f22754` — la rama vieja
+quedó stale sobre el main pre-pantalla-negra). STAGING (`a3dfacf`) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga
+Realtime/suspensión + durabilidad de caja + flush del outbox con tope + auth-recovery + switch de diag solo-staging
+(`[rt-diag]`) + **🆕 esta sesión: IDOR de `extract-document` cerrado** (`c38a252`, desplegado a staging Supabase, §0-quater)
+**+ borrado de caja → cascada de inventario + auditoría (mig 039)** (`82d55cd`+tipos `a3dfacf`, aplicada a la base de staging
+por dashboard). **🆕 pendientes de pase a prod:** auth-recovery (`e0df9ae`+`14e4546`, 🟡 gateado a suspensión real >1h — §0-bis)
+**+ el IDOR y la mig 039** (cherry-pick sobre main limpio, con firma).
 Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
@@ -21,9 +24,11 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 > Realtime/candado de auth. Eran las tres causas viejas del "se traba". **La causa NUEVA (Realtime tras suspensión
 > profunda) + la durabilidad de escritura de caja + el timeout/abort del flush del outbox YA ESTÁN EN PROD y validadas
 > físicamente** vía **OLA 1 (`2358f6c`)** y **OLA 1.1 (`ead4727`+`483d29c`)** — la cola del outbox drena sola. **🆕 También
-> EN PROD: el fix de la PANTALLA NEGRA del bootstrap** (`5f22754`, deploy confirmado; ⏳ validación física en dispositivo
-> pendiente — §0-ter). **El foco AHORA es la OLA 2: Bandeja Etapa 1 + mig 038 a prod (§1), con el prerequisito de
-> seguridad #1 (IDOR en `extract-document`) ANTES de subir la Bandeja.**
+> EN PROD: el fix de la PANTALLA NEGRA del bootstrap** (`5f22754`, ✅ validado físicamente) **y la durabilidad de
+> `createDayMovement`** (`79d8004`, ✅ validada). **🆕 En STAGING esta sesión (§0-quater): el prerequisito de seguridad #1
+> (IDOR en `extract-document`) quedó CERRADO y validado los 2 lados** + la integridad borrado→inventario (mig 039, validada
+> end-to-end por la dueña). **El foco AHORA es la OLA 2: Bandeja Etapa 1 + mig 038 a prod (§1)** — el IDOR ya no bloquea
+> (cerrado en staging), pero su fix **todavía hay que pasarlo a prod** junto con la Bandeja.
 
 ---
 
@@ -97,17 +102,45 @@ con `armBootHang` + natural; Service Worker Clients mostró `…/login`; build p
 
 ---
 
-## ★ PRIORIDAD 1 (pases a prod pendientes) — `createDayMovement` + auth-recovery
-> ✅ La **PANTALLA NEGRA ya pasó a prod** (`5f22754`, §0-ter) — sale de esta lista; queda su validación física en dispositivo.
+## 0-quater. 🆕 RESUELTO esta sesión (2026-06-26, SOLO en staging) — IDOR de `extract-document` + integridad borrado→inventario
 
-Quedan 2 hotfixes para prod (cada uno **NUEVO desde `main`**, NUNCA mergear `staging`→`main`; client-side, **sin migración**;
-verificación: `VITE_APP_ENV=production npm run build` EXIT 0 + suite verde + ritual de identidad `{base}version.json`→`.commit`;
-firma de la dueña). Orden y agrupación los decide la dueña:
-1. **`createDayMovement` durabilidad** — `hotfix/createdaymovement-durability-prod` (`399fc0b`), **ya verificado**, sin
-   `supplier_id` (solo-staging). Cierra el hueco nivel-día de Caja Diaria.
-2. **Auth-recovery** (`e0df9ae`+`14e4546`, **NO** el lock `ccef5f1` solo) — **GATEADO** a la suspensión real >1h (§0-bis);
-   no pasar hasta que esa validación física pase. Antes, ojo con la **PRIORIDAD 2** (drain del outbox en `SIGNED_IN`), de la
-   que depende su premisa "el outbox drena al reloguear".
+**(1) IDOR de la Edge Function `extract-document` — CERRADO** (`c38a252`, desplegado a staging Supabase, **validado los 2 lados**).
+Bajaba del bucket privado `documents` con la `service_role` **sin verificar al llamante** → cualquiera con la URL bajaba
+cualquier factura; CORS `*`. Fix (contrato `{ image_path }`→`{ documentos[] }` intacto): exige `Authorization` (→`401`),
+cliente con **ANON key + ese token** (aplica RLS), `auth.getUser()` (→`401`), **download con ese cliente** (no service_role) →
+RLS de storage de mig 016 es el portón (→`403`); CORS por **allowlist** (`https://cachosatori.github.io` +
+`https://satori-staging.pages.dev`). Validado: positivo (extracción en bandeja OK) + negativo (`curl` sin Authorization → `401`).
+**Era el prerequisito de seguridad #1 de la Ola 2.** Sigue SOLO en staging.
+
+**(2) Borrado de caja → cascada de inventario + auditoría — mig 039 + RPC** (`82d55cd`+tipos `a3dfacf`, **validado end-to-end
+por la dueña**). Antes `inventory_movements.cash_movement_id` era `ON DELETE SET NULL` (mig 017) → al borrar el `cash_movement`
+de una factura su inventario quedaba **huérfano** (inventario inflado + asientos duplicados al recargar). Ahora corre por la RPC
+**`delete_movement_cascade(p_movement_id, p_note)`** (SECURITY DEFINER, 1 transacción): valida owner/manager, snapshotea,
+audita en `movement_deletions`, borra inventario ligado + movimiento; idempotente. App: `deleteCashMovement(id, note)` enruta
+TODO por la RPC, **requiere conexión** (offline BLOQUEA, NO encola un borrado parcial), **nota obligatoria** + `requireManager()`
+en CashMovimientos y CashTurno. Test `cash.cascade.test.ts`. NO toca sagrados.
+
+> ⚠️ **mig 039 aplicada por el SQL editor del DASHBOARD** (firma de la dueña), NO por `db push` → **no quedó en
+> `supabase_migrations.schema_migrations`**. Un futuro `db push` la verá pendiente y la re-aplicará: es **idempotente**, no
+> rompe. Discrepancia de ledger junto con la **035** (ver ESTADO §d).
+> 🖊️ **SUB-DECISIÓN ABIERTA (a probar):** al borrar una factura se va movimiento + inventario, pero la **FOTO/documento queda**.
+> ¿Borrarla también para poder **recargar la factura sin que el dedupe por hash la frene**? Decisión de la dueña.
+
+---
+
+## ★ PRIORIDAD 1 (pases a prod pendientes) — auth-recovery + IDOR + integridad mig 039
+> ✅ La **PANTALLA NEGRA** (`5f22754`, §0-ter) **y la durabilidad de `createDayMovement`** (`79d8004`, §0-quater/abajo) **ya
+> pasaron a prod, validadas** — salen de esta lista.
+
+Cada pase es **NUEVO desde `main`**, NUNCA mergear `staging`→`main`; verificación: `VITE_APP_ENV=production npm run build`
+EXIT 0 + suite verde + ritual de identidad `{base}version.json`→`.commit`; firma de la dueña. Orden lo decide la dueña:
+1. **Auth-recovery** (`e0df9ae`+`14e4546`, **NO** el lock `ccef5f1` solo) — **GATEADO** a la suspensión real >1h (§0-bis);
+   no pasar hasta que esa validación física pase. Ojo con la **PRIORIDAD 2** (drain del outbox en `SIGNED_IN`), de la que
+   depende su premisa "el outbox drena al reloguear". Client-side, sin migración.
+2. **🆕 IDOR `extract-document`** (`c38a252`) — cherry-pick a main + **re-deploy de la Edge Function a la Supabase de PROD**
+   (`yiczgdtirrkdvohdquzf`). Es el prerequisito de seguridad #1 de la Bandeja.
+3. **🆕 Integridad borrado→inventario** (`82d55cd` código + **mig 039 sobre la BASE de prod**, hoy NO aplicada) — pase de
+   código por cherry-pick + aplicar la mig 039 en prod, con firma. La 039 es idempotente (ver nota §0-quater).
 
 ## ★ PRIORIDAD 2 — Hallazgo B: drain del outbox en `SIGNED_IN` (PLATA)
 `outbox.ts` hoy flushea por `'online'` / arranque / un backoff que **se apaga con la cola vacía**; **NO** hay flush atado a
@@ -139,14 +172,21 @@ la máquina** (antes el flush quedaba colgado en "por sincronizar" sobre el sock
 **ya está construida y validada en staging** — esta ola la **activa en prod**. Da **foto+IA real sin construir nada nuevo**.
 Es **esquema → firma de la dueña** (mig 038). ⚠️ **A verificar al planearla:** si la **mig 038 / la Etapa 1 se separan
 limpio de las migraciones del PoS (022–037)** o vienen acopladas (define si se puede pasar la Bandeja sin arrastrar el PoS).
-> 🔴 **PREREQUISITO DE SEGURIDAD #1 — ANTES de subir la Bandeja a prod:** corregir el **IDOR en la Edge Function
-> `extract-document`** (acceso a documentos sin verificar el dueño). No subir la Bandeja a prod hasta cerrarlo. Detalle → [HALLAZGOS.md](HALLAZGOS.md).
+> ✅ **PREREQUISITO DE SEGURIDAD #1 — CERRADO en staging (2026-06-26, §0-quater):** el **IDOR en `extract-document`** ya
+> está corregido y validado los 2 lados en staging (`c38a252`). **Pendiente para la Ola 2:** pasar ese fix a prod (cherry-pick
+> + re-deploy de la Edge Function a la Supabase de prod) **junto con** la Bandeja — no subir la Bandeja a prod sin el IDOR cerrado allí. Detalle → [HALLAZGOS.md](HALLAZGOS.md).
 
 ### Ola 3 🔲 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2
 **Qué:** entrada **foto-primero 100% dentro de Caja Diaria** — hoy **🔲 DISEÑADA, SIN código** (no hay nada en
 `src/modules/cash` ni `inbox`). Se construye **solo si** tras usar la Etapa 1 sigue haciendo falta.
 > **🖊️ DECISIÓN ABIERTA de la dueña (define si la Ola 3 se hace):** *¿la Bandeja **Etapa 1** (unificada con IA, ya lista
 > y validada) ALCANZA, o se necesita la **Etapa 2** (integración foto-primero dentro de Caja Diaria, a construir)?*
+
+### 🆕 PRÓXIMO PROYECTO — SPEC de la unificación Bandeja↔Caja (arranca por DISEÑO, NO construir todavía)
+Colapsar Bandeja y Caja Diaria en un solo flujo: **un único "Agregar"** en Caja Diaria · **auto-clasificar**
+Proveedores/Operativa como ayuda visual (sugerencia, el humano confirma) · **sacar "Ingresar a inventario" del cajero** →
+que el **contador/manager** lo revise y complete en el módulo de **Inventarios** · **asiento contable automático**.
+**Primer entregable = documento de diseño; NO escribir código hasta tener el SPEC + firma.** Detalle → ROADMAP §1ter.
 
 > **NO confundir con el GRAN PASE del PoS** (migs 022–037, comandero/KDS/cobro): es un **proyecto aparte y DIFERIDO**,
 > posterior a estas olas y **bloqueado por el PILAR de escalabilidad de sesión/auth** (abajo) + validación física del PoS (§6).
@@ -162,8 +202,9 @@ limpio de las migraciones del PoS (022–037)** o vienen acopladas (define si se
 - **(b) ✅ HECHO esta sesión — `createDayMovement` blindado** (`dea9486`, en staging). Mismo patrón que
   `registerCashMovement`: id+`client_op_id` en el cliente, `withWriteTimeout`+`.abortSignal()`, reintento único, y ante
   timeout/red-zombi **encola incondicionalmente en el outbox** (idempotente por `client_op_id`). Contrato intacto
-  (`Promise<string>`); sin tocar sagrados. Test en `cash.durability.test.ts` (2 casos nuevos). **Hotfix de prod listo y
-  verificado:** `hotfix/createdaymovement-durability-prod` (`399fc0b`, cherry-pick sobre `main` SIN `supplier_id`, sin mergear).
+  (`Promise<string>`); sin tocar sagrados. Test en `cash.durability.test.ts` (2 casos nuevos). **🆕 YA EN PROD (`79d8004`),
+  VALIDADA:** el cherry-pick `399fc0b` se **re-cortó** sobre `5f22754` (rama `hotfix/createdaymovement-durability-prod-v2`)
+  porque la rama vieja `hotfix/createdaymovement-durability-prod` había quedado stale sobre el main pre-pantalla-negra; FF limpio, sin `supplier_id`.
 - **(c) 🆕 BUG NUEVO (descubierto hoy) — `Cmd+Shift+R` estando en `/caja` deja la app colgada.** Un hard-reload en la
   ruta de Caja deja la app trabada (no termina de cargar). **Investigar:** reproducir, mirar consola/network, aislar si
   es Realtime/auth en el arranque de `/caja` o el SW/precache. Sin RCA todavía.

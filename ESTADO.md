@@ -1,13 +1,13 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-06-25 (cierre).** 🚀 **PROD avanzó a `5f22754` — la PANTALLA NEGRA YA ESTÁ EN PROD** (deploy confirmado: `version.json.commit = 5f22754`). STAGING en **`1c8c2b4`** (código `ee5878a`; lineal: `692055d`→`0adf30e`→`f0f8127`→`8bed794`→`ee5878a`→docs `1c8c2b4`). **HEADLINE:** se diagnosticó y **arregló la PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch de la PWA)** y se pasó a prod por hotfix. Causa raíz: `getSession` **y** `loadProfile` del **BOOTSTRAP** (`useAuth.tsx`) no tenían tope → se colgaban sobre el socket zombi → `loading` nunca bajaba. NINGÚN fix de realtime (máquina de 3 estados de `supabase.ts`) tocaba esta capa de arranque — por eso fallaba hace una semana (Hallazgo A). **✅ validado en staging** (determinístico con `__satoriDiag.armBootHang` + natural) y **✅ EN PROD, VALIDADO FÍSICAMENTE POR LA DUEÑA** (la app se sostiene abierta sin el cuelgue/splash negro; antes no aguantaba ~3 min). Próximos pases a prod desde staging: durabilidad de `createDayMovement` (`399fc0b`) y el fix de auth-recovery (gateado a suspensión real >1h).
+> **Handoff: 2026-06-26.** 🚀 **PROD avanzó a `79d8004`** = la **durabilidad de `createDayMovement`** ya está en prod (cherry-pick `399fc0b` **re-cortado** sobre `5f22754` porque la rama vieja había quedado stale sobre el main pre-pantalla-negra; FF limpio `5f22754`→`79d8004`). **✅ validada físicamente** (`version.json.commit=79d8004` + movimientos de día OK). **STAGING avanzó a `a3dfacf`** con dos fixes de seguridad/integridad (↓ §b-quater): **(1) IDOR de `extract-document` CERRADO** (exige JWT + download bajo RLS, sin service_role; CORS por allowlist) — desplegado a staging Supabase y **validado los 2 lados** (positivo: extracción en bandeja OK; negativo: `401` sin Authorization); **(2) borrado de caja → cascada de inventario + auditoría (mig 039)** — **validado end-to-end por la dueña** (cargar factura→inventario, borrar desde Caja Diaria → desaparece de Caja/Movimientos y se elimina la entrada de inventario, sin huérfanos). **Sesión previa (2026-06-25):** la **PANTALLA NEGRA** del bootstrap pasó a prod (`5f22754`, ✅ validada físicamente; causa raíz: `getSession`+`loadProfile` del BOOTSTRAP de `useAuth.tsx` sin tope → colgaban sobre el socket zombi → `loading` nunca bajaba — detalle §b-ter). **Pendiente de pase a prod:** auth-recovery (gateado a suspensión real >1h) **+ el IDOR y la integridad (mig 039) siguen SOLO en staging** → su pase a prod es trabajo futuro por cherry-pick sobre main limpio, con firma de la dueña.
 > Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Fases → [ROADMAP.md](ROADMAP.md) · Backlog/PASE A PROD → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos de auditoría → [HALLAZGOS.md](HALLAZGOS.md) · RCA Realtime → [docs/rca/2026-06-22-realtime-suspension.md](docs/rca/2026-06-22-realtime-suspension.md) · RCA auth recovery → [docs/HANG-RCA-2.md](docs/HANG-RCA-2.md).
 
 **Stack:** React 19 + TS strict + Vite + PWA · Supabase (Postgres + RLS + Edge Functions) · realtime.
 **Despliegue:** `main` → PROD (GitHub Pages, base `/satori-app/`) · `staging` → Cloudflare Pages.
 
-> **PROD (`main` `5f22754`) tiene las OLAS 1 y 1.1 de estabilidad (validadas) + el fix de la PANTALLA NEGRA del bootstrap (✅ EN PROD, validado físicamente por la dueña) → la app vuelve a ser usable sin cuelgues.** El trabajo de FEATURES (PoS, Bandeja) sigue viviendo en `staging`; a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`.
+> **PROD (`main` `79d8004`) tiene las OLAS 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la durabilidad de `createDayMovement` (todo validado físicamente) → la app vuelve a ser usable sin cuelgues.** El trabajo de FEATURES (PoS, Bandeja) y los fixes de seguridad/integridad de esta sesión (IDOR, mig 039) siguen viviendo en `staging`; a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`.
 
 ---
 
@@ -15,8 +15,8 @@
 
 | Rama | Hash | Qué es |
 |---|---|---|
-| `main` | `5f22754` | **PROD (estable, en uso).** Capa de inteligencia + fix SW viejo (`fde9264`) + fix fechas-borde (`ff836a0`) + canario Realtime/candado de auth + **OLA 1 (`2358f6c`)** = saga Realtime/suspensión (worker:true + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`) **+ durabilidad de escritura de caja**, **SIN diag** + **OLA 1.1 (`ead4727`+`483d29c`)** = timeout/abort del flush del outbox con guardarraíl de plata + **🆕 FIX PANTALLA NEGRA del bootstrap** (FF `483d29c`→`5f22754`, 3 commits `a1342c8`+`fd2755c`+`5f22754` = cherry-picks de `0adf30e`/`f0f8127`/`8bed794`, **+ 2 exports en `supabase.ts`** — ver receta en §(b-ter)). Deploy confirmado (`version.json=5f22754`); **✅ validado físicamente por la dueña en prod**. **NO** tiene el PoS ni la Bandeja. |
-| `staging` | `ee5878a` | **Fuente de verdad del trabajo nuevo (FEATURES).** Todo lo de `main` + PoS/KDS/comandero + FE estructura + inventario activo + Bandeja Etapa 1 + saga Realtime/suspensión (`3a0fd20`) + durabilidad de caja (`0dd258b`) + flush del outbox con tope (`4805e23`) + diag de Realtime solo-staging + **🆕 esta sesión:** durabilidad `createDayMovement` (`dea9486`) · auth-recovery (escape `SESSION_EXPIRED` N=3 + signOut acotado + latch, `e0df9ae`+`14e4546`; el lock 10s→5s `ccef5f1` es hardening, NO el fix — ver §b-bis) · **fix PANTALLA NEGRA: bootstrap con tope** (`0adf30e` getSession + `f0f8127` loadProfile+PrivateRoute + `8bed794` PublicRoute anti-loop — §b-ter) · **palanca diag `armBootHang`** (`ee5878a`, solo-staging, DCE en prod). `[rt-diag]`/`[diag-repro]` activos por diseño (gateado por `VITE_APP_ENV`). |
+| `main` | `79d8004` | **PROD (estable, en uso).** Capa de inteligencia + fix SW viejo (`fde9264`) + fix fechas-borde (`ff836a0`) + canario Realtime/candado de auth + **OLA 1 (`2358f6c`)** = saga Realtime/suspensión (worker:true + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`) **+ durabilidad de escritura de caja**, **SIN diag** + **OLA 1.1 (`ead4727`+`483d29c`)** = timeout/abort del flush del outbox con guardarraíl de plata + **FIX PANTALLA NEGRA del bootstrap** (`5f22754`, 3 commits + 2 exports en `supabase.ts` — receta en §(b-ter)) + **🆕 durabilidad `createDayMovement`** (FF `5f22754`→`79d8004`, cherry-pick `399fc0b` **re-cortado** sobre `5f22754` — la rama vieja había quedado stale sobre el main pre-pantalla-negra; sin `supplier_id`). Deploy confirmado (`version.json=79d8004`); **✅ validado físicamente por la dueña en prod**. **NO** tiene el PoS, la Bandeja, ni los fixes IDOR/mig-039 (siguen en staging). |
+| `staging` | `a3dfacf` | **Fuente de verdad del trabajo nuevo (FEATURES + seguridad/integridad).** Todo lo de `main` (hasta la pantalla negra) + PoS/KDS/comandero + FE estructura + inventario activo + Bandeja Etapa 1 + saga Realtime/suspensión + durabilidad de caja + flush del outbox con tope + auth-recovery (`e0df9ae`+`14e4546`, §b-bis) + diag de Realtime solo-staging + **🆕 esta sesión:** IDOR de `extract-document` cerrado (`c38a252`, §b-quater) · borrado de caja → cascada de inventario + auditoría **mig 039** (`82d55cd`) + tipos regenerados (`a3dfacf`). `[rt-diag]`/`[diag-repro]` activos por diseño (gateado por `VITE_APP_ENV`). |
 
 > Supabase refs: **PROD** = `yiczgdtirrkdvohdquzf` (intocable) · **STAGING** = `hwiatgicyyqyezqwldia`.
 > Ramas de la saga Realtime (todas mergeadas a staging): `fix/realtime-jwt-refresh` (R1) · `fix/realtime-socket-revive` (R2, **REVERTIDO**) · `fix/auth-lock-contention` (`09480a6`) · `fix/realtime-resume-refresh` (`97d9c75`) · `fix/realtime-worker-heartbeat` (`b7cf327`/`7cd7760`) · `fix/realtime-resume-diagnostics` (`28901c4`) · `fix/realtime-reauth-emit` + `fix/realtime-reauth-timeout` + `fix/realtime-resume-revive` (blindaje 8s + cinturón 40s; **approach intermedio que dejaba un loop `InvalidJWT` → REEMPLAZADO**) · **`fix/realtime-3state-machine` (`63ef0bb`)** = máquina de 3 estados · **`fix/realtime-emit-gating` (`3a0fd20`)** = gateo del emit + endurecimiento `SESSION_EXPIRED`. Cronología completa → RCA + `ESTADO-ARCHIVO.md` (2026-06-24).
@@ -89,6 +89,41 @@ socket zombi se colgaban → `loading` quedaba `true` para siempre. Ningún fix 
 > **NO traer** `ee5878a` (la palanca `armBootHang` NO va a prod) ni `ccef5f1` (el cambio de lock). Verificado en el hotfix:
 > build prod **EXIT 0**, **vitest 42/42**, dist sin diag, diff = **4 archivos (+205/−11)**.
 
+## (b-quater) 🆕 Esta sesión (2026-06-26) — seguridad + integridad, SOLO en staging
+
+**(1) IDOR de la Edge Function `extract-document` — CERRADO** (`c38a252`, en staging Supabase desplegado).
+Antes bajaba del bucket privado `documents` con la `service_role` **sin verificar quién llamaba** → cualquiera con la
+URL bajaba cualquier factura; CORS `*`. Fix mínimo (contrato `{ image_path }`→`{ documentos[] }` intacto): exige el header
+`Authorization` (→`401`), crea el cliente con el **ANON key + ese token** (aplica RLS), `auth.getUser()` (→`401` si no hay
+user) y **baja la imagen con ESE cliente** (no service_role) → el RLS de storage de mig 016 (`documents_storage_rw`, rol en
+owner/manager/contador/cajero) es el portón (→`403` si no toca); CORS por **allowlist** (`https://cachosatori.github.io` +
+`https://satori-staging.pages.dev`, eco del Origin + `Vary: Origin`). **VALIDADO los 2 lados:** positivo (extracción en
+bandeja OK) + negativo (`curl` sin Authorization → `401`; preflight de origen no permitido → sin `access-control-allow-origin`).
+Era el **PREREQUISITO de seguridad #1 de la Ola 2/Bandeja**. **Sigue SOLO en staging** → pase a prod por cherry-pick sobre
+main limpio, con firma.
+
+**(2) Borrado de caja → cascada de inventario + auditoría — mig 039 + RPC** (`82d55cd`+tipos `a3dfacf`).
+Antes `inventory_movements.cash_movement_id` era `ON DELETE SET NULL` (mig 017): al borrar el `cash_movement` de una
+factura, su entrada de inventario quedaba **huérfana** → inventario inflado + asientos duplicados al recargar. Ahora el
+borrado corre por la RPC **`delete_movement_cascade(p_movement_id, p_note)`** (SECURITY DEFINER, una transacción): valida
+rol owner/manager, snapshotea, **inserta auditoría en `movement_deletions`** (RLS INSERT/SELECT owner/manager/contador),
+borra el inventario ligado y el movimiento. Idempotente si el movimiento ya no existe. App: `deleteCashMovement(id, note)`
+enruta TODOS los borrados por la RPC; **requiere conexión** (si offline BLOQUEA con mensaje claro — NO encola un borrado
+parcial); **nota de motivo OBLIGATORIA** + `requireManager()` en CashMovimientos (handleDelete + lote) y CashTurno
+(removePago/removeIngreso/removeEgreso). NO toca sagrados; el arqueo no cambia (pendientes/inventario nunca entraron al
+efectivo). Test `cash.cascade.test.ts`. **VALIDADO end-to-end por la dueña en staging.** **Sigue SOLO en staging** → pase
+a prod (incluida la mig 039 sobre la base de prod) es trabajo futuro con firma.
+
+> ⚠️ **mig 039 aplicada por el SQL editor del DASHBOARD** (firma de la dueña), **NO** por `db push` → **no quedó registrada
+> en `supabase_migrations.schema_migrations`**. Un futuro `supabase db push` la verá **pendiente** e intentará re-aplicarla;
+> es **idempotente** (`create table if not exists` / `create or replace function` / `drop policy if exists`+`create`) → re-aplicar
+> NO rompe. Sumada a la lista de **discrepancias de ledger junto con la 035** (§d). Verificado en vivo: `movement_deletions`
+> y `delete_movement_cascade(p_movement_id, p_note)` existen en el esquema de staging; tipos regenerados (diff aditivo +39/−0).
+
+> 🖊️ **SUB-DECISIÓN ABIERTA de la dueña (a probar):** al borrar una factura hoy se va el **movimiento + su inventario**, pero
+> la **FOTO/documento queda**. ¿Borrarla también, para poder **recargar la factura sin que el dedupe por hash la frene**?
+> Decisión de la dueña; probar en staging antes de cablearlo.
+
 ## (c) PROD vs STAGING
 
 - **En PROD (`main` `5f22754`, estable):** ventas/analítica, propinas, caja (turnos + cierre día 2 fases +
@@ -96,21 +131,23 @@ socket zombi se colgaban → `loading` quedaba `true` para siempre. Ningún fix 
   Migraciones **001–021**. **+** fix SW viejo, fix fechas-borde, el canario Realtime/candado, **las OLAS 1 + 1.1 de
   estabilidad** (saga Realtime/suspensión + durabilidad de escritura de caja + timeout/abort del flush del outbox con
   guardarraíl de plata; **SIN diag**), y **🆕 el fix de la PANTALLA NEGRA del bootstrap** (`5f22754`; ✅ validado
-  físicamente por la dueña — §b-ter). Todo es client-only (sin migración).
+  físicamente por la dueña — §b-ter) **y 🆕 la durabilidad de `createDayMovement`** (`79d8004`; ✅ validada). Todo es client-only (sin migración).
 - **Solo en STAGING (no en prod):** todo el **PoS** (catálogo+salón multi-local, comandero, KDS, cobro+splits+ticket
   SIM, `computeTotals`, FE estructura SIM, inventario activo depleción+COGS) · **Bandeja fusionada Etapa 1** + enlace
   proveedor↔caja + visibilidad pendientes + fechas CR · **switch de diagnóstico de Realtime solo-staging**
   (`window.__satoriDiag`: `armZombie`/`armExpired`/`armBootHang`, §b/§b-ter) + la instrumentación `[rt-diag]` activa ·
-  **🆕 pendientes de pase a prod:** **durabilidad `createDayMovement`** (hotfix `399fc0b` listo) y el **fix de auth-recovery**
-  (§b-bis, gateado a suspensión real >1h). Migraciones **022–038** (sin migración nueva esta sesión, todo client-side).
+  **🆕 esta sesión (§b-quater): IDOR de `extract-document` cerrado** (`c38a252`, desplegado a staging Supabase) **y
+  borrado de caja → cascada de inventario + auditoría (mig 039)** (`82d55cd`+`a3dfacf`, aplicada a la base de staging por
+  dashboard). **🆕 pendiente de pase a prod:** el **fix de auth-recovery** (§b-bis, gateado a suspensión real >1h) **+ el
+  IDOR y la mig 039** (cherry-pick sobre main limpio, con firma). Migraciones **022–039** (la 039 es la única nueva de esta sesión).
 - **En rama aparte (sin merge):** `propina-pool` (espera decisión de la dueña).
 
 ## (d) Migraciones
 
 | Entorno | Hasta | Notas |
 |---|---|---|
-| **PROD** | **021** | Los fixes SW/fechas/Realtime, **las Olas 1 + 1.1 de estabilidad y el fix de la PANTALLA NEGRA** son 100% client-side (sin migración). |
-| **STAGING** | **038** | 022–034 PoS · 036 FE estructura · 037 inventario COGS · **038 Bandeja** (firmada por la dueña). ⚠️ **035:** el ledger la marca aplicada pero el archivo solo vive en `propina-pool` (sin merge) → **discrepancia A INVESTIGAR**, sin tocar el historial. ⚠️ Verificar estado real de la **038** en el ledger antes de actuar (a PROD va con el pase del PoS). |
+| **PROD** | **021** | Los fixes SW/fechas/Realtime, **las Olas 1 + 1.1, el fix de la PANTALLA NEGRA y la durabilidad de `createDayMovement`** son 100% client-side (sin migración). |
+| **STAGING** | **039** | 022–034 PoS · 036 FE estructura · 037 inventario COGS · **038 Bandeja** (firmada) · **🆕 039 movimiento→cascada de inventario + `movement_deletions`** (firmada, APLICADA esta sesión). ⚠️ **Discrepancias de ledger (NO tocar el historial):** **(035)** el ledger la marca aplicada pero el archivo solo vive en `propina-pool` (sin merge) — A INVESTIGAR; **(039)** se aplicó por el **SQL editor del dashboard**, NO por `db push` → **no está en `schema_migrations`** → un futuro `db push` la verá pendiente y la re-aplicará (es **idempotente**, no rompe). ⚠️ Verificar estado real de la **038** en el ledger antes de actuar (a PROD va con el pase del PoS). |
 
 ## (e) Lo construido, por módulo
 
@@ -127,7 +164,9 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
 | **Outbox — timeout/abort del flush** (OLA 1.1) | ✅ **EN PROD y VALIDADA** — la cola drena sola | **prod** (`ead4727`+`483d29c`) + staging (`4805e23`) | Las 5 llamadas de red del `supabaseExecutor` con `withWriteTimeout`+`.abortSignal()`. **Guardarraíl de plata:** un timeout → `'retry'`, NUNCA `'fatal'` (fatal borra la op = pago perdido). Test `outbox.test.ts` (9 casos). |
 | **Diagnóstico — switch de reproducción** (solo-staging) | ✅ **validado en staging** | staging (`ee5878a`) | `window.__satoriDiag`: `armZombie`/`armExpired` (realtime) + **`armBootHang('getSession'\|'loadProfile')`/`disarmBootHang`** (pantalla negra del bootstrap, one-shot) + `disarm`/`status`. DCE lo elimina de prod (grep VACÍO). Logs `[diag-repro]`. |
 | **🆕 PANTALLA NEGRA — bootstrap con tope** (getSession + loadProfile + guards) | ✅ **EN PROD (`5f22754`), VALIDADO POR LA DUEÑA** | **prod** (`a1342c8`+`fd2755c`+`5f22754`) + staging (`0adf30e`+`f0f8127`+`8bed794`) | Ver §(b-ter) (incluye la **receta de prod**: 3 commits + 2 exports). La app se sostiene abierta sin el cuelgue (antes ~3 min). |
-| **🆕 `createDayMovement` — durabilidad** (id+`client_op_id`+`withWriteTimeout`+outbox) | 🟢 **en staging** (`dea9486`) · hotfix prod listo (`399fc0b`, sin mergear) | staging + `hotfix/createdaymovement-durability-prod` | Cierra el hueco nivel-día de Caja Diaria. Test `cash.durability.test.ts` (2 casos). El hotfix de prod NO arrastra `supplier_id` (solo-staging). |
+| **🆕 `createDayMovement` — durabilidad** (id+`client_op_id`+`withWriteTimeout`+outbox) | ✅ **EN PROD (`79d8004`), VALIDADA** | **prod** (`399fc0b` re-cortado→`79d8004`) + staging (`dea9486`) | Cierra el hueco nivel-día de Caja Diaria. Test `cash.durability.test.ts` (2 casos). El cherry-pick a prod NO arrastra `supplier_id` (solo-staging); re-cortado sobre `5f22754` (la rama vieja quedó stale). |
+| **🆕 IDOR `extract-document` (Edge Function) — CERRADO** (JWT + download bajo RLS, sin service_role; CORS allowlist) | 🟢 **en staging, VALIDADO los 2 lados** | staging (`c38a252`, desplegado a staging Supabase) | §(b-quater). Prerequisito de seguridad #1 de la Ola 2/Bandeja. **Sigue SOLO en staging** → pase a prod por cherry-pick con firma. |
+| **🆕 Borrado de caja → cascada de inventario + auditoría** (mig 039 + RPC `delete_movement_cascade`, nota obligatoria + `requireManager`) | ✅ **VALIDADO end-to-end por la dueña** (en staging) | staging (`82d55cd`+tipos `a3dfacf`, **mig 039 aplicada** por dashboard) | §(b-quater). Cierra el inventario huérfano del `ON DELETE SET NULL` de mig 017. Requiere conexión (offline BLOQUEA, no encola). Test `cash.cascade.test.ts`. **Sigue SOLO en staging** (código + base). |
 | **🆕 Auth recovery — escape del loop `OFFLINE_WAITING`** (N=3 timeouts → `SESSION_EXPIRED`+signOut local + latch one-shot) | 🟡 **solo unit tests** — falta validación física | staging (`e0df9ae`+`14e4546`) | Ver §(b-bis) + `docs/HANG-RCA-2.md`. **GATE a prod: suspensión real >1h.** El lock `ccef5f1` fue red herring (hardening). |
 | **Bandeja ETAPA 1** (unificada `/inbox`, foto+IA + enlace proveedor↔caja + visibilidad pendientes) | ✅ **COMPLETA y validada** | staging | mig 038, validada con rol contador. **= candidata de la Ola 2.** |
 | **Bandeja ETAPA 2** (entrada foto-primero 100% dentro de Caja Diaria) | 🔲 **DISEÑADA, SIN código** | — | NO hay nada en `src/modules/cash` ni `inbox`. = Ola 3, gated por decisión de la dueña (¿alcanza la Etapa 1?). |
@@ -149,12 +188,15 @@ Leyenda: ✅ validado por la dueña / 🟢 hecho y verde (tests+build) sin valid
   - **OLA 3 (cuando la base esté sólida) — CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro de Caja Diaria; hoy **🔲 diseñada, SIN código**). **Solo si** tras usar la Etapa 1 sigue haciendo falta → **DECISIÓN ABIERTA de la dueña**.
 - **PASE A PROD — estado (detalle + orden → PROMPT-CONTINUACION §1):**
   1. ✅ **PANTALLA NEGRA — HECHA, EN PROD (`5f22754`), VALIDADA POR LA DUEÑA.** Hotfix `hotfix/pantalla-negra-prod` mergeado por FF a `main`; deploy confirmado (`version.json=5f22754`) y **✅ validación física en dispositivo OK** (la app se sostiene abierta sin el cuelgue). Receta registrada en §(b-ter).
-  2. 🟢 **`createDayMovement` durabilidad — PENDIENTE de pase:** `hotfix/createdaymovement-durability-prod` (`399fc0b`) **verificada y lista** (sin `supplier_id`).
+  2. ✅ **`createDayMovement` durabilidad — HECHA, EN PROD (`79d8004`), VALIDADA.** Cherry-pick `399fc0b` **re-cortado** sobre `5f22754` (la rama vieja `hotfix/createdaymovement-durability-prod` quedó stale sobre el main pre-pantalla-negra → se cortó `hotfix/createdaymovement-durability-prod-v2`); FF limpio; sin `supplier_id`.
   3. 🟡 **Auth-recovery (`e0df9ae`+`14e4546`) — PENDIENTE, GATEADO:** hotfix nuevo desde `main` (NO el lock `ccef5f1` solo), **gateado a la suspensión real >1h** (§b-bis).
+  4. 🆕🖊️ **IDOR `extract-document` + integridad mig 039 — PENDIENTES, SOLO en staging:** cerrados y validados en staging (§b-quater) pero **NO en prod**. Su pase es cherry-pick sobre main limpio (como `createDayMovement`) **con firma**; la mig 039 hay que aplicarla además a la **base de prod** (hoy NO está). El IDOR es prerequisito de la Ola 2/Bandeja.
   El orden y la coordinación los decide la dueña.
 - **🔐 Rotar 2 tokens de GitHub:** (a) `gh auth refresh -s repo,read:org,workflow` (el `gho_` que estaba embebido en el remote de `SATORI PROPINAS` ya fue limpiado del config, pero sigue válido en GitHub hasta rotarlo); (b) **regenerar el PAT classic `ghp_` "Claude CLI" sin scope `admin:org`** — su valor quedó en un transcript local; rotar **antes del 27-jun**.
 - **GRAN PASE del PoS a PROD — DIFERIDO** (NO es parte de las 3 olas; la dueña eligió estabilidad primero): consolidar migraciones del PoS (022–037) con guard anti-staging, buckets, tipos, validar TODO el PoS en piso. Es un proyecto aparte y posterior, bloqueado además por el PILAR de escalabilidad de sesión/auth. No confundir con la Ola 2 (que lleva **solo** la Bandeja Etapa 1 + mig 038).
-- **Discrepancia mig 035** en el ledger de staging → sesión dedicada de propinas, sin tocar el historial.
+- **Discrepancias de ledger de staging (sin tocar el historial):** **(035)** marcada aplicada pero el archivo solo vive en `propina-pool` (sin merge) → sesión dedicada de propinas; **(039)** aplicada por el SQL editor del dashboard, NO por `db push` → no está en `schema_migrations` (un futuro `db push` la verá pendiente; es idempotente, re-aplicar no rompe).
+- **🆕 PRÓXIMO PROYECTO de roadmap (arranca por DISEÑO, NO construir todavía): SPEC de la unificación Bandeja↔Caja.** Un único botón **"Agregar"** en Caja Diaria; **auto-clasificar** Proveedores/Operativa como ayuda visual; **sacar "Ingresar a inventario" del cajero** → que el **contador/manager** lo revise y complete en el módulo de **Inventarios**; **asiento contable automático**. Primer entregable = documento de diseño (no código). Ver ROADMAP §1bis y PROMPT-CONTINUACION.
+- **🆕🖊️ SUB-DECISIÓN ABIERTA (a probar):** al borrar una factura se va el movimiento + su inventario, pero la **FOTO/documento queda** → ¿borrarla también para poder recargar sin que el dedupe por hash frene? Decisión de la dueña (§b-quater).
 - **Contadora:** códigos **CIIU/CABYS** (bloquean FE real). **FE real:** emisor certificado CR (Hacienda 4.4) tras `FeProvider` (hoy SIM).
 - **Validación física en staging:** comandero pro, FE-SIM, inventario que baja al cerrar. Checklist en [REPORTE-NOCHE-2.md](REPORTE-NOCHE-2.md).
 - **⚠️ GOTCHA DE VERIFICACIÓN (vale para TODO pase futuro):** **`tsc --noEmit` es un FALSO VERDE** en este repo — el `tsconfig.json` raíz tiene `"files": []` + `references`, así que **no chequea ningún archivo**. El typecheck REAL es **`npm run build`** (`tsc -b`, que compila los `*.test.ts`). En el pase de la Ola 1.1 un cast en un test pasó `tsc --noEmit` pero rompió el build de prod (`tsc -b`); quedó latente en staging y solo apareció en el pase a main. **Regla: toda verificación de un pase corre `VITE_APP_ENV=production npm run build`, no `tsc --noEmit`.** Castear tipos incompatibles en tests: `x as unknown as T`.

@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { Supplier } from '../types/database'
-import type { DocumentRow } from './documents'
+import type { Ingredient } from '../types/inventario'
+import type { DocumentRow, DocItem } from './documents'
 
 // Facturas/proformas ya procesadas (gasto creado) que todavía no tienen su
 // inventario ingresado. El encargado las procesa cuando quiere (batch).
@@ -154,4 +155,103 @@ export async function commitInventoryForDocument(params: {
     ingresados++
   }
   return { ingresados }
+}
+
+// ── Edición de líneas (UI compartida: Bandeja InventoryStep ↔ Revisión InvRevision) ──
+// Extraído de InventoryStep para que ambos flujos resuelvan el mapeo con la MISMA lógica.
+export const NONE = '__none__'
+export const NEW = '__new__'
+export const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
+export const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+
+// Estado editable de una línea (lo que el humano toca en la tabla).
+export interface EditLine {
+  codigo: string | null
+  descripcion: string
+  sel: string            // '' | NONE | NEW | ingredient_id
+  newName: string
+  newUnit: string
+  unidad: string
+  factor: number
+  cantidad: number
+  precio: number
+}
+
+// Resolver una línea de factura a su estado editable: mapeo aprendido → fuzzy → vacío.
+export function resolveLine(it: DocItem, map: SupplierItemMap[], ingredients: Ingredient[]): EditLine {
+  const codigo = (it.codigo ?? '').trim() || null
+  const descripcion = it.descripcion || ''
+  const base: EditLine = {
+    codigo, descripcion, sel: '', newName: descripcion, newUnit: it.unidad || 'UN',
+    unidad: it.unidad || 'UN', factor: 1, cantidad: N(it.cantidad) || 1, precio: N(it.precio_unitario) || N(it.total),
+  }
+  // 1) mapeo aprendido
+  const learned = map.find(m => (codigo && m.codigo === codigo) || (!codigo && norm(m.descripcion_factura || '') === norm(descripcion)))
+  if (learned) {
+    if (!learned.es_inventario) return { ...base, sel: NONE }
+    return { ...base, sel: learned.ingredient_id ?? '', factor: Number(learned.factor_conversion) || 1, unidad: learned.unidad_factura || base.unidad }
+  }
+  // 2) fuzzy por nombre
+  const dn = norm(descripcion)
+  const fuzzy = ingredients.find(g => { const gn = norm(g.name); return gn && (dn.includes(gn) || gn.includes(dn.split(' ')[0])) })
+  if (fuzzy) return { ...base, sel: fuzzy.id, unidad: base.unidad }
+  return base
+}
+
+// Resolver las líneas editadas → InvLine[], creando ingredientes nuevos al vuelo.
+// Lanza Error con mensaje legible si falta una selección. `proveedorName` queda como dueño
+// del ingrediente recién creado. (Igual que el confirmar de InventoryStep, sin el commit.)
+export async function resolveEditLines(lines: EditLine[], ingredients: Ingredient[], proveedorName: string): Promise<InvLine[]> {
+  const resolved: InvLine[] = []
+  for (const l of lines) {
+    const esInv = l.sel !== NONE
+    let ingredientId: string | null = null
+    let unitBase = l.unidad
+    if (esInv) {
+      if (l.sel === NEW) {
+        if (!l.newName.trim()) throw new Error(`Falta el nombre del ingrediente nuevo para "${l.descripcion}"`)
+        ingredientId = await createIngredient(l.newName.trim(), l.newUnit || 'UN', proveedorName || undefined)
+        unitBase = l.newUnit || 'UN'
+      } else if (l.sel) {
+        ingredientId = l.sel
+        unitBase = ingredients.find(g => g.id === l.sel)?.unit || l.unidad || 'UN'
+      } else {
+        throw new Error(`Elegí un ingrediente (o "no es inventario") para "${l.descripcion}"`)
+      }
+    }
+    resolved.push({
+      codigo: l.codigo, descripcion: l.descripcion, ingredient_id: ingredientId,
+      ingredient_unit: unitBase, unidad_factura: l.unidad || 'UN',
+      factor_conversion: l.factor || 1, cantidad: l.cantidad, precio_unitario: l.precio,
+      es_inventario: esInv && !!ingredientId,
+    })
+  }
+  return resolved
+}
+
+// ── F3: líneas para complete_inventory_review ────────────────
+// Mismo cálculo factor/qty/cost que commitInventoryForDocument (NO re-derivar). A diferencia
+// del flujo viejo, esto SOLO arma el payload de la RPC: no toca cost_per_unit ni ingredient_prices.
+export type ReviewLine = {
+  ingredient_id: string
+  qty_delta: number
+  unit: string
+  unit_cost: number
+  notes: string
+}
+export function buildReviewLines(lines: InvLine[]): ReviewLine[] {
+  return lines
+    .filter(l => l.es_inventario && l.ingredient_id)
+    .map(l => {
+      const factor = l.factor_conversion || 1
+      const qtyBase = l.cantidad * factor
+      const costBase = factor ? l.precio_unitario / factor : l.precio_unitario
+      return {
+        ingredient_id: l.ingredient_id as string,
+        qty_delta: qtyBase,
+        unit: l.ingredient_unit,
+        unit_cost: costBase,
+        notes: `Factura · ${l.descripcion}`.slice(0, 200),
+      }
+    })
 }

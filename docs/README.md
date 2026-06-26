@@ -17,6 +17,11 @@ profundizar/decidir; nada acá implementa nada por sí solo.
 - **[SPEC-COMANDA-GAPS.md](./SPEC-COMANDA-GAPS.md)** — 3 gaps priorizados para decidir:
   **Comp vs Void** (P&L), **fire-by-prep-time** (el campo prep ya existe), **revenue centers**
   (venta por área salón/barra/terraza).
+- **[SPEC-unificacion-bandeja-caja.md](./SPEC-unificacion-bandeja-caja.md)** — ✅ **v1, decisiones de diseño
+  FIRMADAS (2026-06-26)**: colapsar Bandeja y Caja Diaria en un **único "Agregar"**; auto-clasificar
+  Proveedores/Operativa como **ayuda visual** (el humano confirma); sacar "Ingresar a inventario" del cajero →
+  **contador/manager** lo completa en Inventarios; asiento contable automático. **SOLO diseño** (no autoriza código).
+  Subsume la "Bandeja — Etapa 2" del ROADMAP (D6).
 
 ## En la raíz del repo (specs previos, se conservan donde estaban)
 - **[../SPEC-LAVU-FLUJO-MESA.md](../SPEC-LAVU-FLUJO-MESA.md)** — flujo de mesa Lavu vs Satori

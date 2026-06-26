@@ -29,7 +29,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **🆕 PANTALLA NEGRA — bootstrap de `useAuth` con tope** (getSession + loadProfile sin tope se colgaban → splash 祭 eterno; capa de arranque que ningún fix de realtime tocaba — Hallazgo A) | ✅ **EN PROD (`5f22754`), VALIDADO POR LA DUEÑA** | **PROD (`a1342c8`+`fd2755c`+`5f22754`)** + STAGING (`0adf30e`+`f0f8127`+`8bed794`). Deploy confirmado (`version.json=5f22754`); la app se sostiene abierta sin el cuelgue (antes ~3 min). **Receta de prod = 3 commits + 2 exports en `supabase.ts`** (ver ESTADO §b-ter) |
 | **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
-| **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 diseñada | — (ver §1bis) |
+| **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 **SUBSUMIDA** por [docs/SPEC-unificacion-bandeja-caja.md](docs/SPEC-unificacion-bandeja-caja.md) (D6) | — (ver §1ter) |
 | **🆕 Unificación Bandeja↔Caja** (un único "Agregar" en Caja Diaria; auto-clasificar Proveedores/Operativa como ayuda visual; sacar "Ingresar a inventario" del cajero → contador/manager lo completa en Inventarios; asiento contable automático) | 🔲 **PRÓXIMO — arranca por DISEÑO, sin código** | — (ver §1ter). Primer entregable = documento de diseño; **NO construir todavía** |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
 | PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
@@ -128,7 +128,7 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
 
 ## §1ter. 🆕 PRÓXIMO PROYECTO — SPEC de la unificación Bandeja↔Caja (arranca por DISEÑO, NO construir todavía)
 
-> **Estado: 🔲 documento de diseño primero. NO escribir código hasta tener el SPEC y la firma de la dueña.**
+> **Estado: ✅ primer entregable (documento de diseño) ENTREGADO Y FIRMADO — [SPEC v1](docs/SPEC-unificacion-bandeja-caja.md) (2026-06-26). 🔲 construcción NO empezada: no escribir código hasta cumplir las precondiciones del SPEC + firma SEPARADA por migración.**
 
 Objetivo: colapsar Bandeja y Caja Diaria en **un solo flujo de entrada** para el cajero, moviendo el trabajo
 contable a quien corresponde. Alcance a especificar:
@@ -142,8 +142,10 @@ contable a quien corresponde. Alcance a especificar:
   (mig 037) y la cascada de borrado (mig 039, que ya mantiene la integridad al deshacer). Define si esto **reemplaza**
   o **envuelve** la Etapa 2 diseñada arriba.
 
-Primer entregable = **documento de diseño** (flujos, roles, estados, impacto en esquema/migraciones, sagrados que NO
-se tocan). Recién con el SPEC firmado se planifica construcción.
+Primer entregable = **documento de diseño** ✅ **ENTREGADO Y FIRMADO (v1, 2026-06-26):**
+[docs/SPEC-unificacion-bandeja-caja.md](docs/SPEC-unificacion-bandeja-caja.md) (flujos, roles, estados, impacto en
+esquema/migraciones, sagrados que NO se tocan). Con el SPEC firmado se planifica construcción (recién tras cumplir
+las precondiciones del propio SPEC; cada migración exige firma separada).
 
 ## 🆕 Backlog nuevo (junio 18) — además de las fases de arriba
 

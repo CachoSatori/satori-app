@@ -1,4 +1,5 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vitest/config'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { execSync } from 'node:child_process'
@@ -128,5 +129,16 @@ export default defineConfig({
         },
       },
     },
+  },
+  // ── Vitest ───────────────────────────────────────────────────────────────────
+  // Default `node` a propósito: los tests existentes (p. ej. supabase.timeout / cash.cascade /
+  // cash.durability) EXPLOTAN la ausencia de window/navigator en Node (montan/borran globalThis.*),
+  // así que el DOM NO puede ser el default sin reescribirlos. Los tests que SÍ necesitan DOM
+  // (render con React Testing Library) lo piden por archivo con el docblock `// @vitest-environment
+  // happy-dom`. El setup file es seguro en ambos entornos (cleanup guardado por typeof document).
+  test: {
+    environment: 'node',
+    setupFiles: ['./vitest.setup.ts'],
+    environmentOptions: { happyDOM: { url: 'http://localhost/' } },
   },
 })

@@ -1,30 +1,30 @@
--- 042 — Unificación Bandeja↔Caja: libro de asientos contables automáticos. ADITIVA e IDEMPOTENTE.
+-- 042 — Unificación Bandeja↔Caja: libro de asientos para AUDITORÍA/REVERSIÓN. ADITIVA e IDEMPOTENTE.
 --
 -- ⚠ BORRADOR DE PLATA — NO MERGEAR / NO APLICAR SIN FIRMA DE LA DUEÑA.
 -- Aplicar SOLO en staging (ref hwiatgicyyqyezqwldia). NUNCA en producción.
 -- Tras aplicarla (con firma): regenerar los tipos de Supabase.
 --
--- FUENTE DE VERDAD: docs/SPEC-unificacion-bandeja-caja.md §11 (D1=C modelo append-only, D2=A timing),
--- §8 (INV-3 append-only, INV-4 idempotencia). Implementa EXACTAMENTE el modelo de §11.1/§11.2.
+-- FUENTE DE VERDAD: docs/SPEC-unificacion-bandeja-caja.md §11 (modelo append-only, idempotencia,
+-- reversión), §8 (INV-3 append-only, INV-4 idempotencia), §7.2 (alta de tarea de mercadería, INV-1).
 --
--- ⚠ DOBLE-CONTEO (a resolver en la capa de app, NO en esta migración): hoy finance.ts deriva
--- "actuals" del P&L directamente desde cash_movements. Este trigger ADEMÁS acumula en finance_actuals
--- (filas con source='unif_accounting'). Mientras AMBOS caminos estén activos, un gasto operativo se
--- contaría DOS veces. El plan de fases (SPEC §17 F2) cambia la app para leer el libro en vez de derivar.
--- Por eso esta migración se aplica con firma y su activación se coordina con ese cambio de app.
+-- ✅ OPCIÓN A (FIRMADA) — en v1 accounting_entries es un libro de AUDITORÍA/REVERSIÓN ÚNICAMENTE y
+-- NO alimenta el P&L. El P&L se sigue derivando EN VIVO de getLiveActuals (cash_movements) + la carga
+-- manual de reales, exactamente como hoy. Por eso esta migración NO escribe la tabla de reales del P&L:
+-- se QUITARON, respecto del borrador previo, el rollup (trigger + función), el recompute y el índice
+-- parcial sobre esa tabla. El asiento se REGISTRA en el libro para dejar traza auditada y reversible;
+-- su propagación automática al P&L queda como visión futura (SPEC §19).
 --
--- Solo AGREGA: tabla nueva + funciones + triggers. NO modifica el esquema de finance_actuals ni
--- toca sus filas existentes (el rollup solo escribe/lee filas propias source='unif_accounting').
--- CERO backfill: los triggers solo actúan sobre DML futuro, nunca sobre filas históricas.
+-- Solo AGREGA: tabla nueva + funciones + trigger sobre cash_movements. NO toca la tabla de reales del
+-- P&L (ni su esquema ni sus filas). CERO backfill: los triggers solo actúan sobre DML futuro, nunca históricos.
 
 -- ── 1. Tabla append-only de asientos (§11.1) ──
 create table if not exists public.accounting_entries (
   id                uuid        primary key default gen_random_uuid(),
   entry_date        date        not null,                 -- fecha de registro CR (RN-1)
-  year              int         not null,                 -- derivados de entry_date (clave de rollup)
+  year              int         not null,                 -- derivados de entry_date (hora CR); para consultar el libro
   month             int         not null,
   account_id        text        not null references public.finance_accounts(id),
-  amount_crc        numeric(12,2) not null,               -- FIRMADO: + suma al actual, − lo revierte
+  amount_crc        numeric(12,2) not null,               -- FIRMADO: + cargo, − contra-asiento de reversión
   currency          text        not null default 'CRC',
   fx_rate           numeric     not null default 1,
   source_type       text        not null,                 -- 'cash_movement'|'inventory_movement'|'reversal'|'manual'
@@ -55,14 +55,7 @@ drop policy if exists accounting_entries_select on public.accounting_entries;
 create policy accounting_entries_select on public.accounting_entries for select
   using (get_my_role() in ('owner','manager','contador'));
 
--- ── 3. Índice parcial para el rollup propio en finance_actuals ──
--- SOLO restringe las filas del libro (source='unif_accounting'); NO toca las filas 'manual'/import
--- existentes (el predicado las excluye). Permite un upsert concurrency-safe del rollup.
-create unique index if not exists finance_actuals_unif_uq
-  on public.finance_actuals (account_id, year, month)
-  where source = 'unif_accounting';
-
--- ── 4. Helper interno: postear un asiento idempotente (no expuesto al cliente) ──
+-- ── 3. Helper interno: postear un asiento idempotente (no expuesto al cliente) ──
 create or replace function public.post_accounting_entry(
   p_entry_date date, p_account_id text, p_amount_crc numeric,
   p_source_type text, p_source_id uuid, p_kind text,
@@ -92,58 +85,12 @@ end $$;
 -- Interno: solo lo invocan funciones/triggers SECURITY DEFINER. Quitamos el execute por defecto a PUBLIC.
 revoke execute on function public.post_accounting_entry(date,text,numeric,text,uuid,text,text,numeric,uuid,text) from public, anon;
 
--- ── 5. Rollup append-only a finance_actuals (§11.1) ──
--- after insert: acumula amount_crc en la fila propia (source='unif_accounting') de ese (cuenta,año,mes).
--- Las reversiones son filas negativas → el neto cuadra solo (INV-3). NUNCA toca filas de otra source.
-create or replace function public.unif_rollup_to_finance_actuals() returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.finance_actuals (account_id, year, month, amount, source, note)
-    values (NEW.account_id, NEW.year, NEW.month, NEW.amount_crc, 'unif_accounting',
-            'rollup del libro de asientos (unificación Bandeja↔Caja)')
-  on conflict (account_id, year, month) where (source = 'unif_accounting')
-    do update set amount = finance_actuals.amount + EXCLUDED.amount;
-  return null;
-end $$;
-
-drop trigger if exists accounting_entries_rollup on public.accounting_entries;
-create trigger accounting_entries_rollup
-  after insert on public.accounting_entries
-  for each row execute function public.unif_rollup_to_finance_actuals();
-
--- ── 6. Recalcular el rollup desde el libro (reparación/auditoría, §11.1) ──
--- Recompone la fila source='unif_accounting' de un período desde accounting_entries. SOLO toca filas
--- propias (source='unif_accounting'); jamás las 'manual'/import. Suma TODAS las filas (la reversión ya
--- aportó su negativo y el original su positivo → neto correcto).
-create or replace function public.recompute_finance_actuals(p_year int, p_month int)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if get_my_role() not in ('owner','manager') then
-    raise exception 'No autorizado';
-  end if;
-  delete from public.finance_actuals
-   where year = p_year and month = p_month and source = 'unif_accounting';
-  insert into public.finance_actuals (account_id, year, month, amount, source, note)
-    select account_id, p_year, p_month, sum(amount_crc), 'unif_accounting',
-           'recompute desde accounting_entries'
-      from public.accounting_entries
-     where year = p_year and month = p_month
-     group by account_id;
-end $$;
-revoke execute on function public.recompute_finance_actuals(int,int) from public, anon;
-grant  execute on function public.recompute_finance_actuals(int,int) to authenticated;
-
--- ── 7. Trigger sobre cash_movements: asiento OPERATIVO + creación de tarea de MERCADERÍA (§11.2, §7.2) ──
+-- ── 4. Trigger sobre cash_movements: asiento OPERATIVO en el libro + creación de tarea de MERCADERÍA (§11.2, §7.2) ──
 -- Es SECURITY DEFINER para poder escribir el libro y crear la tarea sin abrir RLS de escritura.
 -- Robusto offline: un movimiento creado offline postea/crea al sincronizar (el trigger corre en el server).
 -- Idempotente: el asiento por la unicidad parcial; la tarea por el guard de "no existe activa".
+-- OPCIÓN A: el asiento se REGISTRA en accounting_entries para auditoría/reversión; NO impacta el P&L
+-- (el P&L se sigue derivando en vivo de cash_movements vía getLiveActuals).
 --   · classification='operativa' + status='aprobado' (pagado) → asiento 'gasto_operativo' a su account_id.
 --     (Asunción: status='aprobado' = "pagado/confirmado"; el enum movement_status es
 --      ('pendiente','aprobado','rechazado'). Confirmar con la dueña si cambia el criterio.)

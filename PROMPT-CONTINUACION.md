@@ -7,7 +7,7 @@ de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush del outbo
 **🆕 durabilidad `createDayMovement`** (FF `5f22754`→`79d8004`). STAGING (**`69d7749`**) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga
 Realtime/suspensión + durabilidad de caja + flush del outbox con tope + auth-recovery (mergeado) + switch de diag solo-staging
 (`[rt-diag]`) + IDOR de `extract-document` cerrado (`c38a252`) + borrado de caja → cascada de inventario (mig 039)
-+ **🆕 esta sesión (2026-06-26): esquema 040–043 de la unificación APLICADO a la base de staging** (vía `db query`, no en `schema_migrations`; archivos en la rama `feat/unif-migrations-040-043` `3c534f4`, sin mergear) + **entorno de tests DOM** (happy-dom+RTL, smoke anti-loop). **🆕 pendientes de pase a prod:** el IDOR y la mig 039 (cherry-pick sobre main limpio, con firma). Auth-recovery quedó **DIFERIDO** (gate >1h pasó; ya mergeado — §0-bis).
++ **🆕 esta sesión (2026-06-26): esquema 040–043 de la unificación APLICADO a la base de staging** (vía `db query`, no en `schema_migrations`; archivos ✅ **MERGEADOS a staging** `63ca7ce`) + **entorno de tests DOM** (happy-dom+RTL, smoke anti-loop). **🆕 pendientes de pase a prod:** el IDOR y la mig 039 (cherry-pick sobre main limpio, con firma). Auth-recovery quedó **DIFERIDO** (gate >1h pasó; ya mergeado — §0-bis).
 Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
@@ -32,8 +32,8 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 ## ★ PRÓXIMO (2026-06-26) — construcción del módulo de unificación Bandeja↔Caja
 
 El **diseño** (SPEC firmado) y el **esquema** (migraciones 040–043) ya están: las 4 fueron **firmadas y aplicadas a la
-base de staging** vía `supabase db query` (NO `db push` → no en `schema_migrations`; archivos en la rama
-`feat/unif-migrations-040-043` `3c534f4`, **sin mergear**). Decisión **OPCIÓN A** firmada: `accounting_entries` es
+base de staging** vía `supabase db query` (NO `db push` → no en `schema_migrations`; archivos ✅ **MERGEADOS a
+staging** `63ca7ce`). Decisión **OPCIÓN A** firmada: `accounting_entries` es
 auditoría/reversión, **no alimenta el P&L** (ver SPEC §19). Lo que sigue:
 
 1. **🟢 PRIMER PASO — regenerar los tipos TS contra staging.** Ya existen en la base `accounting_entries`,
@@ -42,8 +42,8 @@ auditoría/reversión, **no alimenta el P&L** (ver SPEC §19). Lo que sigue:
    confirmar `cat supabase/.temp/linked-project.json` → ref `hwiatgicyyqyezqwldia` ANTES de cualquier comando de Supabase.
 2. **🟢 Construir F3–F5 del SPEC:** módulo de Inventarios (cola + completar revisión vía `complete_inventory_review`),
    el **"Agregar" único** en Caja Diaria con clasificación advisory, y la cascada extendida en la UI.
-3. **🖊️ DECISIÓN ABIERTA — ¿mergear los archivos `040–043*.sql` a `staging`?** Ya firmados + aplicados a la base; mergearlos
-   haría el repo **fiel** a lo que corre en staging (hoy hay drift archivo↔base). Recomendado antes de construir encima.
+3. **✅ RESUELTO — archivos `040–043*.sql` MERGEADOS a `staging`** (`63ca7ce`): el repo ya es **fiel** al esquema de la base
+   (sin drift archivo↔base).
 
 > 🛑 **RITUAL OBLIGATORIO antes de CUALQUIER comando de base** (aprendizaje crítico de esta sesión, ver HALLAZGOS.md):
 > `cat supabase/.temp/linked-project.json` → el `"ref"` DEBE ser `hwiatgicyyqyezqwldia` (staging). El CLI estaba

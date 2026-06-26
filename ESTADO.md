@@ -2,7 +2,7 @@
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > **Handoff: 2026-06-26.** Esta sesión fue de **esquema + tooling de tests + handoff**, todo en `staging` (prod intacto):
-> 1. **Migraciones 040–043 (unificación Bandeja↔Caja) FIRMADAS y APLICADAS a la base de staging** (vía `supabase db query`, NO `db push` → **no quedaron en `schema_migrations`**). Esquema verificado 10/10 objetos. Los **archivos `.sql` viven SOLO en la rama `feat/unif-migrations-040-043` (`3c534f4`), sin mergear** → *"esquema aplicado en la base de staging, archivos en rama suelta"*.
+> 1. **Migraciones 040–043 (unificación Bandeja↔Caja) FIRMADAS y APLICADAS a la base de staging** (vía `supabase db query`, NO `db push` → **no quedaron en `schema_migrations`**). Esquema verificado 10/10 objetos. Los **archivos `.sql` están ✅ MERGEADOS a staging (`63ca7ce`)** → el repo refleja el esquema real (la rama `feat/unif-migrations-040-043` quedó superada).
 > 2. **Decisión OPCIÓN A (firmada):** `accounting_entries` es libro de **AUDITORÍA/REVERSIÓN únicamente; NO alimenta el P&L** (evita un doble-conteo real, ↓§b6). El P&L se sigue derivando en vivo de `getLiveActuals`. Propagación automática = visión futura (SPEC §19).
 > 3. **Entorno de tests DOM** (happy-dom + RTL + smoke anti-loop `/`↔`/login`) **mergeado a staging** (`69d7749`), gates verdes.
 > 4. **Auth-recovery** reclasificado: el gate de suspensión >1h **PASÓ** → **DIFERIDO** (posiblemente innecesario), código ya **mergeado** en staging (↓§b3).
@@ -22,7 +22,7 @@
 |---|---|---|
 | `main` | `79d8004` | **PROD (estable, en uso), INTACTO esta sesión.** Capa de inteligencia + fixes SW/fechas + canario Realtime/candado + **OLA 1** (saga Realtime/suspensión: worker:true + máquina de 3 estados + gateo del emit + endurecimiento `SESSION_EXPIRED` + durabilidad de escritura de caja, SIN diag) + **OLA 1.1** (timeout/abort del flush del outbox) + **PANTALLA NEGRA** (`5f22754`) + **durabilidad `createDayMovement`** (`79d8004`). Migraciones **≤021** (todo lo demás es client-side). **NO** tiene PoS/Bandeja/IDOR/mig-039/040-043. |
 | `staging` | `69d7749` | **Fuente de verdad del trabajo nuevo.** Todo `main` + PoS/KDS/comandero + FE estructura + inventario activo + Bandeja Etapa 1 + saga Realtime + durabilidad caja/outbox + **auth-recovery mergeado** (`e0df9ae`+`14e4546`, §b3) + diag solo-staging + IDOR cerrado (`c38a252`) + cascada de inventario **mig 039** (`82d55cd`) + docs SPEC unificación (+§19) + **🆕 entorno de tests DOM** (happy-dom+RTL, `69d7749`). |
-| `feat/unif-migrations-040-043` | `3c534f4` | **Rama suelta, FIRMADA.** Contiene los **archivos** `040–043*.sql` (unificación Bandeja↔Caja). El **esquema YA está aplicado a la base de staging** (vía `db query`), pero **los archivos NO están mergeados** a `staging`. Decisión abierta: ¿mergearlos? (los haría fieles al repo). |
+| `feat/unif-migrations-040-043` | `3c534f4` | **MERGEADA a staging (`63ca7ce`), rama superada.** Aportó los **archivos** `040–043*.sql` (unificación Bandeja↔Caja), ya en `staging`. El **esquema fue aplicado a la base de staging** vía `db query` (no en `schema_migrations`). |
 
 > **Supabase refs:** **PROD = `yiczgdtirrkdvohdquzf`** ("satori-app", INTOCABLE) · **STAGING = `hwiatgicyyqyezqwldia`** ("satori-staging").
 > 🛑 **RITUAL OBLIGATORIO antes de CUALQUIER comando de base** (`migration list`, `db query`, `db push`, `dump`…): correr `cat supabase/.temp/linked-project.json` → el `"ref"` **DEBE** ser `hwiatgicyyqyezqwldia`. **El link puede quedar apuntando a PROD sin avisar** (pasó esta sesión). Si no es staging: `supabase link --project-ref hwiatgicyyqyezqwldia` y re-verificar. **Nunca** correr DB sin confirmar el ref. Ver HALLAZGOS.md.
@@ -59,8 +59,8 @@ El escape del loop `OFFLINE_WAITING` (N=3 timeouts de `getSession` → `SESSION_
 ## (c) PROD vs STAGING
 
 - **En PROD (`main` `79d8004`):** ventas/analítica, propinas, caja (turnos + cierre 2 fases + movimientos + pendientes), ingesta foto vieja, finanzas/P&L, reportes+emails, admin, auth Fase 2, realtime, offline. Migraciones **001–021** + (client-side) fixes SW/fechas, canario, Olas 1+1.1, pantalla negra, durabilidad `createDayMovement`. **Sin cambios esta sesión.**
-- **Solo en STAGING:** todo el **PoS** (catálogo/salón multi-local, comandero, KDS, cobro+splits+ticket SIM, `computeTotals`, FE estructura SIM, inventario activo COGS) · **Bandeja Etapa 1** · diag de Realtime · **IDOR cerrado** · **cascada mig 039** · **🆕 esquema 040–043 aplicado a la base** (archivos en rama suelta) · **🆕 entorno de tests DOM**. Migraciones **022–039** + **040–043** (estas últimas fuera del ledger).
-- **En rama aparte (sin merge):** `propina-pool` (espera decisión); `feat/unif-migrations-040-043` (archivos 040-043).
+- **Solo en STAGING:** todo el **PoS** (catálogo/salón multi-local, comandero, KDS, cobro+splits+ticket SIM, `computeTotals`, FE estructura SIM, inventario activo COGS) · **Bandeja Etapa 1** · diag de Realtime · **IDOR cerrado** · **cascada mig 039** · **🆕 esquema 040–043 aplicado a la base + archivos MERGEADOS** (`63ca7ce`) · **🆕 entorno de tests DOM**. Migraciones **022–039** + **040–043** (estas últimas fuera del ledger).
+- **En rama aparte (sin merge):** `propina-pool` (espera decisión). *(`feat/unif-migrations-040-043` ya fue MERGEADA — `63ca7ce`.)*
 
 ## (d) Migraciones
 
@@ -89,7 +89,7 @@ Leyenda: ✅ validado por la dueña / 🟢 verde (tests+build) sin validación f
 | IDOR `extract-document` cerrado | 🟢 validado 2 lados | **solo staging** (`c38a252`) |
 | Cascada de inventario (mig 039) | ✅ validado e2e por la dueña | **solo staging** (`82d55cd`) |
 | Auth-recovery (escape loop OFFLINE_WAITING) | 🟡 **DIFERIDO** (gate >1h pasó; posiblemente innecesario) | mergeado en staging (`e0df9ae`+`14e4546`) |
-| **🆕 Esquema unificación 040–043** (tablas/funciones/columnas) | 🟢 **aplicado a la base de staging** (10/10) · 🔲 archivos sin mergear | base staging + rama `feat/unif-migrations-040-043` |
+| **🆕 Esquema unificación 040–043** (tablas/funciones/columnas) | 🟢 **aplicado a la base de staging** (10/10) · ✅ archivos MERGEADOS (`63ca7ce`) | base staging + `supabase/migrations/040–043` |
 | **🆕 Entorno de tests DOM** (happy-dom+RTL+smoke) | 🟢 mergeado, gates verdes | staging (`69d7749`) |
 | Bandeja Etapa 1 | ✅ COMPLETA y validada | staging (mig 038) |
 | Bandeja Etapa 2 / "Agregar" único | 🔲 **SUBSUMIDA por SPEC unificación** (código sin construir) | — (SPEC §19; ROADMAP §1ter) |
@@ -108,7 +108,7 @@ Leyenda: ✅ validado por la dueña / 🟢 verde (tests+build) sin validación f
 ## (g) Pendientes humanos / operativos / prolijidad
 
 - **PRÓXIMO (construcción del módulo de unificación):** **regenerar los tipos TS** contra staging (ya existen `accounting_entries`, `inventory_review_task`, las RPCs, las 3 columnas) → luego construir F3–F5 del SPEC (módulo de Inventarios, "Agregar" único, cascada en UI). Ver PROMPT-CONTINUACION §1.
-- **DECISIÓN abierta:** ¿mergear los archivos 040–043 a `staging`? (ya firmados + aplicados; haría el repo fiel a la base).
+- **✅ RESUELTO:** los archivos 040–043 fueron **MERGEADOS a `staging`** (`63ca7ce`) → el repo es fiel al esquema de la base.
 - **DIFERIDO — reconciliación del ledger** (009/035/039/040–043): sesión dedicada; resolver 035/`propina-pool` primero.
 - **DIFERIDO — auth-recovery** (§b3): requiere cerrar la premisa Hallazgo B (outbox drena en `SIGNED_IN`).
 - **PLAN DE PASE A PROD — OPCIÓN A (3 OLAS).** Olas 1 y 1.1 ✅ en prod. ⚠️ Staging está muy por delante de main → **solo cherry-pick**, nunca merge. Próximas: pase del IDOR + mig 039 (con firma) y, luego, Ola 2 (Bandeja Etapa 1 + mig 038). Detalle → PROMPT-CONTINUACION.

@@ -1,8 +1,25 @@
-# HALLAZGOS — backlog triado de las auditorías (handoff 2026-06-25, addendum 2026-06-26)
+# HALLAZGOS — backlog triado de las auditorías (handoff 2026-06-25, addenda 2026-06-26/27)
 
 > **SOLO evaluación.** Nada de esto fue accionado salvo lo indicado como ✅. Es el inventario de lo que
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+
+## ✅ Accionado 2026-06-27
+- **Borrado de día / descarte de turno saltaba la cascada.** `discardDiaCompleto`/`discardCashSession`
+  borraban `cash_movements` con `.delete()` crudo → `accounting_entries` huérfanos + `inventory_review_task`
+  colgadas (el mismo bug de integridad que mig 039 cerró para el borrado por movimiento, pero por estos dos
+  caminos). **ARREGLADO + MERGEADO a staging** (`b8ab78c`): ambos enrutan por `delete_movement_cascade` con
+  credenciales de gerencia (mig 044). Test `cash.discardDia.test.ts`. 👁️ falta validación física.
+- **Lectura de facturas con IA fallaba desde el teléfono** (HEIC/peso/orientación EXIF → Anthropic vacío →
+  "sin leer"). **ARREGLADO + MERGEADO a staging (`eefa056`):** se normaliza la foto en el navegador antes de
+  subirla (`imageNormalize.ts`). Front-only. ✅ validada físicamente (captura directa con el teléfono).
+- **Limpieza de código muerto no-money — MERGEADA a staging** (`9b1127c`→`abb2a25`). Los hallazgos de limpieza
+  NO accionados (money-adjacent, sagrados, duplicación de `fi`, `InventoryStep.tsx` huérfano, `@types/dompurify`)
+  están catalogados y rankeados en [INFORME-LIMPIEZA.md](INFORME-LIMPIEZA.md). **Follow-up sugerido:** `knip`/`ts-prune`
+  en CI (el `noUnusedLocals` del build no detecta exports muertos).
+- **Follow-up de seguridad pendiente (Edge Function):** endurecer `mediaType()` de `extract-document` para que NO
+  dependa solo de la extensión del archivo. El fix de la foto (front normalizando a JPEG) resuelve el síntoma; el
+  endurecimiento server-side queda como defensa en profundidad (no se tocó `supabase/` esta sesión).
 
 ## ⚠⚠ APRENDIZAJE CRÍTICO DE PROCESO (2026-06-26) — el CLI estaba enlazado a PRODUCCIÓN
 El CLI de Supabase quedó **enlazado a PROD** (`ref yiczgdtirrkdvohdquzf`, "satori-app"), **NO a staging**

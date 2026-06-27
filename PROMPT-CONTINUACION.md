@@ -1,4 +1,12 @@
-# Continuación — backlog priorizado (handoff 2026-06-26)
+# Continuación — backlog priorizado (handoff 2026-06-27)
+
+> **🆕 ESTA SESIÓN (2026-06-27) — todo en `staging`, prod intacto.** `staging` = **`eefa056`**.
+> 1. **Limpieza de código muerto — MERGEADA a staging** (`9b1127c`→`abb2a25`): archivo huérfano `api/auth.ts`, exports sin uso, assets del scaffold. No-money. Catálogo de lo NO tocado en [INFORME-LIMPIEZA.md](INFORME-LIMPIEZA.md).
+> 2. **Borrar-día y descartar-turno por la CASCADA — MERGEADO a staging** (`b8ab78c`): ya no dejan `accounting_entries` huérfanos ni `inventory_review_task` colgadas; enrutan por `delete_movement_cascade` (mig 044, con credenciales de gerencia). Test `cash.discardDia.test.ts`. **👁️ PRÓXIMO INMEDIATO: validación física** (borrar un día con factura de mercadería → 0 huérfanos).
+> 3. **Foto de factura normalizada en el navegador — MERGEADO a staging** (`eefa056`): arregla la lectura con IA de capturas del teléfono (HEIC/peso/EXIF). Front-only. **✅ Validada físicamente** (captura directa con el teléfono). Follow-up opcional: endurecer `mediaType()` de la Edge Function (defensa en profundidad).
+>
+> Lo de abajo es el handoff de la sesión 2026-06-26 (sigue vigente como plan de fondo).
+
 
 Estado: **PROD (`main` `79d8004`) tiene las OLAS 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la
 durabilidad de `createDayMovement` (todo ✅ validado físicamente) → la app vuelve a ser usable sin cuelgues.** main = capa de

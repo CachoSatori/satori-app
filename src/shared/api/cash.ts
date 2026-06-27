@@ -473,10 +473,25 @@ export async function deleteCashMovement(id: string, note: string, managerEmail?
   }
 }
 
-// Descartar un turno (apertura por error, fecha equivocada): borra sus
-// movimientos y la sesión. Empezás de cero.
-export async function discardCashSession(sessionId: string): Promise<void> {
-  await supabase.from('cash_movements').delete().eq('session_id', sessionId)
+// Descartar un turno (apertura por error, fecha equivocada): borra sus movimientos y la
+// sesión. Empezás de cero. Los movimientos van UNO POR UNO por la cascada (RPC
+// delete_movement_cascade) — igual que el borrado por movimiento y que discardDiaCompleto —
+// para NO dejar accounting_entries huérfanos ni inventory_review_task colgadas. La sesión
+// (no toca el libro) va por `.delete()` crudo, recién DESPUÉS de los movimientos. Secuencial:
+// si una llamada falla, frena y propaga indicando cuántos se borraron (parcial recuperable).
+// `managerEmail/managerPassword` (mig 044) los pasa el cajero; owner/manager logueado no.
+export async function discardCashSession(sessionId: string, managerEmail?: string, managerPassword?: string): Promise<void> {
+  const note = `Descarte de turno ${sessionId}`
+  const { data: movs, error: eMov } = await withWriteTimeout(signal => supabase.from('cash_movements').select('id').eq('session_id', sessionId).abortSignal(signal))
+  if (eMov) throw new Error(eMov.message)
+  let deleted = 0
+  for (const m of (movs ?? []) as { id: string }[]) {
+    try { await deleteCashMovement(m.id, note, managerEmail, managerPassword); deleted++ }
+    catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      throw new Error(`Descarte parcial: se borraron ${deleted} movimiento(s) antes de fallar (${msg}). Volvé a descartar el turno para terminar.`)
+    }
+  }
   const { error } = await supabase.from('cash_sessions').delete().eq('id', sessionId)
   if (error) throw new Error(error.message)
 }
@@ -682,25 +697,52 @@ export async function discardCierreDia(date: string): Promise<void> {
 // movimientos del día (los de los turnos de esa fecha + los a nivel día) + los turnos de
 // caja de esa fecha. NO toca propinas (tip_sessions / tip_entries). Acción destructiva
 // explícita (la dispara el usuario con confirmación + autorización de gerencia).
-export async function discardDiaCompleto(date: string): Promise<void> {
-  // 1) Movimientos ligados a turnos de esa fecha
-  const { data: sess } = await withWriteTimeout(signal => supabase.from('cash_sessions').select('id').eq('session_date', date).abortSignal(signal))
-  const ids = ((sess ?? []) as { id: string }[]).map(s => s.id)
-  if (ids.length) {
-    const { error } = await withWriteTimeout(signal => supabase.from('cash_movements').delete().in('session_id', ids).abortSignal(signal))
-    if (error) throw new Error(error.message)
+//
+// Los MOVIMIENTOS se borran UNO POR UNO por la cascada (deleteCashMovement → RPC
+// delete_movement_cascade), NO con un `.delete()` plano: un delete crudo deja
+// accounting_entries huérfanos (source_id a un movimiento inexistente, sin reversa) e
+// inventory_review_task sin descartar, sin auditoría (mismo bug que arregló mig 039 para el
+// borrado por movimiento). El cierre (paso 3) y las sesiones (paso 4) SÍ van por `.delete()`
+// crudo: no tocan el libro contable. ORDEN: movimientos por la RPC PRIMERO, recién después
+// cierre y sesiones. Es secuencial: si una llamada falla, se frena y se propaga indicando
+// cuántos movimientos se borraron (parcial recuperable: volver a correrlo termina el borrado).
+// `managerEmail/managerPassword` (mig 044) los pasa el cajero; owner/manager logueado no.
+export async function discardDiaCompleto(date: string, managerEmail?: string, managerPassword?: string): Promise<void> {
+  const note = `Borrado de día completo ${date}`
+  let deleted = 0
+  // Propaga el error sin tragarlo, anotando el conteo parcial para que la UI avise.
+  const failPartial = (e: unknown): never => {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new Error(`Borrado parcial: se borraron ${deleted} movimiento(s) antes de fallar (${msg}). Volvé a correr "Borrar TODO el día" para terminar.`)
   }
+  const cascadeDelete = async (id: string) => {
+    try { await deleteCashMovement(id, note, managerEmail, managerPassword); deleted++ }
+    catch (e) { failPartial(e) }
+  }
+
+  // 1) Movimientos ligados a turnos de esa fecha → por la cascada (RPC), uno por uno
+  const { data: sess, error: eSess } = await withWriteTimeout(signal => supabase.from('cash_sessions').select('id').eq('session_date', date).abortSignal(signal))
+  if (eSess) throw new Error(eSess.message)
+  const sessionIds = ((sess ?? []) as { id: string }[]).map(s => s.id)
+  if (sessionIds.length) {
+    const { data: turnMovs, error: eTurn } = await withWriteTimeout(signal => supabase.from('cash_movements').select('id').in('session_id', sessionIds).abortSignal(signal))
+    if (eTurn) throw new Error(eTurn.message)
+    for (const m of (turnMovs ?? []) as { id: string }[]) await cascadeDelete(m.id)
+  }
+
   // 2) Movimientos a nivel día (sin turno) de esa fecha — rango horario de Costa Rica (UTC-6)
   const next = new Date(date + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + 1)
   const nextStr = next.toISOString().slice(0, 10)
-  const { error: e2 } = await withWriteTimeout(signal => supabase.from('cash_movements').delete()
+  const { data: dayMovs, error: eDay } = await withWriteTimeout(signal => supabase.from('cash_movements').select('id')
     .is('session_id', null)
     .gte('created_at', `${date}T06:00:00Z`).lt('created_at', `${nextStr}T06:00:00Z`)
     .abortSignal(signal))
-  if (e2) throw new Error(e2.message)
-  // 3) Cierre del día
+  if (eDay) throw new Error(eDay.message)
+  for (const m of (dayMovs ?? []) as { id: string }[]) await cascadeDelete(m.id)
+
+  // 3) Cierre del día — `.delete()` crudo (no toca el libro contable)
   await withWriteTimeout(signal => supabase.from('cash_cierres_dia').delete().eq('session_date', date).abortSignal(signal))
-  // 4) Turnos de caja de esa fecha
+  // 4) Turnos de caja de esa fecha — `.delete()` crudo
   const { error: e4 } = await withWriteTimeout(signal => supabase.from('cash_sessions').delete().eq('session_date', date).abortSignal(signal))
   if (e4) throw new Error(e4.message)
 }

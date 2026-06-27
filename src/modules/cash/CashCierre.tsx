@@ -259,10 +259,11 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       `Esto borra el cierre, las ventas, el retiro, los PAGOS A PROVEEDORES, gastos, ingresos manuales ` +
       `y los turnos de caja del ${fecha}. Sirve para recargar el día desde cero.\n\n` +
       `NO toca propinas. NO se puede deshacer.`)) return
-    if (!(await requireManager()).ok) return
+    const auth = await requireManager()
+    if (!auth.ok) return
     setSaving(true); setError(null)
     try {
-      await discardDiaCompleto(fecha)
+      await discardDiaCompleto(fecha, auth.managerEmail, auth.managerPassword)
       setMsg('✓ Día borrado completo — podés recargar desde cero.')
       await loadCierres(); onRefresh()
     } catch (e) {

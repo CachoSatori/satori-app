@@ -621,8 +621,9 @@ export default function CashTurno({
   const descartarTurno = async () => {
     if (!openSession) return
     if (!window.confirm(`¿Descartar el turno ${openSession.shift_type} del ${openSession.session_date}?\nSe borra el turno y todos sus movimientos. No se puede deshacer.`)) return
-    if (!(await requireManager()).ok) return
-    try { await discardCashSession(openSession.id); onSessionClose() }
+    const auth = await requireManager()
+    if (!auth.ok) return
+    try { await discardCashSession(openSession.id, auth.managerEmail, auth.managerPassword); onSessionClose() }
     catch (e) { onError(e instanceof Error ? e.message : 'Error al descartar') }
   }
 

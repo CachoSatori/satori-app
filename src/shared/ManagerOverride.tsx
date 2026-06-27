@@ -3,6 +3,47 @@ import type { ReactNode, FormEvent } from 'react'
 import { supabase } from './api/supabase'
 import { useAuth } from './hooks/useAuth'
 
+/**
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *  Autorización de gerencia ("override de cajero") — FUENTE ÚNICA del patrón.
+ * ════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Acciones sensibles (borrar un movimiento, anular un ítem enviado, deshacer un cierre, etc.)
+ * requieren que un owner/manager las autorice. `useManagerOverride()` devuelve `requireManager()`:
+ *
+ *   const requireManager = useManagerOverride()
+ *   const auth = await requireManager()
+ *   if (!auth.ok) return            // canceló o credenciales inválidas → no seguir
+ *
+ * Resultado — ManagerAuth:
+ *   • owner/manager logueado  → { ok: true }                       (sin credenciales: la acción
+ *                                                                    server-side autoriza por su rol)
+ *   • cajero (u otro rol)     → abre el modal; si valida           → { ok: true, managerEmail,
+ *                                                                    managerPassword }
+ *   • cancela / inválido      → { ok: false }
+ *
+ * IMPORTANTE — `requireManager()` resuelve un OBJETO, no un boolean. Siempre chequeá `.ok`
+ * (un `if (!(await requireManager()))` sería SIEMPRE falso → guard inútil; TS no lo cacha).
+ *
+ * ── Por qué el modal verifica Y la RPC re-valida ─────────────────────────────────────────
+ * El modal llama verify_manager (mig 019), que valida las credenciales pero NO cambia la sesión
+ * del navegador (crear una sesión paralela colgaba el refresh de token). Por eso, para el BORRADO,
+ * las mismas credenciales se PASAN a la RPC delete_movement_cascade (mig 044), que las re-valida
+ * server-side y autoriza aunque el llamador siga siendo 'cajero'. La verificación del modal sirve
+ * de UX inmediata y de gate para los usos que NO son borrado (anular ítem, deshacer cierre…), que
+ * confían en `.ok` sin pasar credenciales a ningún lado.
+ *
+ * ── Patrón canónico de "borrado con autorización" (los 5 sites de caja) ──────────────────
+ *   const auth = await requireManager(); if (!auth.ok) return
+ *   const note = await askNote('movimiento'); if (!note) return          // useDeletionNote()
+ *   await deleteCashMovement(id, note, auth.managerEmail, auth.managerPassword)
+ * deleteCashMovement reenvía las credenciales a la RPC solo si vienen (owner/manager no las manda).
+ *
+ * ── Seguridad ────────────────────────────────────────────────────────────────────────────
+ * Las credenciales son TRANSITORIAS: viven en memoria durante el request, viajan a la RPC sobre
+ * HTTPS y se descartan. NO se loguean (sin console.* con la contraseña) y NO se persisten
+ * (deleteCashMovement nunca encola → no van a IndexedDB ni a ningún store).
+ */
 const VERIFY_TIMEOUT_MS = 10_000
 
 type VerifyResult = { ok: boolean; error?: string }
@@ -22,11 +63,12 @@ async function verifyManager(email: string, password: string): Promise<VerifyRes
     setTimeout(() => reject(new Error('timeout')), VERIFY_TIMEOUT_MS))
   try {
     const { data, error } = await Promise.race([rpc('verify_manager', { p_email: email.trim(), p_password: password }), timeout])
-    if (error) return { ok: false, error: `No se pudo verificar: ${error.message}. Reintentá.` }
-    if (data !== true) return { ok: false, error: 'Credenciales inválidas o sin permiso de gerencia' }
+    // Tres casos bien distintos para que el usuario sepa qué hacer:
+    if (error) return { ok: false, error: `Error del servidor al verificar: ${error.message}. Reintentá en un momento.` }   // server
+    if (data !== true) return { ok: false, error: 'Credenciales inválidas o sin permiso de gerencia. Verificá el correo y la contraseña, o pedí a un encargado/dueño que los ingrese.' }   // creds
     return { ok: true }
   } catch {
-    return { ok: false, error: 'No se pudo verificar (sin conexión o demoró >10s). Revisá la red y reintentá.' }
+    return { ok: false, error: 'No se pudo verificar: sin conexión o demoró demasiado (>10s). Revisá internet y reintentá.' }   // red
   }
 }
 

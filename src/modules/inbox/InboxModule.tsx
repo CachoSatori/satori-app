@@ -14,6 +14,7 @@ import { listDocsNeedingInventory } from '../../shared/api/inventoryIngest'
 import type { Supplier, CashMovement, UserRole } from '../../shared/types/database'
 import { fi } from '../cash/cashUtils'
 import { tipShiftToCaja } from '../../shared/utils'
+import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 
 import { ROLE_LABELS } from '../../shared/constants'
 const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
@@ -73,14 +74,18 @@ export default function InboxModule() {
   // ── Procesar una imagen (cámara, galería o compartida) ────────
   // SIN auto-commit: la IA solo PRECARGA. Cada documento detectado entra a la cola
   // 'nuevo'; NINGÚN movimiento se crea hasta que el humano confirme en la ConfirmCard.
-  const processFile = useCallback(async (file: Blob, filename: string) => {
+  const processFile = useCallback(async (file: Blob) => {
     if (!profile) return
     setBusy('upload'); setError(null); setInfo(null)
     try {
-      const sha = await sha256File(file)
+      // Normalizar la foto ANTES de todo (cámara/galería/WhatsApp entran acá): JPEG liviano y con
+      // EXIF aplicado, así la IA siempre recibe algo legible. El sha (dedup) se calcula sobre el
+      // blob YA normalizado.
+      const { blob, filename } = await normalizeInvoiceImage(file)
+      const sha = await sha256File(blob)
       const dup = await withTimeout(findDuplicate(sha, null))
       if (dup) { setError('Esta foto ya fue cargada (duplicado).'); setBusy(null); return }
-      const { path } = await withTimeout(uploadImage(file, filename), 30000)
+      const { path } = await withTimeout(uploadImage(blob, filename), 30000)
       const detected = await extractImage(path)   // una foto puede traer varios documentos
       if (detected.length === 0) {
         await createDocumentRow(path, sha, null, profile.id)
@@ -97,7 +102,7 @@ export default function InboxModule() {
 
   // Varias fotos en una tanda (una factura por hoja) — secuencial para no saturar.
   const processFiles = useCallback(async (files: File[]) => {
-    for (const f of files) await processFile(f, f.name)
+    for (const f of files) await processFile(f)
   }, [processFile])
 
   // ── Imagen compartida desde WhatsApp (Share Target) ───────────
@@ -109,8 +114,7 @@ export default function InboxModule() {
         const res = await cache.match('/__shared__')
         if (res) {
           const blob = await res.blob()
-          const name = res.headers.get('x-filename') || 'compartido.jpg'
-          await processFile(blob, name)
+          await processFile(blob)
           await cache.delete('/__shared__')
         }
       } catch { /* noop */ }

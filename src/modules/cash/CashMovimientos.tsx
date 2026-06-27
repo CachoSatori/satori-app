@@ -17,7 +17,7 @@ const CONCEPTOS = [
 import { todayCR, dateCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr, saldoCajaFuerte } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
-import { askDeletionNote } from './deletionNote'
+import { useDeletionNote } from './deletionNote'
 import { movementAttachments } from '../../shared/api/facturas'
 import FacturaThumbs from '../../shared/FacturaThumbs'
 import FacturaVerify from '../../shared/FacturaVerify'
@@ -31,6 +31,7 @@ interface Props {
 
 export default function CashMovimientos({ movements, sessions, onRefresh }: Props) {
   const requireManager = useManagerOverride()
+  const askNote = useDeletionNote()
   const { profile } = useAuth()
   // Modal "Nuevo movimiento"
   const [nmOpen, setNmOpen] = useState(false)
@@ -155,7 +156,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     if (!window.confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) return
     if (!(await requireManager())) return
     // Motivo obligatorio: borra también el inventario ligado y queda en la auditoría (mig 039).
-    const note = askDeletionNote('movimiento')
+    const note = await askNote('movimiento')
     if (!note) return
     setSaving(id)
     try {
@@ -166,7 +167,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     } finally {
       setSaving(null)
     }
-  }, [onRefresh, requireManager])
+  }, [onRefresh, requireManager, askNote])
 
   const handleBulkDelete = async () => {
     const ids = [...selected]
@@ -174,7 +175,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     if (!window.confirm(`¿Eliminar ${ids.length} movimiento(s) seleccionado(s)? No se puede deshacer.`)) return
     if (!(await requireManager())) return
     // Una sola nota cubre todo el lote (queda en la auditoría de cada borrado).
-    const note = askDeletionNote(`${ids.length} movimiento(s)`)
+    const note = await askNote(`${ids.length} movimiento(s)`)
     if (!note) return
     setSaving('bulk')
     try {

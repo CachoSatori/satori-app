@@ -13,7 +13,7 @@ import {
   updateMiddayCheck,
 } from '../../shared/api/cash'
 import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
-import { askDeletionNote } from './deletionNote'
+import { useDeletionNote } from './deletionNote'
 import { tipShiftToCaja, shiftLabel, dateCR } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
@@ -86,6 +86,7 @@ export default function CashTurno({
 }: Props) {
   const { profile } = useAuth()
   const requireManager = useManagerOverride()
+  const askNote = useDeletionNote()
   const canManage = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'cajero'
   const canClose  = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'cajero'
 
@@ -449,7 +450,7 @@ export default function CashTurno({
       // Borrado de un pago YA guardado → requiere autorización de gerencia
       if (!(await requireManager())) return
       // Motivo obligatorio: el borrado arrastra el inventario ligado y queda en la auditoría (mig 039).
-      const note = askDeletionNote('pago a proveedor')
+      const note = await askNote('pago a proveedor')
       if (!note) return
       // Refrescar desde la fuente de verdad (re-fetch en el padre). Antes se pasaba un
       // PagoRow a onMovAdded, que lo agregaba en memoria → fila fantasma tras el borrado.
@@ -550,7 +551,7 @@ export default function CashTurno({
     const row = displayIngresos.find(i => i.id === id)
     if (row?.persistedId) {
       if (!(await requireManager())) return
-      const note = askDeletionNote('ingreso')
+      const note = await askNote('ingreso')
       if (!note) return
       try { await deleteCashMovement(row.persistedId, note); onRefresh() }
       catch (e) { onError(`No se pudo eliminar el ingreso: ${e instanceof Error ? e.message : 'reintentá'}`) }
@@ -607,7 +608,7 @@ export default function CashTurno({
     && m.movement_type !== 'egreso_mercaderia' && m.status !== 'rechazado')
   const removeEgreso = async (id: string) => {
     if (!(await requireManager())) return
-    const note = askDeletionNote('egreso')
+    const note = await askNote('egreso')
     if (!note) return
     try { await deleteCashMovement(id, note); onRefresh() }
     catch (e) { onError(`No se pudo eliminar el egreso: ${e instanceof Error ? e.message : 'reintentá'}`) }

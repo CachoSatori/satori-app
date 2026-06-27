@@ -154,13 +154,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
 
   const handleDelete = useCallback(async (id: string) => {
     if (!window.confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) return
-    if (!(await requireManager())) return
+    const auth = await requireManager()
+    if (!auth.ok) return
     // Motivo obligatorio: borra también el inventario ligado y queda en la auditoría (mig 039).
     const note = await askNote('movimiento')
     if (!note) return
     setSaving(id)
     try {
-      await deleteCashMovement(id, note)
+      await deleteCashMovement(id, note, auth.managerEmail, auth.managerPassword)
       onRefresh()
     } catch (e) {
       window.alert(`No se pudo eliminar: ${e instanceof Error ? e.message : 'reintentá con conexión'}`)
@@ -173,13 +174,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     const ids = [...selected]
     if (ids.length === 0) return
     if (!window.confirm(`¿Eliminar ${ids.length} movimiento(s) seleccionado(s)? No se puede deshacer.`)) return
-    if (!(await requireManager())) return
+    const auth = await requireManager()
+    if (!auth.ok) return
     // Una sola nota cubre todo el lote (queda en la auditoría de cada borrado).
     const note = await askNote(`${ids.length} movimiento(s)`)
     if (!note) return
     setSaving('bulk')
     try {
-      const results = await Promise.allSettled(ids.map(id => deleteCashMovement(id, note)))
+      const results = await Promise.allSettled(ids.map(id => deleteCashMovement(id, note, auth.managerEmail, auth.managerPassword)))
       const failed = results.filter(r => r.status === 'rejected').length
       if (failed) {
         const reason = (results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined)?.reason

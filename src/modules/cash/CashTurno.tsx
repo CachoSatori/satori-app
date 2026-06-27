@@ -448,13 +448,14 @@ export default function CashTurno({
     const pago = displayPagos.find(p => p.id === id)
     if (pago?.persistedId) {
       // Borrado de un pago YA guardado → requiere autorización de gerencia
-      if (!(await requireManager())) return
+      const auth = await requireManager()
+      if (!auth.ok) return
       // Motivo obligatorio: el borrado arrastra el inventario ligado y queda en la auditoría (mig 039).
       const note = await askNote('pago a proveedor')
       if (!note) return
       // Refrescar desde la fuente de verdad (re-fetch en el padre). Antes se pasaba un
       // PagoRow a onMovAdded, que lo agregaba en memoria → fila fantasma tras el borrado.
-      try { await deleteCashMovement(pago.persistedId, note); onRefresh() }
+      try { await deleteCashMovement(pago.persistedId, note, auth.managerEmail, auth.managerPassword); onRefresh() }
       catch (e) { onError(`No se pudo eliminar el pago: ${e instanceof Error ? e.message : 'reintentá'}`) }
     } else {
       setPagos(prev => prev.filter(p => p.id !== id))
@@ -550,10 +551,11 @@ export default function CashTurno({
   const removeIngreso = async (id: string) => {
     const row = displayIngresos.find(i => i.id === id)
     if (row?.persistedId) {
-      if (!(await requireManager())) return
+      const auth = await requireManager()
+      if (!auth.ok) return
       const note = await askNote('ingreso')
       if (!note) return
-      try { await deleteCashMovement(row.persistedId, note); onRefresh() }
+      try { await deleteCashMovement(row.persistedId, note, auth.managerEmail, auth.managerPassword); onRefresh() }
       catch (e) { onError(`No se pudo eliminar el ingreso: ${e instanceof Error ? e.message : 'reintentá'}`) }
     } else {
       setIngresos(prev => prev.filter(i => i.id !== id))
@@ -607,10 +609,11 @@ export default function CashTurno({
     m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso'
     && m.movement_type !== 'egreso_mercaderia' && m.status !== 'rechazado')
   const removeEgreso = async (id: string) => {
-    if (!(await requireManager())) return
+    const auth = await requireManager()
+    if (!auth.ok) return
     const note = await askNote('egreso')
     if (!note) return
-    try { await deleteCashMovement(id, note); onRefresh() }
+    try { await deleteCashMovement(id, note, auth.managerEmail, auth.managerPassword); onRefresh() }
     catch (e) { onError(`No se pudo eliminar el egreso: ${e instanceof Error ? e.message : 'reintentá'}`) }
   }
 
@@ -618,7 +621,7 @@ export default function CashTurno({
   const descartarTurno = async () => {
     if (!openSession) return
     if (!window.confirm(`¿Descartar el turno ${openSession.shift_type} del ${openSession.session_date}?\nSe borra el turno y todos sus movimientos. No se puede deshacer.`)) return
-    if (!(await requireManager())) return
+    if (!(await requireManager()).ok) return
     try { await discardCashSession(openSession.id); onSessionClose() }
     catch (e) { onError(e instanceof Error ? e.message : 'Error al descartar') }
   }
@@ -627,7 +630,7 @@ export default function CashTurno({
   const [checking, setChecking] = useState(false)
   const handleMiddayCheck = async () => {
     if (!openSession || !profile || checking) return
-    if (!(await requireManager())) return
+    if (!(await requireManager()).ok) return
     setChecking(true)
     try {
       await updateMiddayCheck(openSession.id, profile.id)

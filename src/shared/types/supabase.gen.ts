@@ -1381,6 +1381,7 @@ export type Database = {
       }
       movement_deletions: {
         Row: {
+          authorized_by: string | null
           deleted_at: string
           deleted_by: string | null
           id: string
@@ -1389,6 +1390,7 @@ export type Database = {
           note: string
         }
         Insert: {
+          authorized_by?: string | null
           deleted_at?: string
           deleted_by?: string | null
           id?: string
@@ -1397,6 +1399,7 @@ export type Database = {
           note: string
         }
         Update: {
+          authorized_by?: string | null
           deleted_at?: string
           deleted_by?: string | null
           id?: string
@@ -1405,6 +1408,13 @@ export type Database = {
           note?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "movement_deletions_authorized_by_fkey"
+            columns: ["authorized_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "movement_deletions_deleted_by_fkey"
             columns: ["deleted_by"]
@@ -2489,7 +2499,12 @@ export type Database = {
         Returns: undefined
       }
       delete_movement_cascade: {
-        Args: { p_movement_id: string; p_note: string }
+        Args: {
+          p_manager_email?: string
+          p_manager_password?: string
+          p_movement_id: string
+          p_note: string
+        }
         Returns: undefined
       }
       discard_inventory_review: {

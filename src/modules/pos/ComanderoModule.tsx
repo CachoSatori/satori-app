@@ -215,7 +215,7 @@ function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }
 
   // T2 — anular un ítem ya enviado: permiso de gerencia + motivo obligatorio.
   const doVoid = async (it: PosOrderItem, reason: string) => {
-    if (!(await requireManager())) { setVoiding(null); return }
+    if (!(await requireManager()).ok) { setVoiding(null); return }
     if (!profileId) return
     try {
       await voidOrderItem(it.id, reason, profileId)

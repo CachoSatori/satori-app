@@ -439,18 +439,21 @@ export async function createDayMovement(m: {
 // dejaría exactamente el inventario huérfano que esto arregla → si no hay red, se BLOQUEA con
 // mensaje claro. La RPC es idempotente (si el movimiento ya no existe, no hace nada) → el
 // reintento único tras un socket zombi es seguro. `note` (motivo) es obligatorio para la auditoría.
-export async function deleteCashMovement(id: string, note: string): Promise<void> {
+export async function deleteCashMovement(id: string, note: string, managerEmail?: string, managerPassword?: string): Promise<void> {
   if (isOffline()) {
     throw new Error('El borrado requiere conexión: arrastra el inventario ligado y no puede encolarse a medias. Reintentá con internet.')
   }
-  // delete_movement_cascade no está en los tipos generados hasta aplicar la mig 039 y regenerar
-  // → cast acotado (mismo patrón que FacturaVerify con mark_factura_verified). Termina en
+  // Credenciales de gerencia (mig 044): el cajero las valida en el modal y la RPC las re-verifica
+  // server-side. owner/manager logueado no las pasa (la RPC autoriza por su rol). NO se persisten.
+  const args: Record<string, unknown> = { p_movement_id: id, p_note: note }
+  if (managerEmail && managerPassword) { args.p_manager_email = managerEmail; args.p_manager_password = managerPassword }
+  // Cast acotado (mismo patrón que FacturaVerify con mark_factura_verified). Termina en
   // .abortSignal(signal) para que withWriteTimeout pueda cancelar el fetch colgado.
   const runCascade = (signal: AbortSignal) => (supabase.rpc as unknown as (
     fn: string,
     args: Record<string, unknown>,
   ) => { abortSignal: (s: AbortSignal) => PromiseLike<{ error: { message: string } | null }> })(
-    'delete_movement_cascade', { p_movement_id: id, p_note: note },
+    'delete_movement_cascade', args,
   ).abortSignal(signal)
   try {
     const { error } = await withWriteTimeout(runCascade)

@@ -126,7 +126,7 @@ export default function InboxModule() {
   }
 
   const descartar = async (doc: DocumentRow) => {
-    if (!(await requireManager())) return
+    if (!(await requireManager()).ok) return
     setBusy(doc.id)
     try { await setDocEstado(doc.id, 'descartado'); await loadAll() }
     finally { setBusy(null) }

@@ -30,26 +30,31 @@ async function verifyManager(email: string, password: string): Promise<VerifyRes
   }
 }
 
-type RequireManager = () => Promise<boolean>
-const Ctx = createContext<RequireManager>(() => Promise.resolve(false))
+// Resultado de pedir autorización de gerencia. `ok` = autorizado. Cuando autoriza un cajero vía
+// credenciales en el modal, viajan managerEmail/managerPassword para que la RPC de borrado las
+// re-valide server-side (mig 044). owner/manager logueado → { ok:true } sin credenciales (la RPC
+// autoriza por su rol). Las credenciales son transitorias: NO se loguean ni persisten.
+export type ManagerAuth = { ok: boolean; managerEmail?: string; managerPassword?: string }
+type RequireManager = () => Promise<ManagerAuth>
+const Ctx = createContext<RequireManager>(() => Promise.resolve({ ok: false }))
 
-/** Devuelve una función `requireManager()` que resuelve true si hay autorización. */
+/** Devuelve `requireManager()` que resuelve { ok, managerEmail?, managerPassword? }. */
 export const useManagerOverride = () => useContext(Ctx)
 
 export function ManagerOverrideProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth()
-  const [resolver, setResolver] = useState<((ok: boolean) => void) | null>(null)
+  const [resolver, setResolver] = useState<((res: ManagerAuth) => void) | null>(null)
 
   const requireManager = useCallback<RequireManager>(() => {
-    // Owner/manager logueado → autorizado al instante, sin pedir nada.
+    // Owner/manager logueado → autorizado al instante, sin pedir nada (la RPC autoriza por su rol).
     if (profile && (profile.role === 'owner' || profile.role === 'manager')) {
-      return Promise.resolve(true)
+      return Promise.resolve({ ok: true })
     }
     // Otros roles (cajero, etc.) → pedir credenciales de gerencia.
-    return new Promise<boolean>(res => setResolver(() => res))
+    return new Promise<ManagerAuth>(res => setResolver(() => res))
   }, [profile])
 
-  const finish = (ok: boolean) => { resolver?.(ok); setResolver(null) }
+  const finish = (res: ManagerAuth) => { resolver?.(res); setResolver(null) }
 
   return (
     <Ctx.Provider value={requireManager}>
@@ -59,7 +64,7 @@ export function ManagerOverrideProvider({ children }: { children: ReactNode }) {
   )
 }
 
-function ManagerModal({ onResult }: { onResult: (ok: boolean) => void }) {
+function ManagerModal({ onResult }: { onResult: (res: ManagerAuth) => void }) {
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState<string | null>(null)
@@ -69,12 +74,14 @@ function ManagerModal({ onResult }: { onResult: (ok: boolean) => void }) {
     e.preventDefault()
     setChecking(true); setError(null)
     const res = await verifyManager(email, password)
-    if (res.ok) { onResult(true) }
+    // Verificado en el cliente (UX + gate de los usos que no son borrado). Para el borrado, estas
+    // mismas credenciales se pasan a la RPC, que las re-valida server-side.
+    if (res.ok) { onResult({ ok: true, managerEmail: email.trim(), managerPassword: password }) }
     else { setError(res.error ?? 'Credenciales inválidas o sin permiso de gerencia'); setChecking(false) }
   }
 
   return (
-    <div className="cd-modal-overlay" onClick={() => onResult(false)}>
+    <div className="cd-modal-overlay" onClick={() => onResult({ ok: false })}>
       <form className="cd-modal" onClick={e => e.stopPropagation()} onSubmit={submit} style={{ maxWidth: 380 }}>
         <div className="cd-modal-title">🔒 Autorización de gerencia</div>
         <p style={{ fontSize: '0.8rem', color: 'var(--t-muted)', margin: '0 0 0.75rem' }}>
@@ -87,7 +94,7 @@ function ManagerModal({ onResult }: { onResult: (ok: boolean) => void }) {
           style={{ width: '100%', marginTop: '0.5rem' }} />
         {error && <div style={{ color: 'var(--t-red)', fontSize: '0.78rem', marginTop: '0.5rem' }}>{error}</div>}
         <div className="cd-modal-actions" style={{ marginTop: '0.875rem' }}>
-          <button type="button" className="tips-btn-ghost" onClick={() => onResult(false)} disabled={checking}>Cancelar</button>
+          <button type="button" className="tips-btn-ghost" onClick={() => onResult({ ok: false })} disabled={checking}>Cancelar</button>
           <button type="submit" className="cd-btn-green" disabled={checking}>{checking ? 'Verificando…' : 'Autorizar'}</button>
         </div>
       </form>

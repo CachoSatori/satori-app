@@ -240,7 +240,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       `Se borran SOLO los datos del cierre y lo que generó (ventas del cierre + retiro).\n\n` +
       `⚠ NO se borran los pagos a proveedores, gastos ni ingresos manuales del día — esos quedan. ` +
       `Si querés recargar el día desde cero (sin duplicar), usá el botón "Borrar TODO el día".`)) return
-    if (!(await requireManager())) return
+    if (!(await requireManager()).ok) return
     setSaving(true); setError(null)
     try {
       await discardCierreDia(fecha)
@@ -259,7 +259,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       `Esto borra el cierre, las ventas, el retiro, los PAGOS A PROVEEDORES, gastos, ingresos manuales ` +
       `y los turnos de caja del ${fecha}. Sirve para recargar el día desde cero.\n\n` +
       `NO toca propinas. NO se puede deshacer.`)) return
-    if (!(await requireManager())) return
+    if (!(await requireManager()).ok) return
     setSaving(true); setError(null)
     try {
       await discardDiaCompleto(fecha)

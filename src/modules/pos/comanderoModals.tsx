@@ -43,7 +43,7 @@ export function ReabrirModal({ loc, onClose, onReopened, onError }: {
   const reabrir = async (o: PosOrder) => {
     if (busy || !profile) return
     if (!motivo.trim()) { onError('Indicá el motivo para reabrir'); return }
-    if (!(await requireManager())) return
+    if (!(await requireManager()).ok) return
     setBusy(true)
     try {
       await reopenOrder(o.id, profile.full_name ?? '', motivo.trim())

@@ -104,7 +104,7 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('¿Desactivar este proveedor?')) return
-    if (!(await requireManager())) return
+    if (!(await requireManager()).ok) return
     try { await deactivateSupplier(id); onRefresh() }
     catch { /* noop */ }
   }

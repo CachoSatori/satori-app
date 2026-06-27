@@ -21,7 +21,11 @@ profundizar/decidir; nada acá implementa nada por sí solo.
   FIRMADAS (2026-06-26)**: colapsar Bandeja y Caja Diaria en un **único "Agregar"**; auto-clasificar
   Proveedores/Operativa como **ayuda visual** (el humano confirma); sacar "Ingresar a inventario" del cajero →
   **contador/manager** lo completa en Inventarios; asiento contable automático. **SOLO diseño** (no autoriza código).
-  Subsume la "Bandeja — Etapa 2" del ROADMAP (D6).
+  Subsume la "Bandeja — Etapa 2" del ROADMAP (D6). **🆕 Construido hasta F4.1 en staging** (ver ESTADO/ROADMAP).
+- **[auth-borrado-casos.md](./auth-borrado-casos.md)** — 🆕 matriz de **casos de prueba del borrado con autorización de
+  gerencia** (mig 044): autorización (cajero+credenciales / owner-manager / inválidas / rol no gerencial), red/estado
+  (offline, timeout), UX del modal y cascada (reversa de asiento, descarte de tarea, doc huérfano), + contrato del
+  frontend. Cada caso marcado [auto]/[manual] + consulta legible de `movement_deletions` para el contador.
 
 ## En la raíz del repo (specs previos, se conservan donde estaban)
 - **[../SPEC-LAVU-FLUJO-MESA.md](../SPEC-LAVU-FLUJO-MESA.md)** — flujo de mesa Lavu vs Satori
@@ -33,12 +37,12 @@ profundizar/decidir; nada acá implementa nada por sí solo.
 - 🟢 ya implementado en Satori · 🟡 valioso y razonable de hacer · 🔵 futuro / depende de decisión.
 - ⏳ pendiente de profundizar/decidir (aplica a todo: nada se implementa desde estos docs).
 
-## 🧭 Handoff — leer en este orden (actualizado 2026-06-26)
-1. **[../ESTADO.md](../ESTADO.md)** — foto compacta: ramas (**main `79d8004`** INTACTO en prod; **staging `69d7749`**; rama suelta `feat/unif-migrations-040-043` `3c534f4`), prod vs staging, migraciones. **§(b) = lo de ESTA sesión:** migraciones 040–043 firmadas + **aplicadas a la base de staging** (vía `db query`, no en `schema_migrations`), decisión OPCIÓN A (libro NO alimenta el P&L), entorno de tests DOM, auth-recovery DIFERIDO, y el **RITUAL del link a staging** (§a). §(d) discrepancias de ledger. §(g) pendientes.
-2. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — el PLAN: **★ PRÓXIMO** = construcción del módulo de unificación (regenerar tipos TS → F3–F5; decisión de mergear los archivos 040–043). DIFERIDOS: reconciliación del ledger, auth-recovery (precond. Hallazgo B). Pases a prod pendientes: IDOR + mig 039 (con firma). ⚠️ NUNCA `staging`→`main`: solo cherry-pick. **RITUAL del link a staging antes de cualquier comando de DB.**
-3. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases: estabilidad (Olas 1+1.1) + pantalla negra + `createDayMovement` ✅ en prod; **§1ter = unificación Bandeja↔Caja: diseño ✅ + esquema 040–043 ✅ aplicado a staging, código sin construir**; PILAR de escalabilidad de auth bloqueante del PoS.
-4. **[./SPEC-unificacion-bandeja-caja.md](./SPEC-unificacion-bandeja-caja.md)** — el SPEC v1 firmado del módulo que se construye a continuación: §7 máquina de estados, §8 invariantes, §11 contable (Opción A), §12 borrado, §18 decisiones firmadas, **§19 visión futura (P&L granular)**.
-5. **[../HALLAZGOS.md](../HALLAZGOS.md)** — backlog triado + **⚠⚠ aprendizaje crítico: el CLI estaba enlazado a PROD (ritual del link)**; Hallazgo B (drain del outbox en `SIGNED_IN`, precond. del auth-recovery); #1 IDOR ✅ cerrado en staging; entorno DOM ✅ resuelto.
+## 🧭 Handoff — leer en este orden (actualizado 2026-06-27)
+1. **[../ESTADO.md](../ESTADO.md)** — foto compacta: ramas (**main `79d8004`** INTACTO en prod; **staging `f1e1aa9`**), prod vs staging, migraciones (040–044 en staging FUERA de `schema_migrations`). Secciones (a)–(f): build por módulo, pendientes de plata sin firma, pendientes humanos. **Lo de ESTA sesión:** unificación construida hasta F4.1 + fix borrado-móvil + fix auth-borrado (mig 044).
+2. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — el PLAN: **★ PRÓXIMO** = terminar la unificación (**F4.2** clasificación advisory en CashTurno + **F4.3** el asistente "un solo Agregar"). Deuda: reorder del `document_id`, test de `buildReviewLines`, propuesta `useDeleteAuthorization()`. Hallazgos del audit (override cosmético; "Borrar el día" saltea cascada). DIFERIDOS (decisión dueña): reconciliación del ledger (ahora incl. 044), pase a prod IDOR+mig 039, auth-recovery+Hallazgo B. ⚠️ NUNCA `staging`→`main`. **RITUAL del link antes de cualquier comando de DB.**
+3. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases: estabilidad (Olas 1+1.1) + pantalla negra + `createDayMovement` ✅ en prod; **§1ter = unificación Bandeja↔Caja: diseño ✅ + esquema 040–044 ✅ + F3/F4.1 construidos en staging; falta F4.2/F4.3**; PILAR de escalabilidad de auth bloqueante del PoS.
+4. **[./SPEC-unificacion-bandeja-caja.md](./SPEC-unificacion-bandeja-caja.md)** — el SPEC v1 firmado del módulo: §7 máquina de estados, §8 invariantes, §11 contable (Opción A), §12 borrado, §18 decisiones firmadas, **§19 visión futura (P&L granular)**.
+5. **[./auth-borrado-casos.md](./auth-borrado-casos.md)** — 🆕 casos de prueba del borrado con autorización de gerencia (mig 044): qué probar y cómo, marcados [auto]/[manual]. + **[../HALLAZGOS.md](../HALLAZGOS.md)** (backlog triado + aprendizaje crítico del **ritual del link**; Hallazgo B; #1 IDOR ✅ cerrado en staging).
 
 > RCAs de referencia: auth-recovery → [./HANG-RCA-2.md](./HANG-RCA-2.md) · Realtime tras suspensión → [rca/2026-06-22-realtime-suspension.md](./rca/2026-06-22-realtime-suspension.md) · `/caja` Cmd+Shift+R → RCA en la rama `rca/caja-hardreload-hang` (sin mergear, no está en staging) · historia vieja del "se traba" → [../HANG-RCA.md](../HANG-RCA.md).
 

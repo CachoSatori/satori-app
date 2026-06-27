@@ -1,10 +1,10 @@
-# Continuación — backlog priorizado (handoff 2026-06-26)
+# Continuación — backlog priorizado (handoff 2026-06-27)
 
 Estado: **PROD (`main` `79d8004`) tiene las OLAS 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la
 durabilidad de `createDayMovement` (todo ✅ validado físicamente) → la app vuelve a ser usable sin cuelgues.** main = capa de
 inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado + **Ola 1** (saga Realtime/suspensión + durabilidad
 de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush del outbox) + **fix PANTALLA NEGRA** (`5f22754`) +
-**🆕 durabilidad `createDayMovement`** (FF `5f22754`→`79d8004`). STAGING (**`69d7749`**) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga
+**🆕 durabilidad `createDayMovement`** (FF `5f22754`→`79d8004`). STAGING (**`f1e1aa9`**) = todo el PoS + Bandeja Etapa 1 + **la unificación Bandeja↔Caja construida (F3+F4.1+mig 044)** + esos fixes + la saga
 Realtime/suspensión + durabilidad de caja + flush del outbox con tope + auth-recovery (mergeado) + switch de diag solo-staging
 (`[rt-diag]`) + IDOR de `extract-document` cerrado (`c38a252`) + borrado de caja → cascada de inventario (mig 039)
 + **🆕 esta sesión (2026-06-26): esquema 040–043 de la unificación APLICADO a la base de staging** (vía `db query`, no en `schema_migrations`; archivos ✅ **MERGEADOS a staging** `63ca7ce`) + **entorno de tests DOM** (happy-dom+RTL, smoke anti-loop). **🆕 pendientes de pase a prod:** el IDOR y la mig 039 (cherry-pick sobre main limpio, con firma). Auth-recovery quedó **DIFERIDO** (gate >1h pasó; ya mergeado — §0-bis).
@@ -29,33 +29,54 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 
 ---
 
-## ★ PRÓXIMO (2026-06-26) — construcción del módulo de unificación Bandeja↔Caja
+## ★ PRÓXIMO (2026-06-27) — terminar la unificación Bandeja↔Caja (F4.2 + F4.3)
 
-El **diseño** (SPEC firmado) y el **esquema** (migraciones 040–043) ya están: las 4 fueron **firmadas y aplicadas a la
-base de staging** vía `supabase db query` (NO `db push` → no en `schema_migrations`; archivos ✅ **MERGEADOS a
-staging** `63ca7ce`). Decisión **OPCIÓN A** firmada: `accounting_entries` es
-auditoría/reversión, **no alimenta el P&L** (ver SPEC §19). Lo que sigue:
+La unificación ya está **construida y mergeada a staging** hasta F4.1: ETAPA 1 tipos (`0b3ffb1`), **F3** módulo de
+Revisión (`6e60f60`, validado físicamente con fixture), **F4.1** Bandeja→Revisión + edición de mapeo/nota/proveedor
+(`6863e26`), fix borrado-móvil (`1eef42d`) y fix auth-borrado mig 044 (`7401a5a`/`f1e1aa9`). Decisión **OPCIÓN A**
+firmada: `accounting_entries` es auditoría/reversión, **no alimenta el P&L** (SPEC §19). Lo que falta de la unificación:
 
-1. **🟢 PRIMER PASO — regenerar los tipos TS contra staging.** Ya existen en la base `accounting_entries`,
-   `inventory_review_task`, las RPCs (`post_accounting_entry`, `complete_inventory_review`, `discard_inventory_review`,
-   `unif_on_cash_movement`) y las 3 columnas de `cash_movements`. ⚠️ **RITUAL del link primero** (ver abajo y HALLAZGOS):
-   confirmar `cat supabase/.temp/linked-project.json` → ref `hwiatgicyyqyezqwldia` ANTES de cualquier comando de Supabase.
-2. **🟢 Construir F3–F5 del SPEC:** módulo de Inventarios (cola + completar revisión vía `complete_inventory_review`),
-   el **"Agregar" único** en Caja Diaria con clasificación advisory, y la cascada extendida en la UI.
-3. **✅ RESUELTO — archivos `040–043*.sql` MERGEADOS a `staging`** (`63ca7ce`): el repo ya es **fiel** al esquema de la base
-   (sin drift archivo↔base).
+1. **🟢 F4.2 — clasificación advisory en CashTurno.** El movimiento de caja del turno debería sugerir
+   `classification` (mercadería/operativa) como ayuda visual, igual que hoy lo hace la Bandeja (que ya escribe
+   `classification='mercaderia'`). El humano confirma; no decide solo.
+2. **🟢 F4.3 — el asistente "un solo Agregar".** La unificación VISUAL que falta: un único botón "Agregar" en Caja
+   Diaria que reemplace los caminos separados Bandeja vs movimiento manual (SPEC §"un solo Agregar"). Es UI sobre lo
+   ya construido (no requiere esquema nuevo).
 
-> 🛑 **RITUAL OBLIGATORIO antes de CUALQUIER comando de base** (aprendizaje crítico de esta sesión, ver HALLAZGOS.md):
-> `cat supabase/.temp/linked-project.json` → el `"ref"` DEBE ser `hwiatgicyyqyezqwldia` (staging). El CLI estaba
-> **enlazado a PROD** (`yiczgdtirrkdvohdquzf`) sin avisar; lo cazó el guardrail. Nunca correr DB sin confirmar el ref.
+> 🛑 **RITUAL OBLIGATORIO antes de CUALQUIER comando de base:** `cat supabase/.temp/linked-project.json` → el `"ref"`
+> DEBE ser `hwiatgicyyqyezqwldia` (staging). El CLI puede quedar **enlazado a PROD** (`yiczgdtirrkdvohdquzf`) sin avisar
+> (ya pasó). Nunca correr DB sin confirmar el ref. Ver HALLAZGOS.md.
 
-### DIFERIDOS (sesiones dedicadas, no bloquean lo de arriba)
-- **Reconciliación del ledger de migraciones** (009 drift · 035 fantasma en `propina-pool` · 039 dashboard · 040–043 por
-  `db query`): `db push` se frena por 009/035; NO usar `push`/`repair` hasta una **sesión dedicada de infraestructura**
-  (resolver 035/`propina-pool` primero). Todo es idempotente. Ver ESTADO §d.
-- **Auth-recovery** (§0-bis): DIFERIDO; su **precondición es cerrar el Hallazgo B** (outbox drena en `SIGNED_IN`) — PRIORIDAD 2.
-- **Riesgo latente `/caja` + Cmd+Shift+R** → ya registrado (RCA en la rama `rca/caja-hardreload-hang`, sin mergear); redirige a `/login` ~20s,
-  recuperable. No bloquea el módulo nuevo. (No re-investigar salvo que la dueña lo priorice.)
+### Limpieza / deuda de la unificación (no bloquea F4.2/F4.3)
+- **F4 — reorder del `document_id` (fix limpio del workaround).** Hoy la tarea de Revisión nace con
+  `task.document_id = NULL`: el trigger `unif_on_cash_movement` resuelve el documento por `linked_movement_id` en el
+  INSERT del movimiento, pero la Bandeja enlaza la foto (`setDocEstado`) DESPUÉS. Revisión lo compensa resolviendo la
+  factura por `cash_movement_id` (workaround vivo, funciona). **Fix limpio = reordenar la Bandeja: `setDocEstado` ANTES
+  de setear `classification`** (así el trigger ya encuentra el documento). **No requiere migración.**
+- **🧪 Test de `buildReviewLines` pendiente.** Es cálculo de PLATA (factor/qty/cost que alimenta
+  `complete_inventory_review`) y hoy **no tiene test**. Candidato directo a unit test (junto al contrato de
+  `requireManager`). Ver `docs/auth-borrado-casos.md`.
+- **💡 Propuesta SIN implementar — hook `useDeleteAuthorization()`.** Encapsular el preámbulo común de los 5 sites de
+  borrado (`requireManager` + `askNote` + paso de credenciales) dejando `deleteCashMovement` visible en cada uno. Se
+  dejó como propuesta (no se tocó código verificado en el pase de calidad). Implementar solo si queda MÁS claro.
+
+### Hallazgos del audit de autorización (NO bloquean — registrar y decidir)
+- **(A) El override de gerencia es COSMÉTICO donde la RLS ya permite cajero.** En tablas/acciones cuya RLS deja pasar al
+  cajero (p. ej. `suppliers`, `documents`, y los `delete` de cierre que NO van por la RPC con auth inline), el modal de
+  gerencia mejora la UX pero el server **deja pasar igual** sin credenciales de manager. El gate real solo existe donde
+  la operación pasa por una RPC que valida (como `delete_movement_cascade` tras mig 044).
+- **(B) "Borrar el día" saltea la cascada.** `discardDiaCompleto` (CashCierre → "Borrar TODO el día") borra movimientos
+  **DIRECTO**, sin pasar por `delete_movement_cascade` → **sin auditoría** (`movement_deletions`), **sin reversa de
+  asientos** y **sin descarte de la tarea de inventario**. Decidir si debe enrutarse por la cascada.
+
+### DIFERIDOS por decisión de la dueña (unificación primero) — sesiones dedicadas
+- **Reconciliación del ledger de migraciones** — 009 drift · 035 fantasma en `propina-pool` · 039 dashboard · **040–044**
+  por `db query`. `db push` se frena por 009/035; NO usar `push`/`repair` hasta una **sesión dedicada de
+  infraestructura** (resolver 035/`propina-pool` primero). Todo idempotente. **Ahora incluye la 044.** Ver ESTADO §c.
+- **Pase a PROD del IDOR + integridad mig 039** (con firma) — cherry-pick sobre `main` limpio. Diferido: la unificación va primero.
+- **Auth-recovery + Hallazgo B** (§0-bis): DIFERIDO; precondición = **el outbox drena en `SIGNED_IN`**. Después de la unificación.
+- **Riesgo latente `/caja` + Cmd+Shift+R** → registrado (RCA en la rama `rca/caja-hardreload-hang`, sin mergear); redirige a
+  `/login` ~20s, recuperable. No bloquea. (No re-investigar salvo que la dueña lo priorice.)
 
 ---
 

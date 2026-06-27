@@ -1,11 +1,11 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-26**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-27**
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-06-26)
+## 📍 Estado real de las fases (handoff 2026-06-27)
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: en este bloque ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod).
@@ -30,7 +30,13 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
 | **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 **SUBSUMIDA** por [docs/SPEC-unificacion-bandeja-caja.md](docs/SPEC-unificacion-bandeja-caja.md) (D6) | — (ver §1ter) |
-| **🆕 Unificación Bandeja↔Caja** (un único "Agregar" en Caja Diaria; auto-clasificar Proveedores/Operativa como ayuda visual; sacar "Ingresar a inventario" del cajero → contador/manager lo completa en Inventarios; asiento contable automático) | ✅ diseño firmado · ✅ **esquema 040–043 aplicado a STAGING** (no en ledger; archivos en rama suelta) · 🔲 código sin construir | ver §1ter. Próximo: regenerar tipos TS → F3–F5 |
+| **🆕 Unificación Bandeja↔Caja** — diseño + esquema | ✅ diseño firmado · ✅ **esquema 040–044 aplicado a STAGING** (no en ledger) | ver §1ter |
+| ↳ **ETAPA 1 — tipos TS** regenerados contra staging | ✅ en STAGING | `0b3ffb1` |
+| ↳ **F3 — módulo de Revisión de inventario** (cola + completar/descartar; RPC `complete/discard_inventory_review`) | ✅ **validado físicamente en staging** (fixture) | `6e60f60` |
+| ↳ **F4.1 — Bandeja→Revisión** (`classification='mercaderia'` → trigger crea la tarea; se quitó "Ingresar a inventario" inline) + **edición desde Revisión** (mapeo/nota→`description`/proveedor sync) | 🟢 en STAGING (validación física en la app pendiente) | `6863e26` |
+| ↳ **Fix borrado en móvil** (`window.prompt`→modal in-app `DeletionNoteProvider`) | 🟢 en STAGING (validación física en teléfono pendiente) | `1eef42d` |
+| ↳ **Fix autorización del borrado** (mig **044**: `delete_movement_cascade` valida credenciales de gerencia inline + audita `authorized_by`; cajero puede borrar con credenciales válidas) | 🟢 en STAGING (lógica verificada byte a byte) | `7401a5a`/`f1e1aa9` |
+| ↳ **F4.2** clasificación advisory en CashTurno · **F4.3** el asistente "un solo Agregar" | 🔲 sin código | — (próximo) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
 | PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
 | PoS F2 — Comandero + KDS + impresión (impresión real = F5) | 🟢 | STAGING (023–025) |
@@ -128,7 +134,7 @@ confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian
 
 ## §1ter. 🆕 PRÓXIMO PROYECTO — SPEC de la unificación Bandeja↔Caja (arranca por DISEÑO, NO construir todavía)
 
-> **Estado (2026-06-26): ✅ diseño FIRMADO ([SPEC v1](docs/SPEC-unificacion-bandeja-caja.md)) · ✅ ESQUEMA (migraciones 040–043) FIRMADO y APLICADO a la base de STAGING** (vía `supabase db query`, no en `schema_migrations`; archivos en la rama `feat/unif-migrations-040-043` `3c534f4`, sin mergear) · ✅ entorno de tests DOM en staging. **🔲 Construcción de código NO empezada.** Decisión OPCIÓN A firmada: `accounting_entries` es auditoría/reversión, NO alimenta el P&L (ver SPEC §19). Próximo paso = **regenerar tipos TS** contra staging, luego F3–F5 (módulo de Inventarios + "Agregar" único + cascada en UI).
+> **Estado (2026-06-27): ✅ diseño FIRMADO ([SPEC v1](docs/SPEC-unificacion-bandeja-caja.md)) · ✅ ESQUEMA (migraciones 040–044) APLICADO a la base de STAGING** (vía `supabase db query`, no en `schema_migrations`; archivos MERGEADOS a staging) · ✅ **CONSTRUCCIÓN EN MARCHA en staging:** ETAPA 1 (tipos `0b3ffb1`) + **F3** módulo de Revisión (`6e60f60`, validado físicamente) + **F4.1** Bandeja→Revisión + edición de mapeo/nota/proveedor (`6863e26`) + fix borrado-móvil (`1eef42d`) + fix auth-borrado mig 044 (`7401a5a`/`f1e1aa9`). Decisión OPCIÓN A firmada: `accounting_entries` es auditoría/reversión, NO alimenta el P&L (SPEC §19). **🔲 Falta:** F4.2 (clasificación advisory en CashTurno) + F4.3 (el asistente "un solo Agregar" — la unificación visual). Detalle del backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
 Objetivo: colapsar Bandeja y Caja Diaria en **un solo flujo de entrada** para el cajero, moviendo el trabajo
 contable a quien corresponde. Alcance a especificar:

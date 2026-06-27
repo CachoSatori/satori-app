@@ -3,6 +3,25 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-06-12 (sprint 06-11 EN PRODUCCIÓN: espejo de datos en staging · auth Fase 2 · realtime · correcciones de pago de la dueña · migraciones 018-020 aplicadas en prod)
 
+## 🆕 2026-06-27 — Unificación Bandeja↔Caja CONSTRUIDA en staging (F3 + F4.1 + fixes + mig 044)
+> Detalle archivado de `ESTADO.md`. Todo mergeado a `staging` (de `0b3ffb1` a `f1e1aa9`); **prod intacto**. Cada paso pasó el gate (build prod EXIT 0 + vitest 19/141) y fue revisado por el asesor antes de cada merge.
+
+- **ETAPA 1 — tipos TS regenerados** (`0b3ffb1`): `supabase.gen.ts` contra staging → `accounting_entries`, `inventory_review_task`, las 3 columnas de `cash_movements`, y las RPCs `complete/discard_inventory_review`, `post_accounting_entry`. Diff puramente aditivo.
+- **F3 — módulo de Revisión de inventario** (`6e60f60`): tab "🧾 Revisión" en InventarioModule (roles owner/manager/contador, cajero excluido). Cola de `inventory_review_task` PENDIENTE + detalle con mapeo de ítems (reusa el motor de InventoryStep vía `InvLineTable`) → **Completar** (`complete_inventory_review`) o **Descartar** con motivo (`discard_inventory_review`). El cálculo factor/qty/cost (`buildReviewLines`) reusa la matemática de `commitInventoryForDocument`. **Validado físicamente en staging** (fixture sembrado: tarea `ba37b279…`).
+- **F4.1 — Bandeja redirige a Revisión + edición desde Revisión** (`6863e26`): cada `egreso_mercaderia` de la Bandeja escribe `classification='mercaderia'` → el trigger `unif_on_cash_movement` crea la tarea sola; se quitó el botón "Ingresar a inventario" inline (InventoryStep queda dormido, no borrado). Desde Revisión se edita mapeo + **nota** (→ `cash_movements.description`) + **proveedor** (sync tarea↔movimiento) vía `updateMovementMetadata` (acotada por tipos: nunca toca plata/forma de pago/estado). Revisión resuelve la factura por `document_id` O por `cash_movement_id` (workaround del `document_id=NULL`, ver pendiente F4).
+- **Fix borrado en móvil** (`1eef42d`): el `window.prompt` de la nota de borrado se reemplazó por modal in-app (`DeletionNoteProvider` + `useDeletionNote`, patrón de `ManagerOverride`). En móvil el prompt post-await se suprimía → borrado en silencio.
+- **Fix autorización del borrado + pase de calidad** (`7401a5a`, `f1e1aa9`): un cajero con credenciales de gerencia válidas no podía borrar (la RPC veía su rol). **Mig 044**: `delete_movement_cascade` pasa de 2 a 4 args (`p_manager_email`/`p_manager_password`), valida inline igual que `verify_manager` (`extensions.crypt`), audita `authorized_by` (quién autorizó vs `deleted_by` quién apretó). `requireManager()` ahora devuelve `{ ok, managerEmail?, managerPassword? }`; 13 call sites migrados a `.ok`. **Aplicada a staging vía `db query`** (NO en `schema_migrations`, como 040-043). Pase de calidad posterior: solo comentarios/docs/mensajes, **lógica ejecutable byte-idéntica** (verificada). Doc de casos: `docs/auth-borrado-casos.md`.
+- **Hallazgos del audit de autorización (NO bloquean):** (A) el override de gerencia es **cosmético** en tablas cuya RLS ya permite cajero (suppliers, documents, deletes de cierre) — el server deja pasar igual; (B) **"Borrar el día"** (`discardDiaCompleto`) borra movimientos DIRECTO, salteando la cascada → sin auditoría, sin reversa de asientos, sin descarte de tarea. → backlog en PROMPT-CONTINUACION.
+
+## 🆕 2026-06-26 — Esquema 040–043 (unificación) aplicado a staging + entorno de tests DOM
+> Detalle archivado de `ESTADO.md` §(b).
+
+- **040–043 FIRMADAS + APLICADAS a la base de staging** vía `supabase db query --linked --file` (NO `db push` → **no en `schema_migrations`**; archivos MERGEADOS a staging `63ca7ce`). 040 `inventory_review_task` · 041 `cash_movements`+classification · 042 `accounting_entries`+`post_accounting_entry`+trigger `unif_on_cash_movement` · 043 `delete_movement_cascade` extendida + `complete/discard_inventory_review`.
+- **Decisión OPCIÓN A (firmada):** `accounting_entries` es libro de **auditoría/reversión únicamente; NO alimenta el P&L** (evita doble-conteo con `getLiveActuals`). Propagación granular = visión futura (SPEC §19).
+- **Entorno de tests DOM** mergeado (`69d7749`): happy-dom + RTL + smoke anti-loop `/`↔`/login`.
+- **Auth-recovery** reclasificado a DIFERIDO (gate >1h pasó; ya mergeado).
+- **⚠️ Aprendizaje crítico:** el CLI quedó enlazado a PROD → **RITUAL del link** obligatorio antes de cualquier comando de DB (ver HALLAZGOS.md).
+
 ## 🆕 2026-06-24 — REALTIME tras suspensión profunda: SAGA CERRADA ✅ (resuelta y validada en staging `3a0fd20`)
 > Histórico archivado de `ESTADO.md` §(b). El estado vivo y compacto quedó en `ESTADO.md`; el RCA completo
 > (diagnóstico + cronología + resolución) en `docs/rca/2026-06-22-realtime-suspension.md`. **100% client-side.**

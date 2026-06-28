@@ -9,7 +9,9 @@
   borraban `cash_movements` con `.delete()` crudo → `accounting_entries` huérfanos + `inventory_review_task`
   colgadas (el mismo bug de integridad que mig 039 cerró para el borrado por movimiento, pero por estos dos
   caminos). **ARREGLADO + MERGEADO a staging** (`b8ab78c`): ambos enrutan por `delete_movement_cascade` con
-  credenciales de gerencia (mig 044). Test `cash.discardDia.test.ts`. 👁️ falta validación física.
+  credenciales de gerencia (mig 044). Test `cash.discardDia.test.ts`. ✅ validada físicamente (pruebas A y B:
+  la tarea de Revisión desaparece tras el borrado). Opcional no bloqueante: verificación SQL directa de 0
+  `accounting_entries` huérfanos.
 - **Lectura de facturas con IA fallaba desde el teléfono** (HEIC/peso/orientación EXIF → Anthropic vacío →
   "sin leer"). **ARREGLADO + MERGEADO a staging (`eefa056`):** se normaliza la foto en el navegador antes de
   subirla (`imageNormalize.ts`). Front-only. ✅ validada físicamente (captura directa con el teléfono).

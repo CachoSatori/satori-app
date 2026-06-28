@@ -7,3 +7,4 @@ dist
 .DS_Store
 .staging-backups/
 .claude/
+supabase/.temp/

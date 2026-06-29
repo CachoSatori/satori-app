@@ -76,7 +76,7 @@ auditoría/reversión, **no alimenta el P&L** (ver SPEC §19). Lo que sigue:
 - **Reconciliación del ledger de migraciones** (009 drift · 035 fantasma en `propina-pool` · 039 dashboard · 040–043 por
   `db query`): `db push` se frena por 009/035; NO usar `push`/`repair` hasta una **sesión dedicada de infraestructura**
   (resolver 035/`propina-pool` primero). Todo es idempotente. Ver ESTADO §d.
-- **Auth-recovery** (§0-bis): DIFERIDO; su **precondición es cerrar el Hallazgo B** (outbox drena en `SIGNED_IN`) — PRIORIDAD 2.
+- **Auth-recovery** (§0-bis): DIFERIDO; su **precondición — el Hallazgo B (drain del outbox en `SIGNED_IN`) — quedó ✅ CERRADA en staging** (`492eaa5`). Si se retoma, ya no está bloqueado por B.
 - **Riesgo latente `/caja` + Cmd+Shift+R** → ya registrado (RCA en la rama `rca/caja-hardreload-hang`, sin mergear); redirige a `/login` ~20s,
   recuperable. No bloquea el módulo nuevo. (No re-investigar salvo que la dueña lo priorice.)
 
@@ -117,8 +117,8 @@ adquisición del lock. Queda como hardening inofensivo.
 
 > ✅ **ESTADO CORREGIDO (2026-06-26):** está **MERGEADO en staging** (no vive "solo en una rama") y el **gate de
 > suspensión real >1h PASÓ** — validado físicamente por la dueña: **la app desplegada se recupera sin este fix** → queda
-> **DIFERIDO (posiblemente innecesario)**, NO es un pendiente bloqueante. **Si se retoma**, su precondición es **cerrar el
-> Hallazgo B** (el outbox debe drenar en `SIGNED_IN`; hoy NO está garantizado — PRIORIDAD 2). El lock `ccef5f1` fue red
+> **DIFERIDO (posiblemente innecesario)**, NO es un pendiente bloqueante. **Si se retoma**, su precondición — el
+> **Hallazgo B** (drain del outbox en `SIGNED_IN`) — **ya está ✅ CERRADA en staging** (`492eaa5`, ver PRIORIDAD 2). El lock `ccef5f1` fue red
 > herring (hardening). Diagnóstico → **`docs/HANG-RCA-2.md`**.
 > 🔧 **Identidad de build = `{base}version.json`→`.commit`**, NO un hash de chunk.
 
@@ -189,15 +189,20 @@ EXIT 0 + suite verde + ritual de identidad `{base}version.json`→`.commit`; fir
 1. **🆕 Integridad borrado→inventario** (`82d55cd` código + **mig 039 sobre la BASE de prod**, hoy NO aplicada) — pase de
    código por pase quirúrgico + aplicar la mig 039 en prod, con firma. La 039 es idempotente (ver nota §0-quater).
 2. **Auth-recovery** (`e0df9ae`+`14e4546`) — **DIFERIDO, NO bloqueante** (§0-bis): el gate de suspensión >1h **pasó** y la app
-   se recupera sin él → posiblemente innecesario. Si se retoma, su precondición es la **PRIORIDAD 2** (drain del outbox en
-   `SIGNED_IN`). No es candidato de pase salvo que reaparezca el síntoma. Client-side, sin migración.
+   se recupera sin él → posiblemente innecesario. Su precondición — la **PRIORIDAD 2** (drain del outbox en `SIGNED_IN`) —
+   **ya está ✅ cerrada en staging** (`492eaa5`). No es candidato de pase salvo que reaparezca el síntoma. Client-side, sin migración.
 
 > ✅ **El IDOR de `extract-document` ya NO está en esta lista — pasó a prod el 2026-06-28** (ver §0-quater).
 
-## ★ PRIORIDAD 2 — Hallazgo B: drain del outbox en `SIGNED_IN` (PLATA)
-`outbox.ts` hoy flushea por `'online'` / arranque / un backoff que **se apaga con la cola vacía**; **NO** hay flush atado a
-`SIGNED_IN`/re-login → "el outbox drena al reloguear" (premisa del fix de auth-recovery, §0-bis) **NO está garantizado**.
-Es plata. Próxima rama: disparar `flushNow()` desde el `onAuthStateChange` con sesión fresca. Detalle → [HALLAZGOS.md](HALLAZGOS.md) §B.
+## ★ PRIORIDAD 2 — ✅ RESUELTO en staging — Hallazgo B: drain del outbox en `SIGNED_IN` (PLATA)
+**CERRADO en staging** (`492eaa5`, rama `fix/outbox-flush-on-signin`, mergeada por FF; client-side, **sin migración**). Antes
+`outbox.ts` flusheaba por `'online'` / arranque / un backoff que se apaga con la cola vacía; faltaba el disparo en
+`SIGNED_IN`/re-login → "el outbox drena al reloguear" (premisa del fix de auth-recovery, §0-bis) no estaba garantizado. **Fix:**
+`initOutbox` engancha `onAuthStateChange` y, vía el predicado exportado `shouldFlushOnAuthEvent` (SOLO `SIGNED_IN`;
+`TOKEN_REFRESHED`/`INITIAL_SESSION`/`SIGNED_OUT` no drenan), replica el patrón del handler de `online` (reset de backoff +
+`autoFlush`, **no** `flushNow` directo); guard `outboxWired` contra doble-registro. **NO** toca el `onAuthStateChange` global de
+`supabase.ts` ni `flushNow`/`supabaseExecutor`. +4 tests del gateo; build prod **EXIT 0** + 155 verdes. ⏳ Validación física
+pendiente (es plata). → **desbloquea la precondición del auth-recovery**. Detalle → [HALLAZGOS.md](HALLAZGOS.md) §B.
 
 ---
 

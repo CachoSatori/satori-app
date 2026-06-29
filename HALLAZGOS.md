@@ -56,12 +56,17 @@ stale).
   staging** (3 commits `0adf30e`/`f0f8127`/`8bed794` + palanca de diag `ee5878a`). Ver ESTADO §b-ter / PROMPT §0-ter.
   **Pendiente: pase a prod (PRIORIDAD 1).**
 
-## 🔜 Siguiente rama (PLATA)
-- **B — drain del outbox en `SIGNED_IN`.** `outbox.ts` flushea por `'online'` / arranque / un backoff que **se apaga con
-  la cola vacía**; **NO** hay flush atado a `SIGNED_IN`/re-login. La premisa "el outbox drena al reloguear" (del fix de
-  auth-recovery) **no está garantizada**. Es plata. Fix propuesto: `flushNow()` en el `onAuthStateChange` con sesión fresca.
-  ⚠️ **Es la PRECONDICIÓN para retomar el auth-recovery** (hoy DIFERIDO; ver ESTADO §b3): sin cerrar B, el escape a
-  `/login` no garantiza que el pago encolado se sincronice. → PRIORIDAD 2 en PROMPT-CONTINUACION.
+## ✅ Accionado 2026-06-28 (cont.) — Hallazgo B (PLATA)
+- **B — drain del outbox en `SIGNED_IN` → RESUELTO en STAGING** (`492eaa5`, rama `fix/outbox-flush-on-signin`, mergeada por
+  FF; client-side, **sin migración**). Antes `outbox.ts` flusheaba por `'online'` / arranque / un backoff que se apaga con la
+  cola vacía; **NO** había flush atado a `SIGNED_IN`/re-login → la premisa "el outbox drena al reloguear" (del fix de
+  auth-recovery) no estaba garantizada. **Fix:** `initOutbox` registra `supabase.auth.onAuthStateChange` y, vía el predicado
+  exportado/testeable `shouldFlushOnAuthEvent` (SOLO `SIGNED_IN`; `TOKEN_REFRESHED`/`INITIAL_SESSION`/`SIGNED_OUT` **no**
+  drenan), dispara el **mismo patrón que el handler de `online`** (reset de backoff + `autoFlush`, **no** `flushNow` directo —
+  distinto del "Fix propuesto" original). Guard `outboxWired` contra doble-registro (blinda también el listener `online`).
+  **NO** toca el `onAuthStateChange` global de `supabase.ts` ni `flushNow`/`supabaseExecutor`. Tests: +4 del gateo
+  (`outbox.test.ts` 9→13); build prod **EXIT 0** + **155** verdes. ⏳ **Validación física pendiente** (es plata).
+  ✅ **Desbloquea la PRECONDICIÓN del auth-recovery** (hoy DIFERIDO; ver ESTADO §f / PROMPT §0-bis).
 
 ## 🧪 Testing
 - **✅ RESUELTO (2026-06-26) — entorno DOM en vitest.** Se agregó `happy-dom` + React Testing Library + `vitest.setup.ts`

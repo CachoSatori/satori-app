@@ -57,7 +57,7 @@ stale).
   **Pendiente: pase a prod (PRIORIDAD 1).**
 
 ## ✅ Accionado 2026-06-28 (cont.) — Hallazgo B (PLATA)
-- **B — drain del outbox en `SIGNED_IN` → RESUELTO en STAGING** (`492eaa5`, rama `fix/outbox-flush-on-signin`, mergeada por
+- **B — drain del outbox en `SIGNED_IN` → RESUELTO en STAGING y 🆕 EN PROD** (`a14da50`, cherry-pick `52d26b9`; origen `492eaa5`, rama `fix/outbox-flush-on-signin`, mergeada por
   FF; client-side, **sin migración**). Antes `outbox.ts` flusheaba por `'online'` / arranque / un backoff que se apaga con la
   cola vacía; **NO** había flush atado a `SIGNED_IN`/re-login → la premisa "el outbox drena al reloguear" (del fix de
   auth-recovery) no estaba garantizada. **Fix:** `initOutbox` registra `supabase.auth.onAuthStateChange` y, vía el predicado
@@ -65,11 +65,11 @@ stale).
   drenan), dispara el **mismo patrón que el handler de `online`** (reset de backoff + `autoFlush`, **no** `flushNow` directo —
   distinto del "Fix propuesto" original). Guard `outboxWired` contra doble-registro (blinda también el listener `online`).
   **NO** toca el `onAuthStateChange` global de `supabase.ts` ni `flushNow`/`supabaseExecutor`. Tests: +4 del gateo
-  (`outbox.test.ts` 9→13); build prod **EXIT 0** + **155** verdes. ⏳ **Validación física pendiente** (es plata).
+  (`outbox.test.ts` 9→13); build prod **EXIT 0** + **155** verdes. 🆕 **PORTADO A PROD** (`a14da50`); validado en staging, smoke en prod pendiente del OK de la dueña.
   ✅ **Desbloquea la PRECONDICIÓN del auth-recovery** (hoy DIFERIDO; ver ESTADO §f / PROMPT §0-bis).
 
 ## ✅ Accionado 2026-06-28 (cont.) — Render de Propinas estabilizado (PLATA)
-- **Render de Propinas inestable → ESTABILIZADO en STAGING** (`ec70598`, rama `fix/propinas-render-estabilidad`, FF;
+- **Render de Propinas inestable → ESTABILIZADO en STAGING y 🆕 EN PROD** (`a14da50`, cherry-pick; origen `ec70598`, rama `fix/propinas-render-estabilidad`, FF;
   client-side, **sin migración**). Bug de PROD que dejaba Propinas **inusable**: `take_home`/`pts_val` se guardaban en el
   estado `lines` y un `useEffect` los recalculaba con `setLines` → cada refetch de realtime (auto-eco de las escrituras
   propias) dejaba un frame con `take_home: 0` ("₡ —"); y el picker de Coberturas no excluía a los activos ni persistía.
@@ -78,9 +78,8 @@ stale).
   `removeCobertura` **persisten** (upsert/delete → sobreviven un refetch); (4) refetch por auto-eco cortado con `pauseWhile`
   (3s) + `lastLocalWriteRef`. **SAGRADO intacto:** `tipCalculations.ts`/`calcTurno` **byte-idéntico**, payout al cerrar
   **idéntico** (merge 1:1 verificado; el `?? 0` es código muerto); `tips.ts` sin cambios de firma. Build EXIT 0, 159 tests
-  (+4 del helper), **verificación adversarial 4/4 PASS**. ⏳ **Pendiente validación física** (es plata; el no-parpadeo es
-  estructural → se valida en staging). **Bug de PROD → port a prod PRIORITARIO** (cherry-pick limpio: `TipsModule.tsx`
-  byte-idéntico en main).
+  (+4 del helper), **verificación adversarial 4/4 PASS**. 🆕 **PORTADO A PROD** (`a14da50`, cherry-pick limpio: `TipsModule.tsx`
+  byte-idéntico en main); **crisis prod-down cerrada**; validado en staging, smoke en prod pendiente del OK de la dueña.
 
 ## 🧪 Testing
 - **✅ RESUELTO (2026-06-26) — entorno DOM en vitest.** Se agregó `happy-dom` + React Testing Library + `vitest.setup.ts`

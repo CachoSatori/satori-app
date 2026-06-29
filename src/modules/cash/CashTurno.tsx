@@ -53,6 +53,12 @@ const CONCEPTOS_EGRESO = [
   { id: 'otro',         label: 'Otro (especificar)',              type: 'egreso_operativo', sub: 'Otro',            account: null },
 ] as const
 
+// Unificación Bandeja↔Caja (040-043): el pago a proveedor en Caja Diaria ES mercadería por
+// definición. Marcamos su egreso_mercaderia con classification='mercaderia' → el trigger del
+// server (unif_on_cash_movement) crea la tarea de Revisión de inventario (inventory_review_task
+// PENDIENTE, INV-1). No afecta montos ni la forma de pago. Espejo de InboxModule.MERCADERIA_CLASS.
+const MERCADERIA_CLASS = { classification: 'mercaderia', suggested_classification: 'mercaderia', suggested_confidence: 1 } as const
+
 // Evita que una request colgada (token vencido / red) deje "Cerrando…" para siempre.
 function withTimeout<T>(p: Promise<T>, ms = 15000): Promise<T> {
   return Promise.race([
@@ -383,6 +389,8 @@ export default function CashTurno({
         caja_origen:   pago.method === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
         shift:         tipShiftToCaja(openSession.shift_type),
         attachments:   pago.attachments,
+        // Pago a proveedor = mercadería → el trigger del server crea la tarea de Revisión de inventario.
+        ...MERCADERIA_CLASS,
       })
       // Ya está en la base → se mostrará vía dbPagos; quitamos el borrador en memoria.
       setPagos(prev => prev.filter(p => p.id !== pago.id))

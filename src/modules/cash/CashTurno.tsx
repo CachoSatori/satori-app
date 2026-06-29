@@ -19,6 +19,7 @@ import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '.
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { uploadFacturaPhoto, movementAttachments } from '../../shared/api/facturas'
 import FacturaThumbs from '../../shared/FacturaThumbs'
+import AgregarAsistente from './AgregarAsistente'
 import type { Employee } from '../../shared/types/database'
 
 interface Props {
@@ -106,6 +107,8 @@ export default function CashTurno({
   const yaExisteDia  = !!sesionDelDia   // abierta → se continúa (es openSession); cerrada → bloquear
 
   const [view, setView] = useState<ViewState>(openSession ? 'turno' : 'apertura')
+  // F4.3a: el "➕ Agregar" único (asistente manual). Convive con los 3 botones viejos (F4.3c los retira).
+  const [agregarOpen, setAgregarOpen] = useState(false)
 
   // Apertura form
   const [apCajero,  setApCajero]  = useState(profile?.full_name ?? '')
@@ -846,6 +849,15 @@ export default function CashTurno({
         </div>
       </div>
 
+      {/* F4.3a — "➕ Agregar" único: asistente manual (captura + clasificación advisory + matriz RN-3).
+          Additivo: los botones por sección (pago/ingreso/egreso) siguen abajo hasta F4.3c. */}
+      {canManage && (
+        <button className="cd-btn-green" style={{ width: '100%', marginBottom: '0.75rem', padding: '0.7rem' }}
+          onClick={() => setAgregarOpen(true)}>
+          ➕ Agregar (asistente)
+        </button>
+      )}
+
       {/* Check de proveedores (mediodía) — visto, NO cierra la caja */}
       <div className="cd-section" style={{ marginBottom: '0.75rem' }}>
         <div className="cd-section-head" style={{ padding: '0.5rem 0.75rem' }}>
@@ -1191,6 +1203,19 @@ export default function CashTurno({
       )}
 
       {/* Modal: agregar / editar pago a proveedor */}
+      {agregarOpen && openSession && profile && (
+        <AgregarAsistente
+          openSession={openSession}
+          suppliers={suppliers}
+          role={profile.role}
+          createdBy={profile.id}
+          tc={tc}
+          onCreated={mov => { onMovAdded(mov); setAgregarOpen(false) }}
+          onClose={() => setAgregarOpen(false)}
+          onError={onError}
+        />
+      )}
+
       {pagoModal && (
         <div className="cd-modal-overlay" onClick={() => setPagoModal(false)}>
           <div className="cd-modal" onClick={e => e.stopPropagation()}>

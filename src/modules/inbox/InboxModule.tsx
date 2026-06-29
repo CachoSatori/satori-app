@@ -14,6 +14,7 @@ import { listDocsNeedingInventory } from '../../shared/api/inventoryIngest'
 import type { Supplier, CashMovement, UserRole } from '../../shared/types/database'
 import { fi } from '../cash/cashUtils'
 import { tipShiftToCaja } from '../../shared/utils'
+import { PAGO_META, isLocalRole, type Pago } from '../../shared/utils/pagoMatrix'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 
 import { ROLE_LABELS } from '../../shared/constants'
@@ -256,15 +257,8 @@ export default function InboxModule() {
   )
 }
 
-// ────────────────────────────────────────────────────────────────
-// Forma de pago × rol — el corazón de la fusión. CAJERO/MANAGER están en el local
-// (pueden pagar en efectivo de la Caja Diaria); CONTADOR/DUEÑO no, solo banco/pendiente.
-type Pago = 'efectivo' | 'pendiente' | 'banco'
-const PAGO_META: Record<Pago, { method: string; status: 'aprobado' | 'pendiente'; caja: string; label: string }> = {
-  efectivo:  { method: 'Efectivo',      status: 'aprobado',  caja: 'Caja Proveedores', label: 'Efectivo — descuenta la Caja Diaria (requiere caja abierta)' },
-  pendiente: { method: 'Transferencia', status: 'pendiente', caja: 'Banco',            label: 'Transferencia — Pendiente (cuenta por pagar, no descuenta)' },
-  banco:     { method: 'Transferencia', status: 'aprobado',  caja: 'Banco',            label: 'Pagado desde Banco (no toca el efectivo)' },
-}
+// Forma de pago × rol (RN-3) — la matriz vive en shared/utils/pagoMatrix (fuente única, reusada por el
+// "➕ Agregar" de Caja). PAGO_META, Pago e isLocalRole se importan arriba; el comportamiento no cambia.
 
 // Unificación Bandeja↔Caja (040-043): la vía de la Bandeja ES mercadería por definición. Marcamos
 // cada egreso_mercaderia con classification='mercaderia' → el trigger del server crea la tarea de
@@ -298,7 +292,7 @@ function ConfirmCard({ doc, accounts, suppliers, pendientes, tc, createdBy, role
   onDiscard: () => void
 }) {
   const ex = doc.raw_json
-  const isLocal = role === 'cajero' || role === 'manager'   // están en caja → pueden efectivo
+  const isLocal = isLocalRole(role)   // cajero/manager están en caja → pueden efectivo
   const [tipo, setTipo]     = useState<DocExtract['tipo']>((ex?.tipo as DocExtract['tipo']) ?? 'factura')
   const [prov, setProv]     = useState(ex?.proveedor ?? '')
   const [fecha, setFecha]   = useState(ex?.fecha ?? new Date().toISOString().slice(0, 10))

@@ -14,10 +14,12 @@
  * Fuera de alcance: la RPC ingresa stock + asiento de auditoría; acá NO se toca
  * cost_per_unit ni ingredient_prices (diferido a la alerta de cambio de precio).
  */
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../../shared/api/supabase'
+import { useAuth } from '../../shared/hooks/useAuth'
 import { getSuppliers, updateMovementMetadata } from '../../shared/api/cash'
-import { signedUrl, type DocumentRow, type DocItem } from '../../shared/api/documents'
+import { signedUrl, uploadImage, extractImage, createDocumentRow, type DocumentRow, type DocItem } from '../../shared/api/documents'
+import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import {
   getSupplierItemMap, resolveLine, resolveEditLines, buildReviewLines, learnSupplierMappings,
   NONE, NEW, type EditLine, type InvLine,
@@ -35,11 +37,13 @@ export default function InvRevision({ ingredients, onRefresh }: {
   ingredients: Ingredient[]
   onRefresh: () => void
 }) {
+  const { profile } = useAuth()
   const [tasks, setTasks]       = useState<InvReviewTask[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [docsById, setDocsById] = useState<Record<string, DocumentRow>>({})
   const [docsByMov, setDocsByMov] = useState<Record<string, DocumentRow>>({})
   const [movsById, setMovsById] = useState<Record<string, CashMovement>>({})
+  const [creatorsById, setCreatorsById] = useState<Record<string, string>>({})  // user_id → full_name (trazabilidad)
   const [urls, setUrls]         = useState<Record<string, string>>({})
   const [loading, setLoading]   = useState(true)
   const [err, setErr]           = useState<string | null>(null)
@@ -86,10 +90,19 @@ export default function InvRevision({ ingredients, onRefresh }: {
       // Movimientos de caja ligados (para prefijar la nota = description y el proveedor)
       if (cashIds.length) {
         const { data: movs } = await supabase.from('cash_movements').select('*').in('id', cashIds)
+        const movRows = (movs ?? []) as CashMovement[]
         const mmap: Record<string, CashMovement> = {}
-        for (const m of (movs ?? []) as CashMovement[]) mmap[m.id] = m
+        for (const m of movRows) mmap[m.id] = m
         setMovsById(mmap)
-      } else { setMovsById({}) }
+        // Nombre de quién registró el pago (created_by) — trazabilidad pedida por la dueña. Solo lectura.
+        const creatorIds = [...new Set(movRows.map(m => m.created_by).filter((x): x is string => !!x))]
+        if (creatorIds.length) {
+          const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', creatorIds)
+          const cmap: Record<string, string> = {}
+          for (const p of (profs ?? []) as { id: string; full_name: string }[]) cmap[p.id] = p.full_name
+          setCreatorsById(cmap)
+        } else { setCreatorsById({}) }
+      } else { setMovsById({}); setCreatorsById({}) }
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error cargando la cola de revisión')
     } finally { setLoading(false) }
@@ -171,32 +184,42 @@ export default function InvRevision({ ingredients, onRefresh }: {
         </div>
       )}
 
-      {selected && (
-        <ReviewDetail
-          key={selected.id}
-          task={selected}
-          doc={docForTask(selected)}
-          movement={selected.cash_movement_id ? movsById[selected.cash_movement_id] : undefined}
-          ingredients={ingredients}
-          suppliers={suppliers}
-          supplierName={supName(selected.supplier_id)}
-          onClose={() => setSelId(null)}
-          onSaved={load}
-          onDone={onDone}
-        />
-      )}
+      {selected && (() => {
+        const selMov = selected.cash_movement_id ? movsById[selected.cash_movement_id] : undefined
+        const selDoc = docForTask(selected)
+        return (
+          <ReviewDetail
+            // La key incluye el doc: al adjuntar una factura (sin-doc → con-doc) la vista REMONTA
+            // y el efecto de armado de líneas corre con los ítems recién extraídos.
+            key={`${selected.id}:${selDoc?.id ?? 'nodoc'}`}
+            task={selected}
+            doc={selDoc}
+            movement={selMov}
+            ingredients={ingredients}
+            suppliers={suppliers}
+            supplierName={supName(selected.supplier_id)}
+            createdBy={profile?.id}
+            creatorName={selMov ? (creatorsById[selMov.created_by] ?? selMov.created_by) : undefined}
+            onClose={() => setSelId(null)}
+            onSaved={load}
+            onDone={onDone}
+          />
+        )
+      })()}
     </div>
   )
 }
 
 // ── Detalle: mapear + editar metadatos (proveedor/nota) + completar / descartar ────────
-function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierName, onClose, onSaved, onDone }: {
+function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierName, createdBy, creatorName, onClose, onSaved, onDone }: {
   task: InvReviewTask
   doc: DocumentRow | undefined
   movement: CashMovement | undefined
   ingredients: Ingredient[]
   suppliers: Supplier[]
   supplierName: string
+  createdBy: string | undefined
+  creatorName: string | undefined
   onClose: () => void
   onSaved: () => void
   onDone: () => void
@@ -212,6 +235,41 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [discarding, setDiscarding] = useState(false)
   const [reason, setReason]     = useState('')
+  const [attaching, setAttaching] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  // F4.3b — vía de rectificación: adjuntar una factura a una tarea SIN factura. Reusa el pipeline EXACTO
+  // de la Bandeja (normalizeInvoiceImage → uploadImage → extractImage → createDocumentRow), enlazando por
+  // linked_movement_id = cash_movement_id. NUNCA toca el cash_movement (monto/método/estado/caja intactos):
+  // solo crea el documento. Al refrescar, la tarea ya tiene ítems y el flujo `completar` EXISTENTE aplica.
+  const onAttach = async (file: File) => {
+    if (!task.cash_movement_id) { setErr('La tarea no tiene un movimiento ligado — no se puede adjuntar.'); return }
+    if (!createdBy) { setErr('No se pudo identificar al usuario para registrar la carga.'); return }
+    setAttaching(true); setErr(null); setSavedMsg(null)
+    try {
+      const { blob, filename } = await normalizeInvoiceImage(file)
+      const { path, sha } = await uploadImage(blob, filename)
+      const detected = await extractImage(path)              // la IA lee la factura (puede traer 0..n)
+      // estado='procesado' → la factura NO entra a la cola de la Bandeja (el pago ya existe); queda
+      // enlazada al movimiento. Si la IA no extrajo nada, el doc se crea igual (foto en el expediente).
+      await createDocumentRow(path, sha, detected[0] ?? null, createdBy, task.cash_movement_id, 'procesado')
+      onSaved()   // recarga el padre → la key cambia (nodoc→docId) → remonta con los ítems extraídos
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo adjuntar la factura — reintentá con buena luz.')
+      setAttaching(false)
+    }
+  }
+  const onPickAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    if (f) onAttach(f)
+    e.target.value = ''   // permite re-elegir la misma foto
+  }
+
+  // Aviso (no bloqueante) si el total leído de la factura no coincide con el monto del pago. NO auto-corrige.
+  const facturaTotal = doc?.raw_json?.total != null ? Number(doc.raw_json.total) : null
+  const movAmount = movement ? (movement.currency === 'USD' ? movement.amount_usd : movement.amount_crc) : null
+  const totalMismatch = facturaTotal != null && facturaTotal > 0 && movAmount != null && movAmount > 0
+    && Math.abs(facturaTotal - movAmount) > Math.max(movAmount * 0.02, 50)
 
   useEffect(() => {
     (async () => {
@@ -312,7 +370,29 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
         </p>
         {err && <div className="tips-error" style={{ marginBottom: '0.6rem' }}><span>{err}</span><button onClick={() => setErr(null)}>✕</button></div>}
         {savedMsg && <div style={{ marginBottom: '0.6rem', padding: '0.4rem 0.7rem', borderRadius: 4, background: 'rgba(74,154,106,.12)', border: '1px solid #4a9a6a', color: '#4a9a6a', fontSize: '0.78rem' }}>{savedMsg}</div>}
-        {!doc && <div className="tips-error" style={{ marginBottom: '0.6rem' }}><span>Esta tarea no tiene factura enlazada — no se puede completar. Descartala con un motivo.</span></div>}
+        {/* Trazabilidad: quién registró el pago de mercadería (pedido de la dueña). */}
+        {movement && (
+          <div style={{ fontSize: '0.7rem', color: 'var(--t-muted)', marginBottom: '0.5rem' }}>
+            Registrado por <strong>{creatorName ?? '—'}</strong>
+            {movement.created_at ? ` · ${new Date(movement.created_at).toLocaleString('es-CR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}
+          </div>
+        )}
+        {totalMismatch && (
+          <div className="tips-error" style={{ marginBottom: '0.6rem' }}>
+            <span>⚠ El total de la factura ({money(facturaTotal!, movement?.currency ?? 'CRC')}) no coincide con el monto del pago ({money(movAmount!, movement?.currency ?? 'CRC')}). Revisalo — el movimiento NO se modifica.</span>
+          </div>
+        )}
+        {!doc && (
+          <div style={{ marginBottom: '0.6rem', padding: '0.6rem 0.7rem', border: '1px dashed var(--vt-gold)', borderRadius: 6, background: 'rgba(200,169,110,.06)' }}>
+            <div style={{ fontSize: '0.78rem', marginBottom: '0.45rem' }}>
+              Esta tarea no tiene factura enlazada (el pago se hizo sin foto). Adjuntá la factura para poder completar el inventario — el gasto ya está registrado; esto <strong>solo agrega la factura</strong>, no toca el pago.
+            </div>
+            <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPickAttach} />
+            <button className="cd-btn-green" onClick={() => fileRef.current?.click()} disabled={attaching || !task.cash_movement_id}>
+              {attaching ? '📷 Leyendo factura…' : '📷 Adjuntar factura'}
+            </button>
+          </div>
+        )}
 
         {!loaded ? (
           <div style={{ padding: '1rem', color: '#888' }}>Cargando…</div>

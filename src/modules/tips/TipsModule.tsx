@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, Suspense, lazy } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
@@ -26,9 +26,9 @@ import {
   BAR_ROLES,
   NO_PROPINA_ROLES,
   type DraftLine,
-  type PoolTotals,
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
+import { availableForCobertura } from './tipShiftHelpers'
 const TipHistory   = lazy(() => import('./TipHistory'))
 const TipQuincenal = lazy(() => import('./TipQuincenal'))
 const TipStats     = lazy(() => import('./TipStats'))
@@ -67,10 +67,9 @@ export default function TipsModule() {
   const [efectivoUSD, setEfectivoUSD] = useState<number | ''>('')
   const [barraCRC, setBarraCRC] = useState<number | ''>('')
 
-  // Líneas del draft (por empleado)
+  // Líneas del draft (por empleado). pts_val/take_home NO viven acá: se DERIVAN
+  // en el render (useMemo de abajo) → nunca hay un frame con 0 (el parpadeo).
   const [lines, setLines] = useState<DraftLine[]>([])
-  // Totales calculados
-  const [totals, setTotals] = useState<PoolTotals | null>(null)
 
   // ── Estado UI ─────────────────────────────────────────────
   const [loading, setLoading] = useState(true)
@@ -85,6 +84,9 @@ export default function TipsModule() {
 
   // Refs para evitar re-saves infinitos
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Marca la última escritura local (autosave/toggle/blur/cobertura). El refetch de
+  // realtime se pausa unos segundos después → no pisa la edición con el auto-eco.
+  const lastLocalWriteRef = useRef(0)
 
   // ── Cargar datos ──────────────────────────────────────────
   const loadData = useCallback(async (opts?: { silent?: boolean }) => {
@@ -173,13 +175,18 @@ export default function TipsModule() {
   // este recarga en silencio. pauseWhileTyping: si el cajero está escribiendo
   // en un campo, el refetch se pospone hasta que lo suelte (no se pisa nada).
   useRealtimeRefetch('rt-propinas', ['tip_sessions', 'tip_entries'],
-    () => { loadData({ silent: true }) }, { pauseWhileTyping: true })
+    () => { loadData({ silent: true }) },
+    { pauseWhileTyping: true, pauseWhile: () => Date.now() - lastLocalWriteRef.current < 3000 })
 
-  // ── Recalcular totales en tiempo real ─────────────────────
-  useEffect(() => {
-    if (!openSession) { setTotals(null); return }
-    // Cobertura = trabajó ese puesto: el rol EFECTIVO (cubierto) define puntos
-    // Y la membresía del pool de barra.
+  // ── take_home/pts_val DERIVADOS (no en estado) — mata el parpadeo ─────────
+  // Antes esto vivía en un useEffect que hacía setLines → cada refetch dejaba un
+  // frame con take_home: 0 ("₡ —"). Derivado en el render es síncrono: nunca hay un
+  // frame en 0. MISMA llamada a calcTurno y MISMO merge que hacía el effect; calcTurno
+  // es no-mutante (copia su input) → seguro en render.
+  const { displayLines, totals } = useMemo(() => {
+    if (!openSession) return { displayLines: lines, totals: null }
+    // Cobertura = trabajó ese puesto: el rol EFECTIVO (cubierto) define puntos y la
+    // membresía del pool de barra.
     const linesForCalc = lines.map(l => {
       const cov = coberturas[l.employeeId]
       return cov ? { ...l, role: cov as import('../../shared/types/database').UserRole } : l
@@ -191,22 +198,23 @@ export default function TipsModule() {
       Number(barraCRC) || 0,
       exchangeRate,
     )
-    // Merge pts_val y take_home back — updatedLines are already copies
-    setLines(prev => prev.map((l, i) => ({
+    // Merge sobre las líneas ORIGINALES → el rol NATURAL queda intacto; solo agrega
+    // pts_val/take_home (los campos editables no se tocan).
+    const merged = lines.map((l, i) => ({
       ...l,
-      pts_val:   updatedLines[i]?.pts_val   ?? l.pts_val,
-      take_home: updatedLines[i]?.take_home ?? l.take_home,
-    })))
-    setTotals(t)
+      pts_val:   updatedLines[i]?.pts_val   ?? 0,
+      take_home: updatedLines[i]?.take_home ?? 0,
+    }))
+    return { displayLines: merged, totals: t }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines.map(l => `${l.active}|${l.hours}|${l.propina_crc}|${l.propina_usd}`).join(','),
-      JSON.stringify(coberturas), efectivoCRC, efectivoUSD, barraCRC, exchangeRate, openSession?.id])
+  }, [lines, coberturas, efectivoCRC, efectivoUSD, barraCRC, exchangeRate, openSession?.id])
 
   // ── Auto-guardar pools en Supabase ────────────────────────
   const scheduleSavePools = useCallback(() => {
     if (!openSession) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
+      lastLocalWriteRef.current = Date.now()
       updateSessionPools(openSession.id, {
         pool_efectivo_crc: Number(efectivoCRC) || 0,
         pool_efectivo_usd: Number(efectivoUSD) || 0,
@@ -284,6 +292,7 @@ export default function TipsModule() {
   // ── Toggle empleado ───────────────────────────────────────
   const toggleLine = async (employeeId: string, checked: boolean) => {
     if (!openSession?.id) return  // nunca persistir entradas sin turno con id
+    lastLocalWriteRef.current = Date.now()  // ambas ramas escriben → corta el auto-eco
     if (!checked) {
       // Desmarcar: eliminar entrada
       await deleteTipEntry(openSession.id, employeeId).catch(() => {})
@@ -332,6 +341,17 @@ export default function TipsModule() {
       return { ...l, active: true, hours: defaultHours, pts_rol: ptsMap.get(coveredRole as import('../../shared/types/database').UserRole) ?? l.pts_rol }
     }))
     setShowCobPicker(false); setCobEmpId(''); setCobRole('')
+    // Persistir al toque: que la cobertura sobreviva un refetch (mismo shape que toggleLine).
+    if (!openSession?.id) return
+    lastLocalWriteRef.current = Date.now()
+    upsertTipEntry({
+      session_id:     openSession.id,
+      employee_id:    empId,
+      hours_worked:   defaultHours,
+      tip_amount_crc: 0,
+      tip_amount_usd: 0,
+      covered_role:   coveredRole,
+    }).catch(() => {})
   }
 
   const removeCobertura = (empId: string) => {
@@ -341,6 +361,10 @@ export default function TipsModule() {
       if (l.employeeId !== empId) return l
       return { ...l, active: false, hours: '', pts_rol: ptsMap.get(l.role) ?? l.pts_rol }
     }))
+    // La línea queda inactiva: persistir la baja para que el refetch no la resucite.
+    if (!openSession?.id) return
+    lastLocalWriteRef.current = Date.now()
+    deleteTipEntry(openSession.id, empId).catch(() => {})
   }
 
   // ── Cambiar propina ───────────────────────────────────────
@@ -357,6 +381,7 @@ export default function TipsModule() {
     if (!line || !line.active) return
     const hours = Number(line.hours) || 0
     if (hours <= 0) return
+    lastLocalWriteRef.current = Date.now()
     await upsertTipEntry({
       session_id:     openSession.id,
       employee_id:    employeeId,
@@ -383,7 +408,7 @@ export default function TipsModule() {
   // ── Cerrar turno ──────────────────────────────────────────
   const handleCloseSession = async () => {
     if (!openSession || !profile) return
-    const workedLines = lines.filter(l => l.active)
+    const workedLines = displayLines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
     const poolCRC = Math.round((Number(efectivoCRC)||0) + (Number(efectivoUSD)||0)*exchangeRate + (Number(barraCRC)||0))
 
@@ -424,7 +449,6 @@ export default function TipsModule() {
       // deja pendiente (como un proveedor). Ver CashTurno → "Propinas por pagar".
 
       setOpenSession(null)
-      setTotals(null)
       setEfectivoCRC('')
       setEfectivoUSD('')
       setBarraCRC('')
@@ -632,7 +656,7 @@ export default function TipsModule() {
               }).map(rol => {
                 // Natural role employees (excluding those who are coberturas in a different role)
                 // Cobertura employees in THIS role
-                const rolLines = lines.filter(l =>
+                const rolLines = displayLines.filter(l =>
                   coberturas[l.employeeId]
                     ? coberturas[l.employeeId] === rol   // show under covered role
                     : l.role === rol                      // show under natural role
@@ -655,7 +679,7 @@ export default function TipsModule() {
                         <span className="tips-field-hint">
                           Dividido entre barra por horas
                           {Number(barraCRC) > 0 && (() => {
-                            const sub = lines.filter(l =>
+                            const sub = displayLines.filter(l =>
                               l.active && BAR_ROLES.includes((coberturas[l.employeeId] as import('../../shared/types/database').UserRole) ?? l.role)
                             ).reduce((s, l) => s + l.take_home, 0)
                             return sub > 0 ? ` · barra recibe ${formatCRC(sub)} (pool gral + barra)` : ''
@@ -719,7 +743,7 @@ export default function TipsModule() {
                         <select value={cobEmpId} onChange={e => setCobEmpId(e.target.value)}
                           style={{ background:'#111', border:'1px solid #2a2a2a', color: cobEmpId ? 'var(--t-gold)' : '#888', padding:'5px 8px', borderRadius:2, fontSize:'0.78rem' }}>
                           <option value="">— seleccionar —</option>
-                          {employees.filter(e => !coberturas[e.id]).map(e => (
+                          {availableForCobertura(employees, lines).map(e => (
                             <option key={e.id} value={e.id}>{e.full_name}</option>
                           ))}
                         </select>
@@ -767,7 +791,7 @@ export default function TipsModule() {
                     <div className="tips-pool-item">
                       <div className="tips-pool-label">Subtotal barra</div>
                       <div className="tips-pool-val teal">
-                        {formatCRC(lines.filter(l =>
+                        {formatCRC(displayLines.filter(l =>
                           l.active && BAR_ROLES.includes((coberturas[l.employeeId] as import('../../shared/types/database').UserRole) ?? l.role)
                         ).reduce((s, l) => s + l.take_home, 0))}
                       </div>
@@ -776,7 +800,7 @@ export default function TipsModule() {
                   <div className="tips-pool-item">
                     <div className="tips-pool-label">Distribuido</div>
                     <div className="tips-pool-val gold">
-                      {formatCRC(lines.filter(l => l.active).reduce((s, l) => s + l.take_home, 0))}
+                      {formatCRC(displayLines.filter(l => l.active).reduce((s, l) => s + l.take_home, 0))}
                     </div>
                   </div>
                 </div>

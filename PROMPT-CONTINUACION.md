@@ -1,9 +1,10 @@
 # Continuación — backlog priorizado (handoff 2026-06-28)
 
-> **🆕 ESTA SESIÓN (2026-06-28, cont. — CI/infra, sin código de app).** `main` = **`52d1475`** · `staging` = **`3b821f0`**.
+> **🆕 ESTA SESIÓN (2026-06-28, cont. — CI/infra + 2 fixes de plata client-side).** `main` = **`52d1475`** · `staging` = **`ec70598`**.
 > 1. **GitHub Actions del `deploy.yml` → Node 24 (`@v5`)** en **main** (`52d1475`, FF; deploy verde, warning de Node 20 desaparecido) y **staging** (`3b821f0`, FF; el workflow **no** corre en staging — solo cierra el drift). `deploy.yml` **byte-idéntico** entre main y staging. **No** se tocó `node-version: 20` del build (Node 22 = cambio aparte, ver ★ PENDIENTES NUEVOS).
 > 2. **`supabase/.temp/` untrackeado + ignorado también en MAIN** (`52d1475`, FF; recreado a mano, **no** cherry-pick). Antes solo en staging → ahora un clon fresco de **main** ya no arranca enlazado a prod. Build EXIT 0.
 > 3. **2 ramas de prep integradas por FF y borradas** del remoto.
+> 4. **🆕 2 fixes de plata client-side → STAGING:** **Hallazgo B** (drain del outbox en `SIGNED_IN`, `492eaa5`) y la **estabilización del render de Propinas** (`ec70598`: parpadeo de Take Home + picker de coberturas). Ambos 🟢, `calcTurno`/sagrados byte-idénticos, sin migración, **pendientes validación física**. **El de Propinas es un bug de PROD → port a prod PRIORITARIO** (ver ★ PENDIENTES NUEVOS).
 >
 > **✅ CAMBIO CLAVE DE PRIORIDADES (vigente):** "el IDOR debe llegar a prod antes de la Ola 2" **YA SE CUMPLIÓ** (sesión previa) — el IDOR está en prod. **La Ola 2 ya NO está bloqueada por el IDOR.** Lo que sigue grande es la **Ola 2 (Bandeja Etapa 1 + migs 038/039 a prod)**.
 >
@@ -12,6 +13,8 @@
 ---
 
 ## ★ PENDIENTES NUEVOS — por prioridad
+
+> **🔴 PRIORITARIO (bug de PROD) — portar la estabilización del render de Propinas** (`ec70598`, 🟢 en staging): en prod Propinas queda **inusable** (los "Take Home" parpadean a "₡ —" al editar; el picker de Coberturas muestra/pierde gente). Fix **client-side, matemática intacta** (`tipCalculations.ts`/`calcTurno` byte-idéntico, payout idéntico — el `?? 0` es código muerto; `tips.ts` sin cambios de firma; sin migración). **Pase quirúrgico por cherry-pick** (`TipsModule.tsx` es byte-idéntico en main → entra limpio; los 2 archivos nuevos `tipShiftHelpers.ts`/`.test.ts` no chocan) + **firma de la dueña + ritual de build** (`VITE_APP_ENV=production npm run build` EXIT 0). **Tras validación física en staging.** Detalle → ESTADO §header/§(d) · verificación adversarial 4/4 PASS.
 
 > **✅ Cerrado el 2026-06-28 (cont.):** (a) **portar el `.gitignore` de `supabase/.temp/` a main** — hecho (`52d1475`, FF; un clon fresco de main ya no arranca en prod); (b) **bumpear las GitHub Actions a `@v5`/Node 24** — hecho en main (`52d1475`) y staging (`3b821f0`); deploy verde y warning de Node 20 desaparecido; `deploy.yml` byte-idéntico entre main y staging.
 

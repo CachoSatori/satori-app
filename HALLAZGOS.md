@@ -68,6 +68,20 @@ stale).
   (`outbox.test.ts` 9→13); build prod **EXIT 0** + **155** verdes. ⏳ **Validación física pendiente** (es plata).
   ✅ **Desbloquea la PRECONDICIÓN del auth-recovery** (hoy DIFERIDO; ver ESTADO §f / PROMPT §0-bis).
 
+## ✅ Accionado 2026-06-28 (cont.) — Render de Propinas estabilizado (PLATA)
+- **Render de Propinas inestable → ESTABILIZADO en STAGING** (`ec70598`, rama `fix/propinas-render-estabilidad`, FF;
+  client-side, **sin migración**). Bug de PROD que dejaba Propinas **inusable**: `take_home`/`pts_val` se guardaban en el
+  estado `lines` y un `useEffect` los recalculaba con `setLines` → cada refetch de realtime (auto-eco de las escrituras
+  propias) dejaba un frame con `take_home: 0` ("₡ —"); y el picker de Coberturas no excluía a los activos ni persistía.
+  **Fix (4 partes):** (1) `take_home`/`pts_val` **DERIVADOS en un `useMemo`** (no en estado → síncrono, nunca un frame en 0);
+  (2) el picker excluye a quienes ya participan (helper puro `availableForCobertura` + node-test); (3) `addCobertura`/
+  `removeCobertura` **persisten** (upsert/delete → sobreviven un refetch); (4) refetch por auto-eco cortado con `pauseWhile`
+  (3s) + `lastLocalWriteRef`. **SAGRADO intacto:** `tipCalculations.ts`/`calcTurno` **byte-idéntico**, payout al cerrar
+  **idéntico** (merge 1:1 verificado; el `?? 0` es código muerto); `tips.ts` sin cambios de firma. Build EXIT 0, 159 tests
+  (+4 del helper), **verificación adversarial 4/4 PASS**. ⏳ **Pendiente validación física** (es plata; el no-parpadeo es
+  estructural → se valida en staging). **Bug de PROD → port a prod PRIORITARIO** (cherry-pick limpio: `TipsModule.tsx`
+  byte-idéntico en main).
+
 ## 🧪 Testing
 - **✅ RESUELTO (2026-06-26) — entorno DOM en vitest.** Se agregó `happy-dom` + React Testing Library + `vitest.setup.ts`
   (mergeado a staging `69d7749`). Default `node` a propósito; los tests DOM piden `// @vitest-environment happy-dom`.

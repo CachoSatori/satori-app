@@ -195,8 +195,28 @@ async function autoFlush() {
   retryTimer = window.setTimeout(autoFlush, retryDelay)
 }
 
+/**
+ * Qué eventos de auth deben drenar la cola. A propósito SOLO `SIGNED_IN`:
+ * `TOKEN_REFRESHED` pega cada hora + en cada resume (flush en bucle), `INITIAL_SESSION`
+ * ya lo cubre el `autoFlush()` de arranque, y `SIGNED_OUT` no debe drenar. Exportado para
+ * testear el gateo sin tocar el cliente de auth.
+ */
+export function shouldFlushOnAuthEvent(event: string): boolean {
+  return event === 'SIGNED_IN'
+}
+
+let outboxWired = false
 export function initOutbox() {
+  if (outboxWired) return            // idempotente: no duplicar listeners (online/auth)
+  outboxWired = true
   window.addEventListener('online', () => { retryDelay = 5_000; autoFlush() })
+  // Cierra el Hallazgo B: tras un re-login (p.ej. el escape del auth-recovery) la cola
+  // podía no drenar hasta un evento `online` o un reinicio. Mismo patrón EXACTO que el
+  // handler de `online` (resetear backoff + autoFlush, NO flushNow directo). Supabase
+  // admite múltiples onAuthStateChange; este NO interfiere con el global de supabase.ts.
+  supabase.auth.onAuthStateChange((event) => {
+    if (shouldFlushOnAuthEvent(event)) { retryDelay = 5_000; autoFlush() }
+  })
   // arranque: si quedó cola de una sesión anterior (la app se cerró offline), reintentar
   autoFlush()
   notifyPending()

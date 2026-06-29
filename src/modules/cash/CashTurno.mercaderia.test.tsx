@@ -39,6 +39,10 @@ vi.mock('../../shared/api/facturas', () => ({
 vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn(async () => ({ ok: true })) }))
 vi.mock('./deletionNote', () => ({ useDeletionNote: () => vi.fn(async () => 'nota') }))
 vi.mock('../../shared/FacturaThumbs', () => ({ default: () => null }))
+// CashTurno importa AgregarAsistente → finance/classifyMovement → cliente supabase real (createClient
+// tira "Web Worker is not supported" en happy-dom). Mockeamos el leaf para que el import no instancie
+// el cliente; este test no ejercita el asistente. Espejo de AgregarAsistente.test.tsx.
+vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import CashTurno from './CashTurno'
 

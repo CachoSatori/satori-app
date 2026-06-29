@@ -1,24 +1,28 @@
 # Continuación — backlog priorizado (handoff 2026-06-28)
 
-> **🆕 ESTA SESIÓN (2026-06-28) — infra/seguridad, sin código de app.** `staging` = **`bb93335`** · `main` = **`a0d9f0d`**.
-> 1. **IDOR de `extract-document` → CERRADO EN PROD.** Se desplegó la versión segura (`c38a252`) al **Supabase de prod** (`functions deploy --project-ref yiczgdtirrkdvohdquzf`; NO va por git). Smoke `POST` sin `Authorization` → **`401`**. ✅ Validación física: la dueña leyó una factura real con rol de caja → OK. **Pendiente OPCIONAL no bloqueante:** prueba cross-user (rol fuera de caja → `403`).
-> 2. **`main` alineado con prod — MERGEADO a main** (`a0d9f0d`, FF, **1 archivo**): `extract-document/index.ts` byte-idéntico a staging/prod (blob `65d1c3d`). El push disparó el deploy de GitHub Pages → success.
-> 3. **Footgun del link de Supabase → TAPADO EN STAGING** (`bb93335`): untrackea `supabase/.temp/` + lo ignora. **OJO: solo en staging, NO en main** (pendiente de portar — ver ★ PENDIENTES NUEVOS).
+> **🆕 ESTA SESIÓN (2026-06-28, cont. — CI/infra, sin código de app).** `main` = **`52d1475`** · `staging` = **`3b821f0`**.
+> 1. **GitHub Actions del `deploy.yml` → Node 24 (`@v5`)** en **main** (`52d1475`, FF; deploy verde, warning de Node 20 desaparecido) y **staging** (`3b821f0`, FF; el workflow **no** corre en staging — solo cierra el drift). `deploy.yml` **byte-idéntico** entre main y staging. **No** se tocó `node-version: 20` del build (Node 22 = cambio aparte, ver ★ PENDIENTES NUEVOS).
+> 2. **`supabase/.temp/` untrackeado + ignorado también en MAIN** (`52d1475`, FF; recreado a mano, **no** cherry-pick). Antes solo en staging → ahora un clon fresco de **main** ya no arranca enlazado a prod. Build EXIT 0.
+> 3. **2 ramas de prep integradas por FF y borradas** del remoto.
 >
-> **✅ CAMBIO CLAVE DE PRIORIDADES:** "el IDOR debe llegar a prod antes de la Ola 2" **YA SE CUMPLIÓ** — el IDOR está en prod. **La Ola 2 ya NO está bloqueada por el IDOR.** Lo que sigue grande es la **Ola 2 (Bandeja Etapa 1 + migraciones a prod)**.
+> **✅ CAMBIO CLAVE DE PRIORIDADES (vigente):** "el IDOR debe llegar a prod antes de la Ola 2" **YA SE CUMPLIÓ** (sesión previa) — el IDOR está en prod. **La Ola 2 ya NO está bloqueada por el IDOR.** Lo que sigue grande es la **Ola 2 (Bandeja Etapa 1 + migs 038/039 a prod)**.
 >
 > Lo de abajo es el handoff de las sesiones 2026-06-26/27 (sigue vigente como plan de fondo; el detalle 06-27 quedó archivado en `ESTADO-ARCHIVO.md`).
 
 ---
 
-## ★ PENDIENTES NUEVOS (2026-06-28) — por prioridad
+## ★ PENDIENTES NUEVOS — por prioridad
 
-1. **🟢 [trivial] Portar el `.gitignore` de `supabase/.temp/` a main.** El fix `bb93335` (untrackear `supabase/.temp/` + ignorarlo) está **solo en staging**. En **main** `supabase/.temp/linked-project.json` sigue **trackeado apuntando a PROD** → cualquier clon fresco de main arranca enlazado a prod. Pase quirúrgico de 1 archivo (`.gitignore`) + `git rm --cached supabase/.temp/` sobre main. No toca runtime.
-2. **🟡 [opcional, no bloqueante] Prueba cross-user del IDOR en prod.** Confirmar que un usuario con rol **fuera de caja** (sin acceso por RLS de storage, mig 016) recibe **`403` "Sin acceso al documento"** al pedir el documento de otro. El cierre ya está fundamentado en código + RLS + lectura física OK con rol de caja; esto es cinturón-y-tiradores.
-3. **🟢 [deuda menor, no bloquea] Bumpear las GitHub Actions.** El workflow `Deploy to GitHub Pages` corre `actions/checkout@v4`, `actions/setup-node@v4` y `actions/upload-artifact@v4`, que apuntan a **Node 20 (deprecado)** y GitHub los fuerza a Node 24 (warning en cada run, no bloquea). Subirlas a las versiones soportadas cuando se toque CI.
+> **✅ Cerrado el 2026-06-28 (cont.):** (a) **portar el `.gitignore` de `supabase/.temp/` a main** — hecho (`52d1475`, FF; un clon fresco de main ya no arranca en prod); (b) **bumpear las GitHub Actions a `@v5`/Node 24** — hecho en main (`52d1475`) y staging (`3b821f0`); deploy verde y warning de Node 20 desaparecido; `deploy.yml` byte-idéntico entre main y staging.
+
+1. **🟡 [opcional, no bloqueante] Prueba cross-user del IDOR en prod.** Confirmar que un usuario con rol **fuera de caja** (sin acceso por RLS de storage, mig 016) recibe **`403` "Sin acceso al documento"** al pedir el documento de otro. El cierre ya está fundamentado en código + RLS + lectura física OK con rol de caja; esto es cinturón-y-tiradores.
+2. **🟢 [deuda menor, aparte] Subir el `node-version: 20` del build a Node 22 (LTS).** Las **acciones** del workflow ya están en Node 24 (`@v5`); lo que queda es el **`node-version: 20`** del paso de build (`deploy.yml`, dentro de `setup-node`) — es el Node del **toolchain del build de prod**, por eso va en su propio cambio (no se metió con el bump de acciones). Node 20 se retira de los runners el 16-sep-2026; `setup-node` igual lo baja, así que no rompe, pero conviene subirlo. Cambio de CI, sin runtime de la app.
+3. **🟡 [pendiente conocido, ajeno a este operativo] Check "Supabase Preview" del GitHub App en rojo crónico.** Sale `failure` en **todos** los commits de main (idéntico en `a0d9f0d` / `1788520` / `52d1475`) — es **pre-existente**, no lo causa ningún cambio de esta sesión. Lo que importa para validar un deploy a prod es `build` + `deploy` (GitHub Pages) y `Cloudflare Pages`, que sí dan verde. Mirar aparte: parece **config/secret del GitHub App de Supabase branching**, no código del repo. Si un cambio toca `supabase/` (migraciones/functions/config), recién ahí investigar si es propio.
+
+> **🛠️ Nota de proceso (aprendizaje 2026-06-28):** una rama de prep destinada a FF a `main` tiene que sentarse **directo sobre `origin/main` actual**. Si `main` avanzó desde que se creó la rama (otro pase entró), hay que **`git rebase origin/main` ANTES del FF** — si no, el diff muestra reversiones espurias y `git merge --ff-only` falla. Si la rama ya estaba pusheada, tras rebasar: `git push --force-with-lease=<rama>:<OLD_SHA>` (**nunca** force-push a `main`). Pasó esta sesión con la rama del untrack de `.temp/` (se creó del main viejo `a0d9f0d`; main avanzó al bump `1788520`; se rebasó antes del FF).
 
 
-Estado (baseline del handoff 2026-06-26 — **hoy prod = `main` `a0d9f0d`** = `79d8004` + IDOR alineado, ver bloque superior): **PROD (`main`, entonces `79d8004`) ya tenía las OLAS 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la
+Estado (baseline del handoff 2026-06-26 — **hoy prod = `main` `52d1475`** = `a0d9f0d` (IDOR alineado) + Actions `@v5` + untrack de `.temp/`, ver bloque superior): **PROD (`main`, entonces `79d8004`) ya tenía las OLAS 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la
 durabilidad de `createDayMovement` (todo ✅ validado físicamente) → la app vuelve a ser usable sin cuelgues.** main = capa de
 inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado + **Ola 1** (saga Realtime/suspensión + durabilidad
 de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush del outbox) + **fix PANTALLA NEGRA** (`5f22754`) +

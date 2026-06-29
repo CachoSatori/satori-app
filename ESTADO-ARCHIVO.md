@@ -1,7 +1,14 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> Última actualización: 2026-06-28 (handoff: IDOR de `extract-document` cerrado EN PROD + main alineado `a0d9f0d` + footgun del link tapado en staging `bb93335`).
+> Última actualización: 2026-06-28 (handoff CI/infra: GitHub Actions del deploy a Node 24 `@v5` en main `52d1475` + staging `3b821f0`, `deploy.yml` byte-idéntico; `supabase/.temp/` untrackeado también en main → clon fresco no arranca en prod).
+
+## 🆕 2026-06-28 (cont.) — GitHub Actions del deploy a Node 24 (`@v5`) en main+staging + `supabase/.temp/` untrackeado en main
+> Histórico archivado del header de `ESTADO.md`. Sesión de **CI/infraestructura — sin código de app, sin esquema, sin datos.** `main` = `52d1475` · `staging` = `3b821f0`.
+
+1. **GitHub Actions del `deploy.yml` → Node 24 (`@v5`), en MAIN y STAGING.** Las 4 acciones (`checkout@v5`, `setup-node@v5`, `upload-pages-artifact@v5`, `deploy-pages@v5`) subidas de Node 20 a Node 24 (GitHub lo forzaba desde 2-jun-2026, retira Node 20 el 16-sep). **MAIN `52d1475`** (FF; deploy de GitHub Pages verde, build 29s + deploy 10s, **warning de Node 20 desaparecido / 0 anotaciones**). **STAGING `3b821f0`** (FF; el workflow **no** corre en staging — solo cierra el drift). `deploy.yml` quedó **byte-idéntico entre main y staging**. **NO se tocó `node-version: 20` del build** (Node del build de prod, cambio aparte → Node 22). **Proceso:** la rama de prep del bump a main se había creado del main viejo (`a0d9f0d`); cuando main avanzó con el bump (`1788520`) hubo que **rebasar la rama del untrack sobre `origin/main` antes del FF** — si no, el diff mostraba reversión espuria de `deploy.yml` y `--ff-only` fallaba (force-with-lease al remoto de la rama, **nunca** a main).
+2. **`supabase/.temp/` untrackeado + ignorado también en MAIN** (`52d1475`, FF; recreado a mano, **no** cherry-pick, porque el `.gitignore` de main no tenía la línea `.claude/` de staging). Antes vivía solo en staging → en main `linked-project.json` seguía trackeado apuntando a PROD (`yiczgdtirrkdvohdquzf`). Ahora un clon fresco de main **no** arranca enlazado a prod; los archivos quedan en disco (solo se untrackean). Build `VITE_APP_ENV=production npm run build` → EXIT 0.
+3. **Ramas de prep integradas y borradas.** `chore/gitignore-supabase-temp-a-main` (→ main) y `chore/bump-actions-node24` (→ staging) mergeadas por FF y borradas del remoto (verificadas como contenidas antes de borrar). **Nota CI:** el check **"Supabase Preview"** del GitHub App sale rojo de forma **crónica y pre-existente** (idéntico en `a0d9f0d`/`1788520`/`52d1475`), ajeno a este cambio; `build`+`deploy` (Pages) y `Cloudflare Pages` dan verde.
 
 ## 🆕 2026-06-28 — IDOR de `extract-document` CERRADO EN PROD + main alineado + footgun del link tapado en staging
 > Histórico archivado del header de `ESTADO.md`. Sesión de **infraestructura/seguridad — sin código de app, sin esquema, sin datos.** `staging` = `bb93335` · `main` = `a0d9f0d`.

@@ -5,7 +5,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 // se mockea para que `npx vitest run` pase sin variables de entorno ni .env.
 vi.mock('../api/supabase', () => ({ supabase: {} }))
 
-import { flushOutbox, supabaseExecutor } from './outbox'
+import { flushOutbox, supabaseExecutor, shouldFlushOnAuthEvent } from './outbox'
 import type { OutboxOp, OutboxStore, ExecResult } from './outbox'
 import { supabase } from '../api/supabase'
 
@@ -156,5 +156,21 @@ describe('outbox — durabilidad del flush (socket zombi: timeout → retry, nun
     const res2 = await flushOutbox(store, supabaseExecutor, noAudit)
     expect(res2).toMatchObject({ applied: 2, remaining: 0, stopped: false })
     expect(await store.count()).toBe(0)
+  })
+})
+
+// ── Gateo del disparador de auth: SOLO SIGNED_IN drena la cola (cierra el Hallazgo B) ──
+describe('outbox — shouldFlushOnAuthEvent (gateo del evento de auth)', () => {
+  it('SIGNED_IN dispara el flush', () => {
+    expect(shouldFlushOnAuthEvent('SIGNED_IN')).toBe(true)
+  })
+  it('SIGNED_OUT NO drena (no se sincroniza al desloguear)', () => {
+    expect(shouldFlushOnAuthEvent('SIGNED_OUT')).toBe(false)
+  })
+  it('TOKEN_REFRESHED NO drena (pega cada hora + en cada resume → evita el bucle)', () => {
+    expect(shouldFlushOnAuthEvent('TOKEN_REFRESHED')).toBe(false)
+  })
+  it('INITIAL_SESSION NO drena (ya lo cubre el autoFlush() de arranque)', () => {
+    expect(shouldFlushOnAuthEvent('INITIAL_SESSION')).toBe(false)
   })
 })

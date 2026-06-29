@@ -1,17 +1,17 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-27**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-28**
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-06-27)
+## 📍 Estado real de las fases (handoff 2026-06-28)
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: en este bloque ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod).
-> **🆕 Sesión 2026-06-27 (en staging `eefa056`):** limpieza de código muerto (mergeada) + **borrar-día/descartar-turno por la cascada** (mergeado, ✅ validado físicamente — pruebas A y B: la tarea de Revisión desaparece) + **foto de factura normalizada en el navegador** (✅ validada + mergeada `eefa056`). Ver ESTADO §b27.
+> **🆕 Sesión 2026-06-28 (infra/seguridad, sin código de app):** `staging` = `bb93335` · `main` = `a0d9f0d`. (1) **IDOR de `extract-document` CERRADO EN PROD** (versión segura desplegada al Supabase de prod + `main` alineado `a0d9f0d`; smoke `401`; validación física: lectura OK con rol de caja; pendiente OPCIONAL cross-user). (2) **Footgun del link de Supabase tapado en STAGING** (`bb93335`: untrackea `supabase/.temp/` + lo ignora; **no en main**). Ver ESTADO §header + §(a). La sesión previa **2026-06-27** (limpieza de código muerto + borrar-día/descartar-turno por la cascada + foto de factura normalizada, todo en staging) está archivada en `ESTADO-ARCHIVO.md`.
 
-> **PROD (`main` `79d8004`) tiene las Olas 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la durabilidad de `createDayMovement` (todo ✅ validado físicamente) → la app vuelve a ser usable.** El trabajo de FEATURES y los fixes de seguridad/integridad viven en `staging` (`a3dfacf`); a prod se va por **cherry-pick selectivo**, NUNCA mergeando `staging`→`main`. **🆕 Esta sesión en staging:** IDOR de `extract-document` cerrado (validado los 2 lados) + borrado de caja → cascada de inventario + auditoría (mig 039, validada end-to-end por la dueña). **🆕 Pendientes de pase a prod (en staging):** auth-recovery (🟡 gateado a suspensión real >1h) + IDOR + mig 039. Ver ESTADO §b-quater + §b-ter + `docs/HANG-RCA-2.md`.
+> **PROD (`main` `a0d9f0d`) tiene las Olas 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la durabilidad de `createDayMovement` + 🆕 el fix del IDOR de `extract-document` (todo ✅ validado físicamente).** El resto del trabajo de FEATURES y los fixes de integridad viven en `staging`; a prod se va por **pase quirúrgico selectivo** (esta sesión: 1 archivo a main por FF), **NUNCA mergeando `staging`→`main` en bloque**. **🆕 Pendientes de pase a prod (en staging):** auth-recovery (🟡 DIFERIDO, gate >1h pasó) + mig 039 (integridad borrado→inventario). **El IDOR ya NO es pendiente de pase — está en prod.** Ver ESTADO + `docs/HANG-RCA-2.md`.
 
 | Fase | Estado | Dónde |
 |---|---|---|
@@ -25,7 +25,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **Outbox — timeout/abort del flush** (`supabaseExecutor` con `withWriteTimeout`+`.abortSignal()`; **guardarraíl: timeout→retry, NUNCA fatal**) | ✅ **EN PROD y VALIDADA (Ola 1.1) — la cola drena sola** | **PROD (`ead4727`+`483d29c`)** + staging (`4805e23`). Antes el flush quedaba colgado en "por sincronizar" sobre el socket zombi. Test `outbox.test.ts` (9 casos) |
 | **🆕 Auth recovery — loop `OFFLINE_WAITING` tras suspensión LARGA** (el caso que la máquina de 3 estados NO cubría: `getSession`/`refreshSession` no vuelven → sin escape) | 🟡 **en STAGING, SOLO unit tests** (gate físico pendiente) | STAGING (`e0df9ae` escape N=3 + `14e4546` signOut acotado + latch one-shot). El lock 10s→5s (`ccef5f1`) fue **red herring** (hardening). **RCA → `docs/HANG-RCA-2.md`**. Gate a prod: **suspensión real >1h** |
 | **🆕 `createDayMovement` — durabilidad** (id+`client_op_id`+`withWriteTimeout`+outbox; cierra el hueco nivel-día de Caja) | ✅ **EN PROD (`79d8004`), VALIDADA** | **PROD** (`399fc0b` re-cortado→`79d8004`) + STAGING (`dea9486`). Cherry-pick re-cortado sobre `5f22754` (la rama vieja quedó stale); sin `supplier_id`. Test `cash.durability.test.ts` |
-| **🆕 IDOR `extract-document` (Edge Function)** — bajaba del bucket privado con service_role sin verificar al dueño → cualquiera bajaba cualquier factura | ✅ **CERRADO y VALIDADO los 2 lados — en STAGING** (`c38a252`, desplegado a staging Supabase) | STAGING: exige JWT + download bajo RLS (mig 016) sin service_role + CORS por allowlist. Positivo (extracción OK) + negativo (`401` sin Authorization). **Prerequisito de seguridad #1 de la Ola 2.** Pase a prod por cherry-pick con firma |
+| **🆕 IDOR `extract-document` (Edge Function)** — bajaba del bucket privado con service_role sin verificar al dueño → cualquiera bajaba cualquier factura | ✅ **CERRADO EN PROD (2026-06-28)** — versión segura desplegada al Supabase de prod + `main` alineado (`a0d9f0d`, byte-idéntico a staging) | Exige JWT + download bajo RLS (mig 016) sin service_role + CORS por allowlist (`c38a252`). **PROD:** `functions deploy` a `yiczgdtirrkdvohdquzf` + smoke `401` sin Authorization + validación física (lectura OK con rol de caja). **Ya NO es prerequisito pendiente de la Ola 2: está en prod.** Pendiente OPCIONAL: prueba cross-user (rol fuera de caja → `403`) |
 | **🆕 Borrado de caja → cascada de inventario + auditoría** (mig 039 + RPC `delete_movement_cascade`; nota obligatoria + `requireManager`) | ✅ **VALIDADO end-to-end por la dueña — en STAGING** (`82d55cd`+tipos `a3dfacf`; **mig 039 aplicada** por dashboard) | STAGING: cierra el inventario huérfano del `ON DELETE SET NULL` de mig 017 (inventario inflado + asientos duplicados). Requiere conexión (offline BLOQUEA, no encola). Test `cash.cascade.test.ts`. Pase a prod (código + mig 039 sobre base de prod) con firma |
 | **🆕 Autorización de gerencia inline en el borrado** (mig 044: `delete_movement_cascade` 2→4 args, re-valida credenciales server-side) | 🟢 **en STAGING** (`7401a5a`+`f1e1aa9`; **mig 044 aplicada** fuera del ledger) | STAGING: el cajero puede borrar pasando credenciales de un owner/manager que el RPC re-valida (el modal `verify_manager` no cambiaba la sesión). Requiere 043 antes. Base del fix de borrar-día (↓) |
 | **🆕 Borrar-día y descartar-turno por la CASCADA** (`discardDiaCompleto`/`discardCashSession` enrutan por el RPC, no `.delete()` crudo) | ✅ **VALIDADA físicamente — en STAGING (`b8ab78c`)** (pruebas A y B: la tarea de Revisión desaparece) | STAGING: antes salteaban `delete_movement_cascade` → `accounting_entries` huérfanos + `inventory_review_task` colgadas. Ahora borran cada movimiento por el RPC (credenciales mig 044), orden movimientos→cierre→sesiones, parcial recuperable. Front-only, sin migración. Test `cash.discardDia.test.ts`. Opcional no bloqueante: verificación SQL directa de 0 `accounting_entries` huérfanos |
@@ -44,7 +44,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | Inventario activo F1 — depleción por venta + COGS real | 🟢 | STAGING (037) |
 | Inventario F1 — orden de compra + puente compra→caja→stock | 🔲 | — |
 | Propina PoS → pool del turno | ⏳ | rama `propina-pool` (sin merge, espera decisión dueña) |
-| **Pase a PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS** (ver §"Plan de pase a prod") | 🟢 **Ola 1 + 1.1 ✅ EN PROD** · Ola 2 = siguiente | ✅ Ola 1 estabilidad (`2358f6c`, sin PoS, sin diag) + ✅ Ola 1.1 flush del outbox (`483d29c`) → ⏳ Ola 2 Bandeja Etapa 1 + mig 038 → 🔲 Ola 3 construir Etapa 2 (si hace falta). ⚠️ NUNCA `staging`→`main` (143 commits / 16 migs adelante): solo cherry-pick |
+| **Pase a PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS** (ver §"Plan de pase a prod") | 🟢 **Ola 1 + 1.1 ✅ EN PROD** · Ola 2 = siguiente (**ya NO bloqueada por el IDOR** — está en prod) | ✅ Ola 1 estabilidad (`2358f6c`, sin PoS, sin diag) + ✅ Ola 1.1 flush del outbox (`483d29c`) → ⏳ Ola 2 Bandeja Etapa 1 + mig 038 (su prerequisito de seguridad #1, el IDOR, **ya está en prod** desde 2026-06-28) → 🔲 Ola 3 construir Etapa 2 (si hace falta). ⚠️ NUNCA `staging`→`main` en bloque: solo pase quirúrgico selectivo |
 | GRAN pase del PoS a PROD (migs PoS 022–037) | 🔲 **DIFERIDO** | NO es parte de las 3 olas; proyecto aparte y posterior, bloqueado por el PILAR de sesión/auth |
 | F4 Loyalty en mesa + Nosara · F5 Hub local | 🔲 | futuro |
 
@@ -70,8 +70,9 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
   drena sola tras suspender la máquina** (antes el flush quedaba colgado en "por sincronizar" sobre el socket zombi).
 - **OLA 2 — (SIGUIENTE) — llevar la Bandeja ETAPA 1 a prod con la mig 038.** La Etapa 1 (unificada
   `/inbox`, foto+IA, enlace proveedor↔caja) **ya está construida y validada en staging**; esto la activa en prod. Es
-  esquema → **firma de la dueña**. ⚠️ **A verificar al planearla:** si la **mig 038 / Etapa 1 se separan limpio de las
-  migraciones del PoS (022–037)** o vienen acopladas. Da **foto+IA real sin construir nada nuevo**.
+  esquema → **firma de la dueña**. ✅ **Su prerequisito de seguridad #1, el IDOR de `extract-document`, YA está en prod**
+  (desplegado 2026-06-28) → la Ola 2 ya **no** está bloqueada por él. ⚠️ **A verificar al planearla:** si la **mig 038 /
+  Etapa 1 se separan limpio de las migraciones del PoS (022–037)** o vienen acopladas. Da **foto+IA real sin construir nada nuevo**.
 - **OLA 3 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro
   de Caja Diaria; hoy **🔲 diseñada, SIN código**). **Solo si** tras usar la Etapa 1 sigue haciendo falta. → **DECISIÓN
   ABIERTA de la dueña:** ¿alcanza la Etapa 1 o se necesita la Etapa 2?

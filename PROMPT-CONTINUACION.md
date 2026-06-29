@@ -1,21 +1,31 @@
-# Continuación — backlog priorizado (handoff 2026-06-27)
+# Continuación — backlog priorizado (handoff 2026-06-28)
 
-> **🆕 ESTA SESIÓN (2026-06-27) — todo en `staging`, prod intacto.** `staging` = **`eefa056`**.
-> 1. **Limpieza de código muerto — MERGEADA a staging** (`9b1127c`→`abb2a25`): archivo huérfano `api/auth.ts`, exports sin uso, assets del scaffold. No-money. Catálogo de lo NO tocado en [INFORME-LIMPIEZA.md](INFORME-LIMPIEZA.md).
-> 2. **Borrar-día y descartar-turno por la CASCADA — MERGEADO a staging** (`b8ab78c`): ya no dejan `accounting_entries` huérfanos ni `inventory_review_task` colgadas; enrutan por `delete_movement_cascade` (mig 044, con credenciales de gerencia). Test `cash.discardDia.test.ts`. **✅ Validado físicamente** (pruebas A y B: la tarea de Revisión desaparece). Opcional no bloqueante: verificación SQL directa de 0 `accounting_entries` huérfanos.
-> 3. **Foto de factura normalizada en el navegador — MERGEADO a staging** (`eefa056`): arregla la lectura con IA de capturas del teléfono (HEIC/peso/EXIF). Front-only. **✅ Validada físicamente** (captura directa con el teléfono). Follow-up opcional: endurecer `mediaType()` de la Edge Function (defensa en profundidad).
+> **🆕 ESTA SESIÓN (2026-06-28) — infra/seguridad, sin código de app.** `staging` = **`bb93335`** · `main` = **`a0d9f0d`**.
+> 1. **IDOR de `extract-document` → CERRADO EN PROD.** Se desplegó la versión segura (`c38a252`) al **Supabase de prod** (`functions deploy --project-ref yiczgdtirrkdvohdquzf`; NO va por git). Smoke `POST` sin `Authorization` → **`401`**. ✅ Validación física: la dueña leyó una factura real con rol de caja → OK. **Pendiente OPCIONAL no bloqueante:** prueba cross-user (rol fuera de caja → `403`).
+> 2. **`main` alineado con prod — MERGEADO a main** (`a0d9f0d`, FF, **1 archivo**): `extract-document/index.ts` byte-idéntico a staging/prod (blob `65d1c3d`). El push disparó el deploy de GitHub Pages → success.
+> 3. **Footgun del link de Supabase → TAPADO EN STAGING** (`bb93335`): untrackea `supabase/.temp/` + lo ignora. **OJO: solo en staging, NO en main** (pendiente de portar — ver ★ PENDIENTES NUEVOS).
 >
-> Lo de abajo es el handoff de la sesión 2026-06-26 (sigue vigente como plan de fondo).
+> **✅ CAMBIO CLAVE DE PRIORIDADES:** "el IDOR debe llegar a prod antes de la Ola 2" **YA SE CUMPLIÓ** — el IDOR está en prod. **La Ola 2 ya NO está bloqueada por el IDOR.** Lo que sigue grande es la **Ola 2 (Bandeja Etapa 1 + migraciones a prod)**.
+>
+> Lo de abajo es el handoff de las sesiones 2026-06-26/27 (sigue vigente como plan de fondo; el detalle 06-27 quedó archivado en `ESTADO-ARCHIVO.md`).
+
+---
+
+## ★ PENDIENTES NUEVOS (2026-06-28) — por prioridad
+
+1. **🟢 [trivial] Portar el `.gitignore` de `supabase/.temp/` a main.** El fix `bb93335` (untrackear `supabase/.temp/` + ignorarlo) está **solo en staging**. En **main** `supabase/.temp/linked-project.json` sigue **trackeado apuntando a PROD** → cualquier clon fresco de main arranca enlazado a prod. Pase quirúrgico de 1 archivo (`.gitignore`) + `git rm --cached supabase/.temp/` sobre main. No toca runtime.
+2. **🟡 [opcional, no bloqueante] Prueba cross-user del IDOR en prod.** Confirmar que un usuario con rol **fuera de caja** (sin acceso por RLS de storage, mig 016) recibe **`403` "Sin acceso al documento"** al pedir el documento de otro. El cierre ya está fundamentado en código + RLS + lectura física OK con rol de caja; esto es cinturón-y-tiradores.
+3. **🟢 [deuda menor, no bloquea] Bumpear las GitHub Actions.** El workflow `Deploy to GitHub Pages` corre `actions/checkout@v4`, `actions/setup-node@v4` y `actions/upload-artifact@v4`, que apuntan a **Node 20 (deprecado)** y GitHub los fuerza a Node 24 (warning en cada run, no bloquea). Subirlas a las versiones soportadas cuando se toque CI.
 
 
-Estado: **PROD (`main` `79d8004`) tiene las OLAS 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la
+Estado (baseline del handoff 2026-06-26 — **hoy prod = `main` `a0d9f0d`** = `79d8004` + IDOR alineado, ver bloque superior): **PROD (`main`, entonces `79d8004`) ya tenía las OLAS 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la
 durabilidad de `createDayMovement` (todo ✅ validado físicamente) → la app vuelve a ser usable sin cuelgues.** main = capa de
 inteligencia + fix SW viejo + fix fechas-borde + canario Realtime/candado + **Ola 1** (saga Realtime/suspensión + durabilidad
 de escritura de caja, SIN diag) + **Ola 1.1** (timeout/abort del flush del outbox) + **fix PANTALLA NEGRA** (`5f22754`) +
 **🆕 durabilidad `createDayMovement`** (FF `5f22754`→`79d8004`). STAGING (**`69d7749`**) = todo el PoS + Bandeja Etapa 1 + esos fixes + la saga
 Realtime/suspensión + durabilidad de caja + flush del outbox con tope + auth-recovery (mergeado) + switch de diag solo-staging
 (`[rt-diag]`) + IDOR de `extract-document` cerrado (`c38a252`) + borrado de caja → cascada de inventario (mig 039)
-+ **🆕 esta sesión (2026-06-26): esquema 040–043 de la unificación APLICADO a la base de staging** (vía `db query`, no en `schema_migrations`; archivos ✅ **MERGEADOS a staging** `63ca7ce`) + **entorno de tests DOM** (happy-dom+RTL, smoke anti-loop). **🆕 pendientes de pase a prod:** el IDOR y la mig 039 (cherry-pick sobre main limpio, con firma). Auth-recovery quedó **DIFERIDO** (gate >1h pasó; ya mergeado — §0-bis).
++ **🆕 esta sesión (2026-06-26): esquema 040–043 de la unificación APLICADO a la base de staging** (vía `db query`, no en `schema_migrations`; archivos ✅ **MERGEADOS a staging** `63ca7ce`) + **entorno de tests DOM** (happy-dom+RTL, smoke anti-loop). **🆕 El IDOR ya pasó a prod (2026-06-28).** **Pendiente de pase a prod:** la mig 039 (cherry-pick sobre main limpio, con firma). Auth-recovery quedó **DIFERIDO** (gate >1h pasó; ya mergeado — §0-bis).
 Guardrails de siempre:
 **nada a `main`/PROD sin orden explícita, DDL solo migraciones aditivas, sagrados intactos** (`cashUtils`,
 `tipCalculations`, `computeTotals`, cierres, cobro/vuelto, `posFiscal`), builds+tests+eslint verdes por commit.
@@ -30,10 +40,11 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 > profunda) + la durabilidad de escritura de caja + el timeout/abort del flush del outbox YA ESTÁN EN PROD y validadas
 > físicamente** vía **OLA 1 (`2358f6c`)** y **OLA 1.1 (`ead4727`+`483d29c`)** — la cola del outbox drena sola. **🆕 También
 > EN PROD: el fix de la PANTALLA NEGRA del bootstrap** (`5f22754`, ✅ validado físicamente) **y la durabilidad de
-> `createDayMovement`** (`79d8004`, ✅ validada). **🆕 En STAGING esta sesión (§0-quater): el prerequisito de seguridad #1
-> (IDOR en `extract-document`) quedó CERRADO y validado los 2 lados** + la integridad borrado→inventario (mig 039, validada
-> end-to-end por la dueña). **El foco AHORA es la OLA 2: Bandeja Etapa 1 + mig 038 a prod (§1)** — el IDOR ya no bloquea
-> (cerrado en staging), pero su fix **todavía hay que pasarlo a prod** junto con la Bandeja.
+> `createDayMovement`** (`79d8004`, ✅ validada). **🆕 EN PROD (2026-06-28): el prerequisito de seguridad #1 (IDOR en
+> `extract-document`) quedó CERRADO en producción** (versión segura desplegada al Supabase de prod + `main` alineado
+> `a0d9f0d`; smoke `401`; lectura física OK con rol de caja). En staging sigue además la integridad borrado→inventario
+> (mig 039, validada end-to-end por la dueña). **El foco AHORA es la OLA 2: Bandeja Etapa 1 + mig 038 a prod (§1)** — el
+> IDOR **ya no bloquea y ya está en prod**; lo que falta pasar con la Bandeja es la mig 039.
 
 ---
 
@@ -146,7 +157,7 @@ cualquier factura; CORS `*`. Fix (contrato `{ image_path }`→`{ documentos[] }`
 cliente con **ANON key + ese token** (aplica RLS), `auth.getUser()` (→`401`), **download con ese cliente** (no service_role) →
 RLS de storage de mig 016 es el portón (→`403`); CORS por **allowlist** (`https://cachosatori.github.io` +
 `https://satori-staging.pages.dev`). Validado: positivo (extracción en bandeja OK) + negativo (`curl` sin Authorization → `401`).
-**Era el prerequisito de seguridad #1 de la Ola 2.** Sigue SOLO en staging.
+**Era el prerequisito de seguridad #1 de la Ola 2.** **🆕 ACTUALIZACIÓN 2026-06-28: ya pasó a PROD** — la versión segura se desplegó al Supabase de prod (`functions deploy --project-ref yiczgdtirrkdvohdquzf`) y `main` quedó alineado (`a0d9f0d`, byte-idéntico a staging); smoke `401` + validación física (lectura OK con rol de caja). Pendiente OPCIONAL: prueba cross-user (→ `403`).
 
 **(2) Borrado de caja → cascada de inventario + auditoría — mig 039 + RPC** (`82d55cd`+tipos `a3dfacf`, **validado end-to-end
 por la dueña**). Antes `inventory_movements.cash_movement_id` era `ON DELETE SET NULL` (mig 017) → al borrar el `cash_movement`
@@ -164,19 +175,20 @@ en CashMovimientos y CashTurno. Test `cash.cascade.test.ts`. NO toca sagrados.
 
 ---
 
-## ★ PRIORIDAD 1 (pases a prod pendientes) — auth-recovery + IDOR + integridad mig 039
-> ✅ La **PANTALLA NEGRA** (`5f22754`, §0-ter) **y la durabilidad de `createDayMovement`** (`79d8004`, §0-quater/abajo) **ya
-> pasaron a prod, validadas** — salen de esta lista.
+## ★ PRIORIDAD 1 (pases a prod pendientes) — integridad mig 039 (+ auth-recovery diferido)
+> ✅ La **PANTALLA NEGRA** (`5f22754`, §0-ter), **la durabilidad de `createDayMovement`** (`79d8004`) **y 🆕 el IDOR de
+> `extract-document`** (desplegado al Supabase de prod + `main` alineado `a0d9f0d`, 2026-06-28) **ya pasaron a prod,
+> validados** — salen de esta lista.
 
-Cada pase es **NUEVO desde `main`**, NUNCA mergear `staging`→`main`; verificación: `VITE_APP_ENV=production npm run build`
+Cada pase es **NUEVO desde `main`**, NUNCA mergear `staging`→`main` en bloque; verificación: `VITE_APP_ENV=production npm run build`
 EXIT 0 + suite verde + ritual de identidad `{base}version.json`→`.commit`; firma de la dueña. Orden lo decide la dueña:
-1. **Auth-recovery** (`e0df9ae`+`14e4546`) — **DIFERIDO, NO bloqueante** (§0-bis): el gate de suspensión >1h **pasó** y la app
+1. **🆕 Integridad borrado→inventario** (`82d55cd` código + **mig 039 sobre la BASE de prod**, hoy NO aplicada) — pase de
+   código por pase quirúrgico + aplicar la mig 039 en prod, con firma. La 039 es idempotente (ver nota §0-quater).
+2. **Auth-recovery** (`e0df9ae`+`14e4546`) — **DIFERIDO, NO bloqueante** (§0-bis): el gate de suspensión >1h **pasó** y la app
    se recupera sin él → posiblemente innecesario. Si se retoma, su precondición es la **PRIORIDAD 2** (drain del outbox en
    `SIGNED_IN`). No es candidato de pase salvo que reaparezca el síntoma. Client-side, sin migración.
-2. **🆕 IDOR `extract-document`** (`c38a252`) — cherry-pick a main + **re-deploy de la Edge Function a la Supabase de PROD**
-   (`yiczgdtirrkdvohdquzf`). Es el prerequisito de seguridad #1 de la Bandeja.
-3. **🆕 Integridad borrado→inventario** (`82d55cd` código + **mig 039 sobre la BASE de prod**, hoy NO aplicada) — pase de
-   código por cherry-pick + aplicar la mig 039 en prod, con firma. La 039 es idempotente (ver nota §0-quater).
+
+> ✅ **El IDOR de `extract-document` ya NO está en esta lista — pasó a prod el 2026-06-28** (ver §0-quater).
 
 ## ★ PRIORIDAD 2 — Hallazgo B: drain del outbox en `SIGNED_IN` (PLATA)
 `outbox.ts` hoy flushea por `'online'` / arranque / un backoff que **se apaga con la cola vacía**; **NO** hay flush atado a
@@ -208,9 +220,9 @@ la máquina** (antes el flush quedaba colgado en "por sincronizar" sobre el sock
 **ya está construida y validada en staging** — esta ola la **activa en prod**. Da **foto+IA real sin construir nada nuevo**.
 Es **esquema → firma de la dueña** (mig 038). ⚠️ **A verificar al planearla:** si la **mig 038 / la Etapa 1 se separan
 limpio de las migraciones del PoS (022–037)** o vienen acopladas (define si se puede pasar la Bandeja sin arrastrar el PoS).
-> ✅ **PREREQUISITO DE SEGURIDAD #1 — CERRADO en staging (2026-06-26, §0-quater):** el **IDOR en `extract-document`** ya
-> está corregido y validado los 2 lados en staging (`c38a252`). **Pendiente para la Ola 2:** pasar ese fix a prod (cherry-pick
-> + re-deploy de la Edge Function a la Supabase de prod) **junto con** la Bandeja — no subir la Bandeja a prod sin el IDOR cerrado allí. Detalle → [HALLAZGOS.md](HALLAZGOS.md).
+> ✅ **PREREQUISITO DE SEGURIDAD #1 — CERRADO EN PROD (2026-06-28, §0-quater):** el **IDOR en `extract-document`** ya
+> está corregido **y desplegado en el Supabase de prod** + `main` alineado (`a0d9f0d`). **Ya NO es un pendiente de la Ola 2:**
+> la Bandeja puede subir a prod sin arrastrar este fix (ya está allí). Pendiente OPCIONAL: prueba cross-user (→ `403`). Detalle → [HALLAZGOS.md](HALLAZGOS.md).
 
 ### Ola 3 🔲 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2
 **Qué:** entrada **foto-primero 100% dentro de Caja Diaria** — hoy **🔲 DISEÑADA, SIN código** (no hay nada en

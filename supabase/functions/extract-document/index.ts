@@ -5,20 +5,37 @@
  * a Anthropic (visión) y devuelve { documentos: [...] } — una foto puede traer
  * varios documentos (facturas/tiquetes juntos). La key vive SOLO en el Vault.
  *
+ * Seguridad: exige el JWT del usuario (Authorization) y baja la imagen con un
+ * cliente con ESE token, de modo que el RLS de storage (mig 016: documents_storage_rw,
+ * rol en owner/manager/contador/cajero) sea el portón. NO usa la service_role para
+ * el download → cierra el IDOR. CORS por allowlist (prod + staging).
+ *
  * Deploy: supabase functions deploy extract-document --project-ref yiczgdtirrkdvohdquzf
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
 const SUPABASE_URL      = Deno.env.get('SUPABASE_URL')!
-const SERVICE_KEY       = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const ANON_KEY          = Deno.env.get('SUPABASE_ANON_KEY')!
 // Haiku 4.5 = más barato; cambiá a 'claude-sonnet-4-5' por env si querés más precisión.
 const MODEL             = Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-haiku-4-5'
 
-const CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+// Allowlist de orígenes web conocidos. El '*' anterior dejaba que cualquier sitio
+// llamara la función desde el browser; ahora solo eco del Origin si está permitido.
+const ALLOWED_ORIGINS = new Set([
+  'https://cachosatori.github.io',    // prod — GitHub Pages (base /satori-app/)
+  'https://satori-staging.pages.dev', // staging — Cloudflare Pages
+])
+
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') ?? ''
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+  if (ALLOWED_ORIGINS.has(origin)) headers['Access-Control-Allow-Origin'] = origin
+  return headers
 }
 
 const DOC_DEFAULTS = {
@@ -79,15 +96,32 @@ function toBase64(bytes: Uint8Array): string {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+  const cors = corsHeaders(req)
+  const json = (body: unknown, status: number): Response =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   try {
+    // 1) Exigir el JWT del usuario (el cliente lo reenvía vía supabase.functions.invoke).
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) return json({ documentos: [], error: 'No autorizado' }, 401)
+
     const { image_path } = await req.json()
     if (!image_path) return json({ documentos: [] }, 400)
     if (!ANTHROPIC_API_KEY) return json({ documentos: [], error: 'ANTHROPIC_API_KEY no configurada' }, 200)
 
-    const sb = createClient(SUPABASE_URL, SERVICE_KEY)
-    const { data: file, error: dlErr } = await sb.storage.from('documents').download(image_path)
-    if (dlErr || !file) return json({ documentos: [], error: 'No se pudo bajar la imagen' }, 200)
+    // 2) Cliente con el token del usuario → aplica RLS (NO service_role).
+    const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    })
+
+    // 3) Verificar que el token corresponde a un usuario real.
+    const { data: { user } } = await userClient.auth.getUser()
+    if (!user) return json({ documentos: [], error: 'No autorizado' }, 401)
+
+    // 4) Bajar la imagen CON el cliente del usuario → el RLS de storage (mig 016) es el portón.
+    const { data: file, error: dlErr } = await userClient.storage.from('documents').download(image_path)
+    if (dlErr || !file) return json({ documentos: [], error: 'Sin acceso al documento' }, 403)
 
     const b64 = toBase64(new Uint8Array(await file.arrayBuffer()))
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -128,8 +162,4 @@ function parseDocs(text: string): Record<string, unknown>[] {
       : (obj && typeof obj === 'object') ? [obj] : []
     return arr.map((d: Record<string, unknown>) => ({ ...DOC_DEFAULTS, ...d }))
   } catch { return [] }
-}
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 }

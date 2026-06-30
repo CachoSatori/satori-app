@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { createCashMovement } from '../../shared/api/cash'
+import { createCashMovement, upsertSupplier } from '../../shared/api/cash'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { uploadImage, extractImage, createDocumentRow, cuadra, type DocExtract } from '../../shared/api/documents'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
@@ -7,7 +7,7 @@ import { classifyMovement } from '../../shared/utils/classifyMovement'
 import { PAGO_META, formasPago, type Pago } from '../../shared/utils/pagoMatrix'
 import { norm } from '../../shared/api/inventoryIngest'
 import { tipShiftToCaja } from '../../shared/utils'
-import { fi } from './cashUtils'
+import { fi, fd } from './cashUtils'
 import type { CashSession, CashMovement, Supplier, UserRole } from '../../shared/types/database'
 
 // F4.3a — el "➕ Agregar" único de Caja Diaria (SPEC §5). Asistente de UNA pantalla con secciones
@@ -52,6 +52,11 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const [montoCRC, setMontoCRC] = useState<number | ''>('')
   const [montoUSD, setMontoUSD] = useState<number | ''>('')
   const [fechaFactura, setFechaFactura] = useState('')   // opcional; la fecha de REGISTRO es hoy (RN-1)
+  // Resolución de proveedor: pickedSupplierId = uno elegido/creado a mano (pisa el auto-match por nombre);
+  // createdSuppliers = altas al vuelo en este flujo (aún no en el prop suppliers).
+  const [pickedSupplierId, setPickedSupplierId] = useState<string | null>(null)
+  const [createdSuppliers, setCreatedSuppliers] = useState<Supplier[]>([])
+  const [creatingSup, setCreatingSup] = useState(false)
 
   // ── 2. Clasificación advisory (RN-2: sugiere, el humano confirma) ──
   const sugerencia = useMemo(
@@ -95,7 +100,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       const detected = await extractImage(path)
       const ex = detected[0] ?? null
       if (ex) {
-        if (ex.proveedor) setSupplierName(ex.proveedor)
+        if (ex.proveedor) { setSupplierName(ex.proveedor); setPickedSupplierId(null) }   // re-resolver por el nombre leído
         if (ex.concepto || ex.proveedor) setDescripcion(ex.concepto || ex.proveedor || '')
         if (ex.total != null) {
           if (ex.moneda === 'USD') setMontoUSD(ex.total)
@@ -126,6 +131,41 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
     ? 'Ingreso → entra a la Registradora'
     : `${PAGO_META[pago].caja} · ${PAGO_META[pago].status === 'pendiente' ? 'Pendiente (cuenta por pagar)' : 'Pagado'}`
       + (clase === 'mercaderia' ? ' · crea tarea de Revisión de inventario' : '')
+
+  // ── Resolución de proveedor ────────────────────────────────
+  // Lista total = proveedores del padre + los recién creados acá. El RESUELTO = el elegido/creado a mano
+  // (pickedSupplierId) o, si no, el match EXACTO por nombre (matchSupplier/norm reusado, sin reimplementar).
+  const allSuppliers = useMemo(() => [...suppliers, ...createdSuppliers], [suppliers, createdSuppliers])
+  const nameTrimmed = supplierName.trim()
+  const autoMatch = useMemo(() => matchSupplier(supplierName, allSuppliers), [supplierName, allSuppliers])
+  const pickedSupplier = pickedSupplierId ? (allSuppliers.find(s => s.id === pickedSupplierId) ?? null) : null
+  const resolvedSupplier: Supplier | null = pickedSupplier ?? autoMatch   // elegido/creado pisa el auto-match
+  const resolvedSupplierId = resolvedSupplier?.id ?? null
+  const supplierUnknown = nameTrimmed.length > 0 && !resolvedSupplier
+  // Parecidos (anti-duplicado): comparten substring o un token significativo (≥4) con lo tipeado/leído.
+  const similares = useMemo(() => {
+    if (!supplierUnknown) return []
+    const q = norm(nameTrimmed)
+    const qtok = new Set(q.split(/\s+/).filter(t => t.length >= 4))
+    return allSuppliers.filter(s => s.is_active && (
+      norm(s.name).includes(q) || q.includes(norm(s.name)) ||
+      [...new Set(norm(s.name).split(/\s+/))].some(t => t.length >= 4 && qtok.has(t))
+    )).slice(0, 6)
+  }, [supplierUnknown, nameTrimmed, allSuppliers])
+
+  const pickSupplier = (s: Supplier) => { setPickedSupplierId(s.id); setSupplierName(s.name) }
+  const crearProveedor = async () => {
+    if (!nameTrimmed || creatingSup) return
+    setCreatingSup(true)
+    try {
+      const s = await upsertSupplier({ name: nameTrimmed })   // reusa el alta existente (defaults: CRC/Efectivo/activo)
+      setCreatedSuppliers(prev => [...prev, s])
+      setPickedSupplierId(s.id)
+      setSupplierName(s.name)
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'No se pudo crear el proveedor — reintentá.')
+    } finally { setCreatingSup(false) }
+  }
 
   const confirmar = async () => {
     if (!montoOk || saving) return
@@ -165,8 +205,10 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           exchange_rate: tc,
           description,
           subcategory:   esMercaderia ? 'Proveedor mercadería' : 'Operativo',
-          supplier_id:   esMercaderia ? (matchSupplier(supplierName, suppliers)?.id ?? null) : null,
-          supplier_name: supplierName.trim() || undefined,
+          // Proveedor RESUELTO (matcheado / elegido / recién creado) → va en mercadería Y operativa para
+          // que los movimientos agrupen/filtren por proveedor. No es campo de plata.
+          supplier_id:   resolvedSupplierId,
+          supplier_name: (resolvedSupplier?.name ?? supplierName.trim()) || undefined,
           method,
           caja_origen:   caja,
           status,
@@ -210,6 +252,9 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const lecturaPct = lectura ? Math.round((lectura.confianza ?? 0) * 100) : 0
   const lecturaCuadra = lectura ? cuadra(lectura) : true
   const lecturaAlerta = !!lectura && (lectura.requiere_revision === true || (lectura.confianza ?? 0) < 0.5)
+  // Ítems leídos (read-only) para revisar antes de confirmar. El emparejamiento va en Revisión, no acá.
+  const lineItems = lectura?.items ?? []
+  const fmtMoney = (n: number) => (lectura?.moneda === 'USD' ? fd : fi)(n)
 
   return (
     <div className="cd-modal-overlay" onClick={onClose}>
@@ -256,7 +301,36 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           <div className="tips-field-label">Proveedor (opcional)</div>
           <input type="text" className="tips-input-dark" style={{ width: '100%' }} aria-label="Proveedor"
             placeholder="Nombre del proveedor, si aplica"
-            value={supplierName} onChange={e => setSupplierName(e.target.value)} />
+            value={supplierName} onChange={e => { setSupplierName(e.target.value); setPickedSupplierId(null) }} />
+          {resolvedSupplier && (
+            <div style={{ fontSize: '0.66rem', color: '#4a9a6a', marginTop: 3 }}>✓ Proveedor reconocido: {resolvedSupplier.name}</div>
+          )}
+          {supplierUnknown && (
+            <div style={{ marginTop: 4 }}>
+              <div className="cd-method-info pend" role="alert">
+                ⚠ «{nameTrimmed}» no existe en el sistema — puede ser un error de lectura. Elegí uno existente o crealo.
+              </div>
+              {similares.length > 0 && (
+                <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                  ¿Quisiste decir?
+                  {similares.map(s => (
+                    <button key={s.id} type="button" className="tips-btn-ghost" style={{ padding: '2px 8px', fontSize: '0.7rem' }}
+                      onClick={() => pickSupplier(s)}>{s.name}</button>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                <select className="tips-input-dark" style={{ flex: 1, minWidth: 160 }} aria-label="Elegir proveedor existente"
+                  value="" onChange={e => { const s = allSuppliers.find(x => x.id === e.target.value); if (s) pickSupplier(s) }}>
+                  <option value="">— elegir proveedor existente —</option>
+                  {allSuppliers.filter(s => s.is_active).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <button type="button" className="cd-btn-green" onClick={crearProveedor} disabled={creatingSup}>
+                  {creatingSup ? 'Creando…' : `+ Crear «${nameTrimmed}»`}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
@@ -286,6 +360,29 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             La fecha de registro es HOY (entra hoy a la caja). La de la factura, si difiere, va a la descripción.
           </div>
         </div>
+
+        {/* Preview READ-ONLY de los ítems leídos — revisión previa; el emparejamiento es en Revisión. */}
+        {lineItems.length > 0 && (
+          <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+            <div className="tips-field-label">Ítems leídos por la IA ({lineItems.length}) — revisá antes de confirmar</div>
+            <div style={{ border: '1px solid var(--t-border,#d4cfc4)', borderRadius: 4, overflow: 'hidden', fontSize: '0.7rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 44px 78px 82px', gap: 4, padding: '4px 8px', fontWeight: 700, color: '#8a8378', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
+                <span>Descripción</span><span style={{ textAlign: 'right' }}>Cant.</span><span style={{ textAlign: 'right' }}>P. unit.</span><span style={{ textAlign: 'right' }}>Total</span>
+              </div>
+              {lineItems.map((it, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 44px 78px 82px', gap: 4, padding: '4px 8px', borderBottom: i < lineItems.length - 1 ? '1px solid var(--t-border,#ece8df)' : 'none' }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.descripcion}>{it.descripcion}</span>
+                  <span style={{ textAlign: 'right' }}>{it.cantidad ?? '—'}</span>
+                  <span style={{ textAlign: 'right' }}>{it.precio_unitario != null ? fmtMoney(it.precio_unitario) : '—'}</span>
+                  <span style={{ textAlign: 'right' }}>{it.total != null ? fmtMoney(it.total) : '—'}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: '0.64rem', color: '#8a8378', marginTop: 3 }}>
+              Solo lectura. El emparejamiento ítem↔ingrediente se hace en Revisión de inventario.
+            </div>
+          </div>
+        )}
 
         {/* ── 2. Clasificación advisory ── */}
         <div className="tips-field" style={{ marginTop: '1rem' }}>

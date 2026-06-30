@@ -35,25 +35,6 @@ interface Props {
   onRefresh:          () => void
 }
 
-// Otros egresos del turno que salen de la Caja Diaria (no son mercadería).
-// Las propinas NO van acá — se pagan en el cierre del turno.
-// Categorías ÚNICAS (corrección de la dueña 06-11): un solo "Delivery" y un solo
-// "Propinas" — el detalle (SINPE/tarjeta/turno AM-PM…) va en la NOTA. "Delivery
-// dueños" queda como opción propia (decisión de la dueña: es egreso de socios,
-// contabilidad distinta). El destino contable del Delivery se deriva de la nota
-// al guardar (ver confirmEgreso): electrónico = pass-through sin P&L; si no, a7100.
-// Propinas = SIEMPRE pass-through (la plata es del staff, no gasto del negocio).
-// Los movimientos históricos con las subcategorías viejas ("Delivery por SINPE",
-// "Propinas por Lafise"…) quedan intactos en datos y reportes.
-const CONCEPTOS_EGRESO = [
-  { id: 'delivery',     label: 'Delivery (detalle en la nota)',   type: 'egreso_operativo', sub: 'Delivery',        account: 'a7100' },
-  { id: 'deliv_duenos', label: 'Delivery dueños',                 type: 'egreso_socios',    sub: 'Delivery dueños', account: null },
-  { id: 'propinas',     label: 'Propinas (detalle en la nota)',   type: 'egreso_personal',  sub: 'Propinas',        account: null },
-  { id: 'operativo',    label: 'Operativo (gas, luz, mantenim…)', type: 'egreso_operativo', sub: 'Operativo',       account: null },
-  { id: 'salario',      label: 'Salario / adelanto en efectivo',  type: 'egreso_personal',  sub: 'Salario',         account: 'a6200' },
-  { id: 'otro',         label: 'Otro (especificar)',              type: 'egreso_operativo', sub: 'Otro',            account: null },
-] as const
-
 // Unificación Bandeja↔Caja (040-043): el pago a proveedor en Caja Diaria ES mercadería por
 // definición. Marcamos su egreso_mercaderia con classification='mercaderia' → el trigger del
 // server (unif_on_cash_movement) crea la tarea de Revisión de inventario (inventory_review_task
@@ -441,12 +422,8 @@ export default function CashTurno({
     finally { setAddSupSaving(false) }
   }
 
-  const openNewPago = () => {
-    setEditId(null); setDraftSup(''); setDraftCRC(''); setDraftUSD(''); setDraftMethod('Efectivo'); setDraftRef('')
-    setSupSearch(''); setSupOpen(false)
-    setDraftFotos([]); setDraftFotosPrev([])
-    setPagoModal(true)
-  }
+  // El ALTA de pagos nuevos ahora es por el asistente "➕ Agregar" (F4.3c). El modal de pago sobrevive
+  // SOLO para EDITAR un pago existente (openEditPago) y para el guardado en el cierre (persistPago).
   const openEditPago = (p: PagoRow) => {
     setEditId(p.id); setDraftSup(p.supplier_id); setDraftCRC(p.amount_crc); setDraftUSD(p.amount_usd)
     setDraftMethod(p.method); setDraftRef(p.reference)
@@ -524,41 +501,10 @@ export default function CashTurno({
     return () => window.removeEventListener('keydown', onKey)
   }, [pagoModal])
 
-  // ── Ingreso adicional (por modal + confirmar) ──────────────
-  const [ingresoModal, setIngresoModal] = useState(false)
-  const [draftIngCRC,  setDraftIngCRC]  = useState<number | ''>('')
-  const [draftIngUSD,  setDraftIngUSD]  = useState<number | ''>('')
-  const [draftIngNota, setDraftIngNota] = useState('')
-  const openNewIngreso = () => { setDraftIngCRC(''); setDraftIngUSD(''); setDraftIngNota(''); setIngresoModal(true) }
-  // BUG A FIX: persistir el ingreso adicional AL INSTANTE (antes sólo se guardaba al
-  // cerrar el turno → si recargabas antes del cierre, se perdía).
-  const confirmIngreso = async () => {
-    if (!openSession || !profile || movSaving) return
-    if (!Number(draftIngCRC) && !Number(draftIngUSD)) return
-    setMovSaving(true)
-    const draft: IngresoRow = { id: crypto.randomUUID(), crc: Number(draftIngCRC) || '', usd: Number(draftIngUSD) || '', nota: draftIngNota.trim(), persistedId: null }
-    setIngresos(prev => [...prev, draft])
-    setIngresoModal(false)
-    try {
-      const mov = await createCashMovement({
-        session_id:    openSession.id,
-        created_by:    profile.id,
-        movement_type: 'ingreso',
-        amount_crc:    Number(draft.crc) || 0,
-        amount_usd:    Number(draft.usd) || 0,
-        currency:      'CRC',
-        exchange_rate: tc,
-        description:   draft.nota || 'Ingreso adicional',
-        subcategory:   'Ingreso adicional',
-        method:        'Efectivo',
-        caja_origen:   'Registradora',
-        shift:         tipShiftToCaja(openSession.shift_type),
-      })
-      setIngresos(prev => prev.filter(i => i.id !== draft.id))  // ahora vive en la base (dbIngresos)
-      onMovAdded(mov)
-    } catch { /* queda como borrador y se reintenta al cierre */ }
-    finally { setMovSaving(false) }
-  }
+  // ── Ingresos adicionales ───────────────────────────────────
+  // El ALTA de ingresos nuevos ahora es por el asistente "➕ Agregar" (F4.3c). Se conserva el estado
+  // `ingresos` (drafts en memoria) porque el cierre (handleCierre) y la lista lo siguen usando, y el ×
+  // para quitar un ingreso ya registrado.
   const removeIngreso = async (id: string) => {
     const row = displayIngresos.find(i => i.id === id)
     if (row?.persistedId) {
@@ -574,47 +520,8 @@ export default function CashTurno({
   }
 
   // ── Otros egresos del turno (delivery, operativo, salario) ──
-  // Salen de la Caja Diaria. Se persisten al instante (como los pagos).
-  const [egresoModal,    setEgresoModal]    = useState(false)
-  const [draftEgConcepto, setDraftEgConcepto] = useState<typeof CONCEPTOS_EGRESO[number]['id']>('delivery')
-  const [draftEgCRC,     setDraftEgCRC]     = useState<number | ''>('')
-  const [draftEgMethod,  setDraftEgMethod]  = useState<'Efectivo' | 'Transferencia'>('Efectivo')
-  const [draftEgNota,    setDraftEgNota]    = useState('')
-  const [egSaving,       setEgSaving]       = useState(false)
-  const openNewEgreso = () => { setDraftEgConcepto('delivery'); setDraftEgCRC(''); setDraftEgMethod('Efectivo'); setDraftEgNota(''); setEgresoModal(true) }
-  const confirmEgreso = async () => {
-    if (!openSession || !profile || !Number(draftEgCRC)) return
-    const c = CONCEPTOS_EGRESO.find(x => x.id === draftEgConcepto)!
-    setEgSaving(true)
-    // El detalle vive en la nota → de ahí se deriva el destino contable del Delivery:
-    // electrónico (el cliente ya pagó, la caja solo retira efectivo) = pass-through;
-    // el resto (repartidor en efectivo) → a7100. "Delivery dueños" es opción propia.
-    const esElectronico = /sinpe|lafise|bitcoin|tarjeta|datafono|datáfono/.test(draftEgNota.toLowerCase())
-    const movType = c.type as MovementType
-    const movAccount = c.id === 'delivery' && esElectronico ? null : c.account
-    try {
-      const mov = await createCashMovement({
-        session_id:    openSession.id,
-        created_by:    profile.id,
-        movement_type: movType,
-        amount_crc:    Number(draftEgCRC) || 0,
-        amount_usd:    0,
-        currency:      'CRC',
-        exchange_rate: tc,
-        description:   draftEgNota || c.label,
-        subcategory:   c.sub,
-        supplier_name: draftEgNota || c.label,
-        method:        draftEgMethod,
-        caja_origen:   draftEgMethod === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
-        account_id:    movAccount,
-        shift:         tipShiftToCaja(openSession.shift_type),
-      })
-      onMovAdded(mov)
-      setEgresoModal(false); setDraftEgCRC(''); setDraftEgNota('')
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Error registrando egreso')
-    } finally { setEgSaving(false) }
-  }
+  // El ALTA de egresos operativos nuevos ahora es por el asistente "➕ Agregar" (F4.3c). Se conservan la
+  // lista (otrosEgresosList) y el × para quitar uno ya registrado.
   // Egresos del turno que NO son mercadería (los pagos a proveedor van aparte)
   const otrosEgresosList = sessionMovements.filter(m =>
     m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso'
@@ -886,9 +793,6 @@ export default function CashTurno({
             <div className="cd-section-title" style={{ fontSize: '0.85rem' }}>Ingresos adicionales</div>
             <div className="cd-section-sub" style={{ fontSize: '0.66rem' }}>Aceite, otros ingresos en efectivo</div>
           </div>
-          {canManage && (
-            <button className="cd-section-add" onClick={openNewIngreso}>+ Agregar</button>
-          )}
         </div>
         {displayIngresos.length > 0 && (
           <div className="cd-section-body">
@@ -924,9 +828,6 @@ export default function CashTurno({
               }
             </div>
           </div>
-          {canManage && (
-            <button className="cd-section-add" onClick={openNewPago}>+ Agregar pago</button>
-          )}
         </div>
         <div className="cd-section-body">
           {displayPagos.length === 0 && <div className="cd-empty-row">ℹ Sin pagos registrados</div>}
@@ -988,9 +889,6 @@ export default function CashTurno({
             <div className="cd-section-title">Pagos operativos</div>
             <div className="cd-section-sub">Delivery, operativo, salario en efectivo — salen de la Caja Diaria</div>
           </div>
-          {canManage && (
-            <button className="cd-section-add" onClick={openNewEgreso}>+ Agregar egreso</button>
-          )}
         </div>
         <div className="cd-section-body">
           {otrosEgresosList.length === 0 && <div className="cd-empty-row">ℹ Sin otros egresos registrados</div>}
@@ -1373,99 +1271,6 @@ export default function CashTurno({
         </div>
       )}
 
-      {/* Modal: agregar ingreso adicional */}
-      {ingresoModal && (
-        <div className="cd-modal-overlay" onClick={() => setIngresoModal(false)}>
-          <div className="cd-modal" onClick={e => e.stopPropagation()}>
-            <div className="cd-modal-title">Agregar ingreso adicional</div>
-            <p style={{ fontSize: '0.78rem', color: 'var(--t-muted)', margin: '0.25rem 0 0' }}>
-              Ingresos en efectivo no relacionados a ventas (ej: venta de aceite, otros).
-            </p>
-            <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field">
-                <div className="tips-field-label">Monto ₡ colones</div>
-                <div className="cd-monto-wrap">
-                  <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" value={draftIngCRC} placeholder="0" autoFocus
-                    onChange={e => setDraftIngCRC(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
-              <div className="tips-field">
-                <div className="tips-field-label">Monto $ dólares</div>
-                <div className="cd-monto-wrap usd">
-                  <span className="cd-prefix">$</span>
-                  <input type="number" className="cd-monto-input" value={draftIngUSD} placeholder="0"
-                    onChange={e => setDraftIngUSD(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
-            </div>
-            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field-label">Motivo / nota</div>
-              <input type="text" className="tips-input-dark" value={draftIngNota} placeholder="Motivo del ingreso…"
-                style={{ width: '100%' }} onChange={e => setDraftIngNota(e.target.value)} />
-            </div>
-            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
-              <button className="tips-btn-ghost" onClick={() => setIngresoModal(false)}>Cancelar</button>
-              <button className="cd-btn-green" onClick={confirmIngreso} disabled={!Number(draftIngCRC) && !Number(draftIngUSD)}>
-                ✓ Confirmar ingreso
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: otro egreso del turno */}
-      {egresoModal && (
-        <div className="cd-modal-overlay" onClick={() => setEgresoModal(false)}>
-          <div className="cd-modal" onClick={e => e.stopPropagation()}>
-            <div className="cd-modal-title">Otro egreso del turno</div>
-            <p style={{ fontSize: '0.78rem', color: 'var(--t-muted)', margin: '0.25rem 0 0' }}>
-              Sale de la Caja Diaria. (Las propinas se pagan en el cierre del turno, no acá.)
-            </p>
-            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field-label">Concepto</div>
-              <select className="tips-input-dark" value={draftEgConcepto} onChange={e => setDraftEgConcepto(e.target.value as typeof draftEgConcepto)} style={{ width: '100%' }}>
-                {CONCEPTOS_EGRESO.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </select>
-            </div>
-            <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field">
-                <div className="tips-field-label">Monto ₡ colones</div>
-                <div className="cd-monto-wrap">
-                  <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" value={draftEgCRC} placeholder="0" autoFocus
-                    onChange={e => setDraftEgCRC(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
-              <div className="tips-field">
-                <div className="tips-field-label">Método</div>
-                <div className="cd-metodo-tabs">
-                  <div className={`cd-metodo-tab ef ${draftEgMethod === 'Efectivo' ? 'active' : ''}`} onClick={() => setDraftEgMethod('Efectivo')}>💵 Efectivo</div>
-                  <div className={`cd-metodo-tab tr ${draftEgMethod === 'Transferencia' ? 'active' : ''}`} onClick={() => setDraftEgMethod('Transferencia')}>🏦 Transf.</div>
-                </div>
-              </div>
-            </div>
-            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field-label">Beneficiario / nota</div>
-              <input type="text" className="tips-input-dark" value={draftEgNota} placeholder="Ej: repartidor, empleado, detalle…"
-                style={{ width: '100%' }} onChange={e => setDraftEgNota(e.target.value)} />
-              {(draftEgConcepto === 'delivery' || draftEgConcepto === 'propinas') && (
-                <div style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: 4 }}>
-                  El detalle va acá: <em>"por SINPE", "tarjeta", "turno AM"…</em> — la nota se ve en el listado
-                  {draftEgConcepto === 'delivery' && /sinpe|lafise|bitcoin|tarjeta|datafono|datáfono/.test(draftEgNota.toLowerCase()) &&
-                    <strong> · cobrado electrónico → no cuenta como gasto (retiro de efectivo)</strong>}
-                </div>
-              )}
-            </div>
-            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
-              <button className="tips-btn-ghost" onClick={() => setEgresoModal(false)} disabled={egSaving}>Cancelar</button>
-              <button className="cd-btn-green" onClick={confirmEgreso} disabled={egSaving || !Number(draftEgCRC)}>
-                {egSaving ? 'Guardando…' : '✓ Registrar egreso'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

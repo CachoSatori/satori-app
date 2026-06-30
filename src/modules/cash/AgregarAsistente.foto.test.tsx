@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { CashSession, Supplier } from '../../shared/types/database'
+import type { DocExtract } from '../../shared/api/documents'
 
 // F4.3 (foto/IA en el asistente) — con foto, la IA PRECARGA campos editables (RN-2) y al confirmar se
 // crea el movimiento Y el documento enlazado por linked_movement_id. Test light: createCashMovement y el
@@ -10,7 +11,7 @@ import type { CashSession, Supplier } from '../../shared/types/database'
 const { createSpy, uploadSpy, extractSpy, createDocSpy, normalizeSpy } = vi.hoisted(() => ({
   createSpy: vi.fn(async (m: Record<string, unknown>) => ({ ...m, id: 'mov-1', _pending: false })),
   uploadSpy: vi.fn(async () => ({ path: 'docs/factura.jpg', sha: 'sha123' })),
-  extractSpy: vi.fn(async () => [{
+  extractSpy: vi.fn(async (): Promise<Partial<DocExtract>[]> => [{
     tipo: 'factura', proveedor: 'Pescadería del Pacífico', moneda: 'CRC', fecha: '2026-06-20',
     total: 50000, items: [{ descripcion: 'pescado', cantidad: 2 }, { descripcion: 'camarón', cantidad: 1 }],
   }]),
@@ -19,7 +20,11 @@ const { createSpy, uploadSpy, extractSpy, createDocSpy, normalizeSpy } = vi.hois
 }))
 
 vi.mock('../../shared/api/cash', () => ({ createCashMovement: createSpy }))
-vi.mock('../../shared/api/documents', () => ({ uploadImage: uploadSpy, extractImage: extractSpy, createDocumentRow: createDocSpy }))
+// Pipeline mockeado, pero `cuadra` REAL (importActual) para ejercitar el cruce ítems↔total del cartel.
+vi.mock('../../shared/api/documents', async (orig) => {
+  const actual = await orig<typeof import('../../shared/api/documents')>()
+  return { ...actual, uploadImage: uploadSpy, extractImage: extractSpy, createDocumentRow: createDocSpy }
+})
 vi.mock('../../shared/utils/imageNormalize', () => ({ normalizeInvoiceImage: normalizeSpy }))
 vi.mock('../../shared/api/finance', () => ({ getFinanceAccounts: vi.fn(async () => []) }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
@@ -101,5 +106,48 @@ describe('AgregarAsistente — foto/IA', () => {
     expect(createSpy.mock.calls[0][0]).toMatchObject({ classification: 'operativa' })
     expect(createDocSpy).not.toHaveBeenCalled()
     expect(uploadSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('AgregarAsistente — cartel de calidad de lectura (confianza / cuadre)', () => {
+  beforeEach(() => extractSpy.mockClear())
+
+  it('alta confianza + ítems que cuadran → muestra % y "cuadran", sin aviso', async () => {
+    extractSpy.mockResolvedValueOnce([{ tipo: 'factura', proveedor: 'Pescadería del Pacífico', moneda: 'CRC', fecha: '2026-06-20', total: 50000, confianza: 0.95, items: [{ descripcion: 'pescado', total: 50000 }] }])
+    renderAsistente()
+    takePhoto()
+    await waitFor(() => expect(screen.getByText(/confianza 95%/)).toBeTruthy())
+    expect(screen.getByText(/los ítems cuadran con el total/)).toBeTruthy()
+    expect(screen.queryByText(/revisá bien los campos y los ítems/)).toBeNull()   // sin aviso de baja confianza
+  })
+
+  it('confianza baja (<0.5) → aviso prominente y NO bloquea el confirmar', async () => {
+    extractSpy.mockResolvedValueOnce([{ tipo: 'factura', proveedor: 'Proveedor X', moneda: 'CRC', total: 10000, confianza: 0.3, items: [{ descripcion: 'algo', total: 10000 }] }])
+    renderAsistente()
+    takePhoto()
+    await waitFor(() => expect(screen.getByText(/revisá bien los campos y los ítems/)).toBeTruthy())
+    expect(screen.getByText(/confianza 30%/)).toBeTruthy()
+    // No bloquea: confirmar sigue funcionando.
+    confirmar()
+    await waitFor(() => expect(createSpy).toHaveBeenCalled())
+  })
+
+  it('requiere_revision=true → aviso prominente aunque la confianza sea alta', async () => {
+    extractSpy.mockResolvedValueOnce([{ tipo: 'factura', proveedor: 'Y', moneda: 'CRC', total: 5000, confianza: 0.9, requiere_revision: true, items: [{ descripcion: 'a', total: 5000 }] }])
+    renderAsistente()
+    takePhoto()
+    await waitFor(() => expect(screen.getByText(/revisá bien los campos y los ítems/)).toBeTruthy())
+  })
+
+  it('los ítems no suman el total (cuadra=false) → muestra el aviso de cuadre', async () => {
+    extractSpy.mockResolvedValueOnce([{ tipo: 'factura', proveedor: 'Z', moneda: 'CRC', total: 100000, confianza: 0.9, items: [{ descripcion: 'a', total: 1000 }] }])
+    renderAsistente()
+    takePhoto()
+    await waitFor(() => expect(screen.getByText(/no suman el total/)).toBeTruthy())
+  })
+
+  it('sin foto (camino manual) → el cartel de lectura NO aparece', () => {
+    renderAsistente()
+    expect(screen.queryByText(/Factura leída/)).toBeNull()
   })
 })

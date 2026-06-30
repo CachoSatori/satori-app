@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createCashMovement } from '../../shared/api/cash'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
-import { uploadImage, extractImage, createDocumentRow, type DocExtract } from '../../shared/api/documents'
+import { uploadImage, extractImage, createDocumentRow, cuadra, type DocExtract } from '../../shared/api/documents'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import { classifyMovement } from '../../shared/utils/classifyMovement'
 import { PAGO_META, formasPago, type Pago } from '../../shared/utils/pagoMatrix'
@@ -204,6 +204,13 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const confPct = Math.round(sugerencia.confidence * 100)
   const confNivel = sugerencia.confidence >= 0.8 ? 'alta' : sugerencia.confidence >= 0.6 ? 'media' : 'baja'
 
+  // Calidad de la LECTURA de la IA (≠ confianza de la clasificación). Informativo (RN-2): no bloquea.
+  // Reusa cuadra() para el cruce ítems↔total (no se reimplementa el chequeo).
+  const lectura = photo?.extracted ?? null
+  const lecturaPct = lectura ? Math.round((lectura.confianza ?? 0) * 100) : 0
+  const lecturaCuadra = lectura ? cuadra(lectura) : true
+  const lecturaAlerta = !!lectura && (lectura.requiere_revision === true || (lectura.confianza ?? 0) < 0.5)
+
   return (
     <div className="cd-modal-overlay" onClick={onClose}>
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
@@ -217,8 +224,18 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             {photoBusy ? '📷 Leyendo factura…' : photo ? '📷 Cambiar foto' : '📷 Sacar foto de la factura (la IA precarga)'}
           </button>
           {photo && photo.extracted && (
-            <div style={{ fontSize: '0.66rem', color: '#4a9a6a', marginTop: 3 }}>
-              ✓ Factura leída{photo.extracted.items?.length ? ` · ${photo.extracted.items.length} ítem(s)` : ''} — revisá y corregí los campos antes de confirmar.
+            <div style={{ fontSize: '0.66rem', marginTop: 3 }}>
+              <div style={{ color: '#4a9a6a' }}>
+                ✓ Factura leída{photo.extracted.items?.length ? ` · ${photo.extracted.items.length} ítem(s)` : ''} · confianza {lecturaPct}% — revisá y corregí los campos antes de confirmar.
+              </div>
+              <div style={{ color: lecturaCuadra ? '#4a9a6a' : '#a07030', marginTop: 2 }}>
+                {lecturaCuadra ? '✓ los ítems cuadran con el total leído' : '⚠ los ítems no suman el total — puede faltar alguna línea, revisá'}
+              </div>
+              {lecturaAlerta && (
+                <div className="cd-method-info pend" role="alert" style={{ marginTop: 4 }}>
+                  ⚠ Confianza baja — revisá bien los campos y los ítems antes de confirmar.
+                </div>
+              )}
             </div>
           )}
           {photo && !photo.extracted && (

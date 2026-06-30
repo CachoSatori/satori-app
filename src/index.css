@@ -2503,6 +2503,20 @@ html, body, #root {
   gap: 0.625rem;
   justify-content: flex-end;
 }
+/* Teléfono (≤420px): los botones de acción ENVUELVEN (en vez de desbordar) y llenan ~la mitad del ancho
+   c/u, quedando tocables (≥44px). El gap cubre el row-gap al envolver.
+   NOTA: el flex-wrap se acota a móvil a propósito — NO va en la regla base porque .cd-btn-green tiene
+   width:100% (→ flex-basis 100%): con wrap activo en desktop ese botón principal saltaría a su propia
+   línea (regresión visual). Acá flex:1 1 calc(50%…) pisa ese width:100% solo en móvil. Desktop = idéntico. */
+@media (max-width: 420px) {
+  .cd-modal-actions {
+    flex-wrap: wrap;
+  }
+  .cd-modal-actions > button {
+    flex: 1 1 calc(50% - 0.3125rem);
+    min-height: 44px;
+  }
+}
 .cd-resumen-block {
   background: var(--t-panel, #ede8de);
   border-radius: 2px;

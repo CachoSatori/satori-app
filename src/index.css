@@ -2463,10 +2463,10 @@ html, body, #root {
   border-bottom: 1px solid var(--t-border, #d4cfc4);
 }
 .cierre-resumen-row {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7.4em 5.4em;
+  column-gap: 0.5rem;
   align-items: baseline;
-  gap: 0.75rem;
   padding: 0.55rem 0.85rem;
   border-bottom: 1px solid var(--t-border, #d4cfc4);
   font-size: 0.82rem;
@@ -2478,7 +2478,22 @@ html, body, #root {
   font-weight: 700;
   color: var(--t-ink, #0d0d0d);
   white-space: nowrap;
+  text-align: right;
 }
+/* encabezado de columnas ₡ | US$ */
+.cierre-resumen-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7.4em 5.4em;
+  column-gap: 0.5rem;
+  padding: 0.3rem 0.85rem;
+  background: var(--t-panel, #ede8de);
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8a8272;
+}
+.cierre-resumen-cols span { text-align: right; }
 /* fila clave destacada (= Debería quedar) */
 .cierre-resumen-row.destacada { background: rgba(74,154,106,.12); }
 .cierre-resumen-row.destacada .lbl { color: #2a7a4a; font-weight: 700; }
@@ -2495,6 +2510,158 @@ html, body, #root {
 }
 .cierre-resumen-usd.ok   { background: #e8f5ec; border: 1px solid #b0d8b8; color: #2a7a4a; }
 .cierre-resumen-usd.fail { background: #fdf0ee; border: 1px solid #f0b0b0; color: #c23b22; }
+
+/* móvil: columnas ₡/US$ más angostas para que la etiqueta respire */
+@media (max-width: 420px) {
+  .cierre-resumen-row,
+  .cierre-resumen-cols { grid-template-columns: minmax(0, 1fr) 6.8em 5em; }
+  .cierre-resumen-row  { font-size: 0.78rem; }
+}
+
+/* ── Cierre del Día — tema claro de toda la pestaña ─────────── */
+.cierre-tab {
+  background: var(--t-paper, #f5f0e8);
+  color: var(--t-ink, #0d0d0d);
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 3px;
+  padding: 1rem 0.75rem;
+}
+
+/* tarjeta genérica (secciones, mediodía sellado, día cerrado) */
+.cierre-card {
+  background: #fff;
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.875rem;
+}
+.cierre-card-head {
+  padding: 0.625rem 0.875rem;
+  background: var(--t-panel, #ede8de);
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.cierre-card-body { padding: 0.875rem; }
+
+/* fila etiqueta|valor dentro de una tarjeta (mediodía sellado) */
+.cierre-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.875rem;
+  border-bottom: 1px solid #eee8dc;
+  font-size: 0.8rem;
+}
+.cierre-kv .lbl { color: #6a6250; }
+.cierre-kv .val { font-weight: 500; color: var(--t-ink, #0d0d0d); }
+.cierre-kv.total { background: var(--t-panel, #ede8de); border-bottom: none; padding: 0.5rem 0.875rem; }
+
+/* inputs claros (texto, fecha, select) */
+.cierre-input {
+  background: #fff;
+  border: 1px solid var(--t-border, #d4cfc4);
+  color: var(--t-ink, #0d0d0d);
+  border-radius: 2px;
+}
+
+/* input de monto con prefijo ₡/$ */
+.cierre-monto {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 2px;
+}
+.cierre-monto .pfx { padding: 0 8px; color: #8a8272; flex-shrink: 0; }
+.cierre-monto input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--t-ink, #0d0d0d);
+  padding: 0 8px;
+  font-family: 'DM Mono', monospace;
+}
+
+/* barra de fases (dorado=pendiente, verde=ok, gris=esperando) */
+.cierre-fase {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.cierre-fase.pend { background: #faf3e0; border: 1px solid #c8a030; color: #8a6d1f; }
+.cierre-fase.ok   { background: #e8f5ec; border: 1px solid #4a9a6a; color: #2a7a4a; }
+.cierre-fase.wait { background: var(--t-panel, #ede8de); border: 1px solid var(--t-border, #d4cfc4); color: #8a8272; }
+
+/* avisos/hints semánticos sobre fondo claro */
+.cierre-hint {
+  border-radius: 2px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  margin-bottom: 0.75rem;
+}
+.cierre-hint.gold  { background: #faf3e0; border: 1px solid #c8a030; color: #8a6d1f; }
+.cierre-hint.blue  { background: #eaf3f8; border: 1px solid #7ab4d4; color: #3a7794; }
+.cierre-hint.red   { background: #fdf0ee; border: 1px solid #f0b0b0; color: #c23b22; }
+.cierre-hint.green { background: #e8f5ec; border: 1px solid #b0d8b8; color: #2a7a4a; }
+
+/* tabla de separaciones (conteo físico) */
+.cierre-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75rem;
+  background: #fff;
+  border: 1px solid var(--t-border, #d4cfc4);
+}
+.cierre-table th {
+  text-align: center;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.62rem;
+  color: #6a6250;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--t-panel, #ede8de);
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+  border-left: 1px solid var(--t-border, #d4cfc4);
+}
+.cierre-table th:first-child { border-left: none; text-align: left; padding-left: 0.625rem; width: 180px; }
+.cierre-table td { border-bottom: 1px solid #eee8dc; border-right: 1px solid #eee8dc; }
+.cierre-table td:last-child { border-right: none; }
+.cierre-table tr.total td { background: var(--t-panel, #ede8de); border-top: 2px solid var(--t-border, #d4cfc4); border-bottom: none; }
+
+/* botones de confirmación */
+.cierre-btn {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.cierre-btn.gold  { background: #faf3e0; color: #8a6d1f; border: 1.5px solid #c8a030; }
+.cierre-btn.green {
+  background: #e8f5ec;
+  color: #2a7a4a;
+  border: 2px solid #4a9a6a;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.875rem;
+}
+.cierre-btn:disabled { opacity: 0.55; cursor: default; }
 
 .cd-locked {
   display: flex;

@@ -27,6 +27,13 @@ interface Props { onRefresh: () => void; openSession?: CashSession | null }
 
 function N(v: number | ''): number { return Number(v) || 0 }
 
+// Cuadre USD del cierre — espeja la fórmula CRC (saldo base + mediodía + noche).
+// En Caja Fuerte los dólares solo salen por retiro de socios o depósito a banco,
+// así que el "debería" SIEMPRE incluye el saldo USD del ledger. Exportada para test.
+export function calcDeberiaUSD(saldoBaseUsd: number, vmUsd: number, vnUsd: number): number {
+  return saldoBaseUsd + vmUsd + vnUsd
+}
+
 export default function CashCierre({ onRefresh, openSession }: Props) {
   const { profile } = useAuth()
   const requireManager = useManagerOverride()
@@ -121,8 +128,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const diferencia = totalContadoCRC > 0 ? totalContadoCRC - deberia : null
   const cuadra     = diferencia !== null && Math.abs(diferencia) < 500
 
-  // Dólares: lo que debería haber físicamente = dólares de ventas (mediodía + noche).
-  const deberiaUSD   = vmUSDFromParcial + N(vnUSD)
+  // Dólares: lo que debería haber físicamente = saldo USD de Caja Fuerte (ledger,
+  // ya filtrado anti-doble-conteo) + dólares de ventas (mediodía + noche).
+  const deberiaUSD   = calcDeberiaUSD(saldoBase.usd, vmUSDFromParcial, N(vnUSD))
   const difUSD       = totalContadoUSD > 0 || deberiaUSD > 0 ? totalContadoUSD - deberiaUSD : null
   const cuadraUSD    = difUSD === null || Math.abs(difUSD) < 1
 

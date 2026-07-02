@@ -2444,6 +2444,58 @@ html, body, #root {
 .cd-cierre-resultado.ok   { background: #e8f5ec; border: 1px solid #b0d8b8; color: #2a7a4a; }
 .cd-cierre-resultado.fail { background: #fdf0ee; border: 1px solid #f0b0b0; color: #c23b22; }
 
+/* Resumen del Cierre del Día — filas claras (patrón Caja Diaria) */
+.cierre-resumen {
+  background: var(--t-paper, #f5f0e8);
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+  color: var(--t-ink, #0d0d0d);
+}
+.cierre-resumen-header {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6a6250;
+  background: var(--t-panel, #ede8de);
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+}
+.cierre-resumen-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+  font-size: 0.82rem;
+}
+.cierre-resumen-row:last-child { border-bottom: none; }
+.cierre-resumen-row .lbl { color: #6a6250; }
+.cierre-resumen-row .val {
+  font-family: 'DM Mono', monospace;
+  font-weight: 700;
+  color: var(--t-ink, #0d0d0d);
+  white-space: nowrap;
+}
+/* fila clave destacada (= Debería quedar) */
+.cierre-resumen-row.destacada { background: rgba(74,154,106,.12); }
+.cierre-resumen-row.destacada .lbl { color: #2a7a4a; font-weight: 700; }
+.cierre-resumen-row.destacada .val { color: #2a7a4a; font-size: 0.92rem; }
+
+/* Dólares — fila propia */
+.cierre-resumen-usd {
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+  border-radius: 2px;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+.cierre-resumen-usd.ok   { background: #e8f5ec; border: 1px solid #b0d8b8; color: #2a7a4a; }
+.cierre-resumen-usd.fail { background: #fdf0ee; border: 1px solid #f0b0b0; color: #c23b22; }
+
 .cd-locked {
   display: flex;
   align-items: center;

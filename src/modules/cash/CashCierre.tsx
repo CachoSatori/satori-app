@@ -513,30 +513,40 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
                 {/* Verificación */}
                 {totalContadoCRC > 0 && (
-                  <div style={{ background: cuadra ? 'rgba(74,154,106,.1)' : 'rgba(194,59,34,.1)', border:`1.5px solid ${cuadra ? '#4a9a6a' : '#c23b22'}`, borderRadius:2, padding:'0.75rem', marginBottom:'0.75rem' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'0.5rem', marginBottom:'0.5rem', textAlign:'center' }}>
-                      {[
-                        { l:'Saldo Caja Fuerte (según sistema)', v: saldoBase.crc },
-                        { l:'Mediodía neto',  v: netoM },
-                        { l:'Noche neto',     v: netoN },
-                        { l:'Debería quedar', v: deberia },
-                      ].map(k => (
-                        <div key={k.l}>
-                          <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>{k.l}</div>
-                          <div style={{ fontSize:'0.88rem', fontWeight:700, color:'#aaa' }}>{fi2(k.v)}</div>
-                        </div>
-                      ))}
+                  <>
+                    <div className="cierre-resumen">
+                      <div className="cierre-resumen-header">Verificación — Cierre del Día</div>
+                      <div className="cierre-resumen-row">
+                        <span className="lbl">Saldo Caja Fuerte (según sistema)</span>
+                        <span className="val">{fi2(saldoBase.crc)}</span>
+                      </div>
+                      <div className="cierre-resumen-row">
+                        <span className="lbl">+ Mediodía neto</span>
+                        <span className="val">{fi2(netoM)}</span>
+                      </div>
+                      <div className="cierre-resumen-row">
+                        <span className="lbl">+ Noche neto</span>
+                        <span className="val">{fi2(netoN)}</span>
+                      </div>
+                      <div className="cierre-resumen-row destacada">
+                        <span className="lbl">= Debería quedar en Caja Fuerte</span>
+                        <span className="val">{fi2(deberia)}</span>
+                      </div>
+                      <div className="cierre-resumen-row">
+                        <span className="lbl">Total contado (conteo físico)</span>
+                        <span className="val">{fi2(totalContadoCRC)}</span>
+                      </div>
                     </div>
-                    <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', justifyContent:'center', fontSize:'0.82rem', fontWeight:700, color: cuadra ? '#4a9a6a' : '#c23b22' }}>
-                      {cuadra ? '✅ Cuadra correctamente (₡)' : `⚠️ Diferencia ₡: ${diferencia! >= 0 ? '+' : ''}${fi2(diferencia ?? 0)}`}
+                    <div className={`cd-cierre-resultado ${cuadra ? 'ok' : 'fail'}`}>
+                      <span>{cuadra ? '✅ Cuadra correctamente (₡)' : `⚠️ Diferencia ₡: ${diferencia! >= 0 ? '+' : ''}${fi2(diferencia ?? 0)}`}</span>
                     </div>
                     {deberiaUSD > 0 && (
-                      <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', justifyContent:'center', fontSize:'0.74rem', fontWeight:600, marginTop:'0.4rem', color: cuadraUSD ? '#4a9a6a' : '#c23b22' }}>
+                      <div className={`cierre-resumen-usd ${cuadraUSD ? 'ok' : 'fail'}`}>
                         Dólares: debería ${deberiaUSD.toFixed(2)} · contado ${totalContadoUSD.toFixed(2)}
                         {cuadraUSD ? ' ✅' : ` ⚠️ ${difUSD! >= 0 ? '+' : ''}$${(difUSD ?? 0).toFixed(2)}`}
                       </div>
                     )}
-                  </div>
+                  </>
                 )}
 
                 {/* Ajuste obligatorio si hay diferencia */}

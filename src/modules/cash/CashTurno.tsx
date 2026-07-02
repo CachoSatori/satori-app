@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
-import { useManagerOverride } from '../../shared/ManagerOverride'
+import { useManagerOverride, type ManagerAuth } from '../../shared/ManagerOverride'
 import type { CashSession, CashMovement, Supplier, MovementType } from '../../shared/types/database'
 import {
   createCashSession,
@@ -452,6 +452,15 @@ export default function CashTurno({
 
   const confirmPago = async () => {
     if (!draftSup || !Number(draftCRC) || movSaving) return  // proveedor + monto requeridos · anti doble-submit
+    // Editar un pago YA guardado = reemplazo (borra el movimiento viejo + re-crea) → requiere la
+    // MISMA autorización de gerencia que el borrado. Antes este camino llamaba la cascada SIN
+    // credenciales y la RPC (mig 044) rechazaba al cajero con "No autorizado" sin pedirle nada.
+    const old = editId ? displayPagos.find(p => p.id === editId) : null
+    let auth: ManagerAuth = { ok: true }
+    if (old?.persistedId) {
+      auth = await requireManager()
+      if (!auth.ok) return   // canceló o contraseña inválida → no se toca nada (el modal de edición queda abierto)
+    }
     setMovSaving(true)
     const prov = suppliers.find(s => s.id === draftSup)
     // Subir las fotos nuevas ANTES de tocar el movimiento. Si una falla (sin red),
@@ -466,11 +475,12 @@ export default function CashTurno({
       onError(`${fotosFallidas} foto(s) de la factura no se pudieron subir (¿sin conexión?). El pago se registra igual — volvé a editarlo con red para reintentar la foto.`)
     }
     // Si edito uno ya persistido, borro su movimiento viejo antes de re-crear
-    const old = editId ? displayPagos.find(p => p.id === editId) : null
     if (old?.persistedId) {
       // Edición = reemplazo: borra el movimiento viejo (cascada de inventario incluida) y re-crea.
       // Nota automática (no es un borrado "a mano" del usuario, es parte del flujo de editar).
-      try { await deleteCashMovement(old.persistedId, 'Reemplazo por edición de pago a proveedor'); onRefresh() }
+      // Las credenciales de gerencia (si autorizó un cajero) viajan a la RPC, que las re-valida
+      // server-side y audita al autorizante en movement_deletions.authorized_by (mig 044).
+      try { await deleteCashMovement(old.persistedId, 'Reemplazo por edición de pago a proveedor', auth.managerEmail, auth.managerPassword); onRefresh() }
       catch (e) { onError(`No se pudo reemplazar el pago anterior: ${e instanceof Error ? e.message : 'reintentá'}`); setMovSaving(false); return }
     }
     const pago: PagoRow = {

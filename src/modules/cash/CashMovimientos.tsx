@@ -138,6 +138,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
 
   // ── Actions ──────────────────────────────────────────────
   const handleFieldChange = useCallback(async (id: string, field: string, value: unknown) => {
+    // Editar un movimiento GUARDADO (montos, tipo, método…) requiere autorización de gerencia,
+    // igual que borrarlo. owner/manager logueado pasa al instante; cajero → modal de contraseña.
+    // Si cancela o falla, onRefresh() revierte lo que muestre el input.
+    const auth = await requireManager()
+    if (!auth.ok) { onRefresh(); return }
     setSaving(id)
     try {
       await updateCashMovement(id, { [field]: value } as Partial<CashMovement>)
@@ -150,7 +155,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     } finally {
       setSaving(null)
     }
-  }, [onRefresh])
+  }, [onRefresh, requireManager])
 
   const handleDelete = useCallback(async (id: string) => {
     if (!window.confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) return

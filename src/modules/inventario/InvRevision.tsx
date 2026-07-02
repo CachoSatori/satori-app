@@ -18,7 +18,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '../../shared/api/supabase'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getSuppliers, updateMovementMetadata } from '../../shared/api/cash'
-import { signedUrl, uploadImage, extractImage, createDocumentRow, type DocumentRow, type DocItem } from '../../shared/api/documents'
+import { signedUrl, uploadImage, extractImage, createDocumentRow, type DocumentRow, type DocItem, type DocExtract } from '../../shared/api/documents'
+import FacturaThumbs from '../../shared/FacturaThumbs'
 import { normalizeInvoiceImage } from '../../shared/utils/imageNormalize'
 import {
   getSupplierItemMap, resolveLine, resolveEditLines, buildReviewLines, learnSupplierMappings,
@@ -32,6 +33,12 @@ import type { Database } from '../../shared/types/supabase.gen'
 type InvReviewTask = Database['public']['Tables']['inventory_review_task']['Row']
 
 const money = (n: number, cur: string) => `${cur === 'USD' ? '$' : '₡'}${Math.round(n).toLocaleString('es-CR')}`
+
+// ¿El total leído difiere del monto del pago más allá de la tolerancia? (mismo umbral 2%/₡50 que
+// `cuadra` en api/documents). Lo usan el aviso del detalle Y el paso de confirmación al adjuntar.
+const totalDifiere = (leido: number | null, pago: number | null): boolean =>
+  leido != null && leido > 0 && pago != null && pago > 0
+  && Math.abs(leido - pago) > Math.max(pago * 0.02, 50)
 
 export default function InvRevision({ ingredients, onRefresh }: {
   ingredients: Ingredient[]
@@ -239,9 +246,17 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
   const fileRef = useRef<HTMLInputElement>(null)
 
   // F4.3b — vía de rectificación: adjuntar una factura a una tarea SIN factura. Reusa el pipeline EXACTO
-  // de la Bandeja (normalizeInvoiceImage → uploadImage → extractImage → createDocumentRow), enlazando por
+  // de la Bandeja (normalizeInvoiceImage → uploadImage → extractImage), enlazando por
   // linked_movement_id = cash_movement_id. NUNCA toca el cash_movement (monto/método/estado/caja intactos):
   // solo crea el documento. Al refrescar, la tarea ya tiene ítems y el flujo `completar` EXISTENTE aplica.
+  //
+  // T3-A: entre extractImage y createDocumentRow hay un PASO DE CONFIRMACIÓN: se muestra la foto +
+  // proveedor/total leídos por la IA vs los del pago, y el documento SOLO se crea si el contador
+  // confirma (objetivo firmado: que no se suba cualquier foto a cualquier pago). Cancelar no crea
+  // nada — la foto ya subida al bucket queda huérfana sin fila, invisible, y puede sacar otra.
+  type PendingAttach = { path: string; sha: string; detected: DocExtract | null; previewUrl: string | null }
+  const [pendingAttach, setPendingAttach] = useState<PendingAttach | null>(null)
+
   const onAttach = async (file: File) => {
     if (!task.cash_movement_id) { setErr('La tarea no tiene un movimiento ligado — no se puede adjuntar.'); return }
     if (!createdBy) { setErr('No se pudo identificar al usuario para registrar la carga.'); return }
@@ -250,15 +265,29 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
       const { blob, filename } = await normalizeInvoiceImage(file)
       const { path, sha } = await uploadImage(blob, filename)
       const detected = await extractImage(path)              // la IA lee la factura (puede traer 0..n)
-      // estado='procesado' → la factura NO entra a la cola de la Bandeja (el pago ya existe); queda
-      // enlazada al movimiento. Si la IA no extrajo nada, el doc se crea igual (foto en el expediente).
-      await createDocumentRow(path, sha, detected[0] ?? null, createdBy, task.cash_movement_id, 'procesado')
-      onSaved()   // recarga el padre → la key cambia (nodoc→docId) → remonta con los ítems extraídos
+      const previewUrl = await signedUrl(path).catch(() => null)
+      setPendingAttach({ path, sha, detected: detected[0] ?? null, previewUrl })
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'No se pudo adjuntar la factura — reintentá con buena luz.')
+    } finally { setAttaching(false) }
+  }
+
+  // Confirmado por el contador → recién ahora se crea el documento (misma llamada que antes de T3-A).
+  // estado='procesado' → la factura NO entra a la cola de la Bandeja (el pago ya existe); queda
+  // enlazada al movimiento. Si la IA no extrajo nada, el doc se crea igual (foto en el expediente).
+  const confirmAttach = async () => {
+    if (!pendingAttach || !task.cash_movement_id || !createdBy) return
+    setAttaching(true); setErr(null)
+    try {
+      await createDocumentRow(pendingAttach.path, pendingAttach.sha, pendingAttach.detected, createdBy, task.cash_movement_id, 'procesado')
+      setPendingAttach(null)
+      onSaved()   // recarga el padre → la key cambia (nodoc→docId) → remonta con los ítems extraídos
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo adjuntar la factura — reintentá.')
       setAttaching(false)
     }
   }
+
   const onPickAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
     if (f) onAttach(f)
@@ -268,8 +297,7 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
   // Aviso (no bloqueante) si el total leído de la factura no coincide con el monto del pago. NO auto-corrige.
   const facturaTotal = doc?.raw_json?.total != null ? Number(doc.raw_json.total) : null
   const movAmount = movement ? (movement.currency === 'USD' ? movement.amount_usd : movement.amount_crc) : null
-  const totalMismatch = facturaTotal != null && facturaTotal > 0 && movAmount != null && movAmount > 0
-    && Math.abs(facturaTotal - movAmount) > Math.max(movAmount * 0.02, 50)
+  const totalMismatch = totalDifiere(facturaTotal, movAmount)
 
   useEffect(() => {
     (async () => {
@@ -382,7 +410,17 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
             <span>⚠ El total de la factura ({money(facturaTotal!, movement?.currency ?? 'CRC')}) no coincide con el monto del pago ({money(movAmount!, movement?.currency ?? 'CRC')}). Revisalo — el movimiento NO se modifica.</span>
           </div>
         )}
-        {!doc && (
+        {/* T3-A parte 1 — la foto de la factura en el detalle, en tamaño útil para comparar contra
+            los ítems leídos (tap → fullscreen con el lightbox de FacturaThumbs; bucket 'documents'). */}
+        {doc?.image_path && (
+          <div style={{ marginBottom: '0.6rem' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--t-muted)', marginBottom: 4 }}>
+              Factura adjunta — tocá la foto para ampliarla y comparar contra los ítems leídos.
+            </div>
+            <FacturaThumbs paths={[doc.image_path]} size={120} resolve={signedUrl} />
+          </div>
+        )}
+        {!doc && !pendingAttach && (
           <div style={{ marginBottom: '0.6rem', padding: '0.6rem 0.7rem', border: '1px dashed var(--vt-gold)', borderRadius: 6, background: 'rgba(200,169,110,.06)' }}>
             <div style={{ fontSize: '0.78rem', marginBottom: '0.45rem' }}>
               Esta tarea no tiene factura enlazada (el pago se hizo sin foto). Adjuntá la factura para poder completar el inventario — el gasto ya está registrado; esto <strong>solo agrega la factura</strong>, no toca el pago.
@@ -393,6 +431,45 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
             </button>
           </div>
         )}
+        {/* T3-A parte 2 — confirmación ANTES de crear el documento: la foto + lo que leyó la IA vs lo
+            que dice el pago. Cancelar no crea NADA (puede sacar otra foto). El movimiento no se toca. */}
+        {!doc && pendingAttach && (() => {
+          const leidoProv  = pendingAttach.detected?.proveedor ?? null
+          const leidoTotal = pendingAttach.detected?.total != null ? Number(pendingAttach.detected.total) : null
+          const difiere    = totalDifiere(leidoTotal, movAmount)
+          const cur        = movement?.currency ?? 'CRC'
+          return (
+            <div style={{ marginBottom: '0.6rem', padding: '0.6rem 0.7rem', border: '1px solid var(--vt-gold)', borderRadius: 6, background: 'rgba(200,169,110,.08)' }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.45rem' }}>¿Esta factura corresponde a este pago?</div>
+              <div style={{ display: 'flex', gap: '0.7rem', alignItems: 'flex-start' }}>
+                <div style={{ width: 96, flexShrink: 0 }}>
+                  {pendingAttach.previewUrl
+                    ? <a href={pendingAttach.previewUrl} target="_blank" rel="noreferrer">
+                        <img src={pendingAttach.previewUrl} alt="factura a adjuntar" style={{ width: 96, borderRadius: 6, display: 'block' }} />
+                      </a>
+                    : <span style={{ fontSize: '1.6rem', opacity: 0.4 }}>📄</span>}
+                </div>
+                <div style={{ fontSize: '0.76rem', minWidth: 0, flex: 1, display: 'grid', gap: '0.25rem' }}>
+                  <div>Proveedor leído: <strong>{leidoProv ?? '— (la IA no lo leyó)'}</strong></div>
+                  <div style={{ color: 'var(--t-muted)' }}>Proveedor del pago: {curSupName}</div>
+                  <div>Total leído: <strong>{leidoTotal != null ? money(leidoTotal, cur) : '— (la IA no lo leyó)'}</strong></div>
+                  <div style={{ color: 'var(--t-muted)' }}>Monto del pago: {movAmount != null ? money(movAmount, cur) : '—'}</div>
+                  {difiere && (
+                    <div style={{ color: 'var(--t-red, #d66)', fontWeight: 600 }}>
+                      ⚠ El total leído no coincide con el monto del pago. Confirmá solo si es la factura correcta — el movimiento NO se modifica.
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.6rem' }}>
+                <button className="tips-btn-ghost" onClick={() => setPendingAttach(null)} disabled={attaching}>Cancelar</button>
+                <button className="cd-btn-green" onClick={confirmAttach} disabled={attaching}>
+                  {attaching ? 'Adjuntando…' : '✓ Confirmar y adjuntar'}
+                </button>
+              </div>
+            </div>
+          )
+        })()}
 
         {!loaded ? (
           <div style={{ padding: '1rem', color: '#888' }}>Cargando…</div>

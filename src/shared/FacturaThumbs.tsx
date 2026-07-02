@@ -3,20 +3,26 @@ import { getFacturaUrl } from './api/facturas'
 
 /** Miniaturas de fotos de factura de un pago a proveedor (bucket privado 'facturas').
  *  Tap en una miniatura → lightbox con la foto completa (para revisar nombres de
- *  productos y precios). Soporta varias fotos por pago (◀ ▶ navega). */
-export default function FacturaThumbs({ paths, size = 34 }: { paths: string[]; size?: number }) {
+ *  productos y precios). Soporta varias fotos por pago (◀ ▶ navega).
+ *  `resolve` (opcional) cambia cómo se firma la URL — p. ej. documentos del bucket
+ *  'documents' (signedUrl de api/documents) en la Revisión de inventario. */
+export default function FacturaThumbs({ paths, size = 34, resolve }: {
+  paths: string[]
+  size?: number
+  resolve?: (path: string) => Promise<string | null>
+}) {
   const [urls, setUrls] = useState<Record<string, string>>({})
   const [open, setOpen] = useState<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
     paths.forEach(p => {
-      getFacturaUrl(p)
-        .then(u => { if (!cancelled) setUrls(prev => prev[p] === u ? prev : { ...prev, [p]: u }) })
+      (resolve ?? getFacturaUrl)(p)
+        .then(u => { if (u && !cancelled) setUrls(prev => prev[p] === u ? prev : { ...prev, [p]: u }) })
         .catch(() => { /* sin red o sin permiso → la miniatura queda como 📷 */ })
     })
     return () => { cancelled = true }
-  }, [paths])
+  }, [paths, resolve])
 
   // Cerrar lightbox con Escape, navegar con flechas
   useEffect(() => {

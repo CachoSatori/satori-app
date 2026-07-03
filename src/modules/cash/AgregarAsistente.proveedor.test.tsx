@@ -43,6 +43,9 @@ const session = { id: 's1', shift_type: 'AM' } as unknown as CashSession
 function renderAsistente(suppliers: Supplier[] = [mkSupplier('Pescadería del Pacífico')]) {
   render(<AgregarAsistente openSession={session} suppliers={suppliers} role="cajero" createdBy="u1" tc={600}
     onCreated={vi.fn()} onClose={vi.fn()} onError={vi.fn()} />)
+  // Flujo guiado: estos tests ejercitan el FORM → entran por "Carga manual" (la foto que sacan
+  // después usa el mismo input, siempre montado). El flujo guiado se prueba en su propio archivo.
+  fireEvent.click(screen.getByRole('button', { name: /Carga manual/ }))
 }
 const takePhoto = () => fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [new File(['d'], 'f.jpg', { type: 'image/jpeg' })] } })
 const setProveedor = (v: string) => fireEvent.change(screen.getByLabelText('Proveedor'), { target: { value: v } })

@@ -84,6 +84,22 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   const [saving, setSaving] = useState(false)
 
+  // ── Flujo guiado (decisión de la dueña): el modal abre con DOS opciones — foto (protagonista)
+  // o carga manual — y el formulario completo recién se revela después. 'form' se alcanza por:
+  // (a) foto sacada y leída (onPhoto lo setea al terminar) o (b) tap en "Carga manual".
+  // Cancelar la cámara NO dispara el change del input → la vista queda en 'opciones' sola.
+  const [vista, setVista] = useState<'opciones' | 'form'>('opciones')
+
+  // ← Volver desde el form: limpia el borrador SIN crear nada y regresa a las dos opciones.
+  // (createdSuppliers no se limpia: los proveedores creados ya existen en la base.)
+  const volverAOpciones = () => {
+    setDescripcion(''); setSupplierName(''); setMontoCRC(''); setMontoUSD(''); setFechaFactura('')
+    setPickedSupplierId(null); setClasePicked(null)
+    setPago(formas[0]); setAccountId('')
+    setPhoto(null)
+    setVista('opciones')
+  }
+
   // ── Foto/IA (aditivo) ──────────────────────────────────────
   // photo = la factura ya subida + lo extraído por la IA, para enlazarla al movimiento al confirmar.
   const [photo, setPhoto] = useState<{ path: string; sha: string; extracted: DocExtract | null } | null>(null)
@@ -110,6 +126,10 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         setClasePicked(null)   // que la sugerencia se recalcule sobre lo recién precargado
       }
       setPhoto({ path, sha, extracted: ex })
+      // Flujo guiado: con la foto lista (leída o no), recién ahora se revela el formulario
+      // completo (precarga + confirmación). Si falla (catch), la vista no cambia → el usuario
+      // sigue en las dos opciones y puede sacar otra foto o ir a manual.
+      setVista('form')
     } catch (e) {
       onError(e instanceof Error ? e.message : 'No se pudo leer la factura — probá otra foto o cargá a mano.')
     } finally {
@@ -261,9 +281,45 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
         <div className="cd-modal-title">➕ Agregar movimiento</div>
 
+        {/* Input de cámara SIEMPRE montado: lo disparan la opción grande de la pantalla inicial
+            Y el botón "Cambiar foto" del form. Cancelar la cámara no emite change → no pasa nada. */}
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPickPhoto} aria-label="Foto de la factura" />
+
+        {vista === 'opciones' ? (
+          /* ── Pantalla inicial (flujo guiado): foto protagonista, manual secundario ── */
+          <>
+            <p style={{ fontSize: '0.78rem', color: '#8a8378', margin: '0.4rem 0 1rem' }}>
+              ¿Cómo querés cargar el movimiento?
+            </p>
+            <button className="cd-btn-green" style={{ width: '100%', padding: '1.1rem 1rem', fontSize: '1rem', lineHeight: 1.35 }}
+              disabled={photoBusy} onClick={() => fileRef.current?.click()}>
+              {photoBusy ? '📷 Leyendo factura…' : (
+                <>
+                  📷 Sacar foto de la factura
+                  <div style={{ fontSize: '0.68rem', fontWeight: 400, opacity: 0.85, marginTop: 4 }}>
+                    La IA lee la factura y precarga los campos — recomendado
+                  </div>
+                </>
+              )}
+            </button>
+            <button className="tips-btn-ghost" style={{ width: '100%', marginTop: '0.6rem', padding: '0.7rem 1rem' }}
+              disabled={photoBusy} onClick={() => setVista('form')}>
+              ✏️ Carga manual (sin foto)
+            </button>
+            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
+              <button className="tips-btn-ghost" onClick={onClose} disabled={photoBusy}>Cancelar</button>
+            </div>
+          </>
+        ) : (
+        <>
+        {/* ← Volver: descarta el borrador (no se creó nada) y regresa a las dos opciones. */}
+        <button type="button" className="tips-btn-ghost" onClick={volverAOpciones} disabled={saving || photoBusy}
+          style={{ padding: '2px 10px', fontSize: '0.72rem', marginTop: '0.3rem' }}>
+          ← Volver
+        </button>
+
         {/* ── 1. Captura — foto (opcional) + manual ── */}
         <div className="tips-field" style={{ marginTop: '0.5rem' }}>
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPickPhoto} aria-label="Foto de la factura" />
           <button className="tips-btn-ghost" style={{ width: '100%' }} disabled={photoBusy}
             onClick={() => fileRef.current?.click()}>
             {photoBusy ? '📷 Leyendo factura…' : photo ? '📷 Cambiar foto' : '📷 Sacar foto de la factura (la IA precarga)'}
@@ -314,8 +370,10 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
         <div className="tips-field" style={{ marginTop: '0.5rem' }}>
           <div className="tips-field-label">Proveedor (opcional)</div>
+          {/* En carga manual (sin foto) el foco arranca acá — primer input del orden T3-B.
+              Llegando por foto, photo ya está seteado → sin autofocus (no roba scroll). */}
           <input type="text" className="tips-input-dark" style={{ width: '100%' }} aria-label="Proveedor"
-            placeholder="Nombre del proveedor, si aplica"
+            placeholder="Nombre del proveedor, si aplica" autoFocus={!photo}
             value={supplierName} onChange={e => { setSupplierName(e.target.value); setPickedSupplierId(null) }} />
           {resolvedSupplier && (
             <div style={{ fontSize: '0.66rem', color: '#4a9a6a', marginTop: 3 }}>✓ Proveedor reconocido: {resolvedSupplier.name}</div>
@@ -370,7 +428,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         <div className="tips-field" style={{ marginTop: '0.75rem' }}>
           <div className="tips-field-label">Descripción / concepto</div>
           <input type="text" className="tips-input-dark" style={{ width: '100%' }} aria-label="Descripción"
-            placeholder="Ej: pescado fresco, alquiler del local, ingreso por…" autoFocus
+            placeholder="Ej: pescado fresco, alquiler del local, ingreso por…"
             value={descripcion} onChange={e => setDescripcion(e.target.value)} />
         </div>
 
@@ -453,6 +511,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             {saving ? 'Registrando…' : '✓ Confirmar y registrar'}
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   )

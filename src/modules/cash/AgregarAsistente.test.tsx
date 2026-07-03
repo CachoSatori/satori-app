@@ -48,6 +48,9 @@ function renderAsistente(role: UserRole = 'cajero') {
       onError={onError}
     />,
   )
+  // Flujo guiado: el modal abre con dos opciones — estos tests ejercitan el FORM, así que
+  // entran por "Carga manual" (el flujo guiado en sí se prueba en AgregarAsistente.flujo.test.tsx).
+  fireEvent.click(screen.getByRole('button', { name: /Carga manual/ }))
   return { onCreated, onClose, onError }
 }
 

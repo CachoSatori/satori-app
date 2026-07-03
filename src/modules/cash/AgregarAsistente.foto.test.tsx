@@ -45,6 +45,9 @@ function renderAsistente() {
     <AgregarAsistente openSession={session} suppliers={suppliers} role="cajero" createdBy="u1" tc={600}
       onCreated={vi.fn()} onClose={vi.fn()} onError={vi.fn()} />,
   )
+  // Flujo guiado: estos tests ejercitan el FORM (precarga/lectura) → entran por "Carga manual";
+  // la foto usa el mismo input, siempre montado. El flujo guiado se prueba en su propio archivo.
+  fireEvent.click(screen.getByRole('button', { name: /Carga manual/ }))
 }
 const fileInput = () => document.querySelector('input[type="file"]') as HTMLInputElement
 const takePhoto = () => fireEvent.change(fileInput(), { target: { files: [new File(['d'], 'factura.jpg', { type: 'image/jpeg' })] } })

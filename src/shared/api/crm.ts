@@ -19,16 +19,6 @@ export async function getCustomers(limit = 500): Promise<Customer[]> {
   return (data ?? []) as Customer[]
 }
 
-export async function findCustomerByPhone(phone: string): Promise<Customer | null> {
-  const { data, error } = await supabase
-    .from('customers')
-    .select('*')
-    .eq('phone', phone.trim())
-    .maybeSingle()
-  if (error) throw new Error(error.message)
-  return (data ?? null) as Customer | null
-}
-
 export async function upsertCustomer(c: Partial<Customer> & { phone: string }): Promise<Customer> {
   const payload: Record<string, unknown> = { ...c, phone: c.phone.trim() }
   delete payload.created_at

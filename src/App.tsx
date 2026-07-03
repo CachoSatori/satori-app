@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './shared/hooks/useAuth'
 import { ManagerOverrideProvider } from './shared/ManagerOverride'
+import { DeletionNoteProvider } from './modules/cash/deletionNote'
 import ErrorBoundary from './shared/ErrorBoundary'
 import OfflineBanner from './shared/offline/OfflineBanner'
 import type { UserRole } from './shared/types/database'
@@ -153,6 +154,8 @@ function AppRoutes() {
         <Route path="/mi-rendimiento" element={<PrivateRoute roles={['salonero','barman','barback','runner','cocina']}><MiRendimientoWrap /></PrivateRoute>} />
         <Route path="/admin"    element={<OwnerRoute><AdminModule /></OwnerRoute>} />
         <Route path="/prueba"   element={<OwnerRoute><PruebaModule /></OwnerRoute>} />
+        {/* Operación por roles (06-12): métricas propias del salonero. La bandeja de
+            proveedores se fusionó en /inbox (feat/bandeja-fusion) — ruta /proveedor retirada. */}
         <Route path="*"         element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
@@ -180,14 +183,16 @@ export default function App() {
   return (
     <AuthProvider>
       <ManagerOverrideProvider>
-        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <StagingBanner />
-          <ErrorBoundary>
-            <AppRoutes />
-          </ErrorBoundary>
-          <FloatingHomeBtn />
-          <OfflineBanner />
-        </BrowserRouter>
+        <DeletionNoteProvider>
+          <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+            <StagingBanner />
+            <ErrorBoundary>
+              <AppRoutes />
+            </ErrorBoundary>
+            <FloatingHomeBtn />
+            <OfflineBanner />
+          </BrowserRouter>
+        </DeletionNoteProvider>
       </ManagerOverrideProvider>
     </AuthProvider>
   )

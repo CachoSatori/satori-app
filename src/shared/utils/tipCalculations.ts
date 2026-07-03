@@ -22,6 +22,7 @@ export const ROL_NAMES: Record<UserRole, string> = {
   cocina:   'Cocina',
   cajero:   'Cajeros',
   manager:  'Manager',
+  proveedor: 'Bandeja proveedores',   // sin propinas — solo etiqueta (Record exhaustivo)
 }
 
 export const ROL_LABELS: Record<UserRole, string> = {
@@ -34,6 +35,7 @@ export const ROL_LABELS: Record<UserRole, string> = {
   cocina:   'Cocina',
   cajero:   'Cajero',
   manager:  'Encargado',
+  proveedor: 'Bandeja proveedores',   // sin propinas — solo etiqueta (Record exhaustivo)
 }
 
 // ── Línea del draft ────────────────────────────────────────────

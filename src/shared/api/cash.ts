@@ -213,6 +213,12 @@ export async function createCashMovement(movement: {
   caja_origen: string
   account_id?: string | null
   status?: 'aprobado' | 'pendiente' | 'rechazado'   // override; por defecto se deriva del método
+  attachments?: string[]                            // fotos de factura ya subidas al bucket 'facturas' (mig 026)
+  // Unificación Bandeja↔Caja (040-043): la Bandeja marca los egresos de mercadería para que el
+  // trigger del server cree la tarea de Revisión de inventario. Opcionales → fluyen por ...movement.
+  classification?: string
+  suggested_classification?: string
+  suggested_confidence?: number
 }): Promise<CashMovement> {
   // id y client_op_id se generan en el CLIENTE: así el replay offline es
   // idempotente (021: client_op_id UNIQUE) y las ediciones/borrados encolados
@@ -229,6 +235,7 @@ export async function createCashMovement(movement: {
     employee_name: movement.employee_name ?? '',
     shift:         movement.shift         ?? '',
     account_id:    movement.account_id    ?? null,
+    attachments:   movement.attachments   ?? [],
     status:        movement.status ?? (movement.method === 'Transferencia' ? 'pendiente' : 'aprobado'),
     created_at:    now,
     updated_at:    now,
@@ -331,6 +338,16 @@ export async function updateMovementStatus(id: string, status: 'aprobado' | 'pen
   return updateCashMovement(id, { status } as Partial<CashMovement>)
 }
 
+// Edición de SOLO metadatos de un movimiento desde la Revisión de inventario (F4 unificación).
+// Acotada POR TIPOS: el llamador no puede tocar amount_crc/amount_usd/method/caja_origen/status/
+// classification (plata o disparadores del trigger). Reusa el plumbing offline-safe de updateCashMovement.
+export async function updateMovementMetadata(
+  id: string,
+  meta: { supplier_id?: string | null; supplier_name?: string; description?: string },
+): Promise<void> {
+  return updateCashMovement(id, meta as Partial<CashMovement>)
+}
+
 // Inserta un movimiento a nivel día (sin turno) — para movimientos manuales
 // administrativos: Banco→Caja Fuerte, retiros, gastos sin foto, etc.
 export async function createDayMovement(m: {
@@ -340,12 +357,17 @@ export async function createDayMovement(m: {
   amount_usd?: number
   description: string
   subcategory?: string
+  supplier_id?: string | null
   supplier_name?: string
   method: string
   caja_origen: string
   status?: 'aprobado' | 'pendiente'
   account_id?: string | null
   fecha?: string | null
+  // Unificación Bandeja↔Caja (040-043): clasificación que dispara la tarea de Revisión en el server.
+  classification?: string
+  suggested_classification?: string
+  suggested_confidence?: number
 }): Promise<string> {
   // ts = fecha del MOVIMIENTO (puede venir backdateada al mediodía). NO confundir con el
   // created_at del SOBRE de la cola, que debe ser el reloj real para ordenar bien el outbox.
@@ -358,9 +380,14 @@ export async function createDayMovement(m: {
     client_op_id: id,
     session_id: null, created_by: m.created_by, movement_type: m.movement_type,
     amount_crc: m.amount_crc, amount_usd: m.amount_usd ?? 0, currency: 'CRC',
-    description: m.description, subcategory: m.subcategory ?? '', supplier_name: m.supplier_name ?? '',
+    description: m.description, subcategory: m.subcategory ?? '',
+    supplier_id: m.supplier_id ?? null, supplier_name: m.supplier_name ?? '',
     method: m.method, caja_origen: m.caja_origen, status: m.status ?? 'aprobado',
     account_id: m.account_id ?? null, created_at: ts, updated_at: ts,
+    // Solo se incluyen cuando la Bandeja los pasa (egreso_mercaderia) → los demás callers van sin clasificación.
+    ...(m.classification ? { classification: m.classification } : {}),
+    ...(m.suggested_classification ? { suggested_classification: m.suggested_classification } : {}),
+    ...(m.suggested_confidence != null ? { suggested_confidence: m.suggested_confidence } : {}),
   }
   const queueAndReturn = async (): Promise<string> => {
     await enqueue({ client_op_id: id, table: 'cash_movements', op: 'insert', payload: row, created_at: now })
@@ -402,47 +429,69 @@ export async function createDayMovement(m: {
   }
 }
 
-export async function deleteCashMovement(id: string): Promise<void> {
-  if (isOffline()) return queueCashMutation('delete', { match: { id } })
+// Borrar un movimiento de caja NO es un delete plano: arrastra el inventario ligado y deja
+// auditoría, todo en UNA transacción vía la RPC delete_movement_cascade (mig 039). Antes era
+// un `.delete()` directo y, con inventory_movements.cash_movement_id ON DELETE SET NULL (mig
+// 017), la entrada de inventario quedaba HUÉRFANA → inventario inflado + asientos duplicados.
+//
+// A DIFERENCIA del resto de mutaciones de caja, esto NO se encola offline: es una CORRECCIÓN
+// de integridad, no una escritura operativa. Encolar un borrado sin poder correr la cascada
+// dejaría exactamente el inventario huérfano que esto arregla → si no hay red, se BLOQUEA con
+// mensaje claro. La RPC es idempotente (si el movimiento ya no existe, no hace nada) → el
+// reintento único tras un socket zombi es seguro. `note` (motivo) es obligatorio para la auditoría.
+export async function deleteCashMovement(id: string, note: string, managerEmail?: string, managerPassword?: string): Promise<void> {
+  if (isOffline()) {
+    throw new Error('El borrado requiere conexión: arrastra el inventario ligado y no puede encolarse a medias. Reintentá con internet.')
+  }
+  // Credenciales de gerencia (mig 044): el cajero las valida en el modal y la RPC las re-verifica
+  // server-side. owner/manager logueado no las pasa (la RPC autoriza por su rol). NO se persisten.
+  const args: Record<string, unknown> = { p_movement_id: id, p_note: note }
+  if (managerEmail && managerPassword) { args.p_manager_email = managerEmail; args.p_manager_password = managerPassword }
+  // Cast acotado (mismo patrón que FacturaVerify con mark_factura_verified). Termina en
+  // .abortSignal(signal) para que withWriteTimeout pueda cancelar el fetch colgado.
+  const runCascade = (signal: AbortSignal) => (supabase.rpc as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => { abortSignal: (s: AbortSignal) => PromiseLike<{ error: { message: string } | null }> })(
+    'delete_movement_cascade', args,
+  ).abortSignal(signal)
   try {
-    const { error } = await withWriteTimeout(signal => supabase
-      .from('cash_movements')
-      .delete()
-      .eq('id', id)
-      .abortSignal(signal))
+    const { error } = await withWriteTimeout(runCascade)
     if (error) throw new Error(error.message)
   } catch (e) {
     const timedOut = (e as { isTimeout?: boolean })?.isTimeout === true
                   || (e as { name?: string })?.name === 'AbortError'
     if (timedOut) {
-      // Reintento único (socket zombi tras suspensión). El delete por id es idempotente.
-      try {
-        const { error } = await withWriteTimeout(signal => supabase
-          .from('cash_movements')
-          .delete()
-          .eq('id', id)
-          .abortSignal(signal))
-        if (error) throw new Error(error.message)
-        return
-      } catch (e2) {
-        // Zombi tras suspensión: navigator.onLine MIENTE (=true) con la red muerta. Si el reintento
-        // también venció o es error de red, NUNCA abandonar → encolar (durable + idempotente).
-        // Solo errores reales del server suben.
-        const timedOut2 = (e2 as { isTimeout?: boolean })?.isTimeout === true
-                       || (e2 as { name?: string })?.name === 'AbortError'
-        if (timedOut2 || isNetErr(e2)) return queueCashMutation('delete', { match: { id } })
-        throw e2
-      }
+      // Reintento único (socket zombi tras suspensión). La RPC es idempotente.
+      const { error } = await withWriteTimeout(runCascade)
+      if (error) throw new Error(error.message)
+      return
     }
-    if (isNetErr(e)) return queueCashMutation('delete', { match: { id } })
+    // Red caída o error real del server → NO encolar (sería un borrado parcial sin cascada);
+    // se propaga para que la UI avise y el usuario reintente con red.
     throw e
   }
 }
 
-// Descartar un turno (apertura por error, fecha equivocada): borra sus
-// movimientos y la sesión. Empezás de cero.
-export async function discardCashSession(sessionId: string): Promise<void> {
-  await supabase.from('cash_movements').delete().eq('session_id', sessionId)
+// Descartar un turno (apertura por error, fecha equivocada): borra sus movimientos y la
+// sesión. Empezás de cero. Los movimientos van UNO POR UNO por la cascada (RPC
+// delete_movement_cascade) — igual que el borrado por movimiento y que discardDiaCompleto —
+// para NO dejar accounting_entries huérfanos ni inventory_review_task colgadas. La sesión
+// (no toca el libro) va por `.delete()` crudo, recién DESPUÉS de los movimientos. Secuencial:
+// si una llamada falla, frena y propaga indicando cuántos se borraron (parcial recuperable).
+// `managerEmail/managerPassword` (mig 044) los pasa el cajero; owner/manager logueado no.
+export async function discardCashSession(sessionId: string, managerEmail?: string, managerPassword?: string): Promise<void> {
+  const note = `Descarte de turno ${sessionId}`
+  const { data: movs, error: eMov } = await withWriteTimeout(signal => supabase.from('cash_movements').select('id').eq('session_id', sessionId).abortSignal(signal))
+  if (eMov) throw new Error(eMov.message)
+  let deleted = 0
+  for (const m of (movs ?? []) as { id: string }[]) {
+    try { await deleteCashMovement(m.id, note, managerEmail, managerPassword); deleted++ }
+    catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      throw new Error(`Descarte parcial: se borraron ${deleted} movimiento(s) antes de fallar (${msg}). Volvé a descartar el turno para terminar.`)
+    }
+  }
   const { error } = await supabase.from('cash_sessions').delete().eq('id', sessionId)
   if (error) throw new Error(error.message)
 }
@@ -471,6 +520,9 @@ export async function reconcilePropinaEgreso(description: string, newTotalCRC: n
 // movimientos de ingreso a nivel día (session_id null). Borra los previos del
 // mismo día antes de re-crear, así re-cerrar el día no duplica el ledger.
 // Sólo efectivo: las ventas con tarjeta vienen del XLS de ventas, no del cierre.
+// IDENTIDAD (FIRMADA, cierre-propinas-via-real): el caller pasa el NETO de propinas
+// PAGADAS por fase (efReal − pierna pagada) — lo que efectivamente llega a la bóveda —
+// para que el ledger de Caja Fuerte post-cierre quede EXACTO en el físico contado.
 export async function recordCierreSales(params: {
   session_date:  string
   created_by:    string
@@ -547,6 +599,79 @@ export async function recordCierreRetiro(params: {
     status:        'aprobado',
   }).abortSignal(signal))
   if (error) throw new Error(error.message)
+}
+
+// UUID determinístico (SHA-256 del seed, formateado con bits de versión/variante válidos) —
+// client_op_id del ajuste de cierre: re-confirmar el MISMO cierre produce el MISMO id, así el
+// UNIQUE de client_op_id (mig 021) rebota el duplicado aunque la limpieza previa fallara.
+// (client_op_id es columna uuid → el seed legible "cierre-ajuste-{fecha}-{moneda}" se hashea.)
+// Exportada para test.
+export async function cierreAjusteOpId(sessionDate: string, currency: 'crc' | 'usd'): Promise<string> {
+  const data = new TextEncoder().encode(`cierre-ajuste-${sessionDate}-${currency}`)
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', data))
+  h[6] = (h[6] & 0x0f) | 0x40
+  h[8] = (h[8] & 0x3f) | 0x80
+  const hex = Array.from(h.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+// Registra (idempotente) el/los movimientos de AJUSTE de un cierre con diferencia — Opción B
+// FIRMADA por la dueña: por cada moneda cuya diferencia superó su tolerancia, UN movimiento en
+// Caja Fuerte que deja el ledger igual al físico contado. Faltante (dif<0) → egreso resta;
+// Sobrante (dif>0) → ingreso suma. Espejo del patrón de recordCierreSales/recordCierreRetiro:
+// borra los ajustes previos del día antes de re-crear (re-cerrar no duplica) y ADEMÁS usa
+// client_op_id determinístico por fecha+moneda (doble cinturón contra duplicados por retry).
+// SIEMPRE llamarla al cerrar (aun con dif_crc/dif_usd en 0): la limpieza inicial garantiza que
+// re-cerrar un día que ANTES tuvo diferencia y ahora cuadra no arrastre el ajuste viejo.
+// ORDEN: va DESPUÉS de guardar el cierre y registrar ventas/retiro — la diferencia ya quedó
+// calculada y sellada SIN este ajuste (y el saldoBase del propio día lo excluye, ver CashCierre).
+export async function recordCierreAjuste(params: {
+  session_date:  string
+  created_by:    string
+  exchange_rate: number
+  motivo:        string
+  dif_crc:       number   // diferencia ₡ (0 = no supera tolerancia → no se crea movimiento ₡)
+  dif_usd:       number   // diferencia $ (ídem)
+}): Promise<void> {
+  // Limpiar ajustes previos de este día (idempotencia al re-cerrar).
+  await supabase
+    .from('cash_movements')
+    .delete()
+    .eq('subcategory', 'Ajuste de cierre')
+    .like('description', `Ajuste de cierre ${params.session_date}%`)
+
+  const rows = [
+    { cur: 'crc' as const, dif: params.dif_crc },
+    { cur: 'usd' as const, dif: params.dif_usd },
+  ].filter(r => r.dif !== 0)
+  if (rows.length === 0) return
+
+  const payload = await Promise.all(rows.map(async r => ({
+    client_op_id:  await cierreAjusteOpId(params.session_date, r.cur),
+    session_id:    null,
+    created_by:    params.created_by,
+    // NOTA (taxonomía cashUtils): no existe movement_type 'ajuste' (cambio de enum) → se
+    // registran como ingreso/egreso, tal como quedó decidido en CATEGORIAS_DEFAULT.
+    movement_type: r.dif > 0 ? ('ingreso' as const) : ('egreso_operativo' as const),
+    amount_crc:    r.cur === 'crc' ? Math.abs(r.dif) : 0,
+    amount_usd:    r.cur === 'usd' ? Math.abs(r.dif) : 0,
+    currency:      'CRC' as const,
+    exchange_rate: params.exchange_rate,
+    description:   `Ajuste de cierre ${params.session_date} · ${r.dif > 0 ? 'Sobrante' : 'Faltante'} · ${params.motivo}`,
+    subcategory:   'Ajuste de cierre',
+    supplier_id:   null,
+    supplier_name: '',
+    employee_name: '',
+    shift:         '',
+    caja_origen:   'Caja Fuerte',   // el ajuste corrige el saldo de la Caja Fuerte al físico contado
+    method:        'Efectivo',
+    status:        'aprobado',      // aprobado (no pendiente): saldoCajaFuerte lo cuenta de una
+  })))
+
+  const { error } = await withWriteTimeout(signal =>
+    supabase.from('cash_movements').insert(payload).abortSignal(signal))
+  // 23505 = el client_op_id determinístico ya existe (retry tras timeout) → ya está registrado.
+  if (error && (error as { code?: string }).code !== '23505') throw new Error(error.message)
 }
 
 // ── Proveedores ─────────────────────────────────────────────
@@ -636,10 +761,14 @@ export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created
 }
 
 // Deshacer el cierre del día (error de fecha / empezar de nuevo): borra los
-// cierres de esa fecha y los movimientos que generó (ventas del cierre + retiro).
+// cierres de esa fecha y los movimientos que generó (ventas del cierre + retiro +
+// ajuste de diferencia). El ajuste DEBE borrarse acá: si quedara, re-cerrar el día
+// arrastraría/duplicaría la corrección (Opción B). Mismo delete plano que ventas/retiro
+// (movimientos generados por el propio cierre, sin inventario ligado → sin cascada).
 export async function discardCierreDia(date: string): Promise<void> {
   await supabase.from('cash_movements').delete().eq('subcategory', 'Ventas cierre').like('description', `%${date}`)
   await supabase.from('cash_movements').delete().eq('description', `Retiro dueños a banco ${date}`)
+  await supabase.from('cash_movements').delete().eq('subcategory', 'Ajuste de cierre').like('description', `Ajuste de cierre ${date}%`)
   const { error } = await supabase.from('cash_cierres_dia').delete().eq('session_date', date)
   if (error) throw new Error(error.message)
 }
@@ -648,25 +777,52 @@ export async function discardCierreDia(date: string): Promise<void> {
 // movimientos del día (los de los turnos de esa fecha + los a nivel día) + los turnos de
 // caja de esa fecha. NO toca propinas (tip_sessions / tip_entries). Acción destructiva
 // explícita (la dispara el usuario con confirmación + autorización de gerencia).
-export async function discardDiaCompleto(date: string): Promise<void> {
-  // 1) Movimientos ligados a turnos de esa fecha
-  const { data: sess } = await withWriteTimeout(signal => supabase.from('cash_sessions').select('id').eq('session_date', date).abortSignal(signal))
-  const ids = ((sess ?? []) as { id: string }[]).map(s => s.id)
-  if (ids.length) {
-    const { error } = await withWriteTimeout(signal => supabase.from('cash_movements').delete().in('session_id', ids).abortSignal(signal))
-    if (error) throw new Error(error.message)
+//
+// Los MOVIMIENTOS se borran UNO POR UNO por la cascada (deleteCashMovement → RPC
+// delete_movement_cascade), NO con un `.delete()` plano: un delete crudo deja
+// accounting_entries huérfanos (source_id a un movimiento inexistente, sin reversa) e
+// inventory_review_task sin descartar, sin auditoría (mismo bug que arregló mig 039 para el
+// borrado por movimiento). El cierre (paso 3) y las sesiones (paso 4) SÍ van por `.delete()`
+// crudo: no tocan el libro contable. ORDEN: movimientos por la RPC PRIMERO, recién después
+// cierre y sesiones. Es secuencial: si una llamada falla, se frena y se propaga indicando
+// cuántos movimientos se borraron (parcial recuperable: volver a correrlo termina el borrado).
+// `managerEmail/managerPassword` (mig 044) los pasa el cajero; owner/manager logueado no.
+export async function discardDiaCompleto(date: string, managerEmail?: string, managerPassword?: string): Promise<void> {
+  const note = `Borrado de día completo ${date}`
+  let deleted = 0
+  // Propaga el error sin tragarlo, anotando el conteo parcial para que la UI avise.
+  const failPartial = (e: unknown): never => {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new Error(`Borrado parcial: se borraron ${deleted} movimiento(s) antes de fallar (${msg}). Volvé a correr "Borrar TODO el día" para terminar.`)
   }
+  const cascadeDelete = async (id: string) => {
+    try { await deleteCashMovement(id, note, managerEmail, managerPassword); deleted++ }
+    catch (e) { failPartial(e) }
+  }
+
+  // 1) Movimientos ligados a turnos de esa fecha → por la cascada (RPC), uno por uno
+  const { data: sess, error: eSess } = await withWriteTimeout(signal => supabase.from('cash_sessions').select('id').eq('session_date', date).abortSignal(signal))
+  if (eSess) throw new Error(eSess.message)
+  const sessionIds = ((sess ?? []) as { id: string }[]).map(s => s.id)
+  if (sessionIds.length) {
+    const { data: turnMovs, error: eTurn } = await withWriteTimeout(signal => supabase.from('cash_movements').select('id').in('session_id', sessionIds).abortSignal(signal))
+    if (eTurn) throw new Error(eTurn.message)
+    for (const m of (turnMovs ?? []) as { id: string }[]) await cascadeDelete(m.id)
+  }
+
   // 2) Movimientos a nivel día (sin turno) de esa fecha — rango horario de Costa Rica (UTC-6)
   const next = new Date(date + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + 1)
   const nextStr = next.toISOString().slice(0, 10)
-  const { error: e2 } = await withWriteTimeout(signal => supabase.from('cash_movements').delete()
+  const { data: dayMovs, error: eDay } = await withWriteTimeout(signal => supabase.from('cash_movements').select('id')
     .is('session_id', null)
     .gte('created_at', `${date}T06:00:00Z`).lt('created_at', `${nextStr}T06:00:00Z`)
     .abortSignal(signal))
-  if (e2) throw new Error(e2.message)
-  // 3) Cierre del día
+  if (eDay) throw new Error(eDay.message)
+  for (const m of (dayMovs ?? []) as { id: string }[]) await cascadeDelete(m.id)
+
+  // 3) Cierre del día — `.delete()` crudo (no toca el libro contable)
   await withWriteTimeout(signal => supabase.from('cash_cierres_dia').delete().eq('session_date', date).abortSignal(signal))
-  // 4) Turnos de caja de esa fecha
+  // 4) Turnos de caja de esa fecha — `.delete()` crudo
   const { error: e4 } = await withWriteTimeout(signal => supabase.from('cash_sessions').delete().eq('session_date', date).abortSignal(signal))
   if (e4) throw new Error(e4.message)
 }

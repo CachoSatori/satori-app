@@ -27,19 +27,26 @@ const mock = vi.hoisted(() => {
   const hang = <T>(): Promise<T> => new Promise<T>(() => { /* nunca settlea (zombi) */ })
   return {
     hang,
-    calls: { connect: 0, disconnect: 0, setAuth: 0 },
+    calls: { connect: 0, disconnect: 0, setAuth: 0, signOut: 0 },
     isConnected: true,
     getSession: hang as () => Promise<GetSessionResult>,
     refreshSession: hang as () => Promise<RefreshSessionResult>,
+    // Capturamos el callback del onAuthStateChange GLOBAL de supabase.ts para simular, desde el test,
+    // la llegada de una sesión fresca (login/refresh OK) que limpia el latch del logout forzado.
+    authCallback: null as ((event: string, session: SessionLike | null) => void) | null,
   }
 })
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     auth: {
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() { /* noop */ } } } }),
+      onAuthStateChange: (cb: (event: string, session: SessionLike | null) => void) => {
+        mock.authCallback = cb
+        return { data: { subscription: { unsubscribe() { /* noop */ } } } }
+      },
       getSession: () => mock.getSession(),
       refreshSession: () => mock.refreshSession(),
+      signOut: (_opts?: { scope?: string }) => { mock.calls.signOut++; return Promise.resolve({ error: null }) },
       startAutoRefresh: async () => { /* noop */ },
       stopAutoRefresh: async () => { /* noop */ },
     },
@@ -84,7 +91,9 @@ describe('ensureRealtimeHealthy — máquina de 3 estados + gating de la emisió
     mock.calls.connect = 0
     mock.calls.disconnect = 0
     mock.calls.setAuth = 0
+    mock.calls.signOut = 0
     mock.isConnected = true
+    mock.authCallback = null
     mock.getSession = mock.hang as () => Promise<GetSessionResult>
     mock.refreshSession = mock.hang as () => Promise<RefreshSessionResult>
   })
@@ -157,6 +166,7 @@ describe('ensureRealtimeHealthy — máquina de 3 estados + gating de la emisió
     expect(mock.calls.setAuth).toBe(0)         // SESSION_EXPIRED → NO setAuth
     expect(mock.calls.disconnect).toBe(0)      // NO toca el socket
     expect(mock.calls.connect).toBe(0)
+    expect(mock.calls.signOut).toBe(0)         // refresh.error (forced≠true) → gotrue ya limpió: NO forzamos signOut
   })
 
   // Mantenido — zombi puro: RESUELVE (no se cuelga), 0 emit, renueva el socket y libera el in-flight.
@@ -194,5 +204,135 @@ describe('ensureRealtimeHealthy — máquina de 3 estados + gating de la emisió
     expect(b).toBe(a)
     await vi.advanceTimersByTimeAsync(8_100)   // destraba ambas (OFFLINE_WAITING)
     await a
+  })
+
+  // EL FIX REAL (HANG-RCA-2): getSession wedgeada (nunca completa) ya NO loopea eterno en
+  // OFFLINE_WAITING — tras N timeouts consecutivos escala a SESSION_EXPIRED y fuerza signOut local.
+  it('getSession wedgeada: escala a SESSION_EXPIRED (signOut local) recién tras N timeouts, no antes', async () => {
+    // getSession cuelga siempre (default zombi). El backoff encadena reintentos solos.
+    const { ensureRealtimeHealthy, healthyEvents } = await loadModule()
+    const p = ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(8_100)        // 1er timeout
+    await p
+    expect(mock.calls.signOut).toBe(0)              // NO escala al primer timeout
+    await vi.advanceTimersByTimeAsync(60_000)       // deja correr los reintentos hasta cubrir N ciclos
+    expect(mock.calls.signOut).toBe(1)              // escaló UNA vez (SESSION_EXPIRED corta el backoff)
+    expect(healthyEvents()).toBe(0)                 // nunca emitió rt:healthy
+  })
+
+  // LATCH one-shot: tras forzar el signOut una vez, nuevos resumes con la auth aún wedgeada NO vuelven a
+  // forzarlo (se acabó el ping-pong de logout cada ~30s).
+  it('one-shot: con el latch puesto, nuevos ciclos de N timeouts NO vuelven a forzar signOut', async () => {
+    const { ensureRealtimeHealthy } = await loadModule()   // getSession cuelga (zombi)
+    // 1ª escalada → signOut 1, latch puesto, backoff cancelado.
+    ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(8_100)               // 1er timeout
+    await vi.advanceTimersByTimeAsync(60_000)              // backoff hasta escalar
+    expect(mock.calls.signOut).toBe(1)
+    // Reactivamos el resume (la escalada canceló el backoff) y dejamos correr varios ciclos más de N
+    // timeouts: con el latch puesto siguen dando OFFLINE_WAITING, sin re-disparar signOut.
+    ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(mock.calls.signOut).toBe(1)                     // sigue 1: one-shot
+  })
+
+  // El latch se limpia SOLO con sesión fresca confirmada (login/refresh OK) vía el onAuthStateChange
+  // global → un wedge POSTERIOR puede volver a escalar (nuevo signOut).
+  it('sesión fresca limpia el latch → un wedge posterior vuelve a escalar (signOut otra vez)', async () => {
+    const { ensureRealtimeHealthy } = await loadModule()
+    // 1ª escalada → signOut 1, latch puesto.
+    ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(8_100)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mock.calls.signOut).toBe(1)
+    // Llega sesión fresca (login/refresh OK) → el onAuthStateChange global limpia latch + contador.
+    mock.authCallback?.('SIGNED_IN', sessionExpiringIn(3_600))
+    // Nuevo wedge: vuelve a poder forzar → signOut 2.
+    ensureRealtimeHealthy('resume')
+    await vi.advanceTimersByTimeAsync(8_100)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mock.calls.signOut).toBe(2)
+  })
+})
+
+// ── safeNavigatorLock: el escape del lock muerto y su INVARIANTE de timeouts ──────────────────
+// Bug en prod (Ola 1): LOCK_ACQUIRE_TIMEOUT_MS (10s) era > AUTH_OP_TIMEOUT_MS (8s). Tras suspensión
+// larga, getSession/refreshSession piden el lock (muerto, retenido para siempre) y withTimeout los
+// rinde a los 8s ANTES de que el escape "correr sin lock" de safeNavigatorLock alcance a dispararse
+// (10s) → loop OFFLINE_WAITING eterno, nunca refresca el token, el outbox no drena. El fix invierte
+// los topes (lock < op). Estos tests fijan la invariante y el comportamiento del escape.
+describe('safeNavigatorLock — escape del lock muerto + invariante de timeouts', () => {
+  beforeEach(() => {
+    // supabase.ts exige las env al importar; se stubean ANTES del import dinámico.
+    vi.stubEnv('VITE_SUPABASE_URL', 'http://localhost:54321')
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-anon-key')
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllEnvs()
+    vi.resetModules()
+    Reflect.deleteProperty(globalThis, 'navigator')   // restaurar el navigator mockeado
+  })
+
+  // (a) GUARD anti-regresión EXACTA del bug. Import dinámico (no estático arriba) porque supabase.ts
+  // exige env al cargar y resetModules aísla el estado de módulo entre tests.
+  it('INVARIANTE: el escape del lock dispara antes del tope por-op', async () => {
+    const { LOCK_ACQUIRE_TIMEOUT_MS, AUTH_OP_TIMEOUT_MS } = await import('./supabase')
+    expect(LOCK_ACQUIRE_TIMEOUT_MS).toBeLessThan(AUTH_OP_TIMEOUT_MS)
+  })
+
+  // (b1) Lock RETENIDO (muerto): navigator.locks.request nunca adquiere (jamás llama al callback); solo
+  // rechaza con AbortError cuando el signal aborta. El escape debe correr fn SIN lock al vencer el tope.
+  it('lock retenido (muerto): corre fn SIN lock al vencer el tope, antes del tope por-op', async () => {
+    let fnRan = false
+    const sentinel = Symbol('corrió-sin-lock')
+    // Lock muerto: el request queda pendiente hasta que el AbortController del propio safeNavigatorLock lo aborta.
+    const heldLocks = {
+      request: (_name: string, options: { signal: AbortSignal }, _cb: () => Promise<unknown>): Promise<unknown> =>
+        new Promise<unknown>((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            const err = new Error('lock request aborted'); err.name = 'AbortError'; reject(err)
+          })
+        }),
+    }
+    Object.defineProperty(globalThis, 'navigator', { value: { locks: heldLocks }, configurable: true, writable: true })
+    const { safeNavigatorLock, LOCK_ACQUIRE_TIMEOUT_MS, AUTH_OP_TIMEOUT_MS } = await import('./supabase')
+
+    let result: symbol | undefined
+    const p = safeNavigatorLock('test', LOCK_ACQUIRE_TIMEOUT_MS, async (): Promise<symbol> => { fnRan = true; return sentinel })
+      .then((r) => { result = r })
+
+    // Antes de avanzar el reloj: sigue esperando el lock → fn NO corrió todavía.
+    await Promise.resolve()
+    expect(fnRan).toBe(false)
+    expect(result).toBeUndefined()
+
+    // Justo ANTES del tope del lock: el escape aún no dispara (no penaliza antes de tiempo).
+    await vi.advanceTimersByTimeAsync(LOCK_ACQUIRE_TIMEOUT_MS - 1)
+    expect(fnRan).toBe(false)
+
+    // AL tope del lock: el AbortController dispara → fn corre SIN lock → resuelve con el sentinel.
+    await vi.advanceTimersByTimeAsync(1)
+    await p
+    expect(fnRan).toBe(true)
+    expect(result).toBe(sentinel)
+    // Margen real: el escape ocurrió a los LOCK_ACQUIRE_TIMEOUT_MS, ANTES del tope por-op (si no, loop eterno).
+    expect(LOCK_ACQUIRE_TIMEOUT_MS).toBeLessThan(AUTH_OP_TIMEOUT_MS)
+  })
+
+  // (b2) Lock LIBRE: el callback corre de inmediato → fn ya, sin esperar el timeout (cero penalidad en el camino sano).
+  it('lock libre: corre fn de inmediato, sin esperar el timeout', async () => {
+    let fnRan = false
+    const sentinel = Symbol('corrió-con-lock')
+    const freeLocks = {
+      request: (_name: string, _options: { signal: AbortSignal }, cb: () => Promise<unknown>): Promise<unknown> => cb(),
+    }
+    Object.defineProperty(globalThis, 'navigator', { value: { locks: freeLocks }, configurable: true, writable: true })
+    const { safeNavigatorLock, LOCK_ACQUIRE_TIMEOUT_MS } = await import('./supabase')
+
+    const result = await safeNavigatorLock('test', LOCK_ACQUIRE_TIMEOUT_MS, async (): Promise<symbol> => { fnRan = true; return sentinel })
+    expect(fnRan).toBe(true)
+    expect(result).toBe(sentinel)
   })
 })

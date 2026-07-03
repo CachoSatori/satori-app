@@ -13,10 +13,19 @@ const CONCEPTOS = [
   { id: 'egr_oper', label: 'Egreso · Operativo',              type: 'egreso_operativo',  caja: 'Caja Proveedores',  sub: '',                    method: 'Efectivo' },
   { id: 'egr_pers', label: 'Egreso · Personal / Salario',     type: 'egreso_personal',   caja: 'Caja Fuerte',       sub: '',                    method: 'Efectivo' },
   { id: 'ing_otro', label: 'Ingreso · Otro (aceite, etc.)',   type: 'ingreso',           caja: 'Caja Fuerte',       sub: 'Otros ingresos',      method: 'Efectivo' },
+  // Reajuste (Opción B firmada): cuando la plata de una diferencia de cierre aparece (o falta)
+  // DESPUÉS — corrige el saldo de Caja Fuerte sin tocar el cierre ya sellado.
+  { id: 'reaj_ing', label: 'Reajuste · apareció plata (CF)',  type: 'ingreso',           caja: 'Caja Fuerte',       sub: 'Reajuste',            method: 'Efectivo' },
+  { id: 'reaj_egr', label: 'Reajuste · faltó plata (CF)',     type: 'egreso_operativo',  caja: 'Caja Fuerte',       sub: 'Reajuste',            method: 'Efectivo' },
 ] as const
-import { todayCR } from '../../shared/utils'
+import { todayCR, dateCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr, saldoCajaFuerte } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
+import { useDeletionNote } from './deletionNote'
+import { movementAttachments } from '../../shared/api/facturas'
+import FacturaThumbs from '../../shared/FacturaThumbs'
+import FacturaVerify from '../../shared/FacturaVerify'
+import { listLinkedDocs, type DocumentRow } from '../../shared/api/documents'
 
 interface Props {
   movements: CashMovement[]
@@ -26,6 +35,7 @@ interface Props {
 
 export default function CashMovimientos({ movements, sessions, onRefresh }: Props) {
   const requireManager = useManagerOverride()
+  const askNote = useDeletionNote()
   const { profile } = useAuth()
   // Modal "Nuevo movimiento"
   const [nmOpen, setNmOpen] = useState(false)
@@ -51,9 +61,10 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   }
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
   // Fecha del movimiento: la del turno si lo tiene; si es un movimiento a nivel
-  // día (sin turno, ej. ventas del cierre) cae a su created_at.
+  // día (sin turno, ej. ventas del cierre) cae a su created_at, en fecha LOCAL CR
+  // (dateCR) — no slice UTC — para que un registro de noche caiga en el día correcto.
   const movFecha = (m: CashMovement) =>
-    sesionMap.get(m.session_id ?? '')?.session_date ?? (m.created_at ? m.created_at.slice(0, 10) : '')
+    sesionMap.get(m.session_id ?? '')?.session_date ?? dateCR(m.created_at)
 
   const defaultFrom = (() => { const d = new Date(todayCR() + 'T12:00:00'); d.setDate(d.getDate() - 60); return d.toISOString().slice(0, 10) })()
   const [from,    setFrom]    = useState(defaultFrom)
@@ -69,6 +80,16 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   // Cierres del día → para la tarjeta de Ajustes (diferencias del encargado)
   const [cierres, setCierres] = useState<CashCierreDia[]>([])
   useEffect(() => { getCierresDia().then(setCierres).catch(() => {}) }, [])
+  // Facturas enlazadas (verificado) — map movimiento→documento, una sola consulta.
+  const [docMap, setDocMap] = useState<Record<string, DocumentRow>>({})
+  const [docsLoaded, setDocsLoaded] = useState(false)
+  useEffect(() => {
+    listLinkedDocs().then(ds => {
+      const m: Record<string, DocumentRow> = {}
+      for (const d of ds) if (d.linked_movement_id) m[d.linked_movement_id] = d
+      setDocMap(m)
+    }).catch(() => {}).finally(() => setDocsLoaded(true))
+  }, [])
 
   const toggleSel = (id: string) => setSelected(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
@@ -111,6 +132,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const cierresPeriodo = cierres.filter(c => (!from || c.session_date >= from) && (!to || c.session_date <= to) && Number(c.diferencia_crc) !== 0)
   const ajustesNet   = cierresPeriodo.reduce((s, c) => s + (Number(c.diferencia_crc) || 0), 0)
   const ajustesCount = cierresPeriodo.length
+  // Neto US$ de los ajustes del período — cálculo PARALELO (el ₡ sigue saliendo de los cierres,
+  // intacto). Como cash_cierres_dia no tiene columna diferencia_usd (decisión Opción B), el USD
+  // se deriva del registro durable: los MOVIMIENTOS 'Ajuste de cierre' del período. Signo por
+  // dirección: ingreso = sobrante (+) · egreso = faltante (−). Solo lectura.
+  const ajustesNetUsd = movements
+    .filter(m => m.subcategory === 'Ajuste de cierre' && (m.amount_usd || 0) !== 0)
+    .filter(m => { const f = movFecha(m); return (!from || f >= from) && (!to || f <= to) })
+    .reduce((s, m) => s + (m.movement_type === 'ingreso' ? 1 : -1) * (m.amount_usd || 0), 0)
 
   // El ajuste de APERTURA (reconciliación del saldo real) no es ingreso/egreso
   // real del negocio → se excluye de Ingresos/Egresos del período (pero sí
@@ -121,6 +150,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
 
   // ── Actions ──────────────────────────────────────────────
   const handleFieldChange = useCallback(async (id: string, field: string, value: unknown) => {
+    // Editar un movimiento GUARDADO (montos, tipo, método…) requiere autorización de gerencia,
+    // igual que borrarlo. owner/manager logueado pasa al instante; cajero → modal de contraseña.
+    // Si cancela o falla, onRefresh() revierte lo que muestre el input.
+    const auth = await requireManager()
+    if (!auth.ok) { onRefresh(); return }
     setSaving(id)
     try {
       await updateCashMovement(id, { [field]: value } as Partial<CashMovement>)
@@ -133,28 +167,43 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     } finally {
       setSaving(null)
     }
-  }, [onRefresh])
+  }, [onRefresh, requireManager])
 
   const handleDelete = useCallback(async (id: string) => {
     if (!window.confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) return
-    if (!(await requireManager())) return
+    const auth = await requireManager()
+    if (!auth.ok) return
+    // Motivo obligatorio: borra también el inventario ligado y queda en la auditoría (mig 039).
+    const note = await askNote('movimiento')
+    if (!note) return
     setSaving(id)
     try {
-      await deleteCashMovement(id)
+      await deleteCashMovement(id, note, auth.managerEmail, auth.managerPassword)
       onRefresh()
+    } catch (e) {
+      window.alert(`No se pudo eliminar: ${e instanceof Error ? e.message : 'reintentá con conexión'}`)
     } finally {
       setSaving(null)
     }
-  }, [onRefresh, requireManager])
+  }, [onRefresh, requireManager, askNote])
 
   const handleBulkDelete = async () => {
     const ids = [...selected]
     if (ids.length === 0) return
     if (!window.confirm(`¿Eliminar ${ids.length} movimiento(s) seleccionado(s)? No se puede deshacer.`)) return
-    if (!(await requireManager())) return
+    const auth = await requireManager()
+    if (!auth.ok) return
+    // Una sola nota cubre todo el lote (queda en la auditoría de cada borrado).
+    const note = await askNote(`${ids.length} movimiento(s)`)
+    if (!note) return
     setSaving('bulk')
     try {
-      await Promise.all(ids.map(id => deleteCashMovement(id).catch(() => {})))
+      const results = await Promise.allSettled(ids.map(id => deleteCashMovement(id, note, auth.managerEmail, auth.managerPassword)))
+      const failed = results.filter(r => r.status === 'rejected').length
+      if (failed) {
+        const reason = (results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined)?.reason
+        window.alert(`No se pudieron borrar ${failed} de ${ids.length}: ${reason instanceof Error ? reason.message : 'reintentá con conexión'}`)
+      }
       setSelected(new Set())
       onRefresh()
     } finally {
@@ -213,10 +262,25 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         </div>
         <div className="cd-saldo-card" style={{ borderLeftColor: '#8a7a4a' }}>
           <div className="cd-saldo-label">Ajustes de cierre</div>
-          <div className="cd-saldo-val" style={{ color: ajustesNet < 0 ? '#c0392b' : ajustesNet > 0 ? '#27874f' : '#555', fontSize: ajustesCount ? '17px' : '13px' }}>
-            {ajustesCount ? `${ajustesNet >= 0 ? '+' : ''}${fi(ajustesNet)}` : 'Sin diferencias'}
-          </div>
-          {ajustesCount > 0 && <div style={{ fontSize: '9px', color: '#888', marginTop: '3px' }}>{ajustesCount} cierre{ajustesCount !== 1 ? 's' : ''} con diferencia</div>}
+          {/* Patrón Caja Fuerte: ₡ arriba, $ debajo (secundario). Cada moneda solo si ≠ 0;
+              signo y color por moneda (verde sobrante / rojo faltante / gris cero). */}
+          {ajustesCount === 0 && ajustesNetUsd === 0 ? (
+            <div className="cd-saldo-val" style={{ color: '#555', fontSize: '13px' }}>Sin diferencias</div>
+          ) : (
+            <>
+              {ajustesCount > 0 && (
+                <div className="cd-saldo-val" style={{ color: ajustesNet < 0 ? '#c0392b' : ajustesNet > 0 ? '#27874f' : '#555', fontSize: '17px' }}>
+                  {`${ajustesNet >= 0 ? '+' : ''}${fi(ajustesNet)}`}
+                </div>
+              )}
+              {ajustesNetUsd !== 0 && (
+                <div style={{ fontSize: '13px', fontFamily: "'DM Mono', monospace", marginTop: '2px', color: ajustesNetUsd < 0 ? '#c0392b' : '#27874f' }}>
+                  {ajustesNetUsd >= 0 ? '+' : ''}{fd(ajustesNetUsd)}
+                </div>
+              )}
+              {ajustesCount > 0 && <div style={{ fontSize: '9px', color: '#888', marginTop: '3px' }}>{ajustesCount} cierre{ajustesCount !== 1 ? 's' : ''} con diferencia</div>}
+            </>
+          )}
         </div>
       </div>
 
@@ -370,6 +434,12 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                       defaultValue={m.description}
                       onBlur={e => handleFieldChange(m.id, 'description', e.target.value)}
                       disabled={saving === m.id} />
+                    {movementAttachments(m).length > 0 && (
+                      <div style={{ marginTop: 2 }}><FacturaThumbs paths={movementAttachments(m)} size={26} /></div>
+                    )}
+                    {docsLoaded && isEgreso(m.movement_type as MovementType) && (
+                      <div style={{ marginTop: 2 }}><FacturaVerify movement={m} doc={docMap[m.id] ?? null} compact onVerified={onRefresh} /></div>
+                    )}
                   </td>
                   <td>
                     <input key={m.id + '-pe'} className="cd-tbl-input"
@@ -474,6 +544,12 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--t-ink)', marginBottom: '0.15rem' }}>
                 {m.description || m.supplier_name || m.employee_name || '—'}
               </div>
+              {movementAttachments(m).length > 0 && (
+                <div style={{ marginBottom: '0.3rem' }}><FacturaThumbs paths={movementAttachments(m)} size={40} /></div>
+              )}
+              {docsLoaded && isEg && (
+                <div style={{ marginBottom: '0.3rem' }}><FacturaVerify movement={m} doc={docMap[m.id] ?? null} onVerified={onRefresh} /></div>
+              )}
               <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.68rem', color: '#5a5040' }}>
                 <span>{movFecha(m) || '—'}</span>
                 <span>{m.method}</span>

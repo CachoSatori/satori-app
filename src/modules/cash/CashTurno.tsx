@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
-import { useManagerOverride } from '../../shared/ManagerOverride'
+import { useManagerOverride, type ManagerAuth } from '../../shared/ManagerOverride'
 import type { CashSession, CashMovement, Supplier, MovementType } from '../../shared/types/database'
 import {
   createCashSession,
@@ -12,10 +12,16 @@ import {
   upsertSupplier,
   updateMiddayCheck,
 } from '../../shared/api/cash'
-import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
-import { tipShiftToCaja, shiftLabel } from '../../shared/utils'
+import { fi, fd, todayStr, formatDate, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
+import { propinaEgresoFields, propinasPorPagarDe } from './propinaPago'
+import { useDeletionNote } from './deletionNote'
+import { tipShiftToCaja, shiftLabel, dateCR } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
+import { uploadFacturaPhoto, movementAttachments } from '../../shared/api/facturas'
+import { listLinkedDocs } from '../../shared/api/documents'
+import FacturaThumbs from '../../shared/FacturaThumbs'
+import AgregarAsistente from './AgregarAsistente'
 import type { Employee } from '../../shared/types/database'
 
 interface Props {
@@ -31,24 +37,11 @@ interface Props {
   onRefresh:          () => void
 }
 
-// Otros egresos del turno que salen de la Caja Diaria (no son mercadería).
-// Las propinas NO van acá — se pagan en el cierre del turno.
-// Categorías ÚNICAS (corrección de la dueña 06-11): un solo "Delivery" y un solo
-// "Propinas" — el detalle (SINPE/tarjeta/turno AM-PM…) va en la NOTA. "Delivery
-// dueños" queda como opción propia (decisión de la dueña: es egreso de socios,
-// contabilidad distinta). El destino contable del Delivery se deriva de la nota
-// al guardar (ver confirmEgreso): electrónico = pass-through sin P&L; si no, a7100.
-// Propinas = SIEMPRE pass-through (la plata es del staff, no gasto del negocio).
-// Los movimientos históricos con las subcategorías viejas ("Delivery por SINPE",
-// "Propinas por Lafise"…) quedan intactos en datos y reportes.
-const CONCEPTOS_EGRESO = [
-  { id: 'delivery',     label: 'Delivery (detalle en la nota)',   type: 'egreso_operativo', sub: 'Delivery',        account: 'a7100' },
-  { id: 'deliv_duenos', label: 'Delivery dueños',                 type: 'egreso_socios',    sub: 'Delivery dueños', account: null },
-  { id: 'propinas',     label: 'Propinas (detalle en la nota)',   type: 'egreso_personal',  sub: 'Propinas',        account: null },
-  { id: 'operativo',    label: 'Operativo (gas, luz, mantenim…)', type: 'egreso_operativo', sub: 'Operativo',       account: null },
-  { id: 'salario',      label: 'Salario / adelanto en efectivo',  type: 'egreso_personal',  sub: 'Salario',         account: 'a6200' },
-  { id: 'otro',         label: 'Otro (especificar)',              type: 'egreso_operativo', sub: 'Otro',            account: null },
-] as const
+// Unificación Bandeja↔Caja (040-043): el pago a proveedor en Caja Diaria ES mercadería por
+// definición. Marcamos su egreso_mercaderia con classification='mercaderia' → el trigger del
+// server (unif_on_cash_movement) crea la tarea de Revisión de inventario (inventory_review_task
+// PENDIENTE, INV-1). No afecta montos ni la forma de pago. Espejo de InboxModule.MERCADERIA_CLASS.
+const MERCADERIA_CLASS = { classification: 'mercaderia', suggested_classification: 'mercaderia', suggested_confidence: 1 } as const
 
 // Evita que una request colgada (token vencido / red) deje "Cerrando…" para siempre.
 function withTimeout<T>(p: Promise<T>, ms = 15000): Promise<T> {
@@ -70,9 +63,11 @@ interface PagoRow {
   method:        string   // 'Efectivo' | 'Transferencia' para pagos nuevos; históricos pueden traer SINPE/Bitcoin
   reference:     string
   at:            number          // hora de registro (para ordenar más reciente primero)
+  attachments:   string[]        // paths de fotos de factura (bucket 'facturas', mig 026)
   // persistedId: movement ID in DB — set once saved, null if unsaved
   persistedId:   string | null
   pending?:      boolean        // en la cola offline, esperando sincronizar
+  readonly?:     boolean        // nivel-día (Bandeja): se muestra pero no se edita/borra acá
 }
 
 export default function CashTurno({
@@ -81,6 +76,7 @@ export default function CashTurno({
 }: Props) {
   const { profile } = useAuth()
   const requireManager = useManagerOverride()
+  const askNote = useDeletionNote()
   const canManage = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'cajero'
   const canClose  = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'cajero'
 
@@ -94,6 +90,8 @@ export default function CashTurno({
   const yaExisteDia  = !!sesionDelDia   // abierta → se continúa (es openSession); cerrada → bloquear
 
   const [view, setView] = useState<ViewState>(openSession ? 'turno' : 'apertura')
+  // F4.3a: el "➕ Agregar" único (asistente manual). Convive con los 3 botones viejos (F4.3c los retira).
+  const [agregarOpen, setAgregarOpen] = useState(false)
 
   // Apertura form
   const [apCajero,  setApCajero]  = useState(profile?.full_name ?? '')
@@ -105,6 +103,16 @@ export default function CashTurno({
   // TC por defecto = el configurado en Admin (exchange_rates). Editable.
   useEffect(() => { getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {}) }, [])
   const [saving,       setSaving]       = useState(false)
+  // Facturas enlazadas (documents.linked_movement_id) — espejo del mecanismo de CashMovimientos
+  // (listLinkedDocs, una consulta al montar). Solo lectura: alimenta la nota "⚠ sin foto" en los
+  // pagos de mercadería persistidos sin factura enlazada NI fotos adjuntas (control del manager).
+  const [linkedDocMovs, setLinkedDocMovs] = useState<Set<string>>(new Set())
+  const [docsLoaded, setDocsLoaded] = useState(false)
+  useEffect(() => {
+    listLinkedDocs().then(ds => {
+      setLinkedDocMovs(new Set(ds.map(d => d.linked_movement_id).filter((x): x is string => !!x)))
+    }).catch(() => {}).finally(() => setDocsLoaded(true))
+  }, [])
   const [carryFrom,  setCarryFrom]  = useState<string | null>(null) // fecha del cierre que asignó el fondo
   const [carrySugerido, setCarrySugerido] = useState<number | null>(null) // ₡ asignado a Caja Proveedores por ese cierre
 
@@ -153,13 +161,48 @@ export default function CashTurno({
       method:        m.method || 'Efectivo',
       reference:     m.description ?? '',
       at:            new Date(m.created_at).getTime(),
+      attachments:   movementAttachments(m),
       persistedId:   m.id,
       pending:       m._pending === true,
     })), [sessionMovements, suppliers])
-  // Lista mostrada = borradores no persistidos + persistidos de la base, más reciente primero
+  // VISIBILIDAD (fix nivel-día): la Bandeja crea los pagos por transferencia como
+  // pendientes a NIVEL-DÍA (session_id=null) → no están en sessionMovements y por eso
+  // no aparecían en la Caja Diaria (sí en Proveedores y Pendientes). Acá los derivamos
+  // de allMovements, acotados al DÍA DE REGISTRO del turno abierto. Son SOLO-LECTURA: NO
+  // entran en ningún cómputo de efectivo (method≠Efectivo) — solo suman al aviso amarillo
+  // de transferencias pendientes (pagosTr), igual que las del propio turno.
+  // Comparamos por fecha LOCAL CR (dateCR) — no slice UTC — para que un pago registrado de
+  // noche (después de 18:00 CR) caiga en la Caja Diaria del día correcto y no en el siguiente.
+  const dayPendientesPagos: PagoRow[] = useMemo(() => {
+    if (!openSession) return []
+    const fechaTurno = openSession.session_date
+    return allMovements
+      .filter(m => m.movement_type === 'egreso_mercaderia' && m.session_id === null
+        && m.status !== 'rechazado' && m.caja_origen === 'Banco' && m.method !== 'Efectivo'
+        && dateCR(m.created_at) === fechaTurno)
+      .map(m => ({
+        id:            m.id,
+        supplier_id:   m.supplier_id ?? '',
+        supplier_name: m.supplier_name ?? '',
+        supplier_cat:  suppliers.find(s => s.id === m.supplier_id)?.category ?? '',
+        amount_crc:    m.amount_crc,
+        amount_usd:    m.amount_usd,
+        method:        m.method || 'Transferencia',
+        reference:     m.description ?? '',
+        at:            new Date(m.created_at).getTime(),
+        attachments:   movementAttachments(m),
+        persistedId:   m.id,
+        pending:       m._pending === true,
+        readonly:      true,
+      }))
+  }, [openSession, allMovements, suppliers])
+
+  // Lista mostrada = borradores no persistidos + persistidos del turno + pendientes
+  // nivel-día (Bandeja), más reciente primero. Ids disjuntos (sesión vs session_id=null)
+  // → sin duplicados.
   const displayPagos = useMemo(
-    () => [...pagos.filter(p => !p.persistedId), ...dbPagos].sort((a, b) => b.at - a.at),
-    [pagos, dbPagos])
+    () => [...pagos.filter(p => !p.persistedId), ...dbPagos, ...dayPendientesPagos].sort((a, b) => b.at - a.at),
+    [pagos, dbPagos, dayPendientesPagos])
 
   // Ingresos adicionales ya persistidos en la base
   const dbIngresos: IngresoRow[] = useMemo(() => sessionMovements
@@ -186,36 +229,22 @@ export default function CashTurno({
       .catch(() => { if (!cancelled) setPropinasPagables([]) })
     return () => { cancelled = true }
   }, [openSession])
-  // Clave del movimiento de propinas (misma convención que reconcilePropinaEgreso)
-  const propKey = (p: TipPayoutSummary) => `Propinas turno ${p.session_date} ${shiftLabel(p.shift_type)}`
-  // Ya registradas (pagadas o pendientes) en CUALQUIER turno del día → no mostrar.
-  // La description incluye fecha+turno, así que el match es específico de esa propina.
-  const propinasRegistradas = new Set(
-    allMovements
-      .filter(m => m.subcategory === 'Propinas por turno' && m.status !== 'rechazado')
-      .map(m => m.description))
-  const propinasPorPagar = propinasPagables.filter(p =>
-    p.session_date >= PROPINAS_POR_PAGAR_DESDE && !propinasRegistradas.has(propKey(p)))
+  // Turnos aún sin registrar — criterio COMPARTIDO con el Cierre del Día (propinaPago:
+  // un movimiento con esa description, pagado o pendiente, lo salda). Misma vía, dos puertas.
+  const propinasPorPagar = propinasPorPagarDe(propinasPagables, allMovements)
   const pagarPropina = async (p: TipPayoutSummary, status: 'aprobado' | 'pendiente') => {
     if (!openSession || !profile || payingProp) return   // anti doble-registro
     const accion = status === 'aprobado' ? 'PAGAR ahora' : 'dejar PENDIENTE'
     if (!window.confirm(`¿${accion} las propinas de ${shiftLabel(p.shift_type)} por ${fi(p.total_payout_crc)}?`)) return
     setPayingProp(p.session_id)
     try {
+      // Forma del egreso COMPARTIDA (propinaEgresoFields) — idéntica a la histórica de esta puerta.
       const mov = await createCashMovement({
         session_id:    openSession.id,
         created_by:    profile.id,
-        movement_type: 'egreso_personal',
-        amount_crc:    p.total_payout_crc,
-        amount_usd:    0,
-        currency:      'CRC',
         exchange_rate: null,
-        description:   propKey(p),
-        subcategory:   'Propinas por turno',   // → finance.ts lo excluye del P&L (pass-through)
-        method:        'Efectivo',
-        caja_origen:   'Registradora',
+        ...propinaEgresoFields(p),
         status,                                 // 'pendiente' = el efectivo sigue en caja hasta pagarse
-        shift:         tipShiftToCaja(p.shift_type),
       })
       onMovAdded(mov)
     } catch (e) { onError(e instanceof Error ? e.message : 'Error registrando propinas') }
@@ -341,6 +370,9 @@ export default function CashTurno({
         // Bitcoin) sale del Banco y NO toca la caja (ROADMAP Fase 2D-A).
         caja_origen:   pago.method === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
         shift:         tipShiftToCaja(openSession.shift_type),
+        attachments:   pago.attachments,
+        // Pago a proveedor = mercadería → el trigger del server crea la tarea de Revisión de inventario.
+        ...MERCADERIA_CLASS,
       })
       // Ya está en la base → se mostrará vía dbPagos; quitamos el borrador en memoria.
       setPagos(prev => prev.filter(p => p.id !== pago.id))
@@ -362,6 +394,13 @@ export default function CashTurno({
   const [supSearch,   setSupSearch]   = useState('')   // texto de búsqueda del proveedor
   const [supOpen,     setSupOpen]     = useState(false) // dropdown de proveedores abierto
   const [movSaving,   setMovSaving]   = useState(false) // anti doble-submit (pago/ingreso)
+  // Fotos de la factura: las nuevas (File, aún sin subir) + las ya subidas (paths,
+  // al editar un pago existente). Se suben al confirmar — Storage requiere red.
+  const [draftFotos,     setDraftFotos]     = useState<File[]>([])
+  const [draftFotosPrev, setDraftFotosPrev] = useState<string[]>([])
+  // Previews locales de las fotos nuevas (objectURL); se revocan al cambiar la lista.
+  const fotoPreviews = useMemo(() => draftFotos.map(f => URL.createObjectURL(f)), [draftFotos])
+  useEffect(() => () => { fotoPreviews.forEach(u => URL.revokeObjectURL(u)) }, [fotoPreviews])
 
   // Alta rápida de proveedor desde la caja (cuando llega uno no registrado)
   const [addSupOpen,   setAddSupOpen]   = useState(false)
@@ -381,15 +420,13 @@ export default function CashTurno({
     finally { setAddSupSaving(false) }
   }
 
-  const openNewPago = () => {
-    setEditId(null); setDraftSup(''); setDraftCRC(''); setDraftUSD(''); setDraftMethod('Efectivo'); setDraftRef('')
-    setSupSearch(''); setSupOpen(false)
-    setPagoModal(true)
-  }
+  // El ALTA de pagos nuevos ahora es por el asistente "➕ Agregar" (F4.3c). El modal de pago sobrevive
+  // SOLO para EDITAR un pago existente (openEditPago) y para el guardado en el cierre (persistPago).
   const openEditPago = (p: PagoRow) => {
     setEditId(p.id); setDraftSup(p.supplier_id); setDraftCRC(p.amount_crc); setDraftUSD(p.amount_usd)
     setDraftMethod(p.method); setDraftRef(p.reference)
     setSupSearch(suppliers.find(s => s.id === p.supplier_id)?.name ?? ''); setSupOpen(false)
+    setDraftFotos([]); setDraftFotosPrev(p.attachments)
     setPagoModal(true)
   }
 
@@ -397,10 +434,14 @@ export default function CashTurno({
     const pago = displayPagos.find(p => p.id === id)
     if (pago?.persistedId) {
       // Borrado de un pago YA guardado → requiere autorización de gerencia
-      if (!(await requireManager())) return
+      const auth = await requireManager()
+      if (!auth.ok) return
+      // Motivo obligatorio: el borrado arrastra el inventario ligado y queda en la auditoría (mig 039).
+      const note = await askNote('pago a proveedor')
+      if (!note) return
       // Refrescar desde la fuente de verdad (re-fetch en el padre). Antes se pasaba un
       // PagoRow a onMovAdded, que lo agregaba en memoria → fila fantasma tras el borrado.
-      try { await deleteCashMovement(pago.persistedId); onRefresh() }
+      try { await deleteCashMovement(pago.persistedId, note, auth.managerEmail, auth.managerPassword); onRefresh() }
       catch (e) { onError(`No se pudo eliminar el pago: ${e instanceof Error ? e.message : 'reintentá'}`) }
     } else {
       setPagos(prev => prev.filter(p => p.id !== id))
@@ -409,13 +450,35 @@ export default function CashTurno({
 
   const confirmPago = async () => {
     if (!draftSup || !Number(draftCRC) || movSaving) return  // proveedor + monto requeridos · anti doble-submit
+    // Editar un pago YA guardado = reemplazo (borra el movimiento viejo + re-crea) → requiere la
+    // MISMA autorización de gerencia que el borrado. Antes este camino llamaba la cascada SIN
+    // credenciales y la RPC (mig 044) rechazaba al cajero con "No autorizado" sin pedirle nada.
+    const old = editId ? displayPagos.find(p => p.id === editId) : null
+    let auth: ManagerAuth = { ok: true }
+    if (old?.persistedId) {
+      auth = await requireManager()
+      if (!auth.ok) return   // canceló o contraseña inválida → no se toca nada (el modal de edición queda abierto)
+    }
     setMovSaving(true)
     const prov = suppliers.find(s => s.id === draftSup)
+    // Subir las fotos nuevas ANTES de tocar el movimiento. Si una falla (sin red),
+    // el pago entra igual sin esa foto y se avisa — la plata no espera a Storage.
+    const fotoPaths: string[] = [...draftFotosPrev]
+    let fotosFallidas = 0
+    for (const f of draftFotos) {
+      try { fotoPaths.push(await uploadFacturaPhoto(f)) }
+      catch { fotosFallidas++ }
+    }
+    if (fotosFallidas > 0) {
+      onError(`${fotosFallidas} foto(s) de la factura no se pudieron subir (¿sin conexión?). El pago se registra igual — volvé a editarlo con red para reintentar la foto.`)
+    }
     // Si edito uno ya persistido, borro su movimiento viejo antes de re-crear
-    const old = editId ? displayPagos.find(p => p.id === editId) : null
     if (old?.persistedId) {
-      // ídem removePago: refrescar desde la fuente de verdad, no inyectar fila fantasma.
-      try { await deleteCashMovement(old.persistedId); onRefresh() }
+      // Edición = reemplazo: borra el movimiento viejo (cascada de inventario incluida) y re-crea.
+      // Nota automática (no es un borrado "a mano" del usuario, es parte del flujo de editar).
+      // Las credenciales de gerencia (si autorizó un cajero) viajan a la RPC, que las re-valida
+      // server-side y audita al autorizante en movement_deletions.authorized_by (mig 044).
+      try { await deleteCashMovement(old.persistedId, 'Reemplazo por edición de pago a proveedor', auth.managerEmail, auth.managerPassword); onRefresh() }
       catch (e) { onError(`No se pudo reemplazar el pago anterior: ${e instanceof Error ? e.message : 'reintentá'}`); setMovSaving(false); return }
     }
     const pago: PagoRow = {
@@ -428,6 +491,7 @@ export default function CashTurno({
       method:        draftMethod,
       reference:     draftRef,
       at:            old?.at ?? Date.now(),
+      attachments:   fotoPaths,
       persistedId:   null,
     }
     // más reciente arriba
@@ -445,46 +509,18 @@ export default function CashTurno({
     return () => window.removeEventListener('keydown', onKey)
   }, [pagoModal])
 
-  // ── Ingreso adicional (por modal + confirmar) ──────────────
-  const [ingresoModal, setIngresoModal] = useState(false)
-  const [draftIngCRC,  setDraftIngCRC]  = useState<number | ''>('')
-  const [draftIngUSD,  setDraftIngUSD]  = useState<number | ''>('')
-  const [draftIngNota, setDraftIngNota] = useState('')
-  const openNewIngreso = () => { setDraftIngCRC(''); setDraftIngUSD(''); setDraftIngNota(''); setIngresoModal(true) }
-  // BUG A FIX: persistir el ingreso adicional AL INSTANTE (antes sólo se guardaba al
-  // cerrar el turno → si recargabas antes del cierre, se perdía).
-  const confirmIngreso = async () => {
-    if (!openSession || !profile || movSaving) return
-    if (!Number(draftIngCRC) && !Number(draftIngUSD)) return
-    setMovSaving(true)
-    const draft: IngresoRow = { id: crypto.randomUUID(), crc: Number(draftIngCRC) || '', usd: Number(draftIngUSD) || '', nota: draftIngNota.trim(), persistedId: null }
-    setIngresos(prev => [...prev, draft])
-    setIngresoModal(false)
-    try {
-      const mov = await createCashMovement({
-        session_id:    openSession.id,
-        created_by:    profile.id,
-        movement_type: 'ingreso',
-        amount_crc:    Number(draft.crc) || 0,
-        amount_usd:    Number(draft.usd) || 0,
-        currency:      'CRC',
-        exchange_rate: tc,
-        description:   draft.nota || 'Ingreso adicional',
-        subcategory:   'Ingreso adicional',
-        method:        'Efectivo',
-        caja_origen:   'Registradora',
-        shift:         tipShiftToCaja(openSession.shift_type),
-      })
-      setIngresos(prev => prev.filter(i => i.id !== draft.id))  // ahora vive en la base (dbIngresos)
-      onMovAdded(mov)
-    } catch { /* queda como borrador y se reintenta al cierre */ }
-    finally { setMovSaving(false) }
-  }
+  // ── Ingresos adicionales ───────────────────────────────────
+  // El ALTA de ingresos nuevos ahora es por el asistente "➕ Agregar" (F4.3c). Se conserva el estado
+  // `ingresos` (drafts en memoria) porque el cierre (handleCierre) y la lista lo siguen usando, y el ×
+  // para quitar un ingreso ya registrado.
   const removeIngreso = async (id: string) => {
     const row = displayIngresos.find(i => i.id === id)
     if (row?.persistedId) {
-      if (!(await requireManager())) return
-      try { await deleteCashMovement(row.persistedId); onRefresh() }
+      const auth = await requireManager()
+      if (!auth.ok) return
+      const note = await askNote('ingreso')
+      if (!note) return
+      try { await deleteCashMovement(row.persistedId, note, auth.managerEmail, auth.managerPassword); onRefresh() }
       catch (e) { onError(`No se pudo eliminar el ingreso: ${e instanceof Error ? e.message : 'reintentá'}`) }
     } else {
       setIngresos(prev => prev.filter(i => i.id !== id))
@@ -492,54 +528,18 @@ export default function CashTurno({
   }
 
   // ── Otros egresos del turno (delivery, operativo, salario) ──
-  // Salen de la Caja Diaria. Se persisten al instante (como los pagos).
-  const [egresoModal,    setEgresoModal]    = useState(false)
-  const [draftEgConcepto, setDraftEgConcepto] = useState<typeof CONCEPTOS_EGRESO[number]['id']>('delivery')
-  const [draftEgCRC,     setDraftEgCRC]     = useState<number | ''>('')
-  const [draftEgMethod,  setDraftEgMethod]  = useState<'Efectivo' | 'Transferencia'>('Efectivo')
-  const [draftEgNota,    setDraftEgNota]    = useState('')
-  const [egSaving,       setEgSaving]       = useState(false)
-  const openNewEgreso = () => { setDraftEgConcepto('delivery'); setDraftEgCRC(''); setDraftEgMethod('Efectivo'); setDraftEgNota(''); setEgresoModal(true) }
-  const confirmEgreso = async () => {
-    if (!openSession || !profile || !Number(draftEgCRC)) return
-    const c = CONCEPTOS_EGRESO.find(x => x.id === draftEgConcepto)!
-    setEgSaving(true)
-    // El detalle vive en la nota → de ahí se deriva el destino contable del Delivery:
-    // electrónico (el cliente ya pagó, la caja solo retira efectivo) = pass-through;
-    // el resto (repartidor en efectivo) → a7100. "Delivery dueños" es opción propia.
-    const esElectronico = /sinpe|lafise|bitcoin|tarjeta|datafono|datáfono/.test(draftEgNota.toLowerCase())
-    const movType = c.type as MovementType
-    const movAccount = c.id === 'delivery' && esElectronico ? null : c.account
-    try {
-      const mov = await createCashMovement({
-        session_id:    openSession.id,
-        created_by:    profile.id,
-        movement_type: movType,
-        amount_crc:    Number(draftEgCRC) || 0,
-        amount_usd:    0,
-        currency:      'CRC',
-        exchange_rate: tc,
-        description:   draftEgNota || c.label,
-        subcategory:   c.sub,
-        supplier_name: draftEgNota || c.label,
-        method:        draftEgMethod,
-        caja_origen:   draftEgMethod === 'Efectivo' ? 'Caja Proveedores' : 'Banco',
-        account_id:    movAccount,
-        shift:         tipShiftToCaja(openSession.shift_type),
-      })
-      onMovAdded(mov)
-      setEgresoModal(false); setDraftEgCRC(''); setDraftEgNota('')
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Error registrando egreso')
-    } finally { setEgSaving(false) }
-  }
+  // El ALTA de egresos operativos nuevos ahora es por el asistente "➕ Agregar" (F4.3c). Se conservan la
+  // lista (otrosEgresosList) y el × para quitar uno ya registrado.
   // Egresos del turno que NO son mercadería (los pagos a proveedor van aparte)
   const otrosEgresosList = sessionMovements.filter(m =>
     m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso'
     && m.movement_type !== 'egreso_mercaderia' && m.status !== 'rechazado')
   const removeEgreso = async (id: string) => {
-    if (!(await requireManager())) return
-    try { await deleteCashMovement(id); onRefresh() }
+    const auth = await requireManager()
+    if (!auth.ok) return
+    const note = await askNote('egreso')
+    if (!note) return
+    try { await deleteCashMovement(id, note, auth.managerEmail, auth.managerPassword); onRefresh() }
     catch (e) { onError(`No se pudo eliminar el egreso: ${e instanceof Error ? e.message : 'reintentá'}`) }
   }
 
@@ -547,8 +547,9 @@ export default function CashTurno({
   const descartarTurno = async () => {
     if (!openSession) return
     if (!window.confirm(`¿Descartar el turno ${openSession.shift_type} del ${openSession.session_date}?\nSe borra el turno y todos sus movimientos. No se puede deshacer.`)) return
-    if (!(await requireManager())) return
-    try { await discardCashSession(openSession.id); onSessionClose() }
+    const auth = await requireManager()
+    if (!auth.ok) return
+    try { await discardCashSession(openSession.id, auth.managerEmail, auth.managerPassword); onSessionClose() }
     catch (e) { onError(e instanceof Error ? e.message : 'Error al descartar') }
   }
 
@@ -556,7 +557,7 @@ export default function CashTurno({
   const [checking, setChecking] = useState(false)
   const handleMiddayCheck = async () => {
     if (!openSession || !profile || checking) return
-    if (!(await requireManager())) return
+    if (!(await requireManager()).ok) return
     setChecking(true)
     try {
       await updateMiddayCheck(openSession.id, profile.id)
@@ -763,6 +764,15 @@ export default function CashTurno({
         </div>
       </div>
 
+      {/* F4.3a — "➕ Agregar" único: asistente manual (captura + clasificación advisory + matriz RN-3).
+          Additivo: los botones por sección (pago/ingreso/egreso) siguen abajo hasta F4.3c. */}
+      {canManage && (
+        <button className="cd-btn-green" style={{ width: '100%', marginBottom: '0.75rem', padding: '0.7rem' }}
+          onClick={() => setAgregarOpen(true)}>
+          ➕ Agregar (asistente)
+        </button>
+      )}
+
       {/* Check de proveedores (mediodía) — visto, NO cierra la caja */}
       <div className="cd-section" style={{ marginBottom: '0.75rem' }}>
         <div className="cd-section-head" style={{ padding: '0.5rem 0.75rem' }}>
@@ -791,9 +801,6 @@ export default function CashTurno({
             <div className="cd-section-title" style={{ fontSize: '0.85rem' }}>Ingresos adicionales</div>
             <div className="cd-section-sub" style={{ fontSize: '0.66rem' }}>Aceite, otros ingresos en efectivo</div>
           </div>
-          {canManage && (
-            <button className="cd-section-add" onClick={openNewIngreso}>+ Agregar</button>
-          )}
         </div>
         {displayIngresos.length > 0 && (
           <div className="cd-section-body">
@@ -829,9 +836,6 @@ export default function CashTurno({
               }
             </div>
           </div>
-          {canManage && (
-            <button className="cd-section-add" onClick={openNewPago}>+ Agregar pago</button>
-          )}
         </div>
         <div className="cd-section-body">
           {displayPagos.length === 0 && <div className="cd-empty-row">ℹ Sin pagos registrados</div>}
@@ -845,13 +849,20 @@ export default function CashTurno({
                   {` · ${new Date(p.at).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`}
                   {p.method === 'Transferencia' && <span style={{ color: '#a07030' }}> · pendiente · no descuenta efectivo</span>}
                   {p.method !== 'Efectivo' && p.method !== 'Transferencia' && <span style={{ color: '#2a7a6a' }}> · banco</span>}
+                  {p.readonly && <span style={{ color: '#a07030' }}> · desde Bandeja (se gestiona en Pendientes)</span>}
                   {!p.persistedId && <span style={{ color: '#c0392b' }}> · sin guardar</span>}
                   {p.pending && <span style={{ color: '#a07830', fontWeight: 700 }}> · ⏳ por sincronizar</span>}
+                  {/* T3-B: pago de mercadería guardado SIN factura enlazada (documents) NI fotos adjuntas
+                      → nota para control del manager. Mismo color que "falta factura" (FacturaVerify). */}
+                  {docsLoaded && p.persistedId && p.attachments.length === 0 && !linkedDocMovs.has(p.persistedId) && (
+                    <span style={{ color: '#c8a030', fontWeight: 700 }}> · ⚠ sin foto</span>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
+                {p.attachments.length > 0 && <FacturaThumbs paths={p.attachments} />}
                 <span style={{ fontWeight: 700, fontFamily: 'var(--font-serif)' }}>{fi(Number(p.amount_crc) || 0)}</span>
-                {canManage && (
+                {canManage && !p.readonly && (
                   <>
                     <button onClick={() => openEditPago(p)} title="Editar"
                       style={{ background: 'none', border: '1px solid var(--t-border,#d4cfc4)', color: '#5a5040', borderRadius: 3, padding: '2px 7px', fontSize: '0.72rem', cursor: 'pointer' }}>✏</button>
@@ -891,9 +902,6 @@ export default function CashTurno({
             <div className="cd-section-title">Pagos operativos</div>
             <div className="cd-section-sub">Delivery, operativo, salario en efectivo — salen de la Caja Diaria</div>
           </div>
-          {canManage && (
-            <button className="cd-section-add" onClick={openNewEgreso}>+ Agregar egreso</button>
-          )}
         </div>
         <div className="cd-section-body">
           {otrosEgresosList.length === 0 && <div className="cd-empty-row">ℹ Sin otros egresos registrados</div>}
@@ -1106,6 +1114,19 @@ export default function CashTurno({
       )}
 
       {/* Modal: agregar / editar pago a proveedor */}
+      {agregarOpen && openSession && profile && (
+        <AgregarAsistente
+          openSession={openSession}
+          suppliers={suppliers}
+          role={profile.role}
+          createdBy={profile.id}
+          tc={tc}
+          onCreated={mov => { onMovAdded(mov); setAgregarOpen(false) }}
+          onClose={() => setAgregarOpen(false)}
+          onError={onError}
+        />
+      )}
+
       {pagoModal && (
         <div className="cd-modal-overlay" onClick={() => setPagoModal(false)}>
           <div className="cd-modal" onClick={e => e.stopPropagation()}>
@@ -1212,109 +1233,57 @@ export default function CashTurno({
                 onChange={e => setDraftRef(e.target.value)} />
             </div>
 
-            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
-              <button className="tips-btn-ghost" onClick={() => setPagoModal(false)}>Cancelar</button>
-              <button className="cd-btn-green" onClick={confirmPago} disabled={!draftSup || !Number(draftCRC)}>
-                {editId ? '✓ Guardar cambios' : '✓ Confirmar pago'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: agregar ingreso adicional */}
-      {ingresoModal && (
-        <div className="cd-modal-overlay" onClick={() => setIngresoModal(false)}>
-          <div className="cd-modal" onClick={e => e.stopPropagation()}>
-            <div className="cd-modal-title">Agregar ingreso adicional</div>
-            <p style={{ fontSize: '0.78rem', color: 'var(--t-muted)', margin: '0.25rem 0 0' }}>
-              Ingresos en efectivo no relacionados a ventas (ej: venta de aceite, otros).
-            </p>
-            <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field">
-                <div className="tips-field-label">Monto ₡ colones</div>
-                <div className="cd-monto-wrap">
-                  <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" value={draftIngCRC} placeholder="0" autoFocus
-                    onChange={e => setDraftIngCRC(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
-              <div className="tips-field">
-                <div className="tips-field-label">Monto $ dólares</div>
-                <div className="cd-monto-wrap usd">
-                  <span className="cd-prefix">$</span>
-                  <input type="number" className="cd-monto-input" value={draftIngUSD} placeholder="0"
-                    onChange={e => setDraftIngUSD(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
-            </div>
+            {/* Fotos de la factura — en móvil abre la cámara directo (capture).
+                Quedan guardadas en el bucket 'facturas' y vinculadas al pago (mig 026). */}
             <div className="tips-field" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field-label">Motivo / nota</div>
-              <input type="text" className="tips-input-dark" value={draftIngNota} placeholder="Motivo del ingreso…"
-                style={{ width: '100%' }} onChange={e => setDraftIngNota(e.target.value)} />
-            </div>
-            <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
-              <button className="tips-btn-ghost" onClick={() => setIngresoModal(false)}>Cancelar</button>
-              <button className="cd-btn-green" onClick={confirmIngreso} disabled={!Number(draftIngCRC) && !Number(draftIngUSD)}>
-                ✓ Confirmar ingreso
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: otro egreso del turno */}
-      {egresoModal && (
-        <div className="cd-modal-overlay" onClick={() => setEgresoModal(false)}>
-          <div className="cd-modal" onClick={e => e.stopPropagation()}>
-            <div className="cd-modal-title">Otro egreso del turno</div>
-            <p style={{ fontSize: '0.78rem', color: 'var(--t-muted)', margin: '0.25rem 0 0' }}>
-              Sale de la Caja Diaria. (Las propinas se pagan en el cierre del turno, no acá.)
-            </p>
-            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field-label">Concepto</div>
-              <select className="tips-input-dark" value={draftEgConcepto} onChange={e => setDraftEgConcepto(e.target.value as typeof draftEgConcepto)} style={{ width: '100%' }}>
-                {CONCEPTOS_EGRESO.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </select>
-            </div>
-            <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field">
-                <div className="tips-field-label">Monto ₡ colones</div>
-                <div className="cd-monto-wrap">
-                  <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" value={draftEgCRC} placeholder="0" autoFocus
-                    onChange={e => setDraftEgCRC(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
-              <div className="tips-field">
-                <div className="tips-field-label">Método</div>
-                <div className="cd-metodo-tabs">
-                  <div className={`cd-metodo-tab ef ${draftEgMethod === 'Efectivo' ? 'active' : ''}`} onClick={() => setDraftEgMethod('Efectivo')}>💵 Efectivo</div>
-                  <div className={`cd-metodo-tab tr ${draftEgMethod === 'Transferencia' ? 'active' : ''}`} onClick={() => setDraftEgMethod('Transferencia')}>🏦 Transf.</div>
-                </div>
-              </div>
-            </div>
-            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
-              <div className="tips-field-label">Beneficiario / nota</div>
-              <input type="text" className="tips-input-dark" value={draftEgNota} placeholder="Ej: repartidor, empleado, detalle…"
-                style={{ width: '100%' }} onChange={e => setDraftEgNota(e.target.value)} />
-              {(draftEgConcepto === 'delivery' || draftEgConcepto === 'propinas') && (
-                <div style={{ fontSize: '0.68rem', color: '#5a5040', marginTop: 4 }}>
-                  El detalle va acá: <em>"por SINPE", "tarjeta", "turno AM"…</em> — la nota se ve en el listado
-                  {draftEgConcepto === 'delivery' && /sinpe|lafise|bitcoin|tarjeta|datafono|datáfono/.test(draftEgNota.toLowerCase()) &&
-                    <strong> · cobrado electrónico → no cuenta como gasto (retiro de efectivo)</strong>}
+              <div className="tips-field-label">Fotos de la factura</div>
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                border: '2px dashed var(--t-border,#d4cfc4)', borderRadius: 6, padding: '0.8rem',
+                cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, color: '#5a5040' }}>
+                📷 Sacar foto / agregar imagen
+                <input type="file" accept="image/*" capture="environment" multiple
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    const files = Array.from(e.target.files ?? [])
+                    if (files.length) setDraftFotos(prev => [...prev, ...files])
+                    e.target.value = ''   // permite re-sacar la misma foto
+                  }} />
+              </label>
+              {(draftFotosPrev.length > 0 || draftFotos.length > 0) && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
+                  {draftFotosPrev.length > 0 && <FacturaThumbs paths={draftFotosPrev} size={52} />}
+                  {draftFotosPrev.length > 0 && (
+                    <button type="button" onClick={() => setDraftFotosPrev([])} title="Quitar las fotos ya guardadas de este pago"
+                      style={{ background: 'none', border: '1px solid #e0b0b0', color: '#c0392b', borderRadius: 3, padding: '2px 7px', fontSize: '0.68rem', cursor: 'pointer' }}>
+                      quitar guardadas
+                    </button>
+                  )}
+                  {draftFotos.map((f, i) => (
+                    <span key={i} style={{ position: 'relative', display: 'inline-block' }}>
+                      <img src={fotoPreviews[i]} alt={f.name}
+                        style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--t-border,#d4cfc4)' }} />
+                      <button type="button" onClick={() => setDraftFotos(prev => prev.filter((_, j) => j !== i))}
+                        style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%',
+                          background: '#c0392b', color: '#fff', border: 'none', fontSize: '0.62rem', lineHeight: 1, cursor: 'pointer' }}>✕</button>
+                    </span>
+                  ))}
                 </div>
               )}
+              <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 4 }}>
+                Se suben al confirmar el pago (necesitan conexión). Después se ven como miniatura en la lista — tap para verla completa.
+              </div>
             </div>
+
             <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
-              <button className="tips-btn-ghost" onClick={() => setEgresoModal(false)} disabled={egSaving}>Cancelar</button>
-              <button className="cd-btn-green" onClick={confirmEgreso} disabled={egSaving || !Number(draftEgCRC)}>
-                {egSaving ? 'Guardando…' : '✓ Registrar egreso'}
+              <button className="tips-btn-ghost" onClick={() => setPagoModal(false)}>Cancelar</button>
+              <button className="cd-btn-green" onClick={confirmPago} disabled={!draftSup || !Number(draftCRC) || movSaving}>
+                {movSaving ? 'Guardando…' : editId ? '✓ Guardar cambios' : '✓ Confirmar pago'}
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   )
 }

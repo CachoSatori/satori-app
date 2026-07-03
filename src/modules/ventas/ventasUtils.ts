@@ -3,7 +3,7 @@ import type {
   AggSalonero, AggGeneral, AggCajero, ContabilidadDay,
   ProductMap, HistMap, Meta,
 } from '../../shared/types/ventas'
-import { isCajeroName, fi as _fi, todayCR } from '../../shared/utils'
+import { isCajeroName, todayCR } from '../../shared/utils'
 
 // ── Cajeros detection ────────────────────────────────────────
 export function esCajero(name: string): boolean { return isCajeroName(name) }
@@ -21,9 +21,6 @@ export function pct(a: number, b: number): string {
   if (!b) return '—'
   return ((a - b) / Math.abs(b) * 100).toFixed(1) + '%'
 }
-export function fmtPct(n: number): string {
-  return n.toFixed(1) + '%'
-}
 export function fmtDate(d: string): string {
   if (!d) return ''
   const [y, m, dd] = d.split('-')
@@ -38,9 +35,6 @@ export function fmtMonthLabel(ym: string): string {
 }
 // Timezone-safe today (Costa Rica UTC-6)
 export function todayISO(): string { return todayCR() }
-export function monthKey(date: string): string {
-  return date.slice(0, 7)
-}
 export function daysInMonth(ym: string): number {
   const [y, m] = ym.split('-').map(Number)
   return new Date(y, m, 0).getDate()
@@ -64,10 +58,6 @@ export function metaColor(actual: number, meta: number, dir: 'hi'|'lo' = 'hi'): 
   if (ratio >= 1)    return 'var(--vt-green)'
   if (ratio >= 0.85) return 'var(--vt-gold)'
   return 'var(--vt-red)'
-}
-export function metaDot(actual: number, meta: number, dir: 'hi'|'lo' = 'hi'): string {
-  const col = metaColor(actual, meta, dir)
-  return col ? `<span style="color:${col}">●</span>` : ''
 }
 
 // ── All active dates ──────────────────────────────────────────

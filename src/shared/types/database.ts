@@ -13,6 +13,7 @@ export type UserRole =
   | 'barback'
   | 'runner'
   | 'cocina'
+  | 'proveedor'   // la "bandeja": puesto fijo que registra pagos a proveedor con foto (mig 026)
 
 export type Currency = 'CRC' | 'USD'
 
@@ -133,6 +134,9 @@ export interface CashMovement {
   created_at: string
   updated_at: string
   client_op_id?: string | null      // idempotencia del replay offline (mig 021)
+  attachments?: string[]            // paths de fotos de factura en el bucket 'facturas' (mig 026)
+  factura_verified_by?: string | null  // quién verificó la factura contra el movimiento (mig 038)
+  factura_verified_at?: string | null  // cuándo se verificó (mig 038)
   _pending?: boolean                // SOLO cliente: encolado en la outbox, sin sincronizar
 }
 

@@ -1,8 +1,11 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 import { upsertSupplier, deactivateSupplier } from '../../shared/api/cash'
+import { listLinkedDocs, uploadImage, createDocumentRow, extractImage, type DocumentRow } from '../../shared/api/documents'
 import { fi, todayStr, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
+import { useAuth } from '../../shared/hooks/useAuth'
+import FacturaVerify from '../../shared/FacturaVerify'
 
 const CICLO_DIAS: Record<string, number> = {
   'Diario': 1, 'Semanal': 7, 'Quincenal': 14, 'Mensual': 30,
@@ -35,6 +38,19 @@ function daysBetween(a: string, b: string): number {
 
 export default function CashProveedores({ suppliers, movements, onRefresh }: Props) {
   const requireManager = useManagerOverride()
+  const { profile } = useAuth()
+
+  // Facturas enlazadas (foto por pago) — una sola consulta por lote, no por fila.
+  const [docMap, setDocMap] = useState<Record<string, DocumentRow>>({})
+  const reloadDocs = useCallback(() => {
+    listLinkedDocs().then(ds => {
+      const m: Record<string, DocumentRow> = {}
+      for (const d of ds) if (d.linked_movement_id) m[d.linked_movement_id] = d
+      setDocMap(m)
+    }).catch(() => {})
+  }, [])
+  useEffect(() => { reloadDocs() }, [reloadDocs])
+
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<FormState>(empty)
   const [saving, setSaving] = useState(false)
@@ -88,7 +104,7 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('¿Desactivar este proveedor?')) return
-    if (!(await requireManager())) return
+    if (!(await requireManager()).ok) return
     try { await deactivateSupplier(id); onRefresh() }
     catch { /* noop */ }
   }
@@ -241,14 +257,26 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
                       {expandedProv === s.id && (
                         <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
                           {provPayments.map(pmt => (
-                            <div key={pmt.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', padding: '0.25rem 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                              <div>
-                                <span style={{ color: '#888' }}>{pmt.created_at?.slice(0, 10)}</span>
-                                {pmt.method !== 'Efectivo' && <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? '#c8a030' : '#888' }}>· {pmt.method}</span>}
+                            <div key={pmt.id} style={{ padding: '0.25rem 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem' }}>
+                                <div>
+                                  <span style={{ color: '#888' }}>{pmt.created_at?.slice(0, 10)}</span>
+                                  {pmt.method !== 'Efectivo' && <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? '#c8a030' : '#888' }}>· {pmt.method}</span>}
+                                  <span style={{ marginLeft: '0.4rem', fontSize: '0.62rem', color: pmt.status === 'pendiente' ? '#c8a030' : '#888' }}>· {pmt.status === 'pendiente' ? 'Pendiente' : 'Pagado'}</span>
+                                </div>
+                                <span style={{ fontWeight: 600, color: pmt.status === 'pendiente' ? '#c8a030' : 'var(--t-teal)' }}>
+                                  {fi(pmt.amount_crc)}
+                                </span>
                               </div>
-                              <span style={{ fontWeight: 600, color: pmt.status === 'pendiente' ? '#c8a030' : 'var(--t-teal)' }}>
-                                {fi(pmt.amount_crc)}
-                              </span>
+                              <div style={{ marginTop: 2 }}>
+                                <PagoFoto
+                                  movement={pmt}
+                                  doc={docMap[pmt.id] ?? null}
+                                  createdBy={profile?.id ?? ''}
+                                  onAdded={d => { setDocMap(prev => ({ ...prev, [pmt.id]: d })); reloadDocs() }}
+                                  onRefresh={onRefresh}
+                                />
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -320,5 +348,50 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
         </div>
       )}
     </div>
+  )
+}
+
+// Indicador de FOTO por pago. Con factura → FacturaVerify (📷 ampliable + verificado,
+// reusa signedUrl). Sin factura → "⚠ falta factura" + "➕ Agregar foto": sube al bucket
+// `documents`, enlaza el doc al movimiento (estado 'procesado') y corre extractImage —
+// si la IA detecta productos, la factura cae sola en "Inventario pendiente" (Bandeja).
+function PagoFoto({ movement, doc, createdBy, onAdded, onRefresh }: {
+  movement: CashMovement
+  doc: DocumentRow | null
+  createdBy: string
+  onAdded: (doc: DocumentRow) => void
+  onRefresh: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr]   = useState<string | null>(null)
+
+  // Con factura: el verificado ya muestra la foto (📷) y permite ampliarla.
+  if (doc) return <FacturaVerify movement={movement} doc={doc} compact onVerified={onRefresh} />
+
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy(true); setErr(null)
+    try {
+      const { path, sha } = await uploadImage(file, file.name)
+      const detected = await extractImage(path)         // la IA lee la factura (productos → inventario)
+      const ex = detected[0] ?? null
+      const row = await createDocumentRow(path, sha, ex, createdBy, movement.id, 'procesado')
+      onAdded(row)
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : 'No se pudo agregar la foto')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: '0.66rem' }}>
+      <span style={{ color: '#c8a030', fontWeight: 700 }}>⚠ falta factura</span>
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--t-teal)', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', textDecoration: 'underline' }}>
+        {busy ? '⏳ subiendo…' : '➕ Agregar foto'}
+        <input type="file" accept="image/*" capture="environment" hidden onChange={onPick} disabled={busy} />
+      </label>
+      {err && <span style={{ color: '#c0392b' }}>{err}</span>}
+    </span>
   )
 }

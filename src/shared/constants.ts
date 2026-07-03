@@ -15,4 +15,5 @@ export const ROLE_LABELS: Record<string, string> = {
   barback:  'Barback',
   runner:   'Runner',
   cocina:   'Cocina',
+  proveedor: 'Bandeja proveedores',
 }

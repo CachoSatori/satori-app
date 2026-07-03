@@ -2444,6 +2444,225 @@ html, body, #root {
 .cd-cierre-resultado.ok   { background: #e8f5ec; border: 1px solid #b0d8b8; color: #2a7a4a; }
 .cd-cierre-resultado.fail { background: #fdf0ee; border: 1px solid #f0b0b0; color: #c23b22; }
 
+/* Resumen del Cierre del Día — filas claras (patrón Caja Diaria) */
+.cierre-resumen {
+  background: var(--t-paper, #f5f0e8);
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+  color: var(--t-ink, #0d0d0d);
+}
+.cierre-resumen-header {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6a6250;
+  background: var(--t-panel, #ede8de);
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+}
+.cierre-resumen-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7.4em 5.4em;
+  column-gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+  font-size: 0.82rem;
+}
+.cierre-resumen-row:last-child { border-bottom: none; }
+.cierre-resumen-row .lbl { color: #6a6250; }
+.cierre-resumen-row .val {
+  font-family: 'DM Mono', monospace;
+  font-weight: 700;
+  color: var(--t-ink, #0d0d0d);
+  white-space: nowrap;
+  text-align: right;
+}
+/* encabezado de columnas ₡ | US$ */
+.cierre-resumen-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7.4em 5.4em;
+  column-gap: 0.5rem;
+  padding: 0.3rem 0.85rem;
+  background: var(--t-panel, #ede8de);
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8a8272;
+}
+.cierre-resumen-cols span { text-align: right; }
+/* fila clave destacada (= Debería quedar) */
+.cierre-resumen-row.destacada { background: rgba(74,154,106,.12); }
+.cierre-resumen-row.destacada .lbl { color: #2a7a4a; font-weight: 700; }
+.cierre-resumen-row.destacada .val { color: #2a7a4a; font-size: 0.92rem; }
+
+/* Dólares — fila propia */
+.cierre-resumen-usd {
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.5rem 0.85rem;
+  border-radius: 2px;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+.cierre-resumen-usd.ok   { background: #e8f5ec; border: 1px solid #b0d8b8; color: #2a7a4a; }
+.cierre-resumen-usd.fail { background: #fdf0ee; border: 1px solid #f0b0b0; color: #c23b22; }
+
+/* móvil: columnas ₡/US$ más angostas para que la etiqueta respire */
+@media (max-width: 420px) {
+  .cierre-resumen-row,
+  .cierre-resumen-cols { grid-template-columns: minmax(0, 1fr) 6.8em 5em; }
+  .cierre-resumen-row  { font-size: 0.78rem; }
+}
+
+/* ── Cierre del Día — tema claro de toda la pestaña ─────────── */
+.cierre-tab {
+  background: var(--t-paper, #f5f0e8);
+  color: var(--t-ink, #0d0d0d);
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 3px;
+  padding: 1rem 0.75rem;
+}
+
+/* tarjeta genérica (secciones, mediodía sellado, día cerrado) */
+.cierre-card {
+  background: #fff;
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.875rem;
+}
+.cierre-card-head {
+  padding: 0.625rem 0.875rem;
+  background: var(--t-panel, #ede8de);
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.cierre-card-body { padding: 0.875rem; }
+
+/* fila etiqueta|valor dentro de una tarjeta (mediodía sellado) */
+.cierre-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.875rem;
+  border-bottom: 1px solid #eee8dc;
+  font-size: 0.8rem;
+}
+.cierre-kv .lbl { color: #6a6250; }
+.cierre-kv .val { font-weight: 500; color: var(--t-ink, #0d0d0d); }
+.cierre-kv.total { background: var(--t-panel, #ede8de); border-bottom: none; padding: 0.5rem 0.875rem; }
+
+/* inputs claros (texto, fecha, select) */
+.cierre-input {
+  background: #fff;
+  border: 1px solid var(--t-border, #d4cfc4);
+  color: var(--t-ink, #0d0d0d);
+  border-radius: 2px;
+}
+
+/* input de monto con prefijo ₡/$ */
+.cierre-monto {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 2px;
+}
+.cierre-monto .pfx { padding: 0 8px; color: #8a8272; flex-shrink: 0; }
+.cierre-monto input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--t-ink, #0d0d0d);
+  padding: 0 8px;
+  font-family: 'DM Mono', monospace;
+}
+
+/* barra de fases (dorado=pendiente, verde=ok, gris=esperando) */
+.cierre-fase {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.cierre-fase.pend { background: #faf3e0; border: 1px solid #c8a030; color: #8a6d1f; }
+.cierre-fase.ok   { background: #e8f5ec; border: 1px solid #4a9a6a; color: #2a7a4a; }
+.cierre-fase.wait { background: var(--t-panel, #ede8de); border: 1px solid var(--t-border, #d4cfc4); color: #8a8272; }
+
+/* avisos/hints semánticos sobre fondo claro */
+.cierre-hint {
+  border-radius: 2px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  margin-bottom: 0.75rem;
+}
+.cierre-hint.gold  { background: #faf3e0; border: 1px solid #c8a030; color: #8a6d1f; }
+.cierre-hint.blue  { background: #eaf3f8; border: 1px solid #7ab4d4; color: #3a7794; }
+.cierre-hint.red   { background: #fdf0ee; border: 1px solid #f0b0b0; color: #c23b22; }
+.cierre-hint.green { background: #e8f5ec; border: 1px solid #b0d8b8; color: #2a7a4a; }
+
+/* tabla de separaciones (conteo físico) */
+.cierre-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.75rem;
+  background: #fff;
+  border: 1px solid var(--t-border, #d4cfc4);
+}
+.cierre-table th {
+  text-align: center;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.62rem;
+  color: #6a6250;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--t-panel, #ede8de);
+  border-bottom: 1px solid var(--t-border, #d4cfc4);
+  border-left: 1px solid var(--t-border, #d4cfc4);
+}
+.cierre-table th:first-child { border-left: none; text-align: left; padding-left: 0.625rem; width: 180px; }
+.cierre-table td { border-bottom: 1px solid #eee8dc; border-right: 1px solid #eee8dc; }
+.cierre-table td:last-child { border-right: none; }
+.cierre-table tr.total td { background: var(--t-panel, #ede8de); border-top: 2px solid var(--t-border, #d4cfc4); border-bottom: none; }
+
+/* botones de confirmación */
+.cierre-btn {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.cierre-btn.gold  { background: #faf3e0; color: #8a6d1f; border: 1.5px solid #c8a030; }
+.cierre-btn.green {
+  background: #e8f5ec;
+  color: #2a7a4a;
+  border: 2px solid #4a9a6a;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.875rem;
+}
+.cierre-btn:disabled { opacity: 0.55; cursor: default; }
+
 .cd-locked {
   display: flex;
   align-items: center;
@@ -2503,6 +2722,20 @@ html, body, #root {
   gap: 0.625rem;
   justify-content: flex-end;
 }
+/* Teléfono (≤420px): los botones de acción ENVUELVEN (en vez de desbordar) y llenan ~la mitad del ancho
+   c/u, quedando tocables (≥44px). El gap cubre el row-gap al envolver.
+   NOTA: el flex-wrap se acota a móvil a propósito — NO va en la regla base porque .cd-btn-green tiene
+   width:100% (→ flex-basis 100%): con wrap activo en desktop ese botón principal saltaría a su propia
+   línea (regresión visual). Acá flex:1 1 calc(50%…) pisa ese width:100% solo en móvil. Desktop = idéntico. */
+@media (max-width: 420px) {
+  .cd-modal-actions {
+    flex-wrap: wrap;
+  }
+  .cd-modal-actions > button {
+    flex: 1 1 calc(50% - 0.3125rem);
+    min-height: 44px;
+  }
+}
 .cd-resumen-block {
   background: var(--t-panel, #ede8de);
   border-radius: 2px;
@@ -2544,27 +2777,35 @@ html, body, #root {
   gap: 0.625rem;
   margin-bottom: 1.25rem;
 }
+/* KPI cards de Caja — TEMA CLARO CÁLIDO (aprobado por la dueña; espeja la paleta de
+   .cierre-resumen/.cierre-card: fondo blanco sobre papel, labels gris cálido, montos oscuros).
+   Compartidas por las 4 pestañas (Movimientos, Pendientes, Proveedores, Resumen). El acento
+   por card sigue siendo el border-left (color inline por vista); la semántica de los montos
+   (verde #27874f / rojo #c0392b / dorado #c8a030 / gris #555, inline) ya era legible sobre claro. */
 .cd-saldo-card {
-  background: var(--t-ink);
+  background: #fff;
   padding: 0.875rem 1rem;
+  border: 1px solid var(--t-border, #d4cfc4);
   border-radius: 2px;
   border-left: 3px solid #c8a96e;
+  min-width: 0;             /* móvil: la card puede encoger sin desbordar la grilla */
 }
 .cd-saldo-label {
   font-size: 0.62rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #aaa;
+  color: #6a6250;
   margin-bottom: 0.375rem;
 }
 .cd-saldo-val {
   font-family: var(--font-serif);
   font-size: 1.05rem;
   font-weight: 700;
-  color: var(--t-gold, #c8a96e);
+  color: var(--t-ink, #0d0d0d);
   line-height: 1;
+  overflow-wrap: anywhere;  /* montos largos ("$ 200,00" y peores) no desbordan en ~375px */
 }
-.cd-saldo-val.red { color: #e87070; }
+.cd-saldo-val.red { color: #c0392b; }   /* rojo oscuro: el #e87070 era para fondo oscuro */
 
 .cd-filters-bar {
   display: flex;
@@ -4618,4 +4859,63 @@ html, body, #root {
 .vt-file-row,
 .xr-history {
   background: var(--vt-paper);
+}
+
+/* ── Comandero pro (SPEC P1-b): feedback táctil de cada tap ───────────── */
+.cm-tap { transition: transform .06s ease, filter .06s ease; touch-action: manipulation; }
+.cm-tap:active { transform: scale(.95); filter: brightness(1.12); }
+
+/* ── T4: entrada suave (estados vacíos, grid de productos) ───────────── */
+@keyframes cmFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.cm-fade-in { animation: cmFadeIn .22s ease both; }
+@media (prefers-reduced-motion: reduce) { .cm-fade-in { animation: none; } }
+
+/* ── T4: barra de total siempre visible al pie del pedido ───────────── */
+.cm-total-bar {
+  position: sticky; bottom: 0; z-index: 5;
+  display: flex; align-items: center; gap: 10px;
+  margin: 0.75rem -0.75rem 0; padding: 0.6rem 1rem;
+  background: #0d0f0e; color: #b48e50;
+  border-top: 1px solid rgba(180,142,80,.35);
+  box-shadow: 0 -4px 16px rgba(0,0,0,.14);
+}
+.cm-total-bar .cm-total-val { margin-left: auto; font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+
+/* ── InvRevision T3-A2 — panel lateral de la factura en el detalle de Revisión ──────────
+   Móvil/angosto (<900px): el panel NO existe (display:none) y el modal queda como hoy
+   (thumb T3-A arriba + fullscreen). Desktop (≥900px) con factura (.invrev-has-foto): el
+   modal se ensancha y parte en dos columnas; el thumb se oculta (la foto vive en el panel,
+   sticky para acompañar el scroll de la tabla). El zoom es del componente FotoPanel. */
+.invrev-modal { max-width: 880px; }
+.invrev-foto-panel { display: none; }
+.invrev-foto-head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 6px; margin-bottom: 4px; font-size: 0.72rem; color: var(--t-muted, #8a8378);
+}
+.invrev-foto-scroll {
+  overflow: auto; max-height: calc(90vh - 11rem);
+  border: 1px solid var(--t-border, #d4cfc4); border-radius: 6px; background: #111;
+  /* sin touch-action: en táctil el pan es el scroll nativo del contenedor;
+     el drag-to-pan del componente cubre el mouse (que no arrastra-scrollea solo) */
+}
+.invrev-foto-img { width: 100%; display: block; cursor: zoom-in; user-select: none; }
+.invrev-foto-img.zoomed { width: 250%; max-width: none; cursor: zoom-out; }
+.invrev-foto-hint { font-size: 0.64rem; color: var(--t-muted, #8a8378); margin-top: 3px; }
+/* Pantalla completa — mismo patrón de lightbox que FacturaThumbs */
+.invrev-foto-full {
+  position: fixed; inset: 0; z-index: 10000; background: rgba(0, 0, 0, 0.88);
+  display: flex; align-items: center; justify-content: center; padding: 1rem; cursor: zoom-out;
+}
+.invrev-foto-full img { max-width: 96vw; max-height: 88vh; object-fit: contain; border-radius: 6px; cursor: default; }
+.invrev-foto-full button {
+  position: fixed; top: 12px; right: 14px; background: none; border: none;
+  color: #fff; font-size: 1.8rem; cursor: pointer; line-height: 1;
+}
+@media (min-width: 900px) {
+  .invrev-modal.invrev-has-foto { max-width: min(1320px, 94vw); }
+  .invrev-has-foto .invrev-cols { display: flex; gap: 1.1rem; align-items: flex-start; }
+  .invrev-has-foto .invrev-main { flex: 1 1 0; min-width: 0; }
+  .invrev-has-foto .invrev-foto-panel { display: block; flex: 0 0 40%; max-width: 500px; }
+  .invrev-has-foto .invrev-thumb-block { display: none; } /* la foto no se duplica: vive en el panel */
+  .invrev-foto-box { position: sticky; top: 0; } /* .cd-modal es el contenedor de scroll (overflow-y) */
 }

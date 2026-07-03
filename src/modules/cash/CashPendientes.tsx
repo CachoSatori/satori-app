@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import type { CashMovement, CashSession } from '../../shared/types/database'
 import { updateMovementStatus } from '../../shared/api/cash'
 import { fi, fd } from './cashUtils'
+import { dateCR } from '../../shared/utils'
 
 interface Props {
   movements: CashMovement[]
@@ -42,7 +43,8 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
         const name = (m.supplier_name || m.employee_name || m.description || 'Sin proveedor').trim()
         const key = name.toLowerCase()
         const ses = sesionMap.get(m.session_id ?? '')
-        const fecha = ses?.session_date ?? (m.created_at ? m.created_at.slice(0, 10) : '')
+        // Nivel-día (sin turno): fecha LOCAL CR del registro (dateCR), no slice UTC.
+        const fecha = ses?.session_date ?? dateCR(m.created_at)
         const turno = m.shift || ses?.shift_type || ''
         if (!map.has(key)) map.set(key, { key, name, rows: [], totalCRC: 0, totalUSD: 0 })
         const g = map.get(key)!

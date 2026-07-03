@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
-import { updateMovementStatus, createDayMovement } from './cash'
-import type { CashMovement, Json } from '../types/database'
+import { createDayMovement } from './cash'
+import type { Json } from '../types/database'
 
 export interface DocItem {
   codigo?: string | null; descripcion: string; cantidad?: number | null; unidad?: string | null
@@ -86,21 +86,32 @@ export async function extractImage(imagePath: string): Promise<DocExtract[]> {
 }
 
 // Crea una fila en documents para un documento detectado (o vacía si ex es null).
-export async function createDocumentRow(path: string, sha: string, ex: DocExtract | null, createdBy: string): Promise<DocumentRow> {
+// `linkedMovementId` + `estado` permiten adjuntar una foto a un movimiento ya creado
+// (p. ej. "Agregar foto" a un pago manual sin factura): se enlaza directo y queda
+// 'procesado'. Por defecto (carga normal en la Bandeja) entra como 'nuevo' sin enlace.
+export async function createDocumentRow(
+  path: string,
+  sha: string,
+  ex: DocExtract | null,
+  createdBy: string,
+  linkedMovementId?: string | null,
+  estado: 'nuevo' | 'procesado' = 'nuevo',
+): Promise<DocumentRow> {
   const { data, error } = await supabase.from('documents')
     .insert({
-      image_path: path, sha256: sha, estado: 'nuevo', created_by: createdBy,
+      image_path: path, sha256: sha, estado, created_by: createdBy,
       raw_json: (ex ?? null) as unknown as Json, tipo: ex?.tipo ?? null, clave_fe: ex?.clave_fe ?? null,
+      ...(linkedMovementId ? { linked_movement_id: linkedMovementId } : {}),
     })
     .select().single()
   if (error) throw new Error(error.message)
   return data as DocumentRow
 }
 
-// Commit AUTOMÁTICO de un documento leído por la IA → genera el movimiento de
-// caja (cuenta por pagar / pago) sin intervención. Si la IA no leyó lo
-// suficiente (tipo 'otro', total 0, confianza baja) devuelve null y el doc
-// queda 'nuevo' para carga manual. El encargado revisa todo en Caja → Movimientos.
+// La IA solo PRECARGA: ningún movimiento se crea automáticamente (feat/bandeja-fusion).
+// Todo documento leído queda 'nuevo' en la cola; el humano confirma monto + forma de
+// pago en la Bandeja antes de generar el movimiento de caja. `cuadra` ayuda a marcar
+// los que necesitan revisión humana (manuscrito / no cuadra).
 const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 
 // ¿La suma de ítems + impuestos − descuento cuadra con el total? (tolerancia 2%)
@@ -113,61 +124,6 @@ export function cuadra(ex: DocExtract): boolean {
   return Math.abs(calc - total) <= Math.max(total * 0.02, 50)
 }
 
-// Auto-genera el movimiento si la IA leyó con confianza. Propinas/otro y los que
-// requieren revisión NO se auto-generan (quedan para validación humana).
-export async function autoCommitDocument(
-  doc: DocumentRow, ex: DocExtract, createdBy: string, pendientes: CashMovement[], validAccountIds: Set<string>, tc: number,
-): Promise<{ movementId: string; reconciled: boolean } | null> {
-  if (!ex) return null
-  const tipo = ex.tipo === 'proforma' ? 'factura' : ex.tipo
-  if (tipo !== 'factura' && tipo !== 'comprobante_pago') return null   // propinas/otro → manual
-  const total = N(ex.total)
-  if (total <= 0 || N(ex.confianza) < 0.4) return null
-  if (ex.requiere_revision || !cuadra(ex)) return null                 // necesita validación humana
-
-  const metodo = ex.metodo_pago || 'Transferencia'
-  const esTransfer = metodo === 'Transferencia' || metodo === 'SINPE' || metodo === 'Bitcoin'
-  const esUSD = ex.moneda === 'USD'
-  const prov = (ex.proveedor || '').trim()
-  const fecha = ex.fecha || new Date().toISOString().slice(0, 10)
-  const accId = ex.cuenta_qb_sugerida && validAccountIds.has(ex.cuenta_qb_sugerida) ? ex.cuenta_qb_sugerida : null
-  const amountCRC = esUSD ? Math.round(total * (tc || 1)) : total
-  const amountUSD = esUSD ? total : 0
-
-  // Comprobante: si hay un único pendiente que matchee → marcar pagado.
-  if (tipo === 'comprobante_pago') {
-    const pn = prov.toLowerCase()
-    const matches = pendientes.filter(m => {
-      const okTotal = Math.abs(N(m.amount_crc) - amountCRC) <= amountCRC * 0.02
-      const okProv = pn && (m.supplier_name || '').toLowerCase().includes(pn.slice(0, 4))
-      const okFecha = Math.abs((new Date(fecha).getTime() - new Date(m.created_at.slice(0, 10)).getTime()) / 86400000) <= 7
-      return okTotal && (okProv || !pn) && okFecha
-    })
-    if (matches.length === 1) {
-      await updateMovementStatus(matches[0].id, 'aprobado')
-      await setDocEstado(doc.id, 'procesado', matches[0].id)
-      return { movementId: matches[0].id, reconciled: true }
-    }
-  }
-
-  // condicion_pago manda el status: credito = cuenta por pagar (pendiente).
-  const status: 'aprobado' | 'pendiente' =
-    tipo === 'comprobante_pago' ? 'aprobado'
-    : ex.condicion_pago === 'credito' ? 'pendiente'
-    : ex.condicion_pago === 'contado' ? 'aprobado'
-    : (esTransfer ? 'pendiente' : 'aprobado')
-
-  const movementId = await insertInboxMovement({
-    created_by: createdBy, movement_type: 'egreso_mercaderia', amount_crc: amountCRC, amount_usd: amountUSD,
-    description: ex.referencia || ex.numero_documento ? `${prov || 'Factura'} · ${ex.referencia || ex.numero_documento}` : (prov || 'Factura'),
-    subcategory: prov || '', supplier_name: prov || '', method: metodo,
-    caja_origen: esTransfer || status === 'pendiente' ? 'Banco' : 'Caja Proveedores',
-    status, account_id: accId, fecha,
-  })
-  await setDocEstado(doc.id, 'procesado', movementId)
-  return { movementId, reconciled: false }
-}
-
 export async function listInbox(estado: 'nuevo' | 'procesado' | 'descartado' = 'nuevo'): Promise<DocumentRow[]> {
   const { data, error } = await supabase.from('documents').select('*')
     .eq('estado', estado).order('created_at', { ascending: false }).limit(100)
@@ -178,6 +134,24 @@ export async function listInbox(estado: 'nuevo' | 'procesado' | 'descartado' = '
 export async function signedUrl(path: string): Promise<string | null> {
   const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600)
   return data?.signedUrl ?? null
+}
+
+// La foto (documents) enlazada a un movimiento de caja — para el verificado de
+// factura (FacturaVerify). Devuelve la más reciente o null si no hay factura cargada.
+export async function getDocByMovement(movementId: string): Promise<DocumentRow | null> {
+  const { data } = await supabase.from('documents').select('*')
+    .eq('linked_movement_id', movementId).order('created_at', { ascending: false }).limit(1)
+  return (data?.[0] as DocumentRow | undefined) ?? null
+}
+
+// Todas las facturas ya enlazadas a un movimiento (estado 'procesado') — para
+// listar los gastos con foto en Finanzas / Caja sin una consulta por fila.
+export async function listLinkedDocs(): Promise<DocumentRow[]> {
+  const { data, error } = await supabase.from('documents').select('*')
+    .eq('estado', 'procesado').not('linked_movement_id', 'is', null)
+    .order('created_at', { ascending: false }).limit(500)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as DocumentRow[]
 }
 
 export async function setDocEstado(id: string, estado: 'procesado' | 'descartado', linkedMovementId?: string): Promise<void> {
@@ -197,12 +171,17 @@ export async function insertInboxMovement(m: {
   amount_usd?: number
   description: string
   subcategory?: string
+  supplier_id?: string | null
   supplier_name?: string
   method: string
   caja_origen: string
   status: 'aprobado' | 'pendiente'
   account_id?: string | null
   fecha?: string | null
+  // Unificación Bandeja↔Caja (040-043): clasificación de mercadería → tarea de Revisión (pass-through).
+  classification?: string
+  suggested_classification?: string
+  suggested_confidence?: number
 }): Promise<string> {
   return createDayMovement(m)
 }

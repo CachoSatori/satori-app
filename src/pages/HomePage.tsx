@@ -313,17 +313,38 @@ function StatusBadge({ color, text }: { color: 'open' | 'ok' | 'warn' | 'dim'; t
   )
 }
 
+// ── Aterrizaje por rol (operación por roles, 06-12) ───────────
+// Al ABRIR la app, cada puesto cae directo en SU pantalla: la compu del cajero en
+// Caja, la tablet del salonero en el Comandero. Sucede UNA vez por sesión de pestaña
+// (clave = profile.id, así un cambio de usuario en la misma pestaña re-aterriza) — el
+// botón Home sigue navegando normal después.
+const ROLE_LANDING: Partial<Record<UserRole, string>> = {
+  cajero:    '/caja',
+}
+
 // ── Main component ─────────────────────────────────────────────
 export default function HomePage() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
   const [status, setStatus] = useState<HomeStatus | null>(null)
 
+  const landing = profile ? ROLE_LANDING[profile.role] : undefined
+  const landKey = profile ? `satori-landed-${profile.id}` : ''
+  const mustLand = !!profile && !!landing && sessionStorage.getItem(landKey) !== '1'
+
   useEffect(() => {
+    if (!mustLand || !landing) return
+    sessionStorage.setItem(landKey, '1')
+    navigate(landing, { replace: true })
+  }, [mustLand, landing, landKey, navigate])
+
+  useEffect(() => {
+    if (mustLand) return   // nos vamos ya — no dispares las consultas del Home
     fetchHomeStatus().then(setStatus).catch(() => {})
-  }, [])
+  }, [mustLand])
 
   if (!profile) return null
+  if (mustLand) return null   // redirigiendo al aterrizaje del rol
 
   const available = MODULES.filter(m => m.roles.includes(profile.role))
   const isManager = ['owner', 'manager', 'contador'].includes(profile.role)

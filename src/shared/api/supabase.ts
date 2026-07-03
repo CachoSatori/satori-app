@@ -14,11 +14,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // pero permitía refreshes concurrentes entre pestañas (refresh tokens de un solo
 // uso → una pestaña podía invalidar la sesión de la otra). Este lock usa
 // navigator.locks (serialización real entre pestañas) con un tope de adquisición:
-// si en 10s no se consigue (lock colgado, el caso del RCA), se ejecuta SIN lock
+// si en 5s no se consigue (lock colgado, el caso del RCA), se ejecuta SIN lock
 // en vez de colgar la UI — el peor caso vuelve a ser el comportamiento anterior.
-const LOCK_ACQUIRE_TIMEOUT_MS = 10_000
+// INVARIANTE CRÍTICA: LOCK_ACQUIRE_TIMEOUT_MS DEBE ser < AUTH_OP_TIMEOUT_MS (8s). Si no, getSession/
+// refreshSession se rinden por withTimeout ANTES de que el fallback "correr sin lock" de
+// safeNavigatorLock alcance a dispararse → tras suspensión larga (lock muerto retenido) la máquina
+// queda en loop OFFLINE_WAITING eterno, nunca refresca el token y el outbox NO drena.
+// VALOR 5_000: deja ~3s de slack para la op lock-free (refreshSession es una llamada de red ~1-2s)
+// dentro del presupuesto de 8s; más conservador que 4s frente a falsos "lock no adquirido" en redes/
+// dispositivos lentos.
+// TRADE-OFF: este tope cumple doble función — paciencia para el refresh legítimo de OTRA pestaña
+// (querría ser largo) vs escape de un lock muerto (debe ser < tope por-op). 5s favorece el escape;
+// solo un refresh cross-tab legítimo que tarde >5s correría sin lock (red patológica; en estaciones
+// de un-dispositivo-por-navegador no aplica).
+export const LOCK_ACQUIRE_TIMEOUT_MS = 5_000
 
-const safeNavigatorLock = async <R>(name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
+export const safeNavigatorLock = async <R>(name: string, _acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
   if (typeof navigator === 'undefined' || !navigator.locks) return fn()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), LOCK_ACQUIRE_TIMEOUT_MS)
@@ -48,6 +59,7 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     worker: true,
     heartbeatIntervalMs: 15_000,
     heartbeatCallback: (status) => {
+      console.log('[rt-diag] heartbeat', status, 'connected=', supabase.realtime.isConnected(), 'workerRef=', !!supabase.realtime.workerRef)
       if (status === 'disconnected' || status === 'error') {
         // socket caído (suspensión/red): revivir explícitamente. El onAuthStateChange
         // global ya re-propaga el JWT fresco al reconectar.
@@ -67,6 +79,10 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
 // módulo es singleton). El .catch evita un unhandled rejection si el socket aún no abrió.
 supabase.auth.onAuthStateChange((_event, session) => {
   supabase.realtime.setAuth(session?.access_token ?? null).catch(() => { /* socket no listo */ })
+  // Sesión fresca confirmada (login / refresh OK) → limpiar el latch del logout forzado y el contador de
+  // timeouts: recién acá un wedge POSTERIOR puede volver a escalar. Un signOut emite session=null → NO
+  // limpia (correcto: seguimos deslogueados sin re-machacar el signOut). Ver HANG-RCA-2 (latch one-shot).
+  if (session) { forcedLogoutLatch = false; consecutiveGetSessionTimeouts = 0 }
 })
 
 const EXPIRY_MARGIN_S = 60
@@ -107,6 +123,16 @@ let resumeRetryDelay = RESUME_RETRY_MIN_MS
 // re-suscribir el canal que recién se estaba estableciendo → CLOSED → recreate ×5 → FRENO → tiempo real muerto.
 let healthyAwaited = false
 
+// Tras N timeouts consecutivos de getSession (auth wedgeada: el fetch del refresh no vuelve tras
+// suspensión larga — ver HANG-RCA-2), esperar es inútil (la op nunca completa). Escalamos a
+// SESSION_EXPIRED para forzar el re-login; el outbox sobrevive y drena al reingresar.
+const MAX_GETSESSION_TIMEOUTS = 3
+let consecutiveGetSessionTimeouts = 0
+// Latch terminal one-shot: una vez escalado a SESSION_EXPIRED FORZADO (auth wedgeada) NO volvemos a forzar
+// el signOut en cada resume. Solo lo limpia un onAuthStateChange con sesión fresca (login/refresh OK); un
+// signOut emite session=null → NO lo limpia (correcto: seguimos deslogueados sin re-machacar el logout).
+let forcedLogoutLatch = false
+
 type RealtimeHealthReason = 'resume' | 'channel-stuck'
 
 // Máquina de 3 estados. La regla madre: NUNCA emitir 'rt:healthy' ni re-suscribir sin un token válido
@@ -114,7 +140,7 @@ type RealtimeHealthReason = 'resume' | 'channel-stuck'
 type RealtimeDecision =
   | { state: 'ONLINE_SUBSCRIBED'; freshToken: string }
   | { state: 'OFFLINE_WAITING' }
-  | { state: 'SESSION_EXPIRED' }
+  | { state: 'SESSION_EXPIRED'; forced?: boolean }
 
 const tokenNeedsRefresh = (session: Session | null): boolean => {
   if (!session) return false
@@ -124,12 +150,15 @@ const tokenNeedsRefresh = (session: Session | null): boolean => {
 }
 
 // Promise.race con tope: si `p` no settlea en `ms`, RESUELVE con `fallback` (no rechaza — seguimos
-// en modo degradado). Es lo que evita que ensureRealtimeHealthy quede colgada esperando un await
-// que nunca vuelve (la conexión zombi tras suspensión).
-export const withTimeout = <T>(p: Promise<T>, ms: number, _label: string, fallback: T): Promise<T> => {
+// en modo degradado) y deja rastro en consola. Es lo que evita que ensureRealtimeHealthy quede
+// colgada esperando un await que nunca vuelve (la conexión zombi tras suspensión).
+export const withTimeout = <T>(p: Promise<T>, ms: number, label: string, fallback: T): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<T>((resolve) => {
     timer = setTimeout(() => {
+      // Incluimos ms + estado del socket para ver, en la validación física, EN QUÉ operación se
+      // colgó y cómo estaba el WebSocket en ese momento (isConnected puede ser el zombi true).
+      console.warn(`[rt-diag] withTimeout EXPIRÓ: ${label} (${ms}ms, connected=${supabase.realtime.isConnected()})`)
       resolve(fallback)
     }, ms)
   })
@@ -147,6 +176,7 @@ const scheduleResumeRetry = (): void => {
   // por ensureRealtimeHealthy('resume'), que respeta el single-flight + el cinturón por edad existentes.
   if (resumeRetryTimer !== null) clearTimeout(resumeRetryTimer)
   const delay = resumeRetryDelay
+  console.log('[rt-diag] ensureRealtimeHealthy: OFFLINE_WAITING → reintento en', delay, 'ms')
   resumeRetryTimer = setTimeout(() => {
     resumeRetryTimer = null
     void ensureRealtimeHealthy('resume')
@@ -171,8 +201,24 @@ const classifyRealtime = async (reason: RealtimeHealthReason): Promise<RealtimeD
     'getSession',
     { data: { session: null }, error: null },
   )
-  // getSession EXPIRÓ por timeout (red zombi): no sabemos si la sesión vive → esperar, no desloguear.
-  if (!sessionRead) return { state: 'OFFLINE_WAITING' }
+  // getSession EXPIRÓ por timeout (red/auth zombi): no sabemos si la sesión vive. Esperamos… pero con
+  // tope: tras N timeouts consecutivos la op nunca volverá (auth wedgeada) → escapamos a expirar.
+  if (!sessionRead) {
+    // getSession no completó (auth wedgeada). Contamos timeouts consecutivos: tras N, escapamos a
+    // SESSION_EXPIRED (la op nunca volverá). Un blip transitorio completaría antes de N y resetea abajo.
+    consecutiveGetSessionTimeouts++
+    if (consecutiveGetSessionTimeouts >= MAX_GETSESSION_TIMEOUTS) {
+      consecutiveGetSessionTimeouts = 0
+      // One-shot: forzamos el signOut SOLO la 1ª vez (latch). Si ya está latcheado, seguimos esperando
+      // (renovamos TCP) sin re-disparar el logout en cada resume → evita el ping-pong eterno de logout.
+      if (forcedLogoutLatch) return { state: 'OFFLINE_WAITING' }
+      forcedLogoutLatch = true
+      return { state: 'SESSION_EXPIRED', forced: true }
+    }
+    return { state: 'OFFLINE_WAITING' }
+  }
+  // getSession COMPLETÓ → racha de timeouts rota.
+  consecutiveGetSessionTimeouts = 0
   // getSession COMPLETÓ con session=null NO se trata como deslogueo: al arrancar puede dar null un instante
   // antes de hidratar la sesión desde storage (falso positivo). El árbitro ÚNICO de SESSION_EXPIRED es el
   // refreshSession de abajo (refresh.error). Con session=null caemos a ese refresh y él decide.
@@ -219,15 +265,18 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
   const myStart = healthStartedAt   // identidad de ESTA corrida (el guard impide dos en el mismo ms)
   const run = (async () => {
     try {
+      console.log('[rt-diag] ensureRealtimeHealthy: start reason=', reason)
       // channel-stuck = el hook frenó (5 fallos sin SUBSCRIBED) y llama esperando 'rt:healthy' para
       // re-suscribir → marcamos la espera ya, aunque esta corrida termine en OFFLINE_WAITING.
       if (reason === 'channel-stuck') healthyAwaited = true
       const decision = await classifyRealtime(reason)
+      console.log('[rt-diag] ensureRealtimeHealthy: estado=', decision.state)
       if (decision.state === 'ONLINE_SUBSCRIBED') {
         // Token fresco CONFIRMADO: lo propagamos al socket y revivimos el TCP SOLO si cayó. Acá sí miramos
         // isConnected() (ya clasificamos el estado SIN él): solo decide si hace falta el disconnect→connect.
         await supabase.realtime.setAuth(decision.freshToken).catch(() => { /* socket no listo */ })
         if (!supabase.realtime.isConnected()) {
+          console.log('[rt-diag] ensureRealtimeHealthy: ONLINE pero socket caído → revive (await disconnect → connect)')
           await withTimeout(
             (async () => { await supabase.realtime.disconnect() })(),
             AUTH_OP_TIMEOUT_MS,
@@ -241,13 +290,17 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
         // una recuperación pendiente (healthyAwaited). Un 'resume' rutinario sano (arranque/foco) llega acá
         // con healthyAwaited=false → NO emite → el canal inicial se asienta solo (no lo re-suscribimos).
         if (healthyAwaited) {
+          console.log('[rt-diag] ensureRealtimeHealthy: ONLINE_SUBSCRIBED → emit rt:healthy (recuperación servida)')
           window.dispatchEvent(new Event('rt:healthy'))
+        } else {
+          console.log('[rt-diag] ensureRealtimeHealthy: ONLINE_SUBSCRIBED → setAuth, SIN emit (nada que recuperar)')
         }
         healthyAwaited = false   // recuperación servida (o no había nada pendiente)
       } else if (decision.state === 'OFFLINE_WAITING') {
         // Sin token fresco confirmado (red zombi / refresh colgado): NO emitir, NO setAuth con token
         // vencido/null, NO re-suscribir. Renovar el TCP físico (cura validada del path token-timeout) y
         // reintentar con backoff vía 'resume'. NO setAuth(null): tumbaría la auth del socket compartido.
+        console.log('[rt-diag] ensureRealtimeHealthy: OFFLINE_WAITING → renuevo TCP (disconnect→connect), sin emit')
         await withTimeout(
           (async () => { await supabase.realtime.disconnect() })(),
           AUTH_OP_TIMEOUT_MS,
@@ -260,14 +313,23 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
         healthyAwaited = true
         scheduleResumeRetry()
       } else {
-        // SESSION_EXPIRED: deslogueo real confirmado (refresh.error). NO emitir, NO re-suscribir, NO
-        // disconnect/connect en loop. El deslogueo declarativo (onAuthStateChange → useAuth → <Navigate
-        // to="/login">) hace su trabajo. Cancelamos el backoff y la espera: no hay nada que recuperar.
+        // SESSION_EXPIRED por DOS orígenes, tratados distinto:
+        //  (1) refresh.error (forced ≠ true) → gotrue YA limpió la sesión → SOLO deslogueo declarativo;
+        //      NO forzamos signOut (evita logout espurio ante hipos transitorios del refresh).
+        //  (2) N timeouts de getSession (forced=true, auth wedgeada, ver HANG-RCA-2) → gotrue NO limpió →
+        //      forzamos UN signOut LOCAL (one-shot por el latch): dispara onAuthStateChange(session=null) →
+        //      useAuth → <Navigate to="/login">; el usuario reingresa y el outbox drena (signOut local NO
+        //      toca el IndexedDB del outbox). Sin red no se cuelga (scope:'local' es client-side), idempotente.
+        // En ambos: NO emitir, NO re-suscribir, NO disconnect/connect en loop. Cancelamos backoff y espera.
+        if (decision.forced === true) {
+          void supabase.auth.signOut({ scope: 'local' }).catch(() => { /* ya deslogueado / sin sesión */ })
+        }
+        console.log('[rt-diag] ensureRealtimeHealthy: SESSION_EXPIRED → deslogueo declarativo, sin emit')
         healthyAwaited = false
         cancelResumeRetry()
       }
-    } catch {
-      /* recuperación no crítica: se reintenta en el próximo resume */
+    } catch (e) {
+      console.warn('[rt-diag] ensureRealtimeHealthy: catch', e)
     } finally {
       // Solo limpiamos si seguimos siendo el in-flight vigente: si el cinturón por edad ya arrancó
       // otra corrida (healthStartedAt cambió), NO le pisamos su referencia (evita que una corrida
@@ -281,7 +343,12 @@ export const ensureRealtimeHealthy = (reason: RealtimeHealthReason = 'resume'): 
 
 // Disparadores globales, registrados UNA sola vez (este módulo es singleton).
 if (typeof window !== 'undefined') {
+  // worker:true mueve el heartbeat a un Web Worker (no throttleado). `worker` es el flag de
+  // config; `workerRef` recién se puebla cuando el socket abre y arranca el worker, así que
+  // en load puede estar vacío todavía — se confirma activo en el primer '[rt-diag] heartbeat'.
+  console.log('[rt-diag] worker config=', supabase.realtime.worker, 'workerRef ya activo=', !!supabase.realtime.workerRef)
   const onResume = () => {
+    console.log('[rt-diag] onResume vis=', document.visibilityState)
     if (document.visibilityState === 'visible') {
       supabase.auth.startAutoRefresh().catch(() => {})
       void ensureRealtimeHealthy()
@@ -292,4 +359,19 @@ if (typeof window !== 'undefined') {
   document.addEventListener('visibilitychange', onResume)
   window.addEventListener('online', () => { void ensureRealtimeHealthy() })
   window.addEventListener('focus', () => { void ensureRealtimeHealthy() })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DIAGNÓSTICO SOLO-STAGING (removible de un golpe): switch para reproducir A DEMANDA
+// el cuelgue de Realtime tras suspensión, sin suspender la máquina por horas. Todo lo
+// de arriba queda BYTE-POR-BYTE intacto. Para REMOVERLO: borrar este bloque + el módulo
+// src/shared/diag/realtimeReproSwitch.ts (y su test).
+//
+// En prod (VITE_APP_ENV != 'staging') Vite reemplaza import.meta.env.VITE_APP_ENV por su
+// string literal → este `if` queda en `if (false)` y el bundler lo elimina por DCE junto
+// con su import() dinámico → el código de diagnóstico NUNCA corre fuera de staging.
+if (import.meta.env.VITE_APP_ENV === 'staging') {
+  import('../diag/realtimeReproSwitch')
+    .then((m) => m.installRealtimeReproSwitch?.(supabase))
+    .catch(() => { /* diagnóstico no crítico */ })
 }

@@ -1,4 +1,5 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vitest/config'
+import type { Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { execSync } from 'node:child_process'
@@ -53,10 +54,13 @@ export default defineConfig({
           { src: `${BASE}icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: `${BASE}icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
+        // Long-press del ícono (Android/desktop) → atajo directo al puesto.
+        // iOS no soporta shortcuts, pero el aterrizaje por rol cubre lo mismo.
         shortcuts: [
-          { name: 'Resumen del Día', url: `${BASE}resumen`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
-          { name: 'Propinas',        url: `${BASE}propinas`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
-          { name: 'Caja',            url: `${BASE}caja`,     icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Registrar proveedor', url: `${BASE}proveedor`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Comandero',           url: `${BASE}comandero`, icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Caja',                url: `${BASE}caja`,      icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
+          { name: 'Propinas',            url: `${BASE}propinas`,  icons: [{ src: `${BASE}icon-192.png`, sizes: '192x192' }] },
         ],
         // Compartir una foto desde WhatsApp/galería → Satori (Bandeja). El POST
         // lo intercepta sw-share.js y redirige a {BASE}inbox?shared=1.
@@ -125,5 +129,16 @@ export default defineConfig({
         },
       },
     },
+  },
+  // ── Vitest ───────────────────────────────────────────────────────────────────
+  // Default `node` a propósito: los tests existentes (p. ej. supabase.timeout / cash.cascade /
+  // cash.durability) EXPLOTAN la ausencia de window/navigator en Node (montan/borran globalThis.*),
+  // así que el DOM NO puede ser el default sin reescribirlos. Los tests que SÍ necesitan DOM
+  // (render con React Testing Library) lo piden por archivo con el docblock `// @vitest-environment
+  // happy-dom`. El setup file es seguro en ambos entornos (cleanup guardado por typeof document).
+  test: {
+    environment: 'node',
+    setupFiles: ['./vitest.setup.ts'],
+    environmentOptions: { happyDOM: { url: 'http://localhost/' } },
   },
 })

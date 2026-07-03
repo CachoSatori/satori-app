@@ -51,6 +51,7 @@ export function useRealtimeRefetch(
     const recreateOrFreno = () => {
       failStreak++
       if (failStreak >= MAX_FAIL_STREAK) {
+        console.warn('[rt-diag]', channelName, `FRENO: ${failStreak} fallos seguidos sin SUBSCRIBED → paro recreate, espero rt:healthy`)
         void ensureRealtimeHealthy('channel-stuck')
         return
       }
@@ -110,6 +111,7 @@ export function useRealtimeRefetch(
           failStreak = 0   // R1: recuperado → reset del freno
           schedule()  // ponerse al día con lo que pasó mientras no había canal
         } else if (status === 'CLOSED') {
+          console.log('[rt-diag]', channelName, 'CLOSED → recreate, intento', failStreak + 1)
           recreateOrFreno()
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           // Token JWT vencido (InvalidJWTToken: "Token has expired") o error persistente:
@@ -136,6 +138,7 @@ export function useRealtimeRefetch(
     // el JWT muerto y loopeaba; ahora el re-subscribe ocurre con la sesión ya garantizada.
     const onHealthy = () => {
       if (disposed) return
+      console.log('[rt-diag]', channelName, 're-subscribe por rt:healthy')
       if (channel) {
         supabase.removeChannel(channel).catch(() => { /* ya removido */ })
         channel = null

@@ -4872,3 +4872,42 @@ html, body, #root {
   box-shadow: 0 -4px 16px rgba(0,0,0,.14);
 }
 .cm-total-bar .cm-total-val { margin-left: auto; font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+
+/* ── InvRevision T3-A2 — panel lateral de la factura en el detalle de Revisión ──────────
+   Móvil/angosto (<900px): el panel NO existe (display:none) y el modal queda como hoy
+   (thumb T3-A arriba + fullscreen). Desktop (≥900px) con factura (.invrev-has-foto): el
+   modal se ensancha y parte en dos columnas; el thumb se oculta (la foto vive en el panel,
+   sticky para acompañar el scroll de la tabla). El zoom es del componente FotoPanel. */
+.invrev-modal { max-width: 880px; }
+.invrev-foto-panel { display: none; }
+.invrev-foto-head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 6px; margin-bottom: 4px; font-size: 0.72rem; color: var(--t-muted, #8a8378);
+}
+.invrev-foto-scroll {
+  overflow: auto; max-height: calc(90vh - 11rem);
+  border: 1px solid var(--t-border, #d4cfc4); border-radius: 6px; background: #111;
+  /* sin touch-action: en táctil el pan es el scroll nativo del contenedor;
+     el drag-to-pan del componente cubre el mouse (que no arrastra-scrollea solo) */
+}
+.invrev-foto-img { width: 100%; display: block; cursor: zoom-in; user-select: none; }
+.invrev-foto-img.zoomed { width: 250%; max-width: none; cursor: zoom-out; }
+.invrev-foto-hint { font-size: 0.64rem; color: var(--t-muted, #8a8378); margin-top: 3px; }
+/* Pantalla completa — mismo patrón de lightbox que FacturaThumbs */
+.invrev-foto-full {
+  position: fixed; inset: 0; z-index: 10000; background: rgba(0, 0, 0, 0.88);
+  display: flex; align-items: center; justify-content: center; padding: 1rem; cursor: zoom-out;
+}
+.invrev-foto-full img { max-width: 96vw; max-height: 88vh; object-fit: contain; border-radius: 6px; cursor: default; }
+.invrev-foto-full button {
+  position: fixed; top: 12px; right: 14px; background: none; border: none;
+  color: #fff; font-size: 1.8rem; cursor: pointer; line-height: 1;
+}
+@media (min-width: 900px) {
+  .invrev-modal.invrev-has-foto { max-width: min(1320px, 94vw); }
+  .invrev-has-foto .invrev-cols { display: flex; gap: 1.1rem; align-items: flex-start; }
+  .invrev-has-foto .invrev-main { flex: 1 1 0; min-width: 0; }
+  .invrev-has-foto .invrev-foto-panel { display: block; flex: 0 0 40%; max-width: 500px; }
+  .invrev-has-foto .invrev-thumb-block { display: none; } /* la foto no se duplica: vive en el panel */
+  .invrev-foto-box { position: sticky; top: 0; } /* .cd-modal es el contenedor de scroll (overflow-y) */
+}

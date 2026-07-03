@@ -90,7 +90,39 @@ describe('InvRevision — la foto de la factura en el detalle (T3-A parte 1)', (
     // Lightbox abierto: el thumb + la imagen fullscreen (misma alt) conviven.
     await waitFor(() => expect(screen.getAllByAltText('Factura 1')).toHaveLength(2))
 
-    fireEvent.click(screen.getByText('✕'))
+    // El ✕ del lightbox de FacturaThumbs (el panel T3-A2 tiene su propio ✕ con aria-label).
+    fireEvent.click(screen.getAllByText('✕').find(el => !el.getAttribute('aria-label'))!)
     await waitFor(() => expect(screen.getAllByAltText('Factura 1')).toHaveLength(1))
+  })
+})
+
+// T3-A2 — panel lateral (visible solo en desktop ≥900px vía CSS; acá se prueba el markup y el
+// comportamiento del zoom). El panel reusa la signed URL YA cargada por el padre (urls[doc.id]).
+describe('InvRevision — panel lateral de la factura (T3-A2)', () => {
+  it('el modal con factura trae el panel con la MISMA signed URL del padre y la clase de dos columnas', async () => {
+    await openDetail()
+    const panelImg = await screen.findByAltText('Factura (panel)') as HTMLImageElement
+    expect(panelImg.src).toBe('https://signed.example/factura-1.jpg')
+    expect(document.querySelector('.cd-modal.invrev-has-foto')).toBeTruthy()   // activa el layout ancho (CSS ≥900px)
+    expect(document.querySelector('.invrev-thumb-block')).toBeTruthy()         // el thumb sigue (visible solo <900px)
+  })
+
+  it('click sobre la foto del panel alterna el zoom (1x ↔ 2.5x)', async () => {
+    await openDetail()
+    const img = await screen.findByAltText('Factura (panel)')
+    expect(img.className).not.toContain('zoomed')
+    fireEvent.click(img)
+    expect(img.className).toContain('zoomed')
+    fireEvent.click(img)
+    expect(img.className).not.toContain('zoomed')
+  })
+
+  it('⛶ abre la pantalla completa del panel y ✕ la cierra', async () => {
+    await openDetail()
+    await screen.findByAltText('Factura (panel)')
+    fireEvent.click(screen.getByTitle('Pantalla completa'))
+    expect(screen.getByAltText('Factura (pantalla completa)')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Cerrar'))
+    expect(screen.queryByAltText('Factura (pantalla completa)')).toBeNull()
   })
 })

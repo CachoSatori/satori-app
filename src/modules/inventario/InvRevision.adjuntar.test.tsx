@@ -84,6 +84,9 @@ describe('InvRevision — adjuntar factura (F4.3b)', () => {
     expect(screen.getByText(/Registrado por/)).toBeTruthy()
     expect(screen.getByText('Caja Uno')).toBeTruthy()          // created_by resuelto a nombre
     expect(screen.getByRole('button', { name: /Descartar/ })).toBeTruthy()   // Descartar sigue disponible
+    // T3-A2: sin factura NO hay panel lateral ni layout ancho — el modal queda como hoy.
+    expect(screen.queryByAltText('Factura (panel)')).toBeNull()
+    expect(document.querySelector('.cd-modal.invrev-has-foto')).toBeNull()
   })
 
   it('sacar la foto muestra la CONFIRMACIÓN (proveedor/total leídos vs el pago) sin crear el doc todavía', async () => {

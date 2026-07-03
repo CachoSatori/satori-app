@@ -201,6 +201,7 @@ export default function InvRevision({ ingredients, onRefresh }: {
             key={`${selected.id}:${selDoc?.id ?? 'nodoc'}`}
             task={selected}
             doc={selDoc}
+            docUrl={selDoc ? urls[selDoc.id] : undefined}
             movement={selMov}
             ingredients={ingredients}
             suppliers={suppliers}
@@ -217,10 +218,87 @@ export default function InvRevision({ ingredients, onRefresh }: {
   )
 }
 
+// ── Panel lateral de la foto (T3-A2, solo desktop ≥900px vía CSS) ──────────────────────
+// UI-only: muestra la MISMA signed URL ya cargada por el padre (urls[doc.id] — no re-firma).
+// Click sobre la foto alterna zoom 1x ↔ 2.5x; en zoom se recorre con scroll o arrastrando
+// (drag-to-pan; un arrastre real no dispara el toggle). ⛶ abre pantalla completa (mismo patrón
+// de lightbox que FacturaThumbs). En <900px el panel no existe (CSS) — queda el thumb de T3-A.
+function FotoPanel({ url }: { url: string }) {
+  const [zoom, setZoom] = useState(false)
+  const [full, setFull] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ x: number; y: number; sl: number; st: number; moved: boolean } | null>(null)
+  const justDragged = useRef(false)   // suprime el click-toggle inmediatamente después de un arrastre
+
+  useEffect(() => {
+    if (!full) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFull(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [full])
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Drag-to-pan SOLO para mouse: en táctil el pan ya es el scroll nativo del contenedor
+    // (capturar el puntero ahí pelearía con ese scroll).
+    if (e.pointerType !== 'mouse') return
+    if (!zoom || !scrollRef.current) return
+    drag.current = { x: e.clientX, y: e.clientY, sl: scrollRef.current.scrollLeft, st: scrollRef.current.scrollTop, moved: false }
+    scrollRef.current.setPointerCapture(e.pointerId)
+  }
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!drag.current || !scrollRef.current) return
+    const dx = e.clientX - drag.current.x
+    const dy = e.clientY - drag.current.y
+    if (Math.abs(dx) + Math.abs(dy) > 6) drag.current.moved = true
+    scrollRef.current.scrollLeft = drag.current.sl - dx
+    scrollRef.current.scrollTop  = drag.current.st - dy
+  }
+  const onPointerUp = () => {
+    if (drag.current?.moved) justDragged.current = true
+    drag.current = null
+  }
+  const toggleZoom = () => {
+    if (justDragged.current) { justDragged.current = false; return }   // fue un pan, no un click
+    setZoom(z => !z)
+  }
+
+  return (
+    <div className="invrev-foto-panel">
+      <div className="invrev-foto-box">
+        <div className="invrev-foto-head">
+          <span>🧾 Factura</span>
+          <span style={{ display: 'inline-flex', gap: 6 }}>
+            <button type="button" className="tips-btn-ghost" style={{ padding: '2px 8px', fontSize: '0.7rem' }}
+              onClick={() => setZoom(z => !z)}>{zoom ? '− alejar' : '+ acercar'}</button>
+            <button type="button" className="tips-btn-ghost" style={{ padding: '2px 8px', fontSize: '0.7rem' }}
+              title="Pantalla completa" onClick={() => setFull(true)}>⛶</button>
+          </span>
+        </div>
+        <div className="invrev-foto-scroll" ref={scrollRef}
+          onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+          <img src={url} alt="Factura (panel)" draggable={false}
+            className={`invrev-foto-img${zoom ? ' zoomed' : ''}`} onClick={toggleZoom} />
+        </div>
+        <div className="invrev-foto-hint">
+          {zoom ? 'Arrastrá o scrolleá para recorrer la factura · click para alejar' : 'Click sobre la foto para acercar y leer líneas chicas'}
+        </div>
+      </div>
+      {full && (
+        <div className="invrev-foto-full" onClick={() => setFull(false)}>
+          <img src={url} alt="Factura (pantalla completa)" onClick={e => e.stopPropagation()} />
+          <button type="button" aria-label="Cerrar" onClick={() => setFull(false)}>✕</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Detalle: mapear + editar metadatos (proveedor/nota) + completar / descartar ────────
-function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierName, createdBy, creatorName, onClose, onSaved, onDone }: {
+function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, supplierName, createdBy, creatorName, onClose, onSaved, onDone }: {
   task: InvReviewTask
   doc: DocumentRow | undefined
+  docUrl: string | undefined
   movement: CashMovement | undefined
   ingredients: Ingredient[]
   suppliers: Supplier[]
@@ -389,9 +467,15 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
     }
   }
 
+  // T3-A2: con factura y URL firmada, en desktop (≥900px, CSS) el modal se ensancha a DOS paneles:
+  // izquierda = todo lo actual, derecha = FotoPanel sticky con zoom. En móvil el panel no existe.
+  const showFotoPanel = !!(doc?.image_path && docUrl)
+
   return (
     <div className="cd-modal-overlay" onClick={onClose}>
-      <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 880 }}>
+      <div className={`cd-modal invrev-modal${showFotoPanel ? ' invrev-has-foto' : ''}`} onClick={e => e.stopPropagation()}>
+      <div className="invrev-cols">
+      <div className="invrev-main">
         <div className="cd-modal-title">Revisión — {curSupName}</div>
         <p style={{ fontSize: '0.74rem', color: 'var(--t-muted)', margin: '0.2rem 0 0.75rem' }}>
           Emparejá cada ítem con un ingrediente. Al completar entra al stock y queda auditado (el gasto ya está en Caja). Si no corresponde, descartá con motivo.
@@ -411,9 +495,11 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
           </div>
         )}
         {/* T3-A parte 1 — la foto de la factura en el detalle, en tamaño útil para comparar contra
-            los ítems leídos (tap → fullscreen con el lightbox de FacturaThumbs; bucket 'documents'). */}
+            los ítems leídos (tap → fullscreen con el lightbox de FacturaThumbs; bucket 'documents').
+            T3-A2: en desktop (≥900px) con panel lateral, este thumb se oculta por CSS (la foto no
+            se duplica — vive en el panel). En móvil sigue siendo la única foto, como hoy. */}
         {doc?.image_path && (
-          <div style={{ marginBottom: '0.6rem' }}>
+          <div className="invrev-thumb-block" style={{ marginBottom: '0.6rem' }}>
             <div style={{ fontSize: '0.7rem', color: 'var(--t-muted)', marginBottom: 4 }}>
               Factura adjunta — tocá la foto para ampliarla y comparar contra los ítems leídos.
             </div>
@@ -520,6 +606,9 @@ function ReviewDetail({ task, doc, movement, ingredients, suppliers, supplierNam
             </>
           )}
         </div>
+      </div>
+      {showFotoPanel && <FotoPanel url={docUrl!} />}
+      </div>
       </div>
     </div>
   )

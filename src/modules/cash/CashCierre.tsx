@@ -474,24 +474,39 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
             ✅ Día cerrado — {fecha}
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.75rem', marginBottom:'1rem' }}>
-            {([
+            {[
               { label:'Remanente CF',    val: completo.remanente_crc,    color:'#8a6d1f' },
               { label:'Caja Diaria mañana', val: completo.sep_diaria_crc, color:'#2a7a4a' },
-              // Diferencia en AMBAS monedas (Opción B): ₡ del cierre guardado; US$ derivada del
-              // movimiento de ajuste (solo se muestra si ≠ 0).
-              { label:'Diferencia',      val: completo.diferencia_crc,   color: Math.abs(completo.diferencia_crc) < 500 && ajusteUsdCerrado === 0 ? '#2a7a4a' : '#c23b22',
-                sub: ajusteUsdCerrado !== 0 ? `US$ ${ajusteUsdCerrado >= 0 ? '+' : ''}${ajusteUsdCerrado.toFixed(2)}` : undefined },
-            ] as { label:string; val:number; color:string; sub?:string }[]).map(k => (
+            ].map(k => (
               <div key={k.label} style={{ background:'#fff', border:'1px solid var(--t-border, #d4cfc4)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
                 <div style={{ fontSize:'0.6rem', color:'#6a6250', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>{k.label}</div>
                 <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.1rem', fontWeight:800, color:k.color }}>
                   {fi2(k.val)}
                 </div>
-                {k.sub && (
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.78rem', fontWeight:700, color:k.color, marginTop:2 }}>{k.sub}</div>
-                )}
               </div>
             ))}
+            {/* Diferencia — ₡ y US$ discriminadas con signo y color por moneda (verde sobrante /
+                rojo faltante); una moneda en 0 no se muestra. ₡ del cierre guardado; US$ derivada
+                del movimiento de ajuste (Opción B). Solo presentación — la lógica no cambia. */}
+            <div style={{ background:'#fff', border:'1px solid var(--t-border, #d4cfc4)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
+              <div style={{ fontSize:'0.6rem', color:'#6a6250', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>Diferencia</div>
+              {completo.diferencia_crc === 0 && ajusteUsdCerrado === 0 ? (
+                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.9rem', fontWeight:700, color:'#2a7a4a' }}>✓ Sin diferencia</div>
+              ) : (
+                <>
+                  {completo.diferencia_crc !== 0 && (
+                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.1rem', fontWeight:800, color: completo.diferencia_crc < 0 ? '#c23b22' : '#2a7a4a' }}>
+                      {completo.diferencia_crc >= 0 ? '+' : ''}{fi2(completo.diferencia_crc)}
+                    </div>
+                  )}
+                  {ajusteUsdCerrado !== 0 && (
+                    <div style={{ fontFamily:"'DM Mono',monospace", fontSize: completo.diferencia_crc !== 0 ? '0.82rem' : '1.1rem', fontWeight:800, color: ajusteUsdCerrado < 0 ? '#c23b22' : '#2a7a4a', marginTop: completo.diferencia_crc !== 0 ? 2 : 0 }}>
+                      US$ {ajusteUsdCerrado >= 0 ? '+' : ''}{ajusteUsdCerrado.toFixed(2)}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           {completo.notas && (
             <div style={{ fontSize:'0.78rem', color:'#6a6250', padding:'0.5rem 0.75rem', background:'var(--t-panel, #ede8de)', borderRadius:2 }}>
@@ -705,13 +720,24 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                     <div style={{ fontSize:'0.82rem', fontWeight:700, color:'#c23b22', marginBottom:'0.4rem' }}>
                       ⚠ Diferencia detectada — registrá el motivo para cerrar
                     </div>
-                    {/* Ambas monedas, cada una con signo — solo las que superan su tolerancia (Opción B). */}
-                    <div style={{ display:'flex', gap:'1rem', flexWrap:'wrap', fontFamily:"'DM Mono',monospace", fontSize:'0.85rem', fontWeight:800, color:'#c23b22', marginBottom:'0.75rem' }}>
+                    {/* Ambas monedas con la MISMA jerarquía (columnas moneda | monto), cada una con
+                        signo — solo las que superan su tolerancia (misma condición de siempre). */}
+                    <div style={{ display:'grid', gridTemplateColumns:'6em 1fr', rowGap:4, alignItems:'baseline', marginBottom:'0.75rem' }}>
                       {diferencia !== null && !cuadra && (
-                        <span>₡ {diferencia >= 0 ? '+' : ''}{fi2(diferencia)}</span>
+                        <>
+                          <span style={{ fontSize:'0.66rem', color:'#8a5040', textTransform:'uppercase', letterSpacing:'0.1em' }}>₡ Colones</span>
+                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.95rem', fontWeight:800, color:'#c23b22' }}>
+                            {diferencia >= 0 ? '+' : ''}{fi2(diferencia)}
+                          </span>
+                        </>
                       )}
                       {difUSD !== null && !cuadraUSD && (
-                        <span>US$ {difUSD >= 0 ? '+' : ''}{difUSD.toFixed(2)}</span>
+                        <>
+                          <span style={{ fontSize:'0.66rem', color:'#8a5040', textTransform:'uppercase', letterSpacing:'0.1em' }}>US$ Dólares</span>
+                          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.95rem', fontWeight:800, color:'#c23b22' }}>
+                            {difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}
+                          </span>
+                        </>
                       )}
                     </div>
                     <div style={{ fontSize:'0.68rem', color:'#8a5040', marginBottom:'0.75rem' }}>

@@ -132,6 +132,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const cierresPeriodo = cierres.filter(c => (!from || c.session_date >= from) && (!to || c.session_date <= to) && Number(c.diferencia_crc) !== 0)
   const ajustesNet   = cierresPeriodo.reduce((s, c) => s + (Number(c.diferencia_crc) || 0), 0)
   const ajustesCount = cierresPeriodo.length
+  // Neto US$ de los ajustes del período — cálculo PARALELO (el ₡ sigue saliendo de los cierres,
+  // intacto). Como cash_cierres_dia no tiene columna diferencia_usd (decisión Opción B), el USD
+  // se deriva del registro durable: los MOVIMIENTOS 'Ajuste de cierre' del período. Signo por
+  // dirección: ingreso = sobrante (+) · egreso = faltante (−). Solo lectura.
+  const ajustesNetUsd = movements
+    .filter(m => m.subcategory === 'Ajuste de cierre' && (m.amount_usd || 0) !== 0)
+    .filter(m => { const f = movFecha(m); return (!from || f >= from) && (!to || f <= to) })
+    .reduce((s, m) => s + (m.movement_type === 'ingreso' ? 1 : -1) * (m.amount_usd || 0), 0)
 
   // El ajuste de APERTURA (reconciliación del saldo real) no es ingreso/egreso
   // real del negocio → se excluye de Ingresos/Egresos del período (pero sí
@@ -254,10 +262,25 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
         </div>
         <div className="cd-saldo-card" style={{ borderLeftColor: '#8a7a4a' }}>
           <div className="cd-saldo-label">Ajustes de cierre</div>
-          <div className="cd-saldo-val" style={{ color: ajustesNet < 0 ? '#c0392b' : ajustesNet > 0 ? '#27874f' : '#555', fontSize: ajustesCount ? '17px' : '13px' }}>
-            {ajustesCount ? `${ajustesNet >= 0 ? '+' : ''}${fi(ajustesNet)}` : 'Sin diferencias'}
-          </div>
-          {ajustesCount > 0 && <div style={{ fontSize: '9px', color: '#888', marginTop: '3px' }}>{ajustesCount} cierre{ajustesCount !== 1 ? 's' : ''} con diferencia</div>}
+          {/* Patrón Caja Fuerte: ₡ arriba, $ debajo (secundario). Cada moneda solo si ≠ 0;
+              signo y color por moneda (verde sobrante / rojo faltante / gris cero). */}
+          {ajustesCount === 0 && ajustesNetUsd === 0 ? (
+            <div className="cd-saldo-val" style={{ color: '#555', fontSize: '13px' }}>Sin diferencias</div>
+          ) : (
+            <>
+              {ajustesCount > 0 && (
+                <div className="cd-saldo-val" style={{ color: ajustesNet < 0 ? '#c0392b' : ajustesNet > 0 ? '#27874f' : '#555', fontSize: '17px' }}>
+                  {`${ajustesNet >= 0 ? '+' : ''}${fi(ajustesNet)}`}
+                </div>
+              )}
+              {ajustesNetUsd !== 0 && (
+                <div style={{ fontSize: '13px', fontFamily: "'DM Mono', monospace", marginTop: '2px', color: ajustesNetUsd < 0 ? '#c0392b' : '#27874f' }}>
+                  {ajustesNetUsd >= 0 ? '+' : ''}{fd(ajustesNetUsd)}
+                </div>
+              )}
+              {ajustesCount > 0 && <div style={{ fontSize: '9px', color: '#888', marginTop: '3px' }}>{ajustesCount} cierre{ajustesCount !== 1 ? 's' : ''} con diferencia</div>}
+            </>
+          )}
         </div>
       </div>
 

@@ -520,6 +520,9 @@ export async function reconcilePropinaEgreso(description: string, newTotalCRC: n
 // movimientos de ingreso a nivel día (session_id null). Borra los previos del
 // mismo día antes de re-crear, así re-cerrar el día no duplica el ledger.
 // Sólo efectivo: las ventas con tarjeta vienen del XLS de ventas, no del cierre.
+// IDENTIDAD (FIRMADA, cierre-propinas-via-real): el caller pasa el NETO de propinas
+// PAGADAS por fase (efReal − pierna pagada) — lo que efectivamente llega a la bóveda —
+// para que el ledger de Caja Fuerte post-cierre quede EXACTO en el físico contado.
 export async function recordCierreSales(params: {
   session_date:  string
   created_by:    string

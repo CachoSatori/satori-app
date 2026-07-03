@@ -155,6 +155,16 @@ describe('cash.ts — discardCierreDia borra también los ajustes del cierre', (
     expect(state.deletes.some(d => d.filters['eq:subcategory'] === 'Ajuste de cierre'
       && d.filters['like:description'] === 'Ajuste de cierre 2026-07-03%')).toBe(true)
   })
+
+  it('deshacer el cierre NO toca los pagos de propinas (plata real ya entregada)', async () => {
+    const { discardCierreDia } = await import('./cash')
+    await discardCierreDia('2026-07-03')
+
+    // Ningún delete filtra por 'Propinas por turno': al re-cerrar, lo pagado se recalcula de los
+    // movimientos (siguen ahí) y 'Ventas cierre' se re-crea neto — idempotente, sin duplicar.
+    expect(state.deletes.some(d =>
+      Object.values(d.filters).some(v => String(v).includes('Propinas por turno')))).toBe(false)
+  })
 })
 
 // ── Criterio 4 — LEDGER = FÍSICO CONTADO (con el saldoCajaFuerte REAL) ─────────────────────
@@ -170,7 +180,7 @@ const mkMov = (p: Partial<CashMovement>): CashMovement => ({
 } as CashMovement)
 
 describe('CashCierre + recordCierreAjuste — el saldo de Caja Fuerte arranca del físico contado', () => {
-  it('faltante ₡ y sobrante $: saldoCajaFuerte(ledger post-cierre) = contado físico exacto', async () => {
+  it('caso completo (propinas pagadas + pendiente + retiro + dif mixta): ledger = contado EXACTO', async () => {
     const { recordCierreAjuste } = await import('./cash')
 
     // Ledger PREVIO al cierre: saldo inicial (traspaso a CF) + un gasto viejo.
@@ -181,18 +191,26 @@ describe('CashCierre + recordCierreAjuste — el saldo de Caja Fuerte arranca de
     const saldoBase = saldoCajaFuerte(previos)
     expect(saldoBase).toEqual({ crc: 80000, usd: 200 })
 
-    // Cierre del 2026-07-03 (propinas 0 — ver test siguiente): efReal M/N, retiro, contado.
+    // Cierre del 2026-07-03 — VÍA REAL de propinas (firmado): M pagó ₡20.000 (sellado),
+    // tras el sellado se pagaron ₡5.000 más, y quedó UNA pendiente de ₡8.000 (no resta).
     const efRealM = 300000, efRealN = 200000, retiro = 100000
+    const propM = 20000, propNLeg = 5000
     const vmUSD = 50, vnUSD = 30
-    const deberia    = saldoBase.crc + efRealM + (efRealN - retiro)   // netoM + netoN con propinas 0
+    const deberia    = saldoBase.crc + (efRealM - propM) + (efRealN - propNLeg - retiro)
     const deberiaUSD = saldoBase.usd + vmUSD + vnUSD
-    const contadoCRC = deberia + (-2000)      // faltan ₡2.000
+    const contadoCRC = deberia + (-2000)      // faltan ₡2.000 (diferencia REAL, no fantasma)
     const contadoUSD = deberiaUSD + 5         // sobran $5
 
-    // Movimientos que crea el cierre (forma exacta de recordCierreSales / recordCierreRetiro):
+    // Movimientos del día — propinas por la vía real (Registradora: NO tocan el ledger de CF)…
+    const propinas = [
+      mkMov({ movement_type: 'egreso_personal', subcategory: 'Propinas por turno', caja_origen: 'Registradora', description: 'Propinas turno 2026-07-03 Mediodía', amount_crc: propM }),
+      mkMov({ movement_type: 'egreso_personal', subcategory: 'Propinas por turno', caja_origen: 'Registradora', description: 'Propinas turno 2026-07-03 Noche', amount_crc: propNLeg }),
+      mkMov({ movement_type: 'egreso_personal', subcategory: 'Propinas por turno', caja_origen: 'Registradora', description: 'Propinas turno 2026-07-02 Noche', amount_crc: 8000, status: 'pendiente' }),
+    ]
+    // …'Ventas cierre' ingresa el NETO de propinas pagadas (identidad firmada) + el retiro:
     const ventasYRetiro = [
-      mkMov({ subcategory: 'Ventas cierre', description: 'Ventas efectivo Mediodía 2026-07-03', amount_crc: efRealM, amount_usd: vmUSD }),
-      mkMov({ subcategory: 'Ventas cierre', description: 'Ventas efectivo Noche 2026-07-03', amount_crc: efRealN, amount_usd: vnUSD }),
+      mkMov({ subcategory: 'Ventas cierre', description: 'Ventas efectivo Mediodía 2026-07-03', amount_crc: efRealM - propM, amount_usd: vmUSD }),
+      mkMov({ subcategory: 'Ventas cierre', description: 'Ventas efectivo Noche 2026-07-03', amount_crc: efRealN - propNLeg, amount_usd: vnUSD }),
       mkMov({ movement_type: 'traspaso', subcategory: 'Caja Fuerte → Banco', description: 'Retiro dueños a banco 2026-07-03', amount_crc: retiro }),
     ]
     // …y el/los ajustes, con las filas REALES que inserta recordCierreAjuste:
@@ -200,28 +218,46 @@ describe('CashCierre + recordCierreAjuste — el saldo de Caja Fuerte arranca de
     const ajustes = state.inserts[0].map(r => mkMov(r as Partial<CashMovement>))
     expect(ajustes).toHaveLength(2)
 
-    // El ledger completo queda EXACTAMENTE en el físico contado (criterio 4).
-    const ledger = saldoCajaFuerte([...previos, ...ventasYRetiro, ...ajustes])
+    // El ledger completo queda EXACTAMENTE en el físico contado (invariante firmada).
+    const ledger = saldoCajaFuerte([...previos, ...propinas, ...ventasYRetiro, ...ajustes])
     expect(ledger.crc).toBe(contadoCRC)
     expect(ledger.usd).toBe(contadoUSD)
   })
 
-  it('DOCUMENTA el gap pre-existente: con propinas > 0 el ledger queda en contado + propinas', async () => {
-    // Las propinas se pagan desde la REGISTRADORA (pagarPropina, caja_origen 'Registradora'),
-    // pero el "debería" del cierre las RESTA mientras 'Ventas cierre' ingresa el efectivo BRUTO
-    // a Caja Fuerte. Ese desfase existe DESDE ANTES de la Opción B y el ajuste NO lo oculta ni
-    // lo corrige (el ajuste materializa la diferencia calculada, matemática sagrada intacta).
-    // Este test lo fija para que un cambio silencioso del comportamiento no pase desapercibido.
+  it('IDENTIDAD con propinas pagadas (test del gap DADO VUELTA): ledger = contado, sin fantasmas', async () => {
+    // ANTES este test DOCUMENTABA el gap: 'Ventas cierre' ingresaba el BRUTO y el ledger quedaba
+    // en contado + propinas (faltante fantasma). Con la vía real firmada, el ingreso es NETO de
+    // propinas pagadas → la identidad es exacta y este test la AFIRMA.
     const { recordCierreAjuste } = await import('./cash')
     const propinas = 5000
     const efRealM = 300000
     const deberia = 0 + (efRealM - propinas)              // saldo base 0, solo mediodía, sin retiro
     const contado = deberia                                // el conteo físico cuadra con el "debería"
 
-    const ventas = [mkMov({ subcategory: 'Ventas cierre', description: 'Ventas efectivo Mediodía 2026-07-03', amount_crc: efRealM })]
+    const dia = [
+      mkMov({ movement_type: 'egreso_personal', subcategory: 'Propinas por turno', caja_origen: 'Registradora', description: 'Propinas turno 2026-07-03 Mediodía', amount_crc: propinas }),
+      mkMov({ subcategory: 'Ventas cierre', description: 'Ventas efectivo Mediodía 2026-07-03', amount_crc: efRealM - propinas }),  // NETO
+    ]
     await recordCierreAjuste({ ...base, motivo: '', dif_crc: contado - deberia, dif_usd: 0 })  // dif 0 → sin ajuste
     expect(state.inserts).toHaveLength(0)
 
-    expect(saldoCajaFuerte(ventas).crc).toBe(contado + propinas)   // ← el gap: las propinas no salen de CF
+    expect(saldoCajaFuerte(dia).crc).toBe(contado)   // ✓ identidad exacta — el gap quedó cerrado
+  })
+
+  it('propinas PENDIENTES no restan: sin pagos, la identidad cierra con el ingreso bruto', async () => {
+    // Un turno dejado pendiente no saca plata: deberia no lo resta, 'Ventas cierre' entra
+    // completo y el pendiente (Registradora) no toca CF → ledger = contado igual de exacto.
+    const { recordCierreAjuste } = await import('./cash')
+    const efRealM = 300000
+    const deberia = 0 + efRealM                            // nada pagado → nada resta
+    const contado = deberia
+
+    const dia = [
+      mkMov({ movement_type: 'egreso_personal', subcategory: 'Propinas por turno', caja_origen: 'Registradora', description: 'Propinas turno 2026-07-03 Mediodía', amount_crc: 12000, status: 'pendiente' }),
+      mkMov({ subcategory: 'Ventas cierre', description: 'Ventas efectivo Mediodía 2026-07-03', amount_crc: efRealM }),
+    ]
+    await recordCierreAjuste({ ...base, motivo: '', dif_crc: 0, dif_usd: 0 })
+    expect(state.inserts).toHaveLength(0)
+    expect(saldoCajaFuerte(dia).crc).toBe(contado)
   })
 })

@@ -17,9 +17,12 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto, createDayMovement } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
-import { fi, todayStr, saldoCajaFuerte } from './cashUtils'
+import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
+import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
+import { propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
+import { shiftLabel } from '../../shared/utils'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
@@ -91,10 +94,26 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parcial?.tipo_cambio])
 
+  // ── Propinas del día — VÍA REAL (FIRMADO: una sola fuente de verdad) ─────────
+  // Los turnos de propinas pendientes se PAGAN desde acá (misma vía que Caja Diaria:
+  // propinaEgresoFields → egreso real que salda el pendiente). La matemática del cierre
+  // resta SOLO lo efectivamente pagado (movimientos del libro), nunca un número tipeado.
+  const [propinasPagables, setPropinasPagables] = useState<TipPayoutSummary[]>([])
+  const [payingProp,       setPayingProp]       = useState<string | null>(null)   // anti doble-click
+  useEffect(() => {
+    let cancelled = false
+    const since = new Date(fecha + 'T12:00:00')
+    since.setDate(since.getDate() - 30)   // mismo corte que CashTurno: una impaga vieja reaparece
+    getTipPayoutsSince(since.toISOString().slice(0, 10))
+      .then(r => { if (!cancelled) setPropinasPagables(r) })
+      .catch(() => { if (!cancelled) setPropinasPagables([]) })
+    return () => { cancelled = true }
+  }, [fecha])
+  const propinasPorPagar = propinasPorPagarDe(propinasPagables, movs)
+
   // ── FASE 1 state ──────────────────────────────────────────────
   const [vmCRC,       setVmCRC]       = useState<number | ''>('')
   const [vmUSD,       setVmUSD]       = useState<number | ''>('')
-  const [propM,       setPropM]       = useState<number | ''>('')
 
   // Efectivo real en COLONES del mediodía = ventas PoS ₡ − dólares al TC.
   // (El PoS registra toda venta en colones; los dólares físicos se cuentan
@@ -104,7 +123,6 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   // ── FASE 2 state ──────────────────────────────────────────────
   const [vnCRC,       setVnCRC]       = useState<number | ''>('')
   const [vnUSD,       setVnUSD]       = useState<number | ''>('')
-  const [propN,       setPropN]       = useState<number | ''>('')
   const [retiroN,     setRetiroN]     = useState<number | ''>('')   // retiro de dueños a banco (egreso administrativo)
 
   const efRealN = Math.round(N(vnCRC) - N(vnUSD) * tc)
@@ -120,9 +138,17 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const totalContadoCRC = N(sepDiariaCRC) + N(sepRegCRC) + N(remCRC)
   const totalContadoUSD = N(sepDiariaUSD) + N(sepRegUSD) + N(remUSD)
 
-  // Verification calculation — único egreso del cierre = propinas.
+  // Verification calculation — las propinas que restan son las PAGADAS (vía real, FIRMADO):
+  // movimientos 'Propinas por turno' con status aprobado cuya plata salió HOY (fecha del turno
+  // pagador, o fecha del movimiento a nivel día si se pagó desde este cierre). Las PENDIENTES
+  // no restan nada — la plata sigue en la caja hasta pagarse (flujo proveedor).
+  const propinasPagadasDia = propinasPagadasEnFecha(movs, sessions, fecha)
   const efRealMFromParcial = parcial ? parcial.ef_real_m_crc : efRealM
-  const propMFromParcial   = parcial ? parcial.propinas_m_crc : N(propM)
+  // Pierna M = lo sellado en Fase 1 (propinas_m_crc ahora guarda la SUMA PAGADA al sellar —
+  // mismo campo, compat con cierres históricos y KPIs). Antes del sellado, el total pagado vivo.
+  const propMFromParcial   = parcial ? parcial.propinas_m_crc : propinasPagadasDia
+  // Pierna N = lo pagado después del sellado (clamp ≥0 por robustez ante ediciones raras).
+  const propNLeg           = Math.max(0, propinasPagadasDia - propMFromParcial)
   const vmUSDFromParcial   = parcial ? parcial.vm_usd : N(vmUSD)
 
   // Saldo de Caja Fuerte según el ledger, EXCLUYENDO las ventas-de-cierre de esta fecha
@@ -136,7 +162,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       (m.subcategory === 'Ventas cierre' || m.subcategory === 'Ajuste de cierre')
       && (m.description || '').includes(fecha))))
   const netoM    = efRealMFromParcial - propMFromParcial
-  const netoN    = efRealN - N(propN) - N(retiroN)
+  const netoN    = efRealN - propNLeg - N(retiroN)
   // Debería quedar en Caja Fuerte = saldo del ledger + ventas efectivo − propinas − retiro.
   const deberia  = saldoBase.crc + netoM + netoN
   const diferencia = totalContadoCRC > 0 ? totalContadoCRC - deberia : null
@@ -169,7 +195,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         tipo:            'parcial_mediodia',
         vm_crc:          N(vmCRC),
         vm_usd:          N(vmUSD),
-        propinas_m_crc:  N(propM),
+        // Suma PAGADA (vía real) al momento del sellado — mismo campo que siempre (compat).
+        propinas_m_crc:  propinasPagadasDia,
         otros_m_crc:     0,
         ef_real_m_crc:   efRealM,
         // Fase 2 vacía
@@ -208,7 +235,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         tipo:                 'completo',
         vn_crc:               N(vnCRC),
         vn_usd:               N(vnUSD),
-        propinas_n_crc:       N(propN),
+        // Pierna N pagada (vía real) — mismo campo que siempre (compat con KPIs e históricos).
+        propinas_n_crc:       propNLeg,
         otros_n_crc:          N(retiroN),
         ef_real_n_crc:        efRealN,
         sep_diaria_crc:       N(sepDiariaCRC),
@@ -227,12 +255,16 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       // cierre (alimenta el saldo de Caja Fuerte), NO es complementario. Si falla, el día
       // quedó guardado pero las ventas NO están → avisar explícito, nunca ocultar.
       try {
+        // IDENTIDAD (FIRMADA): 'Ventas cierre' ingresa a Caja Fuerte el NETO de propinas
+        // pagadas (efReal − pierna pagada de cada fase) — lo que efectivamente llega a la
+        // bóveda. Así ledger post-cierre = deberia + ajuste = físico contado, EXACTO.
+        // (Los egresos de propinas viven en Registradora — no tocan el ledger de CF.)
         await recordCierreSales({
           session_date:  fecha,
           created_by:    profile?.id ?? '',
           exchange_rate: tc,
-          mediodia: { crc: efRealMFromParcial, usd: vmUSDFromParcial },
-          noche:    { crc: efRealN,            usd: N(vnUSD) },
+          mediodia: { crc: efRealMFromParcial - propMFromParcial, usd: vmUSDFromParcial },
+          noche:    { crc: efRealN - propNLeg,                    usd: N(vnUSD) },
         })
         await recordCierreRetiro({
           session_date:  fecha,
@@ -313,6 +345,24 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     } finally { setSaving(false) }
   }
 
+  // Pagar un turno de propinas DESDE el cierre — misma vía que Caja Diaria (propinaEgresoFields),
+  // a nivel día y con la FECHA DEL CIERRE: la plata sale HOY del físico aunque el turno de
+  // propinas sea de un día anterior (así la resta cae en el día correcto). El movimiento salda
+  // el pendiente (description = propKey) y la matemática se recalcula sola al refrescar.
+  const pagarPropinaCierre = async (p: TipPayoutSummary) => {
+    if (!profile || payingProp || saving) return
+    if (!window.confirm(`¿PAGAR ahora las propinas de ${shiftLabel(p.shift_type)} del ${formatDate(p.session_date)} por ${fi(p.total_payout_crc)}?\n\nSe registra el egreso real y se descuenta del cierre.`)) return
+    setPayingProp(p.session_id)
+    setError(null)
+    try {
+      await createDayMovement({ created_by: profile.id, ...propinaEgresoFields(p), status: 'aprobado', fecha })
+      await loadCierres()   // refresca el libro → lista y matemática se actualizan
+      onRefresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo registrar el pago de propinas')
+    } finally { setPayingProp(null) }
+  }
+
   // Diferencia US$ del día YA cerrado — derivada del movimiento de Ajuste de cierre (no hay
   // columna diferencia_usd en cash_cierres_dia y NO hace falta migración: el ajuste ES el
   // registro durable; una dif sub-tolerancia (<$1) no genera ajuste y se considera que cuadra).
@@ -390,6 +440,33 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         </div>
       </div>
 
+      {/* ── Propinas del día — la VÍA REAL (una sola fuente de verdad, FIRMADO) ── */}
+      {!completo && (
+        <Section title="Propinas del día" icon="💁" color="#8a5aa8">
+          <div style={{ fontSize:'0.74rem', color:'#6a6250', marginBottom:'0.6rem' }}>
+            Pagadas hoy (movimientos reales): <strong style={{ color:'#8a5aa8' }}>{fi2(propinasPagadasDia)}</strong>.
+            Lo que pagués acá crea el egreso real y se descuenta del cierre; lo pendiente <strong>no resta</strong> (la plata sigue en la caja).
+          </div>
+          {propinasPorPagar.length === 0 ? (
+            <div style={{ fontSize:'0.76rem', color:'#8a8272' }}>✓ Sin propinas por pagar.</div>
+          ) : propinasPorPagar.map(p => (
+            <div key={p.session_id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem', padding:'0.45rem 0.25rem', borderBottom:'1px solid var(--t-border, #d4cfc4)' }}>
+              <div>
+                <div style={{ fontSize:'0.8rem', fontWeight:600 }}>Propinas {shiftLabel(p.shift_type)} · {formatDate(p.session_date)}</div>
+                <div style={{ fontSize:'0.68rem', color:'#8a8272' }}>pendiente de pago</div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
+                <span style={{ fontFamily:"'DM Mono',monospace", fontWeight:700 }}>{fi2(p.total_payout_crc)}</span>
+                <button onClick={() => pagarPropinaCierre(p)} disabled={payingProp !== null || saving}
+                  className="cierre-btn gold" style={{ padding:'5px 12px', fontSize:'0.74rem', width:'auto' }}>
+                  {payingProp === p.session_id ? 'Pagando…' : '💵 Pagar ahora'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </Section>
+      )}
+
       {/* ── CIERRE YA COMPLETO ── */}
       {completo && (
         <div style={{ background:'#e8f5ec', border:'2px solid #4a9a6a', borderRadius:2, padding:'1.25rem' }}>
@@ -444,9 +521,13 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   {N(vmUSD) > 0 && <span style={{ color:'#6a6250' }}> · dólares físicos: <strong>${N(vmUSD).toFixed(2)}</strong></span>}
                 </div>
               )}
+              {/* Propinas: ya NO se tipean — se pagan por la vía real (sección "Propinas del día")
+                  y acá se muestra lo efectivamente pagado, que es lo que resta del neto. */}
               <Row2>
-                <Field label="Propinas ₡ (único egreso)">
-                  <MontoInput prefix="₡" value={propM} onChange={setPropM} />
+                <Field label="Propinas pagadas ₡ (vía real — se sella con la Fase 1)">
+                  <div className="cierre-monto" style={{ height:38, alignItems:'center', display:'flex', padding:'0 10px', fontFamily:"'DM Mono',monospace", fontWeight:700, color:'#8a5aa8' }}>
+                    {fi2(propinasPagadasDia)}
+                  </div>
                 </Field>
                 <div />
               </Row2>
@@ -509,8 +590,11 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   </div>
                 )}
                 <Row2>
-                  <Field label="Propinas noche ₡">
-                    <MontoInput prefix="₡" value={propN} onChange={setPropN} />
+                  {/* Pierna N = pagadas por la vía real DESPUÉS del sellado de Fase 1. */}
+                  <Field label="Propinas pagadas tras Fase 1 ₡ (vía real)">
+                    <div className="cierre-monto" style={{ height:38, alignItems:'center', display:'flex', padding:'0 10px', fontFamily:"'DM Mono',monospace", fontWeight:700, color:'#8a5aa8' }}>
+                      {fi2(propNLeg)}
+                    </div>
                   </Field>
                   <Field label="Retiro dueños → banco ₡">
                     <MontoInput prefix="₡" value={retiroN} onChange={setRetiroN} />

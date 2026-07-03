@@ -14,8 +14,10 @@ vi.mock('../../shared/api/cash', () => ({
   recordCierreAjuste: vi.fn(),
   discardCierreDia: vi.fn(),
   discardDiaCompleto: vi.fn(),
+  createDayMovement: vi.fn(),
 }))
 vi.mock('../../shared/api/exchangeRate', () => ({ getCurrentRate: vi.fn(async () => 640) }))
+vi.mock('../../shared/api/tips', () => ({ getTipPayoutsSince: vi.fn(async () => []) }))
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: null }) }))
 vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn() }))
 

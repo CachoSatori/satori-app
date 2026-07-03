@@ -12,7 +12,8 @@ import {
   upsertSupplier,
   updateMiddayCheck,
 } from '../../shared/api/cash'
-import { fi, fd, todayStr, formatDate, PROPINAS_POR_PAGAR_DESDE, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
+import { fi, fd, todayStr, formatDate, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
+import { propinaEgresoFields, propinasPorPagarDe } from './propinaPago'
 import { useDeletionNote } from './deletionNote'
 import { tipShiftToCaja, shiftLabel, dateCR } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
@@ -228,36 +229,22 @@ export default function CashTurno({
       .catch(() => { if (!cancelled) setPropinasPagables([]) })
     return () => { cancelled = true }
   }, [openSession])
-  // Clave del movimiento de propinas (misma convención que reconcilePropinaEgreso)
-  const propKey = (p: TipPayoutSummary) => `Propinas turno ${p.session_date} ${shiftLabel(p.shift_type)}`
-  // Ya registradas (pagadas o pendientes) en CUALQUIER turno del día → no mostrar.
-  // La description incluye fecha+turno, así que el match es específico de esa propina.
-  const propinasRegistradas = new Set(
-    allMovements
-      .filter(m => m.subcategory === 'Propinas por turno' && m.status !== 'rechazado')
-      .map(m => m.description))
-  const propinasPorPagar = propinasPagables.filter(p =>
-    p.session_date >= PROPINAS_POR_PAGAR_DESDE && !propinasRegistradas.has(propKey(p)))
+  // Turnos aún sin registrar — criterio COMPARTIDO con el Cierre del Día (propinaPago:
+  // un movimiento con esa description, pagado o pendiente, lo salda). Misma vía, dos puertas.
+  const propinasPorPagar = propinasPorPagarDe(propinasPagables, allMovements)
   const pagarPropina = async (p: TipPayoutSummary, status: 'aprobado' | 'pendiente') => {
     if (!openSession || !profile || payingProp) return   // anti doble-registro
     const accion = status === 'aprobado' ? 'PAGAR ahora' : 'dejar PENDIENTE'
     if (!window.confirm(`¿${accion} las propinas de ${shiftLabel(p.shift_type)} por ${fi(p.total_payout_crc)}?`)) return
     setPayingProp(p.session_id)
     try {
+      // Forma del egreso COMPARTIDA (propinaEgresoFields) — idéntica a la histórica de esta puerta.
       const mov = await createCashMovement({
         session_id:    openSession.id,
         created_by:    profile.id,
-        movement_type: 'egreso_personal',
-        amount_crc:    p.total_payout_crc,
-        amount_usd:    0,
-        currency:      'CRC',
         exchange_rate: null,
-        description:   propKey(p),
-        subcategory:   'Propinas por turno',   // → finance.ts lo excluye del P&L (pass-through)
-        method:        'Efectivo',
-        caja_origen:   'Registradora',
+        ...propinaEgresoFields(p),
         status,                                 // 'pendiente' = el efectivo sigue en caja hasta pagarse
-        shift:         tipShiftToCaja(p.shift_type),
       })
       onMovAdded(mov)
     } catch (e) { onError(e instanceof Error ? e.message : 'Error registrando propinas') }

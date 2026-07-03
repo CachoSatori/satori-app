@@ -18,6 +18,7 @@ import { tipShiftToCaja, shiftLabel, dateCR } from '../../shared/utils'
 import { getActiveEmployees, getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { uploadFacturaPhoto, movementAttachments } from '../../shared/api/facturas'
+import { listLinkedDocs } from '../../shared/api/documents'
 import FacturaThumbs from '../../shared/FacturaThumbs'
 import AgregarAsistente from './AgregarAsistente'
 import type { Employee } from '../../shared/types/database'
@@ -101,6 +102,16 @@ export default function CashTurno({
   // TC por defecto = el configurado en Admin (exchange_rates). Editable.
   useEffect(() => { getCurrentRate().then(r => { if (r > 0) setTc(r) }).catch(() => {}) }, [])
   const [saving,       setSaving]       = useState(false)
+  // Facturas enlazadas (documents.linked_movement_id) — espejo del mecanismo de CashMovimientos
+  // (listLinkedDocs, una consulta al montar). Solo lectura: alimenta la nota "⚠ sin foto" en los
+  // pagos de mercadería persistidos sin factura enlazada NI fotos adjuntas (control del manager).
+  const [linkedDocMovs, setLinkedDocMovs] = useState<Set<string>>(new Set())
+  const [docsLoaded, setDocsLoaded] = useState(false)
+  useEffect(() => {
+    listLinkedDocs().then(ds => {
+      setLinkedDocMovs(new Set(ds.map(d => d.linked_movement_id).filter((x): x is string => !!x)))
+    }).catch(() => {}).finally(() => setDocsLoaded(true))
+  }, [])
   const [carryFrom,  setCarryFrom]  = useState<string | null>(null) // fecha del cierre que asignó el fondo
   const [carrySugerido, setCarrySugerido] = useState<number | null>(null) // ₡ asignado a Caja Proveedores por ese cierre
 
@@ -854,6 +865,11 @@ export default function CashTurno({
                   {p.readonly && <span style={{ color: '#a07030' }}> · desde Bandeja (se gestiona en Pendientes)</span>}
                   {!p.persistedId && <span style={{ color: '#c0392b' }}> · sin guardar</span>}
                   {p.pending && <span style={{ color: '#a07830', fontWeight: 700 }}> · ⏳ por sincronizar</span>}
+                  {/* T3-B: pago de mercadería guardado SIN factura enlazada (documents) NI fotos adjuntas
+                      → nota para control del manager. Mismo color que "falta factura" (FacturaVerify). */}
+                  {docsLoaded && p.persistedId && p.attachments.length === 0 && !linkedDocMovs.has(p.persistedId) && (
+                    <span style={{ color: '#c8a030', fontWeight: 700 }}> · ⚠ sin foto</span>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>

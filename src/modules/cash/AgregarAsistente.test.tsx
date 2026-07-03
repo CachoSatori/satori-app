@@ -149,3 +149,22 @@ describe('AgregarAsistente — matriz de pago por rol (RN-3, sin alterarla)', ()
     expect(formas).toEqual(['Transferencia — Pendiente', 'Transferencia — Pagado desde Banco'])
   })
 })
+
+describe('AgregarAsistente — orden del form (T3-B, decidido por la dueña)', () => {
+  it('Foto → Clasificación → Proveedor → Montos → Descripción → Fecha (los bloques en ese orden)', () => {
+    renderAsistente('cajero')
+    // Posición relativa en el DOM (compareDocumentPosition): cada elemento precede al siguiente.
+    const seq = [
+      screen.getByLabelText('Foto de la factura'),
+      screen.getByRole('group', { name: 'Clasificación' }),
+      screen.getByLabelText('Proveedor'),
+      screen.getByLabelText('Monto colones'),
+      screen.getByLabelText('Descripción'),
+      screen.getByLabelText('Fecha de factura'),
+    ]
+    for (let i = 0; i < seq.length - 1; i++) {
+      // DOCUMENT_POSITION_FOLLOWING = 4 → seq[i+1] viene DESPUÉS de seq[i].
+      expect(seq[i].compareDocumentPosition(seq[i + 1]) & 4, `bloque ${i} debe preceder al ${i + 1}`).toBeTruthy()
+    }
+  })
+})

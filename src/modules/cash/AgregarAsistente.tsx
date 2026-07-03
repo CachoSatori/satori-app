@@ -290,11 +290,26 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           )}
         </div>
 
-        <div className="tips-field" style={{ marginTop: '0.5rem' }}>
-          <div className="tips-field-label">Descripción / concepto</div>
-          <input type="text" className="tips-input-dark" style={{ width: '100%' }} aria-label="Descripción"
-            placeholder="Ej: pescado fresco, alquiler del local, ingreso por…" autoFocus
-            value={descripcion} onChange={e => setDescripcion(e.target.value)} />
+        {/* ── 2. Clasificación advisory ── (orden T3-B decidido por la dueña: Foto → Clasificación →
+            Proveedor → Montos → Descripción → Fecha. La sugerencia es un useMemo puro sobre
+            descripción/proveedor/monto → se recalcula sola aunque esos campos estén más abajo.) */}
+        <div className="tips-field" style={{ marginTop: '1rem' }}>
+          <div className="tips-field-label">
+            Clasificación — sugerido: <strong>{claseLabel[sugerencia.suggestion]}</strong> (confianza {confNivel} · {confPct}%)
+          </div>
+          <div className="cd-metodo-tabs" role="group" aria-label="Clasificación">
+            {(['mercaderia', 'operativa', 'ingreso'] as Clase[]).map(c => (
+              <div key={c}
+                className={`cd-metodo-tab ${clase === c ? 'active' : ''}`}
+                role="button" tabIndex={0} aria-pressed={clase === c}
+                onClick={() => setClasePicked(c)}>
+                {claseLabel[c]}{c === sugerencia.suggestion ? ' ✦' : ''}
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 4 }}>
+            Es una sugerencia: confirmala o cambiala. Ingreso se elige a mano (no se deduce del texto).
+          </div>
         </div>
 
         <div className="tips-field" style={{ marginTop: '0.5rem' }}>
@@ -353,6 +368,13 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
         </div>
 
         <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+          <div className="tips-field-label">Descripción / concepto</div>
+          <input type="text" className="tips-input-dark" style={{ width: '100%' }} aria-label="Descripción"
+            placeholder="Ej: pescado fresco, alquiler del local, ingreso por…" autoFocus
+            value={descripcion} onChange={e => setDescripcion(e.target.value)} />
+        </div>
+
+        <div className="tips-field" style={{ marginTop: '0.75rem' }}>
           <div className="tips-field-label">Fecha de la factura (opcional)</div>
           <input type="date" className="tips-input-dark" style={{ width: '100%' }} aria-label="Fecha de factura"
             value={fechaFactura} onChange={e => setFechaFactura(e.target.value)} />
@@ -383,26 +405,6 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             </div>
           </div>
         )}
-
-        {/* ── 2. Clasificación advisory ── */}
-        <div className="tips-field" style={{ marginTop: '1rem' }}>
-          <div className="tips-field-label">
-            Clasificación — sugerido: <strong>{claseLabel[sugerencia.suggestion]}</strong> (confianza {confNivel} · {confPct}%)
-          </div>
-          <div className="cd-metodo-tabs" role="group" aria-label="Clasificación">
-            {(['mercaderia', 'operativa', 'ingreso'] as Clase[]).map(c => (
-              <div key={c}
-                className={`cd-metodo-tab ${clase === c ? 'active' : ''}`}
-                role="button" tabIndex={0} aria-pressed={clase === c}
-                onClick={() => setClasePicked(c)}>
-                {claseLabel[c]}{c === sugerencia.suggestion ? ' ✦' : ''}
-              </div>
-            ))}
-          </div>
-          <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 4 }}>
-            Es una sugerencia: confirmala o cambiala. Ingreso se elige a mano (no se deduce del texto).
-          </div>
-        </div>
 
         {/* ── 3. Pago (matriz RN-3) ── */}
         {clase !== 'ingreso' ? (

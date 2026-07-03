@@ -11,6 +11,7 @@ vi.mock('../../shared/api/cash', () => ({
   updateCierreCompleto: vi.fn(),
   recordCierreSales: vi.fn(),
   recordCierreRetiro: vi.fn(),
+  recordCierreAjuste: vi.fn(),
   discardCierreDia: vi.fn(),
   discardDiaCompleto: vi.fn(),
 }))

@@ -598,6 +598,79 @@ export async function recordCierreRetiro(params: {
   if (error) throw new Error(error.message)
 }
 
+// UUID determinístico (SHA-256 del seed, formateado con bits de versión/variante válidos) —
+// client_op_id del ajuste de cierre: re-confirmar el MISMO cierre produce el MISMO id, así el
+// UNIQUE de client_op_id (mig 021) rebota el duplicado aunque la limpieza previa fallara.
+// (client_op_id es columna uuid → el seed legible "cierre-ajuste-{fecha}-{moneda}" se hashea.)
+// Exportada para test.
+export async function cierreAjusteOpId(sessionDate: string, currency: 'crc' | 'usd'): Promise<string> {
+  const data = new TextEncoder().encode(`cierre-ajuste-${sessionDate}-${currency}`)
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', data))
+  h[6] = (h[6] & 0x0f) | 0x40
+  h[8] = (h[8] & 0x3f) | 0x80
+  const hex = Array.from(h.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+// Registra (idempotente) el/los movimientos de AJUSTE de un cierre con diferencia — Opción B
+// FIRMADA por la dueña: por cada moneda cuya diferencia superó su tolerancia, UN movimiento en
+// Caja Fuerte que deja el ledger igual al físico contado. Faltante (dif<0) → egreso resta;
+// Sobrante (dif>0) → ingreso suma. Espejo del patrón de recordCierreSales/recordCierreRetiro:
+// borra los ajustes previos del día antes de re-crear (re-cerrar no duplica) y ADEMÁS usa
+// client_op_id determinístico por fecha+moneda (doble cinturón contra duplicados por retry).
+// SIEMPRE llamarla al cerrar (aun con dif_crc/dif_usd en 0): la limpieza inicial garantiza que
+// re-cerrar un día que ANTES tuvo diferencia y ahora cuadra no arrastre el ajuste viejo.
+// ORDEN: va DESPUÉS de guardar el cierre y registrar ventas/retiro — la diferencia ya quedó
+// calculada y sellada SIN este ajuste (y el saldoBase del propio día lo excluye, ver CashCierre).
+export async function recordCierreAjuste(params: {
+  session_date:  string
+  created_by:    string
+  exchange_rate: number
+  motivo:        string
+  dif_crc:       number   // diferencia ₡ (0 = no supera tolerancia → no se crea movimiento ₡)
+  dif_usd:       number   // diferencia $ (ídem)
+}): Promise<void> {
+  // Limpiar ajustes previos de este día (idempotencia al re-cerrar).
+  await supabase
+    .from('cash_movements')
+    .delete()
+    .eq('subcategory', 'Ajuste de cierre')
+    .like('description', `Ajuste de cierre ${params.session_date}%`)
+
+  const rows = [
+    { cur: 'crc' as const, dif: params.dif_crc },
+    { cur: 'usd' as const, dif: params.dif_usd },
+  ].filter(r => r.dif !== 0)
+  if (rows.length === 0) return
+
+  const payload = await Promise.all(rows.map(async r => ({
+    client_op_id:  await cierreAjusteOpId(params.session_date, r.cur),
+    session_id:    null,
+    created_by:    params.created_by,
+    // NOTA (taxonomía cashUtils): no existe movement_type 'ajuste' (cambio de enum) → se
+    // registran como ingreso/egreso, tal como quedó decidido en CATEGORIAS_DEFAULT.
+    movement_type: r.dif > 0 ? ('ingreso' as const) : ('egreso_operativo' as const),
+    amount_crc:    r.cur === 'crc' ? Math.abs(r.dif) : 0,
+    amount_usd:    r.cur === 'usd' ? Math.abs(r.dif) : 0,
+    currency:      'CRC' as const,
+    exchange_rate: params.exchange_rate,
+    description:   `Ajuste de cierre ${params.session_date} · ${r.dif > 0 ? 'Sobrante' : 'Faltante'} · ${params.motivo}`,
+    subcategory:   'Ajuste de cierre',
+    supplier_id:   null,
+    supplier_name: '',
+    employee_name: '',
+    shift:         '',
+    caja_origen:   'Caja Fuerte',   // el ajuste corrige el saldo de la Caja Fuerte al físico contado
+    method:        'Efectivo',
+    status:        'aprobado',      // aprobado (no pendiente): saldoCajaFuerte lo cuenta de una
+  })))
+
+  const { error } = await withWriteTimeout(signal =>
+    supabase.from('cash_movements').insert(payload).abortSignal(signal))
+  // 23505 = el client_op_id determinístico ya existe (retry tras timeout) → ya está registrado.
+  if (error && (error as { code?: string }).code !== '23505') throw new Error(error.message)
+}
+
 // ── Proveedores ─────────────────────────────────────────────
 
 export async function getSuppliers(): Promise<Supplier[]> {
@@ -685,10 +758,14 @@ export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created
 }
 
 // Deshacer el cierre del día (error de fecha / empezar de nuevo): borra los
-// cierres de esa fecha y los movimientos que generó (ventas del cierre + retiro).
+// cierres de esa fecha y los movimientos que generó (ventas del cierre + retiro +
+// ajuste de diferencia). El ajuste DEBE borrarse acá: si quedara, re-cerrar el día
+// arrastraría/duplicaría la corrección (Opción B). Mismo delete plano que ventas/retiro
+// (movimientos generados por el propio cierre, sin inventario ligado → sin cascada).
 export async function discardCierreDia(date: string): Promise<void> {
   await supabase.from('cash_movements').delete().eq('subcategory', 'Ventas cierre').like('description', `%${date}`)
   await supabase.from('cash_movements').delete().eq('description', `Retiro dueños a banco ${date}`)
+  await supabase.from('cash_movements').delete().eq('subcategory', 'Ajuste de cierre').like('description', `Ajuste de cierre ${date}%`)
   const { error } = await supabase.from('cash_cierres_dia').delete().eq('session_date', date)
   if (error) throw new Error(error.message)
 }

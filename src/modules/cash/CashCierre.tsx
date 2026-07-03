@@ -17,7 +17,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, discardCierreDia, discardDiaCompleto } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { fi, todayStr, saldoCajaFuerte } from './cashUtils'
 
@@ -32,6 +32,14 @@ function N(v: number | ''): number { return Number(v) || 0 }
 // así que el "debería" SIEMPRE incluye el saldo USD del ledger. Exportada para test.
 export function calcDeberiaUSD(saldoBaseUsd: number, vmUsd: number, vnUsd: number): number {
   return saldoBaseUsd + vmUsd + vnUsd
+}
+
+// Gate del ajuste — Opción B FIRMADA por la dueña: el motivo es obligatorio si la diferencia
+// en ₡ supera su tolerancia (₡500) O la de US$ supera la suya ($1, con datos USD presentes:
+// difUsd viene null cuando no hay ni contado ni "debería" en dólares). Antes el gate era solo ₡.
+// Mismas tolerancias que cuadra/cuadraUSD del componente — mantener en sync. Exportada para test.
+export function cierreNecesitaAjuste(difCrc: number | null, difUsd: number | null): boolean {
+  return (difCrc !== null && Math.abs(difCrc) >= 500) || (difUsd !== null && Math.abs(difUsd) >= 1)
 }
 
 export default function CashCierre({ onRefresh, openSession }: Props) {
@@ -119,8 +127,14 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
   // Saldo de Caja Fuerte según el ledger, EXCLUYENDO las ventas-de-cierre de esta fecha
   // (esas se re-suman desde el formulario → evitar doble conteo). Idempotente al re-cerrar.
+  // El AJUSTE de cierre de esta MISMA fecha recibe el mismo tratamiento (Opción B): el deshacer
+  // lo borra, pero si quedara colgado (deshacer parcial), contarlo acá corrompería el "debería"
+  // del re-cierre. Los ajustes de fechas ANTERIORES sí cuentan — son los que dejan el saldo
+  // arrancando del físico contado de su día.
   const saldoBase = saldoCajaFuerte(
-    movs.filter(m => !(m.subcategory === 'Ventas cierre' && (m.description || '').includes(fecha))))
+    movs.filter(m => !(
+      (m.subcategory === 'Ventas cierre' || m.subcategory === 'Ajuste de cierre')
+      && (m.description || '').includes(fecha))))
   const netoM    = efRealMFromParcial - propMFromParcial
   const netoN    = efRealN - N(propN) - N(retiroN)
   // Debería quedar en Caja Fuerte = saldo del ledger + ventas efectivo − propinas − retiro.
@@ -139,7 +153,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const [ajusteMotivo, setAjusteMotivo] = useState('')
   const [notas,        setNotas]        = useState('')
 
-  const requiresAjuste = diferencia !== null && !cuadra
+  // Opción B (firmada): el gate cubre AMBAS monedas — antes un faltante solo-USD cerraba sin motivo.
+  const requiresAjuste = cierreNecesitaAjuste(diferencia, difUSD)
 
   // ── Confirmar cierre parcial (Fase 1) ─────────────────────────
   const handleConfirmParcial = async () => {
@@ -230,6 +245,25 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         setError(`El día se guardó pero las VENTAS no se registraron en movimientos: ${e3 instanceof Error ? e3.message : String(e3)}. Deshacé el cierre y volvé a cerrarlo.`)
         return
       }
+      // Fase 4 — Opción B (FIRMADA): materializar la diferencia como movimiento(s) de AJUSTE en
+      // Caja Fuerte (faltante → egreso resta · sobrante → ingreso suma), para que el ledger
+      // arranque mañana del físico contado. ORDEN CRÍTICO: va DESPUÉS de sellar el cierre y
+      // registrar ventas/retiro — la diferencia ya quedó calculada y guardada SIN este ajuste.
+      // Se llama SIEMPRE (aun cuadrando): su limpieza inicial borra ajustes viejos del día.
+      try {
+        await recordCierreAjuste({
+          session_date:  fecha,
+          created_by:    profile?.id ?? '',
+          exchange_rate: tc,
+          motivo:        ajusteMotivo.trim(),
+          dif_crc:       diferencia !== null && !cuadra    ? diferencia : 0,
+          dif_usd:       difUSD     !== null && !cuadraUSD ? difUSD     : 0,
+        })
+      } catch (e4) {
+        await loadCierres(); onRefresh()
+        setError(`El día se cerró pero el AJUSTE de la diferencia no quedó en movimientos: ${e4 instanceof Error ? e4.message : String(e4)}. Deshacé el cierre y volvé a cerrarlo.`)
+        return
+      }
       setMsg('✓ Día cerrado completamente')
       await loadCierres()
       onRefresh()
@@ -245,7 +279,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     if (!parcial && !completo) return
     if (!window.confirm(
       `¿Deshacer el cierre del ${fecha}?\n\n` +
-      `Se borran SOLO los datos del cierre y lo que generó (ventas del cierre + retiro).\n\n` +
+      `Se borran SOLO los datos del cierre y lo que generó (ventas del cierre + retiro + ajuste de diferencia).\n\n` +
       `⚠ NO se borran los pagos a proveedores, gastos ni ingresos manuales del día — esos quedan. ` +
       `Si querés recargar el día desde cero (sin duplicar), usá el botón "Borrar TODO el día".`)) return
     if (!(await requireManager()).ok) return
@@ -278,6 +312,16 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       setError(e instanceof Error ? e.message : 'Error al borrar el día')
     } finally { setSaving(false) }
   }
+
+  // Diferencia US$ del día YA cerrado — derivada del movimiento de Ajuste de cierre (no hay
+  // columna diferencia_usd en cash_cierres_dia y NO hace falta migración: el ajuste ES el
+  // registro durable; una dif sub-tolerancia (<$1) no genera ajuste y se considera que cuadra).
+  const ajusteUsdCerrado = (() => {
+    const m = movs.find(m => m.subcategory === 'Ajuste de cierre'
+      && (m.description || '').startsWith(`Ajuste de cierre ${fecha}`)
+      && (m.amount_usd || 0) !== 0)
+    return m ? (m.movement_type === 'ingreso' ? 1 : -1) * (m.amount_usd || 0) : 0
+  })()
 
   if (loading) return <div style={{ padding:'2rem', textAlign:'center', color:'#888' }}>Cargando…</div>
 
@@ -353,16 +397,22 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
             ✅ Día cerrado — {fecha}
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.75rem', marginBottom:'1rem' }}>
-            {[
+            {([
               { label:'Remanente CF',    val: completo.remanente_crc,    color:'#8a6d1f' },
               { label:'Caja Diaria mañana', val: completo.sep_diaria_crc, color:'#2a7a4a' },
-              { label:'Diferencia',      val: completo.diferencia_crc,   color: Math.abs(completo.diferencia_crc) < 500 ? '#2a7a4a' : '#c23b22' },
-            ].map(k => (
+              // Diferencia en AMBAS monedas (Opción B): ₡ del cierre guardado; US$ derivada del
+              // movimiento de ajuste (solo se muestra si ≠ 0).
+              { label:'Diferencia',      val: completo.diferencia_crc,   color: Math.abs(completo.diferencia_crc) < 500 && ajusteUsdCerrado === 0 ? '#2a7a4a' : '#c23b22',
+                sub: ajusteUsdCerrado !== 0 ? `US$ ${ajusteUsdCerrado >= 0 ? '+' : ''}${ajusteUsdCerrado.toFixed(2)}` : undefined },
+            ] as { label:string; val:number; color:string; sub?:string }[]).map(k => (
               <div key={k.label} style={{ background:'#fff', border:'1px solid var(--t-border, #d4cfc4)', padding:'0.75rem', borderRadius:2, textAlign:'center' }}>
                 <div style={{ fontSize:'0.6rem', color:'#6a6250', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>{k.label}</div>
                 <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.1rem', fontWeight:800, color:k.color }}>
                   {fi2(k.val)}
                 </div>
+                {k.sub && (
+                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.78rem', fontWeight:700, color:k.color, marginTop:2 }}>{k.sub}</div>
+                )}
               </div>
             ))}
           </div>
@@ -568,8 +618,20 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 {/* Ajuste obligatorio si hay diferencia */}
                 {requiresAjuste && (
                   <div style={{ background:'#fdf0ee', border:'2px solid #c23b22', borderRadius:2, padding:'0.875rem', marginBottom:'0.75rem' }}>
-                    <div style={{ fontSize:'0.82rem', fontWeight:700, color:'#c23b22', marginBottom:'0.75rem' }}>
+                    <div style={{ fontSize:'0.82rem', fontWeight:700, color:'#c23b22', marginBottom:'0.4rem' }}>
                       ⚠ Diferencia detectada — registrá el motivo para cerrar
+                    </div>
+                    {/* Ambas monedas, cada una con signo — solo las que superan su tolerancia (Opción B). */}
+                    <div style={{ display:'flex', gap:'1rem', flexWrap:'wrap', fontFamily:"'DM Mono',monospace", fontSize:'0.85rem', fontWeight:800, color:'#c23b22', marginBottom:'0.75rem' }}>
+                      {diferencia !== null && !cuadra && (
+                        <span>₡ {diferencia >= 0 ? '+' : ''}{fi2(diferencia)}</span>
+                      )}
+                      {difUSD !== null && !cuadraUSD && (
+                        <span>US$ {difUSD >= 0 ? '+' : ''}{difUSD.toFixed(2)}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize:'0.68rem', color:'#8a5040', marginBottom:'0.75rem' }}>
+                      Al confirmar, la diferencia queda registrada como movimiento de <strong>Ajuste de cierre</strong> en Caja Fuerte (faltante resta · sobrante suma) — el saldo del sistema arranca mañana del físico contado.
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:'160px 1fr', gap:'0.5rem', alignItems:'end' }}>
                       <Field label="Tipo">

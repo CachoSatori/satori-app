@@ -13,6 +13,10 @@ const CONCEPTOS = [
   { id: 'egr_oper', label: 'Egreso · Operativo',              type: 'egreso_operativo',  caja: 'Caja Proveedores',  sub: '',                    method: 'Efectivo' },
   { id: 'egr_pers', label: 'Egreso · Personal / Salario',     type: 'egreso_personal',   caja: 'Caja Fuerte',       sub: '',                    method: 'Efectivo' },
   { id: 'ing_otro', label: 'Ingreso · Otro (aceite, etc.)',   type: 'ingreso',           caja: 'Caja Fuerte',       sub: 'Otros ingresos',      method: 'Efectivo' },
+  // Reajuste (Opción B firmada): cuando la plata de una diferencia de cierre aparece (o falta)
+  // DESPUÉS — corrige el saldo de Caja Fuerte sin tocar el cierre ya sellado.
+  { id: 'reaj_ing', label: 'Reajuste · apareció plata (CF)',  type: 'ingreso',           caja: 'Caja Fuerte',       sub: 'Reajuste',            method: 'Efectivo' },
+  { id: 'reaj_egr', label: 'Reajuste · faltó plata (CF)',     type: 'egreso_operativo',  caja: 'Caja Fuerte',       sub: 'Reajuste',            method: 'Efectivo' },
 ] as const
 import { todayCR, dateCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr, saldoCajaFuerte } from './cashUtils'

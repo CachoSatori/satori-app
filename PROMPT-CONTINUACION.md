@@ -1,20 +1,39 @@
-# Continuación — backlog priorizado (handoff 2026-06-28)
+# Continuación — backlog priorizado (handoff 2026-07-03)
 
-> **🆕 ESTA SESIÓN (2026-06-28, cont. — CI/infra + 2 fixes de plata client-side, ambos ya en PROD).** `main` = **`a14da50`** · `staging` = **`ec70598`**.
-> 1. **GitHub Actions del `deploy.yml` → Node 24 (`@v5`)** en **main** (`52d1475`, FF; deploy verde, warning de Node 20 desaparecido) y **staging** (`3b821f0`, FF; el workflow **no** corre en staging — solo cierra el drift). `deploy.yml` **byte-idéntico** entre main y staging. **No** se tocó `node-version: 20` del build (Node 22 = cambio aparte, ver ★ PENDIENTES NUEVOS).
-> 2. **`supabase/.temp/` untrackeado + ignorado también en MAIN** (`52d1475`, FF; recreado a mano, **no** cherry-pick). Antes solo en staging → ahora un clon fresco de **main** ya no arranca enlazado a prod. Build EXIT 0.
-> 3. **2 ramas de prep integradas por FF y borradas** del remoto.
-> 4. **🆕 2 fixes de plata client-side → ahora EN PROD:** **Hallazgo B** (drain del outbox en `SIGNED_IN`) y la **estabilización del render de Propinas** (bug prod-down). Portados por **cherry-pick selectivo** (`a14da50`; deploy verde, `version.json.commit=a14da50`) + validados en staging; **smoke en prod pendiente del OK de la dueña**. `calcTurno`/sagrados byte-idénticos, sin migración. **Crisis prod-down de Propinas cerrada.**
+> **🆕 ESTA SESIÓN (2026-07-03 — OLA GRANDE a STAGING, 10 pases FF, todos validados físicamente por Ismael; PROD intacta).** `main` = **`a14da50`** (INTACTA) · `staging` = **`c200bec → ddb1c08`**. Se cerró el trabajo grande de Caja/Cierre/Revisión/asistente: Tier 0 (cierre visual + fórmula USD firmada), Tier 2.1 (autorización por contraseña + **mig 045** aplicada a staging), Tier 3 completo (Revisión foto/panel/adjuntar + asistente orden/flujo guiado), **Opción B** (ajuste de cierre al ledger), **propinas por la vía real** (faltante fantasma enterrado), rediseño de Caja a tema claro. **Fuera del repo:** secret `ANTHROPIC_MODEL` → `claude-sonnet-4-5` solo en staging. Detalle → `ESTADO-ARCHIVO.md` (bloque 2026-07-03).
 >
-> **✅ CAMBIO CLAVE DE PRIORIDADES (vigente):** "el IDOR debe llegar a prod antes de la Ola 2" **YA SE CUMPLIÓ** (sesión previa) — el IDOR está en prod. **La Ola 2 ya NO está bloqueada por el IDOR.** Lo que sigue grande es la **Ola 2 (Bandeja Etapa 1 + migs 038/039 a prod)**.
+> **🚨 LA PRÓXIMA SESIÓN = EL PASE ÚNICO A PROD (ver §PASE A PROD, abajo, primero).** Todo el valor de esta ola está en `staging` y **nada en `main`**. El próximo trabajo grande es portarlo a prod, en su propia sesión, con la reconciliación del ledger de migraciones incluida.
 >
-> Lo de abajo es el handoff de las sesiones 2026-06-26/27 (sigue vigente como plan de fondo; el detalle 06-27 quedó archivado en `ESTADO-ARCHIVO.md`).
+> Lo de abajo (★ PENDIENTES / secciones numeradas) es el backlog de fondo de las sesiones 2026-06-26/27/28 — sigue vigente pero **subordinado al pase a prod**.
+
+---
+
+## 🚨 PASE A PROD — PLAN DE LA PRÓXIMA SESIÓN (lo primero)
+
+> **Objetivo:** llevar toda la ola `a4b1be3..ddb1c08` (10 pases) de `staging` a `main`/PROD, en orden, sin romper nada. Es una sesión dedicada. **Guardrails de siempre:** nada a `main` sin orden explícita, **NUNCA `staging`→`main` en bloque** (solo cherry-pick FF-only, en orden), sagrados intactos, build+tests verdes por commit, y el **RITUAL del link** antes de cualquier comando de base (`cat supabase/.temp/project-ref` → `hwiatgicyyqyezqwldia` para staging; para prod, confirmar `yiczgdtirrkdvohdquzf` a conciencia y con doble check).
+
+**Los 5 pasos (en este orden):**
+
+1. **🔴 Reconciliación del ledger de migraciones — ANTES de aplicar nada nuevo a prod.** En staging, `schema_migrations` tiene 022–038 pero **039–045 se aplicaron out-of-band** (039 dashboard, 040–044 `db query`, 045 `db query --linked`), y arrastra 009 (drift) + 035 (fantasma, solo en `propina-pool`). `db push` se frena por 009/035. Hay que decidir cómo queda el ledger de **prod** (que hoy está en ≤021) para que las migs nuevas entren limpias. Sesión de reconciliación primero, o al menos su plan firmado. **Sin esto, aplicar migs a prod es a ciegas.**
+2. **Cherry-pick FF-only de la ola a `main`, en orden** (`a4b1be3` → `4fddc5e` → `46ab5c6` → `86739f5` → `a628dbf` → `d5c8138` → `2784d93` → `e959fe5` → `a0e361c` → `380cb9a` → `ddb1c08`). Recordar que gran parte de la ola **depende del esquema 038–045** (Revisión, cascada, autorización por contraseña) → el código no funciona en prod sin las migraciones aplicadas. Evaluar si el pase de código y el de esquema van juntos o el esquema primero.
+3. **Aplicar migraciones 038–045 en PROD** (con el resultado del paso 1). Verificar cada una; `verify_manager_password` (045) es SECURITY DEFINER — revisar grants/`revoke` como en staging.
+4. **Replicar el secret `ANTHROPIC_MODEL=claude-sonnet-4-5`** en el proyecto Supabase de **prod** (`supabase secrets set --project-ref yiczgdtirrkdvohdquzf ANTHROPIC_MODEL=claude-sonnet-4-5`). Hoy solo está en staging; mejora la lectura de facturas (validado por Ismael). Reversible al instante (env var).
+5. **Sinceramiento USD de Caja Fuerte en prod:** repetir el ajuste inicial (los −$2678 son espejo de staging) con el **conteo físico USD del día del pase** (Movimientos → Ingreso · Otro CF, USD = físico − saldo ledger, ₡ = 0). Recién la fórmula USD firmada empieza a cuadrar desde ese punto.
+6. **Verificar el deploy vivo:** `version.json` de GitHub Pages = el `main` nuevo, y smoke físico con la dueña.
+
+> **Ojo con el secret Sonnet:** es infra fuera del repo, no viaja con el cherry-pick. Fácil de olvidar. Anotarlo como checklist aparte del git.
 
 ---
 
 ## ★ PENDIENTES NUEVOS — por prioridad
 
-> **✅ HECHO — Hallazgo B + estabilización del render de Propinas PORTADOS A PROD** (`a14da50`, cherry-pick selectivo `52d26b9`+`a14da50`; deploy verde, `version.json.commit=a14da50`). El **bug prod-down de Propinas** (Take Home parpadeaba a "₡ —"; picker de coberturas) quedó **cerrado en prod**; B también. Matemática intacta (`calcTurno` byte-idéntico, payout idéntico), validados en staging. **Smoke en prod pendiente del OK de la dueña** (no marcar "validado en prod" aún). El próximo foco de mayor valor vuelve a ser la **OLA 2 — Bandeja Etapa 1 + migs 038/039**.
+> **🚨 Lo primero es el PASE A PROD (ver §PASE A PROD arriba).** Todo lo de esta sección es backlog subordinado a ese pase.
+
+> **🆕 DIFERIDOS CON DECISIÓN (2026-07-03):**
+> - **Foto de comprobante obligatoria al pagar propina** — firmado, pero **fuera de scope de la ola** (deliberadamente no se metió en propinas-vía-real). Pase siguiente, con firma. Toca el flujo de `pagarPropina` / `propinaPago.ts`.
+> - **Tier 1 (monto-on-modify desde Revisión) — DESCARTADO por la dueña.** La decisión firmada es que la Revisión de inventario **no modifica la caja** (no reescribe montos del `cash_movement`). No reabrir sin nueva firma.
+
+> **✅ HECHO (sesión previa 2026-06-28) — Hallazgo B + estabilización del render de Propinas PORTADOS A PROD** (`a14da50`, cherry-pick selectivo `52d26b9`+`a14da50`; deploy verde, `version.json.commit=a14da50`). El **bug prod-down de Propinas** quedó cerrado en prod; B también. Matemática intacta (`calcTurno` byte-idéntico, payout idéntico), validados en staging. Smoke en prod pendiente del OK de la dueña. **Nota:** la "Ola 2 — Bandeja Etapa 1 + migs 038/039" que este backlog viejo pintaba como próximo foco quedó **subsumida** por el pase único de la ola 2026-07-03 (que incluye 038–045 y todo el código de unificación ya construido).
 
 > **✅ Cerrado el 2026-06-28 (cont.):** (a) **portar el `.gitignore` de `supabase/.temp/` a main** — hecho (`52d1475`, FF; un clon fresco de main ya no arranca en prod); (b) **bumpear las GitHub Actions a `@v5`/Node 24** — hecho en main (`52d1475`) y staging (`3b821f0`); deploy verde y warning de Node 20 desaparecido; `deploy.yml` byte-idéntico entre main y staging.
 

@@ -1,8 +1,20 @@
-# HALLAZGOS — backlog triado de las auditorías (handoff 2026-06-25, addenda 2026-06-26/27/28)
+# HALLAZGOS — backlog triado de las auditorías (handoff 2026-06-25, addenda 2026-06-26/27/28, 2026-07-03)
 
 > **SOLO evaluación.** Nada de esto fue accionado salvo lo indicado como ✅. Es el inventario de lo que
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+
+## 🆕 Hallazgos 2026-07-03 (ola grande de Caja/Cierre/Revisión — todo en STAGING)
+
+- **El FALTANTE FANTASMA del cierre — CAUSA RAÍZ ENCONTRADA Y ENTERRADA.** El cierre tiraba un faltante que no era real. Venía de un **desacople**: la fórmula del "debería" **restaba las propinas** (tipeadas), pero el movimiento `'Ventas cierre'` ingresaba el efectivo **BRUTO** a Caja Fuerte (sin descontar propinas). Resultado: el ledger de CF quedaba en `contado + propinas` → faltante fantasma cada día con propinas. **Muerto con "propinas por la vía real"** (`380cb9a`): ahora las propinas se pagan como movimiento real (egreso desde Registradora), la matemática resta las **efectivamente pagadas**, y `'Ventas cierre'` ingresa el **NETO** → `ledger = contado` exacto. El test del gap, que **documentaba** el desfase, se **dio vuelta** y ahora lo **afirma**. Validado físicamente: el cierre "cuadra correctamente" con propinas pagadas y el ledger arranca sincero a la mañana siguiente.
+- **Ledger de Caja Fuerte con DÉFICIT HISTÓRICO USD (−$2678).** La fórmula USD firmada (`46ab5c6`: `calcDeberiaUSD` ahora suma `saldoBase.usd`) **destapó** que el ledger de CF nunca contó bien los dólares — retiros USD sin registrar eran **invisibles** para el cuadre viejo (solo miraba ventas). El −$2678 de staging es **espejo de prod**. **Reconciliado en staging** con un ajuste inicial firmado (Ismael cargó Movimientos → Ingreso · Otro CF, USD = físico + 2678). **Prod pendiente:** repetir con el conteo físico del día del pase (§PASE A PROD paso 5).
+- **La EDICIÓN de un pago NO es un UPDATE — es `delete_movement_cascade` + `persistPago` recreate.** Por eso "editar un pago como cajero" fallaba sin pedir credenciales: el bloqueo real no estaba en un UPDATE (no existe) sino en el **reenvío de credenciales al path de plata** (la RPC de borrado re-valida server-side). Fundamenta por qué la mig 045 (autorización por contraseña) y el envolver el edit-path con `requireManager` + reenvío de credenciales. Confirmado leyendo `CashTurno.confirmPago` en modo edición.
+- **El cambio de modelo de IA de `extract-document` es una ENV VAR, no código.** `ANTHROPIC_MODEL` (leído en `extract-document/index.ts` con default `claude-haiku-4-5`) → cambiar a `claude-sonnet-4-5` es `supabase secrets set`, **sin deploy de código, reversible al instante**. Aplica a las functions sin redeploy. **Trampa de handoff:** no viaja con el cherry-pick a prod → hay que replicarlo aparte (§PASE A PROD paso 4).
+- **La verificación de la migración out-of-band se hace por privilegio, no por ledger.** `verify_manager_password` (045) se aplicó a staging con `db query --linked` y se verificó con `has_function_privilege('anon', ..., 'execute') = false` + `pg_proc.prosecdef = true`. Patrón repetible para el pase a prod.
+
+## 🔄 CAMBIO DE RITUAL (2026-07-03) — el guardrail pre-comando-de-base ahora chequea `project-ref`
+
+**El archivo del link del CLI cambió: `supabase/.temp/linked-project.json` YA NO EXISTE en el CLI v2.105.** El estado del link vive ahora en **`supabase/.temp/project-ref`** (texto plano con el ref; el mismo ref aparece también en `supabase/.temp/pooler-url`). El ritual obligatorio de abajo se actualiza: chequear **`cat supabase/.temp/project-ref`** (no `linked-project.json`). Debe decir `hwiatgicyyqyezqwldia` para staging. Si una checklist vieja pide verificar `linked-project.json`, el equivalente real es `project-ref`.
 
 ## ✅ Accionado 2026-06-28
 - **#1 IDOR en `extract-document` → RESUELTO EN PROD.** La versión segura (`c38a252`) se **desplegó al Supabase de prod**
@@ -47,9 +59,11 @@ stale).
 > prod** (pendiente de portar). El RITUAL de abajo sigue siendo obligatorio igual: el link local puede quedar en prod sin avisar.
 
 > 🛑 **REGLA FIJA, ritual obligatorio — ANTES de CUALQUIER comando de base** (`migration list`, `db query`,
-> `db push`, `db dump`, `db pull`…): correr `cat supabase/.temp/linked-project.json` → el `"ref"` **DEBE** ser
-> `hwiatgicyyqyezqwldia`. Si no lo es: `supabase link --project-ref hwiatgicyyqyezqwldia` y **re-verificar**.
+> `db push`, `db dump`, `db pull`…): correr **`cat supabase/.temp/project-ref`** → **DEBE** decir
+> `hwiatgicyyqyezqwldia`. **🆕 CAMBIÓ (CLI v2.105): es `project-ref`, no `linked-project.json` (ya no existe).**
+> Si no es staging: `supabase link --project-ref hwiatgicyyqyezqwldia` y **re-verificar**.
 > **NUNCA correr un comando de DB sin confirmar el ref primero.** Bajo ningún concepto apuntar a `yiczgdtirrkdvohdquzf`.
+> (En esta ola 2026-07-03 se usó `db query --linked` con doble check del `project-ref` para aplicar la mig 045 a staging.)
 
 ## ✅ Accionado esta sesión
 - **Hallazgo A — PANTALLA NEGRA (bootstrap de `useAuth` sin tope).** Diagnosticado y **arreglado + validado en

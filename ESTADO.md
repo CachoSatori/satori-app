@@ -1,11 +1,11 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-07-03. Ola de 10 pases a STAGING (todos FF, todos validados físicamente por Ismael). PROD intacta.** Se cerró el trabajo grande de Caja/Cierre/Revisión: cierre visual + fórmula USD firmada, autorización de gerencia por SOLO contraseña (mig 045 firmada + aplicada a staging), Tier 3 completo (foto en Revisión, panel lateral, adjuntar con confirmación, orden y flujo guiado del asistente), Opción B (la diferencia del cierre entra al ledger como Ajuste), **propinas por la vía real (el faltante fantasma quedó enterrado)** y rediseño de Caja a tema claro. **`main` = `a14da50` (INTACTA)** · **`staging` = `ddb1c08`.**
+> **Handoff: 2026-07-04. ✅ PASE ÚNICO A PROD COMPLETADO.** Toda la ola 2026-07 + Bandeja + unificación Bandeja↔Caja (**SIN PoS**) pasó a producción por FF de `prod/pase-ola-2026-07`. **`main` = `92c0831`** (avanzó desde `a14da50`) · **`staging` = `1daef0c`** (fuente de desarrollo; sigue con el PoS). Migs **038–045 aplicadas a PROD** (out-of-band vía Management API curl, verificadas por privilegio). Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod**. Deploy verificado (`version.json.commit = 92c0831`).
 >
-> **Lo que pasó esta sesión, en una línea:** todo lo de arriba entró a `staging` por pases quirúrgicos FF-only; **NADA fue a `main`/PROD**; se aplicó **una** migración nueva (**045**) a **staging** (no a prod); se cambió el modelo de IA de la Edge Function a Sonnet **solo en staging**; y se destapó (y reconcilió en staging) una **deuda histórica de −$2678** en el ledger USD de Caja Fuerte.
+> **En una línea:** prod dejó de ir ~143 commits atrás — ahora tiene Caja/Cierre/USD/Revisión/asistente + Bandeja + unificación completos; lo único que queda solo-en-staging es el **PoS** (comandero/KDS/cobro/FE/inventario activo), diferido y bloqueado por el pilar de auth.
 >
-> Historia detallada de esta sesión → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) (bloque 2026-07-03) · Fases → [ROADMAP.md](ROADMAP.md) · Backlog / PLAN DEL PASE A PROD → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos → [HALLAZGOS.md](HALLAZGOS.md) · Índice de SPECs → [docs/README.md](docs/README.md).
+> Historia detallada del pase → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) (bloque 2026-07-04) · Fases → [ROADMAP.md](ROADMAP.md) · Backlog / próxima sesión → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos → [HALLAZGOS.md](HALLAZGOS.md) · Índice de SPECs → [docs/README.md](docs/README.md).
 
 **Stack:** React 19 + TS strict + Vite + PWA · Supabase (Postgres + RLS + Edge Functions) · realtime.
 **Despliegue:** `main` → PROD (GitHub Pages, base `/satori-app/`) · `staging` → Cloudflare Pages (`satori-staging.pages.dev`).
@@ -16,71 +16,64 @@
 
 | Rama | Hash | Qué es |
 |---|---|---|
-| `main` | `a14da50` | **PROD (estable, en uso). INTACTA esta sesión.** Capa de inteligencia + estabilidad (Olas 1/1.1, pantalla negra, `createDayMovement`) + IDOR de `extract-document` cerrado + GitHub Actions Node 24 + drain del outbox en `SIGNED_IN` + render de Propinas estabilizado. Migraciones **≤021** (el resto es client-side). **NO** tiene nada del PoS, Bandeja, unificación, ni ninguna de las 10 cosas de esta ola. |
-| `staging` | `ddb1c08` | **Fuente de verdad del trabajo nuevo.** Todo `main` + PoS/KDS/comandero + Bandeja + unificación Bandeja↔Caja construida (asistente "➕ Agregar", Revisión de inventario) + toda la ola 2026-07-03 (cierre visual/USD, autorización por contraseña, Tier 3, Opción B, propinas vía real, tema claro). Migraciones **022–045** (038–045 aplicadas fuera del ledger). |
+| `main` | `92c0831` | **PROD (estable, en uso).** 🆕 Recibió el **PASE ÚNICO** de la ola 2026-07: toda la Caja/Cierre/USD/Revisión/asistente + Bandeja + unificación Bandeja↔Caja (F41–F43) — **SIN PoS**. Ya tenía Olas 1/1.1, pantalla negra, `createDayMovement`, IDOR `extract-document`, outbox `SIGNED_IN`, render Propinas, Actions Node 24. Migs en el ledger **≤021** + **038–045 out-of-band**. |
+| `staging` | `1daef0c` | **Fuente de verdad del desarrollo.** Todo lo de `main` **+ el PoS/KDS/comandero + FE (SIM) + inventario activo COGS** (migs 022–037). Eso es hoy lo único que separa staging de prod. Migs **022–045** (039–045 out-of-band). |
 
-> **Supabase refs:** **PROD = `yiczgdtirrkdvohdquzf`** ("satori-app", INTOCABLE) · **STAGING = `hwiatgicyyqyezqwldia`** ("satori-staging").
-> 🛑 **RITUAL OBLIGATORIO antes de CUALQUIER comando de base** (`migration list`, `db query`, `db push`, `dump`…): correr **`cat supabase/.temp/project-ref`** → **DEBE** decir `hwiatgicyyqyezqwldia`. **Cambió: ya NO es `linked-project.json` (no existe en el CLI v2.105) — es `project-ref`.** Si no es staging: `supabase link --project-ref hwiatgicyyqyezqwldia` y re-verificar. Ver HALLAZGOS.md.
+> **Supabase refs:** **PROD = `yiczgdtirrkdvohdquzf`** ("satori-app") · **STAGING = `hwiatgicyyqyezqwldia`** ("satori-staging").
+> 🛑 **RITUAL antes de CUALQUIER comando de base:** `cat supabase/.temp/project-ref` → confirmar el proyecto correcto (NO existe `linked-project.json` en el CLI v2.105). 🆕 **`db query --linked` CUELGA en algunos entornos/sandboxes** (visto 2026-07-04, prod y staging) → workaround: **curl directo a la Management API** (`POST https://api.supabase.com/v1/projects/<ref>/database/query`, token del Keychain macOS, servicio `Supabase CLI`). Ver HALLAZGOS.
 
-## (b) PROD vs STAGING
+## (b) PROD vs STAGING — 🆕 el gran cambio: la unificación ENTERA está en PROD
 
-- **En PROD (`main` `a14da50`):** ventas/analítica, propinas, caja (turnos + cierre 2 fases + movimientos + pendientes), ingesta foto vieja, finanzas/P&L, reportes+emails, admin, auth Fase 2, realtime, offline. Migraciones **001–021** + fixes client-side + IDOR de `extract-document` (Edge Function). **Nada de la ola de esta sesión.**
-- **Solo en STAGING (no en main):** **PoS** completo (catálogo/salón, comandero, KDS, cobro+splits+ticket SIM, FE estructura SIM, inventario activo COGS) · **Bandeja + unificación Bandeja↔Caja construida** (F41–F43: "➕ Agregar" único, asistente foto/IA, Revisión de inventario) · cascada mig 039 · autorización inline mig 044 · esquema 040–043 · **🆕 toda la ola 2026-07-03:** cierre resumen+tema claro+fórmula USD firmada, **autorización SOLO por contraseña (mig 045)**, Tier 3 Revisión/asistente, **Opción B (ajuste al ledger)**, **propinas por la vía real**, tema claro de Caja. Migraciones **022–045**.
-- **En rama aparte (sin merge):** `propina-pool` (espera decisión). Las 8 ramas feature de esta ola (`feat/...`, `fix/...`) están mergeadas a staging por FF y **quedan vivas en origin** por si la dueña quiere revisarlas antes del pase.
+- **En PROD (`main` `92c0831`):** ventas/analítica, propinas, caja (turnos + cierre 2 fases + movimientos + pendientes), finanzas/P&L, reportes+emails, admin, auth Fase 2, realtime, offline · estabilidad (Olas 1/1.1, pantalla negra, `createDayMovement`, IDOR, outbox `SIGNED_IN`, render Propinas) · **🆕 Bandeja unificada + unificación Bandeja↔Caja** (asistente "➕ Agregar", Revisión de inventario) · **🆕 toda la ola de cierre/USD:** cierre visual + tema claro + fórmula USD firmada, autorización SOLO por contraseña (mig 045), Tier 3 Revisión/asistente, Opción B (ajuste al ledger), **propinas por la vía real** (faltante fantasma enterrado).
+- **Solo en STAGING (NO en prod):** **el PoS completo** (catálogo/salón, comandero, KDS, cobro+splits+ticket SIM, FE estructura SIM, inventario activo COGS) — migs 022–037. **Es lo único que queda por pasar**, y es un proyecto aparte, **DIFERIDO** (bloqueado por el pilar de auth, §f-5).
+- **En rama aparte (sin merge):** `propina-pool` (espera decisión). La rama `prod/pase-ola-2026-07` (vehículo del pase) quedó mergeada a `main` por FF y sigue viva en origin.
 
-## (c) Migraciones
+## (c) Migraciones — 🆕 ahora AMBOS entornos tienen deuda out-of-band
 
-| Entorno | En el ledger (`schema_migrations`) | Notas |
-|---|---|---|
-| **PROD** | **≤021** | Todo lo posterior es client-side o Edge Function. **Ninguna mig 022–045 está en prod.** |
-| **STAGING** | **022–038** en el ledger · **039–045 aplicadas FUERA del ledger** | 039 por dashboard · 040–043 por `db query` · 044 (delete_cascade 2→4 args) por `db query` · **🆕 045 (`045_verify_manager_by_password.sql`) aplicada a staging esta sesión** con `db query --linked`. |
+| Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger | Notas |
+|---|---|---|---|
+| **PROD** | **≤021** | **🆕 038–045** (Management API curl, esta sesión; verificadas por privilegio) | 022–037 (PoS) NO están: el pase fue sin PoS. La ola necesitaba exactamente 038–045 sobre el ≤021 de prod (aplicaron limpias, HTTP 201). |
+| **STAGING** | **022–038** | **039–045** | 039 dashboard · 040–044 `db query` · 045 `db query --linked`. |
 
-**⚠️ Discrepancias de ledger (reconciliación = sesión dedicada, no tocar el historial):** 009 drift histórico · 035 fantasma (solo en `propina-pool`) · 039–045 aplicadas out-of-band. `db push` se frena por 009/035 — NO usar `push`/`repair` hasta la sesión de reconciliación. Todo idempotente. **Esto es deuda directa del pase a prod** (ver §f).
+**⚠️ Reconciliación del ledger = sesión dedicada (NO tocar el historial):** ahora **los dos entornos** arrastran migraciones out-of-band (prod suma 038–045; staging 039–045). Persisten 009 (drift) y 035 (fantasma, solo en `propina-pool`). **`db push`/`repair` FRENADOS** hasta esa sesión. Todo idempotente. **`schema_migrations` NO se tocó en el pase.**
 
-## (d) Build por módulo — todo validado físicamente por Ismael
+## (d) Build por módulo
 
-Los 10 pases de esta ola fueron **validados físicamente en staging por Ismael** (no solo verde de CI). Gate de cada pase: **`VITE_APP_ENV=production npm run build` → EXIT 0 (con pipefail)** + suite completa verde (llegó a 38 archivos / 272 tests) + Cloudflare Pages verde + `version.json` = el commit esperado. ⚠️ El typecheck real es el **build** (`tsc -b`), NO `tsc --noEmit` (falso verde por `tsconfig` raíz con `files:[]`). ⚠️ El check **"Supabase Preview"** sale rojo crónico/pre-existente en todos los commits — ajeno; validan `Cloudflare Pages` (staging) y `build`+`deploy` Pages (prod).
+Gate del pase: **`VITE_APP_ENV=production npm run build` → EXIT 0** (`tsc -b`, **NO** `tsc --noEmit`, falso verde por `tsconfig` raíz con `files:[]`) + suite completa verde (**192 tests** — bajó de 272 al quedar los tests del PoS fuera con sus fuentes). ⚠️ El check **"Supabase Preview"** es **rojo crónico ajeno**; validan `build`+`deploy` (Pages, prod) y `Cloudflare Pages` (staging).
 
-Leyenda: ✅ validado físicamente / 🟢 verde sin validación física / 🔲 sin código.
+Leyenda: ✅ en prod, maduro / 🟢 en prod, **smoke físico pendiente** / 🧪 solo staging.
 
 | Módulo | Estado | Dónde |
 |---|---|---|
-| Ventas · Propinas · Caja+cierre · Finanzas/P&L · Reportes · Admin · Auth · Realtime · Offline | ✅ | prod (maduro; `cashUtils`/`tipCalculations`/`computeTotals` SAGRADOS) |
-| Estabilidad (Olas 1+1.1) · Pantalla negra · `createDayMovement` · IDOR `extract-document` · outbox `SIGNED_IN` · render Propinas | ✅ EN PROD | prod |
-| PoS (comandero/KDS/cobro/ticket SIM) · FE SIM · Inventario activo COGS | 🟢 sin validación física | solo staging |
-| Unificación Bandeja↔Caja construida (asistente "➕ Agregar" + Revisión de inventario) | ✅ validada | solo staging |
-| **🆕 Cierre: resumen en filas + tema claro + verificación ₡\|US$ + fórmula USD firmada** (`calcDeberiaUSD` incluye `saldoBase.usd`) | ✅ validada | solo staging |
-| **🆕 Autorización de gerencia SOLO POR CONTRASEÑA** (mig 045) + edición de pagos exige autorización | ✅ validada | solo staging (mig 045 en staging, NO prod) |
-| **🆕 Tier 3 Revisión:** foto en detalle · panel lateral desktop con zoom · adjuntar con confirmación (pago intacto) | ✅ validada | solo staging |
-| **🆕 Asistente:** orden nuevo + nota "sin foto" + flujo guiado (foto protagonista / manual) | ✅ validada | solo staging |
-| **🆕 Opción B — Ajuste de cierre al ledger** (faltante→egreso, sobrante→ingreso, ₡ y US$; idempotente por `client_op_id` determinístico) | ✅ **firmada + validada** | solo staging |
-| **🆕 Propinas por la VÍA REAL** (paga desde el cierre; la matemática resta propinas pagadas; faltante fantasma enterrado) | ✅ **firmada + validada** | solo staging |
-| **🆕 Rediseño Caja tema claro** (KPI cards `.cd-saldo-*`, 4 pestañas) + Ajustes en ₡/US$ | ✅ validada | solo staging |
+| Ventas · Propinas · Caja+cierre · Finanzas/P&L · Reportes · Admin · Auth · Realtime · Offline | ✅ | prod (`cashUtils`/`tipCalculations`/`computeTotals` SAGRADOS) |
+| Estabilidad (Olas 1/1.1 · pantalla negra · `createDayMovement` · IDOR · outbox `SIGNED_IN` · render Propinas) | ✅ | prod |
+| Unificación Bandeja↔Caja (asistente "➕ Agregar" + Revisión de inventario) | 🟢 EN PROD | prod + staging |
+| Cierre visual + tema claro + **fórmula USD firmada** (`calcDeberiaUSD` con `saldoBase.usd`) | 🟢 EN PROD | prod + staging |
+| **Autorización de gerencia SOLO por contraseña** (mig 045) + edición de pagos exige autorización | 🟢 EN PROD | prod (mig 045 aplicada) + staging |
+| Tier 3 Revisión (foto/panel/adjuntar) + asistente (orden/flujo guiado) | 🟢 EN PROD | prod + staging |
+| **Opción B — Ajuste de cierre al ledger** (idempotente por `client_op_id`) | 🟢 EN PROD | prod + staging |
+| **Propinas por la VÍA REAL** (resta propinas pagadas; faltante fantasma enterrado) | 🟢 EN PROD | prod + staging |
+| PoS (comandero/KDS/cobro/ticket SIM) · FE SIM · Inventario activo COGS | 🧪 solo staging | staging (migs 022–037) |
 
-## (e) Pendientes de PLATA — FIRMADOS y APLICADOS (a staging) esta sesión
+## (e) Pendientes de PLATA / humanos / fiscales (siguen vivos)
 
-> Todo esto tiene **firma de la dueña** y **ya está aplicado en staging** (falta el pase a prod, §f).
+1. **🔴 Sinceramiento USD de Caja Fuerte en PROD — PENDIENTE.** Repetir el ajuste inicial (los −$2678 son espejo de staging) con el **conteo físico USD del día** (Movimientos → Ingreso · Otro CF, USD = físico − saldo ledger, ₡ = 0). Recién ahí la fórmula USD firmada empieza a cuadrar en prod.
+2. **👁️ Smoke físico en PROD — PENDIENTE.** Validar en piso con la dueña el flujo real (cierre, Revisión, Bandeja) sobre datos de producción. Ninguna de las piezas 🟢 está confirmada en dispositivo todavía.
+3. **🖊️ Foto de comprobante obligatoria al pagar propina** — firmado, **DIFERIDO** (fuera de scope de esta ola; pase siguiente). Toca `pagarPropina`/`propinaPago.ts`.
+4. **`propina-pool`** (rama, sin merge) → decisión: propina de tarjeta/SINPE ¿al mismo pool que efectivo o separada?
 
-1. **✅ Fórmula USD del cuadre de cierre (FIRMADA).** `calcDeberiaUSD` ahora incluye `saldoBase.usd` → detecta retiros USD sin registrar (antes invisibles). Destapó los −$2678 históricos.
-2. **✅ Opción B — Ajuste de cierre al ledger (FIRMADA).** La diferencia del cierre se materializa como movimiento real en Caja Fuerte → el ledger arranca mañana del físico contado. Idempotente; deshacer borra el ajuste.
-3. **✅ Propinas por la vía real (FIRMADA).** El cierre resta propinas efectivamente pagadas (movimientos), no un tipeo. `tipCalculations`/`calcTurno` **byte-idénticos** (sagrado intacto).
-4. **🖊️ Foto de comprobante obligatoria al pagar propina** — DIFERIDO con firma (fuera de scope de esta ola; pase siguiente).
-5. **`propina-pool`** (rama, sin merge) → decisión pendiente: tarjeta/SINPE ¿al mismo pool que efectivo o separada?
+> **Tier 1 (monto-on-modify desde Revisión) = DESCARTADO por la dueña** (la Revisión NO modifica caja). No reabrir sin nueva firma.
 
-## (f) Deuda para el PASE ÚNICO A PROD (próxima sesión — plan completo en PROMPT-CONTINUACION)
+## (f) Deuda técnica / decisiones que siguen vivas (detalle en PROMPT-CONTINUACION)
 
-El próximo trabajo grande es **un pase único, ordenado, de toda esta ola (`a4b1be3..ddb1c08`) a `main`**, en su propia sesión. Piezas:
-
-1. **Cherry-pick FF-only de la ola a `main`**, en orden (ver PROMPT-CONTINUACION). NUNCA `staging`→`main` en bloque.
-2. **Aplicar migraciones 038–045 en prod** — con la **reconciliación del ledger** primero (`schema_migrations` vs las aplicadas out-of-band en staging; resolver 009/035). Es la deuda que bloquea `db push`.
-3. **Replicar el secret `ANTHROPIC_MODEL=claude-sonnet-4-5`** en el proyecto Supabase de **prod** (hoy solo en staging; mejora la lectura de facturas — validado por Ismael).
-4. **Sinceramiento USD en prod:** repetir el ajuste inicial de Caja Fuerte (−$2678 espejo) con el **conteo físico del día del pase**.
-5. **Verificar `version.json`** en el deploy vivo de GitHub Pages tras el pase.
-- **Otros diferidos:** foto de comprobante al pagar propina; Tier 1 (monto-on-modify desde Revisión) **descartado por la dueña** (Revisión no modifica caja); reconciliación del ledger de migraciones (009/035/039–045).
-- **🔐 Rotar tokens de GitHub** (gho_ + PAT "Claude CLI") — la fecha objetivo ya pasó, rotar YA.
+1. **🔴 Reconciliación del ledger de migraciones — ahora en AMBOS entornos.** Sesión dedicada; resolver 009/035 y las out-of-band (prod 038–045, staging 039–045). Bloquea `db push`.
+2. **🔐 Rotar los 2 tokens de GitHub** (`gho_` + PAT classic "Claude CLI") — **la fecha objetivo ya pasó, rotar YA.**
+3. **🖊️👁️ Hora-CR en bordes de período** — las queries de plata (P&L, `finance.ts`) acotan `created_at` en UTC (+6h vs CR) → un cierre de noche puede caer en el período equivocado. Cambia números → valida la dueña.
+4. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy diseñada sin código) — construir **solo si** tras usar la Etapa 1 en prod sigue haciendo falta.
+5. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant** — **bloquea el GRAN PASE del PoS** a prod (~10 dispositivos concurrentes; hotelería/franquicias).
 
 ---
 
 ## Sagrados (NUNCA reimplementar sin acuerdo explícito)
 `cashUtils` · `tipCalculations` · `computeTotals` (fórmula fiscal) · cierres de caja (la matemática del "debería") · cobro/vuelto/conversión · `posFiscal`.
-Todo el trabajo nuevo los **alimenta**, no los cambia. (La ola de esta sesión tocó la *plomería* del cierre con firma, pero `tipCalculations`/`calcTurno`/`saldoCajaFuerte` quedaron byte-idénticos.)
+La ola tocó la *plomería* del cierre con firma, pero `tipCalculations`/`calcTurno`/`saldoCajaFuerte` quedaron byte-idénticos. **Gate 5 del pase:** `tipCalculations.ts` vs prod = **+2 líneas** (etiqueta del rol `proveedor`); `cashUtils.ts`/`computeTotals` **idénticos a staging**.

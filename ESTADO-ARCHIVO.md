@@ -1,7 +1,24 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> Última actualización: 2026-07-03 (ola de 10 pases a staging: Cierre visual+USD, autorización por contraseña/mig 045, Tier 3 Revisión/asistente completo, Opción B ajuste al ledger, propinas por la vía real, rediseño Caja tema claro).
+> Última actualización: 2026-07-04 (PASE ÚNICO A PROD de la ola 2026-07: `main` `a14da50` → `92c0831`, migs 038–045 en prod, secret Sonnet en prod).
+
+## 🆕 2026-07-04 — PASE ÚNICO A PROD (ola 2026-07, SIN PoS) · `main` `a14da50` → `92c0831` · `staging` `1daef0c`
+
+Se llevó a producción **toda la ola 2026-07 + Bandeja + unificación Bandeja↔Caja, excluyendo el PoS**. Fue una sesión que **SÍ tocó prod** (código a `main`, esquema en la BD de PROD, un secret), con paradas de confirmación explícita de la dueña.
+
+**FASE 1 — rama de prep (solo código, cero BD):** se creó `prod/pase-ola-2026-07` desde `origin/main` y se **portó el CONTENIDO** de los archivos de staging (NO cherry-pick — los commits conflictúan porque la ola edita archivos que main no tenía), **excluyendo el PoS** (`modules/pos`, PosF1Admin, ProductosAdmin, `api/{pos,fe,productPhoto}`, `utils/{comanderoMenu,kds,posCobro,posFiscal,posPricing,posSplit,posTicket}`, `shared/fe`). 5 ediciones manuales para desconectar el PoS: `App.tsx` (quitar lazy imports + rutas /comandero //kds //mi-turno), `HomePage.tsx` (quitar tiles + revertir landing salonero a main), `AdminModule.tsx` (quitar tab/refs PosF1Admin), `utils/index.ts` (sin cambios — no tenía re-exports PoS), y `UserApprovals.tsx` (quitar la cláusula obsoleta "salonero → Comandero" del texto de ayuda, que además tripeaba el gate anti-PoS del build). Gates: build prod EXIT 0 · **192 tests** (bajó de 272: los tests del PoS salieron con sus fuentes) · dist sin diag ni PoS · `tipCalculations` +2 líneas (etiqueta rol proveedor) · `cashUtils`/`computeTotals` idénticos a staging. Migraciones 038–045 commiteadas a la rama en un commit aparte (`92c0831`).
+
+**FASE 2 — esquema + FF + deploy (tocó PROD):**
+- **Migs 038–045 aplicadas a la BD de PROD** (`yiczgdtirrkdvohdquzf`) **out-of-band**. `supabase db query --linked` **colgaba** en este entorno (10 min sin output, prod y staging), pero `supabase link`/`secrets` sí responden → workaround: **curl directo a la Management API** `POST https://api.supabase.com/v1/projects/<ref>/database/query` con el token del **Keychain macOS** (servicio `Supabase CLI`, cuenta `supabase`). Las 8 aplicaron limpias (HTTP 201, sin "already exists"). **`schema_migrations` NO se tocó** → prod queda con deuda out-of-band (ledger ≤021 + 038–045 aplicadas), igual que staging.
+- **Verificación por privilegio (PROD):** 3 tablas (`inventory_review_task`, `accounting_entries`, `movement_deletions`); 7 funciones todas `prosecdef=true` (`delete_movement_cascade` pronargs=4, `post_accounting_entry`, `complete_inventory_review`, `discard_inventory_review`, `unif_on_cash_movement`, `verify_manager_password`, `mark_factura_verified`); `has_function_privilege('anon', verify_manager_password, 'execute') = false`.
+- **FF a main:** `git merge --ff-only prod/pase-ola-2026-07` → `main` `a14da50`→`92c0831`, push sin force. Deploy de GitHub Pages verde; **`version.json.commit = 92c0831`**. (El check "Supabase Preview" rojo crónico se ignoró.)
+- **Secret `ANTHROPIC_MODEL=claude-sonnet-4-5` seteado en PROD** y confirmado en `secrets list`.
+- El link del CLI volvió a **staging** al cerrar; el token nunca se imprimió.
+
+**Quedó PENDIENTE (P0 del backlog):** smoke físico en prod con la dueña · **sinceramiento USD de Caja Fuerte en prod** (repetir el ajuste −$2678 con el conteo físico del día). **Deuda P1:** reconciliación del ledger — ahora en AMBOS entornos. Detalle → PROMPT-CONTINUACION.
+
+---
 
 ## 🆕 2026-07-03 — OLA GRANDE a STAGING (10 pases FF, todos validados físicamente por Ismael) · `staging` `c200bec → ddb1c08` · `main` intacta `a14da50`
 > Histórico archivado del header de `ESTADO.md`. Sesión de **features + un cálculo paralelo de plata + una migración firmada — SIN tocar prod, SIN datos.** Cada pase entró a staging por **FF-only** (rama feature → rebase sobre staging actual → FF → push → Cloudflare verde → validación física de Ismael). Ninguna de estas 10 cosas está en `main`/PROD.

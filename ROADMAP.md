@@ -5,29 +5,30 @@ De dashboard de analítica a sistema operativo del restaurante.
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-07-03)
+## 📍 Estado real de las fases (handoff 2026-07-04 — ✅ PASE A PROD COMPLETADO)
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ✅🟢 hecho y **validado físicamente por la dueña en STAGING** (falta el pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod). ✅🟢 = además validado físicamente en staging.
 
-> **🆕 Sesión 2026-07-03 — OLA GRANDE a STAGING (10 pases FF, todos validados físicamente por Ismael; PROD intacta).** `main` = `a14da50` (INTACTA) · `staging` = `c200bec → ddb1c08`. Se cerró el trabajo grande de Caja/Cierre/Revisión/asistente. **Tiers cerrados (todos ✅🟢 en staging, ninguno en prod):**
-> - **Tier 0 — Cierre visual + fórmula USD firmada** ✅🟢: resumen en filas + tema claro + verificación ₡\|US$ en columnas; `calcDeberiaUSD` incluye `saldoBase.usd` → detecta retiros USD sin registrar (destapó −$2678 históricos en el ledger de CF).
-> - **Tier 2.1 — Edición de pagos con contraseña única** ✅🟢: autorización de gerencia SOLO por contraseña (mig 045 firmada + aplicada a staging; `verify_manager_password` SECURITY DEFINER anti fuerza-bruta + rechaza colisiones; la contraseña identifica al manager). Hallazgo: editar un pago es delete_cascade+recreate, no UPDATE → el bloqueo real estaba en el reenvío de credenciales al path de plata.
-> - **Tier 3 completo** ✅🟢: foto de factura en el detalle de Revisión, panel lateral desktop con zoom, adjuntar con paso de confirmación (pago intacto), orden nuevo del asistente + nota "sin foto", flujo guiado (foto protagonista / manual).
-> - **Opción B — Ajuste de cierre al ledger** ✅🟢 firmada: la diferencia del cierre entra como movimiento real en CF (faltante→egreso, sobrante→ingreso, ₡ y US$; idempotente por `client_op_id` determinístico; deshacer borra el ajuste).
-> - **Propinas por la vía real** ✅🟢 firmada: el cierre resta propinas EFECTIVAMENTE PAGADAS (movimientos), no un tipeo → **el faltante fantasma quedó enterrado** (`tipCalculations`/`calcTurno` byte-idénticos; el test del gap se dio vuelta y afirma `ledger = contado`).
-> - **Rediseño de Caja a tema claro** ✅🟢: KPI cards `.cd-saldo-*` (4 pestañas) + Ajustes de cierre en ₡/US$ + diferencias discriminadas por moneda.
-> - **Fuera del repo:** secret `ANTHROPIC_MODEL` de `extract-document` → `claude-sonnet-4-5` **solo en staging** (mejora la lectura de facturas, validado). Pendiente prod.
+> **✅ Sesión 2026-07-04 — PASE ÚNICO A PROD COMPLETADO.** `main` avanzó **`a14da50` → `92c0831`** por FF de `prod/pase-ola-2026-07` (toda la ola 2026-07 + Bandeja + unificación Bandeja↔Caja, **SIN PoS**). `staging` = `1daef0c` (dev, sigue con el PoS). **Lo que se hizo en el pase:**
+> - **Código a `main` por FF** (rama de prep construida portando el CONTENIDO de staging sobre main, excluyendo el PoS) → deploy verde, `version.json.commit = 92c0831`.
+> - **Migs 038–045 aplicadas a PROD** out-of-band vía **Management API curl** (`db query --linked` colgaba). Verificadas por privilegio: 3 tablas (`inventory_review_task`, `accounting_entries`, `movement_deletions`), 7 funciones SECURITY DEFINER (`delete_movement_cascade` 4 args, `post_accounting_entry`, `complete_inventory_review`, `discard_inventory_review`, `unif_on_cash_movement`, `verify_manager_password`, `mark_factura_verified`), `has_function_privilege('anon', verify_manager_password, 'execute') = false`.
+> - **Secret `ANTHROPIC_MODEL=claude-sonnet-4-5` seteado en PROD** (`yiczgdtirrkdvohdquzf`).
+> - Sagrados intactos (gate: `tipCalculations` +2 líneas de etiqueta rol proveedor; `cashUtils`/`computeTotals` idénticos a staging). `schema_migrations` NO se tocó.
 >
-> **➡️ Próximo trabajo grande = PASE ÚNICO A PROD de toda la ola (`a4b1be3..ddb1c08`)**, en su propia sesión: cherry-pick FF-only ordenado a `main` + aplicar migs 038–045 en prod (con reconciliación del ledger) + replicar el secret Sonnet + sinceramiento USD en prod con el conteo físico del día. Plan → PROMPT-CONTINUACION.
+> **Tiers de la ola — TODOS EN PROD ahora (🟢 = smoke físico en piso pendiente):** Tier 0 (cierre visual + fórmula USD firmada), Tier 2.1 (autorización SOLO por contraseña, mig 045), Tier 3 (Revisión foto/panel/adjuntar + asistente), Opción B (ajuste al ledger), Propinas por la vía real (faltante fantasma enterrado), rediseño de Caja a tema claro, unificación Bandeja↔Caja (F41–F43).
+>
+> **➡️ Pendientes vivos post-pase (plan → PROMPT-CONTINUACION):** (1) **smoke físico + sinceramiento USD en prod** (conteo físico del día); (2) **reconciliación del ledger** — ahora AMBOS entornos tienen migs out-of-band; (3) rotar 2 tokens GitHub (vencidos); (4) hora-CR en bordes de período; (5) decisión Etapa 2 de la Bandeja tras uso real; (6) **PILAR de auth** — bloquea el GRAN PASE del PoS.
 > **Diferidos con decisión:** foto de comprobante al pagar propina (firmado, fuera de scope) · **Tier 1 (monto-on-modify desde Revisión) = DESCARTADO por la dueña** (Revisión no modifica caja).
-> Historia detallada → `ESTADO-ARCHIVO.md` (bloque 2026-07-03). La sesión previa 2026-06-28 (CI/infra + 2 fixes de plata a prod) sigue vigente como plan de fondo.
+> Historia detallada → `ESTADO-ARCHIVO.md` (bloque 2026-07-04).
 
-> **PROD (`main` `a14da50`) tiene las Olas 1 y 1.1 de estabilidad + el fix de la PANTALLA NEGRA del bootstrap + la durabilidad de `createDayMovement` + el fix del IDOR de `extract-document` + las GitHub Actions del deploy en Node 24 (`@v5`) + el untrack de `supabase/.temp/` + 🆕 el Hallazgo B (drain del outbox en `SIGNED_IN`) y la estabilización del render de Propinas** (los 2 por cherry-pick; validados en staging, smoke en prod pendiente del OK de la dueña). El resto del trabajo de FEATURES y los fixes de integridad viven en `staging`; a prod se va por **pase quirúrgico selectivo**, **NUNCA mergeando `staging`→`main` en bloque**. **🆕 Pendientes de pase a prod (en staging):** **OLA 2 — Bandeja Etapa 1 + migs 038/039** (próximo foco de mayor valor; el IDOR ya está en prod) + mig 039 (integridad borrado→inventario) + auth-recovery (🟡 DIFERIDO, gate >1h pasó; su precond. Hallazgo B **ya está en prod**). **B y Propinas ya NO son pendientes de pase — están en prod** (crisis prod-down cerrada). Ver ESTADO + `docs/HANG-RCA-2.md`.
+> **PROD (`main` `92c0831`) ya tiene TODO lo no-PoS:** la capa de inteligencia + estabilidad (Olas 1/1.1, pantalla negra, `createDayMovement`, IDOR `extract-document`, outbox `SIGNED_IN`, render Propinas, Actions Node 24, untrack `supabase/.temp/`) **+ 🆕 toda la ola 2026-07** (cierre/USD/Revisión/asistente, autorización por contraseña, Opción B, propinas vía real, tema claro) **+ 🆕 Bandeja + unificación Bandeja↔Caja** (F41–F43). Migs en prod: ledger **≤021** + **038–045 out-of-band**. **Lo único que queda solo en `staging` es el PoS** (comandero/KDS/cobro/FE/inventario activo, migs 022–037) — su pase es un proyecto aparte y DIFERIDO (bloqueado por el pilar de auth). ⚠️ El pase se hizo **portando contenido de staging a una rama sobre main** (no `staging`→`main` en bloque). **Pendiente en prod:** smoke físico + sinceramiento USD. Ver ESTADO + PROMPT-CONTINUACION.
+
+> 🆕 **2026-07-04:** todas las filas de la **ola 2026-07** que abajo dicen "✅🟢 … en STAGING" (Tiers 0/2.1/3, Opción B, propinas vía real, tema claro, unificación Bandeja↔Caja, Bandeja Etapa 1) están **AHORA EN PROD** (`92c0831`). El "STAGING" de esas celdas indica **dónde se validaron físicamente**; el **smoke en prod sigue pendiente**. Lo único que NO pasó a prod es el **PoS** (filas "PoS F0–F3", "FE", "Inventario activo").
 
 | Fase | Estado | Dónde |
 |---|---|---|
-| Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021) |
+| Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021 + 038–045 out-of-band) |
 | **Estabilidad PWA — fix del SW viejo en prod** (updateViaCache:'none' + version.json cache-bust) | ✅ **VALIDADA en PROD** | PROD (`fde9264`) — RCA `_handoff/PROD-SW-RCA.md` |
 | **Fix de fechas de borde de mes** (`-31`→400; helper `monthRangeBounds`, result-preserving) | ✅ **VALIDADA en PROD** | PROD (`ff836a0`) — RCA `_handoff/RCA-FECHAS-BORDE.md` |
 | **Fix Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook; R2 revive REVERTIDO) | ✅ **en PROD vía canario** | PROD (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`). Hist. `HANG-RCA.md` |
@@ -46,9 +47,9 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **🆕 Bandeja: foto de factura normalizada en el navegador** (HEIC/peso/EXIF → JPEG ≤1568px antes de subir) | ✅ **VALIDADA físicamente — en STAGING (`eefa056`)** | La captura del teléfono daba "sin leer" (Anthropic no procesaba la imagen). Helper `imageNormalize.ts` en `processFile`. Front-only, sin migración. Storage queda `.jpg`+`image/jpeg`. Follow-up opcional: endurecer `mediaType()` de la Edge Function |
 | **🆕 PANTALLA NEGRA — bootstrap de `useAuth` con tope** (getSession + loadProfile sin tope se colgaban → splash 祭 eterno; capa de arranque que ningún fix de realtime tocaba — Hallazgo A) | ✅ **EN PROD (`5f22754`), VALIDADO POR LA DUEÑA** | **PROD (`a1342c8`+`fd2755c`+`5f22754`)** + STAGING (`0adf30e`+`f0f8127`+`8bed794`). Deploy confirmado (`version.json=5f22754`); la app se sostiene abierta sin el cuelgue (antes ~3 min). **Receta de prod = 3 commits + 2 exports en `supabase.ts`** (ver ESTADO §b-ter) |
 | **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
-| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **COMPLETA y VALIDADA** en staging · **mig 038 APLICADA** (`0205654`) | STAGING (contador registra + "✓ Verificar" validados por la dueña; a prod con el pase del PoS) |
+| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **EN PROD** (pase 2026-07) · mig 038 aplicada (prod out-of-band + staging `0205654`) | prod + staging (contador registra + "✓ Verificar" validados por la dueña **en staging**; smoke prod pendiente) |
 | **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 **SUBSUMIDA** por [docs/SPEC-unificacion-bandeja-caja.md](docs/SPEC-unificacion-bandeja-caja.md) (D6) | — (ver §1ter) |
-| **🆕 Unificación Bandeja↔Caja** (un único "Agregar" en Caja Diaria; auto-clasificar Proveedores/Operativa como ayuda visual; sacar "Ingresar a inventario" del cajero → contador/manager lo completa en Inventarios; asiento contable automático) | ✅ diseño firmado · ✅ esquema 040–043 en STAGING · ✅🟢 **CÓDIGO CONSTRUIDO Y VALIDADO en staging** (F41–F43: "➕ Agregar" único + asistente foto/IA + Revisión de inventario) | STAGING. Solo falta el pase a prod (parte del pase único de la ola) |
+| **🆕 Unificación Bandeja↔Caja** (un único "Agregar" en Caja Diaria; auto-clasificar Proveedores/Operativa como ayuda visual; sacar "Ingresar a inventario" del cajero → contador/manager lo completa en Inventarios; asiento contable automático) | ✅ diseño firmado · ✅ esquema 040–043 en STAGING · ✅🟢 **CÓDIGO CONSTRUIDO Y VALIDADO en staging** (F41–F43: "➕ Agregar" único + asistente foto/IA + Revisión de inventario) | 🆕 **EN PROD** (pase 2026-07, migs 040–043 aplicadas) + staging; smoke prod pendiente |
 | **🆕 Tier 0 — Cierre visual + fórmula USD firmada** (resumen en filas + tema claro + verificación ₡\|US$ en columnas; `calcDeberiaUSD` incluye `saldoBase.usd`) | ✅🟢 **VALIDADO en STAGING** (`a4b1be3`/`4fddc5e`/`46ab5c6`) | STAGING. Detecta retiros USD sin registrar (destapó −$2678 históricos del ledger de CF). Test `CashCierre.deberiaUSD.test.ts` |
 | **🆕 Tier 2.1 — Autorización de gerencia SOLO POR CONTRASEÑA** (mig 045 `verify_manager_password`; edición de pagos exige autorización) | ✅🟢 **VALIDADO en STAGING** (`86739f5`; **mig 045 aplicada a staging, NO prod**) | STAGING. SECURITY DEFINER anti fuerza-bruta + rechaza colisiones; la contraseña identifica al manager. Editar pago = delete_cascade+recreate → credenciales reenviadas al path de plata |
 | **🆕 Tier 3 — Revisión y asistente** (foto en el detalle · panel lateral desktop con zoom · adjuntar con confirmación (pago intacto) · orden del asistente + nota "sin foto" · flujo guiado foto/manual) | ✅🟢 **VALIDADO en STAGING** (`d5c8138`/`2784d93`/`a628dbf`/`a0e361c`) | STAGING. UI-only salvo la vía de rectificación (adjuntar); el cash_movement nunca se toca (verificado por test) |
@@ -64,7 +65,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | Inventario activo F1 — depleción por venta + COGS real | 🟢 | STAGING (037) |
 | Inventario F1 — orden de compra + puente compra→caja→stock | 🔲 | — |
 | Propina PoS → pool del turno | ⏳ | rama `propina-pool` (sin merge, espera decisión dueña) |
-| **Pase a PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS** (ver §"Plan de pase a prod") | 🟢 **Ola 1 + 1.1 ✅ EN PROD** · Ola 2 = siguiente (**ya NO bloqueada por el IDOR** — está en prod) | ✅ Ola 1 estabilidad (`2358f6c`, sin PoS, sin diag) + ✅ Ola 1.1 flush del outbox (`483d29c`) → ⏳ Ola 2 Bandeja Etapa 1 + mig 038 (su prerequisito de seguridad #1, el IDOR, **ya está en prod** desde 2026-06-28) → 🔲 Ola 3 construir Etapa 2 (si hace falta). ⚠️ NUNCA `staging`→`main` en bloque: solo pase quirúrgico selectivo |
+| **Pase a PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS** | ✅ **COMPLETADO** — subsumido por el **PASE ÚNICO** 2026-07 (`92c0831`) | ✅ Ola 1 (`2358f6c`) + ✅ Ola 1.1 (`483d29c`) ya estaban en prod → 🆕 **Ola 2 (Bandeja Etapa 1) y Ola 3 (Etapa 2) quedaron SUBSUMIDAS**: la Bandeja Etapa 1 + toda la unificación entraron a prod en el pase único (sin esperar a "activar por ola"). La **Etapa 2** sigue 🔲 diseñada sin código (decisión de la dueña tras uso real). ⚠️ El pase se hizo portando contenido de staging a una rama sobre main, no `staging`→`main` en bloque |
 | GRAN pase del PoS a PROD (migs PoS 022–037) | 🔲 **DIFERIDO** | NO es parte de las 3 olas; proyecto aparte y posterior, bloqueado por el PILAR de sesión/auth |
 | F4 Loyalty en mesa + Nosara · F5 Hub local | 🔲 | futuro |
 
@@ -73,12 +74,13 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 
 ---
 
-## 🚀 PLAN DE PASE A PROD — OPCIÓN A de la dueña (estabilidad primero, 3 OLAS)
+## 🚀 PLAN DE PASE A PROD — OPCIÓN A de la dueña (estabilidad primero, 3 OLAS) — ✅ COMPLETADO (pase único 2026-07)
 
-> **Principio:** primero **devolver la app estable** a prod, recién después features. ✅ **Ola 1 + 1.1 + fix de la PANTALLA
-> NEGRA YA están en prod** (`main` `04b1a32`→`483d29c` (Olas) →`5f22754` (pantalla negra); la cola del outbox drena sola).
-> ⚠️ **Staging está ~143 commits y ~16 migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod se va por
-> _cherry-pick selectivo_.**
+> **✅ CERRADO.** El plan de 3 olas se cumplió y se **cerró con un PASE ÚNICO** el 2026-07-04: `main` `a14da50` → `92c0831`.
+> Ola 1 + 1.1 + pantalla negra ya estaban en prod; **la Ola 2 (Bandeja Etapa 1) y la Ola 3 quedaron SUBSUMIDAS** por el
+> pase único (que llevó toda la ola 2026-07 + Bandeja + unificación, sin PoS, y aplicó migs 038–045 en prod). Lo que sigue
+> abajo se conserva como **registro histórico** del plan. ⚠️ El pase NO fue `staging`→`main` en bloque: se portó el
+> **contenido** de staging a una rama sobre `main` excluyendo el PoS, y se hizo FF.
 
 - **OLA 1 — ✅ HECHA (en prod `2358f6c`, validada físicamente).** Pase QUIRÚRGICO de estabilidad a `main` (cherry-pick,
   SIN el PoS): cadena de la saga Realtime (worker:true + blindaje por timeout + máquina de 3 estados + gateo del emit +
@@ -88,14 +90,13 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 - **OLA 1.1 — ✅ HECHA (en prod `ead4727`+`483d29c`, validada físicamente).** Timeout/abort en el ejecutor del flush del
   outbox (`supabaseExecutor`), con **guardarraíl de plata** (timeout → `'retry'`, NUNCA `'fatal'`). **La cola del outbox
   drena sola tras suspender la máquina** (antes el flush quedaba colgado en "por sincronizar" sobre el socket zombi).
-- **OLA 2 — (SIGUIENTE) — llevar la Bandeja ETAPA 1 a prod con la mig 038.** La Etapa 1 (unificada
-  `/inbox`, foto+IA, enlace proveedor↔caja) **ya está construida y validada en staging**; esto la activa en prod. Es
-  esquema → **firma de la dueña**. ✅ **Su prerequisito de seguridad #1, el IDOR de `extract-document`, YA está en prod**
-  (desplegado 2026-06-28) → la Ola 2 ya **no** está bloqueada por él. ⚠️ **A verificar al planearla:** si la **mig 038 /
-  Etapa 1 se separan limpio de las migraciones del PoS (022–037)** o vienen acopladas. Da **foto+IA real sin construir nada nuevo**.
-- **OLA 3 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro
-  de Caja Diaria; hoy **🔲 diseñada, SIN código**). **Solo si** tras usar la Etapa 1 sigue haciendo falta. → **DECISIÓN
-  ABIERTA de la dueña:** ¿alcanza la Etapa 1 o se necesita la Etapa 2?
+- **OLA 2 — ✅ SUBSUMIDA por el pase único (EN PROD).** La Bandeja Etapa 1 (unificada `/inbox`, foto+IA, enlace
+  proveedor↔caja) entró a prod dentro del pase 2026-07, junto con toda la unificación — **sin esperar a "activarla por ola"
+  ni arrastrar el PoS**. Quedó comprobado que la mig 038 y la Etapa 1 se separan limpio del PoS (022–037): el pase llevó
+  **solo** 038–045. Su prerequisito de seguridad #1 (IDOR) ya estaba en prod desde 2026-06-28.
+- **OLA 3 — 🔲 CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro de Caja Diaria; hoy **diseñada, SIN
+  código**). **NO se subsumió** (no había código) → sigue como **DECISIÓN ABIERTA de la dueña**, ahora informada por el
+  **uso real de la Etapa 1 en prod**: ¿alcanza la Etapa 1 o se necesita la Etapa 2?
 - **🆕 PASE A PROD — estado (detalle/orden en PROMPT-CONTINUACION §1):**
   1. ✅ **PANTALLA NEGRA — HECHA, EN PROD (`5f22754`), VALIDADA POR LA DUEÑA.** Hotfix FF a `main`; deploy confirmado (`version.json=5f22754`) y validación física en dispositivo OK. **Receta = 3 commits + 2 exports** (ESTADO §b-ter).
   2. 🟢 **`createDayMovement` — PENDIENTE:** `hotfix/createdaymovement-durability-prod` (`399fc0b`), **verificada y lista** (sin `supplier_id`).

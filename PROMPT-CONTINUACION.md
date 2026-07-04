@@ -1,16 +1,51 @@
-# Continuación — backlog priorizado (handoff 2026-07-03)
+# Continuación — backlog priorizado (handoff 2026-07-04)
 
-> **🆕 ESTA SESIÓN (2026-07-03 — OLA GRANDE a STAGING, 10 pases FF, todos validados físicamente por Ismael; PROD intacta).** `main` = **`a14da50`** (INTACTA) · `staging` = **`c200bec → ddb1c08`**. Se cerró el trabajo grande de Caja/Cierre/Revisión/asistente: Tier 0 (cierre visual + fórmula USD firmada), Tier 2.1 (autorización por contraseña + **mig 045** aplicada a staging), Tier 3 completo (Revisión foto/panel/adjuntar + asistente orden/flujo guiado), **Opción B** (ajuste de cierre al ledger), **propinas por la vía real** (faltante fantasma enterrado), rediseño de Caja a tema claro. **Fuera del repo:** secret `ANTHROPIC_MODEL` → `claude-sonnet-4-5` solo en staging. Detalle → `ESTADO-ARCHIVO.md` (bloque 2026-07-03).
+> **✅ EL PASE ÚNICO A PROD ESTÁ HECHO.** `main` = **`92c0831`** (avanzó de `a14da50`; toda la ola 2026-07 + Bandeja + unificación, **SIN PoS**) · `staging` = **`1daef0c`** (dev, con PoS). Migs **038–045 aplicadas a PROD** (out-of-band vía Management API curl, verificadas por privilegio). Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod**. Deploy verde (`version.json = 92c0831`). Detalle → `ESTADO-ARCHIVO.md` (bloque 2026-07-04) · foto compacta → `ESTADO.md`.
 >
-> **🚨 LA PRÓXIMA SESIÓN = EL PASE ÚNICO A PROD (ver §PASE A PROD, abajo, primero).** Todo el valor de esta ola está en `staging` y **nada en `main`**. El próximo trabajo grande es portarlo a prod, en su propia sesión, con la reconciliación del ledger de migraciones incluida.
->
-> Lo de abajo (★ PENDIENTES / secciones numeradas) es el backlog de fondo de las sesiones 2026-06-26/27/28 — sigue vigente pero **subordinado al pase a prod**.
+> **La próxima sesión NO es un pase.** Es **estabilización post-pase** (P0) y después deuda corta (P1). El gran pase del PoS sigue lejos (bloqueado por el pilar de auth, P3). Las secciones numeradas de más abajo (§0…, RCAs, plan viejo de 3 olas) son **referencia histórica**; el backlog vigente es el de acá (P0–P3).
 
 ---
 
-## 🚨 PASE A PROD — PLAN DE LA PRÓXIMA SESIÓN (lo primero)
+## 🟥 P0 — ESTABILIZACIÓN POST-PASE (lo primero)
 
-> **Objetivo:** llevar toda la ola `a4b1be3..ddb1c08` (10 pases) de `staging` a `main`/PROD, en orden, sin romper nada. Es una sesión dedicada. **Guardrails de siempre:** nada a `main` sin orden explícita, **NUNCA `staging`→`main` en bloque** (solo cherry-pick FF-only, en orden), sagrados intactos, build+tests verdes por commit, y el **RITUAL del link** antes de cualquier comando de base (`cat supabase/.temp/project-ref` → `hwiatgicyyqyezqwldia` para staging; para prod, confirmar `yiczgdtirrkdvohdquzf` a conciencia y con doble check).
+1. **👁️ Smoke físico en PROD con la dueña.** Ninguna pieza de la ola tiene aún validación en piso sobre **datos de producción**. Recorrer en prod: cierre de caja (resumen + verificación ₡/US$), Revisión de inventario (foto/panel/adjuntar), Bandeja (registrar pago no-efectivo + "✓ Verificar"), edición de pago con contraseña (mig 045), Opción B (ajuste al ledger), propinas por la vía real. **NO marcar "validado en prod" hasta su OK.**
+2. **🔴 Sinceramiento USD de Caja Fuerte en PROD (PLATA — firma de la dueña).** La fórmula USD firmada recién cuadra desde un punto de partida real. Repetir el ajuste inicial (espejo de los −$2678 de staging) con el **conteo físico USD del día**: Movimientos → Ingreso · Otro CF, `USD = físico − saldo ledger`, `₡ = 0`. Sin esto, el "debería" USD arranca torcido en prod.
+3. **👀 Vigilar prod tras el pase:** consola/errores, que el deploy servido sea `version.json = 92c0831`, y que `extract-document` con el modelo **Sonnet** lea facturas bien en prod (el secret es nuevo ahí).
+
+## 🟧 P1 — DEUDA CORTA (técnica, acotada)
+
+1. **🔴 Reconciliación del ledger de migraciones — AHORA EN AMBOS ENTORNOS.** prod: ledger **≤021 + 038–045 out-of-band**; staging: **022–038 + 039–045 out-of-band**; + **009** (drift) + **035** (fantasma, solo en `propina-pool`). `db push`/`repair` **FRENADOS** hasta una sesión dedicada de infraestructura (resolver 035/`propina-pool` primero; **NO tocar el historial**). Todo idempotente. Detalle → ESTADO §c + §3 abajo.
+2. **🔐 Rotar los 2 tokens de GitHub — VENCIDOS, rotar YA.** `gho_` (ya limpio del remote pero válido en GitHub hasta rotarlo) + PAT classic "Claude CLI" (quedó en un transcript local). Detalle → §0bis abajo.
+3. **🖊️👁️ Hora-CR en bordes de período (PLATA).** Las queries de plata (`finance.ts:132/139` P&L borde de año, y similares) acotan `created_at` en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. Construir los límites con `dateCR`. Cambia números → valida la dueña. `fix/fecha-cr-consistente` ya en staging. Detalle → §1 abajo.
+4. **🟢 Prolijidad (no bloquea):** subir `node-version: 20`→22 en `deploy.yml`; 404 menores en `/caja` y `propinas:1`; warning cosmético de recharts. Detalle → §2 abajo.
+
+## 🟨 P2 — DECISIONES DE PRODUCTO (esperan a la dueña / uso real en prod)
+
+1. **🖊️ Bandeja Etapa 2** (entrada foto-primero 100% dentro de Caja Diaria) — hoy diseñada sin código. Construir **SOLO si** tras usar la Etapa 1 **en prod** sigue haciendo falta. Detalle → §4 + ROADMAP §Etapa 2.
+2. **🖊️ `propina-pool`** (rama sin merge) — propina de tarjeta/SINPE ¿al mismo pool que efectivo o separada? `git show propina-pool:ESTADO-PROPINA-POOL.md`. Detalle → §7.
+3. **🖊️ Foto de comprobante obligatoria al pagar propina** — firmado, diferido (fuera de scope de la ola); toca `pagarPropina`/`propinaPago.ts`.
+4. **🖊️ Al borrar una factura, ¿borrar también su foto/documento?** (hoy queda; impide recargar la misma factura por el dedupe de hash). Decisión de la dueña.
+
+## 🟦 P3 — PILAR + GRAN PASE DEL PoS (lejos; bloqueante)
+
+1. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant.** El PoS lleva ~10 dispositivos concurrentes; objetivo hotelería/franquicias. Diseño + prueba de carga simulando N dispositivos, NO un parche. **🔴 BLOQUEA el gran pase del PoS.** Detalle → §PILAR abajo + ROADMAP.
+2. **🖊️ GRAN PASE del PoS a PROD — DIFERIDO.** migs 022–037, buckets `facturas`/`productos`/`documents`, regenerar tipos; validación física del PoS (§6). Solo tras el pilar. **Es lo único que hoy separa `staging` de prod.** Detalle → §5.
+
+> **Diferido con decisión (NO reabrir sin nueva firma):** Tier 1 (monto-on-modify desde Revisión) **DESCARTADO** por la dueña — la Revisión NO modifica caja.
+
+---
+
+# 📚 Referencia histórica (secciones de abajo)
+
+> Lo que sigue es el **registro histórico** de las sesiones 2026-06-22 → 2026-07-03 (RCAs, el plan viejo de "PASE A PROD" y las prioridades previas, ya cumplidas o subsumidas por el pase único). Se conserva como contexto de ingeniería. **El backlog vigente es el de arriba (P0–P3).**
+
+---
+
+## 🗄️ (histórico) PASE A PROD — PLAN DE LA SESIÓN ANTERIOR — ✅ EJECUTADO 2026-07-04
+
+> **✅ CÓMO SE EJECUTÓ REALMENTE (vs este plan):** NO fue cherry-pick FF-only de los 10 commits (conflictúan — la ola edita archivos que main no tenía). Se **portó el CONTENIDO** de los archivos de staging a la rama `prod/pase-ola-2026-07` sobre `main`, **excluyendo el PoS**, y se hizo **FF a main** (`92c0831`). Las **migs 038–045 se aplicaron a prod out-of-band vía Management API curl** (`db query --linked` colgaba) **SIN** la reconciliación previa del ledger (el paso 1 quedó como deuda P1, no bloqueó). Secret Sonnet ✅. Sinceramiento USD y smoke físico → **quedaron pendientes (P0)**.
+>
+> **Plan original (histórico):** llevar toda la ola `a4b1be3..ddb1c08` de `staging` a `main`/PROD, en orden, sin romper nada. **Guardrails de siempre:** nada a `main` sin orden explícita, **NUNCA `staging`→`main` en bloque** (solo cherry-pick FF-only, en orden), sagrados intactos, build+tests verdes por commit, y el **RITUAL del link** antes de cualquier comando de base (`cat supabase/.temp/project-ref` → `hwiatgicyyqyezqwldia` para staging; para prod, confirmar `yiczgdtirrkdvohdquzf` a conciencia y con doble check).
 
 **Los 5 pasos (en este orden):**
 
@@ -25,9 +60,9 @@
 
 ---
 
-## ★ PENDIENTES NUEVOS — por prioridad
+## ★ (histórico) PENDIENTES NUEVOS — por prioridad (previos al pase)
 
-> **🚨 Lo primero es el PASE A PROD (ver §PASE A PROD arriba).** Todo lo de esta sección es backlog subordinado a ese pase.
+> **Nota:** el pase a prod YA se ejecutó (2026-07-04). El backlog vigente está arriba (**P0–P3**); esta sección se conserva como contexto previo.
 
 > **🆕 DIFERIDOS CON DECISIÓN (2026-07-03):**
 > - **Foto de comprobante obligatoria al pagar propina** — firmado, pero **fuera de scope de la ola** (deliberadamente no se metió en propinas-vía-real). Pase siguiente, con firma. Toca el flujo de `pagarPropina` / `propinaPago.ts`.

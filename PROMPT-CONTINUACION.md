@@ -14,9 +14,9 @@
 
 ## 🟧 P1 — DEUDA CORTA (técnica/datos, acotada)
 
-1. **🆕🔴 Pagos pendientes huérfanos en Proveedores (hallazgo del smoke 2026-07-06).** En la pestaña **Proveedores** aparecen **"14 PAGOS PENDIENTES"** en rojo de proveedores que **ya no existen** — datos huérfanos (error viejo, **no** del pase). **Limpieza de datos** (identificar y saldar/eliminar los pendientes sin proveedor vivo) **+ prevención** (evaluar FK con `on delete` adecuado, o filtrar por proveedor existente en la query de pendientes). Detalle → **HALLAZGOS.md** (entrada 2026-07-06).
+1. **🔍 Pagos pendientes en Proveedores — DIAGNOSTICADO read-only 2026-07-06 (reencuadrado; ya NO es "limpieza de 14 huérfanos").** El **"14" en rojo NO son pendientes:** es `overdueCount` (`CashProveedores.tsx:83`) — proveedores **activos** vencidos por **ciclo de pago**, con etiqueta engañosa "pagos pendientes". Causa raíz: sin noción de proveedor **puntual/dormido** + etiqueta que confunde agenda con deuda. Aparte, los **pendientes reales** (`status='pendiente'`) son **5** en prod: 3 legítimos + **2 huérfanos** (`supplier_id` NULL, **₡150.043,52**; uno de 2020); **FK íntegra, 0 dangling.** **Lo que queda (post-ventana, con firma):** (a) **decisión de semántica del rojo** (deuda real vs agenda de ciclo → movida a **P2 #5**), (b) **saldar/decidir los 2 huérfanos** (escritura), (c) **posible ciclo 'Puntual'/estado dormido** para no marcar vencidos los one-off. **NO accionar en caliente** (estabilización). Detalle → **HALLAZGOS.md** (entrada 2026-07-06) + `REPORTE_pendientes_huerfanos_2026-07-06.md`.
 2. **🔴 Reconciliación del ledger de migraciones — AHORA EN AMBOS ENTORNOS.** prod: ledger **≤021 + 038–045 + subset core de 026 out-of-band**; staging: **022–038 + 039–045 out-of-band**; + **009** (drift) + **035** (fantasma, solo en `propina-pool`). `db push`/`repair` **FRENADOS** hasta una sesión dedicada de infraestructura (resolver 035/`propina-pool` primero; **NO tocar el historial**). Todo idempotente. Detalle → ESTADO §c + §3 abajo.
-3. **🔐 Rotar los 2 tokens de GitHub — VENCIDOS, rotar YA.** `gho_` (ya limpio del remote pero válido en GitHub hasta rotarlo) + PAT classic "Claude CLI" (quedó en un transcript local). Detalle → §0bis abajo.
+3. **✅ RESUELTO 2026-07-06 — Tokens de GitHub rotados.** PAT classic **"Claude CLI" regenerado con scopes mínimos** (`repo` + `workflow`; se quitó `admin:org`) → el valor viejo del transcript local queda invalidado. OAuth **"GitHub CLI" revocado** → el `gho_` expuesto queda inutilizado → **re-login limpio** (credencial nueva en el keyring de macOS). Ya no hay tokens vivos comprometidos. Detalle → §0bis abajo.
 4. **🖊️👁️ Hora-CR en bordes de período (PLATA).** Las queries de plata (`finance.ts:132/139` P&L borde de año, y similares) acotan `created_at` en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. Construir los límites con `dateCR`. Cambia números → valida la dueña. `fix/fecha-cr-consistente` ya en staging. Detalle → §1 abajo.
 5. **🟢 Prolijidad (no bloquea):** subir `node-version: 20`→22 en `deploy.yml`; 404 menores en `/caja` y `propinas:1`; warning cosmético de recharts. Detalle → §2 abajo.
 
@@ -26,6 +26,7 @@
 2. **🖊️ `propina-pool`** (rama sin merge) — propina de tarjeta/SINPE ¿al mismo pool que efectivo o separada? `git show propina-pool:ESTADO-PROPINA-POOL.md`. Detalle → §7.
 3. **🖊️ Foto de comprobante obligatoria al pagar propina** — firmado, diferido (fuera de scope de la ola); toca `pagarPropina`/`propinaPago.ts`.
 4. **🖊️ Al borrar una factura, ¿borrar también su foto/documento?** (hoy queda; impide recargar la misma factura por el dedupe de hash). Decisión de la dueña.
+5. **🖊️🔍 Semántica del rojo "pagos pendientes" en Proveedores (del diagnóstico 2026-07-06).** ¿El badge rojo debe contar **deuda real registrada** (`status='pendiente'`) o **agenda de ciclo** (proveedor vencido — comportamiento actual `overdueCount`)? La decisión define la corrección de la lógica/etiqueta (`CashProveedores.tsx:75-83`) y si se introduce un ciclo **'Puntual'**/estado dormido para los proveedores one-off (hoy marcan vencido para siempre). Va de la mano con el destino de los 2 huérfanos (P1 #1). Detalle → HALLAZGOS.md (entrada 2026-07-06) + `REPORTE_pendientes_huerfanos_2026-07-06.md`.
 
 ## 🟦 P3 — PILAR + GRAN PASE DEL PoS (lejos; bloqueante)
 
@@ -356,14 +357,15 @@ incompatibles en tests: `x as unknown as T`.
 
 ---
 
-## 0bis. 🔐 Rotar los 2 tokens de GitHub (seguridad — pendiente de la sesión)
+## 0bis. ✅ RESUELTO 2026-07-06 — Tokens de GitHub rotados (seguridad)
 
-1. **`gh auth refresh -s repo,read:org,workflow`** (correr en terminal interactiva — abre device-flow en el navegador).
-   El token `gho_` que estaba **embebido en el remote de `SATORI PROPINAS`** ya se limpió del `.git/config`
-   (`git remote set-url` sin credenciales; auth ahora por osxkeychain), **pero sigue válido en GitHub hasta rotarlo**.
-2. **Regenerar el PAT classic `ghp_` "Claude CLI" SIN scope `admin:org`** — su valor quedó en un transcript local de
-   Claude Code (`~/.claude/projects/.../*.jsonl`). **Rotar ANTES del 27-jun.** (No está configurado en ningún remote/env/MCP;
-   solo persiste en ese log.)
+1. **OAuth "GitHub CLI" (`gho_`) — REVOCADO.** El token que estaba **embebido en el remote de `SATORI PROPINAS`** ya se
+   había limpiado del `.git/config` (`git remote set-url` sin credenciales; auth por osxkeychain); ahora además se
+   **revocó la autorización OAuth** → el `gho_` expuesto queda **invalidado**, con **re-login limpio** (credencial nueva
+   en el keyring de macOS).
+2. **PAT classic `ghp_` "Claude CLI" — REGENERADO con scopes mínimos** (`repo` + `workflow`; **se quitó `admin:org`**).
+   El valor viejo (que había quedado en un transcript local de Claude Code, `~/.claude/projects/.../*.jsonl`) queda
+   **inutilizado**. (No estaba configurado en ningún remote/env/MCP; solo persistía en ese log.)
 
 ---
 

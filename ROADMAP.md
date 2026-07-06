@@ -1,7 +1,247 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-06-12**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-03**
+
+---
+
+## 📍 Estado real de las fases (handoff 2026-07-04 — ✅ PASE A PROD COMPLETADO)
+
+Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ✅🟢 hecho y **validado físicamente por la dueña en STAGING** (falta el pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
+> Nota: ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod). ✅🟢 = además validado físicamente en staging.
+
+> **✅ Sesión 2026-07-04 — PASE ÚNICO A PROD COMPLETADO.** `main` avanzó **`a14da50` → `92c0831`** por FF de `prod/pase-ola-2026-07` (toda la ola 2026-07 + Bandeja + unificación Bandeja↔Caja, **SIN PoS**). `staging` = `1daef0c` (dev, sigue con el PoS). **Lo que se hizo en el pase:**
+> - **Código a `main` por FF** (rama de prep construida portando el CONTENIDO de staging sobre main, excluyendo el PoS) → deploy verde, `version.json.commit = 92c0831`.
+> - **Migs 038–045 aplicadas a PROD** out-of-band vía **Management API curl** (`db query --linked` colgaba). Verificadas por privilegio: 3 tablas (`inventory_review_task`, `accounting_entries`, `movement_deletions`), 7 funciones SECURITY DEFINER (`delete_movement_cascade` 4 args, `post_accounting_entry`, `complete_inventory_review`, `discard_inventory_review`, `unif_on_cash_movement`, `verify_manager_password`, `mark_factura_verified`), `has_function_privilege('anon', verify_manager_password, 'execute') = false`.
+> - **Secret `ANTHROPIC_MODEL=claude-sonnet-4-5` seteado en PROD** (`yiczgdtirrkdvohdquzf`).
+> - Sagrados intactos (gate: `tipCalculations` +2 líneas de etiqueta rol proveedor; `cashUtils`/`computeTotals` idénticos a staging). `schema_migrations` NO se tocó.
+>
+> **Tiers de la ola — TODOS EN PROD ahora (🟢 = smoke físico en piso pendiente):** Tier 0 (cierre visual + fórmula USD firmada), Tier 2.1 (autorización SOLO por contraseña, mig 045), Tier 3 (Revisión foto/panel/adjuntar + asistente), Opción B (ajuste al ledger), Propinas por la vía real (faltante fantasma enterrado), rediseño de Caja a tema claro, unificación Bandeja↔Caja (F41–F43).
+>
+> **➡️ Pendientes vivos post-pase (plan → PROMPT-CONTINUACION):** (1) **smoke físico + sinceramiento USD en prod** (conteo físico del día); (2) **reconciliación del ledger** — ahora AMBOS entornos tienen migs out-of-band; (3) rotar 2 tokens GitHub (vencidos); (4) hora-CR en bordes de período; (5) decisión Etapa 2 de la Bandeja tras uso real; (6) **PILAR de auth** — bloquea el GRAN PASE del PoS.
+> **Diferidos con decisión:** foto de comprobante al pagar propina (firmado, fuera de scope) · **Tier 1 (monto-on-modify desde Revisión) = DESCARTADO por la dueña** (Revisión no modifica caja).
+> Historia detallada → `ESTADO-ARCHIVO.md` (bloque 2026-07-04).
+
+> **PROD (`main` `92c0831`) ya tiene TODO lo no-PoS:** la capa de inteligencia + estabilidad (Olas 1/1.1, pantalla negra, `createDayMovement`, IDOR `extract-document`, outbox `SIGNED_IN`, render Propinas, Actions Node 24, untrack `supabase/.temp/`) **+ 🆕 toda la ola 2026-07** (cierre/USD/Revisión/asistente, autorización por contraseña, Opción B, propinas vía real, tema claro) **+ 🆕 Bandeja + unificación Bandeja↔Caja** (F41–F43). Migs en prod: ledger **≤021** + **038–045 out-of-band**. **Lo único que queda solo en `staging` es el PoS** (comandero/KDS/cobro/FE/inventario activo, migs 022–037) — su pase es un proyecto aparte y DIFERIDO (bloqueado por el pilar de auth). ⚠️ El pase se hizo **portando contenido de staging a una rama sobre main** (no `staging`→`main` en bloque). **Pendiente en prod:** smoke físico + sinceramiento USD. Ver ESTADO + PROMPT-CONTINUACION.
+
+> 🆕 **2026-07-04:** todas las filas de la **ola 2026-07** que abajo dicen "✅🟢 … en STAGING" (Tiers 0/2.1/3, Opción B, propinas vía real, tema claro, unificación Bandeja↔Caja, Bandeja Etapa 1) están **AHORA EN PROD** (`92c0831`). El "STAGING" de esas celdas indica **dónde se validaron físicamente**; el **smoke en prod sigue pendiente**. Lo único que NO pasó a prod es el **PoS** (filas "PoS F0–F3", "FE", "Inventario activo").
+
+| Fase | Estado | Dónde |
+|---|---|---|
+| Capa 1 — Inteligencia (ventas/propinas/caja/reportes/finanzas/auth/realtime/offline) | ✅ | PROD (`main`, migs ≤021 + 038–045 out-of-band) |
+| **Estabilidad PWA — fix del SW viejo en prod** (updateViaCache:'none' + version.json cache-bust) | ✅ **VALIDADA en PROD** | PROD (`fde9264`) — RCA `_handoff/PROD-SW-RCA.md` |
+| **Fix de fechas de borde de mes** (`-31`→400; helper `monthRangeBounds`, result-preserving) | ✅ **VALIDADA en PROD** | PROD (`ff836a0`) — RCA `_handoff/RCA-FECHAS-BORDE.md` |
+| **Fix Realtime/candado de auth** (R1 `setAuth` global + saca `getSession` por-hook; R2 revive REVERTIDO) | ✅ **en PROD vía canario** | PROD (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`). Hist. `HANG-RCA.md` |
+| **Realtime se cuelga tras suspensión profunda** (desync token HTTP↔socket + auth-ops zombi que cuelgan la recuperación) | ✅ **RESUELTO Y VALIDADO — EN PROD (Ola 1)** | **PROD (`2358f6c`)** + staging (`3a0fd20`): saga cerrada con la máquina de 3 estados (↓). En prod SIN diag; en staging `[rt-diag]` activo. **RCA → `docs/rca/2026-06-22-realtime-suspension.md`** |
+| **REDISEÑO recuperación Realtime — máquina de 3 estados** (`ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`) **+ gateo del emit + endurecimiento `SESSION_EXPIRED`** | ✅ **HECHO Y VALIDADO — EN PROD (Ola 1)** | **PROD (`2358f6c`)** + staging (`63ef0bb`+`3a0fd20`). Regla madre: nunca `rt:healthy` sin token fresco confirmado; ningún camino en loop. **Validado físico con `__satoriDiag`** (armZombie→OFFLINE_WAITING sin loop; disarm→recupera; arranque sin cascada CLOSED) |
+| **Durabilidad de escritura de Caja** (reintento con tope + encola SIEMPRE en outbox ante timeout/red-zombi) | ✅ **EN PROD y VALIDADA (Ola 1)** | **PROD (`2358f6c`)** + staging (`0dd258b`) — root cause: confiar en `navigator.onLine` (miente en zombi). Tests `cash.durability.test.ts` + `supabase.timeout.test.ts` |
+| **Outbox — timeout/abort del flush** (`supabaseExecutor` con `withWriteTimeout`+`.abortSignal()`; **guardarraíl: timeout→retry, NUNCA fatal**) | ✅ **EN PROD y VALIDADA (Ola 1.1) — la cola drena sola** | **PROD (`ead4727`+`483d29c`)** + staging (`4805e23`). Antes el flush quedaba colgado en "por sincronizar" sobre el socket zombi. Test `outbox.test.ts` (9 casos) |
+| **🆕 Auth recovery — loop `OFFLINE_WAITING` tras suspensión LARGA** (el caso que la máquina de 3 estados NO cubría: `getSession`/`refreshSession` no vuelven → sin escape) | 🟡 **en STAGING, SOLO unit tests** (gate físico pendiente) | STAGING (`e0df9ae` escape N=3 + `14e4546` signOut acotado + latch one-shot). El lock 10s→5s (`ccef5f1`) fue **red herring** (hardening). **RCA → `docs/HANG-RCA-2.md`**. Gate a prod: **suspensión real >1h**. 🆕 Su precond. (Hallazgo B) **✅ resuelta y EN PROD** (`a14da50`) |
+| **🆕 Drain del outbox en `SIGNED_IN`** (Hallazgo B; `initOutbox` engancha `onAuthStateChange` gateado a `SIGNED_IN` → reset backoff + `autoFlush`) | ✅ **EN PROD** (`a14da50`, cherry-pick `52d26b9`) + staging — código + tests verdes; ⏳ smoke en prod pendiente del OK de la dueña | prod + staging: cierra la **precondición del auth-recovery** (el outbox no drenaba al reloguear → un pago encolado podía no sincronizar). Predicado testeable `shouldFlushOnAuthEvent` (+4 tests); guard `outboxWired`. **NO** toca el `onAuthStateChange` global de `supabase.ts` ni el esquema. Client-side, sin migración |
+| **🆕 Render de Propinas estabilizado** (take_home/pts_val DERIVADOS en useMemo → no más parpadeo "₡ —"; picker de coberturas excluye activos + persiste; refetch gateado por auto-eco) | ✅ **EN PROD** (`a14da50`, cherry-pick) + staging — build EXIT 0 + 159 tests + verif. adversarial 4/4 PASS; ⏳ smoke en prod pendiente del OK de la dueña | prod + staging: **bug prod-down** que dejaba Propinas inusable, **cerrado**. `tipCalculations.ts`/`calcTurno` **byte-idéntico**, payout idéntico (merge 1:1; el `?? 0` es código muerto), `tips.ts` sin cambios de firma. Client-side, sin migración |
+| **🆕 `createDayMovement` — durabilidad** (id+`client_op_id`+`withWriteTimeout`+outbox; cierra el hueco nivel-día de Caja) | ✅ **EN PROD (`79d8004`), VALIDADA** | **PROD** (`399fc0b` re-cortado→`79d8004`) + STAGING (`dea9486`). Cherry-pick re-cortado sobre `5f22754` (la rama vieja quedó stale); sin `supplier_id`. Test `cash.durability.test.ts` |
+| **🆕 IDOR `extract-document` (Edge Function)** — bajaba del bucket privado con service_role sin verificar al dueño → cualquiera bajaba cualquier factura | ✅ **CERRADO EN PROD (2026-06-28)** — versión segura desplegada al Supabase de prod + `main` alineado (`a0d9f0d`, byte-idéntico a staging) | Exige JWT + download bajo RLS (mig 016) sin service_role + CORS por allowlist (`c38a252`). **PROD:** `functions deploy` a `yiczgdtirrkdvohdquzf` + smoke `401` sin Authorization + validación física (lectura OK con rol de caja). **Ya NO es prerequisito pendiente de la Ola 2: está en prod.** Pendiente OPCIONAL: prueba cross-user (rol fuera de caja → `403`) |
+| **🆕 Borrado de caja → cascada de inventario + auditoría** (mig 039 + RPC `delete_movement_cascade`; nota obligatoria + `requireManager`) | ✅ **VALIDADO end-to-end por la dueña — en STAGING** (`82d55cd`+tipos `a3dfacf`; **mig 039 aplicada** por dashboard) | STAGING: cierra el inventario huérfano del `ON DELETE SET NULL` de mig 017 (inventario inflado + asientos duplicados). Requiere conexión (offline BLOQUEA, no encola). Test `cash.cascade.test.ts`. Pase a prod (código + mig 039 sobre base de prod) con firma |
+| **🆕 Autorización de gerencia inline en el borrado** (mig 044: `delete_movement_cascade` 2→4 args, re-valida credenciales server-side) | 🟢 **en STAGING** (`7401a5a`+`f1e1aa9`; **mig 044 aplicada** fuera del ledger) | STAGING: el cajero puede borrar pasando credenciales de un owner/manager que el RPC re-valida (el modal `verify_manager` no cambiaba la sesión). Requiere 043 antes. Base del fix de borrar-día (↓) |
+| **🆕 Borrar-día y descartar-turno por la CASCADA** (`discardDiaCompleto`/`discardCashSession` enrutan por el RPC, no `.delete()` crudo) | ✅ **VALIDADA físicamente — en STAGING (`b8ab78c`)** (pruebas A y B: la tarea de Revisión desaparece) | STAGING: antes salteaban `delete_movement_cascade` → `accounting_entries` huérfanos + `inventory_review_task` colgadas. Ahora borran cada movimiento por el RPC (credenciales mig 044), orden movimientos→cierre→sesiones, parcial recuperable. Front-only, sin migración. Test `cash.discardDia.test.ts`. Opcional no bloqueante: verificación SQL directa de 0 `accounting_entries` huérfanos |
+| **🆕 Bandeja: foto de factura normalizada en el navegador** (HEIC/peso/EXIF → JPEG ≤1568px antes de subir) | ✅ **VALIDADA físicamente — en STAGING (`eefa056`)** | La captura del teléfono daba "sin leer" (Anthropic no procesaba la imagen). Helper `imageNormalize.ts` en `processFile`. Front-only, sin migración. Storage queda `.jpg`+`image/jpeg`. Follow-up opcional: endurecer `mediaType()` de la Edge Function |
+| **🆕 PANTALLA NEGRA — bootstrap de `useAuth` con tope** (getSession + loadProfile sin tope se colgaban → splash 祭 eterno; capa de arranque que ningún fix de realtime tocaba — Hallazgo A) | ✅ **EN PROD (`5f22754`), VALIDADO POR LA DUEÑA** | **PROD (`a1342c8`+`fd2755c`+`5f22754`)** + STAGING (`0adf30e`+`f0f8127`+`8bed794`). Deploy confirmado (`version.json=5f22754`); la app se sostiene abierta sin el cuelgue (antes ~3 min). **Receta de prod = 3 commits + 2 exports en `supabase.ts`** (ver ESTADO §b-ter) |
+| **Switch de diagnóstico de Realtime** (`window.__satoriDiag`; reproduce el cuelgue a demanda en ~30 s) | ✅ **validado en STAGING** | STAGING (`c9e0a24`) — solo-staging, gateado por `VITE_APP_ENV`; DCE lo borra de prod. `armZombie` dispara CHANNEL_ERROR al instante |
+| **Bandeja fusionada + enlace proveedor + visibilidad pendientes Caja + fechas CR — Etapa 1** | ✅ **EN PROD** (pase 2026-07) · mig 038 aplicada (prod out-of-band + staging `0205654`) | prod + staging (contador registra + "✓ Verificar" validados por la dueña **en staging**; smoke prod pendiente) |
+| **Bandeja — Etapa 2** (entrada única foto-primero dentro de Caja Diaria) | 🔲 **SUBSUMIDA** por [docs/SPEC-unificacion-bandeja-caja.md](docs/SPEC-unificacion-bandeja-caja.md) (D6) | — (ver §1ter) |
+| **🆕 Unificación Bandeja↔Caja** (un único "Agregar" en Caja Diaria; auto-clasificar Proveedores/Operativa como ayuda visual; sacar "Ingresar a inventario" del cajero → contador/manager lo completa en Inventarios; asiento contable automático) | ✅ diseño firmado · ✅ esquema 040–043 en STAGING · ✅🟢 **CÓDIGO CONSTRUIDO Y VALIDADO en staging** (F41–F43: "➕ Agregar" único + asistente foto/IA + Revisión de inventario) | 🆕 **EN PROD** (pase 2026-07, migs 040–043 aplicadas) + staging; smoke prod pendiente |
+| **🆕 Tier 0 — Cierre visual + fórmula USD firmada** (resumen en filas + tema claro + verificación ₡\|US$ en columnas; `calcDeberiaUSD` incluye `saldoBase.usd`) | ✅🟢 **VALIDADO en STAGING** (`a4b1be3`/`4fddc5e`/`46ab5c6`) | STAGING. Detecta retiros USD sin registrar (destapó −$2678 históricos del ledger de CF). Test `CashCierre.deberiaUSD.test.ts` |
+| **🆕 Tier 2.1 — Autorización de gerencia SOLO POR CONTRASEÑA** (mig 045 `verify_manager_password`; edición de pagos exige autorización) | ✅🟢 **VALIDADO en STAGING** (`86739f5`; **mig 045 aplicada a staging, NO prod**) | STAGING. SECURITY DEFINER anti fuerza-bruta + rechaza colisiones; la contraseña identifica al manager. Editar pago = delete_cascade+recreate → credenciales reenviadas al path de plata |
+| **🆕 Tier 3 — Revisión y asistente** (foto en el detalle · panel lateral desktop con zoom · adjuntar con confirmación (pago intacto) · orden del asistente + nota "sin foto" · flujo guiado foto/manual) | ✅🟢 **VALIDADO en STAGING** (`d5c8138`/`2784d93`/`a628dbf`/`a0e361c`) | STAGING. UI-only salvo la vía de rectificación (adjuntar); el cash_movement nunca se toca (verificado por test) |
+| **🆕 Opción B — Ajuste de cierre al ledger** (la diferencia entra como movimiento real en CF: faltante→egreso, sobrante→ingreso, ₡ y US$) | ✅🟢 **FIRMADA + VALIDADA en STAGING** (`e959fe5`) | STAGING. Idempotente por `client_op_id` determinístico (SHA-256); deshacer borra el ajuste; `saldoBase` del día excluye su propio ajuste. Subcategoría "Reajuste" para plata que aparece después |
+| **🆕 Propinas por la VÍA REAL** (el campo tipeado del cierre murió; se paga desde el cierre; la matemática resta propinas PAGADAS) | ✅🟢 **FIRMADA + VALIDADA en STAGING** (`380cb9a`) | STAGING. **Faltante fantasma enterrado** (el gap era 'Ventas cierre' bruto vs "debería" con propinas tipeadas). `tipCalculations`/`calcTurno` byte-idénticos; helper `propinaPago.ts`. Sin migración |
+| **🆕 Rediseño de Caja a tema claro** (`.cd-saldo-*` → 4 pestañas; Ajustes en ₡/US$; diferencias discriminadas) | ✅🟢 **VALIDADO en STAGING** (`ddb1c08`) | STAGING. UI + cálculo paralelo del ajuste USD (deriva de los movimientos 'Ajuste de cierre') |
+| PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
+| PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
+| PoS F2 — Comandero + KDS + impresión (impresión real = F5) | 🟢 | STAGING (023–025) |
+| PoS F3 — Cobro + splits + propina capturada + ticket SIM | 🟢 | STAGING (027–034) |
+| FE — **estructura** (SIM, sin Hacienda) | 🟢 | STAGING (036) |
+| FE — **real** (emisor certificado CR) | 🔲 | bloqueado por CIIU/CABYS |
+| Inventario activo F1 — depleción por venta + COGS real | 🟢 | STAGING (037) |
+| Inventario F1 — orden de compra + puente compra→caja→stock | 🔲 | — |
+| Propina PoS → pool del turno | ⏳ | rama `propina-pool` (sin merge, espera decisión dueña) |
+| **Pase a PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS** | ✅ **COMPLETADO** — subsumido por el **PASE ÚNICO** 2026-07 (`92c0831`) | ✅ Ola 1 (`2358f6c`) + ✅ Ola 1.1 (`483d29c`) ya estaban en prod → 🆕 **Ola 2 (Bandeja Etapa 1) y Ola 3 (Etapa 2) quedaron SUBSUMIDAS**: la Bandeja Etapa 1 + toda la unificación entraron a prod en el pase único (sin esperar a "activar por ola"). La **Etapa 2** sigue 🔲 diseñada sin código (decisión de la dueña tras uso real). ⚠️ El pase se hizo portando contenido de staging a una rama sobre main, no `staging`→`main` en bloque |
+| GRAN pase del PoS a PROD (migs PoS 022–037) | 🔲 **DIFERIDO** | NO es parte de las 3 olas; proyecto aparte y posterior, bloqueado por el PILAR de sesión/auth |
+| F4 Loyalty en mesa + Nosara · F5 Hub local | 🔲 | futuro |
+
+> Detalle de cada fase abajo. Lo nuevo de junio (Bandeja fusionada, FE estructura, inventario activo,
+> comandero pro) vive en `staging`. Backlog priorizado: [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+
+---
+
+## 🚀 PLAN DE PASE A PROD — OPCIÓN A de la dueña (estabilidad primero, 3 OLAS) — ✅ COMPLETADO (pase único 2026-07)
+
+> **✅ CERRADO.** El plan de 3 olas se cumplió y se **cerró con un PASE ÚNICO** el 2026-07-04: `main` `a14da50` → `92c0831`.
+> Ola 1 + 1.1 + pantalla negra ya estaban en prod; **la Ola 2 (Bandeja Etapa 1) y la Ola 3 quedaron SUBSUMIDAS** por el
+> pase único (que llevó toda la ola 2026-07 + Bandeja + unificación, sin PoS, y aplicó migs 038–045 en prod). Lo que sigue
+> abajo se conserva como **registro histórico** del plan. ⚠️ El pase NO fue `staging`→`main` en bloque: se portó el
+> **contenido** de staging a una rama sobre `main` excluyendo el PoS, y se hizo FF.
+
+- **OLA 1 — ✅ HECHA (en prod `2358f6c`, validada físicamente).** Pase QUIRÚRGICO de estabilidad a `main` (cherry-pick,
+  SIN el PoS): cadena de la saga Realtime (worker:true + blindaje por timeout + máquina de 3 estados + gateo del emit +
+  endurecimiento `SESSION_EXPIRED`) **+ durabilidad de escritura de caja**. Client-side, sin migración. Se borró la
+  instrumentación por prefijo (`[rt-diag]`/`realtimeReproSwitch` fuera de main; tree-shaking confirmado: grep del dist de
+  prod → VACÍO). Caja/propinas/ventas de vuelta en prod **sin cuelgues**.
+- **OLA 1.1 — ✅ HECHA (en prod `ead4727`+`483d29c`, validada físicamente).** Timeout/abort en el ejecutor del flush del
+  outbox (`supabaseExecutor`), con **guardarraíl de plata** (timeout → `'retry'`, NUNCA `'fatal'`). **La cola del outbox
+  drena sola tras suspender la máquina** (antes el flush quedaba colgado en "por sincronizar" sobre el socket zombi).
+- **OLA 2 — ✅ SUBSUMIDA por el pase único (EN PROD).** La Bandeja Etapa 1 (unificada `/inbox`, foto+IA, enlace
+  proveedor↔caja) entró a prod dentro del pase 2026-07, junto con toda la unificación — **sin esperar a "activarla por ola"
+  ni arrastrar el PoS**. Quedó comprobado que la mig 038 y la Etapa 1 se separan limpio del PoS (022–037): el pase llevó
+  **solo** 038–045. Su prerequisito de seguridad #1 (IDOR) ya estaba en prod desde 2026-06-28.
+- **OLA 3 — 🔲 CONSTRUIR la Bandeja ETAPA 2** (entrada foto-primero 100% dentro de Caja Diaria; hoy **diseñada, SIN
+  código**). **NO se subsumió** (no había código) → sigue como **DECISIÓN ABIERTA de la dueña**, ahora informada por el
+  **uso real de la Etapa 1 en prod**: ¿alcanza la Etapa 1 o se necesita la Etapa 2?
+- **🆕 PASE A PROD — estado (detalle/orden en PROMPT-CONTINUACION §1):**
+  1. ✅ **PANTALLA NEGRA — HECHA, EN PROD (`5f22754`), VALIDADA POR LA DUEÑA.** Hotfix FF a `main`; deploy confirmado (`version.json=5f22754`) y validación física en dispositivo OK. **Receta = 3 commits + 2 exports** (ESTADO §b-ter).
+  2. 🟢 **`createDayMovement` — PENDIENTE:** `hotfix/createdaymovement-durability-prod` (`399fc0b`), **verificada y lista** (sin `supplier_id`).
+  3. 🟡 **Auth-recovery** (`e0df9ae`+`14e4546`, NO el lock `ccef5f1` solo) — **PENDIENTE, gateado** a la suspensión real >1h (`docs/HANG-RCA-2.md`). El orden lo decide la dueña.
+
+> El **gran pase del PoS** (migs 022–037, comandero/KDS/cobro) es un **proyecto aparte y DIFERIDO**, posterior a estas
+> olas y bloqueado por el PILAR de sesión/auth (abajo). No confundir con la Ola 2 (que lleva **solo** la Bandeja Etapa 1).
+
+---
+
+## 🚧 PILAR BLOQUEANTE — Arquitectura de sesión/auth escalable y multi-tenant (alta prioridad)
+
+> **🔴 BLOQUEA EL PASE DEL PoS A PRODUCCIÓN.**
+
+La app hoy usa un **candado de sesión** (`navigator.locks`) que se contiende con pocos dispositivos.
+El PoS llevará **~10 dispositivos concurrentes** (5 tablets salón + 2 cajas + 2 KDS + 1 cocina),
+distintos usuarios al mismo tiempo. Antes del rollout del PoS hay que **rediseñar cómo cada dispositivo
+mantiene su sesión sin pelear por el refresh del token**.
+
+**Objetivo de diseño:** escalable a **HOTELERÍA con MÚLTIPLES restaurantes** y a **FRANQUICIAS**
+(multi-local / multi-tenant).
+
+**NO es un parche:** es **diseño + prueba de carga simulando N dispositivos** antes de tocar prod.
+**Bloquea el pase del PoS a producción.**
+
+---
+
+## 🧾 Bandeja / Caja — Etapa 1 (✅ COMPLETA y validada en staging) y Etapa 2 (🔲 diseñada)
+
+**Etapa 1 — en staging, validada físicamente por la dueña.** Se fusionaron las dos bandejas en una
+sola (`/inbox`, foto-primero, con IA Claude). Se eliminó "Bandeja Proveedores" (`/proveedor` +
+`ProveedorBandeja.tsx` + tile + ROLE_LANDING); el rol `proveedor` queda muerto en el enum (DDL solo
+aditivo). Matriz de pago por rol (cajero/manager: Efectivo con caja abierta · Transferencia→Pendiente
+o Pagado-desde-Banco; contador/owner: solo Pendiente o Banco, nunca efectivo). Verificado de factura
+(`FacturaVerify`) en Caja→Movimientos y Finanzas. Sobre eso:
+- **Enlace proveedor↔caja:** la Bandeja resuelve `supplier_id` (match por nombre o alta mínima) en
+  los 4 caminos → el pago aparece bajo su proveedor en Caja→Proveedores con estado + indicador de
+  foto (📷 / "⚠ falta factura" + agregar foto → bucket `documents` + IA + inventario).
+- **Visibilidad pendientes en Caja Diaria:** los pagos transferencia-pendiente nivel-día se muestran
+  (solo-lectura, no tocan la matemática del efectivo). `created_at` = día de registro; la fecha de
+  factura va a la descripción.
+- **Fechas/mes en hora CR** (`dateCR`) en Movimientos/Pendientes/P&L — **MERGEADO a staging**
+  (`cb25672`). **Pendiente validación física:** Movimientos de noche + P&L borde de mes.
+- **mig 038 APLICADA a staging** (la dueña firmó y la corrió; cierre por CLI + tipos en `0205654`):
+  enciende los dos caminos que estaban gateados por RLS — el **contador registra** egresos no-efectivo
+  desde la Bandeja y el botón **"✓ Verificar"** (RPC `mark_factura_verified`). Ambos **VALIDADOS
+  físicamente por la dueña** con usuario rol contador → **Etapa 1 cerrada en staging**. (No en prod:
+  la 038 va a prod con el pase del PoS.)
+
+**Etapa 2 — diseñada, pendiente.** Entrada única **foto-primero 100% dentro de Caja Diaria**: se
+retira el camino `facturas` (queda legacy); **foto obligatoria**; la IA lee todo y **sugiere**
+tipo/categoría (mercadería/operativo/personal/socios) mapeando a las categorías existentes, el humano
+confirma; **propinas** piden turno (AM/PM)+fecha en vez de proveedor y concilian el pendiente;
+**offline Opción A** (se registra el pago igual, la IA procesa al volver la red).
+
+## §1ter. 🆕 PRÓXIMO PROYECTO — SPEC de la unificación Bandeja↔Caja (arranca por DISEÑO, NO construir todavía)
+
+> **Estado (2026-06-26): ✅ diseño FIRMADO ([SPEC v1](docs/SPEC-unificacion-bandeja-caja.md)) · ✅ ESQUEMA (migraciones 040–043) FIRMADO y APLICADO a la base de STAGING** (vía `supabase db query`, no en `schema_migrations`; archivos en la rama `feat/unif-migrations-040-043` `3c534f4`, sin mergear) · ✅ entorno de tests DOM en staging. **🔲 Construcción de código NO empezada.** Decisión OPCIÓN A firmada: `accounting_entries` es auditoría/reversión, NO alimenta el P&L (ver SPEC §19). Próximo paso = **regenerar tipos TS** contra staging, luego F3–F5 (módulo de Inventarios + "Agregar" único + cascada en UI).
+
+Objetivo: colapsar Bandeja y Caja Diaria en **un solo flujo de entrada** para el cajero, moviendo el trabajo
+contable a quien corresponde. Alcance a especificar:
+- **Un único botón "Agregar"** en Caja Diaria (en vez de caminos separados Bandeja vs movimiento de caja).
+- **Auto-clasificar** el ítem (Proveedores / Operativa) como **ayuda visual** — sugerencia, el humano confirma; no
+  decide solo.
+- **Sacar "Ingresar a inventario" del cajero** → el cajero solo registra el pago/foto; el **contador/manager** revisa
+  y **completa la entrada de inventario en el módulo de Inventarios** (separación de responsabilidades).
+- **Asiento contable automático** al confirmar (puente factura→inventario→costo, sin pegarlo a mano).
+- Encaje con lo que ya existe: la Bandeja Etapa 1 (`/inbox`, foto+IA, enlace proveedor↔caja), el inventario activo
+  (mig 037) y la cascada de borrado (mig 039, que ya mantiene la integridad al deshacer). Define si esto **reemplaza**
+  o **envuelve** la Etapa 2 diseñada arriba.
+
+Primer entregable = **documento de diseño** ✅ **ENTREGADO Y FIRMADO (v1, 2026-06-26):**
+[docs/SPEC-unificacion-bandeja-caja.md](docs/SPEC-unificacion-bandeja-caja.md) (flujos, roles, estados, impacto en
+esquema/migraciones, sagrados que NO se tocan). Con el SPEC firmado se planifica construcción (recién tras cumplir
+las precondiciones del propio SPEC; cada migración exige firma separada).
+
+- 🔲 P&L granular a nivel de línea de factura + alertas inteligentes — ver
+  [docs/SPEC-unificacion-bandeja-caja.md](docs/SPEC-unificacion-bandeja-caja.md) §19 (fase posterior, fuera de v1).
+
+## 🆕 Backlog nuevo (junio 18) — además de las fases de arriba
+
+- **✅ RESUELTO y EN PROD (jun-21) — Estabilidad de la PWA (SW viejo):** registro manual con
+  `updateViaCache:'none'` + `injectRegister:null` + chequeo de `version.json` con cache-bust (`fde9264`).
+  Funciona en GitHub Pages (donde `_headers` no aplica). Validado Mac/iPhone/Lenovo. En staging además
+  está el `public/_headers` no-cache (Cloudflare) y el refresco de token en foco (`useAuth refreshOnFocus`).
+- **✅ RESUELTO y EN PROD (jun-21) — Fechas de borde de mes (400 por `-31`):** helper `monthRangeBounds`
+  (límite superior exclusivo = 1° del mes siguiente) en Inicio/Reporte Mensual/Food Cost; result-preserving
+  para meses de 31 días (`ff836a0`). RCA `_handoff/RCA-FECHAS-BORDE.md`.
+- **✅ RESUELTO y EN PROD vía canario (jun-22) — Contención del candado de auth (tercera causa
+  del "se traba"):** el `getSession()` por-hook de `useRealtimeRefetch` tomaba `navigator.locks` en cada
+  (re)suscripción → con varios módulos/dispositivos se apilaban pedidos → `[auth] lock no adquirido en 10s` →
+  app trabada. R1 `onAuthStateChange` global propaga el JWT al socket (cura el loop `InvalidJWTToken`/"Token has
+  expired"); R2 revive del socket **mergeado y luego REVERTIDO** (subía la contención sin beneficio probado); fix
+  final (`fix/auth-lock-contention`, `09480a6`) **saca el `getSession()` redundante**. Pasó a PROD por canario
+  (`04b1a32`, cherry-picks `deb7da2`/`18c9082`/`9f3ebe0`; sin round 2). Es client-side sin migración. Hist. `HANG-RCA.md`.
+- **✅ EN STAGING (jun-23) — Durabilidad de escritura de Caja:** en `registerCashMovement`/`updateCashMovement`/
+  `deleteCashMovement` el **reintento** corría SIN tope sobre el TCP zombi → la promesa nunca settleaba → la fila se
+  perdía al navegar; y el encolado dependía de `isOffline()` (`navigator.onLine`), que en zombi vale `true` → nunca
+  encolaba. Fix (`0dd258b`/`283f86e`): el reintento va con `withWriteTimeout` y, ante timeout o error de red, **encola
+  INCONDICIONALMENTE en el outbox** (idempotente por `client_op_id`); solo errores reales del server (RLS/FK) suben.
+  Invariante: **toda escritura de caja termina confirmada en el server o encolada — nunca colgada, nunca descartada en
+  silencio.** Test `cash.durability.test.ts`.
+- **✅ VALIDADO EN STAGING (jun-23) — Switch de diagnóstico de Realtime (solo-staging):** `src/shared/diag/`
+  `realtimeReproSwitch.ts` expone `window.__satoriDiag` (`armZombie`/`armExpired`/`disarm`/`status`). Reproduce el
+  cuelgue de Realtime **a demanda en ~30 s** (antes 3+ h): `armZombie` dispara CHANNEL_ERROR al instante. Gateado por
+  `VITE_APP_ENV==='staging'` (DCE lo borra de prod). Es la herramienta para validar el rediseño de Realtime. Logs `[diag-repro]`.
+- **✅ RESUELTO Y VALIDADO EN STAGING (jun-24) — Realtime se cuelga tras suspensión profunda:** raíz en dos capas —
+  (1) desync token HTTP↔socket (socket con JWT vencido pero `isConnected()=true`), y (2) la más grave: las auth-ops
+  (`getSession`/`refreshSession`) que la recuperación usa **se colgaban sobre la conexión zombi y nunca settleaban** →
+  `ensureRealtimeHealthy` clavado → app muerta hasta recargar. **Solución cerrada:** `ensureRealtimeHealthy` rediseñada
+  como **MÁQUINA DE 3 ESTADOS** (`63ef0bb`: `ONLINE_SUBSCRIBED`/`OFFLINE_WAITING`/`SESSION_EXPIRED`; regla madre — nunca
+  `rt:healthy` sin token fresco confirmado, ningún camino en loop → mató el **loop `InvalidJWT`** del viejo
+  emit-on-timeout), más **gateo del emit** (flag `healthyAwaited`: emite solo si hay recuperación pendiente → arregla la
+  regresión de arranque) y **endurecimiento de `SESSION_EXPIRED`** (`getSession→null` transitorio del arranque ya no
+  desloguea; árbitro único = `refresh.error`) — `3a0fd20`. **Validado físicamente** con `window.__satoriDiag`
+  (armZombie→OFFLINE_WAITING + backoff sin loop; disarm→recupera a SUBSCRIBED; arranque sin cascada CLOSED; foco
+  rutinario sin re-subscribe). `useRealtimeRefetch` byte-idéntico (su contrato no cambió). Detalle →
+  **`docs/rca/2026-06-22-realtime-suspension.md`** + `ESTADO-ARCHIVO.md` (2026-06-24). ✅ **YA EN PROD vía la Ola 1
+  (`2358f6c`), SIN diag** (los `[rt-diag]`/`realtimeReproSwitch` se borraron por prefijo en el pase; grep del dist de
+  prod → VACÍO). En `staging` los `[rt-diag]`/`[diag-repro]` siguen activos por diseño (gateados por `VITE_APP_ENV`).
+- **⏳ PENDIENTE (cambia números, valida la dueña) — hora-CR en bordes de período:** el fix del `-31`
+  resolvió el 400, pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`). `finance.ts:132/139`
+  (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el 31-dic de noche cae en el año equivocado por
+  el offset +6h) y similares. Pasar los límites a hora CR. Misma familia que el `-31`, **NO tocada** porque
+  cambia atribuciones → requiere validación física. Ver `_handoff/RCA-FECHAS-BORDE.md` §5.
+- **🔲 404 menor en prod sobre `propinas:1`** (recurso faltante, probablemente icono o source-map; **NO afecta
+  operación**). Prolijidad, baja prioridad — falta identificar el archivo exacto (Network con filtro vacío).
+- **🔲 Discrepancia mig 035** en el ledger de staging (registrada como aplicada sin merge) — sesión dedicada
+  de propinas, **sin tocar el historial** hasta entender el origen.
+- **Cuentas por pagar / crédito a proveedores 7-15-30 días** (fecha de PAGO ≠ fecha de registro).
+- **Alerta de cambio de precio** de un producto (que el contador la detecte y se ajuste la receta).
+- **Offline robusto** con base local que sincroniza con Supabase al volver internet.
+- **Unidades de inventario por presentación** (kilo/litro/gramos; huevos por maple/caja) editables por
+  ingrediente, recordadas por proveedor.
+- **🔲 Deuda de lint (69 err + 12 warn preexistentes) — PRIORIDAD BAJA, debajo de la estabilización de
+  caja/bandeja/propinas/ventas.** `npm run lint` (eslint .) reporta 81 problemas repartidos en ~30 archivos;
+  es deuda preexistente, NO de ningún fix reciente. **NO hacer barrido masivo:** 68 de los 69 errores son
+  manuales (solo 1 es autofixable con `--fix`) y caen en módulos en uso → riesgo sin ganancia funcional.
+  **Estrategia:** absorber la limpieza POR ARCHIVO dentro de la estabilización módulo-por-módulo ya planeada
+  (al tocar un módulo, se limpia su lint). Desglose:
+  - **Grupo A (~28: `no-unused-vars`, `preserve-caught-error`, `react-refresh/only-export-components`,
+    `eslint-disable` muertos)** = cosmético, seguro. *(Los 3 `preserve-caught-error` están en `cash.ts` y son
+    solo observabilidad — NO tocan matemática.)*
+  - **Grupo B (~41: `react-hooks/set-state-in-effect`, `react-hooks/refs`, `react-hooks/preserve-manual-memoization`)**
+    = correctness/perf-adjacent, requiere revisión por archivo, **NO `--fix` a ciegas.**
 
 ---
 
@@ -23,7 +263,7 @@ Satori App no es un POS. Hoy es una capa de inteligencia de negocio que se monta
 | Datos históricos | ✅ 2023→hoy migrados y verificados |
 | SOPs | ✅ CRUD + **19 procedimientos reales migrados** (caja, servicio, delivery, pagos, manager) con render legible |
 | Usuarios / Auth | ✅ login + **auto-registro de empleados** + aprobación del owner (rol + activación) por pantalla Admin |
-| Inventario / Recetas | 🟡 UI completa pero VACÍA — tablas sin datos ni lógica de consumo |
+| Inventario / Recetas | 🟢 (staging) depleción por venta + COGS real al cerrar pedido PoS (mig 037); UI de carga/recetas/food-cost existe. Falta: orden de compra + puente compra→caja. En PROD sigue 🟡 (UI vacía) |
 
 **Arquitectura:** React 19 + TS + Vite · Supabase (Postgres + RLS + Edge Functions) · PWA.
 Code-splitting por módulo. Despliegue automático en push a main.
@@ -119,7 +359,28 @@ Orden acordado (cada uno es base del siguiente):
 - **Modo contingencia**: si el KDS cae, las comandas salen **en papel por LAN** (mismo puente) —
   el servicio nunca se detiene.
 
+### Modelo fiscal del PoS (spec de la dueña, 2026-06-12 — estándar gastronomía CR)
+- **Precio final con IVA incluido** por producto (lo que ve el cliente en la carta) + tipo de
+  impuesto (default **IVA 13%**, opciones exento/otras tasas). El **desglose neto/IVA se deriva
+  automáticamente** (neto = precio/1.13) y es solo-lectura en Admin.
+- Los **deltas de modificadores también son precios finales** (IVA incluido) y heredan el tipo
+  de impuesto del producto.
+- **Servicio 10% por CANAL**, no por producto: salón y barra SÍ, delivery NO. Se aplica al armar
+  la cuenta/cobro, con desglose visible (consumo · servicio 10% · IVA · total).
+- Toda la matemática fiscal vive en **una sola función pura** (`computeTotals(items, canal)`)
+  con tests. ⏳ **PENDIENTE-CONTADORA**: base exacta del 10% (¿neto o total con IVA?) y si el
+  servicio lleva IVA — default implementado: 10% sobre el subtotal neto, parámetro centralizado.
+
 ### F3 — Cobro completo + Modo Evento · L
+- **Flujo de cobro CONFIRMADO con la operación actual (2026-06-12, documentos reales de Nube
+  de Fuego)**: la **pre-cuenta** (🧾 cuenta de mesa, ya construida en el comandero) es el
+  documento PREVIO **no fiscal** que se lleva a la mesa; la **factura electrónica se emite e
+  imprime SOLO al confirmar el método de pago** (tarjeta / efectivo / transferencia-SINPE).
+  El cobro de F3 replica ese orden exacto: **cuenta → método → emisión → impresión**.
+  Calibración fiscal confirmada con esos mismos documentos: servicio = 10% del subtotal NETO,
+  IVA = 13% solo del neto (el servicio NO lleva IVA), total = neto × 1,23 — el default de
+  `SERVICE_CONFIG` ya coincidía; test de regresión "ticket real" en `posFiscal.test.ts`.
+  Pendiente de la contadora: solo CIIU/CABYS.
 - **Previas desde la tablet** (impresas en SALÓN), **splits** por cliente / por productos /
   partes iguales / por montos; cobro **₡/$ al TC de admin**; cierre de cuenta **desde la tablet
   o desde caja**; **descuentos con `verify_manager`** (autorización de gerencia server-side, ya
@@ -143,6 +404,72 @@ Orden acordado (cada uno es base del siguiente):
   el mismo patrón, elevado al hub).
 - El puente de impresión de F0/F2 **es** el embrión de este hub: mismo proceso, misma mini-PC,
   primero imprime, después sirve.
+
+### 🔄 Refinamiento PoS — feedback de la dueña tras la primera prueba física (2026-06-12)
+**Fuente de verdad de este ciclo (rama `pos-refinamiento`):**
+1. **Gestor de Productos unificado** (reemplaza la pestaña "Precios"): Admin → Productos con TODO el
+   ciclo de vida — crear/editar (nombre, categoría, subcategoría), precio final IVA incl. con desglose
+   derivado, tipo de impuesto, **flag "aplica servicio 10%"** (default SÍ, destildable p.ej.
+   merchandising; se combina con la regla por canal: delivery nunca lo aplica), costo visible (receta
+   o carga rápida) con **margen calculado**, botón crear/editar receta, activo/desactivado y
+   eliminación. Filtros (default solo activos; desactivados/todos), búsqueda, **export CSV** según
+   filtro. Campos estándar gastronómicos: **implementados** estación de preparación (cocina/barra/
+   ninguna), tiempo estimado de preparación (min) y alérgenos; **DECISIÓN-PRODUCTO (pendiente)**:
+   código PLU/SKU, visibilidad por canal (salón/delivery/QR), foto del plato, descripción para carta
+   QR. **DECISIÓN**: el nombre del producto es inmutable post-creación (es la llave del histórico de
+   ventas); "eliminar" = desactivar (el histórico lo referencia).
+2. **Modificadores desde el producto** (modelo de la dueña): los grupos se definen UNA vez (ej. "Ron"
+   con sus variantes y deltas default); la asignación vive EN el producto — al editar "Mojito" se
+   elige el grupo y CUÁLES variantes aplican, con **override de delta por producto**. El comandero
+   respeta variantes habilitadas y overrides.
+3. **KDS — ruteo por estación y orden escalonado**: (a) cocina SOLO comida, barra SOLO bebida (campo
+   estación de la ficha; nada cruzado); (b) orden escalonado configurable por SUBCATEGORÍA en Admin →
+   KDS (ej.: 1° crudos/pesca local, 2° nigiris y sashimis, 3° rolls/principales); (c) **postres**: en
+   rush no pueden quedar al fondo — marca de prioridad visual + suben en la comanda + timer propio más
+   corto configurable. **Evolución documentada**: "carril propio de postres" (columna dedicada en el
+   KDS) cuando el volumen lo pida.
+4. **Editor de salón — realismo**: mover mesas por el plano (drag en tablet con fallback de flechas
+   paso grande/chico) + **elementos no-mesa** (barra, maceteros, estaciones, paredes/divisores)
+   agregables, movibles y redimensionables — decorativos, no abren pedidos.
+5. **Acceso por tile en Home** (cierra DECISIÓN-NOCTURNA #10): salonero/manager/owner ven "Comandero";
+   cocina ve "KDS" — nadie tipea rutas.
+
+### 👥 Operación por roles — pedido de la dueña (2026-06-12, rama `operacion-roles`)
+**Objetivo: cada puesto físico (compu del cajero, tablet del salonero, teléfono de la bandeja
+de proveedores) abre la app y aterriza DIRECTO en su pantalla, viendo solo lo suyo.**
+1. **Foto de factura de proveedor — guardada y visible (prioridad máxima)**: bucket de Storage
+   `facturas` (privado, RLS por rol), al registrar un pago a proveedor las fotos se suben y quedan
+   vinculadas al movimiento (`cash_movements.attachments`); en Caja Diaria y en el historial el pago
+   muestra miniatura → tap abre la foto completa (para revisar nombres de productos y precios).
+   Múltiples fotos por pago; en móvil la cámara abre directo (input `capture`). Si no hay red al
+   registrar, el pago entra igual y la foto se avisa como no subida (la foto requiere conexión).
+2. **Aterrizaje y permisos por rol**: cajero → Caja Diaria; salonero → Comandero; **rol nuevo
+   `proveedor`** (la "bandeja": teléfono fijo en recepción de mercadería) → pantalla dedicada de
+   registrar pago con botón de foto gigante, y NADA más; manager/owner → Home completo. El
+   aterrizaje ocurre al abrir la app (una vez por sesión de pestaña); el botón Home sigue
+   funcionando para navegar lo permitido. Rutas fuera del rol: ni tile ni acceso por URL.
+3. **Cierre de turno del salonero + métricas propias**: pantalla "Mi Turno" — ventas del turno,
+   ticket promedio (por mesa y por pax), propinas propias y el cierre respetando `canCloseShift`
+   (el último turno no cierra con mesas abiertas). Los datos salen de un **RPC `my_turno_stats`
+   SECURITY DEFINER** que solo computa `auth.uid()` — garantía estructural de que cada salonero
+   ve únicamente lo suyo.
+4. **Gestión de usuarios desde Admin** (ya existía Admin → Usuarios: rol + habilitar/deshabilitar;
+   se extiende con el rol `proveedor` y el flujo documentado): **crear cuentas** = el empleado se
+   registra (correo real o alias `satorisushibar+nombre@gmail.com`) → queda "pendiente" → el owner
+   le asigna rol y lo habilita desde esta pantalla. Crear cuentas server-side requeriría la
+   service key en un backend (Edge Function) — innecesario por ahora.
+5. **PWA por puesto**: shortcuts del manifest (Registrar proveedor, Comandero, Caja) + guía de
+   instalación por dispositivo en el reporte. Con el aterrizaje por rol, el mismo ícono abre lo
+   correcto para cada quien.
+
+#### 📬 Fase futura — Reportes quincenales por correo a saloneros · M (NO implementado)
+Cada quincena, un correo automático a cada salonero con SUS métricas (ventas, promedios, propinas
+del período) al correo de su cuenta. Requiere: (a) servicio de email transaccional (Resend/Postmark
+— Resend tiene tier gratis 100 mails/día y DX simple), (b) **Edge Function** programada
+(`supabase functions deploy` + cron via pg_cron o Scheduled Functions) que computa las métricas por
+salonero (mismas consultas que `my_turno_stats`, agregadas por quincena) y dispara los correos,
+(c) plantilla HTML simple con la identidad Satori. Decisiones pendientes: día/hora de corte
+(1 y 16 de cada mes, 9am CR sugerido), y si el correo incluye comparativa vs quincena anterior.
 
 ### Reglas transversales (valen para TODAS las fases)
 - El **turno de la mañana puede cerrar con mesas abiertas**; el **último turno NO** (el día no

@@ -4,6 +4,12 @@
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
+## 🔎 Smoke físico PROD 2026-07-06 — TODO PASÓ · 1 hallazgo: pagos pendientes huérfanos
+
+El dueño validó en piso el pase completo en PROD y **todo pasó**: `version.json` ✓ · Caja Diaria sin errores ✓ · asistente con foto + lectura IA Sonnet (efectivo y pendientes, genera tarea de revisión) ✓ · borrado con contraseña de manager (elimina movimiento + tarea asociada) ✓ · Cierre del Día con diferencias USD y gate de ajuste ✓ · sinceramiento USD realizado ✓ · Propinas sin parpadeo, pago por la vía real ✓. **La ola 2026-07 queda cerrada.**
+
+- **🆕 [P1 estabilización] Pagos pendientes huérfanos en Proveedores.** **Síntoma:** en la pestaña **Proveedores** de Caja aparecen **"14 PAGOS PENDIENTES"** en rojo. **Dónde se ve:** vista de proveedores / pendientes de Caja Diaria. **El problema:** son pendientes de **proveedores que ya no existen** — datos huérfanos, **error viejo** (no lo introdujo el pase; el smoke solo lo hizo visible). **Hipótesis:** al borrar un proveedor, sus pagos/pendientes **no se limpiaron en cascada** → quedaron colgados sin fila de proveedor viva que los respalde; y/o la query de pendientes no filtra por proveedor existente. **Acción (registrar, NO arreglar ahora — estabilización):** (1) **limpieza de datos** — identificar los pendientes sin proveedor vivo y saldarlos/eliminarlos con criterio; (2) **prevención** — evaluar FK con `on delete` adecuado (o `set null` + filtro) y/o filtrar la query de pendientes por proveedor existente. NO tocar en caliente; entra al backlog P1.
+
 ## 🔥 Hotfix 2026-07-06 — faltaba el subset core de la mig 026 en PROD (columna `attachments`)
 
 - **Síntoma:** en prod, la Bandeja/Caja tiraba `Could not find the 'attachments' column of 'cash_movements' in the schema cache`. **Causa raíz:** el pase único (2026-07-04) excluyó las migs **022–037 como "PoS"**, pero la **026 (`operacion_roles`) tiene 4 secciones core que la Bandeja/Caja SÍ necesitan** — no son PoS. Se colaron en el corte por estar en un archivo "de PoS".

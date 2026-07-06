@@ -1,7 +1,7 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-07-04. ✅ PASE ÚNICO A PROD COMPLETADO.** Toda la ola 2026-07 + Bandeja + unificación Bandeja↔Caja (**SIN PoS**) pasó a producción por FF de `prod/pase-ola-2026-07`. **`main` = `92c0831`** (avanzó desde `a14da50`) · **`staging` = `1daef0c`** (fuente de desarrollo; sigue con el PoS). Migs **038–045 aplicadas a PROD** (out-of-band vía Management API curl, verificadas por privilegio). Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod**. Deploy verificado (`version.json.commit = 92c0831`).
+> **Handoff: 2026-07-04. ✅ PASE ÚNICO A PROD COMPLETADO.** Toda la ola 2026-07 + Bandeja + unificación Bandeja↔Caja (**SIN PoS**) pasó a producción por FF de `prod/pase-ola-2026-07`. **`main` = `92c0831`** (avanzó desde `a14da50`) · **`staging` = `1daef0c`** (fuente de desarrollo; sigue con el PoS). Migs **038–045 aplicadas a PROD** (out-of-band vía Management API curl, verificadas por privilegio; **+ subset core de la 026 por hotfix 2026-07-06** — columna `attachments` que faltaba). Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod**. Deploy verificado (`version.json.commit = 92c0831`).
 >
 > **En una línea:** prod dejó de ir ~143 commits atrás — ahora tiene Caja/Cierre/USD/Revisión/asistente + Bandeja + unificación completos; lo único que queda solo-en-staging es el **PoS** (comandero/KDS/cobro/FE/inventario activo), diferido y bloqueado por el pilar de auth.
 >
@@ -16,7 +16,7 @@
 
 | Rama | Hash | Qué es |
 |---|---|---|
-| `main` | `92c0831` | **PROD (estable, en uso).** 🆕 Recibió el **PASE ÚNICO** de la ola 2026-07: toda la Caja/Cierre/USD/Revisión/asistente + Bandeja + unificación Bandeja↔Caja (F41–F43) — **SIN PoS**. Ya tenía Olas 1/1.1, pantalla negra, `createDayMovement`, IDOR `extract-document`, outbox `SIGNED_IN`, render Propinas, Actions Node 24. Migs en el ledger **≤021** + **038–045 out-of-band**. |
+| `main` | `92c0831` | **PROD (estable, en uso).** 🆕 Recibió el **PASE ÚNICO** de la ola 2026-07: toda la Caja/Cierre/USD/Revisión/asistente + Bandeja + unificación Bandeja↔Caja (F41–F43) — **SIN PoS**. Ya tenía Olas 1/1.1, pantalla negra, `createDayMovement`, IDOR `extract-document`, outbox `SIGNED_IN`, render Propinas, Actions Node 24. Migs en el ledger **≤021** + **038–045 + subset core de 026, out-of-band**. |
 | `staging` | `1daef0c` | **Fuente de verdad del desarrollo.** Todo lo de `main` **+ el PoS/KDS/comandero + FE (SIM) + inventario activo COGS** (migs 022–037). Eso es hoy lo único que separa staging de prod. Migs **022–045** (039–045 out-of-band). |
 
 > **Supabase refs:** **PROD = `yiczgdtirrkdvohdquzf`** ("satori-app") · **STAGING = `hwiatgicyyqyezqwldia`** ("satori-staging").
@@ -32,10 +32,10 @@
 
 | Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger | Notas |
 |---|---|---|---|
-| **PROD** | **≤021** | **🆕 038–045** (Management API curl, esta sesión; verificadas por privilegio) | 022–037 (PoS) NO están: el pase fue sin PoS. La ola necesitaba exactamente 038–045 sobre el ≤021 de prod (aplicaron limpias, HTTP 201). |
+| **PROD** | **≤021** | **🆕 038–045 + subset core de la 026** (Management API curl; verificadas por privilegio) | 022–037 (PoS) NO están. El pase aplicó 038–045; el **hotfix 2026-07-06** sumó las **secciones 1–4 de la mig 026** (rol `proveedor`, columna `cash_movements.attachments`, bucket `facturas` + 7 políticas) que la Bandeja/Caja necesita — la sección 5 (`my_turno_stats`, PoS) quedó excluida. Todo aplicó limpio (HTTP 201). |
 | **STAGING** | **022–038** | **039–045** | 039 dashboard · 040–044 `db query` · 045 `db query --linked`. |
 
-**⚠️ Reconciliación del ledger = sesión dedicada (NO tocar el historial):** ahora **los dos entornos** arrastran migraciones out-of-band (prod suma 038–045; staging 039–045). Persisten 009 (drift) y 035 (fantasma, solo en `propina-pool`). **`db push`/`repair` FRENADOS** hasta esa sesión. Todo idempotente. **`schema_migrations` NO se tocó en el pase.**
+**⚠️ Reconciliación del ledger = sesión dedicada (NO tocar el historial):** ahora **los dos entornos** arrastran migraciones out-of-band (prod suma **038–045 + subset core de 026**; staging 039–045). Persisten 009 (drift) y 035 (fantasma, solo en `propina-pool`). **`db push`/`repair` FRENADOS** hasta esa sesión. Todo idempotente. **`schema_migrations` NO se tocó** (ni en el pase ni en el hotfix).
 
 ## (d) Build por módulo
 
@@ -66,7 +66,7 @@ Leyenda: ✅ en prod, maduro / 🟢 en prod, **smoke físico pendiente** / 🧪 
 
 ## (f) Deuda técnica / decisiones que siguen vivas (detalle en PROMPT-CONTINUACION)
 
-1. **🔴 Reconciliación del ledger de migraciones — ahora en AMBOS entornos.** Sesión dedicada; resolver 009/035 y las out-of-band (prod 038–045, staging 039–045). Bloquea `db push`.
+1. **🔴 Reconciliación del ledger de migraciones — ahora en AMBOS entornos.** Sesión dedicada; resolver 009/035 y las out-of-band (prod **038–045 + subset core de 026**, staging 039–045). Bloquea `db push`.
 2. **🔐 Rotar los 2 tokens de GitHub** (`gho_` + PAT classic "Claude CLI") — **la fecha objetivo ya pasó, rotar YA.**
 3. **🖊️👁️ Hora-CR en bordes de período** — las queries de plata (P&L, `finance.ts`) acotan `created_at` en UTC (+6h vs CR) → un cierre de noche puede caer en el período equivocado. Cambia números → valida la dueña.
 4. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy diseñada sin código) — construir **solo si** tras usar la Etapa 1 en prod sigue haciendo falta.

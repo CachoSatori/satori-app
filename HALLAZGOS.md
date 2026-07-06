@@ -1,8 +1,15 @@
-# HALLAZGOS — backlog triado de las auditorías (handoff 2026-06-25, addenda 2026-06-26/27/28, 2026-07-03)
+# HALLAZGOS — backlog triado de las auditorías (handoff 2026-06-25, addenda 2026-06-26/27/28, 2026-07-03, hotfix 2026-07-06)
 
 > **SOLO evaluación.** Nada de esto fue accionado salvo lo indicado como ✅. Es el inventario de lo que
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+
+## 🔥 Hotfix 2026-07-06 — faltaba el subset core de la mig 026 en PROD (columna `attachments`)
+
+- **Síntoma:** en prod, la Bandeja/Caja tiraba `Could not find the 'attachments' column of 'cash_movements' in the schema cache`. **Causa raíz:** el pase único (2026-07-04) excluyó las migs **022–037 como "PoS"**, pero la **026 (`operacion_roles`) tiene 4 secciones core que la Bandeja/Caja SÍ necesitan** — no son PoS. Se colaron en el corte por estar en un archivo "de PoS".
+- **Fix (out-of-band, Management API curl, mismo canal del pase):** se aplicaron a PROD (`yiczgdtirrkdvohdquzf`) las **secciones 1–4 de la 026** en una request: (1) `alter type user_role add value 'proveedor'`; (2) `cash_movements.attachments jsonb` (la columna del error); (3) bucket privado `facturas` + 3 políticas de Storage; (4) 4 políticas RLS del rol proveedor. Luego `NOTIFY pgrst, 'reload schema'`. **La sección 5 (`my_turno_stats`) quedó EXCLUIDA** — referencia `pos_orders`/`tip_entries` que prod no tiene y nada en prod la llama. Todo idempotente (`if not exists` / `on conflict` / `drop policy if exists`); aplicó limpio (HTTP 201).
+- **Verificado (PROD):** columna `attachments` (jsonb) ✅ · enum `user_role='proveedor'` ✅ · bucket `facturas` ✅ · las 7 políticas creadas ✅ (`facturas_{insert,select,delete}` + `suppliers_proveedor_select` + `cash_sessions_proveedor_select` + `cash_movements_proveedor_{insert,select_own}`; una 8ª política pre-existente, `"Managers y owners ven proveedores"`, matchea el LIKE por el nombre pero es ajena).
+- **Ledger NO tocado · NO se creó archivo de migración nuevo** (es un subset de la 026 que ya existe; numerarlo duplicado ensuciaría la secuencia). Queda como **más deuda out-of-band de prod** (`038–045 + subset core de 026`), a saldar en la reconciliación del ledger. Prod ahora tiene lo core de la 026 aplicado FUERA del `schema_migrations`.
 
 ## 🆕 Hallazgos 2026-07-03 (ola grande de Caja/Cierre/Revisión — todo en STAGING)
 

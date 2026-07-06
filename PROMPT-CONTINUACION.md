@@ -1,23 +1,24 @@
-# Continuación — backlog priorizado (handoff 2026-07-04)
+# Continuación — backlog priorizado (handoff 2026-07-06)
 
-> **✅ EL PASE ÚNICO A PROD ESTÁ HECHO.** `main` = **`92c0831`** (avanzó de `a14da50`; toda la ola 2026-07 + Bandeja + unificación, **SIN PoS**) · `staging` = **`1daef0c`** (dev, con PoS). Migs **038–045 aplicadas a PROD** (out-of-band vía Management API curl, verificadas por privilegio). Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod**. Deploy verde (`version.json = 92c0831`). Detalle → `ESTADO-ARCHIVO.md` (bloque 2026-07-04) · foto compacta → `ESTADO.md`.
+> **✅ OLA 2026-07 CERRADA.** El pase único a prod **+ smoke físico del dueño ✓ + sinceramiento USD en prod ✓** están completos (ver ESTADO §e). `main` código = **`92c0831`** · `staging` código = **`1daef0c`** (los HEAD avanzan solo por commits **docs-only**). Migs PROD out-of-band: **≤021 + 038–045 + subset core de 026**. Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod** ✓.
 >
-> **La próxima sesión NO es un pase.** Es **estabilización post-pase** (P0) y después deuda corta (P1). El gran pase del PoS sigue lejos (bloqueado por el pilar de auth, P3). Las secciones numeradas de más abajo (§0…, RCAs, plan viejo de 3 olas) son **referencia histórica**; el backlog vigente es el de acá (P0–P3).
+> **➡️ Ahora: ESTABILIZACIÓN (1–2 semanas de observación, SIN construir).** Backlog vigente por prioridad **P0–P3** abajo. Las secciones numeradas de más abajo (§0…, RCAs, planes viejos) son **referencia histórica**; el backlog vigente es el de acá.
 
 ---
 
-## 🟥 P0 — ESTABILIZACIÓN POST-PASE (lo primero)
+## 🟥 P0 — ESTABILIZACIÓN / OBSERVACIÓN (1–2 semanas, SIN construir)
 
-1. **👁️ Smoke físico en PROD con la dueña.** Ninguna pieza de la ola tiene aún validación en piso sobre **datos de producción**. Recorrer en prod: cierre de caja (resumen + verificación ₡/US$), Revisión de inventario (foto/panel/adjuntar), Bandeja (registrar pago no-efectivo + "✓ Verificar"), edición de pago con contraseña (mig 045), Opción B (ajuste al ledger), propinas por la vía real. **NO marcar "validado en prod" hasta su OK.**
-2. **🔴 Sinceramiento USD de Caja Fuerte en PROD (PLATA — firma de la dueña).** La fórmula USD firmada recién cuadra desde un punto de partida real. Repetir el ajuste inicial (espejo de los −$2678 de staging) con el **conteo físico USD del día**: Movimientos → Ingreso · Otro CF, `USD = físico − saldo ledger`, `₡ = 0`. Sin esto, el "debería" USD arranca torcido en prod.
-3. **👀 Vigilar prod tras el pase:** consola/errores, que el deploy servido sea `version.json = 92c0831`, y que `extract-document` con el modelo **Sonnet** lea facturas bien en prod (el secret es nuevo ahí).
+> El pase, el **smoke físico** y el **sinceramiento USD** ya están ✅ (ver ESTADO §e). El foco ahora **NO es construir**: es observar prod en uso real y registrar lo que aparezca.
+1. **👀 Observar prod en operación real.** Consola/errores, comportamiento de Caja/Cierre/Bandeja/Propinas con datos y usuarios reales, y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Todo hallazgo → **HALLAZGOS.md** (no arreglar en caliente salvo urgencia).
+2. **🧊 Congelar construcción.** No arrancar features nuevas durante la ventana de estabilización. La deuda corta (P1) se ataca solo si algo lo exige, o al cerrar la ventana.
 
-## 🟧 P1 — DEUDA CORTA (técnica, acotada)
+## 🟧 P1 — DEUDA CORTA (técnica/datos, acotada)
 
-1. **🔴 Reconciliación del ledger de migraciones — AHORA EN AMBOS ENTORNOS.** prod: ledger **≤021 + 038–045 out-of-band**; staging: **022–038 + 039–045 out-of-band**; + **009** (drift) + **035** (fantasma, solo en `propina-pool`). `db push`/`repair` **FRENADOS** hasta una sesión dedicada de infraestructura (resolver 035/`propina-pool` primero; **NO tocar el historial**). Todo idempotente. Detalle → ESTADO §c + §3 abajo.
-2. **🔐 Rotar los 2 tokens de GitHub — VENCIDOS, rotar YA.** `gho_` (ya limpio del remote pero válido en GitHub hasta rotarlo) + PAT classic "Claude CLI" (quedó en un transcript local). Detalle → §0bis abajo.
-3. **🖊️👁️ Hora-CR en bordes de período (PLATA).** Las queries de plata (`finance.ts:132/139` P&L borde de año, y similares) acotan `created_at` en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. Construir los límites con `dateCR`. Cambia números → valida la dueña. `fix/fecha-cr-consistente` ya en staging. Detalle → §1 abajo.
-4. **🟢 Prolijidad (no bloquea):** subir `node-version: 20`→22 en `deploy.yml`; 404 menores en `/caja` y `propinas:1`; warning cosmético de recharts. Detalle → §2 abajo.
+1. **🆕🔴 Pagos pendientes huérfanos en Proveedores (hallazgo del smoke 2026-07-06).** En la pestaña **Proveedores** aparecen **"14 PAGOS PENDIENTES"** en rojo de proveedores que **ya no existen** — datos huérfanos (error viejo, **no** del pase). **Limpieza de datos** (identificar y saldar/eliminar los pendientes sin proveedor vivo) **+ prevención** (evaluar FK con `on delete` adecuado, o filtrar por proveedor existente en la query de pendientes). Detalle → **HALLAZGOS.md** (entrada 2026-07-06).
+2. **🔴 Reconciliación del ledger de migraciones — AHORA EN AMBOS ENTORNOS.** prod: ledger **≤021 + 038–045 + subset core de 026 out-of-band**; staging: **022–038 + 039–045 out-of-band**; + **009** (drift) + **035** (fantasma, solo en `propina-pool`). `db push`/`repair` **FRENADOS** hasta una sesión dedicada de infraestructura (resolver 035/`propina-pool` primero; **NO tocar el historial**). Todo idempotente. Detalle → ESTADO §c + §3 abajo.
+3. **🔐 Rotar los 2 tokens de GitHub — VENCIDOS, rotar YA.** `gho_` (ya limpio del remote pero válido en GitHub hasta rotarlo) + PAT classic "Claude CLI" (quedó en un transcript local). Detalle → §0bis abajo.
+4. **🖊️👁️ Hora-CR en bordes de período (PLATA).** Las queries de plata (`finance.ts:132/139` P&L borde de año, y similares) acotan `created_at` en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. Construir los límites con `dateCR`. Cambia números → valida la dueña. `fix/fecha-cr-consistente` ya en staging. Detalle → §1 abajo.
+5. **🟢 Prolijidad (no bloquea):** subir `node-version: 20`→22 en `deploy.yml`; 404 menores en `/caja` y `propinas:1`; warning cosmético de recharts. Detalle → §2 abajo.
 
 ## 🟨 P2 — DECISIONES DE PRODUCTO (esperan a la dueña / uso real en prod)
 

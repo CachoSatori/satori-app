@@ -4,6 +4,18 @@
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
+## 📊 Convención de ventas en datos migrados 2026-07-07 — CERRADO (no es bug de la app)
+
+Análisis externo del histórico de ventas migrado (archivo **`MIGRACION-COMPLETA-Satori.xlsx`, en poder del dueño**), 2023 → 2026-07. **No es un defecto de la app: es la CONVENCIÓN DE REGISTRO del Excel de origen.** Se cierra como entendido; lo único que deja es una acción de **import histórico** (→ PROMPT-CONTINUACION P1, post-ventana).
+
+- **Síntoma:** subregistro de ₡ en ventas de **≈49%** — **₡135,9M** cargados contra **₡274,8M reales** (2023 → 2026-07).
+- **Causa confirmada:** el Excel guardaba el colón ya **neteado** → `₡ = efectivo − US$×TC − cobros SINPE − impagos` (al efectivo se le restaba lo cobrado en dólares, lo cobrado por SINPE al banco y lo impago). Los **US$ son confiables**.
+- **Validación contra el PoS por turno (1.774 turnos):** correlación **0,978**, diferencia global **+1,8%** → PoS y Excel cuentan lo mismo una vez entendida la convención.
+- **TC implícito de la casa** (para reconstruir el ₡ real desde los US$): **510** (ene-24) · **500** (feb–mar-24) · **490** (abr-24 → feb-26) · **470** (mar-26 → hoy). **2023 no tiene PoS** (se perdió) → se asume **TC ₡545**.
+- **"CR - Sinpe":** son **descuentos al efectivo por cobros SINPE al banco** — **NO es un gap de la app.** El **único gap real** es **CXC** (cuentas por cobrar = mesas impagas), relevante para el **PoS propio (F4+)**.
+- **"INGRESO DE CAMBIO"** = **traspaso Banco→Caja** — ya soportado por la app (movimiento de traspaso).
+- **Decisión del dueño:** los datos de ventas **actuales de la app son REEMPLAZABLES** (hay doble registro durante la estabilización). **Objetivo: centralizar el histórico completo dentro de la app** vía import (diseño → PROMPT-CONTINUACION P1).
+
 ## 🔎 Smoke físico PROD 2026-07-06 — TODO PASÓ · 1 hallazgo: pagos pendientes huérfanos (🔍 diagnosticado read-only 2026-07-06 — reencuadrado)
 
 El dueño validó en piso el pase completo en PROD y **todo pasó**: `version.json` ✓ · Caja Diaria sin errores ✓ · asistente con foto + lectura IA Sonnet (efectivo y pendientes, genera tarea de revisión) ✓ · borrado con contraseña de manager (elimina movimiento + tarea asociada) ✓ · Cierre del Día con diferencias USD y gate de ajuste ✓ · sinceramiento USD realizado ✓ · Propinas sin parpadeo, pago por la vía real ✓. **La ola 2026-07 queda cerrada.**

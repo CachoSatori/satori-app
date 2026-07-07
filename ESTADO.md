@@ -69,8 +69,8 @@ Leyenda: ✅ en prod, maduro / 🟢 en prod, **smoke físico pendiente** / 🧪 
 ## (f) Deuda técnica / decisiones que siguen vivas (detalle en PROMPT-CONTINUACION)
 
 1. **🔴 Reconciliación del ledger de migraciones — ahora en AMBOS entornos.** Sesión dedicada; resolver 009/035 y las out-of-band (prod **038–045 + subset core de 026**, staging 039–045). Bloquea `db push`.
-2. **🆕🔴 Pagos pendientes huérfanos en Proveedores (P1 de estabilización).** El smoke del 2026-07-06 destapó **"14 pagos pendientes"** en rojo de proveedores que **ya no existen** — datos huérfanos (error viejo, no del pase). Limpieza de datos + prevención (evaluar FK / filtro). Detalle → HALLAZGOS.
-3. **🔐 Rotar los 2 tokens de GitHub** (`gho_` + PAT classic "Claude CLI") — **la fecha objetivo ya pasó, rotar YA.**
+2. **🔍 Pagos pendientes en Proveedores — DIAGNOSTICADO (P1 estabilización, read-only 2026-07-06).** El "14" en rojo **NO son pendientes**: es `overdueCount` (proveedores activos vencidos por **ciclo**, etiqueta engañosa). Pendientes reales = **5** (3 legítimos + **2 huérfanos** `supplier_id` NULL, ₡150.043,52); **FK íntegra**. Queda decisión de **semántica del rojo** + destino de los 2 huérfanos → firma. Detalle → HALLAZGOS.
+3. **✅ Tokens de GitHub rotados (2026-07-06).** PAT "Claude CLI" regenerado con scopes mínimos (`repo`+`workflow`, sin `admin:org`) + OAuth "GitHub CLI" revocado (`gho_` invalidado, re-login limpio en keyring). Ya no hay tokens comprometidos.
 4. **🖊️👁️ Hora-CR en bordes de período** — las queries de plata (P&L, `finance.ts`) acotan `created_at` en UTC (+6h vs CR) → un cierre de noche puede caer en el período equivocado. Cambia números → valida la dueña.
 5. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy diseñada sin código) — construir **solo si** tras usar la Etapa 1 en prod sigue haciendo falta.
 6. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant** — **bloquea el GRAN PASE del PoS** a prod (~10 dispositivos concurrentes; hotelería/franquicias).

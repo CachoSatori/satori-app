@@ -4,6 +4,21 @@
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
+## 🗄️ Migración histórico Excel→app — Fase B EJECUTADA a STAGING (2026-07-08, reversible)
+
+Ejecución del import histórico (P1 #6, del hallazgo "convención de ventas" 2026-07-07). Diseño firmado + import **solo en STAGING** (`hwiatgicyyqyezqwldia`); **prod NUNCA se tocó**. Fuente: `MIGRACION-COMPLETA-Satori.xlsx`. Todo con marca `[migración 2026-07]` + backups → 100% reversible.
+
+- **Alcance importado:**
+  - `cash_movements`: **10.842** filas (Σ₡ 410.469.516 · US$ 252.232), `created_by=Caja Satori`, `status='aprobado'`, marca en `description`. Conteos/sumas por año×tipo = idénticos al Excel (guard pre-insert + verificación adversarial read-only).
+  - `ventas_efectivo_hist` (**tabla NUEVA**, grano turno, RLS espejando `ventas_hist`): **2.448** turnos (Σ₡ **274.817.196,85** = Excel completo · US$ 268.578).
+- **Corte parametrizado `CORTE_APP='2026-06-30'`** (NO hardcodeado; el pase a prod usará otra fecha): Excel dueño de ≤2026-06-30 en `cash_movements` (staging no tenía 2023-2025); la app dueña de 2026-07+. **Suplemento julio 1-6:** 20 movimientos no-tips + 8 tips "claras" (turnos sin payout en la app) — disjunto de las filas vivas de la app (0 duplicados). `ventas_efectivo_hist` NO usa corte (tabla nueva sin colisión) → 2.448 turnos completos.
+- **Exclusiones (anotadas, NO migradas):** **8 REVISAR** (7× `CP -` ilegibles + 1× `CR-Sinpe` sin fecha; Σ₡126.327) · **4 tips ambiguas** julio (Σ₡67.800: turnos 07-01/07-03 Med sin propina → duplicaban el Noche ya pagado por la app, verificado en Propinas).
+- **Suppliers:** 34 matcheados + 10 creados; **4 mergeados** (dedupe): `grupo mc valle` self-dup (5 mov), `Belca`→"Belca- centro internacional de inversiones" (3), `Licores`→"Licores Nakama" (63), `Pescados`→"Pescados Tambor" (669). Nuevos legítimos: Corona, Hielo, Queso Cabra, Super Fresco, Tofu Diego (dormidos). **0 dangling.** (Dup PRE-existente ajeno a la migración: `MUSICOS`/`Musicos`.)
+- **Nuances a validar físicamente (reversibles):** (1) `caja_origen='Caja Fuerte'` uniforme; (2) traspasos "Del Banco a Caja" NO los suma `saldoCajaFuerte` (busca `→ caja fuerte` en subcategoría); (3) **`ventas_efectivo_hist` no tiene vista en la app** → se valida por SQL, no en la UI (los 10.842 movimientos SÍ se ven en Caja→Movimientos).
+- **Cuadre:** sumas exactas vs Excel + validación previa ventas-vs-PoS (corr 0,978, hoja Calidad). Reconstruir el saldo de caja vs los 800 cierres NO cierra en agregado (al dataset le faltan depósitos Caja→Banco) — esperado, no es error de datos.
+- **Reversibilidad total:** `DELETE FROM cash_movements WHERE description LIKE '[migración 2026-07]%'` + `DROP TABLE ventas_efectivo_hist` + backups `cash_movements_pre_migracion_2026_07` (967) / `suppliers_pre_migracion_2026_07` (83).
+- **Fase C:** prod DIFERIDO — validación física en staging por el dueño; el pase a prod es sesión aparte (otro `CORTE_APP`, con firma).
+
 ## 📊 Convención de ventas en datos migrados 2026-07-07 — CERRADO (no es bug de la app)
 
 Análisis externo del histórico de ventas migrado (archivo **`MIGRACION-COMPLETA-Satori.xlsx`, en poder del dueño**), 2023 → 2026-07. **No es un defecto de la app: es la CONVENCIÓN DE REGISTRO del Excel de origen.** Se cierra como entendido; lo único que deja es una acción de **import histórico** (→ PROMPT-CONTINUACION P1, post-ventana).

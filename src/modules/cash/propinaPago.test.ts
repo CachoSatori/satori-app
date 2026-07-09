@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { propKey, propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
 import type { CashMovement, CashSession } from '../../shared/types/database'
-import type { TipPayoutSummary } from '../../shared/api/tips'
+import { totalElectronicoCrc, summarizeTipPayouts, type TipPayoutSummary } from '../../shared/api/tips'
 
 // propinaPago — la vía real COMPARTIDA (FIRMADO). Estos tests fijan:
 //   1. La forma EXACTA del egreso (si cambia, las dos puertas divergen y el saldado se rompe).
@@ -10,8 +10,11 @@ import type { TipPayoutSummary } from '../../shared/api/tips'
 //   3. propinasPagadasEnFecha: SOLO status aprobado, atribuido al día en que la plata salió
 //      (fecha del turno pagador, o dateCR(created_at) a nivel día).
 
+// total_payout_crc (reparto completo) ≠ total_electronico_crc (la cuenta por pagar) a propósito:
+// así los tests distinguen que el egreso usa el ELECTRÓNICO, no el reparto completo.
 const tip = (over: Partial<TipPayoutSummary> = {}): TipPayoutSummary => ({
-  session_id: 'tip-1', session_date: '2026-07-03', shift_type: 'AM', total_payout_crc: 12000, ...over,
+  session_id: 'tip-1', session_date: '2026-07-03', shift_type: 'AM',
+  total_payout_crc: 20000, total_electronico_crc: 12000, ...over,
 })
 
 const mov = (over: Partial<CashMovement>): CashMovement => ({
@@ -29,10 +32,10 @@ describe('propinaPago — forma del egreso (idéntica en las dos puertas)', () =
     expect(propKey(tip({ shift_type: 'PM' }))).toBe('Propinas turno 2026-07-03 Noche')
   })
 
-  it('propinaEgresoFields produce EXACTAMENTE la forma histórica de pagarPropina', () => {
+  it('propinaEgresoFields: forma histórica, pero amount_crc = ELECTRÓNICO (no el reparto completo)', () => {
     expect(propinaEgresoFields(tip())).toEqual({
       movement_type: 'egreso_personal',
-      amount_crc:    12000,
+      amount_crc:    12000,   // total_electronico_crc, NO total_payout_crc (20000)
       amount_usd:    0,
       currency:      'CRC',
       description:   'Propinas turno 2026-07-03 Mediodía',
@@ -98,5 +101,66 @@ describe('propinaPago — propinasPagadasEnFecha (lo que resta del cierre)', () 
       mov({ id: 'd', amount_crc: 9999, subcategory: 'Otra cosa' }),
     ]
     expect(propinasPagadasEnFecha(ms, [], F)).toBe(15000)
+  })
+})
+
+// ── El payable = SOLO lo electrónico (FIRMADO propinas-efectivo-electronico) ──────────────
+// La cuenta por pagar se genera solo por la porción electrónica; el efectivo se lo queda el
+// equipo y NUNCA genera pendiente. Estas pruebas fijan la fórmula pura y el filtro de la lista.
+
+const entry = (crc: number, usd = 0) => ({ tip_amount_crc: crc, tip_amount_usd: usd })
+
+describe('totalElectronicoCrc — fórmula pura del payable', () => {
+  it('turno SOLO EFECTIVO → 0 payable (sin electrónico individual ni barra electrónica)', () => {
+    expect(totalElectronicoCrc([entry(0), entry(0)], 640, 0)).toBe(0)
+  })
+
+  it('turno MIXTO → Σ electrónico exacto: ₡ + $×TC + barra electrónica', () => {
+    // 8.000 + 4.000 (₡) + (10 + 5)$ × 600 = 12.000 + 9.000 = 21.000, + 3.000 barra elec = 24.000
+    const entries = [entry(8000, 10), entry(4000, 5)]
+    expect(totalElectronicoCrc(entries, 600, 3000)).toBe(24000)
+  })
+
+  it('barra ef + elec → SOLO la electrónica cuenta (la efectiva ni se pasa a esta fórmula)', () => {
+    // Solo se le pasa la barra ELECTRÓNICA (7.000). La barra EFECTIVO (p.ej. 5.000) no entra acá.
+    expect(totalElectronicoCrc([entry(0)], 640, 7000)).toBe(7000)
+  })
+
+  it('tolera nulls en las entries', () => {
+    expect(totalElectronicoCrc([{ tip_amount_crc: null, tip_amount_usd: null }], 640, 0)).toBe(0)
+  })
+})
+
+describe('summarizeTipPayouts — arma la lista y filtra por electrónico > 0', () => {
+  const row = (over: Partial<Parameters<typeof summarizeTipPayouts>[0][number]> = {}) => ({
+    id: 's1', session_date: '2026-07-03', shift_type: 'PM', exchange_rate: 600,
+    pool_barra_electronico_crc: 0,
+    tip_entries: [{ payout_crc: 50000, tip_amount_crc: 0, tip_amount_usd: 0 }],
+    ...over,
+  })
+
+  it('turno SOLO EFECTIVO (payout > 0 pero electrónico 0) → FUERA de la lista', () => {
+    // payout_crc 50.000 (repartido del efectivo) pero total_electronico_crc 0 → excluido.
+    expect(summarizeTipPayouts([row()])).toHaveLength(0)
+  })
+
+  it('turno MIXTO → dentro, con payout completo Y electrónico exacto', () => {
+    const [r] = summarizeTipPayouts([row({
+      tip_entries: [
+        { payout_crc: 40000, tip_amount_crc: 8000, tip_amount_usd: 10 },
+        { payout_crc: 20000, tip_amount_crc: 4000, tip_amount_usd: 0 },
+      ],
+      pool_barra_electronico_crc: 3000,
+    })])
+    expect(r.total_payout_crc).toBe(60000)                 // reparto completo, para display
+    expect(r.total_electronico_crc).toBe(8000 + 4000 + 10 * 600 + 3000)  // = 21.000
+  })
+
+  it('barra ef + elec: solo la barra electrónica llega al payable (la efectiva no está en la fila)', () => {
+    const [r] = summarizeTipPayouts([row({
+      tip_entries: [{ payout_crc: 80000, tip_amount_crc: 0, tip_amount_usd: 0 }],
+      pool_barra_electronico_crc: 9000,
+    })])
+    expect(r.total_electronico_crc).toBe(9000)
   })
 })

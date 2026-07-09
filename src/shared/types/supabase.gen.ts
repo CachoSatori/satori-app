@@ -2337,6 +2337,7 @@ export type Database = {
           notes: string | null
           opened_by: string
           pool_barra_crc: number
+          pool_barra_electronico_crc: number
           pool_efectivo_crc: number
           pool_efectivo_usd: number
           pool_pos_crc: number
@@ -2354,6 +2355,7 @@ export type Database = {
           notes?: string | null
           opened_by: string
           pool_barra_crc?: number
+          pool_barra_electronico_crc?: number
           pool_efectivo_crc?: number
           pool_efectivo_usd?: number
           pool_pos_crc?: number
@@ -2371,6 +2373,7 @@ export type Database = {
           notes?: string | null
           opened_by?: string
           pool_barra_crc?: number
+          pool_barra_electronico_crc?: number
           pool_efectivo_crc?: number
           pool_efectivo_usd?: number
           pool_pos_crc?: number

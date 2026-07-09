@@ -65,7 +65,8 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
         {
           pool_efectivo_crc: s.pool_efectivo_crc,
           pool_efectivo_usd: s.pool_efectivo_usd,
-          pool_barra_crc:    s.pool_barra_crc,
+          // Barra = efectivo + electrónico → el reparto recomputado coincide con el payout guardado.
+          pool_barra_crc:    (s.pool_barra_crc || 0) + (s.pool_barra_electronico_crc || 0),
           exchange_rate:     s.exchange_rate,
         },
       )

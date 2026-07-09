@@ -147,7 +147,7 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     supabase.from('suppliers').select('id,ciclo_pago').eq('is_active', true),
     // Today's tip session (open OR closed) for pool total
     supabase.from('tip_sessions')
-      .select('id,status,pool_efectivo_crc,pool_efectivo_usd,pool_barra_crc,exchange_rate')
+      .select('id,status,pool_efectivo_crc,pool_efectivo_usd,pool_barra_crc,pool_barra_electronico_crc,exchange_rate')
       .eq('session_date', today)
       .order('status', { ascending: true })  // 'closed' < 'open' alphabetically
       .limit(1).maybeSingle(),
@@ -223,13 +223,13 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
 
   // ── Tip numbers ─────────────────────────────────────────────
   const tipDetail = tipDetailRes.status === 'fulfilled'
-    ? (tipDetailRes.value.data as { id:string; status:string; pool_efectivo_crc:number; pool_efectivo_usd:number; pool_barra_crc:number; exchange_rate:number } | null)
+    ? (tipDetailRes.value.data as { id:string; status:string; pool_efectivo_crc:number; pool_efectivo_usd:number; pool_barra_crc:number; pool_barra_electronico_crc:number; exchange_rate:number } | null)
     : null
   let tipPool = 0, tipWorkers = 0
   const tipStatus = tipDetail?.status ?? ''
   if (tipDetail) {
     const rate = tipDetail.exchange_rate ?? 640
-    tipPool = (tipDetail.pool_efectivo_crc ?? 0) + (tipDetail.pool_efectivo_usd ?? 0) * rate + (tipDetail.pool_barra_crc ?? 0)
+    tipPool = (tipDetail.pool_efectivo_crc ?? 0) + (tipDetail.pool_efectivo_usd ?? 0) * rate + (tipDetail.pool_barra_crc ?? 0) + (tipDetail.pool_barra_electronico_crc ?? 0)
     // Load tip entries to count workers
     if (tipDetail.status === 'closed') {
       const { data: entries } = await supabase.from('tip_entries').select('payout_crc').eq('session_id', tipDetail.id)

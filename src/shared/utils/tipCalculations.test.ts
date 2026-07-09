@@ -77,4 +77,22 @@ describe('calcTurno — reparto del pool de propinas', () => {
     expect(orig.take_home).toBe(0)
     expect(orig.pts_val).toBe(0)
   })
+
+  // GUARDRAIL (propinas-efectivo-electronico): la UI ahora divide la barra en efectivo +
+  // electrónico y le pasa a calcTurno la SUMA. Este test fija que el take_home por empleado es
+  // idéntico se pase la barra como un único número o como la suma de sus dos partes — la firma de
+  // calcTurno no cambió y el reparto es invariante a cómo se componga ese total de barra.
+  it('mismo take_home con la barra dividida (efectivo + electrónico) vs. como un único pool', () => {
+    const mk = () => [
+      line({ employeeId: 'sal', role: 'salonero', hours: 5, pts_rol: 10, propina_crc: 15_000 }),
+      line({ employeeId: 'bar', role: 'barman', hours: 6, pts_rol: 10 }),
+      line({ employeeId: 'bbk', role: 'barback', hours: 2, pts_rol: 5 }),
+    ]
+    const unico   = calcTurno(mk(), 120_000, 50, 40_000, 600)          // barra = 40.000 de una
+    const dividido = calcTurno(mk(), 120_000, 50, 25_000 + 15_000, 600) // barra = 25.000 ef + 15.000 elec
+    const th = (r: ReturnType<typeof calcTurno>) =>
+      Object.fromEntries(r.updatedLines.map(l => [l.employeeId, Math.round(l.take_home)]))
+    expect(th(dividido)).toEqual(th(unico))
+    expect(unico.totals.totalPool).toBe(dividido.totals.totalPool)
+  })
 })

@@ -72,7 +72,7 @@ async function fetchPropinas(ym: string, emps: Employee[]): Promise<PropinasBloc
 
   const { data: sessions } = await supabase
     .from('tip_sessions')
-    .select('id, session_date, pool_efectivo_crc, pool_efectivo_usd, pool_barra_crc, exchange_rate')
+    .select('id, session_date, pool_efectivo_crc, pool_efectivo_usd, pool_barra_crc, pool_barra_electronico_crc, exchange_rate')
     .eq('status', 'closed')
     // Límite superior EXCLUSIVO = 1° del mes siguiente (no `${ym}-31`, fecha inválida → 400).
     .gte('session_date', monthRangeBounds(ym).start)
@@ -80,12 +80,12 @@ async function fetchPropinas(ym: string, emps: Employee[]): Promise<PropinasBloc
 
   const rows = (sessions ?? []) as Array<{
     id: string; session_date: string
-    pool_efectivo_crc: number; pool_efectivo_usd: number; pool_barra_crc: number; exchange_rate: number
+    pool_efectivo_crc: number; pool_efectivo_usd: number; pool_barra_crc: number; pool_barra_electronico_crc: number; exchange_rate: number
   }>
 
   let pool = 0, q1 = 0, q2 = 0
   for (const s of rows) {
-    const p = (s.pool_efectivo_crc ?? 0) + (s.pool_efectivo_usd ?? 0) * (s.exchange_rate ?? 640) + (s.pool_barra_crc ?? 0)
+    const p = (s.pool_efectivo_crc ?? 0) + (s.pool_efectivo_usd ?? 0) * (s.exchange_rate ?? 640) + (s.pool_barra_crc ?? 0) + (s.pool_barra_electronico_crc ?? 0)
     pool += p
     if (Number(s.session_date.slice(8, 10)) <= 15) q1 += p
     else q2 += p

@@ -65,7 +65,8 @@ export default function TipsModule() {
   const [exchangeRate, setExchangeRate] = useState(640)
   const [efectivoCRC, setEfectivoCRC] = useState<number | ''>('')
   const [efectivoUSD, setEfectivoUSD] = useState<number | ''>('')
-  const [barraCRC, setBarraCRC] = useState<number | ''>('')
+  const [barraCRC, setBarraCRC] = useState<number | ''>('')                       // barra EFECTIVO
+  const [barraElecCRC, setBarraElecCRC] = useState<number | ''>('')               // barra ELECTRÓNICO
 
   // Líneas del draft (por empleado). pts_val/take_home NO viven acá: se DERIVAN
   // en el render (useMemo de abajo) → nunca hay un frame con 0 (el parpadeo).
@@ -114,6 +115,7 @@ export default function TipsModule() {
         setEfectivoCRC(open.pool_efectivo_crc || '')
         setEfectivoUSD(open.pool_efectivo_usd || '')
         setBarraCRC(open.pool_barra_crc || '')
+        setBarraElecCRC(open.pool_barra_electronico_crc || '')
         setShiftType(open.shift_type)
         setFecha(open.session_date)
         setExchangeRate(open.exchange_rate)
@@ -195,7 +197,9 @@ export default function TipsModule() {
       linesForCalc,
       Number(efectivoCRC) || 0,
       Number(efectivoUSD) || 0,
-      Number(barraCRC) || 0,
+      // Pool barra = efectivo + electrónico (la firma de calcTurno NO cambia). El reparto es
+      // idéntico al del valor único de antes → el take_home por empleado no se mueve.
+      (Number(barraCRC) || 0) + (Number(barraElecCRC) || 0),
       exchangeRate,
     )
     // Merge sobre las líneas ORIGINALES → el rol NATURAL queda intacto; solo agrega
@@ -207,7 +211,7 @@ export default function TipsModule() {
     }))
     return { displayLines: merged, totals: t }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, coberturas, efectivoCRC, efectivoUSD, barraCRC, exchangeRate, openSession?.id])
+  }, [lines, coberturas, efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate, openSession?.id])
 
   // ── Auto-guardar pools en Supabase ────────────────────────
   const scheduleSavePools = useCallback(() => {
@@ -219,9 +223,10 @@ export default function TipsModule() {
         pool_efectivo_crc: Number(efectivoCRC) || 0,
         pool_efectivo_usd: Number(efectivoUSD) || 0,
         pool_barra_crc:    Number(barraCRC)    || 0,
+        pool_barra_electronico_crc: Number(barraElecCRC) || 0,
       }).catch(() => {})
     }, 800)
-  }, [openSession, efectivoCRC, efectivoUSD, barraCRC])
+  }, [openSession, efectivoCRC, efectivoUSD, barraCRC, barraElecCRC])
 
   useEffect(() => { scheduleSavePools() }, [scheduleSavePools])
 
@@ -268,6 +273,7 @@ export default function TipsModule() {
       setEfectivoCRC('')
       setEfectivoUSD('')
       setBarraCRC('')
+      setBarraElecCRC('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error creando sesión')
     }
@@ -283,7 +289,7 @@ export default function TipsModule() {
     if (!window.confirm(msg)) return
     try { await deleteTipSession(openSession.id) } catch { /* ignore */ }
     setOpenSession(null)
-    setEfectivoCRC(''); setEfectivoUSD(''); setBarraCRC('')
+    setEfectivoCRC(''); setEfectivoUSD(''); setBarraCRC(''); setBarraElecCRC('')
     setCoberturas({})
     setShowNewSession(true)
     await loadData()
@@ -410,12 +416,24 @@ export default function TipsModule() {
     if (!openSession || !profile) return
     const workedLines = displayLines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
-    const poolCRC = Math.round((Number(efectivoCRC)||0) + (Number(efectivoUSD)||0)*exchangeRate + (Number(barraCRC)||0))
+    // 3 números que reconcilian: Total asignado = Efectivo ya en mano + Electrónico a entregar.
+    const totalAsignado = Math.round(workedLines.reduce((s, l) => s + l.take_home, 0))
+    const efectivoEquipo = Math.round(
+      (Number(efectivoCRC) || 0) + (Number(efectivoUSD) || 0) * exchangeRate + (Number(barraCRC) || 0)
+    )
+    const electronico = Math.round(
+      workedLines.reduce((s, l) => s + (Number(l.propina_crc) || 0) + (Number(l.propina_usd) || 0) * exchangeRate, 0)
+      + (Number(barraElecCRC) || 0)
+    )
+    const crc = (n: number) => `₡ ${n.toLocaleString('es-CR')}`
 
     const ok = window.confirm(
       `¿Cerrar turno y guardar payouts?\n\n` +
       `Empleados: ${workedLines.length}\n` +
-      `Pool total: ₡ ${poolCRC.toLocaleString('es-CR')}\n\n` +
+      `Total asignado: ${crc(totalAsignado)}\n` +
+      `  · Efectivo ya en mano del equipo: ${crc(efectivoEquipo)}\n` +
+      `  · Electrónico a entregar por el encargado: ${crc(electronico)}\n\n` +
+      `El efectivo se lo queda el equipo. Solo el electrónico genera "Propinas por pagar" en Caja.\n\n` +
       `Esta acción no se puede deshacer.`
     )
     if (!ok) return
@@ -430,6 +448,7 @@ export default function TipsModule() {
         pool_efectivo_crc: Number(efectivoCRC) || 0,
         pool_efectivo_usd: Number(efectivoUSD) || 0,
         pool_barra_crc:    Number(barraCRC)    || 0,
+        pool_barra_electronico_crc: Number(barraElecCRC) || 0,
       })
 
       // Guardar todas las entradas con payout
@@ -452,6 +471,7 @@ export default function TipsModule() {
       setEfectivoCRC('')
       setEfectivoUSD('')
       setBarraCRC('')
+      setBarraElecCRC('')
       // Resetear líneas
       setLines(prev => prev.map(l => ({
         ...l, active: false, hours: '', propina_crc: '', propina_usd: '', pts_val: 0, take_home: 0,
@@ -670,15 +690,31 @@ export default function TipsModule() {
                     {isBar && rol === 'barman' && (
                       <div className="tips-barra-row">
                         <span className="tips-barra-label">🍸 Pool Barra</span>
-                        <div className="tips-money-field">
-                          <span className="tips-money-prefix">₡</span>
-                          <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
-                            value={barraCRC}
-                            onChange={e => setBarraCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                        <div className="tips-efectivo-inputs">
+                          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                            <span style={{ fontSize:'0.55rem', letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--t-muted)', fontWeight:700 }}>Barra efectivo</span>
+                            <div className="tips-money-field">
+                              <span className="tips-money-prefix">₡</span>
+                              <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
+                                title="Barra efectivo — ya en mano de la barra, no genera cuenta por pagar"
+                                value={barraCRC}
+                                onChange={e => setBarraCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                            <span style={{ fontSize:'0.55rem', letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--t-muted)', fontWeight:700 }}>Barra electrónico</span>
+                            <div className="tips-money-field">
+                              <span className="tips-money-prefix">₡</span>
+                              <input type="number" className="tips-money-input" placeholder="0" step={100} min={0}
+                                title="Barra electrónico (datáfono/SINPE) — el encargado lo entrega, genera cuenta por pagar"
+                                value={barraElecCRC}
+                                onChange={e => setBarraElecCRC(e.target.value === '' ? '' : parseFloat(e.target.value) || 0)} />
+                            </div>
+                          </div>
                         </div>
                         <span className="tips-field-hint">
-                          Dividido entre barra por horas
-                          {Number(barraCRC) > 0 && (() => {
+                          Efectivo + electrónico, dividido entre barra por horas
+                          {((Number(barraCRC) || 0) + (Number(barraElecCRC) || 0)) > 0 && (() => {
                             const sub = displayLines.filter(l =>
                               l.active && BAR_ROLES.includes((coberturas[l.employeeId] as import('../../shared/types/database').UserRole) ?? l.role)
                             ).reduce((s, l) => s + l.take_home, 0)
@@ -924,7 +960,7 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
           {!isBar && (
             <>
               <div className="tips-emp-field">
-                <div className="tips-emp-field-label">Propina ₡</div>
+                <div className="tips-emp-field-label">Electrónico ₡</div>
                 <div className="tips-money-wrap">
                   <span className="tips-money-sm-prefix">₡</span>
                   <input
@@ -937,7 +973,7 @@ function TipLineRow({ line, isBar, isBarra, generalRate, isManager, shiftType, o
                 </div>
               </div>
               <div className="tips-emp-field">
-                <div className="tips-emp-field-label">Propina $</div>
+                <div className="tips-emp-field-label">Electrónico $</div>
                 <div className="tips-money-wrap">
                   <span className="tips-money-sm-prefix">$</span>
                   <input

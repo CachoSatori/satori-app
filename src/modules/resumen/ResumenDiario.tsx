@@ -54,7 +54,7 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
 
     // Tips — show open OR closed sessions (INT-4 FIX)
     supabase.from('tip_sessions')
-      .select('id, status, pool_efectivo_crc, pool_efectivo_usd, exchange_rate, pool_barra_crc')
+      .select('id, status, pool_efectivo_crc, pool_efectivo_usd, exchange_rate, pool_barra_crc, pool_barra_electronico_crc')
       .eq('session_date', date)
       .order('status', { ascending: true }) // 'closed' before 'open' alphabetically → prefer closed
       .order('created_at', { ascending: false })
@@ -120,12 +120,13 @@ async function fetchSnapshot(date: string): Promise<DaySnapshot> {
 
   // Process propinas
   if (tipsRes.status === 'fulfilled' && tipsRes.value.data) {
-    const ts = tipsRes.value.data as { id: string; pool_efectivo_crc: number; pool_efectivo_usd: number; exchange_rate: number; pool_barra_crc: number; status: string }
+    const ts = tipsRes.value.data as { id: string; pool_efectivo_crc: number; pool_efectivo_usd: number; exchange_rate: number; pool_barra_crc: number; pool_barra_electronico_crc: number; status: string }
     snap.hasTips   = true
     snap.tipsStatus = ts.status
     snap.tipPool   = (ts.pool_efectivo_crc ?? 0)
       + (ts.pool_efectivo_usd ?? 0) * (ts.exchange_rate ?? 640)
       + (ts.pool_barra_crc ?? 0)
+      + (ts.pool_barra_electronico_crc ?? 0)
 
     const { data: entries } = await supabase
       .from('tip_entries')

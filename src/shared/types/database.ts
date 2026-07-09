@@ -61,6 +61,7 @@ export interface TipSession {
   pool_efectivo_crc: number
   pool_efectivo_usd: number
   pool_barra_crc: number
+  pool_barra_electronico_crc: number
   notes: string | null
   created_at: string
   updated_at: string

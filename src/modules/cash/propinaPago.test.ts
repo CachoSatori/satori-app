@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { propKey, propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
 import type { CashMovement, CashSession } from '../../shared/types/database'
 import { totalElectronicoCrc, summarizeTipPayouts, type TipPayoutSummary } from '../../shared/api/tips'
+
+// Importar VALORES de shared/api/tips arrastra el cliente de supabase (exige env vars) → sin este
+// mock, la suite revienta en clon fresco/CI: "Faltan variables de entorno de Supabase". Mismo
+// patrón que CashTurno.editAuth.test.tsx. Estos tests solo usan funciones puras (no tocan la red).
+vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 // propinaPago — la vía real COMPARTIDA (FIRMADO). Estos tests fijan:
 //   1. La forma EXACTA del egreso (si cambia, las dos puertas divergen y el saldado se rompe).

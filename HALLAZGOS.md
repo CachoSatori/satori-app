@@ -4,7 +4,7 @@
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
-## 🗄️ Migración histórico Excel→app — Fase B EJECUTADA a STAGING (2026-07-08, reversible)
+## 🗄️ Migración histórico Excel→app — ejecutada en STAGING (2026-07-08) → 🛑 REVERTIDA por decisión de producto (2026-07-09)
 
 Ejecución del import histórico (P1 #6, del hallazgo "convención de ventas" 2026-07-07). Diseño firmado + import **solo en STAGING** (`hwiatgicyyqyezqwldia`); **prod NUNCA se tocó**. Fuente: `MIGRACION-COMPLETA-Satori.xlsx`. Todo con marca `[migración 2026-07]` + backups → 100% reversible.
 
@@ -17,7 +17,14 @@ Ejecución del import histórico (P1 #6, del hallazgo "convención de ventas" 20
 - **Nuances a validar físicamente (reversibles):** (1) `caja_origen='Caja Fuerte'` uniforme; (2) traspasos "Del Banco a Caja" NO los suma `saldoCajaFuerte` (busca `→ caja fuerte` en subcategoría); (3) **`ventas_efectivo_hist` no tiene vista en la app** → se valida por SQL, no en la UI (los 10.842 movimientos SÍ se ven en Caja→Movimientos).
 - **Cuadre:** sumas exactas vs Excel + validación previa ventas-vs-PoS (corr 0,978, hoja Calidad). Reconstruir el saldo de caja vs los 800 cierres NO cierra en agregado (al dataset le faltan depósitos Caja→Banco) — esperado, no es error de datos.
 - **Reversibilidad total:** `DELETE FROM cash_movements WHERE description LIKE '[migración 2026-07]%'` + `DROP TABLE ventas_efectivo_hist` + backups `cash_movements_pre_migracion_2026_07` (967) / `suppliers_pre_migracion_2026_07` (83).
-- **Fase C:** prod DIFERIDO — validación física en staging por el dueño; el pase a prod es sesión aparte (otro `CORTE_APP`, con firma).
+- **🛑 CIERRE 2026-07-09 — MIGRACIÓN CANCELADA (decisión del dueño; costo/beneficio negativo).** Staging **revertido completo a pre-migración**, con guards + verificación: `cash_movements` = **967** (0 con marca), `suppliers` = **83**, `ventas_efectivo_hist` = **DROP**. Rollback **quirúrgico** (se borraron solo las 10.842 migradas —0 dependientes— y se restauraron las 949 originales) para **preservar 26 vínculos hijos reales** (2 documentos + 22 inventario + 2 tareas) que un DELETE total habría nuleado. **Backups conservados 30 días** como red (`cash_movements_pre_migracion_2026_07` 967 / `suppliers_pre_migracion_2026_07` 83). El histórico vive en los Excel del dueño (`MIGRACION-COMPLETA-Satori.xlsx`, `VENTAS-RECONSTRUIDAS-Satori.xlsx`). **El conocimiento del análisis QUEDA válido** (convención de ventas, TC de la casa, corr 0,978 vs PoS). Reemplazado en backlog por **"Arranque limpio de prod"** (limpieza, no migración) → PROMPT-CONTINUACION P1 #7.
+
+## 🧮 `saldoCajaFuerte` sin ancla + no lee el efectivo de ventas (2026-07-09 — registrado, relevante a futuro)
+
+Destapado al reconstruir el saldo de Caja Fuerte durante la migración (ya revertida), pero **es un hallazgo de la lógica de la app, válido más allá de ese ejercicio**:
+- `saldoCajaFuerte` (`cashUtils.ts`) suma solo `cash_movements` con `caja_origen='Caja Fuerte'` (ingresos + / egresos − / traspasos por dirección vía regex `→ caja fuerte` en `subcategory`). **NO tiene ancla de saldo inicial** y **NO lee el efectivo de ventas** (vive en `ventas_dias`/`ventas_hist`, no en `cash_movements`). → cualquier reconstrucción histórica del saldo desde `cash_movements` da un número que no cierra: la entrada principal de plata no está ahí, y tampoco los depósitos Caja→Banco.
+- La señal de dirección del traspaso depende de una **convención textual frágil** en `subcategory` (`→ caja fuerte`): un traspaso de entrada con otra redacción ("Del Banco a Caja") se cuenta como salida (fue justo la causa del saldo −₡34M visto en la migración).
+- **Implicancia futura:** para que la tarjeta Caja Fuerte muestre un saldo veraz de un período largo hace falta (a) un **ancla de saldo inicial** y (b) representar el efectivo de ventas y los depósitos al banco en el flujo, o redefinir qué "saldo" muestra. Relevante para el "Arranque limpio de prod" y para cualquier feature de tesorería. **NO accionar ahora.**
 
 ## 📊 Convención de ventas en datos migrados 2026-07-07 — CERRADO (no es bug de la app)
 

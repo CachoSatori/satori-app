@@ -1,7 +1,7 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-03**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-09**
 
 ---
 
@@ -9,6 +9,8 @@ De dashboard de analítica a sistema operativo del restaurante.
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ✅🟢 hecho y **validado físicamente por la dueña en STAGING** (falta el pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod). ✅🟢 = además validado físicamente en staging.
+
+> **🆕 2026-07-09 — desde el pase (07-04) NO hubo cambios de código.** Se completó **smoke físico + sinceramiento USD en PROD** (07-06) → toda la ola 2026-07 está **✅ validada físicamente en PROD** (las celdas de abajo que dicen "smoke prod pendiente" ya quedaron cubiertas). **Estabilización en curso — ventana cierra ~semana del 13-jul.** La sesión 07-06→09 fue **solo docs + un ejercicio de datos en staging**: migración del histórico Excel→app **ejecutada, verificada por checksum y CANCELADA** por decisión de producto (staging revertido quirúrgico a pre-migración; **prod NUNCA se tocó**). HEADs: `main` `cf50724` (código `92c0831`) · `staging` `508853a` (código `1daef0c`). Backlog vigente → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md); detalle datos → [HALLAZGOS.md](HALLAZGOS.md).
 
 > **✅ Sesión 2026-07-04 — PASE ÚNICO A PROD COMPLETADO.** `main` avanzó **`a14da50` → `92c0831`** por FF de `prod/pase-ola-2026-07` (toda la ola 2026-07 + Bandeja + unificación Bandeja↔Caja, **SIN PoS**). `staging` = `1daef0c` (dev, sigue con el PoS). **Lo que se hizo en el pase:**
 > - **Código a `main` por FF** (rama de prep construida portando el CONTENIDO de staging sobre main, excluyendo el PoS) → deploy verde, `version.json.commit = 92c0831`.

@@ -235,7 +235,7 @@ export default function CashTurno({
   const pagarPropina = async (p: TipPayoutSummary, status: 'aprobado' | 'pendiente') => {
     if (!openSession || !profile || payingProp) return   // anti doble-registro
     const accion = status === 'aprobado' ? 'PAGAR ahora' : 'dejar PENDIENTE'
-    if (!window.confirm(`¿${accion} las propinas de ${shiftLabel(p.shift_type)} por ${fi(p.total_payout_crc)}?`)) return
+    if (!window.confirm(`¿${accion} las propinas de ${shiftLabel(p.shift_type)} por ${fi(p.total_electronico_crc)}?\n\n(Solo el electrónico — el efectivo ya está en mano del equipo.)`)) return
     setPayingProp(p.session_id)
     try {
       // Forma del egreso COMPARTIDA (propinaEgresoFields) — idéntica a la histórica de esta puerta.
@@ -942,11 +942,11 @@ export default function CashTurno({
               <div key={p.session_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>Propinas {shiftLabel(p.shift_type)} · {formatDate(p.session_date)}</div>
-                  <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>{fi(p.total_payout_crc)} a entregar al staff</div>
+                  <div style={{ fontSize: '0.68rem', color: '#5a5040' }}>{fi(p.total_electronico_crc)} electrónico a entregar</div>
                 </div>
                 {canManage && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
-                    <span style={{ fontWeight: 700, color: '#c0392b', marginRight: '0.25rem' }}>{fi(p.total_payout_crc)}</span>
+                    <span style={{ fontWeight: 700, color: '#c0392b', marginRight: '0.25rem' }}>{fi(p.total_electronico_crc)}</span>
                     <button onClick={() => pagarPropina(p, 'aprobado')} disabled={payingProp === p.session_id} title="Registrar el pago ahora"
                       style={{ background: 'var(--t-ink,#0d0d0d)', border: 'none', color: 'var(--t-gold,#c8a96e)', borderRadius: 3, padding: '4px 10px', fontSize: '0.72rem', cursor: payingProp === p.session_id ? 'wait' : 'pointer', opacity: payingProp === p.session_id ? 0.5 : 1 }}>
                       {payingProp === p.session_id ? 'Guardando…' : 'Pagar ahora'}</button>

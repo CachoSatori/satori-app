@@ -351,7 +351,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   // el pendiente (description = propKey) y la matemática se recalcula sola al refrescar.
   const pagarPropinaCierre = async (p: TipPayoutSummary) => {
     if (!profile || payingProp || saving) return
-    if (!window.confirm(`¿PAGAR ahora las propinas de ${shiftLabel(p.shift_type)} del ${formatDate(p.session_date)} por ${fi(p.total_payout_crc)}?\n\nSe registra el egreso real y se descuenta del cierre.`)) return
+    if (!window.confirm(`¿PAGAR ahora las propinas de ${shiftLabel(p.shift_type)} del ${formatDate(p.session_date)} por ${fi(p.total_electronico_crc)}?\n\n(Solo el electrónico — el efectivo ya está en mano del equipo.) Se registra el egreso real y se descuenta del cierre.`)) return
     setPayingProp(p.session_id)
     setError(null)
     try {
@@ -456,7 +456,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 <div style={{ fontSize:'0.68rem', color:'#8a8272' }}>pendiente de pago</div>
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontWeight:700 }}>{fi2(p.total_payout_crc)}</span>
+                <span style={{ fontFamily:"'DM Mono',monospace", fontWeight:700 }}>{fi2(p.total_electronico_crc)}</span>
                 <button onClick={() => pagarPropinaCierre(p)} disabled={payingProp !== null || saving}
                   className="cierre-btn gold" style={{ padding:'5px 12px', fontSize:'0.74rem', width:'auto' }}>
                   {payingProp === p.session_id ? 'Pagando…' : '💵 Pagar ahora'}

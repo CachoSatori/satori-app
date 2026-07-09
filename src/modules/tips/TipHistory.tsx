@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { TipSession, Employee, RoleTipPoints, UserRole } from '../../shared/types/database'
-import { getTipEntriesBySession, upsertTipEntry, deleteTipEntry, updateSessionPools, savePayouts } from '../../shared/api/tips'
+import { getTipEntriesBySession, upsertTipEntry, deleteTipEntry, updateSessionPools, savePayouts, totalElectronicoCrc } from '../../shared/api/tips'
 import { reconcilePropinaEgreso } from '../../shared/api/cash'
 import { calcHistory, calcTurno, formatCRC, formatNum, ROL_LABELS, ROL_ORDER, NO_PROPINA_ROLES, type HistoryCalc, type HistoryRow, type DraftLine } from '../../shared/utils/tipCalculations'
 import { shiftLabel } from '../../shared/utils'
@@ -30,9 +30,10 @@ const MSHORT = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','
 const BAR_ROLES = new Set(['barman', 'barback'])
 const MUTED = '#5a5040', BORDER = 'var(--t-border,#d4cfc4)', GOLD = '#a07830', TEAL = '#2a7a6a', RED = '#c23b22'
 
-// Pool total a la vista sin click (efectivo + barra del registro de la sesión)
+// Pool total a la vista sin click (efectivo + barra ef + barra elec del registro de la sesión)
 function poolTotalOf(s: TipSession) {
-  return (s.pool_efectivo_crc || 0) + (s.pool_efectivo_usd || 0) * (s.exchange_rate || 0) + (s.pool_barra_crc || 0)
+  return (s.pool_efectivo_crc || 0) + (s.pool_efectivo_usd || 0) * (s.exchange_rate || 0)
+    + (s.pool_barra_crc || 0) + (s.pool_barra_electronico_crc || 0)
 }
 // Desglose de barra para una fila: servicio (pool general por puntos) + pool barra (resto)
 function barraSplit(r: HistoryRow, generalRate: number) {
@@ -54,7 +55,8 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
   const [editErr,   setEditErr]   = useState<string | null>(null)
   const [ePoolCRC,  setEPoolCRC]  = useState<number | ''>('')
   const [ePoolUSD,  setEPoolUSD]  = useState<number | ''>('')
-  const [ePoolBarra, setEPoolBarra] = useState<number | ''>('')
+  const [ePoolBarra, setEPoolBarra] = useState<number | ''>('')           // barra EFECTIVO
+  const [ePoolBarraElec, setEPoolBarraElec] = useState<number | ''>('')   // barra ELECTRÓNICO
   const [eRows,     setERows]     = useState<EditRow[]>([])
 
   const ptsMap = useMemo(() => new Map(rolePoints.map(r => [r.role, r.points])), [rolePoints])
@@ -91,7 +93,8 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         })),
         employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
         rolePoints,
-        { pool_efectivo_crc: s.pool_efectivo_crc, pool_efectivo_usd: s.pool_efectivo_usd, pool_barra_crc: s.pool_barra_crc, exchange_rate: s.exchange_rate },
+        // Barra = efectivo + electrónico → el reparto recomputado coincide con el payout guardado.
+        { pool_efectivo_crc: s.pool_efectivo_crc, pool_efectivo_usd: s.pool_efectivo_usd, pool_barra_crc: (s.pool_barra_crc || 0) + (s.pool_barra_electronico_crc || 0), exchange_rate: s.exchange_rate },
       )
       setCalcCache(prev => ({ ...prev, [s.id]: calc }))
       onCalcReady?.(s.id, calc)
@@ -147,6 +150,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
     setEPoolCRC(session.pool_efectivo_crc || '')
     setEPoolUSD(session.pool_efectivo_usd || '')
     setEPoolBarra(session.pool_barra_crc || '')
+    setEPoolBarraElec(session.pool_barra_electronico_crc || '')
     setEditErr(null)
     setEditMode(true)
   }
@@ -165,7 +169,8 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         pts_rol: ptsMap.get(eff) ?? 0, pts_val: 0, take_home: 0,
       }
     }) as DraftLine[]
-    const { updatedLines } = calcTurno(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, Number(ePoolBarra) || 0, rate)
+    // Barra = efectivo + electrónico (la firma de calcTurno NO cambia); el reparto es idéntico.
+    const { updatedLines } = calcTurno(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), rate)
     if (!updatedLines.some(l => l.active)) { setEditErr('Marcá al menos un empleado que trabajó'); return }
 
     setSaving(true); setEditErr(null)
@@ -189,6 +194,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         pool_efectivo_crc: Number(ePoolCRC) || 0,
         pool_efectivo_usd: Number(ePoolUSD) || 0,
         pool_barra_crc:    Number(ePoolBarra) || 0,
+        pool_barra_electronico_crc: Number(ePoolBarraElec) || 0,
       })
       // Releer entradas para obtener ids y guardar payouts
       const fresh = await getTipEntriesBySession(sid)
@@ -199,11 +205,12 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         .filter((p): p is { id: string; points: number; payout_crc: number } => p !== null)
       await savePayouts(payouts)
 
-      // Reconciliar el egreso de caja de propinas (si existe) con el nuevo total
-      const newTotal = payouts.reduce((s, p) => s + p.payout_crc, 0)
+      // Reconciliar el egreso de caja con el nuevo ELECTRÓNICO (el egreso es la porción
+      // electrónica, no el reparto completo — el efectivo ya está en mano del equipo).
+      const newElectronico = totalElectronicoCrc(fresh, rate, Number(ePoolBarraElec) || 0)
       await reconcilePropinaEgreso(
         `Propinas turno ${session.session_date} ${shiftLabel(session.shift_type)}`,
-        newTotal,
+        newElectronico,
       ).catch(() => {})
 
       // Refrescar: limpiar cache de cálculo y recargar datos del padre
@@ -349,7 +356,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
               pts_rol: ptsMap.get(eff) ?? 0, pts_val: 0, take_home: 0,
             }
           }) as DraftLine[],
-          Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, Number(ePoolBarra) || 0, modalSession.exchange_rate,
+          Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), modalSession.exchange_rate,
         ) : null
         const payoutMap = new Map(preview?.updatedLines.map(l => [l.employeeId, Math.round(l.take_home)]) ?? [])
         const headPool  = editMode && preview ? preview.totals.totalPool : (modalCalc ? modalCalc.totalPool : poolTotalOf(modalSession))
@@ -429,9 +436,16 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                         onChange={e => setEPoolUSD(e.target.value === '' ? '' : Number(e.target.value))} />
                     </div>
                     <div className="tips-field">
-                      <div className="tips-field-label">🍸 Pool barra ₡</div>
+                      <div className="tips-field-label">🍸 Barra efectivo ₡</div>
                       <input type="number" className="tips-input-dark" min={0} step={100} value={ePoolBarra}
+                        title="Barra efectivo — ya en mano de la barra, no genera cuenta por pagar"
                         onChange={e => setEPoolBarra(e.target.value === '' ? '' : Number(e.target.value))} />
+                    </div>
+                    <div className="tips-field">
+                      <div className="tips-field-label">🍸 Barra electrónico ₡</div>
+                      <input type="number" className="tips-input-dark" min={0} step={100} value={ePoolBarraElec}
+                        title="Barra electrónico (datáfono/SINPE) — el encargado lo entrega, genera cuenta por pagar"
+                        onChange={e => setEPoolBarraElec(e.target.value === '' ? '' : Number(e.target.value))} />
                     </div>
                   </div>
 
@@ -483,12 +497,12 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
                               {hasPropina && (
                                 <>
                                   <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                    <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>Datáfono ₡</span>
+                                    <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>Electrónico ₡</span>
                                     <input type="number" className="tips-input-dark" min={0} step={100} value={r.propina_crc} style={{ width: 90 }}
                                       onChange={e => setRow(r.employeeId, { propina_crc: e.target.value === '' ? '' : Number(e.target.value) })} />
                                   </label>
                                   <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                    <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>Datáfono $</span>
+                                    <span style={{ fontSize: '0.55rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: MUTED, fontWeight: 700 }}>Electrónico $</span>
                                     <input type="number" className="tips-input-dark" min={0} step={0.01} value={r.propina_usd} style={{ width: 80 }}
                                       onChange={e => setRow(r.employeeId, { propina_usd: e.target.value === '' ? '' : Number(e.target.value) })} />
                                   </label>

@@ -82,11 +82,11 @@ async function fetchWeek(from: string, to: string): Promise<WeekSnapshot> {
 
   // Propinas
   const { data: tipSess } = await supabase
-    .from('tip_sessions').select('pool_efectivo_crc,pool_efectivo_usd,exchange_rate,pool_barra_crc')
+    .from('tip_sessions').select('pool_efectivo_crc,pool_efectivo_usd,exchange_rate,pool_barra_crc,pool_barra_electronico_crc')
     .eq('status','closed').gte('session_date', from).lte('session_date', to)
   let propinas = 0
-  for (const s of (tipSess ?? []) as Array<{pool_efectivo_crc:number;pool_efectivo_usd:number;exchange_rate:number;pool_barra_crc:number}>) {
-    propinas += (s.pool_efectivo_crc ?? 0) + (s.pool_efectivo_usd ?? 0) * (s.exchange_rate ?? 640) + (s.pool_barra_crc ?? 0)
+  for (const s of (tipSess ?? []) as Array<{pool_efectivo_crc:number;pool_efectivo_usd:number;exchange_rate:number;pool_barra_crc:number;pool_barra_electronico_crc:number}>) {
+    propinas += (s.pool_efectivo_crc ?? 0) + (s.pool_efectivo_usd ?? 0) * (s.exchange_rate ?? 640) + (s.pool_barra_crc ?? 0) + (s.pool_barra_electronico_crc ?? 0)
   }
 
   const sortedDays = [...days].sort((a, b) => b.ventaNeta - a.ventaNeta)

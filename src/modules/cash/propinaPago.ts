@@ -26,10 +26,13 @@ export const propKey = (p: TipPayoutSummary) => `Propinas turno ${p.session_date
 
 // Forma EXACTA del egreso de propinas (la que CashTurno.pagarPropina creaba inline).
 // El caller agrega session_id/created_by/status (y exchange_rate en la puerta de turno).
+// MONTO (FIRMADO propinas-efectivo-electronico): el egreso es la porción ELECTRÓNICA
+// (total_electronico_crc), no el reparto completo — el efectivo ya está en mano del equipo.
+// La convención del movimiento NO cambia (propKey, subcategoría, caja_origen, método): solo el monto.
 export function propinaEgresoFields(p: TipPayoutSummary) {
   return {
     movement_type: 'egreso_personal' as const,
-    amount_crc:    p.total_payout_crc,
+    amount_crc:    p.total_electronico_crc,
     amount_usd:    0,
     currency:      'CRC' as const,
     description:   propKey(p),

@@ -56,6 +56,7 @@ export async function createTipSession(params: {
       pool_efectivo_crc: 0,
       pool_efectivo_usd: 0,
       pool_barra_crc:    0,
+      pool_barra_electronico_crc: 0,
       notes:             params.notes ?? null,
     })
     .select()
@@ -66,7 +67,7 @@ export async function createTipSession(params: {
 
 export async function updateSessionPools(
   sessionId: string,
-  pools: { pool_efectivo_crc: number; pool_efectivo_usd: number; pool_barra_crc: number }
+  pools: { pool_efectivo_crc: number; pool_efectivo_usd: number; pool_barra_crc: number; pool_barra_electronico_crc: number }
 ): Promise<void> {
   const { error } = await supabase
     .from('tip_sessions')
@@ -113,10 +114,45 @@ export async function deleteTipSession(sessionId: string): Promise<void> {
 // Caja las muestra como "Propinas por pagar" para que el cajero las pague o las
 // deje pendientes (no se crea el egreso solo al cerrar Propinas).
 export interface TipPayoutSummary {
-  session_id:       string
-  session_date:     string
-  shift_type:       string   // 'AM' | 'PM'
-  total_payout_crc: number
+  session_id:            string
+  session_date:          string
+  shift_type:            string   // 'AM' | 'PM'
+  total_payout_crc:      number   // reparto COMPLETO (ef + elec) — para display/historial
+  total_electronico_crc: number   // porción ELECTRÓNICA — la cuenta por pagar real de Caja
+}
+
+// ── Payable ELECTRÓNICO (FIRMADO propinas-efectivo-electronico) ──────────────
+// La cuenta por pagar de propinas se genera SOLO por la porción electrónica: el efectivo ya
+// está en mano del equipo y NUNCA genera movimiento. Función PURA (fuera del sagrado
+// tipCalculations): total electrónico = Σ tip_amount_crc por empleado + Σ tip_amount_usd×TC
+// + la barra electrónica del turno. El efectivo (pool_efectivo_*, pool_barra_crc) no entra.
+export function totalElectronicoCrc(
+  entries: Array<{ tip_amount_crc: number | null; tip_amount_usd: number | null }>,
+  exchange_rate: number,
+  pool_barra_electronico_crc: number,
+): number {
+  const crc = entries.reduce((s, e) => s + (e.tip_amount_crc || 0), 0)
+  const usd = entries.reduce((s, e) => s + (e.tip_amount_usd || 0), 0) * (exchange_rate || 0)
+  return crc + usd + (pool_barra_electronico_crc || 0)
+}
+
+// Filas crudas de tip_sessions (con entries) → resúmenes de payout, ya FILTRADO por
+// total_electronico_crc > 0. Un turno solo-efectivo (electrónico = 0) desaparece de la lista
+// "Propinas por pagar" aunque su reparto total (total_payout_crc) sea > 0. Puro y testeable.
+export function summarizeTipPayouts(rows: Array<{
+  id: string; session_date: string; shift_type: string; exchange_rate: number
+  pool_barra_electronico_crc: number
+  tip_entries: Array<{ payout_crc: number | null; tip_amount_crc: number | null; tip_amount_usd: number | null }> | null
+}>): TipPayoutSummary[] {
+  return rows
+    .map(s => ({
+      session_id:            s.id,
+      session_date:          s.session_date,
+      shift_type:            s.shift_type,
+      total_payout_crc:      (s.tip_entries ?? []).reduce((a, e) => a + (e.payout_crc || 0), 0),
+      total_electronico_crc: totalElectronicoCrc(s.tip_entries ?? [], s.exchange_rate, s.pool_barra_electronico_crc),
+    }))
+    .filter(s => s.total_electronico_crc > 0)
 }
 
 // Desde `sinceDate` (inclusive) hacia adelante → así una propina impaga de un día
@@ -125,22 +161,12 @@ export interface TipPayoutSummary {
 export async function getTipPayoutsSince(sinceDate: string): Promise<TipPayoutSummary[]> {
   const { data, error } = await supabase
     .from('tip_sessions')
-    .select('id, session_date, shift_type, tip_entries ( payout_crc )')
+    .select('id, session_date, shift_type, exchange_rate, pool_barra_electronico_crc, tip_entries ( payout_crc, tip_amount_crc, tip_amount_usd )')
     .gte('session_date', sinceDate)
     .eq('status', 'closed')
     .order('session_date', { ascending: false })
   if (error) throw new Error(error.message)
-  return ((data ?? []) as unknown as Array<{
-    id: string; session_date: string; shift_type: string
-    tip_entries: Array<{ payout_crc: number | null }>
-  }>)
-    .map(s => ({
-      session_id:       s.id,
-      session_date:     s.session_date,
-      shift_type:       s.shift_type,
-      total_payout_crc: (s.tip_entries ?? []).reduce((a, e) => a + (e.payout_crc || 0), 0),
-    }))
-    .filter(s => s.total_payout_crc > 0)
+  return summarizeTipPayouts((data ?? []) as unknown as Parameters<typeof summarizeTipPayouts>[0])
 }
 
 // ── Entradas ────────────────────────────────────────────────

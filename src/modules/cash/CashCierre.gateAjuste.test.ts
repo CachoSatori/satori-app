@@ -23,7 +23,7 @@ vi.mock('../../shared/api/tips', () => ({ getTipPayoutsSince: vi.fn(async () => 
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: null }) }))
 vi.mock('../../shared/ManagerOverride', () => ({ useManagerOverride: () => vi.fn() }))
 
-import { cierreNecesitaAjuste } from './CashCierre'
+import { cierreNecesitaAjuste, ventasGateEstado, puedeCerrarVentas } from './CashCierre'
 
 describe('cierreNecesitaAjuste — gate de motivo obligatorio en ₡ Y US$ (Opción B)', () => {
   it('sin diferencias (null/null) no exige motivo', () => {
@@ -53,5 +53,46 @@ describe('cierreNecesitaAjuste — gate de motivo obligatorio en ₡ Y US$ (Opci
   it('mixto: cualquiera de las dos monedas sobre tolerancia dispara el gate', () => {
     expect(cierreNecesitaAjuste(-300, 1.5)).toBe(true)   // ₡ cuadra, $ no
     expect(cierreNecesitaAjuste(-2000, 0.2)).toBe(true)  // $ cuadra, ₡ no
+  })
+})
+
+// CAMBIO A — cerrar con ventas en ₡0 solo con confirmación explícita; campo vacío bloquea siempre.
+describe('ventasGateEstado — vacío vs cero explícito vs monto', () => {
+  it('ambos campos vacíos → "vacio"', () => {
+    expect(ventasGateEstado('', '')).toBe('vacio')
+  })
+
+  it('total 0 con algún 0 explícito → "cero" (venta real de ₡0)', () => {
+    expect(ventasGateEstado(0, '')).toBe('cero')
+    expect(ventasGateEstado('', 0)).toBe('cero')
+    expect(ventasGateEstado(0, 0)).toBe('cero')
+  })
+
+  it('algún monto > 0 → "ok" (incluye venta solo en dólares)', () => {
+    expect(ventasGateEstado(1000, '')).toBe('ok')
+    expect(ventasGateEstado('', 5)).toBe('ok')
+    expect(ventasGateEstado(0, 5)).toBe('ok')
+  })
+})
+
+describe('puedeCerrarVentas — el gate de cierre por fase (CAMBIO A)', () => {
+  it('campo vacío → bloquea SIEMPRE (aun marcando el check)', () => {
+    expect(puedeCerrarVentas('', '', false)).toBe(false)
+    expect(puedeCerrarVentas('', '', true)).toBe(false)
+  })
+
+  it('ventas 0 explícito SIN check → bloquea', () => {
+    expect(puedeCerrarVentas(0, '', false)).toBe(false)
+    expect(puedeCerrarVentas(0, 0, false)).toBe(false)
+  })
+
+  it('ventas 0 explícito CON check → permite', () => {
+    expect(puedeCerrarVentas(0, '', true)).toBe(true)
+    expect(puedeCerrarVentas(0, 0, true)).toBe(true)
+  })
+
+  it('monto > 0 → permite sin necesidad de check', () => {
+    expect(puedeCerrarVentas(150000, '', false)).toBe(true)
+    expect(puedeCerrarVentas('', 300, false)).toBe(true)
   })
 })

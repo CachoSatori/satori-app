@@ -45,6 +45,24 @@ export function cierreNecesitaAjuste(difCrc: number | null, difUsd: number | nul
   return (difCrc !== null && Math.abs(difCrc) >= 500) || (difUsd !== null && Math.abs(difUsd) >= 1)
 }
 
+// Gate de ventas en 0 (CAMBIO A). N() no distingue '' (vacío) de 0 (cero explícito), así que se
+// mira el estado CRUDO de los campos ₡/$:
+//   'vacio' → ambos campos sin cargar → BLOQUEA (hay que ingresar las ventas).
+//   'cero'  → total del turno = 0 con algún 0 explícito → venta real de ₡0 → permite SOLO con confirmación.
+//   'ok'    → algún monto > 0 → cierra normal.
+// Exportada para test.
+export function ventasGateEstado(crc: number | '', usd: number | ''): 'vacio' | 'cero' | 'ok' {
+  if (crc === '' && usd === '') return 'vacio'
+  if ((Number(crc) || 0) === 0 && (Number(usd) || 0) === 0) return 'cero'
+  return 'ok'
+}
+
+// ¿Se puede cerrar la fase con estas ventas? Vacío nunca; cero solo si se confirmó; >0 siempre.
+export function puedeCerrarVentas(crc: number | '', usd: number | '', confirmadoCero: boolean): boolean {
+  const estado = ventasGateEstado(crc, usd)
+  return estado === 'ok' || (estado === 'cero' && confirmadoCero)
+}
+
 export default function CashCierre({ onRefresh, openSession }: Props) {
   const { profile } = useAuth()
   const requireManager = useManagerOverride()
@@ -179,6 +197,18 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const [ajusteMotivo, setAjusteMotivo] = useState('')
   const [notas,        setNotas]        = useState('')
 
+  // CAMBIO A — cerrar con ventas en ₡0: confirmación explícita por fase (checkbox).
+  const [confirmVentasCeroM, setConfirmVentasCeroM] = useState(false)
+  const [confirmVentasCeroN, setConfirmVentasCeroN] = useState(false)
+  // CAMBIO B — resumen del cierre ANTES de confirmar (modal de solo lectura).
+  const [showResumen, setShowResumen] = useState(false)
+
+  // Ventas en 0 (CAMBIO A) — estado crudo por fase (ver ventasGateEstado).
+  const ventasMVacias   = ventasGateEstado(vmCRC, vmUSD) === 'vacio'
+  const ventasMCeroReal = ventasGateEstado(vmCRC, vmUSD) === 'cero'
+  const ventasNVacias   = ventasGateEstado(vnCRC, vnUSD) === 'vacio'
+  const ventasNCeroReal = ventasGateEstado(vnCRC, vnUSD) === 'cero'
+
   // Opción B (firmada): el gate cubre AMBAS monedas — antes un faltante solo-USD cerraba sin motivo.
   const requiresAjuste = cierreNecesitaAjuste(diferencia, difUSD)
 
@@ -186,7 +216,10 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const handleConfirmParcial = async () => {
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
     if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
-    if (!N(vmCRC) && !N(vmUSD)) { setError('Ingresá las ventas de mediodía'); return }
+    if (ventasMVacias) { setError('Ingresá las ventas de mediodía'); return }
+    if (ventasMCeroReal && !confirmVentasCeroM) {
+      setError('Marcá la casilla para confirmar que las ventas de mediodía fueron ₡0, o corregí el monto'); return
+    }
     setSaving(true); setError(null)
     try {
       await saveCierreParcial({
@@ -220,7 +253,10 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
     if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
     if (!cajaProvCerrada) { setError('Cerrá primero la Caja Diaria de proveedores del día.'); return }
-    if (!N(vnCRC) && !N(vnUSD)) { setError('Ingresá las ventas de noche'); return }
+    if (ventasNVacias) { setError('Ingresá las ventas de noche'); return }
+    if (ventasNCeroReal && !confirmVentasCeroN) {
+      setError('Marcá la casilla para confirmar que las ventas de noche fueron ₡0, o corregí el monto'); return
+    }
     if (totalContadoCRC === 0) { setError('Completá el conteo físico (separaciones)'); return }
     if (requiresAjuste && !ajusteMotivo.trim()) {
       setError('⚠ Hay diferencia — el motivo es obligatorio antes de cerrar'); return
@@ -546,8 +582,14 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 </Field>
                 <div />
               </Row2>
+              {ventasMCeroReal && (
+                <label style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'#fdf6e3', border:'1px solid #d8b84a', borderRadius:2, fontSize:'0.78rem', color:'#6a5320', cursor:'pointer', marginTop:'0.25rem' }}>
+                  <input type="checkbox" checked={confirmVentasCeroM} onChange={e => setConfirmVentasCeroM(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
+                  <span>Confirmo que las ventas del turno fueron <strong>₡0</strong> — no es un error de carga.</span>
+                </label>
+              )}
               <button
-                onClick={handleConfirmParcial} disabled={saving || turnoAbierto}
+                onClick={handleConfirmParcial} disabled={saving || turnoAbierto || (ventasMCeroReal && !confirmVentasCeroM)}
                 className="cierre-btn gold" style={{ marginTop:'0.75rem' }}>
                 💾 Confirmar cierre mediodía → sellar Fase 1
               </button>
@@ -603,6 +645,12 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                     Efectivo real ₡ (ventas − dólares): <strong>{fi2(efRealN)}</strong>
                     {N(vnUSD) > 0 && <span style={{ color:'#6a6250' }}> · dólares físicos: <strong>${N(vnUSD).toFixed(2)}</strong></span>}
                   </div>
+                )}
+                {ventasNCeroReal && (
+                  <label style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'#fdf6e3', border:'1px solid #d8b84a', borderRadius:2, fontSize:'0.78rem', color:'#6a5320', cursor:'pointer', marginBottom:'0.6rem' }}>
+                    <input type="checkbox" checked={confirmVentasCeroN} onChange={e => setConfirmVentasCeroN(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
+                    <span>Confirmo que las ventas del turno fueron <strong>₡0</strong> — no es un error de carga.</span>
+                  </label>
                 )}
                 <Row2>
                   {/* Pierna N = pagadas por la vía real DESPUÉS del sellado de Fase 1. */}
@@ -771,14 +819,87 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
               </div>
 
               <button
-                onClick={handleConfirmCompleto}
-                disabled={saving || turnoAbierto || !N(vnCRC) || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())}
+                onClick={() => setShowResumen(true)}
+                disabled={saving || turnoAbierto || ventasNVacias || (ventasNCeroReal && !confirmVentasCeroN) || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())}
                 className="cierre-btn green">
-                ✓ CONFIRMAR CIERRE DEL DÍA
+                👁 Revisar resumen y cerrar el día →
               </button>
             </>
           )}
         </>
+      )}
+
+      {/* ── CAMBIO B: resumen del cierre ANTES de confirmar (solo lectura; nada se recalcula) ── */}
+      {showResumen && parcial && !completo && (
+        <div className="cd-modal-overlay" onClick={() => setShowResumen(false)}>
+          <div className="cd-modal" onClick={e => e.stopPropagation()}>
+            <div className="cd-modal-title">Resumen del cierre del día</div>
+            <div className="cd-modal-meta">{fecha} · TC ₡{tc.toLocaleString('es-CR')} · revisá antes de confirmar</div>
+
+            {/* Ventas + propinas pagadas */}
+            <div className="cd-resumen-block">
+              <div className="cd-resumen-row">
+                <span>Ventas Mediodía</span>
+                <strong>{fi2(parcial.vm_crc)}{parcial.vm_usd > 0 ? ` · $${parcial.vm_usd.toFixed(2)}` : ''}</strong>
+              </div>
+              <div className="cd-resumen-row">
+                <span>Ventas Noche</span>
+                <strong>{fi2(N(vnCRC))}{N(vnUSD) > 0 ? ` · $${N(vnUSD).toFixed(2)}` : ''}</strong>
+              </div>
+              {propinasPagadasDia > 0 && (
+                <div className="cd-resumen-row">
+                  <span>Propinas pagadas en el cierre</span>
+                  <strong style={{ color:'#8a5aa8' }}>− {fi2(propinasPagadasDia)}</strong>
+                </div>
+              )}
+            </div>
+
+            {/* Distribución del conteo físico */}
+            <div className="cd-resumen-block">
+              <div className="cd-resumen-row">
+                <span>Caja Diaria mañana</span>
+                <strong style={{ color:'#2a7a4a' }}>{fi2(N(sepDiariaCRC))}{N(sepDiariaUSD) > 0 ? ` · $${N(sepDiariaUSD).toFixed(2)}` : ''}</strong>
+              </div>
+              <div className="cd-resumen-row">
+                <span>Caja Registradora</span>
+                <strong>{fi2(N(sepRegCRC))}{N(sepRegUSD) > 0 ? ` · $${N(sepRegUSD).toFixed(2)}` : ''}</strong>
+              </div>
+              <div className="cd-resumen-row">
+                <span>Remanente CF</span>
+                <strong style={{ color:'#8a6d1f' }}>{fi2(N(remCRC))}{N(remUSD) > 0 ? ` · $${N(remUSD).toFixed(2)}` : ''}</strong>
+              </div>
+              <div className="cd-resumen-row total">
+                <span>Total contado</span>
+                <strong>{fi2(totalContadoCRC)}{totalContadoUSD > 0 ? ` · $${totalContadoUSD.toFixed(2)}` : ''}</strong>
+              </div>
+            </div>
+
+            {/* Diferencia / ajuste (ya calculado) */}
+            {requiresAjuste ? (
+              <div className="cd-cierre-resultado fail" style={{ marginBottom:'1rem', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
+                <span>⚠ Ajuste: {ajusteTipo}{ajusteMotivo.trim() ? ` — ${ajusteMotivo.trim()}` : ''}</span>
+                <span>
+                  {diferencia !== null && !cuadra ? `${diferencia >= 0 ? '+' : ''}${fi2(diferencia)}` : ''}
+                  {difUSD !== null && !cuadraUSD ? `${diferencia !== null && !cuadra ? ' · ' : ''}US$ ${difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}` : ''}
+                </span>
+              </div>
+            ) : (
+              <div className="cd-cierre-resultado ok" style={{ marginBottom:'1rem' }}>
+                <span>✅ Cuadra — sin diferencia</span>
+              </div>
+            )}
+
+            {notas.trim() && <div className="cd-modal-note">📝 {notas.trim()}</div>}
+
+            <div className="cd-modal-actions">
+              <button className="tips-btn-ghost" onClick={() => setShowResumen(false)}>Volver a editar</button>
+              <button className="cd-btn-green" disabled={saving}
+                onClick={() => { setShowResumen(false); handleConfirmCompleto() }}>
+                {saving ? 'Cerrando…' : '✓ CONFIRMAR CIERRE DEL DÍA'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

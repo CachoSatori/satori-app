@@ -1,6 +1,6 @@
 # Continuación — backlog priorizado (handoff 2026-07-09)
 
-> **✅ OLA 2026-07 CERRADA.** El pase único a prod **+ smoke físico del dueño ✓ + sinceramiento USD en prod ✓** están completos (ver ESTADO §e). `main` código = **`92c0831`** · `staging` código = **`1daef0c`** (los HEAD avanzan solo por commits **docs-only**). Migs PROD out-of-band: **≤021 + 038–045 + subset core de 026**. Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod** ✓.
+> **✅ OLA 2026-07 CERRADA.** El pase único a prod **+ smoke físico del dueño ✓ + sinceramiento USD en prod ✓** están completos (ver ESTADO §e). `main` código = **`6c65f25`** (tras el pase propinas ef/elec + cierre 2026-07-10; antes `92c0831`) · `staging` código = **`1daef0c`**. Migs PROD out-of-band: **≤021 + 038–046 + subset core de 026**. Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod** ✓.
 >
 > **➡️ Ahora: ESTABILIZACIÓN — la ventana cierra ~semana del 13-jul (SIN construir hasta entonces).** Backlog vigente por prioridad **P0–P3** abajo. Las secciones numeradas de más abajo (§0…, RCAs, planes viejos) son **referencia histórica**; el backlog vigente es el de acá.
 >

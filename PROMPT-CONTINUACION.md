@@ -3,6 +3,8 @@
 > **✅ OLA 2026-07 CERRADA.** El pase único a prod **+ smoke físico del dueño ✓ + sinceramiento USD en prod ✓** están completos (ver ESTADO §e). `main` código = **`92c0831`** · `staging` código = **`1daef0c`** (los HEAD avanzan solo por commits **docs-only**). Migs PROD out-of-band: **≤021 + 038–045 + subset core de 026**. Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod** ✓.
 >
 > **➡️ Ahora: ESTABILIZACIÓN (1–2 semanas de observación, SIN construir).** Backlog vigente por prioridad **P0–P3** abajo. Las secciones numeradas de más abajo (§0…, RCAs, planes viejos) son **referencia histórica**; el backlog vigente es el de acá.
+>
+> **🆕 2026-07-09 — PASE A PROD de 2 features (validadas en piso en staging).** Rama **`prod/pase-propinas-cierre`** (cherry-pick limpio sobre `main`): **(i) propinas efectivo/electrónico** (cuenta por pagar = solo lo electrónico) y **(ii) cierre del día: ventas ₡0 con confirmación + resumen previo**. Gates verdes (build EXIT 0 · 207 tests sin env · `tipCalculations`/`cashUtils` byte-idénticos a main). **Orden del pase (con firma):** **1º mig 046 a PROD out-of-band** (`tip_sessions.pool_barra_electronico_crc` + `NOTIFY pgrst,'reload schema'`; `schema_migrations` intacto) — obligatoria ANTES del código o `getTipPayoutsSince` rompe; **2º merge FF a main + deploy**; **3º smoke = cierre de esta noche**. Rollback: revert de los 3 commits + redeploy (la 046 queda, aditiva/inofensiva). Detalle → ESTADO.md.
 
 ---
 

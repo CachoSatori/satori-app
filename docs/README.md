@@ -22,12 +22,12 @@ profundizar/decidir; nada acá implementa nada por sí solo.
   Proveedores/Operativa como **ayuda visual** (el humano confirma); sacar "Ingresar a inventario" del cajero →
   **contador/manager** lo completa en Inventarios; asiento contable automático. **SOLO diseño** (no autoriza código).
   Subsume la "Bandeja — Etapa 2" del ROADMAP (D6).
-- **[SPEC-propinas-efectivo-electronico.md](./SPEC-propinas-efectivo-electronico.md)** — 🖊️ **FIRMADO
-  (2026-07-09) · SPEC de IMPLEMENTACIÓN** (a diferencia del resto de esta carpeta): la **cuenta por pagar
-  de propinas se genera SOLO por la porción electrónica**; el efectivo se lo queda el equipo y nunca genera
-  movimiento/pendiente (el *take-home* por empleado no cambia). Rama `feat/propinas-efectivo-electronico`
-  lista; **mig 046 pendiente de aplicar a staging con firma**; `tipCalculations.ts` byte-idéntico.
-  Backlog → PROMPT-CONTINUACION P2 #6.
+- **[SPEC-propinas-efectivo-electronico.md](./SPEC-propinas-efectivo-electronico.md)** — 🖊️ **FIRMADO ·
+  ✅ EN STAGING (validado en piso 2026-07-09) · SPEC de IMPLEMENTACIÓN** (a diferencia del resto de esta
+  carpeta): la **cuenta por pagar de propinas se genera SOLO por la porción electrónica**; el efectivo se lo
+  queda el equipo y nunca genera movimiento/pendiente (el *take-home* por empleado no cambia). Rama
+  `feat/propinas-efectivo-electronico` **mergeada** (`2a0852e`); **mig 046 aplicada a staging out-of-band**;
+  `tipCalculations.ts` byte-idéntico. **Pendiente: pase a prod (con firma).** Backlog → PROMPT-CONTINUACION P2 #6.
 
 ## En la raíz del repo (specs previos, se conservan donde estaban)
 - **[../SPEC-LAVU-FLUJO-MESA.md](../SPEC-LAVU-FLUJO-MESA.md)** — flujo de mesa Lavu vs Satori

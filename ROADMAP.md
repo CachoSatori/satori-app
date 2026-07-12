@@ -1,7 +1,9 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-09**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-10**
+
+> **🔬 2026-07-10 — Research de 6 PoS completado y FIRMADO → [docs/research/](docs/research/).** Decisiones incorporadas: **hub local = pieza de la arquitectura del PILAR** (no solo F5); el **diseño del PILAR adopta herencia-con-override (C4)** y **evalúa umbral de red (C5)**; **quick-wins C1/C2/C3 en cola post-estabilización**; **descartes D1–D4 registrados (no reabrir sin firma)**.
 
 ---
 

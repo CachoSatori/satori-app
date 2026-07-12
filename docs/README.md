@@ -29,6 +29,16 @@ profundizar/decidir; nada acá implementa nada por sí solo.
   `feat/propinas-efectivo-electronico` **mergeada** (`2a0852e`); **mig 046 aplicada a staging out-of-band**;
   `tipCalculations.ts` byte-idéntico. **Pendiente: pase a prod (con firma).** Backlog → PROMPT-CONTINUACION P2 #6.
 
+## 🔬 Research — comparativa de PoS (✅ FIRMADO por el dueño 2026-07-10)
+Comparativa de **6 sistemas PoS** → gap analysis contra el ROADMAP de Satori. **FIRMADO**: lista de 6,
+veredictos A–E, descartes D1–D4 y priorización (la **ejecución de cada ítem C sigue pidiendo firma** al
+implementar). En `docs/research/`:
+- **[research/00-MARCO.md](./research/00-MARCO.md)** — Fase 0: marco de comparación y criterios de selección de los 6.
+- **[research/01-FICHAS.md](./research/01-FICHAS.md)** — fichas por sistema (features, pricing, límites, con fuente).
+- **[research/02-MEJORES-PRACTICAS.md](./research/02-MEJORES-PRACTICAS.md)** — mejores prácticas transversales, con fuente verificada.
+- **[research/03-GAP-ANALYSIS.md](./research/03-GAP-ANALYSIS.md)** — 🖊️ **FIRMADO** · gap vs ROADMAP: dónde Satori
+  ya es superior (A), qué valida el mercado (B), qué replicar/mejorar (C1–C5), descartes (D1–D4), y (E).
+
 ## En la raíz del repo (specs previos, se conservan donde estaban)
 - **[../SPEC-LAVU-FLUJO-MESA.md](../SPEC-LAVU-FLUJO-MESA.md)** — flujo de mesa Lavu vs Satori
   (21 funciones, semáforo de paridad de la COMANDA; ya casi todo ✅).

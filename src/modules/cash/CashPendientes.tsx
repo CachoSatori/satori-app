@@ -3,6 +3,7 @@ import type { CashMovement, CashSession } from '../../shared/types/database'
 import { updateMovementStatus } from '../../shared/api/cash'
 import { fi, fd } from './cashUtils'
 import { dateCR } from '../../shared/utils'
+import { useManagerOverride } from '../../shared/ManagerOverride'
 
 interface Props {
   movements: CashMovement[]
@@ -29,6 +30,7 @@ interface Group {
 }
 
 export default function CashPendientes({ movements, sessions, onRefresh }: Props) {
+  const requireManager = useManagerOverride()
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -77,6 +79,24 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
     setSaving(true)
     try {
       await Promise.all(ids.map(id => updateMovementStatus(id, 'aprobado')))
+      setSelected(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
+      onRefresh()
+    } finally { setSaving(false) }
+  }
+
+  // ── Rechazar (FIRMADO): marca el pendiente como 'rechazado' — no se paga ni se borra, queda
+  // trazable. Funciona por id de movimiento → sirve para los huérfanos (supplier_id NULL).
+  // Exige autorización de gerencia (borra deuda registrada). No toca esquema ni sagrados.
+  const rechazar = async (ids: string[]) => {
+    if (!ids.length) return
+    const msg = ids.length === 1
+      ? '¿Rechazar este pendiente? Queda registrado como rechazado (no se paga, no se borra). Requiere autorización de gerencia.'
+      : `¿Rechazar ${ids.length} pendientes? Quedan registrados como rechazados (no se pagan, no se borran). Requiere autorización de gerencia.`
+    if (!window.confirm(msg)) return
+    if (!(await requireManager()).ok) return
+    setSaving(true)
+    try {
+      await Promise.all(ids.map(id => updateMovementStatus(id, 'rechazado')))
       setSelected(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
       onRefresh()
     } finally { setSaving(false) }
@@ -231,8 +251,12 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
                           <td style={{ textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#7ab4d4' }}>{r.usd ? fd(r.usd) : '—'}</td>
                           <td style={{ fontSize: '0.78rem', color: '#5a5040' }}>{r.ref || '—'}</td>
                           <td style={{ textAlign: 'center' }}>
-                            <button className="tips-btn-teal" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.7rem' }}
-                              onClick={() => pagar([r.id])}>✓ Pagado</button>
+                            <div style={{ display: 'inline-flex', gap: '0.3rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                              <button className="tips-btn-teal" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.7rem' }}
+                                onClick={() => pagar([r.id])}>✓ Pagado</button>
+                              <button className="tips-btn-ghost" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem', color: '#c0392b', borderColor: '#f0b0b0' }}
+                                onClick={() => rechazar([r.id])} title="Rechazar (requiere autorización de gerencia)">✕ Rechazar</button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -252,6 +276,13 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
                     <button className="cd-btn-primary" disabled={saving}
                       onClick={() => pagar(selInGroup.map(r => r.id))}>
                       ✓ Pagar seleccionados ({selInGroup.length})
+                    </button>
+                  )}
+                  {selInGroup.length > 0 && (
+                    <button className="tips-btn-ghost" disabled={saving}
+                      style={{ color: '#c0392b', borderColor: '#f0b0b0' }}
+                      onClick={() => rechazar(selInGroup.map(r => r.id))}>
+                      ✕ Rechazar seleccionados ({selInGroup.length})
                     </button>
                   )}
                   <button className="cd-btn-primary" disabled={saving}

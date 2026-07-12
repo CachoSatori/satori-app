@@ -6,10 +6,7 @@ import { fi, todayStr, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUti
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { useAuth } from '../../shared/hooks/useAuth'
 import FacturaVerify from '../../shared/FacturaVerify'
-
-const CICLO_DIAS: Record<string, number> = {
-  'Diario': 1, 'Semanal': 7, 'Quincenal': 14, 'Mensual': 30,
-}
+import { computeSupplierStatus, contarAgenda, contarPendientes, totalPendienteCRC } from './proveedoresStatus'
 
 interface Props {
   suppliers:  Supplier[]
@@ -26,14 +23,6 @@ interface FormState {
 const empty: FormState = {
   name: '', category: 'Pescados y Mariscos', moneda: 'CRC',
   ciclo_pago: 'Semanal', metodo_pago: 'Efectivo', cuenta_iban: '', contact: '',
-}
-
-function addDays(date: string, n: number): string {
-  const d = new Date(date + 'T12:00:00'); d.setDate(d.getDate() + n)
-  return d.toISOString().slice(0, 10)
-}
-function daysBetween(a: string, b: string): number {
-  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000)
 }
 
 export default function CashProveedores({ suppliers, movements, onRefresh }: Props) {
@@ -60,28 +49,17 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
   const activos = suppliers.filter(s => s.is_active)
   const today   = todayStr()
 
-  // ── Payment scheduling per supplier ──────────────────────
-  const supplierStatus = useMemo(() => {
-    return activos.map(s => {
-      const paid = movements
-        .filter(m => m.supplier_id === s.id && m.status === 'aprobado' && m.movement_type === 'egreso_mercaderia')
-        .sort((a, b) => b.created_at.localeCompare(a.created_at))
-      const pending = movements
-        .filter(m => m.supplier_id === s.id && m.status === 'pendiente')
-      const lastPay = paid[0]?.created_at?.slice(0, 10) ?? null
-      const ciclo   = CICLO_DIAS[s.ciclo_pago ?? 'Semanal'] ?? 7
-      const nextDue = lastPay ? addDays(lastPay, ciclo) : null
-      const daysUntil = nextDue ? daysBetween(today, nextDue) : null
-      const isOverdue = daysUntil !== null && daysUntil < 0
-      const isDueSoon = daysUntil !== null && daysUntil >= 0 && daysUntil <= 2
-      const pendingCRC = pending.reduce((s, m) => s + m.amount_crc, 0)
-      const totalPaid  = paid.reduce((s, m) => s + m.amount_crc, 0)
-      return { s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, pendingCRC, totalPaid }
-    })
-  }, [activos, movements, today])
+  // ── Agenda de ciclo + deuda por proveedor (lógica pura → proveedoresStatus.ts) ──
+  const supplierStatus = useMemo(
+    () => activos.map(s => computeSupplierStatus(s, movements, today)),
+    [activos, movements, today],
+  )
 
-  const overdueCount = supplierStatus.filter(x => x.isOverdue || x.isDueSoon).length
-  const pendingTotal = supplierStatus.reduce((s, x) => s + x.pendingCRC, 0)
+  // DEUDA REAL registrada = movimientos pendientes (incluye huérfanos supplier_id NULL) → el ROJO.
+  const pendCount    = contarPendientes(movements)
+  const pendTotalCRC = totalPendienteCRC(movements)
+  // AGENDA de ciclo (recompra vencida/próxima) — informativo, NO deuda → indicador ámbar aparte.
+  const agendaCount  = contarAgenda(supplierStatus)
   const [expandedProv, setExpandedProv] = useState<string | null>(null)
   const toggleProv = useCallback((id: string) =>
     setExpandedProv(prev => prev === id ? null : id), [])
@@ -115,15 +93,26 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
     <div>
       <div className="cd-prov-header">
         <div className="sl-cash">Proveedores ({activos.length})</div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {overdueCount > 0 && (
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* ROJO = DEUDA REAL registrada (movimientos pendientes). Se gestiona en la pestaña Pendientes. */}
+          {pendCount > 0 && (
             <button
               className="tips-btn-ghost"
-              style={{ fontSize: '0.8rem', color: '#c0392b', borderColor: '#f0b0b0', position: 'relative' }}
+              style={{ fontSize: '0.8rem', color: '#c0392b', borderColor: '#f0b0b0' }}
               onClick={() => setShowPending(v => !v)}
+              title="Deuda real registrada: movimientos pendientes. Pagalos o rechazalos en la pestaña Pendientes."
             >
-              ⚠ {overdueCount} pago{overdueCount > 1 ? 's' : ''} pendiente{overdueCount > 1 ? 's' : ''}
+              🔴 {pendCount} pendiente{pendCount > 1 ? 's' : ''} por pagar
             </button>
+          )}
+          {/* AGENDA de ciclo = informativo, NO deuda → ámbar, NUNCA rojo. */}
+          {agendaCount > 0 && (
+            <span
+              style={{ fontSize: '0.76rem', color: '#8a6d1f', background: '#fffbec', border: '1px solid #e0c878', borderRadius: 4, padding: '0.3rem 0.6rem', whiteSpace: 'nowrap' }}
+              title="Proveedores activos cuyo ciclo de compra habitual ya venció o vence pronto. Es una agenda de recompra, NO una deuda."
+            >
+              🗓 {agendaCount} con ciclo de compra vencido
+            </span>
           )}
           <button className="tips-btn-teal" onClick={() => { setForm(empty); setShowModal(true) }}>
             + Nuevo Proveedor
@@ -131,33 +120,39 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
         </div>
       </div>
 
-      {/* Alert panel: pagos pendientes / vencidos */}
-      {(showPending || overdueCount > 0) && pendingTotal > 0 && (
+      {/* Panel de deuda pendiente registrada (al tocar el badge rojo) */}
+      {showPending && pendTotalCRC > 0 && (
         <div className="cd-pend-summary" style={{ marginBottom: '1rem' }}>
           <div>
-            <div className="cd-saldo-label">Deuda pendiente (transferencias)</div>
-            <div className="cd-saldo-val" style={{ color: '#c8a030' }}>{fi(pendingTotal)}</div>
+            <div className="cd-saldo-label">Deuda pendiente registrada</div>
+            <div className="cd-saldo-val" style={{ color: '#c0392b' }}>{fi(pendTotalCRC)}</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--t-muted)', marginTop: 4 }}>
+              {pendCount} movimiento{pendCount > 1 ? 's' : ''} pendiente{pendCount > 1 ? 's' : ''} · pagalos o rechazalos en la pestaña <strong>Pendientes</strong>.
+            </div>
           </div>
         </div>
       )}
 
-      {/* Due/overdue banner */}
-      {supplierStatus.filter(x => x.isOverdue || x.isDueSoon).length > 0 && (
+      {/* Agenda de compra por ciclo (recompra vencida/próxima) — informativo, NO es deuda */}
+      {supplierStatus.some(x => x.isOverdue || x.isDueSoon) && (
         <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          <div style={{ fontSize: '0.72rem', color: '#8a6d1f', fontWeight: 600 }}>
+            🗓 Agenda de compra — recompra por ciclo vencida o próxima (no es deuda)
+          </div>
           {supplierStatus.filter(x => x.isOverdue || x.isDueSoon).map(({ s, nextDue, daysUntil, isOverdue, pendingCRC }) => (
             <div key={s.id} className="cd-pend-bar" style={{
-              background: isOverdue ? '#fdf0ee' : '#fffbec',
-              borderColor: isOverdue ? '#f0b0a0' : '#e0c878',
+              background: '#fffbec',
+              borderColor: '#e0c878',
             }}>
-              <span>{isOverdue ? '🔴' : '🟡'}</span>
+              <span>{isOverdue ? '🗓' : '🟡'}</span>
               <div style={{ flex: 1 }}>
                 <strong>{s.name}</strong>
                 <span style={{ fontSize: '0.78rem', color: '#888', marginLeft: '0.5rem' }}>
                   {isOverdue
-                    ? `Vencido hace ${Math.abs(daysUntil!)} días (${nextDue})`
+                    ? `Ciclo vencido hace ${Math.abs(daysUntil!)} días (${nextDue})`
                     : daysUntil === 0
-                    ? 'Vence hoy'
-                    : `Vence en ${daysUntil} días (${nextDue})`}
+                    ? 'Recompra hoy'
+                    : `Recompra en ${daysUntil} días (${nextDue})`}
                 </span>
                 {pendingCRC > 0 && (
                   <span style={{ fontSize: '0.78rem', color: '#c0392b', marginLeft: '0.75rem', fontWeight: 600 }}>
@@ -184,7 +179,7 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
       <div className="cd-prov-grid">
         {supplierStatus.map(({ s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, pendingCRC, totalPaid }) => (
           <div key={s.id} className="cd-prov-card" style={{
-            borderTop: isOverdue ? '2px solid #c23b22' : isDueSoon ? '2px solid #c8a030' : undefined,
+            borderTop: (isOverdue || isDueSoon) ? '2px solid #c8a030' : undefined,
           }}>
             <div className="cd-prov-head">
               <div className="cd-prov-name">{s.name}</div>
@@ -217,7 +212,7 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
                     <span>Próximo pago</span>
                     <span style={{
                       fontSize: '0.78rem', fontWeight: 600,
-                      color: isOverdue ? '#c0392b' : isDueSoon ? '#a07030' : 'var(--t-teal)',
+                      color: (isOverdue || isDueSoon) ? '#a07030' : 'var(--t-teal)',
                     }}>
                       {nextDue}
                       {isOverdue && ` (hace ${Math.abs(daysUntil!)}d)`}
@@ -316,10 +311,13 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
                 </select>
               </div>
               <div className="tips-field">
-                <div className="tips-field-label">Ciclo de pago</div>
+                <div className="tips-field-label">Ciclo de compra</div>
                 <select className="tips-input-dark" value={form.ciclo_pago} onChange={e => up('ciclo_pago', e.target.value)}>
-                  {['Diario','Semanal','Quincenal','Mensual'].map(c => <option key={c}>{c}</option>)}
+                  {['Diario','Semanal','Quincenal','Mensual','Puntual'].map(c => <option key={c}>{c}</option>)}
                 </select>
+                <div style={{ fontSize: '0.68rem', color: 'var(--t-muted)', marginTop: 4 }}>
+                  <strong>Puntual</strong> = compra ocasional, sin recompra fija → no aparece en la agenda de ciclo.
+                </div>
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Método de pago</div>

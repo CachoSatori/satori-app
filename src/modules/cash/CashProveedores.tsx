@@ -6,7 +6,7 @@ import { fi, todayStr, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUti
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { useAuth } from '../../shared/hooks/useAuth'
 import FacturaVerify from '../../shared/FacturaVerify'
-import { computeSupplierStatus, contarAgenda, contarPendientes, totalPendienteCRC } from './proveedoresStatus'
+import { computeSupplierStatus } from './proveedoresStatus'
 
 interface Props {
   suppliers:  Supplier[]
@@ -44,22 +44,19 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
   const [form, setForm] = useState<FormState>(empty)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showPending, setShowPending] = useState(false)
 
   const activos = suppliers.filter(s => s.is_active)
   const today   = todayStr()
 
-  // ── Agenda de ciclo + deuda por proveedor (lógica pura → proveedoresStatus.ts) ──
+  // Estado por proveedor para su tarjeta (deuda, ciclo, último/próximo pago). Lógica pura
+  // → proveedoresStatus.ts. La pestaña es SOLO la lista: los indicadores de agenda y de
+  // pendientes del header se retiraron (decisión del dueño 2026-07-16) — los pendientes
+  // los notifica la pestaña Pendientes, que tiene su propio badge.
   const supplierStatus = useMemo(
     () => activos.map(s => computeSupplierStatus(s, movements, today)),
     [activos, movements, today],
   )
 
-  // DEUDA REAL registrada = movimientos pendientes (incluye huérfanos supplier_id NULL) → el ROJO.
-  const pendCount    = contarPendientes(movements)
-  const pendTotalCRC = totalPendienteCRC(movements)
-  // AGENDA de ciclo (recompra vencida/próxima) — informativo, NO deuda → indicador ámbar aparte.
-  const agendaCount  = contarAgenda(supplierStatus)
   const [expandedProv, setExpandedProv] = useState<string | null>(null)
   const toggleProv = useCallback((id: string) =>
     setExpandedProv(prev => prev === id ? null : id), [])
@@ -93,78 +90,12 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
     <div>
       <div className="cd-prov-header">
         <div className="sl-cash">Proveedores ({activos.length})</div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* ROJO = DEUDA REAL registrada (movimientos pendientes). Se gestiona en la pestaña Pendientes. */}
-          {pendCount > 0 && (
-            <button
-              className="tips-btn-ghost"
-              style={{ fontSize: '0.8rem', color: '#c0392b', borderColor: '#f0b0b0' }}
-              onClick={() => setShowPending(v => !v)}
-              title="Deuda real registrada: movimientos pendientes. Pagalos o rechazalos en la pestaña Pendientes."
-            >
-              🔴 {pendCount} pendiente{pendCount > 1 ? 's' : ''} por pagar
-            </button>
-          )}
-          {/* AGENDA de ciclo = informativo, NO deuda → ámbar, NUNCA rojo. */}
-          {agendaCount > 0 && (
-            <span
-              style={{ fontSize: '0.76rem', color: '#8a6d1f', background: '#fffbec', border: '1px solid #e0c878', borderRadius: 4, padding: '0.3rem 0.6rem', whiteSpace: 'nowrap' }}
-              title="Proveedores activos cuyo ciclo de compra habitual ya venció o vence pronto. Es una agenda de recompra, NO una deuda."
-            >
-              🗓 {agendaCount} con ciclo de compra vencido
-            </span>
-          )}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button className="tips-btn-teal" onClick={() => { setForm(empty); setShowModal(true) }}>
             + Nuevo Proveedor
           </button>
         </div>
       </div>
-
-      {/* Panel de deuda pendiente registrada (al tocar el badge rojo) */}
-      {showPending && pendTotalCRC > 0 && (
-        <div className="cd-pend-summary" style={{ marginBottom: '1rem' }}>
-          <div>
-            <div className="cd-saldo-label">Deuda pendiente registrada</div>
-            <div className="cd-saldo-val" style={{ color: '#c0392b' }}>{fi(pendTotalCRC)}</div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--t-muted)', marginTop: 4 }}>
-              {pendCount} movimiento{pendCount > 1 ? 's' : ''} pendiente{pendCount > 1 ? 's' : ''} · pagalos o rechazalos en la pestaña <strong>Pendientes</strong>.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Agenda de compra por ciclo (recompra vencida/próxima) — informativo, NO es deuda */}
-      {supplierStatus.some(x => x.isOverdue || x.isDueSoon) && (
-        <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-          <div style={{ fontSize: '0.72rem', color: '#8a6d1f', fontWeight: 600 }}>
-            🗓 Agenda de compra — recompra por ciclo vencida o próxima (no es deuda)
-          </div>
-          {supplierStatus.filter(x => x.isOverdue || x.isDueSoon).map(({ s, nextDue, daysUntil, isOverdue, pendingCRC }) => (
-            <div key={s.id} className="cd-pend-bar" style={{
-              background: '#fffbec',
-              borderColor: '#e0c878',
-            }}>
-              <span>{isOverdue ? '🗓' : '🟡'}</span>
-              <div style={{ flex: 1 }}>
-                <strong>{s.name}</strong>
-                <span style={{ fontSize: '0.78rem', color: '#888', marginLeft: '0.5rem' }}>
-                  {isOverdue
-                    ? `Ciclo vencido hace ${Math.abs(daysUntil!)} días (${nextDue})`
-                    : daysUntil === 0
-                    ? 'Recompra hoy'
-                    : `Recompra en ${daysUntil} días (${nextDue})`}
-                </span>
-                {pendingCRC > 0 && (
-                  <span style={{ fontSize: '0.78rem', color: '#c0392b', marginLeft: '0.75rem', fontWeight: 600 }}>
-                    Deuda: {fi(pendingCRC)}
-                  </span>
-                )}
-              </div>
-              <span style={{ fontSize: '0.72rem', color: '#888' }}>{s.ciclo_pago}</span>
-            </div>
-          ))}
-        </div>
-      )}
 
       {activos.length === 0 && (
         <div className="tips-empty-state">

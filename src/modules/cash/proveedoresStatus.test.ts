@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import {
-  esProveedorPuntual, computeSupplierStatus, contarAgenda, contarPendientes, totalPendienteCRC,
-  type SupplierStatus,
-} from './proveedoresStatus'
+import { esProveedorPuntual, computeSupplierStatus } from './proveedoresStatus'
 import type { Supplier, CashMovement } from '../../shared/types/database'
 
-// FIRMADO 2026-07-09: el rojo cuenta DEUDA REAL (pendientes) — no la agenda de ciclo; y un
-// proveedor PUNTUAL nunca entra a la agenda (causa raíz del "14 pagos pendientes" falso).
+// Estado por proveedor para su tarjeta: deuda registrada, total pagado, último pago y —solo si
+// tiene ciclo— próximo vencimiento. Un proveedor PUNTUAL (one-off) nunca vence: esa era la causa
+// raíz del "14 pagos pendientes" falso y la semántica se conserva.
+//
+// Los contadores de cabecera (contarPendientes/totalPendienteCRC/contarAgenda) se borraron junto
+// con los indicadores que alimentaban — decisión del dueño 2026-07-16: Proveedores = lista simple.
 
 const TODAY = '2026-07-20'
 
@@ -83,31 +84,20 @@ describe('computeSupplierStatus — agenda de ciclo', () => {
   })
 })
 
-describe('contarAgenda — proveedores en agenda de ciclo (informativo, no deuda)', () => {
-  it('cuenta vencidos + próximos', () => {
-    const statuses: SupplierStatus[] = [
-      computeSupplierStatus(sup({ id: 'a', ciclo_pago: 'Semanal' }), [mov({ id: 'x', supplier_id: 'a', created_at: '2026-07-05T12:00:00Z' })], TODAY), // overdue
-      computeSupplierStatus(sup({ id: 'b', ciclo_pago: 'Semanal' }), [mov({ id: 'y', supplier_id: 'b', created_at: '2026-07-14T12:00:00Z' })], TODAY), // due soon
-      computeSupplierStatus(sup({ id: 'c', ciclo_pago: 'Puntual' }), [mov({ id: 'z', supplier_id: 'c', created_at: '2026-01-01T12:00:00Z' })], TODAY), // puntual → fuera
-    ]
-    expect(contarAgenda(statuses)).toBe(2)
-  })
-})
-
-describe('contarPendientes / totalPendienteCRC — DEUDA REAL (incluye huérfanos supplier_id NULL)', () => {
+describe('deuda del proveedor en su tarjeta — los huérfanos (supplier_id NULL) no son de nadie', () => {
+  // Los pendientes huérfanos existen en prod (Isleña ₡74.126,92 · GRUPO PAMPA ₡75.916,60) y se
+  // gestionan en la pestaña Pendientes. Acá importa que NO se le imputen a ningún proveedor.
   const ms: CashMovement[] = [
-    mov({ id: 'a', status: 'pendiente', amount_crc: 43374 }),                         // proveedor legítimo
-    mov({ id: 'b', status: 'pendiente', supplier_id: null as unknown as string, amount_crc: 74126 }), // huérfano (Isleña 2020)
-    mov({ id: 'c', status: 'pendiente', supplier_id: null as unknown as string, amount_crc: 75916 }), // huérfano (GRUPO PAMPA)
-    mov({ id: 'd', status: 'aprobado', amount_crc: 99999 }),                          // pagado → no cuenta
-    mov({ id: 'e', status: 'rechazado', amount_crc: 55555 }),                         // rechazado → no cuenta
+    mov({ id: 'a', status: 'pendiente', amount_crc: 43374 }),                                         // del proveedor s1
+    mov({ id: 'b', status: 'pendiente', supplier_id: null as unknown as string, amount_crc: 74126 }), // huérfano
+    mov({ id: 'c', status: 'pendiente', supplier_id: null as unknown as string, amount_crc: 75916 }), // huérfano
+    mov({ id: 'd', status: 'aprobado',  amount_crc: 99999 }),                                         // pagado → no es deuda
+    mov({ id: 'e', status: 'rechazado', amount_crc: 55555 }),                                         // rechazado → no es deuda
   ]
 
-  it('cuenta TODOS los pendientes, huérfanos incluidos (el "5" real del prod), no aprobados/rechazados', () => {
-    expect(contarPendientes(ms)).toBe(3)
-  })
-
-  it('suma el CRC de los pendientes, huérfanos incluidos', () => {
-    expect(totalPendienteCRC(ms)).toBe(43374 + 74126 + 75916)
+  it('pendingCRC del proveedor cuenta SOLO su deuda: ni huérfanos, ni aprobados, ni rechazados', () => {
+    const st = computeSupplierStatus(sup({ id: 's1' }), ms, TODAY)
+    expect(st.pendingCRC).toBe(43374)
+    expect(st.totalPaid).toBe(99999)
   })
 })

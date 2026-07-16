@@ -1,11 +1,17 @@
 /**
- * proveedoresStatus — lógica PURA de agenda de ciclo y deuda de proveedores (FIRMADO 2026-07-09).
+ * proveedoresStatus — lógica PURA del estado de UN proveedor para su tarjeta.
  *
- * Separa dos conceptos que antes se confundían en el badge rojo "N pagos pendientes":
- *   · DEUDA REAL registrada  = movimientos con status 'pendiente' (lo que se debe de verdad;
- *     mismo criterio que la pestaña Pendientes; incluye huérfanos con supplier_id NULL). → el ROJO.
- *   · AGENDA de ciclo        = proveedores activos cuya recompra habitual (último pago + ciclo)
- *     ya venció o vence pronto. Es una agenda de compra, NO una deuda. → indicador aparte, no rojo.
+ * Da, por proveedor: su deuda registrada (`pendingCRC`), su total pagado, su último pago y —si
+ * tiene ciclo de recompra— su próximo vencimiento. Todo es información DEL PROVEEDOR, para
+ * mostrarse dentro de su tarjeta.
+ *
+ * Decisión del dueño (2026-07-16): la pestaña Proveedores es SOLO la lista de proveedores. Los
+ * contadores de cabecera que vivían acá (`contarPendientes`/`totalPendienteCRC` → badge rojo;
+ * `contarAgenda` → chip ámbar) se retiraron por duplicados —los pendientes los notifica la
+ * pestaña Pendientes, con su propio badge— y se borraron al quedar sin uso.
+ *
+ * Un proveedor **'Puntual'** (o sin ciclo) es una compra one-off: no tiene recompra, así que
+ * nunca tiene `nextDue` y jamás figura como vencido. Esa semántica se conserva.
  *
  * NO toca matemática de caja ni sagrados. Puro y testeable (`today` se inyecta, sin Date.now()).
  */
@@ -62,15 +68,3 @@ export function computeSupplierStatus(s: Supplier, movements: CashMovement[], to
   return { s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, esPuntual, pendingCRC, totalPaid }
 }
 
-// AGENDA de ciclo (recompra vencida o próxima) — informativo, NO deuda.
-export function contarAgenda(statuses: SupplierStatus[]): number {
-  return statuses.filter(x => x.isOverdue || x.isDueSoon).length
-}
-
-// DEUDA REAL registrada = movimientos 'pendiente' (incluye huérfanos supplier_id NULL). El ROJO.
-export function contarPendientes(movements: CashMovement[]): number {
-  return movements.filter(m => m.status === 'pendiente').length
-}
-export function totalPendienteCRC(movements: CashMovement[]): number {
-  return movements.filter(m => m.status === 'pendiente').reduce((sum, m) => sum + (m.amount_crc || 0), 0)
-}

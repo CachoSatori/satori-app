@@ -123,8 +123,8 @@ export interface CashMovement {
   description: string
   subcategory: string
   supplier_id: string | null
-  supplier_name: string
-  employee_name: string
+  supplier_name: string | null    // NULLABLE en la base (supabase.gen.ts) — hay filas viejas con null
+  employee_name: string | null    // ídem
   method: string                    // 'Efectivo' | 'Transferencia' | 'SINPE' | 'Bitcoin'
   shift: string                     // 'Mediodía' | 'Noche' | 'General' | ''
   caja_origen: string               // 'Caja Proveedores' | 'Caja Fuerte' | 'Registradora' | 'Banco'

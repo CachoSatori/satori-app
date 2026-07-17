@@ -107,10 +107,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     }
     if (busq) {
       const q = busq.toLowerCase()
+      // supplier_name/employee_name son NULLABLE en la base: hay movimientos viejos con null.
       if (!(
-        m.supplier_name.toLowerCase().includes(q) ||
-        m.employee_name.toLowerCase().includes(q) ||
-        m.description.toLowerCase().includes(q)
+        (m.supplier_name ?? '').toLowerCase().includes(q) ||
+        (m.employee_name ?? '').toLowerCase().includes(q) ||
+        (m.description   ?? '').toLowerCase().includes(q)
       )) return false
     }
     return true
@@ -443,7 +444,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                   </td>
                   <td>
                     <input key={m.id + '-pe'} className="cd-tbl-input"
-                      defaultValue={m.supplier_name || m.employee_name}
+                      defaultValue={m.supplier_name || m.employee_name || ''}
                       onBlur={e => {
                         handleFieldChange(m.id, 'supplier_name', e.target.value)
                         handleFieldChange(m.id, 'employee_name', e.target.value)

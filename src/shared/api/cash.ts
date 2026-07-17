@@ -736,6 +736,17 @@ export async function getCierresDia(date?: string): Promise<CashCierreDia[]> {
   return (data ?? []) as CashCierreDia[]
 }
 
+// C3 — email de cortesía al owner con el resumen del cierre COMPLETO. Fire-and-forget:
+// functions.invoke reenvía el JWT de la sesión (la Edge Function lo exige y aplica RLS).
+// NUNCA lanza — el cierre ya quedó sellado; el email no lo bloquea ni lo rompe.
+export async function sendCierreEmail(cierreId: string): Promise<void> {
+  try {
+    await supabase.functions.invoke('cierre-email', { body: { cierre_id: cierreId } })
+  } catch {
+    /* si la función no está desplegada o el envío falla, se ignora en silencio */
+  }
+}
+
 // Último cierre COMPLETO anterior a una fecha — para el carryover de la
 // caja de proveedores (sep_diaria) a la apertura del día siguiente.
 export async function getPreviousCierre(beforeDate: string): Promise<CashCierreDia | null> {

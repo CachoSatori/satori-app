@@ -17,7 +17,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto, createDayMovement } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
@@ -333,6 +333,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         return
       }
       setMsg('✓ Día cerrado completamente')
+      // C3 — email de cortesía al owner con el resumen (fire-and-forget). La plata ya
+      // quedó sellada arriba; si el email falla no rompe ni bloquea el cierre.
+      void sendCierreEmail(parcial.id)
       await loadCierres()
       onRefresh()
     } catch (e) {

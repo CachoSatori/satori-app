@@ -47,11 +47,12 @@ const COMPS: Comp[] = [
   { id:'c1', nombre:'Reto Sushi', tipo:'semanal', inicio:d2, fin:d0, premio:'Cena', prods:[{ name:'Sushi Roll', pts:2 }], parts:['ANA','BETO'] },
 ]
 const EMP = { id:'e1', full_name:'ANA', role:'salonero' } as unknown as Employee
-// Asistencia: filas mías (una con payout NULL → null-safe) + fila de otro empleado (benchmark equipo)
+// Asistencia: propina COBRADA (payout, take-home) + propina electrónica GENERADA (tip_amount_*).
+// Fila mía con USD (×TC), fila mía null-safe (tip_amount NULL) y fila de otro empleado (benchmark equipo).
 const ATT: AttendanceRow[] = [
-  { session_date:d0, shift_type:'PM', employee_id:'e1', hours_worked:8, payout_crc:15000, points:10 },
-  { session_date:d1, shift_type:'PM', employee_id:'e1', hours_worked:6, payout_crc:null,  points:8 },
-  { session_date:d0, shift_type:'PM', employee_id:'e2', hours_worked:8, payout_crc:12000, points:10 },
+  { session_date:d0, shift_type:'PM', employee_id:'e1', hours_worked:8, payout_crc:15000, points:10, tip_amount_crc:8000, tip_amount_usd:5,    exchange_rate:520 },
+  { session_date:d1, shift_type:'PM', employee_id:'e1', hours_worked:6, payout_crc:null,  points:8,  tip_amount_crc:null, tip_amount_usd:null, exchange_rate:520 },
+  { session_date:d0, shift_type:'PM', employee_id:'e2', hours_worked:8, payout_crc:12000, points:10, tip_amount_crc:6000, tip_amount_usd:0,    exchange_rate:520 },
 ]
 
 function renderHub(props?: Partial<React.ComponentProps<typeof MiRendimiento>>) {
@@ -108,10 +109,12 @@ describe('MiRendimiento · render (salonero con match)', () => {
     expect(getAllByText(/Sushi Roll/).length).toBeGreaterThan(0)
   })
 
-  it('Propinas muestra ICP + benchmark del equipo y navega meses', () => {
+  it('Propinas muestra ICP electrónico + benchmark del equipo y navega meses', () => {
     const { container, getByText, getAllByText } = renderHub()
     fireEvent.click(tabsOf(container)[4])
-    expect(getAllByText(/ICP/).length).toBeGreaterThan(0)
+    expect(getAllByText(/ICP electrónico/).length).toBeGreaterThan(0)  // no "propinas cobradas"
+    expect(getByText(/generado/)).toBeTruthy()                          // numerador = generado
+    expect(getByText(/Total cobrado/)).toBeTruthy()                     // take-home (payout) intacto
     expect(getByText(/Equipo \(benchmark\)/)).toBeTruthy()
     expect(() => fireEvent.click(getByText(/Mes ant\./))).not.toThrow()
   })

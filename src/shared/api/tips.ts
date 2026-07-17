@@ -307,8 +307,14 @@ export interface AttendanceRow {
   shift_type:    string
   employee_id:   string
   hours_worked:  number
-  payout_crc:    number | null
+  payout_crc:    number | null   // lo COBRADO (reparto del pool) — take-home
   points:        number | null
+  // Propina ELECTRÓNICA GENERADA por el empleado (lo que registra al lado de sus horas).
+  // Aditivo/null-safe: filas viejas pueden traerlos null. exchange_rate es el TC de la
+  // sesión, para convertir la porción USD (mismo patrón que totalElectronicoCrc).
+  tip_amount_crc: number | null
+  tip_amount_usd: number | null
+  exchange_rate:  number | null
 }
 
 export async function getAttendanceHistory(months = 3): Promise<AttendanceRow[]> {
@@ -325,11 +331,14 @@ export async function getAttendanceHistory(months = 3): Promise<AttendanceRow[]>
       id,
       session_date,
       shift_type,
+      exchange_rate,
       tip_entries (
         employee_id,
         hours_worked,
         payout_crc,
-        points
+        points,
+        tip_amount_crc,
+        tip_amount_usd
       )
     `)
     .eq('status', 'closed')
@@ -338,20 +347,24 @@ export async function getAttendanceHistory(months = 3): Promise<AttendanceRow[]>
     .limit(2000)
   if (error) throw new Error(error.message)
 
-  // Flatten sessions → entries
+  // Flatten sessions → entries. tip_amount_* (propina electrónica generada) y
+  // exchange_rate (TC de la sesión) viajan aditivos y null-safe.
   const rows: AttendanceRow[] = []
   for (const session of (data ?? []) as unknown as Array<{
-    id: string; session_date: string; shift_type: string
-    tip_entries: Array<{ employee_id: string; hours_worked: number; payout_crc: number | null; points: number | null }>
+    id: string; session_date: string; shift_type: string; exchange_rate: number | null
+    tip_entries: Array<{ employee_id: string; hours_worked: number; payout_crc: number | null; points: number | null; tip_amount_crc: number | null; tip_amount_usd: number | null }>
   }>) {
     for (const entry of session.tip_entries ?? []) {
       rows.push({
-        session_date: session.session_date,
-        shift_type:   session.shift_type,
-        employee_id:  entry.employee_id,
-        hours_worked: entry.hours_worked,
-        payout_crc:   entry.payout_crc,
-        points:       entry.points,
+        session_date:   session.session_date,
+        shift_type:     session.shift_type,
+        employee_id:    entry.employee_id,
+        hours_worked:   entry.hours_worked,
+        payout_crc:     entry.payout_crc,
+        points:         entry.points,
+        tip_amount_crc: entry.tip_amount_crc,
+        tip_amount_usd: entry.tip_amount_usd,
+        exchange_rate:  session.exchange_rate,
       })
     }
   }

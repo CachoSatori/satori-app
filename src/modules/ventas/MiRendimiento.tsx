@@ -27,7 +27,7 @@ import {
 } from './ventasUtils'
 import {
   resolvePeriod, datesInPeriod, dowBreakdown, bestDowIndex,
-  icpVsTeam, shiftMonth, monthLabelLong,
+  icpVsTeam, sumElectronicTips, shiftMonth, monthLabelLong,
   type PeriodKind,
 } from './miRendimientoUtils'
 import { todayCR } from '../../shared/utils'
@@ -180,15 +180,16 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
     [byMonth],
   )
 
-  // ICP del mes seleccionado (propinas cobradas / ventas × 100) + benchmark equipo
+  // ICP ELECTRÓNICO del mes: propina electrónica GENERADA / ventas × 100 + benchmark equipo.
+  // Numerador = tip_amount_crc + tip_amount_usd×TC (lo que el empleado registra), NO payout_crc.
   const icp = useMemo(() => {
     const monthDates = dates.filter(d => d.startsWith(selMonth))
     const myVentas   = activeName ? aggSalonero(activeName, monthDates, dias, pm).total : 0
     const teamVentas = aggGeneral(monthDates, dias, pm).total
-    const myProp     = myAttendance.filter(r => r.session_date.startsWith(selMonth)).reduce((s, r) => s + (r.payout_crc ?? 0), 0)
-    const teamProp   = attendance.filter(r => r.session_date.startsWith(selMonth)).reduce((s, r) => s + (r.payout_crc ?? 0), 0)
-    const res = icpVsTeam(myProp, myVentas, teamProp, teamVentas)
-    return { ...res, myProp, myVentas, teamProp, teamVentas }
+    const myGen      = sumElectronicTips(myAttendance.filter(r => r.session_date.startsWith(selMonth)))
+    const teamGen    = sumElectronicTips(attendance.filter(r => r.session_date.startsWith(selMonth)))
+    const res = icpVsTeam(myGen, myVentas, teamGen, teamVentas)
+    return { ...res, myGen, myVentas, teamGen, teamVentas }
   }, [selMonth, dates, activeName, dias, pm, myAttendance, attendance])
 
   // Totales de propinas (12m)
@@ -636,7 +637,7 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
   byMonth: Record<string, { q1Days: number; q1Hours: number; q1Earn: number; q2Days: number; q2Hours: number; q2Earn: number }>
   monthsWithData: string[]
   selMonth: string; setSelMonth: (m: string) => void; today: string
-  icp: { mine: number; team: number; diff: number; myProp: number; myVentas: number; teamProp: number; teamVentas: number }
+  icp: { mine: number; team: number; diff: number; myGen: number; myVentas: number; teamGen: number; teamVentas: number }
   activeName: string
   totals: { curEarn: number; totalShifts: number; totalHours: number; totalEarned: number }
 }) {
@@ -681,15 +682,15 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
         )}
       </div>
 
-      {/* ICP + benchmark del equipo */}
+      {/* ICP electrónico + benchmark del equipo */}
       {showIcp ? (
         <>
-          <div className="vt-sl">ICP · Índice de Conversión de Propinas</div>
+          <div className="vt-sl">ICP electrónico · propina electrónica generada / ventas</div>
           <div className="mr-icp">
             <div className="mr-icp-card">
-              <div className="mr-icp-label">Mi ICP · {monthLabelLong(selMonth)}</div>
+              <div className="mr-icp-label">Mi ICP electrónico · {monthLabelLong(selMonth)}</div>
               <div className="mr-icp-val">{icp.mine.toFixed(1)}%</div>
-              <div className="mr-icp-sub">{fi(icp.myProp)} propina / {fi(icp.myVentas)} ventas</div>
+              <div className="mr-icp-sub">{fi(icp.myGen)} generado / {fi(icp.myVentas)} ventas</div>
             </div>
             <div className="mr-icp-card team">
               <div className="mr-icp-label">Equipo (benchmark)</div>
@@ -699,10 +700,13 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
               </div>
             </div>
           </div>
+          <div className="mr-icp-sub" style={{ marginTop: '-0.5rem', marginBottom: '1.25rem' }}>
+            Mide la propina <strong>electrónica</strong> que generaste (tarjeta/SINPE), no lo cobrado del reparto del pool (eso es tu take-home, arriba).
+          </div>
         </>
       ) : (
         <div className="mr-icp-sub" style={{ marginBottom: '1rem' }}>
-          {activeName ? 'Sin ventas registradas este mes para calcular el ICP.' : 'El ICP compara propina vs ventas (roles con venta individual).'}
+          {activeName ? 'Sin ventas registradas este mes para calcular el ICP electrónico.' : 'El ICP electrónico compara la propina electrónica generada vs tus ventas (roles con venta individual).'}
         </div>
       )}
 

@@ -25,20 +25,22 @@ Un único hub en `/mi-rendimiento` (roles: salonero, barman, barback, runner, co
 
 ---
 
-## ⚠️ Decisión que necesita tu visto bueno: el ICP
+## El ICP: ahora "ICP electrónico" (propina GENERADA, no reparto)
 
-La referencia (satori-dashboard) define **ICP = propina_generada / ventas × 100**. Pero en esta app las propinas son un **pool que se reparte por puntos/horas**: **NO existe "propina generada" por persona**, solo lo **cobrado** (`payout_crc`).
-
-Por eso el ICP se implementó como el único cálculo que los datos soportan:
+La primera versión usaba `payout_crc` (el **reparto del pool**), que en un sistema pooled mide *take-home*, no eficiencia de propina. **Corregido:** el numerador del ICP es ahora la **propina electrónica GENERADA** por el empleado — `tip_amount_crc + tip_amount_usd × TC` —, que es el dato real que cada uno registra al lado de sus horas.
 
 ```
-ICP = propinas COBRADAS del período / ventas del empleado × 100
-Benchmark equipo = Σ propinas del equipo / ventas del restaurante × 100
+ICP electrónico = Σ (tip_amount_crc + tip_amount_usd×TC) del empleado / ventas del empleado × 100
+Benchmark equipo = Σ generado electrónico del equipo / ventas del restaurante × 100
 ```
 
-- "Mi ICP" y "Equipo (benchmark)" usan el **mismo mes**; ventas del empleado por el heurístico nombre↔empleado actual; ventas del equipo por `aggGeneral`.
-- Es **read-only** sobre lo ya calculado (los sagrados no se tocan).
-- Si preferís otra definición (p.ej. propina por hora, o ICP sobre venta bruta), es un cambio localizado en `computeICP`/`icpVsTeam` + la pestaña Propinas. **Confirmar antes de Etapa 2.**
+- **`payout_crc` (lo cobrado) se mantiene** para los KPIs de take-home ("Este mes", "Total cobrado") y la tabla/quincenal. **Son dos números distintos y ambos se muestran** — no se conflan.
+- USD×TC con el TC de la sesión (`exchange_rate`), mismo patrón que `totalElectronicoCrc`. Todo null-safe (`tip_amount_*`/TC pueden venir 0/NULL).
+- Copy en la UI aclara que es propina **electrónica** generada, distinta del reparto.
+- Helpers puros nuevos y testeados: `electronicTipCrc`, `sumElectronicTips` (incluye caso USD).
+
+### Follow-up (fuera de alcance de este cambio)
+`src/modules/ventas/VentasICP.tsx` (el ICP del lado **owner/manager**) todavía usa `payout_crc` como numerador. Quedó **sin tocar** para respetar el alcance (solo Mi Rendimiento). Si se quiere consistencia, alinearlo a "generado electrónico" en un cambio aparte.
 
 ---
 
@@ -51,8 +53,9 @@ Benchmark equipo = Σ propinas del equipo / ventas del restaurante × 100
 - `HANDOFF-MI-RENDIMIENTO.md` (este archivo).
 
 **Modificados**
-- `src/modules/ventas/MiRendimiento.tsx` — reescrito: hub claro con período global + 6 pestañas.
+- `src/modules/ventas/MiRendimiento.tsx` — reescrito: hub claro con período global + 6 pestañas. ICP electrónico (generado) + take-home (payout) separados.
 - `src/modules/ventas/MiRendimientoWrap.tsx` — carga ventas (365d, antes 90d) **+ propinas** (empleado vinculado + asistencia 12m para el benchmark).
+- `src/shared/api/tips.ts` — `getAttendanceHistory` trae `tip_amount_crc/usd` + `exchange_rate`; `AttendanceRow` extendido (aditivo, null-safe).
 - `src/App.tsx` — `/mis-propinas` → redirect; quitado el import de `MisPropinas`.
 - `src/index.css` — nueva sección `mr-*` (tema claro). **No modifica** ninguna clase existente (`.vt-*`, `.cd-*` intactas → Caja y Ventas sin tocar).
 
@@ -66,10 +69,10 @@ Benchmark equipo = Σ propinas del equipo / ventas del restaurante × 100
 - **Sagrados diff VACÍO:** `tipCalculations.ts`, `computeTotals` (vive en `posFiscal.ts`), `cashUtils.ts`, `posFiscal.ts` — sin cambios.
 - **Typecheck real** (`tsc -b`): EXIT 0.
 - **Build producción** (`VITE_APP_ENV=production npm run build`): EXIT 0.
-- **Suite completa** (sin env): **345 tests / 44 archivos** verde (incluye +34 nuevos).
+- **Suite completa** (sin env): **351 tests / 44 archivos** verde (incluye +40 nuevos: helpers puros + render smoke + ICP electrónico con caso USD).
 - **ESLint** de los archivos tocados: EXIT 0.
 
 ## Pendiente para el review
 
 - **QA visual en teléfono real** con sesión de empleado + datos reales (login requerido, no verificable sin credenciales). El render test cubre estructura y no-crash; falta la validación de "se ve y se siente" en dispositivo.
-- Confirmar la **definición del ICP** (arriba).
+- Decidir si se alinea el **ICP de `VentasICP`** (owner/manager) a "generado electrónico" para consistencia (hoy usa `payout_crc`).

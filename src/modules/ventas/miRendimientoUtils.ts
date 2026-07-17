@@ -165,13 +165,34 @@ export function bestDowIndex(rows: DowRow[] | null | undefined): number {
   return best
 }
 
-// ── ICP (Índice de Conversión de Propinas) ───────────────────
-// En este app las propinas son un POOL que se reparte por puntos/horas: NO hay
-// "propina generada" por persona. El único dato real por empleado es lo COBRADO
-// (payout_crc). Definimos el ICP como: propinas cobradas / ventas × 100 — cuánta
-// propina por cada ₡ de venta. Read-only sobre lo ya calculado (sagrado intacto).
-export function computeICP(propinasCobradas: number | null | undefined, ventas: number | null | undefined): number {
-  const p = propinasCobradas ?? 0
+// ── ICP electrónico (Índice de Conversión de Propina) ────────
+// El numerador es la propina ELECTRÓNICA GENERADA por el empleado (tip_amount_crc +
+// tip_amount_usd×TC) — lo que registra al lado de sus horas —, NO el reparto del pool
+// (payout_crc). En un sistema pooled el payout mide take-home, no eficiencia de propina;
+// lo generado sí. Read-only/agregación (no toca la matemática del pool, sagrado intacto).
+
+// Propina electrónica generada por UNA fila, en CRC. USD×TC con el TC de la sesión.
+// Null-safe: tip_amount_* y exchange_rate pueden venir 0/NULL.
+export function electronicTipCrc(row: { tip_amount_crc?: number | null; tip_amount_usd?: number | null; exchange_rate?: number | null } | null | undefined): number {
+  if (!row) return 0
+  const crc  = row.tip_amount_crc ?? 0
+  const usd  = row.tip_amount_usd ?? 0
+  const rate = row.exchange_rate ?? 0
+  const v = crc + usd * rate
+  return isFinite(v) ? v : 0
+}
+
+// Σ propina electrónica generada sobre un conjunto de filas. Null-safe.
+export function sumElectronicTips(
+  rows: Array<{ tip_amount_crc?: number | null; tip_amount_usd?: number | null; exchange_rate?: number | null }> | null | undefined,
+): number {
+  if (!rows) return 0
+  return rows.reduce((s, r) => s + electronicTipCrc(r), 0)
+}
+
+// ICP = numerador / ventas × 100. El numerador es propina electrónica GENERADA.
+export function computeICP(propinaGenerada: number | null | undefined, ventas: number | null | undefined): number {
+  const p = propinaGenerada ?? 0
   const v = ventas ?? 0
   if (!v || v <= 0 || isNaN(p) || isNaN(v)) return 0
   return (p / v) * 100
@@ -183,15 +204,18 @@ export interface IcpResult {
   diff: number   // mine - team (puntos porcentuales)
 }
 
-/** ICP del empleado vs benchmark del equipo (Σ propinas equipo / ventas equipo). */
+/**
+ * ICP electrónico del empleado vs benchmark del equipo. Ambos numeradores son
+ * propina electrónica GENERADA: Σ generado equipo / Σ ventas del restaurante.
+ */
 export function icpVsTeam(
-  myProp: number | null | undefined,
+  myGen: number | null | undefined,
   myVentas: number | null | undefined,
-  teamProp: number | null | undefined,
+  teamGen: number | null | undefined,
   teamVentas: number | null | undefined,
 ): IcpResult {
-  const mine = computeICP(myProp, myVentas)
-  const team = computeICP(teamProp, teamVentas)
+  const mine = computeICP(myGen, myVentas)
+  const team = computeICP(teamGen, teamVentas)
   return { mine, team, diff: mine - team }
 }
 

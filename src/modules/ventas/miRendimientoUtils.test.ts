@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   addDays, mondayOf, resolvePeriod, datesInPeriod,
   dowBreakdown, bestDowIndex, computeICP, icpVsTeam,
+  electronicTipCrc, sumElectronicTips,
   shiftMonth, monthLabelLong,
   type Period,
 } from './miRendimientoUtils'
@@ -157,26 +158,63 @@ describe('bestDowIndex', () => {
   })
 })
 
-// ── ICP ───────────────────────────────────────────────────────
+// ── Propina electrónica generada (numerador del ICP) ─────────
+describe('electronicTipCrc', () => {
+  it('suma CRC + USD×TC', () => {
+    // 8000 CRC + 5 USD × 520 = 8000 + 2600 = 10600
+    expect(electronicTipCrc({ tip_amount_crc: 8000, tip_amount_usd: 5, exchange_rate: 520 })).toBe(10600)
+  })
+  it('solo CRC (sin USD)', () => {
+    expect(electronicTipCrc({ tip_amount_crc: 6000, tip_amount_usd: 0, exchange_rate: 520 })).toBe(6000)
+  })
+  it('null-safe: campos NULL / fila nula → 0', () => {
+    expect(electronicTipCrc({ tip_amount_crc: null, tip_amount_usd: null, exchange_rate: null })).toBe(0)
+    expect(electronicTipCrc({ tip_amount_usd: 5, exchange_rate: null })).toBe(0)   // sin TC no convierte
+    expect(electronicTipCrc(null)).toBe(0)
+    expect(electronicTipCrc(undefined)).toBe(0)
+  })
+})
+
+describe('sumElectronicTips', () => {
+  it('acumula generado electrónico sobre filas (mezcla CRC/USD y NULL)', () => {
+    const rows = [
+      { tip_amount_crc: 8000, tip_amount_usd: 5,    exchange_rate: 520 },  // 10600
+      { tip_amount_crc: null, tip_amount_usd: null, exchange_rate: 520 },  // 0
+      { tip_amount_crc: 6000, tip_amount_usd: 0,    exchange_rate: 520 },  // 6000
+    ]
+    expect(sumElectronicTips(rows)).toBe(16600)
+  })
+  it('null-safe: lista nula/vacía → 0', () => {
+    expect(sumElectronicTips(null)).toBe(0)
+    expect(sumElectronicTips([])).toBe(0)
+  })
+})
+
+// ── ICP (numerador = propina electrónica GENERADA) ───────────
 describe('computeICP', () => {
-  it('propinas/ventas × 100', () => {
+  it('generado / ventas × 100', () => {
     expect(computeICP(15000, 300000)).toBeCloseTo(5, 5)     // 5%
     expect(computeICP(0, 300000)).toBe(0)
   })
   it('ventas <= 0 o NaN → 0 (sin división por cero)', () => {
     expect(computeICP(15000, 0)).toBe(0)
     expect(computeICP(15000, null)).toBe(0)
-    expect(computeICP(null, 300000)).toBe(0)   // 0 propinas
+    expect(computeICP(null, 300000)).toBe(0)   // 0 generado
     expect(computeICP(15000, -5)).toBe(0)
   })
 })
 
 describe('icpVsTeam', () => {
-  it('calcula mine, team y diff', () => {
+  it('calcula mine, team y diff (generado vs ventas)', () => {
     const r = icpVsTeam(15000, 300000, 40000, 1000000)  // mine 5%, team 4%
     expect(r.mine).toBeCloseTo(5, 5)
     expect(r.team).toBeCloseTo(4, 5)
     expect(r.diff).toBeCloseTo(1, 5)
+  })
+  it('con USD: numerador integra tip_amount_usd×TC vía sumElectronicTips', () => {
+    const myGen = sumElectronicTips([{ tip_amount_crc: 8000, tip_amount_usd: 5, exchange_rate: 520 }]) // 10600
+    const r = icpVsTeam(myGen, 212000, 0, 1)   // 10600/212000 = 5%
+    expect(r.mine).toBeCloseTo(5, 5)
   })
   it('null-safe → 0s', () => {
     expect(icpVsTeam(null, null, null, null)).toEqual({ mine: 0, team: 0, diff: 0 })

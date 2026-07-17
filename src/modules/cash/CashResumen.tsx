@@ -1,7 +1,9 @@
-import { useState, useMemo } from 'react'
-import type { CashMovement, CashSession } from '../../shared/types/database'
+import { useState, useMemo, useEffect } from 'react'
+import type { CashMovement, CashSession, CashCierreDia } from '../../shared/types/database'
 import type { MovementType } from '../../shared/types/database'
 import { MOVEMENT_LABELS, EGRESO_TYPES, isEgreso, fi } from './cashUtils'
+import { getCierresDia } from '../../shared/api/cash'
+import { computeOverShort } from './cierreStats'
 
 interface Props {
   movements: CashMovement[]
@@ -17,6 +19,12 @@ export default function CashResumen({ movements, sessions }: Props) {
   }, [sessions])
 
   const [selMonth, setSelMonth] = useState<string>('all')
+
+  // C2 — Historial de sobrantes/faltantes del cierre. Lee lo YA guardado en
+  // cash_cierres_dia (no recalcula). Fetch propio, como CashMovimientos.
+  const [cierres, setCierres] = useState<CashCierreDia[]>([])
+  useEffect(() => { getCierresDia().then(setCierres).catch(() => {}) }, [])
+  const overShort = useMemo(() => computeOverShort(cierres, selMonth), [cierres, selMonth])
 
   const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
   function fmtMonth(ym: string) {
@@ -235,6 +243,57 @@ export default function CashResumen({ movements, sessions }: Props) {
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* C2 — Sobrantes / faltantes del cierre (patrón over/short). Display de lo
+          ya sellado en cash_cierres_dia; sirve para ver tendencia, no es contabilidad. */}
+      {overShort.total > 0 && (
+        <div style={{ marginTop: '1.5rem' }}>
+          <div className="cd-resumen-section-hdr" style={{ marginBottom: '0.5rem' }}>
+            SOBRANTES / FALTANTES DEL CIERRE ({overShort.total})
+          </div>
+          {/* Agregados del período */}
+          <div style={{ display:'flex', gap:'1rem', flexWrap:'wrap', marginBottom:'0.75rem', fontSize:'0.75rem' }}>
+            <span style={{ color:'#27874f' }}>✓ Cuadraron: <strong>{overShort.nCuadraron}</strong></span>
+            <span style={{ color: overShort.nDescuadraron > 0 ? '#c0392b' : '#555' }}>
+              Con diferencia: <strong>{overShort.nDescuadraron}</strong>
+            </span>
+            <span style={{ color:'#888' }}>
+              Neto: <strong style={{ color: overShort.sumaNeta >= 0 ? '#27874f' : '#c0392b' }}>
+                {overShort.sumaNeta >= 0 ? '+' : ''}{fi(overShort.sumaNeta)}
+              </strong>
+            </span>
+            <span style={{ color:'#888' }}>Absoluto: <strong>{fi(overShort.sumaAbs)}</strong></span>
+          </div>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'0.8rem' }}>
+            <thead>
+              <tr style={{ borderBottom:'1px solid #1a1a1a' }}>
+                <th style={{ textAlign:'left',  padding:'0.4rem 0.5rem', fontSize:'0.65rem', color:'#555', fontWeight:400, textTransform:'uppercase', letterSpacing:'0.1em' }}>Fecha</th>
+                <th style={{ textAlign:'right', padding:'0.4rem 0.5rem', fontSize:'0.65rem', color:'#555', fontWeight:400 }}>Diferencia</th>
+                <th style={{ textAlign:'left',  padding:'0.4rem 0.5rem', fontSize:'0.65rem', color:'#555', fontWeight:400 }}>Ajuste</th>
+              </tr>
+            </thead>
+            <tbody>
+              {overShort.items.map(it => {
+                const color = it.estado === 'faltante' ? '#c0392b' : it.estado === 'sobrante' ? '#c8a030' : '#27874f'
+                const label = it.estado === 'faltante' ? 'Faltante' : it.estado === 'sobrante' ? 'Sobrante' : '✓ Cuadró'
+                return (
+                  <tr key={it.session_date} style={{ borderBottom:'1px solid #111' }}>
+                    <td style={{ padding:'0.4rem 0.5rem', color:'#888' }}>{it.session_date}</td>
+                    <td style={{ padding:'0.4rem 0.5rem', textAlign:'right', color, fontWeight:700, fontFamily:'DM Mono, monospace' }}>
+                      {it.estado === 'cuadro' ? label : `${it.diferencia_crc >= 0 ? '+' : ''}${fi(it.diferencia_crc)}`}
+                    </td>
+                    <td style={{ padding:'0.4rem 0.5rem', color:'#999', fontSize:'0.72rem' }}>
+                      {it.estado === 'cuadro'
+                        ? <span style={{ color:'#555' }}>—</span>
+                        : <span><span style={{ color, fontWeight:600 }}>{it.ajuste_tipo || label}</span>{it.ajuste_motivo ? ` · ${it.ajuste_motivo}` : ''}</span>}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

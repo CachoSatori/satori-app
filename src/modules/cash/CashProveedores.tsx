@@ -57,6 +57,20 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
     [activos, movements, today],
   )
 
+  // Buscador en vivo (~57 proveedores). NULL-SAFE desde el día uno (lección del hotfix del
+  // buscador de Movimientos): category y contact son NULLABLE en la base (supabase.gen.ts),
+  // name es NOT NULL pero se guarda igual — todo campo del filtro va con (campo ?? '').
+  const [busq, setBusq] = useState('')
+  const visibleStatus = useMemo(() => {
+    const q = busq.trim().toLowerCase()
+    if (!q) return supplierStatus
+    return supplierStatus.filter(({ s }) =>
+      (s.name     ?? '').toLowerCase().includes(q) ||
+      (s.category ?? '').toLowerCase().includes(q) ||
+      (s.contact  ?? '').toLowerCase().includes(q),
+    )
+  }, [supplierStatus, busq])
+
   const [expandedProv, setExpandedProv] = useState<string | null>(null)
   const toggleProv = useCallback((id: string) =>
     setExpandedProv(prev => prev === id ? null : id), [])
@@ -107,8 +121,27 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
         </div>
       )}
 
+      {/* Buscador en vivo — mismo patrón visual que el de Movimientos */}
+      {activos.length > 0 && (
+        <div style={{ marginBottom: '1rem' }}>
+          <input
+            className="cd-filter-input"
+            style={{ width: '100%', maxWidth: 320 }}
+            value={busq}
+            placeholder="Buscar proveedor..."
+            onChange={e => setBusq(e.target.value)}
+          />
+        </div>
+      )}
+
+      {activos.length > 0 && visibleStatus.length === 0 && (
+        <div className="tips-empty-state">
+          <p className="tips-empty-text">Sin coincidencias</p>
+        </div>
+      )}
+
       <div className="cd-prov-grid">
-        {supplierStatus.map(({ s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, pendingCRC, totalPaid }) => (
+        {visibleStatus.map(({ s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, pendingCRC, totalPaid }) => (
           <div key={s.id} className="cd-prov-card" style={{
             borderTop: (isOverdue || isDueSoon) ? '2px solid #c8a030' : undefined,
           }}>

@@ -1,93 +1,141 @@
 /**
- * MiRendimiento — Vista personal para saloneros
- * Accessible at /mi-rendimiento for roles: salonero, barman, barback, runner, cocina
+ * MiRendimiento — "La casa del empleado" (TEMA CLARO, espeja Caja)
+ * Ruta /mi-rendimiento — roles: salonero, barman, barback, runner, cocina.
  *
- * Tabs:
- *   Hoy      — today's personal stats vs general average
- *   Historial — last 60 days trend: promPax, bebPax, ratioCB
- *   Semana   — current week + last 4 weeks comparison
+ * Hub personal donde el empleado ve su rendimiento y sus propinas:
+ *   Resumen      — KPIs ricos del período (vs general y vs meta)
+ *   Por día      — promedios por día de la semana + gráfico + yo-vs-resto
+ *   Productos    — top General / Comidas / Bebidas (toggle ₡ / uds)
+ *   Semana       — semanas calendario (actual + 4 previas)
+ *   Propinas     — historial mensual + ICP + benchmark del equipo (Q1/Q2)
+ *   Competencias — mis competencias activas
+ *
+ * Un FILTRO DE PERÍODO GLOBAL (Hoy · Esta semana · Este mes · Rango) gobierna
+ * las sub-vistas de ventas. Propinas tiene su propio selector de mes.
+ * CERO esquema, CERO migración: solo display sobre datos que ya existen.
+ * Read-only sobre lo ya calculado (sagrados intactos).
  */
 import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import type { DiasMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
+import type { Employee } from '../../shared/types/database'
+import type { AttendanceRow } from '../../shared/api/tips'
 import {
   aggSalonero, aggGeneral, allSaloneros, allDates,
-  fi, fmtDate, getMeta,
-  topProds, ratioCBClass,
+  fi, getMeta, topProds, dowLabel,
 } from './ventasUtils'
+import {
+  resolvePeriod, datesInPeriod, dowBreakdown, bestDowIndex,
+  icpVsTeam, shiftMonth, monthLabelLong,
+  type PeriodKind,
+} from './miRendimientoUtils'
 import { todayCR } from '../../shared/utils'
+import { ROLE_LABELS } from '../../shared/constants'
 
-interface Props { dias: DiasMap; pm: ProductMap; metas?: Meta; comps?: Comp[] }
+interface Props {
+  dias:       DiasMap
+  pm:         ProductMap
+  metas?:     Meta
+  comps?:     Comp[]
+  employee:   Employee | null    // empleado vinculado (para propinas)
+  attendance: AttendanceRow[]     // TODAS las filas (para benchmark del equipo)
+  noLink:     boolean             // perfil sin empleado vinculado
+}
 
-type Tab = 'hoy' | 'historial' | 'semana' | 'competencias'
+type Tab = 'resumen' | 'dia' | 'productos' | 'semana' | 'propinas' | 'competencias'
 
-const DAYS_SHORT = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0]  // Lun … Dom
+const MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
-export default function MiRendimiento({ dias, pm, metas, comps = [] }: Props) {
+// Colores Caja: verde/dorado/rojo según % de meta
+function metaCol(ratio: number): string {
+  if (!isFinite(ratio) || ratio <= 0) return '#8a8070'
+  if (ratio >= 1)    return '#27874f'
+  if (ratio >= 0.85) return '#c8a030'
+  return '#c0392b'
+}
+
+const PERIODS: { id: PeriodKind; label: string }[] = [
+  { id: 'hoy',    label: 'Hoy' },
+  { id: 'semana', label: 'Esta semana' },
+  { id: 'mes',    label: 'Este mes' },
+  { id: 'rango',  label: 'Rango' },
+]
+
+export default function MiRendimiento({ dias, pm, metas, comps = [], employee, attendance, noLink }: Props) {
   const { profile } = useAuth()
   const navigate    = useNavigate()
-  const [tab, setTab] = useState<Tab>('hoy')
+  const [params]    = useSearchParams()
+  const today       = todayCR()
 
-  const allSals  = useMemo(() => allSaloneros(dias), [dias])
-  const dates    = useMemo(() => allDates(dias), [dias])
-  const today    = todayCR()
+  const allSals = useMemo(() => allSaloneros(dias), [dias])
+  const dates   = useMemo(() => allDates(dias), [dias])
 
-  // Try to match profile name to a salonero key
+  // ── Match nombre ↔ empleado (heurístico ACTUAL, sin cambios) ──
   const inferredName = useMemo(() => {
     if (!profile?.full_name) return null
     const firstName = profile.full_name.split(' ')[0].toUpperCase()
-    // Exact match first
-    const exact = allSals.find(n => n.toUpperCase() === profile.full_name.toUpperCase())
+    const exact = allSals.find(n => n.toUpperCase() === profile.full_name!.toUpperCase())
     if (exact) return exact
-    // First-name match
-    const byFirst = allSals.find(n => n.toUpperCase().startsWith(firstName))
-    return byFirst ?? null
+    return allSals.find(n => n.toUpperCase().startsWith(firstName)) ?? null
   }, [profile, allSals])
 
   const [salName, setSalName] = useState<string>('')
   const activeName = salName || inferredName || ''
 
-  // ── Data for the active salonero ─────────────────────────────
-  // (Los hooks de abajo se llaman SIEMPRE — guardan internamente con activeName —
-  //  para no violar rules-of-hooks; el early-return va DESPUÉS de todos los hooks.)
-  const todayAgg = useMemo(() =>
-    activeName ? aggSalonero(activeName, dates.filter(d => d === today), dias, pm) : null,
-  [activeName, dates, dias, pm, today])
+  // Rol sin venta individual (cocina/runner/barback) → arranca en Propinas.
+  const isTipsFirst = !activeName || ['cocina', 'runner', 'barback'].includes(profile?.role ?? '')
+  const urlTab = params.get('tab') as Tab | null
+  const [tab, setTab] = useState<Tab>(
+    urlTab ?? (isTipsFirst ? 'propinas' : 'resumen'),
+  )
 
-  const genToday = useMemo(() =>
-    aggGeneral(dates.filter(d => d === today), dias, pm),
-  [dates, dias, pm, today])
+  // ── Período global ───────────────────────────────────────────
+  const [periodKind, setPeriodKind] = useState<PeriodKind>('mes')
+  const [rangeFrom, setRangeFrom]   = useState<string>('')
+  const [rangeTo, setRangeTo]       = useState<string>('')
+  const period = useMemo(
+    () => resolvePeriod(periodKind, today, { from: rangeFrom, to: rangeTo }),
+    [periodKind, today, rangeFrom, rangeTo],
+  )
+  const periodDates = useMemo(() => datesInPeriod(dates, period), [dates, period])
 
-  const last60 = useMemo(() => {
-    const cutoff = new Date(today); cutoff.setDate(cutoff.getDate() - 60)
-    const cutStr = cutoff.toISOString().slice(0, 10)
-    return dates.filter(d => d >= cutStr && d <= today)
-  }, [dates, today])
+  // ── Agregados de ventas del período ──────────────────────────
+  const myAgg  = useMemo(
+    () => (activeName ? aggSalonero(activeName, periodDates, dias, pm) : null),
+    [activeName, periodDates, dias, pm],
+  )
+  const genAgg = useMemo(() => aggGeneral(periodDates, dias, pm), [periodDates, dias, pm])
 
-  const histData = useMemo(() => {
-    if (!activeName) return []
-    return last60
-      .map(date => {
-        const s = aggSalonero(activeName, [date], dias, pm)
-        const g = aggGeneral([date], dias, pm)
-        if (s.days === 0) return null
-        const dow = new Date(date + 'T12:00:00').getDay()
-        return { date, dow, promPax: s.promPax, bebPax: s.bebPax, ratioCB: s.ratioCB, total: s.total, pax: s.pax, genPromPax: g.promPax }
-      })
-      .filter(Boolean) as Array<{ date: string; dow: number; promPax: number; bebPax: number; ratioCB: number; total: number; pax: number; genPromPax: number }>
-  }, [activeName, last60, dias, pm])
+  // Ranking del día — solo cuando el período es un único día con datos
+  const dayRank = useMemo(() => {
+    if (!activeName || periodDates.length !== 1) return null
+    const d = periodDates[0]
+    const ranked = allSals
+      .map(n => ({ n, total: aggSalonero(n, [d], dias, pm).total }))
+      .filter(r => r.total > 0)
+      .sort((a, b) => b.total - a.total)
+    const idx = ranked.findIndex(r => r.n === activeName)
+    if (idx < 0) return null
+    return { pos: idx + 1, of: ranked.length }
+  }, [activeName, periodDates, allSals, dias, pm])
 
-  // Week data: current week + 4 previous weeks
+  // ── Por día de la semana ─────────────────────────────────────
+  const dowRows = useMemo(
+    () => dowBreakdown(activeName, periodDates, dias, pm),
+    [activeName, periodDates, dias, pm],
+  )
+  const bestDow = useMemo(() => bestDowIndex(dowRows), [dowRows])
+  const maxDowProm = Math.max(1, ...dowRows.map(r => r.mine.promPax))
+
+  // ── Semana calendario (actual + 4 previas) ───────────────────
   const weekData = useMemo(() => {
     if (!activeName) return []
-    const weeks: Array<{ label: string; dates: string[]; promPax: number; bebPax: number; total: number; pax: number; days: number }> = []
-    // Get monday of current week
+    const weeks: Array<{ label: string; promPax: number; bebPax: number; total: number; pax: number; days: number }> = []
     const now = new Date(today + 'T12:00:00')
-    const dayOfWeek = now.getDay()
-    const monday = new Date(now)
-    monday.setDate(monday.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
-
+    const dow = now.getDay()
+    const monday = new Date(now); monday.setDate(monday.getDate() - (dow === 0 ? 6 : dow - 1))
     for (let w = 0; w < 5; w++) {
       const from = new Date(monday); from.setDate(from.getDate() - w * 7)
       const to   = new Date(from);   to.setDate(to.getDate() + 6)
@@ -96,529 +144,711 @@ export default function MiRendimiento({ dias, pm, metas, comps = [] }: Props) {
       const wDates  = dates.filter(d => d >= fromStr && d <= toStr)
       const agg     = aggSalonero(activeName, wDates, dias, pm)
       if (w === 0 || agg.days > 0) {
-        const label = w === 0 ? 'Esta semana' : w === 1 ? 'Semana pasada' : `Hace ${w} semanas`
-        weeks.push({ label, dates: wDates, promPax: agg.promPax, bebPax: agg.bebPax, total: agg.total, pax: agg.pax, days: agg.days })
+        const label = w === 0 ? 'Esta semana' : w === 1 ? 'Semana pasada' : `Hace ${w} sem`
+        weeks.push({ label, promPax: agg.promPax, bebPax: agg.bebPax, total: agg.total, pax: agg.pax, days: agg.days })
       }
     }
     return weeks
   }, [activeName, dates, dias, pm, today])
 
-  const top5Today = useMemo(() =>
-    todayAgg ? topProds(todayAgg.prods, 'monto', 5, undefined, pm) : [],
-  [todayAgg, pm])
+  // ── Productos: toggle ₡ / uds ────────────────────────────────
+  const [prodMode, setProdMode] = useState<'monto' | 'unidades'>('monto')
 
-  // Early-return DESPUÉS de todos los hooks (rules-of-hooks): sin datos → estado vacío.
-  if (!activeName && allSals.length === 0) {
+  // ── Propinas: mes seleccionado + agregados ───────────────────
+  const myAttendance = useMemo(
+    () => attendance.filter(r => employee && r.employee_id === employee.id),
+    [attendance, employee],
+  )
+  const [selMonth, setSelMonth] = useState<string>(today.slice(0, 7))
+
+  // Agrupar mis propinas por mes (Q1/Q2) — misma lógica que Mis Propinas
+  const byMonth = useMemo(() => {
+    const acc: Record<string, { q1Days: number; q1Hours: number; q1Earn: number; q2Days: number; q2Hours: number; q2Earn: number }> = {}
+    for (const r of myAttendance) {
+      const ym  = r.session_date.slice(0, 7)
+      const day = Number(r.session_date.slice(8, 10))
+      if (!acc[ym]) acc[ym] = { q1Days: 0, q1Hours: 0, q1Earn: 0, q2Days: 0, q2Hours: 0, q2Earn: 0 }
+      const e = acc[ym]
+      if (day <= 15) { e.q1Days++; e.q1Hours += r.hours_worked; e.q1Earn += r.payout_crc ?? 0 }
+      else           { e.q2Days++; e.q2Hours += r.hours_worked; e.q2Earn += r.payout_crc ?? 0 }
+    }
+    return acc
+  }, [myAttendance])
+
+  const monthsWithData = useMemo(
+    () => Object.keys(byMonth).sort((a, b) => b.localeCompare(a)),
+    [byMonth],
+  )
+
+  // ICP del mes seleccionado (propinas cobradas / ventas × 100) + benchmark equipo
+  const icp = useMemo(() => {
+    const monthDates = dates.filter(d => d.startsWith(selMonth))
+    const myVentas   = activeName ? aggSalonero(activeName, monthDates, dias, pm).total : 0
+    const teamVentas = aggGeneral(monthDates, dias, pm).total
+    const myProp     = myAttendance.filter(r => r.session_date.startsWith(selMonth)).reduce((s, r) => s + (r.payout_crc ?? 0), 0)
+    const teamProp   = attendance.filter(r => r.session_date.startsWith(selMonth)).reduce((s, r) => s + (r.payout_crc ?? 0), 0)
+    const res = icpVsTeam(myProp, myVentas, teamProp, teamVentas)
+    return { ...res, myProp, myVentas, teamProp, teamVentas }
+  }, [selMonth, dates, activeName, dias, pm, myAttendance, attendance])
+
+  // Totales de propinas (12m)
+  const totalEarned = myAttendance.reduce((s, r) => s + (r.payout_crc ?? 0), 0)
+  const totalHours  = myAttendance.reduce((s, r) => s + r.hours_worked, 0)
+  const totalShifts = myAttendance.length
+  const curEarn     = myAttendance.filter(r => r.session_date.startsWith(today.slice(0, 7))).reduce((s, r) => s + (r.payout_crc ?? 0), 0)
+
+  // ── Estado vacío total: sin ventas y sin propinas ────────────
+  if (allSals.length === 0 && !employee && noLink) {
     return (
-      <div className="vt-empty">
-        <div className="vt-empty-icon">👤</div>
-        <div className="vt-empty-title">Sin datos de saloneros</div>
-        <div className="vt-empty-sub">Cargá los XLS del turno para ver tu rendimiento</div>
+      <div className="tips-module">
+        <Header profile={profile} name={activeName} navigate={navigate} />
+        <div className="cd-content">
+          <div className="mr-empty">
+            <div className="mr-empty-icon">🔗</div>
+            <div className="mr-empty-title">Perfil no vinculado</div>
+            <div className="mr-empty-sub">Pedile al dueño que vincule tu perfil en Admin → Empleados para ver tus propinas.</div>
+          </div>
+        </div>
       </div>
     )
   }
 
-  // Max promPax for mini bar chart
-  const maxPromPax = Math.max(...histData.map(d => d.promPax), 1)
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'resumen',      label: '心 Resumen' },
+    { id: 'dia',          label: '📅 Por día' },
+    { id: 'productos',    label: '🍱 Productos' },
+    { id: 'semana',       label: '🗓️ Semana' },
+    { id: 'propinas',     label: '¥ Propinas' },
+    { id: 'competencias', label: '🏆 Competencias' },
+  ]
+
+  const salesTab = tab === 'resumen' || tab === 'dia' || tab === 'productos'
+  const wide = tab === 'dia' || tab === 'productos' || tab === 'propinas'
 
   return (
-    <div className="vt-module">
-      {/* Header */}
-      <div className="vt-module-header">
-        <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
-          <span style={{ fontFamily:'var(--font-serif)', fontSize:'1.5rem', color:'var(--vt-gold)' }}>人</span>
-          <div>
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.9rem', fontWeight:800, color:'var(--vt-gold)', letterSpacing:'0.1em' }}>
-              MI RENDIMIENTO
-            </div>
-            <div style={{ fontSize:'0.6rem', letterSpacing:'0.3em', color:'#444', textTransform:'uppercase' }}>
-              Satori · {activeName || 'Salonero'}
-            </div>
-          </div>
-        </div>
-        <div style={{ display:'flex', gap:'0.5rem', alignItems:'center' }}>
-          {/* Name selector — if auto-match failed */}
-          {(!inferredName || allSals.length > 1) && (
-            <select
-              value={activeName}
-              onChange={e => setSalName(e.target.value)}
-              style={{ background:'#1a1a1a', border:'1px solid #333', color:'#c8a96e', padding:'4px 8px', borderRadius:2, fontSize:'0.78rem' }}>
-              {!inferredName && <option value="">— Seleccioná tu nombre —</option>}
-              {allSals.map(n => <option key={n} value={n}>{n}</option>)}
-            </select>
-          )}
-          <button className="cash-back-btn" style={{ borderColor:'#333', color:'#888' }}
-            onClick={() => navigate('/')}>← Inicio</button>
-        </div>
-      </div>
+    <div className="tips-module">
+      <Header profile={profile} name={activeName} navigate={navigate} />
 
-      {/* Tabs */}
-      <div className="vt-nav-tabs">
-        {([
-          { id:'hoy',          label:'🌅 Hoy' },
-          { id:'historial',    label:'📈 Historial' },
-          { id:'semana',       label:'📅 Semana' },
-          { id:'competencias', label:'🏆 Competencias' },
-        ] as const).map(t => (
-          <div key={t.id}
-            className={`vt-nav-tab ${tab === t.id ? 'active' : ''}`}
-            style={tab === t.id ? { borderBottomColor:'var(--vt-gold)', color:'var(--vt-gold)' } : {}}
-            onClick={() => setTab(t.id)}>
+      {/* Selector de nombre si el match automático falló o hay varios */}
+      {allSals.length > 0 && (!inferredName || allSals.length > 1) && (
+        <div style={{ padding: '0.75rem 1.5rem 0', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="mr-period-lbl">Tu nombre:</span>
+          <select className="mr-select" value={activeName} onChange={e => setSalName(e.target.value)}>
+            {!inferredName && <option value="">— Seleccioná —</option>}
+            {allSals.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Nav tabs (shell de Caja) */}
+      <div className="cd-nav-tabs">
+        {tabs.map(t => (
+          <div key={t.id} className={`cd-nav-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
             {t.label}
           </div>
         ))}
       </div>
 
-      {!activeName ? (
-        <div style={{ padding:'3rem', textAlign:'center', color:'#555' }}>
-          Seleccioná tu nombre arriba para ver tu rendimiento.
+      <div className={`cd-content ${wide ? 'cd-content-wide' : ''}`}>
+
+        {/* Filtro de período global (solo sub-vistas de ventas) */}
+        {salesTab && (
+          <div className="mr-period-bar">
+            <span className="mr-period-lbl">Período</span>
+            <div className="vt-range-bar" style={{ margin: 0 }}>
+              {PERIODS.map(p => (
+                <button key={p.id}
+                  className={`vt-range-btn ${periodKind === p.id ? 'active' : ''}`}
+                  onClick={() => setPeriodKind(p.id)}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {periodKind === 'rango' && (
+              <span style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                <input type="date" className="vt-date-input" value={rangeFrom} max={today} onChange={e => setRangeFrom(e.target.value)} />
+                <span style={{ color: '#8a8070' }}>→</span>
+                <input type="date" className="vt-date-input" value={rangeTo} max={today} onChange={e => setRangeTo(e.target.value)} />
+              </span>
+            )}
+            <span className="vt-range-label">{period.label}</span>
+          </div>
+        )}
+
+        {/* Aviso: rol sin venta individual */}
+        {salesTab && !activeName && (
+          <div className="mr-empty">
+            <div className="mr-empty-icon">¥</div>
+            <div className="mr-empty-title">Tu rol trabaja con propinas</div>
+            <div className="mr-empty-sub">
+              No tenés ventas individuales registradas. Andá a la pestaña <strong>¥ Propinas</strong> para ver tu historial.
+            </div>
+            <button className="vt-range-btn active" style={{ marginTop: '1rem' }} onClick={() => setTab('propinas')}>Ver mis propinas →</button>
+          </div>
+        )}
+
+        {/* ══════════════ RESUMEN ══════════════ */}
+        {tab === 'resumen' && activeName && (
+          <ResumenTab myAgg={myAgg} genAgg={genAgg} metas={metas} activeName={activeName} pm={pm} dayRank={dayRank} period={period} />
+        )}
+
+        {/* ══════════════ POR DÍA ══════════════ */}
+        {tab === 'dia' && activeName && (
+          <DiaTab dowRows={dowRows} bestDow={bestDow} maxDowProm={maxDowProm} />
+        )}
+
+        {/* ══════════════ PRODUCTOS ══════════════ */}
+        {tab === 'productos' && activeName && (
+          <ProductosTab myAgg={myAgg} pm={pm} mode={prodMode} setMode={setProdMode} />
+        )}
+
+        {/* ══════════════ SEMANA ══════════════ */}
+        {tab === 'semana' && (
+          activeName
+            ? <SemanaTab weekData={weekData} />
+            : <div className="mr-empty"><div className="mr-empty-icon">🗓️</div><div className="mr-empty-title">Sin ventas individuales</div></div>
+        )}
+
+        {/* ══════════════ PROPINAS ══════════════ */}
+        {tab === 'propinas' && (
+          <PropinasTab
+            noLink={noLink} employee={employee}
+            byMonth={byMonth} monthsWithData={monthsWithData}
+            selMonth={selMonth} setSelMonth={setSelMonth} today={today}
+            icp={icp} activeName={activeName}
+            totals={{ curEarn, totalShifts, totalHours, totalEarned }}
+          />
+        )}
+
+        {/* ══════════════ COMPETENCIAS ══════════════ */}
+        {tab === 'competencias' && (
+          activeName
+            ? <CompetenciasTab comps={comps} activeName={activeName} dates={dates} dias={dias} pm={pm} today={today} />
+            : <div className="mr-empty"><div className="mr-empty-icon">🏆</div><div className="mr-empty-title">Sin competencias</div><div className="mr-empty-sub">Las competencias aplican a roles con venta individual.</div></div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Header (shell de Caja) ────────────────────────────────────
+function Header({ profile, name, navigate }: { profile: { role?: string; full_name?: string | null } | null; name: string; navigate: (to: string) => void }) {
+  return (
+    <div className="cd-module-header">
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <span className="tips-kanji" style={{ fontSize: '1.6rem' }}>人</span>
+        <div>
+          <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--t-ink)' }}>Mi Rendimiento</div>
+          <div style={{ fontSize: '0.68rem', letterSpacing: '0.15em', color: '#888', textTransform: 'uppercase' }}>
+            Satori · {name || profile?.full_name || 'Empleado'}
+          </div>
         </div>
-      ) : (
-        <div className="vt-content">
+        {profile?.role && <span className="role-badge">{ROLE_LABELS[profile.role] ?? profile.role}</span>}
+      </div>
+      <button className="cash-back-btn" onClick={() => navigate('/')}>← Inicio</button>
+    </div>
+  )
+}
 
-          {/* ══ HOY ══ */}
-          {tab === 'hoy' && (
-            <div className="vt-section">
-              <div className="vt-sl">{fmtDate(today)} — {activeName}</div>
-
-              {!todayAgg || todayAgg.days === 0 ? (
-                <div style={{ padding:'2rem', textAlign:'center', color:'#666', fontSize:'0.85rem' }}>
-                  Sin datos para hoy. El turno puede no estar cargado aún.
-                </div>
-              ) : (
-                <>
-                  {/* My KPIs vs General */}
-                  <div className="vt-kpi-grid">
-                    {[
-                      { label:'Ventas', mine: todayAgg.total,   gen: genToday.total,   fmt: fi,             color:'var(--vt-gold)' },
-                      { label:'PAX',    mine: todayAgg.pax,     gen: genToday.pax,     fmt:(v:number)=>String(Math.round(v)), color:'#aaa' },
-                      { label:'Prom/PAX', mine: todayAgg.promPax, gen: genToday.promPax, fmt: fi,           color:'var(--vt-gold)' },
-                      { label:'Beb/PAX',  mine: todayAgg.bebPax,  gen: genToday.bebPax,  fmt:(v:number)=>v.toFixed(2), color:'#7ec8a0' },
-                    ].map(k => {
-                      const diff = k.mine - k.gen
-                      const pct  = k.gen > 0 ? diff / k.gen * 100 : 0
-                      const col  = diff >= 0 ? 'var(--vt-green)' : 'var(--vt-red)'
-                      return (
-                        <div key={k.label} className="vt-kpi">
-                          <div className="vt-kpi-label">{k.label}</div>
-                          <div className="vt-kpi-val" style={{ color: k.color }}>{k.fmt(k.mine)}</div>
-                          {k.gen > 0 && (
-                            <div style={{ fontSize:'0.65rem', color:col, marginTop:2 }}>
-                              {diff >= 0 ? '▲ +' : '▼ '}{Math.abs(pct).toFixed(1)}% vs general
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                    <div className="vt-kpi">
-                      <div className="vt-kpi-label">Ratio C/B</div>
-                      <div className={`vt-kpi-val ${ratioCBClass(todayAgg.ratioCB)}`}>{todayAgg.ratioCB.toFixed(2)}:1</div>
-                      <div className="vt-kpi-sub">ideal 2.5–4.5</div>
-                    </div>
-                    <div className="vt-kpi">
-                      <div className="vt-kpi-label">Ticket/item</div>
-                      <div className="vt-kpi-val">{fi(todayAgg.promTicket)}</div>
-                      {genToday.promTicket > 0 && (
-                        <div style={{ fontSize:'0.65rem', color: todayAgg.promTicket >= genToday.promTicket ? 'var(--vt-green)' : 'var(--vt-red)', marginTop:2 }}>
-                          {todayAgg.promTicket >= genToday.promTicket ? '▲' : '▼'} vs {fi(genToday.promTicket)} gral
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Metas personales */}
-                  {metas && todayAgg && todayAgg.days > 0 && (() => {
-                    const metaPP  = getMeta(metas, activeName, 'promPax')
-                    const metaBP  = getMeta(metas, activeName, 'bebPax')
-                    const metaVt  = getMeta(metas, activeName, 'ventas')
-                    if (!metaPP && !metaBP && !metaVt) return null
-                    return (
-                      <>
-                        <div className="vt-sl">Mis metas del día</div>
-                        <div className="vt-kpi-grid" style={{ gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))' }}>
-                          {metaPP && (() => {
-                            const ok = todayAgg.promPax >= metaPP
-                            return (
-                              <div className="vt-kpi" style={{ borderLeftColor: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                                <div className="vt-kpi-label">Meta Prom/PAX</div>
-                                <div className="vt-kpi-val" style={{ color: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                                  {ok ? '✓' : '✗'} {fi(metaPP)}
-                                </div>
-                                <div className="vt-kpi-sub">Actual: {fi(todayAgg.promPax)}</div>
-                              </div>
-                            )
-                          })()}
-                          {metaBP && (() => {
-                            const ok = todayAgg.bebPax >= metaBP
-                            return (
-                              <div className="vt-kpi" style={{ borderLeftColor: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                                <div className="vt-kpi-label">Meta Beb/PAX</div>
-                                <div className="vt-kpi-val" style={{ color: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                                  {ok ? '✓' : '✗'} {metaBP.toFixed(2)}
-                                </div>
-                                <div className="vt-kpi-sub">Actual: {todayAgg.bebPax.toFixed(2)}</div>
-                              </div>
-                            )
-                          })()}
-                          {metaVt && (() => {
-                            const ok = todayAgg.total >= metaVt
-                            return (
-                              <div className="vt-kpi" style={{ borderLeftColor: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                                <div className="vt-kpi-label">Meta ventas</div>
-                                <div className="vt-kpi-val" style={{ color: ok ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                                  {ok ? '✓' : '✗'} {fi(metaVt)}
-                                </div>
-                                <div className="vt-kpi-sub">Actual: {fi(todayAgg.total)}</div>
-                              </div>
-                            )
-                          })()}
-                        </div>
-                      </>
-                    )
-                  })()}
-
-                  {/* Top 5 productos del día */}
-                  {top5Today.length > 0 && (
-                    <>
-                      <div className="vt-sl">Top productos de hoy</div>
-                      <div className="vt-prod-list">
-                        {top5Today.map((p, i) => (
-                          <div key={p.nombre} className="vt-prod-row">
-                            <div className="vt-prod-rank">{i + 1}</div>
-                            <div className="vt-prod-name">
-                              {p.nombre}
-                              {pm[p.nombre] && <span className={`vt-prod-tipo ${pm[p.nombre].tipo}`}>{pm[p.nombre].tipo}</span>}
-                            </div>
-                            <div className="vt-prod-stats">
-                              <span>{p.q} uds</span>
-                              <span>{fi(p.m)}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ══ HISTORIAL ══ */}
-          {tab === 'historial' && (
-            <div className="vt-section">
-              <div className="vt-sl">Últimos 60 días — {activeName}</div>
-
-              {histData.length === 0 ? (
-                <div style={{ padding:'2rem', textAlign:'center', color:'#666', fontSize:'0.85rem' }}>Sin datos en los últimos 60 días.</div>
-              ) : (
-                <>
-                  {/* Stats summary */}
-                  {(() => {
-                    const avgPP  = histData.reduce((s,d)=>s+d.promPax,0) / histData.length
-                    const avgBP  = histData.reduce((s,d)=>s+d.bebPax,0)  / histData.length
-                    const totVt  = histData.reduce((s,d)=>s+d.total,0)
-                    const totPax = histData.reduce((s,d)=>s+d.pax,0)
-                    // Trend: last 10 vs prior 10
-                    const last10 = histData.slice(-10)
-                    const prev10 = histData.slice(-20, -10)
-                    const trend  = prev10.length > 0
-                      ? (last10.reduce((s,d)=>s+d.promPax,0)/last10.length) - (prev10.reduce((s,d)=>s+d.promPax,0)/prev10.length)
-                      : 0
-                    return (
-                      <div className="vt-kpi-grid" style={{ marginBottom:'1.5rem' }}>
-                        <div className="vt-kpi red">
-                          <div className="vt-kpi-label">Ventas totales</div>
-                          <div className="vt-kpi-val">{fi(totVt)}</div>
-                          <div className="vt-kpi-sub">{histData.length} días trabajados</div>
-                        </div>
-                        <div className="vt-kpi">
-                          <div className="vt-kpi-label">Prom/PAX promedio</div>
-                          <div className="vt-kpi-val">{fi(avgPP)}</div>
-                        </div>
-                        <div className="vt-kpi">
-                          <div className="vt-kpi-label">Beb/PAX promedio</div>
-                          <div className="vt-kpi-val">{avgBP.toFixed(2)}</div>
-                        </div>
-                        <div className="vt-kpi">
-                          <div className="vt-kpi-label">PAX totales</div>
-                          <div className="vt-kpi-val">{totPax.toLocaleString('es-CR')}</div>
-                        </div>
-                        <div className="vt-kpi" style={{ borderLeftColor: trend >= 0 ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                          <div className="vt-kpi-label">Tendencia (últ. 10 días)</div>
-                          <div className="vt-kpi-val" style={{ color: trend >= 0 ? 'var(--vt-green)' : 'var(--vt-red)', fontSize:'0.9rem' }}>
-                            {trend >= 0 ? '▲ +' : '▼ '}{fi(Math.abs(trend))}/PAX
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Mini bar chart: promPax per worked day */}
-                  <div className="vt-sl">Prom/PAX — evolución</div>
-                  <div style={{ display:'flex', alignItems:'flex-end', gap:2, height:80, marginBottom:'0.5rem', overflowX:'auto', paddingBottom:4 }}>
-                    {histData.map((d, i) => {
-                      const h    = Math.round((d.promPax / maxPromPax) * 100)
-                      const aboveGen = d.promPax >= d.genPromPax
-                      return (
-                        <div key={d.date} style={{ display:'flex', flexDirection:'column', alignItems:'center', flex:'0 0 auto', width:16 }}
-                          title={`${fmtDate(d.date)}: ${fi(d.promPax)}`}>
-                          <div style={{ height:`${h}%`, width:12, borderRadius:'2px 2px 0 0', background: aboveGen ? 'var(--vt-green)' : 'var(--vt-red)', opacity: i === histData.length-1 ? 1 : 0.7 }}/>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  <div style={{ fontSize:'0.62rem', color:'#444', display:'flex', gap:'0.75rem' }}>
-                    <span style={{ color:'var(--vt-green)' }}>■ Por encima del promedio general</span>
-                    <span style={{ color:'var(--vt-red)' }}>■ Por debajo del promedio general</span>
-                  </div>
-
-                  {/* Daily history table */}
-                  <div className="vt-sl" style={{ marginTop:'1.25rem' }}>Detalle por fecha</div>
-                  <div className="vt-tbl-wrap">
-                    <table className="vt-tbl">
-                      <thead>
-                        <tr>
-                          <th>Fecha</th>
-                          <th>Día</th>
-                          <th className="r">PAX</th>
-                          <th className="r">Ventas</th>
-                          <th className="r">Prom/PAX</th>
-                          <th className="r">Beb/PAX</th>
-                          <th className="r" style={{ fontSize:'0.65rem', color:'#555' }}>vs General</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...histData].reverse().map(d => {
-                          const diff = d.promPax - d.genPromPax
-                          const col  = diff >= 0 ? 'var(--vt-green)' : 'var(--vt-red)'
-                          return (
-                            <tr key={d.date}>
-                              <td style={{ fontSize:'0.78rem' }}>{fmtDate(d.date)}</td>
-                              <td style={{ color:'#666', fontSize:'0.78rem' }}>{DAYS_SHORT[d.dow]}</td>
-                              <td className="r">{d.pax}</td>
-                              <td className="r vt-bold">{fi(d.total)}</td>
-                              <td className="r" style={{ color:'var(--vt-gold)' }}>{fi(d.promPax)}</td>
-                              <td className="r">{d.bebPax.toFixed(2)}</td>
-                              <td className="r" style={{ color:col, fontSize:'0.72rem', fontWeight:600 }}>
-                                {diff >= 0 ? '▲ +' : '▼ '}{Math.abs(diff / d.genPromPax * 100).toFixed(1)}%
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ══ SEMANA ══ */}
-          {tab === 'semana' && (
-            <div className="vt-section">
-              <div className="vt-sl">Por semana — {activeName}</div>
-              {weekData.length === 0 ? (
-                <div style={{ padding:'2rem', textAlign:'center', color:'#666', fontSize:'0.85rem' }}>Sin datos semanales.</div>
-              ) : (
-                <>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:'0.75rem', marginBottom:'1.5rem' }}>
-                    {weekData.map((w, i) => (
-                      <div key={w.label} style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.875rem', borderLeft: i===0 ? '3px solid var(--vt-gold)' : '3px solid #222' }}>
-                        <div style={{ fontSize:'0.68rem', letterSpacing:'0.1em', textTransform:'uppercase', color: i===0 ? 'var(--vt-gold)' : '#555', marginBottom:'0.5rem', fontWeight:700 }}>
-                          {w.label}
-                        </div>
-                        {w.days > 0 ? (
-                          <>
-                            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1rem', fontWeight:800, color:'var(--vt-gold)', marginBottom:4 }}>{fi(w.total)}</div>
-                            <div style={{ fontSize:'0.72rem', color:'#888' }}>{w.days} días · {w.pax} PAX</div>
-                            <div style={{ fontSize:'0.75rem', color:'#aaa', marginTop:4 }}>
-                              {fi(w.promPax)}/PAX · {w.bebPax.toFixed(2)} beb/PAX
-                            </div>
-                            {i > 0 && weekData[0].promPax > 0 && (
-                              <div style={{ fontSize:'0.68rem', marginTop:4, color: weekData[0].promPax >= w.promPax ? 'var(--vt-green)' : 'var(--vt-red)' }}>
-                                {weekData[0].promPax >= w.promPax ? '▲ Mejor' : '▼ Peor'} que ahora
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div style={{ color:'#333', fontSize:'0.78rem' }}>Sin datos</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Weekly detail table */}
-                  <div className="vt-tbl-wrap">
-                    <table className="vt-tbl">
-                      <thead>
-                        <tr>
-                          <th>Semana</th>
-                          <th className="r">Días</th>
-                          <th className="r">PAX</th>
-                          <th className="r">Ventas</th>
-                          <th className="r">Prom/PAX</th>
-                          <th className="r">Beb/PAX</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {weekData.filter(w => w.days > 0).map((w, i) => (
-                          <tr key={w.label} style={{ fontWeight: i===0 ? 700 : 400 }}>
-                            <td style={{ color: i===0 ? 'var(--vt-gold-dark,#a07830)' : undefined }}>{w.label}</td>
-                            <td className="r">{w.days}</td>
-                            <td className="r">{w.pax}</td>
-                            <td className="r vt-bold">{fi(w.total)}</td>
-                            <td className="r" style={{ color:'var(--vt-gold)' }}>{fi(w.promPax)}</td>
-                            <td className="r">{w.bebPax.toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ══ COMPETENCIAS ══ */}
-          {tab === 'competencias' && (
-            <div className="vt-section">
-              <div className="vt-sl">Mis competencias — {activeName}</div>
-
-              {(() => {
-                const today = todayCR()
-                // Competitions the salonero participates in
-                const myComps = comps.filter(c => c.parts?.includes(activeName))
-                if (!myComps.length) {
-                  return (
-                    <div style={{ padding:'2rem', textAlign:'center', color:'#666', fontSize:'0.85rem' }}>
-                      No estás participando en ninguna competencia activa.<br/>
-                      <span style={{ fontSize:'0.72rem', color:'#444' }}>El encargado puede crear competencias en Ventas → Competencias.</span>
-                    </div>
-                  )
-                }
-
-                // Sort: active first, then upcoming, then finished
-                const sorted = [...myComps].sort((a, b) => {
-                  const status = (c: Comp) => today > c.fin ? 2 : today < c.inicio ? 1 : 0
-                  return status(a) - status(b)
-                })
-
-                return sorted.map(comp => {
-                  const status  = today > comp.fin ? 'finished' : today < comp.inicio ? 'upcoming' : 'active'
-                  const total   = Math.max(1, Math.ceil((new Date(comp.fin).getTime() - new Date(comp.inicio).getTime()) / 86400000))
-                  const elapsed = Math.min(Math.max(Math.ceil((new Date(today).getTime() - new Date(comp.inicio).getTime()) / 86400000), 0), total)
-                  const pct     = (elapsed / total * 100).toFixed(0)
-
-                  // Build ranking
-                  const ranking = (comp.parts ?? []).map(sal => {
-                    const compDates = dates.filter(d => d >= comp.inicio && d <= comp.fin)
-                    const salAgg    = aggSalonero(sal, compDates, dias, pm)
-                    let pts = 0
-                    for (const prod of (comp.prods ?? [])) {
-                      const q = Object.entries(salAgg.prods).find(([n]) => n === (typeof prod === 'string' ? prod : prod.name))?.[1]?.q ?? 0
-                      pts += q * (typeof prod === 'string' ? 1 : prod.pts)
-                    }
-                    return { sal, pts }
-                  }).sort((a, b) => b.pts - a.pts)
-
-                  const myRank = ranking.findIndex(r => r.sal === activeName) + 1
-                  const myPts  = ranking.find(r => r.sal === activeName)?.pts ?? 0
-                  const leader = ranking[0]
-
-                  const statusColor = status === 'active' ? 'var(--vt-green)' : status === 'upcoming' ? '#c8a96e' : '#555'
-                  const statusLabel = status === 'active' ? '● En curso' : status === 'upcoming' ? '○ Próxima' : '✓ Finalizada'
-
-                  return (
-                    <div key={comp.id} style={{ background:'var(--vt-ink)', borderRadius:2, padding:'1rem', marginBottom:'0.75rem', borderLeft:`3px solid ${statusColor}` }}>
-                      {/* Header */}
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'0.625rem' }}>
-                        <div>
-                          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'0.95rem', fontWeight:800, color:'var(--vt-paper)' }}>{comp.nombre}</div>
-                          <div style={{ fontSize:'0.68rem', color:'#555', marginTop:2 }}>
-                            {comp.inicio} → {comp.fin}
-                            {comp.premio && <span style={{ color:'var(--vt-gold)', marginLeft:'0.5rem' }}>🏅 {comp.premio}</span>}
-                          </div>
-                        </div>
-                        <span style={{ fontSize:'0.68rem', color:statusColor, fontWeight:600 }}>{statusLabel}</span>
-                      </div>
-
-                      {/* My position */}
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'0.5rem', marginBottom:'0.75rem' }}>
-                        <div style={{ background:'#111', borderRadius:2, padding:'0.5rem', textAlign:'center' }}>
-                          <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>Mi posición</div>
-                          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.4rem', fontWeight:800, color: myRank === 1 ? 'var(--vt-gold)' : myRank <= 3 ? '#7ec8a0' : '#888' }}>
-                            {myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : `#${myRank}`}
-                          </div>
-                        </div>
-                        <div style={{ background:'#111', borderRadius:2, padding:'0.5rem', textAlign:'center' }}>
-                          <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>Mis puntos</div>
-                          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:'1.4rem', fontWeight:800, color:'var(--vt-gold)' }}>{myPts}</div>
-                        </div>
-                        <div style={{ background:'#111', borderRadius:2, padding:'0.5rem', textAlign:'center' }}>
-                          <div style={{ fontSize:'0.6rem', color:'#555', textTransform:'uppercase', letterSpacing:'0.1em' }}>Líder</div>
-                          <div style={{ fontSize:'0.75rem', fontWeight:700, color:'#c8a96e', marginTop:4 }}>{leader?.sal ?? '—'}</div>
-                          <div style={{ fontSize:'0.7rem', color:'#888' }}>{leader?.pts ?? 0} pts</div>
-                        </div>
-                      </div>
-
-                      {/* Progress bar */}
-                      {status === 'active' && (
-                        <div style={{ marginBottom:'0.75rem' }}>
-                          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.65rem', color:'#555', marginBottom:4 }}>
-                            <span>Progreso · día {elapsed} de {total}</span>
-                            <span>{pct}%</span>
-                          </div>
-                          <div style={{ height:4, background:'#1a1a1a', borderRadius:2, overflow:'hidden' }}>
-                            <div style={{ height:'100%', width:`${pct}%`, background:'var(--vt-gold)', borderRadius:2 }}/>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Productos a vender */}
-                      <div style={{ display:'flex', gap:'0.3rem', flexWrap:'wrap', marginBottom:'0.5rem' }}>
-                        {(comp.prods ?? []).map((p, i) => (
-                          <span key={i} style={{ fontSize:'0.68rem', background:'#1a1a1a', color:'#c8a96e', padding:'2px 8px', borderRadius:2, border:'1px solid #2a2a2a' }}>
-                            📦 {typeof p === 'string' ? p : p.name} · {typeof p === 'string' ? 1 : p.pts} pts
-                          </span>
-                        ))}
-                      </div>
-
-                      {/* Full ranking */}
-                      {ranking.length > 0 && (
-                        <div className="vt-tbl-wrap" style={{ marginTop:'0.5rem' }}>
-                          <table className="vt-tbl" style={{ fontSize:'0.8rem' }}>
-                            <thead>
-                              <tr>
-                                <th style={{ width:32 }}>#</th>
-                                <th>Salonero</th>
-                                <th className="r">Puntos</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {ranking.map((r, i) => (
-                                <tr key={r.sal} style={{ background: r.sal === activeName ? 'rgba(200,169,110,.08)' : undefined, fontWeight: r.sal === activeName ? 700 : 400 }}>
-                                  <td style={{ color: i === 0 ? 'var(--vt-gold)' : '#666', fontWeight:700 }}>
-                                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                                  </td>
-                                  <td style={{ color: r.sal === activeName ? 'var(--vt-gold)' : undefined }}>
-                                    {r.sal === activeName ? `▶ ${r.sal}` : r.sal}
-                                  </td>
-                                  <td className="r" style={{ fontWeight:700, color: r.sal === activeName ? 'var(--vt-gold)' : 'var(--vt-paper)' }}>{r.pts}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })
-              })()}
-            </div>
-          )}
-
+// ── KPI card (reutiliza .cd-saldo-card) ───────────────────────
+function Kpi({ label, value, accent, delta, meta, sub }: {
+  label: string; value: string; accent?: string
+  delta?: { pct: number; ref: string } | null
+  meta?: { pctOfMeta: number } | null
+  sub?: string
+}) {
+  return (
+    <div className="cd-saldo-card" style={accent ? { borderLeftColor: accent } : undefined}>
+      <div className="cd-saldo-label">{label}</div>
+      <div className="cd-saldo-val" style={accent ? { color: accent } : undefined}>{value}</div>
+      {delta && (
+        <div className={`mr-delta ${delta.pct >= 0 ? 'up' : 'down'}`}>
+          {delta.pct >= 0 ? '▲ +' : '▼ '}{Math.abs(delta.pct).toFixed(1)}% {delta.ref}
         </div>
       )}
+      {meta && (
+        <div className="mr-meta-chip" style={{ background: metaCol(meta.pctOfMeta / 100) + '22', color: metaCol(meta.pctOfMeta / 100) }}>
+          {meta.pctOfMeta.toFixed(0)}% de meta
+        </div>
+      )}
+      {sub && <div className="mr-kpi-sub">{sub}</div>}
     </div>
+  )
+}
+
+// ── RESUMEN ───────────────────────────────────────────────────
+function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
+  myAgg: ReturnType<typeof aggSalonero> | null
+  genAgg: ReturnType<typeof aggGeneral>
+  metas?: Meta; activeName: string; pm: ProductMap
+  dayRank: { pos: number; of: number } | null
+  period: ReturnType<typeof resolvePeriod>
+}) {
+  if (!myAgg || myAgg.days === 0) {
+    return (
+      <div className="mr-empty">
+        <div className="mr-empty-icon">🌙</div>
+        <div className="mr-empty-title">Sin datos en este período</div>
+        <div className="mr-empty-sub">Probá con “Este mes” o un rango más amplio. El turno puede no estar cargado aún.</div>
+      </div>
+    )
+  }
+  const delta = (mine: number, gen: number) => (gen > 0 ? { pct: (mine - gen) / gen * 100, ref: 'vs general' } : null)
+  const metaChip = (metric: 'promPax' | 'bebPax' | 'ratioCB' | 'ventas' | 'ticketItem', actual: number) => {
+    if (!metas) return null
+    const m = getMeta(metas, activeName, metric)
+    if (!m) return null
+    return { pctOfMeta: actual / m * 100 }
+  }
+  const top5 = topProds(myAgg.prods, 'monto', 5, undefined, pm)
+
+  return (
+    <>
+      <div className="vt-sl">{period.label} · {activeName} · {myAgg.days} día{myAgg.days !== 1 ? 's' : ''}</div>
+
+      {dayRank && (
+        <div className="mr-card accent" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ fontSize: '1.5rem' }}>{dayRank.pos === 1 ? '🥇' : dayRank.pos === 2 ? '🥈' : dayRank.pos === 3 ? '🥉' : '🏅'}</span>
+          <div>
+            <div style={{ fontWeight: 800, fontFamily: "'DM Mono',monospace", fontSize: '1.05rem', color: 'var(--t-ink)' }}>
+              #{dayRank.pos} <span style={{ color: '#8a8070', fontWeight: 400 }}>de {dayRank.of} en ventas hoy</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="cd-saldos-bar">
+        <Kpi label="Ventas"   value={fi(myAgg.total)} accent="#c8a96e" delta={delta(myAgg.total, genAgg.total)} meta={metaChip('ventas', myAgg.total)} />
+        <Kpi label="PAX"      value={String(Math.round(myAgg.pax))} delta={delta(myAgg.pax, genAgg.pax)} />
+        <Kpi label="Prom/PAX" value={fi(myAgg.promPax)} accent="#27874f" delta={delta(myAgg.promPax, genAgg.promPax)} meta={metaChip('promPax', myAgg.promPax)} />
+        <Kpi label="Beb/PAX"  value={myAgg.bebPax.toFixed(2)} accent="#2a7a6a" delta={delta(myAgg.bebPax, genAgg.bebPax)} meta={metaChip('bebPax', myAgg.bebPax)} />
+      </div>
+
+      <div className="vt-sl">Detalle</div>
+      <div className="cd-saldos-bar">
+        <Kpi label="Ratio C/B (₡)"  value={`${myAgg.ratioCB.toFixed(2)}:1`} sub="ideal 2.5–4.5" meta={metaChip('ratioCB', myAgg.ratioCB)} />
+        <Kpi label="Ratio C/B (uds)" value={`${myAgg.ratioU.toFixed(2)}:1`} sub={`${Math.round(myAgg.iCom)} com · ${Math.round(myAgg.iBeb)} beb`} />
+        <Kpi label="Prom/Plato"     value={fi(myAgg.promPlato)} />
+        <Kpi label="Prom/Bebida"    value={fi(myAgg.promBebida)} />
+        <Kpi label="Ticket / item"  value={fi(myAgg.promTicket)} meta={metaChip('ticketItem', myAgg.promTicket)}
+             delta={genAgg.promTicket > 0 ? { pct: (myAgg.promTicket - genAgg.promTicket) / genAgg.promTicket * 100, ref: 'vs general' } : null} />
+      </div>
+
+      {top5.length > 0 && (
+        <>
+          <div className="vt-sl">Top productos del período</div>
+          <div className="mr-prod-block">
+            {top5.map((p, i) => (
+              <div key={p.nombre} className="mr-prod-row">
+                <span className="mr-prod-rank">{i + 1}</span>
+                <span className="mr-prod-name">
+                  {p.nombre}
+                  {pm[p.nombre] && <span className={`vt-prod-tipo ${pm[p.nombre].tipo}`} style={{ marginLeft: '0.4rem' }}>{pm[p.nombre].tipo}</span>}
+                </span>
+                <span style={{ fontSize: '0.72rem', color: '#8a8070', flexShrink: 0 }}>{p.q} uds</span>
+                <span className="mr-prod-val">{fi(p.m)}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+// ── POR DÍA ───────────────────────────────────────────────────
+function DiaTab({ dowRows, bestDow, maxDowProm }: {
+  dowRows: ReturnType<typeof dowBreakdown>; bestDow: number; maxDowProm: number
+}) {
+  const worked = dowRows.filter(r => r.days > 0)
+  if (worked.length === 0) {
+    return <div className="mr-empty"><div className="mr-empty-icon">📅</div><div className="mr-empty-title">Sin datos en este período</div><div className="mr-empty-sub">Elegí un período con turnos trabajados.</div></div>
+  }
+  const ordered = DOW_ORDER.map(d => dowRows[d])
+
+  return (
+    <>
+      <div className="vt-sl">Promedio por día de la semana</div>
+      <div className="mr-dow-grid">
+        {ordered.map(r => {
+          const has = r.days > 0
+          const best = r.dow === bestDow
+          return (
+            <div key={r.dow} className={`mr-dow-card ${best ? 'best' : ''} ${has ? '' : 'empty'}`}>
+              <div className="mr-dow-day">{dowLabel(r.dow)}</div>
+              <div className="mr-dow-val">{has ? fi(r.mine.promPax) : '—'}</div>
+              {has && (
+                <>
+                  <div className="mr-dow-sub">{Math.round(r.mine.pax / r.days)} PAX · {r.mine.bebPax.toFixed(2)} b/px</div>
+                  <div className="mr-dow-sub">C/B {r.mine.ratioCB.toFixed(1)}</div>
+                </>
+              )}
+              {best && <span className="mr-dow-badge">★ Mejor día</span>}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Gráfico de barras Prom/PAX */}
+      <div className="vt-sl">Prom/PAX por día</div>
+      <div className="mr-bars">
+        {ordered.map(r => {
+          const h = r.days > 0 ? Math.max(6, Math.round(r.mine.promPax / maxDowProm * 100)) : 0
+          return (
+            <div key={r.dow} className="mr-bar-col">
+              <div className="mr-bar-track">
+                {r.days > 0 && <div className={`mr-bar-fill ${r.dow === bestDow ? 'best' : ''}`} style={{ height: `${h}%` }} title={fi(r.mine.promPax)} />}
+              </div>
+              <div className="mr-bar-lbl">{dowLabel(r.dow)}</div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Tabla yo vs resto del restaurante */}
+      <div className="vt-sl" style={{ marginTop: '1.25rem' }}>Yo vs restaurante</div>
+      <div className="mr-tbl-wrap">
+        <table className="mr-tbl">
+          <thead>
+            <tr>
+              <th>Día</th>
+              <th className="r">Días</th>
+              <th className="r">Mi Prom/PAX</th>
+              <th className="r">Rest. Prom/PAX</th>
+              <th className="r">Dif.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ordered.filter(r => r.days > 0).map(r => {
+              const diff = r.rest.promPax > 0 ? (r.mine.promPax - r.rest.promPax) / r.rest.promPax * 100 : 0
+              return (
+                <tr key={r.dow} className={r.dow === bestDow ? 'best' : ''}>
+                  <td>{dowLabel(r.dow)}{r.dow === bestDow ? ' ★' : ''}</td>
+                  <td className="r muted">{r.days}</td>
+                  <td className="r" style={{ fontWeight: 700 }}>{fi(r.mine.promPax)}</td>
+                  <td className="r muted">{fi(r.rest.promPax)}</td>
+                  <td className="r" style={{ color: diff >= 0 ? '#27874f' : '#c0392b', fontWeight: 700 }}>
+                    {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ── PRODUCTOS ─────────────────────────────────────────────────
+function ProductosTab({ myAgg, pm, mode, setMode }: {
+  myAgg: ReturnType<typeof aggSalonero> | null; pm: ProductMap
+  mode: 'monto' | 'unidades'; setMode: (m: 'monto' | 'unidades') => void
+}) {
+  if (!myAgg || Object.keys(myAgg.prods).length === 0) {
+    return <div className="mr-empty"><div className="mr-empty-icon">🍱</div><div className="mr-empty-title">Sin productos en este período</div></div>
+  }
+  const blocks: { title: string; tipos?: string[] }[] = [
+    { title: 'General' },
+    { title: 'Comidas', tipos: ['comida'] },
+    { title: 'Bebidas', tipos: ['bebida'] },
+  ]
+  return (
+    <>
+      <div className="mr-period-bar">
+        <span className="mr-period-lbl">Ver por</span>
+        <div className="vt-tab-group">
+          <button className={`vt-tab-btn ${mode === 'monto' ? 'active' : ''}`} onClick={() => setMode('monto')}>₡ Monto</button>
+          <button className={`vt-tab-btn ${mode === 'unidades' ? 'active' : ''}`} onClick={() => setMode('unidades')}>Unidades</button>
+        </div>
+      </div>
+      {blocks.map(b => {
+        const list = topProds(myAgg.prods, mode, 8, b.tipos, pm)
+        if (list.length === 0) return null
+        const max = Math.max(1, ...list.map(p => (mode === 'monto' ? p.m : p.q)))
+        return (
+          <div key={b.title} className="mr-prod-block">
+            <div className="mr-prod-hd">{b.title}</div>
+            {list.map((p, i) => {
+              const val = mode === 'monto' ? p.m : p.q
+              return (
+                <div key={p.nombre} className="mr-prod-row">
+                  <span className="mr-prod-rank">{i + 1}</span>
+                  <span className="mr-prod-name">
+                    {p.nombre}
+                    {pm[p.nombre] && <span className={`vt-prod-tipo ${pm[p.nombre].tipo}`} style={{ marginLeft: '0.4rem' }}>{pm[p.nombre].tipo}</span>}
+                  </span>
+                  <div className="mr-prod-bar"><div className="mr-prod-bar-fill" style={{ width: `${val / max * 100}%` }} /></div>
+                  <span className="mr-prod-val">{mode === 'monto' ? fi(p.m) : `${p.q} uds`}</span>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+// ── SEMANA ────────────────────────────────────────────────────
+function SemanaTab({ weekData }: { weekData: Array<{ label: string; promPax: number; bebPax: number; total: number; pax: number; days: number }> }) {
+  if (weekData.length === 0) return <div className="mr-empty"><div className="mr-empty-icon">🗓️</div><div className="mr-empty-title">Sin datos semanales</div></div>
+  return (
+    <>
+      <div className="vt-sl">Semanas calendario</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        {weekData.map((w, i) => (
+          <div key={w.label} className={`mr-card ${i === 0 ? 'accent' : ''}`}>
+            <div style={{ fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: i === 0 ? '#a07830' : '#8a8070', fontWeight: 700, marginBottom: '0.4rem' }}>{w.label}</div>
+            {w.days > 0 ? (
+              <>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.05rem', fontWeight: 800, color: 'var(--t-ink)' }}>{fi(w.total)}</div>
+                <div style={{ fontSize: '0.72rem', color: '#8a8070', marginTop: 2 }}>{w.days} días · {w.pax} PAX</div>
+                <div style={{ fontSize: '0.74rem', color: '#5a5040', marginTop: 2 }}>{fi(w.promPax)}/PAX · {w.bebPax.toFixed(2)} b/px</div>
+              </>
+            ) : <div style={{ color: '#b8ad98', fontSize: '0.78rem' }}>Sin datos</div>}
+          </div>
+        ))}
+      </div>
+      <div className="mr-tbl-wrap">
+        <table className="mr-tbl">
+          <thead><tr><th>Semana</th><th className="r">Días</th><th className="r">PAX</th><th className="r">Ventas</th><th className="r">Prom/PAX</th></tr></thead>
+          <tbody>
+            {weekData.filter(w => w.days > 0).map((w, i) => (
+              <tr key={w.label} style={{ fontWeight: i === 0 ? 700 : 400 }}>
+                <td style={{ color: i === 0 ? '#a07830' : undefined }}>{w.label}</td>
+                <td className="r muted">{w.days}</td>
+                <td className="r">{w.pax}</td>
+                <td className="r" style={{ fontWeight: 700 }}>{fi(w.total)}</td>
+                <td className="r">{fi(w.promPax)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ── PROPINAS ──────────────────────────────────────────────────
+function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setSelMonth, today, icp, activeName, totals }: {
+  noLink: boolean; employee: Employee | null
+  byMonth: Record<string, { q1Days: number; q1Hours: number; q1Earn: number; q2Days: number; q2Hours: number; q2Earn: number }>
+  monthsWithData: string[]
+  selMonth: string; setSelMonth: (m: string) => void; today: string
+  icp: { mine: number; team: number; diff: number; myProp: number; myVentas: number; teamProp: number; teamVentas: number }
+  activeName: string
+  totals: { curEarn: number; totalShifts: number; totalHours: number; totalEarned: number }
+}) {
+  if (noLink && !employee) {
+    return (
+      <div className="mr-empty">
+        <div className="mr-empty-icon">🔗</div>
+        <div className="mr-empty-title">Perfil no vinculado</div>
+        <div className="mr-empty-sub">Tu cuenta no está vinculada a un empleado todavía. Pedile al dueño que la vincule en Admin → Empleados.</div>
+      </div>
+    )
+  }
+
+  const curYm = today.slice(0, 7)
+  const sel = byMonth[selMonth]
+  const total = sel ? sel.q1Earn + sel.q2Earn : 0
+  const canNext = selMonth < curYm
+  const showIcp = activeName && icp.myVentas > 0
+
+  return (
+    <>
+      {/* Totales */}
+      <div className="cd-saldos-bar">
+        <Kpi label="Este mes"        value={fi(totals.curEarn)} accent="#2a7a6a" />
+        <Kpi label="Turnos (12m)"    value={String(totals.totalShifts)} />
+        <Kpi label="Horas (12m)"     value={totals.totalHours.toFixed(0) + 'h'} />
+        <Kpi label="Total cobrado"   value={fi(totals.totalEarned)} accent="#c8a96e" sub="últimos 12 meses" />
+      </div>
+
+      {/* Selector de mes */}
+      <div className="mr-period-bar" style={{ justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button className="vt-range-btn" onClick={() => setSelMonth(shiftMonth(selMonth, -1))}>← Mes ant.</button>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: 'var(--t-ink)', minWidth: 120, textAlign: 'center' }}>{monthLabelLong(selMonth)}</span>
+          <button className="vt-range-btn" disabled={!canNext} style={canNext ? undefined : { opacity: 0.4, cursor: 'default' }} onClick={() => canNext && setSelMonth(shiftMonth(selMonth, 1))}>Mes sig. →</button>
+        </div>
+        {monthsWithData.length > 0 && (
+          <select className="mr-select" value={monthsWithData.includes(selMonth) ? selMonth : ''} onChange={e => e.target.value && setSelMonth(e.target.value)}>
+            <option value="">Ir a mes…</option>
+            {monthsWithData.map(ym => <option key={ym} value={ym}>{monthLabelLong(ym)}</option>)}
+          </select>
+        )}
+      </div>
+
+      {/* ICP + benchmark del equipo */}
+      {showIcp ? (
+        <>
+          <div className="vt-sl">ICP · Índice de Conversión de Propinas</div>
+          <div className="mr-icp">
+            <div className="mr-icp-card">
+              <div className="mr-icp-label">Mi ICP · {monthLabelLong(selMonth)}</div>
+              <div className="mr-icp-val">{icp.mine.toFixed(1)}%</div>
+              <div className="mr-icp-sub">{fi(icp.myProp)} propina / {fi(icp.myVentas)} ventas</div>
+            </div>
+            <div className="mr-icp-card team">
+              <div className="mr-icp-label">Equipo (benchmark)</div>
+              <div className="mr-icp-val">{icp.team.toFixed(1)}%</div>
+              <div className="mr-icp-sub" style={{ color: icp.diff >= 0 ? '#27874f' : '#c0392b', fontWeight: 700 }}>
+                {icp.diff >= 0 ? '▲ +' : '▼ '}{Math.abs(icp.diff).toFixed(1)} pts vs equipo
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="mr-icp-sub" style={{ marginBottom: '1rem' }}>
+          {activeName ? 'Sin ventas registradas este mes para calcular el ICP.' : 'El ICP compara propina vs ventas (roles con venta individual).'}
+        </div>
+      )}
+
+      {/* Detalle quincenal del mes */}
+      <div className="vt-sl">Detalle · {monthLabelLong(selMonth)}</div>
+      {!sel ? (
+        <div className="mr-empty"><div className="mr-empty-icon">📭</div><div className="mr-empty-title">Sin registros ese mes</div></div>
+      ) : (
+        <div className="mr-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <span style={{ fontWeight: 700, color: 'var(--t-ink)' }}>{monthLabelLong(selMonth)}</span>
+            <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: '#2a7a6a', fontSize: '1.05rem' }}>{fi(total)}</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            {[
+              { label: 'Q1 (1–15)',   days: sel.q1Days, hours: sel.q1Hours, earn: sel.q1Earn, color: '#2a7a6a' },
+              { label: 'Q2 (16–fin)', days: sel.q2Days, hours: sel.q2Hours, earn: sel.q2Earn, color: '#a07830' },
+            ].map(q => (
+              <div key={q.label} style={{ background: 'var(--t-panel)', borderRadius: 3, padding: '0.6rem 0.75rem' }}>
+                <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6a6250', marginBottom: '0.25rem' }}>{q.label}</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, fontSize: '0.95rem', color: q.color }}>{q.earn > 0 ? fi(q.earn) : '—'}</div>
+                <div style={{ fontSize: '0.64rem', color: '#8a8070', marginTop: '0.15rem' }}>{q.days} turnos · {q.hours.toFixed(1)}h</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Histórico por mes */}
+      {monthsWithData.length > 0 && (
+        <>
+          <div className="vt-sl">Histórico</div>
+          <div className="mr-tbl-wrap">
+            <table className="mr-tbl">
+              <thead><tr><th>Mes</th><th className="r">Turnos</th><th className="r">Horas</th><th className="r">Q1</th><th className="r">Q2</th><th className="r">Total</th></tr></thead>
+              <tbody>
+                {monthsWithData.map(ym => {
+                  const d = byMonth[ym]
+                  const t = d.q1Earn + d.q2Earn
+                  const isSel = ym === selMonth
+                  return (
+                    <tr key={ym} className={isSel ? 'best' : ''} style={{ cursor: 'pointer' }} onClick={() => setSelMonth(ym)}>
+                      <td style={{ fontWeight: isSel ? 700 : 400 }}>{MONTHS_SHORT[Number(ym.slice(5, 7)) - 1]} {ym.slice(2, 4)}</td>
+                      <td className="r muted">{d.q1Days + d.q2Days}</td>
+                      <td className="r muted">{(d.q1Hours + d.q2Hours).toFixed(0)}h</td>
+                      <td className="r" style={{ color: '#2a7a6a' }}>{d.q1Earn > 0 ? fi(d.q1Earn) : '—'}</td>
+                      <td className="r" style={{ color: '#a07830' }}>{d.q2Earn > 0 ? fi(d.q2Earn) : '—'}</td>
+                      <td className="r" style={{ fontWeight: 700 }}>{fi(t)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+// ── COMPETENCIAS ──────────────────────────────────────────────
+function CompetenciasTab({ comps, activeName, dates, dias, pm, today }: {
+  comps: Comp[]; activeName: string; dates: string[]; dias: DiasMap; pm: ProductMap; today: string
+}) {
+  const myComps = comps.filter(c => c.parts?.includes(activeName))
+  if (myComps.length === 0) {
+    return (
+      <div className="mr-empty">
+        <div className="mr-empty-icon">🏆</div>
+        <div className="mr-empty-title">Sin competencias activas</div>
+        <div className="mr-empty-sub">El encargado puede crear competencias en Ventas → Competencias.</div>
+      </div>
+    )
+  }
+  const sorted = [...myComps].sort((a, b) => {
+    const st = (c: Comp) => today > c.fin ? 2 : today < c.inicio ? 1 : 0
+    return st(a) - st(b)
+  })
+  return (
+    <>
+      <div className="vt-sl">Mis competencias · {activeName}</div>
+      {sorted.map(comp => {
+        const status = today > comp.fin ? 'finished' : today < comp.inicio ? 'upcoming' : 'active'
+        const ranking = (comp.parts ?? []).map(sal => {
+          const compDates = dates.filter(d => d >= comp.inicio && d <= comp.fin)
+          const salAgg = aggSalonero(sal, compDates, dias, pm)
+          let pts = 0
+          for (const prod of (comp.prods ?? [])) {
+            const q = Object.entries(salAgg.prods).find(([n]) => n === (typeof prod === 'string' ? prod : prod.name))?.[1]?.q ?? 0
+            pts += q * (typeof prod === 'string' ? 1 : prod.pts)
+          }
+          return { sal, pts }
+        }).sort((a, b) => b.pts - a.pts)
+        const myRank = ranking.findIndex(r => r.sal === activeName) + 1
+        const myPts  = ranking.find(r => r.sal === activeName)?.pts ?? 0
+        const leader = ranking[0]
+        const statusColor = status === 'active' ? '#27874f' : status === 'upcoming' ? '#c8a030' : '#8a8070'
+        const statusLabel = status === 'active' ? '● En curso' : status === 'upcoming' ? '○ Próxima' : '✓ Finalizada'
+        return (
+          <div key={comp.id} className="mr-card" style={{ borderLeft: `3px solid ${statusColor}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.6rem' }}>
+              <div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '0.95rem', fontWeight: 800, color: 'var(--t-ink)' }}>{comp.nombre}</div>
+                <div style={{ fontSize: '0.66rem', color: '#8a8070', marginTop: 2 }}>
+                  {comp.inicio} → {comp.fin}
+                  {comp.premio && <span style={{ color: '#a07830', marginLeft: '0.5rem' }}>🏅 {comp.premio}</span>}
+                </div>
+              </div>
+              <span style={{ fontSize: '0.66rem', color: statusColor, fontWeight: 700 }}>{statusLabel}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <div style={{ background: 'var(--t-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.58rem', color: '#6a6250', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Mi posición</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.3rem', fontWeight: 800, color: myRank === 1 ? '#a07830' : '#2a7a6a' }}>
+                  {myRank === 1 ? '🥇' : myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : `#${myRank}`}
+                </div>
+              </div>
+              <div style={{ background: 'var(--t-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.58rem', color: '#6a6250', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Mis puntos</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.3rem', fontWeight: 800, color: '#a07830' }}>{myPts}</div>
+              </div>
+              <div style={{ background: 'var(--t-panel)', borderRadius: 3, padding: '0.5rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '0.58rem', color: '#6a6250', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Líder</div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#5a5040', marginTop: 4 }}>{leader?.sal ?? '—'}</div>
+                <div style={{ fontSize: '0.66rem', color: '#8a8070' }}>{leader?.pts ?? 0} pts</div>
+              </div>
+            </div>
+            {ranking.length > 0 && (
+              <div className="mr-tbl-wrap" style={{ marginBottom: 0 }}>
+                <table className="mr-tbl">
+                  <thead><tr><th style={{ width: 32 }}>#</th><th>Salonero</th><th className="r">Puntos</th></tr></thead>
+                  <tbody>
+                    {ranking.map((r, i) => (
+                      <tr key={r.sal} className={r.sal === activeName ? 'best' : ''}>
+                        <td style={{ fontWeight: 700, color: i === 0 ? '#a07830' : '#8a8070' }}>{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
+                        <td style={{ fontWeight: r.sal === activeName ? 700 : 400 }}>{r.sal === activeName ? `▶ ${r.sal}` : r.sal}</td>
+                        <td className="r" style={{ fontWeight: 700 }}>{r.pts}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </>
   )
 }

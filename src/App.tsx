@@ -19,7 +19,6 @@ const ResumenDiario  = lazy(() => import('./modules/resumen/ResumenDiario'))
 const ResumenSemanal = lazy(() => import('./modules/resumen/ResumenSemanal'))
 const ReporteMensual = lazy(() => import('./modules/resumen/ReporteMensual'))
 const SOPsModule       = lazy(() => import('./modules/sops/SOPsModule'))
-const MisPropinas      = lazy(() => import('./modules/tips/MisPropinas'))
 const InventarioModule  = lazy(() => import('./modules/inventario/InventarioModule'))
 const MiRendimientoWrap = lazy(() => import('./modules/ventas/MiRendimientoWrap'))
 const ClientesModule    = lazy(() => import('./modules/crm/ClientesModule'))
@@ -148,7 +147,9 @@ function AppRoutes() {
         <Route path="/caja"     element={<PrivateRoute roles={['owner','manager','cajero','contador']}><CashModule /></PrivateRoute>} />
         <Route path="/ventas"   element={<PrivateRoute roles={['owner','manager','contador']}><VentasModule /></PrivateRoute>} />
         <Route path="/sops"          element={<PrivateRoute><SOPsModule /></PrivateRoute>} />
-        <Route path="/mis-propinas"  element={<PrivateRoute roles={['salonero','barman','barback','runner','cocina']}><MisPropinas /></PrivateRoute>} />
+        {/* Mis Propinas se integró como pestaña de Mi Rendimiento (la "casa del empleado").
+            La ruta vieja redirige a esa pestaña para no romper enlaces/cards del Home. */}
+        <Route path="/mis-propinas"  element={<Navigate to="/mi-rendimiento?tab=propinas" replace />} />
         <Route path="/inventario"    element={<PrivateRoute roles={['owner','manager','contador']}><InventarioModule /></PrivateRoute>} />
         <Route path="/clientes"      element={<PrivateRoute roles={['owner','manager','cajero']}><ClientesModule /></PrivateRoute>} />
         <Route path="/finanzas"      element={<PrivateRoute roles={['owner','manager','contador']}><FinanzasModule /></PrivateRoute>} />

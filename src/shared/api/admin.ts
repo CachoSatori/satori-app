@@ -49,6 +49,20 @@ export async function updateRoleTipPoints(role: UserRole, points: number): Promi
   if (error) throw new Error(error.message)
 }
 
+// Guarda puntos + elegibilidad (recibe_propina) en un solo upsert (onConflict 'role').
+// Se envían AMBOS: mandar points junto al flag evita reventar la restricción NOT NULL de
+// points en el INSERT propuesto (Postgres la evalúa antes de resolver el conflicto).
+export async function upsertRoleTipConfig(
+  role: UserRole,
+  points: number,
+  recibe_propina: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from('role_tip_points')
+    .upsert({ role, points, recibe_propina }, { onConflict: 'role' })
+  if (error) throw new Error(error.message)
+}
+
 // ── Perfiles (solo owner) ───────────────────────────────────
 
 export async function getAllProfiles(): Promise<Profile[]> {

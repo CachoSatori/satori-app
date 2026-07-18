@@ -84,6 +84,9 @@ export interface TipEntry {
 export interface RoleTipPoints {
   role: UserRole
   points: number
+  // Elegibilidad de propina por rol (mig 047). Null-safe: si viene null/ausente
+  // (cache viejo, fila pre-migración) el consumidor lo trata como true (default esquema).
+  recibe_propina?: boolean | null
 }
 
 export interface CashSession {

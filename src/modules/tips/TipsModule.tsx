@@ -28,7 +28,7 @@ import {
   type DraftLine,
 } from '../../shared/utils/tipCalculations'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
-import { availableForCobertura } from './tipShiftHelpers'
+import { availableForCobertura, eligibleRoster } from './tipShiftHelpers'
 const TipHistory   = lazy(() => import('./TipHistory'))
 const TipQuincenal = lazy(() => import('./TipQuincenal'))
 const TipStats     = lazy(() => import('./TipStats'))
@@ -129,7 +129,10 @@ export default function TipsModule() {
         entries.forEach(e => { if (e.covered_role) cobMap[e.employee_id] = e.covered_role })
         setCoberturas(cobMap)
 
-        const draftLines: DraftLine[] = emps.map(emp => {
+        // Elegibilidad por rol (mig 047): excluir roles con recibe_propina=false, pero
+        // PRESERVAR a quien ya tiene entrada en este turno (no re-tocar turnos en curso).
+        const keepIds = new Set(entries.map(e => e.employee_id))
+        const draftLines: DraftLine[] = eligibleRoster(emps, pts, keepIds).map(emp => {
           const entry = entries.find(e => e.employee_id === emp.id)
           const effRole = (entry?.covered_role ?? emp.role)
           const pts_rol = ptsMap.get(effRole) ?? 0
@@ -148,9 +151,10 @@ export default function TipsModule() {
         })
         setLines(draftLines)
       } else {
-        // Sin sesión: armar líneas vacías para cuando se cree
+        // Sin sesión: armar líneas vacías para cuando se cree. Roster elegible (mig 047):
+        // los roles con recibe_propina=false no entran al turno nuevo.
         const ptsMap = new Map(pts.map(r => [r.role, r.points]))
-        const draftLines: DraftLine[] = emps.map(emp => ({
+        const draftLines: DraftLine[] = eligibleRoster(emps, pts).map(emp => ({
           employeeId:   emp.id,
           employeeName: emp.full_name,
           role:         emp.role,
@@ -256,9 +260,9 @@ export default function TipsModule() {
       }
       setOpenSession(session)
       setShowNewSession(false)
-      // Resetear líneas
+      // Resetear líneas — roster elegible (mig 047): roles con recibe_propina=false fuera.
       const ptsMap = new Map(rolePoints.map(r => [r.role, r.points]))
-      setLines(employees.map(emp => ({
+      setLines(eligibleRoster(employees, rolePoints).map(emp => ({
         employeeId:   emp.id,
         employeeName: emp.full_name,
         role:         emp.role,
@@ -779,7 +783,7 @@ export default function TipsModule() {
                         <select value={cobEmpId} onChange={e => setCobEmpId(e.target.value)}
                           style={{ background:'#111', border:'1px solid #2a2a2a', color: cobEmpId ? 'var(--t-gold)' : '#888', padding:'5px 8px', borderRadius:2, fontSize:'0.78rem' }}>
                           <option value="">— seleccionar —</option>
-                          {availableForCobertura(employees, lines).map(e => (
+                          {availableForCobertura(eligibleRoster(employees, rolePoints), lines).map(e => (
                             <option key={e.id} value={e.id}>{e.full_name}</option>
                           ))}
                         </select>

@@ -8,7 +8,7 @@
 
 ## Qué se construyó
 
-1. **Esquema (mig 047, aditiva):** `role_tip_points.recibe_propina boolean not null default true`.
+1. **Esquema (mig 048, aditiva):** `role_tip_points.recibe_propina boolean not null default true`.
    - **Aplicada SOLO a staging** (ref `hwiatgicyyqyezqwldia`) por la Management API (`database/query`), **sin tocar `schema_migrations`**. Verificado: columna `boolean/NOT NULL/default true`, los 7 roles backfilleados a `true`.
    - **Flip de MANAGER → false** aplicado en staging como **dato de config** (idéntico a lo que hace el toggle de Admin; `points` intacto = 3.0). **Reversible** en un clic.
    - **NO aplicada a prod** (prod = `yiczgdtirrkdvohdquzf`, ni siquiera linkeado).

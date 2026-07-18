@@ -129,7 +129,7 @@ export default function TipsModule() {
         entries.forEach(e => { if (e.covered_role) cobMap[e.employee_id] = e.covered_role })
         setCoberturas(cobMap)
 
-        // Elegibilidad por rol (mig 047): excluir roles con recibe_propina=false, pero
+        // Elegibilidad por rol (mig 048): excluir roles con recibe_propina=false, pero
         // PRESERVAR a quien ya tiene entrada en este turno (no re-tocar turnos en curso).
         const keepIds = new Set(entries.map(e => e.employee_id))
         const draftLines: DraftLine[] = eligibleRoster(emps, pts, keepIds).map(emp => {
@@ -151,7 +151,7 @@ export default function TipsModule() {
         })
         setLines(draftLines)
       } else {
-        // Sin sesión: armar líneas vacías para cuando se cree. Roster elegible (mig 047):
+        // Sin sesión: armar líneas vacías para cuando se cree. Roster elegible (mig 048):
         // los roles con recibe_propina=false no entran al turno nuevo.
         const ptsMap = new Map(pts.map(r => [r.role, r.points]))
         const draftLines: DraftLine[] = eligibleRoster(emps, pts).map(emp => ({
@@ -260,7 +260,7 @@ export default function TipsModule() {
       }
       setOpenSession(session)
       setShowNewSession(false)
-      // Resetear líneas — roster elegible (mig 047): roles con recibe_propina=false fuera.
+      // Resetear líneas — roster elegible (mig 048): roles con recibe_propina=false fuera.
       const ptsMap = new Map(rolePoints.map(r => [r.role, r.points]))
       setLines(eligibleRoster(employees, rolePoints).map(emp => ({
         employeeId:   emp.id,

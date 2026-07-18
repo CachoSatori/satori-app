@@ -12,7 +12,7 @@ export function availableForCobertura(
   return employees.filter(e => !lines.some(l => l.employeeId === e.id && l.active))
 }
 
-// ── Elegibilidad de propina por rol (config, mig 047) ────────────
+// ── Elegibilidad de propina por rol (config, mig 048) ────────────
 type RoleFlag = { role: UserRole; recibe_propina?: boolean | null }
 
 /**

@@ -1,5 +1,5 @@
 -- ╔══════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 047 — role_tip_points.recibe_propina: elegibilidad de propina por ROL (configuración).  ║
+-- ║ 048 — role_tip_points.recibe_propina: elegibilidad de propina por ROL (configuración).  ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
 -- ✅ Para STAGING. ⚠ Se escribe en la rama; se aplica QUIRÚRGICA a staging con el ritual

@@ -2060,14 +2060,17 @@ export type Database = {
       role_tip_points: {
         Row: {
           points: number
+          recibe_propina: boolean
           role: Database["public"]["Enums"]["user_role"]
         }
         Insert: {
           points: number
+          recibe_propina?: boolean
           role: Database["public"]["Enums"]["user_role"]
         }
         Update: {
           points?: number
+          recibe_propina?: boolean
           role?: Database["public"]["Enums"]["user_role"]
         }
         Relationships: []

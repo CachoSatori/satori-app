@@ -9,6 +9,8 @@ import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 import { formatCRC, calcHistory } from '../../shared/utils/tipCalculations'
 import { getTipEntriesBySession, getAttendanceHistory } from '../../shared/api/tips'
 import type { AttendanceRow } from '../../shared/api/tips'
+import { ROLE_LABELS } from '../../shared/constants'
+import { distribucionPorPuesto } from './tipStatsHelpers'
 
 interface Props {
   sessions:   TipSession[]
@@ -28,6 +30,18 @@ const MONTH_NAMES: Record<string, string> = {
   '01':'Ene','02':'Feb','03':'Mar','04':'Abr','05':'May','06':'Jun',
   '07':'Jul','08':'Ago','09':'Sep','10':'Oct','11':'Nov','12':'Dic',
 }
+
+// Color por puesto — paleta cálida/teal consistente con el panel de Estadísticas.
+const ROLE_COLORS: Record<string, string> = {
+  salonero: 'var(--t-gold)',
+  barman:   'var(--t-teal)',
+  barback:  '#6aa5a0',
+  runner:   '#c8a030',
+  cocina:   '#a07830',
+  cajero:   '#5a7a8a',
+  manager:  '#8a8070',
+}
+const roleColor = (r: string) => ROLE_COLORS[r] ?? '#8a8070'
 
 export default function TipStats({ sessions, calcCache, employees, rolePoints }: Props) {
   const months = useMemo(() => getMonths(sessions), [sessions])
@@ -170,6 +184,9 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
   // Las sesiones viejas (pre-mayo) no tienen datáfono → generado = 0; el KPI
   // simplemente queda en ₡0 sin romper nada.
   const totalGenerated = useMemo(() => earners.reduce((s, e) => s + e.generated, 0), [earners])
+
+  // Distribución del take-home por PUESTO (incluye cocina) — % que se lleva cada rol.
+  const byRole = useMemo(() => distribucionPorPuesto(earners), [earners])
 
   // Weekly trend within month
   const weeklyData = useMemo(() => {
@@ -319,6 +336,31 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
                 <span style={{ color: '#c8a030' }}>AM {(amPool / totalPool * 100).toFixed(1)}% · {formatCRC(amPool)}</span>
                 <span style={{ color: 'var(--t-teal)' }}>PM {(pmPool / totalPool * 100).toFixed(1)}% · {formatCRC(pmPool)}</span>
               </div>
+            </div>
+          )}
+
+          {/* Distribución por puesto — % del take-home total que se lleva cada ROL (incluye cocina) */}
+          {byRole.total > 0 && (
+            <div style={{ marginBottom: '1.25rem', background: 'var(--t-panel)', border: '1px solid var(--t-border)', borderRadius: 2, padding: '0.875rem 1rem' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a5040', marginBottom: '0.625rem' }}>
+                Distribución por puesto
+              </div>
+              {byRole.rows.map(r => (
+                <div key={r.role} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                  <span style={{ width: 84, fontSize: '0.72rem', color: '#5a5040', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {ROLE_LABELS[r.role] ?? r.role}
+                  </span>
+                  <div style={{ flex: 1, height: 8, background: 'var(--t-border)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: `${r.pct}%`, height: '100%', background: roleColor(r.role), borderRadius: 4 }} />
+                  </div>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: roleColor(r.role), minWidth: 42, textAlign: 'right' }}>
+                    {r.pct.toFixed(1)}%
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#5a5040', minWidth: 80, textAlign: 'right' }}>
+                    {formatCRC(r.total)}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
 

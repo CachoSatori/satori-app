@@ -107,6 +107,34 @@ describe('propinaPago — propinasPagadasEnFecha (lo que resta del cierre)', () 
     ]
     expect(propinasPagadasEnFecha(ms, [], F)).toBe(15000)
   })
+
+  // ── Propina pendiente saldada por BANCO desde Pendientes ──────────────────────────────
+  // No sacó efectivo de la caja (el turno ya había cerrado), así que no puede restar del
+  // efectivo esperado del cierre. "Pagar ahora" sigue siendo efectivo y sigue restando.
+  it('(a) pagada por TRANSFERENCIA → NO resta del efectivo esperado', () => {
+    expect(propinasPagadasEnFecha([mov({ method: 'Transferencia', caja_origen: 'Banco' })], [], F)).toBe(0)
+  })
+
+  it('(b) pagada en EFECTIVO → sigue restando igual que hoy', () => {
+    expect(propinasPagadasEnFecha([mov({ method: 'Efectivo' })], [], F)).toBe(12000)
+  })
+
+  it('backward-compatible: filas históricas SIN method siguen restando', () => {
+    expect(propinasPagadasEnFecha([mov({})], [], F)).toBe(12000)
+  })
+
+  it('mixtas efectivo + banco: solo el efectivo resta', () => {
+    const ms = [
+      mov({ id: 'ef',    amount_crc: 10000, method: 'Efectivo' }),
+      mov({ id: 'banco', amount_crc: 25000, method: 'Transferencia', caja_origen: 'Banco' }),
+    ]
+    expect(propinasPagadasEnFecha(ms, [], F)).toBe(10000)
+  })
+
+  it('la pagada por banco SIGUE saldando el turno (no reaparece en "Propinas por pagar")', () => {
+    const porBanco = mov({ method: 'Transferencia', caja_origen: 'Banco' })
+    expect(propinasPorPagarDe([tip()], [porBanco])).toHaveLength(0)
+  })
 })
 
 // ── El payable = SOLO lo electrónico (FIRMADO propinas-efectivo-electronico) ──────────────

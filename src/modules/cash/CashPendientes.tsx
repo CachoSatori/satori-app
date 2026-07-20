@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { CashMovement, CashSession } from '../../shared/types/database'
-import { updateMovementStatus } from '../../shared/api/cash'
+import { updateMovementStatus, updateCashMovement } from '../../shared/api/cash'
 import { fi, fd } from './cashUtils'
 import { dateCR } from '../../shared/utils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
@@ -74,6 +74,13 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
   const totalCount = groups.reduce((s, g) => s + g.rows.length, 0)
   const provCount = groups.filter(g => !g.esPropinas).length   // el grupo Propinas no es un proveedor
 
+  // Vía de pago por FILA, leída del movimiento real (no del agrupamiento visual, que es display
+  // y podría reagruparse mañana sin que la plata cambie de vía).
+  const esPropina = useMemo(() => {
+    const porId = new Map(movements.map(m => [m.id, m.subcategory]))
+    return (id: string) => porId.get(id) === 'Propinas por turno'
+  }, [movements])
+
   const toggleSel = (id: string) => setSelected(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
   })
@@ -85,11 +92,19 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
   })
 
   // ── Marcar pagado ──────────────────────────────────────────
+  // Una propina que se dejó PENDIENTE se salda por BANCO: el turno ya cerró y ese efectivo no
+  // quedó apartado en la caja, así que el pago no puede descontar efectivo. Por eso la fila de
+  // propina pasa a Transferencia/Banco, y así queda fuera del efectivo esperado tanto del cierre
+  // (propinasPagadasEnFecha) como de la Caja Diaria (otrosEgresosEf filtra method 'Efectivo').
+  // "Pagar ahora" (CashTurno/CashCierre, propinaEgresoFields) sigue siendo Efectivo/Registradora.
+  // Los proveedores no cambian: solo status.
   const pagar = async (ids: string[]) => {
     if (!ids.length) return
     setSaving(true)
     try {
-      await Promise.all(ids.map(id => updateMovementStatus(id, 'aprobado')))
+      await Promise.all(ids.map(id => esPropina(id)
+        ? updateCashMovement(id, { status: 'aprobado', method: 'Transferencia', caja_origen: 'Banco' })
+        : updateMovementStatus(id, 'aprobado')))
       setSelected(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
       onRefresh()
     } finally { setSaving(false) }

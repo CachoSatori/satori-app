@@ -135,7 +135,8 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
     ctx.font = 'bold 30px Georgia, serif'
     ctx.fillText('Satori Sushi Bar', padX, 56)
     ctx.font = '14px Arial'; ctx.fillStyle = '#8a8070'
-    ctx.fillText('Comprobante de pago a proveedor', padX, 80)
+    // Solo el título dibujado: el grupo Propinas no es un proveedor. Layout y montos, igual.
+    ctx.fillText(g.esPropinas ? 'Comprobante de pago de propinas' : 'Comprobante de pago a proveedor', padX, 80)
     ctx.font = 'bold 24px Arial'; ctx.fillStyle = '#0d0d0d'
     ctx.fillText(g.name, padX, 124)
     ctx.font = '13px Arial'; ctx.fillStyle = '#8a8070'

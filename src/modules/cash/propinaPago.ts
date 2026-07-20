@@ -54,17 +54,22 @@ export function propinasPorPagarDe(payouts: TipPayoutSummary[], movements: CashM
   return payouts.filter(p => p.session_date >= PROPINAS_POR_PAGAR_DESDE && !registradas.has(propKey(p)))
 }
 
-// Propinas efectivamente PAGADAS (status aprobado) cuya plata salió en `fecha`:
+// Propinas efectivamente PAGADAS EN EFECTIVO (status aprobado) cuya plata salió en `fecha`:
 //   · movimiento con turno → la fecha del turno (puerta Caja Diaria);
 //   · movimiento a nivel día → dateCR(created_at) (puerta cierre — createDayMovement backdatea
 //     created_at a la fecha del cierre, así un turno VIEJO pagado hoy resta HOY, que es cuando
 //     la plata sale físicamente).
 // Los PENDIENTES no suman nada: la plata sigue en la caja hasta pagarse (flujo proveedor).
+// Las pagadas por TRANSFERENCIA tampoco: una propina que se dejó pendiente y se saldó por banco
+// (desde Pendientes) nunca sacó efectivo de la caja, así que no puede restar del cierre. El
+// filtro es `!== 'Transferencia'` y no `=== 'Efectivo'` a propósito: las filas históricas sin
+// method (o con otro medio en efectivo) siguen contando como hasta hoy.
 export function propinasPagadasEnFecha(movements: CashMovement[], sessions: CashSession[], fecha: string): number {
   const sesionFecha = new Map(sessions.map(s => [s.id, s.session_date]))
   return movements
     .filter(m => m.subcategory === 'Propinas por turno'
       && m.status === 'aprobado'
+      && m.method !== 'Transferencia'
       && (sesionFecha.get(m.session_id ?? '') ?? dateCR(m.created_at)) === fecha)
     .reduce((s, m) => s + (m.amount_crc || 0), 0)
 }

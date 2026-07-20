@@ -24,10 +24,15 @@ interface Row {
 interface Group {
   key: string
   name: string
+  esPropinas: boolean
   rows: Row[]
   totalCRC: number
   totalUSD: number
 }
+
+// Las propinas pendientes NO son un proveedor: caen todas en UN grupo, con cada turno como fila.
+// Clave sentinela (no puede colisionar con el nombre lowercase de un proveedor real).
+const PROPINAS_KEY = '__propinas__'
 
 export default function CashPendientes({ movements, sessions, onRefresh }: Props) {
   const requireManager = useManagerOverride()
@@ -36,19 +41,24 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
 
-  // ── Agrupar pendientes por proveedor ───────────────────────
+  // ── Agrupar pendientes por proveedor (las propinas, todas juntas) ──
   const groups: Group[] = useMemo(() => {
     const map = new Map<string, Group>()
     movements
       .filter(m => m.status === 'pendiente')
       .forEach(m => {
-        const name = (m.supplier_name || m.employee_name || m.description || 'Sin proveedor').trim()
-        const key = name.toLowerCase()
+        // Propinas: un solo grupo. Si no, la description ("Propinas turno <fecha> <turno>")
+        // abría un grupo por turno y la lista quedaba llena de "proveedores" fantasma.
+        const esPropinas = m.subcategory === 'Propinas por turno'
+        const name = esPropinas
+          ? 'Propinas'
+          : (m.supplier_name || m.employee_name || m.description || 'Sin proveedor').trim()
+        const key = esPropinas ? PROPINAS_KEY : name.toLowerCase()
         const ses = sesionMap.get(m.session_id ?? '')
         // Nivel-día (sin turno): fecha LOCAL CR del registro (dateCR), no slice UTC.
         const fecha = ses?.session_date ?? dateCR(m.created_at)
         const turno = m.shift || ses?.shift_type || ''
-        if (!map.has(key)) map.set(key, { key, name, rows: [], totalCRC: 0, totalUSD: 0 })
+        if (!map.has(key)) map.set(key, { key, name, esPropinas, rows: [], totalCRC: 0, totalUSD: 0 })
         const g = map.get(key)!
         g.rows.push({ id: m.id, fecha, turno, crc: N(m.amount_crc), usd: N(m.amount_usd), ref: m.description || m.subcategory || '' })
         g.totalCRC += N(m.amount_crc)
@@ -62,6 +72,7 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
   const totalCRC = groups.reduce((s, g) => s + g.totalCRC, 0)
   const totalUSD = groups.reduce((s, g) => s + g.totalUSD, 0)
   const totalCount = groups.reduce((s, g) => s + g.rows.length, 0)
+  const provCount = groups.filter(g => !g.esPropinas).length   // el grupo Propinas no es un proveedor
 
   const toggleSel = (id: string) => setSelected(prev => {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n
@@ -193,7 +204,7 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
           {totalUSD > 0 && <div style={{ fontSize: '0.85rem', color: '#7ab4d4' }}>{fd(totalUSD)}</div>}
         </div>
         <div className="cd-saldo-label" style={{ alignSelf: 'center' }}>
-          {totalCount} factura{totalCount !== 1 ? 's' : ''} · {groups.length} proveedor{groups.length !== 1 ? 'es' : ''}
+          {totalCount} factura{totalCount !== 1 ? 's' : ''} · {provCount} proveedor{provCount !== 1 ? 'es' : ''}
         </div>
       </div>
 
@@ -206,10 +217,16 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
             {/* Header proveedor */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0.9rem 1.1rem', borderBottom: isCollapsed ? 'none' : '1px solid var(--t-border)' }}>
               <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-                <span style={{ width: 9, height: 9, borderRadius: 99, background: '#c8a030', display: 'inline-block' }} />
+                {g.esPropinas
+                  ? <span style={{ fontSize: '1rem', lineHeight: 1 }}>🎁</span>
+                  : <span style={{ width: 9, height: 9, borderRadius: 99, background: '#c8a030', display: 'inline-block' }} />}
                 <div>
                   <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--t-ink)' }}>{g.name}</div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--t-muted)' }}>Proveedor · {g.rows.length} pago{g.rows.length !== 1 ? 's' : ''} pendiente{g.rows.length !== 1 ? 's' : ''}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--t-muted)' }}>
+                    {g.esPropinas
+                      ? `Propinas · ${g.rows.length} turno${g.rows.length !== 1 ? 's' : ''} pendiente${g.rows.length !== 1 ? 's' : ''}`
+                      : `Proveedor · ${g.rows.length} pago${g.rows.length !== 1 ? 's' : ''} pendiente${g.rows.length !== 1 ? 's' : ''}`}
+                  </div>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>

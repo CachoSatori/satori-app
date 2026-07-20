@@ -279,7 +279,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   return (
     <div className="cd-modal-overlay" onClick={onClose}>
       <div className="cd-modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
-        <div className="cd-modal-title">➕ Agregar movimiento</div>
+        <div className="cd-modal-title">➕ Agregar factura / movimiento</div>
 
         {/* Input de cámara SIEMPRE montado: lo disparan la opción grande de la pantalla inicial
             Y el botón "Cambiar foto" del form. Cancelar la cámara no emite change → no pasa nada. */}

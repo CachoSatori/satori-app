@@ -128,6 +128,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     return () => { cancelled = true }
   }, [fecha])
   const propinasPorPagar = propinasPorPagarDe(propinasPagables, movs)
+  // Sección plegable (default: cerrada) — solo UI, estado en memoria y sin storage.
+  const [propinasOpen, setPropinasOpen] = useState(false)
+  const propinasPorPagarTotal = propinasPorPagar.reduce((s, p) => s + (p.total_electronico_crc || 0), 0)
 
   // ── FASE 1 state ──────────────────────────────────────────────
   const [vmCRC,       setVmCRC]       = useState<number | ''>('')
@@ -414,6 +417,38 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
   if (loading) return <div style={{ padding:'2rem', textAlign:'center', color:'#888' }}>Cargando…</div>
 
+  // ── Propinas del día — la VÍA REAL (una sola fuente de verdad, FIRMADO) ──
+  // Plegada por defecto y ubicada DEBAJO de los campos de venta de la fase en curso (Fase 1
+  // si el mediodía no está sellado, Fase 2 si ya lo está): las ventas primero, las propinas
+  // después. Se renderiza en un solo lugar por vez — las dos ramas son excluyentes.
+  const propinasDelDia = (
+    <CollapsibleSection
+      title={`Propinas del día · ${propinasPorPagar.length} · ${fi2(propinasPorPagarTotal)}`}
+      icon="💁" color="#8a5aa8" open={propinasOpen} onToggle={() => setPropinasOpen(o => !o)}>
+      <div style={{ fontSize:'0.74rem', color:'#6a6250', marginBottom:'0.6rem' }}>
+        Pagadas hoy (movimientos reales): <strong style={{ color:'#8a5aa8' }}>{fi2(propinasPagadasDia)}</strong>.
+        Lo que pagués acá crea el egreso real y se descuenta del cierre; lo pendiente <strong>no resta</strong> (la plata sigue en la caja).
+      </div>
+      {propinasPorPagar.length === 0 ? (
+        <div style={{ fontSize:'0.76rem', color:'#8a8272' }}>✓ Sin propinas por pagar.</div>
+      ) : propinasPorPagar.map(p => (
+        <div key={p.session_id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem', padding:'0.45rem 0.25rem', borderBottom:'1px solid var(--t-border, #d4cfc4)' }}>
+          <div>
+            <div style={{ fontSize:'0.8rem', fontWeight:600 }}>Propinas {shiftLabel(p.shift_type)} · {formatDate(p.session_date)}</div>
+            <div style={{ fontSize:'0.68rem', color:'#8a8272' }}>pendiente de pago</div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
+            <span style={{ fontFamily:"'DM Mono',monospace", fontWeight:700 }}>{fi2(p.total_electronico_crc)}</span>
+            <button onClick={() => pagarPropinaCierre(p)} disabled={payingProp !== null || saving}
+              className="cierre-btn gold" style={{ padding:'5px 12px', fontSize:'0.74rem', width:'auto' }}>
+              {payingProp === p.session_id ? 'Pagando…' : '💵 Pagar ahora'}
+            </button>
+          </div>
+        </div>
+      ))}
+    </CollapsibleSection>
+  )
+
   return (
     <div className="cierre-tab" style={{ maxWidth:680, margin:'0 auto' }}>
 
@@ -478,33 +513,6 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
           <span>Fase 2 — Noche {completo ? '(cerrado)' : parcial ? '(en progreso)' : '(esperando)'}</span>
         </div>
       </div>
-
-      {/* ── Propinas del día — la VÍA REAL (una sola fuente de verdad, FIRMADO) ── */}
-      {!completo && (
-        <Section title="Propinas del día" icon="💁" color="#8a5aa8">
-          <div style={{ fontSize:'0.74rem', color:'#6a6250', marginBottom:'0.6rem' }}>
-            Pagadas hoy (movimientos reales): <strong style={{ color:'#8a5aa8' }}>{fi2(propinasPagadasDia)}</strong>.
-            Lo que pagués acá crea el egreso real y se descuenta del cierre; lo pendiente <strong>no resta</strong> (la plata sigue en la caja).
-          </div>
-          {propinasPorPagar.length === 0 ? (
-            <div style={{ fontSize:'0.76rem', color:'#8a8272' }}>✓ Sin propinas por pagar.</div>
-          ) : propinasPorPagar.map(p => (
-            <div key={p.session_id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.5rem', padding:'0.45rem 0.25rem', borderBottom:'1px solid var(--t-border, #d4cfc4)' }}>
-              <div>
-                <div style={{ fontSize:'0.8rem', fontWeight:600 }}>Propinas {shiftLabel(p.shift_type)} · {formatDate(p.session_date)}</div>
-                <div style={{ fontSize:'0.68rem', color:'#8a8272' }}>pendiente de pago</div>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
-                <span style={{ fontFamily:"'DM Mono',monospace", fontWeight:700 }}>{fi2(p.total_electronico_crc)}</span>
-                <button onClick={() => pagarPropinaCierre(p)} disabled={payingProp !== null || saving}
-                  className="cierre-btn gold" style={{ padding:'5px 12px', fontSize:'0.74rem', width:'auto' }}>
-                  {payingProp === p.session_id ? 'Pagando…' : '💵 Pagar ahora'}
-                </button>
-              </div>
-            </div>
-          ))}
-        </Section>
-      )}
 
       {/* ── CIERRE YA COMPLETO ── */}
       {completo && (
@@ -631,6 +639,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
             </div>
           )}
 
+          {/* Propinas del día, debajo de las ventas de la Fase 1 (mientras sea la fase en curso) */}
+          {!parcial && propinasDelDia}
+
           {/* ── FASE 2: Noche (solo si Fase 1 cerrada) ── */}
           {parcial && (
             <>
@@ -672,6 +683,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   </div>
                 )}
               </Section>
+
+              {/* Propinas del día, debajo de las ventas de la Fase 2 (la fase en curso) */}
+              {propinasDelDia}
 
               {/* Separaciones */}
               <Section title="Conteo físico — separaciones" icon="📊" color="#2a7a4a">
@@ -918,6 +932,25 @@ function Section({ title, icon, color, children }: { title:string; icon:string; 
         <div style={{ fontSize:'0.85rem', fontWeight:600, color }}>{title}</div>
       </div>
       <div className="cierre-card-body">{children}</div>
+    </div>
+  )
+}
+
+// Igual que Section pero plegable — el encabezado resume (cantidad · total) y el cuerpo
+// se despliega a pedido. Estado en memoria (lo maneja el padre), sin storage.
+function CollapsibleSection({ title, icon, color, open, onToggle, children }: {
+  title:string; icon:string; color:string; open:boolean; onToggle:() => void; children: React.ReactNode
+}) {
+  return (
+    <div className="cierre-card">
+      <button type="button" className="cierre-card-head" aria-expanded={open} onClick={onToggle}
+        style={{ width:'100%', font:'inherit', textAlign:'left', cursor:'pointer', border:'none',
+                 borderBottom: open ? '1px solid var(--t-border, #d4cfc4)' : 'none' }}>
+        <span style={{ fontSize:'1.1rem' }}>{icon}</span>
+        <div style={{ fontSize:'0.85rem', fontWeight:600, color, flex:1 }}>{title}</div>
+        <span style={{ color:'#8a8272', fontSize:'0.8rem' }}>{open ? '▼' : '▶'}</span>
+      </button>
+      {open && <div className="cierre-card-body">{children}</div>}
     </div>
   )
 }

@@ -232,6 +232,9 @@ export default function CashTurno({
   // Turnos aún sin registrar — criterio COMPARTIDO con el Cierre del Día (propinaPago:
   // un movimiento con esa description, pagado o pendiente, lo salda). Misma vía, dos puertas.
   const propinasPorPagar = propinasPorPagarDe(propinasPagables, allMovements)
+  // Sección plegable (default: cerrada). Solo UI — el estado vive en memoria, sin storage.
+  const [propinasOpen, setPropinasOpen] = useState(false)
+  const propinasPorPagarTotal = propinasPorPagar.reduce((s, p) => s + (p.total_electronico_crc || 0), 0)
   const pagarPropina = async (p: TipPayoutSummary, status: 'aprobado' | 'pendiente') => {
     if (!openSession || !profile || payingProp) return   // anti doble-registro
     const accion = status === 'aprobado' ? 'PAGAR ahora' : 'dejar PENDIENTE'
@@ -769,7 +772,7 @@ export default function CashTurno({
       {canManage && (
         <button className="cd-btn-green" style={{ width: '100%', marginBottom: '0.75rem', padding: '0.7rem' }}
           onClick={() => setAgregarOpen(true)}>
-          ➕ Agregar (asistente)
+          ➕ Agregar factura / movimiento
         </button>
       )}
 
@@ -927,16 +930,23 @@ export default function CashTurno({
         </div>
       </div>
 
-      {/* Propinas por pagar (Bug C) */}
+      {/* Propinas por pagar (Bug C) — plegada por defecto: el encabezado ya dice cuántas y cuánto,
+          y el turno no necesita verlas abiertas todo el día. Estado en memoria (sin storage). */}
       {propinasPorPagar.length > 0 && (
         <div className="cd-section">
-          <div className="cd-section-head">
+          <button type="button" className="cd-section-head" aria-expanded={propinasOpen}
+            onClick={() => setPropinasOpen(o => !o)}
+            style={{ width: '100%', font: 'inherit', textAlign: 'left', cursor: 'pointer', border: 'none', borderBottom: propinasOpen ? '1px solid var(--t-border, #d4cfc4)' : 'none' }}>
             <div className="cd-section-icon">🎁</div>
-            <div>
-              <div className="cd-section-title">Propinas por pagar</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="cd-section-title">
+                Propinas por pagar · {propinasPorPagar.length} · {fi(propinasPorPagarTotal)}
+              </div>
               <div className="cd-section-sub">Cerradas en Propinas — pagá ahora o dejá pendiente (como un proveedor)</div>
             </div>
-          </div>
+            <span style={{ color: '#8a8070', fontSize: '0.8rem' }}>{propinasOpen ? '▼' : '▶'}</span>
+          </button>
+          {propinasOpen && (
           <div className="cd-section-body">
             {propinasPorPagar.map(p => (
               <div key={p.session_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 0.5rem', borderBottom: '1px solid var(--t-border,#d4cfc4)' }}>
@@ -957,6 +967,7 @@ export default function CashTurno({
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
 

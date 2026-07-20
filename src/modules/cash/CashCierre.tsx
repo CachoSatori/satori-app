@@ -67,7 +67,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const { profile } = useAuth()
   const requireManager = useManagerOverride()
   const today       = todayStr()
-  const turnoAbierto = !!openSession  // no se puede cerrar el día con un turno abierto
+  const turnoAbierto = !!openSession  // bloquea SOLO la Fase 2 (noche); la Fase 1 se sella igual
 
   const [cierres,  setCierres]  = useState<CashCierreDia[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -216,9 +216,11 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const requiresAjuste = cierreNecesitaAjuste(diferencia, difUSD)
 
   // ── Confirmar cierre parcial (Fase 1) ─────────────────────────
+  // El turno abierto NO bloquea el sellado del Mediodía: al mediodía la caja sigue operando
+  // y la Fase 1 solo sella las ventas de ese tramo (no toca conteo físico ni Caja Fuerte).
+  // El bloqueo por turno abierto vive donde importa: la Fase 2 (ver handleConfirmCompleto).
   const handleConfirmParcial = async () => {
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
-    if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
     if (ventasMVacias) { setError('Ingresá las ventas de mediodía'); return }
     if (ventasMCeroReal && !confirmVentasCeroM) {
       setError('Marcá la casilla para confirmar que las ventas de mediodía fueron ₡0, o corregí el monto'); return
@@ -486,7 +488,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
       {turnoAbierto && (
         <div className="cd-warn" style={{ marginBottom:'1rem' }}>
-          ⚠ Hay un turno de caja abierto{openSession?.cajero_name ? ` (${openSession.cajero_name})` : ''}. Cerralo en <strong>Caja Diaria</strong> antes de hacer el cierre del día.
+          ℹ Hay un turno de caja abierto{openSession?.cajero_name ? ` (${openSession.cajero_name})` : ''}. Podés sellar el <strong>Mediodía (Fase 1)</strong> igual.
+          Para cerrar la <strong>Noche (Fase 2)</strong> sí hay que cerrar antes el turno en <strong>Caja Diaria</strong>.
         </div>
       )}
 
@@ -599,8 +602,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   <span>Confirmo que las ventas del turno fueron <strong>₡0</strong> — no es un error de carga.</span>
                 </label>
               )}
+              {/* Sin `turnoAbierto` en el disabled: la Fase 1 se sella con la caja operando. */}
               <button
-                onClick={handleConfirmParcial} disabled={saving || turnoAbierto || (ventasMCeroReal && !confirmVentasCeroM)}
+                onClick={handleConfirmParcial} disabled={saving || (ventasMCeroReal && !confirmVentasCeroM)}
                 className="cierre-btn gold" style={{ marginTop:'0.75rem' }}>
                 💾 Confirmar cierre mediodía → sellar Fase 1
               </button>

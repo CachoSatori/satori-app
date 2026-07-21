@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import type { CashMovement, CashSession } from '../../shared/types/database'
 import { updateMovementStatus, updateCashMovement } from '../../shared/api/cash'
+import { aprobacionPropinaFields } from './propinaPago'
 import { fi, fd } from './cashUtils'
 import { dateCR } from '../../shared/utils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
@@ -92,10 +93,11 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
   })
 
   // ── Marcar pagado ──────────────────────────────────────────
-  // Una propina que se dejó PENDIENTE se salda por BANCO: el turno ya cerró y ese efectivo no
-  // quedó apartado en la caja, así que el pago no puede descontar efectivo. Por eso la fila de
-  // propina pasa a Transferencia/Banco, y así queda fuera del efectivo esperado tanto del cierre
-  // (propinasPagadasEnFecha) como de la Caja Diaria (otrosEgresosEf filtra method 'Efectivo').
+  // Una propina que se dejó PENDIENTE se salda por BANCO (aprobacionPropinaFields — la MISMA vía
+  // que usa el select de estado en Movimientos; el porqué vive allá): el turno ya cerró y ese
+  // efectivo no quedó apartado en la caja, así que el pago no puede descontar efectivo. Queda
+  // fuera del efectivo esperado tanto del cierre (propinasPagadasEnFecha) como de la Caja Diaria
+  // (otrosEgresosEf filtra method 'Efectivo').
   // "Pagar ahora" (CashTurno/CashCierre, propinaEgresoFields) sigue siendo Efectivo/Registradora.
   // Los proveedores no cambian: solo status.
   const pagar = async (ids: string[]) => {
@@ -103,7 +105,7 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
     setSaving(true)
     try {
       await Promise.all(ids.map(id => esPropina(id)
-        ? updateCashMovement(id, { status: 'aprobado', method: 'Transferencia', caja_origen: 'Banco' })
+        ? updateCashMovement(id, aprobacionPropinaFields())
         : updateMovementStatus(id, 'aprobado')))
       setSelected(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
       onRefresh()

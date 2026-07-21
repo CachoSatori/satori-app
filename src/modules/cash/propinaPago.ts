@@ -43,6 +43,25 @@ export function propinaEgresoFields(p: TipPayoutSummary) {
   }
 }
 
+// Aprobación de una propina que quedó PENDIENTE: se salda por BANCO, venga de la puerta que
+// venga (la pestaña Pendientes o el select de estado de Movimientos). UNA SOLA VÍA.
+//
+// POR QUÉ NO EN EFECTIVO — es el origen del "ajuste fantasma ≈ propinas":
+// propinasPagadasEnFecha atribuye el pago a la fecha de la SESIÓN del movimiento, que es la del
+// día en que la propina se dejó pendiente. Ese día ya está sellado, así que una aprobación en
+// efectivo no resta en el "debería" de NINGÚN día y el cierre aparece con un faltante ≈ el monto
+// de la propina. Saldándola por banco la plata no sale de la caja y el descuadre no existe.
+//
+// NO confundir con propinaEgresoFields ("Pagar ahora" = Efectivo/Registradora): ese SÍ saca
+// efectivo, pero en el día correcto, así que resta donde tiene que restar.
+export function aprobacionPropinaFields() {
+  return {
+    status:      'aprobado' as const,
+    method:      'Transferencia',
+    caja_origen: 'Banco',
+  }
+}
+
 // Turnos de propinas aún SIN registrar en Caja (ni pagados ni dejados pendientes) — mismo
 // criterio que la sección "Propinas por pagar" de CashTurno: la description saldada (con
 // cualquier status salvo rechazado) lo saca de la lista; el corte histórico aplica igual.

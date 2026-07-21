@@ -46,6 +46,7 @@ vi.mock('../../shared/ManagerOverride', () => ({
 }))
 
 import CashCierre from './CashCierre'
+import { todayStr } from './cashUtils'
 
 const turnoAbierto: CashSession = {
   id: 'ses1', session_date: '2026-07-20', shift_type: 'Día', opened_by: 'u1', closed_by: null,
@@ -83,8 +84,11 @@ describe('CashCierre · Fase 1 se sella con la Caja Diaria abierta', () => {
     fireEvent.click(btn)
 
     await waitFor(() => expect(saveCierreParcial).toHaveBeenCalledTimes(1))
+    // El cierre se sella con la fecha ELEGIDA en el selector, que arranca en el hoy de CR —
+    // no con la del turno abierto. Se compara contra todayStr() (el mismo helper que usa el
+    // componente) y no contra una fecha hardcodeada, que caducaba al cambiar el día.
     expect(saveCierreParcial.mock.calls[0][0]).toMatchObject({
-      tipo: 'parcial_mediodia', vm_crc: 120000, session_date: '2026-07-20',
+      tipo: 'parcial_mediodia', vm_crc: 120000, session_date: todayStr(),
     })
   })
 

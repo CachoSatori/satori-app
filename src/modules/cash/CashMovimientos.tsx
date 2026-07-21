@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CashMovement, CashSession, MovementType } from '../../shared/types/database'
 import { updateCashMovement, deleteCashMovement, getCierresDia, createDayMovement } from '../../shared/api/cash'
+import { aprobacionPropinaFields } from './propinaPago'
 import type { CashCierreDia } from '../../shared/types/database'
 import { getFinanceAccounts, type FinanceAccount } from '../../shared/api/finance'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -150,7 +151,10 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const totEgresos  = filtered.filter(m => isEgreso(m.movement_type as MovementType) && !isAperturaAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
 
   // ── Actions ──────────────────────────────────────────────
-  const handleFieldChange = useCallback(async (id: string, field: string, value: unknown) => {
+  // `mov` solo hace falta para el select de ESTADO: aprobar una propina pendiente tiene que ir
+  // por la MISMA vía que la pestaña Pendientes (banco), y para saberlo hay que mirar su
+  // subcategory. El resto de los campos no lo necesitan y lo omiten.
+  const handleFieldChange = useCallback(async (id: string, field: string, value: unknown, mov?: CashMovement) => {
     // Editar un movimiento GUARDADO (montos, tipo, método…) requiere autorización de gerencia,
     // igual que borrarlo. owner/manager logueado pasa al instante; cajero → modal de contraseña.
     // Si cancela o falla, onRefresh() revierte lo que muestre el input.
@@ -158,10 +162,13 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
     if (!auth.ok) { onRefresh(); return }
     setSaving(id)
     try {
-      await updateCashMovement(id, { [field]: value } as Partial<CashMovement>)
-      if (field === 'status') {
-        // just update status
-      }
+      // Aprobar una propina PENDIENTE desde acá saldaba en efectivo y reabría el descuadre que
+      // cerró la pestaña Pendientes (el porqué, en aprobacionPropinaFields). Una sola vía: los
+      // 3 campos, no solo el status. Pasar a 'pendiente' y las filas NO-propina, igual que antes.
+      const esAprobarPropina = field === 'status' && value === 'aprobado'
+        && mov?.subcategory === 'Propinas por turno'
+      const updates = esAprobarPropina ? aprobacionPropinaFields() : { [field]: value }
+      await updateCashMovement(id, updates as Partial<CashMovement>)
       onRefresh()
     } catch {
       // revert handled by onRefresh
@@ -491,7 +498,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                     <select className="cd-tbl-select"
                       style={{ fontWeight: 700, color: isPend ? '#c8a030' : '#4a7c59' }}
                       value={isPend ? 'Pendiente' : 'Pagado'}
-                      onChange={e => handleFieldChange(m.id, 'status', e.target.value === 'Pendiente' ? 'pendiente' : 'aprobado')}
+                      onChange={e => handleFieldChange(m.id, 'status', e.target.value === 'Pendiente' ? 'pendiente' : 'aprobado', m)}
                       disabled={saving === m.id}>
                       <option>Pagado</option>
                       <option>Pendiente</option>

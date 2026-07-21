@@ -137,6 +137,48 @@ describe('propinaPago — propinasPagadasEnFecha (lo que resta del cierre)', () 
   })
 })
 
+// ── Identidad del neteo cuando queda NEGATIVO ────────────────────────────────────────────────
+// El cierre netea `efectivo real del turno − propinas pagadas en efectivo`. Un día con pocas
+// ventas en efectivo y una propina grande pagada en efectivo deja ese neto NEGATIVO, y eso es
+// aritméticamente correcto: salió más plata de la caja de la que entró por ventas, así que el
+// "debería quedar" baja. No hay piso en cero ni valor absoluto en ningún lado — si lo hubiera,
+// el faltante se escondería. Estos tests DOCUMENTAN la identidad; no cambian código.
+describe('propinaPago — el neteo negativo es consistente (documentación de la aritmética)', () => {
+  const F = '2026-07-03'
+  const neto = (efectivoReal: number, propinasPagadas: number) => efectivoReal - propinasPagadas
+
+  it('ventas en efectivo MENORES a la propina pagada en efectivo → neto negativo, sin clamp', () => {
+    const propinaEnEfectivo = mov({ amount_crc: 60000, method: 'Efectivo' })
+    const pagadas = propinasPagadasEnFecha([propinaEnEfectivo], [], F)
+
+    expect(pagadas).toBe(60000)
+    expect(neto(40000, pagadas)).toBe(-20000)   // NO 0, NO 20000
+  })
+
+  it('la misma propina saldada por BANCO no entra en el neteo → el neto queda en las ventas', () => {
+    // El contraste es el fix: por banco la plata no salió de la caja, así que no netea.
+    const propinaPorBanco = mov({ amount_crc: 60000, method: 'Transferencia', caja_origen: 'Banco' })
+    const pagadas = propinasPagadasEnFecha([propinaPorBanco], [], F)
+
+    expect(pagadas).toBe(0)
+    expect(neto(40000, pagadas)).toBe(40000)
+  })
+
+  it('la suma es aditiva: netear el total = netear una por una (no hay redondeo ni orden)', () => {
+    const ms = [
+      mov({ id: 'a', amount_crc: 12500, method: 'Efectivo' }),
+      mov({ id: 'b', amount_crc:  7300, method: 'Efectivo' }),
+      mov({ id: 'c', amount_crc: 40200, method: 'Efectivo' }),
+    ]
+    const total = propinasPagadasEnFecha(ms, [], F)
+
+    expect(total).toBe(60000)
+    expect(neto(40000, total)).toBe(-20000)
+    // Restar de a una da lo mismo que restar el total de una vez.
+    expect(ms.reduce((acc, m) => acc - (m.amount_crc || 0), 40000)).toBe(neto(40000, total))
+  })
+})
+
 // ── El payable = SOLO lo electrónico (FIRMADO propinas-efectivo-electronico) ──────────────
 // La cuenta por pagar se genera solo por la porción electrónica; el efectivo se lo queda el
 // equipo y NUNCA genera pendiente. Estas pruebas fijan la fórmula pura y el filtro de la lista.

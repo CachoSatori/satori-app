@@ -1,12 +1,18 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Foto compacta — actualizado 2026-07-17.** El detalle histórico vive en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md). Fases → [ROADMAP.md](ROADMAP.md) · Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos → [HALLAZGOS.md](HALLAZGOS.md) · Índice de SPECs → [docs/README.md](docs/README.md).
+> **Foto compacta — actualizado 2026-07-21.** El detalle histórico vive en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md). Fases → [ROADMAP.md](ROADMAP.md) · Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos → [HALLAZGOS.md](HALLAZGOS.md) · Índice de SPECs → [docs/README.md](docs/README.md).
 
 **Stack:** React 19 + TS strict + Vite + PWA · Supabase (Postgres + RLS + Edge Functions) · realtime.
 **Despliegue:** `main` → PROD (GitHub Pages, base `/satori-app/`) · `staging` → Cloudflare Pages (`satori-staging.pages.dev`). Verificar versión live con `{base}version.json`.
 
-> **En una línea:** TODO lo operativo está en PROD y validado en piso por el dueño (Caja/Cierre/USD/Propinas ef-elec/Revisión/asistente/Bandeja + Proveedores lista simple + quick-wins C2/C3). **Lo ÚNICO que queda solo en `staging` es el PoS** (comandero/KDS/cobro/FE/inventario activo, migs 022–037), diferido y bloqueado por el PILAR de auth. La ventana de **estabilización quedó CERRADA**.
+> **En una línea:** TODO lo operativo está en PROD y validado en piso por el dueño (Caja/Cierre/USD/Propinas ef-elec/Revisión/asistente/Bandeja + Proveedores lista simple + quick-wins C2/C3 + **pulido de Caja/Cierre 07-20/21**). **Lo ÚNICO que queda solo en `staging` es el PoS** (comandero/KDS/cobro/FE/inventario activo, migs 022–037), diferido y bloqueado por el PILAR de auth. La ventana de **estabilización quedó CERRADA**.
+>
+> **🆕 2026-07-20 → 21 — 3 pases cortos a PROD (todos código puro · cero migraciones · sagrados byte-idénticos · validados en staging + piso). `main` `9fc1147` · `staging` `e597206`.**
+> 1. **Estadísticas de propinas → "Distribución por puesto"** (07-20, frontend puro): barra por ROL con su % del take-home del mes, cocina incluida; helper puro `distribucionPorPuesto`.
+> 2. **4 mejoras de Caja/Cierre** (07-20): (a) el asistente de facturas se llama **"Agregar factura / movimiento"**; (b) en **Pendientes** las propinas caen en **UN grupo "Propinas" (🎁)** con cada turno como fila (no un grupo por turno) y el comprobante dice "de propinas"; (c) las secciones de propinas (turno y cierre) arrancan **plegadas** con cantidad+total en el encabezado, y en el cierre van debajo de las ventas de la fase; (d) la **Fase 1 (mediodía) se sella con la Caja Diaria ABIERTA** — la Fase 2 sigue exigiendo turno cerrado; (e) una propina dejada **pendiente se salda por BANCO** desde Pendientes (`Transferencia`/`Banco`) → no descuenta efectivo del cierre.
+> 3. **Una sola vía para aprobar propinas pendientes** (07-21): cierra la última puerta del "ajuste fantasma ≈ propinas" — aprobar una propina pendiente **desde el select de estado de Movimientos** también rutea a banco (helper compartido `aprobacionPropinaFields`), no solo la pestaña Pendientes. **NO corrige hacia atrás** (las ya aprobadas en efectivo quedan como están).
+> Guardrails de los 3: "Pagar ahora" (`propinaEgresoFields` = Efectivo/Registradora) y la math del cierre (`CashCierre` sin diff) **intactos**; `cashUtils`/`tipCalculations` byte-idénticos. Rollback de cualquiera: revert del commit + redeploy (trivial). ⏳ **Smoke físico del pase 07-21 en prod pendiente.**
 
 ---
 
@@ -14,8 +20,8 @@
 
 | Rama | Hash | Qué es |
 |---|---|---|
-| `main` | **`880c863`** | **PROD (estable, en uso).** Toda la capa de inteligencia + estabilidad + ola 2026-07 (Caja/Cierre/USD/Revisión/asistente + Bandeja + unificación) + propinas ef/elec + cierre ventas-0/resumen + Proveedores (lista simple, buscador, 'Puntual', Rechazar) + hotfix buscador Movimientos null-safe + quick-wins C2/C3 + buscador Proveedores. **SIN PoS.** Migs: ledger **≤021** + **038–046 + subset core de 026** out-of-band. |
-| `staging` | **`8c41965`** | **Fuente de verdad del desarrollo.** Todo lo de `main` **+ el PoS/KDS/comandero + FE (SIM) + inventario activo COGS** (migs 022–037). Es lo único que separa staging de prod. Migs: ledger **022–038** + **039–046** out-of-band. |
+| `main` | **`9fc1147`** | **PROD (estable, en uso).** Toda la capa de inteligencia + estabilidad + ola 2026-07 (Caja/Cierre/USD/Revisión/asistente + Bandeja + unificación) + propinas ef/elec + cierre ventas-0/resumen + Proveedores (lista simple, buscador, 'Puntual', Rechazar) + hotfix buscador Movimientos null-safe + quick-wins C2/C3 + buscador Proveedores + **elegibilidad de propina por rol** + **TipStats "por puesto"** + **pulido Caja/Cierre 07-20/21** (asistente renombrado · propinas en un grupo en Pendientes + plegables · Fase 1 con caja abierta · propina pendiente → banco, una sola vía). **SIN PoS.** Migs: ledger **≤021** + **038–046 + 048 + subset core de 026** out-of-band. |
+| `staging` | **`e597206`** | **Fuente de verdad del desarrollo.** Todo lo de `main` **+ el PoS/KDS/comandero + FE (SIM) + inventario activo COGS** (migs 022–037). Es lo único que separa staging de prod. Migs: ledger **022–038** + **039–046 + 048** out-of-band. |
 
 > **Supabase refs:** **PROD = `yiczgdtirrkdvohdquzf`** ("satori-app") · **STAGING = `hwiatgicyyqyezqwldia`** ("satori-staging").
 > 🛑 **RITUAL antes de CUALQUIER comando de base:** `cat supabase/.temp/project-ref` → confirmar el proyecto (NO existe `linked-project.json`). **`db query --linked` CUELGA en algunos entornos** → workaround: curl a la Management API (`POST .../v1/projects/<ref>/database/query`, token del Keychain macOS, servicio `Supabase CLI`). Ver HALLAZGOS.
@@ -23,7 +29,7 @@
 
 ## (b) PROD vs STAGING
 
-- **En PROD (`main` `880c863`) — ✅ TODO validado en piso por el dueño:** ventas/analítica · propinas (incl. **efectivo/electrónico**, mig 046) · caja (turnos + cierre 2 fases + movimientos + pendientes) · **cierre: ventas ₡0 con confirmación + resumen previo + fórmula USD firmada + Opción B (ajuste al ledger) + propinas por la vía real** · finanzas/P&L · reportes+emails · admin · auth F2 · realtime · offline · estabilidad (Olas 1/1.1, pantalla negra, IDOR, outbox) · Bandeja + unificación Bandeja↔Caja · Tier 3 Revisión/asistente · autorización de gerencia por contraseña (mig 045) · **Proveedores = lista simple con buscador** (rojo=deuda saldado → simplificado; ciclo 'Puntual'; Rechazar con gerencia) · **quick-wins C2 (historial over/short) + C3 (email del cierre)**.
+- **En PROD (`main` `9fc1147`) — ✅ TODO validado en piso por el dueño:** ventas/analítica · propinas (incl. **efectivo/electrónico**, mig 046; **elegibilidad por rol**, mig 048; **TipStats "por puesto"**) · caja (turnos + cierre 2 fases + movimientos + pendientes) · **cierre: ventas ₡0 con confirmación + resumen previo + fórmula USD firmada + Opción B (ajuste al ledger) + propinas por la vía real** · finanzas/P&L · reportes+emails · admin · auth F2 · realtime · offline · estabilidad (Olas 1/1.1, pantalla negra, IDOR, outbox) · Bandeja + unificación Bandeja↔Caja · Tier 3 Revisión/asistente · autorización de gerencia por contraseña (mig 045) · **Proveedores = lista simple con buscador** (rojo=deuda saldado → simplificado; ciclo 'Puntual'; Rechazar con gerencia) · **quick-wins C2 (historial over/short) + C3 (email del cierre)** · **pulido Caja/Cierre 07-20/21** (asistente "Agregar factura / movimiento" · propinas en un grupo en Pendientes + secciones plegables · Fase 1 con caja abierta · propina pendiente → banco por una sola vía). ⏳ smoke físico del pase 07-21 pendiente.
 - **Solo en STAGING:** el **PoS completo** (catálogo/salón, comandero, KDS, cobro+splits+ticket SIM, FE estructura SIM, inventario activo COGS) — migs 022–037. **Es lo único que queda por pasar**, DIFERIDO (bloqueado por el PILAR de auth, §f).
 - **En rama aparte (sin merge):** `propina-pool` (espera decisión, §e).
 
@@ -31,8 +37,8 @@
 
 | Entorno | En el ledger (`schema_migrations`) | Fuera del ledger | Notas |
 |---|---|---|---|
-| **PROD** | **≤021** | **038–046 + subset core de 026** | 022–037 (PoS) NO están. mig 046 = `tip_sessions.pool_barra_electronico_crc` (propinas ef/elec, 2026-07-10). Idempotentes, verificadas por privilegio. |
-| **STAGING** | **022–038** | **039–046** | mig 046 aplicada 2026-07-09 (`db query --linked`). |
+| **PROD** | **≤021** | **038–046 + 048 + subset core de 026** | 022–037 (PoS) NO están. mig 046 = `tip_sessions.pool_barra_electronico_crc` (propinas ef/elec, 2026-07-10). **mig 048** = `role_tip_points.recibe_propina` (elegibilidad por rol, 2026-07-18; aditiva, 7 roles en `true` al aplicar). Idempotentes, verificadas por privilegio. |
+| **STAGING** | **022–038** | **039–046 + 048** | mig 046 aplicada 2026-07-09 (`db query --linked`); mig 048 aplicada 2026-07-18. |
 
 **⚠️ Reconciliación del ledger = sesión dedicada (NO tocar el historial):** ambos entornos arrastran migraciones out-of-band; persisten **009** (drift) y **035** (fantasma, solo en la rama `propina-pool`). **`db push`/`repair` FRENADOS** hasta esa sesión. Todo idempotente. `schema_migrations` intacto. **mig 047** (para la notificación de pago a proveedores) aún NO existe en ninguna base — depende de la firma de esa SPEC (§f-2).
 
@@ -40,7 +46,7 @@
 
 ## (d) Build por módulo
 
-Gate de todo pase: **`VITE_APP_ENV=production npm run build` → EXIT 0** (`tsc -b`, **NO** `tsc --noEmit` — falso verde por `tsconfig` raíz con `files:[]`) + **suite SIN variables de entorno** (main ≈**231** tests · staging ≈**311**, arrastra los tests del PoS). El check **"Supabase Preview" es rojo crónico ajeno**; los que validan son `build`+`deploy` (Pages, prod) y `Cloudflare Pages` (staging).
+Gate de todo pase: **`VITE_APP_ENV=production npm run build` → EXIT 0** (`tsc -b`, **NO** `tsc --noEmit` — falso verde por `tsconfig` raíz con `files:[]`) + **suite SIN variables de entorno** (main ≈**309** tests · staging ≈**389**, arrastra los tests del PoS). El check **"Supabase Preview" es rojo crónico ajeno**; los que validan son `build`+`deploy` (Pages, prod) y `Cloudflare Pages` (staging).
 
 Leyenda: ✅ en prod, **validado en piso** · 🧪 solo staging.
 
@@ -53,6 +59,8 @@ Leyenda: ✅ en prod, **validado en piso** · 🧪 solo staging.
 | Proveedores = lista simple + buscador (ciclo 'Puntual' · Rechazar con gerencia) | ✅ | prod + staging |
 | Quick-wins **C2** (historial over/short en Resumen) + **C3** (email del cierre, Edge Fn `cierre-email`) + buscador Proveedores | ✅ | prod + staging (⏳ smoke real de C3, §e-1) |
 | Hotfix buscador Movimientos null-safe (`database.ts` mentía la nulabilidad vs `supabase.gen.ts`) | ✅ | prod + staging |
+| Elegibilidad de propina por rol (toggle en Admin, mig 048) · TipStats "Distribución por puesto" | ✅ | prod + staging |
+| Pulido Caja/Cierre 07-20/21 (asistente renombrado · propinas 1 grupo en Pendientes + plegables · Fase 1 con caja abierta · propina pendiente → banco, una sola vía) | ✅ | prod + staging (⏳ smoke físico 07-21) |
 | PoS (comandero/KDS/cobro/ticket SIM) · FE SIM · Inventario activo COGS | 🧪 solo staging | staging (migs 022–037) |
 
 ## (e) Pendientes de PLATA / validación (sin firma o esperando validación de la dueña)

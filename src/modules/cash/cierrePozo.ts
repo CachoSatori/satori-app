@@ -19,8 +19,18 @@ import { dateCR } from '../../shared/utils'
 // exactamente como hoy (`saldoCajaFuerte` sigue vivo para eso): el histórico no se toca,
 // ni sus números ni su render. Desde el corte, modelo nuevo. Cero migraciones.
 
-/** Fecha del corte por defecto, si el entorno no dice otra cosa. */
-export const POZO_CORTE_FALLBACK = '2026-08-01'
+/**
+ * Fecha del corte por defecto, si el entorno no dice otra cosa.
+ *
+ * ⚠️⚠️ COMMIT SOLO-STAGING — **NO CHERRY-PICKEAR A MAIN** ⚠️⚠️
+ * En `main` este valor debe seguir siendo **'2026-08-01'**. Acá está adelantado a
+ * '2026-07-23' para que la dueña pueda validar el flujo nuevo en staging desde mañana.
+ *
+ * Es el PLAN B documentado: la vía preferida es `VITE_POZO_CORTE` en el dashboard de
+ * Cloudflare Pages (config externa, no se puede setear desde el repo). Si esa variable se
+ * carga, GANA sobre este fallback y este commit deja de tener efecto — las dos vías conviven.
+ */
+export const POZO_CORTE_FALLBACK = '2026-07-23'
 
 /**
  * Valida una fecha de corte venida del entorno. Devuelve la fecha si es un YYYY-MM-DD real,

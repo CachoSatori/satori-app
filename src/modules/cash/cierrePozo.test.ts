@@ -69,9 +69,14 @@ function deberia(
 
 describe('cierrePozo — el corte hacia adelante', () => {
   it('los días anteriores al corte NO usan el modelo nuevo', () => {
-    expect(esPostCorte('2026-07-31')).toBe(false)
+    // Relativo a POZO_CORTE a propósito: la fecha es CONFIG (se adelanta en staging para
+    // validar), y un test que la clave se rompe cada vez que se mueve.
+    const vispera = new Date(Date.parse(`${POZO_CORTE}T00:00:00Z`) - 86_400_000)
+      .toISOString()
+      .slice(0, 10)
+    expect(esPostCorte(vispera)).toBe(false)
     expect(esPostCorte(POZO_CORTE)).toBe(true)
-    expect(esPostCorte('2026-12-01')).toBe(true)
+    expect(esPostCorte('9999-12-31')).toBe(true)
     expect(esPostCorte('')).toBe(false)
   })
 

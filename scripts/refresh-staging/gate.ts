@@ -92,6 +92,33 @@ export async function verificarProdEsSoloLectura(tok: string): Promise<string> {
 // Se copian los DATOS (no la estructura) del dominio CAJA + PROPINAS, que es lo que el
 // dueño va a validar en piso. Todo lo demás queda como está, a propósito.
 
+/**
+ * Orden PADRES → HIJOS, del grafo real de FKs (pg_constraint). Se INSERTA en este orden y se
+ * BORRA en el inverso: `cash_movements.session_id → cash_sessions` es ON DELETE CASCADE, así
+ * que borrar el padre primero se lleva puesto al hijo.
+ */
+export const ORDEN_CARGA = [
+  'employees', 'suppliers', 'exchange_rates', 'role_tip_points',
+  'cash_sessions', 'tip_sessions',
+  'cash_movements', 'tip_entries',
+  'documents', 'movement_deletions',
+  'cash_cierres_dia',
+] as const
+
+/**
+ * OPCIÓN 2 (firmada por la dueña): los ids de perfil de prod que no existen en staging se
+ * remapean a este perfil. Es `Caja Satori · satorisushibar@gmail.com`, owner de staging.
+ * No se toca auth ni el esquema; lo único que cambia es de quién fue la mano.
+ */
+export const OWNER_STAGING = 'cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888'
+
+/**
+ * Excepción al remapeo: `employees.profile_id` NO es un sello de auditoría, es el vínculo
+ * entre un empleado y su cuenta. Apuntarlo al owner diría que esos empleados SON la dueña.
+ * Se pone en NULL, que es un valor legítimo de la columna (la FK es ON DELETE SET NULL).
+ */
+export const FK_A_NULL = new Set<string>(['employees.profile_id'])
+
 export const TABLAS_REFRESH = [
   'cash_movements',
   'cash_sessions',

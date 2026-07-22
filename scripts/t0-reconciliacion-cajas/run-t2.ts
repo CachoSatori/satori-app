@@ -8,10 +8,34 @@
 
 import { loadEnv } from './env.ts'
 import { abrirLector, leerSnapshot } from './db.ts'
-import { asCierre, asMov, asSesion, type Mov } from './analisis.ts'
+import { asCierre, asMov, asSesion, type Cierre, type Mov, type Sesion } from './analisis.ts'
 import { corridaAnclada } from './anclado.ts'
 import { corridaAncladaT2 } from './anclado-t2.ts'
 import { fi } from './reporte.ts'
+import { dateCR, fechaDeMov, TOLERANCIA_CRC } from './analisis.ts'
+
+/**
+ * Parte de `propinas_m + propinas_n` que NO corresponde a propinas en EFECTIVO de ese día.
+ *
+ * El campo sellado arrastra propinas pagadas por TRANSFERENCIA (verificado en prod: ₡15.000 el
+ * 2026-07-19 y ₡9.000 el 2026-07-20). Esa plata nunca salió del efectivo, así que el modelo
+ * viejo la restaba de más y el pozo, correctamente, no la resta. Es la diferencia esperada
+ * entre las dos corridas — y hay que medirla, no taparla.
+ */
+function selladoNoEfectivo(cierre: Cierre, movs: Mov[], sesiones: Sesion[]): number {
+  const porSesion = new Map(sesiones.map(x => [x.id, x]))
+  const enEfectivo = movs
+    .filter(
+      m =>
+        m.subcategory === 'Propinas por turno' &&
+        m.status !== 'rechazado' &&
+        (m.method === 'Efectivo' || !m.method) &&
+        (fechaDeMov(m, porSesion) || dateCR(m.created_at)) === cierre.session_date,
+    )
+    .reduce((a, m) => a + m.amount_crc, 0)
+  const sellado = (cierre.propinas_m_crc || 0) + (cierre.propinas_n_crc || 0)
+  return Math.max(0, sellado - enEfectivo)
+}
 
 async function main(): Promise<void> {
   const lector = abrirLector(loadEnv()) // candado: staging o nada
@@ -43,14 +67,38 @@ async function main(): Promise<void> {
     )
   }
 
-  const okT1 = contig(1, t1)
-  const okT2 = contig(1, t2)
-  if (okT2 < okT1) {
+  // ── Red de regresión ──────────────────────────────────────────────────────
+  // No alcanza con contar pares: el T1 se apoya en los campos sellados y el T2 en los
+  // movimientos, así que donde el sello está mal los dos tienen que diferir. Cada
+  // divergencia se explica o el script aborta.
+  const sinExplicar: string[] = []
+  for (const x of t2) {
+    const y = t1.find(z => z.fecha === x.fecha)
+    if (!y) continue
+    const gap = x.deberiaNuevo - y.esperado
+    if (Math.abs(gap) <= 0.005) continue
+    const c = cierres.find(z => z.session_date === x.fecha && z.tipo === 'completo')
+    const esperado = c ? selladoNoEfectivo(c, movs, sesiones) : 0
+    const explicado = Math.abs(gap - esperado) <= TOLERANCIA_CRC
+    console.log(
+      `  ⚖️  ${x.fecha}: T2 − T1 = ${fi(gap)} · propinas NO-efectivo dentro del sello = ${fi(esperado)} ` +
+        `${explicado ? '→ EXPLICADO ✅' : '→ SIN EXPLICAR 🔴'}`,
+    )
+    if (!explicado) sinExplicar.push(`${x.fecha} (${fi(gap)} vs ${fi(esperado)})`)
+  }
+
+  if (sinExplicar.length) {
     throw new Error(
-      `REGRESIÓN: el modelo nuevo reproduce ${okT2} pares consecutivos y el núcleo del T1 reproducía ${okT1}.`,
+      `REGRESIÓN: ${sinExplicar.length} par(es) donde el modelo nuevo difiere del núcleo T1 sin causa ` +
+        `conocida: ${sinExplicar.join(' · ')}.`,
     )
   }
-  console.log(`[T2] ✅ el modelo nuevo reproduce los mismos ${okT2} pares consecutivos que el T1`)
+  const okT1 = contig(1, t1)
+  const okT2 = contig(1, t2)
+  console.log(
+    `[T2] ✅ sin regresiones: toda diferencia entre el modelo nuevo y el núcleo T1 queda explicada por ` +
+      `propinas NO-efectivo metidas en los campos sellados (pares consecutivos: T1 ${okT1} · T2 ${okT2}).`,
+  )
 }
 
 main().catch((e: unknown) => {

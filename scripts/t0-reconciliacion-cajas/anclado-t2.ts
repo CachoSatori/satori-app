@@ -43,6 +43,11 @@ export function corridaAncladaT2(movs: Mov[], sesiones: Sesion[], cierres: Cierr
   // metía las ventas del día del ancla —selladas después— dentro del período, y las contaba dos
   // veces (ya estaban adentro del conteo físico del ancla).
   const sesionFecha = new Map(sesiones.map(x => [x.id, x.session_date]))
+  // El modelo real arranca el pozo en el asiento de 'Apertura pozo' más reciente. Esta corrida
+  // RE-ANCLA en cada par, así que tiene que ser dueña del ancla: si quedara la apertura real de
+  // la base (sembrada para la validación en piso), taparía la sintética y el corte por abajo
+  // se llevaría todo el período.
+  const sinApertura = movs.filter(m => m.subcategory !== 'Apertura pozo')
   const completos = cierres
     .filter(c => c.tipo === 'completo')
     .sort((a, b) => a.session_date.localeCompare(b.session_date))
@@ -75,7 +80,7 @@ export function corridaAncladaT2(movs: Mov[], sesiones: Sesion[], cierres: Cierr
     // función real; el filtro por fecha operativa y la exclusión de las filas del propio
     // cierre los hace ella.
     const base = basePozoParaCierre(
-      [apertura, ...movs] as never[],
+      [apertura, ...sinApertura] as never[],
       sesiones as never[],
       act.session_date,
     ).filter(m => {

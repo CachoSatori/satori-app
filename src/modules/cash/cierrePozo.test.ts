@@ -9,6 +9,7 @@ import {
   diasPendientesDeCierre,
   esFilaDelCierre,
   esPostCorte,
+  fechaAperturaPozo,
   fechaOperativa,
   hayMontosNegativos,
   ventaSospechosaDeSerNeta,
@@ -394,5 +395,45 @@ describe('cierrePozo — la fecha de corte se puede fijar por entorno', () => {
 
   it('POZO_CORTE queda resuelto y con formato válido', () => {
     expect(POZO_CORTE).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+})
+
+describe('cierrePozo — el pozo arranca en el asiento de apertura', () => {
+  const sessions = [ses('sVieja', '2026-06-10'), ses('sNueva', '2026-08-03')]
+  const apertura = mov({
+    subcategory: 'Apertura pozo',
+    description: 'Apertura pozo 2026-08-01',
+    amount_crc: 744_575,
+  })
+  const historiaVieja = mov({
+    movement_type: 'egreso_operativo', caja_origen: 'Caja Proveedores',
+    amount_crc: 2_000_000, session_id: 'sVieja',
+  })
+  const nuevo = mov({
+    movement_type: 'egreso_operativo', caja_origen: 'Caja Proveedores',
+    amount_crc: 25_000, session_id: 'sNueva',
+  })
+
+  it('ignora TODO lo anterior a la apertura: esa cifra ya lo contiene', () => {
+    // Sin este corte, el histórico (que ni siquiera cuadra: da negativo) se sumaría a la
+    // apertura y el "debería" no tendría sentido.
+    const r = deberia([apertura, historiaVieja, nuevo], sessions, '2026-08-05')
+    expect(r.crc).toBe(744_575 - 25_000)
+  })
+
+  it('sin asiento de apertura se cuenta todo (comportamiento previo intacto)', () => {
+    const r = deberia([historiaVieja, nuevo], sessions, '2026-08-05')
+    expect(r.crc).toBe(-2_000_000 - 25_000)
+  })
+
+  it('si hay varias aperturas, manda la más reciente', () => {
+    const vieja = mov({ subcategory: 'Apertura pozo', description: 'Apertura pozo 2026-07-01', amount_crc: 111 })
+    const r = deberia([vieja, apertura, historiaVieja, nuevo], sessions, '2026-08-05')
+    expect(r.crc).toBe(744_575 - 25_000)
+  })
+
+  it('fechaAperturaPozo devuelve null cuando no hay ninguna', () => {
+    expect(fechaAperturaPozo([historiaVieja], new Map())).toBeNull()
+    expect(fechaAperturaPozo([apertura], new Map())).toBe('2026-08-01')
   })
 })

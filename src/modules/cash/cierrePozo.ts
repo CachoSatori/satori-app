@@ -105,11 +105,31 @@ export function fechaOperativa(m: CashMovement, sesionFecha: Map<string, string>
 }
 
 /**
- * Movimientos que alimentan el pozo del cierre de `fecha`: todo lo que pertenece a ese día
- * o a uno anterior, MENOS lo que el propio cierre generó.
+ * Fecha del asiento de APERTURA del pozo más reciente (o `null` si no hay ninguno).
  *
- * El corte por fecha operativa (y no por `created_at`) es lo que hace que sellar días en
- * otro orden no mueva el número.
+ * El pozo arranca ahí: el asiento de apertura ES el conteo físico del día del corte, así que
+ * todo lo anterior ya está adentro de esa cifra. Sin este corte, el saldo sumaría la apertura
+ * MÁS toda la historia previa y quedaría inservible — el histórico ni siquiera tiene ancla
+ * (medido en T0: el pozo acumulado da negativo).
+ */
+export function fechaAperturaPozo(movements: CashMovement[], sesionFecha: Map<string, string>): string | null {
+  let ultima: string | null = null
+  for (const m of movements) {
+    if (m.subcategory !== SUBCAT_APERTURA_POZO) continue
+    const f = fechaOperativa(m, sesionFecha)
+    if (f && (!ultima || f > ultima)) ultima = f
+  }
+  return ultima
+}
+
+/**
+ * Movimientos que alimentan el pozo del cierre de `fecha`: los que pertenecen a ese día o a
+ * uno anterior **pero no antes de la apertura**, menos lo que el propio cierre generó.
+ *
+ * Dos cortes, cada uno con su motivo:
+ *   · por ARRIBA, `<= fecha` con la FECHA OPERATIVA (no `created_at`): sellar días en otro
+ *     orden no mueve el número.
+ *   · por ABAJO, `>= fecha de apertura`: la apertura ya contiene todo lo anterior.
  */
 export function basePozoParaCierre(
   movements: CashMovement[],
@@ -117,7 +137,13 @@ export function basePozoParaCierre(
   fecha: string,
 ): CashMovement[] {
   const sesionFecha = new Map(sessions.map(s => [s.id, s.session_date]))
-  return movements.filter(m => !esFilaDelCierre(m, fecha) && fechaOperativa(m, sesionFecha) <= fecha)
+  const apertura = fechaAperturaPozo(movements, sesionFecha)
+  return movements.filter(m => {
+    if (esFilaDelCierre(m, fecha)) return false
+    const f = fechaOperativa(m, sesionFecha)
+    if (f > fecha) return false
+    return apertura === null || f >= apertura
+  })
 }
 
 // ── El "debería" del modelo nuevo ────────────────────────────────────────────

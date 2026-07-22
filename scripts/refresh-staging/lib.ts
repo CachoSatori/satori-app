@@ -71,3 +71,54 @@ export async function columnasDe(tabla: string, tok: string): Promise<Set<string
   )) as { column_name: string }[]
   return new Set(filas.map(x => x.column_name))
 }
+
+// ── Remapeo de perfiles (OPCIÓN 2, firmada) ─────────────────────────────────
+
+/** Columnas con FK a `public.profiles`, por tabla. Se consulta en runtime para que no drifte. */
+export async function columnasFkProfiles(tok: string): Promise<Map<string, string[]>> {
+  const { leerDeStaging } = await import('./gate.ts')
+  const filas = (await leerDeStaging(
+    `select conrelid::regclass::text tabla, a.attname col
+       from pg_constraint c
+       join lateral unnest(c.conkey) k(attnum) on true
+       join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum
+      where c.contype = 'f'
+        and c.connamespace = 'public'::regnamespace
+        and c.confrelid = 'public.profiles'::regclass`,
+    tok,
+  )) as { tabla: string; col: string }[]
+  const m = new Map<string, string[]>()
+  for (const f of filas) m.set(f.tabla, [...(m.get(f.tabla) ?? []), f.col])
+  return m
+}
+
+export type Remapeo = { columna: string; deUuid: string; filas: number; destino: string }
+
+/**
+ * Reescribe, EN MEMORIA y antes de insertar, los ids de perfil que staging no tiene.
+ * Nunca se manda un valor que la FK vaya a rechazar: se corrige en origen, no se fuerza la base.
+ */
+export function remapearPerfiles(
+  tabla: string,
+  filas: Fila[],
+  columnas: string[],
+  idsValidos: Set<string>,
+  owner: string,
+  aNull: Set<string>,
+): Remapeo[] {
+  const cuenta = new Map<string, Remapeo>()
+  for (const f of filas) {
+    for (const col of columnas) {
+      const v = f[col]
+      if (v == null || typeof v !== 'string' || idsValidos.has(v)) continue
+      const clave = `${tabla}.${col}`
+      const destino = aNull.has(clave) ? null : owner
+      f[col] = destino
+      const k = `${clave}|${v}`
+      const prev = cuenta.get(k)
+      if (prev) prev.filas += 1
+      else cuenta.set(k, { columna: clave, deUuid: v, filas: 1, destino: destino ?? 'NULL' })
+    }
+  }
+  return [...cuenta.values()].sort((a, b) => b.filas - a.filas)
+}

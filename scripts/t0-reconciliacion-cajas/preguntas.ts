@@ -9,7 +9,8 @@
 // residuo declarado y no se fuerza la conclusión.
 
 import { contribucionCajaFuerte } from './pozo.ts'
-import { dateCR, fechaDeMov, TOLERANCIA_CRC, type Cierre, type Mov, type Sesion } from './analisis.ts'
+import { dateCR, diasEntre, fechaDeMov, TOLERANCIA_CRC, type Cierre, type Mov, type Sesion } from './analisis.ts'
+import type { ParAnclado } from './anclado.ts'
 
 export const SUBCAT_VENTAS_CIERRE = 'Ventas cierre'
 export const SUBCAT_AJUSTE_CIERRE = 'Ajuste de cierre'
@@ -207,6 +208,8 @@ export type DiaFondo = {
   brecha: number
   explicado: boolean
   sepDiaria: number
+  /** El par anclado que termina en este día — el instrumento riguroso. */
+  anclado: { residuo: number; difReconstruida: number; pozoCuadra: boolean; diasDeGap: number } | null
 }
 
 export function analisisFondo(
@@ -214,6 +217,7 @@ export function analisisFondo(
   movs: Mov[],
   sesiones: Sesion[],
   fechas: string[],
+  pares: ParAnclado[] = [],
 ): DiaFondo[] {
   const porSesion = new Map(sesiones.map(s => [s.id, s]))
   const CAJAS = ['Caja Fuerte', 'Caja Proveedores', 'Registradora']
@@ -287,6 +291,175 @@ export function analisisFondo(
       brecha,
       explicado: Math.abs(brecha) <= TOLERANCIA_CRC,
       sepDiaria: cierre?.sep_diaria_crc ?? 0,
+      anclado: (() => {
+        const par = pares.find(x => x.fecha === fecha)
+        return par
+          ? {
+              residuo: par.residuo,
+              difReconstruida: par.difReconstruida,
+              pozoCuadra: par.pozoCuadra,
+              diasDeGap: par.diasDeGap,
+            }
+          : null
+      })(),
+    }
+  })
+}
+
+
+// ── P1-bis · Abrir el período de un par anclado, movimiento por movimiento ───
+//
+// Cuando el par anclado deja un residuo, la única forma honesta de cerrarlo es abrir el
+// período y ver qué movimientos lo componen. Si la suma de los egresos de efectivo del
+// período iguala el residuo, la conclusión es directa: esa plata salió de las cajas pero
+// el conteo físico del día del cierre no la refleja.
+
+export type FilaPeriodo = {
+  fecha: string
+  id: string
+  tipo: string
+  caja: string
+  method: string
+  subcategoria: string
+  monto: number
+  aportePozo: number
+  clase: string
+  excluido: boolean
+  descripcion: string
+}
+
+export type DescomposicionPeriodo = {
+  desde: string
+  hasta: string
+  diasDeGap: number
+  residuo: number
+  filas: FilaPeriodo[]
+  /** Egresos de efectivo de cajas físicas del período (los que el pozo resta). */
+  egresosEfectivo: { n: number; crc: number }
+  /** Traspasos contra Banco del período. */
+  banco: { n: number; crc: number }
+  /** residuo − egresosEfectivo: lo que queda después de atribuirle el residuo a esos egresos. */
+  sobranteTrasEgresos: number
+  cierraConEgresos: boolean
+}
+
+export function descomposicionPeriodo(
+  desde: string,
+  hasta: string,
+  residuo: number,
+  movs: Mov[],
+  sesiones: Sesion[],
+  esExcluido: (m: Mov, fechaCierre: string, fechaMov: string) => boolean,
+  contribucion: (m: Mov) => { crc: number; clase: string },
+): DescomposicionPeriodo {
+  const porSesion = new Map(sesiones.map(s => [s.id, s]))
+  const filas: FilaPeriodo[] = movs
+    .map(m => ({ m, fecha: fechaDeMov(m, porSesion) || dateCR(m.created_at) }))
+    .filter(x => x.fecha > desde && x.fecha <= hasta)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.m.created_at.localeCompare(b.m.created_at))
+    .map(({ m, fecha }) => {
+      const excluido = esExcluido(m, hasta, fecha)
+      const c = contribucion(m)
+      return {
+        fecha,
+        id: m.id,
+        tipo: m.movement_type,
+        caja: m.caja_origen ?? '(null)',
+        method: m.method ?? '(null)',
+        subcategoria: m.subcategory ?? '(null)',
+        monto: m.amount_crc,
+        aportePozo: excluido ? 0 : c.crc,
+        clase: excluido ? 'excluido' : c.clase,
+        excluido,
+        descripcion: m.description ?? '',
+      }
+    })
+
+  const eg = filas.filter(f => !f.excluido && f.clase === 'egreso')
+  const bc = filas.filter(f => !f.excluido && f.clase.startsWith('traspaso-') && f.clase.includes('banco'))
+  const egresosEfectivo = { n: eg.length, crc: eg.reduce((a, f) => a + f.monto, 0) }
+
+  return {
+    desde,
+    hasta,
+    diasDeGap: diasEntre(desde, hasta),
+    residuo,
+    filas,
+    egresosEfectivo,
+    banco: { n: bc.length, crc: bc.reduce((a, f) => a + f.aportePozo, 0) },
+    sobranteTrasEgresos: residuo - egresosEfectivo.crc,
+    cierraConEgresos: Math.abs(residuo - egresosEfectivo.crc) <= TOLERANCIA_CRC,
+  }
+}
+
+// ── P2-bis · El flujo del FONDO (Caja Proveedores) ──────────────────────────
+//
+// La hipótesis dice que el comportamiento depende de si la plata del fondo estaba dentro
+// del pool del ledger ese día. Para contrastarla hay que mirar las dos puntas: cómo se
+// RECARGA el fondo (¿queda asentado como ingreso a Caja Proveedores?) y de dónde sale ese
+// efectivo (el `sep_diaria` que el cierre anterior apartó del conteo físico).
+
+export type FlujoFondo = {
+  fecha: string
+  cierreAnterior: string | null
+  /** Lo que el cierre anterior apartó como "Caja Diaria mañana": el fondo del día. */
+  sepDiariaAnterior: number
+  /** Ingresos a Caja Proveedores ESE día (recarga asentada en el ledger). */
+  ingresosAlFondoDelDia: { n: number; crc: number }
+  /** Ingresos a Caja Proveedores en todo el período desde el cierre anterior. */
+  ingresosAlFondoDelPeriodo: { n: number; crc: number }
+  /** Efectivo que salió de Caja Proveedores ese día. */
+  egresosDelFondoDelDia: { n: number; crc: number }
+  /** Último ingreso a Caja Proveedores registrado en TODO el histórico, antes de este día. */
+  ultimaRecargaAsentada: { fecha: string; crc: number } | null
+  diasDesdeLaUltimaRecarga: number | null
+}
+
+export function flujoDelFondo(
+  cierres: Cierre[],
+  movs: Mov[],
+  sesiones: Sesion[],
+  fechas: string[],
+): FlujoFondo[] {
+  const porSesion = new Map(sesiones.map(s => [s.id, s]))
+  const completos = cierres
+    .filter(c => c.tipo === 'completo')
+    .sort((a, b) => a.session_date.localeCompare(b.session_date))
+  const fechaDe = (m: Mov): string => fechaDeMov(m, porSesion) || dateCR(m.created_at)
+
+  const ingresosFondo = movs
+    .filter(m => m.caja_origen === 'Caja Proveedores' && m.movement_type === 'ingreso' && m.status !== 'rechazado')
+    .map(m => ({ m, fecha: fechaDe(m) }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha))
+
+  return fechas.map(fecha => {
+    const idx = completos.findIndex(c => c.session_date === fecha)
+    const anterior = idx > 0 ? completos[idx - 1] : null
+
+    const delDia = ingresosFondo.filter(x => x.fecha === fecha)
+    const delPeriodo = anterior
+      ? ingresosFondo.filter(x => x.fecha > anterior.session_date && x.fecha <= fecha)
+      : delDia
+    const egresos = movs.filter(
+      m =>
+        fechaDe(m) === fecha &&
+        m.caja_origen === 'Caja Proveedores' &&
+        m.movement_type.startsWith('egreso') &&
+        m.status !== 'rechazado' &&
+        (m.method === 'Efectivo' || !m.method),
+    )
+    const previas = ingresosFondo.filter(x => x.fecha < fecha)
+    const ultima = previas.length ? previas[previas.length - 1] : null
+
+    return {
+      fecha,
+      cierreAnterior: anterior?.session_date ?? null,
+      sepDiariaAnterior: anterior?.sep_diaria_crc ?? 0,
+      ingresosAlFondoDelDia: { n: delDia.length, crc: delDia.reduce((a, x) => a + x.m.amount_crc, 0) },
+      ingresosAlFondoDelPeriodo: { n: delPeriodo.length, crc: delPeriodo.reduce((a, x) => a + x.m.amount_crc, 0) },
+      egresosDelFondoDelDia: { n: egresos.length, crc: egresos.reduce((a, m) => a + m.amount_crc, 0) },
+      ultimaRecargaAsentada: ultima ? { fecha: ultima.fecha, crc: ultima.m.amount_crc } : null,
+      diasDesdeLaUltimaRecarga: ultima ? diasEntre(ultima.fecha, fecha) : null,
     }
   })
 }

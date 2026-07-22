@@ -75,6 +75,12 @@ export type ParAnclado = {
   /** difReconstruida − difSellada. Si es ~0, el modelo reprodujo el día. */
   residuo: number
   reproduce: boolean
+  /**
+   * El POZO reconstruye el conteo físico (|contado − esperado| ≤ tolerancia). Es distinto de
+   * `reproduce`: si `pozoCuadra` es true pero el residuo es grande, el modelo nuevo acertó y
+   * el que se desvió fue el cierre — por lo que estructuralmente no puede ver.
+   */
+  pozoCuadra: boolean
   cuadro: boolean
   /** El cierre del día d se selló ANTES que el del día d−1 (se cargaron fuera de orden). */
   selladoFueraDeOrden: boolean
@@ -232,6 +238,7 @@ export function corridaAnclada(movs: Mov[], sesiones: Sesion[], cierres: Cierre[
       difSellada,
       residuo,
       reproduce,
+      pozoCuadra: Math.abs(difReconstruida) <= TOLERANCIA_CRC,
       cuadro: Math.abs(difSellada) < TOLERANCIA_CRC,
       selladoFueraDeOrden,
       aporteLedgerDelAnterior,

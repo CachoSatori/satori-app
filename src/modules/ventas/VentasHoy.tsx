@@ -8,6 +8,7 @@ import {
   allSaloneros, esCajero,
 } from './ventasUtils'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
+import { esPostCorte } from '../cash/cierrePozo'
 import { useAuth } from '../../shared/hooks/useAuth'
 
 interface Props {
@@ -236,6 +237,16 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
                 if (!profile) return
                 setRegistrando(true); setRegMsg(null)
                 try {
+                  // ⚠️ CANAL DUPLICADO — bloqueado desde el corte del pozo.
+                  // Este botón crea un ingreso de la venta del día en `Registradora`, y el
+                  // Cierre crea otro por la MISMA venta en `Caja Fuerte`. Con el modelo viejo
+                  // no chocaban (saldoCajaFuerte ignora Registradora); con el pozo las dos
+                  // cajas suman, así que la venta entraría DOS VECES. Post-corte la venta
+                  // entra por un solo canal: las ventas brutas del Cierre del Día.
+                  if (esPostCorte(activeDate)) {
+                    setRegMsg('⚠ Desde el pozo, las ventas entran por el Cierre del Día (ventas brutas). Este atajo duplicaría el ingreso.')
+                    return
+                  }
                   const cashSession = await getOpenCashSession()
                   if (!cashSession) { setRegMsg('⚠ No hay turno de caja abierto'); return }
                   await createCashMovement({

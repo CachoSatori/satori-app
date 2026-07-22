@@ -566,6 +566,54 @@ export async function recordCierreSales(params: {
   if (error) throw new Error(error.message)
 }
 
+
+// ── Asiento de APERTURA del pozo (T2) ────────────────────────────────────────
+//
+// El pozo necesita arrancar de una cifra física validada, porque el histórico no tiene
+// ancla (medido en T0: el pozo acumulado da negativo — a `Caja Proveedores` y `Registradora`
+// nunca se les cargó saldo inicial como movimiento).
+//
+// Mecánica deliberadamente mínima: UN ingreso en efectivo a Caja Fuerte con subcategoría
+// 'Apertura pozo'. El pozo lo cuenta como cualquier ingreso de caja física, sin código
+// especial. Idempotente por descripción, igual que `recordCierreAjuste`: re-ejecutarlo con
+// otra cifra corrige en vez de duplicar.
+//
+// ⚠️ LA CIFRA LA FIRMA EL DUEÑO al desplegar — es el conteo físico real del día del corte.
+// Este código no la inventa ni la deduce: se pasa por parámetro, una sola vez.
+export async function recordAperturaPozo(params: {
+  fecha:      string   // el día del corte (POZO_CORTE)
+  created_by: string
+  monto_crc:  number
+  monto_usd:  number
+}): Promise<void> {
+  const desc = `Apertura pozo ${params.fecha}`
+  // Idempotencia: borra la apertura previa de esa fecha antes de re-crearla.
+  await supabase.from('cash_movements').delete().eq('description', desc)
+  if (!params.monto_crc && !params.monto_usd) return
+  if (params.monto_crc < 0 || params.monto_usd < 0) {
+    throw new Error('La apertura del pozo no puede ser negativa')
+  }
+  const { error } = await withWriteTimeout(signal => supabase.from('cash_movements').insert({
+    session_id:    null,
+    created_by:    params.created_by,
+    movement_type: 'ingreso',
+    amount_crc:    params.monto_crc,
+    amount_usd:    params.monto_usd,
+    currency:      'CRC',
+    exchange_rate: null,
+    description:   desc,
+    subcategory:   'Apertura pozo',
+    supplier_id:   null,
+    supplier_name: '',
+    employee_name: '',
+    shift:         '',
+    caja_origen:   'Caja Fuerte',
+    method:        'Efectivo',
+    status:        'aprobado',
+  }).abortSignal(signal))
+  if (error) throw new Error(error.message)
+}
+
 // Registra (idempotente) el retiro de dueños a banco de un Cierre del día.
 // NO es un gasto: es un TRASPASO de efectivo de Caja Fuerte al Banco (para luego
 // pagar transferencias/servicios). Por eso movement_type='traspaso' y queda

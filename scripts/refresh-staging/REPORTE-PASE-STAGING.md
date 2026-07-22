@@ -1,91 +1,190 @@
-# Pase a STAGING · estado
+# Pase a STAGING · acta
 
-> ## 🔴 EL PASE **NO** SE EJECUTÓ
->
-> Frenado en **A.3 (la copia de datos)** por una **FK dura de `created_by` contra `profiles`**,
-> exactamente el caso que la consigna mandaba reportar en vez de forzar. El detalle, con números
-> y las cuatro opciones, está en [PLAN.md §4](PLAN.md).
->
-> **No se hizo merge, ni push, ni deploy, ni se sembró la apertura.** Nada salió a staging.
-> **La base de staging quedó ÍNTEGRA**, verificada contra el backup.
+**Rama desplegada:** `staging` ← `feat/t2-cierre-pozo` (fast-forward, sin merge commit).
+**Commit:** `5f78b56` · **`main` intacto en `9fc1147`.**
+**Fecha de corte activa:** **2026-07-23** · **Apertura del pozo: ₡744.575 · $3.441,00**
 
-## Qué SÍ quedó hecho
+---
 
-| Parte | Estado |
-|---|---|
-| **A.1** Plan read-only + diff de esquema + grafo de FKs | ✅ [PLAN.md](PLAN.md) |
-| **A.2** Backup de staging a JSON + restore documentado | ✅ 11 tablas · 3.415 filas |
-| **A.3** Copia prod → staging | 🔴 **FRENADA** — decisión pendiente |
-| **A.4** Verificación post-refresh | ⏸️ depende de A.3 |
-| **B** Corte por variable de entorno + test | ✅ commiteado |
-| **C.1** Seed de apertura | ⏸️ la cifra sale de los datos refrescados |
-| **C.2** Merge + push + deploy | ⏸️ sin datos frescos la validación en piso no sirve |
-| **C.3** Este reporte | ✅ (como estado, no como acta de pase) |
+## 1 · Refresh de datos prod → staging
 
-## Estado de la base de STAGING
+Copiados los **DATOS** (nunca la estructura) de **11 tablas · 3.451 filas**. Cero migraciones.
+PROD **nunca se tocó**: el smoke de rechazo de escritura (`25006`) se verificó antes de leer un
+solo dato, y todas las lecturas fueron con `read_only: true`.
 
-Se intentó la copia, falló en la primera tabla y **se restauró**. Verificado tabla por tabla
-contra el backup `_backups-staging/2026-07-22-pre-refresh/`:
+| tabla | staging antes | prod | staging después |
+|---|---|---|---|
+| `employees` | 31 | 35 | **35** ✅ |
+| `suppliers` | 85 | 75 | **75** ✅ |
+| `exchange_rates` | 3 | 3 | **3** ✅ |
+| `role_tip_points` | 7 | 7 | **7** ✅ |
+| `cash_sessions` | 169 | 167 | **167** ✅ |
+| `tip_sessions` | 177 | 239 | **239** ✅ |
+| `cash_movements` | 978 | 1423 | **1423** ✅ |
+| `tip_entries` | 1047 | 1332 | **1332** ✅ |
+| `documents` | 107 | 79 | **79** ✅ |
+| `movement_deletions` | 797 | 74 | **74** ✅ |
+| `cash_cierres_dia` | 16 | 17 | **17** ✅ |
 
-| tabla | filas |
-|---|---|
-| `cash_movements` | 980 |
-| `cash_sessions` | 170 |
-| `cash_cierres_dia` | 16 |
-| `suppliers` | 85 |
-| `tip_sessions` | 177 |
-| `tip_entries` | 1047 |
-| `role_tip_points` | 7 |
-| `employees` | 31 |
-| `exchange_rates` | 3 |
-| `movement_deletions` | 792 |
-| `documents` | 107 |
+**Conteos prod == staging en las 11.** Integridad verificada: **0** movimientos con sesión
+colgada · **0** con perfil inexistente · **0** con proveedor inexistente · **0** entradas de
+propina sin sesión o sin empleado.
 
-Además: **0** movimientos con `session_id` colgado y los **5** `documents.linked_movement_id`
-intactos. PROD nunca se tocó — el smoke de rechazo de escritura (`25006`) se verificó antes de
-leer un solo dato.
+Backup previo: `_backups-staging/2026-07-22-pre-refresh-2/` (gitignoreado, con su `RESTAURAR.md`).
 
-## B · La fecha de corte, resuelta
+### Remapeo de perfiles (opción 2, firmada) — **49 valores, no 14**
 
-`POZO_CORTE` ahora sale de **`VITE_POZO_CORTE`**, con `2026-08-01` de fallback y validación de
-formato (una fecha mal formada o inexistente —`2026-02-31`— cae al fallback y avisa por consola).
+> ⚠️ La estimación de 14 del PLAN era **incompleta**: se habían medido 5 de las **13** columnas
+> con FK a `profiles`. El número real, medido sobre las 13, es **49**.
 
-**Cómo inyectarla, y por qué esa vía.** El repo solo tiene workflow para **prod**
-(`.github/workflows/deploy.yml` → GitHub Pages). **Staging es Cloudflare Pages con configuración
-externa: no hay workflow en el repo**, la integración git de CF buildea el push sola. Por eso la
-variable **no se puede setear desde acá**: hay que cargarla en el **dashboard de Cloudflare Pages**
-(Settings → Environment variables → `VITE_POZO_CORTE = 2026-07-23`).
+| columna | valores | destino |
+|---|---|---|
+| `movement_deletions.authorized_by` | 28 | owner |
+| `cash_movements.created_by` | 9 | owner |
+| `tip_sessions.opened_by` | 3 | owner |
+| `tip_sessions.closed_by` | 3 | owner |
+| `cash_sessions.closed_by` | 2 | owner |
+| `cash_sessions.opened_by` | 1 | owner |
+| `movement_deletions.deleted_by` | 1 | owner |
+| `employees.profile_id` | 2 | **NULL** |
+| **total** | **49** | |
 
-Verificado que la vía funciona:
+Owner destino: `cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888` — *Caja Satori · satorisushibar@gmail.com*.
 
-```bash
-VITE_APP_ENV=staging VITE_POZO_CORTE=2026-07-23 npm run build
-# → dist/assets/cierrePozo-*.js contiene 2026-07-23
+**Los 2 de `employees.profile_id` van a NULL, no al owner.** Esa columna no es un sello de
+auditoría: es el vínculo entre un empleado y su cuenta. Apuntarla al owner diría que esos dos
+empleados **son** la dueña. `NULL` es un valor legítimo (la FK es `ON DELETE SET NULL`). Prod
+tenía exactamente 2 empleados con perfil vinculado y son esos dos, así que staging queda con 0.
+
+El remapeo se hace **en memoria antes de insertar**: nunca se le manda a la base un valor que
+la FK vaya a rechazar.
+
+## 2 · Harness sobre los datos frescos
+
+Reportes regenerados (`REPORTE-T0-RECONCILIACION.md`) y red de regresión (`run-t2.ts`) **en
+verde**. Como staging ahora tiene los datos de prod, los números coinciden con los del T0-B:
+15 cierres completos · 10 CUADRÓ · 3 CANDIDATO-HUECO-1 · 2 NO-EXPLICADO · pozo −₡3.394.461,21.
+
+### 🆕 Hallazgo nuevo que destapó la red de regresión
+
+Los campos sellados **`propinas_m/n` incluyen propinas pagadas por TRANSFERENCIA**:
+**₡15.000 el 2026-07-19** y **₡9.000 el 2026-07-20**. Esa plata **nunca salió del efectivo**.
+El modelo viejo la restaba del "debería"; el pozo, con razón, no. Es la misma clase de bug que
+T2 arregla, ahora medida en otra columna.
+
+`run-t2.ts` ya no compara solo conteos: por cada par donde el modelo nuevo difiere del núcleo
+T1 calcula la porción NO-efectivo metida en el sello y **exige** que explique la diferencia. Las
+dos divergencias cierran al céntimo; cualquier otra aborta la corrida.
+
+### 🆕 Gap de T2 encontrado y cerrado
+
+Al sembrar la apertura salió que `basePozoParaCierre` sumaba la apertura **más toda la historia
+previa** — sobre un ledger con historial el "debería" quedaba inservible. El pozo ahora
+**arranca en el asiento de apertura más reciente**: corte por arriba `<= fecha` (independencia
+del orden de sellado) y por abajo `>= apertura` (esa cifra ya contiene lo anterior). 4 tests
+nuevos, incluido el caso sin apertura, donde el comportamiento previo queda intacto.
+
+## 3 · Apertura del pozo sembrada
+
+```
+  ╔════════════════════════════════════════════════════════╗
+  ║   APERTURA DEL POZO — STAGING                          ║
+  ║   Fecha del asiento : 2026-07-23                       ║
+  ║   Origen            : cierre completo del 2026-07-21   ║
+  ║   ────────────────────────────────────────────────     ║
+  ║   COLONES : ₡ 744.575                                  ║
+  ║   DÓLARES : $ 3.441,00                                 ║
+  ╚════════════════════════════════════════════════════════╝
 ```
 
-**Si preferís no tocar el dashboard**, la alternativa es un commit SOLO-STAGING que fije
-`POZO_CORTE_FALLBACK = '2026-07-23'`, marcado **NO cherry-pickear a main**. Con la vía de la env
-var disponible y probada, esa segunda vía queda como plan B — no se hizo el commit para no dejar
-una divergencia de ramas que después haya que recordar no mergear.
+Sale del **conteo físico sellado** de ese cierre: `sep_diaria 100.000 + sep_registradora 99.575
++ remanente 545.000`. **Éste es el número que la dueña verifica** contra lo que contó esa noche.
+El asiento es idempotente por descripción: re-sembrarlo corrige, no duplica.
 
-## Lo que falta, en orden
+## 4 · Cómo quedó activada la fecha de corte
 
-1. **Decidir la opción de [PLAN.md §4](PLAN.md)** (recomendada: la 2 — remapear 14 filas, sin
-   tocar auth ni esquema).
-2. Correr `backup.ts` y después `refresh.ts` con la opción elegida.
-3. Verificar: conteos prod == staging, y re-correr el harness (`run.ts` + `run-t2.ts`) sobre los
-   datos frescos. La red de regresión tiene que seguir dando los mismos pares consecutivos.
-4. Sembrar la apertura del pozo con el contado físico del último cierre completo de los datos
-   frescos (`sep_diaria + sep_registradora + remanente`, CRC y USD) — la cifra se imprime bien
-   grande para que la dueña la verifique.
-5. Cargar `VITE_POZO_CORTE=2026-07-23` en Cloudflare Pages.
-6. Merge `feat/t2-cierre-pozo` → `staging` y push. **`main` no se toca.**
-7. Verificar deploy verde + `{base}version.json` con el commit esperado + smoke del sitio.
+**Por el PLAN B: commit solo-staging `5f78b56`**, que adelanta `POZO_CORTE_FALLBACK` a
+`2026-07-23`. Marcado en el código y en el commit: **NO CHERRY-PICKEAR A MAIN** (en `main` debe
+seguir siendo `2026-08-01`).
 
-## Limitaciones conocidas (cuando se ejecute)
+**Por qué el plan B y no la variable de entorno:** el repo solo tiene workflow para **prod**
+(`.github/workflows/deploy.yml` → GitHub Pages). **Staging es Cloudflare Pages con configuración
+externa** — no hay workflow en el repo, la integración git de CF buildea el push sola. La
+variable `VITE_POZO_CORTE` solo se puede cargar desde el dashboard de Cloudflare, y desde acá no
+hay forma de setearla ni de verificarla.
 
-- **Storage no se copia**: las fotos de facturas apuntarán a paths que en staging no existen. No
-  afecta ningún número.
-- `tip_sessions.pool_pos_*` quedan en 0 (columnas del PoS que prod no tiene).
-- `supplier_item_map` queda con referencias colgadas a proveedores reemplazados.
-- Según la opción elegida, hasta 14 filas pueden quedar atribuidas a otra persona.
+**Las dos vías conviven.** `resolverCorte()` devuelve la variable de entorno si es válida y solo
+cae al fallback si no está. Si cargás `VITE_POZO_CORTE` en Cloudflare, **gana sobre este commit**
+y el plan B queda inerte — no hay que revertir nada.
+
+Verificado: `VITE_APP_ENV=staging npm run build` deja `2026-07-23` en `dist/assets/cierrePozo-*.js`.
+
+## 5 · Estado del deploy
+
+`staging` quedó en **`5f78b56`** (push confirmado contra el remoto). Al cierre de este reporte,
+**Cloudflare todavía no había publicado**: `version.json` seguía sirviendo `933c387`.
+
+**Verificá antes de validar en piso:**
+
+```bash
+curl -s https://satori-staging.pages.dev/version.json
+# esperado: {"commit":"5f78b56", ...}
+```
+
+Y que la fecha de corte viajó al bundle:
+
+```bash
+curl -s https://satori-staging.pages.dev/ | grep -o 'assets/cierrePozo-[^"]*\.js'
+# y sobre ese archivo:
+curl -s https://satori-staging.pages.dev/assets/cierrePozo-XXXX.js | grep -o 2026-07-23
+```
+
+Si pasados ~15 min sigue en `933c387`, mirá el build en el dashboard de Cloudflare Pages: puede
+estar encolado o haber fallado. **El código y los datos ya están listos**; lo único pendiente es
+que CF publique.
+
+## 6 · Limitaciones conocidas
+
+- **Fotos de facturas: no se ven.** El Storage no se copia; las filas de `documents` apuntan a
+  paths del bucket de prod que en staging no existen. No afecta ningún número.
+- **`tip_sessions.pool_pos_*` en 0** — columnas del PoS que prod no tiene.
+- **49 valores de "quién" remapeados** (§1): 47 movimientos/sesiones figuran a nombre de *Caja
+  Satori* y 2 empleados quedaron sin cuenta vinculada. Montos, cajas, métodos y fechas están
+  intactos.
+- **`supplier_item_map`** quedó con referencias a proveedores reemplazados (dominio inventario,
+  fuera del alcance).
+- **`product_map` NO se refrescó** (tiene 8 columnas del PoS que prod no tiene).
+
+## 7 · Pasos para la validación en piso
+
+1. **Verificá el deploy**: `version.json` debe decir `5f78b56` (§5).
+2. **Entrá a Caja → Cierre del Día** y elegí una fecha **≥ 2026-07-23**. La etiqueta de ventas
+   tiene que decir **"Ventas en efectivo BRUTAS ₡ (sin restar propinas)"**. Si dice
+   *"Ventas PoS ₡"*, el corte no está activo — parar y avisar.
+3. **Verificá la apertura**: en Movimientos buscá `Apertura pozo 2026-07-23`. Tiene que decir
+   **₡744.575** y **$3.441,00**. Compará contra tu conteo físico del 21/07.
+4. **Probá el aviso de venta neta**: cargá una venta MENOR que las propinas pagadas del día. Tiene
+   que aparecer el aviso rojo y el botón de sellar queda **bloqueado** hasta tildar la casilla.
+   Es la trampa que causó el sobrante de ₡58.737,07 del 18/07.
+5. **Probá el pago de proveedor desde el fondo**: pagá un proveedor en efectivo desde
+   `Caja Proveedores` y cerrá el día. **Ya no debe aparecer faltante fantasma**: ese pago ahora
+   baja el "debería" solo.
+6. **Probá una propina**: pagala por la vía normal y cerrá. Tiene que restar **una sola vez**.
+7. **Probá el guard de cadena**: si quedó un día anterior (≥ corte) con plata movida y sin cerrar,
+   el cierre **no deja sellar** y dice qué día falta y cuánto se movió.
+8. **Cuadre final**: contá el físico y confirmá que el "debería" coincide. En el resumen de
+   verificación el desglose ahora es *pozo + ventas brutas − retiro*, y **suma exacto**.
+
+> ⚠️ Los días **anteriores al 2026-07-23** siguen con el modelo viejo, sin ningún cambio. Si abrís
+> un cierre histórico, tiene que verse y calcular **igual que siempre**.
+
+## 8 · Si hay que volver atrás
+
+```bash
+# datos de staging
+node --import ./scripts/t0-reconciliacion-cajas/register.mjs \
+  scripts/refresh-staging/restaurar.ts --sello 2026-07-22-pre-refresh-2
+
+# código
+git push origin 933c387:staging --force-with-lease
+```

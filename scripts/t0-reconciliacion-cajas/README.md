@@ -60,6 +60,43 @@ dentro de `run-prod.ts`.
 > `run.ts` (staging) **no cambió de comportamiento**: su reporte sale byte-idéntico al del
 > commit anterior. Todo lo que agregó el T0-B es opcional y solo lo pasa `run-prod.ts`.
 
+## T1 · Corrida paralela ANCLADA (staging)
+
+```bash
+node --import ./scripts/t0-reconciliacion-cajas/register.mjs scripts/t0-reconciliacion-cajas/run-t1.ts
+```
+
+Salida: [`REPORTE-T1-PARALELO.md`](REPORTE-T1-PARALELO.md). Mismo candado de entorno que `run.ts`
+(staging o nada) y mismo transporte read-only.
+
+Valida el núcleo **`src/modules/cash/pozo.ts`** —recién promovido a la app pero que **nadie
+importa todavía**— contra el histórico real. En vez de acumular desde cero como el T0 (que da
+negativo por falta de asiento de apertura), **se ancla en el conteo físico sellado del día
+anterior** y reconstruye qué debería haber al cierre del día siguiente:
+
+```
+ancla(d−1)  = sep_diaria + sep_registradora + remanente     ← contado a mano
+esperado(d) = ancla(d−1) + ef_real_m + ef_real_n − propinas_m − propinas_n − otros_n
+            + neto del período (d−1, d]   ← calculado por saldoPozoEfectivo, la función real
+residuo     = (contado − esperado) − diferencia_crc sellada
+```
+
+Anclar en el físico hace que **cada día se evalúe solo**, sin arrastrar el error del anterior.
+El harness importa `contribucionPozo` de `src/`: si el núcleo cambia, el reporte cambia — que es
+lo que se le pide a una validación paralela.
+
+**Tres trampas de doble conteo**, todas evitadas por exclusión explícita y reportada:
+
+1. `ef_real_*` ya es **BRUTO** (verificado en `CashCierre.tsx`: `efRealM = vm_crc − vm_usd·tc`).
+   Sumarle las propinas "de vuelta" las contaría al revés.
+2. Las filas `Ventas cierre` que genera el cierre son **NETAS** de propinas: contarlas a ellas y
+   además a los egresos `Propinas por turno` resta las propinas dos veces.
+3. El retiro de dueños **no es un movimiento aparte**: `recordCierreRetiro` lo graba como traspaso
+   `Caja Fuerte → Banco`. Contarlo como `otros_n` y como traspaso del período lo resta dos veces.
+
+Las propinas de **días intermedios** sí cuentan como egreso: `propinas_m/n` solo cubre las del día
+del cierre, así que en un período con hueco las del medio no están selladas en ningún lado.
+
 ### Credenciales
 
 La **anon key sola no sirve**: RLS filtra `cash_movements` y PostgREST responde `200` con `[]`.
@@ -99,6 +136,9 @@ El token nunca se imprime ni se guarda.
 |---|---|
 | `run.ts` | Entrypoint STAGING: lee → analiza → verifica invariantes → escribe el reporte |
 | `run-prod.ts` | Entrypoint PROD (doble opt-in) → `REPORTE-T0B-PROD.md` |
+| `run-t1.ts` | Entrypoint T1: corrida anclada por día → `REPORTE-T1-PARALELO.md` |
+| `anclado.ts` | T1: pares de cierres, período, exclusiones y diagnóstico. Sin red |
+| `reporte-t1.ts` | T1: render del Markdown |
 | `env.ts` | `.env.local`, candado de proyecto (staging o nada), token de Management API |
 | `db.ts` | Lectura read-only con los dos transportes; paginado; coerción de numéricos |
 | `pozo.ts` | **`saldoPozoEfectivo`** y `contribucionPozo` — funciones puras del modelo nuevo |

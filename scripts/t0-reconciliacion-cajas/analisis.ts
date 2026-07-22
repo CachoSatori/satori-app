@@ -60,6 +60,16 @@ export type Cierre = {
   ajuste_motivo: string | null
   manager: string | null
   created_at: string | null
+  // Campos sellados que usa la corrida anclada del T1 (ver anclado.ts).
+  ef_real_m_crc: number
+  ef_real_n_crc: number
+  propinas_m_crc: number
+  propinas_n_crc: number
+  otros_m_crc: number
+  otros_n_crc: number
+  sep_diaria_crc: number
+  sep_registradora_crc: number
+  remanente_crc: number
 }
 
 const s = (v: unknown): string => (v == null ? '' : String(v))
@@ -104,6 +114,15 @@ export const asCierre = (f: Fila): Cierre => ({
   ajuste_motivo: sn(f.ajuste_motivo),
   manager: sn(f.manager),
   created_at: sn(f.created_at),
+  ef_real_m_crc: n(f.ef_real_m_crc),
+  ef_real_n_crc: n(f.ef_real_n_crc),
+  propinas_m_crc: n(f.propinas_m_crc),
+  propinas_n_crc: n(f.propinas_n_crc),
+  otros_m_crc: n(f.otros_m_crc),
+  otros_n_crc: n(f.otros_n_crc),
+  sep_diaria_crc: n(f.sep_diaria_crc),
+  sep_registradora_crc: n(f.sep_registradora_crc),
+  remanente_crc: n(f.remanente_crc),
 })
 
 // ── Fechas (hora de Costa Rica, igual convención que `dateCR` de la app) ─────

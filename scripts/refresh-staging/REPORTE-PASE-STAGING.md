@@ -119,29 +119,31 @@ y el plan B queda inerte — no hay que revertir nada.
 
 Verificado: `VITE_APP_ENV=staging npm run build` deja `2026-07-23` en `dist/assets/cierrePozo-*.js`.
 
-## 5 · Estado del deploy
+## 5 · Deploy verificado ✅
 
-`staging` quedó en **`5f78b56`** (push confirmado contra el remoto). Al cierre de este reporte,
-**Cloudflare todavía no había publicado**: `version.json` seguía sirviendo `933c387`.
+| Verificación | Resultado |
+|---|---|
+| `staging` remoto | `5f78b56` (app) → `c837cc5` (este reporte, solo docs) |
+| `main` | **intacto en `9fc1147`** |
+| Cloudflare Pages | publicado — `builtAt` 2026-07-22T17:08:22Z |
+| `version.json` | `{"commit":"5f78b56"}` ✅ |
+| Sitio | `/` HTTP 200 · `/sw.js` HTTP 200 ✅ |
+| **Fecha de corte en el bundle desplegado** | `assets/cierrePozo-C4juHvCa.js` contiene **`2026-07-23`** y **no** contiene `2026-08-01` ✅ |
+| **Etiqueta del cierre desplegado** | `assets/CashCierre-DyitJ5Pd.js` trae *"Ventas en efectivo BRUTAS ₡ (sin restar propinas)"* ✅ |
 
-**Verificá antes de validar en piso:**
+> El chunk del corte es **lazy** (cuelga de `CashModule`), así que no aparece en el HTML: se lo
+> alcanza desde `CashModule-*.js`. Queda anotado porque buscarlo en la raíz da un falso negativo.
+
+Tras verificar, se pushó `c837cc5` con este reporte (**solo `.md`**, sin cambios de app), así que
+Cloudflare va a republicar y `version.json` pasará a `c837cc5`. **El bundle de la aplicación es el
+mismo.**
+
+Para re-verificar en cualquier momento:
 
 ```bash
 curl -s https://satori-staging.pages.dev/version.json
-# esperado: {"commit":"5f78b56", ...}
+curl -s https://satori-staging.pages.dev/assets/cierrePozo-C4juHvCa.js | grep -o 2026-07-23
 ```
-
-Y que la fecha de corte viajó al bundle:
-
-```bash
-curl -s https://satori-staging.pages.dev/ | grep -o 'assets/cierrePozo-[^"]*\.js'
-# y sobre ese archivo:
-curl -s https://satori-staging.pages.dev/assets/cierrePozo-XXXX.js | grep -o 2026-07-23
-```
-
-Si pasados ~15 min sigue en `933c387`, mirá el build en el dashboard de Cloudflare Pages: puede
-estar encolado o haber fallado. **El código y los datos ya están listos**; lo único pendiente es
-que CF publique.
 
 ## 6 · Limitaciones conocidas
 

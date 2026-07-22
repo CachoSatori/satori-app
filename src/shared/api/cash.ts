@@ -178,19 +178,57 @@ export async function getCashMovements(sessionId: string): Promise<CashMovement[
 }
 
 // PERF FIX: filter by date range instead of hard limit
+
+/**
+ * Tamaño de página. Tiene que ser <= al `max_rows` de PostgREST del proyecto MÁS CHICO:
+ * hoy staging está en 1.000 y prod en 10.000. Con 500 el paginado funciona en ambos.
+ */
+const PAGINA_MOVIMIENTOS = 500
+
+/**
+ * Lee TODOS los movimientos desde `sinceStr`, paginando hasta agotar.
+ *
+ * ⚠️ POR QUÉ EXISTE ESTO (bug real, medido en staging el 2026-07-22):
+ * la versión anterior hacía un `select` sin `.range()` ni `.limit()`. PostgREST corta en
+ * `max_rows` y devuelve esa página **sin avisar**: con 1.425 filas y `max_rows=1.000`, la app
+ * veía solo las 1.000 más recientes y la tarjeta "Caja Fuerte" mostraba un número inventado.
+ *
+ * ⚠️ EL DESEMPATE NO ES COSMÉTICO. Ordenar solo por `created_at` es inseguro acá: 1.242 de
+ * 1.425 filas comparten timestamp con otra (166 grupos), porque las cargas históricas entraron
+ * con la hora en 12:00:00. Sin un segundo criterio ÚNICO:
+ *   · el borde de la ventana es arbitrario — la tarjeta cambiaba sin que se registrara nada
+ *     (medido: una fila salía y otra entraba, Δ −₡114.351,18 / −$7.048), y
+ *   · el propio paginado saltearía y duplicaría filas entre páginas.
+ * Por eso se ordena por `created_at` **y** por `id`.
+ */
+async function leerTodosLosMovimientos(sinceStr: string): Promise<CashMovement[]> {
+  const filas: CashMovement[] = []
+  for (let desde = 0; ; desde += PAGINA_MOVIMIENTOS) {
+    const { data, error } = await supabase
+      .from('cash_movements')
+      .select('*')
+      .gte('created_at', sinceStr + 'T00:00:00Z')
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })   // desempate ÚNICO: sin esto el paginado es inseguro
+      .range(desde, desde + PAGINA_MOVIMIENTOS - 1)
+    if (error) throw new Error(error.message)
+    const lote = (data ?? []) as CashMovement[]
+    filas.push(...lote)
+    if (lote.length < PAGINA_MOVIMIENTOS) return filas
+    // Cinturón: si algo raro pasara con el paginado, mejor romper que devolver datos mudos.
+    if (filas.length > 200_000) {
+      throw new Error('getAllCashMovements: el paginado superó 200.000 filas — abortado por seguridad')
+    }
+  }
+}
+
 export async function getAllCashMovements(days = 1000): Promise<CashMovement[]> {
   const since = new Date()
   since.setDate(since.getDate() - days)
   const sinceStr = since.toISOString().slice(0, 10)
 
   const rows = await cachedFetch(`cash:all-movements:${days}`, async () => {
-    const { data, error } = await supabase
-      .from('cash_movements')
-      .select('*')
-      .gte('created_at', sinceStr + 'T00:00:00Z')
-      .order('created_at', { ascending: false })
-    if (error) throw new Error(error.message)
-    return (data ?? []) as CashMovement[]
+    return leerTodosLosMovimientos(sinceStr)
   })
   return applyPendingCash(rows)
 }

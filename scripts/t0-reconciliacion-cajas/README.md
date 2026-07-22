@@ -97,6 +97,27 @@ lo que se le pide a una validación paralela.
 Las propinas de **días intermedios** sí cuentan como egreso: `propinas_m/n` solo cubre las del día
 del cierre, así que en un período con hueco las del medio no están selladas en ningún lado.
 
+### Adenda T1 · las dos preguntas sobre PROD
+
+`run-t1.ts` corre **también contra producción** para responder las dos preguntas obligatorias de la
+adenda (§5 y §6 del reporte), con el **mismo doble opt-in** que `run-prod.ts` — el candado vive una
+sola vez, en `prod-gate.ts`:
+
+```bash
+T0_PROD_FIRMADO=2026-07-22 node --import ./scripts/t0-reconciliacion-cajas/register.mjs scripts/t0-reconciliacion-cajas/run-t1.ts
+```
+
+Sin la firma **aborta**. Para quedarse solo con la parte de staging: `--solo-staging`.
+
+- **§5 — el sobrante del 2026-07-18.** Replay mecánico del cierre con `saldoCajaFuerte` sobre el
+  ledger **tal como estaba al sellar** (con el de hoy da otro número). Reproduce la diferencia
+  sellada al céntimo y descompone el sobrante colón por colón.
+- **§6 — la no-uniformidad del "hueco 2".** Descompone el efectivo de cada día por los tres canales
+  que pueden avisarle a `deberia` (ledger de Caja Fuerte · campos sellados `propinas_m/n` · ninguno)
+  y mide la brecha contra la diferencia sellada.
+
+Lo que no cierra queda **declarado como NO-EXPLICADO con números**, no forzado.
+
 ### Credenciales
 
 La **anon key sola no sirve**: RLS filtra `cash_movements` y PostgREST responde `200` con `[]`.
@@ -139,6 +160,8 @@ El token nunca se imprime ni se guarda.
 | `run-t1.ts` | Entrypoint T1: corrida anclada por día → `REPORTE-T1-PARALELO.md` |
 | `anclado.ts` | T1: pares de cierres, período, exclusiones y diagnóstico. Sin red |
 | `reporte-t1.ts` | T1: render del Markdown |
+| `preguntas.ts` | T1: replay del cierre y descomposición por canal (adenda). Sin red |
+| `prod-gate.ts` | Doble opt-in de PROD — implementación única, la usan run-prod.ts y run-t1.ts |
 | `env.ts` | `.env.local`, candado de proyecto (staging o nada), token de Management API |
 | `db.ts` | Lectura read-only con los dos transportes; paginado; coerción de numéricos |
 | `pozo.ts` | **`saldoPozoEfectivo`** y `contribucionPozo` — funciones puras del modelo nuevo |

@@ -19,8 +19,10 @@ const CONCEPTOS = [
   { id: 'reaj_ing', label: 'Reajuste · apareció plata (CF)',  type: 'ingreso',           caja: 'Caja Fuerte',       sub: 'Reajuste',            method: 'Efectivo' },
   { id: 'reaj_egr', label: 'Reajuste · faltó plata (CF)',     type: 'egreso_operativo',  caja: 'Caja Fuerte',       sub: 'Reajuste',            method: 'Efectivo' },
 ] as const
-import { todayCR, dateCR } from '../../shared/utils'
-import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr, saldoCajaFuerte } from './cashUtils'
+import { dateCR } from '../../shared/utils'
+import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr } from './cashUtils'
+import { saldoTarjetaEfectivo } from './tarjetaPozo'
+import { POZO_CORTE } from './cierrePozo'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { useDeletionNote } from './deletionNote'
 import { movementAttachments } from '../../shared/api/facturas'
@@ -67,7 +69,18 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const movFecha = (m: CashMovement) =>
     sesionMap.get(m.session_id ?? '')?.session_date ?? dateCR(m.created_at)
 
-  const defaultFrom = (() => { const d = new Date(todayCR() + 'T12:00:00'); d.setDate(d.getDate() - 60); return d.toISOString().slice(0, 10) })()
+  // "DESDE" por defecto = LA FECHA DE CORTE (firmado por el dueño). Con el modelo del pozo
+  // arrancando en el corte, las tarjetas de PERÍODO (Ingresos/Egresos/Ajustes) tienen que
+  // arrancar en cero y acumular solo lo nuevo: mezclar los 60 días previos mostraría plata del
+  // modelo viejo sumada a la del nuevo, que es justo la confusión que el corte viene a evitar.
+  //
+  // El histórico NO se toca ni se esconde: sigue entero en la base y a un cambio de fecha de
+  // distancia — mover "Desde" hacia atrás lo muestra idéntico a como se veía antes.
+  //
+  // Ojo: esto filtra SOLO la lista y las tarjetas de período. La tarjeta de efectivo y la de
+  // Pend. Transferencia se calculan sobre `movements` SIN filtrar, a propósito: un pendiente de
+  // antes del corte sigue siendo plata que se debe hoy. Ver los tests de este archivo.
+  const defaultFrom = POZO_CORTE
   const [from,    setFrom]    = useState(defaultFrom)
   const [to,      setTo]      = useState(todayStr())
   const [tipo,    setTipo]    = useState('')
@@ -121,9 +134,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   })
 
   // ── Saldos ───────────────────────────────────────────────
-  // Saldo de Caja Fuerte — ÚNICA fuente de verdad (cashUtils.saldoCajaFuerte).
-  // La tarjeta, el cierre del día y el simulador usan exactamente esta función.
-  const { crc: cfSaldo, usd: cfSaldoUSD } = saldoCajaFuerte(movements)
+  // POST-CORTE la tarjeta muestra el POZO: todo el efectivo físico, contado desde el asiento
+  // de apertura. PRE-CORTE sigue mostrando `saldoCajaFuerte` tal cual (histórico intacto).
+  // Ver tarjetaPozo.ts para el porqué — es la misma regla que el cierre ya usa.
+  const tarjeta = saldoTarjetaEfectivo(movements, sessions)
+  const { crc: cfSaldo, usd: cfSaldoUSD } = tarjeta
 
   const pendTotal = movements.filter(m => m.status === 'pendiente').reduce((s, m) => s + m.amount_crc, 0)
   const pendCount = movements.filter(m => m.status === 'pendiente').length
@@ -249,9 +264,20 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
       {/* Saldos */}
       <div className="cd-saldos-bar">
         <div className={`cd-saldo-card ${cfSaldo < 0 ? 'red' : ''}`} style={{ borderLeftColor: '#c8a96e' }}>
-          <div className="cd-saldo-label">Caja Fuerte</div>
+          <div className="cd-saldo-label">{tarjeta.esPozo ? 'Efectivo en caja' : 'Caja Fuerte'}</div>
           <div className={`cd-saldo-val ${cfSaldo < 0 ? 'red' : ''}`}>{fi(cfSaldo)}</div>
           {cfSaldoUSD !== 0 && <div style={{ fontSize: '13px', color: '#3a7bd5', fontFamily: "'DM Mono', monospace", marginTop: '2px' }}>{fd(cfSaldoUSD)}</div>}
+          {tarjeta.esPozo && (
+            <div data-testid="tarjeta-subtitulo" style={{ fontSize: '9px', color: '#888', marginTop: '3px', lineHeight: 1.3 }}>
+              Caja Fuerte + Proveedores + Registradora
+              {tarjeta.desdeApertura && <> · desde la apertura del {tarjeta.desdeApertura}</>}
+            </div>
+          )}
+          {tarjeta.esPozo && tarjeta.indeterminados.cantidad > 0 && (
+            <div style={{ fontSize: '9px', color: '#8a5a1f', marginTop: '2px' }}>
+              ⚠ {tarjeta.indeterminados.cantidad} traspaso(s) sin dirección ({fi(tarjeta.indeterminados.crc)}) — neutros
+            </div>
+          )}
         </div>
         <div className="cd-saldo-card" style={{ borderLeftColor: pendTotal > 0 ? '#c8a030' : '#444' }}>
           <div className="cd-saldo-label">Pend. Transferencia</div>

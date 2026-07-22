@@ -1,0 +1,145 @@
+{
+  "resumen": [
+    {
+      "tabla": "employees",
+      "prod": 35,
+      "stagingAntes": 31,
+      "stagingDespues": 35,
+      "ok": true
+    },
+    {
+      "tabla": "suppliers",
+      "prod": 75,
+      "stagingAntes": 85,
+      "stagingDespues": 75,
+      "ok": true
+    },
+    {
+      "tabla": "exchange_rates",
+      "prod": 3,
+      "stagingAntes": 3,
+      "stagingDespues": 3,
+      "ok": true
+    },
+    {
+      "tabla": "role_tip_points",
+      "prod": 7,
+      "stagingAntes": 7,
+      "stagingDespues": 7,
+      "ok": true
+    },
+    {
+      "tabla": "cash_sessions",
+      "prod": 167,
+      "stagingAntes": 169,
+      "stagingDespues": 167,
+      "ok": true
+    },
+    {
+      "tabla": "tip_sessions",
+      "prod": 239,
+      "stagingAntes": 177,
+      "stagingDespues": 239,
+      "ok": true
+    },
+    {
+      "tabla": "cash_movements",
+      "prod": 1423,
+      "stagingAntes": 978,
+      "stagingDespues": 1423,
+      "ok": true
+    },
+    {
+      "tabla": "tip_entries",
+      "prod": 1332,
+      "stagingAntes": 1047,
+      "stagingDespues": 1332,
+      "ok": true
+    },
+    {
+      "tabla": "documents",
+      "prod": 79,
+      "stagingAntes": 107,
+      "stagingDespues": 79,
+      "ok": true
+    },
+    {
+      "tabla": "movement_deletions",
+      "prod": 74,
+      "stagingAntes": 797,
+      "stagingDespues": 74,
+      "ok": true
+    },
+    {
+      "tabla": "cash_cierres_dia",
+      "prod": 17,
+      "stagingAntes": 16,
+      "stagingDespues": 17,
+      "ok": true
+    }
+  ],
+  "remapeos": [
+    {
+      "columna": "employees.profile_id",
+      "deUuid": "f54e3eff-7751-4b3c-a94e-c9d26c98a80e",
+      "filas": 1,
+      "destino": "NULL"
+    },
+    {
+      "columna": "employees.profile_id",
+      "deUuid": "c10f2ddf-535a-4c2d-99db-30d5084629c6",
+      "filas": 1,
+      "destino": "NULL"
+    },
+    {
+      "columna": "cash_sessions.closed_by",
+      "deUuid": "c10f2ddf-535a-4c2d-99db-30d5084629c6",
+      "filas": 2,
+      "destino": "cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888"
+    },
+    {
+      "columna": "cash_sessions.opened_by",
+      "deUuid": "c10f2ddf-535a-4c2d-99db-30d5084629c6",
+      "filas": 1,
+      "destino": "cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888"
+    },
+    {
+      "columna": "tip_sessions.opened_by",
+      "deUuid": "c10f2ddf-535a-4c2d-99db-30d5084629c6",
+      "filas": 3,
+      "destino": "cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888"
+    },
+    {
+      "columna": "tip_sessions.closed_by",
+      "deUuid": "c10f2ddf-535a-4c2d-99db-30d5084629c6",
+      "filas": 3,
+      "destino": "cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888"
+    },
+    {
+      "columna": "cash_movements.created_by",
+      "deUuid": "c10f2ddf-535a-4c2d-99db-30d5084629c6",
+      "filas": 9,
+      "destino": "cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888"
+    },
+    {
+      "columna": "movement_deletions.authorized_by",
+      "deUuid": "f54e3eff-7751-4b3c-a94e-c9d26c98a80e",
+      "filas": 23,
+      "destino": "cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888"
+    },
+    {
+      "columna": "movement_deletions.authorized_by",
+      "deUuid": "c10f2ddf-535a-4c2d-99db-30d5084629c6",
+      "filas": 5,
+      "destino": "cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888"
+    },
+    {
+      "columna": "movement_deletions.deleted_by",
+      "deUuid": "c10f2ddf-535a-4c2d-99db-30d5084629c6",
+      "filas": 1,
+      "destino": "cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888"
+    }
+  ],
+  "totalRemap": 49,
+  "owner": "cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888"
+}

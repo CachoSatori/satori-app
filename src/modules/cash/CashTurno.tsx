@@ -290,11 +290,20 @@ export default function CashTurno({
 
   // Otros egresos en efectivo operativos (no proveedores, no ingreso/traspaso)
   // registrados en esta caja. Salen de la misma Caja Diaria.
-  const otrosEgresosEf = sessionMovements
+  // La LISTA es la fuente y el total su suma (antes el total se calculaba suelto): así el
+  // desglose del Resumen del Turno reconstruye línea por línea exactamente lo que se resta —
+  // no hay forma de que una fila se muestre y no reste, ni al revés.
+  const otrosEgresosEfList = sessionMovements
     .filter(m => m.movement_type !== 'ingreso' && m.movement_type !== 'traspaso'
               && m.caja_origen !== 'Caja Proveedores'
               && m.method === 'Efectivo' && m.status !== 'pendiente' && m.status !== 'rechazado')
-    .reduce((s, m) => s + m.amount_crc, 0)
+  const otrosEgresosEf = otrosEgresosEfList.reduce((s, m) => s + m.amount_crc, 0)
+
+  // Efectivo TOTAL que salió de la Caja Diaria = exactamente lo que resta el "debería".
+  // La tarjeta "Gastado efectivo" mostraba solo `provGastadoEf` mientras su rótulo prometía
+  // "proveedores + otros egresos": una propina pagada desde la caja no aparecía ahí aunque sí
+  // bajaba el Disponible (caso real: la tarjeta decía ₡10.000 con ₡40.000 de propina pagada).
+  const gastadoEfTotal = provGastadoEf + otrosEgresosEf
 
   // Lo que debería quedar físicamente en la Caja Diaria al cierre.
   const cajaDeberia  = totalAsig - provGastadoEf - otrosEgresosEf
@@ -755,7 +764,7 @@ export default function CashTurno({
         </div>
         <div className="cd-top-card gold">
           <div className="cd-tc-label">Gastado efectivo</div>
-          <div className="cd-tc-val" style={{ color: provGastadoEf > 0 ? '#a07030' : '#aaa' }}>{fi(provGastadoEf)}</div>
+          <div className="cd-tc-val" style={{ color: gastadoEfTotal > 0 ? '#a07030' : '#aaa' }}>{fi(gastadoEfTotal)}</div>
           <div className="cd-tc-sub">proveedores + otros egresos</div>
         </div>
         <div className="cd-top-card red">
@@ -1011,7 +1020,7 @@ export default function CashTurno({
               </div>
               {provGastadoEf > 0 && (
                 <div className="cd-verif-row">
-                  <span>− Pagos efectivo (proveedores + otros)</span>
+                  <span>− Pagos a proveedores (efectivo)</span>
                   <strong style={{ color: '#c0392b' }}>− {fi(provGastadoEf)}</strong>
                 </div>
               )}
@@ -1098,6 +1107,33 @@ export default function CashTurno({
                   <span>{fi(Number(p.amount_crc) || 0)}</span>
                 </div>
               ))}
+              {/* Subtotal de proveedores: de las filas de arriba solo las de Efectivo bajan la
+                  caja (las de Transferencia/SINPE salen del Banco). Se muestra la MISMA cifra que
+                  resta `cajaDeberia` para que el desglose cierre contra el "debería". */}
+              {provGastadoEf > 0 && (
+                <div className="cd-resumen-row">
+                  <span>− Pagos a proveedores (efectivo)</span>
+                  <strong style={{ color: '#c0392b' }}>− {fi(provGastadoEf)}</strong>
+                </div>
+              )}
+              {/* Otros egresos en EFECTIVO de la Caja Diaria — propinas pagadas desde la caja,
+                  delivery, operativo, salario. Sin estas filas el "debería" no se podía
+                  reconstruir: el modal listaba solo proveedores y el resto desaparecía. */}
+              {otrosEgresosEfList.map(m => (
+                <div key={m.id} className="cd-resumen-pago">
+                  <div>
+                    <span>{m.subcategory || m.description || 'Egreso'}</span>
+                    <span className="cd-method-badge ef">Efectivo</span>
+                  </div>
+                  <span>{fi(m.amount_crc)}</span>
+                </div>
+              ))}
+              {otrosEgresosEf > 0 && (
+                <div className="cd-resumen-row">
+                  <span>− Otros egresos (efectivo)</span>
+                  <strong style={{ color: '#c0392b' }}>− {fi(otrosEgresosEf)}</strong>
+                </div>
+              )}
               <div className="cd-resumen-row">
                 <span>Efectivo que debería quedar (Caja Diaria)</span>
                 <strong style={{ color: '#27874f' }}>{fi(cajaDeberia)}</strong>

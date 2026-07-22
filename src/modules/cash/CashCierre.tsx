@@ -22,6 +22,10 @@ import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
 import { propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
+import {
+  basePozoParaCierre, deberiaPozo, diasPendientesDeCierre, esPostCorte,
+  hayMontosNegativos, mensajeDiasPendientes, ventaSospechosaDeSerNeta,
+} from './cierrePozo'
 import { shiftLabel } from '../../shared/utils'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
@@ -70,6 +74,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const turnoAbierto = !!openSession  // bloquea SOLO la Fase 2 (noche); la Fase 1 se sella igual
 
   const [cierres,  setCierres]  = useState<CashCierreDia[]>([])
+  // TODOS los cierres (no solo los de `fecha`) — los necesita el guard de cadena post-corte.
+  const [cierresTodos, setCierresTodos] = useState<CashCierreDia[]>([])
   const [loading,  setLoading]  = useState(true)
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
@@ -81,8 +87,11 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const loadCierres = async () => {
     setLoading(true)
     try {
-      const [cs, ms, ss] = await Promise.all([getCierresDia(fecha), getAllCashMovements(), getCashSessions()])
+      const [cs, todos, ms, ss] = await Promise.all([
+        getCierresDia(fecha), getCierresDia(), getAllCashMovements(), getCashSessions(),
+      ])
       setCierres(cs)
+      setCierresTodos(todos)
       setMovs(ms)
       setSessions(ss)
     } catch (e) {
@@ -184,14 +193,30 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       && (m.description || '').includes(fecha))))
   const netoM    = efRealMFromParcial - propMFromParcial
   const netoN    = efRealN - propNLeg - N(retiroN)
+
+  // ── CORTE DEL POZO ─────────────────────────────────────────────────────────
+  // Antes del corte: TODO exactamente como siempre (histórico intacto, mismos números,
+  // mismo render). Desde el corte: un solo canal — el pozo. Ver cierrePozo.ts.
+  const postCorte = esPostCorte(fecha)
+  const dPozo = postCorte
+    ? deberiaPozo({
+        base:      basePozoParaCierre(movs, sessions, fecha),
+        efRealM:   efRealMFromParcial,   // BRUTAS: las propinas ya restan como movimientos
+        efRealN,
+        vmUsd:     vmUSDFromParcial,
+        vnUsd:     N(vnUSD),
+        retiroCrc: N(retiroN),           // su movimiento se crea después de este cálculo
+      })
+    : null
+
   // Debería quedar en Caja Fuerte = saldo del ledger + ventas efectivo − propinas − retiro.
-  const deberia  = saldoBase.crc + netoM + netoN
+  const deberia  = dPozo ? dPozo.crc : saldoBase.crc + netoM + netoN
   const diferencia = totalContadoCRC > 0 ? totalContadoCRC - deberia : null
   const cuadra     = diferencia !== null && Math.abs(diferencia) < 500
 
   // Dólares: lo que debería haber físicamente = saldo USD de Caja Fuerte (ledger,
   // ya filtrado anti-doble-conteo) + dólares de ventas (mediodía + noche).
-  const deberiaUSD   = calcDeberiaUSD(saldoBase.usd, vmUSDFromParcial, N(vnUSD))
+  const deberiaUSD   = dPozo ? dPozo.usd : calcDeberiaUSD(saldoBase.usd, vmUSDFromParcial, N(vnUSD))
   const difUSD       = totalContadoUSD > 0 || deberiaUSD > 0 ? totalContadoUSD - deberiaUSD : null
   const cuadraUSD    = difUSD === null || Math.abs(difUSD) < 1
 
@@ -203,6 +228,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   // CAMBIO A — cerrar con ventas en ₡0: confirmación explícita por fase (checkbox).
   const [confirmVentasCeroM, setConfirmVentasCeroM] = useState(false)
   const [confirmVentasCeroN, setConfirmVentasCeroN] = useState(false)
+  // Post-corte: confirmación explícita cuando la venta cargada es menor que las propinas del día.
+  const [confirmVentaBrutaM, setConfirmVentaBrutaM] = useState(false)
+  const [confirmVentaBrutaN, setConfirmVentaBrutaN] = useState(false)
   // CAMBIO B — resumen del cierre ANTES de confirmar (modal de solo lectura).
   const [showResumen, setShowResumen] = useState(false)
 
@@ -222,8 +250,20 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const handleConfirmParcial = async () => {
     if (!navigator.onLine) { setError('El cierre requiere conexión — esperá a que vuelva la señal y reintentá.'); return }
     if (ventasMVacias) { setError('Ingresá las ventas de mediodía'); return }
+    // Post-corte únicamente: pre-corte el cierre queda EXACTAMENTE como estaba.
+    if (postCorte && hayMontosNegativos([vmCRC, vmUSD])) {
+      setError('Las ventas no pueden ser negativas — corregí el monto'); return
+    }
     if (ventasMCeroReal && !confirmVentasCeroM) {
       setError('Marcá la casilla para confirmar que las ventas de mediodía fueron ₡0, o corregí el monto'); return
+    }
+    // Post-corte la venta va BRUTA: si es menor que las propinas pagadas hoy, lo más probable
+    // es que se haya tecleado ya neta (la causa raíz del sobrante del 2026-07-18 en prod).
+    if (postCorte && ventaSospechosaDeSerNeta(N(vmCRC), propinasPagadasDia) && !confirmVentaBrutaM) {
+      setError(
+        `⚠ Las ventas de mediodía (${fi2(N(vmCRC))}) son menores que las propinas pagadas hoy ` +
+        `(${fi2(propinasPagadasDia)}). Acá va la venta BRUTA, sin restarle las propinas — ellas ya ` +
+        'restan solas. Corregí el monto, o marcá la casilla si de verdad fue así.'); return
     }
     setSaving(true); setError(null)
     try {
@@ -259,8 +299,23 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     if (turnoAbierto) { setError('Cerrá el turno abierto en Caja Diaria antes del cierre del día'); return }
     if (!cajaProvCerrada) { setError('Cerrá primero la Caja Diaria de proveedores del día.'); return }
     if (ventasNVacias) { setError('Ingresá las ventas de noche'); return }
+    if (postCorte && hayMontosNegativos([vnCRC, vnUSD, retiroN, sepDiariaCRC, sepDiariaUSD, sepRegCRC, sepRegUSD, remCRC, remUSD])) {
+      setError('Ningún monto del cierre puede ser negativo — revisá ventas, retiro y separaciones'); return
+    }
     if (ventasNCeroReal && !confirmVentasCeroN) {
       setError('Marcá la casilla para confirmar que las ventas de noche fueron ₡0, o corregí el monto'); return
+    }
+    if (postCorte && ventaSospechosaDeSerNeta(N(vnCRC), propinasPagadasDia) && !confirmVentaBrutaN) {
+      setError(
+        `⚠ Las ventas de noche (${fi2(N(vnCRC))}) son menores que las propinas pagadas hoy ` +
+        `(${fi2(propinasPagadasDia)}). Acá va la venta BRUTA, sin restarle las propinas — ellas ya ` +
+        'restan solas. Corregí el monto, o marcá la casilla si de verdad fue así.'); return
+    }
+    // GUARD DE CADENA — post-corte el ancla del día solo vale si los días anteriores con
+    // plata movida ya están cerrados. Un día sin operación no traba.
+    if (postCorte) {
+      const pendientes = diasPendientesDeCierre({ fecha, cierres: cierresTodos, movements: movs, sessions })
+      if (pendientes.length) { setError(mensajeDiasPendientes(pendientes, fi2)); return }
     }
     if (totalContadoCRC === 0) { setError('Completá el conteo físico (separaciones)'); return }
     if (requiresAjuste && !ajusteMotivo.trim()) {
@@ -304,8 +359,10 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
           session_date:  fecha,
           created_by:    profile?.id ?? '',
           exchange_rate: tc,
-          mediodia: { crc: efRealMFromParcial - propMFromParcial, usd: vmUSDFromParcial },
-          noche:    { crc: efRealN - propNLeg,                    usd: N(vnUSD) },
+          // Post-corte entra la venta BRUTA: las propinas ya son movimientos propios y restan
+          // del pozo por su cuenta. Pre-corte se mantiene el NETO de siempre (identidad firmada).
+          mediodia: { crc: postCorte ? efRealMFromParcial : efRealMFromParcial - propMFromParcial, usd: vmUSDFromParcial },
+          noche:    { crc: postCorte ? efRealN            : efRealN - propNLeg,                    usd: N(vnUSD) },
         })
         await recordCierreRetiro({
           session_date:  fecha,
@@ -573,7 +630,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
             /* Formulario Fase 1 */
             <Section title="Ventas mediodía" icon="☀️" color="#8a6d1f">
               <Row2>
-                <Field label="Ventas PoS ₡">
+                <Field label={postCorte ? 'Ventas en efectivo BRUTAS ₡ (sin restar propinas)' : 'Ventas PoS ₡'}>
                   <MontoInput prefix="₡" value={vmCRC} onChange={setVmCRC} />
                 </Field>
                 <Field label={`Dólares físicos $ → ₡${N(vmUSD) > 0 ? (N(vmUSD)*tc).toLocaleString('es-CR') : '—'}`}>
@@ -602,9 +659,20 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   <span>Confirmo que las ventas del turno fueron <strong>₡0</strong> — no es un error de carga.</span>
                 </label>
               )}
+              {postCorte && ventaSospechosaDeSerNeta(N(vmCRC), propinasPagadasDia) && (
+                <label data-testid="aviso-venta-neta-m" style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'#fdecea', border:'1px solid #c23b22', borderRadius:2, fontSize:'0.78rem', color:'#7a2417', cursor:'pointer', marginTop:'0.25rem' }}>
+                  <input type="checkbox" checked={confirmVentaBrutaM} onChange={e => setConfirmVentaBrutaM(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
+                  <span>
+                    ⚠ Las ventas ({fi2(N(vmCRC))}) son <strong>menores</strong> que las propinas pagadas hoy ({fi2(propinasPagadasDia)}).
+                    Acá va la venta <strong>BRUTA</strong>: las propinas ya restan solas. Confirmo que el monto es correcto.
+                  </span>
+                </label>
+              )}
               {/* Sin `turnoAbierto` en el disabled: la Fase 1 se sella con la caja operando. */}
               <button
-                onClick={handleConfirmParcial} disabled={saving || (ventasMCeroReal && !confirmVentasCeroM)}
+                onClick={handleConfirmParcial}
+                disabled={saving || (ventasMCeroReal && !confirmVentasCeroM)
+                  || (postCorte && ventaSospechosaDeSerNeta(N(vmCRC), propinasPagadasDia) && !confirmVentaBrutaM)}
                 className="cierre-btn gold" style={{ marginTop:'0.75rem' }}>
                 💾 Confirmar cierre mediodía → sellar Fase 1
               </button>
@@ -668,6 +736,15 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   <label style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'#fdf6e3', border:'1px solid #d8b84a', borderRadius:2, fontSize:'0.78rem', color:'#6a5320', cursor:'pointer', marginBottom:'0.6rem' }}>
                     <input type="checkbox" checked={confirmVentasCeroN} onChange={e => setConfirmVentasCeroN(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
                     <span>Confirmo que las ventas del turno fueron <strong>₡0</strong> — no es un error de carga.</span>
+                  </label>
+                )}
+                {postCorte && ventaSospechosaDeSerNeta(N(vnCRC), propinasPagadasDia) && (
+                  <label data-testid="aviso-venta-neta-n" style={{ display:'flex', alignItems:'flex-start', gap:'0.5rem', padding:'0.6rem 0.75rem', background:'#fdecea', border:'1px solid #c23b22', borderRadius:2, fontSize:'0.78rem', color:'#7a2417', cursor:'pointer', marginBottom:'0.6rem' }}>
+                    <input type="checkbox" checked={confirmVentaBrutaN} onChange={e => setConfirmVentaBrutaN(e.target.checked)} style={{ marginTop:2, flexShrink:0 }} />
+                    <span>
+                      ⚠ Las ventas ({fi2(N(vnCRC))}) son <strong>menores</strong> que las propinas pagadas hoy ({fi2(propinasPagadasDia)}).
+                      Acá va la venta <strong>BRUTA</strong>: las propinas ya restan solas. Confirmo que el monto es correcto.
+                    </span>
                   </label>
                 )}
                 <Row2>
@@ -745,21 +822,62 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                         <span>₡ Colones</span>
                         <span>US$</span>
                       </div>
-                      <div className="cierre-resumen-row">
-                        <span className="lbl">Saldo Caja Fuerte (según sistema)</span>
-                        <span className="val">{fi2(saldoBase.crc)}</span>
-                        <span className="val">${saldoBase.usd.toFixed(2)}</span>
-                      </div>
-                      <div className="cierre-resumen-row">
-                        <span className="lbl">+ Mediodía neto</span>
-                        <span className="val">{fi2(netoM)}</span>
-                        <span className="val">${vmUSDFromParcial.toFixed(2)}</span>
-                      </div>
-                      <div className="cierre-resumen-row">
-                        <span className="lbl">+ Noche neto</span>
-                        <span className="val">{fi2(netoN)}</span>
-                        <span className="val">${N(vnUSD).toFixed(2)}</span>
-                      </div>
+                      {dPozo ? (
+                        /* Post-corte: el desglose tiene que sumar EXACTO lo que muestra el total.
+                           El pozo son las tres cajas físicas juntas y las ventas entran BRUTAS;
+                           las propinas no aparecen como pierna porque ya restaron en el pozo. */
+                        <>
+                          <div className="cierre-resumen-row">
+                            <span className="lbl">Pozo de efectivo (todas las cajas físicas)</span>
+                            <span className="val" data-testid="resumen-pozo">{fi2(dPozo.crc - efRealMFromParcial - efRealN + N(retiroN))}</span>
+                            <span className="val">${(dPozo.usd - vmUSDFromParcial - N(vnUSD)).toFixed(2)}</span>
+                          </div>
+                          <div className="cierre-resumen-row">
+                            <span className="lbl">+ Ventas efectivo BRUTAS mediodía</span>
+                            <span className="val">{fi2(efRealMFromParcial)}</span>
+                            <span className="val">${vmUSDFromParcial.toFixed(2)}</span>
+                          </div>
+                          <div className="cierre-resumen-row">
+                            <span className="lbl">+ Ventas efectivo BRUTAS noche</span>
+                            <span className="val">{fi2(efRealN)}</span>
+                            <span className="val">${N(vnUSD).toFixed(2)}</span>
+                          </div>
+                          {N(retiroN) > 0 && (
+                            <div className="cierre-resumen-row">
+                              <span className="lbl">− Retiro de dueños a banco</span>
+                              <span className="val">{fi2(-N(retiroN))}</span>
+                              <span className="val">$0.00</span>
+                            </div>
+                          )}
+                          {dPozo.indeterminados.cantidad > 0 && (
+                            <div className="cierre-resumen-row">
+                              <span className="lbl" style={{ color:'#8a5a1f' }}>
+                                ⚠ {dPozo.indeterminados.cantidad} traspaso(s) sin dirección legible ({fi2(dPozo.indeterminados.crc)}) — neutros
+                              </span>
+                              <span className="val">—</span>
+                              <span className="val">—</span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div className="cierre-resumen-row">
+                            <span className="lbl">Saldo Caja Fuerte (según sistema)</span>
+                            <span className="val">{fi2(saldoBase.crc)}</span>
+                            <span className="val">${saldoBase.usd.toFixed(2)}</span>
+                          </div>
+                          <div className="cierre-resumen-row">
+                            <span className="lbl">+ Mediodía neto</span>
+                            <span className="val">{fi2(netoM)}</span>
+                            <span className="val">${vmUSDFromParcial.toFixed(2)}</span>
+                          </div>
+                          <div className="cierre-resumen-row">
+                            <span className="lbl">+ Noche neto</span>
+                            <span className="val">{fi2(netoN)}</span>
+                            <span className="val">${N(vnUSD).toFixed(2)}</span>
+                          </div>
+                        </>
+                      )}
                       <div className="cierre-resumen-row destacada">
                         <span className="lbl">= Debería quedar en Caja Fuerte</span>
                         <span className="val">{fi2(deberia)}</span>
@@ -841,7 +959,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
               <button
                 onClick={() => setShowResumen(true)}
-                disabled={saving || turnoAbierto || ventasNVacias || (ventasNCeroReal && !confirmVentasCeroN) || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())}
+                disabled={saving || turnoAbierto || ventasNVacias || (ventasNCeroReal && !confirmVentasCeroN)
+                  || (postCorte && ventaSospechosaDeSerNeta(N(vnCRC), propinasPagadasDia) && !confirmVentaBrutaN)
+                  || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())}
                 className="cierre-btn green">
                 👁 Revisar resumen y cerrar el día →
               </button>

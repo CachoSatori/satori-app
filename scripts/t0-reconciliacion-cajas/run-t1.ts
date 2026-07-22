@@ -11,9 +11,9 @@
 import { writeFileSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
 
-// ⚠️ Imports desde src/ SOLO de lectura. `pozo.ts` es el núcleo nuevo que T1 valida;
-// `cashUtils.ts` no se toca (queda byte-idéntico a origin/staging).
-import { saldoPozoEfectivo } from '../../src/modules/cash/pozo.ts'
+// `./pozo.ts` es un puente delgado al núcleo promovido `src/modules/cash/pozo.ts` — no
+// reimplementa nada. `cashUtils.ts` no se toca (queda byte-idéntico a origin/staging).
+import { saldoPozoEfectivo } from './pozo.ts'
 
 import { loadEnv, REPO_ROOT, SCRIPT_DIR } from './env.ts'
 import { abrirLector, leerSnapshot } from './db.ts'
@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   const pares = corridaAnclada(movs, sesiones, cierres)
   if (!pares.length) throw new Error('No hay dos cierres completos consecutivos para anclar.')
 
-  const saldoPozoHoy = saldoPozoEfectivo(movs as never[])
+  const saldoPozoHoy = saldoPozoEfectivo(movs)
 
   const md = renderT1({
     ref: lector.ref,

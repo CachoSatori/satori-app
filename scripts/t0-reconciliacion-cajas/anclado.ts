@@ -26,7 +26,7 @@
 //      traspaso 'Caja Fuerte → Banco'. Contarlo como `otros_n` Y como traspaso con Banco del
 //      período lo restaría dos veces.
 
-import { contribucionPozo, type ClasePozo } from '../../src/modules/cash/pozo.ts'
+import { contribucionPozo, type ClasePozo } from './pozo.ts'
 import { dateCR, diasEntre, fechaDeMov, TOLERANCIA_CRC, type Cierre, type Mov, type Sesion } from './analisis.ts'
 
 /** Subcategorías que el propio cierre escribe en el ledger. */
@@ -166,7 +166,7 @@ export function corridaAnclada(movs: Mov[], sesiones: Sesion[], cierres: Cierre[
         continue
       }
       // La contribución la decide la FUNCIÓN REAL promovida a src/ — de eso se trata T1.
-      const c = contribucionPozo(m as never)
+      const c = contribucionPozo(m)
       netoPozo += c.crc
       nContados += 1
       const g = clases.get(c.clase) ?? { n: 0, crc: 0 }

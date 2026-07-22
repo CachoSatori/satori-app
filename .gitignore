@@ -8,3 +8,4 @@ dist
 .staging-backups/
 .claude/
 supabase/.temp/
+_backups-staging/

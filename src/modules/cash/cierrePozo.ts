@@ -19,13 +19,41 @@ import { dateCR } from '../../shared/utils'
 // exactamente como hoy (`saldoCajaFuerte` sigue vivo para eso): el histórico no se toca,
 // ni sus números ni su render. Desde el corte, modelo nuevo. Cero migraciones.
 
+/** Fecha del corte por defecto, si el entorno no dice otra cosa. */
+export const POZO_CORTE_FALLBACK = '2026-08-01'
+
 /**
- * Fecha (YYYY-MM-DD) desde la cual el cierre usa el modelo del pozo. Config de código.
+ * Valida una fecha de corte venida del entorno. Devuelve la fecha si es un YYYY-MM-DD real,
+ * o el fallback si viene vacía o mal formada (con aviso en consola: una fecha inválida que
+ * pasara en silencio movería el corte sin que nadie se entere).
  *
- * Para moverla: cambiar esta constante y desplegar. Los cierres ya sellados NO se
- * recalculan — lo sellado, sellado está.
+ * Exportada para test — el entorno no se puede pisar dentro de un test de forma limpia.
  */
-export const POZO_CORTE = '2026-08-01'
+export function resolverCorte(raw: string | undefined | null, aviso: (m: string) => void = console.warn): string {
+  const v = String(raw ?? '').trim()
+  if (!v) return POZO_CORTE_FALLBACK
+  const formatoOk = /^\d{4}-\d{2}-\d{2}$/.test(v)
+  // `Date.parse` acepta '2026-02-31' y lo corre al 3 de marzo, así que además se comprueba
+  // que la fecha vuelva a serializarse igual: eso descarta días que no existen.
+  const real = formatoOk && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v
+  if (!real) {
+    aviso(`[pozo] VITE_POZO_CORTE inválida (${JSON.stringify(raw)}); se usa el fallback ${POZO_CORTE_FALLBACK}`)
+    return POZO_CORTE_FALLBACK
+  }
+  return v
+}
+
+/**
+ * Fecha (YYYY-MM-DD) desde la cual el cierre usa el modelo del pozo.
+ *
+ * Sale de `VITE_POZO_CORTE` si el build la define; si no, del fallback. Se lee UNA vez, al
+ * cargar el módulo: el corte no puede cambiar a mitad de una sesión.
+ *
+ * Los cierres ya sellados NO se recalculan — lo sellado, sellado está.
+ */
+export const POZO_CORTE = resolverCorte(
+  (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_POZO_CORTE,
+)
 
 /** ¿Este día se cierra con el modelo nuevo? */
 export function esPostCorte(sessionDate: string, corte: string = POZO_CORTE): boolean {

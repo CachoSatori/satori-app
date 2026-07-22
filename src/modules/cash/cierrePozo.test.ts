@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import type { CashMovement, CashSession, CashCierreDia } from '../../shared/types/database'
 import {
   POZO_CORTE,
+  POZO_CORTE_FALLBACK,
+  resolverCorte,
   basePozoParaCierre,
   deberiaPozo,
   diasPendientesDeCierre,
@@ -356,5 +358,41 @@ describe('cierrePozo — exclusión de las filas del propio cierre', () => {
       '2026-08-05',
     )
     expect(r.crc).toBe(250_000)
+  })
+})
+
+describe('cierrePozo — la fecha de corte se puede fijar por entorno', () => {
+  const mudo = () => {}
+
+  it('una fecha válida gana sobre el fallback', () => {
+    expect(resolverCorte('2026-07-23', mudo)).toBe('2026-07-23')
+  })
+
+  it('vacía o ausente cae al fallback, sin ruido', () => {
+    expect(resolverCorte(undefined, mudo)).toBe(POZO_CORTE_FALLBACK)
+    expect(resolverCorte('', mudo)).toBe(POZO_CORTE_FALLBACK)
+    expect(resolverCorte('   ', mudo)).toBe(POZO_CORTE_FALLBACK)
+  })
+
+  it('una fecha mal formada cae al fallback Y avisa', () => {
+    const avisos: string[] = []
+    const push = (m: string) => avisos.push(m)
+    expect(resolverCorte('23/07/2026', push)).toBe(POZO_CORTE_FALLBACK)
+    expect(resolverCorte('2026-7-3', push)).toBe(POZO_CORTE_FALLBACK)
+    expect(resolverCorte('mañana', push)).toBe(POZO_CORTE_FALLBACK)
+    expect(avisos).toHaveLength(3)
+    expect(avisos[0]).toContain('VITE_POZO_CORTE')
+  })
+
+  it('un día que no existe NO pasa como válido', () => {
+    // Date.parse('2026-02-31') no falla: lo corre al 3 de marzo. Sin el chequeo de ida y
+    // vuelta, el corte quedaría en una fecha que nadie escribió.
+    const avisos: string[] = []
+    expect(resolverCorte('2026-02-31', m => avisos.push(m))).toBe(POZO_CORTE_FALLBACK)
+    expect(avisos).toHaveLength(1)
+  })
+
+  it('POZO_CORTE queda resuelto y con formato válido', () => {
+    expect(POZO_CORTE).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 })

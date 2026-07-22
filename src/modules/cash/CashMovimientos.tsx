@@ -22,7 +22,7 @@ const CONCEPTOS = [
 import { dateCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr } from './cashUtils'
 import { saldoTarjetaEfectivo } from './tarjetaPozo'
-import { POZO_CORTE } from './cierrePozo'
+import { POZO_CORTE, SUBCAT_APERTURA_POZO } from './cierrePozo'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { useDeletionNote } from './deletionNote'
 import { movementAttachments } from '../../shared/api/facturas'
@@ -161,7 +161,15 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   // El ajuste de APERTURA (reconciliación del saldo real) no es ingreso/egreso
   // real del negocio → se excluye de Ingresos/Egresos del período (pero sí
   // afecta el saldo de Caja Fuerte).
-  const isAperturaAjuste = (m: CashMovement) => /ajuste apertura/i.test(m.subcategory || '') || /ajuste apertura/i.test(m.description || '')
+  //
+  // MISMA REGLA para el ASIENTO DE ARRANQUE DEL POZO ('Apertura pozo AAAA-MM-DD'): es el saldo
+  // con el que arranca el pozo, no plata que el negocio ingresó ese día. Sin esta exclusión,
+  // el primer día post-corte "Ingresos (período)" mostraría el arranque entero (en prod,
+  // ₡744.570) como si fuera venta — justo el número que el corte viene a poner en cero.
+  // Sí sigue contando para el SALDO de la tarjeta: ahí es donde tiene que estar.
+  const isAperturaAjuste = (m: CashMovement) =>
+    /ajuste apertura/i.test(m.subcategory || '') || /ajuste apertura/i.test(m.description || '')
+    || m.subcategory === SUBCAT_APERTURA_POZO
   const totIngresos = filtered.filter(m => m.movement_type === 'ingreso' && !isAperturaAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
   const totEgresos  = filtered.filter(m => isEgreso(m.movement_type as MovementType) && !isAperturaAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
 

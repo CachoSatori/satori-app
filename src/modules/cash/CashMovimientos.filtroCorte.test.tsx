@@ -143,3 +143,33 @@ describe('CashMovimientos — Pend. Transferencia NO se filtra por período', ()
     expect(tarjeta('Caja Fuerte')).toBe(fi(600_000))   // 900.000 − 300.000, pre-corte
   })
 })
+
+// El ASIENTO DE ARRANQUE del pozo no es plata que entró: es el saldo con el que arranca.
+// Cuenta para el SALDO de la tarjeta, pero NO para "Ingresos (período)" — si contara, el
+// primer día post-corte la tarjeta de ingresos mostraría el arranque entero como si fuera
+// venta, que es exactamente el número que el corte viene a poner en cero.
+// Misma regla que el "ajuste apertura" que ya se excluía.
+describe('CashMovimientos — el asiento de arranque no infla los Ingresos del período', () => {
+  const arranque = mov({
+    movement_type: 'ingreso', amount_crc: 744_570, amount_usd: 3_441,
+    subcategory: 'Apertura pozo', description: `Apertura pozo ${POZO_CORTE}`,
+  })
+
+  it('"Ingresos (período)" NO cuenta el asiento de arranque', () => {
+    render_([arranque])
+    expect(tarjeta('Ingresos (período)')).toBe(fi(0))
+  })
+
+  it('pero el asiento SÍ suma al saldo de la tarjeta de efectivo', () => {
+    render_([arranque])
+    // Con el asiento hay dato post-corte → la tarjeta pasa a modo pozo ("Efectivo en caja").
+    expect(tarjeta('Efectivo en caja')).toBe(fi(744_570))
+  })
+
+  it('una venta real del período SÍ cuenta, junto al asiento', () => {
+    const venta = mov({ movement_type: 'ingreso', amount_crc: 35_000, description: 'Ventas del día' })
+    render_([arranque, venta])
+    expect(tarjeta('Ingresos (período)')).toBe(fi(35_000))          // solo la venta
+    expect(tarjeta('Efectivo en caja')).toBe(fi(744_570 + 35_000))  // el saldo, las dos
+  })
+})

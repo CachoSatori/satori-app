@@ -1,0 +1,30 @@
+// Typecheck del harness. NO entra a `npm run build`: el tsconfig raíz tiene
+// `files: []` y solo referencia tsconfig.app.json (include: ["src"]) y
+// tsconfig.node.json, así que este archivo es inerte para el build de la app.
+//
+//   npx tsc -p scripts/t0-reconciliacion-cajas
+//
+// `moduleResolution: bundler` es a propósito: iguala a tsconfig.app.json y así
+// resuelve los imports sin extensión de src/ (que Vite resuelve y `nodenext` no).
+// En runtime ese mismo hueco lo tapa ts-resolve-hook.mjs.
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "types": ["node"],
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["*.ts"]
+}

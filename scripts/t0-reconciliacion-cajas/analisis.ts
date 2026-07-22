@@ -7,6 +7,8 @@ import { contribucionCajaFuerte, contribucionPozo, esCajaFisica, parseTraspaso, 
 // ── Parámetros del análisis ──────────────────────────────────────────────────
 export const TOLERANCIA_CRC = 500
 export const VENTANA_PROPINA_DIAS = 3
+/** Con más candidatos que esto en la ventana, acertar ±tolerancia por azar deja de ser raro. */
+export const UMBRAL_CANDIDATOS_DEBIL = 5
 export const SUBCAT_PROPINA_TURNO = 'Propinas por turno'
 export const SUBCAT_AJUSTE_CIERRE = 'Ajuste de cierre'
 
@@ -33,6 +35,7 @@ export type Mov = {
   amount_crc: number
   amount_usd: number
   shift: string | null
+  updated_at: string
 }
 
 export type Sesion = {
@@ -44,6 +47,8 @@ export type Sesion = {
   opened_by: string
   initial_suppliers_crc: number
   created_at: string
+  updated_at: string
+  closed_by: string | null
 }
 
 export type Cierre = {
@@ -74,6 +79,7 @@ export const asMov = (f: Fila): Mov => ({
   amount_crc: n(f.amount_crc),
   amount_usd: n(f.amount_usd),
   shift: sn(f.shift),
+  updated_at: s(f.updated_at),
 })
 
 export const asSesion = (f: Fila): Sesion => ({
@@ -85,6 +91,8 @@ export const asSesion = (f: Fila): Sesion => ({
   opened_by: s(f.opened_by),
   initial_suppliers_crc: n(f.initial_suppliers_crc),
   created_at: s(f.created_at),
+  updated_at: s(f.updated_at),
+  closed_by: sn(f.closed_by),
 })
 
 export const asCierre = (f: Fila): Cierre => ({
@@ -131,7 +139,20 @@ export function diasEntre(a: string, b: string): number {
 
 export type Clase = 'CUADRÓ' | 'EXPLICADO-HUECO-2' | 'CANDIDATO-HUECO-1' | 'NO-EXPLICADO'
 
-export type MatchPropina = { id: string; fecha: string; monto: number; deltaDias: number; residuo: number }
+export type MatchPropina = {
+  id: string
+  fecha: string
+  monto: number
+  method: string | null
+  deltaDias: number
+  residuo: number
+  /** Cuántos pagos de propina había en la ventana de fechas (el universo del sorteo). */
+  candidatosEnVentana: number
+  /** Cuántos de ellos caían dentro de la tolerancia (si es >1, la coincidencia no identifica a nadie). */
+  coincidencias: number
+  /** true = la coincidencia puede ser azar; NO tratar como causa probada. */
+  debil: boolean
+}
 
 export type CierreClasificado = {
   cierre: Cierre
@@ -140,8 +161,11 @@ export type CierreClasificado = {
   /** dif + egresos: lo que quedaría sin explicar si el hueco 2 fuera la causa. */
   residuoHueco2: number
   matchPropina: MatchPropina | null
-  /** Egreso 'Ajuste de cierre' emitido al ledger por ese cierre (Opción B), si existe. */
-  ajusteLedger: Mov | null
+  /**
+   * TODOS los asientos 'Ajuste de cierre' que nombran esta fecha (Opción B). Es una lista
+   * y no uno solo: hay cierres con más de un ajuste, y quedarse con el primero los oculta.
+   */
+  ajustesLedger: Mov[]
   /** Movimientos del día que NO entran al join por tener session_id NULL. */
   huerfanosDelDia: Mov[]
   fechaNoConfiable: boolean
@@ -165,7 +189,12 @@ export function esEgresoProvEfectivo(m: Mov): boolean {
   )
 }
 
-export function clasificarCierres(movs: Mov[], sesiones: Sesion[], cierres: Cierre[]): CierreClasificado[] {
+export function clasificarCierres(
+  movs: Mov[],
+  sesiones: Sesion[],
+  cierres: Cierre[],
+  fechasNoConfiables: string[] = FECHAS_NO_CONFIABLES,
+): CierreClasificado[] {
   const porSesion = new Map(sesiones.map((x) => [x.id, x]))
 
   // Egresos de Caja Proveedores en efectivo, agrupados por session_date VÍA EL JOIN
@@ -206,18 +235,26 @@ export function clasificarCierres(movs: Mov[], sesiones: Sesion[], cierres: Cier
       const residuoHueco2 = dif + total
 
       let matchPropina: MatchPropina | null = null
+      let candidatosEnVentana = 0
+      let coincidencias = 0
       for (const p of propinas) {
         if (!p.fecha) continue
         const delta = diasEntre(c.session_date, p.fecha)
         if (Math.abs(delta) > VENTANA_PROPINA_DIAS) continue
+        candidatosEnVentana += 1
         const residuo = dif + p.mov.amount_crc
         if (Math.abs(residuo) > TOLERANCIA_CRC) continue
+        coincidencias += 1
         const cand: MatchPropina = {
           id: p.mov.id,
           fecha: p.fecha,
           monto: p.mov.amount_crc,
+          method: p.mov.method,
           deltaDias: delta,
           residuo,
+          candidatosEnVentana: 0,
+          coincidencias: 0,
+          debil: false,
         }
         // Ante empate, el más cercano en fecha y luego el de menor residuo.
         if (
@@ -229,6 +266,14 @@ export function clasificarCierres(movs: Mov[], sesiones: Sesion[], cierres: Cier
           matchPropina = cand
         }
       }
+      if (matchPropina) {
+        matchPropina.candidatosEnVentana = candidatosEnVentana
+        matchPropina.coincidencias = coincidencias
+        // Un match es DÉBIL cuando no es único: si varios pagos de propina caen dentro
+        // de la tolerancia, o si hay tantos candidatos en la ventana que acertar ±₡500
+        // por azar deja de ser improbable, la coincidencia no prueba causalidad.
+        matchPropina.debil = coincidencias > 1 || candidatosEnVentana > UMBRAL_CANDIDATOS_DEBIL
+      }
 
       let clase: Clase
       if (Math.abs(dif) < TOLERANCIA_CRC) clase = 'CUADRÓ'
@@ -236,9 +281,7 @@ export function clasificarCierres(movs: Mov[], sesiones: Sesion[], cierres: Cier
       else if (matchPropina) clase = 'CANDIDATO-HUECO-1'
       else clase = 'NO-EXPLICADO'
 
-      const ajusteLedger =
-        ajustes.find((m) => s(m.description).includes(c.session_date)) ??
-        null
+      const ajustesLedger = ajustes.filter((m) => s(m.description).includes(c.session_date))
 
       return {
         cierre: c,
@@ -246,9 +289,9 @@ export function clasificarCierres(movs: Mov[], sesiones: Sesion[], cierres: Cier
         egresosProv: { n: eg.length, total, movs: eg },
         residuoHueco2,
         matchPropina,
-        ajusteLedger,
+        ajustesLedger,
         huerfanosDelDia: sinSesionPorFecha.get(c.session_date) ?? [],
-        fechaNoConfiable: FECHAS_NO_CONFIABLES.includes(c.session_date),
+        fechaNoConfiable: fechasNoConfiables.includes(c.session_date),
       }
     })
 }
@@ -403,6 +446,9 @@ export type Inventarios = {
   movsSinSesionTotal: { n: number; crc: number }
   fechasAnomalas: { id: string; created_at: string; fechaCR: string; caja_origen: string; crc: number }[]
   movsEnFechasNoConfiables: { fecha: string; n: number; crc: number }[]
+  /** Movimientos con amount_crc < 0 — un monto negativo invierte el signo del asiento. */
+  negativos: { movement_type: string; caja_origen: string; subcategory: string; n: number; crc: number }[]
+  negativosTotal: { n: number; crc: number }
 }
 
 function banderasDe(m: Mov): string[] {
@@ -415,7 +461,11 @@ function banderasDe(m: Mov): string[] {
   return b
 }
 
-export function construirInventarios(movs: Mov[], sesiones: Sesion[]): Inventarios {
+export function construirInventarios(
+  movs: Mov[],
+  sesiones: Sesion[],
+  fechasNoConfiables: string[] = FECHAS_NO_CONFIABLES,
+): Inventarios {
   // (a) cajas huérfanas
   const sesionesAbiertas = sesiones
     .filter((x) => x.status === 'open')
@@ -520,10 +570,30 @@ export function construirInventarios(movs: Mov[], sesiones: Sesion[]): Inventari
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
 
   // extra · huella de las fechas marcadas como no confiables
-  const movsEnFechasNoConfiables = FECHAS_NO_CONFIABLES.map((f) => {
+  const movsEnFechasNoConfiables = fechasNoConfiables.map((f) => {
     const del = movs.filter((m) => dateCR(m.created_at) === f)
     return { fecha: f, n: del.length, crc: del.reduce((a, m) => a + m.amount_crc, 0) }
   })
+
+  const neg = new Map<string, { movement_type: string; caja_origen: string; subcategory: string; n: number; crc: number }>()
+  let negN = 0
+  let negCrc = 0
+  for (const m of movs) {
+    if (m.amount_crc >= 0) continue
+    negN += 1
+    negCrc += m.amount_crc
+    const k = [m.movement_type, s(m.caja_origen), s(m.subcategory)].join(' ')
+    const g = neg.get(k) ?? {
+      movement_type: m.movement_type,
+      caja_origen: s(m.caja_origen) || '(null)',
+      subcategory: s(m.subcategory) || '(null)',
+      n: 0,
+      crc: 0,
+    }
+    g.n += 1
+    g.crc += m.amount_crc
+    neg.set(k, g)
+  }
 
   return {
     sesionesAbiertas,
@@ -537,7 +607,49 @@ export function construirInventarios(movs: Mov[], sesiones: Sesion[]): Inventari
     movsSinSesionTotal: { n: sinSesN, crc: sinSesCrc },
     fechasAnomalas,
     movsEnFechasNoConfiables,
+    negativos: [...neg.values()].sort((a, b) => a.crc - b.crc),
+    negativosTotal: { n: negN, crc: negCrc },
   }
+}
+
+// ── Focos: días puntuales que hay que mirar con lupa ────────────────────────
+// Se usa para auditar remediaciones manuales (SOP interino) contra los datos.
+
+export type Foco = {
+  fecha: string
+  nota: string
+  sesiones: Sesion[]
+  movs: Mov[]
+  /** Movimientos cuyo updated_at es posterior al created_at: huella de una edición a mano. */
+  editados: { mov: Mov; segundos: number }[]
+}
+
+export function construirFocos(
+  movs: Mov[],
+  sesiones: Sesion[],
+  pedidos: { fecha: string; nota: string }[],
+): Foco[] {
+  const porSesion = new Map(sesiones.map((x) => [x.id, x]))
+  return pedidos.map(({ fecha, nota }) => {
+    const delDia = movs
+      .filter((m) => fechaDeMov(m, porSesion) === fecha)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    const editados = delDia
+      .map((mov) => {
+        const t0 = Date.parse(aISO(mov.created_at))
+        const t1 = Date.parse(aISO(mov.updated_at || mov.created_at))
+        return { mov, segundos: isNaN(t0) || isNaN(t1) ? 0 : Math.round((t1 - t0) / 1000) }
+      })
+      .filter((x) => x.segundos > 1)
+      .sort((a, b) => b.segundos - a.segundos)
+    return {
+      fecha,
+      nota,
+      sesiones: sesiones.filter((x) => x.session_date === fecha),
+      movs: delDia,
+      editados,
+    }
+  })
 }
 
 // ── Watermark del snapshot (hace el reporte determinista y fechable) ─────────

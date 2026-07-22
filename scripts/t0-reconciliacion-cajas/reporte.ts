@@ -8,6 +8,7 @@ import type {
   Cierre,
   CierreClasificado,
   ComparativoPozo,
+  Foco,
   Inventarios,
   Watermark,
 } from './analisis.ts'
@@ -37,6 +38,9 @@ export const TOPE_LISTADO = 25
 /** El texto libre (motivos de ajuste, descripciones) puede traer pipes. */
 const esc = (v: unknown): string => String(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ').trim() || '—'
 
+/** Signo con el que un asiento entra al ledger: los egresos restan, el resto suma. */
+const signoDe = (m: { movement_type: string }): string => (m.movement_type.startsWith('egreso') ? '−' : '+')
+
 const EMOJI: Record<string, string> = {
   'CUADRÓ': '✅',
   'EXPLICADO-HUECO-2': '🟡',
@@ -61,10 +65,24 @@ export type DatosReporte = {
   clasificados: CierreClasificado[]
   pozo: ComparativoPozo
   inv: Inventarios
+  // ── Todo lo de abajo es OPCIONAL y no lo pasa run.ts (staging). Los defaults
+  // reproducen el reporte de staging byte a byte; solo run-prod.ts los usa. ──
+  titulo?: string
+  entorno?: string
+  /** Días cuyos datos no son de piso. Vacío en prod: ahí el 21/07 es real. */
+  fechasNoConfiables?: string[]
+  /** Días a mirar con lupa (remediaciones manuales, cajas viejas). */
+  focos?: Foco[]
+  /** count(*) antes y después de la corrida — evidencia de que no se escribió nada. */
+  conteos?: { antes: Record<string, number>; despues: Record<string, number>; iguales: boolean }
+  /** Mensaje del servidor al rechazar la escritura de prueba. */
+  smokeEscritura?: string
 }
 
 export function renderReporte(d: DatosReporte): string {
   const { clasificados, pozo, inv, watermark: wm } = d
+  const fnc = d.fechasNoConfiables ?? FECHAS_NO_CONFIABLES
+  const entorno = d.entorno ?? 'STAGING'
   const L: string[] = []
   const p = (...xs: string[]) => L.push(...xs)
 
@@ -74,16 +92,16 @@ export function renderReporte(d: DatosReporte): string {
 
   // ── Encabezado ────────────────────────────────────────────────────────────
   p(
-    '# REPORTE T0 — Reconciliación de cajas',
+    d.titulo ?? '# REPORTE T0 — Reconciliación de cajas',
     '',
-    '> **Harness READ-ONLY sobre STAGING.** Cero INSERT/UPDATE/DELETE, cero migraciones, cero cambios de esquema.',
+    `> **Harness READ-ONLY sobre ${entorno}.** Cero INSERT/UPDATE/DELETE, cero migraciones, cero cambios de esquema.`,
     '> Insumo para el rediseño hacia el **pozo único de efectivo**: cuantifica el histórico y corre el modelo nuevo',
     '> en paralelo al actual, sin tocar la app. Generado por `scripts/t0-reconciliacion-cajas` (ver README).',
     '',
     tabla(
       ['Campo', 'Valor'],
       [
-        ['Proyecto Supabase', `\`${d.ref}\` (STAGING)`],
+        ['Proyecto Supabase', `\`${d.ref}\` (${entorno})`],
         ['Transporte de lectura', `\`${d.backend}\``],
         ['`cash_movements`', String(wm.movimientos)],
         ['`cash_sessions`', String(wm.sesiones)],
@@ -93,9 +111,27 @@ export function renderReporte(d: DatosReporte): string {
       ],
     ),
     '',
-    `> ⚠️ **Datos no confiables:** en staging el/los día(s) **${FECHAS_NO_CONFIABLES.join(', ')}** incluyen turnos FICTICIOS de prueba.`,
-    '> Cualquier número que caiga en esas fechas es de laboratorio, no de piso — no sirve para conclusiones de plata.',
-    '',
+    ...(fnc.length
+      ? [
+          `> ⚠️ **Datos no confiables:** en staging el/los día(s) **${fnc.join(', ')}** incluyen turnos FICTICIOS de prueba.`,
+          '> Cualquier número que caiga en esas fechas es de laboratorio, no de piso — no sirve para conclusiones de plata.',
+          '',
+        ]
+      : []),
+    ...(d.conteos
+      ? [
+          '> 🔒 **Evidencia de no-escritura.** `count(*)` de las 3 tablas ANTES y DESPUÉS de la corrida:',
+          '> ' +
+            Object.keys(d.conteos.antes)
+              .map((t) => `\`${t}\` ${d.conteos!.antes[t]} → ${d.conteos!.despues[t]}`)
+              .join(' · ') +
+            ` — **${d.conteos.iguales ? 'idénticos ✅' : 'DISTINTOS ❌'}**.`,
+          ...(d.smokeEscritura
+            ? [`> El canal rechazó la escritura de prueba con: \`${d.smokeEscritura.replace(/\s+/g, ' ').slice(0, 150)}\``]
+            : []),
+          '',
+        ]
+      : []),
     '---',
     '',
   )
@@ -140,12 +176,43 @@ export function renderReporte(d: DatosReporte): string {
         ' → detalle en §1.2.',
     )
   }
-  const conAjuste = noExplicados.filter((x) => x.ajusteLedger)
+  const conAjuste = noExplicados.filter((x) => x.ajustesLedger.length)
   if (conAjuste.length) {
+    const todosEgreso = conAjuste.every((x) => x.ajustesLedger.every((m) => m.movement_type.startsWith('egreso')))
+    const todosCasan = conAjuste.every((x) => {
+      const neto = x.ajustesLedger.reduce(
+        (acc, m) => acc + (m.movement_type.startsWith('egreso') ? -m.amount_crc : m.amount_crc),
+        0,
+      )
+      return Math.abs(Math.abs(neto) - Math.abs(x.cierre.diferencia_crc)) < 0.005
+    })
+    const que = todosEgreso ? 'un egreso' : 'un asiento'
     hallazgos.push(
-      `Los ${conAjuste.length} NO-EXPLICADOS **sí tienen un egreso \`Ajuste de cierre\` en Caja Fuerte por el monto exacto** ` +
+      `Los ${conAjuste.length} NO-EXPLICADOS **sí tienen ${que} \`Ajuste de cierre\` en Caja Fuerte` +
+        `${todosCasan ? ' por el monto exacto' : ''}** ` +
         '(Opción B — la diferencia se selló contra el ledger). O sea: están *contabilizados*, no *explicados*: ' +
         'nadie sabe todavía qué movimiento real los causó.',
+    )
+  }
+  // Contradicciones rótulo-vs-signo en CUALQUIER cierre, no solo en los no explicados.
+  const contradictorios = clasificados.filter((x) => {
+    if (!x.ajustesLedger.length) return false
+    const tipo = String(x.cierre.ajuste_tipo ?? '').toLowerCase()
+    if (tipo !== 'faltante' && tipo !== 'sobrante') return false
+    const neto = x.ajustesLedger.reduce(
+      (acc, m) => acc + (m.movement_type.startsWith('egreso') ? -m.amount_crc : m.amount_crc),
+      0,
+    )
+    if (neto === 0) return false
+    return (tipo === 'faltante' && neto > 0) || (tipo === 'sobrante' && neto < 0)
+  })
+  if (contradictorios.length) {
+    hallazgos.push(
+      `🚩 **${contradictorios.length} cierre(s) donde el rótulo y el signo del ajuste se contradicen**: ` +
+        contradictorios
+          .map((x) => `\`${x.cierre.session_date}\` (sellado "${esc(x.cierre.ajuste_tipo)}", contabilizado al revés)`)
+          .join(' · ') +
+        '. El rótulo del cierre dice una cosa y el asiento del ledger hace la contraria — el signo es el que mueve la plata.',
     )
   }
   hallazgos.push(
@@ -229,18 +296,34 @@ export function renderReporte(d: DatosReporte): string {
       '**Candidatos de hueco 1 encontrados** (pago de `Propinas por turno` cuyo monto ≈ −diferencia):',
       '',
       tabla(
-        ['Cierre', 'Diferencia', 'Movimiento propina', 'Fecha propina', 'Monto', 'Δ días', 'Residuo'],
-        conMatch.map((x) => [
-          `\`${x.cierre.session_date}\``,
-          fi(x.cierre.diferencia_crc),
-          `\`${x.matchPropina!.id.slice(0, 8)}\``,
-          `\`${x.matchPropina!.fecha}\``,
-          fi(x.matchPropina!.monto),
-          String(x.matchPropina!.deltaDias),
-          fi(x.matchPropina!.residuo),
-        ]),
+        ['Cierre', 'Diferencia', 'Movimiento propina', 'Fecha', 'Monto', 'Método', 'Δ días', 'Residuo', 'Fuerza'],
+        conMatch.map((x) => {
+          const m = x.matchPropina!
+          return [
+            `\`${x.cierre.session_date}\``,
+            fi(x.cierre.diferencia_crc),
+            `\`${m.id.slice(0, 8)}\``,
+            `\`${m.fecha}\``,
+            fi(m.monto),
+            esc(m.method),
+            String(m.deltaDias),
+            fi(m.residuo),
+            m.debil
+              ? `⚠️ débil (${m.coincidencias} coincidencia(s) entre ${m.candidatosEnVentana} candidatos)`
+              : `única entre ${m.candidatosEnVentana} candidatos`,
+          ]
+        }),
       ),
       '',
+      ...(conMatch.some((x) => x.matchPropina!.debil)
+        ? [
+            '> ⚠️ **Leer con pinzas.** Un "candidato" es una coincidencia de monto, no una causa probada. Cuando hay',
+            `> muchos pagos de propina en la ventana de ±${VENTANA_PROPINA_DIAS} días, que alguno caiga dentro de`,
+            `> ${fi(TOLERANCIA_CRC)} deja de ser improbable: es lo que mide la columna **Fuerza**. Los marcados como`,
+            '> **débil** hay que confirmarlos contra el comprobante físico antes de darlos por explicados.',
+            '',
+          ]
+        : []),
     )
   } else {
     p(
@@ -283,24 +366,58 @@ export function renderReporte(d: DatosReporte): string {
                 : `ninguno dentro de ${fi(TOLERANCIA_CRC)}`,
             ],
             [
-              'Egreso `Ajuste de cierre` emitido',
-              x.ajusteLedger
-                ? `**sí** — ${fi(x.ajusteLedger.amount_crc)} en \`${x.ajusteLedger.caja_origen}\` (\`${x.ajusteLedger.id.slice(0, 8)}\`, ${x.ajusteLedger.created_at})`
-                : 'no',
+              // La etiqueta sigue el tipo REAL del asiento: un "Sobrante" se contabiliza
+              // como ingreso, y llamarlo egreso sería una falsedad en el reporte.
+              x.ajustesLedger.length && x.ajustesLedger.every((m) => m.movement_type.startsWith('egreso'))
+                ? 'Egreso `Ajuste de cierre` emitido'
+                : 'Asiento `Ajuste de cierre` emitido',
+              x.ajustesLedger.length === 1
+                ? `**sí** — ${fi(x.ajustesLedger[0].amount_crc)} en \`${x.ajustesLedger[0].caja_origen}\` (\`${x.ajustesLedger[0].id.slice(0, 8)}\`, ${x.ajustesLedger[0].created_at})`
+                : x.ajustesLedger.length > 1
+                  ? `**sí, ${x.ajustesLedger.length}** — ` +
+                    x.ajustesLedger
+                      .map((m) => `${signoDe(m)}${fi(m.amount_crc)} (\`${m.id.slice(0, 8)}\`, \`${m.movement_type}\`)`)
+                      .join(' · ')
+                  : 'no',
             ],
           ],
         ),
         '',
       )
-      if (x.ajusteLedger) {
-        const desc = esc(x.ajusteLedger.description)
-        const casa = Math.abs(Math.abs(x.ajusteLedger.amount_crc) - Math.abs(c.diferencia_crc)) < 0.005
-        p(
-          `> El movimiento dice: _"${desc}"_. Su monto ${casa ? '**coincide exactamente**' : 'NO coincide'} con la magnitud`,
-          '> de la diferencia. La plata quedó **cuadrada en el ledger**, pero la causa física sigue sin identificar:',
-          '> ni egresos de proveedor en efectivo ni un pago de propinas de esos días la explican.',
-          '',
+      if (x.ajustesLedger.length) {
+        const neto = x.ajustesLedger.reduce(
+          (acc, m) => acc + (m.movement_type.startsWith('egreso') ? -m.amount_crc : m.amount_crc),
+          0,
         )
+        const casa = Math.abs(Math.abs(neto) - Math.abs(c.diferencia_crc)) < 0.005
+        if (x.ajustesLedger.length === 1) {
+          p(
+            `> El movimiento dice: _"${esc(x.ajustesLedger[0].description)}"_. Su monto ${casa ? '**coincide exactamente**' : 'NO coincide'} con la magnitud`,
+            '> de la diferencia. La plata quedó **cuadrada en el ledger**, pero la causa física sigue sin identificar:',
+            '> ni egresos de proveedor en efectivo ni un pago de propinas de esos días la explican.',
+            '',
+          )
+        } else {
+          p(
+            `> Este cierre emitió **${x.ajustesLedger.length} asientos** de ajuste: ` +
+              x.ajustesLedger.map((m) => `_"${esc(m.description)}"_ (${signoDe(m)}${fi(m.amount_crc)})`).join(' · ') +
+              `. Neto ${fi(neto)}, que ${casa ? '**coincide**' : '**NO coincide**'} con la magnitud de la diferencia.`,
+            '> La plata quedó cuadrada en el ledger, pero la causa física sigue sin identificar.',
+            '',
+          )
+        }
+        // Faltante ⇒ debería restar (egreso); Sobrante ⇒ debería sumar (ingreso).
+        const tipo = String(c.ajuste_tipo ?? '').toLowerCase()
+        const suma = neto > 0
+        const contradice = (tipo === 'faltante' && suma) || (tipo === 'sobrante' && !suma)
+        if (contradice) {
+          p(
+            `> ⚠️ **El cierre y el ledger se contradicen.** El cierre quedó sellado como \`ajuste_tipo = "${esc(c.ajuste_tipo)}"\`,`,
+            `> pero el asiento se contabilizó como **${suma ? 'ingreso (Sobrante)' : 'egreso (Faltante)'}**, es decir ${suma ? 'SUMANDO' : 'RESTANDO'} ${fi(Math.abs(neto))}`,
+            '> a la Caja Fuerte. Uno de los dos rótulos está mal, y el signo decide de qué lado cae la plata.',
+            '',
+          )
+        }
       }
       if (x.egresosProv.n) {
         p(
@@ -596,17 +713,156 @@ export function renderReporte(d: DatosReporte): string {
   } else {
     p('_Sin fechas fuera de rango._', '')
   }
-  p(
-    'Huella de los días marcados como **no confiables** (turnos ficticios de prueba en staging):',
-    '',
-    tabla(
-      ['Fecha', 'Movimientos', 'Σ CRC'],
-      inv.movsEnFechasNoConfiables.map((x) => [`\`${x.fecha}\` ⚠️`, String(x.n), fi(x.crc)]),
-    ),
-    '',
-    '---',
-    '',
-  )
+  if (fnc.length) {
+    p(
+      'Huella de los días marcados como **no confiables** (turnos ficticios de prueba en staging):',
+      '',
+      tabla(
+        ['Fecha', 'Movimientos', 'Σ CRC'],
+        inv.movsEnFechasNoConfiables.map((x) => [`\`${x.fecha}\` ⚠️`, String(x.n), fi(x.crc)]),
+      ),
+      '',
+    )
+  } else {
+    p(
+      '_Sin días marcados como no confiables: en este entorno todos los datos son de piso._',
+      '',
+    )
+  }
+
+  // ── 3.g · Montos negativos (solo se imprime donde se pidió el censo) ──────
+  if (d.focos && inv.negativosTotal.n) {
+    p(
+      '### 3.g · Extra — movimientos con monto NEGATIVO',
+      '',
+      'Un `amount_crc < 0` invierte el signo del asiento: un **ingreso** negativo *resta* del pozo y de la Caja Fuerte,',
+      'sin dejar rastro de que fue una corrección. Es una vía silenciosa de mover plata que ningún modelo —ni el actual',
+      'ni el pozo— distingue de un movimiento normal.',
+      '',
+      tabla(
+        ['movement_type', 'caja_origen', 'subcategory', 'Filas', 'Σ CRC'],
+        inv.negativos.map((g) => [`\`${g.movement_type}\``, `\`${g.caja_origen}\``, esc(g.subcategory), String(g.n), fi(g.crc)]),
+      ),
+      '',
+      `Total: **${inv.negativosTotal.n}** movimiento(s), Σ ${fi(inv.negativosTotal.crc)}.`,
+      '',
+    )
+  }
+  p('---', '')
+
+  // ── 4 · Focos (solo cuando el llamador pide mirar días puntuales) ─────────
+  if (d.focos?.length) {
+    p(
+      '## 4 · Focos — días bajo lupa',
+      '',
+      'Días que hay que auditar contra los datos, no contra la memoria: remediaciones hechas a mano,',
+      'cajas viejas, cualquier cosa que alguien afirme que quedó de una manera.',
+      '',
+    )
+    for (const f of d.focos) {
+      const cierreDelDia = clasificados.find((x) => x.cierre.session_date === f.fecha)
+      p(`### 4.${d.focos.indexOf(f) + 1} · \`${f.fecha}\``, '', `**Qué se fue a verificar:** ${f.nota}`, '')
+
+      p(
+        '**Turnos de ese día**',
+        '',
+        f.sesiones.length
+          ? tabla(
+              ['id', 'shift_type', 'status', 'cajero', '`initial_suppliers_crc`', 'creado', 'último cambio', '`closed_by`'],
+              f.sesiones.map((x) => [
+                `\`${x.id.slice(0, 8)}\``,
+                esc(x.shift_type),
+                x.status === 'open' ? `**${x.status}** ⚠️` : `**${x.status}**`,
+                esc(x.cajero_name),
+                fi(x.initial_suppliers_crc),
+                `\`${x.created_at.slice(0, 19)}\``,
+                `\`${x.updated_at.slice(0, 19)}\``,
+                x.closed_by ? `\`${x.closed_by.slice(0, 8)}\`` : '—',
+              ]),
+            )
+          : '_Ningún turno con esa `session_date`._',
+        '',
+        // Veredicto explícito: el foco suele existir justamente para responder "¿quedó abierta?".
+        ...(f.sesiones.length
+          ? [
+              f.sesiones.some((x) => x.status === 'open')
+                ? `> ⚠️ **Sigue ABIERTA** ${f.sesiones.filter((x) => x.status === 'open').length} caja(s) de esta fecha.`
+                : `> ✅ **Ninguna caja de esta fecha quedó abierta.** Está${f.sesiones.length > 1 ? 'n' : ''} en \`closed\`; ` +
+                  `el último cambio quedó registrado el \`${f.sesiones.map((x) => x.updated_at.slice(0, 19)).sort().at(-1)}\`. ` +
+                  'La tabla no guarda el estado anterior: esto dice cómo está HOY, no si alguna vez estuvo abierta.',
+              '',
+            ]
+          : []),
+      )
+
+      if (cierreDelDia) {
+        p(
+          `**Cómo quedó el cierre:** diferencia ${fi(cierreDelDia.cierre.diferencia_crc)} → ` +
+            `${EMOJI[cierreDelDia.clase]} **${cierreDelDia.clase}**. ` +
+            `Egresos de Caja Proveedores en efectivo de ese día: ${fi(cierreDelDia.egresosProv.total)} ` +
+            `(${cierreDelDia.egresosProv.n} mov.).`,
+          '',
+        )
+      } else {
+        p('**Cierre:** no hay fila de `cash_cierres_dia` con esa fecha.', '')
+      }
+
+      p(
+        `**Movimientos del día (${f.movs.length})**`,
+        '',
+        f.movs.length
+          ? tabla(
+              ['id', 'tipo', 'caja_origen', 'método', 'subcategory', 'descripción', 'monto', 'status'],
+              f.movs
+                .slice(0, TOPE_LISTADO)
+                .map((m) => [
+                  `\`${m.id.slice(0, 8)}\``,
+                  `\`${m.movement_type}\``,
+                  `\`${esc(m.caja_origen)}\``,
+                  esc(m.method),
+                  esc(m.subcategory),
+                  esc(m.description),
+                  fi(m.amount_crc),
+                  esc(m.status),
+                ]),
+            )
+          : '_Ninguno._',
+        '',
+        f.movs.length > TOPE_LISTADO
+          ? `_Se listan ${TOPE_LISTADO} de ${f.movs.length} (tope del reporte)._`
+          : '',
+        '',
+      )
+
+      if (f.editados.length) {
+        p(
+          '**Huella de edición a mano** — movimientos cuyo `updated_at` es posterior al `created_at`. La tabla no guarda',
+          'el valor anterior, así que esto prueba **que** se editaron y cuándo, no **qué** se cambió:',
+          '',
+          tabla(
+            ['id', 'caja_origen ACTUAL', 'método', 'monto', 'creado', 'editado', 'Δ'],
+            f.editados
+              .slice(0, TOPE_LISTADO)
+              .map(({ mov: m, segundos }) => [
+                `\`${m.id.slice(0, 8)}\``,
+                `**\`${esc(m.caja_origen)}\`**`,
+                esc(m.method),
+                fi(m.amount_crc),
+                `\`${m.created_at.slice(0, 19)}\``,
+                `\`${m.updated_at.slice(0, 19)}\``,
+                segundos >= 3600
+                  ? `${Math.floor(segundos / 3600)}h ${Math.floor((segundos % 3600) / 60)}m`
+                  : `${Math.floor(segundos / 60)}m ${segundos % 60}s`,
+              ]),
+          ),
+          '',
+        )
+      } else {
+        p('_Ningún movimiento de ese día tiene `updated_at` posterior al `created_at`._', '')
+      }
+    }
+    p('---', '')
+  }
 
   // ── Apéndice ──────────────────────────────────────────────────────────────
   p(

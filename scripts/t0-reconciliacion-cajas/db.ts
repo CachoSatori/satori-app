@@ -1,4 +1,8 @@
-// T0 · Capa de lectura READ-ONLY contra STAGING.
+// T0 · Capa de lectura READ-ONLY.
+//
+// `abrirLector()` es el camino de STAGING y tiene el candado de entorno adentro.
+// Para PROD existe `crearLectorMgmt()` con ref explícito: NO lleva candado propio a
+// propósito — el doble opt-in vive en run-prod.ts, que es el único que lo llama.
 //
 // Dos transportes, misma salida (filas crudas de 3 tablas):
 //   · postgrest — @supabase/supabase-js (el que ya usa la app). Necesita una key
@@ -77,6 +81,45 @@ function lectorPostgrest(url: string, key: string, ref: string, etiqueta: string
   }
 }
 
+/**
+ * SMOKE de seguridad: manda a propósito una sentencia de ESCRITURA con `read_only:true`
+ * y exige que el servidor la RECHACE. Es la prueba de que el candado no es una promesa
+ * del cliente sino una transacción read-only de Postgres.
+ *
+ * Se salta `assertSoloSelect()` adrede — mandar el write ES la prueba. La sentencia es
+ * `create temp table`: aunque llegara a ejecutarse (no puede), muere con la sesión y no
+ * toca ni un dato de usuario.
+ *
+ * Devuelve el mensaje de error del servidor. Si la sentencia PASA, tira — porque en ese
+ * caso el canal no es read-only y no se puede seguir.
+ */
+export async function verificarRechazoDeEscritura(ref: string, token: string): Promise<string> {
+  const sonda = 'create temp table t0_smoke_debe_fallar (x int)'
+  const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: sonda, read_only: true }),
+  })
+  const cuerpo = (await res.text()).trim()
+  if (res.ok) {
+    throw new Error(
+      `SMOKE FALLIDO: el canal ACEPTÓ una escritura contra ${ref} (HTTP ${res.status}). ` +
+        'read_only no se está aplicando — ABORTAR y no consultar nada más.',
+    )
+  }
+  if (!/read-only|25006/i.test(cuerpo)) {
+    throw new Error(
+      `SMOKE AMBIGUO: la escritura falló contra ${ref}, pero no por ser read-only: ${cuerpo.slice(0, 200)}`,
+    )
+  }
+  return cuerpo.slice(0, 200)
+}
+
+/** Lector por Management API con ref EXPLÍCITO. El candado de entorno es del llamador. */
+export function crearLectorMgmt(ref: string, token: string): Lector {
+  return lectorMgmt(ref, token)
+}
+
 function lectorMgmt(ref: string, token: string): Lector {
   return {
     backend: 'mgmt',
@@ -140,6 +183,27 @@ export type Snapshot = {
   movements: Fila[]
   sessions: Fila[]
   cierres: Fila[]
+}
+
+export type Conteos = Record<Tabla, number>
+
+/**
+ * `count(*)` de las 3 tablas en UNA consulta. Se corre antes y después de la lectura
+ * para dejar evidencia de que el harness no movió una sola fila.
+ */
+export async function contarFilas(ref: string, token: string): Promise<Conteos> {
+  const sql =
+    'select ' +
+    TABLAS.map((t) => `(select count(*)::int from public.${t}) as ${t}`).join(', ')
+  assertSoloSelect(sql)
+  const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: sql, read_only: true }),
+  })
+  if (!res.ok) throw new Error(`[mgmt] conteos HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`)
+  const [fila] = (await res.json()) as Record<string, number>[]
+  return Object.fromEntries(TABLAS.map((t) => [t, Number(fila?.[t] ?? -1)])) as Conteos
 }
 
 export async function leerSnapshot(lector: Lector): Promise<Snapshot> {

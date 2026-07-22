@@ -27,6 +27,39 @@ Typecheck del harness (aparte del build de la app, que no lo mira):
 npx tsc -p scripts/t0-reconciliacion-cajas
 ```
 
+## Cómo correrlo contra PRODUCCIÓN (T0-B)
+
+El dueño firmó la corrida read-only contra prod el **2026-07-22**. Entry point aparte,
+reporte aparte ([`REPORTE-T0B-PROD.md`](REPORTE-T0B-PROD.md)), mismas consultas y mismas
+clasificaciones:
+
+```bash
+T0_PROD_FIRMADO=2026-07-22 node --import ./scripts/t0-reconciliacion-cajas/register.mjs scripts/t0-reconciliacion-cajas/run-prod.ts
+```
+
+**Doble opt-in, y las dos condiciones son obligatorias:**
+
+1. El ref de prod está **clavado en el código** de `run-prod.ts` — no sale de `.env.local`,
+   así que apuntar el `.env` a otro lado no cambia nada.
+2. Exige `T0_PROD_FIRMADO=2026-07-22`. Sin la variable, o con otra fecha, **aborta** y explica
+   por qué. La fecha es la firma del dueño: para otro día hace falta autorización nueva y
+   editar `FIRMA_REQUERIDA` a mano.
+
+**Qué hace antes de leer un solo dato:**
+
+- Manda a propósito un `create temp table` con `read_only:true` y **exige que el servidor lo
+  rechace** con `25006`. Si esa sonda pasara, aborta sin consultar nada.
+- Toma `count(*)` de las 3 tablas **antes** y **después** de la corrida, y los publica en el
+  reporte. Si cambiaron, aborta: no fue el harness (solo manda SELECT), pero el snapshot ya
+  no sería consistente.
+
+El reporte de prod trae además una sección **§4 · Focos**: días que se auditan contra los datos
+y no contra la memoria (remediaciones a mano, cajas viejas). Los focos se declaran en `FOCOS`,
+dentro de `run-prod.ts`.
+
+> `run.ts` (staging) **no cambió de comportamiento**: su reporte sale byte-idéntico al del
+> commit anterior. Todo lo que agregó el T0-B es opcional y solo lo pasa `run-prod.ts`.
+
 ### Credenciales
 
 La **anon key sola no sirve**: RLS filtra `cash_movements` y PostgREST responde `200` con `[]`.
@@ -48,8 +81,11 @@ El token nunca se imprime ni se guarda.
   Postgres impone a nivel de transacción: un `CREATE` por ese canal falla con `25006`. Además
   `assertSoloSelect()` rechaza cualquier sentencia que no empiece con `SELECT`. Cero
   INSERT/UPDATE/DELETE, cero DDL, cero migraciones.
-- **Solo staging.** El ref del proyecto está clavado en `env.ts` y **no hay override**: si la URL
-  no es la de staging (incluido prod), el script aborta antes de abrir la primera conexión.
+- **Cada entorno por su puerta.** `run.ts` (staging) tiene el ref clavado en `env.ts` **sin
+  override**: si la URL no es la de staging —prod incluido— aborta antes de abrir la primera
+  conexión. A prod solo se llega por `run-prod.ts`, con el ref clavado en el código **y** la
+  firma del dueño en el entorno. Ningún entry point puede terminar en el proyecto equivocado
+  por un `.env` mal apuntado.
 - **`src/` intacto.** El único símbolo importado de la app es `saldoCajaFuerte`, en modo lectura.
   Los sagrados (`cashUtils.ts`, `tipCalculations.ts`, `posFiscal.ts`) quedan byte a byte iguales.
 - **Idempotente.** Re-correrlo con los mismos datos produce un reporte **byte-idéntico**: no se
@@ -61,7 +97,8 @@ El token nunca se imprime ni se guarda.
 
 | Archivo | Qué hace |
 |---|---|
-| `run.ts` | Entrypoint: lee → analiza → verifica invariantes → escribe el reporte |
+| `run.ts` | Entrypoint STAGING: lee → analiza → verifica invariantes → escribe el reporte |
+| `run-prod.ts` | Entrypoint PROD (doble opt-in) → `REPORTE-T0B-PROD.md` |
 | `env.ts` | `.env.local`, candado de proyecto (staging o nada), token de Management API |
 | `db.ts` | Lectura read-only con los dos transportes; paginado; coerción de numéricos |
 | `pozo.ts` | **`saldoPozoEfectivo`** y `contribucionPozo` — funciones puras del modelo nuevo |

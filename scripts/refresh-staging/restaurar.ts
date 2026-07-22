@@ -18,6 +18,11 @@ const ORDEN_RESTORE: string[] = [
   'employees', 'suppliers', 'exchange_rates', 'role_tip_points',
   'cash_sessions', 'tip_sessions',
   'cash_movements', 'tip_entries',
+  // `cash_cierres_dia` faltaba en esta lista: el backup SÍ la guarda, pero el restore la
+  // saltaba en silencio y la tabla quedaba como estuviera. Sin FKs (ni hijo ni padre), así
+  // que su posición es indiferente. Se agregó al vaciar staging para el arranque de cero:
+  // un backup del que no se puede restaurar lo que se borró no es un backup.
+  'cash_cierres_dia',
   'documents', 'movement_deletions',
 ]
 

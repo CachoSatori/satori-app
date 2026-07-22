@@ -49,6 +49,18 @@ export function saldoTarjetaEfectivo(
   sessions: CashSession[],
 ): SaldoTarjeta {
   const sesionFecha = new Map(sessions.map(s => [s.id, s.session_date]))
+
+  // BASE VACÍA = arranque de cero. El modo pre-corte existe para NO tocar el histórico; sin
+  // una sola fila no hay histórico que preservar, así que caer al modelo viejo no protege nada
+  // y confunde: la tarjeta arrancaría rotulada "Caja Fuerte" y se renombraría sola a "Efectivo
+  // en caja" al registrar el primer movimiento. El NÚMERO es ₡0 por las dos vías (el pozo de
+  // una lista vacía es cero); lo que se fija acá es el rótulo y el modo, para que el primer día
+  // no cambie de significado solo. Sin apertura sembrada: `desdeApertura` queda en null y el
+  // subtítulo no promete una fecha que no existe.
+  if (movements.length === 0) {
+    return { crc: 0, usd: 0, esPozo: true, desdeApertura: null, indeterminados: SIN_INDETERMINADOS }
+  }
+
   const apertura = fechaAperturaPozo(movements, sesionFecha)
 
   // Post-corte si hay apertura sembrada o si ya se registró algo del corte en adelante.

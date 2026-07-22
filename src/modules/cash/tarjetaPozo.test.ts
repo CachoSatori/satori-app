@@ -147,3 +147,82 @@ describe('tarjeta — POST-corte: el pozo, la regla original recuperada', () => 
     expect(t.crc).toBe(-5_000)
   })
 })
+
+// ── ARRANQUE DE CERO ─────────────────────────────────────────────────────────
+// La dueña vacía staging y abre la app por primera vez. Con la base vacía el número tiene que
+// ser ₡0 SIN estados raros: sin warnings, sin fecha de apertura inventada y —sobre todo— sin
+// que el rótulo cambie solo al registrar el primer movimiento.
+describe('tarjeta — base VACÍA: arranque de cero', () => {
+  const sessionsArranque = [ses('s1', POZO_CORTE)]
+
+  it('base vacía = ₡0 / $0, en modo pozo y sin warnings', () => {
+    const t = saldoTarjetaEfectivo([], [])
+    expect(t.crc).toBe(0)
+    expect(t.usd).toBe(0)
+    expect(t.esPozo).toBe(true)                                   // no cae al modelo viejo
+    expect(t.desdeApertura).toBeNull()                            // no promete una apertura que no hay
+    expect(t.indeterminados).toEqual({ cantidad: 0, crc: 0, usd: 0 })
+  })
+
+  it('sin sesiones tampoco se rompe', () => {
+    expect(saldoTarjetaEfectivo([], []).crc).toBe(0)
+  })
+
+  it('el rótulo NO cambia al registrar el primer movimiento (era el "estado raro")', () => {
+    // Antes: base vacía → esPozo=false ("Caja Fuerte"); primer movimiento → esPozo=true
+    // ("Efectivo en caja"). La tarjeta se renombraba sola el primer día.
+    const vacia = saldoTarjetaEfectivo([], [])
+    const primero = mov({
+      movement_type: 'traspaso', caja_origen: 'Banco',
+      subcategory: 'Banco → Caja Fuerte', amount_crc: 500_000, session_id: 's1',
+    })
+    const conUno = saldoTarjetaEfectivo([primero], sessionsArranque)
+    expect(vacia.esPozo).toBe(conUno.esPozo)                      // mismo modo, mismo rótulo
+    expect(conUno.crc).toBe(500_000)
+  })
+})
+
+// Ciclo corto de humo sobre una base REALMENTE vacía (en memoria: la base de staging ya es de
+// la dueña). Son los 4 pasos del arranque, con sus números absolutos.
+describe('tarjeta — ciclo de arranque desde cero, paso a paso', () => {
+  const s = [ses('s1', POZO_CORTE)]
+  const hoy = { session_id: 's1' as const }
+
+  it('a) traspaso Banco → Caja Fuerte ₡500.000 → la tarjeta dice ₡500.000', () => {
+    const a = mov({ movement_type: 'traspaso', caja_origen: 'Banco',
+                    subcategory: 'Banco → Caja Fuerte', amount_crc: 500_000, ...hoy })
+    expect(saldoTarjetaEfectivo([a], s).crc).toBe(500_000)
+  })
+
+  it('b) egreso EFECTIVO ₡10.000 desde Caja Proveedores → baja exacto a ₡490.000', () => {
+    const a = mov({ movement_type: 'traspaso', caja_origen: 'Banco',
+                    subcategory: 'Banco → Caja Fuerte', amount_crc: 500_000, ...hoy })
+    const b = mov({ movement_type: 'egreso_mercaderia', caja_origen: 'Caja Proveedores',
+                    method: 'Efectivo', amount_crc: 10_000, ...hoy })
+    expect(saldoTarjetaEfectivo([a, b], s).crc).toBe(490_000)
+  })
+
+  it('c) egreso por TRANSFERENCIA ₡50.000 → la tarjeta NO se mueve (sigue en ₡490.000)', () => {
+    const a = mov({ movement_type: 'traspaso', caja_origen: 'Banco',
+                    subcategory: 'Banco → Caja Fuerte', amount_crc: 500_000, ...hoy })
+    const b = mov({ movement_type: 'egreso_mercaderia', caja_origen: 'Caja Proveedores',
+                    method: 'Efectivo', amount_crc: 10_000, ...hoy })
+    const c = mov({ movement_type: 'egreso_mercaderia', caja_origen: 'Banco',
+                    method: 'Transferencia', amount_crc: 50_000, ...hoy })
+    expect(saldoTarjetaEfectivo([a, b, c], s).crc).toBe(490_000)
+  })
+
+  it('d) ingreso EFECTIVO ₡20.000 → sube exacto a ₡510.000', () => {
+    const a = mov({ movement_type: 'traspaso', caja_origen: 'Banco',
+                    subcategory: 'Banco → Caja Fuerte', amount_crc: 500_000, ...hoy })
+    const b = mov({ movement_type: 'egreso_mercaderia', caja_origen: 'Caja Proveedores',
+                    method: 'Efectivo', amount_crc: 10_000, ...hoy })
+    const c = mov({ movement_type: 'egreso_mercaderia', caja_origen: 'Banco',
+                    method: 'Transferencia', amount_crc: 50_000, ...hoy })
+    const d = mov({ movement_type: 'ingreso', caja_origen: 'Registradora',
+                    method: 'Efectivo', amount_crc: 20_000, ...hoy })
+    const t = saldoTarjetaEfectivo([a, b, c, d], s)
+    expect(t.crc).toBe(510_000)
+    expect(t.crc).toBe(500_000 - 10_000 + 20_000)   // la transferencia no entra
+  })
+})

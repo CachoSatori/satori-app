@@ -24,13 +24,22 @@ import { dateCR } from '../../shared/utils'
  *
  * ⚠️⚠️ COMMIT SOLO-STAGING — **NO CHERRY-PICKEAR A MAIN** ⚠️⚠️
  * En `main` este valor debe seguir siendo **'2026-08-01'**. Acá está adelantado a
- * '2026-07-23' para que la dueña pueda validar el flujo nuevo en staging desde mañana.
+ * '2026-07-22' (decisión de la dueña: activa el modelo nuevo en staging DESDE HOY, porque
+ * necesita trabajar hoy con la app). Antes estuvo en '2026-07-23'.
+ *
+ * ⚠️ EL CORTE NO ALCANZA SOLO: la tarjeta y el "debería" cuentan el pozo DESDE EL ASIENTO DE
+ * APERTURA (`fechaAperturaPozo`), no desde el corte. Si el asiento no existe, o si su fecha es
+ * POSTERIOR a los movimientos del día, el número que se muestra no sirve. Mover el corte exige
+ * sembrar la apertura con la MISMA fecha:
+ *     node --import ./scripts/t0-reconciliacion-cajas/register.mjs \
+ *       scripts/refresh-staging/seed-apertura.ts --fecha 2026-07-22
  *
  * Es el PLAN B documentado: la vía preferida es `VITE_POZO_CORTE` en el dashboard de
  * Cloudflare Pages (config externa, no se puede setear desde el repo). Si esa variable se
  * carga, GANA sobre este fallback y este commit deja de tener efecto — las dos vías conviven.
+ * Para que las dos digan lo mismo, `VITE_POZO_CORTE` debe valer exactamente '2026-07-22'.
  */
-export const POZO_CORTE_FALLBACK = '2026-07-23'
+export const POZO_CORTE_FALLBACK = '2026-07-22'
 
 /**
  * Valida una fecha de corte venida del entorno. Devuelve la fecha si es un YYYY-MM-DD real,

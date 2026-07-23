@@ -40,7 +40,7 @@ Núcleo: [`pozo.ts`](src/modules/cash/pozo.ts) (puro) · [`cierrePozo.ts`](src/m
 | Rama | Hash | Qué es |
 |---|---|---|
 | `main` | **`1c8a9ad`** (código de app) | **PROD, en uso.** El HEAD avanza por commits **docs-only** por encima de ese hash. Todo lo de la ola 2026-07 + Caja/Cierre/USD/Revisión/asistente + Bandeja + propinas ef/elec + Proveedores + elegibilidad de propina por rol + **🆕 el POZO completo**. **SIN PoS.** |
-| `staging` | **`5ae267f`** | **Fuente de verdad del desarrollo.** Todo lo de `main` **+ PoS/KDS/comandero + FE (SIM) + inventario activo COGS** (migs 022–037). ⚠️ Su base está en **CERO** (vaciada a pedido del dueño para pruebas limpias — ver [ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
+| `staging` | **merge de `main`(`c77ced0`) en `5ae267f`** (2026-07-23) | **Fuente de verdad del desarrollo.** Todo lo de `main` **+ PoS/KDS/comandero + FE (SIM) + inventario activo COGS** (migs 022–037). **Re-sincronizada con `main`: la parte común es idéntica** — ver el contrato de divergencia en §(b). ⚠️ Su base está en **CERO** (vaciada a pedido del dueño para pruebas limpias — ver [ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
 
 > **Supabase refs:** **PROD = `yiczgdtirrkdvohdquzf`** · **STAGING = `hwiatgicyyqyezqwldia`**.
 > 🛑 **RITUAL antes de CUALQUIER comando de base:** `cat supabase/.temp/project-ref` (NO existe
@@ -49,9 +49,12 @@ Núcleo: [`pozo.ts`](src/modules/cash/pozo.ts) (puro) · [`cierrePozo.ts`](src/m
 > `Supabase CLI`). Para PROD usar **siempre** el canal firmado de
 > [`prod-gate.ts`](scripts/t0-reconciliacion-cajas/prod-gate.ts) (`read_only:true` + smoke `25006`).
 
-⚠️ **La divergencia `main`/`staging` CRECE.** El pozo entró a prod por una rama construida **desde
-`main`** (no por merge de staging), porque staging arrastra el PoS. **Pendiente: mergear
-`main → staging`** para re-sincronizar la parte común. Para volver staging a espejo de prod:
+✅ **La divergencia `main`/`staging` está ACOTADA y CONGELADA (2026-07-23).** El pozo entró a prod
+por una rama construida **desde `main`** (no por merge de staging), porque staging arrastra el PoS.
+Eso dejó la parte común desincronizada. **Ya se mergeó `main → staging`** (merge de `c77ced0` dentro
+de `5ae267f`) y la parte común quedó **idéntica**. La lista de abajo es el **contrato de divergencia**:
+de acá en adelante, **cualquier archivo que difiera entre las ramas y NO esté en esa lista es DEUDA a
+corregir, no divergencia legítima.** Para volver staging a espejo de prod:
 runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
 
 ## (b) PROD vs solo-STAGING
@@ -64,6 +67,38 @@ Revisión de inventario · Proveedores (lista simple + buscador + 'Puntual' + Re
 **Solo en STAGING:** **el PoS completo** (catálogo/salón, comandero, KDS, cobro+splits+ticket SIM,
 FE estructura SIM, inventario activo COGS) — migs 022–037. **DIFERIDO**, bloqueado por el pilar de
 auth. **En rama aparte (sin merge):** `propina-pool` (espera decisión del dueño).
+
+### 📜 CONTRATO DE DIVERGENCIA — qué hay solo en STAGING (congelado 2026-07-23)
+
+Salida literal de `git diff main..staging --name-only` tras el merge de re-sincronización: **75
+archivos**. **Cero** archivos de plata divergen — `tipCalculations`, `cashUtils`, `cierre*`, caja,
+propinas y finanzas son **byte-idénticos** en las dos ramas.
+
+**Código del PoS/FE/inventario (solo-staging, 45 archivos):**
+- `src/modules/pos/` — `ComanderoModule` · `KdsModule` · `MiTurno` · `comanderoModals` · `comanderoShared`
+- `src/shared/utils/` — `comanderoMenu` · `kds` · `posCobro` · `posFiscal` · `posPricing` · `posSplit` · `posTicket` (+ sus 7 `.test.ts`)
+- `src/shared/api/` — `pos.ts` · `fe.ts` · `productPhoto.ts` · `src/shared/fe/feProvider.ts` (+ test)
+- `src/modules/admin/` — `PosF1Admin.tsx` · `ProductosAdmin.tsx`
+- `print-bridge/` (6 archivos) · `scripts/import-carta.py` · `scripts/test-cobro-idempotente.py` · `import/productos.csv`
+- **Migraciones 022–034, 036, 037** (15) — todas ya existentes, **ninguna nueva**
+
+**Enganche del PoS en archivos comunes (4 archivos `M` — la única razón por la que difieren):**
+- `src/App.tsx` — rutas `/comandero`, `/kds`, `/mi-turno` + sus imports lazy
+- `src/pages/HomePage.tsx` — aterrizaje por rol `salonero → /comandero`
+- `src/modules/admin/AdminModule.tsx` — pestaña "🍣 PoS"
+- `src/modules/admin/UserApprovals.tsx` — el texto de ayuda nombra "salonero → Comandero"
+
+**Config de deploy de Cloudflare Pages (staging):** `public/_headers` (+) · `public/_redirects` (−,
+borrado en `0c080d5`: GitHub Pages lo servía con base equivocada y Cloudflare tiraba "Infinite loop").
+
+**Limpiezas que staging YA hizo y `main` todavía NO (5 archivos que main conserva de más):**
+`src/shared/api/auth.ts` (código muerto, nadie lo importa — `9b1127c`) · `src/assets/hero.png`,
+`react.svg`, `vite.svg` (assets sin referencias — `0fa6c5b`) · `public/_redirects`. **Deuda de
+`main`, no de staging**: conviene barrerla en el próximo pase a prod.
+
+**Documentos de trabajo solo-staging (11):** `AUDITORIA-CONSOLIDACION.md` · `HANG-RCA.md` (M) ·
+`PROMPT-T2/T3/T4.md` · `PROMPT-TRAMO-2/3.md` · `REPORTE-NOCHE.md` · `_handoff/` (2) ·
+`docs/auth-borrado-casos.md` · `docs/research/` (4, comparativa de PoS).
 
 ## (c) Migraciones — **cero** en todo el rediseño del pozo
 

@@ -103,28 +103,36 @@ borrado en `0c080d5`: GitHub Pages lo servía con base equivocada y Cloudflare t
 ## (c) Migraciones — el ledger vivo (auditado 2026-07-23, read-only)
 
 > Diagnóstico Fase A → [`_handoff/FASE-A-LEDGER-2026-07-23.md`](_handoff/FASE-A-LEDGER-2026-07-23.md).
-> El ledger NO coincidía con lo que esta sección decía antes ("PROD ≤021" eran en realidad 4 filas).
-> Corregido acá.
+> **FASE B1 EJECUTADA el 2026-07-23** (staging): archivo `035` traído + las 9 out-of-band
+> registradas. Backups: [`pre-B1`](_handoff/ledger-staging-preB1-2026-07-23.json) ·
+> [`post-B1`](_handoff/ledger-staging-postB1-2026-07-23.json).
 
 | Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger (verificadas por objeto) |
 |---|---|---|
 | **PROD** | **solo 4 filas: 018, 019, 020, 021** | **001–017 + 0095 + 038–046 + 048** (28 versiones) **+ el subset core de la 026** (aplicado, pero sin archivo en `main`) |
-| **STAGING** | **001–038 (39 filas; incluye 0095 y el fantasma 035)** | **039–046 + 048** (9 versiones) |
+| **STAGING** | **✅ 48 filas: 001–046 + 048** (todo registrado) | **ninguna** — B1 las registró todas |
 
 - **El rediseño del pozo no agregó ni una migración.** Es código puro + **1 fila** de datos (el asiento).
-- **`035` fantasma (STAGING):** en el ledger, SIN archivo local (solo en `propina-pool`), pero realmente
-  aplicado (`tip_sessions.pool_pos_crc/usd` + fn `sync_pos_tips_to_pool`). Único bloqueante de
-  `db push`. NO marcarlo `reverted` (mentiría sobre plata aplicada).
-- **`026` subset core (PROD):** aplicado sin archivo en `main` (espejo del 035) → se resuelve por
-  decisión, no por `repair`.
+- **`035` (STAGING): ya NO es fantasma.** Su archivo se trajo de `propina-pool` a
+  `supabase/migrations/` (solo el DDL, byte-idéntico; el **código** de la feature sigue sin mergear).
+  Repo y ledger coinciden. Nunca se marcó `reverted`: está realmente aplicado.
+- **🔴 `009` SÍ bloquea `db push` — y no es la base, es el CLI.** Corrección de lo que decía acá antes
+  ("descartado, nunca fue drift"): en la **base** está perfecto (aplicado y con archivo), pero el CLI
+  **no puede emparejarlo** porque ordena los archivos por NOMBRE y el ledger por VERSIÓN, y los dos
+  órdenes son **opuestos**: `0095_drift…` < `009_user…` por nombre (`'5'`=53 < `'_'`=95), pero
+  `009` < `0095` por versión. El merge-join se desalinea y `009` aparece en las dos columnas.
+  **NO correr el `repair --status reverted 009` que sugiere el CLI** — mentiría igual que con el 035.
+  Persiste con CLI **2.109.1** (se probó; no lo arregla). Arreglo propuesto: renombrar
+  `009_user_selfsignup.sql` → `0090_…` + `UPDATE` del ledger `009`→`0090`, que alinea ambos órdenes.
+- **`026` subset core (PROD):** aplicado sin archivo en `main` (espejo del 035) → **decidido: se
+  documenta como excepción permanente** (el PoS no va a prod), no se repara.
 - **PROD no tiene filas de ledger sin archivo** → historial **incompleto, NO divergido** (se reconcilia
-  limpio con `repair --status applied`). STAGING sí está divergido, por el 035.
-- **`009` quedó DESCARTADO como problema** (Fase A): está en el ledger **y** con archivo, igual que
-  `0095`; nunca fue drift. No re-levantarlo.
+  limpio con `repair --status applied`).
 - **047 sigue RESERVADA** (proveedores) — el hueco 046→048 es intencional.
-- **Reconciliación = Fase B** (con firma): B1 staging (resolver 035 + 9 repairs) · B2 prod (28 repairs,
-  sesión dedicada, ojo al re-link del CLI) · B3 decisión sobre la 026. **`db push`/`repair` FRENADOS**
-  hasta entonces.
+- **Estado de la reconciliación:** **B1 staging = HECHO** (parcial: ledger honesto, falta el `009`) ·
+  **B2 prod = PENDIENTE** (28 repairs, sesión dedicada, ⚠️ el `repair` va por el CLI linkeado y el
+  link vive en staging) · **B3 = decidido** (documentar la 026). **`db push` sigue FRENADO en staging
+  solo por el `009`.**
 
 ## (d) Build por módulo
 

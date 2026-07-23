@@ -4,6 +4,36 @@
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
+## 🔐 2026-07-23 (Fase B1) — `revoke ... from anon` INEFECTIVO: funciones SECURITY DEFINER ejecutables por `anon`
+
+**Hallado auditando el DDL del `035` antes de traer su archivo.** No se arregló nada — solo se documenta.
+
+- **El bug de patrón.** `create function` otorga **EXECUTE a PUBLIC** por defecto. Revocarle a `anon`
+  (`revoke execute on function ... from anon`) **NO le quita lo que hereda de PUBLIC** → `anon` sigue
+  pudiendo ejecutar. El patrón correcto es el de la **mig 045**: `revoke all on function ... from
+  public, anon`.
+- **Evidencia (STAGING, `proacl` crudo).** El `=X/postgres` inicial (sin rol antes del `=`) **es**
+  PUBLIC con EXECUTE:
+
+  | función | mig | `proacl` | `anon` puede ejecutar |
+  |---|---|---|---|
+  | `sync_pos_tips_to_pool` | 035 | `=X/postgres` \| … | 🔴 **sí** |
+  | `delete_movement_cascade` | 039/043/044 | `=X/postgres` \| … | 🔴 **sí** |
+  | `verify_manager_password` | 045 | *(sin `=X/`)* | ✅ no |
+
+- **⚠️ Alcance PROD.** `delete_movement_cascade` **está en producción** (migs 039/043/044). En Fase A se
+  verificó en prod que `verify_manager_password` sí está cerrada (`anon`=false), pero **no** se midió el
+  ACL de `delete_movement_cascade` en prod → **verificarlo en B2** (lectura, read-only).
+- **Mitigación vigente (por qué no es una emergencia):** ambas funciones tienen **guard interno de rol**
+  — `sync_pos_tips_to_pool` hace `if get_my_role() not in ('owner','manager') then raise exception`, y
+  `delete_movement_cascade` exige auth de manager desde la 044. Un `anon` que las invoque muere en el
+  guard. Lo roto es la **defensa en profundidad**, no el control de acceso efectivo.
+- **Acción propuesta (NO ejecutada):** una migración nueva que haga
+  `revoke all on function <fn> from public, anon` para las funciones afectadas, y auditar el resto de
+  las `SECURITY DEFINER` con el mismo criterio. **Toca privilegios de funciones de plata → firma.**
+  El archivo `035_propina_pos_pool.sql` traído en B1 **conserva el DDL original a propósito** (debe
+  reflejar lo aplicado) y lleva la advertencia en su cabecera.
+
 ## 🔎 Smoke físico PROD 2026-07-06 — TODO PASÓ · 1 hallazgo: pagos pendientes huérfanos
 
 El dueño validó en piso el pase completo en PROD y **todo pasó**: `version.json` ✓ · Caja Diaria sin errores ✓ · asistente con foto + lectura IA Sonnet (efectivo y pendientes, genera tarea de revisión) ✓ · borrado con contraseña de manager (elimina movimiento + tarea asociada) ✓ · Cierre del Día con diferencias USD y gate de ajuste ✓ · sinceramiento USD realizado ✓ · Propinas sin parpadeo, pago por la vía real ✓. **La ola 2026-07 queda cerrada.**

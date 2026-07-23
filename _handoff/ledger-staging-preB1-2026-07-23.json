@@ -1,0 +1,166 @@
+{
+  "entorno": "staging",
+  "ref": "hwiatgicyyqyezqwldia",
+  "momento": "preB1-2026-07-23",
+  "fuente": "supabase_migrations.schema_migrations",
+  "smoke_read_only": "{\"message\":\"Failed to run sql query: ERROR:  25006: cannot execute CREATE TABLE in a read-only transaction\\n\"}",
+  "total": 39,
+  "filas": [
+    {
+      "version": "001",
+      "name": "initial_schema"
+    },
+    {
+      "version": "002",
+      "name": "tips_pool_fields"
+    },
+    {
+      "version": "003",
+      "name": "tips_email_cron"
+    },
+    {
+      "version": "004",
+      "name": "customers"
+    },
+    {
+      "version": "005",
+      "name": "loyalty"
+    },
+    {
+      "version": "006",
+      "name": "finance"
+    },
+    {
+      "version": "007",
+      "name": "customer_selfsignup"
+    },
+    {
+      "version": "008",
+      "name": "tips_covered_role"
+    },
+    {
+      "version": "009",
+      "name": "user_selfsignup"
+    },
+    {
+      "version": "0095",
+      "name": null
+    },
+    {
+      "version": "010",
+      "name": null
+    },
+    {
+      "version": "011",
+      "name": null
+    },
+    {
+      "version": "012",
+      "name": null
+    },
+    {
+      "version": "013",
+      "name": null
+    },
+    {
+      "version": "014",
+      "name": null
+    },
+    {
+      "version": "015",
+      "name": null
+    },
+    {
+      "version": "016",
+      "name": null
+    },
+    {
+      "version": "017",
+      "name": null
+    },
+    {
+      "version": "018",
+      "name": null
+    },
+    {
+      "version": "019",
+      "name": null
+    },
+    {
+      "version": "020",
+      "name": null
+    },
+    {
+      "version": "021",
+      "name": null
+    },
+    {
+      "version": "022",
+      "name": null
+    },
+    {
+      "version": "023",
+      "name": null
+    },
+    {
+      "version": "024",
+      "name": null
+    },
+    {
+      "version": "025",
+      "name": null
+    },
+    {
+      "version": "026",
+      "name": "operacion_roles"
+    },
+    {
+      "version": "027",
+      "name": "pos_cobro"
+    },
+    {
+      "version": "028",
+      "name": "pos_splits_propina"
+    },
+    {
+      "version": "029",
+      "name": "pos_paridad"
+    },
+    {
+      "version": "030",
+      "name": "producto_foto"
+    },
+    {
+      "version": "031",
+      "name": "item_note"
+    },
+    {
+      "version": "032",
+      "name": "menu_familias"
+    },
+    {
+      "version": "033",
+      "name": "cobro_idempotente"
+    },
+    {
+      "version": "034",
+      "name": "orden_ops_atomicas"
+    },
+    {
+      "version": "035",
+      "name": "propina_pos_pool"
+    },
+    {
+      "version": "036",
+      "name": "fe_estructura"
+    },
+    {
+      "version": "037",
+      "name": "inventario_activo_cogs"
+    },
+    {
+      "version": "038",
+      "name": "bandeja_fusion"
+    }
+  ]
+}

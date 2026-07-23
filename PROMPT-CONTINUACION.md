@@ -1,55 +1,88 @@
-# Continuación — backlog priorizado (handoff 2026-07-06)
+# Continuación — backlog priorizado (handoff 2026-07-22)
 
-> **✅ OLA 2026-07 CERRADA.** El pase único a prod **+ smoke físico del dueño ✓ + sinceramiento USD en prod ✓** están completos (ver ESTADO §e). `main` código = **`92c0831`** · `staging` código = **`1daef0c`** (los HEAD avanzan solo por commits **docs-only**). Migs PROD out-of-band: **≤021 + 038–045 + subset core de 026**. Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod** ✓.
+> **✅ EL REDISEÑO DE CAJAS (POZO ÚNICO) ESTÁ EN PROD Y VALIDADO.** Se firmó, construyó, pasó y se
+> validó físicamente en un día: el **primer cierre real bajo el pozo (22/07) CUADRÓ** y las cargas
+> reales del dueño reconciliaron **al colón**. `main` código = **`1c8a9ad`** · `staging` =
+> **`5ae267f`** (base en CERO). **Cero migraciones** en todo el rediseño.
+> Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · contexto del modelo → [ESTADO.md](ESTADO.md).
 >
-> **➡️ Ahora: ESTABILIZACIÓN (1–2 semanas de observación, SIN construir).** Backlog vigente por prioridad **P0–P3** abajo. Las secciones numeradas de más abajo (§0…, RCAs, planes viejos) son **referencia histórica**; el backlog vigente es el de acá.
->
-> **🆕 2026-07-10 — ✅ PASE A PROD COMPLETO Y VALIDADO EN PISO.** Las 2 features ya están en producción y el dueño validó el cierre real: **(i) propinas efectivo/electrónico** (cuenta por pagar = solo lo electrónico) y **(ii) cierre del día: ventas ₡0 con confirmación + resumen previo**. Ejecutado en orden: **1º mig 046 a PROD out-of-band** (`tip_sessions.pool_barra_electronico_crc` + `NOTIFY pgrst`; `schema_migrations` intacto → prod **038–046 + subset 026**) · **2º merge FF a `main` (`6c65f25`) + deploy** (`version.json` live = `6c65f25`) · **3º smoke en piso en PROD ✓**. **Las 2 features salen de la cola.** Deuda que queda: **reconciliación del ledger** (prod out-of-band 038–046 + subset 026; staging 039–046; P1 #2). Rollback disponible: revert + redeploy (la 046 queda, inofensiva). Detalle → ESTADO.md.
->
-> **🆕 2026-07-17 — QUICK-WINS C2 + C3 + BUSCADOR EN PROD** (research quick-wins FIRMADOS; smoke del dueño en staging **3/3 ✓**). Rama `prod/pase-quickwins` sobre `main` (`c3d8070`), cherry-pick de `8c41965`; solo ESTADO/PROMPT divergían → versión de main; **código byte-idéntico** (8 archivos). **SIN esquema, sagrados intactos, cero migraciones.** **C2** historial over/short del cierre (`cierreStats.ts` puro + sección en `CashResumen`; **display de lo ya sellado en `cash_cierres_dia`, NO recalcula**; null-safe). **C3** email del cierre al owner: `CashCierre` dispara **`sendCierreEmail` fire-and-forget** al confirmar el cierre COMPLETO (si falla, el cierre NO se rompe); Edge Function **`cierre-email`** con **auth JWT obligatorio + relee la fila con el token del usuario (RLS = portón), NO service_role** (fix hallazgo #2, patrón `extract-document`) — **deployada a PROD** (`yiczgdtirrkdvohdquzf`). **`RESEND_API_KEY` ya estaba en prod; `REPORT_TO_EMAIL` NO se tocó** (default `cachorrogp@gmail.com`, hoy el único destinatario que Resend entrega → monthly-report intocado; el cambio de destinatario va con la **tarea de DNS**, aparte). **➕ buscador de Proveedores** null-safe ("Sin coincidencias"). Gates: **build EXIT 0 · 231 tests sin env · sagrados vacío · cero migs**. **Smoke real: el cierre completo de esta noche manda el primer email solo.** Detalle → ESTADO.md.
->
-> **🆕 2026-07-17 — PASE A PROD: Mi Rendimiento (ICP electrónico), validado en piso en staging.** Rama `prod/pase-mi-rendimiento` sobre `main` (`880c863`), cherry-pick **limpio** de `2251d05`→`be2cb50` (**cero conflictos**). **SOLO FRONTEND · cero migraciones** (`tips.ts` solo lee columnas `tip_amount_*`/`exchange_rate` que **ya existen en prod**). `/mi-rendimiento` = **hub claro del empleado** con **período global** + 6 pestañas; **Mis Propinas integrada** (`/mis-propinas` redirige) con selector de mes + **ICP electrónico** = propina electrónica **GENERADA** (`tip_amount_*`) / ventas — **NO el reparto `payout_crc`**, que se muestra como take-home aparte — + benchmark del equipo; roles sin venta arrancan propinas-primero. Gates: **build EXIT 0 · diff de sagrados vs `main` VACÍO · suite verde salvo el flake TZ de `CashMovimientos.buscarNull`** (preexistente, ajeno). **`main` código pasa a este pase** + deploy. Rollback: revert de los 2 commits + redeploy (sin migración → trivial). Detalle → ESTADO.md + HANDOFF-MI-RENDIMIENTO.md.
->
-> **🆕 2026-07-18 — PASE A PROD: elegibilidad de propina por ROL (configurable desde Admin).** Rama `prod/pase-elegibilidad-propina` sobre `main` (`70d7ef2`), cherry-pick **limpio** de `b1a85ba`→`94991cd` (**cero conflictos**). **FRONTEND + BASE + dato de PLATA → orden estricto.** **(1)** **mig 048** (`role_tip_points.recibe_propina boolean not null default true`) aplicada a **PROD out-of-band ANTES del código** (Management API, ref `yiczgdtirrkdvohdquzf`, + `NOTIFY pgrst`; **`schema_migrations` intacto** → prod **038–046 + 048 + subset 026**); verificado: **7 roles en `true`** = cero cambio de comportamiento. **(2)** Código: toggle **"Recibe propina"** por rol en Admin + el **roster del turno** (y el picker de **cobertura**) excluye roles no-elegibles (`eligibleRoster`, null-safe: null/ausente → recibe); **turnos abiertos/cerrados se preservan** (`keepIds`); **`calcTurno`/`PROPINA_ROLES` intactos** (el rol excluido no genera línea). Gates: **build EXIT 0 · sagrados vacío · suite verde salvo flake TZ**. **(3)** El **flip del manager NO es un pendiente técnico**: es **decisión del owner** desde el toggle **"Recibe propina"** en **Admin → Puntos por rol** (sin deploy, sin SQL, **reversible en un clic**). **Al cierre de la sesión: PROD tiene el manager en "Sí" (sigue cobrando); staging en "No".** Columna + frontend **live en prod** (`main` `388a121`) → el toggle ya opera. Rollback: revert + redeploy · manager a `true` desde Admin · columna puede quedar (aditiva) o `drop column`. Detalle → ESTADO.md + HANDOFF-ELEGIBILIDAD-PROPINA.md.
->
-> **🆕 2026-07-20 — PASE CORTO A PROD: "Distribución por puesto" en Estadísticas de propinas.** Rama `prod/pase-tipstats-por-puesto` sobre `main` (`9d55c9c`), cherry-pick **limpio** de `6c63d16` (**cero conflictos**). **FRONTEND PURO — sin base, sin migración, sin plata** (4 archivos). En **Propinas → Estadísticas (vista general)**, junto a "Distribución AM vs PM": una **barra por ROL** con su **% del take-home del mes** + monto, **cocina incluida**. Helper puro `distribucionPorPuesto` (agrupa `payout_crc` por rol, desc, null-safe; mes sin datos → sección oculta). **NO reconcilia con TipCocina** (el `total` de cocina ya es su tajada real del pool; el reparto interno de cocina no cambia el total del rol) → **cero doble-conteo**. Gates: **build EXIT 0 · sagrados vacío · suite 367 verde**. Rollback: revert del commit + redeploy (trivial). Detalle → ESTADO.md.
->
-> **🆕 2026-07-20 (2º pase del día) — PASE A PROD: 4 mejoras de Caja/Cierre (validadas por el dueño en staging `7beabee` + en piso).** Rama `prod/pase-mejoras-dinamicas` sobre `main` (`8b21322`), cherry-pick **limpio** de 5 commits (`bdd48e2` → `a64f529` → `f4a03eb` → `0146de8` → `7beabee`; **cero conflictos**). **CÓDIGO PURO — cero migraciones, cero esquema, sagrados intactos** (9 archivos, 5 son tests). **Equivalencia probada: los 9 archivos byte-idénticos a `7beabee`**, lo validado en staging. **(1)** El asistente de facturas se llama **"Agregar factura / movimiento"** (botón + título del modal). **(2)** En **Pendientes**, las propinas caen en **UN grupo "Propinas" (🎁)** con cada turno como fila (antes un grupo por turno vía `description`) y **no cuentan como proveedor** en el contador; acciones **por `id` de fila, sin cambio de comportamiento**; el comprobante de ese grupo dice **"de propinas"** (solo el título; montos y layout idénticos). **(3)** "Propinas por pagar" (turno) y "Propinas del día" (cierre) arrancan **plegadas**, con **cantidad y total en el encabezado**, estado en **memoria (`useState`), sin storage**; en el cierre la sección va **debajo de los campos de venta de la fase en curso**. **(4)** La **Fase 1 se sella con la Caja Diaria abierta** (guard `turnoAbierto` fuera de `handleConfirmParcial` **y del `disabled` del botón** — sin lo segundo era letra muerta); banner reformulado: solo frena la Noche. **La Fase 2 intacta** (`turnoAbierto` + `cajaProvCerrada` + orden de fases), igual que el gate de ventas-en-0. **(5)** Una propina dejada **pendiente** se salda **por banco** desde Pendientes (`Transferencia`/`Banco`, decidido por el `subcategory` de la fila, no por el grupo visual) y **`propinasPagadasEnFecha` excluye `Transferencia`** → **no resta del efectivo esperado del cierre**; filtro `!== 'Transferencia'` (no `=== 'Efectivo'`) para que las **filas históricas sin `method` sigan contando**. **"Pagar ahora" intacto** (`propinaEgresoFields` = Efectivo/Registradora) y **`tipCalculations` sin tocar**. **Efecto buscado y verificado:** `otrosEgresosEf` filtra `method='Efectivo'` → la propina por banco tampoco resta del efectivo esperado de la **Caja Diaria**. Revisado antes de tocar (el pase mueve `caja_origen` de una fila existente): el trigger **`cash_movements_unif` no lee `method`/`caja_origen`**, **`saldoCajaFuerte` solo cuenta `'Caja Fuerte'`**, **`reconcilePropinaEgreso` machea por `subcategory`+`description`**. **`7beabee` entra porque (2) y (5) chocan en un test** ("Marcar todos pagados" es por grupo → con la agrupación aparece dos veces; y `saving` deshabilita el resto tras el primer click): se adaptó **solo el test**. Gates: **build prod EXIT 0 · 301/303 tests** (los 2 rojos = **flake TZ conocido de `CashMovimientos.buscarNull`**, ajeno) · **sagrados byte-idénticos a `8b21322` por hash de blob** (`cashUtils.ts` `b597c69`, `tipCalculations.ts` `7603ba5`). ⚠️ **`posFiscal.ts`/`computeTotals` NO existen en `main`** (posFiscal sí en `staging`) → chequearlos acá pasa en vacío; los sagrados reales de esta rama son esos dos. **`main` código pasa a este pase (`dcc6080` + docs).** Rollback: revert de los 5 commits + redeploy (trivial). ⏳ **Falta el smoke físico del dueño en PROD.** Detalle → ESTADO.md.
->
-> **🆕 2026-07-21 — PASE CORTO A PROD: una sola vía para aprobar propinas pendientes (validado en staging `e597206`).** Rama `prod/pase-propina-una-via` sobre `main` (`f726af1`), cherry-pick **limpio** de `6b97a46` (**cero conflictos**). **SOLO CÓDIGO — cero migraciones, cero esquema, sagrados intactos** (6 archivos, 3 son tests); los 6 **byte-idénticos a `e597206`**. **Cierra la última puerta del "ajuste fantasma ≈ propinas":** el pase del 20 tapó la pestaña Pendientes, pero el **select de ESTADO en Movimientos** seguía aprobando en **efectivo**, y `propinasPagadasEnFecha` atribuye el pago a la fecha de la **SESIÓN** del movimiento (el día en que se dejó pendiente, ya sellado) → no resta en el "debería" de ningún día → **faltante ≈ el monto de la propina**. Regla del dueño: una propina pendiente se salda **por BANCO, desde cualquier puerta**. Helper puro **`aprobacionPropinaFields()`** (`{aprobado, Transferencia, Banco}`) usado en **las dos**: `CashPendientes.pagar()` (cero cambio de conducta) y `CashMovimientos.handleFieldChange()` (si la fila es `'Propinas por turno'` y va a `aprobado`, aplica los 3 campos; **pasar a 'pendiente' y las filas NO-propina, igual que antes**). **INTACTOS** `propinaEgresoFields` ("Pagar ahora" = Efectivo/Registradora, saca efectivo pero en el día correcto), `propinasPagadasEnFecha`, la math del cierre (**`CashCierre.tsx` diff VACÍO**) y los sagrados. Gates: **build prod EXIT 0 · suite 309/309 verde entera · sagrados byte-idénticos a `f726af1` por hash de blob · `git diff -- supabase/` VACÍO**. Tests: 3 casos en `CashMovimientos.aprobarPropina.test.tsx` (**el primero verificado que FALLA contra el código de prod**) + 3 que documentan la **identidad del neteo negativo** en `propinaPago.test.ts`. **➕ Arregla un defecto propio ya en `main`:** el test de la Fase 1 hardcodeaba `session_date '2026-07-20'` contra un componente que arranca en `todayStr()` → fallaba desde el cambio de día (roto permanente, no flake); ahora usa `todayStr()`. **⚠️ NO corrige hacia atrás** (las propinas ya aprobadas en efectivo quedan como están; un cierre viejo con el faltante fantasma se mira aparte) y **⚠️ el helper hay que llamarlo** si aparece un tercer camino de aprobación (bulk/import) — la regla vive en `propinaPago.ts`, **nada en la base la impone**. **`main` código pasa a este pase (`244682a` + docs).** Rollback: revert del commit + redeploy (trivial). ⏳ **Falta el smoke físico del dueño en PROD.** Detalle → ESTADO.md.
+> Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
+> pases viejos) son **referencia histórica**.
 
 ---
 
-## 🟥 P0 — ESTABILIZACIÓN / OBSERVACIÓN (1–2 semanas, SIN construir)
+## 🟥 P0 — T3 · ENDURECIMIENTO DE CAJA (sesión propia; firma del dueño donde toque plata)
 
-> El pase, el **smoke físico** y el **sinceramiento USD** ya están ✅ (ver ESTADO §e). El foco ahora **NO es construir**: es observar prod en uso real y registrar lo que aparezca.
-1. **👀 Observar prod en operación real.** Consola/errores, comportamiento de Caja/Cierre/Bandeja/Propinas con datos y usuarios reales, y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Todo hallazgo → **HALLAZGOS.md** (no arreglar en caliente salvo urgencia).
-2. **🧊 Congelar construcción.** No arrancar features nuevas durante la ventana de estabilización. La deuda corta (P1) se ataca solo si algo lo exige, o al cerrar la ventana.
+El pozo cerró el agujero conceptual. T3 cierra las puertas por las que todavía puede entrar un dato
+que lo ensucie. **Ninguno es urgente hoy** — el sistema cuadra —, pero cada uno es una forma
+conocida de volver a descuadrar.
 
-## 🟧 P1 — DEUDA CORTA (técnica/datos, acotada)
+1. **🖊️ Dirección obligatoria en traspasos.** Hoy un traspaso sin dirección legible (`subcategory`
+   nula, `'Ajuste'`, `'Otro traspaso'`, texto libre) queda **neutro** y se cuenta aparte en
+   `indeterminados`. Está bien como red de contención, pero el alta debería **exigir** origen→destino.
+   Resolver además los `'Otro traspaso'` que ya existan. **Toca plata → firma.**
+2. **🖊️ Prohibir montos negativos MANUALES.** Un monto negativo invierte el asiento en silencio
+   (`hayMontosNegativos` ya lo detecta en el cierre; falta en el alta manual). ⚠️ **Los negativos
+   bicurrency del SISTEMA son LEGÍTIMOS** (pago en USD con vuelto en colones) — la regla es solo para
+   la carga **manual**, no para el motor. **Toca plata → firma.**
+3. **🖊️ `ajuste_tipo` derivado del signo**, en vez de cargarse aparte y poder contradecirlo.
+4. **🖊️ Impedir operar cajas de fechas pasadas** (abrir/cargar sobre un día ya cerrado).
+5. **🖊️ Auditoría de ediciones** de movimientos (hoy hay auditoría de borrados vía
+   `movement_deletions`; la edición pasa por reemplazo y no deja el mismo rastro).
+6. **👁️ Vigilar "Ingreso adicional".** Es la vía más fácil de meter plata sin respaldo; ver si
+   merece categoría propia o justificación obligatoria.
+7. **🧹 Limpiar los 2 huérfanos de fecha imposible:** `9b79e731` (2020-07-09, ₡74.126,92) y uno de
+   **2016** (₡54.978). **La app NO los muestra** — `getAllCashMovements(days = 1000)` arranca ~1.000
+   días atrás — por eso la verificación de pantalla nunca los vio. Son pendientes que nadie va a pagar.
+8. **🧹 Comentarios "la dueña" → "el dueño"** en el código. Cosmético, cero riesgo, pero el repo
+   está mal generizado en varios comentarios viejos.
 
-1. **✅ EN PROD 2026-07-16 — Proveedores: el rojo cuenta DEUDA REAL (⏳ smoke del dueño pendiente).** ⚠️ **El encuadre original de este punto era equivocado y quedó desmentido:** el **"14 PAGOS PENDIENTES"** en rojo **NO eran datos huérfanos** de proveedores inexistentes, y **NO hacía falta ni FK ni limpieza de datos** — era **`overdueCount`** (proveedores activos con **ciclo de compra** vencido) mostrado con la etiqueta engañosa "pagos pendientes". El diagnóstico read-only (2026-07-06) probó **FK íntegra, 0 dangling**; los **pendientes reales** (`status='pendiente'`) son **5** en prod: 3 legítimos + **2 huérfanos** (`supplier_id` NULL, **₡150.043,52**; uno de 2020).
-    **Construido (firma 2026-07-09) y pasado a prod 2026-07-16** — rama `prod/pase-proveedores-rojo`, cherry-pick de `f7bff9a`, **sin esquema**, sagrados intactos, 4 archivos: **(a)** el **rojo** cuenta **`pendCount`** = movimientos `status='pendiente'` (deuda real, **incluye los huérfanos**) — lógica pura y testeada en `proveedoresStatus.ts`; **(b)** la **agenda de ciclo** (`overdueCount` → `agendaCount`) es un **indicador ámbar aparte** ("N con ciclo de compra vencido"), **nunca rojo**; **(c)** proveedor **'Puntual'** (nuevo valor de `ciclo_pago`; **texto libre → sin migración**) sale de la agenda → **mata el "14"**; **(d)** la pestaña **Pendientes** tiene **✕ Rechazar** (fila y lote) con **autorización de gerencia**, y **funciona con `supplier_id` NULL** (agrupa por nombre, rechaza por `id`; `'rechazado'` ya existía en el enum `movement_status`).
-    **🆕 SIMPLIFICADO EL MISMO DÍA — 2º pase 2026-07-16 (`prod/pase-proveedores-simplificar`, cherry-pick de `d85453a`, OK visual del dueño en staging).** Tras ver el pase anterior en prod, el dueño firmó que la pestaña **Proveedores sea SOLO la lista de proveedores**. **Eliminado de prod:** el badge **rojo** "N pendientes por pagar" + su panel (**duplicado**: la pestaña Pendientes ya notifica con su propio `cd-pend-badge`, `CashModule.tsx:135`), el **chip ámbar** de agenda, y los **banners** "Agenda de compra". **Conservado:** la lista/tarjetas con agregar/editar/desactivar tal cual, y **dentro de cada tarjeta** su deuda (`pendingCRC`), su ciclo acordado (**incluida 'Puntual'**), último/próximo pago y total pagado. **`CashPendientes` intacto.** Sin código muerto: `contarAgenda`/`contarPendientes`/`totalPendienteCRC` se borraron con sus tests al quedar sin uso; `computeSupplierStatus`/`esProveedorPuntual` siguen (los usan las tarjetas). UI-only, cero esquema, sagrados byte-idénticos.
-    **⏳ LO QUE FALTA — smoke del dueño en prod:** (1) marcar un one-off (MUSICOS, Coca) como **Puntual** desde la edición del proveedor; (2) **rechazar los 2 huérfanos desde la pestaña Pendientes** — Distribuidora Isleña 2020-07-09 ₡74.126,92 y GRUPO PAMPA 2026-07-06 ₡75.916,60 (**cero SQL**, con autorización de gerencia). ⚠️ **El punto (1) del smoke viejo ya no aplica:** el **badge rojo en "5" fue retirado** por el 2º pase — el conteo de pendientes vive ahora **solo** en el badge de la pestaña Pendientes, que es donde se cuenta y se gestiona la deuda real. Rollback: revert del commit + redeploy (sin migración → trivial). Detalle → **HALLAZGOS.md** (2026-07-06) + `REPORTE_pendientes_huerfanos_2026-07-06.md`.
-2. **🔴 Reconciliación del ledger de migraciones — AHORA EN AMBOS ENTORNOS.** prod: ledger **≤021 + 038–045 + subset core de 026 out-of-band**; staging: **022–038 + 039–045 out-of-band**; + **009** (drift) + **035** (fantasma, solo en `propina-pool`). `db push`/`repair` **FRENADOS** hasta una sesión dedicada de infraestructura (resolver 035/`propina-pool` primero; **NO tocar el historial**). Todo idempotente. Detalle → ESTADO §c + §3 abajo.
-3. **🔐 Rotar los 2 tokens de GitHub — VENCIDOS, rotar YA.** `gho_` (ya limpio del remote pero válido en GitHub hasta rotarlo) + PAT classic "Claude CLI" (quedó en un transcript local). Detalle → §0bis abajo.
-4. **🖊️👁️ Hora-CR en bordes de período (PLATA).** Las queries de plata (`finance.ts:132/139` P&L borde de año, y similares) acotan `created_at` en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. Construir los límites con `dateCR`. Cambia números → valida la dueña. `fix/fecha-cr-consistente` ya en staging. Detalle → §1 abajo.
-5. **🟢 Prolijidad (no bloquea):** subir `node-version: 20`→22 en `deploy.yml`; 404 menores en `/caja` y `propinas:1`; warning cosmético de recharts. Detalle → §2 abajo.
+## 🟧 P1 — DEUDA CORTA (técnica / datos)
 
-## 🟨 P2 — DECISIONES DE PRODUCTO (esperan a la dueña / uso real en prod)
+1. **🔵 Mergear `main → staging`.** La divergencia crece: el pozo entró a prod por una rama construida
+   **desde `main`** (staging arrastra el PoS, que no va a prod), así que ahora staging **no tiene** los
+   últimos fixes de caja. Re-sincronizar la parte común. Para volver staging a espejo de prod:
+   runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
+2. **🔴 Reconciliación del ledger de migraciones.** Sesión dedicada. Los dos entornos arrastran
+   out-of-band (prod **038–046 + 048 + subset 026**; staging **039–046 + 048**); persisten 009 (drift)
+   y 035 (fantasma, solo en `propina-pool`). **Bloquea `db push`/`repair`.**
+   ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
+3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
+   y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
+4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
+   sandbox de Resend) se manda solo al confirmarse un cierre completo.
 
-1. **🖊️ Bandeja Etapa 2** (entrada foto-primero 100% dentro de Caja Diaria) — hoy diseñada sin código. Construir **SOLO si** tras usar la Etapa 1 **en prod** sigue haciendo falta. Detalle → §4 + ROADMAP §Etapa 2.
-2. **🖊️ `propina-pool`** (rama sin merge) — propina de tarjeta/SINPE ¿al mismo pool que efectivo o separada? `git show propina-pool:ESTADO-PROPINA-POOL.md`. Detalle → §7.
-3. **🖊️ Foto de comprobante obligatoria al pagar propina** — firmado, diferido (fuera de scope de la ola); toca `pagarPropina`/`propinaPago.ts`.
-4. **🖊️ Al borrar una factura, ¿borrar también su foto/documento?** (hoy queda; impide recargar la misma factura por el dedupe de hash). Decisión de la dueña.
+## 🟨 P2 — ESPERAN DECISIÓN O FIRMA DEL DUEÑO
 
-## 🟦 P3 — PILAR + GRAN PASE DEL PoS (lejos; bloqueante)
+1. **🖊️ SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de **DNS**
+   (dominio propio en Resend; hoy el sender sandbox solo entrega a una dirección).
+2. **🖊️ Edición de propinas en Historial por CAJERO** con autorización de gerencia — FIRMADO
+   2026-07-17, sin construir. Patrón mig 045 `requireManager`. **Plata-adyacente → revisión estricta.**
+3. **🖊️ Foto de comprobante obligatoria al pagar propina** — firmado, DIFERIDO. Toca
+   `pagarPropina`/`propinaPago.ts`.
+4. **🖊️ `propina-pool`** (rama, sin merge) — ¿la propina de tarjeta/SINPE va al mismo pool que la de
+   efectivo o separada?
+5. **🖊️ Reconciliación prod-vs-Excel.** **Ahora es viable**: el pozo da **UN número por día**, que es
+   exactamente lo que el Excel del dueño tiene enfrente. Antes no había con qué comparar.
+6. **🖊️👁️ Hora-CR en bordes de período.** Las queries de plata (P&L, `finance.ts`) acotan `created_at`
+   en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. **Cambia números.**
+7. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy
+   diseñada sin código) — construir **solo si** tras usar la Etapa 1 en prod sigue haciendo falta.
 
-1. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant.** El PoS lleva ~10 dispositivos concurrentes; objetivo hotelería/franquicias. Diseño + prueba de carga simulando N dispositivos, NO un parche. **🔴 BLOQUEA el gran pase del PoS.** Detalle → §PILAR abajo + ROADMAP.
-2. **🖊️ GRAN PASE del PoS a PROD — DIFERIDO.** migs 022–037, buckets `facturas`/`productos`/`documents`, regenerar tipos; validación física del PoS (§6). Solo tras el pilar. **Es lo único que hoy separa `staging` de prod.** Detalle → §5.
+## 🟦 P3 — LEJOS / BLOQUEANTE
 
-> **Diferido con decisión (NO reabrir sin nueva firma):** Tier 1 (monto-on-modify desde Revisión) **DESCARTADO** por la dueña — la Revisión NO modifica caja.
+1. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant.** **Bloquea el GRAN PASE del
+   PoS** a prod (~10 dispositivos concurrentes; hotelería/franquicias).
+2. **🧾 FE-CR** (factura electrónica real de Costa Rica) — hoy solo estructura SIM en staging.
+3. **🧪 Gran pase del PoS** a prod — proyecto aparte, detrás del PILAR.
+
+## ⛔ Fuera de alcance (no reabrir sin firma nueva)
+
+- **Tier 1 — monto-on-modify desde Revisión: DESCARTADO por el dueño.** La Revisión **no** modifica caja.
+- **El SOP interino de recategorizar un pago de proveedor a `Caja Fuerte`: RETIRADO.** Era el parche
+  manual al bug que el pozo eliminó de raíz. **No aplicarlo más.**
+- **Re-diagnosticar el flake TZ de los tests: MUERTO.** Los fixtures usaban `new Date().toISOString()`
+  (UTC) contra un filtro con `todayCR()` → 5 tests fallaban solo de noche. Corregido a `todayCR()`.
 
 ---
 

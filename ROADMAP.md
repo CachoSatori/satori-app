@@ -1,11 +1,47 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-03**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-22**
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-07-04 — ✅ PASE A PROD COMPLETADO)
+## 📍 Estado real de las fases (handoff 2026-07-22)
+
+Leyenda: ✅ hecho y en PROD · 🟢 en PROD, smoke físico pendiente · ✅🟢 validado físicamente por el
+dueño · ⏳ en curso/parcial · 🔲 no empezado · 🧪 solo staging.
+
+> ## ✅✅ 2026-07-22 — REDISEÑO DE CAJAS (POZO ÚNICO): HECHO, EN PROD Y VALIDADO
+>
+> **Se firmó, construyó, pasó a prod y se validó físicamente en un solo día.** `main` código
+> `9fc1147` → **`1c8a9ad`**. **El primer cierre real bajo el pozo (22/07) CUADRÓ**, y las primeras
+> cargas reales del dueño reconciliaron **al colón**.
+>
+> **Qué es:** todo movimiento de efectivo físico afecta **un solo saldo, exactamente una vez** (las
+> tres cajas son bolsillos del mismo pozo; Banco no es efectivo). Restaura la lógica del repo viejo
+> `satori-caja`/`buildSaldos` que la app había perdido al portarse. El modelo viejo se enteraba de la
+> plata por tres canales y una fila podía restar dos veces o ninguna — de ahí el sobrante de
+> ₡58.737,07 del 18/07.
+>
+> **Qué entró a prod:** corte `POZO_CORTE='2026-07-22'` (hacia adelante: el histórico no se toca) ·
+> asiento de arranque `296d032d` ₡744.570/$3.441 (único write autorizado) · paginación del fetch
+> **con desempate por `id`** · tarjeta de Movimientos al pozo post-corte · filtro `DESDE`=corte por
+> defecto · exclusión del asiento de arranque de "Ingresos (período)" · fixes de CashTurno
+> ("Gastado efectivo" + Resumen del Turno reconstruible).
+>
+> **Cero migraciones · sagrados byte-idénticos · cero PoS en el bundle de prod.**
+> Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · diagnóstico →
+> [scripts/t0-reconciliacion-cajas/](scripts/t0-reconciliacion-cajas/README.md).
+>
+> **El SOP interino** (recategorizar a mano un pago de proveedor a `Caja Fuerte`) queda **RETIRADO**:
+> era el parche al bug que el pozo eliminó de raíz.
+>
+> **➡️ Sigue:** **T3 — endurecimiento de caja** (sesión propia, con firma donde toque plata) ·
+> mergear `main → staging` · reconciliación del ledger de migraciones · PILAR de auth (bloquea el PoS).
+> Detalle → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+
+---
+
+## 🗄️ (histórico) Estado de las fases al 2026-07-04 — ✅ PASE ÚNICO A PROD COMPLETADO
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ✅🟢 hecho y **validado físicamente por la dueña en STAGING** (falta el pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod). ✅🟢 = además validado físicamente en staging.

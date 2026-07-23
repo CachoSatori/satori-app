@@ -47,24 +47,21 @@ conocida de volver a descuadrar.
    grafo de chunks (corte `2026-07-22` + filtro nuevo presentes en el bundle servido). El **contrato
    de divergencia** (76 archivos, **cero de plata**) quedó fijado en `ESTADO.md §(b)`. `main` intacto.
    Para volver staging a espejo de prod: runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
-2. **🟠 Reconciliación del ledger — A y B1 hechas; falta B2 (prod) y el `009`.**
+2. **🟠 Reconciliación del ledger — A y B1 ✅ COMPLETAS; falta solo B2 (prod).**
    **✅ FASE A** (diagnóstico read-only, 2026-07-23) →
    [`_handoff/FASE-A-LEDGER-2026-07-23.md`](_handoff/FASE-A-LEDGER-2026-07-23.md).
-   **✅ FASE B1** (staging, 2026-07-23, con firma): archivo `035` traído de `propina-pool` (solo el DDL,
-   el código de la feature NO se mergeó) + `repair --status applied` de las 9 out-of-band →
-   **el ledger de staging pasó de 39 a 48 filas** (`001–046 + 048`), **cero out-of-band pendientes**,
-   ninguna fila borrada. Backups [`pre-B1`](_handoff/ledger-staging-preB1-2026-07-23.json) /
-   [`post-B1`](_handoff/ledger-staging-postB1-2026-07-23.json).
-   **🔴 Lo que FALTA:**
-   - **El `009` sigue bloqueando `db push` en staging** — y **NO es la base** (ahí está perfecto), es el
-     CLI: ordena archivos por NOMBRE y el ledger por VERSIÓN, y los órdenes son **opuestos**
-     (`0095_drift…` < `009_user…` por nombre, pero `009` < `0095` por versión). Probado con CLI
-     **2.109.1**: persiste. **NO correr `repair --status reverted 009`.** Arreglo propuesto: renombrar
-     `009_user_selfsignup.sql` → `0090_…` + `UPDATE` del ledger `009`→`0090`. **Requiere firma.**
-   - **B2 prod: 28 repairs** — sesión dedicada. ⚠️ `repair` va por el **CLI linkeado** y el link vive en
-     **staging**; re-linkear a prod es el riesgo principal. Aprovechar para **verificar el ACL de
-     `delete_movement_cascade` en prod** (ver HALLAZGOS 2026-07-23).
-   - **B3 = DECIDIDO:** la `026` en prod se **documenta como excepción permanente**, no se repara.
+   **✅ FASE B1 COMPLETA** (staging, 2026-07-23, con firma) — 3 movimientos:
+   (a) archivo `035` traído de `propina-pool` (solo el DDL; el código de la feature NO se mergeó);
+   (b) `repair --status applied` de las 9 out-of-band → ledger de **39 → 48 filas**, cero out-of-band;
+   (c) fix del `009`: rename a `0090_user_selfsignup.sql` + `UPDATE` de **1 fila** del ledger
+   (`009`→`0090`) → **`db push` DESBLOQUEADO** (`Remote database is up to date`, `migration list`
+   alineado sin huérfanos). 4 backups del ledger en `_handoff/`.
+   **🔴 Lo que FALTA — B2 prod: 28 repairs**, sesión dedicada. ⚠️ `repair` va por el **CLI linkeado** y
+   el link vive en **staging**; re-linkear a prod es el riesgo principal. **Incluir en B2:**
+   - el mismo **rename `009`→`0090` en `main`** + su `UPDATE` de ledger (si no, prod arrastra el mismo
+     bug de ordenamiento y el contrato de divergencia queda abierto — ver §(b));
+   - **verificar el ACL de `delete_movement_cascade` en prod** (ver HALLAZGOS 2026-07-23).
+   **B3 = DECIDIDO:** la `026` en prod se **documenta como excepción permanente**, no se repara.
    ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
 3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
    y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
@@ -80,6 +77,10 @@ conocida de volver a descuadrar.
    📄 **Deuda de DOCS en `main` (misma regla):** la copia de **`ESTADO.md §(c)`** que vive en `main`
    sigue con los números viejos del ledger ("PROD ≤021"). Se corrigió en `staging` el 2026-07-23 con
    el resultado de la Fase A; **portarla a `main` en el próximo pase de docs a prod.**
+   🔢 **Deuda de MIGRACIONES en `main` (va con B2):** renombrar **`009_user_selfsignup.sql` →
+   `0090_user_selfsignup.sql`** también en `main` + el `UPDATE` del ledger de prod (`009`→`0090`).
+   Staging ya lo hizo el 2026-07-23 para destrabar `db push`; hasta que `main` lo replique, el rename
+   figura como divergencia (`R100`) en el contrato §(b) y prod conserva el bug de ordenamiento.
 
 ## 🟨 P2 — ESPERAN DECISIÓN O FIRMA DEL DUEÑO
 

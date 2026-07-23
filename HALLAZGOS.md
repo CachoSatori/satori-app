@@ -21,6 +21,21 @@
   | `delete_movement_cascade` | 039/043/044 | `=X/postgres` \| … | 🔴 **sí** |
   | `verify_manager_password` | 045 | *(sin `=X/`)* | ✅ no |
 
+- **🔴 ALCANCE REAL: 12 de 17.** Al barrer TODAS las `SECURITY DEFINER` de `public` con
+  [`scripts/ledger-reconciliacion/acl-funciones.ts`](scripts/ledger-reconciliacion/acl-funciones.ts)
+  (staging) resultó que **no son 2, son 12** las ejecutables por `anon`:
+
+  🔴 `delete_movement_cascade` · `get_my_role` · `handle_new_user` · `mark_factura_verified` ·
+  `my_turno_stats` · `pos_cobrar_check` · `pos_cobrar_orden` · `pos_merge_orden` ·
+  `pos_reopen_orden` · `pos_unmerge_orden` · `sync_pos_tips_to_pool` · `unif_on_cash_movement`
+
+  ✅ Cerradas correctamente (patrón `from public, anon`): `complete_inventory_review` ·
+  `discard_inventory_review` · `post_accounting_entry` · `verify_manager` · `verify_manager_password`
+
+  **De las 12, las de COBRO del PoS (`pos_cobrar_*`) son plata.** El PoS **no está en prod**, pero
+  `delete_movement_cascade`, `mark_factura_verified`, `unif_on_cash_movement`, `get_my_role` y
+  `handle_new_user` **sí**. Correr el mismo script contra prod es parte de B2.
+
 - **⚠️ Alcance PROD.** `delete_movement_cascade` **está en producción** (migs 039/043/044). En Fase A se
   verificó en prod que `verify_manager_password` sí está cerrada (`anon`=false), pero **no** se midió el
   ACL de `delete_movement_cascade` en prod → **verificarlo en B2** (lectura, read-only).

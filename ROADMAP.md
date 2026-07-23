@@ -1,7 +1,7 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-22**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-23**
 
 ---
 
@@ -35,8 +35,13 @@ dueño · ⏳ en curso/parcial · 🔲 no empezado · 🧪 solo staging.
 > **El SOP interino** (recategorizar a mano un pago de proveedor a `Caja Fuerte`) queda **RETIRADO**:
 > era el parche al bug que el pozo eliminó de raíz.
 >
+> **✅ 2026-07-23:** `main → staging` **mergeado** (contrato de divergencia fijado) y la
+> **reconciliación del ledger** avanzó — Fase A + B1 hechas, **`db push` destrabado en staging**.
+> Ver [HANDOFF-2026-07-23.md](HANDOFF-2026-07-23.md).
+>
 > **➡️ Sigue:** **T3 — endurecimiento de caja** (sesión propia, con firma donde toque plata) ·
-> mergear `main → staging` · reconciliación del ledger de migraciones · PILAR de auth (bloquea el PoS).
+> **B2 = ledger de PROD** (28 repairs + rename `009`→`0090` en main + ACL de `delete_movement_cascade`) ·
+> **hallazgo `anon`** (12/17 `SECURITY DEFINER` expuestas) · PILAR de auth (bloquea el PoS).
 > Detalle → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
 ---
@@ -58,7 +63,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 > **Diferidos con decisión:** foto de comprobante al pagar propina (firmado, fuera de scope) · **Tier 1 (monto-on-modify desde Revisión) = DESCARTADO por la dueña** (Revisión no modifica caja).
 > Historia detallada → `ESTADO-ARCHIVO.md` (bloque 2026-07-04).
 
-> **PROD (`main` `92c0831`) ya tiene TODO lo no-PoS:** la capa de inteligencia + estabilidad (Olas 1/1.1, pantalla negra, `createDayMovement`, IDOR `extract-document`, outbox `SIGNED_IN`, render Propinas, Actions Node 24, untrack `supabase/.temp/`) **+ 🆕 toda la ola 2026-07** (cierre/USD/Revisión/asistente, autorización por contraseña, Opción B, propinas vía real, tema claro) **+ 🆕 Bandeja + unificación Bandeja↔Caja** (F41–F43). Migs en prod: ledger **≤021** + **038–045 out-of-band**. **Lo único que queda solo en `staging` es el PoS** (comandero/KDS/cobro/FE/inventario activo, migs 022–037) — su pase es un proyecto aparte y DIFERIDO (bloqueado por el pilar de auth). ⚠️ El pase se hizo **portando contenido de staging a una rama sobre main** (no `staging`→`main` en bloque). **Pendiente en prod:** smoke físico + sinceramiento USD. Ver ESTADO + PROMPT-CONTINUACION.
+> **PROD (`main` `92c0831`) ya tiene TODO lo no-PoS:** la capa de inteligencia + estabilidad (Olas 1/1.1, pantalla negra, `createDayMovement`, IDOR `extract-document`, outbox `SIGNED_IN`, render Propinas, Actions Node 24, untrack `supabase/.temp/`) **+ 🆕 toda la ola 2026-07** (cierre/USD/Revisión/asistente, autorización por contraseña, Opción B, propinas vía real, tema claro) **+ 🆕 Bandeja + unificación Bandeja↔Caja** (F41–F43). Migs en prod (auditado 2026-07-23): ledger **solo 4 filas (018–021)** + **28 versiones out-of-band**. **Lo único que queda solo en `staging` es el PoS** (comandero/KDS/cobro/FE/inventario activo, migs 022–037) — su pase es un proyecto aparte y DIFERIDO (bloqueado por el pilar de auth). ⚠️ El pase se hizo **portando contenido de staging a una rama sobre main** (no `staging`→`main` en bloque). **Pendiente en prod:** smoke físico + sinceramiento USD. Ver ESTADO + PROMPT-CONTINUACION.
 
 > 🆕 **2026-07-04:** todas las filas de la **ola 2026-07** que abajo dicen "✅🟢 … en STAGING" (Tiers 0/2.1/3, Opción B, propinas vía real, tema claro, unificación Bandeja↔Caja, Bandeja Etapa 1) están **AHORA EN PROD** (`92c0831`). El "STAGING" de esas celdas indica **dónde se validaron físicamente**; el **smoke en prod sigue pendiente**. Lo único que NO pasó a prod es el **PoS** (filas "PoS F0–F3", "FE", "Inventario activo").
 
@@ -260,8 +265,9 @@ las precondiciones del propio SPEC; cada migración exige firma separada).
   cambia atribuciones → requiere validación física. Ver `_handoff/RCA-FECHAS-BORDE.md` §5.
 - **🔲 404 menor en prod sobre `propinas:1`** (recurso faltante, probablemente icono o source-map; **NO afecta
   operación**). Prolijidad, baja prioridad — falta identificar el archivo exacto (Network con filtro vacío).
-- **🔲 Discrepancia mig 035** en el ledger de staging (registrada como aplicada sin merge) — sesión dedicada
-  de propinas, **sin tocar el historial** hasta entender el origen.
+- **✅ Discrepancia mig 035 — RESUELTA (2026-07-23, Fase B1).** Estaba en el ledger de staging sin
+  archivo local, pero **realmente aplicada**. Se trajo su archivo desde `propina-pool` (solo el DDL; el
+  **código** de la feature sigue sin mergear) → repo y ledger coinciden. Nunca se marcó `reverted`.
 - **Cuentas por pagar / crédito a proveedores 7-15-30 días** (fecha de PAGO ≠ fecha de registro).
 - **Alerta de cambio de precio** de un producto (que el contador la detecte y se ajuste la receta).
 - **Offline robusto** con base local que sincroniza con Supabase al volver internet.

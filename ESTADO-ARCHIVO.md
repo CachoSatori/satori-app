@@ -3,6 +3,45 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-07-04 (PASE ÚNICO A PROD de la ola 2026-07: `main` `a14da50` → `92c0831`, migs 038–045 en prod, secret Sonnet en prod).
 
+## 🆕 2026-07-23 — Re-sync `main→staging` + reconciliación del ledger (Fase A + B1)
+
+`staging` `5ae267f` → **`02a012f`** · `main` **intacto en `c77ced0`** · PROD nunca se escribió.
+Handoff del día → [HANDOFF-2026-07-23.md](HANDOFF-2026-07-23.md) · diagnóstico completo →
+[_handoff/FASE-A-LEDGER-2026-07-23.md](_handoff/FASE-A-LEDGER-2026-07-23.md).
+
+**1. Re-sync `main → staging`** (merge de `c77ced0` dentro de `5ae267f`, commit `3f54b99`). 15
+conflictos: los de caja (`cierrePozo`, `CashMovimientos`, `CashTurno`, 2 tests) resueltos **a favor de
+main byte-idéntico**; los 4 archivos comunes de UI (`App.tsx`, `HomePage.tsx`, `AdminModule.tsx`,
+`UserApprovals.tsx`) conservaron el **hunk del enganche del PoS** y dejaron entrar el resto de main por
+auto-merge — tomar main entero habría borrado el comandero de staging. 490 tests, ambos builds EXIT 0,
+deploy verificado por grafo de chunks.
+
+**Contrato de divergencia congelado (75 archivos, cero de plata).** Detalle completo:
+
+- **PoS/FE/inventario (45):** `src/modules/pos/` (5) · `src/shared/utils/` pos* + comanderoMenu + kds
+  (7 + sus 7 tests) · `src/shared/api/` pos/fe/productPhoto + `shared/fe/feProvider` (+test) ·
+  `src/modules/admin/` PosF1Admin + ProductosAdmin · `print-bridge/` (6) · `scripts/import-carta.py` ·
+  `scripts/test-cobro-idempotente.py` · `import/productos.csv` · migs 022–034, 036, 037 (15).
+- **Enganche del PoS en archivos comunes (4 `M`):** `App.tsx` (rutas `/comandero`, `/kds`,
+  `/mi-turno`) · `HomePage.tsx` (`salonero → /comandero`) · `AdminModule.tsx` (pestaña "🍣 PoS") ·
+  `UserApprovals.tsx` (texto de ayuda).
+- **Config Cloudflare:** `public/_headers` (+) · `public/_redirects` (−, borrado en `0c080d5`).
+- **Limpiezas que staging ya hizo y main no (5):** `src/shared/api/auth.ts` (muerto, `9b1127c`) ·
+  `src/assets/{hero.png,react.svg,vite.svg}` (`0fa6c5b`) · `public/_redirects`.
+- **Docs de trabajo (11):** AUDITORIA-CONSOLIDACION · HANG-RCA · PROMPT-T2/T3/T4 · PROMPT-TRAMO-2/3 ·
+  REPORTE-NOCHE · `_handoff/` (2) · `docs/auth-borrado-casos.md` · `docs/research/` (4).
+
+**2. Ledger — Fase A (read-only).** El ledger vivo NO coincidía con lo que ESTADO §(c) afirmaba:
+prod tenía **4 filas** (`018–021`), no "≤021"; staging tenía **39** (`001–038`), no "022–038". 28
+versiones out-of-band en prod, 9 en staging, todas verificadas **por objeto/privilegio**.
+
+**3. Ledger — Fase B1 (staging, con firma).** (a) archivo `035` traído de `propina-pool` (solo DDL,
+byte-idéntico; el código de la feature NO se mergeó) → dejó de ser fantasma; (b) `repair --status
+applied` de las 9 → ledger 39 → 48 filas; (c) el `009` resultó ser un **choque de ordenamiento del
+CLI** (ordena archivos por nombre y el ledger por versión, órdenes opuestos) → rename a
+`0090_user_selfsignup.sql` + `UPDATE` de 1 fila → **`db push` DESBLOQUEADO**. Backups del ledger en
+`_handoff/ledger-staging-{preB1,postB1,preFix009,postFix009}-2026-07-23.json`.
+
 ## 🆕 2026-07-22 — REDISEÑO DE CAJAS (POZO ÚNICO): firmado, construido, PASADO A PROD y VALIDADO en un día
 
 `main` código `9fc1147` → **`1c8a9ad`** · `staging` `5ae267f` (base en cero).

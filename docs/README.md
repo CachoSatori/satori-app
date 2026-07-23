@@ -16,14 +16,17 @@ Dos clases de documento conviven acá, y **no valen lo mismo**:
    antes de tocar caja), §(a) ramas, §(b) prod vs solo-staging, §(c) migraciones, §(d) build por
    módulo, §(e) pendientes de **plata** con firma, §(f) pendientes humanos/técnicos, sagrados con
    sus hashes, y las notas que ahorran una sesión.
-2. **[../PASE-POZO-A-PROD.md](../PASE-POZO-A-PROD.md)** — acta del pase del pozo a producción:
-   diff auditado, gate, asiento de arranque, verificación final y rollback.
+2. **[../HANDOFF-2026-07-23.md](../HANDOFF-2026-07-23.md)** — la última sesión: re-sync
+   `main→staging` + reconciliación del ledger (Fase A + B1, `db push` destrabado en staging), qué
+   quedó abierto y las reglas de entorno que costaron tiempo.
 3. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — backlog vigente por prioridad:
-   **P0** T3 endurecimiento de caja · **P1** deuda corta (mergear `main→staging`, ledger de
-   migraciones) · **P2** decisiones/firmas del dueño · **P3** PILAR de auth + gran pase del PoS ·
+   **P0** T3 endurecimiento de caja · **P1** deuda corta (**ledger: falta B2/prod**; `main→staging`
+   ✅ hecho) · **P2** decisiones/firmas del dueño · **P3** PILAR de auth + gran pase del PoS ·
    **⛔** lo que quedó fuera de alcance.
 4. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases; el rediseño de cajas va ✅ hecho y validado.
-5. **[../HALLAZGOS.md](../HALLAZGOS.md)** — backlog triado de hallazgos. Sigue abierto: #2
+5. **[../PASE-POZO-A-PROD.md](../PASE-POZO-A-PROD.md)** — acta del pase del pozo a producción:
+   diff auditado, gate, asiento de arranque, verificación final y rollback.
+6. **[../HALLAZGOS.md](../HALLAZGOS.md)** — backlog triado de hallazgos. Sigue abierto: #2
    `monthly-report` sin auth, #3 `config.toml`, #14 deploy sin gate de tests, #5 RLS `cash_cierres_dia`.
 
 ## 🧮 Caja y el modelo del POZO

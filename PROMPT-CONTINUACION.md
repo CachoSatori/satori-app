@@ -39,10 +39,14 @@ conocida de volver a descuadrar.
 
 ## 🟧 P1 — DEUDA CORTA (técnica / datos)
 
-1. **🔵 Mergear `main → staging`.** La divergencia crece: el pozo entró a prod por una rama construida
-   **desde `main`** (staging arrastra el PoS, que no va a prod), así que ahora staging **no tiene** los
-   últimos fixes de caja. Re-sincronizar la parte común. Para volver staging a espejo de prod:
-   runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
+1. **✅ Mergear `main → staging` — EJECUTADO 2026-07-23.** `origin/staging` `5ae267f → ec8070a`
+   (merge commit `3f54b99`; `main`=`c77ced0` ahora ancestro de staging). Se re-sincronizó la parte
+   común: sagrados byte-idénticos (`7603ba5a`/`b597c697`/`a3fd445f`), `cierrePozo`+`CashMovimientos`+
+   `CashTurno` idénticos a main, **490 tests / 58 archivos** verdes, `build:staging` y
+   `VITE_APP_ENV=production build` EXIT 0, cero migraciones nuevas, deploy Cloudflare verificado por
+   grafo de chunks (corte `2026-07-22` + filtro nuevo presentes en el bundle servido). El **contrato
+   de divergencia** (76 archivos, **cero de plata**) quedó fijado en `ESTADO.md §(b)`. `main` intacto.
+   Para volver staging a espejo de prod: runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
 2. **🔴 Reconciliación del ledger de migraciones.** Sesión dedicada. Los dos entornos arrastran
    out-of-band (prod **038–046 + 048 + subset 026**; staging **039–046 + 048**); persisten 009 (drift)
    y 035 (fantasma, solo en `propina-pool`). **Bloquea `db push`/`repair`.**
@@ -51,6 +55,13 @@ conocida de volver a descuadrar.
    y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
 4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
    sandbox de Resend) se manda solo al confirmarse un cierre completo.
+5. **🧹 Deuda de limpieza en `main` (barrer en el PRÓXIMO pase a prod, NO suelta).** `main` todavía
+   carga archivos que `staging` ya eliminó y que no aportan nada: `src/shared/api/auth.ts` (código
+   muerto — confirmado 2026-07-23 que nadie lo importa) y `src/assets/{hero.png,react.svg,vite.svg}`
+   (sin referencias). Aparte, `public/_redirects` (staging lo quitó porque en Cloudflare daba
+   "Infinite loop"; en `main` es config de **GitHub Pages** → revisar si aplica **antes** de tocarlo).
+   ⚠️ **Barrer esto modifica `main` = PASE A PROD**: sesión propia, **firma del dueño** y validación
+   física; **jamás colado en un cleanup**. Solo anotado (también en `ESTADO.md §(b)`).
 
 ## 🟨 P2 — ESPERAN DECISIÓN O FIRMA DEL DUEÑO
 

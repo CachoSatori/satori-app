@@ -1,0 +1,204 @@
+{
+  "entorno": "staging",
+  "ref": "hwiatgicyyqyezqwldia",
+  "tomado": "2026-07-23",
+  "fuente": "supabase_migrations.schema_migrations",
+  "smoke_read_only": "{\"message\":\"Failed to run sql query: ERROR:  25006: cannot execute CREATE TABLE in a read-only transaction\\n\"}",
+  "filas": [
+    {
+      "version": "001",
+      "name": "initial_schema",
+      "has_statements": true
+    },
+    {
+      "version": "002",
+      "name": "tips_pool_fields",
+      "has_statements": true
+    },
+    {
+      "version": "003",
+      "name": "tips_email_cron",
+      "has_statements": true
+    },
+    {
+      "version": "004",
+      "name": "customers",
+      "has_statements": true
+    },
+    {
+      "version": "005",
+      "name": "loyalty",
+      "has_statements": true
+    },
+    {
+      "version": "006",
+      "name": "finance",
+      "has_statements": true
+    },
+    {
+      "version": "007",
+      "name": "customer_selfsignup",
+      "has_statements": true
+    },
+    {
+      "version": "008",
+      "name": "tips_covered_role",
+      "has_statements": true
+    },
+    {
+      "version": "009",
+      "name": "user_selfsignup",
+      "has_statements": true
+    },
+    {
+      "version": "0095",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "010",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "011",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "012",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "013",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "014",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "015",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "016",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "017",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "018",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "019",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "020",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "021",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "022",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "023",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "024",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "025",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "026",
+      "name": "operacion_roles",
+      "has_statements": false
+    },
+    {
+      "version": "027",
+      "name": "pos_cobro",
+      "has_statements": false
+    },
+    {
+      "version": "028",
+      "name": "pos_splits_propina",
+      "has_statements": false
+    },
+    {
+      "version": "029",
+      "name": "pos_paridad",
+      "has_statements": false
+    },
+    {
+      "version": "030",
+      "name": "producto_foto",
+      "has_statements": false
+    },
+    {
+      "version": "031",
+      "name": "item_note",
+      "has_statements": false
+    },
+    {
+      "version": "032",
+      "name": "menu_familias",
+      "has_statements": false
+    },
+    {
+      "version": "033",
+      "name": "cobro_idempotente",
+      "has_statements": false
+    },
+    {
+      "version": "034",
+      "name": "orden_ops_atomicas",
+      "has_statements": false
+    },
+    {
+      "version": "035",
+      "name": "propina_pos_pool",
+      "has_statements": false
+    },
+    {
+      "version": "036",
+      "name": "fe_estructura",
+      "has_statements": false
+    },
+    {
+      "version": "037",
+      "name": "inventario_activo_cogs",
+      "has_statements": false
+    },
+    {
+      "version": "038",
+      "name": "bandeja_fusion",
+      "has_statements": true
+    }
+  ]
+}

@@ -100,18 +100,31 @@ borrado en `0c080d5`: GitHub Pages lo servía con base equivocada y Cloudflare t
 `PROMPT-T2/T3/T4.md` · `PROMPT-TRAMO-2/3.md` · `REPORTE-NOCHE.md` · `_handoff/` (2) ·
 `docs/auth-borrado-casos.md` · `docs/research/` (4, comparativa de PoS).
 
-## (c) Migraciones — **cero** en todo el rediseño del pozo
+## (c) Migraciones — el ledger vivo (auditado 2026-07-23, read-only)
 
-| Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger |
+> Diagnóstico Fase A → [`_handoff/FASE-A-LEDGER-2026-07-23.md`](_handoff/FASE-A-LEDGER-2026-07-23.md).
+> El ledger NO coincidía con lo que esta sección decía antes ("PROD ≤021" eran en realidad 4 filas).
+> Corregido acá.
+
+| Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger (verificadas por objeto) |
 |---|---|---|
-| **PROD** | **≤021** | **038–046 + 048 + subset core de la 026** |
-| **STAGING** | **022–038** | **039–046 + 048** |
+| **PROD** | **solo 4 filas: 018, 019, 020, 021** | **001–017 + 0095 + 038–046 + 048** (28 versiones) **+ el subset core de la 026** (aplicado, pero sin archivo en `main`) |
+| **STAGING** | **001–038 (39 filas; incluye 0095 y el fantasma 035)** | **039–046 + 048** (9 versiones) |
 
 - **El rediseño del pozo no agregó ni una migración.** Es código puro + **1 fila** de datos (el asiento).
-- **047 está RESERVADA** para notificación a proveedores — **el hueco es intencional**, la secuencia
-  salta 046 → 048. No reutilizar ese número.
-- **🔴 Reconciliación del ledger = sesión dedicada.** Los dos entornos arrastran out-of-band; persisten
-  009 (drift) y 035 (fantasma, solo en `propina-pool`). **`db push`/`repair` FRENADOS** hasta entonces.
+- **`035` fantasma (STAGING):** en el ledger, SIN archivo local (solo en `propina-pool`), pero realmente
+  aplicado (`tip_sessions.pool_pos_crc/usd` + fn `sync_pos_tips_to_pool`). Único bloqueante de
+  `db push`. NO marcarlo `reverted` (mentiría sobre plata aplicada).
+- **`026` subset core (PROD):** aplicado sin archivo en `main` (espejo del 035) → se resuelve por
+  decisión, no por `repair`.
+- **PROD no tiene filas de ledger sin archivo** → historial **incompleto, NO divergido** (se reconcilia
+  limpio con `repair --status applied`). STAGING sí está divergido, por el 035.
+- **`009` quedó DESCARTADO como problema** (Fase A): está en el ledger **y** con archivo, igual que
+  `0095`; nunca fue drift. No re-levantarlo.
+- **047 sigue RESERVADA** (proveedores) — el hueco 046→048 es intencional.
+- **Reconciliación = Fase B** (con firma): B1 staging (resolver 035 + 9 repairs) · B2 prod (28 repairs,
+  sesión dedicada, ojo al re-link del CLI) · B3 decisión sobre la 026. **`db push`/`repair` FRENADOS**
+  hasta entonces.
 
 ## (d) Build por módulo
 

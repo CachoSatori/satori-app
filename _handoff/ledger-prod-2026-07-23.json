@@ -1,0 +1,29 @@
+{
+  "entorno": "prod",
+  "ref": "yiczgdtirrkdvohdquzf",
+  "tomado": "2026-07-23",
+  "fuente": "supabase_migrations.schema_migrations",
+  "smoke_read_only": "{\"message\":\"Failed to run sql query: ERROR:  25006: cannot execute CREATE TABLE in a read-only transaction\\n\"}",
+  "filas": [
+    {
+      "version": "018",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "019",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "020",
+      "name": null,
+      "has_statements": false
+    },
+    {
+      "version": "021",
+      "name": null,
+      "has_statements": false
+    }
+  ]
+}

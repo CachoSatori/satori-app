@@ -48,9 +48,17 @@ conocida de volver a descuadrar.
    de divergencia** (76 archivos, **cero de plata**) quedó fijado en `ESTADO.md §(b)`. `main` intacto.
    Para volver staging a espejo de prod: runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
 2. **🔴 Reconciliación del ledger de migraciones.** Sesión dedicada. Los dos entornos arrastran
-   out-of-band (prod **038–046 + 048 + subset 026**; staging **039–046 + 048**); persisten 009 (drift)
-   y 035 (fantasma, solo en `propina-pool`). **Bloquea `db push`/`repair`.**
-   ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
+   out-of-band. **✅ FASE A (diagnóstico read-only) HECHA el 2026-07-23** →
+   [`_handoff/FASE-A-LEDGER-2026-07-23.md`](_handoff/FASE-A-LEDGER-2026-07-23.md) + los 2 backups del
+   ledger. Números reales (corrigen lo que decía antes): **prod = solo 4 filas en el ledger (018–021)**,
+   28 versiones fuera; **staging = 001–038 (39 filas)**, 9 fuera. **`009` quedó DESCARTADO** (nunca fue
+   drift). El **`035`** (fantasma en el ledger de staging, sin archivo, pero REALMENTE aplicado) es el
+   único bloqueante de `db push` — **NO marcarlo `reverted`**.
+   **Falta FASE B (escribe en el ledger → con firma):** B1 staging (resolver 035 + 9 `repair --status
+   applied`) · B2 prod (28 repairs, sesión dedicada, ⚠️ `repair` va por el CLI linkeado y el link vive
+   en staging) · B3 decisión sobre la 026 en prod. **Bloquea `db push`/`repair`** hasta entonces.
+   ⏳ **Esperan 2 decisiones del dueño:** el `035` (opción A = traer el archivo desde `propina-pool`) y
+   la `026` en prod. ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
 3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
    y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
 4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
@@ -62,6 +70,9 @@ conocida de volver a descuadrar.
    "Infinite loop"; en `main` es config de **GitHub Pages** → revisar si aplica **antes** de tocarlo).
    ⚠️ **Barrer esto modifica `main` = PASE A PROD**: sesión propia, **firma del dueño** y validación
    física; **jamás colado en un cleanup**. Solo anotado (también en `ESTADO.md §(b)`).
+   📄 **Deuda de DOCS en `main` (misma regla):** la copia de **`ESTADO.md §(c)`** que vive en `main`
+   sigue con los números viejos del ledger ("PROD ≤021"). Se corrigió en `staging` el 2026-07-23 con
+   el resultado de la Fase A; **portarla a `main` en el próximo pase de docs a prod.**
 
 ## 🟨 P2 — ESPERAN DECISIÓN O FIRMA DEL DUEÑO
 

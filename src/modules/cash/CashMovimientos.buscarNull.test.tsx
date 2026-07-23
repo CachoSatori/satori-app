@@ -28,8 +28,14 @@ vi.mock('../../shared/FacturaVerify', () => ({ default: () => null }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import CashMovimientos from './CashMovimientos'
+import { todayCR } from '../../shared/utils'
 
-const hoy = new Date().toISOString().slice(0, 10)
+// FECHA DEL FIXTURE EN HORA DE COSTA RICA, no UTC.
+// El filtro de Movimientos acota con `todayCR()`; un `new Date().toISOString()` da la fecha UTC,
+// que entre las 18:00 y la medianoche de CR ya es EL DÍA SIGUIENTE. El movimiento quedaba
+// fechado mañana, el filtro lo dejaba fuera y estos tests fallaban solo de noche — un flake
+// que no probaba nada del código.
+const hoy = todayCR()
 
 const mov = (over: Partial<CashMovement>) => ({
   id: 'm-base', session_id: null, created_by: 'u1', movement_type: 'egreso_operativo',

@@ -20,24 +20,25 @@ import { dateCR } from '../../shared/utils'
 // ni sus números ni su render. Desde el corte, modelo nuevo. Cero migraciones.
 
 /**
- * Fecha del corte por defecto, si el entorno no dice otra cosa.
+ * Fecha del corte, si el entorno no dice otra cosa.
  *
- * ⚠️⚠️ COMMIT SOLO-STAGING — **NO CHERRY-PICKEAR A MAIN** ⚠️⚠️
- * En `main` este valor debe seguir siendo **'2026-08-01'**. Acá está adelantado a
- * '2026-07-22' (decisión de la dueña: activa el modelo nuevo en staging DESDE HOY, porque
- * necesita trabajar hoy con la app). Antes estuvo en '2026-07-23'.
+ * **FIRMADO POR EL DUEÑO (2026-07-22): el corte de PRODUCCIÓN es '2026-07-22'.**
+ * Desde ese día prod calcula con el modelo del pozo. Los días anteriores se siguen viendo y
+ * calculando exactamente como siempre — el histórico no se toca (ver el encabezado del archivo).
+ *
+ * Ya NO es un valor solo-staging: staging y prod comparten el mismo corte, así que este archivo
+ * es idéntico en las dos ramas y no hay nada que "no cherry-pickear".
  *
  * ⚠️ EL CORTE NO ALCANZA SOLO: la tarjeta y el "debería" cuentan el pozo DESDE EL ASIENTO DE
- * APERTURA (`fechaAperturaPozo`), no desde el corte. Si el asiento no existe, o si su fecha es
- * POSTERIOR a los movimientos del día, el número que se muestra no sirve. Mover el corte exige
- * sembrar la apertura con la MISMA fecha:
- *     node --import ./scripts/t0-reconciliacion-cajas/register.mjs \
- *       scripts/refresh-staging/seed-apertura.ts --fecha 2026-07-22
+ * APERTURA (`fechaAperturaPozo`), no desde el corte. Sin asiento, `fechaAperturaPozo` devuelve
+ * null y el saldo se calcula sobre TODO el ledger — un número inservible (el histórico no tiene
+ * ancla: el pozo acumulado da negativo). Activar el corte exige sembrar el asiento de arranque
+ * con la MISMA fecha. En prod es el asiento firmado 'Apertura pozo 2026-07-22' de
+ * ₡744.570 / $3.441 — la continuidad exacta del número que el sistema ya mostraba.
  *
- * Es el PLAN B documentado: la vía preferida es `VITE_POZO_CORTE` en el dashboard de
- * Cloudflare Pages (config externa, no se puede setear desde el repo). Si esa variable se
- * carga, GANA sobre este fallback y este commit deja de tener efecto — las dos vías conviven.
- * Para que las dos digan lo mismo, `VITE_POZO_CORTE` debe valer exactamente '2026-07-22'.
+ * `VITE_POZO_CORTE` sigue pudiendo pisar este valor desde el entorno del build (ver
+ * `resolverCorte`). En prod NO se usa: el workflow de GitHub Pages no la define, así que manda
+ * esta constante. Si algún día se define, tiene que valer exactamente '2026-07-22'.
  */
 export const POZO_CORTE_FALLBACK = '2026-07-22'
 

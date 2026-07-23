@@ -6,6 +6,4 @@ dist
 *.local
 .DS_Store
 .staging-backups/
-.claude/
 supabase/.temp/
-_backups-staging/

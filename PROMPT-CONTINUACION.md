@@ -1,66 +1,88 @@
-# Continuación — backlog priorizado (handoff 2026-07-21)
+# Continuación — backlog priorizado (handoff 2026-07-22)
 
-> **✅ OLA 2026-07 + post-ola CERRADAS · ventana de ESTABILIZACIÓN CERRADA.** `main` = **`9fc1147`** (PROD) · `staging` = **`e597206`**. Migs PROD out-of-band: **≤021 + 038–046 + 048 + subset core de 026**. Secret **`ANTHROPIC_MODEL=claude-sonnet-4-5` en prod** ✓. **Todo lo operativo está en prod y validado en piso por el dueño** (ver ESTADO §b). Backlog por prioridad **P0–P3** abajo; las secciones §0… de más abajo son **referencia histórica**.
+> **✅ EL REDISEÑO DE CAJAS (POZO ÚNICO) ESTÁ EN PROD Y VALIDADO.** Se firmó, construyó, pasó y se
+> validó físicamente en un día: el **primer cierre real bajo el pozo (22/07) CUADRÓ** y las cargas
+> reales del dueño reconciliaron **al colón**. `main` código = **`1c8a9ad`** · `staging` =
+> **`5ae267f`** (base en CERO). **Cero migraciones** en todo el rediseño.
+> Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · contexto del modelo → [ESTADO.md](ESTADO.md).
 >
-> **🆕 2026-07-18 → 21 — 4 pases cortos a PROD (todos validados en staging; los 3 de Caja/Cierre son código puro, cero migraciones, sagrados byte-idénticos):** **(1)** elegibilidad de propina por rol (07-18, mig 048 out-of-band + toggle en Admin) · **(2)** TipStats "Distribución por puesto" (07-20, frontend puro) · **(3)** 4 mejoras de Caja/Cierre (07-20: asistente "Agregar factura / movimiento" · propinas en UN grupo en Pendientes + secciones plegables · Fase 1 con caja abierta · propina pendiente → banco) · **(4)** una sola vía para aprobar propinas pendientes (07-21: el select de estado de Movimientos también rutea a banco vía `aprobacionPropinaFields`; cierra la última puerta del "ajuste fantasma ≈ propinas"; **NO corrige hacia atrás**). ⏳ **smoke físico del pase 07-21 en prod pendiente.** Detalle → ESTADO §"🆕 2026-07-20 → 21".
->
-> **🆕 COLA ACTUAL — orden del asesor (2026-07-17). El circuito de siempre: el asesor diseña/revisa · Claude Code ejecuta · el dueño firma y valida en piso. NO construir nada hasta confirmar por dónde arrancar.**
-> 1. **SPEC notificación de pago a proveedores** — esperando firma del dueño (vive en el proyecto de Claude, `claude/SPEC-notificacion-pago-proveedores.md`; **fuera del repo**). Al firmar: **mig 047** + **prerequisito DNS**. → **P1 #9**.
-> 2. **Edición de propinas en Historial por CAJERO con autorización de gerencia** — FIRMADO 2026-07-17; patrón mig 045 `requireManager`, sin esquema; plata-adyacente → **revisión estricta**. → **P1 #10**.
-> 3. **Reconciliación del ledger de migraciones** — sesión dedicada; el asesor prepara el **plan read-only primero**. → **P1 #2**.
-> 4. **Hora-CR en bordes de período** (PLATA fiscal). → **P1 #4**.
-> 5. **DNS SiteGround** (corta) — remitente propio `@satoricostarica.com` + destinatario `satorisushibar@gmail.com`; momento para **rotar `RESEND_API_KEY`**. → **P1 #11**.
-> 6. **FE-CR** (bloquea F3) + **diseño del PILAR** incorporando **C4/C5/B1** del research. → **P3**.
->
-> **⏳ Validación viva pendiente:** **smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com`, por el sandbox de Resend) sale **solo** al confirmarse el cierre completo; **lo confirma el dueño**.
->
-> **🆕 Sesión 2026-07-09 → 17 (7 mejoras a PROD, validadas en piso):** propinas ef/elec (mig 046) · cierre ventas-0 + resumen · **Proveedores** rojo=deuda → simplificado a lista + buscador (**2 huérfanos rechazados en prod → P1 #1 / P2 #5 SALDADOS**) · **hotfix buscador Movimientos null-safe** · **quick-wins C2+C3+buscador** (P1 #8). Research de 6 PoS FIRMADO. Detalle → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) (bloque 2026-07-09→17).
+> Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
+> pases viejos) son **referencia histórica**.
 
 ---
 
-## 🟥 P0 — ESTABILIZACIÓN — ✅ CERRADA
+## 🟥 P0 — T3 · ENDURECIMIENTO DE CAJA (sesión propia; firma del dueño donde toque plata)
 
-> La ventana de observación de prod quedó **cerrada** (07-06 → 17): todo lo operativo se validó en piso sin incidentes de plata. Se retoma construcción según la **COLA ACTUAL** de arriba, con firma por ítem. Ya no aplica el congelamiento.
+El pozo cerró el agujero conceptual. T3 cierra las puertas por las que todavía puede entrar un dato
+que lo ensucie. **Ninguno es urgente hoy** — el sistema cuadra —, pero cada uno es una forma
+conocida de volver a descuadrar.
 
-## 🟧 P1 — DEUDA CORTA (técnica/datos, acotada)
+1. **🖊️ Dirección obligatoria en traspasos.** Hoy un traspaso sin dirección legible (`subcategory`
+   nula, `'Ajuste'`, `'Otro traspaso'`, texto libre) queda **neutro** y se cuenta aparte en
+   `indeterminados`. Está bien como red de contención, pero el alta debería **exigir** origen→destino.
+   Resolver además los `'Otro traspaso'` que ya existan. **Toca plata → firma.**
+2. **🖊️ Prohibir montos negativos MANUALES.** Un monto negativo invierte el asiento en silencio
+   (`hayMontosNegativos` ya lo detecta en el cierre; falta en el alta manual). ⚠️ **Los negativos
+   bicurrency del SISTEMA son LEGÍTIMOS** (pago en USD con vuelto en colones) — la regla es solo para
+   la carga **manual**, no para el motor. **Toca plata → firma.**
+3. **🖊️ `ajuste_tipo` derivado del signo**, en vez de cargarse aparte y poder contradecirlo.
+4. **🖊️ Impedir operar cajas de fechas pasadas** (abrir/cargar sobre un día ya cerrado).
+5. **🖊️ Auditoría de ediciones** de movimientos (hoy hay auditoría de borrados vía
+   `movement_deletions`; la edición pasa por reemplazo y no deja el mismo rastro).
+6. **👁️ Vigilar "Ingreso adicional".** Es la vía más fácil de meter plata sin respaldo; ver si
+   merece categoría propia o justificación obligatoria.
+7. **🧹 Limpiar los 2 huérfanos de fecha imposible:** `9b79e731` (2020-07-09, ₡74.126,92) y uno de
+   **2016** (₡54.978). **La app NO los muestra** — `getAllCashMovements(days = 1000)` arranca ~1.000
+   días atrás — por eso la verificación de pantalla nunca los vio. Son pendientes que nadie va a pagar.
+8. **🧹 Comentarios "la dueña" → "el dueño"** en el código. Cosmético, cero riesgo, pero el repo
+   está mal generizado en varios comentarios viejos.
 
-1. **✅✅ SALDADO EN PROD 2026-07-16 — Proveedores: el rojo cuenta DEUDA REAL → simplificado a lista sola** (diagnóstico read-only 2026-07-06 + firma 2026-07-09; ambos pases en prod). **P1 #1 / P2 #5 CERRADOS.** Recordatorio del hallazgo: el **"14" en rojo NO eran pendientes** — era `overdueCount` (agenda de ciclo, etiqueta engañosa "pagos pendientes"); los **pendientes reales** son **5** en prod (3 legítimos + **2 huérfanos** `supplier_id` NULL, **₡150.043,52**; uno de 2020). **En prod (UI/lógica, sin esquema, sagrados intactos):** (a) el **rojo cuenta `pendCount`** = movimientos `status='pendiente'` (deuda real, **incluye huérfanos**) — lógica pura en `proveedoresStatus.ts`, testeada; (b) la **agenda de ciclo** (`overdueCount` → `agendaCount`) quedó como **indicador ámbar aparte**, NO rojo; (c) proveedor **'Puntual'** (valor de `ciclo_pago`, **sin migración** — es texto libre) sale de la agenda → **mata el "14"**; (d) la pestaña **Pendientes** tiene **✕ Rechazar** (con **autorización de gerencia**, funciona con `supplier_id` NULL).
-    **✅ SMOKE DEL DUEÑO HECHO (2026-07-16):** rechazó los **2 huérfanos** desde la pestaña Pendientes en prod (Distribuidora Isleña 2020-07-09 ₡74.126,92 y GRUPO PAMPA 2026-07-06 ₡75.916,60, **cero SQL**) → **Pendientes 5→3**, validado en piso. (El "que el badge diga 5" quedó *moot*: el 2º pase retiró el badge rojo — la confirmación vino por Pendientes.)
-    **✅ 2026-07-16 — SIMPLIFICACIÓN FIRMADA Y EN PROD** (ex-rama `fix/proveedores-simplificar`; los pases `prod/pase-proveedores-*` ya se mergearon a `main` por FF y se borraron de origin). Tras ver el fix en prod, el dueño decidió que la pestaña **Proveedores sea SOLO la lista de proveedores**. **Eliminado de `CashProveedores.tsx`:** el badge rojo "N pendientes por pagar" + su panel "Deuda pendiente registrada" (`showPending`) — **es un duplicado**: la pestaña Pendientes, al lado, ya notifica con su propio badge (`cd-pend-badge`, `CashModule.tsx:135`) —; el chip ámbar "N con ciclo de compra vencido"; y los banners de "Agenda de compra". **Conservado:** la lista/tarjetas con agregar/editar/desactivar tal cual, y **dentro de cada tarjeta** su deuda (`pendingCRC`), su ciclo acordado (**incluida 'Puntual'** y su semántica), último/próximo pago y total pagado. **`CashPendientes` intacto** (Rechazar y todo lo demás). **Sin código muerto:** `contarAgenda`/`contarPendientes`/`totalPendienteCRC` quedaron sin uso (nadie más los importaba) → borrados con sus tests; `computeSupplierStatus`/`esProveedorPuntual` siguen porque los usan las tarjetas. UI-only, cero esquema, sagrados byte-idénticos. Detalle → **HALLAZGOS.md** (2026-07-06) + `REPORTE_pendientes_huerfanos_2026-07-06.md`.
-2. **🔴 Reconciliación del ledger de migraciones — AHORA EN AMBOS ENTORNOS.** prod: ledger **≤021 + 038–046 + subset core de 026 out-of-band**; staging: **022–038 + 039–046 out-of-band**; + **009** (drift) + **035** (fantasma, solo en `propina-pool`). `db push`/`repair` **FRENADOS** hasta una sesión dedicada de infraestructura (resolver 035/`propina-pool` primero; **NO tocar el historial**). Todo idempotente. Detalle → ESTADO §c + §3 abajo.
-3. **✅ RESUELTO 2026-07-06 — Tokens de GitHub rotados.** PAT classic **"Claude CLI" regenerado con scopes mínimos** (`repo` + `workflow`; se quitó `admin:org`) → el valor viejo del transcript local queda invalidado. OAuth **"GitHub CLI" revocado** → el `gho_` expuesto queda inutilizado → **re-login limpio** (credencial nueva en el keyring de macOS). Ya no hay tokens vivos comprometidos. Detalle → §0bis abajo.
-4. **🖊️👁️ Hora-CR en bordes de período (PLATA).** Las queries de plata (`finance.ts:132/139` P&L borde de año, y similares) acotan `created_at` en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. Construir los límites con `dateCR`. Cambia números → valida la dueña. `fix/fecha-cr-consistente` ya en staging. Detalle → §1 abajo.
-5. **🟢 Prolijidad (no bloquea):** subir `node-version: 20`→22 en `deploy.yml`; 404 menores en `/caja` y `propinas:1`; warning cosmético de recharts. Detalle → §2 abajo.
-6. **🛑 Import histórico Excel→app — CANCELADO por decisión del dueño (2026-07-09).** Costo/beneficio negativo. Se ejecutó y verificó en STAGING (Fase A diseño + Fase B import: 10.842 `cash_movements` + tabla `ventas_efectivo_hist` 2.448 turnos, checksum md5 exacto Excel↔DB) y luego se **revirtió completo** (staging = pre-migración: `cash_movements` **967**, `suppliers` **83**, `ventas_efectivo_hist` **DROP**; rollback **quirúrgico** que preservó 26 vínculos hijos reales; **backups conservados 30 días**). **prod NUNCA se tocó.** El histórico vive en los Excel del dueño (`MIGRACION-COMPLETA-Satori.xlsx`, `VENTAS-RECONSTRUIDAS-Satori.xlsx`); el conocimiento del análisis QUEDA válido (convención de ventas, TC de la casa, corr 0,978 vs PoS). Detalle → HALLAZGOS.md (2026-07-08 + cierre 2026-07-09). **No reabrir sin nueva firma.**
-7. **🧹🖊️ Arranque limpio de PROD (post-estabilización · NO es migración, es LIMPIEZA).** Cuando el dueño **declare prod confiable**: eliminar los datos **pre-arranque** (el doble registro viejo) y **conservar** el sinceramiento USD y la operación viva. **Fecha de corte a definir. Requiere diseño + firma.** Distinto del import cancelado (#6): acá no se trae histórico, solo se limpia el arranque. ⚠️ Al validar saldos post-limpieza, ojo con **`saldoCajaFuerte` sin ancla + que no lee el efectivo de ventas** (HALLAZGOS 2026-07-09).
-8. **🔬 Research quick-wins (FIRMADOS 2026-07-10, firma al ejecutar) → [docs/research/03-GAP-ANALYSIS.md](docs/research/03-GAP-ANALYSIS.md).** **C2** historial over/short del cierre + **C3** email del cierre al owner (un solo lote de reportes) · **C1** tips-owing por empleado. **Al diseñar el PILAR:** incorporar **C4/C5/B1**. **FE-CR = sesión dedicada propia (bloquea F3).** Descartes **D1–D4** registrados (no reabrir sin firma).
-    **✅ 2026-07-17 — C2 + C3 + buscador de Proveedores EN PROD** (`main` = `880c863`; smoke del dueño en staging **3/3**). **SIN esquema, sagrados intactos, cero migraciones.**
-    - **C2 — historial de sobrantes/faltantes** (`cierreStats.ts` puro + sección nueva en `CashResumen`, respeta su filtro por mes): lista por cierre completo (fecha · diferencia ₡ con signo/color sobrante/faltante/cuadró · ajuste tipo/motivo) + agregados (cuántos cuadraron vs no · neto · absoluto). **Display de lo ya sellado en `cash_cierres_dia`, NO recalcula.** NULL-safe (`diferencia_crc`/`ajuste_*` son nullable en la base). Test: `cierreStats.test.ts` (7 casos, fixture null).
-    - **C3 — email del cierre al owner** (patrón Square): al confirmarse el cierre COMPLETO, `CashCierre` dispara `sendCierreEmail(cierreId)` **fire-and-forget** (si el email falla, el cierre NO se rompe). Edge Function **`cierre-email`** (patrón Resend) **con el fix del hallazgo #2: EXIGE `Authorization` (JWT verificado) y relee la fila server-side con el token del usuario (RLS = portón), NO service_role** — patrón `extract-document`. **✅ Deployada a STAGING y PROD** (ACTIVE v1 en ambos; portón de auth verificado: sin JWT → 401). `RESEND_API_KEY` ya estaba en prod; **`REPORT_TO_EMAIL` NO se seteó** → destinatario default `cachorrogp@gmail.com` (único que Resend entrega hoy con el sender sandbox → `monthly-report` intocado). **⏳ SMOKE REAL PENDIENTE: el cierre nocturno manda el primer email solo — lo confirma el dueño.**
-    - **➕ Buscador en Proveedores** — filtro en vivo por nombre/categoría/contacto, **null-safe desde el día uno**, estado vacío "Sin coincidencias". Test: `CashProveedores.buscar.test.tsx` (5 casos, fixture null).
-    - Gates del pase: build prod EXIT 0 · **231 tests sin env** (línea de main) · sagrados VACÍO · cero migs. **C1 (tips-owing por empleado) sigue en cola.**
-9. **🖊️ SPEC notificación de pago a proveedores — esperando firma del dueño (COLA #1).** El SPEC vive en el **proyecto de Claude** (`claude/SPEC-notificacion-pago-proveedores.md`), **fuera del repo** — no está en `docs/`. Al firmar: implica **mig 047** (nueva, aún NO existe en ninguna base) + **prerequisito DNS** (§P1 #11, para el remitente propio del correo). Al arrancar: traer el SPEC al repo (`docs/`) y actualizar `docs/README.md`.
-10. **🖊️ Edición de propinas en Historial por CAJERO con autorización de gerencia — FIRMADO 2026-07-17 (COLA #2).** El cajero puede editar propinas desde el Historial pasando **contraseña de manager/dueño** que se re-valida server-side, **mismo patrón que editar-pago en Caja** (mig 045 `verify_manager_password` + `requireManager`). **SIN esquema.** **Plata-adyacente → revisión estricta del asesor** (toca el path de propinas). No confundir con la edición de propinas que ya existe para roles con permiso.
-11. **🖊️ DNS SiteGround (tarea corta) — habilita remitente propio + destinatario real (COLA #5).** Configurar DNS en SiteGround para: (a) remitente propio `@satoricostarica.com` (saca a Resend del modo sandbox `onboarding@resend.dev`), (b) recién entonces el destinatario de los correos puede pasar a `satorisushibar@gmail.com`. ⚠️ `REPORT_TO_EMAIL` es variable **COMPARTIDA con `monthly-report`** (mirar ambos antes de setear). Momento natural para **rotar `RESEND_API_KEY`** (la de staging quedó expuesta en un transcript 2026-07-17; el dueño aceptó el riesgo; rotarla es trivial).
+## 🟧 P1 — DEUDA CORTA (técnica / datos)
 
-## 🟨 P2 — DECISIONES DE PRODUCTO (esperan a la dueña / uso real en prod)
+1. **🔵 Mergear `main → staging`.** La divergencia crece: el pozo entró a prod por una rama construida
+   **desde `main`** (staging arrastra el PoS, que no va a prod), así que ahora staging **no tiene** los
+   últimos fixes de caja. Re-sincronizar la parte común. Para volver staging a espejo de prod:
+   runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
+2. **🔴 Reconciliación del ledger de migraciones.** Sesión dedicada. Los dos entornos arrastran
+   out-of-band (prod **038–046 + 048 + subset 026**; staging **039–046 + 048**); persisten 009 (drift)
+   y 035 (fantasma, solo en `propina-pool`). **Bloquea `db push`/`repair`.**
+   ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
+3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
+   y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
+4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
+   sandbox de Resend) se manda solo al confirmarse un cierre completo.
 
-1. **🖊️ Bandeja Etapa 2** (entrada foto-primero 100% dentro de Caja Diaria) — hoy diseñada sin código. Construir **SOLO si** tras usar la Etapa 1 **en prod** sigue haciendo falta. Detalle → §4 + ROADMAP §Etapa 2.
-2. **🖊️ `propina-pool`** (rama sin merge) — propina de tarjeta/SINPE ¿al mismo pool que efectivo o separada? `git show propina-pool:ESTADO-PROPINA-POOL.md`. Detalle → §7.
-3. **🖊️ Foto de comprobante obligatoria al pagar propina** — firmado, diferido (fuera de scope de la ola); toca `pagarPropina`/`propinaPago.ts`.
-4. **🖊️ Al borrar una factura, ¿borrar también su foto/documento?** (hoy queda; impide recargar la misma factura por el dedupe de hash). Decisión de la dueña.
-5. **✅ CERRADO 2026-07-16 — Semántica del rojo "pagos pendientes" en Proveedores.** Recorrido completo: firmado 2026-07-09 (el rojo = deuda real; la agenda de ciclo, indicador aparte) → **en prod 2026-07-16** (`main` = `7377240`) → y ese mismo día, **viéndolo en prod, el dueño firmó simplificar**: la pestaña Proveedores es **SOLO la lista**, sin indicadores de cabecera (el rojo era **duplicado** de la pestaña Pendientes; la agenda era ruido). **La información no se perdió — vive en la tarjeta de cada proveedor** (su deuda, su ciclo incluida **'Puntual'**, último/próximo pago). Rama `fix/proveedores-simplificar`, sin merge. Ver **P1 #1** para el detalle. Detalle → HALLAZGOS.md + `REPORTE_pendientes_huerfanos_2026-07-06.md`.
-6. **✅ CERRADO — EN PROD, VALIDADAS EN PISO (2026-07-10). Las 2 features están en producción** (pasaron juntas en el pase 2026-07-09/10; `main` = `6c65f25`). Sagrados intactos en ambas (`tipCalculations.ts` byte-idéntico; `cashUtils`/`computeTotals`/`posFiscal` sin tocar).
-    - **(i) Propinas efectivo/electrónico** (`feat/propinas-efectivo-electronico`): la cuenta por pagar de propinas se genera **SOLO por lo electrónico** (datáfono/SINPE); el efectivo se lo queda el equipo, nunca genera movimiento ni pendiente; el reparto/`take_home` no cambia. **Esquema:** mig **046** (`tip_sessions.pool_barra_electronico_crc`) aplicada a **STAGING y PROD** out-of-band. SPEC → [docs/SPEC-propinas-efectivo-electronico.md](docs/SPEC-propinas-efectivo-electronico.md).
-    - **(ii) Cierre del día — ventas ₡0 + resumen** (`feat/cierre-ventas-cero-y-resumen`): cerrar con ventas ₡0 **solo con confirmación explícita** (campo vacío bloquea); **modal de resumen** antes de confirmar. **SIN esquema** (solo UI/gates; el persistido no cambió).
-    - **✅ PASE EJECUTADO 2026-07-10 (en orden):** **1º** mig **046 a PROD** out-of-band (Management API + `NOTIFY pgrst`; `schema_migrations` intacto → prod **038–046 + subset 026**); **2º** merge FF a `main` (`6c65f25`) + deploy (`version.json` live = `6c65f25`); **3º** **smoke en piso en prod ✓**. No había pendientes viejos de propinas en prod (0 `status='pendiente'`). Distinto de `propina-pool` (P2 #2, la pregunta pool-único-vs-separado).
+## 🟨 P2 — ESPERAN DECISIÓN O FIRMA DEL DUEÑO
 
-## 🟦 P3 — PILAR + GRAN PASE DEL PoS (lejos; bloqueante)
+1. **🖊️ SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de **DNS**
+   (dominio propio en Resend; hoy el sender sandbox solo entrega a una dirección).
+2. **🖊️ Edición de propinas en Historial por CAJERO** con autorización de gerencia — FIRMADO
+   2026-07-17, sin construir. Patrón mig 045 `requireManager`. **Plata-adyacente → revisión estricta.**
+3. **🖊️ Foto de comprobante obligatoria al pagar propina** — firmado, DIFERIDO. Toca
+   `pagarPropina`/`propinaPago.ts`.
+4. **🖊️ `propina-pool`** (rama, sin merge) — ¿la propina de tarjeta/SINPE va al mismo pool que la de
+   efectivo o separada?
+5. **🖊️ Reconciliación prod-vs-Excel.** **Ahora es viable**: el pozo da **UN número por día**, que es
+   exactamente lo que el Excel del dueño tiene enfrente. Antes no había con qué comparar.
+6. **🖊️👁️ Hora-CR en bordes de período.** Las queries de plata (P&L, `finance.ts`) acotan `created_at`
+   en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. **Cambia números.**
+7. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy
+   diseñada sin código) — construir **solo si** tras usar la Etapa 1 en prod sigue haciendo falta.
 
-1. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant.** El PoS lleva ~10 dispositivos concurrentes; objetivo hotelería/franquicias. Diseño + prueba de carga simulando N dispositivos, NO un parche. **🔴 BLOQUEA el gran pase del PoS.** Detalle → §PILAR abajo + ROADMAP.
-2. **🖊️ GRAN PASE del PoS a PROD — DIFERIDO.** migs 022–037, buckets `facturas`/`productos`/`documents`, regenerar tipos; validación física del PoS (§6). Solo tras el pilar. **Es lo único que hoy separa `staging` de prod.** Detalle → §5.
+## 🟦 P3 — LEJOS / BLOQUEANTE
 
-> **Diferido con decisión (NO reabrir sin nueva firma):** Tier 1 (monto-on-modify desde Revisión) **DESCARTADO** por la dueña — la Revisión NO modifica caja.
+1. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant.** **Bloquea el GRAN PASE del
+   PoS** a prod (~10 dispositivos concurrentes; hotelería/franquicias).
+2. **🧾 FE-CR** (factura electrónica real de Costa Rica) — hoy solo estructura SIM en staging.
+3. **🧪 Gran pase del PoS** a prod — proyecto aparte, detrás del PILAR.
+
+## ⛔ Fuera de alcance (no reabrir sin firma nueva)
+
+- **Tier 1 — monto-on-modify desde Revisión: DESCARTADO por el dueño.** La Revisión **no** modifica caja.
+- **El SOP interino de recategorizar un pago de proveedor a `Caja Fuerte`: RETIRADO.** Era el parche
+  manual al bug que el pozo eliminó de raíz. **No aplicarlo más.**
+- **Re-diagnosticar el flake TZ de los tests: MUERTO.** Los fixtures usaban `new Date().toISOString()`
+  (UTC) contra un filtro con `todayCR()` → 5 tests fallaban solo de noche. Corregido a `todayCR()`.
 
 ---
 
@@ -384,15 +406,14 @@ incompatibles en tests: `x as unknown as T`.
 
 ---
 
-## 0bis. ✅ RESUELTO 2026-07-06 — Tokens de GitHub rotados (seguridad)
+## 0bis. 🔐 Rotar los 2 tokens de GitHub (seguridad — pendiente de la sesión)
 
-1. **OAuth "GitHub CLI" (`gho_`) — REVOCADO.** El token que estaba **embebido en el remote de `SATORI PROPINAS`** ya se
-   había limpiado del `.git/config` (`git remote set-url` sin credenciales; auth por osxkeychain); ahora además se
-   **revocó la autorización OAuth** → el `gho_` expuesto queda **invalidado**, con **re-login limpio** (credencial nueva
-   en el keyring de macOS).
-2. **PAT classic `ghp_` "Claude CLI" — REGENERADO con scopes mínimos** (`repo` + `workflow`; **se quitó `admin:org`**).
-   El valor viejo (que había quedado en un transcript local de Claude Code, `~/.claude/projects/.../*.jsonl`) queda
-   **inutilizado**. (No estaba configurado en ningún remote/env/MCP; solo persistía en ese log.)
+1. **`gh auth refresh -s repo,read:org,workflow`** (correr en terminal interactiva — abre device-flow en el navegador).
+   El token `gho_` que estaba **embebido en el remote de `SATORI PROPINAS`** ya se limpió del `.git/config`
+   (`git remote set-url` sin credenciales; auth ahora por osxkeychain), **pero sigue válido en GitHub hasta rotarlo**.
+2. **Regenerar el PAT classic `ghp_` "Claude CLI" SIN scope `admin:org`** — su valor quedó en un transcript local de
+   Claude Code (`~/.claude/projects/.../*.jsonl`). **Rotar ANTES del 27-jun.** (No está configurado en ningún remote/env/MCP;
+   solo persiste en ese log.)
 
 ---
 

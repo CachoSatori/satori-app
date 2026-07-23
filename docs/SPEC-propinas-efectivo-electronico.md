@@ -1,9 +1,8 @@
 # SPEC — Propinas: efectivo vs electrónico (la cuenta por pagar es SOLO lo electrónico)
 
-> **Estado: 🖊️ FIRMADO · ✅ EN STAGING (validado en piso 2026-07-09).** Satori Sushi Bar · módulo Propinas + Caja.
-> Rama de implementación: `feat/propinas-efectivo-electronico` **mergeada a `staging`** (`2a0852e`).
-> Migración: `046_pool_barra_electronico.sql` — **aplicada a STAGING out-of-band (2026-07-09, Management API;
-> `schema_migrations` intacto)**. **Pendiente: aplicar a PROD** (ref `yiczgdtirrkdvohdquzf`, con firma, post-ventana).
+> **Estado: 🖊️ FIRMADO.** Satori Sushi Bar · módulo Propinas + Caja.
+> Rama de implementación: `feat/propinas-efectivo-electronico` sobre `origin/staging`.
+> Migración: `046_pool_barra_electronico.sql` (escrita, **pendiente de aplicar a staging con firma**).
 
 ---
 

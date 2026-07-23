@@ -1,20 +1,50 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-17**
-
-> **🆕 2026-07-17 — ESTADO REAL (foto autoritativa; supersede las notas fechadas más abajo).** `main` = **`880c863`** (PROD) · `staging` = **`8c41965`**. **La ventana de estabilización quedó CERRADA.** Desde el pase único 07-04, entraron a PROD y **quedaron validados en piso por el dueño**: **propinas efectivo/electrónico** (mig 046) · **cierre con ventas ₡0 + resumen previo** · **Proveedores = lista simple con buscador** (rojo=deuda saldado → simplificado; ciclo 'Puntual'; ✕ Rechazar con gerencia — 2 huérfanos rechazados en prod) · **hotfix buscador de Movimientos null-safe** · **quick-wins C2 (historial over/short en Resumen) + C3 (email del cierre, Edge Function `cierre-email`) + buscador de Proveedores**. Todas las filas de la tabla que abajo dicen "✅🟢 … en STAGING / smoke prod pendiente" **ya tienen smoke en PROD ✓**. **Lo único que sigue solo en `staging` es el PoS** (comandero/KDS/cobro/FE/inventario activo, migs 022–037), DIFERIDO y bloqueado por el **PILAR de auth**. Backlog vivo → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
-
-> **🔬 2026-07-10 — Research de 6 PoS completado y FIRMADO → [docs/research/](docs/research/).** Decisiones incorporadas: **hub local = pieza de la arquitectura del PILAR** (no solo F5); el **diseño del PILAR adopta herencia-con-override (C4)** y **evalúa umbral de red (C5)**; **quick-wins C1/C2/C3 en cola post-estabilización** (**C2/C3 ✅ EN PROD 2026-07-17**; C1 sigue en cola); **descartes D1–D4 registrados (no reabrir sin firma)**.
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-22**
 
 ---
 
-## 📍 Estado real de las fases (handoff 2026-07-04 — ✅ PASE A PROD COMPLETADO)
+## 📍 Estado real de las fases (handoff 2026-07-22)
+
+Leyenda: ✅ hecho y en PROD · 🟢 en PROD, smoke físico pendiente · ✅🟢 validado físicamente por el
+dueño · ⏳ en curso/parcial · 🔲 no empezado · 🧪 solo staging.
+
+> ## ✅✅ 2026-07-22 — REDISEÑO DE CAJAS (POZO ÚNICO): HECHO, EN PROD Y VALIDADO
+>
+> **Se firmó, construyó, pasó a prod y se validó físicamente en un solo día.** `main` código
+> `9fc1147` → **`1c8a9ad`**. **El primer cierre real bajo el pozo (22/07) CUADRÓ**, y las primeras
+> cargas reales del dueño reconciliaron **al colón**.
+>
+> **Qué es:** todo movimiento de efectivo físico afecta **un solo saldo, exactamente una vez** (las
+> tres cajas son bolsillos del mismo pozo; Banco no es efectivo). Restaura la lógica del repo viejo
+> `satori-caja`/`buildSaldos` que la app había perdido al portarse. El modelo viejo se enteraba de la
+> plata por tres canales y una fila podía restar dos veces o ninguna — de ahí el sobrante de
+> ₡58.737,07 del 18/07.
+>
+> **Qué entró a prod:** corte `POZO_CORTE='2026-07-22'` (hacia adelante: el histórico no se toca) ·
+> asiento de arranque `296d032d` ₡744.570/$3.441 (único write autorizado) · paginación del fetch
+> **con desempate por `id`** · tarjeta de Movimientos al pozo post-corte · filtro `DESDE`=corte por
+> defecto · exclusión del asiento de arranque de "Ingresos (período)" · fixes de CashTurno
+> ("Gastado efectivo" + Resumen del Turno reconstruible).
+>
+> **Cero migraciones · sagrados byte-idénticos · cero PoS en el bundle de prod.**
+> Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · diagnóstico →
+> [scripts/t0-reconciliacion-cajas/](scripts/t0-reconciliacion-cajas/README.md).
+>
+> **El SOP interino** (recategorizar a mano un pago de proveedor a `Caja Fuerte`) queda **RETIRADO**:
+> era el parche al bug que el pozo eliminó de raíz.
+>
+> **➡️ Sigue:** **T3 — endurecimiento de caja** (sesión propia, con firma donde toque plata) ·
+> mergear `main → staging` · reconciliación del ledger de migraciones · PILAR de auth (bloquea el PoS).
+> Detalle → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+
+---
+
+## 🗄️ (histórico) Estado de las fases al 2026-07-04 — ✅ PASE ÚNICO A PROD COMPLETADO
 
 Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validación física/pase a prod) · ✅🟢 hecho y **validado físicamente por la dueña en STAGING** (falta el pase a prod) · ⏳ en curso/parcial · 🔲 no empezado.
 > Nota: ✅ con etiqueta "en STAGING" = mergeado y verde en staging (no necesariamente validado por la dueña ni en prod). ✅🟢 = además validado físicamente en staging.
-
-> **🆕 2026-07-09 — desde el pase (07-04) NO hubo cambios de código.** Se completó **smoke físico + sinceramiento USD en PROD** (07-06) → toda la ola 2026-07 está **✅ validada físicamente en PROD** (las celdas de abajo que dicen "smoke prod pendiente" ya quedaron cubiertas). **Estabilización en curso — ventana cierra ~semana del 13-jul.** La sesión 07-06→09 fue **solo docs + un ejercicio de datos en staging**: migración del histórico Excel→app **ejecutada, verificada por checksum y CANCELADA** por decisión de producto (staging revertido quirúrgico a pre-migración; **prod NUNCA se tocó**). HEADs: `main` `cf50724` (código `92c0831`) · `staging` `508853a` (código `1daef0c`). Backlog vigente → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md); detalle datos → [HALLAZGOS.md](HALLAZGOS.md).
 
 > **✅ Sesión 2026-07-04 — PASE ÚNICO A PROD COMPLETADO.** `main` avanzó **`a14da50` → `92c0831`** por FF de `prod/pase-ola-2026-07` (toda la ola 2026-07 + Bandeja + unificación Bandeja↔Caja, **SIN PoS**). `staging` = `1daef0c` (dev, sigue con el PoS). **Lo que se hizo en el pase:**
 > - **Código a `main` por FF** (rama de prep construida portando el CONTENIDO de staging sobre main, excluyendo el PoS) → deploy verde, `version.json.commit = 92c0831`.
@@ -30,7 +60,7 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 
 > **PROD (`main` `92c0831`) ya tiene TODO lo no-PoS:** la capa de inteligencia + estabilidad (Olas 1/1.1, pantalla negra, `createDayMovement`, IDOR `extract-document`, outbox `SIGNED_IN`, render Propinas, Actions Node 24, untrack `supabase/.temp/`) **+ 🆕 toda la ola 2026-07** (cierre/USD/Revisión/asistente, autorización por contraseña, Opción B, propinas vía real, tema claro) **+ 🆕 Bandeja + unificación Bandeja↔Caja** (F41–F43). Migs en prod: ledger **≤021** + **038–045 out-of-band**. **Lo único que queda solo en `staging` es el PoS** (comandero/KDS/cobro/FE/inventario activo, migs 022–037) — su pase es un proyecto aparte y DIFERIDO (bloqueado por el pilar de auth). ⚠️ El pase se hizo **portando contenido de staging a una rama sobre main** (no `staging`→`main` en bloque). **Pendiente en prod:** smoke físico + sinceramiento USD. Ver ESTADO + PROMPT-CONTINUACION.
 
-> 🆕 **2026-07-04 → 17:** todas las filas de la **ola 2026-07** que abajo dicen "✅🟢 … en STAGING" (Tiers 0/2.1/3, Opción B, propinas vía real, tema claro, unificación Bandeja↔Caja, Bandeja Etapa 1) están **EN PROD y con smoke en piso ✓ HECHO** (`main` = `880c863`; el smoke se completó 2026-07-06→17). El "STAGING" de esas celdas indica dónde se validaron por primera vez. **Sumadas a prod después del 07-04** (ver las 5 filas nuevas al final de la ola): propinas ef/elec, cierre ventas-0, Proveedores simplificado, hotfix buscador, quick-wins C2/C3. Lo único que NO pasó a prod es el **PoS** (filas "PoS F0–F3", "FE", "Inventario activo").
+> 🆕 **2026-07-04:** todas las filas de la **ola 2026-07** que abajo dicen "✅🟢 … en STAGING" (Tiers 0/2.1/3, Opción B, propinas vía real, tema claro, unificación Bandeja↔Caja, Bandeja Etapa 1) están **AHORA EN PROD** (`92c0831`). El "STAGING" de esas celdas indica **dónde se validaron físicamente**; el **smoke en prod sigue pendiente**. Lo único que NO pasó a prod es el **PoS** (filas "PoS F0–F3", "FE", "Inventario activo").
 
 | Fase | Estado | Dónde |
 |---|---|---|
@@ -62,11 +92,6 @@ Leyenda: ✅ hecho y en PROD · 🟢 hecho y en STAGING (verde, falta validació
 | **🆕 Opción B — Ajuste de cierre al ledger** (la diferencia entra como movimiento real en CF: faltante→egreso, sobrante→ingreso, ₡ y US$) | ✅🟢 **FIRMADA + VALIDADA en STAGING** (`e959fe5`) | STAGING. Idempotente por `client_op_id` determinístico (SHA-256); deshacer borra el ajuste; `saldoBase` del día excluye su propio ajuste. Subcategoría "Reajuste" para plata que aparece después |
 | **🆕 Propinas por la VÍA REAL** (el campo tipeado del cierre murió; se paga desde el cierre; la matemática resta propinas PAGADAS) | ✅🟢 **FIRMADA + VALIDADA en STAGING** (`380cb9a`) | STAGING. **Faltante fantasma enterrado** (el gap era 'Ventas cierre' bruto vs "debería" con propinas tipeadas). `tipCalculations`/`calcTurno` byte-idénticos; helper `propinaPago.ts`. Sin migración |
 | **🆕 Rediseño de Caja a tema claro** (`.cd-saldo-*` → 4 pestañas; Ajustes en ₡/US$; diferencias discriminadas) | ✅🟢 **VALIDADO en STAGING** (`ddb1c08`) | STAGING. UI + cálculo paralelo del ajuste USD (deriva de los movimientos 'Ajuste de cierre') |
-| **🆕 Propinas efectivo/electrónico** (cuenta por pagar = SOLO lo electrónico; el efectivo se lo queda el equipo) | ✅ **EN PROD, validado en piso** (2026-07-10) | prod + staging · **mig 046** (`tip_sessions.pool_barra_electronico_crc`) out-of-band en ambos. SPEC → docs/SPEC-propinas-efectivo-electronico.md. `tipCalculations` byte-idéntico |
-| **🆕 Cierre del día — ventas ₡0 + resumen previo** (checkbox de confirmación explícita; modal de resumen antes de confirmar) | ✅ **EN PROD, validado en piso** (2026-07-10) | prod + staging · SIN esquema (el persistido del cierre no cambió) |
-| **🆕 Proveedores = SOLO la lista + buscador** (rojo=deuda real → simplificado; ciclo 'Puntual'; ✕ Rechazar con gerencia; buscador null-safe) | ✅ **EN PROD, validado en piso** (2026-07-16/17) | prod + staging · SIN esquema · 2 huérfanos rechazados en prod (Pendientes 5→3) |
-| **🆕 Hotfix — buscador de Movimientos null-safe** (`database.ts` mentía la nulabilidad vs `supabase.gen.ts`) | ✅ **EN PROD** (2026-07-17, `c3d8070`) | prod + staging · test reproduce el crash exacto; cero lógica de plata |
-| **🆕 Quick-wins C2 + C3 + buscador Proveedores** (C2 historial over/short en Resumen · C3 email del cierre, Edge Fn `cierre-email` con JWT+RLS · buscador) | ✅ **EN PROD** (2026-07-17, `880c863`) — ⏳ smoke real de C3 | prod + staging · del research (C2/C3 de 03-GAP-ANALYSIS) · SIN esquema. C3 → `cachorrogp@gmail.com` (sandbox Resend) |
 | PoS F0 — Fundaciones (offline-first ✅; investigación FE ⏳; spike impresión 🔲) | ⏳ | mixto |
 | PoS F1 — Catálogo + salón + multi-local | 🟢 | STAGING (022) |
 | PoS F2 — Comandero + KDS + impresión (impresión real = F5) | 🟢 | STAGING (023–025) |

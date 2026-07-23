@@ -19,9 +19,10 @@ const CONCEPTOS = [
   { id: 'reaj_ing', label: 'Reajuste · apareció plata (CF)',  type: 'ingreso',           caja: 'Caja Fuerte',       sub: 'Reajuste',            method: 'Efectivo' },
   { id: 'reaj_egr', label: 'Reajuste · faltó plata (CF)',     type: 'egreso_operativo',  caja: 'Caja Fuerte',       sub: 'Reajuste',            method: 'Efectivo' },
 ] as const
-import { todayCR, dateCR } from '../../shared/utils'
+import { dateCR } from '../../shared/utils'
 import { MOVEMENT_LABELS, MOVEMENT_TYPES, CAJAS_ORIGEN, METODOS_PAGO, isEgreso, tipoColor, fi, fd, todayStr } from './cashUtils'
 import { saldoTarjetaEfectivo } from './tarjetaPozo'
+import { POZO_CORTE, SUBCAT_APERTURA_POZO } from './cierrePozo'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { useDeletionNote } from './deletionNote'
 import { movementAttachments } from '../../shared/api/facturas'
@@ -68,7 +69,18 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const movFecha = (m: CashMovement) =>
     sesionMap.get(m.session_id ?? '')?.session_date ?? dateCR(m.created_at)
 
-  const defaultFrom = (() => { const d = new Date(todayCR() + 'T12:00:00'); d.setDate(d.getDate() - 60); return d.toISOString().slice(0, 10) })()
+  // "DESDE" por defecto = LA FECHA DE CORTE (firmado por el dueño). Con el modelo del pozo
+  // arrancando en el corte, las tarjetas de PERÍODO (Ingresos/Egresos/Ajustes) tienen que
+  // arrancar en cero y acumular solo lo nuevo: mezclar los 60 días previos mostraría plata del
+  // modelo viejo sumada a la del nuevo, que es justo la confusión que el corte viene a evitar.
+  //
+  // El histórico NO se toca ni se esconde: sigue entero en la base y a un cambio de fecha de
+  // distancia — mover "Desde" hacia atrás lo muestra idéntico a como se veía antes.
+  //
+  // Ojo: esto filtra SOLO la lista y las tarjetas de período. La tarjeta de efectivo y la de
+  // Pend. Transferencia se calculan sobre `movements` SIN filtrar, a propósito: un pendiente de
+  // antes del corte sigue siendo plata que se debe hoy. Ver los tests de este archivo.
+  const defaultFrom = POZO_CORTE
   const [from,    setFrom]    = useState(defaultFrom)
   const [to,      setTo]      = useState(todayStr())
   const [tipo,    setTipo]    = useState('')
@@ -149,7 +161,15 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   // El ajuste de APERTURA (reconciliación del saldo real) no es ingreso/egreso
   // real del negocio → se excluye de Ingresos/Egresos del período (pero sí
   // afecta el saldo de Caja Fuerte).
-  const isAperturaAjuste = (m: CashMovement) => /ajuste apertura/i.test(m.subcategory || '') || /ajuste apertura/i.test(m.description || '')
+  //
+  // MISMA REGLA para el ASIENTO DE ARRANQUE DEL POZO ('Apertura pozo AAAA-MM-DD'): es el saldo
+  // con el que arranca el pozo, no plata que el negocio ingresó ese día. Sin esta exclusión,
+  // el primer día post-corte "Ingresos (período)" mostraría el arranque entero (en prod,
+  // ₡744.570) como si fuera venta — justo el número que el corte viene a poner en cero.
+  // Sí sigue contando para el SALDO de la tarjeta: ahí es donde tiene que estar.
+  const isAperturaAjuste = (m: CashMovement) =>
+    /ajuste apertura/i.test(m.subcategory || '') || /ajuste apertura/i.test(m.description || '')
+    || m.subcategory === SUBCAT_APERTURA_POZO
   const totIngresos = filtered.filter(m => m.movement_type === 'ingreso' && !isAperturaAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
   const totEgresos  = filtered.filter(m => isEgreso(m.movement_type as MovementType) && !isAperturaAjuste(m)).reduce((s, m) => s + m.amount_crc, 0)
 

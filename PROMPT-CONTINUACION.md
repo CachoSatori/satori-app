@@ -66,11 +66,21 @@ conocida de volver a descuadrar.
    Backups: `_handoff/ledger-prod-2026-07-27-{pre,post}-B2.json`.
    **B3 = DECIDIDO:** la `026` en prod se **documenta como excepción permanente**, no se repara.
    ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
-3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
+3. **🔐🖊️ Hardening ACL — `get_my_role` + 2 triggers (los 3 que faltan en prod).** Tras B2, prod quedó
+   en **3/10** `SECURITY DEFINER` ejecutables por `anon`: `get_my_role`, `unif_on_cash_movement`,
+   `handle_new_user`. NO entraron en la 049 **a propósito**. **Accionable, sin urgencia, su propia sesión:**
+   - `get_my_role` es **helper de policies RLS** (algunas sin cláusula `TO` → PUBLIC). Antes de cualquier
+     `revoke`, hacer un **mini-análisis READ-ONLY**: barrer las policies que lo llaman y confirmar que
+     ninguna `TO public` alcanzable por `anon` dependa de él (si no, el revoke cambia "RLS niega" por
+     "permission denied for function"). A `anon` hoy **no le filtra nada** (devuelve NULL) → no es urgente.
+   - Los 2 triggers son **inertes** (no invocables directo; el revoke no frena el disparo) → van en el
+     mismo lote, sin análisis extra. Fix = `revoke all … from public, anon` (patrón mig 045), con firma.
+     Ver [`_handoff/acl-prod-2026-07-27.md`](_handoff/acl-prod-2026-07-27.md) y el bloque `anon` de HALLAZGOS.
+4. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
    y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
-4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
+5. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
    sandbox de Resend) se manda solo al confirmarse un cierre completo.
-5. **🧹 Deuda de limpieza en `main` (barrer en el PRÓXIMO pase a prod, NO suelta).** `main` todavía
+6. **🧹 Deuda de limpieza en `main` (barrer en el PRÓXIMO pase a prod, NO suelta).** `main` todavía
    carga archivos que `staging` ya eliminó y que no aportan nada: `src/shared/api/auth.ts` (código
    muerto — confirmado 2026-07-23 que nadie lo importa) y `src/assets/{hero.png,react.svg,vite.svg}`
    (sin referencias). Aparte, `public/_redirects` (staging lo quitó porque en Cloudflare daba

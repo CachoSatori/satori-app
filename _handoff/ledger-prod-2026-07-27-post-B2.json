@@ -1,0 +1,142 @@
+{
+  "entorno": "prod",
+  "ref": "yiczgdtirrkdvohdquzf",
+  "momento": "2026-07-27-post-B2",
+  "fuente": "supabase_migrations.schema_migrations",
+  "smoke_read_only": "{\"message\":\"Failed to run sql query: ERROR:  25006: cannot execute CREATE TABLE in a read-only transaction\\n\"}",
+  "total": 33,
+  "filas": [
+    {
+      "version": "001",
+      "name": "initial_schema"
+    },
+    {
+      "version": "002",
+      "name": "tips_pool_fields"
+    },
+    {
+      "version": "003",
+      "name": "tips_email_cron"
+    },
+    {
+      "version": "004",
+      "name": "customers"
+    },
+    {
+      "version": "005",
+      "name": "loyalty"
+    },
+    {
+      "version": "006",
+      "name": "finance"
+    },
+    {
+      "version": "007",
+      "name": "customer_selfsignup"
+    },
+    {
+      "version": "008",
+      "name": "tips_covered_role"
+    },
+    {
+      "version": "0090",
+      "name": "user_selfsignup"
+    },
+    {
+      "version": "0095",
+      "name": "drift_baseline"
+    },
+    {
+      "version": "010",
+      "name": "sops_rls"
+    },
+    {
+      "version": "011",
+      "name": "ventas_exchange_rls"
+    },
+    {
+      "version": "012",
+      "name": "cajero_operativo_rls"
+    },
+    {
+      "version": "013",
+      "name": "cash_movements_day_level"
+    },
+    {
+      "version": "014",
+      "name": "finance_otros_ingresos"
+    },
+    {
+      "version": "015",
+      "name": "cash_account_id"
+    },
+    {
+      "version": "016",
+      "name": "documents"
+    },
+    {
+      "version": "017",
+      "name": "inventory_ingest"
+    },
+    {
+      "version": "018",
+      "name": null
+    },
+    {
+      "version": "019",
+      "name": null
+    },
+    {
+      "version": "020",
+      "name": null
+    },
+    {
+      "version": "021",
+      "name": null
+    },
+    {
+      "version": "038",
+      "name": "bandeja_fusion"
+    },
+    {
+      "version": "039",
+      "name": "movement_deletion_cascade"
+    },
+    {
+      "version": "040",
+      "name": "inventory_review_task"
+    },
+    {
+      "version": "041",
+      "name": "cash_movements_classification"
+    },
+    {
+      "version": "042",
+      "name": "accounting_entries"
+    },
+    {
+      "version": "043",
+      "name": "cascade_extends_accounting"
+    },
+    {
+      "version": "044",
+      "name": "delete_cascade_manager_auth"
+    },
+    {
+      "version": "045",
+      "name": "verify_manager_by_password"
+    },
+    {
+      "version": "046",
+      "name": "pool_barra_electronico"
+    },
+    {
+      "version": "048",
+      "name": "role_tip_recibe_propina"
+    },
+    {
+      "version": "049",
+      "name": "revoke_secdef_from_public"
+    }
+  ]
+}

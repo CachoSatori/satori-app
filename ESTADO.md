@@ -1,9 +1,10 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-07-23** → [HANDOFF-2026-07-23.md](HANDOFF-2026-07-23.md). Hoy: **re-sync
-> `main → staging`** + **reconciliación del ledger** (Fase A + B1 → `db push` destrabado en staging).
-> El **POZO ÚNICO** sigue ✅ validado en prod desde el 22/07 (primer cierre real **cuadró**).
+> **Handoff: 2026-07-27** → [HANDOFF-2026-07-27.md](HANDOFF-2026-07-27.md). Hoy: **B2 — ledger de PROD
+> reconciliado** (4→33 filas, rename `009`→`0090` / `R100` cerrado) + **hardening ACL** (mig 049:
+> `delete_movement_cascade` y `mark_factura_verified` → `anon=false`; prod 5/10→3/10). Solo ledger + ACL,
+> **cero datos de plata**. El **POZO ÚNICO** sigue ✅ validado en prod desde el 22/07 (primer cierre real **cuadró**).
 >
 > Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Fases → [ROADMAP.md](ROADMAP.md) ·
 > Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos → [HALLAZGOS.md](HALLAZGOS.md) ·

@@ -1,0 +1,40 @@
+-- ╔══════════════════════════════════════════════════════════════════════════════════════╗
+-- ║ 049 — Hardening ACL: revoke de PUBLIC/anon en 2 funciones SECURITY DEFINER de plata.    ║
+-- ║        ADITIVA e IDEMPOTENTE. Solo revoca privilegios; NO crea ni cambia lógica.        ║
+-- ╚══════════════════════════════════════════════════════════════════════════════════════╝
+--
+-- ── QUÉ RESUELVE (hallazgo `anon` 2026-07-23, ver HALLAZGOS.md) ───────────────────────────
+-- `create function` otorga EXECUTE a **PUBLIC** por defecto. Un `revoke execute ... from anon` NO le
+-- quita a `anon` lo que hereda de PUBLIC → la función sigue siendo ejecutable por anónimos. El patrón
+-- correcto es el de la mig 045: `revoke all ... from public, anon`.
+--
+-- ── MEDICIÓN EN PROD (read-only, 2026-07-27, ver _handoff/acl-prod-2026-07-27.md) ─────────
+-- 10 funciones SECURITY DEFINER en `public`; 5 ejecutables por `anon`. Esta migración endurece las
+-- **2 RPC directas** que tocan plata/auditoría y que un cliente puede invocar por nombre:
+--   · delete_movement_cascade(uuid,text,text,text)  — mig 044 (firma de 4 args, verificada viva en prod)
+--   · mark_factura_verified(uuid)                    — mig 038
+-- `delete_movement_cascade` tenía `=X` (PUBLIC) sin item `anon` propio y AUN ASÍ anon=true: heredaba
+-- por PUBLIC. Es exactamente la trampa de arriba.
+--
+-- ── QUÉ QUEDA AFUERA, A PROPÓSITO (ver acl-prod-2026-07-27.md) ────────────────────────────
+--   · get_my_role()  — helper usado DENTRO de policies RLS (algunas sin cláusula `TO` → PUBLIC).
+--     Revocarle EXECUTE a `anon` puede cambiar el modo de fallo de "RLS niega" a "permission denied
+--     for function". Para anon devuelve NULL (no filtra nada) → se trata aparte con mini-análisis RLS.
+--   · unif_on_cash_movement(), handle_new_user()  — funciones de TRIGGER: no invocables directo
+--     ("trigger functions can only be called as triggers") y el revoke NO frena el disparo del
+--     trigger. Superficie inerte → prioridad baja; se endurecen aparte si se decide.
+--   · pos_* / sync_pos_tips_to_pool  — NO existen en prod (PoS es solo-staging). Se endurecen con el
+--     pase del PoS, no acá.
+--
+-- ── POR QUÉ NO ES EMERGENCIA ──────────────────────────────────────────────────────────────
+-- Ambas tienen guard interno de rol: `delete_movement_cascade` exige rol owner/manager o credenciales
+-- de gerencia validadas server-side (crypt vs auth.users); `mark_factura_verified` exige
+-- `get_my_role() in ('owner','manager','cajero','contador')`. Un `anon` muere en el guard. Esto es
+-- **defensa en profundidad**, no un agujero de control de acceso abierto.
+--
+-- ── ALCANCE / SEGURIDAD ───────────────────────────────────────────────────────────────────
+-- Idempotente: revocar un privilegio ausente es no-op. Deja intactos `authenticated` y `service_role`
+-- (la app logueada las sigue llamando). Aplica a PROD (yiczgdtirrkdvohdquzf) y se porta a STAGING.
+
+revoke all on function public.delete_movement_cascade(uuid, text, text, text) from public, anon;
+revoke all on function public.mark_factura_verified(uuid) from public, anon;

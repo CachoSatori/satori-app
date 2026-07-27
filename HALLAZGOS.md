@@ -49,6 +49,18 @@
   El archivo `035_propina_pos_pool.sql` traído en B1 **conserva el DDL original a propósito** (debe
   reflejar lo aplicado) y lleva la advertencia en su cabecera.
 
+- **✅ MEDIDO Y ENDURECIDO EN PROD (B2, 2026-07-27, con firma).** `acl-funciones.ts prod` (read-only)
+  dio **5/10** `SECURITY DEFINER` ejecutables por `anon`: `delete_movement_cascade`,
+  `mark_factura_verified`, `get_my_role`, `handle_new_user`, `unif_on_cash_movement` (las `pos_*`
+  **no existen en prod**). La **mig 049** aplicó `revoke all ... from public, anon` a las **2 RPC
+  directas de plata/auditoría** (`delete_movement_cascade(uuid,text,text,text)` +
+  `mark_factura_verified(uuid)`) → ambas `anon`=false; prod quedó en **3/10**. Se dejaron **afuera a
+  propósito**: `get_my_role` (helper de RLS `TO public` → revocarlo puede cambiar "RLS niega" por
+  "permission denied"; a `anon` no le filtra nada) y los 2 triggers (`unif_on_cash_movement`,
+  `handle_new_user` — no invocables directo; el revoke no frena el disparo). Detalle →
+  [`_handoff/acl-prod-2026-07-27.md`](_handoff/acl-prod-2026-07-27.md). La 049 se portó también a
+  staging (12/17 → **10/17**; las `pos_*` van con el pase del PoS).
+
 ## 🔎 Smoke físico PROD 2026-07-06 — TODO PASÓ · 1 hallazgo: pagos pendientes huérfanos
 
 El dueño validó en piso el pase completo en PROD y **todo pasó**: `version.json` ✓ · Caja Diaria sin errores ✓ · asistente con foto + lectura IA Sonnet (efectivo y pendientes, genera tarea de revisión) ✓ · borrado con contraseña de manager (elimina movimiento + tarea asociada) ✓ · Cierre del Día con diferencias USD y gate de ajuste ✓ · sinceramiento USD realizado ✓ · Propinas sin parpadeo, pago por la vía real ✓. **La ola 2026-07 queda cerrada.**

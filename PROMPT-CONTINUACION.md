@@ -47,7 +47,7 @@ conocida de volver a descuadrar.
    grafo de chunks (corte `2026-07-22` + filtro nuevo presentes en el bundle servido). El **contrato
    de divergencia** (76 archivos, **cero de plata**) quedó fijado en `ESTADO.md §(b)`. `main` intacto.
    Para volver staging a espejo de prod: runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
-2. **🟠 Reconciliación del ledger — A y B1 ✅ COMPLETAS; falta solo B2 (prod).**
+2. **✅ Reconciliación del ledger — A + B1 + B2 COMPLETAS (B2: prod, 2026-07-27).**
    **✅ FASE A** (diagnóstico read-only, 2026-07-23) →
    [`_handoff/FASE-A-LEDGER-2026-07-23.md`](_handoff/FASE-A-LEDGER-2026-07-23.md).
    **✅ FASE B1 COMPLETA** (staging, 2026-07-23, con firma) — 3 movimientos:
@@ -56,11 +56,14 @@ conocida de volver a descuadrar.
    (c) fix del `009`: rename a `0090_user_selfsignup.sql` + `UPDATE` de **1 fila** del ledger
    (`009`→`0090`) → **`db push` DESBLOQUEADO** (`Remote database is up to date`, `migration list`
    alineado sin huérfanos). 4 backups del ledger en `_handoff/`.
-   **🔴 Lo que FALTA — B2 prod: 28 repairs**, sesión dedicada. ⚠️ `repair` va por el **CLI linkeado** y
-   el link vive en **staging**; re-linkear a prod es el riesgo principal. **Incluir en B2:**
-   - el mismo **rename `009`→`0090` en `main`** + su `UPDATE` de ledger (si no, prod arrastra el mismo
-     bug de ordenamiento y el contrato de divergencia queda abierto — ver §(b));
-   - **verificar el ACL de `delete_movement_cascade` en prod** (ver HALLAZGOS 2026-07-23).
+   **✅ FASE B2 COMPLETA** (prod, 2026-07-27, con firma) — vía CLI re-linkeado a prod (ref verificado
+   antes de cada comando, devuelto a staging al terminar):
+   - **28 `repair --status applied`** (con `0090`) → ledger de prod **4 → 33 filas**, alineado sin huérfanos;
+   - **rename `009`→`0090` replicado en `main`** por FF (cierra `R100` del §b);
+   - **mig 049** aplicada por `db push` → `delete_movement_cascade` y `mark_factura_verified` a `anon`=false
+     (ACL de prod medido: **5/10 → 3/10**; ver HALLAZGOS 2026-07-23 y `_handoff/acl-prod-2026-07-27.md`);
+   - la 049 se **portó a staging** (10/17) y el **tooling `ledger-reconciliacion` se portó a `main`**.
+   Backups: `_handoff/ledger-prod-2026-07-27-{pre,post}-B2.json`.
    **B3 = DECIDIDO:** la `026` en prod se **documenta como excepción permanente**, no se repara.
    ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
 3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
@@ -77,10 +80,10 @@ conocida de volver a descuadrar.
    📄 **Deuda de DOCS en `main` (misma regla):** la copia de **`ESTADO.md §(c)`** que vive en `main`
    sigue con los números viejos del ledger ("PROD ≤021"). Se corrigió en `staging` el 2026-07-23 con
    el resultado de la Fase A; **portarla a `main` en el próximo pase de docs a prod.**
-   🔢 **Deuda de MIGRACIONES en `main` (va con B2):** renombrar **`009_user_selfsignup.sql` →
-   `0090_user_selfsignup.sql`** también en `main` + el `UPDATE` del ledger de prod (`009`→`0090`).
-   Staging ya lo hizo el 2026-07-23 para destrabar `db push`; hasta que `main` lo replique, el rename
-   figura como divergencia (`R100`) en el contrato §(b) y prod conserva el bug de ordenamiento.
+   🔢 **✅ Deuda de MIGRACIONES en `main` — SALDADA en B2 (2026-07-27).** El rename
+   **`009_user_selfsignup.sql` → `0090_user_selfsignup.sql`** se replicó en `main` por FF y el ledger de
+   prod se reconcilió con `0090` (28 repairs). **`R100` cerrado** en el contrato §(b); prod ya no arrastra
+   el bug de ordenamiento.
 
 ## 🟨 P2 — ESPERAN DECISIÓN O FIRMA DEL DUEÑO
 

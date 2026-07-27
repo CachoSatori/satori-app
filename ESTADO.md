@@ -74,7 +74,7 @@ auth. **En rama aparte (sin merge):** `propina-pool` (espera decisión del dueñ
 | Config de Cloudflare | 2 | `public/_headers` (+) · `public/_redirects` (−) |
 | Limpiezas que staging hizo y `main` no | 5 | `api/auth.ts` muerto · 3 assets sin uso · `_redirects` → **deuda de main** |
 | Docs de trabajo | 11 | `docs/research/`, PROMPT-T*, `_handoff/`… |
-| **Excepciones de la Fase B1** | 2 | `035_propina_pos_pool.sql` (solo DDL, feature sin mergear) · rename `009`→`0090` (`R100`) → **replicar en `main` en B2** |
+| **Excepciones de la Fase B1** | 2 | `035_propina_pos_pool.sql` (solo DDL, feature sin mergear) · rename `009`→`0090` (`R100`) → **replicado en `main` (B2, 2026-07-27) ✅** |
 
 **Cualquier archivo que difiera y NO entre en esas categorías es DEUDA, no divergencia legítima.**
 Lista archivo por archivo → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md#-2026-07-23--re-sync-mainstaging--reconciliación-del-ledger-fase-a--b1).
@@ -87,8 +87,8 @@ Lista archivo por archivo → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md#-2026-07-23-
 
 | Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger (verificadas por objeto) |
 |---|---|---|
-| **PROD** | **solo 4 filas: 018–021** | **001–017 + 0095 + 038–046 + 048** (28) **+ subset core de la 026** (sin archivo en `main`) |
-| **STAGING** | **✅ 48 filas: 001–008, 0090, 0095, 010–046, 048** — `db push` al día | **ninguna** — B1 las registró todas |
+| **PROD** | **✅ 33 filas: 001–008, 0090, 0095, 010–021, 038–046, 048, 049** — B2 reconcilió (2026-07-27) | **solo el subset core de la 026** (sin archivo en `main`) → excepción permanente (B3) |
+| **STAGING** | **✅ 49 filas: 001–008, 0090, 0095, 010–046, 048, 049** — `db push` al día | **ninguna** — B1 las registró todas |
 
 - **El rediseño del pozo no agregó ni una migración.** Es código puro + **1 fila** de datos (el asiento).
 - **B1 ✅ (staging, 2026-07-23):** el `035` dejó de ser fantasma (su archivo se trajo de
@@ -102,9 +102,13 @@ Lista archivo por archivo → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md#-2026-07-23-
   le mentiría al ledger sobre plata real.
 - **`026` subset core (PROD):** aplicado sin archivo en `main` → **decidido: excepción permanente
   documentada**, no se repara. **047 RESERVADA** (proveedores): el hueco 046→048 es intencional.
-- **Falta B2 (prod):** 28 repairs + replicar el rename `009`→`0090` + medir el ACL de
-  `delete_movement_cascade`. ⚠️ `repair` va por el **CLI linkeado** (hoy en staging) → el re-link es
-  el riesgo. PROD **no tiene filas sin archivo**: su historial está **incompleto, no divergido**.
+- **✅ B2 (prod, 2026-07-27, con firma):** 28 `repair --status applied` (con `0090`) → ledger de prod
+  **4 → 33 filas**, `migration list` alineado sin huérfanos; **rename `009`→`0090` replicado en `main`**
+  por FF (cierra `R100` del §b); **mig 049** (`revoke all ... from public, anon`) aplicada por `db push`
+  → `delete_movement_cascade` y `mark_factura_verified` pasan a **`anon`=false** (ACL de prod: 5/10 →
+  **3/10**). Backups: `_handoff/ledger-prod-2026-07-27-{pre,post}-B2.json`. CLI devuelto a staging;
+  el tooling `ledger-reconciliacion` se portó a `main`. PROD ya no arrastra deuda de ledger:
+  **incompleto → reconciliado**.
 
 ## (d) Build por módulo
 
@@ -137,9 +141,11 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🧪
 
 ## (f) Pendientes humanos / fiscales / técnicos
 
-1. **🟠 Ledger** (§c) — **B1 ✅ staging**; falta **B2 (prod)**.
-2. **🔐 `revoke … from anon` inefectivo — 12 de 17 `SECURITY DEFINER` ejecutables por `anon`**
-   (mitigadas por guard de rol interno). Varias están en prod → ver [HALLAZGOS.md](HALLAZGOS.md).
+1. **✅ Ledger** (§c) — A + B1 (staging) + **B2 (prod) ✅ 2026-07-27**. Reconciliado en ambos entornos.
+2. **🔐 `revoke … from anon` — medido y endurecido en las 2 RPC de plata.** Prod dio **5/10**
+   ejecutables por `anon`; la **mig 049** cerró `delete_movement_cascade` y `mark_factura_verified`
+   → **3/10** (quedan `get_my_role` + 2 triggers, diferidos). Staging 12/17 → **10/17** (las `pos_*`
+   con el pase del PoS). Ver [HALLAZGOS.md](HALLAZGOS.md).
 3. **👁️ Hora-CR en bordes de período** — las queries de plata acotan `created_at` en **UTC** (+6h vs
    CR) → un cierre de noche puede caer en el período equivocado. **Cambia números → valida el dueño.**
 4. **🧾 FE-CR** (factura electrónica real) — hoy solo estructura SIM en staging.

@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import type { Employee, UserRole, Profile } from '../../shared/types/database'
 import { createEmployee, updateEmployee, toggleEmployeeActive, getAllProfiles, linkProfileToEmployee } from '../../shared/api/admin'
-// pos_name added to Employee type via DB migration — exact name as it appears in POS XLS
+import { getVentasDias } from '../../shared/api/ventas'
+import { allSaloneros } from '../ventas/ventasUtils'
+// pos_name (columna viva en employees) = nombre exacto en el XLS de ventas/POS, clave de dias.saloneros.
+// Se elige desde un dropdown de nombres reales para evitar typos; ata Mi Rendimiento y VentasICP al empleado.
 
 import { ROLE_LABELS } from '../../shared/constants'
 
@@ -14,11 +17,13 @@ interface Props {
 
 export default function EmployeeList({ employees, onRefresh }: Props) {
   const [profiles, setProfiles] = useState<Profile[]>([])
+  const [salNames, setSalNames] = useState<string[]>([])   // nombres reales de ventas (claves de dias.saloneros)
   const [linkingId, setLinkingId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
 
   useEffect(() => {
     getAllProfiles().then(setProfiles).catch(() => {})
+    getVentasDias(365).then(d => setSalNames(allSaloneros(d))).catch(() => {})
   }, [])
 
   const handleLink = async (empId: string, profileId: string) => {
@@ -65,7 +70,7 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
     setEditId(emp.id)
     setEditName(emp.full_name)
     setEditRole(emp.role)
-    setEditPosName((emp as { pos_name?: string }).pos_name ?? '')
+    setEditPosName(emp.pos_name ?? '')
   }
 
   const handleSaveEdit = async (id: string) => {
@@ -75,8 +80,9 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
       await updateEmployee(id, {
         full_name: editName.trim().toUpperCase(),
         role: editRole,
-        ...(editPosName.trim() ? { pos_name: editPosName.trim().toUpperCase() } : { pos_name: null }),
-      } as Parameters<typeof updateEmployee>[1])
+        // pos_name: valor exacto de dias.saloneros (del dropdown) → match exacto en Mi Rendimiento. null = sin vincular.
+        pos_name: editPosName.trim() ? editPosName.trim() : null,
+      })
       setEditId(null)
       await onRefresh()
     } catch (err) {
@@ -162,14 +168,20 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                       style={{ width: '130px', marginBottom: '2px' }}
                     />
                     <div>
-                      <input
+                      <select
                         className="tip-input"
                         value={editPosName}
                         onChange={e => setEditPosName(e.target.value)}
                         disabled={saving}
-                        placeholder="Nombre en POS…"
+                        title="Nombre en ventas — clave exacta del XLS (dias.saloneros)"
                         style={{ width: '130px', fontSize: '0.72rem', opacity: 0.7 }}
-                      />
+                      >
+                        <option value="">— sin vincular —</option>
+                        {editPosName && !salNames.includes(editPosName) && (
+                          <option value={editPosName}>{editPosName} (actual)</option>
+                        )}
+                        {salNames.map(n => <option key={n} value={n}>{n}</option>)}
+                      </select>
                     </div>
                   </td>
                   <td>
@@ -197,9 +209,9 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                 <>
                   <td className="admin-emp-name">
                     {emp.full_name}
-                    {(emp as { pos_name?: string }).pos_name && (
+                    {emp.pos_name && (
                       <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '1px' }}>
-                        POS: {(emp as { pos_name?: string }).pos_name}
+                        Ventas: {emp.pos_name}
                       </div>
                     )}
                   </td>

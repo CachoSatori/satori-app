@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   addDays, mondayOf, resolvePeriod, datesInPeriod, lastWorkedDate,
+  dailyPromPaxSeries, movingAverage,
   dowBreakdown, bestDowIndex, computeICP, icpVsTeam,
   electronicTipCrc, sumElectronicTips,
   shiftMonth, monthLabelLong,
@@ -127,6 +128,62 @@ describe('lastWorkedDate', () => {
     expect(lastWorkedDate('ANA', null, DIAS, PM, '2026-07-31')).toBe('')
     expect(lastWorkedDate('', dates, DIAS, PM, '2026-07-31')).toBe('')
     expect(lastWorkedDate('ANA', ['', '2099-01-01', '2026-07-06'], DIAS, PM, '2026-07-31')).toBe('2026-07-06')
+  })
+})
+
+// ── dailyPromPaxSeries ────────────────────────────────────────
+describe('dailyPromPaxSeries', () => {
+  // Fixture con Prom/PAX DISTINTO por día (para verificar que se calcula por-día).
+  const SERIES_DIAS: DiasMap = {
+    '2026-07-02': dia({ ANA: sal({ pax: 10, total: 80000 }) }),   // 8000/PAX
+    '2026-07-05': dia({ ANA: sal({ pax: 10, total: 120000 }) }),  // 12000/PAX
+    '2026-07-09': dia({ ANA: sal({ pax: 10, total: 100000 }) }),  // 10000/PAX
+  }
+  const dts = ['2026-07-09', '2026-07-02', '2026-07-05']   // desordenadas a propósito
+
+  it('devuelve un punto por día trabajado, ordenado asc, con Prom/PAX por día', () => {
+    expect(dailyPromPaxSeries('ANA', dts, SERIES_DIAS, PM, '2026-07-31')).toEqual([
+      { date: '2026-07-02', promPax: 8000 },
+      { date: '2026-07-05', promPax: 12000 },
+      { date: '2026-07-09', promPax: 10000 },
+    ])
+  })
+  it('el primer elemento es el primer día trabajado', () => {
+    expect(dailyPromPaxSeries('ANA', dts, SERIES_DIAS, PM, '2026-07-31')[0].date).toBe('2026-07-02')
+  })
+  it('respeta el tope `today` (excluye días futuros)', () => {
+    expect(dailyPromPaxSeries('ANA', dts, SERIES_DIAS, PM, '2026-07-05').map(p => p.date))
+      .toEqual(['2026-07-02', '2026-07-05'])
+  })
+  it('ignora fechas sin turno trabajado y las que no existen en dias', () => {
+    // 2026-07-20 no está en el fixture (days=0) → no entra
+    expect(dailyPromPaxSeries('ANA', ['2026-07-20', '2026-07-05'], SERIES_DIAS, PM, '2026-07-31'))
+      .toEqual([{ date: '2026-07-05', promPax: 12000 }])
+  })
+  it('null-safe: nunca trabajó / lista nula / nombre vacío → []', () => {
+    expect(dailyPromPaxSeries('NADIE', dts, SERIES_DIAS, PM, '2026-07-31')).toEqual([])
+    expect(dailyPromPaxSeries('ANA', null, SERIES_DIAS, PM, '2026-07-31')).toEqual([])
+    expect(dailyPromPaxSeries('', dts, SERIES_DIAS, PM, '2026-07-31')).toEqual([])
+  })
+})
+
+// ── movingAverage ─────────────────────────────────────────────
+describe('movingAverage', () => {
+  it('window=1 → identidad', () => {
+    expect(movingAverage([10, 20, 30], 1)).toEqual([10, 20, 30])
+  })
+  it('promedio móvil trailing (arranca con ventana parcial)', () => {
+    expect(movingAverage([10, 20, 30], 2)).toEqual([10, 15, 25])
+    expect(movingAverage([10, 20, 30, 40], 3)).toEqual([10, 15, 20, 30])
+  })
+  it('window mayor que la longitud → usa lo disponible', () => {
+    expect(movingAverage([2, 4, 6], 5)).toEqual([2, 3, 4])
+  })
+  it('null-safe: vacío/nulo → []; window ≤ 0 → copia', () => {
+    expect(movingAverage([], 3)).toEqual([])
+    expect(movingAverage(null, 3)).toEqual([])
+    expect(movingAverage([5, 6], 0)).toEqual([5, 6])
+    expect(movingAverage([5, 6], -1)).toEqual([5, 6])
   })
 })
 

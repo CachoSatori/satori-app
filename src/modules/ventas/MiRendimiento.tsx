@@ -28,6 +28,7 @@ import {
 import {
   resolvePeriod, datesInPeriod, dowBreakdown, bestDowIndex,
   icpVsTeam, sumElectronicTips, shiftMonth, monthLabelLong, lastWorkedDate,
+  dailyPromPaxSeries, movingAverage,
   type PeriodKind,
 } from './miRendimientoUtils'
 import { todayCR } from '../../shared/utils'
@@ -176,6 +177,12 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
     return weeks
   }, [activeName, dates, dias, pm, today])
 
+  // Serie diaria de Prom/PAX (primer día trabajado → hoy) para el gráfico de línea de Semana.
+  const promPaxSeries = useMemo(
+    () => dailyPromPaxSeries(activeName, dates, dias, pm, today),
+    [activeName, dates, dias, pm, today],
+  )
+
   // ── Propinas: mes seleccionado + agregados ───────────────────
   const myAttendance = useMemo(
     () => attendance.filter(r => employee && r.employee_id === employee.id),
@@ -317,7 +324,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
         {/* ══════════════ SEMANA ══════════════ */}
         {tab === 'semana' && (
           activeName
-            ? <SemanaTab weekData={weekData} />
+            ? <SemanaTab weekData={weekData} series={promPaxSeries} today={today} />
             : <div className="mr-empty"><div className="mr-empty-icon">🗓️</div><div className="mr-empty-title">Sin ventas individuales</div></div>
         )}
 
@@ -592,13 +599,111 @@ function ProductosTab({ myAgg, pm }: {
   )
 }
 
+// ── Gráfico de línea SVG: Prom/PAX diario + tendencia (prom. móvil) ──
+// Curva suave (Catmull-Rom → bézier) para la línea de tendencia. Sin librerías.
+function smoothPath(pts: { x: number; y: number }[]): string {
+  if (pts.length === 0) return ''
+  if (pts.length < 3) return 'M ' + pts.map(p => `${p.x},${p.y}`).join(' L ')
+  let d = `M ${pts[0].x},${pts[0].y}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[i + 2] ?? p2
+    const cp1x = p1.x + (p2.x - p0.x) / 6
+    const cp1y = p1.y + (p2.y - p0.y) / 6
+    const cp2x = p2.x - (p3.x - p1.x) / 6
+    const cp2y = p2.y - (p3.y - p1.y) / 6
+    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`
+  }
+  return d
+}
+
+function PromPaxLineChart({ series, today }: {
+  series: Array<{ date: string; promPax: number }>; today: string
+}) {
+  // Null-safe: con < 2 puntos no se dibuja el SVG (mensaje limpio).
+  if (series.length < 2) {
+    return <div className="mr-icp-sub" style={{ margin: '0.25rem 0 1.25rem' }}>Aún sin historial suficiente para el gráfico (hacen falta al menos 2 días trabajados).</div>
+  }
+  const W = 720, H = 240, padL = 46, padR = 14, padT = 14, padB = 30
+  const plotW = W - padL - padR
+  const plotH = H - padT - padB
+
+  // Escala Y en ₡: 0 → múltiplo de 15k sobre el máximo (cap de gridlines para no saturar).
+  const yMaxData = Math.max(0, ...series.map(p => p.promPax))
+  let step = 15000
+  let yMax = Math.max(step, Math.ceil(yMaxData / step) * step)
+  while (yMax / step > 6) { step *= 2; yMax = Math.ceil(yMaxData / step) * step }
+  const yOf = (v: number) => padT + (1 - v / yMax) * plotH
+
+  // Escala X por fecha: primer día trabajado → hoy.
+  const toDayNum = (d: string) => Math.round(new Date(d + 'T12:00:00').getTime() / 86400000)
+  const firstNum = toDayNum(series[0].date)
+  const span = Math.max(1, toDayNum(today) - firstNum)
+  const xOf = (d: string) => padL + (toDayNum(d) - firstNum) / span * plotW
+
+  // Tendencia: promedio móvil trailing (ventana 5, menos si hay pocos puntos).
+  const n = series.length
+  const win = Math.min(5, Math.max(2, Math.floor(n / 2)))
+  const trend = movingAverage(series.map(p => p.promPax), win)
+
+  const dailyPts = series.map(p => ({ x: xOf(p.date), y: yOf(p.promPax) }))
+  const trendPts = series.map((p, i) => ({ x: xOf(p.date), y: yOf(trend[i]) }))
+
+  const gridVals: number[] = []
+  for (let v = 0; v <= yMax + 1; v += step) gridVals.push(v)
+
+  // Etiquetas X: primera, algunas intermedias y última (por índice, sin saturar).
+  const labelCount = Math.min(5, n)
+  const labelIdxs = [...new Set(Array.from({ length: labelCount }, (_, k) =>
+    Math.round(k * (n - 1) / (labelCount - 1))))]
+  const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
+  const kLabel = (v: number) => v === 0 ? '₡0' : `₡${Math.round(v / 1000)}k`
+
+  return (
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}
+           role="img" aria-label="Prom/PAX diario e histórico con línea de tendencia">
+        {/* Gridlines Y punteadas + etiquetas ₡ */}
+        {gridVals.map(v => (
+          <g key={v}>
+            <line x1={padL} y1={yOf(v)} x2={padL + plotW} y2={yOf(v)}
+                  stroke="rgba(138,128,112,0.22)" strokeWidth={1} strokeDasharray="3 4" />
+            <text x={padL - 6} y={yOf(v) + 3} textAnchor="end" fontSize={10}
+                  fill="#8a8070" fontFamily="'DM Mono',monospace">{kLabel(v)}</text>
+          </g>
+        ))}
+        {/* Eje X (base) */}
+        <line x1={padL} y1={yOf(0)} x2={padL + plotW} y2={yOf(0)} stroke="rgba(138,128,112,0.5)" strokeWidth={1} />
+        {/* Etiquetas X (fechas) */}
+        {labelIdxs.map(i => (
+          <text key={series[i].date} x={xOf(series[i].date)} y={H - 9} textAnchor="middle" fontSize={10}
+                fill="#8a8070" fontFamily="'DM Mono',monospace">{ddmm(series[i].date)}</text>
+        ))}
+        {/* Línea fina diaria + puntos */}
+        <polyline points={dailyPts.map(p => `${p.x},${p.y}`).join(' ')}
+                  fill="none" stroke="#bcae91" strokeWidth={1.3} strokeLinejoin="round" opacity={0.9} />
+        {dailyPts.map((p, i) => <circle key={series[i].date} cx={p.x} cy={p.y} r={2} fill="#a89a7c" />)}
+        {/* Línea gruesa de tendencia (dorada) */}
+        <path d={smoothPath(trendPts)} fill="none" stroke="#c8a96e" strokeWidth={2.6}
+              strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div className="mr-icp-sub" style={{ marginTop: '0.35rem', marginBottom: '1.1rem' }}>
+        Línea fina: Prom/PAX por día trabajado · <span style={{ color: '#a07830', fontWeight: 700 }}>línea dorada</span>: tendencia (prom. móvil {win}).
+      </div>
+    </>
+  )
+}
+
 // ── SEMANA (foco Prom/PAX, sin ₡) ─────────────────────────────
-function SemanaTab({ weekData }: { weekData: Array<{ label: string; promPax: number; bebPax: number; comidaPax: number; paxPerDay: number; pax: number; days: number }> }) {
+function SemanaTab({ weekData, series, today }: {
+  weekData: Array<{ label: string; promPax: number; bebPax: number; comidaPax: number; paxPerDay: number; pax: number; days: number }>
+  series: Array<{ date: string; promPax: number }>
+  today: string
+}) {
   if (weekData.length === 0) return <div className="mr-empty"><div className="mr-empty-icon">🗓️</div><div className="mr-empty-title">Sin datos semanales</div></div>
-  const worked  = weekData.filter(w => w.days > 0)
-  const maxProm = Math.max(1, ...worked.map(w => w.promPax))
-  // Etiqueta corta para el eje del gráfico.
-  const shortLbl = (l: string) => l === 'Esta semana' ? 'Esta' : l === 'Semana pasada' ? 'Pasada' : l.replace('Hace ', '−').replace(' sem', '')
+  const worked = weekData.filter(w => w.days > 0)
   return (
     <>
       <div className="vt-sl">Semanas calendario</div>
@@ -619,25 +724,9 @@ function SemanaTab({ weekData }: { weekData: Array<{ label: string; promPax: num
         ))}
       </div>
 
-      {/* Gráfico histórico de Prom/PAX por semana (reusa el estilo mr-bars de "Por día") */}
-      {worked.length > 0 && (
-        <>
-          <div className="vt-sl">Prom/PAX por semana</div>
-          <div className="mr-bars">
-            {[...worked].reverse().map(w => {
-              const h = Math.max(6, Math.round(w.promPax / maxProm * 100))
-              return (
-                <div key={w.label} className="mr-bar-col">
-                  <div className="mr-bar-track">
-                    <div className={`mr-bar-fill ${w.promPax === maxProm ? 'best' : ''}`} style={{ height: `${h}%` }} title={fi(w.promPax)} />
-                  </div>
-                  <div className="mr-bar-lbl">{shortLbl(w.label)}</div>
-                </div>
-              )
-            })}
-          </div>
-        </>
-      )}
+      {/* Histórico DIARIO de Prom/PAX (línea fina + tendencia dorada), del primer día trabajado a hoy */}
+      <div className="vt-sl">Prom/PAX · histórico diario</div>
+      <PromPaxLineChart series={series} today={today} />
 
       <div className="mr-tbl-wrap" style={{ marginTop: '1.25rem' }}>
         <table className="mr-tbl">

@@ -27,7 +27,7 @@ import {
 } from './ventasUtils'
 import {
   resolvePeriod, datesInPeriod, dowBreakdown, bestDowIndex,
-  icpVsTeam, sumElectronicTips, shiftMonth, monthLabelLong,
+  icpVsTeam, sumElectronicTips, shiftMonth, monthLabelLong, lastWorkedDate,
   type PeriodKind,
 } from './miRendimientoUtils'
 import { todayCR } from '../../shared/utils'
@@ -96,11 +96,27 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   const [periodKind, setPeriodKind] = useState<PeriodKind>('mes')
   const [rangeFrom, setRangeFrom]   = useState<string>('')
   const [rangeTo, setRangeTo]       = useState<string>('')
-  const period = useMemo(
+  const rawPeriod = useMemo(
     () => resolvePeriod(periodKind, today, { from: rangeFrom, to: rangeTo }),
     [periodKind, today, rangeFrom, rangeTo],
   )
-  const periodDates = useMemo(() => datesInPeriod(dates, period), [dates, period])
+  // "Hoy" sin turno cargado hoy → caer al ÚLTIMO día trabajado (con su fecha), para
+  // que "Hoy" siga siendo útil. Null-safe: si nunca trabajó, se queda con Hoy (empty-state
+  // actual). Gobierna Resumen / Por día / Productos (todo lo atado a periodDates).
+  const { period, periodDates } = useMemo(() => {
+    const base = datesInPeriod(dates, rawPeriod)
+    if (periodKind === 'hoy' && activeName &&
+        aggSalonero(activeName, [today], dias, pm).days === 0) {
+      const last = lastWorkedDate(activeName, dates, dias, pm, today)
+      if (last) {
+        return {
+          period: { ...rawPeriod, label: `Último día · ${last.slice(8, 10)}/${last.slice(5, 7)}` },
+          periodDates: [last],
+        }
+      }
+    }
+    return { period: rawPeriod, periodDates: base }
+  }, [rawPeriod, periodKind, activeName, today, dias, pm, dates])
 
   // ── Agregados de ventas del período ──────────────────────────
   const myAgg  = useMemo(
@@ -109,12 +125,12 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   )
   const genAgg = useMemo(() => aggGeneral(periodDates, dias, pm), [periodDates, dias, pm])
 
-  // Ranking del día — solo cuando el período es un único día con datos
+  // Ranking del período — posición del empleado por ventas totales del período
+  // (Hoy/Semana/Mes/Rango). Es una POSICIÓN, no expone el monto.
   const dayRank = useMemo(() => {
-    if (!activeName || periodDates.length !== 1) return null
-    const d = periodDates[0]
+    if (!activeName || periodDates.length === 0) return null
     const ranked = allSals
-      .map(n => ({ n, total: aggSalonero(n, [d], dias, pm).total }))
+      .map(n => ({ n, total: aggSalonero(n, periodDates, dias, pm).total }))
       .filter(r => r.total > 0)
       .sort((a, b) => b.total - a.total)
     const idx = ranked.findIndex(r => r.n === activeName)
@@ -133,7 +149,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   // ── Semana calendario (actual + 4 previas) ───────────────────
   const weekData = useMemo(() => {
     if (!activeName) return []
-    const weeks: Array<{ label: string; promPax: number; bebPax: number; total: number; pax: number; days: number }> = []
+    const weeks: Array<{ label: string; promPax: number; bebPax: number; comidaPax: number; paxPerDay: number; pax: number; days: number }> = []
     const now = new Date(today + 'T12:00:00')
     const dow = now.getDay()
     const monday = new Date(now); monday.setDate(monday.getDate() - (dow === 0 ? 6 : dow - 1))
@@ -146,14 +162,19 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
       const agg     = aggSalonero(activeName, wDates, dias, pm)
       if (w === 0 || agg.days > 0) {
         const label = w === 0 ? 'Esta semana' : w === 1 ? 'Semana pasada' : `Hace ${w} sem`
-        weeks.push({ label, promPax: agg.promPax, bebPax: agg.bebPax, total: agg.total, pax: agg.pax, days: agg.days })
+        weeks.push({
+          label,
+          promPax:   agg.promPax,
+          bebPax:    agg.bebPax,
+          comidaPax: agg.pax > 0 ? agg.iCom / agg.pax : 0,
+          paxPerDay: agg.days > 0 ? agg.pax / agg.days : 0,
+          pax:       agg.pax,
+          days:      agg.days,
+        })
       }
     }
     return weeks
   }, [activeName, dates, dias, pm, today])
-
-  // ── Productos: toggle ₡ / uds ────────────────────────────────
-  const [prodMode, setProdMode] = useState<'monto' | 'unidades'>('monto')
 
   // ── Propinas: mes seleccionado + agregados ───────────────────
   const myAttendance = useMemo(
@@ -290,7 +311,7 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
 
         {/* ══════════════ PRODUCTOS ══════════════ */}
         {tab === 'productos' && activeName && (
-          <ProductosTab myAgg={myAgg} pm={pm} mode={prodMode} setMode={setProdMode} />
+          <ProductosTab myAgg={myAgg} pm={pm} />
         )}
 
         {/* ══════════════ SEMANA ══════════════ */}
@@ -391,7 +412,10 @@ function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
     if (!m) return null
     return { pctOfMeta: actual / m * 100 }
   }
-  const top5 = topProds(myAgg.prods, 'monto', 5, undefined, pm)
+  // Unidades por PAX (foco del empleado; el dueño no quiere exponer ventas ₡ del local).
+  const comidaPax    = myAgg.pax > 0 ? myAgg.iCom / myAgg.pax : 0
+  const genComidaPax = genAgg.pax > 0 ? genAgg.iCom / genAgg.pax : 0
+  const top5 = topProds(myAgg.prods, 'unidades', 5, undefined, pm)
 
   return (
     <>
@@ -402,22 +426,21 @@ function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
           <span style={{ fontSize: '1.5rem' }}>{dayRank.pos === 1 ? '🥇' : dayRank.pos === 2 ? '🥈' : dayRank.pos === 3 ? '🥉' : '🏅'}</span>
           <div>
             <div style={{ fontWeight: 800, fontFamily: "'DM Mono',monospace", fontSize: '1.05rem', color: 'var(--t-ink)' }}>
-              #{dayRank.pos} <span style={{ color: '#8a8070', fontWeight: 400 }}>de {dayRank.of} en ventas hoy</span>
+              #{dayRank.pos} <span style={{ color: '#8a8070', fontWeight: 400 }}>de {dayRank.of} en ventas · {period.label}</span>
             </div>
           </div>
         </div>
       )}
 
       <div className="cd-saldos-bar">
-        <Kpi label="Ventas"   value={fi(myAgg.total)} accent="#c8a96e" delta={delta(myAgg.total, genAgg.total)} meta={metaChip('ventas', myAgg.total)} />
-        <Kpi label="PAX"      value={String(Math.round(myAgg.pax))} delta={delta(myAgg.pax, genAgg.pax)} />
-        <Kpi label="Prom/PAX" value={fi(myAgg.promPax)} accent="#27874f" delta={delta(myAgg.promPax, genAgg.promPax)} meta={metaChip('promPax', myAgg.promPax)} />
-        <Kpi label="Beb/PAX"  value={myAgg.bebPax.toFixed(2)} accent="#2a7a6a" delta={delta(myAgg.bebPax, genAgg.bebPax)} meta={metaChip('bebPax', myAgg.bebPax)} />
+        <Kpi label="Prom/PAX"         value={fi(myAgg.promPax)} accent="#27874f" delta={delta(myAgg.promPax, genAgg.promPax)} meta={metaChip('promPax', myAgg.promPax)} />
+        <Kpi label="PAX"              value={String(Math.round(myAgg.pax))} delta={delta(myAgg.pax, genAgg.pax)} />
+        <Kpi label="Comida/PAX (uds)" value={comidaPax.toFixed(2)} accent="#c8a96e" delta={delta(comidaPax, genComidaPax)} />
+        <Kpi label="Bebida/PAX (uds)" value={myAgg.bebPax.toFixed(2)} accent="#2a7a6a" delta={delta(myAgg.bebPax, genAgg.bebPax)} meta={metaChip('bebPax', myAgg.bebPax)} />
       </div>
 
       <div className="vt-sl">Detalle</div>
       <div className="cd-saldos-bar">
-        <Kpi label="Ratio C/B (₡)"  value={`${myAgg.ratioCB.toFixed(2)}:1`} sub="ideal 2.5–4.5" meta={metaChip('ratioCB', myAgg.ratioCB)} />
         <Kpi label="Ratio C/B (uds)" value={`${myAgg.ratioU.toFixed(2)}:1`} sub={`${Math.round(myAgg.iCom)} com · ${Math.round(myAgg.iBeb)} beb`} />
         <Kpi label="Prom/Plato"     value={fi(myAgg.promPlato)} />
         <Kpi label="Prom/Bebida"    value={fi(myAgg.promBebida)} />
@@ -436,8 +459,7 @@ function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
                   {p.nombre}
                   {pm[p.nombre] && <span className={`vt-prod-tipo ${pm[p.nombre].tipo}`} style={{ marginLeft: '0.4rem' }}>{pm[p.nombre].tipo}</span>}
                 </span>
-                <span style={{ fontSize: '0.72rem', color: '#8a8070', flexShrink: 0 }}>{p.q} uds</span>
-                <span className="mr-prod-val">{fi(p.m)}</span>
+                <span className="mr-prod-val">{p.q} uds</span>
               </div>
             ))}
           </div>
@@ -531,10 +553,9 @@ function DiaTab({ dowRows, bestDow, maxDowProm }: {
   )
 }
 
-// ── PRODUCTOS ─────────────────────────────────────────────────
-function ProductosTab({ myAgg, pm, mode, setMode }: {
+// ── PRODUCTOS (siempre en unidades; el toggle ₡/uds fue removido) ──
+function ProductosTab({ myAgg, pm }: {
   myAgg: ReturnType<typeof aggSalonero> | null; pm: ProductMap
-  mode: 'monto' | 'unidades'; setMode: (m: 'monto' | 'unidades') => void
 }) {
   if (!myAgg || Object.keys(myAgg.prods).length === 0) {
     return <div className="mr-empty"><div className="mr-empty-icon">🍱</div><div className="mr-empty-title">Sin productos en este período</div></div>
@@ -546,34 +567,24 @@ function ProductosTab({ myAgg, pm, mode, setMode }: {
   ]
   return (
     <>
-      <div className="mr-period-bar">
-        <span className="mr-period-lbl">Ver por</span>
-        <div className="vt-tab-group">
-          <button className={`vt-tab-btn ${mode === 'monto' ? 'active' : ''}`} onClick={() => setMode('monto')}>₡ Monto</button>
-          <button className={`vt-tab-btn ${mode === 'unidades' ? 'active' : ''}`} onClick={() => setMode('unidades')}>Unidades</button>
-        </div>
-      </div>
       {blocks.map(b => {
-        const list = topProds(myAgg.prods, mode, 8, b.tipos, pm)
+        const list = topProds(myAgg.prods, 'unidades', 8, b.tipos, pm)
         if (list.length === 0) return null
-        const max = Math.max(1, ...list.map(p => (mode === 'monto' ? p.m : p.q)))
+        const max = Math.max(1, ...list.map(p => p.q))
         return (
           <div key={b.title} className="mr-prod-block">
             <div className="mr-prod-hd">{b.title}</div>
-            {list.map((p, i) => {
-              const val = mode === 'monto' ? p.m : p.q
-              return (
-                <div key={p.nombre} className="mr-prod-row">
-                  <span className="mr-prod-rank">{i + 1}</span>
-                  <span className="mr-prod-name">
-                    {p.nombre}
-                    {pm[p.nombre] && <span className={`vt-prod-tipo ${pm[p.nombre].tipo}`} style={{ marginLeft: '0.4rem' }}>{pm[p.nombre].tipo}</span>}
-                  </span>
-                  <div className="mr-prod-bar"><div className="mr-prod-bar-fill" style={{ width: `${val / max * 100}%` }} /></div>
-                  <span className="mr-prod-val">{mode === 'monto' ? fi(p.m) : `${p.q} uds`}</span>
-                </div>
-              )
-            })}
+            {list.map((p, i) => (
+              <div key={p.nombre} className="mr-prod-row">
+                <span className="mr-prod-rank">{i + 1}</span>
+                <span className="mr-prod-name">
+                  {p.nombre}
+                  {pm[p.nombre] && <span className={`vt-prod-tipo ${pm[p.nombre].tipo}`} style={{ marginLeft: '0.4rem' }}>{pm[p.nombre].tipo}</span>}
+                </span>
+                <div className="mr-prod-bar"><div className="mr-prod-bar-fill" style={{ width: `${p.q / max * 100}%` }} /></div>
+                <span className="mr-prod-val">{p.q} uds</span>
+              </div>
+            ))}
           </div>
         )
       })}
@@ -581,9 +592,13 @@ function ProductosTab({ myAgg, pm, mode, setMode }: {
   )
 }
 
-// ── SEMANA ────────────────────────────────────────────────────
-function SemanaTab({ weekData }: { weekData: Array<{ label: string; promPax: number; bebPax: number; total: number; pax: number; days: number }> }) {
+// ── SEMANA (foco Prom/PAX, sin ₡) ─────────────────────────────
+function SemanaTab({ weekData }: { weekData: Array<{ label: string; promPax: number; bebPax: number; comidaPax: number; paxPerDay: number; pax: number; days: number }> }) {
   if (weekData.length === 0) return <div className="mr-empty"><div className="mr-empty-icon">🗓️</div><div className="mr-empty-title">Sin datos semanales</div></div>
+  const worked  = weekData.filter(w => w.days > 0)
+  const maxProm = Math.max(1, ...worked.map(w => w.promPax))
+  // Etiqueta corta para el eje del gráfico.
+  const shortLbl = (l: string) => l === 'Esta semana' ? 'Esta' : l === 'Semana pasada' ? 'Pasada' : l.replace('Hace ', '−').replace(' sem', '')
   return (
     <>
       <div className="vt-sl">Semanas calendario</div>
@@ -593,25 +608,50 @@ function SemanaTab({ weekData }: { weekData: Array<{ label: string; promPax: num
             <div style={{ fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: i === 0 ? '#a07830' : '#8a8070', fontWeight: 700, marginBottom: '0.4rem' }}>{w.label}</div>
             {w.days > 0 ? (
               <>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.05rem', fontWeight: 800, color: 'var(--t-ink)' }}>{fi(w.total)}</div>
-                <div style={{ fontSize: '0.72rem', color: '#8a8070', marginTop: 2 }}>{w.days} días · {w.pax} PAX</div>
-                <div style={{ fontSize: '0.74rem', color: '#5a5040', marginTop: 2 }}>{fi(w.promPax)}/PAX · {w.bebPax.toFixed(2)} b/px</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: '1.25rem', fontWeight: 800, color: 'var(--t-ink)' }}>
+                  {fi(w.promPax)}<span style={{ fontSize: '0.68rem', color: '#8a8070', fontWeight: 600 }}> /PAX</span>
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#8a8070', marginTop: 4 }}>{w.days} día{w.days !== 1 ? 's' : ''} · {w.pax} PAX · {w.paxPerDay.toFixed(1)} PAX/día</div>
+                <div style={{ fontSize: '0.74rem', color: '#5a5040', marginTop: 2 }}>{w.bebPax.toFixed(2)} beb/px · {w.comidaPax.toFixed(2)} com/px</div>
               </>
             ) : <div style={{ color: '#b8ad98', fontSize: '0.78rem' }}>Sin datos</div>}
           </div>
         ))}
       </div>
-      <div className="mr-tbl-wrap">
+
+      {/* Gráfico histórico de Prom/PAX por semana (reusa el estilo mr-bars de "Por día") */}
+      {worked.length > 0 && (
+        <>
+          <div className="vt-sl">Prom/PAX por semana</div>
+          <div className="mr-bars">
+            {[...worked].reverse().map(w => {
+              const h = Math.max(6, Math.round(w.promPax / maxProm * 100))
+              return (
+                <div key={w.label} className="mr-bar-col">
+                  <div className="mr-bar-track">
+                    <div className={`mr-bar-fill ${w.promPax === maxProm ? 'best' : ''}`} style={{ height: `${h}%` }} title={fi(w.promPax)} />
+                  </div>
+                  <div className="mr-bar-lbl">{shortLbl(w.label)}</div>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      <div className="mr-tbl-wrap" style={{ marginTop: '1.25rem' }}>
         <table className="mr-tbl">
-          <thead><tr><th>Semana</th><th className="r">Días</th><th className="r">PAX</th><th className="r">Ventas</th><th className="r">Prom/PAX</th></tr></thead>
+          <thead><tr><th>Semana</th><th className="r">Días</th><th className="r">PAX</th><th className="r">PAX/día</th><th className="r">Prom/PAX</th><th className="r">Bebida/PAX</th><th className="r">Comida/PAX</th></tr></thead>
           <tbody>
-            {weekData.filter(w => w.days > 0).map((w, i) => (
+            {worked.map((w, i) => (
               <tr key={w.label} style={{ fontWeight: i === 0 ? 700 : 400 }}>
                 <td style={{ color: i === 0 ? '#a07830' : undefined }}>{w.label}</td>
                 <td className="r muted">{w.days}</td>
                 <td className="r">{w.pax}</td>
-                <td className="r" style={{ fontWeight: 700 }}>{fi(w.total)}</td>
-                <td className="r">{fi(w.promPax)}</td>
+                <td className="r muted">{w.paxPerDay.toFixed(1)}</td>
+                <td className="r" style={{ fontWeight: 700 }}>{fi(w.promPax)}</td>
+                <td className="r muted">{w.bebPax.toFixed(2)}</td>
+                <td className="r muted">{w.comidaPax.toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
@@ -646,6 +686,8 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
   const total = sel ? sel.q1Earn + sel.q2Earn : 0
   const canNext = selMonth < curYm
   const showIcp = activeName && icp.myVentas > 0
+  // Prom/turno = cobrado / turnos. Null-safe: turnos=0 → "—".
+  const avgShift = (earn: number, days: number) => (days > 0 ? fi(earn / days) : '—')
 
   return (
     <>
@@ -710,6 +752,14 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
             <span style={{ fontWeight: 700, color: 'var(--t-ink)' }}>{monthLabelLong(selMonth)}</span>
             <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: '#2a7a6a', fontSize: '1.05rem' }}>{fi(total)}</span>
           </div>
+          {/* Prom/turno general del mes (cobrado / turnos) */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--t-panel)', borderRadius: 3, padding: '0.5rem 0.75rem', marginBottom: '0.5rem' }}>
+            <span style={{ fontSize: '0.62rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6a6250' }}>Prom / turno</span>
+            <span style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, color: 'var(--t-ink)' }}>
+              {avgShift(sel.q1Earn + sel.q2Earn, sel.q1Days + sel.q2Days)}
+              <span style={{ fontSize: '0.62rem', color: '#8a8070', fontWeight: 600 }}> · {sel.q1Days + sel.q2Days} turno{(sel.q1Days + sel.q2Days) !== 1 ? 's' : ''}</span>
+            </span>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
             {[
               { label: 'Q1 (1–15)',   days: sel.q1Days, hours: sel.q1Hours, earn: sel.q1Earn, color: '#2a7a6a' },
@@ -719,6 +769,7 @@ function PropinasTab({ noLink, employee, byMonth, monthsWithData, selMonth, setS
                 <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#6a6250', marginBottom: '0.25rem' }}>{q.label}</div>
                 <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 800, fontSize: '0.95rem', color: q.color }}>{q.earn > 0 ? fi(q.earn) : '—'}</div>
                 <div style={{ fontSize: '0.64rem', color: '#8a8070', marginTop: '0.15rem' }}>{q.days} turnos · {q.hours.toFixed(1)}h</div>
+                <div style={{ fontSize: '0.64rem', color: '#5a5040', marginTop: '0.15rem', fontWeight: 700 }}>Prom/turno {avgShift(q.earn, q.days)}</div>
               </div>
             ))}
           </div>

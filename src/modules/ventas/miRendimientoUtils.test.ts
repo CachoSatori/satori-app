@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  addDays, mondayOf, resolvePeriod, datesInPeriod,
+  addDays, mondayOf, resolvePeriod, datesInPeriod, lastWorkedDate,
   dowBreakdown, bestDowIndex, computeICP, icpVsTeam,
   electronicTipCrc, sumElectronicTips,
   shiftMonth, monthLabelLong,
@@ -99,6 +99,34 @@ describe('datesInPeriod', () => {
     expect(datesInPeriod(null, p)).toEqual([])
     expect(datesInPeriod([''], p)).toEqual([])
     expect(datesInPeriod([...all, ''], p)).toEqual(['2026-07-06', '2026-07-07', '2026-07-13', '2026-07-20'])
+  })
+})
+
+// ── lastWorkedDate ────────────────────────────────────────────
+describe('lastWorkedDate', () => {
+  const dates = ['2026-07-06', '2026-07-07', '2026-07-13']   // ANA trabajó los 3
+
+  it('devuelve la mayor fecha ≤ today con turno trabajado', () => {
+    expect(lastWorkedDate('ANA', dates, DIAS, PM, '2026-07-31')).toBe('2026-07-13')
+  })
+  it('respeta el tope `today` (no cuenta días futuros)', () => {
+    // 13 > today → excluido; 07 ≤ 10 y con datos → gana
+    expect(lastWorkedDate('ANA', dates, DIAS, PM, '2026-07-10')).toBe('2026-07-07')
+    // today ES un día trabajado → se devuelve ese mismo día
+    expect(lastWorkedDate('ANA', dates, DIAS, PM, '2026-07-07')).toBe('2026-07-07')
+  })
+  it('ignora fechas sin turno trabajado por el empleado', () => {
+    // 2026-07-20 no está en DIAS (days=0) → cae al 07-13 real
+    expect(lastWorkedDate('ANA', ['2026-07-20', '2026-07-13'], DIAS, PM, '2026-07-31')).toBe('2026-07-13')
+  })
+  it("'' cuando el empleado nunca trabajó / no hay fecha ≤ today", () => {
+    expect(lastWorkedDate('NADIE', dates, DIAS, PM, '2026-07-31')).toBe('')
+    expect(lastWorkedDate('ANA', dates, DIAS, PM, '2026-07-05')).toBe('')   // todo futuro
+  })
+  it('null-safe: lista nula / nombre vacío / fechas basura', () => {
+    expect(lastWorkedDate('ANA', null, DIAS, PM, '2026-07-31')).toBe('')
+    expect(lastWorkedDate('', dates, DIAS, PM, '2026-07-31')).toBe('')
+    expect(lastWorkedDate('ANA', ['', '2099-01-01', '2026-07-06'], DIAS, PM, '2026-07-31')).toBe('2026-07-06')
   })
 })
 

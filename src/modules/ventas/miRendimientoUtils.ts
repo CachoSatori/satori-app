@@ -81,6 +81,75 @@ export function datesInPeriod(allDates: string[] | null | undefined, p: Period):
   return allDates.filter(d => !!d && (!from || d >= from) && (!to || d <= to))
 }
 
+/**
+ * Última fecha ≤ `today` en `dates` donde `name` trabajó (aggSalonero(...).days > 0).
+ * '' si no trabajó ningún día. Sirve para que "Hoy" caiga al último día real cuando
+ * el empleado aún no tiene turno cargado hoy. Null-safe (lista/fechas/nombre vacíos).
+ */
+export function lastWorkedDate(
+  name: string,
+  dates: string[] | null | undefined,
+  dias: DiasMap,
+  pm: ProductMap,
+  today: string,
+): string {
+  if (!name || !dates) return ''
+  // De mayor a menor: la primera fecha con turno trabajado es la respuesta.
+  const candidates = dates
+    .filter(d => !!d && (!today || d <= today))
+    .sort((a, b) => b.localeCompare(a))
+  for (const d of candidates) {
+    if (aggSalonero(name, [d], dias, pm).days > 0) return d
+  }
+  return ''
+}
+
+/**
+ * Serie diaria de Prom/PAX del empleado, del primer día trabajado hasta `today`.
+ * Un punto por día TRABAJADO (aggSalonero(name,[d]).days > 0), ordenado ascendente.
+ * [] si nunca trabajó. Null-safe (name/dates/dias vacíos). El "primer día trabajado"
+ * es el primer elemento del array. Alimenta el gráfico de línea de la pestaña Semana.
+ */
+export function dailyPromPaxSeries(
+  name: string,
+  dates: string[] | null | undefined,
+  dias: DiasMap,
+  pm: ProductMap,
+  today: string,
+): { date: string; promPax: number }[] {
+  if (!name || !dates) return []
+  const out: { date: string; promPax: number }[] = []
+  const sorted = dates
+    .filter(d => !!d && (!today || d <= today))
+    .sort((a, b) => a.localeCompare(b))
+  for (const d of sorted) {
+    const agg = aggSalonero(name, [d], dias, pm)
+    if (agg.days > 0) out.push({ date: d, promPax: agg.promPax })
+  }
+  return out
+}
+
+/**
+ * Promedio móvil TRAILING de `values` con ventana `window` (línea de tendencia).
+ * Para cada índice i promedia los últimos min(window, i+1) valores (i-window+1 … i).
+ * Ignora valores no finitos. Null-safe: lista vacía/nula → []; window ≤ 0 → copia.
+ */
+export function movingAverage(values: number[] | null | undefined, window: number): number[] {
+  if (!values || values.length === 0) return []
+  if (!window || window <= 0) return [...values]
+  const out: number[] = []
+  for (let i = 0; i < values.length; i++) {
+    const start = Math.max(0, i - window + 1)
+    let sum = 0, cnt = 0
+    for (let j = start; j <= i; j++) {
+      const v = values[j]
+      if (typeof v === 'number' && isFinite(v)) { sum += v; cnt++ }
+    }
+    out.push(cnt > 0 ? sum / cnt : 0)
+  }
+  return out
+}
+
 // ── Agregación por día de la semana (yo vs resto del restaurante) ──
 export interface DowStat {
   days:    number

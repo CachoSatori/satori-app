@@ -86,11 +86,13 @@ describe('MiRendimiento · render (salonero con match)', () => {
     }).not.toThrow()
   })
 
-  it('Resumen muestra KPIs de ventas', () => {
-    const { container, getByText } = renderHub()
+  it('Resumen muestra KPIs de unidades/promedios (sin Ventas ₡)', () => {
+    const { container, getByText, queryByText } = renderHub()
     fireEvent.click(tabsOf(container)[0])
-    expect(getByText('Ventas')).toBeTruthy()
     expect(getByText('Prom/PAX')).toBeTruthy()
+    expect(getByText('Comida/PAX (uds)')).toBeTruthy()
+    expect(getByText('Bebida/PAX (uds)')).toBeTruthy()
+    expect(queryByText('Ventas')).toBeNull()   // el empleado ya no ve ventas ₡ del local
   })
 
   it('Por día muestra la comparación yo-vs-restaurante', () => {
@@ -99,13 +101,13 @@ describe('MiRendimiento · render (salonero con match)', () => {
     expect(getByText(/Yo vs restaurante/)).toBeTruthy()
   })
 
-  it('Productos separa Comidas / Bebidas con toggle ₡/uds', () => {
-    const { container, getByText, getAllByText } = renderHub()
+  it('Productos separa Comidas / Bebidas en unidades (sin toggle ₡/uds)', () => {
+    const { container, getByText, getAllByText, queryByText } = renderHub()
     fireEvent.click(tabsOf(container)[2])
     expect(getByText('Comidas')).toBeTruthy()
     expect(getByText('Bebidas')).toBeTruthy()
-    // toggle a unidades no revienta
-    expect(() => fireEvent.click(getByText(/Unidades/))).not.toThrow()
+    expect(queryByText('Ver por')).toBeNull()          // toggle removido: siempre unidades
+    expect(getAllByText(/uds/).length).toBeGreaterThan(0)
     expect(getAllByText(/Sushi Roll/).length).toBeGreaterThan(0)
   })
 

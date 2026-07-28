@@ -27,7 +27,7 @@ export async function createEmployee(payload: {
 
 export async function updateEmployee(
   id: string,
-  payload: Partial<Pick<Employee, 'full_name' | 'role' | 'is_active'>>
+  payload: Partial<Pick<Employee, 'full_name' | 'role' | 'is_active' | 'pos_name'>>
 ): Promise<void> {
   const { error } = await supabase
     .from('employees')

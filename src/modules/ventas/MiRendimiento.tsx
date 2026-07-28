@@ -81,8 +81,9 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
     return allSals.find(n => n.toUpperCase().startsWith(firstName)) ?? null
   }, [profile, allSals])
 
-  const [salName, setSalName] = useState<string>('')
-  const activeName = salName || inferredName || ''
+  // Vínculo explícito: employee.pos_name (seteado en Admin desde el dropdown de nombres reales de ventas).
+  // Fallback null-safe: sin vínculo → heurística actual; si tampoco matchea → '' (arranca en Propinas).
+  const activeName = employee?.pos_name ?? inferredName ?? ''
 
   // Rol sin venta individual (cocina/runner/barback) → arranca en Propinas.
   const isTipsFirst = !activeName || ['cocina', 'runner', 'barback'].includes(profile?.role ?? '')
@@ -229,17 +230,6 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   return (
     <div className="tips-module">
       <Header profile={profile} name={activeName} navigate={navigate} />
-
-      {/* Selector de nombre si el match automático falló o hay varios */}
-      {allSals.length > 0 && (!inferredName || allSals.length > 1) && (
-        <div style={{ padding: '0.75rem 1.5rem 0', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <span className="mr-period-lbl">Tu nombre:</span>
-          <select className="mr-select" value={activeName} onChange={e => setSalName(e.target.value)}>
-            {!inferredName && <option value="">— Seleccioná —</option>}
-            {allSals.map(n => <option key={n} value={n}>{n}</option>)}
-          </select>
-        </div>
-      )}
 
       {/* Nav tabs (shell de Caja) */}
       <div className="cd-nav-tabs">

@@ -38,11 +38,8 @@ const MODULES: Module[] = [
     description: 'Mis stats del turno', ready: true,
     roles: ['salonero', 'barman', 'barback', 'runner', 'cocina'],
   },
-  {
-    id: 'mis-propinas', path: '/mis-propinas', label: 'Mis Propinas', kanji: '¥',
-    description: 'Mi historial', ready: true,
-    roles: ['salonero', 'barman', 'barback', 'runner', 'cocina'],
-  },
+  // "Mis Propinas" ya vive como pestaña dentro de Mi Rendimiento → card redundante removida.
+  // La ruta /mis-propinas sigue redirigiendo a /mi-rendimiento?tab=propinas (App.tsx), sin romper links viejos.
   {
     id: 'cash', path: '/caja', label: 'Caja', kanji: '金',
     description: 'Turnos y movimientos', ready: true,

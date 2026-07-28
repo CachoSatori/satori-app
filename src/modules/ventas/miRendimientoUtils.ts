@@ -81,6 +81,29 @@ export function datesInPeriod(allDates: string[] | null | undefined, p: Period):
   return allDates.filter(d => !!d && (!from || d >= from) && (!to || d <= to))
 }
 
+/**
+ * Última fecha ≤ `today` en `dates` donde `name` trabajó (aggSalonero(...).days > 0).
+ * '' si no trabajó ningún día. Sirve para que "Hoy" caiga al último día real cuando
+ * el empleado aún no tiene turno cargado hoy. Null-safe (lista/fechas/nombre vacíos).
+ */
+export function lastWorkedDate(
+  name: string,
+  dates: string[] | null | undefined,
+  dias: DiasMap,
+  pm: ProductMap,
+  today: string,
+): string {
+  if (!name || !dates) return ''
+  // De mayor a menor: la primera fecha con turno trabajado es la respuesta.
+  const candidates = dates
+    .filter(d => !!d && (!today || d <= today))
+    .sort((a, b) => b.localeCompare(a))
+  for (const d of candidates) {
+    if (aggSalonero(name, [d], dias, pm).days > 0) return d
+  }
+  return ''
+}
+
 // ── Agregación por día de la semana (yo vs resto del restaurante) ──
 export interface DowStat {
   days:    number

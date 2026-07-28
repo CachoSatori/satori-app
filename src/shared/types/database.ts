@@ -46,6 +46,7 @@ export interface Employee {
   role: UserRole
   profile_id: string | null
   is_active: boolean
+  pos_name: string | null   // nombre exacto en el XLS de ventas/POS (clave de dias.saloneros); null = sin vincular
   created_at: string
   updated_at: string
 }

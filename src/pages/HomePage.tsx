@@ -51,7 +51,7 @@ const MODULES: Module[] = [
   {
     id: 'tips', path: '/propinas', label: 'Propinas', kanji: '心',
     description: 'Pool del turno', ready: true,
-    roles: ['owner', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina'],
+    roles: ['owner', 'manager', 'cajero', 'contador'],
   },
   {
     id: 'dashboard', path: '/ventas', label: 'Ventas', kanji: '売',
@@ -72,11 +72,6 @@ const MODULES: Module[] = [
     id: 'finanzas', path: '/finanzas', label: 'Finanzas', kanji: '財',
     description: 'P&L · Presupuesto vs Real', ready: true,
     roles: ['owner', 'manager', 'contador'],
-  },
-  {
-    id: 'inbox', path: '/inbox', label: 'Bandeja', kanji: '受',
-    description: 'Facturas y comprobantes', ready: true,
-    roles: ['owner', 'manager', 'contador', 'cajero'],
   },
   {
     id: 'sops', path: '/sops', label: 'SOPs', kanji: '書',
@@ -107,7 +102,6 @@ interface HomeStatus {
   overdueSuppliers: number
   metaPct:          number | null
   sopsCount:        number
-  inboxCount:       number
   ventasHoy:        boolean
   // Actual numbers for today
   ventaNeta:        number
@@ -130,7 +124,7 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
   const curMonth = today.slice(0, 7)
 
   const [tipRes, cashRes, pendRes, metaRes, sopsRes, ventasRes, suppliersRes,
-         tipDetailRes, cashSessionsRes, cashMovsRes, ingredientsRes, inboxRes] = await Promise.allSettled([
+         tipDetailRes, cashSessionsRes, cashMovsRes, ingredientsRes] = await Promise.allSettled([
     // Open tip session
     supabase.from('tip_sessions').select('shift_type,created_at').eq('status', 'open').limit(1).maybeSingle(),
     // Open cash session
@@ -162,10 +156,7 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
       .neq('status', 'rechazado'),
     // Ingredients (stock levels for low-stock alert)
     supabase.from('ingredients').select('current_stock,min_stock'),
-    // Bandeja: documentos nuevos sin procesar
-    supabase.from('documents').select('id', { count: 'exact', head: true }).eq('estado', 'nuevo'),
   ])
-  const inboxCount = inboxRes.status === 'fulfilled' ? (inboxRes.value.count ?? 0) : 0
 
   const tipSession  = tipRes.status  === 'fulfilled' ? (tipRes.value.data  as { shift_type: string; created_at: string } | null)   : null
   const cashSession = cashRes.status === 'fulfilled' ? (cashRes.value.data as { cajero_name: string; created_at: string } | null) : null
@@ -270,7 +261,6 @@ async function fetchHomeStatus(): Promise<HomeStatus> {
     overdueSuppliers,
     metaPct,
     sopsCount,
-    inboxCount,
     ventasHoy:        ventaNeta > 0,
     ventaNeta,
     ventaPax,
@@ -391,9 +381,6 @@ export default function HomePage() {
         if (status.invLowStock > 0) return <StatusBadge color="warn" text={`${status.invLowStock} stock bajo`} />
         if (status.invTotal > 0)    return <StatusBadge color="ok" text="Stock OK" />
         return <StatusBadge color="dim" text="Sin datos" />
-      case 'inbox':
-        if (status.inboxCount > 0) return <StatusBadge color="warn" text={`${status.inboxCount} sin procesar`} />
-        return null
       case 'sops':
         if (status.sopsCount > 0) return <StatusBadge color="dim" text={`${status.sopsCount} procedimientos`} />
         return <StatusBadge color="warn" text="Sin contenido" />

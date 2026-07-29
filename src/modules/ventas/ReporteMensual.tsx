@@ -4,6 +4,7 @@
  * Usa window.print() — el browser lo convierte en PDF via "Guardar como PDF"
  */
 import { useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import type { DiasMap, HistMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
   getContabilidadDays, aggGeneral, aggSalonero, allSaloneros,
@@ -25,10 +26,13 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
 
   const days = useMemo(() => getContabilidadDays(y, m, dias, hist), [y, m, dias, hist])
 
-  // Previous month for comparison
+  // Períodos previos para comparación (ambos a misma ventana de días — ver cutoffDom más abajo)
   const prevYM = m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`
   const [py, pm2] = prevYM.split('-').map(Number)
   const prevDays = useMemo(() => getContabilidadDays(py, pm2, dias, hist), [py, pm2, dias, hist])
+  // Mismo mes del año anterior (YoY). Si dias/hist no traen ese año → array vacío → indicador '—'.
+  const prevYearYM   = `${y-1}-${String(m).padStart(2,'0')}`
+  const prevYearDays = useMemo(() => getContabilidadDays(y-1, m, dias, hist), [y, m, dias, hist])
 
   // Aggregations
   const rangeDates = useMemo(() => days.map(d => d.fecha), [days])
@@ -54,15 +58,35 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
   const totDel  = days.reduce((s, d) => s + d.delivery, 0)
   const totPax  = days.reduce((s, d) => s + d.pax, 0)
 
-  const prevVN  = prevDays.reduce((s, d) => s + d.ventaNeta, 0)
-  const varVN   = prevVN > 0 ? ((totVN - prevVN) / prevVN * 100).toFixed(1) : null
+  // Comparaciones a misma ventana de días. N (cutoffDom) = mayor día-del-mes CON datos en el mes
+  // reportado; cada mes comparado suma su venta neta solo hasta ese día-del-mes (los días sin datos
+  // cuentan 0), de modo que a mitad de mes se compara "primeros N días" vs "primeros N días" y no el
+  // mes completo. Mes reportado completo → N = último día → compara meses completos.
+  const cutoffDom = days.length ? Math.max(...days.map(d => Number(d.fecha.slice(8, 10)))) : 0
+  const vnUpToCutoff = (arr: typeof prevDays) =>
+    arr.filter(d => Number(d.fecha.slice(8, 10)) <= cutoffDom).reduce((s, d) => s + d.ventaNeta, 0)
+
+  const prevVNSame     = vnUpToCutoff(prevDays)
+  const varVN          = prevVNSame     > 0 ? ((totVN - prevVNSame)     / prevVNSame     * 100).toFixed(1) : null
+  const prevYearVNSame = vnUpToCutoff(prevYearDays)
+  const varVNYear      = prevYearVNSame > 0 ? ((totVN - prevYearVNSame) / prevYearVNSame * 100).toFixed(1) : null
   const maxDay  = days.length ? days.reduce((a, b) => a.ventaNeta > b.ventaNeta ? a : b) : null
   const minDay  = days.length ? days.reduce((a, b) => a.ventaNeta < b.ventaNeta ? a : b) : null
 
   const prog    = metaProgress(metas, dias, hist, ym)
   const today   = new Date().toLocaleDateString('es-CR', { day: 'numeric', month: 'long', year: 'numeric' })
 
-  return (
+  // Badge de variación reutilizado por ambas comparaciones: verde ▲ +x% / rojo ▼ x% / gris — si no hay dato
+  const varBadge = (v: string | null) => (
+    <strong style={{ color: v !== null ? (Number(v) >= 0 ? '#2a6a42' : '#c0392b') : '#888' }}>
+      {v !== null ? (Number(v) >= 0 ? '▲ +' : '▼ ') + v + '%' : '—'}
+    </strong>
+  )
+
+  // Portal a document.body: el overlay debe ser hijo DIRECTO de <body>. Si vive dentro
+  // de #root, el `@media print { body > * { display:none } }` esconde a #root (ancestro)
+  // y `.rpt-overlay { display:block }` no puede revertirlo → PDF en blanco. En <body> sí.
+  return createPortal(
     <>
       {/* Print overlay */}
       <div className="rpt-overlay" onClick={onClose}>
@@ -123,11 +147,27 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
               ))}
             </div>
 
-            {/* vs previous month */}
+            {/* vs períodos previos — misma ventana (primeros N días) */}
             <div className="rpt-compare-row">
-              <span>vs {fmtMonthLabel(prevYM)}: <strong style={{ color: varVN !== null ? (Number(varVN) >= 0 ? '#2a6a42' : '#c0392b') : '#888' }}>{varVN !== null ? (Number(varVN) >= 0 ? '▲ +' : '▼ ') + varVN + '%' : '—'}</strong> en venta neta</span>
-              {prog && <span>· Meta {fmtMonthLabel(ym)}: <strong>{prog.pct.toFixed(1)}%</strong> alcanzado ({fi(prog.ventasMes)} de {fi(prog.meta)})</span>}
+              <span>vs {fmtMonthLabel(prevYM)} (primeros {cutoffDom} días): {varBadge(varVN)} en venta neta</span>
+              <span>· vs {fmtMonthLabel(prevYearYM)} (primeros {cutoffDom} días): {varBadge(varVNYear)} en venta neta</span>
             </div>
+
+            {/* Proyección de meta — reusa `prog` (metaProgress): coincide al colón con la barra del
+                dashboard. Bloque plano (sin recuadro), como el resto del reporte. Sin meta del mes → prog=null → no se muestra. */}
+            {prog && (
+              <>
+                <div className="rpt-section-title">Proyección de Meta</div>
+                <div style={{ marginBottom: '0.85rem', fontSize: '0.82rem', color: '#444' }}>
+                  <div style={{ fontWeight: 600, color: '#1a1a1a' }}>{prog.pct.toFixed(1)}% completado</div>
+                  <div>{fi(prog.ventasMes)} <span style={{ color: '#888' }}>de {fi(prog.meta)}</span></div>
+                  <div style={{ marginTop: '0.35rem', fontWeight: 600, color: prog.onTrack ? '#2a6a42' : '#c0392b' }}>
+                    {prog.onTrack ? '✓ En camino' : '⚠ Por debajo'} · Proyección: {fi(prog.projection)} ({(prog.meta > 0 ? prog.projection / prog.meta * 100 : 0).toFixed(0)}%)
+                  </div>
+                  <div style={{ color: '#666' }}>Meta diaria implícita: <strong style={{ color: '#333' }}>{fi(prog.metaDia)}</strong></div>
+                </div>
+              </>
+            )}
 
             {/* Section 2: Highlights */}
             <div className="rpt-row-2">
@@ -268,6 +308,7 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
           @page { margin: 1.5cm; size: A4 portrait; }
         }
       `}</style>
-    </>
+    </>,
+    document.body,
   )
 }

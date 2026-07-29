@@ -4,6 +4,7 @@
  * Usa window.print() — el browser lo convierte en PDF via "Guardar como PDF"
  */
 import { useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import type { DiasMap, HistMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
   getContabilidadDays, aggGeneral, aggSalonero, allSaloneros,
@@ -62,7 +63,10 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
   const prog    = metaProgress(metas, dias, hist, ym)
   const today   = new Date().toLocaleDateString('es-CR', { day: 'numeric', month: 'long', year: 'numeric' })
 
-  return (
+  // Portal a document.body: el overlay debe ser hijo DIRECTO de <body>. Si vive dentro
+  // de #root, el `@media print { body > * { display:none } }` esconde a #root (ancestro)
+  // y `.rpt-overlay { display:block }` no puede revertirlo → PDF en blanco. En <body> sí.
+  return createPortal(
     <>
       {/* Print overlay */}
       <div className="rpt-overlay" onClick={onClose}>
@@ -268,6 +272,7 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
           @page { margin: 1.5cm; size: A4 portrait; }
         }
       `}</style>
-    </>
+    </>,
+    document.body,
   )
 }

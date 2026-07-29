@@ -154,16 +154,12 @@ export default function ReporteMensual({ ym, dias, hist, pm, metas, onClose }: P
             </div>
 
             {/* Proyección de meta — reusa `prog` (metaProgress): coincide al colón con la barra del
-                dashboard. Tema claro/imprimible (no la barra oscura). Sin meta del mes → prog=null → no se muestra. */}
+                dashboard. Bloque plano (sin recuadro), como el resto del reporte. Sin meta del mes → prog=null → no se muestra. */}
             {prog && (
               <>
                 <div className="rpt-section-title">Proyección de Meta</div>
-                <div style={{
-                  border: '1px solid #e5e0d5', borderRadius: '6px',
-                  padding: '0.65rem 0.85rem', marginBottom: '0.85rem',
-                  background: '#faf9f5', fontSize: '0.82rem', color: '#444', lineHeight: 1.5,
-                }}>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1a1a1a' }}>{prog.pct.toFixed(1)}% completado</div>
+                <div style={{ marginBottom: '0.85rem', fontSize: '0.82rem', color: '#444' }}>
+                  <div style={{ fontWeight: 600, color: '#1a1a1a' }}>{prog.pct.toFixed(1)}% completado</div>
                   <div>{fi(prog.ventasMes)} <span style={{ color: '#888' }}>de {fi(prog.meta)}</span></div>
                   <div style={{ marginTop: '0.35rem', fontWeight: 600, color: prog.onTrack ? '#2a6a42' : '#c0392b' }}>
                     {prog.onTrack ? '✓ En camino' : '⚠ Por debajo'} · Proyección: {fi(prog.projection)} ({(prog.meta > 0 ? prog.projection / prog.meta * 100 : 0).toFixed(0)}%)

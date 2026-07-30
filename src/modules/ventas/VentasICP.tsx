@@ -80,7 +80,7 @@ export default function VentasICP({ dias, pm }: Props) {
       if (!emp) continue
       const payout = r.payout_crc ?? 0
       const hours  = r.hours_worked ?? 0
-      const posName = (emp as { pos_name?: string | null }).pos_name
+      const posName = emp.pos_name
       if (posName) add(normName(posName), payout, hours)
       const fullKey = normName(emp.full_name)
       const posKey  = posName ? normName(posName) : null
@@ -328,7 +328,7 @@ export default function VentasICP({ dias, pm }: Props) {
                   tipData.filter(r => r.session_date.startsWith(ym)).forEach(r => {
                     const emp = employees.find(e => e.id === r.employee_id)
                     if (!emp) return
-                    const posName = (emp as { pos_name?: string | null }).pos_name
+                    const posName = emp.pos_name
                     const keys = posName ? [normName(posName), normName(emp.full_name)] : [normName(emp.full_name)]
                     keys.forEach(k => { m[k] = (m[k] ?? 0) + (r.payout_crc ?? 0) })
                   })

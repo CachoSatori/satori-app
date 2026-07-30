@@ -46,6 +46,12 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
   const active   = employees.filter(e => e.is_active)
   const inactive = employees.filter(e => !e.is_active)
 
+  // Nombres del XLS de ventas que no son el pos_name de ningún empleado → sin vincular.
+  const unassignedNames = salNames
+    .filter(n => !employees.some(e => (e.pos_name ?? '') === n))
+    .slice()
+    .sort((a, b) => a.localeCompare(b))
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
@@ -143,6 +149,15 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
             </button>
           </div>
         </form>
+      )}
+
+      {unassignedNames.length > 0 && (
+        <UnassignedNamesPanel
+          names={unassignedNames}
+          employees={employees}
+          profiles={profiles}
+          onRefresh={onRefresh}
+        />
       )}
 
       <table className="admin-table">
@@ -354,6 +369,127 @@ function BulkImport({ employees, onRefresh }: { employees: Employee[]; onRefresh
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Panel "Nombres en ventas sin asignar" ──
+// Lista los nombres del XLS de ventas que no son el pos_name de ningún empleado y permite,
+// por nombre, crear el empleado + setear pos_name (+ rol + usuario opcional) en un clic.
+// Sin esquema, sin plata: reusa createEmployee/updateEmployee/linkProfileToEmployee.
+function UnassignedNamesPanel({ names, employees, profiles, onRefresh }: {
+  names: string[]
+  employees: Employee[]
+  profiles: Profile[]
+  onRefresh: () => Promise<void>
+}) {
+  const [open, setOpen] = useState(true)
+  if (names.length === 0) return null
+  return (
+    <div style={{ margin: '0 0 1rem', background: '#fdf6e3', border: '1px solid #e6d9a8', borderRadius: 2, padding: '0.75rem 1rem' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.82rem', fontWeight: 700, color: '#8a6d1a' }}
+      >
+        {open ? '▼' : '▶'} Nombres en ventas sin asignar ({names.length})
+      </button>
+      {open && (
+        <>
+          <div style={{ fontSize: '0.72rem', color: '#8a7a4a', margin: '0.4rem 0 0.7rem' }}>
+            Aparecen en los XLS de ventas pero no están vinculados a ningún empleado.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {names.map(n => (
+              <UnassignedRow key={n} name={n} employees={employees} profiles={profiles} onRefresh={onRefresh} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function UnassignedRow({ name, employees, profiles, onRefresh }: {
+  name: string
+  employees: Employee[]
+  profiles: Profile[]
+  onRefresh: () => Promise<void>
+}) {
+  const [role, setRole] = useState<UserRole>('salonero')
+  const [profileId, setProfileId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Perfiles todavía sin empleado vinculado (y nunca owner/contador) → candidatos a usuario.
+  const linkedProfileIds = new Set(
+    employees.map(e => e.profile_id).filter((id): id is string => !!id)
+  )
+  const availableProfiles = profiles.filter(
+    p => !['owner', 'contador'].includes(p.role) && !linkedProfileIds.has(p.id)
+  )
+
+  const handleAssign = async () => {
+    setSaving(true)
+    setError(null)
+    let changed = false
+    try {
+      // ¿Ya existe un empleado con ese nombre (case-insensitive) y sin pos_name? → vincular ese, NO duplicar.
+      const existing = employees.find(
+        e => e.full_name.trim().toUpperCase() === name.trim().toUpperCase() && !e.pos_name
+      )
+      let empId: string
+      if (existing) {
+        await updateEmployee(existing.id, { pos_name: name, role })
+        empId = existing.id
+        changed = true
+      } else {
+        const created = await createEmployee({ full_name: name.toUpperCase(), role })
+        changed = true
+        // pos_name EXACTO del XLS (sin uppercase) → match exacto en Mi Rendimiento / VentasICP.
+        await updateEmployee(created.id, { pos_name: name })
+        empId = created.id
+      }
+      if (profileId) await linkProfileToEmployee(empId, profileId)
+      await onRefresh()   // el nombre desaparece del panel (ya quedó vinculado)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+      setSaving(false)
+      if (changed) await onRefresh()   // sincronizar el estado para no duplicar en un reintento
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontFamily: 'monospace', fontSize: '0.82rem', minWidth: 120, fontWeight: 700, color: '#5a5040' }}>
+        {name}
+      </span>
+      <select
+        value={role}
+        onChange={e => setRole(e.target.value as UserRole)}
+        disabled={saving}
+        title="Rol del nuevo empleado"
+        style={{ fontSize: '0.78rem', padding: '4px 8px', border: '1px solid #ccc', borderRadius: 2, background: '#fff' }}
+      >
+        {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
+      </select>
+      <select
+        value={profileId}
+        onChange={e => setProfileId(e.target.value)}
+        disabled={saving}
+        title="Usuario (opcional)"
+        style={{ fontSize: '0.78rem', padding: '4px 8px', border: '1px solid #ccc', borderRadius: 2, background: '#fff', color: profileId ? 'var(--t-teal)' : '#888' }}
+      >
+        <option value="">— sin usuario —</option>
+        {availableProfiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+      </select>
+      <button
+        onClick={handleAssign}
+        disabled={saving}
+        style={{ fontSize: '0.78rem', padding: '5px 12px', borderRadius: 2, background: saving ? '#ccc' : '#2a7a4a', color: '#fff', fontWeight: 700, border: 'none', cursor: saving ? 'default' : 'pointer' }}
+      >
+        {saving ? 'Guardando…' : 'Crear + vincular'}
+      </button>
+      {error && <span style={{ fontSize: '0.72rem', color: '#c23b22' }}>✗ {error}</span>}
     </div>
   )
 }

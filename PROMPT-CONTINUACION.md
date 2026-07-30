@@ -1,9 +1,11 @@
-# Continuación — backlog priorizado (handoff 2026-07-22)
+# Continuación — backlog priorizado (handoff 2026-07-30)
 
 > **✅ EL REDISEÑO DE CAJAS (POZO ÚNICO) ESTÁ EN PROD Y VALIDADO.** Se firmó, construyó, pasó y se
 > validó físicamente en un día: el **primer cierre real bajo el pozo (22/07) CUADRÓ** y las cargas
-> reales del dueño reconciliaron **al colón**. `main` código = **`1c8a9ad`** · `staging` =
-> **`5ae267f`** (base en CERO). **Cero migraciones** en todo el rediseño.
+> reales del dueño reconciliaron **al colón**. `main` = **`8d41d1a`** · `staging` = **`1b79265`**
+> (base en CERO). **Cero migraciones** en todo el rediseño del pozo. Encima del pozo, `main` ya lleva
+> los **3 pases de jul-2026** (vista del empleado · Reporte de Ventas · panel "Nombres sin asignar"),
+> con **código real**. **Deuda de docs (repo-truth) SALDADA 2026-07-30.**
 > Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · contexto del modelo → [ESTADO.md](ESTADO.md).
 >
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
@@ -39,14 +41,14 @@ conocida de volver a descuadrar.
 
 ## 🟧 P1 — DEUDA CORTA (técnica / datos)
 
-1. **🔵 Mergear `main → staging`.** La divergencia crece: el pozo entró a prod por una rama construida
-   **desde `main`** (staging arrastra el PoS, que no va a prod), así que ahora staging **no tiene** los
-   últimos fixes de caja. Re-sincronizar la parte común. Para volver staging a espejo de prod:
-   runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
-2. **🔴 Reconciliación del ledger de migraciones.** Sesión dedicada. Los dos entornos arrastran
-   out-of-band (prod **038–046 + 048 + subset 026**; staging **039–046 + 048**); persisten 009 (drift)
-   y 035 (fantasma, solo en `propina-pool`). **Bloquea `db push`/`repair`.**
-   ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
+1. **✅ Mergear `main → staging` — HECHO (2026-07-23).** La parte común quedó re-sincronizada (los pases
+   entran a prod por ramas **desde `main`**; staging arrastra el PoS, que no va a prod). Para volver staging
+   a espejo de prod: runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
+2. **✅ Reconciliación del ledger de migraciones — HECHA.** A + **B1 (staging, 2026-07-23)** + **B2 (prod,
+   2026-07-27, con firma)**: prod pasó de 4 → **33 filas** en `schema_migrations` (`009`→`0090`; mig 049
+   aplicada por `db push`), staging al día (**49 filas**). **`db push` DESBLOQUEADO.** La **mig 050**
+   (`employees.pos_name`, idempotente, ya viva out-of-band) queda en el repo esperando un push firmado.
+   ⚠️ **047 sigue RESERVADA** para proveedores — el hueco 046→048 es intencional. Detalle → [ESTADO.md](ESTADO.md) §c.
 3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
    y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
 4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción

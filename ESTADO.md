@@ -1,8 +1,10 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-07-22.** El **rediseño de cajas (POZO ÚNICO)** se firmó, construyó, pasó a
-> **PROD** y se **validó físicamente** en un solo día. El primer cierre real bajo el pozo **cuadró**.
+> **Handoff: 2026-07-30.** `main` = **`8d41d1a`** en PROD: el **POZO ÚNICO** (validado 22/07, primer
+> cierre real **cuadró**) **más los 3 pases de jul-2026** ya en prod — **vista del empleado**
+> (Mi Rendimiento), **Reporte de Ventas** (comparaciones mismos-días + YoY + proyección) y el panel
+> **"Nombres en ventas sin asignar"**. Los tres con **código real** en `main` (ya no "arriba solo docs").
 >
 > Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Fases → [ROADMAP.md](ROADMAP.md) ·
 > Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos → [HALLAZGOS.md](HALLAZGOS.md) ·
@@ -39,19 +41,20 @@ Núcleo: [`pozo.ts`](src/modules/cash/pozo.ts) (puro) · [`cierrePozo.ts`](src/m
 
 | Rama | Hash | Qué es |
 |---|---|---|
-| `main` | **`1c8a9ad`** (código de app) | **PROD, en uso.** El HEAD avanza por commits **docs-only** por encima de ese hash. Todo lo de la ola 2026-07 + Caja/Cierre/USD/Revisión/asistente + Bandeja + propinas ef/elec + Proveedores + elegibilidad de propina por rol + **🆕 el POZO completo**. **SIN PoS.** |
-| `staging` | **`5ae267f`** | **Fuente de verdad del desarrollo.** Todo lo de `main` **+ PoS/KDS/comandero + FE (SIM) + inventario activo COGS** (migs 022–037). ⚠️ Su base está en **CERO** (vaciada a pedido del dueño para pruebas limpias — ver [ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
+| `main` | **`8d41d1a`** | **PROD, en uso.** Todo lo no-PoS: ola 2026-07 + Caja/Cierre/USD/Revisión/asistente + Bandeja + propinas ef/elec + Proveedores + elegibilidad de propina por rol + **el POZO completo** + los **3 pases de jul-2026** (vista del empleado · Reporte de Ventas · panel "Nombres en ventas sin asignar"). **SIN PoS.** |
+| `staging` | **`1b79265`** | **Fuente de verdad del desarrollo.** Todo lo de `main` **+ PoS/KDS/comandero + FE (SIM) + inventario activo COGS** (migs 022–037). ⚠️ Su base está en **CERO** (vaciada a pedido del dueño para pruebas limpias — ver [ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
 
 > **Supabase refs:** **PROD = `yiczgdtirrkdvohdquzf`** · **STAGING = `hwiatgicyyqyezqwldia`**.
-> 🛑 **RITUAL antes de CUALQUIER comando de base:** `cat supabase/.temp/project-ref` (NO existe
-> `linked-project.json`). **`db query --linked` CUELGA** en algunos entornos → workaround: curl a
+> 🛑 **RITUAL antes de CUALQUIER comando de base:** `cat supabase/.temp/project-ref` **y**
+> `supabase/.temp/linked-project.json` (**SÍ existe**; su `name` — hoy `satori-staging` — es el
+> desempate del entorno). **`db query --linked` CUELGA** en algunos entornos → workaround: curl a
 > la Management API (`POST /v1/projects/<ref>/database/query`, token del Keychain, servicio
 > `Supabase CLI`). Para PROD usar **siempre** el canal firmado de
 > [`prod-gate.ts`](scripts/t0-reconciliacion-cajas/prod-gate.ts) (`read_only:true` + smoke `25006`).
 
-⚠️ **La divergencia `main`/`staging` CRECE.** El pozo entró a prod por una rama construida **desde
-`main`** (no por merge de staging), porque staging arrastra el PoS. **Pendiente: mergear
-`main → staging`** para re-sincronizar la parte común. Para volver staging a espejo de prod:
+⚠️ **La divergencia `main`/`staging` CRECE.** Los pases entran a prod por ramas construidas **desde
+`main`** (nunca por merge de staging, que arrastra el PoS). El **merge `main → staging`** para
+re-sincronizar la parte común quedó **hecho el 2026-07-23**. Para volver staging a espejo de prod:
 runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
 
 ## (b) PROD vs solo-STAGING
@@ -65,18 +68,34 @@ Revisión de inventario · Proveedores (lista simple + buscador + 'Puntual' + Re
 FE estructura SIM, inventario activo COGS) — migs 022–037. **DIFERIDO**, bloqueado por el pilar de
 auth. **En rama aparte (sin merge):** `propina-pool` (espera decisión del dueño).
 
-## (c) Migraciones — **cero** en todo el rediseño del pozo
+## (c) Migraciones — el ledger vivo (reconciliado 2026-07-27)
 
-| Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger |
+Herramientas read-only del ledger → [`scripts/ledger-reconciliacion/`](scripts/ledger-reconciliacion/README.md).
+
+| Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger (verificadas por objeto) |
 |---|---|---|
-| **PROD** | **≤021** | **038–046 + 048 + subset core de la 026** |
-| **STAGING** | **022–038** | **039–046 + 048** |
+| **PROD** | **✅ 33 filas: 001–008, 0090, 0095, 010–021, 038–046, 048, 049** — B2 reconcilió (2026-07-27) | **solo el subset core de la 026** (sin archivo en `main`) → excepción permanente |
+| **STAGING** | **✅ 49 filas: 001–008, 0090, 0095, 010–046, 048, 049** — `db push` al día | **ninguna** — B1 las registró todas |
 
 - **El rediseño del pozo no agregó ni una migración.** Es código puro + **1 fila** de datos (el asiento).
-- **047 está RESERVADA** para notificación a proveedores — **el hueco es intencional**, la secuencia
-  salta 046 → 048. No reutilizar ese número.
-- **🔴 Reconciliación del ledger = sesión dedicada.** Los dos entornos arrastran out-of-band; persisten
-  009 (drift) y 035 (fantasma, solo en `propina-pool`). **`db push`/`repair` FRENADOS** hasta entonces.
+- **✅ B1 (staging, 2026-07-23):** las 9 out-of-band quedaron registradas; el `035` dejó de ser fantasma
+  (su archivo se trajo de `propina-pool` — solo el DDL, el **código** de la feature sigue sin mergear); el
+  `009` se resolvió renombrando a `0090_user_selfsignup.sql` + `UPDATE` de 1 fila → **`db push` DESBLOQUEADO**.
+- **⚠️ El `009` NO era la base, era el CLI:** ordena archivos por **nombre** y el ledger por **versión**, y los
+  órdenes eran opuestos (`0095…` < `009…` porque `'5'` < `'_'`). Persiste en CLI **2.109.1** → el fix es el
+  nombre. **Si volvés a numerar `NNN` + `NNNx`, revisá esto.**
+- **🚫 NUNCA `repair --status reverted` sobre algo aplicado** (el CLI lo sugiere para `009`/`035`): le mentiría
+  al ledger sobre plata real.
+- **026 subset core (PROD)** aplicado sin archivo en `main` → **excepción permanente documentada**, no se repara.
+  **047 RESERVADA** (proveedores): el hueco 046 → 048 es intencional.
+- **✅ B2 (prod, 2026-07-27, con firma):** 28 `repair --status applied` (con `0090`) → ledger de prod **4 → 33
+  filas**, `migration list` alineado sin huérfanos; **mig 049** (`revoke all … from public, anon`) aplicada por
+  `db push` → `delete_movement_cascade` y `mark_factura_verified` pasan a **`anon`=false** (ACL de prod 5/10 →
+  **3/10**). PROD ya no arrastra deuda de ledger: **incompleto → reconciliado**.
+- **🆕 mig `050_employee_pos_name.sql` = repo-truth de `employees.pos_name`.** La columna ya vive en prod y
+  staging (agregada **fuera de banda**); la migración es **idempotente** (`add column if not exists`) → **no-op**
+  donde ya existe, **cero cambio de datos**, **cero PoS**. **NO está aplicada por el ledger** (no cuenta entre las
+  33 filas de prod); queda en el repo esperando un `db push` **firmado** si alguna vez se corre.
 
 ## (d) Build por módulo
 
@@ -94,8 +113,12 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🧪
 | **🆕 CashTurno**: "Gastado efectivo" suma otros egresos · Resumen del Turno reconstruible | ✅ VALIDADO EN PROD | prod + staging |
 | Ventas · Propinas · Caja+cierre · Finanzas/P&L · Reportes · Admin · Auth · Realtime · Offline · Estabilidad (Olas 1/1.1 · pantalla negra · IDOR · outbox · render Propinas) | ✅ | prod (sagrados) |
 | Bandeja unificada + Revisión · Tier 3 · autorización por contraseña (045) · propinas ef/elec (046) · elegibilidad por rol (048) · TipStats por puesto | ✅ | prod + staging |
+| **🆕 Vista del empleado** (Mi Rendimiento: período global + propinas + métricas por PAX + gráfico Semana) · **🆕 Reporte de Ventas** (comparaciones mismos-días + YoY + proyección) · **🆕 panel "Nombres en ventas sin asignar"** | ✅ **EN PROD** (jul-2026) | prod + staging |
 | Quick-wins C2 (historial over/short) + C3 (email del cierre, Edge Fn `cierre-email`) | 🟢 | prod + staging |
 | PoS (comandero/KDS/cobro/ticket SIM) · FE SIM · Inventario activo COGS | 🧪 | staging (migs 022–037) |
+
+> **Vínculo empleado↔ventas = `employees.pos_name`** (columna viva; mig 050 solo la registra, §c). El plan
+> original de una columna nueva `ventas_nombre` quedó **SUPERADO**: se reusó `pos_name`, sin columna nueva.
 
 ## (e) Pendientes de PLATA — esperan FIRMA del dueño
 
@@ -112,8 +135,9 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🧪
 
 ## (f) Pendientes humanos / fiscales / técnicos
 
-1. **🔴 Reconciliación del ledger de migraciones** (§c) — bloquea `db push`.
-2. **🔵 Mergear `main → staging`** para re-sincronizar la parte común (la divergencia crece).
+1. **✅ Reconciliación del ledger de migraciones** (§c) — A + B1 (staging) + **B2 (prod, 2026-07-27)**.
+   Reconciliado en **ambos entornos**; `db push` desbloqueado (mig 050 espera un push firmado, §c).
+2. **✅ Mergear `main → staging`** — hecho **2026-07-23**; la parte común quedó re-sincronizada.
 3. **🖊️👁️ Hora-CR en bordes de período** — las queries de plata acotan `created_at` en **UTC** (+6h vs
    CR) → un cierre de noche puede caer en el período equivocado. **Cambia números → valida el dueño.**
 4. **🧾 FE-CR** (factura electrónica real) — hoy solo estructura SIM en staging.

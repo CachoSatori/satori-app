@@ -315,6 +315,9 @@ export default function CashTurno({
   const handleApertura = useCallback(async () => {
     if (!profile) return
     if (!apCajero) { onError('Seleccioná un cajero'); return }
+    // Guard de fecha (Ítem 4): la Caja Diaria se abre SIEMPRE con la fecha de HOY. Los turnos no se
+    // backdatean (ni al pasado ni al futuro), para NADIE. El input queda fijo en hoy; esto blinda el submit.
+    if (apFecha !== today) { onError('La Caja Diaria se abre con la fecha de HOY — los turnos no se registran en otra fecha.'); return }
     // Caja única por día: si ya hay una sesión de esa fecha, no abrir otra.
     const dup = sessions.find(s => s.session_date === apFecha)
     if (dup) {
@@ -353,7 +356,7 @@ export default function CashTurno({
     } finally {
       setSaving(false)
     }
-  }, [profile, apCajero, apTurno, apFecha, apProvCRC, apUSD, carrySugerido, carryFrom, sessions, onSessionOpen, onError])
+  }, [profile, apCajero, apTurno, apFecha, apProvCRC, apUSD, carrySugerido, carryFrom, sessions, onSessionOpen, onError, today])
 
   // ── Add pago ──────────────────────────────────────────────
   // ── Crash-safe pago persistence ──────────────────────────
@@ -666,9 +669,13 @@ export default function CashTurno({
             </div>
             <div className="tips-field">
               <div className="tips-field-label">Fecha</div>
-              <input type="date" className="tips-input-dark" value={apFecha}
+              {/* Ítem 4: la Caja Diaria se abre solo HOY (min=max=hoy) — los turnos no se backdatean.
+                  handleApertura revalida apFecha === hoy antes de crear (blindaje del submit). */}
+              <input type="date" className="tips-input-dark" aria-label="Fecha de apertura" value={apFecha}
+                min={today} max={today}
                 onChange={e => setApFecha(e.target.value)}
                 onClick={e => { try { (e.currentTarget as HTMLInputElement).showPicker?.() } catch { /* noop */ } }} />
+              <div style={{ fontSize: '0.66rem', color: '#8a8378', marginTop: 3 }}>🔒 Fija en hoy — la Caja Diaria no se abre en otra fecha.</div>
             </div>
           </div>
 

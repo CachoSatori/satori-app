@@ -8,6 +8,7 @@ import { PAGO_META, formasPago, type Pago } from '../../shared/utils/pagoMatrix'
 import { norm } from '../../shared/api/inventoryIngest'
 import { tipShiftToCaja } from '../../shared/utils'
 import { fi, fd } from './cashUtils'
+import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashSession, CashMovement, Supplier, UserRole } from '../../shared/types/database'
 
 // F4.3a — el "➕ Agregar" único de Caja Diaria (SPEC §5). Asistente de UNA pantalla con secciones
@@ -44,6 +45,14 @@ function matchSupplier(name: string, suppliers: Supplier[]): Supplier | null {
 }
 
 const claseLabel: Record<Clase, string> = { mercaderia: 'Mercadería', operativa: 'Operativa', ingreso: 'Ingreso' }
+
+// ── Ingreso adicional (Caja Diaria) — endurecimiento ──────────────────────────────────────
+// La categoría (dropdown) y el motivo son obligatorios; ambos se guardan en `description`
+// (`${categoría} · ${motivo}`). subcategory se mantiene 'Ingreso adicional' (compat pozo/reportes)
+// → SIN cambio de esquema. Un ingreso que supera el umbral (equivalente CRC = crc + usd·tc) exige
+// autorización de gerencia antes de crear. SOLO aplica a esta clase del asistente.
+const INGRESO_CATEGORIAS = ['Aceite/reciclaje', 'Reintegro', 'Devolución de proveedor', 'Otro'] as const
+const INGRESO_UMBRAL_CRC = 100_000
 
 export default function AgregarAsistente({ openSession, suppliers, role, createdBy, tc, onCreated, onClose, onError }: Props) {
   // ── 1. Captura manual ──────────────────────────────────────
@@ -84,6 +93,11 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   const [saving, setSaving] = useState(false)
 
+  // ── Ingreso adicional (Caja Diaria): categoría + motivo obligatorios; umbral con autorización ──
+  const requireManager = useManagerOverride()
+  const [ingresoCategoria, setIngresoCategoria] = useState<string>('')   // '' = sin elegir (bloquea)
+  const [ingresoMotivo, setIngresoMotivo] = useState('')
+
   // ── Flujo guiado (decisión del dueño): el modal abre con DOS opciones — foto (protagonista)
   // o carga manual — y el formulario completo recién se revela después. 'form' se alcanza por:
   // (a) foto sacada y leída (onPhoto lo setea al terminar) o (b) tap en "Carga manual".
@@ -95,6 +109,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const volverAOpciones = () => {
     setDescripcion(''); setSupplierName(''); setMontoCRC(''); setMontoUSD(''); setFechaFactura('')
     setPickedSupplierId(null); setClasePicked(null)
+    setIngresoCategoria(''); setIngresoMotivo('')
     setPago(formas[0]); setAccountId('')
     setPhoto(null)
     setVista('opciones')
@@ -146,6 +161,11 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const amountUSD = Number(montoUSD) || 0
   const montoOk = amountCRC > 0 || amountUSD > 0
 
+  // Ingreso adicional: categoría + motivo completos (sino no se puede crear) y si el equivalente en
+  // colones (crc + usd·tc) supera el umbral → hay que pedir autorización de gerencia antes de crear.
+  const ingresoCompleto = ingresoCategoria !== '' && ingresoMotivo.trim() !== ''
+  const ingresoSuperaUmbral = clase === 'ingreso' && amountCRC + amountUSD * tc > INGRESO_UMBRAL_CRC
+
   // Preview del destino, para que el cajero vea qué va a pasar antes de confirmar.
   const preview = clase === 'ingreso'
     ? 'Ingreso → entra a la Registradora'
@@ -189,15 +209,25 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   const confirmar = async () => {
     if (!montoOk || saving) return
+    // Ingreso adicional: sin categoría o sin motivo NO se crea (se elimina el default mudo).
+    if (clase === 'ingreso' && !ingresoCompleto) return
     setSaving(true)
-    const baseDesc = descripcion.trim() || supplierName.trim() || claseLabel[clase]
-    const description = fechaFactura ? `${baseDesc} · fact ${fechaFactura}` : baseDesc
+
+    // Umbral (Caja Diaria): un ingreso cuyo equivalente en colones supera ₡100.000 exige autorización
+    // de gerencia ANTES de crear. owner/manager pasan solos; otros → modal de contraseña. Si cancela o
+    // la contraseña no valida (!auth.ok) → no se crea nada. Patrón canónico de ManagerOverride.
+    if (ingresoSuperaUmbral) {
+      const auth = await requireManager()
+      if (!auth.ok) { setSaving(false); return }
+    }
 
     // Paso 1 — crear el movimiento (plata). Si falla, NO se intenta el doc (no se duplica el movimiento).
     let mov: CashMovement
     try {
       if (clase === 'ingreso') {
-        // Dirección de flujo = entrada. No lleva clasificación mercadería/operativa.
+        // Dirección de flujo = entrada. No lleva clasificación mercadería/operativa. La categoría
+        // elegida + el motivo se persisten en description; subcategory se mantiene 'Ingreso adicional'.
+        const description = `${ingresoCategoria} · ${ingresoMotivo.trim()}`
         mov = await createCashMovement({
           session_id:    openSession.id,
           created_by:    createdBy,
@@ -213,6 +243,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           shift:         tipShiftToCaja(openSession.shift_type),
         })
       } else {
+        const baseDesc = descripcion.trim() || supplierName.trim() || claseLabel[clase]
+        const description = fechaFactura ? `${baseDesc} · fact ${fechaFactura}` : baseDesc
         const { method, status, caja } = PAGO_META[pago]
         const esMercaderia = clase === 'mercaderia'
         mov = await createCashMovement({
@@ -425,12 +457,33 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           </div>
         </div>
 
-        <div className="tips-field" style={{ marginTop: '0.75rem' }}>
-          <div className="tips-field-label">Descripción / concepto</div>
-          <input type="text" className="tips-input-dark" style={{ width: '100%' }} aria-label="Descripción"
-            placeholder="Ej: pescado fresco, alquiler del local, ingreso por…"
-            value={descripcion} onChange={e => setDescripcion(e.target.value)} />
-        </div>
+        {clase === 'ingreso' ? (
+          /* Ingreso adicional: categoría (obligatoria) + motivo (obligatorio) reemplazan la descripción
+             libre. Ambos se guardan juntos en `description` al confirmar (subcategory queda 'Ingreso adicional'). */
+          <>
+            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field-label">Categoría del ingreso</div>
+              <select className="tips-input-dark" style={{ width: '100%' }} aria-label="Categoría del ingreso"
+                value={ingresoCategoria} onChange={e => setIngresoCategoria(e.target.value)}>
+                <option value="">— elegí una categoría —</option>
+                {INGRESO_CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+              <div className="tips-field-label">Motivo / nota</div>
+              <input type="text" className="tips-input-dark" style={{ width: '100%' }} aria-label="Motivo del ingreso"
+                placeholder="Por qué entra esta plata (obligatorio)"
+                value={ingresoMotivo} onChange={e => setIngresoMotivo(e.target.value)} />
+            </div>
+          </>
+        ) : (
+          <div className="tips-field" style={{ marginTop: '0.75rem' }}>
+            <div className="tips-field-label">Descripción / concepto</div>
+            <input type="text" className="tips-input-dark" style={{ width: '100%' }} aria-label="Descripción"
+              placeholder="Ej: pescado fresco, alquiler del local, ingreso por…"
+              value={descripcion} onChange={e => setDescripcion(e.target.value)} />
+          </div>
+        )}
 
         <div className="tips-field" style={{ marginTop: '0.75rem' }}>
           <div className="tips-field-label">Fecha de la factura (opcional)</div>
@@ -497,7 +550,10 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             )}
           </>
         ) : (
-          <div className="cd-method-info" style={{ marginTop: '1rem' }}>Ingreso en efectivo → entra a la Registradora.</div>
+          <div className="cd-method-info" style={{ marginTop: '1rem' }}>
+            Ingreso en efectivo → entra a la Registradora.
+            {ingresoSuperaUmbral && <> Supera ₡100.000 → requiere <strong>autorización de gerencia</strong> al confirmar.</>}
+          </div>
         )}
 
         <div className="tips-field" style={{ marginTop: '0.75rem' }}>
@@ -507,7 +563,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
           <button className="tips-btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || saving}>
+          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || (clase === 'ingreso' && !ingresoCompleto) || saving}>
             {saving ? 'Registrando…' : '✓ Confirmar y registrar'}
           </button>
         </div>

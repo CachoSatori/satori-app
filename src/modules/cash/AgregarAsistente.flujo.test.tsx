@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import type { CashSession, Supplier } from '../../shared/types/database'
 
-// Flujo guiado del "➕ Agregar" (decisión de la dueña): el modal abre con DOS opciones — foto
+// Flujo guiado del "➕ Agregar" (decisión del dueño): el modal abre con DOS opciones — foto
 // (protagonista) y carga manual — y el formulario completo recién se revela después. Invariantes:
 //   1. Al abrir NO hay formulario: solo las dos opciones, con la foto como botón principal.
 //   2. Cancelar la cámara (tap en foto sin sacar foto → no hay change) deja las dos opciones.

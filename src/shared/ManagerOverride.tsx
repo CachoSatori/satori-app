@@ -85,7 +85,7 @@ async function verifyManagerPassword(password: string): Promise<VerifyResult> {
     }
     const d = data as { user_id?: string; email?: string; role?: string } | null
     if (!d?.user_id || !d?.email) {
-      return { ok: false, error: 'Respuesta inesperada del servidor al verificar (¿migración 045 aplicada?). Avisá a la dueña.' }
+      return { ok: false, error: 'Respuesta inesperada del servidor al verificar (¿migración 045 aplicada?). Avisá al dueño.' }
     }
     return { ok: true, userId: d.user_id, email: d.email, role: d.role ?? 'manager' }
   } catch {

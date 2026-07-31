@@ -61,7 +61,7 @@ export function nextCourse(c: PosCourse): PosCourse {
 }
 
 // ── Reglas de turno (F3) ──────────────────────────────────────
-// Regla de la dueña: el turno de la MAÑANA puede cerrar con mesas abiertas
+// Regla del dueño: el turno de la MAÑANA puede cerrar con mesas abiertas
 // (pasan al turno de la noche); el ÚLTIMO turno NO (el día no cierra con mesas vivas).
 export type Turno = 'mañana' | 'noche'
 

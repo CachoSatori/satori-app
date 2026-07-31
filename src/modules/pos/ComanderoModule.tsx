@@ -147,7 +147,7 @@ export default function ComanderoModule() {
   )
 }
 
-/** Chequeo de cierre de turno (regla de la dueña): el turno mañana puede cerrar
+/** Chequeo de cierre de turno (regla del dueño): el turno mañana puede cerrar
  *  con mesas abiertas; el último turno NO. Informativo — no toca la Caja. */
 function OrderScreen({ order, priceMap, cajeroName, onBack, onError, onEditPax }: {
   // (meta de productos para snapshots de estación/subcategoría/servicio)

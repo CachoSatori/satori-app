@@ -18,7 +18,7 @@ import { fi } from '../../shared/utils'
 type Filtro = 'activos' | 'desactivados' | 'todos'
 const inp = 'tips-input-dark'
 
-/** GESTOR DE PRODUCTOS UNIFICADO (refinamiento 06-12, prioridad máxima de la dueña):
+/** GESTOR DE PRODUCTOS UNIFICADO (refinamiento 06-12, prioridad máxima del dueño):
  *  todo el ciclo de vida en una pantalla — ficha, precio fiscal, costo/margen,
  *  modificadores POR PRODUCTO (variantes + override de delta), receta, estado.
  *  El nombre es inmutable post-creación (PK del histórico de ventas). */
@@ -118,7 +118,7 @@ export default function ProductosAdmin({ locationId, onError }: { locationId: st
         {sinPrecio > 0 && <div style={{ fontSize: '0.7rem', color: '#c23b22', fontWeight: 700, marginBottom: 4 }}>⚠ {sinPrecio} activos sin precio (el comandero no los envía)</div>}
         <button className="cd-btn-green" style={{ width: '100%', marginBottom: 6 }} onClick={() => setCreating(true)}>+ Producto nuevo</button>
         {/* Árbol FAMILIA → categoría → productos (mig 032). La familia de cada
-            categoría es editable acá mismo (la dueña reacomoda sin tocar código). */}
+            categoría es editable acá mismo (el dueño reacomoda sin tocar código). */}
         <div style={{ maxHeight: 520, overflowY: 'auto' }}>
           {tree.groups.map(({ family, cats }) => (
             <div key={family?.id ?? 'sin'} style={{ marginBottom: 4 }}>
@@ -305,7 +305,7 @@ function FichaProducto({ p, price, locationId, onFicha, onPriceSaved, onError, o
   )
 }
 
-/** Modelo de la dueña: el grupo se define una vez; ACÁ se elige qué grupos lleva
+/** Modelo del dueño: el grupo se define una vez; ACÁ se elige qué grupos lleva
  *  este producto, cuáles variantes aplican y el override de delta por producto. */
 function ModificadoresDelProducto({ productName, locationId, onError }: { productName: string; locationId: string; onError: (e: string) => void }) {
   const [groups, setGroups] = useState<ModifierGroupRow[]>([])

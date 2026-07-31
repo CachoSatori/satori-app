@@ -702,7 +702,7 @@ export async function cierreAjusteOpId(sessionDate: string, currency: 'crc' | 'u
 }
 
 // Registra (idempotente) el/los movimientos de AJUSTE de un cierre con diferencia — Opción B
-// FIRMADA por la dueña: por cada moneda cuya diferencia superó su tolerancia, UN movimiento en
+// FIRMADA por el dueño: por cada moneda cuya diferencia superó su tolerancia, UN movimiento en
 // Caja Fuerte que deja el ledger igual al físico contado. Faltante (dif<0) → egreso resta;
 // Sobrante (dif>0) → ingreso suma. Espejo del patrón de recordCierreSales/recordCierreRetiro:
 // borra los ajustes previos del día antes de re-crear (re-cerrar no duplica) y ADEMÁS usa

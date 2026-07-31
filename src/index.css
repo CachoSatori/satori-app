@@ -2777,7 +2777,7 @@ html, body, #root {
   gap: 0.625rem;
   margin-bottom: 1.25rem;
 }
-/* KPI cards de Caja — TEMA CLARO CÁLIDO (aprobado por la dueña; espeja la paleta de
+/* KPI cards de Caja — TEMA CLARO CÁLIDO (aprobado por el dueño; espeja la paleta de
    .cierre-resumen/.cierre-card: fondo blanco sobre papel, labels gris cálido, montos oscuros).
    Compartidas por las 4 pestañas (Movimientos, Pendientes, Proveedores, Resumen). El acento
    por card sigue siendo el border-left (color inline por vista); la semántica de los montos

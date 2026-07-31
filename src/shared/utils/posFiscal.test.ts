@@ -4,7 +4,7 @@ import {
 } from './posFiscal'
 import type { BillItem } from './posFiscal'
 
-// Caso de referencia de la dueña: MOJITO ₡4.500 final + Zacapa ₡3.000 = ₡7.500 final, IVA 13%.
+// Caso de referencia del dueño: MOJITO ₡4.500 final + Zacapa ₡3.000 = ₡7.500 final, IVA 13%.
 const mojitoZacapa: BillItem = {
   product_name: 'MOJITO ZACAPA 23', qty: 1, price_final_crc: 4500, tax_type: 'iva13',
   modifiers: [{ name: 'Zacapa', price_delta_crc: 3000 }], seat: 1,

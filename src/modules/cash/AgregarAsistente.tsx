@@ -84,7 +84,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   const [saving, setSaving] = useState(false)
 
-  // ── Flujo guiado (decisión de la dueña): el modal abre con DOS opciones — foto (protagonista)
+  // ── Flujo guiado (decisión del dueño): el modal abre con DOS opciones — foto (protagonista)
   // o carga manual — y el formulario completo recién se revela después. 'form' se alcanza por:
   // (a) foto sacada y leída (onPhoto lo setea al terminar) o (b) tap en "Carga manual".
   // Cancelar la cámara NO dispara el change del input → la vista queda en 'opciones' sola.
@@ -346,7 +346,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
           )}
         </div>
 
-        {/* ── 2. Clasificación advisory ── (orden T3-B decidido por la dueña: Foto → Clasificación →
+        {/* ── 2. Clasificación advisory ── (orden T3-B decidido por el dueño: Foto → Clasificación →
             Proveedor → Montos → Descripción → Fecha. La sugerencia es un useMemo puro sobre
             descripción/proveedor/monto → se recalcula sola aunque esos campos estén más abajo.) */}
         <div className="tips-field" style={{ marginTop: '1rem' }}>

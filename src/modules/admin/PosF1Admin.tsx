@@ -476,7 +476,7 @@ function KdsSection({ locationId, onError }: { locationId: string; onError: (e: 
 
       <div className="admin-table" style={{ padding: '0.875rem', gridColumn: '1 / -1' }}>
         <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: 4 }}>Orden ESCALONADO por subcategoría (dentro de cada comanda)</div>
-        <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: '0.625rem' }}>Ej. de la dueña: 1° crudos/pesca local · 2° nigiris y sashimis · 3° rolls/principales. Los postres prioritarios saltan al frente igual.</div>
+        <div style={{ fontSize: '0.7rem', color: '#5a5040', marginBottom: '0.625rem' }}>Ej. del dueño: 1° crudos/pesca local · 2° nigiris y sashimis · 3° rolls/principales. Los postres prioritarios saltan al frente igual.</div>
         {(settings.subcategory_order ?? []).map((c, i) => {
           const order = settings.subcategory_order ?? []
           const move = (dir: -1 | 1) => {

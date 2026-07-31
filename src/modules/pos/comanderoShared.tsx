@@ -21,7 +21,7 @@ export function toBillItem(it: PosOrderItem): BillItem {
 export const COURSE_LABEL: Record<PosCourse, string> = { bebida: '🥤 Bebida', entrada: '🥢 Entrada', principal: '🍣 Principal' }
 export const KS_LABEL: Record<string, string> = { pendiente: '· por marchar', marchado: '🔥 en cocina', listo: '✅ listo', entregado: '✓ entregado' }
 
-/** Chequeo de cierre de turno (regla de la dueña): el turno mañana puede cerrar con
+/** Chequeo de cierre de turno (regla del dueño): el turno mañana puede cerrar con
  *  mesas abiertas; el último turno NO. Informativo — no toca la Caja. */
 export function CierreTurnoModal({ openTables, onClose }: { openTables: string[]; onClose: () => void }) {
   const [turno, setTurno] = useState<Turno>('noche')

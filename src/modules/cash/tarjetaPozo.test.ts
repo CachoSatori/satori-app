@@ -116,7 +116,7 @@ describe('tarjeta — POST-corte: el pozo, la regla original recuperada', () => 
   })
 
   it('la regla vieja y la nueva difieren justo en lo que el modelo viejo no veía', () => {
-    // Éste es el bug que la dueña reportó: pagar del fondo no movía la tarjeta.
+    // Éste es el bug que el dueño reportó: pagar del fondo no movía la tarjeta.
     const egresoFondo = mov({
       movement_type: 'egreso_mercaderia', caja_origen: 'Caja Proveedores',
       amount_crc: 10_000, session_id: 's1',
@@ -149,7 +149,7 @@ describe('tarjeta — POST-corte: el pozo, la regla original recuperada', () => 
 })
 
 // ── ARRANQUE DE CERO ─────────────────────────────────────────────────────────
-// La dueña vacía staging y abre la app por primera vez. Con la base vacía el número tiene que
+// El dueño vacía staging y abre la app por primera vez. Con la base vacía el número tiene que
 // ser ₡0 SIN estados raros: sin warnings, sin fecha de apertura inventada y —sobre todo— sin
 // que el rótulo cambie solo al registrar el primer movimiento.
 describe('tarjeta — base VACÍA: arranque de cero', () => {
@@ -182,8 +182,8 @@ describe('tarjeta — base VACÍA: arranque de cero', () => {
   })
 })
 
-// Ciclo corto de humo sobre una base REALMENTE vacía (en memoria: la base de staging ya es de
-// la dueña). Son los 4 pasos del arranque, con sus números absolutos.
+// Ciclo corto de humo sobre una base REALMENTE vacía (en memoria: la base de staging ya es
+// del dueño). Son los 4 pasos del arranque, con sus números absolutos.
 describe('tarjeta — ciclo de arranque desde cero, paso a paso', () => {
   const s = [ses('s1', POZO_CORTE)]
   const hoy = { session_id: 's1' as const }

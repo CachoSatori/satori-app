@@ -160,6 +160,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const amountCRC = Number(montoCRC) || 0
   const amountUSD = Number(montoUSD) || 0
   const montoOk = amountCRC > 0 || amountUSD > 0
+  const montoNegativo = amountCRC < 0 || amountUSD < 0   // Ítem 2: entrada manual no admite montos < 0
 
   // Ingreso adicional: categoría + motivo completos (sino no se puede crear) y si el equivalente en
   // colones (crc + usd·tc) supera el umbral → hay que pedir autorización de gerencia antes de crear.
@@ -209,6 +210,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
   const confirmar = async () => {
     if (!montoOk || saving) return
+    if (montoNegativo) { onError('El monto no puede ser negativo.'); return }   // Ítem 2
     // Ingreso adicional: sin categoría o sin motivo NO se crea (se elimina el default mudo).
     if (clase === 'ingreso' && !ingresoCompleto) return
     setSaving(true)
@@ -443,7 +445,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             <div className="tips-field-label">Monto ₡ colones</div>
             <div className="cd-monto-wrap">
               <span className="cd-prefix">₡</span>
-              <input type="number" className="cd-monto-input" aria-label="Monto colones" placeholder="0"
+              <input type="number" className="cd-monto-input" aria-label="Monto colones" placeholder="0" min={0}
                 value={montoCRC} onChange={e => setMontoCRC(e.target.value === '' ? '' : Number(e.target.value))} />
             </div>
           </div>
@@ -451,11 +453,16 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
             <div className="tips-field-label">Monto $ dólares</div>
             <div className="cd-monto-wrap usd">
               <span className="cd-prefix">$</span>
-              <input type="number" className="cd-monto-input" aria-label="Monto dólares" placeholder="0"
+              <input type="number" className="cd-monto-input" aria-label="Monto dólares" placeholder="0" min={0}
                 value={montoUSD} onChange={e => setMontoUSD(e.target.value === '' ? '' : Number(e.target.value))} />
             </div>
           </div>
         </div>
+        {montoNegativo && (
+          <div className="cd-method-info pend" role="alert" style={{ marginTop: 4 }}>
+            ⚠ El monto no puede ser negativo.
+          </div>
+        )}
 
         {clase === 'ingreso' ? (
           /* Ingreso adicional: categoría (obligatoria) + motivo (obligatorio) reemplazan la descripción
@@ -563,7 +570,7 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
 
         <div className="cd-modal-actions" style={{ marginTop: '1rem' }}>
           <button className="tips-btn-ghost" onClick={onClose}>Cancelar</button>
-          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || (clase === 'ingreso' && !ingresoCompleto) || saving}>
+          <button className="cd-btn-green" onClick={confirmar} disabled={!montoOk || montoNegativo || (clase === 'ingreso' && !ingresoCompleto) || saving}>
             {saving ? 'Registrando…' : '✓ Confirmar y registrar'}
           </button>
         </div>

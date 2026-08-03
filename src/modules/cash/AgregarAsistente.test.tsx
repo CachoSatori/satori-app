@@ -177,3 +177,25 @@ describe('AgregarAsistente — orden del form (T3-B, decidido por la dueña)', (
     }
   })
 })
+
+describe('AgregarAsistente — monto negativo bloqueado (Ítem 2)', () => {
+  const btnConfirmar = () => screen.getByRole('button', { name: /Confirmar y registrar/ }) as HTMLButtonElement
+
+  it('₡ negativo: aviso, botón deshabilitado y NO crea', async () => {
+    const { onCreated } = renderAsistente('cajero')
+    setMonto('-100')
+    expect(screen.getByText(/no puede ser negativo/i)).toBeTruthy()
+    expect(btnConfirmar().disabled).toBe(true)
+    await confirmar()
+    expect(createSpy).not.toHaveBeenCalled()
+    expect(onCreated).not.toHaveBeenCalled()
+  })
+
+  it('$ negativo: también bloquea', async () => {
+    renderAsistente('cajero')
+    fireEvent.change(screen.getByLabelText('Monto dólares'), { target: { value: '-5' } })
+    expect(btnConfirmar().disabled).toBe(true)
+    await confirmar()
+    expect(createSpy).not.toHaveBeenCalled()
+  })
+})

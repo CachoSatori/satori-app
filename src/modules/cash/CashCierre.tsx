@@ -21,6 +21,7 @@ import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial,
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
+import { ajusteTipoPorSigno } from './ajusteTipo'
 import { propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
 import {
   basePozoParaCierre, deberiaPozo, diasPendientesDeCierre, esPostCorte,
@@ -220,8 +221,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const difUSD       = totalContadoUSD > 0 || deberiaUSD > 0 ? totalContadoUSD - deberiaUSD : null
   const cuadraUSD    = difUSD === null || Math.abs(difUSD) < 1
 
-  // Ajuste
-  const [ajusteTipo,   setAjusteTipo]   = useState('Faltante')
+  // Ajuste — Ítem 3: la etiqueta (Faltante/Sobrante) se DERIVA del signo de la diferencia, no de un
+  // select manual que podría contradecir a la plata. La plata ya se deriva del mismo signo en recordCierreAjuste.
+  const ajusteTipoDerivado = ajusteTipoPorSigno(diferencia, difUSD)
   const [ajusteMotivo, setAjusteMotivo] = useState('')
   const [notas,        setNotas]        = useState('')
 
@@ -342,7 +344,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         remanente_crc:        N(remCRC),
         remanente_usd:        N(remUSD),
         diferencia_crc:       diferencia ?? 0,
-        ajuste_tipo:          requiresAjuste ? ajusteTipo : '',
+        ajuste_tipo:          requiresAjuste ? ajusteTipoDerivado : '',
         ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
         notas,
         tipo_cambio:          tc,
@@ -932,10 +934,12 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:'160px 1fr', gap:'0.5rem', alignItems:'end' }}>
                       <Field label="Tipo">
-                        <select value={ajusteTipo} onChange={e => setAjusteTipo(e.target.value)}
-                          className="cierre-input" style={{ width:'100%', padding:'6px 8px', fontSize:'0.82rem' }}>
-                          <option>Faltante</option><option>Sobrante</option><option>Error cobro</option><option>Otro</option>
-                        </select>
+                        {/* Ítem 3: derivado del signo de la diferencia — solo lectura (no un select que contradiga la plata). */}
+                        <div className="cierre-input" aria-label="Tipo de ajuste"
+                          style={{ width:'100%', padding:'6px 8px', fontSize:'0.82rem', display:'flex', alignItems:'center', gap:6, background:'#f3efe6' }}>
+                          <strong>{ajusteTipoDerivado}</strong>
+                          <span style={{ fontSize:'0.66rem', color:'#8a8378' }}>(según el signo de la diferencia)</span>
+                        </div>
                       </Field>
                       <Field label="Motivo *">
                         <input value={ajusteMotivo} onChange={e => setAjusteMotivo(e.target.value)}
@@ -1018,7 +1022,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
             {/* Diferencia / ajuste (ya calculado) */}
             {requiresAjuste ? (
               <div className="cd-cierre-resultado fail" style={{ marginBottom:'1rem', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
-                <span>⚠ Ajuste: {ajusteTipo}{ajusteMotivo.trim() ? ` — ${ajusteMotivo.trim()}` : ''}</span>
+                <span>⚠ Ajuste: {ajusteTipoDerivado}{ajusteMotivo.trim() ? ` — ${ajusteMotivo.trim()}` : ''}</span>
                 <span>
                   {diferencia !== null && !cuadra ? `${diferencia >= 0 ? '+' : ''}${fi2(diferencia)}` : ''}
                   {difUSD !== null && !cuadraUSD ? `${diferencia !== null && !cuadra ? ' · ' : ''}US$ ${difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}` : ''}

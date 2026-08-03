@@ -56,6 +56,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const guardarNuevo = async () => {
     const c = CONCEPTOS.find(x => x.id === nmConcepto)!
     if (!Number(nmCRC) && !Number(nmUSD)) { setNmErr('Ingresá un monto'); return }
+    if (Number(nmCRC) < 0 || Number(nmUSD) < 0) { setNmErr('El monto no puede ser negativo.'); return }   // Ítem 2
 
     // ── Guard de fecha (Ítem 4) ────────────────────────────────────────────────────────────────
     // Default HOY. Futuro → bloqueado para TODOS. Pasado → solo owner/manager/contador (gate por ROL,
@@ -201,6 +202,12 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   // por la MISMA vía que la pestaña Pendientes (banco), y para saberlo hay que mirar su
   // subcategory. El resto de los campos no lo necesitan y lo omiten.
   const handleFieldChange = useCallback(async (id: string, field: string, value: unknown, mov?: CashMovement) => {
+    // Guard de negativos (Ítem 2): un monto editado inline no puede quedar < 0 → revierte el input.
+    if ((field === 'amount_crc' || field === 'amount_usd') && typeof value === 'number' && value < 0) {
+      window.alert('El monto no puede ser negativo.')
+      onRefresh()
+      return
+    }
     // Editar un movimiento GUARDADO (montos, tipo, método…) requiere autorización de gerencia,
     // igual que borrarlo. owner/manager logueado pasa al instante; cajero → modal de contraseña.
     // Si cancela o falla, onRefresh() revierte lo que muestre el input.
@@ -392,11 +399,11 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
             <div className="cd-grid2" style={{ marginTop: '0.75rem' }}>
               <div className="tips-field">
                 <div className="tips-field-label">Monto ₡</div>
-                <input type="number" className="tips-input-dark" value={nmCRC} placeholder="0" onChange={e => setNmCRC(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input type="number" className="tips-input-dark" value={nmCRC} placeholder="0" min={0} onChange={e => setNmCRC(e.target.value === '' ? '' : Number(e.target.value))} />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Monto $ (opcional)</div>
-                <input type="number" className="tips-input-dark" value={nmUSD} placeholder="0" onChange={e => setNmUSD(e.target.value === '' ? '' : Number(e.target.value))} />
+                <input type="number" className="tips-input-dark" value={nmUSD} placeholder="0" min={0} onChange={e => setNmUSD(e.target.value === '' ? '' : Number(e.target.value))} />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Fecha</div>
@@ -526,14 +533,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                       disabled={saving === m.id} />
                   </td>
                   <td className="r">
-                    <input key={m.id + '-crc'} className="cd-tbl-input r" type="number"
+                    <input key={m.id + '-crc'} className="cd-tbl-input r" type="number" min={0}
                       defaultValue={m.amount_crc || ''}
                       style={{ color: col, fontWeight: 600 }}
                       onBlur={e => handleFieldChange(m.id, 'amount_crc', Number(e.target.value) || 0)}
                       disabled={saving === m.id} />
                   </td>
                   <td className="r">
-                    <input key={m.id + '-usd'} className="cd-tbl-input r" type="number"
+                    <input key={m.id + '-usd'} className="cd-tbl-input r" type="number" min={0}
                       defaultValue={m.amount_usd || ''}
                       style={{ color: '#7ab4d4' }}
                       onBlur={e => handleFieldChange(m.id, 'amount_usd', Number(e.target.value) || 0)}

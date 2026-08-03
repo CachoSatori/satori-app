@@ -40,6 +40,10 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const requireManager = useManagerOverride()
   const askNote = useDeletionNote()
   const { profile } = useAuth()
+  // Ítem 4 — backdateo de "Nuevo movimiento": solo owner/manager/contador pueden fechar en el PASADO
+  // (gate por ROL, Camino 1 — sin contraseña ni RPC). El resto (cajero/salonero/…) queda fijo en hoy.
+  // El FUTURO se bloquea para todos. El enforcement real vive en guardarNuevo (el input es UX).
+  const puedeBackdatear = profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'contador'
   // Modal "Nuevo movimiento"
   const [nmOpen, setNmOpen] = useState(false)
   const [nmConcepto, setNmConcepto] = useState<typeof CONCEPTOS[number]['id']>('banco_cf')
@@ -52,6 +56,25 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
   const guardarNuevo = async () => {
     const c = CONCEPTOS.find(x => x.id === nmConcepto)!
     if (!Number(nmCRC) && !Number(nmUSD)) { setNmErr('Ingresá un monto'); return }
+
+    // ── Guard de fecha (Ítem 4) ────────────────────────────────────────────────────────────────
+    // Default HOY. Futuro → bloqueado para TODOS. Pasado → solo owner/manager/contador (gate por ROL,
+    // sin contraseña) y con confirmación explícita — REFORZADA si ese día ya tiene un cierre COMPLETO
+    // sellado (cargar ahí altera un cierre). cajero/salonero no pueden fechar en otro día.
+    const hoy = todayStr()
+    if (nmFecha !== hoy) {
+      if (nmFecha > hoy) { setNmErr('No se puede registrar un movimiento con fecha futura.'); return }
+      if (!puedeBackdatear) {
+        setNmErr('Pedí a un encargado, dueño o contador que inicie sesión para registrar en otra fecha.')
+        return
+      }
+      const diaCerrado = cierres.some(k => k.session_date === nmFecha && k.tipo === 'completo')
+      const aviso = diaCerrado
+        ? `⚠ El ${nmFecha} ya está cerrado; cargar acá altera un cierre sellado. ¿Seguro?`
+        : `Vas a registrar un movimiento con fecha ${nmFecha} (pasada), no hoy. ¿Confirmás?`
+      if (!window.confirm(aviso)) return
+    }
+
     setNmSaving(true); setNmErr(null)
     try {
       await createDayMovement({
@@ -347,7 +370,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
           <input className="cd-filter-input" style={{ minWidth: 140 }} value={busq} placeholder="Buscar..."
             onChange={e => setBusq(e.target.value)} />
         </div>
-        <button className="cd-btn-green" style={{ fontSize: '0.8rem' }} onClick={() => { setNmErr(null); setNmOpen(true) }}>+ Nuevo movimiento</button>
+        <button className="cd-btn-green" style={{ fontSize: '0.8rem' }} onClick={() => { setNmErr(null); setNmFecha(todayStr()); setNmOpen(true) }}>+ Nuevo movimiento</button>
         <button className="tips-btn-ghost" style={{ fontSize: '0.8rem' }} onClick={exportCSV}>⬇ CSV</button>
       </div>
 
@@ -377,7 +400,17 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Fecha</div>
-                <input type="date" className="tips-input-dark" value={nmFecha} max={todayStr()} onChange={e => setNmFecha(e.target.value)} />
+                {/* Ítem 4: default hoy. El backdateo (fecha pasada) es solo para owner/manager/contador →
+                    a ellos el picker les abre días previos (sin min); al resto les queda fijo en hoy.
+                    El futuro nunca (max=hoy). guardarNuevo revalida rol/fecha y confirma antes de guardar. */}
+                <input type="date" className="tips-input-dark" aria-label="Fecha del movimiento" value={nmFecha}
+                  min={puedeBackdatear ? undefined : todayStr()} max={todayStr()}
+                  onChange={e => setNmFecha(e.target.value)} />
+                {!puedeBackdatear && (
+                  <div style={{ fontSize: '0.66rem', color: 'var(--t-muted)', marginTop: 3 }}>
+                    🔒 Fija en hoy. Pedí a un encargado, dueño o contador que inicie sesión para registrar en otra fecha.
+                  </div>
+                )}
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Descripción / nota</div>

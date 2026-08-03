@@ -124,15 +124,21 @@ describe('AgregarAsistente — clase confirmada + snapshot advisory', () => {
     })
   })
 
-  it('Ingreso es elección explícita: crea movement_type=ingreso sin classification', async () => {
+  it('Ingreso es elección explícita: crea movement_type=ingreso sin classification; description = categoría · motivo', async () => {
     renderAsistente('cajero')
-    fireEvent.change(screen.getByLabelText('Descripción'), { target: { value: 'devolución de proveedor' } })
-    setMonto('10000')
     fireEvent.click(screen.getByRole('button', { name: 'Ingreso' }))
+    // Ingreso adicional: categoría + motivo obligatorios reemplazan la descripción libre.
+    fireEvent.change(screen.getByLabelText('Categoría del ingreso'), { target: { value: 'Devolución de proveedor' } })
+    fireEvent.change(screen.getByLabelText('Motivo del ingreso'), { target: { value: 'nota de crédito Pescadería' } })
+    setMonto('10000')   // ≤ ₡100.000 → sin autorización
     await confirmar()
 
     const arg = createSpy.mock.calls[0][0]
-    expect(arg).toMatchObject({ movement_type: 'ingreso', caja_origen: 'Registradora', method: 'Efectivo' })
+    expect(arg).toMatchObject({
+      movement_type: 'ingreso', caja_origen: 'Registradora', method: 'Efectivo',
+      subcategory: 'Ingreso adicional',                                     // compat pozo/reportes
+      description: 'Devolución de proveedor · nota de crédito Pescadería',  // categoría · motivo
+    })
     expect(arg.classification).toBeUndefined()
     expect(arg.suggested_classification).toBeUndefined()
   })

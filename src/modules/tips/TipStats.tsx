@@ -106,7 +106,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
             entries.map(e => ({
               employee_id: e.employee_id, hours_worked: e.hours_worked,
               tip_amount_crc: e.tip_amount_crc, tip_amount_usd: e.tip_amount_usd,
-              points: e.points, payout_crc: e.payout_crc,
+              points: e.points, payout_crc: e.payout_crc, covered_role: e.covered_role,   // covered_role canónico (== Quincenal/correo): sala/barra por lo que se cubrió
             })),
             employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
             rolePoints,

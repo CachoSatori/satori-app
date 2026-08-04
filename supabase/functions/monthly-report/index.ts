@@ -213,18 +213,18 @@ async function calcPropinas(supabase: ReturnType<typeof createClient>, ym: strin
   // propinaSala — las propinas INDIVIDUALES de sala, que viven en tip_entries.tip_amount_crc/usd, NO en
   // las columnas de la sesión. El correo viejo sumaba solo las columnas → perdía propinaSala.
   const { data: entries } = await supabase.from('tip_entries')
-    .select('employee_id, payout_crc, session_id, tip_amount_crc, tip_amount_usd').in('session_id', sids)
+    .select('employee_id, payout_crc, session_id, tip_amount_crc, tip_amount_usd, covered_role').in('session_id', sids)
   const { data: emps } = await supabase.from('employees').select('id, full_name, role')
   const empInfo: Record<string,{name:string;role:string}> = {}
   for (const e of (emps ?? []) as Array<{id:string;full_name:string;role:string}>) empInfo[e.id] = {name:e.full_name, role:e.role}
 
-  // Agrupar las entries por sesión con su ROL para poolTotalSesion (clasifica sala vs barra).
-  // NOTA base-vs-covered_role: Estadísticas (TipStats) llama a calcHistory SIN covered_role → clasifica
-  // por rol BASE, y ese es el número objetivo del correo (Jul-2026 = ₡2.160.860). Usar covered_role daría
-  // ₡2.167.131 (los dos difieren solo por coberturas que cruzan sala↔barra; ver reporte del pase).
+  // Agrupar las entries por sesión clasificando sala vs barra por el ROL EFECTIVO = covered_role ?? rol
+  // base — CANÓNICO (decisión del dueño: el número REAL es lo que la persona CUBRIÓ ese turno). Igual que
+  // calcHistory (sagrado) y Quincenal/TipHistory. Jul-2026 = ₡2.167.131 (== payout distribuido, conserva).
   const entriesBySesion: Record<string, PoolEntry[]> = {}
-  for (const e of (entries ?? []) as Array<{employee_id:string;session_id:string;tip_amount_crc:number|null;tip_amount_usd:number|null}>) {
-    (entriesBySesion[e.session_id] ??= []).push({ role: empInfo[e.employee_id]?.role ?? '', tip_amount_crc: e.tip_amount_crc, tip_amount_usd: e.tip_amount_usd })
+  for (const e of (entries ?? []) as Array<{employee_id:string;session_id:string;tip_amount_crc:number|null;tip_amount_usd:number|null;covered_role:string|null}>) {
+    const effectiveRole = e.covered_role ?? empInfo[e.employee_id]?.role ?? ''
+    ;(entriesBySesion[e.session_id] ??= []).push({ role: effectiveRole, tip_amount_crc: e.tip_amount_crc, tip_amount_usd: e.tip_amount_usd })
   }
 
   let pool=0, barra=0, amCount=0, pmCount=0, amPool=0, pmPool=0

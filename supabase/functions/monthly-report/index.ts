@@ -13,6 +13,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { poolTotalSesion, type PoolEntry } from './pool.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
@@ -205,17 +206,37 @@ async function calcPropinas(supabase: ReturnType<typeof createClient>, ym: strin
 
   // Pool totals from sessions
   const { data: sessData } = await supabase.from('tip_sessions')
-    .select('id,pool_efectivo_crc,pool_efectivo_usd,pool_barra_crc,exchange_rate,shift_type,session_date')
+    .select('id,pool_efectivo_crc,pool_efectivo_usd,pool_barra_crc,pool_barra_electronico_crc,exchange_rate,shift_type,session_date')
     .in('id', sids)
+
+  // Entries + empleados PRIMERO: el pool de cada sesión = calcTurno.totalPool (sagrado) necesita la
+  // propinaSala — las propinas INDIVIDUALES de sala, que viven en tip_entries.tip_amount_crc/usd, NO en
+  // las columnas de la sesión. El correo viejo sumaba solo las columnas → perdía propinaSala.
+  const { data: entries } = await supabase.from('tip_entries')
+    .select('employee_id, payout_crc, session_id, tip_amount_crc, tip_amount_usd').in('session_id', sids)
+  const { data: emps } = await supabase.from('employees').select('id, full_name, role')
+  const empInfo: Record<string,{name:string;role:string}> = {}
+  for (const e of (emps ?? []) as Array<{id:string;full_name:string;role:string}>) empInfo[e.id] = {name:e.full_name, role:e.role}
+
+  // Agrupar las entries por sesión con su ROL para poolTotalSesion (clasifica sala vs barra).
+  // NOTA base-vs-covered_role: Estadísticas (TipStats) llama a calcHistory SIN covered_role → clasifica
+  // por rol BASE, y ese es el número objetivo del correo (Jul-2026 = ₡2.160.860). Usar covered_role daría
+  // ₡2.167.131 (los dos difieren solo por coberturas que cruzan sala↔barra; ver reporte del pase).
+  const entriesBySesion: Record<string, PoolEntry[]> = {}
+  for (const e of (entries ?? []) as Array<{employee_id:string;session_id:string;tip_amount_crc:number|null;tip_amount_usd:number|null}>) {
+    (entriesBySesion[e.session_id] ??= []).push({ role: empInfo[e.employee_id]?.role ?? '', tip_amount_crc: e.tip_amount_crc, tip_amount_usd: e.tip_amount_usd })
+  }
 
   let pool=0, barra=0, amCount=0, pmCount=0, amPool=0, pmPool=0
   const semMap: Record<string,number[]> = {}
   const dowMap: Record<string,number[]> = {}
   const DAYS_ES: Record<number,string> = {0:'Domingo',1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado'}
 
-  for (const s of (sessData ?? []) as Array<{id:string;pool_efectivo_crc:number;pool_efectivo_usd:number;pool_barra_crc:number;exchange_rate:number;shift_type:string;session_date:string}>) {
-    const p = (s.pool_efectivo_crc??0) + (s.pool_efectivo_usd??0)*(s.exchange_rate??640) + (s.pool_barra_crc??0)
-    pool += p; barra += s.pool_barra_crc??0
+  for (const s of (sessData ?? []) as Array<{id:string;pool_efectivo_crc:number;pool_efectivo_usd:number;pool_barra_crc:number;pool_barra_electronico_crc:number;exchange_rate:number;shift_type:string;session_date:string}>) {
+    // Pool por sesión = calcTurno.totalPool (sagrado, replicado en ./pool.ts): efectivo + propinaSala(sala)
+    // + barra (efectivo + electrónica). Atado al peso por el oracle test pool.test.ts.
+    const p = poolTotalSesion(s, entriesBySesion[s.id] ?? [])
+    pool += p; barra += (s.pool_barra_crc??0) + (s.pool_barra_electronico_crc??0)
     const isAM = s.shift_type === 'AM' || s.shift_type === 'Mediodía'
     if (isAM) { amCount++; amPool += p } else { pmCount++; pmPool += p }
     const dNum = Number(s.session_date.slice(8,10))
@@ -224,13 +245,6 @@ async function calcPropinas(supabase: ReturnType<typeof createClient>, ym: strin
     const dow = DAYS_ES[new Date(s.session_date+'T12:00:00').getDay()] ?? ''
     if (!dowMap[dow]) dowMap[dow] = []; dowMap[dow].push(p)
   }
-
-  // Employee entries
-  const { data: entries } = await supabase.from('tip_entries')
-    .select('employee_id, payout_crc, session_id').in('session_id', sids)
-  const { data: emps } = await supabase.from('employees').select('id, full_name, role')
-  const empInfo: Record<string,{name:string;role:string}> = {}
-  for (const e of (emps ?? []) as Array<{id:string;full_name:string;role:string}>) empInfo[e.id] = {name:e.full_name, role:e.role}
 
   const empMap: Record<string,{take:number;dias:number;rol:string}> = {}
   for (const e of (entries ?? []) as Array<{employee_id:string;payout_crc:number|null}>) {

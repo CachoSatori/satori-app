@@ -59,6 +59,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
           tip_amount_usd: e.tip_amount_usd,
           points:         e.points,
           payout_crc:     e.payout_crc,
+          covered_role:   e.covered_role,
         })),
         employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
         rolePoints,

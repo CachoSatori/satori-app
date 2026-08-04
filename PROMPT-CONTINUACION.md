@@ -1,4 +1,4 @@
-# Continuación — backlog priorizado (handoff 2026-07-22)
+# Continuación — backlog priorizado (handoff 2026-08-03)
 
 > **✅ EL REDISEÑO DE CAJAS (POZO ÚNICO) ESTÁ EN PROD Y VALIDADO.** Se firmó, construyó, pasó y se
 > validó físicamente en un día: el **primer cierre real bajo el pozo (22/07) CUADRÓ** y las cargas
@@ -8,6 +8,11 @@
 >
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
 > pases viejos) son **referencia histórica**.
+>
+> **AL DÍA (2026-08-03):** `main` = **`723f734`** · `staging` = **`7d768d1`** (reconciliado). En prod desde
+> hoy: **endurecimiento de caja ítems 6+4** (`b36a382`) y **`covered_role` canónico en los 3 reportes de
+> propinas** (`723f734`, correo de Julio ENVIADO = **₡2.167.131**). Detalle →
+> [HANDOFF-2026-08-03.md](HANDOFF-2026-08-03.md).
 
 ---
 
@@ -17,25 +22,35 @@ El pozo cerró el agujero conceptual. T3 cierra las puertas por las que todavía
 que lo ensucie. **Ninguno es urgente hoy** — el sistema cuadra —, pero cada uno es una forma
 conocida de volver a descuadrar.
 
-1. **🖊️ Dirección obligatoria en traspasos.** Hoy un traspaso sin dirección legible (`subcategory`
+1. **🖊️ Dirección obligatoria en traspasos (1a + 1b).** Hoy un traspaso sin dirección legible (`subcategory`
    nula, `'Ajuste'`, `'Otro traspaso'`, texto libre) queda **neutro** y se cuenta aparte en
    `indeterminados`. Está bien como red de contención, pero el alta debería **exigir** origen→destino.
-   Resolver además los `'Otro traspaso'` que ya existan. **Toca plata → firma.**
-2. **🖊️ Prohibir montos negativos MANUALES.** Un monto negativo invierte el asiento en silencio
-   (`hayMontosNegativos` ya lo detecta en el cierre; falta en el alta manual). ⚠️ **Los negativos
-   bicurrency del SISTEMA son LEGÍTIMOS** (pago en USD con vuelto en colones) — la regla es solo para
-   la carga **manual**, no para el motor. **Toca plata → firma.**
-3. **🖊️ `ajuste_tipo` derivado del signo**, en vez de cargarse aparte y poder contradecirlo.
-4. **🖊️ Impedir operar cajas de fechas pasadas** (abrir/cargar sobre un día ya cerrado).
-5. **🖊️ Auditoría de ediciones** de movimientos (hoy hay auditoría de borrados vía
-   `movement_deletions`; la edición pasa por reemplazo y no deja el mismo rastro).
-6. **👁️ Vigilar "Ingreso adicional".** Es la vía más fácil de meter plata sin respaldo; ver si
-   merece categoría propia o justificación obligatoria.
+   Resolver además los `'Otro traspaso'` que ya existan. **Toca plata → firma.** ← **PENDIENTE**
+2. **✅ HECHO en staging** (`feat/plata-negativos-ajustetipo` **`930ad83`**, validado por el asesor; **falta
+   rebase sobre el nuevo `7d768d1` + pase a prod firmado**) — **Prohibir montos negativos MANUALES**
+   (asistente / nuevo mov / edición inline / draft de pago). ⚠️ Los negativos bicurrency del SISTEMA son
+   LEGÍTIMOS — la regla es solo para la carga **manual**. **Toca plata → firma.**
+3. **✅ HECHO en staging** (mismo `930ad83`, pendiente rebase + prod firmado) — **`ajuste_tipo` derivado del
+   signo** de la diferencia (₡ manda; si solo hay $, manda $), en vez de cargarse aparte y contradecirlo.
+4. **✅ EN PROD** (`b36a382`→`723f734`) — **guard de fechas de caja**: apertura fija en hoy (`min=max` +
+   revalida en `handleApertura`); "Nuevo movimiento" con backdateo solo owner/manager/contador + confirm
+   reforzado si el día ya tiene cierre `'completo'`.
+5. **🖊️ Auditoría de ediciones** de movimientos (hoy hay auditoría de borrados vía `movement_deletions`;
+   la edición pasa por reemplazo y no deja el mismo rastro). Puede tocar esquema. ← **PENDIENTE**
+6. **✅ EN PROD** (`b36a382`→`723f734`) — **"Ingreso adicional" endurecido**: categoría (dropdown) + motivo
+   obligatorios + umbral ₡100.000 (equiv. CRC) con autorización de gerencia. subcategory sigue
+   `'Ingreso adicional'`; categoría+motivo en `description`. **Sin esquema.**
 7. **🧹 Limpiar los 2 huérfanos de fecha imposible:** `9b79e731` (2020-07-09, ₡74.126,92) y uno de
    **2016** (₡54.978). **La app NO los muestra** — `getAllCashMovements(days = 1000)` arranca ~1.000
-   días atrás — por eso la verificación de pantalla nunca los vio. Son pendientes que nadie va a pagar.
-8. **🧹 Comentarios "la dueña" → "el dueño"** en el código. Cosmético, cero riesgo, pero el repo
-   está mal generizado en varios comentarios viejos.
+   días atrás — por eso la verificación de pantalla nunca los vio. Son pendientes que nadie va a pagar. ← **PENDIENTE**
+8. **✅ HECHO en staging** (cosmético **`6b7a7bc`**) — Comentarios "la dueña" → "el dueño". **Falta pase a
+   prod** (haría converger `AgregarAsistente.tsx` main↔staging — hoy divergen por 2 comentarios). Cero riesgo.
+
+> ✅ **EN PROD además** (fuera de T3, `723f734`): **`covered_role` canónico en los 3 reportes de propinas**
+> (correo mensual + Estadísticas + Quincenal = **₡2.167.131** Jul; invariante de conservación pool==payout
+> ±₡1 confirmada, 61/61). Correo replica `calcTurno.totalPool` (`monthly-report/pool.ts` + oracle test);
+> TipStats pasa `covered_role` a `calcHistory`. **Pendiente UI (letra chica):** "generado por cobertura" en
+> Estadísticas cuando alguien cubrió otro puesto ese turno.
 
 ## 🟧 P1 — DEUDA CORTA (técnica / datos)
 

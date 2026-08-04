@@ -1,10 +1,11 @@
 # Satori App — Estado del proyecto
 
 > Restaurant POS + analítica · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
-> **Handoff: 2026-07-27** → [HANDOFF-2026-07-27.md](HANDOFF-2026-07-27.md). Hoy: **B2 — ledger de PROD
-> reconciliado** (4→33 filas, rename `009`→`0090` / `R100` cerrado) + **hardening ACL** (mig 049:
-> `delete_movement_cascade` y `mark_factura_verified` → `anon=false`; prod 5/10→3/10). Solo ledger + ACL,
-> **cero datos de plata**. El **POZO ÚNICO** sigue ✅ validado en prod desde el 22/07 (primer cierre real **cuadró**).
+> **Handoff: 2026-08-03** → [HANDOFF-2026-08-03.md](HANDOFF-2026-08-03.md). Hoy: **2 pases a PROD firmados** —
+> (1) endurecimiento de caja **ítems 6 (Ingreso adicional) + 4 (guard de fechas)** → `b36a382`; (2) **`covered_role`
+> canónico en los 3 reportes de propinas** (correo + Estadísticas + Quincenal = **₡2.167.131**) → `723f734`,
+> **correo de Julio ENVIADO**. Sagrados byte-idénticos, cero esquema, cero db write. **Staging reconciliado**
+> (`7d768d1`). El **POZO ÚNICO** sigue ✅ validado en prod desde el 22/07 (primer cierre real **cuadró**).
 >
 > Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Fases → [ROADMAP.md](ROADMAP.md) ·
 > Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos → [HALLAZGOS.md](HALLAZGOS.md) ·
@@ -41,8 +42,8 @@ Núcleo: [`pozo.ts`](src/modules/cash/pozo.ts) (puro) · [`cierrePozo.ts`](src/m
 
 | Rama | Hash | Qué es |
 |---|---|---|
-| `main` | **`c77ced0`** (código de app = `1c8a9ad`; arriba solo docs) | **PROD, en uso.** Todo lo no-PoS: ola 2026-07, Caja/Cierre/USD/Revisión, Bandeja, propinas ef/elec, Proveedores, elegibilidad por rol y **el POZO**. **SIN PoS.** |
-| `staging` | **`02a012f`** | **Fuente de verdad del desarrollo** = `main` **+ PoS/KDS/comandero + FE (SIM) + inventario COGS**. Parte común **idéntica** a main (contrato en §b). ⚠️ Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
+| `main` | **`723f734`** | **PROD, en uso.** Todo lo no-PoS: ola 2026-07, Caja/Cierre/USD/Revisión, Bandeja, propinas ef/elec **+ `covered_role` en los 3 reportes**, Proveedores, elegibilidad por rol, **el POZO**, y el **endurecimiento de caja ítems 6+4** (Ingreso adicional + guard de fechas). **SIN PoS.** |
+| `staging` | **`7d768d1`** (reconciliado con prod: trae `covered_role` + `monthly-report/pool.ts`) | **Fuente de verdad del desarrollo** = `main` **+ PoS/KDS/comandero + FE (SIM) + inventario COGS**. Parte común **idéntica** a main (contrato en §b). ⚠️ Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
 
 > **Refs:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`**
 > (`satori-staging`).
@@ -125,6 +126,8 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🧪
 | Paginación del fetch (`.range()` de 500 con desempate por `id`) · Tarjeta de Movimientos post-corte · CashTurno reconstruible | ✅ VALIDADO EN PROD |
 | Ventas · Propinas · Caja+cierre · Finanzas/P&L · Reportes · Admin · Auth · Realtime · Offline · Estabilidad (Olas 1/1.1, pantalla negra, IDOR, outbox) | ✅ prod (sagrados) |
 | Bandeja unificada + Revisión · Tier 3 · autorización por contraseña (045) · propinas ef/elec (046) · elegibilidad por rol (048) · TipStats por puesto | ✅ prod + staging |
+| **Propinas — pool por `covered_role`** en los **3 reportes** (correo mensual + Estadísticas + Quincenal) = **₡2.167.131** (Jul). Correo replica `calcTurno.totalPool` (`monthly-report/pool.ts` + oracle test); TipStats pasa `covered_role` a `calcHistory`. | ✅ **prod + staging** (`723f734`/`7d768d1`) |
+| **Endurecimiento de caja — ítems 6 (Ingreso adicional: categoría+motivo+umbral) + 4 (guard de fechas: apertura hoy · backdateo por rol)** | ✅ **prod + staging** (`b36a382`→`723f734`) |
 | Quick-wins C2 (historial over/short) + C3 (email del cierre, Edge Fn `cierre-email`) | 🟢 smoke pendiente |
 | PoS (comandero/KDS/cobro/ticket SIM) · FE SIM · Inventario activo COGS | 🧪 staging (migs 022–037) |
 

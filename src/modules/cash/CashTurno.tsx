@@ -465,6 +465,7 @@ export default function CashTurno({
 
   const confirmPago = async () => {
     if (!draftSup || !Number(draftCRC) || movSaving) return  // proveedor + monto requeridos · anti doble-submit
+    if (Number(draftCRC) < 0 || Number(draftUSD) < 0) { onError('El monto no puede ser negativo.'); return }   // Ítem 2
     // Editar un pago YA guardado = reemplazo (borra el movimiento viejo + re-crea) → requiere la
     // MISMA autorización de gerencia que el borrado. Antes este camino llamaba la cascada SIN
     // credenciales y la RPC (mig 044) rechazaba al cajero con "No autorizado" sin pedirle nada.
@@ -1253,7 +1254,7 @@ export default function CashTurno({
                 <div className="tips-field-label">Monto ₡ colones</div>
                 <div className="cd-monto-wrap">
                   <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" value={draftCRC} placeholder="0" autoFocus
+                  <input type="number" className="cd-monto-input" aria-label="Monto ₡ del pago" value={draftCRC} placeholder="0" min={0} autoFocus
                     onChange={e => setDraftCRC(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>
@@ -1261,7 +1262,7 @@ export default function CashTurno({
                 <div className="tips-field-label">Monto $ dólares</div>
                 <div className="cd-monto-wrap usd">
                   <span className="cd-prefix">$</span>
-                  <input type="number" className="cd-monto-input" value={draftUSD} placeholder="0"
+                  <input type="number" className="cd-monto-input" aria-label="Monto $ del pago" value={draftUSD} placeholder="0" min={0}
                     onChange={e => setDraftUSD(e.target.value === '' ? '' : Number(e.target.value))} />
                 </div>
               </div>

@@ -63,6 +63,10 @@ export interface TipSession {
   pool_efectivo_usd: number
   pool_barra_crc: number
   pool_barra_electronico_crc: number
+  // Total real del pool del turno = calcTurno/calcHistory().totalPool (efectivo + propinaSala
+  // por covered_role + barra ef+elec). Lo escribe el cierre/edición del turno (mig 051). NULL =
+  // sin calcular → la lectura cae al fallback poolTotalOf. Derivado persistido, no entra al reparto.
+  pool_total_crc: number | null
   notes: string | null
   created_at: string
   updated_at: string

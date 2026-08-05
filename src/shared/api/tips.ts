@@ -67,7 +67,13 @@ export async function createTipSession(params: {
 
 export async function updateSessionPools(
   sessionId: string,
-  pools: { pool_efectivo_crc: number; pool_efectivo_usd: number; pool_barra_crc: number; pool_barra_electronico_crc: number }
+  pools: {
+    pool_efectivo_crc: number; pool_efectivo_usd: number; pool_barra_crc: number; pool_barra_electronico_crc: number
+    // Opcional: total real del pool = calcTurno/calcHistory().totalPool (SAGRADO). Se manda SOLO
+    // al cerrar/editar el turno (cuando ya se corrió el reparto); el autoguardado de pools lo omite
+    // y no lo pisa. Persistir en el MISMO update evita una segunda escritura (mig 051).
+    pool_total_crc?: number
+  }
 ): Promise<void> {
   const { error } = await supabase
     .from('tip_sessions')

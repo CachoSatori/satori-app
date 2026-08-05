@@ -9,10 +9,11 @@
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
 > pases viejos) son **referencia histórica**.
 >
-> **AL DÍA (2026-08-03):** `main` = **`723f734`** · `staging` = **`7d768d1`** (reconciliado). En prod desde
-> hoy: **endurecimiento de caja ítems 6+4** (`b36a382`) y **`covered_role` canónico en los 3 reportes de
-> propinas** (`723f734`, correo de Julio ENVIADO = **₡2.167.131**). Detalle →
-> [HANDOFF-2026-08-03.md](HANDOFF-2026-08-03.md).
+> **AL DÍA (2026-08-04):** `main` = **`a6192cd`** · `staging` = **`7d768d1`** (código; ⚠️ **pendiente FF** del
+> fix de Quincenal `dad7ea9`). En prod: **endurecimiento de caja ítems 6+4** (`b36a382`) · **`covered_role`
+> canónico** en correo + Estadísticas + Historial (`723f734`, correo de Julio ENVIADO = **₡2.167.131**) · **la
+> pestaña Quincenal alineada a `covered_role` + "Total mes"=pool** (`a6192cd`, era el ÚLTIMO reporte en rol
+> base). Detalle → [HANDOFF-2026-08-03.md](HANDOFF-2026-08-03.md).
 
 ---
 
@@ -46,11 +47,12 @@ conocida de volver a descuadrar.
 8. **✅ HECHO en staging** (cosmético **`6b7a7bc`**) — Comentarios "la dueña" → "el dueño". **Falta pase a
    prod** (haría converger `AgregarAsistente.tsx` main↔staging — hoy divergen por 2 comentarios). Cero riesgo.
 
-> ✅ **EN PROD además** (fuera de T3, `723f734`): **`covered_role` canónico en los 3 reportes de propinas**
-> (correo mensual + Estadísticas + Quincenal = **₡2.167.131** Jul; invariante de conservación pool==payout
-> ±₡1 confirmada, 61/61). Correo replica `calcTurno.totalPool` (`monthly-report/pool.ts` + oracle test);
-> TipStats pasa `covered_role` a `calcHistory`. **Pendiente UI (letra chica):** "generado por cobertura" en
-> Estadísticas cuando alguien cubrió otro puesto ese turno.
+> ✅ **EN PROD además** (fuera de T3): **`covered_role` canónico en los reportes de propinas** = **₡2.167.131**
+> Jul (invariante de conservación pool==payout ±₡1 confirmada, 61/61). **`723f734`**: correo mensual (replica
+> `calcTurno.totalPool` vía `monthly-report/pool.ts` + oracle test) + Estadísticas (TipStats pasa
+> `covered_role` a `calcHistory`) + Historial (ya lo hacía). **`a6192cd`**: la pestaña **Quincenal**
+> (`TipQuincenal.tsx`) —el último que quedaba en rol base— + "Total mes"=pool. **Pendiente UI (letra chica):**
+> "generado por cobertura" en Estadísticas cuando alguien cubrió otro puesto ese turno.
 
 ## 🟧 P1 — DEUDA CORTA (técnica / datos)
 

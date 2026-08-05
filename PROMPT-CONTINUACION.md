@@ -9,8 +9,8 @@
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
 > pases viejos) son **referencia histórica**.
 >
-> **AL DÍA (2026-08-04):** `main` = **`a6192cd`** · `staging` = **`7d768d1`** (código; ⚠️ **pendiente FF** del
-> fix de Quincenal `dad7ea9`). En prod: **endurecimiento de caja ítems 6+4** (`b36a382`) · **`covered_role`
+> **AL DÍA (2026-08-05):** `main` = **`a6192cd`** · `staging` = **`7fb8f41`** (código; ✅ **reconciliado** —
+> merge `7fb8f41` trae el fix de Quincenal `dad7ea9`; `TipQuincenal.tsx` == prod). En prod: **endurecimiento de caja ítems 6+4** (`b36a382`) · **`covered_role`
 > canónico** en correo + Estadísticas + Historial (`723f734`, correo de Julio ENVIADO = **₡2.167.131**) · **la
 > pestaña Quincenal alineada a `covered_role` + "Total mes"=pool** (`a6192cd`, era el ÚLTIMO reporte en rol
 > base). Detalle → [HANDOFF-2026-08-03.md](HANDOFF-2026-08-03.md).
@@ -28,7 +28,7 @@ conocida de volver a descuadrar.
    `indeterminados`. Está bien como red de contención, pero el alta debería **exigir** origen→destino.
    Resolver además los `'Otro traspaso'` que ya existan. **Toca plata → firma.** ← **PENDIENTE**
 2. **✅ HECHO en staging** (`feat/plata-negativos-ajustetipo` **`930ad83`**, validado por el asesor; **falta
-   rebase sobre el nuevo `7d768d1` + pase a prod firmado**) — **Prohibir montos negativos MANUALES**
+   rebase sobre el nuevo `7fb8f41` + pase a prod firmado**) — **Prohibir montos negativos MANUALES**
    (asistente / nuevo mov / edición inline / draft de pago). ⚠️ Los negativos bicurrency del SISTEMA son
    LEGÍTIMOS — la regla es solo para la carga **manual**. **Toca plata → firma.**
 3. **✅ HECHO en staging** (mismo `930ad83`, pendiente rebase + prod firmado) — **`ajuste_tipo` derivado del

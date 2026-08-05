@@ -5,12 +5,12 @@
 > (1) endurecimiento de caja **ítems 6 (Ingreso adicional) + 4 (guard de fechas)** → `b36a382`; (2) **`covered_role`
 > canónico en los reportes de propinas** (correo + Estadísticas + Historial = **₡2.167.131**) → `723f734`,
 > **correo de Julio ENVIADO**. Sagrados byte-idénticos, cero esquema, cero db write. **Staging reconciliado**
-> (`7d768d1`). El **POZO ÚNICO** sigue ✅ validado en prod desde el 22/07 (primer cierre real **cuadró**).
+> (`7fb8f41`, incl. Quincenal). El **POZO ÚNICO** sigue ✅ validado en prod desde el 22/07 (primer cierre real **cuadró**).
 >
 > **Post-handoff (2026-08-04):** la pestaña **Quincenal** (`TipQuincenal.tsx`) —el ÚLTIMO reporte que quedaba
 > clasificando por rol base— alineada a `covered_role` + **"Total mes" = pool** (q1Total+q2Total) → merge
-> **`a6192cd`** EN PROD (Pages verificado por chunk). `main` = **`a6192cd`**. ⚠️ Staging aún NO trae este fix
-> (`fix/quincenal-covered-role` `dad7ea9`, **pendiente FF**).
+> **`a6192cd`** EN PROD (Pages verificado por chunk). `main` = **`a6192cd`**. ✅ Staging **reconciliado** con este fix
+> (`fix/quincenal-covered-role` `dad7ea9` → merge **`7fb8f41`** 2026-08-05; `TipQuincenal.tsx` == prod).
 >
 > Historia detallada → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) · Fases → [ROADMAP.md](ROADMAP.md) ·
 > Backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) · Hallazgos → [HALLAZGOS.md](HALLAZGOS.md) ·
@@ -48,7 +48,7 @@ Núcleo: [`pozo.ts`](src/modules/cash/pozo.ts) (puro) · [`cierrePozo.ts`](src/m
 | Rama | Hash | Qué es |
 |---|---|---|
 | `main` | **`a6192cd`** | **PROD, en uso.** Todo lo no-PoS: ola 2026-07, Caja/Cierre/USD/Revisión, Bandeja, propinas ef/elec **+ `covered_role` en TODOS los reportes** (correo/Estadísticas/Historial + **Quincenal** con "Total mes"=pool, `a6192cd`), Proveedores, elegibilidad por rol, **el POZO**, y el **endurecimiento de caja ítems 6+4** (Ingreso adicional + guard de fechas). **SIN PoS.** |
-| `staging` | **`7d768d1`** (código; trae `covered_role` + `monthly-report/pool.ts`) ⚠️ **pendiente FF del fix de Quincenal** `dad7ea9` que prod ya tiene | **Fuente de verdad del desarrollo** = `main` **+ PoS/KDS/comandero + FE (SIM) + inventario COGS**. Parte común **idéntica** a main salvo ese fix pendiente (contrato en §b). ⚠️ Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
+| `staging` | **`7fb8f41`** (código; trae `covered_role` + `monthly-report/pool.ts` + **fix de Quincenal** `dad7ea9`, **reconciliado** con prod vía merge `7fb8f41`) | **Fuente de verdad del desarrollo** = `main` **+ PoS/KDS/comandero + FE (SIM) + inventario COGS**. Parte común **idéntica** a main (contrato en §b). ⚠️ Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
 
 > **Refs:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`**
 > (`satori-staging`).
@@ -131,7 +131,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🧪
 | Paginación del fetch (`.range()` de 500 con desempate por `id`) · Tarjeta de Movimientos post-corte · CashTurno reconstruible | ✅ VALIDADO EN PROD |
 | Ventas · Propinas · Caja+cierre · Finanzas/P&L · Reportes · Admin · Auth · Realtime · Offline · Estabilidad (Olas 1/1.1, pantalla negra, IDOR, outbox) | ✅ prod (sagrados) |
 | Bandeja unificada + Revisión · Tier 3 · autorización por contraseña (045) · propinas ef/elec (046) · elegibilidad por rol (048) · TipStats por puesto | ✅ prod + staging |
-| **Propinas — pool por `covered_role`** en los reportes (correo mensual + Estadísticas + Historial + **Quincenal**) = **₡2.167.131** (Jul). Correo replica `calcTurno.totalPool` (`monthly-report/pool.ts` + oracle test); TipStats/TipQuincenal pasan `covered_role` a `calcHistory`. | ✅ **prod** (correo/Est./Hist. `723f734` · **Quincenal `a6192cd`**); staging `7d768d1` (⚠️ Quincenal pendiente FF) |
+| **Propinas — pool por `covered_role`** en los reportes (correo mensual + Estadísticas + Historial + **Quincenal**) = **₡2.167.131** (Jul). Correo replica `calcTurno.totalPool` (`monthly-report/pool.ts` + oracle test); TipStats/TipQuincenal pasan `covered_role` a `calcHistory`. | ✅ **prod** (correo/Est./Hist. `723f734` · **Quincenal `a6192cd`**); staging `7fb8f41` (Quincenal **reconciliado**) |
 | **Endurecimiento de caja — ítems 6 (Ingreso adicional: categoría+motivo+umbral) + 4 (guard de fechas: apertura hoy · backdateo por rol)** | ✅ **prod + staging** (`b36a382`→`723f734`) |
 | Quick-wins C2 (historial over/short) + C3 (email del cierre, Edge Fn `cierre-email`) | 🟢 smoke pendiente |
 | PoS (comandero/KDS/cobro/ticket SIM) · FE SIM · Inventario activo COGS | 🧪 staging (migs 022–037) |

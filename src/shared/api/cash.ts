@@ -3,6 +3,7 @@ import type { CashSession, CashMovement, Supplier, MovementType } from '../types
 import type { Database } from '../types/supabase.gen'
 import { cachedFetch } from '../offline/cache'
 import { enqueue, pendingOps } from '../offline/outbox'
+import { parseTraspaso } from '../../modules/cash/pozo'
 
 type Tables = Database['public']['Tables']
 
@@ -329,10 +330,50 @@ async function queueCashMutation(op: 'update' | 'delete', payload: Record<string
   await enqueue({ client_op_id: crypto.randomUUID(), table: 'cash_movements', op, payload, created_at: new Date().toISOString() })
 }
 
+// ── Guard de dirección de traspaso (ítem 1a) ────────────────────────────────────────────────
+// Un movimiento con movement_type='traspaso' DEBE tener subcategory que parsee 'A → B'
+// (parseTraspaso, en pozo.ts). Sin dirección legible el pozo no puede decidir si suma, resta o es
+// interno → se rechaza en el BORDE de escritura (además de que la UI ya no ofrece 'traspaso' en el
+// select inline). El traspaso del SISTEMA (recordCierreRetiro, 'Caja Fuerte → Banco') es legible y
+// además NO pasa por acá (insert directo) → intacto.
+export const TRASPASO_SIN_DIRECCION =
+  'No se puede guardar un traspaso sin dirección legible. Elegí origen → destino (ej. "Caja Fuerte → Banco").'
+
+function assertTraspasoLegible(
+  movement_type: string | null | undefined,
+  subcategory: string | null | undefined,
+): void {
+  if (movement_type === 'traspaso' && !parseTraspaso(subcategory)) {
+    throw new Error(TRASPASO_SIN_DIRECCION)
+  }
+}
+
 export async function updateCashMovement(
   id: string,
   updates: Partial<CashMovement>,
 ): Promise<void> {
+  // Guard de dirección (ítem 1a): si el update toca el tipo y/o la subcategoría, validar el ESTADO
+  // RESULTANTE. Atajo: si el tipo final NO es traspaso, no hay nada que validar (ni se lee la fila →
+  // las ediciones inline offline de otros campos no se ven afectadas). Solo si hace falta un dato del
+  // estado final que el update no trae, se lee la fila actual.
+  if ('movement_type' in updates || 'subcategory' in updates) {
+    let finalType: string | null | undefined =
+      'movement_type' in updates ? (updates.movement_type as string | null | undefined) : undefined
+    if (!('movement_type' in updates) || finalType === 'traspaso') {
+      let finalSub: string | null | undefined =
+        'subcategory' in updates ? (updates.subcategory as string | null | undefined) : undefined
+      if (finalType === undefined || finalSub === undefined) {
+        const { data, error } = await supabase
+          .from('cash_movements').select('movement_type, subcategory').eq('id', id).single()
+        if (error) throw new Error(error.message)
+        const row = data as { movement_type: string | null; subcategory: string | null } | null
+        if (finalType === undefined) finalType = row?.movement_type
+        if (finalSub === undefined) finalSub = row?.subcategory
+      }
+      assertTraspasoLegible(finalType, finalSub)
+    }
+  }
+
   // _pending es un flag SOLO de cliente (proyección de la cola) — nunca viaja a la DB.
   const { _pending, ...clean } = updates
   void _pending
@@ -407,6 +448,8 @@ export async function createDayMovement(m: {
   suggested_classification?: string
   suggested_confidence?: number
 }): Promise<string> {
+  // Guard de dirección (ítem 1a): no crear un traspaso sin dirección legible.
+  assertTraspasoLegible(m.movement_type, m.subcategory)
   // ts = fecha del MOVIMIENTO (puede venir backdateada al mediodía). NO confundir con el
   // created_at del SOBRE de la cola, que debe ser el reloj real para ordenar bien el outbox.
   const ts = m.fecha ? `${m.fecha}T12:00:00Z` : new Date().toISOString()

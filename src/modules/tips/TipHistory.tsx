@@ -30,10 +30,16 @@ const MSHORT = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','
 const BAR_ROLES = new Set(['barman', 'barback'])
 const MUTED = '#5a5040', BORDER = 'var(--t-border,#d4cfc4)', GOLD = '#a07830', TEAL = '#2a7a6a', RED = '#c23b22'
 
-// Pool total a la vista sin click (efectivo + barra ef + barra elec del registro de la sesión)
+// Pool total a la vista sin click. Fuente de verdad = pool_total_crc (SAGRADO calcHistory().totalPool
+// persistido al cerrar/editar, mig 051): incluye la propinaSala (propinas individuales de sala) que el
+// fallback NO puede ver sin releer las entries. Si es NULL (turnos históricos sin backfill) cae al
+// fallback: efectivo + barra ef + barra elec de la sesión — subcuenta porque le falta propinaSala,
+// pero es lo único reconstruible sin fetch por turno. `??` a propósito: un total real de ₡0 es válido.
 function poolTotalOf(s: TipSession) {
-  return (s.pool_efectivo_crc || 0) + (s.pool_efectivo_usd || 0) * (s.exchange_rate || 0)
+  return s.pool_total_crc ?? (
+    (s.pool_efectivo_crc || 0) + (s.pool_efectivo_usd || 0) * (s.exchange_rate || 0)
     + (s.pool_barra_crc || 0) + (s.pool_barra_electronico_crc || 0)
+  )
 }
 // Desglose de barra para una fila: servicio (pool general por puntos) + pool barra (resto)
 function barraSplit(r: HistoryRow, generalRate: number) {
@@ -170,7 +176,9 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
       }
     }) as DraftLine[]
     // Barra = efectivo + electrónico (la firma de calcTurno NO cambia); el reparto es idéntico.
-    const { updatedLines } = calcTurno(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), rate)
+    // `totals.totalPool` es el TOTAL REAL del pool (SAGRADO) con la cobertura ya aplicada en el
+    // draft (rol efectivo) → se persiste abajo como fuente de verdad (mig 051).
+    const { totals, updatedLines } = calcTurno(draft, Number(ePoolCRC) || 0, Number(ePoolUSD) || 0, (Number(ePoolBarra) || 0) + (Number(ePoolBarraElec) || 0), rate)
     if (!updatedLines.some(l => l.active)) { setEditErr('Marcá al menos un empleado que trabajó'); return }
 
     setSaving(true); setEditErr(null)
@@ -195,6 +203,7 @@ export default function TipHistory({ sessions, employees, rolePoints, onCalcRead
         pool_efectivo_usd: Number(ePoolUSD) || 0,
         pool_barra_crc:    Number(ePoolBarra) || 0,
         pool_barra_electronico_crc: Number(ePoolBarraElec) || 0,
+        pool_total_crc:    totals.totalPool,
       })
       // Releer entradas para obtener ids y guardar payouts
       const fresh = await getTipEntriesBySession(sid)

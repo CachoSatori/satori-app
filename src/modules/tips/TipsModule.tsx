@@ -417,7 +417,7 @@ export default function TipsModule() {
 
   // ── Cerrar turno ──────────────────────────────────────────
   const handleCloseSession = async () => {
-    if (!openSession || !profile) return
+    if (!openSession || !profile || !totals) return
     const workedLines = displayLines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
     // 3 números que reconcilian: Total asignado = Efectivo ya en mano + Electrónico a entregar.
@@ -447,12 +447,16 @@ export default function TipsModule() {
       // (handles the case where a field was edited but not blurred before clicking close)
       await Promise.all(workedLines.map(l => handleLineBlur(l.employeeId)))
 
-      // Guardar pool final
+      // Guardar pool final + el TOTAL REAL del pool (SAGRADO: totals.totalPool = calcTurno con
+      // cobertura aplicada = efectivo + propinaSala(covered_role) + barra ef+elec). Se persiste en
+      // el MISMO update que las columnas del pool → Historial muestra el total real sin recomputar
+      // (fuente de verdad, mig 051). Coincide al peso con calcHistory().totalPool al releer.
       await updateSessionPools(openSession.id, {
         pool_efectivo_crc: Number(efectivoCRC) || 0,
         pool_efectivo_usd: Number(efectivoUSD) || 0,
         pool_barra_crc:    Number(barraCRC)    || 0,
         pool_barra_electronico_crc: Number(barraElecCRC) || 0,
+        pool_total_crc:    totals.totalPool,
       })
 
       // Guardar todas las entradas con payout

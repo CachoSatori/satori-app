@@ -2345,6 +2345,7 @@ export type Database = {
           pool_efectivo_usd: number
           pool_pos_crc: number
           pool_pos_usd: number
+          pool_total_crc: number | null
           session_date: string
           shift_type: string
           status: string
@@ -2363,6 +2364,7 @@ export type Database = {
           pool_efectivo_usd?: number
           pool_pos_crc?: number
           pool_pos_usd?: number
+          pool_total_crc?: number | null
           session_date: string
           shift_type?: string
           status?: string
@@ -2381,6 +2383,7 @@ export type Database = {
           pool_efectivo_usd?: number
           pool_pos_crc?: number
           pool_pos_usd?: number
+          pool_total_crc?: number | null
           session_date?: string
           shift_type?: string
           status?: string

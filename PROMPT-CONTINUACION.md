@@ -1,4 +1,4 @@
-# Continuación — backlog priorizado (handoff 2026-08-03)
+# Continuación — backlog priorizado (handoff 2026-08-05)
 
 > **✅ EL REDISEÑO DE CAJAS (POZO ÚNICO) ESTÁ EN PROD Y VALIDADO.** Se firmó, construyó, pasó y se
 > validó físicamente en un día: el **primer cierre real bajo el pozo (22/07) CUADRÓ** y las cargas
@@ -9,11 +9,13 @@
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
 > pases viejos) son **referencia histórica**.
 >
-> **AL DÍA (2026-08-05):** `main` = **`a6192cd`** · `staging` = **`7fb8f41`** (código; ✅ **reconciliado** —
-> merge `7fb8f41` trae el fix de Quincenal `dad7ea9`; `TipQuincenal.tsx` == prod). En prod: **endurecimiento de caja ítems 6+4** (`b36a382`) · **`covered_role`
-> canónico** en correo + Estadísticas + Historial (`723f734`, correo de Julio ENVIADO = **₡2.167.131**) · **la
-> pestaña Quincenal alineada a `covered_role` + "Total mes"=pool** (`a6192cd`, era el ÚLTIMO reporte en rol
-> base). Detalle → [HANDOFF-2026-08-03.md](HANDOFF-2026-08-03.md).
+> **AL DÍA (2026-08-05):** `main` = **`5e85abc`** · `staging` = **`129a516`**. En prod **hoy**: **bloque de
+> plata ítems 2+3** (negativos MANUALES prohibidos + `ajuste_tipo` derivado del signo, `8c65686`) ·
+> **`pool_total_crc` = fuente de verdad del total del pool** (mig 051 out-of-band + escritura al cerrar/editar
+> + **backfill de 266 sesiones**, `5e85abc`; Julio = **₡2.167.131**). Antes en la ola: ítems 6+4 (`b36a382`),
+> `covered_role` en correo + Estadísticas + Historial (`723f734`, correo de Julio ENVIADO), Quincenal
+> (`a6192cd`). Detalle → [HANDOFF-2026-08-05.md](HANDOFF-2026-08-05.md). ⚠️ La rama `metas_personales` también
+> usa mig **051** → **renumerar a `052+`** antes de que vaya a staging.
 
 ---
 
@@ -27,12 +29,11 @@ conocida de volver a descuadrar.
    nula, `'Ajuste'`, `'Otro traspaso'`, texto libre) queda **neutro** y se cuenta aparte en
    `indeterminados`. Está bien como red de contención, pero el alta debería **exigir** origen→destino.
    Resolver además los `'Otro traspaso'` que ya existan. **Toca plata → firma.** ← **PENDIENTE**
-2. **✅ HECHO en staging** (`feat/plata-negativos-ajustetipo` **`930ad83`**, validado por el asesor; **falta
-   rebase sobre el nuevo `7fb8f41` + pase a prod firmado**) — **Prohibir montos negativos MANUALES**
-   (asistente / nuevo mov / edición inline / draft de pago). ⚠️ Los negativos bicurrency del SISTEMA son
-   LEGÍTIMOS — la regla es solo para la carga **manual**. **Toca plata → firma.**
-3. **✅ HECHO en staging** (mismo `930ad83`, pendiente rebase + prod firmado) — **`ajuste_tipo` derivado del
-   signo** de la diferencia (₡ manda; si solo hay $, manda $), en vez de cargarse aparte y contradecirlo.
+2. **✅ EN PROD** (merge `8c65686`; staging `6479eb8`) — **Prohibir montos negativos MANUALES** (asistente /
+   nuevo mov / edición inline / draft de pago = 4 puntos de carga). ⚠️ Los negativos bicurrency del SISTEMA
+   son LEGÍTIMOS — la regla es solo para la carga **manual**.
+3. **✅ EN PROD** (mismo `8c65686`) — **`ajuste_tipo` del cierre derivado del SIGNO** de la diferencia (₡ manda;
+   si solo hay $, manda $), en vez de cargarse aparte y poder contradecirlo. El `select` queda solo-lectura.
 4. **✅ EN PROD** (`b36a382`→`723f734`) — **guard de fechas de caja**: apertura fija en hoy (`min=max` +
    revalida en `handleApertura`); "Nuevo movimiento" con backdateo solo owner/manager/contador + confirm
    reforzado si el día ya tiene cierre `'completo'`.
@@ -51,8 +52,11 @@ conocida de volver a descuadrar.
 > Jul (invariante de conservación pool==payout ±₡1 confirmada, 61/61). **`723f734`**: correo mensual (replica
 > `calcTurno.totalPool` vía `monthly-report/pool.ts` + oracle test) + Estadísticas (TipStats pasa
 > `covered_role` a `calcHistory`) + Historial (ya lo hacía). **`a6192cd`**: la pestaña **Quincenal**
-> (`TipQuincenal.tsx`) —el último que quedaba en rol base— + "Total mes"=pool. **Pendiente UI (letra chica):**
-> "generado por cobertura" en Estadísticas cuando alguien cubrió otro puesto ese turno.
+> (`TipQuincenal.tsx`) —el último que quedaba en rol base— + "Total mes"=pool. **`5e85abc` (ítem B):**
+> **`pool_total_crc` = fuente única del total del pool** — mig 051 (out-of-band en ambos entornos) + escritura
+> al cerrar/editar (`updateSessionPools`) + **backfill de las 266 sesiones** (solo esa columna); Historial
+> muestra el total real **sin expandir** (`poolTotalOf = pool_total_crc ?? fallback`). **Pendiente UI (letra
+> chica):** "generado por cobertura" en Estadísticas cuando alguien cubrió otro puesto ese turno.
 
 ## 🟧 P1 — DEUDA CORTA (técnica / datos)
 

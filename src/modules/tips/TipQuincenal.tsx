@@ -59,6 +59,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
           tip_amount_usd: e.tip_amount_usd,
           points:         e.points,
           payout_crc:     e.payout_crc,
+          covered_role:   e.covered_role,
         })),
         employees.map(e => ({ id: e.id, full_name: e.full_name, role: e.role })),
         rolePoints,
@@ -164,7 +165,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
           {[
             { label: 'Q1 (1-15) pool', val: formatCRC(q1Total), sub: `${q1Sessions.length} turnos` },
             { label: 'Q2 (16-fin) pool', val: formatCRC(q2Total), sub: `${q2Sessions.length} turnos` },
-            { label: 'Total mes', val: formatCRC(grandTotal), sub: `${q1Sessions.length + q2Sessions.length} turnos` },
+            { label: 'Total mes', val: formatCRC(q1Total + q2Total), sub: `${q1Sessions.length + q2Sessions.length} turnos` },
           ].map(k => (
             <div key={k.label}>
               <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#555' }}>{k.label}</div>

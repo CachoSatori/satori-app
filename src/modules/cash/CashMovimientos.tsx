@@ -507,7 +507,12 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
                     <select className="cd-tbl-select" value={m.movement_type}
                       onChange={e => handleFieldChange(m.id, 'movement_type', e.target.value)}
                       disabled={saving === m.id}>
-                      {MOVEMENT_TYPES.map(t => <option key={t} value={t}>{MOVEMENT_LABELS[t]}</option>)}
+                      {/* 'traspaso' NO se ofrece como destino de conversión (un traspaso necesita
+                          dirección legible 'A → B', que este select no captura → quedaría indeterminado).
+                          Se mantiene la opción SOLO si la fila YA es traspaso, para que se muestre bien;
+                          el filtro de arriba y el modal (MOVEMENT_TYPES global) NO se tocan. */}
+                      {MOVEMENT_TYPES.filter(t => t !== 'traspaso' || m.movement_type === 'traspaso')
+                        .map(t => <option key={t} value={t}>{MOVEMENT_LABELS[t]}</option>)}
                     </select>
                   </td>
                   <td>

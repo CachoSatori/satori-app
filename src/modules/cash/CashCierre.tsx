@@ -42,7 +42,7 @@ export function calcDeberiaUSD(saldoBaseUsd: number, vmUsd: number, vnUsd: numbe
   return saldoBaseUsd + vmUsd + vnUsd
 }
 
-// Gate del ajuste — Opción B FIRMADA por la dueña: el motivo es obligatorio si la diferencia
+// Gate del ajuste — Opción B FIRMADA por el dueño: el motivo es obligatorio si la diferencia
 // en ₡ supera su tolerancia (₡500) O la de US$ supera la suya ($1, con datos USD presentes:
 // difUsd viene null cuando no hay ni contado ni "debería" en dólares). Antes el gate era solo ₡.
 // Mismas tolerancias que cuadra/cuadraUSD del componente — mantener en sync. Exportada para test.

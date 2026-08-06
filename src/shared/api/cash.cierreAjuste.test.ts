@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { saldoCajaFuerte } from '../../modules/cash/cashUtils'
 import type { CashMovement } from '../types/database'
 
-// Opción B (FIRMADA por la dueña) — recordCierreAjuste materializa la diferencia del cierre como
+// Opción B (FIRMADA por el dueño) — recordCierreAjuste materializa la diferencia del cierre como
 // movimiento(s) de Caja Fuerte: faltante (dif<0) → egreso resta · sobrante (dif>0) → ingreso suma.
 // Invariantes fijados acá:
 //   1. Dirección/monto/moneda correctos por cada moneda que superó su tolerancia (mixto = 2 movs).

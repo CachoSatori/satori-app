@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// Fase 1 con la Caja Diaria ABIERTA (decisión de la dueña): al mediodía la caja sigue operando,
+// Fase 1 con la Caja Diaria ABIERTA (decisión del dueño): al mediodía la caja sigue operando,
 // así que sellar el Mediodía NO puede depender de cerrar el turno. La Fase 2 (noche) sí: ahí se
 // cuenta el físico y se cierra la bóveda, y un turno abierto seguiría moviendo plata.
 //

@@ -101,7 +101,7 @@ export default function InvRevision({ ingredients, onRefresh }: {
         const mmap: Record<string, CashMovement> = {}
         for (const m of movRows) mmap[m.id] = m
         setMovsById(mmap)
-        // Nombre de quién registró el pago (created_by) — trazabilidad pedida por la dueña. Solo lectura.
+        // Nombre de quién registró el pago (created_by) — trazabilidad pedida por el dueño. Solo lectura.
         const creatorIds = [...new Set(movRows.map(m => m.created_by).filter((x): x is string => !!x))]
         if (creatorIds.length) {
           const { data: profs } = await supabase.from('profiles').select('id, full_name').in('id', creatorIds)
@@ -482,7 +482,7 @@ function ReviewDetail({ task, doc, docUrl, movement, ingredients, suppliers, sup
         </p>
         {err && <div className="tips-error" style={{ marginBottom: '0.6rem' }}><span>{err}</span><button onClick={() => setErr(null)}>✕</button></div>}
         {savedMsg && <div style={{ marginBottom: '0.6rem', padding: '0.4rem 0.7rem', borderRadius: 4, background: 'rgba(74,154,106,.12)', border: '1px solid #4a9a6a', color: '#4a9a6a', fontSize: '0.78rem' }}>{savedMsg}</div>}
-        {/* Trazabilidad: quién registró el pago de mercadería (pedido de la dueña). */}
+        {/* Trazabilidad: quién registró el pago de mercadería (pedido del dueño). */}
         {movement && (
           <div style={{ fontSize: '0.7rem', color: 'var(--t-muted)', marginBottom: '0.5rem' }}>
             Registrado por <strong>{creatorName ?? '—'}</strong>

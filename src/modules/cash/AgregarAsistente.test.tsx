@@ -159,7 +159,7 @@ describe('AgregarAsistente — matriz de pago por rol (RN-3, sin alterarla)', ()
   })
 })
 
-describe('AgregarAsistente — orden del form (T3-B, decidido por la dueña)', () => {
+describe('AgregarAsistente — orden del form (T3-B, decidido por el dueño)', () => {
   it('Foto → Clasificación → Proveedor → Montos → Descripción → Fecha (los bloques en ese orden)', () => {
     renderAsistente('cajero')
     // Posición relativa en el DOM (compareDocumentPosition): cada elemento precede al siguiente.

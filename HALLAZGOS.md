@@ -4,6 +4,27 @@
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
+## 🧭 2026-08-07 — 2 aprendizajes operativos (pases ítems 1/7/8)
+
+- **`delete_movement_cascade` NO se puede llamar por el canal admin (Management API).** La versión de prod
+  (mig 044) exige en su FASE 1 de autorización una de dos: `get_my_role() in ('owner','manager')` (sesión de
+  app con JWT) **o** `p_manager_email` + `p_manager_password` validados server-side (crypt). Por la Management
+  API el contexto corre como `supabase_read_only_user` con `get_my_role() = null` y `auth.uid() = null` → cae
+  al `else` → `raise 'No autorizado para borrar movimientos'`. **Conclusión:** los **borrados** de movimientos
+  van **desde la app** logueado como owner/manager; por SQL admin solo se pueden hacer **correcciones** (UPDATE
+  directo, que NO pasa por esa RPC). Por eso el ítem 7 se **corrigió** en vez de borrarse. (Un `DELETE` crudo
+  tampoco sirve: `inventory_movements.cash_movement_id` es `ON DELETE SET NULL` → dejaría inventario huérfano
+  + el documento colgando + sin auditoría — justo lo que la mig 039/044 existe para evitar.)
+- **El auto-disparo del workflow "Deploy to GitHub Pages" falló en 2 pases seguidos.** El push a `main` **no
+  disparó** el workflow (Actions habilitado, sin `[skip ci]`); hubo que lanzarlo a mano con
+  `gh workflow run deploy.yml --ref main` (`workflow_dispatch`). Además, con congestión de runners, algunos
+  jobs quedaron en cola ~15 min y fueron **cancelados** (`build`/`deploy: cancelled` → run `failure`, aunque el
+  código compile local), y dispatches repetidos **colisionan en el grupo de concurrencia `pages`**. **A revisar
+  en `deploy.yml`:** por qué el trigger `on: push` no dispara (¿filtros de `paths`? ¿webhook?) y la
+  `concurrency`. Workaround: verificar que no haya runs `queued`/`in_progress`, lanzar **UN** dispatch limpio y
+  monitorear; confirmar por `version.json.commit` + grafo de chunks, **nunca por HTTP 200** (el fallback SPA
+  responde 200 a cualquier `/assets/*.js` inexistente).
+
 ## 🔐 2026-07-23 (Fase B1) — `revoke ... from anon` INEFECTIVO: funciones SECURITY DEFINER ejecutables por `anon`
 
 **Hallado auditando el DDL del `035` antes de traer su archivo.** No se arregló nada — solo se documenta.

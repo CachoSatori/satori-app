@@ -6,7 +6,11 @@
 > `ajuste_tipo` derivado del signo) → `8c65686`; (2) **`pool_total_crc` = fuente de verdad del total del pool**
 > (mig 051 + escritura al cerrar/editar + backfill de **266 sesiones**) → **`5e85abc`**. Julio 2026 =
 > **₡2.167.131** en TODOS los reportes. Sagrados byte-idénticos; **mig 051 aplicada OUT-OF-BAND en staging Y prod**
-> (sin `schema_migrations`), cero `db push`. `main` = **`5e85abc`** · `staging` = **`129a516`**. El **POZO ÚNICO**
+> (sin `schema_migrations`), cero `db push`. **Post-05 (2026-08-06/07):** a prod el **guard de dirección de
+> traspasos** (ítem 1a, UI+API, `f11ccdb`) y el **cosmético ítem 8** (solo 11 archivos no-PoS → convergió la
+> divergencia no-PoS main↔staging, `5c3b4ff`); el **ítem 7** (huérfano de fecha imposible) quedó **corregido**
+> (la factura de Distribuidora Isleña re-fechada a 2026-06-18/aprobado/Transferencia, NO borrada). `main` =
+> **`5c3b4ff`** · `staging` = **`e11c085`**. El **POZO ÚNICO**
 > sigue ✅ validado en prod desde el 22/07 (primer cierre real **cuadró**).
 >
 > **La cadena de propinas quedó CERRADA:** los 6 consumidores del pool clasifican sala↔barra por `covered_role`
@@ -49,8 +53,8 @@ Núcleo: [`pozo.ts`](src/modules/cash/pozo.ts) (puro) · [`cierrePozo.ts`](src/m
 
 | Rama | Hash | Qué es |
 |---|---|---|
-| `main` | **`5e85abc`** | **PROD, en uso.** Todo lo no-PoS: ola 2026-07, Caja/Cierre/USD/Revisión, Bandeja, propinas ef/elec **+ `covered_role` en TODOS los reportes** (correo/Estadísticas/Historial + **Quincenal** "Total mes"=pool) **+ `pool_total_crc` fuente de verdad del total del pool** (mig 051 + backfill 266, `5e85abc`), Proveedores, elegibilidad por rol, **el POZO**, el **endurecimiento de caja ítems 6+4** (Ingreso adicional + guard de fechas) y el **bloque de plata ítems 2+3** (negativos manuales prohibidos + `ajuste_tipo` por signo, `8c65686`). **SIN PoS.** |
-| `staging` | **`129a516`** (sobre el reconciliado `7fb8f41`: docs `db4bbc2` + **plata 2+3** `6479eb8` + **`pool_total_crc`** `129a516`) | **Fuente de verdad del desarrollo** = `main` **+ PoS/KDS/comandero + FE (SIM) + inventario COGS**. Parte común **idéntica** a main (contrato en §b). ⚠️ Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
+| `main` | **`5c3b4ff`** | **PROD, en uso.** Todo lo no-PoS: ola 2026-07, Caja/Cierre/USD/Revisión, Bandeja, propinas ef/elec **+ `covered_role` en TODOS los reportes** (correo/Estadísticas/Historial + **Quincenal** "Total mes"=pool) **+ `pool_total_crc` fuente de verdad del total del pool** (mig 051 + backfill 266, `5e85abc`), Proveedores, elegibilidad por rol, **el POZO**, el **endurecimiento de caja ítems 6+4** (Ingreso adicional + guard de fechas) el **bloque de plata ítems 2+3** (negativos manuales prohibidos + `ajuste_tipo` por signo, `8c65686`), el **guard de dirección de traspasos** (ítem 1a: UI select + API, `f11ccdb`) y el **cosmético ítem 8** ("la dueña"→"el dueño", solo los 11 no-PoS, `5c3b4ff`). **SIN PoS.** |
+| `staging` | **`e11c085`** (sobre `7fb8f41`: docs `db4bbc2` + **plata 2+3** `6479eb8` + **`pool_total_crc`** `129a516` + docs cierre `4b88ef3` + **guard de traspasos** `e11c085`) | **Fuente de verdad del desarrollo** = `main` **+ PoS/KDS/comandero + FE (SIM) + inventario COGS**. Parte común **idéntica** a main (contrato en §b). ⚠️ Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
 
 > **Refs:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`**
 > (`satori-staging`).
@@ -73,8 +77,15 @@ auth. **En rama aparte (sin merge):** `propina-pool` (espera decisión del dueñ
 
 ### 📜 CONTRATO DE DIVERGENCIA — qué hay solo en STAGING (congelado 2026-07-23)
 
-`git diff main..staging --name-only` = **75 archivos**, **cero de plata** (`tipCalculations`,
-`cashUtils`, `cierre*`, caja, propinas, finanzas son **byte-idénticos**).
+`git diff main..staging --name-only` = **75 archivos** (congelado 2026-07-23), **cero de plata**
+(`tipCalculations`, `cashUtils`, `cierre*`, caja, propinas, finanzas son **byte-idénticos**).
+
+> **Actualización 2026-08-07 — divergencia NO-PoS saldada.** Los **11 archivos cosméticos** ("la dueña"→"el
+> dueño", ítem 8) **convergieron** al pasar el cosmético a prod (`5c3b4ff`, solo los 11 no-PoS): `AgregarAsistente.tsx`,
+> `CashCierre.tsx`, `InvRevision.tsx`, `ManagerOverride.tsx`, `api/cash.ts`, `index.css` y sus tests ya **no
+> difieren** main↔staging. El guard de traspasos (ítem 1a) también quedó en ambos (main `f11ccdb` / staging
+> `e11c085`). **Lo que resta en `main..staging` es PoS/FE/inventario + config Cloudflare + docs de trabajo** (las
+> categorías de abajo); la parte no-PoS de plata/negocio ya está convergida.
 
 | Categoría | Nº | Qué |
 |---|---|---|

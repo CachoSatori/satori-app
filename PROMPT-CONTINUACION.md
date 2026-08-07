@@ -25,10 +25,11 @@ El pozo cerró el agujero conceptual. T3 cierra las puertas por las que todavía
 que lo ensucie. **Ninguno es urgente hoy** — el sistema cuadra —, pero cada uno es una forma
 conocida de volver a descuadrar.
 
-1. **🖊️ Dirección obligatoria en traspasos (1a + 1b).** Hoy un traspaso sin dirección legible (`subcategory`
-   nula, `'Ajuste'`, `'Otro traspaso'`, texto libre) queda **neutro** y se cuenta aparte en
-   `indeterminados`. Está bien como red de contención, pero el alta debería **exigir** origen→destino.
-   Resolver además los `'Otro traspaso'` que ya existan. **Toca plata → firma.** ← **PENDIENTE**
+1. **✅ EN PROD** (ítem 1a, merge `f11ccdb`; `main` = `5c3b4ff`) — **dirección obligatoria en traspasos**: el
+   `<select>` de Tipo de la fila ya no ofrece 'traspaso' (UI) + `createDayMovement`/`updateCashMovement`
+   rechazan un traspaso cuyo `subcategory` no parsee 'A → B' (API, vía `parseTraspaso`); `recordCierreRetiro`
+   intacto. **1b: cerrado SIN acción** — los 154 "indeterminados" en prod eran **ajustes de diferencia de caja**
+   (Registradora), no transferencias → la data de prod está correcta, no hay que darles dirección.
 2. **✅ EN PROD** (merge `8c65686`; staging `6479eb8`) — **Prohibir montos negativos MANUALES** (asistente /
    nuevo mov / edición inline / draft de pago = 4 puntos de carga). ⚠️ Los negativos bicurrency del SISTEMA
    son LEGÍTIMOS — la regla es solo para la carga **manual**.
@@ -42,11 +43,16 @@ conocida de volver a descuadrar.
 6. **✅ EN PROD** (`b36a382`→`723f734`) — **"Ingreso adicional" endurecido**: categoría (dropdown) + motivo
    obligatorios + umbral ₡100.000 (equiv. CRC) con autorización de gerencia. subcategory sigue
    `'Ingreso adicional'`; categoría+motivo en `description`. **Sin esquema.**
-7. **🧹 Limpiar los 2 huérfanos de fecha imposible:** `9b79e731` (2020-07-09, ₡74.126,92) y uno de
-   **2016** (₡54.978). **La app NO los muestra** — `getAllCashMovements(days = 1000)` arranca ~1.000
-   días atrás — por eso la verificación de pantalla nunca los vio. Son pendientes que nadie va a pagar. ← **PENDIENTE**
-8. **✅ HECHO en staging** (cosmético **`6b7a7bc`**) — Comentarios "la dueña" → "el dueño". **Falta pase a
-   prod** (haría converger `AgregarAsistente.tsx` main↔staging — hoy divergen por 2 comentarios). Cero riesgo.
+7. **✅ RESUELTO POR CORRECCIÓN (2026-08-07).** Era **1 huérfano, no 2**: `9b79e731` NO era basura — es una
+   compra REAL de mercadería a Distribuidora Isleña (factura electrónica **2026-06-18**, ₡74.126,92) mal
+   importada con `created_at=2020-07-09` y en `pendiente`. **Corregida** (UPDATE de UNA fila, solo
+   `created_at`→2026-06-18 · `status`→aprobado · `method`→Transferencia; pagada por banco ese día); las 5
+   `inventory_movements` y la foto (`6aef3a0b`) intactas, invariante de cajas físicas idéntica antes/después.
+   El **"2016 · ₡54.978" NO existe en prod** (verificado read-only: sin created_at 2016, sin monto 54.978,
+   sin fila en `movement_deletions`) → era **stale**.
+8. **✅ EN PROD** (merge `5c3b4ff`) — cosmético "la dueña" → "el dueño": se pasaron **solo los 11 archivos
+   no-PoS** de `6b7a7bc` (se omitieron los 6 solo-PoS que no existen en main). **Convergió la divergencia
+   no-PoS** main↔staging (`AgregarAsistente.tsx` et al. ya no difieren). Cero riesgo (comentarios/strings).
 
 > ✅ **EN PROD además** (fuera de T3): **`covered_role` canónico en los reportes de propinas** = **₡2.167.131**
 > Jul (invariante de conservación pool==payout ±₡1 confirmada, 61/61). **`723f734`**: correo mensual (replica

@@ -10,7 +10,10 @@
 > traspasos** (ítem 1a, UI+API, `f11ccdb`) y el **cosmético ítem 8** (solo 11 archivos no-PoS → convergió la
 > divergencia no-PoS main↔staging, `5c3b4ff`); el **ítem 7** (huérfano de fecha imposible) quedó **corregido**
 > (la factura de Distribuidora Isleña re-fechada a 2026-06-18/aprobado/Transferencia, NO borrada). `main` =
-> **`5c3b4ff`** · `staging` = **`e11c085`**. El **POZO ÚNICO**
+> **`5c3b4ff`** · `staging` = **`2ccdfa0`**. **Post-07 (2026-08-07):** T3 endurecimiento de caja
+> **COMPLETO** — el ítem 5 (auditoría de **EDICIONES**, mig **052** = `movement_edits` + trigger
+> `AFTER UPDATE`) quedó aplicada y **verificada punta a punta en staging**; el **ledger de staging se
+> reconcilió a 52 filas** (`repair --status applied 050 051 052` → `db push` desbloqueado, no-op). El **POZO ÚNICO**
 > sigue ✅ validado en prod desde el 22/07 (primer cierre real **cuadró**).
 >
 > **La cadena de propinas quedó CERRADA:** los 6 consumidores del pool clasifican sala↔barra por `covered_role`
@@ -107,8 +110,8 @@ Lista archivo por archivo → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md#-2026-07-23-
 
 | Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger (verificadas por objeto) |
 |---|---|---|
-| **PROD** | **✅ 33 filas: 001–008, 0090, 0095, 010–021, 038–046, 048, 049** — B2 reconcilió (2026-07-27) | subset core de la `026` (sin archivo en `main`) + **mig `051`** (`pool_total_crc`, 2026-08-05) |
-| **STAGING** | **✅ 49 filas: 001–008, 0090, 0095, 010–046, 048, 049** — `db push` al día | **mig `051`** (`pool_total_crc`, 2026-08-05) — el `db push` volvió a estar frenado por el ledger |
+| **PROD** | **✅ 35 filas: 001–008, 0090, 0095, 010–021, 038–046, 048–051** — B2 (2026-07-27) + **`050` y `051` YA registradas + aplicadas (consistente)** | subset core de la `026` (sin archivo en `main`). **Único pendiente: mig `052`** (aún NO aplicada a prod — su sesión, con firma) |
+| **STAGING** | **✅ 52 filas: 001–008, 0090, 0095, 010–046, 048–052** — **reconciliado 2026-08-07** (`repair --status applied 050 051 052`), `db push` **DESBLOQUEADO** (no-op) | — (cero out-of-band; 050/051/052 ya en el ledger) |
 
 - **El rediseño del pozo no agregó ni una migración.** Es código puro + **1 fila** de datos (el asiento).
 - **B1 ✅ (staging, 2026-07-23):** el `035` dejó de ser fantasma (su archivo se trajo de
@@ -126,8 +129,14 @@ Lista archivo por archivo → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md#-2026-07-23-
   EXISTS pool_total_crc numeric` aplicada por Management API (`read_only:false`), **sin tocar
   `schema_migrations`** (el `db push` sigue frenado por el ledger). El backfill de las sesiones closed
   (**266 prod / 2 staging**) escribió **solo `pool_total_crc`** — checksum de las demás columnas idéntico
-  antes/después. **⚠️ Colisión:** la rama `metas_personales` también reserva **051** → **renumerar a
-  `052+`** antes de que vaya a staging.
+  antes/después. **⚠️ Colisión:** la rama `metas_personales` también reservaba 051/052 → **renumerar a
+  `053+`** (051 = `pool_total_crc`, **052 = `movement_edits`**).
+- **🆕 RECONCILIACIÓN 2026-08-07 (staging, con firma):** `repair --status applied 050 051 052` registró las 3
+  out-of-band → **staging 49 → 52 filas**, `migration list` alineado (local==remote, sin huérfanos),
+  **`db push` DESBLOQUEADO** (`Remote database is up to date`, no-op). Backups:
+  `_handoff/ledger-staging-2026-08-07-{pre,post}-reconciliacion.json`. **PROD ya estaba consistente** (foto
+  read-only del 08-07: **35 filas**, `050`/`051` en el ledger) → **prod NO se tocó**; su único pendiente de
+  ledger es **052** (va con el pase de la auditoría de ediciones a prod, sesión aparte).
 - **✅ B2 (prod, 2026-07-27, con firma):** 28 `repair --status applied` (con `0090`) → ledger de prod
   **4 → 33 filas**, `migration list` alineado sin huérfanos; **rename `009`→`0090` replicado en `main`**
   por FF (cierra `R100` del §b); **mig 049** (`revoke all ... from public, anon`) aplicada por `db push`
@@ -153,12 +162,16 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🧪
 | **Propinas — pool por `covered_role`** en los **6 consumidores** (cierre · edición · Historial · Estadísticas · Quincenal · correo) = **₡2.167.131** (Jul) **+ `pool_total_crc` = fuente única del total** (persistido al cerrar/editar + backfill de 266; Historial lo muestra sin recomputar). Correo replica `calcTurno.totalPool` (`monthly-report/pool.ts` + oracle test). | ✅ **prod + staging** (correo/Est./Hist. `723f734` · Quincenal `a6192cd` · **`pool_total_crc` `5e85abc`**) |
 | **Endurecimiento de caja — ítems 6 (Ingreso adicional: categoría+motivo+umbral) + 4 (guard de fechas: apertura hoy · backdateo por rol)** | ✅ **prod + staging** (`b36a382`→`723f734`) |
 | **Bloque de plata — ítems 2 (negativos MANUALES prohibidos: 4 puntos de carga) + 3 (`ajuste_tipo` del cierre derivado del signo)** | ✅ **prod + staging** (`8c65686`) |
+| **Auditoría de EDICIONES de caja — ítem 5 / mig `052`** (`movement_edits` append-only + trigger `AFTER UPDATE`: registra solo cambios en 10 columnas sensibles; RLS solo-SELECT owner/manager/contador) | 🧪 **staging** (`2ccdfa0`, aplicada + verificada punta a punta; **pase a prod pendiente**) |
 | Quick-wins C2 (historial over/short) + C3 (email del cierre, Edge Fn `cierre-email`) | 🟢 smoke pendiente |
 | PoS (comandero/KDS/cobro/ticket SIM) · FE SIM · Inventario activo COGS | 🧪 staging (migs 022–037) |
 
 ## (e) Pendientes de PLATA — esperan FIRMA del dueño
 
-1. **T3 — endurecimiento de caja** (sesión propia; los ítems de plata van con firma).
+1. **✅ T3 — endurecimiento de caja: COMPLETO.** Los ítems 1a/1b (traspasos), 2+3 (negativos / `ajuste_tipo`),
+   4+6 (fechas / ingreso), 7 (huérfano) y 8 (cosmético) están **en prod**; el ítem **5 (auditoría de
+   EDICIONES, mig `052`)** quedó **aplicado + verificado en staging** — falta solo su **pase a prod** (sesión
+   aparte, con firma).
 2. **SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de DNS.
 3. **Edición de propinas en Historial por CAJERO** con autorización de gerencia — firmado
    2026-07-17, sin construir. Patrón mig 045 `requireManager`.
@@ -179,8 +192,11 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🧪
    CR) → un cierre de noche puede caer en el período equivocado. **Cambia números → valida el dueño.**
 4. **🧾 FE-CR** (factura electrónica real) — hoy solo estructura SIM en staging.
 5. **🚧 PILAR — sesión/auth escalable y multi-tenant.** **Bloquea el gran pase del PoS.**
-6. **🧹 Limpieza de datos:** 2 huérfanos de fecha imposible — `9b79e731` (2020-07-09, ₡74.126,92) y
-   uno de 2016 (₡54.978). **La app NO los muestra** (el fetch arranca 1.000 días atrás). Van en T3.
+6. **✅ Limpieza de datos — RESUELTO (2026-08-07):** era **1 huérfano, no 2**. `9b79e731` (mal importado con
+   `created_at=2020-07-09`) era una **compra real** a Distribuidora Isleña (factura 2026-06-18, ₡74.126,92) →
+   **corregida** (UPDATE de 1 fila; inventario + foto intactos, invariante idéntica). El **"2016 · ₡54.978"
+   NO existe en prod** (verificado read-only: sin `created_at` 2016, sin monto 54.978, sin fila en
+   `movement_deletions`) → era **stale**, se descarta.
 7. **🧹 Comentarios "la dueña" → "el dueño"** en el código. Cosmético, sin riesgo.
 
 ---

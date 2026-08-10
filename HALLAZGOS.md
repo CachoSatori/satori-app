@@ -4,6 +4,28 @@
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
+## 🧾 2026-08-07 (tarde) — Auditoría de EDICIONES (mig 052) + ledger de STAGING reconciliado
+
+- **Mig `052` — auditoría de EDICIONES de `cash_movements`** (espejo de `movement_deletions`/039, pero para
+  UPDATE). Tabla `movement_edits` **append-only** + trigger `AFTER UPDATE` `log_movement_edit()` (`SECURITY
+  DEFINER`) que registra **solo** cambios en 10 columnas sensibles (`amount_crc, amount_usd, method,
+  movement_type, caja_origen, status, subcategory, classification, account_id, supplier_id`); ignora no-op /
+  cosméticos / el toque de `updated_at`. RLS **solo-SELECT** owner/manager/contador (ningún cliente forja o borra
+  trazas; escribe únicamente el trigger). **Aplicada out-of-band a staging + verificada punta a punta** (una
+  edición real por la app dejó su fila con `edited_by` = usuario). Cero código de app, sagrados byte-idénticos.
+  **Commit `2ccdfa0`, FF-merged a `staging`.**
+- **Ledger de STAGING reconciliado.** `schema_migrations` cortaba en **049** con `050`/`051`/`052` aplicadas
+  FUERA del ledger. `supabase migration repair --status applied 050 051 052` → **49 → 52 filas**, `migration
+  list` alineado (local==remote, sin huérfanos), **`db push` desbloqueado** (`Remote database is up to date`,
+  no-op). Con **backups antes/después** (`_handoff/ledger-staging-2026-08-07-{pre,post}-reconciliacion.json`) y
+  **`--status applied`** (NUNCA `reverted` — le mentiría al ledger sobre plata real).
+- **PROD ya estaba consistente — NO se tocó.** Foto read-only por el canal firmado (`comun.ts`/`prod-gate`,
+  `read_only:true` + smoke `25006`): prod tiene **35 filas** y `050`/`051` **ya están en su ledger** (los docs
+  viejos decían "33 filas + `051` out-of-band" → desactualizado). El **único pendiente de prod es la `052`**.
+- **Pase de `052` a PROD = su propia sesión, con firma.** Como el ledger de prod SÍ es consistente, allá la `052`
+  lleva **`migration repair --status applied 052`** además del SQL out-of-band (a diferencia de staging, donde
+  se registró junto con el arrastre `050`/`051`).
+
 ## 🧭 2026-08-07 — 2 aprendizajes operativos (pases ítems 1/7/8)
 
 - **`delete_movement_cascade` NO se puede llamar por el canal admin (Management API).** La versión de prod

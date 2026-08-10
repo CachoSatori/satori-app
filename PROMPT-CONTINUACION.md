@@ -9,21 +9,25 @@
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
 > pases viejos) son **referencia histórica**.
 >
+> **AL DÍA (2026-08-07):** `main` = **`5c3b4ff`** (intacto) · `staging` = **`2ccdfa0`**. **T3 endurecimiento de
+> caja COMPLETO** — ítem 5 (auditoría de **EDICIONES**, mig **`052`** = `movement_edits` + trigger `AFTER UPDATE`)
+> aplicada + verificada punta a punta en staging (pase a prod pendiente) · **ledger de staging reconciliado a
+> 52 filas** (`repair --status applied 050 051 052`, `db push` desbloqueado). Backups del ledger en `_handoff/`.
 > **AL DÍA (2026-08-05):** `main` = **`5e85abc`** · `staging` = **`129a516`**. En prod **hoy**: **bloque de
 > plata ítems 2+3** (negativos MANUALES prohibidos + `ajuste_tipo` derivado del signo, `8c65686`) ·
 > **`pool_total_crc` = fuente de verdad del total del pool** (mig 051 out-of-band + escritura al cerrar/editar
 > + **backfill de 266 sesiones**, `5e85abc`; Julio = **₡2.167.131**). Antes en la ola: ítems 6+4 (`b36a382`),
 > `covered_role` en correo + Estadísticas + Historial (`723f734`, correo de Julio ENVIADO), Quincenal
 > (`a6192cd`). Detalle → [HANDOFF-2026-08-05.md](HANDOFF-2026-08-05.md). ⚠️ La rama `metas_personales` también
-> usa mig **051** → **renumerar a `052+`** antes de que vaya a staging.
+> usaba mig **051/052** → **renumerar a `053+`** (051 = `pool_total_crc`, **052 = `movement_edits`**).
 
 ---
 
-## 🟥 P0 — T3 · ENDURECIMIENTO DE CAJA (sesión propia; firma del dueño donde toque plata)
+## ✅ T3 · ENDURECIMIENTO DE CAJA — COMPLETO (2026-08-07)
 
-El pozo cerró el agujero conceptual. T3 cierra las puertas por las que todavía puede entrar un dato
-que lo ensucie. **Ninguno es urgente hoy** — el sistema cuadra —, pero cada uno es una forma
-conocida de volver a descuadrar.
+> **Los 8 ítems resueltos.** El pozo cerró el agujero conceptual; T3 cerró las puertas por las que aún podía
+> entrar un dato que lo ensucie. Todo está **en prod** salvo el ítem **5** (auditoría de EDICIONES, mig `052`),
+> que está **en staging** (aplicado + verificado) y solo espera su **pase a prod** (sesión aparte, con firma).
 
 1. **✅ EN PROD** (ítem 1a, merge `f11ccdb`; `main` = `5c3b4ff`) — **dirección obligatoria en traspasos**: el
    `<select>` de Tipo de la fila ya no ofrece 'traspaso' (UI) + `createDayMovement`/`updateCashMovement`
@@ -38,8 +42,13 @@ conocida de volver a descuadrar.
 4. **✅ EN PROD** (`b36a382`→`723f734`) — **guard de fechas de caja**: apertura fija en hoy (`min=max` +
    revalida en `handleApertura`); "Nuevo movimiento" con backdateo solo owner/manager/contador + confirm
    reforzado si el día ya tiene cierre `'completo'`.
-5. **🖊️ Auditoría de ediciones** de movimientos (hoy hay auditoría de borrados vía `movement_deletions`;
-   la edición pasa por reemplazo y no deja el mismo rastro). Puede tocar esquema. ← **PENDIENTE**
+5. **✅ EN STAGING (mig `052`, `2ccdfa0`) — Auditoría de EDICIONES** de movimientos (antes solo había auditoría
+   de borrados vía `movement_deletions`). Tabla `movement_edits` **append-only** + trigger `AFTER UPDATE`
+   `log_movement_edit()` que registra **solo** cambios en 10 columnas sensibles (plata / estado / clasificación /
+   cuenta / proveedor); ignora no-op y cosméticos (p. ej. `description`). RLS **solo-SELECT** owner/manager/contador
+   (escribe únicamente el trigger, `SECURITY DEFINER`). **Aplicada + verificada punta a punta en staging** — una
+   edición real por la app dejó su fila con `edited_by` = usuario. ← **pase a PROD = su sesión, con firma** (prod
+   ya tiene ledger consistente hasta 051 → allá 052 SÍ lleva `migration repair` además del SQL out-of-band).
 6. **✅ EN PROD** (`b36a382`→`723f734`) — **"Ingreso adicional" endurecido**: categoría (dropdown) + motivo
    obligatorios + umbral ₡100.000 (equiv. CRC) con autorización de gerencia. subcategory sigue
    `'Ingreso adicional'`; categoría+motivo en `description`. **Sin esquema.**
@@ -93,6 +102,12 @@ conocida de volver a descuadrar.
    Backups: `_handoff/ledger-prod-2026-07-27-{pre,post}-B2.json`.
    **B3 = DECIDIDO:** la `026` en prod se **documenta como excepción permanente**, no se repara.
    ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
+   **🆕 RECONCILIACIÓN 2026-08-07 (staging):** las 3 out-of-band posteriores (`050 employee_pos_name`,
+   `051 pool_total_crc`, `052 movement_edit_audit`) se registraron con `repair --status applied 050 051 052`
+   → **staging 49 → 52 filas**, `migration list` alineado sin huérfanos, **`db push` desbloqueado** (no-op).
+   Backups: `_handoff/ledger-staging-2026-08-07-{pre,post}-reconciliacion.json`. **Prod ya estaba consistente**
+   (foto read-only 08-07: **35 filas**, `050`/`051` en el ledger) → prod NO se tocó; su único pendiente de
+   ledger es **052** (con el pase de la auditoría de ediciones, sesión aparte).
 3. **🔐🖊️ Hardening ACL — `get_my_role` + 2 triggers (los 3 que faltan en prod).** Tras B2, prod quedó
    en **3/10** `SECURITY DEFINER` ejecutables por `anon`: `get_my_role`, `unif_on_cash_movement`,
    `handle_new_user`. NO entraron en la 049 **a propósito**. **Accionable, sin urgencia, su propia sesión:**

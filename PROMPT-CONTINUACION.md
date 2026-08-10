@@ -9,10 +9,12 @@
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
 > pases viejos) son **referencia histórica**.
 >
-> **AL DÍA (2026-08-07):** `main` = **`5c3b4ff`** (intacto) · `staging` = **`2ccdfa0`**. **T3 endurecimiento de
-> caja COMPLETO** — ítem 5 (auditoría de **EDICIONES**, mig **`052`** = `movement_edits` + trigger `AFTER UPDATE`)
-> aplicada + verificada punta a punta en staging (pase a prod pendiente) · **ledger de staging reconciliado a
-> 52 filas** (`repair --status applied 050 051 052`, `db push` desbloqueado). Backups del ledger en `_handoff/`.
+> **AL DÍA (2026-08-10):** `main` = **`6bb9c33`** · `staging` = **`2f88fd6`**. **T3 endurecimiento de caja
+> COMPLETO EN PROD** — ítem 5 (auditoría de **EDICIONES**, mig **`052`** = `movement_edits` + trigger `AFTER
+> UPDATE`) quedó **en staging Y en prod**. 🔌 **Hallazgo clave + DECISIÓN ADOPTADA:** `main` es la **rama de
+> producción** del proyecto Supabase de prod (Branching ON) → **pushear una migración a `main` la AUTO-APLICA a la
+> base de prod** (la 052 entró sola al pushear `6bb9c33`, NO out-of-band). Ledger: staging **52**, prod **36**.
+> Detalle → [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
 > **AL DÍA (2026-08-05):** `main` = **`5e85abc`** · `staging` = **`129a516`**. En prod **hoy**: **bloque de
 > plata ítems 2+3** (negativos MANUALES prohibidos + `ajuste_tipo` derivado del signo, `8c65686`) ·
 > **`pool_total_crc` = fuente de verdad del total del pool** (mig 051 out-of-band + escritura al cerrar/editar
@@ -21,13 +23,24 @@
 > (`a6192cd`). Detalle → [HANDOFF-2026-08-05.md](HANDOFF-2026-08-05.md). ⚠️ La rama `metas_personales` también
 > usaba mig **051/052** → **renumerar a `053+`** (051 = `pool_total_crc`, **052 = `movement_edits`**).
 
+> **🔌 MODELO DE MIGRACIONES A PROD — ADOPTADO (2026-08-10, REEMPLAZA el viejo "db push frenado / prod solo por
+> canal firmado"):** `main` = la **base de producción** del proyecto Supabase de prod (`yiczgdti`, **Branching
+> ON**). **Mergear/pushear una migración a `main` la AUTO-APLICA a prod** (`db push` de la integración) + la
+> registra en `schema_migrations`. El check **"Supabase Preview"** verde sobre un commit de main con `.sql` nuevo =
+> **ya está en prod** (⚠️ NO correr apply/repair manual). **Guardrails:** (1) una migración llega a `main` **solo
+> cuando ya está lista para prod**, con el **ledger de prod consistente** (si hay drift → db push falla → check
+> rojo → no aplica); (2) **STAGING sigue MANUAL** (CLI `db query --linked` / Management API firmada), NO está atado
+> a la integración. Interruptor para desactivar: Dashboard → `yiczgdti` → Branches. Detalle + TODO de edge
+> functions → [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
+
 ---
 
-## ✅ T3 · ENDURECIMIENTO DE CAJA — COMPLETO (2026-08-07)
+## ✅ T3 · ENDURECIMIENTO DE CAJA — COMPLETO EN PROD (2026-08-10)
 
-> **Los 8 ítems resueltos.** El pozo cerró el agujero conceptual; T3 cerró las puertas por las que aún podía
-> entrar un dato que lo ensucie. Todo está **en prod** salvo el ítem **5** (auditoría de EDICIONES, mig `052`),
-> que está **en staging** (aplicado + verificado) y solo espera su **pase a prod** (sesión aparte, con firma).
+> **Los 8 ítems en prod.** El pozo cerró el agujero conceptual; T3 cerró las puertas por las que aún podía
+> entrar un dato que lo ensucie. El ítem **5** (auditoría de EDICIONES, mig `052`) fue el último y ya está
+> **en staging Y en prod** — a prod lo **auto-aplicó la integración Supabase Branching** al pushear la mig a
+> `main` (`6bb9c33`), sin apply manual.
 
 1. **✅ EN PROD** (ítem 1a, merge `f11ccdb`; `main` = `5c3b4ff`) — **dirección obligatoria en traspasos**: el
    `<select>` de Tipo de la fila ya no ofrece 'traspaso' (UI) + `createDayMovement`/`updateCashMovement`
@@ -42,13 +55,14 @@
 4. **✅ EN PROD** (`b36a382`→`723f734`) — **guard de fechas de caja**: apertura fija en hoy (`min=max` +
    revalida en `handleApertura`); "Nuevo movimiento" con backdateo solo owner/manager/contador + confirm
    reforzado si el día ya tiene cierre `'completo'`.
-5. **✅ EN STAGING (mig `052`, `2ccdfa0`) — Auditoría de EDICIONES** de movimientos (antes solo había auditoría
-   de borrados vía `movement_deletions`). Tabla `movement_edits` **append-only** + trigger `AFTER UPDATE`
-   `log_movement_edit()` que registra **solo** cambios en 10 columnas sensibles (plata / estado / clasificación /
-   cuenta / proveedor); ignora no-op y cosméticos (p. ej. `description`). RLS **solo-SELECT** owner/manager/contador
-   (escribe únicamente el trigger, `SECURITY DEFINER`). **Aplicada + verificada punta a punta en staging** — una
-   edición real por la app dejó su fila con `edited_by` = usuario. ← **pase a PROD = su sesión, con firma** (prod
-   ya tiene ledger consistente hasta 051 → allá 052 SÍ lleva `migration repair` además del SQL out-of-band).
+5. **✅ EN PROD Y STAGING (mig `052`; staging `2ccdfa0`, prod `6bb9c33`) — Auditoría de EDICIONES** de movimientos
+   (antes solo había auditoría de borrados vía `movement_deletions`). Tabla `movement_edits` **append-only** +
+   trigger `AFTER UPDATE` `log_movement_edit()` que registra **solo** cambios en 10 columnas sensibles (plata /
+   estado / clasificación / cuenta / proveedor); ignora no-op y cosméticos (p. ej. `description`). RLS
+   **solo-SELECT** owner/manager/contador (escribe únicamente el trigger, `SECURITY DEFINER`). Verificada punta a
+   punta en staging (una edición real por la app dejó su fila con `edited_by`=usuario) + estructural read-only en
+   prod. **A prod la AUTO-APLICÓ la integración Supabase Branching** al pushear `6bb9c33` (ledger 35→36, registrada)
+   — el apply/repair manual fue **STOP** porque ya estaba (ver [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md)).
 6. **✅ EN PROD** (`b36a382`→`723f734`) — **"Ingreso adicional" endurecido**: categoría (dropdown) + motivo
    obligatorios + umbral ₡100.000 (equiv. CRC) con autorización de gerencia. subcategory sigue
    `'Ingreso adicional'`; categoría+motivo en `description`. **Sin esquema.**
@@ -105,9 +119,9 @@
    **🆕 RECONCILIACIÓN 2026-08-07 (staging):** las 3 out-of-band posteriores (`050 employee_pos_name`,
    `051 pool_total_crc`, `052 movement_edit_audit`) se registraron con `repair --status applied 050 051 052`
    → **staging 49 → 52 filas**, `migration list` alineado sin huérfanos, **`db push` desbloqueado** (no-op).
-   Backups: `_handoff/ledger-staging-2026-08-07-{pre,post}-reconciliacion.json`. **Prod ya estaba consistente**
-   (foto read-only 08-07: **35 filas**, `050`/`051` en el ledger) → prod NO se tocó; su único pendiente de
-   ledger es **052** (con el pase de la auditoría de ediciones, sesión aparte).
+   Backups: `_handoff/ledger-staging-2026-08-07-{pre,post}-reconciliacion.json`. **Prod** estaba consistente
+   (foto read-only 08-07: 35 filas, `050`/`051` en el ledger) y **la `052` entró sola a prod** al pushear `6bb9c33`
+   (integración Supabase Branching → **prod 35 → 36 filas**). Ver [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
 3. **🔐🖊️ Hardening ACL — `get_my_role` + 2 triggers (los 3 que faltan en prod).** Tras B2, prod quedó
    en **3/10** `SECURITY DEFINER` ejecutables por `anon`: `get_my_role`, `unif_on_cash_movement`,
    `handle_new_user`. NO entraron en la 049 **a propósito**. **Accionable, sin urgencia, su propia sesión:**

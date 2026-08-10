@@ -4,6 +4,39 @@
 > las auditorías de esta sesión encontraron, para decidir qué atacar y en qué orden. No implementa nada.
 > Estado/pase a prod → [ESTADO.md](ESTADO.md) · backlog priorizado → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
+## 🔌 2026-08-07 (noche) — HALLAZGO: la base de prod tiene auto-deploy de migraciones (Supabase Branching)
+
+Al pasar la mig 052 a prod, el pre-check read-only encontró que **prod YA la tenía aplicada** — sin apply manual.
+Investigado 100% read-only (`gh api` checks + Management API GET `/branches` + `git log`). Resumen ejecutivo →
+[`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
+
+- **Mecanismo:** lo hace la **Supabase GitHub App** (`app_slug: supabase`) con **Branching** activo — **NO** un
+  workflow del repo (el único es `.github/workflows/deploy.yml`, solo frontend con la anon key) y **NO** hay
+  `supabase/config.toml`. Es la app la que postea el check **"Supabase Preview"**.
+- **Alcance = SOLO PROD.** Management API `/branches` del proyecto prod (`yiczgdti`) devuelve 1 rama: `name:"main"`,
+  `is_default:true`, `git_branch:"main"` (la base de producción atada a git `main`). En commits de la rama git
+  `staging` el check sale **`skipped`** → el proyecto **STAGING (`hwiatgic`) NO está atado a la integración**
+  (sus migraciones siguen manuales por CLI/Management API).
+- **Disparo:** push a `main`. La app corre `db push` contra prod; si el commit trae un `.sql` nuevo en
+  `supabase/migrations/`, lo **aplica + registra en `schema_migrations`**. Evidencia: `6bb9c33` (mig 052) → prod
+  **35→36 filas**, `movement_edits` creada, fila 052 con **9 statements** (formato db push).
+- **Condición (por qué antes NO aplicaba):** el `db push` a prod solo entra si el **ledger de prod está
+  consistente**. Evidencia gh api: en commits de main **pre-B2** (≤ 2026-07-23: c77ced0, 1c8a9ad, 3df4feb) el
+  check era **`failure`** (drift del ledger → db push fallaba); **desde el B2** (2026-07-27, prod reconciliado)
+  es **`success`** en todos. → El viejo "Supabase Preview rojo crónico" era ESO, y ya se dio vuelta. Los pases
+  viejos evitaban el auto-apply **aplicando la mig out-of-band ANTES de pushear** (nada pendiente → verde no-op).
+- **Superficie de riesgo:** (1) **cualquier `.sql` nuevo/modificado en `supabase/migrations/` que llegue a
+  `main`** (push directo o merge de PR) → auto-aplicado a prod. (2) **Edge functions PROBABLEMENTE también**
+  (la rama reporta `status: FUNCTIONS_DEPLOYED`) → **A CONFIRMAR** si cambios en `supabase/functions/` en main
+  se despliegan solos a prod. (3) NO toca el frontend (eso es Pages) ni staging.
+- **⚠️ Implicación:** el orden "git primero (reversible) · base al final" **NO se sostiene para prod**: pushear
+  el `.sql` a `main` YA es el apply. Un `Supabase Preview` verde sobre un commit de main con `.sql` nuevo = ya
+  está en prod → **NO correr apply/repair manual después** (el repair duplicaría la fila del ledger).
+- **DECISIÓN: ADOPTADA** (el pase a prod pasa a ser el push a main + verificar). **Guardrails:** (1) una mig
+  llega a `main` **solo cuando ya va para prod** y con el **ledger de prod consistente**; (2) **staging sigue
+  manual**. **Interruptor** si se quiere desactivar: Dashboard de Supabase → proyecto `yiczgdti` → **Branches**
+  (o Settings → Integrations → GitHub). No tocado (solo identificado).
+
 ## 🧾 2026-08-07 (tarde) — Auditoría de EDICIONES (mig 052) + ledger de STAGING reconciliado
 
 - **Mig `052` — auditoría de EDICIONES de `cash_movements`** (espejo de `movement_deletions`/039, pero para

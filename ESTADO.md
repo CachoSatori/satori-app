@@ -10,10 +10,12 @@
 > traspasos** (ítem 1a, UI+API, `f11ccdb`) y el **cosmético ítem 8** (solo 11 archivos no-PoS → convergió la
 > divergencia no-PoS main↔staging, `5c3b4ff`); el **ítem 7** (huérfano de fecha imposible) quedó **corregido**
 > (la factura de Distribuidora Isleña re-fechada a 2026-06-18/aprobado/Transferencia, NO borrada). `main` =
-> **`5c3b4ff`** · `staging` = **`2ccdfa0`**. **Post-07 (2026-08-07):** T3 endurecimiento de caja
-> **COMPLETO** — el ítem 5 (auditoría de **EDICIONES**, mig **052** = `movement_edits` + trigger
-> `AFTER UPDATE`) quedó aplicada y **verificada punta a punta en staging**; el **ledger de staging se
-> reconcilió a 52 filas** (`repair --status applied 050 051 052` → `db push` desbloqueado, no-op). El **POZO ÚNICO**
+> **`6bb9c33`** · `staging` = **`2f88fd6`**. **Post-07 (2026-08-10):** T3 endurecimiento de caja
+> **COMPLETO EN PROD** — el ítem 5 (auditoría de **EDICIONES**, mig **052** = `movement_edits` + trigger
+> `AFTER UPDATE`) quedó **en staging Y en prod**: a prod la **AUTO-APLICÓ la integración Supabase Branching**
+> al pushear la mig a `main` (`6bb9c33`), **NO** out-of-band manual — ver §(c) y
+> [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md). El **ledger de staging** quedó en
+> **52 filas** y el de **prod en 36** (`001…052`). El **POZO ÚNICO**
 > sigue ✅ validado en prod desde el 22/07 (primer cierre real **cuadró**).
 >
 > **La cadena de propinas quedó CERRADA:** los 6 consumidores del pool clasifican sala↔barra por `covered_role`
@@ -110,7 +112,7 @@ Lista archivo por archivo → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md#-2026-07-23-
 
 | Entorno | En el ledger (`schema_migrations`) | Aplicadas FUERA del ledger (verificadas por objeto) |
 |---|---|---|
-| **PROD** | **✅ 35 filas: 001–008, 0090, 0095, 010–021, 038–046, 048–051** — B2 (2026-07-27) + **`050` y `051` YA registradas + aplicadas (consistente)** | subset core de la `026` (sin archivo en `main`). **Único pendiente: mig `052`** (aún NO aplicada a prod — su sesión, con firma) |
+| **PROD** | **✅ 36 filas: 001–008, 0090, 0095, 010–021, 038–046, 048–052** — la **`052` la aplicó la integración Supabase Branching** al pushear la mig a `main` (`6bb9c33`), registrada en el ledger (NO out-of-band); B2 (2026-07-27) dejó 050/051 consistentes | subset core de la `026` (sin archivo en `main`). **Sin pendientes de ledger.** |
 | **STAGING** | **✅ 52 filas: 001–008, 0090, 0095, 010–046, 048–052** — **reconciliado 2026-08-07** (`repair --status applied 050 051 052`), `db push` **DESBLOQUEADO** (no-op) | — (cero out-of-band; 050/051/052 ya en el ledger) |
 
 - **El rediseño del pozo no agregó ni una migración.** Es código puro + **1 fila** de datos (el asiento).
@@ -134,9 +136,16 @@ Lista archivo por archivo → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md#-2026-07-23-
 - **🆕 RECONCILIACIÓN 2026-08-07 (staging, con firma):** `repair --status applied 050 051 052` registró las 3
   out-of-band → **staging 49 → 52 filas**, `migration list` alineado (local==remote, sin huérfanos),
   **`db push` DESBLOQUEADO** (`Remote database is up to date`, no-op). Backups:
-  `_handoff/ledger-staging-2026-08-07-{pre,post}-reconciliacion.json`. **PROD ya estaba consistente** (foto
-  read-only del 08-07: **35 filas**, `050`/`051` en el ledger) → **prod NO se tocó**; su único pendiente de
-  ledger es **052** (va con el pase de la auditoría de ediciones a prod, sesión aparte).
+  `_handoff/ledger-staging-2026-08-07-{pre,post}-reconciliacion.json`. **PROD** estaba consistente (foto
+  read-only del 08-07: 35 filas, `050`/`051` en el ledger) y **la `052` entró SOLA a prod** al pushear a `main`
+  (`6bb9c33`): la integración Supabase Branching corrió `db push` → prod **35 → 36 filas**, `movement_edits`
+  creada. Ver el bullet de INTEGRACIÓN abajo.
+- **🆕🔌 INTEGRACIÓN Supabase↔GitHub (Branching) — descubierta 2026-08-10, DECISIÓN: ADOPTADA.** `main` es la
+  **rama de producción** del proyecto prod (`yiczgdti`): **pushear una migración a `main` la AUTO-APLICA a la
+  base de prod** (`db push`) + la registra en `schema_migrations`. El check **"Supabase Preview"** verde sobre un
+  commit de main con `.sql` nuevo = **ya está en prod** (⚠️ NO correr apply/repair manual después). Rojo = drift
+  del ledger de prod (db push falló) → no aplica. Alcance: **solo prod** (staging va manual). Interruptor:
+  Dashboard → `yiczgdti` → Branches. Detalle + TODO de edge functions → [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
 - **✅ B2 (prod, 2026-07-27, con firma):** 28 `repair --status applied` (con `0090`) → ledger de prod
   **4 → 33 filas**, `migration list` alineado sin huérfanos; **rename `009`→`0090` replicado en `main`**
   por FF (cierra `R100` del §b); **mig 049** (`revoke all ... from public, anon`) aplicada por `db push`
@@ -149,7 +158,10 @@ Lista archivo por archivo → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md#-2026-07-23-
 
 Gate de todo pase: **`npm run build` → EXIT 0** (`tsc -b`; **`tsc --noEmit` es FALSO VERDE** por el
 `tsconfig` raíz con `files:[]`) + suite verde (**559 tests** en staging · 479 en prod). El check
-**"Supabase Preview"** es **rojo crónico ajeno**; valen `build`+`deploy` (Pages) y `Cloudflare Pages`.
+**"Supabase Preview"** (Supabase GitHub App, proyecto prod) **ya NO es "rojo crónico ignorable":** en un commit
+de `main`, **verde = la migración se aplicó a la base de PROD** (Branching ON); **rojo = el ledger de prod tiene
+drift** y el `db push` falló. **NO ignorarlo.** Para el DEPLOY DE FRONTEND siguen valiendo `build`+`deploy` (Pages)
+y `Cloudflare Pages`. Ver §(c) y [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
 
 Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🧪 solo staging.
 
@@ -162,16 +174,16 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🧪
 | **Propinas — pool por `covered_role`** en los **6 consumidores** (cierre · edición · Historial · Estadísticas · Quincenal · correo) = **₡2.167.131** (Jul) **+ `pool_total_crc` = fuente única del total** (persistido al cerrar/editar + backfill de 266; Historial lo muestra sin recomputar). Correo replica `calcTurno.totalPool` (`monthly-report/pool.ts` + oracle test). | ✅ **prod + staging** (correo/Est./Hist. `723f734` · Quincenal `a6192cd` · **`pool_total_crc` `5e85abc`**) |
 | **Endurecimiento de caja — ítems 6 (Ingreso adicional: categoría+motivo+umbral) + 4 (guard de fechas: apertura hoy · backdateo por rol)** | ✅ **prod + staging** (`b36a382`→`723f734`) |
 | **Bloque de plata — ítems 2 (negativos MANUALES prohibidos: 4 puntos de carga) + 3 (`ajuste_tipo` del cierre derivado del signo)** | ✅ **prod + staging** (`8c65686`) |
-| **Auditoría de EDICIONES de caja — ítem 5 / mig `052`** (`movement_edits` append-only + trigger `AFTER UPDATE`: registra solo cambios en 10 columnas sensibles; RLS solo-SELECT owner/manager/contador) | 🧪 **staging** (`2ccdfa0`, aplicada + verificada punta a punta; **pase a prod pendiente**) |
+| **Auditoría de EDICIONES de caja — ítem 5 / mig `052`** (`movement_edits` append-only + trigger `AFTER UPDATE`: registra solo cambios en 10 columnas sensibles; RLS solo-SELECT owner/manager/contador) | ✅ **prod + staging** (staging `2ccdfa0`; **prod `6bb9c33`** — auto-aplicada por Branching; verificada estructural read-only) |
 | Quick-wins C2 (historial over/short) + C3 (email del cierre, Edge Fn `cierre-email`) | 🟢 smoke pendiente |
 | PoS (comandero/KDS/cobro/ticket SIM) · FE SIM · Inventario activo COGS | 🧪 staging (migs 022–037) |
 
 ## (e) Pendientes de PLATA — esperan FIRMA del dueño
 
-1. **✅ T3 — endurecimiento de caja: COMPLETO.** Los ítems 1a/1b (traspasos), 2+3 (negativos / `ajuste_tipo`),
-   4+6 (fechas / ingreso), 7 (huérfano) y 8 (cosmético) están **en prod**; el ítem **5 (auditoría de
-   EDICIONES, mig `052`)** quedó **aplicado + verificado en staging** — falta solo su **pase a prod** (sesión
-   aparte, con firma).
+1. **✅ T3 — endurecimiento de caja: COMPLETO EN PROD.** Los 8 ítems están **en prod**: 1a/1b (traspasos),
+   2+3 (negativos / `ajuste_tipo`), 4+6 (fechas / ingreso), **5 (auditoría de EDICIONES, mig `052`, `6bb9c33`)**,
+   7 (huérfano) y 8 (cosmético). El ítem 5 entró a prod **auto-aplicado por la integración Supabase Branching**
+   al pushear la mig a `main` (ver §c).
 2. **SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de DNS.
 3. **Edición de propinas en Historial por CAJERO** con autorización de gerencia — firmado
    2026-07-17, sin construir. Patrón mig 045 `requireManager`.

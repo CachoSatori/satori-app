@@ -325,7 +325,7 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">WhatsApp (opcional)</div>
-                <input className="tips-input-dark" inputMode="tel" value={form.whatsapp} onChange={e => up('whatsapp', e.target.value)} placeholder="ej: 50688887777" />
+                <input className="tips-input-dark" inputMode="tel" value={form.whatsapp} onChange={e => up('whatsapp', e.target.value)} placeholder="8 dígitos (sin 506)" />
               </div>
               <div className="tips-field">
                 <div className="tips-field-label">Notificar pagos</div>

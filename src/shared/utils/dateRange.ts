@@ -8,11 +8,14 @@
 export interface MonthRangeBounds {
   /** Primer día del mes — `YYYY-MM-01`. Límite INFERIOR inclusivo para columnas DATE (session_date). */
   start: string
-  /** Primer día del mes — `YYYY-MM-01T00:00:00Z`. Límite INFERIOR inclusivo para timestamptz (created_at). */
+  /** Medianoche de Costa Rica del 1° del mes — `YYYY-MM-01T06:00:00Z`. Límite INFERIOR inclusivo para
+   *  timestamptz (created_at). `created_at` es timestamptz en UTC y CR es UTC-6 → medianoche CR = 06:00Z;
+   *  así el filtro corta por el día de Costa Rica, no por el día UTC. */
   startTs: string
   /** Primer día del MES SIGUIENTE — `YYYY-MM-01`. Límite SUPERIOR EXCLUSIVO para DATE. Usar con `.lt()`. */
   endExclusive: string
-  /** Primer día del MES SIGUIENTE — `YYYY-MM-01T00:00:00Z`. Límite SUPERIOR EXCLUSIVO para timestamptz. Usar con `.lt()`. */
+  /** Medianoche de Costa Rica del 1° del MES SIGUIENTE — `YYYY-MM-01T06:00:00Z`. Límite SUPERIOR EXCLUSIVO
+   *  para timestamptz. Usar con `.lt()`. `created_at` es timestamptz en UTC y CR es UTC-6 → medianoche CR = 06:00Z. */
   endExclusiveTs: string
 }
 
@@ -31,8 +34,8 @@ export function monthRangeBounds(ym: string): MonthRangeBounds {
   const start = `${ym}-01`
   return {
     start,
-    startTs: `${start}T00:00:00Z`,
+    startTs: `${start}T06:00:00Z`,
     endExclusive: nextFirst,
-    endExclusiveTs: `${nextFirst}T00:00:00Z`,
+    endExclusiveTs: `${nextFirst}T06:00:00Z`,
   }
 }

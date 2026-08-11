@@ -17,16 +17,18 @@ describe('monthRangeBounds', () => {
   it('junio (30 días): límite superior = 1° de julio, no 06-31', () => {
     const b = monthRangeBounds('2026-06')
     expect(b.start).toBe('2026-06-01')
-    expect(b.startTs).toBe('2026-06-01T00:00:00Z')
+    expect(b.startTs).toBe('2026-06-01T06:00:00Z')
     expect(b.endExclusive).toBe('2026-07-01')
-    expect(b.endExclusiveTs).toBe('2026-07-01T00:00:00Z')
+    expect(b.endExclusiveTs).toBe('2026-07-01T06:00:00Z')
     expect(isValidISODate(b.endExclusive)).toBe(true)
   })
 
   it('febrero no bisiesto (28 días): límite superior = 1° de marzo', () => {
     const b = monthRangeBounds('2026-02')
     expect(b.start).toBe('2026-02-01')
+    expect(b.startTs).toBe('2026-02-01T06:00:00Z')
     expect(b.endExclusive).toBe('2026-03-01')
+    expect(b.endExclusiveTs).toBe('2026-03-01T06:00:00Z')
     expect(isValidISODate(b.endExclusive)).toBe(true)
   })
 
@@ -40,15 +42,28 @@ describe('monthRangeBounds', () => {
     const b = monthRangeBounds('2026-01')
     expect(b.start).toBe('2026-01-01')
     expect(b.endExclusive).toBe('2026-02-01')
-    expect(b.endExclusiveTs).toBe('2026-02-01T00:00:00Z')
+    expect(b.endExclusiveTs).toBe('2026-02-01T06:00:00Z')
   })
 
   it('diciembre → enero del año siguiente (cruce de año)', () => {
     const b = monthRangeBounds('2026-12')
     expect(b.start).toBe('2026-12-01')
     expect(b.endExclusive).toBe('2027-01-01')
-    expect(b.endExclusiveTs).toBe('2027-01-01T00:00:00Z')
+    expect(b.endExclusiveTs).toBe('2027-01-01T06:00:00Z')
     expect(isValidISODate(b.endExclusive)).toBe(true)
+  })
+
+  it('borde nocturno: un created_at de noche del último día cae en el mes CORRECTO (día CR, no UTC)', () => {
+    // Los límites Ts son medianoche de Costa Rica (UTC-6) = 06:00Z. Para junio, el superior EXCLUSIVO
+    // es 2026-07-01T06:00:00Z (medianoche CR del 1-jul), no 2026-07-01T00:00:00Z.
+    const { endExclusiveTs } = monthRangeBounds('2026-06')
+    expect(endExclusiveTs).toBe('2026-07-01T06:00:00Z')
+    // 30-jun 21:00 CR = 2026-07-01T03:00:00Z → DENTRO de junio (con el bug viejo T00:00:00Z caía FUERA).
+    const dentro = '2026-07-01T03:00:00Z'
+    expect(new Date(dentro) < new Date(endExclusiveTs)).toBe(true)
+    // 1-jul 01:00 CR = 2026-07-01T07:00:00Z → FUERA de junio (ya es julio en CR).
+    const fuera = '2026-07-01T07:00:00Z'
+    expect(new Date(fuera) >= new Date(endExclusiveTs)).toBe(true)
   })
 
   it('el límite superior NUNCA es una fecha inválida (todos los meses del año)', () => {

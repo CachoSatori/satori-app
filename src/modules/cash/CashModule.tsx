@@ -186,6 +186,7 @@ export default function CashModule() {
           <CashPendientes
             movements={allMovements}
             sessions={sessions}
+            suppliers={suppliers}
             onRefresh={loadAll}
           />
         )}

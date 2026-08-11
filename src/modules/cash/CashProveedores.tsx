@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import type { Supplier, CashMovement } from '../../shared/types/database'
-import { upsertSupplier, deactivateSupplier } from '../../shared/api/cash'
+import { upsertSupplier, deactivateSupplier, sendPagoProveedorEmail } from '../../shared/api/cash'
 import { listLinkedDocs, uploadImage, createDocumentRow, extractImage, type DocumentRow } from '../../shared/api/documents'
 import { fi, todayStr, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
@@ -18,11 +18,13 @@ interface FormState {
   id?: string
   name: string; category: string; moneda: string
   ciclo_pago: string; metodo_pago: string; cuenta_iban: string; contact: string
+  email: string; whatsapp: string; notificar_pago: string   // mig 047 — notificación de pago
 }
 
 const empty: FormState = {
   name: '', category: 'Pescados y Mariscos', moneda: 'CRC',
   ciclo_pago: 'Semanal', metodo_pago: 'Efectivo', cuenta_iban: '', contact: '',
+  email: '', whatsapp: '', notificar_pago: 'no',
 }
 
 export default function CashProveedores({ suppliers, movements, onRefresh }: Props) {
@@ -79,14 +81,18 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
     setForm({ id: s.id, name: s.name, category: s.category ?? 'Otros',
       moneda: s.moneda ?? 'CRC', ciclo_pago: s.ciclo_pago ?? 'Semanal',
       metodo_pago: s.metodo_pago ?? 'Efectivo', cuenta_iban: s.cuenta_iban ?? '',
-      contact: s.contact ?? '' })
+      contact: s.contact ?? '',
+      email: s.email ?? '', whatsapp: s.whatsapp ?? '',
+      notificar_pago: s.notificar_pago === 'email' ? 'email' : 'no' })
     setShowModal(true)
   }
 
   const handleSave = async () => {
     if (!form.name.trim()) { setError('El nombre es obligatorio'); return }
     setSaving(true); setError(null)
-    try { await upsertSupplier(form); setShowModal(false); onRefresh() }
+    // Notificar=Email SOLO si hay email cargado (null-safe; nunca 'email' sin destinatario).
+    const notificar_pago = form.email.trim() && form.notificar_pago === 'email' ? 'email' : 'no'
+    try { await upsertSupplier({ ...form, notificar_pago }); setShowModal(false); onRefresh() }
     catch (e) { setError(e instanceof Error ? e.message : 'Error') }
     finally { setSaving(false) }
   }
@@ -227,6 +233,19 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
                                   {fi(pmt.amount_crc)}
                                 </span>
                               </div>
+                              {/* mig 047 — estado de la notificación + reenviar (solo si el proveedor recibe email) */}
+                              {s.notificar_pago === 'email' && pmt.status === 'aprobado' && (
+                                <div style={{ marginTop: 3, fontSize: '0.62rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                  {pmt.proveedor_notificado_at
+                                    ? <span style={{ color: 'var(--t-teal)' }}>📧 Comprobante enviado · {pmt.proveedor_notificado_at.slice(0, 10)}</span>
+                                    : <span style={{ color: '#c8a030' }}>📧 No enviado</span>}
+                                  <button
+                                    onClick={async () => { await sendPagoProveedorEmail(pmt.id); onRefresh() }}
+                                    style={{ background: 'none', border: 'none', color: 'var(--t-teal)', cursor: 'pointer', fontSize: '0.62rem', padding: 0, textDecoration: 'underline' }}>
+                                    {pmt.proveedor_notificado_at ? 'Reenviar' : 'Enviar comprobante'}
+                                  </button>
+                                </div>
+                              )}
                               <div style={{ marginTop: 2 }}>
                                 <PagoFoto
                                   movement={pmt}
@@ -298,6 +317,27 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
               <div className="tips-field cash-form-desc">
                 <div className="tips-field-label">Contacto / Notas (opcional)</div>
                 <input className="tips-input-dark" value={form.contact} onChange={e => up('contact', e.target.value)} placeholder="Teléfono, observaciones..." />
+              </div>
+              {/* mig 047 — notificación de pago al proveedor */}
+              <div className="tips-field">
+                <div className="tips-field-label">Email (para comprobante)</div>
+                <input className="tips-input-dark" type="email" value={form.email} onChange={e => up('email', e.target.value)} placeholder="proveedor@correo.com" />
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">WhatsApp (opcional)</div>
+                <input className="tips-input-dark" inputMode="tel" value={form.whatsapp} onChange={e => up('whatsapp', e.target.value)} placeholder="ej: 50688887777" />
+              </div>
+              <div className="tips-field">
+                <div className="tips-field-label">Notificar pagos</div>
+                <select className="tips-input-dark" value={form.notificar_pago} onChange={e => up('notificar_pago', e.target.value)}>
+                  <option value="no">No</option>
+                  <option value="email" disabled={!form.email.trim()}>Email</option>
+                </select>
+                {!form.email.trim() && (
+                  <div style={{ fontSize: '0.68rem', color: 'var(--t-muted)', marginTop: 4 }}>
+                    Cargá un email arriba para poder enviar el comprobante.
+                  </div>
+                )}
               </div>
             </div>
             <div className="cd-modal-actions">

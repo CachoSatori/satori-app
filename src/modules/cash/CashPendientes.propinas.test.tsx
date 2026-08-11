@@ -47,7 +47,7 @@ const movs = [
   mov({ id: 's3', supplier_name: 'Verduras La Huerta',    description: 'Factura 99', amount_crc: 7000 }),
 ]
 
-const renderPend = () => render(<CashPendientes movements={movs} sessions={[]} onRefresh={vi.fn()} />)
+const renderPend = () => render(<CashPendientes movements={movs} sessions={[]} suppliers={[]} onRefresh={vi.fn()} />)
 
 describe('CashPendientes — las propinas caen en UN solo grupo', () => {
   it('un único encabezado "Propinas", con los 3 turnos como filas', () => {

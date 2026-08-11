@@ -27,7 +27,8 @@ import CashProveedores from './CashProveedores'
 const sup = (over: Partial<Supplier>): Supplier => ({
   id: 'x', name: 'X', category: 'Otros', contact: '', moneda: 'CRC',
   ciclo_pago: 'Semanal', metodo_pago: 'Efectivo', cuenta_iban: '', aliases: null,
-  is_active: true, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+  is_active: true, email: null, whatsapp: null, notificar_pago: 'no',
+  created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
   ...over,
 })
 

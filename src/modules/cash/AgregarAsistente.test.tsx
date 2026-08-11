@@ -26,6 +26,7 @@ import AgregarAsistente from './AgregarAsistente'
 const mkSupplier = (name: string, aliases: string[] | null = null): Supplier => ({
   id: name, name, category: null, contact: null, moneda: 'CRC', ciclo_pago: 'Semanal',
   metodo_pago: 'Efectivo', cuenta_iban: '', aliases, is_active: true,
+  email: null, whatsapp: null, notificar_pago: 'no',
   created_at: '2026-06-29T00:00:00Z', updated_at: '2026-06-29T00:00:00Z',
 })
 

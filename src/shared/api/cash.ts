@@ -826,6 +826,9 @@ export async function upsertSupplier(params: {
   ciclo_pago?: string
   metodo_pago?: string
   cuenta_iban?: string
+  email?: string
+  whatsapp?: string
+  notificar_pago?: string
 }): Promise<Supplier> {
   const payload: Record<string, unknown> = {
     name:        params.name,
@@ -835,6 +838,9 @@ export async function upsertSupplier(params: {
     ciclo_pago:  params.ciclo_pago  ?? 'Semanal',
     metodo_pago: params.metodo_pago ?? 'Efectivo',
     cuenta_iban: params.cuenta_iban ?? '',
+    email:          params.email?.trim()    || null,   // mig 047
+    whatsapp:       params.whatsapp?.trim()  || null,   // mig 047
+    notificar_pago: params.notificar_pago === 'email' ? 'email' : 'no',  // mig 047 — null-safe
     is_active:   true,
   }
   if (params.id) payload.id = params.id
@@ -873,6 +879,18 @@ export async function sendCierreEmail(cierreId: string): Promise<void> {
     await supabase.functions.invoke('cierre-email', { body: { cierre_id: cierreId } })
   } catch {
     /* si la función no está desplegada o el envío falla, se ignora en silencio */
+  }
+}
+
+// Etapa 1 — comprobante por email al proveedor al marcar pagado un pendiente. MISMO patrón fire-and-forget:
+// functions.invoke reenvía el JWT; la Edge Function 'pago-notificar' EXIGE auth, relee movimiento+proveedor
+// server-side (anti-IDOR) y envía por Resend. NUNCA lanza: LA PLATA MANDA — el pago ya quedó pagado; si el
+// email falla, `proveedor_notificado_at` queda NULL y la UI ofrece reintento. NO pasar contenido libre.
+export async function sendPagoProveedorEmail(movementId: string): Promise<void> {
+  try {
+    await supabase.functions.invoke('pago-notificar', { body: { movimiento_id: movementId } })
+  } catch {
+    /* función no desplegada / sin RESEND_API_KEY / envío falló → se ignora; queda para reintento */
   }
 }
 

@@ -146,6 +146,7 @@ export interface CashMovement {
   attachments?: string[]            // paths de fotos de factura en el bucket 'facturas' (mig 026)
   factura_verified_by?: string | null  // quién verificó la factura contra el movimiento (mig 038)
   factura_verified_at?: string | null  // cuándo se verificó (mig 038)
+  proveedor_notificado_at?: string | null  // mig 047 — cuándo la Edge Function envió el comprobante al proveedor (NULL = no enviado)
   _pending?: boolean                // SOLO cliente: encolado en la outbox, sin sincronizar
 }
 
@@ -195,6 +196,9 @@ export interface Supplier {
   cuenta_iban: string
   aliases: string[] | null
   is_active: boolean
+  email: string | null            // mig 047 — correo del proveedor (para el comprobante por email)
+  whatsapp: string | null         // mig 047 — número para el botón wa.me (envío manual)
+  notificar_pago: string          // mig 047 — 'no' | 'email' (default 'no')
   created_at: string
   updated_at: string
 }

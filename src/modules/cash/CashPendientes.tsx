@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
-import type { CashMovement, CashSession } from '../../shared/types/database'
-import { updateMovementStatus, updateCashMovement } from '../../shared/api/cash'
+import type { CashMovement, CashSession, Supplier } from '../../shared/types/database'
+import { updateMovementStatus, updateCashMovement, sendPagoProveedorEmail } from '../../shared/api/cash'
 import { aprobacionPropinaFields } from './propinaPago'
 import { fi, fd } from './cashUtils'
 import { dateCR } from '../../shared/utils'
@@ -9,6 +9,7 @@ import { useManagerOverride } from '../../shared/ManagerOverride'
 interface Props {
   movements: CashMovement[]
   sessions:  CashSession[]
+  suppliers: Supplier[]   // mig 047 — para leer email/whatsapp/notificar_pago del proveedor
   onRefresh: () => void
 }
 
@@ -35,9 +36,21 @@ interface Group {
 // Clave sentinela (no puede colisionar con el nombre lowercase de un proveedor real).
 const PROPINAS_KEY = '__propinas__'
 
-export default function CashPendientes({ movements, sessions, onRefresh }: Props) {
+export default function CashPendientes({ movements, sessions, suppliers, onRefresh }: Props) {
   const requireManager = useManagerOverride()
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
+  // Lookups para la notificación al proveedor (mig 047). Null-safe: supplier_id puede ser null.
+  const movById = useMemo(() => new Map(movements.map(m => [m.id, m])), [movements])
+  const supById = useMemo(() => new Map(suppliers.map(s => [s.id, s])), [suppliers])
+  // Proveedor de un grupo = el del 1er movimiento del grupo que tenga supplier_id vivo.
+  const supOfGroup = (g: Group): Supplier | null => {
+    for (const r of g.rows) {
+      const sid = movById.get(r.id)?.supplier_id
+      const s = sid ? supById.get(sid) : undefined
+      if (s) return s
+    }
+    return null
+  }
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
@@ -102,11 +115,27 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
   // Los proveedores no cambian: solo status.
   const pagar = async (ids: string[]) => {
     if (!ids.length) return
+    // Destinatarios del comprobante por email: SOLO proveedores con notificar_pago='email' + email.
+    // Selección mixta (propinas + varios proveedores) → acá quedan SOLO los configurados.
+    const receptores = ids
+      .map(id => {
+        const sid = movById.get(id)?.supplier_id
+        const s = sid ? supById.get(sid) : undefined
+        return s && s.notificar_pago === 'email' && s.email ? { id, name: s.name, email: s.email } : null
+      })
+      .filter((x): x is { id: string; name: string; email: string } => x !== null)
+    // Confirmación EXPLÍCITA por envío. Si nadie recibe (Notificar=No) → flujo idéntico al actual (sin confirm).
+    if (receptores.length > 0) {
+      const lineas = receptores.map(r => `📧 Se enviará comprobante a: ${r.name} (${r.email})`).join('\n')
+      if (!window.confirm(`Confirmar pago de ${ids.length} pendiente${ids.length !== 1 ? 's' : ''}.\n\n${lineas}`)) return
+    }
     setSaving(true)
     try {
       await Promise.all(ids.map(id => esPropina(id)
         ? updateCashMovement(id, aprobacionPropinaFields())
         : updateMovementStatus(id, 'aprobado')))
+      // LA PLATA MANDA: el email va DESPUÉS del pago, fire-and-forget — nunca lo bloquea ni lo revierte.
+      receptores.forEach(r => { void sendPagoProveedorEmail(r.id) })
       setSelected(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
       onRefresh()
     } finally { setSaving(false) }
@@ -203,6 +232,21 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
     }, 'image/png')
   }
 
+  // WhatsApp manual (mig 047): abre wa.me/{whatsapp} con el comprobante en TEXTO prearmado.
+  const comprobanteTexto = (g: Group, onlySelected: boolean): string => {
+    const rows = onlySelected ? g.rows.filter(r => selected.has(r.id)) : g.rows
+    const sumCRC = rows.reduce((s, r) => s + r.crc, 0)
+    const sumUSD = rows.reduce((s, r) => s + r.usd, 0)
+    const lineas = rows.map(r => `• ${r.fecha || '—'}  ${r.crc ? fi(r.crc) : (r.usd ? fd(r.usd) : '—')}${r.ref ? '  ' + r.ref : ''}`).join('\n')
+    const total = `Total: ${sumCRC ? fi(sumCRC) : ''}${sumUSD ? (sumCRC ? ' · ' : '') + fd(sumUSD) : ''}`
+    return `*Satori Sushi Bar* — Comprobante de pago\n${g.name}\n\n${lineas}\n\n${total}`
+  }
+  const abrirWhatsApp = (g: Group, onlySelected: boolean) => {
+    const wa = (supOfGroup(g)?.whatsapp ?? '').replace(/\D/g, '')
+    if (!wa) return
+    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(g, onlySelected))}`, '_blank')
+  }
+
   if (!totalCount) {
     return (
       <div className="tips-empty-state">
@@ -230,6 +274,7 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
         const selInGroup = g.rows.filter(r => selected.has(r.id))
         const allSel = selInGroup.length === g.rows.length && g.rows.length > 0
         const isCollapsed = collapsed.has(g.key)
+        const supG = supOfGroup(g)   // mig 047 — proveedor del grupo (para WhatsApp / config)
         return (
           <div key={g.key} className="cd-prov-card" style={{ marginBottom: '1.25rem', padding: 0, overflow: 'hidden' }}>
             {/* Header proveedor */}
@@ -329,6 +374,13 @@ export default function CashPendientes({ movements, sessions, onRefresh }: Props
                     onClick={() => descargarComprobante(g, selInGroup.length > 0)}>
                     📷 Descargar comprobante{selInGroup.length > 0 ? ` (${selInGroup.length})` : ''}
                   </button>
+                  {supG?.whatsapp && (
+                    <button className="tips-btn-ghost"
+                      onClick={() => abrirWhatsApp(g, selInGroup.length > 0)}
+                      title={`Enviar comprobante por WhatsApp a ${supG.name}`}>
+                      💬 WhatsApp{selInGroup.length > 0 ? ` (${selInGroup.length})` : ''}
+                    </button>
+                  )}
                 </div>
               </>
             )}

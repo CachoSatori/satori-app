@@ -19,6 +19,9 @@ const mkSupplier = (name: string, aliases: string[] | null = null): Supplier => 
   cuenta_iban: '',
   aliases,
   is_active: true,
+  email: null,
+  whatsapp: null,
+  notificar_pago: 'no',
   created_at: '2026-06-29T00:00:00Z',
   updated_at: '2026-06-29T00:00:00Z',
 })

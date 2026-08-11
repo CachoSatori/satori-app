@@ -15,6 +15,17 @@ interface Props {
 
 const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 
+// Normaliza un WhatsApp a formato internacional para wa.me (que EXIGE código de país).
+// Local CR = 8 dígitos (ej. 89900324) → 506 + número. Si ya trae 506 (11 díg) o es extranjero, se deja.
+// Idempotente: '+506 8990 0324' y '50689900324' → '50689900324' (no duplica el 506).
+export const waNumber = (raw: string): string => {
+  const d = (raw ?? '').replace(/\D/g, '')
+  if (!d) return ''
+  if (d.startsWith('506') && d.length === 11) return d   // ya tiene código CR
+  if (d.length === 8) return '506' + d                    // local CR 8 dígitos → +506
+  return d                                                 // best-effort (ya codeado / extranjero)
+}
+
 interface Row {
   id: string
   fecha: string
@@ -242,7 +253,7 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
     return `*Satori Sushi Bar* — Comprobante de pago\n${g.name}\n\n${lineas}\n\n${total}`
   }
   const abrirWhatsApp = (g: Group, onlySelected: boolean) => {
-    const wa = (supOfGroup(g)?.whatsapp ?? '').replace(/\D/g, '')
+    const wa = waNumber(supOfGroup(g)?.whatsapp ?? '')
     if (!wa) return
     window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(g, onlySelected))}`, '_blank')
   }

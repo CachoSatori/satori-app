@@ -53,3 +53,21 @@ export function maxAplicable(
 ): number {
   return round2(Math.max(0, Math.min(saldoCredito(credito, applications), saldoResidual(factura, applications))))
 }
+
+/**
+ * Reparte un `saldo` de crédito entre varias facturas por su `residual`, FIFO: llena el residual de
+ * cada factura (en el ORDEN recibido — el caller manda las más viejas primero) con el crédito
+ * disponible hasta agotarlo; el resto queda en 0. Devuelve los montos alineados 1:1 con `residuales`.
+ *
+ * Invariantes: cada monto ∈ [0, residual]; Σ montos ≤ saldo (y = min(saldo, Σ residuales)). Puro,
+ * sin efectos; la RPC `apply_supplier_credit` es la que realmente lockea y persiste cada imputación.
+ */
+export function distribuirCreditoFIFO(saldo: number, residuales: number[]): number[] {
+  let restante = round2(Math.max(0, N(saldo)))
+  return residuales.map(r => {
+    const res = Math.max(0, N(r))
+    const aplicar = round2(Math.min(res, restante))
+    restante = round2(restante - aplicar)
+    return aplicar
+  })
+}

@@ -203,6 +203,35 @@ export interface Supplier {
   updated_at: string
 }
 
+// ── Saldo a favor de proveedores (mig 053/054) ──
+export interface SupplierCredit {
+  id: string
+  supplier_id: string
+  origin: string                  // 'sobrepago' | 'nota_credito'
+  amount_crc: number
+  amount_usd: number
+  currency: string
+  fecha_origen: string | null
+  motivo: string | null
+  referencia: string | null
+  source_movement_id: string | null
+  document_id: string | null
+  created_by: string | null
+  created_at: string
+  client_op_id: string | null
+}
+export interface CreditApplication {
+  id: string
+  credit_id: string
+  applied_to_movement_id: string | null
+  amount_applied: number
+  currency: string
+  applied_at: string
+  applied_by: string | null
+  client_op_id: string | null
+  reversed: boolean
+}
+
 export interface ExchangeRate {
   id: string
   rate_date: string

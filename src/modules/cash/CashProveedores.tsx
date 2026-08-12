@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import type { Supplier, CashMovement } from '../../shared/types/database'
+import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '../../shared/types/database'
 import { upsertSupplier, deactivateSupplier, sendPagoProveedorEmail } from '../../shared/api/cash'
 import { listLinkedDocs, uploadImage, createDocumentRow, extractImage, type DocumentRow } from '../../shared/api/documents'
 import { fi, todayStr, METODOS_PAGO_PROVEEDOR, CATEGORIAS_PROV } from './cashUtils'
@@ -7,11 +7,14 @@ import { useManagerOverride } from '../../shared/ManagerOverride'
 import { useAuth } from '../../shared/hooks/useAuth'
 import FacturaVerify from '../../shared/FacturaVerify'
 import { computeSupplierStatus } from './proveedoresStatus'
+import { saldoCredito } from './supplierCredits'
 
 interface Props {
-  suppliers:  Supplier[]
-  movements:  CashMovement[]
-  onRefresh:  () => void
+  suppliers:    Supplier[]
+  movements:    CashMovement[]
+  credits:      SupplierCredit[]        // mig 053/054 — saldo a favor
+  applications: CreditApplication[]     // mig 053 — aplicaciones de crédito a facturas
+  onRefresh:    () => void
 }
 
 interface FormState {
@@ -27,7 +30,7 @@ const empty: FormState = {
   email: '', whatsapp: '', notificar_pago: 'no',
 }
 
-export default function CashProveedores({ suppliers, movements, onRefresh }: Props) {
+export default function CashProveedores({ suppliers, movements, credits, applications, onRefresh }: Props) {
   const requireManager = useManagerOverride()
   const { profile } = useAuth()
 
@@ -55,8 +58,8 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
   // pendientes del header se retiraron (decisión del dueño 2026-07-16) — los pendientes
   // los notifica la pestaña Pendientes, que tiene su propio badge.
   const supplierStatus = useMemo(
-    () => activos.map(s => computeSupplierStatus(s, movements, today)),
-    [activos, movements, today],
+    () => activos.map(s => computeSupplierStatus(s, movements, today, applications, credits)),
+    [activos, movements, today, applications, credits],
   )
 
   // Buscador en vivo (~57 proveedores). NULL-SAFE desde el día uno (lección del hotfix del
@@ -76,6 +79,9 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
   const [expandedProv, setExpandedProv] = useState<string | null>(null)
   const toggleProv = useCallback((id: string) =>
     setExpandedProv(prev => prev === id ? null : id), [])
+  const [expandedCred, setExpandedCred] = useState<string | null>(null)   // historial de saldo a favor
+  const toggleCred = useCallback((id: string) =>
+    setExpandedCred(prev => prev === id ? null : id), [])
 
   const openEdit = (s: Supplier) => {
     setForm({ id: s.id, name: s.name, category: s.category ?? 'Otros',
@@ -147,7 +153,7 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
       )}
 
       <div className="cd-prov-grid">
-        {visibleStatus.map(({ s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, pendingCRC, totalPaid }) => (
+        {visibleStatus.map(({ s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, pendingCRC, totalPaid, saldoDisponible }) => (
           <div key={s.id} className="cd-prov-card" style={{
             borderTop: (isOverdue || isDueSoon) ? '2px solid #c8a030' : undefined,
           }}>
@@ -203,6 +209,59 @@ export default function CashProveedores({ suppliers, movements, onRefresh }: Pro
                     <div className="cd-prov-deuda-val">{fi(pendingCRC)}</div>
                   </div>
                 )}
+                {saldoDisponible > 0 && (
+                  <div className="cd-prov-deuda" style={{ borderColor: 'var(--t-teal)' }}>
+                    <div className="cd-prov-deuda-label" style={{ color: 'var(--t-teal)' }}>💳 Saldo a favor disponible</div>
+                    <div className="cd-prov-deuda-val" style={{ color: 'var(--t-teal)' }}>{fi(saldoDisponible)}</div>
+                  </div>
+                )}
+
+                {/* Saldo a favor — historial de créditos + aplicaciones (mig 053/054) */}
+                {(() => {
+                  const misCreds = credits.filter(c => c.supplier_id === s.id)
+                    .sort((a, b) => (b.fecha_origen ?? b.created_at.slice(0, 10)).localeCompare(a.fecha_origen ?? a.created_at.slice(0, 10)))
+                  if (!misCreds.length) return null
+                  return (
+                    <div style={{ marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid var(--t-border)' }}>
+                      <button
+                        onClick={() => toggleCred(s.id)}
+                        style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--t-teal)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                      >
+                        {expandedCred === s.id ? '▼' : '▶'} Saldo a favor ({misCreds.length})
+                      </button>
+                      {expandedCred === s.id && (
+                        <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          {misCreds.map(c => {
+                            const saldo = saldoCredito(c, applications)
+                            const apps  = applications.filter(a => a.credit_id === c.id && !a.reversed)
+                            return (
+                              <div key={c.id} style={{ padding: '0.3rem 0', borderBottom: '1px solid rgba(0,0,0,0.05)', fontSize: '0.72rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+                                  <span style={{ color: '#888' }}>
+                                    {c.fecha_origen ?? c.created_at.slice(0, 10)} · {c.origin === 'nota_credito' ? 'Nota de crédito' : 'Sobrepago'}
+                                  </span>
+                                  <span style={{ fontWeight: 600, color: saldo > 0 ? 'var(--t-teal)' : '#888' }} title="saldo / monto original">
+                                    {fi(saldo)} / {fi(c.amount_crc)}
+                                  </span>
+                                </div>
+                                {(c.referencia || c.motivo) && (
+                                  <div style={{ fontSize: '0.62rem', color: '#888' }}>
+                                    {c.referencia ? `ref: ${c.referencia}` : ''}{c.referencia && c.motivo ? ' · ' : ''}{c.motivo ?? ''}
+                                  </div>
+                                )}
+                                {apps.map(a => (
+                                  <div key={a.id} style={{ fontSize: '0.62rem', color: '#a07030', marginLeft: '0.5rem' }}>
+                                    → aplicado {fi(a.amount_applied)} · {a.applied_at.slice(0, 10)}
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Payment history toggle */}
                 {(() => {

@@ -40,7 +40,7 @@ const suppliers = [
 ]
 
 const renderProv = () => render(
-  <CashProveedores suppliers={suppliers} movements={[]} onRefresh={vi.fn()} />,
+  <CashProveedores suppliers={suppliers} movements={[]} credits={[]} applications={[]} onRefresh={vi.fn()} />,
 )
 
 const buscar = (t: string) =>

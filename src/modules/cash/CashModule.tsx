@@ -7,8 +7,10 @@ import {
   getCashSessions,
   getAllCashMovements,
   getSuppliers,
+  getSupplierCredits,
+  getCreditApplications,
 } from '../../shared/api/cash'
-import type { CashSession, CashMovement, Supplier } from '../../shared/types/database'
+import type { CashSession, CashMovement, Supplier, SupplierCredit, CreditApplication } from '../../shared/types/database'
 
 const CashTurno       = lazy(() => import('./CashTurno'))
 const CashMovimientos = lazy(() => import('./CashMovimientos'))
@@ -53,6 +55,8 @@ export default function CashModule() {
   const [sessions, setSessions]           = useState<CashSession[]>([])
   const [allMovements, setAllMovements]   = useState<CashMovement[]>([])
   const [suppliers, setSuppliers]         = useState<Supplier[]>([])
+  const [credits, setCredits]             = useState<SupplierCredit[]>([])
+  const [creditApps, setCreditApps]       = useState<CreditApplication[]>([])
 
   const pendCount = allMovements.filter(m => m.status === 'pendiente').length
 
@@ -60,16 +64,20 @@ export default function CashModule() {
     if (!opts?.silent) setLoading(true)
     setError(null)
     try {
-      const [open, all, supps, allMovs] = await Promise.all([
+      const [open, all, supps, allMovs, creds, apps] = await Promise.all([
         getOpenCashSession(),
         getCashSessions(),
         getSuppliers(),
         getAllCashMovements(),
+        getSupplierCredits(),
+        getCreditApplications(),
       ])
       setOpenSession(open)
       setSessions(all)
       setSuppliers(supps)
       setAllMovements(allMovs)
+      setCredits(creds)
+      setCreditApps(apps)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error cargando datos')
     } finally {
@@ -179,6 +187,8 @@ export default function CashModule() {
           <CashProveedores
             suppliers={suppliers}
             movements={allMovements}
+            credits={credits}
+            applications={creditApps}
             onRefresh={loadAll}
           />
         )}
@@ -187,6 +197,8 @@ export default function CashModule() {
             movements={allMovements}
             sessions={sessions}
             suppliers={suppliers}
+            credits={credits}
+            applications={creditApps}
             onRefresh={loadAll}
           />
         )}

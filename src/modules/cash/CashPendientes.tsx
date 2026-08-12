@@ -1,15 +1,19 @@
 import { useState, useMemo } from 'react'
-import type { CashMovement, CashSession, Supplier } from '../../shared/types/database'
+import type { CashMovement, CashSession, Supplier, SupplierCredit, CreditApplication } from '../../shared/types/database'
 import { updateMovementStatus, updateCashMovement, sendPagoProveedorEmail } from '../../shared/api/cash'
 import { aprobacionPropinaFields } from './propinaPago'
 import { fi, fd } from './cashUtils'
 import { dateCR } from '../../shared/utils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
+import { saldoResidual, saldoCredito, facturaAplicado } from './supplierCredits'
+import { RegistrarCreditoModal, AplicarCreditoModal } from './CreditoModals'
 
 interface Props {
   movements: CashMovement[]
   sessions:  CashSession[]
   suppliers: Supplier[]   // mig 047 — para leer email/whatsapp/notificar_pago del proveedor
+  credits: SupplierCredit[]           // mig 053/054 — saldo a favor del proveedor
+  applications: CreditApplication[]
   onRefresh: () => void
 }
 
@@ -30,16 +34,18 @@ interface Row {
   id: string
   fecha: string
   turno: string
-  crc: number
+  crc: number       // amount_crc ORIGINAL (para tachar si hay crédito aplicado)
   usd: number
   ref: string
+  aplicado: number  // crédito aplicado (no reversado) a esta factura (mig 053)
+  residual: number  // crc − aplicado = lo que falta pagar
 }
 interface Group {
   key: string
   name: string
   esPropinas: boolean
   rows: Row[]
-  totalCRC: number
+  totalCRC: number  // Σ RESIDUAL del grupo (NO Σ amount_crc)
   totalUSD: number
 }
 
@@ -47,7 +53,7 @@ interface Group {
 // Clave sentinela (no puede colisionar con el nombre lowercase de un proveedor real).
 const PROPINAS_KEY = '__propinas__'
 
-export default function CashPendientes({ movements, sessions, suppliers, onRefresh }: Props) {
+export default function CashPendientes({ movements, sessions, suppliers, credits, applications, onRefresh }: Props) {
   const requireManager = useManagerOverride()
   const sesionMap = useMemo(() => new Map(sessions.map(s => [s.id, s])), [sessions])
   // Lookups para la notificación al proveedor (mig 047). Null-safe: supplier_id puede ser null.
@@ -62,9 +68,17 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
     }
     return null
   }
+  // Saldo a favor disponible del proveedor (mig 053) = Σ saldo de sus créditos (monto − aplicado no reversado).
+  const saldoDisponibleOf = (s: Supplier | null): number =>
+    s ? credits.filter(c => c.supplier_id === s.id).reduce((sum, c) => sum + saldoCredito(c, applications), 0) : 0
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
+  const [regModal, setRegModal] = useState<Supplier | null>(null)   // "Registrar saldo a favor"
+  const [aplModal, setAplModal] = useState<Supplier | null>(null)   // "Aplicar crédito"
+  // Crear/aplicar crédito = gerencia-gated (la RPC además exige owner/manager server-side).
+  const abrirRegistrar = async (s: Supplier) => { if ((await requireManager()).ok) setRegModal(s) }
+  const abrirAplicar   = async (s: Supplier) => { if ((await requireManager()).ok) setAplModal(s) }
 
   // ── Agrupar pendientes por proveedor (las propinas, todas juntas) ──
   const groups: Group[] = useMemo(() => {
@@ -85,14 +99,16 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
         const turno = m.shift || ses?.shift_type || ''
         if (!map.has(key)) map.set(key, { key, name, esPropinas, rows: [], totalCRC: 0, totalUSD: 0 })
         const g = map.get(key)!
-        g.rows.push({ id: m.id, fecha, turno, crc: N(m.amount_crc), usd: N(m.amount_usd), ref: m.description || m.subcategory || '' })
-        g.totalCRC += N(m.amount_crc)
+        const aplicado = facturaAplicado(m.id, applications)   // crédito aplicado a esta factura (mig 053)
+        const residual = saldoResidual(m, applications)
+        g.rows.push({ id: m.id, fecha, turno, crc: N(m.amount_crc), usd: N(m.amount_usd), ref: m.description || m.subcategory || '', aplicado, residual })
+        g.totalCRC += residual   // ← el total del grupo suma RESIDUALES, no amount_crc
         g.totalUSD += N(m.amount_usd)
       })
     const arr = [...map.values()]
     arr.forEach(g => g.rows.sort((a, b) => a.fecha.localeCompare(b.fecha)))
     return arr.sort((a, b) => b.totalCRC - a.totalCRC)
-  }, [movements, sesionMap])
+  }, [movements, sesionMap, applications])
 
   const totalCRC = groups.reduce((s, g) => s + g.totalCRC, 0)
   const totalUSD = groups.reduce((s, g) => s + g.totalUSD, 0)
@@ -174,11 +190,13 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
   const descargarComprobante = (g: Group, onlySelected: boolean) => {
     const rows = onlySelected ? g.rows.filter(r => selected.has(r.id)) : g.rows
     if (!rows.length) return
-    const sumCRC = rows.reduce((s, r) => s + r.crc, 0)
+    // Comprobante = lo transferido = Σ RESIDUAL (amount_crc − crédito aplicado). NO muta amount_crc.
+    const sumCRC = rows.reduce((s, r) => s + r.residual, 0)
     const sumUSD = rows.reduce((s, r) => s + r.usd, 0)
 
-    const W = 760, padX = 40, rowH = 38, headerH = 200, footH = 120
-    const H = headerH + rows.length * rowH + footH
+    const W = 760, padX = 40, rowH = 38, headerH = 200, footH = 120, noteH = 16
+    // Las filas con crédito aplicado llevan una línea extra de desglose → alto variable.
+    const H = headerH + rows.reduce((s, r) => s + rowH + (r.aplicado > 0 ? noteH : 0), 0) + footH
     const c = document.createElement('canvas')
     const scale = 2
     c.width = W * scale; c.height = H * scale
@@ -210,16 +228,23 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
     // filas
     ctx.font = '14px Arial'
     rows.forEach(r => {
+      const rh = rowH + (r.aplicado > 0 ? noteH : 0)
       ctx.fillStyle = '#0d0d0d'
       ctx.fillText(r.fecha || '—', padX, y + rowH - 14)
       const ref = (r.ref || '—').slice(0, 38)
       ctx.fillStyle = '#5a5040'; ctx.fillText(ref, padX + 130, y + rowH - 14)
       ctx.fillStyle = '#0d0d0d'; ctx.textAlign = 'right'
       ctx.font = 'bold 14px Arial'
-      ctx.fillText(r.crc ? fi(r.crc) : (r.usd ? fd(r.usd) : '—'), W - padX, y + rowH - 14)
+      ctx.fillText(r.residual ? fi(r.residual) : (r.usd ? fd(r.usd) : '—'), W - padX, y + rowH - 14)
       ctx.font = '14px Arial'; ctx.textAlign = 'left'
-      ctx.strokeStyle = '#e6e0d4'; ctx.beginPath(); ctx.moveTo(padX, y + rowH - 2); ctx.lineTo(W - padX, y + rowH - 2); ctx.stroke()
-      y += rowH
+      // Desglose del crédito aplicado (mig 053): facturado − crédito = pagado (el residual de arriba).
+      if (r.aplicado > 0) {
+        ctx.textAlign = 'right'; ctx.font = '11px Arial'; ctx.fillStyle = '#8a8070'
+        ctx.fillText(`facturado ${fi(r.crc)}  −  crédito ${fi(r.aplicado)}`, W - padX, y + rowH + 1)
+        ctx.textAlign = 'left'; ctx.font = '14px Arial'; ctx.fillStyle = '#0d0d0d'
+      }
+      ctx.strokeStyle = '#e6e0d4'; ctx.beginPath(); ctx.moveTo(padX, y + rh - 2); ctx.lineTo(W - padX, y + rh - 2); ctx.stroke()
+      y += rh
     })
 
     // total
@@ -246,9 +271,17 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
   // WhatsApp manual (mig 047): abre wa.me/{whatsapp} con el comprobante en TEXTO prearmado.
   const comprobanteTexto = (g: Group, onlySelected: boolean): string => {
     const rows = onlySelected ? g.rows.filter(r => selected.has(r.id)) : g.rows
-    const sumCRC = rows.reduce((s, r) => s + r.crc, 0)
+    // El comprobante refleja lo efectivamente transferido = RESIDUAL (amount_crc − crédito aplicado).
+    // Si hubo crédito, se desglosa "facturado − crédito = pagado". Sin crédito, residual === amount_crc.
+    const sumCRC = rows.reduce((s, r) => s + r.residual, 0)
     const sumUSD = rows.reduce((s, r) => s + r.usd, 0)
-    const lineas = rows.map(r => `• ${r.fecha || '—'}  ${r.crc ? fi(r.crc) : (r.usd ? fd(r.usd) : '—')}${r.ref ? '  ' + r.ref : ''}`).join('\n')
+    const lineas = rows.map(r => {
+      const monto = r.residual ? fi(r.residual) : (r.usd ? fd(r.usd) : '—')
+      const base = `• ${r.fecha || '—'}  ${monto}${r.ref ? '  ' + r.ref : ''}`
+      return r.aplicado > 0
+        ? `${base}\n    (facturado ${fi(r.crc)} − crédito ${fi(r.aplicado)} = pagado ${fi(r.residual)})`
+        : base
+    }).join('\n')
     const total = `Total: ${sumCRC ? fi(sumCRC) : ''}${sumUSD ? (sumCRC ? ' · ' : '') + fd(sumUSD) : ''}`
     return `*Satori Sushi Bar* — Comprobante de pago\n${g.name}\n\n${lineas}\n\n${total}`
   }
@@ -286,6 +319,7 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
         const allSel = selInGroup.length === g.rows.length && g.rows.length > 0
         const isCollapsed = collapsed.has(g.key)
         const supG = supOfGroup(g)   // mig 047 — proveedor del grupo (para WhatsApp / config)
+        const saldoDisp = saldoDisponibleOf(supG)   // mig 053 — saldo a favor disponible del proveedor
         return (
           <div key={g.key} className="cd-prov-card" style={{ marginBottom: '1.25rem', padding: 0, overflow: 'hidden' }}>
             {/* Header proveedor */}
@@ -301,6 +335,11 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
                       ? `Propinas · ${g.rows.length} turno${g.rows.length !== 1 ? 's' : ''} pendiente${g.rows.length !== 1 ? 's' : ''}`
                       : `Proveedor · ${g.rows.length} pago${g.rows.length !== 1 ? 's' : ''} pendiente${g.rows.length !== 1 ? 's' : ''}`}
                   </div>
+                  {saldoDisp > 0 && (
+                    <div style={{ fontSize: '0.72rem', color: 'var(--t-teal)', fontWeight: 600, marginTop: 2 }}>
+                      💳 crédito disponible {fi(saldoDisp)}
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -338,7 +377,15 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
                           </td>
                           <td style={{ whiteSpace: 'nowrap', fontWeight: 600 }}>{r.fecha || '—'}</td>
                           <td style={{ color: 'var(--t-muted)' }}>{r.turno || '—'}</td>
-                          <td style={{ textAlign: 'right', fontFamily: "'DM Mono', monospace" }}>{r.crc ? fi(r.crc) : '—'}</td>
+                          <td style={{ textAlign: 'right', fontFamily: "'DM Mono', monospace" }}>
+                            {r.aplicado > 0 ? (
+                              <>
+                                <span style={{ textDecoration: 'line-through', color: 'var(--t-muted)', fontSize: '0.7rem' }}>{fi(r.crc)}</span>{' '}
+                                <strong>{fi(r.residual)}</strong>
+                                <div style={{ fontSize: '0.6rem', color: 'var(--t-teal)' }}>crédito {fi(r.aplicado)}</div>
+                              </>
+                            ) : (r.crc ? fi(r.crc) : '—')}
+                          </td>
                           <td style={{ textAlign: 'right', fontFamily: "'DM Mono', monospace", color: '#7ab4d4' }}>{r.usd ? fd(r.usd) : '—'}</td>
                           <td style={{ fontSize: '0.78rem', color: '#5a5040' }}>{r.ref || '—'}</td>
                           <td style={{ textAlign: 'center' }}>
@@ -392,12 +439,33 @@ export default function CashPendientes({ movements, sessions, suppliers, onRefre
                       💬 WhatsApp{selInGroup.length > 0 ? ` (${selInGroup.length})` : ''}
                     </button>
                   )}
+                  {!g.esPropinas && supG && (
+                    <button className="tips-btn-ghost" onClick={() => abrirRegistrar(supG)}
+                      title="Registrar un saldo a favor (sobrepago) — NO mueve plata">
+                      💳 Registrar saldo a favor
+                    </button>
+                  )}
+                  {!g.esPropinas && supG && saldoDisp > 0 && (
+                    <button className="cd-btn-primary" disabled={saving} onClick={() => abrirAplicar(supG)}>
+                      💳 Aplicar crédito ({fi(saldoDisp)})
+                    </button>
+                  )}
                 </div>
               </>
             )}
           </div>
         )
       })}
+
+      {regModal && (
+        <RegistrarCreditoModal supplier={regModal} movements={movements}
+          onDone={onRefresh} onClose={() => setRegModal(null)} />
+      )}
+      {aplModal && (
+        <AplicarCreditoModal supplier={aplModal} credits={credits} applications={applications}
+          pendientes={movements.filter(m => m.supplier_id === aplModal.id && m.status === 'pendiente')}
+          onDone={onRefresh} onClose={() => setAplModal(null)} />
+      )}
     </div>
   )
 }

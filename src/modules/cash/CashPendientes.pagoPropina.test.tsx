@@ -53,7 +53,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('CashPendientes · una propina pendiente se paga por banco', () => {
   it('propina → updateCashMovement con Transferencia/Banco (no descuenta efectivo)', async () => {
-    render(<CashPendientes movements={[propina, proveedor]} sessions={[]} suppliers={[]} onRefresh={vi.fn()} />)
+    render(<CashPendientes movements={[propina, proveedor]} sessions={[]} suppliers={[]} credits={[]} applications={[]} onRefresh={vi.fn()} />)
 
     pagarFila('Propinas turno 2026-07-14 Noche')
 
@@ -67,7 +67,7 @@ describe('CashPendientes · una propina pendiente se paga por banco', () => {
   })
 
   it('proveedor → sigue siendo solo status, sin tocar método ni caja', async () => {
-    render(<CashPendientes movements={[propina, proveedor]} sessions={[]} suppliers={[]} onRefresh={vi.fn()} />)
+    render(<CashPendientes movements={[propina, proveedor]} sessions={[]} suppliers={[]} credits={[]} applications={[]} onRefresh={vi.fn()} />)
 
     pagarFila('Factura 12')
 
@@ -85,7 +85,7 @@ describe('CashPendientes · una propina pendiente se paga por banco', () => {
       id: 'prop-2', subcategory: 'Propinas por turno', supplier_name: 'Pescados del Pacífico',
       description: 'Propinas turno 2026-07-12 Noche', amount_crc: 8000,
     })
-    render(<CashPendientes movements={[proveedor, propinaConNombreDeProveedor]} sessions={[]} suppliers={[]} onRefresh={vi.fn()} />)
+    render(<CashPendientes movements={[proveedor, propinaConNombreDeProveedor]} sessions={[]} suppliers={[]} credits={[]} applications={[]} onRefresh={vi.fn()} />)
 
     expect(screen.getAllByText('✓ Marcar todos pagados')).toHaveLength(2)   // Propinas + proveedor
 

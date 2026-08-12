@@ -1,6 +1,6 @@
 // Helpers puros del saldo a favor (mig 053). Encodean la MISMA matemática que la RPC apply_supplier_credit.
 import { describe, it, expect } from 'vitest'
-import { saldoCredito, saldoResidual, maxAplicable, type CreditApplicationLike } from './supplierCredits'
+import { saldoCredito, saldoResidual, maxAplicable, distribuirCreditoFIFO, type CreditApplicationLike } from './supplierCredits'
 
 const app = (o: Partial<CreditApplicationLike>): CreditApplicationLike => ({
   amount_applied: 0, reversed: false, credit_id: 'C', applied_to_movement_id: 'F', ...o,
@@ -50,5 +50,33 @@ describe('supplierCredits — saldos puros', () => {
     expect(saldoCredito(credito, activa)).toBe(60000)
     const repuesta = [app({ credit_id: 'C', amount_applied: 40000, reversed: true })]
     expect(saldoCredito(credito, repuesta)).toBe(100000)  // como si nunca se hubiera aplicado
+  })
+})
+
+describe('distribuirCreditoFIFO — reparte un crédito entre varias facturas (más viejas primero)', () => {
+  it('FIFO: agota el crédito llenando de la 1ª a la última; el resto queda en 0', () => {
+    // saldo 50k, residuales [30k, 30k, 30k] → llena 30k, 20k, 0.
+    expect(distribuirCreditoFIFO(50000, [30000, 30000, 30000])).toEqual([30000, 20000, 0])
+  })
+
+  it('crédito ≥ Σ residuales → cubre todas exactas (Σ = Σ residuales, no el saldo)', () => {
+    expect(distribuirCreditoFIFO(100000, [20000, 30000, 10000])).toEqual([20000, 30000, 10000])
+  })
+
+  it('cada monto ≤ su residual y Σ ≤ saldo (invariantes)', () => {
+    const saldo = 45000
+    const residuales = [10000, 50000, 7000, 20000]
+    const montos = distribuirCreditoFIFO(saldo, residuales)
+    montos.forEach((m, i) => { expect(m).toBeLessThanOrEqual(residuales[i]); expect(m).toBeGreaterThanOrEqual(0) })
+    const sum = montos.reduce((s, m) => s + m, 0)
+    expect(sum).toBeLessThanOrEqual(saldo)
+    expect(sum).toBe(Math.min(saldo, residuales.reduce((s, r) => s + r, 0)))  // = min(saldo, Σ residuales)
+    expect(montos).toEqual([10000, 35000, 0, 0])                              // FIFO exacto
+  })
+
+  it('saldo 0 → todo 0; lista vacía → []; residual negativo se trata como 0', () => {
+    expect(distribuirCreditoFIFO(0, [10000, 20000])).toEqual([0, 0])
+    expect(distribuirCreditoFIFO(50000, [])).toEqual([])
+    expect(distribuirCreditoFIFO(50000, [-5000, 30000])).toEqual([0, 30000])
   })
 })

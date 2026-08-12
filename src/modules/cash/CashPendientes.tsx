@@ -68,6 +68,9 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
+  // Comprobante POST-pago: snapshot de lo pagado. Al pagar la última factura (o "Marcar todos"), el
+  // grupo desaparece de Pendientes → sin este snapshot no se podría emitir el comprobante después.
+  const [pagoResultado, setPagoResultado] = useState<{ data: ComprobanteData; whatsapp: string | null } | null>(null)
   const [regModal, setRegModal] = useState<Supplier | null>(null)   // "Registrar saldo a favor"
   const [aplModal, setAplModal] = useState<Supplier | null>(null)   // "Aplicar crédito"
   // Crear/aplicar crédito = gerencia-gated (la RPC además exige owner/manager server-side).
@@ -134,7 +137,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
   // (otrosEgresosEf filtra method 'Efectivo').
   // "Pagar ahora" (CashTurno/CashCierre, propinaEgresoFields) sigue siendo Efectivo/Registradora.
   // Los proveedores no cambian: solo status.
-  const pagar = async (ids: string[]) => {
+  const pagar = async (ids: string[], snapshot?: { data: ComprobanteData; whatsapp: string | null } | null) => {
     if (!ids.length) return
     // Destinatarios del comprobante por email: SOLO proveedores con notificar_pago='email' + email.
     // Selección mixta (propinas + varios proveedores) → acá quedan SOLO los configurados.
@@ -158,6 +161,8 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
       // LA PLATA MANDA: el email va DESPUÉS del pago, fire-and-forget — nunca lo bloquea ni lo revierte.
       receptores.forEach(r => { void sendPagoProveedorEmail(r.id) })
       setSelected(prev => { const n = new Set(prev); ids.forEach(i => n.delete(i)); return n })
+      // Comprobante post-pago (snapshot ya armado en el call site, estable ante el refresh). Propinas → null.
+      if (snapshot && snapshot.data.lineas.length) setPagoResultado(snapshot)
       onRefresh()
     } finally { setSaving(false) }
   }
@@ -183,8 +188,8 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
   // ── Comprobante (PNG + texto WhatsApp) — vía el módulo compartido ./comprobante ──
   // Arma el ComprobanteData del grupo: MISMAS líneas/total que antes (residual + desglose del
   // crédito), ahora renderizado por el generador compartido. Output del pago normal SIN cambios.
-  const comprobanteDeGrupo = (g: Group, onlySelected: boolean): ComprobanteData => {
-    const rows = onlySelected ? g.rows.filter(r => selected.has(r.id)) : g.rows
+  // Arma el ComprobanteData a partir de un set EXPLÍCITO de filas (para snapshots post-pago).
+  const comprobanteDeRows = (g: Group, rows: Row[]): ComprobanteData => {
     // Comprobante = lo transferido = Σ RESIDUAL (amount_crc − crédito aplicado). NO muta amount_crc.
     const sumCRC = rows.reduce((s, r) => s + r.residual, 0)
     const sumUSD = rows.reduce((s, r) => s + r.usd, 0)
@@ -204,6 +209,8 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
       totalPNG:   `${sumCRC ? fi(sumCRC) : ''}${sumUSD ? (sumCRC ? '  ·  ' : '') + fd(sumUSD) : ''}`,
     }
   }
+  const comprobanteDeGrupo = (g: Group, onlySelected: boolean): ComprobanteData =>
+    comprobanteDeRows(g, onlySelected ? g.rows.filter(r => selected.has(r.id)) : g.rows)
   const descargarComprobante = (g: Group, onlySelected: boolean) => {
     const rows = onlySelected ? g.rows.filter(r => selected.has(r.id)) : g.rows
     if (!rows.length) return
@@ -245,6 +252,8 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
         const isCollapsed = collapsed.has(g.key)
         const supG = supOfGroup(g)   // mig 047 — proveedor del grupo (para WhatsApp / config)
         const saldoDisp = saldoDisponibleOf(supG)   // mig 053 — saldo a favor disponible del proveedor
+        // Snapshot del comprobante post-pago (proveedor + filas pagadas). Propinas → null (no aplica).
+        const snap = (rows: Row[]) => g.esPropinas ? null : { data: comprobanteDeRows(g, rows), whatsapp: supG?.whatsapp ?? null }
         return (
           <div key={g.key} className="cd-prov-card" style={{ marginBottom: '1.25rem', padding: 0, overflow: 'hidden' }}>
             {/* Header proveedor */}
@@ -316,7 +325,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                           <td style={{ textAlign: 'center' }}>
                             <div style={{ display: 'inline-flex', gap: '0.3rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                               <button className="tips-btn-teal" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.7rem' }}
-                                onClick={() => pagar([r.id])}>✓ Pagado</button>
+                                onClick={() => pagar([r.id], snap([r]))}>✓ Pagado</button>
                               <button className="tips-btn-ghost" disabled={saving} style={{ fontSize: '0.72rem', padding: '0.3rem 0.6rem', color: '#c0392b', borderColor: '#f0b0b0' }}
                                 onClick={() => rechazar([r.id])} title="Rechazar (requiere autorización de gerencia)">✕ Rechazar</button>
                             </div>
@@ -337,7 +346,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                 <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', padding: '0.9rem 1.1rem', borderTop: '1px solid var(--t-border)' }}>
                   {selInGroup.length > 0 && (
                     <button className="cd-btn-primary" disabled={saving}
-                      onClick={() => pagar(selInGroup.map(r => r.id))}>
+                      onClick={() => pagar(selInGroup.map(r => r.id), snap(selInGroup))}>
                       ✓ Pagar seleccionados ({selInGroup.length})
                     </button>
                   )}
@@ -350,7 +359,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                   )}
                   <button className="cd-btn-primary" disabled={saving}
                     style={{ background: '#0d0d0d' }}
-                    onClick={() => pagar(g.rows.map(r => r.id))}>
+                    onClick={() => pagar(g.rows.map(r => r.id), snap(g.rows))}>
                     ✓ Marcar todos pagados
                   </button>
                   <button className="tips-btn-ghost"
@@ -390,6 +399,39 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
         <AplicarCreditoModal supplier={aplModal} credits={credits} applications={applications}
           pendientes={movements.filter(m => m.supplier_id === aplModal.id && m.status === 'pendiente')}
           onDone={onRefresh} onClose={() => setAplModal(null)} />
+      )}
+
+      {/* Comprobante POST-pago: el grupo ya salió de Pendientes, pero el snapshot deja emitirlo. */}
+      {pagoResultado && (
+        <div className="cd-modal-overlay" onClick={() => setPagoResultado(null)}>
+          <div className="cd-modal" onClick={e => e.stopPropagation()}>
+            <div className="cd-modal-title">Comprobante de pago · {pagoResultado.data.proveedor}</div>
+            <div style={{ fontSize: '0.78rem', color: 'var(--t-muted)', marginBottom: '0.6rem' }}>Pago registrado ✓</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: 260, overflowY: 'auto' }}>
+              {pagoResultado.data.lineas.map((l, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {l.fecha || '—'}{l.nota ? <> · <span style={{ color: 'var(--t-muted)' }}>{l.nota}</span></> : null}
+                  </span>
+                  <strong style={{ whiteSpace: 'nowrap' }}>{l.monto}</strong>
+                </div>
+              ))}
+            </div>
+            <div style={{ margin: '0.75rem 0', fontSize: '0.85rem' }}>
+              Total pagado: <strong style={{ color: 'var(--t-teal)' }}>{pagoResultado.data.totalTexto}</strong>
+            </div>
+            <div className="cd-modal-actions">
+              <button className="tips-btn-ghost" onClick={() => descargarComprobantePNG(pagoResultado.data)}>📷 Descargar comprobante</button>
+              {pagoResultado.whatsapp && (
+                <button className="tips-btn-ghost"
+                  onClick={() => { const wa = waNumber(pagoResultado.whatsapp ?? ''); if (wa) window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(pagoResultado.data))}`, '_blank') }}>
+                  💬 WhatsApp
+                </button>
+              )}
+              <button className="tips-btn-teal" onClick={() => setPagoResultado(null)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

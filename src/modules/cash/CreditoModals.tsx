@@ -6,6 +6,7 @@ import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '
 import { createSupplierCredit, applySupplierCredit } from '../../shared/api/cash'
 import { fi } from './cashUtils'
 import { saldoCredito, saldoResidual, distribuirCreditoFIFO } from './supplierCredits'
+import { waNumber, comprobanteTexto, descargarComprobantePNG, type ComprobanteData } from './comprobante'
 
 const uuid = (): string =>
   (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
@@ -132,6 +133,9 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
   const [montos, setMontos]     = useState<Record<string, string>>(() => buildFIFO(misCreditos[0]?.id ?? ''))
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
+  // Vista de comprobante tras aplicar: snapshot de lo imputado (estable ante el refresh del padre).
+  type Resultado = { items: { fecha: string; desc: string; monto: number; residual: number }[]; creditoRef: string; totalAplicado: number; saldoRestante: number }
+  const [resultado, setResultado] = useState<Resultado | null>(null)
 
   const credito   = misCreditos.find(c => c.id === creditId) ?? null
   const saldoCred = credito ? saldoCredito(credito, applications) : 0
@@ -165,8 +169,83 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
       setMontos(prev => { const n = { ...prev }; ok.forEach(id => delete n[id]); return n })
       setError(`Se aplicaron ${ok.length} de ${items.length} facturas. Fallaron ${fail.length} — revisá y reintentá.`)
     } else {
-      onClose()
+      // Éxito total → VISTA DE COMPROBANTE (no cierra directo). Snapshot con los residuales PREVIOS:
+      // `applications` sigue siendo el de este render (el refresh del padre por onDone es async).
+      const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+      const resItems = items.map(it => {
+        const m = ordered.find(x => x.id === it.id)!
+        const residualPrev = residualOf(m)
+        return { fecha: m.created_at.slice(0, 10), desc: (m.description || m.subcategory || '').slice(0, 26), monto: it.monto, residual: Math.max(0, r2(residualPrev - it.monto)) }
+      })
+      const totalAplicado = items.reduce((s, it) => s + it.monto, 0)
+      setResultado({ items: resItems, creditoRef: credito?.referencia ?? '', totalAplicado, saldoRestante: Math.max(0, r2(saldoCred - totalAplicado)) })
     }
+  }
+
+  // Comprobante de la liquidación (reusa el generador compartido ./comprobante).
+  const comprobanteData = (): ComprobanteData => {
+    const r = resultado!
+    return {
+      tituloTexto: 'Comprobante de aplicación de saldo a favor',
+      tituloPNG: 'Comprobante de aplicación de saldo a favor',
+      proveedor: supplier.name,
+      lineas: r.items.map(it => ({
+        fecha: it.fecha,
+        nota: it.residual <= 0.001 ? 'saldada ✓' : `residual ${fi(it.residual)}`,
+        monto: fi(it.monto),
+      })),
+      totalTexto: fi(r.totalAplicado),
+      totalPNG: fi(r.totalAplicado),
+      totalLabel: 'TOTAL APLICADO',
+      pie: [
+        `Crédito usado${r.creditoRef ? `: ${r.creditoRef}` : ''}`,
+        `Saldo a favor restante: ${fi(r.saldoRestante)}`,
+      ],
+    }
+  }
+  const descargarComp = () => descargarComprobantePNG(comprobanteData())
+  const waComp = () => {
+    const wa = waNumber(supplier.whatsapp ?? '')
+    if (wa) window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(comprobanteData()))}`, '_blank')
+  }
+
+  // Tras aplicar con éxito: VISTA DE RESULTADO (comprobante) — descargar PNG / WhatsApp / cerrar.
+  if (resultado) {
+    const r = resultado
+    return (
+      <div className="cd-modal-overlay" onClick={onClose}>
+        <div className="cd-modal" onClick={e => e.stopPropagation()}>
+          <div className="cd-modal-title">Comprobante · {supplier.name}</div>
+          <div style={{ fontSize: '0.78rem', color: 'var(--t-muted)', marginBottom: '0.6rem' }}>
+            Saldo a favor aplicado{r.creditoRef ? ` · ${r.creditoRef}` : ''}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: 260, overflowY: 'auto' }}>
+            {r.items.map((it, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', fontSize: '0.78rem', padding: '0.3rem 0', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {it.fecha} · <span style={{ color: 'var(--t-muted)' }}>{it.desc}</span>
+                </span>
+                <span style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <strong>{fi(it.monto)}</strong>
+                  <div style={{ fontSize: '0.66rem', color: it.residual <= 0.001 ? 'var(--t-teal)' : '#c8a030' }}>
+                    {it.residual <= 0.001 ? 'saldada ✓' : `residual ${fi(it.residual)}`}
+                  </div>
+                </span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '1.5rem', margin: '0.75rem 0', fontSize: '0.85rem', flexWrap: 'wrap' }}>
+            <div>Total aplicado: <strong>{fi(r.totalAplicado)}</strong></div>
+            <div>Saldo restante: <strong style={{ color: 'var(--t-teal)' }}>{fi(r.saldoRestante)}</strong></div>
+          </div>
+          <div className="cd-modal-actions">
+            <button className="tips-btn-ghost" onClick={descargarComp}>Descargar comprobante</button>
+            {supplier.whatsapp && <button className="tips-btn-ghost" onClick={waComp}>WhatsApp</button>}
+            <button className="tips-btn-teal" onClick={onClose}>Cerrar</button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!misCreditos.length || !pendientes.length) {

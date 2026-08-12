@@ -4,7 +4,7 @@
 // operación. Fija lo que no puede volver atrás: pre-llenado FIFO, e imputación por RPC a CADA
 // factura con monto>0 (no a las de 0), en orden. El reparto puro vive en supplierCredits.test.ts.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import type { Supplier, CashMovement, SupplierCredit } from '../../shared/types/database'
 
 const { applySpy } = vi.hoisted(() => ({ applySpy: vi.fn() }))
@@ -44,7 +44,8 @@ describe('AplicarCreditoModal — reparte un crédito entre varias facturas (FIF
     expect(aplicarBtn.textContent?.replace(/\D/g, '')).toBe('50000')
 
     fireEvent.click(aplicarBtn)
-    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    // Éxito total → NO cierra directo: aparece la VISTA DE COMPROBANTE.
+    await screen.findByRole('button', { name: /Descargar comprobante/ })
 
     // Una imputación por factura con monto>0, en orden FIFO; la de monto 0 (f3) NO se imputa.
     expect(applySpy).toHaveBeenCalledTimes(2)
@@ -52,7 +53,13 @@ describe('AplicarCreditoModal — reparte un crédito entre varias facturas (FIF
     expect(calls[0]).toMatchObject({ credit_id: 'C', movement_id: 'f1', amount: 30000 })
     expect(calls[1]).toMatchObject({ credit_id: 'C', movement_id: 'f2', amount: 20000 })
     expect(calls.some(c => c.movement_id === 'f3')).toBe(false)
-    expect(onClose).toHaveBeenCalled()  // éxito total → cierra
+    expect(onDone).toHaveBeenCalled()          // refrescó el padre
+    expect(onClose).not.toHaveBeenCalled()     // pero NO cerró: muestra el comprobante
+    // El comprobante refleja f1 saldada (30k de 30k) y f2 con residual 10k.
+    expect(screen.getByText(/Total aplicado/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Cerrar$/ }))
+    expect(onClose).toHaveBeenCalled()         // recién al cerrar el comprobante
   })
 
   it('bloquea Aplicar si el total supera el crédito (Σ montos > saldoCredito)', async () => {

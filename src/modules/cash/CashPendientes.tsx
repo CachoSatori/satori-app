@@ -7,6 +7,7 @@ import { dateCR } from '../../shared/utils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { saldoResidual, saldoCredito, facturaAplicado } from './supplierCredits'
 import { RegistrarCreditoModal, AplicarCreditoModal } from './CreditoModals'
+import { waNumber, comprobanteTexto, descargarComprobantePNG, type ComprobanteData } from './comprobante'
 
 interface Props {
   movements: CashMovement[]
@@ -19,16 +20,9 @@ interface Props {
 
 const N = (v: unknown): number => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 
-// Normaliza un WhatsApp a formato internacional para wa.me (que EXIGE código de país).
-// Local CR = 8 dígitos (ej. 89900324) → 506 + número. Si ya trae 506 (11 díg) o es extranjero, se deja.
-// Idempotente: '+506 8990 0324' y '50689900324' → '50689900324' (no duplica el 506).
-export const waNumber = (raw: string): string => {
-  const d = (raw ?? '').replace(/\D/g, '')
-  if (!d) return ''
-  if (d.startsWith('506') && d.length === 11) return d   // ya tiene código CR
-  if (d.length === 8) return '506' + d                    // local CR 8 dígitos → +506
-  return d                                                 // best-effort (ya codeado / extranjero)
-}
+// waNumber (formato internacional para wa.me) vive ahora en ./comprobante (compartido con la
+// liquidación de crédito); se re-exporta acá para no romper importadores/tests existentes.
+export { waNumber }
 
 interface Row {
   id: string
@@ -186,109 +180,40 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
     } finally { setSaving(false) }
   }
 
-  // ── Comprobante (imagen PNG por Canvas) ────────────────────
-  const descargarComprobante = (g: Group, onlySelected: boolean) => {
+  // ── Comprobante (PNG + texto WhatsApp) — vía el módulo compartido ./comprobante ──
+  // Arma el ComprobanteData del grupo: MISMAS líneas/total que antes (residual + desglose del
+  // crédito), ahora renderizado por el generador compartido. Output del pago normal SIN cambios.
+  const comprobanteDeGrupo = (g: Group, onlySelected: boolean): ComprobanteData => {
     const rows = onlySelected ? g.rows.filter(r => selected.has(r.id)) : g.rows
-    if (!rows.length) return
     // Comprobante = lo transferido = Σ RESIDUAL (amount_crc − crédito aplicado). NO muta amount_crc.
     const sumCRC = rows.reduce((s, r) => s + r.residual, 0)
     const sumUSD = rows.reduce((s, r) => s + r.usd, 0)
-
-    const W = 760, padX = 40, rowH = 38, headerH = 200, footH = 120, noteH = 16
-    // Las filas con crédito aplicado llevan una línea extra de desglose → alto variable.
-    const H = headerH + rows.reduce((s, r) => s + rowH + (r.aplicado > 0 ? noteH : 0), 0) + footH
-    const c = document.createElement('canvas')
-    const scale = 2
-    c.width = W * scale; c.height = H * scale
-    const ctx = c.getContext('2d')!
-    ctx.scale(scale, scale)
-
-    // fondo
-    ctx.fillStyle = '#f5f0e8'; ctx.fillRect(0, 0, W, H)
-    // encabezado
-    ctx.fillStyle = '#0d0d0d'
-    ctx.font = 'bold 30px Georgia, serif'
-    ctx.fillText('Satori Sushi Bar', padX, 56)
-    ctx.font = '14px Arial'; ctx.fillStyle = '#8a8070'
-    // Solo el título dibujado: el grupo Propinas no es un proveedor. Layout y montos, igual.
-    ctx.fillText(g.esPropinas ? 'Comprobante de pago de propinas' : 'Comprobante de pago a proveedor', padX, 80)
-    ctx.font = 'bold 24px Arial'; ctx.fillStyle = '#0d0d0d'
-    ctx.fillText(g.name, padX, 124)
-    ctx.font = '13px Arial'; ctx.fillStyle = '#8a8070'
-    ctx.fillText(`Emitido: ${new Date().toLocaleDateString('es-CR')}   ·   ${rows.length} factura(s)`, padX, 148)
-
-    // header tabla
-    let y = headerH - 16
-    ctx.strokeStyle = '#d4cfc4'; ctx.beginPath(); ctx.moveTo(padX, y - 22); ctx.lineTo(W - padX, y - 22); ctx.stroke()
-    ctx.font = 'bold 12px Arial'; ctx.fillStyle = '#8a8070'
-    ctx.fillText('FECHA', padX, y - 4)
-    ctx.fillText('REFERENCIA / NOTA', padX + 130, y - 4)
-    ctx.textAlign = 'right'; ctx.fillText('MONTO', W - padX, y - 4); ctx.textAlign = 'left'
-
-    // filas
-    ctx.font = '14px Arial'
-    rows.forEach(r => {
-      const rh = rowH + (r.aplicado > 0 ? noteH : 0)
-      ctx.fillStyle = '#0d0d0d'
-      ctx.fillText(r.fecha || '—', padX, y + rowH - 14)
-      const ref = (r.ref || '—').slice(0, 38)
-      ctx.fillStyle = '#5a5040'; ctx.fillText(ref, padX + 130, y + rowH - 14)
-      ctx.fillStyle = '#0d0d0d'; ctx.textAlign = 'right'
-      ctx.font = 'bold 14px Arial'
-      ctx.fillText(r.residual ? fi(r.residual) : (r.usd ? fd(r.usd) : '—'), W - padX, y + rowH - 14)
-      ctx.font = '14px Arial'; ctx.textAlign = 'left'
-      // Desglose del crédito aplicado (mig 053): facturado − crédito = pagado (el residual de arriba).
-      if (r.aplicado > 0) {
-        ctx.textAlign = 'right'; ctx.font = '11px Arial'; ctx.fillStyle = '#8a8070'
-        ctx.fillText(`facturado ${fi(r.crc)}  −  crédito ${fi(r.aplicado)}`, W - padX, y + rowH + 1)
-        ctx.textAlign = 'left'; ctx.font = '14px Arial'; ctx.fillStyle = '#0d0d0d'
-      }
-      ctx.strokeStyle = '#e6e0d4'; ctx.beginPath(); ctx.moveTo(padX, y + rh - 2); ctx.lineTo(W - padX, y + rh - 2); ctx.stroke()
-      y += rh
-    })
-
-    // total
-    y += 18
-    ctx.strokeStyle = '#0d0d0d'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(padX, y - 26); ctx.lineTo(W - padX, y - 26); ctx.stroke(); ctx.lineWidth = 1
-    ctx.font = 'bold 16px Arial'; ctx.fillStyle = '#0d0d0d'
-    ctx.fillText('TOTAL A PAGAR', padX, y)
-    ctx.textAlign = 'right'; ctx.font = 'bold 22px Georgia, serif'; ctx.fillStyle = '#2a7a6a'
-    const totalTxt = sumCRC ? fi(sumCRC) : ''
-    const usdTxt = sumUSD ? (sumCRC ? '  ·  ' : '') + fd(sumUSD) : ''
-    ctx.fillText(totalTxt + usdTxt, W - padX, y + 2); ctx.textAlign = 'left'
-    ctx.font = '11px Arial'; ctx.fillStyle = '#8a8070'
-    ctx.fillText('Documento generado automáticamente · Satori · Santa Teresa, CR', padX, H - 24)
-
-    c.toBlob(blob => {
-      if (!blob) return
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = `comprobante_${g.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.png`
-      a.click(); URL.revokeObjectURL(url)
-    }, 'image/png')
+    return {
+      tituloTexto: 'Comprobante de pago',
+      tituloPNG: g.esPropinas ? 'Comprobante de pago de propinas' : 'Comprobante de pago a proveedor',
+      proveedor: g.name,
+      lineas: rows.map(r => ({
+        fecha: r.fecha,
+        nota: r.ref,
+        monto: r.residual ? fi(r.residual) : (r.usd ? fd(r.usd) : '—'),
+        // Desglose del crédito aplicado (mig 053). El texto lleva "= pagado Z"; el PNG no (espaciado).
+        subnotaTexto: r.aplicado > 0 ? `facturado ${fi(r.crc)} − crédito ${fi(r.aplicado)} = pagado ${fi(r.residual)}` : undefined,
+        subnotaPNG:   r.aplicado > 0 ? `facturado ${fi(r.crc)}  −  crédito ${fi(r.aplicado)}` : undefined,
+      })),
+      totalTexto: `${sumCRC ? fi(sumCRC) : ''}${sumUSD ? (sumCRC ? ' · ' : '') + fd(sumUSD) : ''}`,
+      totalPNG:   `${sumCRC ? fi(sumCRC) : ''}${sumUSD ? (sumCRC ? '  ·  ' : '') + fd(sumUSD) : ''}`,
+    }
   }
-
-  // WhatsApp manual (mig 047): abre wa.me/{whatsapp} con el comprobante en TEXTO prearmado.
-  const comprobanteTexto = (g: Group, onlySelected: boolean): string => {
+  const descargarComprobante = (g: Group, onlySelected: boolean) => {
     const rows = onlySelected ? g.rows.filter(r => selected.has(r.id)) : g.rows
-    // El comprobante refleja lo efectivamente transferido = RESIDUAL (amount_crc − crédito aplicado).
-    // Si hubo crédito, se desglosa "facturado − crédito = pagado". Sin crédito, residual === amount_crc.
-    const sumCRC = rows.reduce((s, r) => s + r.residual, 0)
-    const sumUSD = rows.reduce((s, r) => s + r.usd, 0)
-    const lineas = rows.map(r => {
-      const monto = r.residual ? fi(r.residual) : (r.usd ? fd(r.usd) : '—')
-      const base = `• ${r.fecha || '—'}  ${monto}${r.ref ? '  ' + r.ref : ''}`
-      return r.aplicado > 0
-        ? `${base}\n    (facturado ${fi(r.crc)} − crédito ${fi(r.aplicado)} = pagado ${fi(r.residual)})`
-        : base
-    }).join('\n')
-    const total = `Total: ${sumCRC ? fi(sumCRC) : ''}${sumUSD ? (sumCRC ? ' · ' : '') + fd(sumUSD) : ''}`
-    return `*Satori Sushi Bar* — Comprobante de pago\n${g.name}\n\n${lineas}\n\n${total}`
+    if (!rows.length) return
+    descargarComprobantePNG(comprobanteDeGrupo(g, onlySelected))
   }
+  // WhatsApp manual (mig 047): abre wa.me/{whatsapp} con el comprobante en TEXTO prearmado.
   const abrirWhatsApp = (g: Group, onlySelected: boolean) => {
     const wa = waNumber(supOfGroup(g)?.whatsapp ?? '')
     if (!wa) return
-    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(g, onlySelected))}`, '_blank')
+    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(comprobanteDeGrupo(g, onlySelected)))}`, '_blank')
   }
 
   if (!totalCount) {

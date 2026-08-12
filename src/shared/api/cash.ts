@@ -866,11 +866,18 @@ export async function deactivateSupplier(id: string): Promise<void> {
 // están en supabase.gen.ts → cast acotado de supabase.rpc (mismo patrón que delete_movement_cascade).
 import type { SupplierCredit, CreditApplication } from '../types/database'
 type RpcInvoke = (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>
-const rpc = supabase.rpc as unknown as RpcInvoke
+// OJO: `.bind(supabase)` es obligatorio. Asignar `supabase.rpc` a una const DESESTACA el método
+// (pierde `this`) → supabase-js hace `this.rest.…` con this=undefined → "Cannot read properties of
+// undefined (reading 'rest')". El wrapper del cascade NO tiene el bug porque es llamada inline, no const.
+// `?.` = guarda de carga: estas 2 líneas corren al IMPORTAR el módulo; varios tests mockean
+// `./supabase` parcialmente (sin `.rpc`/`.from`) y `undefined.bind` tiraría al importar. Con `?.`
+// degradan a undefined (esos tests nunca llaman crédito); el cliente real SIEMPRE trae los métodos.
+const rpc = supabase.rpc?.bind(supabase) as unknown as RpcInvoke
 // Las tablas nuevas (mig 053) no están en supabase.gen.ts (no regeneramos el archivo); cast acotado
 // de supabase.from para poder leerlas. Solo SELECT — todo write va por RPC (la RLS bloquea el resto).
+// Mismo trap de `this` → mismo `.bind(supabase)` (con la misma guarda `?.` de carga).
 type FromSelect = { select: (cols: string) => PromiseLike<{ data: unknown; error: { message: string } | null }> }
-const fromAny = supabase.from as unknown as (table: string) => FromSelect
+const fromAny = supabase.from?.bind(supabase) as unknown as (table: string) => FromSelect
 
 export async function getSupplierCredits(): Promise<SupplierCredit[]> {
   try {

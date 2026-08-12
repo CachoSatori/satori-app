@@ -48,7 +48,7 @@ beforeEach(() => { vi.clearAllMocks(); window.confirm = vi.fn(() => true) })
 
 describe('CashPendientes · notificación de pago al proveedor (mig 047)', () => {
   it('Notificar=Email → confirma anunciando el envío y dispara el email SOLO a ese proveedor', async () => {
-    render(<CashPendientes movements={[provA, provB]} sessions={[]} suppliers={suppliers} onRefresh={vi.fn()} />)
+    render(<CashPendientes movements={[provA, provB]} sessions={[]} suppliers={suppliers} credits={[]} applications={[]} onRefresh={vi.fn()} />)
     pagarFila('Fact A')
     await waitFor(() => expect(updateMovementStatus).toHaveBeenCalledWith('a1', 'aprobado'))
     expect(window.confirm).toHaveBeenCalledTimes(1)
@@ -58,7 +58,7 @@ describe('CashPendientes · notificación de pago al proveedor (mig 047)', () =>
   })
 
   it('Notificar=No → sin confirm y sin email (flujo idéntico al actual)', async () => {
-    render(<CashPendientes movements={[provA, provB]} sessions={[]} suppliers={suppliers} onRefresh={vi.fn()} />)
+    render(<CashPendientes movements={[provA, provB]} sessions={[]} suppliers={suppliers} credits={[]} applications={[]} onRefresh={vi.fn()} />)
     pagarFila('Fact B')
     await waitFor(() => expect(updateMovementStatus).toHaveBeenCalledWith('b1', 'aprobado'))
     expect(window.confirm).not.toHaveBeenCalled()
@@ -67,7 +67,7 @@ describe('CashPendientes · notificación de pago al proveedor (mig 047)', () =>
 
   it('si el usuario cancela el confirm, NO paga ni notifica', async () => {
     window.confirm = vi.fn(() => false)
-    render(<CashPendientes movements={[provA, provB]} sessions={[]} suppliers={suppliers} onRefresh={vi.fn()} />)
+    render(<CashPendientes movements={[provA, provB]} sessions={[]} suppliers={suppliers} credits={[]} applications={[]} onRefresh={vi.fn()} />)
     pagarFila('Fact A')
     await Promise.resolve()
     expect(updateMovementStatus).not.toHaveBeenCalled()

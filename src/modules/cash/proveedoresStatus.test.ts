@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { esProveedorPuntual, computeSupplierStatus } from './proveedoresStatus'
-import type { Supplier, CashMovement } from '../../shared/types/database'
+import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '../../shared/types/database'
 
 // Estado por proveedor para su tarjeta: deuda registrada, total pagado, último pago y —solo si
 // tiene ciclo— próximo vencimiento. Un proveedor PUNTUAL (one-off) nunca vence: esa era la causa
@@ -99,5 +99,49 @@ describe('deuda del proveedor en su tarjeta — los huérfanos (supplier_id NULL
     const st = computeSupplierStatus(sup({ id: 's1' }), ms, TODAY)
     expect(st.pendingCRC).toBe(43374)
     expect(st.totalPaid).toBe(99999)
+  })
+})
+
+// Saldo a favor (mig 053/054): la deuda pendiente se mide por RESIDUAL (amount_crc − crédito aplicado
+// no reversado) y el proveedor gana un `saldoDisponible` = Σ saldo de sus créditos. amount_crc NUNCA se muta.
+describe('mig 053/054 — residual del pendiente y saldo a favor disponible', () => {
+  const credit = (over: Partial<SupplierCredit> = {}): SupplierCredit => ({
+    id: 'c1', supplier_id: 's1', origin: 'sobrepago', amount_crc: 20000, amount_usd: 0,
+    currency: 'CRC', fecha_origen: '2026-07-01', motivo: 'm', referencia: 'r',
+    source_movement_id: null, document_id: null, created_by: null,
+    created_at: '2026-07-01T12:00:00Z', client_op_id: null, ...over,
+  })
+  const app = (over: Partial<CreditApplication> = {}): CreditApplication => ({
+    id: 'a1', credit_id: 'c1', applied_to_movement_id: 'f1', amount_applied: 5000,
+    currency: 'CRC', applied_at: '2026-07-10T12:00:00Z', applied_by: null,
+    client_op_id: null, reversed: false, ...over,
+  })
+
+  it('pendingCRC descuenta el crédito aplicado (residual), sin mutar amount_crc', () => {
+    const facturas = [mov({ id: 'f1', status: 'pendiente', amount_crc: 12000 })]
+    const apps = [app({ applied_to_movement_id: 'f1', amount_applied: 5000 })]
+    const st = computeSupplierStatus(sup({ ciclo_pago: 'Puntual' }), facturas, TODAY, apps)
+    expect(st.pendingCRC).toBe(7000)          // 12000 − 5000
+    expect(facturas[0].amount_crc).toBe(12000) // el monto original NO se muta
+  })
+
+  it('aplicación reversed NO descuenta → vuelve al monto completo', () => {
+    const facturas = [mov({ id: 'f1', status: 'pendiente', amount_crc: 12000 })]
+    const apps = [app({ applied_to_movement_id: 'f1', amount_applied: 5000, reversed: true })]
+    const st = computeSupplierStatus(sup({ ciclo_pago: 'Puntual' }), facturas, TODAY, apps)
+    expect(st.pendingCRC).toBe(12000)
+  })
+
+  it('saldoDisponible = Σ (monto − aplicado no reversado) de los créditos del proveedor', () => {
+    const credits = [credit({ id: 'c1', amount_crc: 20000 })]
+    const apps = [app({ id: 'a1', credit_id: 'c1', amount_applied: 8000 })]
+    const st = computeSupplierStatus(sup({ ciclo_pago: 'Puntual' }), [], TODAY, apps, credits)
+    expect(st.saldoDisponible).toBe(12000)    // 20000 − 8000
+  })
+
+  it('sin créditos ni aplicaciones (defaults) → saldoDisponible 0 y pendingCRC = amount_crc', () => {
+    const st = computeSupplierStatus(sup({ ciclo_pago: 'Puntual' }), [mov({ status: 'pendiente', amount_crc: 9000 })], TODAY)
+    expect(st.saldoDisponible).toBe(0)
+    expect(st.pendingCRC).toBe(9000)
   })
 })

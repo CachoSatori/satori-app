@@ -15,7 +15,8 @@
  *
  * NO toca matemática de caja ni sagrados. Puro y testeable (`today` se inyecta, sin Date.now()).
  */
-import type { Supplier, CashMovement } from '../../shared/types/database'
+import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '../../shared/types/database'
+import { saldoResidual, saldoCredito } from './supplierCredits'
 
 // Días por ciclo de compra. Lo que no esté acá (p.ej. 'Puntual') no tiene agenda de recompra.
 export const CICLO_DIAS: Record<string, number> = {
@@ -45,12 +46,17 @@ export interface SupplierStatus {
   isOverdue: boolean
   isDueSoon: boolean
   esPuntual: boolean
-  pendingCRC: number
+  pendingCRC: number       // Σ RESIDUAL de los pendientes (amount_crc − crédito aplicado no reversado)
   totalPaid: number
+  saldoDisponible: number  // saldo a favor disponible del proveedor (Σ saldoCredito de sus créditos)
 }
 
 // Estado de agenda + deuda de UN proveedor (misma lógica que la del componente, ahora testeable).
-export function computeSupplierStatus(s: Supplier, movements: CashMovement[], today: string): SupplierStatus {
+// `applications`/`credits` (mig 053/054): la deuda pendiente se mide por RESIDUAL (nunca por amount_crc).
+export function computeSupplierStatus(
+  s: Supplier, movements: CashMovement[], today: string,
+  applications: CreditApplication[] = [], credits: SupplierCredit[] = [],
+): SupplierStatus {
   const paid = movements
     .filter(m => m.supplier_id === s.id && m.status === 'aprobado' && m.movement_type === 'egreso_mercaderia')
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -63,8 +69,13 @@ export function computeSupplierStatus(s: Supplier, movements: CashMovement[], to
   const daysUntil  = nextDue ? daysBetween(today, nextDue) : null
   const isOverdue  = daysUntil !== null && daysUntil < 0
   const isDueSoon  = daysUntil !== null && daysUntil >= 0 && daysUntil <= 2
-  const pendingCRC = pending.reduce((sum, m) => sum + m.amount_crc, 0)
+  // Deuda pendiente = Σ RESIDUAL (descuenta el crédito ya aplicado a cada factura, sin mutar amount_crc).
+  const pendingCRC = pending.reduce((sum, m) => sum + saldoResidual(m, applications), 0)
   const totalPaid  = paid.reduce((sum, m) => sum + m.amount_crc, 0)
-  return { s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, esPuntual, pendingCRC, totalPaid }
+  // Saldo a favor disponible del proveedor = Σ saldo de sus créditos (monto − aplicado no reversado).
+  const saldoDisponible = credits
+    .filter(c => c.supplier_id === s.id)
+    .reduce((sum, c) => sum + saldoCredito(c, applications), 0)
+  return { s, lastPay, nextDue, daysUntil, isOverdue, isDueSoon, esPuntual, pendingCRC, totalPaid, saldoDisponible }
 }
 

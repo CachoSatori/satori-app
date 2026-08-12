@@ -860,6 +860,66 @@ export async function deactivateSupplier(id: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+// ── Saldo a favor de proveedores (mig 053 backend + 054 create) ───────────────
+// Todos los WRITES van por RPC SECURITY DEFINER (la RLS bloquea insert/update directo). Los READS
+// son null-safe (devuelven [] ante error/permiso) para no romper la carga de Caja. Las tablas no
+// están en supabase.gen.ts → cast acotado de supabase.rpc (mismo patrón que delete_movement_cascade).
+import type { SupplierCredit, CreditApplication } from '../types/database'
+type RpcInvoke = (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>
+const rpc = supabase.rpc as unknown as RpcInvoke
+// Las tablas nuevas (mig 053) no están en supabase.gen.ts (no regeneramos el archivo); cast acotado
+// de supabase.from para poder leerlas. Solo SELECT — todo write va por RPC (la RLS bloquea el resto).
+type FromSelect = { select: (cols: string) => PromiseLike<{ data: unknown; error: { message: string } | null }> }
+const fromAny = supabase.from as unknown as (table: string) => FromSelect
+
+export async function getSupplierCredits(): Promise<SupplierCredit[]> {
+  try {
+    const { data, error } = await fromAny('supplier_credits').select('*')
+    return error ? [] : ((data ?? []) as SupplierCredit[])
+  } catch { return [] }
+}
+export async function getCreditApplications(): Promise<CreditApplication[]> {
+  try {
+    const { data, error } = await fromAny('credit_applications').select('*')
+    return error ? [] : ((data ?? []) as CreditApplication[])
+  } catch { return [] }
+}
+
+/** Registra un saldo a favor (sobrepago / nota de crédito). NO mueve plata. gerencia-gated (server-side). */
+export async function createSupplierCredit(params: {
+  supplier_id: string; origin: string; amount_crc: number; amount_usd?: number; currency?: string
+  fecha_origen?: string | null; motivo: string; referencia: string
+  source_movement_id?: string | null; document_id?: string | null; client_op_id: string
+}): Promise<string> {
+  const { data, error } = await rpc('create_supplier_credit', {
+    p_supplier_id: params.supplier_id, p_origin: params.origin, p_amount_crc: params.amount_crc,
+    p_amount_usd: params.amount_usd ?? 0, p_currency: params.currency ?? 'CRC',
+    p_fecha_origen: params.fecha_origen ?? null, p_motivo: params.motivo, p_referencia: params.referencia,
+    p_source_movement_id: params.source_movement_id ?? null, p_document_id: params.document_id ?? null,
+    p_client_op_id: params.client_op_id,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
+/** Aplica un crédito a una factura (idempotente por client_op_id). NO muta amount_crc. gerencia-gated. */
+export async function applySupplierCredit(params: {
+  credit_id: string; movement_id: string; amount: number; client_op_id: string
+}): Promise<string> {
+  const { data, error } = await rpc('apply_supplier_credit', {
+    p_credit_id: params.credit_id, p_movement_id: params.movement_id,
+    p_amount: params.amount, p_client_op_id: params.client_op_id,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
+/** Borra un crédito. La RPC BLOQUEA si tiene aplicaciones activas (no-reversed). gerencia-gated. */
+export async function deleteSupplierCredit(creditId: string, note: string): Promise<void> {
+  const { error } = await rpc('delete_supplier_credit', { p_credit_id: creditId, p_note: note })
+  if (error) throw new Error(error.message)
+}
+
 // ── Cierres del día (2 fases) ─────────────────────────────────
 import type { CashCierreDia } from '../types/database'
 

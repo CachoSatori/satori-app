@@ -1,7 +1,7 @@
 # 📚 Índice de documentación — Satori App
 
-> **Actualizado 2026-07-22.** Todos los enlaces de este índice fueron verificados contra la rama
-> actual (`main`). Si algo no está enlazado, es porque **no existe en esta rama**.
+> **Actualizado 2026-08-17.** Todos los enlaces de este índice fueron verificados contra la rama
+> actual (`staging`). Si algo no está enlazado, es porque **no existe en esta rama**.
 
 Dos clases de documento conviven acá, y **no valen lo mismo**:
 
@@ -16,14 +16,14 @@ Dos clases de documento conviven acá, y **no valen lo mismo**:
    antes de tocar caja), §(a) ramas, §(b) prod vs solo-staging, §(c) migraciones, §(d) build por
    módulo, §(e) pendientes de **plata** con firma, §(f) pendientes humanos/técnicos, sagrados con
    sus hashes, y las notas que ahorran una sesión.
-2. **[../HANDOFF-2026-07-23.md](../HANDOFF-2026-07-23.md)** — la última sesión: re-sync
-   `main→staging` + reconciliación del ledger (Fase A + B1, `db push` destrabado en staging), qué
-   quedó abierto y las reglas de entorno que costaron tiempo.
-3. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — backlog vigente por prioridad:
-   **P0** T3 endurecimiento de caja · **P1** deuda corta (**ledger: falta B2/prod**; `main→staging`
-   ✅ hecho) · **P2** decisiones/firmas del dueño · **P3** PILAR de auth + gran pase del PoS ·
-   **⛔** lo que quedó fuera de alcance.
-4. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases; el rediseño de cajas va ✅ hecho y validado.
+2. **[../PROMPT-CONTINUACION.md](../PROMPT-CONTINUACION.md)** — backlog vigente por prioridad:
+   **P0** validar Proveedores en piso · DNS de Resend · **Salarios Fase 0** y sus bloqueos humanos ·
+   **P1** deuda corta (ledger ✅ reconciliado en ambos entornos) · **P2** decisiones/firmas del dueño ·
+   **P3** PILAR de auth + gran pase del PoS · **⛔** lo que quedó fuera de alcance.
+3. **[../ROADMAP.md](../ROADMAP.md)** — plan por fases: Proveedores A+B ✅ en prod, **Salarios** como
+   fase nueva (0→5) con la Fase 0 🔲 pendiente, el rediseño de cajas ✅ hecho y validado.
+4. **[SPEC-modulo-salarios.md](../claude/SPEC-modulo-salarios.md)** — el SPEC firmado del módulo que
+   viene (ver la sección de Salarios más abajo).
 5. **[../PASE-POZO-A-PROD.md](../PASE-POZO-A-PROD.md)** — acta del pase del pozo a producción:
    diff auditado, gate, asiento de arranque, verificación final y rollback.
 6. **[../HALLAZGOS.md](../HALLAZGOS.md)** — backlog triado de hallazgos. Sigue abierto: #2
@@ -46,6 +46,27 @@ El rediseño de cajas (2026-07-22) tiene su documentación junto al código y al
   [TRIAGE-TARJETA](../scripts/refresh-staging/TRIAGE-TARJETA.md) ·
   [ARRANQUE-CERO](../scripts/refresh-staging/ARRANQUE-CERO.md) ·
   [REPORTE-PASE-STAGING](../scripts/refresh-staging/REPORTE-PASE-STAGING.md).
+
+## 💰 Salarios / Nómina — el módulo que viene (SPEC FIRMADO, sin construir)
+
+Viven en **`claude/`** (no en `docs/`) porque nacieron como material de asesoría. **Leer en este orden:**
+
+1. **[../claude/ANALISIS-planilla-salarios-y-nomina.md](../claude/ANALISIS-planilla-salarios-y-nomina.md)** —
+   🔵 **DIAGNÓSTICO.** Qué hace hoy la planilla anual de Excel (40 hojas), verificado **contra sus fórmulas**:
+   reparto del 10% de servicio, pago por hora, comprobantes, % sobre ventas y liquidaciones. Incluye las
+   decisiones del dueño del 2026-08-17 y por qué BioTime se lee **por Postgres directo** (no tiene API).
+2. **[../claude/SPEC-modulo-salarios.md](../claude/SPEC-modulo-salarios.md)** — 🖊️ **FIRMADO 2026-08-17 ·
+   CONGELADO a nivel diseño.** Resoluciones **R1–R14** + enmiendas de endurecimiento **A1–A7** + reglas de
+   proceso. Modelo de datos (`employees` extendida, `time_punches`, `work_days`, `feriados`, `salary_periods`,
+   `salary_lines`, `liquidaciones`), fórmulas exactas, puente BioTime, UI y las **6 fases con su criterio de
+   aceptación**. Decisión raíz: **el 10% NO es propina** (flujos distintos, no se mezclan ni se doble-cuentan);
+   el 10% se **consume** de `computeTotals().servicio` y **nunca se recalcula**; Tips **solo se lee**.
+   > ⚠️ **Firmado el diseño ≠ autorizado a construir todo:** cada fase toca dinero y/o esquema y necesita
+   > **firma propia**. Sagrados byte-idénticos.
+3. **[../claude/PROMPT-salarios-fase0.md](../claude/PROMPT-salarios-fase0.md)** — 🔲 **Fase 0, lista para
+   ejecutar** (maestro de empleados: migración aditiva ~`055` + UI de tarifas). Entrega en 2 tiempos: primero
+   el esquema para revisión, después la UI. **Solo a staging.** Falta el insumo humano: código BioTime +
+   fecha de ingreso por empleado.
 
 ## 🟢 SPECs de IMPLEMENTACIÓN (firmados)
 
@@ -93,7 +114,9 @@ El rediseño de cajas (2026-07-22) tiene su documentación junto al código y al
 | [../_handoff/RCA-FECHAS-BORDE.md](../_handoff/RCA-FECHAS-BORDE.md) — 400 por `-31` en reportes | ✅ cerrado |
 
 Infraestructura: [../OFFLINE.md](../OFFLINE.md) · [../STAGING.md](../STAGING.md) ·
-[../ESTADO-ARCHIVO.md](../ESTADO-ARCHIVO.md) (changelog histórico).
+[../ESTADO-ARCHIVO.md](../ESTADO-ARCHIVO.md) (changelog histórico) ·
+[../_handoff/INTEGRACION-SUPABASE.md](../_handoff/INTEGRACION-SUPABASE.md) (Branching: una migración
+pusheada a `main` se **auto-aplica a la base de prod**).
 
 > `ESTADO-PROPINA-POOL.md` **no existe en esta rama** — vive solo en la rama `propina-pool`.
 

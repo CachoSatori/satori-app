@@ -1,4 +1,4 @@
-# Continuación — backlog priorizado (handoff 2026-08-05)
+# Continuación — backlog priorizado (al día: 2026-08-17)
 
 > **✅ EL REDISEÑO DE CAJAS (POZO ÚNICO) ESTÁ EN PROD Y VALIDADO.** Se firmó, construyó, pasó y se
 > validó físicamente en un día: el **primer cierre real bajo el pozo (22/07) CUADRÓ** y las cargas
@@ -32,6 +32,15 @@
 > rojo → no aplica); (2) **STAGING sigue MANUAL** (CLI `db query --linked` / Management API firmada), NO está atado
 > a la integración. Interruptor para desactivar: Dashboard → `yiczgdti` → Branches. Detalle + TODO de edge
 > functions → [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
+
+> **AL DÍA (2026-08-17):** `main` = **`3e54aa4`** · `staging` = **`134893c`**. Hoy entró a prod el **paquete de
+> PROVEEDORES completo** (Fase A notificación de pago **mig 047** · Fase B saldo a favor **migs 053/054** ·
+> comprobantes de liquidación/post-pago · **WhatsApp mandando la imagen**). Ledger de prod = **39 filas, contiguo
+> 040–054, 0 pendientes**. Edge Function `pago-notificar` **v1 ACTIVE** (inerte sin DNS+secreto). Además se
+> **congeló y firmó el SPEC del módulo SALARIOS** (`claude/`): diseño listo, **construcción no iniciada**.
+>
+> **⚠️ Lo de proveedores está en prod pero NADIE lo usó todavía** (`supplier_credits`/`credit_applications` en 0
+> filas). Validación física en piso = P0.
 
 ---
 
@@ -86,6 +95,39 @@
 > al cerrar/editar (`updateSessionPools`) + **backfill de las 266 sesiones** (solo esa columna); Historial
 > muestra el total real **sin expandir** (`poolTotalOf = pool_total_crc ?? fallback`). **Pendiente UI (letra
 > chica):** "generado por cobertura" en Estadísticas cuando alguien cubrió otro puesto ese turno.
+
+---
+
+## 🟥 P0 — LO QUE SIGUE AHORA
+
+1. **👁️ Validar PROVEEDORES A+B en piso (prod).** Está desplegado y verificado por esquema/chunk, pero **sin uso
+   real**: registrar un **saldo a favor** de un proveedor, **aplicarlo** a una y a varias facturas (reparto FIFO),
+   emitir el comprobante de **liquidación** y el **post-pago**, y mandar uno por **WhatsApp desde el celular**
+   (ahí se prueba de verdad el Web Share con imagen; en desktop cae a `wa.me` texto, que es lo esperado).
+   Mirar que el **residual** (`amount_crc − crédito`) cuadre en las 3 superficies y que `amount_crc` **no** cambie.
+
+2. **📮 DNS de Resend + `RESEND_API_KEY` en prod — DEPENDE DEL DUEÑO.** Es lo único que separa a la Fase A de
+   enviar correo. Hoy el sender sandbox solo entrega a una dirección. Hasta que se configure, el correo **no
+   sale** y no rompe nada (la llamada a `pago-notificar` es fire-and-forget). **El WhatsApp ya funciona.**
+   Cuando esté: smoke de un pago real con `notificar_pago='email'`.
+
+3. **🖊️ SALARIOS · Fase 0 — Maestro de empleados.** SPEC **FIRMADO**, prompt escrito y listo
+   ([`claude/PROMPT-salarios-fase0.md`](claude/PROMPT-salarios-fase0.md)). **Bloqueada por un insumo humano, no
+   por código:** hace falta la **lista maestra de empleados con su código BioTime y su fecha de ingreso**. Sin
+   eso, la tabla se puede crear pero queda vacía de lo que importa.
+   - Entrega en 2 tiempos (regla de proceso §10 del SPEC): **primero la migración** (~`055`, aditiva:
+     `hourly_rate_crc`, `fixed_salary_crc`, `participa_servicio`, `biotime_emp_code` con índice único parcial,
+     `fecha_ingreso`) para revisión y firma; **después la UI** (sección Salarios → pestaña Empleados/Tarifas).
+   - **Solo a STAGING** (`hwiatgic`). Nada a `main`.
+
+4. **🔑 SALARIOS · Fase 1 — credenciales del Postgres de BioTime + PC siempre encendida. DEPENDE DEL DUEÑO.**
+   BioTime **no tiene API** y vive en **otra PC**: el puente lee su Postgres directo con un usuario **read-only**.
+   Sin credenciales y sin esa máquina prendida (o una ventana de sincronización), no hay horas → no hay nómina.
+   Aceptación de la fase: las horas de la app **cuadran contra el reporte real de BioTime** de un día.
+
+5. **🧮 SALARIOS · consultar al CONTADOR: bruto vs neto y modelo de vacaciones.** Condiciona las **Fases 2 y 5**
+   (qué número es el que se paga y cómo se acumulan/liquidan las vacaciones). Es una decisión externa: conviene
+   preguntarla **antes** de construir la Fase 2, no después.
 
 ## 🟧 P1 — DEUDA CORTA (técnica / datos)
 
@@ -153,8 +195,9 @@
 
 ## 🟨 P2 — ESPERAN DECISIÓN O FIRMA DEL DUEÑO
 
-1. **🖊️ SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de **DNS**
-   (dominio propio en Resend; hoy el sender sandbox solo entrega a una dirección).
+1. **✅ SPEC notificación a proveedores — CONSTRUIDO Y EN PROD (2026-08-17).** Firma dada, **mig 047 aplicada**,
+   Edge Fn `pago-notificar` desplegada. Lo único que queda es la **tarea de DNS** (dominio propio en Resend) +
+   `RESEND_API_KEY` → movido a **P0 §2**. La Fase B (saldo a favor, migs 053/054) también entró en el mismo pase.
 2. **🖊️ Edición de propinas en Historial por CAJERO** con autorización de gerencia — FIRMADO
    2026-07-17, sin construir. Patrón mig 045 `requireManager`. **Plata-adyacente → revisión estricta.**
 3. **🖊️ Foto de comprobante obligatoria al pagar propina** — firmado, DIFERIDO. Toca
@@ -163,9 +206,13 @@
    efectivo o separada?
 5. **🖊️ Reconciliación prod-vs-Excel.** **Ahora es viable**: el pozo da **UN número por día**, que es
    exactamente lo que el Excel del dueño tiene enfrente. Antes no había con qué comparar.
-6. **🖊️👁️ Hora-CR en bordes de período.** Las queries de plata (P&L, `finance.ts`) acotan `created_at`
-   en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. **Cambia números.**
-7. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy
+6. **✅ Hora-CR en bordes de período — RESUELTO Y EN PROD.** `monthRangeBounds` (`dateRange.ts`) acota
+   `created_at` a **T06:00:00Z = medianoche de Costa Rica**; helper compartido por ReporteMensual + InvFoodCost.
+   Impacto medido en el borde Jul/Ago 2026: 7 movimientos de caja (₡122.544,37) y 3 de mercadería pasaron al mes
+   correcto. **Queda pendiente barrer el resto de las queries de plata** (P&L / `finance.ts`) con el mismo helper.
+7. **🖊️ SALARIOS — firma por FASE.** El SPEC está firmado a nivel diseño, pero **cada fase toca dinero y/o
+   esquema** ⇒ necesita firma propia antes de aplicar (0 → 1 → 2 → {3,4} → 5).
+8. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy
    diseñada sin código) — construir **solo si** tras usar la Etapa 1 en prod sigue haciendo falta.
 
 ## 🟦 P3 — LEJOS / BLOQUEANTE

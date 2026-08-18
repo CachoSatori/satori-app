@@ -1,7 +1,56 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-07-23**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-08-17**
+
+---
+
+---
+
+## ✅ 2026-08-17 — PROVEEDORES (Fases A + B) EN PROD · 🆕 SALARIOS arranca (SPEC firmado)
+
+> **`main` `73352ba` → `3e54aa4`** (9 commits por cherry-pick sobre main, cero conflictos) ·
+> **`staging` = `134893c`** · migs **047 / 053 / 054** aplicadas a prod (ledger **39 filas, 0 pendientes**).
+
+**✅ Proveedores — Fase A · notificación de pago (mig 047).** Al pagar un pendiente sale comprobante por
+**email** (Resend, si el proveedor tiene `notificar_pago='email'`) + botón de **WhatsApp**. Columnas
+`email`/`whatsapp`/`notificar_pago` en `suppliers` y sello `proveedor_notificado_at` en `cash_movements`.
+Edge Function `pago-notificar` desplegada (**v1 ACTIVE**, fire-and-forget).
+> ⚠️ **El correo está INERTE** hasta que el dueño configure **DNS de Resend + `RESEND_API_KEY`**. No rompe
+> nada: si la función no responde, el pago se registra igual. **El WhatsApp sí funciona hoy.**
+
+**✅ Proveedores — Fase B · saldo a favor (migs 053/054).** Tablas `supplier_credits` y `credit_applications`
+**append-only** (RLS solo-SELECT; todo se escribe por RPC: `create_supplier_credit`, `apply_supplier_credit`,
+`delete_supplier_credit`). Un sobrepago queda como crédito y se **aplica a una o varias facturas con reparto
+FIFO**; el residual (`amount_crc − crédito aplicado`) se muestra en 3 superficies y **nunca muta `amount_crc`**.
+`delete_movement_cascade` quedó **extendida** (repone el saldo al borrar la factura, con snapshot en la auditoría).
+
+**✅ Comprobantes.** Comprobante de **liquidación** de crédito, comprobante **post-pago** (antes el grupo
+desaparecía al pagar la última factura) y **WhatsApp = IMAGEN**: el botón 💬 comparte el mismo PNG que
+"Descargar" usando el menú del sistema (Web Share con archivo), con fallback a `wa.me` texto y a la descarga.
+
+> 🔲 **Los tres bloques están en prod SIN validación física.** Falta usarlos en piso (registrar/aplicar un
+> saldo a favor real y mandar un comprobante por WhatsApp desde el celular).
+
+**🆕 SALARIOS — módulo nuevo, arranca por DISEÑO.** SPEC **CONGELADO y FIRMADO por el dueño (2026-08-17)**:
+R1–R14 + enmiendas A1–A7 + reglas de proceso. Reemplaza la planilla anual de Excel (10% de servicio + pago por
+hora + comprobantes + % sobre ventas + liquidaciones). **Fuente única por dato:** horas ← **BioTime**, tarifas ←
+ficha del empleado, 10% ← **POS/fiscal** (`computeTotals().servicio`, **nunca se recalcula**), ventas ← POS,
+propina ← módulo Tips (**solo lectura**). Decisión raíz: **el 10% NO es propina** — son flujos distintos y no se
+mezclan. Docs: [SPEC](claude/SPEC-modulo-salarios.md) · [análisis de la planilla](claude/ANALISIS-planilla-salarios-y-nomina.md) ·
+[prompt de Fase 0](claude/PROMPT-salarios-fase0.md).
+
+| Fase | Entregable | Estado |
+|---|---|---|
+| **0 — Maestro** | Extender `employees` (tarifa/hora, salario fijo, `participa_servicio`, `biotime_emp_code`, `fecha_ingreso`) + UI de tarifas | 🔲 **NO iniciada** — habilitada por firma; falta el insumo humano (código BioTime + fecha de ingreso por empleado) |
+| **1 — Puente de horas** | Usuario read-only en BioTime + puente + `ingest-punches` + `time_punches`/`work_days` | 🔲 bloqueada por **credenciales del Postgres de BioTime + PC siempre encendida** |
+| **2 — Salarios núcleo** | Feriados + reparto diario del 10% + salario + período + reporte + comprobante | 🔲 ancla de aceptación = fixture **`Q1_Ago`** (Σ = ₡1.060.891, ±₡1 por empleado) |
+| **3 — Consolidado** | Horas + 10% + propina por empleado (cocina = pozo aparte, ÷ igual) | 🔲 |
+| **4 — % sobre ventas** | Costo laboral / ventas (semana/mes) en P&L | 🔲 |
+| **5 — Liquidaciones** | Vacaciones + aguinaldo, completa o parcial | 🔲 requiere validación del **contador** |
+
+Orden: 0 → 1 → 2 → {3, 4} → 5. **Cada fase toca DINERO y/o ESQUEMA ⇒ firma explícita del dueño** antes de
+aplicar; sagrados byte-idénticos y el módulo Tips solo se lee.
 
 ---
 
@@ -39,10 +88,10 @@ dueño · ⏳ en curso/parcial · 🔲 no empezado · 🧪 solo staging.
 > **reconciliación del ledger** avanzó — Fase A + B1 hechas, **`db push` destrabado en staging**.
 > Ver [HANDOFF-2026-07-23.md](HANDOFF-2026-07-23.md).
 >
-> **➡️ Sigue:** **T3 — endurecimiento de caja** (sesión propia, con firma donde toque plata) ·
-> **B2 = ledger de PROD** (28 repairs + rename `009`→`0090` en main + ACL de `delete_movement_cascade`) ·
-> **hallazgo `anon`** (12/17 `SECURITY DEFINER` expuestas) · PILAR de auth (bloquea el PoS).
-> Detalle → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+> **✅ Todo lo que este bloque dejaba "por seguir" ya ocurrió:** T3 endurecimiento de caja **completo en prod**
+> (los 8 ítems), ledger de prod **reconciliado** (B2) y ACL endurecida (mig 049; quedan 3 `SECURITY DEFINER`
+> por `anon`, ver §f de ESTADO). **Lo que sigue hoy:** validar Proveedores A+B en piso · **Salarios Fase 0** ·
+> el **PILAR de auth** (bloquea el PoS). Detalle → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
 ---
 

@@ -7,7 +7,7 @@ import { dateCR } from '../../shared/utils'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import { saldoResidual, saldoCredito, facturaAplicado } from './supplierCredits'
 import { RegistrarCreditoModal, AplicarCreditoModal } from './CreditoModals'
-import { waNumber, comprobanteTexto, descargarComprobantePNG, type ComprobanteData } from './comprobante'
+import { waNumber, descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
 
 interface Props {
   movements: CashMovement[]
@@ -106,6 +106,10 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
     arr.forEach(g => g.rows.sort((a, b) => a.fecha.localeCompare(b.fecha)))
     return arr.sort((a, b) => b.totalCRC - a.totalCRC)
   }, [movements, sesionMap, applications])
+
+  // ¿El equipo puede compartir archivos por el menú del sistema? Decide si el botón 💬 WhatsApp
+  // aparece aun sin número guardado (en celular manda la IMAGEN del comprobante).
+  const compartirArchivos = useMemo(() => puedeCompartirArchivos(), [])
 
   const totalCRC = groups.reduce((s, g) => s + g.totalCRC, 0)
   const totalUSD = groups.reduce((s, g) => s + g.totalUSD, 0)
@@ -216,11 +220,10 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
     if (!rows.length) return
     descargarComprobantePNG(comprobanteDeGrupo(g, onlySelected))
   }
-  // WhatsApp manual (mig 047): abre wa.me/{whatsapp} con el comprobante en TEXTO prearmado.
+  // WhatsApp manual (mig 047): comparte el comprobante como IMAGEN (Web Share con archivo);
+  // en equipos sin soporte cae a wa.me con el texto prearmado, o a la descarga del PNG.
   const abrirWhatsApp = (g: Group, onlySelected: boolean) => {
-    const wa = waNumber(supOfGroup(g)?.whatsapp ?? '')
-    if (!wa) return
-    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(comprobanteDeGrupo(g, onlySelected)))}`, '_blank')
+    void compartirComprobanteWhatsApp(comprobanteDeGrupo(g, onlySelected), supOfGroup(g)?.whatsapp ?? '')
   }
 
   if (!totalCount) {
@@ -366,7 +369,7 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
                     onClick={() => descargarComprobante(g, selInGroup.length > 0)}>
                     📷 Descargar comprobante{selInGroup.length > 0 ? ` (${selInGroup.length})` : ''}
                   </button>
-                  {supG?.whatsapp && (
+                  {(supG?.whatsapp || (supG && compartirArchivos)) && (
                     <button className="tips-btn-ghost"
                       onClick={() => abrirWhatsApp(g, selInGroup.length > 0)}
                       title={`Enviar comprobante por WhatsApp a ${supG.name}`}>
@@ -422,9 +425,9 @@ export default function CashPendientes({ movements, sessions, suppliers, credits
             </div>
             <div className="cd-modal-actions">
               <button className="tips-btn-ghost" onClick={() => descargarComprobantePNG(pagoResultado.data)}>📷 Descargar comprobante</button>
-              {pagoResultado.whatsapp && (
+              {(pagoResultado.whatsapp || compartirArchivos) && (
                 <button className="tips-btn-ghost"
-                  onClick={() => { const wa = waNumber(pagoResultado.whatsapp ?? ''); if (wa) window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(pagoResultado.data))}`, '_blank') }}>
+                  onClick={() => { void compartirComprobanteWhatsApp(pagoResultado.data, pagoResultado.whatsapp ?? '') }}>
                   💬 WhatsApp
                 </button>
               )}

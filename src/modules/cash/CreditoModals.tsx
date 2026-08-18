@@ -6,7 +6,7 @@ import type { Supplier, CashMovement, SupplierCredit, CreditApplication } from '
 import { createSupplierCredit, applySupplierCredit } from '../../shared/api/cash'
 import { fi } from './cashUtils'
 import { saldoCredito, saldoResidual, distribuirCreditoFIFO } from './supplierCredits'
-import { waNumber, comprobanteTexto, descargarComprobantePNG, type ComprobanteData } from './comprobante'
+import { descargarComprobantePNG, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
 
 const uuid = (): string =>
   (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
@@ -204,10 +204,8 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
     }
   }
   const descargarComp = () => descargarComprobantePNG(comprobanteData())
-  const waComp = () => {
-    const wa = waNumber(supplier.whatsapp ?? '')
-    if (wa) window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(comprobanteData()))}`, '_blank')
-  }
+  // Manda la IMAGEN por el menú de compartir (Web Share); sin soporte cae a wa.me texto / descarga.
+  const waComp = () => { void compartirComprobanteWhatsApp(comprobanteData(), supplier.whatsapp ?? '') }
 
   // Tras aplicar con éxito: VISTA DE RESULTADO (comprobante) — descargar PNG / WhatsApp / cerrar.
   if (resultado) {
@@ -240,7 +238,7 @@ export function AplicarCreditoModal({ supplier, credits, applications, pendiente
           </div>
           <div className="cd-modal-actions">
             <button className="tips-btn-ghost" onClick={descargarComp}>Descargar comprobante</button>
-            {supplier.whatsapp && <button className="tips-btn-ghost" onClick={waComp}>WhatsApp</button>}
+            {(supplier.whatsapp || puedeCompartirArchivos()) && <button className="tips-btn-ghost" onClick={waComp}>WhatsApp</button>}
             <button className="tips-btn-teal" onClick={onClose}>Cerrar</button>
           </div>
         </div>

@@ -42,10 +42,11 @@ export function comprobanteTexto(d: ComprobanteData): string {
   return `*Satori Sushi Bar* — ${d.tituloTexto}\n${d.proveedor}\n\n${lineas}\n\nTotal: ${d.totalTexto}${pie}`
 }
 
-/** Comprobante como imagen PNG (Canvas) y dispara la descarga. Requiere DOM (browser). */
-export function descargarComprobantePNG(d: ComprobanteData): void {
+/** Comprobante como imagen PNG (Canvas). Requiere DOM (browser). Resuelve null si no hay líneas
+ *  o si el canvas no produce blob. Es LA fuente del PNG: la descarga y el compartir la reusan. */
+export function comprobantePNGBlob(d: ComprobanteData): Promise<Blob | null> {
   const rows = d.lineas
-  if (!rows.length) return
+  if (!rows.length) return Promise.resolve(null)
   const sumCount = rows.length
 
   const W = 760, padX = 40, rowH = 38, headerH = 200, noteH = 16
@@ -116,11 +117,63 @@ export function descargarComprobantePNG(d: ComprobanteData): void {
   ctx.font = '11px Arial'; ctx.fillStyle = '#8a8070'
   ctx.fillText('Documento generado automáticamente · Satori · Santa Teresa, CR', padX, H - 24)
 
-  c.toBlob(blob => {
+  return new Promise(resolve => c.toBlob(blob => resolve(blob), 'image/png'))
+}
+
+/** Nombre de archivo del PNG (compartido por descarga y share). */
+const nombrePNG = (d: ComprobanteData): string =>
+  `comprobante_${d.proveedor.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.png`
+
+/** Comprobante como imagen PNG y dispara la descarga. Byte-idéntico a antes. */
+export function descargarComprobantePNG(d: ComprobanteData): void {
+  void comprobantePNGBlob(d).then(blob => {
     if (!blob) return
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url; a.download = `comprobante_${d.proveedor.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.png`
+    a.href = url; a.download = nombrePNG(d)
     a.click(); URL.revokeObjectURL(url)
-  }, 'image/png')
+  })
+}
+
+/**
+ * ¿El dispositivo puede compartir ARCHIVOS por el menú del sistema? Se usa solo para decidir la
+ * VISIBILIDAD del botón 💬 WhatsApp (así aparece aunque el proveedor no tenga número guardado).
+ * Sonda con un File vacío: `canShare` mira el tipo/soporte, no el contenido.
+ */
+export function puedeCompartirArchivos(): boolean {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.canShare || typeof File === 'undefined') return false
+    return navigator.canShare({ files: [new File([], 'comprobante.png', { type: 'image/png' })] })
+  } catch { return false }
+}
+
+/**
+ * Envía el comprobante por WhatsApp como IMAGEN usando el menú de compartir del sistema
+ * (Web Share API con archivo — requiere HTTPS + gesto de usuario; el click lo es).
+ * Degradación: sin soporte de archivos → wa.me con el texto prearmado; sin número → descarga el PNG.
+ * Cancelar el diálogo de compartir (AbortError) NO es error: no hace nada.
+ */
+export async function compartirComprobanteWhatsApp(d: ComprobanteData, numero?: string): Promise<void> {
+  const nav = typeof navigator !== 'undefined' ? navigator : undefined
+  let file: File | undefined
+  if (nav?.canShare && typeof nav.share === 'function' && typeof File !== 'undefined') {
+    const blob = await comprobantePNGBlob(d)
+    if (blob) {
+      const f = new File([blob], nombrePNG(d), { type: 'image/png' })
+      if (nav.canShare({ files: [f] })) file = f
+    }
+  }
+  if (file) {
+    try {
+      await nav!.share!({ files: [file], title: 'Comprobante de pago', text: comprobanteTexto(d) })
+      return
+    } catch (e) {
+      // Cancelar el diálogo (AbortError) es una decisión del usuario: se termina acá, sin ruido.
+      if ((e as Error)?.name === 'AbortError') return
+      // Cualquier otra falla del share → se sigue por la vía de siempre (wa.me / descarga).
+    }
+  }
+  const wa = waNumber(numero ?? '')
+  if (wa) window.open(`https://wa.me/${wa}?text=${encodeURIComponent(comprobanteTexto(d))}`, '_blank')
+  else descargarComprobantePNG(d)
 }

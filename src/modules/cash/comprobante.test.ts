@@ -1,8 +1,8 @@
 // Generador de comprobante compartido (texto WhatsApp). Fija que arma líneas + total + pie como
 // espera cada caller (pago normal y liquidación de crédito). El PNG (Canvas) necesita DOM y no se
 // testea acá; el texto es determinista (sin fecha de emisión) → oráculo exacto.
-import { describe, it, expect } from 'vitest'
-import { comprobanteTexto, waNumber, type ComprobanteData } from './comprobante'
+import { describe, it, expect, vi } from 'vitest'
+import { comprobanteTexto, waNumber, compartirComprobanteWhatsApp, puedeCompartirArchivos, type ComprobanteData } from './comprobante'
 
 describe('comprobante — texto para WhatsApp', () => {
   it('pago normal: título, proveedor, líneas (con nota y subnota de desglose) y total', () => {
@@ -57,5 +57,49 @@ describe('comprobante — texto para WhatsApp', () => {
     }
     expect(comprobanteTexto(d)).toBe('*Satori Sushi Bar* — X\nP\n\n• 2026-07-05  ₡100\n\nTotal: ₡100')
     expect(waNumber('89900324')).toBe('50689900324')
+  })
+})
+
+// Compartir por WhatsApp como IMAGEN (Web Share con archivo). El camino feliz (share con File)
+// necesita Canvas real; acá se fija la DEGRADACIÓN, que es la que puede romperse sin que se note:
+// sin soporte de archivos → wa.me con el número YA normalizado; sin número → descarga el PNG.
+describe('compartirComprobanteWhatsApp — degradación sin Web Share de archivos', () => {
+  const d: ComprobanteData = {
+    tituloTexto: 'Comprobante de pago', tituloPNG: 'Comprobante de pago a proveedor',
+    proveedor: 'Pescados del Pacífico',
+    lineas: [{ fecha: '2026-07-05', nota: 'Factura 12', monto: '₡30 000' }],
+    totalTexto: '₡30 000', totalPNG: '₡30 000',
+  }
+
+  it('sin canShare y CON número: abre wa.me con el número normalizado y el texto prearmado', async () => {
+    const open = vi.fn()
+    vi.stubGlobal('navigator', {})            // sin canShare/share
+    vi.stubGlobal('window', { open })
+    await compartirComprobanteWhatsApp(d, '8990 0324')
+    expect(open).toHaveBeenCalledTimes(1)
+    const [url, target] = open.mock.calls[0]
+    expect(url).toBe(`https://wa.me/50689900324?text=${encodeURIComponent(comprobanteTexto(d))}`)
+    expect(target).toBe('_blank')
+    vi.unstubAllGlobals()
+  })
+
+  it('sin canShare y SIN número: no abre wa.me (cae a la descarga del PNG)', async () => {
+    const open = vi.fn()
+    // Canvas de juguete: el Proxy responde cualquier método del contexto 2D con un no-op.
+    const canvas = { width: 0, height: 0, getContext: () => new Proxy({}, { get: () => () => {} }), toBlob: (cb: (b: Blob | null) => void) => cb(null) }
+    vi.stubGlobal('navigator', {})
+    vi.stubGlobal('window', { open })
+    vi.stubGlobal('document', { createElement: () => canvas })
+    await compartirComprobanteWhatsApp(d)      // proveedor sin WhatsApp guardado
+    expect(open).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('puedeCompartirArchivos: false sin canShare, true cuando el navegador lo acepta', () => {
+    vi.stubGlobal('navigator', {})
+    expect(puedeCompartirArchivos()).toBe(false)
+    vi.stubGlobal('navigator', { canShare: (data: { files?: File[] }) => !!data.files?.length })
+    expect(puedeCompartirArchivos()).toBe(true)
+    vi.unstubAllGlobals()
   })
 })

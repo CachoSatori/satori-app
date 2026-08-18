@@ -613,30 +613,45 @@ export type Database = {
       }
       employees: {
         Row: {
+          biotime_emp_code: string | null
           created_at: string
+          fecha_ingreso: string | null
+          fixed_salary_crc: number
           full_name: string
+          hourly_rate_crc: number
           id: string
           is_active: boolean
+          participa_servicio: boolean
           pos_name: string | null
           profile_id: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
         }
         Insert: {
+          biotime_emp_code?: string | null
           created_at?: string
+          fecha_ingreso?: string | null
+          fixed_salary_crc?: number
           full_name: string
+          hourly_rate_crc?: number
           id?: string
           is_active?: boolean
+          participa_servicio?: boolean
           pos_name?: string | null
           profile_id?: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
         Update: {
+          biotime_emp_code?: string | null
           created_at?: string
+          fecha_ingreso?: string | null
+          fixed_salary_crc?: number
           full_name?: string
+          hourly_rate_crc?: number
           id?: string
           is_active?: boolean
+          participa_servicio?: boolean
           pos_name?: string | null
           profile_id?: string | null
           role?: Database["public"]["Enums"]["user_role"]

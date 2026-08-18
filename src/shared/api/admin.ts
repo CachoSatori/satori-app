@@ -12,16 +12,54 @@ export async function getAllEmployees(): Promise<Employee[]> {
   return data as Employee[]
 }
 
-export async function createEmployee(payload: {
-  full_name: string
-  role: UserRole
-}): Promise<Employee> {
+// ── Salarios · Fase 0 (mig 055) ─────────────────────────────
+// Datos maestros de nómina que vivían en el Excel. Se escriben con un update normal
+// sobre employees (RLS: owner/manager gestionan empleados); no hay RPC nueva porque
+// acá todavía no se mueve plata — son solo los datos que Fase 1+ va a consumir.
+export interface EmployeePayroll {
+  hourly_rate_crc:    number
+  fixed_salary_crc:   number
+  participa_servicio: boolean
+  biotime_emp_code:   string | null
+  fecha_ingreso:      string | null
+}
+
+// El índice único parcial employees_biotime_emp_code_key (mig 055) es el que manda:
+// dos empleados no pueden compartir código de BioTime. Traducimos su 23505 a algo
+// que se entienda en la UI (la validación de la UI es la primera línea, esta es la red).
+function payrollError(error: { code?: string; message: string }, code?: string | null): Error {
+  const dup = error.code === '23505' || error.message.includes('employees_biotime_emp_code_key')
+  if (dup) {
+    return new Error(
+      `El código de BioTime${code ? ` «${code}»` : ''} ya está asignado a otro empleado. ` +
+      'Cada usuario del reloj lleva su propio código.',
+    )
+  }
+  return new Error(error.message)
+}
+
+export async function updateEmployeePayroll(
+  id: string,
+  payload: Partial<EmployeePayroll>,
+): Promise<void> {
+  const { error } = await supabase
+    .from('employees')
+    .update(payload)
+    .eq('id', id)
+  if (error) throw payrollError(error, payload.biotime_emp_code)
+}
+
+export async function createEmployee(
+  payload: { full_name: string; role: UserRole } & Partial<EmployeePayroll>,
+): Promise<Employee> {
+  // profile_id queda null: el empleado existe sin cuenta de login (cocina/back).
+  // La FK a profiles es nullable, así que es una fila válida y completa.
   const { data, error } = await supabase
     .from('employees')
     .insert(payload)
     .select()
     .single()
-  if (error) throw new Error(error.message)
+  if (error) throw payrollError(error, payload.biotime_emp_code)
   return data as Employee
 }
 

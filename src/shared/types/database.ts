@@ -47,6 +47,16 @@ export interface Employee {
   profile_id: string | null
   is_active: boolean
   pos_name: string | null   // nombre exacto en el XLS de ventas/POS (clave de dias.saloneros); null = sin vincular
+  // ── Salarios · Fase 0 (mig 055) ──────────────────────────────────────────────
+  // Datos maestros de nómina. Opcionales a propósito: las lecturas castean la fila
+  // cruda (data as Employee[]) y hay código que arma Employees a mano en tests y
+  // fixtures; declararlos requeridos rompería esas construcciones sin ganar nada.
+  // En la base son NOT NULL con default (0 / 0 / true) y NULL en code/fecha.
+  hourly_rate_crc?: number             // tarifa por hora en colones; 0 = no cobra por hora
+  fixed_salary_crc?: number            // salario fijo por quincena en colones; 0 = no aplica
+  participa_servicio?: boolean         // Y/N del reparto del 10% de servicio (R4)
+  biotime_emp_code?: string | null     // código en BioTime (A3); único cuando no es null; null = sin mapear
+  fecha_ingreso?: string | null        // date (YYYY-MM-DD); para vacaciones/aguinaldo (Fase 5)
   created_at: string
   updated_at: string
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Employee, UserRole } from '../../shared/types/database'
 import { createEmployee, updateEmployeePayroll, toggleEmployeeActive } from '../../shared/api/admin'
+import { updateEmployeeHomebankingName } from '../../shared/api/salarios'
 import { ROLE_LABELS } from '../../shared/constants'
 import { fi } from '../../shared/utils'
 
@@ -18,9 +19,10 @@ interface Draft {
   participa: boolean
   code:      string
   ingreso:   string
+  banco:     string   // nombre del beneficiario en el homebanking (mig 058)
 }
 
-const emptyDraft: Draft = { hourly: '0', fijo: '0', participa: true, code: '', ingreso: '' }
+const emptyDraft: Draft = { hourly: '0', fijo: '0', participa: true, code: '', ingreso: '', banco: '' }
 
 function draftOf(emp: Employee): Draft {
   return {
@@ -29,6 +31,7 @@ function draftOf(emp: Employee): Draft {
     participa: emp.participa_servicio ?? true,
     code:      emp.biotime_emp_code ?? '',
     ingreso:   emp.fecha_ingreso ?? '',
+    banco:     emp.nombre_homebanking ?? '',
   }
 }
 
@@ -100,6 +103,11 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
     setError(null)
     try {
       await updateEmployeePayroll(emp.id, payloadOf(draft))
+      // El alias del homebanking va por su propia función: el payload de
+      // updateEmployeePayroll es un contrato cerrado (mig 055) y no se ensancha.
+      if ((emp.nombre_homebanking ?? '') !== draft.banco.trim()) {
+        await updateEmployeeHomebankingName(emp.id, draft.banco)
+      }
       setEditId(null)
       await onRefresh()
     } catch (err) {
@@ -121,11 +129,14 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
     setError(null)
     try {
       // Sin profile_id: el empleado existe sin cuenta de login (FK nullable).
-      await createEmployee({
+      const creado = await createEmployee({
         full_name: newName.trim().toUpperCase(),
         role:      newRole,
         ...payloadOf(newDraft),
       })
+      if (newDraft.banco.trim() && creado?.id) {
+        await updateEmployeeHomebankingName(creado.id, newDraft.banco)
+      }
       setNewName('')
       setNewRole('cocina')
       setNewDraft(emptyDraft)
@@ -213,6 +224,18 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
           style={{ width: '130px' }}
         />
       </td>
+      <td>
+        <input
+          className="tip-input"
+          type="text"
+          aria-label={`Nombre en el homebanking: ${prefix}`}
+          placeholder="— usa el nombre —"
+          value={d.banco}
+          onChange={e => set({ ...d, banco: e.target.value })}
+          disabled={saving}
+          style={{ width: '160px' }}
+        />
+      </td>
     </>
   )
 
@@ -279,6 +302,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
                 <th>10%</th>
                 <th>Cód. BioTime</th>
                 <th>Ingreso</th>
+                <th>Nombre en el banco</th>
               </tr>
             </thead>
             <tbody>
@@ -306,6 +330,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
             <th>10%</th>
             <th>Cód. BioTime</th>
             <th>Ingreso</th>
+            <th>Nombre en el banco</th>
             <th></th>
           </tr>
         </thead>
@@ -347,6 +372,11 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
                   <td style={{ fontSize: '0.75rem' }}>
                     {emp.fecha_ingreso ?? <span style={{ opacity: 0.35 }}>—</span>}
                   </td>
+                  {/* El banco identifica al beneficiario por el NOMBRE (col A del archivo);
+                      sin alias cargado se exporta el nombre del empleado. */}
+                  <td style={{ fontSize: '0.75rem' }}>
+                    {emp.nombre_homebanking ?? <span style={{ opacity: 0.35 }}>— usa {emp.full_name} —</span>}
+                  </td>
                   <td className="admin-row-actions">
                     <button className="btn-delete-inline" onClick={() => startEdit(emp)} disabled={saving}>
                       Editar
@@ -362,7 +392,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
 
           {visibles.length === 0 && (
             <tr>
-              <td colSpan={8} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
+              <td colSpan={9} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
                 Sin empleados en este filtro.
               </td>
             </tr>

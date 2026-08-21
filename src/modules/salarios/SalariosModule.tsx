@@ -5,16 +5,18 @@ import { getAllEmployees } from '../../shared/api/admin'
 import type { Employee } from '../../shared/types/database'
 import { ROLE_LABELS } from '../../shared/constants'
 
-// Salarios · Fase 0 (SPEC claude/SPEC-modulo-salarios.md §5): la sección arranca con
-// una sola pestaña — el maestro de empleados y sus tarifas. Las que faltan (Feriados,
-// Horas, Período/Reporte, Consolidado, % sobre ventas, Liquidaciones) entran en las
-// fases siguientes; acá NO hay nada de cálculo de plata todavía.
+// Salarios · Fase 0 (SPEC claude/SPEC-modulo-salarios.md §5) + U0b: el maestro de
+// empleados/tarifas y el ciclo mínimo de pago del período. Las que faltan (Feriados,
+// Consolidado con 10% y propinas, % sobre ventas, Liquidaciones) entran en las fases
+// siguientes.
 const SalariosEmpleados = lazy(() => import('./SalariosEmpleados'))
+const SalariosPago      = lazy(() => import('./SalariosPago'))
 
-type Tab = 'empleados'
+type Tab = 'empleados' | 'pago'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'empleados', label: 'Empleados / Tarifas' },
+  { id: 'pago',      label: 'Pago del período' },
 ]
 
 export default function SalariosModule() {
@@ -99,6 +101,9 @@ export default function SalariosModule() {
         <div className="cd-content cd-content-wide">
           {tab === 'empleados' && (
             <SalariosEmpleados employees={employees} onRefresh={loadAll} />
+          )}
+          {tab === 'pago' && (
+            <SalariosPago employees={employees} />
           )}
         </div>
       </Suspense>

@@ -613,14 +613,17 @@ export type Database = {
       }
       employees: {
         Row: {
+          banco: string | null
           biotime_emp_code: string | null
           created_at: string
+          cuenta_iban_alias: string | null
           fecha_ingreso: string | null
           fixed_salary_crc: number
           full_name: string
           hourly_rate_crc: number
           id: string
           is_active: boolean
+          nombre_homebanking: string | null
           participa_servicio: boolean
           pos_name: string | null
           profile_id: string | null
@@ -628,14 +631,17 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          banco?: string | null
           biotime_emp_code?: string | null
           created_at?: string
+          cuenta_iban_alias?: string | null
           fecha_ingreso?: string | null
           fixed_salary_crc?: number
           full_name: string
           hourly_rate_crc?: number
           id?: string
           is_active?: boolean
+          nombre_homebanking?: string | null
           participa_servicio?: boolean
           pos_name?: string | null
           profile_id?: string | null
@@ -643,14 +649,17 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          banco?: string | null
           biotime_emp_code?: string | null
           created_at?: string
+          cuenta_iban_alias?: string | null
           fecha_ingreso?: string | null
           fixed_salary_crc?: number
           full_name?: string
           hourly_rate_crc?: number
           id?: string
           is_active?: boolean
+          nombre_homebanking?: string | null
           participa_servicio?: boolean
           pos_name?: string | null
           profile_id?: string | null

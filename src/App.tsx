@@ -154,7 +154,7 @@ function AppRoutes() {
         <Route path="/inventario"    element={<PrivateRoute roles={['owner','manager','contador']}><InventarioModule /></PrivateRoute>} />
         <Route path="/clientes"      element={<PrivateRoute roles={['owner','manager','cajero']}><ClientesModule /></PrivateRoute>} />
         <Route path="/finanzas"      element={<PrivateRoute roles={['owner','manager','contador']}><FinanzasModule /></PrivateRoute>} />
-        <Route path="/salarios"      element={<PrivateRoute roles={['owner','manager']}><SalariosModule /></PrivateRoute>} />
+        <Route path="/salarios"      element={<PrivateRoute roles={['owner','manager','contador']}><SalariosModule /></PrivateRoute>} />
         <Route path="/inbox"         element={<PrivateRoute roles={['owner','manager','contador','cajero']}><InboxModule /></PrivateRoute>} />
         <Route path="/inbox/share"   element={<Navigate to="/inbox" replace />} />
         <Route path="/mi-rendimiento" element={<PrivateRoute roles={['salonero','barman','barback','runner','cocina']}><MiRendimientoWrap /></PrivateRoute>} />

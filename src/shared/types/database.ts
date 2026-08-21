@@ -57,8 +57,72 @@ export interface Employee {
   participa_servicio?: boolean         // Y/N del reparto del 10% de servicio (R4)
   biotime_emp_code?: string | null     // código en BioTime (A3); único cuando no es null; null = sin mapear
   fecha_ingreso?: string | null        // date (YYYY-MM-DD); para vacaciones/aguinaldo (Fase 5)
+  // ── Salarios · U0b (mig 058) ─────────────────────────────────────────────────
+  nombre_homebanking?: string | null   // nombre del beneficiario TAL CUAL en el homebanking (col A del archivo del banco); null = usar full_name
   created_at: string
   updated_at: string
+}
+
+// ── Salarios · ciclo de nómina (mig 056) ─────────────────────────────────────────
+// Estas tablas NO están en supabase.gen.ts (no lo regeneramos; ver el cast acotado de
+// shared/api/salarios.ts). Estos tipos son el contrato del lado de la app.
+
+// Tarifa VERSIONADA. La vigente a una fecha = la de mayor efectivo_desde <= fecha.
+// `tipo` es la modalidad principal y NO excluye la otra columna: el caso real del Excel
+// cobra fijo por quincena Y tarifa por hora a la vez.
+export interface EmployeeWageRate {
+  id:               string
+  employee_id:      string
+  tipo:             'hora' | 'quincena' | 'mes'
+  hourly_rate_crc:  number
+  fixed_salary_crc: number
+  efectivo_desde:   string   // date (YYYY-MM-DD)
+  nota:             string | null
+  created_at:       string
+  updated_at:       string
+}
+
+export type SalaryPeriodEstado = 'abierto' | 'en_revision' | 'cerrado' | 'pagado'
+
+export interface SalaryPeriod {
+  id:         string
+  tipo:       'quincena' | 'adhoc'
+  fecha_ini:  string   // date
+  fecha_fin:  string   // date
+  estado:     SalaryPeriodEstado
+  local:      string | null   // solo etiqueta; el pay run es global
+  paid_by:    string | null
+  paid_at:    string | null
+  created_at: string
+  updated_at: string
+}
+
+// Horas por empleado/día/local. U0b las carga a mano; Fase 1 (BioTime) escribe las
+// mismas filas con source='biotime'.
+export interface WorkDay {
+  employee_id: string
+  work_date:   string   // date
+  local:       string
+  hours:       number
+  es_feriado:  boolean
+  source:      'manual' | 'biotime'
+  created_at:  string
+  updated_at:  string
+}
+
+// Registro del pago por transferencia. NO genera movimiento de caja.
+export interface EmployeePayment {
+  id:          string
+  period_id:   string
+  employee_id: string
+  monto_neto:  number
+  metodo:      string
+  referencia:  string | null
+  estado:      string
+  paid_by:     string | null
+  paid_at:     string | null
+  created_at:  string
+  updated_at:  string
 }
 
 export interface TipSession {

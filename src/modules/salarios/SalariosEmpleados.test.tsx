@@ -13,6 +13,12 @@ vi.mock('../../shared/api/admin', () => ({
   toggleEmployeeActive:  (id: string, a: boolean) => toggle(id, a),
 }))
 
+// El alias del homebanking (U0b) se guarda aparte, con su propia función.
+const setBanco = vi.fn<(id: string, n: string | null) => Promise<void>>(async () => {})
+vi.mock('../../shared/api/salarios', () => ({
+  updateEmployeeHomebankingName: (id: string, n: string | null) => setBanco(id, n),
+}))
+
 import SalariosEmpleados from './SalariosEmpleados'
 
 function emp(over: Partial<Employee> & { id: string; full_name: string }): Employee {
@@ -41,6 +47,7 @@ beforeEach(() => {
   updatePayroll.mockClear()
   create.mockClear()
   toggle.mockClear()
+  setBanco.mockClear()
 })
 
 describe('Salarios · Empleados / Tarifas — guardado de nómina', () => {

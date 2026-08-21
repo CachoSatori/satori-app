@@ -1,4 +1,4 @@
-# Continuación — backlog priorizado (al día: 2026-08-17)
+# Continuación — backlog priorizado (al día: 2026-08-21)
 
 > **✅ EL REDISEÑO DE CAJAS (POZO ÚNICO) ESTÁ EN PROD Y VALIDADO.** Se firmó, construyó, pasó y se
 > validó físicamente en un día: el **primer cierre real bajo el pozo (22/07) CUADRÓ** y las cargas
@@ -8,20 +8,8 @@
 >
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
 > pases viejos) son **referencia histórica**.
->
-> **AL DÍA (2026-08-10):** `main` = **`6bb9c33`** · `staging` = **`2f88fd6`**. **T3 endurecimiento de caja
-> COMPLETO EN PROD** — ítem 5 (auditoría de **EDICIONES**, mig **`052`** = `movement_edits` + trigger `AFTER
-> UPDATE`) quedó **en staging Y en prod**. 🔌 **Hallazgo clave + DECISIÓN ADOPTADA:** `main` es la **rama de
-> producción** del proyecto Supabase de prod (Branching ON) → **pushear una migración a `main` la AUTO-APLICA a la
-> base de prod** (la 052 entró sola al pushear `6bb9c33`, NO out-of-band). Ledger: staging **52**, prod **36**.
-> Detalle → [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
-> **AL DÍA (2026-08-05):** `main` = **`5e85abc`** · `staging` = **`129a516`**. En prod **hoy**: **bloque de
-> plata ítems 2+3** (negativos MANUALES prohibidos + `ajuste_tipo` derivado del signo, `8c65686`) ·
-> **`pool_total_crc` = fuente de verdad del total del pool** (mig 051 out-of-band + escritura al cerrar/editar
-> + **backfill de 266 sesiones**, `5e85abc`; Julio = **₡2.167.131**). Antes en la ola: ítems 6+4 (`b36a382`),
-> `covered_role` en correo + Estadísticas + Historial (`723f734`, correo de Julio ENVIADO), Quincenal
-> (`a6192cd`). Detalle → [HANDOFF-2026-08-05.md](HANDOFF-2026-08-05.md). ⚠️ La rama `metas_personales` también
-> usaba mig **051/052** → **renumerar a `053+`** (051 = `pool_total_crc`, **052 = `movement_edits`**).
+
+> **AL DÍA (2026-08-21):** `main` = **`3e54aa4`** (intacto) · `staging` = **`7ef7664`** (F1c). **BioTime Fase 1 EN VIVO**: migs **056 (U0a) / 057 (F1a) / 058 (U0b)** + Edge `ingest-punches` (F1b) + agente `tools/biotime-bridge/` corriendo en la PC del reloj de ST. Drenó **22.403 marcas** (`last_id=213972`, ~68% mapeadas, 15 códigos sin mapear); F1d sin arrancar (greenfield). **Sigue:** (1) Task Scheduler del agente en ST · (2) decisión identidad BioTime §7 (5 SELECT → decidir → mapear + Angela) · (3) F1d. Detalle vivo → PROYECTO claude.ai (HANDOFF-2026-08-21). Todo toca plata/esquema → firma.
 
 > **🔌 MODELO DE MIGRACIONES A PROD — ADOPTADO (2026-08-10, REEMPLAZA el viejo "db push frenado / prod solo por
 > canal firmado"):** `main` = la **base de producción** del proyecto Supabase de prod (`yiczgdti`, **Branching
@@ -32,15 +20,6 @@
 > rojo → no aplica); (2) **STAGING sigue MANUAL** (CLI `db query --linked` / Management API firmada), NO está atado
 > a la integración. Interruptor para desactivar: Dashboard → `yiczgdti` → Branches. Detalle + TODO de edge
 > functions → [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
-
-> **AL DÍA (2026-08-17):** `main` = **`3e54aa4`** · `staging` = **`134893c`**. Hoy entró a prod el **paquete de
-> PROVEEDORES completo** (Fase A notificación de pago **mig 047** · Fase B saldo a favor **migs 053/054** ·
-> comprobantes de liquidación/post-pago · **WhatsApp mandando la imagen**). Ledger de prod = **39 filas, contiguo
-> 040–054, 0 pendientes**. Edge Function `pago-notificar` **v1 ACTIVE** (inerte sin DNS+secreto). Además se
-> **congeló y firmó el SPEC del módulo SALARIOS** (`claude/`): diseño listo, **construcción no iniciada**.
->
-> **⚠️ Lo de proveedores está en prod pero NADIE lo usó todavía** (`supplier_credits`/`credit_applications` en 0
-> filas). Validación física en piso = P0.
 
 ---
 
@@ -111,18 +90,24 @@
    sale** y no rompe nada (la llamada a `pago-notificar` es fire-and-forget). **El WhatsApp ya funciona.**
    Cuando esté: smoke de un pago real con `notificar_pago='email'`.
 
-3. **🖊️ SALARIOS · Fase 0 — Maestro de empleados.** SPEC **FIRMADO**, prompt escrito y listo
-   ([`claude/PROMPT-salarios-fase0.md`](claude/PROMPT-salarios-fase0.md)). **Bloqueada por un insumo humano, no
-   por código:** hace falta la **lista maestra de empleados con su código BioTime y su fecha de ingreso**. Sin
-   eso, la tabla se puede crear pero queda vacía de lo que importa.
-   - Entrega en 2 tiempos (regla de proceso §10 del SPEC): **primero la migración** (~`055`, aditiva:
-     `hourly_rate_crc`, `fixed_salary_crc`, `participa_servicio`, `biotime_emp_code` con índice único parcial,
-     `fecha_ingreso`) para revisión y firma; **después la UI** (sección Salarios → pestaña Empleados/Tarifas).
-   - **Solo a STAGING** (`hwiatgic`). Nada a `main`.
+3. **✅🧪 SALARIOS · Fase 0 — Maestro de empleados: HECHA EN STAGING (2026-08-19).** Se entregó en los 2
+   tiempos de la regla §10 del SPEC: **mig `055`** (`f158bc2`, aditiva e idempotente, aplicada a `hwiatgic` con
+   `db push`) y **después la UI** (`82bd0ce`: sección Salarios → pestaña Empleados/Tarifas). **Maestro cargado:
+   18 empleados con código BioTime** (42 empleados · 24 activos). Prompt de la fase →
+   [`claude/PROMPT-salarios-fase0.md`](claude/PROMPT-salarios-fase0.md).
+   - **Queda del insumo humano:** **6 activos sin código BioTime** (`COCINA`, `JOTA`, `MAXI BARRA`, `MAXO`,
+     `NACHO` manager, `ROMAN`) y **`fecha_ingreso` null en TODOS** (la pestaña muestra el contador de *"sin
+     código de BioTime"*). Sin código, esa gente no entra al cálculo automático de la Fase 1.
+   - **Queda el pase a PROD, con firma y en su propio ciclo:** la `055` toca esquema y **Branching ON** hace
+     que pushearla a `main` **la aplique sola a la base de prod**. Hoy `main` sigue en `3e54aa4`, intacto.
 
-4. **🔑 SALARIOS · Fase 1 — credenciales del Postgres de BioTime + PC siempre encendida. DEPENDE DEL DUEÑO.**
-   BioTime **no tiene API** y vive en **otra PC**: el puente lee su Postgres directo con un usuario **read-only**.
-   Sin credenciales y sin esa máquina prendida (o una ventana de sincronización), no hay horas → no hay nómina.
+4. **✅🧪 SALARIOS · Fase 1 — EN VIVO en staging (F1a/F1b/F1c). El bloqueo de credenciales está RESUELTO.**
+   mig **057** (marcas) + Edge Function **`ingest-punches`** + agente **`tools/biotime-bridge/`** corriendo en la
+   PC del reloj de Santa Teresa: **22.403 marcas** ingeridas (`last_id=213972`, ~68% mapeadas, 15 códigos sin mapear).
+   **Lo que queda de la fase:** **(a)** dejar el agente en **Task Scheduler** de esa PC (pendiente humano: sin eso,
+   un reinicio corta la captura sin avisar) · **(b)** la **decisión de identidad BioTime §7** (`emp_code` se recicla
+   → capturar `emp_id` estable: 5 SELECT → decidir → re-drenar + mapear + Angela) · **(c)** **F1d** (derivación de
+   horas a `work_days` + validación de fichajes), sin arrancar.
    Aceptación de la fase: las horas de la app **cuadran contra el reporte real de BioTime** de un día.
 
 5. **🧮 SALARIOS · consultar al CONTADOR: bruto vs neto y modelo de vacaciones.** Condiciona las **Fases 2 y 5**

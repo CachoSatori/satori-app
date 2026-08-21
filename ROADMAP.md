@@ -1,9 +1,54 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-08-17**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-08-21**
 
 ---
+
+---
+
+## 🧪 2026-08-21 — BioTime Fase 1 (F1a/F1b/F1c) EN VIVO en staging · próximo F1d
+
+> **`staging` `82bd0ce` → `7ef7664`** (migs **056–058** + F1b/F1c) · **`main` INTACTO `3e54aa4`** · nada a prod.
+
+**✅ F1a (mig 057) — esquema de marcas.** `time_punches` (idempotente `unique(local,biotime_id)`), `punch_exceptions`, `payroll_config` (corte 05:00, umbral 12h). **✅ F1b — Edge Function `ingest-punches`** (service-role, normaliza 0/1→in/out, upsert idempotente). **✅ F1c — agente local** `tools/biotime-bridge/` (Node, BioTime solo-lectura, salida-only), corriendo en la PC del reloj de ST.
+
+**✅ EN VIVO:** el agente drenó todo el histórico de ST — **22.403 marcas** (`last_id=213972`; 8 descartadas por `unknown_state`). Mapeo **~68%**; **15 de 33 códigos sin mapear**. Criterio F1 cumplido (count = insertadas, `max(biotime_id)` = `last_id`).
+
+> **En paralelo:** **U0a (mig 056)** núcleo del ciclo de nómina y **U0b (mig 058)** pago del período + Excel homebanking (pago = transferencia, no toca caja).
+
+**Sigue, en orden:** (1) **Task Scheduler** del agente en ST · (2) **decisión de identidad BioTime §7** (`emp_code` se recicla → capturar `emp_id` estable; 5 SELECT → decidir → re-drenar + mapear + Angela) · (3) **F1d** derivación de horas + validación de fichajes. Todo toca plata/esquema → **firma**.
+
+---
+
+## 🧪 2026-08-19 — SALARIOS Fase 0 (maestro de nómina) HECHA EN STAGING
+
+> **`staging` `134893c` → `82bd0ce`** (2 commits) · **`main` INTACTO en `3e54aa4`** · mig **055** aplicada
+> **solo a STAGING** (`hwiatgic`, por `db push`, ya en el ledger). **Nada de Salarios está en producción.**
+
+**✅ Fase 0 — Maestro (`f158bc2` mig + `82bd0ce` UI).** `public.employees` quedó extendida con los datos
+maestros de nómina del SPEC §2.1: `hourly_rate_crc`, `fixed_salary_crc`, `participa_servicio`,
+`biotime_emp_code` (**índice único parcial** cuando no es null) y `fecha_ingreso`. La migración es **aditiva e
+idempotente**: sin backfill, sin cambio de RLS (hereda las policies de `employees`), sin tocar el enum
+`user_role` ni auth — los defaults dejaron a los empleados existentes exactamente como estaban.
+
+Encima va la sección **Salarios** (ruta `/salarios`, nav owner/manager, patrón de `CashModule`) con su primera
+pestaña **Empleados/Tarifas**: tabla editable por fila, filtro activos/inactivos/todos, contador de *"sin código
+de BioTime"* y **alta de los empleados que no existían** (cocina/back, sin cuenta de login). El duplicado de
+`biotime_emp_code` se valida en la UI **y** lo rechaza la red del índice único (el `23505` se traduce a un
+mensaje entendible). **Cero cálculo de plata**: solo el maestro que las fases siguientes van a consumir.
+
+**✅ Validado en staging con datos reales: 18 empleados con código BioTime** (base = 42 empleados · 24 activos ·
+**6 activos todavía sin código** · **`fecha_ingreso` null en todos**).
+Gate del pase: `npm run build` **EXIT 0** · **618 tests** · ESLint delta 0 · sagrados
+`7603ba5a`/`b597c697`/`a3fd445f` **intactos**.
+
+> **⛳ Lo que sigue en el módulo es un bloqueo HUMANO, no de código:** la **Fase 1 (puente de horas) espera las
+> credenciales del Postgres de BioTime** (usuario read-only) **y la PC del reloj encendida**. Sin horas no hay
+> nómina, y las Fases 2–5 cuelgan de ahí.
+>
+> **El pase a PROD de la Fase 0 es su propio ciclo, con firma:** la `055` toca esquema y, con **Branching ON**,
+> pushear la migración a `main` **la aplica sola a la base de prod**.
 
 ---
 
@@ -42,8 +87,8 @@ mezclan. Docs: [SPEC](claude/SPEC-modulo-salarios.md) · [análisis de la planil
 
 | Fase | Entregable | Estado |
 |---|---|---|
-| **0 — Maestro** | Extender `employees` (tarifa/hora, salario fijo, `participa_servicio`, `biotime_emp_code`, `fecha_ingreso`) + UI de tarifas | 🔲 **NO iniciada** — habilitada por firma; falta el insumo humano (código BioTime + fecha de ingreso por empleado) |
-| **1 — Puente de horas** | Usuario read-only en BioTime + puente + `ingest-punches` + `time_punches`/`work_days` | 🔲 bloqueada por **credenciales del Postgres de BioTime + PC siempre encendida** |
+| **0 — Maestro** | Extender `employees` (tarifa/hora, salario fijo, `participa_servicio`, `biotime_emp_code`, `fecha_ingreso`) + UI de tarifas | 🧪 **HECHA EN STAGING (2026-08-19)** — mig **055** + `/salarios`, **18 empleados con código BioTime** cargados (faltan 6 activos sin código y todas las `fecha_ingreso`). **No está en prod**: el pase es su propio ciclo con firma |
+| **1 — Puente de horas** | Usuario read-only en BioTime + puente + `ingest-punches` + `time_punches`/`work_days` | ⏳ **EN CURSO / EN VIVO** — F1a (057) + F1b + F1c hechos, **22.403 marcas** drenadas en ST. Falta **F1d** + **decisión identidad §7**. Bloqueo de credenciales **resuelto** |
 | **2 — Salarios núcleo** | Feriados + reparto diario del 10% + salario + período + reporte + comprobante | 🔲 ancla de aceptación = fixture **`Q1_Ago`** (Σ = ₡1.060.891, ±₡1 por empleado) |
 | **3 — Consolidado** | Horas + 10% + propina por empleado (cocina = pozo aparte, ÷ igual) | 🔲 |
 | **4 — % sobre ventas** | Costo laboral / ventas (semana/mes) en P&L | 🔲 |
@@ -90,8 +135,9 @@ dueño · ⏳ en curso/parcial · 🔲 no empezado · 🧪 solo staging.
 >
 > **✅ Todo lo que este bloque dejaba "por seguir" ya ocurrió:** T3 endurecimiento de caja **completo en prod**
 > (los 8 ítems), ledger de prod **reconciliado** (B2) y ACL endurecida (mig 049; quedan 3 `SECURITY DEFINER`
-> por `anon`, ver §f de ESTADO). **Lo que sigue hoy:** validar Proveedores A+B en piso · **Salarios Fase 0** ·
-> el **PILAR de auth** (bloquea el PoS). Detalle → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
+> por `anon`, ver §f de ESTADO). **Lo que sigue hoy:** validar Proveedores A+B en piso · **Salarios Fase 1**
+> (Fase 0 ya hecha en staging; espera las **credenciales de BioTime**) · el **PILAR de auth** (bloquea el PoS).
+> Detalle → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
 ---
 

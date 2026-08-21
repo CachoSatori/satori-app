@@ -3,6 +3,60 @@
 > Restaurant POS analytics dashboard · Satori Sushi Bar, Santa Teresa & Nosara, Costa Rica
 > Última actualización: 2026-07-04 (PASE ÚNICO A PROD de la ola 2026-07: `main` `a14da50` → `92c0831`, migs 038–045 en prod, secret Sonnet en prod).
 
+## 🗄️ (movido de ESTADO/PROMPT-CONTINUACION el 2026-08-21)
+
+### De `ESTADO.md` — blockquote de subtítulo (párrafos fechados)
+
+> **Al día: 2026-08-19.** **SALARIOS Fase 0 está CONSTRUIDA, APLICADA y VALIDADA — pero SOLO EN STAGING**
+> (`staging` `134893c` → **`82bd0ce`**): mig **055** (maestro de nómina en `employees`) + la sección
+> **/salarios** con la pestaña Empleados/Tarifas, y el **maestro ya cargado: 18 empleados con código BioTime**
+> (base de staging = **42 empleados · 24 activos · 6 activos sin código**; `fecha_ingreso` **sigue null en todos**).
+> **PROD NO SE TOCÓ** (`main` sigue en **`3e54aa4`**): nada de Salarios está en producción.
+> La **Fase 1 (puente de horas BioTime) espera las credenciales del reloj** — bloqueo humano, no de código.
+>
+> **Antes (2026-08-17):** pase de **PROVEEDORES a PROD** (`main` `73352ba` → `3e54aa4`, 9 commits):
+> notificación de pago (mig **047**), **saldo a favor** (migs **053/054**) y los **comprobantes** (liquidación,
+> post-pago y **WhatsApp mandando la IMAGEN** por Web Share). Ledger de prod = **39 filas, 0 pendientes**.
+> El **SPEC del módulo SALARIOS** quedó congelado y **FIRMADO** (docs en `claude/`).
+
+### De `PROMPT-CONTINUACION.md` — blockquotes "AL DÍA"
+
+> **AL DÍA (2026-08-10):** `main` = **`6bb9c33`** · `staging` = **`2f88fd6`**. **T3 endurecimiento de caja
+> COMPLETO EN PROD** — ítem 5 (auditoría de **EDICIONES**, mig **`052`** = `movement_edits` + trigger `AFTER
+> UPDATE`) quedó **en staging Y en prod**. 🔌 **Hallazgo clave + DECISIÓN ADOPTADA:** `main` es la **rama de
+> producción** del proyecto Supabase de prod (Branching ON) → **pushear una migración a `main` la AUTO-APLICA a la
+> base de prod** (la 052 entró sola al pushear `6bb9c33`, NO out-of-band). Ledger: staging **52**, prod **36**.
+> Detalle → [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
+> **AL DÍA (2026-08-05):** `main` = **`5e85abc`** · `staging` = **`129a516`**. En prod **hoy**: **bloque de
+> plata ítems 2+3** (negativos MANUALES prohibidos + `ajuste_tipo` derivado del signo, `8c65686`) ·
+> **`pool_total_crc` = fuente de verdad del total del pool** (mig 051 out-of-band + escritura al cerrar/editar
+> + **backfill de 266 sesiones**, `5e85abc`; Julio = **₡2.167.131**). Antes en la ola: ítems 6+4 (`b36a382`),
+> `covered_role` en correo + Estadísticas + Historial (`723f734`, correo de Julio ENVIADO), Quincenal
+> (`a6192cd`). Detalle → [HANDOFF-2026-08-05.md](HANDOFF-2026-08-05.md). ⚠️ La rama `metas_personales` también
+> usaba mig **051/052** → **renumerar a `053+`** (051 = `pool_total_crc`, **052 = `movement_edits`**).
+
+> **AL DÍA (2026-08-19):** `main` = **`3e54aa4`** (**sin cambios**) · `staging` = **`82bd0ce`**. Entró a
+> **staging** la **Fase 0 de SALARIOS** (maestro de nómina): mig **`055`** en `employees` (`hourly_rate_crc`,
+> `fixed_salary_crc`, `participa_servicio`, `biotime_emp_code` con índice único parcial, `fecha_ingreso`) +
+> la sección **`/salarios`** con la pestaña **Empleados/Tarifas** (edición por fila, alta de empleados sin
+> login, duplicado de código BioTime rechazado en UI y en la base). **Validada con datos reales: 18 empleados
+> con código BioTime** (base = 42 empleados · 24 activos · 6 activos sin código · `fecha_ingreso` null en todos).
+> Gate: build 0 · **618 tests** · ESLint delta 0 · sagrados intactos.
+>
+> ⚠️ **NADA de Salarios está en prod** y la mig `055` **NO se aplicó a la base de prod** — el pase a `main` es
+> **su propio ciclo con firma** (Branching ON ⇒ pushear la `055` a `main` la aplica sola a prod).
+> **Lo que sigue en el módulo (Fase 1, puente de horas) depende del dueño: credenciales del Postgres de
+> BioTime + la PC del reloj encendida.**
+
+> **AL DÍA (2026-08-17):** `main` = **`3e54aa4`** · `staging` = **`134893c`**. Hoy entró a prod el **paquete de
+> PROVEEDORES completo** (Fase A notificación de pago **mig 047** · Fase B saldo a favor **migs 053/054** ·
+> comprobantes de liquidación/post-pago · **WhatsApp mandando la imagen**). Ledger de prod = **39 filas, contiguo
+> 040–054, 0 pendientes**. Edge Function `pago-notificar` **v1 ACTIVE** (inerte sin DNS+secreto). Además se
+> **congeló y firmó el SPEC del módulo SALARIOS** (`claude/`): diseño listo, **construcción no iniciada**.
+>
+> **⚠️ Lo de proveedores está en prod pero NADIE lo usó todavía** (`supplier_credits`/`credit_applications` en 0
+> filas). Validación física en piso = P0.
+
 ## 🗄️ 2026-08-17 — Snapshot del ESTADO.md previo a la compactación (pase de Proveedores a PROD)
 
 > Se archiva **tal cual** el cuerpo del `ESTADO.md` vigente hasta el 2026-08-17 (refs `main` `6bb9c33`/`5c3b4ff`,

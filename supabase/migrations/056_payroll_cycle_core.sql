@@ -124,12 +124,12 @@ comment on column public.salary_periods.local is
 -- `source='biotime'` y deriva `hours` de las marcas — por eso la PK ya contempla el local.
 -- `hours` es numeric SIN escala fija: BioTime da horas exactas con minutos (7.3333…) y redondear acá
 -- ensuciaría el reparto del 10%.
--- `local` es NOT NULL con default 'ST' porque forma parte de la PK (una PK no admite null): así la carga
--- manual de U0 nunca queda a medias. `salary_periods.local`, en cambio, SÍ es nullable (pay run global).
+-- `local` es NOT NULL con default 'santa-teresa' porque forma parte de la PK (una PK no admite null): así
+-- la carga manual de U0 nunca queda a medias. `salary_periods.local`, en cambio, SÍ es nullable (pay run global).
 create table if not exists public.work_days (
   employee_id uuid        not null references public.employees(id) on delete cascade,
   work_date   date        not null,
-  local       text        not null default 'ST',
+  local       text        not null default 'santa-teresa',
   hours       numeric     not null default 0 check (hours >= 0),
   es_feriado  boolean     not null default false,
   source      text        not null default 'manual' check (source in ('manual','biotime')),
@@ -149,7 +149,7 @@ create trigger work_days_updated_at
 comment on table public.work_days is
   'Salarios U0a: horas por empleado/día/local. U0 = carga manual; Fase 1 la REUSA (source=biotime), no la recrea.';
 comment on column public.work_days.local is
-  'Código corto del local; default ST (Santa Teresa). NOT NULL porque es parte del PK: la carga manual de U0 nunca deja el local en null y la UI de U0b obliga a elegirlo. OJO: NO son los slugs de public.locations (santa-teresa|nosara) que usa el POS — sin FK a propósito en U0a.';
+  'Slug del local, mismos valores que public.locations.id (santa-teresa | nosara) → cruza directo con el POS. Default santa-teresa. NOT NULL porque es parte del PK: la carga manual de U0 nunca deja el local en null y la UI de U0b obliga a elegirlo. Sin FK a propósito en U0a.';
 comment on column public.work_days.work_date is
   'Fecha de la JORNADA operativa (corte ~05:00 CR, A1), no el día civil. Se alinea al session_date del POS/caja.';
 

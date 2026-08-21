@@ -7,3 +7,6 @@ dist
 .DS_Store
 .staging-backups/
 supabase/.temp/
+.claude/settings.local.json
+_backups-staging/
+import/

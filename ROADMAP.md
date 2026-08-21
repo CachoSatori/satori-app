@@ -135,8 +135,8 @@ dueño · ⏳ en curso/parcial · 🔲 no empezado · 🧪 solo staging.
 >
 > **✅ Todo lo que este bloque dejaba "por seguir" ya ocurrió:** T3 endurecimiento de caja **completo en prod**
 > (los 8 ítems), ledger de prod **reconciliado** (B2) y ACL endurecida (mig 049; quedan 3 `SECURITY DEFINER`
-> por `anon`, ver §f de ESTADO). **Lo que sigue hoy:** validar Proveedores A+B en piso · **Salarios Fase 1**
-> (Fase 0 ya hecha en staging; espera las **credenciales de BioTime**) · el **PILAR de auth** (bloquea el PoS).
+> por `anon`, ver §f de ESTADO). **Lo que sigue hoy:** validar Proveedores A+B en piso · **Salarios Fase 1 EN VIVO**
+> (F1a/F1b/F1c; falta F1d + decisión §7) · el **PILAR de auth** (bloquea el PoS).
 > Detalle → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).
 
 ---

@@ -43,7 +43,7 @@ Núcleo: [`pozo.ts`](src/modules/cash/pozo.ts) · [`cierrePozo.ts`](src/modules/
 | Rama | Hash | Qué es |
 |---|---|---|
 | `main` | **`3e54aa4`** | **PROD, en uso.** Todo lo no-PoS + **Proveedores Fases A y B** (notificación de pago, saldo a favor con reparto FIFO, comprobantes con imagen por WhatsApp). |
-| `staging` | **`82bd0ce`** | **Fuente de verdad del desarrollo** = `main` + PoS/KDS/comandero + FE (SIM) + inventario COGS + los **docs de Salarios** (`claude/`) + **SALARIOS Fase 0** (mig `055` + `/salarios`). Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
+| `staging` | **`7ef7664`** | **Fuente de verdad del desarrollo** = `main` + PoS/KDS/comandero + FE (SIM) + inventario COGS + los **docs de Salarios** (`claude/`) + **Salarios/Empleados U0–U0b** (migs 055–058) + **BioTime Fase 1** (057 + `ingest-punches` + agente en vivo). Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
 
 > **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 > 🛑 **RITUAL antes de CUALQUIER comando de base:** `cat supabase/.temp/project-ref` **y** `linked-project.json`
@@ -61,7 +61,7 @@ Fase 2 · realtime · offline · Bandeja unificada + Revisión de inventario · 
 
 **Solo en STAGING:** **el PoS completo** (catálogo/salón, comandero, KDS, cobro+splits+ticket SIM, FE SIM, inventario activo COGS) — migs 022–037, y **`posFiscal.ts` no existe en `main`**. **DIFERIDO**, bloqueado por el PILAR de auth. También **SALARIOS Fase 0** (mig **055** + módulo `src/modules/salarios/` + ruta `/salarios`, owner/manager) y los **docs de Salarios** (`claude/`). En rama aparte sin merge: `propina-pool`.
 
-> ⚠️ **Salarios NO está en prod.** Fase 0 vive solo en `staging` (`82bd0ce`) y su pase a `main` es **su propio
+> ⚠️ **Salarios NO está en prod.** U0 + BioTime Fase 1 viven solo en `staging` (`7ef7664`) y su pase a `main` es **su propio
 > ciclo con firma** — la mig `055` toca esquema y, con Branching ON, **pushearla a `main` la aplica a la base de prod**.
 
 > **Contrato de divergencia:** lo legítimo en `main..staging` es **PoS/FE/inventario + config Cloudflare + docs
@@ -93,7 +93,7 @@ Fase 2 · realtime · offline · Bandeja unificada + Revisión de inventario · 
 
 ## (d) Build por módulo
 
-**Gate de todo pase:** `npm run build` → **EXIT 0** (`tsc -b`; ⚠️ **`tsc --noEmit` es FALSO VERDE** por el `tsconfig` raíz con `files:[]`) + suite verde (**618 tests** staging · **525** prod) + **sagrados por hash de blob** + **ESLint delta 0** contra la rama destino.
+**Gate de todo pase:** `npm run build` → **EXIT 0** (`tsc -b`; ⚠️ **`tsc --noEmit` es FALSO VERDE** por el `tsconfig` raíz con `files:[]`) + suite verde (**685 tests** staging · **525** prod) + **sagrados por hash de blob** + **ESLint delta 0** contra la rama destino.
 
 Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🔲 construido sin validar · 🧪 solo staging.
 
@@ -108,7 +108,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🔲
 | **🆕 Proveedores Fase B — saldo a favor** (migs 053/054: `supplier_credits` + `credit_applications` append-only + RPCs `create`/`apply`/`delete`; residual en 3 superficies; reparto **FIFO** a una o varias facturas) | 🔲 **en prod, SIN validar en piso** (tablas en 0 filas: nadie lo usó todavía) |
 | **🆕 Comprobantes** (liquidación de crédito · post-pago · **WhatsApp = imagen PNG por Web Share**, con fallback `wa.me` texto y descarga) | 🔲 **en prod, SIN validar en piso** (el share con archivo solo se prueba en celular real) |
 | Quick-wins C2 (historial over/short) + C3 (email del cierre, Edge Fn `cierre-email`) | 🟢 smoke pendiente |
-| **🆕 Salarios — Fase 0 · maestro de nómina** (mig **055**: `hourly_rate_crc`, `fixed_salary_crc`, `participa_servicio`, `biotime_emp_code` con índice único parcial, `fecha_ingreso` + sección **/salarios** → pestaña Empleados/Tarifas con alta de empleados sin login) | 🧪 **staging** (`82bd0ce`) — aplicada y **validada con datos reales: 18 empleados con código BioTime** (42 empleados · 24 activos · 6 activos sin código · `fecha_ingreso` null en todos). **Nada en prod.** SPEC → [`claude/SPEC-modulo-salarios.md`](claude/SPEC-modulo-salarios.md) |
+| **🆕 Salarios — Fase 0 · maestro de nómina** (mig **055**: `hourly_rate_crc`, `fixed_salary_crc`, `participa_servicio`, `biotime_emp_code` con índice único parcial, `fecha_ingreso` + sección **/salarios** → pestaña Empleados/Tarifas con alta de empleados sin login) | 🧪 **staging** — aplicada y **validada con datos reales: 18 empleados con código BioTime** (42 empleados · 24 activos · 6 activos sin código · `fecha_ingreso` null en todos). **Nada en prod.** SPEC → [`claude/SPEC-modulo-salarios.md`](claude/SPEC-modulo-salarios.md) |
 | **Salarios/Empleados — U0a/U0b** (migs 056/058: núcleo del ciclo de nómina + pago del período por transferencia + Excel homebanking; **no toca caja**) | 🧪 **staging** |
 | **Salarios — Fase 1 · Puente BioTime (F1a/F1b/F1c)** (mig 057 marcas + Edge `ingest-punches` + agente en ST) | 🧪 **EN VIVO en staging** — 22.403 marcas (`last_id=213972`, ~68% mapeadas). Falta **F1d** + **decisión identidad §7** |
 | Salarios — Fases 2–5 (núcleo · consolidado · % ventas · liquidaciones) | 🔲 no iniciadas |

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { Employee, EmployeePayment, EmployeeWageRate, SalaryPeriod, WorkDay } from '../../shared/types/database'
 import {
   getSalaryPeriods, createSalaryPeriod, getWorkDays, upsertWorkDay, getWageRatesUpTo,
-  getPeriodPayments, markPeriodPaid, consolidarPeriodo, LOCAL_DEFAULT,
+  getPeriodPayments, markPeriodPaid, consolidarPeriodo, getPunchExceptions, LOCAL_DEFAULT,
   type LineaConsolidado,
 } from '../../shared/api/salarios'
 import {
@@ -39,6 +39,10 @@ export default function SalariosPago({ employees }: Props) {
   const [rates, setRates]       = useState<EmployeeWageRate[]>([])
   const [workDays, setWorkDays] = useState<WorkDay[]>([])
   const [pagos, setPagos]       = useState<EmployeePayment[]>([])
+  // F1d: un período con fichajes sin resolver no se paga. La lectura es null-safe
+  // (devuelve [] si la tabla no está o la RLS dice que no), así que no puede tumbar
+  // esta pantalla — solo puede FRENAR el pago, nunca habilitarlo por error.
+  const [excAbiertas, setExcAbiertas] = useState(0)
 
   const [concepto, setConcepto] = useState(CONCEPTO_SALARIOS_DEFAULT)
   // Borradores por empleado. Las horas se persisten (work_days); el neto pisado a mano
@@ -79,16 +83,18 @@ export default function SalariosPago({ employees }: Props) {
 
   // Datos del período elegido: horas, tarifas vigentes a su fecha de fin y pagos ya hechos.
   const loadPeriodData = useCallback(async (p: SalaryPeriod | null) => {
-    if (!p) { setWorkDays([]); setRates([]); setPagos([]); return }
+    if (!p) { setWorkDays([]); setRates([]); setPagos([]); setExcAbiertas(0); return }
     try {
-      const [wd, rs, pg] = await Promise.all([
+      const [wd, rs, pg, ex] = await Promise.all([
         getWorkDays(p.fecha_ini, p.fecha_fin),
         getWageRatesUpTo(p.fecha_fin),
         getPeriodPayments(p.id),
+        getPunchExceptions(p.fecha_ini, p.fecha_fin, LOCAL_DEFAULT),
       ])
       setWorkDays(wd)
       setRates(rs)
       setPagos(pg)
+      setExcAbiertas(ex.filter(x => x.estado === 'abierta').length)
       setHorasDraft({})
       setNetoDraft({})
       setError(null)
@@ -187,6 +193,13 @@ export default function SalariosPago({ employees }: Props) {
 
   const handlePagar = async () => {
     if (!period || !user?.id) return
+    if (excAbiertas > 0) {
+      setError(
+        `El período tiene ${excAbiertas} excepción(es) de fichaje sin resolver. ` +
+        'Resolvelas en la pestaña Horas antes de pagar: las horas de esos días todavía no son confiables.',
+      )
+      return
+    }
     const ok = window.confirm(
       `¿Marcar el período ${period.fecha_ini} → ${period.fecha_fin} como PAGADO?\n\n` +
       `${aPagar.length} empleado(s) · ${fi(total)}\n\n` +
@@ -300,6 +313,13 @@ export default function SalariosPago({ employees }: Props) {
             </span>
           </div>
 
+          {excAbiertas > 0 && !pagado && (
+            <p style={{ padding: '0 12px 8px', fontSize: '0.74rem', color: 'var(--t-red, #b04a3a)' }}>
+              ⚠️ {excAbiertas} excepción(es) de fichaje sin resolver en este período. El pago queda
+              bloqueado hasta que se cierren en la pestaña <strong>Horas</strong>.
+            </p>
+          )}
+
           <table className="admin-table">
             <thead>
               <tr>
@@ -385,8 +405,12 @@ export default function SalariosPago({ employees }: Props) {
             <button
               className="btn-primary"
               onClick={handlePagar}
-              disabled={saving || pagado || aPagar.length === 0 || !puedePagar}
-              title={puedePagar ? undefined : 'Solo el dueño o el gerente marcan el pago'}
+              disabled={saving || pagado || aPagar.length === 0 || !puedePagar || excAbiertas > 0}
+              title={
+                excAbiertas > 0
+                  ? `${excAbiertas} excepción(es) de fichaje sin resolver (pestaña Horas)`
+                  : puedePagar ? undefined : 'Solo el dueño o el gerente marcan el pago'
+              }
             >
               {pagado ? 'Pagado' : 'Marcar pagado'}
             </button>

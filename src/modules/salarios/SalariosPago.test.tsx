@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import type { Employee, EmployeeWageRate, SalaryPeriod, WorkDay } from '../../shared/types/database'
+import type { Employee, EmployeeWageRate, PunchException, SalaryPeriod, WorkDay } from '../../shared/types/database'
 
 // Salarios · U0b: la pantalla que cierra el ciclo. Se prueba el camino real —
 // horas → neto → archivo del banco → marcar pagado — y el gate del contador.
@@ -28,6 +28,8 @@ const RATES: EmployeeWageRate[] = [
 ]
 
 let WORK_DAYS: WorkDay[] = []
+// F1d: las excepciones abiertas del período frenan el pago.
+let EXCS: PunchException[] = []
 
 const upsert   = vi.fn<(w: unknown) => Promise<void>>(async () => {})
 const pagar    = vi.fn<(id: string, l: unknown, by: string) => Promise<number>>(async () => 2)
@@ -41,6 +43,7 @@ vi.mock('../../shared/api/salarios', async (orig) => {
     getWorkDays:        async () => WORK_DAYS,
     getWageRatesUpTo:   async () => RATES,
     getPeriodPayments:  async () => [],
+    getPunchExceptions: async () => EXCS,
     upsertWorkDay:      (w: unknown) => upsert(w),
     markPeriodPaid:     (id: string, l: unknown, by: string) => pagar(id, l, by),
   }
@@ -77,8 +80,9 @@ beforeEach(() => {
   rol = 'owner'
   WORK_DAYS = [{
     employee_id: 'e1', work_date: '2026-08-15', local: 'santa-teresa', hours: 96,
-    es_feriado: false, source: 'manual', created_at: '', updated_at: '',
+    es_feriado: false, source: 'manual', flags: null, created_at: '', updated_at: '',
   }]
+  EXCS = []
   upsert.mockClear(); pagar.mockClear(); download.mockClear()
 })
 
@@ -148,5 +152,32 @@ describe('Salarios · Pago del período', () => {
     await renderPago()
     expect((screen.getByText('Marcar pagado') as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByText('Descargar Excel para el banco') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  // F1d: si el fichaje del período todavía tiene agujeros, las horas no son confiables y
+  // el pago se frena. El archivo del banco SÍ se puede bajar (para revisarlo), pero no se paga.
+  it('un período con excepciones de fichaje abiertas NO se puede pagar', async () => {
+    EXCS = [{
+      id: 'x1', employee_id: 'e1', emp_code: null, work_date: '2026-08-03', local: 'santa-teresa',
+      tipo: 'impar', detalle: null, estado: 'abierta', resuelto_by: null, resuelto_at: null,
+      created_at: '', updated_at: '',
+    }]
+    await renderPago()
+    expect(await screen.findByText(/1 excepción\(es\) de fichaje sin resolver/)).toBeTruthy()
+    expect((screen.getByText('Marcar pagado') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByText('Descargar Excel para el banco') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('las excepciones YA resueltas no frenan el pago', async () => {
+    window.confirm = vi.fn(() => true)
+    EXCS = [{
+      id: 'x1', employee_id: 'e1', emp_code: null, work_date: '2026-08-03', local: 'santa-teresa',
+      tipo: 'impar', detalle: null, estado: 'resuelta', resuelto_by: 'u-1', resuelto_at: '2026-08-20',
+      created_at: '', updated_at: '',
+    }]
+    await renderPago()
+    expect((screen.getByText('Marcar pagado') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
   })
 })

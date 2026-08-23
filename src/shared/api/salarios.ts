@@ -3,7 +3,9 @@ import type {
   Employee,
   EmployeePayment,
   EmployeeWageRate,
+  PunchException,
   SalaryPeriod,
+  TimePunch,
   WorkDay,
 } from '../types/database'
 
@@ -30,6 +32,7 @@ interface Q extends PromiseLike<{ data: unknown; error: PgError }> {
   eq(col: string, value: unknown): Q
   gte(col: string, value: unknown): Q
   lte(col: string, value: unknown): Q
+  lt(col: string, value: unknown): Q
   order(col: string, opts?: { ascending?: boolean }): Q
   single(): Q
 }
@@ -259,4 +262,208 @@ export function consolidarPeriodo(
       nombreBanco: nombreBanco(emp),
     }
   })
+}
+
+
+// ── BioTime F1d: derivación de horas (mig 059) ──────────────────────────────────
+// El wrapper de la RPC + la bandeja de excepciones. La derivación es SERVIDOR: acá no
+// se empareja nada, se pide y se lee el resultado. La RPC es SECURITY DEFINER porque
+// `punch_exceptions` no tiene policy de insert (057) y `work_days` se reescribe entero.
+
+type RpcInvoke = (fn: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: PgError }>
+// Mismo trap que en cash.ts: `.bind(supabase)` es obligatorio (sin él se pierde `this` y
+// supabase-js revienta con "reading 'rest'"), y el `?.` es guarda de carga porque varios
+// tests mockean `./supabase` parcialmente.
+const rpcAny = supabase.rpc?.bind(supabase) as unknown as RpcInvoke
+
+export interface DerivacionResumen {
+  local:                string
+  desde:                string
+  hasta:                string
+  marcas:               number
+  dias:                 number
+  dias_omitidos_manual: number
+  horas:                number
+  excepciones: { impar: number; turno_largo: number; solapado: number; sin_mapear: number }
+}
+
+/** Recalcula las horas de `[desde, hasta]` en un local. Idempotente: pisa solo lo `biotime`. */
+export async function derivarWorkDays(
+  desde: string,
+  hasta: string,
+  local: string = LOCAL_DEFAULT,
+): Promise<DerivacionResumen> {
+  const { data, error } = await rpcAny('derivar_work_days', {
+    p_desde: desde, p_hasta: hasta, p_local: local,
+  })
+  if (error) fail(error, 'recalcular las horas del período')
+  return data as DerivacionResumen
+}
+
+// Las lecturas de la bandeja son NULL-SAFE (devuelven [] ante error o permiso): una
+// excepción de lectura acá no puede tumbar la pantalla de pago, que es la que mueve plata.
+export async function getPunchExceptions(
+  desde: string,
+  hasta: string,
+  local: string = LOCAL_DEFAULT,
+): Promise<PunchException[]> {
+  try {
+    const { data, error } = await fromAny('punch_exceptions')
+      .select('*')
+      .eq('local', local)
+      .gte('work_date', desde)
+      .lte('work_date', hasta)
+      .order('work_date', { ascending: true })
+    return error ? [] : ((data ?? []) as PunchException[])
+  } catch { return [] }
+}
+
+// Costa Rica es UTC−6 FIJO (no hay horario de verano), así que la jornada se puede
+// acotar con offsets literales sin ninguna librería de zonas: la jornada D va de
+// D+corte a (D+1)+corte, hora local. Mismo criterio que la mig 059.
+export function jornadaBounds(
+  workDate: string,
+  corte: string = '05:00',
+): { desde: string; hasta: string } {
+  const hhmm = /^\d{2}:\d{2}/.test(corte) ? corte.slice(0, 5) : '05:00'
+  const sig  = new Date(`${workDate}T12:00:00Z`)
+  sig.setUTCDate(sig.getUTCDate() + 1)
+  const siguiente = sig.toISOString().slice(0, 10)
+  return {
+    desde: `${workDate}T${hhmm}:00-06:00`,
+    hasta: `${siguiente}T${hhmm}:00-06:00`,
+  }
+}
+
+/** Las marcas CRUDAS de una jornada, para que la bandeja muestre el problema tal cual pasó. */
+export async function getPunchesDeJornada(
+  local: string,
+  workDate: string,
+  corte: string = '05:00',
+): Promise<TimePunch[]> {
+  const { desde, hasta } = jornadaBounds(workDate, corte)
+  try {
+    const { data, error } = await fromAny('time_punches')
+      .select('*')
+      .eq('local', local)
+      .gte('punch_at', desde)
+      .lt('punch_at', hasta)
+      .order('punch_at', { ascending: true })
+    return error ? [] : ((data ?? []) as TimePunch[])
+  } catch { return [] }
+}
+
+/** Marca una excepción como resuelta. No la borra: queda el rastro (057). */
+export async function resolvePunchException(id: string, userId: string): Promise<void> {
+  const { error } = await fromAny('punch_exceptions')
+    .update({ estado: 'resuelta', resuelto_by: userId, resuelto_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) fail(error, 'resolver la excepción')
+}
+
+/**
+ * Override a mano de las horas de UNA jornada. Escribe `source='manual'`, que es
+ * justamente lo que la mig 059 nunca pisa: a partir de acá el recálculo respeta el
+ * número que puso la persona. El rastro (quién, cuándo, qué decía BioTime) va en `flags`.
+ */
+export async function overrideHorasDia(o: {
+  employee_id:   string
+  work_date:     string
+  local:         string
+  hours:         number
+  userId:        string
+  horas_biotime: number | null
+  motivo?:       string
+}): Promise<void> {
+  const { error } = await fromAny('work_days').upsert(
+    {
+      employee_id: o.employee_id,
+      work_date:   o.work_date,
+      local:       o.local,
+      hours:       Math.max(0, o.hours),
+      source:      'manual',
+      flags: {
+        override: {
+          by:            o.userId,
+          at:            new Date().toISOString(),
+          horas_biotime: o.horas_biotime,
+          motivo:        o.motivo?.trim() || null,
+        },
+      },
+    },
+    { onConflict: 'employee_id,work_date,local' },
+  )
+  if (error) fail(error, 'corregir las horas del día')
+}
+
+// ── Agrupado de la bandeja (puro) ───────────────────────────────────────────────
+
+export interface GrupoExcepciones {
+  key:      string                 // employee_id, o `code:NN` cuando no hay empleado
+  nombre:   string
+  abiertas: number
+  tipos:    Record<string, number>
+  items:    PunchException[]
+}
+
+const TIPO_LABEL: Record<string, string> = {
+  impar:       'sin par',
+  turno_largo: 'turno largo',
+  solapado:    'solapado',
+  sin_mapear:  'sin mapear',
+}
+
+export function etiquetaTipo(tipo: string): string {
+  return TIPO_LABEL[tipo] ?? tipo
+}
+
+/**
+ * La bandeja se lee POR PERSONA, no por fila suelta: quien la mira quiere saber a quién
+ * le falta cerrar el día. Las `sin_mapear` no tienen empleado, así que se agrupan por su
+ * `emp_code` — son el caso más frecuente el primer día y no pueden quedar invisibles.
+ */
+export function agruparExcepciones(
+  excepciones: PunchException[],
+  employees: Employee[],
+): GrupoExcepciones[] {
+  const nombreDe = new Map(employees.map(e => [e.id, e.full_name]))
+  const grupos = new Map<string, GrupoExcepciones>()
+
+  for (const x of excepciones) {
+    if (x.estado !== 'abierta') continue
+    const key = x.employee_id ?? `code:${x.emp_code ?? '?'}`
+    const nombre = x.employee_id
+      ? (nombreDe.get(x.employee_id) ?? 'Empleado desconocido')
+      : `Código ${x.emp_code ?? '?'} (sin empleado)`
+    const g = grupos.get(key) ?? { key, nombre, abiertas: 0, tipos: {}, items: [] }
+    g.abiertas += 1
+    g.tipos[x.tipo] = (g.tipos[x.tipo] ?? 0) + 1
+    g.items.push(x)
+    grupos.set(key, g)
+  }
+
+  for (const g of grupos.values()) {
+    g.items.sort((a, b) => (a.work_date ?? '').localeCompare(b.work_date ?? ''))
+  }
+  // Primero el que más pendientes tiene: es por donde conviene empezar a limpiar.
+  return [...grupos.values()].sort((a, b) => b.abiertas - a.abiertas || a.nombre.localeCompare(b.nombre))
+}
+
+/**
+ * Empleados del rango que tienen A LA VEZ una fila MANUAL y filas de BioTime. Es el único
+ * lugar donde el total del período se puede contar DOS VECES: U0b carga el total de la
+ * quincena en UNA fila manual fechada el último día, y `splitHorasPeriodo` suma manual +
+ * biotime. Convivir en el mismo día es imposible (la PK es employee_id+fecha+local y la
+ * derivación no pisa lo manual), así que el choque real es este: total manual arriba,
+ * días derivados abajo. No se corrige solo — se avisa para que alguien decida.
+ */
+export function empleadosConHorasDobles(workDays: WorkDay[]): string[] {
+  const manual  = new Set<string>()
+  const biotime = new Set<string>()
+  for (const w of workDays) {
+    if ((Number(w.hours) || 0) <= 0) continue
+    if (w.source === 'manual') manual.add(w.employee_id)
+    else if (w.source === 'biotime') biotime.add(w.employee_id)
+  }
+  return [...manual].filter(id => biotime.has(id))
 }

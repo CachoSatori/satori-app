@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import type { Employee, EmployeeWageRate, PunchException, SalaryPeriod, WorkDay } from '../../shared/types/database'
+import type { Employee, PunchException, SalaryPeriod, WorkDay } from '../../shared/types/database'
 
 // Salarios · U0b: la pantalla que cierra el ciclo. Se prueba el camino real —
 // horas → neto → archivo del banco → marcar pagado — y el gate del contador.
@@ -20,13 +20,6 @@ const PERIODO: SalaryPeriod = {
   estado: 'abierto', local: null, paid_by: null, paid_at: null, created_at: '', updated_at: '',
 }
 
-const RATES: EmployeeWageRate[] = [
-  { id: 'r1', employee_id: 'e1', tipo: 'hora', hourly_rate_crc: 2600, fixed_salary_crc: 0,
-    efectivo_desde: '2026-06-01', nota: null, created_at: '', updated_at: '' },
-  { id: 'r2', employee_id: 'e2', tipo: 'quincena', hourly_rate_crc: 0, fixed_salary_crc: 185_000,
-    efectivo_desde: '2026-06-01', nota: null, created_at: '', updated_at: '' },
-]
-
 let WORK_DAYS: WorkDay[] = []
 // F1d: las excepciones abiertas del período frenan el pago.
 let EXCS: PunchException[] = []
@@ -41,7 +34,6 @@ vi.mock('../../shared/api/salarios', async (orig) => {
     ...actual,
     getSalaryPeriods:   async () => [PERIODO],
     getWorkDays:        async () => WORK_DAYS,
-    getWageRatesUpTo:   async () => RATES,
     getPeriodPayments:  async () => [],
     getPunchExceptionsTodosLosLocales: async () => EXCS,
     upsertWorkDay:      (w: unknown) => upsert(w),
@@ -63,11 +55,15 @@ const money = (n: number) => (content: string) => plano(content) === plano(`₡ 
 
 const emp = (over: Partial<Employee> & { id: string; full_name: string }): Employee =>
   ({ role: 'salonero', profile_id: null, is_active: true, pos_name: null,
+     hourly_rate_crc: 0, fixed_salary_crc: 0,
      created_at: '', updated_at: '', ...over }) as Employee
 
-const ANA    = emp({ id: 'e1', full_name: 'ANA' })
-const BENITO = emp({ id: 'e2', full_name: 'BENITO', nombre_homebanking: 'BENITO PEREZ MORA' })
+// La tarifa vive en el EMPLEADO (employees.hourly_rate_crc / fixed_salary_crc), que es lo
+// que la pestaña Empleados/Tarifas escribe. `employee_wage_rates` ya no se lee.
+const ANA    = emp({ id: 'e1', full_name: 'ANA', hourly_rate_crc: 2600 })
+const BENITO = emp({ id: 'e2', full_name: 'BENITO', nombre_homebanking: 'BENITO PEREZ MORA', fixed_salary_crc: 185_000 })
 const INACTIVO = emp({ id: 'e3', full_name: 'VIEJO', is_active: false })
+const SIN_TARIFA = emp({ id: 'e4', full_name: 'NUEVO' })
 
 async function renderPago() {
   const view = render(<SalariosPago employees={[ANA, BENITO, INACTIVO]} />)
@@ -140,9 +136,11 @@ describe('Salarios · Pago del período', () => {
     fireEvent.click(screen.getByText('Marcar pagado'))
     await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
     expect(pagar.mock.calls[0][0]).toBe('per-1')
+    // Se manda también la TARIFA usada: markPeriodPaid la congela en salary_lines.snapshot
+    // para que un pago viejo se pueda auditar aunque después le suban el precio de la hora.
     expect(pagar.mock.calls[0][1]).toEqual([
-      { employee_id: 'e1', monto_neto: 249_600 },
-      { employee_id: 'e2', monto_neto: 185_000 },
+      { employee_id: 'e1', monto_neto: 249_600, horas: 96, hourly_rate: 2600, fijo: 0 },
+      { employee_id: 'e2', monto_neto: 185_000, horas: 0,  hourly_rate: 0,    fijo: 185_000 },
     ])
     expect(pagar.mock.calls[0][2]).toBe('u-1')
   })
@@ -221,6 +219,55 @@ describe('Salarios · Pago del período', () => {
     fireEvent.click(screen.getByText('Marcar pagado'))
     await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
     expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/Horas dobles confirmadas/)
+  })
+
+  // ── #1 · el neto ────────────────────────────────────────────────────────────────
+  // El bug de la prueba en staging: TODOS los netos daban ₡0 porque la tarifa se leía de
+  // employee_wage_rates (vigencia por fecha) y las filas estaban fechadas DESPUÉS del
+  // período. Ahora sale de la tarifa del empleado.
+  it('el neto sale de la tarifa DEL EMPLEADO y deja de dar ₡0', async () => {
+    await renderPago()
+    expect(screen.getAllByText(money(249_600)).length).toBeGreaterThan(0)   // 96 × 2.600
+    expect(screen.getAllByText(money(185_000)).length).toBeGreaterThan(0)   // el fijo
+    expect(screen.getAllByText(money(434_600)).length).toBeGreaterThan(0)   // total
+    // y la tarifa se muestra, no "sin tarifa"
+    expect(screen.getAllByText(money(2_600)).length).toBeGreaterThan(0)
+  })
+
+  it('un activo CON horas y SIN tarifa se destaca en vez de quedar en ₡0 callado', async () => {
+    WORK_DAYS = [...WORK_DAYS, {
+      employee_id: 'e4', work_date: '2026-08-15', local: 'santa-teresa', hours: 40,
+      es_feriado: false, source: 'manual' as const, flags: null, created_at: '', updated_at: '',
+    }]
+    window.confirm = vi.fn(() => true)
+    render(<SalariosPago employees={[ANA, BENITO, INACTIVO, SIN_TARIFA]} />)
+    await screen.findByDisplayValue('96')
+
+    expect(await screen.findByText(/NINGUNA tarifa cargada/)).toBeTruthy()
+    expect(screen.getByText('sin tarifa')).toBeTruthy()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalled())
+    const confirms = (window.confirm as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0] as string)
+    expect(confirms.join('\n')).toMatch(/SIN TARIFA .*NUEVO/s)
+  })
+
+  it('sin nadie sin tarifa, el cartel no aparece', async () => {
+    await renderPago()
+    expect(screen.queryByText(/NINGUNA tarifa cargada/)).toBeNull()
+  })
+
+  // ── #3a · el aviso de doble conteo explica cómo se destraba ──────────────────────
+  it('el freno por horas dobles dice que NO se resuelve en la pestaña Horas', async () => {
+    WORK_DAYS = [...WORK_DAYS, {
+      employee_id: 'e1', work_date: '2026-08-03', local: 'santa-teresa', hours: 8,
+      es_feriado: false, source: 'biotime' as const, flags: null, created_at: '', updated_at: '',
+    }]
+    render(<SalariosPago employees={[ANA, BENITO, INACTIVO]} />)
+    await screen.findByDisplayValue('104')
+    // el "no" va en <strong>: se compara el texto del párrafo entero
+    const explica = await screen.findByText(/se destraba resolviendo marcas/i)
+    expect(explica.textContent?.replace(/\s+/g, ' '))
+      .toMatch(/no se destraba resolviendo marcas en la pestaña Horas.*confirmás acá abajo/i)
   })
 
   // A8 · paso consciente: las horas que no midió el reloj no frenan la nómina, pero quien

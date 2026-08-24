@@ -138,9 +138,23 @@ export async function getPeriodPayments(periodId: string): Promise<EmployeePayme
 // Registra UN pago por empleado con neto > 0 y pasa el período a `pagado`.
 // Orden a propósito: primero los pagos, después el estado. Si la RLS frena al contador,
 // frena en el insert y el período queda como estaba — nunca "pagado" sin pagos.
+/**
+ * El detalle congelado de lo que se pagó. `salary_lines` (mig 056) es el snapshot del
+ * cierre: guarda la TARIFA que se usó, no un puntero a ella. Si mañana le suben el
+ * precio de la hora a alguien, la quincena ya pagada sigue diciendo con qué número se
+ * calculó — sin esto, el contador no puede auditar un pago viejo.
+ */
+export interface LineaPagada {
+  employee_id: string
+  monto_neto:  number
+  horas:       number
+  hourly_rate: number
+  fijo:        number
+}
+
 export async function markPeriodPaid(
   periodId: string,
-  lineas: { employee_id: string; monto_neto: number }[],
+  lineas: LineaPagada[],
   paidBy: string,
 ): Promise<number> {
   const pagables = lineas.filter(l => Math.round(l.monto_neto) > 0)
@@ -170,6 +184,29 @@ export async function markPeriodPaid(
   )
   if (errPagos) fail(errPagos, 'registrar los pagos')
 
+  // Snapshot del cierre. Va DESPUÉS de los pagos y ANTES del estado, y su error NO
+  // frena el pago: es auditoría, no plata. Si fallara, el pago ya está registrado y
+  // frenar acá dejaría el período sin marcar (que es el defecto que ya arrastramos).
+  const { error: errLineas } = await fromAny('salary_lines').insert(
+    pagables.map(l => ({
+      period_id:    periodId,
+      employee_id:  l.employee_id,
+      horas:        l.horas,
+      pago_horas:   Math.round(l.horas * l.hourly_rate),
+      salario_fijo: Math.round(l.fijo),
+      total:        Math.round(l.monto_neto),
+      snapshot: {
+        hourly_rate_crc:  l.hourly_rate,
+        fixed_salary_crc: l.fijo,
+        horas:            l.horas,
+        // De dónde salió la tarifa, para que dentro de un año se entienda el número.
+        origen_tarifa:    'employees',
+        calculado_at:     paidAt,
+      },
+    })),
+  )
+  if (errLineas) console.warn('No se pudo guardar el detalle del pago (salary_lines):', errLineas.message)
+
   const { error: errEstado } = await fromAny('salary_periods')
     .update({ estado: 'pagado', paid_by: paidBy, paid_at: paidAt })
     .eq('id', periodId)
@@ -180,6 +217,19 @@ export async function markPeriodPaid(
 
 // ── Cálculo (puro) ──────────────────────────────────────────────────────────────
 
+// ⚠️ DEUDA A RETIRAR (firmado por Ismael el 2026-08-24): `employee_wage_rates`,
+// `tarifaVigente` y `getWageRatesUpTo` YA NO SE USAN. La única fuente de verdad de la
+// tarifa es `employees.hourly_rate_crc` / `fixed_salary_crc` — que es lo que la pestaña
+// Empleados/Tarifas escribe y lo que la dueña ve.
+//
+// Por qué se sacaron: el modelo de vigencia por fecha daba ₡0 en silencio. Las tarifas
+// se cargaron el 2026-08-21 (todas con `efectivo_desde` = ese día) y el período que se
+// estaba pagando era el 01→15/08: `getWageRatesUpTo('2026-08-15')` filtra
+// `efectivo_desde <= fecha` → 0 filas → `tarifaVigente` = null → neto ₡0 para TODOS.
+// No es que la tabla estuviera vacía (tenía 18 filas): es que ninguna regía en el
+// período. Y nadie la escribe desde la app, así que el historial nunca se iba a poblar
+// solo. Quedan acá sin llamadores hasta que se retire la tabla (eso toca esquema).
+//
 // Tarifa vigente = la de mayor `efectivo_desde` <= fecha. El unique (employee_id,
 // efectivo_desde) de la mig 056 garantiza que no hay empate posible.
 export function tarifaVigente(
@@ -222,7 +272,8 @@ export function splitHorasPeriodo(
 
 export interface LineaConsolidado {
   employee:    Employee
-  rate:        EmployeeWageRate | null
+  hourlyRate:  number    // employees.hourly_rate_crc — la única fuente de verdad
+  sinTarifa:   boolean   // activo con horas y sin tarifa: no puede quedar en ₡0 callado
   horasManual: number
   horasOtras:  number
   horasPisadas: number   // horas de BioTime del último día, que el upsert manual reemplaza
@@ -233,11 +284,18 @@ export interface LineaConsolidado {
   nombreBanco: string
 }
 
-// El neto de U0b: horas × tarifa vigente + salario fijo de esa misma tarifa. NADA de
-// 10% de servicio ni propinas — eso es F2 (consolidado), fuera de alcance acá.
-export function netoDe(horas: number, rate: EmployeeWageRate | null): number {
-  if (!rate) return 0
-  return horas * (Number(rate.hourly_rate_crc) || 0) + (Number(rate.fixed_salary_crc) || 0)
+// El neto de U0b: horas × tarifa del EMPLEADO + su salario fijo. NADA de 10% de servicio
+// ni propinas — eso es F2 (consolidado), fuera de alcance acá.
+export function netoDe(horas: number, emp: Pick<Employee, 'hourly_rate_crc' | 'fixed_salary_crc'>): number {
+  return horas * (Number(emp.hourly_rate_crc) || 0) + (Number(emp.fixed_salary_crc) || 0)
+}
+
+/**
+ * Un activo con horas cargadas y SIN tarifa (ni por hora ni fija) no puede quedar en ₡0
+ * silencioso: eso es alguien que no cobra y nadie se entera. La pantalla lo destaca.
+ */
+export function sinTarifa(emp: Pick<Employee, 'hourly_rate_crc' | 'fixed_salary_crc'>): boolean {
+  return (Number(emp.hourly_rate_crc) || 0) <= 0 && (Number(emp.fixed_salary_crc) || 0) <= 0
 }
 
 // El banco identifica al beneficiario por el NOMBRE: el alias del homebanking manda y
@@ -248,19 +306,21 @@ export function nombreBanco(emp: Employee): string {
 
 export function consolidarPeriodo(
   employees: Employee[],
-  rates: EmployeeWageRate[],
   workDays: WorkDay[],
   period: Pick<SalaryPeriod, 'fecha_fin'>,
   local: string,
 ): LineaConsolidado[] {
   return employees.map(emp => {
-    const rate  = tarifaVigente(rates, emp.id, period.fecha_fin)
-    const split = splitHorasPeriodo(workDays, emp.id, period.fecha_fin, local)
-    const pagoHoras = split.total * (Number(rate?.hourly_rate_crc) || 0)
-    const fijo      = Number(rate?.fixed_salary_crc) || 0
+    const split      = splitHorasPeriodo(workDays, emp.id, period.fecha_fin, local)
+    const hourlyRate = Number(emp.hourly_rate_crc) || 0
+    const fijo       = Number(emp.fixed_salary_crc) || 0
+    const pagoHoras  = split.total * hourlyRate
     return {
       employee:    emp,
-      rate,
+      hourlyRate,
+      // Solo es un problema si además tiene horas: sin horas y sin tarifa es alguien
+      // que simplemente no trabajó en el período.
+      sinTarifa:   sinTarifa(emp) && split.total > 0,
       horasManual: split.manual,
       horasOtras:  split.otras,
       horasPisadas: split.pisadas,
@@ -441,6 +501,30 @@ export async function overrideHorasDia(o: {
   if (error) fail(error, 'corregir las horas del día')
 }
 
+/**
+ * Qué marcas de la jornada corresponden al caso, con respaldo. La marca cruda puede no
+ * tener `employee_id` resuelto (el ingest lo deja null si el `emp_code` no estaba mapeado
+ * cuando entró), así que filtrar solo por `employee_id` dejaba el renglón VACÍO —
+ * indistinguible de "no hubo marcas". Se prueban tres criterios en orden y, si ninguno da,
+ * se muestran TODAS las de la jornada: ver de más es infinitamente mejor que ver nada
+ * cuando lo que se está mirando es por qué a alguien no le cuadran las horas.
+ */
+export function marcasDelCaso(
+  marcas: TimePunch[],
+  x: Pick<PunchException, 'employee_id' | 'emp_code'>,
+): { lista: TimePunch[]; ampliado: boolean } {
+  if (marcas.length === 0) return { lista: [], ampliado: false }
+  if (x.employee_id) {
+    const porEmpleado = marcas.filter(m => m.employee_id === x.employee_id)
+    if (porEmpleado.length > 0) return { lista: porEmpleado, ampliado: false }
+  }
+  if (x.emp_code) {
+    const porCodigo = marcas.filter(m => m.emp_code === x.emp_code)
+    if (porCodigo.length > 0) return { lista: porCodigo, ampliado: false }
+  }
+  return { lista: marcas, ampliado: true }
+}
+
 // ── Agrupado de la bandeja (puro) ───────────────────────────────────────────────
 
 export interface GrupoExcepciones {
@@ -514,7 +598,15 @@ export function empleadosConHorasDobles(workDays: WorkDay[], fechaFin: string): 
   for (const w of workDays) {
     if ((Number(w.hours) || 0) <= 0) continue
     if (w.source === 'manual') {
-      if (w.work_date === fechaFin) totalDelPeriodo.add(w.employee_id)
+      // Una fila manual del último día puede ser DOS cosas distintas, y confundirlas
+      // frena nóminas sanas: el TOTAL del período que carga U0b (`upsertWorkDay`, sin
+      // flags), o una CORRECCIÓN puntual de esa jornada hecha desde la bandeja
+      // (`overrideHorasDia`, que deja `flags.override`). La corrección REEMPLAZÓ la fila
+      // de BioTime de ese día —misma PK— así que no duplica nada. El discriminante es
+      // `flags.override`: sin él, quien corrige el último día queda marcado para siempre
+      // y aprende a tildar la casilla sin mirar.
+      const esOverride = !!(w.flags as { override?: unknown } | null)?.override
+      if (w.work_date === fechaFin && !esOverride) totalDelPeriodo.add(w.employee_id)
     } else if (w.source === 'biotime') {
       derivadas.add(w.employee_id)
     }

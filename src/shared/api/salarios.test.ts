@@ -34,7 +34,7 @@ vi.mock('./supabase', () => ({
 
 import {
   getWorkDays, upsertWorkDay, markPeriodPaid, updateEmployeeHomebankingName,
-  tarifaVigente, splitHorasPeriodo, netoDe, nombreBanco, consolidarPeriodo, LOCAL_DEFAULT,
+  tarifaVigente, splitHorasPeriodo, netoDe, sinTarifa, nombreBanco, consolidarPeriodo, LOCAL_DEFAULT,
 } from './salarios'
 
 beforeEach(() => {
@@ -88,13 +88,30 @@ describe('tarifaVigente', () => {
   })
 })
 
-describe('netoDe · horas × tarifa vigente + fijo', () => {
+// La tarifa sale del EMPLEADO (employees.hourly_rate_crc / fixed_salary_crc), que es lo
+// que la pestaña Empleados/Tarifas escribe. `employee_wage_rates` quedó fuera: su modelo
+// de vigencia por fecha daba ₡0 en silencio para cualquier período anterior a la carga.
+describe('netoDe · horas × tarifa del empleado + fijo', () => {
   it('suma las dos patas (el caso real cobra fijo Y por hora)', () => {
-    expect(netoDe(80, rate({ employee_id: 'e1', efectivo_desde: '2026-01-01', hourly_rate_crc: 2600, fixed_salary_crc: 50_000 })))
+    expect(netoDe(80, { hourly_rate_crc: 2600, fixed_salary_crc: 50_000 }))
       .toBe(80 * 2600 + 50_000)
   })
-  it('sin tarifa vigente → 0', () => {
-    expect(netoDe(80, null)).toBe(0)
+  it('el que solo cobra por hora', () => {
+    expect(netoDe(80, { hourly_rate_crc: 1500, fixed_salary_crc: 0 })).toBe(120_000)
+  })
+  it('sin tarifa → 0 (y por eso la pantalla tiene que gritarlo)', () => {
+    expect(netoDe(80, { hourly_rate_crc: 0, fixed_salary_crc: 0 })).toBe(0)
+  })
+  it('tolera null/undefined en la base sin explotar', () => {
+    expect(netoDe(80, { hourly_rate_crc: null as unknown as number, fixed_salary_crc: null as unknown as number })).toBe(0)
+  })
+})
+
+describe('sinTarifa', () => {
+  it('es true solo cuando NINGUNA de las dos patas tiene valor', () => {
+    expect(sinTarifa({ hourly_rate_crc: 0, fixed_salary_crc: 0 })).toBe(true)
+    expect(sinTarifa({ hourly_rate_crc: 1500, fixed_salary_crc: 0 })).toBe(false)
+    expect(sinTarifa({ hourly_rate_crc: 0, fixed_salary_crc: 185_000 })).toBe(false)
   })
 })
 
@@ -126,13 +143,12 @@ describe('nombreBanco · a quién le transfiere el banco', () => {
 })
 
 describe('consolidarPeriodo', () => {
-  it('una línea por empleado con horas, tarifa vigente y neto', () => {
+  it('una línea por empleado con horas, tarifa del empleado y neto', () => {
     const period = { fecha_fin: '2026-08-15' }
     const lineas = consolidarPeriodo(
-      [emp({ id: 'e1', full_name: 'ANA' }), emp({ id: 'e2', full_name: 'BENITO', nombre_homebanking: 'BENITO PEREZ' })],
       [
-        rate({ employee_id: 'e1', efectivo_desde: '2026-06-01', hourly_rate_crc: 2600 }),
-        rate({ employee_id: 'e2', efectivo_desde: '2026-06-01', hourly_rate_crc: 0, fixed_salary_crc: 185_000, tipo: 'quincena' }),
+        emp({ id: 'e1', full_name: 'ANA', hourly_rate_crc: 2600 }),
+        emp({ id: 'e2', full_name: 'BENITO', nombre_homebanking: 'BENITO PEREZ', fixed_salary_crc: 185_000 }),
       ],
       [wd({ employee_id: 'e1', work_date: '2026-08-15', hours: 96 })],
       period,
@@ -144,13 +160,35 @@ describe('consolidarPeriodo', () => {
     ])
   })
 
-  it('empleado sin tarifa vigente queda en 0 (no explota ni inventa)', () => {
+  // EL TEST DEL BUG: con la tarifa cargada en el empleado, el neto NO puede dar 0.
+  // Antes se leía employee_wage_rates (vigencia por fecha) y daba ₡0 para todos.
+  it('con hourly_rate_crc > 0 el neto es > 0', () => {
     const lineas = consolidarPeriodo(
-      [emp({ id: 'e9', full_name: 'NUEVO' })], [],
+      [emp({ id: 'e1', full_name: 'KAREN', hourly_rate_crc: 1500 })],
+      [wd({ employee_id: 'e1', work_date: '2026-08-15', hours: 58 })],
+      { fecha_fin: '2026-08-15' }, LOCAL_DEFAULT,
+    )
+    expect(lineas[0].neto).toBe(58 * 1500)
+    expect(lineas[0].neto).toBeGreaterThan(0)
+    expect(lineas[0].hourlyRate).toBe(1500)
+    expect(lineas[0].sinTarifa).toBe(false)
+  })
+
+  it('activo CON horas y SIN tarifa se marca sinTarifa (no queda en ₡0 callado)', () => {
+    const lineas = consolidarPeriodo(
+      [emp({ id: 'e9', full_name: 'NUEVO' })],
       [wd({ employee_id: 'e9', work_date: '2026-08-15', hours: 20 })],
       { fecha_fin: '2026-08-15' }, LOCAL_DEFAULT,
     )
-    expect(lineas[0]).toMatchObject({ horas: 20, rate: null, neto: 0 })
+    expect(lineas[0]).toMatchObject({ horas: 20, neto: 0, hourlyRate: 0, sinTarifa: true })
+  })
+
+  it('sin horas y sin tarifa NO se marca: es alguien que no trabajó, no un problema', () => {
+    const lineas = consolidarPeriodo(
+      [emp({ id: 'e9', full_name: 'NUEVO' })], [],
+      { fecha_fin: '2026-08-15' }, LOCAL_DEFAULT,
+    )
+    expect(lineas[0]).toMatchObject({ horas: 0, neto: 0, sinTarifa: false })
   })
 })
 
@@ -191,9 +229,9 @@ describe('updateEmployeeHomebankingName', () => {
 
 describe('markPeriodPaid', () => {
   const lineas = [
-    { employee_id: 'e1', monto_neto: 249_600 },
-    { employee_id: 'e2', monto_neto: 0 },        // no se paga ₡0
-    { employee_id: 'e3', monto_neto: 185_000.4 },
+    { employee_id: 'e1', monto_neto: 249_600, horas: 10, hourly_rate: 1500, fijo: 0 },
+    { employee_id: 'e2', monto_neto: 0, horas: 10, hourly_rate: 1500, fijo: 0 },        // no se paga ₡0
+    { employee_id: 'e3', monto_neto: 185_000.4, horas: 0, hourly_rate: 0, fijo: 185_000.4 },
   ]
 
   it('un pago por empleado con neto > 0 (transferencia) y recién después el período a pagado', async () => {
@@ -231,7 +269,7 @@ describe('markPeriodPaid', () => {
   })
 
   it('sin ningún neto > 0 no toca la base', async () => {
-    await expect(markPeriodPaid('per-1', [{ employee_id: 'e2', monto_neto: 0 }], 'u-owner'))
+    await expect(markPeriodPaid('per-1', [{ employee_id: 'e2', monto_neto: 0, horas: 10, hourly_rate: 1500, fijo: 0 }], 'u-owner'))
       .rejects.toThrow(/mayor a/i)
     expect(calls).toHaveLength(0)
   })

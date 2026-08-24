@@ -27,7 +27,7 @@ type PgError = { message: string; code?: string } | null
 interface Q extends PromiseLike<{ data: unknown; error: PgError }> {
   select(cols?: string): Q
   insert(rows: unknown): Q
-  upsert(rows: unknown, opts?: { onConflict?: string }): Q
+  upsert(rows: unknown, opts?: { onConflict?: string; ignoreDuplicates?: boolean }): Q
   update(patch: unknown): Q
   eq(col: string, value: unknown): Q
   gte(col: string, value: unknown): Q
@@ -171,7 +171,14 @@ export async function markPeriodPaid(
   }
 
   const paidAt = new Date().toISOString()
-  const { error: errPagos } = await fromAny('employee_payments').insert(
+  // UPSERT y no insert: el guard de arriba relee el mismo campo que escribe el ÚLTIMO paso
+  // de esta función, así que no puede ver un intento anterior que murió en el medio. El
+  // candado real es el unique (period_id, employee_id) de la mig 060; el `do nothing` es lo
+  // que hace que el reintento CONVERJA en vez de rebotar — sin él, el 23505 mataría la
+  // función antes del update y el período quedaría imposible de marcar pagado, con la
+  // transferencia ya hecha. `do nothing` y no `do update`: la fila vieja es la evidencia de
+  // cuánto se transfirió de verdad y no se pisa (corregir un pago es otro flujo: reapertura).
+  const { error: errPagos } = await fromAny('employee_payments').upsert(
     pagables.map(l => ({
       period_id:   periodId,
       employee_id: l.employee_id,
@@ -181,13 +188,14 @@ export async function markPeriodPaid(
       paid_by:     paidBy,
       paid_at:     paidAt,
     })),
+    { onConflict: 'period_id,employee_id', ignoreDuplicates: true },
   )
   if (errPagos) fail(errPagos, 'registrar los pagos')
 
   // Snapshot del cierre. Va DESPUÉS de los pagos y ANTES del estado, y su error NO
   // frena el pago: es auditoría, no plata. Si fallara, el pago ya está registrado y
   // frenar acá dejaría el período sin marcar (que es el defecto que ya arrastramos).
-  const { error: errLineas } = await fromAny('salary_lines').insert(
+  const { error: errLineas } = await fromAny('salary_lines').upsert(
     pagables.map(l => ({
       period_id:    periodId,
       employee_id:  l.employee_id,
@@ -204,6 +212,8 @@ export async function markPeriodPaid(
         calculado_at:     paidAt,
       },
     })),
+    // Espeja el unique de employee_payments (mig 060): reintentar no duplica el snapshot.
+    { onConflict: 'period_id,employee_id', ignoreDuplicates: true },
   )
   if (errLineas) console.warn('No se pudo guardar el detalle del pago (salary_lines):', errLineas.message)
 

@@ -241,7 +241,7 @@ describe('markPeriodPaid', () => {
     const n = await markPeriodPaid('per-1', lineas, 'u-owner')
 
     expect(n).toBe(2)
-    const rows = opArgs(lastCall('employee_payments'), 'insert')![0] as Record<string, unknown>[]
+    const rows = opArgs(lastCall('employee_payments'), 'upsert')![0] as Record<string, unknown>[]
     expect(rows).toHaveLength(2)
     expect(rows.map(r => [r.employee_id, r.monto_neto, r.metodo])).toEqual([
       ['e1', 249_600, 'transferencia'],
@@ -266,6 +266,63 @@ describe('markPeriodPaid', () => {
     enqueue('salary_periods', { data: { estado: 'pagado' } })
     await expect(markPeriodPaid('per-1', lineas, 'u-owner')).rejects.toThrow(/ya está marcado como pagado/i)
     expect(calls.some(c => c.table === 'employee_payments')).toBe(false)
+  })
+
+  // ── Idempotencia (mig 060) ────────────────────────────────────────────────────
+  // El guard de "ya pagado" relee el MISMO campo que escribe el último paso de la
+  // función, así que no puede ver un intento anterior que murió en el medio. El candado
+  // real es el unique de la base; acá se fija que el cliente escriba de la forma que lo
+  // aprovecha (`on conflict do nothing`) en vez de rebotar con 23505.
+  it('escribe los pagos con upsert on conflict do nothing, no con insert', async () => {
+    enqueue('salary_periods', { data: { estado: 'cerrado' } })
+    enqueue('employee_payments', {})
+    enqueue('salary_lines', {})
+    enqueue('salary_periods', {})
+    await markPeriodPaid('per-1', lineas, 'u-owner')
+
+    const c = lastCall('employee_payments')
+    expect(c.ops.some(o => o.fn === 'insert')).toBe(false)
+    const [, opts] = opArgs(c, 'upsert') as [unknown, { onConflict: string; ignoreDuplicates: boolean }]
+    expect(opts).toEqual({ onConflict: 'period_id,employee_id', ignoreDuplicates: true })
+  })
+
+  it('el snapshot de salary_lines también es idempotente', async () => {
+    enqueue('salary_periods', { data: { estado: 'cerrado' } })
+    enqueue('employee_payments', {})
+    enqueue('salary_lines', {})
+    enqueue('salary_periods', {})
+    await markPeriodPaid('per-1', lineas, 'u-owner')
+
+    const c = lastCall('salary_lines')
+    const [rows, opts] = opArgs(c, 'upsert') as [Record<string, unknown>[], { onConflict: string; ignoreDuplicates: boolean }]
+    expect(opts).toEqual({ onConflict: 'period_id,employee_id', ignoreDuplicates: true })
+    // y congela la tarifa usada
+    expect((rows[0].snapshot as Record<string, unknown>).hourly_rate_crc).toBe(1500)
+  })
+
+  // El escenario real del bug: el update de estado falla, el operador reintenta.
+  it('reintentar tras un fallo manda EXACTAMENTE las mismas filas (el unique hace el resto)', async () => {
+    // intento 1: pagos OK, snapshot OK, y el update de estado se cae
+    enqueue('salary_periods', { data: { estado: 'cerrado' } })
+    enqueue('employee_payments', {})
+    enqueue('salary_lines', {})
+    enqueue('salary_periods', { error: { message: 'Failed to fetch' } })
+    await expect(markPeriodPaid('per-1', lineas, 'u-owner')).rejects.toThrow(/Failed to fetch/)
+    const rows1 = opArgs(lastCall('employee_payments'), 'upsert')![0] as Record<string, unknown>[]
+
+    // intento 2: el período sigue sin 'pagado', el guard deja pasar
+    enqueue('salary_periods', { data: { estado: 'cerrado' } })
+    enqueue('employee_payments', {})
+    enqueue('salary_lines', {})
+    enqueue('salary_periods', {})
+    const n = await markPeriodPaid('per-1', lineas, 'u-owner')
+    const rows2 = opArgs(lastCall('employee_payments'), 'upsert')![0] as Record<string, unknown>[]
+
+    expect(n).toBe(2)
+    // mismas claves (period_id, employee_id) y mismos montos → con el unique + do nothing,
+    // la base se queda con UN solo juego de filas.
+    expect(rows2.map(r => [r.period_id, r.employee_id, r.monto_neto]))
+      .toEqual(rows1.map(r => [r.period_id, r.employee_id, r.monto_neto]))
   })
 
   it('sin ningún neto > 0 no toca la base', async () => {

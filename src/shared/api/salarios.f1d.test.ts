@@ -346,45 +346,77 @@ describe('splitHorasPeriodo · horas que el upsert manual va a pisar', () => {
 // LEA bien el origen de las horas — que es lo que decide qué ve el contador.
 
 describe('resumenImpares', () => {
-  const bio = (over: Partial<WorkDay> & { work_date: string }) =>
-    wd({ employee_id: 'e1', source: 'biotime', ...over })
-
-  it('separa las jornadas medidas de las contadas al default', () => {
-    const r = resumenImpares([
-      bio({ work_date: '2026-08-01', hours: 8, flags: { horas_origen: 'biotime', impares: 0, solapados: 0 } }),
-      bio({ work_date: '2026-08-02', hours: 3, flags: { horas_origen: '3h_default_impar', impares: 1, solapados: 0 } }),
-      bio({ work_date: '2026-08-03', hours: 3, flags: { horas_origen: '3h_default_impar', impares: 0, solapados: 1 } }),
-    ]).get('e1')!
-    expect(r.dias).toBe(3)
-    expect(r.dias3h).toBe(2)
-    expect(r.horas3h).toBe(6)
-    expect(r.diasConSuelta).toBe(0)
+  // Los flags tal cual los escribe la mig 059 (A8). El emparejamiento vive en SQL; acá se
+  // prueba que la app LEA bien el desglose — que es lo que decide qué ve el contador.
+  const dia = (work_date: string, o: {
+    pares?: number; horas_pares?: number; tramos?: number
+  }) => wd({
+    employee_id: 'e1', source: 'biotime', work_date,
+    hours: (o.horas_pares ?? 0) + (o.tramos ?? 0) * 3,
+    flags: {
+      pares:             o.pares ?? 0,
+      horas_pares:       o.horas_pares ?? 0,
+      tramos_sin_cerrar: o.tramos ?? 0,
+      horas_default:     (o.tramos ?? 0) * 3,
+      horas_origen: (o.tramos ?? 0) === 0 ? 'biotime' : (o.pares ?? 0) === 0 ? 'default' : 'mixto',
+    },
   })
 
-  // Un impar suelto en un día que SÍ midió no lo convierte en día de 3 h: se cuenta
-  // aparte, como "mirá esto", no como "esto es un default".
-  it('un día medido con una marca suelta NO cuenta como día al default', () => {
+  it('separa las horas medidas de las que puso la regla', () => {
     const r = resumenImpares([
-      bio({ work_date: '2026-08-01', hours: 6.65, flags: { horas_origen: 'biotime', pares: 1, impares: 1, solapados: 0 } }),
+      dia('2026-08-01', { pares: 1, horas_pares: 8 }),                 // completo
+      dia('2026-08-02', { tramos: 1 }),                                // solo default
+      dia('2026-08-03', { pares: 1, horas_pares: 4, tramos: 1 }),      // MIXTO: turno cortado
     ]).get('e1')!
-    expect(r.dias3h).toBe(0)
-    expect(r.horas3h).toBe(0)
-    expect(r.diasConSuelta).toBe(1)
+    expect(r.dias).toBe(3)
+    expect(r.diasIncompletos).toBe(2)
+    expect(r.tramos).toBe(2)
+    expect(r.horasMedidas).toBe(12)
+    expect(r.horasDefault).toBe(6)
+  })
+
+  // El caso que la regla a nivel DÍA perdía: el día mixto tiene que aparecer en las DOS
+  // columnas. Si solo contara como "medido", el contador no vería nunca sus 3 h de default.
+  it('el día mixto cuenta en las dos columnas', () => {
+    const r = resumenImpares([dia('2026-08-03', { pares: 1, horas_pares: 4, tramos: 1 })]).get('e1')!
+    expect(r.diasIncompletos).toBe(1)
+    expect(r.horasMedidas).toBe(4)
+    expect(r.horasDefault).toBe(3)
+  })
+
+  it('un día completo no aporta nada al default', () => {
+    const r = resumenImpares([dia('2026-08-01', { pares: 2, horas_pares: 9.5 })]).get('e1')!
+    expect(r.diasIncompletos).toBe(0)
+    expect(r.tramos).toBe(0)
+    expect(r.horasDefault).toBe(0)
+    expect(r.horasMedidas).toBe(9.5)
+  })
+
+  it('varios tramos en el mismo día suman todos', () => {
+    const r = resumenImpares([dia('2026-08-01', { tramos: 2 })]).get('e1')!
+    expect(r.diasIncompletos).toBe(1)   // sigue siendo UN día
+    expect(r.tramos).toBe(2)
+    expect(r.horasDefault).toBe(6)
   })
 
   it('ignora lo cargado a mano y lo de otro local', () => {
     const r = resumenImpares([
-      bio({ work_date: '2026-08-01', hours: 3, flags: { horas_origen: '3h_default_impar' } }),
-      bio({ work_date: '2026-08-02', hours: 3, local: 'nosara', flags: { horas_origen: '3h_default_impar' } }),
+      dia('2026-08-01', { tramos: 1 }),
+      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-02', local: 'nosara',
+           hours: 3, flags: { tramos_sin_cerrar: 1, horas_default: 3, horas_pares: 0 } }),
       wd({ employee_id: 'e1', source: 'manual', work_date: '2026-08-15', hours: 96 }),
     ], 'santa-teresa').get('e1')!
     expect(r.dias).toBe(1)
-    expect(r.dias3h).toBe(1)
+    expect(r.tramos).toBe(1)
   })
 
-  it('una jornada sin flags no rompe el conteo', () => {
-    const r = resumenImpares([bio({ work_date: '2026-08-01', hours: 5, flags: null })]).get('e1')!
-    expect(r).toMatchObject({ dias: 1, dias3h: 0, horas3h: 0, diasConSuelta: 0 })
+  // Filas viejas (derivadas antes de A8) no tienen el desglose: no se puede inventar, pero
+  // tampoco se puede contar 8 h medidas como default ni al revés.
+  it('una jornada sin flags cae del lado de lo medido, no del default', () => {
+    const r = resumenImpares([
+      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-01', hours: 5, flags: null }),
+    ]).get('e1')!
+    expect(r).toMatchObject({ dias: 1, diasIncompletos: 0, tramos: 0, horasDefault: 0, horasMedidas: 5 })
   })
 })
 
@@ -423,17 +455,18 @@ describe('semaforoPago', () => {
 
   // El aviso de las 3 h sale de work_days.flags, NO del estado de la excepción: resolver
   // la bandeja no cambia un colón de lo que se paga, así que no puede apagar la señal.
-  it('las 3 h siguen avisando aunque la excepción esté resuelta', () => {
+  it('las horas default siguen avisando aunque la excepción esté resuelta', () => {
     const filas = [
       wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-03', hours: 3,
-           flags: { horas_origen: '3h_default_impar' } }),
-      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-04', hours: 3,
-           flags: { horas_origen: '3h_default_impar' } }),
+           flags: { horas_pares: 0, tramos_sin_cerrar: 1, horas_default: 3 } }),
+      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-04', hours: 7,
+           flags: { horas_pares: 4, tramos_sin_cerrar: 1, horas_default: 3 } }),
     ]
     const s = semaforoPago([ex('impar', { employee_id: 'e1', estado: 'resuelta' })], filas, FIN)
     expect(s.fichajeDias).toBe(0)
-    expect(s.dias3h).toBe(2)
-    expect(s.horas3h).toBe(6)
+    expect(s.diasIncompletos).toBe(2)
+    expect(s.tramos).toBe(2)
+    expect(s.horasDefault).toBe(6)
   })
 
   it('marca el doble conteo: total a mano + días derivados del mismo empleado', () => {
@@ -450,8 +483,8 @@ describe('semaforoPago', () => {
   it('solo mira a los empleados que se están pagando', () => {
     const filas = [
       wd({ employee_id: 'e9', source: 'manual',  work_date: FIN, hours: 96 }),
-      wd({ employee_id: 'e9', source: 'biotime', work_date: '2026-08-01', hours: 8,
-           flags: { horas_origen: '3h_default_impar' } }),
+      wd({ employee_id: 'e9', source: 'biotime', work_date: '2026-08-01', hours: 3,
+           flags: { horas_pares: 0, tramos_sin_cerrar: 1, horas_default: 3 } }),
     ]
     const conE9 = semaforoPago([ex('impar', { employee_id: 'e9' })], filas, FIN, ['e9'])
     const sinE9 = semaforoPago([ex('impar', { employee_id: 'e9' })], filas, FIN, ['e1'])
@@ -459,7 +492,8 @@ describe('semaforoPago', () => {
     expect(conE9.fichajeDias).toBe(1)
     expect(sinE9.dobles).toEqual([])
     expect(sinE9.fichajeDias).toBe(0)
-    expect(sinE9.dias3h).toBe(0)
+    expect(sinE9.diasIncompletos).toBe(0)
+    expect(sinE9.horasDefault).toBe(0)
   })
 
   it('las marcas sin empleado cuentan SIEMPRE: no hay a quién acotarlas', () => {
@@ -482,14 +516,18 @@ describe('HORAS_DEFAULT_IMPAR ↔ mig 059', () => {
     'utf8',
   )
 
-  it('el `else N` del insert es el mismo número que usa la app', () => {
-    const m = MIG.match(/case\s+when\s+c\.tiene_par\s+then\s+c\.horas_pares\s+else\s+(\d+(?:\.\d+)?)\s+end/)
-    expect(m, 'no se encontró el case de las horas en la 059').toBeTruthy()
+  it('`v_default_h` de la 059 es el mismo número que usa la app', () => {
+    const m = MIG.match(/v_default_h\s+numeric\s*:=\s*(\d+(?:\.\d+)?)\s*;/)
+    expect(m, 'no se encontró v_default_h en la 059').toBeTruthy()
     expect(Number(m![1])).toBe(HORAS_DEFAULT_IMPAR)
   })
 
-  it('la migración sigue marcando el origen de esas horas', () => {
-    expect(MIG).toContain("'3h_default_impar'")
-    expect(MIG).toContain("'horas_origen'")
+  it('la migración sigue calculando POR TRAMO y dejando el desglose en flags', () => {
+    // el corazón de A8: pares + tramos × default, no un case por día
+    expect(MIG).toMatch(/c\.horas_pares\s*\+\s*\(c\.tramos_sin_cerrar\s*\*\s*v_default_h\)/)
+    expect(MIG).toMatch(/\(a\.impar_in\s*\+\s*a\.impar_out\s*\+\s*a\.solapados\)\s+as\s+tramos_sin_cerrar/)
+    for (const k of ['horas_pares', 'tramos_sin_cerrar', 'horas_default', 'horas_origen']) {
+      expect(MIG).toContain(`'${k}'`)
+    }
   })
 })

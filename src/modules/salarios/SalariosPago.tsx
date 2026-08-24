@@ -229,24 +229,38 @@ export default function SalariosPago({ employees }: Props) {
 
     // Los avisos que no frenan viajan al confirm, para que quien paga los vea en el
     // último momento y no en un cartel que ya scrolleó.
-    const avisos: string[] = []
+    // A8 · paso consciente, no bloqueo: quien paga tiene que decir que sí a las horas que
+    // NO midió el reloj. Va en su propio confirm y no mezclado con el resto, porque es la
+    // única cifra de la nómina que salió de una política y no de un dato.
+    if (semaforo.diasIncompletos > 0) {
+      const sigue = window.confirm(
+        `${semaforo.diasIncompletos} día(s) con marca incompleta contados a ${HORAS_DEFAULT_IMPAR} h.\n\n` +
+        `${semaforo.tramos} tramo(s) sin cerrar = ${semaforo.horasDefault.toFixed(0)} h que no midió ` +
+        'el reloj (los tramos bien marcados de esos días sí cuentan sus horas reales).\n\n' +
+        'Se pueden corregir uno por uno en la pestaña Horas.\n\n¿Pagar igual?',
+      )
+      if (!sigue) return
+    }
+
+    // Marcas de alguien que no está en el maestro: el riesgo no es pagar de más, es que
+    // haya UNA PERSONA que no cobra. No se puede resolver desde acá (falta darla de alta).
     if (semaforo.sinMapearDias > 0) {
-      avisos.push(
-        `⚠️ ${semaforo.sinMapearMarcas} marca(s) de fichaje sin empleado asignado en el período ` +
-        '(puede que alguien NO ESTÉ COBRANDO).',
+      const sigue = window.confirm(
+        `Hay ${semaforo.sinMapearMarcas} marca(s) de fichaje sin empleado asignado ` +
+        `(${semaforo.sinMapearDias} jornada(s)).\n\n` +
+        'Puede que alguien NO ESTÉ COBRANDO este período.\n\n' +
+        'Se asigna el código en Empleados / Tarifas y después se recalculan las horas.\n\n' +
+        '¿Pagar igual?',
       )
+      if (!sigue) return
     }
-    if (semaforo.dias3h > 0) {
-      avisos.push(
-        `🕒 ${semaforo.dias3h} jornada(s) se pagan a ${HORAS_DEFAULT_IMPAR} h por defecto ` +
-        `(${semaforo.horas3h.toFixed(0)} h que no midió el reloj).`,
-      )
-    }
-    if (semaforo.fichajeDias > 0) {
-      avisos.push(`${semaforo.fichajeDias} jornada(s) con fichaje incompleto sin revisar.`)
-    }
+
+    const avisos: string[] = []
     if (semaforo.dobles.length > 0) {
       avisos.push(`⚠️ Horas dobles confirmadas a mano: ${nombresDobles.join(', ')}.`)
+    }
+    if (semaforo.fichajeDias > 0) {
+      avisos.push(`${semaforo.fichajeDias} jornada(s) con fichaje incompleto sin revisar en la bandeja.`)
     }
 
     const ok = window.confirm(
@@ -372,11 +386,13 @@ export default function SalariosPago({ employees }: Props) {
             </p>
           )}
 
-          {!pagado && semaforo.dias3h > 0 && (
+          {!pagado && semaforo.diasIncompletos > 0 && (
             <p style={{ padding: '0 12px 8px', fontSize: '0.76rem', color: '#8a6d3b' }}>
-              🕒 <strong>{semaforo.dias3h} jornada(s)</strong> de esta nómina se están pagando a{' '}
-              {HORAS_DEFAULT_IMPAR} h ({semaforo.horas3h.toFixed(0)} h en total) porque no tuvieron
-              ninguna marca cerrada. Son horas puestas por la regla, no medidas por el reloj.
+              🕒 <strong>{semaforo.diasIncompletos} jornada(s) con marca incompleta</strong> en esta
+              nómina: {semaforo.tramos} tramo(s) sin cerrar ={' '}
+              <strong>{semaforo.horasDefault.toFixed(0)} h</strong> puestas por la regla
+              ({HORAS_DEFAULT_IMPAR} h por tramo), no medidas por el reloj. Los tramos bien marcados
+              de esos días sí cuentan sus horas reales.
             </p>
           )}
 

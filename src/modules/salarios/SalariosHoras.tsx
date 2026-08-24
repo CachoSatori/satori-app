@@ -28,11 +28,12 @@ interface FilaHoras {
   biotime:     number
   manual:      number
   dias:        number
-  // Lo que el contador tiene que ver antes de pagar: cuántas de esas jornadas no salieron
-  // del reloj sino de la regla de las 3 h, y cuántas midieron pero con marcas sueltas.
-  dias3h:      number
-  horas3h:     number
-  conSuelta:   number
+  // Lo que el contador tiene que ver antes de pagar (A8): cuántas jornadas quedaron
+  // incompletas y qué parte de las horas la puso la regla en vez del reloj.
+  incompletos:  number   // jornadas con algún tramo sin cerrar
+  tramos:       number   // tramos sin cerrar (cada uno vale HORAS_DEFAULT_IMPAR)
+  horasDefault: number   // las horas que puso la regla
+  horasMedidas: number   // las que midió el reloj
 }
 
 function hhmm(iso: string): string {
@@ -114,7 +115,8 @@ export default function SalariosHoras({ employees }: Props) {
         employee_id: w.employee_id,
         nombre: nombreDe.get(w.employee_id) ?? '—',
         biotime: 0, manual: 0, dias: 0,
-        dias3h: imp?.dias3h ?? 0, horas3h: imp?.horas3h ?? 0, conSuelta: imp?.diasConSuelta ?? 0,
+        incompletos: imp?.diasIncompletos ?? 0, tramos: imp?.tramos ?? 0,
+        horasDefault: imp?.horasDefault ?? 0, horasMedidas: imp?.horasMedidas ?? 0,
       }
       const h = Number(w.hours) || 0
       if (w.source === 'biotime') { f.biotime += h; f.dias += 1 }
@@ -126,7 +128,8 @@ export default function SalariosHoras({ employees }: Props) {
       .sort((a, b) => a.nombre.localeCompare(b.nombre))
   }, [workDays, employees, local])
 
-  const total3h = useMemo(() => filas.reduce((s, f) => s + f.dias3h, 0), [filas])
+  const totalIncompletos = useMemo(() => filas.reduce((s, f) => s + f.incompletos, 0), [filas])
+  const totalDefault     = useMemo(() => filas.reduce((s, f) => s + f.horasDefault, 0), [filas])
 
   const grupos: GrupoExcepciones[] = useMemo(
     () => agruparExcepciones(excs, employees),
@@ -271,8 +274,10 @@ export default function SalariosHoras({ employees }: Props) {
               {resumen.marcas} marca(s) · {resumen.dias} jornada(s) · {Number(resumen.horas).toFixed(2)} h ·{' '}
               {resumen.excepciones.impar + resumen.excepciones.turno_largo +
                resumen.excepciones.solapado + resumen.excepciones.sin_mapear} excepción(es)
-              {resumen.dias_3h_default > 0 && (
-                <> · <strong>{resumen.dias_3h_default} jornada(s) a {HORAS_DEFAULT_IMPAR} h por defecto</strong> (sin ninguna marca cerrada)</>
+              {resumen.dias_incompletos > 0 && (
+                <> · <strong>{resumen.dias_incompletos} jornada(s) incompleta(s)</strong>:{' '}
+                  {resumen.tramos_sin_cerrar} tramo(s) sin cerrar ={' '}
+                  {Number(resumen.horas_default).toFixed(0)} h a {HORAS_DEFAULT_IMPAR} h por tramo</>
               )}
               {resumen.dias_omitidos_manual > 0 && (
                 <> · <strong>{resumen.dias_omitidos_manual} jornada(s) NO se tocaron</strong> porque ya tenían horas cargadas a mano</>
@@ -287,11 +292,12 @@ export default function SalariosHoras({ employees }: Props) {
             </p>
           )}
 
-          {total3h > 0 && (
+          {totalIncompletos > 0 && (
             <p style={{ padding: '0 12px 8px', fontSize: '0.74rem', color: '#8a6d3b' }}>
-              🕒 <strong>{total3h} jornada(s)</strong> del período se contaron a{' '}
-              {HORAS_DEFAULT_IMPAR} h por no tener ninguna marca cerrada. Son horas puestas por la
-              regla, no medidas por el reloj: revisalas antes de cerrar la nómina.
+              🕒 <strong>{totalIncompletos} jornada(s) incompleta(s)</strong> en el período:{' '}
+              <strong>{totalDefault.toFixed(0)} h</strong> las puso la regla ({HORAS_DEFAULT_IMPAR} h
+              por cada tramo sin cerrar), no el reloj. Los tramos que SÍ cerraron cuentan sus horas
+              reales — revisá estas antes de cerrar la nómina.
             </p>
           )}
 
@@ -300,8 +306,9 @@ export default function SalariosHoras({ employees }: Props) {
               <tr>
                 <th>Empleado</th>
                 <th>Jornadas</th>
-                <th>Días a {HORAS_DEFAULT_IMPAR} h</th>
-                <th>Días c/ marca suelta</th>
+                <th>Incompletas</th>
+                <th>Horas medidas</th>
+                <th>Horas default</th>
                 <th>Horas BioTime</th>
                 <th>Horas a mano</th>
                 <th>Total</th>
@@ -313,13 +320,18 @@ export default function SalariosHoras({ employees }: Props) {
                   <td className="admin-emp-name">{f.nombre}</td>
                   <td>{f.dias}</td>
                   <td>
-                    {f.dias3h > 0
-                      ? <span title={`${f.horas3h.toFixed(2)} h puestas por la regla, no medidas`}>
-                          <strong>{f.dias3h}</strong> ({f.horas3h.toFixed(0)} h)
+                    {f.incompletos > 0
+                      ? <span title={`${f.tramos} tramo(s) sin cerrar`}>
+                          <strong>{f.incompletos}</strong> ({f.tramos} tramo{f.tramos === 1 ? '' : 's'})
                         </span>
                       : <span style={{ opacity: 0.35 }}>—</span>}
                   </td>
-                  <td>{f.conSuelta > 0 ? f.conSuelta : <span style={{ opacity: 0.35 }}>—</span>}</td>
+                  <td>{f.horasMedidas.toFixed(2)}</td>
+                  <td>
+                    {f.horasDefault > 0
+                      ? <strong title="horas puestas por la regla, no medidas por el reloj">{f.horasDefault.toFixed(0)}</strong>
+                      : <span style={{ opacity: 0.35 }}>—</span>}
+                  </td>
                   <td>{f.biotime.toFixed(2)}</td>
                   <td>{f.manual > 0 ? f.manual.toFixed(2) : <span style={{ opacity: 0.35 }}>—</span>}</td>
                   <td><strong>{(f.biotime + f.manual).toFixed(2)}</strong></td>
@@ -327,7 +339,7 @@ export default function SalariosHoras({ employees }: Props) {
               ))}
               {filas.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
+                  <td colSpan={8} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
                     Todavía no hay horas para este período. Recalculá para derivarlas de las marcas.
                   </td>
                 </tr>
@@ -426,9 +438,11 @@ export default function SalariosHoras({ employees }: Props) {
           <p style={{ padding: '0 12px 12px', fontSize: '0.68rem', color: '#888' }}>
             El recálculo empareja entrada/salida por jornada (corte 05:00) y reescribe SOLO las horas
             derivadas de BioTime: lo cargado a mano no se toca nunca. Corregir a mano una jornada la deja
-            como manual, así que el próximo recálculo la respeta. Un día con marcas pero <em>sin ninguna
-            cerrada</em> se cuenta a <strong>{HORAS_DEFAULT_IMPAR} h por defecto</strong>: es un número
-            puesto por la regla, no medido — si tenés el real, corregilo desde la bandeja.
+            como manual, así que el próximo recálculo la respeta. Cada <em>tramo sin cerrar</em> (una
+            marca que quedó sin su otra mitad) se cuenta a <strong>{HORAS_DEFAULT_IMPAR} h por
+            defecto</strong>, y los tramos que sí cerraron cuentan sus horas reales: un turno cortado
+            con la salida olvidada no pierde la mañana. Ese default lo puso la regla, no el reloj — si
+            tenés el dato real, corregilo desde la bandeja.
             <strong> Acá no se calcula plata.</strong>
           </p>
         </>

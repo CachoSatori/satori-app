@@ -70,7 +70,8 @@ beforeEach(() => {
   derivar.mockReset()
   derivar.mockResolvedValue({
     local: 'santa-teresa', desde: '2026-08-01', hasta: '2026-08-15',
-    marcas: 400, dias: 200, dias_3h_default: 26, dias_omitidos_manual: 0, horas: 1099.55,
+    marcas: 400, dias: 200, dias_incompletos: 29, tramos_sin_cerrar: 32,
+    horas_default: 96, dias_omitidos_manual: 0, horas: 1117.55,
     excepciones: { impar: 29, turno_largo: 0, solapado: 2, sin_mapear: 0 },
   })
   resolver.mockClear(); override.mockClear(); marcas.mockClear()
@@ -85,15 +86,18 @@ describe('SalariosHoras — recálculo', () => {
 
     await waitFor(() => expect(derivar).toHaveBeenCalledWith('2026-08-01', '2026-08-15', 'santa-teresa'))
     expect(await screen.findByText(/200 jornada\(s\)/)).toBeTruthy()
-    expect(screen.getByText(/1099\.55 h/)).toBeTruthy()
-    expect(screen.getByText(/26 jornada\(s\) a 3 h por defecto/)).toBeTruthy()
+    expect(screen.getByText(/1117\.55 h/)).toBeTruthy()
+    const linea = screen.getByText(/tramo\(s\) sin cerrar/)
+    expect(linea.textContent?.replace(/\s+/g, ' '))
+      .toMatch(/29 jornada\(s\) incompleta\(s\): 32 tramo\(s\) sin cerrar = 96 h a 3 h por tramo/)
     expect(screen.getByText(/31 excepción\(es\)/)).toBeTruthy()
   })
 
   it('avisa cuando el recálculo NO tocó jornadas por tener horas a mano', async () => {
     derivar.mockResolvedValue({
       local: 'santa-teresa', desde: '2026-08-01', hasta: '2026-08-15',
-      marcas: 10, dias: 3, dias_3h_default: 0, dias_omitidos_manual: 2, horas: 20,
+      marcas: 10, dias: 3, dias_incompletos: 0, tramos_sin_cerrar: 0,
+      horas_default: 0, dias_omitidos_manual: 2, horas: 20,
       excepciones: { impar: 0, turno_largo: 0, solapado: 0, sin_mapear: 0 },
     })
     render(<SalariosHoras employees={EMPLEADOS} />)
@@ -127,47 +131,42 @@ describe('SalariosHoras — horas derivadas', () => {
     render(<SalariosHoras employees={EMPLEADOS} />)
 
     expect(await screen.findByText('NACHO')).toBeTruthy()
-    expect(screen.getByText('15.00')).toBeTruthy()      // biotime de NACHO
-    expect(screen.getByText('96.00')).toBeTruthy()      // manual de NACHO
-    expect(screen.getByText('111.00')).toBeTruthy()     // el total que SUMA las dos
+    const celdas = screen.getAllByRole('cell').map(c => c.textContent?.replace(/\s+/g, ' '))
+    // Empleado · Jornadas · Incompletas · Medidas · Default · BioTime · a mano · Total
+    expect(celdas.slice(0, 8)).toEqual(['NACHO', '2', '—', '15.00', '—', '15.00', '96.00', '111.00'])
     expect(screen.getByText(/tienen horas cargadas a mano/)).toBeTruthy()
   })
 
-  it('muestra por empleado los días contados a 3 h y los que tienen marca suelta', async () => {
+  it('muestra por empleado las jornadas incompletas y qué parte de las horas puso la regla', async () => {
     WORK_DAYS = [
-      // dos jornadas medidas, una de ellas con una marca suelta al lado
+      // día completo: 8 h medidas
       wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-01', hours: 8,
-           flags: { horas_origen: 'biotime', pares: 1, impares: 0, solapados: 0 } }),
-      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-02', hours: 6,
-           flags: { horas_origen: 'biotime', pares: 1, impares: 1, solapados: 0 } }),
-      // y dos jornadas sin ningún par → default de 3 h
-      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-03', hours: 3,
-           flags: { horas_origen: '3h_default_impar', pares: 0, impares: 1, solapados: 0 } }),
-      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-04', hours: 3,
-           flags: { horas_origen: '3h_default_impar', pares: 0, impares: 1, solapados: 1 } }),
+           flags: { pares: 1, horas_pares: 8, tramos_sin_cerrar: 0, horas_default: 0, horas_origen: 'biotime' } }),
+      // TURNO CORTADO: 4 h medidas + 1 tramo sin cerrar = 7 h
+      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-02', hours: 7,
+           flags: { pares: 1, horas_pares: 4, tramos_sin_cerrar: 1, horas_default: 3, horas_origen: 'mixto' } }),
+      // día sin ningún par, con dos tramos abiertos = 6 h
+      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-03', hours: 6,
+           flags: { pares: 0, horas_pares: 0, tramos_sin_cerrar: 2, horas_default: 6, horas_origen: 'default' } }),
     ]
     render(<SalariosHoras employees={EMPLEADOS} />)
 
     expect(await screen.findByText('NACHO')).toBeTruthy()
-    // el "2" va en <strong> y el "(6 h)" al lado: se compara el texto de la celda entera
-    const celda = screen.getByTitle(/6\.00 h puestas por la regla/)
-    expect(celda.textContent?.replace(/\s+/g, ' ')).toBe('2 (6 h)')
-    // 8 + 6 + 3 + 3 = 20, y como no hay horas a mano el Total repite el mismo número
-    expect(screen.getAllByText('20.00')).toHaveLength(2)
-    // la otra mitad del título: la columna de al lado cuenta los días que SÍ midieron
-    // pero tienen una marca suelta (1: el 02/08). Si se confunde con la de 3 h, falla.
     const celdas = screen.getAllByRole('cell').map(c => c.textContent?.replace(/\s+/g, ' '))
-    expect(celdas.slice(0, 4)).toEqual(['NACHO', '4', '2 (6 h)', '1'])
-    const cartel = screen.getByText(/por no tener ninguna marca cerrada/)
-    expect(cartel.textContent?.replace(/\s+/g, ' ')).toMatch(/2 jornada\(s\) del período se contaron a 3 h/)
+    // Empleado · Jornadas · Incompletas · Horas medidas · Horas default · BioTime · a mano · Total
+    expect(celdas.slice(0, 8)).toEqual(['NACHO', '3', '2 (3 tramos)', '12.00', '9', '21.00', '—', '21.00'])
+
+    const cartel = screen.getByText(/por cada tramo sin cerrar/)
+    expect(cartel.textContent?.replace(/\s+/g, ' '))
+      .toMatch(/2 jornada\(s\) incompleta\(s\) en el período: 9 h las puso la regla/)
   })
 
-  it('sin días al default no aparece el aviso de las 3 h', async () => {
+  it('sin jornadas incompletas no aparece el aviso de las horas default', async () => {
     WORK_DAYS = [wd({ employee_id: 'e1', source: 'biotime', hours: 8,
-                      flags: { horas_origen: 'biotime', pares: 1, impares: 0, solapados: 0 } })]
+                      flags: { pares: 1, horas_pares: 8, tramos_sin_cerrar: 0, horas_default: 0 } })]
     render(<SalariosHoras employees={EMPLEADOS} />)
     expect(await screen.findByText('NACHO')).toBeTruthy()
-    expect(screen.queryByText(/por no tener ninguna marca cerrada/)).toBeNull()
+    expect(screen.queryByText(/por cada tramo sin cerrar/)).toBeNull()
   })
 
   it('sin doble carga no aparece el aviso', async () => {

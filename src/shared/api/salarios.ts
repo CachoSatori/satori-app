@@ -286,12 +286,16 @@ type RpcInvoke = (fn: string, args: Record<string, unknown>) => PromiseLike<{ da
 const rpcAny = supabase.rpc?.bind(supabase) as unknown as RpcInvoke
 
 /**
- * Horas que se le acreditan a una jornada que tuvo marcas pero NINGÚN par cerrado
- * (fichó la entrada y se olvidó de la salida). Es un DEFAULT CORREGIBLE, no una
- * medición: la mig 059 lo escribe con `flags.horas_origen = '3h_default_impar'` para
- * que se distinga del número medido, y quien tenga el dato real lo pisa desde la
- * bandeja. Política firmada por Ismael el 2026-08-23 — si cambia, cambia en los dos
- * lados (acá y en la 059).
+ * Horas que se le acreditan a CADA TRAMO SIN CERRAR de una jornada (A8): la marca que
+ * quedó sin su otra mitad porque alguien se olvidó de fichar. Se cuenta por tramo y no
+ * por día justamente para no perder el tramo que SÍ está bien marcado — el turno cortado
+ * con la tarde sin salida vale la mañana medida + 3 h, no solo la mañana.
+ *
+ * Es un DEFAULT CORREGIBLE, no una medición: la 059 deja el desglose en `flags`
+ * (`horas_pares` / `tramos_sin_cerrar` / `horas_default`) para que el contador vea
+ * "X h reales + Y h default", y quien tenga el dato real lo pisa desde la bandeja.
+ * Política firmada por Ismael el 2026-08-23 — el número vive acá y en `v_default_h` de
+ * la 059, y un test los ata leyendo el .sql.
  */
 export const HORAS_DEFAULT_IMPAR = 3
 
@@ -301,7 +305,9 @@ export interface DerivacionResumen {
   hasta:                string
   marcas:               number
   dias:                 number
-  dias_3h_default:      number
+  dias_incompletos:     number
+  tramos_sin_cerrar:    number
+  horas_default:        number
   dias_omitidos_manual: number
   horas:                number
   excepciones: { impar: number; turno_largo: number; solapado: number; sin_mapear: number }
@@ -520,22 +526,28 @@ export function empleadosConHorasDobles(workDays: WorkDay[], fechaFin: string): 
 // ── Lo que el contador necesita ver (puro) ──────────────────────────────────────
 
 export interface ResumenImpares {
-  employee_id:  string
-  dias:         number   // jornadas derivadas de BioTime
-  dias3h:       number   // ...de las cuales se contaron al default por no tener ningún par
-  horas3h:      number   // las horas que puso el default (dias3h × HORAS_DEFAULT_IMPAR)
-  diasConSuelta: number  // días CON medición real pero con alguna marca suelta al lado
+  employee_id:     string
+  dias:            number   // jornadas derivadas de BioTime
+  diasIncompletos: number   // ...con al menos un tramo sin cerrar
+  tramos:          number   // tramos sin cerrar en total
+  horasMedidas:    number   // las que sí midió el reloj (Σ pares)
+  horasDefault:    number   // las que puso la regla (tramos × HORAS_DEFAULT_IMPAR)
 }
 
 /**
- * Por empleado: cuántas jornadas se contaron al default de 3 h y cuántas tienen marcas
- * sueltas aunque midieran bien. Es el dato que el contador tiene que ver ANTES de pagar
- * —esas horas no salieron del reloj, salieron de una regla— y el mismo que la Fase 2 va
- * a necesitar para el comprobante individual.
+ * Por empleado: cuántas jornadas quedaron incompletas, cuántos tramos sin cerrar suman y
+ * cuántas horas de esas NO las midió el reloj. Es el dato que el contador tiene que ver
+ * ANTES de pagar (A8: "X h reales + Y h default"), y el mismo que la Fase 2 va a
+ * necesitar para el comprobante individual.
  *
  * Se lee de `work_days.flags` (lo escribe la mig 059), no de `punch_exceptions`: las
- * excepciones se resuelven y desaparecen de la bandeja, pero el origen de las horas
- * queda pegado a la jornada para siempre.
+ * excepciones se resuelven y desaparecen de la bandeja, pero el origen de las horas queda
+ * pegado a la jornada para siempre — y resolver una excepción no cambia un colón de lo
+ * que se paga.
+ *
+ * Los días MIXTOS (un par bien marcado + un tramo abierto) cuentan en las dos columnas:
+ * sus horas medidas van a `horasMedidas` y sus 3 h a `horasDefault`. Sumarlas a ciegas
+ * sería volver a esconder justo lo que A8 quiere exhibir.
  */
 export function resumenImpares(workDays: WorkDay[], local?: string): Map<string, ResumenImpares> {
   const out = new Map<string, ResumenImpares>()
@@ -544,15 +556,19 @@ export function resumenImpares(workDays: WorkDay[], local?: string): Map<string,
     if (local && w.local !== local) continue
     const f = (w.flags ?? {}) as Record<string, unknown>
     const r = out.get(w.employee_id) ?? {
-      employee_id: w.employee_id, dias: 0, dias3h: 0, horas3h: 0, diasConSuelta: 0,
+      employee_id: w.employee_id, dias: 0, diasIncompletos: 0, tramos: 0,
+      horasMedidas: 0, horasDefault: 0,
     }
+    const tramos  = Number(f.tramos_sin_cerrar) || 0
+    const hDef    = Number(f.horas_default) || 0
+    // `horas_pares` puede faltar en filas viejas: el resto de las horas es lo medido.
+    const hMedida = f.horas_pares != null ? Number(f.horas_pares) || 0
+                                          : Math.max(0, (Number(w.hours) || 0) - hDef)
     r.dias += 1
-    if (f.horas_origen === '3h_default_impar') {
-      r.dias3h  += 1
-      r.horas3h += Number(w.hours) || 0
-    } else if ((Number(f.impares) || 0) > 0 || (Number(f.solapados) || 0) > 0) {
-      r.diasConSuelta += 1
-    }
+    if (tramos > 0) r.diasIncompletos += 1
+    r.tramos       += tramos
+    r.horasDefault += hDef
+    r.horasMedidas += hMedida
     out.set(w.employee_id, r)
   }
   return out
@@ -564,8 +580,9 @@ export interface SemaforoPago {
   fichajeDias:     number     // JORNADAS con fichaje incompleto: avisan, no frenan
   sinMapearDias:   number     // (código, jornada) con marcas de alguien que no está en el maestro
   sinMapearMarcas: number     // ...y cuántas marcas suman
-  dias3h:          number     // jornadas que se están pagando al default de 3 h
-  horas3h:         number
+  diasIncompletos: number     // jornadas de esta nómina con algún tramo sin cerrar
+  tramos:          number     // tramos sin cerrar (cada uno vale HORAS_DEFAULT_IMPAR)
+  horasDefault:    number     // las horas que puso la regla, no el reloj
   dobles:          string[]   // employee_ids con total del período a mano Y días derivados
 }
 
@@ -581,10 +598,10 @@ const clave = (x: PunchException) => `${x.employee_id ?? x.emp_code ?? '?'}|${x.
  * · sin_mapear — hay marcas de una persona que no está en el maestro: puede que ALGUIEN
  *   NO ESTÉ COBRANDO. No se puede arreglar solo desde acá (falta darla de alta), así que
  *   se pide confirmación explícita en vez de frenar la nómina de todos los demás.
- * · 3 h — sale de `work_days.flags`, NO de las excepciones. Una excepción se resuelve y
- *   desaparece de la bandeja, pero las 3 h siguen puestas y siguen cobrándose: si el
- *   aviso colgara del estado de la excepción, limpiar la bandeja apagaría la señal sin
- *   cambiar un solo colón de lo que se paga.
+ * · horas default — salen de `work_days.flags`, NO de las excepciones. Una excepción se
+ *   resuelve y desaparece de la bandeja, pero las horas puestas por la regla siguen
+ *   cobrándose: si el aviso colgara del estado de la excepción, limpiar la bandeja
+ *   apagaría la señal sin cambiar un solo colón de lo que se paga.
  * · dobles — el único riesgo de pagar DE MÁS. Frena el pago hasta que alguien lo mire.
  *
  * `idsQueSePagan` acota todo a la nómina real: un inactivo con horas viejas no puede
@@ -613,19 +630,21 @@ export function semaforoPago(
     }
   }
 
-  let dias3h = 0, horas3h = 0
+  let diasIncompletos = 0, tramos = 0, horasDefault = 0
   for (const r of resumenImpares(workDays).values()) {
     if (!cuenta(r.employee_id)) continue
-    dias3h  += r.dias3h
-    horas3h += r.horas3h
+    diasIncompletos += r.diasIncompletos
+    tramos          += r.tramos
+    horasDefault    += r.horasDefault
   }
 
   return {
     fichajeDias:     fichaje.size,
     sinMapearDias:   sinMap.size,
     sinMapearMarcas: sinMapMarcas,
-    dias3h,
-    horas3h,
+    diasIncompletos,
+    tramos,
+    horasDefault,
     dobles: empleadosConHorasDobles(workDays, fechaFin).filter(id => cuenta(id)),
   }
 }

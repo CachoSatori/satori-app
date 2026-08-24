@@ -223,6 +223,40 @@ describe('Salarios · Pago del período', () => {
     expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/Horas dobles confirmadas/)
   })
 
+  // A8 · paso consciente: las horas que no midió el reloj no frenan la nómina, pero quien
+  // paga tiene que decir que sí en su propio confirm. Cancelar ahí NO paga.
+  const DIA_INCOMPLETO = {
+    employee_id: 'e2', work_date: '2026-08-03', local: 'santa-teresa', hours: 7,
+    es_feriado: false, source: 'biotime' as const,
+    flags: { pares: 1, horas_pares: 4, tramos_sin_cerrar: 1, horas_default: 3, horas_origen: 'mixto' },
+    created_at: '', updated_at: '',
+  }
+
+  it('las jornadas incompletas NO bloquean, pero piden confirmación aparte al pagar', async () => {
+    window.confirm = vi.fn(() => true)
+    WORK_DAYS = [...WORK_DAYS, DIA_INCOMPLETO]
+    await renderPago()
+
+    const btn = screen.getByText('Marcar pagado') as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+    fireEvent.click(btn)
+
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    const confirms = (window.confirm as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0] as string)
+    expect(confirms[0]).toMatch(/1 día\(s\) con marca incompleta contados a 3 h/)
+    expect(confirms[0]).toMatch(/1 tramo\(s\) sin cerrar = 3 h que no midió el reloj/)
+    expect(confirms.at(-1)).toMatch(/como PAGADO/)
+  })
+
+  it('cancelar la confirmación de las jornadas incompletas NO paga', async () => {
+    window.confirm = vi.fn(() => false)
+    WORK_DAYS = [...WORK_DAYS, DIA_INCOMPLETO]
+    await renderPago()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1))
+    expect(pagar).not.toHaveBeenCalled()
+  })
+
   // El archivo del banco es lo que MUEVE la plata; "Marcar pagado" es solo el registro.
   it('el bloqueo por horas dobles también frena el Excel del banco', async () => {
     WORK_DAYS = [
@@ -245,16 +279,19 @@ describe('Salarios · Pago del período', () => {
     EXCS = [exc({ id: 'x1', tipo: 'impar', estado: 'resuelta', resuelto_by: 'u-1' })]
     WORK_DAYS = [
       ...WORK_DAYS,
-      { employee_id: 'e2', work_date: '2026-08-03', local: 'santa-teresa', hours: 3,
-        es_feriado: false, source: 'biotime', flags: { horas_origen: '3h_default_impar' },
+      { employee_id: 'e2', work_date: '2026-08-03', local: 'santa-teresa', hours: 7,
+        es_feriado: false, source: 'biotime',
+        flags: { pares: 1, horas_pares: 4, tramos_sin_cerrar: 1, horas_default: 3, horas_origen: 'mixto' },
         created_at: '', updated_at: '' },
     ]
     await renderPago()
     expect(screen.queryByText(/fichaje incompleto/)).toBeNull()
-    expect(await screen.findByText(/se están pagando a/)).toBeTruthy()
+    expect(await screen.findByText(/tramo\(s\) sin cerrar/)).toBeTruthy()
     fireEvent.click(screen.getByText('Marcar pagado'))
     await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
-    expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/1 jornada\(s\) se pagan a 3 h/)
+    // el paso consciente de A8 va en su PROPIO confirm, antes del de pagar
+    expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0])
+      .toMatch(/1 día\(s\) con marca incompleta contados a 3 h/)
   })
 
   // La fila editable comparte PK con la jornada del último día: el upsert la PISA. Si el

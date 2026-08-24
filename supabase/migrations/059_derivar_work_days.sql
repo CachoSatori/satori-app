@@ -14,7 +14,7 @@
 -- UNA función: `derivar_work_days(p_desde, p_hasta, p_local)`. Sin tablas, sin columnas, sin RLS
 -- nueva: `work_days` (056), `punch_exceptions` y `payroll_config` (057) YA EXISTEN.
 --
--- ⚠ 2026-08-23: la función se EDITÓ en esta misma migración (regla de las 3 h del día sin par).
+-- ⚠ 2026-08-23/24: la función se EDITÓ en esta misma migración (regla de las 3 h POR TRAMO, A8).
 --   Es `create or replace` y la 059 ya estaba en el ledger de staging, así que se re-aplicó el
 --   archivo por `db query --linked -f` sin tocar `schema_migrations`. Antes de llevarla a prod,
 --   la 059 que viaja es ESTA (la de las 3 h), no la primera versión.
@@ -63,6 +63,12 @@ declare
   v_dias     int := 0;
   v_omitidos int := 0;
   v_3h       int := 0;
+  v_h3h      numeric := 0;
+  v_tramos   int := 0;
+  -- La política de A8, en UN solo lugar del SQL. El test del puente TS↔SQL lee esta línea
+  -- y la compara con HORAS_DEFAULT_IMPAR (src/shared/api/salarios.ts): mover una sola
+  -- rompe el build. Si la política se estabiliza, su casa natural es `payroll_config`.
+  v_default_h numeric := 3;
   v_horas    numeric := 0;
   v_marcas   int := 0;
   v_impar    int := 0;
@@ -165,33 +171,43 @@ begin
   where s.punch_state = 'out' and s.prev_state = 'in';
 
   -- ── work_days ────────────────────────────────────────────────────────────────────────────
-  -- Una fila por (empleado, jornada) con marcas. `hours` = Σ de los pares, en horas decimales.
+  -- Una fila por (empleado, jornada) con marcas.
   --
-  -- ── LA REGLA DE LAS 3 HORAS (firmada por Ismael el 2026-08-23) ───────────────────────────
-  -- Antes, un día sin ningún par cerrado valía 0 h: el que fichó la entrada y se olvidó de la
-  -- salida trabajaba gratis hasta que alguien lo corrigiera a mano. Ahora:
-  --   · día con AL MENOS UN par → `hours` = Σ pares. Un impar suelto NO baja el día: si hubo
-  --     medición real, manda la medición.
-  --   · día con marcas y NINGÚN par (una sola marca, dos `in` sin `out`, etc.) → `hours` = 3.
-  -- Las 3 h son un DEFAULT CORREGIBLE, no una medición ni una sentencia: `flags.horas_origen`
-  -- lo dice explícito (`3h_default_impar`) para que el contador —y el comprobante de la Fase 2—
-  -- sepan que ese número hay que mirarlo, y la excepción `impar`/`solapado` se genera igual.
-  -- Quien tenga el dato real lo pisa desde la bandeja (override `source='manual'`).
-  -- ⚠ Es una POLÍTICA laboral, no una decisión técnica: puede quedar por debajo de lo realmente
-  --   trabajado. Ismael la valida con su contador/abogado.
+  -- ── LA REGLA DE LAS 3 HORAS, POR TRAMO (A8, firmada por Ismael el 2026-08-23) ────────────
   --
-  -- ⚠ DOS LÍMITES CONOCIDOS de la regla, que la bandeja tiene que seguir mostrando:
-  --   1. Un turno que CRUZA el corte sin cerrar se parte en dos jornadas sin par y pasa a valer
-  --      3 + 3 = 6 h. Antes valía 0 y frenaba el pago; ahora da un número plausible. Por eso las
-  --      excepciones `impar` se siguen generando Y la pantalla de pago avisa las jornadas a 3 h
-  --      leyendo `flags.horas_origen` (que es permanente) en vez del estado de la excepción
-  --      (que alguien puede resolver sin tocar las horas).
-  --   2. Una marca espuria en un día no trabajado también acredita 3 h. Se corrige con el
-  --      override de la bandeja (que escribe 0 h manuales y el recálculo ya no pisa).
-  -- El número vive hardcodeado acá y en `HORAS_DEFAULT_IMPAR` (src/shared/api/salarios.ts); un
-  -- test los ATA leyendo este archivo, así que mover uno solo rompe el build. El lugar natural
-  -- para cuando la política se estabilice es `payroll_config` (ya es por local, ya guarda
-  -- corte_jornada y umbral_turno_largo_h) — se dejó fuera hasta que el contador la confirme.
+  --     hours = Σ(pares válidos in→out)  +  3 × (tramos sin cerrar)
+  --     tramo sin cerrar = impar_in + impar_out + solapados
+  --
+  -- Se razona POR TRAMO, no por día. La diferencia no es cosmética: un turno CORTADO
+  -- (mañana bien marcada, tarde sin salida) tiene un par válido Y un tramo abierto. Con la
+  -- regla a nivel día —"si hay algún par, el impar suma 0"— ese día pagaba solo la mañana y
+  -- la tarde se perdía entera. Que es el caso que más pasa: la gente se olvida de marcar la
+  -- salida, no de marcar la entrada.
+  --
+  --   in-out              → 4 h medidas                          → 4 h
+  --   in                  → 0 pares + 1 tramo abierto            → 3 h
+  --   in-out-in           → 4 h (par) + 3 h (tramo)              → 7 h   ← el caso clave
+  --   in-out-in-out       → 2 pares, nada abierto                → horas reales
+  --   out                 → 0 pares + 1 tramo abierto            → 3 h
+  --   in-in-out           → 1 par + 1 solapado (el in pisado)    → par + 3 h
+  --
+  -- Sin tope al número de defaults por día: los casos raros los ajusta el contador (A9).
+  --
+  -- Las 3 h son un DEFAULT CORREGIBLE, no una medición: `flags` guarda el desglose
+  -- (`horas_pares` / `tramos_sin_cerrar` / `horas_default`) para que el contador —y el
+  -- comprobante de la Fase 2— lean "X h reales + Y h default", también en los días MIXTOS.
+  -- Quien tenga el dato real lo pisa desde la bandeja (override `source='manual'`), y las
+  -- excepciones `impar`/`solapado` se siguen generando igual, para el aviso.
+  -- ⚠ Es una POLÍTICA laboral, no una decisión técnica: Ismael la valida con su contador.
+  --
+  -- ⚠ DOS LÍMITES CONOCIDOS, que la bandeja tiene que seguir mostrando:
+  --   1. Un turno que CRUZA el corte sin cerrar se parte en dos jornadas, cada una con su
+  --      tramo abierto → 3 + 3 = 6 h. Pasa con cualquiera de las dos reglas; queda así.
+  --   2. Una marca espuria en un día no trabajado también acredita 3 h (y en un día completo
+  --      SUMA 3 h fantasma, que es el costo de razonar por tramo). Se corrige con el override
+  --      de la bandeja, y el contador lo ve porque la pantalla de pago avisa las jornadas
+  --      incompletas leyendo `flags` —que es permanente— en vez del estado de la excepción,
+  --      que alguien puede resolver sin tocar las horas.
   --
   -- `on conflict do nothing` es la otra mitad de "nunca tocar lo manual": si ya hay una fila
   -- MANUAL para ese (empleado, jornada, local) —el total del período que carga U0b, o un override
@@ -223,7 +239,9 @@ begin
       coalesce(h.pares, 0)  as pares,
       coalesce(h.horas, 0)  as horas_pares,
       coalesce(h.largos, 0) as largos,
-      coalesce(h.pares, 0) > 0 as tiene_par
+      -- El corazón de A8: cada marca que quedó sin su otra mitad es UN tramo abierto.
+      -- El `in` solapado cuenta porque también es un tramo que nadie cerró.
+      (a.impar_in + a.impar_out + a.solapados) as tramos_sin_cerrar
     from agg a
     left join hrs h on h.employee_id = a.employee_id and h.work_date = a.work_date
   ),
@@ -233,26 +251,39 @@ begin
       c.employee_id,
       c.work_date,
       p_local,
-      case when c.tiene_par then c.horas_pares else 3 end,
+      c.horas_pares + (c.tramos_sin_cerrar * v_default_h),
       'biotime',
       jsonb_build_object(
-        'marcas',       c.marcas,
-        'pares',        c.pares,
-        'impares',      c.impar_in + c.impar_out,
-        'solapados',    c.solapados,
-        'turno_largo',  c.largos,
-        -- El origen del número, explícito: medido o puesto por la regla.
-        'horas_origen', case when c.tiene_par then 'biotime' else '3h_default_impar' end
+        'marcas',            c.marcas,
+        'pares',             c.pares,
+        'horas_pares',       c.horas_pares,
+        'tramos_sin_cerrar', c.tramos_sin_cerrar,
+        'horas_default',     c.tramos_sin_cerrar * v_default_h,
+        'total',             c.horas_pares + (c.tramos_sin_cerrar * v_default_h),
+        'impares',           c.impar_in + c.impar_out,
+        'solapados',         c.solapados,
+        'turno_largo',       c.largos,
+        -- De dónde salió el número, para que la pantalla no tenga que deducirlo:
+        -- todo medido | mezcla de medido y default | todo default.
+        'horas_origen', case
+                          when c.tramos_sin_cerrar = 0 then 'biotime'
+                          when c.pares = 0             then 'default'
+                          else                              'mixto'
+                        end
       )
     from calc c
     on conflict (employee_id, work_date, local) do nothing
-    returning (flags->>'horas_origen') as origen
+    returning
+      (flags->>'horas_default')::numeric     as hdef,
+      (flags->>'tramos_sin_cerrar')::int     as tramos
   )
   select
     (select count(*) from ins),
     (select count(*) from agg) - (select count(*) from ins),
-    (select count(*) from ins where origen = '3h_default_impar')
-    into v_dias, v_omitidos, v_3h;
+    (select count(*)          from ins where hdef > 0),
+    (select coalesce(sum(hdef), 0)   from ins),
+    (select coalesce(sum(tramos), 0) from ins)
+    into v_dias, v_omitidos, v_3h, v_h3h, v_tramos;
 
   select coalesce(sum(hours), 0) into v_horas
     from work_days
@@ -406,7 +437,9 @@ begin
     'umbral_turno_largo_h', v_umbral,
     'marcas',               v_marcas,
     'dias',                 v_dias,
-    'dias_3h_default',      v_3h,
+    'dias_incompletos',     v_3h,
+    'tramos_sin_cerrar',    v_tramos,
+    'horas_default',        v_h3h,
     'dias_omitidos_manual', v_omitidos,
     'horas',                v_horas,
     'excepciones', jsonb_build_object(
@@ -419,7 +452,7 @@ begin
 end $$;
 
 comment on function public.derivar_work_days(date, date, text) is
-  'Salarios F1d: empareja in/out de time_punches por jornada (corte de payroll_config) y escribe work_days source=biotime + punch_exceptions. Un dia sin ningun par cerrado se cuenta a 3h (default corregible, flags.horas_origen=3h_default_impar); si hay al menos un par manda la medicion. Idempotente por (local, rango): borra lo biotime y las excepciones ABIERTAS antes de recalcular; NUNCA toca work_days source=manual ni las excepciones ya resueltas. NO calcula plata.';
+  'Salarios F1d: empareja in/out de time_punches por jornada (corte de payroll_config) y escribe work_days source=biotime + punch_exceptions. A8: hours = suma de los pares + 3h por CADA TRAMO SIN CERRAR (impar_in+impar_out+solapados), asi un turno cortado no pierde el tramo bien marcado; el desglose queda en flags (horas_pares / tramos_sin_cerrar / horas_default). Idempotente por (local, rango): borra lo biotime y las excepciones ABIERTAS antes de recalcular; NUNCA toca work_days source=manual ni las excepciones ya resueltas. NO calcula plata.';
 
 revoke all on function public.derivar_work_days(date, date, text) from public, anon;
 grant  execute on function public.derivar_work_days(date, date, text) to authenticated;

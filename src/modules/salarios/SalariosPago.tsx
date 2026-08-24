@@ -3,7 +3,7 @@ import type { Employee, EmployeePayment, PunchException, SalaryPeriod, WorkDay }
 import {
   getSalaryPeriods, createSalaryPeriod, getWorkDays, upsertWorkDay,
   getPeriodPayments, markPeriodPaid, consolidarPeriodo, getPunchExceptionsTodosLosLocales,
-  semaforoPago, HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
+  semaforoPago, inactivosConHoras, HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
   type LineaConsolidado,
 } from '../../shared/api/salarios'
 import {
@@ -135,6 +135,18 @@ export default function SalariosPago({ employees }: Props) {
   // banco sin decir nada. Es el mismo silencio que el inactivo: alguien no cobra.
   const sinTarifa = useMemo(() => lineas.filter(l => l.sinTarifa), [lineas])
 
+  // El que trabajó media quincena y lo desactivaron antes de cerrarla: sus horas están
+  // cargadas pero su línea no existe en esta pantalla. No se lo mete a la nómina —
+  // irse a mitad de período puede ser legítimo — pero no puede desaparecer callado.
+  const inactivos = useMemo(
+    () => (period ? inactivosConHoras(employees, workDays, period) : []),
+    [employees, workDays, period],
+  )
+  const nombresInactivos = useMemo(
+    () => inactivos.map(id => employees.find(e => e.id === id)?.full_name ?? id),
+    [inactivos, employees],
+  )
+
   // Neto efectivo = el pisado a mano si lo hay, el calculado si no.
   const netoEfectivo = useCallback(
     (l: LineaConsolidado) => {
@@ -243,6 +255,20 @@ export default function SalariosPago({ employees }: Props) {
       if (!sigue) return
     }
 
+    // Mismo riesgo que sin_mapear —alguien que no cobra— y misma respuesta: no se frena la
+    // nómina de los demás, se pregunta. La decisión de pagarle a alguien que se fue a
+    // mitad de quincena es del dueño, no del código.
+    if (nombresInactivos.length > 0) {
+      const sigue = window.confirm(
+        `${nombresInactivos.length} inactivo(s) con horas SIN PAGAR en este período:\n\n` +
+        `${nombresInactivos.join(', ')}\n\n` +
+        'No entran a esta nómina ni al archivo del banco. ¿Trabajaron y hay que pagarles?\n\n' +
+        'Si sí: cancelá, reactivalos en Empleados / Tarifas y volvé a intentar.\n' +
+        '¿Pagar igual, dejándolos afuera?',
+      )
+      if (!sigue) return
+    }
+
     // Marcas de alguien que no está en el maestro: el riesgo no es pagar de más, es que
     // haya UNA PERSONA que no cobra. No se puede resolver desde acá (falta darla de alta).
     if (semaforo.sinMapearDias > 0) {
@@ -257,6 +283,9 @@ export default function SalariosPago({ employees }: Props) {
     }
 
     const avisos: string[] = []
+    if (nombresInactivos.length > 0) {
+      avisos.push(`⛔ Quedan AFUERA (inactivos con horas): ${nombresInactivos.join(', ')}.`)
+    }
     if (sinTarifa.length > 0) {
       avisos.push(
         `⛔ SIN TARIFA (neto ₡0, quedan fuera del archivo): ${sinTarifa.map(l => l.employee.full_name).join(', ')}.`,
@@ -395,6 +424,16 @@ export default function SalariosPago({ employees }: Props) {
               en este período y <strong>NINGUNA tarifa cargada</strong>: su neto da ₡0 y{' '}
               {sinTarifa.length === 1 ? 'queda' : 'quedan'} fuera del archivo del banco. Cargale(s) la
               tarifa en <strong>Empleados / Tarifas</strong> antes de pagar.
+            </p>
+          )}
+
+          {!pagado && nombresInactivos.length > 0 && (
+            <p style={{ padding: '0 12px 8px', fontSize: '0.8rem', color: 'var(--t-red, #b04a3a)' }}>
+              ⛔ <strong>{nombresInactivos.join(', ')}</strong> tiene(n) horas en este período y
+              está(n) <strong>inactivo(s)</strong>: no entra(n) a esta nómina, no van al archivo del
+              banco y <strong>no van a cobrar</strong>. Las horas se ven en la pestaña{' '}
+              <strong>Horas</strong>. Si trabajaron, reactivalos en{' '}
+              <strong>Empleados / Tarifas</strong> antes de cerrar.
             </p>
           )}
 

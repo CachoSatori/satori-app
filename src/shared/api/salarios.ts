@@ -666,6 +666,44 @@ export function resumenImpares(workDays: WorkDay[], local?: string): Map<string,
   return out
 }
 
+/**
+ * Empleados INACTIVOS que igual tienen horas cargadas en el período.
+ *
+ * La nómina se arma con `employees.filter(is_active)`. Si alguien trabajó media quincena
+ * y lo desactivan antes de cerrarla, sus horas quedan cargadas y visibles en la pestaña
+ * Horas, pero su línea no existe en la de Pago: no entra al total, no entra al archivo
+ * del banco, y el semáforo tampoco lo cuenta porque `idsQueSePagan` lo filtra a propósito
+ * (para que no frene la nómina de los demás). El resultado es el peor de los silencios:
+ * alguien no cobra y el único que se entera es él, cuando reclama.
+ *
+ * Esto NO los mete a la nómina: irse a mitad de quincena puede ser legítimo y la decisión
+ * de pagarle o no es del dueño. Solo deja de callarlos.
+ *
+ * `local` es opcional y por defecto NO se filtra: `splitHorasPeriodo` suma las horas de
+ * TODOS los locales (el pay run es global), así que mirar uno solo dejaría ciego el aviso
+ * justo donde la plata también se cuenta.
+ */
+export function inactivosConHoras(
+  employees: Employee[],
+  workDays: WorkDay[],
+  period: Pick<SalaryPeriod, 'fecha_ini' | 'fecha_fin'>,
+  local?: string,
+): string[] {
+  const inactivos = new Set(employees.filter(e => !e.is_active).map(e => e.id))
+  if (inactivos.size === 0) return []
+
+  const conHoras = new Set<string>()
+  for (const w of workDays) {
+    if (!inactivos.has(w.employee_id)) continue
+    if ((Number(w.hours) || 0) <= 0) continue
+    if (local && w.local !== local) continue
+    if (w.work_date < period.fecha_ini || w.work_date > period.fecha_fin) continue
+    conHoras.add(w.employee_id)
+  }
+  // En el orden del maestro, para que el cartel sea estable entre renders.
+  return employees.filter(e => conHoras.has(e.id)).map(e => e.id)
+}
+
 // ── Semáforo del pago (puro) ────────────────────────────────────────────────────
 
 export interface SemaforoPago {

@@ -60,7 +60,8 @@ vi.mock('./supabase', () => ({ supabase: cliente }))
 import {
   derivarWorkDays, getPunchExceptions, getPunchesDeJornada, resolvePunchException,
   overrideHorasDia, agruparExcepciones, etiquetaTipo, empleadosConHorasDobles, jornadaBounds,
-  resumenImpares, semaforoPago, splitHorasPeriodo, marcasDelCaso, HORAS_DEFAULT_IMPAR,
+  resumenImpares, semaforoPago, splitHorasPeriodo, marcasDelCaso, inactivosConHoras,
+  HORAS_DEFAULT_IMPAR,
 } from './salarios'
 
 beforeEach(() => {
@@ -496,6 +497,76 @@ describe('resumenImpares', () => {
       wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-01', hours: 5, flags: null }),
     ]).get('e1')!
     expect(r).toMatchObject({ dias: 1, diasIncompletos: 0, tramos: 0, horasDefault: 0, horasMedidas: 5 })
+  })
+})
+
+// El que trabajó media quincena y lo desactivaron antes de cerrarla: sus horas quedan
+// cargadas pero su línea no existe en la pantalla de pago. No cobra y nadie se entera.
+describe('inactivosConHoras', () => {
+  const PERIODO = { fecha_ini: '2026-08-01', fecha_fin: '2026-08-15' }
+  const activo   = (id: string, full_name: string) => emp(id, full_name)
+  const inactivo = (id: string, full_name: string) =>
+    ({ ...emp(id, full_name), is_active: false }) as Employee
+
+  it('lo detecta: inactivo con horas en el período', () => {
+    const r = inactivosConHoras(
+      [activo('e1', 'ANA'), inactivo('e2', 'KEVIN')],
+      [
+        wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-02', hours: 8 }),
+        wd({ employee_id: 'e2', source: 'biotime', work_date: '2026-08-02', hours: 40 }),
+      ],
+      PERIODO,
+    )
+    expect(r).toEqual(['e2'])
+  })
+
+  it('un inactivo SIN horas no hace ruido', () => {
+    const r = inactivosConHoras(
+      [activo('e1', 'ANA'), inactivo('e2', 'KEVIN')],
+      [wd({ employee_id: 'e1', source: 'biotime', hours: 8 })],
+      PERIODO,
+    )
+    expect(r).toEqual([])
+  })
+
+  it('un inactivo con horas en CERO tampoco', () => {
+    const r = inactivosConHoras(
+      [inactivo('e2', 'KEVIN')],
+      [wd({ employee_id: 'e2', source: 'biotime', hours: 0 })],
+      PERIODO,
+    )
+    expect(r).toEqual([])
+  })
+
+  it('las horas FUERA del período no cuentan (se fue la quincena pasada)', () => {
+    const r = inactivosConHoras(
+      [inactivo('e2', 'KEVIN')],
+      [wd({ employee_id: 'e2', source: 'biotime', work_date: '2026-07-20', hours: 40 })],
+      PERIODO,
+    )
+    expect(r).toEqual([])
+  })
+
+  it('cuenta las horas cargadas a mano igual que las derivadas', () => {
+    const r = inactivosConHoras(
+      [inactivo('e2', 'KEVIN')],
+      [wd({ employee_id: 'e2', source: 'manual', work_date: '2026-08-15', hours: 40 })],
+      PERIODO,
+    )
+    expect(r).toEqual(['e2'])
+  })
+
+  // Por defecto NO filtra local: `splitHorasPeriodo` suma todos los locales, así que
+  // mirar uno solo dejaría ciego el aviso justo donde la plata también se cuenta.
+  it('ve las horas de otro local si no se pide uno', () => {
+    const filas = [wd({ employee_id: 'e2', source: 'biotime', work_date: '2026-08-02', hours: 8, local: 'nosara' })]
+    expect(inactivosConHoras([inactivo('e2', 'KEVIN')], filas, PERIODO)).toEqual(['e2'])
+    expect(inactivosConHoras([inactivo('e2', 'KEVIN')], filas, PERIODO, 'santa-teresa')).toEqual([])
+  })
+
+  it('sin inactivos en el maestro corta de una', () => {
+    expect(inactivosConHoras([activo('e1', 'ANA')], [wd({ employee_id: 'e1', source: 'biotime', hours: 8 })], PERIODO))
+      .toEqual([])
   })
 })
 

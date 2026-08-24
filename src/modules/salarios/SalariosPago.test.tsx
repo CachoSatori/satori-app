@@ -256,6 +256,57 @@ describe('Salarios · Pago del período', () => {
     expect(screen.queryByText(/NINGUNA tarifa cargada/)).toBeNull()
   })
 
+  // ── El inactivo que trabajó media quincena ──────────────────────────────────────
+  // No entra a la nómina (irse a mitad de período puede ser legítimo), pero no puede
+  // desaparecer callado: alguien se queda sin cobrar y el único que se entera es él.
+  it('un inactivo CON horas en el período sale en aviso y pide confirmación al pagar', async () => {
+    window.confirm = vi.fn(() => true)
+    WORK_DAYS = [...WORK_DAYS, {
+      employee_id: 'e3', work_date: '2026-08-05', local: 'santa-teresa', hours: 40,
+      es_feriado: false, source: 'biotime' as const, flags: null, created_at: '', updated_at: '',
+    }]
+    await renderPago()
+
+    // el cartel lo nombra…
+    const cartel = await screen.findByText(/está\(n\)/)
+    expect(cartel.textContent?.replace(/\s+/g, ' ')).toMatch(/VIEJO.*no van a cobrar/)
+    // …y NO se lo metió a la nómina
+    expect(screen.queryByLabelText('Horas del período: VIEJO')).toBeNull()
+
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalled())
+    const confirms = (window.confirm as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0] as string)
+    expect(confirms[0]).toMatch(/1 inactivo\(s\) con horas SIN PAGAR/)
+    expect(confirms[0]).toMatch(/VIEJO/)
+    // y sigue nombrado en el confirm final, por si el primero se aceptó de corrido
+    expect(confirms.at(-1)).toMatch(/Quedan AFUERA \(inactivos con horas\): VIEJO/)
+    // no se le pagó a nadie de más: solo ANA y BENITO
+    expect((pagar.mock.calls[0][1] as { employee_id: string }[]).map(l => l.employee_id))
+      .toEqual(['e1', 'e2'])
+  })
+
+  it('cancelar esa confirmación NO paga', async () => {
+    window.confirm = vi.fn(() => false)
+    WORK_DAYS = [...WORK_DAYS, {
+      employee_id: 'e3', work_date: '2026-08-05', local: 'santa-teresa', hours: 40,
+      es_feriado: false, source: 'biotime' as const, flags: null, created_at: '', updated_at: '',
+    }]
+    await renderPago()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1))
+    expect(pagar).not.toHaveBeenCalled()
+  })
+
+  it('un inactivo SIN horas no genera ningún ruido', async () => {
+    window.confirm = vi.fn(() => true)
+    await renderPago()   // VIEJO está inactivo pero no tiene work_days
+    expect(screen.queryByText(/no van a cobrar/)).toBeNull()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalled())
+    const confirms = (window.confirm as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0] as string)
+    expect(confirms.join('\n')).not.toMatch(/inactivo/i)
+  })
+
   // ── #3a · el aviso de doble conteo explica cómo se destraba ──────────────────────
   it('el freno por horas dobles dice que NO se resuelve en la pestaña Horas', async () => {
     WORK_DAYS = [...WORK_DAYS, {

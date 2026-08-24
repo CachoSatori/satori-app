@@ -3,7 +3,7 @@ import type { Employee, PunchException, SalaryPeriod, TimePunch, WorkDay } from 
 import {
   getSalaryPeriods, getWorkDays, getPunchExceptions, getPunchesDeJornada,
   derivarWorkDays, resolvePunchException, overrideHorasDia,
-  agruparExcepciones, etiquetaTipo, empleadosConHorasDobles, resumenImpares,
+  agruparExcepciones, etiquetaTipo, empleadosConHorasDobles, resumenImpares, marcasDelCaso,
   HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
   type DerivacionResumen, type GrupoExcepciones,
 } from '../../shared/api/salarios'
@@ -410,21 +410,26 @@ export default function SalariosHoras({ employees }: Props) {
                                 Marcar resuelta
                               </button>
                             </div>
-                            {ms && (
-                              <div style={{ padding: '0.3rem 0 0 0.2rem', fontSize: '0.72rem', color: '#888' }}>
-                                {ms.length === 0
-                                  ? 'sin marcas crudas para esa jornada'
-                                  : ms
-                                      // La jornada trae las marcas de TODO el local: se
-                                      // muestran solo las del caso (por empleado si está
-                                      // resuelto, por código si es una sin_mapear).
-                                      .filter(m => x.employee_id
-                                        ? m.employee_id === x.employee_id
-                                        : m.emp_code === x.emp_code)
-                                      .map(m => `${hhmm(m.punch_at)} ${m.punch_state}`)
-                                      .join('  ·  ')}
-                              </div>
-                            )}
+                            {ms && (() => {
+                              const { lista, ampliado } = marcasDelCaso(ms, x)
+                              return (
+                                <div style={{ padding: '0.3rem 0 0 0.2rem', fontSize: '0.72rem', color: '#888' }}>
+                                  {lista.length === 0 ? (
+                                    <em>Sin marcas crudas en esa jornada.</em>
+                                  ) : (
+                                    <>
+                                      {lista.map(m => `${hhmm(m.punch_at)} ${m.punch_state}`).join('  ·  ')}
+                                      {ampliado && (
+                                        <span style={{ opacity: 0.75 }}>
+                                          {' '}— <em>todas las de la jornada</em> (ninguna quedó
+                                          asociada a este caso)
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </div>
                         )
                       })}

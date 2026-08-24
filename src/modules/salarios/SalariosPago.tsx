@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { Employee, EmployeePayment, EmployeeWageRate, PunchException, SalaryPeriod, WorkDay } from '../../shared/types/database'
+import type { Employee, EmployeePayment, PunchException, SalaryPeriod, WorkDay } from '../../shared/types/database'
 import {
-  getSalaryPeriods, createSalaryPeriod, getWorkDays, upsertWorkDay, getWageRatesUpTo,
+  getSalaryPeriods, createSalaryPeriod, getWorkDays, upsertWorkDay,
   getPeriodPayments, markPeriodPaid, consolidarPeriodo, getPunchExceptionsTodosLosLocales,
   semaforoPago, HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
   type LineaConsolidado,
@@ -37,7 +37,6 @@ export default function SalariosPago({ employees }: Props) {
 
   const [periods, setPeriods]   = useState<SalaryPeriod[]>([])
   const [periodId, setPeriodId] = useState<string>('')
-  const [rates, setRates]       = useState<EmployeeWageRate[]>([])
   const [workDays, setWorkDays] = useState<WorkDay[]>([])
   const [pagos, setPagos]       = useState<EmployeePayment[]>([])
   // F1d: el estado del fichaje del período. La lectura es null-safe (devuelve [] si la
@@ -86,18 +85,16 @@ export default function SalariosPago({ employees }: Props) {
 
   // Datos del período elegido: horas, tarifas vigentes a su fecha de fin y pagos ya hechos.
   const loadPeriodData = useCallback(async (p: SalaryPeriod | null) => {
-    if (!p) { setWorkDays([]); setRates([]); setPagos([]); setExcs([]); setOkDobles(false); return }
+    if (!p) { setWorkDays([]); setPagos([]); setExcs([]); setOkDobles(false); return }
     try {
-      const [wd, rs, pg, ex] = await Promise.all([
+      const [wd, pg, ex] = await Promise.all([
         getWorkDays(p.fecha_ini, p.fecha_fin),
-        getWageRatesUpTo(p.fecha_fin),
         getPeriodPayments(p.id),
         // TODOS los locales: el neto del período suma las horas de cualquier local
         // (el pay run es global), así que el semáforo tiene que mirar el mismo conjunto.
         getPunchExceptionsTodosLosLocales(p.fecha_ini, p.fecha_fin),
       ])
       setWorkDays(wd)
-      setRates(rs)
       setPagos(pg)
       setExcs(ex)
       setOkDobles(false)
@@ -130,9 +127,13 @@ export default function SalariosPago({ employees }: Props) {
   const frenado = semaforo.dobles.length > 0 && !okDobles
 
   const lineas: LineaConsolidado[] = useMemo(
-    () => (period ? consolidarPeriodo(activos, rates, workDays, period, LOCAL_DEFAULT) : []),
-    [activos, rates, workDays, period],
+    () => (period ? consolidarPeriodo(activos, workDays, period, LOCAL_DEFAULT) : []),
+    [activos, workDays, period],
   )
+
+  // Un activo con horas y sin tarifa cargada da neto ₡0 y queda fuera del archivo del
+  // banco sin decir nada. Es el mismo silencio que el inactivo: alguien no cobra.
+  const sinTarifa = useMemo(() => lineas.filter(l => l.sinTarifa), [lineas])
 
   // Neto efectivo = el pisado a mano si lo hay, el calculado si no.
   const netoEfectivo = useCallback(
@@ -256,6 +257,11 @@ export default function SalariosPago({ employees }: Props) {
     }
 
     const avisos: string[] = []
+    if (sinTarifa.length > 0) {
+      avisos.push(
+        `⛔ SIN TARIFA (neto ₡0, quedan fuera del archivo): ${sinTarifa.map(l => l.employee.full_name).join(', ')}.`,
+      )
+    }
     if (semaforo.dobles.length > 0) {
       avisos.push(`⚠️ Horas dobles confirmadas a mano: ${nombresDobles.join(', ')}.`)
     }
@@ -274,7 +280,13 @@ export default function SalariosPago({ employees }: Props) {
     try {
       const n = await markPeriodPaid(
         period.id,
-        aPagar.map(x => ({ employee_id: x.l.employee.id, monto_neto: x.monto })),
+        aPagar.map(x => ({
+          employee_id: x.l.employee.id,
+          monto_neto:  x.monto,
+          horas:       x.l.horas,
+          hourly_rate: x.l.hourlyRate,
+          fijo:        x.l.fijo,
+        })),
         user.id,
       )
       setAviso(`Período marcado como pagado: ${n} pago(s) registrado(s).`)
@@ -377,6 +389,15 @@ export default function SalariosPago({ employees }: Props) {
             </span>
           </div>
 
+          {!pagado && sinTarifa.length > 0 && (
+            <p style={{ padding: '0 12px 8px', fontSize: '0.8rem', color: 'var(--t-red, #b04a3a)' }}>
+              ⛔ <strong>{sinTarifa.map(l => l.employee.full_name).join(', ')}</strong> tiene(n) horas
+              en este período y <strong>NINGUNA tarifa cargada</strong>: su neto da ₡0 y{' '}
+              {sinTarifa.length === 1 ? 'queda' : 'quedan'} fuera del archivo del banco. Cargale(s) la
+              tarifa en <strong>Empleados / Tarifas</strong> antes de pagar.
+            </p>
+          )}
+
           {!pagado && semaforo.sinMapearDias > 0 && (
             <p style={{ padding: '0 12px 8px', fontSize: '0.78rem', color: 'var(--t-red, #b04a3a)' }}>
               ⚠️ <strong>{semaforo.sinMapearMarcas} marca(s) de fichaje sin empleado asignado</strong>{' '}
@@ -409,6 +430,11 @@ export default function SalariosPago({ employees }: Props) {
                 ⛔ <strong>{nombresDobles.join(', ')}</strong> tiene(n) el total del período cargado
                 a mano <em>y</em> horas de BioTime: el neto las <strong>SUMA</strong>. Es el único
                 caso que puede pagar de más.
+              </p>
+              <p style={{ margin: '0.2rem 0 0', fontSize: '0.72rem', opacity: 0.85 }}>
+                Esto <strong>no</strong> se destraba resolviendo marcas en la pestaña Horas: o borrás
+                la carga manual duplicada (el total del período), o confirmás acá abajo que el total
+                que ves es el correcto.
               </p>
               <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.3rem' }}>
                 <input
@@ -447,7 +473,13 @@ export default function SalariosPago({ employees }: Props) {
                         ? l.employee.nombre_homebanking
                         : <span style={{ opacity: 0.45 }}>{l.employee.full_name} (sin alias)</span>}
                     </td>
-                    <td>{l.rate ? fi(l.rate.hourly_rate_crc) : <span style={{ opacity: 0.35 }}>sin tarifa</span>}</td>
+                    <td>
+                      {l.hourlyRate > 0
+                        ? fi(l.hourlyRate)
+                        : l.sinTarifa
+                          ? <strong style={{ color: 'var(--t-red, #b04a3a)' }}>sin tarifa</strong>
+                          : <span style={{ opacity: 0.35 }}>—</span>}
+                    </td>
                     <td>
                       <input
                         className="tip-input"
@@ -523,7 +555,8 @@ export default function SalariosPago({ employees }: Props) {
           </div>
 
           <p style={{ padding: '0 12px 12px', fontSize: '0.68rem', color: '#888' }}>
-            El neto se calcula como horas × tarifa vigente + salario fijo. Editarlo a mano ajusta
+            El neto se calcula como horas × la tarifa del empleado (Empleados / Tarifas) + su salario
+            fijo. Editarlo a mano ajusta
             solo lo que se paga en este período. El pago se registra como transferencia:
             <strong> no genera movimiento de caja</strong>.
           </p>

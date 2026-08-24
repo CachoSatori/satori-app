@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import type { Employee, PunchException, WorkDay } from '../types/database'
+import type { Employee, PunchException, TimePunch, WorkDay } from '../types/database'
 
 // Salarios · BioTime F1d: contrato del wrapper de la RPC + la bandeja de excepciones.
 // El emparejamiento vive en la mig 059 (SQL) y se valida contra la base; acá se prueba
@@ -60,7 +60,7 @@ vi.mock('./supabase', () => ({ supabase: cliente }))
 import {
   derivarWorkDays, getPunchExceptions, getPunchesDeJornada, resolvePunchException,
   overrideHorasDia, agruparExcepciones, etiquetaTipo, empleadosConHorasDobles, jornadaBounds,
-  resumenImpares, semaforoPago, splitHorasPeriodo, HORAS_DEFAULT_IMPAR,
+  resumenImpares, semaforoPago, splitHorasPeriodo, marcasDelCaso, HORAS_DEFAULT_IMPAR,
 } from './salarios'
 
 beforeEach(() => {
@@ -176,6 +176,51 @@ describe('getPunchesDeJornada', () => {
   })
 })
 
+// "Ver marcas" no mostraba nada cuando la marca cruda no tenía employee_id resuelto (el
+// ingest lo deja null si el emp_code no estaba mapeado al entrar): el filtro las descartaba
+// todas y el renglón quedaba vacío, indistinguible de "no hubo marcas".
+describe('marcasDelCaso', () => {
+  const tp = (over: Partial<TimePunch> & { id: string }): TimePunch => ({
+    local: 'santa-teresa', biotime_id: 1, emp_code: '18', employee_id: null,
+    punch_at: '2026-08-03T17:00:00Z', punch_state: 'in', terminal: null,
+    synced_at: '', created_at: '', updated_at: '', ...over,
+  } as TimePunch)
+
+  it('cuando la marca SÍ tiene el empleado, filtra por él', () => {
+    const r = marcasDelCaso(
+      [tp({ id: 'a', employee_id: 'e1' }), tp({ id: 'b', employee_id: 'e2' })],
+      { employee_id: 'e1', emp_code: null },
+    )
+    expect(r.lista.map(m => m.id)).toEqual(['a'])
+    expect(r.ampliado).toBe(false)
+  })
+
+  it('si ninguna tiene employee_id, cae al emp_code', () => {
+    const r = marcasDelCaso(
+      [tp({ id: 'a', emp_code: '18' }), tp({ id: 'b', emp_code: '99' })],
+      { employee_id: 'e1', emp_code: '18' },
+    )
+    expect(r.lista.map(m => m.id)).toEqual(['a'])
+    expect(r.ampliado).toBe(false)
+  })
+
+  // EL BUG: excepción con employee_id, marcas crudas sin resolver y sin emp_code en la
+  // excepción. Antes devolvía [] y la UI mostraba un renglón en blanco.
+  it('si ningún criterio matchea, muestra TODAS y lo dice', () => {
+    const r = marcasDelCaso(
+      [tp({ id: 'a' }), tp({ id: 'b' })],
+      { employee_id: 'e1', emp_code: null },
+    )
+    expect(r.lista.map(m => m.id)).toEqual(['a', 'b'])
+    expect(r.ampliado).toBe(true)
+  })
+
+  it('sin marcas de verdad no inventa el "ampliado"', () => {
+    expect(marcasDelCaso([], { employee_id: 'e1', emp_code: null }))
+      .toEqual({ lista: [], ampliado: false })
+  })
+})
+
 describe('resolvePunchException', () => {
   it('no borra: marca resuelta con quién y cuándo', async () => {
     enqueue('punch_exceptions', { data: null })
@@ -265,6 +310,40 @@ describe('etiquetaTipo', () => {
     expect(etiquetaTipo('sin_mapear')).toBe('sin mapear')
     expect(etiquetaTipo('solapado')).toBe('solapado')
     expect(etiquetaTipo('marciano')).toBe('marciano')
+  })
+})
+
+// El override puntual de la bandeja escribe una fila MANUAL con flags.override. Si esa
+// fila cae en fecha_fin, antes se confundía con el TOTAL del período cargado a mano y
+// frenaba la nómina — el falso positivo real que le pasó a KAREN (11 correcciones, una
+// de ellas el 15/08).
+describe('empleadosConHorasDobles · override puntual vs total del período', () => {
+  const FIN = '2026-08-15'
+  const override = (work_date: string, hours: number) => wd({
+    employee_id: 'e1', source: 'manual', work_date, hours,
+    flags: { override: { by: 'u-1', at: '2026-08-24T16:58:01Z', horas_biotime: 3, motivo: null } },
+  })
+
+  it('corregir a mano el ÚLTIMO día NO es doble conteo', () => {
+    expect(empleadosConHorasDobles([
+      override(FIN, 5),
+      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-01', hours: 3 }),
+    ], FIN)).toEqual([])
+  })
+
+  it('el caso KAREN completo: 11 correcciones + 1 jornada derivada → sin freno', () => {
+    const filas = [
+      ...['03','05','06','07','08','10','11','12','13','14','15'].map(d => override(`2026-08-${d}`, 5)),
+      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-01', hours: 3 }),
+    ]
+    expect(empleadosConHorasDobles(filas, FIN)).toEqual([])
+  })
+
+  it('pero el TOTAL del período cargado a mano (sin flags) SÍ frena', () => {
+    expect(empleadosConHorasDobles([
+      wd({ employee_id: 'e1', source: 'manual', work_date: FIN, hours: 96 }),
+      wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-01', hours: 3 }),
+    ], FIN)).toEqual(['e1'])
   })
 })
 

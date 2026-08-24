@@ -199,6 +199,32 @@ describe('SalariosHoras — bandeja de excepciones', () => {
     expect(await screen.findByText(/16:00 in/)).toBeTruthy()
   })
 
+  // #2 · la marca cruda puede no tener employee_id resuelto: filtrar solo por él dejaba el
+  // renglón VACÍO, indistinguible de "no hubo marcas".
+  it('muestra las marcas aunque la cruda no tenga employee_id resuelto', async () => {
+    EXCS = [exc({ id: 'x1', tipo: 'impar', employee_id: 'e1', work_date: '2026-08-03' })]
+    marcas.mockResolvedValue([
+      { id: 'p1', employee_id: null, emp_code: '18', punch_at: '2026-08-03T17:00:00Z', punch_state: 'in' } as TimePunch,
+    ])
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await screen.findByText('Excepciones de fichaje (1)')
+    fireEvent.click(screen.getAllByText('NACHO').at(-1)!)
+    fireEvent.click(await screen.findByRole('button', { name: /Ver marcas/i }))
+
+    expect(await screen.findByText(/11:00 in/)).toBeTruthy()
+    expect(screen.getByText(/todas las de la jornada/)).toBeTruthy()
+  })
+
+  it('si de verdad no hay marcas lo dice, no deja el renglón en blanco', async () => {
+    EXCS = [exc({ id: 'x1', tipo: 'impar', employee_id: 'e1', work_date: '2026-08-03' })]
+    marcas.mockResolvedValue([])
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await screen.findByText('Excepciones de fichaje (1)')
+    fireEvent.click(screen.getAllByText('NACHO').at(-1)!)
+    fireEvent.click(await screen.findByRole('button', { name: /Ver marcas/i }))
+    expect(await screen.findByText(/Sin marcas crudas en esa jornada/)).toBeTruthy()
+  })
+
   it('resolver una excepción la marca resuelta con el usuario de la sesión', async () => {
     EXCS = [exc({ id: 'x1', tipo: 'impar', employee_id: 'e1' })]
     render(<SalariosHoras employees={EMPLEADOS} />)

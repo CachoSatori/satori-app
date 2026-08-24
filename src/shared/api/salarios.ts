@@ -202,15 +202,22 @@ export function splitHorasPeriodo(
   employeeId: string,
   fechaFin: string,
   local: string,
-): { manual: number; otras: number; total: number } {
-  let manual = 0, otras = 0
+): { manual: number; otras: number; pisadas: number; total: number } {
+  let manual = 0, otras = 0, pisadas = 0
   for (const w of workDays) {
     if (w.employee_id !== employeeId) continue
     const h = Number(w.hours) || 0
     if (w.work_date === fechaFin && w.local === local && w.source === 'manual') manual += h
-    else otras += h
+    else {
+      otras += h
+      // La fila editable comparte PK con la jornada de `fechaFin`: si BioTime derivó ese
+      // día, el upsert de la pantalla la REEMPLAZA. Esas horas están dentro de `otras`
+      // pero NO van a sobrevivir, así que quien calcula cuánto guardar tiene que
+      // descontarlas o termina restando dos veces (y pagando de menos).
+      if (w.work_date === fechaFin && w.local === local) pisadas += h
+    }
   }
-  return { manual, otras, total: manual + otras }
+  return { manual, otras, pisadas, total: manual + otras }
 }
 
 export interface LineaConsolidado {
@@ -218,6 +225,7 @@ export interface LineaConsolidado {
   rate:        EmployeeWageRate | null
   horasManual: number
   horasOtras:  number
+  horasPisadas: number   // horas de BioTime del último día, que el upsert manual reemplaza
   horas:       number
   pagoHoras:   number
   fijo:        number
@@ -255,6 +263,7 @@ export function consolidarPeriodo(
       rate,
       horasManual: split.manual,
       horasOtras:  split.otras,
+      horasPisadas: split.pisadas,
       horas:       split.total,
       pagoHoras,
       fijo,
@@ -276,12 +285,23 @@ type RpcInvoke = (fn: string, args: Record<string, unknown>) => PromiseLike<{ da
 // tests mockean `./supabase` parcialmente.
 const rpcAny = supabase.rpc?.bind(supabase) as unknown as RpcInvoke
 
+/**
+ * Horas que se le acreditan a una jornada que tuvo marcas pero NINGÚN par cerrado
+ * (fichó la entrada y se olvidó de la salida). Es un DEFAULT CORREGIBLE, no una
+ * medición: la mig 059 lo escribe con `flags.horas_origen = '3h_default_impar'` para
+ * que se distinga del número medido, y quien tenga el dato real lo pisa desde la
+ * bandeja. Política firmada por Ismael el 2026-08-23 — si cambia, cambia en los dos
+ * lados (acá y en la 059).
+ */
+export const HORAS_DEFAULT_IMPAR = 3
+
 export interface DerivacionResumen {
   local:                string
   desde:                string
   hasta:                string
   marcas:               number
   dias:                 number
+  dias_3h_default:      number
   dias_omitidos_manual: number
   horas:                number
   excepciones: { impar: number; turno_largo: number; solapado: number; sin_mapear: number }
@@ -333,6 +353,25 @@ export function jornadaBounds(
     desde: `${workDate}T${hhmm}:00-06:00`,
     hasta: `${siguiente}T${hhmm}:00-06:00`,
   }
+}
+
+/**
+ * Las excepciones del período en TODOS los locales. La pantalla de pago usa esta y no la
+ * filtrada: el neto de la quincena suma las horas de cualquier local (el pay run es
+ * global), así que mirar un solo local dejaría el aviso ciego justo donde sale la plata.
+ */
+export async function getPunchExceptionsTodosLosLocales(
+  desde: string,
+  hasta: string,
+): Promise<PunchException[]> {
+  try {
+    const { data, error } = await fromAny('punch_exceptions')
+      .select('*')
+      .gte('work_date', desde)
+      .lte('work_date', hasta)
+      .order('work_date', { ascending: true })
+    return error ? [] : ((data ?? []) as PunchException[])
+  } catch { return [] }
 }
 
 /** Las marcas CRUDAS de una jornada, para que la bandeja muestre el problema tal cual pasó. */
@@ -450,20 +489,143 @@ export function agruparExcepciones(
 }
 
 /**
- * Empleados del rango que tienen A LA VEZ una fila MANUAL y filas de BioTime. Es el único
- * lugar donde el total del período se puede contar DOS VECES: U0b carga el total de la
- * quincena en UNA fila manual fechada el último día, y `splitHorasPeriodo` suma manual +
- * biotime. Convivir en el mismo día es imposible (la PK es employee_id+fecha+local y la
- * derivación no pisa lo manual), así que el choque real es este: total manual arriba,
- * días derivados abajo. No se corrige solo — se avisa para que alguien decida.
+ * Empleados que corren riesgo de que se les pague la quincena DOS VECES.
+ *
+ * El riesgo real es UNO solo: U0b carga el total del período en una fila manual fechada
+ * el ÚLTIMO día (`work_date === fechaFin`) y `splitHorasPeriodo` la SUMA a todo lo
+ * derivado. Cualquier otra fila manual es un override de la bandeja, que por la PK
+ * (employee_id, work_date, local) REEMPLAZÓ la jornada de BioTime de ese día: ahí no hay
+ * nada duplicado, y marcarlo frenaría justo el flujo que la app recomienda para arreglar
+ * los fichajes (y enseñaría a tildar la casilla sin mirar).
+ *
+ * NO se filtra por local a propósito: `splitHorasPeriodo` suma TODAS las filas del
+ * empleado en el rango sin mirar el local (el pay run es global), así que vigilar un
+ * solo local dejaría ciego al guard justo donde la plata sí se suma.
  */
-export function empleadosConHorasDobles(workDays: WorkDay[]): string[] {
-  const manual  = new Set<string>()
-  const biotime = new Set<string>()
+export function empleadosConHorasDobles(workDays: WorkDay[], fechaFin: string): string[] {
+  const totalDelPeriodo = new Set<string>()
+  const derivadas       = new Set<string>()
   for (const w of workDays) {
     if ((Number(w.hours) || 0) <= 0) continue
-    if (w.source === 'manual') manual.add(w.employee_id)
-    else if (w.source === 'biotime') biotime.add(w.employee_id)
+    if (w.source === 'manual') {
+      if (w.work_date === fechaFin) totalDelPeriodo.add(w.employee_id)
+    } else if (w.source === 'biotime') {
+      derivadas.add(w.employee_id)
+    }
   }
-  return [...manual].filter(id => biotime.has(id))
+  return [...totalDelPeriodo].filter(id => derivadas.has(id))
+}
+
+
+// ── Lo que el contador necesita ver (puro) ──────────────────────────────────────
+
+export interface ResumenImpares {
+  employee_id:  string
+  dias:         number   // jornadas derivadas de BioTime
+  dias3h:       number   // ...de las cuales se contaron al default por no tener ningún par
+  horas3h:      number   // las horas que puso el default (dias3h × HORAS_DEFAULT_IMPAR)
+  diasConSuelta: number  // días CON medición real pero con alguna marca suelta al lado
+}
+
+/**
+ * Por empleado: cuántas jornadas se contaron al default de 3 h y cuántas tienen marcas
+ * sueltas aunque midieran bien. Es el dato que el contador tiene que ver ANTES de pagar
+ * —esas horas no salieron del reloj, salieron de una regla— y el mismo que la Fase 2 va
+ * a necesitar para el comprobante individual.
+ *
+ * Se lee de `work_days.flags` (lo escribe la mig 059), no de `punch_exceptions`: las
+ * excepciones se resuelven y desaparecen de la bandeja, pero el origen de las horas
+ * queda pegado a la jornada para siempre.
+ */
+export function resumenImpares(workDays: WorkDay[], local?: string): Map<string, ResumenImpares> {
+  const out = new Map<string, ResumenImpares>()
+  for (const w of workDays) {
+    if (w.source !== 'biotime') continue
+    if (local && w.local !== local) continue
+    const f = (w.flags ?? {}) as Record<string, unknown>
+    const r = out.get(w.employee_id) ?? {
+      employee_id: w.employee_id, dias: 0, dias3h: 0, horas3h: 0, diasConSuelta: 0,
+    }
+    r.dias += 1
+    if (f.horas_origen === '3h_default_impar') {
+      r.dias3h  += 1
+      r.horas3h += Number(w.hours) || 0
+    } else if ((Number(f.impares) || 0) > 0 || (Number(f.solapados) || 0) > 0) {
+      r.diasConSuelta += 1
+    }
+    out.set(w.employee_id, r)
+  }
+  return out
+}
+
+// ── Semáforo del pago (puro) ────────────────────────────────────────────────────
+
+export interface SemaforoPago {
+  fichajeDias:     number     // JORNADAS con fichaje incompleto: avisan, no frenan
+  sinMapearDias:   number     // (código, jornada) con marcas de alguien que no está en el maestro
+  sinMapearMarcas: number     // ...y cuántas marcas suman
+  dias3h:          number     // jornadas que se están pagando al default de 3 h
+  horas3h:         number
+  dobles:          string[]   // employee_ids con total del período a mano Y días derivados
+}
+
+const clave = (x: PunchException) => `${x.employee_id ?? x.emp_code ?? '?'}|${x.work_date ?? '?'}`
+
+/**
+ * Qué tan seguro es pagar este período. La distinción es deliberada:
+ *
+ * · fichaje (impar/solapado/turno_largo) — el día YA tiene un valor: horas medidas, o el
+ *   default de 3 h. Bloquear por esto dejaría la quincena sin pagar por un olvido de
+ *   alguien que igual trabajó. Avisa y nada más. Se cuentan JORNADAS, no filas: una
+ *   jornada `in,in` genera DOS excepciones (solapado + impar) y sigue siendo un día.
+ * · sin_mapear — hay marcas de una persona que no está en el maestro: puede que ALGUIEN
+ *   NO ESTÉ COBRANDO. No se puede arreglar solo desde acá (falta darla de alta), así que
+ *   se pide confirmación explícita en vez de frenar la nómina de todos los demás.
+ * · 3 h — sale de `work_days.flags`, NO de las excepciones. Una excepción se resuelve y
+ *   desaparece de la bandeja, pero las 3 h siguen puestas y siguen cobrándose: si el
+ *   aviso colgara del estado de la excepción, limpiar la bandeja apagaría la señal sin
+ *   cambiar un solo colón de lo que se paga.
+ * · dobles — el único riesgo de pagar DE MÁS. Frena el pago hasta que alguien lo mire.
+ *
+ * `idsQueSePagan` acota todo a la nómina real: un inactivo con horas viejas no puede
+ * frenar el pago de los demás, porque su línea ni siquiera existe en la pantalla.
+ */
+export function semaforoPago(
+  excepciones: PunchException[],
+  workDays: WorkDay[],
+  fechaFin: string,
+  idsQueSePagan?: string[],
+): SemaforoPago {
+  const nomina   = idsQueSePagan ? new Set(idsQueSePagan) : null
+  const cuenta   = (id: string | null) => !nomina || (id != null && nomina.has(id))
+  const abiertas = excepciones.filter(x => x.estado === 'abierta')
+
+  const fichaje = new Set<string>()
+  const sinMap  = new Set<string>()
+  let sinMapMarcas = 0
+  for (const x of abiertas) {
+    if (x.tipo === 'sin_mapear') {
+      // Sin empleado resuelto no hay a quién acotarlo: siempre cuenta.
+      sinMap.add(clave(x))
+      sinMapMarcas += Number((x.detalle as { cuantas?: unknown } | null)?.cuantas) || 1
+    } else if (cuenta(x.employee_id)) {
+      fichaje.add(clave(x))
+    }
+  }
+
+  let dias3h = 0, horas3h = 0
+  for (const r of resumenImpares(workDays).values()) {
+    if (!cuenta(r.employee_id)) continue
+    dias3h  += r.dias3h
+    horas3h += r.horas3h
+  }
+
+  return {
+    fichajeDias:     fichaje.size,
+    sinMapearDias:   sinMap.size,
+    sinMapearMarcas: sinMapMarcas,
+    dias3h,
+    horas3h,
+    dobles: empleadosConHorasDobles(workDays, fechaFin).filter(id => cuenta(id)),
+  }
 }

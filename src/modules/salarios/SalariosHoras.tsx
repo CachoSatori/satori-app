@@ -3,7 +3,8 @@ import type { Employee, PunchException, SalaryPeriod, TimePunch, WorkDay } from 
 import {
   getSalaryPeriods, getWorkDays, getPunchExceptions, getPunchesDeJornada,
   derivarWorkDays, resolvePunchException, overrideHorasDia,
-  agruparExcepciones, etiquetaTipo, empleadosConHorasDobles, LOCAL_DEFAULT,
+  agruparExcepciones, etiquetaTipo, empleadosConHorasDobles, resumenImpares,
+  HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
   type DerivacionResumen, type GrupoExcepciones,
 } from '../../shared/api/salarios'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -27,6 +28,11 @@ interface FilaHoras {
   biotime:     number
   manual:      number
   dias:        number
+  // Lo que el contador tiene que ver antes de pagar: cuántas de esas jornadas no salieron
+  // del reloj sino de la regla de las 3 h, y cuántas midieron pero con marcas sueltas.
+  dias3h:      number
+  horas3h:     number
+  conSuelta:   number
 }
 
 function hhmm(iso: string): string {
@@ -99,32 +105,40 @@ export default function SalariosHoras({ employees }: Props) {
 
   const filas: FilaHoras[] = useMemo(() => {
     const nombreDe = new Map(employees.map(e => [e.id, e.full_name]))
+    const impares  = resumenImpares(workDays, local)
     const acc = new Map<string, FilaHoras>()
     for (const w of workDays) {
       if (w.local !== local) continue
+      const imp = impares.get(w.employee_id)
       const f = acc.get(w.employee_id) ?? {
         employee_id: w.employee_id,
         nombre: nombreDe.get(w.employee_id) ?? '—',
         biotime: 0, manual: 0, dias: 0,
+        dias3h: imp?.dias3h ?? 0, horas3h: imp?.horas3h ?? 0, conSuelta: imp?.diasConSuelta ?? 0,
       }
       const h = Number(w.hours) || 0
-      if (w.source === 'biotime') { f.biotime += h; if (h > 0) f.dias += 1 }
+      if (w.source === 'biotime') { f.biotime += h; f.dias += 1 }
       else f.manual += h
       acc.set(w.employee_id, f)
     }
     return [...acc.values()]
-      .filter(f => f.biotime > 0 || f.manual > 0)
+      .filter(f => f.biotime > 0 || f.manual > 0 || f.dias > 0)
       .sort((a, b) => a.nombre.localeCompare(b.nombre))
   }, [workDays, employees, local])
+
+  const total3h = useMemo(() => filas.reduce((s, f) => s + f.dias3h, 0), [filas])
 
   const grupos: GrupoExcepciones[] = useMemo(
     () => agruparExcepciones(excs, employees),
     [excs, employees],
   )
 
+  // Misma definición que usa la pantalla de pago: solo el TOTAL del período cargado a
+  // mano (fila manual del último día) choca con lo derivado. Sin filtrar local, porque el
+  // neto que se paga tampoco filtra.
   const dobles = useMemo(
-    () => empleadosConHorasDobles(workDays.filter(w => w.local === local)),
-    [workDays, local],
+    () => (period ? empleadosConHorasDobles(workDays, period.fecha_fin) : []),
+    [workDays, period],
   )
 
   const handleRecalcular = async () => {
@@ -156,6 +170,10 @@ export default function SalariosHoras({ employees }: Props) {
     setBusy(true); setError(null)
     try {
       await resolvePunchException(x.id, user.id)
+      // El resumen es la foto del último recálculo: apenas los datos cambian por otra
+      // vía deja de ser cierto, y dos números distintos del mismo concepto en la misma
+      // pantalla es peor que ninguno.
+      setResumen(null)
       await loadDatos(period, local)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error resolviendo la excepción')
@@ -187,6 +205,7 @@ export default function SalariosHoras({ employees }: Props) {
       })
       await resolvePunchException(x.id, user.id)
       setHoras(d => { const r = { ...d }; delete r[x.id]; return r })
+      setResumen(null)
       await loadDatos(period, local)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error corrigiendo las horas')
@@ -252,6 +271,9 @@ export default function SalariosHoras({ employees }: Props) {
               {resumen.marcas} marca(s) · {resumen.dias} jornada(s) · {Number(resumen.horas).toFixed(2)} h ·{' '}
               {resumen.excepciones.impar + resumen.excepciones.turno_largo +
                resumen.excepciones.solapado + resumen.excepciones.sin_mapear} excepción(es)
+              {resumen.dias_3h_default > 0 && (
+                <> · <strong>{resumen.dias_3h_default} jornada(s) a {HORAS_DEFAULT_IMPAR} h por defecto</strong> (sin ninguna marca cerrada)</>
+              )}
               {resumen.dias_omitidos_manual > 0 && (
                 <> · <strong>{resumen.dias_omitidos_manual} jornada(s) NO se tocaron</strong> porque ya tenían horas cargadas a mano</>
               )}
@@ -265,11 +287,21 @@ export default function SalariosHoras({ employees }: Props) {
             </p>
           )}
 
+          {total3h > 0 && (
+            <p style={{ padding: '0 12px 8px', fontSize: '0.74rem', color: '#8a6d3b' }}>
+              🕒 <strong>{total3h} jornada(s)</strong> del período se contaron a{' '}
+              {HORAS_DEFAULT_IMPAR} h por no tener ninguna marca cerrada. Son horas puestas por la
+              regla, no medidas por el reloj: revisalas antes de cerrar la nómina.
+            </p>
+          )}
+
           <table className="admin-table">
             <thead>
               <tr>
                 <th>Empleado</th>
                 <th>Jornadas</th>
+                <th>Días a {HORAS_DEFAULT_IMPAR} h</th>
+                <th>Días c/ marca suelta</th>
                 <th>Horas BioTime</th>
                 <th>Horas a mano</th>
                 <th>Total</th>
@@ -280,6 +312,14 @@ export default function SalariosHoras({ employees }: Props) {
                 <tr key={f.employee_id} className="admin-row">
                   <td className="admin-emp-name">{f.nombre}</td>
                   <td>{f.dias}</td>
+                  <td>
+                    {f.dias3h > 0
+                      ? <span title={`${f.horas3h.toFixed(2)} h puestas por la regla, no medidas`}>
+                          <strong>{f.dias3h}</strong> ({f.horas3h.toFixed(0)} h)
+                        </span>
+                      : <span style={{ opacity: 0.35 }}>—</span>}
+                  </td>
+                  <td>{f.conSuelta > 0 ? f.conSuelta : <span style={{ opacity: 0.35 }}>—</span>}</td>
                   <td>{f.biotime.toFixed(2)}</td>
                   <td>{f.manual > 0 ? f.manual.toFixed(2) : <span style={{ opacity: 0.35 }}>—</span>}</td>
                   <td><strong>{(f.biotime + f.manual).toFixed(2)}</strong></td>
@@ -287,7 +327,7 @@ export default function SalariosHoras({ employees }: Props) {
               ))}
               {filas.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
+                  <td colSpan={7} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
                     Todavía no hay horas para este período. Recalculá para derivarlas de las marcas.
                   </td>
                 </tr>
@@ -386,7 +426,10 @@ export default function SalariosHoras({ employees }: Props) {
           <p style={{ padding: '0 12px 12px', fontSize: '0.68rem', color: '#888' }}>
             El recálculo empareja entrada/salida por jornada (corte 05:00) y reescribe SOLO las horas
             derivadas de BioTime: lo cargado a mano no se toca nunca. Corregir a mano una jornada la deja
-            como manual, así que el próximo recálculo la respeta. <strong>Acá no se calcula plata.</strong>
+            como manual, así que el próximo recálculo la respeta. Un día con marcas pero <em>sin ninguna
+            cerrada</em> se cuenta a <strong>{HORAS_DEFAULT_IMPAR} h por defecto</strong>: es un número
+            puesto por la regla, no medido — si tenés el real, corregilo desde la bandeja.
+            <strong> Acá no se calcula plata.</strong>
           </p>
         </>
       )}

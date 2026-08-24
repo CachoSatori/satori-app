@@ -14,6 +14,11 @@
 -- UNA función: `derivar_work_days(p_desde, p_hasta, p_local)`. Sin tablas, sin columnas, sin RLS
 -- nueva: `work_days` (056), `punch_exceptions` y `payroll_config` (057) YA EXISTEN.
 --
+-- ⚠ 2026-08-23: la función se EDITÓ en esta misma migración (regla de las 3 h del día sin par).
+--   Es `create or replace` y la 059 ya estaba en el ledger de staging, así que se re-aplicó el
+--   archivo por `db query --linked -f` sin tocar `schema_migrations`. Antes de llevarla a prod,
+--   la 059 que viaja es ESTA (la de las 3 h), no la primera versión.
+--
 -- ── LO QUE NO HACE ─────────────────────────────────────────────────────────────────────────
 -- NO calcula plata. Ni tarifas, ni 10% de servicio, ni propinas, ni netos (eso es la Fase 2).
 -- Solo HORAS. No toca Caja · Tips · POS · Proveedores · los sagrados · `posFiscal` · realtime.
@@ -57,6 +62,7 @@ declare
   v_fin_ts   timestamptz;
   v_dias     int := 0;
   v_omitidos int := 0;
+  v_3h       int := 0;
   v_horas    numeric := 0;
   v_marcas   int := 0;
   v_impar    int := 0;
@@ -159,9 +165,33 @@ begin
   where s.punch_state = 'out' and s.prev_state = 'in';
 
   -- ── work_days ────────────────────────────────────────────────────────────────────────────
-  -- Una fila por (empleado, jornada) con marcas, aunque la jornada haya quedado en 0 horas (día
-  -- con solo una marca impar): la fila en 0 es la que hace visible que ESE día hubo fichaje y no
-  -- salieron horas. `hours` = Σ de los pares, en horas decimales.
+  -- Una fila por (empleado, jornada) con marcas. `hours` = Σ de los pares, en horas decimales.
+  --
+  -- ── LA REGLA DE LAS 3 HORAS (firmada por Ismael el 2026-08-23) ───────────────────────────
+  -- Antes, un día sin ningún par cerrado valía 0 h: el que fichó la entrada y se olvidó de la
+  -- salida trabajaba gratis hasta que alguien lo corrigiera a mano. Ahora:
+  --   · día con AL MENOS UN par → `hours` = Σ pares. Un impar suelto NO baja el día: si hubo
+  --     medición real, manda la medición.
+  --   · día con marcas y NINGÚN par (una sola marca, dos `in` sin `out`, etc.) → `hours` = 3.
+  -- Las 3 h son un DEFAULT CORREGIBLE, no una medición ni una sentencia: `flags.horas_origen`
+  -- lo dice explícito (`3h_default_impar`) para que el contador —y el comprobante de la Fase 2—
+  -- sepan que ese número hay que mirarlo, y la excepción `impar`/`solapado` se genera igual.
+  -- Quien tenga el dato real lo pisa desde la bandeja (override `source='manual'`).
+  -- ⚠ Es una POLÍTICA laboral, no una decisión técnica: puede quedar por debajo de lo realmente
+  --   trabajado. Ismael la valida con su contador/abogado.
+  --
+  -- ⚠ DOS LÍMITES CONOCIDOS de la regla, que la bandeja tiene que seguir mostrando:
+  --   1. Un turno que CRUZA el corte sin cerrar se parte en dos jornadas sin par y pasa a valer
+  --      3 + 3 = 6 h. Antes valía 0 y frenaba el pago; ahora da un número plausible. Por eso las
+  --      excepciones `impar` se siguen generando Y la pantalla de pago avisa las jornadas a 3 h
+  --      leyendo `flags.horas_origen` (que es permanente) en vez del estado de la excepción
+  --      (que alguien puede resolver sin tocar las horas).
+  --   2. Una marca espuria en un día no trabajado también acredita 3 h. Se corrige con el
+  --      override de la bandeja (que escribe 0 h manuales y el recálculo ya no pisa).
+  -- El número vive hardcodeado acá y en `HORAS_DEFAULT_IMPAR` (src/shared/api/salarios.ts); un
+  -- test los ATA leyendo este archivo, así que mover uno solo rompe el build. El lugar natural
+  -- para cuando la política se estabilice es `payroll_config` (ya es por local, ya guarda
+  -- corte_jornada y umbral_turno_largo_h) — se dejó fuera hasta que el contador la confirme.
   --
   -- `on conflict do nothing` es la otra mitad de "nunca tocar lo manual": si ya hay una fila
   -- MANUAL para ese (empleado, jornada, local) —el total del período que carga U0b, o un override
@@ -187,30 +217,42 @@ begin
     from pg_temp.f1d_pares
     group by employee_id, work_date
   ),
+  calc as (
+    select
+      a.*,
+      coalesce(h.pares, 0)  as pares,
+      coalesce(h.horas, 0)  as horas_pares,
+      coalesce(h.largos, 0) as largos,
+      coalesce(h.pares, 0) > 0 as tiene_par
+    from agg a
+    left join hrs h on h.employee_id = a.employee_id and h.work_date = a.work_date
+  ),
   ins as (
     insert into work_days (employee_id, work_date, local, hours, source, flags)
     select
-      a.employee_id,
-      a.work_date,
+      c.employee_id,
+      c.work_date,
       p_local,
-      coalesce(h.horas, 0),
+      case when c.tiene_par then c.horas_pares else 3 end,
       'biotime',
       jsonb_build_object(
-        'marcas',      a.marcas,
-        'pares',       coalesce(h.pares, 0),
-        'impares',     a.impar_in + a.impar_out,
-        'solapados',   a.solapados,
-        'turno_largo', coalesce(h.largos, 0)
+        'marcas',       c.marcas,
+        'pares',        c.pares,
+        'impares',      c.impar_in + c.impar_out,
+        'solapados',    c.solapados,
+        'turno_largo',  c.largos,
+        -- El origen del número, explícito: medido o puesto por la regla.
+        'horas_origen', case when c.tiene_par then 'biotime' else '3h_default_impar' end
       )
-    from agg a
-    left join hrs h on h.employee_id = a.employee_id and h.work_date = a.work_date
+    from calc c
     on conflict (employee_id, work_date, local) do nothing
-    returning 1
+    returning (flags->>'horas_origen') as origen
   )
   select
     (select count(*) from ins),
-    (select count(*) from agg) - (select count(*) from ins)
-    into v_dias, v_omitidos;
+    (select count(*) from agg) - (select count(*) from ins),
+    (select count(*) from ins where origen = '3h_default_impar')
+    into v_dias, v_omitidos, v_3h;
 
   select coalesce(sum(hours), 0) into v_horas
     from work_days
@@ -364,6 +406,7 @@ begin
     'umbral_turno_largo_h', v_umbral,
     'marcas',               v_marcas,
     'dias',                 v_dias,
+    'dias_3h_default',      v_3h,
     'dias_omitidos_manual', v_omitidos,
     'horas',                v_horas,
     'excepciones', jsonb_build_object(
@@ -376,7 +419,7 @@ begin
 end $$;
 
 comment on function public.derivar_work_days(date, date, text) is
-  'Salarios F1d: empareja in/out de time_punches por jornada (corte de payroll_config) y escribe work_days source=biotime + punch_exceptions. Idempotente por (local, rango): borra lo biotime y las excepciones ABIERTAS antes de recalcular; NUNCA toca work_days source=manual ni las excepciones ya resueltas. NO calcula plata.';
+  'Salarios F1d: empareja in/out de time_punches por jornada (corte de payroll_config) y escribe work_days source=biotime + punch_exceptions. Un dia sin ningun par cerrado se cuenta a 3h (default corregible, flags.horas_origen=3h_default_impar); si hay al menos un par manda la medicion. Idempotente por (local, rango): borra lo biotime y las excepciones ABIERTAS antes de recalcular; NUNCA toca work_days source=manual ni las excepciones ya resueltas. NO calcula plata.';
 
 revoke all on function public.derivar_work_days(date, date, text) from public, anon;
 grant  execute on function public.derivar_work_days(date, date, text) to authenticated;

@@ -10,12 +10,14 @@ import { ROLE_LABELS } from '../../shared/constants'
 // Consolidado con 10% y propinas, % sobre ventas, Liquidaciones) entran en las fases
 // siguientes.
 const SalariosEmpleados = lazy(() => import('./SalariosEmpleados'))
+const SalariosHoras     = lazy(() => import('./SalariosHoras'))
 const SalariosPago      = lazy(() => import('./SalariosPago'))
 
-type Tab = 'empleados' | 'pago'
+type Tab = 'empleados' | 'horas' | 'pago'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'empleados', label: 'Empleados / Tarifas' },
+  { id: 'horas',     label: 'Horas' },
   { id: 'pago',      label: 'Pago del período' },
 ]
 
@@ -101,6 +103,9 @@ export default function SalariosModule() {
         <div className="cd-content cd-content-wide">
           {tab === 'empleados' && (
             <SalariosEmpleados employees={employees} onRefresh={loadAll} />
+          )}
+          {tab === 'horas' && (
+            <SalariosHoras employees={employees} />
           )}
           {tab === 'pago' && (
             <SalariosPago employees={employees} />

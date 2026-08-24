@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import type { Employee, EmployeeWageRate, SalaryPeriod, WorkDay } from '../../shared/types/database'
+import type { Employee, EmployeeWageRate, PunchException, SalaryPeriod, WorkDay } from '../../shared/types/database'
 
 // Salarios · U0b: la pantalla que cierra el ciclo. Se prueba el camino real —
 // horas → neto → archivo del banco → marcar pagado — y el gate del contador.
@@ -28,6 +28,8 @@ const RATES: EmployeeWageRate[] = [
 ]
 
 let WORK_DAYS: WorkDay[] = []
+// F1d: las excepciones abiertas del período frenan el pago.
+let EXCS: PunchException[] = []
 
 const upsert   = vi.fn<(w: unknown) => Promise<void>>(async () => {})
 const pagar    = vi.fn<(id: string, l: unknown, by: string) => Promise<number>>(async () => 2)
@@ -41,6 +43,7 @@ vi.mock('../../shared/api/salarios', async (orig) => {
     getWorkDays:        async () => WORK_DAYS,
     getWageRatesUpTo:   async () => RATES,
     getPeriodPayments:  async () => [],
+    getPunchExceptionsTodosLosLocales: async () => EXCS,
     upsertWorkDay:      (w: unknown) => upsert(w),
     markPeriodPaid:     (id: string, l: unknown, by: string) => pagar(id, l, by),
   }
@@ -77,8 +80,9 @@ beforeEach(() => {
   rol = 'owner'
   WORK_DAYS = [{
     employee_id: 'e1', work_date: '2026-08-15', local: 'santa-teresa', hours: 96,
-    es_feriado: false, source: 'manual', created_at: '', updated_at: '',
+    es_feriado: false, source: 'manual', flags: null, created_at: '', updated_at: '',
   }]
+  EXCS = []
   upsert.mockClear(); pagar.mockClear(); download.mockClear()
 })
 
@@ -148,5 +152,177 @@ describe('Salarios · Pago del período', () => {
     await renderPago()
     expect((screen.getByText('Marcar pagado') as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByText('Descargar Excel para el banco') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  // ── F1d · el semáforo del fichaje ──────────────────────────────────────────────
+  // La regla de las 3 h (mig 059) le sacó el filo a los impares: esos días ya valen algo,
+  // así que bloquear la quincena entera por un olvido sería peor que pagarla.
+  function exc(over: Partial<PunchException> & { id: string; tipo: PunchException['tipo'] }): PunchException {
+    return {
+      employee_id: 'e1', emp_code: null, work_date: '2026-08-03', local: 'santa-teresa',
+      detalle: null, estado: 'abierta', resuelto_by: null, resuelto_at: null,
+      created_at: '', updated_at: '', ...over,
+    } as PunchException
+  }
+
+  it('un fichaje incompleto (impar/solapado/turno largo) AVISA pero NO frena el pago', async () => {
+    window.confirm = vi.fn(() => true)
+    EXCS = [
+      exc({ id: 'x1', tipo: 'impar',    work_date: '2026-08-03' }),
+      exc({ id: 'x2', tipo: 'solapado', work_date: '2026-08-04' }),
+    ]
+    await renderPago()
+    expect(await screen.findByText(/2 jornada\(s\) con fichaje incompleto/)).toBeTruthy()
+    const btn = screen.getByText('Marcar pagado') as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+    fireEvent.click(btn)
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/fichaje incompleto/)
+  })
+
+  it('una marca SIN EMPLEADO avisa fuerte y viaja al confirm, pero no bloquea', async () => {
+    window.confirm = vi.fn(() => true)
+    EXCS = [exc({ id: 'x1', tipo: 'sin_mapear', employee_id: null, emp_code: '8' })]
+    await renderPago()
+    expect(await screen.findByText(/sin empleado asignado/)).toBeTruthy()
+    expect((screen.getByText('Marcar pagado') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/NO ESTÉ COBRANDO/)
+  })
+
+  it('si el confirm de las marcas sin empleado se cancela, no se paga', async () => {
+    window.confirm = vi.fn(() => false)
+    EXCS = [exc({ id: 'x1', tipo: 'sin_mapear', employee_id: null, emp_code: '8' })]
+    await renderPago()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(window.confirm).toHaveBeenCalled())
+    expect(pagar).not.toHaveBeenCalled()
+  })
+
+  // El único caso que sí frena: el total del período suma la fila manual Y los días de
+  // BioTime, así que se puede pagar de más.
+  it('las horas contadas dos veces FRENAN el pago hasta que una persona lo destrabe', async () => {
+    window.confirm = vi.fn(() => true)
+    WORK_DAYS = [
+      ...WORK_DAYS,   // la fila manual de ANA (96 h el 15/08)
+      { employee_id: 'e1', work_date: '2026-08-03', local: 'santa-teresa', hours: 8,
+        es_feriado: false, source: 'biotime', flags: null, created_at: '', updated_at: '' },
+    ]
+    // el total de ANA ahora es 96 (a mano) + 8 (BioTime): el input arranca en 104
+    render(<SalariosPago employees={[ANA, BENITO, INACTIVO]} />)
+    await screen.findByDisplayValue('104')
+    expect(await screen.findByText(/tiene\(n\) el total del período cargado/)).toBeTruthy()
+    const btn = screen.getByText('Marcar pagado') as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+
+    fireEvent.click(screen.getByLabelText(/Revisé las horas de 1 empleado/))
+    expect((screen.getByText('Marcar pagado') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/Horas dobles confirmadas/)
+  })
+
+  // A8 · paso consciente: las horas que no midió el reloj no frenan la nómina, pero quien
+  // paga tiene que decir que sí en su propio confirm. Cancelar ahí NO paga.
+  const DIA_INCOMPLETO = {
+    employee_id: 'e2', work_date: '2026-08-03', local: 'santa-teresa', hours: 7,
+    es_feriado: false, source: 'biotime' as const,
+    flags: { pares: 1, horas_pares: 4, tramos_sin_cerrar: 1, horas_default: 3, horas_origen: 'mixto' },
+    created_at: '', updated_at: '',
+  }
+
+  it('las jornadas incompletas NO bloquean, pero piden confirmación aparte al pagar', async () => {
+    window.confirm = vi.fn(() => true)
+    WORK_DAYS = [...WORK_DAYS, DIA_INCOMPLETO]
+    await renderPago()
+
+    const btn = screen.getByText('Marcar pagado') as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+    fireEvent.click(btn)
+
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    const confirms = (window.confirm as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0] as string)
+    expect(confirms[0]).toMatch(/1 día\(s\) con marca incompleta contados a 3 h/)
+    expect(confirms[0]).toMatch(/1 tramo\(s\) sin cerrar = 3 h que no midió el reloj/)
+    expect(confirms.at(-1)).toMatch(/como PAGADO/)
+  })
+
+  it('cancelar la confirmación de las jornadas incompletas NO paga', async () => {
+    window.confirm = vi.fn(() => false)
+    WORK_DAYS = [...WORK_DAYS, DIA_INCOMPLETO]
+    await renderPago()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1))
+    expect(pagar).not.toHaveBeenCalled()
+  })
+
+  // El archivo del banco es lo que MUEVE la plata; "Marcar pagado" es solo el registro.
+  it('el bloqueo por horas dobles también frena el Excel del banco', async () => {
+    WORK_DAYS = [
+      ...WORK_DAYS,
+      { employee_id: 'e1', work_date: '2026-08-03', local: 'santa-teresa', hours: 8,
+        es_feriado: false, source: 'biotime', flags: null, created_at: '', updated_at: '' },
+    ]
+    render(<SalariosPago employees={[ANA, BENITO, INACTIVO]} />)
+    await screen.findByDisplayValue('104')
+    expect((screen.getByText('Descargar Excel para el banco') as HTMLButtonElement).disabled).toBe(true)
+
+    fireEvent.click(screen.getByLabelText(/Revisé las horas de 1 empleado/))
+    expect((screen.getByText('Descargar Excel para el banco') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  // Resolver la bandeja no cambia un colón de lo que se paga: la señal de las 3 h sale de
+  // work_days.flags, no del estado de la excepción.
+  it('avisa las horas puestas por la regla aunque la bandeja esté limpia', async () => {
+    window.confirm = vi.fn(() => true)
+    EXCS = [exc({ id: 'x1', tipo: 'impar', estado: 'resuelta', resuelto_by: 'u-1' })]
+    WORK_DAYS = [
+      ...WORK_DAYS,
+      { employee_id: 'e2', work_date: '2026-08-03', local: 'santa-teresa', hours: 7,
+        es_feriado: false, source: 'biotime',
+        flags: { pares: 1, horas_pares: 4, tramos_sin_cerrar: 1, horas_default: 3, horas_origen: 'mixto' },
+        created_at: '', updated_at: '' },
+    ]
+    await renderPago()
+    expect(screen.queryByText(/fichaje incompleto/)).toBeNull()
+    expect(await screen.findByText(/tramo\(s\) sin cerrar/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    // el paso consciente de A8 va en su PROPIO confirm, antes del de pagar
+    expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0])
+      .toMatch(/1 día\(s\) con marca incompleta contados a 3 h/)
+  })
+
+  // La fila editable comparte PK con la jornada del último día: el upsert la PISA. Si el
+  // cálculo no lo descuenta, el total guardado queda por debajo del tecleado.
+  it('editar el total no se come la jornada derivada del último día', async () => {
+    WORK_DAYS = [
+      { employee_id: 'e1', work_date: '2026-08-14', local: 'santa-teresa', hours: 72,
+        es_feriado: false, source: 'biotime', flags: null, created_at: '', updated_at: '' },
+      { employee_id: 'e1', work_date: '2026-08-15', local: 'santa-teresa', hours: 8,
+        es_feriado: false, source: 'biotime', flags: null, created_at: '', updated_at: '' },
+    ]
+    render(<SalariosPago employees={[ANA, BENITO, INACTIVO]} />)
+    const input = await screen.findByDisplayValue('80')
+    fireEvent.change(input, { target: { value: '82' } })
+    fireEvent.blur(input)
+
+    await waitFor(() => expect(upsert).toHaveBeenCalledTimes(1))
+    // 82 tecleadas − 72 que sobreviven = 10 en la fila manual (que reemplaza a las 8).
+    // Con el bug era 82 − 80 = 2, y el total recargado daba 74: 8 h de menos.
+    expect(upsert.mock.calls[0][0]).toMatchObject({
+      employee_id: 'e1', work_date: '2026-08-15', local: 'santa-teresa', hours: 10,
+    })
+  })
+
+  it('las excepciones YA resueltas no avisan nada', async () => {
+    window.confirm = vi.fn(() => true)
+    EXCS = [exc({ id: 'x1', tipo: 'impar', estado: 'resuelta', resuelto_by: 'u-1' })]
+    await renderPago()
+    expect(screen.queryByText(/fichaje incompleto/)).toBeNull()
+    expect((screen.getByText('Marcar pagado') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
   })
 })

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { Employee, EmployeePayment, EmployeeWageRate, SalaryPeriod, WorkDay } from '../../shared/types/database'
+import type { Employee, EmployeePayment, EmployeeWageRate, PunchException, SalaryPeriod, WorkDay } from '../../shared/types/database'
 import {
   getSalaryPeriods, createSalaryPeriod, getWorkDays, upsertWorkDay, getWageRatesUpTo,
-  getPeriodPayments, markPeriodPaid, consolidarPeriodo, LOCAL_DEFAULT,
+  getPeriodPayments, markPeriodPaid, consolidarPeriodo, getPunchExceptionsTodosLosLocales,
+  semaforoPago, HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
   type LineaConsolidado,
 } from '../../shared/api/salarios'
 import {
@@ -39,6 +40,12 @@ export default function SalariosPago({ employees }: Props) {
   const [rates, setRates]       = useState<EmployeeWageRate[]>([])
   const [workDays, setWorkDays] = useState<WorkDay[]>([])
   const [pagos, setPagos]       = useState<EmployeePayment[]>([])
+  // F1d: el estado del fichaje del período. La lectura es null-safe (devuelve [] si la
+  // tabla no está o la RLS dice que no), así que no puede tumbar esta pantalla — solo
+  // puede FRENAR el pago, nunca habilitarlo por error.
+  const [excs, setExcs] = useState<PunchException[]>([])
+  // Destrabe explícito del único caso que sí frena: horas contadas dos veces.
+  const [okDobles, setOkDobles] = useState(false)
 
   const [concepto, setConcepto] = useState(CONCEPTO_SALARIOS_DEFAULT)
   // Borradores por empleado. Las horas se persisten (work_days); el neto pisado a mano
@@ -79,16 +86,21 @@ export default function SalariosPago({ employees }: Props) {
 
   // Datos del período elegido: horas, tarifas vigentes a su fecha de fin y pagos ya hechos.
   const loadPeriodData = useCallback(async (p: SalaryPeriod | null) => {
-    if (!p) { setWorkDays([]); setRates([]); setPagos([]); return }
+    if (!p) { setWorkDays([]); setRates([]); setPagos([]); setExcs([]); setOkDobles(false); return }
     try {
-      const [wd, rs, pg] = await Promise.all([
+      const [wd, rs, pg, ex] = await Promise.all([
         getWorkDays(p.fecha_ini, p.fecha_fin),
         getWageRatesUpTo(p.fecha_fin),
         getPeriodPayments(p.id),
+        // TODOS los locales: el neto del período suma las horas de cualquier local
+        // (el pay run es global), así que el semáforo tiene que mirar el mismo conjunto.
+        getPunchExceptionsTodosLosLocales(p.fecha_ini, p.fecha_fin),
       ])
       setWorkDays(wd)
       setRates(rs)
       setPagos(pg)
+      setExcs(ex)
+      setOkDobles(false)
       setHorasDraft({})
       setNetoDraft({})
       setError(null)
@@ -102,6 +114,20 @@ export default function SalariosPago({ employees }: Props) {
 
   // Solo activos: un inactivo conserva su historial pero no entra a una nómina nueva.
   const activos = useMemo(() => employees.filter(e => e.is_active), [employees])
+
+  // El semáforo del fichaje: qué avisa, qué pide confirmación y qué frena. La regla de
+  // las 3 h (mig 059) le sacó el filo a los impares —esos días ya valen algo—, así que
+  // lo único que frena de verdad es la doble carga de horas.
+  const semaforo = useMemo(
+    () => (period ? semaforoPago(excs, workDays, period.fecha_fin, activos.map(e => e.id))
+                  : semaforoPago([], [], '', [])),
+    [excs, workDays, period, activos],
+  )
+  const nombresDobles = useMemo(
+    () => semaforo.dobles.map(id => employees.find(e => e.id === id)?.full_name ?? id),
+    [semaforo.dobles, employees],
+  )
+  const frenado = semaforo.dobles.length > 0 && !okDobles
 
   const lineas: LineaConsolidado[] = useMemo(
     () => (period ? consolidarPeriodo(activos, rates, workDays, period, LOCAL_DEFAULT) : []),
@@ -147,8 +173,12 @@ export default function SalariosPago({ employees }: Props) {
     const draft = horasDraft[l.employee.id]
     if (!period || draft == null) return
     const totalNuevo = num(draft)
-    // Lo editable es la fila manual: si mañana BioTime aporta horas propias, no las pisamos.
-    const manualNuevo = Math.max(0, totalNuevo - l.horasOtras)
+    // Lo editable es la fila manual, que comparte PK con la jornada del último día: si
+    // BioTime derivó ESE día, el upsert la reemplaza. Esas horas están dentro de
+    // `horasOtras` pero no van a sobrevivir, así que se descuentan del resto — restarlas
+    // igual dejaría el total por debajo de lo tecleado y se pagaría de menos.
+    const sobreviven  = Math.max(0, l.horasOtras - l.horasPisadas)
+    const manualNuevo = Math.max(0, totalNuevo - sobreviven)
     if (manualNuevo === l.horasManual) {
       setHorasDraft(d => { const rest = { ...d }; delete rest[l.employee.id]; return rest })
       return
@@ -187,9 +217,56 @@ export default function SalariosPago({ employees }: Props) {
 
   const handlePagar = async () => {
     if (!period || !user?.id) return
+    // Lo único que frena: las horas contadas dos veces. Se destraba tildando la casilla,
+    // no acá — este chequeo es la segunda llave por si el botón quedó habilitado.
+    if (frenado) {
+      setError(
+        `${nombresDobles.join(', ')} tiene(n) horas cargadas a mano Y horas de BioTime en este ` +
+        'período: el total las SUMA. Revisá cuál vale y confirmá la casilla antes de pagar.',
+      )
+      return
+    }
+
+    // Los avisos que no frenan viajan al confirm, para que quien paga los vea en el
+    // último momento y no en un cartel que ya scrolleó.
+    // A8 · paso consciente, no bloqueo: quien paga tiene que decir que sí a las horas que
+    // NO midió el reloj. Va en su propio confirm y no mezclado con el resto, porque es la
+    // única cifra de la nómina que salió de una política y no de un dato.
+    if (semaforo.diasIncompletos > 0) {
+      const sigue = window.confirm(
+        `${semaforo.diasIncompletos} día(s) con marca incompleta contados a ${HORAS_DEFAULT_IMPAR} h.\n\n` +
+        `${semaforo.tramos} tramo(s) sin cerrar = ${semaforo.horasDefault.toFixed(0)} h que no midió ` +
+        'el reloj (los tramos bien marcados de esos días sí cuentan sus horas reales).\n\n' +
+        'Se pueden corregir uno por uno en la pestaña Horas.\n\n¿Pagar igual?',
+      )
+      if (!sigue) return
+    }
+
+    // Marcas de alguien que no está en el maestro: el riesgo no es pagar de más, es que
+    // haya UNA PERSONA que no cobra. No se puede resolver desde acá (falta darla de alta).
+    if (semaforo.sinMapearDias > 0) {
+      const sigue = window.confirm(
+        `Hay ${semaforo.sinMapearMarcas} marca(s) de fichaje sin empleado asignado ` +
+        `(${semaforo.sinMapearDias} jornada(s)).\n\n` +
+        'Puede que alguien NO ESTÉ COBRANDO este período.\n\n' +
+        'Se asigna el código en Empleados / Tarifas y después se recalculan las horas.\n\n' +
+        '¿Pagar igual?',
+      )
+      if (!sigue) return
+    }
+
+    const avisos: string[] = []
+    if (semaforo.dobles.length > 0) {
+      avisos.push(`⚠️ Horas dobles confirmadas a mano: ${nombresDobles.join(', ')}.`)
+    }
+    if (semaforo.fichajeDias > 0) {
+      avisos.push(`${semaforo.fichajeDias} jornada(s) con fichaje incompleto sin revisar en la bandeja.`)
+    }
+
     const ok = window.confirm(
       `¿Marcar el período ${period.fecha_ini} → ${period.fecha_fin} como PAGADO?\n\n` +
       `${aPagar.length} empleado(s) · ${fi(total)}\n\n` +
+      (avisos.length > 0 ? avisos.join('\n') + '\n\n' : '') +
       'Queda el registro del pago por transferencia. No genera movimiento de caja.',
     )
     if (!ok) return
@@ -300,6 +377,51 @@ export default function SalariosPago({ employees }: Props) {
             </span>
           </div>
 
+          {!pagado && semaforo.sinMapearDias > 0 && (
+            <p style={{ padding: '0 12px 8px', fontSize: '0.78rem', color: 'var(--t-red, #b04a3a)' }}>
+              ⚠️ <strong>{semaforo.sinMapearMarcas} marca(s) de fichaje sin empleado asignado</strong>{' '}
+              ({semaforo.sinMapearDias} jornada(s)) en este período: puede que alguien no esté
+              cobrando. Asignale el código en <strong>Empleados / Tarifas</strong> y recalculá las
+              horas antes de pagar.
+            </p>
+          )}
+
+          {!pagado && semaforo.diasIncompletos > 0 && (
+            <p style={{ padding: '0 12px 8px', fontSize: '0.76rem', color: '#8a6d3b' }}>
+              🕒 <strong>{semaforo.diasIncompletos} jornada(s) con marca incompleta</strong> en esta
+              nómina: {semaforo.tramos} tramo(s) sin cerrar ={' '}
+              <strong>{semaforo.horasDefault.toFixed(0)} h</strong> puestas por la regla
+              ({HORAS_DEFAULT_IMPAR} h por tramo), no medidas por el reloj. Los tramos bien marcados
+              de esos días sí cuentan sus horas reales.
+            </p>
+          )}
+
+          {!pagado && semaforo.fichajeDias > 0 && (
+            <p style={{ padding: '0 12px 8px', fontSize: '0.72rem', color: '#888' }}>
+              {semaforo.fichajeDias} jornada(s) con fichaje incompleto sin revisar en la bandeja
+              (pestaña <strong>Horas</strong>). No frenan el pago.
+            </p>
+          )}
+
+          {!pagado && semaforo.dobles.length > 0 && (
+            <div style={{ padding: '0 12px 8px', fontSize: '0.78rem', color: 'var(--t-red, #b04a3a)' }}>
+              <p style={{ margin: 0 }}>
+                ⛔ <strong>{nombresDobles.join(', ')}</strong> tiene(n) el total del período cargado
+                a mano <em>y</em> horas de BioTime: el neto las <strong>SUMA</strong>. Es el único
+                caso que puede pagar de más.
+              </p>
+              <label style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.3rem' }}>
+                <input
+                  type="checkbox"
+                  checked={okDobles}
+                  onChange={e => setOkDobles(e.target.checked)}
+                  disabled={saving}
+                />
+                Revisé las horas de {semaforo.dobles.length} empleado(s) y el total es correcto
+              </label>
+            </div>
+          )}
+
           <table className="admin-table">
             <thead>
               <tr>
@@ -378,15 +500,23 @@ export default function SalariosPago({ employees }: Props) {
             <button
               className="btn-secondary"
               onClick={handleDownload}
-              disabled={saving || aPagar.length === 0}
+              // El archivo del banco es lo que MUEVE la plata: "Marcar pagado" es solo el
+              // registro. Frenar el registro y dejar bajar el Excel sería frenar la puerta
+              // equivocada — se transferiría de más y recién después aparecería el bloqueo.
+              disabled={saving || aPagar.length === 0 || frenado}
+              title={frenado ? `Horas contadas dos veces: ${nombresDobles.join(', ')}` : undefined}
             >
               Descargar Excel para el banco
             </button>
             <button
               className="btn-primary"
               onClick={handlePagar}
-              disabled={saving || pagado || aPagar.length === 0 || !puedePagar}
-              title={puedePagar ? undefined : 'Solo el dueño o el gerente marcan el pago'}
+              disabled={saving || pagado || aPagar.length === 0 || !puedePagar || frenado}
+              title={
+                frenado
+                  ? `Horas contadas dos veces: ${nombresDobles.join(', ')}`
+                  : puedePagar ? undefined : 'Solo el dueño o el gerente marcan el pago'
+              }
             >
               {pagado ? 'Pagado' : 'Marcar pagado'}
             </button>

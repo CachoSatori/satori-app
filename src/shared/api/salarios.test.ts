@@ -106,10 +106,12 @@ describe('splitHorasPeriodo', () => {
     wd({ employee_id: 'e2', work_date: fin, hours: 40 }),
   ]
   it('separa la fila manual editable del resto y el total es la suma', () => {
-    expect(splitHorasPeriodo(rows, 'e1', fin, LOCAL_DEFAULT)).toEqual({ manual: 90, otras: 8, total: 98 })
+    expect(splitHorasPeriodo(rows, 'e1', fin, LOCAL_DEFAULT))
+      .toEqual({ manual: 90, otras: 8, pisadas: 0, total: 98 })
   })
   it('empleado sin horas → todo en cero', () => {
-    expect(splitHorasPeriodo(rows, 'e9', fin, LOCAL_DEFAULT)).toEqual({ manual: 0, otras: 0, total: 0 })
+    expect(splitHorasPeriodo(rows, 'e9', fin, LOCAL_DEFAULT))
+      .toEqual({ manual: 0, otras: 0, pisadas: 0, total: 0 })
   })
 })
 

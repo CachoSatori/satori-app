@@ -106,6 +106,46 @@ export interface WorkDay {
   hours:       number
   es_feriado:  boolean
   source:      'manual' | 'biotime'
+  // F1d escribe acá el recuento del emparejamiento (marcas/pares/impares/solapados/
+  // turno_largo) y el override manual deja su rastro de auditoría.
+  flags:       Record<string, unknown> | null
+  created_at:  string
+  updated_at:  string
+}
+
+// ── BioTime (migs 057 F1a / 059 F1d) ────────────────────────────────────────────
+
+// La marca cruda del reloj, tal cual la dejó el agente. NADIE la edita: las
+// correcciones van a work_days (override manual) o a punch_exceptions.
+export interface TimePunch {
+  id:          string
+  local:       string
+  biotime_id:  number
+  emp_code:    string
+  employee_id: string | null
+  punch_at:    string   // timestamptz
+  punch_state: 'in' | 'out'
+  terminal:    string | null
+  synced_at:   string
+  created_at:  string
+  updated_at:  string
+}
+
+export type PunchExceptionTipo = 'impar' | 'turno_largo' | 'sin_mapear' | 'solapado'
+
+// Lo que el emparejamiento de F1d no pudo resolver solo. `employee_id` es null
+// justo en el caso sin_mapear (todavía no hay a quién acreditarle la marca).
+export interface PunchException {
+  id:          string
+  employee_id: string | null
+  emp_code:    string | null
+  work_date:   string | null   // date
+  local:       string | null
+  tipo:        PunchExceptionTipo
+  detalle:     Record<string, unknown> | null
+  estado:      'abierta' | 'resuelta'
+  resuelto_by: string | null
+  resuelto_at: string | null
   created_at:  string
   updated_at:  string
 }

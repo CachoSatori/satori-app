@@ -597,6 +597,23 @@ export async function reconcilePropinaEgreso(description: string, newTotalCRC: n
   await supabase.from('cash_movements').update({ amount_crc: newTotalCRC }).eq('id', mov.id)
 }
 
+// ── Idempotencia de los asientos de cierre ───────────────────────────────────
+//
+// UUID determinístico (SHA-256 del seed, formateado con bits de versión/variante válidos):
+// re-ejecutar el MISMO asiento produce el MISMO id, así el UNIQUE de client_op_id (mig 021)
+// rebota el duplicado aunque la limpieza previa (el delete) hubiera fallado. Es el SEGUNDO
+// cinturón: el delete sigue siendo la primera capa — es el que además permite CORREGIR
+// (re-cerrar el día con otro monto). (client_op_id es columna uuid → el seed legible se hashea.)
+// Exportada para test.
+export async function cierreOpId(seed: string): Promise<string> {
+  const data = new TextEncoder().encode(seed)
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', data))
+  h[6] = (h[6] & 0x0f) | 0x40
+  h[8] = (h[8] & 0x3f) | 0x80
+  const hex = Array.from(h.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 // Registra (idempotente) las ventas en EFECTIVO de un Cierre del día como
 // movimientos de ingreso a nivel día (session_id null). Borra los previos del
 // mismo día antes de re-crear, así re-cerrar el día no duplica el ledger.
@@ -612,39 +629,47 @@ export async function recordCierreSales(params: {
   noche:    { crc: number; usd: number }
 }): Promise<void> {
   // Limpiar ventas-de-cierre previas de este día (idempotencia).
-  await supabase
+  const { error: delErr } = await supabase
     .from('cash_movements')
     .delete()
     .eq('subcategory', 'Ventas cierre')
     .like('description', `%${params.session_date}`)
+  // La limpieza que falla NO aborta el cierre: el client_op_id determinístico ya impide el
+  // duplicado (el insert rebota con 23505). Se deja rastro para poder auditarlo.
+  if (delErr) console.warn('[cierre] no se pudieron limpiar las ventas previas del día:', delErr.message)
 
   const rows = [
-    { turno: 'Mediodía', ...params.mediodia },
-    { turno: 'Noche',    ...params.noche },
+    { turno: 'Mediodía', key: 'mediodia', ...params.mediodia },
+    { turno: 'Noche',    key: 'noche',    ...params.noche },
   ].filter(r => r.crc !== 0 || r.usd !== 0)
   if (rows.length === 0) return
 
-  const { error } = await withWriteTimeout(signal => supabase.from('cash_movements').insert(
-    rows.map(r => ({
-      session_id:    null,
-      created_by:    params.created_by,
-      movement_type: 'ingreso',
-      amount_crc:    r.crc,
-      amount_usd:    r.usd,
-      currency:      'CRC',
-      exchange_rate: params.exchange_rate,
-      description:   `Ventas efectivo ${r.turno} ${params.session_date}`,
-      subcategory:   'Ventas cierre',
-      supplier_id:   null,
-      supplier_name: '',
-      employee_name: '',
-      shift:         r.turno,
-      caja_origen:   'Caja Fuerte',   // las ventas en efectivo entran a la Caja Fuerte (+saldo)
-      method:        'Efectivo',
-      status:        'aprobado',
-    })),
-  ).abortSignal(signal))
-  if (error) throw new Error(error.message)
+  // key SIN acento ni mayúscula: es la mitad estable del seed del client_op_id — si cambiara
+  // el texto visible del turno, el id del asiento ya escrito no debe moverse.
+  const payload = await Promise.all(rows.map(async r => ({
+    client_op_id:  await cierreOpId(`cierre-ventas-${params.session_date}-${r.key}`),
+    session_id:    null,
+    created_by:    params.created_by,
+    movement_type: 'ingreso' as const,
+    amount_crc:    r.crc,
+    amount_usd:    r.usd,
+    currency:      'CRC' as const,
+    exchange_rate: params.exchange_rate,
+    description:   `Ventas efectivo ${r.turno} ${params.session_date}`,
+    subcategory:   'Ventas cierre',
+    supplier_id:   null,
+    supplier_name: '',
+    employee_name: '',
+    shift:         r.turno,
+    caja_origen:   'Caja Fuerte',   // las ventas en efectivo entran a la Caja Fuerte (+saldo)
+    method:        'Efectivo',
+    status:        'aprobado',
+  })))
+
+  const { error } = await withWriteTimeout(signal =>
+    supabase.from('cash_movements').insert(payload).abortSignal(signal))
+  // 23505 = el client_op_id determinístico ya existe (retry tras timeout) → ya está registrado.
+  if (error && (error as { code?: string }).code !== '23505') throw new Error(error.message)
 }
 
 
@@ -669,12 +694,16 @@ export async function recordAperturaPozo(params: {
 }): Promise<void> {
   const desc = `Apertura pozo ${params.fecha}`
   // Idempotencia: borra la apertura previa de esa fecha antes de re-crearla.
-  await supabase.from('cash_movements').delete().eq('description', desc)
+  const { error: delErr } = await supabase.from('cash_movements').delete().eq('description', desc)
+  // Falló la limpieza → NO se aborta: el client_op_id determinístico rebota el duplicado (23505).
+  if (delErr) console.warn('[apertura pozo] no se pudo limpiar la apertura previa:', delErr.message)
   if (!params.monto_crc && !params.monto_usd) return
   if (params.monto_crc < 0 || params.monto_usd < 0) {
     throw new Error('La apertura del pozo no puede ser negativa')
   }
+  const opId = await cierreOpId(`apertura-pozo-${params.fecha}`)
   const { error } = await withWriteTimeout(signal => supabase.from('cash_movements').insert({
+    client_op_id:  opId,
     session_id:    null,
     created_by:    params.created_by,
     movement_type: 'ingreso',
@@ -692,7 +721,8 @@ export async function recordAperturaPozo(params: {
     method:        'Efectivo',
     status:        'aprobado',
   }).abortSignal(signal))
-  if (error) throw new Error(error.message)
+  // 23505 = el client_op_id determinístico ya existe (retry) → ya está registrada.
+  if (error && (error as { code?: string }).code !== '23505') throw new Error(error.message)
 }
 
 // Registra (idempotente) el retiro de dueños a banco de un Cierre del día.
@@ -707,9 +737,13 @@ export async function recordCierreRetiro(params: {
   amount_crc:    number
 }): Promise<void> {
   const desc = `Retiro dueños a banco ${params.session_date}`
-  await supabase.from('cash_movements').delete().eq('description', desc)
+  const { error: delErr } = await supabase.from('cash_movements').delete().eq('description', desc)
+  // Falló la limpieza → NO se aborta el cierre: el client_op_id rebota el duplicado (23505).
+  if (delErr) console.warn('[cierre] no se pudo limpiar el retiro previo del día:', delErr.message)
   if (!params.amount_crc) return
+  const opId = await cierreOpId(`cierre-retiro-${params.session_date}`)
   const { error } = await withWriteTimeout(signal => supabase.from('cash_movements').insert({
+    client_op_id:  opId,
     session_id:    null,
     created_by:    params.created_by,
     movement_type: 'traspaso',
@@ -727,21 +761,15 @@ export async function recordCierreRetiro(params: {
     method:        'Transferencia',
     status:        'aprobado',
   }).abortSignal(signal))
-  if (error) throw new Error(error.message)
+  // 23505 = el client_op_id determinístico ya existe (retry tras timeout) → ya está registrado.
+  if (error && (error as { code?: string }).code !== '23505') throw new Error(error.message)
 }
 
-// UUID determinístico (SHA-256 del seed, formateado con bits de versión/variante válidos) —
-// client_op_id del ajuste de cierre: re-confirmar el MISMO cierre produce el MISMO id, así el
-// UNIQUE de client_op_id (mig 021) rebota el duplicado aunque la limpieza previa fallara.
-// (client_op_id es columna uuid → el seed legible "cierre-ajuste-{fecha}-{moneda}" se hashea.)
-// Exportada para test.
+// client_op_id del ajuste de cierre — seed "cierre-ajuste-{fecha}-{moneda}" (ver cierreOpId).
+// EL SEED NO SE TOCA: los ajustes ya escritos en producción llevan estos mismos ids, y cambiarlo
+// dejaría de rebotar sus duplicados. Exportada para test.
 export async function cierreAjusteOpId(sessionDate: string, currency: 'crc' | 'usd'): Promise<string> {
-  const data = new TextEncoder().encode(`cierre-ajuste-${sessionDate}-${currency}`)
-  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', data))
-  h[6] = (h[6] & 0x0f) | 0x40
-  h[8] = (h[8] & 0x3f) | 0x80
-  const hex = Array.from(h.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('')
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  return cierreOpId(`cierre-ajuste-${sessionDate}-${currency}`)
 }
 
 // Registra (idempotente) el/los movimientos de AJUSTE de un cierre con diferencia — Opción B

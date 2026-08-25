@@ -272,6 +272,118 @@ describe('SalariosHoras — bandeja de excepciones', () => {
     expect(screen.getAllByText('Cocina')).toHaveLength(1)   // la del código 8 no lo tiene
   })
 
+  // ── Capa 2 · corrección por resta ────────────────────────────────────────────
+  // El impar de UNA marca no se corrige escribiendo horas: se muestra la hora real del
+  // reloj, de qué lado va (BioTime se equivoca seguido con quien marca una sola vez) y se
+  // completa la otra mitad. Las horas salen de la resta.
+  const impar1 = (over: Partial<PunchException> = {}) => exc({
+    id: 'x1', tipo: 'impar', employee_id: 'e1', work_date: '2026-08-03',
+    // 17:07Z = 11:07 en Costa Rica (UTC−6 fijo)
+    detalle: { cuantas: 1, marcas: [{ id: 'p1', punch_at: '2026-08-03T17:07:00Z', punch_state: 'in' }] },
+    ...over,
+  })
+
+  async function abrirCaso(e: PunchException[] = [impar1()]) {
+    EXCS = e
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(e.length)
+    fireEvent.click(screen.getAllByText('NACHO').at(-1)!)
+  }
+
+  it('muestra la hora real, el lado y pide la otra mitad', async () => {
+    await abrirCaso()
+    expect(screen.getByText('11:07')).toBeTruthy()                       // la del reloj
+    expect(screen.getByLabelText('Lado de la marca 2026-08-03').textContent).toMatch(/Entrada/)
+    expect(screen.getByText('salió')).toBeTruthy()                        // pide la salida
+    expect(screen.getByLabelText('Salida 2026-08-03')).toBeTruthy()
+    expect(screen.getByText('= —')).toBeTruthy()                          // sin complemento, sin horas
+    expect((screen.getByText('Guardar') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('completa la mitad que falta y calcula las horas por resta, en vivo', async () => {
+    await abrirCaso()
+    fireEvent.change(screen.getByLabelText('Salida 2026-08-03'), { target: { value: '19:22' } })
+    expect(screen.getByText('= 8.25 h')).toBeTruthy()                     // 11:07 → 19:22
+    expect((screen.getByText('Guardar') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('voltear el lado cambia QUÉ mitad se pide y recalcula', async () => {
+    await abrirCaso()
+    fireEvent.change(screen.getByLabelText('Salida 2026-08-03'), { target: { value: '19:22' } })
+    expect(screen.getByText('= 8.25 h')).toBeTruthy()
+
+    fireEvent.click(screen.getByLabelText('Lado de la marca 2026-08-03'))
+
+    // ahora la marca real es la SALIDA y se pide la entrada
+    expect(screen.getByLabelText('Lado de la marca 2026-08-03').textContent).toMatch(/Salida/)
+    expect(screen.getByText('entró')).toBeTruthy()
+    expect(screen.getByLabelText('Entrada 2026-08-03')).toBeTruthy()
+    // el complemento tecleado ahora es la ENTRADA: 19:22 → 11:07 cruza medianoche = 15.75 h
+    expect(screen.getByText('= 15.75 h')).toBeTruthy()
+  })
+
+  it('Guardar escribe las horas calculadas con su motivo y después resuelve', async () => {
+    await abrirCaso()
+    fireEvent.change(screen.getByLabelText('Salida 2026-08-03'), { target: { value: '19:00' } })
+    fireEvent.click(screen.getByText('Guardar'))
+
+    await waitFor(() => expect(override).toHaveBeenCalled())
+    expect(override.mock.calls[0][0]).toMatchObject({
+      employee_id: 'e1', work_date: '2026-08-03', local: 'santa-teresa',
+      hours: 7.88, userId: 'u-1',
+      motivo: 'entró 11:07 → salió 19:00 (marca real: entrada 11:07, mitad completada a mano)',
+    })
+    await waitFor(() => expect(resolver).toHaveBeenCalledWith('x1', 'u-1'))
+  })
+
+  it('el botón de 3 h acepta el default derivado sin escribir override', async () => {
+    await abrirCaso()
+    fireEvent.click(screen.getByText('3 h'))
+    await waitFor(() => expect(resolver).toHaveBeenCalledWith('x1', 'u-1'))
+    expect(override).not.toHaveBeenCalled()
+  })
+
+  it('avisa —sin bloquear— cuando la resta da un turno absurdo', async () => {
+    await abrirCaso()
+    fireEvent.change(screen.getByLabelText('Salida 2026-08-03'), { target: { value: '10:00' } })
+    expect(screen.getByText('= 22.88 h')).toBeTruthy()
+    expect(screen.getByText(/más de 16 h, revisalo/)).toBeTruthy()
+    expect((screen.getByText('Guardar') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('el estado no se filtra entre casos', async () => {
+    await abrirCaso([
+      impar1(),
+      impar1({ id: 'x2', work_date: '2026-08-04',
+               detalle: { cuantas: 1, marcas: [{ id: 'p2', punch_at: '2026-08-04T14:00:00Z', punch_state: 'out' }] } }),
+    ])
+    fireEvent.change(screen.getByLabelText('Salida 2026-08-03'), { target: { value: '19:22' } })
+    expect(screen.getByText('= 8.25 h')).toBeTruthy()
+    // el segundo caso (marca real = salida 08:00) sigue vacío
+    expect((screen.getByLabelText('Entrada 2026-08-04') as HTMLInputElement).value).toBe('')
+    expect(screen.getByText('= —')).toBeTruthy()
+  })
+
+  it('los casos que NO son impar de una marca siguen con el input numérico', async () => {
+    EXCS = [
+      exc({ id: 'x1', tipo: 'solapado', employee_id: 'e1', work_date: '2026-08-03',
+            detalle: { marcas: [{ id: 'p1', punch_at: '2026-08-03T17:00:00Z' }] } }),
+      exc({ id: 'x2', tipo: 'impar', employee_id: 'e1', work_date: '2026-08-04',
+            detalle: { cuantas: 2, marcas: [
+              { id: 'p1', punch_at: '2026-08-04T14:00:00Z', punch_state: 'in' },
+              { id: 'p2', punch_at: '2026-08-04T22:00:00Z', punch_state: 'in' },
+            ] } }),
+    ]
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(2)
+    fireEvent.click(screen.getAllByText('NACHO').at(-1)!)
+
+    expect(screen.getByLabelText('Horas corregidas 2026-08-03')).toBeTruthy()
+    expect(screen.getByLabelText('Horas corregidas 2026-08-04')).toBeTruthy()
+    expect(screen.getAllByText('Corregir a mano')).toHaveLength(2)
+    expect(screen.queryByText('Guardar')).toBeNull()
+  })
+
   it('resolver una excepción la marca resuelta con el usuario de la sesión', async () => {
     EXCS = [exc({ id: 'x1', tipo: 'impar', employee_id: 'e1' })]
     render(<SalariosHoras employees={EMPLEADOS} />)

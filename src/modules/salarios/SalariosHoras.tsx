@@ -9,6 +9,9 @@ import {
 } from '../../shared/api/salarios'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { ROLE_LABELS } from '../../shared/constants'
+import {
+  horasEntreMarcas, motivoCorreccion, marcaUnicaDeImpar, HORAS_SOSPECHOSAS,
+} from '../../shared/utils/horasCorreccion'
 
 // Salarios · BioTime F1d: la pantalla que convierte marcas en HORAS.
 //
@@ -35,6 +38,13 @@ interface FilaHoras {
   tramos:       number   // tramos sin cerrar (cada uno vale HORAS_DEFAULT_IMPAR)
   horasDefault: number   // las horas que puso la regla
   horasMedidas: number   // las que midió el reloj
+}
+
+// De qué lado quedó la marca real: lo que dijo BioTime, salvo que alguien lo haya
+// volteado en la pantalla. BioTime se equivoca seguido con quien marca UNA sola vez.
+type LadoMap = Record<string, 'in' | 'out'>
+function ladoConDraft(id: string, porDefecto: 'in' | 'out', draft: LadoMap): 'in' | 'out' {
+  return draft[id] ?? porDefecto
 }
 
 function hhmm(iso: string): string {
@@ -64,6 +74,10 @@ export default function SalariosHoras({ employees }: Props) {
   const [abierto, setAbierto]   = useState<string | null>(null)     // grupo expandido
   const [marcas, setMarcas]     = useState<Record<string, TimePunch[]>>({})
   const [horasDraft, setHoras]  = useState<Record<string, string>>({})
+  // Capa 2 · corrección por resta, por caso (keyed por x.id, sin fuga entre filas):
+  // de qué lado va la marca real, y la mitad que falta en formato reloj.
+  const [ladoDraft, setLado]    = useState<Record<string, 'in' | 'out'>>({})
+  const [compDraft, setComp]    = useState<Record<string, string>>({})
 
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState(false)
@@ -196,6 +210,41 @@ export default function SalariosHoras({ employees }: Props) {
       await loadDatos(period, local)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error resolviendo la excepción')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Capa 2: guardar la corrección por RESTA. Mismo camino de siempre —override manual +
+   * resolver— pero las horas salen de dos marcas de reloj en vez de que alguien las
+   * estime. El `motivo` deja escrito cuál mitad la puso el reloj y cuál la persona.
+   */
+  const handleGuardarReloj = async (x: PunchException, entrada: string, salida: string, horas: number) => {
+    if (!user?.id || !x.employee_id || !x.work_date) return
+    const marca = marcaUnicaDeImpar(x)
+    if (!marca) return
+    const wd = workDays.find(
+      w => w.employee_id === x.employee_id && w.work_date === x.work_date && w.local === (x.local ?? local),
+    )
+    setBusy(true); setError(null)
+    try {
+      await overrideHorasDia({
+        employee_id:   x.employee_id,
+        work_date:     x.work_date,
+        local:         x.local ?? local,
+        hours:         horas,
+        userId:        user.id,
+        horas_biotime: wd ? Number(wd.hours) || 0 : null,
+        motivo:        motivoCorreccion(entrada, salida, ladoConDraft(x.id, marca.punch_state, ladoDraft), hhmm(marca.punch_at)),
+      })
+      await resolvePunchException(x.id, user.id)
+      setComp(d => { const r = { ...d }; delete r[x.id]; return r })
+      setLado(d => { const r = { ...d }; delete r[x.id]; return r })
+      setResumen(null)
+      await loadDatos(period, local)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error guardando la corrección')
     } finally {
       setBusy(false)
     }
@@ -379,7 +428,7 @@ export default function SalariosHoras({ employees }: Props) {
             )}
             <span className="fx-spacer" />
             {/* Re-dispara la MISMA carga del período; no trae nada nuevo ni recalcula. */}
-            <button className="btn-secondary" onClick={() => loadDatos(period, local)} disabled={busy}>
+            <button className="btn-secondary fx-btn" onClick={() => loadDatos(period, local)} disabled={busy}>
               Actualizar
             </button>
           </div>
@@ -420,34 +469,99 @@ export default function SalariosHoras({ employees }: Props) {
                                 <div className="fx-caso-info">
                                   <span className="fx-fecha">{x.work_date}</span>
                                   <span className="role-badge">{etiquetaTipo(x.tipo)}</span>
-                                  <button className="btn-secondary" onClick={() => verMarcas(x)} disabled={busy}>
+                                  <button className="btn-secondary fx-btn" onClick={() => verMarcas(x)} disabled={busy}>
                                     Ver marcas
                                   </button>
                                 </div>
-                                <div className="fx-caso-acciones">
-                                {x.employee_id && x.work_date && (
-                                  <>
-                                    <input
-                                      className="tip-input"
-                                      type="number"
-                                      min="0"
-                                      step="0.25"
-                                      placeholder="horas"
-                                      aria-label={`Horas corregidas ${x.work_date}`}
-                                      value={horasDraft[x.id] ?? ''}
-                                      onChange={e => setHoras(d => ({ ...d, [x.id]: e.target.value }))}
-                                      disabled={busy}
-                                      style={{ width: '80px' }}
-                                    />
-                                    <button className="btn-primary" onClick={() => handleOverride(x)} disabled={busy}>
-                                      Corregir a mano
-                                    </button>
-                                  </>
-                                )}
-                                <button className="btn-secondary" onClick={() => handleResolver(x)} disabled={busy}>
-                                  Marcar resuelta
-                                </button>
-                                </div>
+                                {(() => {
+                                  // Solo el impar de UNA marca se corrige por resta: es el
+                                  // único caso donde no hay ambigüedad sobre qué falta.
+                                  const marca = marcaUnicaDeImpar(x)
+                                  if (!marca) {
+                                    return (
+                                      <div className="fx-caso-acciones">
+                                        {x.employee_id && x.work_date && (
+                                          <>
+                                            <input
+                                              className="tip-input fx-input"
+                                              type="number"
+                                              min="0"
+                                              step="0.25"
+                                              placeholder="horas"
+                                              aria-label={`Horas corregidas ${x.work_date}`}
+                                              value={horasDraft[x.id] ?? ''}
+                                              onChange={e => setHoras(d => ({ ...d, [x.id]: e.target.value }))}
+                                              disabled={busy}
+                                              style={{ width: '80px' }}
+                                            />
+                                            <button className="btn-primary fx-btn" onClick={() => handleOverride(x)} disabled={busy}>
+                                              Corregir a mano
+                                            </button>
+                                          </>
+                                        )}
+                                        <button className="btn-secondary fx-btn" onClick={() => handleResolver(x)} disabled={busy}>
+                                          Marcar resuelta
+                                        </button>
+                                      </div>
+                                    )
+                                  }
+
+                                  const lado      = ladoConDraft(x.id, marca.punch_state, ladoDraft)
+                                  const horaReal  = hhmm(marca.punch_at)
+                                  const comp      = compDraft[x.id] ?? ''
+                                  const entrada   = lado === 'in' ? horaReal : comp
+                                  const salida    = lado === 'in' ? comp : horaReal
+                                  const horas     = horasEntreMarcas(entrada, salida)
+                                  const sospechoso = horas != null && horas > HORAS_SOSPECHOSAS
+
+                                  return (
+                                    <div className="fx-caso-acciones fx-reloj">
+                                      <span className="fx-marca fx-marca-real" title="hora real del reloj">
+                                        {horaReal}
+                                      </span>
+                                      {/* Voltear el lado es la corrección clave: BioTime
+                                          etiqueta mal a quien marca una sola vez. */}
+                                      <button
+                                        className="btn-secondary fx-btn fx-toggle"
+                                        aria-label={`Lado de la marca ${x.work_date}`}
+                                        onClick={() => setLado(d => ({ ...d, [x.id]: lado === 'in' ? 'out' : 'in' }))}
+                                        disabled={busy}
+                                      >
+                                        {lado === 'in' ? 'Entrada' : 'Salida'} ⇄
+                                      </button>
+                                      <span className="fx-reloj-sep">
+                                        {lado === 'in' ? 'salió' : 'entró'}
+                                      </span>
+                                      <input
+                                        className="tip-input fx-input fx-input-reloj"
+                                        type="time"
+                                        aria-label={`${lado === 'in' ? 'Salida' : 'Entrada'} ${x.work_date}`}
+                                        value={comp}
+                                        onChange={e => setComp(d => ({ ...d, [x.id]: e.target.value }))}
+                                        disabled={busy}
+                                      />
+                                      <span className={`fx-horas${sospechoso ? ' fx-horas-alerta' : ''}`}>
+                                        {horas != null ? `= ${horas} h` : '= —'}
+                                      </span>
+                                      {sospechoso && (
+                                        <span className="fx-aviso" role="status">
+                                          ⚠️ más de {HORAS_SOSPECHOSAS} h, revisalo
+                                        </span>
+                                      )}
+                                      <button
+                                        className="btn-primary fx-btn"
+                                        onClick={() => horas != null && handleGuardarReloj(x, entrada, salida, horas)}
+                                        disabled={busy || horas == null}
+                                      >
+                                        Guardar
+                                      </button>
+                                      {/* Aceptar el default derivado, sin override. */}
+                                      <button className="btn-secondary fx-btn" onClick={() => handleResolver(x)} disabled={busy}>
+                                        {HORAS_DEFAULT_IMPAR} h
+                                      </button>
+                                    </div>
+                                  )
+                                })()}
                               </div>
 
                               {ms && (() => {

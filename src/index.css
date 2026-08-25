@@ -5177,3 +5177,49 @@ html, body, #root {
   color: var(--t-muted, #8a8070);
 }
 .fx-nota strong { color: var(--t-ink, #0d0d0d); }
+
+/* ── Bandeja · Capa 2: botones compactos + corrección por resta ─────────────────
+   Scoped a .fx-*: los .btn-* globales quedan como están en el resto de la app.     */
+
+.fx-btn {
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  padding: 4px 9px;
+  min-height: 0;
+  line-height: 1.4;
+}
+.fx-input {
+  font-size: 0.74rem;
+  padding: 3px 6px;
+  min-height: 0;
+}
+.fx-input-reloj { width: 92px; }
+
+.fx-reloj {
+  gap: 0.3rem;
+  padding: 0.15rem 0;
+}
+/* La hora que dio el reloj: se distingue de la que completa una persona. */
+.fx-marca-real {
+  font-weight: 700;
+  color: var(--t-ink, #0d0d0d);
+  border-left: 3px solid var(--t-teal, #2a7a6a);
+}
+.fx-toggle { min-width: 74px; }
+.fx-reloj-sep {
+  font-size: 0.68rem;
+  color: var(--t-muted, #8a8070);
+  font-style: italic;
+}
+.fx-horas {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--t-teal, #2a7a6a);
+  min-width: 56px;
+}
+.fx-horas-alerta { color: var(--t-red, #c23b22); }
+.fx-aviso {
+  font-size: 0.66rem;
+  color: var(--t-red, #c23b22);
+}

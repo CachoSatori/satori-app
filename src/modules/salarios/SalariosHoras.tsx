@@ -5,6 +5,8 @@ import {
   derivarWorkDays, resolvePunchException, overrideHorasDia,
   agruparExcepciones, etiquetaTipo, empleadosConHorasDobles, resumenImpares, marcasDelCaso,
   HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
+  // Capa 3 (mig 061): la regla de horario del empleado.
+  imparesConRegla, horaHabitualFaltante, motivoRegla, hhmmCR as hhmm, MOTIVO_REGLA,
   type DerivacionResumen, type GrupoExcepciones,
 } from '../../shared/api/salarios'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -47,14 +49,6 @@ function ladoConDraft(id: string, porDefecto: 'in' | 'out', draft: LadoMap): 'in
   return draft[id] ?? porDefecto
 }
 
-function hhmm(iso: string): string {
-  // Costa Rica es UTC−6 fijo: la hora local sale del instante sin librería de zonas.
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  const cr = new Date(d.getTime() - 6 * 3600_000)
-  return `${String(cr.getUTCHours()).padStart(2, '0')}:${String(cr.getUTCMinutes()).padStart(2, '0')}`
-}
-
 interface Props {
   employees: Employee[]
 }
@@ -82,8 +76,12 @@ export default function SalariosHoras({ employees }: Props) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy]       = useState(false)
   const [error, setError]     = useState<string | null>(null)
+  // Aviso ≠ error: la regla puede dar un turno absurdo y eso se avisa SIN teñir de rojo
+  // ni frenar nada, igual que en Capa 2.
+  const [aviso, setAviso]     = useState<string | null>(null)
 
   const period = periods.find(p => p.id === periodId) ?? null
+  const empById = useMemo(() => new Map(employees.map(e => [e.id, e])), [employees])
 
   const loadPeriods = useCallback(async () => {
     try {
@@ -174,6 +172,24 @@ export default function SalariosHoras({ employees }: Props) {
     [workDays, period],
   )
 
+  /**
+   * Los impares de un grupo que la regla del empleado puede completar. El rótulo del botón
+   * y lo que el botón hace salen de ACÁ, así el número que se lee es exactamente el número
+   * que se va a escribir.
+   *
+   * Se descuenta lo que la persona ya escribió a mano en ese caso: si alguien puso una hora
+   * distinta para un día puntual, la regla no se la pisa.
+   */
+  const aplicablesDe = useCallback(
+    (g: GrupoExcepciones) =>
+      imparesConRegla(
+        g.items,
+        empById.get(g.key) ?? null,
+        (x, porDefecto) => ladoConDraft(x.id, porDefecto, ladoDraft),
+      ).filter(a => !compDraft[a.x.id]),
+    [empById, ladoDraft, compDraft],
+  )
+
   const handleRecalcular = async () => {
     if (!period) return
     setBusy(true); setError(null)
@@ -245,6 +261,67 @@ export default function SalariosHoras({ employees }: Props) {
       await loadDatos(period, local)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error guardando la corrección')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Capa 3: aplicar el horario habitual del empleado a TODOS sus impares del período.
+   *
+   * Es el mismo camino de Capa 2 repetido —override manual + resolver— sin ningún atajo:
+   * cada día se escribe con sus horas por resta y su propio motivo. Lo único que cambia es
+   * quién puso la mitad que faltaba, y el motivo lo deja dicho.
+   *
+   * Nunca alcanza a un día sin marcas: `imparesConRegla` solo devuelve impares de UNA
+   * marca, donde el reloj ya probó que la persona estuvo.
+   */
+  const handleAplicarRegla = async (g: GrupoExcepciones) => {
+    if (!user?.id) { setError('Sesión sin usuario.'); return }
+    const aplicables = aplicablesDe(g)
+    if (aplicables.length === 0) return
+    setBusy(true); setError(null); setAviso(null)
+    // Se va a escribir sí o sí (aplicables > 0) → el resumen del último recálculo deja de
+    // ser cierto desde acá.
+    setResumen(null)
+    let hechos = 0
+    try {
+      const sospechosos: string[] = []
+      for (const a of aplicables) {
+        const x = a.x
+        if (!x.employee_id || !x.work_date) continue
+        const loc = x.local ?? local
+        const wd = workDays.find(
+          w => w.employee_id === x.employee_id && w.work_date === x.work_date && w.local === loc,
+        )
+        await overrideHorasDia({
+          employee_id:   x.employee_id,
+          work_date:     x.work_date,
+          local:         loc,
+          hours:         a.horas,
+          userId:        user.id,
+          horas_biotime: wd ? Number(wd.hours) || 0 : null,
+          motivo:        motivoRegla(a.entrada, a.salida, a.lado, a.horaReal),
+        })
+        await resolvePunchException(x.id, user.id)
+        hechos += 1
+        if (a.horas > HORAS_SOSPECHOSAS) sospechosos.push(`${x.work_date} (${a.horas} h)`)
+      }
+      await loadDatos(period, local)
+      // Avisa, no bloquea: un turno largo de verdad existe y frenar obligaría a inventar
+      // un número más chico.
+      if (sospechosos.length > 0) {
+        setAviso(`Se aplicó la regla. Revisá: más de ${HORAS_SOSPECHOSAS} h en ${sospechosos.join(', ')}.`)
+      }
+    } catch (e) {
+      // A mitad de camino: unos días ya quedaron escritos y otros no. Decir CUÁNTOS, y
+      // releer para que la bandeja muestre lo que de verdad quedó — apretar de nuevo sigue
+      // por los que faltan, porque los hechos ya salieron de la lista de abiertas.
+      await loadDatos(period, local).catch(() => {})
+      const msg = e instanceof Error ? e.message : 'Error aplicando el horario habitual'
+      setError(hechos > 0
+        ? `${msg}. Se corrigieron ${hechos} de ${aplicables.length} días; apretá de nuevo para seguir con el resto.`
+        : msg)
     } finally {
       setBusy(false)
     }
@@ -327,6 +404,9 @@ export default function SalariosHoras({ employees }: Props) {
       </div>
 
       {error && <p className="field-error" style={{ padding: '0 12px' }}>{error}</p>}
+      {aviso && (
+        <p className="fx-aviso" role="status" style={{ padding: '0 12px' }}>⚠️ {aviso}</p>
+      )}
 
       {!period ? (
         <p style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.45, fontSize: '0.8rem' }}>
@@ -460,6 +540,27 @@ export default function SalariosHoras({ employees }: Props) {
 
                     {expandido && (
                       <div className="fx-body">
+                        {(() => {
+                          // Solo aparece si HAY algo que aplicar: sin regla cargada, o con
+                          // la regla del lado que no falta, esta persona no lo ve nunca.
+                          const aplicables = aplicablesDe(g)
+                          if (aplicables.length === 0) return null
+                          return (
+                            <div className="fx-caso-acciones" style={{ padding: '0 0 6px' }}>
+                              <button
+                                className="btn-primary fx-btn"
+                                onClick={() => handleAplicarRegla(g)}
+                                disabled={busy}
+                              >
+                                Aplicar el horario de {g.nombre} a {aplicables.length}{' '}
+                                {aplicables.length === 1 ? 'impar' : 'impares'}
+                              </button>
+                              <span style={{ fontSize: '0.7rem', opacity: 0.55 }}>
+                                queda auditado como «{MOTIVO_REGLA}»
+                              </span>
+                            </div>
+                          )
+                        })()}
                         {g.items.map(x => {
                           const k = `${x.local ?? local}|${x.work_date}`
                           const ms = marcas[k]
@@ -508,7 +609,15 @@ export default function SalariosHoras({ employees }: Props) {
 
                                   const lado      = ladoConDraft(x.id, marca.punch_state, ladoDraft)
                                   const horaReal  = hhmm(marca.punch_at)
-                                  const comp      = compDraft[x.id] ?? ''
+                                  // Capa 3: si esta persona tiene cargada la hora habitual
+                                  // del lado que FALTA, se propone — editable, y lo que la
+                                  // persona escriba manda. Voltear el lado vuelve a proponer
+                                  // la otra hora, que es la que pasa a faltar.
+                                  const habitual  = horaHabitualFaltante(
+                                    x.employee_id ? empById.get(x.employee_id) ?? null : null,
+                                    lado,
+                                  )
+                                  const comp      = compDraft[x.id] ?? habitual ?? ''
                                   const entrada   = lado === 'in' ? horaReal : comp
                                   const salida    = lado === 'in' ? comp : horaReal
                                   const horas     = horasEntreMarcas(entrada, salida)

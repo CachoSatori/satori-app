@@ -428,3 +428,155 @@ describe('SalariosHoras — bandeja de excepciones', () => {
     expect(screen.getByRole('button', { name: /Marcar resuelta/i })).toBeTruthy()
   })
 })
+
+// ── Capa 3 · la regla de hora habitual del empleado (mig 061) ──────────────────
+// Lo repetitivo de Capa 2 era escribir SIEMPRE la misma hora para la misma persona. Con
+// la regla cargada en la ficha, la bandeja la propone y puede aplicarla a todos sus
+// impares del período de una vez. Lo que NO cambia: la regla no inventa jornadas y no
+// escribe sola — sigue siendo un override `manual` auditado, con su motivo.
+describe('SalariosHoras — Capa 3: regla de hora habitual', () => {
+  const NACHO_CON_REGLA = {
+    ...EMPLEADOS[0], hora_entrada_habitual: '08:00:00', hora_salida_habitual: '17:00:00',
+  } as Employee
+  const CON_REGLA: Employee[] = [NACHO_CON_REGLA, EMPLEADOS[1]]
+
+  // 17:07Z = 11:07 en Costa Rica (UTC−6 fijo).
+  const imparDe = (id: string, fecha: string, iso: string, lado: 'in' | 'out' = 'in') => exc({
+    id, tipo: 'impar', employee_id: 'e1', work_date: fecha,
+    detalle: { cuantas: 1, marcas: [{ id: `p-${id}`, punch_at: iso, punch_state: lado }] },
+  })
+  // Un día SIN NINGUNA marca: es una AUSENCIA. La regla no lo puede tocar.
+  const sinMarcas = (id: string, fecha: string) => exc({
+    id, tipo: 'impar', employee_id: 'e1', work_date: fecha, detalle: { cuantas: 0, marcas: [] },
+  })
+
+  async function abrir(e: PunchException[], employees: Employee[] = CON_REGLA) {
+    EXCS = e
+    render(<SalariosHoras employees={employees} />)
+    await esperarBandeja(e.length)
+    fireEvent.click(screen.getAllByText('NACHO').at(-1)!)
+  }
+
+  it('pre-rellena la mitad que falta con la hora habitual y ya muestra las horas', async () => {
+    await abrir([imparDe('x1', '2026-08-03', '2026-08-03T17:07:00Z')])
+    // Marca real = entrada 11:07 → falta la salida → propone la salida habitual (17:00).
+    expect((screen.getByLabelText('Salida 2026-08-03') as HTMLInputElement).value).toBe('17:00')
+    expect(screen.getByText('= 5.88 h')).toBeTruthy()
+    expect((screen.getByText('Guardar') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('voltear el lado propone la OTRA hora habitual: la que pasa a faltar', async () => {
+    await abrir([imparDe('x1', '2026-08-03', '2026-08-03T17:07:00Z')])
+    fireEvent.click(screen.getByLabelText('Lado de la marca 2026-08-03'))
+    // Ahora la marca real es la salida (11:07) → falta la entrada → propone 08:00.
+    expect((screen.getByLabelText('Entrada 2026-08-03') as HTMLInputElement).value).toBe('08:00')
+    expect(screen.getByText('= 3.12 h')).toBeTruthy()
+  })
+
+  it('el pre-rellenado es editable: lo que la persona escribe manda', async () => {
+    await abrir([imparDe('x1', '2026-08-03', '2026-08-03T17:07:00Z')])
+    fireEvent.change(screen.getByLabelText('Salida 2026-08-03'), { target: { value: '19:00' } })
+    expect(screen.getByText('= 7.88 h')).toBeTruthy()
+    // Y el lote deja de ofrecer ese caso, para no pisarle la hora que puso a mano.
+    expect(screen.queryByRole('button', { name: /Aplicar el horario/i })).toBeNull()
+  })
+
+  it('sin regla cargada NO se pre-rellena ni aparece el botón de lote', async () => {
+    await abrir([imparDe('x1', '2026-08-03', '2026-08-03T17:07:00Z')], EMPLEADOS)
+    expect((screen.getByLabelText('Salida 2026-08-03') as HTMLInputElement).value).toBe('')
+    expect(screen.getByText('= —')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Aplicar el horario/i })).toBeNull()
+  })
+
+  it('el botón de lote cuenta SOLO los impares que la regla puede completar', async () => {
+    await abrir([
+      imparDe('x1', '2026-08-03', '2026-08-03T17:07:00Z'),
+      imparDe('x2', '2026-08-04', '2026-08-04T17:07:00Z'),
+      sinMarcas('x3', '2026-08-05'),
+    ])
+    expect(screen.getByRole('button', { name: /Aplicar el horario de NACHO a 2 impares/i })).toBeTruthy()
+  })
+
+  it('aplicar a todos: escribe las horas por resta de cada día y resuelve solo esos', async () => {
+    await abrir([
+      imparDe('x1', '2026-08-03', '2026-08-03T17:07:00Z'),
+      imparDe('x2', '2026-08-04', '2026-08-04T14:00:00Z'),   // 08:00 CR
+      sinMarcas('x3', '2026-08-05'),
+    ])
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar el horario/i }))
+
+    await waitFor(() => expect(override).toHaveBeenCalledTimes(2))
+    expect(override.mock.calls[0][0]).toMatchObject({
+      employee_id: 'e1', work_date: '2026-08-03', local: 'santa-teresa',
+      hours: 5.88, userId: 'u-1',
+      motivo: 'entró 11:07 → salió 17:00 (marca real: entrada 11:07, mitad completada por regla del empleado (hora habitual))',
+    })
+    expect(override.mock.calls[1][0]).toMatchObject({ work_date: '2026-08-04', hours: 9 })
+
+    // El día sin marcas no recibió horas NI se dio por resuelto: es una ausencia.
+    expect(override.mock.calls.every(c => (c[0] as { work_date: string }).work_date !== '2026-08-05')).toBe(true)
+    await waitFor(() => expect(resolver).toHaveBeenCalledTimes(2))
+    expect(resolver.mock.calls.map(c => c[0])).toEqual(['x1', 'x2'])
+  })
+
+  it('la corrección por regla queda auditada como REGLA, no como corrección a mano', async () => {
+    await abrir([imparDe('x1', '2026-08-03', '2026-08-03T17:07:00Z')])
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar el horario/i }))
+    await waitFor(() => expect(override).toHaveBeenCalled())
+    const motivo = (override.mock.calls[0][0] as { motivo: string }).motivo
+    expect(motivo).toContain('regla del empleado (hora habitual)')
+    expect(motivo).not.toContain('a mano')
+  })
+
+  it('el impar de OTRA persona sin regla se queda en la bandeja', async () => {
+    EXCS = [
+      imparDe('x1', '2026-08-03', '2026-08-03T17:07:00Z'),
+      exc({ id: 'x9', tipo: 'impar', employee_id: 'e2', work_date: '2026-08-03',
+            detalle: { cuantas: 1, marcas: [{ id: 'p9', punch_at: '2026-08-03T17:07:00Z', punch_state: 'in' }] } }),
+    ]
+    render(<SalariosHoras employees={CON_REGLA} />)
+    await esperarBandeja(2)
+    // SELENA no tiene regla: su tarjeta no ofrece el lote.
+    fireEvent.click(screen.getAllByText('SELENA').at(-1)!)
+    expect(screen.queryByRole('button', { name: /Aplicar el horario/i })).toBeNull()
+  })
+
+  it('avisa —sin bloquear— si la regla deja un turno absurdo', async () => {
+    // Marca real 18:00 con salida habitual 17:00 → cruza medianoche → 23 h.
+    await abrir([imparDe('x1', '2026-08-03', '2026-08-04T00:00:00Z')])
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar el horario/i }))
+    await waitFor(() => expect(override).toHaveBeenCalled())
+    expect((override.mock.calls[0][0] as { hours: number }).hours).toBe(23)   // se escribió igual
+    expect(await screen.findByText(/más de 16 h en 2026-08-03 \(23 h\)/)).toBeTruthy()
+  })
+})
+
+describe('SalariosHoras — Capa 3: el lote que falla a mitad de camino', () => {
+  const CON_REGLA = [
+    { ...EMPLEADOS[0], hora_entrada_habitual: '08:00:00', hora_salida_habitual: '17:00:00' } as Employee,
+    EMPLEADOS[1],
+  ]
+  const imparDe = (id: string, fecha: string, iso: string) => exc({
+    id, tipo: 'impar', employee_id: 'e1', work_date: fecha,
+    detalle: { cuantas: 1, marcas: [{ id: `p-${id}`, punch_at: iso, punch_state: 'in' }] },
+  })
+
+  it('dice cuántos días alcanzó a corregir antes de fallar', async () => {
+    EXCS = [
+      imparDe('x1', '2026-08-03', '2026-08-03T17:07:00Z'),
+      imparDe('x2', '2026-08-04', '2026-08-04T14:00:00Z'),
+      imparDe('x3', '2026-08-05', '2026-08-05T14:00:00Z'),
+    ]
+    override.mockImplementationOnce(async () => {})
+    override.mockImplementationOnce(async () => { throw new Error('se cayó la red') })
+
+    render(<SalariosHoras employees={CON_REGLA} />)
+    await esperarBandeja(3)
+    fireEvent.click(screen.getAllByText('NACHO').at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar el horario/i }))
+
+    expect(await screen.findByText(/se cayó la red\. Se corrigieron 1 de 3 días/)).toBeTruthy()
+    // El primero quedó escrito de verdad: no se revierte nada ni se finge que no pasó.
+    expect(resolver).toHaveBeenCalledTimes(1)
+  })
+})

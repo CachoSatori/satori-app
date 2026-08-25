@@ -620,6 +620,8 @@ export type Database = {
           fecha_ingreso: string | null
           fixed_salary_crc: number
           full_name: string
+          hora_entrada_habitual: string | null
+          hora_salida_habitual: string | null
           hourly_rate_crc: number
           id: string
           is_active: boolean
@@ -638,6 +640,8 @@ export type Database = {
           fecha_ingreso?: string | null
           fixed_salary_crc?: number
           full_name: string
+          hora_entrada_habitual?: string | null
+          hora_salida_habitual?: string | null
           hourly_rate_crc?: number
           id?: string
           is_active?: boolean
@@ -656,6 +660,8 @@ export type Database = {
           fecha_ingreso?: string | null
           fixed_salary_crc?: number
           full_name?: string
+          hora_entrada_habitual?: string | null
+          hora_salida_habitual?: string | null
           hourly_rate_crc?: number
           id?: string
           is_active?: boolean

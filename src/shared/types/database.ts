@@ -59,6 +59,12 @@ export interface Employee {
   fecha_ingreso?: string | null        // date (YYYY-MM-DD); para vacaciones/aguinaldo (Fase 5)
   // ── Salarios · U0b (mig 058) ─────────────────────────────────────────────────
   nombre_homebanking?: string | null   // nombre del beneficiario TAL CUAL en el homebanking (col A del archivo del banco); null = usar full_name
+  // ── Salarios · Capa 3 (mig 061) ──────────────────────────────────────────────
+  // Hora de reloj de pared ("HH:MM:SS" tal como la devuelve una columna `time`), no un
+  // instante. Solo PRE-RELLENAN la mitad que falta de un fichaje impar; nunca escriben
+  // horas por su cuenta. null = este empleado no tiene regla → corrección manual.
+  hora_entrada_habitual?: string | null
+  hora_salida_habitual?: string | null
   created_at: string
   updated_at: string
 }

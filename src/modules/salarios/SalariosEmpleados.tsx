@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Employee, UserRole } from '../../shared/types/database'
 import { createEmployee, updateEmployeePayroll, toggleEmployeeActive } from '../../shared/api/admin'
-import { updateEmployeeHomebankingName } from '../../shared/api/salarios'
+import { updateEmployeeHomebankingName, updateEmployeeHorasHabituales, horaHabitualHHMM } from '../../shared/api/salarios'
 import { ROLE_LABELS } from '../../shared/constants'
 import { fi } from '../../shared/utils'
 
@@ -20,9 +20,13 @@ interface Draft {
   code:      string
   ingreso:   string
   banco:     string   // nombre del beneficiario en el homebanking (mig 058)
+  // Capa 3 (mig 061): el horario de siempre de esta persona. Vacío = sin regla; su
+  // fichaje impar se sigue corrigiendo a mano.
+  entrada:   string
+  salida:    string
 }
 
-const emptyDraft: Draft = { hourly: '0', fijo: '0', participa: true, code: '', ingreso: '', banco: '' }
+const emptyDraft: Draft = { hourly: '0', fijo: '0', participa: true, code: '', ingreso: '', banco: '', entrada: '', salida: '' }
 
 function draftOf(emp: Employee): Draft {
   return {
@@ -32,6 +36,9 @@ function draftOf(emp: Employee): Draft {
     code:      emp.biotime_emp_code ?? '',
     ingreso:   emp.fecha_ingreso ?? '',
     banco:     emp.nombre_homebanking ?? '',
+    // La columna es `time` y vuelve como "08:00:00"; el input del navegador quiere "08:00".
+    entrada:   horaHabitualHHMM(emp.hora_entrada_habitual) ?? '',
+    salida:    horaHabitualHHMM(emp.hora_salida_habitual) ?? '',
   }
 }
 
@@ -108,6 +115,11 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
       if ((emp.nombre_homebanking ?? '') !== draft.banco.trim()) {
         await updateEmployeeHomebankingName(emp.id, draft.banco)
       }
+      // Ídem la regla de horario (mig 061): función propia, y solo si cambió.
+      if ((horaHabitualHHMM(emp.hora_entrada_habitual) ?? '') !== draft.entrada ||
+          (horaHabitualHHMM(emp.hora_salida_habitual) ?? '') !== draft.salida) {
+        await updateEmployeeHorasHabituales(emp.id, draft.entrada, draft.salida)
+      }
       setEditId(null)
       await onRefresh()
     } catch (err) {
@@ -136,6 +148,9 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
       })
       if (newDraft.banco.trim() && creado?.id) {
         await updateEmployeeHomebankingName(creado.id, newDraft.banco)
+      }
+      if ((newDraft.entrada || newDraft.salida) && creado?.id) {
+        await updateEmployeeHorasHabituales(creado.id, newDraft.entrada, newDraft.salida)
       }
       setNewName('')
       setNewRole('cocina')
@@ -236,6 +251,30 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
           style={{ width: '160px' }}
         />
       </td>
+      {/* Capa 3 (mig 061): el horario de siempre. Las dos horas van juntas porque se leen
+          juntas ("entra 08:00, sale 17:00") y porque cada una sirve para un lado distinto
+          del fichaje impar. Vacías = sin regla, y la bandeja no propone nada. */}
+      <td style={{ whiteSpace: 'nowrap' }}>
+        <input
+          className="tip-input"
+          type="time"
+          aria-label={`Hora de entrada habitual: ${prefix}`}
+          value={d.entrada}
+          onChange={e => set({ ...d, entrada: e.target.value })}
+          disabled={saving}
+          style={{ width: '92px' }}
+        />
+        <span style={{ opacity: 0.45, margin: '0 4px' }}>→</span>
+        <input
+          className="tip-input"
+          type="time"
+          aria-label={`Hora de salida habitual: ${prefix}`}
+          value={d.salida}
+          onChange={e => set({ ...d, salida: e.target.value })}
+          disabled={saving}
+          style={{ width: '92px' }}
+        />
+      </td>
     </>
   )
 
@@ -303,6 +342,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
                 <th>Cód. BioTime</th>
                 <th>Ingreso</th>
                 <th>Nombre en el banco</th>
+                <th>Horario habitual</th>
               </tr>
             </thead>
             <tbody>
@@ -331,6 +371,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
             <th>Cód. BioTime</th>
             <th>Ingreso</th>
             <th>Nombre en el banco</th>
+            <th>Horario habitual</th>
             <th></th>
           </tr>
         </thead>
@@ -377,6 +418,12 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
                   <td style={{ fontSize: '0.75rem' }}>
                     {emp.nombre_homebanking ?? <span style={{ opacity: 0.35 }}>— usa {emp.full_name} —</span>}
                   </td>
+                  {/* Sin regla cargada el impar de esta persona se sigue corrigiendo a mano. */}
+                  <td style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                    {horaHabitualHHMM(emp.hora_entrada_habitual) || horaHabitualHHMM(emp.hora_salida_habitual)
+                      ? `${horaHabitualHHMM(emp.hora_entrada_habitual) ?? '—'} → ${horaHabitualHHMM(emp.hora_salida_habitual) ?? '—'}`
+                      : <span style={{ opacity: 0.35 }}>— sin regla —</span>}
+                  </td>
                   <td className="admin-row-actions">
                     <button className="btn-delete-inline" onClick={() => startEdit(emp)} disabled={saving}>
                       Editar
@@ -392,7 +439,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
 
           {visibles.length === 0 && (
             <tr>
-              <td colSpan={9} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
+              <td colSpan={10} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
                 Sin empleados en este filtro.
               </td>
             </tr>

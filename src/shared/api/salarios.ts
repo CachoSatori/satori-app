@@ -8,6 +8,7 @@ import type {
   TimePunch,
   WorkDay,
 } from '../types/database'
+import { horasEntreMarcas, marcaUnicaDeImpar } from '../utils/horasCorreccion'
 
 // ── Salarios · U0b: el ciclo mínimo de pago ─────────────────────────────────────
 // Cargar horas del período → ver el neto → bajar el archivo del banco → marcar pagado.
@@ -787,4 +788,141 @@ export function semaforoPago(
     horasDefault,
     dobles: empleadosConHorasDobles(workDays, fechaFin).filter(id => cuenta(id)),
   }
+}
+
+// ── Salarios · Capa 3: la regla de hora habitual del empleado (mig 061) ─────────
+//
+// Capa 2 dejó de pedir horas estimadas: las saca de la RESTA entre dos marcas de reloj.
+// Lo que seguía siendo repetitivo es la otra mitad — quien marca una sola vez deja el
+// mismo hueco cada quincena, y para la mayoría la hora que falta es siempre la misma.
+// Guardarla en la ficha convierte esa corrección repetida en un dato del empleado.
+//
+// Dos límites que no se mueven:
+//   · La regla NO inventa jornadas. Solo alcanza al `impar` de UNA marca, donde el reloj
+//     ya probó que la persona estuvo. Un día SIN ninguna marca es una AUSENCIA, y
+//     rellenarlo sería inventar horas — o sea plata. `marcaUnicaDeImpar` es lo que lo
+//     garantiza: devuelve null para todo lo demás, y acá eso significa "no se toca".
+//   · La regla NO escribe sola. Es un pre-relleno editable; lo que persiste sigue siendo
+//     un override `manual` con su motivo, igual que en Capa 2.
+
+export interface EmpleadoConRegla {
+  hora_entrada_habitual?: string | null
+  hora_salida_habitual?:  string | null
+}
+
+// Una columna `time` vuelve como "08:00:00" y el input del navegador da "08:00". Se
+// aceptan las dos y se normaliza a "HH:MM", que es lo único que `horasEntreMarcas` come.
+const HORA_TIME = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/
+
+/** "08:00:00" → "08:00". `null` si no hay regla cargada o el valor no es una hora de reloj. */
+export function horaHabitualHHMM(v: string | null | undefined): string | null {
+  if (typeof v !== 'string') return null
+  const m = HORA_TIME.exec(v.trim())
+  return m ? `${m[1]}:${m[2]}` : null
+}
+
+/**
+ * La hora habitual de la mitad que FALTA, según de qué lado quedó la marca real:
+ * si la marca real es la entrada falta la salida, y al revés. `null` = este empleado no
+ * tiene cargada ESA hora → el impar sigue yendo a corrección manual.
+ */
+export function horaHabitualFaltante(
+  emp: EmpleadoConRegla | null | undefined,
+  ladoReal: 'in' | 'out',
+): string | null {
+  if (!emp) return null
+  return horaHabitualHHMM(ladoReal === 'in' ? emp.hora_salida_habitual : emp.hora_entrada_habitual)
+}
+
+/** Hora local de Costa Rica (UTC−6 FIJO, sin horario de verano) de un instante ISO. */
+export function hhmmCR(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const cr = new Date(d.getTime() - 6 * 3600_000)
+  return `${String(cr.getUTCHours()).padStart(2, '0')}:${String(cr.getUTCMinutes()).padStart(2, '0')}`
+}
+
+export const MOTIVO_REGLA = 'regla del empleado (hora habitual)'
+
+/**
+ * El rastro que queda en `work_days.flags.override.motivo` cuando la mitad la puso la
+ * regla y NO una persona mirando el caso. Se distingue a propósito del motivo de Capa 2
+ * ("completada a mano"): dentro de seis meses el contador tiene que poder separar lo que
+ * alguien revisó uno por uno de lo que se aplicó en lote.
+ */
+export function motivoRegla(
+  entrada: string,
+  salida: string,
+  ladoReal: 'in' | 'out',
+  horaReal: string,
+): string {
+  const etiqueta = ladoReal === 'in' ? 'entrada' : 'salida'
+  return `entró ${entrada} → salió ${salida} (marca real: ${etiqueta} ${horaReal}, mitad completada por ${MOTIVO_REGLA})`
+}
+
+export interface ImparConRegla {
+  x:        PunchException
+  lado:     'in' | 'out'   // de qué lado quedó la marca REAL
+  horaReal: string
+  habitual: string         // la mitad que pone la regla
+  entrada:  string
+  salida:   string
+  horas:    number
+}
+
+/**
+ * De una lista de excepciones, las que la regla del empleado PUEDE completar, ya con las
+ * horas resueltas por resta. Puro: no lee ni escribe nada.
+ *
+ * Queda afuera, en este orden y a propósito:
+ *   · todo lo que no sea `impar` de UNA marca —incluido el día sin ninguna marca, que es
+ *     una ausencia— porque `marcaUnicaDeImpar` devuelve null;
+ *   · el empleado sin la hora habitual DEL LADO que falta (tiene entrada pero le falta la
+ *     salida, o ninguna de las dos): ese impar se corrige a mano, como siempre;
+ *   · lo que no dé una resta válida.
+ *
+ * `ladoDe` deja que la pantalla imponga el lado que el usuario ya volteó a mano: lo que se
+ * aplica es lo que está viendo, no lo que dijo BioTime.
+ */
+export function imparesConRegla(
+  items: PunchException[],
+  emp: EmpleadoConRegla | null | undefined,
+  ladoDe: (x: PunchException, porDefecto: 'in' | 'out') => 'in' | 'out' = (_x, d) => d,
+): ImparConRegla[] {
+  const out: ImparConRegla[] = []
+  for (const x of items) {
+    if (x.estado !== 'abierta') continue
+    const marca = marcaUnicaDeImpar(x)
+    if (!marca) continue
+    const lado     = ladoDe(x, marca.punch_state)
+    const habitual = horaHabitualFaltante(emp, lado)
+    if (!habitual) continue
+    const horaReal = hhmmCR(marca.punch_at)
+    const entrada  = lado === 'in' ? horaReal : habitual
+    const salida   = lado === 'in' ? habitual : horaReal
+    const horas    = horasEntreMarcas(entrada, salida)
+    if (horas == null) continue
+    out.push({ x, lado, horaReal, habitual, entrada, salida, horas })
+  }
+  return out
+}
+
+/**
+ * Guarda (o borra) la regla del empleado. Por su propia función, igual que el alias del
+ * homebanking: el payload de `updateEmployeePayroll` es un contrato cerrado (mig 055) y no
+ * se ensancha. Vacío → null: "sin regla" es un estado legítimo y explícito, '' no.
+ */
+export async function updateEmployeeHorasHabituales(
+  id: string,
+  entrada: string | null,
+  salida: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('employees')
+    .update({
+      hora_entrada_habitual: horaHabitualHHMM(entrada),
+      hora_salida_habitual:  horaHabitualHHMM(salida),
+    })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
 }

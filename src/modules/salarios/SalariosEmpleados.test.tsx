@@ -13,10 +13,17 @@ vi.mock('../../shared/api/admin', () => ({
   toggleEmployeeActive:  (id: string, a: boolean) => toggle(id, a),
 }))
 
-// El alias del homebanking (U0b) se guarda aparte, con su propia función.
-const setBanco = vi.fn<(id: string, n: string | null) => Promise<void>>(async () => {})
-vi.mock('../../shared/api/salarios', () => ({
+// El alias del homebanking (U0b) y la regla de horario (Capa 3) se guardan cada uno con su
+// propia función: el payload de `updateEmployeePayroll` es un contrato cerrado (mig 055).
+const setBanco   = vi.fn<(id: string, n: string | null) => Promise<void>>(async () => {})
+const setHorario = vi.fn<(id: string, e: string | null, s: string | null) => Promise<void>>(async () => {})
+vi.mock('../../shared/api/supabase', () => ({ supabase: { from: () => ({}) } }))
+// El módulo real, con las dos escrituras interceptadas: los helpers puros de Capa 3
+// (`horaHabitualHHMM`) tienen que ser los DE VERDAD, porque la ficha los usa para pintar.
+vi.mock('../../shared/api/salarios', async (orig) => ({
+  ...(await orig<typeof import('../../shared/api/salarios')>()),
   updateEmployeeHomebankingName: (id: string, n: string | null) => setBanco(id, n),
+  updateEmployeeHorasHabituales: (id: string, e: string | null, s: string | null) => setHorario(id, e, s),
 }))
 
 import SalariosEmpleados from './SalariosEmpleados'
@@ -48,6 +55,7 @@ beforeEach(() => {
   create.mockClear()
   toggle.mockClear()
   setBanco.mockClear()
+  setHorario.mockClear()
 })
 
 describe('Salarios · Empleados / Tarifas — guardado de nómina', () => {
@@ -178,5 +186,75 @@ describe('Salarios · inactivos', () => {
 
     fireEvent.click(screen.getByText('Activar'))
     await waitFor(() => expect(toggle).toHaveBeenCalledWith('e3', true))
+  })
+})
+
+// ── Capa 3 · la regla de horario del empleado (mig 061) ───────────────────────
+// La hora de siempre de cada persona deja de ser algo que alguien recuerda y se escribe a
+// mano cada quincena: vive en la ficha. Acá solo se guarda; quien la usa es la bandeja.
+describe('Salarios · Empleados / Tarifas — horario habitual', () => {
+  const CON_REGLA = emp({
+    id: 'e3', full_name: 'CARLA',
+    hora_entrada_habitual: '08:00:00', hora_salida_habitual: '17:00:00',
+  })
+
+  it('muestra el horario cargado y, sin regla, lo dice en vez de fingir una hora', () => {
+    renderList([CON_REGLA, BENITO])
+    expect(screen.getByText('08:00 → 17:00')).toBeTruthy()
+    expect(screen.getByText('— sin regla —')).toBeTruthy()
+  })
+
+  it('editar carga las horas en formato del navegador ("08:00:00" → "08:00")', () => {
+    renderList([CON_REGLA])
+    fireEvent.click(screen.getByText('Editar'))
+    expect((screen.getByLabelText('Hora de entrada habitual: CARLA') as HTMLInputElement).value).toBe('08:00')
+    expect((screen.getByLabelText('Hora de salida habitual: CARLA') as HTMLInputElement).value).toBe('17:00')
+  })
+
+  it('cargar el horario de quien no lo tenía lo guarda por su propia función', async () => {
+    renderList()
+    fireEvent.click(screen.getAllByText('Editar')[1])                       // BENITO
+
+    fireEvent.change(screen.getByLabelText('Hora de entrada habitual: BENITO'), { target: { value: '08:00' } })
+    fireEvent.change(screen.getByLabelText('Hora de salida habitual: BENITO'), { target: { value: '17:00' } })
+    fireEvent.click(screen.getByText('Guardar'))
+
+    await waitFor(() => expect(setHorario).toHaveBeenCalledWith('e2', '08:00', '17:00'))
+    // El contrato cerrado de la mig 055 no se ensancha con las horas nuevas.
+    expect(updatePayroll.mock.calls[0][1]).not.toHaveProperty('hora_entrada_habitual')
+  })
+
+  it('borrar el horario borra la REGLA (vacío = sin regla, no una hora en cero)', async () => {
+    renderList([CON_REGLA])
+    fireEvent.click(screen.getByText('Editar'))
+    fireEvent.change(screen.getByLabelText('Hora de entrada habitual: CARLA'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Hora de salida habitual: CARLA'), { target: { value: '' } })
+    fireEvent.click(screen.getByText('Guardar'))
+
+    await waitFor(() => expect(setHorario).toHaveBeenCalledWith('e3', '', ''))
+  })
+
+  it('guardar sin tocar el horario no escribe la regla', async () => {
+    renderList([CON_REGLA])
+    fireEvent.click(screen.getByText('Editar'))
+    fireEvent.change(screen.getByLabelText('Tarifa por hora: CARLA'), { target: { value: '3000' } })
+    fireEvent.click(screen.getByText('Guardar'))
+
+    await waitFor(() => expect(updatePayroll).toHaveBeenCalled())
+    expect(setHorario).not.toHaveBeenCalled()
+  })
+
+  it('el alta puede traer el horario puesto desde el primer día', async () => {
+    create.mockResolvedValueOnce({ id: 'e9' } as Employee)
+    renderList()
+    fireEvent.click(screen.getByText('+ Agregar empleado'))
+    fireEvent.change(screen.getByPlaceholderText('Ej: JOSE'), { target: { value: 'jose' } })
+    fireEvent.change(screen.getByLabelText('Hora de entrada habitual: nuevo empleado'), { target: { value: '09:00' } })
+    fireEvent.change(screen.getByLabelText('Hora de salida habitual: nuevo empleado'), { target: { value: '18:00' } })
+    fireEvent.click(screen.getByText('Crear empleado'))
+
+    await waitFor(() => expect(setHorario).toHaveBeenCalledWith('e9', '09:00', '18:00'))
+    // Y no se cuela en el payload del alta: va por su propia función, después.
+    expect(create.mock.calls[0][0]).not.toHaveProperty('hora_entrada_habitual')
   })
 })

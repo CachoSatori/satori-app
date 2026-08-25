@@ -8,6 +8,7 @@ import {
   type DerivacionResumen, type GrupoExcepciones,
 } from '../../shared/api/salarios'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { ROLE_LABELS } from '../../shared/constants'
 
 // Salarios · BioTime F1d: la pantalla que convierte marcas en HORAS.
 //
@@ -139,6 +140,21 @@ export default function SalariosHoras({ employees }: Props) {
   // Misma definición que usa la pantalla de pago: solo el TOTAL del período cargado a
   // mano (fila manual del último día) choca con lo derivado. Sin filtrar local, porque el
   // neto que se paga tampoco filtra.
+  // Solo presentación: el conteo de resueltas sale de las mismas `excs` que ya se
+  // cargaron (`getPunchExceptions` trae el período entero, `agruparExcepciones` es la que
+  // se queda con las abiertas). No hay lectura nueva.
+  const abiertasTotal = useMemo(() => grupos.reduce((n, g) => n + g.abiertas, 0), [grupos])
+  const resueltasTotal = useMemo(
+    () => excs.filter(x => x.estado === 'resuelta').length,
+    [excs],
+  )
+  // El puesto para el badge del grupo. La clave del grupo es el employee_id, salvo en las
+  // `sin_mapear`, que se agrupan por `code:NN` y no tienen empleado todavía.
+  const puestoDe = useMemo(() => {
+    const m = new Map(employees.map(e => [e.id, ROLE_LABELS[e.role] ?? e.role]))
+    return (key: string) => (key.startsWith('code:') ? null : m.get(key) ?? null)
+  }, [employees])
+
   const dobles = useMemo(
     () => (period ? empleadosConHorasDobles(workDays, period.fecha_fin) : []),
     [workDays, period],
@@ -349,98 +365,130 @@ export default function SalariosHoras({ employees }: Props) {
 
           {/* ── Bandeja ─────────────────────────────────────────────────────── */}
           <div className="admin-section-header" style={{ marginTop: '1rem' }}>
-            <span className="admin-section-title">
-              Excepciones de fichaje ({grupos.reduce((s, g) => s + g.abiertas, 0)})
+            <span className="admin-section-title">Excepciones de fichaje</span>
+          </div>
+
+          <div className="fx-head">
+            <span className="fx-count fx-count-abiertas" aria-label="Excepciones por revisar">
+              {abiertasTotal} por revisar
             </span>
+            {resueltasTotal > 0 && (
+              <span className="fx-count fx-count-resueltas" aria-label="Excepciones resueltas">
+                {resueltasTotal} resueltas
+              </span>
+            )}
+            <span className="fx-spacer" />
+            {/* Re-dispara la MISMA carga del período; no trae nada nuevo ni recalcula. */}
+            <button className="btn-secondary" onClick={() => loadDatos(period, local)} disabled={busy}>
+              Actualizar
+            </button>
           </div>
 
           {grupos.length === 0 ? (
-            <p style={{ padding: '1rem 12px', fontSize: '0.78rem', opacity: 0.5 }}>
+            <p style={{ padding: '0 12px 1rem', fontSize: '0.78rem', opacity: 0.5 }}>
               Sin excepciones abiertas en este período.
             </p>
           ) : (
-            <div style={{ padding: '0 12px 12px' }}>
-              {grupos.map(g => (
-                <div key={g.key} style={{ borderBottom: '1px solid var(--t-line, #e5e2dc)' }}>
-                  <div
-                    onClick={() => setAbierto(a => (a === g.key ? null : g.key))}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '0.55rem 0', cursor: 'pointer' }}
-                  >
-                    <span style={{ opacity: 0.5, fontSize: '0.7rem' }}>{abierto === g.key ? '▾' : '▸'}</span>
-                    <strong style={{ fontSize: '0.82rem' }}>{g.nombre}</strong>
-                    <span className="role-badge">{g.abiertas}</span>
-                    <span style={{ fontSize: '0.7rem', color: '#888' }}>
-                      {Object.entries(g.tipos).map(([t, n]) => `${etiquetaTipo(t)} ×${n}`).join(' · ')}
-                    </span>
-                  </div>
-
-                  {abierto === g.key && (
-                    <div style={{ padding: '0 0 0.75rem 1.4rem' }}>
-                      {g.items.map(x => {
-                        const k = `${x.local ?? local}|${x.work_date}`
-                        const ms = marcas[k]
-                        return (
-                          <div key={x.id} style={{ padding: '0.4rem 0', fontSize: '0.76rem' }}>
-                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                              <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{x.work_date}</span>
-                              <span className="role-badge">{etiquetaTipo(x.tipo)}</span>
-                              <button className="btn-secondary" onClick={() => verMarcas(x)} disabled={busy}>
-                                Ver marcas
-                              </button>
-                              {x.employee_id && x.work_date && (
-                                <>
-                                  <input
-                                    className="tip-input"
-                                    type="number"
-                                    min="0"
-                                    step="0.25"
-                                    placeholder="horas"
-                                    aria-label={`Horas corregidas ${x.work_date}`}
-                                    value={horasDraft[x.id] ?? ''}
-                                    onChange={e => setHoras(d => ({ ...d, [x.id]: e.target.value }))}
-                                    disabled={busy}
-                                    style={{ width: '80px' }}
-                                  />
-                                  <button className="btn-primary" onClick={() => handleOverride(x)} disabled={busy}>
-                                    Corregir a mano
-                                  </button>
-                                </>
-                              )}
-                              <button className="btn-secondary" onClick={() => handleResolver(x)} disabled={busy}>
-                                Marcar resuelta
-                              </button>
-                            </div>
-                            {ms && (() => {
-                              const { lista, ampliado } = marcasDelCaso(ms, x)
-                              return (
-                                <div style={{ padding: '0.3rem 0 0 0.2rem', fontSize: '0.72rem', color: '#888' }}>
-                                  {lista.length === 0 ? (
-                                    <em>Sin marcas crudas en esa jornada.</em>
-                                  ) : (
-                                    <>
-                                      {lista.map(m => `${hhmm(m.punch_at)} ${m.punch_state}`).join('  ·  ')}
-                                      {ampliado && (
-                                        <span style={{ opacity: 0.75 }}>
-                                          {' '}— <em>todas las de la jornada</em> (ninguna quedó
-                                          asociada a este caso)
-                                        </span>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              )
-                            })()}
-                          </div>
-                        )
-                      })}
+            <div className="fx-list">
+              {grupos.map(g => {
+                const expandido = abierto === g.key
+                const puesto = puestoDe(g.key)
+                return (
+                  <div key={g.key} className={`fx-card${expandido ? ' fx-card-abierta' : ''}`}>
+                    <div
+                      className="fx-card-head"
+                      onClick={() => setAbierto(a => (a === g.key ? null : g.key))}
+                    >
+                      <span className="fx-caret">{expandido ? '▾' : '▸'}</span>
+                      <span className="fx-nombre">{g.nombre}</span>
+                      {puesto && <span className="role-badge">{puesto}</span>}
+                      <span className="fx-tipos">
+                        {Object.entries(g.tipos).map(([t, n]) => `${etiquetaTipo(t)} ×${n}`).join(' · ')}
+                      </span>
+                      <span className="fx-spacer" />
+                      <span className="fx-count fx-count-abiertas">{g.abiertas} por revisar</span>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {expandido && (
+                      <div className="fx-body">
+                        {g.items.map(x => {
+                          const k = `${x.local ?? local}|${x.work_date}`
+                          const ms = marcas[k]
+                          return (
+                            <div key={x.id}>
+                              <div className="fx-caso">
+                                <div className="fx-caso-info">
+                                  <span className="fx-fecha">{x.work_date}</span>
+                                  <span className="role-badge">{etiquetaTipo(x.tipo)}</span>
+                                  <button className="btn-secondary" onClick={() => verMarcas(x)} disabled={busy}>
+                                    Ver marcas
+                                  </button>
+                                </div>
+                                <div className="fx-caso-acciones">
+                                {x.employee_id && x.work_date && (
+                                  <>
+                                    <input
+                                      className="tip-input"
+                                      type="number"
+                                      min="0"
+                                      step="0.25"
+                                      placeholder="horas"
+                                      aria-label={`Horas corregidas ${x.work_date}`}
+                                      value={horasDraft[x.id] ?? ''}
+                                      onChange={e => setHoras(d => ({ ...d, [x.id]: e.target.value }))}
+                                      disabled={busy}
+                                      style={{ width: '80px' }}
+                                    />
+                                    <button className="btn-primary" onClick={() => handleOverride(x)} disabled={busy}>
+                                      Corregir a mano
+                                    </button>
+                                  </>
+                                )}
+                                <button className="btn-secondary" onClick={() => handleResolver(x)} disabled={busy}>
+                                  Marcar resuelta
+                                </button>
+                                </div>
+                              </div>
+
+                              {ms && (() => {
+                                const { lista, ampliado } = marcasDelCaso(ms, x)
+                                return (
+                                  <div className="fx-marcas">
+                                    {lista.length === 0 ? (
+                                      <em>Sin marcas crudas en esa jornada.</em>
+                                    ) : (
+                                      <>
+                                        {lista.map(m => (
+                                          <span
+                                            key={m.id}
+                                            className={`fx-marca fx-marca-${m.punch_state}`}
+                                          >
+                                            {hhmm(m.punch_at)} {m.punch_state}
+                                          </span>
+                                        ))}
+                                        {ampliado && (
+                                          <span style={{ opacity: 0.75 }}>
+                                            — <em>todas las de la jornada</em> (ninguna quedó
+                                            asociada a este caso)
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
 
-          <p style={{ padding: '0 12px 12px', fontSize: '0.68rem', color: '#888' }}>
+          <p className="fx-nota">
             El recálculo empareja entrada/salida por jornada (corte 05:00) y reescribe SOLO las horas
             derivadas de BioTime: lo cargado a mano no se toca nunca. Corregir a mano una jornada la deja
             como manual, así que el próximo recálculo la respeta. Cada <em>tramo sin cerrar</em> (una

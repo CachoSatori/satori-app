@@ -5069,3 +5069,111 @@ html, body, #root {
   .mr-icp { grid-template-columns: 1fr; }
   .mr-bar-track { height: 80px; }
 }
+
+/* ── Bandeja de excepciones de fichaje (Salarios · F1d) ─────────────────────────
+   Solo presentación: la bandeja agrupa por empleado y cada grupo colapsa. Reusa los
+   tokens --t-* y convive con .admin-section / .role-badge / .btn-*.                */
+
+.fx-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0 12px 0.5rem;
+}
+.fx-count {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+}
+.fx-count-abiertas {
+  color: var(--t-red, #c23b22);
+  border-color: var(--t-red, #c23b22);
+}
+.fx-count-resueltas {
+  color: var(--t-teal, #2a7a6a);
+  border-color: var(--t-teal, #2a7a6a);
+  opacity: 0.85;
+}
+
+.fx-list { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 0.4rem; }
+
+.fx-card {
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--t-panel, #ede8de);
+}
+.fx-card-abierta { border-color: var(--t-gold, #c8a96e); }
+
+.fx-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.7rem;
+  cursor: pointer;
+  user-select: none;
+}
+.fx-card-head:hover { background: rgba(0, 0, 0, 0.03); }
+.fx-caret { opacity: 0.45; font-size: 0.7rem; width: 0.8rem; }
+.fx-nombre { font-size: 0.85rem; font-weight: 700; color: var(--t-ink, #0d0d0d); }
+.fx-tipos { font-size: 0.7rem; color: var(--t-muted, #8a8070); }
+.fx-spacer { flex: 1; }
+
+.fx-body {
+  border-top: 1px solid var(--t-border, #d4cfc4);
+  padding: 0.2rem 0.7rem 0.6rem;
+  background: var(--t-paper, #f5f0e8);
+}
+
+/* Dos filas a propósito y no un wrap accidental: .admin-section está capado a 640px y
+   los 3 botones + el input no entran en una sola línea. Arriba el CASO (qué día y qué
+   pasó), abajo las ACCIONES. */
+.fx-caso { padding: 0.5rem 0; border-bottom: 1px dashed var(--t-border, #d4cfc4); }
+.fx-caso:last-of-type { border-bottom: none; }
+.fx-caso-info,
+.fx-caso-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.fx-caso-acciones { margin-top: 0.35rem; }
+.fx-fecha {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--t-ink, #0d0d0d);
+}
+
+.fx-marcas {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0 0 0.5rem 0.1rem;
+  font-size: 0.72rem;
+  color: var(--t-muted, #8a8070);
+}
+.fx-marca {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  border: 1px solid var(--t-border, #d4cfc4);
+  border-radius: 3px;
+  padding: 1px 6px;
+  background: var(--t-panel, #ede8de);
+}
+.fx-marca-in  { border-left: 3px solid var(--t-teal, #2a7a6a); }
+.fx-marca-out { border-left: 3px solid var(--t-gold, #c8a96e); }
+
+.fx-nota {
+  padding: 0 12px 12px;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--t-muted, #8a8070);
+}
+.fx-nota strong { color: var(--t-ink, #0d0d0d); }

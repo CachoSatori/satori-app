@@ -31,6 +31,7 @@ const derivar   = vi.fn<(d: string, h: string, l: string) => Promise<unknown>>()
 const resolver  = vi.fn<(id: string, u: string) => Promise<void>>(async () => {})
 const override  = vi.fn<(o: unknown) => Promise<void>>(async () => {})
 const marcas    = vi.fn<(l: string, d: string) => Promise<TimePunch[]>>(async () => [])
+const cargarExc = vi.fn()   // cuenta cuántas veces la pantalla relee las excepciones
 
 vi.mock('../../shared/api/salarios', async (orig) => {
   const actual = await orig<typeof import('../../shared/api/salarios')>()
@@ -38,7 +39,7 @@ vi.mock('../../shared/api/salarios', async (orig) => {
     ...actual,
     getSalaryPeriods:    async () => [PERIODO],
     getWorkDays:         async () => WORK_DAYS,
-    getPunchExceptions:  async () => EXCS,
+    getPunchExceptions:  async () => { cargarExc(); return EXCS },
     derivarWorkDays:     (d: string, h: string, l: string) => derivar(d, h, l),
     resolvePunchException: (id: string, u: string) => resolver(id, u),
     overrideHorasDia:    (o: unknown) => override(o),
@@ -47,6 +48,14 @@ vi.mock('../../shared/api/salarios', async (orig) => {
 })
 
 import SalariosHoras from './SalariosHoras'
+
+// La bandeja se pinta antes de que lleguen las excepciones (con el contador en 0), así
+// que esperar a que el elemento EXISTA no alcanza: se espera a que el conteo llegue.
+const esperarBandeja = (n: number) =>
+  waitFor(() =>
+    expect(screen.getByLabelText('Excepciones por revisar').textContent?.trim())
+      .toBe(`${n} por revisar`),
+  )
 
 function wd(over: Partial<WorkDay> & { employee_id: string; source: WorkDay['source'] }): WorkDay {
   return {
@@ -74,7 +83,7 @@ beforeEach(() => {
     horas_default: 96, dias_omitidos_manual: 0, horas: 1117.55,
     excepciones: { impar: 29, turno_largo: 0, solapado: 2, sin_mapear: 0 },
   })
-  resolver.mockClear(); override.mockClear(); marcas.mockClear()
+  resolver.mockClear(); override.mockClear(); marcas.mockClear(); cargarExc.mockClear()
 })
 
 describe('SalariosHoras — recálculo', () => {
@@ -188,7 +197,7 @@ describe('SalariosHoras — bandeja de excepciones', () => {
     ])
     render(<SalariosHoras employees={EMPLEADOS} />)
 
-    expect(await screen.findByText('Excepciones de fichaje (2)')).toBeTruthy()
+    await esperarBandeja(2)
     expect(screen.getByText('Código 8 (sin empleado)')).toBeTruthy()
 
     fireEvent.click(screen.getByText('NACHO'))
@@ -207,7 +216,7 @@ describe('SalariosHoras — bandeja de excepciones', () => {
       { id: 'p1', employee_id: null, emp_code: '18', punch_at: '2026-08-03T17:00:00Z', punch_state: 'in' } as TimePunch,
     ])
     render(<SalariosHoras employees={EMPLEADOS} />)
-    await screen.findByText('Excepciones de fichaje (1)')
+    await esperarBandeja(1)
     fireEvent.click(screen.getAllByText('NACHO').at(-1)!)
     fireEvent.click(await screen.findByRole('button', { name: /Ver marcas/i }))
 
@@ -219,10 +228,48 @@ describe('SalariosHoras — bandeja de excepciones', () => {
     EXCS = [exc({ id: 'x1', tipo: 'impar', employee_id: 'e1', work_date: '2026-08-03' })]
     marcas.mockResolvedValue([])
     render(<SalariosHoras employees={EMPLEADOS} />)
-    await screen.findByText('Excepciones de fichaje (1)')
+    await esperarBandeja(1)
     fireEvent.click(screen.getAllByText('NACHO').at(-1)!)
     fireEvent.click(await screen.findByRole('button', { name: /Ver marcas/i }))
     expect(await screen.findByText(/Sin marcas crudas en esa jornada/)).toBeTruthy()
+  })
+
+  it('el botón Actualizar re-carga el período y nada más', async () => {
+    EXCS = [exc({ id: 'x1', tipo: 'impar', employee_id: 'e1' })]
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(1)
+    const antes = cargarExc.mock.calls.length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Actualizar' }))
+
+    await waitFor(() => expect(cargarExc.mock.calls.length).toBe(antes + 1))
+    // no recalcula, no resuelve, no corrige: solo relee
+    expect(derivar).not.toHaveBeenCalled()
+    expect(resolver).not.toHaveBeenCalled()
+    expect(override).not.toHaveBeenCalled()
+  })
+
+  it('el encabezado cuenta las abiertas y, aparte, las ya resueltas', async () => {
+    EXCS = [
+      exc({ id: 'x1', tipo: 'impar', employee_id: 'e1' }),
+      exc({ id: 'x2', tipo: 'impar', employee_id: 'e1', work_date: '2026-08-04' }),
+      exc({ id: 'x3', tipo: 'impar', employee_id: 'e2', estado: 'resuelta', resuelto_by: 'u-1' }),
+    ]
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(2)
+    expect(screen.getByLabelText('Excepciones resueltas').textContent?.trim()).toBe('1 resueltas')
+  })
+
+  it('la tarjeta del grupo muestra el puesto del empleado; la sin_mapear no', async () => {
+    EXCS = [
+      exc({ id: 'x1', tipo: 'impar', employee_id: 'e1' }),
+      exc({ id: 'x2', tipo: 'sin_mapear', emp_code: '8', work_date: '2026-08-04' }),
+    ]
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(2)
+    // EMPLEADOS son rol 'cocina' → ROLE_LABELS.cocina
+    expect(screen.getByText('Cocina')).toBeTruthy()
+    expect(screen.getAllByText('Cocina')).toHaveLength(1)   // la del código 8 no lo tiene
   })
 
   it('resolver una excepción la marca resuelta con el usuario de la sesión', async () => {
@@ -238,7 +285,7 @@ describe('SalariosHoras — bandeja de excepciones', () => {
     WORK_DAYS = [wd({ employee_id: 'e1', source: 'biotime', work_date: '2026-08-03', hours: 0 })]
     render(<SalariosHoras employees={EMPLEADOS} />)
     // NACHO aparece en la tabla de horas Y en la bandeja: se abre el de la bandeja.
-    await screen.findByText('Excepciones de fichaje (1)')
+    await esperarBandeja(1)
     fireEvent.click(screen.getAllByText('NACHO').at(-1)!)
 
     fireEvent.change(screen.getByLabelText('Horas corregidas 2026-08-03'), { target: { value: '7.5' } })

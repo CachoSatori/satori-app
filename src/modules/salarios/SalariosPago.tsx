@@ -5,7 +5,7 @@ import {
   getPeriodPayments, markPeriodPaid, consolidarPeriodo, getPunchExceptionsTodosLosLocales,
   semaforoPago, inactivosConHoras, HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
   setPeriodoEnRevision, cerrarPeriodo, reabrirPeriodo,
-  estaCongelado, motivoBloqueoExcepciones, ESTADO_LABEL,
+  estaCongelado, motivoBloqueoExcepciones, avisoHorasDefault, ESTADO_LABEL,
   type LineaConsolidado,
 } from '../../shared/api/salarios'
 import {
@@ -159,6 +159,15 @@ export default function SalariosPago({ employees }: Props) {
     () => (period ? motivoBloqueoExcepciones(semaforo, 'pagar') : null),
     [period, semaforo],
   )
+  // A8 · las horas que no midió el reloj NO frenan: se muestran y se aceptan a mano.
+  const avisoCerrar = useMemo(
+    () => (period ? avisoHorasDefault(semaforo, 'cerrar') : null),
+    [period, semaforo],
+  )
+  const avisoPagar = useMemo(
+    () => (period ? avisoHorasDefault(semaforo, 'pagar') : null),
+    [period, semaforo],
+  )
 
   const lineas: LineaConsolidado[] = useMemo(
     () => (period ? consolidarPeriodo(activos, workDays, period, LOCAL_DEFAULT) : []),
@@ -240,6 +249,9 @@ export default function SalariosPago({ employees }: Props) {
 
   const handleCerrar = () => {
     if (!period || !user?.id) return
+    // A8 · paso consciente: cerrar congela el número, así que las horas que puso la regla
+    // se aceptan ACÁ, en su propio confirm, y no mezcladas con el resto.
+    if (avisoCerrar && !window.confirm(`${avisoCerrar}\n\n¿Cerrar igual?`)) return
     const ok = window.confirm(
       `¿Cerrar el período ${period.fecha_ini} → ${period.fecha_fin}?\n\n` +
       'Las horas y las tarifas quedan CONGELADAS: para volver a tocarlas hay que reabrirlo ' +
@@ -319,11 +331,14 @@ export default function SalariosPago({ employees }: Props) {
       return
     }
 
-    // Fichajes sin resolver: ya NO se pregunta, se frena. Antes esto era un confirm
-    // ("paso consciente"), y la decisión firmada el 2026-08-25 lo cambió: no se paga con
-    // marcas abiertas ni con horas puestas por la regla. La API aplica la misma guarda
-    // releyendo la base, así que este chequeo es la primera llave, no la única.
+    // Fichajes sin resolver (marcas abiertas / sin mapear): eso sí frena. La API aplica la
+    // misma guarda releyendo la base, así que este chequeo es la primera llave, no la única.
     if (bloqueoPagar) { setError(bloqueoPagar); return }
+
+    // A8 · paso consciente, no bloqueo: las horas que NO midió el reloj se pagan, pero
+    // quien paga tiene que decir que sí. Va en su propio confirm y no mezclado con el
+    // resto, porque es la única cifra de la nómina que salió de una política y no de un dato.
+    if (avisoPagar && !window.confirm(`${avisoPagar}\n\n¿Pagar igual?`)) return
 
     // Mismo riesgo que sin_mapear —alguien que no cobra— y misma respuesta: no se frena la
     // nómina de los demás, se pregunta. La decisión de pagarle a alguien que se fue a
@@ -585,8 +600,9 @@ export default function SalariosPago({ employees }: Props) {
               nómina: {semaforo.tramos} tramo(s) sin cerrar ={' '}
               <strong>{semaforo.horasDefault.toFixed(0)} h</strong> puestas por la regla
               ({HORAS_DEFAULT_IMPAR} h por tramo), no medidas por el reloj. Los tramos bien marcados
-              de esos días sí cuentan sus horas reales. <strong>Frenan el cierre y el pago</strong>:
-              corregí las horas de cada día en la pestaña <strong>Horas</strong>.
+              de esos días sí cuentan sus horas reales. <strong>No frenan</strong> el cierre ni el
+              pago — se piden a mano —, pero se corrigen día por día en la pestaña{' '}
+              <strong>Horas</strong>.
             </p>
           )}
 

@@ -343,9 +343,9 @@ describe('Salarios · Pago del período', () => {
       .toMatch(/no se destraba resolviendo marcas en la pestaña Horas.*confirmás acá abajo/i)
   })
 
-  // A8 · las 3 h por tramo siguen siendo el default de la mig 059, pero ya NO se aceptan
-  // con un confirm: la decisión del 2026-08-25 las convirtió en bloqueo. La jornada tiene
-  // que corregirse en la pestaña Horas antes de cerrar o pagar.
+  // A8 · paso consciente, no bloqueo: las horas que no midió el reloj no frenan la nómina
+  // (el día ya vale algo y frenar dejaría sin cobrar a alguien que sí trabajó), pero quien
+  // cierra o paga tiene que decir que sí en su PROPIO confirm. Cancelar ahí no avanza.
   const DIA_INCOMPLETO = {
     employee_id: 'e2', work_date: '2026-08-03', local: 'santa-teresa', hours: 7,
     es_feriado: false, source: 'biotime' as const,
@@ -353,24 +353,46 @@ describe('Salarios · Pago del período', () => {
     created_at: '', updated_at: '',
   }
 
-  it('las jornadas incompletas BLOQUEAN el pago y explican dónde se arreglan', async () => {
+  it('las jornadas incompletas NO bloquean el pago: piden confirmación aparte', async () => {
     window.confirm = vi.fn(() => true)
     conEstado('cerrado')
     WORK_DAYS = [...WORK_DAYS, DIA_INCOMPLETO]
     await renderPago()
 
     const cartel = await screen.findByText(/tramo\(s\) sin cerrar/)
-    expect(cartel.textContent?.replace(/\s+/g, ' ')).toMatch(/Frenan el cierre y el pago/)
+    expect(cartel.textContent?.replace(/\s+/g, ' ')).toMatch(/No frenan el cierre ni el pago/)
     const btn = screen.getByText('Marcar pagado') as HTMLButtonElement
-    expect(btn.disabled).toBe(true)
-    expect(btn.title).toMatch(/no midió el reloj/i)
+    expect(btn.disabled).toBe(false)
+    fireEvent.click(btn)
+
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    const confirms = (window.confirm as ReturnType<typeof vi.fn>).mock.calls.map(c => c[0] as string)
+    expect(confirms[0]).toMatch(/1 jornada\(s\) con horas puestas por la regla/)
+    expect(confirms[0]).toMatch(/3 h que no midió el reloj/)
+    expect(confirms[0]).toMatch(/¿Pagar igual\?/)
+    expect(confirms.at(-1)).toMatch(/como PAGADO/)
+  })
+
+  it('cancelar la confirmación de las jornadas incompletas NO paga', async () => {
+    window.confirm = vi.fn(() => false)
+    conEstado('cerrado')
+    WORK_DAYS = [...WORK_DAYS, DIA_INCOMPLETO]
+    await renderPago()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1))
     expect(pagar).not.toHaveBeenCalled()
   })
 
-  it('las jornadas incompletas también bloquean el CIERRE', async () => {
+  it('al CERRAR también se pide el paso consciente, y cancelar no cierra', async () => {
     WORK_DAYS = [...WORK_DAYS, DIA_INCOMPLETO]
+    window.confirm = vi.fn(() => false)
     await renderPago()
-    expect((await screen.findByText('Cerrar período') as HTMLButtonElement).disabled).toBe(true)
+    const btn = await screen.findByText('Cerrar período') as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+
+    fireEvent.click(btn)
+    await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(1))
+    expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/¿Cerrar igual\?/)
     expect(cerrar).not.toHaveBeenCalled()
   })
 
@@ -391,7 +413,7 @@ describe('Salarios · Pago del período', () => {
 
   // Resolver la bandeja no cambia un colón de lo que se paga: la señal de las 3 h sale de
   // work_days.flags, no del estado de la excepción.
-  it('frena por las horas puestas por la regla aunque la bandeja esté limpia', async () => {
+  it('avisa por las horas puestas por la regla aunque la bandeja esté limpia', async () => {
     window.confirm = vi.fn(() => true)
     conEstado('cerrado')
     EXCS = [exc({ id: 'x1', tipo: 'impar', estado: 'resuelta', resuelto_by: 'u-1' })]
@@ -405,10 +427,12 @@ describe('Salarios · Pago del período', () => {
     await renderPago()
     // la bandeja está limpia (la excepción se resolvió)…
     expect(screen.queryByText(/fichaje incompleto sin resolver/)).toBeNull()
-    // …y sin embargo las 3 h siguen cobrándose, así que el pago sigue frenado
+    // …y sin embargo las 3 h siguen cobrándose, así que el aviso sigue apareciendo
     expect(await screen.findByText(/tramo\(s\) sin cerrar/)).toBeTruthy()
-    expect((screen.getByText('Marcar pagado') as HTMLButtonElement).disabled).toBe(true)
-    expect(pagar).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    expect((window.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0])
+      .toMatch(/1 jornada\(s\) con horas puestas por la regla/)
   })
 
   // La fila editable comparte PK con la jornada del último día: el upsert la PISA. Si el

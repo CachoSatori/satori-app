@@ -124,22 +124,21 @@ export function estaCongelado(estado: SalaryPeriodEstado): boolean {
 }
 
 /**
- * Cuántos fichajes sin resolver tiene el período, según el semáforo.
+ * Cuántos fichajes sin resolver FRENAN el período. Son dos, y los dos se arreglan desde la
+ * pestaña Horas por caminos distintos:
+ *   · `fichajeDias`   → resolver la excepción en la bandeja.
+ *   · `sinMapearDias` → asignarle el código al empleado y recalcular.
  *
- * Los tres cuentan y los tres se resuelven desde la pestaña Horas, pero por caminos
- * distintos — y confundirlos deja a alguien girando en la bandeja:
- *   · `fichajeDias`     → resolver la excepción en la bandeja.
- *   · `sinMapearDias`   → asignarle el código al empleado y recalcular.
- *   · `diasIncompletos` → corregir las horas del día (el override manual es lo único que
- *                         saca la jornada del default de la regla: sale de
- *                         `work_days.flags`, NO del estado de la excepción, así que
- *                         "resolver" la excepción no lo baja).
- *
- * `dobles` NO entra: tiene su propio destrabe explícito en la pantalla de pago (revisar y
- * confirmar), y meterlo acá lo dejaría sin salida.
+ * Dos cosas quedan afuera A PROPÓSITO:
+ *   · `diasIncompletos` — las horas puestas por la regla de las 3 h. Son un DEFAULT
+ *     corregible, no un error: el día ya vale algo y bloquear la quincena por un olvido
+ *     dejaría sin cobrar a alguien que sí trabajó. A8 pide paso consciente, no bloqueo →
+ *     se avisa fuerte (`avisoHorasDefault`) y se deja seguir.
+ *   · `dobles` — tiene su propio destrabe explícito en la pantalla de pago (revisar y
+ *     confirmar), y meterlo acá lo dejaría sin salida.
  */
 export function excepcionesSinResolver(s: SemaforoPago): number {
-  return s.fichajeDias + s.sinMapearDias + s.diasIncompletos
+  return s.fichajeDias + s.sinMapearDias
 }
 
 /** El mensaje de por qué no se puede avanzar, o `null` si sí se puede. */
@@ -149,11 +148,26 @@ export function motivoBloqueoExcepciones(s: SemaforoPago, accion: string): strin
   const detalle = [
     s.fichajeDias   > 0 ? `${s.fichajeDias} jornada(s) con fichaje incompleto en la bandeja` : null,
     s.sinMapearDias > 0 ? `${s.sinMapearDias} jornada(s) con marcas de alguien que no está en el maestro` : null,
-    s.diasIncompletos > 0
-      ? `${s.diasIncompletos} jornada(s) con horas puestas por la regla (${s.tramos} tramo(s) sin cerrar = ${s.horasDefault.toFixed(0)} h que no midió el reloj)`
-      : null,
   ].filter(Boolean).join(' · ')
   return `Hay ${n} fichaje(s) sin resolver — resolvelos en Horas antes de ${accion}. ${detalle}.`
+}
+
+/**
+ * A8 · paso consciente: el aviso de las horas que NO midió el reloj. No frena — quien
+ * cierra o paga tiene que verlo y decir que sí.
+ *
+ * Sale de `work_days.flags` (lo escribe la mig 059), NO del estado de la excepción: una
+ * excepción se resuelve y desaparece de la bandeja, pero las 3 h siguen cobrándose. Si el
+ * aviso colgara de la excepción, limpiar la bandeja lo apagaría sin cambiar un colón.
+ */
+export function avisoHorasDefault(s: SemaforoPago, accion: string): string | null {
+  if (s.diasIncompletos === 0) return null
+  return (
+    `${s.diasIncompletos} jornada(s) con horas puestas por la regla: ${s.tramos} tramo(s) sin ` +
+    `cerrar = ${s.horasDefault.toFixed(0)} h que no midió el reloj (${HORAS_DEFAULT_IMPAR} h por ` +
+    'tramo). Los tramos bien marcados de esos días sí cuentan sus horas reales.\n\n' +
+    `Se puede ${accion} igual — corregilas una por una en la pestaña Horas si podés.`
+  )
 }
 
 async function leerPeriodo(periodId: string): Promise<SalaryPeriod> {

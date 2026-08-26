@@ -41,7 +41,8 @@ import {
   setPeriodoEnRevision, cerrarPeriodo, reabrirPeriodo, markPeriodPaid,
   upsertWorkDay, overrideHorasDia, derivarWorkDays, periodoCongeladoEn, periodoCerradoSinPagar,
   exigirTarifasEditables,
-  puedeTransicionar, estaCongelado, motivoBloqueoExcepciones, excepcionesSinResolver,
+  puedeTransicionar, estaCongelado, motivoBloqueoExcepciones, avisoHorasDefault,
+  excepcionesSinResolver,
   semaforoPago, LOCAL_DEFAULT,
 } from './salarios'
 
@@ -126,17 +127,37 @@ describe('motivoBloqueoExcepciones', () => {
     expect(motivoBloqueoExcepciones(limpio, 'cerrar')).toBeNull()
   })
 
-  it('cuenta las tres familias y dice qué hacer', () => {
+  it('cuenta las dos familias que frenan y dice qué hacer', () => {
     const s = semaforoPago(
       [exc({ id: 'a', tipo: 'impar' }), exc({ id: 'b', tipo: 'sin_mapear', employee_id: null, emp_code: '77' })],
       [wdBiotime()],
       '2026-08-15',
       ['e1'],
     )
-    expect(excepcionesSinResolver(s)).toBe(3)   // 1 fichaje + 1 sin_mapear + 1 día incompleto
+    // el día incompleto está ahí, pero NO suma al bloqueo (A8)
+    expect(s.diasIncompletos).toBe(1)
+    expect(excepcionesSinResolver(s)).toBe(2)   // 1 fichaje + 1 sin_mapear
     const msg = motivoBloqueoExcepciones(s, 'cerrar')!
-    expect(msg).toMatch(/3 fichaje\(s\) sin resolver/)
+    expect(msg).toMatch(/2 fichaje\(s\) sin resolver/)
     expect(msg).toMatch(/antes de cerrar/)
+    expect(msg).not.toMatch(/regla/)
+  })
+
+  // A8 · paso consciente: las 3 h por tramo avisan, no frenan.
+  it('las horas puestas por la regla NO bloquean: avisan', () => {
+    const s = semaforoPago([], [wdBiotime()], '2026-08-15', ['e1'])
+    expect(s.diasIncompletos).toBe(1)
+    expect(excepcionesSinResolver(s)).toBe(0)
+    expect(motivoBloqueoExcepciones(s, 'cerrar')).toBeNull()
+
+    const aviso = avisoHorasDefault(s, 'cerrar')!
+    expect(aviso).toMatch(/1 jornada\(s\) con horas puestas por la regla/)
+    expect(aviso).toMatch(/3 h que no midió el reloj/)
+    expect(aviso).toMatch(/Se puede cerrar igual/)
+  })
+
+  it('sin días incompletos no hay aviso que mostrar', () => {
+    expect(avisoHorasDefault(semaforoPago([], [], '2026-08-15', ['e1']), 'pagar')).toBeNull()
   })
 
   it('las horas dobles NO entran acá: tienen su propio destrabe en la pantalla', () => {
@@ -199,12 +220,23 @@ describe('cerrarPeriodo', () => {
     expect(callsA('salary_periods').some(c => c.ops.some(o => o.fn === 'update'))).toBe(false)
   })
 
-  it('las horas puestas por la regla (3 h) también frenan el cierre', async () => {
+  // A8: el día con horas de la regla no frena el cierre — el aviso lo da la pantalla.
+  it('cierra igual con jornadas de horas por defecto (A8: aviso, no bloqueo)', async () => {
     enqueue('salary_periods', { data: period({ estado: 'abierto' }) })
     enqueue('employees', { data: [{ id: 'e1', is_active: true }] })
     enqueue('work_days', { data: [wdBiotime()] })
+    enqueue('salary_periods', { data: period({ estado: 'cerrado' }) })
 
-    await expect(cerrarPeriodo('per-1', 'u-1')).rejects.toThrow(/no midió el reloj/i)
+    await expect(cerrarPeriodo('per-1', 'u-1')).resolves.toMatchObject({ estado: 'cerrado' })
+  })
+
+  it('pero una marca sin mapear sí lo frena', async () => {
+    enqueue('salary_periods', { data: period({ estado: 'abierto' }) })
+    enqueue('employees', { data: [{ id: 'e1', is_active: true }] })
+    enqueue('punch_exceptions', { data: [exc({ id: 'a', tipo: 'sin_mapear', employee_id: null, emp_code: '77' })] })
+
+    await expect(cerrarPeriodo('per-1', 'u-1')).rejects.toThrow(/sin resolver.*antes de cerrar/i)
+    expect(callsA('salary_periods').some(c => c.ops.some(o => o.fn === 'update'))).toBe(false)
   })
 
   it('un período ya cerrado no se cierra dos veces', async () => {
@@ -269,6 +301,17 @@ describe('markPeriodPaid · guardas del ciclo', () => {
 
     await expect(markPeriodPaid('per-1', lineas, 'u-owner')).rejects.toThrow(/sin resolver.*antes de pagar/i)
     expect(callsA('employee_payments')).toHaveLength(0)
+  })
+
+  it('paga con jornadas de horas por defecto: A8 avisa en pantalla, no frena la API', async () => {
+    enqueue('salary_periods', { data: { estado: 'cerrado', fecha_ini: '2026-08-01', fecha_fin: '2026-08-15' } })
+    enqueue('employees', { data: [{ id: 'e1', is_active: true }] })
+    enqueue('work_days', { data: [wdBiotime()] })
+    enqueue('employee_payments', {})
+    enqueue('salary_lines', {})
+    enqueue('salary_periods', {})
+
+    await expect(markPeriodPaid('per-1', lineas, 'u-owner')).resolves.toBe(1)
   })
 
   it('cerrado y limpio: paga', async () => {

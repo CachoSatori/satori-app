@@ -15,7 +15,10 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: { from: () => ({}) } }))
 
 const PERIODO: SalaryPeriod = {
   id: 'per-1', tipo: 'quincena', fecha_ini: '2026-08-01', fecha_fin: '2026-08-15',
-  estado: 'abierto', local: null, paid_by: null, paid_at: null, created_at: '', updated_at: '',
+  estado: 'abierto', local: null, created_by: null, closed_by: null, closed_at: null,
+  paid_by: null, paid_at: null,
+  reopened_by: null, reopened_at: null, reopen_motivo: null,
+  created_at: '', updated_at: '',
 }
 
 const emp = (id: string, full_name: string): Employee =>

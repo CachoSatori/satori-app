@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import type { Employee, UserRole } from '../../shared/types/database'
 import { createEmployee, updateEmployeePayroll, toggleEmployeeActive } from '../../shared/api/admin'
-import { updateEmployeeHomebankingName, updateEmployeeHorasHabituales, horaHabitualHHMM } from '../../shared/api/salarios'
+import {
+  updateEmployeeHomebankingName, updateEmployeeHorasHabituales, horaHabitualHHMM,
+  exigirTarifasEditables,
+} from '../../shared/api/salarios'
 import { ROLE_LABELS } from '../../shared/constants'
 import { fi } from '../../shared/utils'
 
@@ -59,6 +62,13 @@ function payloadOf(d: Draft) {
   }
 }
 
+// ¿Se tocó alguna de las dos patas de la tarifa? Es lo único que un período cerrado
+// congela: el resto de los campos de nómina no cambia un colón de lo ya calculado.
+function tarifaCambio(emp: Employee, d: Draft): boolean {
+  return num(d.hourly) !== (Number(emp.hourly_rate_crc) || 0)
+      || num(d.fijo)   !== (Number(emp.fixed_salary_crc) || 0)
+}
+
 // Validación en la app ANTES de persistir (A3). El índice único parcial de la mig 055
 // es la red de seguridad; esto es lo que hace que el error se vea claro y a tiempo.
 function codigoDuplicado(code: string, employees: Employee[], exceptId?: string): Employee | null {
@@ -109,6 +119,11 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
     setSaving(true)
     setError(null)
     try {
+      // La tarifa NO tiene fecha: vive en `employees` y el neto de un período la lee en
+      // vivo. Cambiarla con un período cerrado sin pagar le movería el neto por atrás —
+      // exactamente lo que "cerrado" promete que no pasa. Se chequea solo si la tarifa
+      // cambió: el código de BioTime, la fecha de ingreso o el alias del banco no son plata.
+      if (tarifaCambio(emp, draft)) await exigirTarifasEditables()
       await updateEmployeePayroll(emp.id, payloadOf(draft))
       // El alias del homebanking va por su propia función: el payload de
       // updateEmployeePayroll es un contrato cerrado (mig 055) y no se ensancha.

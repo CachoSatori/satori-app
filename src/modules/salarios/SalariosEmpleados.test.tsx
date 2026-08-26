@@ -17,13 +17,18 @@ vi.mock('../../shared/api/admin', () => ({
 // propia función: el payload de `updateEmployeePayroll` es un contrato cerrado (mig 055).
 const setBanco   = vi.fn<(id: string, n: string | null) => Promise<void>>(async () => {})
 const setHorario = vi.fn<(id: string, e: string | null, s: string | null) => Promise<void>>(async () => {})
+// La guarda del período cerrado (ciclo de estados): la tarifa no tiene fecha, así que
+// cambiarla con un período cerrado sin pagar le movería el neto por atrás. Deja pasar por
+// defecto; la prueba que la ejercita le pone el rechazo.
+const guardaTarifas = vi.fn<() => Promise<void>>(async () => {})
 vi.mock('../../shared/api/supabase', () => ({ supabase: { from: () => ({}) } }))
-// El módulo real, con las dos escrituras interceptadas: los helpers puros de Capa 3
+// El módulo real, con las ESCRITURAS interceptadas: los helpers puros de Capa 3
 // (`horaHabitualHHMM`) tienen que ser los DE VERDAD, porque la ficha los usa para pintar.
 vi.mock('../../shared/api/salarios', async (orig) => ({
   ...(await orig<typeof import('../../shared/api/salarios')>()),
   updateEmployeeHomebankingName: (id: string, n: string | null) => setBanco(id, n),
   updateEmployeeHorasHabituales: (id: string, e: string | null, s: string | null) => setHorario(id, e, s),
+  exigirTarifasEditables: () => guardaTarifas(),
 }))
 
 import SalariosEmpleados from './SalariosEmpleados'
@@ -56,6 +61,8 @@ beforeEach(() => {
   toggle.mockClear()
   setBanco.mockClear()
   setHorario.mockClear()
+  guardaTarifas.mockClear()
+  guardaTarifas.mockResolvedValue(undefined)
 })
 
 describe('Salarios · Empleados / Tarifas — guardado de nómina', () => {
@@ -256,5 +263,29 @@ describe('Salarios · Empleados / Tarifas — horario habitual', () => {
     await waitFor(() => expect(setHorario).toHaveBeenCalledWith('e9', '09:00', '18:00'))
     // Y no se cuela en el payload del alta: va por su propia función, después.
     expect(create.mock.calls[0][0]).not.toHaveProperty('hora_entrada_habitual')
+  })
+})
+
+// ── El período cerrado congela las tarifas ────────────────────────────────────────
+describe('Salarios · Empleados / Tarifas — guarda del período cerrado', () => {
+  it('con un período cerrado sin pagar, cambiar la tarifa REBOTA y no persiste', async () => {
+    guardaTarifas.mockRejectedValue(new Error('El período 2026-08-01 → 2026-08-15 está cerrado y todavía no se pagó'))
+    renderList()
+    fireEvent.click(screen.getAllByText('Editar')[0])   // ANA
+    fireEvent.change(screen.getByLabelText('Tarifa por hora: ANA'), { target: { value: '3000' } })
+    fireEvent.click(screen.getByText('Guardar'))
+
+    expect(await screen.findByText(/cerrado y todavía no se pagó/)).toBeTruthy()
+    expect(updatePayroll).not.toHaveBeenCalled()
+  })
+
+  it('tocar SOLO el código de BioTime no dispara la guarda: no es plata', async () => {
+    renderList()
+    fireEvent.click(screen.getAllByText('Editar')[0])   // ANA, tarifa intacta
+    fireEvent.change(screen.getByLabelText('Código BioTime: ANA'), { target: { value: '31' } })
+    fireEvent.click(screen.getByText('Guardar'))
+
+    await waitFor(() => expect(updatePayroll).toHaveBeenCalledTimes(1))
+    expect(guardaTarifas).not.toHaveBeenCalled()
   })
 })

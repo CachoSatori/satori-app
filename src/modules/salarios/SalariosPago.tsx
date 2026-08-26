@@ -4,6 +4,8 @@ import {
   getSalaryPeriods, createSalaryPeriod, getWorkDays, upsertWorkDay,
   getPeriodPayments, markPeriodPaid, consolidarPeriodo, getPunchExceptionsTodosLosLocales,
   semaforoPago, inactivosConHoras, HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
+  setPeriodoEnRevision, cerrarPeriodo, reabrirPeriodo,
+  estaCongelado, motivoBloqueoExcepciones, ESTADO_LABEL,
   type LineaConsolidado,
 } from '../../shared/api/salarios'
 import {
@@ -18,6 +20,15 @@ import { useAuth } from '../../shared/hooks/useAuth'
 // Lo que NO hace (a propósito, va en los pases siguientes): 10% de servicio y propinas
 // en el consolidado (F2), horas automáticas de BioTime (F1d), comprobante por WhatsApp
 // o email, y datos bancarios completos. El pago NO toca caja.
+
+// El estado del período de un vistazo. `cerrado` va en ámbar a propósito: no es un
+// final (todavía falta pagar), es "esto ya no se toca".
+const COLOR_ESTADO: Record<string, string> = {
+  abierto:     '#888',
+  en_revision: '#8a6d3b',
+  cerrado:     '#8a6d3b',
+  pagado:      'var(--t-teal)',
+}
 
 // El texto del input a número, tolerando el campo a medio escribir.
 function num(s: string): number {
@@ -34,6 +45,9 @@ export default function SalariosPago({ employees }: Props) {
   // Registrar el pago es evento de plata: la RLS de la mig 056 lo deja solo a
   // owner/manager. El contador arma la nómina y baja el archivo, pero no paga.
   const puedePagar = profile?.role === 'owner' || profile?.role === 'manager'
+  // Mover el período por su ciclo (revisar / cerrar / reabrir) NO es plata: es el trabajo
+  // del que arma la nómina, y el contador es justamente quien lo hace.
+  const puedeCerrar = puedePagar || profile?.role === 'contador'
 
   const [periods, setPeriods]   = useState<SalaryPeriod[]>([])
   const [periodId, setPeriodId] = useState<string>('')
@@ -64,8 +78,16 @@ export default function SalariosPago({ employees }: Props) {
   const [newIni, setNewIni]     = useState(todayCR())
   const [newFin, setNewFin]     = useState(todayCR())
 
-  const period = periods.find(p => p.id === periodId) ?? null
-  const pagado = period?.estado === 'pagado'
+  // Reapertura: el motivo es obligatorio y viaja a la fila del período (mig 056).
+  const [reabriendo, setReabriendo]   = useState(false)
+  const [motivoReab, setMotivoReab]   = useState('')
+
+  const period    = periods.find(p => p.id === periodId) ?? null
+  const estado    = period?.estado ?? 'abierto'
+  const pagado    = estado === 'pagado'
+  // `cerrado` y `pagado` congelan el período: horas y netos dejan de editarse hasta que
+  // alguien lo reabra con motivo. Es la promesa que hace cerrar, y sin esto es una etiqueta.
+  const congelado = period != null && estaCongelado(estado)
 
   const loadPeriods = useCallback(async () => {
     try {
@@ -126,6 +148,18 @@ export default function SalariosPago({ employees }: Props) {
   )
   const frenado = semaforo.dobles.length > 0 && !okDobles
 
+  // Espejo en pantalla del guard que la API aplica igual (`cerrarPeriodo` /
+  // `markPeriodPaid` releen el semáforo de la base antes de escribir). Acá es para que el
+  // botón diga POR QUÉ está apagado en vez de rebotar recién al apretarlo.
+  const bloqueoCerrar = useMemo(
+    () => (period ? motivoBloqueoExcepciones(semaforo, 'cerrar') : null),
+    [period, semaforo],
+  )
+  const bloqueoPagar = useMemo(
+    () => (period ? motivoBloqueoExcepciones(semaforo, 'pagar') : null),
+    [period, semaforo],
+  )
+
   const lineas: LineaConsolidado[] = useMemo(
     () => (period ? consolidarPeriodo(activos, workDays, period, LOCAL_DEFAULT) : []),
     [activos, workDays, period],
@@ -178,6 +212,51 @@ export default function SalariosPago({ employees }: Props) {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Todas las transiciones pasan por acá: la API valida el salto y las guardas, la
+  // pantalla solo muestra el resultado y recarga. `loadPeriods` refresca la lista y el
+  // efecto de arriba vuelve a traer horas, pagos y excepciones del período.
+  const transicionar = async (accion: () => Promise<unknown>, ok: string) => {
+    setSaving(true); setError(null); setAviso(null)
+    try {
+      await accion()
+      setAviso(ok)
+      await loadPeriods()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error cambiando el estado del período')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEnRevision = () => {
+    if (!period || !user?.id) return
+    transicionar(
+      () => setPeriodoEnRevision(period.id, user.id),
+      'Período en revisión: las horas se siguen editando.',
+    )
+  }
+
+  const handleCerrar = () => {
+    if (!period || !user?.id) return
+    const ok = window.confirm(
+      `¿Cerrar el período ${period.fecha_ini} → ${period.fecha_fin}?\n\n` +
+      'Las horas y las tarifas quedan CONGELADAS: para volver a tocarlas hay que reabrirlo ' +
+      'con un motivo, que queda registrado.\n\nDespués de cerrar se puede marcar el pago.',
+    )
+    if (!ok) return
+    transicionar(() => cerrarPeriodo(period.id, user.id), 'Período cerrado.')
+  }
+
+  const handleReabrir = () => {
+    if (!period || !user?.id) return
+    const motivo = motivoReab.trim()
+    if (!motivo) { setError('Escribí el motivo de la reapertura: queda registrado en el período.'); return }
+    transicionar(
+      () => reabrirPeriodo(period.id, user.id, motivo),
+      'Período reabierto: vuelve a revisión y las horas se pueden corregir.',
+    ).then(() => { setReabriendo(false); setMotivoReab('') })
   }
 
   // Las horas se guardan al salir del campo (mismo gesto que el resto de la app: se
@@ -240,20 +319,11 @@ export default function SalariosPago({ employees }: Props) {
       return
     }
 
-    // Los avisos que no frenan viajan al confirm, para que quien paga los vea en el
-    // último momento y no en un cartel que ya scrolleó.
-    // A8 · paso consciente, no bloqueo: quien paga tiene que decir que sí a las horas que
-    // NO midió el reloj. Va en su propio confirm y no mezclado con el resto, porque es la
-    // única cifra de la nómina que salió de una política y no de un dato.
-    if (semaforo.diasIncompletos > 0) {
-      const sigue = window.confirm(
-        `${semaforo.diasIncompletos} día(s) con marca incompleta contados a ${HORAS_DEFAULT_IMPAR} h.\n\n` +
-        `${semaforo.tramos} tramo(s) sin cerrar = ${semaforo.horasDefault.toFixed(0)} h que no midió ` +
-        'el reloj (los tramos bien marcados de esos días sí cuentan sus horas reales).\n\n' +
-        'Se pueden corregir uno por uno en la pestaña Horas.\n\n¿Pagar igual?',
-      )
-      if (!sigue) return
-    }
+    // Fichajes sin resolver: ya NO se pregunta, se frena. Antes esto era un confirm
+    // ("paso consciente"), y la decisión firmada el 2026-08-25 lo cambió: no se paga con
+    // marcas abiertas ni con horas puestas por la regla. La API aplica la misma guarda
+    // releyendo la base, así que este chequeo es la primera llave, no la única.
+    if (bloqueoPagar) { setError(bloqueoPagar); return }
 
     // Mismo riesgo que sin_mapear —alguien que no cobra— y misma respuesta: no se frena la
     // nómina de los demás, se pregunta. La decisión de pagarle a alguien que se fue a
@@ -269,19 +339,6 @@ export default function SalariosPago({ employees }: Props) {
       if (!sigue) return
     }
 
-    // Marcas de alguien que no está en el maestro: el riesgo no es pagar de más, es que
-    // haya UNA PERSONA que no cobra. No se puede resolver desde acá (falta darla de alta).
-    if (semaforo.sinMapearDias > 0) {
-      const sigue = window.confirm(
-        `Hay ${semaforo.sinMapearMarcas} marca(s) de fichaje sin empleado asignado ` +
-        `(${semaforo.sinMapearDias} jornada(s)).\n\n` +
-        'Puede que alguien NO ESTÉ COBRANDO este período.\n\n' +
-        'Se asigna el código en Empleados / Tarifas y después se recalculan las horas.\n\n' +
-        '¿Pagar igual?',
-      )
-      if (!sigue) return
-    }
-
     const avisos: string[] = []
     if (nombresInactivos.length > 0) {
       avisos.push(`⛔ Quedan AFUERA (inactivos con horas): ${nombresInactivos.join(', ')}.`)
@@ -293,9 +350,6 @@ export default function SalariosPago({ employees }: Props) {
     }
     if (semaforo.dobles.length > 0) {
       avisos.push(`⚠️ Horas dobles confirmadas a mano: ${nombresDobles.join(', ')}.`)
-    }
-    if (semaforo.fichajeDias > 0) {
-      avisos.push(`${semaforo.fichajeDias} jornada(s) con fichaje incompleto sin revisar en la bandeja.`)
     }
 
     const ok = window.confirm(
@@ -383,12 +437,91 @@ export default function SalariosPago({ employees }: Props) {
             </option>
           ))}
         </select>
-        {pagado && (
-          <span className="role-badge" style={{ color: 'var(--t-teal)' }}>
-            pagado · {pagos.length} registro(s)
+        {period && (
+          <span className="role-badge" style={{ color: COLOR_ESTADO[estado] ?? '#888' }}>
+            {ESTADO_LABEL[estado]}{pagado ? ` · ${pagos.length} registro(s)` : ''}
           </span>
         )}
       </div>
+
+      {period && (
+        <div style={{ padding: '0 12px 8px', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {estado === 'abierto' && (
+            <button
+              className="btn-secondary"
+              onClick={handleEnRevision}
+              disabled={saving || !puedeCerrar}
+              title={puedeCerrar ? undefined : 'Lo hacen el dueño, el gerente o el contador'}
+            >
+              Marcar en revisión
+            </button>
+          )}
+
+          {!congelado && (
+            <button
+              className="btn-secondary"
+              onClick={handleCerrar}
+              disabled={saving || !puedeCerrar || !!bloqueoCerrar}
+              title={bloqueoCerrar ?? (puedeCerrar ? undefined : 'Lo hacen el dueño, el gerente o el contador')}
+            >
+              Cerrar período
+            </button>
+          )}
+
+          {congelado && !reabriendo && (
+            <button
+              className="btn-secondary"
+              onClick={() => { setReabriendo(true); setError(null) }}
+              disabled={saving || !puedeCerrar}
+              title={puedeCerrar ? undefined : 'Lo hacen el dueño, el gerente o el contador'}
+            >
+              Reabrir período
+            </button>
+          )}
+
+          {congelado && reabriendo && (
+            <>
+              <input
+                className="tip-input"
+                type="text"
+                aria-label="Motivo de la reapertura"
+                placeholder="Motivo de la reapertura (obligatorio)"
+                value={motivoReab}
+                onChange={e => setMotivoReab(e.target.value)}
+                disabled={saving}
+                style={{ width: '320px' }}
+              />
+              <button className="btn-primary" onClick={handleReabrir} disabled={saving || !motivoReab.trim()}>
+                Reabrir
+              </button>
+              <button
+                className="btn-delete-inline"
+                onClick={() => { setReabriendo(false); setMotivoReab('') }}
+                disabled={saving}
+              >
+                Cancelar
+              </button>
+            </>
+          )}
+
+          {congelado && (
+            <span style={{ fontSize: '0.7rem', color: '#888' }}>
+              🔒 Horas y tarifas congeladas hasta reabrirlo.
+            </span>
+          )}
+          {period.reopen_motivo && (
+            <span style={{ fontSize: '0.68rem', color: '#888' }}>
+              Última reapertura: «{period.reopen_motivo}»
+            </span>
+          )}
+        </div>
+      )}
+
+      {period && bloqueoCerrar && !congelado && (
+        <p style={{ padding: '0 12px 8px', fontSize: '0.78rem', color: 'var(--t-red, #b04a3a)' }}>
+          ⛔ {bloqueoCerrar}
+        </p>
+      )}
 
       {error && <p className="field-error" style={{ padding: '0 12px' }}>{error}</p>}
       {aviso && (
@@ -452,14 +585,15 @@ export default function SalariosPago({ employees }: Props) {
               nómina: {semaforo.tramos} tramo(s) sin cerrar ={' '}
               <strong>{semaforo.horasDefault.toFixed(0)} h</strong> puestas por la regla
               ({HORAS_DEFAULT_IMPAR} h por tramo), no medidas por el reloj. Los tramos bien marcados
-              de esos días sí cuentan sus horas reales.
+              de esos días sí cuentan sus horas reales. <strong>Frenan el cierre y el pago</strong>:
+              corregí las horas de cada día en la pestaña <strong>Horas</strong>.
             </p>
           )}
 
           {!pagado && semaforo.fichajeDias > 0 && (
-            <p style={{ padding: '0 12px 8px', fontSize: '0.72rem', color: '#888' }}>
-              {semaforo.fichajeDias} jornada(s) con fichaje incompleto sin revisar en la bandeja
-              (pestaña <strong>Horas</strong>). No frenan el pago.
+            <p style={{ padding: '0 12px 8px', fontSize: '0.72rem', color: 'var(--t-red, #b04a3a)' }}>
+              ⛔ {semaforo.fichajeDias} jornada(s) con fichaje incompleto sin resolver en la bandeja
+              (pestaña <strong>Horas</strong>). <strong>Frenan el cierre y el pago.</strong>
             </p>
           )}
 
@@ -529,7 +663,7 @@ export default function SalariosPago({ employees }: Props) {
                         value={horasVal}
                         onChange={e => setHorasDraft(d => ({ ...d, [id]: e.target.value }))}
                         onBlur={() => saveHoras(l)}
-                        disabled={saving || pagado}
+                        disabled={saving || congelado}
                         style={{ width: '80px' }}
                       />
                     </td>
@@ -545,7 +679,7 @@ export default function SalariosPago({ employees }: Props) {
                         placeholder={String(Math.round(l.neto))}
                         value={netoVal}
                         onChange={e => setNetoDraft(d => ({ ...d, [id]: e.target.value }))}
-                        disabled={saving || pagado}
+                        disabled={saving || congelado}
                         style={{ width: '110px' }}
                       />
                     </td>
@@ -574,19 +708,31 @@ export default function SalariosPago({ employees }: Props) {
               // El archivo del banco es lo que MUEVE la plata: "Marcar pagado" es solo el
               // registro. Frenar el registro y dejar bajar el Excel sería frenar la puerta
               // equivocada — se transferiría de más y recién después aparecería el bloqueo.
-              disabled={saving || aPagar.length === 0 || frenado}
-              title={frenado ? `Horas contadas dos veces: ${nombresDobles.join(', ')}` : undefined}
+              // Por eso lo frena TODO lo que frena el pago, fichajes sin resolver incluidos.
+              disabled={saving || aPagar.length === 0 || frenado || !!bloqueoPagar}
+              title={
+                frenado ? `Horas contadas dos veces: ${nombresDobles.join(', ')}`
+                        : bloqueoPagar ?? undefined
+              }
             >
               Descargar Excel para el banco
             </button>
             <button
               className="btn-primary"
               onClick={handlePagar}
-              disabled={saving || pagado || aPagar.length === 0 || !puedePagar || frenado}
+              // Se paga lo que se CERRÓ: sin saltos. Un período abierto o en revisión
+              // todavía se está moviendo, y transferir contra un número que se mueve es
+              // justamente lo que el ciclo viene a evitar.
+              disabled={
+                saving || pagado || estado !== 'cerrado' || aPagar.length === 0 ||
+                !puedePagar || frenado || !!bloqueoPagar
+              }
               title={
-                frenado
-                  ? `Horas contadas dos veces: ${nombresDobles.join(', ')}`
-                  : puedePagar ? undefined : 'Solo el dueño o el gerente marcan el pago'
+                pagado ? undefined
+                : estado !== 'cerrado' ? 'Cerrá el período antes de marcar el pago'
+                : frenado ? `Horas contadas dos veces: ${nombresDobles.join(', ')}`
+                : bloqueoPagar ? bloqueoPagar
+                : puedePagar ? undefined : 'Solo el dueño o el gerente marcan el pago'
               }
             >
               {pagado ? 'Pagado' : 'Marcar pagado'}

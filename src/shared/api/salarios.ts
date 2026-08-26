@@ -5,6 +5,7 @@ import type {
   EmployeeWageRate,
   PunchException,
   SalaryPeriod,
+  SalaryPeriodEstado,
   TimePunch,
   WorkDay,
 } from '../types/database'
@@ -40,11 +41,19 @@ interface Q extends PromiseLike<{ data: unknown; error: PgError }> {
 
 const fromAny = supabase.from?.bind(supabase) as unknown as (table: string) => Q
 
-function fail(error: PgError, quePasaba: string): never {
+// La pista por defecto es la del PAGO porque es el rebote real de la RLS (mig 056 §7.4:
+// el contador arma la nómina pero no paga). Las transiciones de estado la pisan: cerrar y
+// reabrir SÍ los puede el contador, y decirle lo contrario lo manda a buscar un permiso
+// que ya tiene.
+function fail(
+  error: PgError,
+  quePasaba: string,
+  pista = 'El pago lo marcan solo el dueño o el gerente.',
+): never {
   const msg = error?.message ?? 'error desconocido'
   // 42501 = la RLS dijo que no. El caso real es el contador intentando pagar.
   if (error?.code === '42501' || /row-level security/i.test(msg)) {
-    throw new Error(`No tenés permiso para ${quePasaba}. El pago lo marcan solo el dueño o el gerente.`)
+    throw new Error(`No tenés permiso para ${quePasaba}. ${pista}`.trim())
   }
   throw new Error(msg)
 }
@@ -68,6 +77,286 @@ export async function createSalaryPeriod(p: {
   const { data, error } = await fromAny('salary_periods').insert(p).select('*').single()
   if (error) fail(error, 'crear un período de pago')
   return data as SalaryPeriod
+}
+
+// ── Ciclo de estados del período ────────────────────────────────────────────────
+//
+// abierto → en_revision → cerrado → pagado, y la vuelta atrás SOLO por reapertura con
+// motivo. Es control, no plata: acá no se calcula ni se mueve un colón, se decide QUÉ SE
+// PUEDE TOCAR y CUÁNDO.
+//
+// Las tres reglas que sostienen el ciclo:
+//   1. Sin saltos. `abierto → pagado` no existe: pagar exige haber cerrado.
+//   2. No se cierra ni se paga con fichajes sin resolver (ver `motivoBloqueoExcepciones`).
+//   3. `cerrado` y `pagado` CONGELAN horas y tarifas. La única salida es reabrir, y
+//      reabrir deja rastro (`reopened_by/at/motivo`, mig 056).
+//
+// El esquema ya estaba: el CHECK del estado y las columnas de reapertura viven en la
+// mig 056. Este bloque NO agrega ni una migración.
+
+/** Cómo se lee cada estado en pantalla y en los mensajes de error. */
+export const ESTADO_LABEL: Record<SalaryPeriodEstado, string> = {
+  abierto:     'abierto',
+  en_revision: 'en revisión',
+  cerrado:     'cerrado',
+  pagado:      'pagado',
+}
+
+/**
+ * Transiciones válidas. La tabla es la definición: si un salto no está acá, no pasa.
+ * `en_revision` es el único destino "hacia atrás", y llegar ahí desde `cerrado`/`pagado`
+ * es una REAPERTURA — que exige motivo (`reabrirPeriodo`).
+ */
+export const TRANSICIONES: Record<SalaryPeriodEstado, SalaryPeriodEstado[]> = {
+  abierto:     ['en_revision', 'cerrado'],
+  en_revision: ['cerrado'],
+  cerrado:     ['en_revision', 'pagado'],
+  pagado:      ['en_revision'],
+}
+
+export function puedeTransicionar(desde: SalaryPeriodEstado, hacia: SalaryPeriodEstado): boolean {
+  return TRANSICIONES[desde]?.includes(hacia) ?? false
+}
+
+/** Un período congelado no acepta cambios de horas ni de tarifas hasta que se reabra. */
+export function estaCongelado(estado: SalaryPeriodEstado): boolean {
+  return estado === 'cerrado' || estado === 'pagado'
+}
+
+/**
+ * Cuántos fichajes sin resolver tiene el período, según el semáforo.
+ *
+ * Los tres cuentan y los tres se resuelven desde la pestaña Horas, pero por caminos
+ * distintos — y confundirlos deja a alguien girando en la bandeja:
+ *   · `fichajeDias`     → resolver la excepción en la bandeja.
+ *   · `sinMapearDias`   → asignarle el código al empleado y recalcular.
+ *   · `diasIncompletos` → corregir las horas del día (el override manual es lo único que
+ *                         saca la jornada del default de la regla: sale de
+ *                         `work_days.flags`, NO del estado de la excepción, así que
+ *                         "resolver" la excepción no lo baja).
+ *
+ * `dobles` NO entra: tiene su propio destrabe explícito en la pantalla de pago (revisar y
+ * confirmar), y meterlo acá lo dejaría sin salida.
+ */
+export function excepcionesSinResolver(s: SemaforoPago): number {
+  return s.fichajeDias + s.sinMapearDias + s.diasIncompletos
+}
+
+/** El mensaje de por qué no se puede avanzar, o `null` si sí se puede. */
+export function motivoBloqueoExcepciones(s: SemaforoPago, accion: string): string | null {
+  const n = excepcionesSinResolver(s)
+  if (n === 0) return null
+  const detalle = [
+    s.fichajeDias   > 0 ? `${s.fichajeDias} jornada(s) con fichaje incompleto en la bandeja` : null,
+    s.sinMapearDias > 0 ? `${s.sinMapearDias} jornada(s) con marcas de alguien que no está en el maestro` : null,
+    s.diasIncompletos > 0
+      ? `${s.diasIncompletos} jornada(s) con horas puestas por la regla (${s.tramos} tramo(s) sin cerrar = ${s.horasDefault.toFixed(0)} h que no midió el reloj)`
+      : null,
+  ].filter(Boolean).join(' · ')
+  return `Hay ${n} fichaje(s) sin resolver — resolvelos en Horas antes de ${accion}. ${detalle}.`
+}
+
+async function leerPeriodo(periodId: string): Promise<SalaryPeriod> {
+  const { data, error } = await fromAny('salary_periods')
+    .select('*')
+    .eq('id', periodId)
+    .single()
+  if (error) fail(error, 'leer el período')
+  const p = data as SalaryPeriod | null
+  if (!p) throw new Error('El período no existe.')
+  return p
+}
+
+// Los ids de la nómina real, para acotar el semáforo igual que lo hace la pantalla: un
+// inactivo con horas viejas no puede frenar el cierre de los demás. Si la lectura falla o
+// vuelve vacía se devuelve `[]` y el llamador cuenta TODO (fail-closed): quedarse ciego
+// no puede ser lo que destrabe un cierre.
+async function idsDeLaNomina(): Promise<string[]> {
+  try {
+    const { data, error } = await fromAny('employees').select('id,is_active').eq('is_active', true)
+    if (error) return []
+    return ((data ?? []) as { id: string }[]).map(e => e.id)
+  } catch { return [] }
+}
+
+/**
+ * El semáforo del período leído de la BASE, no de la pantalla. Es a propósito: entre que
+ * alguien abrió la pestaña y apretó "Cerrar" pueden haber entrado marcas nuevas.
+ */
+export async function semaforoDelPeriodo(
+  p: Pick<SalaryPeriod, 'fecha_ini' | 'fecha_fin'>,
+): Promise<SemaforoPago> {
+  const [wd, exc, nomina] = await Promise.all([
+    getWorkDays(p.fecha_ini, p.fecha_fin),
+    getPunchExceptionsTodosLosLocales(p.fecha_ini, p.fecha_fin),
+    idsDeLaNomina(),
+  ])
+  return semaforoPago(exc, wd, p.fecha_fin, nomina.length > 0 ? nomina : undefined)
+}
+
+async function exigirSinExcepciones(
+  p: Pick<SalaryPeriod, 'fecha_ini' | 'fecha_fin'>,
+  accion: string,
+): Promise<void> {
+  const motivo = motivoBloqueoExcepciones(await semaforoDelPeriodo(p), accion)
+  if (motivo) throw new Error(motivo)
+}
+
+// Qué se escribe además del estado. El `userId` no es decorativo: es la mitad del rastro
+// (la otra es la fecha). Pasar a revisión un período ABIERTO no tiene columna propia en la
+// mig 056 y no la inventamos acá — agregar una es esquema, y el esquema lo firma Ismael.
+function patchDe(hacia: SalaryPeriodEstado, userId: string, motivo?: string): Record<string, unknown> {
+  const at = new Date().toISOString()
+  if (hacia === 'cerrado') return { estado: 'cerrado', closed_by: userId, closed_at: at }
+  if (hacia === 'en_revision') {
+    return motivo != null
+      ? { estado: 'en_revision', reopened_by: userId, reopened_at: at, reopen_motivo: motivo }
+      : { estado: 'en_revision' }
+  }
+  return { estado: hacia }
+}
+
+const PISTA_ESTADO = 'Cerrar y reabrir lo pueden el dueño, el gerente y el contador.'
+
+async function moverEstado(
+  periodId: string,
+  hacia: SalaryPeriodEstado,
+  userId: string,
+  motivo?: string,
+): Promise<SalaryPeriod> {
+  const p = await leerPeriodo(periodId)
+  if (p.estado === hacia) throw new Error(`El período ya está ${ESTADO_LABEL[hacia]}.`)
+  if (!puedeTransicionar(p.estado, hacia)) {
+    throw new Error(
+      `No se puede pasar un período de ${ESTADO_LABEL[p.estado]} a ${ESTADO_LABEL[hacia]}.`,
+    )
+  }
+  // Reapertura = volver atrás desde un período congelado, y va SIEMPRE con motivo. Las
+  // dos mitades importan: sin la primera, `reabrirPeriodo` "reabriría" un período abierto;
+  // sin la segunda, `setPeriodoEnRevision` descongelaría uno cerrado por la puerta de al
+  // lado, sin dejar rastro — que es exactamente lo que la reapertura auditada evita.
+  if (motivo != null && !estaCongelado(p.estado)) {
+    throw new Error(`Solo se reabre un período cerrado o pagado (este está ${ESTADO_LABEL[p.estado]}).`)
+  }
+  if (motivo == null && estaCongelado(p.estado)) {
+    throw new Error(
+      `El período está ${ESTADO_LABEL[p.estado]}: para volver a tocarlo hay que reabrirlo con un motivo.`,
+    )
+  }
+  if (hacia === 'cerrado') await exigirSinExcepciones(p, 'cerrar')
+
+  const { data, error } = await fromAny('salary_periods')
+    .update(patchDe(hacia, userId, motivo))
+    .eq('id', periodId)
+    .select('*')
+    .single()
+  if (error) fail(error, `pasar el período a ${ESTADO_LABEL[hacia]}`, PISTA_ESTADO)
+  return data as SalaryPeriod
+}
+
+/** `abierto → en_revision`: la nómina está armada y alguien la está mirando. */
+export async function setPeriodoEnRevision(periodId: string, userId: string): Promise<SalaryPeriod> {
+  return moverEstado(periodId, 'en_revision', userId)
+}
+
+/**
+ * `abierto`/`en_revision` → `cerrado`. Congela horas y tarifas del período.
+ * Rebota si quedan fichajes sin resolver: cerrar con marcas abiertas es congelar un
+ * número que todavía no es el correcto.
+ */
+export async function cerrarPeriodo(periodId: string, userId: string): Promise<SalaryPeriod> {
+  return moverEstado(periodId, 'cerrado', userId)
+}
+
+/**
+ * `cerrado`/`pagado` → `en_revision`, con motivo OBLIGATORIO. Es la única forma de volver
+ * a tocar las horas o las tarifas de un período congelado, y queda registrado quién lo
+ * hizo, cuándo y por qué (mig 056: `reopened_by` / `reopened_at` / `reopen_motivo`).
+ *
+ * Reabrir un período PAGADO no borra ni toca los pagos ya registrados: `employee_payments`
+ * y `salary_lines` son append-only y siguen siendo la evidencia de lo que se transfirió.
+ */
+export async function reabrirPeriodo(
+  periodId: string,
+  userId: string,
+  motivo: string,
+): Promise<SalaryPeriod> {
+  const m = (motivo ?? '').trim()
+  if (!m) throw new Error('La reapertura necesita un motivo: queda registrado en el período.')
+  return moverEstado(periodId, 'en_revision', userId, m)
+}
+
+// ── Congelado: qué NO se puede editar mientras el período está cerrado ──────────
+
+/**
+ * El período que cubre esa fecha y está congelado, si lo hay.
+ *
+ * La lectura es null-safe a propósito (mismo criterio que la bandeja de excepciones): si
+ * la consulta falla, la pantalla de Horas tiene que seguir funcionando. El congelado es
+ * una guarda de proceso, no el candado de la plata — el candado del pago es
+ * `markPeriodPaid`, que relee el estado del período antes de escribir nada.
+ */
+export async function periodoCongeladoEnRango(
+  desde: string,
+  hasta: string,
+): Promise<SalaryPeriod | null> {
+  try {
+    // Solapamiento clásico: el período empieza antes de que termine el rango y termina
+    // después de que empieza. Con desde === hasta es "el período que cubre ese día".
+    const { data, error } = await fromAny('salary_periods')
+      .select('*')
+      .lte('fecha_ini', hasta)
+      .gte('fecha_fin', desde)
+    if (error) return null
+    return ((data ?? []) as SalaryPeriod[]).find(p => estaCongelado(p.estado)) ?? null
+  } catch { return null }
+}
+
+export async function periodoCongeladoEn(workDate: string): Promise<SalaryPeriod | null> {
+  return periodoCongeladoEnRango(workDate, workDate)
+}
+
+async function exigirHorasEditables(desde: string, hasta = desde): Promise<void> {
+  const p = await periodoCongeladoEnRango(desde, hasta)
+  if (!p) return
+  throw new Error(
+    `El período ${p.fecha_ini} → ${p.fecha_fin} está ${ESTADO_LABEL[p.estado]}: sus horas están ` +
+    'congeladas. Reabrilo con motivo desde Pago del período para poder corregirlas.',
+  )
+}
+
+/**
+ * El período CERRADO que todavía no se pagó, si lo hay.
+ *
+ * Es el único que una tarifa nueva podría alterar por atrás: su neto se sigue calculando
+ * en vivo (`horas × tarifa del empleado`) hasta que se paga. Un período ya PAGADO no
+ * corre riesgo — `salary_lines` congeló la tarifa con la que se calculó cada línea (mig
+ * 056), así que cambiar la tarifa hoy no le mueve un colón a lo que ya se transfirió.
+ */
+export async function periodoCerradoSinPagar(): Promise<SalaryPeriod | null> {
+  try {
+    const { data, error } = await fromAny('salary_periods')
+      .select('*')
+      .eq('estado', 'cerrado')
+      .order('fecha_ini', { ascending: false })
+    if (error) return null
+    return ((data ?? []) as SalaryPeriod[])[0] ?? null
+  } catch { return null }
+}
+
+/**
+ * Guarda de la edición de tarifas. La tarifa vive en `employees` y NO tiene fecha: cambiarla
+ * mientras hay un período cerrado sin pagar le cambia el neto por atrás, que es exactamente
+ * lo que "cerrado" promete que no pasa. Se llama desde la pestaña Empleados / Tarifas.
+ */
+export async function exigirTarifasEditables(): Promise<void> {
+  const p = await periodoCerradoSinPagar()
+  if (!p) return
+  throw new Error(
+    `El período ${p.fecha_ini} → ${p.fecha_fin} está cerrado y todavía no se pagó: cambiar una ` +
+    'tarifa ahora le cambiaría el neto. Pagalo, o reabrilo con motivo desde Pago del período, ' +
+    'antes de tocar las tarifas.',
+  )
 }
 
 // ── Horas ───────────────────────────────────────────────────────────────────────
@@ -94,6 +383,7 @@ export async function upsertWorkDay(w: {
   local:       string
   hours:       number
 }): Promise<void> {
+  await exigirHorasEditables(w.work_date)
   const { error } = await fromAny('work_days').upsert(
     { ...w, source: 'manual' },
     { onConflict: 'employee_id,work_date,local' },
@@ -163,13 +453,25 @@ export async function markPeriodPaid(
 
   // Guarda contra el doble pago: releemos el estado real, no el que tenga la pantalla.
   const { data: periodo, error: errPeriodo } = await fromAny('salary_periods')
-    .select('estado')
+    .select('estado, fecha_ini, fecha_fin')
     .eq('id', periodId)
     .single()
   if (errPeriodo) fail(errPeriodo, 'leer el período')
-  if ((periodo as { estado?: string } | null)?.estado === 'pagado') {
+  const fila = periodo as Pick<SalaryPeriod, 'estado' | 'fecha_ini' | 'fecha_fin'> | null
+  if (fila?.estado === 'pagado') {
     throw new Error('Este período ya está marcado como pagado.')
   }
+  // Sin saltos: se paga lo que se cerró. Pagar un período abierto sería transferir contra
+  // un número que todavía se está moviendo.
+  if (fila?.estado !== 'cerrado') {
+    throw new Error(
+      `Solo se paga un período cerrado (este está ${ESTADO_LABEL[fila?.estado as SalaryPeriodEstado] ?? 'sin estado'}). ` +
+      'Cerralo antes de pagar.',
+    )
+  }
+  // Misma guarda que el cierre, releída de la base: entre cerrar y pagar pueden haber
+  // entrado marcas nuevas, y lo que se transfiere no puede salir de horas sin resolver.
+  await exigirSinExcepciones(fila, 'pagar')
 
   const paidAt = new Date().toISOString()
   // UPSERT y no insert: el guard de arriba relee el mismo campo que escribe el ÚLTIMO paso
@@ -390,6 +692,10 @@ export async function derivarWorkDays(
   hasta: string,
   local: string = LOCAL_DEFAULT,
 ): Promise<DerivacionResumen> {
+  // El recálculo REESCRIBE las horas del rango del lado del servidor: es la misma puerta
+  // que `upsertWorkDay`, con otra cerradura. Sin esta guarda, "recalcular" descongelaría
+  // un período cerrado sin que nadie lo reabra.
+  await exigirHorasEditables(desde, hasta)
   const { data, error } = await rpcAny('derivar_work_days', {
     p_desde: desde, p_hasta: hasta, p_local: local,
   })
@@ -491,6 +797,7 @@ export async function overrideHorasDia(o: {
   horas_biotime: number | null
   motivo?:       string
 }): Promise<void> {
+  await exigirHorasEditables(o.work_date)
   const { error } = await fromAny('work_days').upsert(
     {
       employee_id: o.employee_id,

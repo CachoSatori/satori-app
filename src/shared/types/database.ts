@@ -97,8 +97,16 @@ export interface SalaryPeriod {
   fecha_fin:  string   // date
   estado:     SalaryPeriodEstado
   local:      string | null   // solo etiqueta; el pay run es global
+  created_by:    string | null
+  closed_by:     string | null
+  closed_at:     string | null
   paid_by:    string | null
   paid_at:    string | null
+  // Rastro de la reapertura (mig 056). El motivo es obligatorio y lo exige la app:
+  // volver atrás un período cerrado o pagado nunca queda sin explicación.
+  reopened_by:   string | null
+  reopened_at:   string | null
+  reopen_motivo: string | null
   created_at: string
   updated_at: string
 }

@@ -6,8 +6,10 @@ import {
   semaforoPago, inactivosConHoras, HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
   setPeriodoEnRevision, cerrarPeriodo, reabrirPeriodo,
   estaCongelado, motivoBloqueoExcepciones, avisoHorasDefault, ESTADO_LABEL,
+  ingresoTotalDe,
   type LineaConsolidado,
 } from '../../shared/api/salarios'
+import { getTipPayoutsPorEmpleado } from '../../shared/api/tips'
 import {
   downloadPlanillaXlsx, planillaFileName, CONCEPTO_SALARIOS_DEFAULT,
 } from '../../shared/utils/planillaBanco'
@@ -59,6 +61,11 @@ export default function SalariosPago({ employees }: Props) {
   const [excs, setExcs] = useState<PunchException[]>([])
   // Destrabe explícito del único caso que sí frena: horas contadas dos veces.
   const [okDobles, setOkDobles] = useState(false)
+  // Propinas del período por empleado. SOLO PARA MOSTRAR: no entran al neto, ni al archivo
+  // del banco, ni a `markPeriodPaid`. Su error vive aparte del de la pantalla — que no se
+  // puedan leer no puede frenar una nómina, pero tampoco puede disfrazarse de ₡0.
+  const [propinas, setPropinas] = useState<Map<string, number>>(new Map())
+  const [errPropinas, setErrPropinas] = useState<string | null>(null)
 
   const [concepto, setConcepto] = useState(CONCEPTO_SALARIOS_DEFAULT)
   // Borradores por empleado. Las horas se persisten (work_days); el neto pisado a mano
@@ -107,7 +114,19 @@ export default function SalariosPago({ employees }: Props) {
 
   // Datos del período elegido: horas, tarifas vigentes a su fecha de fin y pagos ya hechos.
   const loadPeriodData = useCallback(async (p: SalaryPeriod | null) => {
-    if (!p) { setWorkDays([]); setPagos([]); setExcs([]); setOkDobles(false); return }
+    if (!p) {
+      setWorkDays([]); setPagos([]); setExcs([]); setOkDobles(false)
+      setPropinas(new Map()); setErrPropinas(null)
+      return
+    }
+    // Las propinas van por su propio try: son informativas, así que su fallo no puede
+    // tumbar la carga del período (que es la que arma el pago).
+    getTipPayoutsPorEmpleado(p.fecha_ini, p.fecha_fin)
+      .then(m => { setPropinas(m); setErrPropinas(null) })
+      .catch(e => {
+        setPropinas(new Map())
+        setErrPropinas(e instanceof Error ? e.message : 'No se pudieron leer las propinas del período')
+      })
     try {
       const [wd, pg, ex] = await Promise.all([
         getWorkDays(p.fecha_ini, p.fecha_fin),
@@ -170,9 +189,10 @@ export default function SalariosPago({ employees }: Props) {
   )
 
   const lineas: LineaConsolidado[] = useMemo(
-    () => (period ? consolidarPeriodo(activos, workDays, period, LOCAL_DEFAULT) : []),
-    [activos, workDays, period],
+    () => (period ? consolidarPeriodo(activos, workDays, period, LOCAL_DEFAULT, propinas) : []),
+    [activos, workDays, period, propinas],
   )
+  const totalPropinas = useMemo(() => lineas.reduce((s, l) => s + l.propinasPeriodo, 0), [lineas])
 
   // Un activo con horas y sin tarifa cargada da neto ₡0 y queda fuera del archivo del
   // banco sin decir nada. Es el mismo silencio que el inactivo: alguien no cobra.
@@ -637,6 +657,14 @@ export default function SalariosPago({ employees }: Props) {
             </div>
           )}
 
+          {errPropinas && (
+            <p style={{ padding: '0 12px 8px', fontSize: '0.75rem', color: '#8a6d3b' }}>
+              ⚠️ No se pudieron leer las propinas del período ({errPropinas}). Las columnas
+              informativas quedan en ₡0 — <strong>no es que nadie haya cobrado propinas</strong>.
+              El pago por transferencia no depende de esto.
+            </p>
+          )}
+
           <table className="admin-table">
             <thead>
               <tr>
@@ -645,8 +673,10 @@ export default function SalariosPago({ employees }: Props) {
                 <th>Tarifa/hora</th>
                 <th>Horas</th>
                 <th>Fijo</th>
-                <th>Neto calculado</th>
-                <th>Neto a pagar</th>
+                <th>Salario calculado</th>
+                <th>A pagar (transferencia)</th>
+                <th>Propinas del período</th>
+                <th>Ingreso total</th>
               </tr>
             </thead>
             <tbody>
@@ -699,12 +729,23 @@ export default function SalariosPago({ employees }: Props) {
                         style={{ width: '110px' }}
                       />
                     </td>
+                    {/* Informativas: NO se transfieren. Van en gris y fuera de cualquier
+                        total del archivo del banco, para que no se confundan con plata
+                        que sale por esta pantalla. */}
+                    <td style={{ color: '#8a6d3b' }}>
+                      {l.propinasPeriodo > 0
+                        ? fi(l.propinasPeriodo)
+                        : <span style={{ opacity: 0.35 }}>—</span>}
+                    </td>
+                    <td style={{ fontWeight: 600 }}>
+                      {fi(ingresoTotalDe(netoEfectivo(l), l.propinasPeriodo))}
+                    </td>
                   </tr>
                 )
               })}
               {lineas.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
+                  <td colSpan={9} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
                     No hay empleados activos.
                   </td>
                 </tr>
@@ -717,6 +758,11 @@ export default function SalariosPago({ employees }: Props) {
             <span style={{ fontSize: '0.72rem', color: '#888' }}>
               {aPagar.length} transferencia(s) · el resto queda fuera del archivo
             </span>
+            {totalPropinas > 0 && (
+              <span style={{ fontSize: '0.72rem', color: '#8a6d3b' }}>
+                + {fi(totalPropinas)} de propinas <strong>que NO se transfieren</strong>
+              </span>
+            )}
             <span style={{ flex: 1 }} />
             <button
               className="btn-secondary"
@@ -760,6 +806,11 @@ export default function SalariosPago({ employees }: Props) {
             fijo. Editarlo a mano ajusta
             solo lo que se paga en este período. El pago se registra como transferencia:
             <strong> no genera movimiento de caja</strong>.
+            <br />
+            <strong>Propinas del período</strong> e <strong>Ingreso total</strong> son{' '}
+            <strong>solo informativas</strong>: las propinas ya se pagan aparte (efectivo / Caja)
+            y <strong>no</strong> entran en la transferencia ni en el archivo del banco. Lo único
+            que se transfiere es la columna <strong>A pagar (transferencia)</strong>.
           </p>
         </>
       )}

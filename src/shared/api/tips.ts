@@ -175,6 +175,57 @@ export async function getTipPayoutsSince(sinceDate: string): Promise<TipPayoutSu
   return summarizeTipPayouts((data ?? []) as unknown as Parameters<typeof summarizeTipPayouts>[0])
 }
 
+// ── Propinas del período POR EMPLEADO (solo lectura) ────────────────────────
+// Lo consume el consolidado de Salarios para MOSTRAR el ingreso total de cada persona
+// (salario + propinas). Es visibilidad y nada más: la propina se sigue pagando por su
+// camino de siempre y NO entra ni al neto que se transfiere ni al archivo del banco.
+//
+// `payout_crc` es el reparto COMPLETO del turno para esa persona (efectivo + electrónico),
+// que es justo lo que cobró — a diferencia de `total_electronico_crc`, que existe para la
+// cuenta por pagar de Caja y no sirve para decirle a alguien cuánto ganó.
+//
+// Solo sesiones `closed`: un turno abierto todavía se está repartiendo y su `payout_crc`
+// puede cambiar en el próximo guardado.
+
+/** Σ `payout_crc` por empleado sobre el embed crudo de PostgREST. Puro y testeable. */
+export function sumPayoutsPorEmpleado(rows: Array<{
+  tip_entries: Array<{ employee_id: string | null; payout_crc: number | null }> | null
+}>): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const sesion of rows) {
+    for (const e of sesion.tip_entries ?? []) {
+      // Sin empleado resuelto no hay a quién sumarle: la fila no se pierde en un total
+      // anónimo, simplemente no entra (el consolidado es por persona).
+      if (!e.employee_id) continue
+      const monto = Number(e.payout_crc) || 0
+      if (monto === 0) continue
+      out.set(e.employee_id, (out.get(e.employee_id) ?? 0) + monto)
+    }
+  }
+  return out
+}
+
+/**
+ * Las propinas repartidas en `[desde, hasta]`, por empleado. Empleado sin propinas no
+ * aparece en el Map → el llamador lee 0.
+ *
+ * NO es null-safe a propósito: si la lectura falla, es mejor que la pantalla diga "no se
+ * pudieron leer las propinas" a que muestre ₡0 y alguien crea que no le tocó nada.
+ */
+export async function getTipPayoutsPorEmpleado(
+  desde: string,
+  hasta: string,
+): Promise<Map<string, number>> {
+  const { data, error } = await supabase
+    .from('tip_sessions')
+    .select('id, session_date, tip_entries ( employee_id, payout_crc )')
+    .gte('session_date', desde)
+    .lte('session_date', hasta)
+    .eq('status', 'closed')
+  if (error) throw new Error(error.message)
+  return sumPayoutsPorEmpleado((data ?? []) as unknown as Parameters<typeof sumPayoutsPorEmpleado>[0])
+}
+
 // ── Entradas ────────────────────────────────────────────────
 
 export async function getTipEntriesBySession(sessionId: string): Promise<TipEntry[]> {

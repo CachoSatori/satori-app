@@ -607,8 +607,23 @@ export interface LineaConsolidado {
   horas:       number
   pagoHoras:   number
   fijo:        number
-  neto:        number       // calculado; la pantalla puede pisarlo a mano
+  neto:        number       // el SALARIO calculado; la pantalla puede pisarlo a mano
+  // Σ de lo que esta persona cobró de propinas en el período. INFORMATIVO: no entra al
+  // neto, no entra al archivo del banco y no viaja a `markPeriodPaid`. Se pagan por su
+  // propio camino (efectivo / Caja) y sumarlas acá sería pagarlas dos veces.
+  propinasPeriodo: number
+  ingresoTotal:    number   // salario + propinas — lo que la persona ganó en el período
   nombreBanco: string
+}
+
+/**
+ * Lo que la persona ganó en el período = salario + propinas. Existe como función y no como
+ * suma suelta para que la pantalla (que puede pisar el neto a mano) y el consolidado usen
+ * LA MISMA fórmula: si el ingreso total se calculara aparte, un neto editado dejaría los
+ * dos números contando historias distintas.
+ */
+export function ingresoTotalDe(neto: number, propinas: number): number {
+  return (Number(neto) || 0) + (Number(propinas) || 0)
 }
 
 // El neto de U0b: horas × tarifa del EMPLEADO + su salario fijo. NADA de 10% de servicio
@@ -631,17 +646,23 @@ export function nombreBanco(emp: Employee): string {
   return (emp.nombre_homebanking ?? '').trim() || emp.full_name
 }
 
+// `propinas` es OPCIONAL: sin él cada línea queda en 0 y el consolidado se comporta
+// exactamente como antes de mostrarlas. Es lo que hace que este agregado no pueda romper
+// una pantalla que todavía no las carga.
 export function consolidarPeriodo(
   employees: Employee[],
   workDays: WorkDay[],
   period: Pick<SalaryPeriod, 'fecha_fin'>,
   local: string,
+  propinas?: Map<string, number>,
 ): LineaConsolidado[] {
   return employees.map(emp => {
     const split      = splitHorasPeriodo(workDays, emp.id, period.fecha_fin, local)
     const hourlyRate = Number(emp.hourly_rate_crc) || 0
     const fijo       = Number(emp.fixed_salary_crc) || 0
     const pagoHoras  = split.total * hourlyRate
+    const neto       = pagoHoras + fijo
+    const propina    = Number(propinas?.get(emp.id)) || 0
     return {
       employee:    emp,
       hourlyRate,
@@ -654,7 +675,9 @@ export function consolidarPeriodo(
       horas:       split.total,
       pagoHoras,
       fijo,
-      neto:        pagoHoras + fijo,
+      neto,
+      propinasPeriodo: propina,
+      ingresoTotal:    ingresoTotalDe(neto, propina),
       nombreBanco: nombreBanco(emp),
     }
   })

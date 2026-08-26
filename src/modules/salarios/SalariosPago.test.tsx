@@ -56,6 +56,16 @@ vi.mock('../../shared/api/salarios', async (orig) => {
   }
 })
 
+// B · consolidado con ingreso total: las propinas del período, SOLO para mostrar.
+let PROPINAS = new Map<string, number>()
+let propinasFallan: string | null = null
+vi.mock('../../shared/api/tips', () => ({
+  getTipPayoutsPorEmpleado: async () => {
+    if (propinasFallan) throw new Error(propinasFallan)
+    return PROPINAS
+  },
+}))
+
 vi.mock('../../shared/utils/planillaBanco', async (orig) => {
   const actual = await orig<typeof import('../../shared/utils/planillaBanco')>()
   return { ...actual, downloadPlanillaXlsx: (...a: unknown[]) => download(...a) }
@@ -95,6 +105,8 @@ beforeEach(() => {
     es_feriado: false, source: 'manual', flags: null, created_at: '', updated_at: '',
   }]
   EXCS = []
+  PROPINAS = new Map()
+  propinasFallan = null
   upsert.mockClear(); pagar.mockClear(); download.mockClear()
   revisar.mockClear(); cerrar.mockClear(); reabrir.mockClear()
 })
@@ -565,6 +577,76 @@ describe('Salarios · ciclo del período', () => {
     const pagarBtn = screen.getAllByText('Marcar pagado').at(-1) as HTMLButtonElement
     expect(pagarBtn.disabled).toBe(true)
     expect(pagarBtn.title).toMatch(/Solo el dueño o el gerente/)
+  })
+})
+
+// ── B · ingreso total = salario + propinas (MOSTRAR, no pagar) ────────────────────
+// La propina ya se paga por su camino (efectivo / Caja). Acá se muestra para que se vea
+// cuánto ganó cada persona; sumarla a la transferencia sería pagarla dos veces.
+describe('Salarios · consolidado con ingreso total', () => {
+  it('muestra propinas del período e ingreso total por empleado', async () => {
+    PROPINAS = new Map([['e1', 27_000]])
+    await renderPago()
+
+    // ANA: 96 × 2.600 = 249.600 de salario + 27.000 de propinas
+    expect(await screen.findByText(money(27_000))).toBeTruthy()
+    expect(screen.getAllByText(money(276_600)).length).toBeGreaterThan(0)
+    // BENITO no cobró propinas: su ingreso total es su salario
+    expect(screen.getAllByText(money(185_000)).length).toBeGreaterThan(0)
+  })
+
+  it('el archivo del banco NO incluye las propinas', async () => {
+    PROPINAS = new Map([['e1', 27_000], ['e2', 8_500]])
+    await renderPago()
+    await screen.findByText(money(27_000))          // ya cargaron las propinas
+
+    fireEvent.click(screen.getByText('Descargar Excel para el banco'))
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(1))
+    // idénticos a los del test sin propinas: solo salario
+    expect(download.mock.calls[0][0]).toEqual([
+      { nombre: 'ANA', monto: 249_600 },
+      { nombre: 'BENITO PEREZ MORA', monto: 185_000 },
+    ])
+  })
+
+  it('markPeriodPaid recibe el salario, sin un colón de propina', async () => {
+    window.confirm = vi.fn(() => true)
+    PROPINAS = new Map([['e1', 27_000], ['e2', 8_500]])
+    conEstado('cerrado')
+    await renderPago()
+    await screen.findByText(money(27_000))
+
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    expect(pagar.mock.calls[0][1]).toEqual([
+      { employee_id: 'e1', monto_neto: 249_600, horas: 96, hourly_rate: 2600, fijo: 0 },
+      { employee_id: 'e2', monto_neto: 185_000, horas: 0,  hourly_rate: 0,    fijo: 185_000 },
+    ])
+  })
+
+  it('el total del pie sigue siendo solo salario, con las propinas aparte', async () => {
+    PROPINAS = new Map([['e1', 27_000], ['e2', 8_500]])
+    await renderPago()
+    await screen.findByText(money(27_000))
+
+    expect(screen.getAllByText(money(434_600)).length).toBeGreaterThan(0)   // 249.600 + 185.000
+    // …y las propinas van SEPARADAS, con su propia etiqueta: 27.000 + 8.500
+    // el "NO" va en <strong>: el monto vive en el <span> padre
+    const nota = screen.getByText(/que NO se transfieren/).parentElement!
+    expect(plano(nota.textContent ?? '')).toContain(plano((35_500).toLocaleString('es-CR')))
+    expect(plano(nota.textContent ?? '')).toMatch(/de propinas que NO se transfieren/)
+  })
+
+  // Un ₡0 falso le diría a alguien que no le tocó nada: si la lectura falla, se dice.
+  it('si no se pueden leer las propinas lo dice, y el pago sigue funcionando', async () => {
+    window.confirm = vi.fn(() => true)
+    propinasFallan = 'permission denied for table tip_entries'
+    conEstado('cerrado')
+    await renderPago()
+
+    expect(await screen.findByText(/No se pudieron leer las propinas/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
   })
 })
 

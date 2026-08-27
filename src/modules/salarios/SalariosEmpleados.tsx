@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import type { Employee, UserRole } from '../../shared/types/database'
 import { createEmployee, updateEmployeePayroll, toggleEmployeeActive } from '../../shared/api/admin'
 import {
   updateEmployeeHomebankingName, updateEmployeeHorasHabituales, horaHabitualHHMM,
-  exigirTarifasEditables,
+  exigirTarifasEditables, participaServicio,
 } from '../../shared/api/salarios'
 import { ROLE_LABELS } from '../../shared/constants'
 import { fi } from '../../shared/utils'
@@ -96,13 +96,30 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
   const [newRole, setNewRole]   = useState<UserRole>('cocina')
   const [newDraft, setNewDraft] = useState<Draft>(emptyDraft)
 
-  const visibles = employees.filter(e =>
-    filtro === 'todos' ? true : filtro === 'activos' ? e.is_active : !e.is_active,
+  const visibles = useMemo(
+    () => employees.filter(e =>
+      filtro === 'todos' ? true : filtro === 'activos' ? e.is_active : !e.is_active,
+    ),
+    [employees, filtro],
   )
 
   // Sin código de BioTime = no entra al cálculo automático de horas (A1). Se cuenta
   // sobre los activos: un inactivo no entra a cálculos nuevos de todos modos.
   const sinCodigo = employees.filter(e => e.is_active && !e.biotime_emp_code).length
+
+  // v3 · el promedio de tarifa se calcula SOBRE EL FILTRO ACTIVO. Solo cuenta a quien
+  // cobra por hora: meter los ₡0 de un sueldo fijo lo hundiría y el número dejaría de
+  // querer decir nada.
+  const tarifas = useMemo(
+    () => visibles.map(e => Number(e.hourly_rate_crc) || 0).filter(t => t > 0),
+    [visibles],
+  )
+  const promedioTarifa = tarifas.length > 0
+    ? Math.round(tarifas.reduce((s, t) => s + t, 0) / tarifas.length)
+    : 0
+  // Quiénes entran al reparto del 10% de SERVICIO (no propina, no IVA). El default de la
+  // base es SÍ (mig 055), así que este conteo dice cuántos NO fueron marcados a mano.
+  const participan = useMemo(() => visibles.filter(e => participaServicio(e)).length, [visibles])
 
   const startEdit = (emp: Employee) => {
     setError(null)
@@ -302,23 +319,49 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
         </button>
       </div>
 
-      <div style={{ padding: '0 12px 8px', fontSize: '0.72rem', color: '#888', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <span>{employees.filter(e => e.is_active).length} activos</span>
-        <span>·</span>
-        <span style={{ color: sinCodigo > 0 ? 'var(--t-teal)' : '#888' }}>
-          {sinCodigo} sin código de BioTime
-        </span>
-        <span style={{ flex: 1 }} />
-        {(['activos', 'inactivos', 'todos'] as Filtro[]).map(f => (
-          <button
-            key={f}
-            className="btn-delete-inline"
-            onClick={() => setFiltro(f)}
-            style={{ opacity: filtro === f ? 1 : 0.45, textTransform: 'capitalize' }}
-          >
-            {f}
-          </button>
-        ))}
+      <div className="sal-bar">
+        <span className="sal-bar-label">Ver</span>
+        <div className="sal-pills" role="group" aria-label="Filtrar empleados">
+          {(['activos', 'inactivos', 'todos'] as Filtro[]).map(f => (
+            <button
+              key={f}
+              type="button"
+              className={`sal-pill ${filtro === f ? 'is-active' : ''}`}
+              aria-pressed={filtro === f}
+              onClick={() => setFiltro(f)}
+              style={{ textTransform: 'capitalize' }}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <span className="sal-spacer" />
+        {sinCodigo > 0 && (
+          <span className="sal-tag is-teal">{sinCodigo} sin código de BioTime</span>
+        )}
+      </div>
+
+      {/* Stats del filtro activo (v3). El "Local" NO está acá a propósito: `employees` no
+          tiene columna de local — el dato vive en `work_days.local`, así que el filtro por
+          local está en Pago del período y en Horas, que son las pantallas que lo tienen. */}
+      <div className="sal-stats">
+        <div className="sal-stat">
+          <span className="sal-stat-label">En este filtro</span>
+          <span className="sal-stat-value">{visibles.length}</span>
+          <span className="sal-stat-note">{employees.filter(e => e.is_active).length} activos en total</span>
+        </div>
+        <div className="sal-stat">
+          <span className="sal-stat-label">Tarifa promedio</span>
+          <span className="sal-stat-value is-teal">
+            {promedioTarifa > 0 ? fi(promedioTarifa) : '—'}
+          </span>
+          <span className="sal-stat-note">{tarifas.length} cobran por hora</span>
+        </div>
+        <div className="sal-stat">
+          <span className="sal-stat-label">Participan del 10%</span>
+          <span className="sal-stat-value is-plum">{participan}</span>
+          <span className="sal-stat-note">de {visibles.length} · servicio, no propina</span>
+        </div>
       </div>
 
       {error && <p className="field-error" style={{ padding: '0 12px' }}>{error}</p>}
@@ -353,7 +396,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
               <tr>
                 <th>Tarifa/hora</th>
                 <th>Salario fijo</th>
-                <th>10%</th>
+                <th>10% serv.</th>
                 <th>Cód. BioTime</th>
                 <th>Ingreso</th>
                 <th>Nombre en el banco</th>
@@ -364,8 +407,13 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
               <tr className="admin-row">{draftFields(newDraft, setNewDraft, 'nuevo empleado')}</tr>
             </tbody>
           </table>
-          <p style={{ fontSize: '0.7rem', color: '#888', margin: '0.25rem 0 0' }}>
+          <p className="sal-legend">
             Se crea sin cuenta de login. Los datos de nómina se pueden dejar en 0 y cargarlos después.
+            <br />
+            <span className="is-plum">10% serv.</span> = participa del reparto del 10% de servicio
+            (salón y barra, se transfiere con el salario). <strong>No es la propina</strong> —esa se
+            paga en efectivo por el módulo Propinas— ni el IVA. Viene marcado en <strong>Sí</strong>
+            {' '}por defecto.
           </p>
           <div className="form-actions">
             <button type="submit" className="btn-primary" disabled={saving}>
@@ -375,6 +423,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
         </form>
       )}
 
+      <div className="sal-table-wrap">
       <table className="admin-table">
         <thead>
           <tr>
@@ -382,7 +431,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
             <th>Rol</th>
             <th>Tarifa/hora</th>
             <th>Salario fijo</th>
-            <th>10%</th>
+            <th>10% serv.</th>
             <th>Cód. BioTime</th>
             <th>Ingreso</th>
             <th>Nombre en el banco</th>
@@ -417,9 +466,11 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
                 <>
                   <td>{(emp.hourly_rate_crc ?? 0) > 0 ? fi(emp.hourly_rate_crc) : <span style={{ opacity: 0.35 }}>—</span>}</td>
                   <td>{(emp.fixed_salary_crc ?? 0) > 0 ? fi(emp.fixed_salary_crc) : <span style={{ opacity: 0.35 }}>—</span>}</td>
+                  {/* 10% de SERVICIO — no es propina y no es IVA. Lleva el color propio
+                      del concepto (plum) para que no se lea como ninguno de los otros dos. */}
                   <td style={{ textAlign: 'center' }}>
-                    {(emp.participa_servicio ?? true)
-                      ? <span style={{ color: 'var(--t-teal)' }}>Sí</span>
+                    {participaServicio(emp)
+                      ? <span style={{ color: 'var(--sal-plum)', fontWeight: 600 }}>Sí</span>
                       : <span style={{ opacity: 0.45 }}>No</span>}
                   </td>
                   <td style={{ fontSize: '0.75rem' }}>
@@ -461,6 +512,13 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
           )}
         </tbody>
       </table>
+      </div>
+
+      <p className="sal-legend">
+        Un empleado inactivo <strong>no se borra</strong>: conserva su historial y sale de los
+        cálculos nuevos. El <strong>nombre en el banco</strong> es con el que el homebanking
+        identifica la cuenta — sin él, el archivo del banco exporta el nombre del empleado.
+      </p>
     </div>
   )
 }

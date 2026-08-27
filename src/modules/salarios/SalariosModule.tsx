@@ -4,6 +4,9 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { getAllEmployees } from '../../shared/api/admin'
 import type { Employee } from '../../shared/types/database'
 import { ROLE_LABELS } from '../../shared/constants'
+// Piel v3 (SPEC-UI Empleados v3). El archivo es SCOPED: todo cuelga de `.sal-v3` y no
+// toca index.css ni :root, así que ningún otro módulo cambia de color por este import.
+import './salarios.css'
 
 // Salarios · Fase 0 (SPEC claude/SPEC-modulo-salarios.md §5) + U0b: el maestro de
 // empleados/tarifas y el ciclo mínimo de pago del período. Las que faltan (Feriados,
@@ -61,16 +64,14 @@ export default function SalariosModule() {
   }
 
   return (
-    <div className="tips-module">
+    <div className="tips-module sal-v3">
       {/* Header */}
-      <div className="cd-module-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span className="tips-kanji" style={{ fontSize: '1.6rem' }}>給</span>
+      <div className="sal-header">
+        <div className="sal-brand">
+          <span className="sal-kanji">給</span>
           <div>
-            <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--t-ink)' }}>Salarios</div>
-            <div style={{ fontSize: '0.72rem', letterSpacing: '0.15em', color: '#888', textTransform: 'uppercase' }}>
-              Satori · Santa Teresa
-            </div>
+            <div className="sal-title">Salarios</div>
+            <div className="sal-sub">Satori · nómina</div>
           </div>
           {profile?.role && <span className="role-badge">{ROLE_LABELS[profile.role] ?? profile.role}</span>}
         </div>
@@ -79,16 +80,20 @@ export default function SalariosModule() {
         </div>
       </div>
 
-      {/* Nav tabs */}
-      <div className="cd-nav-tabs">
+      {/* Nav tabs — las MISMAS tres pestañas de siempre, con la piel v3. Este pase no
+          abre rutas ni pantallas nuevas. */}
+      <div className="sal-tabs" role="tablist">
         {TABS.map(t => (
-          <div
+          <button
             key={t.id}
-            className={`cd-nav-tab ${tab === t.id ? 'active' : ''}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className={`sal-tab ${tab === t.id ? 'is-active' : ''}`}
             onClick={() => setTab(t.id)}
           >
             {t.label}
-          </div>
+          </button>
         ))}
       </div>
 

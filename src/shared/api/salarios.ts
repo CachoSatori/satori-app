@@ -451,10 +451,17 @@ export async function getPeriodPayments(periodId: string): Promise<EmployeePayme
  */
 export interface LineaPagada {
   employee_id: string
+  /** Lo que se transfiere = total de horas + 10% de servicio. El MISMO número que la grilla. */
   monto_neto:  number
   horas:       number
   hourly_rate: number
   fijo:        number
+  /**
+   * La parte del neto que salió del 10% de SERVICIO (no es propina, no es IVA). Opcional
+   * con default 0 para no romper a un llamador viejo. Va a `salary_lines.aporte_servicio`,
+   * columna que la mig 056 YA declaró — no hace falta migración nueva.
+   */
+  servicio?:   number
 }
 
 export async function markPeriodPaid(
@@ -518,12 +525,20 @@ export async function markPeriodPaid(
       employee_id:  l.employee_id,
       horas:        l.horas,
       pago_horas:   Math.round(l.horas * l.hourly_rate),
+      // El 10% de SERVICIO repartido. La columna existe desde la mig 056 y estaba en 0:
+      // ahora guarda de verdad cuánto del total salió del servicio, que es lo que permite
+      // auditar un pago viejo sin tener que rehacer el reparto del día.
+      aporte_servicio: Math.round(Number(l.servicio) || 0),
       salario_fijo: Math.round(l.fijo),
       total:        Math.round(l.monto_neto),
       snapshot: {
         hourly_rate_crc:  l.hourly_rate,
         fixed_salary_crc: l.fijo,
         horas:            l.horas,
+        // El servicio también en el snapshot: el reparto depende de las horas de TODO el
+        // equipo ese día, así que sin dejarlo escrito no se puede recalcular después.
+        aporte_servicio_crc: Math.round(Number(l.servicio) || 0),
+        origen_servicio:     'ventas_dias (10% de salón/barra)',
         // De dónde salió la tarifa, para que dentro de un año se entienda el número.
         origen_tarifa:    'employees',
         calculado_at:     paidAt,
@@ -607,23 +622,46 @@ export interface LineaConsolidado {
   horas:       number
   pagoHoras:   number
   fijo:        number
-  neto:        number       // el SALARIO calculado; la pantalla puede pisarlo a mano
-  // Σ de lo que esta persona cobró de propinas en el período. INFORMATIVO: no entra al
-  // neto, no entra al archivo del banco y no viaja a `markPeriodPaid`. Se pagan por su
-  // propio camino (efectivo / Caja) y sumarlas acá sería pagarlas dos veces.
+  neto:        number       // el SALARIO calculado (horas × tarifa + fijo); la pantalla puede pisarlo a mano
+  // Σ de las cuotas diarias del 10% de SERVICIO. NO es IVA y NO es propina: es el cargo
+  // de salón/barra que se reparte al equipo y SÍ se transfiere junto con las horas.
+  servicio:    number
+  // Lo que sale por el banco = horas + 10% de servicio. Es la única cifra que el Excel
+  // del homebanking y `markPeriodPaid` pueden usar: si la pantalla dijera una y el
+  // archivo otra, alguien cobraría distinto de lo que se le mostró.
+  aPagar:      number
+  // Σ de lo que esta persona cobró de propinas en el período. INFORMATIVO: no entra a
+  // `aPagar`, no entra al archivo del banco y no viaja a `markPeriodPaid`. Se pagan por
+  // su propio camino (efectivo / Caja) y sumarlas acá sería pagarlas dos veces.
   propinasPeriodo: number
-  ingresoTotal:    number   // salario + propinas — lo que la persona ganó en el período
+  ingresoTotal:    number   // horas + 10% de servicio + propinas — lo que ganó en el período
   nombreBanco: string
 }
 
 /**
- * Lo que la persona ganó en el período = salario + propinas. Existe como función y no como
- * suma suelta para que la pantalla (que puede pisar el neto a mano) y el consolidado usen
- * LA MISMA fórmula: si el ingreso total se calculara aparte, un neto editado dejaría los
- * dos números contando historias distintas.
+ * Lo que SALE POR EL BANCO = total de horas + 10% de servicio. El servicio se transfiere
+ * con las horas (no es efectivo); las propinas NO entran acá.
+ *
+ * Existe como función y no como suma suelta para que la grilla, el Excel del homebanking
+ * y `markPeriodPaid` usen LA MISMA fórmula. La pantalla y el banco no pueden decir
+ * cosas distintas: la pantalla es la promesa de lo que la persona va a cobrar.
  */
-export function ingresoTotalDe(neto: number, propinas: number): number {
-  return (Number(neto) || 0) + (Number(propinas) || 0)
+export function aPagarDe(neto: number, servicio: number): number {
+  return (Number(neto) || 0) + (Number(servicio) || 0)
+}
+
+/**
+ * Lo que la persona GANÓ en el período = horas + 10% de servicio + propinas. Informativo:
+ * las propinas ya se cobraron en efectivo por su propio camino.
+ *
+ * `servicio` va con default 0 a propósito: un llamador que todavía no lee el servicio del
+ * día sigue dando el mismo número que antes, en vez de romperse. Existe como función y no
+ * como suma suelta para que la pantalla (que puede pisar el neto a mano) y el consolidado
+ * usen LA MISMA fórmula: si el ingreso total se calculara aparte, un neto editado dejaría
+ * los dos números contando historias distintas.
+ */
+export function ingresoTotalDe(neto: number, propinas: number, servicio = 0): number {
+  return aPagarDe(neto, servicio) + (Number(propinas) || 0)
 }
 
 // El neto de U0b: horas × tarifa del EMPLEADO + su salario fijo. NADA de 10% de servicio
@@ -646,15 +684,17 @@ export function nombreBanco(emp: Employee): string {
   return (emp.nombre_homebanking ?? '').trim() || emp.full_name
 }
 
-// `propinas` es OPCIONAL: sin él cada línea queda en 0 y el consolidado se comporta
-// exactamente como antes de mostrarlas. Es lo que hace que este agregado no pueda romper
-// una pantalla que todavía no las carga.
+// `propinas` y `servicio` son OPCIONALES: sin ellos cada línea queda en 0 y el consolidado
+// se comporta exactamente como antes de mostrarlos. Es lo que hace que estos agregados no
+// puedan romper una pantalla que todavía no los carga — y, en el caso del servicio, lo que
+// deja que la grilla muestre "—" en vez de inventar un monto cuando el dato no está.
 export function consolidarPeriodo(
   employees: Employee[],
   workDays: WorkDay[],
   period: Pick<SalaryPeriod, 'fecha_fin'>,
   local: string,
   propinas?: Map<string, number>,
+  servicio?: Map<string, number>,
 ): LineaConsolidado[] {
   return employees.map(emp => {
     const split      = splitHorasPeriodo(workDays, emp.id, period.fecha_fin, local)
@@ -663,6 +703,7 @@ export function consolidarPeriodo(
     const pagoHoras  = split.total * hourlyRate
     const neto       = pagoHoras + fijo
     const propina    = Number(propinas?.get(emp.id)) || 0
+    const serv       = Number(servicio?.get(emp.id)) || 0
     return {
       employee:    emp,
       hourlyRate,
@@ -676,13 +717,208 @@ export function consolidarPeriodo(
       pagoHoras,
       fijo,
       neto,
+      servicio:    serv,
+      aPagar:      aPagarDe(neto, serv),
       propinasPeriodo: propina,
-      ingresoTotal:    ingresoTotalDe(neto, propina),
+      ingresoTotal:    ingresoTotalDe(neto, propina, serv),
       nombreBanco: nombreBanco(emp),
     }
   })
 }
 
+
+// ── 10% de SERVICIO · el reparto (SALARIOS, no propinas) ────────────────────────
+//
+// TRES CONCEPTOS QUE NO SE MEZCLAN. La confusión entre ellos es la que hace que alguien
+// cobre de menos o que el fisco cobre de más, así que quedan escritos donde se calculan:
+//
+//   · IVA 13%          → IMPUESTO. Vive en la factura (`utils/posFiscal`). NO se reparte,
+//                        NO se le paga a nadie y NO aparece en la nómina. La columna del
+//                        10% NUNCA se llama "IVA" ni "impuesto de ventas".
+//   · 10% de SERVICIO  → cargo de salón/barra (delivery NO lo cobra). Se REPARTE al equipo
+//                        y sale POR TRANSFERENCIA junto con las horas. Es lo que calcula
+//                        este bloque.
+//   · PROPINA / pozo   → módulo Propinas (`utils/tipCalculations`). Hoy solo efectivo.
+//                        NO va al banco.
+//
+// Por qué el reparto vive ACÁ y no en `tipCalculations`: ese archivo es el POZO de
+// propinas. Meter el servicio ahí sería justamente borrar la línea de arriba — y el
+// servicio se transfiere, así que un error de encuadre se paga en plata.
+//
+// De dónde sale el pool: `ventas_dias` (lo que el módulo Ventas ya carga del POS). Se LEE,
+// no se escribe. `posFiscal` tampoco se toca: ahí vive la fórmula que arma el servicio en
+// la factura, y este bloque solo consume el resultado que quedó guardado por día.
+
+/**
+ * Default del flag `employees.participa_servicio`: **true** (mig 055 lo declara
+ * `not null default true`). La lectura usa `?? true` porque el tipo lo tiene opcional —
+ * hay fixtures y filas casteadas a mano que no lo traen— y porque el default de la base
+ * y el de la app tienen que decir lo MISMO: si acá dijera false, alguien dejaría de
+ * cobrar servicio por un dato que en la base dice que sí lo cobra.
+ *
+ * El valor real por persona lo firma quien corresponde desde Empleados / Tarifas.
+ */
+export const PARTICIPA_SERVICIO_DEFAULT = true
+
+export function participaServicio(emp: Pick<Employee, 'participa_servicio'>): boolean {
+  return emp.participa_servicio ?? PARTICIPA_SERVICIO_DEFAULT
+}
+
+/**
+ * Los días de calendario del período, inclusive. UTC a propósito: son fechas
+ * (`YYYY-MM-DD`), no instantes — con hora local, el `+1 día` repite o se come un día
+ * cuando el runtime cambia de huso. El tope de 400 es una red contra una fecha mal
+ * cargada, no un límite de negocio: una quincena tiene 15.
+ */
+export function diasDelPeriodo(fechaIni: string, fechaFin: string): string[] {
+  const out: string[] = []
+  if (!fechaIni || !fechaFin || fechaFin < fechaIni) return out
+  const d   = new Date(`${fechaIni}T00:00:00Z`)
+  const fin = new Date(`${fechaFin}T00:00:00Z`)
+  if (isNaN(d.getTime()) || isNaN(fin.getTime())) return out
+  while (d <= fin && out.length < 400) {
+    out.push(d.toISOString().slice(0, 10))
+    d.setUTCDate(d.getUTCDate() + 1)
+  }
+  return out
+}
+
+/**
+ * El reparto de UN día. Fórmula:
+ *
+ *     denom = Σ horas de ese día de quien participa
+ *     denom = 0  →  cuota = 0 para todos (NO se divide por cero: el pool queda sin repartir)
+ *     denom > 0  →  cuota = pool / denom × horas_de_la_persona
+ *
+ * Quien tiene `participa = false` no llega acá: ni cobra servicio ni entra al denominador
+ * (si entrara, achicaría la cuota de los demás sin cobrar él).
+ */
+export function repartoServicioDia(
+  pool: number,
+  horas: Array<{ employeeId: string; horas: number }>,
+): Map<string, number> {
+  const out = new Map<string, number>()
+  const p = Number(pool) || 0
+  const denom = horas.reduce((sum, h) => sum + (Number(h.horas) || 0), 0)
+  if (p <= 0 || denom <= 0) return out
+  for (const h of horas) {
+    const hs = Number(h.horas) || 0
+    if (hs <= 0) continue
+    out.set(h.employeeId, (out.get(h.employeeId) ?? 0) + (p / denom) * hs)
+  }
+  return out
+}
+
+export interface ServicioPeriodo {
+  /** employee_id → Σ de sus cuotas diarias. Es la columna "10% serv." de la quincena. */
+  porEmpleado: Map<string, number>
+  /** Σ de lo que efectivamente se repartió. */
+  totalRepartido: number
+  /**
+   * Σ de los pools de días que cobraron servicio y NO tenían horas de nadie que participe.
+   * Esa plata existe y no la cobró nadie: se muestra en vez de desaparecer en un ₡0.
+   */
+  totalSinRepartir: number
+  /**
+   * Días del período SIN fila en `ventas_dias`. No es "ese día no hubo servicio": es
+   * "no se sabe". Se listan para que el que arma la nómina cargue las ventas o acepte
+   * el faltante a sabiendas.
+   */
+  diasSinVentas: string[]
+}
+
+/**
+ * El 10% de servicio del período, día por día. `servicioPorDia` viene de
+ * `getServicioPorDia` y `dias` de `diasDelPeriodo`.
+ *
+ * El local NO entra en el denominador a propósito: `ventas_dias` guarda UN pool por día
+ * para el negocio entero (no está abierto por local), así que dividirlo entre las horas
+ * de un solo local repartiría plata de todos entre una parte del equipo. Si algún día el
+ * pool se abre por local, el denominador se abre con él — y no antes.
+ */
+export function servicioDelPeriodo(
+  workDays: WorkDay[],
+  servicioPorDia: Map<string, number>,
+  participa: (employeeId: string) => boolean,
+  dias: string[],
+): ServicioPeriodo {
+  const porEmpleado = new Map<string, number>()
+  let totalRepartido   = 0
+  let totalSinRepartir = 0
+  const diasSinVentas: string[] = []
+
+  // Horas por día, SOLO de quien participa. Se suman los locales del mismo día: una
+  // persona puede tener horas en dos locales y su cuota sale de las horas que trabajó.
+  const horasPorDia = new Map<string, Map<string, number>>()
+  for (const w of workDays) {
+    if (!participa(w.employee_id)) continue
+    const h = Number(w.hours) || 0
+    if (h <= 0) continue
+    const delDia = horasPorDia.get(w.work_date) ?? new Map<string, number>()
+    delDia.set(w.employee_id, (delDia.get(w.employee_id) ?? 0) + h)
+    horasPorDia.set(w.work_date, delDia)
+  }
+
+  for (const fecha of dias) {
+    if (!servicioPorDia.has(fecha)) { diasSinVentas.push(fecha); continue }
+    const pool = Number(servicioPorDia.get(fecha)) || 0
+    if (pool <= 0) continue
+    const delDia = horasPorDia.get(fecha)
+    const filas  = delDia ? [...delDia].map(([employeeId, horas]) => ({ employeeId, horas })) : []
+    const cuotas = repartoServicioDia(pool, filas)
+    if (cuotas.size === 0) { totalSinRepartir += pool; continue }
+    for (const [id, monto] of cuotas) {
+      porEmpleado.set(id, (porEmpleado.get(id) ?? 0) + monto)
+      totalRepartido += monto
+    }
+  }
+
+  return { porEmpleado, totalRepartido, totalSinRepartir, diasSinVentas }
+}
+
+/**
+ * El servicio de UN día a partir de la fila cruda de `ventas_dias`. El JSONB es el
+ * `DiaData` del módulo Ventas: un mapa de personas (saloneros y cajeros, disjuntos) y
+ * cada una trae el servicio que cobró ese día. Se suma igual que lo hace el reporte de
+ * contabilidad.
+ *
+ * El monto YA viene solo de salón/barra: el POS no cobra servicio en delivery, así que no
+ * hay nada que descontar acá. Y no lleva IVA (`SERVICE_CONFIG.taxed = false`).
+ *
+ * Tolerante a propósito (`unknown` → 0): la fila es JSON de otro módulo y un día raro no
+ * puede tumbar la pantalla que paga.
+ */
+export function servicioDeDiaData(data: unknown): number {
+  const d = data as { saloneros?: Record<string, { serv?: number } | null> } | null
+  const saloneros = d?.saloneros
+  if (!saloneros || typeof saloneros !== 'object') return 0
+  let serv = 0
+  for (const persona of Object.values(saloneros)) serv += Number(persona?.serv) || 0
+  return serv
+}
+
+/**
+ * `fecha → 10% de servicio cobrado ese día`, leído de `ventas_dias`. SOLO LECTURA: esta
+ * función no escribe una fila de ventas ni toca `posFiscal`.
+ *
+ * Una fecha AUSENTE del mapa es "no hay ventas cargadas ese día", que no es lo mismo que
+ * ₡0 — por eso el `Map` no se rellena con ceros: quien lo consume distingue los dos casos.
+ */
+export async function getServicioPorDia(
+  fechaIni: string,
+  fechaFin: string,
+): Promise<Map<string, number>> {
+  const { data, error } = await fromAny('ventas_dias')
+    .select('session_date, data')
+    .gte('session_date', fechaIni)
+    .lte('session_date', fechaFin)
+  if (error) fail(error, 'ver el servicio del período', 'Las ventas del día las carga el módulo Ventas.')
+  const out = new Map<string, number>()
+  for (const row of ((data ?? []) as Array<{ session_date: string; data: unknown }>)) {
+    out.set(row.session_date, servicioDeDiaData(row.data))
+  }
+  return out
+}
 
 // ── BioTime F1d: derivación de horas (mig 059) ──────────────────────────────────
 // El wrapper de la RPC + la bandeja de excepciones. La derivación es SERVIDOR: acá no

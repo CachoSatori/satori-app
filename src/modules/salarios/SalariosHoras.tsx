@@ -24,6 +24,12 @@ import {
 // Acá no se calcula plata: ni tarifas, ni 10%, ni netos. Solo horas (eso es la Fase 2).
 
 const LOCALES = ['santa-teresa', 'nosara']
+// v3 · el slug es la clave (cruza con `locations.id` y con `work_days.local`); la etiqueta
+// es lo que se lee. Antes se mostraba el slug crudo.
+const LOCAL_LABEL: Record<string, string> = {
+  'santa-teresa': 'Santa Teresa',
+  'nosara':       'Nosara',
+}
 
 // Las horas de un empleado en el rango, separadas por origen: lo derivado y lo cargado a
 // mano. Se muestran separadas a propósito — sumarlas a ciegas es justo el error que
@@ -369,8 +375,28 @@ export default function SalariosHoras({ employees }: Props) {
         <span className="admin-section-title">Horas del período · BioTime</span>
       </div>
 
-      <div style={{ padding: '0 12px 8px', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={{ fontSize: '0.72rem', color: '#888' }}>Período</label>
+      {/* v3 · Local primero. Acá el filtro NO es cosmético: la bandeja de excepciones se
+          lee por local (cada BioTime tiene su propia secuencia de marcas). */}
+      <div className="sal-bar">
+        <span className="sal-bar-label">Local</span>
+        <div className="sal-pills" role="group" aria-label="Local">
+          {LOCALES.map(l => (
+            <button
+              key={l}
+              type="button"
+              className={`sal-pill ${local === l ? 'is-active' : ''}`}
+              aria-pressed={local === l}
+              onClick={() => { setLocal(l); setResumen(null) }}
+              disabled={busy}
+            >
+              {LOCAL_LABEL[l] ?? l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="sal-bar">
+        <span className="sal-bar-label">Período</span>
         <select
           className="tip-input"
           aria-label="Período"
@@ -383,16 +409,7 @@ export default function SalariosHoras({ employees }: Props) {
             <option key={p.id} value={p.id}>{p.fecha_ini} → {p.fecha_fin} · {p.estado}</option>
           ))}
         </select>
-        <label style={{ fontSize: '0.72rem', color: '#888' }}>Local</label>
-        <select
-          className="tip-input"
-          aria-label="Local"
-          value={local}
-          onChange={e => { setLocal(e.target.value); setResumen(null) }}
-          disabled={busy}
-        >
-          {LOCALES.map(l => <option key={l} value={l}>{l}</option>)}
-        </select>
+        <span className="sal-spacer" />
         <button
           className="btn-primary"
           onClick={handleRecalcular}
@@ -446,6 +463,7 @@ export default function SalariosHoras({ employees }: Props) {
             </p>
           )}
 
+          <div className="sal-table-wrap">
           <table className="admin-table">
             <thead>
               <tr>
@@ -491,6 +509,7 @@ export default function SalariosHoras({ employees }: Props) {
               )}
             </tbody>
           </table>
+          </div>
 
           {/* ── Bandeja ─────────────────────────────────────────────────────── */}
           <div className="admin-section-header" style={{ marginTop: '1rem' }}>

@@ -6,8 +6,12 @@ import {
   semaforoPago, inactivosConHoras, HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
   setPeriodoEnRevision, cerrarPeriodo, reabrirPeriodo,
   estaCongelado, motivoBloqueoExcepciones, avisoHorasDefault, ESTADO_LABEL,
-  ingresoTotalDe,
-  type LineaConsolidado,
+  ingresoTotalDe, aPagarDe,
+  // 10% de SERVICIO (v3): el reparto vive en SALARIOS. `tipCalculations` es el pozo de
+  // propinas y no se toca — son tres conceptos distintos (ver el bloque en salarios.ts).
+  getServicioPorDia, servicioDelPeriodo, diasDelPeriodo, participaServicio,
+  PARTICIPA_SERVICIO_DEFAULT,
+  type LineaConsolidado, type ServicioPeriodo,
 } from '../../shared/api/salarios'
 import { getTipPayoutsPorEmpleado } from '../../shared/api/tips'
 import {
@@ -19,9 +23,16 @@ import { useAuth } from '../../shared/hooks/useAuth'
 // Salarios · U0b (MVP): el ciclo mínimo de pago en una sola pantalla —
 // cargar horas del período → ver el neto → bajar el archivo del banco → marcar pagado.
 //
-// Lo que NO hace (a propósito, va en los pases siguientes): 10% de servicio y propinas
-// en el consolidado (F2), horas automáticas de BioTime (F1d), comprobante por WhatsApp
-// o email, y datos bancarios completos. El pago NO toca caja.
+// Lo que NO hace (a propósito, va en los pases siguientes): horas automáticas de BioTime
+// (F1d), comprobante por WhatsApp o email, y datos bancarios completos. El pago NO toca caja.
+//
+// LOS TRES CONCEPTOS de esta pantalla, que NO se mezclan:
+//   · TOTAL HORAS (₡)  → horas × tarifa + fijo. Se transfiere.
+//   · 10% DE SERVICIO  → cargo de salón/barra repartido por horas. TAMBIÉN se transfiere,
+//                        junto con las horas. NO es IVA (eso es un impuesto y va en la
+//                        factura) y NO es propina.
+//   · PROPINAS         → pozo del módulo Propinas, hoy solo efectivo. NO va al banco.
+// A pagar = horas + 10% de servicio. Ingreso total = eso + propinas (informativo).
 
 // El estado del período de un vistazo. `cerrado` va en ámbar a propósito: no es un
 // final (todavía falta pagar), es "esto ya no se toca".
@@ -30,6 +41,17 @@ const COLOR_ESTADO: Record<string, string> = {
   en_revision: '#8a6d3b',
   cerrado:     '#8a6d3b',
   pagado:      'var(--t-teal)',
+}
+
+// Filtro de local (v3 "Local primero"). El dato existe en `work_days.local`; en
+// `employees` NO hay columna de local, así que el filtro vive donde el dato vive: sobre
+// las HORAS del período, no sobre la ficha de la persona.
+type LocalFiltro = 'todos' | 'santa-teresa' | 'nosara'
+const LOCAL_FILTROS: LocalFiltro[] = ['todos', 'santa-teresa', 'nosara']
+const LOCAL_LABEL: Record<LocalFiltro, string> = {
+  'todos':        'Todos',
+  'santa-teresa': 'Santa Teresa',
+  'nosara':       'Nosara',
 }
 
 // El texto del input a número, tolerando el campo a medio escribir.
@@ -66,6 +88,16 @@ export default function SalariosPago({ employees }: Props) {
   // puedan leer no puede frenar una nómina, pero tampoco puede disfrazarse de ₡0.
   const [propinas, setPropinas] = useState<Map<string, number>>(new Map())
   const [errPropinas, setErrPropinas] = useState<string | null>(null)
+
+  // 10% de SERVICIO del período: `fecha → servicio cobrado ese día`, leído de las ventas
+  // ya cargadas (SOLO LECTURA). `null` = TODAVÍA NO SE PUEDE SABER, que no es ₡0: con
+  // null la columna va en "—" y "A pagar" queda en solo horas, en vez de inventar un monto.
+  const [servicioDia, setServicioDia] = useState<Map<string, number> | null>(null)
+  const [errServicio, setErrServicio] = useState<string | null>(null)
+
+  // v3 · "Local primero". Es un filtro de VISTA sobre las horas: el pay run es global, así
+  // que con un local elegido se puede mirar y comparar, pero no pagar (ver `alcanceParcial`).
+  const [localFiltro, setLocalFiltro] = useState<LocalFiltro>('todos')
 
   const [concepto, setConcepto] = useState(CONCEPTO_SALARIOS_DEFAULT)
   // Borradores por empleado. Las horas se persisten (work_days); el neto pisado a mano
@@ -117,6 +149,7 @@ export default function SalariosPago({ employees }: Props) {
     if (!p) {
       setWorkDays([]); setPagos([]); setExcs([]); setOkDobles(false)
       setPropinas(new Map()); setErrPropinas(null)
+      setServicioDia(null); setErrServicio(null)
       return
     }
     // Las propinas van por su propio try: son informativas, así que su fallo no puede
@@ -126,6 +159,15 @@ export default function SalariosPago({ employees }: Props) {
       .catch(e => {
         setPropinas(new Map())
         setErrPropinas(e instanceof Error ? e.message : 'No se pudieron leer las propinas del período')
+      })
+    // El servicio también va aparte, pero por el motivo CONTRARIO: sí es plata que se
+    // transfiere. Si no se puede leer, la pantalla lo dice y paga solo las horas — nunca
+    // rellena el 10% con un número inventado ni frena la nómina entera por él.
+    getServicioPorDia(p.fecha_ini, p.fecha_fin)
+      .then(m => { setServicioDia(m); setErrServicio(null) })
+      .catch(e => {
+        setServicioDia(null)
+        setErrServicio(e instanceof Error ? e.message : 'No se pudo leer el servicio del período')
       })
     try {
       const [wd, pg, ex] = await Promise.all([
@@ -188,15 +230,70 @@ export default function SalariosPago({ employees }: Props) {
     [period, semaforo],
   )
 
-  const lineas: LineaConsolidado[] = useMemo(
-    () => (period ? consolidarPeriodo(activos, workDays, period, LOCAL_DEFAULT, propinas) : []),
-    [activos, workDays, period, propinas],
+  // ── 10% de SERVICIO ───────────────────────────────────────────────────────────
+  const empById = useMemo(() => new Map(employees.map(e => [e.id, e])), [employees])
+
+  // Quién entra al reparto. Default `true` (mig 055: `participa_servicio not null default
+  // true`), incluido el caso raro de horas de alguien que no está en la lista: dejarlo
+  // afuera por defecto sería sacarle plata a alguien por un dato que la base dice que sí.
+  const participaDe = useCallback(
+    (id: string) => {
+      const e = empById.get(id)
+      return e ? participaServicio(e) : PARTICIPA_SERVICIO_DEFAULT
+    },
+    [empById],
   )
-  const totalPropinas = useMemo(() => lineas.reduce((s, l) => s + l.propinasPeriodo, 0), [lineas])
+
+  const diasPeriodo = useMemo(
+    () => (period ? diasDelPeriodo(period.fecha_ini, period.fecha_fin) : []),
+    [period],
+  )
+
+  // El reparto usa SIEMPRE las horas completas del período (`workDays`), nunca las del
+  // filtro de local: el pool del día es del negocio entero, y dividirlo entre las horas de
+  // un solo local le daría a media plantilla la plata de toda.
+  const servicio: ServicioPeriodo | null = useMemo(
+    () => (servicioDia ? servicioDelPeriodo(workDays, servicioDia, participaDe, diasPeriodo) : null),
+    [servicioDia, workDays, participaDe, diasPeriodo],
+  )
+  const servicioDisponible = servicio != null
+
+  // ── Filtro de local (vista) ───────────────────────────────────────────────────
+  // El pay run es global: con un local elegido se MIRA, no se paga ni se editan horas
+  // (el input de horas escribe siempre en la fila de LOCAL_DEFAULT).
+  const alcanceParcial = localFiltro !== 'todos'
+  const wdVista = useMemo(
+    () => (alcanceParcial ? workDays.filter(w => w.local === localFiltro) : workDays),
+    [workDays, alcanceParcial, localFiltro],
+  )
+
+  const lineas: LineaConsolidado[] = useMemo(
+    () => (period
+      ? consolidarPeriodo(activos, wdVista, period, LOCAL_DEFAULT, propinas, servicio?.porEmpleado)
+      : []),
+    [activos, wdVista, period, propinas, servicio],
+  )
+  // Con un local elegido, quien no tuvo horas ahí no es parte de esa vista.
+  const lineasVista = useMemo(
+    () => (alcanceParcial ? lineas.filter(l => l.horas > 0) : lineas),
+    [lineas, alcanceParcial],
+  )
+  const totalPropinas = useMemo(() => lineasVista.reduce((s, l) => s + l.propinasPeriodo, 0), [lineasVista])
+
+  // Promedio de tarifa SOBRE EL FILTRO ACTIVO (v3). Solo cuenta a quien cobra por hora:
+  // meter los ₡0 de un sueldo fijo lo hundiría y el número dejaría de querer decir nada.
+  const tarifas = useMemo(
+    () => lineasVista.filter(l => l.hourlyRate > 0).map(l => l.hourlyRate),
+    [lineasVista],
+  )
+  const promedioTarifa = tarifas.length > 0
+    ? tarifas.reduce((s, t) => s + t, 0) / tarifas.length
+    : 0
+  const horasVista = useMemo(() => lineasVista.reduce((s, l) => s + l.horas, 0), [lineasVista])
 
   // Un activo con horas y sin tarifa cargada da neto ₡0 y queda fuera del archivo del
   // banco sin decir nada. Es el mismo silencio que el inactivo: alguien no cobra.
-  const sinTarifa = useMemo(() => lineas.filter(l => l.sinTarifa), [lineas])
+  const sinTarifa = useMemo(() => lineasVista.filter(l => l.sinTarifa), [lineasVista])
 
   // El que trabajó media quincena y lo desactivaron antes de cerrarla: sus horas están
   // cargadas pero su línea no existe en esta pantalla. No se lo mete a la nómina —
@@ -219,10 +316,30 @@ export default function SalariosPago({ employees }: Props) {
     [netoDraft],
   )
 
-  const aPagar = lineas
-    .map(l => ({ l, monto: Math.round(netoEfectivo(l)) }))
+  // Los montos que salen por el banco. Se redondea POR PARTES y después se suma: si se
+  // redondeara el total, el pie quedaría desfasado en ₡1 respecto de la suma de columnas
+  // y la grilla y el Excel dirían cosas distintas por un centavo.
+  const montoHoras    = useCallback((l: LineaConsolidado) => Math.round(netoEfectivo(l)), [netoEfectivo])
+  const montoServicio = useCallback((l: LineaConsolidado) => Math.round(l.servicio), [])
+  const montoAPagar   = useCallback(
+    (l: LineaConsolidado) => aPagarDe(montoHoras(l), montoServicio(l)),
+    [montoHoras, montoServicio],
+  )
+
+  const aPagar = lineasVista
+    .map(l => ({ l, horas: montoHoras(l), servicio: montoServicio(l), monto: montoAPagar(l) }))
     .filter(x => x.monto > 0)
-  const total = aPagar.reduce((s, x) => s + x.monto, 0)
+  const total          = aPagar.reduce((s, x) => s + x.monto, 0)
+  const totalHoras     = aPagar.reduce((s, x) => s + x.horas, 0)
+  const totalServicio  = aPagar.reduce((s, x) => s + x.servicio, 0)
+  const totalIngreso   = total + totalPropinas
+
+  // El 10% que este período cobró y que esta nómina NO transfiere: días sin nadie que
+  // participe, más lo que le tocó a gente que no está en la grilla (inactivos con horas).
+  // Es plata que existe: se muestra en vez de evaporarse en la diferencia de dos totales.
+  const servicioSinRepartir = servicio
+    ? Math.max(0, Math.round(servicio.totalRepartido + servicio.totalSinRepartir - totalServicio))
+    : 0
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -296,6 +413,10 @@ export default function SalariosPago({ employees }: Props) {
   const saveHoras = async (l: LineaConsolidado) => {
     const draft = horasDraft[l.employee.id]
     if (!period || draft == null) return
+    // Con un local elegido el total de la fila es PARCIAL, y el upsert escribe siempre en
+    // la fila de LOCAL_DEFAULT: guardar acá le borraría a la persona las horas del otro
+    // local. El input ya va deshabilitado; esto es la segunda llave.
+    if (alcanceParcial) return
     const totalNuevo = num(draft)
     // Lo editable es la fila manual, que comparte PK con la jornada del último día: si
     // BioTime derivó ESE día, el upsert la reemplaza. Esas horas están dentro de
@@ -328,12 +449,18 @@ export default function SalariosPago({ employees }: Props) {
     if (!period) return
     setError(null)
     try {
+      // `x.monto` = total de horas + 10% de servicio: EXACTAMENTE la columna "A pagar" de
+      // la grilla. La pantalla es la promesa de lo que la persona va a cobrar; el archivo
+      // del banco es lo que la cumple, y no pueden decir números distintos.
       downloadPlanillaXlsx(
         aPagar.map(x => ({ nombre: x.l.nombreBanco, monto: x.monto })),
         concepto,
         planillaFileName('planilla-salarios', `${period.fecha_ini}-a-${period.fecha_fin}`),
       )
-      setAviso(`Archivo generado: ${aPagar.length} transferencia(s) por ${fi(total)}.`)
+      setAviso(
+        `Archivo generado: ${aPagar.length} transferencia(s) por ${fi(total)}` +
+        (totalServicio > 0 ? ` (${fi(totalHoras)} de horas + ${fi(totalServicio)} de 10% de servicio).` : '.'),
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error generando el archivo')
     }
@@ -341,6 +468,11 @@ export default function SalariosPago({ employees }: Props) {
 
   const handlePagar = async () => {
     if (!period || !user?.id) return
+    // El pay run es GLOBAL: pagar mirando un solo local dejaría afuera las horas del otro.
+    if (alcanceParcial) {
+      setError(`Estás viendo solo ${LOCAL_LABEL[localFiltro]}. Poné el filtro en «Todos» para pagar: el período se paga completo.`)
+      return
+    }
     // Lo único que frena: las horas contadas dos veces. Se destraba tildando la casilla,
     // no acá — este chequeo es la segunda llave por si el botón quedó habilitado.
     if (frenado) {
@@ -386,11 +518,20 @@ export default function SalariosPago({ employees }: Props) {
     if (semaforo.dobles.length > 0) {
       avisos.push(`⚠️ Horas dobles confirmadas a mano: ${nombresDobles.join(', ')}.`)
     }
+    if (!servicioDisponible) {
+      avisos.push('⚠️ SIN el 10% de servicio: no se pudo leer el servicio del período y se transfieren SOLO las horas.')
+    } else if (servicio && servicio.diasSinVentas.length > 0) {
+      avisos.push(
+        `⚠️ ${servicio.diasSinVentas.length} día(s) del período SIN ventas cargadas: su 10% de servicio no se repartió.`,
+      )
+    }
 
     const ok = window.confirm(
       `¿Marcar el período ${period.fecha_ini} → ${period.fecha_fin} como PAGADO?\n\n` +
-      `${aPagar.length} empleado(s) · ${fi(total)}\n\n` +
+      `${aPagar.length} empleado(s) · ${fi(total)}\n` +
+      `${fi(totalHoras)} de horas + ${fi(totalServicio)} de 10% de servicio\n\n` +
       (avisos.length > 0 ? avisos.join('\n') + '\n\n' : '') +
+      'Las PROPINAS no van en esta transferencia: se pagan en efectivo por su propio camino.\n\n' +
       'Queda el registro del pago por transferencia. No genera movimiento de caja.',
     )
     if (!ok) return
@@ -400,10 +541,14 @@ export default function SalariosPago({ employees }: Props) {
         period.id,
         aPagar.map(x => ({
           employee_id: x.l.employee.id,
+          // El neto registrado es lo que SE TRANSFIRIÓ: horas + 10% de servicio, el mismo
+          // número de la grilla y del Excel. `servicio` viaja aparte para que
+          // `salary_lines.aporte_servicio` guarde de qué está hecho ese total.
           monto_neto:  x.monto,
           horas:       x.l.horas,
           hourly_rate: x.l.hourlyRate,
           fijo:        x.l.fijo,
+          servicio:    x.servicio,
         })),
         user.id,
       )
@@ -456,8 +601,28 @@ export default function SalariosPago({ employees }: Props) {
         </form>
       )}
 
-      <div style={{ padding: '0 12px 8px', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <label style={{ fontSize: '0.72rem', color: '#888' }}>Período</label>
+      {/* v3 · Local primero. Filtra la VISTA de las horas (work_days.local); el pay run
+          sigue siendo global, así que con un local elegido no se paga ni se editan horas. */}
+      <div className="sal-bar">
+        <span className="sal-bar-label">Local</span>
+        <div className="sal-pills" role="group" aria-label="Filtrar por local">
+          {LOCAL_FILTROS.map(f => (
+            <button
+              key={f}
+              type="button"
+              className={`sal-pill ${localFiltro === f ? 'is-active' : ''}`}
+              aria-pressed={localFiltro === f}
+              onClick={() => setLocalFiltro(f)}
+              disabled={saving}
+            >
+              {LOCAL_LABEL[f]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="sal-bar">
+        <span className="sal-bar-label">Período</span>
         <select
           className="tip-input"
           aria-label="Período de pago"
@@ -478,6 +643,15 @@ export default function SalariosPago({ employees }: Props) {
           </span>
         )}
       </div>
+
+      {alcanceParcial && (
+        <p className="sal-note is-info">
+          👁️ Vista de <strong>{LOCAL_LABEL[localFiltro]}</strong>: se muestran solo las horas de
+          ese local. El período se <strong>paga completo</strong>, así que mientras el filtro esté
+          puesto no se editan horas ni se baja el archivo del banco. Volvé a{' '}
+          <strong>Todos</strong> para pagar.
+        </p>
+      )}
 
       {period && (
         <div style={{ padding: '0 12px 8px', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -657,6 +831,41 @@ export default function SalariosPago({ employees }: Props) {
             </div>
           )}
 
+          {/* Si el 10% no se puede leer, se DICE y se paga solo lo que sí se sabe. Un ₡0
+              inventado sería una transferencia de menos que nadie iba a notar. */}
+          {!servicioDisponible && (
+            <p className="sal-note is-stop">
+              ⛔ <strong>No se pudo leer el 10% de servicio de este período</strong>
+              {errServicio ? ` (${errServicio})` : ''}. La columna <strong>10% serv.</strong> va en
+              «—» y <strong>A pagar = solo las horas</strong>: no se inventa el monto.
+              <br />
+              Falta el <strong>servicio por día</strong>, que sale de las ventas del POS que carga el
+              módulo <strong>Ventas</strong>. Las horas por día y el flag{' '}
+              <em>participa del 10%</em> ya están.
+            </p>
+          )}
+
+          {servicioDisponible && servicio && servicio.diasSinVentas.length > 0 && (
+            <p className="sal-note is-warn">
+              ⚠️ <strong>{servicio.diasSinVentas.length} día(s) del período sin ventas cargadas</strong>{' '}
+              ({servicio.diasSinVentas.slice(0, 6).join(', ')}
+              {servicio.diasSinVentas.length > 6 ? '…' : ''}): de esos días{' '}
+              <strong>no se sabe</strong> cuánto servicio se cobró, así que su 10% no se repartió.
+              No es que hayan sido ₡0 — cargá las ventas en <strong>Ventas</strong> y volvé.
+            </p>
+          )}
+
+          {/* Con un local elegido la resta compara un pool global contra una vista parcial:
+              el número no querría decir nada, así que no se muestra. */}
+          {servicioDisponible && !alcanceParcial && servicioSinRepartir > 0 && (
+            <p className="sal-note is-plum">
+              ℹ️ <strong>{fi(servicioSinRepartir)}</strong> del 10% de servicio del período{' '}
+              <strong>no se reparte en esta nómina</strong>: son días sin horas de nadie que
+              participe, o le tocan a alguien que no está en esta grilla (por ejemplo un inactivo
+              con horas). No se transfiere y no se pierde de vista.
+            </p>
+          )}
+
           {errPropinas && (
             <p style={{ padding: '0 12px 8px', fontSize: '0.75rem', color: '#8a6d3b' }}>
               ⚠️ No se pudieron leer las propinas del período ({errPropinas}). Las columnas
@@ -665,101 +874,188 @@ export default function SalariosPago({ employees }: Props) {
             </p>
           )}
 
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Empleado</th>
-                <th>Nombre en el banco</th>
-                <th>Tarifa/hora</th>
-                <th>Horas</th>
-                <th>Fijo</th>
-                <th>Salario calculado</th>
-                <th>A pagar (transferencia)</th>
-                <th>Propinas del período</th>
-                <th>Ingreso total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lineas.map(l => {
-                const id = l.employee.id
-                const horasVal = horasDraft[id] ?? String(l.horas)
-                const netoVal  = netoDraft[id]  ?? ''
-                return (
-                  <tr key={id} className="admin-row">
-                    <td className="admin-emp-name">{l.employee.full_name}</td>
-                    <td style={{ fontSize: '0.75rem' }}>
-                      {l.employee.nombre_homebanking
-                        ? l.employee.nombre_homebanking
-                        : <span style={{ opacity: 0.45 }}>{l.employee.full_name} (sin alias)</span>}
-                    </td>
-                    <td>
-                      {l.hourlyRate > 0
-                        ? fi(l.hourlyRate)
-                        : l.sinTarifa
-                          ? <strong style={{ color: 'var(--t-red, #b04a3a)' }}>sin tarifa</strong>
-                          : <span style={{ opacity: 0.35 }}>—</span>}
-                    </td>
-                    <td>
-                      <input
-                        className="tip-input"
-                        type="number"
-                        min="0"
-                        step="0.25"
-                        aria-label={`Horas del período: ${l.employee.full_name}`}
-                        value={horasVal}
-                        onChange={e => setHorasDraft(d => ({ ...d, [id]: e.target.value }))}
-                        onBlur={() => saveHoras(l)}
-                        disabled={saving || congelado}
-                        style={{ width: '80px' }}
-                      />
-                    </td>
-                    <td>{l.fijo > 0 ? fi(l.fijo) : <span style={{ opacity: 0.35 }}>—</span>}</td>
-                    <td>{fi(l.neto)}</td>
-                    <td>
-                      <input
-                        className="tip-input"
-                        type="number"
-                        min="0"
-                        step="1"
-                        aria-label={`Neto a pagar: ${l.employee.full_name}`}
-                        placeholder={String(Math.round(l.neto))}
-                        value={netoVal}
-                        onChange={e => setNetoDraft(d => ({ ...d, [id]: e.target.value }))}
-                        disabled={saving || congelado}
-                        style={{ width: '110px' }}
-                      />
-                    </td>
-                    {/* Informativas: NO se transfieren. Van en gris y fuera de cualquier
-                        total del archivo del banco, para que no se confundan con plata
-                        que sale por esta pantalla. */}
-                    <td style={{ color: '#8a6d3b' }}>
-                      {l.propinasPeriodo > 0
-                        ? fi(l.propinasPeriodo)
-                        : <span style={{ opacity: 0.35 }}>—</span>}
-                    </td>
-                    <td style={{ fontWeight: 600 }}>
-                      {fi(ingresoTotalDe(netoEfectivo(l), l.propinasPeriodo))}
+          {/* ── Stats del filtro activo (v3) ───────────────────────────────────── */}
+          <div className="sal-stats">
+            <div className="sal-stat">
+              <span className="sal-stat-label">Personas</span>
+              <span className="sal-stat-value">{lineasVista.length}</span>
+              <span className="sal-stat-note">{aPagar.length} con transferencia</span>
+            </div>
+            <div className="sal-stat">
+              <span className="sal-stat-label">Horas</span>
+              <span className="sal-stat-value">{horasVista.toLocaleString('es-CR')}</span>
+              <span className="sal-stat-note">{LOCAL_LABEL[localFiltro]}</span>
+            </div>
+            <div className="sal-stat">
+              <span className="sal-stat-label">Tarifa promedio</span>
+              <span className="sal-stat-value is-teal">
+                {promedioTarifa > 0 ? fi(Math.round(promedioTarifa)) : '—'}
+              </span>
+              <span className="sal-stat-note">
+                {tarifas.length} por hora · sobre el filtro activo
+              </span>
+            </div>
+            <div className="sal-stat">
+              <span className="sal-stat-label">10% de servicio</span>
+              <span className="sal-stat-value is-plum">
+                {servicioDisponible ? fi(totalServicio) : '—'}
+              </span>
+              <span className="sal-stat-note">
+                {servicioDisponible ? 'se transfiere con las horas' : 'sin dato del período'}
+              </span>
+            </div>
+            <div className="sal-stat">
+              <span className="sal-stat-label">Propinas</span>
+              <span className="sal-stat-value is-gold">{fi(totalPropinas)}</span>
+              <span className="sal-stat-note">efectivo · NO se transfieren</span>
+            </div>
+          </div>
+
+          {/* La grilla de pago v3. Orden de columnas del SPEC:
+              Nombre | Horas | Total horas (₡) | 10% serv. | A pagar | Propinas | Ingreso total
+              Lo operativo que la nómina igual necesita (alias del banco, tarifa, fijo,
+              flag del 10%) baja a la celda del nombre en vez de perderse. */}
+          <div className="sal-table-wrap">
+            <table className="sal-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th className="is-num">Horas</th>
+                  <th className="is-num">Total horas (₡)</th>
+                  <th className="is-num">10% serv.</th>
+                  <th className="is-num">A pagar</th>
+                  <th className="is-num">Propinas</th>
+                  <th className="is-num">Ingreso total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lineasVista.map(l => {
+                  const id       = l.employee.id
+                  const horasVal = horasDraft[id] ?? String(l.horas)
+                  const netoVal  = netoDraft[id]  ?? ''
+                  const pisado   = netoVal.trim() !== ''
+                  const participa = participaServicio(l.employee)
+                  const serv     = montoServicio(l)
+                  return (
+                    <tr key={id}>
+                      <td>
+                        <div className="sal-name">{l.employee.full_name}</div>
+                        <div className="sal-name-meta">
+                          {/* El banco identifica al beneficiario POR EL NOMBRE: sin alias
+                              cargado se exporta el nombre del empleado. */}
+                          {l.employee.nombre_homebanking
+                            ? `banco: ${l.employee.nombre_homebanking}`
+                            : `banco: ${l.employee.full_name} (sin alias)`}
+                          {' · '}
+                          {l.hourlyRate > 0
+                            ? `${fi(l.hourlyRate)}/h`
+                            : l.sinTarifa
+                              ? <strong style={{ color: 'var(--sal-red)' }}>sin tarifa</strong>
+                              : 'sin tarifa por hora'}
+                          {l.fijo > 0 && ` · fijo ${fi(l.fijo)}`}
+                          {!participa && ' · no participa del 10%'}
+                        </div>
+                      </td>
+                      <td className="is-num">
+                        <input
+                          className="tip-input"
+                          type="number"
+                          min="0"
+                          step="0.25"
+                          aria-label={`Horas del período: ${l.employee.full_name}`}
+                          value={horasVal}
+                          onChange={e => setHorasDraft(d => ({ ...d, [id]: e.target.value }))}
+                          onBlur={() => saveHoras(l)}
+                          disabled={saving || congelado || alcanceParcial}
+                          style={{ width: '76px', textAlign: 'right' }}
+                        />
+                      </td>
+                      {/* Total horas (₡) = horas × tarifa + fijo. Es lo que en B se llamaba
+                          "Salario calculado", y sigue siendo lo único que se pisa a mano. */}
+                      <td className="is-num">
+                        <input
+                          className="tip-input"
+                          type="number"
+                          min="0"
+                          step="1"
+                          aria-label={`Total de horas a pagar: ${l.employee.full_name}`}
+                          placeholder={String(Math.round(l.neto))}
+                          value={netoVal}
+                          onChange={e => setNetoDraft(d => ({ ...d, [id]: e.target.value }))}
+                          disabled={saving || congelado}
+                          style={{ width: '110px', textAlign: 'right' }}
+                        />
+                        {pisado && (
+                          <div className="sal-name-meta">calculado {fi(l.neto)}</div>
+                        )}
+                      </td>
+                      {/* 10% de SERVICIO — NO es IVA y NO es propina. Se transfiere. */}
+                      <td className="is-num">
+                        {!servicioDisponible
+                          ? <span className="sal-dash" title="No se pudo leer el servicio del período">—</span>
+                          : serv > 0
+                            ? <span className="sal-money-serv">{fi(serv)}</span>
+                            : <span className="sal-dash">—</span>}
+                      </td>
+                      {/* A pagar = Total horas + 10% de servicio. Es lo que sale por el banco. */}
+                      <td className="is-num">
+                        <span className="sal-money-pagar">{fi(montoAPagar(l))}</span>
+                      </td>
+                      {/* Informativas: NO se transfieren. Van en su propio color y fuera de
+                          cualquier total del archivo del banco. */}
+                      <td className="is-num">
+                        {l.propinasPeriodo > 0
+                          ? <span className="sal-money-tip">{fi(l.propinasPeriodo)}</span>
+                          : <span className="sal-dash">—</span>}
+                      </td>
+                      <td className="is-num">
+                        <span className="sal-money-total">
+                          {fi(ingresoTotalDe(montoHoras(l), l.propinasPeriodo, serv))}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {lineasVista.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
+                      {alcanceParcial
+                        ? `Nadie con horas en ${LOCAL_LABEL[localFiltro]} en este período.`
+                        : 'No hay empleados activos.'}
                     </td>
                   </tr>
-                )
-              })}
-              {lineas.length === 0 && (
-                <tr>
-                  <td colSpan={9} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
-                    No hay empleados activos.
-                  </td>
-                </tr>
+                )}
+              </tbody>
+              {lineasVista.length > 0 && (
+                <tfoot>
+                  <tr className="sal-foot">
+                    <td>Total</td>
+                    <td className="is-num">{horasVista.toLocaleString('es-CR')}</td>
+                    <td className="is-num">{fi(totalHoras)}</td>
+                    <td className="is-num">
+                      {servicioDisponible
+                        ? <span className="sal-money-serv">{fi(totalServicio)}</span>
+                        : <span className="sal-dash">—</span>}
+                    </td>
+                    <td className="is-num"><span className="sal-money-pagar">{fi(total)}</span></td>
+                    <td className="is-num"><span className="sal-money-tip">{fi(totalPropinas)}</span></td>
+                    <td className="is-num"><span className="sal-money-total">{fi(totalIngreso)}</span></td>
+                  </tr>
+                </tfoot>
               )}
-            </tbody>
-          </table>
+            </table>
+          </div>
 
-          <div style={{ padding: '10px 12px', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <strong style={{ fontFamily: 'var(--font-serif)' }}>{fi(total)}</strong>
-            <span style={{ fontSize: '0.72rem', color: '#888' }}>
-              {aPagar.length} transferencia(s) · el resto queda fuera del archivo
+          <div style={{ padding: '10px 0', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <strong style={{ fontFamily: 'var(--font-serif)', fontSize: '1.05rem' }}>{fi(total)}</strong>
+            <span style={{ fontSize: '0.72rem', color: 'var(--sal-muted)' }}>
+              {aPagar.length} transferencia(s) ={' '}
+              <strong>{fi(totalHoras)}</strong> de horas
+              {servicioDisponible && <> + <strong className="is-plum" style={{ color: 'var(--sal-plum)' }}>{fi(totalServicio)}</strong> de 10% de servicio</>}
+              {' '}· el resto queda fuera del archivo
             </span>
             {totalPropinas > 0 && (
-              <span style={{ fontSize: '0.72rem', color: '#8a6d3b' }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--sal-gold)' }}>
                 + {fi(totalPropinas)} de propinas <strong>que NO se transfieren</strong>
               </span>
             )}
@@ -771,9 +1067,10 @@ export default function SalariosPago({ employees }: Props) {
               // registro. Frenar el registro y dejar bajar el Excel sería frenar la puerta
               // equivocada — se transferiría de más y recién después aparecería el bloqueo.
               // Por eso lo frena TODO lo que frena el pago, fichajes sin resolver incluidos.
-              disabled={saving || aPagar.length === 0 || frenado || !!bloqueoPagar}
+              disabled={saving || aPagar.length === 0 || frenado || !!bloqueoPagar || alcanceParcial}
               title={
-                frenado ? `Horas contadas dos veces: ${nombresDobles.join(', ')}`
+                alcanceParcial ? `Estás viendo solo ${LOCAL_LABEL[localFiltro]}: el período se paga completo. Poné el filtro en «Todos».`
+                : frenado ? `Horas contadas dos veces: ${nombresDobles.join(', ')}`
                         : bloqueoPagar ?? undefined
               }
             >
@@ -787,10 +1084,11 @@ export default function SalariosPago({ employees }: Props) {
               // justamente lo que el ciclo viene a evitar.
               disabled={
                 saving || pagado || estado !== 'cerrado' || aPagar.length === 0 ||
-                !puedePagar || frenado || !!bloqueoPagar
+                !puedePagar || frenado || !!bloqueoPagar || alcanceParcial
               }
               title={
                 pagado ? undefined
+                : alcanceParcial ? `Estás viendo solo ${LOCAL_LABEL[localFiltro]}: el período se paga completo. Poné el filtro en «Todos».`
                 : estado !== 'cerrado' ? 'Cerrá el período antes de marcar el pago'
                 : frenado ? `Horas contadas dos veces: ${nombresDobles.join(', ')}`
                 : bloqueoPagar ? bloqueoPagar
@@ -801,16 +1099,22 @@ export default function SalariosPago({ employees }: Props) {
             </button>
           </div>
 
-          <p style={{ padding: '0 12px 12px', fontSize: '0.68rem', color: '#888' }}>
-            El neto se calcula como horas × la tarifa del empleado (Empleados / Tarifas) + su salario
-            fijo. Editarlo a mano ajusta
-            solo lo que se paga en este período. El pago se registra como transferencia:
-            <strong> no genera movimiento de caja</strong>.
+          <p className="sal-legend">
+            <strong>Total horas (₡)</strong> = horas × la tarifa del empleado (Empleados / Tarifas)
+            + su salario fijo. Editarlo a mano ajusta solo lo que se paga en este período.
             <br />
-            <strong>Propinas del período</strong> e <strong>Ingreso total</strong> son{' '}
-            <strong>solo informativas</strong>: las propinas ya se pagan aparte (efectivo / Caja)
-            y <strong>no</strong> entran en la transferencia ni en el archivo del banco. Lo único
-            que se transfiere es la columna <strong>A pagar (transferencia)</strong>.
+            <span className="is-plum">10% de servicio</span> = el cargo de servicio de salón y barra
+            del período (delivery no lo cobra), repartido por las horas de cada día entre quienes
+            participan. <strong>No es el IVA</strong> —eso es un impuesto, va en la factura y no se
+            reparte— y <strong>no es propina</strong>.
+            <br />
+            Se transfieren <span className="is-teal">salario + 10% de servicio</span>: eso, y solo
+            eso, es la columna <strong>A pagar</strong> y lo que baja en el Excel del banco.
+            Las <span className="is-gold">propinas NO se transfieren</span> (se pagan en efectivo,
+            por el módulo Propinas), así que <strong>Propinas</strong> e{' '}
+            <strong>Ingreso total</strong> son de solo lectura e informativas.
+            <br />
+            El pago se registra como transferencia: <strong>no genera movimiento de caja</strong>.
           </p>
         </>
       )}

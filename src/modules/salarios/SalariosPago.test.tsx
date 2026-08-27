@@ -40,10 +40,20 @@ const revisar  = vi.fn<(id: string, by: string) => Promise<unknown>>(async () =>
 const cerrar   = vi.fn<(id: string, by: string) => Promise<unknown>>(async () => PERIODO)
 const reabrir  = vi.fn<(id: string, by: string, m: string) => Promise<unknown>>(async () => PERIODO)
 
+// v3 · el 10% de SERVICIO del período: `fecha → servicio cobrado ese día`, leído de las
+// ventas. Por defecto un mapa VACÍO = "no hay ventas cargadas": el servicio da ₡0 y la
+// nómina paga solo las horas, que es el comportamiento de B.
+let SERVICIO_DIA: Map<string, number> = new Map()
+let servicioFalla: string | null = null
+
 vi.mock('../../shared/api/salarios', async (orig) => {
   const actual = await orig<typeof import('../../shared/api/salarios')>()
   return {
     ...actual,
+    getServicioPorDia: async () => {
+      if (servicioFalla) throw new Error(servicioFalla)
+      return SERVICIO_DIA
+    },
     getSalaryPeriods:   async () => [PERIODO],
     getWorkDays:        async () => WORK_DAYS,
     getPeriodPayments:  async () => [],
@@ -107,6 +117,8 @@ beforeEach(() => {
   EXCS = []
   PROPINAS = new Map()
   propinasFallan = null
+  SERVICIO_DIA = new Map()
+  servicioFalla = null
   upsert.mockClear(); pagar.mockClear(); download.mockClear()
   revisar.mockClear(); cerrar.mockClear(); reabrir.mockClear()
 })
@@ -134,7 +146,7 @@ describe('Salarios · Pago del período', () => {
 
   it('el neto se puede pisar a mano y es el que manda', async () => {
     await renderPago()
-    fireEvent.change(screen.getByLabelText('Neto a pagar: ANA'), { target: { value: '300000' } })
+    fireEvent.change(screen.getByLabelText('Total de horas a pagar: ANA'), { target: { value: '300000' } })
     expect(screen.getAllByText(money(485_000)).length).toBeGreaterThan(0)   // 300.000 + 185.000
   })
 
@@ -169,8 +181,8 @@ describe('Salarios · Pago del período', () => {
     // Se manda también la TARIFA usada: markPeriodPaid la congela en salary_lines.snapshot
     // para que un pago viejo se pueda auditar aunque después le suban el precio de la hora.
     expect(pagar.mock.calls[0][1]).toEqual([
-      { employee_id: 'e1', monto_neto: 249_600, horas: 96, hourly_rate: 2600, fijo: 0 },
-      { employee_id: 'e2', monto_neto: 185_000, horas: 0,  hourly_rate: 0,    fijo: 185_000 },
+      { employee_id: 'e1', monto_neto: 249_600, horas: 96, hourly_rate: 2600, fijo: 0, servicio: 0 },
+      { employee_id: 'e2', monto_neto: 185_000, horas: 0,  hourly_rate: 0,    fijo: 185_000, servicio: 0 },
     ])
     expect(pagar.mock.calls[0][2]).toBe('u-1')
   })
@@ -523,7 +535,7 @@ describe('Salarios · ciclo del período', () => {
     conEstado('cerrado')
     await renderPago()
     expect((screen.getByLabelText('Horas del período: ANA') as HTMLInputElement).disabled).toBe(true)
-    expect((screen.getByLabelText('Neto a pagar: ANA') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Total de horas a pagar: ANA') as HTMLInputElement).disabled).toBe(true)
     expect(screen.getByText(/Horas y tarifas congeladas/)).toBeTruthy()
     expect(screen.queryByText('Cerrar período')).toBeNull()
     expect(screen.getByText('Reabrir período')).toBeTruthy()
@@ -589,7 +601,7 @@ describe('Salarios · consolidado con ingreso total', () => {
     await renderPago()
 
     // ANA: 96 × 2.600 = 249.600 de salario + 27.000 de propinas
-    expect(await screen.findByText(money(27_000))).toBeTruthy()
+    expect((await screen.findAllByText(money(27_000))).length).toBeGreaterThan(0)
     expect(screen.getAllByText(money(276_600)).length).toBeGreaterThan(0)
     // BENITO no cobró propinas: su ingreso total es su salario
     expect(screen.getAllByText(money(185_000)).length).toBeGreaterThan(0)
@@ -598,7 +610,7 @@ describe('Salarios · consolidado con ingreso total', () => {
   it('el archivo del banco NO incluye las propinas', async () => {
     PROPINAS = new Map([['e1', 27_000], ['e2', 8_500]])
     await renderPago()
-    await screen.findByText(money(27_000))          // ya cargaron las propinas
+    await screen.findAllByText(money(27_000))        // ya cargaron las propinas
 
     fireEvent.click(screen.getByText('Descargar Excel para el banco'))
     await waitFor(() => expect(download).toHaveBeenCalledTimes(1))
@@ -614,20 +626,20 @@ describe('Salarios · consolidado con ingreso total', () => {
     PROPINAS = new Map([['e1', 27_000], ['e2', 8_500]])
     conEstado('cerrado')
     await renderPago()
-    await screen.findByText(money(27_000))
+    await screen.findAllByText(money(27_000))
 
     fireEvent.click(screen.getByText('Marcar pagado'))
     await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
     expect(pagar.mock.calls[0][1]).toEqual([
-      { employee_id: 'e1', monto_neto: 249_600, horas: 96, hourly_rate: 2600, fijo: 0 },
-      { employee_id: 'e2', monto_neto: 185_000, horas: 0,  hourly_rate: 0,    fijo: 185_000 },
+      { employee_id: 'e1', monto_neto: 249_600, horas: 96, hourly_rate: 2600, fijo: 0, servicio: 0 },
+      { employee_id: 'e2', monto_neto: 185_000, horas: 0,  hourly_rate: 0,    fijo: 185_000, servicio: 0 },
     ])
   })
 
   it('el total del pie sigue siendo solo salario, con las propinas aparte', async () => {
     PROPINAS = new Map([['e1', 27_000], ['e2', 8_500]])
     await renderPago()
-    await screen.findByText(money(27_000))
+    await screen.findAllByText(money(27_000))
 
     expect(screen.getAllByText(money(434_600)).length).toBeGreaterThan(0)   // 249.600 + 185.000
     // …y las propinas van SEPARADAS, con su propia etiqueta: 27.000 + 8.500
@@ -650,3 +662,159 @@ describe('Salarios · consolidado con ingreso total', () => {
   })
 })
 
+
+// ── v3 · el 10% de SERVICIO en la grilla de pago ─────────────────────────────────
+// Los TRES CONCEPTOS de esta pantalla: salario y 10% de servicio SE TRANSFIEREN;
+// las propinas NO (efectivo). Y ninguno de los tres es el IVA, que es un impuesto y
+// ni siquiera aparece acá.
+describe('Salarios · 10% de servicio (v3)', () => {
+  const CARLOS = emp({ id: 'e5', full_name: 'CARLOS', hourly_rate_crc: 2000 })
+  const CARLOS_NO = emp({ ...CARLOS, participa_servicio: false })
+
+  const dia = (employee_id: string, hours: number, local = 'santa-teresa'): WorkDay => ({
+    employee_id, work_date: '2026-08-15', local, hours,
+    es_feriado: false, source: 'manual', flags: null, created_at: '', updated_at: '',
+  })
+
+  // La grilla busca por la columna "A pagar", que es la única que el banco mira.
+  const celda = (n: number) => screen.getAllByText(money(n))
+
+  it('se reparte por horas del día y se SUMA a lo que se transfiere', async () => {
+    SERVICIO_DIA = new Map([['2026-08-15', 100_000]])
+    render(<SalariosPago employees={[ANA, BENITO]} />)
+    await screen.findByDisplayValue('96')
+
+    // ANA es la única con horas ese día: se lleva el 10% entero.
+    await waitFor(() => expect(celda(100_000).length).toBeGreaterThan(0))
+    // A pagar = 249.600 de horas + 100.000 de servicio
+    expect(celda(349_600).length).toBeGreaterThan(0)
+    // BENITO no tuvo horas: cobra su fijo y nada de servicio
+    expect(celda(185_000).length).toBeGreaterThan(0)
+  })
+
+  it('participa = false → ₡0 de servicio y fuera del denominador', async () => {
+    WORK_DAYS = [dia('e1', 8), dia('e5', 2)]
+    SERVICIO_DIA = new Map([['2026-08-15', 100_000]])
+    render(<SalariosPago employees={[ANA, CARLOS_NO]} />)
+    await screen.findByDisplayValue('8')
+
+    // Las 2 h de CARLOS no achican la cuota de ANA: el 10% entero es de ella.
+    await waitFor(() => expect(celda(100_000).length).toBeGreaterThan(0))
+    expect(celda(120_800).length).toBeGreaterThan(0)   // 8 × 2.600 + 100.000
+    // Y CARLOS cobra sus horas y nada más.
+    expect(celda(4_000).length).toBeGreaterThan(0)     // 2 × 2.000
+    expect(screen.getByText(/no participa del 10%/)).toBeTruthy()
+  })
+
+  it('el Excel del banco lleva horas + 10% de servicio: la grilla y el banco dicen lo mismo', async () => {
+    SERVICIO_DIA = new Map([['2026-08-15', 100_000]])
+    PROPINAS = new Map([['e1', 27_000]])
+    render(<SalariosPago employees={[ANA, BENITO]} />)
+    await screen.findByDisplayValue('96')
+    await waitFor(() => expect(celda(349_600).length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getByText('Descargar Excel para el banco'))
+    await waitFor(() => expect(download).toHaveBeenCalledTimes(1))
+    expect(download.mock.calls[0][0]).toEqual([
+      { nombre: 'ANA', monto: 349_600 },                  // horas + 10%, SIN la propina
+      { nombre: 'BENITO PEREZ MORA', monto: 185_000 },
+    ])
+  })
+
+  it('markPeriodPaid registra el total transferido y el servicio por separado', async () => {
+    window.confirm = vi.fn(() => true)
+    SERVICIO_DIA = new Map([['2026-08-15', 100_000]])
+    conEstado('cerrado')
+    render(<SalariosPago employees={[ANA, BENITO]} />)
+    await screen.findByDisplayValue('96')
+    await waitFor(() => expect(celda(349_600).length).toBeGreaterThan(0))
+
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    expect(pagar.mock.calls[0][1]).toEqual([
+      // monto_neto = lo que sale por el banco; `servicio` dice de qué está hecho.
+      { employee_id: 'e1', monto_neto: 349_600, horas: 96, hourly_rate: 2600, fijo: 0, servicio: 100_000 },
+      { employee_id: 'e2', monto_neto: 185_000, horas: 0,  hourly_rate: 0,    fijo: 185_000, servicio: 0 },
+    ])
+  })
+
+  it('las propinas siguen fuera del banco aunque el 10% de servicio entre', async () => {
+    SERVICIO_DIA = new Map([['2026-08-15', 100_000]])
+    PROPINAS = new Map([['e1', 27_000]])
+    render(<SalariosPago employees={[ANA, BENITO]} />)
+    await screen.findByDisplayValue('96')
+
+    // Ingreso total de ANA = 249.600 + 100.000 + 27.000. Es informativo y NO se transfiere.
+    await waitFor(() => expect(celda(376_600).length).toBeGreaterThan(0))
+    expect(screen.getByText(/que NO se transfieren/)).toBeTruthy()
+  })
+
+  // Un ₡0 inventado sería una transferencia de menos que nadie iba a notar.
+  it('si NO se puede leer el servicio lo dice, va en "—" y paga solo las horas', async () => {
+    servicioFalla = 'permission denied for table ventas_dias'
+    window.confirm = vi.fn(() => true)
+    conEstado('cerrado')
+    await renderPago()
+
+    expect(await screen.findByText(/No se pudo leer el 10% de servicio/)).toBeTruthy()
+    expect(screen.getByText(/Falta el/).textContent).toMatch(/servicio por día/)
+    // A pagar vuelve a ser solo las horas, y el pago sigue funcionando.
+    expect(celda(249_600).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByText('Marcar pagado'))
+    await waitFor(() => expect(pagar).toHaveBeenCalledTimes(1))
+    expect((pagar.mock.calls[0][1] as Array<Record<string, number>>)[0])
+      .toMatchObject({ monto_neto: 249_600, servicio: 0 })
+  })
+
+  it('avisa por los días del período SIN ventas cargadas: no se sabe ≠ ₡0', async () => {
+    SERVICIO_DIA = new Map([['2026-08-15', 100_000]])   // del 01 al 14 no hay nada
+    await renderPago()
+    expect(await screen.findByText(/día\(s\) del período sin ventas cargadas/)).toBeTruthy()
+  })
+})
+
+// ── v3 · "Local primero" ─────────────────────────────────────────────────────────
+describe('Salarios · filtro de local', () => {
+  const CARLOS = emp({ id: 'e5', full_name: 'CARLOS', hourly_rate_crc: 2000 })
+  const dia = (employee_id: string, hours: number, local: string): WorkDay => ({
+    employee_id, work_date: '2026-08-15', local, hours,
+    es_feriado: false, source: 'manual', flags: null, created_at: '', updated_at: '',
+  })
+
+  it('muestra solo las horas del local elegido', async () => {
+    WORK_DAYS = [dia('e1', 96, 'santa-teresa'), dia('e5', 10, 'nosara')]
+    render(<SalariosPago employees={[ANA, CARLOS]} />)
+    await screen.findByDisplayValue('96')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nosara' }))
+    await waitFor(() => expect(screen.queryByText('ANA')).toBeNull())
+    expect(screen.getByText('CARLOS')).toBeTruthy()
+  })
+
+  // El pay run es GLOBAL: pagar mirando un solo local dejaría las horas del otro afuera.
+  it('con un local elegido no se paga, no se baja el Excel y no se editan horas', async () => {
+    WORK_DAYS = [dia('e1', 96, 'santa-teresa'), dia('e5', 10, 'nosara')]
+    conEstado('cerrado')
+    render(<SalariosPago employees={[ANA, CARLOS]} />)
+    await screen.findByDisplayValue('96')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Santa Teresa' }))
+    await waitFor(() =>
+      expect((screen.getByText('Descargar Excel para el banco') as HTMLButtonElement).disabled).toBe(true))
+    expect((screen.getByText('Marcar pagado') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Horas del período: ANA') as HTMLInputElement).disabled).toBe(true)
+    expect(screen.getByText(/Vista de/)).toBeTruthy()
+  })
+
+  it('volver a Todos devuelve la nómina completa y habilita el pago', async () => {
+    WORK_DAYS = [dia('e1', 96, 'santa-teresa'), dia('e5', 10, 'nosara')]
+    render(<SalariosPago employees={[ANA, CARLOS]} />)
+    await screen.findByDisplayValue('96')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nosara' }))
+    await waitFor(() => expect(screen.queryByText('ANA')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Todos' }))
+    await waitFor(() => expect(screen.getByText('ANA')).toBeTruthy())
+    expect((screen.getByText('Descargar Excel para el banco') as HTMLButtonElement).disabled).toBe(false)
+  })
+})

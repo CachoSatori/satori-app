@@ -124,12 +124,28 @@ describe('Salarios · alta de empleados que no existen en la app', () => {
       role:               'cocina',
       hourly_rate_crc:    2000,
       fixed_salary_crc:   0,
-      participa_servicio: true,
+      // v3 · el alta de COCINA arranca sin 10% de servicio (el default por puesto).
+      // Salón y barra arrancan en true; ver el caso de abajo.
+      participa_servicio: false,
       biotime_emp_code:   null,
       fecha_ingreso:      null,
     })
     expect(Object.keys(payload)).not.toContain('profile_id')
     await waitFor(() => expect(onRefresh).toHaveBeenCalled())
+  })
+
+  it('v3 · elegir un puesto de salón mueve el 10% a Sí en el alta', async () => {
+    renderList()
+
+    fireEvent.click(screen.getByText('+ Agregar empleado'))
+    fireEvent.change(screen.getByPlaceholderText('Ej: JOSE'), { target: { value: 'karen' } })
+    fireEvent.change(screen.getByLabelText('Rol'), { target: { value: 'salonero' } })
+    fireEvent.click(screen.getByText('Crear empleado'))
+
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    const payload = create.mock.calls[0][0] as Record<string, unknown>
+    expect(payload.role).toBe('salonero')
+    expect(payload.participa_servicio).toBe(true)
   })
 })
 

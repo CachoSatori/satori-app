@@ -4,6 +4,9 @@ import { createEmployee, updateEmployeePayroll, toggleEmployeeActive } from '../
 import {
   updateEmployeeHomebankingName, updateEmployeeHorasHabituales, horaHabitualHHMM,
   exigirTarifasEditables, participaServicio,
+  // v3 · el default del 10% según el puesto, SOLO para altas, y la lista de cocina que
+  // hoy cobra servicio (para revisar a mano, nunca para corregir sola).
+  participaPorRolDefault, cocinaConServicio, departamentoDe, type Departamento,
 } from '../../shared/api/salarios'
 import { ROLE_LABELS } from '../../shared/constants'
 import { fi } from '../../shared/utils'
@@ -12,6 +15,14 @@ import { fi } from '../../shared/utils'
 const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
 type Filtro = 'activos' | 'inactivos' | 'todos'
+
+// Un color por departamento, como en el prototipo: salón teal, cocina gold, barra plum.
+const DEPTO_PILL: Record<Departamento, string> = {
+  'Salón':          'is-teal',
+  'Cocina':         'is-gold',
+  'Barra':          'is-plum',
+  'Administración': 'is-plain',
+}
 
 // Borrador de los datos de nómina de una fila (o del alta). Todo texto: los inputs
 // devuelven strings y se convierten recién al persistir, así un campo a medio escribir
@@ -77,12 +88,22 @@ function codigoDuplicado(code: string, employees: Employee[], exceptId?: string)
   return employees.find(e => e.id !== exceptId && (e.biotime_emp_code ?? '') === c) ?? null
 }
 
+/**
+ * `vista` parte la MISMA lista en las dos pestañas que el SPEC pide (Personal y
+ * Tarifas) sin duplicar nada: el maestro, la edición por fila y el alta son los
+ * mismos; cambia qué columnas se miran. Duplicar el componente habría dejado dos
+ * lugares donde arreglar el mismo bug de plata.
+ */
+export type VistaEmpleados = 'personal' | 'tarifas'
+
 interface Props {
   employees: Employee[]
   onRefresh: () => Promise<void>
+  vista?: VistaEmpleados
 }
 
-export default function SalariosEmpleados({ employees, onRefresh }: Props) {
+export default function SalariosEmpleados({ employees, onRefresh, vista = 'personal' }: Props) {
+  const esTarifas = vista === 'tarifas'
   const [filtro, setFiltro]   = useState<Filtro>('activos')
   const [editId, setEditId]   = useState<string | null>(null)
   const [draft, setDraft]     = useState<Draft>(emptyDraft)
@@ -94,7 +115,15 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [newName, setNewName]   = useState('')
   const [newRole, setNewRole]   = useState<UserRole>('cocina')
-  const [newDraft, setNewDraft] = useState<Draft>(emptyDraft)
+  const [newDraft, setNewDraft] = useState<Draft>(
+    // El alta arranca en 'cocina', así que su 10% arranca en No — coherente con el
+    // default por puesto de abajo. Cambiar el rol mueve el flag.
+    { ...emptyDraft, participa: participaPorRolDefault('cocina') },
+  )
+
+  // v3 · cocina que HOY cobra el 10%. Se lista para que se revise a mano; no se corrige
+  // sola (ver la leyenda del panel).
+  const cocinaSi = useMemo(() => cocinaConServicio(employees), [employees])
 
   const visibles = useMemo(
     () => employees.filter(e =>
@@ -186,7 +215,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
       }
       setNewName('')
       setNewRole('cocina')
-      setNewDraft(emptyDraft)
+      setNewDraft({ ...emptyDraft, participa: participaPorRolDefault('cocina') })
       setShowForm(false)
       await onRefresh()
     } catch (err) {
@@ -312,8 +341,16 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
 
   return (
     <div className="admin-section">
-      <div className="admin-section-header">
-        <span className="admin-section-title">Empleados / Tarifas</span>
+      <div className="sal-phead">
+        <div>
+          <div className="sal-eyebrow">{esTarifas ? 'Lo que cobra cada uno' : 'El equipo'}</div>
+          <h2>{esTarifas ? 'Tarifas' : 'Personal'}</h2>
+          <p>
+            {esTarifas
+              ? 'Tarifa por hora, salario fijo y quién participa del 10% de servicio. Es la misma lista que Personal: se edita en un solo lugar.'
+              : 'El maestro de la gente. Cada persona tiene departamento, puesto y una tarifa vigente.'}
+          </p>
+        </div>
         <button className="btn-secondary" onClick={() => { setShowForm(v => !v); setError(null) }}>
           {showForm ? 'Cancelar' : '+ Agregar empleado'}
         </button>
@@ -366,6 +403,31 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
 
       {error && <p className="field-error" style={{ padding: '0 12px' }}>{error}</p>}
 
+      {cocinaSi.length > 0 && (
+        <div className="sal-nomap">
+          <div className="sal-nomap-head">
+            <span className="sal-note-mk">!</span>
+            <strong>{cocinaSi.length} persona(s) de cocina cobran hoy el 10% de servicio</strong>
+            <span className="sal-spacer" />
+            <span className="sal-nomap-hint">a revisar a mano</span>
+          </div>
+          <ul className="sal-nomap-list">
+            {cocinaSi.map(e => (
+              <li key={e.id}>
+                <span className="sal-nomap-code">{e.full_name}</span>
+                <span className="sal-nomap-meta">10% serv. = Sí</span>
+              </li>
+            ))}
+          </ul>
+          <p className="sal-legend" style={{ margin: '0 14px 12px' }}>
+            Las altas nuevas de cocina arrancan en <strong>No</strong>. A estas NO se les tocó
+            nada: cambiar el flag de alguien que ya existe decide quién cobra el 10% de la
+            quincena —es plata— y se firma de a una persona, en su fila «10% serv.». Puede
+            ser correcto que un cocinero participe: por eso es una lista, no una corrección.
+          </p>
+        </div>
+      )}
+
       {showForm && (
         <form className="admin-form" onSubmit={handleCreate}>
           <div className="field">
@@ -382,8 +444,16 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
           <div className="field">
             <label>Rol</label>
             <select
+              aria-label="Rol"
               value={newRole}
-              onChange={e => setNewRole(e.target.value as UserRole)}
+              onChange={e => {
+                const r = e.target.value as UserRole
+                setNewRole(r)
+                // El 10% de servicio arranca según el puesto: salón y barra lo cobran,
+                // cocina no. Es SOLO el valor inicial de este alta — se puede cambiar acá
+                // mismo antes de crear, y a nadie que ya exista se le toca el flag.
+                setNewDraft(d => ({ ...d, participa: participaPorRolDefault(r) }))
+              }}
               disabled={saving}
             >
               {ROLES.map(r => (
@@ -428,7 +498,8 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
         <thead>
           <tr>
             <th>Nombre</th>
-            <th>Rol</th>
+            {!esTarifas && <th>Departamento</th>}
+            <th>{esTarifas ? 'Rol' : 'Puesto'}</th>
             <th>Tarifa/hora</th>
             <th>Salario fijo</th>
             <th>10% serv.</th>
@@ -448,6 +519,9 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
                   <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '1px' }}>inactivo</div>
                 )}
               </td>
+              {!esTarifas && (
+                <td><span className={`sal-pill ${DEPTO_PILL[departamentoDe(emp.role)]}`}>{departamentoDe(emp.role)}</span></td>
+              )}
               <td><span className="role-tag">{ROLE_LABELS[emp.role] ?? emp.role}</span></td>
 
               {editId === emp.id ? (

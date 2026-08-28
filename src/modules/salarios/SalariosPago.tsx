@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { Employee, EmployeePayment, PunchException, SalaryPeriod, WorkDay } from '../../shared/types/database'
+import type { Employee, EmployeePayment, PunchException, SalaryPeriod, SalaryPeriodEstado, WorkDay } from '../../shared/types/database'
 import {
   getSalaryPeriods, createSalaryPeriod, getWorkDays, upsertWorkDay,
   getPeriodPayments, markPeriodPaid, consolidarPeriodo, getPunchExceptionsTodosLosLocales,
@@ -10,6 +10,7 @@ import {
   // 10% de SERVICIO (v3): el reparto vive en SALARIOS. `tipCalculations` es el pozo de
   // propinas y no se toca — son tres conceptos distintos (ver el bloque en salarios.ts).
   getServicioPorDia, servicioDelPeriodo, diasDelPeriodo, participaServicio,
+  autoDerivarSiVacio, type DerivacionResumen,
   PARTICIPA_SERVICIO_DEFAULT,
   type LineaConsolidado, type ServicioPeriodo,
 } from '../../shared/api/salarios'
@@ -36,6 +37,15 @@ import { useAuth } from '../../shared/hooks/useAuth'
 
 // El estado del período de un vistazo. `cerrado` va en ámbar a propósito: no es un
 // final (todavía falta pagar), es "esto ya no se toca".
+// El ciclo, en orden. Es la misma secuencia que declara `TRANSICIONES` en la API: acá
+// solo se dibuja.
+const CICLO: SalaryPeriodEstado[] = ['abierto', 'en_revision', 'cerrado', 'pagado']
+
+// CCSS: PLACEHOLDER declarado. No es el porcentaje real (patrono + obrero) y no está en
+// el camino del pago al banco — solo en el bloque gerencial de costo laboral. Se ajusta
+// cuando el contador firme la base.
+const CCSS_PLACEHOLDER = 0.26
+
 const COLOR_ESTADO: Record<string, string> = {
   abierto:     '#888',
   en_revision: '#8a6d3b',
@@ -94,6 +104,8 @@ export default function SalariosPago({ employees }: Props) {
   // null la columna va en "—" y "A pagar" queda en solo horas, en vez de inventar un monto.
   const [servicioDia, setServicioDia] = useState<Map<string, number> | null>(null)
   const [errServicio, setErrServicio] = useState<string | null>(null)
+  // v3 · resumen de la derivación automática al abrir un período vivo y vacío.
+  const [autoDeriv, setAutoDeriv] = useState<DerivacionResumen | null>(null)
 
   // v3 · "Local primero". Es un filtro de VISTA sobre las horas: el pay run es global, así
   // que con un local elegido se puede mirar y comparar, pero no pagar (ver `alcanceParcial`).
@@ -147,7 +159,7 @@ export default function SalariosPago({ employees }: Props) {
   // Datos del período elegido: horas, tarifas vigentes a su fecha de fin y pagos ya hechos.
   const loadPeriodData = useCallback(async (p: SalaryPeriod | null) => {
     if (!p) {
-      setWorkDays([]); setPagos([]); setExcs([]); setOkDobles(false)
+      setWorkDays([]); setPagos([]); setExcs([]); setOkDobles(false); setAutoDeriv(null)
       setPropinas(new Map()); setErrPropinas(null)
       setServicioDia(null); setErrServicio(null)
       return
@@ -170,13 +182,24 @@ export default function SalariosPago({ employees }: Props) {
         setErrServicio(e instanceof Error ? e.message : 'No se pudo leer el servicio del período')
       })
     try {
-      const [wd, pg, ex] = await Promise.all([
+      let [wd, pg, ex] = await Promise.all([
         getWorkDays(p.fecha_ini, p.fecha_fin),
         getPeriodPayments(p.id),
         // TODOS los locales: el neto del período suma las horas de cualquier local
         // (el pay run es global), así que el semáforo tiene que mirar el mismo conjunto.
         getPunchExceptionsTodosLosLocales(p.fecha_ini, p.fecha_fin),
       ])
+      // v3 · un período VIVO que abre sin una sola hora deriva solo (mismas guardas que
+      // en Horas: nada de períodos congelados, nada de pisar horas manuales, y si falla
+      // devuelve null sin tumbar la pantalla que mueve la plata).
+      const auto = await autoDerivarSiVacio(p, wd, LOCAL_DEFAULT)
+      setAutoDeriv(auto)
+      if (auto) {
+        [wd, ex] = await Promise.all([
+          getWorkDays(p.fecha_ini, p.fecha_fin),
+          getPunchExceptionsTodosLosLocales(p.fecha_ini, p.fecha_fin),
+        ])
+      }
       setWorkDays(wd)
       setPagos(pg)
       setExcs(ex)
@@ -333,6 +356,11 @@ export default function SalariosPago({ employees }: Props) {
   const totalHoras     = aPagar.reduce((s, x) => s + x.horas, 0)
   const totalServicio  = aPagar.reduce((s, x) => s + x.servicio, 0)
   const totalIngreso   = total + totalPropinas
+
+  // Costo laboral (bloque gerencial, NO la transferencia). El CCSS es un placeholder
+  // sobre el salario por horas: las propinas y el 10% no son salario base.
+  const ccss         = Math.round(totalHoras * CCSS_PLACEHOLDER)
+  const costoLaboral = totalHoras + totalServicio + totalPropinas + ccss
 
   // El 10% que este período cobró y que esta nómina NO transfiere: días sin nadie que
   // participe, más lo que le tocó a gente que no está en la grilla (inactivos con horas).
@@ -644,6 +672,30 @@ export default function SalariosPago({ employees }: Props) {
         )}
       </div>
 
+      {/* Ciclo del período con la forma del prototipo (`.steps`): dónde está hoy y qué
+          falta. Los estados y su orden son los de `TRANSICIONES`, no una lista aparte. */}
+      {period && (
+        <div className="sal-card">
+          <p className="sal-mini-hd">Estado del período</p>
+          <div className="sal-steps">
+            {CICLO.map((e, i) => {
+              const idx  = CICLO.indexOf(estado)
+              const done = i < idx
+              const now  = i === idx
+              return (
+                <span key={e} style={{ display: 'contents' }}>
+                  {i > 0 && <span className="sal-step-arrow">→</span>}
+                  <span className={`sal-step ${done ? 'is-done' : now ? 'is-now' : ''}`}>
+                    <span className="sal-step-n">{done ? '✓' : i + 1}</span>
+                    {ESTADO_LABEL[e]}
+                  </span>
+                </span>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {alcanceParcial && (
         <p className="sal-note is-info">
           👁️ Vista de <strong>{LOCAL_LABEL[localFiltro]}</strong>: se muestran solo las horas de
@@ -776,6 +828,22 @@ export default function SalariosPago({ employees }: Props) {
               banco y <strong>no van a cobrar</strong>. Las horas se ven en la pestaña{' '}
               <strong>Horas</strong>. Si trabajaron, reactivalos en{' '}
               <strong>Empleados / Tarifas</strong> antes de cerrar.
+            </p>
+          )}
+
+          {autoDeriv && (
+            <p className="sal-note sal-note-teal" role="status">
+              <span className="sal-note-mk">◆</span>
+              <span>
+                El período no tenía horas: se derivaron solas desde BioTime{' '}
+                (<strong>{autoDeriv.marcas} marca(s)</strong> · {autoDeriv.dias} jornada(s) ·{' '}
+                {Number(autoDeriv.horas).toFixed(2)} h).
+                {autoDeriv.dias_omitidos_manual > 0 && (
+                  <> {autoDeriv.dias_omitidos_manual} jornada(s) cargada(s) a mano{' '}
+                    <strong>no se tocaron</strong>.</>
+                )}{' '}
+                Revisalas en <strong>Horas</strong> antes de pagar.
+              </span>
             </p>
           )}
 
@@ -915,6 +983,20 @@ export default function SalariosPago({ employees }: Props) {
               Nombre | Horas | Total horas (₡) | 10% serv. | A pagar | Propinas | Ingreso total
               Lo operativo que la nómina igual necesita (alias del banco, tarifa, fijo,
               flag del 10%) baja a la celda del nombre en vez de perderse. */}
+          {/* Los tres conceptos de plata, a la vista arriba de la grilla (`.moneykey` del
+              prototipo): qué sale por el banco y qué no. */}
+          <div className="sal-moneykey">
+            <span style={{ color: 'var(--sal-ink)' }}>
+              <i style={{ background: 'var(--sal-ink)' }} />Salario por horas → banco
+            </span>
+            <span style={{ color: 'var(--sal-plum)' }}>
+              <i style={{ background: 'var(--sal-plum)' }} />10% de servicio → banco (con el salario)
+            </span>
+            <span style={{ color: 'var(--sal-gold)' }}>
+              <i style={{ background: 'var(--sal-gold)' }} />Propinas (pozo) → efectivo (por ahora)
+            </span>
+          </div>
+
           <div className="sal-table-wrap">
             <table className="sal-table">
               <thead>
@@ -1046,20 +1128,25 @@ export default function SalariosPago({ employees }: Props) {
             </table>
           </div>
 
-          <div style={{ padding: '10px 0', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <strong style={{ fontFamily: 'var(--font-serif)', fontSize: '1.05rem' }}>{fi(total)}</strong>
-            <span style={{ fontSize: '0.72rem', color: 'var(--sal-muted)' }}>
-              {aPagar.length} transferencia(s) ={' '}
-              <strong>{fi(totalHoras)}</strong> de horas
-              {servicioDisponible && <> + <strong className="is-plum" style={{ color: 'var(--sal-plum)' }}>{fi(totalServicio)}</strong> de 10% de servicio</>}
-              {' '}· el resto queda fuera del archivo
-            </span>
-            {totalPropinas > 0 && (
-              <span style={{ fontSize: '0.72rem', color: 'var(--sal-gold)' }}>
-                + {fi(totalPropinas)} de propinas <strong>que NO se transfieren</strong>
-              </span>
-            )}
-            <span style={{ flex: 1 }} />
+          {/* `.totalbar` del prototipo: lo que SALE POR TRANSFERENCIA, en grande, con las
+              acciones al lado. Es el número del archivo del banco — no el ingreso total. */}
+          <div className="sal-totalbar">
+            <div>
+              <div className="sal-totalbar-lbl">
+                Sale por transferencia (salario + 10% de servicio)
+              </div>
+              <div className="sal-totalbar-big">{fi(total)}</div>
+              <div style={{ fontSize: '12.5px', color: 'var(--sal-muted)', marginTop: '4px' }}>
+                {aPagar.length} transferencia(s) = <strong>{fi(totalHoras)}</strong> de horas
+                {servicioDisponible && <> + <strong className="sal-money-serv">{fi(totalServicio)}</strong> de 10% de servicio</>}
+                {totalPropinas > 0 && (
+                  <> · <span className="sal-money-tip">
+                    + {fi(totalPropinas)} de propinas <strong>que NO se transfieren</strong>
+                  </span></>
+                )}
+              </div>
+            </div>
+            <span className="sal-spacer" />
             <button
               className="btn-secondary"
               onClick={handleDownload}
@@ -1098,6 +1185,75 @@ export default function SalariosPago({ employees }: Props) {
               {pagado ? 'Pagado' : 'Marcar pagado'}
             </button>
           </div>
+
+          {/* COSTO LABORAL — bloque APARTE (`.costbox` del prototipo). Mezcla lo que sale
+              por el banco con lo que sale por otros caminos y con las cargas: es lo que
+              CUESTA el equipo, no lo que se transfiere. Por eso vive fuera de la barra de
+              transferencia y lo dice en su propia etiqueta. */}
+          <div className="sal-costbox">
+            <div className="sal-costbox-head">
+              <span className="sal-note-mk" style={{ color: 'var(--sal-teal)' }}>▦</span>
+              <b>Costo laboral del período</b>
+              <span className="sal-spacer" />
+              <span className="sal-pill is-plain">gerencial · no es la transferencia</span>
+            </div>
+            <div className="sal-costrow">
+              <span className="sal-costrow-l">
+                <span className="sal-swatch" style={{ background: 'var(--sal-ink)' }} />
+                Salarios por horas
+              </span>
+              <span className="sal-costrow-r is-num">{fi(totalHoras)}</span>
+            </div>
+            <div className="sal-costrow">
+              <span className="sal-costrow-l">
+                <span className="sal-swatch" style={{ background: 'var(--sal-plum)' }} />
+                10% de servicio
+              </span>
+              <span className="sal-costrow-r is-num">
+                {servicioDisponible ? fi(totalServicio) : <span className="sal-dash">—</span>}
+              </span>
+            </div>
+            <div className="sal-costrow">
+              <span className="sal-costrow-l">
+                <span className="sal-swatch" style={{ background: 'var(--sal-gold)' }} />
+                Propinas (pozo) · efectivo
+              </span>
+              <span className="sal-costrow-r is-num">{fi(totalPropinas)}</span>
+            </div>
+            <div className="sal-costrow">
+              <span className="sal-costrow-l">
+                <span className="sal-swatch" style={{ background: 'var(--sal-muted)' }} />
+                CCSS / cargas sociales
+                <span className="sal-pill is-plain" style={{ fontSize: '11px' }}>
+                  placeholder ≈{Math.round(CCSS_PLACEHOLDER * 100)}% s/salario
+                </span>
+              </span>
+              <span className="sal-costrow-r is-num">{fi(ccss)}</span>
+            </div>
+            <div className="sal-costrow">
+              <span className="sal-costrow-l">
+                <span className="sal-swatch" style={{ background: 'var(--sal-crit)' }} />
+                Liquidaciones del período
+              </span>
+              <span className="sal-costrow-r is-num">
+                <span className="sal-dash">sin registrar</span>
+              </span>
+            </div>
+            <div className="sal-costrow is-total">
+              <span className="sal-costrow-l">Costo laboral real</span>
+              <span className="sal-costrow-r">{fi(costoLaboral)}</span>
+            </div>
+          </div>
+
+          <p className="sal-legend">
+            El costo laboral vive <strong>aparte</strong> de la transferencia: mezcla banco
+            + otros caminos + cargas. <strong>El {Math.round(CCSS_PLACEHOLDER * 100)}% de
+            CCSS es un placeholder</strong>, no el porcentaje real (patrono + obrero): sirve
+            para tener el orden de magnitud y <strong>no se puede usar para presupuestar</strong>{' '}
+            hasta que lo firme el contador. Las <strong>liquidaciones</strong> todavía no se
+            guardan en ninguna tabla, así que este total no las incluye — se arman en su
+            pestaña y se suman a mano.
+          </p>
 
           <p className="sal-legend">
             <strong>Total horas (₡)</strong> = horas × la tarifa del empleado (Empleados / Tarifas)

@@ -11,6 +11,7 @@ import type {
   WorkDay,
 } from '../types/database'
 import { horasEntreMarcas, marcaUnicaDeImpar } from '../utils/horasCorreccion'
+import { ROLE_LABELS } from '../constants'
 
 // ── Salarios · U0b: el ciclo mínimo de pago ─────────────────────────────────────
 // Cargar horas del período → ver el neto → bajar el archivo del banco → marcar pagado.
@@ -763,6 +764,59 @@ export const PARTICIPA_SERVICIO_DEFAULT = true
 
 export function participaServicio(emp: Pick<Employee, 'participa_servicio'>): boolean {
   return emp.participa_servicio ?? PARTICIPA_SERVICIO_DEFAULT
+}
+
+/**
+ * DEPARTAMENTO y PUESTO a partir del rol.
+ *
+ * HUECO DE ESQUEMA CONOCIDO: `employees` no tiene columnas `departamento` ni `puesto`
+ * — solo `role`, el enum `user_role` que ya usa toda la app. El SPEC-UI v3 pide los dos
+ * campos por separado. Se parten en la UI a partir del rol en vez de meter una migración
+ * para esto: el dato que hoy existe alcanza para agrupar (Salón / Cocina / Barra) y para
+ * nombrar el puesto, y una columna nueva sin nadie que la cargue solo agrega un campo
+ * vacío. Cuando haya puestos que el enum no distingue (bacha, limpieza), va con su DDL
+ * aditivo propio.
+ */
+export type Departamento = 'Salón' | 'Cocina' | 'Barra' | 'Administración'
+
+const DEPARTAMENTO_DE: Record<string, Departamento> = {
+  salonero: 'Salón',
+  runner:   'Salón',
+  barman:   'Barra',
+  barback:  'Barra',
+  cocina:   'Cocina',
+  cajero:   'Administración',
+  manager:  'Administración',
+  owner:    'Administración',
+  contador: 'Administración',
+}
+
+export function departamentoDe(role: UserRole): Departamento {
+  return DEPARTAMENTO_DE[role] ?? 'Administración'
+}
+
+/** El puesto es la etiqueta del rol: hoy es el único dato de puesto que hay. */
+export function puestoDe(role: UserRole): string {
+  return ROLE_LABELS[role] ?? role
+}
+
+/**
+ * El tipo de regla de horario de una persona, deducido de lo que tiene cargado.
+ * `employees` guarda UNA entrada y UNA salida habituales (mig 061), así que:
+ *   · las dos cargadas  → regla ÚNICA (entra/sale fijos);
+ *   · ninguna cargada   → FLEXIBLE (sin hora techo: cada impar se propone en blanco).
+ * El tipo CORTADO (dos bloques el mismo día) necesita cuatro horas y hoy no hay dónde
+ * guardarlas — ver el DDL aditivo propuesto en el reporte. Se ofrece en la ficha
+ * mostrando qué falta, no como un campo que dice guardar y no guarda.
+ */
+export type TipoRegla = 'unico' | 'cortado' | 'flexible'
+
+export function tipoReglaDe(
+  emp: Pick<Employee, 'hora_entrada_habitual' | 'hora_salida_habitual'>,
+): TipoRegla {
+  const e = horaHabitualHHMM(emp.hora_entrada_habitual)
+  const sl = horaHabitualHHMM(emp.hora_salida_habitual)
+  return e && sl ? 'unico' : 'flexible'
 }
 
 /**

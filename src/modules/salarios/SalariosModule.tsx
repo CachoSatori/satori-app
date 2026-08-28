@@ -12,26 +12,42 @@ import './salarios.css'
 // empleados/tarifas y el ciclo mínimo de pago del período. Las que faltan (Feriados,
 // Consolidado con 10% y propinas, % sobre ventas, Liquidaciones) entran en las fases
 // siguientes.
-const SalariosEmpleados = lazy(() => import('./SalariosEmpleados'))
-const SalariosHoras     = lazy(() => import('./SalariosHoras'))
-const SalariosPago      = lazy(() => import('./SalariosPago'))
+const SalariosEmpleados     = lazy(() => import('./SalariosEmpleados'))
+const SalariosHoras         = lazy(() => import('./SalariosHoras'))
+const SalariosPago          = lazy(() => import('./SalariosPago'))
+const SalariosFicha         = lazy(() => import('./SalariosFicha'))
+const SalariosPropinas      = lazy(() => import('./SalariosPropinas'))
+const SalariosLiquidaciones = lazy(() => import('./SalariosLiquidaciones'))
+const SalariosHistorial     = lazy(() => import('./SalariosHistorial'))
 
-type Tab = 'empleados' | 'horas' | 'pago'
+// Las 8 pestañas del SPEC-UI v3, en su orden. Personal y Tarifas son la MISMA lista
+// con dos lecturas (`vista`), no dos componentes: la edición de plata vive en un solo
+// lugar.
+type Tab =
+  | 'personal' | 'ficha' | 'tarifas' | 'horas'
+  | 'propinas' | 'pago' | 'liquidacion' | 'historial'
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'empleados', label: 'Empleados / Tarifas' },
-  { id: 'horas',     label: 'Horas' },
-  { id: 'pago',      label: 'Pago del período' },
+  { id: 'personal',    label: 'Personal' },
+  { id: 'ficha',       label: 'Ficha' },
+  { id: 'tarifas',     label: 'Tarifas' },
+  { id: 'horas',       label: 'Horas' },
+  { id: 'propinas',    label: 'Propinas' },
+  { id: 'pago',        label: 'Período de pago' },
+  { id: 'liquidacion', label: 'Liquidaciones' },
+  { id: 'historial',   label: 'Historial' },
 ]
 
 export default function SalariosModule() {
   const { profile } = useAuth()
   const navigate    = useNavigate()
 
-  const [tab, setTab]             = useState<Tab>('empleados')
+  const [tab, setTab]             = useState<Tab>('personal')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState<string | null>(null)
+
+  const activos = employees.filter(e => e.is_active).length
 
   // El await va primero a propósito: así el efecto de abajo no dispara un setState
   // sincrónico (react-hooks/set-state-in-effect) al montar.
@@ -79,8 +95,8 @@ export default function SalariosModule() {
         <button className="cash-back-btn" onClick={() => navigate('/')}>← Inicio</button>
       </div>
 
-      {/* Nav tabs — las MISMAS tres pestañas de siempre, con la piel v3. Este pase no
-          abre rutas ni pantallas nuevas. */}
+      {/* Nav tabs — las 8 del SPEC-UI v3. Siguen siendo una sola ruta: el módulo cambia
+          de panel, no de URL. */}
       <div className="sal-tabs" role="tablist">
         {TABS.map(t => (
           <button
@@ -92,6 +108,9 @@ export default function SalariosModule() {
             onClick={() => setTab(t.id)}
           >
             {t.label}
+            {t.id === 'personal' && activos > 0 && (
+              <span className="sal-tab-cnt">{activos}</span>
+            )}
           </button>
         ))}
       </div>
@@ -105,14 +124,29 @@ export default function SalariosModule() {
 
       <Suspense fallback={<div style={{ padding: '3rem', textAlign: 'center', opacity: 0.4 }}>⏳</div>}>
         <div className="cd-content cd-content-wide">
-          {tab === 'empleados' && (
-            <SalariosEmpleados employees={employees} onRefresh={loadAll} />
+          {tab === 'personal' && (
+            <SalariosEmpleados employees={employees} onRefresh={loadAll} vista="personal" />
+          )}
+          {tab === 'ficha' && (
+            <SalariosFicha employees={employees} onRefresh={loadAll} />
+          )}
+          {tab === 'tarifas' && (
+            <SalariosEmpleados employees={employees} onRefresh={loadAll} vista="tarifas" />
           )}
           {tab === 'horas' && (
             <SalariosHoras employees={employees} />
           )}
+          {tab === 'propinas' && (
+            <SalariosPropinas employees={employees} />
+          )}
           {tab === 'pago' && (
             <SalariosPago employees={employees} />
+          )}
+          {tab === 'liquidacion' && (
+            <SalariosLiquidaciones employees={employees} />
+          )}
+          {tab === 'historial' && (
+            <SalariosHistorial employees={employees} />
           )}
         </div>
       </Suspense>

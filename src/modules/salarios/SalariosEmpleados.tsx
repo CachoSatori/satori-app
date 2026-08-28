@@ -6,7 +6,7 @@ import {
   exigirTarifasEditables, participaServicio,
   // v3 · el default del 10% según el puesto, SOLO para altas, y la lista de cocina que
   // hoy cobra servicio (para revisar a mano, nunca para corregir sola).
-  participaPorRolDefault, cocinaConServicio,
+  participaPorRolDefault, cocinaConServicio, departamentoDe, type Departamento,
 } from '../../shared/api/salarios'
 import { ROLE_LABELS } from '../../shared/constants'
 import { fi } from '../../shared/utils'
@@ -15,6 +15,14 @@ import { fi } from '../../shared/utils'
 const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
 type Filtro = 'activos' | 'inactivos' | 'todos'
+
+// Un color por departamento, como en el prototipo: salón teal, cocina gold, barra plum.
+const DEPTO_PILL: Record<Departamento, string> = {
+  'Salón':          'is-teal',
+  'Cocina':         'is-gold',
+  'Barra':          'is-plum',
+  'Administración': 'is-plain',
+}
 
 // Borrador de los datos de nómina de una fila (o del alta). Todo texto: los inputs
 // devuelven strings y se convierten recién al persistir, así un campo a medio escribir
@@ -80,12 +88,22 @@ function codigoDuplicado(code: string, employees: Employee[], exceptId?: string)
   return employees.find(e => e.id !== exceptId && (e.biotime_emp_code ?? '') === c) ?? null
 }
 
+/**
+ * `vista` parte la MISMA lista en las dos pestañas que el SPEC pide (Personal y
+ * Tarifas) sin duplicar nada: el maestro, la edición por fila y el alta son los
+ * mismos; cambia qué columnas se miran. Duplicar el componente habría dejado dos
+ * lugares donde arreglar el mismo bug de plata.
+ */
+export type VistaEmpleados = 'personal' | 'tarifas'
+
 interface Props {
   employees: Employee[]
   onRefresh: () => Promise<void>
+  vista?: VistaEmpleados
 }
 
-export default function SalariosEmpleados({ employees, onRefresh }: Props) {
+export default function SalariosEmpleados({ employees, onRefresh, vista = 'personal' }: Props) {
+  const esTarifas = vista === 'tarifas'
   const [filtro, setFiltro]   = useState<Filtro>('activos')
   const [editId, setEditId]   = useState<string | null>(null)
   const [draft, setDraft]     = useState<Draft>(emptyDraft)
@@ -323,8 +341,16 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
 
   return (
     <div className="admin-section">
-      <div className="admin-section-header">
-        <span className="admin-section-title">Empleados / Tarifas</span>
+      <div className="sal-phead">
+        <div>
+          <div className="sal-eyebrow">{esTarifas ? 'Lo que cobra cada uno' : 'El equipo'}</div>
+          <h2>{esTarifas ? 'Tarifas' : 'Personal'}</h2>
+          <p>
+            {esTarifas
+              ? 'Tarifa por hora, salario fijo y quién participa del 10% de servicio. Es la misma lista que Personal: se edita en un solo lugar.'
+              : 'El maestro de la gente. Cada persona tiene departamento, puesto y una tarifa vigente.'}
+          </p>
+        </div>
         <button className="btn-secondary" onClick={() => { setShowForm(v => !v); setError(null) }}>
           {showForm ? 'Cancelar' : '+ Agregar empleado'}
         </button>
@@ -472,7 +498,8 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
         <thead>
           <tr>
             <th>Nombre</th>
-            <th>Rol</th>
+            {!esTarifas && <th>Departamento</th>}
+            <th>{esTarifas ? 'Rol' : 'Puesto'}</th>
             <th>Tarifa/hora</th>
             <th>Salario fijo</th>
             <th>10% serv.</th>
@@ -492,6 +519,9 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
                   <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '1px' }}>inactivo</div>
                 )}
               </td>
+              {!esTarifas && (
+                <td><span className={`sal-pill ${DEPTO_PILL[departamentoDe(emp.role)]}`}>{departamentoDe(emp.role)}</span></td>
+              )}
               <td><span className="role-tag">{ROLE_LABELS[emp.role] ?? emp.role}</span></td>
 
               {editId === emp.id ? (

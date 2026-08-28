@@ -497,13 +497,27 @@ describe('Salarios · Pago del período', () => {
 // abierto → en_revision → cerrado → pagado, y la vuelta atrás solo por reapertura con
 // motivo. La pantalla es la primera llave; la API vuelve a validar contra la base.
 describe('Salarios · ciclo del período', () => {
-  it('el badge dice en qué estado está', async () => {
+  // v3 · el estado se dice DOS veces: en el badge del selector y en los `steps` del
+  // ciclo. Se acota al badge para no chocar con el paso "ahora", que dice lo mismo a
+  // propósito — que coincidan es la señal de que la pantalla no se contradice.
+  // El segundo `render` monta OTRA instancia en el mismo contenedor, así que se mira
+  // la ÚLTIMA: la del componente recién montado.
+  const ultimo = (sel: string) => {
+    const ns = document.querySelectorAll(sel)
+    return ns.length ? (ns[ns.length - 1].textContent ?? '') : ''
+  }
+  const badge     = () => ultimo('.role-badge')
+  const pasoAhora = () => ultimo('.sal-step.is-now')
+
+  it('el badge dice en qué estado está, y el paso "ahora" del ciclo dice lo mismo', async () => {
     await renderPago()
-    expect(screen.getByText('abierto')).toBeTruthy()
+    expect(badge()).toMatch(/abierto/)
+    expect(pasoAhora()).toMatch(/abierto/)
 
     conEstado('en_revision')
     render(<SalariosPago employees={[ANA, BENITO, INACTIVO]} />)
-    expect(await screen.findByText('en revisión')).toBeTruthy()
+    expect(await screen.findAllByText('en revisión')).not.toHaveLength(0)
+    expect(badge()).toMatch(/en revisión/)
   })
 
   it('abierto: se puede marcar en revisión o cerrar; NO pagar', async () => {

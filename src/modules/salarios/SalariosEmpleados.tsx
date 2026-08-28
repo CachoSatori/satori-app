@@ -4,6 +4,9 @@ import { createEmployee, updateEmployeePayroll, toggleEmployeeActive } from '../
 import {
   updateEmployeeHomebankingName, updateEmployeeHorasHabituales, horaHabitualHHMM,
   exigirTarifasEditables, participaServicio,
+  // v3 · el default del 10% según el puesto, SOLO para altas, y la lista de cocina que
+  // hoy cobra servicio (para revisar a mano, nunca para corregir sola).
+  participaPorRolDefault, cocinaConServicio,
 } from '../../shared/api/salarios'
 import { ROLE_LABELS } from '../../shared/constants'
 import { fi } from '../../shared/utils'
@@ -94,7 +97,15 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [newName, setNewName]   = useState('')
   const [newRole, setNewRole]   = useState<UserRole>('cocina')
-  const [newDraft, setNewDraft] = useState<Draft>(emptyDraft)
+  const [newDraft, setNewDraft] = useState<Draft>(
+    // El alta arranca en 'cocina', así que su 10% arranca en No — coherente con el
+    // default por puesto de abajo. Cambiar el rol mueve el flag.
+    { ...emptyDraft, participa: participaPorRolDefault('cocina') },
+  )
+
+  // v3 · cocina que HOY cobra el 10%. Se lista para que se revise a mano; no se corrige
+  // sola (ver la leyenda del panel).
+  const cocinaSi = useMemo(() => cocinaConServicio(employees), [employees])
 
   const visibles = useMemo(
     () => employees.filter(e =>
@@ -186,7 +197,7 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
       }
       setNewName('')
       setNewRole('cocina')
-      setNewDraft(emptyDraft)
+      setNewDraft({ ...emptyDraft, participa: participaPorRolDefault('cocina') })
       setShowForm(false)
       await onRefresh()
     } catch (err) {
@@ -366,6 +377,31 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
 
       {error && <p className="field-error" style={{ padding: '0 12px' }}>{error}</p>}
 
+      {cocinaSi.length > 0 && (
+        <div className="sal-nomap">
+          <div className="sal-nomap-head">
+            <span className="sal-note-mk">!</span>
+            <strong>{cocinaSi.length} persona(s) de cocina cobran hoy el 10% de servicio</strong>
+            <span className="sal-spacer" />
+            <span className="sal-nomap-hint">a revisar a mano</span>
+          </div>
+          <ul className="sal-nomap-list">
+            {cocinaSi.map(e => (
+              <li key={e.id}>
+                <span className="sal-nomap-code">{e.full_name}</span>
+                <span className="sal-nomap-meta">10% serv. = Sí</span>
+              </li>
+            ))}
+          </ul>
+          <p className="sal-legend" style={{ margin: '0 14px 12px' }}>
+            Las altas nuevas de cocina arrancan en <strong>No</strong>. A estas NO se les tocó
+            nada: cambiar el flag de alguien que ya existe decide quién cobra el 10% de la
+            quincena —es plata— y se firma de a una persona, en su fila «10% serv.». Puede
+            ser correcto que un cocinero participe: por eso es una lista, no una corrección.
+          </p>
+        </div>
+      )}
+
       {showForm && (
         <form className="admin-form" onSubmit={handleCreate}>
           <div className="field">
@@ -382,8 +418,16 @@ export default function SalariosEmpleados({ employees, onRefresh }: Props) {
           <div className="field">
             <label>Rol</label>
             <select
+              aria-label="Rol"
               value={newRole}
-              onChange={e => setNewRole(e.target.value as UserRole)}
+              onChange={e => {
+                const r = e.target.value as UserRole
+                setNewRole(r)
+                // El 10% de servicio arranca según el puesto: salón y barra lo cobran,
+                // cocina no. Es SOLO el valor inicial de este alta — se puede cambiar acá
+                // mismo antes de crear, y a nadie que ya exista se le toca el flag.
+                setNewDraft(d => ({ ...d, participa: participaPorRolDefault(r) }))
+              }}
               disabled={saving}
             >
               {ROLES.map(r => (

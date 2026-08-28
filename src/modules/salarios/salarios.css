@@ -422,3 +422,112 @@
   .sal-v3 .sal-tabs { padding-left: 1rem; padding-right: 1rem; }
   .sal-v3 .sal-stat { flex-basis: 100%; }
 }
+
+/* ── v3 · Inputs del alta y de la ficha ─────────────────────────────────────────
+   ARREGLO DE CONTRASTE. `.field input` de index.css es del login (pantalla oscura):
+   fondo #1a1a1a con placeholder #444 — sobre el papel claro del módulo el campo se
+   lee negro-sobre-negro y el "Ej: JOSE" directamente no se ve. Acá los campos del
+   módulo pasan a los tokens v3: superficie de tarjeta, texto ink, placeholder en
+   muted (que sí contrasta), y lo mismo en oscuro. No se toca index.css: esto vale
+   solo dentro de `.sal-v3`. */
+
+.sal-v3 .field input,
+.sal-v3 .field select,
+.sal-v3 .field textarea,
+.sal-v3 .admin-form input,
+.sal-v3 .admin-form select {
+  background: var(--sal-card);
+  border: 1px solid var(--sal-border);
+  color: var(--sal-ink);
+  font-weight: 400;
+}
+
+.sal-v3 .field input::placeholder,
+.sal-v3 .admin-form input::placeholder,
+.sal-v3 .tip-input::placeholder {
+  color: var(--sal-muted);
+  opacity: 1;   /* Firefox lo baja a .54 por su cuenta y vuelve a quedar flojo. */
+}
+
+.sal-v3 .field input:focus,
+.sal-v3 .field select:focus,
+.sal-v3 .admin-form input:focus,
+.sal-v3 .admin-form select:focus {
+  border-color: var(--sal-teal);
+  outline: none;
+}
+
+.sal-v3 .field label {
+  color: var(--sal-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* ── v3 · Avisos con la forma del prototipo (.note) ─────────────────────────── */
+
+.sal-v3 .sal-note {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  margin: 0 12px 10px;
+  padding: 0.8rem 1rem;
+  border-radius: 9px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.sal-v3 .sal-note-mk { font-size: 0.95rem; line-height: 1.2; flex-shrink: 0; }
+.sal-v3 .sal-note-teal { background: var(--sal-teal-soft); color: var(--sal-teal); }
+.sal-v3 .sal-note-warn { background: var(--sal-gold-soft); color: var(--sal-gold); }
+.sal-v3 .sal-note strong { font-weight: 700; }
+
+/* ── v3 · Lista de códigos sin mapear / cocina a revisar ────────────────────── */
+
+.sal-v3 .sal-nomap {
+  margin: 0 12px 12px;
+  border: 1px solid var(--sal-border);
+  border-radius: 12px;
+  background: var(--sal-card);
+  overflow: hidden;
+}
+
+.sal-v3 .sal-nomap-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 0.9rem;
+  background: var(--sal-gold-soft);
+  color: var(--sal-gold);
+  font-size: 0.8rem;
+}
+
+.sal-v3 .sal-nomap-hint { font-size: 0.7rem; font-weight: 600; opacity: 0.85; }
+
+.sal-v3 .sal-nomap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.4rem 0.9rem 0.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.sal-v3 .sal-nomap-list li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--sal-border);
+  border-radius: 999px;
+  background: var(--sal-panel);
+}
+
+.sal-v3 .sal-nomap-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: var(--sal-ink);
+}
+
+.sal-v3 .sal-nomap-meta { font-size: 0.68rem; color: var(--sal-muted); }

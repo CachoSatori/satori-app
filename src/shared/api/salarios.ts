@@ -7,6 +7,7 @@ import type {
   SalaryPeriod,
   SalaryPeriodEstado,
   TimePunch,
+  UserRole,
   WorkDay,
 } from '../types/database'
 import { horasEntreMarcas, marcaUnicaDeImpar } from '../utils/horasCorreccion'
@@ -762,6 +763,105 @@ export const PARTICIPA_SERVICIO_DEFAULT = true
 
 export function participaServicio(emp: Pick<Employee, 'participa_servicio'>): boolean {
   return emp.participa_servicio ?? PARTICIPA_SERVICIO_DEFAULT
+}
+
+/**
+ * El default de `participa_servicio` PARA UN ALTA, según el puesto. Salón y barra
+ * cobran el 10% de servicio; cocina no.
+ *
+ * SOLO se usa al CREAR. Cambiarle el flag a alguien que ya existe es decidir quién cobra
+ * el 10% de esta quincena —plata— y eso lo firma quien corresponde desde Empleados /
+ * Tarifas, de a una persona. Esta función no toca a nadie que ya esté en el maestro.
+ */
+export function participaPorRolDefault(role: UserRole): boolean {
+  return role === 'cocina' ? false : PARTICIPA_SERVICIO_DEFAULT
+}
+
+/**
+ * Los empleados de cocina que HOY cobran el 10% de servicio. No los cambia: los LISTA,
+ * para que quien firma los apague de a uno si corresponde. Un `participa` de cocina en
+ * `Sí` puede ser correcto (un cocinero que sí entra al reparto por acuerdo) — por eso es
+ * una lista para revisar, no una corrección automática.
+ */
+export function cocinaConServicio(employees: Employee[]): Employee[] {
+  return employees.filter(e => e.is_active && e.role === 'cocina' && participaServicio(e))
+}
+
+/**
+ * ¿Corresponde derivar las horas solo por abrir la pantalla?
+ *
+ * Sí cuando el período está VIVO (abierto / en revisión) y NO tiene ni una hora cargada
+ * en ese local: sin horas no hay nada que mirar ni que pagar, y hacer que la pantalla
+ * arranque vacía obliga a adivinar que existe un botón "Recalcular".
+ *
+ * NO cuando:
+ *   · el período está CERRADO o PAGADO — congelado; derivar ahí lo descongelaría de
+ *     hecho, sin que nadie lo reabra con motivo;
+ *   · YA hay horas — auto-derivar entonces sería pisar trabajo hecho sin que lo pidan.
+ *     Para forzar un recálculo está el botón, que es explícito y deja resumen.
+ *
+ * Ojo: aun cuando esta función dice que sí, `derivarWorkDays` REESCRIBE solo lo que vino
+ * de BioTime; las horas cargadas a mano las respeta (`dias_omitidos_manual`).
+ */
+export function debeAutoDerivar(
+  estado: SalaryPeriodEstado,
+  workDays: Array<Pick<WorkDay, 'local'>>,
+  local: string,
+): boolean {
+  if (estaCongelado(estado)) return false
+  return !workDays.some(w => w.local === local)
+}
+
+/**
+ * Deriva las horas del período si corresponde (ver `debeAutoDerivar`). Devuelve el
+ * resumen cuando derivó y `null` cuando no había nada que hacer.
+ *
+ * NULL-SAFE por diseño: si la derivación falla (permiso, RPC caída), devuelve `null` en
+ * vez de tirar. Es una comodidad al abrir la pantalla, no una operación que el usuario
+ * pidió: no puede tumbar Horas ni Pago. El botón "Recalcular" sigue reportando su error.
+ */
+export async function autoDerivarSiVacio(
+  period: Pick<SalaryPeriod, 'fecha_ini' | 'fecha_fin' | 'estado'>,
+  workDays: Array<Pick<WorkDay, 'local'>>,
+  local: string = LOCAL_DEFAULT,
+): Promise<DerivacionResumen | null> {
+  if (!debeAutoDerivar(period.estado, workDays, local)) return null
+  try {
+    return await derivarWorkDays(period.fecha_ini, period.fecha_fin, local)
+  } catch {
+    return null
+  }
+}
+
+/** Un código de BioTime que fichó pero no es de nadie del maestro. */
+export interface CodigoSinMapear {
+  code:   string
+  dias:   number
+  marcas: number
+}
+
+/**
+ * Los códigos de BioTime que fichan y NO tienen empleado. Son horas que alguien
+ * trabajó y que hoy no se le pagan a nadie: tienen que estar A LA VISTA, no escondidas
+ * en el conteo de excepciones. Solo LISTA — el mapeo código→persona lo firma quien
+ * corresponde desde Empleados / Tarifas.
+ */
+export function codigosSinMapear(excs: PunchException[]): CodigoSinMapear[] {
+  const acc = new Map<string, { dias: Set<string>; marcas: number }>()
+  for (const x of excs) {
+    if (x.tipo !== 'sin_mapear' || x.estado !== 'abierta') continue
+    const code = (x.emp_code ?? '').trim()
+    if (!code) continue
+    const e = acc.get(code) ?? { dias: new Set<string>(), marcas: 0 }
+    if (x.work_date) e.dias.add(x.work_date)
+    // Mismo criterio que el semáforo (`sinMapearMarcas`): la RPC deja el conteo en
+    // `detalle.cuantas`; sin ese dato, la fila vale por una marca.
+    e.marcas += Number((x.detalle as { cuantas?: unknown } | null)?.cuantas) || 1
+    acc.set(code, e)
+  }
+  return [...acc.entries()]
+    .map(([code, e]) => ({ code, dias: e.dias.size, marcas: e.marcas }))
+    .sort((a, b) => a.code.localeCompare(b.code, 'es'))
 }
 
 /**

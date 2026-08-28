@@ -7,6 +7,8 @@ import {
   HORAS_DEFAULT_IMPAR, LOCAL_DEFAULT,
   // Capa 3 (mig 061): la regla de horario del empleado.
   imparesConRegla, horaHabitualFaltante, motivoRegla, hhmmCR as hhmm, MOTIVO_REGLA,
+  // v3 · la pantalla se abre con horas: si el período está vivo y vacío, se derivan solas.
+  autoDerivarSiVacio, codigosSinMapear,
   type DerivacionResumen, type GrupoExcepciones,
 } from '../../shared/api/salarios'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -85,6 +87,9 @@ export default function SalariosHoras({ employees }: Props) {
   // Aviso ≠ error: la regla puede dar un turno absurdo y eso se avisa SIN teñir de rojo
   // ni frenar nada, igual que en Capa 2.
   const [aviso, setAviso]     = useState<string | null>(null)
+  // v3 · resumen de la derivación AUTOMÁTICA (la del botón vive en `resumen`). Se separan
+  // porque dicen cosas distintas: una la pidió el usuario, la otra pasó sola al abrir.
+  const [autoDeriv, setAutoDeriv] = useState<DerivacionResumen | null>(null)
 
   const period = periods.find(p => p.id === periodId) ?? null
   const empById = useMemo(() => new Map(employees.map(e => [e.id, e])), [employees])
@@ -106,12 +111,24 @@ export default function SalariosHoras({ employees }: Props) {
   useEffect(() => { loadPeriods() }, [loadPeriods])
 
   const loadDatos = useCallback(async (p: SalaryPeriod | null, loc: string) => {
-    if (!p) { setWorkDays([]); setExcs([]); return }
+    if (!p) { setWorkDays([]); setExcs([]); setAutoDeriv(null); return }
     try {
-      const [wd, ex] = await Promise.all([
+      let [wd, ex] = await Promise.all([
         getWorkDays(p.fecha_ini, p.fecha_fin),
         getPunchExceptions(p.fecha_ini, p.fecha_fin, loc),
       ])
+      // v3 · un período VIVO y sin una sola hora en este local se deriva solo. Antes la
+      // pantalla abría vacía y había que saber que existía un botón. Las guardas viven en
+      // `autoDerivarSiVacio`: no toca períodos congelados, no pisa horas cargadas a mano,
+      // y si falla devuelve null en vez de tumbar la pantalla.
+      const auto = await autoDerivarSiVacio(p, wd, loc)
+      setAutoDeriv(auto)
+      if (auto) {
+        [wd, ex] = await Promise.all([
+          getWorkDays(p.fecha_ini, p.fecha_fin),
+          getPunchExceptions(p.fecha_ini, p.fecha_fin, loc),
+        ])
+      }
       setWorkDays(wd)
       setExcs(ex)
       setError(null)
@@ -195,6 +212,10 @@ export default function SalariosHoras({ employees }: Props) {
       ).filter(a => !compDraft[a.x.id]),
     [empById, ladoDraft, compDraft],
   )
+
+  // v3 · marcas que no son de nadie del maestro. Van ARRIBA y siempre: son horas que
+  // alguien trabajó y que hoy no se le pagan a nadie.
+  const sinMapear = useMemo(() => codigosSinMapear(excs), [excs])
 
   const handleRecalcular = async () => {
     if (!period) return
@@ -431,6 +452,50 @@ export default function SalariosHoras({ employees }: Props) {
         </p>
       ) : (
         <>
+          {autoDeriv && (
+            <p className="sal-note sal-note-teal" role="status">
+              <span className="sal-note-mk">◆</span>
+              <span>
+                El período no tenía horas cargadas: se derivaron solas desde BioTime{' '}
+                (<strong>{autoDeriv.marcas} marca(s)</strong> · {autoDeriv.dias} jornada(s) ·{' '}
+                {Number(autoDeriv.horas).toFixed(2)} h).
+                {autoDeriv.dias_omitidos_manual > 0 && (
+                  <> {autoDeriv.dias_omitidos_manual} jornada(s) con horas cargadas a mano{' '}
+                    <strong>no se tocaron</strong>.</>
+                )}{' '}
+                Para forzar un recálculo está el botón.
+              </span>
+            </p>
+          )}
+
+          {sinMapear.length > 0 && (
+            <div className="sal-nomap">
+              <div className="sal-nomap-head">
+                <span className="sal-note-mk">!</span>
+                <strong>{sinMapear.length} código(s) de BioTime sin empleado</strong>
+                <span className="sal-spacer" />
+                <span className="sal-nomap-hint">
+                  Estas horas hoy no se le pagan a nadie
+                </span>
+              </div>
+              <ul className="sal-nomap-list">
+                {sinMapear.map(c => (
+                  <li key={c.code}>
+                    <span className="sal-nomap-code">{c.code}</span>
+                    <span className="sal-nomap-meta">
+                      {c.marcas} marca(s) · {c.dias} jornada(s)
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="sal-legend" style={{ margin: '0 14px 12px' }}>
+                Asignale el código a la persona en <strong>Empleados / Tarifas</strong> (campo
+                «Cód. BioTime») y volvé a recalcular. Acá solo se listan: el mapeo
+                código→persona lo firma quien corresponde.
+              </p>
+            </div>
+          )}
+
           {resumen && (
             <p style={{ padding: '0 12px 8px', fontSize: '0.75rem', color: 'var(--t-teal)' }}>
               {resumen.marcas} marca(s) · {resumen.dias} jornada(s) · {Number(resumen.horas).toFixed(2)} h ·{' '}

@@ -10,6 +10,7 @@ import {
   // 10% de SERVICIO (v3): el reparto vive en SALARIOS. `tipCalculations` es el pozo de
   // propinas y no se toca — son tres conceptos distintos (ver el bloque en salarios.ts).
   getServicioPorDia, servicioDelPeriodo, diasDelPeriodo, participaServicio,
+  autoDerivarSiVacio, type DerivacionResumen,
   PARTICIPA_SERVICIO_DEFAULT,
   type LineaConsolidado, type ServicioPeriodo,
 } from '../../shared/api/salarios'
@@ -94,6 +95,8 @@ export default function SalariosPago({ employees }: Props) {
   // null la columna va en "—" y "A pagar" queda en solo horas, en vez de inventar un monto.
   const [servicioDia, setServicioDia] = useState<Map<string, number> | null>(null)
   const [errServicio, setErrServicio] = useState<string | null>(null)
+  // v3 · resumen de la derivación automática al abrir un período vivo y vacío.
+  const [autoDeriv, setAutoDeriv] = useState<DerivacionResumen | null>(null)
 
   // v3 · "Local primero". Es un filtro de VISTA sobre las horas: el pay run es global, así
   // que con un local elegido se puede mirar y comparar, pero no pagar (ver `alcanceParcial`).
@@ -147,7 +150,7 @@ export default function SalariosPago({ employees }: Props) {
   // Datos del período elegido: horas, tarifas vigentes a su fecha de fin y pagos ya hechos.
   const loadPeriodData = useCallback(async (p: SalaryPeriod | null) => {
     if (!p) {
-      setWorkDays([]); setPagos([]); setExcs([]); setOkDobles(false)
+      setWorkDays([]); setPagos([]); setExcs([]); setOkDobles(false); setAutoDeriv(null)
       setPropinas(new Map()); setErrPropinas(null)
       setServicioDia(null); setErrServicio(null)
       return
@@ -170,13 +173,24 @@ export default function SalariosPago({ employees }: Props) {
         setErrServicio(e instanceof Error ? e.message : 'No se pudo leer el servicio del período')
       })
     try {
-      const [wd, pg, ex] = await Promise.all([
+      let [wd, pg, ex] = await Promise.all([
         getWorkDays(p.fecha_ini, p.fecha_fin),
         getPeriodPayments(p.id),
         // TODOS los locales: el neto del período suma las horas de cualquier local
         // (el pay run es global), así que el semáforo tiene que mirar el mismo conjunto.
         getPunchExceptionsTodosLosLocales(p.fecha_ini, p.fecha_fin),
       ])
+      // v3 · un período VIVO que abre sin una sola hora deriva solo (mismas guardas que
+      // en Horas: nada de períodos congelados, nada de pisar horas manuales, y si falla
+      // devuelve null sin tumbar la pantalla que mueve la plata).
+      const auto = await autoDerivarSiVacio(p, wd, LOCAL_DEFAULT)
+      setAutoDeriv(auto)
+      if (auto) {
+        [wd, ex] = await Promise.all([
+          getWorkDays(p.fecha_ini, p.fecha_fin),
+          getPunchExceptionsTodosLosLocales(p.fecha_ini, p.fecha_fin),
+        ])
+      }
       setWorkDays(wd)
       setPagos(pg)
       setExcs(ex)
@@ -776,6 +790,22 @@ export default function SalariosPago({ employees }: Props) {
               banco y <strong>no van a cobrar</strong>. Las horas se ven en la pestaña{' '}
               <strong>Horas</strong>. Si trabajaron, reactivalos en{' '}
               <strong>Empleados / Tarifas</strong> antes de cerrar.
+            </p>
+          )}
+
+          {autoDeriv && (
+            <p className="sal-note sal-note-teal" role="status">
+              <span className="sal-note-mk">◆</span>
+              <span>
+                El período no tenía horas: se derivaron solas desde BioTime{' '}
+                (<strong>{autoDeriv.marcas} marca(s)</strong> · {autoDeriv.dias} jornada(s) ·{' '}
+                {Number(autoDeriv.horas).toFixed(2)} h).
+                {autoDeriv.dias_omitidos_manual > 0 && (
+                  <> {autoDeriv.dias_omitidos_manual} jornada(s) cargada(s) a mano{' '}
+                    <strong>no se tocaron</strong>.</>
+                )}{' '}
+                Revisalas en <strong>Horas</strong> antes de pagar.
+              </span>
             </p>
           )}
 

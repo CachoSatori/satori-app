@@ -1,12 +1,17 @@
 /* ============================================================
    SALARIOS · piel v3 (SPEC-UI Empleados v3)
    ------------------------------------------------------------
-   TODO lo de este archivo cuelga de `.sal-v3`, la clase que solo
-   pone SalariosModule. Es a propósito: los tokens v3 NO van a
+   Esta hoja REPRODUCE docs/prototipos/nomina-satori-v3.html
+   (referencia congelada, commit 6228445): mismos tokens, misma
+   escala tipográfica, mismos componentes. No es "inspirado en":
+   los valores son los del prototipo.
+
+   TODO cuelga de `.sal-v3`, la clase que solo pone
+   SalariosModule. Es a propósito: los tokens v3 NO van a
    index.css ni a :root, así que ningún otro módulo (Caja,
    Propinas, Ventas) cambia de color por este pase.
 
-   Paleta v3:
+   Paleta v3 (del prototipo):
      teal  #0C6E6B  — acento del módulo, títulos, "A pagar"
      gold  #A9791F  — propinas / avisos suaves (efectivo, NO banco)
      plum  #6C4A86  — SOLO el 10% de SERVICIO. Un color propio para
@@ -15,75 +20,141 @@
                       y la grilla tiene que dejarlo ver de lejos.
    ============================================================ */
 
+/* Las tres familias del prototipo. Va acá y NO en index.css: esta hoja viaja en el
+   chunk lazy del módulo, así que la fuente se pide recién cuando alguien abre
+   Salarios — el resto de la app no paga el pedido. Los fallbacks son reales: si
+   Google Fonts no responde, la escala tipográfica se sostiene igual. */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 /* Los tokens v3 pisan a los del shell heredado (`.tips-module` define los `--t-*` con
    un solo nombre de clase). La doble clase gana por especificidad, sin depender del
    orden en que el bundler concatene los CSS. */
 .tips-module.sal-v3 {
-  --sal-teal:      #0C6E6B;
-  --sal-teal-soft: rgba(12, 110, 107, 0.12);
-  --sal-gold:      #A9791F;
-  --sal-gold-soft: rgba(169, 121, 31, 0.13);
-  --sal-plum:      #6C4A86;
-  --sal-plum-soft: rgba(108, 74, 134, 0.13);
+  /* — Superficies y tinta (valores exactos del prototipo) — */
+  --sal-ground:      #F5F8F7;
+  --sal-surface:     #FFFFFF;
+  --sal-surface-2:   #F0F5F3;
+  --sal-ink:         #0E1B1C;
+  --sal-ink-soft:    #3A4A49;
+  --sal-muted:       #61716F;
+  --sal-faint:       #8A9997;
+  --sal-line:        #E1E9E7;
+  --sal-line-strong: #CDD9D6;
 
-  --sal-paper:  #f6f2ea;
-  --sal-card:   #fffdf8;
-  --sal-panel:  #ebe5da;
-  --sal-border: #d9d2c4;
-  --sal-ink:    #14120f;
-  --sal-muted:  #7d7466;
-  --sal-red:    #b0402c;
+  /* — Acentos — */
+  --sal-teal:        #0C6E6B;
+  --sal-teal-bright: #0F8F8A;
+  --sal-teal-wash:   #E4F1EF;
+  --sal-gold:        #A9791F;
+  --sal-gold-bright: #C79A38;
+  --sal-gold-wash:   #F6EDD8;
+  --sal-plum:        #6C4A86;
+  --sal-plum-wash:   #EFE7F4;
+
+  /* — Semánticos (aparte del acento, como en el prototipo) — */
+  --sal-ok:    #1F8A57;  --sal-ok-wash:   #E1F1E8;
+  --sal-warn:  #B26A12;  --sal-warn-wash: #F8ECD8;
+  --sal-crit:  #BC4034;  --sal-crit-wash: #F8E3E0;
+
+  --sal-shadow: 0 1px 2px rgba(14, 27, 28, 0.04), 0 8px 24px -12px rgba(14, 27, 28, 0.14);
+  --sal-r:      14px;
+  --sal-r-sm:   9px;
+  --sal-r-pill: 999px;
+
+  --sal-display: 'Fraunces', 'Hanken Grotesk', Georgia, serif;
+  --sal-ui:      'Hanken Grotesk', system-ui, sans-serif;
+  --sal-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  /* Alias que ya usaban las reglas viejas del módulo. Se mantienen para no reescribir
+     cada selector: apuntan a los tokens nuevos. */
+  --sal-paper:     var(--sal-ground);
+  --sal-card:      var(--sal-surface);
+  --sal-panel:     var(--sal-surface-2);
+  --sal-border:    var(--sal-line);
+  --sal-red:       var(--sal-crit);
+  --sal-teal-soft: var(--sal-teal-wash);
+  --sal-gold-soft: var(--sal-gold-wash);
+  --sal-plum-soft: var(--sal-plum-wash);
 
   /* Los `--t-*` del shell se redirigen a la paleta v3: así las tablas, botones y
      badges que YA existen (.admin-*, .cd-*, .btn-*, .role-badge) se repintan sin
      tocar una línea de index.css. */
   --t-teal:     var(--sal-teal);
-  --t-teal-dim: var(--sal-teal-soft);
+  --t-teal-dim: var(--sal-teal-wash);
   --t-gold:     var(--sal-gold);
-  --t-paper:    var(--sal-paper);
-  --t-panel:    var(--sal-panel);
-  --t-border:   var(--sal-border);
+  --t-paper:    var(--sal-ground);
+  --t-panel:    var(--sal-surface-2);
+  --t-border:   var(--sal-line);
   --t-ink:      var(--sal-ink);
   --t-muted:    var(--sal-muted);
-  --t-red:      var(--sal-red);
+  --t-red:      var(--sal-crit);
 
-  background: var(--sal-paper);
+  background: var(--sal-ground);
   color: var(--sal-ink);
+  font-family: var(--sal-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: light;
 }
 
-/* Oscuro: el shell de la app ya es negro y el módulo pinta su propio papel. Acá se
-   invierten SOLO los tokens de superficie — los tres acentos se aclaran lo justo para
-   seguir legibles sobre fondo oscuro y no cambian de identidad. */
+/* Oscuro: los mismos valores que el prototipo define para `prefers-color-scheme:dark`.
+   Los tres acentos se aclaran lo justo para seguir legibles sobre fondo oscuro y no
+   cambian de identidad. */
 @media (prefers-color-scheme: dark) {
   .tips-module.sal-v3 {
-    --sal-teal:      #3fa8a2;
-    --sal-teal-soft: rgba(63, 168, 162, 0.16);
-    --sal-gold:      #d8a24a;
-    --sal-gold-soft: rgba(216, 162, 74, 0.16);
-    --sal-plum:      #b394d6;
-    --sal-plum-soft: rgba(179, 148, 214, 0.18);
+    --sal-ground:      #0A1413;
+    --sal-surface:     #101E1C;
+    --sal-surface-2:   #152521;
+    --sal-ink:         #E9F1EF;
+    --sal-ink-soft:    #C3D2CF;
+    --sal-muted:       #8BA19D;
+    --sal-faint:       #5E7370;
+    --sal-line:        #1F302D;
+    --sal-line-strong: #2B403C;
 
-    --sal-paper:  #14130f;
-    --sal-card:   #1c1a16;
-    --sal-panel:  #23201a;
-    --sal-border: #34302a;
-    --sal-ink:    #ece7dc;
-    --sal-muted:  #9a9182;
-    --sal-red:    #e0705a;
+    --sal-teal:        #2FAFA9;
+    --sal-teal-bright: #43C6BF;
+    --sal-teal-wash:   #12312E;
+    --sal-gold:        #D3AA55;
+    --sal-gold-bright: #E4BE68;
+    --sal-gold-wash:   #2E2716;
+    --sal-plum:        #B394CE;
+    --sal-plum-wash:   #241A2E;
+
+    --sal-ok:    #46B67E;  --sal-ok-wash:   #123023;
+    --sal-warn:  #D69A46;  --sal-warn-wash: #31260F;
+    --sal-crit:  #E06456;  --sal-crit-wash: #361B18;
+
+    --sal-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px -14px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
   }
 }
 
-/* ── Header del módulo ──────────────────────────────────────────────────────── */
+.sal-v3 h1,
+.sal-v3 h2,
+.sal-v3 h3 { font-family: var(--sal-display); font-optical-sizing: auto; }
+
+.sal-v3 :focus-visible {
+  outline: 2.5px solid var(--sal-teal-bright);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Topbar del módulo (el del prototipo, NO el header negro del shell viejo) ──
+   El prototipo abre con una barra sobre el mismo papel de la página: marca a la
+   izquierda, período al medio y acciones a la derecha. El header negro sólido del
+   app-shell cortaba la pantalla en dos y peleaba con el papel claro de abajo. */
 
 .sal-v3 .sal-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  gap: 18px;
   flex-wrap: wrap;
-  padding: 0.8rem 1.5rem;
-  background: #0d0d0d;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 18px 20px 16px;
+  background: var(--sal-ground);
+  border-bottom: none;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -92,279 +163,577 @@
 .sal-v3 .sal-brand {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 11px;
 }
 
+/* El glyph del prototipo: cuadrado redondeado con degradé teal, no un kanji suelto. */
 .sal-v3 .sal-kanji {
-  font-family: var(--font-serif);
-  font-size: 1.6rem;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(150deg, var(--sal-teal), #0a5a57);
+  color: #fff;
+  font-family: var(--sal-display);
+  font-size: 20px;
   line-height: 1;
-  color: var(--sal-gold);
 }
 
 .sal-v3 .sal-title {
-  font-family: var(--font-serif);
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #f2ede2;
+  font-family: var(--sal-display);
+  font-weight: 600;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--sal-ink);
 }
 
 .sal-v3 .sal-sub {
-  font-size: 0.66rem;
-  letter-spacing: 0.16em;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #8a8278;
+  color: var(--sal-muted);
+  margin-top: 3px;
 }
 
-/* ── Pestañas ───────────────────────────────────────────────────────────────── */
+.sal-v3 .sal-header .role-badge {
+  background: var(--sal-gold-wash);
+  color: var(--sal-gold);
+  border: 1px solid var(--sal-line);
+  border-radius: var(--sal-r-pill);
+  padding: 4px 11px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.sal-v3 .cash-back-btn {
+  border: 1px solid var(--sal-line);
+  background: var(--sal-surface);
+  color: var(--sal-ink);
+  border-radius: 11px;
+  box-shadow: var(--sal-shadow);
+  padding: 9px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: transform 0.12s;
+}
+
+.sal-v3 .cash-back-btn:hover { transform: translateY(-1px); }
+
+/* ── Pestañas (las del prototipo: subrayado teal sobre la línea, no cápsulas) ── */
 
 .sal-v3 .sal-tabs {
   display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0 1.5rem;
-  background: #0d0d0d;
-  border-bottom: 1px solid #242424;
+  gap: 2px;
+  padding: 0 20px;
+  background: var(--sal-ground);
+  border-bottom: 1px solid var(--sal-line);
+  margin-bottom: 26px;
   overflow-x: auto;
+  scrollbar-width: none;
 }
+
+.sal-v3 .sal-tabs::-webkit-scrollbar { display: none; }
 
 .sal-v3 .sal-tab {
   appearance: none;
   background: none;
-  border: 0;
-  border-bottom: 2px solid transparent;
+  border: none;
+  border-bottom: 2.5px solid transparent;
   margin-bottom: -1px;
-  padding: 0.8rem 1rem;
+  padding: 11px 14px 13px;
   cursor: pointer;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-family: inherit;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: #8a8278;
-  transition: color 0.15s, border-color 0.15s;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--sal-muted);
+  transition: color 0.14s;
 }
 
-.sal-v3 .sal-tab:hover { color: #e8e2d8; }
+.sal-v3 .sal-tab:hover { color: var(--sal-ink-soft); }
 
 .sal-v3 .sal-tab.is-active {
-  color: var(--sal-gold);
-  border-bottom-color: var(--sal-gold);
-  font-weight: 700;
+  color: var(--sal-teal);
+  border-bottom-color: var(--sal-teal);
+  font-weight: 500;
 }
 
-/* ── Cards y stats ──────────────────────────────────────────────────────────── */
+/* Contador dentro de la pestaña (`.cnt` del prototipo). */
+.sal-v3 .sal-tab-cnt {
+  font-family: var(--sal-mono);
+  font-size: 11px;
+  background: var(--sal-surface-2);
+  color: var(--sal-muted);
+  padding: 1px 6px;
+  border-radius: var(--sal-r-pill);
+}
+
+.sal-v3 .sal-tab.is-active .sal-tab-cnt {
+  background: var(--sal-teal-wash);
+  color: var(--sal-teal);
+}
+
+/* ── Cards y stats (`.card`, `.stat` del prototipo) ─────────────────────────── */
 
 .sal-v3 .sal-card {
-  background: var(--sal-card);
-  border: 1px solid var(--sal-border);
-  border-radius: 4px;
-  padding: 0.9rem 1rem;
-  margin-bottom: 1rem;
+  background: var(--sal-surface);
+  border: 1px solid var(--sal-line);
+  border-radius: var(--sal-r);
+  box-shadow: var(--sal-shadow);
+  padding: 20px;
+  margin-bottom: 16px;
 }
 
-.sal-v3 .sal-card-title {
-  font-size: 0.66rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--sal-teal);
+.sal-v3 .sal-card-title,
+.sal-v3 .sal-mini-hd {
+  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sal-muted);
+  margin: 0 0 12px;
+}
+
+/* Encabezado de panel del prototipo: eyebrow dorada + título Fraunces + bajada. */
+.sal-v3 .sal-phead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.sal-v3 .sal-eyebrow {
+  font-size: 11.5px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--sal-gold);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.sal-v3 .sal-phead h2 {
+  font-family: var(--sal-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--sal-ink);
+}
+
+.sal-v3 .sal-phead p {
+  color: var(--sal-muted);
+  font-size: 13.5px;
+  margin-top: 5px;
+  max-width: 64ch;
 }
 
 .sal-v3 .sal-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 0 0 0.9rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 0 0 18px;
+}
+
+@media (max-width: 820px) {
+  .sal-v3 .sal-stats { grid-template-columns: 1fr; }
 }
 
 .sal-v3 .sal-stat {
-  flex: 1 1 128px;
-  background: var(--sal-card);
-  border: 1px solid var(--sal-border);
-  border-radius: 4px;
-  padding: 0.6rem 0.75rem;
+  background: var(--sal-surface);
+  border: 1px solid var(--sal-line);
+  border-radius: var(--sal-r);
+  box-shadow: var(--sal-shadow);
+  padding: 17px 18px;
 }
 
 .sal-v3 .sal-stat-label {
   display: block;
-  font-size: 0.6rem;
-  letter-spacing: 0.13em;
+  font-size: 12px;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--sal-muted);
-  margin-bottom: 0.2rem;
+  font-weight: 600;
 }
 
 .sal-v3 .sal-stat-value {
   display: block;
-  font-family: var(--font-serif);
-  font-size: 1.05rem;
-  font-weight: 700;
+  font-family: var(--sal-display);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-top: 6px;
   color: var(--sal-ink);
-  line-height: 1.2;
 }
 
-.sal-v3 .sal-stat-value.is-teal { color: var(--sal-teal); }
-.sal-v3 .sal-stat-value.is-gold { color: var(--sal-gold); }
-.sal-v3 .sal-stat-value.is-plum { color: var(--sal-plum); }
+.sal-v3 .sal-stat-value small {
+  font-family: var(--sal-mono);
+  font-size: 15px;
+  color: var(--sal-muted);
+  font-weight: 400;
+}
 
 .sal-v3 .sal-stat-note {
   display: block;
-  font-size: 0.62rem;
+  font-size: 12px;
   color: var(--sal-muted);
-  margin-top: 0.15rem;
+  margin-top: 8px;
 }
 
-/* ── Pills (filtros y etiquetas) ────────────────────────────────────────────── */
+/* ── Pills (`.pill` del prototipo: punto + fondo wash) ──────────────────────── */
 
-.sal-v3 .sal-pills {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-}
+.sal-v3 .sal-pills { display: flex; flex-wrap: wrap; gap: 6px; }
 
-.sal-v3 .sal-pill {
-  appearance: none;
-  font-family: inherit;
-  background: transparent;
-  border: 1px solid var(--sal-border);
-  border-radius: 99px;
-  padding: 0.24rem 0.7rem;
-  font-size: 0.66rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--sal-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.sal-v3 .sal-pill:hover:not(:disabled) { border-color: var(--sal-teal); color: var(--sal-teal); }
-.sal-v3 .sal-pill:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.sal-v3 .sal-pill.is-active {
-  background: var(--sal-teal-soft);
-  border-color: var(--sal-teal);
-  color: var(--sal-teal);
-}
-
-/* Etiqueta no clickeable (conteos, estado). */
+.sal-v3 .sal-pill,
 .sal-v3 .sal-tag {
-  display: inline-block;
-  border: 1px solid var(--sal-border);
-  border-radius: 99px;
-  padding: 0.2rem 0.62rem;
-  font-size: 0.63rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  color: var(--sal-muted);
+  padding: 3px 9px;
+  border-radius: var(--sal-r-pill);
   white-space: nowrap;
+  background: var(--sal-surface-2);
+  color: var(--sal-muted);
 }
 
-.sal-v3 .sal-tag.is-teal { color: var(--sal-teal); border-color: var(--sal-teal); background: var(--sal-teal-soft); }
-.sal-v3 .sal-tag.is-gold { color: var(--sal-gold); border-color: var(--sal-gold); background: var(--sal-gold-soft); }
-.sal-v3 .sal-tag.is-plum { color: var(--sal-plum); border-color: var(--sal-plum); background: var(--sal-plum-soft); }
-
-/* ── Avisos ─────────────────────────────────────────────────────────────────── */
-
-.sal-v3 .sal-note {
-  border-left: 3px solid var(--sal-border);
-  background: var(--sal-card);
-  border-radius: 0 3px 3px 0;
-  padding: 0.55rem 0.75rem;
-  margin: 0 0 0.6rem;
-  font-size: 0.76rem;
-  line-height: 1.5;
-  color: var(--sal-ink);
+.sal-v3 .sal-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.9;
 }
 
-.sal-v3 .sal-note.is-stop { border-left-color: var(--sal-red); color: var(--sal-red); }
-.sal-v3 .sal-note.is-warn { border-left-color: var(--sal-gold); }
-.sal-v3 .sal-note.is-info { border-left-color: var(--sal-teal); }
-.sal-v3 .sal-note.is-plum { border-left-color: var(--sal-plum); }
+.sal-v3 .sal-pill.is-plain::before { display: none; }
+.sal-v3 .sal-pill.is-teal { background: var(--sal-teal-wash); color: var(--sal-teal); }
+.sal-v3 .sal-pill.is-gold { background: var(--sal-gold-wash); color: var(--sal-gold); }
+.sal-v3 .sal-pill.is-plum { background: var(--sal-plum-wash); color: var(--sal-plum); }
+.sal-v3 .sal-pill.is-ok   { background: var(--sal-ok-wash);   color: var(--sal-ok); }
+.sal-v3 .sal-pill.is-warn { background: var(--sal-warn-wash); color: var(--sal-warn); }
+.sal-v3 .sal-pill.is-crit { background: var(--sal-crit-wash); color: var(--sal-crit); }
 
-/* ── Tablas ─────────────────────────────────────────────────────────────────── */
+/* ── Tablas (`.tbl-wrap` + table del prototipo) ─────────────────────────────── */
 
 .sal-v3 .sal-table-wrap {
   overflow-x: auto;
-  border: 1px solid var(--sal-border);
-  border-radius: 4px;
-  background: var(--sal-card);
+  border: 1px solid var(--sal-line);
+  border-radius: var(--sal-r);
+  background: var(--sal-surface);
+  box-shadow: var(--sal-shadow);
 }
 
-.sal-v3 .admin-table,
-.sal-v3 .sal-table {
+.sal-v3 .sal-table-wrap table,
+.sal-v3 table.sal-table,
+.sal-v3 table.admin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
-  background: var(--sal-card);
+}
+
+.sal-v3 .sal-table-wrap th,
+.sal-v3 table.sal-table th,
+.sal-v3 table.admin-table th {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--sal-muted);
+  font-weight: 600;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--sal-line);
+  background: var(--sal-surface-2);
+}
+
+.sal-v3 .sal-table-wrap td,
+.sal-v3 table.sal-table td,
+.sal-v3 table.admin-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--sal-line);
+  font-size: 14px;
+  vertical-align: middle;
   color: var(--sal-ink);
 }
 
-/* La grilla ya vive dentro de .sal-table-wrap, que aporta el marco. */
-.sal-v3 .sal-table-wrap > .admin-table,
-.sal-v3 .sal-table-wrap > .sal-table {
-  border: 0;
-  border-radius: 0;
+.sal-v3 .sal-table-wrap tbody tr { transition: background 0.12s; }
+.sal-v3 .sal-table-wrap tbody tr:hover { background: var(--sal-surface-2); }
+.sal-v3 .sal-table-wrap tbody tr:last-child td { border-bottom: none; }
+
+/* `.is-num` es el nombre que ya usaban las grillas del módulo; `.sal-num` es el del
+   prototipo. Las dos alinean a la derecha con cifras tabulares. */
+.sal-v3 .sal-num,   .sal-v3 th.sal-num,
+.sal-v3 .is-num,    .sal-v3 th.is-num {
+  text-align: right;
+  font-family: var(--sal-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-.sal-v3 .admin-table th,
-.sal-v3 .sal-table th {
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+/* Persona: iniciales en cuadro teal + nombre y meta debajo (`.who` / `.ini`). */
+.sal-v3 .sal-who { display: flex; align-items: center; gap: 11px; }
+
+.sal-v3 .sal-ini {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--sal-teal-wash);
   color: var(--sal-teal);
-  background: var(--sal-panel);
-  border-bottom: 1px solid var(--sal-border);
-  padding: 0.55rem 0.75rem;
-  text-align: left;
-  white-space: nowrap;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 12.5px;
+  flex-shrink: 0;
 }
 
-/* Las tres columnas de plata se leen de derecha a izquierda, como en una planilla. */
-.sal-v3 .sal-table th.is-num,
-.sal-v3 .sal-table td.is-num { text-align: right; white-space: nowrap; }
-
-.sal-v3 .sal-table td {
-  padding: 0.55rem 0.75rem;
-  border-bottom: 1px solid var(--sal-border);
-  vertical-align: middle;
-}
-
-.sal-v3 .sal-table tbody tr:last-child td { border-bottom: none; }
-.sal-v3 .sal-table tbody tr:hover td { background: var(--sal-panel); }
-
-.sal-v3 .admin-row td { border-bottom-color: var(--sal-border); }
-.sal-v3 .admin-row:hover td { background: var(--sal-panel); }
-.sal-v3 .admin-emp-name { color: var(--sal-ink); }
-
-.sal-v3 .sal-name { font-weight: 700; letter-spacing: 0.02em; color: var(--sal-ink); }
+.sal-v3 .sal-name { font-weight: 600; color: var(--sal-ink); }
 
 .sal-v3 .sal-name-meta {
-  font-size: 0.64rem;
+  display: block;
   color: var(--sal-muted);
-  margin-top: 2px;
-  line-height: 1.35;
+  font-size: 12px;
+  font-weight: 400;
 }
 
-.sal-v3 .sal-dash { opacity: 0.35; }
+/* ── Botones (`.btn` del prototipo) ─────────────────────────────────────────── */
 
-/* Los tres conceptos, cada uno con su color. Es la única señal que separa de un vistazo
-   lo que se transfiere (teal) de lo que se cobra en efectivo (gold) y de la parte que
-   sale del 10% de servicio (plum). */
-.sal-v3 .sal-money-serv  { color: var(--sal-plum); font-weight: 600; }
-.sal-v3 .sal-money-pagar { color: var(--sal-teal); font-weight: 700; }
-.sal-v3 .sal-money-tip   { color: var(--sal-gold); }
-.sal-v3 .sal-money-total { font-weight: 700; color: var(--sal-ink); }
+.sal-v3 .btn-primary,
+.sal-v3 .sal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 15px;
+  border-radius: var(--sal-r-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+  border: 1px solid var(--sal-line);
+  background: var(--sal-surface);
+  color: var(--sal-ink);
+  box-shadow: var(--sal-shadow);
+  cursor: pointer;
+  transition: transform 0.12s;
+}
 
+.sal-v3 .btn-primary:hover:not(:disabled),
+.sal-v3 .sal-btn:hover:not(:disabled) { transform: translateY(-1px); }
+
+.sal-v3 .btn-primary,
+.sal-v3 .sal-btn.is-primary {
+  background: var(--sal-teal);
+  color: #fff;
+  border-color: transparent;
+}
+
+.sal-v3 .sal-btn.is-gold { background: var(--sal-gold); color: #fff; border-color: transparent; }
+.sal-v3 .sal-btn.is-ghost { background: transparent; box-shadow: none; }
+.sal-v3 .sal-btn.is-sm { padding: 7px 12px; font-size: 13px; }
+.sal-v3 .btn-primary:disabled, .sal-v3 .sal-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Selector de período (`.periodsel`) ─────────────────────────────────────── */
+
+.sal-v3 .sal-periodsel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--sal-surface);
+  border: 1px solid var(--sal-line);
+  border-radius: var(--sal-r-sm);
+  padding: 8px 10px 8px 14px;
+  box-shadow: var(--sal-shadow);
+  margin-bottom: 16px;
+}
+
+.sal-v3 .sal-periodsel-cur {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.sal-v3 .sal-periodsel-acts {
+  display: flex;
+  gap: 4px;
+  margin-left: 6px;
+  border-left: 1px solid var(--sal-line);
+  padding-left: 10px;
+}
+
+.sal-v3 .sal-periodsel-acts button {
+  border: none;
+  background: var(--sal-surface-2);
+  color: var(--sal-muted);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sal-v3 .sal-periodsel-acts button:hover:not(:disabled) { color: var(--sal-ink); }
+.sal-v3 .sal-periodsel-acts button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Steps del ciclo del período (`.steps`) ─────────────────────────────────── */
+
+.sal-v3 .sal-steps { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+.sal-v3 .sal-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px;
+  border-radius: var(--sal-r-pill);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--sal-surface-2);
+  color: var(--sal-muted);
+  border: 1px solid var(--sal-line);
+}
+
+.sal-v3 .sal-step-n {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--sal-line-strong);
+  color: var(--sal-surface);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+}
+
+.sal-v3 .sal-step.is-done { background: var(--sal-ok-wash); color: var(--sal-ok); border-color: transparent; }
+.sal-v3 .sal-step.is-done .sal-step-n { background: var(--sal-ok); color: #fff; }
+.sal-v3 .sal-step.is-now { background: var(--sal-teal); color: #fff; border-color: transparent; }
+.sal-v3 .sal-step.is-now .sal-step-n { background: rgba(255, 255, 255, 0.25); color: #fff; }
+.sal-v3 .sal-step-arrow { color: var(--sal-faint); }
+
+/* ── Leyenda de los tres conceptos de plata (`.moneykey`) ───────────────────── */
+
+.sal-v3 .sal-moneykey {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 2px 0 14px;
+  font-size: 12.5px;
+  color: var(--sal-muted);
+}
+
+.sal-v3 .sal-moneykey span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.sal-v3 .sal-moneykey i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+/* ── Barra del total que sale por transferencia (`.totalbar`) ───────────────── */
+
+.sal-v3 .sal-totalbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+  background: linear-gradient(120deg, var(--sal-teal-wash), transparent);
+  border: 1px solid var(--sal-teal-wash);
+  border-radius: var(--sal-r);
+  margin-top: 16px;
+}
+
+.sal-v3 .sal-totalbar-lbl {
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sal-muted);
+  font-weight: 600;
+}
+
+.sal-v3 .sal-totalbar-big {
+  font-family: var(--sal-display);
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--sal-ink);
+}
+
+/* ── Costo laboral (`.costbox`) ─────────────────────────────────────────────── */
+
+.sal-v3 .sal-costbox {
+  margin-top: 22px;
+  border: 1px solid var(--sal-line);
+  border-radius: var(--sal-r);
+  background: var(--sal-surface);
+  box-shadow: var(--sal-shadow);
+  overflow: hidden;
+}
+
+.sal-v3 .sal-costbox-head {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--sal-line);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sal-v3 .sal-costbox-head b { font-family: var(--sal-display); font-size: 17px; font-weight: 600; }
+
+.sal-v3 .sal-costrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--sal-line);
+  font-size: 14px;
+}
+
+.sal-v3 .sal-costrow-l {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  color: var(--sal-ink-soft);
+}
+
+.sal-v3 .sal-swatch { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+
+.sal-v3 .sal-costrow.is-total { background: var(--sal-surface-2); font-weight: 700; border-bottom: none; }
+.sal-v3 .sal-costrow.is-total .sal-costrow-r { font-family: var(--sal-display); font-size: 20px; color: var(--sal-teal); }
+
+/* Fila de totales de la grilla (`tfoot` del prototipo). */
 .sal-v3 .sal-foot td {
-  background: var(--sal-panel);
-  border-top: 1px solid var(--sal-border);
-  font-weight: 700;
-  white-space: nowrap;
+  background: var(--sal-surface-2);
+  border-bottom: none;
+  border-top: 1px solid var(--sal-line);
+  font-weight: 600;
 }
+
+/* ── Colores de las tres columnas de plata ──────────────────────────────────── */
+
+.sal-v3 .sal-money-serv,  .sal-v3 .sal-plum { color: var(--sal-plum); font-weight: 600; }
+.sal-v3 .sal-money-tip,   .sal-v3 .sal-gold { color: var(--sal-gold); font-weight: 600; }
+.sal-v3 .sal-money-pagar { font-weight: 700; color: var(--sal-ink); }
+.sal-v3 .sal-money-total { color: var(--sal-ink); }
+.sal-v3 .sal-muted { color: var(--sal-muted); }
+.sal-v3 .sal-red   { color: var(--sal-crit); }
+.sal-v3 .sal-dash  { color: var(--sal-faint); }
 
 /* ── Formularios dentro del módulo ──────────────────────────────────────────── */
 

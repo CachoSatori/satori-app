@@ -945,6 +945,20 @@ export default function SalariosPago({ employees }: Props) {
               Nombre | Horas | Total horas (₡) | 10% serv. | A pagar | Propinas | Ingreso total
               Lo operativo que la nómina igual necesita (alias del banco, tarifa, fijo,
               flag del 10%) baja a la celda del nombre en vez de perderse. */}
+          {/* Los tres conceptos de plata, a la vista arriba de la grilla (`.moneykey` del
+              prototipo): qué sale por el banco y qué no. */}
+          <div className="sal-moneykey">
+            <span style={{ color: 'var(--sal-ink)' }}>
+              <i style={{ background: 'var(--sal-ink)' }} />Salario por horas → banco
+            </span>
+            <span style={{ color: 'var(--sal-plum)' }}>
+              <i style={{ background: 'var(--sal-plum)' }} />10% de servicio → banco (con el salario)
+            </span>
+            <span style={{ color: 'var(--sal-gold)' }}>
+              <i style={{ background: 'var(--sal-gold)' }} />Propinas (pozo) → efectivo (por ahora)
+            </span>
+          </div>
+
           <div className="sal-table-wrap">
             <table className="sal-table">
               <thead>
@@ -1076,20 +1090,25 @@ export default function SalariosPago({ employees }: Props) {
             </table>
           </div>
 
-          <div style={{ padding: '10px 0', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <strong style={{ fontFamily: 'var(--font-serif)', fontSize: '1.05rem' }}>{fi(total)}</strong>
-            <span style={{ fontSize: '0.72rem', color: 'var(--sal-muted)' }}>
-              {aPagar.length} transferencia(s) ={' '}
-              <strong>{fi(totalHoras)}</strong> de horas
-              {servicioDisponible && <> + <strong className="is-plum" style={{ color: 'var(--sal-plum)' }}>{fi(totalServicio)}</strong> de 10% de servicio</>}
-              {' '}· el resto queda fuera del archivo
-            </span>
-            {totalPropinas > 0 && (
-              <span style={{ fontSize: '0.72rem', color: 'var(--sal-gold)' }}>
-                + {fi(totalPropinas)} de propinas <strong>que NO se transfieren</strong>
-              </span>
-            )}
-            <span style={{ flex: 1 }} />
+          {/* `.totalbar` del prototipo: lo que SALE POR TRANSFERENCIA, en grande, con las
+              acciones al lado. Es el número del archivo del banco — no el ingreso total. */}
+          <div className="sal-totalbar">
+            <div>
+              <div className="sal-totalbar-lbl">
+                Sale por transferencia (salario + 10% de servicio)
+              </div>
+              <div className="sal-totalbar-big">{fi(total)}</div>
+              <div style={{ fontSize: '12.5px', color: 'var(--sal-muted)', marginTop: '4px' }}>
+                {aPagar.length} transferencia(s) = <strong>{fi(totalHoras)}</strong> de horas
+                {servicioDisponible && <> + <strong className="sal-money-serv">{fi(totalServicio)}</strong> de 10% de servicio</>}
+                {totalPropinas > 0 && (
+                  <> · <span className="sal-money-tip">
+                    + {fi(totalPropinas)} de propinas <strong>que NO se transfieren</strong>
+                  </span></>
+                )}
+              </div>
+            </div>
+            <span className="sal-spacer" />
             <button
               className="btn-secondary"
               onClick={handleDownload}

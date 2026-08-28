@@ -70,14 +70,13 @@ export default function SalariosModule() {
         <div className="sal-brand">
           <span className="sal-kanji">給</span>
           <div>
-            <div className="sal-title">Salarios</div>
-            <div className="sal-sub">Satori · nómina</div>
+            <div className="sal-title">Satori</div>
+            <div className="sal-sub">Nómina &amp; Empleados</div>
           </div>
-          {profile?.role && <span className="role-badge">{ROLE_LABELS[profile.role] ?? profile.role}</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <button className="cash-back-btn" onClick={() => navigate('/')}>← Inicio</button>
-        </div>
+        <span className="sal-spacer" />
+        {profile?.role && <span className="role-badge">{ROLE_LABELS[profile.role] ?? profile.role}</span>}
+        <button className="cash-back-btn" onClick={() => navigate('/')}>← Inicio</button>
       </div>
 
       {/* Nav tabs — las MISMAS tres pestañas de siempre, con la piel v3. Este pase no

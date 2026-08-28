@@ -251,6 +251,64 @@ del "debería") · cobro/vuelto/conversión · `posFiscal`.
 
 ---
 
+## 🆕 2026-08-28 — PILOTO VISUAL v3 de SALARIOS + 10% DE SERVICIO EN EL PAGO — a STAGING · `staging` `d8db700` → **`6228445`** · `main` **intacto en `3e54aa4`**
+
+Pase **fast-forward**, **0 migraciones nuevas**, **PROD no se tocó**. SPEC de referencia →
+[docs/SPEC-UI-empleados.md](docs/SPEC-UI-empleados.md) · prototipo congelado →
+[docs/prototipos/nomina-satori-v3.html](docs/prototipos/nomina-satori-v3.html).
+
+**Qué entró.** `059eedb` — piloto visual v3 sobre las pantallas de salarios que ya existían (piel v3
+**scoped** bajo `.sal-v3` en `salarios.css`: teal `#0C6E6B` / gold `#A9791F` / **plum `#6C4A86` reservado al
+10% de servicio**, claro/oscuro, **`index.css` y los tokens globales intactos**; no abre rutas ni pestañas
+nuevas) + la grilla de pago evolucionada a 7 columnas: `Nombre | Horas | Total horas (₡) | 10% serv. |
+A pagar | Propinas | Ingreso total`. `6228445` — `docs/prototipos/nomina-satori-v3.html`, la referencia
+visual congelada (PARTE A). Este commit — el **SPEC-UI Empleados v3** al repo (hasta hoy vivía solo fuera
+de él) + esta entrada.
+
+**La plata: tres conceptos que NO se mezclan.** **IVA 13%** = impuesto, vive en la factura / `posFiscal`,
+**no se reparte y no aparece en la nómina** ≠ **10% de servicio** = cargo de salón/barra, **se reparte y
+va al banco con las horas** ≠ **propina/pozo** = módulo Propinas, **efectivo, NO va al banco**.
+**`A pagar` = Total horas + 10% de servicio**, y ese mismo número es el del **Excel del banco** y el del
+**registro** (`markPeriodPaid`) — **amarrado por test**, con redondeo por partes. `Ingreso total` = eso +
+propinas, **informativo**. **Costo laboral** en bloque aparte = salarios + 10% + pozo + CCSS + liquidaciones.
+**DEROGADO:** "el 10% nunca va al banco" queda sin efecto; solo las **propinas** quedan fuera del banco.
+
+**Dónde vive el cálculo.** `src/shared/api/salarios.ts` — `repartoServicioDia` / `servicioDelPeriodo` /
+`getServicioPorDia`. **NUNCA en `tipCalculations`**, que es el pozo de propinas: lo que separamos en
+concepto no se re-mezcla en código. Fuente del pool = **`ventas_dias`** (el XLS diario; la columna
+`Servicio` ya viene **sin IVA y sin delivery**, verificado en `xlsParser.ts`), **SELECT-only**.
+**`posFiscal` no se lee ni se escribe** (aparece solo en comentarios). Reparto **por DÍA**:
+`cuota = pool_del_día / (Σ horas de participantes) × horas_persona`; **guarda `denom = 0 → cuota 0`**,
+nunca se divide por cero. Si el servicio del día no se puede leer, la columna va en `—`, `A pagar` vuelve
+a ser solo las horas y la pantalla **dice qué dato falta**: no se inventa el monto.
+
+**Sin esquema nuevo.** `participa_servicio` ya existía (mig **055**, `not null default true`) y ya era
+editable en Empleados/Tarifas; el desglose persiste en `salary_lines.aporte_servicio`, columna que la
+mig **056** ya declaraba. **0 migraciones nuevas.**
+
+**Alcance: hoy ST-única.** El reparto es **por local por diseño**, pero **la app opera solo en Santa
+Teresa**, así que el pozo diario **es** el de ST: global y por-local son el mismo número, y eso es
+correcto hoy. El filtro de local en Pago del período es **de VISTA**: con un local elegido **no se paga,
+no se baja el Excel y no se editan horas**, porque el pay run es global (`ventas_dias` todavía no tiene
+dimensión de local). **Ninguna etiqueta de la UI afirma "por local".** El split real llega con el
+**backend multi-local** (Nosara) — fase futura.
+
+**Gate.** `VITE_APP_ENV=production npm run build` **EXIT 0** · **91/91 suites, 932 tests** · **sagrados
+byte-idénticos** (sha256, `d8db700` → `6228445`): `posFiscal` `7618ad1d…` · `tipCalculations` `9148dde2…` ·
+`cashUtils` `b268823b…`.
+
+**⏳ Pendiente antes de un pago REAL.** **(1) Validación física en staging** — Salarios → Pago del período →
+filtro «Todos» → `A pagar` **peso a peso contra el Excel del banco**. Es el único gate de un pago correcto.
+**(2) CCSS real** — el ≈26% es **placeholder** y **no está en el camino del pago al banco** (solo en el
+bloque de costo laboral); se ajusta al % real (patrono + obrero) antes de confiar en el costo laboral.
+
+**Al margen del pase:** `fix/caja-cierre-idempotencia` (**`2daa912`**, padre `3e54aa4`, sin migraciones)
+—idempotencia real de los asientos de cierre vía `client_op_id` determinístico— quedó **respaldada a
+`origin`** el 2026-08-28; vivía solo en el Mac. Medición en prod = **0 duplicados reales**. Pendiente de
+deploy a prod con ventana + validación física.
+
+---
+
 ## 🆕 2026-07-23 — Re-sync `main→staging` + reconciliación del ledger (Fase A + B1)
 
 `staging` `5ae267f` → **`02a012f`** · `main` **intacto en `c77ced0`** · PROD nunca se escribió.

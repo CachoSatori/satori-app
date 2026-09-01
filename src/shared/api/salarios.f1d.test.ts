@@ -59,7 +59,7 @@ vi.mock('./supabase', () => ({ supabase: cliente }))
 
 import {
   derivarWorkDays, getPunchExceptions, getPunchesDeJornada, resolvePunchException,
-  overrideHorasDia, agruparExcepciones, etiquetaTipo, empleadosConHorasDobles, jornadaBounds,
+  overrideHorasDia, agruparExcepciones, etiquetaTipo, empleadosConHorasDobles, jornadaBounds, hhmmCR,
   resumenImpares, semaforoPago, splitHorasPeriodo, marcasDelCaso, inactivosConHoras,
   HORAS_DEFAULT_IMPAR,
 } from './salarios'
@@ -163,6 +163,85 @@ describe('jornadaBounds', () => {
 
   it('ante un corte basura cae en 05:00 en vez de armar una fecha inválida', () => {
     expect(jornadaBounds('2026-08-01', 'cualquier cosa').desde).toBe('2026-08-01T05:00:00-06:00')
+  })
+})
+
+// ╔══════════════════════════════════════════════════════════════════════════════════════╗
+// ║ EL DESFASE DE 1 HORA (piloto v3, agosto 2026) — el lado de LECTURA                     ║
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+// El desfase se originó en la INGESTA (el agente leía el `timestamp` naive de BioTime con la
+// zona de la PC). Esta batería fija el otro extremo: que la app lea y muestre en hora de
+// Costa Rica —UTC−6 FIJO, SIN horario de verano— y que no haya una segunda conversión que
+// vuelva a correr la hora. Si alguien mete una librería de zonas con DST, esto se pone rojo.
+describe('zona horaria de lectura · Costa Rica es UTC−6 FIJO', () => {
+  it('un instante UTC se muestra 6 horas antes, y en las dos mitades del año igual', () => {
+    // Enero y agosto: MISMO corrimiento. Con DST, agosto daría 5 horas y esto fallaría.
+    expect(hhmmCR('2026-01-16T22:00:00+00:00')).toBe('16:00')
+    expect(hhmmCR('2026-08-16T22:00:00+00:00')).toBe('16:00')
+  })
+
+  it('las marcas reales del piloto se muestran con la hora de BioTime, no 1 h atrás', () => {
+    // BioTime es la fuente correcta: Fran[4] 16/08 entró 11:05 y salió 16:08;
+    // Lester[10] 20/08 entró 16:01 y salió 22:03; Ampi[25] 16/08 entró 19:04.
+    expect(hhmmCR('2026-08-16T17:05:00+00:00')).toBe('11:05')
+    expect(hhmmCR('2026-08-16T22:08:00+00:00')).toBe('16:08')
+    expect(hhmmCR('2026-08-20T22:01:00+00:00')).toBe('16:01')
+    expect(hhmmCR('2026-08-21T04:03:00+00:00')).toBe('22:03')
+    expect(hhmmCR('2026-08-17T01:04:00+00:00')).toBe('19:04')
+  })
+
+  it('los turnos entran ~11:00 y ~16:00, NUNCA ~10:00 / ~15:00', () => {
+    // El síntoma exacto que se reportó: todo corrido una hora para atrás.
+    expect(hhmmCR('2026-08-16T17:05:00Z')).not.toBe('10:05')
+    expect(hhmmCR('2026-08-20T22:01:00Z')).not.toBe('15:01')
+  })
+
+  it('da lo mismo el formato del offset: +00:00, Z o -06:00 son el mismo instante', () => {
+    expect(hhmmCR('2026-08-16T22:00:00+00:00')).toBe('16:00')
+    expect(hhmmCR('2026-08-16T22:00:00Z')).toBe('16:00')
+    expect(hhmmCR('2026-08-16T16:00:00-06:00')).toBe('16:00')
+  })
+
+  it('formato 24 h: la salida de las 22:03 no se muestra como 10:03', () => {
+    expect(hhmmCR('2026-08-21T04:03:00Z')).toBe('22:03')
+    expect(hhmmCR('2026-08-21T08:03:00Z')).toBe('02:03')   // madrugada
+    expect(hhmmCR('2026-08-21T06:00:00Z')).toBe('00:00')   // medianoche, no 12:00
+  })
+
+  it('un valor que no es un instante vuelve tal cual en vez de mostrar NaN', () => {
+    expect(hhmmCR('no es una fecha')).toBe('no es una fecha')
+  })
+})
+
+describe('CORTE 05:00 · la madrugada pertenece a la jornada de APERTURA', () => {
+  // El fix del desfase mueve los instantes; esto verifica que no rompa la asignación de día
+  // laboral. `jornadaBounds` es el mismo criterio que la mig 059
+  // (`(punch_at at time zone 'America/Costa_Rica') - corte`).
+  const dentro = (workDate: string, iso: string): boolean => {
+    const { desde, hasta } = jornadaBounds(workDate)
+    const t = Date.parse(iso)
+    return t >= Date.parse(desde) && t < Date.parse(hasta)
+  }
+
+  it('el turno que abre 16:01 y cierra 02:03 cae ENTERO en la jornada de apertura', () => {
+    // Lester[10], 20/08: entrada 16:01 CR = 22:01Z del 20; salida 02:03 CR del 21 = 08:03Z.
+    expect(dentro('2026-08-20', '2026-08-20T22:01:00Z')).toBe(true)
+    expect(dentro('2026-08-20', '2026-08-21T08:03:00Z')).toBe(true)
+    // Y NO cae en la jornada del 21: si cayera, el par se partiría y se perderían las horas.
+    expect(dentro('2026-08-21', '2026-08-21T08:03:00Z')).toBe(false)
+  })
+
+  it('04:59 CR sigue siendo del día anterior; 05:00 CR ya es el día nuevo', () => {
+    expect(dentro('2026-08-20', '2026-08-21T10:59:00Z')).toBe(true)    // 04:59 CR del 21
+    expect(dentro('2026-08-20', '2026-08-21T11:00:00Z')).toBe(false)   // 05:00 CR del 21
+    expect(dentro('2026-08-21', '2026-08-21T11:00:00Z')).toBe(true)
+  })
+
+  it('el corrimiento de 1 hora movía marcas de jornada — por eso importa', () => {
+    // Una salida real de 05:30 CR (= 11:30Z) pertenece a la jornada del 21. Leída 1 h atrás
+    // (04:30 CR) habría caído en la del 20: el desfase no solo mostraba mal, movía el día.
+    expect(dentro('2026-08-21', '2026-08-21T11:30:00Z')).toBe(true)
+    expect(dentro('2026-08-20', '2026-08-21T10:30:00Z')).toBe(true)
   })
 })
 

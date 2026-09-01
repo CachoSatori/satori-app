@@ -42,17 +42,50 @@ export interface Queryable {
 const TZ_RE = /(Z|[+-]\d{2}:?\d{2})$/i
 
 /**
- * El error que NO hay que tragarse. Si `punch_time` llega sin zona horaria, mandarla
- * igual haría que el edge la rechace (`invalid`) y, como el ciclo habría avanzado el
- * `last_id`, esa marca se perdería en silencio. Peor todavía: si alguien "arreglara" el
- * problema poniéndole una zona inventada, las marcas quedarían corridas 6 horas y las
- * horas de la quincena saldrían mal SIN que nada falle. Preferimos frenar el ciclo.
+ * Un `timestamp` naive de Postgres tal como lo entrega el parser de `db.ts`:
+ * `'2026-08-16 16:00:00'` o `'2026-08-16T16:00:00.123'`. Sin zona, sin offset.
+ */
+const NAIVE_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/
+
+/**
+ * ── EL DESFASE DE 1 HORA (piloto v3, agosto 2026) ──────────────────────────────────────
+ *
+ * Costa Rica es **UTC−6 FIJO**: no tiene horario de verano, nunca lo tuvo en el período que
+ * nos importa, y no lo va a tener. Ese `-06:00` es la ÚNICA verdad de este archivo.
+ *
+ * Qué pasaba: `public.iclock_transaction.punch_time` de BioTime es un `timestamp` NAIVE
+ * (reloj de pared, sin zona). `pg` lo convertía a `Date` interpretándolo en la zona del
+ * **proceso Node** — o sea, en la zona que tenga configurada la PC del reloj. Si esa PC
+ * está en una zona UTC−5 (Bogotá/Lima) o en una zona CON horario de verano que en agosto
+ * corre a UTC−5 (Central Time), una marca de las 16:00 salía como 21:00Z en vez de 22:00Z
+ * y la app la mostraba a las **15:00**: exactamente 1 hora atrás. Y el guard de abajo NO
+ * lo veía, porque un `Date` siempre serializa con `Z`.
+ *
+ * Ahora `db.ts` desactiva ese parseo (los naive llegan como TEXTO crudo) y acá se les pone
+ * el offset de Costa Rica a mano. El resultado deja de depender de cómo esté configurada
+ * la PC del local.
+ */
+export const CR_OFFSET = '-06:00'
+
+/**
+ * `'2026-08-16 16:00:00'` (reloj de pared de Costa Rica) → `'2026-08-16T16:00:00-06:00'`.
+ * NO mueve la hora: solo dice en qué zona estaba leída, que es lo que faltaba.
+ */
+export function conOffsetCR(naive: string): string {
+  return `${naive.replace(' ', 'T')}${CR_OFFSET}`
+}
+
+/**
+ * El error que NO hay que tragarse. Si `punch_time` llega como algo que no es ni un
+ * instante con zona ni un `timestamp` naive reconocible, mandarlo igual haría que el edge
+ * lo rechace (`invalid`) y, como el ciclo habría avanzado el `last_id`, esa marca se
+ * perdería en silencio. Preferimos frenar el ciclo.
  */
 export class NaiveTimestampError extends Error {
   constructor(valor: string) {
     super(
-      `punch_time sin zona horaria: "${valor}". La columna public.iclock_transaction.punch_time ` +
-      'tiene que ser timestamptz (con -06:00). Sin zona, las marcas se guardarían corridas 6 horas.',
+      `punch_time con formato irreconocible: "${valor}". Se esperaba un instante con zona ` +
+      `(Z o ±HH:MM) o un timestamp naive de Costa Rica (YYYY-MM-DD HH:MM:SS).`,
     )
     this.name = 'NaiveTimestampError'
   }
@@ -68,18 +101,32 @@ function idNumerico(v: string | number): number {
 }
 
 /**
+ * `punch_time` → instante con zona explícita, SIEMPRE, y sin depender de la zona de la PC.
+ *
+ *   · `Date`            → el driver ya resolvió un instante absoluto (columna `timestamptz`);
+ *                          `toISOString()` lo deja en UTC, que es el MISMO instante.
+ *   · texto CON zona    → se respeta tal cual (ya dice en qué zona está).
+ *   · texto SIN zona    → es el reloj de pared de Costa Rica: se le pone `-06:00`.
+ *   · cualquier otra cosa → frena el ciclo.
+ */
+export function normalizarInstante(v: Date | string): string {
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) throw new NaiveTimestampError(String(v))
+    return v.toISOString()
+  }
+  const s = String(v).trim()
+  if (TZ_RE.test(s)) return s
+  if (NAIVE_RE.test(s)) return conOffsetCR(s)
+  throw new NaiveTimestampError(s)
+}
+
+/**
  * Fila de BioTime → cuerpo del edge. NO normaliza ni filtra: `punch_state` va CRUDO
  * ('0'/'1'), el edge lo traduce a in/out y cuenta lo que descarta. Lo único que se toca
  * es el instante, que se serializa con zona explícita.
  */
 export function mapRow(row: BiotimeRow): IngestPunch {
-  const punchTime =
-    row.punch_time instanceof Date
-      // timestamptz → el driver ya devuelve el instante correcto; ISO lo deja en UTC (mismo instante).
-      ? row.punch_time.toISOString()
-      : String(row.punch_time).trim()
-
-  if (!TZ_RE.test(punchTime)) throw new NaiveTimestampError(punchTime)
+  const punchTime = normalizarInstante(row.punch_time)
 
   const punch: IngestPunch = {
     biotime_id:  idNumerico(row.id),

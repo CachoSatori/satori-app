@@ -240,6 +240,9 @@ export default function SalariosFicha({ employees, onRefresh }: Props) {
                 guardan y se muestran en 24 h: 14:00, 02:00. Nunca a.m./p.m. */}
             {regla === 'unico' && (
               <div className="sal-fields">
+                {/* El `<input type="time">` lo pinta el NAVEGADOR y con `es-CR` muestra el
+                    reloj de 12 h («04:00 p. m.»). El valor que viaja y se guarda es 24 h
+                    igual; el eco de al lado es para que lo que se LEE sea lo que se guarda. */}
                 <div className="field">
                   <label>Entra (24 h)</label>
                   <input
@@ -247,6 +250,7 @@ export default function SalariosFicha({ employees, onRefresh }: Props) {
                     value={entrada} disabled={saving}
                     onChange={e => setEntrada(e.target.value)}
                   />
+                  <span className="sal-24h" title="hora en formato 24 h">{entrada || '—'}</span>
                 </div>
                 <div className="field">
                   <label>Sale (24 h)</label>
@@ -255,6 +259,7 @@ export default function SalariosFicha({ employees, onRefresh }: Props) {
                     value={salida} disabled={saving}
                     onChange={e => setSalida(e.target.value)}
                   />
+                  <span className="sal-24h" title="hora en formato 24 h">{salida || '—'}</span>
                 </div>
               </div>
             )}

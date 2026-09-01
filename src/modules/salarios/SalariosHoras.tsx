@@ -849,6 +849,16 @@ export default function SalariosHoras({ employees, onRefresh }: Props) {
                                         onChange={e => setComp(d => ({ ...d, [x.id]: e.target.value }))}
                                         disabled={busy}
                                       />
+                                      {/* El `<input type="time">` lo pinta el NAVEGADOR y con
+                                          `es-CR` muestra el reloj de 12 h («04:00 p. m.»). El
+                                          valor que se guarda es 24 h igual, pero en nómina lo
+                                          que se lee tiene que ser lo que se guarda: acá va el
+                                          valor canónico, en 24 h, al lado. */}
+                                      {comp && (
+                                        <span className="fx-24h" title="hora en formato 24 h">
+                                          {comp}
+                                        </span>
+                                      )}
                                       <span className={`fx-horas${sospechoso ? ' fx-horas-alerta' : ''}`}>
                                         {horas != null ? `= ${horas} h` : '= —'}
                                       </span>

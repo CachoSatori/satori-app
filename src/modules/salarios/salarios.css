@@ -1059,3 +1059,19 @@
 }
 
 .sal-v3 .sal-nomap-duenio strong { font-weight: 700; }
+
+/* ── Eco en 24 h de un `<input type="time">` ─────────────────────────────────
+   El widget de hora lo pinta el navegador y con `es-CR` muestra el reloj de
+   12 h («04:00 p. m.»). El valor que viaja y se guarda es 24 h igual, pero en
+   nómina lo que se LEE tiene que ser lo que se guarda: un turno cruza la
+   medianoche todas las noches y «2:00» mal leído son 8 horas o −6. Este eco es
+   el valor canónico, en monoespaciada para que se lea como dato y no como
+   texto. */
+.sal-v3 .sal-24h,
+.sal-v3 .fx-24h {
+  font-family: var(--sal-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  color: var(--sal-muted);
+  white-space: nowrap;
+}

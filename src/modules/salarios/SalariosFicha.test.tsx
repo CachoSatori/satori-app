@@ -114,3 +114,34 @@ describe('Ficha · el horario se edita acá', () => {
     expect(screen.getByText('◆ Horario · el único lugar donde se edita')).toBeTruthy()
   })
 })
+
+// ── Formato 24 h ────────────────────────────────────────────────────────────────
+// El `<input type="time">` lo pinta el NAVEGADOR y con `es-CR` muestra el reloj de 12 h
+// («04:00 p. m.»). El valor que viaja es 24 h igual, pero en nómina lo que se LEE tiene que
+// ser lo que se guarda: un turno cruza la medianoche todas las noches.
+describe('Ficha · las horas se leen en 24 h', () => {
+  // Un marcador de 12 h siempre viene PEGADO a un número: «04:00 p. m.», «4 pm». Sin el
+  // dígito adelante, el patrón matchea dentro de cualquier palabra («c-am-bios»).
+  const SIN_12H = /\d\s*(a\.?\s?m\.?|p\.?\s?m\.?)\b/i
+
+  it('al lado del selector de hora va el valor canónico, en 24 h', () => {
+    abrir(FRAN)
+    fireEvent.change(screen.getByLabelText('Hora de entrada habitual'), { target: { value: '16:00' } })
+    fireEvent.change(screen.getByLabelText('Hora de salida habitual'),  { target: { value: '02:00' } })
+
+    const ecos = [...document.querySelectorAll('.sal-24h')].map(n => n.textContent)
+    expect(ecos).toEqual(['16:00', '02:00'])
+  })
+
+  it('las etiquetas dicen 24 h y en ningún lado aparece a.m./p.m.', () => {
+    abrir(FRAN)
+    expect(screen.getByText('Entra (24 h)')).toBeTruthy()
+    expect(screen.getByText('Sale (24 h)')).toBeTruthy()
+    expect(document.body.textContent ?? '').not.toMatch(SIN_12H)
+  })
+
+  it('el resumen que leen las otras pestañas también va en 24 h', () => {
+    abrir(FRAN)
+    expect(screen.getByText('Fijo · 11:00 → 20:00')).toBeTruthy()
+  })
+})

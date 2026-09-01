@@ -1821,7 +1821,9 @@ const HORA_TIME = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/
 export function horaHabitualHHMM(v: string | null | undefined): string | null {
   if (typeof v !== 'string') return null
   const m = HORA_TIME.exec(v.trim())
-  return m ? `${m[1]}:${m[2]}` : null
+  // `HORA_TIME` ya exige 00–23, así que esto es 24 h por construcción. Pasa igual por
+  // `hhmm24` para que la salida del módulo tenga UNA sola forma.
+  return m ? hhmm24(Number(m[1]), Number(m[2])) : null
 }
 
 /**
@@ -1837,12 +1839,35 @@ export function horaHabitualFaltante(
   return horaHabitualHHMM(ladoReal === 'in' ? emp.hora_salida_habitual : emp.hora_entrada_habitual)
 }
 
-/** Hora local de Costa Rica (UTC−6 FIJO, sin horario de verano) de un instante ISO. */
+// ── EL FORMATO DE HORA DE NÓMINA: 24 h, SIEMPRE (v3, fix del piloto) ────────────
+//
+// Toda hora de reloj de este módulo —marcas de BioTime, horario habitual, la bandeja de
+// fichajes, la Ficha— se escribe **HH:MM en 24 horas**: 14:00, 02:00, 00:00. Nunca
+// a.m./p.m., y nunca `toLocaleTimeString`, que con `es-CR` devuelve el reloj de 12 h.
+//
+// No es estética. Un turno de nómina cruza la medianoche todas las noches: "2:00" sin el
+// a.m./p.m. —o con el a.m./p.m. leído rápido— es la diferencia entre una salida de
+// madrugada y una entrada de tarde, o sea entre 8 horas y −6. El 24 h no tiene ese doblez.
+//
+// `hhmmCR` (de un instante) y `horaHabitualHHMM` (de una columna `time`) son las DOS
+// puertas de entrada, y las dos salen por `hhmm24`. Si alguna hora de reloj de este módulo
+// no pasó por acá, es una hora que puede estar en 12 h.
+
+/** Horas y minutos → "HH:MM" en 24 h, con el cero adelante. La ÚNICA salida del módulo. */
+export function hhmm24(horas: number, minutos: number): string {
+  return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`
+}
+
+/**
+ * Hora local de Costa Rica (UTC−6 FIJO, sin horario de verano) de un instante ISO,
+ * en 24 h. Un valor que no es un instante vuelve tal cual: mejor un dato raro visible
+ * que un "NaN:NaN" que no dice de dónde salió.
+ */
 export function hhmmCR(iso: string): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return iso
   const cr = new Date(d.getTime() - 6 * 3600_000)
-  return `${String(cr.getUTCHours()).padStart(2, '0')}:${String(cr.getUTCMinutes()).padStart(2, '0')}`
+  return hhmm24(cr.getUTCHours(), cr.getUTCMinutes())
 }
 
 export const MOTIVO_REGLA = 'regla del empleado (hora habitual)'

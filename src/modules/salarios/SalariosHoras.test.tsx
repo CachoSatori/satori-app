@@ -681,3 +681,59 @@ describe('SalariosHoras — asignar un código de BioTime huérfano', () => {
     expect(await screen.findByText(/ya es de FRAN/)).toBeTruthy()
   })
 })
+
+
+// ── Formato 24 h en la bandeja de fichajes ──────────────────────────────────────────────
+// La hora real de la marca ya sale en 24 h (`hhmmCR`). Lo que faltaba es el
+// `<input type="time">`: lo pinta el NAVEGADOR y con `es-CR` muestra el reloj de 12 h
+// («04:00 p. m.»). El valor que se guarda es 24 h igual, pero en nómina lo que se LEE tiene
+// que ser lo que se guarda — un turno cruza la medianoche todas las noches.
+describe('SalariosHoras — formato 24 h', () => {
+  // El marcador de 12 h siempre viene PEGADO a un número: sin el dígito adelante el patrón
+  // matchea dentro de cualquier palabra («c-am-bios»).
+  const SIN_12H = /\d\s*(a\.?\s?m\.?|p\.?\s?m\.?)\b/i
+
+  const imparDe = (hora: string) => exc({
+    id: 'x1', tipo: 'impar', employee_id: 'e1', work_date: '2026-08-20',
+    detalle: { marcas: [{ id: 'm1', punch_at: hora, punch_state: 'in' }], cuantas: 1 },
+  })
+
+  it('la marca de las 16:01 se muestra 16:01, no 4:01 p. m.', async () => {
+    // 22:01Z = 16:01 en Costa Rica (UTC−6 fijo). Es la entrada real de Lester el 20/08.
+    EXCS = [imparDe('2026-08-20T22:01:00Z')]
+    const { container } = render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(1)
+    fireEvent.click(
+      [...container.querySelectorAll('.fx-nombre')].find(n => n.textContent === 'NACHO')!,
+    )
+
+    expect(await screen.findByText('16:01')).toBeTruthy()
+    expect(document.body.textContent ?? '').not.toMatch(SIN_12H)
+  })
+
+  it('la salida de madrugada se muestra 02:03, no 2:03 a. m.', async () => {
+    // 08:03Z del 21 = 02:03 en Costa Rica. Es la salida real de Lester.
+    EXCS = [imparDe('2026-08-21T08:03:00Z')]
+    const { container } = render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(1)
+    fireEvent.click(
+      [...container.querySelectorAll('.fx-nombre')].find(n => n.textContent === 'NACHO')!,
+    )
+
+    expect(await screen.findByText('02:03')).toBeTruthy()
+    expect(document.body.textContent ?? '').not.toMatch(SIN_12H)
+  })
+
+  it('lo que se escribe en el selector de hora se repite al lado en 24 h', async () => {
+    EXCS = [imparDe('2026-08-20T22:01:00Z')]
+    const { container } = render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(1)
+    fireEvent.click(
+      [...container.querySelectorAll('.fx-nombre')].find(n => n.textContent === 'NACHO')!,
+    )
+
+    const input = await screen.findByLabelText('Salida 2026-08-20')
+    fireEvent.change(input, { target: { value: '22:03' } })
+    expect(container.querySelector('.fx-24h')?.textContent).toBe('22:03')
+  })
+})

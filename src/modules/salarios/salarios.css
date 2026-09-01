@@ -1012,3 +1012,22 @@
   background: var(--sal-surface-2);
   color: var(--sal-ink-soft);
 }
+
+/* ── Aviso que FRENA (`is-stop`) ─────────────────────────────────────────────
+   Distinto del aviso ámbar: ámbar es «mirá esto», stop es «no se puede seguir».
+   Lo usa el 10% de servicio SIN ASIGNAR, que bloquea cerrar y pagar hasta que
+   alguien decida qué se hace con esa plata. El color es `--sal-crit`, el mismo
+   rojo semántico del módulo, y está definido en claro y en oscuro. */
+.sal-v3 .sal-note.is-stop {
+  background: var(--sal-crit-wash);
+  color: var(--sal-crit);
+}
+
+.sal-v3 .sal-nomap.is-stop {
+  border-color: var(--sal-crit);
+}
+
+.sal-v3 .sal-nomap.is-stop .sal-nomap-head {
+  background: var(--sal-crit-wash);
+  color: var(--sal-crit);
+}

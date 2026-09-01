@@ -11,6 +11,9 @@ import type {
   WorkDay,
 } from '../types/database'
 import { horasEntreMarcas, marcaUnicaDeImpar } from '../utils/horasCorreccion'
+// El MISMO formateador de colones que usa la pantalla: el mensaje del bloqueo y el cartel
+// tienen que escribir el monto igual, o parecen dos números distintos.
+import { fi } from '../utils'
 import { ROLE_LABELS } from '../constants'
 
 // ── Salarios · U0b: el ciclo mínimo de pago ─────────────────────────────────────
@@ -1016,6 +1019,12 @@ export interface ServicioPeriodo {
    */
   totalSinRepartir: number
   /**
+   * Los días de arriba, UNO POR UNO con su monto. El total suelto no dice qué hacer; la
+   * fecha sí: o faltan las horas de ese día, o ese día de verdad no lo trabajó nadie que
+   * participe del 10% y hay que asignarlo a mano.
+   */
+  diasSinParticipantes: { fecha: string; pool: number }[]
+  /**
    * Días del período SIN fila en `ventas_dias`. No es "ese día no hubo servicio": es
    * "no se sabe". Se listan para que el que arma la nómina cargue las ventas o acepte
    * el faltante a sabiendas.
@@ -1042,6 +1051,7 @@ export function servicioDelPeriodo(
   let totalRepartido   = 0
   let totalSinRepartir = 0
   const diasSinVentas: string[] = []
+  const diasSinParticipantes: { fecha: string; pool: number }[] = []
 
   // Horas por día, SOLO de quien participa. Se suman los locales del mismo día: una
   // persona puede tener horas en dos locales y su cuota sale de las horas que trabajó.
@@ -1062,14 +1072,132 @@ export function servicioDelPeriodo(
     const delDia = horasPorDia.get(fecha)
     const filas  = delDia ? [...delDia].map(([employeeId, horas]) => ({ employeeId, horas })) : []
     const cuotas = repartoServicioDia(pool, filas)
-    if (cuotas.size === 0) { totalSinRepartir += pool; continue }
+    if (cuotas.size === 0) {
+      totalSinRepartir += pool
+      diasSinParticipantes.push({ fecha, pool })
+      continue
+    }
     for (const [id, monto] of cuotas) {
       porEmpleado.set(id, (porEmpleado.get(id) ?? 0) + monto)
       totalRepartido += monto
     }
   }
 
-  return { porEmpleado, totalRepartido, totalSinRepartir, diasSinVentas }
+  return { porEmpleado, totalRepartido, totalSinRepartir, diasSinParticipantes, diasSinVentas }
+}
+
+// ── EL 10% QUE NADIE COBRA · desglose POR CAUSA (v3, fix del piloto) ────────────
+//
+// Antes esto era un total opaco: «₡X del 10% no se reparte en esta nómina». Un número
+// sin causa no se puede arreglar — el que arma la nómina no sabe si le faltan horas, si
+// le faltan ventas, o si hay alguien afuera de la grilla que ya se ganó esa plata.
+//
+// Ahora se parte en las DOS causas que existen, cada una con su acción:
+//
+//   1. DÍAS SIN PARTICIPANTES — el día cobró 10% y nadie que participe tiene horas.
+//      → o faltan las horas de ese día, o hay que asignarlo a mano. Lo decide una persona.
+//   2. INACTIVOS CON HORAS — ficharon, les tocó su cuota, y su línea no está en la grilla
+//      porque están desactivados. → nombre, horas y CUÁNTO les tocaría.
+//
+// Y el remanente BLOQUEA el cierre y el pago. No se redistribuye solo: repartir entre los
+// demás la plata de alguien que no está es una decisión de Ismael, no un default.
+
+export interface ServicioInactivo {
+  employeeId: string
+  nombre:     string
+  horas:      number
+  /** Lo que el reparto por horas le adjudicó y esta nómina NO transfiere. */
+  cuota:      number
+}
+
+export interface ServicioNoAsignado {
+  /** Días con 10% cobrado y ninguna hora de quien participa. Con fecha y monto. */
+  diasSinParticipantes: { fecha: string; pool: number }[]
+  /** Σ de esos días. Remanente irreductible: no hay a quién dárselo sin decidirlo. */
+  totalDiasSinParticipantes: number
+  /** Quiénes ficharon estando inactivos, con sus horas y su cuota. */
+  inactivos: ServicioInactivo[]
+  /** Σ de las cuotas de los inactivos. */
+  totalInactivos: number
+  /** Todo lo que queda SIN ASIGNAR. `> 0` bloquea cerrar y pagar. */
+  total: number
+  /** `true` si hay algo que impide cerrar/pagar. Es `total > 0`, con nombre. */
+  bloquea: boolean
+}
+
+/**
+ * El 10% que esta nómina NO transfiere, abierto por causa.
+ *
+ * `enLaGrilla` son los `employee_id` que la nómina SÍ paga (los activos consolidados). Una
+ * cuota adjudicada a alguien fuera de ese conjunto es plata de una persona real que la
+ * pantalla no está mostrando: es exactamente el caso «fichó estando inactivo».
+ *
+ * PURO: no lee, no escribe, no redondea la decisión de nadie. Los montos van redondeados a
+ * colón porque es la unidad en la que se transfiere y en la que se mira la pantalla.
+ */
+export function servicioNoAsignado(
+  servicio: ServicioPeriodo,
+  enLaGrilla: Set<string>,
+  datosDe: (employeeId: string) => { nombre: string; horas: number },
+): ServicioNoAsignado {
+  const diasSinParticipantes = servicio.diasSinParticipantes.map(
+    d => ({ fecha: d.fecha, pool: Math.round(d.pool) }),
+  )
+  const totalDiasSinParticipantes = diasSinParticipantes.reduce((s, d) => s + d.pool, 0)
+
+  const inactivos: ServicioInactivo[] = []
+  for (const [employeeId, monto] of servicio.porEmpleado) {
+    if (enLaGrilla.has(employeeId)) continue
+    const cuota = Math.round(Number(monto) || 0)
+    // Una cuota que redondea a ₡0 no es plata: no se lista para no llenar el aviso de ruido.
+    if (cuota <= 0) continue
+    const { nombre, horas } = datosDe(employeeId)
+    inactivos.push({ employeeId, nombre, horas, cuota })
+  }
+  // Del que más plata tiene sin cobrar hacia abajo: es el orden en que hay que resolverlos.
+  inactivos.sort((a, b) => b.cuota - a.cuota || a.nombre.localeCompare(b.nombre, 'es'))
+  const totalInactivos = inactivos.reduce((s, i) => s + i.cuota, 0)
+
+  const total = totalDiasSinParticipantes + totalInactivos
+  return {
+    diasSinParticipantes,
+    totalDiasSinParticipantes,
+    inactivos,
+    totalInactivos,
+    total,
+    bloquea: total > 0,
+  }
+}
+
+/**
+ * El mensaje del bloqueo, con la causa adentro. `null` = no bloquea.
+ *
+ * Se escribe acá y no en la pantalla para que el botón, el `confirm` y el cartel digan
+ * EXACTAMENTE lo mismo: tres textos distintos para el mismo bloqueo es cómo se termina
+ * cerrando un período «porque el cartel decía otra cosa».
+ */
+export function motivoBloqueoServicio(
+  na: ServicioNoAsignado,
+  accion: 'cerrar' | 'pagar',
+): string | null {
+  if (!na.bloquea) return null
+  const partes: string[] = []
+  if (na.totalDiasSinParticipantes > 0) {
+    partes.push(
+      `${fi(na.totalDiasSinParticipantes)} de ` +
+      `${na.diasSinParticipantes.length} día(s) sin nadie que participe`,
+    )
+  }
+  if (na.totalInactivos > 0) {
+    partes.push(
+      `${fi(na.totalInactivos)} de ` +
+      `${na.inactivos.length} persona(s) que fichó estando inactiva`,
+    )
+  }
+  return (
+    `Queda 10% de servicio SIN ASIGNAR: ${fi(na.total)} ` +
+    `(${partes.join(' · ')}). No se puede ${accion} el período hasta resolverlo.`
+  )
 }
 
 /**

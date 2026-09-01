@@ -35,6 +35,8 @@ const resolver  = vi.fn<(id: string, u: string) => Promise<void>>(async () => {}
 const override  = vi.fn<(o: unknown) => Promise<void>>(async () => {})
 const marcas    = vi.fn<(l: string, d: string) => Promise<TimePunch[]>>(async () => [])
 const cargarExc = vi.fn()   // cuenta cuántas veces la pantalla relee las excepciones
+// v3 · el mapeo código BioTime → persona, desde la bandeja. Escribe `biotime_emp_code`.
+const asignar   = vi.fn<(id: string, c: string, es: Employee[]) => Promise<void>>(async () => {})
 
 vi.mock('../../shared/api/salarios', async (orig) => {
   const actual = await orig<typeof import('../../shared/api/salarios')>()
@@ -47,6 +49,7 @@ vi.mock('../../shared/api/salarios', async (orig) => {
     resolvePunchException: (id: string, u: string) => resolver(id, u),
     overrideHorasDia:    (o: unknown) => override(o),
     getPunchesDeJornada: (l: string, d: string) => marcas(l, d),
+    asignarCodigoBiotime: (id: string, c: string, es: Employee[]) => asignar(id, c, es),
   }
 })
 
@@ -87,6 +90,7 @@ beforeEach(() => {
     excepciones: { impar: 29, turno_largo: 0, solapado: 2, sin_mapear: 0 },
   })
   resolver.mockClear(); override.mockClear(); marcas.mockClear(); cargarExc.mockClear()
+  asignar.mockClear(); asignar.mockResolvedValue(undefined)
 })
 
 describe('SalariosHoras — recálculo', () => {
@@ -198,12 +202,16 @@ describe('SalariosHoras — bandeja de excepciones', () => {
     marcas.mockResolvedValue([
       { id: 'p1', employee_id: 'e1', emp_code: '5', punch_at: '2026-08-03T22:00:00Z', punch_state: 'in' } as TimePunch,
     ])
-    render(<SalariosHoras employees={EMPLEADOS} />)
+    const { container } = render(<SalariosHoras employees={EMPLEADOS} />)
 
     await esperarBandeja(2)
     expect(screen.getByText('Código 8 (sin empleado)')).toBeTruthy()
 
-    fireEvent.click(screen.getByText('NACHO'))
+    // `getByText('NACHO')` ya no alcanza: NACHO también aparece como <option> del selector
+    // con el que se asigna un código huérfano. Se clickea el encabezado del grupo.
+    fireEvent.click(
+      [...container.querySelectorAll('.fx-nombre')].find(n => n.textContent === 'NACHO')!,
+    )
     fireEvent.click(await screen.findByRole('button', { name: /Ver marcas/i }))
 
     await waitFor(() => expect(marcas).toHaveBeenCalledWith('santa-teresa', '2026-08-03'))
@@ -581,5 +589,95 @@ describe('SalariosHoras — Capa 3: el lote que falla a mitad de camino', () => 
     expect(await screen.findByText(/se cayó la red\. Se corrigieron 1 de 3 días/)).toBeTruthy()
     // El primero quedó escrito de verdad: no se revierte nada ni se finge que no pasó.
     expect(resolver).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+// ╔══════════════════════════════════════════════════════════════════════════════════════╗
+// ║ MAPEO código BioTime → persona, DESDE la bandeja (v3, fix del piloto)                  ║
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+// Antes la bandeja listaba los códigos huérfanos y mandaba a otra pestaña. Son horas que
+// alguien trabajó y que hoy no se le pagan a nadie: la acción va donde se ve el problema.
+describe('SalariosHoras — asignar un código de BioTime huérfano', () => {
+  const conCodigo = (id: string, nombre: string, code: string): Employee =>
+    ({ ...emp(id, nombre), biotime_emp_code: code }) as Employee
+
+  it('el código que NADIE tiene se asigna desde acá, sin salir de la bandeja', async () => {
+    EXCS = [exc({ id: 'x1', tipo: 'sin_mapear', emp_code: '26', work_date: '2026-08-04' })]
+    const onRefresh = vi.fn(async () => {})
+    render(<SalariosHoras employees={EMPLEADOS} onRefresh={onRefresh} />)
+    await esperarBandeja(1)
+
+    fireEvent.change(screen.getByLabelText('Asignar el código 26 a'), { target: { value: 'e2' } })
+    fireEvent.click(screen.getByText('Asignar'))
+
+    await waitFor(() => expect(asignar).toHaveBeenCalledWith('e2', '26', EMPLEADOS))
+    // Relee el maestro: sin eso, la bandeja seguiría mostrando el código como huérfano.
+    await waitFor(() => expect(onRefresh).toHaveBeenCalled())
+    expect(await screen.findByText(/Código 26 asignado a SELENA/)).toBeTruthy()
+  })
+
+  it('sin elegir persona no escribe nada y lo dice', async () => {
+    EXCS = [exc({ id: 'x1', tipo: 'sin_mapear', emp_code: '26' })]
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(1)
+
+    // El botón arranca apagado; forzarlo tampoco escribe.
+    const btn = screen.getByText('Asignar') as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+    fireEvent.click(btn)
+    expect(asignar).not.toHaveBeenCalled()
+  })
+
+  it('el código que ALGUIEN YA TIENE no ofrece asignarlo: dice de quién es y qué pasó', async () => {
+    // Este es el caso que rompía la validación: el código está en la ficha y la bandeja lo
+    // mostraba igual como huérfano, sin decir nada. Asignarlo de nuevo no arregla nada.
+    const CON = [conCodigo('e1', 'FRAN', '4'), emp('e2', 'SELENA')]
+    EXCS = [exc({ id: 'x1', tipo: 'sin_mapear', emp_code: '4' })]
+    render(<SalariosHoras employees={CON} />)
+    await esperarBandeja(1)
+
+    expect(screen.getByText(/ya es de/)).toBeTruthy()
+    expect(screen.getByText('FRAN')).toBeTruthy()
+    expect(screen.getByText(/quedaron sin enganchar/)).toBeTruthy()
+    expect(screen.queryByLabelText('Asignar el código 4 a')).toBeNull()
+  })
+
+  it('el match ignora los ceros a la izquierda: "04" del reloj es el "4" de la ficha', async () => {
+    const CON = [conCodigo('e1', 'FRAN', '4'), emp('e2', 'SELENA')]
+    EXCS = [exc({ id: 'x1', tipo: 'sin_mapear', emp_code: '04' })]
+    render(<SalariosHoras employees={CON} />)
+    await esperarBandeja(1)
+
+    expect(screen.getByText('FRAN')).toBeTruthy()
+    expect(screen.queryByLabelText('Asignar el código 04 a')).toBeNull()
+  })
+
+  it('dice que las marcas VIEJAS no se re-enganchan solas — no promete lo que no hace', async () => {
+    EXCS = [exc({ id: 'x1', tipo: 'sin_mapear', emp_code: '26' })]
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(1)
+    expect(screen.getByText(/no se re-enganchan solas/)).toBeTruthy()
+  })
+
+  it('un rol sin permiso ve el problema pero no puede asignar', async () => {
+    rol = 'cajero'
+    EXCS = [exc({ id: 'x1', tipo: 'sin_mapear', emp_code: '26' })]
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(1)
+
+    expect((screen.getByLabelText('Asignar el código 26 a') as HTMLSelectElement).disabled).toBe(true)
+    expect((screen.getByText('Asignar') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('un código duplicado rebota con el nombre de quien lo tiene, y no se pierde el error', async () => {
+    asignar.mockRejectedValueOnce(new Error('El código de BioTime «26» ya es de FRAN. Cada usuario del reloj lleva el suyo.'))
+    EXCS = [exc({ id: 'x1', tipo: 'sin_mapear', emp_code: '26' })]
+    render(<SalariosHoras employees={EMPLEADOS} />)
+    await esperarBandeja(1)
+
+    fireEvent.change(screen.getByLabelText('Asignar el código 26 a'), { target: { value: 'e2' } })
+    fireEvent.click(screen.getByText('Asignar'))
+    expect(await screen.findByText(/ya es de FRAN/)).toBeTruthy()
   })
 })

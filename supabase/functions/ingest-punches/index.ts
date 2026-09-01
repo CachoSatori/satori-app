@@ -43,9 +43,6 @@ const LOCALES = new Set(['santa-teresa', 'nosara'])
 /** Tope de lote. Un poll de 2–5 min trae decenas de marcas; esto solo frena un payload absurdo. */
 const MAX_BATCH = 10_000
 
-/** Tope por consulta a `employees`: evita armar una URL gigante con `.in(...)`. */
-const CHUNK_CODES = 200
-
 interface PunchIn {
   biotime_id?: unknown
   emp_code?: unknown
@@ -115,6 +112,27 @@ function parseInstant(v: unknown): string | null {
   const t = Date.parse(s)
   if (Number.isNaN(t)) return null
   return new Date(t).toISOString()
+}
+
+/**
+ * Forma canónica de un código de BioTime, SOLO para comparar (nunca para guardar).
+ *
+ *   ' 04 ' → '4'   ·   '17' → '17'   ·   'A7' → 'a7'
+ *
+ * Sin esto, un empleado con `biotime_emp_code = '4'` no matcheaba las marcas de un usuario
+ * que BioTime numera '04' (o al revés, según cómo se cargó el usuario en el reloj): la
+ * marca entraba con `employee_id = null`, caía en la bandeja como «sin mapear», y sus horas
+ * no se le pagaban a nadie — sin que nada fallara.
+ *
+ * Los ceros a la izquierda se caen SOLO si el resto es numérico. Tiene que decir lo mismo
+ * que `normalizarCodigoBiotime` en src/shared/api/salarios.ts, que es lo que la app usa
+ * para avisar de un duplicado ANTES de guardar.
+ */
+function normCode(v: unknown): string {
+  const s = String(v ?? '').trim()
+  if (s === '') return ''
+  if (/^\d+$/.test(s)) return String(Number(s))
+  return s.toLowerCase()
 }
 
 /** `biotime_id` es `integer not null` en la tabla: acepta 5 y '5', rechaza 5.5, '' y null. */
@@ -228,23 +246,25 @@ Deno.serve(async (req) => {
     // ── 5. Resolver empleado por biotime_emp_code ────────────────────────────────────────
     // NUNCA por nombre (SPEC §9: casar por nombre ya produjo drift real). Sin match → null: la marca
     // se guarda igual con su `emp_code` para poder reconciliarla después sin volver a BioTime.
+    // El match se hace en FORMA CANÓNICA (`normCode`), no por igualdad de texto: '04' y '4'
+    // son el mismo usuario del reloj. Por eso NO se puede filtrar con `.in(biotime_emp_code,
+    // codes)` —ese filtro lo hace la base, comparando texto— y se traen los códigos cargados
+    // para cruzarlos acá. Son decenas de empleados, no un problema de tamaño.
     const sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
-    const codes = [...new Set(candidatos.map((c) => c.emp_code))]
     const mapa = new Map<string, string>()
 
-    for (let i = 0; i < codes.length; i += CHUNK_CODES) {
-      const trozo = codes.slice(i, i + CHUNK_CODES)
+    {
       const { data, error } = await sb
         .from('employees')
         .select('id, biotime_emp_code')
-        .in('biotime_emp_code', trozo)
+        .not('biotime_emp_code', 'is', null)
       if (error) {
         console.error('ingest-punches: fallo leyendo employees', error)
         return json({ ok: false, error: 'No se pudo resolver empleados' }, 500)
       }
       for (const e of (data ?? []) as { id: string; biotime_emp_code: string | null }[]) {
-        // A texto de los dos lados: en BioTime el código es numérico, en la app es text.
-        if (e.biotime_emp_code !== null) mapa.set(String(e.biotime_emp_code).trim(), e.id)
+        const k = normCode(e.biotime_emp_code)
+        if (k !== '') mapa.set(k, e.id)
       }
     }
 
@@ -256,7 +276,7 @@ Deno.serve(async (req) => {
     for (const c of candidatos) {
       if (vistos.has(c.biotime_id)) continue
       vistos.add(c.biotime_id)
-      rows.push({ ...c, employee_id: mapa.get(c.emp_code) ?? null })
+      rows.push({ ...c, employee_id: mapa.get(normCode(c.emp_code)) ?? null })
     }
 
     // ── 7. Insertar idempotente ──────────────────────────────────────────────────────────

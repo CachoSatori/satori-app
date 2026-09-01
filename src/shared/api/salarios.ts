@@ -945,6 +945,105 @@ export interface CodigoSinMapear {
  * en el conteo de excepciones. Solo LISTA — el mapeo código→persona lo firma quien
  * corresponde desde Empleados / Tarifas.
  */
+// ── EL MATCH código BioTime ↔ empleado (v3, fix del piloto) ─────────────────────
+//
+// La bandeja mostraba códigos huérfanos y mandaba a otra pantalla a asignarlos. Dos
+// problemas reales del piloto:
+//
+//   1. El código estaba EN LA FICHA y la bandeja lo seguía mostrando como huérfano. Pasa
+//      cuando el código se cargó DESPUÉS de que las marcas entraron: la Edge Function
+//      resuelve `employee_id` en el momento de insertar, y las marcas viejas quedan con
+//      `employee_id = null` para siempre. La bandeja no lo decía: mostraba el código pelado
+//      como si nadie lo tuviera.
+//   2. El código no matcheaba por una diferencia de FORMA: "04" contra "4", o un espacio.
+//      BioTime numera con ceros a la izquierda según cómo se cargó el usuario.
+//
+// `normalizarCodigoBiotime` es la respuesta a (2) y `empleadoDeCodigo` la usa para (1).
+
+/**
+ * Forma canónica de un código de BioTime, para COMPARAR (nunca para guardar).
+ *
+ *   " 04 " → "4"   ·   "17" → "17"   ·   "A7" → "a7"   ·   "" → ""
+ *
+ * Los ceros a la izquierda se caen SOLO si el resto es numérico: un código que no es un
+ * número se compara en minúsculas y sin espacios, pero no se le toca nada más.
+ */
+export function normalizarCodigoBiotime(v: string | null | undefined): string {
+  const s = String(v ?? '').trim()
+  if (s === '') return ''
+  if (/^\d+$/.test(s)) return String(Number(s))
+  return s.toLowerCase()
+}
+
+/** El empleado cuyo `biotime_emp_code` es ESE código, comparando en forma canónica. */
+export function empleadoDeCodigo(
+  code: string,
+  employees: Employee[],
+): Employee | null {
+  const c = normalizarCodigoBiotime(code)
+  if (!c) return null
+  return employees.find(e => normalizarCodigoBiotime(e.biotime_emp_code) === c) ?? null
+}
+
+/**
+ * Un código huérfano de la bandeja, ya cruzado contra el maestro. `duenio` distingue los
+ * dos casos que la pantalla tiene que tratar DISTINTO:
+ *
+ *   · `duenio === null` → nadie tiene ese código. Se asigna desde la bandeja y listo.
+ *   · `duenio !== null` → alguien YA lo tiene y las marcas igual quedaron sueltas: el
+ *     código se cargó después de que entraran. Asignarlo otra vez no arregla nada; hace
+ *     falta re-enganchar las marcas viejas, que es una corrección de datos aparte.
+ */
+export interface CodigoSinMapearConDuenio extends CodigoSinMapear {
+  duenio: Employee | null
+}
+
+export function codigosSinMapearConDuenio(
+  excs: PunchException[],
+  employees: Employee[],
+): CodigoSinMapearConDuenio[] {
+  return codigosSinMapear(excs).map(c => ({ ...c, duenio: empleadoDeCodigo(c.code, employees) }))
+}
+
+/**
+ * Asigna un código de BioTime a una persona que YA existe. Es la misma escritura que hace
+ * Tarifas, disponible desde donde el problema se ve — la bandeja de Horas.
+ *
+ * El guard de duplicado va ANTES de escribir y compara en forma canónica, así que "04" no
+ * entra si alguien ya tiene "4": el índice único de la mig 055 los vería distintos y
+ * dejaría dos personas cobrando las horas del mismo usuario del reloj.
+ *
+ * El código se guarda TAL CUAL lo escribió BioTime (sin normalizar): la forma canónica es
+ * para comparar, no para pisar el dato de origen.
+ *
+ * ⚠ Esto arregla las marcas que entren DESDE AHORA: la Edge Function resuelve el empleado
+ * al insertar. Las marcas YA guardadas siguen con `employee_id = null` — `time_punches` no
+ * tiene policy de escritura para la app (mig 057, a propósito), así que re-engancharlas es
+ * una corrección de datos aparte, no algo que esta función pueda hacer.
+ */
+export async function asignarCodigoBiotime(
+  employeeId: string,
+  code: string,
+  employees: Employee[],
+): Promise<void> {
+  const limpio = String(code ?? '').trim()
+  if (!limpio) throw new Error('El código de BioTime no puede quedar vacío.')
+
+  const otro = empleadoDeCodigo(limpio, employees)
+  if (otro && otro.id !== employeeId) {
+    throw new Error(
+      `El código de BioTime «${limpio}» ya es de ${otro.full_name}. ` +
+      'Cada usuario del reloj lleva el suyo.',
+    )
+  }
+
+  const { error } = await supabase
+    .from('employees')
+    .update({ biotime_emp_code: limpio })
+    .eq('id', employeeId)
+  if (error) throw new Error(error.message)
+}
+
 export function codigosSinMapear(excs: PunchException[]): CodigoSinMapear[] {
   const acc = new Map<string, { dias: Set<string>; marcas: number }>()
   for (const x of excs) {

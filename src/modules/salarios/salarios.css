@@ -1031,3 +1031,31 @@
   background: var(--sal-crit-wash);
   color: var(--sal-crit);
 }
+
+/* ── Bandeja de Horas · asignar un código de BioTime huérfano ────────────────
+   La lista de códigos sin empleado dejó de ser una lista muerta: cada ítem trae
+   el selector de persona y el botón. Necesita más aire y alinearse en el centro
+   (el `baseline` del listado normal descuadra un <select>), así que la variante
+   ajusta solo eso — el resto lo hereda de `.sal-nomap-list`. */
+.sal-v3 .sal-nomap-asigna li {
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--sal-r-sm);
+}
+
+.sal-v3 .sal-nomap-asigna .tip-input {
+  padding: 5px 8px;
+  font-size: 0.75rem;
+  max-width: 220px;
+}
+
+/* El código YA está en una ficha y las marcas igual quedaron sueltas: no es un
+   error de carga, es una marca vieja sin enganchar. Va en ámbar de aviso, no en
+   el gris del resto del meta, para que se lea como «esto es otra cosa». */
+.sal-v3 .sal-nomap-duenio {
+  font-size: 0.68rem;
+  color: var(--sal-warn);
+}
+
+.sal-v3 .sal-nomap-duenio strong { font-weight: 700; }

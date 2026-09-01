@@ -2,11 +2,13 @@ import { useState, useMemo } from 'react'
 import type { Employee, UserRole } from '../../shared/types/database'
 import { createEmployee, updateEmployeePayroll, toggleEmployeeActive } from '../../shared/api/admin'
 import {
-  updateEmployeeHomebankingName, updateEmployeeHorasHabituales, horaHabitualHHMM,
+  updateEmployeeHomebankingName,
   exigirTarifasEditables, participaServicio,
   // v3 · el default del 10% según el puesto, SOLO para altas, y la lista de cocina que
   // hoy cobra servicio (para revisar a mano, nunca para corregir sola).
   participaPorRolDefault, cocinaConServicio, departamentoDe, type Departamento,
+  // El horario se MUESTRA acá y se EDITA en Ficha: mismo texto en las dos pantallas.
+  horarioResumen,
 } from '../../shared/api/salarios'
 import { ROLE_LABELS } from '../../shared/constants'
 import { fi } from '../../shared/utils'
@@ -34,13 +36,11 @@ interface Draft {
   code:      string
   ingreso:   string
   banco:     string   // nombre del beneficiario en el homebanking (mig 058)
-  // Capa 3 (mig 061): el horario de siempre de esta persona. Vacío = sin regla; su
-  // fichaje impar se sigue corrigiendo a mano.
-  entrada:   string
-  salida:    string
+  // El HORARIO no está acá a propósito: se edita SOLO en Ficha (v3). Ver la nota de
+  // «una sola fuente» en `horarioResumen` (src/shared/api/salarios.ts).
 }
 
-const emptyDraft: Draft = { hourly: '0', fijo: '0', participa: true, code: '', ingreso: '', banco: '', entrada: '', salida: '' }
+const emptyDraft: Draft = { hourly: '0', fijo: '0', participa: true, code: '', ingreso: '', banco: '' }
 
 function draftOf(emp: Employee): Draft {
   return {
@@ -50,9 +50,6 @@ function draftOf(emp: Employee): Draft {
     code:      emp.biotime_emp_code ?? '',
     ingreso:   emp.fecha_ingreso ?? '',
     banco:     emp.nombre_homebanking ?? '',
-    // La columna es `time` y vuelve como "08:00:00"; el input del navegador quiere "08:00".
-    entrada:   horaHabitualHHMM(emp.hora_entrada_habitual) ?? '',
-    salida:    horaHabitualHHMM(emp.hora_salida_habitual) ?? '',
   }
 }
 
@@ -90,9 +87,18 @@ function codigoDuplicado(code: string, employees: Employee[], exceptId?: string)
 
 /**
  * `vista` parte la MISMA lista en las dos pestañas que el SPEC pide (Personal y
- * Tarifas) sin duplicar nada: el maestro, la edición por fila y el alta son los
- * mismos; cambia qué columnas se miran. Duplicar el componente habría dejado dos
- * lugares donde arreglar el mismo bug de plata.
+ * Tarifas) sin duplicar nada: el maestro y el alta son los mismos; cambia qué columnas
+ * se miran y QUIÉN puede editar. Duplicar el componente habría dejado dos lugares donde
+ * arreglar el mismo bug de plata.
+ *
+ * ── QUIÉN EDITA QUÉ (v3, fix del piloto) ─────────────────────────────────────────────
+ *   · **Personal** = SOLO LECTURA. Quién trabaja y en qué puesto. Lo único que se acciona
+ *     desde acá es dar de alta y activar/desactivar: eso ES «quién trabaja».
+ *   · **Tarifas**  = la plata (tarifa, salario fijo, 10% de servicio) + el código de
+ *     BioTime, la fecha de ingreso y el alias del banco.
+ *   · **Ficha**    = el HORARIO, y solo ahí. Antes se editaba también desde acá y el
+ *     mismo dato terminaba distinto según la pantalla. Las dos vistas lo MUESTRAN con
+ *     `horarioResumen`, que es literalmente el mismo código.
  */
 export type VistaEmpleados = 'personal' | 'tarifas'
 
@@ -151,6 +157,9 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
   const participan = useMemo(() => visibles.filter(e => participaServicio(e)).length, [visibles])
 
   const startEdit = (emp: Employee) => {
+    // Personal es de lectura: ni siquiera hay botón que llame acá. La guarda es por si
+    // alguien vuelve a montar la fila editable sin mirar la vista.
+    if (!esTarifas) return
     setError(null)
     setEditId(emp.id)
     setDraft(draftOf(emp))
@@ -176,11 +185,8 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
       if ((emp.nombre_homebanking ?? '') !== draft.banco.trim()) {
         await updateEmployeeHomebankingName(emp.id, draft.banco)
       }
-      // Ídem la regla de horario (mig 061): función propia, y solo si cambió.
-      if ((horaHabitualHHMM(emp.hora_entrada_habitual) ?? '') !== draft.entrada ||
-          (horaHabitualHHMM(emp.hora_salida_habitual) ?? '') !== draft.salida) {
-        await updateEmployeeHorasHabituales(emp.id, draft.entrada, draft.salida)
-      }
+      // El horario NO se escribe desde acá: es de Ficha. Si vuelve a aparecer una
+      // escritura de horario en este archivo, volvió el bug de las dos fuentes.
       setEditId(null)
       await onRefresh()
     } catch (err) {
@@ -209,9 +215,6 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
       })
       if (newDraft.banco.trim() && creado?.id) {
         await updateEmployeeHomebankingName(creado.id, newDraft.banco)
-      }
-      if ((newDraft.entrada || newDraft.salida) && creado?.id) {
-        await updateEmployeeHorasHabituales(creado.id, newDraft.entrada, newDraft.salida)
       }
       setNewName('')
       setNewRole('cocina')
@@ -312,30 +315,6 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
           style={{ width: '160px' }}
         />
       </td>
-      {/* Capa 3 (mig 061): el horario de siempre. Las dos horas van juntas porque se leen
-          juntas ("entra 08:00, sale 17:00") y porque cada una sirve para un lado distinto
-          del fichaje impar. Vacías = sin regla, y la bandeja no propone nada. */}
-      <td style={{ whiteSpace: 'nowrap' }}>
-        <input
-          className="tip-input"
-          type="time"
-          aria-label={`Hora de entrada habitual: ${prefix}`}
-          value={d.entrada}
-          onChange={e => set({ ...d, entrada: e.target.value })}
-          disabled={saving}
-          style={{ width: '92px' }}
-        />
-        <span style={{ opacity: 0.45, margin: '0 4px' }}>→</span>
-        <input
-          className="tip-input"
-          type="time"
-          aria-label={`Hora de salida habitual: ${prefix}`}
-          value={d.salida}
-          onChange={e => set({ ...d, salida: e.target.value })}
-          disabled={saving}
-          style={{ width: '92px' }}
-        />
-      </td>
     </>
   )
 
@@ -347,8 +326,8 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
           <h2>{esTarifas ? 'Tarifas' : 'Personal'}</h2>
           <p>
             {esTarifas
-              ? 'Tarifa por hora, salario fijo y quién participa del 10% de servicio. Es la misma lista que Personal: se edita en un solo lugar.'
-              : 'El maestro de la gente. Cada persona tiene departamento, puesto y una tarifa vigente.'}
+              ? 'Tarifa por hora, salario fijo y quién participa del 10% de servicio. Es la misma lista que Personal: la plata se edita en un solo lugar.'
+              : 'Quién trabaja y en qué puesto — de solo lectura. La plata se edita en Tarifas y el horario en Ficha.'}
           </p>
         </div>
         <button className="btn-secondary" onClick={() => { setShowForm(v => !v); setError(null) }}>
@@ -470,7 +449,6 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
                 <th>Cód. BioTime</th>
                 <th>Ingreso</th>
                 <th>Nombre en el banco</th>
-                <th>Horario habitual</th>
               </tr>
             </thead>
             <tbody>
@@ -484,6 +462,9 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
             (salón y barra, se transfiere con el salario). <strong>No es la propina</strong> —esa se
             paga en efectivo por el módulo Propinas— ni el IVA. Viene marcado en <strong>Sí</strong>
             {' '}por defecto.
+            <br />
+            El <strong>horario habitual</strong> se carga después, en la pestaña{' '}
+            <strong>Ficha</strong>: es el único lugar donde vive.
           </p>
           <div className="form-actions">
             <button type="submit" className="btn-primary" disabled={saving}>
@@ -506,7 +487,7 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
             <th>Cód. BioTime</th>
             <th>Ingreso</th>
             <th>Nombre en el banco</th>
-            <th>Horario habitual</th>
+            <th title="Se edita en la pestaña Ficha">Horario habitual <span className="sal-ro-mk">·  Ficha</span></th>
             <th></th>
           </tr>
         </thead>
@@ -558,16 +539,21 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
                   <td style={{ fontSize: '0.75rem' }}>
                     {emp.nombre_homebanking ?? <span style={{ opacity: 0.35 }}>— usa {emp.full_name} —</span>}
                   </td>
-                  {/* Sin regla cargada el impar de esta persona se sigue corrigiendo a mano. */}
-                  <td style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-                    {horaHabitualHHMM(emp.hora_entrada_habitual) || horaHabitualHHMM(emp.hora_salida_habitual)
-                      ? `${horaHabitualHHMM(emp.hora_entrada_habitual) ?? '—'} → ${horaHabitualHHMM(emp.hora_salida_habitual) ?? '—'}`
-                      : <span style={{ opacity: 0.35 }}>— sin regla —</span>}
+                  {/* SOLO LECTURA en las dos vistas: el horario se edita en Ficha. El
+                      texto sale de `horarioResumen`, el mismo que usa la Ficha, así que
+                      no puede decir una cosa acá y otra allá. Formato 24 h. */}
+                  <td className="sal-ro" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                      title="El horario se edita en la pestaña Ficha">
+                    {horarioResumen(emp)}
                   </td>
                   <td className="admin-row-actions">
-                    <button className="btn-delete-inline" onClick={() => startEdit(emp)} disabled={saving}>
-                      Editar
-                    </button>
+                    {/* Personal NO edita: quién trabaja (alta / activar / desactivar) sí es
+                        suyo, pero los datos son de Tarifas y de Ficha. */}
+                    {esTarifas && (
+                      <button className="btn-delete-inline" onClick={() => startEdit(emp)} disabled={saving}>
+                        Editar
+                      </button>
+                    )}
                     <button className="btn-delete-inline" onClick={() => handleToggle(emp)} disabled={saving}>
                       {emp.is_active ? 'Desactivar' : 'Activar'}
                     </button>
@@ -579,7 +565,7 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
 
           {visibles.length === 0 && (
             <tr>
-              <td colSpan={10} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
+              <td colSpan={esTarifas ? 10 : 11} style={{ padding: '1.5rem', textAlign: 'center', opacity: 0.4, fontSize: '0.8rem' }}>
                 Sin empleados en este filtro.
               </td>
             </tr>
@@ -592,6 +578,18 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
         Un empleado inactivo <strong>no se borra</strong>: conserva su historial y sale de los
         cálculos nuevos. El <strong>nombre en el banco</strong> es con el que el homebanking
         identifica la cuenta — sin él, el archivo del banco exporta el nombre del empleado.
+        <br />
+        El <strong>horario habitual</strong> de esta tabla es de <strong>solo lectura</strong>:
+        se edita en la pestaña <strong>Ficha</strong>, que es su único dueño. Lo que se guarda
+        allá aparece acá al volver a esta pestaña.
+        {!esTarifas && (
+          <>
+            <br />
+            <strong>Personal es de solo lectura.</strong> La tarifa, el salario fijo, el 10% de
+            servicio, el código de BioTime y el nombre en el banco se editan en{' '}
+            <strong>Tarifas</strong>.
+          </>
+        )}
       </p>
     </div>
   )

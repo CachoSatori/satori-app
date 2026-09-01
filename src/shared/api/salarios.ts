@@ -820,6 +820,48 @@ export function tipoReglaDe(
 }
 
 /**
+ * ── UNA SOLA FUENTE DEL HORARIO (v3) ──────────────────────────────────────────────────
+ *
+ * El horario se EDITA en un único lugar: la pestaña **Ficha**. Personal y Tarifas lo
+ * MUESTRAN, con estas dos funciones, y no lo tocan. Tener el mismo dato editable en dos
+ * pantallas ya había dejado horarios distintos según dónde se mirara; el arreglo no es
+ * sincronizarlos, es que haya un solo formulario.
+ *
+ * Estas funciones son la vitrina compartida: si el texto cambia, cambia en las dos
+ * pantallas a la vez porque es literalmente el mismo código.
+ */
+export const TIPO_REGLA_LABEL: Record<TipoRegla, string> = {
+  unico:    'Fijo',
+  cortado:  'Cortado',
+  flexible: 'Flexible',
+}
+
+/**
+ * El horario de una persona, como se lee en pantalla. Formato 24 h siempre —
+ * `horaHabitualHHMM` ya devuelve "HH:MM", nunca a.m./p.m.
+ *
+ *   "11:00 → 20:00"   con las dos horas cargadas (Fijo)
+ *   "—"               sin regla (Flexible): no hay hora techo que mostrar
+ */
+export function horarioHabitualTexto(
+  emp: Pick<Employee, 'hora_entrada_habitual' | 'hora_salida_habitual'>,
+): string {
+  const e  = horaHabitualHHMM(emp.hora_entrada_habitual)
+  const sl = horaHabitualHHMM(emp.hora_salida_habitual)
+  if (!e && !sl) return '—'
+  return `${e ?? '—'} → ${sl ?? '—'}`
+}
+
+/** "Fijo · 11:00 → 20:00" / "Flexible" — tipo y horas en una línea, para las tablas. */
+export function horarioResumen(
+  emp: Pick<Employee, 'hora_entrada_habitual' | 'hora_salida_habitual'>,
+): string {
+  const tipo = TIPO_REGLA_LABEL[tipoReglaDe(emp)]
+  const txt  = horarioHabitualTexto(emp)
+  return txt === '—' ? tipo : `${tipo} · ${txt}`
+}
+
+/**
  * El default de `participa_servicio` PARA UN ALTA, según el puesto. Salón y barra
  * cobran el 10% de servicio; cocina no.
  *

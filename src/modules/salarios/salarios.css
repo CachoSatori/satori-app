@@ -985,3 +985,30 @@
 /* Fila del costbox: el monto editable de Liquidaciones entra sin romper la alineación. */
 .sal-v3 .sal-costrow-r { font-family: var(--sal-mono); font-variant-numeric: tabular-nums; }
 .sal-v3 .sal-costrow-r .tip-input { padding: 6px 10px; font-size: 13px; }
+
+/* ── Solo lectura: el dato se ve, pero su dueño es otra pestaña ───────────────
+   Nace del fix v3 «una sola fuente del horario»: Personal y Tarifas MUESTRAN el
+   horario y la Ficha lo edita. La celda tiene que leerse como dato, no como un
+   campo que alguien pueda intentar tocar — de ahí el tono apagado y el cursor
+   de ayuda que revela el `title` («se edita en Ficha»). */
+.sal-v3 .sal-ro {
+  color: var(--sal-muted);
+  cursor: help;
+}
+
+.sal-v3 .sal-ro-mk {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+/* Nota neutra: ni aviso (gold) ni confirmación (teal). Se usa para mostrar el
+   dato tal como lo van a leer OTRAS pantallas. */
+.sal-v3 .sal-note-plain {
+  background: var(--sal-surface-2);
+  color: var(--sal-ink-soft);
+}

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Employee, WorkDay } from '../types/database'
+import { fi } from '../utils'
 
 // Salarios · el 10% de SERVICIO (v3). Los tests que amarran los TRES CONCEPTOS:
 //
@@ -41,6 +42,7 @@ import {
   repartoServicioDia, servicioDelPeriodo, servicioDeDiaData, diasDelPeriodo,
   participaServicio, PARTICIPA_SERVICIO_DEFAULT, getServicioPorDia,
   consolidarPeriodo, aPagarDe, ingresoTotalDe, LOCAL_DEFAULT,
+  servicioNoAsignado, motivoBloqueoServicio,
 } from './salarios'
 
 beforeEach(() => {
@@ -282,5 +284,168 @@ describe('consolidado v3: A pagar = total de horas + 10% de servicio', () => {
     expect(ingresoTotalDe(249_600, 27_000, 41_000)).toBe(317_600)
     // `servicio` con default 0: un llamador viejo sigue dando el número de antes.
     expect(ingresoTotalDe(249_600, 27_000)).toBe(276_600)
+  })
+})
+
+
+// ╔══════════════════════════════════════════════════════════════════════════════════════╗
+// ║ EL 10% QUE NADIE COBRA · desglose POR CAUSA, y el BLOQUEO (v3, fix del piloto)         ║
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+// Antes la pantalla mostraba un total opaco: «₡X no se reparte en esta nómina». Un número
+// sin causa no se puede arreglar. Estas pruebas fijan las dos causas, sus montos, y que un
+// remanente FRENE el cierre y el pago en vez de dejar plata perdida en silencio.
+
+describe('10% sin asignar · el desglose por causa', () => {
+  const TODOS = ['2026-08-01', '2026-08-02', '2026-08-03']
+
+  it('un día con 10% y nadie que participe queda listado CON su fecha y su monto', () => {
+    // El 02 lo trabajó solo BENITO, que NO participa del 10% → ese pool no tiene dueño.
+    const sp = servicioDelPeriodo(
+      [
+        wd({ employee_id: 'e1', work_date: '2026-08-01', hours: 8 }),
+        wd({ employee_id: 'e2', work_date: '2026-08-02', hours: 8 }),
+      ],
+      new Map([['2026-08-01', 30_000], ['2026-08-02', 21_000], ['2026-08-03', 0]]),
+      id => id === 'e1',
+      TODOS,
+    )
+    expect(sp.diasSinParticipantes).toEqual([{ fecha: '2026-08-02', pool: 21_000 }])
+    expect(sp.totalSinRepartir).toBe(21_000)
+
+    const na = servicioNoAsignado(sp, new Set(['e1']), () => ({ nombre: '?', horas: 0 }))
+    expect(na.totalDiasSinParticipantes).toBe(21_000)
+    expect(na.inactivos).toEqual([])
+    expect(na.total).toBe(21_000)
+    expect(na.bloquea).toBe(true)
+  })
+
+  it('quien fichó estando INACTIVO sale con nombre, horas y la cuota que le tocaría', () => {
+    // LESTER está inactivo: tiene horas, el reparto le adjudicó su parte, y la grilla no
+    // lo tiene. Esa plata existe y hoy no se la paga nadie.
+    const sp = servicioDelPeriodo(
+      [
+        wd({ employee_id: 'e1', work_date: '2026-08-01', hours: 6 }),
+        wd({ employee_id: 'e9', work_date: '2026-08-01', hours: 4 }),
+      ],
+      new Map([['2026-08-01', 20_000]]),
+      () => true,
+      ['2026-08-01'],
+    )
+    // 20.000 entre 10 h → 2.000/h. ANA 6 h = 12.000; LESTER 4 h = 8.000.
+    const na = servicioNoAsignado(
+      sp,
+      new Set(['e1']),                       // solo ANA está en la grilla
+      id => ({ nombre: id === 'e9' ? 'LESTER' : id, horas: id === 'e9' ? 4 : 6 }),
+    )
+    expect(na.inactivos).toEqual([{ employeeId: 'e9', nombre: 'LESTER', horas: 4, cuota: 8_000 }])
+    expect(na.totalInactivos).toBe(8_000)
+    expect(na.diasSinParticipantes).toEqual([])
+    expect(na.total).toBe(8_000)
+    expect(na.bloquea).toBe(true)
+  })
+
+  it('las dos causas juntas SUMAN, y cada una conserva su monto', () => {
+    const sp = servicioDelPeriodo(
+      [
+        wd({ employee_id: 'e1', work_date: '2026-08-01', hours: 6 }),
+        wd({ employee_id: 'e9', work_date: '2026-08-01', hours: 4 }),
+        wd({ employee_id: 'e2', work_date: '2026-08-02', hours: 8 }),   // no participa
+      ],
+      new Map([['2026-08-01', 20_000], ['2026-08-02', 21_000]]),
+      id => id !== 'e2',
+      ['2026-08-01', '2026-08-02'],
+    )
+    const na = servicioNoAsignado(sp, new Set(['e1']), id => ({ nombre: id, horas: 4 }))
+    expect(na.totalDiasSinParticipantes).toBe(21_000)
+    expect(na.totalInactivos).toBe(8_000)
+    expect(na.total).toBe(29_000)
+  })
+
+  it('los inactivos van del que más plata tiene sin cobrar hacia abajo', () => {
+    const sp = servicioDelPeriodo(
+      [
+        wd({ employee_id: 'e7', work_date: '2026-08-01', hours: 2 }),
+        wd({ employee_id: 'e8', work_date: '2026-08-01', hours: 8 }),
+      ],
+      new Map([['2026-08-01', 10_000]]),
+      () => true,
+      ['2026-08-01'],
+    )
+    const na = servicioNoAsignado(sp, new Set(), id => ({ nombre: id, horas: 0 }))
+    expect(na.inactivos.map(i => i.cuota)).toEqual([8_000, 2_000])
+  })
+
+  it('sin remanente NO bloquea: todo repartido entre gente que sí está en la grilla', () => {
+    const sp = servicioDelPeriodo(
+      [wd({ employee_id: 'e1', work_date: '2026-08-01', hours: 8 })],
+      new Map([['2026-08-01', 30_000]]),
+      () => true,
+      ['2026-08-01'],
+    )
+    const na = servicioNoAsignado(sp, new Set(['e1']), id => ({ nombre: id, horas: 8 }))
+    expect(na.total).toBe(0)
+    expect(na.bloquea).toBe(false)
+    expect(motivoBloqueoServicio(na, 'cerrar')).toBeNull()
+    expect(motivoBloqueoServicio(na, 'pagar')).toBeNull()
+  })
+
+  it('un día con pool ₡0 no inventa un remanente', () => {
+    const sp = servicioDelPeriodo([], new Map([['2026-08-01', 0]]), () => true, ['2026-08-01'])
+    const na = servicioNoAsignado(sp, new Set(), () => ({ nombre: '?', horas: 0 }))
+    expect(na.total).toBe(0)
+    expect(na.bloquea).toBe(false)
+  })
+
+  it('un día SIN ventas cargadas no es un remanente: es "no se sabe"', () => {
+    // Se sigue avisando aparte (`diasSinVentas`), pero no se cuenta como plata sin
+    // asignar: no hay monto conocido que asignarle a nadie.
+    const sp = servicioDelPeriodo([], new Map(), () => true, ['2026-08-01', '2026-08-02'])
+    expect(sp.diasSinVentas).toEqual(['2026-08-01', '2026-08-02'])
+    const na = servicioNoAsignado(sp, new Set(), () => ({ nombre: '?', horas: 0 }))
+    expect(na.total).toBe(0)
+    expect(na.bloquea).toBe(false)
+  })
+
+  it('una cuota que redondea a ₡0 no ensucia la lista', () => {
+    const sp = servicioDelPeriodo(
+      [
+        wd({ employee_id: 'e1', work_date: '2026-08-01', hours: 1000 }),
+        wd({ employee_id: 'e9', work_date: '2026-08-01', hours: 0.01 }),
+      ],
+      new Map([['2026-08-01', 100]]),
+      () => true,
+      ['2026-08-01'],
+    )
+    const na = servicioNoAsignado(sp, new Set(['e1']), id => ({ nombre: id, horas: 0.01 }))
+    expect(na.inactivos).toEqual([])
+    expect(na.bloquea).toBe(false)
+  })
+})
+
+describe('10% sin asignar · el mensaje del bloqueo', () => {
+  const conRemanente = (dias: number, inact: number) => ({
+    diasSinParticipantes: dias > 0 ? [{ fecha: '2026-08-02', pool: dias }] : [],
+    totalDiasSinParticipantes: dias,
+    inactivos: inact > 0 ? [{ employeeId: 'e9', nombre: 'LESTER', horas: 4, cuota: inact }] : [],
+    totalInactivos: inact,
+    total: dias + inact,
+    bloquea: dias + inact > 0,
+  })
+
+  it('nombra el total, la causa y la acción que queda frenada', () => {
+    const msg = motivoBloqueoServicio(conRemanente(21_000, 8_000), 'cerrar')!
+    expect(msg).toContain('SIN ASIGNAR')
+    // El monto se escribe con el MISMO `fi` que la pantalla: un solo formato de colones.
+    expect(msg).toContain(fi(29_000))
+    expect(msg).toContain('1 día(s) sin nadie que participe')
+    expect(msg).toContain('1 persona(s) que fichó estando inactiva')
+    expect(msg).toContain('cerrar')
+  })
+
+  it('con una sola causa no menciona la otra', () => {
+    const msg = motivoBloqueoServicio(conRemanente(0, 8_000), 'pagar')!
+    expect(msg).toContain('fichó estando inactiva')
+    expect(msg).not.toContain('sin nadie que participe')
+    expect(msg).toContain('pagar')
   })
 })

@@ -11,6 +11,9 @@ import type {
   WorkDay,
 } from '../types/database'
 import { horasEntreMarcas, marcaUnicaDeImpar } from '../utils/horasCorreccion'
+// El MISMO formateador de colones que usa la pantalla: el mensaje del bloqueo y el cartel
+// tienen que escribir el monto igual, o parecen dos números distintos.
+import { fi } from '../utils'
 import { ROLE_LABELS } from '../constants'
 
 // ── Salarios · U0b: el ciclo mínimo de pago ─────────────────────────────────────
@@ -820,6 +823,48 @@ export function tipoReglaDe(
 }
 
 /**
+ * ── UNA SOLA FUENTE DEL HORARIO (v3) ──────────────────────────────────────────────────
+ *
+ * El horario se EDITA en un único lugar: la pestaña **Ficha**. Personal y Tarifas lo
+ * MUESTRAN, con estas dos funciones, y no lo tocan. Tener el mismo dato editable en dos
+ * pantallas ya había dejado horarios distintos según dónde se mirara; el arreglo no es
+ * sincronizarlos, es que haya un solo formulario.
+ *
+ * Estas funciones son la vitrina compartida: si el texto cambia, cambia en las dos
+ * pantallas a la vez porque es literalmente el mismo código.
+ */
+export const TIPO_REGLA_LABEL: Record<TipoRegla, string> = {
+  unico:    'Fijo',
+  cortado:  'Cortado',
+  flexible: 'Flexible',
+}
+
+/**
+ * El horario de una persona, como se lee en pantalla. Formato 24 h siempre —
+ * `horaHabitualHHMM` ya devuelve "HH:MM", nunca a.m./p.m.
+ *
+ *   "11:00 → 20:00"   con las dos horas cargadas (Fijo)
+ *   "—"               sin regla (Flexible): no hay hora techo que mostrar
+ */
+export function horarioHabitualTexto(
+  emp: Pick<Employee, 'hora_entrada_habitual' | 'hora_salida_habitual'>,
+): string {
+  const e  = horaHabitualHHMM(emp.hora_entrada_habitual)
+  const sl = horaHabitualHHMM(emp.hora_salida_habitual)
+  if (!e && !sl) return '—'
+  return `${e ?? '—'} → ${sl ?? '—'}`
+}
+
+/** "Fijo · 11:00 → 20:00" / "Flexible" — tipo y horas en una línea, para las tablas. */
+export function horarioResumen(
+  emp: Pick<Employee, 'hora_entrada_habitual' | 'hora_salida_habitual'>,
+): string {
+  const tipo = TIPO_REGLA_LABEL[tipoReglaDe(emp)]
+  const txt  = horarioHabitualTexto(emp)
+  return txt === '—' ? tipo : `${tipo} · ${txt}`
+}
+
+/**
  * El default de `participa_servicio` PARA UN ALTA, según el puesto. Salón y barra
  * cobran el 10% de servicio; cocina no.
  *
@@ -900,6 +945,105 @@ export interface CodigoSinMapear {
  * en el conteo de excepciones. Solo LISTA — el mapeo código→persona lo firma quien
  * corresponde desde Empleados / Tarifas.
  */
+// ── EL MATCH código BioTime ↔ empleado (v3, fix del piloto) ─────────────────────
+//
+// La bandeja mostraba códigos huérfanos y mandaba a otra pantalla a asignarlos. Dos
+// problemas reales del piloto:
+//
+//   1. El código estaba EN LA FICHA y la bandeja lo seguía mostrando como huérfano. Pasa
+//      cuando el código se cargó DESPUÉS de que las marcas entraron: la Edge Function
+//      resuelve `employee_id` en el momento de insertar, y las marcas viejas quedan con
+//      `employee_id = null` para siempre. La bandeja no lo decía: mostraba el código pelado
+//      como si nadie lo tuviera.
+//   2. El código no matcheaba por una diferencia de FORMA: "04" contra "4", o un espacio.
+//      BioTime numera con ceros a la izquierda según cómo se cargó el usuario.
+//
+// `normalizarCodigoBiotime` es la respuesta a (2) y `empleadoDeCodigo` la usa para (1).
+
+/**
+ * Forma canónica de un código de BioTime, para COMPARAR (nunca para guardar).
+ *
+ *   " 04 " → "4"   ·   "17" → "17"   ·   "A7" → "a7"   ·   "" → ""
+ *
+ * Los ceros a la izquierda se caen SOLO si el resto es numérico: un código que no es un
+ * número se compara en minúsculas y sin espacios, pero no se le toca nada más.
+ */
+export function normalizarCodigoBiotime(v: string | null | undefined): string {
+  const s = String(v ?? '').trim()
+  if (s === '') return ''
+  if (/^\d+$/.test(s)) return String(Number(s))
+  return s.toLowerCase()
+}
+
+/** El empleado cuyo `biotime_emp_code` es ESE código, comparando en forma canónica. */
+export function empleadoDeCodigo(
+  code: string,
+  employees: Employee[],
+): Employee | null {
+  const c = normalizarCodigoBiotime(code)
+  if (!c) return null
+  return employees.find(e => normalizarCodigoBiotime(e.biotime_emp_code) === c) ?? null
+}
+
+/**
+ * Un código huérfano de la bandeja, ya cruzado contra el maestro. `duenio` distingue los
+ * dos casos que la pantalla tiene que tratar DISTINTO:
+ *
+ *   · `duenio === null` → nadie tiene ese código. Se asigna desde la bandeja y listo.
+ *   · `duenio !== null` → alguien YA lo tiene y las marcas igual quedaron sueltas: el
+ *     código se cargó después de que entraran. Asignarlo otra vez no arregla nada; hace
+ *     falta re-enganchar las marcas viejas, que es una corrección de datos aparte.
+ */
+export interface CodigoSinMapearConDuenio extends CodigoSinMapear {
+  duenio: Employee | null
+}
+
+export function codigosSinMapearConDuenio(
+  excs: PunchException[],
+  employees: Employee[],
+): CodigoSinMapearConDuenio[] {
+  return codigosSinMapear(excs).map(c => ({ ...c, duenio: empleadoDeCodigo(c.code, employees) }))
+}
+
+/**
+ * Asigna un código de BioTime a una persona que YA existe. Es la misma escritura que hace
+ * Tarifas, disponible desde donde el problema se ve — la bandeja de Horas.
+ *
+ * El guard de duplicado va ANTES de escribir y compara en forma canónica, así que "04" no
+ * entra si alguien ya tiene "4": el índice único de la mig 055 los vería distintos y
+ * dejaría dos personas cobrando las horas del mismo usuario del reloj.
+ *
+ * El código se guarda TAL CUAL lo escribió BioTime (sin normalizar): la forma canónica es
+ * para comparar, no para pisar el dato de origen.
+ *
+ * ⚠ Esto arregla las marcas que entren DESDE AHORA: la Edge Function resuelve el empleado
+ * al insertar. Las marcas YA guardadas siguen con `employee_id = null` — `time_punches` no
+ * tiene policy de escritura para la app (mig 057, a propósito), así que re-engancharlas es
+ * una corrección de datos aparte, no algo que esta función pueda hacer.
+ */
+export async function asignarCodigoBiotime(
+  employeeId: string,
+  code: string,
+  employees: Employee[],
+): Promise<void> {
+  const limpio = String(code ?? '').trim()
+  if (!limpio) throw new Error('El código de BioTime no puede quedar vacío.')
+
+  const otro = empleadoDeCodigo(limpio, employees)
+  if (otro && otro.id !== employeeId) {
+    throw new Error(
+      `El código de BioTime «${limpio}» ya es de ${otro.full_name}. ` +
+      'Cada usuario del reloj lleva el suyo.',
+    )
+  }
+
+  const { error } = await supabase
+    .from('employees')
+    .update({ biotime_emp_code: limpio })
+    .eq('id', employeeId)
+  if (error) throw new Error(error.message)
+}
+
 export function codigosSinMapear(excs: PunchException[]): CodigoSinMapear[] {
   const acc = new Map<string, { dias: Set<string>; marcas: number }>()
   for (const x of excs) {
@@ -974,6 +1118,12 @@ export interface ServicioPeriodo {
    */
   totalSinRepartir: number
   /**
+   * Los días de arriba, UNO POR UNO con su monto. El total suelto no dice qué hacer; la
+   * fecha sí: o faltan las horas de ese día, o ese día de verdad no lo trabajó nadie que
+   * participe del 10% y hay que asignarlo a mano.
+   */
+  diasSinParticipantes: { fecha: string; pool: number }[]
+  /**
    * Días del período SIN fila en `ventas_dias`. No es "ese día no hubo servicio": es
    * "no se sabe". Se listan para que el que arma la nómina cargue las ventas o acepte
    * el faltante a sabiendas.
@@ -1000,6 +1150,7 @@ export function servicioDelPeriodo(
   let totalRepartido   = 0
   let totalSinRepartir = 0
   const diasSinVentas: string[] = []
+  const diasSinParticipantes: { fecha: string; pool: number }[] = []
 
   // Horas por día, SOLO de quien participa. Se suman los locales del mismo día: una
   // persona puede tener horas en dos locales y su cuota sale de las horas que trabajó.
@@ -1020,14 +1171,132 @@ export function servicioDelPeriodo(
     const delDia = horasPorDia.get(fecha)
     const filas  = delDia ? [...delDia].map(([employeeId, horas]) => ({ employeeId, horas })) : []
     const cuotas = repartoServicioDia(pool, filas)
-    if (cuotas.size === 0) { totalSinRepartir += pool; continue }
+    if (cuotas.size === 0) {
+      totalSinRepartir += pool
+      diasSinParticipantes.push({ fecha, pool })
+      continue
+    }
     for (const [id, monto] of cuotas) {
       porEmpleado.set(id, (porEmpleado.get(id) ?? 0) + monto)
       totalRepartido += monto
     }
   }
 
-  return { porEmpleado, totalRepartido, totalSinRepartir, diasSinVentas }
+  return { porEmpleado, totalRepartido, totalSinRepartir, diasSinParticipantes, diasSinVentas }
+}
+
+// ── EL 10% QUE NADIE COBRA · desglose POR CAUSA (v3, fix del piloto) ────────────
+//
+// Antes esto era un total opaco: «₡X del 10% no se reparte en esta nómina». Un número
+// sin causa no se puede arreglar — el que arma la nómina no sabe si le faltan horas, si
+// le faltan ventas, o si hay alguien afuera de la grilla que ya se ganó esa plata.
+//
+// Ahora se parte en las DOS causas que existen, cada una con su acción:
+//
+//   1. DÍAS SIN PARTICIPANTES — el día cobró 10% y nadie que participe tiene horas.
+//      → o faltan las horas de ese día, o hay que asignarlo a mano. Lo decide una persona.
+//   2. INACTIVOS CON HORAS — ficharon, les tocó su cuota, y su línea no está en la grilla
+//      porque están desactivados. → nombre, horas y CUÁNTO les tocaría.
+//
+// Y el remanente BLOQUEA el cierre y el pago. No se redistribuye solo: repartir entre los
+// demás la plata de alguien que no está es una decisión de Ismael, no un default.
+
+export interface ServicioInactivo {
+  employeeId: string
+  nombre:     string
+  horas:      number
+  /** Lo que el reparto por horas le adjudicó y esta nómina NO transfiere. */
+  cuota:      number
+}
+
+export interface ServicioNoAsignado {
+  /** Días con 10% cobrado y ninguna hora de quien participa. Con fecha y monto. */
+  diasSinParticipantes: { fecha: string; pool: number }[]
+  /** Σ de esos días. Remanente irreductible: no hay a quién dárselo sin decidirlo. */
+  totalDiasSinParticipantes: number
+  /** Quiénes ficharon estando inactivos, con sus horas y su cuota. */
+  inactivos: ServicioInactivo[]
+  /** Σ de las cuotas de los inactivos. */
+  totalInactivos: number
+  /** Todo lo que queda SIN ASIGNAR. `> 0` bloquea cerrar y pagar. */
+  total: number
+  /** `true` si hay algo que impide cerrar/pagar. Es `total > 0`, con nombre. */
+  bloquea: boolean
+}
+
+/**
+ * El 10% que esta nómina NO transfiere, abierto por causa.
+ *
+ * `enLaGrilla` son los `employee_id` que la nómina SÍ paga (los activos consolidados). Una
+ * cuota adjudicada a alguien fuera de ese conjunto es plata de una persona real que la
+ * pantalla no está mostrando: es exactamente el caso «fichó estando inactivo».
+ *
+ * PURO: no lee, no escribe, no redondea la decisión de nadie. Los montos van redondeados a
+ * colón porque es la unidad en la que se transfiere y en la que se mira la pantalla.
+ */
+export function servicioNoAsignado(
+  servicio: ServicioPeriodo,
+  enLaGrilla: Set<string>,
+  datosDe: (employeeId: string) => { nombre: string; horas: number },
+): ServicioNoAsignado {
+  const diasSinParticipantes = servicio.diasSinParticipantes.map(
+    d => ({ fecha: d.fecha, pool: Math.round(d.pool) }),
+  )
+  const totalDiasSinParticipantes = diasSinParticipantes.reduce((s, d) => s + d.pool, 0)
+
+  const inactivos: ServicioInactivo[] = []
+  for (const [employeeId, monto] of servicio.porEmpleado) {
+    if (enLaGrilla.has(employeeId)) continue
+    const cuota = Math.round(Number(monto) || 0)
+    // Una cuota que redondea a ₡0 no es plata: no se lista para no llenar el aviso de ruido.
+    if (cuota <= 0) continue
+    const { nombre, horas } = datosDe(employeeId)
+    inactivos.push({ employeeId, nombre, horas, cuota })
+  }
+  // Del que más plata tiene sin cobrar hacia abajo: es el orden en que hay que resolverlos.
+  inactivos.sort((a, b) => b.cuota - a.cuota || a.nombre.localeCompare(b.nombre, 'es'))
+  const totalInactivos = inactivos.reduce((s, i) => s + i.cuota, 0)
+
+  const total = totalDiasSinParticipantes + totalInactivos
+  return {
+    diasSinParticipantes,
+    totalDiasSinParticipantes,
+    inactivos,
+    totalInactivos,
+    total,
+    bloquea: total > 0,
+  }
+}
+
+/**
+ * El mensaje del bloqueo, con la causa adentro. `null` = no bloquea.
+ *
+ * Se escribe acá y no en la pantalla para que el botón, el `confirm` y el cartel digan
+ * EXACTAMENTE lo mismo: tres textos distintos para el mismo bloqueo es cómo se termina
+ * cerrando un período «porque el cartel decía otra cosa».
+ */
+export function motivoBloqueoServicio(
+  na: ServicioNoAsignado,
+  accion: 'cerrar' | 'pagar',
+): string | null {
+  if (!na.bloquea) return null
+  const partes: string[] = []
+  if (na.totalDiasSinParticipantes > 0) {
+    partes.push(
+      `${fi(na.totalDiasSinParticipantes)} de ` +
+      `${na.diasSinParticipantes.length} día(s) sin nadie que participe`,
+    )
+  }
+  if (na.totalInactivos > 0) {
+    partes.push(
+      `${fi(na.totalInactivos)} de ` +
+      `${na.inactivos.length} persona(s) que fichó estando inactiva`,
+    )
+  }
+  return (
+    `Queda 10% de servicio SIN ASIGNAR: ${fi(na.total)} ` +
+    `(${partes.join(' · ')}). No se puede ${accion} el período hasta resolverlo.`
+  )
 }
 
 /**
@@ -1552,7 +1821,9 @@ const HORA_TIME = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/
 export function horaHabitualHHMM(v: string | null | undefined): string | null {
   if (typeof v !== 'string') return null
   const m = HORA_TIME.exec(v.trim())
-  return m ? `${m[1]}:${m[2]}` : null
+  // `HORA_TIME` ya exige 00–23, así que esto es 24 h por construcción. Pasa igual por
+  // `hhmm24` para que la salida del módulo tenga UNA sola forma.
+  return m ? hhmm24(Number(m[1]), Number(m[2])) : null
 }
 
 /**
@@ -1568,12 +1839,35 @@ export function horaHabitualFaltante(
   return horaHabitualHHMM(ladoReal === 'in' ? emp.hora_salida_habitual : emp.hora_entrada_habitual)
 }
 
-/** Hora local de Costa Rica (UTC−6 FIJO, sin horario de verano) de un instante ISO. */
+// ── EL FORMATO DE HORA DE NÓMINA: 24 h, SIEMPRE (v3, fix del piloto) ────────────
+//
+// Toda hora de reloj de este módulo —marcas de BioTime, horario habitual, la bandeja de
+// fichajes, la Ficha— se escribe **HH:MM en 24 horas**: 14:00, 02:00, 00:00. Nunca
+// a.m./p.m., y nunca `toLocaleTimeString`, que con `es-CR` devuelve el reloj de 12 h.
+//
+// No es estética. Un turno de nómina cruza la medianoche todas las noches: "2:00" sin el
+// a.m./p.m. —o con el a.m./p.m. leído rápido— es la diferencia entre una salida de
+// madrugada y una entrada de tarde, o sea entre 8 horas y −6. El 24 h no tiene ese doblez.
+//
+// `hhmmCR` (de un instante) y `horaHabitualHHMM` (de una columna `time`) son las DOS
+// puertas de entrada, y las dos salen por `hhmm24`. Si alguna hora de reloj de este módulo
+// no pasó por acá, es una hora que puede estar en 12 h.
+
+/** Horas y minutos → "HH:MM" en 24 h, con el cero adelante. La ÚNICA salida del módulo. */
+export function hhmm24(horas: number, minutos: number): string {
+  return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`
+}
+
+/**
+ * Hora local de Costa Rica (UTC−6 FIJO, sin horario de verano) de un instante ISO,
+ * en 24 h. Un valor que no es un instante vuelve tal cual: mejor un dato raro visible
+ * que un "NaN:NaN" que no dice de dónde salió.
+ */
 export function hhmmCR(iso: string): string {
   const d = new Date(iso)
   if (isNaN(d.getTime())) return iso
   const cr = new Date(d.getTime() - 6 * 3600_000)
-  return `${String(cr.getUTCHours()).padStart(2, '0')}:${String(cr.getUTCMinutes()).padStart(2, '0')}`
+  return hhmm24(cr.getUTCHours(), cr.getUTCMinutes())
 }
 
 export const MOTIVO_REGLA = 'regla del empleado (hora habitual)'

@@ -49,9 +49,18 @@ function emp(over: Partial<Employee> & { id: string; full_name: string }): Emplo
 const ANA    = emp({ id: 'e1', full_name: 'ANA',    biotime_emp_code: '17', hourly_rate_crc: 2600 })
 const BENITO = emp({ id: 'e2', full_name: 'BENITO', role: 'cocina' })
 
+// La EDICIÓN vive en Tarifas (v3): Personal quedó de solo lectura. Por eso el helper por
+// defecto monta la vista de Tarifas — es donde están los botones que estas pruebas usan.
 function renderList(employees: Employee[] = [ANA, BENITO]) {
   const onRefresh = vi.fn(async () => {})
-  const view = render(<SalariosEmpleados employees={employees} onRefresh={onRefresh} />)
+  const view = render(<SalariosEmpleados employees={employees} onRefresh={onRefresh} vista="tarifas" />)
+  return { onRefresh, view }
+}
+
+/** Personal: quién trabaja y en qué puesto. De SOLO LECTURA. */
+function renderPersonal(employees: Employee[] = [ANA, BENITO]) {
+  const onRefresh = vi.fn(async () => {})
+  const view = render(<SalariosEmpleados employees={employees} onRefresh={onRefresh} vista="personal" />)
   return { onRefresh, view }
 }
 
@@ -94,6 +103,7 @@ describe('Salarios · Empleados / Tarifas — guardado de nómina', () => {
       <SalariosEmpleados
         employees={[ANA, { ...BENITO, hourly_rate_crc: 2600, fixed_salary_crc: 450000, participa_servicio: false, biotime_emp_code: '42', fecha_ingreso: '2024-03-01' }]}
         onRefresh={async () => {}}
+        vista="tarifas"
       />,
     )
     expect(screen.getByText('42')).toBeTruthy()
@@ -212,52 +222,46 @@ describe('Salarios · inactivos', () => {
   })
 })
 
-// ── Capa 3 · la regla de horario del empleado (mig 061) ───────────────────────
-// La hora de siempre de cada persona deja de ser algo que alguien recuerda y se escribe a
-// mano cada quincena: vive en la ficha. Acá solo se guarda; quien la usa es la bandeja.
-describe('Salarios · Empleados / Tarifas — horario habitual', () => {
+// ╔══════════════════════════════════════════════════════════════════════════════════════╗
+// ║ UNA SOLA FUENTE DEL HORARIO (v3 · fix del piloto)                                      ║
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+// El horario se editaba en DOS lados —acá y en Ficha— y el mismo dato terminaba distinto
+// según dónde se mirara. Ahora Personal y Tarifas lo MUESTRAN y la Ficha es su única dueña.
+// Estas pruebas son la red: si vuelve a aparecer un input de horario en esta pantalla, o si
+// esta pantalla vuelve a escribir la regla, se ponen en rojo.
+describe('Salarios · el horario se MUESTRA acá y se edita SOLO en Ficha', () => {
   const CON_REGLA = emp({
     id: 'e3', full_name: 'CARLA',
     hora_entrada_habitual: '08:00:00', hora_salida_habitual: '17:00:00',
   })
 
-  it('muestra el horario cargado y, sin regla, lo dice en vez de fingir una hora', () => {
-    renderList([CON_REGLA, BENITO])
-    expect(screen.getByText('08:00 → 17:00')).toBeTruthy()
-    expect(screen.getByText('— sin regla —')).toBeTruthy()
+  it('muestra tipo y horas en 24 h, y dice «Flexible» en vez de fingir una hora', () => {
+    renderPersonal([CON_REGLA, BENITO])
+    expect(screen.getByText('Fijo · 08:00 → 17:00')).toBeTruthy()
+    expect(screen.getByText('Flexible')).toBeTruthy()
   })
 
-  it('editar carga las horas en formato del navegador ("08:00:00" → "08:00")', () => {
+  it('Personal es de SOLO LECTURA: no hay botón Editar ni inputs de nómina', () => {
+    renderPersonal()
+    expect(screen.queryByText('Editar')).toBeNull()
+    expect(screen.queryByLabelText('Tarifa por hora: ANA')).toBeNull()
+    expect(screen.queryByLabelText('Código BioTime: ANA')).toBeNull()
+    // Lo que SÍ es de Personal: quién trabaja.
+    expect(screen.getAllByText('Desactivar').length).toBeGreaterThan(0)
+    expect(screen.getByText('+ Agregar empleado')).toBeTruthy()
+  })
+
+  it('NINGUNA de las dos vistas tiene input de horario — ni editando una fila', () => {
+    renderPersonal([CON_REGLA])
+    expect(screen.queryByLabelText('Hora de entrada habitual: CARLA')).toBeNull()
+
     renderList([CON_REGLA])
     fireEvent.click(screen.getByText('Editar'))
-    expect((screen.getByLabelText('Hora de entrada habitual: CARLA') as HTMLInputElement).value).toBe('08:00')
-    expect((screen.getByLabelText('Hora de salida habitual: CARLA') as HTMLInputElement).value).toBe('17:00')
+    expect(screen.queryByLabelText('Hora de entrada habitual: CARLA')).toBeNull()
+    expect(screen.queryByLabelText('Hora de salida habitual: CARLA')).toBeNull()
   })
 
-  it('cargar el horario de quien no lo tenía lo guarda por su propia función', async () => {
-    renderList()
-    fireEvent.click(screen.getAllByText('Editar')[1])                       // BENITO
-
-    fireEvent.change(screen.getByLabelText('Hora de entrada habitual: BENITO'), { target: { value: '08:00' } })
-    fireEvent.change(screen.getByLabelText('Hora de salida habitual: BENITO'), { target: { value: '17:00' } })
-    fireEvent.click(screen.getByText('Guardar'))
-
-    await waitFor(() => expect(setHorario).toHaveBeenCalledWith('e2', '08:00', '17:00'))
-    // El contrato cerrado de la mig 055 no se ensancha con las horas nuevas.
-    expect(updatePayroll.mock.calls[0][1]).not.toHaveProperty('hora_entrada_habitual')
-  })
-
-  it('borrar el horario borra la REGLA (vacío = sin regla, no una hora en cero)', async () => {
-    renderList([CON_REGLA])
-    fireEvent.click(screen.getByText('Editar'))
-    fireEvent.change(screen.getByLabelText('Hora de entrada habitual: CARLA'), { target: { value: '' } })
-    fireEvent.change(screen.getByLabelText('Hora de salida habitual: CARLA'), { target: { value: '' } })
-    fireEvent.click(screen.getByText('Guardar'))
-
-    await waitFor(() => expect(setHorario).toHaveBeenCalledWith('e3', '', ''))
-  })
-
-  it('guardar sin tocar el horario no escribe la regla', async () => {
+  it('guardar desde Tarifas NUNCA escribe la regla de horario', async () => {
     renderList([CON_REGLA])
     fireEvent.click(screen.getByText('Editar'))
     fireEvent.change(screen.getByLabelText('Tarifa por hora: CARLA'), { target: { value: '3000' } })
@@ -267,18 +271,39 @@ describe('Salarios · Empleados / Tarifas — horario habitual', () => {
     expect(setHorario).not.toHaveBeenCalled()
   })
 
-  it('el alta puede traer el horario puesto desde el primer día', async () => {
+  it('el alta tampoco escribe horario: se carga después, en Ficha', async () => {
     create.mockResolvedValueOnce({ id: 'e9' } as Employee)
     renderList()
     fireEvent.click(screen.getByText('+ Agregar empleado'))
+    expect(screen.queryByLabelText('Hora de entrada habitual: nuevo empleado')).toBeNull()
+
     fireEvent.change(screen.getByPlaceholderText('Ej: JOSE'), { target: { value: 'jose' } })
-    fireEvent.change(screen.getByLabelText('Hora de entrada habitual: nuevo empleado'), { target: { value: '09:00' } })
-    fireEvent.change(screen.getByLabelText('Hora de salida habitual: nuevo empleado'), { target: { value: '18:00' } })
     fireEvent.click(screen.getByText('Crear empleado'))
 
-    await waitFor(() => expect(setHorario).toHaveBeenCalledWith('e9', '09:00', '18:00'))
-    // Y no se cuela en el payload del alta: va por su propia función, después.
+    await waitFor(() => expect(create).toHaveBeenCalled())
+    expect(setHorario).not.toHaveBeenCalled()
     expect(create.mock.calls[0][0]).not.toHaveProperty('hora_entrada_habitual')
+  })
+
+  it('lo que la Ficha guarda es lo que Personal muestra (una sola fuente)', () => {
+    // Ficha guarda → el módulo relee `employees` → Personal pinta el dato nuevo.
+    const { view } = renderPersonal([CON_REGLA])
+    expect(screen.getByText('Fijo · 08:00 → 17:00')).toBeTruthy()
+
+    view.rerender(
+      <SalariosEmpleados
+        employees={[{ ...CON_REGLA, hora_entrada_habitual: '16:00:00', hora_salida_habitual: '23:30:00' }]}
+        onRefresh={async () => {}}
+        vista="personal"
+      />,
+    )
+    expect(screen.getByText('Fijo · 16:00 → 23:30')).toBeTruthy()
+    expect(screen.queryByText('Fijo · 08:00 → 17:00')).toBeNull()
+  })
+
+  it('la tabla apunta a dónde se edita, para que nadie lo busque acá', () => {
+    renderPersonal()
+    expect(screen.getAllByTitle('El horario se edita en la pestaña Ficha').length).toBeGreaterThan(0)
   })
 })
 

@@ -134,7 +134,7 @@ export default function SalariosModule() {
             <SalariosEmpleados employees={employees} onRefresh={loadAll} vista="tarifas" />
           )}
           {tab === 'horas' && (
-            <SalariosHoras employees={employees} />
+            <SalariosHoras employees={employees} onRefresh={loadAll} />
           )}
           {tab === 'propinas' && (
             <SalariosPropinas employees={employees} />

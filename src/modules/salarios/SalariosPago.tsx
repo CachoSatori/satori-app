@@ -10,6 +10,9 @@ import {
   // 10% de SERVICIO (v3): el reparto vive en SALARIOS. `tipCalculations` es el pozo de
   // propinas y no se toca — son tres conceptos distintos (ver el bloque en salarios.ts).
   getServicioPorDia, servicioDelPeriodo, diasDelPeriodo, participaServicio,
+  // v3 · el 10% que NADIE cobra, abierto POR CAUSA, y el bloqueo que impide cerrar o
+  // pagar con plata sin asignar. No hay redistribución automática: eso lo firma Ismael.
+  servicioNoAsignado, motivoBloqueoServicio,
   autoDerivarSiVacio, type DerivacionResumen,
   PARTICIPA_SERVICIO_DEFAULT,
   type LineaConsolidado, type ServicioPeriodo,
@@ -362,12 +365,39 @@ export default function SalariosPago({ employees }: Props) {
   const ccss         = Math.round(totalHoras * CCSS_PLACEHOLDER)
   const costoLaboral = totalHoras + totalServicio + totalPropinas + ccss
 
-  // El 10% que este período cobró y que esta nómina NO transfiere: días sin nadie que
-  // participe, más lo que le tocó a gente que no está en la grilla (inactivos con horas).
-  // Es plata que existe: se muestra en vez de evaporarse en la diferencia de dos totales.
-  const servicioSinRepartir = servicio
-    ? Math.max(0, Math.round(servicio.totalRepartido + servicio.totalSinRepartir - totalServicio))
-    : 0
+  // ── EL 10% QUE NADIE COBRA · por CAUSA, no un total opaco (v3) ────────────────
+  //
+  // Antes esto era una resta de totales: «₡X no se reparte en esta nómina». Un número sin
+  // causa no se puede arreglar. Ahora se calcula desde el DETALLE (días sin participantes
+  // + cuotas de gente fuera de la grilla), que es reconstruible y no depende del filtro de
+  // local: la resta de totales cambiaba de sentido con el filtro puesto; esto no.
+  // Consts derivadas y no `useMemo`, igual que `aPagar` / `total` unas líneas más abajo:
+  // son recorridos O(n) sobre los días del período y encadenar más memos en este
+  // componente no compra nada (y el compilador de React ya no puede preservarlos acá).
+  const horasDeEmpleado = new Map<string, number>()
+  if (period) {
+    for (const w of workDays) {
+      if (w.work_date < period.fecha_ini || w.work_date > period.fecha_fin) continue
+      horasDeEmpleado.set(w.employee_id, (horasDeEmpleado.get(w.employee_id) ?? 0) + (Number(w.hours) || 0))
+    }
+  }
+
+  // Quién SÍ está en la nómina que se va a pagar. Son los ACTIVOS consolidados, no
+  // `lineasVista`: el pay run es global y el filtro de local es solo una mirada.
+  const enLaGrilla = new Set(activos.map(e => e.id))
+
+  const noAsignado = servicio
+    ? servicioNoAsignado(servicio, enLaGrilla, id => ({
+        nombre: employees.find(e => e.id === id)?.full_name ?? id,
+        horas:  horasDeEmpleado.get(id) ?? 0,
+      }))
+    : null
+
+  // El remanente BLOQUEA cerrar y pagar. Es el mismo texto en el botón, en el cartel y en
+  // el chequeo del handler: tres redacciones distintas para el mismo bloqueo es cómo se
+  // termina cerrando un período «porque el cartel decía otra cosa».
+  const bloqueoServicioCerrar = noAsignado ? motivoBloqueoServicio(noAsignado, 'cerrar') : null
+  const bloqueoServicioPagar  = noAsignado ? motivoBloqueoServicio(noAsignado, 'pagar')  : null
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -414,6 +444,11 @@ export default function SalariosPago({ employees }: Props) {
 
   const handleCerrar = () => {
     if (!period || !user?.id) return
+    // El 10% sin asignar FRENA. Cerrar congela el número; congelarlo con plata que nadie
+    // cobró es dejarla perdida sin que quede ni el rastro de la decisión. Se resuelve
+    // primero (cargando horas, reactivando a quien fichó, o asignándolo a mano) y se
+    // cierra después. NO hay «cerrar igual».
+    if (bloqueoServicioCerrar) { setError(bloqueoServicioCerrar); return }
     // A8 · paso consciente: cerrar congela el número, así que las horas que puso la regla
     // se aceptan ACÁ, en su propio confirm, y no mezcladas con el resto.
     if (avisoCerrar && !window.confirm(`${avisoCerrar}\n\n¿Cerrar igual?`)) return
@@ -514,6 +549,11 @@ export default function SalariosPago({ employees }: Props) {
     // Fichajes sin resolver (marcas abiertas / sin mapear): eso sí frena. La API aplica la
     // misma guarda releyendo la base, así que este chequeo es la primera llave, no la única.
     if (bloqueoPagar) { setError(bloqueoPagar); return }
+
+    // El 10% sin asignar FRENA. Es plata que el negocio ya cobró y que esta transferencia
+    // no le da a nadie: o se le asigna a alguien, o se decide qué se hace con ella. No se
+    // reparte sola entre los demás — eso lo firma Ismael, no el código.
+    if (bloqueoServicioPagar) { setError(bloqueoServicioPagar); return }
 
     // A8 · paso consciente, no bloqueo: las horas que NO midió el reloj se pagan, pero
     // quien paga tiene que decir que sí. Va en su propio confirm y no mezclado con el
@@ -722,8 +762,8 @@ export default function SalariosPago({ employees }: Props) {
             <button
               className="btn-secondary"
               onClick={handleCerrar}
-              disabled={saving || !puedeCerrar || !!bloqueoCerrar}
-              title={bloqueoCerrar ?? (puedeCerrar ? undefined : 'Lo hacen el dueño, el gerente o el contador')}
+              disabled={saving || !puedeCerrar || !!bloqueoCerrar || !!bloqueoServicioCerrar}
+              title={bloqueoCerrar ?? bloqueoServicioCerrar ?? (puedeCerrar ? undefined : 'Lo hacen el dueño, el gerente o el contador')}
             >
               Cerrar período
             </button>
@@ -923,15 +963,90 @@ export default function SalariosPago({ employees }: Props) {
             </p>
           )}
 
-          {/* Con un local elegido la resta compara un pool global contra una vista parcial:
-              el número no querría decir nada, así que no se muestra. */}
-          {servicioDisponible && !alcanceParcial && servicioSinRepartir > 0 && (
-            <p className="sal-note is-plum">
-              ℹ️ <strong>{fi(servicioSinRepartir)}</strong> del 10% de servicio del período{' '}
-              <strong>no se reparte en esta nómina</strong>: son días sin horas de nadie que
-              participe, o le tocan a alguien que no está en esta grilla (por ejemplo un inactivo
-              con horas). No se transfiere y no se pierde de vista.
-            </p>
+          {/* ── EL 10% SIN ASIGNAR · abierto POR CAUSA, y BLOQUEA (v3) ──────────────
+              Antes acá había un total opaco («₡X no se reparte»). Un número sin causa no
+              se puede arreglar: el que arma la nómina no sabía si le faltaban horas, si le
+              faltaban ventas, o si había alguien afuera de la grilla que ya se ganó esa
+              plata. Ahora cada causa trae su monto y su acción — y mientras quede un colón
+              sin asignar, no se cierra ni se paga.
+
+              Se muestra AUNQUE haya un filtro de local puesto: el desglose sale del detalle
+              (días + personas), no de una resta de totales, así que no cambia de sentido con
+              el filtro. Lo que cambia es la advertencia de que estás mirando una parte. */}
+          {servicioDisponible && noAsignado && noAsignado.bloquea && (
+            <div className="sal-nomap is-stop">
+              <div className="sal-nomap-head">
+                <span className="sal-note-mk">⛔</span>
+                <strong>
+                  {fi(noAsignado.total)} del 10% de servicio SIN ASIGNAR
+                </strong>
+                <span className="sal-spacer" />
+                <span className="sal-nomap-hint">bloquea cerrar y pagar</span>
+              </div>
+
+              {/* CAUSA 1 · el día cobró 10% y nadie que participe tiene horas. */}
+              {noAsignado.diasSinParticipantes.length > 0 && (
+                <>
+                  <p className="sal-legend" style={{ margin: '10px 14px 4px' }}>
+                    <strong>{fi(noAsignado.totalDiasSinParticipantes)}</strong> en{' '}
+                    <strong>{noAsignado.diasSinParticipantes.length} día(s) sin nadie que participe</strong>:
+                    ese día se cobró el 10% y no hay horas de ninguna persona que entre al reparto.
+                    O <strong>faltan las horas de ese día</strong> (cargalas en{' '}
+                    <strong>Horas</strong> o recalculá), o de verdad no lo trabajó nadie del 10% y
+                    hay que <strong>asignarlo a mano</strong>. La app no lo reparte sola.
+                  </p>
+                  <ul className="sal-nomap-list">
+                    {noAsignado.diasSinParticipantes.map(d => (
+                      <li key={d.fecha}>
+                        <span className="sal-nomap-code">{d.fecha}</span>
+                        <span className="sal-nomap-meta">
+                          {fi(d.pool)} de 10% · sin horas de quien participa
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {/* CAUSA 2 · fichó estando inactivo: la plata ya es suya y la grilla no lo tiene. */}
+              {noAsignado.inactivos.length > 0 && (
+                <>
+                  <p className="sal-legend" style={{ margin: '10px 14px 4px' }}>
+                    <strong>{fi(noAsignado.totalInactivos)}</strong> le toca a{' '}
+                    <strong>{noAsignado.inactivos.length} persona(s) que fichó estando inactiva</strong>:
+                    trabajaron y el reparto por horas ya les adjudicó su cuota, pero{' '}
+                    <strong>no están en la grilla</strong> y esta transferencia no se la paga.
+                    Si corresponde pagarles, reactivalos en <strong>Tarifas</strong> y volvé.
+                  </p>
+                  <ul className="sal-nomap-list">
+                    {noAsignado.inactivos.map(i => (
+                      <li key={i.employeeId}>
+                        <span className="sal-nomap-code">{i.nombre}</span>
+                        <span className="sal-nomap-meta">
+                          {i.horas.toLocaleString('es-CR', { maximumFractionDigits: 2 })} h ·
+                          le tocaría {fi(i.cuota)} de 10% · no está en la grilla
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              <p className="sal-legend" style={{ margin: '0 14px 12px' }}>
+                <strong>No se redistribuye solo.</strong> Repartir entre los demás la plata de
+                un día que nadie trabajó, o la de alguien que no está, es una decisión — y la
+                firma Ismael, no el código. Mientras quede sin asignar, el período queda en ese
+                estado y los botones de <strong>cerrar</strong> y <strong>pagar</strong> están
+                apagados.
+                {alcanceParcial && (
+                  <>
+                    {' '}Ojo: estás viendo solo <strong>{LOCAL_LABEL[localFiltro]}</strong>, pero
+                    este desglose es del <strong>período completo</strong> — el 10% se cobra para
+                    el negocio entero.
+                  </>
+                )}
+              </p>
+            </div>
           )}
 
           {errPropinas && (
@@ -1154,11 +1269,11 @@ export default function SalariosPago({ employees }: Props) {
               // registro. Frenar el registro y dejar bajar el Excel sería frenar la puerta
               // equivocada — se transferiría de más y recién después aparecería el bloqueo.
               // Por eso lo frena TODO lo que frena el pago, fichajes sin resolver incluidos.
-              disabled={saving || aPagar.length === 0 || frenado || !!bloqueoPagar || alcanceParcial}
+              disabled={saving || aPagar.length === 0 || frenado || !!bloqueoPagar || !!bloqueoServicioPagar || alcanceParcial}
               title={
                 alcanceParcial ? `Estás viendo solo ${LOCAL_LABEL[localFiltro]}: el período se paga completo. Poné el filtro en «Todos».`
                 : frenado ? `Horas contadas dos veces: ${nombresDobles.join(', ')}`
-                        : bloqueoPagar ?? undefined
+                        : bloqueoPagar ?? bloqueoServicioPagar ?? undefined
               }
             >
               Descargar Excel para el banco
@@ -1171,7 +1286,7 @@ export default function SalariosPago({ employees }: Props) {
               // justamente lo que el ciclo viene a evitar.
               disabled={
                 saving || pagado || estado !== 'cerrado' || aPagar.length === 0 ||
-                !puedePagar || frenado || !!bloqueoPagar || alcanceParcial
+                !puedePagar || frenado || !!bloqueoPagar || !!bloqueoServicioPagar || alcanceParcial
               }
               title={
                 pagado ? undefined
@@ -1179,6 +1294,7 @@ export default function SalariosPago({ employees }: Props) {
                 : estado !== 'cerrado' ? 'Cerrá el período antes de marcar el pago'
                 : frenado ? `Horas contadas dos veces: ${nombresDobles.join(', ')}`
                 : bloqueoPagar ? bloqueoPagar
+                : bloqueoServicioPagar ? bloqueoServicioPagar
                 : puedePagar ? undefined : 'Solo el dueño o el gerente marcan el pago'
               }
             >

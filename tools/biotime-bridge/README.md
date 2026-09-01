@@ -86,7 +86,7 @@ No pasa nada: las repetidas se descartan solas (se cuentan como `duplicates`).
 | `LOCAL inválido` | Se escribió mal el local | Tiene que ser `santa-teresa` o `nosara` |
 | `ingest-punches rechazó el lote (401)` | El `INGEST_SECRET` no coincide | Pedirle el secreto correcto a Ismael |
 | `N sin empleado mapeado` | Marcas de un usuario del reloj que no está vinculado | Cargar el **Cód. BioTime** en Satori → Salarios → Empleados / Tarifas |
-| `punch_time sin zona horaria` | La columna de BioTime no es `timestamptz` | Avisar — el agente frena a propósito, para no guardar marcas corridas 6 horas |
+| `punch_time con formato irreconocible` | `punch_time` no es ni un instante con zona ni un `timestamp` naive | Avisar — el agente frena a propósito, para no guardar instantes inventados |
 | `ECONNREFUSED` | No llega a BioTime o a internet | Ver que BioTime esté prendido y haya red |
 
 ## Seguridad
@@ -111,3 +111,30 @@ src/index.ts         el loop
 
 Los tests (`*.test.ts`) corren con el vitest del repo de Satori (`npx vitest run`), no hace
 falta instalarlos en la PC del local.
+
+
+## Zona horaria — el desfase de 1 hora del piloto v3
+
+Costa Rica es **UTC−6 FIJO**: no tiene horario de verano. Ese offset es la única verdad de
+este agente.
+
+`public.iclock_transaction.punch_time` de BioTime es un `timestamp` **naive** (reloj de pared,
+sin zona). Antes, `pg` lo convertía a `Date` interpretándolo en la zona del **proceso Node** —
+o sea, en la que tenga configurada la PC del reloj. Con esa PC en una zona UTC−5 (Bogotá, Lima)
+o en una zona con horario de verano que en agosto corre a UTC−5 (Central Time), cada marca se
+mandaba **1 hora antes**: BioTime 16:00 → la app mostraba 15:00. Nada fallaba, así que el error
+fue invisible hasta la validación física.
+
+Ahora:
+
+- `db.ts` desactiva el parseo de `timestamp` (OID 1114): los naive llegan como **texto crudo**.
+- `fetchPunches.ts` les pone `-06:00` explícito (`conOffsetCR`).
+- La sesión se abre con `TimeZone=America/Costa_Rica`.
+- El resultado **no depende de cómo esté configurada la PC del local**, que era el problema.
+
+En cada arranque el agente imprime la última marca tal cual está en BioTime, el instante que va
+a mandar y la hora en que se verá en la app. **Tienen que coincidir con lo que muestra BioTime.**
+Si no coinciden, el problema está aguas arriba (la hora del propio reloj o del BioTime), no acá.
+
+Las marcas que quedaron guardadas corridas se corrigen con `CORRECCION-DESFASE-1H.sql`, que
+**no está aplicado**: lo revisa el asesor y lo corre Ismael.

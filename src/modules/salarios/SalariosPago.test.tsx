@@ -832,3 +832,104 @@ describe('Salarios · filtro de local', () => {
     expect((screen.getByText('Descargar Excel para el banco') as HTMLButtonElement).disabled).toBe(false)
   })
 })
+
+// ╔══════════════════════════════════════════════════════════════════════════════════════╗
+// ║ EL 10% SIN ASIGNAR · desglose por CAUSA y BLOQUEO (v3, fix del piloto)                 ║
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+// Antes acá salía un total opaco («₡X no se reparte») que no frenaba nada: se podía cerrar
+// y pagar el período dejando plata que el negocio ya cobró sin dársela a nadie. Ahora cada
+// causa trae su monto y su acción, y mientras quede un colón sin asignar no se cierra ni
+// se paga.
+describe('Salarios · el 10% de servicio SIN ASIGNAR', () => {
+  // El 15 lo trabajó ANA (96 h, participa). Le agregamos un día que cobró 10% y que NADIE
+  // que participe trabajó: ese pool no tiene dueño.
+  const conDiaHuerfano = () => {
+    SERVICIO_DIA = new Map([['2026-08-15', 40_000], ['2026-08-10', 21_000]])
+  }
+
+  it('un día con 10% y sin nadie que participe se lista con FECHA y MONTO', async () => {
+    conDiaHuerfano()
+    await renderPago()
+    expect(screen.getByText(/del 10% de servicio SIN ASIGNAR/)).toBeTruthy()
+    expect(screen.getByText('2026-08-10')).toBeTruthy()
+    expect(screen.getByText(/sin horas de quien participa/)).toBeTruthy()
+    // Y dice qué hacer, no solo que pasa algo.
+    expect(screen.getByText(/faltan las horas de ese día/)).toBeTruthy()
+  })
+
+  it('el que fichó estando INACTIVO sale con nombre, horas y la cuota que le tocaría', async () => {
+    // VIEJO (inactivo) trabajó 4 h el 15; ANA 96 h. El pool del día se reparte por horas.
+    WORK_DAYS = [
+      ...WORK_DAYS,
+      { employee_id: 'e3', work_date: '2026-08-15', local: 'santa-teresa', hours: 4,
+        es_feriado: false, source: 'manual', flags: null, created_at: '', updated_at: '' },
+    ]
+    SERVICIO_DIA = new Map([['2026-08-15', 100_000]])
+    const { container } = await renderPago()
+
+    expect(screen.getByText(/del 10% de servicio SIN ASIGNAR/)).toBeTruthy()
+    // Está en pantalla, con su nombre, sus horas y su cuota: 100.000 × 4/100 = 4.000.
+    // Se busca DENTRO del cartel del 10% (`.is-stop`): VIEJO también aparece en el aviso
+    // de «inactivos con horas», que es otro cartel y dice otra cosa.
+    const cartel = container.querySelector('.sal-nomap.is-stop')!
+    const item = [...cartel.querySelectorAll('li')].find(li => li.textContent?.includes('VIEJO'))!
+    expect(item.textContent).toContain('4 h')
+    expect(plano(item.textContent ?? '')).toContain(plano(`₡ ${(4_000).toLocaleString('es-CR')}`))
+    expect(item.textContent).toContain('no está en la grilla')
+  })
+
+  it('BLOQUEA cerrar: el botón queda apagado y dice por qué', async () => {
+    conDiaHuerfano()
+    conEstado('en_revision')
+    await renderPago()
+    const btn = screen.getByText('Cerrar período') as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+    expect(btn.title).toContain('SIN ASIGNAR')
+    fireEvent.click(btn)
+    expect(cerrar).not.toHaveBeenCalled()
+  })
+
+  it('BLOQUEA pagar y BLOQUEA el archivo del banco — que es lo que mueve la plata', async () => {
+    conDiaHuerfano()
+    conEstado('cerrado')
+    await renderPago()
+
+    const pagarBtn = screen.getByText('Marcar pagado') as HTMLButtonElement
+    expect(pagarBtn.disabled).toBe(true)
+    expect(pagarBtn.title).toContain('SIN ASIGNAR')
+
+    const excelBtn = screen.getByText('Descargar Excel para el banco') as HTMLButtonElement
+    expect(excelBtn.disabled).toBe(true)
+
+    fireEvent.click(pagarBtn)
+    expect(pagar).not.toHaveBeenCalled()
+    fireEvent.click(excelBtn)
+    expect(download).not.toHaveBeenCalled()
+  })
+
+  it('NO inventa una redistribución: dice que la asignación la firma una persona', async () => {
+    conDiaHuerfano()
+    await renderPago()
+    expect(screen.getByText(/No se redistribuye solo/)).toBeTruthy()
+    expect(screen.getByText(/asignarlo a mano/)).toBeTruthy()
+  })
+
+  it('sin remanente no hay cartel y el cierre no se frena por esto', async () => {
+    // Todo el 10% del período cae en un día que ANA trabajó, y ANA está en la grilla.
+    SERVICIO_DIA = new Map([['2026-08-15', 40_000]])
+    conEstado('en_revision')
+    await renderPago()
+    expect(screen.queryByText(/del 10% de servicio SIN ASIGNAR/)).toBeNull()
+    expect((screen.getByText('Cerrar período') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('un día SIN ventas cargadas avisa, pero no cuenta como remanente ni bloquea', async () => {
+    // El mapa no trae el 2026-08-14: eso es "no se sabe", no "fue ₡0".
+    SERVICIO_DIA = new Map([['2026-08-15', 40_000]])
+    conEstado('en_revision')
+    await renderPago()
+    expect(screen.getByText(/sin ventas cargadas/)).toBeTruthy()
+    expect(screen.queryByText(/del 10% de servicio SIN ASIGNAR/)).toBeNull()
+    expect((screen.getByText('Cerrar período') as HTMLButtonElement).disabled).toBe(false)
+  })
+})

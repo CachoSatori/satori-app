@@ -8,7 +8,9 @@ import {
   // Capa 3 (mig 061): la regla de horario del empleado.
   imparesConRegla, horaHabitualFaltante, motivoRegla, hhmmCR as hhmm, MOTIVO_REGLA,
   // v3 · la pantalla se abre con horas: si el período está vivo y vacío, se derivan solas.
-  autoDerivarSiVacio, codigosSinMapear,
+  autoDerivarSiVacio,
+  // v3 · el mapeo código BioTime → persona, desde donde el problema se ve.
+  codigosSinMapearConDuenio, asignarCodigoBiotime,
   type DerivacionResumen, type GrupoExcepciones,
 } from '../../shared/api/salarios'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -59,9 +61,15 @@ function ladoConDraft(id: string, porDefecto: 'in' | 'out', draft: LadoMap): 'in
 
 interface Props {
   employees: Employee[]
+  /**
+   * Relee el maestro. Hace falta porque desde acá se puede ASIGNAR un código de BioTime a
+   * una persona: sin releer, la bandeja seguiría mostrando el código como huérfano hasta
+   * que alguien cambiara de pestaña. Opcional para no romper un montaje viejo.
+   */
+  onRefresh?: () => Promise<void> | void
 }
 
-export default function SalariosHoras({ employees }: Props) {
+export default function SalariosHoras({ employees, onRefresh }: Props) {
   const { user, profile } = useAuth()
   const puedeRecalcular =
     profile?.role === 'owner' || profile?.role === 'manager' || profile?.role === 'contador'
@@ -87,6 +95,9 @@ export default function SalariosHoras({ employees }: Props) {
   // Aviso ≠ error: la regla puede dar un turno absurdo y eso se avisa SIN teñir de rojo
   // ni frenar nada, igual que en Capa 2.
   const [aviso, setAviso]     = useState<string | null>(null)
+  // Confirmación de una acción que SÍ escribió (hoy: asignar un código de BioTime). Es
+  // distinto de `aviso`, que señala algo a mirar: esto dice «se guardó».
+  const [ok, setOk]           = useState<string | null>(null)
   // v3 · resumen de la derivación AUTOMÁTICA (la del botón vive en `resumen`). Se separan
   // porque dicen cosas distintas: una la pidió el usuario, la otra pasó sola al abrir.
   const [autoDeriv, setAutoDeriv] = useState<DerivacionResumen | null>(null)
@@ -214,8 +225,55 @@ export default function SalariosHoras({ employees }: Props) {
   )
 
   // v3 · marcas que no son de nadie del maestro. Van ARRIBA y siempre: son horas que
-  // alguien trabajó y que hoy no se le pagan a nadie.
-  const sinMapear = useMemo(() => codigosSinMapear(excs), [excs])
+  // alguien trabajó y que hoy no se le pagan a nadie. Ya cruzadas contra el maestro: un
+  // código que ALGUIEN YA TIENE es un caso distinto —y se trata distinto— que uno que
+  // nadie tiene.
+  const sinMapear = useMemo(
+    () => codigosSinMapearConDuenio(excs, employees),
+    [excs, employees],
+  )
+
+  // A quién asignarle cada código huérfano, mientras se elige. Por código, no global: se
+  // pueden resolver varios sin perder lo elegido en los otros.
+  const [asignaDraft, setAsignaDraft] = useState<Record<string, string>>({})
+  const [asignando, setAsignando]     = useState<string | null>(null)
+
+  const activosOrdenados = useMemo(
+    () => employees.filter(e => e.is_active)
+                   .slice()
+                   .sort((a, b) => a.full_name.localeCompare(b.full_name, 'es')),
+    [employees],
+  )
+
+  /**
+   * Asignar el código a la persona elegida. Escribe SOLO `employees.biotime_emp_code` —
+   * el mismo campo que Tarifas— y después relee el maestro y las excepciones.
+   *
+   * Lo que NO puede hacer: re-enganchar las marcas que YA entraron. La Edge Function
+   * resuelve el empleado al insertar, y `time_punches` no tiene policy de escritura para
+   * la app (mig 057, a propósito). Por eso el cartel lo dice en vez de prometerlo.
+   */
+  const handleAsignar = async (code: string) => {
+    const employeeId = asignaDraft[code]
+    if (!employeeId) { setError('Elegí a quién le corresponde ese código.'); return }
+    setAsignando(code); setError(null); setOk(null)
+    try {
+      await asignarCodigoBiotime(employeeId, code, employees)
+      const nombre = employees.find(e => e.id === employeeId)?.full_name ?? employeeId
+      await onRefresh?.()
+      if (period) await loadDatos(period, local)
+      // Sale del borrador: el código ya no va a estar en la lista tras releer.
+      setAsignaDraft(d => Object.fromEntries(Object.entries(d).filter(([k]) => k !== code)))
+      setOk(
+        `Código ${code} asignado a ${nombre}. Las marcas NUEVAS ya van a caer en su nombre; ` +
+        'las que ya estaban guardadas siguen sueltas (ver el aviso).',
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error asignando el código')
+    } finally {
+      setAsignando(null)
+    }
+  }
 
   const handleRecalcular = async () => {
     if (!period) return
@@ -442,6 +500,11 @@ export default function SalariosHoras({ employees }: Props) {
       </div>
 
       {error && <p className="field-error" style={{ padding: '0 12px' }}>{error}</p>}
+      {ok && (
+        <p className="sal-note sal-note-teal" role="status">
+          <span className="sal-note-mk">✓</span><span>{ok}</span>
+        </p>
+      )}
       {aviso && (
         <p className="fx-aviso" role="status" style={{ padding: '0 12px' }}>⚠️ {aviso}</p>
       )}
@@ -468,6 +531,14 @@ export default function SalariosHoras({ employees }: Props) {
             </p>
           )}
 
+          {/* ── CÓDIGOS DE BIOTIME SIN EMPLEADO · se ASIGNAN acá (v3) ──────────────
+              Antes esto era una lista muerta que mandaba a otra pestaña. Son horas que
+              alguien trabajó y que hoy no se le pagan a nadie: la acción tiene que estar
+              donde se ve el problema. Dos casos, tratados distinto:
+                · nadie tiene el código  → se elige la persona y se asigna, acá mismo.
+                · alguien YA lo tiene    → asignarlo otra vez no arregla nada; lo que pasó
+                                            es que el código se cargó DESPUÉS de que las
+                                            marcas entraran. Se dice, con nombre. */}
           {sinMapear.length > 0 && (
             <div className="sal-nomap">
               <div className="sal-nomap-head">
@@ -478,20 +549,65 @@ export default function SalariosHoras({ employees }: Props) {
                   Estas horas hoy no se le pagan a nadie
                 </span>
               </div>
-              <ul className="sal-nomap-list">
+
+              <ul className="sal-nomap-list sal-nomap-asigna">
                 {sinMapear.map(c => (
                   <li key={c.code}>
                     <span className="sal-nomap-code">{c.code}</span>
                     <span className="sal-nomap-meta">
                       {c.marcas} marca(s) · {c.dias} jornada(s)
                     </span>
+
+                    {c.duenio ? (
+                      // El match SÍ existe en la ficha y la derivación igual las dejó
+                      // sueltas. Decirlo con nombre es la mitad del arreglo: sin esto,
+                      // alguien vuelve a escribir el código que ya estaba y no pasa nada.
+                      <span className="sal-nomap-duenio">
+                        ya es de <strong>{c.duenio.full_name}</strong> — las marcas viejas
+                        quedaron sin enganchar
+                      </span>
+                    ) : (
+                      <>
+                        <select
+                          className="tip-input fx-input"
+                          aria-label={`Asignar el código ${c.code} a`}
+                          value={asignaDraft[c.code] ?? ''}
+                          disabled={busy || asignando !== null || !puedeRecalcular}
+                          onChange={e => setAsignaDraft(d => ({ ...d, [c.code]: e.target.value }))}
+                        >
+                          <option value="">— ¿de quién es? —</option>
+                          {activosOrdenados.map(e => (
+                            <option key={e.id} value={e.id}>
+                              {e.full_name}
+                              {e.biotime_emp_code ? ` (cód. ${e.biotime_emp_code})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="btn-primary fx-btn"
+                          onClick={() => handleAsignar(c.code)}
+                          disabled={busy || asignando !== null || !asignaDraft[c.code] || !puedeRecalcular}
+                          title={puedeRecalcular ? undefined : 'Lo hacen el dueño, el gerente o el contador'}
+                        >
+                          {asignando === c.code ? 'Asignando…' : 'Asignar'}
+                        </button>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
+
               <p className="sal-legend" style={{ margin: '0 14px 12px' }}>
-                Asignale el código a la persona en <strong>Empleados / Tarifas</strong> (campo
-                «Cód. BioTime») y volvé a recalcular. Acá solo se listan: el mapeo
-                código→persona lo firma quien corresponde.
+                Elegí a quién le corresponde el código y asignalo: se guarda en su ficha
+                (campo «Cód. BioTime», el mismo que edita <strong>Tarifas</strong>) y las
+                marcas <strong>nuevas</strong> caen en su nombre. El código se compara sin
+                ceros a la izquierda, así que «04» y «4» son el mismo.
+                <br />
+                <strong>Las marcas que YA estaban guardadas no se re-enganchan solas</strong>:
+                el empleado se resuelve al momento de ingerir la marca, y{' '}
+                <code>time_punches</code> no se escribe desde la app (mig 057, a propósito).
+                Un código que aparece acá <em>y</em> ya figura en una ficha es exactamente
+                ese caso — se arregla con una corrección de datos, no desde esta pantalla.
               </p>
             </div>
           )}
@@ -733,6 +849,16 @@ export default function SalariosHoras({ employees }: Props) {
                                         onChange={e => setComp(d => ({ ...d, [x.id]: e.target.value }))}
                                         disabled={busy}
                                       />
+                                      {/* El `<input type="time">` lo pinta el NAVEGADOR y con
+                                          `es-CR` muestra el reloj de 12 h («04:00 p. m.»). El
+                                          valor que se guarda es 24 h igual, pero en nómina lo
+                                          que se lee tiene que ser lo que se guarda: acá va el
+                                          valor canónico, en 24 h, al lado. */}
+                                      {comp && (
+                                        <span className="fx-24h" title="hora en formato 24 h">
+                                          {comp}
+                                        </span>
+                                      )}
                                       <span className={`fx-horas${sospechoso ? ' fx-horas-alerta' : ''}`}>
                                         {horas != null ? `= ${horas} h` : '= —'}
                                       </span>

@@ -14,8 +14,33 @@ cablear esto sea llenar tres huecos, no escribir un agente.
 ## Qué va a hacer (cuando esté cableado)
 
 Un proceso por local. Cada 2 minutos lee las cuentas **cerradas** nuevas del PoS y las empuja
-a Supabase. No calcula nada: ni mix, ni ticket promedio, ni venta por pax — eso se deriva
+a Supabase. No calcula nada: ni mix, ni ticket promedio, ni promedio por pax — eso se deriva
 después, del lado de la app.
+
+### El objetivo: reemplazar el import manual de xls
+
+Este feed **no introduce un modelo nuevo**. Tiene que terminar produciendo exactamente lo que
+hoy produce el import manual:
+
+```
+ventas_dias.data = DiaData = {
+  fileName, uploadedAt,
+  saloneros: { "<nombre>": SaloneroDay | CajeroDay }
+}
+```
+
+(ver `src/shared/types/ventas.ts` y `src/modules/ventas/xlsParser.ts`)
+
+…más el **detalle que solo existe en vivo** — el ritmo por hora —, que el xls no puede dar
+porque trae el día entero sin repartir.
+
+Con eso, la pestaña «En vivo» de Ventas y todas las pestañas de siempre leen la misma cosa, y
+el día que esto ande, el import de xls deja de hacer falta sin que ninguna pantalla cambie.
+
+**El agente transporta, no agrega.** Manda las cuentas cerradas una por una; la agregación a
+`SaloneroDay` / `CajeroDay` (sumar por mesero, separar comida de bebida, contar pax) la hace
+la Edge Function del lado del servidor, igual que hoy la hace `xlsParser` del lado del
+navegador.
 
 - **El PoS nunca se escribe.** Usuario de solo lectura, y el único SQL del agente es un SELECT.
 - **Solo sale, nunca entra.** El agente abre la conexión hacia Supabase; no abre ningún puerto
@@ -33,8 +58,8 @@ Hoy es una plantilla con nombres inventados. Necesita el esquema real de `ndf`:
 - ¿Cuál es la tabla de cuentas y cuál su PK incremental?
 - ¿Cómo se marca una cuenta **cerrada**? (Una cuenta abierta cambia de monto: si se empuja y
   después se modifica, la base queda con un número que ya no existe.)
-- ¿Cuál es el campo **nativo de comensales**? Es el que decide si `venta por pax` significa
-  algo — ver `CalidadPax` en `src/modules/analitica-pos/types.ts`.
+- ¿Cuál es el campo **nativo de comensales**? Es el que decide si el `promedio por pax`
+  significa algo — ver `CalidadPax` en `src/modules/ventas/ventasEnVivoTypes.ts`.
 - ¿Hay un identificador de mesero por cuenta?
 
 > **Lección cara del biotime-bridge (sep-2026).** El supuesto «el id crece con el tiempo» no
@@ -50,12 +75,18 @@ Los nombres reales de las columnas y su traducción a nuestro modelo. **Este es 
 donde la forma del PoS existe**: de acá para arriba nadie sabe cómo se llaman sus columnas, y
 por eso cambiar de PoS mañana no toca la pantalla.
 
-Dos cosas que no se pueden aplastar en el mapeo:
+Tres cosas que no se pueden aplastar en el mapeo:
 
+- **El artículo `PAX` no es un producto.** En el xls el pax viaja como una línea llamada `PAX`
+  y `xlsParser` la saca del mix. Si el PoS lo trae como artículo, va a `SaloneroDay.pax`,
+  nunca a `prods` — si se cuela, infla las unidades del mix y encabeza «lo que más se vendió».
 - **`pax: null` ≠ `pax: 0`.** «No se cargó el comensal» es distinto de «vinieron cero
-  personas», y esa diferencia es justamente lo que mide el indicador de calidad del pax.
+  personas», y esa diferencia es justamente lo que mide el indicador de calidad del pax. Hoy
+  `xlsParser` descarta al salonero entero cuando falta el pax, o sea que un pax mal cargado se
+  ve como alguien que no trabajó.
 - **El mesero se casa por CÓDIGO, nunca por nombre.** Casar por nombre ya produjo drift real
-  en BioTime (SPEC §9).
+  en BioTime (SPEC §9). Ojo: en `DiaData` la clave de `saloneros` **es el nombre**, así que el
+  puente código → nombre lo tiene que resolver el edge antes de escribir.
 
 ### 3. El destino — `src/pushVentas.ts` + la Edge Function
 
@@ -66,6 +97,8 @@ de manejo de error. Falta la función del otro lado. Cuando exista, tiene que:
   proceso headless sin sesión;
 - insertar con **clave única `(local, pos_id)`** y `on conflict do nothing`, para que
   reenviar nunca duplique;
+- **agregar las cuentas al `DiaData` del día** y escribirlo en `ventas_dias`, con la misma
+  forma que produce `xlsParser` (esa agregación es el corazón de la Fase B);
 - devolver los contadores `received / inserted / duplicates / unmapped / invalid`.
 
 ### Y además — `src/db.ts` → `createDb` y `checkEsquema`
@@ -114,3 +147,5 @@ src/index.ts        el loop
 | Consulta real | ❌ plantilla con nombres inventados |
 | Mapeo de campos | ❌ falta el esquema de `ndf` |
 | Edge Function `ingest-ventas` | ❌ no existe |
+| Agregación cuentas → `DiaData` | ❌ va en el edge (Fase B) |
+| Persistencia del ritmo por hora | ❌ TBD dónde se guarda |

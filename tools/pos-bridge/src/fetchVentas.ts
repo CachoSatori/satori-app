@@ -12,6 +12,16 @@ import type { Local } from './config.js'
 // driver (recibe un ejecutor de consultas, lo arma `db.ts`), así que el SELECT, el filtro
 // incremental y el mapeo se pueden probar sin base.
 //
+// ── EL DESTINO: LA MISMA FORMA QUE EL IMPORT DE XLS ────────────────────────────────────────
+// El objetivo de este feed NO es un modelo nuevo: es producir lo MISMO que hoy produce el
+// import manual de xls — un `DiaData` en `ventas_dias` (ver src/shared/types/ventas.ts y
+// src/modules/ventas/xlsParser.ts) — más el detalle que solo existe en vivo (el ritmo por
+// hora). Así el PoS reemplaza el import manual sin que ninguna pestaña de Ventas cambie.
+//
+// Concretamente, el edge tiene que terminar escribiendo:
+//   `ventas_dias.data` = { fileName, uploadedAt, saloneros: { <nombre>: SaloneroDay | CajeroDay } }
+//   + una tabla/campo aparte con el detalle por hora (TBD, Fase B).
+//
 // ── LO QUE HAY QUE CABLEAR (ver README) ────────────────────────────────────────────────────
 //   1. `FETCH_SQL` — la consulta real.
 //   2. `PosRow`    — los nombres reales de las columnas.
@@ -73,7 +83,14 @@ export interface PosRow {
   terminal:   string | null
 }
 
-/** Una venta en el formato que va a esperar la Edge Function `ingest-ventas`. */
+/**
+ * Una cuenta cerrada, cruda, en el formato que va a esperar la Edge Function `ingest-ventas`.
+ *
+ * Deliberadamente NO es un `DiaData`: acá viaja el detalle POR CUENTA, que es lo que el PoS
+ * tiene. La agregación a `SaloneroDay` / `CajeroDay` (sumar por mesero, separar comida de
+ * bebida, contar pax) la hace el edge, del lado del servidor — igual que hoy la hace
+ * `xlsParser` del lado del navegador. El agente no agrega: transporta.
+ */
 export interface VentaCruda {
   posId:     number
   /** Instante con zona explícita, SIEMPRE. Ver la advertencia de arriba. */
@@ -131,7 +148,20 @@ function numero(v: unknown, campo: string): number {
  * ⚠ TODO CABLEAR · Fila del PoS → nuestro modelo.
  *
  * El mapeo vive ACÁ y en ningún otro lado: es lo que hace que la forma del PoS no se filtre
- * hasta la pantalla (ver `src/modules/analitica-pos/types.ts`).
+ * hasta la pantalla. Aguas abajo, el edge convierte estas cuentas en el `DiaData` que ya
+ * consume Ventas (ver `src/shared/types/ventas.ts`).
+ *
+ * ⚠ DOS REGLAS QUE VIENEN DEL MODELO ACTUAL, y que el edge tiene que respetar:
+ *
+ *   1. EL ARTÍCULO PAX NO ES UN PRODUCTO. En el xls el pax viaja como una línea llamada
+ *      `PAX` y `xlsParser` la SACA del mix (`if (prod === 'PAX') return`). Si el PoS trae el
+ *      pax como artículo, tiene que ir a `SaloneroDay.pax`, NUNCA a `prods`: si se colara,
+ *      inflaría las unidades y encabezaría «lo que más se vendió».
+ *
+ *   2. `pax: null` ≠ `pax: 0`. «No se cargó el comensal» es distinto de «vinieron cero
+ *      personas». Hoy `xlsParser` descarta al salonero entero cuando no hay pax
+ *      (`if (!pax || !total) return`), o sea que un pax mal cargado se ve como alguien que no
+ *      trabajó. Mantener el `null` es lo que permite medirlo en vez de perderlo.
  */
 export function mapRow(row: PosRow): VentaCruda {
   const posId = numero(row.pos_id, 'pos_id')

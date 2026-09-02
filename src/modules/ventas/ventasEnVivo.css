@@ -1,9 +1,14 @@
 /* ============================================================
-   ANALÍTICA PoS · piel del módulo (Fase A)
+   VENTAS · pestaña EN VIVO — piel de la pestaña
 
-   TODO cuelga de `.apos`, la clase que solo pone AnaliticaPosModule.
-   Es a propósito: los tokens NO van a index.css ni a :root, así que
-   ningún otro módulo (Caja, Ventas, Salarios) cambia por este archivo.
+   TODO cuelga de `.apos` (por «Analítica PoS», el feed que va a
+   reemplazar el import manual). El prefijo se conserva del scaffold
+   original: renombrarlo no compra nada y el scope es lo que importa.
+
+   Es SCOPED a propósito: los tokens NO van a index.css ni a :root, y
+   ninguna clase pisa las `vt-*` del módulo. Las otras pestañas de
+   Ventas se ven exactamente igual que antes de este archivo — es la
+   garantía de que la pestaña nueva es puramente aditiva.
 
    La paleta sale del sistema que ya tiene la app (index.css): header
    oscuro sobre `ink`, contenido sobre `paper`, acento dorado. Lo único
@@ -40,95 +45,13 @@
   --apos-r-sm:   6px;
   --apos-mono:   'DM Mono', ui-monospace, monospace;
 
-  min-height: 100vh;
-  background: var(--apos-paper);
+  /* La pestaña vive DENTRO de `.vt-content`, que ya pone el fondo de papel: no se
+     fuerza `min-height` ni se repinta el fondo del módulo. */
   color: var(--apos-ink);
 }
 
-/* ── Header ─────────────────────────────────────────────────── */
-
-.apos-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1.25rem;
-  background: var(--apos-ink);
-  border-bottom: 1px solid #242424;
-  flex-wrap: wrap;
-}
-
-.apos-brand { display: flex; align-items: center; gap: 0.7rem; }
-
-.apos-kanji {
-  font-family: var(--font-serif);
-  font-size: 1.5rem;
-  color: var(--apos-gold);
-}
-
-.apos-title {
-  font-family: var(--font-serif);
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--apos-gold);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.apos-sub {
-  font-size: 0.68rem;
-  color: #8a8378;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.apos-fase {
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: #d8b06a;
-  background: rgba(200, 169, 110, 0.13);
-  border: 1px solid rgba(200, 169, 110, 0.32);
-  border-radius: 999px;
-  padding: 3px 10px;
-}
-
-.apos-spacer { flex: 1 1 auto; }
-
-/* ── Tabs ───────────────────────────────────────────────────── */
-
-.apos-tabs {
-  display: flex;
-  gap: 0.25rem;
-  padding: 0 1.25rem;
-  background: var(--apos-ink);
-  border-bottom: 1px solid #242424;
-  overflow-x: auto;
-}
-
-.apos-tab {
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: #8a8378;
-  font-family: inherit;
-  font-size: 0.72rem;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  padding: 0.7rem 0.9rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.apos-tab:hover { color: #e8e2d8; }
-
-.apos-tab.is-active {
-  font-weight: 700;
-  color: var(--apos-gold);
-  border-bottom-color: var(--apos-gold);
-}
-
-.apos-body { padding: 1.1rem 1.25rem 3rem; }
+/* El header y las tabs propias del módulo standalone se quitaron: la pestaña vive
+   dentro de las tabs de Ventas (`.vt-nav-tabs`), que no se tocan. */
 
 .apos-cargando {
   display: flex;
@@ -195,11 +118,24 @@
 
 /* ── KPIs ───────────────────────────────────────────────────── */
 
+/* Columnas FIJAS, no `auto-fit`: son 6 tarjetas, y con `auto-fit` el ancho decide
+   cuántas entran — a 1100 px entraban 5 y la sexta quedaba sola en una fila, con
+   media pantalla vacía al lado. Con 3 / 2 / 1 las seis siempre llenan sus filas,
+   y encima quedan emparejadas por sentido: arriba lo que se vendió, abajo los
+   promedios y la estimación. */
 .apos-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.7rem;
   margin-bottom: 1.1rem;
+}
+
+@media (max-width: 860px) {
+  .apos-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+  .apos-kpis { grid-template-columns: minmax(0, 1fr); }
 }
 
 .apos-kpi {
@@ -508,7 +444,6 @@
 /* ── Angosto ────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
-  .apos-body { padding: 0.9rem 0.75rem 3rem; }
   .apos-panel { padding: 0.85rem 0.8rem; }
 
   /* En móvil la fila de barras se parte: la pista pasa a ocupar el ancho y los
@@ -531,3 +466,11 @@
 /* Servicio cerrado: sin pulso, en tinta apagada. Lo que se muestra es una foto de
    anoche, no algo que se esté moviendo — y tiene que verse distinto de un vistazo. */
 .apos-fresco.is-cerrado { color: var(--apos-muted); font-style: italic; }
+
+/* Aviso de que la pestaña todavía no muestra datos reales. Va arriba de todo y con la
+   misma marca ámbar que las secciones pendientes: quien entra tiene que saberlo antes
+   de leer un número. */
+.apos-panel.is-preliminar {
+  border-color: #e4cfa8;
+  background: #fbf7ef;
+}

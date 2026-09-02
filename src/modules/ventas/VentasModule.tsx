@@ -8,6 +8,9 @@ import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/type
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
 const VentasHoy          = lazy(() => import('./VentasHoy'))
+// Pestaña ADITIVA (preliminar, datos simulados). No recibe props: lee su propio snapshot del
+// mock y no toca `dias`, `pm` ni ninguna otra pestaña.
+const VentasEnVivo       = lazy(() => import('./VentasEnVivo'))
 const VentasContabilidad = lazy(() => import('./VentasContabilidad'))
 const VentasSaloneros    = lazy(() => import('./VentasSaloneros'))
 const VentasHistorico    = lazy(() => import('./VentasHistorico'))
@@ -23,11 +26,15 @@ const VentasICP          = lazy(() => import('./VentasICP'))
 const VentasCalendario   = lazy(() => import('./VentasCalendario'))
 const VentasMenuEng      = lazy(() => import('./VentasMenuEng'))
 
-type Tab = 'hoy'|'ventas'|'saloneros'|'evaluacion'|'icp'|'cajeros'|'historico'|'mix'|'analisis'|'calendario'|'menueng'|'metas'|'competencias'|'xls'|'config'
+type Tab = 'hoy'|'envivo'|'ventas'|'saloneros'|'evaluacion'|'icp'|'cajeros'|'historico'|'mix'|'analisis'|'calendario'|'menueng'|'metas'|'competencias'|'xls'|'config'
 
 interface TabDef { id: Tab; label: string; group: string; roles: string[] }
 const TABS: TabDef[] = [
   { id: 'hoy',          label: 'Hoy',          group: 'ops',   roles: ['owner','manager','contador'] },
+  // Va DESPUÉS de 'hoy' a propósito: `visibleTabs[0]` es la pestaña por defecto, y con los
+  // mismos roles que 'hoy' nadie puede ver esta sin ver aquella primero. La pestaña de
+  // arranque no cambia para ningún rol.
+  { id: 'envivo',       label: 'En vivo',       group: 'ops',   roles: ['owner','manager','contador'] },
   { id: 'saloneros',    label: 'Saloneros',     group: 'ops',   roles: ['owner','manager'] },
   { id: 'evaluacion',   label: 'Evaluación',    group: 'team',  roles: ['owner','manager'] },
   { id: 'icp',          label: 'ICP',           group: 'team',  roles: ['owner','manager','contador'] },
@@ -171,6 +178,7 @@ export default function VentasModule() {
           <Suspense fallback={<TabLoader />}>
             <div className="vt-content">
               {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
+              {tab === 'envivo'      && <VentasEnVivo />}
               {tab === 'ventas'      && <VentasContabilidad dias={allDias} hist={hist} metas={metas} pm={pm} />}
               {tab === 'saloneros'   && <VentasSaloneros    dias={allDias} pm={pm} metas={metas} />}
               {tab === 'evaluacion'  && <VentasEvaluacion   dias={allDias} pm={pm} metas={metas} />}

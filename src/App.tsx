@@ -27,7 +27,6 @@ const SalariosModule    = lazy(() => import('./modules/salarios/SalariosModule')
 const InboxModule       = lazy(() => import('./modules/inbox/InboxModule'))
 const PruebaModule      = lazy(() => import('./modules/prueba/PruebaModule'))
 const ComanderoModule   = lazy(() => import('./modules/pos/ComanderoModule'))
-const AnaliticaPosModule = lazy(() => import('./modules/analitica-pos/AnaliticaPosModule'))
 const KdsModule         = lazy(() => import('./modules/pos/KdsModule'))
 const MiTurno           = lazy(() => import('./modules/pos/MiTurno'))
 const RegistroCliente   = lazy(() => import('./pages/RegistroCliente'))
@@ -148,9 +147,6 @@ function AppRoutes() {
         <Route path="/propinas" element={<PrivateRoute roles={['owner','manager','cajero','contador']}><TipsModule /></PrivateRoute>} />
         <Route path="/caja"     element={<PrivateRoute roles={['owner','manager','cajero','contador']}><CashModule /></PrivateRoute>} />
         <Route path="/ventas"   element={<PrivateRoute roles={['owner','manager','contador']}><VentasModule /></PrivateRoute>} />
-        {/* Analítica PoS (Fase A): la pantalla corre con datos simulados hasta que tengamos
-            lectura del PoS. Mismos roles que Ventas — es la misma pregunta, otra fuente. */}
-        <Route path="/analitica-pos" element={<PrivateRoute roles={['owner','manager','contador']}><AnaliticaPosModule /></PrivateRoute>} />
         <Route path="/sops"          element={<PrivateRoute><SOPsModule /></PrivateRoute>} />
         {/* Mis Propinas se integró como pestaña de Mi Rendimiento (la "casa del empleado").
             La ruta vieja redirige a esa pestaña para no romper enlaces/cards del Home. */}

@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import type { VentaPorHora } from './types'
-import { fi } from '../../shared/utils'
+import type { VentaPorHora } from './ventasEnVivoTypes'
+import { fi } from './ventasUtils'
 
-// ── El ritmo del día, hora por hora ─────────────────────────────────────────────
+// ── Ventas · En vivo — el ritmo del día, hora por hora ──────────────────────────
+//
+// LIVE-ONLY: el import de xls trae el día entero sin repartirlo por hora, así que este dato
+// no existe en `DiaData`. Es de lo poco que el PoS en línea agrega de verdad.
 //
 // POR QUÉ BARRAS Y NO UNA LÍNEA: la venta por hora son baldes discretos, no una señal
 // continua. Una línea dibujaría una pendiente entre las 19:00 y las 20:00 que sugiere valores
@@ -47,7 +50,7 @@ function corto(n: number): string {
   return `₡${n}`
 }
 
-export default function RitmoPorHora({ datos, horaActual }: Props) {
+export default function VentasEnVivoRitmo({ datos, horaActual }: Props) {
   const [hover, setHover] = useState<number | null>(null)
 
   if (datos.length === 0) {

@@ -71,11 +71,6 @@ const MODULES: Module[] = [
     roles: ['owner', 'manager', 'contador'],
   },
   {
-    id: 'analitica-pos', path: '/analitica-pos', label: 'Analítica PoS', kanji: '析',
-    description: 'Ventas en vivo (Fase A · simulado)', ready: true,
-    roles: ['owner', 'manager', 'contador'],
-  },
-  {
     id: 'inventario', path: '/inventario', label: 'Inventario', kanji: '庫',
     description: 'Stock · Recetas · Costos', ready: true,
     roles: ['owner', 'manager', 'contador'],

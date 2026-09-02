@@ -1,0 +1,22 @@
+{
+  "name": "pos-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ESQUELETO · Agente local PoS (SQL Server 'ndf') -> Supabase. Fase A: NO se conecta a nada real.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mssql": "^11.0.1"
+  },
+  "devDependencies": {
+    "@types/mssql": "^9.1.5",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

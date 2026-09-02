@@ -1,0 +1,7 @@
+node_modules
+dist
+# El .env lleva la clave del usuario de solo lectura del PoS: NUNCA al repo.
+.env
+# Estado local del agente (last_id por local). Es de la PC, no del repo.
+.bridge-state.json
+*.bridge-state.json

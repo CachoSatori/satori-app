@@ -1,0 +1,533 @@
+/* ============================================================
+   ANALÍTICA PoS · piel del módulo (Fase A)
+
+   TODO cuelga de `.apos`, la clase que solo pone AnaliticaPosModule.
+   Es a propósito: los tokens NO van a index.css ni a :root, así que
+   ningún otro módulo (Caja, Ventas, Salarios) cambia por este archivo.
+
+   La paleta sale del sistema que ya tiene la app (index.css): header
+   oscuro sobre `ink`, contenido sobre `paper`, acento dorado. Lo único
+   que se agrega son los tokens del GRÁFICO, y por una razón concreta:
+   el dorado de la app da 1.98:1 sobre el papel — alcanza para un
+   texto de acento, no para una marca de datos que hay que comparar de
+   un vistazo. Las marcas usan el teal, que sí pasa contraste, en UN
+   solo hue: hay una sola serie, y el color no lleva identidad, lleva
+   magnitud (que ya lleva la altura).
+   ============================================================ */
+
+.apos {
+  /* — Superficies y tinta (mismas del sistema) — */
+  --apos-ink:       #0d0d0d;
+  --apos-paper:     #f5f0e8;
+  --apos-panel:     #ede8de;
+  --apos-border:    #d4cfc4;
+  --apos-muted:     #5a5040;   /* tinta apagada, legible sobre papel (6:1) */
+  --apos-gold:      #c8a96e;   /* solo sobre el header oscuro */
+  --apos-gold-dark: #a07830;   /* la variante legible sobre papel (5:1) */
+
+  /* — Marcas del gráfico — */
+  --apos-mark:        #2a7a6a;  /* teal: magnitud, una sola serie */
+  --apos-mark-fuerte: #1d5b4e;  /* el mismo hue, más oscuro, para el hover */
+  --apos-mark-suave:  #cfe0da;  /* relleno tenue de las barras de lista */
+  --apos-grid:        #d9d3c7;  /* grilla y ejes: recesivos */
+
+  /* — Semánticos: estado, nunca serie — */
+  --apos-ok:     #1f6b45;
+  --apos-alerta: #8f5509;
+  --apos-crit:   #a8362b;
+
+  --apos-r:      10px;
+  --apos-r-sm:   6px;
+  --apos-mono:   'DM Mono', ui-monospace, monospace;
+
+  min-height: 100vh;
+  background: var(--apos-paper);
+  color: var(--apos-ink);
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+
+.apos-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--apos-ink);
+  border-bottom: 1px solid #242424;
+  flex-wrap: wrap;
+}
+
+.apos-brand { display: flex; align-items: center; gap: 0.7rem; }
+
+.apos-kanji {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  color: var(--apos-gold);
+}
+
+.apos-title {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--apos-gold);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.apos-sub {
+  font-size: 0.68rem;
+  color: #8a8378;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.apos-fase {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #d8b06a;
+  background: rgba(200, 169, 110, 0.13);
+  border: 1px solid rgba(200, 169, 110, 0.32);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.apos-spacer { flex: 1 1 auto; }
+
+/* ── Tabs ───────────────────────────────────────────────────── */
+
+.apos-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 1.25rem;
+  background: var(--apos-ink);
+  border-bottom: 1px solid #242424;
+  overflow-x: auto;
+}
+
+.apos-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #8a8378;
+  font-family: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 0.7rem 0.9rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.apos-tab:hover { color: #e8e2d8; }
+
+.apos-tab.is-active {
+  font-weight: 700;
+  color: var(--apos-gold);
+  border-bottom-color: var(--apos-gold);
+}
+
+.apos-body { padding: 1.1rem 1.25rem 3rem; }
+
+.apos-cargando {
+  display: flex;
+  justify-content: center;
+  padding: 3.5rem;
+  opacity: 0.4;
+}
+
+/* ── Barra de control ───────────────────────────────────────── */
+
+.apos-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.apos-locales { display: flex; gap: 0.35rem; }
+
+.apos-chip {
+  background: var(--apos-panel);
+  border: 1px solid var(--apos-border);
+  border-radius: 999px;
+  color: var(--apos-muted);
+  font-family: inherit;
+  font-size: 0.74rem;
+  padding: 5px 14px;
+  cursor: pointer;
+}
+
+.apos-chip.is-on {
+  background: var(--apos-mark);
+  border-color: var(--apos-mark);
+  color: #fff;
+  font-weight: 600;
+}
+
+.apos-fresco {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--apos-muted);
+}
+
+/* El pulso dice «esto se está actualizando» sin ocupar una línea de texto. */
+.apos-pulso {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--apos-mark);
+  animation: apos-latido 2.4s ease-in-out infinite;
+}
+
+@keyframes apos-latido {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apos-pulso { animation: none; }
+}
+
+/* ── KPIs ───────────────────────────────────────────────────── */
+
+.apos-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 0.7rem;
+  margin-bottom: 1.1rem;
+}
+
+.apos-kpi {
+  background: #fff;
+  border: 1px solid var(--apos-border);
+  border-left: 3px solid var(--apos-border);
+  border-radius: var(--apos-r-sm);
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* El borde de color se gasta SOLO en las dos tarjetas que lo justifican: la cifra
+   principal y la que no es un dato medido. Si todas lo llevaran, no diría nada. */
+.apos-kpi.is-principal  { border-left-color: var(--apos-mark); }
+.apos-kpi.is-proyeccion { border-left-color: var(--apos-gold-dark); }
+
+.apos-kpi-lbl {
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--apos-muted);
+}
+
+.apos-kpi-val {
+  font-family: var(--apos-mono);
+  font-size: 1.32rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.apos-kpi.is-principal .apos-kpi-val { color: var(--apos-mark-fuerte); }
+.apos-kpi.is-proyeccion .apos-kpi-val { color: var(--apos-gold-dark); }
+
+.apos-kpi-sub { font-size: 0.66rem; color: var(--apos-muted); }
+
+/* ── Paneles ────────────────────────────────────────────────── */
+
+.apos-panel {
+  background: #fff;
+  border: 1px solid var(--apos-border);
+  border-radius: var(--apos-r);
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.9rem;
+}
+
+.apos-panel-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+}
+
+.apos-panel-hd h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.apos-panel-sub { font-size: 0.7rem; color: var(--apos-muted); }
+
+.apos-panel.apos-stop {
+  border-color: var(--apos-crit);
+  color: var(--apos-crit);
+}
+
+.apos-nota {
+  font-size: 0.73rem;
+  line-height: 1.55;
+  color: var(--apos-muted);
+  margin-bottom: 0.85rem;
+  max-width: 72ch;
+}
+
+.apos-nota code,
+.apos-pie code {
+  font-family: var(--apos-mono);
+  font-size: 0.92em;
+  background: var(--apos-panel);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.apos-vacio { font-size: 0.78rem; color: var(--apos-muted); padding: 1.5rem 0; }
+
+/* ── Gráfico ────────────────────────────────────────────────── */
+
+.apos-chart svg { width: 100%; height: auto; display: block; }
+
+/* El texto del gráfico usa tinta, nunca el color de la marca: la marca lleva la
+   identidad, el texto solo se tiene que leer. */
+.apos-axis {
+  font-family: var(--apos-mono);
+  font-size: 10px;
+  fill: var(--apos-muted);
+}
+
+.apos-pico {
+  font-family: var(--apos-mono);
+  font-size: 11px;
+  font-weight: 500;
+  fill: var(--apos-mark-fuerte);
+}
+
+.apos-tip {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  min-height: 1.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--apos-border);
+  font-size: 0.76rem;
+  font-family: var(--apos-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.apos-tip-sec { color: var(--apos-muted); }
+
+/* ── Barras de lista (categorías, productos, saloneros) ─────── */
+
+.apos-barras { list-style: none; display: grid; gap: 0.4rem; }
+
+.apos-barras li {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.3fr) minmax(60px, 2fr) auto auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.76rem;
+}
+
+.apos-barra-lbl { display: flex; flex-direction: column; gap: 1px; }
+
+.apos-barra-cat {
+  font-size: 0.62rem;
+  font-style: normal;
+  color: var(--apos-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.apos-barra-pista {
+  height: 9px;
+  background: var(--apos-panel);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.apos-barra-fill {
+  display: block;
+  height: 100%;
+  background: var(--apos-mark);
+  border-radius: 999px;
+}
+
+/* La barra de una sección pendiente va apagada y rayada: se distingue de un dato
+   real incluso en blanco y negro o con daltonismo. */
+.apos-barra-fill.is-ejemplo {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--apos-mark-suave) 0 5px,
+    var(--apos-panel) 5px 10px
+  );
+}
+
+.apos-barra-val,
+.apos-barra-pct,
+.apos-barra-uds {
+  font-family: var(--apos-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.apos-barra-pct { font-weight: 500; color: var(--apos-mark-fuerte); }
+.apos-barra-uds { font-size: 0.7rem; color: var(--apos-muted); }
+
+/* ── Comparativa ────────────────────────────────────────────── */
+
+.apos-comp { display: grid; gap: 0.5rem; }
+
+.apos-comp-fila {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 0.8rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--apos-panel);
+  border-radius: var(--apos-r-sm);
+  font-size: 0.78rem;
+}
+
+.apos-comp-val {
+  font-family: var(--apos-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.apos-delta {
+  font-family: var(--apos-mono);
+  font-size: 0.74rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.apos-delta.is-arriba { color: var(--apos-ok); }
+.apos-delta.is-abajo  { color: var(--apos-crit); }
+.apos-delta.is-nulo   { color: var(--apos-muted); font-weight: 400; }
+
+/* ── Secciones pendientes de cablear ────────────────────────── */
+
+.apos-panel.is-pendiente {
+  border-style: dashed;
+  background: #fbf9f5;
+}
+
+.apos-tag-pendiente {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--apos-alerta);
+  background: #f8ecd8;
+  border: 1px solid #e4cfa8;
+  border-radius: 999px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+/* ── Toggle ─────────────────────────────────────────────────── */
+
+.apos-toggle { display: flex; gap: 0; }
+
+.apos-toggle button {
+  background: var(--apos-panel);
+  border: 1px solid var(--apos-border);
+  color: var(--apos-muted);
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 4px 11px;
+  cursor: pointer;
+}
+
+.apos-toggle button:first-child { border-radius: var(--apos-r-sm) 0 0 var(--apos-r-sm); }
+.apos-toggle button:last-child  { border-radius: 0 var(--apos-r-sm) var(--apos-r-sm) 0; border-left: none; }
+
+.apos-toggle button.is-on {
+  background: var(--apos-mark);
+  border-color: var(--apos-mark);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── Tabla ──────────────────────────────────────────────────── */
+
+.apos-tabla-wrap { overflow-x: auto; }
+
+.apos-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+  min-width: 460px;
+}
+
+.apos-tabla th {
+  text-align: left;
+  font-size: 0.62rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--apos-muted);
+  font-weight: 500;
+  padding: 0 0.7rem 0.5rem 0;
+  border-bottom: 1px solid var(--apos-border);
+}
+
+.apos-tabla td {
+  padding: 0.5rem 0.7rem 0.5rem 0;
+  border-bottom: 1px solid var(--apos-panel);
+}
+
+.apos-tabla tr:last-child td { border-bottom: none; }
+.apos-tabla .r { text-align: right; font-family: var(--apos-mono); font-variant-numeric: tabular-nums; }
+
+/* El estado va con ícono Y palabra: nunca solo color. */
+.apos-estado { font-size: 0.72rem; white-space: nowrap; }
+.apos-estado.is-ok    { color: var(--apos-ok); }
+.apos-estado.is-flojo { color: var(--apos-alerta); font-weight: 600; }
+
+/* ── Pie ────────────────────────────────────────────────────── */
+
+.apos-pie {
+  font-size: 0.72rem;
+  color: var(--apos-muted);
+  line-height: 1.55;
+  max-width: 72ch;
+  margin-top: 1.2rem;
+}
+
+.apos :focus-visible {
+  outline: 2px solid var(--apos-mark);
+  outline-offset: 2px;
+}
+
+/* ── Angosto ────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .apos-body { padding: 0.9rem 0.75rem 3rem; }
+  .apos-panel { padding: 0.85rem 0.8rem; }
+
+  /* En móvil la fila de barras se parte: la pista pasa a ocupar el ancho y los
+     números caen debajo, en vez de exprimir cinco columnas en 320 px. */
+  .apos-barras li {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "lbl val"
+      "pista pista"
+      "uds pct";
+    gap: 0.3rem 0.6rem;
+  }
+  .apos-barra-lbl   { grid-area: lbl; }
+  .apos-barra-val   { grid-area: val; }
+  .apos-barra-pista { grid-area: pista; }
+  .apos-barra-uds   { grid-area: uds; text-align: left; }
+  .apos-barra-pct   { grid-area: pct; }
+}
+
+/* Servicio cerrado: sin pulso, en tinta apagada. Lo que se muestra es una foto de
+   anoche, no algo que se esté moviendo — y tiene que verse distinto de un vistazo. */
+.apos-fresco.is-cerrado { color: var(--apos-muted); font-style: italic; }

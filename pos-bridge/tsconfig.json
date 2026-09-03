@@ -1,0 +1,30 @@
+// Typecheck del extractor. NO entra a `npm run build` de la app (el tsconfig raíz
+// tiene files: [] y solo referencia tsconfig.app.json / tsconfig.node.json), así que
+// es inerte para el build:
+//
+//   cd pos-bridge && npm run typecheck
+//
+// `moduleResolution: bundler` iguala a tsconfig.app.json y resuelve los imports sin
+// extensión de `src/` (que Vite resuelve y `nodenext` no). En runtime ese mismo hueco
+// lo tapa ts-resolve-hook.mjs. Mismo molde que scripts/pool-backfill.
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "types": ["node"],
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["*.ts"]
+}

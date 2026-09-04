@@ -8,8 +8,12 @@
 // Fase 1a: el total es PROVISORIO (suma de medios de pago en colones) hasta que un
 // día real cuadre contra el Excel. Ver `pos-bridge/README.md`.
 
-import type { CajeroDay, DiaData, SaloneroDay } from '../types/ventas'
-import { isCajeroName } from '../utils'
+// Extensiones explícitas (`.ts`) a propósito, en contra de la convención del resto de
+// `src/`: este módulo lo importa TAMBIÉN el Edge `ingest-ndf`, que corre en Deno y ahí
+// el import sin extensión no resuelve. Vite y vitest resuelven las dos formas
+// (`allowImportingTsExtensions` en tsconfig.app.json), así que la app no cambia.
+import type { CajeroDay, DiaData, SaloneroDay } from '../types/ventas.ts'
+import { isCajeroName } from '../utils/index.ts'
 
 // ── Vocabulario ────────────────────────────────────────────────────────────────
 

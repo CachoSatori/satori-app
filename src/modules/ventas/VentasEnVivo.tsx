@@ -180,8 +180,14 @@ export default function VentasEnVivo() {
           </div>
           <div className="apos-kpi">
             <span className="apos-kpi-lbl">Venta bruta</span>
-            <span className="apos-kpi-val">{fi(stats.ventaBruta)}</span>
-            <span className="apos-kpi-sub">neta + IVA {fi(stats.iva)} + serv. {fi(stats.serv)}</span>
+            {/* Con el feed real la bruta es el dato del PoS (Σ medios de pago − vuelto); con el
+                mock se sigue derivando como antes. El IVA se muestra PENDIENTE cuando el PoS lo
+                informa en cero: NO se deriva de neta × 0,13 (SPEC-valor-servido-regalias). */}
+            <span className="apos-kpi-val">{fi(snap.bruto ?? stats.ventaBruta)}</span>
+            <span className="apos-kpi-sub">
+              neta + IVA {snap.ivaPendiente ? <em>pendiente</em> : fi(snap.iva ?? stats.iva)}
+              {' '}+ serv. {fi(snap.servicio ?? stats.serv)}
+            </span>
           </div>
           <div className="apos-kpi">
             <span className="apos-kpi-lbl">Tickets</span>
@@ -197,7 +203,7 @@ export default function VentasEnVivo() {
             <span className="apos-kpi-lbl">Promedio por pax</span>
             <span className="apos-kpi-val">{stats.promPax > 0 ? fi(Math.round(stats.promPax)) : '—'}</span>
             <span className="apos-kpi-sub">
-              {stats.pax.toLocaleString('es-CR')} pax · salón / pax
+              {stats.pax.toLocaleString('es-CR')} pax · vía artículo pax (§3.F)
             </span>
           </div>
           <div className="apos-kpi is-proyeccion">

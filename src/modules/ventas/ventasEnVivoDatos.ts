@@ -47,6 +47,21 @@ const esFamiliaNeto = (f: number | null): boolean =>
 
 const n = (v: number | null | undefined): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
+/**
+ * Los comensales de un ticket, con la **fuente primaria del SPEC §3.F: el ARTÍCULO pax**.
+ *
+ * NO se usa la columna `pax` directamente. Esa la resuelve el mapper con la regla del puente
+ * (manda el nativo cuando está), y el SPEC dice lo contrario mientras el nativo no sea
+ * confiable: el campo nativo no es obligatorio y hoy viene sin cargar. Si no hay artículo, se
+ * cae al `pax` ya resuelto — así un ticket con solo nativo no queda en cero.
+ *
+ * El día que el nativo llegue al 100 % (§3.F) esto se invierte y el artículo se retira.
+ */
+export function paxDelTicket(t: Pick<TicketNdfConId, 'pax' | 'pax_articulo'>): number {
+  const articulo = n(t.pax_articulo)
+  return articulo > 0 ? articulo : n(t.pax)
+}
+
 /** Con quién se acredita el ticket. `null` = cajero, sistema o sin pedido: no es un mesero. */
 export function claveSalonero(t: Pick<TicketNdfConId, 'salonero_login' | 'registrado_por'>): string | null {
   if (t.registrado_por !== 'salonero') return null
@@ -103,7 +118,7 @@ export function armarDia(
       pax: 0, total: 0, com: 0, beb: 0, iCom: 0, iBeb: 0, serv: 0,
       prods: new Map<string, { q: number; m: number }>(),
     }
-    e.pax   += n(t.pax)
+    e.pax   += paxDelTicket(t)
     e.total += n(t.valor_servido_crc)   // el NETO — ver el bloque de arriba
     e.serv  += n(t.servicio_crc)
 
@@ -269,7 +284,7 @@ export interface EntradaSnapshot {
 }
 
 /** PURO: todo lo de arriba junto. Se prueba sin Supabase. */
-export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo & { bruto: number; servicio: number; iva: number; regalia: number } {
+export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
   const armado = armarDia(e.fecha, e.tickets, e.lineas, e.ahora.toISOString())
   const neto = Object.values(armado.dia.saloneros).reduce((s, v) => s + v.total, 0)
   const comparables = jornadasComparables(e.fecha)
@@ -286,7 +301,15 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo & { bruto: num
     proyeccionCierre: neto,
     historico: compararContra(e.neto4Sem, comparables),
     calidadPax: calidadPaxPorSalonero(e.tickets),
-    bruto: armado.bruto, servicio: armado.servicio, iva: armado.iva, regalia: armado.regalia,
+
+    // Extras del feed real (campos opcionales del contrato).
+    bruto:    armado.bruto,
+    servicio: armado.servicio,
+    iva:      armado.iva,
+    regalia:  armado.regalia,
+    // El PoS informa el IVA en 0 en todo el histórico. Se marca PENDIENTE en vez de mostrar
+    // un cero que se lee como "no hubo impuesto" — y NUNCA se deriva de neto × 0,13.
+    ivaPendiente: armado.iva === 0,
   }
 }
 

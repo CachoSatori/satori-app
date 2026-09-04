@@ -4,7 +4,7 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import {
   armarDia, armarSnapshot, calidadPaxPorSalonero, claveSalonero, compararContra,
-  etiquetaNoMesero, horaCRDe, jornadasComparables, ritmoPorHora,
+  etiquetaNoMesero, horaCRDe, jornadasComparables, paxDelTicket, ritmoPorHora,
 } from './ventasEnVivoDatos'
 import { businessDateDe, ventanaJornada } from '../../shared/api/posNdf'
 import { mixPorCategoria, ticketsDelDia } from './ventasEnVivoTypes'
@@ -149,6 +149,34 @@ describe('claveSalonero / etiquetaNoMesero', () => {
   })
 })
 
+// ── Pax: la fuente primaria es el ARTÍCULO (§3.F) ──────────────────────────────
+
+describe('paxDelTicket', () => {
+  it('manda el ARTÍCULO, no el `pax` que resolvió el mapper', () => {
+    // El mapper pone `pax` = nativo cuando está; el SPEC §3.F dice lo contrario mientras
+    // el nativo no sea confiable. Acá el nativo dice 4 y el artículo 2: vale 2.
+    expect(paxDelTicket({ pax: 4, pax_articulo: 2 })).toBe(2)
+  })
+
+  it('sin artículo cae al pax resuelto (un ticket con solo nativo no queda en cero)', () => {
+    expect(paxDelTicket({ pax: 3, pax_articulo: 0 })).toBe(3)
+    expect(paxDelTicket({ pax: 3, pax_articulo: null })).toBe(3)
+  })
+
+  it('sin ninguna de las dos, cero', () => {
+    expect(paxDelTicket({ pax: 0, pax_articulo: 0 })).toBe(0)
+    expect(paxDelTicket({ pax: null, pax_articulo: null })).toBe(0)
+  })
+
+  it('el día acredita el pax por artículo', () => {
+    const a = armarDia('2026-09-01', [
+      ticket({ id: 'a', pax: 4, pax_nativo: 4, pax_articulo: 2 }),
+      ticket({ id: 'b', pax: 3, pax_nativo: 0, pax_articulo: 3 }),
+    ], [], '2026-09-01')
+    expect(sal(a.dia, '026').pax).toBe(5)   // 2 + 3, no 4 + 3
+  })
+})
+
 // ── Ritmo ──────────────────────────────────────────────────────────────────────
 
 describe('ritmoPorHora', () => {
@@ -279,5 +307,21 @@ describe('armarSnapshot', () => {
     expect(snap.bruto).toBe(27120)
     expect(snap.servicio).toBe(2400)
     expect(snap.iva).toBe(0)
+  })
+
+  it('el IVA en cero se marca PENDIENTE, no se deriva', () => {
+    expect(snap.ivaPendiente).toBe(true)
+    // 25.000 de neto × 0,13 = 3.250. Ese número no aparece por ningún lado.
+    expect(snap.iva).toBe(0)
+  })
+
+  it('con IVA real informado por el PoS, deja de estar pendiente', () => {
+    const conIva = armarSnapshot({
+      local: 'santa-teresa', fecha: '2026-09-01',
+      tickets: [ticket({ iva_crc: 1560 })], lineas: [], neto4Sem: {},
+      ahora: new Date('2026-09-02T02:00:00Z'), enServicio: true,
+    })
+    expect(conIva.iva).toBe(1560)
+    expect(conIva.ivaPendiente).toBe(false)
   })
 })

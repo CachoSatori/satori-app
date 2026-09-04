@@ -118,6 +118,25 @@ export interface SnapshotEnVivo {
   historico:        ComparativaHistorico
   /** ⚠ Fase B — hoy son datos de ejemplo, la pantalla los marca como tales. */
   calidadPax:       CalidadPax[]
+
+  // ── Extras del feed real (OPCIONALES) ───────────────────────────────────────────────────
+  // Aditivos a propósito: el mock no los trae y sigue cumpliendo el tipo sin cambiar una línea.
+  // `DiaData` no tiene dónde guardarlos (su `iva`/`serv` son por salonero), así que viajan acá.
+
+  /** Bruto del día: Σ medios de pago − vuelto (`total_crc`). */
+  bruto?:    number
+  /** Servicio 10 % cobrado (`Σ servicio_crc`). */
+  servicio?: number
+  /** IVA informado por el PoS (`Σ iva_crc`). Ver `ivaPendiente`. */
+  iva?:      number
+  /** Lo regalado, en neto (`Σ regalia_crc`). */
+  regalia?:  number
+  /**
+   * `true` = el PoS todavía no informa IVA (llega en 0 en todo el histórico). La pantalla lo
+   * muestra como PENDIENTE en vez de como "₡0": **no se deriva** de neto × 0,13, porque
+   * calcular un impuesto que nadie cobró sería inventar plata (SPEC-valor-servido-regalias).
+   */
+  ivaPendiente?: boolean
 }
 
 // ── Derivados live-only ─────────────────────────────────────────────────────────
@@ -198,6 +217,17 @@ export function mixPorCategoria(dia: DiaData, pm: ProductMap): MixCategoria[] {
       pctMix:   total > 0 ? (e.monto / total) * 100 : 0,
     }))
     .sort((a, b) => b.monto - a.monto)
+}
+
+/**
+ * ── VENTA POR PAX (§3.F del SPEC) ──────────────────────────────────────────────────────
+ * La fuente PRIMARIA de comensales es el **artículo pax**, no el campo nativo del PoS:
+ * el nativo no es obligatorio y hoy no es confiable. Cuando el nativo llegue al 100 %
+ * (§3.F) esto se invierte y el artículo se retira.
+ */
+export function ventaPorPax(venta: number, pax: number): number {
+  if (!pax || pax <= 0) return 0
+  return Math.round(venta / pax)
 }
 
 /**

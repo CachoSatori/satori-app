@@ -5,7 +5,8 @@
 > PoS. Escrito para ejecutarse en orden, de arriba abajo, leyendo el "qué ver" de cada paso antes
 > de pasar al siguiente.
 >
-> **Rama:** `feat/pos-bridge-a3` (`065cafb`). **NO se mergea** — ni a `staging` ni a `main`.
+> **Rama:** **`deploy/pos-bridge-staging`** (= `feat/pos-bridge-a3`, el mismo commit; el primer
+> nombre es el que se usa para desplegar). **NO se mergea** — ni a `staging` ni a `main`.
 > Decisiones firmadas por Ismael: `local` en el sobre · RLS `owner/manager/contador` · el Edge
 > recalcula el total (medios − vuelto) y gana el Edge.
 
@@ -48,12 +49,26 @@ hasta que exista su propio ciclo de pase a prod, con firma.
 En la máquina desde la que se administra (la de Ismael, no la del PoS):
 
 ```bash
-supabase --version          # CLI de Supabase instalada
-git rev-parse --abbrev-ref HEAD    # tiene que decir: feat/pos-bridge-a3
+supabase --version                 # CLI de Supabase instalada
+git fetch origin
+git checkout deploy/pos-bridge-staging
+git rev-parse --abbrev-ref HEAD    # tiene que decir: deploy/pos-bridge-staging
+ls supabase/migrations | tail -3   # 060… 061… 062_pos_ndf_ingesta.sql
 ```
 
-- El checkout **tiene que estar en `feat/pos-bridge-a3`**: `db push` mira los **archivos** de la
-  rama en la que estás parado. Desde `main` no vería la `062`; desde una rama vieja vería otro set.
+- El checkout **tiene que estar en `deploy/pos-bridge-staging`**: `db push` mira los **archivos**
+  de la rama en la que estás parado.
+
+> ### ⚠️ La rama sale de `staging`, NO de `main` — y tiene que ser así
+>
+> `main` es **producción** y su última migración es la **054**: no tiene las 055–061 (Salarios y
+> BioTime viven solo en staging, ESTADO.md §b). Una rama basada en `main` traería la `062` con un
+> hueco de siete migraciones: contra la base de staging —cuyo ledger ya tiene esas versiones— el
+> CLI lo lee como **drift** y `migration list` / `db push` fallan.
+>
+> Y hay algo peor: con **Branching ON**, cualquier cosa que llegue a `main` **se auto-aplica a la
+> base de producción**. Por eso la rama sale de `staging`, donde el ledger calza, y no se mergea
+> a ningún lado.
 - El CLI conecta a la base con el **access token del Keychain** (servicio `Supabase CLI`), no con
   `SUPABASE_DB_PASSWORD`. Si pide login: `supabase login`.
 
@@ -374,7 +389,7 @@ Con git, o copiando la carpeta desde un pendrive/red:
 cd C:\satori
 git clone https://github.com/CachoSatori/satori-app.git
 cd satori-app
-git checkout feat/pos-bridge-a3
+git checkout deploy/pos-bridge-staging
 ```
 
 **Sin git:** copiar la carpeta del repo **sin `node_modules`** y verificar que estén

@@ -271,3 +271,82 @@ agente.ts         el loop
 Por eso el ciclo entero —el saludo, el avance del cursor, el PoS apagado, Supabase caído— se
 prueba con mocks, que es lo único validable desde el repo: la PC del PoS es la única máquina
 con red al PoS y a Supabase a la vez.
+
+---
+
+# El backfill histórico (A4)
+
+El segundo camino, **en paralelo al agente en vivo**: trae el histórico de ventas cerradas a
+`pos_ndf_tickets` / `pos_ndf_ticket_lines` de staging, día por día, agrupando el log por mes.
+
+```
+npm run pos:backfill -- --desde 2026-08-05 --hasta 2026-09-03
+npm run pos:backfill -- --desde 2026-07-01 --hasta 2026-07-31     # mes a mes hacia atrás
+npm run pos:backfill -- --desde 2026-09-01 --hasta 2026-09-03 --dry-run
+npm run pos:backfill -- --todo                                     # desde la venta más vieja hasta AYER
+```
+
+| Opción | |
+|---|---|
+| `--desde` / `--hasta` | El rango, inclusive. Es el modo principal: permite ir mes a mes y **retomar tras un corte**. |
+| `--todo` | Descubre `min(FechaRegistra)` de las cerradas y barre hasta **ayer** (hoy lo cubre el agente). |
+| `--dry-run` | Lee y cuenta, **no envía**. Para sondear un tramo viejo antes de cargarlo. |
+| `--orden asc` | Del más viejo al más reciente. Por defecto va **al revés**. |
+| `--pausa-ms N` | Pausa entre días (default 500; 300–800 es lo sano para no machacar el SQL Server). |
+
+**Va del más reciente al más viejo a propósito:** si el barrido se corta a la mitad, lo que ya
+entró es lo último —que es lo que se está cuadrando— y no un pedazo suelto de 2024.
+
+## No hay que parar el agente
+
+El lote del backfill lleva **solo `{ local, tickets }`**:
+
+- **sin `open`** — `open: []` le borraría a staging las mesas abiertas de HOY. Ausente, el Edge
+  no toca `pos_ndf_open`.
+- **sin `cursor`** — ni siquiera `{ last_error: null }`: eso le limpiaría al agente un error
+  recién escrito. Ausente, el Edge **lee** la fila para devolverla y **no la escribe**:
+  `last_factura`, `last_error` y `last_poll_at` quedan como los dejó el agente.
+
+> ⚠️ Esa última parte **es un cambio en la Edge Function** (`ingest-ndf`): antes, un lote sin
+> `cursor` igual pisaba `last_poll_at`. **Hay que redesplegarla antes de correr el backfill.**
+> Para el agente en vivo no cambia nada: él siempre manda `cursor`.
+
+Reingestar un ticket ya guardado no duplica (upsert por `(local, numero_factura)`) y el detalle
+se reemplaza entero, así que tampoco duplica líneas. **Re-correr un rango es seguro** — es la
+forma de retomar después de un corte.
+
+## Cómo se ve
+
+```
+[…] backfill pos-ndf · local=santa-teresa · entorno=staging · ingest=hwiatgic….supabase.co
+[…] rango 2026-08-28 … 2026-09-02 · 6 día(s) · orden reciente-primero · pausa 500 ms
+[…] el agente en vivo NO se toca: el lote va sin 'open' y sin 'cursor'.
+[…]  ── 2026-09 · 2 día(s) ──
+[…]    2026-09-02  tickets=38 guardados=38 líneas=173
+[…]    2026-09-01  tickets=41 guardados=41 líneas=190
+[…]  2026-09 · días=2 (vacíos 0) · tickets=79 guardados=79 · líneas=363 · errores=0 · 2026-09-01…2026-09-02
+[…]  ── 2026-08 · 4 día(s) ──
+[…]    2026-08-31  tickets=29 guardados=29 líneas=131
+[…]    ⚠ 2026-08-30 · 2 factura(s) sin pedido (histórico): salonero null y pax 0.
+[…]    2026-08-30  tickets=44 guardados=44 líneas=201
+[…]    2026-08-29  sin ventas
+[…]    2026-08-28  ✖ ECONNREFUSED DESKTOP-25PRDR1\SQLNUBE:1433
+[…]  2026-08 · días=4 (vacíos 1) · tickets=73 guardados=73 · líneas=332 · errores=1 · 2026-08-30…2026-08-31
+[…] TOTAL · días=6 (vacíos 1) · tickets=152 guardados=152 · líneas=695 · errores=1 · 2026-08-30…2026-09-02
+```
+
+**Un día que falla no frena el barrido**: se anota, se sigue, y al final el proceso sale con
+código ≠ 0 para que se vea. La cura es re-correr **ese** rango (reenviar no duplica). Un tramo
+viejo raro —saloneros reciclados, sin artículo de pax, una columna que no estaba— sale como
+aviso y no cuesta el resto del histórico.
+
+## Archivos
+
+```
+backfillPlan.ts   args, enumeración de días, tramos mensuales y contadores   (puro)
+backfill.ts       el barrido con los puertos inyectados + el CLI
+```
+
+`correrBackfill` recibe los puertos (leer un día, enviar, pausar, loguear), así que el barrido
+entero —el orden, los tramos, el día roto, la idempotencia y **la forma exacta del payload**— se
+prueba con mocks sin tocar el PoS ni Supabase.

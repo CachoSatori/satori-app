@@ -11,7 +11,7 @@ import type { DiaData } from '../src/shared/types/ventas'
 
 import { describirConfig, loadEnv, loadPosConfig, type PosConfig } from './config.ts'
 import { leerDia, type LecturaDia } from './consulta.ts'
-import { abrirConexion } from './db.ts'
+import { abrirConexion, type ConexionPos } from './db.ts'
 import { agruparColumnas, resolverEsquema, SQL_ESQUEMA, type Esquema, type FilaEsquema } from './esquema.ts'
 
 export interface ExtraccionDia extends LecturaDia {
@@ -31,22 +31,61 @@ export async function leerEsquema(
 }
 
 /**
+ * Una conexión al PoS con su esquema ya resuelto, para leer MUCHOS días seguidos.
+ *
+ * `extraerDiaDetalle` abre y cierra por día, que es lo correcto para el dry-run de UN
+ * día. El backfill barre meses: reconectar y releer `INFORMATION_SCHEMA` en cada
+ * fecha sería tirar el trabajo a la basura 300 veces.
+ */
+export interface SesionPos {
+  conn:    ConexionPos
+  esquema: Esquema
+  /** Destino de la conexión, sin contraseña. */
+  origen:  string
+  close(): Promise<void>
+}
+
+export async function abrirSesion(config?: PosConfig): Promise<SesionPos> {
+  const cfg = config ?? loadPosConfig(loadEnv())
+  const conn = await abrirConexion(cfg)
+  try {
+    return {
+      conn,
+      esquema: await leerEsquema(conn, cfg.columnas),
+      origen:  describirConfig(cfg),
+      close:   () => conn.close(),
+    }
+  } catch (e) {
+    // Si el esquema no resuelve, la conexión no queda colgada.
+    await conn.close()
+    throw e
+  }
+}
+
+/** Un día sobre una sesión ya abierta. Es el cuerpo que comparten el dry-run y el backfill. */
+export async function extraerDiaEnSesion(
+  sesion: SesionPos,
+  fecha: string,
+  uploadedAt: string,
+): Promise<ExtraccionDia> {
+  const lectura = await leerDia(sesion.conn, sesion.esquema, fecha)
+  return {
+    ...lectura,
+    dia:    construirDiaData(fecha, lectura.tickets, { uploadedAt }),
+    origen: sesion.origen,
+  }
+}
+
+/**
  * El día completo: facturas mapeadas + `DiaData` + conteos y avisos. Es lo que usa
  * el CLI, porque el dry-run necesita el detalle factura por factura.
  */
 export async function extraerDiaDetalle(fecha: string, config?: PosConfig): Promise<ExtraccionDia> {
-  const cfg = config ?? loadPosConfig(loadEnv())
-  const conn = await abrirConexion(cfg)
+  const sesion = await abrirSesion(config)
   try {
-    const esquema = await leerEsquema(conn, cfg.columnas)
-    const lectura = await leerDia(conn, esquema, fecha)
-    return {
-      ...lectura,
-      dia: construirDiaData(fecha, lectura.tickets, { uploadedAt: todayCR() }),
-      origen: describirConfig(cfg),
-    }
+    return await extraerDiaEnSesion(sesion, fecha, todayCR())
   } finally {
-    await conn.close()
+    await sesion.close()
   }
 }
 

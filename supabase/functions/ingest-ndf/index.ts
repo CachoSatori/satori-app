@@ -213,11 +213,19 @@ Deno.serve(async (req) => {
     const { data: cursorActual, error: errLeerCursor } = await sb
       .from('pos_ndf_cursor').select('*').eq('local', local).maybeSingle()
     if (errLeerCursor) throw new Error(`no se pudo leer el cursor: ${errLeerCursor.message}`)
+    const guardado = (cursorActual ?? null) as CursorRow | null
 
-    const cursor = fusionarCursor((cursorActual ?? null) as CursorRow | null, lote.cursor)
-    const { error: errCursor } = await sb
-      .from('pos_ndf_cursor').upsert(cursor, { onConflict: 'local' })
-    if (errCursor) throw new Error(`no se pudo actualizar el cursor: ${errCursor.message}`)
+    // Sin la clave `cursor` en el sobre, la fila NO se escribe: se lee para devolverla y nada
+    // más — ni siquiera el latido. Es lo que deja al BACKFILL histórico correr en paralelo con
+    // el agente en vivo sin moverle el corte. El agente SIEMPRE manda `cursor`, así que a él
+    // no le cambia nada.
+    let cursor = guardado
+    if (lote.cursor !== null) {
+      cursor = fusionarCursor(guardado, lote.cursor)
+      const { error: errCursor } = await sb
+        .from('pos_ndf_cursor').upsert(cursor, { onConflict: 'local' })
+      if (errCursor) throw new Error(`no se pudo actualizar el cursor: ${errCursor.message}`)
+    }
 
     // Invariante: tickets_recibidos = tickets_guardados + invalid + repetidos dentro del lote.
     return json({
@@ -231,8 +239,10 @@ Deno.serve(async (req) => {
       invalid:           lote.invalid,
       recalculados:      lote.recalculados,
       problemas:         lote.problemas,
-      // El cursor ya fusionado: es de acá de donde el agente saca por dónde seguir.
+      // El cursor ya fusionado: es de acá de donde el agente saca por dónde seguir. Si el lote
+      // no traía `cursor`, es la fila TAL CUAL está guardada (no se escribió nada).
       cursor,
+      cursor_escrito: lote.cursor !== null,
     }, 200)
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : String(e)

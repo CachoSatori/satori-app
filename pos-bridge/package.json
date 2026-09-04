@@ -8,6 +8,7 @@
   "scripts": {
     "dia": "node --import ./register.mjs dia.ts",
     "agente": "node --import ./register.mjs agente.ts",
+    "backfill": "node --import ./register.mjs backfill.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

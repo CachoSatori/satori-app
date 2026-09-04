@@ -469,6 +469,13 @@ export interface PayloadValidado {
   /** `undefined` = el agente no mandó snapshot; `[]` = mandó uno VACÍO (cerrar todas). */
   open:    unknown[] | undefined
   cursor:  unknown
+  /**
+   * ¿El sobre traía la clave `cursor`? Sin ella, la fila de `pos_ndf_cursor` NO se
+   * escribe (ni siquiera el latido). Es lo que le permite al **backfill** correr en
+   * paralelo con el agente en vivo sin pisarle nada: manda `{ local, tickets }` y el
+   * cursor del agente queda intacto, `last_poll_at` incluido.
+   */
+  tieneCursor: boolean
 }
 
 /**
@@ -496,7 +503,13 @@ export function validarPayload(body: unknown): Resultado<PayloadValidado> {
     return { ok: false, error: `Snapshot demasiado grande (máx ${MAX_OPEN} mesas)` }
   }
 
-  return { ok: true, valor: { local, tickets: b.tickets, open, cursor: b.cursor } }
+  return {
+    ok: true,
+    valor: {
+      local, tickets: b.tickets, open, cursor: b.cursor,
+      tieneCursor: Object.prototype.hasOwnProperty.call(b, 'cursor') && b.cursor !== undefined,
+    },
+  }
 }
 
 // ── Lote listo para persistir ──────────────────────────────────────────────────
@@ -505,7 +518,8 @@ export interface LoteNormalizado {
   local:     string
   tickets:   TicketNormalizado[]
   open:      OpenRow[] | undefined
-  cursor:    CursorParcial
+  /** `null` = el sobre no trajo `cursor`: la fila NO se escribe (la deja como está). */
+  cursor:    CursorParcial | null
   invalid:   number
   /** Tickets cuyo total no coincidía con el recalculado (se guardó el recalculado). */
   recalculados: number
@@ -561,7 +575,7 @@ export function normalizarLote(p: PayloadValidado, ahora: string): LoteNormaliza
     local:    p.local,
     tickets:  [...porFactura.values()],
     open,
-    cursor:   normalizarCursor(p.local, p.cursor, ahora),
+    cursor:   p.tieneCursor ? normalizarCursor(p.local, p.cursor, ahora) : null,
     invalid,
     recalculados,
     problemas,

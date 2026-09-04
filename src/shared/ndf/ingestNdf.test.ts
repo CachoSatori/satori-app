@@ -90,6 +90,13 @@ describe('validarPayload', () => {
     expect(r).toMatchObject({ ok: false })
   })
 
+  it('registra si el sobre TRAJO la clave cursor (el backfill no la manda)', () => {
+    const con = validarPayload({ local: 'nosara', tickets: [], cursor: { last_factura: '5001' } })
+    const sin = validarPayload({ local: 'nosara', tickets: [] })
+    expect(con.ok && con.valor.tieneCursor).toBe(true)
+    expect(sin.ok && sin.valor.tieneCursor).toBe(false)
+  })
+
   it('distingue "sin snapshot" (undefined) de "no hay nada abierto" ([])', () => {
     const sin = validarPayload({ local: 'nosara', tickets: [] })
     const vacio = validarPayload({ local: 'nosara', tickets: [], open: [] })
@@ -316,7 +323,33 @@ describe('fusionarCursor', () => {
 
 describe('normalizarLote', () => {
   const lote = (tickets: unknown[], open?: unknown[]) =>
-    normalizarLote({ local: 'santa-teresa', tickets, open, cursor: undefined }, AHORA)
+    normalizarLote({ local: 'santa-teresa', tickets, open, cursor: undefined, tieneCursor: true }, AHORA)
+
+  // ── El lote del BACKFILL histórico ──────────────────────────────────────────
+  // Corre en paralelo con el agente en vivo y manda solo `{ local, tickets }`.
+  describe('lote del backfill (sin `open` y sin `cursor`)', () => {
+    const sobre = validarPayload({ local: 'santa-teresa', tickets: [ticket()] })
+    const r = sobre.ok ? normalizarLote(sobre.valor, AHORA) : null
+
+    it('sin `cursor` la fila NO se escribe: el Edge la lee y la deja como está', () => {
+      expect(r?.cursor).toBeNull()
+    })
+
+    it('sin `open` el snapshot de mesas abiertas no se toca', () => {
+      expect(r?.open).toBeUndefined()
+    })
+
+    it('los tickets sí se procesan normal', () => {
+      expect(r?.tickets).toHaveLength(1)
+      expect(r?.tickets[0].fila.total_crc).toBe(12000)
+    })
+
+    it('en cambio `cursor: {}` SÍ escribe (aunque sea solo el latido)', () => {
+      const conCursor = validarPayload({ local: 'santa-teresa', tickets: [], cursor: {} })
+      const n = conCursor.ok ? normalizarLote(conCursor.valor, AHORA) : null
+      expect(n?.cursor).toEqual({ local: 'santa-teresa', last_poll_at: AHORA })
+    })
+  })
 
   it('un ticket corrupto NO tumba el lote: se cuenta y se sigue', () => {
     const r = lote([ticket(), { numero_factura: '' }, ticket({}, { numero_factura: '5002' })])

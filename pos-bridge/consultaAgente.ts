@@ -170,3 +170,24 @@ export async function leerAbiertas(
   }
   return out
 }
+
+// ── El primer día con ventas (modo `--todo` del backfill) ──────────────────────
+
+/**
+ * `min(FechaRegistra)` de las facturas CERRADAS. Es de dónde arranca el barrido
+ * histórico cuando no se le da un `--desde`.
+ *
+ * Devuelve la FECHA sola (sin hora): el backfill trabaja por día.
+ */
+export function sqlPrimerDia(esq: Esquema): string {
+  const F = `${q('dbo')}.${q(esq.facturas.tabla)}`
+  const cf = (campo: string) => q(col(esq, 'facturas', campo))
+  return `SELECT CONVERT(varchar(10), MIN(f.${cf('fecha')}), 120) AS primer_dia
+FROM ${F} f
+WHERE f.${cf('estado')} = 'C'`
+}
+
+export async function primerDiaConVentas(qy: Queryable, esq: Esquema): Promise<string | null> {
+  const { rows } = await qy.query<{ primer_dia: unknown }>(sqlPrimerDia(esq))
+  return texto(rows[0]?.primer_dia)
+}

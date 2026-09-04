@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "pos:dia": "node --import ./pos-bridge/register.mjs pos-bridge/dia.ts",
-    "pos:agente": "node --import ./pos-bridge/register.mjs pos-bridge/agente.ts"
+    "pos:agente": "node --import ./pos-bridge/register.mjs pos-bridge/agente.ts",
+    "pos:backfill": "node --import ./pos-bridge/register.mjs pos-bridge/backfill.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",

@@ -64,6 +64,11 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       personas:        req('pax nativo', 'Personas'),
       tipo:            opt('canal B/D/M/L', 'Tipo', 'TipoPedido'),
       area:            opt('área cruda', 'Area'),
+      // Las tres las usa el agente (A3): el número de pedido es la CLAVE de la mesa
+      // abierta, y sin `fecha` el snapshot de abiertas escanearía FAC_Pedidos entero.
+      numeropedido:    opt('id del pedido (clave de la mesa abierta)', 'NumeroPedido', 'IdPedido', 'Numero'),
+      mesa:            opt('mesa', 'Mesa', 'NumeroMesa'),
+      fecha:           opt('fecha del pedido (acota el snapshot de abiertas)', 'FechaRegistra', 'Fecha'),
     },
   },
   facturasdet: {

@@ -42,8 +42,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 import {
+  fusionarCursor,
   normalizarLote,
   validarPayload,
+  type CursorRow,
   type LineaRow,
   type OpenRow,
 } from '../../../src/shared/ndf/ingestNdf.ts'
@@ -204,8 +206,17 @@ Deno.serve(async (req) => {
     // ── 8. Cursor ────────────────────────────────────────────────────────────────────────
     // Se escribe al final y solo si todo lo anterior salió bien: si el cursor avanzara con el lote
     // a medio guardar, el agente daría por sincronizado algo que no está.
+    //
+    // Se lee y se FUSIONA en vez de pisar la fila entera: lo que el agente no mandó se conserva.
+    // El agente saluda al arrancar con un lote vacío para que la respuesta le diga hasta dónde
+    // llegó; si ese saludo borrara `last_factura`, cada reinicio releería el día desde el principio.
+    const { data: cursorActual, error: errLeerCursor } = await sb
+      .from('pos_ndf_cursor').select('*').eq('local', local).maybeSingle()
+    if (errLeerCursor) throw new Error(`no se pudo leer el cursor: ${errLeerCursor.message}`)
+
+    const cursor = fusionarCursor((cursorActual ?? null) as CursorRow | null, lote.cursor)
     const { error: errCursor } = await sb
-      .from('pos_ndf_cursor').upsert(lote.cursor, { onConflict: 'local' })
+      .from('pos_ndf_cursor').upsert(cursor, { onConflict: 'local' })
     if (errCursor) throw new Error(`no se pudo actualizar el cursor: ${errCursor.message}`)
 
     // Invariante: tickets_recibidos = tickets_guardados + invalid + repetidos dentro del lote.
@@ -220,6 +231,8 @@ Deno.serve(async (req) => {
       invalid:           lote.invalid,
       recalculados:      lote.recalculados,
       problemas:         lote.problemas,
+      // El cursor ya fusionado: es de acá de donde el agente saca por dónde seguir.
+      cursor,
     }, 200)
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : String(e)

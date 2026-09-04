@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "pos:dia": "node --import ./pos-bridge/register.mjs pos-bridge/dia.ts"
+    "pos:dia": "node --import ./pos-bridge/register.mjs pos-bridge/dia.ts",
+    "pos:agente": "node --import ./pos-bridge/register.mjs pos-bridge/agente.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",

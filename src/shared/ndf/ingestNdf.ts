@@ -213,6 +213,20 @@ export interface CursorRow {
   last_error:          string | null
 }
 
+/**
+ * Lo que el agente dijo del cursor EN ESTE LOTE. Una clave ausente significa "no lo
+ * toques", no "ponelo en null": el agente saluda al arrancar con un lote vacío para
+ * leer hasta dónde llegó, y ese saludo NO puede borrarle el corte que ya tenía.
+ * `last_error: null` explícito sí limpia (es como el agente avisa que se recuperó).
+ */
+export interface CursorParcial {
+  local:                string
+  last_poll_at:         string
+  last_factura?:        string | null
+  last_fecha_registra?: string | null
+  last_error?:          string | null
+}
+
 /** Un ticket ya normalizado, con sus líneas al lado (la base las guarda en dos tablas). */
 export interface TicketNormalizado {
   fila:   TicketRow
@@ -405,17 +419,45 @@ export function normalizarOpen(local: string, o: unknown, ahora: string): Result
   }
 }
 
-export function normalizarCursor(local: string, c: unknown, ahora: string): CursorRow {
+const tiene = (o: object, k: string): boolean => Object.prototype.hasOwnProperty.call(o, k)
+
+/** Solo las claves que el agente mandó de verdad. Ver `CursorParcial`. */
+export function normalizarCursor(local: string, c: unknown, ahora: string): CursorParcial {
   const x = (c && typeof c === 'object' ? c : {}) as Partial<CursorIngest>
-  const fecha = instanteOpcional(x.last_fecha_registra)
-  const poll  = instanteOpcional(x.last_poll_at)
+  const poll = instanteOpcional(x.last_poll_at)
+
+  // El cursor se fecha con el lote aunque el agente no mande nada: es el latido.
+  const out: CursorParcial = { local, last_poll_at: (poll.ok ? poll.valor : null) ?? ahora }
+
+  if (tiene(x, 'last_factura')) out.last_factura = texto(x.last_factura)
+  if (tiene(x, 'last_fecha_registra')) {
+    const fecha = instanteOpcional(x.last_fecha_registra)
+    out.last_fecha_registra = fecha.ok ? fecha.valor : null
+  }
+  if (tiene(x, 'last_error')) out.last_error = texto(x.last_error)
+  return out
+}
+
+/**
+ * El cursor guardado + lo que trajo el lote. Lo ausente se conserva; lo explícito pisa.
+ *
+ * Sin esto, un `upsert` con el objeto entero pondría en null lo que el agente no mandó
+ * — y el saludo de arranque (lote vacío) le borraría `last_factura`, o sea que el
+ * agente volvería a leer el día desde el principio en cada reinicio.
+ */
+export function fusionarCursor(actual: CursorRow | null, entrante: CursorParcial): CursorRow {
   return {
-    local,
-    last_factura:        texto(x.last_factura),
-    last_fecha_registra: fecha.ok ? fecha.valor : null,
-    // El cursor se fecha con el lote aunque el agente no mande nada: es el latido.
-    last_poll_at:        (poll.ok ? poll.valor : null) ?? ahora,
-    last_error:          texto(x.last_error),
+    local:               entrante.local,
+    last_poll_at:        entrante.last_poll_at,
+    last_factura:        tiene(entrante, 'last_factura')
+      ? entrante.last_factura ?? null
+      : actual?.last_factura ?? null,
+    last_fecha_registra: tiene(entrante, 'last_fecha_registra')
+      ? entrante.last_fecha_registra ?? null
+      : actual?.last_fecha_registra ?? null,
+    last_error:          tiene(entrante, 'last_error')
+      ? entrante.last_error ?? null
+      : actual?.last_error ?? null,
   }
 }
 
@@ -463,7 +505,7 @@ export interface LoteNormalizado {
   local:     string
   tickets:   TicketNormalizado[]
   open:      OpenRow[] | undefined
-  cursor:    CursorRow
+  cursor:    CursorParcial
   invalid:   number
   /** Tickets cuyo total no coincidía con el recalculado (se guardó el recalculado). */
   recalculados: number

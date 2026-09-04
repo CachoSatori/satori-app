@@ -5,6 +5,7 @@ import {
   MAX_TICKETS,
   conOffsetCR,
   instanteConZona,
+  fusionarCursor,
   normalizarCursor,
   normalizarLinea,
   normalizarLote,
@@ -259,17 +260,54 @@ describe('normalizarOpen', () => {
 
 describe('normalizarCursor', () => {
   it('siempre deja el latido, aunque el agente no mande nada', () => {
+    // Solo `local` y `last_poll_at`: lo demás ausente = "no lo toques".
     expect(normalizarCursor('nosara', undefined, AHORA)).toEqual({
-      local: 'nosara', last_factura: null, last_fecha_registra: null,
-      last_poll_at: AHORA, last_error: null,
+      local: 'nosara', last_poll_at: AHORA,
     })
   })
 
   it('guarda el corte y el último error', () => {
     expect(normalizarCursor('nosara', {
       last_factura: '5001', last_fecha_registra: '2026-09-01T19:42:07-06:00', last_error: 'timeout',
-    }, AHORA)).toMatchObject({
-      last_factura: '5001', last_fecha_registra: '2026-09-02T01:42:07.000Z', last_error: 'timeout',
+    }, AHORA)).toEqual({
+      local: 'nosara', last_poll_at: AHORA, last_factura: '5001',
+      last_fecha_registra: '2026-09-02T01:42:07.000Z', last_error: 'timeout',
+    })
+  })
+
+  it('distingue "no lo mandé" de "ponelo en null"', () => {
+    expect(normalizarCursor('nosara', { last_error: null }, AHORA))
+      .toHaveProperty('last_error', null)
+    expect(normalizarCursor('nosara', {}, AHORA)).not.toHaveProperty('last_error')
+  })
+})
+
+describe('fusionarCursor', () => {
+  const guardado = {
+    local: 'nosara', last_factura: '5001', last_fecha_registra: '2026-09-02T01:42:07.000Z',
+    last_poll_at: '2026-09-02T01:45:00.000Z', last_error: 'timeout',
+  }
+
+  it('el saludo de arranque (lote vacío) NO borra el corte guardado', () => {
+    const r = fusionarCursor(guardado, normalizarCursor('nosara', undefined, AHORA))
+    expect(r).toEqual({ ...guardado, last_poll_at: AHORA })
+  })
+
+  it('lo que el agente sí manda, pisa', () => {
+    const r = fusionarCursor(guardado, normalizarCursor('nosara', { last_factura: '5099' }, AHORA))
+    expect(r.last_factura).toBe('5099')
+    expect(r.last_fecha_registra).toBe(guardado.last_fecha_registra)   // no lo mandó: se conserva
+  })
+
+  it('last_error: null explícito limpia el error anterior (el agente se recuperó)', () => {
+    const r = fusionarCursor(guardado, normalizarCursor('nosara', { last_error: null }, AHORA))
+    expect(r.last_error).toBeNull()
+  })
+
+  it('sin fila previa arma la fila completa con nulls', () => {
+    expect(fusionarCursor(null, normalizarCursor('nosara', undefined, AHORA))).toEqual({
+      local: 'nosara', last_factura: null, last_fecha_registra: null,
+      last_poll_at: AHORA, last_error: null,
     })
   })
 })

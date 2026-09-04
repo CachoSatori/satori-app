@@ -75,13 +75,26 @@ GROUP BY ${q(col(esq, 'facturas', 'estado'))}`
 }
 
 /**
+ * Filtro incremental del agente (A3): solo las facturas más nuevas que el cursor.
+ *
+ * La comparación es NUMÉRICA (`CAST(@ultima AS decimal(38,0))`), no de texto: como
+ * string, '9' sería mayor que '10' y el agente se saltearía facturas para siempre.
+ * `@ultima` viaja como string porque el decimal del PoS no entra en un número de JS.
+ */
+export const FILTRO_INCREMENTAL = (columna: string): string =>
+  `\n  AND (@ultima IS NULL OR ${columna} > CAST(@ultima AS decimal(38,0)))`
+
+/**
  * Las facturas CERRADAS del día, con su pedido y su salonero.
  *
  * El pedido se agrega ANTES del join: una factura puede consolidar varios pedidos
  * (varias mesas) y un `LEFT JOIN` directo multiplicaría la fila de la factura →
  * los medios de pago se contarían dos veces y el total del día saldría inflado.
+ *
+ * `incremental` agrega el corte por cursor (A3). El dry-run de la Fase 1a no lo usa:
+ * quiere el día entero, siempre.
  */
-export function sqlFacturas(esq: Esquema): string {
+export function sqlFacturas(esq: Esquema, incremental = false): string {
   const F = `${q('dbo')}.${q(esq.facturas.tabla)}`
   const P = `${q('dbo')}.${q(esq.pedidos.tabla)}`
   const cf = (campo: string) => q(col(esq, 'facturas', campo))
@@ -94,6 +107,14 @@ export function sqlFacturas(esq: Esquema): string {
     const real = colOpt(esq, 'pedidos', campo)
     return real ? `MIN(p.${q(real)})` : 'NULL'
   }
+  // El número de pedido también es decimal: sale como varchar por la misma razón que
+  // `NumeroFactura` (un Number lo trunca arriba de 2^53).
+  const opTexto = (campo: string) => {
+    const real = colOpt(esq, 'pedidos', campo)
+    return real ? `MIN(CAST(p.${q(real)} AS varchar(40)))` : 'NULL'
+  }
+
+  const corte = (columna: string) => (incremental ? FILTRO_INCREMENTAL(columna) : '')
 
   const emp = esq.empleados.presente
   const joinEmpleados = emp
@@ -114,6 +135,8 @@ export function sqlFacturas(esq: Esquema): string {
   ped.pedidos                                       AS pedidos,
   ped.tipo                                          AS tipo_pedido,
   ped.area                                          AS area_pedido,
+  ped.mesa                                          AS mesa,
+  ped.numero_pedido_txt                             AS numero_pedido,
   ${nombreEmpleado}                                 AS salonero_nombre,
   COALESCE(f.${cf('efectivo')}, 0)                  AS efectivo,
   COALESCE(f.${cf('tarjeta')}, 0)                   AS tarjeta,
@@ -133,20 +156,22 @@ LEFT JOIN (
     MIN(p.${cp('usuarioregistra')})                 AS usuario_registra,
     MAX(p.${cp('usuarioregistra')})                 AS usuario_max,
     ${op('tipo')}                                   AS tipo,
-    ${op('area')}                                   AS area
+    ${op('area')}                                   AS area,
+    ${op('mesa')}                                   AS mesa,
+    ${opTexto('numeropedido')}                      AS numero_pedido_txt
   FROM ${P} p
   INNER JOIN ${F} fp ON fp.${cf('numero')} = p.${cp('numerofactura')}
   WHERE fp.${cf('estado')} = 'C'
-    AND fp.${cf('fecha')} >= ${DESDE} AND fp.${cf('fecha')} < ${HASTA}
+    AND fp.${cf('fecha')} >= ${DESDE} AND fp.${cf('fecha')} < ${HASTA}${corte(`fp.${cf('numero')}`)}
   GROUP BY p.${cp('numerofactura')}
 ) ped ON ped.numero_factura = f.${cf('numero')}${joinEmpleados}
 WHERE f.${cf('estado')} = 'C'
-  AND f.${cf('fecha')} >= ${DESDE} AND f.${cf('fecha')} < ${HASTA}
+  AND f.${cf('fecha')} >= ${DESDE} AND f.${cf('fecha')} < ${HASTA}${corte(`f.${cf('numero')}`)}
 ORDER BY f.${cf('fecha')}, f.${cf('numero')}`
 }
 
 /** El detalle de esas mismas facturas, ya resuelto contra el catálogo de productos. */
-export function sqlDetalle(esq: Esquema): string {
+export function sqlDetalle(esq: Esquema, incremental = false): string {
   const F = `${q('dbo')}.${q(esq.facturas.tabla)}`
   const D = `${q('dbo')}.${q(esq.facturasdet.tabla)}`
   const PR = `${q('dbo')}.${q(esq.productos.tabla)}`
@@ -156,6 +181,8 @@ export function sqlDetalle(esq: Esquema): string {
     const real = colOpt(esq, 'facturasdet', campo)
     return real ? `d.${q(real)}` : 'NULL'
   }
+
+  const corte = incremental ? FILTRO_INCREMENTAL(`f.${cf('numero')}`) : ''
 
   const clas = esq.clasificaciones.presente
   const joinClas = clas
@@ -179,7 +206,7 @@ FROM ${D} d
 INNER JOIN ${F} f ON f.${cf('numero')} = d.${cd('numerofactura')}
 LEFT JOIN ${PR} pr ON pr.${q(col(esq, 'productos', 'codigo'))} = d.${cd('producto')}${joinClas}
 WHERE f.${cf('estado')} = 'C'
-  AND f.${cf('fecha')} >= ${DESDE} AND f.${cf('fecha')} < ${HASTA}
+  AND f.${cf('fecha')} >= ${DESDE} AND f.${cf('fecha')} < ${HASTA}${corte}
 ORDER BY d.${cd('numerofactura')}`
 }
 
@@ -198,6 +225,9 @@ export interface FilaFactura {
   pedidos:           unknown
   tipo_pedido:       unknown
   area_pedido:       unknown
+  /** Opcionales: solo salen si la instalación tiene esas columnas en FAC_Pedidos. */
+  mesa?:             unknown
+  numero_pedido?:    unknown
   salonero_nombre:   unknown
   efectivo:          unknown
   tarjeta:           unknown

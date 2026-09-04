@@ -151,3 +151,123 @@ Typecheck del extractor: `cd pos-bridge && npm run typecheck`.
 
 Cero Supabase, cero migración, cero Edge, cero UI y cero escritura. Las tablas y el Edge de
 ingesta (A1 + A2) vienen **después** de que un día real cuadre contra el Excel.
+
+---
+
+# El agente (A3)
+
+El mismo extractor, pero en loop y empujando a Supabase. Corre **en la PC del PoS**, lee las
+ventas nuevas y las mesas abiertas cada minuto y pico, y se las manda al Edge `ingest-ndf`
+(A2), que las guarda en `pos_ndf_*` (mig 062).
+
+```
+npm run pos:agente        # desde la raíz del repo
+npm run agente            # desde pos-bridge/
+```
+
+> **Apunta a STAGING.** El `.env` trae `ENV=staging` y el agente **aborta** con cualquier otro
+> entorno salvo que se firme explícitamente (`POS_AGENTE_PROD_FIRMADO=<fecha>`). Primero se
+> valida un día real comparando `pos_ndf_*` de staging contra el reporte del PoS; recién
+> después se habla de producción.
+
+## Qué hace cada ciclo
+
+1. **Saludo (solo al arrancar).** Manda un lote vacío y el Edge le devuelve el cursor
+   guardado: por ahí sigue. Como no manda `cursor` ni `open`, el Edge no toca nada.
+2. **Cerradas nuevas.** `Estado='C'` con `NumeroFactura` mayor al cursor, dentro de la ventana
+   reciente (36 h por defecto: cubre el turno que cruza la medianoche y un reinicio).
+3. **Abiertas.** `FAC_Pedidos` sin factura todavía → el snapshot. El Edge **borra** las que no
+   vinieron, así que la mesa que se cerró desaparece sola.
+4. **Envía** `{ local, tickets, open, cursor }` y avanza el cursor **con lo que el Edge
+   confirmó**, no con lo que el agente propuso.
+
+Una línea de log por ciclo:
+
+```
+[2026-09-01T20:10:00.000Z] saludo · cursor guardado=5000
+[2026-09-01T20:11:15.000Z] cerradas=2 guardadas=2 abiertas=1 cursor=5002
+[2026-09-01T20:12:30.000Z] error_pos · ECONNREFUSED DESKTOP-25PRDR1\SQLNUBE:1433 · cursor=5002 (no avanza)
+[2026-09-01T20:13:45.000Z] cerradas=0 guardadas=0 abiertas=0 cursor=5002
+```
+
+## Ritmo
+
+| | |
+|---|---|
+| En operación (10:00–02:00 CR) | cada **75 s** — la mesa abierta tiene que verse casi en vivo |
+| De madrugada | cada **300 s** — el PoS no factura; machacarlo no aporta nada |
+
+Configurable: `POLL_OPERACION_MS`, `POLL_MADRUGADA_MS`, `HORA_APERTURA`, `HORA_CIERRE`.
+La ventana cruza la medianoche a propósito (abre 10, cierra 2).
+
+## Qué pasa cuando algo falla
+
+El agente **no se cae nunca** por un ciclo malo: un proceso que muere a las 2 de la mañana no
+se entera nadie hasta el otro día.
+
+| Situación | Qué hace |
+|---|---|
+| **PoS apagado** o sin red local | No inventa el día. Manda un lote vacío solo para dejar el motivo en `pos_ndf_cursor.last_error` (que se vea en la base, no solo en esta consola), no toca las mesas abiertas y reintenta el próximo ciclo. |
+| **Supabase caído** o 5xx | Un reintento a los 3 s; si sigue, el cursor **no avanza** y el próximo ciclo relee y reenvía. El `(local, numero_factura)` de la base hace que reenviar nunca duplique. |
+| **401 / 400 del Edge** | No reintenta: el secreto equivocado o un body mal armado no se arreglan repitiendo. Se ve en el log el primer ciclo. |
+| **El Edge descartó una factura** | El cursor queda en la última que el Edge confirmó, así que esa factura se vuelve a mandar. |
+| **Se pierde el estado** (reinicio de la PC) | No pasa nada: el cursor vive en Supabase, no en un archivo local. El saludo lo recupera. |
+| **`FAC_Pedidos` sin `NumeroPedido`** | Sin clave estable no hay snapshot confiable: manda `open` **ausente** y el Edge no toca las mesas abiertas (mejor no saber que borrar mesas vivas). |
+
+## `.env` del agente
+
+Sobre el `.env` del extractor (`POS_DB_*`, ver arriba) se agregan:
+
+```
+LOCAL=santa-teresa
+ENV=staging
+INGEST_URL=https://<ref>.supabase.co/functions/v1/ingest-ndf
+INGEST_SECRET=<el POS_INGEST_SECRET que cargó Ismael en Supabase>
+```
+
+El secreto es el **mismo** que se cargó con `supabase secrets set POS_INGEST_SECRET=…`, y es
+distinto del de BioTime. Viaja en el header `x-ingest-secret`, siempre por **https** (el agente
+aborta si `INGEST_URL` no es https). El `.env` no va al repo y no se manda por WhatsApp.
+
+## Dejarlo corriendo siempre (Windows)
+
+Mismo método que el agente BioTime en esa PC — **Programador de tareas** (Task Scheduler):
+
+- Acción: `Iniciar un programa`
+- Programa: `C:\Program Files\nodejs\node.exe`
+- Argumentos: `--import ./pos-bridge/register.mjs pos-bridge/agente.ts`
+- Iniciar en: `C:\satori\satori-app` (la carpeta del repo en esa PC)
+- Marcar *Ejecutar aunque el usuario no haya iniciado sesión* y *Reiniciar si falla*
+- Disparador: `Al iniciar el equipo`
+
+El agente solo sale con código ≠ 0 si **no pudo arrancar** (config incompleta, entorno no
+habilitado): ahí el Programador lo marca como fallido y lo reintenta. Los errores de ciclo no
+lo matan. `Ctrl+C` lo corta limpio: termina el ciclo en curso y cierra la conexión.
+
+Si estuvo apagado un rato no se pierde nada: al volver, el saludo recupera el cursor y la
+ventana de 36 h cubre lo que pasó mientras tanto.
+
+## Orden de puesta en marcha
+
+1. Aplicar la **mig 062** en staging (crea las tablas).
+2. `supabase secrets set POS_INGEST_SECRET=…` y `supabase functions deploy ingest-ndf --no-verify-jwt`.
+3. Completar el `.env` en la PC del PoS y correr `npm run pos:agente` **a mano**, mirando el log.
+4. Cuadrar `pos_ndf_tickets` de staging contra el reporte del PoS del mismo día.
+5. Recién ahí, dejarlo como tarea programada.
+
+## Archivos del agente
+
+```
+configAgente.ts   el .env del agente + el candado de STAGING
+ventana.ts        hora CR, ritmo del poll y ventana de lectura       (puro)
+factura.ts        comparación de NumeroFactura decimal como string   (puro)
+consultaAgente.ts las dos lecturas: cerradas incrementales y abiertas (sin driver)
+pushIngest.ts     POST a ingest-ndf, con un reintento
+ciclo.ts          la decisión de un ciclo, con los puertos inyectados (puro)
+agente.ts         el loop
+```
+
+`ciclo.ts` no toca ni la base ni la red: las tres operaciones con el mundo entran como puertos.
+Por eso el ciclo entero —el saludo, el avance del cursor, el PoS apagado, Supabase caído— se
+prueba con mocks, que es lo único validable desde el repo: la PC del PoS es la única máquina
+con red al PoS y a Supabase a la vez.

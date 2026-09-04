@@ -185,10 +185,22 @@ describe('mapTotalProvisorio', () => {
     })).toBe(4000)
   })
 
-  it('NO suma dólares (el PoS ya los convirtió) ni resta el vuelto', () => {
+  it('NO suma dólares: el PoS ya los convirtió a colones', () => {
     expect(mapTotalProvisorio({
-      efectivo: 10000, dolaresEfectivo: 20, dolaresTarjeta: 15, vuelto: 3000,
+      efectivo: 10000, dolaresEfectivo: 20, dolaresTarjeta: 15,
     })).toBe(10000)
+  })
+
+  it('RESTA el vuelto: Efectivo viene con el vuelto adentro', () => {
+    // Cuadre contra "Ventas Netas por Día" del PoS (1-sep-2026): el cliente pagó
+    // ₡10.000 por un consumo de ₡7.000 y se llevó ₡3.000 de vuelto.
+    expect(mapTotalProvisorio({ efectivo: 10000, vuelto: 3000 })).toBe(7000)
+    expect(mapTotalProvisorio({ efectivo: 10000, tarjeta: 5000, vuelto: 3000 })).toBe(12000)
+  })
+
+  it('vuelto NULL o 0 no cambia el total', () => {
+    expect(mapTotalProvisorio({ efectivo: 10000, vuelto: null })).toBe(10000)
+    expect(mapTotalProvisorio({ efectivo: 10000, vuelto: 0 })).toBe(10000)
   })
 
   it('acepta montos como string (el driver a veces los devuelve así)', () => {
@@ -389,14 +401,14 @@ describe('mapTicket', () => {
     expect(t.comida).toBe(6500)
   })
 
-  it('imprime dólares y vuelto sin meterlos en el total', () => {
+  it('resta el vuelto del total e imprime los dólares aparte', () => {
     const t = mapTicket(factura({
       medios: { efectivo: 12000, dolaresEfectivo: 40, vuelto: 2000, tarjeta: null },
     }))
-    expect(t.total).toBe(12000)
+    expect(t.total).toBe(10000)
     expect(t.total_fuente).toBe('provisorio')
     expect(t.medios.dolares_efectivo).toBe(40)
-    expect(t.medios.vuelto).toBe(2000)
+    expect(t.medios.vuelto).toBe(2000)   // se sigue mostrando para poder cuadrarlo
   })
 })
 

@@ -360,9 +360,11 @@ export function formatearReporte(r: ResumenDia, tickets: TicketMapeado[], opts: 
   titulo('Notas')
   L.push(
     `· total_fuente = provisorio: el total es la suma de los medios de pago en colones`,
-    `  (efectivo + tarjeta + electrónico + depósito + cheque + cuenta por cobrar).`,
+    `  (efectivo + tarjeta + electrónico + depósito + cheque + cuenta por cobrar) MENOS el vuelto.`,
+    `· Vuelto del día ${fi(r.vuelto)}: se RESTA — el campo Efectivo del PoS lo trae adentro`,
+    `  (cuadre contra "Ventas Netas por Día", 1-sep-2026).`,
     `· Dólares del día — efectivo $ ${r.dolares_efectivo} · tarjeta $ ${r.dolares_tarjeta}: NO se suman`,
-    `  (el PoS ya los convirtió a colones). Vuelto ${fi(r.vuelto)}: NO se resta.`,
+    `  (el PoS ya los convirtió a colones).`,
     `· El IVA no se calcula en esta fase; el servicio 10% sí sale del dato real (SUM(ImpS)).`,
   )
   for (const a of r.avisos) L.push(`· ⚠ ${a}`)

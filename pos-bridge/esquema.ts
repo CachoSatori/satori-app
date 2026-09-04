@@ -49,7 +49,7 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       cuentacobrar:     req('medio de pago', 'CuentaCobrar'),
       dolaresefectivo:  opt('informativo (NO suma)', 'DolaresEfectivo'),
       dolarestarjeta:   opt('informativo (NO suma)', 'DolaresTarjeta'),
-      vuelto:           opt('informativo (NO se resta)', 'Vuelto'),
+      vuelto:           req('vuelto — se RESTA del total (Efectivo lo trae adentro)', 'Vuelto'),
       login:            opt('cajero que cobró (informativo)', 'Login'),
       tipo:             opt('canal, si el pedido no lo trae', 'Tipo', 'TipoFactura'),
       area:             opt('área cruda', 'Area'),

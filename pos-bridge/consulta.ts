@@ -123,7 +123,7 @@ export function sqlFacturas(esq: Esquema): string {
   COALESCE(f.${cf('cuentacobrar')}, 0)              AS cuenta_cobrar,
   COALESCE(${of_('dolaresefectivo')}, 0)            AS dolares_efectivo,
   COALESCE(${of_('dolarestarjeta')}, 0)             AS dolares_tarjeta,
-  COALESCE(${of_('vuelto')}, 0)                     AS vuelto
+  COALESCE(f.${cf('vuelto')}, 0)                    AS vuelto
 FROM ${F} f
 LEFT JOIN (
   SELECT

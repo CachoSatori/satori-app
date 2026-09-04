@@ -72,16 +72,16 @@ quien corre el comando).
      se le acreditan a ningún mesero),
    - **facturas sin detalle** en los avisos del pie (su 10% queda en 0 y caen del lado
      "sin 10%"),
-   - los **dólares** y el **vuelto**, que se imprimen aparte: el total es la suma de los
-     medios de pago **en colones** y `total_fuente` dice `provisorio` justamente hasta que
-     una factura con efectivo + dólares se verifique a mano.
+   - los **dólares**, que se imprimen aparte y **no** se suman (el PoS ya los convirtió a
+     colones); `total_fuente` dice `provisorio` justamente hasta que una factura con
+     efectivo + dólares se verifique a mano.
 
 ## Las reglas que aplica (y por qué)
 
 | Tema | Regla |
 |---|---|
 | Facturas del día | `Estado='C'` y `FechaRegistra` dentro del día. `X` (anulada) **no suma**; `R` se ignora y se reporta. |
-| Total | `Efectivo + Tarjeta + MontoElectronico + Deposito + Cheque + CuentaCobrar`, con `COALESCE(...,0)`. **No** suma dólares (el PoS ya los convirtió) y **no** resta el vuelto: los tres se imprimen igual. |
+| Total | `Efectivo + Tarjeta + MontoElectronico + Deposito + Cheque + CuentaCobrar − Vuelto`, con `COALESCE(...,0)`. El **vuelto se resta**: el cuadre contra el reporte oficial del PoS (*Ventas Netas por Día*, 1-sep-2026) mostró que `Efectivo` viene con el vuelto adentro. Los dólares **no** se suman (el PoS ya los convirtió) pero se imprimen igual. |
 | Servicio 10% | `con_servicio` = `SUM(ImpS del detalle) > 0`. Con 10% = consumo en salón · sin 10% = delivery/llevar. Es lo que parte el día como en el Excel. |
 | Salonero | `FAC_Pedidos.UsuarioRegistra` (login: `023` Esteban, `024` Juancho, `025` Dolores, `026` MAXO, `027` GUILLE, `028` FRANCISCO). El join es por `NumeroFactura` — **nunca** por `Facturas.NumeroPedido`, que viene vacío en mesa. `Facturas.Login` (el cajero que cobró) es informativo y **no pisa** al salonero. |
 | Cajeros `111` / `222` | No son saloneros. Sus facturas **cuentan en el total** pero van a su línea aparte: `111` = turno mañana, `222` = turno noche. Con `ImpS > 0` es "favor a salón"; con `ImpS = 0`, delivery/cajero. **No se adivina el mesero por la mesa.** |

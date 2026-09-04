@@ -345,15 +345,19 @@ export interface MediosPago {
   /** Informativos: el PoS YA los convirtió a colones. NO entran al total. */
   dolaresEfectivo?:  unknown
   dolaresTarjeta?:   unknown
-  /** Informativo: NO se resta. */
+  /** `Efectivo` viene CON el vuelto adentro: se RESTA del total. */
   vuelto?:           unknown
 }
 
 /**
  * Total del ticket en COLONES. Los campos vienen NULL en la base → COALESCE a 0.
  *
- * Los dólares NO se suman (el PoS ya los convirtió y sumarlos contaría doble) y el
- * vuelto NO se resta. Los tres se imprimen igual en el dry-run para poder cuadrarlos.
+ * El **vuelto se resta**: el cuadre contra el reporte oficial del PoS ("Ventas Netas
+ * por Día", 1-sep-2026) mostró que `Efectivo` viene con el vuelto adentro — o sea,
+ * con lo que el cliente entregó, no con lo que quedó en la caja.
+ *
+ * Los dólares NO se suman (el PoS ya los convirtió a colones y sumarlos contaría
+ * doble); se imprimen igual en el dry-run para poder cuadrarlos.
  */
 export function mapTotalProvisorio(medios: MediosPago): number {
   return redondear(
@@ -362,7 +366,8 @@ export function mapTotalProvisorio(medios: MediosPago): number {
     num(medios.montoElectronico) +
     num(medios.deposito) +
     num(medios.cheque) +
-    num(medios.cuentaCobrar),
+    num(medios.cuentaCobrar) -
+    num(medios.vuelto),
   )
 }
 

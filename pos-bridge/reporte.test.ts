@@ -84,15 +84,16 @@ const LECTURA: LecturaDia = {
 describe('resumirDia — el cuadre primario', () => {
   const r = resumirDia(LECTURA)
 
-  it('el total del día es la suma de TODAS las facturas cerradas', () => {
+  it('el total del día es la suma de TODAS las facturas cerradas, menos el vuelto', () => {
     expect(r.tickets).toBe(5)
-    expect(r.total).toBe(88000)     // 22000 + 31000 + 12000 + 18000 + 5000
-    expect(r.ticket_promedio).toBe(17600)
+    // 22000 + 31000 + 12000 + 18000 + (5000 − 1000 de vuelto)
+    expect(r.total).toBe(87000)
+    expect(r.ticket_promedio).toBe(17400)
   })
 
   it('parte el día en con 10% / sin 10% como el Excel', () => {
     expect(r.con10).toBe(71000)     // 5001 + 5002 + 5004 (ImpS > 0)
-    expect(r.sin10).toBe(17000)     // 5003 delivery + 5005 sin detalle con servicio
+    expect(r.sin10).toBe(16000)     // 5003 delivery (12000) + 5005 neto de vuelto (4000)
     expect(r.con10 + r.sin10).toBe(r.total)
     expect(r.imp_servicio).toBe(6200)
   })
@@ -114,7 +115,7 @@ describe('resumirDia — el cuadre primario', () => {
 
   it('la factura sin pedido cuenta en el día pero no en ningún mesero', () => {
     expect(r.sin_pedido.tickets).toBe(1)
-    expect(r.sin_pedido.total).toBe(5000)
+    expect(r.sin_pedido.total).toBe(4000)   // 5000 cobrados − 1000 de vuelto
     expect(r.saloneros.some(s => s.clave.includes('sin salonero'))).toBe(false)
   })
 
@@ -139,10 +140,10 @@ describe('resumirDia — el cuadre primario', () => {
     expect(cat('pax')?.unidades).toBe(4)
   })
 
-  it('los dólares y el vuelto se reportan sin tocar el total', () => {
-    expect(r.dolares_efectivo).toBe(10)
+  it('el vuelto se resta del total y se sigue reportando aparte', () => {
+    expect(r.dolares_efectivo).toBe(10)   // los dólares NO se suman
     expect(r.vuelto).toBe(1000)
-    expect(r.total).toBe(88000)
+    expect(r.total).toBe(87000)           // 88000 cobrados − 1000 de vuelto
   })
 })
 

@@ -108,7 +108,7 @@ describe('SQL generado', () => {
   it('se degrada si no están las tablas opcionales', () => {
     const sinCatalogos = new Map(Object.entries({
       fac_facturas: ['NumeroFactura', 'FechaRegistra', 'Estado', 'Efectivo', 'Tarjeta',
-        'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar'],
+        'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'Vuelto'],
       fac_pedidos:     ['NumeroFactura', 'UsuarioRegistra', 'Personas'],
       fac_facturasdet: ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS'],
       fac_productos:   ['Codigo', 'Nombre', 'Clasificacion'],

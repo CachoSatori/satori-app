@@ -219,16 +219,16 @@ comment on column public.employees.pos_login is
   'LOGIN del empleado en el PoS Nube de Fuego (023 Esteban, 024 Juancho, 025 Dolores, 026 MAXO, 027 GUILLE, 028 FRANCISCO). Ata pos_ndf_tickets.salonero_login con el empleado. Distinto de pos_name (nombre en el .xls). null = sin vincular.';
 
 -- ── 6. RLS ─────────────────────────────────────────────────────────────────────────────────
--- Lectura para `authenticated`; la escritura es EXCLUSIVA de la Edge Function `ingest-ndf`, que
--- corre con service-role y por lo tanto bypassa RLS. Deliberadamente NO hay policy de
--- insert/update/delete en ninguna de las cuatro: el ticket del PoS es evidencia y no se edita
--- desde la app.
+-- Lectura para GERENCIA + CONTADOR (`get_my_role() in ('owner','manager','contador')`), el mismo
+-- criterio que la mig 057 y el resto del repo. NO es `authenticated`: la venta completa del local
+-- —el total del día, la de cada mesero, los medios de pago— no es un dato que deba ver cualquier
+-- usuario logueado. Un salonero no ve la caja del local, y hoy no hay ninguna pantalla que se lo
+-- muestre; el día que exista "Mi Rendimiento" contra estas tablas va a necesitar su propia policy
+-- acotada al empleado (`pos_login`), no abrir la tabla entera.
 --
--- ⚠ REVISAR ANTES DE APLICAR: el resto del repo restringe los datos de gerencia con
---   `get_my_role() in ('owner','manager','contador')` (ver mig 057). Acá el SELECT es para todo
---   `authenticated` porque así lo pide la spec de A1 — pero eso le da a cualquier usuario logueado
---   (saloneros incluidos) la venta completa del local. Si eso no es lo querido, cambiar las cuatro
---   policies por la forma de la 057 ANTES de aplicar la migración: después ya hay que migrar.
+-- La escritura es EXCLUSIVA de la Edge Function `ingest-ndf`, que corre con service-role y por lo
+-- tanto bypassa RLS. Deliberadamente NO hay policy de insert/update/delete en ninguna de las
+-- cuatro: el ticket del PoS es evidencia y no se edita desde la app.
 alter table public.pos_ndf_tickets      enable row level security;
 alter table public.pos_ndf_ticket_lines enable row level security;
 alter table public.pos_ndf_open         enable row level security;
@@ -236,16 +236,16 @@ alter table public.pos_ndf_cursor       enable row level security;
 
 drop policy if exists pos_ndf_tickets_select on public.pos_ndf_tickets;
 create policy pos_ndf_tickets_select on public.pos_ndf_tickets for select
-  to authenticated using (true);
+  using (get_my_role() in ('owner','manager','contador'));
 
 drop policy if exists pos_ndf_ticket_lines_select on public.pos_ndf_ticket_lines;
 create policy pos_ndf_ticket_lines_select on public.pos_ndf_ticket_lines for select
-  to authenticated using (true);
+  using (get_my_role() in ('owner','manager','contador'));
 
 drop policy if exists pos_ndf_open_select on public.pos_ndf_open;
 create policy pos_ndf_open_select on public.pos_ndf_open for select
-  to authenticated using (true);
+  using (get_my_role() in ('owner','manager','contador'));
 
 drop policy if exists pos_ndf_cursor_select on public.pos_ndf_cursor;
 create policy pos_ndf_cursor_select on public.pos_ndf_cursor for select
-  to authenticated using (true);
+  using (get_my_role() in ('owner','manager','contador'));

@@ -16,6 +16,7 @@ import {
   mapTotalProvisorio,
   num,
   type Canal,
+  type ClaseIngreso,
   type EstadoFactura,
   type ItemMapeado,
   type PaxAlerta,
@@ -45,6 +46,14 @@ const PAX_ALERTA_OK: Record<PaxAlerta, true> = {
  * el día que se confirme, el turno entra sin migrar la tabla ni tocar este contrato.
  */
 const TURNO_OK: Record<Turno | 'tarde', true> = { 'mañana': true, tarde: true, noche: true }
+
+/**
+ * Las clases del CHECK de la mig 063. Mismo candado que el resto: si `mapTicket`
+ * agrega una clase y no se contempla acá, este archivo NO compila.
+ */
+const CLASE_OK: Record<ClaseIngreso, true> = {
+  cobrada: true, cortesia: true, duenos: true, sin_cobro: true, descuento: true, mixta: true,
+}
 
 /** Topes de lote. Un poll normal trae decenas de tickets; esto solo frena un payload absurdo. */
 export const MAX_TICKETS = 5_000
@@ -108,7 +117,6 @@ export interface TicketIngest extends TicketMapeado {
   tipo?:           string | null
   mesa?:           string | null
   numero_pedido?:  string | null
-  descuento?:      number | null
 }
 
 /** Una línea = el `ItemMapeado` de la Fase 1a más el precio unitario. */
@@ -172,6 +180,11 @@ export interface TicketRow {
   descuento_crc:    number
   con_servicio:     boolean
   servicio_crc:     number
+  /** Desglose fiscal (mig 063). `total_crc` NO se toca. */
+  valor_servido_crc: number
+  iva_crc:           number
+  regalia_crc:       number
+  clase_ingreso:     ClaseIngreso | null
   pax_nativo:       number
   pax_articulo:     number
   pax:              number
@@ -378,6 +391,13 @@ export function normalizarTicket(local: string, t: unknown): Resultado<TicketNor
         descuento_crc:    num(x.descuento),
         con_servicio:     x.con_servicio === true,
         servicio_crc:     num(x.imp_servicio),
+        // Desglose fiscal: los cuatro salen del mapper y viajan tal cual. El IVA NO
+        // se deriva acá tampoco — si el agente mandó 0, se guarda 0.
+        valor_servido_crc: num(x.valor_servido),
+        iva_crc:           num(x.iva),
+        regalia_crc:       num(x.regalia),
+        // Fuera del CHECK de la 063 → null en vez de tumbar el INSERT del lote entero.
+        clase_ingreso:     enUnion<ClaseIngreso>(x.clase_ingreso, CLASE_OK),
         pax_nativo:       entero(x.pax_nativo),
         pax_articulo:     entero(x.pax_articulo),
         pax:              entero(x.pax),

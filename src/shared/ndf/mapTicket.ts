@@ -112,6 +112,37 @@ export type CategoriaMix =
   | 'comida' | 'bebida' | 'pax' | 'ingredientes' | 'extras'
   | 'giftcard' | 'merch' | 'cortesia' | 'duenos' | 'otro'
 
+// ── Desglose fiscal (mig 063) ──────────────────────────────────────────────────
+
+/** Familia 29: bentos / almuerzo. Entra al valor servido; no estaba en el mix v1. */
+export const FAMILIA_BENTOS = 29
+
+/**
+ * Las familias que suman al **VALOR SERVIDO** (el neto fiscal): comida 2, 3, 4, 13,
+ * 16, 29 + bebida 5.
+ *
+ * ⚠️ Es un conjunto DISTINTO del `FAMILIAS_COMIDA` del mix, a propósito y por dos
+ * diferencias que están firmadas:
+ *   · **29 (bentos/almuerzo) ENTRA** acá y hoy no existe en el mix (cae en "otro").
+ *   · **6 ENTRA al mix como comida pero NO al neto**: es el cajón mixto donde también
+ *     se carga la comida del personal ("XX" a ₡0).
+ * Quedan afuera del neto, además: pax 19 · ingredientes 20 · extras 22 · gift 12 ·
+ * merch 21/23/24/26/27 · cortesías 17 · dueños 28 · cajón/personal 1, 6, 9, 11, 15, 25.
+ */
+export const FAMILIAS_VALOR_SERVIDO = [2, 3, 4, 5, 13, 16, 29] as const
+
+/**
+ * Cómo se cobró el ticket. `null` = no clasificable (un ticket sin plata y sin nada
+ * servido: no es una venta ni un regalo).
+ */
+export type ClaseIngreso = 'cobrada' | 'cortesia' | 'duenos' | 'sin_cobro' | 'descuento' | 'mixta'
+
+/** ¿Esta familia suma al valor servido? */
+export function esValorServido(familia: unknown): boolean {
+  const id = familiaId(familia)
+  return id !== null && (FAMILIAS_VALOR_SERVIDO as readonly number[]).includes(id)
+}
+
 // ── Coerción ───────────────────────────────────────────────────────────────────
 // El driver puede devolver `null`, `number` o `string` según la columna y la
 // versión de tedious. Nada de `Number(x)` suelto: un NaN silencioso arruina el día.
@@ -329,6 +360,103 @@ export function esIngreso(cat: CategoriaMix): boolean {
   return cat === 'comida' || cat === 'bebida'
 }
 
+// ── Desglose fiscal: valor servido, IVA, regalía y clase ───────────────────────
+
+/**
+ * **VALOR SERVIDO (neto)** = Σ `monto` de las líneas de `FAMILIAS_VALOR_SERVIDO`.
+ *
+ * Es lo que se compara contra la "Venta Neta" del reporte oficial. El gap esperado
+ * contra ese número son las familias de cajón/personal (1, 6, 9, 11, 15, 25), que
+ * quedan afuera a propósito.
+ */
+export function mapValorServido(items: readonly ItemMapeado[]): number {
+  return redondear(items.reduce((s, it) => (esValorServido(it.familia) ? s + it.monto : s), 0))
+}
+
+/**
+ * **IVA** = lo que dijo el PoS (`ImpV`), y nada más.
+ *
+ * NUNCA se deriva de `neto × 0,13`: las facturas de 2024 vienen con `ImpV = 0` y
+ * calcularles un IVA que nadie cobró inventaría plata en un reporte fiscal. Si la
+ * columna no existe en la instalación, el SELECT la trae como 0 y acá queda 0.
+ */
+export function mapIva(items: readonly ItemMapeado[], impVTicket?: unknown): number {
+  return redondear(
+    impVTicket === undefined || impVTicket === null
+      ? items.reduce((s, it) => s + it.imp_venta, 0)
+      : num(impVTicket),
+  )
+}
+
+export interface RegaliaInput {
+  items:         readonly ItemMapeado[]
+  valorServido:  number
+  total:         number
+}
+
+/**
+ * **REGALÍA**, medida en NETO (no `bruto − cobrado`):
+ *   · Σ `monto` de las líneas de cortesías (17) y dueños (28), y
+ *   · el valor servido COMPLETO de un ticket que no cobró nada.
+ *
+ * NO incluye `descuento_crc`: un Local Club o una promo autorizada es una decisión
+ * comercial sobre una venta que SÍ se cobró, no un regalo.
+ *
+ * Las dos partes SUMAN sin pisarse: 17 y 28 no están en `FAMILIAS_VALOR_SERVIDO`. Un
+ * ticket con comida servida Y una cortesía, que no cobró nada, regala las dos cosas.
+ *
+ * Ojo con la asimetría contra `mapClaseIngreso`: acá la condición de "sin cobro" es la
+ * LITERAL de la spec (`valor_servido > 0 && total === 0`), sin el "y sin 17/28" que sí
+ * lleva la clase. No es un descuido: en la clase esa exclusión existe para que una
+ * cortesía no cuente dos veces y termine marcada `mixta`; en la plata, en cambio, todo
+ * lo que salió de la cocina y no se cobró es regalía.
+ */
+export function mapRegalia(input: RegaliaInput): number {
+  const lineas = input.items.reduce(
+    (s, it) => (it.categoria === 'cortesia' || it.categoria === 'duenos' ? s + it.monto : s),
+    0,
+  )
+  const sinCobro = input.valorServido > 0 && input.total === 0 ? input.valorServido : 0
+  return redondear(lineas + sinCobro)
+}
+
+export interface ClaseIngresoInput {
+  items:        readonly ItemMapeado[]
+  valorServido: number
+  total:        number
+  descuento:    number
+}
+
+/**
+ * **CLASE DE INGRESO** — cómo se cobró el ticket.
+ *
+ * PRECEDENCIA: no hay una lista ordenada, hay un CONTEO. Se miran cuatro condiciones
+ * independientes —cortesía (17), dueños (28), sin cobro, descuento— y:
+ *   · dos o más → **`mixta`** (el caso que el prompt pide explícito: 17 **y** 28 → mixta);
+ *   · exactamente una → esa;
+ *   · ninguna y hay plata → **`cobrada`**;
+ *   · ninguna y no hay nada → `null` (ni venta ni regalo: no es clasificable).
+ *
+ * `sin_cobro` se define SIN 17/28 a propósito: una cortesía también tiene total 0, y
+ * contarla dos veces convertiría toda cortesía en `mixta`.
+ */
+export function mapClaseIngreso(input: ClaseIngresoInput): ClaseIngreso | null {
+  const cortesia = input.items.some(it => it.categoria === 'cortesia')
+  const duenos   = input.items.some(it => it.categoria === 'duenos')
+  const sinCobro = input.valorServido > 0 && input.total === 0 && !cortesia && !duenos
+  const descuento = input.descuento > 0
+
+  const activas: ClaseIngreso[] = []
+  if (cortesia)  activas.push('cortesia')
+  if (duenos)    activas.push('duenos')
+  if (sinCobro)  activas.push('sin_cobro')
+  if (descuento) activas.push('descuento')
+
+  if (activas.length > 1) return 'mixta'
+  if (activas.length === 1) return activas[0]
+  return input.total > 0 ? 'cobrada' : null
+}
+
 // ── mapEstado ──────────────────────────────────────────────────────────────────
 
 /** Solo `C|X|R` son estados conocidos. Cualquier otra cosa → `null` (se reporta). */
@@ -387,6 +515,8 @@ export interface ItemCrudo {
   familia_nombre: unknown
   /** `ImpS` de la línea: impuesto de servicio 10%. */
   impS?:          unknown
+  /** `ImpV` de la línea: impuesto de VENTA (IVA). Puede no existir en la instalación. */
+  impV?:          unknown
   /** `EsExtra`/`Compuesto` del detalle: la línea NO cuenta como unidad vendida. */
   no_cuenta_unidad?: boolean
 }
@@ -410,6 +540,10 @@ export interface TicketCrudo {
   personas:         unknown
   /** `SUM(ImpS)` del detalle. Si viene de la consulta, gana sobre la suma de ítems. */
   imp_servicio?:    unknown
+  /** `SUM(ImpV)` del detalle (IVA). Igual que arriba: si viene, gana. */
+  imp_venta?:       unknown
+  /** Descuentos autorizados (Local Club, promos). NO son regalía. */
+  descuento?:       unknown
   /** Cuántos pedidos trae la factura, y si hay más de un salonero. */
   pedidos?:         number
   saloneros_varios?: boolean
@@ -423,6 +557,8 @@ export interface ItemMapeado {
   cantidad:       number
   monto:          number
   imp_servicio:   number
+  /** IVA de la línea, TAL CUAL vino del PoS. Nunca se deriva de `monto`. */
+  imp_venta:      number
   familia:        number | null
   familia_nombre: string | null
   categoria:      CategoriaMix
@@ -459,6 +595,12 @@ export interface TicketMapeado {
   pax_alerta:      PaxAlerta
   total:           number
   total_fuente:    TotalFuente
+  /** Desglose fiscal (mig 063). `total` NO se recalcula con esto. */
+  valor_servido:   number
+  iva:             number
+  regalia:         number
+  descuento:       number
+  clase_ingreso:   ClaseIngreso | null
   medios:          Record<string, number>
   comida:          number
   bebida:          number
@@ -489,6 +631,7 @@ export function mapTicket(t: TicketCrudo): TicketMapeado {
       cantidad:       entero(it.cantidad),
       monto:          redondear(num(it.monto)),
       imp_servicio:   redondear(num(it.impS)),
+      imp_venta:      redondear(num(it.impV)),
       familia,
       familia_nombre: texto(it.familia_nombre),
       categoria:      mapCategoria(familia),
@@ -524,6 +667,16 @@ export function mapTicket(t: TicketCrudo): TicketMapeado {
       ? items.reduce((s, it) => s + it.imp_servicio, 0)
       : num(t.imp_servicio),
   )
+
+  // ── Desglose fiscal ───────────────────────────────────────────────────────
+  // El total se calcula ANTES porque `sin_cobro` y la regalía dependen de él. Lo que
+  // sigue NO lo toca: son cuatro lecturas sobre el mismo ticket.
+  const total = mapTotalProvisorio(t.medios)
+  const valor_servido = mapValorServido(items)
+  const iva = mapIva(items, t.imp_venta)
+  const descuento = redondear(num(t.descuento))
+  const regalia = mapRegalia({ items, valorServido: valor_servido, total })
+  const clase_ingreso = mapClaseIngreso({ items, valorServido: valor_servido, total, descuento })
 
   const registra = texto(t.usuario_registra)
   const cajero   = texto(t.login_cajero)
@@ -566,8 +719,13 @@ export function mapTicket(t: TicketCrudo): TicketMapeado {
     pedidos:          entero(t.pedidos ?? 0),
     saloneros_varios: t.saloneros_varios === true,
     ...pax,
-    total:            mapTotalProvisorio(t.medios),
+    total,
     total_fuente:     'provisorio',
+    valor_servido,
+    iva,
+    regalia,
+    descuento,
+    clase_ingreso,
     medios: {
       efectivo:          num(t.medios.efectivo),
       tarjeta:           num(t.medios.tarjeta),

@@ -10,6 +10,10 @@ import {
   esLoginSistema,
   mapCanal,
   mapCategoria,
+  mapClaseIngreso,
+  mapIva,
+  mapRegalia,
+  mapValorServido,
   mapEstado,
   mapFamiliaFlags,
   mapPax,
@@ -462,5 +466,229 @@ describe('construirDiaData', () => {
   it('el total del día es la suma de TODAS las facturas, cajero incluido', () => {
     const total = Object.values(dia.saloneros).reduce((s, v) => s + v.total, 0)
     expect(total).toBe(43000)
+  })
+})
+
+// ── Desglose fiscal (mig 063) ──────────────────────────────────────────────────
+// Firmado 2026-09-04 · SPEC-valor-servido-regalias.md
+
+// Las cuatro funciones, llamadas directo: son puras y se van a reusar desde A2/A3
+// sin pasar por `mapTicket`.
+describe('las funciones del desglose, sueltas', () => {
+  const li = (familia: number, monto: number, categoria: 'comida' | 'cortesia' | 'duenos' | 'otro' = 'otro') =>
+    ({ codigo: null, nombre: 'x', cantidad: 1, monto, imp_servicio: 0, imp_venta: 0,
+       familia, familia_nombre: null, categoria, es_pax: false, es_extra: false, es_cortesia: false })
+
+  it('mapValorServido suma solo las familias del neto', () => {
+    expect(mapValorServido([li(2, 1000), li(29, 500), li(6, 9999), li(19, 7777)])).toBe(1500)
+    expect(mapValorServido([])).toBe(0)
+  })
+
+  it('mapIva suma los ImpV de las líneas, o toma el del ticket si vino', () => {
+    const items = [{ ...li(2, 1000), imp_venta: 130 }, { ...li(5, 500), imp_venta: 65 }]
+    expect(mapIva(items)).toBe(195)
+    expect(mapIva(items, 900)).toBe(900)
+    expect(mapIva(items, 0)).toBe(0)
+    expect(mapIva([])).toBe(0)
+  })
+
+  it('mapRegalia: 17 + 28 + el neto sin cobrar', () => {
+    const items = [li(17, 2500, 'cortesia'), li(28, 800, 'duenos')]
+    expect(mapRegalia({ items, valorServido: 0, total: 5000 })).toBe(3300)
+    expect(mapRegalia({ items: [], valorServido: 12000, total: 0 })).toBe(12000)
+    expect(mapRegalia({ items: [], valorServido: 12000, total: 12000 })).toBe(0)
+  })
+
+  it('mapClaseIngreso cuenta condiciones: 2+ → mixta', () => {
+    const base = { items: [], valorServido: 0, total: 10000, descuento: 0 }
+    expect(mapClaseIngreso(base)).toBe('cobrada')
+    expect(mapClaseIngreso({ ...base, descuento: 500 })).toBe('descuento')
+    expect(mapClaseIngreso({ ...base, items: [li(17, 100, 'cortesia')], descuento: 500 })).toBe('mixta')
+    expect(mapClaseIngreso({ ...base, total: 0 })).toBeNull()
+  })
+})
+
+describe('mapValorServido — el NETO', () => {
+  const linea = (familia: number, monto: number, codigo = String(familia)) =>
+    item({ familia, monto, codigo })
+
+  it('suma comida 2,3,4,13,16,29 y bebida 5', () => {
+    const t = mapTicket(factura({
+      items: [linea(2, 1000), linea(3, 2000), linea(4, 3000), linea(13, 4000),
+              linea(16, 5000), linea(29, 6000), linea(5, 7000)],
+    }))
+    expect(t.valor_servido).toBe(28000)
+  })
+
+  it('la familia 29 (bentos/almuerzo) ENTRA', () => {
+    expect(mapTicket(factura({ items: [linea(29, 4500)] })).valor_servido).toBe(4500)
+  })
+
+  it('la familia 6 NO entra: es el cajón mixto con la comida del personal', () => {
+    // …aunque el MIX la siga contando como comida: son dos medidas distintas.
+    const t = mapTicket(factura({ items: [linea(6, 9000)] }))
+    expect(t.valor_servido).toBe(0)
+    expect(t.comida).toBe(9000)
+  })
+
+  it('deja afuera pax, extras, gift, merch, cortesías, dueños y cajón/personal', () => {
+    for (const f of [19, 20, 22, 12, 21, 23, 24, 26, 27, 17, 28, 1, 6, 9, 11, 15, 25]) {
+      expect(mapTicket(factura({ items: [linea(f, 5000)] })).valor_servido).toBe(0)
+    }
+  })
+})
+
+describe('mapIva — nunca derivado', () => {
+  it('es el ImpV que mandó el PoS, línea por línea', () => {
+    const t = mapTicket(factura({
+      imp_venta: undefined,
+      items: [item({ monto: 10000, impV: 1300 }), item({ monto: 5000, impV: 650, codigo: '200' })],
+    }))
+    expect(t.iva).toBe(1950)
+  })
+
+  it('el SUM(ImpV) de la consulta gana sobre la suma de líneas', () => {
+    expect(mapTicket(factura({ imp_venta: 900, items: [item({ impV: 1 })] })).iva).toBe(900)
+  })
+
+  it('2024: ImpV = 0 → iva 0, NUNCA neto x 0,13', () => {
+    const t = mapTicket(factura({
+      fecha_hora: '2024-03-10 20:00:00', imp_venta: 0,
+      items: [item({ familia: 2, monto: 50000, impV: 0 })],
+    }))
+    expect(t.valor_servido).toBe(50000)
+    expect(t.iva).toBe(0)              // 50000 × 0,13 = 6500 — NO aparece por ningún lado
+  })
+
+  it('2026: con ImpV real, se guarda tal cual', () => {
+    const t = mapTicket(factura({
+      imp_venta: 6500, items: [item({ familia: 2, monto: 50000, impV: 6500 })],
+    }))
+    expect(t.iva).toBe(6500)
+  })
+
+  it('sin la columna ImpV (llega null) el IVA queda en 0', () => {
+    expect(mapTicket(factura({ imp_venta: null, items: [item({ impV: null })] })).iva).toBe(0)
+  })
+})
+
+describe('mapRegalia — medida en NETO', () => {
+  it('suma las líneas de cortesías (17) y dueños (28)', () => {
+    const t = mapTicket(factura({
+      items: [item({ familia: 2, monto: 10000 }),
+              item({ familia: 17, monto: 2500, codigo: '400' }),
+              item({ familia: 28, monto: 800, codigo: '500' })],
+    }))
+    expect(t.regalia).toBe(3300)
+  })
+
+  it('un ticket servido y NO cobrado regala su neto entero', () => {
+    const t = mapTicket(factura({
+      medios: {}, items: [item({ familia: 2, monto: 12000 })],
+    }))
+    expect(t.total).toBe(0)
+    expect(t.valor_servido).toBe(12000)
+    expect(t.regalia).toBe(12000)
+  })
+
+  it('NO incluye el descuento: una promo autorizada no es un regalo', () => {
+    const t = mapTicket(factura({
+      descuento: 5000, medios: { efectivo: 10000 }, items: [item({ familia: 2, monto: 15000 })],
+    }))
+    expect(t.descuento).toBe(5000)
+    expect(t.regalia).toBe(0)
+  })
+
+  it('las dos partes SUMAN sin pisarse: 17/28 no están en el neto', () => {
+    const t = mapTicket(factura({
+      medios: {}, items: [item({ familia: 2, monto: 10000 }), item({ familia: 17, monto: 2500, codigo: '400' })],
+    }))
+    // Se sirvieron ₡10.000 de comida + ₡2.500 de cortesía y no entró un colón: se
+    // regalaron los ₡12.500. La condición de la regalía es la LITERAL de la spec
+    // (`valor_servido > 0 AND total = 0`), sin el "sin 17/28" que sí lleva la CLASE:
+    // ahí esa exclusión existe para que una cortesía no cuente doble y salga `mixta`.
+    expect(t.valor_servido).toBe(10000)
+    expect(t.regalia).toBe(12500)
+    expect(t.clase_ingreso).toBe('cortesia')
+  })
+})
+
+describe('mapClaseIngreso — una por clase', () => {
+  const clase = (over: Partial<TicketCrudo>) => mapTicket(factura(over)).clase_ingreso
+
+  it('cobrada: hay plata y ninguna condición especial', () => {
+    expect(clase({ medios: { efectivo: 12000 }, items: [item({ familia: 2, monto: 12000 })] })).toBe('cobrada')
+  })
+
+  it('cortesia: hay líneas de familia 17', () => {
+    expect(clase({ medios: {}, items: [item({ familia: 17, monto: 2500 })] })).toBe('cortesia')
+  })
+
+  it('duenos: hay líneas de familia 28', () => {
+    expect(clase({ medios: {}, items: [item({ familia: 28, monto: 800 })] })).toBe('duenos')
+  })
+
+  it('sin_cobro: se sirvió y no se cobró, sin 17 ni 28', () => {
+    expect(clase({ medios: {}, items: [item({ familia: 2, monto: 12000 })] })).toBe('sin_cobro')
+  })
+
+  it('descuento: hubo descuento y el resto se cobró', () => {
+    expect(clase({ descuento: 3000, medios: { efectivo: 9000 }, items: [item({ familia: 2, monto: 12000 })] }))
+      .toBe('descuento')
+  })
+
+  it('mixta: 17 Y 28 en el mismo ticket', () => {
+    expect(clase({
+      medios: {},
+      items: [item({ familia: 17, monto: 2500 }), item({ familia: 28, monto: 800, codigo: '500' })],
+    })).toBe('mixta')
+  })
+
+  it('mixta: cortesía + descuento', () => {
+    expect(clase({
+      descuento: 1000, medios: { efectivo: 9000 },
+      items: [item({ familia: 2, monto: 10000 }), item({ familia: 17, monto: 2500, codigo: '400' })],
+    })).toBe('mixta')
+  })
+
+  it('null: ni venta ni regalo (nada servido, nada cobrado)', () => {
+    expect(clase({ medios: {}, items: [] })).toBeNull()
+  })
+
+  it('una cortesía NO es mixta por tener total 0', () => {
+    // `sin_cobro` se define SIN 17/28 justamente para que esto no pase.
+    expect(clase({ medios: {}, items: [item({ familia: 17, monto: 2500 })] })).toBe('cortesia')
+  })
+})
+
+describe('el desglose NO toca el total', () => {
+  it('total sigue siendo Σ medios − vuelto, mire lo que mire el desglose', () => {
+    const t = mapTicket(factura({
+      descuento: 4000, imp_venta: 1300,
+      medios: { efectivo: 15000, vuelto: 3000, dolaresEfectivo: 20 },
+      items: [item({ familia: 2, monto: 10000, impV: 1300 }), item({ familia: 17, monto: 2500, codigo: '400' })],
+    }))
+    expect(t.total).toBe(12000)          // 15.000 − 3.000, igual que antes de la 063
+    expect(t.valor_servido).toBe(10000)
+    expect(t.iva).toBe(1300)
+    expect(t.regalia).toBe(2500)
+    expect(t.descuento).toBe(4000)
+    expect(t.clase_ingreso).toBe('mixta')
+  })
+
+  it('el bruto servido se DERIVA, no se guarda', () => {
+    const t = mapTicket(factura({
+      imp_venta: 1300, imp_servicio: 1000,
+      items: [item({ familia: 2, monto: 10000, impV: 1300 })],
+    }))
+    expect(t.valor_servido + t.iva + t.imp_servicio).toBe(12300)
+  })
+
+  it('2024 con iva 0: bruto = neto + servicio', () => {
+    const t = mapTicket(factura({
+      fecha_hora: '2024-03-10 20:00:00', imp_venta: 0, imp_servicio: 5000,
+      items: [item({ familia: 2, monto: 50000, impV: 0 })],
+    }))
+    expect(t.valor_servido + t.iva + t.imp_servicio).toBe(55000)
   })
 })

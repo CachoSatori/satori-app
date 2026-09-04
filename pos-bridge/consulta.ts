@@ -314,6 +314,7 @@ export function armarTickets(
         cantidad:       l.cantidad,
         monto:          l.monto,
         impS:           l.imp_servicio,
+        impV:           l.imp_venta,
         familia:        l.familia,
         familia_nombre: l.familia_nombre,
         no_cuenta_unidad: banderaVerdadera(l.es_extra) || banderaVerdadera(l.compuesto),
@@ -332,6 +333,9 @@ export function armarTickets(
       salonero_nombre:  f.salonero_nombre,
       personas:         f.personas,
       imp_servicio:     lineas.reduce((s, l) => s + num(l.imp_servicio), 0),
+      // IVA: lo que dijo el PoS. Si la columna ImpV no existe, el SELECT ya lo trajo
+      // en 0 y acá queda 0 — nunca se deriva de neto × 0,13.
+      imp_venta:        lineas.reduce((s, l) => s + num(l.imp_venta), 0),
       pedidos:          entero(f.pedidos),
       saloneros_varios,
       medios: {

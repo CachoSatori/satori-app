@@ -350,3 +350,75 @@ backfill.ts       el barrido con los puertos inyectados + el CLI
 `correrBackfill` recibe los puertos (leer un día, enviar, pausar, loguear), así que el barrido
 entero —el orden, los tramos, el día roto, la idempotencia y **la forma exacta del payload**— se
 prueba con mocks sin tocar el PoS ni Supabase.
+
+---
+
+# Desglose fiscal y regalías (mig 063)
+
+Cuatro columnas nuevas en `pos_ndf_tickets`, calculadas por el mapper y persistidas por la Edge.
+**`total_crc`, `servicio_crc` y `descuento_crc` no se tocan.**
+
+| Columna | Qué es |
+|---|---|
+| `valor_servido_crc` | El **NETO**: Σ monto de las líneas de comida `2, 3, 4, 13, 16, 29` + bebida `5`. |
+| `iva_crc` | El **ImpV que dijo el PoS**. Nunca derivado. |
+| `regalia_crc` | Cortesías (17) + dueños (28) + el neto de un ticket que no cobró nada. |
+| `clase_ingreso` | `cobrada · cortesia · duenos · sin_cobro · descuento · mixta` (o `null`). |
+
+El **bruto servido no se guarda**: se deriva en la consulta.
+
+```sql
+select fecha_registra::date as dia,
+       sum(valor_servido_crc)                                              as neto,
+       sum(coalesce(iva_crc, 0))                                           as iva,
+       sum(coalesce(servicio_crc, 0))                                      as servicio_10,
+       sum(valor_servido_crc + coalesce(iva_crc,0) + coalesce(servicio_crc,0)) as bruto,
+       sum(coalesce(regalia_crc, 0))                                       as regalado,
+       sum(total_crc)                                                      as cobrado
+from pos_ndf_tickets
+where local = 'santa-teresa'
+  and fecha_registra >= timestamptz '2026-09-01 00:00:00-06'
+  and fecha_registra <  timestamptz '2026-09-02 00:00:00-06'
+group by 1;
+```
+
+## Las tres decisiones que hay que entender
+
+**La familia 6 NO entra al neto** (es el cajón mixto donde también se carga la comida del
+personal, la "XX" a ₡0) **y la 29 SÍ** (bentos/almuerzo). El mix del dry-run sigue con su
+conjunto viejo: son dos medidas distintas y no se tocaron entre sí. El gap esperado contra la
+"Venta Neta" oficial son las familias de cajón/personal `1, 6, 9, 11, 15, 25`.
+
+**El IVA nunca se deriva.** Las facturas de 2024 vienen con `ImpV = 0`, y calcularles
+`neto × 0,13` inventaría plata en un reporte fiscal. Si la columna `ImpV` no existe en la
+instalación, el SELECT la trae en 0 y ahí queda. Para 2024: **bruto = neto + servicio**.
+
+**La regalía se mide en NETO**, no como `bruto − cobrado`, y **no incluye `descuento_crc`**: un
+Local Club o una promo autorizada es una decisión comercial sobre una venta que sí se cobró.
+
+Hay una asimetría deliberada entre `regalia_crc` y `clase_ingreso`: un ticket con comida servida
+**y** una cortesía que no cobró nada regala **las dos cosas** (la condición de la regalía es la
+literal, `valor_servido > 0 AND total = 0`), pero se clasifica `cortesia`, no `mixta` — ahí la
+exclusión existe para que una cortesía no cuente dos veces.
+
+## Orden de puesta en marcha
+
+```bash
+# 1. La migración (la corre Ismael, con el ritual del ref)
+cat supabase/.temp/project-ref          # hwiatgicyyqyezqwldia — si dice otra cosa, PARÁ
+supabase migration list --linked        # que la 063 sea la ÚNICA pendiente
+supabase db push --dry-run
+echo "y" | supabase db push
+
+# 2. La Edge (lleva JUNTO el fix del cursor de feat/pos-backfill)
+supabase functions deploy ingest-ndf --project-ref hwiatgicyyqyezqwldia --no-verify-jwt
+
+# 3. El vivo primero: el agente ya empieza a mandar el desglose en cada ciclo.
+#    Mirar un ticket nuevo y confirmar que valor_servido_crc / iva_crc / clase_ingreso vienen.
+
+# 4. El backfill después, para rellenar el histórico ya cargado:
+npm run pos:backfill -- --todo
+```
+
+El re-backfill es **idempotente** (upsert por `(local, numero_factura)`, el detalle se reemplaza
+entero) y va **sin `open` y sin `cursor`**: no le toca nada al agente en vivo.

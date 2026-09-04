@@ -134,6 +134,44 @@ describe('normalizarTicket', () => {
     })
   })
 
+  it('lleva el desglose fiscal de la 063 tal cual lo calculó el mapper', () => {
+    const r = normalizarTicket('santa-teresa', ticket({}, {
+      imp_venta: 1300, descuento: 0,
+      items: [
+        { codigo: '100', nombre: 'ROLL', cantidad: 2, monto: 12000, familia: 2, familia_nombre: 'SUSHI', impS: 1200, impV: 1300 },
+        { codigo: '400', nombre: 'CORTESIA', cantidad: 1, monto: 2500, familia: 17, familia_nombre: 'CORTESIAS', impS: 0, impV: 0 },
+      ],
+    }))
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.valor.fila).toMatchObject({
+      valor_servido_crc: 12000,
+      iva_crc:           1300,
+      regalia_crc:       2500,
+      clase_ingreso:     'cortesia',
+    })
+    // El bruto NO se persiste: se deriva de estas tres.
+    const f = r.valor.fila
+    expect(f.valor_servido_crc + f.iva_crc + f.servicio_crc).toBe(14500)
+  })
+
+  it('una clase fuera del CHECK de la 063 se guarda null, no tumba el lote', () => {
+    const r = normalizarTicket('santa-teresa', ticket({ clase_ingreso: 'regalada' } as unknown as Partial<TicketIngest>))
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.valor.fila.clase_ingreso).toBeNull()
+  })
+
+  it('el IVA tampoco se deriva del lado del Edge: si llegó 0, se guarda 0', () => {
+    const r = normalizarTicket('santa-teresa', ticket({}, {
+      fecha_hora: '2024-03-10 20:00:00', imp_venta: 0,
+      items: [{ codigo: '100', nombre: 'ROLL', cantidad: 1, monto: 50000, familia: 2, familia_nombre: 'SUSHI', impS: 0, impV: 0 }],
+    }))
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.valor.fila.valor_servido_crc).toBe(50000)
+    expect(r.valor.fila.iva_crc).toBe(0)
+  })
+
   it('el total se recalcula con la misma regla del extractor: el vuelto SE RESTA', () => {
     const r = normalizarTicket('santa-teresa', ticket())
     expect(r.ok).toBe(true)

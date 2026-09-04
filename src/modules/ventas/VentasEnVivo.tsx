@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fi, getDayStats, topProds } from './ventasUtils'
 import VentasEnVivoRitmo from './VentasEnVivoRitmo'
-import { getSnapshotEnVivo, horaCorteCR, REFRESH_MS } from './ventasEnVivoMock'
+import { getSnapshotEnVivo, horaCorteCR, REFRESH_MS } from './ventasEnVivoDatos'
 import {
   LOCALES, mixPorCategoria, prodsDelDia, ticketsDelDia, ticketPromedioDe,
   variacionPct, paxEsConfiable, UMBRAL_PAX_CONFIABLE,

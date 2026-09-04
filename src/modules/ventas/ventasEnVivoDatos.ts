@@ -36,10 +36,28 @@ import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type LocalId,
  */
 export const FAMILIAS_NETO = [2, 3, 4, 5, 13, 16, 29] as const
 
-/** Familia → la categoría con la que se agrupa el mix. */
+/** La familia de bebidas. Lo único que parte el mix en comida/bebida. */
+export const FAMILIA_BEBIDA = 5
+
+/**
+ * Familia del PoS → la etiqueta con la que se agrupa el mix.
+ *
+ * Se agrupa por el NÚMERO de familia, que es dato duro del PoS, y no por el `ProductMap` de
+ * la app: el ProductMap se carga a mano producto por producto y un producto sin cargar caería
+ * en «SIN CLASIFICAR» aunque el PoS sí sepa qué es. Esto es ETIQUETAR, no recalcular plata.
+ *
+ * ⚠️ INVARIANTE: las claves de este mapa son EXACTAMENTE `FAMILIAS_NETO`, las mismas que
+ * alimentan `valor_servido_crc`. Por eso **la suma del mix es el neto del día**. Agregar acá
+ * una familia que no esté en el neto rompería esa igualdad — hay un test que lo fija.
+ */
 const CATEGORIA_FAMILIA: Record<number, string> = {
-  2: 'COMIDA', 3: 'COMIDA', 4: 'COMIDA', 13: 'COMIDA', 16: 'COMIDA', 29: 'COMIDA',
-  5: 'BEBIDA',
+  3:  'Rolls',
+  5:  'Bebidas',
+  2:  'Entradas',
+  16: 'Platos fuertes',
+  29: 'Bentos',
+  4:  'Otros',
+  13: 'Otros',
 }
 
 const esFamiliaNeto = (f: number | null): boolean =>
@@ -129,10 +147,11 @@ export function armarDia(
       const nombre = (l.nombre ?? l.codigo_producto ?? '').trim().toUpperCase()
       if (nombre === '' || nombre === ARTICULO_PAX) continue
 
-      const cat = CATEGORIA_FAMILIA[l.familia as number] ?? 'SIN CLASIFICAR'
+      const cat = CATEGORIA_FAMILIA[l.familia as number] ?? 'Otros'
+      const esBebida = l.familia === FAMILIA_BEBIDA
       const monto = n(l.monto), qty = Math.round(n(l.cantidad))
-      if (cat === 'BEBIDA') { e.beb += monto; e.iBeb += qty }
-      else                  { e.com += monto; e.iCom += qty }
+      if (esBebida) { e.beb += monto; e.iBeb += qty }
+      else          { e.com += monto; e.iCom += qty }
 
       const p = e.prods.get(nombre) ?? { q: 0, m: 0 }
       p.q += qty; p.m += monto
@@ -140,7 +159,7 @@ export function armarDia(
 
       if (!pm[nombre]) {
         pm[nombre] = {
-          tipo: cat === 'BEBIDA' ? 'bebida' : 'comida',
+          tipo: esBebida ? 'bebida' : 'comida',
           clasificacion: cat, subclasificacion: '', multiplicador: 1, costo_unitario: 0,
         }
       }

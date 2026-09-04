@@ -8,6 +8,7 @@ import {
 } from './ventasEnVivoDatos'
 import { businessDateDe, ventanaJornada } from '../../shared/api/posNdf'
 import { mixPorCategoria, ticketsDelDia } from './ventasEnVivoTypes'
+import { FAMILIAS_NETO } from './ventasEnVivoDatos'
 import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
 import type { DiaData, SaloneroDay } from '../../shared/types/ventas'
 
@@ -101,22 +102,62 @@ describe('armarDia', () => {
     expect(sal(a.dia, '026').beb).toBe(3000)
   })
 
-  it('la familia 29 (bentos) entra al mix como comida', () => {
+  it('la familia 29 (bentos) entra como comida, con su propia etiqueta', () => {
     const a = armarDia('2026-09-01', [ticket()],
       [linea({ familia: 29, monto: 4500, cantidad: 1, nombre: 'BENTO' })], '2026-09-01')
     expect(sal(a.dia, '026').com).toBe(4500)
-    expect(a.pm['BENTO'].clasificacion).toBe('COMIDA')
+    expect(a.pm['BENTO'].clasificacion).toBe('Bentos')
+    expect(a.pm['BENTO'].tipo).toBe('comida')
   })
 
-  it('el mix por categoría usa el pm que sale del mismo snapshot', () => {
+  it('el mix se agrupa por FAMILIA del PoS, no por el ProductMap', () => {
     const a = armarDia('2026-09-01', [ticket()], [
-      linea({ familia: 2, monto: 9000, cantidad: 2 }),
-      linea({ familia: 5, monto: 3000, cantidad: 3, nombre: 'IMPERIAL', codigo_producto: '200' }),
+      linea({ familia: 3,  monto: 9000, cantidad: 2, nombre: 'ROLL SATORI' }),
+      linea({ familia: 5,  monto: 3000, cantidad: 3, nombre: 'IMPERIAL', codigo_producto: '200' }),
+      linea({ familia: 2,  monto: 2000, cantidad: 1, nombre: 'EDAMAME', codigo_producto: '201' }),
+      linea({ familia: 16, monto: 5000, cantidad: 1, nombre: 'TERIYAKI', codigo_producto: '202' }),
+      linea({ familia: 29, monto: 4000, cantidad: 1, nombre: 'BENTO', codigo_producto: '203' }),
+      linea({ familia: 4,  monto: 1000, cantidad: 1, nombre: 'SOPA', codigo_producto: '204' }),
+      linea({ familia: 13, monto: 500,  cantidad: 1, nombre: 'POSTRE', codigo_producto: '205' }),
     ], '2026-09-01')
     const mix = mixPorCategoria(a.dia, a.pm)
-    expect(mix.map(m => m.categoria)).toEqual(['COMIDA', 'BEBIDA'])
-    expect(mix[0].monto).toBe(9000)
-    expect(Math.round(mix[0].pctMix)).toBe(75)
+    const por = Object.fromEntries(mix.map(m => [m.categoria, m.monto]))
+    expect(por).toEqual({
+      'Rolls': 9000, 'Bebidas': 3000, 'Entradas': 2000,
+      'Platos fuertes': 5000, 'Bentos': 4000, 'Otros': 1500,   // 4 y 13 juntas
+    })
+  })
+
+  it('INVARIANTE: la suma del mix ES el neto del día', () => {
+    // Las familias del mix son EXACTAMENTE las que alimentan `valor_servido_crc`. Si alguien
+    // agregara una familia no-neto al mapa de etiquetas, esta igualdad se rompe.
+    const lineas = [
+      linea({ ticket_id: 't1', familia: 3,  monto: 9000 }),
+      linea({ ticket_id: 't1', familia: 5,  monto: 3000, nombre: 'IMPERIAL', codigo_producto: '200' }),
+      linea({ ticket_id: 't1', familia: 19, monto: 0,    nombre: 'PAX',   codigo_producto: '677' }),
+      linea({ ticket_id: 't1', familia: 22, monto: 1500, nombre: 'EXTRA', codigo_producto: '300' }),
+    ]
+    const a = armarDia('2026-09-01', [ticket({ valor_servido_crc: 12000 })], lineas, '2026-09-01')
+    const mix = mixPorCategoria(a.dia, a.pm)
+    const sumaMix = mix.reduce((s, m) => s + m.monto, 0)
+    const neto = Object.values(a.dia.saloneros).reduce((s, v) => s + v.total, 0)
+    expect(sumaMix).toBe(12000)
+    expect(sumaMix).toBe(neto)
+  })
+
+  it('las familias etiquetadas son exactamente las del neto', () => {
+    const conUna = (f: number) => armarDia('2026-09-01', [ticket()],
+      [linea({ familia: f, monto: 1000, nombre: `P${f}` })], '2026-09-01')
+    // Toda familia del neto produce una categoría con nombre propio…
+    for (const f of FAMILIAS_NETO) {
+      const mix = mixPorCategoria(conUna(f).dia, conUna(f).pm)
+      expect(mix).toHaveLength(1)
+      expect(mix[0].monto).toBe(1000)
+    }
+    // …y ninguna familia de fuera del neto entra al mix.
+    for (const f of [1, 6, 9, 11, 12, 15, 17, 19, 20, 21, 22, 25, 28]) {
+      expect(mixPorCategoria(conUna(f).dia, conUna(f).pm)).toEqual([])
+    }
   })
 
   it('un día sin ventas da un DiaData vacío, no explota', () => {

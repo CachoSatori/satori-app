@@ -197,13 +197,13 @@ export default function VentasEnVivo() {
           <div className="apos-kpi">
             <span className="apos-kpi-lbl">Ticket promedio</span>
             <span className="apos-kpi-val">{ticketProm > 0 ? fi(ticketProm) : '—'}</span>
-            <span className="apos-kpi-sub">venta neta / tickets</span>
+            <span className="apos-kpi-sub">venta NETA / tickets</span>
           </div>
           <div className="apos-kpi">
             <span className="apos-kpi-lbl">Promedio por pax</span>
             <span className="apos-kpi-val">{stats.promPax > 0 ? fi(Math.round(stats.promPax)) : '—'}</span>
             <span className="apos-kpi-sub">
-              {stats.pax.toLocaleString('es-CR')} pax · vía artículo pax (§3.F)
+              NETO / pax · {stats.pax.toLocaleString('es-CR')} pax vía artículo pax (§3.F)
             </span>
           </div>
           <div className="apos-kpi is-proyeccion">
@@ -253,7 +253,7 @@ export default function VentasEnVivo() {
           <div className="apos-panel-hd">
             <h3>Ventas por categoría</h3>
             <span className="apos-panel-sub">
-              agrupado por clasificación, igual que Mix Ventas · sin el artículo PAX
+              en NETO, por familia del PoS · suma el neto del día · sin el artículo PAX
             </span>
           </div>
           <ul className="apos-barras">

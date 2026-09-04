@@ -3,7 +3,7 @@
 ## ⚡ ARRANQUE — foto real del repo (se REEMPLAZA en cada entrega, no se acumula)
 **Al día: 2026-08-21**
 
-- Punteros: `staging = origin/staging = 7ef7664` (F1c) · `origin/main = 3e54aa4` (PROD, intacto) · trabajo en `staging`. (`main` local 9 atrás = cosmético.)
+- Punteros: `staging = origin/staging = 9d477ba` (validación piloto v3) · `origin/main = 3e54aa4` (PROD, intacto) · trabajo en `staging`. (`main` local 9 atrás = cosmético.)
 - Sagrados (blob): tipCalculations `7603ba5a` · cashUtils `b597c697` · posFiscal `a3fd445f` (posFiscal solo en staging).
 - Migraciones: staging `040–062` · prod `040–054` · próximo libre `063`.
 - EN VIVO: BioTime Fase 1 — el agente en la PC de ST drenó 22.403 marcas (`last_id=213972`, ~68% mapeadas, 15 códigos sin mapear). F1d sin arrancar (`punch_exceptions`=0, `work_days source='biotime'`=0).
@@ -96,8 +96,9 @@ Fase 2 · realtime · offline · Bandeja unificada + Revisión de inventario · 
   escritura** (solo la escribe la Edge `ingest-ndf` con service-role). **NO está en prod** y la rama
   **no se mergea**: `main` con Branching ON auto-aplicaría a la base de producción.
   Verificada antes de aplicar sobre un Postgres 16 descartable (2 corridas, misma foto del esquema).
-- **059 · 060 · 061 ya estaban en el ledger de staging** al 2026-09-04: el `db push --dry-run` previo
-  a la 062 mostró **solo la 062** como pendiente. (Dato derivado del dry-run, no de leer la tabla.)
+- **059 · 060 · 061 ya estaban en el ledger de staging** al 2026-09-04: `supabase migration list --linked`
+  las listó en la columna **Remote** — está confirmado, no es una inferencia del dry-run. Lo único que
+  no se leyó son las **fechas exactas de aplicación** de esas tres.
 - **Próximo número libre: `063`.** ⚠️ La rama `metas_personales` también reclamaba
   051/052/053 → **renumerar** antes de traerla.
 

@@ -9,6 +9,7 @@ import {
 import { businessDateDe, ventanaJornada } from '../../shared/api/posNdf'
 import { mixPorCategoria, ticketsDelDia } from './ventasEnVivoTypes'
 import { FAMILIAS_NETO } from './ventasEnVivoDatos'
+import { FAMILIAS_VALOR_SERVIDO } from '../../shared/ndf/mapTicket'
 import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
 import type { DiaData, SaloneroDay } from '../../shared/types/ventas'
 
@@ -187,6 +188,18 @@ describe('claveSalonero / etiquetaNoMesero', () => {
     expect(etiquetaNoMesero('cajero')).toBe('(cajero de turno)')
     expect(etiquetaNoMesero('sistema')).toBe('(sistema)')
     expect(etiquetaNoMesero('sin_pedido')).toBe('(sin salonero)')
+  })
+})
+
+// ── Una sola fuente de verdad para las familias del neto ───────────────────────
+
+describe('FAMILIAS_NETO', () => {
+  it('ES el mismo conjunto que usa el mapper para calcular valor_servido_crc', () => {
+    // No "coinciden": es la MISMA referencia. Si el mapper cambia el conjunto (p. ej. el día
+    // que se confirme qué hacer con la familia 6), el mix se mueve con él y la invariante
+    // "suma del mix = neto del día" se sostiene sola.
+    expect(FAMILIAS_NETO).toBe(FAMILIAS_VALOR_SERVIDO)
+    expect([...FAMILIAS_NETO].sort((a, b) => a - b)).toEqual([2, 3, 4, 5, 13, 16, 29])
   })
 })
 

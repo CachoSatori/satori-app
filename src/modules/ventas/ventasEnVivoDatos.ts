@@ -3,6 +3,7 @@ import {
   businessDateDe, getLineasDeTickets, getNetoPorJornada, getTicketsJornada,
   type LineaNdfRow, type TicketNdfConId,
 } from '../../shared/api/posNdf'
+import { FAMILIAS_VALOR_SERVIDO } from '../../shared/ndf/mapTicket'
 import { fechaServicioCR, horaCorteCR, servicioEnCursoCR } from './ventasEnVivoMock'
 import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type LocalId,
          type SnapshotEnVivo, type VentaPorHora } from './ventasEnVivoTypes'
@@ -29,12 +30,14 @@ import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type LocalId,
 // servicio viajan igual, en los extras del snapshot, para poder mirarlos al lado.
 
 /**
- * Familias que suman al valor servido. **Duplicado a propósito y marcado como tal**: la fuente
- * de verdad es `FAMILIAS_VALOR_SERVIDO` de `src/shared/ndf/mapTicket.ts`, que vive en las ramas
- * del puente y todavía no está en esta. Acá solo se usa para FILTRAR el mix de producto — los
- * montos ya vienen resueltos de la ingesta. Cuando las ramas converjan, esto se importa de allá.
+ * Familias que suman al valor servido. **Importadas de la fuente de verdad**, no copiadas:
+ * `FAMILIAS_VALOR_SERVIDO` de `src/shared/ndf/mapTicket.ts` es el mismo conjunto que usa el
+ * mapper del puente para calcular `valor_servido_crc` en la ingesta.
+ *
+ * Acá solo sirve para FILTRAR el mix de producto — los montos ya vienen resueltos. Que sea el
+ * MISMO array es lo que garantiza la invariante: la suma del mix es el neto del día.
  */
-export const FAMILIAS_NETO = [2, 3, 4, 5, 13, 16, 29] as const
+export const FAMILIAS_NETO = FAMILIAS_VALOR_SERVIDO
 
 /** La familia de bebidas. Lo único que parte el mix en comida/bebida. */
 export const FAMILIA_BEBIDA = 5

@@ -36,16 +36,37 @@ export interface ParametrosLectura extends RangoLectura {
   ultima: string | null
 }
 
+/** Lo que produce `CONVERT(varchar(19), <datetime>, 120)`: el naive completo. */
+const NAIVE_120 = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/
+
+/**
+ * `FechaCierra` del PoS → el MISMO instante con la zona explícita, o `null`.
+ *
+ * No interpreta nada (el lote de cierre es P1): lo único que hace de más es exigir el
+ * naive completo antes de ponerle el offset. Si la columna resultara ser un `date`, el
+ * `CONVERT` daría `2026-09-02` y `conOffsetCR` armaría `2026-09-02-06:00`, que NO es un
+ * instante — y el Edge, que exige zona, rechazaría el TICKET ENTERO. Perder una venta
+ * por un campo informativo no es aceptable: acá se descarta el campo, no el ticket, y
+ * `leerCerradas` lo avisa.
+ */
+export function cierreConZona(v: unknown): string | null {
+  const s = texto(v)
+  return s !== null && NAIVE_120.test(s) ? conOffsetCR(s) : null
+}
+
 /** Un ticket listo para el Edge: el `TicketMapeado` de la Fase 1a con lo que la base pide. */
 export function aTicketIngest(
   t: TicketMapeado,
-  extra: { mesa?: unknown; numero_pedido?: unknown } = {},
+  extra: { mesa?: unknown; numero_pedido?: unknown; fecha_cierra?: unknown } = {},
 ): TicketIngest {
   return {
     ...t,
     // El PoS guarda hora de pared de Costa Rica; acá se le pone el offset explícito.
     // El Edge RECHAZA cualquier instante sin zona (el desfase de 1 h de BioTime).
     fecha_registra: conOffsetCR(`${t.fecha} ${t.hora}`),
+    // `FechaCierra` va CRUDA: se le pone la zona y nada más. Agrupar por
+    // (Login, FechaCierra) para deducir la jornada es P1 y NO vive acá.
+    fecha_cierra:   cierreConZona(extra.fecha_cierra),
     mesa:           texto(extra.mesa),
     numero_pedido:  texto(extra.numero_pedido),
   }
@@ -64,11 +85,25 @@ export async function leerCerradas(
 
   const { tickets, avisos } = armarTickets(facturas.rows, detalle.rows)
 
-  // `mesa` y `numero_pedido` no son del dominio del mapper (no cambian ni un monto):
-  // salen del SELECT y se pegan acá, indexados por el número de factura como STRING.
-  const extras = new Map<string, { mesa?: unknown; numero_pedido?: unknown }>()
+  // `mesa`, `numero_pedido` y `fecha_cierra` no son del dominio del mapper (no cambian
+  // ni un monto): salen del SELECT y se pegan acá, indexados por el número de factura
+  // como STRING.
+  const extras = new Map<string, { mesa?: unknown; numero_pedido?: unknown; fecha_cierra?: unknown }>()
   for (const f of facturas.rows) {
-    extras.set(String(f.numero_factura), { mesa: f.mesa, numero_pedido: f.numero_pedido })
+    extras.set(String(f.numero_factura), {
+      mesa:          f.mesa,
+      numero_pedido: f.numero_pedido,
+      fecha_cierra:  f.fecha_cierra,
+    })
+  }
+
+  // Una FechaCierra que existe pero no se puede leer se pierde en silencio si nadie la
+  // cuenta, y P1 se apoya en ella: mejor que salga en el log del ciclo.
+  const cierreIlegible = facturas.rows.filter(
+    (f) => texto(f.fecha_cierra) !== null && cierreConZona(f.fecha_cierra) === null,
+  ).length
+  if (cierreIlegible) {
+    avisos.push(`${cierreIlegible} factura(s) con FechaCierra en un formato no esperado: van con fecha_cierra null.`)
   }
 
   return {

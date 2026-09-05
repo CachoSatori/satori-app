@@ -103,6 +103,13 @@ export function sqlFacturas(esq: Esquema, incremental = false): string {
     const real = colOpt(esq, 'facturas', campo)
     return real ? `f.${q(real)}` : 'NULL'
   }
+  // Una fecha opcional de la factura, como TEXTO y con estilo 120, por lo mismo que
+  // `FechaRegistra`: así el driver no la mueve de zona. `NULL` si la instalación no
+  // tiene la columna.
+  const ofFecha = (campo: string) => {
+    const real = colOpt(esq, 'facturas', campo)
+    return real ? `CONVERT(varchar(19), f.${q(real)}, 120)` : 'NULL'
+  }
   const op = (campo: string) => {
     const real = colOpt(esq, 'pedidos', campo)
     return real ? `MIN(p.${q(real)})` : 'NULL'
@@ -125,6 +132,7 @@ export function sqlFacturas(esq: Esquema, incremental = false): string {
   return `SELECT
   CAST(f.${cf('numero')} AS varchar(40))            AS numero_factura,
   CONVERT(varchar(19), f.${cf('fecha')}, 120)       AS fecha_hora,
+  ${ofFecha('fechacierra')}                         AS fecha_cierra,
   f.${cf('estado')}                                 AS estado,
   ${of_('login')}                                   AS login_cajero,
   ${of_('tipo')}                                    AS tipo_factura,
@@ -215,6 +223,8 @@ ORDER BY d.${cd('numerofactura')}`
 export interface FilaFactura {
   numero_factura:    string
   fecha_hora:        string
+  /** `FechaCierra` CRUDA (naive = hora CR). Opcional: la columna puede no existir. */
+  fecha_cierra?:     unknown
   estado:            string | null
   login_cajero:      unknown
   tipo_factura:      unknown

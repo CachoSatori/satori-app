@@ -81,6 +81,7 @@ quien corre el comando).
 | Tema | Regla |
 |---|---|
 | Facturas del día | `Estado='C'` y `FechaRegistra` dentro del día. `X` (anulada) **no suma**; `R` se ignora y se reporta. |
+| `FechaCierra` | El **lote de cierre** de la caja, CRUDO: se lee, se le pone el offset de CR y se manda a `pos_ndf_tickets.fecha_cierra`. Acá **no se interpreta** — agrupar por (`Login`, `FechaCierra`) para deducir la jornada es P1. La columna es **opcional**: si la instalación no la tiene, o el valor no es un `YYYY-MM-DD HH:MM:SS` completo, el campo va en `null` (con aviso) y **la venta se ingesta igual**. |
 | Total | `Efectivo + Tarjeta + MontoElectronico + Deposito + Cheque + CuentaCobrar − Vuelto`, con `COALESCE(...,0)`. El **vuelto se resta**: el cuadre contra el reporte oficial del PoS (*Ventas Netas por Día*, 1-sep-2026) mostró que `Efectivo` viene con el vuelto adentro. Los dólares **no** se suman (el PoS ya los convirtió) pero se imprimen igual. |
 | Servicio 10% | `con_servicio` = `SUM(ImpS del detalle) > 0`. Con 10% = consumo en salón · sin 10% = delivery/llevar. Es lo que parte el día como en el Excel. |
 | Salonero | `FAC_Pedidos.UsuarioRegistra` (login: `023` Esteban, `024` Juancho, `025` Dolores, `026` MAXO, `027` GUILLE, `028` FRANCISCO). El join es por `NumeroFactura` — **nunca** por `Facturas.NumeroPedido`, que viene vacío en mesa. `Facturas.Login` (el cajero que cobró) es informativo y **no pisa** al salonero. |

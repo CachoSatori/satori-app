@@ -40,6 +40,9 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
     columnas: {
       numero:           req('id de la factura', 'NumeroFactura'),
       fecha:            req('fecha/hora de la venta (naive = hora CR)', 'FechaRegistra'),
+      // CRUDA: el bridge la lee y la manda tal cual. Agrupar por (Login, FechaCierra)
+      // para deducir la jornada es P1 y NO vive acá.
+      fechacierra:      opt('cierre del lote de caja (naive = hora CR)', 'FechaCierra'),
       estado:           req('C cerrada / X anulada / R rara', 'Estado'),
       efectivo:         req('medio de pago', 'Efectivo'),
       tarjeta:          req('medio de pago', 'Tarjeta'),

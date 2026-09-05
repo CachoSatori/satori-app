@@ -38,6 +38,16 @@ describe('resolverEsquema', () => {
     expect(colOpt(esq, 'facturasdet', 'compuesto')).toBeNull()
   })
 
+  it('FechaCierra se resuelve sola y es OPCIONAL (la instalación puede no tenerla)', () => {
+    // El lote de cierre (Login + FechaCierra) es la base de la jornada de P1: sin esta
+    // columna el bridge sigue andando, pero manda `fecha_cierra` en null.
+    expect(colOpt(resolverEsquema(mapa({
+      fac_facturas: [...COLUMNAS_OK.fac_facturas, 'FechaCierra'],
+    })), 'facturas', 'fechacierra')).toBe('FechaCierra')
+
+    expect(colOpt(resolverEsquema(mapa()), 'facturas', 'fechacierra')).toBeNull()
+  })
+
   it('acepta variantes de nombre (la instalación puede diferir)', () => {
     const esq = resolverEsquema(mapa({
       fac_facturasdet: ['NumeroFactura', 'Codigo', 'Cant', 'MontoTotal', 'ImpS'],

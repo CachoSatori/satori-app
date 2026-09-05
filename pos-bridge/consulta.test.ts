@@ -94,6 +94,28 @@ describe('SQL generado', () => {
     expect(sqlFacturas(ESQUEMA)).toContain('CONVERT(varchar(19), f.[FechaRegistra], 120)')
   })
 
+  it('FechaCierra sale CRUDA y como texto estilo 120, igual que FechaRegistra', () => {
+    const conCierre = resolverEsquema(new Map(Object.entries({
+      fac_facturas: [
+        'NumeroFactura', 'FechaRegistra', 'FechaCierra', 'Estado', 'Login', 'Efectivo',
+        'Tarjeta', 'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'Vuelto',
+      ],
+      fac_pedidos:     ['NumeroFactura', 'UsuarioRegistra', 'Personas'],
+      fac_facturasdet: ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS'],
+      fac_productos:   ['Codigo', 'Nombre', 'Clasificacion'],
+    })))
+    const sql = sqlFacturas(conCierre)
+    expect(sql).toContain('CONVERT(varchar(19), f.[FechaCierra], 120)')
+    expect(sql).toContain('AS fecha_cierra')
+    expect(() => assertSoloSelect(sql)).not.toThrow()
+  })
+
+  it('sin la columna FechaCierra la consulta sigue en pie (manda NULL)', () => {
+    // `ESQUEMA` no la tiene: el bridge no puede exigirla en toda instalación.
+    expect(sqlFacturas(ESQUEMA)).not.toContain('FechaCierra')
+    expect(sqlFacturas(ESQUEMA)).toMatch(/NULL\s+AS fecha_cierra/)
+  })
+
   it('agrega los pedidos ANTES del join (una factura puede consolidar varias mesas)', () => {
     const sql = sqlFacturas(ESQUEMA)
     expect(sql).toContain('GROUP BY p.[NumeroFactura]')

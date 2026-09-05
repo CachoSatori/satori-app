@@ -97,6 +97,25 @@ describe('los números del día salen de las funciones DE SIEMPRE', () => {
     expect(top.length).toBeGreaterThan(0)
     expect(top.map(p => p.m)).toEqual([...top.map(p => p.m)].sort((a, b) => b - a))
   })
+
+  // Regresión: una fila con `total` y sin un solo producto es un día que no puede existir, y
+  // el mix deja de cerrar contra el total. Pasaba con ventas chicas —la PRIMERA HORA del
+  // servicio— porque toda línea cuya cantidad redondeaba a 0 se filtraba llevándose su monto.
+  // Como el mock se arma con el reloj de verdad, el fallo aparecía solo entre las 11 y las 12.
+  it('cada fila tiene productos y sus montos suman el total de la fila', async () => {
+    const { dia } = await getSnapshotEnVivo('santa-teresa')
+    for (const [nombre, s] of Object.entries(dia.saloneros)) {
+      if (s.total <= 0) continue
+      expect(s.prods.length, `${nombre} tiene total pero ningún producto`).toBeGreaterThan(0)
+      const suma = s.prods.reduce((acc, [, , m]) => acc + m, 0)
+      expect(suma, `los productos de ${nombre} no cierran contra su total`).toBe(s.total)
+      // Y ninguna línea con plata puede valer cero unidades.
+      for (const [pn, q, m] of s.prods) {
+        expect(m, `${pn} de ${nombre} sin monto`).toBeGreaterThan(0)
+        expect(q, `${pn} de ${nombre} con monto pero 0 unidades`).toBeGreaterThan(0)
+      }
+    }
+  })
 })
 
 // ── El artículo PAX ─────────────────────────────────────────────────────────────

@@ -359,7 +359,12 @@ describe('mapTicket', () => {
 
   it('sin nombre en FAC_Empleados usa el maestro de saloneros conocido', () => {
     const t = mapTicket(factura({ usuario_registra: '024', salonero_nombre: null }))
-    expect(t.salonero).toBe('JUANCHO')
+    expect(t.salonero).toBe('Juancho')
+  })
+
+  it('un login fuera del roster sale por su número, no inventado', () => {
+    const t = mapTicket(factura({ usuario_registra: '999', salonero_nombre: null }))
+    expect(t.salonero).toBe('999')
   })
 
   it('SUM(ImpS) de la consulta manda; si no vino, suma línea por línea', () => {

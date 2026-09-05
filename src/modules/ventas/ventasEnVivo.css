@@ -534,3 +534,57 @@
 /* En el ranking el delta va dentro de una celda numérica: no debe heredar la fuente mono
    ni el alineado de bloque. */
 .apos-tabla .apos-delta { white-space: nowrap; }
+
+/* ── Mesas abiertas: la barra de arriba de todo ─────────────── */
+
+/* Es lo único de la pantalla que sirve para actuar AHORA, así que se distingue del
+   resto de los paneles con el mismo acento que la cifra principal — y con el pulso,
+   que ya significa «esto se está moviendo». */
+.apos-abiertas { border-left: 3px solid var(--apos-mark); }
+.apos-abiertas .apos-panel-hd h3 { display: flex; align-items: center; gap: 0.45rem; }
+
+.apos-abiertas-lista {
+  list-style: none;
+  margin: 0.6rem 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.5rem;
+}
+
+.apos-abiertas-lista li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.28rem 0.6rem;
+  border: 1px solid var(--apos-border);
+  border-radius: var(--apos-r-sm);
+  background: var(--apos-panel);
+}
+
+.apos-abiertas-quien { font-size: 0.78rem; font-weight: 500; }
+
+.apos-abiertas-dato {
+  font-family: var(--apos-mono);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--apos-muted);
+}
+
+/* ── Navegación de jornada ──────────────────────────────────── */
+
+.apos-nav-jornada { display: inline-flex; align-items: center; gap: 0.25rem; }
+
+.apos-btn-nav {
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--border, #30363d);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.apos-btn-nav:hover:not(:disabled) { border-color: currentColor; }
+.apos-btn-nav:disabled { opacity: 0.35; cursor: default; }

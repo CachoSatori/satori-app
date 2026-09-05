@@ -1,10 +1,12 @@
 import type { CajeroDay, DiaData, ProductMap, SaloneroDay } from '../../shared/types/ventas'
 import {
   businessDateDe, getLineasDeTickets, getMesasAbiertas, getNetoPorJornada, getSaloneroNombres,
-  getTicketsJornada, HORA_CORTE_JORNADA, type LineaNdfRow, type TicketNdfConId,
+  getTicketsJornada, HORA_CORTE_JORNADA, type LineaNdfRow, type MesaAbiertaRow,
+  type TicketNdfConId,
 } from '../../shared/api/posNdf'
 import {
-  FAMILIAS_VALOR_SERVIDO, LOGIN_CAJERO_MANANA, LOGIN_CAJERO_NOCHE,
+  esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO, LOGIN_CAJERO_MANANA,
+  LOGIN_CAJERO_NOCHE, SALONEROS_CONOCIDOS,
 } from '../../shared/ndf/mapTicket'
 import { horaCorteCR } from './ventasEnVivoMock'
 import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type LocalId,
@@ -260,17 +262,68 @@ interface AccEntrada {
 }
 
 /**
- * El login del PoS → cómo se muestra. Con el empleado cargado, su nombre; sin cargar, el
- * número **marcado**, para que se vea que falta el mapeo en vez de desaparecer del ranking.
+ * El login del PoS → cómo se muestra, en TRES CAPAS y en este orden:
+ *
+ *   1. `employees.pos_login` — el mapeo que mantiene el negocio en Empleados. Manda siempre:
+ *      si alguien corrigió un nombre ahí, eso es lo que tiene que verse.
+ *   2. `SALONEROS_CONOCIDOS` — el roster de `FAC_Empleados` que viaja con el código. Es el
+ *      respaldo para el login que todavía nadie cargó en Empleados, y es lo que hace que la
+ *      pantalla deje de mostrar números.
+ *   3. El número **marcado** `«026 · sin asignar»` — cuando no está en ninguna de las dos. No
+ *      se inventa un nombre y tampoco se lo esconde: sigue en el ranking, con la marca puesta,
+ *      que es lo que hace visible el mapeo que falta.
  */
 export function nombreSalonero(login: string, nombres: Record<string, string>): string {
-  const n = nombres[login]?.trim()
-  return n && n !== '' ? n : `${login} · sin asignar`
+  const deEmpleados = nombres[login]?.trim()
+  if (deEmpleados) return deEmpleados
+  const delRoster = SALONEROS_CONOCIDOS[login]?.trim()
+  if (delRoster) return delRoster
+  return `${login} · sin asignar`
 }
 
 /** ¿Este salonero quedó sin mapear a un empleado? */
 export function esSinAsignar(clave: string): boolean {
   return clave.endsWith(' · sin asignar')
+}
+
+/**
+ * El `turno` que guarda el PoS → cómo se dice en pantalla.
+ *
+ * El valor guardado del turno de la noche es `'noche'` y **no se toca**: está en la columna
+ * `turno` de `pos_ndf_tickets`, lo escribe el mapper y lo defiende un CHECK. Pero el negocio a
+ * ese turno le dice «tarde» (el cajero 222 arranca a las 16:00, no de noche), así que la
+ * TRADUCCIÓN vive acá, en el borde de la pantalla, y en ningún lado más.
+ */
+export const ETIQUETA_TURNO_POS: Record<string, string> = {
+  'mañana': 'Mañana',
+  'manana': 'Mañana',
+  'noche':  'Tarde',
+  'tarde':  'Tarde',
+}
+
+export function etiquetaTurnoPoS(turno: string | null | undefined): string {
+  if (!turno) return 'Sin turno'
+  return ETIQUETA_TURNO_POS[turno] ?? turno
+}
+
+/**
+ * Cuántas facturas y cuánto neto hay en cada turno **según el PoS** (el que decide 111/222).
+ *
+ * Es la otra lectura del mismo día: el corte de las 16:00 se calcula del reloj de cada ticket,
+ * este sale de qué caja estaba abierta. Cuando las dos no coinciden hay algo que mirar.
+ */
+export function ventasPorTurnoPoS(tickets: TicketNdfConId[]): { turno: string; neto: number; tickets: number }[] {
+  const acc = new Map<string, { neto: number; tickets: number }>()
+  for (const t of tickets) {
+    const k = etiquetaTurnoPoS(t.turno)
+    const e = acc.get(k) ?? { neto: 0, tickets: 0 }
+    e.neto += n(t.valor_servido_crc)
+    e.tickets += 1
+    acc.set(k, e)
+  }
+  return [...acc.entries()]
+    .map(([turno, e]) => ({ turno, neto: Math.round(e.neto), tickets: e.tickets }))
+    .sort((a, b) => b.neto - a.neto)
 }
 
 /**
@@ -283,8 +336,9 @@ export function esSinAsignar(clave: string): boolean {
  */
 export function etiquetaNoMesero(registradoPor: string, login: string | null = null): string {
   if (registradoPor === 'cajero') {
-    if (login === LOGIN_CAJERO_MANANA) return 'Cajero turno mañana'
-    if (login === LOGIN_CAJERO_NOCHE)  return 'Cajero turno tarde'
+    // El 222 se muestra «Tarde», nunca «noche» — misma traducción que `etiquetaTurnoPoS`.
+    if (login === LOGIN_CAJERO_MANANA) return `Cajero turno ${etiquetaTurnoPoS('mañana').toLowerCase()}`
+    if (login === LOGIN_CAJERO_NOCHE)  return `Cajero turno ${etiquetaTurnoPoS('noche').toLowerCase()}`
     return login ? `Caja · ${login}` : 'Caja'
   }
   if (registradoPor === 'sistema') return login ? `Sistema · ${login}` : 'Sistema'
@@ -367,6 +421,43 @@ export function ventasPorTurno(tickets: TicketNdfConId[]): VentasTurno {
   out.manana.neto = Math.round(out.manana.neto)
   out.tarde.neto  = Math.round(out.tarde.neto)
   return out
+}
+
+// ── Mesas abiertas AHORA ───────────────────────────────────────────────────────────────────
+
+export interface MesaAbiertaResumen {
+  salonero: string
+  mesas:    number
+  pax:      number
+}
+
+/**
+ * Lo que está abierto en este momento, agrupado por quién lo tiene.
+ *
+ * ⚠️ SIN MONTO, a propósito: `pos_ndf_open` todavía no trae lo consumido por mesa. Mostrar un
+ * monto acá obligaría a inventarlo, y una mesa abierta con una cifra al lado se lee como venta.
+ * // TODO monto: pendiente de columna en el bridge.
+ */
+export function resumirMesasAbiertas(
+  abiertas: MesaAbiertaRow[],
+  nombres: Record<string, string> = {},
+): MesaAbiertaResumen[] {
+  const acc = new Map<string, { mesas: number; pax: number }>()
+  for (const m of abiertas) {
+    const login = m.salonero_login
+    const clave =
+      login === null || login === ''      ? 'Sin salonero'
+      : esCajeroTurno(login)              ? etiquetaNoMesero('cajero', login)
+      : esLoginSistema(login)             ? etiquetaNoMesero('sistema', login)
+      : nombreSalonero(login, nombres)
+    const e = acc.get(clave) ?? { mesas: 0, pax: 0 }
+    e.mesas += 1
+    e.pax   += n(m.pax)
+    acc.set(clave, e)
+  }
+  return [...acc.entries()]
+    .map(([salonero, e]) => ({ salonero, mesas: e.mesas, pax: e.pax }))
+    .sort((a, b) => b.mesas - a.mesas || a.salonero.localeCompare(b.salonero, 'es'))
 }
 
 // ── Calidad del pax (§3.F) ─────────────────────────────────────────────────────────────────
@@ -473,6 +564,7 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
     // Todo lo de acá salió de `pos_ndf_*`. El generador de ejemplo no pasa por esta función.
     fuente: 'pos',
     turnos: ventasPorTurno(e.tickets),
+    turnosPoS: ventasPorTurnoPoS(e.tickets),
     canales: armado.canales,
   }
 }
@@ -491,6 +583,17 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
 export function jornadaActualCR(ahora: Date = new Date()): string {
   const cr = new Date(ahora.getTime() - 6 * 3_600_000 - HORA_CORTE_JORNADA * 3_600_000)
   return cr.toISOString().slice(0, 10)
+}
+
+/**
+ * La jornada N días para adelante o para atrás. Es aritmética de CALENDARIO sobre la etiqueta
+ * de la jornada (`YYYY-MM-DD`), no de instantes: la jornada anterior al 1-sep es el 31-ago,
+ * dure lo que dure cada servicio. Se hace en UTC para que no la corra la zona del navegador.
+ */
+export function jornadaDesplazada(fecha: string, dias: number): string {
+  const [y, m, d] = fecha.split('-').map(Number)
+  if (!y || !m || !d) return fecha
+  return new Date(Date.UTC(y, m - 1, d + dias)).toISOString().slice(0, 10)
 }
 
 /** ¿La jornada que se está mirando es la de hoy? Solo entonces hay "en vivo" que refrescar. */
@@ -528,6 +631,7 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
     ...snap,
     mesasAbiertas: enCurso ? abiertas.length : undefined,
     paxAbierto:    enCurso ? abiertas.reduce((s, m) => s + n(m.pax), 0) : undefined,
+    abiertasPorSalonero: enCurso ? resumirMesasAbiertas(abiertas, nombres) : undefined,
   }
 }
 

@@ -203,12 +203,18 @@ function repartirEntero(total: number, pesos: number[]): number[] {
  * Los montos suman EXACTAMENTE `venta`, igual que en el xls real: ahí `total` es la suma de
  * los montos de las mismas filas de las que sale `prodMap`, así que el mix cierra contra el
  * total por construcción.
+ *
+ * ⚠️ Por eso una línea CON PLATA vale al menos 1 unidad. Redondear la cantidad a 0 y después
+ * filtrarla le sacaba el monto a `prods` pero se lo dejaba a `total`, y el mix dejaba de cerrar.
+ * Con una venta chica —la primera hora del servicio— TODAS las líneas caían en ese caso: el día
+ * quedaba con total y sin un solo producto, que es un día que no puede existir.
  */
 function armarProds(local: LocalId, fecha: string, quien: string, venta: number): [string, number, number][] {
   const pesos  = CATALOGO.map(p => p.peso * ruido(`${local}|${fecha}|${quien}|${p.nombre}`, 0.16))
   const montos = repartirEntero(venta, pesos)
   return CATALOGO
-    .map((p, i): [string, number, number] => [p.nombre, Math.max(0, Math.round(montos[i] / p.precio)), montos[i]])
+    .map((p, i): [string, number, number] =>
+      [p.nombre, montos[i] > 0 ? Math.max(1, Math.round(montos[i] / p.precio)) : 0, montos[i]])
     .filter(([, q, m]) => q > 0 && m > 0)
     .sort((a, b) => b[2] - a[2])
 }

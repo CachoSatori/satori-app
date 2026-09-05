@@ -6,11 +6,13 @@ import {
   armarDia, armarSnapshot, calidadPaxPorSalonero, claveSalonero, compararContra,
   esJornadaEnCurso, esSinAsignar, etiquetaNoMesero, horaCRDe, jornadaActualCR,
   jornadasComparables, nombreSalonero, paxDelTicket, ritmoPorHora, turnoDeTicket,
-  ventasPorCanal, ventasPorTurno,
+  etiquetaTurnoPoS, jornadaDesplazada, resumirMesasAbiertas, ventasPorCanal, ventasPorTurno,
+  ventasPorTurnoPoS,
 } from './ventasEnVivoDatos'
 import type { CajeroDay } from '../../shared/types/ventas'
+import { SALONEROS_CONOCIDOS } from '../../shared/ndf/mapTicket'
 import { aggGeneral, aggSalonero, getDayStats } from './ventasUtils'
-import { businessDateDe, ventanaJornada } from '../../shared/api/posNdf'
+import { businessDateDe, ventanaJornada, type MesaAbiertaRow } from '../../shared/api/posNdf'
 import { mixPorCategoria, ticketsDelDia } from './ventasEnVivoTypes'
 import { FAMILIAS_NETO } from './ventasEnVivoDatos'
 import { FAMILIAS_VALOR_SERVIDO } from '../../shared/ndf/mapTicket'
@@ -403,8 +405,26 @@ describe('nombreSalonero', () => {
     expect(esSinAsignar('MAXO')).toBe(false)
   })
 
-  it('un full_name vacío cuenta como sin asignar', () => {
-    expect(nombreSalonero('026', { '026': '   ' })).toBe('026 · sin asignar')
+  it('un full_name vacío cae a la capa siguiente, no a la marca', () => {
+    // El empleado existe pero sin nombre cargado: no es un mapeo, es un campo en blanco.
+    expect(nombreSalonero('026', { '026': '   ' })).toBe('MAXO')   // ← del roster
+  })
+
+  it('Empleados le gana al roster: es el mapeo que mantiene el negocio', () => {
+    expect(nombreSalonero('026', { '026': 'Máximo R.' })).toBe('Máximo R.')
+    expect(SALONEROS_CONOCIDOS['026']).toBe('MAXO')                // el roster dice otra cosa
+  })
+
+  it('sin Empleados, el roster de FAC_Empleados evita que salgan números', () => {
+    expect(nombreSalonero('024', {})).toBe('Juancho')
+    expect(nombreSalonero('235', {})).toBe('ROSAURA M')
+    expect(nombreSalonero('444', {})).toBe('MAXI')
+    expect(esSinAsignar(nombreSalonero('024', {}))).toBe(false)
+  })
+
+  it('fuera de las dos capas, el número MARCADO — nunca un nombre inventado', () => {
+    expect(nombreSalonero('777', {})).toBe('777 · sin asignar')
+    expect(SALONEROS_CONOCIDOS['777']).toBeUndefined()
   })
 
   it('el día usa el nombre como clave del salonero', () => {
@@ -417,9 +437,14 @@ describe('nombreSalonero', () => {
       .toEqual(['099 · sin asignar', 'Caja', 'MAXO'])
   })
 
-  it('sin mapa, todos salen por número marcado (no se inventa un nombre)', () => {
+  it('sin mapa de Empleados el día igual sale por nombre, vía roster', () => {
     const a = armarDia('2026-09-01', [ticket()], [], '2026-09-01')
-    expect(Object.keys(a.dia.saloneros)).toEqual(['026 · sin asignar'])
+    expect(Object.keys(a.dia.saloneros)).toEqual(['MAXO'])
+  })
+
+  it('un login que no está en ninguna capa sí queda marcado', () => {
+    const a = armarDia('2026-09-01', [ticket({ salonero_login: '777' })], [], '2026-09-01')
+    expect(Object.keys(a.dia.saloneros)).toEqual(['777 · sin asignar'])
   })
 })
 
@@ -461,7 +486,7 @@ describe('calidadPaxPorSalonero', () => {
       ticket({ id: 'd', pax_nativo: 0, pax_articulo: 0, pax_alerta: 'sin_pax' }),
     ])
     expect(c).toHaveLength(1)
-    expect(c[0]).toMatchObject({ salonero: '026 · sin asignar', mesas: 4 })
+    expect(c[0]).toMatchObject({ salonero: 'MAXO', mesas: 4 })
     expect(c[0].pctPaxNativoCargado).toBe(50)      // 2 de 4 mesas
     expect(c[0].matchArticuloVsNativo).toBe(50)    // de las 2 con ambos, 1 coincide
   })
@@ -478,7 +503,7 @@ describe('calidadPaxPorSalonero', () => {
       ticket({ id: 'b', salonero_login: '027' }),
       ticket({ id: 'c', salonero_login: '027' }),
     ])
-    expect(c.map(x => x.salonero)).toEqual(['027 · sin asignar', '026 · sin asignar'])
+    expect(c.map(x => x.salonero)).toEqual(['GUILLE', 'MAXO'])
   })
 
   it('con el mapa cargado, la calidad del pax también sale por nombre', () => {
@@ -538,7 +563,7 @@ describe('armarSnapshot', () => {
     expect(snap.fecha).toBe('2026-09-01')
     expect(snap.servicioEnCurso).toBe(true)
     expect(snap.dia.fileName).toBe('ndf 2026-09-01')
-    expect(Object.keys(snap.dia.saloneros).sort()).toEqual(['026 · sin asignar', '027 · sin asignar'])
+    expect(Object.keys(snap.dia.saloneros).sort()).toEqual(['GUILLE', 'MAXO'])
   })
 
   it('el acumulado del día es la suma del neto de los saloneros', () => {
@@ -551,8 +576,7 @@ describe('armarSnapshot', () => {
     expect(snap.porHora.map(h => h.hora)).toEqual([13, 20])
     expect(snap.historico.mismoDiaSemanaPasada).toBe(20000)
     expect(snap.historico.promedio4Semanas).toBe(30000)   // 20+30+40 / 3, el 0 no cuenta
-    expect(snap.calidadPax.map(c => c.salonero).sort())
-      .toEqual(['026 · sin asignar', '027 · sin asignar'])
+    expect(snap.calidadPax.map(c => c.salonero).sort()).toEqual(['GUILLE', 'MAXO'])
   })
 
   it('bruto, servicio, IVA y regalía viajan al lado del neto', () => {
@@ -680,5 +704,110 @@ describe('paridad con las funciones de Hoy', () => {
       .map(([k]) => k)
       .sort()
     expect(enRanking).toEqual(['GUILLE', 'MAXO'])
+  })
+})
+
+// ── Mesas abiertas AHORA ───────────────────────────────────────────────────────
+
+describe('resumirMesasAbiertas', () => {
+  const mesa = (over: Partial<MesaAbiertaRow> = {}): MesaAbiertaRow => ({
+    clave: 'm1', numero_factura: null, id_pedido: '1', mesa: '5',
+    salonero_login: '026', canal: 'salon', pax: 2, pax_alerta: 'ok',
+    updated_at: '2026-09-01T20:00:00-06:00',
+    ...over,
+  })
+
+  it('agrupa por quién tiene la mesa, con el nombre resuelto', () => {
+    const r = resumirMesasAbiertas([
+      mesa({ clave: 'a', salonero_login: '026', pax: 2 }),
+      mesa({ clave: 'b', salonero_login: '026', pax: 4 }),
+      mesa({ clave: 'c', salonero_login: '027', pax: 3 }),
+    ], NOMBRES)
+    expect(r).toEqual([
+      { salonero: 'MAXO',   mesas: 2, pax: 6 },
+      { salonero: 'GUILLE', mesas: 1, pax: 3 },
+    ])
+  })
+
+  it('sin mapa de Empleados igual sale por nombre, vía roster', () => {
+    expect(resumirMesasAbiertas([mesa({ salonero_login: '024' })])[0].salonero).toBe('Juancho')
+  })
+
+  it('caja, sistema y sin login llevan su propia etiqueta', () => {
+    const r = resumirMesasAbiertas([
+      mesa({ clave: 'a', salonero_login: '111' }),
+      mesa({ clave: 'b', salonero_login: '222' }),
+      mesa({ clave: 'c', salonero_login: '002' }),
+      mesa({ clave: 'd', salonero_login: null }),
+    ])
+    expect(r.map(x => x.salonero).sort()).toEqual([
+      'Cajero turno mañana', 'Cajero turno tarde', 'Sin salonero', 'Sistema · 002',
+    ])
+  })
+
+  it('ordena por cantidad de mesas y desempata alfabéticamente', () => {
+    const r = resumirMesasAbiertas([
+      mesa({ clave: 'a', salonero_login: '027' }),
+      mesa({ clave: 'b', salonero_login: '026' }),
+    ], NOMBRES)
+    expect(r.map(x => x.salonero)).toEqual(['GUILLE', 'MAXO'])
+  })
+
+  it('sin mesas abiertas, lista vacía — no una fila en cero', () => {
+    expect(resumirMesasAbiertas([])).toEqual([])
+  })
+})
+
+// ── Navegación de jornada ──────────────────────────────────────────────────────
+
+describe('jornadaDesplazada', () => {
+  it('va una jornada atrás y una adelante', () => {
+    expect(jornadaDesplazada('2026-09-01', -1)).toBe('2026-08-31')
+    expect(jornadaDesplazada('2026-09-01',  1)).toBe('2026-09-02')
+  })
+
+  it('cruza fin de mes y de año', () => {
+    expect(jornadaDesplazada('2026-03-01', -1)).toBe('2026-02-28')
+    expect(jornadaDesplazada('2026-01-01', -1)).toBe('2025-12-31')
+    expect(jornadaDesplazada('2026-12-31',  1)).toBe('2027-01-01')
+  })
+
+  it('respeta el año bisiesto', () => {
+    expect(jornadaDesplazada('2028-03-01', -1)).toBe('2028-02-29')
+  })
+
+  it('una fecha ilegible se devuelve tal cual, sin inventar un día', () => {
+    expect(jornadaDesplazada('', -1)).toBe('')
+    expect(jornadaDesplazada('no-es-fecha', 1)).toBe('no-es-fecha')
+  })
+})
+
+// ── El turno que guarda el PoS: 222 se DICE «Tarde» ────────────────────────────
+
+describe('etiquetaTurnoPoS', () => {
+  it('traduce el valor guardado sin cambiarlo: noche → Tarde', () => {
+    expect(etiquetaTurnoPoS('noche')).toBe('Tarde')
+    expect(etiquetaTurnoPoS('mañana')).toBe('Mañana')
+  })
+
+  it('un turno desconocido se muestra tal cual, no se esconde', () => {
+    expect(etiquetaTurnoPoS('raro')).toBe('raro')
+    expect(etiquetaTurnoPoS(null)).toBe('Sin turno')
+  })
+
+  it('la línea del cajero 222 también dice «tarde»', () => {
+    expect(etiquetaNoMesero('cajero', '222')).toBe('Cajero turno tarde')
+    expect(etiquetaNoMesero('cajero', '111')).toBe('Cajero turno mañana')
+  })
+
+  it('agrupa el neto por el turno del PoS, ya traducido', () => {
+    expect(ventasPorTurnoPoS([
+      ticket({ id: 'a', turno: 'mañana', valor_servido_crc: 4000 }),
+      ticket({ id: 'b', turno: 'noche',  valor_servido_crc: 9000 }),
+      ticket({ id: 'c', turno: 'noche',  valor_servido_crc: 1000 }),
+    ])).toEqual([
+      { turno: 'Tarde',  neto: 10000, tickets: 2 },
+      { turno: 'Mañana', neto: 4000,  tickets: 1 },
+    ])
   })
 })

@@ -65,14 +65,35 @@ export const LOGIN_CAJERO_TARDE_SIN_CONFIRMAR = '022'
  */
 export const LOGINS_SISTEMA = ['002', '01', '02'] as const
 
-/** Maestro de saloneros conocido. Solo para mostrar cuando `FAC_Empleados` no da nombre. */
+/**
+ * Roster activo de `FAC_Empleados`, login → nombre. **Solo para MOSTRAR**: no decide quién es
+ * salonero (eso lo hace `mapSalonero` por descarte de 111/222 y los logins de sistema), no
+ * entra en ningún cálculo de plata y no cambia una sola columna guardada.
+ *
+ * Es la SEGUNDA capa de resolución de nombre, no la primera: manda `employees.pos_login` de la
+ * app, que es el que el negocio mantiene. Esto es el respaldo para que un login que todavía no
+ * se cargó en Empleados salga con su nombre en vez de con un número — y si tampoco está acá,
+ * sale marcado «sin asignar», nunca inventado.
+ *
+ * Un login que se va del roster NO se borra de acá: los días viejos lo siguen necesitando para
+ * poder leerse.
+ */
 export const SALONEROS_CONOCIDOS: Record<string, string> = {
-  '023': 'ESTEBAN',
-  '024': 'JUANCHO',
-  '025': 'DOLORES',
+  '023': 'Esteban',
+  '024': 'Juancho',
+  '025': 'Dolores',
   '026': 'MAXO',
   '027': 'GUILLE',
   '028': 'FRANCISCO',
+  '029': 'Ignacio',
+  '030': 'Jota',
+  '032': 'GONZA',
+  '033': 'FEDERICO',
+  '034': 'INE',
+  '035': 'RODRIGO BAR',
+  '235': 'ROSAURA M',
+  '266': 'NACHO',
+  '444': 'MAXI',
 }
 
 /**

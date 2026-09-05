@@ -196,8 +196,12 @@ export async function getMesasAbiertas(local: string): Promise<MesaAbiertaRow[]>
  * rol que cumple `biotime_emp_code` para el reloj.
  *
  * `pos_login` la agregó la mig 062 y todavía no está en `supabase.gen.ts`, así que va por el
- * mismo cliente destipado que las tablas `pos_ndf_*`. Un login sin cargar en Empleados NO se
- * inventa: la pantalla lo muestra con el número y marcado «sin asignar».
+ * mismo cliente destipado que las tablas `pos_ndf_*`.
+ *
+ * Esta es la **primera capa** de la resolución, no la única: es el mapeo que mantiene el
+ * negocio y por eso manda. Lo que esta consulta no encuentre lo resuelve `nombreSalonero`
+ * contra el roster `SALONEROS_CONOCIDOS`, y recién si tampoco está ahí el login sale marcado
+ * «sin asignar». Un nombre NUNCA se inventa.
  */
 export async function getSaloneroNombres(): Promise<Record<string, string>> {
   const { data, error } = await sb

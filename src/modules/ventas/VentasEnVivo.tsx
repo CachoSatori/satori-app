@@ -5,7 +5,7 @@ import {
 } from './ventasUtils'
 import VentasEnVivoRitmo from './VentasEnVivoRitmo'
 import {
-  esSinAsignar, getSnapshotEnVivo, horaCorteCR, jornadaActualCR, REFRESH_MS,
+  esSinAsignar, getSnapshotEnVivo, horaCorteCR, jornadaActualCR, jornadaDesplazada, REFRESH_MS,
 } from './ventasEnVivoDatos'
 import {
   LOCALES, mixPorCategoria, prodsDelDia, ticketsDelDia, ticketPromedioDe,
@@ -149,7 +149,10 @@ export default function VentasEnVivo({ metas }: Props) {
     )
   }
 
-  const { dia, pm, porHora, historico, calidadPax, proyeccionCierre, turnos, canales } = snap
+  const {
+    dia, pm, porHora, historico, calidadPax, proyeccionCierre, turnos, turnosPoS, canales,
+    abiertasPorSalonero,
+  } = snap
 
   // ── El día, con las MISMAS funciones que «Hoy» ─────────────────────────────────────────────
   // `DiasMap` de una sola entrada: es todo lo que necesitan `aggGeneral`/`aggSalonero` para
@@ -202,6 +205,9 @@ export default function VentasEnVivo({ metas }: Props) {
   const maxCat  = Math.max(...mix.map(c => c.monto), 1)
   const maxProd = Math.max(...prods.map(p => (prodPor === 'monto' ? p.m : p.q)), 1)
 
+  const hoyJornada = jornadaActualCR()
+  const enUltimaJornada = snap.fecha >= hoyJornada
+
   const netoTurnos = turnos ? turnos.manana.neto + turnos.tarde.neto : 0
   const dow = dayOfWeek(snap.fecha)
 
@@ -213,6 +219,44 @@ export default function VentasEnVivo({ metas }: Props) {
     <div className="vt-section">
       <div className="apos">
 
+        {/* ── LO QUE ESTÁ PASANDO AHORA ──────────────────────────────────────────
+            Va primero porque es lo único de esta pantalla que sirve para actuar EN EL
+            MOMENTO: el resto ya pasó. Solo aparece mirando la jornada en curso — en un día
+            cerrado `pos_ndf_open` está vacía y una barra en cero sería ruido. */}
+        {snap.mesasAbiertas !== undefined && snap.mesasAbiertas > 0 && (
+          <section className="apos-panel apos-abiertas">
+            <div className="apos-panel-hd">
+              <h3>
+                <span className="apos-pulso" aria-hidden="true" />{' '}
+                {snap.mesasAbiertas} {snap.mesasAbiertas === 1 ? 'mesa abierta' : 'mesas abiertas'}
+              </h3>
+              <span className="apos-panel-sub">
+                {snap.paxAbierto ? `${snap.paxAbierto} pax sentados · ` : ''}
+                todavía sin cobrar: <strong>no</strong> entran en ninguna cifra de abajo
+              </span>
+            </div>
+            {abiertasPorSalonero && abiertasPorSalonero.length > 0 && (
+              <ul className="apos-abiertas-lista">
+                {abiertasPorSalonero.map(a => (
+                  <li key={a.salonero}>
+                    <span className="apos-abiertas-quien">{a.salonero}</span>
+                    <span className="apos-abiertas-dato">
+                      {a.mesas} {a.mesas === 1 ? 'mesa' : 'mesas'}
+                    </span>
+                    {a.pax > 0 && <span className="apos-abiertas-dato">{a.pax} pax</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/* El monto consumido por mesa NO se muestra porque no existe: `pos_ndf_open` trae
+                mesa, salonero, canal y pax, y nada más. Poner una cifra acá sería inventarla.
+                // TODO monto: pendiente de columna en el bridge. */}
+            <p className="apos-nota" style={{ marginBottom: 0 }}>
+              Sin monto por mesa: <code>pos_ndf_open</code> todavía no trae lo consumido.
+            </p>
+          </section>
+        )}
+
         {/* ── De dónde salen estos números ──────────────────────────────────── */}
         <div className="apos-panel">
           <div className="apos-panel-hd">
@@ -221,16 +265,45 @@ export default function VentasEnVivo({ metas }: Props) {
               {snap.fuente === 'pos' ? 'Datos del PoS · pos_ndf' : 'Datos simulados'}
             </span>
             <span className="apos-spacer" />
-            {/* Ver una jornada pasada: lo que permite cuadrar contra el reporte del PoS. */}
-            <label className="apos-fecha">
-              Jornada{' '}
-              <input
-                type="date"
-                value={fecha}
-                max={jornadaActualCR()}
-                onChange={e => setFecha(e.target.value)}
-              />
-            </label>
+            {/* Ver una jornada pasada: lo que permite cuadrar contra el reporte del PoS.
+                Las flechas mueven de a una jornada (7→7), que es la unidad con la que se
+                lee este negocio — no de a un día civil. */}
+            <div className="apos-nav-jornada">
+              <button
+                type="button"
+                className="apos-btn-nav"
+                aria-label="Jornada anterior"
+                title="Jornada anterior"
+                onClick={() => setFecha(jornadaDesplazada(snap.fecha, -1))}
+              >
+                ‹
+              </button>
+              <label className="apos-fecha">
+                Jornada{' '}
+                <input
+                  type="date"
+                  value={fecha}
+                  max={hoyJornada}
+                  onChange={e => setFecha(e.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="apos-btn-nav"
+                aria-label="Jornada siguiente"
+                title={enUltimaJornada ? 'Ya estás en la jornada de hoy' : 'Jornada siguiente'}
+                disabled={enUltimaJornada}
+                onClick={() => {
+                  const sig = jornadaDesplazada(snap.fecha, 1)
+                  // Volver a "hoy" tiene que dejar el selector VACÍO: es lo que vuelve a
+                  // prender el refresco automático. Con la fecha puesta, la pantalla queda
+                  // congelada aunque sea el día de hoy.
+                  setFecha(sig >= hoyJornada ? '' : sig)
+                }}
+              >
+                ›
+              </button>
+            </div>
             {fecha && (
               <button type="button" className="apos-btn-hoy" onClick={() => setFecha('')}>
                 Volver a hoy
@@ -256,17 +329,6 @@ export default function VentasEnVivo({ metas }: Props) {
               factura cerrada en <code>pos_ndf_tickets</code> para el rango 07:00–07:00. Si
               esperabas ver movimiento, revisá que el agente del PoS esté corriendo; para validar
               la pantalla con datos reales, elegí una jornada pasada en el selector de arriba.
-            </p>
-          </div>
-        )}
-
-        {/* ── Mesas abiertas ahora mismo ─────────────────────────────────────── */}
-        {snap.mesasAbiertas !== undefined && snap.mesasAbiertas > 0 && (
-          <div className="apos-panel">
-            <p className="apos-nota" style={{ marginBottom: 0 }}>
-              <strong>{snap.mesasAbiertas} mesa(s) abiertas</strong> ahora
-              {snap.paxAbierto ? ` · ${snap.paxAbierto} pax sentados` : ''} — todavía sin cobrar,
-              así que <strong>no</strong> entran en las cifras de arriba.
             </p>
           </div>
         )}
@@ -480,6 +542,23 @@ export default function VentasEnVivo({ metas }: Props) {
               extractor todavía no trae la fecha de cierre del PoS, así que una mesa abierta 15:50 y
               cobrada 16:30 cuenta como mañana.
             </p>
+
+            {/* La otra lectura del mismo día: la que guarda el PoS según qué caja estaba
+                abierta (111 → Mañana · 222 → Tarde). El valor guardado del 222 sigue siendo
+                'noche' en la columna `turno`; acá solo se TRADUCE para mostrarlo. */}
+            {turnosPoS && turnosPoS.length > 0 && (
+              <p className="apos-nota" style={{ marginBottom: 0 }}>
+                <strong>Según la caja del PoS</strong> (111 · 222):{' '}
+                {turnosPoS.map((t, i) => (
+                  <span key={t.turno}>
+                    {i > 0 ? ' · ' : ''}
+                    {t.turno} {fi(t.neto)} ({t.tickets} {t.tickets === 1 ? 'ticket' : 'tickets'})
+                  </span>
+                ))}
+                . Es el mismo día leído por <em>qué caja estaba abierta</em> en vez de por el
+                reloj; si las dos lecturas se separan mucho, hay algo que mirar.
+              </p>
+            )}
           </section>
         )}
 

@@ -160,6 +160,16 @@ export interface SnapshotEnVivo {
    * solo puede ver el delivery a través del cajero que lo cobró; el PoS lo sabe ticket a ticket.
    */
   canales?: { salon: number; delivery: number }
+
+  /**
+   * El mismo día leído por el turno que GUARDA el PoS (el que deciden los cajeros 111/222), en
+   * vez de por el corte de las 16:00. Sirve de contraste: si las dos lecturas no coinciden, hay
+   * algo que mirar. La etiqueta ya viene traducida — el 222 se dice «Tarde».
+   */
+  turnosPoS?: { turno: string; neto: number; tickets: number }[]
+
+  /** Quién tiene abierta cada mesa AHORA. Sin monto: `pos_ndf_open` todavía no lo trae. */
+  abiertasPorSalonero?: { salonero: string; mesas: number; pax: number }[]
 }
 
 // ── Derivados live-only ─────────────────────────────────────────────────────────

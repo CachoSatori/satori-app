@@ -513,3 +513,24 @@
   cursor: pointer;
 }
 .apos-btn-hoy:hover { border-color: currentColor; }
+
+/* ── Paridad con «Hoy» ──────────────────────────────────────── */
+
+/* Los bloques que replican «Hoy» no tienen 6 tarjetas fijas: son 3 (restaurante) o 9
+   (saloneros). Para esos vale el `auto-fill`, que es justo lo que NO servía para los KPIs
+   de arriba. */
+.apos-kpis-libre {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+/* El ratio comida/bebida se clasifica con `ratioCBClass`, la MISMA función que usa «Hoy».
+   Sus colores están calibrados para el fondo oscuro de esa pestaña y sobre este panel claro
+   quedan ilegibles, así que se re-tiñen solo acá adentro: la función y su regla no cambian,
+   cambia el contraste. */
+.apos .ratio-ok   { color: #1f7a4d; }
+.apos .ratio-low  { color: #1c6b91; }
+.apos .ratio-high { color: #b4402f; }
+
+/* En el ranking el delta va dentro de una celda numérica: no debe heredar la fuente mono
+   ni el alineado de bloque. */
+.apos-tabla .apos-delta { white-space: nowrap; }

@@ -1,9 +1,11 @@
-import type { DiaData, ProductMap, SaloneroDay } from '../../shared/types/ventas'
+import type { CajeroDay, DiaData, ProductMap, SaloneroDay } from '../../shared/types/ventas'
 import {
-  businessDateDe, getLineasDeTickets, getMesasAbiertas, getNetoPorJornada, getTicketsJornada,
-  HORA_CORTE_JORNADA, type LineaNdfRow, type TicketNdfConId,
+  businessDateDe, getLineasDeTickets, getMesasAbiertas, getNetoPorJornada, getSaloneroNombres,
+  getTicketsJornada, HORA_CORTE_JORNADA, type LineaNdfRow, type TicketNdfConId,
 } from '../../shared/api/posNdf'
-import { FAMILIAS_VALOR_SERVIDO } from '../../shared/ndf/mapTicket'
+import {
+  FAMILIAS_VALOR_SERVIDO, LOGIN_CAJERO_MANANA, LOGIN_CAJERO_NOCHE,
+} from '../../shared/ndf/mapTicket'
 import { horaCorteCR } from './ventasEnVivoMock'
 import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type LocalId,
          type SnapshotEnVivo, type VentaPorHora } from './ventasEnVivoTypes'
@@ -100,6 +102,27 @@ export interface DiaArmado {
   iva:      number
   regalia:  number
   tickets:  number
+  /** El neto partido en salón / delivery. */
+  canales:  VentasPorCanal
+}
+
+export interface VentasPorCanal { salon: number; delivery: number }
+
+/**
+ * Salón vs delivery, en NETO y **ticket por ticket**.
+ *
+ * En el modelo del xls el delivery solo se puede ver por el cajero que lo cobró; el PoS lo sabe
+ * factura por factura (`canal`), así que acá se parte por el dato duro y no por quién la cerró.
+ * Todo lo que no es delivery cuenta como salón: barra, para llevar y mesa son piso.
+ */
+export function ventasPorCanal(tickets: TicketNdfConId[]): VentasPorCanal {
+  let salon = 0, delivery = 0
+  for (const t of tickets) {
+    const v = n(t.valor_servido_crc)
+    if (t.canal === 'delivery') delivery += v
+    else salon += v
+  }
+  return { salon: Math.round(salon), delivery: Math.round(delivery) }
 }
 
 /**
@@ -113,6 +136,7 @@ export function armarDia(
   tickets: TicketNdfConId[],
   lineas: LineaNdfRow[],
   uploadedAt: string,
+  nombres: Record<string, string> = {},
 ): DiaArmado {
   const porTicket = new Map<string, LineaNdfRow[]>()
   for (const l of lineas) {
@@ -121,10 +145,7 @@ export function armarDia(
     else porTicket.set(l.ticket_id, [l])
   }
 
-  const acc = new Map<string, {
-    pax: number; total: number; com: number; beb: number; iCom: number; iBeb: number
-    serv: number; prods: Map<string, { q: number; m: number }>
-  }>()
+  const acc = new Map<string, AccEntrada>()
   const pm: ProductMap = {}
   let bruto = 0, servicio = 0, iva = 0, regalia = 0
 
@@ -134,14 +155,22 @@ export function armarDia(
     iva      += n(t.iva_crc)
     regalia  += n(t.regalia_crc)
 
-    const clave = claveSalonero(t) ?? etiquetaNoMesero(t.registrado_por)
+    const login = claveSalonero(t)
+    const esMesero = login !== null
+    const clave = esMesero
+      ? nombreSalonero(login, nombres)
+      : etiquetaNoMesero(t.registrado_por, t.salonero_login)
     const e = acc.get(clave) ?? {
+      esCajero: !esMesero,
       pax: 0, total: 0, com: 0, beb: 0, iCom: 0, iBeb: 0, serv: 0,
+      delivery: 0, ordenes: 0,
       prods: new Map<string, { q: number; m: number }>(),
     }
-    e.pax   += paxDelTicket(t)
-    e.total += n(t.valor_servido_crc)   // el NETO — ver el bloque de arriba
-    e.serv  += n(t.servicio_crc)
+    e.pax     += paxDelTicket(t)
+    e.total   += n(t.valor_servido_crc)   // el NETO — ver el bloque de arriba
+    e.serv    += n(t.servicio_crc)
+    e.ordenes += 1
+    if (t.canal === 'delivery') e.delivery += n(t.valor_servido_crc)
 
     for (const l of porTicket.get(t.id) ?? []) {
       // El "artículo pax" cuenta comensales, no es algo que se venda: fuera del mix, igual
@@ -170,10 +199,34 @@ export function armarDia(
     acc.set(clave, e)
   }
 
-  const saloneros: Record<string, SaloneroDay> = {}
+  const saloneros: Record<string, SaloneroDay | CajeroDay> = {}
   for (const [nombre, e] of acc) {
+    const prods = [...e.prods.entries()]
+      .sort((a, b) => b[1].m - a[1].m)
+      .map(([nom, v]) => [nom, v.q, Math.round(v.m)] as [string, number, number])
+    const total = Math.round(e.total)
+
+    if (e.esCajero) {
+      // Caja y sistema NO son meseros: van con la marca `esCajero`, que es lo que hace que
+      // `aggSalonero` los saltee, `aggGeneral` los mande a `cajTotal` y el ranking del día no
+      // los liste. `getDayStats` los sigue sumando al total del restaurante — que es el punto:
+      // su venta cuenta, pero no compite con la de nadie.
+      const delivery = Math.round(e.delivery)
+      saloneros[nombre] = {
+        esCajero: true,
+        total,
+        salon:      total - delivery,
+        delivery,
+        iva: 0, serv: Math.round(e.serv),
+        ordenes:    e.ordenes,
+        ticketProm: e.ordenes ? total / e.ordenes : 0,
+        prods,
+      }
+      continue
+    }
+
     saloneros[nombre] = {
-      pax: e.pax, total: Math.round(e.total), com: Math.round(e.com), beb: Math.round(e.beb),
+      pax: e.pax, total, com: Math.round(e.com), beb: Math.round(e.beb),
       iCom: e.iCom, iBeb: e.iBeb,
       // IVA a nivel salonero queda en 0: el PoS lo informa por ticket y hoy viene 0 en el
       // histórico. `serv` sí es el dato real (Σ ImpS).
@@ -184,9 +237,7 @@ export function armarDia(
       ratioCB:    e.beb  ? e.com   / e.beb  : 0,
       ratioU:     e.iBeb ? e.iCom  / e.iBeb : 0,
       bebPax:     e.pax  ? e.iBeb  / e.pax  : 0,
-      prods: [...e.prods.entries()]
-        .sort((a, b) => b[1].m - a[1].m)
-        .map(([nom, v]) => [nom, v.q, Math.round(v.m)] as [string, number, number]),
+      prods,
     }
   }
 
@@ -196,14 +247,48 @@ export function armarDia(
     bruto: Math.round(bruto), servicio: Math.round(servicio),
     iva: Math.round(iva), regalia: Math.round(regalia),
     tickets: tickets.length,
+    canales: ventasPorCanal(tickets),
   }
 }
 
-/** Las facturas que no son de un mesero, con nombre propio para que se vean en el desglose. */
-export function etiquetaNoMesero(registradoPor: string): string {
-  if (registradoPor === 'cajero')  return '(cajero de turno)'
-  if (registradoPor === 'sistema') return '(sistema)'
-  return '(sin salonero)'
+/** Lo que se va acumulando por clave mientras se recorren los tickets. */
+interface AccEntrada {
+  esCajero: boolean
+  pax: number; total: number; com: number; beb: number; iCom: number; iBeb: number
+  serv: number; delivery: number; ordenes: number
+  prods: Map<string, { q: number; m: number }>
+}
+
+/**
+ * El login del PoS → cómo se muestra. Con el empleado cargado, su nombre; sin cargar, el
+ * número **marcado**, para que se vea que falta el mapeo en vez de desaparecer del ranking.
+ */
+export function nombreSalonero(login: string, nombres: Record<string, string>): string {
+  const n = nombres[login]?.trim()
+  return n && n !== '' ? n : `${login} · sin asignar`
+}
+
+/** ¿Este salonero quedó sin mapear a un empleado? */
+export function esSinAsignar(clave: string): boolean {
+  return clave.endsWith(' · sin asignar')
+}
+
+/**
+ * Las facturas que no son de un mesero, con nombre propio para que se vean en el desglose.
+ *
+ * Los dos cajeros se separan por login (111 mañana · 222 noche) y salen con el MISMO nombre que
+ * usa el xls — `isCajeroName` los reconoce, así que el resto del módulo los trata como caja sin
+ * que haya que enseñarle nada nuevo. El sistema (002/01/02) va aparte: no es una caja, es el
+ * PoS facturando solo, y mezclarlo con la caja escondería que existe.
+ */
+export function etiquetaNoMesero(registradoPor: string, login: string | null = null): string {
+  if (registradoPor === 'cajero') {
+    if (login === LOGIN_CAJERO_MANANA) return 'Cajero turno mañana'
+    if (login === LOGIN_CAJERO_NOCHE)  return 'Cajero turno tarde'
+    return login ? `Caja · ${login}` : 'Caja'
+  }
+  if (registradoPor === 'sistema') return login ? `Sistema · ${login}` : 'Sistema'
+  return 'Sin salonero'
 }
 
 // ── Ritmo por hora ─────────────────────────────────────────────────────────────────────────
@@ -236,6 +321,54 @@ export function horaCRDe(instante: string): number | null {
   return new Date(t - 6 * 3_600_000).getUTCHours()
 }
 
+// ── Turnos: mañana / tarde ─────────────────────────────────────────────────────────────────
+
+/** Corte entre turnos, hora de pared CR. La jornada 07→07 se parte acá. */
+export const HORA_CORTE_TURNO = 16
+
+export type Turno = 'manana' | 'tarde'
+
+/**
+ * A qué turno pertenece un ticket: **mañana** si cerró entre las 07:00 y las 16:00 CR,
+ * **tarde** entre las 16:00 y las 07:00 del día siguiente.
+ *
+ * Se mide por `fecha_cierra` —cuándo se cobró la cuenta, que es lo que define el turno— y se
+ * cae a `fecha_registra` cuando no está.
+ *
+ * ⚠️ HOY SIEMPRE SE CAE AL FALLBACK: el extractor no selecciona la fecha de cierre del PoS, así
+ * que `fecha_cierra` viene NULL en todas las filas. Para una mesa que se abre y se cobra en el
+ * mismo turno da igual; la que se abre a las 15:50 y se cobra a las 16:30 hoy cuenta como
+ * mañana. Está reportado.
+ *
+ * Los dos turnos son excluyentes y cubren la jornada entera: mañana + tarde = el neto del día.
+ */
+export function turnoDeTicket(t: Pick<TicketNdfConId, 'fecha_cierra' | 'fecha_registra'>): Turno {
+  const h = horaCRDe(t.fecha_cierra ?? t.fecha_registra)
+  if (h === null) return 'tarde'
+  return h >= HORA_CORTE_JORNADA && h < HORA_CORTE_TURNO ? 'manana' : 'tarde'
+}
+
+export interface BloqueTurno { neto: number; tickets: number; pax: number }
+
+export interface VentasTurno {
+  manana: BloqueTurno
+  tarde:  BloqueTurno
+}
+
+export function ventasPorTurno(tickets: TicketNdfConId[]): VentasTurno {
+  const vacio = (): BloqueTurno => ({ neto: 0, tickets: 0, pax: 0 })
+  const out: VentasTurno = { manana: vacio(), tarde: vacio() }
+  for (const t of tickets) {
+    const b = out[turnoDeTicket(t)]
+    b.neto    += n(t.valor_servido_crc)
+    b.tickets += 1
+    b.pax     += paxDelTicket(t)
+  }
+  out.manana.neto = Math.round(out.manana.neto)
+  out.tarde.neto  = Math.round(out.tarde.neto)
+  return out
+}
+
 // ── Calidad del pax (§3.F) ─────────────────────────────────────────────────────────────────
 
 /**
@@ -245,7 +378,10 @@ export function horaCRDe(instante: string): number | null {
  * Sale de `pax_nativo` / `pax_articulo` / `pax_alerta`, que el mapper ya resolvió por ticket.
  * Solo se miden los meseros de verdad: al cajero de turno no se le exige cargar comensales.
  */
-export function calidadPaxPorSalonero(tickets: TicketNdfConId[]): CalidadPax[] {
+export function calidadPaxPorSalonero(
+  tickets: TicketNdfConId[],
+  nombres: Record<string, string> = {},
+): CalidadPax[] {
   const acc = new Map<string, { mesas: number; conNativo: number; conAmbos: number; coinciden: number }>()
   for (const t of tickets) {
     const clave = claveSalonero(t)
@@ -261,8 +397,8 @@ export function calidadPaxPorSalonero(tickets: TicketNdfConId[]): CalidadPax[] {
     acc.set(clave, e)
   }
   return [...acc.entries()]
-    .map(([salonero, e]) => ({
-      salonero,
+    .map(([login, e]) => ({
+      salonero: nombreSalonero(login, nombres),
       mesas: e.mesas,
       pctPaxNativoCargado:   e.mesas ? (e.conNativo / e.mesas) * 100 : 0,
       matchArticuloVsNativo: e.conAmbos ? (e.coinciden / e.conAmbos) * 100 : 0,
@@ -303,11 +439,13 @@ export interface EntradaSnapshot {
   neto4Sem:   Record<string, number>
   ahora:      Date
   enServicio: boolean
+  /** `pos_login` → nombre del empleado. Sin él, los saloneros salen por número. */
+  nombres?:   Record<string, string>
 }
 
 /** PURO: todo lo de arriba junto. Se prueba sin Supabase. */
 export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
-  const armado = armarDia(e.fecha, e.tickets, e.lineas, e.ahora.toISOString())
+  const armado = armarDia(e.fecha, e.tickets, e.lineas, e.ahora.toISOString(), e.nombres ?? {})
   const neto = Object.values(armado.dia.saloneros).reduce((s, v) => s + v.total, 0)
   const comparables = jornadasComparables(e.fecha)
 
@@ -322,7 +460,7 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
     // La proyección no es un dato del PoS: con el servicio terminado no se proyecta nada.
     proyeccionCierre: neto,
     historico: compararContra(e.neto4Sem, comparables),
-    calidadPax: calidadPaxPorSalonero(e.tickets),
+    calidadPax: calidadPaxPorSalonero(e.tickets, e.nombres ?? {}),
 
     // Extras del feed real (campos opcionales del contrato).
     bruto:    armado.bruto,
@@ -334,6 +472,8 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
     ivaPendiente: armado.iva === 0,
     // Todo lo de acá salió de `pos_ndf_*`. El generador de ejemplo no pasa por esta función.
     fuente: 'pos',
+    turnos: ventasPorTurno(e.tickets),
+    canales: armado.canales,
   }
 }
 
@@ -376,12 +516,13 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
 
   const tickets = await getTicketsJornada(local, jornada)
   const lineas  = await getLineasDeTickets(tickets.map(t => t.id))
+  const nombres = await getSaloneroNombres()
   const neto4Sem = await getNetoPorJornada(local, jornadasComparables(jornada))
   // El snapshot de mesas abiertas es de AHORA: mirando un día viejo no significa nada.
   const abiertas = enCurso ? await getMesasAbiertas(local) : []
 
   const snap = armarSnapshot({
-    local, fecha: jornada, tickets, lineas, neto4Sem, ahora, enServicio: enCurso,
+    local, fecha: jornada, tickets, lineas, neto4Sem, ahora, enServicio: enCurso, nombres,
   })
   return {
     ...snap,

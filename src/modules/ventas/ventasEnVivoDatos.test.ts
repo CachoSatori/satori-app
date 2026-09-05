@@ -4,9 +4,12 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import {
   armarDia, armarSnapshot, calidadPaxPorSalonero, claveSalonero, compararContra,
-  esJornadaEnCurso, etiquetaNoMesero, horaCRDe, jornadaActualCR, jornadasComparables,
-  paxDelTicket, ritmoPorHora,
+  esJornadaEnCurso, esSinAsignar, etiquetaNoMesero, horaCRDe, jornadaActualCR,
+  jornadasComparables, nombreSalonero, paxDelTicket, ritmoPorHora, turnoDeTicket,
+  ventasPorCanal, ventasPorTurno,
 } from './ventasEnVivoDatos'
+import type { CajeroDay } from '../../shared/types/ventas'
+import { aggGeneral, aggSalonero, getDayStats } from './ventasUtils'
 import { businessDateDe, ventanaJornada } from '../../shared/api/posNdf'
 import { mixPorCategoria, ticketsDelDia } from './ventasEnVivoTypes'
 import { FAMILIAS_NETO } from './ventasEnVivoDatos'
@@ -19,11 +22,20 @@ const sal = (dia: DiaData, clave: string): SaloneroDay => dia.saloneros[clave] a
 
 const ticket = (over: Partial<TicketNdfConId> = {}): TicketNdfConId => ({
   id: 't1', numero_factura: '5001', fecha_registra: '2026-09-01T19:42:07-06:00',
+  fecha_cierra: null,
   canal: 'salon', salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,
   iva_crc: 0, regalia_crc: 0, descuento_crc: 0, clase_ingreso: 'cobrada',
   pax: 2, pax_nativo: 2, pax_articulo: 2, pax_alerta: 'ok', ...over,
 })
+
+/** Los saloneros cargados en Empleados. Sin esto, el día los muestra por número marcado. */
+const NOMBRES = { '026': 'MAXO', '027': 'GUILLE' }
+
+/** `armarDia` con el maestro puesto — como corre de verdad. */
+const armar = (
+  fecha: string, tickets: TicketNdfConId[], lineas: LineaNdfRow[], uploadedAt: string,
+) => armarDia(fecha, tickets, lineas, uploadedAt, NOMBRES)
 
 const linea = (over: Partial<LineaNdfRow> = {}): LineaNdfRow => ({
   ticket_id: 't1', codigo_producto: '100', nombre: 'ROLL SATORI',
@@ -59,14 +71,14 @@ describe('ventanaJornada / businessDateDe', () => {
 
 describe('armarDia', () => {
   it('acredita el NETO al salonero, no el bruto', () => {
-    const a = armarDia('2026-09-01', [ticket()], [linea()], '2026-09-01')
-    expect(a.dia.saloneros['026'].total).toBe(12000)   // valor_servido_crc
+    const a = armar('2026-09-01', [ticket()], [linea()], '2026-09-01')
+    expect(sal(a.dia, 'MAXO').total).toBe(12000)   // valor_servido_crc
     expect(a.bruto).toBe(13560)                        // total_crc, al lado
     expect(a.servicio).toBe(1200)
   })
 
   it('el bruto, el servicio, el IVA y la regalía viajan aparte', () => {
-    const a = armarDia('2026-09-01', [
+    const a = armar('2026-09-01', [
       ticket({ id: 't1', iva_crc: 0, regalia_crc: 0 }),
       ticket({ id: 't2', numero_factura: '5002', total_crc: 0, valor_servido_crc: 5000,
                regalia_crc: 5000, clase_ingreso: 'sin_cobro' }),
@@ -77,18 +89,58 @@ describe('armarDia', () => {
   })
 
   it('las facturas del cajero cuentan en el día, en su propia línea', () => {
-    const a = armarDia('2026-09-01', [
+    const a = armar('2026-09-01', [
       ticket(),
       ticket({ id: 't2', numero_factura: '5002', salonero_login: null,
                registrado_por: 'cajero', valor_servido_crc: 8000 }),
     ], [], '2026-09-01')
-    expect(Object.keys(a.dia.saloneros).sort()).toEqual(['(cajero de turno)', '026'])
+    expect(Object.keys(a.dia.saloneros).sort()).toEqual(['Caja', 'MAXO'])
     const total = Object.values(a.dia.saloneros).reduce((s, v) => s + v.total, 0)
     expect(total).toBe(20000)
   })
 
+  it('caja y sistema salen marcados `esCajero` — fuera del ranking, dentro del total', () => {
+    const a = armar('2026-09-01', [
+      ticket(),
+      ticket({ id: 't2', numero_factura: '5002', salonero_login: '111',
+               registrado_por: 'cajero', valor_servido_crc: 8000 }),
+      ticket({ id: 't3', numero_factura: '5003', salonero_login: '222',
+               registrado_por: 'cajero', valor_servido_crc: 3000 }),
+      ticket({ id: 't4', numero_factura: '5004', salonero_login: '002',
+               registrado_por: 'sistema', valor_servido_crc: 1000 }),
+    ], [], '2026-09-01')
+
+    expect(Object.keys(a.dia.saloneros).sort())
+      .toEqual(['Cajero turno mañana', 'Cajero turno tarde', 'MAXO', 'Sistema · 002'])
+
+    // La marca es lo que hace que `aggSalonero` los saltee y `aggGeneral` los mande a caja.
+    for (const clave of ['Cajero turno mañana', 'Cajero turno tarde', 'Sistema · 002']) {
+      expect((a.dia.saloneros[clave] as CajeroDay).esCajero).toBe(true)
+    }
+    expect((a.dia.saloneros['MAXO'] as CajeroDay).esCajero).toBeUndefined()
+
+    // Y sin embargo su venta sigue contando en el día.
+    const total = Object.values(a.dia.saloneros).reduce((s, v) => s + v.total, 0)
+    expect(total).toBe(12000 + 8000 + 3000 + 1000)
+  })
+
+  it('el cajero lleva órdenes, ticket promedio y su corte salón/delivery', () => {
+    const a = armar('2026-09-01', [
+      ticket({ id: 'c1', salonero_login: '111', registrado_por: 'cajero',
+               canal: 'salon', valor_servido_crc: 6000 }),
+      ticket({ id: 'c2', numero_factura: '5002', salonero_login: '111',
+               registrado_por: 'cajero', canal: 'delivery', valor_servido_crc: 4000 }),
+    ], [], '2026-09-01')
+    const c = a.dia.saloneros['Cajero turno mañana'] as CajeroDay
+    expect(c.total).toBe(10000)
+    expect(c.delivery).toBe(4000)
+    expect(c.salon).toBe(6000)
+    expect(c.ordenes).toBe(2)
+    expect(c.ticketProm).toBe(5000)
+  })
+
   it('el mix deja afuera el artículo pax y las familias que no son neto', () => {
-    const a = armarDia('2026-09-01', [ticket()], [
+    const a = armar('2026-09-01', [ticket()], [
       linea({ familia: 2, monto: 9000, cantidad: 2 }),
       linea({ familia: 5, monto: 3000, cantidad: 3, nombre: 'IMPERIAL', codigo_producto: '200' }),
       linea({ familia: 19, monto: 0, cantidad: 2, nombre: 'PAX', codigo_producto: '677' }),
@@ -96,24 +148,24 @@ describe('armarDia', () => {
       linea({ familia: 17, monto: 2500, cantidad: 1, nombre: 'CORTESIA', codigo_producto: '400' }),
     ], '2026-09-01')
 
-    const prods = sal(a.dia, '026').prods.map(p => p[0])
+    const prods = sal(a.dia, 'MAXO').prods.map(p => p[0])
     expect(prods).toEqual(['ROLL SATORI', 'IMPERIAL'])
     expect(prods).not.toContain('PAX')
     expect(prods).not.toContain('EXTRA')
-    expect(sal(a.dia, '026').com).toBe(9000)
-    expect(sal(a.dia, '026').beb).toBe(3000)
+    expect(sal(a.dia, 'MAXO').com).toBe(9000)
+    expect(sal(a.dia, 'MAXO').beb).toBe(3000)
   })
 
   it('la familia 29 (bentos) entra como comida, con su propia etiqueta', () => {
-    const a = armarDia('2026-09-01', [ticket()],
+    const a = armar('2026-09-01', [ticket()],
       [linea({ familia: 29, monto: 4500, cantidad: 1, nombre: 'BENTO' })], '2026-09-01')
-    expect(sal(a.dia, '026').com).toBe(4500)
+    expect(sal(a.dia, 'MAXO').com).toBe(4500)
     expect(a.pm['BENTO'].clasificacion).toBe('Bentos')
     expect(a.pm['BENTO'].tipo).toBe('comida')
   })
 
   it('el mix se agrupa por FAMILIA del PoS, no por el ProductMap', () => {
-    const a = armarDia('2026-09-01', [ticket()], [
+    const a = armar('2026-09-01', [ticket()], [
       linea({ familia: 3,  monto: 9000, cantidad: 2, nombre: 'ROLL SATORI' }),
       linea({ familia: 5,  monto: 3000, cantidad: 3, nombre: 'IMPERIAL', codigo_producto: '200' }),
       linea({ familia: 2,  monto: 2000, cantidad: 1, nombre: 'EDAMAME', codigo_producto: '201' }),
@@ -139,7 +191,7 @@ describe('armarDia', () => {
       linea({ ticket_id: 't1', familia: 19, monto: 0,    nombre: 'PAX',   codigo_producto: '677' }),
       linea({ ticket_id: 't1', familia: 22, monto: 1500, nombre: 'EXTRA', codigo_producto: '300' }),
     ]
-    const a = armarDia('2026-09-01', [ticket({ valor_servido_crc: 12000 })], lineas, '2026-09-01')
+    const a = armar('2026-09-01', [ticket({ valor_servido_crc: 12000 })], lineas, '2026-09-01')
     const mix = mixPorCategoria(a.dia, a.pm)
     const sumaMix = mix.reduce((s, m) => s + m.monto, 0)
     const neto = Object.values(a.dia.saloneros).reduce((s, v) => s + v.total, 0)
@@ -148,7 +200,7 @@ describe('armarDia', () => {
   })
 
   it('las familias etiquetadas son exactamente las del neto', () => {
-    const conUna = (f: number) => armarDia('2026-09-01', [ticket()],
+    const conUna = (f: number) => armar('2026-09-01', [ticket()],
       [linea({ familia: f, monto: 1000, nombre: `P${f}` })], '2026-09-01')
     // Toda familia del neto produce una categoría con nombre propio…
     for (const f of FAMILIAS_NETO) {
@@ -163,18 +215,18 @@ describe('armarDia', () => {
   })
 
   it('un día sin ventas da un DiaData vacío, no explota', () => {
-    const a = armarDia('2026-09-01', [], [], '2026-09-01')
+    const a = armar('2026-09-01', [], [], '2026-09-01')
     expect(a.dia.saloneros).toEqual({})
     expect(a.bruto).toBe(0)
   })
 
   it('tolera nulos en todos los montos', () => {
-    const a = armarDia('2026-09-01', [ticket({
+    const a = armar('2026-09-01', [ticket({
       total_crc: null, valor_servido_crc: null, servicio_crc: null, iva_crc: null,
       regalia_crc: null, pax: null,
     })], [linea({ monto: null, cantidad: null })], '2026-09-01')
-    expect(a.dia.saloneros['026'].total).toBe(0)
-    expect(sal(a.dia, '026').promPax).toBe(0)   // sin pax: 0, no NaN
+    expect(sal(a.dia, 'MAXO').total).toBe(0)
+    expect(sal(a.dia, 'MAXO').promPax).toBe(0)   // sin pax: 0, no NaN
   })
 })
 
@@ -186,9 +238,13 @@ describe('claveSalonero / etiquetaNoMesero', () => {
   })
 
   it('cada tipo de no-mesero tiene su etiqueta', () => {
-    expect(etiquetaNoMesero('cajero')).toBe('(cajero de turno)')
-    expect(etiquetaNoMesero('sistema')).toBe('(sistema)')
-    expect(etiquetaNoMesero('sin_pedido')).toBe('(sin salonero)')
+    expect(etiquetaNoMesero('cajero', '111')).toBe('Cajero turno mañana')
+    expect(etiquetaNoMesero('cajero', '222')).toBe('Cajero turno tarde')
+    expect(etiquetaNoMesero('cajero', '333')).toBe('Caja · 333')
+    expect(etiquetaNoMesero('cajero')).toBe('Caja')
+    expect(etiquetaNoMesero('sistema', '002')).toBe('Sistema · 002')
+    expect(etiquetaNoMesero('sistema')).toBe('Sistema')
+    expect(etiquetaNoMesero('sin_pedido')).toBe('Sin salonero')
   })
 })
 
@@ -259,11 +315,111 @@ describe('paxDelTicket', () => {
   })
 
   it('el día acredita el pax por artículo', () => {
-    const a = armarDia('2026-09-01', [
+    const a = armar('2026-09-01', [
       ticket({ id: 'a', pax: 4, pax_nativo: 4, pax_articulo: 2 }),
       ticket({ id: 'b', pax: 3, pax_nativo: 0, pax_articulo: 3 }),
     ], [], '2026-09-01')
-    expect(sal(a.dia, '026').pax).toBe(5)   // 2 + 3, no 4 + 3
+    expect(sal(a.dia, 'MAXO').pax).toBe(5)   // 2 + 3, no 4 + 3
+  })
+})
+
+// ── Turnos: mañana / tarde, corte a las 16:00 CR ───────────────────────────────
+
+describe('turnoDeTicket — los bordes', () => {
+  const enCierre = (iso: string) => ({ fecha_cierra: iso, fecha_registra: '2026-09-01T12:00:00-06:00' })
+
+  it('15:59 es MAÑANA', () => {
+    expect(turnoDeTicket(enCierre('2026-09-01T15:59:59-06:00'))).toBe('manana')
+  })
+
+  it('16:00 ya es TARDE', () => {
+    expect(turnoDeTicket(enCierre('2026-09-01T16:00:00-06:00'))).toBe('tarde')
+  })
+
+  it('las 02:00 son TARDE, de la jornada ANTERIOR', () => {
+    // La jornada va 07→07, así que las 2 AM todavía son el turno de la tarde del día previo.
+    expect(turnoDeTicket(enCierre('2026-09-02T02:00:00-06:00'))).toBe('tarde')
+    expect(businessDateDe('2026-09-02T02:00:00-06:00')).toBe('2026-09-01')
+  })
+
+  it('07:00 abre la mañana; 06:59 todavía es la tarde de ayer', () => {
+    expect(turnoDeTicket(enCierre('2026-09-01T07:00:00-06:00'))).toBe('manana')
+    expect(turnoDeTicket(enCierre('2026-09-01T06:59:00-06:00'))).toBe('tarde')
+  })
+
+  it('sin fecha_cierra se cae a fecha_registra (hoy SIEMPRE, la columna viene NULL)', () => {
+    expect(turnoDeTicket({ fecha_cierra: null, fecha_registra: '2026-09-01T13:00:00-06:00' })).toBe('manana')
+    expect(turnoDeTicket({ fecha_cierra: null, fecha_registra: '2026-09-01T20:00:00-06:00' })).toBe('tarde')
+  })
+})
+
+describe('ventasPorTurno', () => {
+  it('INVARIANTE: mañana + tarde = el neto del día', () => {
+    const tickets = [
+      ticket({ id: 'a', fecha_registra: '2026-09-01T09:00:00-06:00', valor_servido_crc: 10000 }),
+      ticket({ id: 'b', fecha_registra: '2026-09-01T15:59:00-06:00', valor_servido_crc: 5000 }),
+      ticket({ id: 'c', fecha_registra: '2026-09-01T16:00:00-06:00', valor_servido_crc: 7000 }),
+      ticket({ id: 'd', fecha_registra: '2026-09-02T02:00:00-06:00', valor_servido_crc: 3000 }),
+    ]
+    const t = ventasPorTurno(tickets)
+    expect(t.manana).toMatchObject({ neto: 15000, tickets: 2 })
+    expect(t.tarde).toMatchObject({ neto: 10000, tickets: 2 })
+
+    const neto = tickets.reduce((s, x) => s + (x.valor_servido_crc ?? 0), 0)
+    expect(t.manana.neto + t.tarde.neto).toBe(neto)
+    expect(t.manana.tickets + t.tarde.tickets).toBe(tickets.length)
+  })
+
+  it('la fecha de cierre manda sobre la de registro', () => {
+    // Mesa abierta 15:50, cobrada 16:30 → es del turno TARDE.
+    const t = ventasPorTurno([ticket({
+      fecha_registra: '2026-09-01T15:50:00-06:00',
+      fecha_cierra:   '2026-09-01T16:30:00-06:00',
+      valor_servido_crc: 9000,
+    })])
+    expect(t.tarde.neto).toBe(9000)
+    expect(t.manana.neto).toBe(0)
+  })
+
+  it('jornada vacía: los dos turnos en cero', () => {
+    expect(ventasPorTurno([])).toEqual({
+      manana: { neto: 0, tickets: 0, pax: 0 }, tarde: { neto: 0, tickets: 0, pax: 0 },
+    })
+  })
+})
+
+// ── El login del PoS → la persona ──────────────────────────────────────────────
+
+describe('nombreSalonero', () => {
+  const nombres = { '026': 'MAXO', '027': 'GUILLE' }
+
+  it('con el empleado cargado, su nombre', () => {
+    expect(nombreSalonero('026', nombres)).toBe('MAXO')
+  })
+
+  it('sin cargar, el número MARCADO — no desaparece del ranking', () => {
+    expect(nombreSalonero('031', nombres)).toBe('031 · sin asignar')
+    expect(esSinAsignar(nombreSalonero('031', nombres))).toBe(true)
+    expect(esSinAsignar('MAXO')).toBe(false)
+  })
+
+  it('un full_name vacío cuenta como sin asignar', () => {
+    expect(nombreSalonero('026', { '026': '   ' })).toBe('026 · sin asignar')
+  })
+
+  it('el día usa el nombre como clave del salonero', () => {
+    const a = armarDia('2026-09-01', [
+      ticket({ id: 'a', salonero_login: '026' }),
+      ticket({ id: 'b', salonero_login: '099' }),
+      ticket({ id: 'c', salonero_login: null, registrado_por: 'cajero' }),
+    ], [], '2026-09-01', nombres)
+    expect(Object.keys(a.dia.saloneros).sort())
+      .toEqual(['099 · sin asignar', 'Caja', 'MAXO'])
+  })
+
+  it('sin mapa, todos salen por número marcado (no se inventa un nombre)', () => {
+    const a = armarDia('2026-09-01', [ticket()], [], '2026-09-01')
+    expect(Object.keys(a.dia.saloneros)).toEqual(['026 · sin asignar'])
   })
 })
 
@@ -305,7 +461,7 @@ describe('calidadPaxPorSalonero', () => {
       ticket({ id: 'd', pax_nativo: 0, pax_articulo: 0, pax_alerta: 'sin_pax' }),
     ])
     expect(c).toHaveLength(1)
-    expect(c[0]).toMatchObject({ salonero: '026', mesas: 4 })
+    expect(c[0]).toMatchObject({ salonero: '026 · sin asignar', mesas: 4 })
     expect(c[0].pctPaxNativoCargado).toBe(50)      // 2 de 4 mesas
     expect(c[0].matchArticuloVsNativo).toBe(50)    // de las 2 con ambos, 1 coincide
   })
@@ -322,7 +478,12 @@ describe('calidadPaxPorSalonero', () => {
       ticket({ id: 'b', salonero_login: '027' }),
       ticket({ id: 'c', salonero_login: '027' }),
     ])
-    expect(c.map(x => x.salonero)).toEqual(['027', '026'])
+    expect(c.map(x => x.salonero)).toEqual(['027 · sin asignar', '026 · sin asignar'])
+  })
+
+  it('con el mapa cargado, la calidad del pax también sale por nombre', () => {
+    const c = calidadPaxPorSalonero([ticket({ salonero_login: '026' })], NOMBRES)
+    expect(c[0].salonero).toBe('MAXO')
   })
 })
 
@@ -377,7 +538,7 @@ describe('armarSnapshot', () => {
     expect(snap.fecha).toBe('2026-09-01')
     expect(snap.servicioEnCurso).toBe(true)
     expect(snap.dia.fileName).toBe('ndf 2026-09-01')
-    expect(Object.keys(snap.dia.saloneros).sort()).toEqual(['026', '027'])
+    expect(Object.keys(snap.dia.saloneros).sort()).toEqual(['026 · sin asignar', '027 · sin asignar'])
   })
 
   it('el acumulado del día es la suma del neto de los saloneros', () => {
@@ -390,7 +551,8 @@ describe('armarSnapshot', () => {
     expect(snap.porHora.map(h => h.hora)).toEqual([13, 20])
     expect(snap.historico.mismoDiaSemanaPasada).toBe(20000)
     expect(snap.historico.promedio4Semanas).toBe(30000)   // 20+30+40 / 3, el 0 no cuenta
-    expect(snap.calidadPax.map(c => c.salonero).sort()).toEqual(['026', '027'])
+    expect(snap.calidadPax.map(c => c.salonero).sort())
+      .toEqual(['026 · sin asignar', '027 · sin asignar'])
   })
 
   it('bruto, servicio, IVA y regalía viajan al lado del neto', () => {
@@ -429,5 +591,94 @@ describe('armarSnapshot', () => {
     })
     expect(conIva.iva).toBe(1560)
     expect(conIva.ivaPendiente).toBe(false)
+  })
+})
+
+// ── Canal: salón vs delivery ───────────────────────────────────────────────────
+
+describe('ventasPorCanal', () => {
+  it('parte el neto por el canal de cada factura, no por quién la cobró', () => {
+    const c = ventasPorCanal([
+      ticket({ id: 'a', canal: 'salon',    valor_servido_crc: 10000 }),
+      ticket({ id: 'b', canal: 'delivery', valor_servido_crc: 4000 }),
+      ticket({ id: 'c', canal: 'barra',    valor_servido_crc: 3000 }),
+      ticket({ id: 'd', canal: 'llevar',   valor_servido_crc: 1000 }),
+      ticket({ id: 'e', canal: null,       valor_servido_crc: 500 }),
+    ])
+    expect(c.delivery).toBe(4000)
+    // Barra, para llevar y sin canal son piso: todo lo que no es delivery cuenta como salón.
+    expect(c.salon).toBe(14500)
+  })
+
+  it('salón + delivery = el neto del día', () => {
+    const tickets = [
+      ticket({ id: 'a', canal: 'salon',    valor_servido_crc: 12000 }),
+      ticket({ id: 'b', canal: 'delivery', valor_servido_crc: 8000 }),
+    ]
+    const c = ventasPorCanal(tickets)
+    const a = armar('2026-09-01', tickets, [], '2026-09-01')
+    const neto = Object.values(a.dia.saloneros).reduce((s, v) => s + v.total, 0)
+    expect(c.salon + c.delivery).toBe(neto)
+    expect(a.canales).toEqual(c)
+  })
+})
+
+// ── Paridad con «Hoy»: las MISMAS funciones, sobre el día del PoS ──────────────
+//
+// No se reimplementa ninguna métrica: se arma el `DiaData` desde `pos_ndf` y se lo pasa a
+// `getDayStats`, `aggGeneral` y `aggSalonero` — las de `ventasUtils`, las que usa «Hoy». Estos
+// tests fijan que el día que sale del PoS es un ciudadano de primera para esas funciones.
+
+describe('paridad con las funciones de Hoy', () => {
+  const tickets = [
+    ticket({ id: 'a', salonero_login: '026', valor_servido_crc: 12000, pax_articulo: 4 }),
+    ticket({ id: 'b', numero_factura: '5002', salonero_login: '027',
+             valor_servido_crc: 8000, pax_articulo: 2 }),
+    ticket({ id: 'c', numero_factura: '5003', salonero_login: '111',
+             registrado_por: 'cajero', canal: 'delivery', valor_servido_crc: 5000 }),
+  ]
+  const lineas = [
+    linea({ ticket_id: 'a', familia: 3, monto: 9000, cantidad: 3 }),
+    linea({ ticket_id: 'a', familia: 5, monto: 3000, cantidad: 3, nombre: 'IMPERIAL',
+            codigo_producto: '200' }),
+    linea({ ticket_id: 'b', familia: 3, monto: 8000, cantidad: 2 }),
+    linea({ ticket_id: 'c', familia: 3, monto: 5000, cantidad: 1 }),
+  ]
+  const a = armar('2026-09-01', tickets, lineas, '2026-09-01')
+  const dias = { '2026-09-01': a.dia }
+
+  it('getDayStats da el total del restaurante, con caja adentro', () => {
+    const st = getDayStats(a.dia)
+    expect(st.ventaNeta).toBe(25000)
+    expect(st.delivery).toBe(5000)      // el delivery de la caja
+    expect(st.pax).toBe(6)              // el pax es solo de los meseros
+  })
+
+  it('aggGeneral separa salón de caja y `totalRest` sigue siendo el neto del día', () => {
+    const g = aggGeneral(['2026-09-01'], dias, a.pm)
+    expect(g.total).toBe(20000)         // solo meseros
+    expect(g.cajTotal).toBe(5000)
+    expect(g.cajDelivery).toBe(5000)
+    expect(g.totalRest).toBe(25000)
+    expect(g.promPax).toBeCloseTo(20000 / 6, 6)
+  })
+
+  it('aggSalonero saltea a la caja y da el Prom/PAX de cada mesero', () => {
+    expect(aggSalonero('Cajero turno mañana', ['2026-09-01'], dias, a.pm).total).toBe(0)
+    const s = aggSalonero('MAXO', ['2026-09-01'], dias, a.pm)
+    expect(s.total).toBe(12000)
+    expect(s.pax).toBe(4)
+    expect(s.promPax).toBe(3000)
+    expect(s.promPlato).toBe(3000)      // 9000 / 3 platos
+    expect(s.promBebida).toBe(1000)     // 3000 / 3 bebidas
+    expect(s.bebPax).toBe(0.75)
+  })
+
+  it('el ranking del día no lista a la caja ni al sistema', () => {
+    const enRanking = Object.entries(a.dia.saloneros)
+      .filter(([, v]) => !(v as CajeroDay).esCajero)
+      .map(([k]) => k)
+      .sort()
+    expect(enRanking).toEqual(['GUILLE', 'MAXO'])
   })
 })

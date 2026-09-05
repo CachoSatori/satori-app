@@ -147,6 +147,19 @@ export interface SnapshotEnVivo {
    * generador de ejemplo. La pantalla lo dice en pantalla en vez de asumirlo.
    */
   fuente?: 'pos' | 'simulado'
+
+  /**
+   * La jornada 07→07 partida por el corte de las 16:00 CR. Mañana + tarde = el neto del día.
+   * Opcional: el generador de ejemplo no lo trae.
+   */
+  turnos?: { manana: { neto: number; tickets: number; pax: number }
+             tarde:  { neto: number; tickets: number; pax: number } }
+
+  /**
+   * El neto partido en salón / delivery, **por el canal de cada factura**. El modelo del xls
+   * solo puede ver el delivery a través del cajero que lo cobró; el PoS lo sabe ticket a ticket.
+   */
+  canales?: { salon: number; delivery: number }
 }
 
 // ── Derivados live-only ─────────────────────────────────────────────────────────

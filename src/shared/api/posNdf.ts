@@ -54,6 +54,8 @@ export function businessDateDe(fechaRegistra: string): string {
 export interface TicketNdfRow {
   numero_factura:    string
   fecha_registra:    string
+  /** Cuándo se COBRÓ la cuenta. Define el turno. Hoy viene NULL: el extractor no la trae. */
+  fecha_cierra:      string | null
   canal:             string | null
   salonero_login:    string | null
   registrado_por:    string
@@ -85,7 +87,7 @@ export interface LineaNdfRow {
 export interface TicketNdfConId extends TicketNdfRow { id: string }
 
 const COLS_TICKET =
-  'id, numero_factura, fecha_registra, canal, salonero_login, registrado_por, turno, ' +
+  'id, numero_factura, fecha_registra, fecha_cierra, canal, salonero_login, registrado_por, turno, ' +
   'con_servicio, servicio_crc, total_crc, valor_servido_crc, iva_crc, regalia_crc, ' +
   'descuento_crc, clase_ingreso, pax, pax_nativo, pax_articulo, pax_alerta'
 
@@ -185,4 +187,29 @@ export async function getMesasAbiertas(local: string): Promise<MesaAbiertaRow[]>
     .order('updated_at', { ascending: true })
   if (error) throw new Error(error.message)
   return (data ?? []) as unknown as MesaAbiertaRow[]
+}
+
+// ── Saloneros: el login del PoS → la persona ───────────────────────────────────────────────
+
+/**
+ * `employees.pos_login` → `full_name`. Es el puente que convierte un «026» en «MAXO», el mismo
+ * rol que cumple `biotime_emp_code` para el reloj.
+ *
+ * `pos_login` la agregó la mig 062 y todavía no está en `supabase.gen.ts`, así que va por el
+ * mismo cliente destipado que las tablas `pos_ndf_*`. Un login sin cargar en Empleados NO se
+ * inventa: la pantalla lo muestra con el número y marcado «sin asignar».
+ */
+export async function getSaloneroNombres(): Promise<Record<string, string>> {
+  const { data, error } = await sb
+    .from('employees')
+    .select('pos_login, full_name')
+    .not('pos_login', 'is', null)
+  if (error) throw new Error(error.message)
+  const out: Record<string, string> = {}
+  for (const e of (data ?? []) as unknown as { pos_login: string | null; full_name: string | null }[]) {
+    const login = (e.pos_login ?? '').trim()
+    const nombre = (e.full_name ?? '').trim()
+    if (login && nombre) out[login] = nombre
+  }
+  return out
 }

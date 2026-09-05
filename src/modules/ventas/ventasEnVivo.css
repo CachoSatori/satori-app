@@ -474,3 +474,42 @@
   border-color: #e4cfa8;
   background: #fbf7ef;
 }
+
+/* ── Selector de jornada y sello de fuente (En vivo) ───────────────────────── */
+.apos-tag-ok {
+  background: rgba(46, 160, 67, .14);
+  color: #2ea043;
+  border: 1px solid rgba(46, 160, 67, .35);
+  border-radius: 999px;
+  padding: .15rem .6rem;
+  font-size: .72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.apos-fecha {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .78rem;
+  opacity: .85;
+}
+.apos-fecha input {
+  font: inherit;
+  padding: .2rem .4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border, #30363d);
+  background: var(--bg-input, transparent);
+  color: inherit;
+}
+.apos-btn-hoy {
+  font: inherit;
+  font-size: .75rem;
+  margin-left: .5rem;
+  padding: .2rem .6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border, #30363d);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.apos-btn-hoy:hover { border-color: currentColor; }

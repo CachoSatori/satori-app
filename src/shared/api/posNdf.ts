@@ -157,3 +157,32 @@ export async function getNetoPorJornada(
   }
   return out
 }
+
+// ── Mesas abiertas (snapshot del PoS, "ahora") ─────────────────────────────────────────────
+
+export interface MesaAbiertaRow {
+  clave:          string
+  numero_factura: string | null
+  id_pedido:      string | null
+  mesa:           string | null
+  salonero_login: string | null
+  canal:          string | null
+  pax:            number | null
+  pax_alerta:     string | null
+  updated_at:     string
+}
+
+/**
+ * Lo que está abierto AHORA en el local. No lleva filtro de fecha porque no es historial: el
+ * agente pisa la tabla entera en cada poll y borra la mesa que se cerró. Por eso solo tiene
+ * sentido mirarla cuando se está viendo el día en curso.
+ */
+export async function getMesasAbiertas(local: string): Promise<MesaAbiertaRow[]> {
+  const { data, error } = await sb
+    .from('pos_ndf_open')
+    .select('clave, numero_factura, id_pedido, mesa, salonero_login, canal, pax, pax_alerta, updated_at')
+    .eq('local', local)
+    .order('updated_at', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as MesaAbiertaRow[]
+}

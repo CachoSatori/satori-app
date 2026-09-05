@@ -1,10 +1,10 @@
 import type { DiaData, ProductMap, SaloneroDay } from '../../shared/types/ventas'
 import {
-  businessDateDe, getLineasDeTickets, getNetoPorJornada, getTicketsJornada,
-  type LineaNdfRow, type TicketNdfConId,
+  businessDateDe, getLineasDeTickets, getMesasAbiertas, getNetoPorJornada, getTicketsJornada,
+  HORA_CORTE_JORNADA, type LineaNdfRow, type TicketNdfConId,
 } from '../../shared/api/posNdf'
 import { FAMILIAS_VALOR_SERVIDO } from '../../shared/ndf/mapTicket'
-import { fechaServicioCR, horaCorteCR, servicioEnCursoCR } from './ventasEnVivoMock'
+import { horaCorteCR } from './ventasEnVivoMock'
 import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type LocalId,
          type SnapshotEnVivo, type VentaPorHora } from './ventasEnVivoTypes'
 
@@ -332,24 +332,62 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
     // El PoS informa el IVA en 0 en todo el histórico. Se marca PENDIENTE en vez de mostrar
     // un cero que se lee como "no hubo impuesto" — y NUNCA se deriva de neto × 0,13.
     ivaPendiente: armado.iva === 0,
+    // Todo lo de acá salió de `pos_ndf_*`. El generador de ejemplo no pasa por esta función.
+    fuente: 'pos',
   }
+}
+
+// ── Qué jornada se está mirando ────────────────────────────────────────────────────────────
+
+/**
+ * La jornada en curso, con la regla del negocio: **07:00 → 07:00 hora de Costa Rica**.
+ *
+ * ⚠️ NO se usa el `fechaServicioCR()` del mock. Ese decide con un horario de atención
+ * (11:00–23:00) y devuelve "ayer" entre las 00:00 y las 11:00 — o sea que a las 09:00 de la
+ * mañana pedía el día equivocado. La jornada del negocio y el horario de atención son dos
+ * cosas distintas, y la que manda acá es la primera: es la misma con la que se filtran los
+ * tickets (`ventanaJornada`) y la que usa el cuadre contra el reporte del PoS.
+ */
+export function jornadaActualCR(ahora: Date = new Date()): string {
+  const cr = new Date(ahora.getTime() - 6 * 3_600_000 - HORA_CORTE_JORNADA * 3_600_000)
+  return cr.toISOString().slice(0, 10)
+}
+
+/** ¿La jornada que se está mirando es la de hoy? Solo entonces hay "en vivo" que refrescar. */
+export function esJornadaEnCurso(fecha: string, ahora: Date = new Date()): boolean {
+  return fecha === jornadaActualCR(ahora)
 }
 
 // ── La carga (I/O) ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Misma firma que el mock: la pantalla cambia UNA línea de import y no se entera del resto.
+ * Misma firma que el mock (más una fecha opcional): la pantalla no se entera del resto.
+ *
+ * `fecha` permite mirar CUALQUIER jornada ya cargada — es lo que hace falta para cuadrar
+ * contra el reporte del PoS sin esperar a que el día de hoy tenga ventas. Sin fecha, la
+ * jornada en curso.
+ *
+ * **Nunca simula.** Un día sin ventas devuelve un snapshot en cero, y la pantalla lo dice.
  */
-export async function getSnapshotEnVivo(local: LocalId): Promise<SnapshotEnVivo> {
-  const fecha = fechaServicioCR()
-  const tickets = await getTicketsJornada(local, fecha)
-  const lineas  = await getLineasDeTickets(tickets.map(t => t.id))
-  const neto4Sem = await getNetoPorJornada(local, jornadasComparables(fecha))
+export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise<SnapshotEnVivo> {
+  const ahora = new Date()
+  const jornada = fecha ?? jornadaActualCR(ahora)
+  const enCurso = esJornadaEnCurso(jornada, ahora)
 
-  return armarSnapshot({
-    local, fecha, tickets, lineas, neto4Sem,
-    ahora: new Date(), enServicio: servicioEnCursoCR(),
+  const tickets = await getTicketsJornada(local, jornada)
+  const lineas  = await getLineasDeTickets(tickets.map(t => t.id))
+  const neto4Sem = await getNetoPorJornada(local, jornadasComparables(jornada))
+  // El snapshot de mesas abiertas es de AHORA: mirando un día viejo no significa nada.
+  const abiertas = enCurso ? await getMesasAbiertas(local) : []
+
+  const snap = armarSnapshot({
+    local, fecha: jornada, tickets, lineas, neto4Sem, ahora, enServicio: enCurso,
   })
+  return {
+    ...snap,
+    mesasAbiertas: enCurso ? abiertas.length : undefined,
+    paxAbierto:    enCurso ? abiertas.reduce((s, m) => s + n(m.pax), 0) : undefined,
+  }
 }
 
 export { horaCorteCR, businessDateDe }

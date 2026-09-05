@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fi, getDayStats, topProds } from './ventasUtils'
 import VentasEnVivoRitmo from './VentasEnVivoRitmo'
-import { getSnapshotEnVivo, horaCorteCR, REFRESH_MS } from './ventasEnVivoDatos'
+import { getSnapshotEnVivo, horaCorteCR, jornadaActualCR, REFRESH_MS } from './ventasEnVivoDatos'
 import {
   LOCALES, mixPorCategoria, prodsDelDia, ticketsDelDia, ticketPromedioDe,
   variacionPct, paxEsConfiable, UMBRAL_PAX_CONFIABLE,
@@ -58,10 +58,13 @@ export default function VentasEnVivo() {
   const [error, setError]     = useState<string | null>(null)
   const [ahora, setAhora]     = useState(() => Date.now())
   const [prodPor, setProdPor] = useState<'monto' | 'unidades'>('monto')
+  // La jornada que se está mirando. Vacío = la de hoy. Poder pedir un día pasado es lo que
+  // permite CUADRAR contra el reporte del PoS sin esperar a que el día de hoy tenga ventas.
+  const [fecha, setFecha] = useState<string>('')
 
-  const cargar = useCallback(async (l: LocalId) => {
+  const cargar = useCallback(async (l: LocalId, f: string) => {
     try {
-      setSnap(await getSnapshotEnVivo(l))
+      setSnap(await getSnapshotEnVivo(l, f || undefined))
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron leer las ventas')
@@ -69,14 +72,16 @@ export default function VentasEnVivo() {
   }, [])
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { cargar(local) }, [cargar, local])
+  useEffect(() => { cargar(local, fecha) }, [cargar, local, fecha])
 
   // «Siempre actualizado»: se vuelve a pedir cada 30 s. El `setAhora` del mismo tick es lo que
-  // hace avanzar el «hace X s» aunque el snapshot no cambie.
+  // hace avanzar el «hace X s» aunque el snapshot no cambie. Mirando un día cerrado no hay nada
+  // que refrescar, así que el intervalo no se arma.
   useEffect(() => {
-    const id = setInterval(() => { setAhora(Date.now()); cargar(local) }, REFRESH_MS)
+    if (fecha) return
+    const id = setInterval(() => { setAhora(Date.now()); cargar(local, fecha) }, REFRESH_MS)
     return () => clearInterval(id)
-  }, [cargar, local])
+  }, [cargar, local, fecha])
 
   // El sello corre más fino que el refresco, o el texto quedaría clavado en «hace 30 s».
   useEffect(() => {
@@ -122,24 +127,70 @@ export default function VentasEnVivo() {
   const maxCat  = Math.max(...mix.map(c => c.monto), 1)
   const maxProd = Math.max(...prods.map(p => (prodPor === 'monto' ? p.m : p.q)), 1)
 
+  // Sin una sola factura cerrada en la jornada. No es un error ni algo que rellenar: es que
+  // todavía no se vendió nada (o que el agente aún no empujó el primer lote).
+  const sinVentas = tickets === 0 && stats.ventaNeta === 0
+
   return (
     <div className="vt-section">
       <div className="apos">
 
-        {/* ── Aviso: esto todavía no es un dato ─────────────────────────────── */}
-        <div className="apos-panel is-preliminar">
+        {/* ── De dónde salen estos números ──────────────────────────────────── */}
+        <div className="apos-panel">
           <div className="apos-panel-hd">
             <h3>En vivo</h3>
-            <span className="apos-tag-pendiente">Preliminar — datos simulados</span>
+            <span className="apos-tag-ok">
+              {snap.fuente === 'pos' ? 'Datos del PoS · pos_ndf' : 'Datos simulados'}
+            </span>
+            <span className="apos-spacer" />
+            {/* Ver una jornada pasada: lo que permite cuadrar contra el reporte del PoS. */}
+            <label className="apos-fecha">
+              Jornada{' '}
+              <input
+                type="date"
+                value={fecha}
+                max={jornadaActualCR()}
+                onChange={e => setFecha(e.target.value)}
+              />
+            </label>
+            {fecha && (
+              <button type="button" className="apos-btn-hoy" onClick={() => setFecha('')}>
+                Volver a hoy
+              </button>
+            )}
           </div>
           <p className="apos-nota" style={{ marginBottom: 0 }}>
-            Todavía no hay lectura del PoS. Lo que se ve sale de un generador local con la
-            <strong> misma forma</strong> que el import de xls (<code>DiaData</code>), para poder
-            discutir la pantalla antes de cablear. El total del día, el pax y el mix se calculan
-            con las mismas funciones que <strong>Hoy</strong> y <strong>Mix Ventas</strong>: cuando
-            llegue el feed real, cambia de dónde salen los datos, no cómo se leen.
+            Leído de <code>pos_ndf_tickets</code> / <code>pos_ndf_ticket_lines</code> del local,
+            por <strong>jornada de 07:00 a 07:00</strong>. Neto = <code>valor_servido_crc</code>,
+            bruto = <code>total_crc</code>, servicio = <code>servicio_crc</code>. El total, el pax
+            y el mix se calculan con las mismas funciones que <strong>Hoy</strong> y{' '}
+            <strong>Mix Ventas</strong>. <strong>No se simula nada</strong>: una jornada sin
+            ventas se muestra en cero.
           </p>
         </div>
+
+        {/* ── Jornada sin ventas: se dice, no se rellena ─────────────────────── */}
+        {sinVentas && (
+          <div className="apos-panel">
+            <p className="apos-nota" style={{ marginBottom: 0 }}>
+              <strong>Sin ventas todavía en esta jornada</strong> ({snap.fecha}). No hay ninguna
+              factura cerrada en <code>pos_ndf_tickets</code> para el rango 07:00–07:00. Si
+              esperabas ver movimiento, revisá que el agente del PoS esté corriendo; para validar
+              la pantalla con datos reales, elegí una jornada pasada en el selector de arriba.
+            </p>
+          </div>
+        )}
+
+        {/* ── Mesas abiertas ahora mismo ─────────────────────────────────────── */}
+        {snap.mesasAbiertas !== undefined && snap.mesasAbiertas > 0 && (
+          <div className="apos-panel">
+            <p className="apos-nota" style={{ marginBottom: 0 }}>
+              <strong>{snap.mesasAbiertas} mesa(s) abiertas</strong> ahora
+              {snap.paxAbierto ? ` · ${snap.paxAbierto} pax sentados` : ''} — todavía sin cobrar,
+              así que <strong>no</strong> entran en las cifras de arriba.
+            </p>
+          </div>
+        )}
 
         {/* ── Barra: local + frescura ───────────────────────────────────────── */}
         <div className="apos-bar">

@@ -4,7 +4,8 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
 import {
   armarDia, armarSnapshot, calidadPaxPorSalonero, claveSalonero, compararContra,
-  etiquetaNoMesero, horaCRDe, jornadasComparables, paxDelTicket, ritmoPorHora,
+  esJornadaEnCurso, etiquetaNoMesero, horaCRDe, jornadaActualCR, jornadasComparables,
+  paxDelTicket, ritmoPorHora,
 } from './ventasEnVivoDatos'
 import { businessDateDe, ventanaJornada } from '../../shared/api/posNdf'
 import { mixPorCategoria, ticketsDelDia } from './ventasEnVivoTypes'
@@ -191,6 +192,41 @@ describe('claveSalonero / etiquetaNoMesero', () => {
   })
 })
 
+// ── La jornada que se mira: 07:00 → 07:00, NO el horario de atención ───────────
+
+describe('jornadaActualCR', () => {
+  it('usa el corte de las 07:00 CR, no el horario de atención del mock (11–23)', () => {
+    // 09:00 CR: el mock decía "ayer" porque el local no había abierto. La jornada del
+    // NEGOCIO ya es la de hoy — ese era el bug: a las 9 de la mañana pedía el día equivocado.
+    expect(jornadaActualCR(new Date('2026-09-02T15:00:00Z'))).toBe('2026-09-02')  // 09:00 CR
+  })
+
+  it('antes de las 07:00 sigue siendo la jornada de ayer', () => {
+    expect(jornadaActualCR(new Date('2026-09-02T11:00:00Z'))).toBe('2026-09-01')  // 05:00 CR
+    expect(jornadaActualCR(new Date('2026-09-02T12:59:00Z'))).toBe('2026-09-01')  // 06:59 CR
+    expect(jornadaActualCR(new Date('2026-09-02T13:00:00Z'))).toBe('2026-09-02')  // 07:00 CR
+  })
+
+  it('la madrugada del servicio cuenta al día anterior', () => {
+    expect(jornadaActualCR(new Date('2026-09-02T07:30:00Z'))).toBe('2026-09-01')  // 01:30 CR
+  })
+
+  it('es la MISMA regla con la que se filtran los tickets', () => {
+    // `businessDateDe` decide a qué jornada pertenece un ticket; `jornadaActualCR`, cuál se
+    // está mirando. Si divergieran, la pantalla pediría un rango y mostraría otro.
+    const t = '2026-09-02T01:30:00-06:00'
+    expect(businessDateDe(t)).toBe(jornadaActualCR(new Date(t)))
+  })
+})
+
+describe('esJornadaEnCurso', () => {
+  it('solo la de hoy está en curso', () => {
+    const ahora = new Date('2026-09-02T15:00:00Z')   // 09:00 CR → jornada 2026-09-02
+    expect(esJornadaEnCurso('2026-09-02', ahora)).toBe(true)
+    expect(esJornadaEnCurso('2026-09-01', ahora)).toBe(false)
+  })
+})
+
 // ── Una sola fuente de verdad para las familias del neto ───────────────────────
 
 describe('FAMILIAS_NETO', () => {
@@ -367,6 +403,22 @@ describe('armarSnapshot', () => {
     expect(snap.ivaPendiente).toBe(true)
     // 25.000 de neto × 0,13 = 3.250. Ese número no aparece por ningún lado.
     expect(snap.iva).toBe(0)
+  })
+
+  it('el snapshot dice que la fuente es el PoS, no el simulador', () => {
+    expect(snap.fuente).toBe('pos')
+  })
+
+  it('una jornada sin ventas da CERO, nunca datos inventados', () => {
+    const vacio = armarSnapshot({
+      local: 'santa-teresa', fecha: '2026-09-01', tickets: [], lineas: [], neto4Sem: {},
+      ahora: new Date('2026-09-02T02:00:00Z'), enServicio: true,
+    })
+    expect(vacio.dia.saloneros).toEqual({})
+    expect(vacio.porHora).toEqual([])
+    expect(vacio.bruto).toBe(0)
+    expect(vacio.proyeccionCierre).toBe(0)
+    expect(vacio.fuente).toBe('pos')
   })
 
   it('con IVA real informado por el PoS, deja de estar pendiente', () => {

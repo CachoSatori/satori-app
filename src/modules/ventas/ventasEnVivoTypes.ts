@@ -137,6 +137,16 @@ export interface SnapshotEnVivo {
    * calcular un impuesto que nadie cobró sería inventar plata (SPEC-valor-servido-regalias).
    */
   ivaPendiente?: boolean
+
+  /** Mesas abiertas AHORA (snapshot de `pos_ndf_open`). Solo cuando se mira el día en curso. */
+  mesasAbiertas?: number
+  /** Comensales sentados en esas mesas. */
+  paxAbierto?:    number
+  /**
+   * De dónde salieron los números. `'pos'` = leídos de `pos_ndf_*`; `'simulado'` = el
+   * generador de ejemplo. La pantalla lo dice en pantalla en vez de asumirlo.
+   */
+  fuente?: 'pos' | 'simulado'
 }
 
 // ── Derivados live-only ─────────────────────────────────────────────────────────

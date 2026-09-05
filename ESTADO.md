@@ -3,9 +3,9 @@
 ## ⚡ ARRANQUE — foto real del repo (se REEMPLAZA en cada entrega, no se acumula)
 **Al día: 2026-08-21**
 
-- Punteros: `staging = origin/staging = 7ef7664` (F1c) · `origin/main = 3e54aa4` (PROD, intacto) · trabajo en `staging`. (`main` local 9 atrás = cosmético.)
+- Punteros: `staging = origin/staging = 9d477ba` (validación piloto v3) · `origin/main = 3e54aa4` (PROD, intacto) · trabajo en `staging`. (`main` local 9 atrás = cosmético.)
 - Sagrados (blob): tipCalculations `7603ba5a` · cashUtils `b597c697` · posFiscal `a3fd445f` (posFiscal solo en staging).
-- Migraciones: staging `040–058` · prod `040–054` · próximo libre `059`.
+- Migraciones: staging `040–062` · prod `040–054` · próximo libre `063`.
 - EN VIVO: BioTime Fase 1 — el agente en la PC de ST drenó 22.403 marcas (`last_id=213972`, ~68% mapeadas, 15 códigos sin mapear). F1d sin arrancar (`punch_exceptions`=0, `work_days source='biotime'`=0).
 - Sigue, en orden: (1) Task Scheduler del agente en la PC de ST · (2) decisión identidad BioTime §7 (5 SELECT → decidir → mapear + Angela) · (3) F1d. Todo lo que toca plata/esquema/prod = firma.
 - Detalle: SPECs/handoffs → PROYECTO claude.ai (no en el repo) · historial → ESTADO-ARCHIVO.md · fases → ROADMAP.md · backlog → PROMPT-CONTINUACION.md.
@@ -74,7 +74,7 @@ Fase 2 · realtime · offline · Bandeja unificada + Revisión de inventario · 
 | Entorno | Ledger (`schema_migrations`) |
 |---|---|
 | **PROD** | **✅ 39 filas — contiguo `040–054`** (001–008, 0090, 0095, 010–021, 038–054). **0 pendientes.** |
-| **STAGING** | **✅ rango 040–058** (055 F0 · 056 U0a · 057 F1a · 058 U0b, por `db push`, registradas) + PoS (022–037). |
+| **STAGING** | **✅ rango 040–062** (055 F0 · 056 U0a · 057 F1a · 058 U0b · 059 F1d · 060 pago idempotente · 061 hora habitual · **062 PoS ndf**, por `db push`, registradas) + PoS (022–037). |
 
 - **047/053/054 aplicadas a prod el 2026-08-17** con `db push --include-all` desde un worktree linkeado a prod.
   La **047 entró fuera de orden** (después de la 052 ya aplicada) y `--include-all` lo resolvió **sin ningún
@@ -88,7 +88,18 @@ Fase 2 · realtime · offline · Bandeja unificada + Revisión de inventario · 
 - **`055 employees_payroll_master`** (Salarios Fase 0): **aplicada a STAGING el 2026-08-18 con `db push`** (aditiva
   e idempotente, sin backfill, sin tocar RLS ni el enum `user_role`). **NO está en prod.**
 - **056 U0a (núcleo nómina) · 057 F1a (esquema de marcas BioTime) · 058 U0b (ciclo de pago + Excel homebanking):** aplicadas a STAGING (`db push`). **NO en prod.**
-- **Próximo número libre: `059`.** ⚠️ La rama `metas_personales` también reclamaba
+- **`062 pos_ndf_ingesta`** (puente del PoS "Nube de Fuego", A1): **aplicada a STAGING el 2026-09-04
+  con `db push`** desde la rama `deploy/pos-bridge-staging` (= `feat/pos-bridge-a3`, `57b0aa0`).
+  Aditiva e idempotente: crea las 4 tablas `pos_ndf_*` + `employees.pos_login` (unique parcial, sin
+  backfill) y **no altera ninguna tabla existente** — el único `alter` sobre algo que ya existía es
+  el `add column if not exists`. RLS: SELECT para `owner/manager/contador`, **cero policies de
+  escritura** (solo la escribe la Edge `ingest-ndf` con service-role). **NO está en prod** y la rama
+  **no se mergea**: `main` con Branching ON auto-aplicaría a la base de producción.
+  Verificada antes de aplicar sobre un Postgres 16 descartable (2 corridas, misma foto del esquema).
+- **059 · 060 · 061 ya estaban en el ledger de staging** al 2026-09-04: `supabase migration list --linked`
+  las listó en la columna **Remote** — está confirmado, no es una inferencia del dry-run. Lo único que
+  no se leyó son las **fechas exactas de aplicación** de esas tres.
+- **Próximo número libre: `063`.** ⚠️ La rama `metas_personales` también reclamaba
   051/052/053 → **renumerar** antes de traerla.
 
 ## (d) Build por módulo

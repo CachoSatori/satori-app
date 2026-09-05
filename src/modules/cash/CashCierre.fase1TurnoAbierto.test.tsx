@@ -38,6 +38,12 @@ vi.mock('../../shared/api/cash', () => ({
 const { saveCierreParcial, updateCierreCompleto, getCierresDia } = api
 vi.mock('../../shared/api/exchangeRate', () => ({ getCurrentRate: vi.fn(async () => 600) }))
 vi.mock('../../shared/api/tips', () => ({ getTipPayoutsSince: vi.fn(async () => []) }))
+vi.mock('../../shared/api/posNdf', () => ({
+  // El cierre pre-carga las ventas del PoS. Acá no hay `pos_ndf` ni Supabase: el doble devuelve
+  // los dos turnos en cero, que es exactamente el caso "sin datos del PoS" — el cierre tiene que
+  // comportarse igual que siempre (carga manual) y estos tests fijan eso.
+  getVentasPorTurno: vi.fn(async () => ({ mediodia: { crc: 0, usd: 0 }, noche: { crc: 0, usd: 0 } })),
+}))
 vi.mock('../../shared/hooks/useAuth', () => ({
   useAuth: () => ({ profile: { id: 'u1', role: 'manager', full_name: 'Dueña' } }),
 }))

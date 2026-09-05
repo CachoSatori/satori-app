@@ -19,6 +19,10 @@ import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
 import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
+import { getVentasPorTurno, type VentasPorTurnoPoS } from '../../shared/api/posNdf'
+import {
+  desfasesPoS, notasConDesfasePoS, TOLERANCIA_CRC, TOLERANCIA_USD,
+} from './cierreAutofillPos'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
 import { ajusteTipoPorSigno } from './ajusteTipo'
@@ -158,6 +162,44 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
   const efRealN = Math.round(N(vnCRC) - N(vnUSD) * tc)
 
+  // ── PRE-CARGA DESDE EL PoS (Track B) ────────────────────────────────────────
+  // Lo que el PoS dice que vendió cada turno de caja de la jornada 7→7. Sirve para DOS cosas y
+  // para ninguna más: arrancar los campos con un número en vez de en blanco, y dejar escrito el
+  // desfase si el cajero declara otra cosa.
+  //
+  // NO entra en `deberia`, ni en los gates, ni en el sellado: todo eso sigue leyendo el CAMPO.
+  // Con el mismo input, este cierre da exactamente lo que daba antes.
+  //
+  // ⚠️ Si `pos_ndf` no responde —no está la tabla, no hay permiso, se cayó la red— se cae al
+  // comportamiento de siempre: carga manual, campos vacíos, cero ruido. El cierre del día NUNCA
+  // se puede quedar trabado porque el puente del PoS no esté.
+  const [esperadoPos, setEsperadoPos] = useState<VentasPorTurnoPoS | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    // Sin `setEsperadoPos(null)` sincrónico acá a propósito: dispararía un render en cascada
+    // (y el lint lo marca). Las dos ramas de abajo asignan siempre, así que el único momento
+    // con el dato de la fecha anterior en pantalla es mientras la consulta viaja.
+    getVentasPorTurno(fecha)
+      .then(v => {
+        if (cancelled) return
+        setEsperadoPos(v)
+        // Pre-llenar es ARRANCAR el campo, no imponerlo. Se hace UNA VEZ POR FECHA —el efecto
+        // solo corre al cambiar `fecha`—, así que lo que el cajero escriba después no se lo
+        // pisa nadie. Un turno que el PoS reporta en cero deja el campo VACÍO, no en 0: un 0
+        // tipeado es una afirmación («no se vendió nada») y esa la hace el cajero, no el PoS
+        // — es justo lo que distingue `ventasGateEstado` entre 'vacio' y 'cero'.
+        //
+        // Con el mediodía ya sellado esto es inerte: `vmCRC`/`vmUSD` no los lee nadie una vez
+        // que existe `parcial` (la matemática usa `parcial.vm_*` y el formulario no se pinta).
+        setVmCRC(v.mediodia.crc || '')
+        setVmUSD(v.mediodia.usd || '')
+        setVnCRC(v.noche.crc || '')
+        setVnUSD(v.noche.usd || '')
+      })
+      .catch(() => { if (!cancelled) setEsperadoPos(null) })
+    return () => { cancelled = true }
+  }, [fecha])
+
   // Separaciones
   const [sepDiariaCRC,  setSepDiariaCRC]  = useState<number | ''>('')
   const [sepDiariaUSD,  setSepDiariaUSD]  = useState<number | ''>('')
@@ -226,6 +268,14 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const ajusteTipoDerivado = ajusteTipoPorSigno(diferencia, difUSD)
   const [ajusteMotivo, setAjusteMotivo] = useState('')
   const [notas,        setNotas]        = useState('')
+
+  // Lo declarado contra lo que el PoS esperaba. Del mediodía manda lo SELLADO cuando ya está
+  // sellado: es el número que firmó el cajero, no el que quedó en un campo que ya nadie mira.
+  // Esto no bloquea ni corrige nada — se escribe en las notas y ahí queda.
+  const desfases = desfasesPoS(esperadoPos, {
+    mediodia: { crc: parcial ? parcial.vm_crc : N(vmCRC), usd: vmUSDFromParcial },
+    noche:    { crc: N(vnCRC), usd: N(vnUSD) },
+  })
 
   // CAMBIO A — cerrar con ventas en ₡0: confirmación explícita por fase (checkbox).
   const [confirmVentasCeroM, setConfirmVentasCeroM] = useState(false)
@@ -346,7 +396,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         diferencia_crc:       diferencia ?? 0,
         ajuste_tipo:          requiresAjuste ? ajusteTipoDerivado : '',
         ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
-        notas,
+        // Las notas de la persona, con el desfase PoS↔declarado pegado al final si lo hubo.
+        // Es TESTIGO, no control: ningún monto del cierre sale de acá.
+        notas: notasConDesfasePoS(notas, desfases),
         tipo_cambio:          tc,
       })
       // Fase 3 — registrar las ventas en EFECTIVO en el ledger. ES PARTE ESENCIAL del
@@ -634,9 +686,11 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
               <Row2>
                 <Field label={postCorte ? 'Ventas en efectivo BRUTAS ₡ (sin restar propinas)' : 'Ventas PoS ₡'}>
                   <MontoInput prefix="₡" value={vmCRC} onChange={setVmCRC} />
+                  <EsperadoPoS monto={esperadoPos?.mediodia.crc} moneda="CRC" declarado={N(vmCRC)} />
                 </Field>
                 <Field label={`Dólares físicos $ → ₡${N(vmUSD) > 0 ? (N(vmUSD)*tc).toLocaleString('es-CR') : '—'}`}>
                   <MontoInput prefix="$" value={vmUSD} onChange={setVmUSD} />
+                  <EsperadoPoS monto={esperadoPos?.mediodia.usd} moneda="USD" declarado={N(vmUSD)} />
                 </Field>
               </Row2>
               {(N(vmCRC) > 0 || N(vmUSD) > 0) && (
@@ -723,9 +777,11 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 <Row2>
                   <Field label="Ventas PoS ₡">
                     <MontoInput prefix="₡" value={vnCRC} onChange={setVnCRC} />
+                    <EsperadoPoS monto={esperadoPos?.noche.crc} moneda="CRC" declarado={N(vnCRC)} />
                   </Field>
                   <Field label={`Dólares $ → ₡${N(vnUSD) > 0 ? (N(vnUSD)*tc).toLocaleString('es-CR') : '—'}`}>
                     <MontoInput prefix="$" value={vnUSD} onChange={setVnUSD} />
+                    <EsperadoPoS monto={esperadoPos?.noche.usd} moneda="USD" declarado={N(vnUSD)} />
                   </Field>
                 </Row2>
                 {(N(vnCRC) > 0 || N(vnUSD) > 0) && (
@@ -1092,6 +1148,29 @@ function Field({ label, children }: { label:string; children: React.ReactNode })
     <div>
       <div style={{ fontSize:'0.65rem', color:'#6a6250', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:4 }}>{label}</div>
       {children}
+    </div>
+  )
+}
+
+/**
+ * «esperado del PoS: ₡X» debajo de un campo de ventas. INFORMATIVO: el campo manda.
+ *
+ * Sin dato del PoS no dice nada — ni «₡0» ni «sin datos». Un cero de un puente que no respondió
+ * se lee igual que un cero de un turno sin ventas, y esa confusión es peor que el silencio.
+ * Cuando lo declarado se aparta de lo esperado se marca, sin bloquear: el cajero cuenta plata
+ * física y el PoS cuenta facturas; que difieran es información, no un error a impedir.
+ */
+function EsperadoPoS({ monto, moneda, declarado }: {
+  monto: number | undefined; moneda: 'CRC' | 'USD'; declarado: number
+}) {
+  if (monto === undefined) return null
+  const tolerancia = moneda === 'CRC' ? TOLERANCIA_CRC : TOLERANCIA_USD
+  const diverge = Math.abs(declarado - monto) >= tolerancia
+  const texto = moneda === 'CRC' ? fi2(monto) : `$${monto.toFixed(2)}`
+  return (
+    <div style={{ fontSize:'0.66rem', marginTop:4, color: diverge ? '#8a5a1f' : '#6a6250' }}>
+      esperado del PoS: <strong>{texto}</strong>
+      {diverge && <span> · declarado distinto (queda anotado)</span>}
     </div>
   )
 }

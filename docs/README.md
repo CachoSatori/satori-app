@@ -75,6 +75,15 @@ Viven en **`claude/`** (no en `docs/`) porque nacieron como material de asesorí
   electrónica**; el efectivo se lo queda el equipo y nunca genera movimiento ni pendiente (el
   *take-home* por empleado no cambia). Mig **046** aplicada a prod out-of-band.
 
+## 🚀 Guías de puesta en marcha
+
+- **[DEPLOY-pos-bridge-staging.md](./DEPLOY-pos-bridge-staging.md)** — checklist con comandos
+  exactos para poner el **puente del PoS "Nube de Fuego"** en **STAGING**: la mig `062`, la Edge
+  Function `ingest-ndf` y el agente en la PC del PoS (`DESKTOP-25PRDR1`). Trae el ritual del
+  project-ref, el "qué ver si salió bien" de cada paso y **qué pasos requieren firma**. Recordá
+  que acá las migraciones **no van por merge**: son `db push` contra el proyecto linkeado, y
+  pushear a `main` **auto-aplica a producción**.
+
 ## 🔵 SPECs de INVESTIGACIÓN / DECISIÓN (no autorizan código)
 
 - **[SPEC-unificacion-bandeja-caja.md](./SPEC-unificacion-bandeja-caja.md)** — ✅ **v1, decisiones de

@@ -149,11 +149,14 @@ export interface SnapshotEnVivo {
   fuente?: 'pos' | 'simulado'
 
   /**
-   * La jornada 07→07 partida por el corte de las 16:00 CR. Mañana + tarde = el neto del día.
+   * El día partido por LOTE DE CIERRE de caja: mañana = cajero `111`, tarde = `222` (ver
+   * `shared/ndf/jornada.ts`). `sinTurno` son las facturas que no cerró ninguno de los dos —
+   * no se reparten a ojo. Los tres son excluyentes: mañana + tarde + sinTurno = el neto del día.
    * Opcional: el generador de ejemplo no lo trae.
    */
-  turnos?: { manana: { neto: number; tickets: number; pax: number }
-             tarde:  { neto: number; tickets: number; pax: number } }
+  turnos?: { manana:   { neto: number; tickets: number; pax: number }
+             tarde:    { neto: number; tickets: number; pax: number }
+             sinTurno: { neto: number; tickets: number; pax: number } }
 
   /**
    * El neto partido en salón / delivery, **por el canal de cada factura**. El modelo del xls

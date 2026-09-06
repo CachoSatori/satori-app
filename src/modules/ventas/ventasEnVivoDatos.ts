@@ -4,6 +4,7 @@ import {
   getTicketsJornada, HORA_CORTE_JORNADA, type LineaNdfRow, type MesaAbiertaRow,
   type TicketNdfConId,
 } from '../../shared/api/posNdf'
+import { agruparEnLotes, type Turno } from '../../shared/ndf/jornada'
 import {
   esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO, LOGIN_CAJERO_MANANA,
   LOGIN_CAJERO_NOCHE, SALONEROS_CONOCIDOS,
@@ -376,51 +377,86 @@ export function horaCRDe(instante: string): number | null {
 }
 
 // ── Turnos: mañana / tarde ─────────────────────────────────────────────────────────────────
+//
+// ── LO QUE CAMBIÓ (P1a) ────────────────────────────────────────────────────────────────────
+// Antes el turno salía del RELOJ: la jornada 07→07 partida a las 16:00 CR. Era un relleno
+// mientras `fecha_cierra` venía NULL en toda la tabla. Ya no viene NULL: el PoS dice quién
+// cerró la caja y cuándo, así que el turno lo define el CAJERO (`111` mañana · `222` tarde) y
+// el día lo define la APERTURA del lote de cierre. La definición vive en `shared/ndf/jornada.ts`
+// y la comparten esta pantalla y (en P1b) el adaptador, para que no puedan discrepar.
+//
+// El corte de las 16:00 murió acá. La mesa que se abre a las 15:50 y se cobra a las 16:30 ya no
+// se decide por la hora: cuenta en el turno del cajero que la cobró.
 
-/** Corte entre turnos, hora de pared CR. La jornada 07→07 se parte acá. */
-export const HORA_CORTE_TURNO = 16
-
-export type Turno = 'manana' | 'tarde'
-
-/**
- * A qué turno pertenece un ticket: **mañana** si cerró entre las 07:00 y las 16:00 CR,
- * **tarde** entre las 16:00 y las 07:00 del día siguiente.
- *
- * Se mide por `fecha_cierra` —cuándo se cobró la cuenta, que es lo que define el turno— y se
- * cae a `fecha_registra` cuando no está.
- *
- * ⚠️ HOY SIEMPRE SE CAE AL FALLBACK: el extractor no selecciona la fecha de cierre del PoS, así
- * que `fecha_cierra` viene NULL en todas las filas. Para una mesa que se abre y se cobra en el
- * mismo turno da igual; la que se abre a las 15:50 y se cobra a las 16:30 hoy cuenta como
- * mañana. Está reportado.
- *
- * Los dos turnos son excluyentes y cubren la jornada entera: mañana + tarde = el neto del día.
- */
-export function turnoDeTicket(t: Pick<TicketNdfConId, 'fecha_cierra' | 'fecha_registra'>): Turno {
-  const h = horaCRDe(t.fecha_cierra ?? t.fecha_registra)
-  if (h === null) return 'tarde'
-  return h >= HORA_CORTE_JORNADA && h < HORA_CORTE_TURNO ? 'manana' : 'tarde'
-}
+export type { Turno } from '../../shared/ndf/jornada'
 
 export interface BloqueTurno { neto: number; tickets: number; pax: number }
 
 export interface VentasTurno {
   manana: BloqueTurno
   tarde:  BloqueTurno
+  /**
+   * Las facturas que no cerró ninguno de los dos cajeros (login vacío, un salonero, o un login
+   * de sistema). NO se reparten a ojo: se muestran aparte, que es la verdad. Normalmente 0.
+   */
+  sinTurno: BloqueTurno
 }
 
+/**
+ * Cuánto vendió cada turno, agrupando por LOTE de cierre.
+ *
+ * Los tres bloques son excluyentes y cubren la jornada entera:
+ * mañana + tarde + sinTurno = el neto del día.
+ */
 export function ventasPorTurno(tickets: TicketNdfConId[]): VentasTurno {
   const vacio = (): BloqueTurno => ({ neto: 0, tickets: 0, pax: 0 })
-  const out: VentasTurno = { manana: vacio(), tarde: vacio() }
-  for (const t of tickets) {
-    const b = out[turnoDeTicket(t)]
-    b.neto    += n(t.valor_servido_crc)
-    b.tickets += 1
-    b.pax     += paxDelTicket(t)
+  const out: VentasTurno = { manana: vacio(), tarde: vacio(), sinTurno: vacio() }
+  for (const lote of agruparEnLotes(tickets)) {
+    const b = out[lote.turno ?? 'sinTurno']
+    for (const t of lote.tickets) {
+      b.neto    += n(t.valor_servido_crc)
+      b.tickets += 1
+      b.pax     += paxDelTicket(t)
+    }
   }
-  out.manana.neto = Math.round(out.manana.neto)
-  out.tarde.neto  = Math.round(out.tarde.neto)
+  out.manana.neto   = Math.round(out.manana.neto)
+  out.tarde.neto    = Math.round(out.tarde.neto)
+  out.sinTurno.neto = Math.round(out.sinTurno.neto)
   return out
+}
+
+/**
+ * Los lotes de cierre de la jornada que se está mirando, en orden de apertura.
+ *
+ * Es el detalle detrás del panel de turnos: cada fila es una pasada de caja real (quién cerró,
+ * cuándo, cuántas facturas). Un lote nunca se parte entre dos turnos.
+ */
+export interface LoteResumen {
+  clave:       string
+  cajeroLogin: string | null
+  turno:       Turno | null
+  jornada:     string | null
+  apertura:    string | null
+  fechaCierra: string | null
+  abierto:     boolean
+  neto:        number
+  tickets:     number
+  pax:         number
+}
+
+export function lotesDeCierre(tickets: TicketNdfConId[]): LoteResumen[] {
+  return agruparEnLotes(tickets).map(l => ({
+    clave:       l.clave,
+    cajeroLogin: l.cajeroLogin,
+    turno:       l.turno,
+    jornada:     l.jornada,
+    apertura:    l.apertura,
+    fechaCierra: l.fechaCierra,
+    abierto:     l.abierto,
+    neto:        Math.round(l.tickets.reduce((s, t) => s + n(t.valor_servido_crc), 0)),
+    tickets:     l.tickets.length,
+    pax:         l.tickets.reduce((s, t) => s + paxDelTicket(t), 0),
+  }))
 }
 
 // ── Mesas abiertas AHORA ───────────────────────────────────────────────────────────────────
@@ -573,6 +609,15 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
 
 /**
  * La jornada en curso, con la regla del negocio: **07:00 → 07:00 hora de Costa Rica**.
+ *
+ * ⚠️ P1a: esto YA NO define a qué jornada pertenece un ticket — eso lo decide el LOTE de cierre
+ * (`shared/ndf/jornada.ts`). Lo que sigue haciendo es elegir QUÉ VENTANA se pide a la base y
+ * cuál es el día que abre el selector, y para eso el 07→07 sirve: es un superset que contiene
+ * los lotes del día (incluidas las facturas de después de medianoche). No se puede reemplazar
+ * por la definición del lote sin caer en un círculo — habría que leer los tickets para saber
+ * qué tickets pedir. Si algún día un cajero abriera antes de las 07:00 CR, su lote caería en la
+ * ventana del día anterior; con los turnos reales (111 abre ~11:00) no pasa.
+ *
  *
  * ⚠️ NO se usa el `fechaServicioCR()` del mock. Ese decide con un horario de atención
  * (11:00–23:00) y devuelve "ayer" entre las 00:00 y las 11:00 — o sea que a las 09:00 de la

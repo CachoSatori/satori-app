@@ -5,7 +5,7 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 import {
   armarDia, armarSnapshot, calidadPaxPorSalonero, claveSalonero, compararContra,
   esJornadaEnCurso, esSinAsignar, etiquetaNoMesero, horaCRDe, jornadaActualCR,
-  jornadasComparables, nombreSalonero, paxDelTicket, ritmoPorHora, turnoDeTicket,
+  jornadasComparables, lotesDeCierre, nombreSalonero, paxDelTicket, ritmoPorHora,
   etiquetaTurnoPoS, jornadaDesplazada, resumirMesasAbiertas, ventasPorCanal, ventasPorTurno,
   ventasPorTurnoPoS,
 } from './ventasEnVivoDatos'
@@ -24,7 +24,7 @@ const sal = (dia: DiaData, clave: string): SaloneroDay => dia.saloneros[clave] a
 
 const ticket = (over: Partial<TicketNdfConId> = {}): TicketNdfConId => ({
   id: 't1', numero_factura: '5001', fecha_registra: '2026-09-01T19:42:07-06:00',
-  fecha_cierra: null,
+  fecha_cierra: null, cajero_login: '222',
   canal: 'salon', salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,
   iva_crc: 0, regalia_crc: 0, descuento_crc: 0, clase_ingreso: 'cobrada',
@@ -327,65 +327,103 @@ describe('paxDelTicket', () => {
 
 // ── Turnos: mañana / tarde, corte a las 16:00 CR ───────────────────────────────
 
-describe('turnoDeTicket — los bordes', () => {
-  const enCierre = (iso: string) => ({ fecha_cierra: iso, fecha_registra: '2026-09-01T12:00:00-06:00' })
+describe('el turno lo decide el CAJERO, no el reloj (P1a)', () => {
+  // El corte de las 16:00 murió: la definición vive en `shared/ndf/jornada.ts` y sus bordes
+  // están clavados ahí. Acá se prueba el cableado de «En vivo» contra filas reales.
 
-  it('15:59 es MAÑANA', () => {
-    expect(turnoDeTicket(enCierre('2026-09-01T15:59:59-06:00'))).toBe('manana')
-  })
-
-  it('16:00 ya es TARDE', () => {
-    expect(turnoDeTicket(enCierre('2026-09-01T16:00:00-06:00'))).toBe('tarde')
-  })
-
-  it('las 02:00 son TARDE, de la jornada ANTERIOR', () => {
-    // La jornada va 07→07, así que las 2 AM todavía son el turno de la tarde del día previo.
-    expect(turnoDeTicket(enCierre('2026-09-02T02:00:00-06:00'))).toBe('tarde')
-    expect(businessDateDe('2026-09-02T02:00:00-06:00')).toBe('2026-09-01')
-  })
-
-  it('07:00 abre la mañana; 06:59 todavía es la tarde de ayer', () => {
-    expect(turnoDeTicket(enCierre('2026-09-01T07:00:00-06:00'))).toBe('manana')
-    expect(turnoDeTicket(enCierre('2026-09-01T06:59:00-06:00'))).toBe('tarde')
-  })
-
-  it('sin fecha_cierra se cae a fecha_registra (hoy SIEMPRE, la columna viene NULL)', () => {
-    expect(turnoDeTicket({ fecha_cierra: null, fecha_registra: '2026-09-01T13:00:00-06:00' })).toBe('manana')
-    expect(turnoDeTicket({ fecha_cierra: null, fecha_registra: '2026-09-01T20:00:00-06:00' })).toBe('tarde')
-  })
-})
-
-describe('ventasPorTurno', () => {
-  it('INVARIANTE: mañana + tarde = el neto del día', () => {
-    const tickets = [
-      ticket({ id: 'a', fecha_registra: '2026-09-01T09:00:00-06:00', valor_servido_crc: 10000 }),
-      ticket({ id: 'b', fecha_registra: '2026-09-01T15:59:00-06:00', valor_servido_crc: 5000 }),
-      ticket({ id: 'c', fecha_registra: '2026-09-01T16:00:00-06:00', valor_servido_crc: 7000 }),
-      ticket({ id: 'd', fecha_registra: '2026-09-02T02:00:00-06:00', valor_servido_crc: 3000 }),
-    ]
-    const t = ventasPorTurno(tickets)
-    expect(t.manana).toMatchObject({ neto: 15000, tickets: 2 })
-    expect(t.tarde).toMatchObject({ neto: 10000, tickets: 2 })
-
-    const neto = tickets.reduce((s, x) => s + (x.valor_servido_crc ?? 0), 0)
-    expect(t.manana.neto + t.tarde.neto).toBe(neto)
-    expect(t.manana.tickets + t.tarde.tickets).toBe(tickets.length)
-  })
-
-  it('la fecha de cierre manda sobre la de registro', () => {
-    // Mesa abierta 15:50, cobrada 16:30 → es del turno TARDE.
+  it('la mesa abierta 15:50 y cobrada 16:30 cuenta en el turno del CAJERO que la cobró', () => {
+    // Con la regla vieja del reloj esto era «mañana» por abrirse antes de las 16:00.
     const t = ventasPorTurno([ticket({
       fecha_registra: '2026-09-01T15:50:00-06:00',
-      fecha_cierra:   '2026-09-01T16:30:00-06:00',
+      fecha_cierra:   '2026-09-01T22:30:00-06:00',
+      cajero_login:   '222',
       valor_servido_crc: 9000,
     })])
     expect(t.tarde.neto).toBe(9000)
     expect(t.manana.neto).toBe(0)
   })
 
-  it('jornada vacía: los dos turnos en cero', () => {
+  it('el 111 que cierra pasadas las 16:00 sigue siendo MAÑANA', () => {
+    // Dato real de staging: el 5-sep el 111 cerró 16:07 CR.
+    const t = ventasPorTurno([ticket({
+      fecha_registra: '2026-09-05T12:00:00-06:00',
+      fecha_cierra:   '2026-09-05T16:07:00-06:00',
+      cajero_login:   '111',
+      valor_servido_crc: 8000,
+    })])
+    expect(t.manana.neto).toBe(8000)
+    expect(t.tarde.neto).toBe(0)
+  })
+
+  it('la factura de las 02:00 del lote del 222 va con su turno, sin partirse', () => {
+    const cierre = '2026-09-02T02:30:00-06:00'
+    const t = ventasPorTurno([
+      ticket({ id: 'a', fecha_registra: '2026-09-01T20:00:00-06:00', fecha_cierra: cierre, cajero_login: '222', valor_servido_crc: 7000 }),
+      ticket({ id: 'b', fecha_registra: '2026-09-02T02:00:00-06:00', fecha_cierra: cierre, cajero_login: '222', valor_servido_crc: 3000 }),
+    ])
+    expect(t.tarde).toMatchObject({ neto: 10000, tickets: 2 })
+  })
+})
+
+describe('lotesDeCierre', () => {
+  it('una fila por pasada de caja, con su jornada de apertura', () => {
+    const lotes = lotesDeCierre([
+      ticket({ id: 'a', fecha_registra: '2026-09-05T11:30:00-06:00', fecha_cierra: '2026-09-05T16:07:00-06:00', cajero_login: '111', valor_servido_crc: 8000, pax: 2, pax_articulo: 2 }),
+      ticket({ id: 'b', fecha_registra: '2026-09-05T18:30:00-06:00', fecha_cierra: '2026-09-06T01:00:00-06:00', cajero_login: '222', valor_servido_crc: 12000, pax: 4, pax_articulo: 4 }),
+      ticket({ id: 'c', fecha_registra: '2026-09-06T00:40:00-06:00', fecha_cierra: '2026-09-06T01:00:00-06:00', cajero_login: '222', valor_servido_crc: 3000, pax: 2, pax_articulo: 2 }),
+    ])
+    expect(lotes).toHaveLength(2)
+    expect(lotes[0]).toMatchObject({
+      cajeroLogin: '111', turno: 'manana', jornada: '2026-09-05', abierto: false, neto: 8000, tickets: 1,
+    })
+    // El 222 abrió el 5 y cerró el 6 a la 01:00: la jornada es la que ABRIÓ.
+    expect(lotes[1]).toMatchObject({
+      cajeroLogin: '222', turno: 'tarde', jornada: '2026-09-05', abierto: false, neto: 15000, tickets: 2,
+    })
+  })
+
+  it('el turno todavía abierto se marca como tal', () => {
+    const lotes = lotesDeCierre([
+      ticket({ fecha_registra: '2026-09-06T18:00:00-06:00', fecha_cierra: null, cajero_login: '222' }),
+    ])
+    expect(lotes[0]).toMatchObject({ abierto: true, fechaCierra: null, turno: 'tarde', jornada: '2026-09-06' })
+  })
+})
+
+describe('ventasPorTurno', () => {
+  it('INVARIANTE: mañana + tarde + sinTurno = el neto del día', () => {
+    const tickets = [
+      ticket({ id: 'a', fecha_registra: '2026-09-01T09:00:00-06:00', cajero_login: '111', valor_servido_crc: 10000 }),
+      ticket({ id: 'b', fecha_registra: '2026-09-01T15:59:00-06:00', cajero_login: '111', valor_servido_crc: 5000 }),
+      ticket({ id: 'c', fecha_registra: '2026-09-01T16:00:00-06:00', cajero_login: '222', valor_servido_crc: 7000 }),
+      ticket({ id: 'd', fecha_registra: '2026-09-02T02:00:00-06:00', cajero_login: '222', valor_servido_crc: 3000 }),
+    ]
+    const t = ventasPorTurno(tickets)
+    expect(t.manana).toMatchObject({ neto: 15000, tickets: 2 })
+    expect(t.tarde).toMatchObject({ neto: 10000, tickets: 2 })
+    expect(t.sinTurno).toMatchObject({ neto: 0, tickets: 0 })
+
+    const neto = tickets.reduce((s, x) => s + (x.valor_servido_crc ?? 0), 0)
+    expect(t.manana.neto + t.tarde.neto + t.sinTurno.neto).toBe(neto)
+    expect(t.manana.tickets + t.tarde.tickets + t.sinTurno.tickets).toBe(tickets.length)
+  })
+
+  it('la factura que no cerró 111 ni 222 se muestra aparte, no se reparte a ojo', () => {
+    const t = ventasPorTurno([
+      ticket({ id: 'a', cajero_login: '222', valor_servido_crc: 4000 }),
+      ticket({ id: 'b', cajero_login: '026', valor_servido_crc: 1000 }),   // un salonero cobrando
+      ticket({ id: 'c', cajero_login: null,  valor_servido_crc: 500 }),    // histórico sin login
+    ])
+    expect(t.tarde.neto).toBe(4000)
+    expect(t.sinTurno).toMatchObject({ neto: 1500, tickets: 2 })
+    expect(t.manana.neto).toBe(0)
+  })
+
+  it('jornada vacía: los tres bloques en cero', () => {
     expect(ventasPorTurno([])).toEqual({
-      manana: { neto: 0, tickets: 0, pax: 0 }, tarde: { neto: 0, tickets: 0, pax: 0 },
+      manana:   { neto: 0, tickets: 0, pax: 0 },
+      tarde:    { neto: 0, tickets: 0, pax: 0 },
+      sinTurno: { neto: 0, tickets: 0, pax: 0 },
     })
   })
 })

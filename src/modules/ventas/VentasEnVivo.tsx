@@ -208,7 +208,7 @@ export default function VentasEnVivo({ metas }: Props) {
   const hoyJornada = jornadaActualCR()
   const enUltimaJornada = snap.fecha >= hoyJornada
 
-  const netoTurnos = turnos ? turnos.manana.neto + turnos.tarde.neto : 0
+  const netoTurnos = turnos ? turnos.manana.neto + turnos.tarde.neto + turnos.sinTurno.neto : 0
   const dow = dayOfWeek(snap.fecha)
 
   // Sin una sola factura cerrada en la jornada. No es un error ni algo que rellenar: es que
@@ -489,7 +489,7 @@ export default function VentasEnVivo({ metas }: Props) {
             <div className="apos-panel-hd">
               <h3>Por turno</h3>
               <span className="apos-panel-sub">
-                la jornada 07→07 partida a las 16:00 CR · mañana 07:00–16:00 · tarde 16:00–07:00
+                por lote de cierre de caja · mañana = cajero <code>111</code> · tarde = cajero <code>222</code>
               </span>
             </div>
             <div className="apos-tabla-wrap">
@@ -505,7 +505,14 @@ export default function VentasEnVivo({ metas }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {([['Mañana · 07:00–16:00', turnos.manana], ['Tarde · 16:00–07:00', turnos.tarde]] as const).map(
+                  {([
+                    ['Mañana · cajero 111', turnos.manana],
+                    ['Tarde · cajero 222', turnos.tarde],
+                    // Solo si hay algo: normalmente no cerró nadie más que 111/222.
+                    ...(turnos.sinTurno.tickets > 0
+                      ? [['Sin cajero de turno', turnos.sinTurno] as const]
+                      : []),
+                  ] as const).map(
                     ([label, t]) => (
                       <tr key={label}>
                         <td>{label}</td>
@@ -520,9 +527,9 @@ export default function VentasEnVivo({ metas }: Props) {
                     <td><strong>Jornada completa</strong></td>
                     <td className="r"><strong>{fi(netoTurnos)}</strong></td>
                     <td className="r">100,0%</td>
-                    <td className="r"><strong>{(turnos.manana.tickets + turnos.tarde.tickets).toLocaleString('es-CR')}</strong></td>
+                    <td className="r"><strong>{(turnos.manana.tickets + turnos.tarde.tickets + turnos.sinTurno.tickets).toLocaleString('es-CR')}</strong></td>
                     <td className="r">—</td>
-                    <td className="r"><strong>{(turnos.manana.pax + turnos.tarde.pax).toLocaleString('es-CR')}</strong></td>
+                    <td className="r"><strong>{(turnos.manana.pax + turnos.tarde.pax + turnos.sinTurno.pax).toLocaleString('es-CR')}</strong></td>
                   </tr>
                 </tbody>
               </table>
@@ -531,16 +538,18 @@ export default function VentasEnVivo({ metas }: Props) {
                 entera, así que su suma TIENE que ser el neto del día. Si algún día no cuadra,
                 se ve acá y no en una hoja de cálculo tres semanas después. */}
             <p className="apos-nota" style={{ marginBottom: 0 }}>
-              Mañana + tarde = {fi(netoTurnos)}{' '}
+              Mañana + tarde{turnos.sinTurno.tickets > 0 ? ' + sin cajero' : ''} = {fi(netoTurnos)}{' '}
               {netoTurnos === stats.ventaNeta
                 ? <span className="apos-estado is-ok">✓ cuadra con el neto del día</span>
                 : <span className="apos-estado is-flojo">
                     ⚠ no cuadra con el neto del día ({fi(stats.ventaNeta)})
                   </span>}
-              . El turno se decide por <code>fecha_cierra</code> —cuándo se cobró la cuenta—, con
-              caída a <code>fecha_registra</code>. <strong>Hoy siempre cae al respaldo</strong>: el
-              extractor todavía no trae la fecha de cierre del PoS, así que una mesa abierta 15:50 y
-              cobrada 16:30 cuenta como mañana.
+              . El turno lo decide el <strong>cajero que cerró la caja</strong>, no el reloj:
+              un turno es un <em>lote</em> = la clave (<code>cajero_login</code>,{' '}
+              <code>fecha_cierra</code>), y todas las facturas de una misma pasada de caja van
+              juntas. La <strong>fecha de la jornada sale de la apertura</strong> (el primer
+              ticket del lote, en hora de Costa Rica): el <code>222</code> que cierra a la 01:00
+              sigue perteneciendo al día que abrió.
             </p>
 
             {/* La otra lectura del mismo día: la que guarda el PoS según qué caja estaba

@@ -54,8 +54,13 @@ export function businessDateDe(fechaRegistra: string): string {
 export interface TicketNdfRow {
   numero_factura:    string
   fecha_registra:    string
-  /** Cuándo se COBRÓ la cuenta. Define el turno. Hoy viene NULL: el extractor no la trae. */
+  /**
+   * Cuándo cerró la caja el cajero. Junto con `cajero_login` forma el LOTE de cierre, que es
+   * la unidad del turno y de la jornada (ver `shared/ndf/jornada.ts`).
+   */
   fecha_cierra:      string | null
+  /** `FAC_Facturas.Login`: el cajero que cobró. `111` mañana · `222` tarde. Define el turno. */
+  cajero_login:      string | null
   canal:             string | null
   salonero_login:    string | null
   registrado_por:    string
@@ -87,7 +92,7 @@ export interface LineaNdfRow {
 export interface TicketNdfConId extends TicketNdfRow { id: string }
 
 const COLS_TICKET =
-  'id, numero_factura, fecha_registra, fecha_cierra, canal, salonero_login, registrado_por, turno, ' +
+  'id, numero_factura, fecha_registra, fecha_cierra, cajero_login, canal, salonero_login, registrado_por, turno, ' +
   'con_servicio, servicio_crc, total_crc, valor_servido_crc, iva_crc, regalia_crc, ' +
   'descuento_crc, clase_ingreso, pax, pax_nativo, pax_articulo, pax_alerta'
 

@@ -30,19 +30,83 @@ export const CR_OFFSET_HORAS = -6
 
 const MS_HORA = 3_600_000
 
-/** Los dos cajeros de caja del PoS. El turno sale de acá, NO del reloj. */
+// ── EL MAPA DE CAJAS ───────────────────────────────────────────────────────────────────────
+//
+// La ÚNICA lista de cajas del PoS. Agregar el turno de barra o un desayuno más temprano es
+// UNA FILA acá: ni «En vivo» ni el adaptador se tocan, porque los dos leen el mapa en vez de
+// preguntar por un login concreto.
+//
+// ⚠️ DOS EJES DISTINTOS, NO MEZCLAR:
+//   · TURNO  → sale de este mapa, por `cajero_login`. Es "qué CAJA cerró la factura".
+//     Un turno de barra sería una caja con su propio login, y va acá.
+//   · CANAL  → es `pos_ndf_tickets.canal`, un campo POR TICKET que ya existe (salon, barra,
+//     delivery, llevar, otro). Dice "por dónde se vendió". Este mapa NO lo toca ni lo mira.
+//   Una factura de canal `barra` cobrada por la caja `222` es del turno tarde. Son
+//   ortogonales: la barra como CANAL no implica una caja de barra.
+//
+// ⚠️ ESTO NO SE PERSISTE. La columna `pos_ndf_tickets.turno` tiene un CHECK
+// `'mañana'|'tarde'|'noche'` y la escribe la ingesta; agregar un turno acá NO la toca. Lo de
+// este módulo es cálculo app-side sobre `cajero_login`, que es el dato crudo.
+
+/** Id del turno. Es un string abierto A PROPÓSITO: los turnos los define el mapa, no el tipo. */
+export type Turno = string
+
+/** Una caja del PoS: qué turno es y cómo se dice en pantalla. */
+export interface DefCaja {
+  /** Id del turno. Varias cajas pueden compartirlo (dos cajas de almuerzo, por ejemplo). */
+  turno:    Turno
+  /** Cómo se muestra. La pantalla no arma etiquetas: las lee de acá. */
+  etiqueta: string
+  /** Para ordenar los turnos en tablas y reportes. Menor = más temprano. */
+  orden:    number
+}
+
+/**
+ * `cajero_login` → su caja.
+ *
+ * Para sumar un turno nuevo, agregá la fila y listo:
+ *   '333': { turno: 'barra',    etiqueta: 'Barra',    orden: 3 },
+ *   '444': { turno: 'desayuno', etiqueta: 'Desayuno', orden: 0 },
+ */
+export const CAJAS_POR_LOGIN: Readonly<Record<string, DefCaja>> = Object.freeze({
+  '111': { turno: 'manana', etiqueta: 'Mañana · almuerzo', orden: 1 },
+  '222': { turno: 'tarde',  etiqueta: 'Tarde · noche',     orden: 2 },
+})
+
+/** Atajos para el que necesita el login suelto. Salen del mapa, no al revés. */
 export const LOGIN_CAJERO_MANANA = '111'
 export const LOGIN_CAJERO_TARDE  = '222'
 
+/** La caja de un login, o `null` si no está en el mapa. */
+export function cajaDeLogin(cajeroLogin: string | null | undefined): DefCaja | null {
+  const l = cajeroLogin?.trim()
+  return l ? CAJAS_POR_LOGIN[l] ?? null : null
+}
+
+export interface TurnoConocido { turno: Turno; etiqueta: string; orden: number }
+
 /**
- * Los ids del turno.
+ * Los turnos que define el mapa, ordenados y sin repetir.
  *
- * Sin `ñ` a propósito: son los mismos valores que ya usa «En vivo» (`turnos.manana` /
- * `turnos.tarde`), así que la pantalla no se toca. La etiqueta que ve el usuario («Mañana»,
- * «Tarde») se resuelve en la capa de presentación, no acá. Ojo: el valor que el PoS guarda en
- * la columna `turno` para el 222 es `'noche'` — otra cosa, y no se toca.
+ * Es lo que recorre la pantalla para armar el panel: agregar una caja al mapa agrega su fila
+ * sola. Si dos cajas comparten turno, gana la de menor `orden` para la etiqueta.
  */
-export type Turno = 'manana' | 'tarde'
+export function turnosConocidos(): TurnoConocido[] {
+  const porTurno = new Map<Turno, TurnoConocido>()
+  for (const def of Object.values(CAJAS_POR_LOGIN)) {
+    const previo = porTurno.get(def.turno)
+    if (!previo || def.orden < previo.orden) {
+      porTurno.set(def.turno, { turno: def.turno, etiqueta: def.etiqueta, orden: def.orden })
+    }
+  }
+  return [...porTurno.values()].sort((a, b) => a.orden - b.orden || a.turno.localeCompare(b.turno))
+}
+
+/** La etiqueta de un turno. Si no está en el mapa, el id crudo (nunca se inventa un nombre). */
+export function etiquetaTurno(turno: Turno | null): string {
+  if (turno === null) return 'Sin caja de turno'
+  return turnosConocidos().find(t => t.turno === turno)?.etiqueta ?? turno
+}
 
 /** Lo mínimo que este módulo necesita de un ticket. Deliberadamente estructural. */
 export interface TicketJornada {
@@ -84,17 +148,15 @@ export function instanteCanonico(iso: string | null | undefined): string | null 
 // ── Turno ──────────────────────────────────────────────────────────────────────────────────
 
 /**
- * El cajero que cobró → su turno. `111` mañana · `222` tarde.
+ * El cajero que cobró → su turno, LEÍDO DEL MAPA.
  *
- * Cualquier otro login (o ninguno) devuelve `null` y **no se adivina por el reloj**: es el
- * error que esta definición viene a corregir. Un `null` acá es información —"esta factura no
- * la cerró ninguno de los dos cajeros"— y el que agrupa decide qué hacer con ella.
+ * Un login que no está en el mapa devuelve `null`, y eso **no se adivina por el reloj**: es el
+ * error que esta definición viene a corregir. `null` acá es información —"esta factura no la
+ * cerró ninguna caja conocida"— y el que agrupa decide qué hacer con ella. Ojo: su ticket
+ * SIGUE teniendo jornada y sigue contando en el total del día; lo único que le falta es turno.
  */
 export function turnoDeCajero(cajeroLogin: string | null | undefined): Turno | null {
-  const l = cajeroLogin?.trim()
-  if (l === LOGIN_CAJERO_MANANA) return 'manana'
-  if (l === LOGIN_CAJERO_TARDE)  return 'tarde'
-  return null
+  return cajaDeLogin(cajeroLogin)?.turno ?? null
 }
 
 /** El turno de un ticket. Lo decide el cajero, punto. */
@@ -133,6 +195,14 @@ export interface LoteCierre<T extends TicketJornada = TicketJornada> {
  *   todavía no cerró. Cuando el PoS estampe la `FechaCierra`, esos tickets se reagrupan solos
  *   bajo la clave cerrada — por eso el prefijo `abierto` está en la clave: para que un lote a
  *   medio cerrar nunca se confunda con uno ya cuadrado.
+ *
+ * ⚠️ LÍMITE CONOCIDO Y ACEPTADO EN P1a — la medianoche en un turno ABIERTO.
+ * Mientras no haya cierre, el fallback agrupa por DÍA CR de cada venta, así que un turno que
+ * cruza la medianoche se parte en dos lotes (el de antes y el de después de las 00:00). No se
+ * "arregla" acá a propósito: sin `fecha_cierra` no hay nada que diga que esas facturas son la
+ * misma pasada de caja, y adivinarlo con una ventana horaria sería volver a la lógica de reloj
+ * que P1a vino a matar. Se corrige SOLO en cuanto el cajero cierra: ahí los dos pedazos caen
+ * bajo la misma clave y la jornada pasa a ser la de la apertura. Está clavado en un test.
  */
 export function claveLote(t: TicketJornada): string {
   const cajero = t.cajero_login?.trim() || '(sin cajero)'

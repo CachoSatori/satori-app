@@ -3,12 +3,17 @@ import { describe, it, expect } from 'vitest'
 import {
   agruparEnLotes,
   agruparPorJornadaTurno,
+  cajaDeLogin,
+  CAJAS_POR_LOGIN,
   claveLote,
+  etiquetaTurno,
   fechaCR,
   instanteCanonico,
   jornadaPorTicket,
   turnoDeCajero,
   turnoDeTicket,
+  turnosConocidos,
+  type DefCaja,
   type TicketJornada,
 } from './jornada'
 
@@ -49,15 +54,18 @@ describe('instanteCanonico', () => {
 
 // ── Turno = el cajero, no el reloj ─────────────────────────────────────────────────────────
 
-describe('turnoDeCajero — 111 mañana, 222 tarde', () => {
-  it('111 es mañana y 222 es tarde', () => {
+describe('el mapa de cajas — el turno se BUSCA, no se pregunta con ifs', () => {
+  it('lookup: 111 → mañana, 222 → tarde', () => {
     expect(turnoDeCajero('111')).toBe('manana')
     expect(turnoDeCajero('222')).toBe('tarde')
+    expect(cajaDeLogin('111')).toMatchObject({ turno: 'manana', etiqueta: 'Mañana · almuerzo' })
+    expect(cajaDeLogin('222')).toMatchObject({ turno: 'tarde',  etiqueta: 'Tarde · noche' })
   })
 
-  it('NO se adivina por el reloj: cualquier otro login es null', () => {
-    for (const l of [null, undefined, '', '026', '002', '022', '01']) {
+  it('un login FUERA del mapa no tiene turno de caja, y no se inventa por reloj', () => {
+    for (const l of [null, undefined, '', '026', '002', '022', '01', '333']) {
       expect(turnoDeCajero(l), `login: ${JSON.stringify(l)}`).toBeNull()
+      expect(cajaDeLogin(l), `login: ${JSON.stringify(l)}`).toBeNull()
     }
   })
 
@@ -65,6 +73,47 @@ describe('turnoDeCajero — 111 mañana, 222 tarde', () => {
     // El 111 que cierra tardísimo sigue siendo la mañana; el 222 que cobra temprano, la tarde.
     expect(turnoDeTicket({ cajero_login: '111' })).toBe('manana')
     expect(turnoDeTicket({ cajero_login: '222' })).toBe('tarde')
+  })
+
+  it('los turnos conocidos salen del mapa, ordenados y sin repetir', () => {
+    expect(turnosConocidos()).toEqual([
+      { turno: 'manana', etiqueta: 'Mañana · almuerzo', orden: 1 },
+      { turno: 'tarde',  etiqueta: 'Tarde · noche',     orden: 2 },
+    ])
+  })
+
+  it('etiquetaTurno lee el mapa; sin caja conocida lo dice, no inventa un nombre', () => {
+    expect(etiquetaTurno('manana')).toBe('Mañana · almuerzo')
+    expect(etiquetaTurno('tarde')).toBe('Tarde · noche')
+    expect(etiquetaTurno(null)).toBe('Sin caja de turno')
+    expect(etiquetaTurno('barra')).toBe('barra')            // no está en el mapa: el id crudo
+  })
+
+  it('SUMAR UN TURNO DE BARRA = UNA FILA en el mapa, sin tocar nada más', () => {
+    // El contrato del addendum: la barra entra por el mapa. Se simula agregándole la fila a una
+    // copia y comprobando que todo lo que consume el mapa la toma sola.
+    const conBarra: Record<string, DefCaja> = {
+      ...CAJAS_POR_LOGIN,
+      '333': { turno: 'barra', etiqueta: 'Barra', orden: 3 },
+    }
+    // El lookup por login sale del mapa…
+    expect(conBarra['333']).toMatchObject({ turno: 'barra' })
+    // …y la lista de turnos se deriva de él, ordenada, sin que nadie la escriba a mano.
+    const derivados = Object.values(conBarra)
+      .sort((a, b) => a.orden - b.orden)
+      .map(c => c.turno)
+    expect(derivados).toEqual(['manana', 'tarde', 'barra'])
+
+    // Y el mapa real sigue intacto: la prueba no lo mutó.
+    expect(Object.keys(CAJAS_POR_LOGIN)).toEqual(['111', '222'])
+  })
+
+  it('el mapa NO toca el canal: son dos ejes distintos', () => {
+    // El canal (`pos_ndf_tickets.canal`) es por TICKET; el turno es por CAJA. Una venta de
+    // canal «barra» cobrada por el 222 es del turno tarde, no de un turno «barra».
+    const enBarra = { fecha_registra: '2026-09-05T19:00:00-06:00', cajero_login: '222' }
+    expect(turnoDeTicket(enBarra)).toBe('tarde')
+    expect(Object.values(CAJAS_POR_LOGIN).some(c => c.turno === 'barra')).toBe(false)
   })
 })
 
@@ -184,14 +233,20 @@ describe('fecha_cierra NULL — el fallback en vivo', () => {
     expect(despues[0].turno).toBe(antes[0].turno)
   })
 
-  it('el turno abierto que ya cruzó medianoche sigue en la jornada que abrió', () => {
-    // Fallback = día CR de cada venta, así que la de las 00:40 arma su propia clave. Es lo
-    // correcto mientras no haya cierre: recién el lote las une, y este test lo demuestra.
+  it('LÍMITE ACEPTADO: en turno ABIERTO la medianoche parte el lote — y el cierre lo repara', () => {
+    // Sin `fecha_cierra` no hay nada que diga que esas facturas son la misma pasada de caja, y
+    // adivinarlo con una ventana horaria sería volver a la lógica de reloj que P1a vino a
+    // matar. Así que en vivo se parte, y se documenta. En cuanto el cajero cierra, los dos
+    // pedazos caen bajo la misma clave y la jornada pasa a ser la de la apertura.
     const abierto = agruparEnLotes([
       t({ fecha_registra: '2026-09-05T18:30:00-06:00', cajero_login: '222' }),
       t({ fecha_registra: '2026-09-06T00:40:00-06:00', cajero_login: '222' }),
     ])
-    expect(abierto).toHaveLength(2)
+    expect(abierto).toHaveLength(2)                       // ← el límite: se parte
+    expect(abierto.map(l => l.jornada)).toEqual(['2026-09-05', '2026-09-06'])
+    // Pero no tumba nada: los dos pedazos tienen jornada y turno, y ningún ticket se pierde.
+    expect(abierto.every(l => l.turno === 'tarde')).toBe(true)
+    expect(abierto.flatMap(l => l.tickets)).toHaveLength(2)
 
     const cerrado = agruparEnLotes([
       t({ fecha_registra: '2026-09-05T18:30:00-06:00', fecha_cierra: '2026-09-06T01:00:00-06:00', cajero_login: '222' }),
@@ -263,5 +318,115 @@ describe('jornadaPorTicket', () => {
     // El ticket de las 00:40 del 6 pertenece a la jornada del 5: la que abrió su lote.
     expect(mapa.get(tardio)).toMatchObject({ jornada: '2026-09-05', turno: 'tarde' })
     expect(mapa.get(temprano)?.lote).toBe(mapa.get(tardio)?.lote)
+  })
+})
+
+// ── Los tres lotes reales de staging ───────────────────────────────────────────────────────
+//
+// Números de factura y horas de cierre verificados contra staging. Son el caso de aceptación
+// de P1a: si esto se rompe, la jornada dejó de coincidir con lo que el PoS cerró de verdad.
+
+/** `110826..110838` → tickets con el mismo lote, repartidos en la tarde/noche. */
+const rango = (
+  desde: number, hasta: number,
+  opts: { cierre: string | null; cajero: string; primero: string; pasoMin?: number },
+): (TicketJornada & { numero: string })[] => {
+  const paso = opts.pasoMin ?? 10
+  const t0 = Date.parse(opts.primero)
+  const out: (TicketJornada & { numero: string })[] = []
+  for (let n = desde; n <= hasta; n++) {
+    out.push({
+      numero:         String(n),
+      fecha_registra: new Date(t0 + (n - desde) * paso * 60_000).toISOString(),
+      fecha_cierra:   opts.cierre,
+      cajero_login:   opts.cajero,
+    })
+  }
+  return out
+}
+
+describe('los lotes REALES de staging (4 y 5 de septiembre de 2026)', () => {
+  // 110826–110838: 13 facturas, cerradas por el 222 a las 22:07:59 CR del 4-sep.
+  const LOTE_4_TARDE = rango(110826, 110838, {
+    cajero: '222', cierre: '2026-09-04T22:07:59-06:00', primero: '2026-09-04T18:05:00-06:00',
+  })
+  // 110840: una sola factura, cerrada por el 111 a las 16:07:03 CR del 5-sep.
+  const LOTE_5_MANANA = rango(110840, 110840, {
+    cajero: '111', cierre: '2026-09-05T16:07:03-06:00', primero: '2026-09-05T12:20:00-06:00',
+  })
+  // 110843–110866: 24 facturas, cerradas por el 222 a las 22:30:06 CR del 5-sep.
+  const LOTE_5_TARDE = rango(110843, 110866, {
+    cajero: '222', cierre: '2026-09-05T22:30:06-06:00', primero: '2026-09-05T17:15:00-06:00',
+  })
+  const TODOS = [...LOTE_4_TARDE, ...LOTE_5_MANANA, ...LOTE_5_TARDE]
+
+  it('110826–110838 = UN turno tarde del 222, jornada 2026-09-04, cierre 22:07:59 CR', () => {
+    const lotes = agruparEnLotes(LOTE_4_TARDE)
+    expect(lotes).toHaveLength(1)
+    expect(lotes[0]).toMatchObject({ cajeroLogin: '222', turno: 'tarde', jornada: '2026-09-04' })
+    expect(lotes[0].tickets).toHaveLength(13)
+    expect(lotes[0].tickets.map(t => t.numero)).toEqual(
+      Array.from({ length: 13 }, (_, i) => String(110826 + i)))
+    expect(fechaCR(lotes[0].fechaCierra)).toBe('2026-09-04')
+    expect(lotes[0].fechaCierra).toBe('2026-09-05T04:07:59.000Z')   // 22:07:59 CR
+  })
+
+  it('110840 = mañana del 111, jornada 2026-09-05, cierre 16:07:03 CR', () => {
+    const lotes = agruparEnLotes(LOTE_5_MANANA)
+    expect(lotes).toHaveLength(1)
+    expect(lotes[0]).toMatchObject({ cajeroLogin: '111', turno: 'manana', jornada: '2026-09-05' })
+    expect(lotes[0].fechaCierra).toBe('2026-09-05T22:07:03.000Z')   // 16:07:03 CR
+  })
+
+  it('110843–110866 = UN turno tarde del 222, jornada 2026-09-05, cierre 22:30:06 CR', () => {
+    const lotes = agruparEnLotes(LOTE_5_TARDE)
+    expect(lotes).toHaveLength(1)
+    expect(lotes[0]).toMatchObject({ cajeroLogin: '222', turno: 'tarde', jornada: '2026-09-05' })
+    expect(lotes[0].tickets).toHaveLength(24)
+    expect(lotes[0].fechaCierra).toBe('2026-09-06T04:30:06.000Z')   // 22:30:06 CR
+  })
+
+  it('los tres juntos = tres lotes y tres celdas (jornada, turno), sin mezclarse', () => {
+    expect(agruparEnLotes(TODOS)).toHaveLength(3)
+    expect(agruparPorJornadaTurno(TODOS).map(c => [c.jornada, c.turno, c.tickets.length])).toEqual([
+      ['2026-09-04', 'tarde',  13],
+      ['2026-09-05', 'manana',  1],
+      ['2026-09-05', 'tarde',  24],
+    ])
+  })
+
+  it('ninguna de las 38 facturas se pierde ni se duplica', () => {
+    const celdas = agruparPorJornadaTurno(TODOS)
+    const numeros = celdas.flatMap(c => c.tickets.map(t => t.numero))
+    expect(numeros).toHaveLength(38)
+    expect(new Set(numeros).size).toBe(38)
+  })
+})
+
+describe('jornada para TODOS los tickets, turno solo para los del mapa', () => {
+  it('el ticket sin caja conocida IGUAL forma lote y recibe jornada — solo le falta el turno', () => {
+    const lotes = agruparEnLotes([
+      t({ fecha_registra: '2026-09-05T14:00:00-06:00', fecha_cierra: '2026-09-05T16:00:00-06:00', cajero_login: '026' }),
+      t({ fecha_registra: '2026-09-05T15:00:00-06:00', cajero_login: null }),   // histórico sin cajero
+    ])
+    expect(lotes).toHaveLength(2)
+    for (const l of lotes) {
+      expect(l.jornada).toBe('2026-09-05')   // jornada SIEMPRE
+      expect(l.turno).toBeNull()             // turno solo si está en el mapa
+    }
+  })
+
+  it('mezclados con los del mapa, NINGUNO se cae del día', () => {
+    const tickets = [
+      t({ fecha_registra: '2026-09-05T12:00:00-06:00', fecha_cierra: '2026-09-05T16:07:03-06:00', cajero_login: '111' }),
+      t({ fecha_registra: '2026-09-05T18:00:00-06:00', fecha_cierra: '2026-09-05T22:30:06-06:00', cajero_login: '222' }),
+      t({ fecha_registra: '2026-09-05T15:00:00-06:00', cajero_login: '026' }),
+      t({ fecha_registra: '2026-09-05T15:30:00-06:00', cajero_login: null }),
+    ]
+    const celdas = agruparPorJornadaTurno(tickets)
+    expect(celdas.flatMap(c => c.tickets)).toHaveLength(4)
+    expect(celdas.every(c => c.jornada === '2026-09-05')).toBe(true)
+    // Dos celdas con turno y las sin caja, que quedan aparte pero presentes.
+    expect(celdas.filter(c => c.turno === null).flatMap(c => c.tickets)).toHaveLength(2)
   })
 })

@@ -11,6 +11,7 @@ import {
 } from './ventasEnVivoDatos'
 import type { CajeroDay } from '../../shared/types/ventas'
 import { SALONEROS_CONOCIDOS } from '../../shared/ndf/mapTicket'
+import { turnosConocidos } from '../../shared/ndf/jornada'
 import { aggGeneral, aggSalonero, getDayStats } from './ventasUtils'
 import { businessDateDe, ventanaJornada, type MesaAbiertaRow } from '../../shared/api/posNdf'
 import { mixPorCategoria, ticketsDelDia } from './ventasEnVivoTypes'
@@ -327,58 +328,64 @@ describe('paxDelTicket', () => {
 
 // ── Turnos: mañana / tarde, corte a las 16:00 CR ───────────────────────────────
 
-describe('el turno lo decide el CAJERO, no el reloj (P1a)', () => {
-  // El corte de las 16:00 murió: la definición vive en `shared/ndf/jornada.ts` y sus bordes
-  // están clavados ahí. Acá se prueba el cableado de «En vivo» contra filas reales.
+/** Los bloques de `ventasPorTurno` indexados por id de turno, para poder afirmar corto. */
+const porTurno = (v: ReturnType<typeof ventasPorTurno>) =>
+  Object.fromEntries([...v.turnos, v.sinTurno].map(b => [b.turno ?? 'sinTurno', b]))
 
-  it('la mesa abierta 15:50 y cobrada 16:30 cuenta en el turno del CAJERO que la cobró', () => {
+describe('el turno lo decide el CAJERO (mapa), no el reloj (P1a)', () => {
+  // Los bordes de la definición están clavados en `shared/ndf/jornada.test.ts` contra los
+  // números reales de staging. Acá se prueba el cableado de «En vivo».
+
+  it('la mesa abierta 15:50 y cobrada 22:30 cuenta en el turno del CAJERO que la cobró', () => {
     // Con la regla vieja del reloj esto era «mañana» por abrirse antes de las 16:00.
-    const t = ventasPorTurno([ticket({
+    const t = porTurno(ventasPorTurno([ticket({
       fecha_registra: '2026-09-01T15:50:00-06:00',
       fecha_cierra:   '2026-09-01T22:30:00-06:00',
       cajero_login:   '222',
       valor_servido_crc: 9000,
-    })])
+    })]))
     expect(t.tarde.neto).toBe(9000)
     expect(t.manana.neto).toBe(0)
   })
 
   it('el 111 que cierra pasadas las 16:00 sigue siendo MAÑANA', () => {
-    // Dato real de staging: el 5-sep el 111 cerró 16:07 CR.
-    const t = ventasPorTurno([ticket({
+    // Dato real de staging: el 5-sep el 111 cerró 16:07:03 CR.
+    const t = porTurno(ventasPorTurno([ticket({
       fecha_registra: '2026-09-05T12:00:00-06:00',
-      fecha_cierra:   '2026-09-05T16:07:00-06:00',
+      fecha_cierra:   '2026-09-05T16:07:03-06:00',
       cajero_login:   '111',
       valor_servido_crc: 8000,
-    })])
+    })]))
     expect(t.manana.neto).toBe(8000)
     expect(t.tarde.neto).toBe(0)
   })
 
   it('la factura de las 02:00 del lote del 222 va con su turno, sin partirse', () => {
     const cierre = '2026-09-02T02:30:00-06:00'
-    const t = ventasPorTurno([
+    const t = porTurno(ventasPorTurno([
       ticket({ id: 'a', fecha_registra: '2026-09-01T20:00:00-06:00', fecha_cierra: cierre, cajero_login: '222', valor_servido_crc: 7000 }),
       ticket({ id: 'b', fecha_registra: '2026-09-02T02:00:00-06:00', fecha_cierra: cierre, cajero_login: '222', valor_servido_crc: 3000 }),
-    ])
+    ]))
     expect(t.tarde).toMatchObject({ neto: 10000, tickets: 2 })
   })
 })
 
 describe('lotesDeCierre', () => {
-  it('una fila por pasada de caja, con su jornada de apertura', () => {
+  it('una fila por pasada de caja, con su jornada de apertura y su etiqueta del mapa', () => {
     const lotes = lotesDeCierre([
-      ticket({ id: 'a', fecha_registra: '2026-09-05T11:30:00-06:00', fecha_cierra: '2026-09-05T16:07:00-06:00', cajero_login: '111', valor_servido_crc: 8000, pax: 2, pax_articulo: 2 }),
+      ticket({ id: 'a', fecha_registra: '2026-09-05T11:30:00-06:00', fecha_cierra: '2026-09-05T16:07:03-06:00', cajero_login: '111', valor_servido_crc: 8000, pax: 2, pax_articulo: 2 }),
       ticket({ id: 'b', fecha_registra: '2026-09-05T18:30:00-06:00', fecha_cierra: '2026-09-06T01:00:00-06:00', cajero_login: '222', valor_servido_crc: 12000, pax: 4, pax_articulo: 4 }),
       ticket({ id: 'c', fecha_registra: '2026-09-06T00:40:00-06:00', fecha_cierra: '2026-09-06T01:00:00-06:00', cajero_login: '222', valor_servido_crc: 3000, pax: 2, pax_articulo: 2 }),
     ])
     expect(lotes).toHaveLength(2)
     expect(lotes[0]).toMatchObject({
-      cajeroLogin: '111', turno: 'manana', jornada: '2026-09-05', abierto: false, neto: 8000, tickets: 1,
+      cajeroLogin: '111', turno: 'manana', etiqueta: 'Mañana · almuerzo',
+      jornada: '2026-09-05', abierto: false, neto: 8000, tickets: 1,
     })
     // El 222 abrió el 5 y cerró el 6 a la 01:00: la jornada es la que ABRIÓ.
     expect(lotes[1]).toMatchObject({
-      cajeroLogin: '222', turno: 'tarde', jornada: '2026-09-05', abierto: false, neto: 15000, tickets: 2,
+      cajeroLogin: '222', turno: 'tarde', etiqueta: 'Tarde · noche',
+      jornada: '2026-09-05', abierto: false, neto: 15000, tickets: 2,
     })
   })
 
@@ -391,40 +398,51 @@ describe('lotesDeCierre', () => {
 })
 
 describe('ventasPorTurno', () => {
-  it('INVARIANTE: mañana + tarde + sinTurno = el neto del día', () => {
+  it('INVARIANTE: Σ turnos + sinTurno = el neto del día', () => {
     const tickets = [
       ticket({ id: 'a', fecha_registra: '2026-09-01T09:00:00-06:00', cajero_login: '111', valor_servido_crc: 10000 }),
       ticket({ id: 'b', fecha_registra: '2026-09-01T15:59:00-06:00', cajero_login: '111', valor_servido_crc: 5000 }),
       ticket({ id: 'c', fecha_registra: '2026-09-01T16:00:00-06:00', cajero_login: '222', valor_servido_crc: 7000 }),
       ticket({ id: 'd', fecha_registra: '2026-09-02T02:00:00-06:00', cajero_login: '222', valor_servido_crc: 3000 }),
     ]
-    const t = ventasPorTurno(tickets)
+    const v = ventasPorTurno(tickets)
+    const t = porTurno(v)
     expect(t.manana).toMatchObject({ neto: 15000, tickets: 2 })
     expect(t.tarde).toMatchObject({ neto: 10000, tickets: 2 })
     expect(t.sinTurno).toMatchObject({ neto: 0, tickets: 0 })
 
     const neto = tickets.reduce((s, x) => s + (x.valor_servido_crc ?? 0), 0)
-    expect(t.manana.neto + t.tarde.neto + t.sinTurno.neto).toBe(neto)
-    expect(t.manana.tickets + t.tarde.tickets + t.sinTurno.tickets).toBe(tickets.length)
+    const todos = [...v.turnos, v.sinTurno]
+    expect(todos.reduce((a, b) => a + b.neto, 0)).toBe(neto)
+    expect(todos.reduce((a, b) => a + b.tickets, 0)).toBe(tickets.length)
   })
 
-  it('la factura que no cerró 111 ni 222 se muestra aparte, no se reparte a ojo', () => {
-    const t = ventasPorTurno([
+  it('la factura sin caja conocida NO se cae del total del día: va a `sinTurno`', () => {
+    const tickets = [
       ticket({ id: 'a', cajero_login: '222', valor_servido_crc: 4000 }),
       ticket({ id: 'b', cajero_login: '026', valor_servido_crc: 1000 }),   // un salonero cobrando
       ticket({ id: 'c', cajero_login: null,  valor_servido_crc: 500 }),    // histórico sin login
-    ])
+    ]
+    const v = ventasPorTurno(tickets)
+    const t = porTurno(v)
     expect(t.tarde.neto).toBe(4000)
     expect(t.sinTurno).toMatchObject({ neto: 1500, tickets: 2 })
     expect(t.manana.neto).toBe(0)
+    // Lo que importa: el día entero sigue estando.
+    expect([...v.turnos, v.sinTurno].reduce((a, b) => a + b.neto, 0)).toBe(5500)
   })
 
-  it('jornada vacía: los tres bloques en cero', () => {
-    expect(ventasPorTurno([])).toEqual({
-      manana:   { neto: 0, tickets: 0, pax: 0 },
-      tarde:    { neto: 0, tickets: 0, pax: 0 },
-      sinTurno: { neto: 0, tickets: 0, pax: 0 },
-    })
+  it('las filas salen del MAPA, en su orden, aunque un turno no haya vendido', () => {
+    const v = ventasPorTurno([ticket({ cajero_login: '222', valor_servido_crc: 4000 })])
+    expect(v.turnos.map(b => b.turno)).toEqual(turnosConocidos().map(t => t.turno))
+    expect(v.turnos.map(b => b.etiqueta)).toEqual(turnosConocidos().map(t => t.etiqueta))
+  })
+
+  it('jornada vacía: todos los turnos del mapa en cero, y sinTurno en cero', () => {
+    const v = ventasPorTurno([])
+    expect(v.turnos).toHaveLength(turnosConocidos().length)
+    expect(v.turnos.every(b => b.neto === 0 && b.tickets === 0 && b.pax === 0)).toBe(true)
+    expect(v.sinTurno).toMatchObject({ turno: null, neto: 0, tickets: 0, pax: 0 })
   })
 })
 

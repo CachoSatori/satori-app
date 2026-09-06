@@ -208,7 +208,14 @@ export default function VentasEnVivo({ metas }: Props) {
   const hoyJornada = jornadaActualCR()
   const enUltimaJornada = snap.fecha >= hoyJornada
 
-  const netoTurnos = turnos ? turnos.manana.neto + turnos.tarde.neto + turnos.sinTurno.neto : 0
+  // Todas las filas del panel: los turnos del mapa + las facturas sin caja conocida (solo si
+  // hay alguna). Sumar una caja al mapa agrega su fila acá sola, sin tocar esta pantalla.
+  const filasTurno = turnos
+    ? [...turnos.turnos, ...(turnos.sinTurno.tickets > 0 ? [turnos.sinTurno] : [])]
+    : []
+  const netoTurnos    = filasTurno.reduce((a, t) => a + t.neto, 0)
+  const ticketsTurno  = filasTurno.reduce((a, t) => a + t.tickets, 0)
+  const paxTurno      = filasTurno.reduce((a, t) => a + t.pax, 0)
   const dow = dayOfWeek(snap.fecha)
 
   // Sin una sola factura cerrada en la jornada. No es un error ni algo que rellenar: es que
@@ -489,7 +496,7 @@ export default function VentasEnVivo({ metas }: Props) {
             <div className="apos-panel-hd">
               <h3>Por turno</h3>
               <span className="apos-panel-sub">
-                por lote de cierre de caja · mañana = cajero <code>111</code> · tarde = cajero <code>222</code>
+                por lote de cierre de caja · el turno lo define el cajero que cerró
               </span>
             </div>
             <div className="apos-tabla-wrap">
@@ -505,31 +512,23 @@ export default function VentasEnVivo({ metas }: Props) {
                   </tr>
                 </thead>
                 <tbody>
-                  {([
-                    ['Mañana · cajero 111', turnos.manana],
-                    ['Tarde · cajero 222', turnos.tarde],
-                    // Solo si hay algo: normalmente no cerró nadie más que 111/222.
-                    ...(turnos.sinTurno.tickets > 0
-                      ? [['Sin cajero de turno', turnos.sinTurno] as const]
-                      : []),
-                  ] as const).map(
-                    ([label, t]) => (
-                      <tr key={label}>
-                        <td>{label}</td>
-                        <td className="r">{fi(t.neto)}</td>
-                        <td className="r">{porcentaje(t.neto, netoTurnos)}</td>
-                        <td className="r">{t.tickets.toLocaleString('es-CR')}</td>
-                        <td className="r">{t.tickets > 0 ? fi(Math.round(t.neto / t.tickets)) : '—'}</td>
-                        <td className="r">{t.pax.toLocaleString('es-CR')}</td>
-                      </tr>
-                    ))}
+                  {filasTurno.map(t => (
+                    <tr key={t.turno ?? '(sin turno)'}>
+                      <td>{t.etiqueta}</td>
+                      <td className="r">{fi(t.neto)}</td>
+                      <td className="r">{porcentaje(t.neto, netoTurnos)}</td>
+                      <td className="r">{t.tickets.toLocaleString('es-CR')}</td>
+                      <td className="r">{t.tickets > 0 ? fi(Math.round(t.neto / t.tickets)) : '—'}</td>
+                      <td className="r">{t.pax.toLocaleString('es-CR')}</td>
+                    </tr>
+                  ))}
                   <tr>
                     <td><strong>Jornada completa</strong></td>
                     <td className="r"><strong>{fi(netoTurnos)}</strong></td>
                     <td className="r">100,0%</td>
-                    <td className="r"><strong>{(turnos.manana.tickets + turnos.tarde.tickets + turnos.sinTurno.tickets).toLocaleString('es-CR')}</strong></td>
+                    <td className="r"><strong>{ticketsTurno.toLocaleString('es-CR')}</strong></td>
                     <td className="r">—</td>
-                    <td className="r"><strong>{(turnos.manana.pax + turnos.tarde.pax + turnos.sinTurno.pax).toLocaleString('es-CR')}</strong></td>
+                    <td className="r"><strong>{paxTurno.toLocaleString('es-CR')}</strong></td>
                   </tr>
                 </tbody>
               </table>
@@ -538,7 +537,7 @@ export default function VentasEnVivo({ metas }: Props) {
                 entera, así que su suma TIENE que ser el neto del día. Si algún día no cuadra,
                 se ve acá y no en una hoja de cálculo tres semanas después. */}
             <p className="apos-nota" style={{ marginBottom: 0 }}>
-              Mañana + tarde{turnos.sinTurno.tickets > 0 ? ' + sin cajero' : ''} = {fi(netoTurnos)}{' '}
+              {filasTurno.map(t => t.etiqueta).join(' + ')} = {fi(netoTurnos)}{' '}
               {netoTurnos === stats.ventaNeta
                 ? <span className="apos-estado is-ok">✓ cuadra con el neto del día</span>
                 : <span className="apos-estado is-flojo">
@@ -549,7 +548,10 @@ export default function VentasEnVivo({ metas }: Props) {
               <code>fecha_cierra</code>), y todas las facturas de una misma pasada de caja van
               juntas. La <strong>fecha de la jornada sale de la apertura</strong> (el primer
               ticket del lote, en hora de Costa Rica): el <code>222</code> que cierra a la 01:00
-              sigue perteneciendo al día que abrió.
+              sigue perteneciendo al día que abrió. Las cajas salen de un mapa —{' '}
+              <code>CAJAS_POR_LOGIN</code>—, así que sumar una barra o un desayuno es una fila
+              ahí y esta tabla la muestra sola. Ojo: el <em>canal</em> «barra» de cada factura
+              es otra cosa, y no entra en esta cuenta.
             </p>
 
             {/* La otra lectura del mismo día: la que guarda el PoS según qué caja estaba

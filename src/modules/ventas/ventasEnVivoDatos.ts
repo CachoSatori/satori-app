@@ -4,7 +4,9 @@ import {
   getTicketsJornada, HORA_CORTE_JORNADA, type LineaNdfRow, type MesaAbiertaRow,
   type TicketNdfConId,
 } from '../../shared/api/posNdf'
-import { agruparEnLotes, type Turno } from '../../shared/ndf/jornada'
+import {
+  agruparEnLotes, etiquetaTurno, turnosConocidos, type Turno,
+} from '../../shared/ndf/jornada'
 import {
   esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO, LOGIN_CAJERO_MANANA,
   LOGIN_CAJERO_NOCHE, SALONEROS_CONOCIDOS,
@@ -390,14 +392,24 @@ export function horaCRDe(instante: string): number | null {
 
 export type { Turno } from '../../shared/ndf/jornada'
 
-export interface BloqueTurno { neto: number; tickets: number; pax: number }
+export interface BloqueTurno {
+  /** Id del turno, del mapa de cajas. `null` en el bloque de las facturas sin caja conocida. */
+  turno:    Turno | null
+  etiqueta: string
+  neto:     number
+  tickets:  number
+  pax:      number
+}
 
 export interface VentasTurno {
-  manana: BloqueTurno
-  tarde:  BloqueTurno
   /**
-   * Las facturas que no cerró ninguno de los dos cajeros (login vacío, un salonero, o un login
-   * de sistema). NO se reparten a ojo: se muestran aparte, que es la verdad. Normalmente 0.
+   * Un bloque por turno DEL MAPA, en el orden del mapa. Siempre están todos, aunque un turno
+   * no haya vendido nada: la tabla tiene que ser estable entre jornadas.
+   */
+  turnos:   BloqueTurno[]
+  /**
+   * Las facturas que no cerró ninguna caja del mapa (login vacío, un salonero, un login de
+   * sistema, o histórico). NO se reparten a ojo — pero SÍ cuentan en el total del día.
    */
   sinTurno: BloqueTurno
 }
@@ -405,24 +417,32 @@ export interface VentasTurno {
 /**
  * Cuánto vendió cada turno, agrupando por LOTE de cierre.
  *
- * Los tres bloques son excluyentes y cubren la jornada entera:
- * mañana + tarde + sinTurno = el neto del día.
+ * Los bloques salen del MAPA de cajas (`CAJAS_POR_LOGIN`): sumar una caja de barra o un
+ * desayuno agrega su fila sola, sin tocar esta función ni la pantalla.
+ *
+ * Invariante: Σ turnos + sinTurno = el neto del día. Ninguna factura se cae por no tener turno.
  */
 export function ventasPorTurno(tickets: TicketNdfConId[]): VentasTurno {
-  const vacio = (): BloqueTurno => ({ neto: 0, tickets: 0, pax: 0 })
-  const out: VentasTurno = { manana: vacio(), tarde: vacio(), sinTurno: vacio() }
+  const vacio = (turno: Turno | null, etiqueta: string): BloqueTurno =>
+    ({ turno, etiqueta, neto: 0, tickets: 0, pax: 0 })
+
+  const turnos = turnosConocidos().map(t => vacio(t.turno, t.etiqueta))
+  const porId  = new Map(turnos.map(b => [b.turno, b]))
+  const sinTurno = vacio(null, etiquetaTurno(null))
+
   for (const lote of agruparEnLotes(tickets)) {
-    const b = out[lote.turno ?? 'sinTurno']
+    // Un turno que el mapa no conoce (login mapeado y después borrado del mapa) cae igual acá
+    // en vez de perderse: el total del día manda sobre la prolijidad de la tabla.
+    const b = (lote.turno !== null ? porId.get(lote.turno) : undefined) ?? sinTurno
     for (const t of lote.tickets) {
       b.neto    += n(t.valor_servido_crc)
       b.tickets += 1
       b.pax     += paxDelTicket(t)
     }
   }
-  out.manana.neto   = Math.round(out.manana.neto)
-  out.tarde.neto    = Math.round(out.tarde.neto)
-  out.sinTurno.neto = Math.round(out.sinTurno.neto)
-  return out
+
+  for (const b of [...turnos, sinTurno]) b.neto = Math.round(b.neto)
+  return { turnos, sinTurno }
 }
 
 /**
@@ -435,6 +455,7 @@ export interface LoteResumen {
   clave:       string
   cajeroLogin: string | null
   turno:       Turno | null
+  etiqueta:    string
   jornada:     string | null
   apertura:    string | null
   fechaCierra: string | null
@@ -449,6 +470,7 @@ export function lotesDeCierre(tickets: TicketNdfConId[]): LoteResumen[] {
     clave:       l.clave,
     cajeroLogin: l.cajeroLogin,
     turno:       l.turno,
+    etiqueta:    etiquetaTurno(l.turno),
     jornada:     l.jornada,
     apertura:    l.apertura,
     fechaCierra: l.fechaCierra,

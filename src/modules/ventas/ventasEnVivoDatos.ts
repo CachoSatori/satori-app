@@ -109,6 +109,15 @@ export interface DiaArmado {
   tickets:  number
   /** El neto partido en salón / delivery. */
   canales:  VentasPorCanal
+  /**
+   * Cuántas FACTURAS lleva cada clave de `dia.saloneros` (meseros, caja y sistema).
+   *
+   * `SaloneroDay` no tiene campo para las órdenes —el modelo del xls nunca las tuvo—, pero
+   * `armarDia` ya las cuenta para poder sacar el ticket promedio de la caja. Se expone en vez
+   * de recontarlas afuera, así el denominador del "neto ÷ órdenes" de cada mesero es el MISMO
+   * número que usa la fila de caja.
+   */
+  ordenes:  Record<string, number>
 }
 
 export interface VentasPorCanal { salon: number; delivery: number }
@@ -248,6 +257,7 @@ export function armarDia(
 
   return {
     dia: { fileName: `ndf ${fecha}`, uploadedAt, saloneros },
+    ordenes: Object.fromEntries([...acc.entries()].map(([k, v]) => [k, v.ordenes])),
     pm,
     bruto: Math.round(bruto), servicio: Math.round(servicio),
     iva: Math.round(iva), regalia: Math.round(regalia),
@@ -445,6 +455,76 @@ export function ventasPorTurno(tickets: TicketNdfConId[]): VentasTurno {
   return { turnos, sinTurno }
 }
 
+// ── El día PARTIDO POR TURNO ───────────────────────────────────────────────────────────────
+//
+// La partición que va a reusar el dashboard por empleado: **por turno + general**. Cada turno
+// arma su propio `DiaData` con el MISMO `armarDia`, así que todo lo que sabe leer un `DiaData`
+// (`aggSalonero`, `aggGeneral`, `getDayStats`, el mix) funciona igual sobre un turno suelto.
+// Nada de agregadores nuevos: cambia el conjunto de tickets, no la matemática.
+
+export interface DiaDeTurno {
+  turno:    Turno | null
+  etiqueta: string
+  /** El día de ESE turno, con la misma forma que el día completo. */
+  dia:      DiaData
+  pm:       ProductMap
+  /** Órdenes por clave de `dia.saloneros`, para el "neto ÷ órdenes" de cada mesero. */
+  ordenes:  Record<string, number>
+  neto:     number
+  tickets:  number
+  pax:      number
+}
+
+/**
+ * La jornada partida en turnos, cada uno con su `DiaData` completo.
+ *
+ * Los turnos salen del MAPA de cajas y del lote de cierre (`shared/ndf/jornada.ts`), igual que
+ * `ventasPorTurno`: un turno es una pasada de caja, no una franja horaria. Solo se devuelven
+ * los turnos que efectivamente vendieron — una tabla con un turno en cero por cada caja del
+ * mapa sería ruido.
+ */
+export function diasPorTurno(
+  fecha: string,
+  tickets: TicketNdfConId[],
+  lineas: LineaNdfRow[],
+  uploadedAt: string,
+  nombres: Record<string, string> = {},
+): DiaDeTurno[] {
+  const porTurno = new Map<Turno | null, TicketNdfConId[]>()
+  for (const lote of agruparEnLotes(tickets)) {
+    const lista = porTurno.get(lote.turno)
+    if (lista) lista.push(...lote.tickets)
+    else porTurno.set(lote.turno, [...lote.tickets])
+  }
+
+  const lineasPorTicket = new Map<string, LineaNdfRow[]>()
+  for (const l of lineas) {
+    const lista = lineasPorTicket.get(l.ticket_id)
+    if (lista) lista.push(l)
+    else lineasPorTicket.set(l.ticket_id, [l])
+  }
+
+  const orden = new Map(turnosConocidos().map((t, i) => [t.turno, i]))
+  const salida: DiaDeTurno[] = []
+  for (const [turno, delTurno] of porTurno) {
+    const suyas = delTurno.flatMap(t => lineasPorTicket.get(t.id) ?? [])
+    const armado = armarDia(fecha, delTurno, suyas, uploadedAt, nombres)
+    salida.push({
+      turno,
+      etiqueta: etiquetaTurno(turno),
+      dia:      armado.dia,
+      pm:       armado.pm,
+      ordenes:  armado.ordenes,
+      neto:     Math.round(Object.values(armado.dia.saloneros).reduce((a, v) => a + v.total, 0)),
+      tickets:  delTurno.length,
+      pax:      delTurno.reduce((a, t) => a + paxDelTicket(t), 0),
+    })
+  }
+  // En el orden del mapa; lo que no está en el mapa (sin caja conocida), al final.
+  return salida.sort((a, b) =>
+    (orden.get(a.turno ?? '') ?? 99) - (orden.get(b.turno ?? '') ?? 99))
+}
+
 /**
  * Los lotes de cierre de la jornada que se está mirando, en orden de apertura.
  *
@@ -624,6 +704,10 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
     turnos: ventasPorTurno(e.tickets),
     turnosPoS: ventasPorTurnoPoS(e.tickets),
     canales: armado.canales,
+    // Órdenes por clave: el denominador del "neto ÷ órdenes" de cada mesero.
+    ordenes: armado.ordenes,
+    // La jornada partida por turno, cada uno con su `DiaData` completo.
+    porTurno: diasPorTurno(e.fecha, e.tickets, e.lineas, e.ahora.toISOString(), e.nombres ?? {}),
   }
 }
 

@@ -175,6 +175,30 @@ export interface SnapshotEnVivo {
 
   /** Quién tiene abierta cada mesa AHORA. Sin monto: `pos_ndf_open` todavía no lo trae. */
   abiertasPorSalonero?: { salonero: string; mesas: number; pax: number }[]
+
+  /**
+   * Cuántas FACTURAS lleva cada clave de `dia.saloneros`. `SaloneroDay` no tiene el campo —el
+   * modelo del xls nunca contó órdenes por mesero—, así que viaja aparte. Es el denominador
+   * del ticket promedio "neto ÷ órdenes".
+   */
+  ordenes?: Record<string, number>
+
+  /**
+   * La jornada partida por TURNO, cada uno con su `DiaData` completo (mismo `armarDia`).
+   *
+   * Es la partición que va a reusar el dashboard por empleado: **por turno + general**. Todo lo
+   * que sabe leer un `DiaData` funciona igual sobre un turno suelto.
+   */
+  porTurno?: {
+    turno:    string | null
+    etiqueta: string
+    dia:      DiaData
+    pm:       ProductMap
+    ordenes:  Record<string, number>
+    neto:     number
+    tickets:  number
+    pax:      number
+  }[]
 }
 
 // ── Derivados live-only ─────────────────────────────────────────────────────────

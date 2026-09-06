@@ -5,6 +5,7 @@ vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 import {
   armarDia, armarSnapshot, calidadPaxPorSalonero, claveSalonero, compararContra,
   esJornadaEnCurso, esSinAsignar, etiquetaNoMesero, horaCRDe, jornadaActualCR,
+  diasPorTurno,
   jornadasComparables, lotesDeCierre, nombreSalonero, paxDelTicket, ritmoPorHora,
   etiquetaTurnoPoS, jornadaDesplazada, resumirMesasAbiertas, ventasPorCanal, ventasPorTurno,
   ventasPorTurnoPoS,
@@ -865,5 +866,109 @@ describe('etiquetaTurnoPoS', () => {
       { turno: 'Tarde',  neto: 10000, tickets: 2 },
       { turno: 'Mañana', neto: 4000,  tickets: 1 },
     ])
+  })
+})
+
+// ── El día partido por turno (pase de producto) ────────────────────────────────────────────
+
+describe('diasPorTurno — la partición "por turno + general"', () => {
+  const linea = (id: string): LineaNdfRow => ({
+    ticket_id: id, codigo_producto: '100', nombre: 'ROLL SATORI',
+    cantidad: 2, monto: 12000, familia: 2,
+  })
+  // Mañana: el 111 cierra 16:07. Tarde: el 222 cierra 22:30. Dos meseros distintos.
+  const TICKETS = [
+    ticket({ id: 'm1', fecha_registra: '2026-09-05T12:00:00-06:00', fecha_cierra: '2026-09-05T16:07:03-06:00',
+             cajero_login: '111', salonero_login: '026', valor_servido_crc: 10000, pax: 2, pax_articulo: 2 }),
+    ticket({ id: 'm2', fecha_registra: '2026-09-05T13:00:00-06:00', fecha_cierra: '2026-09-05T16:07:03-06:00',
+             cajero_login: '111', salonero_login: '026', valor_servido_crc: 6000, pax: 2, pax_articulo: 2 }),
+    ticket({ id: 't1', fecha_registra: '2026-09-05T19:00:00-06:00', fecha_cierra: '2026-09-05T22:30:06-06:00',
+             cajero_login: '222', salonero_login: '027', valor_servido_crc: 20000, pax: 4, pax_articulo: 4 }),
+  ]
+  const LINEAS = TICKETS.map(t => linea(t.id))
+  const partido = () => diasPorTurno('2026-09-05', TICKETS, LINEAS, 'sello', NOMBRES)
+
+  it('devuelve un DiaData por turno, en el orden del mapa de cajas', () => {
+    expect(partido().map(t => [t.turno, t.etiqueta])).toEqual([
+      ['manana', 'Mañana · almuerzo'],
+      ['tarde',  'Tarde · noche'],
+    ])
+  })
+
+  it('cada turno lleva SOLO sus tickets, con su neto, sus tickets y su pax', () => {
+    const [manana, tarde] = partido()
+    expect(manana).toMatchObject({ neto: 16000, tickets: 2, pax: 4 })
+    expect(tarde).toMatchObject({ neto: 20000, tickets: 1, pax: 4 })
+  })
+
+  it('INVARIANTE: los turnos suman el día entero, sin perder ni duplicar', () => {
+    const p = partido()
+    expect(p.reduce((a, t) => a + t.neto, 0)).toBe(36000)
+    expect(p.reduce((a, t) => a + t.tickets, 0)).toBe(TICKETS.length)
+    expect(p.reduce((a, t) => a + t.pax, 0)).toBe(8)
+  })
+
+  it('el DiaData de un turno tiene la MISMA forma que el del día entero', () => {
+    for (const t of partido()) {
+      expect(Object.keys(t.dia).sort()).toEqual(['fileName', 'saloneros', 'uploadedAt'])
+    }
+  })
+
+  it('es EXACTAMENTE lo que daría armarDia con los tickets de ese turno', () => {
+    const soloManana = TICKETS.filter(t => t.cajero_login === '111')
+    const esperado = armarDia('2026-09-05', soloManana, soloManana.map(t => linea(t.id)), 'sello', NOMBRES)
+    expect(partido()[0].dia).toEqual(esperado.dia)
+  })
+
+  it('cada mesero aparece SOLO en el turno que trabajó', () => {
+    const [manana, tarde] = partido()
+    expect(Object.keys(manana.dia.saloneros)).toEqual(['MAXO'])
+    expect(Object.keys(tarde.dia.saloneros)).toEqual(['GUILLE'])
+  })
+
+  it('el lote que cruza medianoche NO se parte: va entero al turno que abrió', () => {
+    const cierre = '2026-09-06T01:00:00-06:00'
+    const p = diasPorTurno('2026-09-05', [
+      ticket({ id: 'a', fecha_registra: '2026-09-05T20:00:00-06:00', fecha_cierra: cierre, cajero_login: '222', valor_servido_crc: 7000 }),
+      ticket({ id: 'b', fecha_registra: '2026-09-06T00:40:00-06:00', fecha_cierra: cierre, cajero_login: '222', valor_servido_crc: 3000 }),
+    ], [], 'sello', NOMBRES)
+    expect(p).toHaveLength(1)
+    expect(p[0]).toMatchObject({ turno: 'tarde', neto: 10000, tickets: 2 })
+  })
+
+  it('las facturas sin caja conocida forman su propio bloque, al final y sin turno', () => {
+    const p = diasPorTurno('2026-09-05', [
+      ...TICKETS,
+      ticket({ id: 'x', fecha_registra: '2026-09-05T15:00:00-06:00', cajero_login: '026', valor_servido_crc: 500 }),
+    ], [], 'sello', NOMBRES)
+    expect(p.map(t => t.turno)).toEqual(['manana', 'tarde', null])
+    expect(p[2]).toMatchObject({ etiqueta: 'Sin caja de turno', neto: 500 })
+  })
+
+  it('sin tickets no inventa turnos en cero', () => {
+    expect(diasPorTurno('2026-09-05', [], [], 'sello')).toEqual([])
+  })
+})
+
+describe('armarDia expone las órdenes por clave', () => {
+  it('cuenta las facturas de cada mesero, que es el divisor del "neto ÷ órdenes"', () => {
+    const t = [
+      ticket({ id: 'a', salonero_login: '026', valor_servido_crc: 10000 }),
+      ticket({ id: 'b', salonero_login: '026', valor_servido_crc: 6000 }),
+      ticket({ id: 'c', salonero_login: '027', valor_servido_crc: 20000 }),
+    ]
+    const armado = armarDia('2026-09-05', t, [], 'sello', NOMBRES)
+    expect(armado.ordenes).toEqual({ MAXO: 2, GUILLE: 1 })
+    // El ticket promedio del mesero sale de acá, NO de las unidades vendidas.
+    const maxo = armado.dia.saloneros['MAXO']
+    expect(Math.round(maxo.total / armado.ordenes['MAXO'])).toBe(8000)
+  })
+
+  it('las claves son las MISMAS que las de dia.saloneros, caja incluida', () => {
+    const armado = armarDia('2026-09-05', [
+      ticket({ id: 'a', salonero_login: '026' }),
+      ticket({ id: 'b', salonero_login: null, registrado_por: 'cajero', cajero_login: '222' }),
+    ], [], 'sello', NOMBRES)
+    expect(Object.keys(armado.ordenes).sort()).toEqual(Object.keys(armado.dia.saloneros).sort())
   })
 })

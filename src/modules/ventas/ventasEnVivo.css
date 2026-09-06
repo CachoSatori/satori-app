@@ -588,3 +588,32 @@
 }
 .apos-btn-nav:hover:not(:disabled) { border-color: currentColor; }
 .apos-btn-nav:disabled { opacity: 0.35; cursor: default; }
+
+/* Bloques colapsables (caja y sistema): el resumen ya lleva la cifra, así que se abre
+   solo cuando hace falta el desglose. */
+.apos-detalle { margin-top: .9rem; }
+.apos-detalle > summary {
+  cursor: pointer;
+  padding: .5rem .1rem;
+  font-size: .86rem;
+  color: var(--vt-fg-2, #5b6472);
+  list-style: revert;
+}
+.apos-detalle > summary:hover { color: var(--vt-fg, #222); }
+.apos-detalle > summary strong { color: var(--vt-fg, #222); }
+
+/* Saloneros por turno: un sub-bloque por turno dentro del mismo panel. */
+.apos-turno-bloque + .apos-turno-bloque { margin-top: 1.1rem; }
+.apos-subtitulo {
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+  margin: 0 0 .4rem;
+  font-size: .9rem;
+  font-weight: 600;
+}
+.apos-subtitulo-dato {
+  font-weight: 400;
+  font-size: .82rem;
+  color: var(--vt-fg-2, #5b6472);
+}

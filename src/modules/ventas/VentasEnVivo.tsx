@@ -151,7 +151,7 @@ export default function VentasEnVivo({ metas }: Props) {
 
   const {
     dia, pm, porHora, historico, calidadPax, proyeccionCierre, turnos, turnosPoS, canales,
-    abiertasPorSalonero,
+    abiertasPorSalonero, ordenes, porTurno,
   } = snap
 
   // ── El día, con las MISMAS funciones que «Hoy» ─────────────────────────────────────────────
@@ -188,6 +188,55 @@ export default function VentasEnVivo({ metas }: Props) {
   const tickets    = ticketsDelDia(porHora)
   const ticketProm = ticketPromedioDe(stats.ventaNeta, tickets)
   const hora       = horaCorteCR()
+
+  // ── LOS TRES TICKET PROMEDIO, cada uno con su regla ────────────────────────────────────────
+  // Son cifras DISTINTAS a propósito y por eso van con nombre. Antes había dos sin rótulo y
+  // parecían la misma mal calculada:
+  //   · restaurante → neto del día ENTERO ÷ tickets del día entero (incluye caja y sistema).
+  //   · salón       → neto de los MESEROS ÷ órdenes de los meseros. Es el comparable del panel
+  //                   de saloneros, cuyo general nunca tuvo un ticket promedio propio.
+  //   · mesero      → su neto ÷ SUS órdenes (la fila del ranking).
+  // Qué caja está abierta AHORA: el turno del lote que todavía no cerró. Sirve al encargado
+  // más que cualquier badge de origen de datos.
+  const turnoEnCurso = snap.servicioEnCurso
+    ? porTurno?.find(t => t.turno !== null && t.tickets > 0)?.etiqueta ?? null
+    : null
+
+  const ordenesDe = (nombre: string): number => ordenes?.[nombre] ?? 0
+
+  // ── SALONEROS POR TURNO ────────────────────────────────────────────────────────────────────
+  // La misma partición que va a usar el dashboard por empleado: por turno + general. Cada turno
+  // trae su `DiaData` completo (`snap.porTurno`, armado con el MISMO `armarDia`), así que acá se
+  // corre `aggSalonero` igual que sobre el día entero — cambia el conjunto de tickets, no la
+  // matemática. Así "trabajó en la tarde" se lee de que TIENE fila en ese turno.
+  const saloneroPorTurno = (porTurno ?? [])
+    .filter(t => t.turno !== null)
+    .map(t => {
+      const diasT: DiasMap = { [snap.fecha]: t.dia }
+      const nombresT = Object.entries(t.dia.saloneros)
+        .filter(([, v]) => !(v as CajeroDay).esCajero)
+        .map(([k]) => k)
+      const filas = nombresT
+        .map(nom => {
+          const a = aggSalonero(nom, [snap.fecha], diasT, t.pm)
+          const ords = t.ordenes[nom] ?? 0
+          return {
+            nombre:     nom,
+            total:      a.total,
+            pax:        a.pax,
+            ordenes:    ords,
+            ticketProm: ords > 0 ? Math.round(a.total / ords) : 0,
+            promPax:    a.promPax,
+          }
+        })
+        .filter(f => f.total > 0 || f.ordenes > 0)
+        .sort((a, b) => b.total - a.total)
+      const netoMeseros = filas.reduce((acc, f) => acc + f.total, 0)
+      return { turno: t.turno, etiqueta: t.etiqueta, filas, netoMeseros }
+    })
+    .filter(t => t.filas.length > 0)
+  const ordenesSalon = sals.reduce((a, nom) => a + ordenesDe(nom), 0)
+  const ticketPromSalon = ordenesSalon > 0 ? Math.round(gen.total / ordenesSalon) : 0
 
   // ── Mix y top, con el mismo par (DiaData + ProductMap) que usa Mix Ventas ──
   const mix = mixPorCategoria(dia, pm)
@@ -239,7 +288,7 @@ export default function VentasEnVivo({ metas }: Props) {
               </h3>
               <span className="apos-panel-sub">
                 {snap.paxAbierto ? `${snap.paxAbierto} pax sentados · ` : ''}
-                todavía sin cobrar: <strong>no</strong> entran en ninguna cifra de abajo
+                todavía sin cobrar: <strong>no</strong> entran en las cifras de abajo
               </span>
             </div>
             {abiertasPorSalonero && abiertasPorSalonero.length > 0 && (
@@ -255,12 +304,10 @@ export default function VentasEnVivo({ metas }: Props) {
                 ))}
               </ul>
             )}
-            {/* El monto consumido por mesa NO se muestra porque no existe: `pos_ndf_open` trae
-                mesa, salonero, canal y pax, y nada más. Poner una cifra acá sería inventarla.
-                // TODO monto: pendiente de columna en el bridge. */}
-            <p className="apos-nota" style={{ marginBottom: 0 }}>
-              Sin monto por mesa: <code>pos_ndf_open</code> todavía no trae lo consumido.
-            </p>
+            {/* NO se muestra monto ni promedio de lo abierto: `pos_ndf_open` trae mesa,
+                salonero, canal y pax, y nada más. Poner una cifra acá sería inventarla.
+                Cuando el bridge traiga lo consumido, la columna entra en esta lista.
+                // TODO monto abierto: pendiente de columna en el bridge. */}
           </section>
         )}
 
@@ -268,8 +315,15 @@ export default function VentasEnVivo({ metas }: Props) {
         <div className="apos-panel">
           <div className="apos-panel-hd">
             <h3>En vivo</h3>
-            <span className="apos-tag-ok">
-              {snap.fuente === 'pos' ? 'Datos del PoS · pos_ndf' : 'Datos simulados'}
+            {/* El espacio del badge de origen ahora lleva lo que el encargado sí mira: qué hay
+                abierto, cuánto va el ticket promedio y en qué turno está la caja. */}
+            <span className="apos-panel-sub">
+              {snap.mesasAbiertas
+                ? `${snap.mesasAbiertas} ${snap.mesasAbiertas === 1 ? 'mesa abierta' : 'mesas abiertas'}`
+                : 'sin mesas abiertas'}
+              {snap.paxAbierto ? ` · ${snap.paxAbierto} pax sentados` : ''}
+              {ticketProm > 0 ? ` · ticket prom. ${fi(ticketProm)}` : ''}
+              {turnoEnCurso ? ` · ${turnoEnCurso}` : ''}
             </span>
             <span className="apos-spacer" />
             {/* Ver una jornada pasada: lo que permite cuadrar contra el reporte del PoS.
@@ -317,25 +371,14 @@ export default function VentasEnVivo({ metas }: Props) {
               </button>
             )}
           </div>
-          <p className="apos-nota" style={{ marginBottom: 0 }}>
-            Leído de <code>pos_ndf_tickets</code> / <code>pos_ndf_ticket_lines</code> del local,
-            por <strong>jornada de 07:00 a 07:00</strong>. Neto = <code>valor_servido_crc</code>,
-            bruto = <code>total_crc</code>, servicio = <code>servicio_crc</code>. El total, el pax,
-            el mix, el ranking y los promedios se calculan con las <strong>mismas funciones</strong>{' '}
-            que <strong>Hoy</strong> y <strong>Mix Ventas</strong> — esta pestaña no reimplementa
-            ninguna métrica. <strong>No se simula nada</strong>: una jornada sin ventas se muestra
-            en cero.
-          </p>
         </div>
 
         {/* ── Jornada sin ventas: se dice, no se rellena ─────────────────────── */}
         {sinVentas && (
           <div className="apos-panel">
             <p className="apos-nota" style={{ marginBottom: 0 }}>
-              <strong>Sin ventas todavía en esta jornada</strong> ({snap.fecha}). No hay ninguna
-              factura cerrada en <code>pos_ndf_tickets</code> para el rango 07:00–07:00. Si
-              esperabas ver movimiento, revisá que el agente del PoS esté corriendo; para validar
-              la pantalla con datos reales, elegí una jornada pasada en el selector de arriba.
+              <strong>Sin ventas todavía en esta jornada</strong> ({snap.fecha}). Ninguna cuenta
+              cerrada. Si esperabas movimiento, revisá que el agente del PoS esté corriendo.
             </p>
           </div>
         )}
@@ -396,7 +439,9 @@ export default function VentasEnVivo({ metas }: Props) {
           <div className="apos-kpi">
             <span className="apos-kpi-lbl">Ticket promedio</span>
             <span className="apos-kpi-val">{ticketProm > 0 ? fi(ticketProm) : '—'}</span>
-            <span className="apos-kpi-sub">venta NETA / tickets</span>
+            {/* Rótulo explícito: NO es el mismo número que el ticket promedio de los meseros.
+                Este es del restaurante entero e incluye caja y sistema. */}
+            <span className="apos-kpi-sub">restaurante · neto ÷ tickets</span>
           </div>
           <div className="apos-kpi">
             <span className="apos-kpi-lbl">Promedio por pax</span>
@@ -453,12 +498,22 @@ export default function VentasEnVivo({ metas }: Props) {
           {/* Caja y sistema: LÍNEA APARTE. No son meseros y no compiten en el ranking, pero su
               venta es del restaurante y tiene que verse. */}
           {cajAggs.length > 0 && (
-            <>
+            <details className="apos-detalle">
+              {/* Colapsable: al encargado no le sirve todos los días, pero cuando el neto del
+                  salón no cuadra con el del restaurante, la diferencia está acá. Por eso el
+                  resumen lleva la cifra: se ve sin abrir. */}
+              <summary>
+                <strong>Caja y sistema</strong> · {fi(cajAggs.reduce((a, c) => a + c.total, 0))}{' '}
+                en {cajAggs.reduce((a, c) => a + c.ordenes, 0).toLocaleString('es-CR')} facturas
+                {' '}— no se le acreditan a ningún mesero
+              </summary>
               <p className="apos-nota">
-                <strong>Caja y sistema</strong> — facturas que no se le acreditan a ningún mesero
-                (cajero de turno <code>111</code>/<code>222</code>, o el PoS facturando solo con{' '}
-                <code>002</code>/<code>01</code>/<code>02</code>). Suman al total del restaurante y{' '}
-                <strong>quedan fuera del ranking de saloneros</strong>.
+                <strong>Caja</strong> = lo cobró un cajero de turno (<code>111</code> mañana ·{' '}
+                <code>222</code> tarde) sin mesero asignado: delivery, para llevar, o una cuenta
+                que pasó directo por caja. <strong>Sistema</strong> = el PoS facturando solo
+                (<code>002</code> cocina express, <code>01</code>/<code>02</code> bajas).
+                Las dos <strong>suman al total del restaurante</strong> y quedan fuera del
+                ranking de saloneros.
               </p>
               <div className="apos-tabla-wrap">
                 <table className="apos-tabla">
@@ -486,7 +541,7 @@ export default function VentasEnVivo({ metas }: Props) {
                   </tbody>
                 </table>
               </div>
-            </>
+            </details>
           )}
         </section>
 
@@ -496,7 +551,7 @@ export default function VentasEnVivo({ metas }: Props) {
             <div className="apos-panel-hd">
               <h3>Por turno</h3>
               <span className="apos-panel-sub">
-                por lote de cierre de caja · el turno lo define el cajero que cerró
+                por lote de cierre de caja · ticket prom. = neto ÷ tickets del turno · prom/pax = neto ÷ pax del turno
               </span>
             </div>
             <div className="apos-tabla-wrap">
@@ -509,6 +564,7 @@ export default function VentasEnVivo({ metas }: Props) {
                     <th className="r">Tickets</th>
                     <th className="r">Ticket prom.</th>
                     <th className="r">PAX</th>
+                    <th className="r">Prom/PAX</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -518,8 +574,11 @@ export default function VentasEnVivo({ metas }: Props) {
                       <td className="r">{fi(t.neto)}</td>
                       <td className="r">{porcentaje(t.neto, netoTurnos)}</td>
                       <td className="r">{t.tickets.toLocaleString('es-CR')}</td>
+                      {/* Ticket promedio DEL TURNO = su neto ÷ sus tickets. */}
                       <td className="r">{t.tickets > 0 ? fi(Math.round(t.neto / t.tickets)) : '—'}</td>
                       <td className="r">{t.pax.toLocaleString('es-CR')}</td>
+                      {/* Promedio por comensal DEL TURNO = su neto ÷ su pax. */}
+                      <td className="r">{t.pax > 0 ? fi(Math.round(t.neto / t.pax)) : '—'}</td>
                     </tr>
                   ))}
                   <tr>
@@ -527,8 +586,13 @@ export default function VentasEnVivo({ metas }: Props) {
                     <td className="r"><strong>{fi(netoTurnos)}</strong></td>
                     <td className="r">100,0%</td>
                     <td className="r"><strong>{ticketsTurno.toLocaleString('es-CR')}</strong></td>
-                    <td className="r">—</td>
+                    <td className="r">
+                      <strong>{ticketsTurno > 0 ? fi(Math.round(netoTurnos / ticketsTurno)) : '—'}</strong>
+                    </td>
                     <td className="r"><strong>{paxTurno.toLocaleString('es-CR')}</strong></td>
+                    <td className="r">
+                      <strong>{paxTurno > 0 ? fi(Math.round(netoTurnos / paxTurno)) : '—'}</strong>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -604,12 +668,66 @@ export default function VentasEnVivo({ metas }: Props) {
           </div>
         </section>
 
-        {/* ── Saloneros: los promedios del día, con `aggGeneral` ─────────────── */}
+        {/* ── Saloneros POR TURNO ────────────────────────────────────────────
+            Va ANTES del general: el encargado cierra por turno, no por jornada. Un mesero que
+            solo trabajó la tarde aparece solo en la tarde — "en qué turno trabajó" se lee de en
+            qué tabla está, sin una columna que lo repita. */}
+        {saloneroPorTurno.length > 0 && (
+          <section className="apos-panel">
+            <div className="apos-panel-hd">
+              <h3>Saloneros por turno</h3>
+              <span className="apos-panel-sub">
+                cada mesero en el turno que trabajó · ticket prom. = su neto ÷ sus órdenes
+              </span>
+            </div>
+            {saloneroPorTurno.map(t => (
+              <div key={t.turno ?? '(sin turno)'} className="apos-turno-bloque">
+                <h4 className="apos-subtitulo">
+                  {t.etiqueta}
+                  <span className="apos-subtitulo-dato">
+                    {fi(t.netoMeseros)} · {t.filas.length}{' '}
+                    {t.filas.length === 1 ? 'mesero' : 'meseros'}
+                  </span>
+                </h4>
+                <div className="apos-tabla-wrap">
+                  <table className="apos-tabla">
+                    <thead>
+                      <tr>
+                        <th>Mesero</th>
+                        <th className="r">Ventas</th>
+                        <th className="r">% del turno</th>
+                        <th className="r">Órdenes</th>
+                        <th className="r">Ticket prom.</th>
+                        <th className="r">PAX</th>
+                        <th className="r">Prom/PAX</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {t.filas.map(f => (
+                        <tr key={f.nombre}>
+                          <td>{f.nombre}</td>
+                          <td className="r">{fi(f.total)}</td>
+                          <td className="r">{porcentaje(f.total, t.netoMeseros)}</td>
+                          <td className="r">{f.ordenes.toLocaleString('es-CR')}</td>
+                          <td className="r">{f.ticketProm > 0 ? fi(f.ticketProm) : '—'}</td>
+                          <td className="r">{f.pax.toLocaleString('es-CR')}</td>
+                          <td className="r">{f.pax > 0 ? fi(Math.round(f.promPax)) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {/* ── Saloneros: el general de la jornada (todos los turnos) ─────────── */}
         <section className="apos-panel">
           <div className="apos-panel-hd">
-            <h3>Saloneros</h3>
+            <h3>Saloneros · jornada completa</h3>
             <span className="apos-panel-sub">
-              solo piso: caja y sistema van en su línea aparte · <code>aggGeneral</code>, la de «Hoy»
+              solo piso · caja y sistema van aparte, en «Restaurante»
             </span>
           </div>
           <div className="apos-kpis apos-kpis-libre">
@@ -617,6 +735,15 @@ export default function VentasEnVivo({ metas }: Props) {
               <span className="apos-kpi-lbl">Ventas salón</span>
               <span className="apos-kpi-val">{fi(gen.total)}</span>
               <span className="apos-kpi-sub">{porcentaje(gen.total, stats.ventaNeta)} del restaurante</span>
+            </div>
+            <div className="apos-kpi">
+              <span className="apos-kpi-lbl">Ticket promedio salón</span>
+              <span className="apos-kpi-val">{ticketPromSalon > 0 ? fi(ticketPromSalon) : '—'}</span>
+              {/* El comparable del «Ticket promedio» de arriba: mismo cálculo, otro universo.
+                  Arriba es el restaurante entero; acá solo lo que pasó por un mesero. */}
+              <span className="apos-kpi-sub">
+                mesero · neto ÷ órdenes · {ordenesSalon.toLocaleString('es-CR')} órdenes
+              </span>
             </div>
             <div className="apos-kpi">
               <span className="apos-kpi-lbl">PAX</span>

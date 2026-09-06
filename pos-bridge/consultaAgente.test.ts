@@ -124,11 +124,25 @@ describe('aTicketIngest', () => {
   })
 
   it('una FechaCierra ilegible se descarta SOLA: nunca se lleva puesto el ticket', () => {
-    // Si la columna fuera un `date`, el CONVERT daría `2026-09-02` y con el offset
-    // pegado NO sería un instante: el Edge rechazaría la venta entera por un campo
-    // informativo.
-    for (const basura of ['2026-09-02', '', '  ', 'null', 'Wed Sep 02 2026 01:15:00 GMT-0600']) {
-      expect(aTicketIngest(t, { fecha_cierra: basura }).fecha_cierra).toBeNull()
+    // La FORMA no alcanza: '0000-00-00 00:00:00' (centinela posible si la columna es
+    // varchar) pasa el regex pero NO es un instante — y el Edge, que exige zona, rechazaría
+    // la VENTA ENTERA por un campo informativo. Se comprueba las dos cosas: que el campo
+    // quede en null Y que el ticket siga siendo válido para el Edge.
+    const basuras = [
+      '2026-09-02',                          // un `date`: al CONVERT le falta la hora
+      '0000-00-00 00:00:00',                 // centinela: forma válida, instante imposible
+      '2026-02-31 10:00:00',                 // día inexistente
+      '2026-13-01 10:00:00',                 // mes inexistente
+      '2026-09-02 25:61:61',                 // hora imposible
+      '', '  ', 'null',
+      'Wed Sep 02 2026 01:15:00 GMT-0600',   // un Date de JS convertido a string
+    ]
+    for (const basura of basuras) {
+      const ticket = aTicketIngest(t, { fecha_cierra: basura })
+      expect(ticket.fecha_cierra, `basura: ${JSON.stringify(basura)}`).toBeNull()
+      // Lo que de verdad importa: la venta se ingesta igual.
+      expect(normalizarTicket('santa-teresa', ticket), `basura: ${JSON.stringify(basura)}`)
+        .toMatchObject({ ok: true })
     }
     expect(aTicketIngest(t, { fecha_cierra: '2026-09-02T01:15:00' }).fecha_cierra)
       .toBe('2026-09-02T01:15:00-06:00')

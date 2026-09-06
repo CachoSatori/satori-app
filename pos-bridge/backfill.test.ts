@@ -1,8 +1,14 @@
 import { describe, it, expect } from 'vitest'
 
-import { correrBackfill, correrDia, payloadBackfill, rangoEfectivo, type PuertosBackfill } from './backfill.ts'
+import {
+  correrBackfill, correrDia, leerDiaBackfill, payloadBackfill, rangoEfectivo,
+  type PuertosBackfill,
+} from './backfill.ts'
 import { enumerarDias, parsearArgs } from './backfillPlan.ts'
-import { aTicketIngest } from './consultaAgente.ts'
+import { aTicketIngest, leerCerradas } from './consultaAgente.ts'
+import { resolverEsquema } from './esquema.ts'
+import type { FilaDetalle, FilaFactura, Queryable } from './consulta.ts'
+import type { SesionPos } from './extraerDia.ts'
 import type { IngestNdfResult } from './pushIngest.ts'
 import type { PayloadIngest } from '../src/shared/ndf/ingestNdf'
 import { mapTicket } from '../src/shared/ndf/mapTicket'
@@ -198,5 +204,89 @@ describe('rangoEfectivo', () => {
   it('--todo sin ninguna factura cerrada avisa en vez de barrer al vacío', () => {
     expect(() => rangoEfectivo(parsearArgs(['--todo']), null, '2026-09-05'))
       .toThrow(/ninguna factura cerrada/)
+  })
+})
+
+// ── El puerto real: los extras NO se pueden perder ─────────────────────────────
+//
+// Este bloque existe por un bug que llegó a estar en la rama: el puerto `leerDia` vivía
+// inline dentro de `main()` y llamaba `aTicketIngest(t)` SIN extras, así que el backfill
+// mandaba `mesa`, `numero_pedido` y `fecha_cierra` en null. Como el Edge upsertea la fila
+// ENTERA por `(local, numero_factura)`, cada re-backfill le BORRABA al agente en vivo lo que
+// ya había escrito — y el agente no lo reparaba nunca, porque su filtro incremental
+// (`NumeroFactura > @ultima`) no vuelve a leer una factura ya ingestada.
+//
+// El puerto está exportado (`leerDiaBackfill`) justamente para poder probar esto: los tests
+// de arriba mockean `leerDia` y por eso pasaban en verde con el bug adentro.
+
+const COLUMNAS_POS = {
+  fac_facturas: [
+    'NumeroFactura', 'FechaRegistra', 'FechaCierra', 'Estado', 'Login', 'Efectivo', 'Tarjeta',
+    'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'DolaresEfectivo',
+    'DolaresTarjeta', 'Vuelto',
+  ],
+  fac_pedidos:         ['NumeroFactura', 'UsuarioRegistra', 'Personas', 'Tipo', 'Area', 'NumeroPedido', 'Mesa', 'FechaRegistra'],
+  fac_facturasdet:     ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS'],
+  fac_productos:       ['Codigo', 'Nombre', 'Clasificacion'],
+  fac_clasificaciones: ['Codigo', 'Nombre'],
+  fac_empleados:       ['Login', 'Nombre'],
+}
+const ESQUEMA_POS = resolverEsquema(new Map(Object.entries(COLUMNAS_POS)))
+
+const FILA_FACTURA: FilaFactura = {
+  numero_factura: '5001', fecha_hora: '2026-09-04 21:55:00', estado: 'C', login_cajero: '222',
+  tipo_factura: null, area_factura: null, usuario_registra: '026', usuario_max: '026',
+  personas: 0, pedidos: 1, tipo_pedido: 'M', area_pedido: 'SALON 1', salonero_nombre: 'MAXO',
+  mesa: '12', numero_pedido: '4477', fecha_cierra: '2026-09-04 22:07:59',
+  efectivo: 15000, tarjeta: 0, monto_electronico: 0, deposito: 0, cheque: 0, cuenta_cobrar: 0,
+  dolares_efectivo: 0, dolares_tarjeta: 0, vuelto: 3000,
+}
+const FILA_DETALLE: FilaDetalle = {
+  numero_factura: '5001', codigo: '100', nombre: 'ROLL SATORI', cantidad: 2, monto: 12000,
+  imp_servicio: 1200, imp_venta: 0, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null,
+}
+
+/** Un PoS falso que devuelve la MISMA factura para las dos consultas (día y ventana). */
+const posFalso = (): Queryable => ({
+  async query<T>(sql: string): Promise<{ rows: T[] }> {
+    if (sql.includes('FROM [dbo].[FAC_FacturasDet] d')) return { rows: [FILA_DETALLE] as T[] }
+    if (sql.includes('COUNT(*) AS n')) return { rows: [] as T[] }   // el conteo por estado
+    return { rows: [FILA_FACTURA] as T[] }
+  },
+})
+
+const sesionFalsa = (): SesionPos => ({
+  conn:    posFalso(),
+  esquema: ESQUEMA_POS,
+  origen:  'falso',
+  close:   async () => {},
+} as unknown as SesionPos)
+
+describe('leerDiaBackfill', () => {
+  it('conserva mesa, numero_pedido y fecha_cierra (no los manda en null)', async () => {
+    const { tickets } = await leerDiaBackfill(sesionFalsa(), '2026-09-04', '2026-09-05')
+    expect(tickets).toHaveLength(1)
+    expect(tickets[0]).toMatchObject({
+      numero_factura: '5001',
+      mesa:           '12',
+      numero_pedido:  '4477',
+      fecha_cierra:   '2026-09-04T22:07:59-06:00',
+    })
+  })
+
+  it('re-backfillear un día NO le borra al agente lo que ya había escrito', async () => {
+    // El plan de puesta en marcha es: agente en vivo primero, backfill después. Como el
+    // Edge upsertea la fila ENTERA, los dos caminos tienen que producir los mismos extras
+    // para la MISMA factura; si el backfill mandara null, el upsert los pisaría.
+    const delAgente = await leerCerradas(posFalso(), ESQUEMA_POS, {
+      desde: 'a', hasta: 'b', ultima: null,
+    })
+    const delBackfill = await leerDiaBackfill(sesionFalsa(), '2026-09-04', '2026-09-05')
+
+    const extras = (t: { mesa?: string | null; numero_pedido?: string | null; fecha_cierra?: string | null }) =>
+      ({ mesa: t.mesa, numero_pedido: t.numero_pedido, fecha_cierra: t.fecha_cierra })
+
+    expect(extras(delBackfill.tickets[0])).toEqual(extras(delAgente.tickets[0]))
+    expect(delBackfill.tickets[0].fecha_cierra).not.toBeNull()
   })
 })

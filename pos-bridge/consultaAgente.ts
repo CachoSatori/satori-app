@@ -37,7 +37,7 @@ export interface ParametrosLectura extends RangoLectura {
 }
 
 /** Lo que produce `CONVERT(varchar(19), <datetime>, 120)`: el naive completo. */
-const NAIVE_120 = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/
+const NAIVE_120 = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/
 
 /**
  * `FechaCierra` del PoS → el MISMO instante con la zona explícita, o `null`.
@@ -51,13 +51,60 @@ const NAIVE_120 = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/
  */
 export function cierreConZona(v: unknown): string | null {
   const s = texto(v)
-  return s !== null && NAIVE_120.test(s) ? conOffsetCR(s) : null
+  const m = s === null ? null : NAIVE_120.exec(s)
+  if (m === null || s === null) return null
+
+  // La FORMA no alcanza, por dos motivos distintos:
+  //   · '0000-00-00 00:00:00' (centinela posible si la columna es varchar) matchea el regex
+  //     y arma un instante que NADIE puede parsear → el Edge lo rechaza por "sin zona" y se
+  //     lleva puesta LA VENTA ENTERA.
+  //   · '2026-02-31 10:00:00' sí parsea, pero JS lo RUEDA callado al 3 de marzo: se guardaría
+  //     un lote de cierre en un día que no existió.
+  // Mismo chequeo de rodaje que `assertFecha` en `consulta.ts`: se rearma la fecha y se exige
+  // que los seis campos vuelvan idénticos.
+  const [y, mes, d, hh, mm, ss] = m.slice(1).map(Number)
+  const dt = new Date(Date.UTC(y, mes - 1, d, hh, mm, ss))
+  const rueda =
+    dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mes - 1 || dt.getUTCDate() !== d ||
+    dt.getUTCHours() !== hh || dt.getUTCMinutes() !== mm || dt.getUTCSeconds() !== ss
+  return rueda ? null : conOffsetCR(s)
+}
+
+/**
+ * Lo que sale del SELECT pero NO pasa por el mapper: no cambia ni un monto, así que no es
+ * dominio de `mapTicket`. Se pega al ticket indexado por el número de factura como STRING
+ * (es decimal: `Number` pierde precisión arriba de 2^53).
+ */
+export interface ExtrasFactura {
+  mesa?:          unknown
+  numero_pedido?: unknown
+  fecha_cierra?:  unknown
+}
+
+/**
+ * Filas crudas → extras por factura.
+ *
+ * Existe como función exportada para que los DOS caminos de escritura —el agente en vivo y
+ * el backfill histórico— usen exactamente el mismo armado. Cuando solo lo tenía `leerCerradas`,
+ * el backfill mandaba los tres campos en null y, como el Edge upsertea la fila ENTERA, cada
+ * re-backfill BORRABA lo que el agente había escrito.
+ */
+export function extrasPorFactura(filas: FilaFactura[]): Map<string, ExtrasFactura> {
+  const out = new Map<string, ExtrasFactura>()
+  for (const f of filas) {
+    out.set(String(f.numero_factura), {
+      mesa:          f.mesa,
+      numero_pedido: f.numero_pedido,
+      fecha_cierra:  f.fecha_cierra,
+    })
+  }
+  return out
 }
 
 /** Un ticket listo para el Edge: el `TicketMapeado` de la Fase 1a con lo que la base pide. */
 export function aTicketIngest(
   t: TicketMapeado,
-  extra: { mesa?: unknown; numero_pedido?: unknown; fecha_cierra?: unknown } = {},
+  extra: ExtrasFactura = {},
 ): TicketIngest {
   return {
     ...t,
@@ -85,17 +132,7 @@ export async function leerCerradas(
 
   const { tickets, avisos } = armarTickets(facturas.rows, detalle.rows)
 
-  // `mesa`, `numero_pedido` y `fecha_cierra` no son del dominio del mapper (no cambian
-  // ni un monto): salen del SELECT y se pegan acá, indexados por el número de factura
-  // como STRING.
-  const extras = new Map<string, { mesa?: unknown; numero_pedido?: unknown; fecha_cierra?: unknown }>()
-  for (const f of facturas.rows) {
-    extras.set(String(f.numero_factura), {
-      mesa:          f.mesa,
-      numero_pedido: f.numero_pedido,
-      fecha_cierra:  f.fecha_cierra,
-    })
-  }
+  const extras = extrasPorFactura(facturas.rows)
 
   // Una FechaCierra que existe pero no se puede leer se pierde en silencio si nadie la
   // cuenta, y P1 se apoya en ella: mejor que salga en el log del ciclo.

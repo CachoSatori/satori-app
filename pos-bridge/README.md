@@ -81,7 +81,7 @@ quien corre el comando).
 | Tema | Regla |
 |---|---|
 | Facturas del día | `Estado='C'` y `FechaRegistra` dentro del día. `X` (anulada) **no suma**; `R` se ignora y se reporta. |
-| `FechaCierra` | El **lote de cierre** de la caja, CRUDO: se lee, se le pone el offset de CR y se manda a `pos_ndf_tickets.fecha_cierra`. Acá **no se interpreta** — agrupar por (`Login`, `FechaCierra`) para deducir la jornada es P1. La columna es **opcional**: si la instalación no la tiene, o el valor no es un `YYYY-MM-DD HH:MM:SS` completo, el campo va en `null` (con aviso) y **la venta se ingesta igual**. |
+| `FechaCierra` | El **lote de cierre** de la caja, CRUDO: se lee, se le pone el offset de CR y se manda a `pos_ndf_tickets.fecha_cierra`. Acá **no se interpreta** — agrupar por (`Login`, `FechaCierra`) para deducir la jornada es P1. La columna es **opcional**: si la instalación no la tiene, o el valor no es un `YYYY-MM-DD HH:MM:SS` completo (o es una fecha que no existe, tipo `2026-02-31`), el campo va en `null` (con aviso) y **la venta se ingesta igual**. Se guarda como `timestamptz` = instante: al leerlo, el día se saca SIEMPRE con `(fecha_cierra at time zone 'America/Costa_Rica')::date`, nunca con `::date` pelado. |
 | Total | `Efectivo + Tarjeta + MontoElectronico + Deposito + Cheque + CuentaCobrar − Vuelto`, con `COALESCE(...,0)`. El **vuelto se resta**: el cuadre contra el reporte oficial del PoS (*Ventas Netas por Día*, 1-sep-2026) mostró que `Efectivo` viene con el vuelto adentro. Los dólares **no** se suman (el PoS ya los convirtió) pero se imprimen igual. |
 | Servicio 10% | `con_servicio` = `SUM(ImpS del detalle) > 0`. Con 10% = consumo en salón · sin 10% = delivery/llevar. Es lo que parte el día como en el Excel. |
 | Salonero | `FAC_Pedidos.UsuarioRegistra` (login: `023` Esteban, `024` Juancho, `025` Dolores, `026` MAXO, `027` GUILLE, `028` FRANCISCO). El join es por `NumeroFactura` — **nunca** por `Facturas.NumeroPedido`, que viene vacío en mesa. `Facturas.Login` (el cajero que cobró) es informativo y **no pisa** al salonero. |
@@ -369,7 +369,10 @@ Cuatro columnas nuevas en `pos_ndf_tickets`, calculadas por el mapper y persisti
 El **bruto servido no se guarda**: se deriva en la consulta.
 
 ```sql
-select fecha_registra::date as dia,
+-- El día SIEMPRE se saca en hora de Costa Rica. Un `fecha_registra::date` pelado, bajo el
+-- TimeZone por defecto (UTC), parte el día a las 18:00 CR: la venta de las 22:07 cae en el
+-- día siguiente. Misma forma que las migs 026/035/042/043/059.
+select (fecha_registra at time zone 'America/Costa_Rica')::date as dia,
        sum(valor_servido_crc)                                              as neto,
        sum(coalesce(iva_crc, 0))                                           as iva,
        sum(coalesce(servicio_crc, 0))                                      as servicio_10,

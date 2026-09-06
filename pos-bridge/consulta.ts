@@ -280,6 +280,15 @@ export function banderaVerdadera(v: unknown): boolean {
 export interface LecturaDia {
   fecha:           string
   tickets:         TicketMapeado[]
+  /**
+   * Las filas CRUDAS de la factura, tal como salieron del SELECT.
+   *
+   * Se devuelven a propósito: `TicketMapeado` no lleva `mesa`, `numero_pedido` ni
+   * `fecha_cierra` (no son dominio del mapper), y sin estas filas el backfill no tendría
+   * de dónde sacarlas — mandaría los tres campos en null y el upsert le borraría al agente
+   * lo que ya había escrito. Ver `extrasPorFactura` en `consultaAgente.ts`.
+   */
+  facturas:        FilaFactura[]
   /** Estado → cantidad de facturas del día (incluye X y R). */
   conteoEstados:   Record<string, number>
   avisos:          string[]
@@ -391,5 +400,5 @@ export async function leerDia(qy: Queryable, esq: Esquema, fecha: string): Promi
     avisos.push(`Estados no previstos en el día: ${desconocidos.join(', ')} (solo se cuentan las C).`)
   }
 
-  return { fecha, tickets, conteoEstados, avisos }
+  return { fecha, tickets, facturas: facturas.rows, conteoEstados, avisos }
 }

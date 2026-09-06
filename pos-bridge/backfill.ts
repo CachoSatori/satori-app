@@ -35,8 +35,8 @@ import {
 } from './backfillPlan.ts'
 import { describirAgente, loadAgenteConfig, type AgenteConfig } from './configAgente.ts'
 import { loadEnv } from './config.ts'
-import { aTicketIngest, primerDiaConVentas } from './consultaAgente.ts'
-import { abrirSesion, extraerDiaEnSesion } from './extraerDia.ts'
+import { aTicketIngest, extrasPorFactura, primerDiaConVentas } from './consultaAgente.ts'
+import { abrirSesion, extraerDiaEnSesion, type SesionPos } from './extraerDia.ts'
 import { pushIngest, type IngestNdfResult } from './pushIngest.ts'
 
 // ── Puertos ────────────────────────────────────────────────────────────────────
@@ -48,6 +48,32 @@ export interface PuertosBackfill {
   enviar(payload: PayloadIngest): Promise<IngestNdfResult>
   pausar(ms: number): Promise<void>
   log(linea: string): void
+}
+
+/**
+ * Un día del histórico, listo para mandar.
+ *
+ * **Los extras van SIEMPRE.** `leerDia` devuelve los tickets ya mapeados, que no llevan
+ * `mesa`, `numero_pedido` ni `fecha_cierra`: hay que pegárselos desde las filas crudas, con
+ * el mismo `extrasPorFactura` que usa el agente en vivo. Sin eso el backfill los manda en
+ * null y, como el Edge upsertea la fila ENTERA por `(local, numero_factura)`, cada
+ * re-backfill le BORRA al agente lo que ya había escrito — y el agente no lo repara nunca,
+ * porque su filtro incremental (`NumeroFactura > @ultima`) no vuelve a leer esa factura.
+ *
+ * Está exportada para poder testear justamente eso: el puerto que arma `main()` no se puede
+ * probar desde afuera.
+ */
+export async function leerDiaBackfill(
+  sesion: SesionPos,
+  fecha: string,
+  uploadedAt: string,
+): Promise<{ tickets: TicketIngest[]; avisos: string[] }> {
+  const ext = await extraerDiaEnSesion(sesion, fecha, uploadedAt)
+  const extras = extrasPorFactura(ext.facturas)
+  return {
+    tickets: ext.tickets.map((t) => aTicketIngest(t, extras.get(t.numero_factura) ?? {})),
+    avisos:  ext.avisos,
+  }
 }
 
 /**
@@ -182,10 +208,7 @@ async function main(): Promise<void> {
 
     const uploadedAt = todayCR()
     const puertos: PuertosBackfill = {
-      async leerDia(fecha) {
-        const ext = await extraerDiaEnSesion(sesion, fecha, uploadedAt)
-        return { tickets: ext.tickets.map((t) => aTicketIngest(t)), avisos: ext.avisos }
-      },
+      leerDia: (fecha) => leerDiaBackfill(sesion, fecha, uploadedAt),
       enviar: (payload) => pushIngest(cfg, payload),
       pausar: dormir,
       log:    (linea) => console.log(`[${ts()}]${linea}`),

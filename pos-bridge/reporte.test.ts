@@ -77,6 +77,7 @@ const armado = armarTickets(FACTURAS, DETALLE)
 const LECTURA: LecturaDia = {
   fecha:         '2026-09-01',
   tickets:       armado.tickets,
+  facturas:      FACTURAS,
   conteoEstados: { C: 5, X: 2, R: 1 },
   avisos:        armado.avisos,
 }

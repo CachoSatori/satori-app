@@ -13,7 +13,7 @@ import { sqlDetalle, sqlFacturas, type FilaDetalle, type FilaFactura, type Query
 import { resolverEsquema } from './esquema.ts'
 import { assertSoloSelect } from './sqlGuard.ts'
 import { mapTicket } from '../src/shared/ndf/mapTicket'
-import { normalizarTicket } from '../src/shared/ndf/ingestNdf.ts'
+import { CR_OFFSET, normalizarTicket } from '../src/shared/ndf/ingestNdf.ts'
 
 const COLUMNAS = {
   fac_facturas: [
@@ -107,6 +107,22 @@ describe('aTicketIngest', () => {
       .toBe('2026-09-02T01:15:00-06:00')
   })
 
+  it('el cierre de las 22:07 sale con hora de CR y NO se corre al día siguiente', () => {
+    // El caso que rompe todo si alguien "normaliza" a UTC antes de mandar: 22:07:59 CR es
+    // 04:07:59Z del día SIGUIENTE. Con 'Z' el lote del jueves aparecería como del viernes
+    // y la jornada de P1 se partiría al medio. El bridge manda hora de pared + offset.
+    const cierre = aTicketIngest(t, { fecha_cierra: '2026-09-04 22:07:59' }).fecha_cierra
+    expect(cierre).toBe('2026-09-04T22:07:59-06:00')
+    expect(cierre).not.toMatch(/Z$/)
+    expect(cierre?.slice(0, 10)).toBe('2026-09-04')
+  })
+
+  it('el ticket abierto (FechaCierra NULL) va con fecha_cierra null, no con una fecha inventada', () => {
+    for (const vacio of [null, undefined]) {
+      expect(aTicketIngest(t, { fecha_cierra: vacio }).fecha_cierra).toBeNull()
+    }
+  })
+
   it('una FechaCierra ilegible se descarta SOLA: nunca se lleva puesto el ticket', () => {
     // Si la columna fuera un `date`, el CONVERT daría `2026-09-02` y con el offset
     // pegado NO sería un instante: el Edge rechazaría la venta entera por un campo
@@ -182,6 +198,15 @@ const fake = (filas: { facturas?: FilaFactura[]; detalle?: FilaDetalle[]; abiert
   return { qy, params }
 }
 
+/**
+ * Lo que hará P1 para cortar la jornada: instante guardado → reloj de pared de Costa Rica.
+ * Vive acá y no en el bridge a propósito — el bridge NO interpreta la FechaCierra, solo la
+ * manda. Está en el test para poder demostrar que el día no se corrió.
+ */
+const enHoraCR = (iso: string): string =>
+  new Date(Date.parse(iso) + Number(CR_OFFSET.slice(0, 3)) * 3_600_000)
+    .toISOString().slice(0, 19).replace('T', ' ')
+
 describe('leerCerradas', () => {
   it('devuelve tickets listos para el Edge, con el cursor como parámetro', async () => {
     const { qy, params } = fake({ facturas: [filaFactura()], detalle: [filaDetalle()] })
@@ -207,6 +232,7 @@ describe('leerCerradas', () => {
     const { qy } = fake({ facturas: [filaFactura()], detalle: [filaDetalle()] })
     const r = await leerCerradas(qy, ESQUEMA, { desde: 'a', hasta: 'b', ultima: null })
 
+    // Lo que sale de la PC del PoS: hora de PARED de Costa Rica con el offset pegado.
     expect(r.tickets[0].fecha_cierra).toBe('2026-09-02T01:15:00-06:00')
 
     // El Edge RECHAZA cualquier instante sin zona: que pase acá es la prueba de que el
@@ -214,7 +240,31 @@ describe('leerCerradas', () => {
     const norm = normalizarTicket('santa-teresa', r.tickets[0])
     expect(norm).toMatchObject({ ok: true })
     if (!norm.ok) return
-    expect(norm.valor.fila.fecha_cierra).toBe('2026-09-02T07:15:00.000Z')
+    // El Edge normaliza a ISO-UTC para escribir el `timestamptz`. Es el MISMO INSTANTE,
+    // no una conversión de hora: se comprueba comparando instantes, no strings.
+    expect(Date.parse(norm.valor.fila.fecha_cierra!))
+      .toBe(Date.parse(r.tickets[0].fecha_cierra!))
+  })
+
+  it('el lote de las 22:07 llega al Edge como el MISMO instante, sin saltar de día en CR', async () => {
+    // La regresión que se quiere clavar: 2026-09-04 22:07:59 CR = 2026-09-05T04:07:59Z.
+    // El día natural en UTC ya es OTRO. Si el bridge mandara UTC en vez de la hora de
+    // pared, el lote del jueves se leería como del viernes y la jornada se partiría.
+    const { qy } = fake({
+      facturas: [filaFactura({ fecha_hora: '2026-09-04 21:55:00', fecha_cierra: '2026-09-04 22:07:59' })],
+      detalle: [filaDetalle()],
+    })
+    const r = await leerCerradas(qy, ESQUEMA, { desde: 'a', hasta: 'b', ultima: null })
+
+    expect(r.tickets[0].fecha_cierra).toBe('2026-09-04T22:07:59-06:00')
+
+    const norm = normalizarTicket('santa-teresa', r.tickets[0])
+    expect(norm).toMatchObject({ ok: true })
+    if (!norm.ok) return
+    // Mismo instante...
+    expect(Date.parse(norm.valor.fila.fecha_cierra!)).toBe(Date.parse('2026-09-04T22:07:59-06:00'))
+    // ...y leído de vuelta en hora de Costa Rica sigue siendo el JUEVES 4, no el 5.
+    expect(enHoraCR(norm.valor.fila.fecha_cierra!)).toBe('2026-09-04 22:07:59')
   })
 
   it('sin FechaCierra en la fila, el ticket va con fecha_cierra null (y sigue siendo válido)', async () => {

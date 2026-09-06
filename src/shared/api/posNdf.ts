@@ -37,6 +37,34 @@ export function ventanaJornada(businessDate: string): { desde: string; hasta: st
   }
 }
 
+/**
+ * El rango de jornadas `[desde, hasta]` → la ventana de `fecha_registra` que hay que LEER.
+ *
+ * Es un SUPERSET a propósito, y por los dos lados:
+ *
+ * · +1 día al final — un lote de noche puede cerrar pasada la medianoche, así que la jornada
+ *   `hasta` todavía tiene facturas al día siguiente. Sin este margen se perderían.
+ *
+ * · −1 día al principio — el que NO es obvio. La jornada de un lote es la fecha del PRIMER
+ *   ticket del lote. Si el rango arranca justo después de que un turno cruzó la medianoche, y
+ *   solo se leyera desde `desde`, se vería el pedazo de madrugada SIN su apertura: ese lote
+ *   truncado calcularía su jornada como `desde` y se colaría en el día equivocado. Con el día
+ *   de atrás, el lote entra completo, su jornada da el día anterior y el filtro lo descarta.
+ *
+ * Un margen de un día alcanza: un turno cierra a las horas, no a los días. Lo que sobra del
+ * superset se descarta después por jornada, así que la ventana ancha no ensucia el resultado.
+ */
+export function ventanaRangoJornadas(desde: string, hasta: string): { desde: string; hasta: string } {
+  const dia = (fecha: string, mas: number): string => {
+    const [y, m, d] = fecha.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, d + mas)).toISOString().slice(0, 10)
+  }
+  return {
+    desde: `${dia(desde, -1)}T00:00:00${CR_OFFSET}`,
+    hasta: `${dia(hasta, 2)}T00:00:00${CR_OFFSET}`,
+  }
+}
+
 /** El instante de un ticket → a qué jornada pertenece. Inversa de `ventanaJornada`. */
 export function businessDateDe(fechaRegistra: string): string {
   const t = Date.parse(fechaRegistra)
@@ -121,14 +149,51 @@ export async function getTicketsJornada(local: string, businessDate: string): Pr
 }
 
 /** El detalle de esas facturas. Sin tickets no se hace la consulta. */
+/**
+ * Las facturas CERRADAS de un rango de JORNADAS, con el superset de `ventanaRangoJornadas`.
+ *
+ * Devuelve de más a propósito: el que llama agrupa por lote y se queda con las jornadas que
+ * pedía. Filtrar acá por fecha sería imposible — la jornada de un ticket no se puede saber sin
+ * ver el resto de su lote.
+ *
+ * `estado = 'C'` explícito: hoy la ingesta solo escribe cerradas, pero el CHECK de la 062
+ * admite `X` y `R` para auditoría y un día podrían entrar.
+ */
+export async function getTicketsRango(
+  local: string,
+  rango: { desde: string; hasta: string },
+): Promise<TicketNdfConId[]> {
+  const v = ventanaRangoJornadas(rango.desde, rango.hasta)
+  const { data, error } = await sb
+    .from('pos_ndf_tickets')
+    .select(COLS_TICKET)
+    .eq('local', local)
+    .eq('estado', 'C')
+    .gte('fecha_registra', v.desde)
+    .lt('fecha_registra', v.hasta)
+    .order('fecha_registra', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as TicketNdfConId[]
+}
+
+/**
+ * Cuántos ids entran en un `IN (...)`. PostgREST los manda en la URL, así que una lista larga
+ * (un mes de ventas son miles) la haría explotar por largo. Se pide por tandas y se concatena.
+ */
+const TANDA_IDS = 200
+
 export async function getLineasDeTickets(ticketIds: string[]): Promise<LineaNdfRow[]> {
   if (ticketIds.length === 0) return []
-  const { data, error } = await sb
-    .from('pos_ndf_ticket_lines')
-    .select('ticket_id, codigo_producto, nombre, cantidad, monto, familia')
-    .in('ticket_id', ticketIds)
-  if (error) throw new Error(error.message)
-  return (data ?? []) as unknown as LineaNdfRow[]
+  const out: LineaNdfRow[] = []
+  for (let i = 0; i < ticketIds.length; i += TANDA_IDS) {
+    const { data, error } = await sb
+      .from('pos_ndf_ticket_lines')
+      .select('ticket_id, codigo_producto, nombre, cantidad, monto, familia')
+      .in('ticket_id', ticketIds.slice(i, i + TANDA_IDS))
+    if (error) throw new Error(error.message)
+    out.push(...((data ?? []) as unknown as LineaNdfRow[]))
+  }
+  return out
 }
 
 /**

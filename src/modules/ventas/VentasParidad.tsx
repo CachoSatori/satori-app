@@ -8,7 +8,12 @@
 //
 // ── SOLO LECTURA ───────────────────────────────────────────────────────────────────────────
 // Ni una escritura. Los dos lados se leen con funciones que ya existen y el reporte lo arma
-// `ventasParidad.ts`, que es puro. Esta pantalla no puede modificar un dato ni por accidente.
+// `ventasParidadCalc.ts`, que es puro. Esta pantalla no puede modificar un dato ni por accidente.
+//
+// ⚠️ EL SUFIJO `Calc` NO ES DECORATIVO. El módulo puro se llamaba `ventasParidad.ts` y colisionaba
+// con este archivo (`VentasParidad.tsx`) en filesystems case-insensitive: en macOS
+// `import './VentasParidad'` resolvía al `.ts`, que no tiene default export, y se rompía la ruta
+// Ventas ENTERA. Los dos nombres tienen que diferir en algo más que el case.
 
 import { useCallback, useMemo, useState } from 'react'
 
@@ -18,7 +23,7 @@ import { getDiasMapDesdePos } from './ventasDiasDesdePos'
 import {
   compararParidad, TOLERANCIA_POR_DEFECTO,
   type Comparacion, type FilaParidad, type ReporteParidad, type Tolerancia,
-} from './ventasParidad'
+} from './ventasParidadCalc'
 import { fi } from './ventasUtils'
 import './ventasEnVivo.css'
 

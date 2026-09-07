@@ -7,7 +7,7 @@ import {
   METRICAS,
   TOLERANCIA_POR_DEFECTO,
   type Tolerancia,
-} from './ventasParidad'
+} from './ventasParidadCalc'
 import type { DiasMap, ProductMap, SaloneroDay } from '../../shared/types/ventas'
 
 const PM: ProductMap = {

@@ -107,17 +107,29 @@ errores** (ignora el campo extra en silencio).
 
 ## Lecciones (para no repetirlas)
 
-1. **Edge + `src/shared/**`:** un cambio en código compartido que la Edge importa **no surte
-   efecto hasta redeployar la Edge**. El bridge solo no alcanza. Síntoma clásico: columna nueva
-   100% null, 0 errores. → nota agregada a `docs/DEPLOY-pos-bridge-staging.md`.
+1. **Edge + `src/shared/**` = chequeo de VERSIÓN DESPLEGADA, no de código.** Un cambio en código
+   compartido que la Edge importa **no surte efecto hasta redeployar la Edge**. El test del
+   pipeline del pase anterior cubría el **código**, no **qué versión estaba desplegada** — por eso
+   el campo llegó null aun con el test verde. Síntoma clásico: columna nueva 100% null, 0 errores.
+   El `grep -c` antes de deployar + backfill de 1 día + spot-check **son ese chequeo de "versión
+   desplegada"**, no burocracia. → nota agregada a `docs/DEPLOY-pos-bridge-staging.md`.
 
-2. **Guardia antes del `--todo`:** correr primero un backfill de **1 día + spot-check**, no el
-   `--todo` de ~20 min a ciegas. Y `grep` del campo en el working tree antes de deployar la Edge.
+2. **Guardia antes del `--todo`:** primero un backfill de **1 día + spot-check**, no el `--todo`
+   de ~20 min a ciegas.
 
-3. **Silent-degrade:** `colOpt`/`opt` devuelve `null` sin error si no resuelve. Para campos que
-   sabemos que existen conviene evaluar `req` (falla ruidoso) en vez de `opt` (null silencioso).
+3. **`opt` vs `req` — matizado.** El silent-degrade de `opt` es real en general, pero **NO fue la
+   causa de este bug, y `req` no lo habría cazado**. Acá el resolver **sí** resolvía
+   `UsuarioRegistra` (la columna existe) y el SELECT emitía el campo bien; quien lo descartaba era
+   la **Edge desplegada** (código viejo). `req` solo falla ruidoso cuando la columna **no se
+   resuelve** — el caso "la columna no existe en la instalación", que es **otro problema**. Para
+   este bug (código desplegado ≠ repo) el guard es **redeploy + grep + spot-check**.
 
-4. **Diagnóstico:** no anclarse en un doc (el de esquema describía el salonero por ticket) cuando
-   la data en vivo dice otra cosa. **La query al PoS mandó.**
+   > Versión anterior de esta lección, corregida: decía "para campos que sabemos que existen
+   > conviene evaluar `req` en vez de `opt`". Aplicado a este bug era una conclusión equivocada, y
+   > cambiar `opt` → `req` en `esquema.ts` no habría cambiado nada acá (sí habría roto la ingesta
+   > en una instalación del PoS donde la columna no exista).
+
+4. **La data en vivo manda sobre el doc.** No anclarse en un doc (el de esquema describía el
+   salonero por ticket) cuando la query al PoS dice otra cosa. **La query al PoS mandó.**
 
 5. **Comandos sin comentarios inline** en los bloques copiables — el `#` rompió el cherry-pick.

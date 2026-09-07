@@ -30,6 +30,36 @@ hasta que exista su propio ciclo de pase a prod, con firma.
 
 ---
 
+## ⚠️ Si tocás `src/shared/**`, redeployá la Edge
+
+La Edge `ingest-ndf` importa `normalizarLinea` y tipos de `src/shared/ndf/**`. Ese código se
+**EMPAQUETA al momento del `functions deploy`, desde el working tree** — no se actualiza solo
+cuando cambia en otra rama, ni porque el bridge de la PC del PoS ya corra la versión nueva.
+
+Si un cambio en `src/shared/**` afecta lo que la Edge ingesta (por ejemplo un campo nuevo como
+`usuario_registra`), **el bridge solo NO alcanza**: hay que correr
+
+```bash
+supabase functions deploy ingest-ndf
+```
+
+**desde la rama que tiene el cambio.**
+
+> **El síntoma de olvidarlo es traicionero: la columna nueva entra 100% en `null`, SIN un solo
+> error.** La Edge vieja simplemente ignora el campo extra que le manda el bridge nuevo. No hay
+> excepción, no hay log, no hay fila rechazada — solo una columna vacía que parece un problema
+> del PoS.
+
+**Guardas, antes de dar por bueno un backfill:**
+
+1. `grep -c <campo> src/shared/ndf/ingestNdf.ts` **antes** de deployar — si da 0, la Edge que
+   estás por publicar no conoce el campo.
+2. Un backfill de **1 día** + spot-check de la columna en la base, **antes** de correr el
+   `--todo`. Un `--todo` con la Edge vieja escribe el histórico entero en `null` y hay que
+   volver a correrlo completo.
+
+---
+
 ## Pasos y firmas
 
 | # | Paso | ¿Firma de Ismael? |

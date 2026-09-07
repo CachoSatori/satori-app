@@ -43,7 +43,7 @@ const armar = (
 
 const linea = (over: Partial<LineaNdfRow> = {}): LineaNdfRow => ({
   ticket_id: 't1', codigo_producto: '100', nombre: 'ROLL SATORI',
-  cantidad: 2, monto: 9000, familia: 2, ...over,
+  cantidad: 2, monto: 9000, familia: 2, usuario_registra: null, ...over,
 })
 
 // ── La jornada 07:00 → 07:00 ───────────────────────────────────────────────────
@@ -874,7 +874,7 @@ describe('etiquetaTurnoPoS', () => {
 describe('diasPorTurno — la partición "por turno + general"', () => {
   const linea = (id: string): LineaNdfRow => ({
     ticket_id: id, codigo_producto: '100', nombre: 'ROLL SATORI',
-    cantidad: 2, monto: 12000, familia: 2,
+    cantidad: 2, monto: 12000, familia: 2, usuario_registra: null,
   })
   // Mañana: el 111 cierra 16:07. Tarde: el 222 cierra 22:30. Dos meseros distintos.
   const TICKETS = [

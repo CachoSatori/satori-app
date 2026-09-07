@@ -23,7 +23,7 @@ const ticket = (over: Partial<TicketNdfConId> & { id: string }): TicketNdfConId 
 
 const linea = (ticketId: string, over: Partial<LineaNdfRow> = {}): LineaNdfRow => ({
   ticket_id: ticketId, codigo_producto: '100', nombre: 'ROLL SATORI',
-  cantidad: 2, monto: 12000, familia: 2, ...over,
+  cantidad: 2, monto: 12000, familia: 2, usuario_registra: null, ...over,
 })
 
 // ── Los lotes REALES de staging ────────────────────────────────────────────────────────────

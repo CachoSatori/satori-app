@@ -114,6 +114,14 @@ export interface LineaNdfRow {
   cantidad:        number | null
   monto:           number | null
   familia:         number | null
+  /**
+   * El mesero que COMANDÓ esta línea (`FAC_FacturasDet.UsuarioRegistra`).
+   *
+   * Es lo que permite atribuir la venta por línea en vez de un mesero por ticket, y con eso las
+   * facturas PARTIDAS (dos meseros en la misma factura). `null` en las 10 líneas del histórico
+   * que el PoS no trae con usuario.
+   */
+  usuario_registra: string | null
 }
 
 /** El id se pide para poder atar cada línea a su ticket. */
@@ -188,7 +196,7 @@ export async function getLineasDeTickets(ticketIds: string[]): Promise<LineaNdfR
   for (let i = 0; i < ticketIds.length; i += TANDA_IDS) {
     const { data, error } = await sb
       .from('pos_ndf_ticket_lines')
-      .select('ticket_id, codigo_producto, nombre, cantidad, monto, familia')
+      .select('ticket_id, codigo_producto, nombre, cantidad, monto, familia, usuario_registra')
       .in('ticket_id', ticketIds.slice(i, i + TANDA_IDS))
     if (error) throw new Error(error.message)
     out.push(...((data ?? []) as unknown as LineaNdfRow[]))

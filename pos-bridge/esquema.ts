@@ -82,7 +82,12 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       cantidad:      req('unidades vendidas', 'Cantidad', 'Cant'),
       monto:         req('monto de la línea', 'Monto', 'MontoTotal', 'Total', 'SubTotal'),
       imps:          req('impuesto de servicio 10% (parte el día con/sin 10%)', 'ImpS'),
-      impv:          opt('impuesto de venta (informativo)', 'ImpV', 'Imp', 'IVA', 'Impuesto'),
+      // `IV` PRIMERO: es el nombre REAL en esta instalación (Tarifa 13, CodigoImpuesto '01'),
+      // verificado contra la base. Antes se buscaba `ImpV/Imp/IVA/Impuesto`, ninguno matcheaba,
+      // el SELECT caía al `NULL` de `colOpt` y el IVA entraba en 0 en TODA la analítica — la
+      // bruta del PoS salía ~11% por debajo del XLS. NO es informativo: es el IVA que se
+      // persiste y se muestra discriminado. Y NO se deriva del 13%: se lee de la fuente.
+      impv:          opt('IVA 13% del PoS', 'IV', 'ImpV', 'Imp', 'IVA', 'Impuesto'),
       esextra:       opt('línea que NO cuenta como unidad', 'EsExtra'),
       compuesto:     opt('línea que NO cuenta como unidad', 'Compuesto', 'EsCompuesto'),
     },

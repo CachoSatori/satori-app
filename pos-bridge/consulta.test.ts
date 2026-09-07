@@ -116,6 +116,22 @@ describe('SQL generado', () => {
     expect(sqlFacturas(ESQUEMA)).toMatch(/NULL\s+AS fecha_cierra/)
   })
 
+  it('el IVA sale de la columna `IV`, que es la real del PoS', () => {
+    const conIV = resolverEsquema(new Map(Object.entries({
+      fac_facturas: [
+        'NumeroFactura', 'FechaRegistra', 'Estado', 'Login', 'Efectivo', 'Tarjeta',
+        'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'Vuelto',
+      ],
+      fac_pedidos:     ['NumeroFactura', 'UsuarioRegistra', 'Personas'],
+      fac_facturasdet: ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS', 'IV'],
+      fac_productos:   ['Codigo', 'Nombre', 'Clasificacion'],
+    })))
+    // Con `IV` presente el SELECT la trae; sin ninguna columna de IVA, manda 0 y NO se deriva.
+    expect(sqlDetalle(conIV)).toContain('COALESCE(d.[IV], 0)')
+    expect(sqlDetalle(conIV)).toContain('AS imp_venta')
+    expect(sqlDetalle(ESQUEMA)).toContain('COALESCE(d.[ImpV], 0)')   // fixture viejo: sigue OK
+  })
+
   it('agrega los pedidos ANTES del join (una factura puede consolidar varias mesas)', () => {
     const sql = sqlFacturas(ESQUEMA)
     expect(sql).toContain('GROUP BY p.[NumeroFactura]')
@@ -302,5 +318,76 @@ describe('leerDia', () => {
     const q = fake()
     await expect(leerDia(q, ESQUEMA, '2026-13-01')).rejects.toThrow()
     expect(q.sqls).toHaveLength(0)
+  })
+})
+
+// ── La factura 110599 del 29-ago: el caso de aceptación del IVA ────────────────────────────
+//
+// Es la factura con la que se firmó el arreglo. Sus números salen del PoS y tienen que cerrar:
+//   neta ₡48.142 + IVA ₡6.258 + servicio ₡4.814 = bruto ₡59.214, que es EXACTAMENTE la Tarjeta.
+//
+// El IVA sale de la columna `IV` línea por línea. Si el resolver vuelve a no encontrarla, este
+// test cae con IVA 0 y el bruto ₡6.258 corto — que es justo el ~11% de brecha contra el XLS.
+
+describe('factura 110599 (29-ago) — el IVA cierra el bruto contra la Tarjeta', () => {
+  const ESQ_IV = resolverEsquema(new Map(Object.entries({
+    fac_facturas: [
+      'NumeroFactura', 'FechaRegistra', 'Estado', 'Login', 'Efectivo', 'Tarjeta',
+      'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'Vuelto',
+    ],
+    fac_pedidos:     ['NumeroFactura', 'UsuarioRegistra', 'Personas'],
+    fac_facturasdet: ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS', 'IV'],
+    fac_productos:   ['Codigo', 'Nombre', 'Clasificacion'],
+  })))
+
+  // Tres líneas de comida que suman la neta, con su IVA y su 10% tal como los da el PoS.
+  const LINEAS: FilaDetalle[] = [
+    { numero_factura: '110599', codigo: '100', nombre: 'ROLL A', cantidad: 1, monto: 20000,
+      imp_servicio: 2000, imp_venta: 2600, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null },
+    { numero_factura: '110599', codigo: '101', nombre: 'ROLL B', cantidad: 1, monto: 18142,
+      imp_servicio: 1814, imp_venta: 2358, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null },
+    { numero_factura: '110599', codigo: '200', nombre: 'BEBIDA', cantidad: 1, monto: 10000,
+      imp_servicio: 1000, imp_venta: 1300, familia: 5, familia_nombre: 'BEBIDAS', es_extra: 0, compuesto: null },
+  ]
+  const FACTURA = filaFactura({
+    numero_factura: '110599',
+    efectivo: 0, tarjeta: 59214, vuelto: 0,
+  })
+
+  it('el SELECT trae el IVA desde `IV`', () => {
+    expect(sqlDetalle(ESQ_IV)).toContain('COALESCE(d.[IV], 0)')
+  })
+
+  it('el IVA del ticket es la Σ de las líneas — no el 13% derivado', () => {
+    const { tickets } = armarTickets([FACTURA], LINEAS)
+    expect(tickets[0].iva).toBe(6258)
+    // La prueba de que NO se deriva: 48.142 × 0,13 ≈ 6.258 da parecido, pero el ticket usa la
+    // Σ real. Con una línea exenta el derivado mentiría (subiría) y la Σ no se mueve.
+    const conExenta = armarTickets([FACTURA], [
+      ...LINEAS,
+      { numero_factura: '110599', codigo: '300', nombre: 'EXENTO', cantidad: 1, monto: 5000,
+        imp_servicio: 0, imp_venta: 0, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null },
+    ])
+    expect(conExenta.tickets[0].iva).toBe(6258)          // el IVA NO sube con la línea exenta
+    expect(conExenta.tickets[0].valor_servido).toBe(53142)  // …pero la neta sí
+  })
+
+  it('neta + IVA + servicio = el bruto, y el bruto es la Tarjeta', () => {
+    const t = armarTickets([FACTURA], LINEAS).tickets[0]
+    expect(t.valor_servido).toBe(48142)
+    expect(t.iva).toBe(6258)
+    expect(t.imp_servicio).toBe(4814)
+
+    const bruto = t.valor_servido + t.iva + t.imp_servicio
+    expect(Math.round(bruto)).toBe(59214)
+    expect(Math.round(bruto)).toBe(t.total)      // ← cierra contra el medio de pago
+  })
+
+  it('sin la columna de IVA el ticket queda en 0 y el bruto sale CORTO (el bug de antes)', () => {
+    const sinIva = LINEAS.map(l => ({ ...l, imp_venta: 0 }))
+    const t = armarTickets([FACTURA], sinIva).tickets[0]
+    expect(t.iva).toBe(0)
+    // ₡6.258 menos que la Tarjeta: la brecha del ~11% contra el XLS, exacta.
+    expect(t.total - (t.valor_servido + t.iva + t.imp_servicio)).toBe(6258)
   })
 })

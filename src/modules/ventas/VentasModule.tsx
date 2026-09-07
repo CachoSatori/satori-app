@@ -5,13 +5,19 @@ import {
   getVentasDias, getAllVentasDias, getVentasHist, getProductMap, getMetas, getComps,
 } from '../../shared/api/ventas'
 import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
+// ESTÁTICA a propósito, a diferencia de las otras 17 pestañas: con la conexión de Supabase
+// degradada (socket zombie / sesión en churn) el `import()` dinámico se rechaza transitoriamente,
+// `React.lazy` CACHEA ese rechazo y no reintenta, y al re-loguearlo React 19 hace `String()` de un
+// namespace de módulo (prototipo nulo) → «Cannot convert object to primitive value» → ErrorBoundary.
+// Paridad es temporal (se saca al cerrar P3) y no necesita su propio chunk, así que se importa
+// derecho y el problema no puede pasar.
+import VentasParidad from './VentasParidad'
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
 const VentasHoy          = lazy(() => import('./VentasHoy'))
 // Pestaña ADITIVA (preliminar, datos simulados). No recibe props: lee su propio snapshot del
 // mock y no toca `dias`, `pm` ni ninguna otra pestaña.
 const VentasEnVivo       = lazy(() => import('./VentasEnVivo'))
-const VentasParidad      = lazy(() => import('./VentasParidad'))
 const VentasContabilidad = lazy(() => import('./VentasContabilidad'))
 const VentasSaloneros    = lazy(() => import('./VentasSaloneros'))
 const VentasHistorico    = lazy(() => import('./VentasHistorico'))

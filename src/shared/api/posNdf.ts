@@ -90,6 +90,13 @@ export interface TicketNdfRow {
   /** `FAC_Facturas.Login`: el cajero que cobró. `111` mañana · `222` tarde. Define el turno. */
   cajero_login:      string | null
   canal:             string | null
+  /**
+   * Número de mesa del PoS. `null` en delivery y para llevar, que no tienen.
+   *
+   * Lo usa la lente de "mesa propia" para contar MESAS distintas y no confundirlas con
+   * facturas: una mesa que pidió la cuenta en dos tandas son dos facturas y una sola mesa.
+   */
+  mesa:              string | null
   salonero_login:    string | null
   registrado_por:    string
   turno:             string | null
@@ -128,7 +135,7 @@ export interface LineaNdfRow {
 export interface TicketNdfConId extends TicketNdfRow { id: string }
 
 const COLS_TICKET =
-  'id, numero_factura, fecha_registra, fecha_cierra, cajero_login, canal, salonero_login, registrado_por, turno, ' +
+  'id, numero_factura, fecha_registra, fecha_cierra, cajero_login, canal, mesa, salonero_login, registrado_por, turno, ' +
   'con_servicio, servicio_crc, total_crc, valor_servido_crc, iva_crc, regalia_crc, ' +
   'descuento_crc, clase_ingreso, pax, pax_nativo, pax_articulo, pax_alerta'
 

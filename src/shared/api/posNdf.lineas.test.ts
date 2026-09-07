@@ -120,3 +120,26 @@ describe('getLineasDeTickets — trae el mesero de la línea', () => {
     expect(selects).toEqual([])
   })
 })
+
+// La lente de "mesa propia" cuenta MESAS distintas, no facturas: una mesa que pidió la cuenta en
+// dos tandas son dos facturas y una sola mesa. Para eso hace falta el número de mesa, que la
+// tabla siempre tuvo y el select del ticket no pedía.
+describe('getTicketsRango / getTicketsJornada — traen el número de mesa', () => {
+  it('`mesa` está en las columnas que se piden', async () => {
+    const selects: string[] = []
+    const api = {
+      from:   () => api,
+      select: (cols: string) => { selects.push(cols); return api },
+      eq:     () => api,
+      gte:    () => api,
+      lt:     () => api,
+      order:  () => Promise.resolve({ data: [], error: null }),
+    }
+    mock.cliente.from = () => api
+
+    const { getTicketsRango } = await import('./posNdf')
+    await getTicketsRango('santa-teresa', { desde: '2026-09-01', hasta: '2026-09-01' })
+
+    expect(selects[0].split(',').map(c => c.trim())).toContain('mesa')
+  })
+})

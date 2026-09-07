@@ -15,7 +15,7 @@ const SELLO = '2026-09-05'
 const ticket = (over: Partial<TicketNdfConId> & { id: string }): TicketNdfConId => ({
   numero_factura: over.id, fecha_registra: '2026-09-05T19:00:00-06:00',
   fecha_cierra: null, cajero_login: '222',
-  canal: 'salon', salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
+  canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,
   iva_crc: 0, regalia_crc: 0, descuento_crc: 0, clase_ingreso: 'cobrada',
   pax: 2, pax_nativo: 2, pax_articulo: 2, pax_alerta: 'ok', ...over,

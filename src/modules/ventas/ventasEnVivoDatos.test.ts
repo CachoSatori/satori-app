@@ -27,7 +27,7 @@ const sal = (dia: DiaData, clave: string): SaloneroDay => dia.saloneros[clave] a
 const ticket = (over: Partial<TicketNdfConId> = {}): TicketNdfConId => ({
   id: 't1', numero_factura: '5001', fecha_registra: '2026-09-01T19:42:07-06:00',
   fecha_cierra: null, cajero_login: '222',
-  canal: 'salon', salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
+  canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,
   iva_crc: 0, regalia_crc: 0, descuento_crc: 0, clase_ingreso: 'cobrada',
   pax: 2, pax_nativo: 2, pax_articulo: 2, pax_alerta: 'ok', ...over,

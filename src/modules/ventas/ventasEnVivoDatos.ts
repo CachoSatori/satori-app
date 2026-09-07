@@ -176,13 +176,14 @@ export function armarDia(
       : etiquetaNoMesero(t.registrado_por, t.salonero_login)
     const e = acc.get(clave) ?? {
       esCajero: !esMesero,
-      pax: 0, total: 0, com: 0, beb: 0, iCom: 0, iBeb: 0, serv: 0,
+      pax: 0, total: 0, com: 0, beb: 0, iCom: 0, iBeb: 0, iva: 0, serv: 0,
       delivery: 0, ordenes: 0,
       prods: new Map<string, { q: number; m: number }>(),
     }
     e.pax     += paxDelTicket(t)
     e.total   += n(t.valor_servido_crc)   // el NETO — ver el bloque de arriba
     e.serv    += n(t.servicio_crc)
+    e.iva     += n(t.iva_crc)
     e.ordenes += 1
     if (t.canal === 'delivery') e.delivery += n(t.valor_servido_crc)
 
@@ -231,7 +232,7 @@ export function armarDia(
         total,
         salon:      total - delivery,
         delivery,
-        iva: 0, serv: Math.round(e.serv),
+        iva: Math.round(e.iva), serv: Math.round(e.serv),
         ordenes:    e.ordenes,
         ticketProm: e.ordenes ? total / e.ordenes : 0,
         prods,
@@ -242,9 +243,12 @@ export function armarDia(
     saloneros[nombre] = {
       pax: e.pax, total, com: Math.round(e.com), beb: Math.round(e.beb),
       iCom: e.iCom, iBeb: e.iBeb,
-      // IVA a nivel salonero queda en 0: el PoS lo informa por ticket y hoy viene 0 en el
-      // histórico. `serv` sí es el dato real (Σ ImpS).
-      iva: 0, serv: Math.round(e.serv),
+      // IVA y servicio ATRIBUIDOS, los dos igual: Σ de los tickets de este salonero
+      // (`iva_crc` / `servicio_crc`), tal como los informa el PoS. El IVA estaba clavado en 0
+      // porque el bridge leía mal la columna y venía 0 en toda la base; con `IV` resuelto ya
+      // trae el dato, y dejarlo en 0 acá hacía que `getDayStats` —que lee el IVA POR
+      // SALONERO— calculara la bruta ~11% corta. NUNCA se deriva del 13%: se suma lo que vino.
+      iva: Math.round(e.iva), serv: Math.round(e.serv),
       promPax:    e.pax  ? e.total / e.pax  : 0,
       promPlato:  e.iCom ? e.com   / e.iCom : 0,
       promBebida: e.iBeb ? e.beb   / e.iBeb : 0,
@@ -270,7 +274,7 @@ export function armarDia(
 interface AccEntrada {
   esCajero: boolean
   pax: number; total: number; com: number; beb: number; iCom: number; iBeb: number
-  serv: number; delivery: number; ordenes: number
+  iva: number; serv: number; delivery: number; ordenes: number
   prods: Map<string, { q: number; m: number }>
 }
 

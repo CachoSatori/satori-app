@@ -30,33 +30,30 @@ hasta que exista su propio ciclo de pase a prod, con firma.
 
 ---
 
-## ⚠️ Si tocás `src/shared/**`, redeployá la Edge
+## ⚠️ Si tocás `src/shared/**`, redeployá la Edge — y verificá la VERSIÓN, no el código
 
-La Edge `ingest-ndf` importa `normalizarLinea` y tipos de `src/shared/ndf/**`. Ese código se
-**EMPAQUETA al momento del `functions deploy`, desde el working tree** — no se actualiza solo
-cuando cambia en otra rama, ni porque el bridge de la PC del PoS ya corra la versión nueva.
+La Edge `ingest-ndf` empaqueta `src/shared/ndf/**` (p. ej. `normalizarLinea`) **al momento del
+`functions deploy`, desde el working tree**. No se actualiza sola cuando el código cambia en otra
+rama, ni porque el bridge corra la versión nueva.
 
-Si un cambio en `src/shared/**` afecta lo que la Edge ingesta (por ejemplo un campo nuevo como
-`usuario_registra`), **el bridge solo NO alcanza**: hay que correr
+**Un test verde valida el CÓDIGO, no QUÉ VERSIÓN está desplegada:** por eso un campo nuevo puede
+entrar **100% en `null`, sin errores**, con el pipeline testeado en verde. La Edge vieja ignora el
+campo extra en silencio — no hay excepción, no hay log, no hay fila rechazada; solo una columna
+vacía que parece un problema del PoS.
 
-```bash
-supabase functions deploy ingest-ndf
-```
+**Secuencia obligatoria** cuando un cambio en `src/shared/**` afecta lo que la Edge ingesta (campo
+nuevo, forma nueva):
 
-**desde la rama que tiene el cambio.**
+1. `grep -c <campo> src/shared/ndf/ingestNdf.ts` en el working tree — tiene que dar **≥ 1** antes
+   de deployar. Si da 0, la Edge que estás por publicar no conoce el campo.
+2. `supabase functions deploy ingest-ndf --project-ref hwiatgicyyqyezqwldia` **desde la rama que
+   TIENE el cambio**.
+3. Backfill de **UN día**.
+4. **Spot-check** de ese día en staging: que el campo no venga `null`.
+5. Recién ahí, el `--todo`.
 
-> **El síntoma de olvidarlo es traicionero: la columna nueva entra 100% en `null`, SIN un solo
-> error.** La Edge vieja simplemente ignora el campo extra que le manda el bridge nuevo. No hay
-> excepción, no hay log, no hay fila rechazada — solo una columna vacía que parece un problema
-> del PoS.
-
-**Guardas, antes de dar por bueno un backfill:**
-
-1. `grep -c <campo> src/shared/ndf/ingestNdf.ts` **antes** de deployar — si da 0, la Edge que
-   estás por publicar no conoce el campo.
-2. Un backfill de **1 día** + spot-check de la columna en la base, **antes** de correr el
-   `--todo`. Un `--todo` con la Edge vieja escribe el histórico entero en `null` y hay que
-   volver a correrlo completo.
+**Nunca correr el `--todo` de ~20 min a ciegas antes del spot-check.** Un `--todo` contra la Edge
+vieja escribe el histórico entero en `null` y hay que volver a correrlo completo.
 
 ---
 

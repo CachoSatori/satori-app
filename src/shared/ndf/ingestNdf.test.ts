@@ -271,8 +271,19 @@ describe('normalizarLinea', () => {
       .toEqual({
         codigo_producto: null, nombre: null, cantidad: 0, precio: null, monto: 0,
         familia: null, es_pax: false, es_extra: false, es_cortesia: false,
+        usuario_registra: null,
       })
     expect(normalizarLinea('no soy objeto')).toBeNull()
+  })
+
+  it('lleva el mesero que comandó la línea, y lo limpia', () => {
+    expect(normalizarLinea({ codigo: '100', usuario_registra: '032' })?.usuario_registra).toBe('032')
+    expect(normalizarLinea({ codigo: '100', usuario_registra: ' 026 ' })?.usuario_registra).toBe('026')
+    // Sin mesero: null, nunca '' ni undefined — la columna es nullable y el histórico ya
+    // ingestado no lo tiene.
+    for (const v of [null, undefined, '', '   ']) {
+      expect(normalizarLinea({ codigo: '100', usuario_registra: v })?.usuario_registra).toBeNull()
+    }
   })
 })
 

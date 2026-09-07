@@ -208,6 +208,7 @@ export function sqlDetalle(esq: Esquema, incremental = false): string {
   COALESCE(${od('impv')}, 0)                        AS imp_venta,
   pr.${q(col(esq, 'productos', 'clasificacion'))}   AS familia,
   ${nombreFamilia}                                  AS familia_nombre,
+  ${od('usuarioregistra')}                          AS usuario_registra,
   ${od('esextra')}                                  AS es_extra,
   ${od('compuesto')}                                AS compuesto
 FROM ${D} d
@@ -252,6 +253,8 @@ export interface FilaFactura {
 
 export interface FilaDetalle {
   numero_factura: string
+  /** `FAC_FacturasDet.UsuarioRegistra`: el mesero que comandó ESTA línea. */
+  usuario_registra: unknown
   codigo:         unknown
   nombre:         unknown
   cantidad:       unknown
@@ -330,6 +333,7 @@ export function armarTickets(
       return {
         codigo:         l.codigo,
         nombre:         l.nombre,
+        usuario_registra: l.usuario_registra,
         cantidad:       l.cantidad,
         monto:          l.monto,
         impS:           l.imp_servicio,

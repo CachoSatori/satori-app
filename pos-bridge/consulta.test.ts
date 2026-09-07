@@ -14,6 +14,7 @@ import {
   type Queryable,
 } from './consulta.ts'
 import { resolverEsquema } from './esquema.ts'
+import { normalizarLinea } from '../src/shared/ndf/ingestNdf.ts'
 import { assertSoloSelect } from './sqlGuard.ts'
 
 const ESQUEMA = resolverEsquema(new Map(Object.entries({
@@ -188,6 +189,7 @@ const filaFactura = (over: Partial<FilaFactura> = {}): FilaFactura => ({
 
 const filaDetalle = (over: Partial<FilaDetalle> = {}): FilaDetalle => ({
   numero_factura: '5001',
+  usuario_registra: null,
   codigo:         '100',
   nombre:         'ROLL SATORI',
   cantidad:       1,
@@ -342,11 +344,11 @@ describe('factura 110599 (29-ago) — el IVA cierra el bruto contra la Tarjeta',
 
   // Tres líneas de comida que suman la neta, con su IVA y su 10% tal como los da el PoS.
   const LINEAS: FilaDetalle[] = [
-    { numero_factura: '110599', codigo: '100', nombre: 'ROLL A', cantidad: 1, monto: 20000,
+    { numero_factura: '110599', usuario_registra: null, codigo: '100', nombre: 'ROLL A', cantidad: 1, monto: 20000,
       imp_servicio: 2000, imp_venta: 2600, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null },
-    { numero_factura: '110599', codigo: '101', nombre: 'ROLL B', cantidad: 1, monto: 18142,
+    { numero_factura: '110599', usuario_registra: null, codigo: '101', nombre: 'ROLL B', cantidad: 1, monto: 18142,
       imp_servicio: 1814, imp_venta: 2358, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null },
-    { numero_factura: '110599', codigo: '200', nombre: 'BEBIDA', cantidad: 1, monto: 10000,
+    { numero_factura: '110599', usuario_registra: null, codigo: '200', nombre: 'BEBIDA', cantidad: 1, monto: 10000,
       imp_servicio: 1000, imp_venta: 1300, familia: 5, familia_nombre: 'BEBIDAS', es_extra: 0, compuesto: null },
   ]
   const FACTURA = filaFactura({
@@ -365,7 +367,7 @@ describe('factura 110599 (29-ago) — el IVA cierra el bruto contra la Tarjeta',
     // Σ real. Con una línea exenta el derivado mentiría (subiría) y la Σ no se mueve.
     const conExenta = armarTickets([FACTURA], [
       ...LINEAS,
-      { numero_factura: '110599', codigo: '300', nombre: 'EXENTO', cantidad: 1, monto: 5000,
+      { numero_factura: '110599', usuario_registra: null, codigo: '300', nombre: 'EXENTO', cantidad: 1, monto: 5000,
         imp_servicio: 0, imp_venta: 0, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null },
     ])
     expect(conExenta.tickets[0].iva).toBe(6258)          // el IVA NO sube con la línea exenta
@@ -389,5 +391,103 @@ describe('factura 110599 (29-ago) — el IVA cierra el bruto contra la Tarjeta',
     expect(t.iva).toBe(0)
     // ₡6.258 menos que la Tarjeta: la brecha del ~11% contra el XLS, exacta.
     expect(t.total - (t.valor_servido + t.iva + t.imp_servicio)).toBe(6258)
+  })
+})
+
+// ── Saloneros por línea · el mesero que comandó cada línea ─────────────────────────────────
+//
+// `FAC_FacturasDet.UsuarioRegistra` → `pos_ndf_ticket_lines.usuario_registra`. Es lo que va a
+// permitir atribuir la venta por mesero A NIVEL LÍNEA, en vez de acreditarle la factura entera
+// a quien la abrió.
+//
+// El test recorre el pipeline ENTERO —SELECT → armarTickets → mapTicket → normalizarLinea—
+// porque el dato tiene tres saltos donde se podía perder, y de hecho `mapTicket` reconstruye
+// cada ítem desde cero: si no se lo lleva explícitamente, se cae ahí sin que nada falle.
+
+describe('usuario_registra por línea (factura 110607)', () => {
+  const ESQ = resolverEsquema(new Map(Object.entries({
+    fac_facturas: [
+      'NumeroFactura', 'FechaRegistra', 'Estado', 'Login', 'Efectivo', 'Tarjeta',
+      'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'Vuelto',
+    ],
+    fac_pedidos:     ['NumeroFactura', 'UsuarioRegistra', 'Personas'],
+    fac_facturasdet: ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS', 'IV',
+                      'UsuarioRegistra'],
+    fac_productos:   ['Codigo', 'Nombre', 'Clasificacion'],
+  })))
+
+  /** 5 líneas de '032' y 4 de '026' — los dos artículos 677 (pax) entre las de '026'. */
+  const LINEAS_110607: FilaDetalle[] = [
+    ...Array.from({ length: 5 }, (_, i) => filaDetalle({
+      numero_factura: '110607', codigo: `10${i}`, usuario_registra: '032',
+    })),
+    ...Array.from({ length: 2 }, (_, i) => filaDetalle({
+      numero_factura: '110607', codigo: `20${i}`, usuario_registra: '026',
+    })),
+    // Los dos 677: son el artículo PAX, y también los comandó '026'.
+    ...Array.from({ length: 2 }, () => filaDetalle({
+      numero_factura: '110607', codigo: '677', nombre: 'A PAX', familia: 19,
+      familia_nombre: 'A PAX', usuario_registra: '026',
+    })),
+  ]
+
+  it('el SELECT del detalle trae la columna', () => {
+    expect(sqlDetalle(ESQ)).toContain('d.[UsuarioRegistra]')
+    expect(sqlDetalle(ESQ)).toContain('AS usuario_registra')
+  })
+
+  it('sin la columna en la instalación, el SELECT manda NULL y NO rompe', () => {
+    const sinColumna = resolverEsquema(new Map(Object.entries({
+      fac_facturas: [
+        'NumeroFactura', 'FechaRegistra', 'Estado', 'Efectivo', 'Tarjeta',
+        'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'Vuelto',
+      ],
+      fac_pedidos:     ['NumeroFactura', 'UsuarioRegistra', 'Personas'],
+      fac_facturasdet: ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS'],
+      fac_productos:   ['Codigo', 'Nombre', 'Clasificacion'],
+    })))
+    expect(sqlDetalle(sinColumna)).toMatch(/NULL\s+AS usuario_registra/)
+    expect(() => assertSoloSelect(sqlDetalle(sinColumna))).not.toThrow()
+  })
+
+  it('EL PIPELINE ENTERO: la línea de «032» llega a LineaRow con «032»', () => {
+    const { tickets } = armarTickets(
+      [filaFactura({ numero_factura: '110607' })], LINEAS_110607)
+    const filas = tickets[0].items.map(normalizarLinea)
+
+    expect(filas).toHaveLength(9)
+    expect(filas.filter(f => f?.usuario_registra === '032')).toHaveLength(5)
+    expect(filas.filter(f => f?.usuario_registra === '026')).toHaveLength(4)
+  })
+
+  it('los dos 677 (artículo PAX) van con «026», su mesero', () => {
+    const { tickets } = armarTickets(
+      [filaFactura({ numero_factura: '110607' })], LINEAS_110607)
+    const pax = tickets[0].items
+      .filter(it => it.codigo === '677')
+      .map(normalizarLinea)
+
+    expect(pax).toHaveLength(2)
+    expect(pax.every(f => f?.usuario_registra === '026')).toBe(true)
+    expect(pax.every(f => f?.es_pax === true)).toBe(true)
+  })
+
+  it('una línea sin mesero queda en null, no en «» ni undefined', () => {
+    const { tickets } = armarTickets([filaFactura()], [
+      filaDetalle({ usuario_registra: null }),
+      filaDetalle({ codigo: '999', usuario_registra: '  ' }),
+    ])
+    expect(tickets[0].items.map(normalizarLinea).map(f => f?.usuario_registra))
+      .toEqual([null, null])
+  })
+
+  it('NO toca la plata de la línea: monto, IVA y servicio quedan igual', () => {
+    const conMesero = armarTickets([filaFactura()], [filaDetalle({ usuario_registra: '032' })])
+    const sinMesero = armarTickets([filaFactura()], [filaDetalle({ usuario_registra: null })])
+    const plata = (t: typeof conMesero) => {
+      const x = t.tickets[0]
+      return { total: x.total, iva: x.iva, serv: x.imp_servicio, neto: x.valor_servido }
+    }
+    expect(plata(conMesero)).toEqual(plata(sinMesero))
   })
 })

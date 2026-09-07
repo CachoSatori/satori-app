@@ -203,6 +203,8 @@ export interface LineaRow {
   es_pax:          boolean
   es_extra:        boolean
   es_cortesia:     boolean
+  /** El mesero que comandó la línea. Aditivo: `null` en el histórico ya ingestado. */
+  usuario_registra: string | null
 }
 
 export interface OpenRow {
@@ -282,6 +284,7 @@ export function normalizarLinea(l: unknown): LineaRow | null {
     es_pax:          x.es_pax === true,
     es_extra:        x.es_extra === true,
     es_cortesia:     x.es_cortesia === true,
+    usuario_registra: texto(x.usuario_registra),
   }
 }
 

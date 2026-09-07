@@ -477,7 +477,8 @@ describe('construirDiaData', () => {
 describe('las funciones del desglose, sueltas', () => {
   const li = (familia: number, monto: number, categoria: 'comida' | 'cortesia' | 'duenos' | 'otro' = 'otro') =>
     ({ codigo: null, nombre: 'x', cantidad: 1, monto, imp_servicio: 0, imp_venta: 0,
-       familia, familia_nombre: null, categoria, es_pax: false, es_extra: false, es_cortesia: false })
+       familia, familia_nombre: null, categoria, es_pax: false, es_extra: false, es_cortesia: false,
+       usuario_registra: null })
 
   it('mapValorServido suma solo las familias del neto', () => {
     expect(mapValorServido([li(2, 1000), li(29, 500), li(6, 9999), li(19, 7777)])).toBe(1500)

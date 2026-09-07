@@ -88,6 +88,9 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       // bruta del PoS salía ~11% por debajo del XLS. NO es informativo: es el IVA que se
       // persiste y se muestra discriminado. Y NO se deriva del 13%: se lee de la fuente.
       impv:          opt('IVA 13% del PoS', 'IV', 'ImpV', 'Imp', 'IVA', 'Impuesto'),
+      // Quién COMANDÓ la línea. `opt` y no `req` por el mismo criterio que `impv`: si faltara,
+      // degrada a NULL en vez de tumbar el ingest de la plata.
+      usuarioregistra: opt('mesero que comandó la línea', 'UsuarioRegistra'),
       esextra:       opt('línea que NO cuenta como unidad', 'EsExtra'),
       compuesto:     opt('línea que NO cuenta como unidad', 'Compuesto', 'EsCompuesto'),
     },

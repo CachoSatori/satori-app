@@ -33,6 +33,7 @@ const factura = (over: Partial<FilaFactura>): FilaFactura => ({
 
 const linea = (over: Partial<FilaDetalle>): FilaDetalle => ({
   numero_factura: '0',
+  usuario_registra: null,
   codigo:         '100',
   nombre:         'ROLL SATORI',
   cantidad:       1,

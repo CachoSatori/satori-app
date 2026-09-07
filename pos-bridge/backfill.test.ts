@@ -242,7 +242,8 @@ const FILA_FACTURA: FilaFactura = {
   dolares_efectivo: 0, dolares_tarjeta: 0, vuelto: 3000,
 }
 const FILA_DETALLE: FilaDetalle = {
-  numero_factura: '5001', codigo: '100', nombre: 'ROLL SATORI', cantidad: 2, monto: 12000,
+  numero_factura: '5001', usuario_registra: null,
+  codigo: '100', nombre: 'ROLL SATORI', cantidad: 2, monto: 12000,
   imp_servicio: 1200, imp_venta: 0, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null,
 }
 

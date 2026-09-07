@@ -194,7 +194,7 @@ const filaFactura = (over: Partial<FilaFactura> = {}): FilaFactura => ({
 })
 
 const filaDetalle = (over: Partial<FilaDetalle> = {}): FilaDetalle => ({
-  numero_factura: '5001', codigo: '100', nombre: 'ROLL SATORI', cantidad: 2, monto: 12000,
+  numero_factura: '5001', usuario_registra: null, codigo: '100', nombre: 'ROLL SATORI', cantidad: 2, monto: 12000,
   imp_servicio: 1200, imp_venta: 0, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null,
   ...over,
 })

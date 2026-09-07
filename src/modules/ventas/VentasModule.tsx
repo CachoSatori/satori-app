@@ -11,6 +11,7 @@ const VentasHoy          = lazy(() => import('./VentasHoy'))
 // Pestaña ADITIVA (preliminar, datos simulados). No recibe props: lee su propio snapshot del
 // mock y no toca `dias`, `pm` ni ninguna otra pestaña.
 const VentasEnVivo       = lazy(() => import('./VentasEnVivo'))
+const VentasParidad      = lazy(() => import('./VentasParidad'))
 const VentasContabilidad = lazy(() => import('./VentasContabilidad'))
 const VentasSaloneros    = lazy(() => import('./VentasSaloneros'))
 const VentasHistorico    = lazy(() => import('./VentasHistorico'))
@@ -26,7 +27,7 @@ const VentasICP          = lazy(() => import('./VentasICP'))
 const VentasCalendario   = lazy(() => import('./VentasCalendario'))
 const VentasMenuEng      = lazy(() => import('./VentasMenuEng'))
 
-type Tab = 'hoy'|'envivo'|'ventas'|'saloneros'|'evaluacion'|'icp'|'cajeros'|'historico'|'mix'|'analisis'|'calendario'|'menueng'|'metas'|'competencias'|'xls'|'config'
+type Tab = 'hoy'|'envivo'|'paridad'|'ventas'|'saloneros'|'evaluacion'|'icp'|'cajeros'|'historico'|'mix'|'analisis'|'calendario'|'menueng'|'metas'|'competencias'|'xls'|'config'
 
 interface TabDef { id: Tab; label: string; group: string; roles: string[] }
 const TABS: TabDef[] = [
@@ -35,6 +36,8 @@ const TABS: TabDef[] = [
   // mismos roles que 'hoy' nadie puede ver esta sin ver aquella primero. La pestaña de
   // arranque no cambia para ningún rol.
   { id: 'envivo',       label: 'En vivo',       group: 'ops',   roles: ['owner','manager','contador'] },
+  // P3, TEMPORAL: diagnóstico para firmar el swap de fuente. Solo owner, y se saca al cerrar P3.
+  { id: 'paridad',      label: 'Paridad (validación)', group: 'ops', roles: ['owner'] },
   { id: 'saloneros',    label: 'Saloneros',     group: 'ops',   roles: ['owner','manager'] },
   { id: 'evaluacion',   label: 'Evaluación',    group: 'team',  roles: ['owner','manager'] },
   { id: 'icp',          label: 'ICP',           group: 'team',  roles: ['owner','manager','contador'] },
@@ -179,6 +182,7 @@ export default function VentasModule() {
             <div className="vt-content">
               {tab === 'hoy'         && <VentasHoy         dias={allDias} pm={pm} metas={metas} />}
               {tab === 'envivo'      && <VentasEnVivo       metas={metas} />}
+              {tab === 'paridad'     && <VentasParidad     />}
               {tab === 'ventas'      && <VentasContabilidad dias={allDias} hist={hist} metas={metas} pm={pm} />}
               {tab === 'saloneros'   && <VentasSaloneros    dias={allDias} pm={pm} metas={metas} />}
               {tab === 'evaluacion'  && <VentasEvaluacion   dias={allDias} pm={pm} metas={metas} />}

@@ -199,3 +199,16 @@ venta propia (neta) | IVA | servicio | pax propio | prom/pax | mesas | tickets |
    110607 verde. **PARTE A CERRADA.**
 6. ⏭️ **Parte B** (app, `feat/analitica`): mapa de códigos + dos lentes + vista una fila por
    persona × turno.
+
+---
+
+## Mejora diferida (post-P2)
+
+El feedback sobre la pestaña que salió de esta SPEC —«toda la información pero súper
+desordenada»— quedó anotado como una reorganización de UI en
+[`SPEC-ui-ventas-por-turno-y-saloneros.md`](./SPEC-ui-ventas-por-turno-y-saloneros.md):
+«Ventas por turno» (la unidad es el turno) + «Saloneros» por empleado (la unidad es la persona).
+
+**No arranca hasta que P2 esté cerrado**, y hereda sin cambios las reglas firmadas de acá: PAX solo
+`677`, turnos mañana/noche/día sin fila Bar, ranking por venta propia, y las dos lentes que nunca
+se suman.

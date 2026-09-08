@@ -37,20 +37,27 @@ const linea = (ticket_id: string, usuario_registra: string | null): Fila => ({
 function fakeSupabase(filas: Fila[]) {
   const selects: string[] = []
   const tandas: string[][] = []
+  // `getLineasDeTickets` pide por tandas de ids Y pagina cada tanda con `.range()` (ver
+  // `posNdf.paginado.test.ts`). Acá la paginación no es lo que se prueba: el doble la soporta
+  // para poder correr, y devuelve la tanda entera en la primera página.
+  let ultimaTanda: Partial<Fila>[] = []
   const api = {
     from: () => api,
     select: (cols: string) => {
       selects.push(cols)
       return api
     },
+    order: () => api,
     in: (_col: string, ids: string[]) => {
       tandas.push(ids)
       const pedidas = selects[selects.length - 1].split(',').map(c => c.trim())
-      const data = filas
+      ultimaTanda = filas
         .filter(f => ids.includes(f.ticket_id))
         .map(f => Object.fromEntries(pedidas.filter(c => c in f).map(c => [c, f[c as keyof Fila]])))
-      return Promise.resolve({ data, error: null })
+      return api
     },
+    range: (a: number, b: number) =>
+      Promise.resolve({ data: ultimaTanda.slice(a, b + 1), error: null }),
   }
   return { api, selects, tandas }
 }
@@ -133,7 +140,8 @@ describe('getTicketsRango / getTicketsJornada — traen el número de mesa', () 
       eq:     () => api,
       gte:    () => api,
       lt:     () => api,
-      order:  () => Promise.resolve({ data: [], error: null }),
+      order:  () => api,
+      range:  () => Promise.resolve({ data: [], error: null }),
     }
     mock.cliente.from = () => api
 

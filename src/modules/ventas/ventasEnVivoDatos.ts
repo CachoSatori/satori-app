@@ -8,9 +8,9 @@ import {
   agruparEnLotes, etiquetaTurno, turnosConocidos, type Turno,
 } from '../../shared/ndf/jornada'
 import {
-  esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO, LOGIN_CAJERO_MANANA,
-  LOGIN_CAJERO_NOCHE, SALONEROS_CONOCIDOS,
+  esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO, SALONEROS_CONOCIDOS,
 } from '../../shared/ndf/mapTicket'
+import { claveNoMesero, etiquetaNoMesero, etiquetaTurnoPoS } from './baldesNoMesero'
 import { horaCorteCR } from './ventasEnVivoMock'
 import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type LocalId,
          type SnapshotEnVivo, type VentaPorHora } from './ventasEnVivoTypes'
@@ -173,7 +173,9 @@ export function armarDia(
     const esMesero = login !== null
     const clave = esMesero
       ? nombreSalonero(login, nombres)
-      : etiquetaNoMesero(t.registrado_por, t.salonero_login)
+      // El balde sale de (registrado_por, cajero que cobró, canal) — NO del login de la
+      // factura. `cajero_login` es la CAJA que cerró, que es la que define el turno.
+      : claveNoMesero(t.registrado_por, t.cajero_login, t.canal)
     const e = acc.get(clave) ?? {
       esCajero: !esMesero,
       pax: 0, total: 0, com: 0, beb: 0, iCom: 0, iBeb: 0, iva: 0, serv: 0,
@@ -309,26 +311,6 @@ export function esSinAsignar(clave: string): boolean {
 }
 
 /**
- * El `turno` que guarda el PoS → cómo se dice en pantalla.
- *
- * El valor guardado del turno de la noche es `'noche'` y **no se toca**: está en la columna
- * `turno` de `pos_ndf_tickets`, lo escribe el mapper y lo defiende un CHECK. Pero el negocio a
- * ese turno le dice «tarde» (el cajero 222 arranca a las 16:00, no de noche), así que la
- * TRADUCCIÓN vive acá, en el borde de la pantalla, y en ningún lado más.
- */
-export const ETIQUETA_TURNO_POS: Record<string, string> = {
-  'mañana': 'Mañana',
-  'manana': 'Mañana',
-  'noche':  'Tarde',
-  'tarde':  'Tarde',
-}
-
-export function etiquetaTurnoPoS(turno: string | null | undefined): string {
-  if (!turno) return 'Sin turno'
-  return ETIQUETA_TURNO_POS[turno] ?? turno
-}
-
-/**
  * Cuántas facturas y cuánto neto hay en cada turno **según el PoS** (el que decide 111/222).
  *
  * Es la otra lectura del mismo día: el corte de las 16:00 se calcula del reloj de cada ticket,
@@ -348,24 +330,15 @@ export function ventasPorTurnoPoS(tickets: TicketNdfConId[]): { turno: string; n
     .sort((a, b) => b.neto - a.neto)
 }
 
-/**
- * Las facturas que no son de un mesero, con nombre propio para que se vean en el desglose.
- *
- * Los dos cajeros se separan por login (111 mañana · 222 noche) y salen con el MISMO nombre que
- * usa el xls — `isCajeroName` los reconoce, así que el resto del módulo los trata como caja sin
- * que haya que enseñarle nada nuevo. El sistema (002/01/02) va aparte: no es una caja, es el
- * PoS facturando solo, y mezclarlo con la caja escondería que existe.
- */
-export function etiquetaNoMesero(registradoPor: string, login: string | null = null): string {
-  if (registradoPor === 'cajero') {
-    // El 222 se muestra «Tarde», nunca «noche» — misma traducción que `etiquetaTurnoPoS`.
-    if (login === LOGIN_CAJERO_MANANA) return `Cajero turno ${etiquetaTurnoPoS('mañana').toLowerCase()}`
-    if (login === LOGIN_CAJERO_NOCHE)  return `Cajero turno ${etiquetaTurnoPoS('noche').toLowerCase()}`
-    return login ? `Caja · ${login}` : 'Caja'
-  }
-  if (registradoPor === 'sistema') return login ? `Sistema · ${login}` : 'Sistema'
-  return 'Sin salonero'
-}
+// Las etiquetas de turno y los baldes de no-mesero viven en `baldesNoMesero` (módulo PURO):
+// las pantallas los necesitan y no pueden arrastrar el cliente de Supabase por eso. Se
+// re-exportan acá para no romper a quien ya los importaba desde este módulo.
+export {
+  ETIQUETA_TURNO_POS, etiquetaTurnoPoS, claveNoMesero, etiquetaNoMesero,
+  CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS,
+  CLAVES_CAJERO_TURNO,
+} from './baldesNoMesero'
+
 
 // ── Ritmo por hora ─────────────────────────────────────────────────────────────────────────
 

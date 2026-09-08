@@ -45,7 +45,10 @@ const DIAS: DiasMap = {
         iva: 26_000, serv: 20_000,
         prods: [['ROLL SATORI', 40, 150_000], ['IMPERIAL', 25, 50_000]],
       }),
-      'Caja · 388': caj({ pax: 4, total: 105_000, salon: 65_000, delivery: 40_000, ordenes: 7 }),
+      'Cajero turno mañana': caj({ pax: 0, total: 60_000, salon: 0, delivery: 60_000, ordenes: 4 }),
+      'Cajero turno tarde':  caj({ pax: 0, total: 20_000, salon: 0, delivery: 20_000, ordenes: 2 }),
+      'Salón sin mesero':    caj({ pax: 4, total: 20_000, salon: 20_000, delivery: 0, ordenes: 1 }),
+      'Sistema y otros':     caj({ pax: 0, total:  5_000, salon:  5_000, delivery: 0, ordenes: 1 }),
     },
   },
 }
@@ -101,18 +104,35 @@ describe('VentasHoy · Ratio C/B (₡) en la misma base que las tarjetas', () =>
 })
 
 describe('VentasHoy · el bloque «Restaurante» no se esconde', () => {
-  it('muestra «Venta Total Restaurante» aunque la caja se llame `Caja · 388`', () => {
-    // `Caja · 388` no está en `CAJEROS_IDS`: con la detección por nombre este bloque entero
-    // —y con él la NETA DEL DÍA— desaparecía de la pantalla.
+  it('muestra «Venta Total Restaurante» con la neta ENTERA del día', () => {
     render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
+    // 200.000 meseros + 60.000 + 20.000 + 20.000 + 5.000 de los cuatro baldes no-mesero.
     expect(texto()).toContain(`Venta Total Restaurante${plano(fi(305_000))}`)
-    expect(texto()).toContain(plano(fi(305_000)))
   })
 
-  it('el bucket de caja aparece con su propio KPI, salón y delivery', () => {
+  it('las tarjetas de caja son SOLO los dos turnos', () => {
     render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
-    expect(texto()).toContain(`Caja · 388${plano(fi(105_000))}`)
-    expect(texto()).toContain(`S: ${plano(fi(65_000))} · D: ${plano(fi(40_000))}`)
+    expect(texto()).toContain(`Cajero turno mañana${plano(fi(60_000))}`)
+    expect(texto()).toContain(`Cajero turno tarde${plano(fi(20_000))}`)
+    // Estos dos no son caja: no van como tarjeta acá.
+    expect(texto()).not.toContain(`Salón sin mesero${plano(fi(20_000))}`)
+    expect(texto()).not.toContain(`Sistema y otros${plano(fi(5_000))}`)
+  })
+
+  it('el bloque NO se esconde si la única plata no-mesero es «Salón sin mesero»', () => {
+    // Es el bug que arregló el pase anterior, de vuelta por otra puerta: atar el gate a las
+    // tarjetas dejaría al día sin el KPI de la NETA. El gate mira la MARCA, no las tarjetas.
+    const soloSinMesero: DiasMap = {
+      '2026-09-07': {
+        fileName: 'ndf', uploadedAt: '2026-09-08',
+        saloneros: {
+          MAXO: sal({ pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25 }),
+          'Salón sin mesero': caj({ pax: 4, total: 20_000, salon: 20_000, delivery: 0, ordenes: 1 }),
+        },
+      },
+    }
+    render(<VentasHoy dias={soloSinMesero} pm={{}} metas={METAS} />)
+    expect(texto()).toContain(`Venta Total Restaurante${plano(fi(220_000))}`)
   })
 
   it('sin ningún bucket de caja el bloque sigue sin aparecer', () => {

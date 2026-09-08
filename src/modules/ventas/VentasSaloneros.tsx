@@ -7,10 +7,11 @@ function addDays(date: string, n: number): string {
 }
 import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
-  aggSalonero, aggGeneral, allSaloneros,
+  aggSalonero, aggCajero, aggGeneral, allSaloneros,
   fi, fmtDate, metaColor, getMeta, ratioCBClass,
   topProds, datesInRange, allDates,
 } from './ventasUtils'
+import { CLAVE_SALON_SIN_MESERO } from './baldesNoMesero'
 
 interface Props {
   dias:  DiasMap
@@ -63,6 +64,20 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
       return b.promPax - a.promPax
     })
   }, [sals, rangeDates, dias, pm, sortCol])
+
+  // ── «Salón sin mesero» ─────────────────────────────────────────────────────────────────────
+  // Venta de SALÓN que la factura no le acredita a ningún mesero: `registrado_por` de
+  // `cajero` o `sin_pedido` con `canal = 'salon'` (el balde lo arma `claveNoMesero()`).
+  //
+  // NO es una persona: no compite en el ranking, no tiene meta y no entra a Competencias ni
+  // a Empleados — eso sale gratis porque el balde conserva la marca `esCajero`, que es lo que
+  // `allSaloneros()` usa para excluirlo. Por la misma razón se lee con `aggCajero`.
+  //
+  // ⚠️ Que la FACTURA no tenga dueño NO quiere decir que no se sepa quién comandó: la línea
+  // sí lo dice (`pos_ndf_lineas.usuario_registra`), y esa atribución vive en la lente «venta
+  // propia» de Saloneros por línea. Las dos lentes no se suman (regla firmada), así que en
+  // esta vista —que es POR FACTURA— el rótulo honesto es este.
+  const sinAsignar = useMemo(() => aggCajero(CLAVE_SALON_SIN_MESERO, rangeDates, dias), [rangeDates, dias])
 
   const firstDate = rangeDates[0] ?? ''
   const lastDate  = rangeDates[rangeDates.length - 1] ?? ''
@@ -126,6 +141,23 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
         </div>
       </div>
 
+      {/* «Salón sin mesero»: visible en los dos modos, siempre fuera del ranking. */}
+      {sinAsignar.total !== 0 && (
+        <div style={{ background:'var(--vt-paper)', border:'1px dashed var(--vt-border)', borderRadius:3, padding:'0.75rem 1rem', marginBottom:'1rem', display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'1rem', flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:'0.85rem' }}>{CLAVE_SALON_SIN_MESERO}</div>
+            <div style={{ fontSize:'0.62rem', color:'#888', marginTop:'0.15rem' }}>
+              Venta de salón que la factura no le acredita a ningún mesero · no compite en el
+              ranking · <strong>no suma al Total Cajeros</strong>
+            </div>
+          </div>
+          <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:'0.9rem' }}>
+            {fi(sinAsignar.total)}
+            <span style={{ fontSize:'0.62rem', color:'#888', fontWeight:400 }}> · {sinAsignar.ordenes} órdenes</span>
+          </div>
+        </div>
+      )}
+
       {/* ── TABLA MODE ── */}
       {viewMode === 'tabla' && (
         <div className="vt-tbl-wrap" style={{ marginBottom:'1.5rem' }}>
@@ -183,6 +215,21 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
               })}
             </tbody>
             <tfoot>
+              {sinAsignar.total !== 0 && (
+                <tr style={{ color:'#777', fontStyle:'italic' }}>
+                  <td style={{ textAlign:'center' }}>—</td>
+                  <td>
+                    <div style={{ fontWeight:600 }}>{CLAVE_SALON_SIN_MESERO}</div>
+                    <div style={{ fontSize:'0.65rem' }}>
+                      salón sin mesero en la factura · no compite en el ranking
+                    </div>
+                  </td>
+                  <td className="r vt-bold">{fi(sinAsignar.total)}</td>
+                  <td className="r" colSpan={7} style={{ fontSize:'0.68rem', textAlign:'right' }}>
+                    quién comandó cada línea se ve en «Saloneros por línea»
+                  </td>
+                </tr>
+              )}
               <tr className="vt-tbl-footer">
                 <td colSpan={2}>GENERAL</td>
                 <td className="r">{fi(gen.total)}</td>

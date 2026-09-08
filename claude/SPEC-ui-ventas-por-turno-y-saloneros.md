@@ -97,3 +97,11 @@ sobre la fuente ya migrada.
 - **No** es una migración de datos ni toca esquema.
 - **No** define el layout final (tarjetas vs tabla plegable): eso se decide al retomar, con Ismael
   viéndolo en staging.
+
+---
+
+## Otra mejora diferida, del mismo bloque post-P2
+
+[`SPEC-descomposicion-de-venta.md`](./SPEC-descomposicion-de-venta.md) — "por qué bajó / subió":
+la frase de diagnóstico + las dos palancas (tickets/jornada y ticket promedio). También **NO
+INICIAR hasta P2**, y comparte con ésta el recorte por turno y la fuente PoS.

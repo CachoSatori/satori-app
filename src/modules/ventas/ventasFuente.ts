@@ -25,7 +25,7 @@
 import { getAllVentasDias, getVentasDias, getVentasHist } from '../../shared/api/ventas'
 import type { DiasMap, HistMap } from '../../shared/types/ventas'
 import {
-  getDiasMapDesdePos, getHistDesdePos, LOCAL_POR_DEFECTO, type RangoJornadas,
+  aHistMap, getDiasMapDesdePos, LOCAL_POR_DEFECTO, type RangoJornadas,
 } from './ventasDiasDesdePos'
 
 /**
@@ -53,8 +53,19 @@ export const FUENTE_VENTAS: FuenteVentas = 'pos'
  */
 export const PRIMERA_JORNADA_POS = '2024-01-05'
 
-/** Cuántos días trae el eager. Es el mismo default de `getVentasDias()`. */
-export const DIAS_EAGER = 400
+/**
+ * Cuántos días trae el EAGER — el que bloquea el primer render.
+ *
+ * Bajó de 400 a 90 (P2-perf). Leer del PoS no es leer una fila por día: son los tickets y las
+ * líneas CRUDAS, que la app agrega en el navegador. A la escala medida en staging (39.470
+ * tickets y 221.639 líneas en 973 días ≈ 41 tickets y 228 líneas por día), 400 días son ~16.000
+ * tickets y ~91.000 líneas antes de pintar nada.
+ *
+ * 90 alcanza para lo único que el primer render necesita: «Hoy» compara contra las **4 últimas
+ * ocurrencias del mismo día de semana** (28 días), y lo reciente cabe de sobra. La historia
+ * completa sigue llegando por `cargarDeFondo`, en segundo plano.
+ */
+export const DIAS_EAGER = 90
 
 /** Hoy en Costa Rica (`YYYY-MM-DD`). CR es UTC−6 fijo. */
 export function hoyCR(ahora: Date = new Date()): string {
@@ -117,8 +128,23 @@ export function fusionarHist(xls: HistMap, pos: HistMap): HistMap {
 // inflado. La neta, el salón y el servicio no se mueven (paridad de agosto 2026: neta −0,4 %,
 // salón −0,0 %, pax +1,5 %).
 
+// ── QUÉ BLOQUEA EL PRIMER RENDER Y QUÉ NO (P2-perf) ────────────────────────────────────────
+//
+// Bloquea: `cargarDiasEager` (90 días) + `cargarHistEager` (una consulta al Excel).
+// No bloquea: `cargarDeFondo`, que trae la historia completa del PoS en segundo plano.
+//
+// La primera versión de P2 metía el histórico ENTERO del PoS en el `Promise.all` bloqueante
+// (`getHistDesdePos` con el rango `'todo'`), y eso solo ya era ~2,4× el eager de 400 días: el
+// histórico del PoS no es una tabla de resúmenes, se DERIVA agregando los mismos tickets y
+// líneas crudas. Estaba pagando el rango completo dos veces —una para el `HistMap` y otra para
+// el `DiasMap` full— antes de pintar un pixel.
+//
+// Ahora el PoS del rango completo se lee UNA sola vez, en `cargarDeFondo`, y de ese único pase
+// salen las dos cosas: el `DiasMap` full y el `HistMap` (que es una proyección del mismo día,
+// vía `aHistMap`). Mitad de trabajo, y nada de eso bloquea.
+
 /**
- * Los días del eager (los últimos `DIAS_EAGER`), fusionados.
+ * Los días del eager (los últimos `DIAS_EAGER`), fusionados. **Bloquea el primer render.**
  *
  * Con `FUENTE_VENTAS = 'xls'` devuelve exactamente lo que devolvía antes y **no consulta el
  * PoS**: el camino viejo queda intacto, no emulado.
@@ -133,29 +159,50 @@ export async function cargarDiasEager(
   return fusionarDias(xls, await getDiasMapDesdePos(rangoPos(DIAS_EAGER, ahora), local))
 }
 
-/** El histórico completo de días, fusionado. Lo mismo, con el rango entero del PoS. */
-export async function cargarDiasFull(
-  fuente: FuenteVentas = FUENTE_VENTAS,
-  local: string = LOCAL_POR_DEFECTO,
-  ahora: Date = new Date(),
-): Promise<DiasMap> {
-  const xls = await getAllVentasDias()
-  if (fuente === 'xls') return xls
-  return fusionarDias(xls, await getDiasMapDesdePos(rangoPos('todo', ahora), local))
+/**
+ * El `HistMap` del EXCEL, y nada más. **Bloquea el primer render, y por eso no toca el PoS.**
+ *
+ * `ventas_hist` son 1.096 filas ya resumidas: una sola consulta. El overlay del PoS —que
+ * cuesta agregar el rango completo— llega después, por `cargarDeFondo`.
+ *
+ * Efecto visible, y es el mismo patrón que ya tenía el `DiasMap` full: por un momento las
+ * pestañas que leen `hist` (Histórico, Mix, Análisis, Contabilidad, Calendario, Metas) muestran
+ * los números del Excel, y cuando el fondo termina pasan a los del PoS. No quedan vacías: el
+ * Excel cubre 2023-2025 completo.
+ */
+export async function cargarHistEager(): Promise<HistMap> {
+  return getVentasHist()
+}
+
+/** Lo que llega en segundo plano: la historia completa, ya fusionada. */
+export interface CargaDeFondo {
+  dias: DiasMap
+  hist: HistMap
 }
 
 /**
- * El `HistMap`, fusionado.
+ * La historia completa, en segundo plano y con **un solo pase por el PoS**.
  *
- * `ventas_hist` tiene 2023-2025 y el PoS arranca en 2024: la fusión deja 2023 tal cual y pisa
- * de 2024 en adelante.
+ * `histXls` es el que ya trajo `cargarHistEager`: se pasa en vez de volver a pedirlo, porque el
+ * `HistMap` del Excel no cambia entre las dos cargas.
+ *
+ * Las dos salidas usan las MISMAS funciones de fusión que el eager, que es lo que garantiza que
+ * una fecha que está en los dos dé exactamente lo mismo y nada salte cuando esto termina.
  */
-export async function cargarHist(
+export async function cargarDeFondo(
+  histXls: HistMap,
   fuente: FuenteVentas = FUENTE_VENTAS,
   local: string = LOCAL_POR_DEFECTO,
   ahora: Date = new Date(),
-): Promise<HistMap> {
-  const xls = await getVentasHist()
-  if (fuente === 'xls') return xls
-  return fusionarHist(xls, await getHistDesdePos(rangoPos('todo', ahora), local))
+): Promise<CargaDeFondo> {
+  const diasXls = await getAllVentasDias()
+  if (fuente === 'xls') return { dias: diasXls, hist: histXls }
+
+  // UNA lectura del PoS para las dos salidas. `aHistMap` es un re-shape puro del mismo día:
+  // pedir `getHistDesdePos` aparte volvería a agregar los mismos tickets y líneas.
+  const pos = await getDiasMapDesdePos(rangoPos('todo', ahora), local)
+  return {
+    dias: fusionarDias(diasXls, pos),
+    hist: fusionarHist(histXls, aHistMap(pos)),
+  }
 }

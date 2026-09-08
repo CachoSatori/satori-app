@@ -5,7 +5,7 @@ import { getProductMap, getMetas, getComps } from '../../shared/api/ventas'
 import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
 // La fuente de las ventas (P2). `getVentasDias`/`getAllVentasDias`/`getVentasHist` siguen
 // existiendo y se llaman desde acá adentro: el Excel es el piso de la fusión, no se retiró.
-import { cargarDiasEager, cargarDiasFull, cargarHist } from './ventasFuente'
+import { cargarDeFondo, cargarDiasEager, cargarHistEager } from './ventasFuente'
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
 const VentasHoy          = lazy(() => import('./VentasHoy'))
@@ -87,6 +87,8 @@ export default function VentasModule() {
 
   const [dias,     setDias]     = useState<DiasMap>({})
   const [diasFull, setDiasFull] = useState<DiasMap>({})
+  /** La carga de fondo (historia completa del PoS) sigue corriendo. Solo para avisar. */
+  const [cargandoFondo, setCargandoFondo] = useState(false)
   const [hist,  setHist]  = useState<HistMap>({})
   const [pm,    setPm]    = useState<ProductMap>({})
   const [metas, setMetas] = useState<Meta>({
@@ -101,16 +103,21 @@ export default function VentasModule() {
     setError(null)
     try {
       // ── P2 · LA FUENTE ES EL PoS, con el Excel de respaldo ──────────────────────────
-      // `cargarDiasEager` / `cargarDiasFull` / `cargarHist` fusionan `{ ...xls, ...pos }`:
-      // el PoS pisa donde tiene lote, el Excel queda intacto en 2023 y en cualquier jornada
-      // sin lote. Las tres viven en `ventasFuente.ts` y usan la MISMA función de fusión, que
-      // es lo que evita que «Hoy» (eager) y «Análisis» (full) discrepen en las fechas que se
-      // solapan o que algo salte cuando el full termina de cargar.
+      // Todo fusiona `{ ...xls, ...pos }` con la MISMA función (`ventasFuente.ts`): el PoS
+      // pisa donde tiene lote, el Excel queda intacto en 2023 y en cualquier jornada sin lote.
+      // Que la fusión sea una sola es lo que evita que «Hoy» y «Análisis» discrepen en las
+      // fechas que se solapan, o que algo salte cuando el fondo termina de cargar.
       //
-      // Con `FUENTE_VENTAS = 'xls'` las tres devuelven el Excel puro, sin consultar el PoS.
+      // ── QUÉ BLOQUEA Y QUÉ NO (P2-perf) ──────────────────────────────────────────────
+      // Bloquea solo lo barato: 90 días de días + el `hist` del Excel (una consulta a una
+      // tabla ya resumida). El PoS no da resúmenes: hay que agregar tickets y líneas crudas,
+      // así que el rango completo se lee en SEGUNDO PLANO y de un solo pase salen las dos
+      // cosas que faltan (el `DiasMap` full y el `HistMap`).
+      //
+      // Con `FUENTE_VENTAS = 'xls'` nada de esto consulta el PoS.
       const [d, h, p, m, c] = await Promise.all([
-        cargarDiasEager(),      // últimos 400 días, PoS + Excel
-        cargarHist(),
+        cargarDiasEager(),      // últimos DIAS_EAGER días, PoS + Excel
+        cargarHistEager(),      // el hist del Excel; el overlay del PoS llega en el fondo
         getProductMap(),
         getMetas(),
         getComps(),
@@ -120,9 +127,14 @@ export default function VentasModule() {
       setPm(p)
       setMetas(m)
       setComps(c)
-      // El histórico completo sigue cargándose en segundo plano para el año contra año de
-      // Análisis. Misma fusión que el eager, así que las fechas solapadas dan lo mismo.
-      cargarDiasFull().then(setDiasFull).catch(() => setDiasFull(d))
+      // La historia completa, en segundo plano: es lo que necesitan Análisis (año contra año),
+      // Histórico y Calendario. Hasta que llegue, esas pestañas muestran el Excel — nunca
+      // quedan vacías, porque el Excel cubre 2023-2025 entero.
+      setCargandoFondo(true)
+      cargarDeFondo(h)
+        .then(({ dias, hist }) => { setDiasFull(dias); setHist(hist) })
+        .catch(() => setDiasFull(d))
+        .finally(() => setCargandoFondo(false))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error cargando datos')
     } finally {
@@ -180,6 +192,15 @@ export default function VentasModule() {
           )
         })}
       </div>
+
+      {/* La historia completa llega en segundo plano (P2-perf). Sin este aviso, Análisis e
+          Histórico muestran los años viejos del Excel y parecen "mal" hasta que el PoS entra. */}
+      {cargandoFondo && (
+        <div style={{ margin: '0.75rem 1.5rem', fontSize: '0.75rem', color: '#888' }}>
+          Cargando la historia completa del PoS… mientras tanto, los años anteriores se muestran
+          desde el Excel.
+        </div>
+      )}
 
       {error && (
         <div className="tips-error" style={{ margin: '0.75rem 1.5rem' }}>

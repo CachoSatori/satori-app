@@ -14,7 +14,7 @@ const api = vi.hoisted(() => ({
 }))
 const pos = vi.hoisted(() => ({
   getDiasMapDesdePos: vi.fn(),
-  getHistDesdePos:    vi.fn(),
+  aHistMap:           vi.fn(() => ({})),
 }))
 
 vi.mock('../../shared/api/ventas', () => api)
@@ -24,7 +24,7 @@ vi.mock('./ventasDiasDesdePos', () => ({
 }))
 
 const {
-  DIAS_EAGER, PRIMERA_JORNADA_POS, cargarDiasEager, cargarDiasFull, cargarHist,
+  DIAS_EAGER, PRIMERA_JORNADA_POS, cargarDeFondo, cargarDiasEager, cargarHistEager,
   fusionarDias, fusionarHist, hoyCR, rangoPos, restarDias,
 } = await import('./ventasFuente')
 
@@ -97,8 +97,12 @@ describe('fusionarHist — misma regla para el histórico', () => {
 describe('rangoPos — en JORNADAS, y nunca antes de que el PoS exista', () => {
   const AHORA = new Date('2026-09-08T15:00:00Z')   // 09:00 en CR
 
-  it('el eager pide los últimos 400 días', () => {
-    expect(rangoPos(DIAS_EAGER, AHORA)).toEqual({ desde: '2025-08-04', hasta: '2026-09-08' })
+  it('el eager pide solo los últimos DIAS_EAGER días', () => {
+    // 90, no 400: leer del PoS es agregar tickets y líneas crudas, y 400 días son ~16.000
+    // tickets y ~91.000 líneas antes de pintar nada.
+    expect(DIAS_EAGER).toBeLessThanOrEqual(90)
+    expect(rangoPos(DIAS_EAGER, AHORA))
+      .toEqual({ desde: restarDias('2026-09-08', DIAS_EAGER), hasta: '2026-09-08' })
   })
 
   it('el full arranca en la primera jornada del PoS, no en 2023', () => {
@@ -139,25 +143,48 @@ describe('cargarDiasEager / cargarDiasFull / cargarHist', () => {
     expect(api.getVentasDias).toHaveBeenCalledWith(DIAS_EAGER)
   })
 
-  it('el full pide el rango entero del PoS y fusiona igual', async () => {
+  it('el fondo pide el rango entero del PoS y fusiona igual', async () => {
     api.getAllVentasDias.mockResolvedValue({ '2023-01-01': dia('xls') })
     pos.getDiasMapDesdePos.mockResolvedValue({ '2024-05-05': dia('pos') })
 
-    const r = await cargarDiasFull('pos', 'santa-teresa', AHORA)
+    const { dias } = await cargarDeFondo({}, 'pos', 'santa-teresa', AHORA)
 
-    expect(Object.keys(r).sort()).toEqual(['2023-01-01', '2024-05-05'])
+    expect(Object.keys(dias).sort()).toEqual(['2023-01-01', '2024-05-05'])
     expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith(
       { desde: PRIMERA_JORNADA_POS, hasta: '2026-09-08' }, 'santa-teresa')
   })
 
-  it('el hist fusiona `ventas_hist` con el HistMap del PoS', async () => {
+  it('el hist del eager es SOLO el Excel: no toca el PoS', async () => {
     api.getVentasHist.mockResolvedValue({ '2023-06-15': hd(1), '2024-06-15': hd(2) })
-    pos.getHistDesdePos.mockResolvedValue({ '2024-06-15': hd(99) })
 
-    const r = await cargarHist('pos', 'santa-teresa', AHORA)
+    const r = await cargarHistEager()
 
-    expect(r['2023-06-15'].ventaNeta).toBe(1)
-    expect(r['2024-06-15'].ventaNeta).toBe(99)
+    expect(r['2024-06-15'].ventaNeta).toBe(2)
+    expect(pos.getDiasMapDesdePos).not.toHaveBeenCalled()
+  })
+
+  it('el fondo superpone el HistMap del PoS sobre el del Excel', async () => {
+    api.getAllVentasDias.mockResolvedValue({})
+    pos.getDiasMapDesdePos.mockResolvedValue({ '2024-06-15': dia('pos') })
+    pos.aHistMap.mockReturnValue({ '2024-06-15': hd(99) })
+
+    const { hist } = await cargarDeFondo({ '2023-06-15': hd(1), '2024-06-15': hd(2) },
+      'pos', 'santa-teresa', AHORA)
+
+    expect(hist['2023-06-15'].ventaNeta).toBe(1)    // 2023: el PoS no llega, queda el Excel
+    expect(hist['2024-06-15'].ventaNeta).toBe(99)   // 2024: pisa el PoS
+  })
+
+  it('UN SOLO pase por el PoS para las dos salidas del fondo', async () => {
+    // Antes se pedía el rango completo dos veces —una para el DiasMap y otra para el
+    // HistMap—, agregando los mismos tickets y líneas dos veces. Es la mitad del trabajo.
+    api.getAllVentasDias.mockResolvedValue({})
+    pos.getDiasMapDesdePos.mockResolvedValue({ '2024-06-15': dia('pos') })
+    pos.aHistMap.mockReturnValue({})
+
+    await cargarDeFondo({}, 'pos', 'santa-teresa', AHORA)
+
+    expect(pos.getDiasMapDesdePos).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -170,13 +197,15 @@ describe("FUENTE_VENTAS = 'xls' — el camino viejo, intacto", () => {
     api.getAllVentasDias.mockResolvedValue(soloXls)
     api.getVentasHist.mockResolvedValue({ '2026-09-07': hd(1) })
 
+    const histXls = { '2026-09-07': hd(1) }
     expect(await cargarDiasEager('xls', 'santa-teresa', AHORA)).toBe(soloXls)
-    expect(await cargarDiasFull('xls', 'santa-teresa', AHORA)).toBe(soloXls)
-    expect((await cargarHist('xls', 'santa-teresa', AHORA))['2026-09-07'].ventaNeta).toBe(1)
+    expect((await cargarHistEager())['2026-09-07'].ventaNeta).toBe(1)
+    const fondo = await cargarDeFondo(histXls, 'xls', 'santa-teresa', AHORA)
+    expect(fondo.dias).toBe(soloXls)
+    expect(fondo.hist).toBe(histXls)
 
     // La aserción que importa: con el flag en `xls` no se pisa `pos_ndf_*` ni una vez.
     expect(pos.getDiasMapDesdePos).not.toHaveBeenCalled()
-    expect(pos.getHistDesdePos).not.toHaveBeenCalled()
   })
 })
 
@@ -192,7 +221,7 @@ describe('el eager y el full no se pelean', () => {
     pos.getDiasMapDesdePos.mockResolvedValue(delPos)
 
     const eager = await cargarDiasEager('pos', 'santa-teresa', AHORA)
-    const full  = await cargarDiasFull('pos', 'santa-teresa', AHORA)
+    const full  = (await cargarDeFondo({}, 'pos', 'santa-teresa', AHORA)).dias
 
     // Si el eager y el full usaran fusiones distintas, «Hoy» y «Análisis» mostrarían números
     // distintos de la misma fecha y algo saltaría al terminar de cargar el full.

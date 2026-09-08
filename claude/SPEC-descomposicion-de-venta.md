@@ -2,45 +2,40 @@
 
 > ⛔ **DISEÑO — NO INICIAR.** Después de P2. Solo lectura sobre `pos_ndf_*`. No toca IVA,
 > `total_crc`, sagrados, caja, propinas, realtime, prod ni main. Autor: Ismael. Revisión técnica: Claude.
-> La v1 verbatim + la revisión larga quedan en el historial (`79b0aef`, `feat/analitica`).
+> Copia verbatim (v1) + revisión larga recuperables en `79b0aef`. v2 en `42a4962` (feat/analitica).
 
-## 🔧 Revisión técnica — verificada en código 2026-09-08 (cerrar antes de firmar)
+## 🔧 Revisión técnica — FIRMADA 2026-09-08 (verificada en código + resuelta por Ismael)
 
-Tres correcciones de fondo (cambian números, no redacción). Verificadas contra el repo:
+- **✅ Jornada = LOTE, no −7h.** `jornada.ts:251` → `fechaCR(apertura)` del lote (`agruparEnLotes`).
+  El helper reutiliza `agruparEnLotes` / `agruparPorJornadaTurno`. **Los ancla de la query 64 se
+  corrieron con −7h → recalcular por lote antes del test.**
+- **✅ Mix = lista BLANCA `FAMILIAS_VALOR_SERVIDO = [2,3,4,5,13,16,29]`** (`mapTicket.ts:153`), la misma
+  que `armarDia`. Afuera: 6 personal, 12 gift, 17 cortesía, 19 pax, 20–27 merch/extras, 28 dueños, 25 cajón.
+- **✅ Familia 29 = GREENSEASON** (Nube viva: CSV + SKUs 1049–1054 en tipo 29). Alias `FAMILIA_BENTOS=29`
+  del código VIEJO. `% promo` = familia 29 y/o SKUs 1049–1054. La 25 no entra. *(Aparte: el app hoy
+  mislabela 29 como "Bentos" — limpieza chica de constante, no toca plata.)*
+- **✅ Diagnóstico cubre SUBA y BAJA** (ver árbol). El módulo es "bajó / subió": no puede quedarse sin
+  titular cuando creció.
+- **✅ KPI 3 redondea como `armarDia`:** `Math.round(n(cantidad))` **por línea** antes de acumular
+  (`cantidad` es numeric). Sumar crudo y redondear al final hace driftear el cross-check de unidades.
+- **✅ Exclusión `677/678` = defensa en profundidad,** redundante con la whitelist (son familia 19) a
+  propósito. `armarDia` lleva los dos filtros; el de código protege si un 677 aparece cargado bajo otra
+  familia. NO simplificar.
+- **✅ Ancla:** columna `jornadas` (noches con ≥1 ticket 222) por año.
+- **✅ Turnos:** ids de `jornada.ts` — `manana` (111) / `tarde` (222) / `dia` (resto).
+- El helper expone `descuadreCrc` (líneas vs header), como la lente A de Parte B.
 
-- **🔴 Jornada = LOTE, no −7h.** `jornada.ts:251` → `jornada: fechaCR(apertura)` (fecha CR de la
-  apertura del lote de cierre, vía `agruparEnLotes`). NO hay `−7 hours`. El −7h es la definición
-  vieja, viva solo en `posNdf.ts` (`businessDateDe`). El helper DEBE usar `agruparEnLotes` (como
-  `getDiasMapDesdePos`/`saloneroLentesDatos`) o es el tercer agregador que el SPEC prohíbe. Los
-  ancla tickets/ticket/neta casi no se mueven (turno por `cajero_login`, trimestre entero), pero el
-  **conteo de jornadas** (KPI 1) se saca por lote.
-- **🔴 Exclusión = lista BLANCA.** La app usa `FAMILIAS_VALOR_SERVIDO = [2,3,4,5,13,16,29]`
-  (`mapTicket.ts:153`), no la lista negra `{6,17,19,28}`. El mix debe correr sobre esa misma
-  whitelist o rompe el invariante testeado "mix = neto del día".
-- **🟠 Familia 29 SIN RESOLVER.** En el código 29 = **BENTOS/almuerzo** (`FAMILIA_BENTOS=29`,
-  `CATEGORIA_FAMILIA[29]='Bentos'`, test "29 bentos ENTRA" al valor servido). El CSV de
-  `FAC_Clasificaciones` dijo 29=greenseason. El hallazgo del SPEC dice GS = SKUs 1049–1054
-  (productos, no familia). **Pendiente:** confirmar en el CSV `NombreClasificacion` de 29 y bajo qué
-  familia caen los SKUs 1049–1054. Hasta entonces, el KPI `%promo` NO se puede construir. Además:
-  familia **25 no está en el valor servido**, así que `promo={25,29}` no cierra.
-
-Menores (anotados, no bloquean): falta columna `jornadas` por año en el ancla para testear el KPI 1;
-hueco en el árbol de diagnóstico (tickets/jornada −20% con ticket −5% no dispara ninguna regla → falta
-regla de fondo); bucket "otro" en el SPEC = `'dia'`/"Día" en el código y Parte B; el helper debería
-exponer `descuadreCrc` (líneas vs header), como la lente A de Parte B, en vez de elegir base en silencio.
-
-**Prerrequisito técnico:** `bebc9de` (paginación de líneas) está en `feat/analitica` e
-`integracion/analitica-staging` pero NO en `staging` (`db690f1`). Construir sobre la integración; sobre
-staging el mix vuelve a leer líneas truncadas.
+**Prerrequisito:** `bebc9de` (paginación de líneas) está en `feat/analitica` e `integracion/analitica-staging`
+pero NO en `staging`. Construir sobre la integración.
 
 ---
 
 ## Pregunta que responde
 
-"Bajó la neta" no es un diagnóstico. El módulo muestra de qué palanca salió el movimiento, en una
-frase + 6 números, por turno y por recorte comparable.
+"Bajó / subió la neta" no es diagnóstico. El módulo muestra de qué palanca salió el movimiento: una frase
++ 6 números, por turno y por recorte comparable.
 
-## Identidad (única)
+## Identidad
 
 ```
 neta = jornadas × tickets_por_jornada × ticket_promedio
@@ -48,70 +43,56 @@ ticket_promedio     = neta / tickets
 unidades_por_ticket = unidades / tickets     (sin 677 ni 678)
 ```
 
-- `jornadas` = días con ≥1 ticket de ese turno (mismo denominador que el KPI 1), **contados por lote**.
-- 2 palancas (tickets/jornada, ticket promedio). `unidades/ticket` descompone la palanca 2.
-- Nunca una neta suelta como KPI titular.
+`jornadas` = noches con ≥1 ticket del turno, contadas por lote. 2 palancas + `unidades/ticket` (descompone
+la 2). Nunca neta suelta como titular.
 
 ## Recorte de tiempo
 
-- **Jornada = fecha CR de la apertura del lote de cierre (`agruparEnLotes`, igual que `jornada.ts`).**
-  NO −7h.
-- Turno v1 = `cajero_login`: 111 mañana · 222 noche. Cualquier otro → bucket **`'dia'`** (no fila Bar).
-  388 es caja, no turno.
-- Comparación default = mismos meses del año anterior. Segunda = mismos N días. No "YTD vs año completo".
+- Jornada = fecha CR de la apertura del lote (`agruparEnLotes`). NO −7h.
+- Turno v1 = `cajero_login`: `manana` (111) · `tarde` (222) · `dia` (resto). 388 es caja, no turno.
+- Comparación default = mismos meses año anterior. Segunda = mismos N días. No "YTD vs año completo".
 
 ## Universo
 
-- `pos_ndf_tickets.estado = 'C'`.
-- Neta del ticket = `valor_servido_crc` (header). No re-sumar líneas para el total. El helper expone
-  `descuadreCrc` (líneas vs header) para no tapar discrepancias.
-- Unidades y mix = `pos_ndf_ticket_lines`, **familias `FAMILIAS_VALOR_SERVIDO = [2,3,4,5,13,16,29]`**
-  (misma whitelist que la app), excluyendo `codigo_producto IN ('677','678')`.
-- Local: piloto (`santa-teresa`) salvo filtro.
+- `pos_ndf_tickets.estado = 'C'`. Neta del ticket = `valor_servido_crc` (header); no re-sumar líneas
+  para el total; el helper expone `descuadreCrc`.
+- Unidades y mix = `pos_ndf_ticket_lines`, familias `FAMILIAS_VALOR_SERVIDO = [2,3,4,5,13,16,29]`,
+  excluyendo `codigo_producto IN ('677','678')` (defensa en profundidad). Unidades: `Math.round` por línea.
+- Local: `santa-teresa` salvo filtro.
 
 ## Los 6 KPIs (una fila = turno × recorte)
 
-1. **Tickets / jornada** = tickets ÷ jornadas del turno (contadas por lote). ¿Menos mesas?
-2. **Ticket promedio** = Σ neta ÷ tickets (header `valor_servido_crc`). ¿Menos por mesa?
-3. **Unidades / ticket** = Σ cantidad (whitelist, sin 677/678) ÷ tickets. ¿Menos platos?
-4. **Mix** = % de neta de líneas por familia (base whitelist, NO el header). ¿A lo barato?
-5. **% turno / día** = neta del turno ÷ neta del día (111+222+dia). ¿Un turno o el local?
-6. **% promo** = ⚠️ **BLOQUEADO** hasta resolver qué es la familia 29 y cómo entra 25 (ver revisión).
+1. **Tickets / jornada** = tickets ÷ jornadas del turno (por lote).
+2. **Ticket promedio** = Σ neta ÷ tickets (header).
+3. **Unidades / ticket** = Σ `round(cantidad)` (whitelist, sin 677/678) ÷ tickets.
+4. **Mix** = % de neta de líneas por familia (base whitelist, no header).
+5. **% turno / día** = neta del turno ÷ neta del día (manana+tarde+dia).
+6. **% promo** = % de neta de líneas de familia 29 (GreenSeason) y/o SKUs 1049–1054. (La 25 no entra.)
 
 Δ vs recorte comparable, absoluta y %. Semáforo solo en 1 y 2. 4–6 contexto. KPIs 4/6 sobre neta de
-**líneas**, base distinta del header — rotularlo en la UI.
+**líneas** — rotularlo en la UI.
 
-## Diagnóstico automático (una línea). Prioridad:
+## Diagnóstico (una línea, cubre suba y baja). Prioridad, primera que aplique:
 
 1. Tickets/jornada ≤ −15 % y ticket ≥ 0 % → **Menos mesas.** Quien vino gastó igual o más.
 2. Tickets/jornada ≥ −5 % y ticket ≤ −15 % → Misma afluencia, ticket más chico.
 3. Tickets y ticket ≤ −10 % → Menos mesas y menor gasto por mesa.
-4. Neta ≤ −15 % y % promo < 5 % → La promo no explica (⚠️ depende del KPI 6, hoy bloqueado).
-5. % turno noche cae y mañana no → Se cayó la noche, no el local.
-6. **(FALTA — regla de fondo)** cualquier otro caso con neta ≤ −10 % → describir las dos palancas sin
-   etiqueta ("Tickets X %, ticket Y %"), para que el bloque siempre tenga titular.
+4. Neta ≤ −15 % y % promo < 5 % → La promo no explica la baja.
+5. % turno tarde cae y manana no → Se cayó la noche, no el local.
+6. **Espejo de crecimiento:** tickets/jornada ≥ +15 % y ticket ≥ 0 % → **Más mesas,** gastando igual o más.
+7. **Catch-all (else real, SIN piso):** cualquier caso no cubierto, suba o baje → "Neta ΔX %.
+   Tickets/jornada ΔY %. Ticket ΔZ %." Siempre hay titular.
 
-## Mix — catálogo (VALIDAR nombres contra `FAC_Clasificaciones`; 29 en disputa)
+## Mix — catálogo (nombres reales de `FAC_Clasificaciones`)
 
-`CodigoTipoClasificacion` = `pos_ndf_ticket_lines.familia`. En el valor servido: 2,3,4,5,13,16,29.
-
-| id | Código app | Grupo UI |
-|----|-----------|----------|
-| 3 | SUSHI ROLLS | Comida |
-| 2 | TAPAS ASIATICAS | Comida |
-| 16 | POKES BOWLS CEVICHES | Comida |
-| 13 | KIDS MENU | Comida |
-| 4 | POSTRES | Comida |
-| 5 | BEBIDAS | Bebida |
-| 29 | **Bentos (código) / ¿greenseason? (CSV)** — SIN RESOLVER | ¿Comida o Promo? |
-| 25 | PROMOCIONES — **fuera del valor servido** | (no entra al mix de neto) |
-| 6, 17, 19, 28 | PERSONAL / CORTESÍAS / PAX / DUEÑOS | Fuera |
-| resto | Otros | Otros |
+En el valor servido: 2 TAPAS · 3 SUSHI · 4 POSTRES · 5 BEBIDAS · 13 KIDS · 16 POKE · **29 GREENSEASON**.
+Fuera: 6 personal · 12 gift · 17 cortesía · 19 pax · 20–27 merch/extras · 28 dueños · 25 cajón/promociones.
+UI del mix: Comida vs Bebida vs Promo (29) vs Otros. Drill: 3, 5, 2, 16 + 29.
 
 ## Vista
 
 Un bloque en analítica. Arriba: recorte + turno. Cuerpo compacto (frase de diagnóstico titular + 3
-palancas + mix en una línea). Sin gráficos obligatorios en v1.
+palancas + mix en una línea). Sin gráficos obligatorios en v1; si hay, dos barras (tickets/jornada y ticket).
 
 ## Fuera de alcance v1
 
@@ -122,78 +103,51 @@ escritura; migraciones.
 
 - Rama `feat/analitica` (build sobre la integración, no staging). Aditivo. Solo SELECT.
 - No tocar `cashUtils`, `tipCalculations`, `computeTotals`, `posFiscal`, cierres, IVA, `total_crc`.
-- Tests: identidad neta ≈ tickets × ticket (±₡1); exclusión 677/678; whitelist de familias; turno
-  111/222; jornada por lote; recorte sep–nov 24/25 reproduce los ancla; diagnóstico dispara;
-  **cross-check: neta/tickets/jornadas del helper = las del módulo migrado** para un turno/rango.
+- Tests: identidad neta ≈ tickets × ticket (±₡1); exclusión 677/678; whitelist de familias; `round`
+  por línea en unidades; turno 111/222; jornada por lote; recorte sep–nov 24/25 reproduce los ancla
+  (recalculados por lote); diagnóstico dispara en suba Y baja; **cross-check: neta/tickets/jornadas/
+  unidades del helper = las del módulo migrado**.
 
-## Cifras ancla (noche, cajero 222, sep–nov · header `pos_ndf_tickets`, query 64)
+## Cifras ancla (noche, cajero 222, sep–nov · header `pos_ndf_tickets`)
 
 | Año | Tickets | Ticket prom | Neta | Jornadas |
 |-----|---------|-------------|------|----------|
-| 2024 | 3.180 | ₡26.238 | ₡83.435.771 | **(falta — contar por lote)** |
-| 2025 | 1.687 | ₡30.391 | ₡51.269.675 | **(falta — contar por lote)** |
+| 2024 | 3.180* | ₡26.238* | ₡83.435.771* | (contar por lote) |
+| 2025 | 1.687* | ₡30.391* | ₡51.269.675* | (contar por lote) |
 
-Δ tickets −46,9 %. Δ ticket +15,8 %. Δ neta −38,6 %. Diagnóstico esperado: caso 1.
-Tickets/ticket/neta salen del header y sobreviven al cambio de definición de jornada; el conteo de
-jornadas hay que agregarlo (por lote) para poder testear el KPI 1.
+\* query 64 con −7h → **recalcular por lote.** Las dos definiciones difieren solo en los lotes del
+BORDE del recorte: el que abre el 31-ago y cruza a septiembre, y el que abre el 30-nov y cruza a
+diciembre — a lo sumo 2 lotes por año por turno. **Anotar el delta observado aunque dé 0:** si sale
+mayor que un par de lotes, cambió otra cosa además de la definición de jornada. La forma (−46,9 %
+tickets / +15,8 % ticket / −38,6 % neta → caso 1) se mantiene.
 
 ## Hallazgo que el SPEC no reabre
 
-Green Season (SKUs 1049–1054, alta 2025-09-12, baja 2026-04-25) no mueve el mediodía ni explica la
-noche. Almuerzo sep–nov 2025 vs 2024 subió (+24 % neta/jornada). Nota, no feature. (Relacionado con la
-disputa del 29: si 29 fuera greenseason y estuviera en el valor servido, chocaría con esto.)
+Green Season = familia 29 (SKUs 1049–1054, alta 2025-09-12, baja 2026-04-25). Almuerzo sep–nov 2025 vs
+2024 subió (+24 % neta/jornada) — con el árbol nuevo, el turno mañana que creció SÍ tiene titular
+(regla 6/7). Nota en el bloque promo, no feature.
 
 ## Firma
 
-- Titular = frase de diagnóstico. La neta con Δ va dentro de la frase.
-- **Bloqueos abiertos:** jornada por lote (no −7h) · exclusión por whitelist · resolver familia 29 y
-  el KPI %promo · agregar jornadas al ancla · regla de diagnóstico de fondo. No iniciar hasta P2 +
-  bebc9de en la rama de build.
+- Titular = frase de diagnóstico, cubre suba y baja (else sin piso). Jornada por lote. Mix por whitelist.
+  `%promo` = 29 / SKUs GS. `round` por línea en unidades. 677/678 defensa en profundidad. Ancla con
+  columna jornadas recalculada por lote (anotar delta del borde). Turnos manana/tarde/dia.
+- ⛔ No iniciar hasta P2 + `bebc9de` en la rama de build. El prompt de P2 lleva jornada por lote y whitelist.
 
 ---
 
-# Delta de revisión sobre esta v2 — Claude, 2026-09-08
+# Pendiente que sale de esta firma (NO es parte del módulo)
 
-Los tres bloqueos de la v1 quedaron incorporados bien; no tengo nada que agregarles. Tres cosas
-nuevas, una de ellas real:
+**Renombrar la familia 29 en el código: "Bentos" → GreenSeason.** La firma resolvió que 29 es
+GREENSEASON; el código la llama bentos/almuerzo en tres lugares y eso hoy se VE en pantalla:
 
-## 🟠 El árbol de diagnóstico no tiene ninguna regla para cuando SUBIÓ
+| Dónde | Qué dice |
+|---|---|
+| `mapTicket.ts:139` | `export const FAMILIA_BENTOS = 29` + el comentario "bentos / almuerzo" |
+| `ventasEnVivoDatos.ts:68` | `29: 'Bentos'` — **la etiqueta del mix en «En vivo»** |
+| `ventasEnVivoDatos.test.ts:167,185` | dos aserciones sobre la etiqueta `'Bentos'` |
 
-El módulo se llama "por qué bajó **/ subió**", y el titular del bloque es la frase de diagnóstico.
-Pero las seis reglas son todas de caída: 1, 2 y 3 tienen umbrales `≤` sobre las palancas; la 4 pide
-`neta ≤ −15 %`; la 5 es "cae la noche"; y la 6 —la de fondo, que se agregó justamente para que
-siempre haya titular— arranca en `neta ≤ −10 %`.
-
-Con eso, **un trimestre que creció se queda sin titular**, que es lo único que el SPEC declara como
-titular. Y no es hipotético: el propio hallazgo del SPEC dice que el almuerzo sep–nov 2025 subió
-+24 % neta/jornada — o sea el primer recorte que alguien va a mirar en el turno mañana no tendría
-frase.
-
-**Propuesta:** la regla 6 no debería tener piso, sino ser el `else` real del árbol —
-`describir las dos palancas sin etiqueta` para **cualquier** caso no cubierto, suba o baje. Y, si se
-quiere el espejo de la 1 para crecimiento, una regla `tickets/jornada ≥ +15 % y ticket ≥ 0 %` →
-*"Más mesas, gastando igual o más"*.
-
-## 🟡 `Σ cantidad` del KPI 3 tiene que redondear igual que `armarDia`
-
-`pos_ndf_ticket_lines.cantidad` es `numeric`, y `armarDia` la consume como
-`Math.round(n(l.cantidad))` por línea antes de acumular. Si el helper suma la cantidad cruda y
-redondea al final, el cross-check de unidades contra el módulo migrado va a driftear por líneas con
-decimales. Es una línea de código, pero conviene que esté escrita en el SPEC porque el test de
-cross-check la va a encontrar tarde.
-
-## 🟡 La exclusión `677/678` es redundante con la whitelist, y está bien que lo sea
-
-677 y 678 son familia 19 (A PAX), que ya queda fuera de `FAMILIAS_VALOR_SERVIDO`. O sea el filtro
-por código no saca nada que la whitelist no haya sacado. **No lo quiten igual:** `armarDia` también
-lleva los dos filtros, y el de código es el que protege si algún día un 677 aparece cargado bajo
-otra familia. Solo vale la pena que el SPEC diga que es defensa en profundidad y no una segunda
-condición necesaria, para que nadie lo "simplifique" después.
-
-## Sobre "los ancla casi no se mueven"
-
-De acuerdo, con una precisión para cuando se recalculen: las dos definiciones difieren solo en los
-lotes del **borde** del recorte (el que abre el 31-ago y cruza a septiembre, y el que abre el 30-nov
-y cruza a diciembre). Son a lo sumo dos lotes por año por turno. Cuando se recalcule el ancla con
-lotes, conviene anotar el delta observado aunque sea 0 — si sale más grande que un par de lotes, es
-señal de que algo más cambió y no la definición de jornada.
+Es rename puro: no toca plata, la familia 29 sigue entrando al valor servido exactamente igual y la
+suma del mix sigue siendo el neto del día. Pero **cambia una etiqueta visible** en el mix de «En
+vivo», así que se hace cuando el dueño lo pida, no de contrabando en un commit de docs. No bloquea el
+módulo: el helper puede leer la familia 29 sin importar cómo se llame la constante.

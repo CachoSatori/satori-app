@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, Suspense, lazy, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
-import {
-  getVentasDias, getAllVentasDias, getVentasHist, getProductMap, getMetas, getComps,
-} from '../../shared/api/ventas'
+import { getProductMap, getMetas, getComps } from '../../shared/api/ventas'
 import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
+// La fuente de las ventas (P2). `getVentasDias`/`getAllVentasDias`/`getVentasHist` siguen
+// existiendo y se llaman desde acá adentro: el Excel es el piso de la fusión, no se retiró.
+import { cargarDiasEager, cargarDiasFull, cargarHist } from './ventasFuente'
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
 const VentasHoy          = lazy(() => import('./VentasHoy'))
@@ -99,9 +100,17 @@ export default function VentasModule() {
     setLoading(true)
     setError(null)
     try {
+      // ── P2 · LA FUENTE ES EL PoS, con el Excel de respaldo ──────────────────────────
+      // `cargarDiasEager` / `cargarDiasFull` / `cargarHist` fusionan `{ ...xls, ...pos }`:
+      // el PoS pisa donde tiene lote, el Excel queda intacto en 2023 y en cualquier jornada
+      // sin lote. Las tres viven en `ventasFuente.ts` y usan la MISMA función de fusión, que
+      // es lo que evita que «Hoy» (eager) y «Análisis» (full) discrepen en las fechas que se
+      // solapan o que algo salte cuando el full termina de cargar.
+      //
+      // Con `FUENTE_VENTAS = 'xls'` las tres devuelven el Excel puro, sin consultar el PoS.
       const [d, h, p, m, c] = await Promise.all([
-        getVentasDias(),        // last 90 days eager
-        getVentasHist(),
+        cargarDiasEager(),      // últimos 400 días, PoS + Excel
+        cargarHist(),
         getProductMap(),
         getMetas(),
         getComps(),
@@ -111,8 +120,9 @@ export default function VentasModule() {
       setPm(p)
       setMetas(m)
       setComps(c)
-      // Load full history lazily in background for Análisis year-over-year
-      getAllVentasDias().then(setDiasFull).catch(() => setDiasFull(d))
+      // El histórico completo sigue cargándose en segundo plano para el año contra año de
+      // Análisis. Misma fusión que el eager, así que las fechas solapadas dan lo mismo.
+      cargarDiasFull().then(setDiasFull).catch(() => setDiasFull(d))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error cargando datos')
     } finally {

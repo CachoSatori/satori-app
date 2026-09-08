@@ -176,6 +176,15 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🔲
   sirven del Excel, así que Histórico/Análisis/Calendario/Metas no pierden años. Para volver atrás:
   `FUENTE_VENTAS = 'xls'` en `ventasFuente.ts` → Excel puro, sin una sola consulta a `pos_ndf_*`.
   `xlsParser`, `ventas_dias`, `ventas_hist` y la pestaña «Cargar XLS» siguen ahí, latentes.
+- **P2-perf · qué bloquea el primer render de Ventas.** Bloquea solo lo barato: 90 días
+  (`DIAS_EAGER`) + el `hist` del **Excel** (una consulta a una tabla ya resumida). El rango
+  completo del PoS va en SEGUNDO PLANO (`cargarDeFondo`) y de **un solo pase** salen el `DiasMap`
+  full y el `HistMap`. La primera versión de P2 metía el histórico entero del PoS en el
+  `Promise.all` bloqueante y además lo agregaba dos veces: **615 → 42 requests** bloqueantes
+  (~14,6×) a la escala medida de staging. **El PoS no da resúmenes**: cada día se DERIVA
+  agregando tickets y líneas crudas en el navegador; si algún día hace falta más, el fix real es
+  agregación server-side (`pos_ndf_dias` upserteada en el ingest con el MISMO `armarDia`, o un
+  RPC) → toca ESQUEMA + INGEST, fase aparte con firma.
 - **La historia 2024-2025 NO cuadra al céntimo, y está medido: −0,057 %.** Histórico 3 años =
   99,94 %; el PoS da sistemáticamente de menos, concentrado en días viejos puntuales (casi todo
   el −107k de marzo 2024 está en el **7-mar**). Causa pendiente de drill-down (vuelto/dólares

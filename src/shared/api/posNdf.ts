@@ -149,6 +149,51 @@ const COLS_TICKET =
  */
 const sb = supabase as unknown as SupabaseClient
 
+// ── Paginación: PostgREST corta en 1.000 filas SIN AVISAR ──────────────────────────────────
+//
+// Sin un `Range`, PostgREST devuelve su `max-rows` (1.000) y **no dice que hay más**: no hay
+// error, no hay warning, no hay flag. La consulta parece haber traído todo. Es el mismo bug que
+// ya se arregló en `getAllCashMovements` (`cash.paginado.test.ts`) y en `getAllVentasDias`
+// (`ventas.limit.test.ts`), y acá pega fuerte: en staging hay **39.470 tickets y 221.639
+// líneas**, así que un rango grande veía el 2,5% de los tickets y creía que ese era el día.
+//
+// El `.limit(n)` de las otras dos no alcanza acá: habría que adivinar un techo y volveríamos al
+// mismo problema en cuanto la tabla lo pase. Se pagina con `.range()` hasta que no venga nada.
+//
+// ⚠️ EL ORDEN TIENE QUE SER TOTAL. `.range()` pagina por posición: si dos filas empatan en la
+// clave de orden, el motor puede devolverlas en distinto orden en dos páginas distintas y la
+// misma fila aparece dos veces (o ninguna). Por eso todas las consultas de acá desempatan por
+// una columna ÚNICA (`id`), además de su orden natural.
+
+/** Filas por viaje. Es el `max-rows` de PostgREST; pedir más no trae más. */
+const TANDA_FILAS = 1000
+
+/** Lo que devuelve una página de PostgREST, en lo mínimo que a este módulo le importa. */
+type Pagina = PromiseLike<{ data: unknown; error: { message: string } | null }>
+
+/**
+ * Pide páginas y concatena, hasta que una vuelva con MENOS filas de las que se pidieron.
+ *
+ * "Menos de lo que pedí" = no hay más. Cuando el total es múltiplo exacto de `TANDA_FILAS`, la
+ * última página vuelve vacía y cuesta un viaje de más; es el único caso.
+ *
+ * ⚠️ Esto asume que el servidor sirve las `TANDA_FILAS` completas. Vale porque el tope de
+ * PostgREST acá está por arriba de 1.000: `getVentasHist`/`getAllVentasDias` piden
+ * `.limit(5000)` y traen las 1.096 filas del histórico, que con un tope menor no pasaría. Si
+ * algún día se baja `db_max_rows` por debajo de `TANDA_FILAS`, hay que bajar `TANDA_FILAS`
+ * junto con él o esto vuelve a cortar callado.
+ */
+async function leerTodo<T>(pagina: (desde: number, hasta: number) => Pagina): Promise<T[]> {
+  const out: T[] = []
+  for (let desde = 0; ; desde += TANDA_FILAS) {
+    const { data, error } = await pagina(desde, desde + TANDA_FILAS - 1)
+    if (error) throw new Error(error.message)
+    const filas = (data ?? []) as T[]
+    out.push(...filas)
+    if (filas.length < TANDA_FILAS) return out
+  }
+}
+
 /** Las facturas de UNA jornada de un local, en orden cronológico. */
 export async function getTicketsJornada(local: string, businessDate: string): Promise<TicketNdfConId[]> {
   const { desde, hasta } = ventanaJornada(businessDate)
@@ -179,7 +224,10 @@ export async function getTicketsRango(
   rango: { desde: string; hasta: string },
 ): Promise<TicketNdfConId[]> {
   const v = ventanaRangoJornadas(rango.desde, rango.hasta)
-  const { data, error } = await sb
+  // Paginado: un mes de ventas pasa de 1.000 facturas y sin `.range()` se perdían en silencio.
+  // El `id` desempata `fecha_registra` (dos facturas del mismo segundo son normales), que es lo
+  // que hace que la paginación no repita ni saltee filas.
+  return leerTodo<TicketNdfConId>((desde, hasta) => sb
     .from('pos_ndf_tickets')
     .select(COLS_TICKET)
     .eq('local', local)
@@ -187,8 +235,8 @@ export async function getTicketsRango(
     .gte('fecha_registra', v.desde)
     .lt('fecha_registra', v.hasta)
     .order('fecha_registra', { ascending: true })
-  if (error) throw new Error(error.message)
-  return (data ?? []) as unknown as TicketNdfConId[]
+    .order('id', { ascending: true })
+    .range(desde, hasta))
 }
 
 /**
@@ -201,12 +249,21 @@ export async function getLineasDeTickets(ticketIds: string[]): Promise<LineaNdfR
   if (ticketIds.length === 0) return []
   const out: LineaNdfRow[] = []
   for (let i = 0; i < ticketIds.length; i += TANDA_IDS) {
-    const { data, error } = await sb
+    const tanda = ticketIds.slice(i, i + TANDA_IDS)
+    // DOS cortes distintos, por dos motivos distintos:
+    //   · `TANDA_IDS` parte la lista de ids porque van en la URL y una lista larga la revienta.
+    //   · `leerTodo` pagina las FILAS de cada tanda, porque 200 facturas son ~1.100 líneas
+    //     (5,6 por factura en staging) y una sola tanda ya pasa el corte de PostgREST.
+    // Sin lo segundo, cada tanda perdía sus líneas de más — callado.
+    out.push(...await leerTodo<LineaNdfRow>((desde, hasta) => sb
       .from('pos_ndf_ticket_lines')
       .select('ticket_id, codigo_producto, nombre, cantidad, monto, familia, usuario_registra')
-      .in('ticket_id', ticketIds.slice(i, i + TANDA_IDS))
-    if (error) throw new Error(error.message)
-    out.push(...((data ?? []) as unknown as LineaNdfRow[]))
+      .in('ticket_id', tanda)
+      // `id` es la PK de la 062: orden TOTAL, que es lo que `.range()` necesita para no repetir
+      // ni saltear. `ticket_id` primero solo para que las líneas de una factura salgan juntas.
+      .order('ticket_id', { ascending: true })
+      .order('id', { ascending: true })
+      .range(desde, hasta)))
   }
   return out
 }
@@ -226,16 +283,19 @@ export async function getNetoPorJornada(
   const { desde } = ventanaJornada(ordenadas[0])
   const { hasta } = ventanaJornada(ordenadas[ordenadas.length - 1])
 
-  const { data, error } = await sb
-    .from('pos_ndf_tickets')
-    .select('fecha_registra, valor_servido_crc')
-    .eq('local', local)
-    .gte('fecha_registra', desde)
-    .lt('fecha_registra', hasta)
-    .order('fecha_registra', { ascending: true })
-  if (error) throw new Error(error.message)
-
-  const filas = (data ?? []) as unknown as { fecha_registra: string; valor_servido_crc: number | null }[]
+  // Paginado por el mismo motivo: un rango de varias jornadas pasa las 1.000 facturas y sin
+  // esto el neto salía corto — con la pinta de un día flojo, no de una lectura incompleta.
+  // El `id` va en el select SOLO para poder desempatar el orden; no se usa para nada más.
+  const filas = await leerTodo<{ fecha_registra: string; valor_servido_crc: number | null }>(
+    (d, h) => sb
+      .from('pos_ndf_tickets')
+      .select('id, fecha_registra, valor_servido_crc')
+      .eq('local', local)
+      .gte('fecha_registra', desde)
+      .lt('fecha_registra', hasta)
+      .order('fecha_registra', { ascending: true })
+      .order('id', { ascending: true })
+      .range(d, h))
   const out: Record<string, number> = {}
   for (const f of businessDates) out[f] = 0
   for (const r of filas) {

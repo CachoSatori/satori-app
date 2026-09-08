@@ -90,6 +90,13 @@ export interface TicketNdfRow {
   /** `FAC_Facturas.Login`: el cajero que cobró. `111` mañana · `222` tarde. Define el turno. */
   cajero_login:      string | null
   canal:             string | null
+  /**
+   * Número de mesa del PoS. `null` en delivery y para llevar, que no tienen.
+   *
+   * Lo usa la lente de "mesa propia" para contar MESAS distintas y no confundirlas con
+   * facturas: una mesa que pidió la cuenta en dos tandas son dos facturas y una sola mesa.
+   */
+  mesa:              string | null
   salonero_login:    string | null
   registrado_por:    string
   turno:             string | null
@@ -114,13 +121,21 @@ export interface LineaNdfRow {
   cantidad:        number | null
   monto:           number | null
   familia:         number | null
+  /**
+   * El mesero que COMANDÓ esta línea (`FAC_FacturasDet.UsuarioRegistra`).
+   *
+   * Es lo que permite atribuir la venta por línea en vez de un mesero por ticket, y con eso las
+   * facturas PARTIDAS (dos meseros en la misma factura). `null` en las 10 líneas del histórico
+   * que el PoS no trae con usuario.
+   */
+  usuario_registra: string | null
 }
 
 /** El id se pide para poder atar cada línea a su ticket. */
 export interface TicketNdfConId extends TicketNdfRow { id: string }
 
 const COLS_TICKET =
-  'id, numero_factura, fecha_registra, fecha_cierra, cajero_login, canal, salonero_login, registrado_por, turno, ' +
+  'id, numero_factura, fecha_registra, fecha_cierra, cajero_login, canal, mesa, salonero_login, registrado_por, turno, ' +
   'con_servicio, servicio_crc, total_crc, valor_servido_crc, iva_crc, regalia_crc, ' +
   'descuento_crc, clase_ingreso, pax, pax_nativo, pax_articulo, pax_alerta'
 
@@ -188,7 +203,7 @@ export async function getLineasDeTickets(ticketIds: string[]): Promise<LineaNdfR
   for (let i = 0; i < ticketIds.length; i += TANDA_IDS) {
     const { data, error } = await sb
       .from('pos_ndf_ticket_lines')
-      .select('ticket_id, codigo_producto, nombre, cantidad, monto, familia')
+      .select('ticket_id, codigo_producto, nombre, cantidad, monto, familia, usuario_registra')
       .in('ticket_id', ticketIds.slice(i, i + TANDA_IDS))
     if (error) throw new Error(error.message)
     out.push(...((data ?? []) as unknown as LineaNdfRow[]))

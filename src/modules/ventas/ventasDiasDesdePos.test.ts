@@ -2,11 +2,12 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
 
-import { armarDiasMap, type RangoJornadas } from './ventasDiasDesdePos'
+import { aHistDay, aHistMap, armarDiasMap, type RangoJornadas } from './ventasDiasDesdePos'
 import { armarDia } from './ventasEnVivoDatos'
+import { getDayStats } from './ventasUtils'
 import { ventanaRangoJornadas } from '../../shared/api/posNdf'
 import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
-import type { DiaData } from '../../shared/types/ventas'
+import type { DiaData, HistDay } from '../../shared/types/ventas'
 
 const NOMBRES = { '026': 'MAXO', '027': 'GUILLE' }
 const SELLO = '2026-09-05'
@@ -14,7 +15,7 @@ const SELLO = '2026-09-05'
 const ticket = (over: Partial<TicketNdfConId> & { id: string }): TicketNdfConId => ({
   numero_factura: over.id, fecha_registra: '2026-09-05T19:00:00-06:00',
   fecha_cierra: null, cajero_login: '222',
-  canal: 'salon', salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
+  canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,
   iva_crc: 0, regalia_crc: 0, descuento_crc: 0, clase_ingreso: 'cobrada',
   pax: 2, pax_nativo: 2, pax_articulo: 2, pax_alerta: 'ok', ...over,
@@ -22,7 +23,7 @@ const ticket = (over: Partial<TicketNdfConId> & { id: string }): TicketNdfConId 
 
 const linea = (ticketId: string, over: Partial<LineaNdfRow> = {}): LineaNdfRow => ({
   ticket_id: ticketId, codigo_producto: '100', nombre: 'ROLL SATORI',
-  cantidad: 2, monto: 12000, familia: 2, ...over,
+  cantidad: 2, monto: 12000, familia: 2, usuario_registra: null, ...over,
 })
 
 // ── Los lotes REALES de staging ────────────────────────────────────────────────────────────
@@ -223,5 +224,130 @@ describe('el rango recorta por JORNADA, no por fecha de factura', () => {
 
   it('un rango sin jornadas devuelve vacío', () => {
     expect(armar(TODOS, LINEAS, { desde: '2026-10-01', hasta: '2026-10-31' })).toEqual({})
+  })
+})
+
+
+// ── P1c · el histórico ─────────────────────────────────────────────────────────────────────
+
+describe('aHistMap / getHistDesdePos — el equivalente de ventas_hist', () => {
+  const hist = () => aHistMap(armar(TODOS, LINEAS, RANGO))
+
+  it('un HistDay por jornada, con las MISMAS claves del rango', () => {
+    expect(Object.keys(hist())).toEqual(['2026-09-04', '2026-09-05'])
+  })
+
+  it('la forma es EXACTAMENTE la de HistDay: ni un campo de más ni de menos', () => {
+    for (const d of Object.values(hist())) {
+      expect(Object.keys(d).sort()).toEqual([
+        'delivery', 'iva', 'pax', 'promPax', 'salon', 'serv', 'source', 'ventaBruta', 'ventaNeta',
+      ])
+      for (const k of ['ventaBruta', 'ventaNeta', 'iva', 'serv', 'salon', 'delivery', 'pax', 'promPax'] as const) {
+        expect(typeof d[k], k).toBe('number')
+        expect(Number.isFinite(d[k]), k).toBe(true)
+      }
+    }
+  })
+
+  it('source es «hist» — el literal que el tipo exige y que los consumidores ya manejan', () => {
+    for (const d of Object.values(hist())) expect(d.source).toBe('hist')
+    // Y es asignable a HistDay sin castear.
+    const uno: HistDay = hist()['2026-09-04']
+    expect(uno.source).toBe('hist')
+  })
+
+  it('CADA campo coincide con la proyección del DiaData de esa jornada', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    for (const [jornada, dia] of Object.entries(dias)) {
+      const s = getDayStats(dia)
+      expect(aHistDay(dia), jornada).toEqual({
+        ventaBruta: s.ventaBruta,
+        ventaNeta:  s.ventaNeta,
+        iva:        s.iva,
+        serv:       s.serv,
+        salon:      s.salon,
+        delivery:   s.delivery,
+        pax:        s.pax,
+        promPax:    s.promPax,
+        source:     'hist',
+      })
+    }
+  })
+
+  it('no reimplementa nada: es getDayStats + source, campo por campo', () => {
+    const dia = armar(TODOS, LINEAS, RANGO)['2026-09-05']
+    const s = getDayStats(dia)
+    const h = aHistDay(dia)
+    // `getDayStats` trae dos campos que `HistDay` no tiene; el resto es idéntico.
+    const numeros = { ...s } as Partial<typeof s>
+    delete numeros.fecha
+    delete numeros.saloneroNames
+    expect(h).toEqual({ ...numeros, source: 'hist' })
+  })
+
+  // ── Los días reales de staging ───────────────────────────────────────────────────────────
+  // 13 facturas el 4-sep y 25 el 5-sep, todas del fixture: neto ₡12.000, servicio ₡1.200,
+  // IVA 0, bruto ₡13.560 y 2 pax cada una, canal salón y con mesero.
+
+  it('4-sep: el HistDay de las 13 facturas del lote del 222', () => {
+    expect(hist()['2026-09-04']).toEqual({
+      ventaNeta:  13 * 12000,
+      serv:       13 * 1200,
+      iva:        0,
+      ventaBruta: 13 * 12000 + 13 * 1200,     // neta + IVA + servicio
+      salon:      13 * 12000,                  // todo por mesero, canal salón
+      delivery:   0,
+      pax:        26,
+      promPax:    (13 * 12000) / 26,           // OJO: salon / pax, no ventaNeta / pax
+      source:     'hist',
+    })
+  })
+
+  it('5-sep: el HistDay junta el lote del 111 y el del 222', () => {
+    expect(hist()['2026-09-05']).toEqual({
+      ventaNeta:  25 * 12000,
+      serv:       25 * 1200,
+      iva:        0,
+      ventaBruta: 25 * 12000 + 25 * 1200,
+      salon:      25 * 12000,
+      delivery:   0,
+      pax:        50,
+      promPax:    (25 * 12000) / 50,
+      source:     'hist',
+    })
+  })
+
+  it('el bruto es neta + IVA + servicio, y el neto NO lo incluye', () => {
+    const d = hist()['2026-09-04']
+    expect(d.ventaBruta).toBe(d.ventaNeta + d.iva + d.serv)
+    expect(d.ventaBruta).toBeGreaterThan(d.ventaNeta)
+  })
+
+  it('respeta la jornada por LOTE: el turno que cierra pasada medianoche no parte el HistDay', () => {
+    const CRUZA = lote(300001, 300002, {
+      cajero: '222', cierre: '2026-09-06T01:00:00-06:00', primero: '2026-09-05T20:00:00-06:00',
+      pasoMin: 300,   // 20:00 y 01:00 del día siguiente
+    })
+    const h = aHistMap(armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-05', hasta: '2026-09-05' }))
+    expect(Object.keys(h)).toEqual(['2026-09-05'])
+    expect(h['2026-09-05'].ventaNeta).toBe(2 * 12000)     // las dos, incluida la de la 01:00
+  })
+
+  it('el delivery sale del CANAL de la factura, no del cajero', () => {
+    const conDelivery = [
+      ticket({ id: 'd1', canal: 'delivery', salonero_login: null, registrado_por: 'cajero',
+               cajero_login: '222', fecha_cierra: '2026-09-05T22:30:06-06:00',
+               fecha_registra: '2026-09-05T19:00:00-06:00', valor_servido_crc: 5000,
+               servicio_crc: 0, pax: 0, pax_articulo: 0 }),
+      ...LOTE_5_MANANA,
+    ]
+    const h = aHistMap(armar(conDelivery, [], { desde: '2026-09-05', hasta: '2026-09-05' }))
+    expect(h['2026-09-05'].delivery).toBe(5000)
+    expect(h['2026-09-05'].salon).toBe(12000)            // la del 111, por mesero
+  })
+
+  it('rango sin jornadas → HistMap vacío, no un día en cero', () => {
+    expect(aHistMap(armar(TODOS, LINEAS, { desde: '2026-10-01', hasta: '2026-10-31' }))).toEqual({})
+    expect(aHistMap({})).toEqual({})
   })
 })

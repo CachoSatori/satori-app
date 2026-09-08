@@ -617,3 +617,18 @@
   font-size: .82rem;
   color: var(--vt-fg-2, #5b6472);
 }
+
+/* ── Paridad (P3, diagnóstico temporal) ─────────────────────────────────────── */
+.apos-tag-diag {
+  padding: .15rem .5rem;
+  border: 1px dashed currentColor;
+  border-radius: 999px;
+  font-size: .72rem;
+  letter-spacing: .02em;
+  opacity: .75;
+}
+.apos-tabla-paridad td, .apos-tabla-paridad th { vertical-align: top; }
+.apos-mini { font-size: .72rem; opacity: .65; }
+.apos-fila-flag > td { background: color-mix(in srgb, #d98324 12%, transparent); }
+.apos-fila-total > td { background: color-mix(in srgb, currentColor 7%, transparent); font-weight: 600; }
+.apos-celda-fuera { color: #b4521a; font-weight: 600; }

@@ -27,7 +27,7 @@ const sal = (dia: DiaData, clave: string): SaloneroDay => dia.saloneros[clave] a
 const ticket = (over: Partial<TicketNdfConId> = {}): TicketNdfConId => ({
   id: 't1', numero_factura: '5001', fecha_registra: '2026-09-01T19:42:07-06:00',
   fecha_cierra: null, cajero_login: '222',
-  canal: 'salon', salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
+  canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,
   iva_crc: 0, regalia_crc: 0, descuento_crc: 0, clase_ingreso: 'cobrada',
   pax: 2, pax_nativo: 2, pax_articulo: 2, pax_alerta: 'ok', ...over,
@@ -43,7 +43,7 @@ const armar = (
 
 const linea = (over: Partial<LineaNdfRow> = {}): LineaNdfRow => ({
   ticket_id: 't1', codigo_producto: '100', nombre: 'ROLL SATORI',
-  cantidad: 2, monto: 9000, familia: 2, ...over,
+  cantidad: 2, monto: 9000, familia: 2, usuario_registra: null, ...over,
 })
 
 // ── La jornada 07:00 → 07:00 ───────────────────────────────────────────────────
@@ -874,7 +874,7 @@ describe('etiquetaTurnoPoS', () => {
 describe('diasPorTurno — la partición "por turno + general"', () => {
   const linea = (id: string): LineaNdfRow => ({
     ticket_id: id, codigo_producto: '100', nombre: 'ROLL SATORI',
-    cantidad: 2, monto: 12000, familia: 2,
+    cantidad: 2, monto: 12000, familia: 2, usuario_registra: null,
   })
   // Mañana: el 111 cierra 16:07. Tarde: el 222 cierra 22:30. Dos meseros distintos.
   const TICKETS = [
@@ -970,5 +970,66 @@ describe('armarDia expone las órdenes por clave', () => {
       ticket({ id: 'b', salonero_login: null, registrado_por: 'cajero', cajero_login: '222' }),
     ], [], 'sello', NOMBRES)
     expect(Object.keys(armado.ordenes).sort()).toEqual(Object.keys(armado.dia.saloneros).sort())
+  })
+})
+
+// ── El IVA atribuido por salonero (el que lee getDayStats para la bruta) ───────────────────
+
+describe('armarDia atribuye el IVA por salonero/cajero, no lo deja en 0', () => {
+  it('cada salonero lleva la Σ de `iva_crc` de SUS tickets', () => {
+    const armado = armarDia('2026-08-29', [
+      ticket({ id: 'a', salonero_login: '026', iva_crc: 6258, servicio_crc: 4814, valor_servido_crc: 48142 }),
+      ticket({ id: 'b', salonero_login: '026', iva_crc: 1300, servicio_crc: 1000, valor_servido_crc: 10000 }),
+      ticket({ id: 'c', salonero_login: '027', iva_crc: 2600, servicio_crc: 2000, valor_servido_crc: 20000 }),
+    ], [], 'sello', NOMBRES)
+
+    expect(armado.dia.saloneros['MAXO'].iva).toBe(6258 + 1300)
+    expect(armado.dia.saloneros['GUILLE'].iva).toBe(2600)
+  })
+
+  it('el cajero también: su IVA es el de sus facturas, no 0', () => {
+    const armado = armarDia('2026-08-29', [
+      ticket({ id: 'a', salonero_login: null, registrado_por: 'cajero', cajero_login: '222',
+               iva_crc: 3900, servicio_crc: 0, valor_servido_crc: 30000 }),
+    ], [], 'sello', NOMBRES)
+    const caja = Object.values(armado.dia.saloneros).find(v => 'esCajero' in v && v.esCajero)!
+    expect(caja.iva).toBe(3900)
+  })
+
+  it('INVARIANTE: Σ del IVA por salonero == el IVA a nivel DÍA', () => {
+    // Es lo que hacía que la bruta saliera ~11% corta: el día tenía el IVA y los saloneros no,
+    // y `getDayStats` —que arma la bruta— lo lee POR SALONERO.
+    const tickets = [
+      ticket({ id: 'a', salonero_login: '026', iva_crc: 6258 }),
+      ticket({ id: 'b', salonero_login: '027', iva_crc: 2600 }),
+      ticket({ id: 'c', salonero_login: null, registrado_por: 'cajero', cajero_login: '222', iva_crc: 1300 }),
+    ]
+    const armado = armarDia('2026-08-29', tickets, [], 'sello', NOMBRES)
+    const porSalonero = Object.values(armado.dia.saloneros).reduce((a, v) => a + (v.iva ?? 0), 0)
+
+    expect(porSalonero).toBe(6258 + 2600 + 1300)
+    expect(porSalonero).toBe(armado.iva)              // el nivel día NO cambió
+    expect(getDayStats(armado.dia).iva).toBe(armado.iva)
+  })
+
+  it('la BRUTA de getDayStats ahora cierra: neta + IVA + servicio', () => {
+    // La factura 110599 del 29-ago: ₡48.142 + ₡6.258 + ₡4.814 = ₡59.214.
+    const armado = armarDia('2026-08-29', [
+      ticket({ id: '110599', salonero_login: '026',
+               valor_servido_crc: 48142, iva_crc: 6258, servicio_crc: 4814, total_crc: 59214 }),
+    ], [], 'sello', NOMBRES)
+    const s = getDayStats(armado.dia)
+    expect(s.ventaNeta).toBe(48142)
+    expect(s.iva).toBe(6258)
+    expect(s.serv).toBe(4814)
+    expect(s.ventaBruta).toBe(59214)
+  })
+
+  it('sin IVA en el PoS sigue en 0: NO se deriva el 13%', () => {
+    const armado = armarDia('2026-08-29', [
+      ticket({ id: 'a', salonero_login: '026', valor_servido_crc: 48142, iva_crc: 0 }),
+    ], [], 'sello', NOMBRES)
+    expect(armado.dia.saloneros['MAXO'].iva).toBe(0)
+    expect(getDayStats(armado.dia).ventaBruta).toBe(48142 + 0 + 1200)   // solo neta + servicio
   })
 })

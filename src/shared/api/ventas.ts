@@ -26,10 +26,14 @@ export async function getVentasDias(days = 400): Promise<Record<string, DiaData>
 }
 
 export async function getAllVentasDias(): Promise<Record<string, DiaData>> {
+  // PostgREST corta callado en 1000 filas: sin este limit el histórico se truncaba y los días
+  // más viejos (2023 / inicio 2024) desaparecían sin error. Mismo motivo y mismo número que
+  // `getVentasHist()`.
   const { data, error } = await supabase
     .from('ventas_dias')
     .select('session_date, data')
     .order('session_date', { ascending: true })
+    .limit(5000)
   if (error) throw new Error(error.message)
   const result: Record<string, DiaData> = {}
   for (const row of (data as unknown as Array<{ session_date: string; data: DiaData }> ?? [])) {

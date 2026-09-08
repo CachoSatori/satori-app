@@ -10,13 +10,15 @@
 // · NO decide la jornada por su cuenta: la decide `shared/ndf/jornada.ts` (P1a), que también
 //   usa «En vivo». Las dos pantallas no pueden discrepar porque leen la misma función.
 // · NO cambia de dónde lee `VentasModule` — eso es P2. Acá solo se ofrece la función.
-// · NO toca `ventas_dias` ni el histórico (`getHistDesdePos` es P1c).
+// · NO toca `ventas_dias` ni `ventas_hist`: son OTRAS tablas, con su propia carga por xls.
+//   Acá solo se DERIVA la misma forma desde el PoS, sin escribir nada en ningún lado.
 
 import { getLineasDeTickets, getSaloneroNombres, getTicketsRango,
          type LineaNdfRow, type TicketNdfConId } from '../../shared/api/posNdf'
 import { agruparEnLotes } from '../../shared/ndf/jornada'
-import type { DiasMap } from '../../shared/types/ventas'
+import type { DiaData, DiasMap, HistDay, HistMap } from '../../shared/types/ventas'
 import { armarDia } from './ventasEnVivoDatos'
+import { getDayStats } from './ventasUtils'
 
 /** Un rango de JORNADAS, inclusivo de los dos lados. `YYYY-MM-DD`. */
 export interface RangoJornadas {
@@ -91,4 +93,67 @@ export async function getDiasMapDesdePos(
   // `uploadedAt` es la marca de "cuándo se armó esta vista", como el `uploadedAt` del .xls.
   // La jornada más nueva del rango sirve de sello estable: dos llamadas iguales dan lo mismo.
   return armarDiasMap(tickets, lineas, rango, { uploadedAt: rango.hasta, nombres })
+}
+
+
+// ── El histórico: `pos_ndf_*` → `HistMap` (P1c) ─────────────────────────────────────────────
+//
+// `HistDay` es el RESUMEN por día que hoy sale de `ventas_hist` (1096 días, 2023-2025) y que
+// consumen Histórico, Mix, Análisis, Contabilidad, Calendario, ReporteMensual y Metas por el
+// prop `hist`. Acá se deriva la MISMA forma desde el PoS.
+//
+// La clave de que esto no invente nada: `getDayStats` —la función que ya usa toda la app para
+// resumir un `DiaData`— devuelve EXACTAMENTE los ocho números de `HistDay`. Así que la
+// proyección es un re-shape, no un cálculo: se le sacan `fecha` y `saloneroNames`, se le pone
+// `source`, y listo. Si mañana cambia la definición de `ventaBruta` o de `promPax`, cambia en
+// `getDayStats` y estas dos vistas se mueven juntas.
+//
+// ⚠️ `promPax` es `salon / pax`, NO `ventaNeta / pax`. Es la definición que ya tiene la app y
+// se respeta tal cual: acá no se corrige nada, se proyecta.
+
+/**
+ * `source` SIEMPRE `'hist'`.
+ *
+ * No es un valor elegido a ojo: en `HistDay` el campo es el literal `'hist'` (no una unión),
+ * y ningún consumidor lo ramifica —se buscó: nadie hace `if (d.source === …)` sobre un
+ * `HistDay`—. Inventar un `'pos'` rompería el tipo y no le serviría a nadie. Que el día venga
+ * del PoS o del xls se sabe por de dónde se pidió el `HistMap`, no por dentro de la fila.
+ */
+const SOURCE_HIST = 'hist' as const
+
+/** Un `DiaData` → su `HistDay`. Puro re-shape de `getDayStats`. */
+export function aHistDay(dia: DiaData): HistDay {
+  const s = getDayStats(dia)
+  return {
+    ventaBruta: s.ventaBruta,
+    ventaNeta:  s.ventaNeta,
+    iva:        s.iva,
+    serv:       s.serv,
+    salon:      s.salon,
+    delivery:   s.delivery,
+    pax:        s.pax,
+    promPax:    s.promPax,
+    source:     SOURCE_HIST,
+  }
+}
+
+/** Un `DiasMap` → su `HistMap`, jornada por jornada. PURO: se prueba sin base de datos. */
+export function aHistMap(dias: DiasMap): HistMap {
+  const hist: HistMap = {}
+  for (const [jornada, dia] of Object.entries(dias)) hist[jornada] = aHistDay(dia)
+  return hist
+}
+
+/**
+ * El `HistMap` de un rango de jornadas, leído del PoS.
+ *
+ * Se apoya en `getDiasMapDesdePos` (P1b) en vez de volver a leer la base con otro criterio:
+ * una sola lectura, la MISMA jornada por lote de cierre, el mismo local, y el histórico sale
+ * de proyectar lo mismo que ya se armó. Que las dos vistas no puedan discrepar es el punto.
+ */
+export async function getHistDesdePos(
+  rango: RangoJornadas,
+  local: string = LOCAL_POR_DEFECTO,
+): Promise<HistMap> {
+  return aHistMap(await getDiasMapDesdePos(rango, local))
 }

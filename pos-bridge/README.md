@@ -385,7 +385,7 @@ group by 1;
 ## Las tres decisiones que hay que entender
 
 **La familia 6 NO entra al neto** (es el cajón mixto donde también se carga la comida del
-personal, la "XX" a ₡0) **y la 29 SÍ** (bentos/almuerzo). El mix del dry-run sigue con su
+personal, la "XX" a ₡0) **y la 29 SÍ** (GreenSeason). El mix del dry-run sigue con su
 conjunto viejo: son dos medidas distintas y no se tocaron entre sí. El gap esperado contra la
 "Venta Neta" oficial son las familias de cajón/personal `1, 6, 9, 11, 15, 25`.
 

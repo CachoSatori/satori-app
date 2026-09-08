@@ -160,12 +160,15 @@ describe('armarDia', () => {
     expect(sal(a.dia, 'MAXO').beb).toBe(3000)
   })
 
-  it('la familia 29 (bentos) entra como comida, con su propia etiqueta', () => {
+  // `KOROKKE BENTO` es un PRODUCTO real (`import/productos.csv`), con clasificación
+  // GREENSEASON y subclasificación BENTO BOX. La caja de almuerzo es una familia de platos
+  // DENTRO de GreenSeason; la FAMILIA 29 se llama GreenSeason, que es lo que se etiqueta acá.
+  it('la familia 29 (GreenSeason) entra como comida, con su propia etiqueta', () => {
     const a = armar('2026-09-01', [ticket()],
-      [linea({ familia: 29, monto: 4500, cantidad: 1, nombre: 'BENTO' })], '2026-09-01')
+      [linea({ familia: 29, monto: 4500, cantidad: 1, nombre: 'KOROKKE BENTO' })], '2026-09-01')
     expect(sal(a.dia, 'MAXO').com).toBe(4500)
-    expect(a.pm['BENTO'].clasificacion).toBe('Bentos')
-    expect(a.pm['BENTO'].tipo).toBe('comida')
+    expect(a.pm['KOROKKE BENTO'].clasificacion).toBe('GreenSeason')
+    expect(a.pm['KOROKKE BENTO'].tipo).toBe('comida')
   })
 
   it('el mix se agrupa por FAMILIA del PoS, no por el ProductMap', () => {
@@ -174,7 +177,7 @@ describe('armarDia', () => {
       linea({ familia: 5,  monto: 3000, cantidad: 3, nombre: 'IMPERIAL', codigo_producto: '200' }),
       linea({ familia: 2,  monto: 2000, cantidad: 1, nombre: 'EDAMAME', codigo_producto: '201' }),
       linea({ familia: 16, monto: 5000, cantidad: 1, nombre: 'TERIYAKI', codigo_producto: '202' }),
-      linea({ familia: 29, monto: 4000, cantidad: 1, nombre: 'BENTO', codigo_producto: '203' }),
+      linea({ familia: 29, monto: 4000, cantidad: 1, nombre: 'KOROKKE BENTO', codigo_producto: '203' }),
       linea({ familia: 4,  monto: 1000, cantidad: 1, nombre: 'SOPA', codigo_producto: '204' }),
       linea({ familia: 13, monto: 500,  cantidad: 1, nombre: 'POSTRE', codigo_producto: '205' }),
     ], '2026-09-01')
@@ -182,7 +185,7 @@ describe('armarDia', () => {
     const por = Object.fromEntries(mix.map(m => [m.categoria, m.monto]))
     expect(por).toEqual({
       'Rolls': 9000, 'Bebidas': 3000, 'Entradas': 2000,
-      'Platos fuertes': 5000, 'Bentos': 4000, 'Otros': 1500,   // 4 y 13 juntas
+      'Platos fuertes': 5000, 'GreenSeason': 4000, 'Otros': 1500,   // 4 y 13 juntas
     })
   })
 

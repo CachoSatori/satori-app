@@ -169,6 +169,19 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🔲
 
 ## Notas que ahorran una sesión
 
+- **P2 · el módulo Ventas lee del PoS, con el Excel de RESPALDO.** `ventasFuente.ts` fusiona
+  `{ ...xls, ...pos }`: el PoS pisa donde tiene lote, el Excel queda intacto donde no llega.
+  **El PoS NO cubre 2023** (primera jornada ≈ `2024-01-05`, `PRIMERA_JORNADA_POS` — ⚠️ pendiente
+  de confirmar con `min(...)` contra la base). 2023 y cualquier jornada sin lote se sirven del
+  Excel, así que Histórico/Análisis/Calendario/Metas no pierden años. Para volver atrás:
+  `FUENTE_VENTAS = 'xls'` en `ventasFuente.ts` → Excel puro, sin una sola consulta a `pos_ndf_*`.
+  `xlsParser`, `ventas_dias`, `ventas_hist` y la pestaña «Cargar XLS» siguen ahí, latentes.
+- **El "delivery" BAJA ~4-5 % con el swap del PoS. NO es un bug — el PoS es el correcto.** El xls
+  marcaba delivery por "sin cargo de servicio", y ahí adentro caían también «para llevar» y la
+  barra. El PoS usa el canal real (`canal = 'delivery'`), que es lo que de verdad salió en moto.
+  La neta, el salón y el servicio NO se mueven: paridad de agosto 2026 = neta −0,4 %, salón
+  −0,0 %, pax +1,5 %. **No re-diagnosticar como pérdida de datos.**
+
 - **Verificar un deploy por CONTENIDO, nunca por HTTP 200:** pedir un asset por el hash del build local siempre
   da 200 (el fallback SPA devuelve el `index.html`). **Caminar el grafo de chunks** desde el entry y comprobar
   marcadores. ⚠️ El hash del chunk que emite CI **≠** el local.

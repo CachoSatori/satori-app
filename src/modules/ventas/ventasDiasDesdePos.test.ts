@@ -71,6 +71,41 @@ const armar = (
 
 // ── Un DiaData por jornada ─────────────────────────────────────────────────────────────────
 
+// ── P2: el eager y el full tienen que dar LO MISMO donde se solapan ────────────────────────
+//
+// «Hoy» lee el eager (últimos 400 días) y «Análisis» el full (todo el PoS). Los dos piden al
+// MISMO adaptador, con rangos distintos. Si una jornada que cae dentro de los dos diera
+// distinto, la plata de esa fecha CAMBIARÍA en pantalla cuando el full termina de cargar en
+// segundo plano — y el usuario vería saltar un número sin tocar nada.
+//
+// Que no pase depende de dos cosas que ya están en P1b y se fijan acá:
+//   · `ventanaRangoJornadas` lee un SUPERSET por los dos lados (−1 día al principio, +2 al
+//     final), así que un lote que cruza el borde del rango entra COMPLETO.
+//   · `armarDiasMap` agrupa primero por lote y recién después descarta las jornadas de afuera.
+describe('P2 · el eager y el full coinciden en las fechas solapadas', () => {
+  it('la jornada del borde da el MISMO DiaData pedida sola o dentro del rango largo', () => {
+    // El 5-sep es el borde: en el rango corto es su primer día, en el largo está en el medio.
+    const corto = armar(TODOS, LINEAS, { desde: '2026-09-05', hasta: '2026-09-05' })
+    const largo = armar(TODOS, LINEAS, { desde: '2026-09-01', hasta: '2026-09-30' })
+
+    expect(corto['2026-09-05']).toEqual(largo['2026-09-05'])
+  })
+
+  it('el lote que abrió ANTES del rango corto no se cuela truncado en su primer día', () => {
+    // El lote del 4 abre el 4 a las 18:05. Pedido desde el 5, sus facturas entran por el
+    // superset pero su jornada da 2026-09-04, así que se descartan enteras — no se parten ni
+    // inflan el 5. Sin eso, el eager mostraría un 5-sep más grande que el full.
+    const corto = armar(TODOS, LINEAS, { desde: '2026-09-05', hasta: '2026-09-05' })
+    expect(Object.keys(corto)).toEqual(['2026-09-05'])
+  })
+
+  it('las dos jornadas dan igual en los dos rangos, no solo la del borde', () => {
+    const corto = armar(TODOS, LINEAS, RANGO)
+    const largo = armar(TODOS, LINEAS, { desde: '2026-08-01', hasta: '2026-10-31' })
+    for (const f of Object.keys(corto)) expect(corto[f]).toEqual(largo[f])
+  })
+})
+
 describe('armarDiasMap — un DiaData por jornada', () => {
   it('el rango multi-día parte los lotes reales en sus dos jornadas', () => {
     const dias = armar(TODOS, LINEAS, RANGO)

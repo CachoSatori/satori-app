@@ -171,9 +171,13 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🔲
 
 - **P2 · el módulo Ventas lee del PoS, con el Excel de RESPALDO.** `ventasFuente.ts` fusiona
   `{ ...xls, ...pos }`: el PoS pisa donde tiene lote, el Excel queda intacto donde no llega.
-  **El PoS NO cubre 2023**: el backfill va de **5-ene-2024 a 3-sep-2026** (`PRIMERA_JORNADA_POS`,
-  confirmado por `VALIDACION-cuadre-pos-agosto-2026-09-04`). 2023 y cualquier jornada sin lote se
-  sirven del Excel, así que Histórico/Análisis/Calendario/Metas no pierden años. Para volver atrás:
+  **Qué cubre cada fuente (medido, NO confundir las dos tablas del Excel):** `ventas_dias`
+  (detalle diario con saloneros) = **solo enero 2026 → hoy** · `ventas_hist` (reporte diario
+  general, sin salonero) = **2023-2025** · `pos_ndf_*` = **5-ene-2024 → 3-sep-2026**
+  (`PRIMERA_JORNADA_POS`, confirmado por `VALIDACION-cuadre-pos-agosto-2026-09-04`). O sea:
+  **2023 no tiene detalle diario en ninguna fuente** —sobrevive por el `HistMap`, no por el
+  `DiasMap`— y **2024-2025 tampoco lo tenía: el PoS se lo agrega**, que es ganancia del swap.
+  Histórico/Análisis/Calendario/Metas no pierden años porque leen `hist`. Para volver atrás:
   `FUENTE_VENTAS = 'xls'` en `ventasFuente.ts` → Excel puro, sin una sola consulta a `pos_ndf_*`.
   `xlsParser`, `ventas_dias`, `ventas_hist` y la pestaña «Cargar XLS» siguen ahí, latentes.
 - **P2-perf · qué bloquea el primer render de Ventas.** Bloquea solo lo barato: 90 días

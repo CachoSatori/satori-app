@@ -3,10 +3,13 @@
 //
 // Es el MISMO bug que ya se arregló en `getAllCashMovements` (ver `cash.paginado.test.ts`): el
 // select no tenía `.limit()`, PostgREST cortaba en 1.000 filas y devolvía esa página SIN AVISAR
-// —sin error, sin warning—. Con el histórico del xls arriba de 1.000 días, la app veía solo los
-// más recientes y los de 2023 / inicio 2024 simplemente no existían. En la pantalla de Paridad
-// eso se leía como "el PoS tiene días que el xls no tiene", que es exactamente la conclusión
-// equivocada para firmar el swap de fuente.
+// —sin error, sin warning—. La app veía solo la última página y los días más viejos
+// simplemente no existían. En la pantalla de Paridad eso se leía como "el PoS tiene días que el
+// xls no tiene", que es exactamente la conclusión equivocada para firmar el swap de fuente.
+//
+// (Se midió después: `ventas_dias` hoy arranca en enero 2026, así que todavía no llega a las
+// 1.000 filas — la que sí las pasa es `ventas_hist`, con 2023-2025. El corte igual es cuestión
+// de tiempo a ~1 fila por día, y el test lo fija antes de que vuelva a morder.)
 //
 // `getVentasHist()` ya ponía `.limit(5000)` por este motivo; este test fija que su hermano
 // tampoco se vuelva a quedar sin él.

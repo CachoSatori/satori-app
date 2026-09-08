@@ -6,13 +6,24 @@
 //
 // ── LA FUSIÓN NO ES UN REEMPLAZO ───────────────────────────────────────────────────────────
 // Se parte del mapa del Excel y se le SUPERPONE el del PoS: `{ ...xls, ...pos }`. El PoS pisa
-// donde tiene lote; donde no llega, queda el Excel intacto. Es lo que permite hacer el swap sin
-// perder historia, porque **el PoS no cubre 2023**.
+// donde tiene lote; donde no llega, queda el Excel intacto.
 //
-// ⚠️ El PoS arranca en 2024. La primera jornada con lote es del 2024-01-05 (ver
-// `PRIMERA_JORNADA_POS`). Todo 2023 —y cualquier jornada de 2024/2025 sin lote— se sirve del
-// Excel. Pedirle al adaptador un rango que arranque antes no rompe nada, pero son viajes al
-// pedo: no hay filas que traer.
+// ⚠️ QUÉ CUBRE CADA FUENTE DE VERDAD (medido, no supuesto — no confundir las dos tablas):
+//   · `ventas_dias` (DETALLE diario, con saloneros)  → **solo enero 2026 → hoy**.
+//   · `ventas_hist` (reporte diario GENERAL, sin salonero) → **2023-2025**.
+//   · `pos_ndf_*`                                     → **2024-01-05 → hoy**.
+//
+// De ahí sale lo que hay que tener claro y es fácil leer al revés:
+//   · **2023 NO tiene detalle diario en ninguna fuente.** Sobrevive por el `HistMap`
+//     (`ventas_hist`), no por el `DiasMap`. Apagar el Excel (P4) no le quita a 2023 un detalle
+//     que nunca tuvo, pero sí le quitaría el reporte general.
+//   · **2024-2025 tampoco tenía detalle diario**: el PoS se lo AGREGA. Es ganancia del swap, no
+//     algo que había que preservar.
+//   · El Excel es piso real del `DiasMap` solo de enero 2026 en adelante — y ahí es donde de
+//     verdad tapa una jornada sin lote del PoS.
+//
+// Pedirle al adaptador un rango que arranque antes de `PRIMERA_JORNADA_POS` no rompe nada, pero
+// son viajes al pedo: no hay filas que traer.
 //
 // ── LAS 15 PESTAÑAS NO SE ENTERAN ──────────────────────────────────────────────────────────
 // Lo que sale de acá tiene la MISMA forma que antes (`DiasMap` / `HistMap`), así que ninguna
@@ -49,7 +60,7 @@ export const FUENTE_VENTAS: FuenteVentas = 'pos'
  * **5-ene-2024 → 3-sep-2026**. Antes de eso no hay una sola factura en `pos_ndf_tickets`.
  *
  * Lo que **no** hay que hacer es bajarla a 2023: ahí el PoS no existe y serían viajes al pedo.
- * 2023 lo sirve el Excel, entero, por la fusión.
+ * 2023 lo sirve `ventas_hist` (el reporte general), NO el detalle diario — ver arriba.
  */
 export const PRIMERA_JORNADA_POS = '2024-01-05'
 
@@ -167,8 +178,9 @@ export async function cargarDiasEager(
  *
  * Efecto visible, y es el mismo patrón que ya tenía el `DiasMap` full: por un momento las
  * pestañas que leen `hist` (Histórico, Mix, Análisis, Contabilidad, Calendario, Metas) muestran
- * los números del Excel, y cuando el fondo termina pasan a los del PoS. No quedan vacías: el
- * Excel cubre 2023-2025 completo.
+ * los números del Excel, y cuando el fondo termina pasan a los del PoS. No quedan vacías: acá
+ * sí, `ventas_hist` cubre 2023-2025 completo (a diferencia de `ventas_dias`, que arranca en
+ * enero 2026).
  */
 export async function cargarHistEager(): Promise<HistMap> {
   return getVentasHist()

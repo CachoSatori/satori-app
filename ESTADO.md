@@ -171,11 +171,21 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🔲
 
 - **P2 · el módulo Ventas lee del PoS, con el Excel de RESPALDO.** `ventasFuente.ts` fusiona
   `{ ...xls, ...pos }`: el PoS pisa donde tiene lote, el Excel queda intacto donde no llega.
-  **El PoS NO cubre 2023** (primera jornada ≈ `2024-01-05`, `PRIMERA_JORNADA_POS` — ⚠️ pendiente
-  de confirmar con `min(...)` contra la base). 2023 y cualquier jornada sin lote se sirven del
-  Excel, así que Histórico/Análisis/Calendario/Metas no pierden años. Para volver atrás:
+  **El PoS NO cubre 2023**: el backfill va de **5-ene-2024 a 3-sep-2026** (`PRIMERA_JORNADA_POS`,
+  confirmado por `VALIDACION-cuadre-pos-agosto-2026-09-04`). 2023 y cualquier jornada sin lote se
+  sirven del Excel, así que Histórico/Análisis/Calendario/Metas no pierden años. Para volver atrás:
   `FUENTE_VENTAS = 'xls'` en `ventasFuente.ts` → Excel puro, sin una sola consulta a `pos_ndf_*`.
   `xlsParser`, `ventas_dias`, `ventas_hist` y la pestaña «Cargar XLS» siguen ahí, latentes.
+- **La historia 2024-2025 NO cuadra al céntimo, y está medido: −0,057 %.** Histórico 3 años =
+  99,94 %; el PoS da sistemáticamente de menos, concentrado en días viejos puntuales (casi todo
+  el −107k de marzo 2024 está en el **7-mar**). Causa pendiente de drill-down (vuelto/dólares
+  viejos, o un tipo de factura filtrado en 2024-2025). **NO es borde de día.** Al correr Paridad
+  sobre 2024-2025, esperar ESE delta: el objetivo es confirmar que aparece solo el −0,057 %
+  conocido y nada nuevo. Para Histórico/Análisis/Mix es ruido → OK; **para algo contable u
+  oficial, resolver el drill-down antes.**
+- **2024 tiene 0 % de cobertura de salonero** (el mesero no se registraba; 2025 ~39-66 %, 2026
+  ~71-76 %). Saloneros / Evaluación / ICP salen **vacíos en 2024**. No es regresión del swap —
+  el Excel tenía el mismo hueco— pero hay que avisarlo antes de que alguien lo reporte como bug.
 - **El "delivery" BAJA ~4-5 % con el swap del PoS. NO es un bug — el PoS es el correcto.** El xls
   marcaba delivery por "sin cargo de servicio", y ahí adentro caían también «para llevar» y la
   barra. El PoS usa el canal real (`canal = 'delivery'`), que es lo que de verdad salió en moto.

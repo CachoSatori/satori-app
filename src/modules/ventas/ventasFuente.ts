@@ -45,17 +45,11 @@ export const FUENTE_VENTAS: FuenteVentas = 'pos'
 /**
  * La primera jornada que el PoS tiene ingestada.
  *
- * ⚠️ **Sin confirmar contra la base.** El valor sale del backfill `--todo` (976 días contados
- * hacia atrás desde principios de septiembre 2026 caen justo acá) y de que el PoS "Nube de
- * Fuego" se instaló en 2024. **Antes de firmar P2 hay que correr
- * `select min((fecha_registra at time zone 'America/Costa_Rica')::date) from pos_ndf_tickets;`
- * y poner el valor de verdad.**
- *
- * Si el valor real fuera POSTERIOR, no se rompe nada: las jornadas de más que se piden vuelven
- * vacías y el Excel las cubre. Si fuera ANTERIOR, se pierde el PoS de esos días y se sirve el
- * Excel — tampoco se rompe, pero se estaría dejando fuera historia que sí existe.
+ * ✅ **CONFIRMADO** por `VALIDACION-cuadre-pos-agosto-2026-09-04`: el backfill cubre
+ * **5-ene-2024 → 3-sep-2026**. Antes de eso no hay una sola factura en `pos_ndf_tickets`.
  *
  * Lo que **no** hay que hacer es bajarla a 2023: ahí el PoS no existe y serían viajes al pedo.
+ * 2023 lo sirve el Excel, entero, por la fusión.
  */
 export const PRIMERA_JORNADA_POS = '2024-01-05'
 

@@ -2,8 +2,8 @@ import { useState, useMemo } from 'react'
 import { todayCR } from '../../shared/utils'
 import type { DiasMap } from '../../shared/types/ventas'
 import {
-  aggCajero,
-  fi, fmtDate, datesInRange, allDates, dowLabel, dayOfWeek, esCajero,
+  aggCajero, allCajeros, esEntradaCajero,
+  fi, fmtDate, datesInRange, allDates, dowLabel, dayOfWeek,
 } from './ventasUtils'
 
 interface Props {
@@ -30,16 +30,14 @@ export default function VentasCajeros({ dias }: Props) {
   const dates = useMemo(() => allDates(dias), [dias])
   const range = useMemo(() => datesInRange(dates, from, to), [dates, from, to])
 
-  // Find all cajero names across all loaded dates
-  const cajeroNames = useMemo(() => {
-    const names = new Set<string>()
-    for (const dia of Object.values(dias)) {
-      for (const name of Object.keys(dia.saloneros)) {
-        if (esCajero(name)) names.add(name)
-      }
-    }
-    return [...names].sort()
-  }, [dias])
+  // Los buckets de caja del PoS (`CajeroDay`), por la MARCA `esCajero` de cada entrada y no
+  // por el nombre de la clave: el PoS etiqueta la caja con `etiquetaNoMesero()` y solo dos de
+  // esas etiquetas caen en `CAJEROS_IDS`, la lista de nombres del .xls. Filtrando por nombre,
+  // `Caja · 388`, `Sistema · …` y `Sin salonero` quedaban INVISIBLES acá aunque su plata sí
+  // contara en el total del día (`getDayStats`/`aggGeneral` ya leen la marca).
+  const cajerosCargados = useMemo(() => allCajeros(dias), [dias])
+  // Las columnas y las tarjetas son las del PERÍODO elegido, no las de todo lo cargado.
+  const cajeroNames     = useMemo(() => allCajeros(dias, range), [dias, range])
 
   const cajAggs = useMemo(() =>
     cajeroNames.map(n => aggCajero(n, range, dias)),
@@ -55,21 +53,24 @@ export default function VentasCajeros({ dias }: Props) {
     for (const date of range) {
       if (!dias[date]) continue
       const dow  = dayOfWeek(date)
-      const cajTotal = Object.entries(dias[date].saloneros)
-        .filter(([n]) => esCajero(n))
-        .reduce((s, [, v]) => s + (v as { total: number }).total, 0)
+      const cajTotal = Object.values(dias[date].saloneros)
+        .filter(esEntradaCajero)
+        .reduce((s, c) => s + c.total, 0)
       if (!acc[dow]) acc[dow] = { sum: 0, cnt: 0 }
       acc[dow].sum += cajTotal; acc[dow].cnt++
     }
     return acc
   }, [range, dias])
 
-  if (!cajeroNames.length) {
+  // Vacío de verdad: no hay NINGÚN día cargado con ventas de caja. Solo acá se esconde la
+  // barra de rango — si el período elegido es el que está vacío, la barra tiene que seguir
+  // en pantalla para poder cambiarlo (ver el vacío de período, más abajo).
+  if (!cajerosCargados.length) {
     return (
       <div className="vt-empty">
         <div className="vt-empty-icon">🏦</div>
         <div className="vt-empty-title">Sin datos de cajeros</div>
-        <div className="vt-empty-sub">Los cajeros aparecen cuando cargás archivos XLS con ventas de delivery</div>
+        <div className="vt-empty-sub">Todavía no hay ventas de caja en los días cargados</div>
       </div>
     )
   }
@@ -92,6 +93,16 @@ export default function VentasCajeros({ dias }: Props) {
         <span className="vt-range-label">{range.length} días</span>
       </div>
 
+      {!cajeroNames.length ? (
+        <div className="vt-empty">
+          <div className="vt-empty-icon">🏦</div>
+          <div className="vt-empty-title">Sin ventas de caja en el período</div>
+          <div className="vt-empty-sub">
+            No hay movimiento de caja entre {fmtDate(from)} y {fmtDate(to)}. Elegí otro rango.
+          </div>
+        </div>
+      ) : (
+      <>
       {/* KPIs */}
       <div className="vt-kpi-grid">
         <div className="vt-kpi red">
@@ -205,17 +216,20 @@ export default function VentasCajeros({ dias }: Props) {
           </thead>
           <tbody>
             {range.filter(d => dias[d]).map(date => {
-              const rowTotal = cajeroNames.reduce((s, n) => {
-                const e = dias[date]?.saloneros[n] as { total?: number } | undefined
-                return s + (e?.total ?? 0)
-              }, 0)
+              // El guard `esEntradaCajero` es el mismo con el que se armó `cajeroNames`: la
+              // fila nunca puede sumar una clave que ese día no sea un bucket de caja.
+              const cajDelDia = (n: string) => {
+                const e = dias[date]?.saloneros[n]
+                return esEntradaCajero(e) ? e : undefined
+              }
+              const rowTotal = cajeroNames.reduce((s, n) => s + (cajDelDia(n)?.total ?? 0), 0)
               if (rowTotal === 0) return null
               return (
                 <tr key={date}>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(date)}</td>
                   <td className="vt-muted">{dowLabel(dayOfWeek(date))}</td>
                   {cajeroNames.map(n => {
-                    const e = dias[date]?.saloneros[n] as { total?: number } | undefined
+                    const e = cajDelDia(n)
                     return (
                       <td key={n} className="r">
                         {e?.total ? fi(e.total) : '—'}
@@ -229,6 +243,8 @@ export default function VentasCajeros({ dias }: Props) {
           </tbody>
         </table>
       </div>
+      </>
+      )}
     </div>
   )
 }

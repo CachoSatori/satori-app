@@ -80,6 +80,77 @@ export function allSaloneros(dias: DiasMap): string[] {
   return [...names].sort()
 }
 
+/**
+ * ¿Esta entrada de `DiaData.saloneros` es un bucket de caja?
+ *
+ * Por la MARCA `esCajero` del dato, no por el nombre de la clave. `esCajero(nombre)` mira
+ * `CAJEROS_IDS`, una lista de nombres del .xls; el PoS etiqueta sus buckets de caja con
+ * `etiquetaNoMesero()` (`Caja · 388`, `Sistema · …`, `Sin salonero`), que no están en esa
+ * lista. Los agregadores del día (`getDayStats`, `aggGeneral`) ya leen la marca — quien
+ * filtre por nombre ve MENOS caja de la que el día realmente tiene.
+ */
+export function esEntradaCajero(e: SaloneroDay | CajeroDay | undefined): e is CajeroDay {
+  return (e as CajeroDay | undefined)?.esCajero === true
+}
+
+/**
+ * Los buckets de caja presentes en `dates` (o en todos los días cargados si no se pasan),
+ * por la marca `esCajero` de cada entrada.
+ */
+export function allCajeros(dias: DiasMap, dates?: string[]): string[] {
+  const names = new Set<string>()
+  for (const date of dates ?? Object.keys(dias)) {
+    const dia = dias[date]
+    if (!dia) continue
+    for (const [name, s] of Object.entries(dia.saloneros)) {
+      if (esEntradaCajero(s)) names.add(name)
+    }
+  }
+  return [...names].sort()
+}
+
+/** ₡ y unidades de comida / bebida, clasificadas por familia. */
+export interface MixFamilia {
+  com:  number
+  beb:  number
+  iCom: number
+  iBeb: number
+}
+
+/**
+ * El mix comida/bebida de `dates` **por FAMILIA del PoS**, no por `ProductMap`.
+ *
+ * De dónde sale: `SaloneroDay.com/.beb/.iCom/.iBeb`, que `armarDia()` llena recorriendo las
+ * líneas `pos_ndf` y partiéndolas por `FAMILIAS_VALOR_SERVIDO` (`mapTicket.ts`), con la
+ * bebida en la familia 5 y todo lo demás de ese conjunto en comida. Los ₡ y las unidades
+ * salen del MISMO recorrido, así que no pueden discrepar.
+ *
+ * Reemplaza a la cuenta por `pm[nombre]?.tipo`: el `ProductMap` se carga a mano con los
+ * nombres del .xls y los productos del PoS entran en MAYÚSCULAS desde `pos_ndf_lineas`, así
+ * que un producto sin cargar no sumaba ₡ aunque sus unidades sí se contaran — de ahí el
+ * ₡0 con unidades > 0.
+ *
+ * ⚠️ NO ES LA NETA DEL DÍA: los buckets de caja (`CajeroDay`) no traen desglose comida/bebida,
+ * así que su plata queda afuera de esta suma aunque sí cuente en el total del día. Quien lo
+ * muestre tiene que rotularlo.
+ */
+export function mixPorFamilia(dias: DiasMap, dates: string[]): MixFamilia {
+  let com = 0, beb = 0, iCom = 0, iBeb = 0
+  for (const date of dates) {
+    const dia = dias[date]
+    if (!dia) continue
+    for (const s of Object.values(dia.saloneros)) {
+      if (esEntradaCajero(s)) continue
+      const sl = s as SaloneroDay
+      com  += sl.com  ?? 0
+      beb  += sl.beb  ?? 0
+      iCom += sl.iCom ?? 0
+      iBeb += sl.iBeb ?? 0
+    }
+  }
+  return { com, beb, iCom, iBeb }
+}
+
 // ── Per-day combined stats ───────────────────────────────────
 export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: string[] } {
   let ventaNeta = 0, iva = 0, serv = 0, salon = 0, delivery = 0, pax = 0

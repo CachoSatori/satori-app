@@ -525,7 +525,7 @@ describe('mapValorServido — el NETO', () => {
     expect(t.valor_servido).toBe(28000)
   })
 
-  it('la familia 29 (bentos/almuerzo) ENTRA', () => {
+  it('la familia 29 (GreenSeason) ENTRA', () => {
     expect(mapTicket(factura({ items: [linea(29, 4500)] })).valor_servido).toBe(4500)
   })
 

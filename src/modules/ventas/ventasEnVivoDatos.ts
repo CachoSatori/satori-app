@@ -65,7 +65,7 @@ const CATEGORIA_FAMILIA: Record<number, string> = {
   5:  'Bebidas',
   2:  'Entradas',
   16: 'Platos fuertes',
-  29: 'Bentos',
+  29: 'GreenSeason',
   4:  'Otros',
   13: 'Otros',
 }

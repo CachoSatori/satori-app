@@ -135,8 +135,17 @@ export type CategoriaMix =
 
 // ── Desglose fiscal (mig 063) ──────────────────────────────────────────────────
 
-/** Familia 29: bentos / almuerzo. Entra al valor servido; no estaba en el mix v1. */
-export const FAMILIA_BENTOS = 29
+/**
+ * Familia 29: **GreenSeason** (SKUs 1049-1054). Entra al valor servido; no estaba en el mix v1.
+ *
+ * El identificador y el rótulo anteriores («almuerzo») eran los VIEJOS: la firma resolvió que
+ * 29 es GreenSeason, y el rótulo se veía en pantalla — es la etiqueta del mix de «En vivo».
+ * El número 29 NO cambió: esto es un rename de identificador y de etiqueta, cero plata.
+ *
+ * La caja de almuerzo sigue existiendo en el menú, pero como SUBCLASIFICACIÓN de productos
+ * DENTRO de GreenSeason (`import/productos.csv`), no como el nombre de la familia.
+ */
+export const FAMILIA_GREENSEASON = 29
 
 /**
  * Las familias que suman al **VALOR SERVIDO** (el neto fiscal): comida 2, 3, 4, 13,
@@ -144,7 +153,7 @@ export const FAMILIA_BENTOS = 29
  *
  * ⚠️ Es un conjunto DISTINTO del `FAMILIAS_COMIDA` del mix, a propósito y por dos
  * diferencias que están firmadas:
- *   · **29 (bentos/almuerzo) ENTRA** acá y hoy no existe en el mix (cae en "otro").
+ *   · **29 (GreenSeason) ENTRA** acá y hoy no existe en el mix (cae en "otro").
  *   · **6 ENTRA al mix como comida pero NO al neto**: es el cajón mixto donde también
  *     se carga la comida del personal ("XX" a ₡0).
  * Quedan afuera del neto, además: pax 19 · ingredientes 20 · extras 22 · gift 12 ·

@@ -2,8 +2,8 @@ import { useState, useMemo } from 'react'
 import { todayCR } from '../../shared/utils'
 import type { DiasMap } from '../../shared/types/ventas'
 import {
-  aggCajero,
-  fi, fmtDate, datesInRange, allDates, dowLabel, dayOfWeek, esCajero,
+  aggCajero, cajerosEnRango,
+  fi, fmtDate, datesInRange, allDates, dowLabel, dayOfWeek,
 } from './ventasUtils'
 
 interface Props {
@@ -30,16 +30,14 @@ export default function VentasCajeros({ dias }: Props) {
   const dates = useMemo(() => allDates(dias), [dias])
   const range = useMemo(() => datesInRange(dates, from, to), [dates, from, to])
 
-  // Find all cajero names across all loaded dates
-  const cajeroNames = useMemo(() => {
-    const names = new Set<string>()
-    for (const dia of Object.values(dias)) {
-      for (const name of Object.keys(dia.saloneros)) {
-        if (esCajero(name)) names.add(name)
-      }
-    }
-    return [...names].sort()
-  }, [dias])
+  // Los buckets de caja DEL PERÍODO, por la marca `esCajero` del dato. Dos cambios contra la
+  // versión anterior, y los dos son para que la pantalla diga la verdad:
+  //   · por MARCA y no por nombre → entran los buckets que el PoS nombra distinto
+  //     (`Caja · 388`, `Sistema · 002`, `Sin salonero`) y que antes desaparecían de acá
+  //     aunque `aggGeneral` sí los contara en `cajTotal`. Ver `cajerosEnRango`.
+  //   · sobre `range` y no sobre todo `dias` → las columnas del detalle y el vacío hablan del
+  //     período que el usuario está mirando, no de todo lo que haya cargado en memoria.
+  const cajeroNames = useMemo(() => cajerosEnRango(dias, range), [dias, range])
 
   const cajAggs = useMemo(() =>
     cajeroNames.map(n => aggCajero(n, range, dias)),
@@ -55,21 +53,53 @@ export default function VentasCajeros({ dias }: Props) {
     for (const date of range) {
       if (!dias[date]) continue
       const dow  = dayOfWeek(date)
-      const cajTotal = Object.entries(dias[date].saloneros)
-        .filter(([n]) => esCajero(n))
-        .reduce((s, [, v]) => s + (v as { total: number }).total, 0)
+      const cajTotal = Object.values(dias[date].saloneros)
+        .filter(v => (v as { esCajero?: true }).esCajero === true)
+        .reduce((s, v) => s + (v as { total: number }).total, 0)
       if (!acc[dow]) acc[dow] = { sum: 0, cnt: 0 }
       acc[dow].sum += cajTotal; acc[dow].cnt++
     }
     return acc
   }, [range, dias])
 
+  // La barra de rango se arma UNA vez y se muestra siempre, también con el vacío: el vacío de
+  // esta pantalla depende del período elegido, así que esconder los controles dejaba al usuario
+  // encerrado en un rango sin datos y sin forma de ampliarlo.
+  const barraRango = (
+    <div className="vt-range-bar">
+      {PRESETS.map((p, i) => (
+        <button key={i} className={`vt-range-btn ${preset === i ? 'active' : ''}`}
+          onClick={() => { setFrom(p.from()); setTo(todayCR()); setPreset(i) }}>
+          {p.label}
+        </button>
+      ))}
+      <input className="vt-date-input" type="date" value={from}
+        onChange={e => { setFrom(e.target.value); setPreset(-1) }} />
+      <span>→</span>
+      <input className="vt-date-input" type="date" value={to}
+        onChange={e => { setTo(e.target.value); setPreset(-1) }} />
+      <span className="vt-range-label">{range.length} días</span>
+    </div>
+  )
+
+  // Vacío HONESTO: dice qué falta de verdad, sin prometer una carga de XLS que ya no es de
+  // dónde salen los cajeros — el día lo arma `armarDia` desde `pos_ndf_*` y la caja viene con
+  // su canal real en cada ticket.
   if (!cajeroNames.length) {
     return (
-      <div className="vt-empty">
-        <div className="vt-empty-icon">🏦</div>
-        <div className="vt-empty-title">Sin datos de cajeros</div>
-        <div className="vt-empty-sub">Los cajeros aparecen cuando cargás archivos XLS con ventas de delivery</div>
+      <div className="vt-section">
+        {barraRango}
+        <div className="vt-empty">
+          <div className="vt-empty-icon">🏦</div>
+          <div className="vt-empty-title">
+            {dates.length ? 'Sin movimientos de caja en el período' : 'Sin ventas cargadas'}
+          </div>
+          <div className="vt-empty-sub">
+            {dates.length
+              ? 'No hay facturas cobradas por caja entre esas dos fechas. Probá con un rango más amplio.'
+              : 'Todavía no hay ventas para este período.'}
+          </div>
+        </div>
       </div>
     )
   }
@@ -77,20 +107,7 @@ export default function VentasCajeros({ dias }: Props) {
   return (
     <div className="vt-section">
       {/* Range bar */}
-      <div className="vt-range-bar">
-        {PRESETS.map((p, i) => (
-          <button key={i} className={`vt-range-btn ${preset === i ? 'active' : ''}`}
-            onClick={() => { setFrom(p.from()); setTo(todayCR()); setPreset(i) }}>
-            {p.label}
-          </button>
-        ))}
-        <input className="vt-date-input" type="date" value={from}
-          onChange={e => { setFrom(e.target.value); setPreset(-1) }} />
-        <span>→</span>
-        <input className="vt-date-input" type="date" value={to}
-          onChange={e => { setTo(e.target.value); setPreset(-1) }} />
-        <span className="vt-range-label">{range.length} días</span>
-      </div>
+      {barraRango}
 
       {/* KPIs */}
       <div className="vt-kpi-grid">

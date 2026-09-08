@@ -80,6 +80,78 @@ export function allSaloneros(dias: DiasMap): string[] {
   return [...names].sort()
 }
 
+/**
+ * Los BUCKETS DE CAJA que aparecen en las fechas dadas, por la MARCA `esCajero` del dato y no
+ * por cómo se llame la clave.
+ *
+ * Es la diferencia entre leer el PoS y leer solo el .xls. `esCajero(nombre)` compara contra
+ * `CAJEROS_IDS` (`shared/utils`), la lista de nombres que escribía el Excel. El adaptador del
+ * PoS (`armarDia` → `etiquetaNoMesero`) sí produce esos dos nombres para los logins 111 y 222,
+ * pero manda a la MISMA rama `CajeroDay` otros tres buckets que no están en esa lista:
+ * `«Caja · <login>»` (cualquier otro login de caja), `«Sistema · <login>»` y `«Sin salonero»`.
+ * Filtrando por nombre esa plata se volvía invisible en la pestaña Cajeros aunque
+ * `aggGeneral` sí la contara en `cajTotal` — la pestaña mostraba MENOS de lo que el resto de
+ * la app decía que había pasado por caja.
+ *
+ * Por la marca no se puede fallar: la ponen las DOS fuentes (`xlsParser` y `armarDia`) y es la
+ * misma que ya usan `aggGeneral`, `aggSalonero` y `getDayStats` para decidir quién es mesero.
+ *
+ * Solo LISTA: no suma nada. La plata la sigue sacando `aggCajero` de `CajeroDay`.
+ */
+export function cajerosEnRango(dias: DiasMap, dates: string[]): string[] {
+  const names = new Set<string>()
+  for (const date of dates) {
+    const dia = dias[date]
+    if (!dia) continue
+    for (const [name, s] of Object.entries(dia.saloneros)) {
+      if ((s as CajeroDay).esCajero) names.add(name)
+    }
+  }
+  return [...names].sort()
+}
+
+/** El mix comida/bebida en ₡ de un período. Ver `mixPorFamilia`. */
+export interface MixPorFamilia {
+  com: number
+  beb: number
+}
+
+/**
+ * El mix comida/bebida en ₡ **por FAMILIA del PoS**, sumado de los buckets de mesero.
+ *
+ * POR QUÉ EXISTE: la otra forma de sacar este número —recorrer `AggGeneral.prods` y sumar lo
+ * que el `ProductMap` marque `tipo: 'comida' | 'bebida'`— cruza el nombre del producto contra
+ * la tabla `product_map`, que se carga a mano y con los nombres de la era del .xls. Los
+ * nombres que trae el PoS no son los mismos, así que `pm[nombre]` sale `undefined`, la suma da
+ * ₡0 y la pantalla queda mostrando «₡ 0» al lado de un contador de unidades que sí tiene
+ * decenas de platos.
+ *
+ * De dónde sale el número que sí cierra: `SaloneroDay.com` / `.beb` los llena `armarDia`
+ * (`modules/ventas/ventasEnVivoDatos.ts`) recorriendo las líneas de `pos_ndf_ticket_lines`,
+ * quedándose con las familias de `FAMILIAS_VALOR_SERVIDO` (`shared/ndf/mapTicket.ts`) y
+ * partiéndolas en bebida (familia 5) contra todo lo demás. Es EXACTAMENTE el mismo recorrido,
+ * la misma línea y el mismo `if`, que llenan `iCom`/`iBeb`. Por eso ₡ y unidades cierran: son
+ * dos acumuladores del mismo bucle, no dos criterios distintos.
+ *
+ * ⚠️ NO ES LA NETA DEL DÍA y no se puede usar como tal: acá solo entran los buckets de MESERO
+ * —los mismos que `aggGeneral` manda a `total`, `iCom` e `iBeb`— y queda afuera todo lo que
+ * pasó por caja (`cajTotal`). La neta del día la sigue dando `getDayStats`.
+ */
+export function mixPorFamilia(dates: string[], dias: DiasMap): MixPorFamilia {
+  let com = 0, beb = 0
+  for (const date of dates) {
+    const dia = dias[date]
+    if (!dia) continue
+    for (const s of Object.values(dia.saloneros)) {
+      if ((s as CajeroDay).esCajero) continue
+      const sl = s as SaloneroDay
+      com += sl.com ?? 0
+      beb += sl.beb ?? 0
+    }
+  }
+  return { com, beb }
+}
+
 // ── Per-day combined stats ───────────────────────────────────
 export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: string[] } {
   let ventaNeta = 0, iva = 0, serv = 0, salon = 0, delivery = 0, pax = 0

@@ -5,7 +5,7 @@ import {
   aggGeneral, aggSalonero, aggCajero, getDayStats,
   fi, fmtDate, metaColor, getMeta,
   topProds, metaProgress, ratioCBClass,
-  allSaloneros, esCajero,
+  allSaloneros, esCajero, mixPorFamilia,
 } from './ventasUtils'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import { esPostCorte } from '../cash/cierrePozo'
@@ -16,6 +16,14 @@ interface Props {
   pm:     ProductMap
   metas: Meta
 }
+
+/**
+ * El rótulo «no neta» de las tarjetas Comidas/Bebidas. Es una ADVERTENCIA, no un detalle: las
+ * dos suman solo los buckets de MESERO, así que `com + beb` NO da la neta del día — le falta
+ * todo lo que se cobró por caja. La neta la dice la tarjeta «Venta neta».
+ */
+const MIX_FAM_TITULO =
+  'Mix por familia del PoS (valor servido), solo de meseros. NO es la neta del día: no incluye lo cobrado por caja.'
 
 // ── Share helper ──────────────────────────────────────────────
 async function shareText(text: string, setCopied: (v: boolean) => void) {
@@ -85,6 +93,21 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   const beb  = useMemo(() => gen ? Object.entries(gen.prods).reduce((s,[n,v]) => s + (pm[n]?.tipo==='bebida' ? v.m : 0), 0) : 0, [gen, pm])
   const promPlato   = gen && gen.iCom > 0 ? com   / gen.iCom : 0
   const promBebida  = gen && gen.iBeb > 0 ? beb   / gen.iBeb : 0
+
+  // El ₡ de las tarjetas «Comidas» y «Bebidas», por FAMILIA del PoS y no por `ProductMap`.
+  //
+  // `com`/`beb` de arriba cruzan el nombre del producto contra `product_map`, que se carga a
+  // mano con los nombres de la era del .xls. Los nombres que trae el PoS no son esos, así que
+  // `pm[nombre]` sale `undefined` y las dos tarjetas mostraban «₡ 0» al lado de un contador de
+  // unidades con decenas de platos. `mixPorFamilia` suma `SaloneroDay.com`/`.beb`, que salen
+  // del MISMO bucle sobre las líneas de `pos_ndf` que llena `gen.iCom`/`gen.iBeb`
+  // (`FAMILIAS_VALOR_SERVIDO`, bebida = familia 5) — por eso ₡ y unidades cierran.
+  //
+  // Deliberadamente NO se toca nada más: `promPlato`/`promBebida` siguen sobre `com`/`beb`, y
+  // `gen.total`, `gen.ratioCB` y la neta del día quedan exactamente como estaban.
+  const mixFam = useMemo(() =>
+    activeDate ? mixPorFamilia([activeDate], dias) : { com: 0, beb: 0 },
+  [activeDate, dias])
 
   // Special product categories for bottom section
   const cortProds = useMemo(() => gen ? topProds(gen.prods, 'monto', 8, ['cortesia'],    pm) : [], [gen, pm])
@@ -384,15 +407,15 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           <div className="vt-kpi-label">Ratio C/B (₡)</div>
           <div className={`vt-kpi-val ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</div>
         </div>
-        <div className="vt-kpi">
+        <div className="vt-kpi" title={MIX_FAM_TITULO}>
           <div className="vt-kpi-label">Comidas</div>
-          <div className="vt-kpi-val" style={{ fontSize:'0.85rem' }}>{fi(com)}</div>
-          <div className="vt-kpi-sub">{gen.iCom} platos</div>
+          <div className="vt-kpi-val" style={{ fontSize:'0.85rem' }}>{fi(mixFam.com)}</div>
+          <div className="vt-kpi-sub">{gen.iCom} platos · no neta</div>
         </div>
-        <div className="vt-kpi blue">
+        <div className="vt-kpi blue" title={MIX_FAM_TITULO}>
           <div className="vt-kpi-label">Bebidas</div>
-          <div className="vt-kpi-val" style={{ fontSize:'0.85rem' }}>{fi(beb)}</div>
-          <div className="vt-kpi-sub">{gen.iBeb} bebidas</div>
+          <div className="vt-kpi-val" style={{ fontSize:'0.85rem' }}>{fi(mixFam.beb)}</div>
+          <div className="vt-kpi-sub">{gen.iBeb} bebidas · no neta</div>
         </div>
       </div>
 

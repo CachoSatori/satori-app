@@ -229,6 +229,11 @@ export function armarDia(
       const delivery = Math.round(e.delivery)
       saloneros[nombre] = {
         esCajero: true,
+        // El pax VIAJA aunque el bucket sea de caja. En el PoS hay tickets de salón cobrados
+        // bajo un login de caja; su plata siempre contó en el total del día, y tirar su pax
+        // hacía que el día entero informara menos comensales de los que hubo. No compite con
+        // nadie —`esCajero` lo saca igual del ranking—, pero suma al total.
+        pax:        e.pax,
         total,
         salon:      total - delivery,
         delivery,

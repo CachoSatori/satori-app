@@ -70,11 +70,20 @@ export function datesInRange(dates: string[], from: string, to: string): string[
   return dates.filter(d => d >= from && d <= to)
 }
 
+/**
+ * Los MESEROS de los días cargados.
+ *
+ * Excluye por la MARCA `esCajero` de cada entrada, no por el nombre de la clave. Con el
+ * filtro por nombre (`CAJEROS_IDS`, cinco nombres del .xls) los buckets de caja que el PoS
+ * etiqueta `Caja · 388` / `Sistema · N` / `Sin salonero` entraban acá como si fueran meseros:
+ * `aggSalonero` los saltea por la marca (`if (raw.esCajero) continue`), así que agregaban
+ * cero y salían como FILAS FANTASMA en ₡0 en el ranking, la evaluación y el ICP.
+ */
 export function allSaloneros(dias: DiasMap): string[] {
   const names = new Set<string>()
   for (const dia of Object.values(dias)) {
-    for (const name of Object.keys(dia.saloneros)) {
-      if (!esCajero(name)) names.add(name)
+    for (const [name, s] of Object.entries(dia.saloneros)) {
+      if (!esEntradaCajero(s)) names.add(name)
     }
   }
   return [...names].sort()

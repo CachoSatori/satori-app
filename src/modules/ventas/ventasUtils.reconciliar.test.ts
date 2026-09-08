@@ -20,7 +20,8 @@ import { describe, it, expect } from 'vitest'
 
 import type { CajeroDay, DiaData, DiasMap, SaloneroDay } from '../../shared/types/ventas'
 import {
-  aggCajero, aggGeneral, allCajeros, esEntradaCajero, getDayStats, mixPorFamilia,
+  aggCajero, aggGeneral, aggSalonero, allCajeros, allSaloneros, esEntradaCajero,
+  getDayStats, mixPorFamilia,
 } from './ventasUtils'
 
 const sal = (o: Partial<SaloneroDay>): SaloneroDay => ({
@@ -142,6 +143,57 @@ describe('el total y la neta del día NO se mueven', () => {
   })
 
   it('`aggGeneral` sigue dando el mismo `totalRest`', () => {
+    expect(aggGeneral(['2026-09-07'], DIAS, PM_SIN_MATCH).totalRest).toBe(305_000)
+  })
+})
+
+// ── Micropase «coherencia C/B»: el mismo root, tres lugares más ──────────────────────────────
+
+describe('el Ratio C/B general se puede derivar del mix por familia', () => {
+  it('`aggGeneral.ratioCB` sale en 0 con el ProductMap vacío — por eso no se muestra', () => {
+    // No es un bug de `aggGeneral`: es la misma cuenta por `pm[nombre]?.tipo` de siempre, y se
+    // deja intacta a propósito (la usan otras pantallas con días del .xls). Lo que cambia es
+    // de dónde saca «Hoy» el número que PINTA.
+    expect(aggGeneral(['2026-09-07'], DIAS, PM_SIN_MATCH).ratioCB).toBe(0)
+  })
+
+  it('el ratio por familia sí tiene valor, y es com ÷ beb del mismo mix de las tarjetas', () => {
+    const mix = mixPorFamilia(DIAS, ['2026-09-07'])
+    expect(mix.com / mix.beb).toBe(3)   // 150.000 ÷ 50.000
+  })
+
+  it('la tabla por salonero YA era por familia: `aggSalonero.ratioCB` no se toca', () => {
+    // `aggSalonero` acumula `com`/`beb` desde `SaloneroDay`, que ya viene partido por familia.
+    // Su ratio coincide con el general por familia — que es justamente el punto de coherencia.
+    expect(aggSalonero('MAXO', ['2026-09-07'], DIAS, PM_SIN_MATCH).ratioCB).toBe(3)
+  })
+})
+
+describe('`allSaloneros` excluye la caja por MARCA, no por nombre', () => {
+  it('los buckets de caja del PoS ya no entran a la lista de meseros', () => {
+    expect(allSaloneros(DIAS)).toEqual(['MAXO'])
+  })
+
+  it('las etiquetas del .xls también quedan afuera (no hay regresión del caso viejo)', () => {
+    const soloXls: DiasMap = {
+      '2026-09-07': dia({
+        MAXO: sal({ total: 100_000 }),
+        'Cajero turno mañana': caj({ total: 50_000 }),
+      }),
+    }
+    expect(allSaloneros(soloXls)).toEqual(['MAXO'])
+  })
+
+  it('las filas que se van eran fantasmas: `aggSalonero` ya les daba cero', () => {
+    // Es lo que hace que sacarlas NO mueva ninguna cifra: las pantallas que las listaban
+    // filtran por `total > 0` o `days > 0`, así que nunca aportaron nada.
+    const fantasma = aggSalonero('Caja · 388', ['2026-09-07'], DIAS, PM_SIN_MATCH)
+    expect(fantasma.total).toBe(0)
+    expect(fantasma.days).toBe(0)
+  })
+
+  it('sacarlas no mueve el total ni la neta del día', () => {
+    expect(getDayStats(DIAS['2026-09-07']).ventaNeta).toBe(305_000)
     expect(aggGeneral(['2026-09-07'], DIAS, PM_SIN_MATCH).totalRest).toBe(305_000)
   })
 })

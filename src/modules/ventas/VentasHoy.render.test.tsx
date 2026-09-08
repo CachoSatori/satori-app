@@ -1,0 +1,81 @@
+// @vitest-environment happy-dom
+//
+// «Hoy», en el DOM: las tarjetas Comidas/Bebidas con el ₡ por FAMILIA del PoS.
+//
+// El caso que fija este test es el de staging: los días vienen del PoS y el `ProductMap` está
+// vacío para esos nombres. Antes las dos tarjetas mostraban ₡0 con las unidades > 0 al lado —
+// las unidades salen de la familia, la plata salía del `ProductMap`. Ahora las dos salen del
+// mismo desglose, y como la caja no lo trae, se rotula «no neta».
+import { describe, it, expect, vi } from 'vitest'
+import { render } from '@testing-library/react'
+
+vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: null }) }))
+vi.mock('../../shared/api/cash', () => ({
+  getOpenCashSession: vi.fn(async () => null),
+  createCashMovement:  vi.fn(async () => undefined),
+}))
+
+import VentasHoy from './VentasHoy'
+import type { CajeroDay, DiasMap, Meta, SaloneroDay } from '../../shared/types/ventas'
+import { fi, getDayStats } from './ventasUtils'
+
+const sal = (o: Partial<SaloneroDay>): SaloneroDay => ({
+  pax: 0, total: 0, com: 0, beb: 0, iCom: 0, iBeb: 0, iva: 0, serv: 0,
+  promPax: 0, promPlato: 0, promBebida: 0, ratioCB: 0, ratioU: 0, bebPax: 0, prods: [], ...o,
+})
+
+const caj = (o: Partial<CajeroDay>): CajeroDay => ({
+  esCajero: true, total: 0, salon: 0, delivery: 0, iva: 0, serv: 0,
+  ordenes: 0, ticketProm: 0, prods: [], ...o,
+})
+
+const METAS: Meta = {
+  restaurante: {}, margen: {},
+  global: { promPax: 15_000, bebPax: 1.2, ratioCB: 3.0, ticketItem: 7_500, ventas: 800_000 },
+  salMetas: {},
+}
+
+/** Nombres de producto tal como llegan de `pos_ndf_lineas`: en MAYÚSCULAS y sin ProductMap. */
+const DIAS: DiasMap = {
+  '2026-09-07': {
+    fileName: 'ndf 2026-09-07', uploadedAt: '2026-09-08',
+    saloneros: {
+      MAXO: sal({
+        pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25,
+        iva: 26_000, serv: 20_000,
+        prods: [['ROLL SATORI', 40, 150_000], ['IMPERIAL', 25, 50_000]],
+      }),
+      'Caja · 388': caj({ pax: 4, total: 105_000, salon: 65_000, delivery: 40_000, ordenes: 7 }),
+    },
+  },
+}
+
+const texto = () => (document.body.textContent ?? '').replace(/\s/g, ' ')
+const plano = (s: string) => s.replace(/\s/g, ' ')
+
+describe('VentasHoy · tarjetas Comidas / Bebidas', () => {
+  it('muestra ₡ por familia aunque el ProductMap no conozca los productos del PoS', () => {
+    render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
+    expect(texto()).toContain(`Comidas${plano(fi(150_000))}`)
+    expect(texto()).toContain(`Bebidas${plano(fi(50_000))}`)
+    // Y NUNCA ₡0 con unidades al lado, que era el síntoma.
+    expect(texto()).not.toContain(`Comidas${plano(fi(0))}`)
+    expect(texto()).not.toContain(`Bebidas${plano(fi(0))}`)
+  })
+
+  it('rotula «no neta» en las dos tarjetas, junto a las unidades', () => {
+    render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
+    expect(texto()).toContain('40 platos · no neta')
+    expect(texto()).toContain('25 bebidas · no neta')
+  })
+
+  it('el total y la neta del día NO se mueven', () => {
+    render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
+    // La neta del día sigue saliendo de `getDayStats` — meseros + caja, sin tocar.
+    expect(getDayStats(DIAS['2026-09-07']).ventaNeta).toBe(305_000)
+    // Y el KPI de meseros de la cabecera sigue valiendo lo mismo que antes del cambio.
+    expect(texto()).toContain(`Ventas Salón${plano(fi(200_000))}`)
+    // «no neta» no es decorativo: comida + bebida (₡200.000) < neta del día (₡305.000).
+    expect(150_000 + 50_000).toBeLessThan(getDayStats(DIAS['2026-09-07']).ventaNeta)
+  })
+})

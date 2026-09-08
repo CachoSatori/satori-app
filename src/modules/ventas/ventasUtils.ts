@@ -92,6 +92,12 @@ export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: st
       serv      += c.serv ?? 0
       delivery  += c.delivery
       salon     += c.salon
+      // El PAX de caja TAMBIÉN cuenta. En el PoS hay tickets de salón cobrados bajo un login
+      // de caja (111/222/388): su plata ya venía sumando acá (`c.total`, `c.salon`), pero su
+      // pax se descartaba, así que el día informaba menos comensales de los que hubo — ~9%
+      // menos que el xls en la Paridad, con el crudo (`pax_articulo`) dando idéntico.
+      // `?? 0`: el `xlsParser` nunca llenó este campo, así que los días del xls no se mueven.
+      pax       += c.pax ?? 0
     } else {
       const sl = s as SaloneroDay
       ventaNeta += sl.total
@@ -175,7 +181,13 @@ export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: Pr
 // ── aggGeneral ───────────────────────────────────────────────
 export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggGeneral {
   let total = 0, cajTotal = 0, cajDelivery = 0, cajSalon = 0
-  let pax = 0, iCom = 0, iBeb = 0
+  // DOS contadores de pax, a propósito (ver `AggGeneral.paxSaloneros`):
+  //   · `pax`          = todos los comensales del día, caja incluida. Es "cuánta gente vino".
+  //   · `paxSaloneros` = solo los de meseros. Es el denominador de `promPax`/`bebPax`, cuyos
+  //     numeradores (`total`, `iBeb`) también son de meseros. Ese ratio es el BENCHMARK contra
+  //     el que «En vivo» y Evaluación comparan a cada mesero: tiene que seguir siendo
+  //     comparable con `aggSalonero`, así que no se le mete el pax de caja abajo.
+  let pax = 0, paxSaloneros = 0, iCom = 0, iBeb = 0
   let cortTotal = 0, persTotal = 0
   const prods: Record<string, { q: number; m: number }> = {}
 
@@ -188,10 +200,12 @@ export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggG
         cajTotal    += c.total
         cajDelivery += c.delivery
         cajSalon    += c.salon
+        pax         += c.pax ?? 0     // los comensales de caja cuentan en el pax del día
       } else {
         const sl = s as SaloneroDay
         total += sl.total
-        pax   += sl.pax ?? 0
+        pax          += sl.pax ?? 0
+        paxSaloneros += sl.pax ?? 0
         iCom  += sl.iCom ?? 0
         iBeb  += sl.iBeb ?? 0
         for (const [pname, qty, monto] of (sl.prods ?? [])) {
@@ -218,12 +232,15 @@ export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggG
     totalRest,
     salon:      total + cajSalon,
     pax,
-    promPax:    pax > 0 ? total / pax : 0,
+    paxSaloneros,
+    // Sobre `paxSaloneros` y no sobre `pax`: los dos numeradores son de meseros. Es el mismo
+    // valor que devolvían antes de que `pax` pasara a contar también el de caja.
+    promPax:    paxSaloneros > 0 ? total / paxSaloneros : 0,
     iCom,
     iBeb,
     ratioCB:    beb > 0 ? com / beb : 0,
     ratioU:     iBeb > 0 ? iCom / iBeb : 0,
-    bebPax:     pax > 0 ? iBeb / pax : 0,
+    bebPax:     paxSaloneros > 0 ? iBeb / paxSaloneros : 0,
     promTicket: (iCom + iBeb) > 0 ? total / (iCom + iBeb) : 0,
     cortTotal,
     persTotal,

@@ -81,7 +81,7 @@ describe('armarDiasMap — un DiaData por jornada', () => {
     const dias = armar(TODOS, LINEAS, RANGO)
     const d4 = dias['2026-09-04']
     // 13 facturas del fixture, todas del mismo salonero: 2 pax y ₡12.000 netos cada una.
-    const pax   = Object.values(d4.saloneros).reduce((s, x) => s + ('pax' in x ? x.pax : 0), 0)
+    const pax   = Object.values(d4.saloneros).reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
     const total = Object.values(d4.saloneros).reduce((s, x) => s + x.total, 0)
     expect(pax).toBe(13 * 2)
     expect(total).toBe(13 * 12000)
@@ -91,7 +91,7 @@ describe('armarDiasMap — un DiaData por jornada', () => {
   it('110840 + 110843–110866 caen juntas en la jornada 2026-09-05', () => {
     const dias = armar(TODOS, LINEAS, RANGO)
     const pax = Object.values(dias['2026-09-05'].saloneros)
-      .reduce((s, x) => s + ('pax' in x ? x.pax : 0), 0)
+      .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
     expect(pax).toBe(25 * 2)                  // 1 del 111 + 24 del 222
     expect(dias['2026-09-05'].fileName).toBe('ndf 2026-09-05')
   })
@@ -99,7 +99,7 @@ describe('armarDiasMap — un DiaData por jornada', () => {
   it('ninguna de las 38 facturas se pierde ni se duplica entre las dos jornadas', () => {
     const dias = armar(TODOS, LINEAS, RANGO)
     const pax = Object.values(dias).flatMap(d => Object.values(d.saloneros))
-      .reduce((s, x) => s + ('pax' in x ? x.pax : 0), 0)
+      .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
     expect(pax).toBe(38 * 2)
   })
 
@@ -168,7 +168,7 @@ describe('el borde del rango — el lote que cruza la medianoche', () => {
     const dias = armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-05', hasta: '2026-09-05' })
     expect(Object.keys(dias)).toEqual(['2026-09-05'])
     const pax = Object.values(dias['2026-09-05'].saloneros)
-      .reduce((s, x) => s + ('pax' in x ? x.pax : 0), 0)
+      .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
     expect(pax).toBe(3 * 2)     // las tres, incluida la de la 01:10
   })
 
@@ -184,7 +184,7 @@ describe('el borde del rango — el lote que cruza la medianoche', () => {
     const dias = armar([...CRUZA, ...LOTE_4_TARDE], [], { desde: '2026-09-05', hasta: '2026-09-05' })
     expect(Object.keys(dias)).toEqual(['2026-09-05'])
     const pax = Object.values(dias['2026-09-05'].saloneros)
-      .reduce((s, x) => s + ('pax' in x ? x.pax : 0), 0)
+      .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
     expect(pax).toBe(3 * 2)     // solo el lote que abrió el 5; las 13 del 4 quedaron afuera
   })
 

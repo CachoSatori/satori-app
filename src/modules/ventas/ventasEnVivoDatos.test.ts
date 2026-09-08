@@ -732,7 +732,10 @@ describe('paridad con las funciones de Hoy', () => {
     const st = getDayStats(a.dia)
     expect(st.ventaNeta).toBe(25000)
     expect(st.delivery).toBe(5000)      // el delivery de la caja
-    expect(st.pax).toBe(6)              // el pax es solo de los meseros
+    // El pax es el del DÍA: meseros + caja. Antes decía 6 —solo meseros—, y ése era el bug:
+    // los comensales de un ticket de salón cobrado por caja se descartaban, y el PoS informaba
+    // ~9% menos gente que el xls aunque el crudo diera idéntico.
+    expect(st.pax).toBe(8)
   })
 
   it('aggGeneral separa salón de caja y `totalRest` sigue siendo el neto del día', () => {
@@ -994,6 +997,31 @@ describe('armarDia atribuye el IVA por salonero/cajero, no lo deja en 0', () => 
     ], [], 'sello', NOMBRES)
     const caja = Object.values(armado.dia.saloneros).find(v => 'esCajero' in v && v.esCajero)!
     expect(caja.iva).toBe(3900)
+  })
+
+  it('el cajero conserva su PAX: el bucket de caja lo lleva, no se tira', () => {
+    // Un ticket de SALÓN cobrado bajo un login de caja: sus comensales existieron. `armarDia`
+    // ya los acumulaba, pero no los copiaba al `CajeroDay` — y ahí se perdían, antes de que
+    // `getDayStats` pudiera sumarlos. Era el ~9% que le faltaba al PAX del PoS en la Paridad.
+    const armado = armarDia('2026-08-29', [
+      ticket({ id: 'a', salonero_login: null, registrado_por: 'cajero', cajero_login: '222',
+               pax_articulo: 4, valor_servido_crc: 30000 }),
+    ], [], 'sello', NOMBRES)
+    const caja = Object.values(armado.dia.saloneros).find(v => 'esCajero' in v && v.esCajero)!
+    expect((caja as CajeroDay).pax).toBe(4)
+  })
+
+  it('INVARIANTE: el PAX del día == Σ del pax de TODOS los buckets, caja incluida', () => {
+    const armado = armarDia('2026-08-29', [
+      ticket({ id: 'a', pax_articulo: 2 }),
+      ticket({ id: 'b', pax_articulo: 3 }),
+      ticket({ id: 'c', salonero_login: null, registrado_por: 'cajero', cajero_login: '222',
+               pax_articulo: 4 }),
+    ], [], 'sello', NOMBRES)
+    const suma = Object.values(armado.dia.saloneros)
+      .reduce((s, v) => s + ('pax' in v ? v.pax ?? 0 : 0), 0)
+    expect(suma).toBe(9)
+    expect(getDayStats(armado.dia).pax).toBe(9)   // 5 de MAXO + 4 de la caja
   })
 
   it('INVARIANTE: Σ del IVA por salonero == el IVA a nivel DÍA', () => {

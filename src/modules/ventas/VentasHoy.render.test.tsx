@@ -17,7 +17,7 @@ vi.mock('../../shared/api/cash', () => ({
 
 import VentasHoy from './VentasHoy'
 import type { CajeroDay, DiasMap, Meta, SaloneroDay } from '../../shared/types/ventas'
-import { fi, getDayStats } from './ventasUtils'
+import { aggGeneral, fi, getDayStats } from './ventasUtils'
 
 const sal = (o: Partial<SaloneroDay>): SaloneroDay => ({
   pax: 0, total: 0, com: 0, beb: 0, iCom: 0, iBeb: 0, iva: 0, serv: 0,
@@ -77,5 +77,63 @@ describe('VentasHoy · tarjetas Comidas / Bebidas', () => {
     expect(texto()).toContain(`Ventas Salón${plano(fi(200_000))}`)
     // «no neta» no es decorativo: comida + bebida (₡200.000) < neta del día (₡305.000).
     expect(150_000 + 50_000).toBeLessThan(getDayStats(DIAS['2026-09-07']).ventaNeta)
+  })
+})
+
+// ── Micropase «coherencia C/B» ──────────────────────────────────────────────────────────────
+
+describe('VentasHoy · Ratio C/B (₡) en la misma base que las tarjetas', () => {
+  it('muestra el ratio por familia, no el 0.00:1 del ProductMap vacío', () => {
+    // `aggGeneral` sigue devolviendo 0 —no se tocó—, pero la pantalla ya no pinta ESE número.
+    expect(aggGeneral(['2026-09-07'], DIAS, {}).ratioCB).toBe(0)
+    render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
+    expect(texto()).toContain('Ratio C/B (₡)3.00:1')   // 150.000 ÷ 50.000
+    expect(texto()).not.toContain('Ratio C/B (₡)0.00:1')
+  })
+
+  it('el ratio cuadra con las tarjetas Comidas/Bebidas que ya estaban corregidas', () => {
+    render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
+    // Las dos tarjetas y el ratio salen del MISMO mix por familia: 150.000 / 50.000 = 3.00.
+    expect(texto()).toContain(`Comidas${plano(fi(150_000))}`)
+    expect(texto()).toContain(`Bebidas${plano(fi(50_000))}`)
+    expect(texto()).toContain('3.00:1')
+  })
+})
+
+describe('VentasHoy · el bloque «Restaurante» no se esconde', () => {
+  it('muestra «Venta Total Restaurante» aunque la caja se llame `Caja · 388`', () => {
+    // `Caja · 388` no está en `CAJEROS_IDS`: con la detección por nombre este bloque entero
+    // —y con él la NETA DEL DÍA— desaparecía de la pantalla.
+    render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
+    expect(texto()).toContain(`Venta Total Restaurante${plano(fi(305_000))}`)
+    expect(texto()).toContain(plano(fi(305_000)))
+  })
+
+  it('el bucket de caja aparece con su propio KPI, salón y delivery', () => {
+    render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
+    expect(texto()).toContain(`Caja · 388${plano(fi(105_000))}`)
+    expect(texto()).toContain(`S: ${plano(fi(65_000))} · D: ${plano(fi(40_000))}`)
+  })
+
+  it('sin ningún bucket de caja el bloque sigue sin aparecer', () => {
+    const soloMeseros: DiasMap = {
+      '2026-09-07': {
+        fileName: 'ndf', uploadedAt: '2026-09-08',
+        saloneros: { MAXO: sal({ pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25 }) },
+      },
+    }
+    render(<VentasHoy dias={soloMeseros} pm={{}} metas={METAS} />)
+    expect(texto()).not.toContain('Venta Total Restaurante')
+  })
+})
+
+describe('VentasHoy · el ranking no lista buckets de caja', () => {
+  it('`Caja · 388` no aparece como una fila de mesero en ₡0', () => {
+    render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
+    const t = texto()
+    const ranking = t.slice(t.indexOf('Ranking del día'), t.indexOf('Top Productos'))
+    expect(ranking).toContain('MAXO')
+    expect(ranking).not.toContain('Caja · 388')
+    expect(ranking).not.toContain(plano(fi(0)))
   })
 })

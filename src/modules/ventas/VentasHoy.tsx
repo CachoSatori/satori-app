@@ -5,7 +5,7 @@ import {
   aggGeneral, aggSalonero, aggCajero, getDayStats,
   fi, fmtDate, metaColor, getMeta,
   topProds, metaProgress, ratioCBClass,
-  allSaloneros, esCajero, mixPorFamilia,
+  allSaloneros, allCajeros, mixPorFamilia,
 } from './ventasUtils'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import { esPostCorte } from '../cash/cierrePozo'
@@ -46,9 +46,12 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
 
   const dia  = activeDate ? dias[activeDate] : null
   const sals = useMemo(() => dia ? allSaloneros({ [activeDate!]: dia }) : [], [dia, activeDate])
-  const cajs = useMemo(() => dia
-    ? Object.keys(dia.saloneros).filter(n => esCajero(n))
-    : [], [dia])
+  // Los buckets de caja del día, por la MARCA `esCajero` y no por el nombre de la clave.
+  // Con el filtro por nombre (`CAJEROS_IDS`, cinco nombres del .xls) un día cuya caja el PoS
+  // etiquetó `Caja · 388` daba `cajs` vacío → `hasCajeros` false → el bloque «Restaurante»
+  // NO se renderizaba, y con él desaparecía de la pantalla el KPI «Venta Total Restaurante»,
+  // que es la NETA DEL DÍA. El número siempre estuvo bien; lo que fallaba era mostrarlo.
+  const cajs = useMemo(() => allCajeros(dias, activeDate ? [activeDate] : []), [dias, activeDate])
 
   const gen = useMemo(() =>
     activeDate ? aggGeneral([activeDate], dias, pm) : null,
@@ -100,6 +103,12 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   const beb  = mixFam.beb
   const promPlato   = gen && gen.iCom > 0 ? com   / gen.iCom : 0
   const promBebida  = gen && gen.iBeb > 0 ? beb   / gen.iBeb : 0
+  // El Ratio C/B (₡) que se MUESTRA sale de la misma base que las tarjetas Comidas/Bebidas.
+  // `gen.ratioCB` lo calcula `aggGeneral` con la cuenta por `pm[nombre]?.tipo`, que en un día
+  // del PoS no matchea y deja com y beb en 0 → el ratio salía `0.00:1` al lado de dos tarjetas
+  // con plata. `aggGeneral` no se toca: la tabla por salonero usa `aggSalonero`, que YA suma
+  // por familia, y su ratio queda como está.
+  const ratioCB     = beb > 0 ? com / beb : 0
 
   // Special product categories for bottom section
   const cortProds = useMemo(() => gen ? topProds(gen.prods, 'monto', 8, ['cortesia'],    pm) : [], [gen, pm])
@@ -228,7 +237,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               `💰 Ventas: *${fi(gen.totalRest)}*`,
               gen.pax > 0 ? `👥 PAX: ${gen.pax}  •  Prom/PAX: *${fi(gen.promPax)}*` : '',
               gen.cajDelivery > 0 ? `🛵 Delivery: ${fi(gen.cajDelivery)}` : '',
-              `🍺 Beb/PAX: ${gen.bebPax.toFixed(2)}  •  Ratio C/B: ${gen.ratioCB.toFixed(1)}`,
+              `🍺 Beb/PAX: ${gen.bebPax.toFixed(2)}  •  Ratio C/B: ${ratioCB.toFixed(1)}`,
               topLines ? '━━━━━━━━━━━━━━━━━━━━\n' + topLines : '',
               '━━━━━━━━━━━━━━━━━━━━',
               '_Satori · Santa Teresa, CR_',
@@ -397,7 +406,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Ratio C/B (₡)</div>
-          <div className={`vt-kpi-val ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</div>
+          <div className={`vt-kpi-val ${ratioCBClass(ratioCB)}`}>{ratioCB.toFixed(2)}:1</div>
         </div>
         <div className="vt-kpi" title="₡ por familia del PoS (comida = 2·3·4·13·16·29). No es la neta del día: la caja no trae desglose comida/bebida.">
           <div className="vt-kpi-label">Comidas</div>

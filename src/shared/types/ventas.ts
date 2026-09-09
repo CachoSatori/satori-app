@@ -70,6 +70,16 @@ export interface ProductInfo {
   subclasificacion: string
   multiplicador:    number
   costo_unitario:   number  // costo de insumos por unidad vendida (food cost)
+  /**
+   * `true` si el `tipo` lo puso la FAMILIA del PoS y no una persona.
+   *
+   * Existe para CONGELAR `aggSalonero.iBebAdj`: ese cálculo aplica el `multiplicador` a los
+   * productos de tipo `bebida`, y antes de la fusión los del PoS no estaban en el mapa, así
+   * que nunca entraban. Sin esta marca, la fusión los activaría de golpe y movería
+   * `bebPax` / `promBebida` / `ratioU` / `promTicket` en los días del PoS. El multiplicador
+   * sigue aplicándose donde siempre se aplicó: los productos clasificados a mano.
+   */
+  tipoDeFamilia?:   boolean
 }
 
 export type ProductMap = Record<string, ProductInfo>

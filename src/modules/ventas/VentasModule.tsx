@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Suspense, lazy, Fragment } from 'reac
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getProductMap, getMetas, getComps } from '../../shared/api/ventas'
+import { fusionarProductMap } from './ventasUtils'
 import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
 // La fuente de las ventas (P2). `getVentasDias`/`getAllVentasDias`/`getVentasHist` siguen
 // existiendo y se llaman desde acá adentro: el Excel es el piso de la fusión, no se retiró.
@@ -122,9 +123,18 @@ export default function VentasModule() {
         getMetas(),
         getComps(),
       ])
-      setDias(d)
+      setDias(d.dias)
       setHist(h)
-      setPm(p)
+      // ── El ProductMap que ven las pantallas: curado + FAMILIA del PoS ─────────────────
+      // `d.pm` lo arma `armarDia` con la familia de cada línea (`FAMILIAS_NETO`), y hasta
+      // ahora se tiraba: las pantallas se quedaban con el `product_map` curado a mano, que no
+      // conoce los nombres del PoS, y el Mix mandaba esa plata a «MERCHANDISING / OTROS».
+      //
+      // La fusión es CONSERVADORA (ver `fusionarProductMap`): la familia solo rellena lo que
+      // no tiene un tipo válido puesto a mano. Un `cortesia`/`personal` curado no se pisa, así
+      // que `cortTotal`/`persTotal`, Menu Engineering y la Paridad no se mueven, y los días
+      // del .xls quedan idénticos.
+      setPm(fusionarProductMap(p, d.pm))
       setMetas(m)
       setComps(c)
       // La historia completa, en segundo plano: es lo que necesitan Análisis (año contra año),
@@ -132,8 +142,15 @@ export default function VentasModule() {
       // quedan vacías, porque el Excel cubre 2023-2025 entero.
       setCargandoFondo(true)
       cargarDeFondo(h)
-        .then(({ dias, hist }) => { setDiasFull(dias); setHist(hist) })
-        .catch(() => setDiasFull(d))
+        .then(({ dias, hist, pm }) => {
+          setDiasFull(dias)
+          setHist(hist)
+          // El rango completo ve más productos que los 90 días del eager: se vuelve a fusionar
+          // sobre el curado ORIGINAL (`p`), no sobre el ya fusionado, para que la regla se
+          // aplique una sola vez y el resultado no dependa del orden de llegada.
+          setPm(fusionarProductMap(p, pm))
+        })
+        .catch(() => setDiasFull(d.dias))
         .finally(() => setCargandoFondo(false))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error cargando datos')

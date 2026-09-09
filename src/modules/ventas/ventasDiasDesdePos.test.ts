@@ -67,7 +67,7 @@ const RANGO: RangoJornadas = { desde: '2026-09-04', hasta: '2026-09-05' }
 
 const armar = (
   tickets: TicketNdfConId[], lineas: LineaNdfRow[], rango: RangoJornadas,
-) => armarDiasMap(tickets, lineas, rango, { uploadedAt: SELLO, nombres: NOMBRES })
+) => armarDiasMap(tickets, lineas, rango, { uploadedAt: SELLO, nombres: NOMBRES }).dias
 
 // ── Un DiaData por jornada ─────────────────────────────────────────────────────────────────
 

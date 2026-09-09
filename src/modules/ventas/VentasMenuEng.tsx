@@ -15,7 +15,13 @@
 import { useState, useMemo } from 'react'
 import type { DiasMap, ProductMap, HistMap } from '../../shared/types/ventas'
 import { availableMonths, availableYears, fi } from './ventasUtils'
-import { isCajeroName } from '../../shared/utils'
+import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
+
+// ── Qué cuenta como DELIVERY acá ───────────────────────────────────────────────────────────
+// Las DOS cajas de turno, no la marca `esCajero`: «Salón sin mesero» también la lleva y su
+// plata es de SALÓN por definición (`canal = 'salon'`).
+const esCajaDeTurno = (clave: string): boolean =>
+  (CLAVES_CAJERO_TURNO as readonly string[]).includes(clave)
 
 interface MenuEngItem {
   nombre:     string
@@ -78,7 +84,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
       const dia = dias[date]
       if (!dia) continue
       for (const [salName, s] of Object.entries(dia.saloneros)) {
-        const isCaj = isCajeroName(salName)
+        const isCaj = esCajaDeTurno(salName)
         if (canal === 'salon'    && isCaj)  continue
         if (canal === 'delivery' && !isCaj) continue
         const prods = (s as { prods?: [string, number, number][] }).prods ?? []

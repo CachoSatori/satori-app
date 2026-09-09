@@ -34,7 +34,7 @@
 // tiene una sola policy de escritura) ni en `ventas_dias`/`ventas_hist`.
 
 import { getAllVentasDias, getVentasDias, getVentasHist } from '../../shared/api/ventas'
-import type { DiasMap, HistMap } from '../../shared/types/ventas'
+import type { DiasMap, HistMap, ProductMap } from '../../shared/types/ventas'
 import {
   aHistMap, getDiasMapDesdePos, LOCAL_POR_DEFECTO, type RangoJornadas,
 } from './ventasDiasDesdePos'
@@ -164,10 +164,11 @@ export async function cargarDiasEager(
   fuente: FuenteVentas = FUENTE_VENTAS,
   local: string = LOCAL_POR_DEFECTO,
   ahora: Date = new Date(),
-): Promise<DiasMap> {
+): Promise<CargaDias> {
   const xls = await getVentasDias(DIAS_EAGER)
-  if (fuente === 'xls') return xls
-  return fusionarDias(xls, await getDiasMapDesdePos(rangoPos(DIAS_EAGER, ahora), local))
+  if (fuente === 'xls') return { dias: xls, pm: {} }
+  const pos = await getDiasMapDesdePos(rangoPos(DIAS_EAGER, ahora), local)
+  return { dias: fusionarDias(xls, pos.dias), pm: pos.pm }
 }
 
 /**
@@ -186,9 +187,19 @@ export async function cargarHistEager(): Promise<HistMap> {
   return getVentasHist()
 }
 
-/** Lo que llega en segundo plano: la historia completa, ya fusionada. */
-export interface CargaDeFondo {
+/**
+ * Los días fusionados + el `ProductMap` por FAMILIA que viene del PoS.
+ *
+ * `pm` va vacío con `FUENTE_VENTAS = 'xls'`: sin PoS no hay familias que leer, y el camino
+ * viejo tiene que quedar EXACTAMENTE como estaba.
+ */
+export interface CargaDias {
   dias: DiasMap
+  pm:   ProductMap
+}
+
+/** Lo que llega en segundo plano: la historia completa, ya fusionada. */
+export interface CargaDeFondo extends CargaDias {
   hist: HistMap
 }
 
@@ -208,13 +219,14 @@ export async function cargarDeFondo(
   ahora: Date = new Date(),
 ): Promise<CargaDeFondo> {
   const diasXls = await getAllVentasDias()
-  if (fuente === 'xls') return { dias: diasXls, hist: histXls }
+  if (fuente === 'xls') return { dias: diasXls, hist: histXls, pm: {} }
 
   // UNA lectura del PoS para las dos salidas. `aHistMap` es un re-shape puro del mismo día:
   // pedir `getHistDesdePos` aparte volvería a agregar los mismos tickets y líneas.
   const pos = await getDiasMapDesdePos(rangoPos('todo', ahora), local)
   return {
-    dias: fusionarDias(diasXls, pos),
-    hist: fusionarHist(histXls, aHistMap(pos)),
+    dias: fusionarDias(diasXls, pos.dias),
+    hist: fusionarHist(histXls, aHistMap(pos.dias)),
+    pm:   pos.pm,
   }
 }

@@ -8,7 +8,7 @@
 import { useState, useMemo, useCallback, type ReactElement } from 'react'
 import type { DiasMap, ProductMap, HistMap } from '../../shared/types/ventas'
 import { availableMonths, availableYears, fi } from './ventasUtils'
-import { isCajeroName } from '../../shared/utils'
+import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
 
 // ── Types ─────────────────────────────────────────────────────────
 interface PMItem {
@@ -42,6 +42,15 @@ const SECTIONS: Section[] = [
   { label: 'COMENSALES / A PAX',    color: '#666',    filterFn: p => p.tipo === 'comensales' },
 ]
 
+// ── Qué cuenta como DELIVERY en el Mix ─────────────────────────────────────────────────────
+//
+// Las DOS cajas de turno, y nada más. El criterio no es la marca `esCajero`: desde el pase de
+// cajeros por turno, «Salón sin mesero» TAMBIÉN la lleva, y su plata es de SALÓN por
+// definición (`canal = 'salon'`) — mandarla a delivery sería inventar reparto. Las claves de
+// turno, en cambio, son `canal <> 'salon'` por construcción.
+const esCajaDeTurno = (clave: string): boolean =>
+  (CLAVES_CAJERO_TURNO as readonly string[]).includes(clave)
+
 // ── Helpers ───────────────────────────────────────────────────────
 function getMonto(p: PMItem | { monto: number; salon: number; delivery: number }, canal: 'todos'|'salon'|'delivery'): number {
   if (canal === 'salon')    return (p as PMItem).salon
@@ -64,7 +73,7 @@ function buildPMRaw(dates: string[], dias: DiasMap, pm: ProductMap, canal: 'todo
     const dia = dias[date]
     if (!dia) continue
     for (const [salName, s] of Object.entries(dia.saloneros)) {
-      const isCaj = isCajeroName(salName)
+      const isCaj = esCajaDeTurno(salName)
       if (canal === 'salon'    && isCaj)  continue
       if (canal === 'delivery' && !isCaj) continue
       const prods = (s as { prods?: [string, number, number][] }).prods ?? []

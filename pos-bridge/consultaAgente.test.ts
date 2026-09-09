@@ -7,6 +7,7 @@ import {
   mapAbierta,
   puedeLeerAbiertas,
   sqlAbiertas,
+  ESTADO_PEDIDO_ABIERTO,
   type FilaAbierta,
 } from './consultaAgente.ts'
 import { sqlDetalle, sqlFacturas, type FilaDetalle, type FilaFactura, type Queryable } from './consulta.ts'
@@ -21,7 +22,7 @@ const COLUMNAS = {
     'MontoElectronico', 'Deposito', 'Cheque', 'CuentaCobrar', 'DolaresEfectivo',
     'DolaresTarjeta', 'Vuelto', 'FechaCierra',
   ],
-  fac_pedidos:         ['NumeroFactura', 'UsuarioRegistra', 'Personas', 'Tipo', 'Area', 'NumeroPedido', 'Mesa', 'FechaRegistra'],
+  fac_pedidos:         ['NumeroFactura', 'UsuarioRegistra', 'Personas', 'Tipo', 'Area', 'NumeroPedido', 'Mesa', 'FechaRegistra', 'Estado'],
   fac_facturasdet:     ['NumeroFactura', 'CodigoProducto', 'Cantidad', 'Monto', 'ImpS'],
   fac_productos:       ['Codigo', 'Nombre', 'Clasificacion'],
   fac_clasificaciones: ['Codigo', 'Nombre'],
@@ -63,6 +64,24 @@ describe('SQL incremental', () => {
     expect(abiertas).toContain('CONVERT(datetime, @desde, 120)')
   })
 
+  it('«abierta» la define Estado = R, no la ausencia de factura', () => {
+    // El candado del bug de las mesas fantasma. `NumeroFactura IS NULL` agarra los pedidos
+    // facturados y anulados cuyo back-link nunca se escribió (~7%); el Estado no.
+    expect(abiertas).toContain("[Estado] = 'R'")
+    expect(ESTADO_PEDIDO_ABIERTO).toBe('R')
+  })
+
+  it('es WHITELIST, no blacklist: nunca `NOT IN`', () => {
+    // Una blacklist mostraría cualquier código nuevo del PoS como actividad viva.
+    expect(abiertas).not.toContain('NOT IN')
+    expect(abiertas).not.toMatch(/Estado\]\s*(<>|!=)/)
+  })
+
+  it('el filtro de Estado NO se cuela en las CERRADAS (esas ya filtran por su propio C)', () => {
+    expect(cerradas).toContain("= 'C'")
+    expect(cerradas).not.toContain("= 'R'")
+  })
+
   it('el número de pedido sale como varchar (también es decimal)', () => {
     expect(abiertas).toContain('CAST(p.[NumeroPedido] AS varchar(40))')
     expect(cerradas).toContain('MIN(CAST(p.[NumeroPedido] AS varchar(40)))')
@@ -75,6 +94,28 @@ describe('SQL incremental', () => {
     })))
     expect(puedeLeerAbiertas(sinPedidoId)).toBe(false)
     expect(puedeLeerAbiertas(ESQUEMA)).toBe(true)
+  })
+
+  it('FAIL-CLOSED: sin la columna Estado tampoco se manda el snapshot', () => {
+    // La instalación tiene TODO menos `Estado`. Antes habría emitido la consulta vieja y
+    // pintado pedidos cerrados como abiertos; ahora simplemente no reporta abiertas.
+    const sinEstado = resolverEsquema(new Map(Object.entries({
+      ...COLUMNAS,
+      fac_pedidos: ['NumeroFactura', 'UsuarioRegistra', 'Personas', 'Tipo', 'Area',
+                    'NumeroPedido', 'Mesa', 'FechaRegistra'],
+    })))
+    expect(puedeLeerAbiertas(sinEstado)).toBe(false)
+  })
+
+  it('sin la columna Estado, sqlAbiertas EXPLOTA en vez de emitir la consulta vieja', () => {
+    // El candado estructural: aunque alguien saltee `puedeLeerAbiertas`, no hay forma de
+    // llegar al SQL sin el filtro. Fallar ruidoso, nunca volver al bug en silencio.
+    const sinEstado = resolverEsquema(new Map(Object.entries({
+      ...COLUMNAS,
+      fac_pedidos: ['NumeroFactura', 'UsuarioRegistra', 'Personas', 'Tipo', 'Area',
+                    'NumeroPedido', 'Mesa', 'FechaRegistra'],
+    })))
+    expect(() => sqlAbiertas(sinEstado)).toThrow(/pedidos\.estado/)
   })
 })
 
@@ -343,6 +384,22 @@ describe('leerAbiertas', () => {
     const r = await leerAbiertas(qy, ESQUEMA, { desde: 'a', hasta: 'b' })
     expect(r).toHaveLength(1)
     expect(r[0].clave).toBe('pedido:4477')
+  })
+
+  it('la consulta que SALE lleva la whitelist de Estado', async () => {
+    // El filtro vive en el SQL, así que un fake no puede "filtrar" filas: lo que se prueba es
+    // que la consulta emitida contra el PoS trae la condición. Un pedido F o X nunca llega a
+    // `mapAbierta` porque la base no lo devuelve.
+    const visto: string[] = []
+    const qy: Queryable = {
+      async query<T>(sql: string): Promise<{ rows: T[] }> {
+        visto.push(sql)
+        return { rows: [] as T[] }
+      },
+    }
+    await leerAbiertas(qy, ESQUEMA, { desde: 'a', hasta: 'b' })
+    expect(visto).toHaveLength(1)
+    expect(visto[0]).toContain("[Estado] = 'R'")
   })
 
   it('sin mesas abiertas devuelve [] (que el Edge lee como "cerrá todas")', async () => {

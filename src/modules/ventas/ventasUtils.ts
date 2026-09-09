@@ -118,6 +118,73 @@ export function allCajeros(dias: DiasMap, dates?: string[]): string[] {
   return [...names].sort()
 }
 
+// ── El ProductMap: vocabulario y fusión curado × familia ───────────────────────────────────
+
+/**
+ * Los `tipo` que la app entiende. Es el vocabulario del selector de Config
+ * (`VentasConfig.tsx`), y el mismo que leen `VentasMix` (sus secciones), `aggGeneral`
+ * (`cortesia`/`personal`) y `topProds`.
+ *
+ * `desconocido` está en la lista porque es el valor que la pantalla ofrece, pero significa
+ * «todavía nadie lo clasificó» — por eso NO cuenta como curado en `esTipoCurado`.
+ */
+export const TIPOS_PRODUCTO = [
+  'comida', 'bebida', 'cortesia', 'personal',
+  'nofood', 'comensales', 'merchandising', 'desconocido',
+] as const
+
+/**
+ * ¿Este `tipo` es una clasificación que alguien puso a mano y hay que respetar?
+ *
+ * Dice que NO para tres casos, que son justo los que la familia puede rellenar sin pisar a
+ * nadie: vacío, `desconocido`, y **cualquier valor fuera del vocabulario**. Ese tercer caso no
+ * es teórico: `scripts/import-carta.py:62` escribió en `tipo` la CATEGORÍA del CSV
+ * (`SUSHI ROLLS`, `BEBIDAS`, `X CORTESIAS`, `GREENSEASON`…), que ninguna pantalla sabe leer —
+ * esos productos hoy caen en «MERCHANDISING / OTROS» del Mix aunque estén cargados.
+ */
+export function esTipoCurado(tipo: string | null | undefined): boolean {
+  const t = (tipo ?? '').trim().toLowerCase()
+  return t !== '' && t !== 'desconocido'
+    && (TIPOS_PRODUCTO as readonly string[]).includes(t)
+}
+
+/**
+ * El `ProductMap` curado + el que deriva de la FAMILIA del PoS, fusionados CAMPO POR CAMPO.
+ *
+ * ── La regla (firmada, versión conservadora) ─────────────────────────────────────────────
+ *   · `tipo` y `clasificacion`: gana la familia **solo si el curado no tiene un tipo válido**.
+ *     Un `cortesia` / `personal` / `merchandising` puesto a mano NUNCA se pisa — que es lo que
+ *     garantiza que `aggGeneral.cortTotal`/`persTotal`, Menu Engineering y la Paridad no se
+ *     muevan ni un colón, y que los días del .xls queden idénticos.
+ *   · `multiplicador` y `costo_unitario`: gana SIEMPRE el curado. La familia no los sabe
+ *     (los deja en 1 y 0) y los usan Menu Engineering y el ICP.
+ *   · Producto solo en el curado (típico del .xls): queda tal cual.
+ *   · Producto solo en el PoS: entra con lo que dice su familia.
+ *
+ * La familia solo conoce productos de `FAMILIAS_NETO`, así que cortesías (17), personal (6),
+ * merch, gift, pax y extras no están en `familia` y no pueden ser pisados por esta vía.
+ */
+export function fusionarProductMap(curado: ProductMap, familia: ProductMap): ProductMap {
+  const out: ProductMap = { ...curado }
+  for (const [nombre, fam] of Object.entries(familia)) {
+    const cur = curado[nombre]
+    if (!cur) { out[nombre] = fam; continue }
+    const respetar = esTipoCurado(cur.tipo)
+    out[nombre] = {
+      tipo:             respetar ? cur.tipo          : fam.tipo,
+      clasificacion:    respetar ? cur.clasificacion : fam.clasificacion,
+      // Quién puso el tipo. Lo lee `aggSalonero` para no activar el multiplicador de bebida
+      // en productos que nadie clasificó a mano — ver `ProductInfo.tipoDeFamilia`.
+      tipoDeFamilia:    !respetar,
+      // La subclasificación es del curado: la familia no la conoce (la deja en '').
+      subclasificacion: cur.subclasificacion || fam.subclasificacion,
+      multiplicador:    cur.multiplicador  || fam.multiplicador,
+      costo_unitario:   cur.costo_unitario || fam.costo_unitario,
+    }
+  }
+  return out
+}
+
 /** ₡ y unidades de comida / bebida, clasificadas por familia. */
 export interface MixFamilia {
   com:  number
@@ -231,10 +298,15 @@ export function aggSalonero(name: string, dates: string[], dias: DiasMap, pm: Pr
     }
   }
 
+  // El `multiplicador` (una botella que cuenta como 6 tragos) se aplica SOLO a los productos
+  // cuyo tipo puso una persona. Los que se clasificaron por FAMILIA del PoS quedan afuera a
+  // propósito: antes de la fusión no estaban en el mapa y nunca entraban a esta cuenta, así
+  // que contarlos ahora movería `bebPax`, `promBebida`, `ratioU` y `promTicket` de los días
+  // del PoS. Los días del .xls no se enteran: ahí el tipo siempre fue curado.
   const mult = (n: string) => pm[n]?.multiplicador ?? 1
   const iBebAdj = Object.entries(prods).reduce((acc, [n, v]) => {
     const info = pm[n]
-    if (info?.tipo === 'bebida') acc += v.q * mult(n)
+    if (info?.tipo === 'bebida' && !info.tipoDeFamilia) acc += v.q * mult(n)
     return acc
   }, 0) || iBeb
 

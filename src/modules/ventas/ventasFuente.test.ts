@@ -134,9 +134,9 @@ describe('cargarDiasEager / cargarDiasFull / cargarHist', () => {
 
   it('el eager fusiona el Excel con el PoS', async () => {
     api.getVentasDias.mockResolvedValue({ '2023-06-15': dia('xls'), '2026-09-07': dia('xls') })
-    pos.getDiasMapDesdePos.mockResolvedValue({ '2026-09-07': dia('pos') })
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2026-09-07': dia('pos') }, pm: {} })
 
-    const r = await cargarDiasEager('pos', 'santa-teresa', AHORA)
+    const { dias: r } = await cargarDiasEager('pos', 'santa-teresa', AHORA)
 
     expect(r['2023-06-15'].fileName).toBe('xls')
     expect(r['2026-09-07'].fileName).toBe('pos')
@@ -145,7 +145,7 @@ describe('cargarDiasEager / cargarDiasFull / cargarHist', () => {
 
   it('el fondo pide el rango entero del PoS y fusiona igual', async () => {
     api.getAllVentasDias.mockResolvedValue({ '2023-01-01': dia('xls') })
-    pos.getDiasMapDesdePos.mockResolvedValue({ '2024-05-05': dia('pos') })
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2024-05-05': dia('pos') }, pm: {} })
 
     const { dias } = await cargarDeFondo({}, 'pos', 'santa-teresa', AHORA)
 
@@ -165,7 +165,7 @@ describe('cargarDiasEager / cargarDiasFull / cargarHist', () => {
 
   it('el fondo superpone el HistMap del PoS sobre el del Excel', async () => {
     api.getAllVentasDias.mockResolvedValue({})
-    pos.getDiasMapDesdePos.mockResolvedValue({ '2024-06-15': dia('pos') })
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2024-06-15': dia('pos') }, pm: {} })
     pos.aHistMap.mockReturnValue({ '2024-06-15': hd(99) })
 
     const { hist } = await cargarDeFondo({ '2023-06-15': hd(1), '2024-06-15': hd(2) },
@@ -179,7 +179,7 @@ describe('cargarDiasEager / cargarDiasFull / cargarHist', () => {
     // Antes se pedía el rango completo dos veces —una para el DiasMap y otra para el
     // HistMap—, agregando los mismos tickets y líneas dos veces. Es la mitad del trabajo.
     api.getAllVentasDias.mockResolvedValue({})
-    pos.getDiasMapDesdePos.mockResolvedValue({ '2024-06-15': dia('pos') })
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2024-06-15': dia('pos') }, pm: {} })
     pos.aHistMap.mockReturnValue({})
 
     await cargarDeFondo({}, 'pos', 'santa-teresa', AHORA)
@@ -198,7 +198,7 @@ describe("FUENTE_VENTAS = 'xls' — el camino viejo, intacto", () => {
     api.getVentasHist.mockResolvedValue({ '2026-09-07': hd(1) })
 
     const histXls = { '2026-09-07': hd(1) }
-    expect(await cargarDiasEager('xls', 'santa-teresa', AHORA)).toBe(soloXls)
+    expect((await cargarDiasEager('xls', 'santa-teresa', AHORA)).dias).toBe(soloXls)
     expect((await cargarHistEager())['2026-09-07'].ventaNeta).toBe(1)
     const fondo = await cargarDeFondo(histXls, 'xls', 'santa-teresa', AHORA)
     expect(fondo.dias).toBe(soloXls)
@@ -218,9 +218,9 @@ describe('el eager y el full no se pelean', () => {
 
     api.getVentasDias.mockResolvedValue({ '2026-09-07': dia('xls', 999) })
     api.getAllVentasDias.mockResolvedValue({ '2023-01-01': dia('xls'), '2026-09-07': dia('xls', 999) })
-    pos.getDiasMapDesdePos.mockResolvedValue(delPos)
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: delPos, pm: {} })
 
-    const eager = await cargarDiasEager('pos', 'santa-teresa', AHORA)
+    const eager = (await cargarDiasEager('pos', 'santa-teresa', AHORA)).dias
     const full  = (await cargarDeFondo({}, 'pos', 'santa-teresa', AHORA)).dias
 
     // Si el eager y el full usaran fusiones distintas, «Hoy» y «Análisis» mostrarían números

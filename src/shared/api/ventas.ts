@@ -137,10 +137,15 @@ export async function saveProductMapItems(
 }
 
 export async function updateProductInfo(nombre: string, info: Partial<ProductInfo>): Promise<void> {
+  // `tipoDeFamilia` es una marca de RUNTIME (quién puso el tipo: la familia del PoS o una
+  // persona). No es una columna de `product_map` y no se persiste — se descarta acá para que
+  // no viaje nunca al upsert.
+  const persistible: Record<string, unknown> = { ...info }
+  delete persistible.tipoDeFamilia
   const { error } = await supabase
     .from('product_map')
     .upsert(
-      { nombre, ...info, updated_at: new Date().toISOString() },
+      { nombre, ...persistible, updated_at: new Date().toISOString() },
       { onConflict: 'nombre' },
     )
   if (error) throw new Error(error.message)

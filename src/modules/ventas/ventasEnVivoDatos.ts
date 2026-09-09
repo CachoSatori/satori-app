@@ -210,6 +210,10 @@ export function armarDia(
         pm[nombre] = {
           tipo: esBebida ? 'bebida' : 'comida',
           clasificacion: cat, subclasificacion: '', multiplicador: 1, costo_unitario: 0,
+          // Todo lo de acá sale de la familia, no de una persona. Es un no-op para «En vivo»
+          // (su multiplicador es 1, así que la cuenta da lo mismo por los dos caminos) pero
+          // deja la marca coherente en el único lugar que la produce.
+          tipoDeFamilia: true,
         }
       }
     }

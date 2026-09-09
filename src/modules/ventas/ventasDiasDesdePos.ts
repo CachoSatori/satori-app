@@ -16,7 +16,7 @@
 import { getLineasDeTickets, getSaloneroNombres, getTicketsRango,
          type LineaNdfRow, type TicketNdfConId } from '../../shared/api/posNdf'
 import { agruparEnLotes } from '../../shared/ndf/jornada'
-import type { DiaData, DiasMap, HistDay, HistMap } from '../../shared/types/ventas'
+import type { DiaData, DiasMap, HistDay, HistMap, ProductMap } from '../../shared/types/ventas'
 import { armarDia } from './ventasEnVivoDatos'
 import { getDayStats } from './ventasUtils'
 
@@ -27,6 +27,20 @@ export interface RangoJornadas {
 }
 
 export const LOCAL_POR_DEFECTO = 'santa-teresa'
+
+/**
+ * Los días del PoS + el `ProductMap` que sale de la FAMILIA de cada línea.
+ *
+ * El `pm` viaja junto a los días porque `armarDia` YA lo construye mientras recorre las
+ * líneas (`ventasEnVivoDatos.ts:207-212`) — antes se descartaba acá y las pantallas se
+ * quedaban con el `product_map` curado a mano, que no conoce los nombres del PoS. Es la
+ * clasificación que hace correcto al mix de «En vivo»; ahora también llega a las demás.
+ */
+export interface DiasDesdePos {
+  dias: DiasMap
+  /** Solo productos de `FAMILIAS_NETO`: comida y bebida. Merch, cortesías y pax no están. */
+  pm:   ProductMap
+}
 
 /** `'2026-09-04' <= f <= '2026-09-06'`. Comparación de strings: `YYYY-MM-DD` ordena solo. */
 function dentro(fecha: string | null, r: RangoJornadas): fecha is string {
@@ -46,7 +60,7 @@ export function armarDiasMap(
   lineas: LineaNdfRow[],
   rango: RangoJornadas,
   opciones: { uploadedAt: string; nombres?: Record<string, string> },
-): DiasMap {
+): DiasDesdePos {
   // 1. Cada lote de cierre aporta su jornada; los tickets del lote la heredan enteros.
   const porJornada = new Map<string, TicketNdfConId[]>()
   for (const lote of agruparEnLotes(tickets)) {
@@ -64,13 +78,18 @@ export function armarDiasMap(
     else lineasPorTicket.set(l.ticket_id, [l])
   }
 
-  // 3. Un `DiaData` por jornada, con el MISMO armador que «En vivo».
+  // 3. Un `DiaData` por jornada, con el MISMO armador que «En vivo». El `pm` por familia que
+  //    ese armador ya calcula se acumula en vez de tirarse: un producto vale lo mismo en
+  //    cualquier jornada, así que el primer día que lo vea define su tipo.
   const dias: DiasMap = {}
+  const pm: ProductMap = {}
   for (const [jornada, delDia] of [...porJornada.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const suyas = delDia.flatMap(t => lineasPorTicket.get(t.id) ?? [])
-    dias[jornada] = armarDia(jornada, delDia, suyas, opciones.uploadedAt, opciones.nombres ?? {}).dia
+    const armado = armarDia(jornada, delDia, suyas, opciones.uploadedAt, opciones.nombres ?? {})
+    dias[jornada] = armado.dia
+    for (const [nombre, info] of Object.entries(armado.pm)) if (!pm[nombre]) pm[nombre] = info
   }
-  return dias
+  return { dias, pm }
 }
 
 /**
@@ -83,9 +102,9 @@ export function armarDiasMap(
 export async function getDiasMapDesdePos(
   rango: RangoJornadas,
   local: string = LOCAL_POR_DEFECTO,
-): Promise<DiasMap> {
+): Promise<DiasDesdePos> {
   const tickets = await getTicketsRango(local, rango)
-  if (tickets.length === 0) return {}
+  if (tickets.length === 0) return { dias: {}, pm: {} }
 
   const lineas  = await getLineasDeTickets(tickets.map(t => t.id))
   const nombres = await getSaloneroNombres()
@@ -155,5 +174,5 @@ export async function getHistDesdePos(
   rango: RangoJornadas,
   local: string = LOCAL_POR_DEFECTO,
 ): Promise<HistMap> {
-  return aHistMap(await getDiasMapDesdePos(rango, local))
+  return aHistMap((await getDiasMapDesdePos(rango, local)).dias)
 }

@@ -109,7 +109,9 @@ export default function VentasParidad() {
         getDiasMapDesdePos({ desde, hasta }),
         getProductMap(),
       ])
-      setCorrida({ desde, hasta, xls: enRango(todosXls, desde, hasta), pos: delPos, pm: mapa })
+      // La Paridad compara el .xls contra el PoS CRUDO: usa el `pm` curado tal cual, sin
+      // fusionar, porque su trabajo es justamente medir la diferencia entre las dos fuentes.
+      setCorrida({ desde, hasta, xls: enRango(todosXls, desde, hasta), pos: delPos.dias, pm: mapa })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

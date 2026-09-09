@@ -14,20 +14,13 @@ El bridge define mesa abierta como `FAC_Pedidos.NumeroFactura IS NULL` (`pos-bri
 `sqlAbiertas`), **sin ninguna condición de estado**. Las CERRADAS sí usan whitelist (`Estado='C'` en
 `FAC_Facturas`). La señal real de abierto/cerrado es **`FAC_Pedidos.Estado`**.
 
-### Encuadre correcto (corrige la v1 de este doc)
-La v1 decía "este PoS no escribe el back-link". **Falso como generalización.** El back-link se escribe
-el **93%** de las veces:
-
-| Medida | Filas |
-|---|---|
-| FAC_Pedidos total (F+X+R) | 24.201 |
-| NumeroFactura IS NULL | 1.780 |
-| Con back-link escrito | 22.421 (93%) |
-
-El fantasma es la **minoría** que nunca recibe el back-link: de los 1.780 con NumeroFactura NULL →
-**1.101 `X` (anuladas, correctamente sin factura), 647 `F` (facturadas pero sin back-link — la anomalía),
-30 `R`**. El bridge los toma a todos por "abiertos" cuando caen en la ventana de fecha. La conclusión no
-cambia (whitelist por Estado), pero el encuadre importa para el resto.
+### Encuadre correcto
+El back-link `FAC_Pedidos.NumeroFactura` se escribe en la gran mayoría de los pedidos: de ~24.200,
+solo 1.780 lo tienen en NULL (≈7%). No es que el PoS "no reescriba el back-link" — es que una
+MINORÍA no lo recibe, y esa minoría es el fantasma: 647 `F` (facturadas, back-link ausente = la
+anomalía) + 1.101 `X` (anuladas, correctamente sin factura) + 30 `R`. La conclusión no cambia
+(whitelist por `Estado`), pero el encuadre sí. (Nota: 1.780 por conteo directo / 1.778 por desglose
+de Estado = número vivo que drifta entre queries; ninguno es canónico y el fix no depende de él.)
 
 ## Evidencia (DBeaver, 2026-09-09)
 - Los 3 pedidos: **22 → `X`**, **23 → `F`** (UltimaAccion 21:40), **24 → `X`** + `PedidoTrasladado=21`.

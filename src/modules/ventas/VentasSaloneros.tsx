@@ -8,6 +8,7 @@ function addDays(date: string, n: number): string {
 import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
   aggSalonero, aggCajero, aggGeneral, allSaloneros,
+  mixPorFamilia,
   fi, fmtDate, metaColor, getMeta, ratioCBClass,
   topProds, datesInRange, allDates,
 } from './ventasUtils'
@@ -49,6 +50,19 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
   }, [dates, preset, from, to])
 
   const gen = useMemo(() => aggGeneral(rangeDates, dias, pm), [rangeDates, dias, pm])
+
+  // ── El Ratio C/B (₡) GENERAL, por familia ──────────────────────────────────────────────
+  // `gen.ratioCB` lo calcula `aggGeneral` con la cuenta por `pm[nombre]?.tipo`
+  // (`ventasUtils.ts:304-305,321`), el mismo `ProductMap` curado a mano que en un día del PoS
+  // no matchea: com y beb quedan en 0 y el ratio sale `0.00:1` — al lado de una tabla cuyas
+  // filas SÍ tienen valor, porque `aggSalonero` acumula `com`/`beb` desde `SaloneroDay`, que
+  // ya viene partido por familia. Era la misma incoherencia que #6 arregló en «Hoy».
+  //
+  // Acá se deriva de `mixPorFamilia`, la MISMA fuente que usan las filas de abajo, así que el
+  // general y el por-salonero por fin hablan el mismo idioma. `aggGeneral` NO se toca: lo
+  // consumen otras pantallas con días del .xls, donde la cuenta por `ProductMap` sí matchea.
+  const mixFam  = useMemo(() => mixPorFamilia(dias, rangeDates), [dias, rangeDates])
+  const ratioCB = mixFam.beb > 0 ? mixFam.com / mixFam.beb : 0
   const [viewMode, setViewMode] = useState<'cards' | 'tabla'>('cards')
   const [sortCol,  setSortCol]  = useState<string>('promPax')
 
@@ -129,7 +143,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Ratio C/B</div>
-          <div className={`vt-kpi-val ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</div>
+          <div className={`vt-kpi-val ${ratioCBClass(ratioCB)}`}>{ratioCB.toFixed(2)}:1</div>
         </div>
       </div>
 
@@ -237,7 +251,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                 <td className="r vt-bold">{fi(gen.promPax)}</td>
                 <td className="r" style={{ fontSize:'0.75rem' }}>{fi(gen.promTicket)}</td>
                 <td className="r">{gen.bebPax.toFixed(2)}</td>
-                <td className={`r ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</td>
+                <td className={`r ${ratioCBClass(ratioCB)}`}>{ratioCB.toFixed(2)}:1</td>
                 <td colSpan={2}/>
               </tr>
             </tfoot>

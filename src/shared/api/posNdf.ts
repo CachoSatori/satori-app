@@ -362,3 +362,67 @@ export async function getSaloneroNombres(): Promise<Record<string, string>> {
   }
   return out
 }
+
+// ── Frescura del feed: ¿el agente sigue vivo? ──────────────────────────────────────────────
+
+/**
+ * Cuándo fue el último poll del agente contra el PoS (`pos_ndf_cursor.last_poll_at`).
+ *
+ * ⚠️ ES EL ÚNICO LATIDO QUE HAY. `pos_ndf_open.updated_at` NO sirve para esto: pese al nombre,
+ * no es la frescura del snapshot sino la hora en que se ABRIÓ el pedido (el agente lo copia de
+ * `FAC_Pedidos.FechaRegistra`, ver `pos-bridge/consultaAgente.ts`). El upsert lo reescribe en
+ * cada poll, pero siempre con el MISMO valor, así que mirarlo no dice nada sobre si el agente
+ * respira.
+ *
+ * Sin este dato «En vivo» puede mentir en silencio: si el agente se cae, `pos_ndf_open` conserva
+ * el último snapshot para siempre y las mesas fantasma se siguen pintando como si fueran de ahora.
+ *
+ * `null` = todavía no hay fila de cursor para el local (el agente nunca corrió acá).
+ */
+export async function getUltimoPollPoS(local: string): Promise<string | null> {
+  const { data, error } = await sb
+    .from('pos_ndf_cursor')
+    .select('last_poll_at')
+    .eq('local', local)
+    .maybeSingle()
+  if (error) throw new Error(error.message)
+  return ((data ?? null) as { last_poll_at: string | null } | null)?.last_poll_at ?? null
+}
+
+// ── La llave de exclusión Hoy ↔ En vivo ────────────────────────────────────────────────────
+
+/**
+ * Los `numero_pedido` de las facturas YA CERRADAS de la jornada.
+ *
+ * Es la llave que evita el doble conteo: `pos_ndf_open.id_pedido` y
+ * `pos_ndf_tickets.numero_pedido` salen los dos del mismo `FAC_Pedidos.NumeroPedido`, así que
+ * una mesa que ya se cobró se reconoce por ahí y se saca del panel de abiertas.
+ *
+ * Hace falta porque el snapshot de abiertas no se limpia al instante: la Edge borra las claves
+ * que no vinieron en el lote, y entre poll y poll pasan ~75 s. En esa ventana la misma mesa está
+ * en las dos tablas.
+ *
+ * Va en su PROPIA consulta angosta en vez de sumar la columna a `COLS_TICKET`: ese SELECT lo
+ * comparten las pestañas que leen meses de historia, y este campo solo lo necesita «En vivo».
+ * Menos payload y, sobre todo, el camino de la plata no se toca.
+ */
+export async function getPedidosCerradosJornada(
+  local: string,
+  businessDate: string,
+): Promise<Set<string>> {
+  const { desde, hasta } = ventanaJornada(businessDate)
+  const { data, error } = await sb
+    .from('pos_ndf_tickets')
+    .select('numero_pedido')
+    .eq('local', local)
+    .not('numero_pedido', 'is', null)
+    .gte('fecha_registra', desde)
+    .lt('fecha_registra', hasta)
+  if (error) throw new Error(error.message)
+  const out = new Set<string>()
+  for (const r of (data ?? []) as unknown as { numero_pedido: string | null }[]) {
+    const v = (r.numero_pedido ?? '').trim()
+    if (v !== '') out.add(v)
+  }
+  return out
+}

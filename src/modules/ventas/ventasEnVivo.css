@@ -632,3 +632,32 @@
 .apos-fila-flag > td { background: color-mix(in srgb, #d98324 12%, transparent); }
 .apos-fila-total > td { background: color-mix(in srgb, currentColor 7%, transparent); font-weight: 600; }
 .apos-celda-fuera { color: #b4521a; font-weight: 600; }
+
+/* ── Feed del PoS desactualizado ─────────────────────────────
+   Es un AVISO, no un error: el día se sigue leyendo bien (sale de las facturas cerradas).
+   Lo único en duda es el snapshot de mesas abiertas. Por eso va en color de alerta y no en
+   el crítico de `.apos-stop`. */
+
+.apos-panel.apos-viejo {
+  border-left: 3px solid var(--apos-alerta);
+}
+
+.apos-viejo-nota {
+  margin: 0.5rem 0 0;
+  font-size: 0.73rem;
+  line-height: 1.55;
+  color: var(--apos-muted);
+}
+
+/* ── El «—» honesto ──────────────────────────────────────────
+   Un dato que el PoS todavía no manda. Se marca distinto de un cero para que nadie lo lea
+   como «no consumió»: el subrayado punteado invita a pasar el mouse y leer el porqué. */
+
+.apos-pendiente {
+  color: var(--apos-muted);
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+  cursor: help;
+}
+
+.apos-tabla-abiertas { margin-top: 0.35rem; }

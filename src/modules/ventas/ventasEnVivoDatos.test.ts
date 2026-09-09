@@ -7,7 +7,8 @@ import {
   esJornadaEnCurso, esSinAsignar, etiquetaNoMesero, horaCRDe, jornadaActualCR,
   diasPorTurno,
   jornadasComparables, lotesDeCierre, nombreSalonero, paxDelTicket, ritmoPorHora,
-  etiquetaTurnoPoS, jornadaDesplazada, resumirMesasAbiertas, ventasPorCanal, ventasPorTurno,
+  detallarMesasAbiertas, etiquetaTurnoPoS, excluirCerradas, frescuraDe, jornadaDesplazada,
+  resumirMesasAbiertas, tiempoAbiertaConfiable, ventasPorCanal, ventasPorTurno,
   ventasPorTurnoPoS,
 } from './ventasEnVivoDatos'
 import type { CajeroDay } from '../../shared/types/ventas'
@@ -839,6 +840,185 @@ describe('resumirMesasAbiertas', () => {
 
   it('sin mesas abiertas, lista vacía — no una fila en cero', () => {
     expect(resumirMesasAbiertas([])).toEqual([])
+  })
+})
+
+// ── El candado de la fusión: la plata del día no se mueve ──────────────────────
+
+const mesaAb = (over: Partial<MesaAbiertaRow> = {}): MesaAbiertaRow => ({
+  clave: 'm1', numero_factura: null, id_pedido: '1', mesa: '5',
+  salonero_login: '026', canal: 'salon', pax: 2, pax_alerta: 'ok',
+  updated_at: '2026-09-01T20:00:00-06:00',
+  ...over,
+})
+
+describe('la fusión Hoy ↔ En vivo no toca la plata del día', () => {
+  const base = armarSnapshot({
+    local: 'santa-teresa', fecha: '2026-09-01',
+    tickets: [
+      ticket({ id: 'a', fecha_registra: '2026-09-01T13:00:00-06:00', valor_servido_crc: 10000 }),
+      ticket({ id: 'b', fecha_registra: '2026-09-01T20:00:00-06:00', valor_servido_crc: 15000,
+               salonero_login: '027' }),
+    ],
+    lineas: [linea({ ticket_id: 'a', monto: 10000 })],
+    neto4Sem: {},
+    ahora: new Date('2026-09-02T02:00:00Z'), enServicio: true,
+  })
+
+  // Exactamente lo que hace `getSnapshotEnVivo`: pega los extras del snapshot de abiertas
+  // ENCIMA del día ya armado. Si alguna vez alguien mete las mesas abiertas adentro del
+  // cálculo, esta prueba se cae.
+  const conAbiertas = {
+    ...base,
+    mesasAbiertas: 3,
+    paxAbierto: 9,
+    abiertasPorSalonero: resumirMesasAbiertas([mesaAb()], NOMBRES),
+    mesasDetalle: detallarMesasAbiertas([mesaAb()], NOMBRES, true),
+    frescura: frescuraDe('2026-09-01T20:59:00-06:00', new Date('2026-09-01T21:00:00-06:00')),
+    tiempoAbiertaConfiable: true,
+  }
+
+  it('el DiaData queda byte-idéntico con y sin mesas abiertas', () => {
+    expect(JSON.stringify(conAbiertas.dia)).toBe(JSON.stringify(base.dia))
+  })
+
+  it('neto, bruto, servicio, IVA y regalía quedan idénticos', () => {
+    const plata = (s: typeof base) =>
+      [s.bruto, s.servicio, s.iva, s.regalia,
+       Object.values(s.dia.saloneros).reduce((a, v) => a + v.total, 0)]
+    expect(plata(conAbiertas)).toEqual(plata(base))
+  })
+
+  it('las 9 personas sentadas NO entran en el neto del día', () => {
+    const neto = Object.values(conAbiertas.dia.saloneros).reduce((a, v) => a + v.total, 0)
+    expect(neto).toBe(25000)   // solo las dos facturas CERRADAS
+  })
+
+  it('`armarSnapshot` ni siquiera recibe las mesas abiertas', () => {
+    // El candado estructural: `EntradaSnapshot` no tiene por dónde entrarle una mesa abierta,
+    // así que la venta cerrada no puede contaminarse ni por error.
+    expect(Object.keys(base)).not.toContain('mesasAbiertas')
+    expect(Object.keys(base)).not.toContain('mesasDetalle')
+  })
+})
+
+// ── Fusión Hoy ↔ En vivo: exclusión, tiempo abierta y frescura ─────────────────
+
+describe('excluirCerradas', () => {
+  it('saca la mesa que ya se cobró — es el doble conteo Hoy ↔ En vivo', () => {
+    const r = excluirCerradas(
+      [mesaAb({ clave: 'a', id_pedido: '101' }), mesaAb({ clave: 'b', id_pedido: '102' })],
+      new Set(['101']),
+    )
+    expect(r.map(m => m.clave)).toEqual(['b'])
+  })
+
+  it('sin facturas cerradas no saca nada', () => {
+    const abiertas = [mesaAb({ id_pedido: '101' })]
+    expect(excluirCerradas(abiertas, new Set())).toEqual(abiertas)
+  })
+
+  it('la mesa SIN id_pedido se conserva: no hay con qué probar que se cerró', () => {
+    const r = excluirCerradas([mesaAb({ clave: 'x', id_pedido: null })], new Set(['101']))
+    expect(r.map(m => m.clave)).toEqual(['x'])
+  })
+
+  it('no confunde un id_pedido con espacios', () => {
+    const r = excluirCerradas([mesaAb({ clave: 'x', id_pedido: ' 101 ' })], new Set(['101']))
+    expect(r).toHaveLength(0)
+  })
+})
+
+describe('tiempoAbiertaConfiable', () => {
+  it('mesas separadas por horas = updated_at es la hora de apertura', () => {
+    expect(tiempoAbiertaConfiable([
+      mesaAb({ clave: 'a', updated_at: '2026-09-01T19:00:00-06:00' }),
+      mesaAb({ clave: 'b', updated_at: '2026-09-01T21:30:00-06:00' }),
+    ])).toBe(true)
+  })
+
+  it('todas con el MISMO sello = ruta fallback, el lote las selló con su `ahora`', () => {
+    expect(tiempoAbiertaConfiable([
+      mesaAb({ clave: 'a', updated_at: '2026-09-01T21:00:00-06:00' }),
+      mesaAb({ clave: 'b', updated_at: '2026-09-01T21:00:00-06:00' }),
+    ])).toBe(false)
+  })
+
+  it('dispersión menor a una ventana de poll no alcanza para afirmar nada', () => {
+    expect(tiempoAbiertaConfiable([
+      mesaAb({ clave: 'a', updated_at: '2026-09-01T21:00:00-06:00' }),
+      mesaAb({ clave: 'b', updated_at: '2026-09-01T21:00:30-06:00' }),
+    ])).toBe(false)
+  })
+
+  it('con una sola mesa el resultado es INCONCLUSO, y se trata como no confiable', () => {
+    expect(tiempoAbiertaConfiable([mesaAb()])).toBe(false)
+    expect(tiempoAbiertaConfiable([])).toBe(false)
+  })
+})
+
+describe('detallarMesasAbiertas', () => {
+  it('NUNCA trae monto: pos_ndf_open no lo tiene en ninguna capa del puente', () => {
+    const [m] = detallarMesasAbiertas([mesaAb()], NOMBRES, true)
+    expect(Object.keys(m).sort())
+      .toEqual(['abiertaDesde', 'canal', 'clave', 'idPedido', 'mesa', 'pax', 'salonero'])
+  })
+
+  it('resuelve el nombre y conserva mesa, canal y pax', () => {
+    const [m] = detallarMesasAbiertas([mesaAb({ mesa: '12', pax: 4 })], NOMBRES, true)
+    expect(m.salonero).toBe('MAXO')
+    expect(m.mesa).toBe('12')
+    expect(m.canal).toBe('salon')
+    expect(m.pax).toBe(4)
+  })
+
+  it('sin la guarda, abiertaDesde va en null — la pantalla muestra «—», no una duración falsa', () => {
+    const [m] = detallarMesasAbiertas([mesaAb()], NOMBRES, false)
+    expect(m.abiertaDesde).toBeNull()
+  })
+
+  it('ordena primero la que lleva más tiempo abierta', () => {
+    const r = detallarMesasAbiertas([
+      mesaAb({ clave: 'nueva',  updated_at: '2026-09-01T22:00:00-06:00' }),
+      mesaAb({ clave: 'vieja',  updated_at: '2026-09-01T18:00:00-06:00' }),
+    ], NOMBRES, true)
+    expect(r.map(m => m.clave)).toEqual(['vieja', 'nueva'])
+  })
+
+  it('caja, sistema y sin login llevan su etiqueta, igual que en el agrupado', () => {
+    const r = detallarMesasAbiertas([
+      mesaAb({ clave: 'a', salonero_login: '111' }),
+      mesaAb({ clave: 'b', salonero_login: null }),
+    ], {}, false)
+    expect(r.map(m => m.salonero).sort()).toEqual(['Cajero turno mañana', 'Sin salonero'])
+  })
+})
+
+describe('frescuraDe', () => {
+  const ahora = new Date('2026-09-01T21:00:00-06:00')
+
+  it('un poll reciente no está desactualizado', () => {
+    const f = frescuraDe('2026-09-01T20:58:00-06:00', ahora)
+    expect(f.minutos).toBe(2)
+    expect(f.desactualizado).toBe(false)
+  })
+
+  it('pasado el umbral se marca desactualizado', () => {
+    const f = frescuraDe('2026-09-01T20:50:00-06:00', ahora)
+    expect(f.minutos).toBe(10)
+    expect(f.desactualizado).toBe(true)
+  })
+
+  it('sin cursor se asume desactualizado: no poder probar que el agente vive no es probarlo', () => {
+    expect(frescuraDe(null, ahora)).toEqual({
+      ultimoPollAt: null, minutos: null, desactualizado: true,
+    })
+  })
+
+  it('un reloj adelantado en la PC del PoS no muestra futuro', () => {
+    const f = frescuraDe('2026-09-01T21:05:00-06:00', ahora)
+    expect(f.minutos).toBe(0)
+    expect(f.desactualizado).toBe(false)
   })
 })
 

@@ -95,6 +95,48 @@ export interface CalidadPax {
  * que en Mix Ventas. Cuando el feed sea real, este `pm` se reemplaza por el que ya carga el
  * módulo y el código de la pantalla no cambia.
  */
+/**
+ * Una mesa abierta, fila por fila.
+ *
+ * ── SIN MONTO, Y NO ES UN OLVIDO ───────────────────────────────────────────────────────────
+ * `pos_ndf_open` no tiene columna de plata, y no la tiene en NINGUNA de las tres capas: el
+ * SELECT del agente contra el PoS no pide ningún campo de monto, el payload de la ingesta no lo
+ * lleva y la tabla no tiene dónde ponerlo. Por eso «pedido ₡» y «ticket/mesa» de una mesa
+ * abierta se muestran como «—» y nunca como «₡0»: un cero acá se leería como «esta mesa no
+ * consumió nada», que es falso. Destrabarlo son tres cambios coordinados en el puente más firma.
+ */
+export interface MesaAbiertaDetalle {
+  /** `pedido:<NumeroPedido>` — la identidad estable de la mesa dentro del local. */
+  clave:    string
+  /** `FAC_Pedidos.NumeroPedido`. Es la llave que cruza con `pos_ndf_tickets.numero_pedido`. */
+  idPedido: string | null
+  /** Número de mesa del PoS. `null` en delivery y para llevar, que no tienen. */
+  mesa:     string | null
+  /** El nombre ya resuelto; nunca un login crudo y nunca un nombre inventado. */
+  salonero: string
+  canal:    string | null
+  pax:      number
+  /**
+   * Desde cuándo está abierta, en ISO. Alias de LECTURA de `pos_ndf_open.updated_at`, cuyo
+   * nombre miente: no es la frescura del snapshot sino la hora en que se abrió el pedido.
+   * Renombrar la columna sería esquema, así que la verdad se dice acá.
+   *
+   * `null` cuando la guarda de `tiempoAbiertaConfiable` no puede afirmar que el valor sea
+   * la hora de apertura. La pantalla muestra «—», no una duración inventada.
+   */
+  abiertaDesde: string | null
+}
+
+/** Qué tan viejo es lo que se está mirando. Sale de `pos_ndf_cursor.last_poll_at`. */
+export interface FrescuraPoS {
+  /** Último poll del agente, ISO. `null` = nunca corrió para este local. */
+  ultimoPollAt: string | null
+  /** Minutos desde ese poll. `null` cuando no hay contra qué medir. */
+  minutos:      number | null
+  /** `true` = pasó el umbral y lo que se ve puede estar viejo. La pantalla se degrada sola. */
+  desactualizado: boolean
+}
+
 export interface SnapshotEnVivo {
   local:           LocalId
   fecha:           string    // 'YYYY-MM-DD' · la JORNADA de servicio, no el día civil
@@ -175,6 +217,25 @@ export interface SnapshotEnVivo {
 
   /** Quién tiene abierta cada mesa AHORA. Sin monto: `pos_ndf_open` todavía no lo trae. */
   abiertasPorSalonero?: { salonero: string; mesas: number; pax: number }[]
+
+  /**
+   * Las mesas abiertas UNA POR UNA, ya excluidas las que se cobraron (ver `excluirCerradas`).
+   * Es el mismo universo que `abiertasPorSalonero`, sin agrupar.
+   */
+  mesasDetalle?: MesaAbiertaDetalle[]
+
+  /**
+   * Frescura del feed. Es lo que permite que la pantalla diga «última lectura hace X» y se
+   * apague sola cuando el agente dejó de reportar, en vez de pintar mesas viejas como si
+   * fueran de ahora.
+   */
+  frescura?: FrescuraPoS
+
+  /**
+   * `false` = no se puede afirmar que `updated_at` sea la hora de apertura (ver la guarda en
+   * `tiempoAbiertaConfiable`), así que las duraciones se muestran como «—».
+   */
+  tiempoAbiertaConfiable?: boolean
 
   /**
    * Cuántas FACTURAS lleva cada clave de `dia.saloneros`. `SaloneroDay` no tiene el campo —el

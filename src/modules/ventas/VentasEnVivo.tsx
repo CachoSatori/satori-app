@@ -49,6 +49,33 @@ function haceCuanto(iso: string, ahora: number): string {
   return `hace ${Math.round(seg / 60)} min`
 }
 
+/**
+ * El texto del «—» de plata. Es la explicación que el encargado ve al pasar el mouse, y la
+ * razón por la que acá NUNCA va un ₡0: cero significaría «no consumió», y lo cierto es que
+ * el PoS no lo manda.
+ */
+const MONTO_PENDIENTE =
+  'El PoS todavía no manda lo consumido de una mesa abierta: pos_ndf_open no trae monto. ' +
+  'Mostrar ₡0 diría que la mesa no consumió nada, que es falso.'
+
+/** El «—» del tiempo abierta, cuando no se puede afirmar la semántica de `updated_at`. */
+const TIEMPO_PENDIENTE =
+  'No se puede confirmar desde cuándo está abierta: o el feed del PoS está viejo, o esta ' +
+  'instalación no manda la hora de apertura del pedido.'
+
+/**
+ * Cuánto tiempo pasó, en horas y minutos. `haceCuanto` corta en minutos y sirve para el latido
+ * de la pantalla; una mesa puede llevar tres horas abierta y «hace 187 min» no se lee.
+ */
+function duracion(iso: string, ahora: number): string {
+  const min = Math.max(0, Math.round((ahora - new Date(iso).getTime()) / 60_000))
+  if (min < 1)  return 'recién'
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const r = min % 60
+  return r === 0 ? `${h} h` : `${h} h ${r} min`
+}
+
 /** ▲/▼ + porcentaje. La flecha es la codificación secundaria: el color nunca va solo. */
 function Delta({ actual, referencia }: { actual: number; referencia: number }) {
   const pct = variacionPct(actual, referencia)
@@ -151,7 +178,7 @@ export default function VentasEnVivo({ metas }: Props) {
 
   const {
     dia, pm, porHora, historico, calidadPax, proyeccionCierre, turnos, turnosPoS, canales,
-    abiertasPorSalonero, ordenes, porTurno,
+    abiertasPorSalonero, mesasDetalle, frescura, ordenes, porTurno,
   } = snap
 
   // ── El día, con las MISMAS funciones que «Hoy» ─────────────────────────────────────────────
@@ -275,10 +302,38 @@ export default function VentasEnVivo({ metas }: Props) {
     <div className="vt-section">
       <div className="apos">
 
+        {/* ── El feed está viejo ────────────────────────────────────────────────
+            Va ANTES y aparte del panel de mesas, y no depende de que haya mesas abiertas:
+            justamente cuando el agente se cayó, «0 mesas abiertas» es la mentira más
+            peligrosa de la pantalla. `pos_ndf_open` conserva el último snapshot para
+            siempre, así que sin este aviso las mesas fantasma se leen como actuales. */}
+        {snap.servicioEnCurso && frescura?.desactualizado === true && (
+          <section className="apos-panel apos-viejo" role="status">
+            <div className="apos-panel-hd">
+              <h3>Sin lecturas recientes del PoS</h3>
+              <span className="apos-panel-sub">
+                {frescura.ultimoPollAt === null
+                  ? 'el agente del PoS todavía no reportó para este local'
+                  : `última lectura ${duracion(frescura.ultimoPollAt, ahora)} atrás`}
+                {' · '}lo que se ve abajo puede estar viejo
+              </span>
+            </div>
+            <p className="apos-viejo-nota">
+              Las mesas abiertas y sus tiempos quedan en «—» hasta que el agente vuelva a
+              reportar. Las cifras del día no se ven afectadas: salen de las facturas ya
+              cerradas, no de este snapshot.
+            </p>
+          </section>
+        )}
+
         {/* ── LO QUE ESTÁ PASANDO AHORA ──────────────────────────────────────────
             Va primero porque es lo único de esta pantalla que sirve para actuar EN EL
             MOMENTO: el resto ya pasó. Solo aparece mirando la jornada en curso — en un día
-            cerrado `pos_ndf_open` está vacía y una barra en cero sería ruido. */}
+            cerrado `pos_ndf_open` está vacía y una barra en cero sería ruido.
+
+            Lo que se lista acá YA tiene excluidas las mesas que se cobraron: entre poll y
+            poll una mesa recién cerrada vive en `pos_ndf_open` y en `pos_ndf_tickets` a la
+            vez, y sin ese filtro se vería como cerrada en «Hoy» y abierta acá. */}
         {snap.mesasAbiertas !== undefined && snap.mesasAbiertas > 0 && (
           <section className="apos-panel apos-abiertas">
             <div className="apos-panel-hd">
@@ -290,6 +345,14 @@ export default function VentasEnVivo({ metas }: Props) {
                 {snap.paxAbierto ? `${snap.paxAbierto} pax sentados · ` : ''}
                 todavía sin cobrar: <strong>no</strong> entran en las cifras de abajo
               </span>
+              <span className="apos-spacer" />
+              {frescura && (
+                <span className={`apos-fresco${frescura.desactualizado ? ' is-cerrado' : ''}`}>
+                  {frescura.ultimoPollAt === null
+                    ? 'sin lecturas del PoS'
+                    : `PoS leído ${duracion(frescura.ultimoPollAt, ahora)} atrás`}
+                </span>
+              )}
             </div>
             {abiertasPorSalonero && abiertasPorSalonero.length > 0 && (
               <ul className="apos-abiertas-lista">
@@ -304,10 +367,50 @@ export default function VentasEnVivo({ metas }: Props) {
                 ))}
               </ul>
             )}
-            {/* NO se muestra monto ni promedio de lo abierto: `pos_ndf_open` trae mesa,
-                salonero, canal y pax, y nada más. Poner una cifra acá sería inventarla.
-                Cuando el bridge traiga lo consumido, la columna entra en esta lista.
+
+            {/* Mesa por mesa. Las columnas de plata van SIEMPRE en «—»: `pos_ndf_open` no
+                trae monto en ninguna de las tres capas del puente (el SELECT contra el PoS
+                no lo pide, el payload no lo lleva, la tabla no tiene la columna). Un «₡0»
+                acá se leería como «esta mesa no consumió nada», que es falso.
                 // TODO monto abierto: pendiente de columna en el bridge. */}
+            {mesasDetalle && mesasDetalle.length > 0 && (
+              <div className="apos-tabla-wrap">
+                <table className="apos-tabla apos-tabla-abiertas">
+                  <thead>
+                    <tr>
+                      <th scope="col">Mesa</th>
+                      <th scope="col">Salonero</th>
+                      <th scope="col">Canal</th>
+                      <th scope="col" className="r">PAX</th>
+                      <th scope="col" className="r">Abierta</th>
+                      <th scope="col" className="r">Pedido ₡</th>
+                      <th scope="col" className="r">Ticket/mesa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mesasDetalle.map(m => (
+                      <tr key={m.clave}>
+                        <td>{m.mesa ?? '—'}</td>
+                        <td>{m.salonero}</td>
+                        <td>{m.canal ?? '—'}</td>
+                        <td className="r">{m.pax > 0 ? m.pax : '—'}</td>
+                        <td className="r">
+                          {m.abiertaDesde === null
+                            ? <span className="apos-pendiente" title={TIEMPO_PENDIENTE}>—</span>
+                            : duracion(m.abiertaDesde, ahora)}
+                        </td>
+                        <td className="r">
+                          <span className="apos-pendiente" title={MONTO_PENDIENTE}>—</span>
+                        </td>
+                        <td className="r">
+                          <span className="apos-pendiente" title={MONTO_PENDIENTE}>—</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
         )}
 

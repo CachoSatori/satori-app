@@ -1,8 +1,8 @@
 import type { CajeroDay, DiaData, ProductMap, SaloneroDay } from '../../shared/types/ventas'
 import {
-  businessDateDe, getLineasDeTickets, getMesasAbiertas, getNetoPorJornada, getSaloneroNombres,
-  getTicketsJornada, HORA_CORTE_JORNADA, type LineaNdfRow, type MesaAbiertaRow,
-  type TicketNdfConId,
+  businessDateDe, getLineasDeTickets, getMesasAbiertas, getNetoPorJornada,
+  getPedidosCerradosJornada, getSaloneroNombres, getTicketsJornada, getUltimoPollPoS,
+  HORA_CORTE_JORNADA, type LineaNdfRow, type MesaAbiertaRow, type TicketNdfConId,
 } from '../../shared/api/posNdf'
 import {
   agruparEnLotes, etiquetaTurno, turnosConocidos, type Turno,
@@ -12,8 +12,9 @@ import {
 } from '../../shared/ndf/mapTicket'
 import { claveNoMesero, etiquetaNoMesero, etiquetaTurnoPoS } from './baldesNoMesero'
 import { horaCorteCR } from './ventasEnVivoMock'
-import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type LocalId,
-         type SnapshotEnVivo, type VentaPorHora } from './ventasEnVivoTypes'
+import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type FrescuraPoS,
+         type LocalId, type MesaAbiertaDetalle, type SnapshotEnVivo,
+         type VentaPorHora } from './ventasEnVivoTypes'
 
 // ╔══════════════════════════════════════════════════════════════════════════════════════╗
 // ║ Ventas · EN VIVO — el snapshot REAL, armado desde `pos_ndf_*` de staging                ║
@@ -562,18 +563,28 @@ export interface MesaAbiertaResumen {
  * monto acá obligaría a inventarlo, y una mesa abierta con una cifra al lado se lee como venta.
  * // TODO monto: pendiente de columna en el bridge.
  */
+/**
+ * Quién tiene la mesa, en texto. Es la MISMA regla para el agrupado y para el detalle: si las
+ * dos vistas resolvieran el nombre por su cuenta, un día dirían cosas distintas de la misma
+ * mesa. Un nombre NUNCA se inventa — lo que no está en Empleados ni en el roster sale marcado.
+ */
+function quienTieneLaMesa(
+  login: string | null,
+  nombres: Record<string, string>,
+): string {
+  if (login === null || login === '') return 'Sin salonero'
+  if (esCajeroTurno(login))           return etiquetaNoMesero('cajero', login)
+  if (esLoginSistema(login))          return etiquetaNoMesero('sistema', login)
+  return nombreSalonero(login, nombres)
+}
+
 export function resumirMesasAbiertas(
   abiertas: MesaAbiertaRow[],
   nombres: Record<string, string> = {},
 ): MesaAbiertaResumen[] {
   const acc = new Map<string, { mesas: number; pax: number }>()
   for (const m of abiertas) {
-    const login = m.salonero_login
-    const clave =
-      login === null || login === ''      ? 'Sin salonero'
-      : esCajeroTurno(login)              ? etiquetaNoMesero('cajero', login)
-      : esLoginSistema(login)             ? etiquetaNoMesero('sistema', login)
-      : nombreSalonero(login, nombres)
+    const clave = quienTieneLaMesa(m.salonero_login, nombres)
     const e = acc.get(clave) ?? { mesas: 0, pax: 0 }
     e.mesas += 1
     e.pax   += n(m.pax)
@@ -582,6 +593,130 @@ export function resumirMesasAbiertas(
   return [...acc.entries()]
     .map(([salonero, e]) => ({ salonero, mesas: e.mesas, pax: e.pax }))
     .sort((a, b) => b.mesas - a.mesas || a.salonero.localeCompare(b.salonero, 'es'))
+}
+
+// ── Frescura del feed y mesas abiertas, una por una ────────────────────────────────────────
+
+/**
+ * Cada cuánto lee el agente el PoS en horario de operación (`POLL_OPERACION_MS` en
+ * `pos-bridge/configAgente.ts`). Si allá cambia el ritmo, acá se afloja la guarda: es el margen
+ * con el que se decide si `updated_at` es hora de apertura o sello del lote.
+ */
+export const VENTANA_POLL_MS = 75_000
+
+/** A partir de acá lo que se ve puede estar viejo y la pantalla lo dice. */
+export const UMBRAL_DESACTUALIZADO_MS = 5 * 60_000
+
+/**
+ * Saca del snapshot las mesas que YA se cobraron.
+ *
+ * El snapshot de abiertas no se limpia al instante: la Edge borra las claves que no vinieron en
+ * el lote, y entre poll y poll pasan ~75 s. En esa ventana la misma mesa está en `pos_ndf_open`
+ * y en `pos_ndf_tickets`, y sin este filtro se vería a la vez como cerrada en «Hoy» y como
+ * abierta en «En vivo».
+ *
+ * La llave es `id_pedido` ↔ `numero_pedido`: los dos salen del mismo `FAC_Pedidos.NumeroPedido`.
+ * Una fila sin `id_pedido` NO se descarta — no hay con qué probar que se cerró, y esconder una
+ * mesa abierta de verdad es peor que mostrarla.
+ *
+ * ⚠️ Esto NO resta plata en ningún lado: las mesas abiertas nunca sumaron al neto ni al total
+ * del día. Es un filtro de lo que se PINTA, y nada más.
+ */
+export function excluirCerradas(
+  abiertas: MesaAbiertaRow[],
+  pedidosCerrados: ReadonlySet<string>,
+): MesaAbiertaRow[] {
+  return abiertas.filter(m => {
+    const id = (m.id_pedido ?? '').trim()
+    if (id === '') return true
+    return !pedidosCerrados.has(id)
+  })
+}
+
+/**
+ * ¿Se puede afirmar que `updated_at` es la hora de APERTURA de la mesa?
+ *
+ * El agente lo copia de `FAC_Pedidos.FechaRegistra`, que no se mueve mientras la mesa siga
+ * abierta: por eso el upsert de cada poll reescribe siempre el mismo instante y la resta contra
+ * ahora da el tiempo real que la mesa lleva abierta.
+ *
+ * Pero esa columna del PoS es OPCIONAL en el mapeo del puente (`esquema.ts`, `opt(...)`), y
+ * `puedeLeerAbiertas` solo exige el número de pedido. En una instalación sin ella el agente
+ * manda `updated_at: null` y `normalizarOpen` lo rellena con el instante del LOTE. Ahí la misma
+ * columna pasa a significar «cuándo se leyó», y todas las mesas se verían recién abiertas.
+ *
+ * La firma de esa ruta es que el lote sella TODAS las filas con el mismo `ahora`, así que la
+ * dispersión es cero. Se exige entonces que haya al menos dos mesas y que se separen por más de
+ * una ventana de poll. Con una sola mesa no hay dispersión que medir y el resultado es
+ * INCONCLUSO, que acá se trata como «no confiable»: mejor un «—» honesto que una duración falsa.
+ */
+export function tiempoAbiertaConfiable(
+  abiertas: MesaAbiertaRow[],
+  ventanaMs: number = VENTANA_POLL_MS,
+): boolean {
+  const ts: number[] = []
+  for (const m of abiertas) {
+    const t = Date.parse(m.updated_at)
+    if (Number.isFinite(t)) ts.push(t)
+  }
+  if (ts.length < 2) return false
+  return Math.max(...ts) - Math.min(...ts) > ventanaMs
+}
+
+/**
+ * Las mesas abiertas una por una, con el nombre del salonero ya resuelto.
+ *
+ * `abiertaDesde` viaja como `null` cuando la guarda de arriba no puede afirmar la semántica: la
+ * pantalla muestra «—». Y no lleva monto en ninguna forma, porque `pos_ndf_open` no lo trae.
+ */
+export function detallarMesasAbiertas(
+  abiertas: MesaAbiertaRow[],
+  nombres: Record<string, string> = {},
+  confiable: boolean = tiempoAbiertaConfiable(abiertas),
+): MesaAbiertaDetalle[] {
+  return abiertas
+    .map(m => {
+      const salonero = quienTieneLaMesa(m.salonero_login, nombres)
+      const abierta = Date.parse(m.updated_at)
+      return {
+        clave:        m.clave,
+        idPedido:     m.id_pedido,
+        mesa:         m.mesa,
+        salonero,
+        canal:        m.canal,
+        pax:          n(m.pax),
+        abiertaDesde: confiable && Number.isFinite(abierta) ? m.updated_at : null,
+      }
+    })
+    .sort((a, b) => {
+      // Primero la que lleva más tiempo abierta: es la que hay que ir a mirar.
+      const ta = a.abiertaDesde === null ? Infinity : Date.parse(a.abiertaDesde)
+      const tb = b.abiertaDesde === null ? Infinity : Date.parse(b.abiertaDesde)
+      if (ta !== tb) return ta - tb
+      return (a.mesa ?? '').localeCompare(b.mesa ?? '', 'es', { numeric: true })
+    })
+}
+
+/**
+ * Qué tan viejo es el feed, a partir del ÚNICO latido que existe (`pos_ndf_cursor.last_poll_at`).
+ *
+ * Sin cursor se considera desactualizado a propósito: no poder probar que el agente respira no
+ * es lo mismo que probar que respira, y de las dos lecturas la única honesta es la pesimista.
+ */
+export function frescuraDe(
+  ultimoPollAt: string | null,
+  ahora: Date = new Date(),
+  umbralMs: number = UMBRAL_DESACTUALIZADO_MS,
+): FrescuraPoS {
+  const t = ultimoPollAt === null ? NaN : Date.parse(ultimoPollAt)
+  if (!Number.isFinite(t)) return { ultimoPollAt, minutos: null, desactualizado: true }
+  // Un reloj adelantado en la PC del PoS daría negativo: se piso en 0 en vez de mostrar futuro.
+  const transcurrido = Math.max(0, ahora.getTime() - t)
+  return {
+    ultimoPollAt,
+    minutos:        Math.floor(transcurrido / 60_000),
+    desactualizado: transcurrido > umbralMs,
+  }
 }
 
 // ── Calidad del pax (§3.F) ─────────────────────────────────────────────────────────────────
@@ -759,7 +894,20 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
   const nombres = await getSaloneroNombres()
   const neto4Sem = await getNetoPorJornada(local, jornadasComparables(jornada))
   // El snapshot de mesas abiertas es de AHORA: mirando un día viejo no significa nada.
-  const abiertas = enCurso ? await getMesasAbiertas(local) : []
+  const crudas = enCurso ? await getMesasAbiertas(local) : []
+  // La llave de exclusión y el latido del agente solo se piden cuando hay algo en vivo que mirar.
+  const cerrados = enCurso && crudas.length > 0
+    ? await getPedidosCerradosJornada(local, jornada)
+    : new Set<string>()
+  const frescura = enCurso ? frescuraDe(await getUltimoPollPoS(local), ahora) : undefined
+
+  // Una mesa que ya se cobró está en las dos tablas hasta el próximo poll. Se saca ACÁ, antes
+  // de contar nada, para que el conteo, el pax y el detalle hablen todos del mismo universo.
+  const abiertas = excluirCerradas(crudas, cerrados)
+
+  // Con el feed viejo las duraciones no se muestran: no se sabe cuánto de lo que se ve sigue
+  // siendo cierto, y una mesa «abierta hace 3 h» que en realidad se cobró hace rato miente.
+  const confiable = tiempoAbiertaConfiable(abiertas) && frescura?.desactualizado !== true
 
   const snap = armarSnapshot({
     local, fecha: jornada, tickets, lineas, neto4Sem, ahora, enServicio: enCurso, nombres,
@@ -769,6 +917,9 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
     mesasAbiertas: enCurso ? abiertas.length : undefined,
     paxAbierto:    enCurso ? abiertas.reduce((s, m) => s + n(m.pax), 0) : undefined,
     abiertasPorSalonero: enCurso ? resumirMesasAbiertas(abiertas, nombres) : undefined,
+    mesasDetalle:  enCurso ? detallarMesasAbiertas(abiertas, nombres, confiable) : undefined,
+    frescura,
+    tiempoAbiertaConfiable: enCurso ? confiable : undefined,
   }
 }
 

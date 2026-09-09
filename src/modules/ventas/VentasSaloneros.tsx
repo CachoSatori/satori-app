@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { todayCR } from '../../shared/utils'
 
 function addDays(date: string, n: number): string {
@@ -13,6 +13,8 @@ import {
   topProds, datesInRange, allDates,
 } from './ventasUtils'
 import { CLAVE_SALON_SIN_MESERO } from './baldesNoMesero'
+import { getLentesDesdePos, type LentesConNombres } from './saloneroLentesDatos'
+import { ventaPropiaDe } from './saloneroVentaPropia'
 
 interface Props {
   dias:  DiasMap
@@ -93,10 +95,39 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
   // esta vista —que es POR FACTURA— el rótulo honesto es este.
   const sinAsignar = useMemo(() => aggCajero(CLAVE_SALON_SIN_MESERO, rangeDates, dias), [rangeDates, dias])
 
+  // ── Lente A · «venta propia por línea», bajo demanda ──────────────────────────────────
+  // NO se carga sola al entrar: barrer el rango en el PoS cuesta (es lo mismo que decide la
+  // pestaña «Saloneros x línea», que usa un botón como disparador). Esta pestaña hoy pinta al
+  // instante sobre el `dias` que ya está en memoria, y eso no se rompe: la lectura se dispara
+  // recién cuando alguien abre una tarjeta.
+  //
+  // La corrida guarda el rango con el que se leyó. Si el usuario mueve las fechas, lo cargado
+  // deja de ser válido y se vuelve a pedir — mostrar los números de OTRO rango sería peor que
+  // no mostrarlos.
+  const [lentes,     setLentes]     = useState<({ desde: string; hasta: string } & LentesConNombres) | null>(null)
+  const [cargandoLn, setCargandoLn] = useState(false)
+  const [errorLn,    setErrorLn]    = useState<string | null>(null)
+
   const firstDate = rangeDates[0] ?? ''
   const lastDate  = rangeDates[rangeDates.length - 1] ?? ''
 
   function toggleSort(col: string) { setSortCol(col) }
+
+  const lentesVigentes = lentes !== null && lentes.desde === firstDate && lentes.hasta === lastDate
+
+  /** Se dispara al abrir una tarjeta. Idempotente: si ya está el rango vigente, no re-lee. */
+  const pedirLentes = useCallback(async () => {
+    if (!firstDate || !lastDate || lentesVigentes || cargandoLn) return
+    setCargandoLn(true); setErrorLn(null)
+    try {
+      const datos = await getLentesDesdePos({ desde: firstDate, hasta: lastDate })
+      setLentes({ desde: firstDate, hasta: lastDate, ...datos })
+    } catch (e) {
+      setErrorLn(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCargandoLn(false)
+    }
+  }, [firstDate, lastDate, lentesVigentes, cargandoLn])
 
   return (
     <div className="vt-section">
@@ -271,7 +302,8 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
 
           return (
             <div key={s.nombre} className="vt-sal-card">
-              <div className="vt-sal-card-head" onClick={() => setExpanded(isOpen ? null : s.nombre)}>
+              <div className="vt-sal-card-head"
+                onClick={() => { const abrir = !isOpen; setExpanded(abrir ? s.nombre : null); if (abrir) void pedirLentes() }}>
                 <div>
                   <div className="vt-sal-name">
                     {i < 3 && <span className="vt-medal">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</span>}
@@ -334,6 +366,85 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                     <div><span>Prom/plato</span> <strong>{fi(s.promPlato)}</strong></div>
                     <div><span>Prom/bebida</span> <strong>{fi(s.promBebida)}</strong></div>
                     <div><span>Ticket/item</span> <strong>{fi(s.promTicket)}</strong></div>
+                  </div>
+
+                  {/* ── SEGUNDA LECTURA, no el desglose de la de arriba ────────────────────
+                      Va con su PROPIO total a propósito. La tarjeta reparte por el salonero
+                      DEL PEDIDO (una factura entera a una persona); esto reparte por el
+                      `usuario_registra` de CADA LÍNEA (una factura partida se reparte). Son
+                      dos ejes sobre la misma neta: sumarlos contaría dos veces toda mesa
+                      compartida, y la SPEC lo prohíbe. Por eso el bloque se titula, se
+                      encierra y cierra su propio total — nunca se presenta como detalle. */}
+                  <div className="vt-sal-lente">
+                    <div className="vt-sal-lente-hd">
+                      Venta propia · por línea
+                      <span className="vt-sal-lente-tag">otra lectura</span>
+                    </div>
+                    <p className="vt-sal-lente-nota">
+                      Lo que <strong>{s.nombre}</strong> comandó línea por línea, incluido lo
+                      que vendió en mesa ajena. <strong>No es el desglose</strong> de las
+                      ventas de arriba —esas se acreditan por el salonero del pedido— así que
+                      los dos números no tienen por qué coincidir y <strong>no se suman</strong>.
+                    </p>
+
+                    {cargandoLn && <div className="vt-sal-lente-msg">Leyendo el PoS…</div>}
+                    {errorLn && !cargandoLn && (
+                      <div className="vt-sal-lente-msg">No se pudo leer: {errorLn}</div>
+                    )}
+                    {!cargandoLn && !errorLn && lentesVigentes && (() => {
+                      const vp = ventaPropiaDe(s.nombre, lentes?.lentes ?? null, lentes?.nombres ?? {})
+                      if (!vp.hayDatos) {
+                        return (
+                          <div className="vt-sal-lente-msg">
+                            No aparece en la lente por línea en este período. No es lo mismo que
+                            haber vendido ₡0: puede que sus líneas vengan sin código, o que su
+                            código no esté en el mapa de personas.
+                          </div>
+                        )
+                      }
+                      return (
+                        <>
+                          <table className="vt-sal-lente-tbl">
+                            <thead>
+                              <tr>
+                                <th>Turno</th>
+                                <th className="r">Venta propia</th>
+                                <th className="r">PAX propio</th>
+                                <th className="r">Prom/pax</th>
+                                <th className="r">Líneas</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {vp.turnos.map(t => (
+                                <tr key={t.turno}>
+                                  <td>{t.etiqueta}</td>
+                                  <td className="r">{fi(t.netaCrc)}</td>
+                                  <td className="r">{t.paxPropio}</td>
+                                  <td className="r">{t.promPorPax === null ? '—' : fi(t.promPorPax)}</td>
+                                  <td className="r">{t.lineas}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr>
+                                <td>Total venta propia</td>
+                                <td className="r">{fi(vp.netaCrc)}</td>
+                                <td className="r">{vp.paxPropio}</td>
+                                <td className="r">{vp.promPorPax === null ? '—' : fi(vp.promPorPax)}</td>
+                                <td className="r">{vp.lineas}</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                          {lentes && lentes.lentes.descuadreCrc !== 0 && (
+                            <div className="vt-sal-lente-msg">
+                              ⚠️ Las líneas del período no suman lo que dicen las facturas
+                              ({fi(lentes.lentes.descuadreCrc)} de diferencia). El reparto de esta
+                              tabla está sobre un total distinto al del día.
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
                 </div>
               )}

@@ -414,6 +414,10 @@ las precondiciones del propio SPEC; cada migración exige firma separada).
      `scripts/import-carta.py:62` (`SUSHI ROLLS`, `BEBIDAS`, `X CORTESIAS`…).
   **Guardrail:** es un cambio de métrica VISIBLE. Se prende con firma y **después** de medir, en su propio
   pase — no de contrabando dentro de otro.
+- **🔲 PASO 0 FIRMADO CON DATOS (2026-09-09) — Atribución de venta de salón por LÍNEA (fin de "Salón sin
+  mesero" como agujero).** ~75% del balde (₡225k de ₡300k) es atribuible por línea vía
+  `FAC_FacturasDet.UsuarioRegistra`. Misma raíz que el bug de mesas-abiertas (back-link NULL).
+  Pendiente: 3 decisiones del dueño + split ₡ del mixto. Ver `claude/SPEC-atribucion-salon-por-linea.md`.
 
 ---
 

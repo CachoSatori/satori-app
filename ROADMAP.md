@@ -1,7 +1,7 @@
 # Satori App — Roadmap a producto óptimo
 
 De dashboard de analítica a sistema operativo del restaurante.
-**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-08-21**
+**Satori Sushi Bar · Santa Teresa & Nosara, Costa Rica · Actualizado 2026-09-09**
 
 ---
 
@@ -379,6 +379,41 @@ las precondiciones del propio SPEC; cada migración exige firma separada).
     solo observabilidad — NO tocan matemática.)*
   - **Grupo B (~41: `react-hooks/set-state-in-effect`, `react-hooks/refs`, `react-hooks/preserve-manual-memoization`)**
     = correctness/perf-adjacent, requiere revisión por archivo, **NO `--fix` a ciegas.**
+- **🔲 IDEA FIRMADA (2026-09-09) — Multiplicador de bebida: una botella compartida cuenta como N unidades.**
+  Es justo que una botella para compartir valga más de 1: una botella de vino son ~6 copas, y hoy cuenta
+  como una sola unidad, así que castiga el `Beb/PAX` del mesero que la vendió. El `multiplicador` del
+  `product_map` ya existe para eso y `aggSalonero.iBebAdj` (`ventasUtils.ts:306-311`) ya lo aplica —
+  pero **solo a los productos con `tipo` puesto a mano**.
+  **Por qué está apagado en los días del PoS y no es un olvido:** en E2 (#10) la fusión del `ProductMap`
+  lo habría prendido de golpe, sin que nadie lo pidiera ni lo midiera. Se **congeló a propósito** con
+  `ProductInfo.tipoDeFamilia`, la marca que dice si el `tipo` lo puso una persona o la familia del PoS.
+  Los días del **.xls no cambiaron**: ahí el tipo siempre fue curado y el multiplicador se sigue aplicando.
+  **Prenderlo = borrar `&& !info.tipoDeFamilia`** de esa línea. La marca además permite prenderlo
+  **selectivamente** (solo lo revisado en Config), que es la forma de hacerlo gradual en vez de big-bang.
+  **Alcance:** solo métrica de salonero — `bebPax`, `promBebida`, `ratioU`, `promTicket` y la columna
+  `iBeb`. **NO toca plata:** `total`, `com` y `beb` se acumulan aparte; neta y total del día no se mueven.
+  **Paso 0 antes de prender — tres cosas, y la primera es la que sorprende:**
+  1. ⚠️ **El `|| iBeb` de la línea 311 es un fallback silencioso.** Si el `reduce` da 0 —porque ningún
+     producto califica— cae a las unidades crudas, y eso es lo que está actuando hoy en los días del PoS.
+     Al prenderlo, la cuenta pasa a ser **parcial**: los que califican suman con su multiplicador y el
+     resto **no suma nada**. O sea que `bebPax` puede **BAJAR**, no solo subir, según la cobertura del
+     curado. Medir en las dos direcciones, no asumir que sube.
+  2. **Cuánto mueve**, con una query y sin tocar la app:
+     ```sql
+     select pm.nombre, pm.tipo, pm.multiplicador, round(sum(l.cantidad)) as unidades
+     from product_map pm
+     join pos_ndf_lineas l on upper(trim(l.nombre)) = upper(trim(pm.nombre))
+     where l.familia = 5 and pm.multiplicador > 1
+     group by 1,2,3 order by unidades desc;
+     ```
+  3. **La cobertura del curado en bebidas** — cuántos productos de familia 5 tienen un `tipo` válido a
+     mano. Es la variable que decide todo: si son pocos, prenderlo hoy daría un `Beb/PAX` **peor** que el
+     actual. Sale de la misma query pendiente que dejó #10 (`select tipo, count(*) from product_map
+     group by 1`), que también dice si conviene normalizar `product_map.tipo` primero — hoy convive el
+     vocabulario de la app (`comida`/`bebida`/…) con las CATEGORÍAS que escribió
+     `scripts/import-carta.py:62` (`SUSHI ROLLS`, `BEBIDAS`, `X CORTESIAS`…).
+  **Guardrail:** es un cambio de métrica VISIBLE. Se prende con firma y **después** de medir, en su propio
+  pase — no de contrabando dentro de otro.
 
 ---
 

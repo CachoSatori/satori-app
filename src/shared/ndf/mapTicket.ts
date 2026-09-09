@@ -549,6 +549,8 @@ export interface ItemCrudo {
   impV?:          unknown
   /** `EsExtra`/`Compuesto` del detalle: la línea NO cuenta como unidad vendida. */
   no_cuenta_unidad?: boolean
+  /** `FAC_FacturasDet.UsuarioRegistra`: el mesero que comandó ESTA línea. */
+  usuario_registra?: unknown
 }
 
 /** Una factura del día, tal como sale del SELECT (sin interpretar). */
@@ -595,6 +597,14 @@ export interface ItemMapeado {
   es_pax:         boolean
   es_extra:       boolean
   es_cortesia:    boolean
+  /**
+   * El mesero que comandó la línea, TAL CUAL vino del PoS.
+   *
+   * Vive en el ítem MAPEADO y no solo en el crudo porque `mapTicket` reconstruye cada ítem
+   * desde cero: si no estuviera acá, el dato se perdería entre `armarTickets` y el Edge, que
+   * es quien lo persiste en `pos_ndf_ticket_lines.usuario_registra`.
+   */
+  usuario_registra: string | null
 }
 
 export interface TicketMapeado {
@@ -665,6 +675,7 @@ export function mapTicket(t: TicketCrudo): TicketMapeado {
       familia,
       familia_nombre: texto(it.familia_nombre),
       categoria:      mapCategoria(familia),
+      usuario_registra: texto(it.usuario_registra),
       ...mapFamiliaFlags(familia),
     }
   })

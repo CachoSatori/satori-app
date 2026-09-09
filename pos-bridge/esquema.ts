@@ -40,6 +40,9 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
     columnas: {
       numero:           req('id de la factura', 'NumeroFactura'),
       fecha:            req('fecha/hora de la venta (naive = hora CR)', 'FechaRegistra'),
+      // CRUDA: el bridge la lee y la manda tal cual. Agrupar por (Login, FechaCierra)
+      // para deducir la jornada es P1 y NO vive acá.
+      fechacierra:      opt('cierre del lote de caja (naive = hora CR)', 'FechaCierra'),
       estado:           req('C cerrada / X anulada / R rara', 'Estado'),
       efectivo:         req('medio de pago', 'Efectivo'),
       tarjeta:          req('medio de pago', 'Tarjeta'),
@@ -69,6 +72,11 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       numeropedido:    opt('id del pedido (clave de la mesa abierta)', 'NumeroPedido', 'IdPedido', 'Numero'),
       mesa:            opt('mesa', 'Mesa', 'NumeroMesa'),
       fecha:           opt('fecha del pedido (acota el snapshot de abiertas)', 'FechaRegistra', 'Fecha'),
+      // La señal REAL de abierto/cerrado. `NumeroFactura IS NULL` no sirve: el back-link no se
+      // escribe en una minoría de pedidos (~7%), y ahí un pedido ya facturado o anulado se veía
+      // abierto para siempre. Es OPCIONAL en el catálogo pero el snapshot de abiertas no sale
+      // sin ella — ver `puedeLeerAbiertas`.
+      estado:          opt('R abierto / F facturada / X anulada — define la mesa ABIERTA', 'Estado'),
     },
   },
   facturasdet: {
@@ -79,7 +87,15 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       cantidad:      req('unidades vendidas', 'Cantidad', 'Cant'),
       monto:         req('monto de la línea', 'Monto', 'MontoTotal', 'Total', 'SubTotal'),
       imps:          req('impuesto de servicio 10% (parte el día con/sin 10%)', 'ImpS'),
-      impv:          opt('impuesto de venta (informativo)', 'ImpV', 'Imp', 'IVA', 'Impuesto'),
+      // `IV` PRIMERO: es el nombre REAL en esta instalación (Tarifa 13, CodigoImpuesto '01'),
+      // verificado contra la base. Antes se buscaba `ImpV/Imp/IVA/Impuesto`, ninguno matcheaba,
+      // el SELECT caía al `NULL` de `colOpt` y el IVA entraba en 0 en TODA la analítica — la
+      // bruta del PoS salía ~11% por debajo del XLS. NO es informativo: es el IVA que se
+      // persiste y se muestra discriminado. Y NO se deriva del 13%: se lee de la fuente.
+      impv:          opt('IVA 13% del PoS', 'IV', 'ImpV', 'Imp', 'IVA', 'Impuesto'),
+      // Quién COMANDÓ la línea. `opt` y no `req` por el mismo criterio que `impv`: si faltara,
+      // degrada a NULL en vez de tumbar el ingest de la plata.
+      usuarioregistra: opt('mesero que comandó la línea', 'UsuarioRegistra'),
       esextra:       opt('línea que NO cuenta como unidad', 'EsExtra'),
       compuesto:     opt('línea que NO cuenta como unidad', 'Compuesto', 'EsCompuesto'),
     },

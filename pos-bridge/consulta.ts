@@ -103,6 +103,13 @@ export function sqlFacturas(esq: Esquema, incremental = false): string {
     const real = colOpt(esq, 'facturas', campo)
     return real ? `f.${q(real)}` : 'NULL'
   }
+  // Una fecha opcional de la factura, como TEXTO y con estilo 120, por lo mismo que
+  // `FechaRegistra`: así el driver no la mueve de zona. `NULL` si la instalación no
+  // tiene la columna.
+  const ofFecha = (campo: string) => {
+    const real = colOpt(esq, 'facturas', campo)
+    return real ? `CONVERT(varchar(19), f.${q(real)}, 120)` : 'NULL'
+  }
   const op = (campo: string) => {
     const real = colOpt(esq, 'pedidos', campo)
     return real ? `MIN(p.${q(real)})` : 'NULL'
@@ -125,6 +132,7 @@ export function sqlFacturas(esq: Esquema, incremental = false): string {
   return `SELECT
   CAST(f.${cf('numero')} AS varchar(40))            AS numero_factura,
   CONVERT(varchar(19), f.${cf('fecha')}, 120)       AS fecha_hora,
+  ${ofFecha('fechacierra')}                         AS fecha_cierra,
   f.${cf('estado')}                                 AS estado,
   ${of_('login')}                                   AS login_cajero,
   ${of_('tipo')}                                    AS tipo_factura,
@@ -200,6 +208,7 @@ export function sqlDetalle(esq: Esquema, incremental = false): string {
   COALESCE(${od('impv')}, 0)                        AS imp_venta,
   pr.${q(col(esq, 'productos', 'clasificacion'))}   AS familia,
   ${nombreFamilia}                                  AS familia_nombre,
+  ${od('usuarioregistra')}                          AS usuario_registra,
   ${od('esextra')}                                  AS es_extra,
   ${od('compuesto')}                                AS compuesto
 FROM ${D} d
@@ -215,6 +224,8 @@ ORDER BY d.${cd('numerofactura')}`
 export interface FilaFactura {
   numero_factura:    string
   fecha_hora:        string
+  /** `FechaCierra` CRUDA (naive = hora CR). Opcional: la columna puede no existir. */
+  fecha_cierra?:     unknown
   estado:            string | null
   login_cajero:      unknown
   tipo_factura:      unknown
@@ -242,6 +253,8 @@ export interface FilaFactura {
 
 export interface FilaDetalle {
   numero_factura: string
+  /** `FAC_FacturasDet.UsuarioRegistra`: el mesero que comandó ESTA línea. */
+  usuario_registra: unknown
   codigo:         unknown
   nombre:         unknown
   cantidad:       unknown
@@ -270,6 +283,15 @@ export function banderaVerdadera(v: unknown): boolean {
 export interface LecturaDia {
   fecha:           string
   tickets:         TicketMapeado[]
+  /**
+   * Las filas CRUDAS de la factura, tal como salieron del SELECT.
+   *
+   * Se devuelven a propósito: `TicketMapeado` no lleva `mesa`, `numero_pedido` ni
+   * `fecha_cierra` (no son dominio del mapper), y sin estas filas el backfill no tendría
+   * de dónde sacarlas — mandaría los tres campos en null y el upsert le borraría al agente
+   * lo que ya había escrito. Ver `extrasPorFactura` en `consultaAgente.ts`.
+   */
+  facturas:        FilaFactura[]
   /** Estado → cantidad de facturas del día (incluye X y R). */
   conteoEstados:   Record<string, number>
   avisos:          string[]
@@ -311,6 +333,7 @@ export function armarTickets(
       return {
         codigo:         l.codigo,
         nombre:         l.nombre,
+        usuario_registra: l.usuario_registra,
         cantidad:       l.cantidad,
         monto:          l.monto,
         impS:           l.imp_servicio,
@@ -381,5 +404,5 @@ export async function leerDia(qy: Queryable, esq: Esquema, fecha: string): Promi
     avisos.push(`Estados no previstos en el día: ${desconocidos.join(', ')} (solo se cuentan las C).`)
   }
 
-  return { fecha, tickets, conteoEstados, avisos }
+  return { fecha, tickets, facturas: facturas.rows, conteoEstados, avisos }
 }

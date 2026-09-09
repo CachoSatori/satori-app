@@ -93,32 +93,49 @@ describe('armarDia', () => {
   })
 
   it('las facturas del cajero cuentan en el día, en su propia línea', () => {
+    // El balde del cajero sale de la CAJA QUE COBRÓ (`cajero_login`, acá el 222 del fixture)
+    // y del canal: fuera del salón es un cajero de turno. Ver `claveNoMesero`.
     const a = armar('2026-09-01', [
       ticket(),
       ticket({ id: 't2', numero_factura: '5002', salonero_login: null,
-               registrado_por: 'cajero', valor_servido_crc: 8000 }),
+               registrado_por: 'cajero', canal: 'delivery', valor_servido_crc: 8000 }),
     ], [], '2026-09-01')
-    expect(Object.keys(a.dia.saloneros).sort()).toEqual(['Caja', 'MAXO'])
+    expect(Object.keys(a.dia.saloneros).sort()).toEqual(['Cajero turno tarde', 'MAXO'])
     const total = Object.values(a.dia.saloneros).reduce((s, v) => s + v.total, 0)
     expect(total).toBe(20000)
   })
 
-  it('caja y sistema salen marcados `esCajero` — fuera del ranking, dentro del total', () => {
+  it('el cajero DENTRO del salón no es un cajero: es «Salón sin mesero»', () => {
+    // Venta de salón que la factura no le acredita a ningún mesero. No suma al Total Cajeros;
+    // quién comandó cada línea se resuelve en la otra lente (`usuario_registra`).
     const a = armar('2026-09-01', [
       ticket(),
-      ticket({ id: 't2', numero_factura: '5002', salonero_login: '111',
-               registrado_por: 'cajero', valor_servido_crc: 8000 }),
-      ticket({ id: 't3', numero_factura: '5003', salonero_login: '222',
-               registrado_por: 'cajero', valor_servido_crc: 3000 }),
+      ticket({ id: 't2', numero_factura: '5002', salonero_login: null,
+               registrado_por: 'cajero', canal: 'salon', valor_servido_crc: 8000 }),
+      ticket({ id: 't3', numero_factura: '5003', salonero_login: null,
+               registrado_por: 'sin_pedido', canal: 'salon', valor_servido_crc: 2000 }),
+    ], [], '2026-09-01')
+    expect(Object.keys(a.dia.saloneros).sort()).toEqual(['MAXO', 'Salón sin mesero'])
+    expect((a.dia.saloneros['Salón sin mesero'] as CajeroDay).total).toBe(10000)
+  })
+
+  it('caja y sistema salen marcados `esCajero` — fuera del ranking, dentro del total', () => {
+    // El turno lo da `cajero_login` (la caja que cobró), no el login que registró.
+    const a = armar('2026-09-01', [
+      ticket(),
+      ticket({ id: 't2', numero_factura: '5002', salonero_login: null, cajero_login: '111',
+               registrado_por: 'cajero', canal: 'delivery', valor_servido_crc: 8000 }),
+      ticket({ id: 't3', numero_factura: '5003', salonero_login: null, cajero_login: '222',
+               registrado_por: 'cajero', canal: 'delivery', valor_servido_crc: 3000 }),
       ticket({ id: 't4', numero_factura: '5004', salonero_login: '002',
                registrado_por: 'sistema', valor_servido_crc: 1000 }),
     ], [], '2026-09-01')
 
     expect(Object.keys(a.dia.saloneros).sort())
-      .toEqual(['Cajero turno mañana', 'Cajero turno tarde', 'MAXO', 'Sistema · 002'])
+      .toEqual(['Cajero turno mañana', 'Cajero turno tarde', 'MAXO', 'Sistema y otros'])
 
     // La marca es lo que hace que `aggSalonero` los saltee y `aggGeneral` los mande a caja.
-    for (const clave of ['Cajero turno mañana', 'Cajero turno tarde', 'Sistema · 002']) {
+    for (const clave of ['Cajero turno mañana', 'Cajero turno tarde', 'Sistema y otros']) {
       expect((a.dia.saloneros[clave] as CajeroDay).esCajero).toBe(true)
     }
     expect((a.dia.saloneros['MAXO'] as CajeroDay).esCajero).toBeUndefined()
@@ -129,10 +146,12 @@ describe('armarDia', () => {
   })
 
   it('el cajero lleva órdenes, ticket promedio y su corte salón/delivery', () => {
+    // Los dos son del cajero 111 y ninguno es de salón (el de salón se iría a «Salón sin mesero»).
+    // `salon` acá es lo que no es delivery: barra / para llevar / otro.
     const a = armar('2026-09-01', [
-      ticket({ id: 'c1', salonero_login: '111', registrado_por: 'cajero',
-               canal: 'salon', valor_servido_crc: 6000 }),
-      ticket({ id: 'c2', numero_factura: '5002', salonero_login: '111',
+      ticket({ id: 'c1', salonero_login: null, cajero_login: '111', registrado_por: 'cajero',
+               canal: 'llevar', valor_servido_crc: 6000 }),
+      ticket({ id: 'c2', numero_factura: '5002', salonero_login: null, cajero_login: '111',
                registrado_por: 'cajero', canal: 'delivery', valor_servido_crc: 4000 }),
     ], [], '2026-09-01')
     const c = a.dia.saloneros['Cajero turno mañana'] as CajeroDay
@@ -491,10 +510,12 @@ describe('nombreSalonero', () => {
     const a = armarDia('2026-09-01', [
       ticket({ id: 'a', salonero_login: '026' }),
       ticket({ id: 'b', salonero_login: '099' }),
-      ticket({ id: 'c', salonero_login: null, registrado_por: 'cajero' }),
+      // Cajero en el salón → «Salón sin mesero». Ojo con el parecido: `099 · sin asignar` es un
+      // MESERO al que no se le pudo poner nombre; `Salón sin mesero` es una factura SIN mesero.
+      ticket({ id: 'c', salonero_login: null, registrado_por: 'cajero', canal: 'salon' }),
     ], [], '2026-09-01', nombres)
     expect(Object.keys(a.dia.saloneros).sort())
-      .toEqual(['099 · sin asignar', 'Caja', 'MAXO'])
+      .toEqual(['099 · sin asignar', 'MAXO', 'Salón sin mesero'])
   })
 
   it('sin mapa de Empleados el día igual sale por nombre, vía roster', () => {

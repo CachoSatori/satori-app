@@ -5,8 +5,9 @@ import {
   aggGeneral, aggSalonero, aggCajero, getDayStats,
   fi, fmtDate, metaColor, getMeta,
   topProds, metaProgress, ratioCBClass,
-  allSaloneros, allCajeros, mixPorFamilia,
+  allSaloneros, esEntradaCajero, mixPorFamilia,
 } from './ventasUtils'
+import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import { esPostCorte } from '../cash/cierrePozo'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -46,12 +47,20 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
 
   const dia  = activeDate ? dias[activeDate] : null
   const sals = useMemo(() => dia ? allSaloneros({ [activeDate!]: dia }) : [], [dia, activeDate])
-  // Los buckets de caja del día, por la MARCA `esCajero` y no por el nombre de la clave.
-  // Con el filtro por nombre (`CAJEROS_IDS`, cinco nombres del .xls) un día cuya caja el PoS
-  // etiquetó `Caja · 388` daba `cajs` vacío → `hasCajeros` false → el bloque «Restaurante»
-  // NO se renderizaba, y con él desaparecía de la pantalla el KPI «Venta Total Restaurante»,
-  // que es la NETA DEL DÍA. El número siempre estuvo bien; lo que fallaba era mostrarlo.
-  const cajs = useMemo(() => allCajeros(dias, activeDate ? [activeDate] : []), [dias, activeDate])
+  // ── Las TARJETAS de caja del bloque «Restaurante» ─────────────────────────────────────
+  // Solo los dos turnos. Los otros dos baldes que arma `claveNoMesero()` no son caja y no
+  // van acá: «Salón sin mesero» vive en Saloneros y «Sistema y otros» en la pestaña Cajeros.
+  //
+  // ⚠️ Esto es SOLO la lista de tarjetas. El gate del bloque va aparte, abajo — ver `hayCaja`.
+  const cajs = CLAVES_CAJERO_TURNO as readonly string[]
+
+  // El GATE del bloque, en cambio, mira si el día tiene CUALQUIER bucket de caja, por la marca.
+  // Atarlo a `cajs` sería repetir el bug que arregló el pase anterior: un día cuya única plata
+  // no-mesero fuera «Salón sin mesero» dejaría el bloque sin renderizar, y con él desaparecería
+  // de la pantalla el KPI «Venta Total Restaurante», que es la NETA DEL DÍA.
+  const hayCaja = useMemo(
+    () => Object.values(dia?.saloneros ?? {}).some(esEntradaCajero),
+    [dia])
 
   const gen = useMemo(() =>
     activeDate ? aggGeneral([activeDate], dias, pm) : null,
@@ -156,7 +165,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   }
 
   const stats      = getDayStats(dia)
-  const hasCajeros = cajAggs.length > 0
+  const hasCajeros = hayCaja
 
   // ▲/▼ delta vs día anterior
   function delta(cur: number, prev: number | undefined, isInt = false): React.ReactNode {
@@ -329,7 +338,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               <div className="vt-kpi-val">{fi(gen.cajDelivery)}</div>
               <div className="vt-kpi-sub">{gen.totalRest > 0 ? (gen.cajDelivery / gen.totalRest * 100).toFixed(1) : 0}%</div>
             </div>
-            {cajAggs.map(c => (
+            {cajAggs.filter(c => c.total !== 0).map(c => (
               <div key={c.nombre} className="vt-kpi">
                 <div className="vt-kpi-label">{c.nombre}</div>
                 <div className="vt-kpi-val" style={{ fontSize: '0.9rem' }}>{fi(c.total)}</div>

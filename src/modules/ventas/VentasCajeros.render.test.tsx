@@ -38,27 +38,43 @@ const dia = (saloneros: Record<string, SaloneroDay | CajeroDay>): DiaData =>
 const HOY   = new Date()
 const DIA_1 = `${HOY.getFullYear()}-${String(HOY.getMonth() + 1).padStart(2, '0')}-01`
 
+// Los baldes que produce `claveNoMesero`: dos turnos + los dos que NO suman al total.
 const DIAS_POS: DiasMap = {
   [DIA_1]: dia({
     MAXO: sal({ pax: 20, total: 200_000 }),
-    'Cajero turno mañana': caj({ total: 60_000, salon: 40_000, delivery: 20_000, ordenes: 4 }),
-    'Caja · 388':          caj({ total: 30_000, salon: 10_000, delivery: 20_000, ordenes: 2 }),
+    'Cajero turno mañana': caj({ total: 60_000, salon: 0, delivery: 60_000, ordenes: 4 }),
+    'Cajero turno tarde':  caj({ total: 30_000, salon: 0, delivery: 30_000, ordenes: 2 }),
+    'Salón sin mesero':         caj({ total: 25_000, salon: 25_000, delivery: 0, ordenes: 3 }),
+    'Sistema y otros':     caj({ total:  5_000, salon: 0, delivery: 5_000, ordenes: 1 }),
   }),
 }
 
 describe('VentasCajeros · render', () => {
-  it('lista los buckets del PoS, incluido el que no está en CAJEROS_IDS', () => {
+  it('muestra las DOS tarjetas de turno, y ninguna tarjeta por login', () => {
     render(<VentasCajeros dias={DIAS_POS} />)
     expect(screen.getAllByText('Cajero turno mañana').length).toBeGreaterThan(0)
-    // `Caja · 388` es el que se perdía: no está en `CAJEROS_IDS`, solo trae la marca `esCajero`.
-    expect(screen.getAllByText('Caja · 388').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Cajero turno tarde').length).toBeGreaterThan(0)
+    // La etiqueta del 222 nunca dice «noche».
+    expect(texto()).not.toMatch(/noche/i)
+    // Y ya no hay tarjetas por login ni el balde de salón sin mesero.
+    expect(texto()).not.toContain('Caja · ')
+    expect(texto()).not.toContain('Sin salonero')
+    expect(texto()).not.toContain('Salón sin mesero')
   })
 
-  it('el total y el delivery suman los DOS buckets, con el delivery por canal', () => {
+  it('Total Cajeros = mañana + tarde, sin «Salón sin mesero» ni «Sistema y otros»', () => {
     render(<VentasCajeros dias={DIAS_POS} />)
-    expect(texto()).toContain(`Total cajeros${plano(fi(90_000))}`)
-    // Delivery por CANAL: ₡20.000 de cada bucket, incluido el que se perdía.
-    expect(texto()).toContain(`Delivery${plano(fi(40_000))}`)
+    expect(texto()).toContain(`Total cajeros${plano(fi(90_000))}`)   // 60.000 + 30.000
+    expect(texto()).toContain(`Delivery${plano(fi(90_000))}`)
+    // Los ₡25.000 de «Salón sin mesero» NO entran al total.
+    expect(texto()).not.toContain(`Total cajeros${plano(fi(115_000))}`)
+  })
+
+  it('«Sistema y otros» se ve, pero avisando que no suma al total', () => {
+    render(<VentasCajeros dias={DIAS_POS} />)
+    expect(texto()).toContain('Sistema y otros')
+    expect(texto()).toContain(plano(fi(5_000)))
+    expect(texto()).toContain('no suma al Total Cajeros')
   })
 
   it('sin ningún día con caja: vacío honesto y SIN mención al XLS', () => {

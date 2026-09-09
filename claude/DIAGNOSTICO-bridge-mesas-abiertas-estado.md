@@ -1,104 +1,99 @@
 # DIAGNÓSTICO — mesas abiertas fantasma en "En vivo" (bug del bridge, P1)
 
-2026-09-09. Asesor: Claude. Verificado contra el PoS (DBeaver, base `ndf`) y el repo
-(`origin/staging`). No es pase C. No es plata. Es la definición de "mesa abierta" del bridge.
+> 2026-09-09. Asesor: Claude. Verificado contra el PoS (DBeaver, base `ndf`) y el repo (origin/staging).
+> Refinado con la revisión de CC (5 puntos, ver abajo). **No es pase C. No es plata. Es la definición de
+> "mesa abierta" del bridge.**
 
 ## Síntoma
+Staging (`satori-staging.pages.dev`, pase C) mostró **3 "mesas abiertas" con el local cerrado**
+(mesas 20/17/19, salonero 028/FRANCISCO, "abierta hace 12 h"). Ismael confirmó: PoS cerrado, cierre
+del día anterior cuadrado al 100%, cero mesas abiertas reales.
 
-Staging (`satori-staging.pages.dev`, pase C) mostró 3 "mesas abiertas" con el local cerrado
-(mesas 20/17/19, salonero 028/FRANCISCO, "abierta hace 12 h"). Ismael confirmó: PoS cerrado,
-cierre del día anterior cuadrado al 100%, cero mesas abiertas reales.
+## Causa raíz (CONFIRMADA en código)
+El bridge define mesa abierta como `FAC_Pedidos.NumeroFactura IS NULL` (`pos-bridge/consultaAgente.ts:126`,
+`sqlAbiertas`), **sin ninguna condición de estado**. Las CERRADAS sí usan whitelist (`Estado='C'` en
+`FAC_Facturas`). La señal real de abierto/cerrado es **`FAC_Pedidos.Estado`**.
 
-## Causa raíz (CONFIRMADA)
+### Encuadre correcto (corrige la v1 de este doc)
+La v1 decía "este PoS no escribe el back-link". **Falso como generalización.** El back-link se escribe
+el **93%** de las veces:
 
-El bridge define mesa abierta como `FAC_Pedidos.NumeroFactura IS NULL`
-(`pos-bridge/consultaAgente.ts`, `sqlAbiertas`). Está mal para este PoS. Este PoS no reescribe
-`NumeroFactura` en el pedido cuando factura: la factura queda en `FAC_Facturas` (por eso el día
-cuadra), pero el back-link al pedido no se escribe. Resultado: `NumeroFactura IS NULL` agarra
-pedidos facturados y anulados por igual.
+| Medida | Filas |
+|---|---|
+| FAC_Pedidos total (F+X+R) | 24.201 |
+| NumeroFactura IS NULL | 1.780 |
+| Con back-link escrito | 22.421 (93%) |
 
-La señal real de abierto/cerrado es `FAC_Pedidos.Estado`.
+El fantasma es la **minoría** que nunca recibe el back-link: de los 1.780 con NumeroFactura NULL →
+**1.101 `X` (anuladas, correctamente sin factura), 647 `F` (facturadas pero sin back-link — la anomalía),
+30 `R`**. El bridge los toma a todos por "abiertos" cuando caen en la ventana de fecha. La conclusión no
+cambia (whitelist por Estado), pero el encuadre importa para el resto.
 
 ## Evidencia (DBeaver, 2026-09-09)
+- Los 3 pedidos: **22 → `X`**, **23 → `F`** (UltimaAccion 21:40), **24 → `X`** + `PedidoTrasladado=21`.
+  Ninguno abierto. Sin factura por el enlace inverso (`FAC_Facturas.NumeroPedido`, vacío en mesa).
+- `WHERE NumeroFactura IS NULL` → 1.780 pedidos, desde ene-2026 y atrás.
+- `Estado` en TODO `FAC_Pedidos`: solo **`F`=23.070, `X`=1.101, `R`=30**. No hay código de "abierto"
+  con el local cerrado (todos resolvieron a terminal).
+- Nota: el conteo back-link-NULL (1.780 por conteo directo / 1.778 por desglose de Estado) es un número
+  VIVO que drifta entre queries corridas con minutos de diferencia; ninguno es canónico y el fix no depende de él.
 
-- Los 3 pedidos: 22 → Estado `X` (anulada), 23 → Estado `F` (facturada, UltimaAccion 21:40),
-  24 → Estado `X` + `PedidoTrasladado=21` (movida y anulada). Ninguno abierto. Sin factura por el
-  enlace inverso (`FAC_Facturas.NumeroPedido`), que en este esquema viene vacío en mesa.
-- `SELECT ... WHERE NumeroFactura IS NULL` → 1.780 pedidos, desde ene-2026 y atrás.
-- Distribución de `Estado` en TODO `FAC_Pedidos`: solo tres valores — `F`=23.070 (facturada),
-  `X`=1.101 (anulada), `R`=30 (rara). No existe un código de "abierto" en la base con el local
-  cerrado.
+## El fix (bridge, P1) — NO es de una línea (corrige la v1)
+`sqlAbiertas` debe filtrar por `Estado = '<activo>'` (whitelist), no por `NumeroFactura IS NULL`. Pero:
 
-Nota: el conteo de pedidos back-link-NULL (1.780 por conteo directo / 1.778 por desglose de
-Estado) es un número VIVO que drifta entre queries corridas con minutos de diferencia; ninguno es
-canónico y el fix no depende de él.
+- **La tabla `pedidos` NO tiene `estado` en el catálogo de `esquema.ts`** (solo `facturas` lo tiene). Hay
+  que **agregar la definición** de la columna al `CATALOGO.pedidos`.
+- Declararla **opcional**, y que **`puedeLeerAbiertas` devuelva `false` cuando no esté** — igual que ya
+  hace con `numeropedido`. ⚠️ Caer de vuelta a solo `NumeroFactura IS NULL` restauraría el bug en
+  silencio: **fail-closed** (no mandar snapshot), nunca fail-open.
+- Test: un pedido `F` y uno `X` NO entran; uno `'<activo>'` sí.
+- Bonus: apenas se corrija, los fantasma se limpian solos (al cerrarse → F/X → sale del snapshot → la
+  Edge lo borra en el próximo poll).
 
-## Lo que FALTA para el fix exacto
+## Lo que FALTA: el código del Estado ACTIVO (protocolo de captura refinado)
+No hay pedidos abiertos ahora, así que la base no revela el código activo. **Una sola foto en servicio
+puede engañar** (no distingue el código activo de uno que ya mutó). Protocolo correcto:
+1. En servicio, con mesas que el personal confirma abiertas, registrar **NumeroPedido + Estado**:
+   ```sql
+   SELECT NumeroPedido, NumeroMesa, Estado, NumeroFactura, UltimaAccion, FechaRegistra
+   FROM dbo.FAC_Pedidos
+   WHERE NumeroFactura IS NULL AND FechaRegistra >= CAST(GETDATE() AS date)
+   ORDER BY FechaRegistra DESC;
+   ```
+2. Tras el cierre, releer **esos mismos NumeroPedido**. El código que aparece **solo mientras estaba
+   abierta** (y mutó a F/X al cerrar) es el `'<activo>'`.
 
-No hay ningún pedido abierto ahora (todos resolvieron a F/X/R), así que la base no revela el
-código del Estado ACTIVO. Hay que capturarlo en servicio, con al menos una mesa realmente abierta:
-
-```sql
-SELECT NumeroPedido, NumeroMesa, Estado, NumeroFactura, UltimaAccion, FechaRegistra
-FROM dbo.FAC_Pedidos
-WHERE NumeroFactura IS NULL
-  AND FechaRegistra >= CAST(GETDATE() AS date)
-ORDER BY FechaRegistra DESC;
-```
-
-→ El `Estado` de las mesas que el personal confirma abiertas = el código activo.
-
-⚠️ NO usar el blacklist `Estado NOT IN ('F','X','R')` a ciegas: si una mesa abierta ya figura `F`
-durante el servicio, ese filtro escondería mesas abiertas reales (peor que el bug actual). Por eso
-se captura el código activo y se hace whitelist.
-
-## El fix (bridge, P1) — pendiente del código activo
-
-`sqlAbiertas` filtra por `Estado = '<activo>'` en vez de (o además de) `NumeroFactura IS NULL`.
-Cambio de una línea + test. Bonus: apenas se corrija, los fantasma se limpian solos (al cerrarse el
-pedido pasa a F/X → sale del snapshot → la Edge lo borra en el próximo poll).
-
-Borrador de prompt para CC (completar `<ACTIVO>`):
-
-```
-TAREA — fix del bridge: sqlAbiertas debe filtrar por Estado, no por NumeroFactura IS NULL.
-Confirmado: en este PoS FAC_Pedidos.Estado es F(facturada)/X(anulada)/R(rara); "abierta" = Estado='<ACTIVO>'
-(capturado en servicio el <FECHA>). NumeroFactura NULL agarra pedidos cerrados (el PoS no escribe el back-link).
-- Cambiar sqlAbiertas (pos-bridge/consultaAgente.ts): WHERE p.<numerofactura> IS NULL AND p.Estado = '<ACTIVO>'
-  (mantené el acote por fecha). Resolver el nombre real de la columna Estado por esquema.ts si aplica.
-- Test: un pedido F y uno X NO entran; uno '<ACTIVO>' sí.
-- Guardrails: solo el snapshot de abiertas (En vivo). NO tocar sqlCerradas/ventas/plata. Rama nueva, nada a main.
-```
+⚠️ NO usar blacklist `Estado NOT IN ('F','X','R')` a ciegas (escondería mesas abiertas reales si durante
+el servicio ya figuran `F`).
 
 ## Alcance / blast radius
+Solo "En vivo" (mesas abiertas, de `FAC_Pedidos`). La venta/plata sale de `FAC_Facturas` por `sqlCerradas`
+(whitelist `Estado='C'`) y **cuadró perfecto**. **No es bug de plata.**
 
-Solo "En vivo" (mesas abiertas, de `FAC_Pedidos`). La venta/plata sale de `FAC_Facturas` por
-`sqlCerradas` (filtra su propio Estado C/X/R) y cuadró perfecto. No es bug de plata.
+## Impacto en pase C (hallazgo de CC — sube P2)
+`excluirCerradas` (la exclusión del pase C) **NO es red independiente**: su set de llaves sale de
+`getPedidosCerradosJornada`, que lee `numero_pedido` de `pos_ndf_tickets`, y ese `numero_pedido` viene del
+**mismo back-link** (join por `NumeroFactura`). Cuando el back-link es NULL, el ticket cerrado queda sin
+`numero_pedido`, el set nunca lo contiene, y la exclusión **falla exactamente sobre el conjunto fantasma**.
+→ El **guard de mesas viejas (P2) es la ÚNICA defensa de display** que puede atajar esto.
+
+## El delta ₡4.867 puede ser el MISMO bug (hallazgo de CC — cruzar antes de tratarlo aparte)
+El salonero/mesa/pax/canal de los tickets cerrados salen de esa misma subconsulta por back-link. Una
+factura cuyo pedido tiene `NumeroFactura` NULL **pierde su `usuario_registra` → cae en "Salón sin mesero"**.
+El delta de #8 puede ser justo esas facturas. **Cruzar:** ¿el ₡4.867 corresponde a facturas cuyos pedidos
+tienen `NumeroFactura` NULL? Si sí, delta y fantasma comparten raíz. (Ver `SPEC-atribucion-salon-por-linea.md`.)
 
 ## Interino
-
 Borrar las 3 fantasma para destrabar staging (parche; reaparecen hasta el fix):
-
 ```sql
 delete from pos_ndf_open where local='santa-teresa' and clave in ('pedido:22','pedido:23','pedido:24');
 ```
 
-## Relación con pase C
-
-- Pase C (fusión Hoy+En vivo) solo muestra lo que el bridge le da; no es el bug. Pero no va a
-  `main` hasta cerrar este P1.
-- Hardening de display de pase C (P2) — defensa en profundidad, en paralelo:
-  - Guard de mesas viejas: una mesa "abierta hace >Nh" o de jornada pasada sale MARCADA
-    ("revisar"), no como actividad viva normal. (Esto es lo que habría delatado este bug en
-    pantalla.)
-  - Frescura mirando `last_error` de `pos_ndf_cursor`, no solo `last_poll_at`. (Hygiene; no habría
-    cachado ESTE bug porque el agente no erroraba, pero cubre el caso PoS-apagado.)
-
 ## Prioridades
-
-1. P1 — fix del bridge (definición de abierto). Pendiente: 1 captura en servicio.
-2. P2 — hardening de display de pase C (guard de mesas viejas + frescura con `last_error`). En
-   paralelo.
+1. **P1 — fix del bridge** (whitelist por Estado en `sqlAbiertas` + Estado al `CATALOGO.pedidos` opcional +
+   fail-closed). Pendiente: captura del código activo en servicio (protocolo de 2 pasos).
+2. **P2 — hardening de display de pase C** (guard de mesas viejas = única defensa que ataja esto +
+   frescura con `last_error`). YA en staging (`ffe88e8`); pendiente validación física.
 3. Pase C a `main`: bloqueado hasta P1.
-4. Encolados aparte: delta ₡4.867 (Salón sin mesero), limpieza de `product_map.tipo` /
-   mapCategoria.
+4. **Delta ₡4.867**: cruzar contra el conjunto back-link-NULL antes de tratarlo aparte (puede colapsar).
+5. Limpieza de `product_map.tipo` / mapCategoria: encolado.

@@ -69,6 +69,11 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       numeropedido:    opt('id del pedido (clave de la mesa abierta)', 'NumeroPedido', 'IdPedido', 'Numero'),
       mesa:            opt('mesa', 'Mesa', 'NumeroMesa'),
       fecha:           opt('fecha del pedido (acota el snapshot de abiertas)', 'FechaRegistra', 'Fecha'),
+      // La señal REAL de abierto/cerrado. `NumeroFactura IS NULL` no sirve: el back-link no se
+      // escribe en una minoría de pedidos (~7%), y ahí un pedido ya facturado o anulado se veía
+      // abierto para siempre. Es OPCIONAL en el catálogo pero el snapshot de abiertas no sale
+      // sin ella — ver `puedeLeerAbiertas`.
+      estado:          opt('R abierto / F facturada / X anulada — define la mesa ABIERTA', 'Estado'),
     },
   },
   facturasdet: {

@@ -91,19 +91,47 @@ export interface FilaAbierta {
 }
 
 /**
- * ¿Se puede leer el snapshot en esta instalación? Necesita el número de pedido, que es
- * la CLAVE de la mesa abierta. Sin él no hay identidad estable y el snapshot no cierra:
- * mejor no mandarlo (el Edge no toca `pos_ndf_open` si `open` viene ausente).
+ * El código de `FAC_Pedidos.Estado` que significa MESA ABIERTA.
+ *
+ * La columna tiene solo tres valores en este PoS: `R` en curso, `F` facturada, `X` anulada
+ * (verificado con DBeaver; el único pedido abierto en servicio salió `R` y los tres fantasma
+ * eran `X`/`F`). Se filtra por whitelist y NUNCA por blacklist `NOT IN ('F','X')`: si un día
+ * apareciera un código nuevo, una whitelist deja de mostrar mesas —visible, se reporta— y una
+ * blacklist mostraría basura como si fuera actividad viva.
+ */
+export const ESTADO_PEDIDO_ABIERTO = 'R'
+
+/**
+ * ¿Se puede leer el snapshot en esta instalación? Necesita DOS columnas:
+ *
+ *   · `numeropedido` — la CLAVE de la mesa abierta. Sin ella no hay identidad estable.
+ *   · `estado`       — la señal de abierto/cerrado. Sin ella no se puede distinguir una mesa
+ *                      abierta de un pedido ya facturado o anulado.
+ *
+ * Sin cualquiera de las dos NO se manda el snapshot (el Edge no toca `pos_ndf_open` si `open`
+ * viene ausente). Es FAIL-CLOSED a propósito: la alternativa —caer de vuelta a solo
+ * `NumeroFactura IS NULL`— restauraría en silencio el bug de las mesas fantasma, y un feed que
+ * miente sin avisar es peor que un feed que no reporta.
  */
 export function puedeLeerAbiertas(esq: Esquema): boolean {
   return colOpt(esq, 'pedidos', 'numeropedido') !== null
+      && colOpt(esq, 'pedidos', 'estado') !== null
 }
 
 /**
- * Los pedidos SIN factura = lo que está abierto ahora.
+ * Los pedidos EN CURSO = lo que está abierto ahora.
  *
- * Se acota por fecha cuando la columna existe: sin ese filtro, un `NumeroFactura IS NULL`
- * escanea `FAC_Pedidos` entero (24.054 filas y creciendo) en cada poll.
+ * La condición que manda es `Estado = 'R'`. `NumeroFactura IS NULL` se conserva —acota igual y
+ * un pedido abierto todavía no tiene factura— pero por sí solo NO define "abierto": el
+ * back-link no se escribe en ~7% de los pedidos, y ahí uno ya facturado (`F`) o anulado (`X`)
+ * se veía abierto para siempre. Ese era el bug de las mesas fantasma.
+ *
+ * Se acota por fecha cuando la columna existe: sin ese filtro se escanea `FAC_Pedidos` entero
+ * (24.054 filas y creciendo) en cada poll.
+ *
+ * `col()` y no `colOpt()` para el estado: si la columna no está esto EXPLOTA en vez de emitir
+ * la consulta vieja. No debería llegar acá —`puedeLeerAbiertas` corta antes— y si llega, un
+ * error ruidoso es mejor que volver al bug en silencio.
  */
 export function sqlAbiertas(esq: Esquema): string {
   const P = `${q('dbo')}.${q(esq.pedidos.tabla)}`
@@ -123,7 +151,8 @@ export function sqlAbiertas(esq: Esquema): string {
   ${op('mesa')}                                     AS mesa,
   ${fecha ? `CONVERT(varchar(19), p.${q(fecha)}, 120)` : 'NULL'} AS fecha_hora
 FROM ${P} p
-WHERE p.${cp('numerofactura')} IS NULL${
+WHERE p.${cp('numerofactura')} IS NULL
+  AND p.${cp('estado')} = '${ESTADO_PEDIDO_ABIERTO}'${
   fecha ? `\n  AND p.${q(fecha)} >= ${DESDE} AND p.${q(fecha)} < ${HASTA}` : ''
 }
 ORDER BY p.${q(col(esq, 'pedidos', 'numeropedido'))}`

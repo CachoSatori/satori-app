@@ -26,22 +26,31 @@ de Estado = número vivo que drifta entre queries; ninguno es canónico y el fix
 - Los 3 pedidos: **22 → `X`**, **23 → `F`** (UltimaAccion 21:40), **24 → `X`** + `PedidoTrasladado=21`.
   Ninguno abierto. Sin factura por el enlace inverso (`FAC_Facturas.NumeroPedido`, vacío en mesa).
 - `WHERE NumeroFactura IS NULL` → 1.780 pedidos, desde ene-2026 y atrás.
-- `Estado` en TODO `FAC_Pedidos`: solo **`F`=23.070, `X`=1.101, `R`=30**. No hay código de "abierto"
-  con el local cerrado (todos resolvieron a terminal).
+- Estado en FAC_Pedidos: F=23.070 (facturada), X=1.101 (anulada), R=30 (en curso). CONFIRMADO en
+  servicio (2026-09-09): R = ABIERTO. Se capturó la mesa 5 abierta en vivo en Estado R, con dos
+  pedidos previos de la misma mesa en X (anulados). F/X son terminales. Los "30 R" no son rareza:
+  Estado es el estado ACTUAL (se sobrescribe), así que solo quedan en R los pedidos abiertos o
+  atascados en el momento de la query.
 - Nota: el conteo back-link-NULL (1.780 por conteo directo / 1.778 por desglose de Estado) es un número
   VIVO que drifta entre queries corridas con minutos de diferencia; ninguno es canónico y el fix no depende de él.
 
 ## El fix (bridge, P1) — NO es de una línea (corrige la v1)
-`sqlAbiertas` debe filtrar por `Estado = '<activo>'` (whitelist), no por `NumeroFactura IS NULL`. Pero:
+`sqlAbiertas` debe filtrar por **`Estado = 'R'`** (whitelist), no por `NumeroFactura IS NULL`. El código
+activo ya NO es una incógnita: se capturó en servicio y es `R`. Pero:
 
 - **La tabla `pedidos` NO tiene `estado` en el catálogo de `esquema.ts`** (solo `facturas` lo tiene). Hay
   que **agregar la definición** de la columna al `CATALOGO.pedidos`.
 - Declararla **opcional**, y que **`puedeLeerAbiertas` devuelva `false` cuando no esté** — igual que ya
   hace con `numeropedido`. ⚠️ Caer de vuelta a solo `NumeroFactura IS NULL` restauraría el bug en
   silencio: **fail-closed** (no mandar snapshot), nunca fail-open.
-- Test: un pedido `F` y uno `X` NO entran; uno `'<activo>'` sí.
+- Test: un pedido `F` y uno `X` NO entran; uno `R` sí.
 - Bonus: apenas se corrija, los fantasma se limpian solos (al cerrarse → F/X → sale del snapshot → la
   Edge lo borra en el próximo poll).
+
+**Estado: IMPLEMENTADO** en `aef2660` (rama `claude/bridge-abiertas-estado-r`). Los tres cambios
+están: `estado` opcional en `CATALOGO.pedidos`, `puedeLeerAbiertas` fail-closed sin la columna, y
+`sqlAbiertas` con `AND p.[Estado] = 'R'`. **Pendiente: desplegar el agente** en la PC del PoS
+(`deploy/pos-bridge-staging`) — hasta que corra el binario nuevo, los fantasma siguen entrando.
 
 ## Lo que FALTA: el código del Estado ACTIVO (protocolo de captura refinado)
 No hay pedidos abiertos ahora, así que la base no revela el código activo. **Una sola foto en servicio

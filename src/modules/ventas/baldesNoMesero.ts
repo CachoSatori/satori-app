@@ -61,7 +61,7 @@ export const CLAVE_CAJERO_TARDE  = `Cajero turno ${ETIQUETA_TURNO_POS['noche'].t
 /**
  * Venta de SALÓN que la factura no le acredita a ningún mesero.
  *
- * Se llama «Salón sin mesero» y NO «Salón sin mesero» a propósito: el roster ya usa
+ * Se llama «Salón sin mesero» y NO «Sin asignar» a propósito: el roster ya usa
  * `«099 · sin asignar»` (`nombreSalonero`) para un MESERO real al que no se le pudo poner
  * nombre. Son cosas distintas —una factura sin dueño contra una persona sin nombre— y con el
  * rótulo viejo se leían igual.

@@ -366,7 +366,22 @@ export async function getSaloneroNombres(): Promise<Record<string, string>> {
 // ── Frescura del feed: ¿el agente sigue vivo? ──────────────────────────────────────────────
 
 /**
- * Cuándo fue el último poll del agente contra el PoS (`pos_ndf_cursor.last_poll_at`).
+ * El latido del agente: cuándo leyó por última vez y si ese último lote falló.
+ *
+ * Son los DOS campos de `pos_ndf_cursor` que dicen si se puede creer lo que hay en
+ * `pos_ndf_open`. Van juntos porque separados mienten: un `last_poll_at` de hace 30 s con un
+ * `last_error` encima significa que el agente corrió y NO pudo traer nada, y mirando solo la
+ * hora eso se lee como un feed sano.
+ */
+export interface LatidoPoS {
+  /** `pos_ndf_cursor.last_poll_at`. `null` = el agente nunca corrió para este local. */
+  ultimoPollAt: string | null
+  /** `pos_ndf_cursor.last_error`. `null` = el último lote entró limpio (ver mig 062). */
+  error: string | null
+}
+
+/**
+ * El latido del agente contra el PoS (`pos_ndf_cursor`). Solo LECTURA: acá nunca se escribe.
  *
  * ⚠️ ES EL ÚNICO LATIDO QUE HAY. `pos_ndf_open.updated_at` NO sirve para esto: pese al nombre,
  * no es la frescura del snapshot sino la hora en que se ABRIÓ el pedido (el agente lo copia de
@@ -377,16 +392,20 @@ export async function getSaloneroNombres(): Promise<Record<string, string>> {
  * Sin este dato «En vivo» puede mentir en silencio: si el agente se cae, `pos_ndf_open` conserva
  * el último snapshot para siempre y las mesas fantasma se siguen pintando como si fueran de ahora.
  *
- * `null` = todavía no hay fila de cursor para el local (el agente nunca corrió acá).
+ * Sin fila de cursor el latido viaja entero en `null` — el agente nunca corrió acá.
  */
-export async function getUltimoPollPoS(local: string): Promise<string | null> {
+export async function getUltimoPollPoS(local: string): Promise<LatidoPoS> {
   const { data, error } = await sb
     .from('pos_ndf_cursor')
-    .select('last_poll_at')
+    .select('last_poll_at, last_error')
     .eq('local', local)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  return ((data ?? null) as { last_poll_at: string | null } | null)?.last_poll_at ?? null
+  const fila = (data ?? null) as { last_poll_at: string | null; last_error: string | null } | null
+  return {
+    ultimoPollAt: fila?.last_poll_at ?? null,
+    error:        (fila?.last_error ?? '').trim() === '' ? null : String(fila?.last_error),
+  }
 }
 
 // ── La llave de exclusión Hoy ↔ En vivo ────────────────────────────────────────────────────

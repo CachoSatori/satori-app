@@ -661,3 +661,35 @@
 }
 
 .apos-tabla-abiertas { margin-top: 0.35rem; }
+
+/* ── Mesa arrastrada de otra jornada ─────────────────────────
+   La fila se MARCA, nunca se esconde: si el puente reporta como abierto un pedido que ya se
+   cobró, taparlo sería tapar la evidencia. Va en el color de alerta y no en el crítico —
+   es algo que hay que ir a mirar al PoS, no una cifra rota (el día sale de las cerradas). */
+
+.apos-revisar {
+  color: var(--apos-alerta);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.apos-tabla-abiertas tr.is-revisar > td {
+  background: color-mix(in srgb, var(--apos-alerta) 8%, transparent);
+}
+
+.apos-revisar-nota {
+  margin: 0.5rem 0 0;
+  font-size: 0.73rem;
+  line-height: 1.55;
+  color: var(--apos-alerta);
+  font-weight: 600;
+}
+
+/* El texto crudo del `last_error` del cursor: es un mensaje de máquina, va en mono y chico. */
+.apos-mono-sm {
+  font-family: var(--apos-mono);
+  font-size: 0.7rem;
+  overflow-wrap: anywhere;
+}

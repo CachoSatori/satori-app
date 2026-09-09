@@ -58,6 +58,15 @@ const MONTO_PENDIENTE =
   'El PoS todavía no manda lo consumido de una mesa abierta: pos_ndf_open no trae monto. ' +
   'Mostrar ₡0 diría que la mesa no consumió nada, que es falso.'
 
+/**
+ * La marca de la mesa arrastrada de otra jornada. Se explica en el `title` porque la fila NO se
+ * esconde: el operador tiene que poder decidir si es un olvido del personal o basura del puente.
+ */
+const REVISAR_JORNADA =
+  'Esta mesa figura abierta desde una jornada anterior. Un servicio no cruza jornadas: o quedó ' +
+  'sin cerrar en el PoS, o el puente la sigue reportando abierta cuando ya se cobró. No afecta ' +
+  'las cifras del día, que salen de las facturas cerradas.'
+
 /** El «—» del tiempo abierta, cuando no se puede afirmar la semántica de `updated_at`. */
 const TIEMPO_PENDIENTE =
   'No se puede confirmar desde cuándo está abierta: o el feed del PoS está viejo, o esta ' +
@@ -178,7 +187,7 @@ export default function VentasEnVivo({ metas }: Props) {
 
   const {
     dia, pm, porHora, historico, calidadPax, proyeccionCierre, turnos, turnosPoS, canales,
-    abiertasPorSalonero, mesasDetalle, frescura, ordenes, porTurno,
+    abiertasPorSalonero, mesasDetalle, mesasJornadaAnterior, frescura, ordenes, porTurno,
   } = snap
 
   // ── El día, con las MISMAS funciones que «Hoy» ─────────────────────────────────────────────
@@ -318,6 +327,15 @@ export default function VentasEnVivo({ metas }: Props) {
                 {' · '}lo que se ve abajo puede estar viejo
               </span>
             </div>
+            {/* Un lote que falló deja el snapshot viejo aunque el poll sea de recién. Sin decir
+                el motivo, «última lectura hace 1 min · puede estar viejo» se lee como un bug
+                de la pantalla en vez de como lo que es: el agente no pudo traer nada. */}
+            {frescura.error !== null && (
+              <p className="apos-viejo-nota">
+                El agente corrió pero el último lote <strong>no entró</strong>:{' '}
+                <span className="apos-mono-sm">{frescura.error}</span>
+              </p>
+            )}
             <p className="apos-viejo-nota">
               Las mesas abiertas y sus tiempos quedan en «—» hasta que el agente vuelva a
               reportar. Las cifras del día no se ven afectadas: salen de las facturas ya
@@ -368,6 +386,20 @@ export default function VentasEnVivo({ metas }: Props) {
               </ul>
             )}
 
+            {/* Mesas arrastradas de otra jornada. Va ARRIBA de la tabla y no la filtra: si el
+                puente está metiendo pedidos ya cerrados como abiertos, la pantalla tiene que
+                delatarlo. `excluirCerradas` no ataja ese caso — su llave sale del mismo
+                back-link del PoS que viene vacío justo ahí. */}
+            {mesasJornadaAnterior !== undefined && mesasJornadaAnterior > 0 && (
+              <p className="apos-revisar-nota" role="status">
+                <span className="apos-revisar" aria-hidden="true">⚠</span>{' '}
+                {mesasJornadaAnterior === 1
+                  ? '1 mesa lleva abierta desde una jornada anterior'
+                  : `${mesasJornadaAnterior} mesas llevan abiertas desde una jornada anterior`}
+                {' — revisar en el PoS'}
+              </p>
+            )}
+
             {/* Mesa por mesa. Las columnas de plata van SIEMPRE en «—»: `pos_ndf_open` no
                 trae monto en ninguna de las tres capas del puente (el SELECT contra el PoS
                 no lo pide, el payload no lo lleva, la tabla no tiene la columna). Un «₡0»
@@ -389,8 +421,18 @@ export default function VentasEnVivo({ metas }: Props) {
                   </thead>
                   <tbody>
                     {mesasDetalle.map(m => (
-                      <tr key={m.clave}>
-                        <td>{m.mesa ?? '—'}</td>
+                      <tr key={m.clave} className={m.deJornadaAnterior ? 'is-revisar' : undefined}>
+                        <td>
+                          {m.mesa ?? '—'}
+                          {m.deJornadaAnterior && (
+                            <>
+                              {' '}
+                              <span className="apos-revisar" title={REVISAR_JORNADA}>
+                                ⚠ revisar
+                              </span>
+                            </>
+                          )}
+                        </td>
                         <td>{m.salonero}</td>
                         <td>{m.canal ?? '—'}</td>
                         <td className="r">{m.pax > 0 ? m.pax : '—'}</td>

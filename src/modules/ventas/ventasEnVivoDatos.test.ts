@@ -10,6 +10,7 @@ import {
   detallarMesasAbiertas, etiquetaTurnoPoS, excluirCerradas, frescuraDe, jornadaDesplazada,
   resumirMesasAbiertas, tiempoAbiertaConfiable, ventasPorCanal, ventasPorTurno,
   ventasPorTurnoPoS,
+  contarJornadaAnterior, esDeJornadaAnterior, jornadaDeInstante,
 } from './ventasEnVivoDatos'
 import type { CajeroDay } from '../../shared/types/ventas'
 import { SALONEROS_CONOCIDOS } from '../../shared/ndf/mapTicket'
@@ -845,6 +846,9 @@ describe('resumirMesasAbiertas', () => {
 
 // ── El candado de la fusión: la plata del día no se mueve ──────────────────────
 
+/** La jornada de las mesas de ejemplo: `mesaAb()` abre a las 20:00 CR del 1-sep. */
+const JORNADA = '2026-09-01'
+
 const mesaAb = (over: Partial<MesaAbiertaRow> = {}): MesaAbiertaRow => ({
   clave: 'm1', numero_factura: null, id_pedido: '1', mesa: '5',
   salonero_login: '026', canal: 'salon', pax: 2, pax_alerta: 'ok',
@@ -873,7 +877,7 @@ describe('la fusión Hoy ↔ En vivo no toca la plata del día', () => {
     mesasAbiertas: 3,
     paxAbierto: 9,
     abiertasPorSalonero: resumirMesasAbiertas([mesaAb()], NOMBRES),
-    mesasDetalle: detallarMesasAbiertas([mesaAb()], NOMBRES, true),
+    mesasDetalle: detallarMesasAbiertas([mesaAb()], NOMBRES, true, JORNADA),
     frescura: frescuraDe('2026-09-01T20:59:00-06:00', new Date('2026-09-01T21:00:00-06:00')),
     tiempoAbiertaConfiable: true,
   }
@@ -892,6 +896,34 @@ describe('la fusión Hoy ↔ En vivo no toca la plata del día', () => {
   it('las 9 personas sentadas NO entran en el neto del día', () => {
     const neto = Object.values(conAbiertas.dia.saloneros).reduce((a, v) => a + v.total, 0)
     expect(neto).toBe(25000)   // solo las dos facturas CERRADAS
+  })
+
+  // El guard de mesas viejas es un RÓTULO. Si alguna vez marcar una mesa restara de una cifra,
+  // esta prueba se cae: es el mismo candado byte-a-byte, con el peor caso posible del feed.
+  const conFantasma = {
+    ...base,
+    mesasAbiertas: 3,
+    paxAbierto: 9,
+    mesasDetalle: detallarMesasAbiertas([
+      mesaAb({ clave: 'pedido:22', updated_at: '2026-08-31T21:00:00-06:00' }),
+      mesaAb({ clave: 'pedido:23', updated_at: '2026-08-31T21:40:00-06:00' }),
+    ], NOMBRES, true, JORNADA),
+    frescura: frescuraDe(
+      { ultimoPollAt: '2026-09-01T20:59:00-06:00', error: 'timeout' },
+      new Date('2026-09-01T21:00:00-06:00')),
+  }
+
+  it('marcar mesas de jornada anterior deja el DiaData byte-idéntico', () => {
+    expect(conFantasma.mesasDetalle.every(m => m.deJornadaAnterior)).toBe(true)
+    expect(JSON.stringify(conFantasma.dia)).toBe(JSON.stringify(base.dia))
+  })
+
+  it('el feed roto (last_error) no mueve ni el neto ni el bruto', () => {
+    expect(conFantasma.frescura.desactualizado).toBe(true)
+    const plata = (s: typeof base) =>
+      [s.bruto, s.servicio, s.iva, s.regalia,
+       Object.values(s.dia.saloneros).reduce((a, v) => a + v.total, 0)]
+    expect(plata(conFantasma)).toEqual(plata(base))
   })
 
   it('`armarSnapshot` ni siquiera recibe las mesas abiertas', () => {
@@ -959,13 +991,14 @@ describe('tiempoAbiertaConfiable', () => {
 
 describe('detallarMesasAbiertas', () => {
   it('NUNCA trae monto: pos_ndf_open no lo tiene en ninguna capa del puente', () => {
-    const [m] = detallarMesasAbiertas([mesaAb()], NOMBRES, true)
+    const [m] = detallarMesasAbiertas([mesaAb()], NOMBRES, true, JORNADA)
     expect(Object.keys(m).sort())
-      .toEqual(['abiertaDesde', 'canal', 'clave', 'idPedido', 'mesa', 'pax', 'salonero'])
+      .toEqual(['abiertaDesde', 'canal', 'clave', 'deJornadaAnterior', 'idPedido', 'mesa',
+                'pax', 'salonero'])
   })
 
   it('resuelve el nombre y conserva mesa, canal y pax', () => {
-    const [m] = detallarMesasAbiertas([mesaAb({ mesa: '12', pax: 4 })], NOMBRES, true)
+    const [m] = detallarMesasAbiertas([mesaAb({ mesa: '12', pax: 4 })], NOMBRES, true, JORNADA)
     expect(m.salonero).toBe('MAXO')
     expect(m.mesa).toBe('12')
     expect(m.canal).toBe('salon')
@@ -973,7 +1006,7 @@ describe('detallarMesasAbiertas', () => {
   })
 
   it('sin la guarda, abiertaDesde va en null — la pantalla muestra «—», no una duración falsa', () => {
-    const [m] = detallarMesasAbiertas([mesaAb()], NOMBRES, false)
+    const [m] = detallarMesasAbiertas([mesaAb()], NOMBRES, false, JORNADA)
     expect(m.abiertaDesde).toBeNull()
   })
 
@@ -981,7 +1014,7 @@ describe('detallarMesasAbiertas', () => {
     const r = detallarMesasAbiertas([
       mesaAb({ clave: 'nueva',  updated_at: '2026-09-01T22:00:00-06:00' }),
       mesaAb({ clave: 'vieja',  updated_at: '2026-09-01T18:00:00-06:00' }),
-    ], NOMBRES, true)
+    ], NOMBRES, true, JORNADA)
     expect(r.map(m => m.clave)).toEqual(['vieja', 'nueva'])
   })
 
@@ -989,8 +1022,123 @@ describe('detallarMesasAbiertas', () => {
     const r = detallarMesasAbiertas([
       mesaAb({ clave: 'a', salonero_login: '111' }),
       mesaAb({ clave: 'b', salonero_login: null }),
-    ], {}, false)
+    ], {}, false, JORNADA)
     expect(r.map(m => m.salonero).sort()).toEqual(['Cajero turno mañana', 'Sin salonero'])
+  })
+})
+
+// ── Guard de mesas viejas: la mesa arrastrada de otra jornada se MARCA, no se esconde ──
+
+describe('jornadaDeInstante', () => {
+  it('un instante del servicio cae en la jornada de ese día', () => {
+    // 20:00 CR del 1-sep: después del corte de las 07:00, jornada del 1-sep.
+    expect(jornadaDeInstante('2026-09-01T20:00:00-06:00')).toBe('2026-09-01')
+  })
+
+  it('la madrugada pertenece a la jornada que arrancó el día anterior', () => {
+    // 02:00 CR del 2-sep: antes del corte, todavía es el servicio del 1-sep.
+    expect(jornadaDeInstante('2026-09-02T02:00:00-06:00')).toBe('2026-09-01')
+  })
+
+  it('pasado el corte de las 07:00 ya es la jornada nueva', () => {
+    expect(jornadaDeInstante('2026-09-02T08:00:00-06:00')).toBe('2026-09-02')
+  })
+
+  it('un sello ilegible o ausente no pertenece a ninguna jornada', () => {
+    expect(jornadaDeInstante('no es una fecha')).toBeNull()
+    expect(jornadaDeInstante(null)).toBeNull()
+    expect(jornadaDeInstante(undefined)).toBeNull()
+  })
+})
+
+describe('esDeJornadaAnterior', () => {
+  it('la mesa abierta ayer, mirando hoy, es de una jornada anterior', () => {
+    expect(esDeJornadaAnterior('2026-09-01T20:00:00-06:00', '2026-09-02')).toBe(true)
+  })
+
+  it('la mesa de la jornada en curso NO se marca', () => {
+    expect(esDeJornadaAnterior('2026-09-01T20:00:00-06:00', '2026-09-01')).toBe(false)
+  })
+
+  it('la mesa de madrugada sigue siendo de la jornada en curso: el servicio no cortó', () => {
+    // Es el caso que un umbral de «hace más de N horas» marcaría mal: a las 02:00 la mesa
+    // lleva 6 h abierta y está perfectamente viva.
+    expect(esDeJornadaAnterior('2026-09-02T02:00:00-06:00', '2026-09-01')).toBe(false)
+  })
+
+  it('un sello ilegible no se marca: no se puede ubicar en ninguna jornada', () => {
+    expect(esDeJornadaAnterior('cualquier cosa', '2026-09-02')).toBe(false)
+    expect(esDeJornadaAnterior(null, '2026-09-02')).toBe(false)
+  })
+})
+
+describe('detallarMesasAbiertas marca las mesas de jornada anterior', () => {
+  const HOY = '2026-09-02'
+
+  it('la de ayer sale marcada y la de hoy sale normal', () => {
+    const r = detallarMesasAbiertas([
+      mesaAb({ clave: 'ayer', mesa: '20', updated_at: '2026-09-01T20:00:00-06:00' }),
+      mesaAb({ clave: 'hoy',  mesa: '7',  updated_at: '2026-09-02T19:00:00-06:00' }),
+    ], NOMBRES, true, HOY)
+    expect(r.find(m => m.clave === 'ayer')?.deJornadaAnterior).toBe(true)
+    expect(r.find(m => m.clave === 'hoy')?.deJornadaAnterior).toBe(false)
+  })
+
+  it('NO se esconde ninguna: el guard marca, no filtra', () => {
+    const r = detallarMesasAbiertas([
+      mesaAb({ clave: 'ayer', updated_at: '2026-09-01T20:00:00-06:00' }),
+      mesaAb({ clave: 'hoy',  updated_at: '2026-09-02T19:00:00-06:00' }),
+    ], NOMBRES, true, HOY)
+    expect(r).toHaveLength(2)
+  })
+
+  it('marca aunque `abiertaDesde` venga en «—»: la marca sale del sello CRUDO', () => {
+    // Es el caso que importa: con el feed raro la guarda de semántica no concluye y
+    // `abiertaDesde` va en null. Colgar la marca de ahí la apagaría justo cuando hace falta.
+    const [m] = detallarMesasAbiertas(
+      [mesaAb({ updated_at: '2026-09-01T20:00:00-06:00' })], NOMBRES, false, HOY)
+    expect(m.abiertaDesde).toBeNull()
+    expect(m.deJornadaAnterior).toBe(true)
+  })
+
+  it('la marcada va primero: es la que hay que ir a mirar', () => {
+    const r = detallarMesasAbiertas([
+      mesaAb({ clave: 'hoy-vieja', updated_at: '2026-09-02T08:00:00-06:00' }),
+      mesaAb({ clave: 'ayer',      updated_at: '2026-09-01T22:00:00-06:00' }),
+    ], NOMBRES, true, HOY)
+    expect(r.map(m => m.clave)).toEqual(['ayer', 'hoy-vieja'])
+  })
+
+  it('los tres fantasma del 8-sep salen los tres marcados', () => {
+    // El caso real: pedidos 22/23/24 de la jornada anterior, «abiertos hace 12 h» con el
+    // local cerrado. La pantalla los tiene que delatar, no taparlos.
+    const r = detallarMesasAbiertas([
+      mesaAb({ clave: 'pedido:22', mesa: '20', updated_at: '2026-09-08T21:00:00-06:00' }),
+      mesaAb({ clave: 'pedido:23', mesa: '17', updated_at: '2026-09-08T21:40:00-06:00' }),
+      mesaAb({ clave: 'pedido:24', mesa: '19', updated_at: '2026-09-08T21:50:00-06:00' }),
+    ], NOMBRES, true, '2026-09-09')
+    expect(r.every(m => m.deJornadaAnterior)).toBe(true)
+    expect(contarJornadaAnterior(r)).toBe(3)
+  })
+})
+
+describe('contarJornadaAnterior', () => {
+  const HOY = '2026-09-02'
+
+  it('cuenta solo las marcadas', () => {
+    const r = detallarMesasAbiertas([
+      mesaAb({ clave: 'a', updated_at: '2026-09-01T20:00:00-06:00' }),
+      mesaAb({ clave: 'b', updated_at: '2026-09-01T21:00:00-06:00' }),
+      mesaAb({ clave: 'c', updated_at: '2026-09-02T19:00:00-06:00' }),
+    ], NOMBRES, true, HOY)
+    expect(contarJornadaAnterior(r)).toBe(2)
+  })
+
+  it('sin ninguna marcada da 0, no undefined: la nota no aparece', () => {
+    const r = detallarMesasAbiertas(
+      [mesaAb({ updated_at: '2026-09-02T19:00:00-06:00' })], NOMBRES, true, HOY)
+    expect(contarJornadaAnterior(r)).toBe(0)
+    expect(contarJornadaAnterior([])).toBe(0)
   })
 })
 
@@ -1011,7 +1159,7 @@ describe('frescuraDe', () => {
 
   it('sin cursor se asume desactualizado: no poder probar que el agente vive no es probarlo', () => {
     expect(frescuraDe(null, ahora)).toEqual({
-      ultimoPollAt: null, minutos: null, desactualizado: true,
+      ultimoPollAt: null, minutos: null, desactualizado: true, error: null,
     })
   })
 
@@ -1019,6 +1167,38 @@ describe('frescuraDe', () => {
     const f = frescuraDe('2026-09-01T21:05:00-06:00', ahora)
     expect(f.minutos).toBe(0)
     expect(f.desactualizado).toBe(false)
+  })
+
+  // ── El latido entero: `last_poll_at` + `last_error` ──────────────────────────
+  // Un lote que falló deja `pos_ndf_open` con el snapshot VIEJO. Mirando solo el reloj eso se
+  // ve sano, que es exactamente la mentira silenciosa que este guard cierra.
+
+  it('con last_error el feed está desactualizado aunque el poll sea de recién', () => {
+    const f = frescuraDe(
+      { ultimoPollAt: '2026-09-01T20:59:30-06:00', error: 'ECONNREFUSED SQLNUBE' }, ahora)
+    expect(f.minutos).toBe(0)
+    expect(f.desactualizado).toBe(true)
+    expect(f.error).toBe('ECONNREFUSED SQLNUBE')
+  })
+
+  it('el latido limpio se comporta igual que pasar solo la hora', () => {
+    const conObjeto = frescuraDe({ ultimoPollAt: '2026-09-01T20:58:00-06:00', error: null }, ahora)
+    expect(conObjeto).toEqual(frescuraDe('2026-09-01T20:58:00-06:00', ahora))
+    expect(conObjeto.desactualizado).toBe(false)
+    expect(conObjeto.error).toBeNull()
+  })
+
+  it('sin cursor y con error: sigue desactualizado y el motivo viaja', () => {
+    const f = frescuraDe({ ultimoPollAt: null, error: 'login failed' }, ahora)
+    expect(f.desactualizado).toBe(true)
+    expect(f.minutos).toBeNull()
+    expect(f.error).toBe('login failed')
+  })
+
+  it('un poll viejo Y con error sigue siendo un solo aviso', () => {
+    const f = frescuraDe({ ultimoPollAt: '2026-09-01T20:00:00-06:00', error: 'timeout' }, ahora)
+    expect(f.desactualizado).toBe(true)
+    expect(f.minutos).toBe(60)
   })
 })
 

@@ -125,16 +125,42 @@ export interface MesaAbiertaDetalle {
    * la hora de apertura. La pantalla muestra «—», no una duración inventada.
    */
   abiertaDesde: string | null
+  /**
+   * `true` = la mesa se abrió en una JORNADA ANTERIOR a la que se está mirando. Un servicio no
+   * cruza jornadas: una mesa así o se le olvidó cerrarla al personal, o el puente la está
+   * reportando abierta cuando ya no lo está.
+   *
+   * La fila se MARCA, nunca se esconde. Es a propósito: el filtro que debería atajar una mesa
+   * ya cobrada (`excluirCerradas`) se apoya en el mismo back-link del PoS que viene vacío
+   * justo en los casos raros, así que esta marca es la única defensa que le queda a la
+   * pantalla. Tapar la fila sería tapar la evidencia.
+   *
+   * Se calcula sobre el `updated_at` CRUDO, no sobre `abiertaDesde`: ese llega en `null`
+   * cuando la guarda de semántica no concluye, y ahí la marca se perdería justo cuando el
+   * feed está más raro. Un sello ilegible NO se marca — no se puede ubicar en ninguna jornada
+   * y afirmarlo sería inventar.
+   */
+  deJornadaAnterior: boolean
 }
 
-/** Qué tan viejo es lo que se está mirando. Sale de `pos_ndf_cursor.last_poll_at`. */
+/** Qué tan viejo es lo que se está mirando. Sale de `pos_ndf_cursor` (poll + último fallo). */
 export interface FrescuraPoS {
   /** Último poll del agente, ISO. `null` = nunca corrió para este local. */
   ultimoPollAt: string | null
   /** Minutos desde ese poll. `null` cuando no hay contra qué medir. */
   minutos:      number | null
-  /** `true` = pasó el umbral y lo que se ve puede estar viejo. La pantalla se degrada sola. */
+  /**
+   * `true` = no se puede afirmar que lo que se ve sea de ahora. Lo disparan DOS cosas: que el
+   * último poll haya pasado el umbral, o que el agente haya dejado un `last_error`. La pantalla
+   * se degrada sola en los dos casos.
+   */
   desactualizado: boolean
+  /**
+   * `pos_ndf_cursor.last_error` — el último fallo que dejó el agente, `null` si el último lote
+   * entró limpio. Un poll reciente CON error es un feed roto que se ve sano mirando solo la
+   * hora: por eso el motivo viaja hasta la pantalla en vez de quedarse en un booleano.
+   */
+  error: string | null
 }
 
 export interface SnapshotEnVivo {
@@ -223,6 +249,14 @@ export interface SnapshotEnVivo {
    * Es el mismo universo que `abiertasPorSalonero`, sin agrupar.
    */
   mesasDetalle?: MesaAbiertaDetalle[]
+
+  /**
+   * Cuántas de esas mesas vienen de una jornada anterior (ver `MesaAbiertaDetalle.deJornadaAnterior`).
+   * Es el contador de la nota de panel; las filas siguen listadas, marcadas una por una.
+   *
+   * NO resta de `mesasAbiertas` ni de ninguna cifra de plata: es un rótulo, no un filtro.
+   */
+  mesasJornadaAnterior?: number
 
   /**
    * Frescura del feed. Es lo que permite que la pantalla diga «última lectura hace X» y se

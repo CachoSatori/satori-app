@@ -2,7 +2,8 @@ import type { CajeroDay, DiaData, ProductMap, SaloneroDay } from '../../shared/t
 import {
   businessDateDe, getLineasDeTickets, getMesasAbiertas, getNetoPorJornada,
   getPedidosCerradosJornada, getSaloneroNombres, getTicketsJornada, getUltimoPollPoS,
-  HORA_CORTE_JORNADA, type LineaNdfRow, type MesaAbiertaRow, type TicketNdfConId,
+  HORA_CORTE_JORNADA, type LatidoPoS, type LineaNdfRow, type MesaAbiertaRow,
+  type TicketNdfConId,
 } from '../../shared/api/posNdf'
 import {
   agruparEnLotes, etiquetaTurno, turnosConocidos, type Turno,
@@ -664,15 +665,38 @@ export function tiempoAbiertaConfiable(
 }
 
 /**
+ * ¿Esta mesa se abrió en una jornada ANTERIOR a la que se está mirando?
+ *
+ * Un servicio no cruza jornadas: si el sello de apertura cae en una jornada previa, o al
+ * personal se le olvidó cerrar la mesa en el PoS, o el puente la está reportando abierta
+ * cuando ya no lo está. Las dos cosas hay que ir a mirarlas, así que la fila se MARCA.
+ *
+ * Se mide sobre el `updated_at` CRUDO y no sobre `abiertaDesde`. Ese último llega en `null`
+ * cuando `tiempoAbiertaConfiable` no concluye, y colgar la marca de él la apagaría justo
+ * cuando el feed está más raro. La ruta fallback sella todas las filas con el `ahora` del
+ * lote, o sea con la jornada en curso, así que ese caso no puede producir un falso positivo.
+ *
+ * Un sello ilegible devuelve `false`: no se puede ubicar en ninguna jornada.
+ */
+export function esDeJornadaAnterior(updatedAt: string | null | undefined, jornada: string): boolean {
+  const suya = jornadaDeInstante(updatedAt)
+  return suya !== null && suya < jornada
+}
+
+/**
  * Las mesas abiertas una por una, con el nombre del salonero ya resuelto.
  *
  * `abiertaDesde` viaja como `null` cuando la guarda de arriba no puede afirmar la semántica: la
  * pantalla muestra «—». Y no lleva monto en ninguna forma, porque `pos_ndf_open` no lo trae.
+ *
+ * `jornada` es la que se está mirando; contra ella se marca `deJornadaAnterior`. Se pasa
+ * explícita desde `getSnapshotEnVivo` — el default es solo para llamadas sueltas.
  */
 export function detallarMesasAbiertas(
   abiertas: MesaAbiertaRow[],
   nombres: Record<string, string> = {},
   confiable: boolean = tiempoAbiertaConfiable(abiertas),
+  jornada: string = jornadaActualCR(),
 ): MesaAbiertaDetalle[] {
   return abiertas
     .map(m => {
@@ -686,10 +710,14 @@ export function detallarMesasAbiertas(
         canal:        m.canal,
         pax:          n(m.pax),
         abiertaDesde: confiable && Number.isFinite(abierta) ? m.updated_at : null,
+        deJornadaAnterior: esDeJornadaAnterior(m.updated_at, jornada),
       }
     })
     .sort((a, b) => {
-      // Primero la que lleva más tiempo abierta: es la que hay que ir a mirar.
+      // Lo que hay que ir a mirar primero: la mesa arrastrada de otra jornada es más urgente
+      // que la que lleva tres horas abierta hoy, y la duración puede venir en «—».
+      if (a.deJornadaAnterior !== b.deJornadaAnterior) return a.deJornadaAnterior ? -1 : 1
+      // Después, la que lleva más tiempo abierta.
       const ta = a.abiertaDesde === null ? Infinity : Date.parse(a.abiertaDesde)
       const tb = b.abiertaDesde === null ? Infinity : Date.parse(b.abiertaDesde)
       if (ta !== tb) return ta - tb
@@ -697,25 +725,48 @@ export function detallarMesasAbiertas(
     })
 }
 
+/** Cuántas de las mesas listadas vienen de una jornada anterior. Es el contador de la nota. */
+export function contarJornadaAnterior(detalle: readonly MesaAbiertaDetalle[]): number {
+  return detalle.reduce((n, m) => n + (m.deJornadaAnterior ? 1 : 0), 0)
+}
+
 /**
- * Qué tan viejo es el feed, a partir del ÚNICO latido que existe (`pos_ndf_cursor.last_poll_at`).
+ * Qué tan viejo es el feed, a partir del latido del agente (`pos_ndf_cursor`).
+ *
+ * Mira las DOS señales de la fila del cursor, no solo la hora:
+ *
+ *   · `last_poll_at` pasado el umbral → el agente dejó de reportar.
+ *   · `last_error` presente          → el agente corrió y el lote NO entró.
+ *
+ * El segundo caso es el que se veía sano y no lo estaba: un poll de hace 30 s con un error
+ * encima deja `pos_ndf_open` con el snapshot VIEJO, y mirando solo el reloj la pantalla lo
+ * pintaba como actual. Los dos casos caen en el mismo aviso, que es lo que el operador
+ * necesita saber: lo de abajo puede no ser de ahora.
+ *
+ * Acepta el latido entero o solo la hora — así una llamada suelta puede seguir pasando el ISO.
  *
  * Sin cursor se considera desactualizado a propósito: no poder probar que el agente respira no
  * es lo mismo que probar que respira, y de las dos lecturas la única honesta es la pesimista.
  */
 export function frescuraDe(
-  ultimoPollAt: string | null,
+  latido: string | LatidoPoS | null,
   ahora: Date = new Date(),
   umbralMs: number = UMBRAL_DESACTUALIZADO_MS,
 ): FrescuraPoS {
+  const { ultimoPollAt, error } = typeof latido === 'string' || latido === null
+    ? { ultimoPollAt: latido, error: null }
+    : latido
+
   const t = ultimoPollAt === null ? NaN : Date.parse(ultimoPollAt)
-  if (!Number.isFinite(t)) return { ultimoPollAt, minutos: null, desactualizado: true }
+  if (!Number.isFinite(t)) return { ultimoPollAt, minutos: null, desactualizado: true, error }
   // Un reloj adelantado en la PC del PoS daría negativo: se piso en 0 en vez de mostrar futuro.
   const transcurrido = Math.max(0, ahora.getTime() - t)
   return {
     ultimoPollAt,
     minutos:        Math.floor(transcurrido / 60_000),
-    desactualizado: transcurrido > umbralMs,
+    // El error pesa igual que el reloj: un lote que falló no es un feed fresco.
+    desactualizado: transcurrido > umbralMs || error !== null,
+    error,
   }
 }
 
@@ -858,6 +909,21 @@ export function jornadaActualCR(ahora: Date = new Date()): string {
 }
 
 /**
+ * A qué JORNADA pertenece un instante cualquiera. Es `jornadaActualCR` aplicada a una fecha que
+ * no es «ahora»: misma regla 07→07 en hora CR, así que una mesa y el selector de día hablan
+ * siempre de la misma cosa.
+ *
+ * `null` cuando el sello no se puede leer. Un instante ilegible no pertenece a ninguna jornada,
+ * y devolver una igual sería inventarla.
+ */
+export function jornadaDeInstante(iso: string | null | undefined): string | null {
+  if (iso === null || iso === undefined) return null
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return null
+  return jornadaActualCR(new Date(t))
+}
+
+/**
  * La jornada N días para adelante o para atrás. Es aritmética de CALENDARIO sobre la etiqueta
  * de la jornada (`YYYY-MM-DD`), no de instantes: la jornada anterior al 1-sep es el 31-ago,
  * dure lo que dure cada servicio. Se hace en UTC para que no la corra la zona del navegador.
@@ -909,6 +975,10 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
   // siendo cierto, y una mesa «abierta hace 3 h» que en realidad se cobró hace rato miente.
   const confiable = tiempoAbiertaConfiable(abiertas) && frescura?.desactualizado !== true
 
+  // La jornada que se está mirando es la vara del guard de mesas viejas: se pasa explícita
+  // para que el detalle no dependa del reloj del navegador.
+  const detalle = enCurso ? detallarMesasAbiertas(abiertas, nombres, confiable, jornada) : undefined
+
   const snap = armarSnapshot({
     local, fecha: jornada, tickets, lineas, neto4Sem, ahora, enServicio: enCurso, nombres,
   })
@@ -917,7 +987,9 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
     mesasAbiertas: enCurso ? abiertas.length : undefined,
     paxAbierto:    enCurso ? abiertas.reduce((s, m) => s + n(m.pax), 0) : undefined,
     abiertasPorSalonero: enCurso ? resumirMesasAbiertas(abiertas, nombres) : undefined,
-    mesasDetalle:  enCurso ? detallarMesasAbiertas(abiertas, nombres, confiable) : undefined,
+    mesasDetalle:  detalle,
+    // Rótulo, no filtro: `mesasAbiertas` las sigue contando a todas.
+    mesasJornadaAnterior: detalle === undefined ? undefined : contarJornadaAnterior(detalle),
     frescura,
     tiempoAbiertaConfiable: enCurso ? confiable : undefined,
   }

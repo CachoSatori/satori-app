@@ -5,8 +5,15 @@
 > PoS. Escrito para ejecutarse en orden, de arriba abajo, leyendo el "qué ver" de cada paso antes
 > de pasar al siguiente.
 >
-> **Rama:** **`deploy/pos-bridge-staging`** (= `feat/pos-bridge-a3`, el mismo commit; el primer
-> nombre es el que se usa para desplegar). **NO se mergea** — ni a `staging` ni a `main`.
+> **Ramas (tras la unificación del 2026-09-09).** El código del puente ya está **mergeado en
+> `integracion/analitica-staging` = `staging`** (commit `ad80a07`). Para el despliegue de base y
+> Edge se trabaja **parado en `staging`** (ahí viven la `062`, la Edge y `src/shared/ndf`).
+> **El agente en la PC del PoS corre sobre `feat/pos-desglose`** (opción B, temporal: su código
+> de `pos-bridge/` es idéntico en lógica al de `staging` — solo difiere el README). Migrar la
+> tarea a `staging` es trabajo aparte, con firma.
+>
+> ⚠️ **`deploy/pos-bridge-staging` quedó OBSOLETA** (84 commits atrás). No la uses para nada.
+>
 > Decisiones firmadas por Ismael: `local` en el sobre · RLS `owner/manager/contador` · el Edge
 > recalcula el total (medios − vuelto) y gana el Edge.
 
@@ -51,12 +58,12 @@ En la máquina desde la que se administra (la de Ismael, no la del PoS):
 ```bash
 supabase --version                 # CLI de Supabase instalada
 git fetch origin
-git checkout deploy/pos-bridge-staging
-git rev-parse --abbrev-ref HEAD    # tiene que decir: deploy/pos-bridge-staging
+git checkout staging
+git rev-parse --abbrev-ref HEAD    # tiene que decir: staging
 ls supabase/migrations | tail -3   # 060… 061… 062_pos_ndf_ingesta.sql
 ```
 
-- El checkout **tiene que estar en `deploy/pos-bridge-staging`**: `db push` mira los **archivos**
+- El checkout **tiene que estar en `staging`**: `db push` mira los **archivos**
   de la rama en la que estás parado.
 
 > ### ⚠️ La rama sale de `staging`, NO de `main` — y tiene que ser así
@@ -389,7 +396,7 @@ Con git, o copiando la carpeta desde un pendrive/red:
 cd C:\satori
 git clone https://github.com/CachoSatori/satori-app.git
 cd satori-app
-git checkout deploy/pos-bridge-staging
+git checkout feat/pos-desglose      # opcion B: el agente corre sobre esta rama
 ```
 
 **Sin git:** copiar la carpeta del repo **sin `node_modules`** y verificar que estén
@@ -584,8 +591,8 @@ staging** y con firma — y hay que borrar además su fila del ledger
 
 ## Lo que este documento NO autoriza
 
-- ❌ **Mergear a `staging` o a `main`.** La rama se entrega para revisión. `main` **auto-aplica a
-  producción**.
+- ❌ **Mergear a `main`.** `main` **auto-aplica a producción**; el pase a prod es su propio ciclo
+  con firma. (A `staging` el puente ya se unificó el 2026-09-09, con firma de Ismael.)
 - ❌ **Tocar el proyecto de prod** (`yiczgdtirrkdvohdquzf`) en ningún paso.
 - ❌ **Apuntar el agente a producción.** `ENV=staging`, y el candado pide firma explícita para
   cualquier otra cosa.

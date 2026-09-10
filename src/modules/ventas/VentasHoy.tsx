@@ -436,7 +436,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           {(['promPax','total','pax','ticket'] as const).map(k => (
             <button key={k} className={`vt-sort-tab ${sortBy === k ? 'active' : ''}`}
               onClick={() => setSortBy(k)}>
-              {k === 'promPax' ? 'Prom/PAX' : k === 'total' ? 'Ventas' : k === 'ticket' ? 'Ticket/item' : 'PAX'}
+              {k === 'promPax' ? 'Prom/PAX' : k === 'total' ? 'Ventas' : k === 'ticket' ? 'Ticket/ítem' : 'PAX'}
             </button>
           ))}
         </div>
@@ -450,7 +450,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               <th className="r">PAX</th>
               <th className="r">Ventas</th>
               <th className="r">Prom/PAX</th>
-              <th className="r">Ticket/item</th>
+              <th className="r">Ticket/ítem</th>
               <th className="r">Beb/PAX</th>
               <th className="r">Ratio C/B</th>
               <th className="r" style={{ color:'#555', fontSize:'0.65rem' }}>vs General</th>

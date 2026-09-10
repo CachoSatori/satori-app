@@ -328,7 +328,7 @@ export default function VentasEvaluacion({ dias, pm, metas }: Props) {
                     cls:   ratioCBClass(agg.ratioCB),
                   },
                   {
-                    label: 'Ticket/item',
+                    label: 'Ticket/ítem',
                     val:   fi(agg.promTicket),
                     meta:  getMeta(metas, name, 'ticketItem'),
                     pct:   getMeta(metas, name, 'ticketItem') > 0

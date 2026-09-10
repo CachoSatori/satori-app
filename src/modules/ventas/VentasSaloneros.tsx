@@ -186,7 +186,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                   { id:'total',    label:'Ventas' },
                   { id:'pax',      label:'PAX' },
                   { id:'promPax',  label:'Prom/PAX' },
-                  { id:'ticket',   label:'Ticket/item' },
+                  { id:'ticket',   label:'Ticket/ítem' },
                   { id:'bebPax',   label:'Beb/PAX' },
                   { id:'ratioCB',  label:'Ratio C/B' },
                   { id:'promPlato',label:'Prom/plato' },
@@ -335,7 +335,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                   <div className="vt-sal-metrics" style={{ marginTop: '0.75rem' }}>
                     <div><span>Prom/plato</span> <strong>{fi(s.promPlato)}</strong></div>
                     <div><span>Prom/bebida</span> <strong>{fi(s.promBebida)}</strong></div>
-                    <div><span>Ticket/item</span> <strong>{fi(s.promTicket)}</strong></div>
+                    <div><span>Ticket/ítem</span> <strong>{fi(s.promTicket)}</strong></div>
                   </div>
                 </div>
               )}

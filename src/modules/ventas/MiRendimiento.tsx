@@ -451,7 +451,7 @@ function ResumenTab({ myAgg, genAgg, metas, activeName, pm, dayRank, period }: {
         <Kpi label="Ratio C/B (uds)" value={`${myAgg.ratioU.toFixed(2)}:1`} sub={`${Math.round(myAgg.iCom)} com · ${Math.round(myAgg.iBeb)} beb`} />
         <Kpi label="Prom/Plato"     value={fi(myAgg.promPlato)} />
         <Kpi label="Prom/Bebida"    value={fi(myAgg.promBebida)} />
-        <Kpi label="Ticket / item"  value={fi(myAgg.promTicket)} meta={metaChip('ticketItem', myAgg.promTicket)}
+        <Kpi label="Ticket / ítem"  value={fi(myAgg.promTicket)} meta={metaChip('ticketItem', myAgg.promTicket)}
              delta={genAgg.promTicket > 0 ? { pct: (myAgg.promTicket - genAgg.promTicket) / genAgg.promTicket * 100, ref: 'vs general' } : null} />
       </div>
 

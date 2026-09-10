@@ -232,7 +232,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
           <div className="vt-kpi-val" style={{ color: withCostPct > 80 ? 'var(--vt-green)' : withCostPct > 50 ? '#c8a96e' : 'var(--vt-red)' }}>
             {withCostPct.toFixed(0)}%
           </div>
-          <div className="vt-kpi-sub">de items con costo</div>
+          <div className="vt-kpi-sub">de ítems con costo</div>
         </div>
         {withCost.length > 0 && (
           <>
@@ -307,7 +307,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
                       <div style={{ fontSize:'0.65rem', color:'#444', marginTop:2 }}>+{qItems.length-6} más…</div>
                     )}
                     {qItems.length === 0 && (
-                      <div style={{ fontSize:'0.72rem', color:'#333', padding:'0.5rem 0' }}>Sin items en este cuadrante</div>
+                      <div style={{ fontSize:'0.72rem', color:'#333', padding:'0.5rem 0' }}>Sin ítems en este cuadrante</div>
                     )}
                   </div>
                 </div>

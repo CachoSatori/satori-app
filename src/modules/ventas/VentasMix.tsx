@@ -419,7 +419,7 @@ function VerKPIs({ tots }: { tots: Tots }) {
     { label:'Local Club',    val:fi(totLC)  + (totG ? ' · ' + (totLC/totG*100).toFixed(1)+'%' : ''),         color:'#d4a84b' },
     { label:'Merchandising', val:fi(totMerch) + (totG ? ' · ' + (totMerch/totG*100).toFixed(1)+'%' : ''),    color:'#c890e8' },
     { label:'Unidades',      val:Math.round(totUn).toLocaleString('es-CR'),                                   color:'#aaa' },
-    { label:'Ticket / item', val:fi(totUn ? totG / totUn : 0),                                               color:'var(--vt-gold)' },
+    { label:'Ticket / ítem', val:fi(totUn ? totG / totUn : 0),                                               color:'var(--vt-gold)' },
   ]
   return (
     <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'0.5rem', marginBottom:'1rem' }}>
@@ -519,7 +519,7 @@ function CmpKPIs({ cmpData }: { cmpData: Array<{ key: string; label: string; PM:
     { label:'Bebidas',      fn: t => t.totBeb },
     { label:'Comidas',      fn: t => t.totCom },
     { label:'Local Club',   fn: t => t.totLC },
-    { label:'Ticket/item',  fn: t => t.totUn ? t.totG / t.totUn : 0 },
+    { label:'Ticket/ítem',  fn: t => t.totUn ? t.totG / t.totUn : 0 },
   ]
   return (
     <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.75rem', marginBottom:'1rem', overflowX:'auto' }}>
@@ -746,7 +746,7 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
         <thead>
           <tr style={{ background:'var(--vt-ink)', color:'#aaa' }}>
             {[
-              ['Clasificacion / Producto','left','28%'],['Uds','right','7%'],['Monto','right',''],
+              ['Clasificación / Producto','left','28%'],['Uds','right','7%'],['Monto','right',''],
               ['% Total','right','8%'],['% Secc','right','8%'],['Salón','right',''],['Delivery','right',''],['Tipo','center','7%'],
             ].map(([h,a,w]) => (
               <th key={h} style={{ padding:'0.55rem 0.5rem', textAlign:a as 'left'|'right'|'center', fontSize:'0.62rem', letterSpacing:'0.12em', textTransform:'uppercase', fontWeight:500, whiteSpace:'nowrap', ...(w ? {width:w} : {}) }}>

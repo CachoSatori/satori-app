@@ -124,6 +124,16 @@ export interface LineaIngest extends ItemMapeado {
   precio?: number | null
 }
 
+/**
+ * Un producto comandado en una mesa abierta, ya AGRUPADO (cantidad total del producto).
+ * Es lo que viaja en `pos_ndf_open.detalle_productos` (mig 065) y lo que lista el desplegable
+ * de «En vivo». Informativo: nombre × cantidad, sin ₡ en v1.
+ */
+export interface ProductoComandado {
+  nombre:   string
+  cantidad: number
+}
+
 /** Una mesa abierta del snapshot. */
 export interface OpenIngest {
   clave:           string
@@ -142,6 +152,12 @@ export interface OpenIngest {
   pax_pedido?:         number | null
   /** Líneas con valor servido en el pedido. `null` = sin líneas usables. */
   items_valor?:        number | null
+  /**
+   * Productos comandados, agrupados (desplegable de «En vivo», mig 065). Todo menos los
+   * marcadores de pax (677/678) y las anuladas. `null` = no se pudo leer el detalle, o alguna
+   * línea vino sin nombre de catálogo (fail-closed). Nunca un array vacío.
+   */
+  detalle_productos?:  ProductoComandado[] | null
 }
 
 export interface CursorIngest {
@@ -228,6 +244,7 @@ export interface OpenRow {
   monto_estimado_crc: number | null
   pax_pedido:         number | null
   items_valor:        number | null
+  detalle_productos:  ProductoComandado[] | null
 }
 
 export interface CursorRow {
@@ -453,8 +470,31 @@ export function normalizarOpen(local: string, o: unknown, ahora: string): Result
       monto_estimado_crc: montoNoNegativo(x.monto_estimado_crc),
       pax_pedido:         enteroNoNegativo(x.pax_pedido),
       items_valor:        enteroNoNegativo(x.items_valor),
+      // Informativo (mig 065). Fail-closed: cualquier entrada malformada tira el array ENTERO
+      // a null, no se guarda una lista a medias que se leería como «la mesa solo tiene esto».
+      detalle_productos:  productosComandados(x.detalle_productos),
     },
   }
+}
+
+/**
+ * El array de productos comandados, o `null`.
+ *
+ * `null` si falta, no es un array, está vacío, o CUALQUIER entrada no es `{ nombre: texto no
+ * vacío, cantidad: número finito > 0 }`. Se conserva el orden que mandó el agente.
+ */
+export const productosComandados = (v: unknown): ProductoComandado[] | null => {
+  if (!Array.isArray(v) || v.length === 0) return null
+  const out: ProductoComandado[] = []
+  for (const e of v) {
+    if (!e || typeof e !== 'object') return null
+    const x = e as { nombre?: unknown; cantidad?: unknown }
+    const nombre = texto(x.nombre)
+    const cantidad = typeof x.cantidad === 'number' ? x.cantidad : Number(x.cantidad)
+    if (nombre === null || !Number.isFinite(cantidad) || cantidad <= 0) return null
+    out.push({ nombre, cantidad: Math.round(cantidad * 100) / 100 })
+  }
+  return out
 }
 
 /** `null` si falta, no es número, es negativo o no es finito. Conserva decimales. */

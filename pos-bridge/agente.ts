@@ -18,7 +18,7 @@
 
 import { describirAgente, loadAgenteConfig } from './configAgente.ts'
 import { loadEnv, describirConfig } from './config.ts'
-import { leerAbiertas, leerCerradas, puedeLeerAbiertas } from './consultaAgente.ts'
+import { leerAbiertas, leerCerradas, leerProvisionales, puedeLeerAbiertas } from './consultaAgente.ts'
 import { abrirConexion, type ConexionPos } from './db.ts'
 import { leerEsquema } from './extraerDia.ts'
 import { pushIngest } from './pushIngest.ts'
@@ -61,6 +61,14 @@ async function main(): Promise<void> {
       const { conn, esquema } = await conectar()
       try {
         return await leerCerradas(conn, esquema, p)
+      } finally {
+        await conn.close()
+      }
+    },
+    async leerProvisionales(r) {
+      const { conn, esquema } = await conectar()
+      try {
+        return await leerProvisionales(conn, esquema, r)
       } finally {
         await conn.close()
       }

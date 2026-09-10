@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { compararFactura, mayorFactura, normalizarFactura } from './factura.ts'
+import { anteriorFactura, compararFactura, mayorFactura, normalizarFactura } from './factura.ts'
 
 describe('normalizarFactura', () => {
   it('limpia espacios, ceros a la izquierda y decimales en cero', () => {
@@ -45,5 +45,36 @@ describe('mayorFactura', () => {
     expect(mayorFactura(['x', null, '5003'], null)).toBe('5003')
     expect(mayorFactura([], null)).toBeNull()
     expect(mayorFactura([], '5001')).toBe('5001')
+  })
+})
+
+describe('anteriorFactura — el tope del cursor por debajo de una R', () => {
+  it('resta uno como entero, no como texto', () => {
+    expect(anteriorFactura('110850')).toBe('110849')
+    expect(anteriorFactura('5001')).toBe('5000')
+    expect(anteriorFactura('1')).toBe('0')
+  })
+
+  it('el préstamo cruza los ceros y suelta el cero a la izquierda', () => {
+    expect(anteriorFactura('1000')).toBe('999')
+    expect(anteriorFactura('100')).toBe('99')
+    expect(anteriorFactura('10')).toBe('9')
+    expect(anteriorFactura('2000000000000000000000')).toBe('1999999999999999999999')  // > 2^53
+  })
+
+  it('normaliza antes: ceros a la izquierda y decimales en cero', () => {
+    expect(anteriorFactura(' 005001.00 ')).toBe('5000')
+  })
+
+  it("no hay anterior de '0', y lo ilegible da null", () => {
+    expect(anteriorFactura('0')).toBeNull()
+    expect(anteriorFactura('A-1')).toBeNull()
+    expect(anteriorFactura(null)).toBeNull()
+  })
+
+  it('anterior(n) < n, siempre, por compararFactura', () => {
+    for (const n of ['1', '10', '100', '110850', '99999999999999999999']) {
+      expect(compararFactura(anteriorFactura(n)!, n)).toBe(-1)
+    }
   })
 })

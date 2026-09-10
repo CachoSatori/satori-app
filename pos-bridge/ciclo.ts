@@ -8,13 +8,18 @@
 
 import type { OpenIngest, PayloadIngest, TicketIngest } from '../src/shared/ndf/ingestNdf.ts'
 
-import { mayorFactura, normalizarFactura } from './factura.ts'
+import { anteriorFactura, compararFactura, mayorFactura, normalizarFactura } from './factura.ts'
 import type { IngestNdfResult } from './pushIngest.ts'
 import { rangoLectura, type RangoLectura } from './ventana.ts'
 
 export interface PuertosCiclo {
   /** Facturas cerradas nuevas (`NumeroFactura > ultima`) dentro de la ventana. */
   leerCerradas(p: RangoLectura & { ultima: string | null }): Promise<{ tickets: TicketIngest[]; avisos: string[] }>
+  /**
+   * Facturas provisionales (`R` en curso, `X` anulada) de la ventana ENTERA, sin cursor. Se
+   * releen cada ciclo porque cambian. Nunca mueven el cursor: lo topan.
+   */
+  leerProvisionales(r: RangoLectura): Promise<{ tickets: TicketIngest[]; avisos: string[] }>
   /** Snapshot de mesas abiertas. `null` = esta instalación no lo puede leer. */
   leerAbiertas(r: RangoLectura): Promise<OpenIngest[] | null>
   enviar(payload: PayloadIngest): Promise<IngestNdfResult>
@@ -37,7 +42,10 @@ export const ESTADO_INICIAL: EstadoAgente = {
 
 export interface ResumenCiclo {
   fase:      'saludo' | 'sincronizado' | 'error_pos' | 'error_envio'
+  /** Cerradas (`C`) leídas este ciclo: las que mueven el cursor. */
   tickets:   number
+  /** Provisionales (`R`/`X`) releídas este ciclo. Viajan en el mismo lote, no mueven el cursor. */
+  provisionales: number
   abiertas:  number | null
   guardados: number
   cursor:    string | null
@@ -83,7 +91,7 @@ export async function ejecutarCiclo(
       return {
         estado: { ultimaFactura: guardado, saludado: true, ultimoError: null },
         resumen: {
-          fase: 'saludo', tickets: 0, abiertas: null, guardados: 0,
+          fase: 'saludo', tickets: 0, provisionales: 0, abiertas: null, guardados: 0,
           cursor: guardado, avisos: [], error: null,
         },
       }
@@ -94,7 +102,7 @@ export async function ejecutarCiclo(
       return {
         estado,
         resumen: {
-          fase: 'error_envio', tickets: 0, abiertas: null, guardados: 0,
+          fase: 'error_envio', tickets: 0, provisionales: 0, abiertas: null, guardados: 0,
           cursor: estado.ultimaFactura, avisos: [], error: mensaje(e),
         },
       }
@@ -107,12 +115,15 @@ export async function ejecutarCiclo(
   // Sin inicializar a propósito: el `catch` de abajo corta con `return`, así que después
   // del try/catch las tres están asignadas y TypeScript lo sabe.
   let tickets: TicketIngest[]
+  let provisionales: TicketIngest[]
   let abiertas: OpenIngest[] | null
   let avisos: string[]
   try {
     const cerradas = await puertos.leerCerradas({ ...rango, ultima: estado.ultimaFactura })
     tickets = cerradas.tickets
-    avisos = cerradas.avisos
+    const prov = await puertos.leerProvisionales(rango)
+    provisionales = prov.tickets
+    avisos = [...cerradas.avisos, ...prov.avisos]
     abiertas = await puertos.leerAbiertas(rango)
   } catch (e) {
     // PoS apagado, red local caída, SQL Server reiniciando. NO se inventa el día: se deja
@@ -127,18 +138,47 @@ export async function ejecutarCiclo(
     return {
       estado: { ...estado, ultimoError: error },
       resumen: {
-        fase: 'error_pos', tickets: 0, abiertas: null, guardados: 0,
+        fase: 'error_pos', tickets: 0, provisionales: 0, abiertas: null, guardados: 0,
         cursor: estado.ultimaFactura, avisos: [], error,
       },
     }
   }
 
   // ── 3. Armar el lote ─────────────────────────────────────────────────────────
-  // El cursor propuesto es el mayor número de factura EFECTIVAMENTE leído. Nunca se
+  // El cursor propuesto es el mayor número de factura CERRADA efectivamente leída. Nunca se
   // adivina hacia adelante: si una factura no entró en este lote, su número no viaja.
-  const propuesto = mayorFactura(tickets.map((t) => t.numero_factura), estado.ultimaFactura)
+  //
+  // Y NUNCA por encima de una `R`. La lectura de cerradas es `NumeroFactura > cursor`; una
+  // factura en curso que quedara por debajo del cursor no se leería nunca cuando cierre.
+  // Pasa de verdad: la caja de la tarde abre minutos antes de que cierre la de la mañana, y
+  // sus primeras facturas tienen número menor que la última de la mañana. Si el cursor ya se
+  // había pasado (historia previa a este tope), se REBOBINA: el Edge pisa `last_factura` y el
+  // upsert por `(local, numero_factura)` hace que releer no duplique. Las `X` no topan nada.
+  // Un solo lote, SIN repetidos. La misma factura puede salir como `R` (relectura de la
+  // ventana) y como `C` (cerró en este mismo ciclo). El Edge NO deduplica dentro de un tramo:
+  // hace `upsert` del chunk tal cual, y Postgres rechaza un `ON CONFLICT` que toque la misma
+  // fila dos veces — se caería el lote entero, cada ciclo, mientras dure la superposición.
+  // Se resuelve acá: si hay `C`, la `R`/`X` del mismo número no viaja. La `C` es la verdad.
+  const cerradasPorNumero = new Set(
+    tickets.map((t) => normalizarFactura(t.numero_factura)).filter((n): n is string => n !== null),
+  )
+  const provisionalesSinCerradas = provisionales.filter((t) => {
+    const n = normalizarFactura(t.numero_factura)
+    return n === null || !cerradasPorNumero.has(n)
+  })
 
-  const payload: PayloadIngest = { local, tickets, cursor: { last_error: null } }
+  // El tope mira SOLO las `R` que quedaron: una que cerró en este ciclo ya es `C`, y una `C`
+  // no retiene el cursor — al contrario, lo empuja.
+  const propuesto = toparCursor(
+    mayorFactura(tickets.map((t) => t.numero_factura), estado.ultimaFactura),
+    provisionalesSinCerradas,
+  )
+
+  const payload: PayloadIngest = {
+    local,
+    tickets: [...provisionalesSinCerradas, ...tickets],
+    cursor: { last_error: null },
+  }
   // `open` ausente ≠ `open: []`. Ausente = "no sé, no lo toques" (esta instalación no
   // puede leer las abiertas); `[]` = "no hay nada abierto", y el Edge cierra todas.
   if (abiertas !== null) payload.open = abiertas
@@ -146,7 +186,10 @@ export async function ejecutarCiclo(
   // mandar solo lo que cambió deja el log del lote diciendo la verdad.
   if (propuesto !== null && propuesto !== estado.ultimaFactura) {
     payload.cursor = { ...payload.cursor, last_factura: propuesto }
-    const ultimo = tickets[tickets.length - 1]
+    // La fecha acompaña al cursor solo cuando el cursor ES una cerrada de este lote. Con un
+    // tope (o un rebobinado) el número no corresponde a ningún ticket leído, y la fecha vieja
+    // se conserva por la fusión del Edge.
+    const ultimo = tickets.find((t) => normalizarFactura(t.numero_factura) === propuesto)
     if (ultimo) payload.cursor.last_fecha_registra = ultimo.fecha_registra
   }
 
@@ -161,6 +204,7 @@ export async function ejecutarCiclo(
       resumen: {
         fase: 'sincronizado',
         tickets: tickets.length,
+        provisionales: provisionalesSinCerradas.length,
         abiertas: abiertas === null ? null : abiertas.length,
         guardados: res.tickets_guardados,
         cursor: confirmado,
@@ -177,6 +221,7 @@ export async function ejecutarCiclo(
       resumen: {
         fase: 'error_envio',
         tickets: tickets.length,
+        provisionales: provisionalesSinCerradas.length,
         abiertas: abiertas === null ? null : abiertas.length,
         guardados: 0,
         cursor: estado.ultimaFactura,
@@ -193,4 +238,26 @@ export function describirCiclo(r: ResumenCiclo): string {
   if (r.error !== null) return `${r.fase} · ${r.error} · cursor=${r.cursor ?? '(vacío)'} (no avanza)`
   const abiertas = r.abiertas === null ? 'n/d' : String(r.abiertas)
   return `cerradas=${r.tickets} guardadas=${r.guardados} abiertas=${abiertas} cursor=${r.cursor ?? '(vacío)'}`
+}
+
+/**
+ * El cursor nunca queda por encima de la menor factura EN CURSO (`R`) que se vio este ciclo.
+ * Devuelve el menor entre `propuesto` y `anteriorFactura(menor R)`. Sin `R` no topa nada.
+ */
+export function toparCursor(
+  propuesto: string | null,
+  provisionales: readonly Pick<TicketIngest, 'numero_factura' | 'estado'>[],
+): string | null {
+  let menorR: string | null = null
+  for (const t of provisionales) {
+    if (t.estado !== 'R') continue
+    const n = normalizarFactura(t.numero_factura)
+    if (n === null) continue
+    if (menorR === null || compararFactura(n, menorR) < 0) menorR = n
+  }
+  if (menorR === null) return propuesto
+  const tope = anteriorFactura(menorR)
+  if (tope === null) return propuesto
+  if (propuesto === null) return propuesto
+  return compararFactura(propuesto, tope) > 0 ? tope : propuesto
 }

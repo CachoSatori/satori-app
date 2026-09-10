@@ -4,6 +4,7 @@ import {
   aTicketIngest,
   leerAbiertas,
   leerCerradas,
+  leerProvisionales,
   mapAbierta,
   puedeLeerAbiertas,
   sqlAbiertas,
@@ -405,5 +406,76 @@ describe('leerAbiertas', () => {
   it('sin mesas abiertas devuelve [] (que el Edge lee como "cerrá todas")', async () => {
     const { qy } = fake({})
     expect(await leerAbiertas(qy, ESQUEMA, { desde: 'a', hasta: 'b' })).toEqual([])
+  })
+})
+
+// ── B · leerProvisionales: R/X de la ventana entera, sin cursor ───────────────────────────
+
+describe('leerProvisionales', () => {
+  const espiar = () => {
+    const visto: { sql: string; params: Record<string, unknown> | undefined }[] = []
+    const qy: Queryable = {
+      async query<T>(sql: string, params?: Record<string, unknown>): Promise<{ rows: T[] }> {
+        visto.push({ sql, params })
+        return { rows: [] as T[] }
+      },
+    }
+    return { qy, visto }
+  }
+
+  it('emite facturas + detalle con IN (R, X) y SIN corte por cursor', async () => {
+    const { qy, visto } = espiar()
+    await leerProvisionales(qy, ESQUEMA, { desde: 'a', hasta: 'b' })
+    expect(visto).toHaveLength(2)
+    for (const v of visto) {
+      expect(v.sql).toContain("[Estado] IN ('R', 'X')")
+      expect(v.sql).not.toContain('@ultima')
+      expect(v.sql).not.toContain("= 'C'")
+    }
+  })
+
+  it('los parámetros llevan solo la ventana: sin `ultima`, como el dry-run', async () => {
+    const { qy, visto } = espiar()
+    await leerProvisionales(qy, ESQUEMA, { desde: 'a', hasta: 'b' })
+    for (const v of visto) {
+      expect(v.params).toEqual({ desde: 'a', hasta: 'b' })
+    }
+  })
+
+  it('leerCerradas sigue exactamente igual: = C, con @ultima y con `ultima` en params', async () => {
+    const { qy, visto } = espiar()
+    await leerCerradas(qy, ESQUEMA, { desde: 'a', hasta: 'b', ultima: '5000' })
+    expect(visto).toHaveLength(2)
+    for (const v of visto) {
+      expect(v.sql).toContain("= 'C'")
+      expect(v.sql).toContain('@ultima')
+      expect(v.params).toEqual({ desde: 'a', hasta: 'b', ultima: '5000' })
+    }
+  })
+
+  it('una R mapeada viaja con estado R y su neto (sale de las líneas), lista para el Edge', async () => {
+    const factura: FilaFactura = {
+      numero_factura: '7001', fecha_hora: '2026-09-09 21:10:00', estado: 'R', login_cajero: '222',
+      tipo_factura: 'M', area_factura: 'SALON 1', usuario_registra: '026', usuario_max: '026',
+      personas: 2, pedidos: 1, tipo_pedido: 'M', area_pedido: 'SALON 1', salonero_nombre: 'MAXO',
+      efectivo: 0, tarjeta: 0, monto_electronico: 0, deposito: 0, cheque: 0, cuenta_cobrar: 0,
+      dolares_efectivo: 0, dolares_tarjeta: 0, vuelto: 0,
+    } as FilaFactura
+    const detalle: FilaDetalle = {
+      numero_factura: '7001', codigo: '25', nombre: 'ROLL', cantidad: 1, monto: 9000,
+      imp_servicio: 0, imp_venta: 0, familia: 2, familia_nombre: 'SUSHI',   // 2 ∈ FAMILIAS_VALOR_SERVIDO
+      usuario_registra: '026', es_extra: null, compuesto: null,
+    } as FilaDetalle
+    const qy: Queryable = {
+      async query<T>(sql: string): Promise<{ rows: T[] }> {
+        if (sql.includes('FROM [dbo].[FAC_FacturasDet] d')) return { rows: [detalle] as T[] }
+        return { rows: [factura] as T[] }
+      },
+    }
+    const { tickets } = await leerProvisionales(qy, ESQUEMA, { desde: 'a', hasta: 'b' })
+    expect(tickets).toHaveLength(1)
+    expect(tickets[0].estado).toBe('R')
+    expect(tickets[0].numero_factura).toBe('7001')
+    expect(tickets[0].valor_servido).toBe(9000)
   })
 })

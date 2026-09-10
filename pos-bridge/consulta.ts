@@ -15,6 +15,7 @@ import {
   texto,
   type TicketCrudo,
   type TicketMapeado,
+  type EstadoFactura,
 } from '../src/shared/ndf/mapTicket'
 import { col, colOpt, q, type Esquema } from './esquema.ts'
 
@@ -84,6 +85,32 @@ GROUP BY ${q(col(esq, 'facturas', 'estado'))}`
 export const FILTRO_INCREMENTAL = (columna: string): string =>
   `\n  AND (@ultima IS NULL OR ${columna} > CAST(@ultima AS decimal(38,0)))`
 
+/** Los estados que se piden por defecto: solo las CERRADAS. Es lo que cuenta como venta. */
+export const ESTADOS_CERRADAS: readonly EstadoFactura[] = ['C']
+/**
+ * Las que el agente relee cada ciclo sin cursor: `R` en curso (provisional) y `X` anulada.
+ * La `X` viaja para que una factura que fue `R` y se anuló deje de figurar como provisional;
+ * el frontend la descarta en su embudo.
+ */
+export const ESTADOS_PROVISIONALES: readonly EstadoFactura[] = ['R', 'X']
+
+const ESTADO_VALIDO = new Set<string>(['C', 'X', 'R'])
+
+/**
+ * `f.[Estado] = 'C'` con un solo estado, `f.[Estado] IN ('R', 'X')` con varios. Un estado
+ * solo se renderiza igual que siempre para que el SQL de cerradas quede byte-idéntico al
+ * que ya está probado. Los valores son literales del código, nunca del `.env`, y aun así
+ * se validan contra la unión: un estado inventado explota acá, no en el PoS.
+ */
+export function filtroEstado(columna: string, estados: readonly EstadoFactura[]): string {
+  if (estados.length === 0) throw new Error('filtroEstado: hace falta al menos un estado')
+  for (const e of estados) {
+    if (!ESTADO_VALIDO.has(e)) throw new Error(`filtroEstado: estado desconocido ${JSON.stringify(e)}`)
+  }
+  if (estados.length === 1) return `${columna} = '${estados[0]}'`
+  return `${columna} IN (${estados.map((e) => `'${e}'`).join(', ')})`
+}
+
 /**
  * Las facturas CERRADAS del día, con su pedido y su salonero.
  *
@@ -94,7 +121,11 @@ export const FILTRO_INCREMENTAL = (columna: string): string =>
  * `incremental` agrega el corte por cursor (A3). El dry-run de la Fase 1a no lo usa:
  * quiere el día entero, siempre.
  */
-export function sqlFacturas(esq: Esquema, incremental = false): string {
+export function sqlFacturas(
+  esq: Esquema,
+  incremental = false,
+  estados: readonly EstadoFactura[] = ESTADOS_CERRADAS,
+): string {
   const F = `${q('dbo')}.${q(esq.facturas.tabla)}`
   const P = `${q('dbo')}.${q(esq.pedidos.tabla)}`
   const cf = (campo: string) => q(col(esq, 'facturas', campo))
@@ -169,17 +200,21 @@ LEFT JOIN (
     ${opTexto('numeropedido')}                      AS numero_pedido_txt
   FROM ${P} p
   INNER JOIN ${F} fp ON fp.${cf('numero')} = p.${cp('numerofactura')}
-  WHERE fp.${cf('estado')} = 'C'
+  WHERE ${filtroEstado(`fp.${cf('estado')}`, estados)}
     AND fp.${cf('fecha')} >= ${DESDE} AND fp.${cf('fecha')} < ${HASTA}${corte(`fp.${cf('numero')}`)}
   GROUP BY p.${cp('numerofactura')}
 ) ped ON ped.numero_factura = f.${cf('numero')}${joinEmpleados}
-WHERE f.${cf('estado')} = 'C'
+WHERE ${filtroEstado(`f.${cf('estado')}`, estados)}
   AND f.${cf('fecha')} >= ${DESDE} AND f.${cf('fecha')} < ${HASTA}${corte(`f.${cf('numero')}`)}
 ORDER BY f.${cf('fecha')}, f.${cf('numero')}`
 }
 
 /** El detalle de esas mismas facturas, ya resuelto contra el catálogo de productos. */
-export function sqlDetalle(esq: Esquema, incremental = false): string {
+export function sqlDetalle(
+  esq: Esquema,
+  incremental = false,
+  estados: readonly EstadoFactura[] = ESTADOS_CERRADAS,
+): string {
   const F = `${q('dbo')}.${q(esq.facturas.tabla)}`
   const D = `${q('dbo')}.${q(esq.facturasdet.tabla)}`
   const PR = `${q('dbo')}.${q(esq.productos.tabla)}`
@@ -214,7 +249,7 @@ export function sqlDetalle(esq: Esquema, incremental = false): string {
 FROM ${D} d
 INNER JOIN ${F} f ON f.${cf('numero')} = d.${cd('numerofactura')}
 LEFT JOIN ${PR} pr ON pr.${q(col(esq, 'productos', 'codigo'))} = d.${cd('producto')}${joinClas}
-WHERE f.${cf('estado')} = 'C'
+WHERE ${filtroEstado(`f.${cf('estado')}`, estados)}
   AND f.${cf('fecha')} >= ${DESDE} AND f.${cf('fecha')} < ${HASTA}${corte}
 ORDER BY d.${cd('numerofactura')}`
 }

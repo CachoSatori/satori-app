@@ -153,6 +153,10 @@
    principal y la que no es un dato medido. Si todas lo llevaran, no diría nada. */
 .apos-kpi.is-principal  { border-left-color: var(--apos-mark); }
 .apos-kpi.is-proyeccion { border-left-color: var(--apos-gold-dark); }
+/* «Sin cerrar»: plata que existe pero puede cambiar. Alerta, no crítico. */
+.apos-kpi.is-provisional { border-left-color: var(--apos-alerta); }
+/* La misma tarjeta cuando no hay nada en curso: visible, pero sin pedir la mirada. */
+.apos-kpi.is-tenue { opacity: 0.6; }
 
 .apos-kpi-lbl {
   font-size: 0.63rem;
@@ -171,6 +175,7 @@
 
 .apos-kpi.is-principal .apos-kpi-val { color: var(--apos-mark-fuerte); }
 .apos-kpi.is-proyeccion .apos-kpi-val { color: var(--apos-gold-dark); }
+.apos-kpi.is-provisional .apos-kpi-val { color: var(--apos-alerta); }
 
 .apos-kpi-sub { font-size: 0.66rem; color: var(--apos-muted); }
 

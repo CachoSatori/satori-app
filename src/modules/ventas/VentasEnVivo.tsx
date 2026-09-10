@@ -223,7 +223,13 @@ export default function VentasEnVivo({ metas }: Props) {
   // ── Las tres cifras que el modelo del xls no tiene ──
   const tickets    = ticketsDelDia(porHora)
   const ticketProm = ticketPromedioDe(stats.ventaNeta, tickets)
+  // La hora actual CR: es el cursor del gráfico de ritmo por hora. Ya NO es el rótulo del KPI
+  // principal, que decía «al cierre de las HH:00» con este reloj y se leía como un corte.
   const hora       = horaCorteCR()
+  // Lo provisional (cuentas en curso, estado R) viaja APARTE del día en `snap.provisional`,
+  // en la misma unidad que la neta (valor_servido). El generador de ejemplo no lo trae: 0.
+  const sinCerrar          = snap.provisional?.monto   ?? 0
+  const provisionalTickets = snap.provisional?.tickets ?? 0
 
   // ── LOS TRES TICKET PROMEDIO, cada uno con su regla ────────────────────────────────────────
   // Son cifras DISTINTAS a propósito y por eso van con nombre. Antes había dos sin rótulo y
@@ -556,13 +562,44 @@ export default function VentasEnVivo({ metas }: Props) {
           )}
         </div>
 
-        {/* ── KPIs ──────────────────────────────────────────────────────────── */}
+        {/* ── KPIs ──────────────────────────────────────────────────────────────
+            El encuadre operable, en TRES cifras rotuladas y una sola unidad (NETO):
+              · Cobrado    = la venta oficial (`getDayStats`, solo cuentas cerradas, estado C).
+              · Sin cerrar = cuentas en curso (estado R). Plata que existe pero puede cambiar
+                             hasta que el cajero cierre el lote. Sale de `snap.provisional`,
+                             NUNCA de `getDayStats`: la neta oficial no la lleva.
+              · Abierto    = mesas abiertas ahora (conteo, sin monto: el PoS no lo manda).
+            La cifra PRINCIPAL es el total de la JORNADA, cobrado + sin cerrar. El desglose por
+            turno (mañana / tarde) vive abajo, en «Por turno», como detalle. Antes el principal
+            decía «al cierre de las 16:00» con la hora ACTUAL, que se leía como un corte y era
+            solo el reloj. */}
         <div className="apos-kpis">
           <div className="apos-kpi is-principal">
-            <span className="apos-kpi-lbl">Venta neta</span>
-            <span className="apos-kpi-val">{fi(stats.ventaNeta)}</span>
+            <span className="apos-kpi-lbl">Vendido hasta ahora</span>
+            <span className="apos-kpi-val">{fi(stats.ventaNeta + sinCerrar)}</span>
             <span className="apos-kpi-sub">
-              {snap.servicioEnCurso ? `al cierre de las ${String(hora).padStart(2, '0')}:00` : 'servicio completo'}
+              neto · cobrado + sin cerrar · {snap.servicioEnCurso ? 'jornada en curso' : 'jornada completa'}
+            </span>
+          </div>
+          <div className="apos-kpi">
+            <span className="apos-kpi-lbl">Cobrado</span>
+            <span className="apos-kpi-val">{fi(stats.ventaNeta)}</span>
+            <span className="apos-kpi-sub">neto oficial · solo cuentas cerradas</span>
+          </div>
+          <div className={`apos-kpi${sinCerrar > 0 ? ' is-provisional' : ' is-tenue'}`}>
+            <span className="apos-kpi-lbl">Sin cerrar</span>
+            <span className="apos-kpi-val">{fi(sinCerrar)}</span>
+            <span className="apos-kpi-sub">
+              {sinCerrar > 0
+                ? `${provisionalTickets} ${provisionalTickets === 1 ? 'cuenta' : 'cuentas'} en curso · puede cambiar hasta el cierre`
+                : 'nada en curso · cuentas en R'}
+            </span>
+          </div>
+          <div className="apos-kpi">
+            <span className="apos-kpi-lbl">Abierto</span>
+            <span className="apos-kpi-val">{(snap.mesasAbiertas ?? 0).toLocaleString('es-CR')}</span>
+            <span className="apos-kpi-sub">
+              {(snap.mesasAbiertas ?? 0) === 1 ? 'mesa abierta ahora' : 'mesas abiertas ahora'} · sin monto: el PoS no lo manda
             </span>
           </div>
           <div className="apos-kpi">

@@ -289,6 +289,31 @@ describe('normalizarLinea', () => {
 
 // ── Mesas abiertas y cursor ────────────────────────────────────────────────────
 
+describe('normalizarOpen · Frente C: monto estimado, pax y ítems (provisionales)', () => {
+  const base = { clave: 'pedido:58' }
+
+  it('ausentes → null. NUNCA 0 por defecto: ausente es «no sé», no «nada»', () => {
+    const r = normalizarOpen('nosara', base, AHORA)
+    expect(r.ok && r.valor).toMatchObject({ monto_estimado_crc: null, pax_pedido: null, items_valor: null })
+  })
+
+  it('un 0 mandado a propósito se conserva: es el cero REAL de una cortesía', () => {
+    const r = normalizarOpen('nosara', { ...base, monto_estimado_crc: 0, items_valor: 0 }, AHORA)
+    expect(r.ok && r.valor).toMatchObject({ monto_estimado_crc: 0, items_valor: 0 })
+  })
+
+  it('números ≥ 0 pasan; el monto conserva dos decimales, el pax y los ítems son enteros', () => {
+    const r = normalizarOpen('nosara', { ...base, monto_estimado_crc: '24600.456', pax_pedido: 4, items_valor: '3' }, AHORA)
+    expect(r.ok && r.valor).toMatchObject({ monto_estimado_crc: 24600.46, pax_pedido: 4, items_valor: 3 })
+  })
+
+  it('negativos, NaN, texto o vacío → null, y el resto de la fila sigue entrando', () => {
+    const r = normalizarOpen('nosara', { ...base, monto_estimado_crc: -1, pax_pedido: 'x', items_valor: '' }, AHORA)
+    expect(r.ok).toBe(true)
+    expect(r.ok && r.valor).toMatchObject({ monto_estimado_crc: null, pax_pedido: null, items_valor: null })
+  })
+})
+
 describe('normalizarOpen', () => {
   it('arma la fila del snapshot', () => {
     const r = normalizarOpen('nosara', {

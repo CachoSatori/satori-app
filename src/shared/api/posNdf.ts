@@ -298,6 +298,10 @@ export async function getNetoPorJornada(
       .from('pos_ndf_tickets')
       .select('id, fecha_registra, valor_servido_crc')
       .eq('local', local)
+      // Solo CERRADAS. La comparativa mira jornadas pasadas, que ya son todas C, así que hoy
+      // no cambia nada; pero desde B la tabla trae R y X, y una R viva en el rango (o una R
+      // huérfana que nunca cerró) inflaría el «promedio de 4 semanas» con plata que no es venta.
+      .eq('estado', 'C')
       .gte('fecha_registra', desde)
       .lt('fecha_registra', hasta)
       .order('fecha_registra', { ascending: true })

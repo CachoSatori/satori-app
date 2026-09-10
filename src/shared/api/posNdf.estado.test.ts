@@ -45,7 +45,7 @@ function fakePostgrest(filas: Fila[]) {
 const mock = vi.hoisted(() => ({ cliente: { from: (): unknown => ({}) } }))
 vi.mock('./supabase', () => ({ supabase: mock.cliente }))
 
-const { getPedidosCerradosJornada } = await import('./posNdf')
+const { getNetoPorJornada, getPedidosCerradosJornada } = await import('./posNdf')
 
 const LOCAL = 'santa-teresa'
 const JORNADA = '2026-09-09'
@@ -93,5 +93,38 @@ describe('getPedidosCerradosJornada — la llave que saca una mesa de «abiertas
     ])
     mock.cliente.from = fake.from
     expect(await getPedidosCerradosJornada(LOCAL, JORNADA)).toEqual(new Set())
+  })
+})
+
+describe('getNetoPorJornada — la comparativa de 4 semanas es C-only', () => {
+  it('pide EXPLÍCITAMENTE estado C', async () => {
+    const fake = fakePostgrest([])
+    mock.cliente.from = fake.from
+    await getNetoPorJornada(LOCAL, ['2026-09-02'])
+    const filtros = fake.llamadas.filter(l => l.metodo === 'eq').map(l => l.args)
+    expect(filtros).toContainEqual(['estado', 'C'])
+  })
+
+  it('una R viva en el rango NO infla el neto de esa jornada; una X tampoco', async () => {
+    const fake = fakePostgrest([
+      tk({ id: 'c1', estado: 'C', fecha_registra: '2026-09-02T19:00:00-06:00', valor_servido_crc: 100_000 }),
+      tk({ id: 'c2', estado: 'C', fecha_registra: '2026-09-02T21:00:00-06:00', valor_servido_crc: 50_000 }),
+      tk({ id: 'r1', estado: 'R', fecha_registra: '2026-09-02T22:00:00-06:00', valor_servido_crc: 80_000 }),
+      tk({ id: 'x1', estado: 'X', fecha_registra: '2026-09-02T20:00:00-06:00', valor_servido_crc: 30_000 }),
+    ])
+    mock.cliente.from = fake.from
+    const neto = await getNetoPorJornada(LOCAL, ['2026-09-02'])
+    expect(neto).toEqual({ '2026-09-02': 150_000 })
+  })
+
+  it('una R huérfana de otra jornada del rango tampoco entra', async () => {
+    const fake = fakePostgrest([
+      tk({ id: 'c1', estado: 'C', fecha_registra: '2026-08-26T19:00:00-06:00', valor_servido_crc: 70_000 }),
+      tk({ id: 'r0', estado: 'R', fecha_registra: '2026-08-26T23:30:00-06:00', valor_servido_crc: 999_999 }),
+      tk({ id: 'c2', estado: 'C', fecha_registra: '2026-09-02T19:00:00-06:00', valor_servido_crc: 100_000 }),
+    ])
+    mock.cliente.from = fake.from
+    const neto = await getNetoPorJornada(LOCAL, ['2026-08-26', '2026-09-02'])
+    expect(neto).toEqual({ '2026-08-26': 70_000, '2026-09-02': 100_000 })
   })
 })

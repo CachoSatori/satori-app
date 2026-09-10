@@ -532,8 +532,9 @@ export default function VentasEnVivo({ metas }: Props) {
                             <ul className="apos-detalle-productos" title={PRODUCTOS_COMANDADOS}>
                               {m.productos.map(p => (
                                 <li key={p.nombre}>
+                                  {/* «Nombre ×N» es UNA unidad: la cantidad va pegada, sin espacio que la separe. */}
                                   <span className="apos-detalle-nombre">{p.nombre}</span>
-                                  <span className="apos-detalle-cant">× {p.cantidad}</span>
+                                  <span className="apos-detalle-cant">×{p.cantidad}</span>
                                 </li>
                               ))}
                             </ul>

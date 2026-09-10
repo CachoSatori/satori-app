@@ -726,26 +726,37 @@
   padding-bottom: 0.55rem;
 }
 
+/* Tres columnas en el ancho normal de la tabla; en pantallas angostas se acomodan solas.
+   «Nombre ×N» es una unidad: la cantidad va pegada al nombre, no al borde de la columna. */
 .apos-detalle-productos {
   list-style: none;
   margin: 0;
-  padding: 0.25rem 0 0 1.1rem;
+  padding: 0.2rem 0 0 1.1rem;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  gap: 0.15rem 1.25rem;
-  font-size: 0.78rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.1rem 1rem;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+@media (max-width: 720px) {
+  .apos-detalle-productos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 440px) {
+  .apos-detalle-productos { grid-template-columns: minmax(0, 1fr); }
 }
 .apos-detalle-productos li {
   display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
+  align-items: baseline;
+  gap: 0.3em;
+  min-width: 0;
 }
-.apos-detalle-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apos-detalle-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .apos-detalle-cant {
   font-family: var(--apos-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   opacity: 0.8;
+  flex-shrink: 0;
 }
 
 .apos-revisar-nota {

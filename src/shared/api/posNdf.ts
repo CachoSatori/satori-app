@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { ProductoComandado } from '../ndf/ingestNdf'
 import type { EstadoFactura } from '../ndf/mapTicket'
 
 import { supabase } from './supabase'
@@ -333,6 +334,8 @@ export interface MesaAbiertaRow {
   monto_estimado_crc: number | null
   pax_pedido:         number | null
   items_valor:        number | null
+  /** Productos comandados, agrupados (mig 065). Informativo. `null` = sin detalle. */
+  detalle_productos:  ProductoComandado[] | null
 }
 
 /**
@@ -343,7 +346,7 @@ export interface MesaAbiertaRow {
 export async function getMesasAbiertas(local: string): Promise<MesaAbiertaRow[]> {
   const { data, error } = await sb
     .from('pos_ndf_open')
-    .select('clave, numero_factura, id_pedido, mesa, salonero_login, canal, pax, pax_alerta, updated_at, monto_estimado_crc, pax_pedido, items_valor')
+    .select('clave, numero_factura, id_pedido, mesa, salonero_login, canal, pax, pax_alerta, updated_at, monto_estimado_crc, pax_pedido, items_valor, detalle_productos')
     .eq('local', local)
     .order('updated_at', { ascending: true })
   if (error) throw new Error(error.message)

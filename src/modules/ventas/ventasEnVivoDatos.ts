@@ -781,6 +781,10 @@ export function detallarMesasAbiertas(
         montoEstimado: m.monto_estimado_crc ?? null,
         paxPedido:     m.pax_pedido ?? null,
         itemsValor:    m.items_valor ?? null,
+        // Mig 065: la lista viaja tal cual. Lo que no sea un array con algo adentro es «sin
+        // detalle» — la base ya la validó al entrar (`productosComandados`), acá no se reinterpreta.
+        productos:     Array.isArray(m.detalle_productos) && m.detalle_productos.length > 0
+                         ? m.detalle_productos : null,
       }
     })
     .sort((a, b) => {

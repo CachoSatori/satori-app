@@ -803,7 +803,7 @@ describe('resumirMesasAbiertas', () => {
     clave: 'm1', numero_factura: null, id_pedido: '1', mesa: '5',
     salonero_login: '026', canal: 'salon', pax: 2, pax_alerta: 'ok',
     updated_at: '2026-09-01T20:00:00-06:00',
-    monto_estimado_crc: null, pax_pedido: null, items_valor: null,
+    monto_estimado_crc: null, pax_pedido: null, items_valor: null, detalle_productos: null,
     ...over,
   })
 
@@ -857,7 +857,7 @@ const mesaAb = (over: Partial<MesaAbiertaRow> = {}): MesaAbiertaRow => ({
   clave: 'm1', numero_factura: null, id_pedido: '1', mesa: '5',
   salonero_login: '026', canal: 'salon', pax: 2, pax_alerta: 'ok',
   updated_at: '2026-09-01T20:00:00-06:00',
-  monto_estimado_crc: null, pax_pedido: null, items_valor: null,
+  monto_estimado_crc: null, pax_pedido: null, items_valor: null, detalle_productos: null,
   ...over,
 })
 
@@ -940,7 +940,9 @@ describe('la fusión Hoy ↔ En vivo no toca la plata del día', () => {
     mesasAbiertas: 2,
     paxAbierto: 6,
     mesasDetalle: detallarMesasAbiertas([
-      mesaAb({ clave: 'pedido:58', monto_estimado_crc: 246_000, pax_pedido: 4, items_valor: 9 }),
+      mesaAb({ clave: 'pedido:58', monto_estimado_crc: 246_000, pax_pedido: 4, items_valor: 9,
+               // Mig 065: la lista de productos viaja en la misma fila. Tampoco toca nada.
+               detalle_productos: [{ nombre: 'NIGIRI SALMÓN', cantidad: 9 }, { nombre: 'CORTESÍA TÉ', cantidad: 2 }] }),
       mesaAb({ clave: 'pedido:59', monto_estimado_crc: 0, pax_pedido: 2, items_valor: 0 }),
     ], NOMBRES, true, JORNADA),
   }
@@ -948,6 +950,14 @@ describe('la fusión Hoy ↔ En vivo no toca la plata del día', () => {
   it('CANDADO Frente C: el monto estimado y el pax de abiertas NO tocan el DiaData', () => {
     expect(conEstimado.mesasDetalle.map(m => m.montoEstimado)).toEqual([246_000, 0])
     expect(JSON.stringify(conEstimado.dia)).toBe(JSON.stringify(base.dia))
+  })
+
+  it('CANDADO mig 065: la lista de productos comandados NO toca el DiaData ni el mix del día', () => {
+    expect(conEstimado.mesasDetalle[0].productos).toHaveLength(2)
+    expect(JSON.stringify(conEstimado.dia)).toBe(JSON.stringify(base.dia))
+    // Ni un producto de la mesa abierta aparece en el ProductMap ni en el mix de los cerrados.
+    expect(Object.keys(conEstimado.pm)).toEqual(Object.keys(base.pm))
+    expect(JSON.stringify(conEstimado.pm)).toBe(JSON.stringify(base.pm))
   })
 
   it('CANDADO Frente C: getDayStats, bruto, servicio, IVA y regalía no cambian ni un colón', () => {
@@ -1152,9 +1162,22 @@ describe('detallarMesasAbiertas', () => {
     const [m] = detallarMesasAbiertas([mesaAb()], NOMBRES, true, JORNADA)
     expect(Object.keys(m).sort())
       .toEqual(['abiertaDesde', 'canal', 'clave', 'deJornadaAnterior', 'idPedido', 'itemsValor',
-                'mesa', 'montoEstimado', 'pax', 'paxPedido', 'salonero'])
+                'mesa', 'montoEstimado', 'pax', 'paxPedido', 'productos', 'salonero'])
     expect(m.montoEstimado).toBeNull()
     expect(m.paxPedido).toBeNull()
+    expect(m.productos).toBeNull()
+  })
+
+  it('mig 065 · los productos comandados se copian tal cual; vacío o ausente es «sin detalle»', () => {
+    const lista = [{ nombre: 'NIGIRI SALMÓN', cantidad: 3 }, { nombre: 'IMPERIAL', cantidad: 2 }]
+    const [con, vacio, sin] = detallarMesasAbiertas([
+      mesaAb({ clave: 'a', detalle_productos: lista }),
+      mesaAb({ clave: 'b', detalle_productos: [] }),
+      mesaAb({ clave: 'c' }),
+    ], NOMBRES, true, JORNADA)
+    expect(con.productos).toEqual(lista)      // mismo orden que mandó el agente
+    expect(vacio.productos).toBeNull()        // un array vacío no abre desplegable
+    expect(sin.productos).toBeNull()
   })
 
   it('copia el estimado y el pax tal cual: null sigue siendo null, 0 sigue siendo 0', () => {

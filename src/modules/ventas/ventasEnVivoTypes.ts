@@ -1,3 +1,4 @@
+import type { ProductoComandado } from '../../shared/ndf/ingestNdf'
 import type { DiaData, ProductMap } from '../../shared/types/ventas'
 
 // ╔══════════════════════════════════════════════════════════════════════════════════════╗
@@ -152,6 +153,12 @@ export interface MesaAbiertaDetalle {
   paxPedido:     number | null
   /** Líneas con valor servido. `null` = sin líneas usables. */
   itemsValor:    number | null
+  /**
+   * Productos comandados, agrupados por producto (mig 065). Es lo que abre el desplegable de
+   * la fila. Se COPIA de `pos_ndf_open.detalle_productos` y no se suma a nada: es una lista,
+   * no plata. `null` = sin detalle → la fila no se despliega.
+   */
+  productos:     ProductoComandado[] | null
 }
 
 /** Qué tan viejo es lo que se está mirando. Sale de `pos_ndf_cursor` (poll + último fallo). */

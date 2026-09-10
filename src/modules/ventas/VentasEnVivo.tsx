@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { Fragment, useState, useEffect, useCallback } from 'react'
 import {
   aggCajero, aggGeneral, aggSalonero, dayOfWeek, fi, getDayStats, getMeta,
   metaColor, ratioCBClass, topProds,
@@ -71,6 +71,11 @@ const MONTO_CERO_REAL =
 const PROM_PAX_ESTIMADO =
   'ESTIMADO: monto estimado por catálogo ÷ pax del pedido. Mientras la mesa siga abierta es ' +
   'una lectura de ritmo, no un ticket promedio. Nunca entra en la neta ni en el cuadre.'
+
+/** El desplegable de productos: qué hay comandado en la mesa. Lista, no plata. */
+const PRODUCTOS_COMANDADOS =
+  'Lo comandado en la mesa hasta el último poll, agrupado por producto. Incluye cortesías; ' +
+  'no incluye los marcadores de pax. Es informativo: no lleva ₡ y no entra en ninguna cifra.'
 
 /**
  * La marca de la mesa arrastrada de otra jornada. Se explica en el `title` porque la fila NO se
@@ -151,6 +156,17 @@ export default function VentasEnVivo({ metas }: Props) {
   const [prodTipo, setProdTipo] = useState<'general' | 'comidas' | 'bebidas'>('general')
   const [salFiltro, setSalFiltro] = useState<string>('')
   const [orden, setOrden] = useState<OrdenRanking>('promPax')
+  // Qué mesas abiertas están desplegadas (por `clave`). Solo UI: sobrevive al refresco del
+  // snapshot porque la clave es estable; una mesa que se cierra simplemente deja de listarse.
+  const [desplegadas, setDesplegadas] = useState<ReadonlySet<string>>(() => new Set())
+  const alternarMesa = useCallback((clave: string) => {
+    setDesplegadas(prev => {
+      const next = new Set(prev)
+      if (next.has(clave)) next.delete(clave)
+      else next.add(clave)
+      return next
+    })
+  }, [])
   // La jornada que se está mirando. Vacío = la de hoy. Poder pedir un día pasado es lo que
   // permite CUADRAR contra el reporte del PoS sin esperar a que el día de hoy tenga ventas.
   const [fecha, setFecha] = useState<string>('')
@@ -444,9 +460,32 @@ export default function VentasEnVivo({ metas }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {mesasDetalle.map(m => (
-                      <tr key={m.clave} className={m.deJornadaAnterior ? 'is-revisar' : undefined}>
+                    {mesasDetalle.map(m => {
+                      const tieneDetalle = m.productos !== null && m.productos.length > 0
+                      const abierta = tieneDetalle && desplegadas.has(m.clave)
+                      return (
+                      <Fragment key={m.clave}>
+                      <tr
+                        className={[
+                          m.deJornadaAnterior ? 'is-revisar' : '',
+                          tieneDetalle ? 'is-desplegable' : '',
+                          abierta ? 'is-abierta' : '',
+                        ].filter(Boolean).join(' ') || undefined}
+                      >
                         <td>
+                          {/* Sin detalle no hay botón: la fila se ve igual que siempre. */}
+                          {tieneDetalle && (
+                            <button
+                              type="button"
+                              className="apos-desplegar"
+                              aria-expanded={abierta}
+                              aria-controls={`apos-detalle-${m.clave}`}
+                              title={PRODUCTOS_COMANDADOS}
+                              onClick={() => alternarMesa(m.clave)}
+                            >
+                              {abierta ? '▾' : '▸'}
+                            </button>
+                          )}
                           {m.mesa ?? '—'}
                           {m.deJornadaAnterior && (
                             <>
@@ -487,7 +526,23 @@ export default function VentasEnVivo({ metas }: Props) {
                           })()}
                         </td>
                       </tr>
-                    ))}
+                      {abierta && m.productos !== null && (
+                        <tr className="apos-detalle-row" id={`apos-detalle-${m.clave}`}>
+                          <td colSpan={7}>
+                            <ul className="apos-detalle-productos" title={PRODUCTOS_COMANDADOS}>
+                              {m.productos.map(p => (
+                                <li key={p.nombre}>
+                                  <span className="apos-detalle-nombre">{p.nombre}</span>
+                                  <span className="apos-detalle-cant">× {p.cantidad}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

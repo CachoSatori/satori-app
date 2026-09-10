@@ -701,6 +701,53 @@
   background: color-mix(in srgb, var(--apos-alerta) 8%, transparent);
 }
 
+/* ── Desplegable de productos de la mesa abierta (mig 065) ──────────────────
+   Solo la fila que TIENE detalle lleva el botón; sin detalle se ve exactamente como siempre.
+   La fila hija es una lista, no una tabla de plata: sin columnas de ₡, tipografía chica. */
+
+.apos-desplegar {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0 0.35rem 0 0;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.apos-desplegar:hover, .apos-desplegar:focus-visible { opacity: 1; }
+
+.apos-tabla-abiertas tr.is-abierta > td { border-bottom: none; }
+
+.apos-tabla-abiertas tr.apos-detalle-row > td {
+  padding-top: 0;
+  padding-bottom: 0.55rem;
+}
+
+.apos-detalle-productos {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0 0 1.1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.15rem 1.25rem;
+  font-size: 0.78rem;
+}
+.apos-detalle-productos li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.apos-detalle-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apos-detalle-cant {
+  font-family: var(--apos-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
 .apos-revisar-nota {
   margin: 0.5rem 0 0;
   font-size: 0.73rem;

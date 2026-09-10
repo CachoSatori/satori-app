@@ -726,31 +726,48 @@
   padding-bottom: 0.55rem;
 }
 
-/* Tres columnas en el ancho normal de la tabla; en pantallas angostas se acomodan solas.
-   «Nombre ×N» es una unidad: la cantidad va pegada al nombre, no al borde de la columna. */
+/* Denso y acotado: el bloque ocupa como mucho la mitad izquierda de la fila (hasta donde cae
+   la columna «Abierta»), y adentro los ítems van por CONTENIDO con wrap natural — los cortos
+   («Coca Zero ×1») se juntan varios por línea, los largos ocupan lo suyo. «Nombre ×N» es una
+   unidad, y entre ítems va un «·» sutil que sale del CSS, no del markup.
+   En pantallas angostas el tope de ancho se suelta: ahí la mitad de la fila no alcanza. */
 .apos-detalle-productos {
   list-style: none;
   margin: 0;
   padding: 0.2rem 0 0 1.1rem;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.1rem 1rem;
+  max-width: 50%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.7em;
+  row-gap: 0.1rem;
   font-size: 0.76rem;
   line-height: 1.4;
 }
 @media (max-width: 720px) {
-  .apos-detalle-productos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 440px) {
-  .apos-detalle-productos { grid-template-columns: minmax(0, 1fr); }
+  .apos-detalle-productos { max-width: none; }
 }
 .apos-detalle-productos li {
-  display: flex;
+  display: inline-flex;
   align-items: baseline;
   gap: 0.3em;
-  min-width: 0;
+  white-space: nowrap;
+  max-width: 100%;
 }
-.apos-detalle-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* El separador entre ítems, desde el CSS (sin un elemento por ítem en el markup). Va DESPUÉS
+   de cada ítem menos el último: cuando la lista wrappea, el punto queda al final de la línea y
+   la siguiente arranca por un nombre, no por un «·» suelto. */
+.apos-detalle-productos li:not(:last-child)::after {
+  content: '·';
+  opacity: 0.45;
+  margin-left: 0.7em;
+}
+.apos-detalle-nombre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18em;
+}
 .apos-detalle-cant {
   font-family: var(--apos-mono);
   font-variant-numeric: tabular-nums;

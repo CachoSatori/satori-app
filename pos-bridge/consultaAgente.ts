@@ -19,7 +19,7 @@ import {
   texto,
   type TicketMapeado,
 } from '../src/shared/ndf/mapTicket.ts'
-import { conOffsetCR, type OpenIngest, type TicketIngest } from '../src/shared/ndf/ingestNdf.ts'
+import { conOffsetCR, type OpenIngest, type ProductoComandado, type TicketIngest } from '../src/shared/ndf/ingestNdf.ts'
 
 import {
   armarTickets,
@@ -227,6 +227,8 @@ export interface FilaLineaAbierta {
   tipo_descuento: unknown
   precio:        unknown
   familia:       unknown
+  /** `FAC_Productos.Nombre` (desplegable de productos, mig 065). `NULL` si el código no está en el catálogo. */
+  nombre?:       unknown
 }
 
 /**
@@ -354,7 +356,8 @@ export function sqlLineasAbiertas(esq: Esquema): string {
   ${od('descuento')}                                AS descuento,
   ${od('tipodescuento')}                            AS tipo_descuento,
   pr.${q(col(esq, 'productos', 'precio'))}          AS precio,
-  pr.${q(col(esq, 'productos', 'clasificacion'))}   AS familia
+  pr.${q(col(esq, 'productos', 'clasificacion'))}   AS familia,
+  pr.${q(col(esq, 'productos', 'nombre'))}          AS nombre
 FROM ${D} d
 INNER JOIN ${P} p
   ON p.${cp('numeropedido')} = d.${cd('numeropedido')}
@@ -461,6 +464,46 @@ export function estimarPedido(lineas: readonly FilaLineaAbierta[], tipo: unknown
 }
 
 /**
+ * Los productos comandados de la mesa abierta, AGRUPADOS por producto (desplegable de «En
+ * vivo», mig 065). Informativo: nombre × cantidad total, sin ₡.
+ *
+ * Alcance firmado (Ismael, 2026-09-10): TODO lo comandado —cortesías, dueños, merch, lo que
+ * sea— EXCEPTO los marcadores de pax (677 / 678), que no son algo que se sirva, y las líneas
+ * anuladas. No pasa por la whitelist de valor servido a propósito: acá no se cuenta plata,
+ * se lista lo que hay en la mesa.
+ *
+ * Se agrupa por CÓDIGO (la identidad del producto) y se muestra el nombre del catálogo. Orden:
+ * cantidad desc, después nombre, así dos snapshots seguidos de la misma mesa listan igual.
+ *
+ * FAIL-CLOSED, todo o nada:
+ *   · Sin líneas (o sin poder leerlas) → `null`: la fila no tiene desplegable.
+ *   · Una línea sin nombre de catálogo → `null` para la mesa ENTERA. Una lista a medias se
+ *     leería como «la mesa solo tiene esto», que es falso; mejor no mostrar nada y que se vea.
+ *   · Una línea con cantidad ilegible o ≤ 0 se ignora (no es un producto en la mesa).
+ *   · Si después de todo eso no queda nada → `null`, nunca `[]`.
+ */
+export function agruparProductos(lineas: readonly FilaLineaAbierta[]): ProductoComandado[] | null {
+  const por = new Map<string, { nombre: string; cantidad: number }>()
+  for (const l of lineas) {
+    if ((texto(l.estado) ?? '').toUpperCase() === ESTADO_LINEA_ANULADA) continue
+    const codigo = texto(l.codigo)
+    if (codigo === null) continue
+    if (codigo === COD_PAX_1 || codigo === COD_PAX_2) continue
+    const cantidad = numero(l.cantidad)
+    if (cantidad === null || cantidad <= 0) continue
+    const nombre = texto(l.nombre)
+    if (nombre === null) return null            // sin catálogo: no se lista a medias
+    const acc = por.get(codigo)
+    if (acc) acc.cantidad += cantidad
+    else por.set(codigo, { nombre, cantidad })
+  }
+  if (por.size === 0) return null
+  return [...por.values()]
+    .map((p) => ({ nombre: p.nombre, cantidad: Math.round(p.cantidad * 100) / 100 }))
+    .sort((a, b) => b.cantidad - a.cantidad || a.nombre.localeCompare(b.nombre, 'es'))
+}
+
+/**
  * Fila de pedido abierto → entrada del snapshot.
  *
  * `clave` = `pedido:<NumeroPedido>`, la identidad estable dentro del local. El pax sale
@@ -491,6 +534,8 @@ export function mapAbierta(f: FilaAbierta, lineas: readonly FilaLineaAbierta[] =
     monto_estimado_crc: est.monto_estimado_crc,
     pax_pedido:         est.pax_pedido,
     items_valor:        est.items_valor,
+    // Informativo (mig 065). Mismas líneas que el estimado, otra pregunta: qué hay en la mesa.
+    detalle_productos:  agruparProductos(lineas),
   }
 }
 

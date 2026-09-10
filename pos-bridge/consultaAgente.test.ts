@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import {
+  agruparProductos,
   aTicketIngest,
   leerAbiertas,
   leerCerradas,
@@ -207,6 +208,7 @@ describe('mapAbierta', () => {
 
   it('arma la mesa abierta con clave estable y canal mapeado', () => {
     expect(mapAbierta(fila())).toEqual({
+      detalle_productos: null,
       clave: 'pedido:4477', numero_factura: null, id_pedido: '4477', mesa: '12',
       salonero_login: '026', canal: 'salon', pax: 4, pax_alerta: 'falta_articulo',
       updated_at: '2026-09-01T20:05:00-06:00',
@@ -605,6 +607,11 @@ describe('puedeLeerLineasAbiertas — fail-closed por esquema', () => {
 describe('sqlLineasAbiertas', () => {
   const sql = sqlLineasAbiertas(ESQUEMA_C)
 
+  it('mig 065: pide el NOMBRE del catálogo junto con precio y familia, del mismo LEFT JOIN', () => {
+    expect(sql).toMatch(/pr\.\[Nombre\]\s+AS nombre/)
+    expect(sql).toMatch(/LEFT JOIN \[dbo\]\.\[FAC_Productos\] pr/)
+  })
+
   it('pasa el candado read-only', () => {
     expect(() => assertSoloSelect(sql)).not.toThrow()
   })
@@ -631,6 +638,59 @@ describe('sqlLineasAbiertas', () => {
     expect(cab).toContain("[Estado] = 'R'")
     expect(cab).toContain('AS periodo')
     expect(sqlAbiertas(ESQUEMA)).toMatch(/NULL\s+AS periodo/)   // sin las columnas, la clave va en NULL
+  })
+})
+
+describe('agruparProductos — el desplegable de la mesa abierta (mig 065)', () => {
+  const l = (over: Partial<FilaLineaAbierta> = {}) => lin({ nombre: 'NIGIRI SALMÓN', ...over })
+
+  it('agrupa por producto y suma cantidades; orden cantidad desc, después nombre', () => {
+    expect(agruparProductos([
+      l({ codigo: '25', cantidad: 1 }),
+      l({ codigo: '31', nombre: 'IMPERIAL', cantidad: 2 }),
+      l({ codigo: '25', cantidad: 2 }),
+      l({ codigo: '40', nombre: 'AGUA', cantidad: 3 }),
+    ])).toEqual([
+      { nombre: 'AGUA', cantidad: 3 },
+      { nombre: 'NIGIRI SALMÓN', cantidad: 3 },
+      { nombre: 'IMPERIAL', cantidad: 2 },
+    ])
+  })
+
+  it('ALCANCE FIRMADO: todo lo comandado, cortesías incluidas; fuera SOLO 677/678 y anuladas', () => {
+    expect(agruparProductos([
+      l({ codigo: '25', cantidad: 1 }),
+      l({ codigo: '677', nombre: 'PAX', familia: 19, cantidad: 2, precio: 0 }),
+      l({ codigo: '678', nombre: 'PAX X2', familia: 19, cantidad: 1, precio: 0 }),
+      l({ codigo: '90', nombre: 'CORTESÍA TÉ', familia: 17, cantidad: 1, precio: 0 }),
+      l({ codigo: '91', nombre: 'ANULADO', cantidad: 5, estado: 'X' }),
+    ])).toEqual([
+      { nombre: 'CORTESÍA TÉ', cantidad: 1 },
+      { nombre: 'NIGIRI SALMÓN', cantidad: 1 },
+    ])
+  })
+
+  it('no pasa por la whitelist de valor servido: lista, no plata', () => {
+    // Familia 28 (dueños) no suma al estimado, pero SÍ está en la mesa.
+    expect(agruparProductos([l({ codigo: '77', nombre: 'PLATO DUEÑOS', familia: 28, precio: null })]))
+      .toEqual([{ nombre: 'PLATO DUEÑOS', cantidad: 1 }])
+  })
+
+  it('FAIL-CLOSED: sin líneas → null; una línea sin nombre de catálogo → null para la mesa entera', () => {
+    expect(agruparProductos([])).toBeNull()
+    expect(agruparProductos([l({ codigo: '25' }), l({ codigo: '99', nombre: null })])).toBeNull()
+    expect(agruparProductos([l({ nombre: undefined })])).toBeNull()
+  })
+
+  it('FAIL-CLOSED: cantidad ilegible o ≤ 0 se ignora; si no queda nada → null, nunca []', () => {
+    expect(agruparProductos([l({ cantidad: 0 }), l({ cantidad: 'x' }), l({ cantidad: -1 })])).toBeNull()
+    expect(agruparProductos([l({ cantidad: 0 }), l({ codigo: '31', nombre: 'IMPERIAL', cantidad: 1 })]))
+      .toEqual([{ nombre: 'IMPERIAL', cantidad: 1 }])
+  })
+
+  it('un 677 anulado o sin nombre tampoco rompe nada: se salta antes de mirar el nombre', () => {
+    expect(agruparProductos([l({ codigo: '25' }), l({ codigo: '677', nombre: null, cantidad: 2 })]))
+      .toEqual([{ nombre: 'NIGIRI SALMÓN', cantidad: 1 }])
   })
 })
 
@@ -678,11 +738,22 @@ describe('leerAbiertas con líneas (Frente C)', () => {
     expect(m.pax_alerta).toBe('falta_nativo')
   })
 
-  it('FAIL-CLOSED: con el esquema de siempre no se pide el detalle y la mesa sale sin monto', async () => {
+  it('mig 065: el desplegable viaja en la misma entrada, armado de las mismas líneas', async () => {
+    const { qy } = espiar([cabecera()], [
+      lin({ codigo: '25', nombre: 'NIGIRI SALMÓN', cantidad: 2 }),
+      lin({ codigo: '677', nombre: 'PAX', familia: 19, cantidad: 2, precio: 0 }),
+    ])
+    const [m] = await leerAbiertas(qy, ESQUEMA_C, { desde: 'a', hasta: 'b' })
+    expect(m.detalle_productos).toEqual([{ nombre: 'NIGIRI SALMÓN', cantidad: 2 }])
+    // Y Frente C sigue diciendo lo mismo que antes: el desplegable no le cambia nada.
+    expect(m).toMatchObject({ monto_estimado_crc: 24_600, pax_pedido: 2, items_valor: 1, pax: 2 })
+  })
+
+  it('FAIL-CLOSED: con el esquema de siempre no se pide el detalle y la mesa sale sin monto ni productos', async () => {
     const { qy, visto } = espiar([cabecera()], [lin()])
     const [m] = await leerAbiertas(qy, ESQUEMA, { desde: 'a', hasta: 'b' })
     expect(visto).toHaveLength(1)
-    expect(m).toMatchObject({ monto_estimado_crc: null, pax_pedido: null, items_valor: null })
+    expect(m).toMatchObject({ monto_estimado_crc: null, pax_pedido: null, items_valor: null, detalle_productos: null })
   })
 
   it('sin mesas abiertas no se pide el detalle', async () => {

@@ -21,6 +21,8 @@ import { conOffsetCR, type OpenIngest, type TicketIngest } from '../src/shared/n
 import {
   armarTickets,
   DESDE,
+  ESTADOS_CERRADAS,
+  ESTADOS_PROVISIONALES,
   HASTA,
   sqlDetalle,
   sqlFacturas,
@@ -28,6 +30,7 @@ import {
   type FilaFactura,
   type Queryable,
 } from './consulta.ts'
+import type { EstadoFactura } from '../src/shared/ndf/mapTicket'
 import { col, colOpt, q, type Esquema } from './esquema.ts'
 import type { RangoLectura } from './ventana.ts'
 
@@ -119,16 +122,24 @@ export function aTicketIngest(
   }
 }
 
-/** Las facturas cerradas nuevas de la ventana, ya mapeadas y listas para mandar. */
-export async function leerCerradas(
+/**
+ * La lectura común: facturas + detalle de unos estados, mapeadas y listas para mandar.
+ *
+ * `incremental` decide si viaja el corte por cursor. Cuando NO viaja, `@ultima` no existe en
+ * el SQL y tampoco se manda en los parámetros — mismo contrato que el dry-run de la Fase 1a.
+ */
+async function leerFacturas(
   qy: Queryable,
   esq: Esquema,
-  p: ParametrosLectura,
+  rango: RangoLectura,
+  opciones: { incremental: boolean; ultima: string | null; estados: readonly EstadoFactura[] },
 ): Promise<{ tickets: TicketIngest[]; avisos: string[] }> {
-  const params = { desde: p.desde, hasta: p.hasta, ultima: p.ultima }
+  const params = opciones.incremental
+    ? { desde: rango.desde, hasta: rango.hasta, ultima: opciones.ultima }
+    : { desde: rango.desde, hasta: rango.hasta }
 
-  const facturas = await qy.query<FilaFactura>(sqlFacturas(esq, true), params)
-  const detalle  = await qy.query<FilaDetalle>(sqlDetalle(esq, true), params)
+  const facturas = await qy.query<FilaFactura>(sqlFacturas(esq, opciones.incremental, opciones.estados), params)
+  const detalle  = await qy.query<FilaDetalle>(sqlDetalle(esq, opciones.incremental, opciones.estados), params)
 
   const { tickets, avisos } = armarTickets(facturas.rows, detalle.rows)
 
@@ -147,6 +158,35 @@ export async function leerCerradas(
     tickets: tickets.map((t) => aTicketIngest(t, extras.get(t.numero_factura) ?? {})),
     avisos,
   }
+}
+
+/** Las facturas CERRADAS nuevas (`NumeroFactura > ultima`) de la ventana. Mueven el cursor. */
+export async function leerCerradas(
+  qy: Queryable,
+  esq: Esquema,
+  p: ParametrosLectura,
+): Promise<{ tickets: TicketIngest[]; avisos: string[] }> {
+  return leerFacturas(qy, esq, p, { incremental: true, ultima: p.ultima, estados: ESTADOS_CERRADAS })
+}
+
+/**
+ * Las facturas PROVISIONALES de la ventana: `R` en curso y `X` anulada. Se releen ENTERAS
+ * cada ciclo, sin cursor, porque cambian: una `R` se cobra y pasa a `C`, o se anula y pasa a
+ * `X`. El Edge las pisa por `(local, numero_factura)`, así que releer no duplica.
+ *
+ * NUNCA mueven el cursor. Al contrario: lo topan (ver `ciclo.ts`), porque la lectura de
+ * cerradas es `NumeroFactura > cursor` y una `R` que quedara por debajo no se leería nunca
+ * cuando cierre.
+ *
+ * Es lo que hace que «En vivo» tenga plata DURANTE el servicio: en este PoS las facturas
+ * quedan en `R` hasta que el cajero cierra el lote, y hasta entonces «cerradas» no trae nada.
+ */
+export async function leerProvisionales(
+  qy: Queryable,
+  esq: Esquema,
+  rango: RangoLectura,
+): Promise<{ tickets: TicketIngest[]; avisos: string[] }> {
+  return leerFacturas(qy, esq, rango, { incremental: false, ultima: null, estados: ESTADOS_PROVISIONALES })
 }
 
 // ── Mesas abiertas ─────────────────────────────────────────────────────────────

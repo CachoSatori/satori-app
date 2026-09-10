@@ -5,6 +5,7 @@ import {
   ejecutarCiclo,
   ESTADO_INICIAL,
   payloadSaludo,
+  toparCursor,
   type EstadoAgente,
   type PuertosCiclo,
 } from './ciclo.ts'
@@ -28,6 +29,10 @@ const ticket = (numero: string): TicketIngest => ({
 
 const abierta = (clave: string): OpenIngest => ({ clave, mesa: '14', pax: 4, canal: 'salon' })
 
+/** Una factura en curso (`R`) o anulada (`X`): mismo ticket, otro estado, sin cobro. */
+const provisional = (numero: string, estado: 'R' | 'X' = 'R'): TicketIngest =>
+  ({ ...ticket(numero), estado })
+
 const respuesta = (over: Partial<IngestNdfResult> = {}): IngestNdfResult => ({
   ok: true, local: LOCAL, tickets_recibidos: 0, tickets_guardados: 0, lineas_guardadas: 0,
   open_guardadas: 0, open_borradas: 0, invalid: 0, recalculados: 0, problemas: [],
@@ -38,6 +43,8 @@ const respuesta = (over: Partial<IngestNdfResult> = {}): IngestNdfResult => ({
 /** Puertos falsos: el agente no toca ni el PoS ni la red en ningún test de este archivo. */
 function puertos(opts: {
   tickets?: TicketIngest[]
+  /** Las R/X que relee cada ciclo. Sin esto: ninguna, igual que antes de B. */
+  provisionales?: TicketIngest[]
   abiertas?: OpenIngest[] | null
   fallaPos?: string
   fallaEnvio?: string
@@ -49,6 +56,10 @@ function puertos(opts: {
     async leerCerradas() {
       if (opts.fallaPos) throw new Error(opts.fallaPos)
       return { tickets: opts.tickets ?? [], avisos: opts.avisos ?? [] }
+    },
+    async leerProvisionales() {
+      if (opts.fallaPos) throw new Error(opts.fallaPos)
+      return { tickets: opts.provisionales ?? [], avisos: [] }
     },
     async leerAbiertas() {
       if (opts.fallaPos) throw new Error(opts.fallaPos)
@@ -215,6 +226,7 @@ describe('resiliencia', () => {
   it('ejecutarCiclo NUNCA tira: un agente caído de madrugada no se entera nadie', async () => {
     const explota: PuertosCiclo = {
       leerCerradas: () => { throw new Error('boom') },
+      leerProvisionales: () => { throw new Error('boom') },
       leerAbiertas: () => { throw new Error('boom') },
       enviar:       () => { throw new Error('boom') },
     }
@@ -233,5 +245,118 @@ describe('describirCiclo', () => {
     const { p } = puertos({ fallaPos: 'ECONNREFUSED' })
     const r = await correr(p, YA_SALUDADO)
     expect(describirCiclo(r.resumen)).toContain('no avanza')
+  })
+})
+
+// ── B · provisionales en el lote, cursor topado por la menor R ────────────────────────────
+
+describe('toparCursor', () => {
+  it('sin R no topa nada', () => {
+    expect(toparCursor('5010', [])).toBe('5010')
+    expect(toparCursor('5010', [provisional('5003', 'X')])).toBe('5010')
+    expect(toparCursor(null, [provisional('5003')])).toBeNull()
+  })
+
+  it('con una R por debajo del propuesto, el cursor queda en anterior(R)', () => {
+    expect(toparCursor('5010', [provisional('5005')])).toBe('5004')
+  })
+
+  it('la que manda es la MENOR R, y las X no cuentan', () => {
+    expect(toparCursor('5010', [provisional('5008'), provisional('5005'), provisional('5001', 'X')])).toBe('5004')
+  })
+
+  it('una R por encima del propuesto no lo mueve', () => {
+    expect(toparCursor('5010', [provisional('5020')])).toBe('5010')
+  })
+
+  it("compara por valor: '9' no es mayor que '10'", () => {
+    expect(toparCursor('10', [provisional('9')])).toBe('8')
+  })
+})
+
+describe('el ciclo con provisionales (B)', () => {
+  const estado = YA_SALUDADO
+
+  it('las R/X viajan en el MISMO lote que las C, las C al final para que ganen en el upsert', async () => {
+    const { p, enviados } = puertos({
+      tickets: [ticket('5001'), ticket('5002')],
+      provisionales: [provisional('5003'), provisional('4990', 'X')],
+    })
+    const r = await correr(p, estado)
+    expect(r.resumen.fase).toBe('sincronizado')
+    expect(enviados[0].tickets.map((t) => `${t.numero_factura}:${t.estado}`))
+      .toEqual(['5003:R', '4990:X', '5001:C', '5002:C'])
+    expect(r.resumen.tickets).toBe(2)
+    expect(r.resumen.provisionales).toBe(2)
+  })
+
+  it('el cursor NUNCA pasa por encima de una R: se topa en anterior(menor R)', async () => {
+    // La caja de la tarde abrió 5003 antes de que la mañana cerrara 5004 y 5005.
+    const { p, enviados } = puertos({
+      tickets: [ticket('5004'), ticket('5005')],
+      provisionales: [provisional('5003')],
+    })
+    const r = await correr(p, estado)
+    expect(enviados[0].cursor?.last_factura).toBe('5002')
+    expect(r.estado.ultimaFactura).toBe('5002')
+  })
+
+  it('si el cursor ya se había pasado de una R, se REBOBINA (el Edge pisa, el upsert absorbe)', async () => {
+    const pasado = { ultimaFactura: '5010', saludado: true, ultimoError: null }
+    const { p, enviados } = puertos({ tickets: [], provisionales: [provisional('5003')] })
+    const r = await correr(p, pasado)
+    expect(enviados[0].cursor?.last_factura).toBe('5002')
+    expect(r.estado.ultimaFactura).toBe('5002')
+  })
+
+  it('solo R sin C nuevas y sin R por debajo: el cursor no se manda (nada avanzó)', async () => {
+    const { p, enviados } = puertos({ tickets: [], provisionales: [provisional('5020')] })
+    await correr(p, estado)
+    expect(enviados[0].cursor).not.toHaveProperty('last_factura')
+    expect(enviados[0].tickets.map((t) => t.numero_factura)).toEqual(['5020'])
+  })
+
+  it('una X sola no topa el cursor (es terminal)', async () => {
+    const { p, enviados } = puertos({ tickets: [ticket('5004')], provisionales: [provisional('5001', 'X')] })
+    await correr(p, estado)
+    expect(enviados[0].cursor?.last_factura).toBe('5004')
+  })
+
+  it('last_fecha_registra acompaña al cursor SOLO cuando el cursor es una C de este lote', async () => {
+    // Topado: el cursor (5002) no es ningún ticket leído → la fecha no viaja.
+    const topado = puertos({ tickets: [ticket('5004')], provisionales: [provisional('5003')] })
+    await correr(topado.p, estado)
+    expect(topado.enviados[0].cursor?.last_factura).toBe('5002')
+    expect(topado.enviados[0].cursor).not.toHaveProperty('last_fecha_registra')
+    // Normal: el cursor ES la última C → la fecha viaja.
+    const normal = puertos({ tickets: [ticket('5004')] })
+    await correr(normal.p, estado)
+    expect(normal.enviados[0].cursor?.last_factura).toBe('5004')
+    expect(normal.enviados[0].cursor?.last_fecha_registra).toBe('2026-09-01T13:42:07-06:00')
+  })
+
+  it('la misma factura como R y como C en el mismo ciclo viaja UNA vez, y es la C', async () => {
+    // Cerró entre la relectura de R y la lectura de cerradas. El Edge NO deduplica dentro de un
+    // tramo y Postgres rechaza tocar la misma fila dos veces en un ON CONFLICT: sin esto se
+    // caería el lote entero, cada ciclo, hasta que la R saliera de la ventana.
+    const { p, enviados } = puertos({
+      tickets: [ticket('5003')],
+      provisionales: [provisional('5003'), provisional('5004')],
+    })
+    const r = await correr(p, estado)
+    expect(enviados[0].tickets.map((t) => `${t.numero_factura}:${t.estado}`))
+      .toEqual(['5004:R', '5003:C'])
+    expect(r.resumen.tickets).toBe(1)
+    expect(r.resumen.provisionales).toBe(1)
+    // La R restante (5004) sigue topando el cursor por debajo de ella.
+    expect(enviados[0].cursor?.last_factura).toBe('5003')
+  })
+
+  it('sin provisionales el ciclo es el de siempre: mismo payload que antes de B', async () => {
+    const { p, enviados } = puertos({ tickets: [ticket('5001')] })
+    const r = await correr(p, estado)
+    expect(enviados[0].tickets.map((t) => t.numero_factura)).toEqual(['5001'])
+    expect(enviados[0].cursor?.last_factura).toBe('5001')
+    expect(r.resumen.provisionales).toBe(0)
   })
 })

@@ -38,3 +38,22 @@ export function mayorFactura(valores: readonly unknown[], actual: string | null 
   }
   return mayor
 }
+
+/**
+ * El número de factura inmediatamente ANTERIOR: `'110850'` → `'110849'`, `'1000'` → `'999'`.
+ * `null` para `'0'` (no hay anterior) y para lo ilegible.
+ *
+ * Es lo que permite TOPAR el cursor sin pasar por punto flotante: el cursor nunca puede
+ * quedar por encima de una factura que todavía está en curso (`R`), porque la lectura
+ * incremental es `NumeroFactura > cursor` y esa factura, cuando cierre, ya no se leería.
+ * El tope es entonces `anteriorFactura(menor R)`.
+ */
+export function anteriorFactura(v: unknown): string | null {
+  const n = normalizarFactura(v)
+  if (n === null || n === '0') return null
+  const digitos = n.split('')
+  let i = digitos.length - 1
+  while (i >= 0 && digitos[i] === '0') { digitos[i] = '9'; i-- }
+  digitos[i] = String(Number(digitos[i]) - 1)
+  return digitos.join('').replace(/^0+(?=\d)/, '')
+}

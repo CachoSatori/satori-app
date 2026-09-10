@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import {
+  ESTADOS_CERRADAS, ESTADOS_PROVISIONALES, filtroEstado,
   armarTickets,
   assertFecha,
   banderaVerdadera,
@@ -489,5 +490,54 @@ describe('usuario_registra por línea (factura 110607)', () => {
       return { total: x.total, iva: x.iva, serv: x.imp_servicio, neto: x.valor_servido }
     }
     expect(plata(conMesero)).toEqual(plata(sinMesero))
+  })
+})
+
+// ── B · el estado es parámetro: cerradas byte-idénticas, provisionales con IN ──────────────
+
+describe('filtroEstado', () => {
+  it('un solo estado se renderiza como siempre (= \'C\'), para no mover el SQL probado', () => {
+    expect(filtroEstado('f.[Estado]', ['C'])).toBe("f.[Estado] = 'C'")
+  })
+
+  it('varios estados van con IN', () => {
+    expect(filtroEstado('f.[Estado]', ['R', 'X'])).toBe("f.[Estado] IN ('R', 'X')")
+  })
+
+  it('un estado inventado explota acá, nunca llega al PoS', () => {
+    // @ts-expect-error — a propósito: se prueba el candado en runtime
+    expect(() => filtroEstado('f.[Estado]', ['Z'])).toThrow(/desconocido/)
+    expect(() => filtroEstado('f.[Estado]', [])).toThrow(/al menos un estado/)
+  })
+})
+
+describe('sqlFacturas / sqlDetalle con estados', () => {
+  it('sin parámetro = cerradas: el SQL es BYTE-IDÉNTICO al de antes', () => {
+    expect(sqlFacturas(ESQUEMA)).toBe(sqlFacturas(ESQUEMA, false, ESTADOS_CERRADAS))
+    expect(sqlDetalle(ESQUEMA)).toBe(sqlDetalle(ESQUEMA, false, ESTADOS_CERRADAS))
+    expect(sqlFacturas(ESQUEMA, true)).toBe(sqlFacturas(ESQUEMA, true, ['C']))
+  })
+
+  it('provisionales: las TRES condiciones de estado pasan a IN (R, X)', () => {
+    const f = sqlFacturas(ESQUEMA, false, ESTADOS_PROVISIONALES)
+    const d = sqlDetalle(ESQUEMA, false, ESTADOS_PROVISIONALES)
+    // facturas: el WHERE principal y el del subquery de pedidos
+    expect(f.match(/\[Estado\] IN \('R', 'X'\)/g)).toHaveLength(2)
+    expect(f).not.toContain("= 'C'")
+    // detalle: su propio WHERE
+    expect(d.match(/\[Estado\] IN \('R', 'X'\)/g)).toHaveLength(1)
+    expect(d).not.toContain("= 'C'")
+  })
+
+  it('provisionales NO llevan cursor: sin @ultima, con ventana', () => {
+    const f = sqlFacturas(ESQUEMA, false, ESTADOS_PROVISIONALES)
+    expect(f).not.toContain('@ultima')
+    expect(f).toContain('CONVERT(datetime, @desde, 120)')
+  })
+
+  it('las provisionales siguen pasando el candado read-only', () => {
+    for (const sql of [sqlFacturas(ESQUEMA, false, ESTADOS_PROVISIONALES), sqlDetalle(ESQUEMA, false, ESTADOS_PROVISIONALES)]) {
+      expect(() => assertSoloSelect(sql)).not.toThrow()
+    }
   })
 })

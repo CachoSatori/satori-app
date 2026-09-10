@@ -10,7 +10,7 @@
 // Nada de esto toca datos: `INFORMATION_SCHEMA` es catálogo.
 
 export type TablaKey =
-  | 'facturas' | 'facturasdet' | 'pedidos' | 'productos' | 'clasificaciones' | 'empleados'
+  | 'facturas' | 'facturasdet' | 'pedidos' | 'pedidosdet' | 'productos' | 'clasificaciones' | 'empleados'
 
 export interface DefColumna {
   /** En orden de preferencia. El primero que exista, gana. */
@@ -77,6 +77,32 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       // abierto para siempre. Es OPCIONAL en el catálogo pero el snapshot de abiertas no sale
       // sin ella — ver `puedeLeerAbiertas`.
       estado:          opt('R abierto / F facturada / X anulada — define la mesa ABIERTA', 'Estado'),
+      // `NumeroPedido` se REINICIA cada día (el 58 aparece en 18 fechas distintas). La clave real
+      // del pedido es (Periodo, Mes, Dia, NumeroPedido), y es con lo que se atan sus líneas.
+      // Opcionales: sin las tres, el snapshot sale igual pero SIN monto ni pax (Frente C).
+      periodo:         opt('año del pedido (clave junto con mes, día y número)', 'Periodo'),
+      mes:             opt('mes del pedido (clave)', 'Mes'),
+      dia:             opt('día del pedido (clave)', 'Dia'),
+    },
+  },
+  // ── Frente C v1: las líneas del pedido ABIERTO, para el monto estimado y el pax ────────
+  // Tabla OPCIONAL y TODAS sus columnas opcionales a propósito: en una tabla opcional presente,
+  // una columna `req` ausente abortaría el agente entero (ver `resolverEsquema`). El gate está
+  // en `puedeLeerLineasAbiertas`: sin la tabla o sin alguna columna, no se leen líneas y el
+  // snapshot sale sin monto ni pax, como hoy. Fail-closed.
+  pedidosdet: {
+    tabla: 'FAC_PedidosDet',
+    opcional: true,
+    columnas: {
+      numeropedido:  opt('join con el pedido', 'NumeroPedido'),
+      periodo:       opt('clave del pedido', 'Periodo'),
+      mes:           opt('clave del pedido', 'Mes'),
+      dia:           opt('clave del pedido', 'Dia'),
+      producto:      opt('código del producto (join con FAC_Productos)', 'CodigoProducto', 'Codigo', 'Producto'),
+      cantidad:      opt('unidades', 'Cantidad', 'Cant'),
+      estado:        opt('estado de la línea (X = anulada, fuera)', 'Estado'),
+      descuento:     opt('descuento de la línea (% o monto según TipoDescuento)', 'Descuento'),
+      tipodescuento: opt("'P' = porcentaje · 'M' = monto", 'TipoDescuento'),
     },
   },
   facturasdet: {
@@ -106,6 +132,10 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       codigo:        req('join con el detalle', 'Codigo', 'CodigoProducto', 'Producto'),
       nombre:        req('nombre del producto', 'Nombre', 'Descripcion', 'NombreProducto'),
       clasificacion: req('familia (mix)', 'Clasificacion', 'CodigoClasificacion', 'IdClasificacion', 'Familia'),
+      // Frente C: el precio de catálogo, NETO, para estimar la mesa abierta. `FAC_PedidosDet`
+      // NO trae monto de línea (PrecioVenta viene vacío ahí), el precio vive en el producto.
+      // Opcional: sin él no hay estimado, y el snapshot sale sin monto.
+      precio:        opt('precio de venta NETO del catálogo (estimado de mesa abierta)', 'PrecioVenta', 'Precio', 'PrecioUnitario'),
     },
   },
   clasificaciones: {

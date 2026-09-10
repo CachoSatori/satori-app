@@ -45,12 +45,17 @@ export const SIN_SALONERO = '(sin salonero)'
 
 /**
  * Cajeros del PoS. NO son saloneros y sus facturas NO se filtran del total: van a
- * la línea aparte "registrado por cajero (111/222)".
+ * la línea aparte "registrado por cajero (111/222/388)".
  *   · 111 = cajero turno mañana (abre y cierra ~11:00–16:00)
  *   · 222 = cajero turno noche  (post-cierre de la mañana → cierre del día)
+ *   · 388 = caja de barra. Casi no se usa, pero cuando timbra es CAJA, no un mesero: sin
+ *           esto abría un «388 · sin asignar» en el ranking (`personasNdf` ya lo tenía como
+ *           caja en la lente por línea; acá faltaba). No define turno: ese sigue saliendo
+ *           de 111/222 o del reloj. Ver `claude/NOTA-colision-codigo-388-local-vs-cajero.md`.
  */
 export const LOGIN_CAJERO_MANANA = '111'
 export const LOGIN_CAJERO_NOCHE  = '222'
+export const LOGIN_CAJERO_BAR    = '388'
 
 /**
  * `022` figura como "cajero turno tarde" en el maestro, pero puede ser un usuario
@@ -207,7 +212,7 @@ export function mapCanal(tipo: string | null | undefined, _area?: string | null)
 /** `111` / `222`: los dos cajeros del PoS. `022` NO entra hasta confirmarlo. */
 export function esCajeroTurno(login: unknown): boolean {
   const l = texto(login)
-  return l === LOGIN_CAJERO_MANANA || l === LOGIN_CAJERO_NOCHE
+  return l === LOGIN_CAJERO_MANANA || l === LOGIN_CAJERO_NOCHE || l === LOGIN_CAJERO_BAR
 }
 
 /** Login de sistema (`002` cocina express, `01`/`02` bajas). */

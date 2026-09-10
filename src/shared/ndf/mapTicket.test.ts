@@ -237,6 +237,14 @@ describe('esCajeroTurno / esLoginSistema / mapSalonero', () => {
     expect(esCajeroTurno(null)).toBe(false)
   })
 
+  it('388 (caja de barra) es CAJA, no un salonero — no abre «388 · sin asignar»', () => {
+    // SPEC atribución por línea (2026-09-10): `personasNdf` ya lo tenía como caja en la lente
+    // por línea; acá pasaba como mesero y abría una tarjeta fantasma en el ranking.
+    expect(esCajeroTurno('388')).toBe(true)
+    expect(esCajeroTurno(' 388 ')).toBe(true)
+    expect(mapSalonero('388')).toBeNull()
+  })
+
   it('022 NO se mezcla con 111/222 hasta confirmarlo: sigue siendo salonero', () => {
     expect(esCajeroTurno('022')).toBe(false)
     expect(mapSalonero('022')).toBe('022')
@@ -339,6 +347,20 @@ describe('mapTicket', () => {
     expect(t.con_servicio).toBe(true)
     expect(t.imp_servicio).toBe(1200)
     expect(t.salonero).toBe(CLAVE_CAJERO['noche'])
+  })
+
+  it('registrada por el 388 de barra → cajero, sin mesero, y el turno sigue saliendo del reloj/caja', () => {
+    const t = mapTicket(factura({
+      usuario_registra: '388',
+      salonero_nombre:  null,
+      login_cajero:     '222',
+    }))
+    expect(t.salonero_login).toBeNull()
+    expect(t.registrado_por).toBe('cajero')
+    expect(t.salonero).not.toBe('388')
+    expect(t.salonero).toBe(CLAVE_CAJERO['noche'])   // el turno lo da la caja 222, no el 388
+    expect(t.turno).toBe('noche')
+    expect(t.total).toBe(10000)                      // NO se filtra del total
   })
 
   it('el cajero que cobró NO pisa al salonero que registró', () => {

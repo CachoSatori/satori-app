@@ -314,6 +314,50 @@ describe('normalizarOpen · Frente C: monto estimado, pax y ítems (provisionale
   })
 })
 
+describe('normalizarOpen · mig 065: productos comandados (informativo, fail-closed)', () => {
+  const base = { clave: 'pedido:58', updated_at: '2026-09-09T20:05:00-06:00' }
+  const ok = (v: unknown) => {
+    const r = normalizarOpen('nosara', { ...base, detalle_productos: v }, AHORA)
+    expect(r.ok).toBe(true)
+    return r.ok ? r.valor.detalle_productos : undefined
+  }
+
+  it('ausente → null (el agente viejo no lo manda; la fila no se despliega)', () => {
+    const r = normalizarOpen('nosara', base, AHORA)
+    expect(r.ok && r.valor).toMatchObject({ detalle_productos: null })
+  })
+
+  it('una lista bien formada pasa tal cual, en el orden que vino', () => {
+    expect(ok([{ nombre: 'NIGIRI SALMÓN', cantidad: 3 }, { nombre: 'IMPERIAL', cantidad: 2 }]))
+      .toEqual([{ nombre: 'NIGIRI SALMÓN', cantidad: 3 }, { nombre: 'IMPERIAL', cantidad: 2 }])
+  })
+
+  it('cantidad como texto se convierte; decimales se conservan a dos', () => {
+    expect(ok([{ nombre: 'SAKE', cantidad: '1.5' }])).toEqual([{ nombre: 'SAKE', cantidad: 1.5 }])
+    expect(ok([{ nombre: 'SAKE', cantidad: 0.333 }])).toEqual([{ nombre: 'SAKE', cantidad: 0.33 }])
+  })
+
+  it('FAIL-CLOSED: array vacío, no-array, o CUALQUIER entrada mala tiran la lista entera a null', () => {
+    expect(ok([])).toBeNull()
+    expect(ok('NIGIRI x3')).toBeNull()
+    expect(ok({ nombre: 'X', cantidad: 1 })).toBeNull()
+    expect(ok([{ nombre: 'OK', cantidad: 1 }, { nombre: '', cantidad: 1 }])).toBeNull()
+    expect(ok([{ nombre: 'OK', cantidad: 1 }, { nombre: 'SIN CANT' }])).toBeNull()
+    expect(ok([{ nombre: 'OK', cantidad: 0 }])).toBeNull()
+    expect(ok([{ nombre: 'OK', cantidad: -2 }])).toBeNull()
+    expect(ok([{ nombre: 'OK', cantidad: 'tres' }])).toBeNull()
+    expect(ok([null])).toBeNull()
+  })
+
+  it('no toca los tres campos de Frente C', () => {
+    const r = normalizarOpen('nosara', {
+      ...base, monto_estimado_crc: 24_600, pax_pedido: 2, items_valor: 3,
+      detalle_productos: [{ nombre: 'A', cantidad: 1 }],
+    }, AHORA)
+    expect(r.ok && r.valor).toMatchObject({ monto_estimado_crc: 24_600, pax_pedido: 2, items_valor: 3 })
+  })
+})
+
 describe('normalizarOpen', () => {
   it('arma la fila del snapshot', () => {
     const r = normalizarOpen('nosara', {

@@ -55,8 +55,17 @@ function haceCuanto(iso: string, ahora: number): string {
  * el PoS no lo manda.
  */
 const MONTO_PENDIENTE =
-  'El PoS todavía no manda lo consumido de una mesa abierta: pos_ndf_open no trae monto. ' +
-  'Mostrar ₡0 diría que la mesa no consumió nada, que es falso.'
+  'El agente no pudo estimar esta mesa: el pedido no trae líneas con catálogo, o esta ' +
+  'instalación no expone el detalle del pedido. Mostrar ₡0 diría que no consumió nada, que es falso.'
+
+/** El rótulo del estimado. Es un cálculo por catálogo mientras la mesa sigue abierta. */
+const MONTO_ESTIMADO =
+  'ESTIMADO por catálogo: cantidad × precio de lista − descuento, más IVA y servicio según el ' +
+  'canal. No es venta: el cobro real sale al cerrar. Nunca entra en la neta ni en el cuadre.'
+
+/** Cero de verdad: hay líneas en el pedido pero ninguna con valor servido (una cortesía). */
+const MONTO_CERO_REAL =
+  'El pedido tiene líneas pero ninguna con valor servido: cortesía, dueños o solo pax.'
 
 /**
  * La marca de la mesa arrastrada de otra jornada. Se explica en el `title` porque la fila NO se
@@ -445,16 +454,22 @@ export default function VentasEnVivo({ metas }: Props) {
                         </td>
                         <td>{m.salonero}</td>
                         <td>{m.canal ?? '—'}</td>
-                        <td className="r">{m.pax > 0 ? m.pax : '—'}</td>
+                        <td className="r">
+                          {m.paxPedido !== null ? m.paxPedido : m.pax > 0 ? m.pax : '—'}
+                        </td>
                         <td className="r">
                           {m.abiertaDesde === null
                             ? <span className="apos-pendiente" title={TIEMPO_PENDIENTE}>—</span>
                             : duracion(m.abiertaDesde, ahora)}
                         </td>
                         <td className="r">
-                          <span className="apos-pendiente apos-sin-dato" title={MONTO_PENDIENTE}>
-                            el PoS no manda total
-                          </span>
+                          {m.montoEstimado === null
+                            ? <span className="apos-pendiente apos-sin-dato" title={MONTO_PENDIENTE}>sin total</span>
+                            : m.montoEstimado === 0
+                              ? <span className="apos-pendiente apos-sin-dato" title={MONTO_CERO_REAL}>₡0 · cortesía</span>
+                              : <span className="apos-estimado" title={MONTO_ESTIMADO}>
+                                  ≈ {fi(m.montoEstimado)} <small>estimado</small>
+                                </span>}
                         </td>
                         <td className="r">
                           <span className="apos-pendiente apos-sin-dato" title={MONTO_PENDIENTE}>

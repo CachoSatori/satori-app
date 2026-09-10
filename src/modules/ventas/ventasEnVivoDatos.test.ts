@@ -802,6 +802,7 @@ describe('resumirMesasAbiertas', () => {
     clave: 'm1', numero_factura: null, id_pedido: '1', mesa: '5',
     salonero_login: '026', canal: 'salon', pax: 2, pax_alerta: 'ok',
     updated_at: '2026-09-01T20:00:00-06:00',
+    monto_estimado_crc: null, pax_pedido: null, items_valor: null,
     ...over,
   })
 
@@ -855,6 +856,7 @@ const mesaAb = (over: Partial<MesaAbiertaRow> = {}): MesaAbiertaRow => ({
   clave: 'm1', numero_factura: null, id_pedido: '1', mesa: '5',
   salonero_login: '026', canal: 'salon', pax: 2, pax_alerta: 'ok',
   updated_at: '2026-09-01T20:00:00-06:00',
+  monto_estimado_crc: null, pax_pedido: null, items_valor: null,
   ...over,
 })
 
@@ -926,6 +928,37 @@ describe('la fusión Hoy ↔ En vivo no toca la plata del día', () => {
       [s.bruto, s.servicio, s.iva, s.regalia,
        Object.values(s.dia.saloneros).reduce((a, v) => a + v.total, 0)]
     expect(plata(conFantasma)).toEqual(plata(base))
+  })
+
+  // ── CANDADO Frente C ────────────────────────────────────────────────────────────────
+  // Mesas abiertas con monto estimado y pax CARGADOS. Si alguna vez `monto_estimado_crc` o
+  // `pax_pedido` se colaran en el DiaData, en getDayStats, en el bruto o en la comparativa,
+  // esto se cae. Reforzado, no aflojado: antes el candado era «no existe el campo».
+  const conEstimado = {
+    ...base,
+    mesasAbiertas: 2,
+    paxAbierto: 6,
+    mesasDetalle: detallarMesasAbiertas([
+      mesaAb({ clave: 'pedido:58', monto_estimado_crc: 246_000, pax_pedido: 4, items_valor: 9 }),
+      mesaAb({ clave: 'pedido:59', monto_estimado_crc: 0, pax_pedido: 2, items_valor: 0 }),
+    ], NOMBRES, true, JORNADA),
+  }
+
+  it('CANDADO Frente C: el monto estimado y el pax de abiertas NO tocan el DiaData', () => {
+    expect(conEstimado.mesasDetalle.map(m => m.montoEstimado)).toEqual([246_000, 0])
+    expect(JSON.stringify(conEstimado.dia)).toBe(JSON.stringify(base.dia))
+  })
+
+  it('CANDADO Frente C: getDayStats, bruto, servicio, IVA y regalía no cambian ni un colón', () => {
+    expect(getDayStats(conEstimado.dia)).toEqual(getDayStats(base.dia))
+    const plata = (s: typeof base) => [s.bruto, s.servicio, s.iva, s.regalia]
+    expect(plata(conEstimado)).toEqual(plata(base))
+    const neto = Object.values(conEstimado.dia.saloneros).reduce((a, v) => a + v.total, 0)
+    expect(neto).toBe(25_000)
+  })
+
+  it('CANDADO Frente C: el pax del día sale de los tickets, no del pax_pedido de las abiertas', () => {
+    expect(getDayStats(conEstimado.dia).pax).toBe(getDayStats(base.dia).pax)
   })
 
   it('`armarSnapshot` ni siquiera recibe las mesas abiertas', () => {
@@ -1111,11 +1144,27 @@ describe('tiempoAbiertaConfiable', () => {
 })
 
 describe('detallarMesasAbiertas', () => {
-  it('NUNCA trae monto: pos_ndf_open no lo tiene en ninguna capa del puente', () => {
+  it('el monto de una mesa abierta es un ESTIMADO provisional y nullable, y viaja aparte de la plata', () => {
+    // Antes este test decía «NUNCA trae monto». Desde Frente C lo trae, pero con tres
+    // condiciones que este candado sigue afirmando: es nullable (null = sin total), se COPIA
+    // sin sumarse a nada, y no aparece en ninguna cifra oficial (ver el candado de abajo).
     const [m] = detallarMesasAbiertas([mesaAb()], NOMBRES, true, JORNADA)
     expect(Object.keys(m).sort())
-      .toEqual(['abiertaDesde', 'canal', 'clave', 'deJornadaAnterior', 'idPedido', 'mesa',
-                'pax', 'salonero'])
+      .toEqual(['abiertaDesde', 'canal', 'clave', 'deJornadaAnterior', 'idPedido', 'itemsValor',
+                'mesa', 'montoEstimado', 'pax', 'paxPedido', 'salonero'])
+    expect(m.montoEstimado).toBeNull()
+    expect(m.paxPedido).toBeNull()
+  })
+
+  it('copia el estimado y el pax tal cual: null sigue siendo null, 0 sigue siendo 0', () => {
+    const [con, cero, sin] = detallarMesasAbiertas([
+      mesaAb({ clave: 'a', monto_estimado_crc: 24_600, pax_pedido: 4, items_valor: 3 }),
+      mesaAb({ clave: 'b', monto_estimado_crc: 0, pax_pedido: null, items_valor: 0 }),
+      mesaAb({ clave: 'c' }),
+    ], NOMBRES, true, JORNADA)
+    expect(con).toMatchObject({ montoEstimado: 24_600, paxPedido: 4, itemsValor: 3 })
+    expect(cero).toMatchObject({ montoEstimado: 0, paxPedido: null, itemsValor: 0 })
+    expect(sin).toMatchObject({ montoEstimado: null, paxPedido: null, itemsValor: null })
   })
 
   it('resuelve el nombre y conserva mesa, canal y pax', () => {

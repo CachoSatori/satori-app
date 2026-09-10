@@ -665,6 +665,16 @@
   cursor: help;
 }
 
+/* El ESTIMADO de una mesa abierta: se distingue del cobro real por el «≈», el color de alerta
+   y la palabra. Nunca se confunde con «Sin cerrar», que sí es plata cobrada. */
+.apos-estimado {
+  color: var(--apos-alerta);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: help;
+}
+.apos-estimado small { font-size: 0.66rem; font-weight: 400; margin-left: 0.2em; }
+
 /* El dato que el PoS no manda, dicho con palabras y chico: no un «—» que se lee como cero. */
 .apos-sin-dato {
   font-size: 0.68rem;

@@ -328,6 +328,11 @@ export interface MesaAbiertaRow {
   pax:            number | null
   pax_alerta:     string | null
   updated_at:     string
+  // ── Frente C v1: PROVISIONALES de la mesa abierta. Se COPIAN a la pantalla, no se suman a
+  // nada: ni a la neta, ni a «Hoy», ni al cuadre. `null` = el agente no pudo calcular.
+  monto_estimado_crc: number | null
+  pax_pedido:         number | null
+  items_valor:        number | null
 }
 
 /**
@@ -338,7 +343,7 @@ export interface MesaAbiertaRow {
 export async function getMesasAbiertas(local: string): Promise<MesaAbiertaRow[]> {
   const { data, error } = await sb
     .from('pos_ndf_open')
-    .select('clave, numero_factura, id_pedido, mesa, salonero_login, canal, pax, pax_alerta, updated_at')
+    .select('clave, numero_factura, id_pedido, mesa, salonero_login, canal, pax, pax_alerta, updated_at, monto_estimado_crc, pax_pedido, items_valor')
     .eq('local', local)
     .order('updated_at', { ascending: true })
   if (error) throw new Error(error.message)

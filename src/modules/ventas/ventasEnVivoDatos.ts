@@ -777,6 +777,10 @@ export function detallarMesasAbiertas(
         pax:          n(m.pax),
         abiertaDesde: confiable && Number.isFinite(abierta) ? m.updated_at : null,
         deJornadaAnterior: esDeJornadaAnterior(m.updated_at, jornada),
+        // Frente C: se copian tal cual. Un `null` sigue siendo «sin total», no un cero.
+        montoEstimado: m.monto_estimado_crc ?? null,
+        paxPedido:     m.pax_pedido ?? null,
+        itemsValor:    m.items_valor ?? null,
       }
     })
     .sort((a, b) => {

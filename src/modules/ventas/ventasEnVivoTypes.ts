@@ -141,6 +141,17 @@ export interface MesaAbiertaDetalle {
    * y afirmarlo sería inventar.
    */
   deJornadaAnterior: boolean
+
+  // ── Frente C v1: PROVISIONALES ────────────────────────────────────────────────────────
+  // Los tres se COPIAN de `pos_ndf_open` y no se suman a nada. Son un ESTIMADO por catálogo
+  // mientras la mesa sigue abierta, y la pantalla lo rotula así («≈ … estimado»). Nunca entran
+  // en la neta, en «Hoy» ni en el cuadre: el candado está en los tests.
+  /** Bruto estimado. `null` = sin total (no se pudo calcular); `0` = cero real (cortesía). */
+  montoEstimado: number | null
+  /** Pax por artículo (677 + 2×678). `null` = el pedido no trae esas líneas. */
+  paxPedido:     number | null
+  /** Líneas con valor servido. `null` = sin líneas usables. */
+  itemsValor:    number | null
 }
 
 /** Qué tan viejo es lo que se está mirando. Sale de `pos_ndf_cursor` (poll + último fallo). */

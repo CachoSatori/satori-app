@@ -10,7 +10,7 @@ import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
 import { armarLentes, filtrarPorJornada } from './saloneroLentesDatos'
 
 const ticket = (over: Partial<TicketNdfConId> & { id: string }): TicketNdfConId => ({
-  numero_factura: over.id, fecha_registra: '2026-09-05T19:00:00-06:00',
+  numero_factura: over.id, estado: 'C', fecha_registra: '2026-09-05T19:00:00-06:00',
   fecha_cierra: null, cajero_login: '222',
   canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 0, total_crc: 0, valor_servido_crc: 10_000,

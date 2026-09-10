@@ -30,7 +30,7 @@ import { aggCajero, aggGeneral, getDayStats, allSaloneros } from './ventasUtils'
 import { esSinAsignar } from './ventasEnVivoDatos'
 
 const ticket = (over: Partial<TicketNdfConId> = {}): TicketNdfConId => ({
-  id: 't1', numero_factura: '5001', fecha_registra: '2026-09-01T19:42:07-06:00',
+  id: 't1', numero_factura: '5001', estado: 'C', fecha_registra: '2026-09-01T19:42:07-06:00',
   fecha_cierra: null, cajero_login: '222',
   canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,

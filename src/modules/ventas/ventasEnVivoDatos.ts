@@ -10,6 +10,7 @@ import {
 } from '../../shared/ndf/jornada'
 import {
   esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO, SALONEROS_CONOCIDOS,
+  type EstadoFactura,
 } from '../../shared/ndf/mapTicket'
 import { claveNoMesero, etiquetaNoMesero, etiquetaTurnoPoS } from './baldesNoMesero'
 import { horaCorteCR } from './ventasEnVivoMock'
@@ -147,13 +148,69 @@ export function ventasPorCanal(tickets: TicketNdfConId[]): VentasPorCanal {
  * Las facturas que no son de un mesero (cajero 111/222, sistema, sin pedido) NO se pierden:
  * van a su propia clave, porque cuentan en el día aunque no se le acrediten a nadie.
  */
+// ── Oficial vs provisional: la ÚNICA definición ────────────────────────────────────────────
+//
+// `pos_ndf_tickets.estado`: `C` cerrada · `X` anulada · `R` en curso. La venta OFICIAL del día
+// son SOLO las `C`. Las `R` son cuentas abiertas que todavía pueden cambiar (y las `X` ya no
+// valen nada), así que no pueden entrar en un neto que después se compara contra el cierre.
+//
+// El filtro se aplica en `armarDia`, que es el EMBUDO: por ahí pasan «En vivo» (`armarSnapshot`),
+// «Hoy» y el módulo entero (`armarDiasMap`) y el split por turno (`diasPorTurno`). Filtrando ahí
+// quedan todos C-only sin que cada caller tenga que acordarse. `getSnapshotEnVivo` usa el MISMO
+// predicado para partir la lista cruda y calcular el provisional aparte — una definición, no dos.
+
+/** El único estado que cuenta como venta del día. */
+export const ESTADO_OFICIAL: EstadoFactura = 'C'
+
+/** ¿Este ticket entra en la venta oficial? */
+export function esTicketOficial(t: Pick<TicketNdfConId, 'estado'>): boolean {
+  return t.estado === ESTADO_OFICIAL
+}
+
+/** ¿Este ticket es una cuenta EN CURSO (provisional)? Ni oficial ni anulada. */
+export function esTicketProvisional(t: Pick<TicketNdfConId, 'estado'>): boolean {
+  return t.estado === 'R'
+}
+
+/**
+ * La lista cruda partida en dos: lo que cuenta y lo que todavía no. Las `X` no van a ningún
+ * lado — anuladas no son venta ni provisional.
+ */
+export function partirPorEstado<T extends Pick<TicketNdfConId, 'estado'>>(
+  tickets: readonly T[],
+): { oficiales: T[]; provisionales: T[] } {
+  const oficiales: T[] = [], provisionales: T[] = []
+  for (const t of tickets) {
+    if (esTicketOficial(t)) oficiales.push(t)
+    else if (esTicketProvisional(t)) provisionales.push(t)
+  }
+  return { oficiales, provisionales }
+}
+
+/** Lo provisional resumido: cuánto hay en cuentas abiertas y cuántas son. Solo «En vivo». */
+export function resumirProvisional(
+  tickets: readonly Pick<TicketNdfConId, 'estado' | 'valor_servido_crc'>[],
+): { monto: number; tickets: number } {
+  let monto = 0, cuenta = 0
+  for (const t of tickets) {
+    if (!esTicketProvisional(t)) continue
+    monto += n(t.valor_servido_crc)
+    cuenta += 1
+  }
+  return { monto: Math.round(monto), tickets: cuenta }
+}
+
 export function armarDia(
   fecha: string,
-  tickets: TicketNdfConId[],
+  entrada: TicketNdfConId[],
   lineas: LineaNdfRow[],
   uploadedAt: string,
   nombres: Record<string, string> = {},
 ): DiaArmado {
+  // EL filtro. Todo lo que sigue —sumas, buckets, órdenes, canales, el conteo de tickets— ve
+  // solo las cerradas. Un `R` que se colara acá sería venta que después no cuadra con el cierre.
+  const tickets = entrada.filter(esTicketOficial)
+
   const porTicket = new Map<string, LineaNdfRow[]>()
   for (const l of lineas) {
     const lista = porTicket.get(l.ticket_id)
@@ -504,8 +561,10 @@ export function diasPorTurno(
       pm:       armado.pm,
       ordenes:  armado.ordenes,
       neto:     Math.round(Object.values(armado.dia.saloneros).reduce((a, v) => a + v.total, 0)),
-      tickets:  delTurno.length,
-      pax:      delTurno.reduce((a, t) => a + paxDelTicket(t), 0),
+      // Del ARMADO, no de `delTurno`: ese todavía trae los `R`, y el filtro vive en `armarDia`.
+      // Σ pax de los buckets = Σ `paxDelTicket` de las cerradas, ticket por ticket.
+      tickets:  armado.tickets,
+      pax:      Object.values(armado.dia.saloneros).reduce((a, v) => a + (v.pax ?? 0), 0),
     })
   }
   // En el orden del mapa; lo que no está en el mapa (sin caja conocida), al final.
@@ -955,7 +1014,12 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
   const jornada = fecha ?? jornadaActualCR(ahora)
   const enCurso = esJornadaEnCurso(jornada, ahora)
 
-  const tickets = await getTicketsJornada(local, jornada)
+  // La lista CRUDA trae C, X y R. Se parte ACÁ, antes de armar nada: `armarSnapshot` deriva
+  // ritmo por hora, turnos y calidad de pax de la lista que recibe, y todo eso tiene que ser
+  // C-only igual que el día. Lo provisional se resume aparte y nunca toca el `DiaData`.
+  const crudos = await getTicketsJornada(local, jornada)
+  const { oficiales: tickets } = partirPorEstado(crudos)
+  const provisional = resumirProvisional(crudos)
   const lineas  = await getLineasDeTickets(tickets.map(t => t.id))
   const nombres = await getSaloneroNombres()
   const neto4Sem = await getNetoPorJornada(local, jornadasComparables(jornada))
@@ -992,6 +1056,8 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
     mesasJornadaAnterior: detalle === undefined ? undefined : contarJornadaAnterior(detalle),
     frescura,
     tiempoAbiertaConfiable: enCurso ? confiable : undefined,
+    // Concepto de «En vivo»: cuentas abiertas que todavía pueden cambiar. «Hoy» no lo lleva.
+    provisional,
   }
 }
 

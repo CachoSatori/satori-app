@@ -132,7 +132,7 @@ describe('Fix B · el delivery del Mix son las cajas de TURNO, no la marca', () 
 
 describe('armarDiasMap · el familia-pm ya no se tira', () => {
   const ticket = (over: Partial<TicketNdfConId> = {}): TicketNdfConId => ({
-    id: 't1', numero_factura: '1', fecha_registra: '2026-09-01T19:00:00-06:00',
+    id: 't1', numero_factura: '1', estado: 'C', fecha_registra: '2026-09-01T19:00:00-06:00',
     fecha_cierra: '2026-09-02T01:00:00-06:00', cajero_login: '222',
     canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
     con_servicio: true, servicio_crc: 0, total_crc: 12000, valor_servido_crc: 12000,

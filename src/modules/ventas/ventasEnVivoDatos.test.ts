@@ -11,6 +11,7 @@ import {
   resumirMesasAbiertas, tiempoAbiertaConfiable, ventasPorCanal, ventasPorTurno,
   ventasPorTurnoPoS,
   contarJornadaAnterior, esDeJornadaAnterior, jornadaDeInstante,
+  esTicketOficial, esTicketProvisional, partirPorEstado, resumirProvisional, ESTADO_OFICIAL,
 } from './ventasEnVivoDatos'
 import type { CajeroDay } from '../../shared/types/ventas'
 import { SALONEROS_CONOCIDOS } from '../../shared/ndf/mapTicket'
@@ -27,7 +28,7 @@ import type { DiaData, SaloneroDay } from '../../shared/types/ventas'
 const sal = (dia: DiaData, clave: string): SaloneroDay => dia.saloneros[clave] as SaloneroDay
 
 const ticket = (over: Partial<TicketNdfConId> = {}): TicketNdfConId => ({
-  id: 't1', numero_factura: '5001', fecha_registra: '2026-09-01T19:42:07-06:00',
+  id: 't1', numero_factura: '5001', estado: 'C', fecha_registra: '2026-09-01T19:42:07-06:00',
   fecha_cierra: null, cajero_login: '222',
   canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,
@@ -931,6 +932,98 @@ describe('la fusión Hoy ↔ En vivo no toca la plata del día', () => {
     // así que la venta cerrada no puede contaminarse ni por error.
     expect(Object.keys(base)).not.toContain('mesasAbiertas')
     expect(Object.keys(base)).not.toContain('mesasDetalle')
+  })
+})
+
+// ── A1 · Oficial (C) vs provisional (R): el filtro vive en armarDia ─────────────
+
+describe('esTicketOficial / partirPorEstado / resumirProvisional — la única definición', () => {
+  it('solo C es oficial; R es provisional; X no es ninguna de las dos', () => {
+    expect(ESTADO_OFICIAL).toBe('C')
+    expect(esTicketOficial(ticket({ estado: 'C' }))).toBe(true)
+    expect(esTicketOficial(ticket({ estado: 'R' }))).toBe(false)
+    expect(esTicketOficial(ticket({ estado: 'X' }))).toBe(false)
+    expect(esTicketProvisional(ticket({ estado: 'R' }))).toBe(true)
+    expect(esTicketProvisional(ticket({ estado: 'C' }))).toBe(false)
+    expect(esTicketProvisional(ticket({ estado: 'X' }))).toBe(false)
+  })
+
+  it('partirPorEstado separa en dos y tira las X', () => {
+    const { oficiales, provisionales } = partirPorEstado([
+      ticket({ id: 'c', estado: 'C' }),
+      ticket({ id: 'r', estado: 'R' }),
+      ticket({ id: 'x', estado: 'X' }),
+    ])
+    expect(oficiales.map(t => t.id)).toEqual(['c'])
+    expect(provisionales.map(t => t.id)).toEqual(['r'])
+  })
+
+  it('resumirProvisional suma SOLO las R, en la unidad del neto (valor_servido_crc)', () => {
+    const r = resumirProvisional([
+      ticket({ estado: 'C', valor_servido_crc: 100_000 }),
+      ticket({ estado: 'R', valor_servido_crc: 7_000 }),
+      ticket({ estado: 'R', valor_servido_crc: 5_500 }),
+      ticket({ estado: 'X', valor_servido_crc: 99_999 }),
+    ])
+    expect(r).toEqual({ monto: 12_500, tickets: 2 })
+    expect(resumirProvisional([])).toEqual({ monto: 0, tickets: 0 })
+  })
+})
+
+describe('armarDia es el embudo: con R presentes el DiaData es IDÉNTICO al de solo-C', () => {
+  const C = [
+    ticket({ id: 'c1', estado: 'C', fecha_registra: '2026-09-01T13:00:00-06:00', valor_servido_crc: 10_000 }),
+    ticket({ id: 'c2', estado: 'C', fecha_registra: '2026-09-01T20:00:00-06:00', valor_servido_crc: 15_000,
+             salonero_login: '027', pax: 4, pax_articulo: 4 }),
+  ]
+  // Una cuenta abierta grande, del mismo salonero, con pax y con líneas: si se colara, se
+  // notaría en el neto, en el pax, en las órdenes, en el mix y en el conteo de tickets.
+  const R = [
+    ticket({ id: 'r1', estado: 'R', fecha_registra: '2026-09-01T21:00:00-06:00', valor_servido_crc: 80_000,
+             total_crc: 90_400, servicio_crc: 8_000, iva_crc: 10_400, pax: 6, pax_articulo: 6 }),
+  ]
+  const X = [ticket({ id: 'x1', estado: 'X', valor_servido_crc: 50_000 })]
+  const lineas = [
+    linea({ ticket_id: 'c1', monto: 10_000 }),
+    linea({ ticket_id: 'r1', monto: 80_000, nombre: 'PLATO FANTASMA' }),
+  ]
+  const soloC  = armarDia('2026-09-01', C, lineas, '2026-09-01', NOMBRES)
+  const conCRX = armarDia('2026-09-01', [...C, ...R, ...X], lineas, '2026-09-01', NOMBRES)
+
+  it('el DiaData queda byte-idéntico', () => {
+    expect(JSON.stringify(conCRX.dia)).toBe(JSON.stringify(soloC.dia))
+  })
+
+  it('bruto, servicio, IVA, regalía, tickets, canales y órdenes: idénticos', () => {
+    const resto = (a: typeof soloC) =>
+      [a.bruto, a.servicio, a.iva, a.regalia, a.tickets, a.canales, a.ordenes]
+    expect(resto(conCRX)).toEqual(resto(soloC))
+    expect(conCRX.tickets).toBe(2)
+  })
+
+  it('el producto de la cuenta abierta NO entra al mix ni al pm', () => {
+    expect(conCRX.pm['PLATO FANTASMA']).toBeUndefined()
+    expect(JSON.stringify(conCRX.pm)).toBe(JSON.stringify(soloC.pm))
+  })
+
+  it('el neto es Σ de las C, y nada más', () => {
+    const neto = Object.values(conCRX.dia.saloneros).reduce((a, v) => a + v.total, 0)
+    expect(neto).toBe(25_000)
+  })
+})
+
+describe('diasPorTurno: tickets y pax por turno salen del armado, no de la lista cruda', () => {
+  it('con una R en el turno, tickets y pax cuentan solo las C', () => {
+    const C = [
+      ticket({ id: 'c1', estado: 'C', cajero_login: '222', pax: 2, pax_articulo: 2 }),
+      ticket({ id: 'c2', estado: 'C', cajero_login: '222', pax: 3, pax_articulo: 3 }),
+    ]
+    const R = [ticket({ id: 'r1', estado: 'R', cajero_login: '222', pax: 9, pax_articulo: 9 })]
+    const [turno] = diasPorTurno('2026-09-01', [...C, ...R], [], '2026-09-01', NOMBRES)
+    expect(turno.tickets).toBe(2)
+    expect(turno.pax).toBe(5)
+    const [sinR] = diasPorTurno('2026-09-01', C, [], '2026-09-01', NOMBRES)
+    expect(JSON.stringify(turno)).toBe(JSON.stringify(sinR))
   })
 })
 

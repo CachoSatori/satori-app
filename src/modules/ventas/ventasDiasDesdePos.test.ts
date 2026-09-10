@@ -13,7 +13,7 @@ const NOMBRES = { '026': 'MAXO', '027': 'GUILLE' }
 const SELLO = '2026-09-05'
 
 const ticket = (over: Partial<TicketNdfConId> & { id: string }): TicketNdfConId => ({
-  numero_factura: over.id, fecha_registra: '2026-09-05T19:00:00-06:00',
+  numero_factura: over.id, estado: 'C', fecha_registra: '2026-09-05T19:00:00-06:00',
   fecha_cierra: null, cajero_login: '222',
   canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
   con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,
@@ -384,5 +384,49 @@ describe('aHistMap / getHistDesdePos — el equivalente de ventas_hist', () => {
   it('rango sin jornadas → HistMap vacío, no un día en cero', () => {
     expect(aHistMap(armar(TODOS, LINEAS, { desde: '2026-10-01', hasta: '2026-10-31' }))).toEqual({})
     expect(aHistMap({})).toEqual({})
+  })
+})
+
+// ── A1 · El camino de «Hoy» no se infla con cuentas abiertas (R) ──────────────────────────
+//
+// `armarDiasMap` es lo que arma el módulo entero desde el PoS. Si un `R` entrara por acá, «Hoy»
+// mostraría plata que todavía puede cambiar. El filtro NO está en este archivo: vive en
+// `armarDia`, y esto prueba que alcanza para que este caller quede C-only sin tocarlo.
+
+describe('armarDiasMap con R presentes: neta idéntica a solo-C', () => {
+  // Dos cuentas abiertas realistas: sin `fecha_cierra` (todavía no cerró la caja), con plata
+  // y con pax. Una del turno tarde y otra suelta sin cajero, para cubrir los dos lotes posibles.
+  const ABIERTAS = [
+    ticket({ id: 'r1', estado: 'R', fecha_registra: '2026-09-05T20:10:00-06:00', fecha_cierra: null,
+             cajero_login: '222', valor_servido_crc: 95_000, pax: 6, pax_articulo: 6 }),
+    ticket({ id: 'r2', estado: 'R', fecha_registra: '2026-09-05T20:40:00-06:00', fecha_cierra: null,
+             cajero_login: null, valor_servido_crc: 40_000, pax: 2, pax_articulo: 2 }),
+  ]
+  const ANULADA = [ticket({ id: 'x1', estado: 'X', fecha_registra: '2026-09-05T19:30:00-06:00',
+                            fecha_cierra: null, cajero_login: '222', valor_servido_crc: 33_000 })]
+  const LINEAS_EXTRA = [linea('r1', { monto: 95_000 }), linea('r2', { monto: 40_000 }), linea('x1', { monto: 33_000 })]
+
+  const soloC = armar(TODOS, LINEAS, RANGO)
+  const conR  = armar([...TODOS, ...ABIERTAS, ...ANULADA], [...LINEAS, ...LINEAS_EXTRA], RANGO)
+  const neto  = (d: DiaData) => Object.values(d.saloneros).reduce((a, v) => a + v.total, 0)
+
+  it('las mismas jornadas, ni una más', () => {
+    expect(Object.keys(conR).sort()).toEqual(Object.keys(soloC).sort())
+  })
+
+  it('cada jornada queda byte-idéntica', () => {
+    for (const j of Object.keys(soloC)) {
+      expect(JSON.stringify(conR[j])).toBe(JSON.stringify(soloC[j]))
+    }
+  })
+
+  it('la neta del 5-sep es Σ de las C y no suma los ₡135.000 abiertos ni los ₡33.000 anulados', () => {
+    expect(neto(conR['2026-09-05'])).toBe(neto(soloC['2026-09-05']))
+    // 25 facturas C del 5-sep × 12.000 (el helper) = 300.000
+    expect(neto(conR['2026-09-05'])).toBe(300_000)
+  })
+
+  it('getDayStats sobre el día con R da lo mismo que sobre el día solo-C', () => {
+    expect(getDayStats(conR['2026-09-05'])).toEqual(getDayStats(soloC['2026-09-05']))
   })
 })

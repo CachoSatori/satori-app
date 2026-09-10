@@ -272,6 +272,16 @@ export interface SnapshotEnVivo {
   tiempoAbiertaConfiable?: boolean
 
   /**
+   * Cuentas EN CURSO (`estado = 'R'`): plata que todavía puede cambiar y por eso NO está en
+   * `dia` ni en ninguna cifra oficial. Es un concepto de «En vivo»: «Hoy» no lo lleva.
+   *
+   * `monto` es la Σ de `valor_servido_crc` de esos tickets, o sea la misma unidad que el neto
+   * oficial, para que se puedan leer lado a lado sin convertir nada. Siempre presente cuando
+   * el snapshot sale del PoS, en 0 si no hay nada abierto; el generador de ejemplo no lo trae.
+   */
+  provisional?: { monto: number; tickets: number }
+
+  /**
    * Cuántas FACTURAS lleva cada clave de `dia.saloneros`. `SaloneroDay` no tiene el campo —el
    * modelo del xls nunca contó órdenes por mesero—, así que viaja aparte. Es el denominador
    * del ticket promedio "neto ÷ órdenes".

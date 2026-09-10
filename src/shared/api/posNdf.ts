@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { EstadoFactura } from '../ndf/mapTicket'
 
 import { supabase } from './supabase'
 
@@ -81,6 +82,12 @@ export function businessDateDe(fechaRegistra: string): string {
 
 export interface TicketNdfRow {
   numero_factura:    string
+  /**
+   * `C` cerrada · `X` anulada · `R` en curso (provisional). El día OFICIAL se arma SOLO con
+   * `C`; el filtro vive en `armarDia`, que es el embudo único. Viaja en la fila para que ese
+   * embudo pueda decidir — sin la columna, un ticket `R` se contaría como venta cerrada.
+   */
+  estado:            EstadoFactura
   fecha_registra:    string
   /**
    * Cuándo cerró la caja el cajero. Junto con `cajero_login` forma el LOTE de cierre, que es
@@ -135,7 +142,7 @@ export interface LineaNdfRow {
 export interface TicketNdfConId extends TicketNdfRow { id: string }
 
 const COLS_TICKET =
-  'id, numero_factura, fecha_registra, fecha_cierra, cajero_login, canal, mesa, salonero_login, registrado_por, turno, ' +
+  'id, numero_factura, estado, fecha_registra, fecha_cierra, cajero_login, canal, mesa, salonero_login, registrado_por, turno, ' +
   'con_servicio, servicio_crc, total_crc, valor_servido_crc, iva_crc, regalia_crc, ' +
   'descuento_crc, clase_ingreso, pax, pax_nativo, pax_articulo, pax_alerta'
 

@@ -9,7 +9,14 @@ import {
   puedeLeerAbiertas,
   sqlAbiertas,
   ESTADO_PEDIDO_ABIERTO,
+  claveLineas,
+  estimarPedido,
+  puedeLeerLineasAbiertas,
+  sqlLineasAbiertas,
+  MULT_DELIVERY,
+  MULT_SALON,
   type FilaAbierta,
+  type FilaLineaAbierta,
 } from './consultaAgente.ts'
 import { sqlDetalle, sqlFacturas, type FilaDetalle, type FilaFactura, type Queryable } from './consulta.ts'
 import { resolverEsquema } from './esquema.ts'
@@ -203,6 +210,8 @@ describe('mapAbierta', () => {
       clave: 'pedido:4477', numero_factura: null, id_pedido: '4477', mesa: '12',
       salonero_login: '026', canal: 'salon', pax: 4, pax_alerta: 'falta_articulo',
       updated_at: '2026-09-01T20:05:00-06:00',
+      // Frente C: sin líneas, los tres provisionales van en null («sin total»), nunca en 0.
+      monto_estimado_crc: null, pax_pedido: null, items_valor: null,
     })
   })
 
@@ -477,5 +486,208 @@ describe('leerProvisionales', () => {
     expect(tickets[0].estado).toBe('R')
     expect(tickets[0].numero_factura).toBe('7001')
     expect(tickets[0].valor_servido).toBe(9000)
+  })
+})
+
+// ── Frente C v1 · monto estimado + pax de la mesa abierta ─────────────────────────────────
+
+/** La instalación COMPLETA: detalle de pedido, clave real y precio de catálogo. */
+const COLUMNAS_C = {
+  ...COLUMNAS,
+  fac_pedidos:    [...COLUMNAS.fac_pedidos, 'Periodo', 'Mes', 'Dia'],
+  fac_pedidosdet: ['NumeroPedido', 'Periodo', 'Mes', 'Dia', 'CodigoProducto', 'Cantidad', 'Estado', 'Descuento', 'TipoDescuento'],
+  fac_productos:  [...COLUMNAS.fac_productos, 'PrecioVenta'],
+}
+const ESQUEMA_C = resolverEsquema(new Map(Object.entries(COLUMNAS_C)))
+
+const lin = (over: Partial<FilaLineaAbierta> = {}): FilaLineaAbierta => ({
+  periodo: 2026, mes: 9, dia: 9, numero_pedido: '58', codigo: '25', cantidad: 1,
+  estado: 'E', descuento: null, tipo_descuento: null, precio: 10_000, familia: 2, ...over,
+})
+
+describe('estimarPedido — la fórmula v1 en TS, una sola fuente', () => {
+  it('cantidad × precio de catálogo, por el multiplicador del canal (salón 1,23)', () => {
+    const r = estimarPedido([lin({ cantidad: 2, precio: 10_000 })], 'M')
+    expect(r.monto_estimado_crc).toBe(24_600)
+    expect(r.items_valor).toBe(1)
+  })
+
+  it('delivery y llevar solo llevan IVA (1,13); barra lleva servicio (1,23)', () => {
+    expect(estimarPedido([lin()], 'D').monto_estimado_crc).toBe(11_300)
+    expect(estimarPedido([lin()], 'L').monto_estimado_crc).toBe(11_300)
+    expect(estimarPedido([lin()], 'B').monto_estimado_crc).toBe(12_300)
+    expect(MULT_SALON).toBe(1.23); expect(MULT_DELIVERY).toBe(1.13)
+  })
+
+  it('Tipo vacío o desconocido = salón por defecto', () => {
+    expect(estimarPedido([lin()], null).monto_estimado_crc).toBe(12_300)
+    expect(estimarPedido([lin()], 'Z').monto_estimado_crc).toBe(12_300)
+  })
+
+  it('descuento P = porcentaje; M = monto; vacío o desconocido = 0', () => {
+    expect(estimarPedido([lin({ descuento: 10, tipo_descuento: 'P' })], 'D').monto_estimado_crc).toBe(10_170)
+    expect(estimarPedido([lin({ descuento: 1_000, tipo_descuento: 'M' })], 'D').monto_estimado_crc).toBe(10_170)
+    expect(estimarPedido([lin({ descuento: 1_000, tipo_descuento: null })], 'D').monto_estimado_crc).toBe(11_300)
+    expect(estimarPedido([lin({ descuento: 1_000, tipo_descuento: 'Q' })], 'D').monto_estimado_crc).toBe(11_300)
+  })
+
+  it('WHITELIST: solo familias de FAMILIAS_VALOR_SERVIDO suman — no es "excluir 4 códigos"', () => {
+    const r = estimarPedido([
+      lin({ codigo: '25',  familia: 2,  precio: 10_000 }),   // sushi: entra
+      lin({ codigo: '677', familia: 19, precio: 0 }),        // pax: fuera
+      lin({ codigo: '900', familia: 17, precio: 5_000 }),    // cortesía: fuera
+      lin({ codigo: '901', familia: 21, precio: 8_000 }),    // merch: fuera
+    ], 'D')
+    expect(r.monto_estimado_crc).toBe(11_300)
+    expect(r.items_valor).toBe(1)
+  })
+
+  it('la línea anulada (X) queda fuera; E y P van', () => {
+    const r = estimarPedido([
+      lin({ estado: 'X', precio: 99_999 }),
+      lin({ estado: 'E' }),
+      lin({ estado: 'P' }),
+    ], 'D')
+    expect(r.monto_estimado_crc).toBe(22_600)
+    expect(r.items_valor).toBe(2)
+  })
+
+  it('FAIL-CLOSED: la línea sin precio de catálogo no suma ni cuenta como ítem', () => {
+    const r = estimarPedido([lin({ precio: null }), lin({ precio: 'no' })], 'D')
+    expect(r.monto_estimado_crc).toBeNull()
+    expect(r.items_valor).toBeNull()
+  })
+
+  it('sin líneas → null («sin total»), NUNCA ₡0', () => {
+    expect(estimarPedido([], 'M')).toMatchObject({ monto_estimado_crc: null, items_valor: null, pax_pedido: null })
+  })
+
+  it('cero REAL ≠ null: líneas con catálogo pero ninguna con valor servido (cortesía) → 0', () => {
+    const r = estimarPedido([lin({ codigo: '900', familia: 17, precio: 5_000 })], 'M')
+    expect(r.monto_estimado_crc).toBe(0)
+    expect(r.items_valor).toBe(0)
+  })
+
+  it('pax por artículo con la MISMA regla que el ticket: 677 vale 1 y 678 vale 2', () => {
+    const r = estimarPedido([
+      lin({ codigo: '677', familia: 19, cantidad: 2, precio: 0 }),
+      lin({ codigo: '678', familia: 19, cantidad: 1, precio: 0 }),
+    ], 'M')
+    expect(r.pax_pedido).toBe(4)
+    expect(r.qty677).toBe(2); expect(r.qty678).toBe(1)
+  })
+
+  it('sin 677/678 el pax es null, no 0 — Personas no se usa', () => {
+    expect(estimarPedido([lin()], 'M').pax_pedido).toBeNull()
+  })
+})
+
+describe('puedeLeerLineasAbiertas — fail-closed por esquema', () => {
+  it('con la instalación completa, sí', () => {
+    expect(puedeLeerLineasAbiertas(ESQUEMA_C)).toBe(true)
+  })
+
+  it('sin la tabla de detalle, sin el precio o sin la clave real del pedido, NO (y el snapshot sale igual)', () => {
+    expect(puedeLeerLineasAbiertas(ESQUEMA)).toBe(false)   // la instalación de siempre: sin detalle
+    const sinPrecio = resolverEsquema(new Map(Object.entries({ ...COLUMNAS_C, fac_productos: COLUMNAS.fac_productos })))
+    expect(puedeLeerLineasAbiertas(sinPrecio)).toBe(false)
+    const sinClave = resolverEsquema(new Map(Object.entries({ ...COLUMNAS_C, fac_pedidos: COLUMNAS.fac_pedidos })))
+    expect(puedeLeerLineasAbiertas(sinClave)).toBe(false)
+    const detIncompleto = resolverEsquema(new Map(Object.entries({ ...COLUMNAS_C, fac_pedidosdet: ['NumeroPedido', 'CodigoProducto', 'Cantidad'] })))
+    expect(puedeLeerLineasAbiertas(detIncompleto)).toBe(false)
+  })
+
+  it('una tabla de detalle presente pero incompleta NO aborta el agente: todo es opcional', () => {
+    expect(() => resolverEsquema(new Map(Object.entries({ ...COLUMNAS_C, fac_pedidosdet: ['NumeroPedido'] })))).not.toThrow()
+  })
+})
+
+describe('sqlLineasAbiertas', () => {
+  const sql = sqlLineasAbiertas(ESQUEMA_C)
+
+  it('pasa el candado read-only', () => {
+    expect(() => assertSoloSelect(sql)).not.toThrow()
+  })
+
+  it('ata las líneas a la cabecera por la clave REAL: Periodo, Mes, Dia y NumeroPedido', () => {
+    for (const c of ['Periodo', 'Mes', 'Dia', 'NumeroPedido']) expect(sql).toContain(`p.[${c}] = d.[${c}]`)
+  })
+
+  it('mismo filtro que la cabecera: Estado R, sin factura, ventana, sin cursor', () => {
+    expect(sql).toContain("[Estado] = 'R'")
+    expect(sql).toContain('[NumeroFactura] IS NULL')
+    expect(sql).toContain('CONVERT(datetime, @desde, 120)')
+    expect(sql).not.toContain('@ultima')
+  })
+
+  it('trae precio y familia del catálogo, y descuento con su tipo', () => {
+    expect(sql).toContain('[PrecioVenta]')
+    expect(sql).toContain('AS familia')
+    expect(sql).toContain('AS tipo_descuento')
+  })
+
+  it('sqlAbiertas conserva su WHERE y solo suma la clave real al SELECT', () => {
+    const cab = sqlAbiertas(ESQUEMA_C)
+    expect(cab).toContain("[Estado] = 'R'")
+    expect(cab).toContain('AS periodo')
+    expect(sqlAbiertas(ESQUEMA)).toMatch(/NULL\s+AS periodo/)   // sin las columnas, la clave va en NULL
+  })
+})
+
+describe('claveLineas', () => {
+  it('normaliza decimales en cero y arma la clave', () => {
+    expect(claveLineas({ periodo: 2026, mes: 9, dia: 9, numero: '58.00' })).toBe('2026|9|9|58')
+  })
+  it('sin alguna parte no hay clave', () => {
+    expect(claveLineas({ periodo: null, mes: 9, dia: 9, numero: '58' })).toBeNull()
+  })
+})
+
+describe('leerAbiertas con líneas (Frente C)', () => {
+  const cabecera = (over: Partial<FilaAbierta> = {}): FilaAbierta => ({
+    id_pedido: '58', usuario_registra: '026', personas: 0, tipo: 'M', area: 'SALON 1', mesa: '5',
+    fecha_hora: '2026-09-09 20:05:00', periodo: 2026, mes: 9, dia: 9, ...over,
+  })
+  const espiar = (abiertas: FilaAbierta[], lineas: FilaLineaAbierta[]) => {
+    const visto: string[] = []
+    const qy: Queryable = {
+      async query<T>(sql: string): Promise<{ rows: T[] }> {
+        visto.push(sql)
+        if (sql.includes('FROM [dbo].[FAC_PedidosDet] d')) return { rows: lineas as T[] }
+        return { rows: abiertas as T[] }
+      },
+    }
+    return { qy, visto }
+  }
+
+  it('ata las líneas por la clave real: el 58 de OTRO día no se le pega al 58 de hoy', async () => {
+    const { qy } = espiar([cabecera()], [
+      lin({ numero_pedido: '58', dia: 9, precio: 10_000 }),
+      lin({ numero_pedido: '58', dia: 8, precio: 99_999 }),   // ayer, mismo número: NO
+    ])
+    const [m] = await leerAbiertas(qy, ESQUEMA_C, { desde: 'a', hasta: 'b' })
+    expect(m.monto_estimado_crc).toBe(12_300)
+    expect(m.items_valor).toBe(1)
+  })
+
+  it('el pax por artículo entra a mapPax: la alerta deja de decir sin_pax', async () => {
+    const { qy } = espiar([cabecera()], [lin({ codigo: '678', familia: 19, cantidad: 1, precio: 0 })])
+    const [m] = await leerAbiertas(qy, ESQUEMA_C, { desde: 'a', hasta: 'b' })
+    expect(m.pax_pedido).toBe(2)
+    expect(m.pax).toBe(2)
+    expect(m.pax_alerta).toBe('falta_nativo')
+  })
+
+  it('FAIL-CLOSED: con el esquema de siempre no se pide el detalle y la mesa sale sin monto', async () => {
+    const { qy, visto } = espiar([cabecera()], [lin()])
+    const [m] = await leerAbiertas(qy, ESQUEMA, { desde: 'a', hasta: 'b' })
+    expect(visto).toHaveLength(1)
+    expect(m).toMatchObject({ monto_estimado_crc: null, pax_pedido: null, items_valor: null })
+  })
+
+  it('sin mesas abiertas no se pide el detalle', async () => {
+    const { qy, visto } = espiar([], [lin()])
+    expect(await leerAbiertas(qy, ESQUEMA_C, { desde: 'a', hasta: 'b' })).toEqual([])
+    expect(visto).toHaveLength(1)
   })
 })

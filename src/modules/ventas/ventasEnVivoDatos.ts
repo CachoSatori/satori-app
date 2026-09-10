@@ -706,20 +706,27 @@ export function excluirCerradas(
  * columna pasa a significar «cuándo se leyó», y todas las mesas se verían recién abiertas.
  *
  * La firma de esa ruta es que el lote sella TODAS las filas con el mismo `ahora`, así que la
- * dispersión es cero. Se exige entonces que haya al menos dos mesas y que se separen por más de
- * una ventana de poll. Con una sola mesa no hay dispersión que medir y el resultado es
- * INCONCLUSO, que acá se trata como «no confiable»: mejor un «—» honesto que una duración falsa.
+ * dispersión es cero. Con dos o más mesas se exige que se separen por más de una ventana de
+ * poll. Con una sola no hay dispersión, pero sí antigüedad: un sello de lote es siempre
+ * reciente, así que una mesa cuyo sello ya tiene más de una ventana de poll es apertura real.
  */
 export function tiempoAbiertaConfiable(
   abiertas: MesaAbiertaRow[],
   ventanaMs: number = VENTANA_POLL_MS,
+  ahora: Date = new Date(),
 ): boolean {
   const ts: number[] = []
   for (const m of abiertas) {
     const t = Date.parse(m.updated_at)
     if (Number.isFinite(t)) ts.push(t)
   }
-  if (ts.length < 2) return false
+  if (ts.length === 0) return false
+  // Con UNA sola mesa no hay dispersión que medir, pero sí antigüedad: el sello del lote
+  // (la ruta fallback) es siempre de hace segundos, y una hora de apertura real se aleja del
+  // reloj a medida que la mesa sigue abierta. Pasada una ventana de poll, es apertura. Así
+  // «abierta hace 40 min» se ve aunque haya una sola mesa, y la que se abrió hace 30 s dice
+  // «—» un minuto y después se afirma sola.
+  if (ts.length === 1) return ahora.getTime() - ts[0] > ventanaMs
   return Math.max(...ts) - Math.min(...ts) > ventanaMs
 }
 
@@ -1037,7 +1044,7 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
 
   // Con el feed viejo las duraciones no se muestran: no se sabe cuánto de lo que se ve sigue
   // siendo cierto, y una mesa «abierta hace 3 h» que en realidad se cobró hace rato miente.
-  const confiable = tiempoAbiertaConfiable(abiertas) && frescura?.desactualizado !== true
+  const confiable = tiempoAbiertaConfiable(abiertas, VENTANA_POLL_MS, ahora) && frescura?.desactualizado !== true
 
   // La jornada que se está mirando es la vara del guard de mesas viejas: se pasa explícita
   // para que el detalle no dependa del reloj del navegador.

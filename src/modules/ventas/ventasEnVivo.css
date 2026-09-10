@@ -665,6 +665,13 @@
   cursor: help;
 }
 
+/* El dato que el PoS no manda, dicho con palabras y chico: no un «—» que se lee como cero. */
+.apos-sin-dato {
+  font-size: 0.68rem;
+  font-style: italic;
+  white-space: nowrap;
+}
+
 .apos-tabla-abiertas { margin-top: 0.35rem; }
 
 /* ── Mesa arrastrada de otra jornada ─────────────────────────

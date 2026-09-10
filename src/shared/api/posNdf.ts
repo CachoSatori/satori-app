@@ -418,7 +418,8 @@ export async function getUltimoPollPoS(local: string): Promise<LatidoPoS> {
 // ── La llave de exclusión Hoy ↔ En vivo ────────────────────────────────────────────────────
 
 /**
- * Los `numero_pedido` de las facturas YA CERRADAS de la jornada.
+ * Los `numero_pedido` de las facturas de la jornada que ya EXISTEN como factura: cerradas (`C`)
+ * y en curso (`R`). Es la llave que saca una mesa del panel de abiertas.
  *
  * Es la llave que evita el doble conteo: `pos_ndf_open.id_pedido` y
  * `pos_ndf_tickets.numero_pedido` salen los dos del mismo `FAC_Pedidos.NumeroPedido`, así que
@@ -441,6 +442,11 @@ export async function getPedidosCerradosJornada(
     .from('pos_ndf_tickets')
     .select('numero_pedido')
     .eq('local', local)
+    // EXPLÍCITO y a propósito: una factura EN CURSO (`R`) también saca la mesa del panel de
+    // abiertas. Cuando existe la factura, el pedido ya pasó a `F` en el PoS y salió de
+    // `pos_ndf_open`; la mesa está en la etapa de cobro, no abierta. Su plata se ve en
+    // «Sin cerrar», no en «Abierto». La `X` (anulada) NO cuenta: una anulación no cierra nada.
+    .in('estado', ['C', 'R'])
     .not('numero_pedido', 'is', null)
     .gte('fecha_registra', desde)
     .lt('fecha_registra', hasta)

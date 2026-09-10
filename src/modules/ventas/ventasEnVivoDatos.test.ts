@@ -12,6 +12,7 @@ import {
   ventasPorTurnoPoS,
   contarJornadaAnterior, esDeJornadaAnterior, jornadaDeInstante,
   esTicketOficial, esTicketProvisional, partirPorEstado, resumirProvisional, ESTADO_OFICIAL,
+  VENTANA_POLL_MS,
 } from './ventasEnVivoDatos'
 import type { CajeroDay } from '../../shared/types/ventas'
 import { SALONEROS_CONOCIDOS } from '../../shared/ndf/mapTicket'
@@ -1076,9 +1077,36 @@ describe('tiempoAbiertaConfiable', () => {
     ])).toBe(false)
   })
 
-  it('con una sola mesa el resultado es INCONCLUSO, y se trata como no confiable', () => {
-    expect(tiempoAbiertaConfiable([mesaAb()])).toBe(false)
+  // ── A3 · una sola mesa: se afirma por ANTIGÜEDAD, no por dispersión ────────────────
+  // Un sello de lote (la ruta fallback) es siempre de hace segundos. Una hora de apertura real
+  // se aleja del reloj mientras la mesa siga abierta. Pasada una ventana de poll, es apertura.
+
+  it('una sola mesa con sello de hace 40 min es confiable: se muestra «abierta hace 40 min»', () => {
+    const ahora = new Date('2026-09-01T20:40:00-06:00')
+    expect(tiempoAbiertaConfiable([mesaAb({ updated_at: '2026-09-01T20:00:00-06:00' })], VENTANA_POLL_MS, ahora)).toBe(true)
+  })
+
+  it('una sola mesa con sello de hace 30 s todavía NO: podría ser el sello del lote', () => {
+    const ahora = new Date('2026-09-01T20:00:30-06:00')
+    expect(tiempoAbiertaConfiable([mesaAb({ updated_at: '2026-09-01T20:00:00-06:00' })], VENTANA_POLL_MS, ahora)).toBe(false)
+  })
+
+  it('una sola mesa justo pasada la ventana de poll ya se afirma', () => {
+    const ahora = new Date(Date.parse('2026-09-01T20:00:00-06:00') + VENTANA_POLL_MS + 1)
+    expect(tiempoAbiertaConfiable([mesaAb({ updated_at: '2026-09-01T20:00:00-06:00' })], VENTANA_POLL_MS, ahora)).toBe(true)
+  })
+
+  it('sin mesas no hay nada que afirmar', () => {
     expect(tiempoAbiertaConfiable([])).toBe(false)
+  })
+
+  it('con dos o más mesas la regla sigue siendo la dispersión, no la antigüedad', () => {
+    // Dos mesas selladas hace una hora con el MISMO instante: es el lote, no la apertura.
+    const ahora = new Date('2026-09-01T22:00:00-06:00')
+    expect(tiempoAbiertaConfiable([
+      mesaAb({ clave: 'a', updated_at: '2026-09-01T21:00:00-06:00' }),
+      mesaAb({ clave: 'b', updated_at: '2026-09-01T21:00:00-06:00' }),
+    ], VENTANA_POLL_MS, ahora)).toBe(false)
   })
 })
 

@@ -67,10 +67,14 @@ const REVISAR_JORNADA =
   'sin cerrar en el PoS, o el puente la sigue reportando abierta cuando ya se cobró. No afecta ' +
   'las cifras del día, que salen de las facturas cerradas.'
 
-/** El «—» del tiempo abierta, cuando no se puede afirmar la semántica de `updated_at`. */
+/**
+ * El «—» del tiempo abierta, cuando no se puede afirmar la semántica de `updated_at`. Con una
+ * sola mesa ya no es el caso normal: se afirma sola pasada una ventana de poll. Queda para el
+ * feed viejo, el primer minuto de una mesa recién abierta, y la instalación sin hora de pedido.
+ */
 const TIEMPO_PENDIENTE =
-  'No se puede confirmar desde cuándo está abierta: o el feed del PoS está viejo, o esta ' +
-  'instalación no manda la hora de apertura del pedido.'
+  'Todavía no se puede confirmar desde cuándo está abierta: el feed del PoS está viejo, la mesa ' +
+  'se abrió hace menos de un minuto, o esta instalación no manda la hora de apertura del pedido.'
 
 /**
  * Cuánto tiempo pasó, en horas y minutos. `haceCuanto` corta en minutos y sirve para el latido
@@ -448,10 +452,14 @@ export default function VentasEnVivo({ metas }: Props) {
                             : duracion(m.abiertaDesde, ahora)}
                         </td>
                         <td className="r">
-                          <span className="apos-pendiente" title={MONTO_PENDIENTE}>—</span>
+                          <span className="apos-pendiente apos-sin-dato" title={MONTO_PENDIENTE}>
+                            el PoS no manda total
+                          </span>
                         </td>
                         <td className="r">
-                          <span className="apos-pendiente" title={MONTO_PENDIENTE}>—</span>
+                          <span className="apos-pendiente apos-sin-dato" title={MONTO_PENDIENTE}>
+                            sin total
+                          </span>
                         </td>
                       </tr>
                     ))}

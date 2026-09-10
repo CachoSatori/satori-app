@@ -80,8 +80,9 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
   }, [sals, rangeDates, dias, pm, sortCol])
 
   // ── «Salón sin mesero» ─────────────────────────────────────────────────────────────────────
-  // Venta de SALÓN que la factura no le acredita a ningún mesero: `registrado_por` de
-  // `cajero` o `sin_pedido` con `canal = 'salon'` (el balde lo arma `claveNoMesero()`).
+  // Venta de SALÓN que la factura no le acredita a nadie: `registrado_por = 'sin_pedido'` con
+  // `canal = 'salon'` (el balde lo arma `claveNoMesero()`). La caja timbrando en el salón ya
+  // NO cae acá: es «Cajero-salón», tarjeta propia en la pestaña Cajeros (SPEC atribución).
   //
   // NO es una persona: no compite en el ranking, no tiene meta y no entra a Competencias ni
   // a Empleados — eso sale gratis porque el balde conserva la marca `esCajero`, que es lo que
@@ -161,7 +162,8 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
           <div>
             <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:'0.85rem' }}>{CLAVE_SALON_SIN_MESERO}</div>
             <div style={{ fontSize:'0.62rem', color:'#888', marginTop:'0.15rem' }}>
-              Venta de salón que la factura no le acredita a ningún mesero · no compite en el
+              Venta de salón que la factura no le acredita a nadie · el nombre de quien comandó
+              se busca en la lente por línea (Saloneros por línea) · no compite en el
               ranking · <strong>no suma al Total Cajeros</strong>
             </div>
           </div>

@@ -38,10 +38,15 @@ export function etiquetaTurnoPoS(turno: string | null | undefined): string {
 //              de barra, que casi no se usa, o una factura sin login) cae en **Mañana**.
 //              NO se filtra por mesa. El «Total Cajeros» es la suma de estos dos y nada más.
 //
-//   SALÓN SIN MESERO = `cajero` + `canal = 'salon'`  ∪  `sin_pedido` + `canal = 'salon'`.
-//              Es venta de SALÓN que la factura no le acredita a ningún mesero. Un solo
-//              rótulo: no es una persona, así que no compite en el ranking ni entra a
-//              Competencias o Empleados. Queda FUERA del Total Cajeros.
+//   CAJERO-SALÓN = `cajero` + `canal = 'salon'`. Venta de SALÓN que timbró la CAJA (111/222/388)
+//              sin pasar por un mesero en la factura. Tarjeta propia (SPEC atribución por
+//              línea, decisión 3, firmada 2026-09-10): no es un mesero —fuera del ranking— y
+//              no es delivery/llevar —fuera del Total Cajeros—. Antes iba mezclada en «Salón
+//              sin mesero», donde convivía con facturas que SÍ tienen quién las comandó.
+//
+//   SALÓN SIN MESERO = `sin_pedido` + `canal = 'salon'`. Venta de SALÓN que la factura no le
+//              acredita a nadie. No es una persona, así que no compite en el ranking ni entra
+//              a Competencias o Empleados. Queda FUERA del Total Cajeros.
 //              ⚠️ Que la FACTURA no tenga dueño no quiere decir que no se sepa quién comandó:
 //              `pos_ndf_lineas.usuario_registra` lo dice LÍNEA POR LÍNEA, y eso ya está
 //              resuelto en la lente «venta propia» de Saloneros por línea. Las dos lentes
@@ -52,9 +57,9 @@ export function etiquetaTurnoPoS(turno: string | null | undefined): string {
 //              cualquier canal) y `sin_pedido` fuera del salón. Se muestra aparte para que su
 //              plata siga a la vista, y también queda FUERA del Total Cajeros.
 //
-// Los cuatro baldes siguen llevando la marca `esCajero`, que NO se toca: `getDayStats` y
+// Los cinco baldes siguen llevando la marca `esCajero`, que NO se toca: `getDayStats` y
 // `aggGeneral` los suman igual que antes. Esto REAGRUPA, no recalcula — la neta y el total
-// del día dan exactamente lo mismo que antes de este cambio.
+// del día dan exactamente lo mismo que antes de este cambio (candado en `cajerosPorTurno.test`).
 
 export const CLAVE_CAJERO_MANANA = `Cajero turno ${ETIQUETA_TURNO_POS['mañana'].toLowerCase()}`
 export const CLAVE_CAJERO_TARDE  = `Cajero turno ${ETIQUETA_TURNO_POS['noche'].toLowerCase()}`
@@ -67,6 +72,11 @@ export const CLAVE_CAJERO_TARDE  = `Cajero turno ${ETIQUETA_TURNO_POS['noche'].t
  * rótulo viejo se leían igual.
  */
 export const CLAVE_SALON_SIN_MESERO = 'Salón sin mesero'
+/**
+ * Venta de SALÓN timbrada por la caja, sin mesero en la factura. Tarjeta propia en Cajeros,
+ * fuera del Total Cajeros (que es delivery/llevar) y fuera del ranking (no es una persona).
+ */
+export const CLAVE_CAJERO_SALON = 'Cajero-salón'
 export const CLAVE_SISTEMA_OTROS = 'Sistema y otros'
 
 /** Las dos tarjetas que suman el «Total Cajeros», en orden de turno. */
@@ -85,7 +95,7 @@ export function claveNoMesero(
 ): string {
   const esSalon = canal === 'salon'
   if (registradoPor === 'cajero') {
-    if (esSalon) return CLAVE_SALON_SIN_MESERO
+    if (esSalon) return CLAVE_CAJERO_SALON
     // El turno lo da la caja QUE COBRÓ. El 222 se muestra «Tarde», nunca «noche».
     return cajeroLogin === LOGIN_CAJERO_NOCHE ? CLAVE_CAJERO_TARDE : CLAVE_CAJERO_MANANA
   }

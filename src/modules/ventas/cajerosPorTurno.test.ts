@@ -9,22 +9,25 @@
 //   CAJEROS      registrado_por = 'cajero' Y canal <> 'salon', partido por la CAJA QUE COBRÓ.
 //                111 → Mañana · 222 → Tarde (etiqueta «Tarde», nunca «noche»). Cualquier otro
 //                login cobrando cae en Mañana. NO se filtra por mesa.
-//   SALÓN SIN MESERO  cajero + salón  ∪  sin_pedido + salón. Venta de salón sin mesero en la
-//                factura. Va a Saloneros, fuera del ranking, y NO suma al Total Cajeros.
+//   CAJERO-SALÓN cajero + salón. La caja timbró en el SALÓN sin mesero en la factura. Tarjeta
+//                propia en Cajeros (SPEC atribución por línea, 2026-09-10), fuera del ranking
+//                y fuera del Total Cajeros. Quién comandó se lee en la lente por línea.
+//   SALÓN SIN MESERO  sin_pedido + salón. Venta de salón que la factura no le acredita a
+//                nadie. Va a Saloneros, fuera del ranking, y NO suma al Total Cajeros.
 //   SISTEMA Y OTROS  todo el resto no-mesero. Aparte, también fuera del Total Cajeros.
 //
 // ── LO QUE NO CAMBIA ───────────────────────────────────────────────────────────────────────
 // Esto REAGRUPA, no recalcula: la neta y el total del día dan exactamente lo mismo, y los
-// cuatro baldes conservan la marca `esCajero` (que no se toca), así que `getDayStats` y
-// `aggGeneral` siguen sumando igual. Fijado abajo.
+// cinco baldes conservan la marca `esCajero` (que no se toca), así que `getDayStats` y
+// `aggGeneral` siguen sumando igual. Fijado abajo, byte a byte.
 import { describe, it, expect } from 'vitest'
 
-import type { CajeroDay } from '../../shared/types/ventas'
+import type { CajeroDay, DiaData, SaloneroDay } from '../../shared/types/ventas'
 import type { TicketNdfConId } from '../../shared/api/posNdf'
 import {
   armarDia, claveNoMesero,
-  CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS,
-  CLAVES_CAJERO_TURNO,
+  CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_CAJERO_SALON, CLAVE_SALON_SIN_MESERO,
+  CLAVE_SISTEMA_OTROS, CLAVES_CAJERO_TURNO,
 } from './ventasEnVivoDatos'
 import { aggCajero, aggGeneral, getDayStats, allSaloneros } from './ventasUtils'
 import { esSinAsignar } from './ventasEnVivoDatos'
@@ -67,8 +70,13 @@ describe('claveNoMesero · la regla, sin datos alrededor', () => {
     }
   })
 
-  it('cajero + salón y sin_pedido + salón son «Salón sin mesero», un solo rótulo', () => {
-    expect(claveNoMesero('cajero',     '111', 'salon')).toBe(CLAVE_SALON_SIN_MESERO)
+  it('cajero + salón es «Cajero-salón», tarjeta propia; sin_pedido + salón sigue en «Salón sin mesero»', () => {
+    // Antes iban juntos. Partirlos es lo que deja ver que la caja timbró en el salón (C) sin
+    // mezclarlo con las facturas que no tienen dueño en absoluto (A/B), cuyos nombres viven
+    // en la lente por línea.
+    expect(claveNoMesero('cajero',     '111', 'salon')).toBe(CLAVE_CAJERO_SALON)
+    expect(claveNoMesero('cajero',     '222', 'salon')).toBe(CLAVE_CAJERO_SALON)
+    expect(claveNoMesero('cajero',     '388', 'salon')).toBe(CLAVE_CAJERO_SALON)
     expect(claveNoMesero('sin_pedido', null,  'salon')).toBe(CLAVE_SALON_SIN_MESERO)
   })
 
@@ -83,7 +91,7 @@ describe('claveNoMesero · la regla, sin datos alrededor', () => {
       ['111', '222', '388', '002', null].flatMap(l =>
         ['salon', 'delivery', 'barra', 'otro'].map(c => claveNoMesero(r, l, c))))
     expect([...new Set(claves)].sort()).toEqual(
-      [CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS].sort(),
+      [CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_CAJERO_SALON, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS].sort(),
     )
     expect(claves.some(c => /^Caja · |^Sistema · |^Sin salonero$/.test(c))).toBe(false)
   })
@@ -98,19 +106,19 @@ const TICKETS = [
   ticket({ id: 'c2', registrado_por: 'cajero', salonero_login: null, cajero_login: '222', canal: 'delivery', valor_servido_crc: 50_000 }),
   // El 388 de barra: cae en Mañana.
   ticket({ id: 'c3', registrado_por: 'cajero', salonero_login: null, cajero_login: '388', canal: 'llevar',   valor_servido_crc:  4_000 }),
-  // Salón sin mesero: los dos componentes.
+  // Cajero-salón: la caja timbró en el salón. Salón sin mesero: nadie en la factura.
   ticket({ id: 's1', registrado_por: 'cajero',     salonero_login: null, cajero_login: '111', canal: 'salon', valor_servido_crc: 15_000 }),
   ticket({ id: 's2', registrado_por: 'sin_pedido', salonero_login: null, cajero_login: '222', canal: 'salon', valor_servido_crc:  8_000 }),
   // Tercer balde.
   ticket({ id: 'o1', registrado_por: 'sistema', salonero_login: '002', cajero_login: '111', canal: 'delivery', valor_servido_crc: 6_000 }),
 ]
 
-describe('armarDia · los cuatro baldes en un día completo', () => {
+describe('armarDia · los cinco baldes en un día completo', () => {
   const a = armar(TICKETS)
 
-  it('hay exactamente los cuatro baldes esperados, más el mesero', () => {
+  it('hay exactamente los cinco baldes esperados, más el mesero', () => {
     expect(Object.keys(a.dia.saloneros).sort()).toEqual(
-      ['MAXO', CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS].sort(),
+      ['MAXO', CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_CAJERO_SALON, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS].sort(),
     )
   })
 
@@ -125,10 +133,11 @@ describe('armarDia · los cuatro baldes en un día completo', () => {
       .map(n => aggCajero(n, ['2026-09-01'], dias).total)
       .reduce((s, t) => s + t, 0)
     expect(total).toBe(84_000)
-    // Ni «Salón sin mesero» ni «Sistema y otros» entran.
-    expect(total).not.toBe(total + 23_000)
-    expect(aggCajero(CLAVE_SALON_SIN_MESERO,   ['2026-09-01'], dias).total).toBe(23_000)  // 15k + 8k
-    expect(aggCajero(CLAVE_SISTEMA_OTROS, ['2026-09-01'], dias).total).toBe(6_000)
+    // Ni «Cajero-salón», ni «Salón sin mesero», ni «Sistema y otros» entran.
+    expect(CLAVES_CAJERO_TURNO as readonly string[]).not.toContain(CLAVE_CAJERO_SALON)
+    expect(aggCajero(CLAVE_CAJERO_SALON,     ['2026-09-01'], dias).total).toBe(15_000)
+    expect(aggCajero(CLAVE_SALON_SIN_MESERO, ['2026-09-01'], dias).total).toBe(8_000)
+    expect(aggCajero(CLAVE_SISTEMA_OTROS,    ['2026-09-01'], dias).total).toBe(6_000)
   })
 
   it('la columna salón de los turnos es 0 salvo barra/llevar/otro, que se muestran', () => {
@@ -140,19 +149,21 @@ describe('armarDia · los cuatro baldes en un día completo', () => {
     expect(caj(a.dia, CLAVE_CAJERO_TARDE)!.salon).toBe(0)
   })
 
-  it('«Salón sin mesero» es todo salón, por construcción', () => {
+  it('«Cajero-salón» y «Salón sin mesero» son todo salón, por construcción', () => {
+    expect(caj(a.dia, CLAVE_CAJERO_SALON)!.delivery).toBe(0)
+    expect(caj(a.dia, CLAVE_CAJERO_SALON)!.salon).toBe(15_000)
     expect(caj(a.dia, CLAVE_SALON_SIN_MESERO)!.delivery).toBe(0)
-    expect(caj(a.dia, CLAVE_SALON_SIN_MESERO)!.salon).toBe(23_000)
+    expect(caj(a.dia, CLAVE_SALON_SIN_MESERO)!.salon).toBe(8_000)
   })
 
-  it('los cuatro baldes conservan la marca `esCajero` — no se tocó', () => {
-    for (const k of [CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS]) {
+  it('los cinco baldes conservan la marca `esCajero` — no se tocó', () => {
+    for (const k of [CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_CAJERO_SALON, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS]) {
       expect(caj(a.dia, k)!.esCajero).toBe(true)
     }
   })
 
-  it('«Salón sin mesero» no es un empleado: queda fuera de la lista de meseros', () => {
-    // Es lo que lo mantiene fuera de Competencias y de Empleados, que leen `allSaloneros`.
+  it('ni «Cajero-salón» ni «Salón sin mesero» son un empleado: fuera de la lista de meseros', () => {
+    // Es lo que los mantiene fuera de Competencias y de Empleados, que leen `allSaloneros`.
     expect(allSaloneros({ '2026-09-01': a.dia })).toEqual(['MAXO'])
   })
 })
@@ -170,8 +181,59 @@ describe('REAGRUPA, NO RECALCULA: el día no se mueve', () => {
   it('el corte meseros / no-meseros no se movió', () => {
     const gen = aggGeneral(['2026-09-01'], dias, {})
     expect(gen.total).toBe(200_000)                      // meseros
-    expect(gen.cajTotal).toBe(34_000 + 50_000 + 23_000 + 6_000)
+    expect(gen.cajTotal).toBe(34_000 + 50_000 + 15_000 + 8_000 + 6_000)
     expect(gen.total + gen.cajTotal).toBe(NETA)
+  })
+
+  // ── CANDADO BYTE A BYTE (SPEC atribución, lectura mínima) ──────────────────────────────
+  // «Antes» = el día con «Cajero-salón» y «Salón sin mesero» fundidos en un solo balde, que
+  // es exactamente lo que producía `claveNoMesero` hasta este pase. Si partir el rótulo
+  // moviera un colón, un pax, una unidad o un producto del día, estas comparaciones fallan.
+  const fundir = (x: CajeroDay, y: CajeroDay): CajeroDay => {
+    const prods = new Map<string, [number, number]>()
+    for (const [nom, q, m] of [...x.prods, ...y.prods]) {
+      const p = prods.get(nom) ?? [0, 0]
+      prods.set(nom, [p[0] + q, p[1] + m])
+    }
+    const total = x.total + y.total, ordenes = x.ordenes + y.ordenes
+    return {
+      esCajero: true,
+      pax: (x.pax ?? 0) + (y.pax ?? 0),
+      total, salon: x.salon + y.salon, delivery: x.delivery + y.delivery,
+      iva: x.iva + y.iva, serv: x.serv + y.serv, ordenes,
+      ticketProm: ordenes > 0 ? Math.round(total / ordenes) : 0,
+      prods: [...prods.entries()].map(([nom, [q, m]]) => [nom, q, m] as [string, number, number]),
+    }
+  }
+  const antes = (): DiaData => {
+    const { [CLAVE_CAJERO_SALON]: cs, [CLAVE_SALON_SIN_MESERO]: ss, ...resto } = a.dia.saloneros
+    const saloneros: Record<string, SaloneroDay | CajeroDay> = { ...resto }
+    if (cs && ss) saloneros[CLAVE_SALON_SIN_MESERO] = fundir(cs as CajeroDay, ss as CajeroDay)
+    else if (cs) saloneros[CLAVE_SALON_SIN_MESERO] = cs
+    else if (ss) saloneros[CLAVE_SALON_SIN_MESERO] = ss
+    return { ...a.dia, saloneros }
+  }
+
+  it('CANDADO · getDayStats es byte-idéntico con el balde partido y sin partir', () => {
+    const despues = getDayStats(a.dia)
+    const previo  = getDayStats(antes())
+    expect(JSON.stringify(despues)).toBe(JSON.stringify(previo))
+    expect(despues.ventaNeta).toBe(NETA)
+  })
+
+  it('CANDADO · aggGeneral (neta, caja, pax, mix) es byte-idéntico antes/después', () => {
+    const d = { '2026-09-01': a.dia }
+    const p = { '2026-09-01': antes() }
+    expect(JSON.stringify(aggGeneral(['2026-09-01'], d, {})))
+      .toBe(JSON.stringify(aggGeneral(['2026-09-01'], p, {})))
+  })
+
+  it('CANDADO · los dos baldes nuevos suman exactamente lo que sumaba el viejo', () => {
+    const cs = caj(a.dia, CLAVE_CAJERO_SALON)!, ss = caj(a.dia, CLAVE_SALON_SIN_MESERO)!
+    expect(cs.total + ss.total).toBe(23_000)
+    expect(cs.salon + ss.salon).toBe(23_000)
+    expect(cs.ordenes + ss.ordenes).toBe(2)
+    expect((cs.pax ?? 0) + (ss.pax ?? 0)).toBe(4)
   })
 
   it('el delivery del día sigue saliendo por canal, ticket a ticket', () => {

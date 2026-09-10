@@ -109,9 +109,9 @@ describe('armarDia', () => {
     expect(total).toBe(20000)
   })
 
-  it('el cajero DENTRO del salón no es un cajero: es «Salón sin mesero»', () => {
-    // Venta de salón que la factura no le acredita a ningún mesero. No suma al Total Cajeros;
-    // quién comandó cada línea se resuelve en la otra lente (`usuario_registra`).
+  it('el cajero DENTRO del salón no es un cajero de turno: es «Cajero-salón»; sin pedido es «Salón sin mesero»', () => {
+    // Venta de salón que la factura no le acredita a ningún mesero. Ninguno suma al Total
+    // Cajeros; quién comandó cada línea se resuelve en la otra lente (`usuario_registra`).
     const a = armar('2026-09-01', [
       ticket(),
       ticket({ id: 't2', numero_factura: '5002', salonero_login: null,
@@ -119,8 +119,9 @@ describe('armarDia', () => {
       ticket({ id: 't3', numero_factura: '5003', salonero_login: null,
                registrado_por: 'sin_pedido', canal: 'salon', valor_servido_crc: 2000 }),
     ], [], '2026-09-01')
-    expect(Object.keys(a.dia.saloneros).sort()).toEqual(['MAXO', 'Salón sin mesero'])
-    expect((a.dia.saloneros['Salón sin mesero'] as CajeroDay).total).toBe(10000)
+    expect(Object.keys(a.dia.saloneros).sort()).toEqual(['Cajero-salón', 'MAXO', 'Salón sin mesero'])
+    expect((a.dia.saloneros['Cajero-salón'] as CajeroDay).total).toBe(8000)
+    expect((a.dia.saloneros['Salón sin mesero'] as CajeroDay).total).toBe(2000)
   })
 
   it('caja y sistema salen marcados `esCajero` — fuera del ranking, dentro del total', () => {
@@ -514,12 +515,12 @@ describe('nombreSalonero', () => {
     const a = armarDia('2026-09-01', [
       ticket({ id: 'a', salonero_login: '026' }),
       ticket({ id: 'b', salonero_login: '099' }),
-      // Cajero en el salón → «Salón sin mesero». Ojo con el parecido: `099 · sin asignar` es un
-      // MESERO al que no se le pudo poner nombre; `Salón sin mesero` es una factura SIN mesero.
+      // Cajero en el salón → «Cajero-salón». Ojo con el parecido: `099 · sin asignar` es un
+      // MESERO al que no se le pudo poner nombre; «Cajero-salón» es la caja timbrando sin mesero.
       ticket({ id: 'c', salonero_login: null, registrado_por: 'cajero', canal: 'salon' }),
     ], [], '2026-09-01', nombres)
     expect(Object.keys(a.dia.saloneros).sort())
-      .toEqual(['099 · sin asignar', 'MAXO', 'Salón sin mesero'])
+      .toEqual(['099 · sin asignar', 'Cajero-salón', 'MAXO'])
   })
 
   it('sin mapa de Empleados el día igual sale por nombre, vía roster', () => {

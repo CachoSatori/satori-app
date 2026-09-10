@@ -398,7 +398,7 @@ export function ventasPorTurnoPoS(tickets: TicketNdfConId[]): { turno: string; n
 // re-exportan acá para no romper a quien ya los importaba desde este módulo.
 export {
   ETIQUETA_TURNO_POS, etiquetaTurnoPoS, claveNoMesero, etiquetaNoMesero,
-  CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS,
+  CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_CAJERO_SALON, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS,
   CLAVES_CAJERO_TURNO,
 } from './baldesNoMesero'
 

@@ -1,11 +1,13 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { todayCR } from '../../shared/utils'
 import type { DiasMap } from '../../shared/types/ventas'
 import {
   aggCajero, esEntradaCajero,
   fi, fmtDate, datesInRange, allDates, dowLabel, dayOfWeek,
 } from './ventasUtils'
-import { CLAVES_CAJERO_TURNO, CLAVE_SISTEMA_OTROS } from './baldesNoMesero'
+import { CLAVES_CAJERO_TURNO, CLAVE_CAJERO_SALON, CLAVE_SISTEMA_OTROS } from './baldesNoMesero'
+import { BloquesLentes } from './VentasSaloneroLineas'
+import { getLentesDesdePos, type LentesConNombres } from './saloneroLentesDatos'
 
 interface Props {
   dias: DiasMap
@@ -37,8 +39,11 @@ export default function VentasCajeros({ dias }: Props) {
   // `claveNoMesero()` en `ventasEnVivoDatos`, así que acá las claves son FIJAS y conocidas —
   // ya no se descubren por login, que era lo que abría tarjetas `Caja · 388` sin sentido.
   //
-  // El TOTAL CAJEROS es la suma de esas dos y NADA más. Los otros dos baldes que arma el
+  // El TOTAL CAJEROS es la suma de esas dos y NADA más. Los otros tres baldes que arma el
   // mapeo se muestran o se derivan aparte, a propósito:
+  //   · `Cajero-salón` (caja timbrando en el SALÓN, sin mesero en la factura) se muestra
+  //     abajo como tarjeta propia, fuera del total: no es delivery/llevar y no es un mesero.
+  //     Quién comandó cada línea se lee en la lente por línea, también abajo.
   //   · `Salón sin mesero` vive en la pestaña Saloneros, no acá.
   //   · `Sistema y otros` se muestra abajo, fuera del total.
   const cajeroNames = CLAVES_CAJERO_TURNO as readonly string[]
@@ -49,6 +54,30 @@ export default function VentasCajeros({ dias }: Props) {
 
   /** Fuera del Total Cajeros, pero su plata tiene que verse. */
   const otrosAgg = useMemo(() => aggCajero(CLAVE_SISTEMA_OTROS, range, dias), [range, dias])
+  /** Idem: la venta de salón que timbró la caja. Fuera del total, en su propia tarjeta. */
+  const cajeroSalonAgg = useMemo(() => aggCajero(CLAVE_CAJERO_SALON, range, dias), [range, dias])
+
+  // ── La lente por LÍNEA, expuesta acá (SPEC atribución, lectura mínima) ─────────────────
+  // El balde por FACTURA no sabe quién comandó; la lente por línea sí (`usuario_registra`).
+  // Se lee a pedido, con el mismo rango de arriba, y se pinta con el mismo componente de
+  // Saloneros por línea: es la MISMA lente, no otra cuenta. Las lentes no se suman con los
+  // baldes de esta pantalla (regla firmada). Solo lectura.
+  const [lente, setLente]               = useState<({ desde: string; hasta: string } & LentesConNombres) | null>(null)
+  const [lenteCargando, setLenteCargando] = useState(false)
+  const [lenteError, setLenteError]     = useState<string | null>(null)
+  const leerLente = useCallback(async () => {
+    setLenteCargando(true)
+    setLenteError(null)
+    try {
+      const datos = await getLentesDesdePos({ desde: from, hasta: to })
+      setLente({ desde: from, hasta: to, ...datos })
+    } catch (e) {
+      setLenteError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLenteCargando(false)
+    }
+  }, [from, to])
+  const lenteVigente = lente !== null && lente.desde === from && lente.hasta === to
 
   const totTotal    = cajAggs.reduce((s, c) => s + c.total, 0)
   const totSalon    = cajAggs.reduce((s, c) => s + c.salon, 0)
@@ -123,7 +152,7 @@ export default function VentasCajeros({ dias }: Props) {
       <>
       {/* KPIs — el total son los DOS turnos y nada más */}
       <div className="vt-kpi-grid">
-        <div className="vt-kpi red" title="Suma de Cajero turno mañana + Cajero turno tarde. No incluye «Salón sin mesero» (venta de salón sin mesero, en la pestaña Saloneros) ni «Sistema y otros».">
+        <div className="vt-kpi red" title="Suma de Cajero turno mañana + Cajero turno tarde. No incluye «Cajero-salón» (venta de salón timbrada por la caja, abajo), «Salón sin mesero» (en la pestaña Saloneros) ni «Sistema y otros».">
           <div className="vt-kpi-label">Total cajeros</div>
           <div className="vt-kpi-val">{fi(totTotal)}</div>
           <div className="vt-kpi-sub">mañana + tarde</div>
@@ -205,6 +234,29 @@ export default function VentasCajeros({ dias }: Props) {
         ))}
       </div>
 
+      {/* «Cajero-salón»: la caja timbrando en el SALÓN. Tarjeta propia, fuera del Total Cajeros
+          (no es delivery/llevar) y fuera del ranking (no es una persona). El nombre de quien
+          comandó no está en la factura: se lee en la lente por línea, más abajo. */}
+      {cajeroSalonAgg.total !== 0 && (
+        <div style={{ background: 'var(--vt-paper)', border: '1px dashed var(--vt-border)', borderRadius: 3, padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.85rem' }}>
+                {CLAVE_CAJERO_SALON}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#888', marginTop: '0.15rem' }}>
+                Venta de salón timbrada por la caja, sin mesero en la factura · quién comandó
+                se lee en la lente por línea · <strong>no suma al Total Cajeros</strong>
+              </div>
+            </div>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.9rem' }}>
+              {fi(cajeroSalonAgg.total)}
+              <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 400 }}> · {cajeroSalonAgg.ordenes} órdenes</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Fuera del Total Cajeros, pero a la vista: si esta plata existe, tiene que verse. */}
       {otrosAgg.total !== 0 && (
         <div style={{ background: 'var(--vt-paper)', border: '1px dashed var(--vt-border)', borderRadius: 3, padding: '0.75rem 1rem', marginBottom: '1.5rem' }}>
@@ -224,6 +276,39 @@ export default function VentasCajeros({ dias }: Props) {
           </div>
         </div>
       )}
+
+      {/* ── La lente por línea: quién comandó lo que la caja timbró ───────────────────── */}
+      <div className="vt-sl">Atribución por línea</div>
+      <div style={{ background: 'var(--vt-paper)', border: '1px solid var(--vt-border)', borderRadius: 3, padding: '0.75rem 1rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '0.72rem', color: '#555', maxWidth: '48rem' }}>
+            Las tarjetas de arriba van por <strong>factura</strong>: la caja timbró, y la factura no
+            dice quién comandó. La lente por <strong>línea</strong> sí lo sabe
+            (<code>UsuarioRegistra</code>): con ella lo que timbró la caja en el salón se lee
+            por persona. Es la misma lente de Saloneros por línea, para el rango de arriba.{' '}
+            <strong>No se suma</strong> con las tarjetas.
+          </div>
+          <button type="button" className="vt-range-btn" disabled={lenteCargando} onClick={leerLente}>
+            {lenteCargando ? 'Leyendo…' : lenteVigente ? 'Volver a leer' : 'Leer lente por línea'}
+          </button>
+        </div>
+        {lenteError && (
+          <div style={{ fontSize: '0.72rem', color: 'var(--vt-red,#a03030)', marginTop: '0.5rem' }}>
+            <strong>No se pudo leer:</strong> {lenteError}
+          </div>
+        )}
+        {lente && !lenteVigente && (
+          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '0.5rem' }}>
+            <strong>Moviste el rango.</strong> Lo de abajo es de {lente.desde} → {lente.hasta}.
+            Tocá <strong>Volver a leer</strong> para el rango nuevo.
+          </div>
+        )}
+        {lente && (
+          <div className="apos" style={{ marginTop: '0.75rem' }}>
+            <BloquesLentes lentes={lente.lentes} nombres={lente.nombres} />
+          </div>
+        )}
+      </div>
 
       {/* Day-of-week averages */}
       <div className="vt-sl">Promedio por día de semana</div>

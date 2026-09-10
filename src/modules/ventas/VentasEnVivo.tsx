@@ -8,7 +8,7 @@ import {
   esSinAsignar, getSnapshotEnVivo, horaCorteCR, jornadaActualCR, jornadaDesplazada, REFRESH_MS,
 } from './ventasEnVivoDatos'
 import {
-  LOCALES, mixPorCategoria, prodsDelDia, ticketsDelDia, ticketPromedioDe,
+  LOCALES, mixPorCategoria, prodsDelDia, promPorPaxDe, ticketsDelDia, ticketPromedioDe,
   variacionPct, paxEsConfiable, UMBRAL_PAX_CONFIABLE,
 } from './ventasEnVivoTypes'
 import type { LocalId, SnapshotEnVivo } from './ventasEnVivoTypes'
@@ -66,6 +66,11 @@ const MONTO_ESTIMADO =
 /** Cero de verdad: hay líneas en el pedido pero ninguna con valor servido (una cortesía). */
 const MONTO_CERO_REAL =
   'El pedido tiene líneas pero ninguna con valor servido: cortesía, dueños o solo pax.'
+
+/** El rótulo del promedio por pax de una mesa abierta: sale del estimado, hereda sus límites. */
+const PROM_PAX_ESTIMADO =
+  'ESTIMADO: monto estimado por catálogo ÷ pax del pedido. Mientras la mesa siga abierta es ' +
+  'una lectura de ritmo, no un ticket promedio. Nunca entra en la neta ni en el cuadre.'
 
 /**
  * La marca de la mesa arrastrada de otra jornada. Se explica en el `title` porque la fila NO se
@@ -435,7 +440,7 @@ export default function VentasEnVivo({ metas }: Props) {
                       <th scope="col" className="r">PAX</th>
                       <th scope="col" className="r">Abierta</th>
                       <th scope="col" className="r">Pedido ₡</th>
-                      <th scope="col" className="r">Ticket/mesa</th>
+                      <th scope="col" className="r">Prom/pax</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -472,9 +477,14 @@ export default function VentasEnVivo({ metas }: Props) {
                                 </span>}
                         </td>
                         <td className="r">
-                          <span className="apos-pendiente apos-sin-dato" title={MONTO_PENDIENTE}>
-                            sin total
-                          </span>
+                          {(() => {
+                            const prom = promPorPaxDe(m.montoEstimado, m.paxPedido)
+                            return prom === null
+                              ? <span className="apos-pendiente" title={MONTO_PENDIENTE}>—</span>
+                              : <span className="apos-estimado" title={PROM_PAX_ESTIMADO}>
+                                  ≈ {fi(prom)} <small>/pax estimado</small>
+                                </span>
+                          })()}
                         </td>
                       </tr>
                     ))}

@@ -338,6 +338,18 @@ export function ticketPromedioDe(venta: number, tickets: number): number {
 }
 
 /**
+ * Promedio por pax de una mesa abierta = montoEstimado ÷ paxPedido. `null` cuando falta
+ * cualquiera de los dos o el pax es 0: no se divide por cero ni se inventa un promedio, y la
+ * pantalla muestra «—». Un estimado de ₡0 con pax sí da 0 (cortesía real, no dato ausente).
+ */
+export function promPorPaxDe(montoEstimado: number | null, paxPedido: number | null): number | null {
+  if (montoEstimado === null || paxPedido === null) return null
+  if (!Number.isFinite(montoEstimado) || !Number.isFinite(paxPedido)) return null
+  if (paxPedido <= 0) return null
+  return Math.round(montoEstimado / paxPedido)
+}
+
+/**
  * Variación porcentual contra una referencia. `null` cuando no hay contra qué comparar —
  * distinto de `0`, que sería «igual que la referencia».
  */

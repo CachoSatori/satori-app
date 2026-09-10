@@ -135,6 +135,13 @@ export interface OpenIngest {
   pax?:            number | null
   pax_alerta?:     PaxAlerta | null
   updated_at?:     string | null
+  // ── Frente C v1: PROVISIONALES. Nunca entran en neta / cuadre / pos_ndf_tickets. ──────
+  /** Estimado por catálogo, bruto. `null` = no se pudo calcular; `0` = cero real (cortesía). */
+  monto_estimado_crc?: number | null
+  /** Pax por artículo (677 + 2×678) del pedido abierto. `null` = sin esas líneas. */
+  pax_pedido?:         number | null
+  /** Líneas con valor servido en el pedido. `null` = sin líneas usables. */
+  items_valor?:        number | null
 }
 
 export interface CursorIngest {
@@ -218,6 +225,9 @@ export interface OpenRow {
   pax:            number | null
   pax_alerta:     string | null
   updated_at:     string
+  monto_estimado_crc: number | null
+  pax_pedido:         number | null
+  items_valor:        number | null
 }
 
 export interface CursorRow {
@@ -438,8 +448,27 @@ export function normalizarOpen(local: string, o: unknown, ahora: string): Result
       pax_alerta:     enUnion<PaxAlerta>(x.pax_alerta, PAX_ALERTA_OK),
       // El snapshot SIEMPRE queda fechado: si el agente no lo dice, vale el momento del lote.
       updated_at:     upd.valor ?? ahora,
+      // Provisionales (Frente C). Número ≥ 0 o null. NUNCA 0 por defecto: ausente o ilegible
+      // es «no sé» (null), y solo un 0 mandado a propósito es un cero real.
+      monto_estimado_crc: montoNoNegativo(x.monto_estimado_crc),
+      pax_pedido:         enteroNoNegativo(x.pax_pedido),
+      items_valor:        enteroNoNegativo(x.items_valor),
     },
   }
+}
+
+/** `null` si falta, no es número, es negativo o no es finito. Conserva decimales. */
+const montoNoNegativo = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null
+}
+
+/** `null` si falta, no es número, es negativo o no es finito. Redondea a entero. */
+const enteroNoNegativo = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null
 }
 
 const tiene = (o: object, k: string): boolean => Object.prototype.hasOwnProperty.call(o, k)

@@ -1,14 +1,16 @@
 # Satori App — Estado del proyecto
 
 ## ⚡ ARRANQUE — foto real del repo (se REEMPLAZA en cada entrega, no se acumula)
-**Al día: 2026-08-21**
+**Al día: 2026-09-11**
 
-- Punteros: `staging = origin/staging = 9d477ba` (validación piloto v3) · `origin/main = 3e54aa4` (PROD, intacto) · trabajo en `staging`. (`main` local 9 atrás = cosmético.)
+- Punteros (verificados contra origin): `main = 3e54aa4` (PROD, intacto) · `staging ≡ integracion/analitica-staging = 35eeaff` (las DOS ramas, mismo hash) · agente del PoS `feat/pos-desglose = 14bd278` (origin y PC sincronizados, corriendo con el fix 388).
+- **Ramas canónicas (fijado 2026-09-11):** `staging` e `integracion/analitica-staging` son **la misma verdad** — todo pase va en FF a las DOS (Cloudflare Pages despliega desde `integracion/analitica-staging`). `feat/pos-desglose` = la rama del **agente** que corre en la PC del PoS y publica a Supabase staging. La vieja `origin/staging` de handoffs anteriores es **legado**: la canónica es el par de arriba.
 - Sagrados (blob): tipCalculations `7603ba5a` · cashUtils `b597c697` · posFiscal `a3fd445f` (posFiscal solo en staging).
-- Migraciones: staging `040–062` · prod `040–054` · próximo libre `063`.
-- EN VIVO: BioTime Fase 1 — el agente en la PC de ST drenó 22.403 marcas (`last_id=213972`, ~68% mapeadas, 15 códigos sin mapear). F1d sin arrancar (`punch_exceptions`=0, `work_days source='biotime'`=0).
-- Sigue, en orden: (1) Task Scheduler del agente en la PC de ST · (2) decisión identidad BioTime §7 (5 SELECT → decidir → mapear + Angela) · (3) F1d. Todo lo que toca plata/esquema/prod = firma.
-- Detalle: SPECs/handoffs → PROYECTO claude.ai (no en el repo) · historial → ESTADO-ARCHIVO.md · fases → ROADMAP.md · backlog → PROMPT-CONTINUACION.md.
+- Migraciones: staging `040–065` (063 desglose fiscal · 064 monto/pax estimado de mesa abierta · 065 `detalle_productos`) · prod `040–054` · próximo libre `066`.
+- EN STAGING, validados (todo en staging; `main` intacto): **Frente C** (≈₡ estimado + pax + prom/pax de mesa abierta, provisional, NUNCA entra en neta/Hoy/cuadre) · **atribución de salón por línea** (`claveNoMesero` + lentes A/B en Cajeros, sin doble conteo) · **desplegable de productos por mesa abierta** (mig 065) · **fix 388** (caja de barra = CAJA, `esCajeroTurno`; aplica hacia adelante, histórico pendiente de backfill con firma).
+- Auditoría 388 + 266 (read-only, 2026-09-10/11): 388 limpio en código; 266 = fan-out del `LEFT JOIN FAC_Empleados` **confirmado cosmético** (el Edge deduplica por `numero_factura` y la tabla tiene `unique (local, numero_factura)`); sin bug de plata. Detalle → PROYECTO claude.ai.
+- Sigue, en orden: (1) backfill histórico 388 (mapa read-only primero; toca datos → firma) · (2) pase de todo a `main` (bloqueado hasta validación física sostenida + firma; ⚠️ auto-aplica 064/065 a prod) · (3) catálogo del PoS (tildes en `FAC_Productos`, fuera de la app). Todo lo que toca plata/esquema/prod = firma.
+- Detalle: SPECs/handoffs → PROYECTO claude.ai (no en el repo; CC no lo ve, se le pasa en TEXTO) · historial → ESTADO-ARCHIVO.md · fases → ROADMAP.md · backlog → PROMPT-CONTINUACION.md.
 
 > **Regla (Definition of Done):** ninguna entrega se cierra sin actualizar este bloque ⚡ARRANQUE + su fila de tabla, EN EL MISMO COMMIT.
 
@@ -20,7 +22,7 @@
 > SPECs e índice → [docs/README.md](docs/README.md).
 
 **Stack:** React 19 + TS strict + Vite + PWA · Supabase (Postgres + RLS + Edge Functions) · realtime.
-**Despliegue:** `main` → **PROD** (GitHub Pages, base `/satori-app/`) · `staging` → **Cloudflare Pages**.
+**Despliegue:** `main` → **PROD** (GitHub Pages, base `/satori-app/`) · `integracion/analitica-staging` (≡ `staging`) → **Cloudflare Pages**.
 
 ---
 
@@ -43,7 +45,12 @@ Núcleo: [`pozo.ts`](src/modules/cash/pozo.ts) · [`cierrePozo.ts`](src/modules/
 | Rama | Hash | Qué es |
 |---|---|---|
 | `main` | **`3e54aa4`** | **PROD, en uso.** Todo lo no-PoS + **Proveedores Fases A y B** (notificación de pago, saldo a favor con reparto FIFO, comprobantes con imagen por WhatsApp). |
-| `staging` | **`7ef7664`** | **Fuente de verdad del desarrollo** = `main` + PoS/KDS/comandero + FE (SIM) + inventario COGS + los **docs de Salarios** (`claude/`) + **Salarios/Empleados U0–U0b** (migs 055–058) + **BioTime Fase 1** (057 + `ingest-punches` + agente en vivo). Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
+| `staging` **≡** `integracion/analitica-staging` | **`35eeaff`** (las dos) | **Fuente de verdad del desarrollo** = `main` + PoS/KDS/comandero + FE (SIM) + inventario COGS + los **docs de Salarios** (`claude/`) + **Salarios/Empleados U0–U0b** (migs 055–058) + **BioTime Fase 1** (057 + `ingest-punches` + agente en vivo) + **PoS "Nube de Fuego"** (migs 062–065, Edge `ingest-ndf`, módulo Ventas leyendo del PoS, En vivo, Frente C, atribución por línea, fix 388). Son la **misma verdad**: todo FF va a las DOS. Cloudflare Pages despliega desde `integracion/analitica-staging`. Su base está en **CERO** ([ARRANQUE-CERO.md](scripts/refresh-staging/ARRANQUE-CERO.md)). |
+| `feat/pos-desglose` | **`14bd278`** | **Rama del AGENTE del PoS** (`pos-bridge/`), la que corre en la PC del PoS (`DESKTOP-25PRDR1`, tarea "Satori PoS Bridge") y publica a Supabase staging vía Edge `ingest-ndf`. Origin y PC sincronizados. **No se mergea a `main`.** |
+
+> **Nombres de rama canónicos (fijado 2026-09-11):** `main` = PROD · `staging` ≡ `integracion/analitica-staging`
+> (alineadas, mismo hash, FF a las dos en cada pase) · `feat/pos-desglose` = agente. La `origin/staging` "vieja" que
+> citaban handoffs anteriores es **legado**; no hay una tercera verdad.
 
 > **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 > 🛑 **RITUAL antes de CUALQUIER comando de base:** `cat supabase/.temp/project-ref` **y** `linked-project.json`
@@ -61,7 +68,7 @@ Fase 2 · realtime · offline · Bandeja unificada + Revisión de inventario · 
 
 **Solo en STAGING:** **el PoS completo** (catálogo/salón, comandero, KDS, cobro+splits+ticket SIM, FE SIM, inventario activo COGS) — migs 022–037, y **`posFiscal.ts` no existe en `main`**. **DIFERIDO**, bloqueado por el PILAR de auth. También **SALARIOS Fase 0** (mig **055** + módulo `src/modules/salarios/` + ruta `/salarios`, owner/manager) y los **docs de Salarios** (`claude/`). En rama aparte sin merge: `propina-pool`.
 
-> ⚠️ **Salarios NO está en prod.** U0 + BioTime Fase 1 viven solo en `staging` (`7ef7664`) y su pase a `main` es **su propio
+> ⚠️ **Salarios NO está en prod.** U0 + BioTime Fase 1 viven solo en `staging` (`35eeaff`) y su pase a `main` es **su propio
 > ciclo con firma** — la mig `055` toca esquema y, con Branching ON, **pushearla a `main` la aplica a la base de prod**.
 
 > **Contrato de divergencia:** lo legítimo en `main..staging` es **PoS/FE/inventario + config Cloudflare + docs
@@ -74,7 +81,7 @@ Fase 2 · realtime · offline · Bandeja unificada + Revisión de inventario · 
 | Entorno | Ledger (`schema_migrations`) |
 |---|---|
 | **PROD** | **✅ 39 filas — contiguo `040–054`** (001–008, 0090, 0095, 010–021, 038–054). **0 pendientes.** |
-| **STAGING** | **✅ rango 040–062** (055 F0 · 056 U0a · 057 F1a · 058 U0b · 059 F1d · 060 pago idempotente · 061 hora habitual · **062 PoS ndf**, por `db push`, registradas) + PoS (022–037). |
+| **STAGING** | **✅ rango 040–065** (055 F0 · 056 U0a · 057 F1a · 058 U0b · 059 F1d · 060 pago idempotente · 061 hora habitual · **062 PoS ndf** · **063 desglose fiscal** · **064 monto/pax estimado de mesa abierta** · **065 `detalle_productos`**, por `db push`, registradas) + PoS (022–037). |
 
 - **047/053/054 aplicadas a prod el 2026-08-17** con `db push --include-all` desde un worktree linkeado a prod.
   La **047 entró fuera de orden** (después de la 052 ya aplicada) y `--include-all` lo resolvió **sin ningún
@@ -99,7 +106,13 @@ Fase 2 · realtime · offline · Bandeja unificada + Revisión de inventario · 
 - **059 · 060 · 061 ya estaban en el ledger de staging** al 2026-09-04: `supabase migration list --linked`
   las listó en la columna **Remote** — está confirmado, no es una inferencia del dry-run. Lo único que
   no se leyó son las **fechas exactas de aplicación** de esas tres.
-- **Próximo número libre: `063`.** ⚠️ La rama `metas_personales` también reclamaba
+- **`063 pos_ndf_desglose_fiscal`** (valor_servido / iva / regalia / clase_ingreso sobre `pos_ndf_tickets`),
+  **`064 pos_ndf_open_monto_pax`** (`monto_estimado_crc numeric(14,2)`, `pax_pedido smallint`, `items_valor
+  smallint`, todas nullable — Frente C) y **`065 pos_ndf_open_detalle_productos`** (`detalle_productos jsonb`,
+  nullable): **aplicadas SOLO en STAGING y en el ledger**. Aditivas (`add column if not exists`). **NO en prod.**
+  ⚠️ Al pasar el paquete PoS a `main`, Branching ON las **auto-aplica a la base de prod**: la firma del pase
+  tiene que ser explícita sobre ese efecto.
+- **Próximo número libre: `066`.** ⚠️ La rama `metas_personales` también reclamaba
   051/052/053 → **renumerar** antes de traerla.
 
 ## (d) Build por módulo
@@ -124,6 +137,11 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, smoke pendiente · 🔲
 | **Salarios — Fase 1 · Puente BioTime (F1a/F1b/F1c)** (mig 057 marcas + Edge `ingest-punches` + agente en ST) | 🧪 **EN VIVO en staging** — 22.403 marcas (`last_id=213972`, ~68% mapeadas). Falta **F1d** + **decisión identidad §7** |
 | Salarios — Fases 2–5 (núcleo · consolidado · % ventas · liquidaciones) | 🔲 no iniciadas |
 | PoS (comandero/KDS/cobro/ticket SIM) · FE SIM · Inventario activo COGS | 🧪 staging (migs 022–037) |
+| **PoS "Nube de Fuego" — puente + Ventas desde el PoS** (migs 062/063 · Edge `ingest-ndf` · agente `pos-bridge/` en `feat/pos-desglose` · P2 `ventasFuente.ts` · En vivo · turnos por lote de cierre) | 🧪 **EN VIVO en staging** — agente corriendo en la PC del PoS (`14bd278`), backfill 5-ene-2024 → hoy |
+| **Frente C — ≈₡ estimado + pax + prom/pax de mesa abierta** (mig 064; catálogo NET × canal − descuento; fail-closed `null` ≠ `0`) | 🧪 **VALIDADO EN VIVO en staging.** Provisional: **NUNCA entra en neta/Hoy/cuadre** (backtest 17/20 exacto) |
+| **Atribución de salón por línea** (`claveNoMesero`: Cajero-salón + «Salón sin mesero» · lentes A ranking / B contexto en Cajeros, sin doble conteo · `armarDia` intacto) | 🧪 **VALIDADO en staging** (`89ae60e`) |
+| **Desplegable de productos por mesa abierta** (mig 065 `detalle_productos`; nombre × cantidad, sin 677/678; fail-closed por mesa) | 🧪 **VALIDADO EN VIVO en staging** |
+| **Fix 388 — caja de barra es CAJA** (`LOGIN_CAJERO_BAR` + `esCajeroTurno` en `mapTicket.ts`; agente `14bd278`) | 🧪 **hecho, aplica hacia adelante.** Histórico con `salonero_login='388'` → backfill con firma |
 
 ## (e) Pendientes de PLATA — esperan FIRMA del dueño
 

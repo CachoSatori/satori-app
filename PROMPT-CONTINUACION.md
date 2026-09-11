@@ -1,4 +1,4 @@
-# Continuación — backlog priorizado (al día: 2026-08-21)
+# Continuación — backlog priorizado (al día: 2026-09-11)
 
 > **✅ EL REDISEÑO DE CAJAS (POZO ÚNICO) ESTÁ EN PROD Y VALIDADO.** Se firmó, construyó, pasó y se
 > validó físicamente en un día: el **primer cierre real bajo el pozo (22/07) CUADRÓ** y las cargas
@@ -9,7 +9,9 @@
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
 > pases viejos) son **referencia histórica**.
 
-> **AL DÍA (2026-08-21):** `main` = **`3e54aa4`** (intacto) · `staging` = **`7ef7664`** (F1c). **BioTime Fase 1 EN VIVO**: migs **056 (U0a) / 057 (F1a) / 058 (U0b)** + Edge `ingest-punches` (F1b) + agente `tools/biotime-bridge/` corriendo en la PC del reloj de ST. Drenó **22.403 marcas** (`last_id=213972`, ~68% mapeadas, 15 códigos sin mapear); F1d sin arrancar (greenfield). **Sigue:** (1) Task Scheduler del agente en ST · (2) decisión identidad BioTime §7 (5 SELECT → decidir → mapear + Angela) · (3) F1d. Detalle vivo → PROYECTO claude.ai (HANDOFF-2026-08-21). Todo toca plata/esquema → firma.
+> **AL DÍA (2026-09-11):** `main` = **`3e54aa4`** (PROD, intacto) · `staging` **≡** `integracion/analitica-staging` = **`35eeaff`** (las dos, mismo hash) · agente del PoS `feat/pos-desglose` = **`14bd278`**. **PoS "Nube de Fuego" EN VIVO en staging**: migs **062–065**, Edge `ingest-ndf`, agente `pos-bridge/` corriendo en la PC del PoS, módulo Ventas leyendo del PoS (P2), En vivo. **Validados en staging:** Frente C (≈₡/pax/prom-pax de mesa abierta, provisional, nunca en neta/Hoy/cuadre) · atribución de salón por línea · desplegable de productos por mesa abierta · fix 388. Auditoría 388 + 266: sin bug de plata (266 = fan-out colapsado por el Edge y el `unique (local, numero_factura)`). **Sigue:** (1) backfill histórico 388 (mapa read-only → firma) · (2) pase de todo a `main` (validación física sostenida + firma; ⚠️ auto-aplica 064/065 a prod) · (3) catálogo del PoS (tildes en `FAC_Productos`). Detalle vivo → PROYECTO claude.ai (HANDOFF consolidado 2026-09-11; CC no lo ve → texto verbatim). Todo toca plata/esquema → firma.
+>
+> **Ramas canónicas (fijado 2026-09-11):** `main` = PROD · `staging` **≡** `integracion/analitica-staging` = la **misma verdad**, alineadas — **todo FF va a las DOS** (Cloudflare Pages despliega desde `integracion/analitica-staging`) · `feat/pos-desglose` = la rama del **agente** del PoS (no se mergea a `main`). La `origin/staging` que citan las secciones históricas de abajo es **legado**: la canónica es el par.
 
 > **🔌 MODELO DE MIGRACIONES A PROD — ADOPTADO (2026-08-10, REEMPLAZA el viejo "db push frenado / prod solo por
 > canal firmado"):** `main` = la **base de producción** del proyecto Supabase de prod (`yiczgdti`, **Branching

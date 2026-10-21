@@ -192,35 +192,47 @@ describe('paridad de FORMA con armarDia / «En vivo»', () => {
 
 // ── El borde del superset ──────────────────────────────────────────────────────────────────
 
-describe('el borde del rango — el lote que cruza la medianoche', () => {
-  // 222 que abre el 5-sep 18:30 y cierra el 6-sep 01:00. Su jornada es el 5.
+describe('el corte de día — por FACTURA, no por lote de cierre', () => {
+  // 222 que abre el 5-sep 18:30 y cierra el 6-sep 01:00. Antes, el lote entero iba al 5. Ahora
+  // cada factura va al día CR de su `fecha_registra`: el corte del reporte del PoS.
   const CRUZA = lote(200001, 200003, {
     cajero: '222', cierre: '2026-09-06T01:00:00-06:00', primero: '2026-09-05T18:30:00-06:00',
     pasoMin: 200,   // 18:30 · 21:50 · 01:10 del día siguiente
   })
+  const paxDe = (d: DiaData) => Object.values(d.saloneros)
+    .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
 
-  it('cae ENTERO en la jornada que abrió, con la factura de después de medianoche adentro', () => {
-    const dias = armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-05', hasta: '2026-09-05' })
-    expect(Object.keys(dias)).toEqual(['2026-09-05'])
-    const pax = Object.values(dias['2026-09-05'].saloneros)
-      .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
-    expect(pax).toBe(3 * 2)     // las tres, incluida la de la 01:10
+  it('la factura de después de medianoche va al día SIGUIENTE, aunque su lote abriera antes', () => {
+    const dias = armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-05', hasta: '2026-09-06' })
+    expect(Object.keys(dias)).toEqual(['2026-09-05', '2026-09-06'])
+    expect(paxDe(dias['2026-09-05'])).toBe(2 * 2)     // 18:30 y 21:50
+    expect(paxDe(dias['2026-09-06'])).toBe(1 * 2)     // la de la 01:10
   })
 
-  it('NO se cuela en la jornada del 6 aunque tenga facturas con fecha del 6', () => {
+  it('pedir solo el 6 trae SOLO la factura de la madrugada', () => {
     const dias = armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-06', hasta: '2026-09-06' })
-    expect(dias).toEqual({})
+    expect(Object.keys(dias)).toEqual(['2026-09-06'])
+    expect(paxDe(dias['2026-09-06'])).toBe(2)
   })
 
-  it('el lote que abrió ANTES del rango se descarta entero, no a medias', () => {
-    // Es el motivo del margen de −1 día en `ventanaRangoJornadas`: si el fetch arrancara en
-    // `desde`, este lote se vería truncado (solo la factura de la madrugada) y se colaría en el
-    // 5 con la jornada mal calculada. Con el lote completo a la vista, su jornada da 4 y sale.
+  it('el superset del fetch no se cuela: las facturas del 4 quedan afuera del 5', () => {
     const dias = armar([...CRUZA, ...LOTE_4_TARDE], [], { desde: '2026-09-05', hasta: '2026-09-05' })
     expect(Object.keys(dias)).toEqual(['2026-09-05'])
-    const pax = Object.values(dias['2026-09-05'].saloneros)
-      .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
-    expect(pax).toBe(3 * 2)     // solo el lote que abrió el 5; las 13 del 4 quedaron afuera
+    expect(paxDe(dias['2026-09-05'])).toBe(2 * 2)     // las dos del 5; las 13 del 4 y la del 6, afuera
+  })
+
+  it('caja cerrada al día siguiente (corte de luz 10-oct-2026): el lote NO arrastra el día', () => {
+    // El 222 del 10 no pudo cerrar y cerró el 11 a las 12:00, en la MISMA pasada que lo que se
+    // vendió el 11 a la mañana. Con el lote, todo caía en el 10 (su apertura). Por factura, no.
+    const CIERRE_TARDIO = '2026-10-11T12:00:00-06:00'
+    const tickets = [
+      ticket({ id: 'n1', fecha_registra: '2026-10-10T20:00:00-06:00', fecha_cierra: CIERRE_TARDIO, valor_servido_crc: 50000 }),
+      ticket({ id: 'n2', fecha_registra: '2026-10-11T10:30:00-06:00', fecha_cierra: CIERRE_TARDIO, valor_servido_crc: 83000 }),
+    ]
+    const lineas = [linea('n1', { monto: 50000 }), linea('n2', { monto: 83000 })]
+    const h = aHistMap(armar(tickets, lineas, { desde: '2026-10-10', hasta: '2026-10-11' }))
+    expect(h['2026-10-10'].ventaNeta).toBe(50000)
+    expect(h['2026-10-11'].ventaNeta).toBe(83000)
   })
 
   it('la ventana de fetch es un superset por los DOS lados', () => {
@@ -246,7 +258,7 @@ describe('el borde del rango — el lote que cruza la medianoche', () => {
 
 // ── Recortes del rango ─────────────────────────────────────────────────────────────────────
 
-describe('el rango recorta por JORNADA, no por fecha de factura', () => {
+describe('el rango recorta por día de FACTURA', () => {
   it('pedir solo el 4 deja afuera los dos lotes del 5', () => {
     const dias = armar(TODOS, LINEAS, { desde: '2026-09-04', hasta: '2026-09-04' })
     expect(Object.keys(dias)).toEqual(['2026-09-04'])
@@ -358,14 +370,15 @@ describe('aHistMap / getHistDesdePos — el equivalente de ventas_hist', () => {
     expect(d.ventaBruta).toBeGreaterThan(d.ventaNeta)
   })
 
-  it('respeta la jornada por LOTE: el turno que cierra pasada medianoche no parte el HistDay', () => {
+  it('el HistDay corta por día de FACTURA: la de la 01:00 es del día siguiente', () => {
     const CRUZA = lote(300001, 300002, {
       cajero: '222', cierre: '2026-09-06T01:00:00-06:00', primero: '2026-09-05T20:00:00-06:00',
       pasoMin: 300,   // 20:00 y 01:00 del día siguiente
     })
-    const h = aHistMap(armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-05', hasta: '2026-09-05' }))
-    expect(Object.keys(h)).toEqual(['2026-09-05'])
-    expect(h['2026-09-05'].ventaNeta).toBe(2 * 12000)     // las dos, incluida la de la 01:00
+    const h = aHistMap(armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-05', hasta: '2026-09-06' }))
+    expect(Object.keys(h)).toEqual(['2026-09-05', '2026-09-06'])
+    expect(h['2026-09-05'].ventaNeta).toBe(12000)
+    expect(h['2026-09-06'].ventaNeta).toBe(12000)
   })
 
   it('el delivery sale del CANAL de la factura, no del cajero', () => {

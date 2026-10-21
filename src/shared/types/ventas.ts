@@ -16,6 +16,12 @@ export interface SaloneroDay {
   ratioU:      number
   bebPax:      number
   prods:       [string, number, number][]  // [nombre, qty, monto]
+  /**
+   * La parte de `total` que fue DELIVERY (canal del ticket). OPCIONAL: solo la fuente PoS la
+   * llena, y solo cuando hubo; el `xlsParser` nunca la tuvo, así que sus días quedan iguales
+   * (`?? 0`). Sirve para que `getDayStats` no cuente como salón el delivery de un mesero.
+   */
+  delivery?:   number
 }
 
 export interface CajeroDay {

@@ -79,8 +79,10 @@ describe('ventanaJornada / businessDateDe', () => {
 
 describe('armarDia', () => {
   it('acredita el NETO al salonero, no el bruto', () => {
+    // La neta sale de las LÍNEAS (Σ monto de venta), no de `valor_servido_crc` (12000 en el
+    // fixture) ni del bruto: ver `netaVenta.ts`.
     const a = armar('2026-09-01', [ticket()], [linea()], '2026-09-01')
-    expect(sal(a.dia, 'MAXO').total).toBe(12000)   // valor_servido_crc
+    expect(sal(a.dia, 'MAXO').total).toBe(9000)    // Σ líneas de venta
     expect(a.bruto).toBe(13560)                        // total_crc, al lado
     expect(a.servicio).toBe(1200)
   })
@@ -213,21 +215,25 @@ describe('armarDia', () => {
     })
   })
 
-  it('INVARIANTE: la suma del mix ES el neto del día', () => {
+  it('INVARIANTE: la suma del mix ES el VALOR SERVIDO del día (no la neta)', () => {
     // Las familias del mix son EXACTAMENTE las que alimentan `valor_servido_crc`. Si alguien
-    // agregara una familia no-neto al mapa de etiquetas, esta igualdad se rompe.
+    // agregara una familia que no es valor servido al mapa de etiquetas, esta igualdad se rompe.
+    // La NETA es otra medida: suma además lo que es venta y no es valor servido (acá el EXTRA
+    // de la 22 y el BOXING de la 19), así que da MÁS que el mix — y eso es lo correcto.
     const lineas = [
       linea({ ticket_id: 't1', familia: 3,  monto: 9000 }),
       linea({ ticket_id: 't1', familia: 5,  monto: 3000, nombre: 'IMPERIAL', codigo_producto: '200' }),
-      linea({ ticket_id: 't1', familia: 19, monto: 0,    nombre: 'PAX',   codigo_producto: '677' }),
-      linea({ ticket_id: 't1', familia: 22, monto: 1500, nombre: 'EXTRA', codigo_producto: '300' }),
+      linea({ ticket_id: 't1', familia: 19, monto: 0,    nombre: 'PAX',    codigo_producto: '677' }),
+      linea({ ticket_id: 't1', familia: 19, monto: 884.94, nombre: 'BOXING', codigo_producto: '900' }),
+      linea({ ticket_id: 't1', familia: 22, monto: 1500, nombre: 'EXTRA',  codigo_producto: '300' }),
     ]
     const a = armar('2026-09-01', [ticket({ valor_servido_crc: 12000 })], lineas, '2026-09-01')
     const mix = mixPorCategoria(a.dia, a.pm)
     const sumaMix = mix.reduce((s, m) => s + m.monto, 0)
     const neto = Object.values(a.dia.saloneros).reduce((s, v) => s + v.total, 0)
-    expect(sumaMix).toBe(12000)
-    expect(sumaMix).toBe(neto)
+    expect(sumaMix).toBe(12000)              // = valor_servido_crc del ticket
+    expect(neto).toBe(Math.round(9000 + 3000 + 884.94 + 1500))
+    expect(neto - sumaMix).toBe(Math.round(884.94 + 1500))   // lo que es venta sin ser valor servido
   })
 
   it('las familias etiquetadas son exactamente las del neto', () => {
@@ -1453,9 +1459,11 @@ describe('etiquetaTurnoPoS', () => {
 // ── El día partido por turno (pase de producto) ────────────────────────────────────────────
 
 describe('diasPorTurno — la partición "por turno + general"', () => {
-  const linea = (id: string): LineaNdfRow => ({
+  // La línea lleva el MISMO monto que el valor servido de su ticket: la neta del turno sale de
+  // las líneas, así que el fixture tiene que ser coherente para que los dos números coincidan.
+  const linea = (id: string, monto = 12000): LineaNdfRow => ({
     ticket_id: id, codigo_producto: '100', nombre: 'ROLL SATORI',
-    cantidad: 2, monto: 12000, familia: 2, usuario_registra: null,
+    cantidad: 2, monto, familia: 2, usuario_registra: null,
   })
   // Mañana: el 111 cierra 16:07. Tarde: el 222 cierra 22:30. Dos meseros distintos.
   const TICKETS = [
@@ -1466,7 +1474,7 @@ describe('diasPorTurno — la partición "por turno + general"', () => {
     ticket({ id: 't1', fecha_registra: '2026-09-05T19:00:00-06:00', fecha_cierra: '2026-09-05T22:30:06-06:00',
              cajero_login: '222', salonero_login: '027', valor_servido_crc: 20000, pax: 4, pax_articulo: 4 }),
   ]
-  const LINEAS = TICKETS.map(t => linea(t.id))
+  const LINEAS = TICKETS.map(t => linea(t.id, t.valor_servido_crc ?? 0))
   const partido = () => diasPorTurno('2026-09-05', TICKETS, LINEAS, 'sello', NOMBRES)
 
   it('devuelve un DiaData por turno, en el orden del mapa de cajas', () => {
@@ -1497,7 +1505,7 @@ describe('diasPorTurno — la partición "por turno + general"', () => {
 
   it('es EXACTAMENTE lo que daría armarDia con los tickets de ese turno', () => {
     const soloManana = TICKETS.filter(t => t.cajero_login === '111')
-    const esperado = armarDia('2026-09-05', soloManana, soloManana.map(t => linea(t.id)), 'sello', NOMBRES)
+    const esperado = armarDia('2026-09-05', soloManana, soloManana.map(t => linea(t.id, t.valor_servido_crc ?? 0)), 'sello', NOMBRES)
     expect(partido()[0].dia).toEqual(esperado.dia)
   })
 

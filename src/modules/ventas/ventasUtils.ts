@@ -247,10 +247,15 @@ export function getDayStats(dia: DiaData): ContabilidadDay & { saloneroNames: st
       pax       += c.pax ?? 0
     } else {
       const sl = s as SaloneroDay
+      // El delivery de un mesero NO es salón. `armarDia` lo separa con el mismo predicado que
+      // `ventasPorCanal` (canal del ticket), así que Σ salón / Σ delivery del día dan lo mismo
+      // que `ventasPorCanal`. Días del xls: sin el campo → todo a salón, como siempre.
+      const dl  = sl.delivery ?? 0
       ventaNeta += sl.total
       iva       += sl.iva ?? 0
       serv      += sl.serv ?? 0
-      salon     += sl.total
+      salon     += sl.total - dl
+      delivery  += dl
       pax       += sl.pax ?? 0
       saloneroNames.push(name)
     }

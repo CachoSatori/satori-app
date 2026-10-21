@@ -7,18 +7,22 @@
 // ── LO QUE ESTE ARCHIVO NO HACE ────────────────────────────────────────────────────────────
 // · NO reimplementa agregadores: el día lo arma `armarDia`, el mismo que usa «En vivo». Si
 //   algún día el neto o el mix cambian de definición, cambian en un solo lugar.
-// · NO decide la jornada por su cuenta: la decide `shared/ndf/jornada.ts` (P1a), que también
-//   usa «En vivo». Las dos pantallas no pueden discrepar porque leen la misma función.
+// · El DÍA del reporte es el día en Costa Rica de la FACTURA (`fecha_registra`), no la jornada
+//   del lote de cierre. Es el corte del reporte del PoS («Ventas por Salón»): con el lote, una
+//   caja que se cerró al día siguiente (corte de luz del 10-oct-2026) arrastraba facturas de un
+//   día al otro. `shared/ndf/jornada.ts` NO se toca: el lote sigue mandando en «En vivo», en los
+//   turnos y en las lentes de saloneros; solo dejó de decidir el día de Ventas/Contabilidad.
 // · NO cambia de dónde lee `VentasModule` — eso es P2. Acá solo se ofrece la función.
 // · NO toca `ventas_dias` ni `ventas_hist`: son OTRAS tablas, con su propia carga por xls.
 //   Acá solo se DERIVA la misma forma desde el PoS, sin escribir nada en ningún lado.
 
 import { getLineasDeTickets, getSaloneroNombres, getTicketsRango,
          type LineaNdfRow, type TicketNdfConId } from '../../shared/api/posNdf'
-import { agruparEnLotes } from '../../shared/ndf/jornada'
+import { fechaCR } from '../../shared/ndf/jornada'
 import type { DiaData, DiasMap, HistDay, HistMap, ProductMap } from '../../shared/types/ventas'
 import { armarDia } from './ventasEnVivoDatos'
 import { getDayStats } from './ventasUtils'
+import { resumirAvisos, type AvisoCatalogo } from './netaVenta'
 
 /** Un rango de JORNADAS, inclusivo de los dos lados. `YYYY-MM-DD`. */
 export interface RangoJornadas {
@@ -48,26 +52,33 @@ function dentro(fecha: string | null, r: RangoJornadas): fecha is string {
 }
 
 /**
+ * El día del reporte de un ticket: `(fecha_registra AT TIME ZONE 'America/Costa_Rica')::date`.
+ * `null` si el instante no se puede leer (ese ticket no entra a ningún día).
+ */
+export function diaDeFactura(t: Pick<TicketNdfConId, 'fecha_registra'>): string | null {
+  return fechaCR(t.fecha_registra)
+}
+
+/**
  * El corazón, PURO: tickets + líneas → `DiasMap`. Se prueba sin base de datos.
  *
- * Los tickets vienen del superset de `ventanaRangoJornadas`, así que hay de más: lotes que
- * abrieron antes de `desde` o después de `hasta` entran para poder calcular bien su jornada, y
- * se descartan acá. Es el orden correcto — la jornada de un ticket NO se puede saber sin ver
- * el resto de su lote, así que primero se agrupa y recién después se filtra.
+ * Los tickets vienen del superset de `ventanaRangoJornadas` (un día antes, dos después), así
+ * que hay de más: los que caen fuera de `[desde, hasta]` por su día de factura se descartan acá.
  */
 export function armarDiasMap(
   tickets: TicketNdfConId[],
   lineas: LineaNdfRow[],
   rango: RangoJornadas,
-  opciones: { uploadedAt: string; nombres?: Record<string, string> },
+  opciones: { uploadedAt: string; nombres?: Record<string, string>; avisar?: (msg: string) => void },
 ): DiasDesdePos {
-  // 1. Cada lote de cierre aporta su jornada; los tickets del lote la heredan enteros.
+  // 1. Cada factura va al día CR de su `fecha_registra` (ver el encabezado).
   const porJornada = new Map<string, TicketNdfConId[]>()
-  for (const lote of agruparEnLotes(tickets)) {
-    if (!dentro(lote.jornada, rango)) continue
-    const lista = porJornada.get(lote.jornada)
-    if (lista) lista.push(...lote.tickets)
-    else porJornada.set(lote.jornada, [...lote.tickets])
+  for (const t of tickets) {
+    const dia = diaDeFactura(t)
+    if (!dentro(dia, rango)) continue
+    const lista = porJornada.get(dia)
+    if (lista) lista.push(t)
+    else porJornada.set(dia, [t])
   }
 
   // 2. Las líneas, indexadas una sola vez para no barrer el array por cada día.
@@ -83,21 +94,27 @@ export function armarDiasMap(
   //    cualquier jornada, así que el primer día que lo vea define su tipo.
   const dias: DiasMap = {}
   const pm: ProductMap = {}
+  const avisos: AvisoCatalogo[] = []
   for (const [jornada, delDia] of [...porJornada.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const suyas = delDia.flatMap(t => lineasPorTicket.get(t.id) ?? [])
     const armado = armarDia(jornada, delDia, suyas, opciones.uploadedAt, opciones.nombres ?? {})
     dias[jornada] = armado.dia
+    avisos.push(...armado.avisosCatalogo)
     for (const [nombre, info] of Object.entries(armado.pm)) if (!pm[nombre]) pm[nombre] = info
+  }
+  // Huecos de catálogo: la plata YA cuenta en la neta; el aviso es para ir a corregir el PoS.
+  if (avisos.length > 0) {
+    (opciones.avisar ?? console.warn)(
+      `[ventas] neta ${rango.desde}→${rango.hasta}: líneas con plata fuera del catálogo — ${resumirAvisos(avisos)}`)
   }
   return { dias, pm }
 }
 
 /**
- * El `DiasMap` de un rango de jornadas, leído del PoS.
+ * El `DiasMap` de un rango de días, leído del PoS.
  *
- * `rango` es inclusivo de los dos lados y va en JORNADAS, no en días civiles: la jornada de un
- * lote es la fecha en Costa Rica de su apertura, así que el turno que cierra a la 01:00 sigue
- * contando en el día que abrió (ver `shared/ndf/jornada.ts`).
+ * `rango` es inclusivo de los dos lados y va en días de FACTURA (fecha CR de `fecha_registra`),
+ * el mismo corte que el reporte del PoS: la factura de las 00:30 es del día siguiente.
  */
 export async function getDiasMapDesdePos(
   rango: RangoJornadas,

@@ -13,6 +13,7 @@ import {
   type EstadoFactura,
 } from '../../shared/ndf/mapTicket'
 import { claveNoMesero, etiquetaNoMesero, etiquetaTurnoPoS } from './baldesNoMesero'
+import { netaDelTicket, netaPorTicket, type AvisoCatalogo } from './netaVenta'
 import { horaCorteCR } from './ventasEnVivoMock'
 import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type FrescuraPoS,
          type LocalId, type MesaAbiertaDetalle, type SnapshotEnVivo,
@@ -27,8 +28,11 @@ import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type Frescura
 // `xlsParser`, ni `ventasUtils`, ni ninguna pestaña que ya existía.
 //
 // ── DE DÓNDE SALE CADA NÚMERO ──────────────────────────────────────────────────────────────
-// Ninguno se recalcula acá: los resolvió el mapper del puente en la ingesta y viven en columnas.
-//   neto      → `valor_servido_crc`   (comida 2,3,4,13,16,29 + bebida 5; ver la spec de regalías)
+// Casi ninguno se recalcula acá: los resolvió el mapper del puente en la ingesta y viven en columnas.
+//   neto      → Σ líneas de VENTA (`netaVenta.ts`: todo menos 6/17/20). Se arma acá, desde
+//               `pos_ndf_ticket_lines`, porque tiene que cuadrar con la Venta Neta del PoS.
+//   valor servido → `valor_servido_crc` (comida 2,3,4,13,16,29 + bebida 5): la base del mix y
+//               de la analítica por PAX. NO es la neta — ver `netaVenta.ts`.
 //   bruto     → `total_crc`           (Σ medios de pago − vuelto)
 //   servicio  → `servicio_crc`        (Σ ImpS, el 10 %)
 //   IVA       → `iva_crc`             (ImpV del PoS; hoy 0 en el histórico — no se deriva)
@@ -44,8 +48,9 @@ import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type Frescura
  * `FAMILIAS_VALOR_SERVIDO` de `src/shared/ndf/mapTicket.ts` es el mismo conjunto que usa el
  * mapper del puente para calcular `valor_servido_crc` en la ingesta.
  *
- * Acá solo sirve para FILTRAR el mix de producto — los montos ya vienen resueltos. Que sea el
- * MISMO array es lo que garantiza la invariante: la suma del mix es el neto del día.
+ * Acá solo sirve para FILTRAR el mix de producto. Que sea el MISMO array es lo que garantiza la
+ * invariante: la suma del mix es el VALOR SERVIDO del día (no la neta, que suma además merch,
+ * BOXING, gift cards… — ver `netaVenta.ts`).
  */
 export const FAMILIAS_NETO = FAMILIAS_VALOR_SERVIDO
 
@@ -60,8 +65,9 @@ export const FAMILIA_BEBIDA = 5
  * en «SIN CLASIFICAR» aunque el PoS sí sepa qué es. Esto es ETIQUETAR, no recalcular plata.
  *
  * ⚠️ INVARIANTE: las claves de este mapa son EXACTAMENTE `FAMILIAS_NETO`, las mismas que
- * alimentan `valor_servido_crc`. Por eso **la suma del mix es el neto del día**. Agregar acá
- * una familia que no esté en el neto rompería esa igualdad — hay un test que lo fija.
+ * alimentan `valor_servido_crc`. Por eso **la suma del mix es el valor servido del día**.
+ * Agregar acá una familia que no esté en el valor servido rompería esa igualdad — hay un test
+ * que lo fija.
  */
 const CATEGORIA_FAMILIA: Record<number, string> = {
   3:  'Rolls',
@@ -113,6 +119,12 @@ export interface DiaArmado {
   /** El neto partido en salón / delivery. */
   canales:  VentasPorCanal
   /**
+   * Líneas con plata que cuentan en la neta pero que el catálogo no tiene bien identificadas
+   * (sin familia, familia desconocida) y tickets sin líneas. La plata YA está en la neta: esto
+   * es para que alguien mire el hueco de catálogo, no una corrección.
+   */
+  avisosCatalogo: AvisoCatalogo[]
+  /**
    * Cuántas FACTURAS lleva cada clave de `dia.saloneros` (meseros, caja y sistema).
    *
    * `SaloneroDay` no tiene campo para las órdenes —el modelo del xls nunca las tuvo—, pero
@@ -125,18 +137,29 @@ export interface DiaArmado {
 
 export interface VentasPorCanal { salon: number; delivery: number }
 
+/** ¿El ticket es delivery? El ÚNICO predicado del canal: lo usan `ventasPorCanal` y `armarDia`. */
+export function esDelivery(t: Pick<TicketNdfConId, 'canal'>): boolean {
+  return t.canal === 'delivery'
+}
+
 /**
  * Salón vs delivery, en NETO y **ticket por ticket**.
  *
  * En el modelo del xls el delivery solo se puede ver por el cajero que lo cobró; el PoS lo sabe
  * factura por factura (`canal`), así que acá se parte por el dato duro y no por quién la cerró.
  * Todo lo que no es delivery cuenta como salón: barra, para llevar y mesa son piso.
+ *
+ * `netoDe` es la neta de cada ticket (la de `armarDia`, desde las líneas). Sin él se cae al
+ * valor servido de la cabecera, que es lo que devolvía antes.
  */
-export function ventasPorCanal(tickets: TicketNdfConId[]): VentasPorCanal {
+export function ventasPorCanal(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): VentasPorCanal {
   let salon = 0, delivery = 0
   for (const t of tickets) {
-    const v = n(t.valor_servido_crc)
-    if (t.canal === 'delivery') delivery += v
+    const v = netoDe(t)
+    if (esDelivery(t)) delivery += v
     else salon += v
   }
   return { salon: Math.round(salon), delivery: Math.round(delivery) }
@@ -218,6 +241,12 @@ export function armarDia(
     else porTicket.set(l.ticket_id, [l])
   }
 
+  // La NETA de cada ticket, una sola vez: la usan los buckets, el delivery y los canales.
+  const avisosCatalogo: AvisoCatalogo[] = []
+  const netaPorTicket = new Map<string, number>()
+  for (const t of tickets) netaPorTicket.set(t.id, netaDelTicket(t, porTicket.get(t.id), avisosCatalogo))
+  const netoDe = (t: TicketNdfConId): number => netaPorTicket.get(t.id) ?? 0
+
   const acc = new Map<string, AccEntrada>()
   const pm: ProductMap = {}
   let bruto = 0, servicio = 0, iva = 0, regalia = 0
@@ -242,11 +271,13 @@ export function armarDia(
       prods: new Map<string, { q: number; m: number }>(),
     }
     e.pax     += paxDelTicket(t)
-    e.total   += n(t.valor_servido_crc)   // el NETO — ver el bloque de arriba
+    e.total   += netoDe(t)   // el NETO desde las líneas — ver `netaVenta.ts`
     e.serv    += n(t.servicio_crc)
     e.iva     += n(t.iva_crc)
     e.ordenes += 1
-    if (t.canal === 'delivery') e.delivery += n(t.valor_servido_crc)
+    // Para TODOS los baldes, meseros incluidos: así `getDayStats` separa el delivery también en
+    // la venta de un salonero (antes solo lo hacía en los baldes de caja).
+    if (esDelivery(t)) e.delivery += netoDe(t)
 
     for (const l of porTicket.get(t.id) ?? []) {
       // El "artículo pax" cuenta comensales, no es algo que se venda: fuera del mix, igual
@@ -310,9 +341,13 @@ export function armarDia(
       continue
     }
 
+    // `delivery` solo si hubo: el modelo del xls no tiene el campo y un 0 de más cambiaría la
+    // forma de todos los días sin delivery de mesero.
+    const deliveryMesero = Math.round(e.delivery)
     saloneros[nombre] = {
       pax: e.pax, total, com: Math.round(e.com), beb: Math.round(e.beb),
       iCom: e.iCom, iBeb: e.iBeb,
+      ...(deliveryMesero !== 0 ? { delivery: deliveryMesero } : {}),
       // IVA y servicio ATRIBUIDOS, los dos igual: Σ de los tickets de este salonero
       // (`iva_crc` / `servicio_crc`), tal como los informa el PoS. El IVA estaba clavado en 0
       // porque el bridge leía mal la columna y venía 0 en toda la base; con `IV` resuelto ya
@@ -336,7 +371,8 @@ export function armarDia(
     bruto: Math.round(bruto), servicio: Math.round(servicio),
     iva: Math.round(iva), regalia: Math.round(regalia),
     tickets: tickets.length,
-    canales: ventasPorCanal(tickets),
+    canales: ventasPorCanal(tickets, netoDe),
+    avisosCatalogo,
   }
 }
 
@@ -379,12 +415,15 @@ export function esSinAsignar(clave: string): boolean {
  * Es la otra lectura del mismo día: el corte de las 16:00 se calcula del reloj de cada ticket,
  * este sale de qué caja estaba abierta. Cuando las dos no coinciden hay algo que mirar.
  */
-export function ventasPorTurnoPoS(tickets: TicketNdfConId[]): { turno: string; neto: number; tickets: number }[] {
+export function ventasPorTurnoPoS(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): { turno: string; neto: number; tickets: number }[] {
   const acc = new Map<string, { neto: number; tickets: number }>()
   for (const t of tickets) {
     const k = etiquetaTurnoPoS(t.turno)
     const e = acc.get(k) ?? { neto: 0, tickets: 0 }
-    e.neto += n(t.valor_servido_crc)
+    e.neto += netoDe(t)
     e.tickets += 1
     acc.set(k, e)
   }
@@ -411,13 +450,16 @@ export {
  * Se recorren solo las horas con movimiento: un día que arrancó a las 11 no tiene por qué
  * mostrar diez horas en cero adelante.
  */
-export function ritmoPorHora(tickets: TicketNdfConId[]): VentaPorHora[] {
+export function ritmoPorHora(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): VentaPorHora[] {
   const acc = new Map<number, { monto: number; tickets: number }>()
   for (const t of tickets) {
     const h = horaCRDe(t.fecha_registra)
     if (h === null) continue
     const e = acc.get(h) ?? { monto: 0, tickets: 0 }
-    e.monto += n(t.valor_servido_crc)
+    e.monto += netoDe(t)
     e.tickets += 1
     acc.set(h, e)
   }
@@ -477,7 +519,10 @@ export interface VentasTurno {
  *
  * Invariante: Σ turnos + sinTurno = el neto del día. Ninguna factura se cae por no tener turno.
  */
-export function ventasPorTurno(tickets: TicketNdfConId[]): VentasTurno {
+export function ventasPorTurno(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): VentasTurno {
   const vacio = (turno: Turno | null, etiqueta: string): BloqueTurno =>
     ({ turno, etiqueta, neto: 0, tickets: 0, pax: 0 })
 
@@ -490,7 +535,7 @@ export function ventasPorTurno(tickets: TicketNdfConId[]): VentasTurno {
     // en vez de perderse: el total del día manda sobre la prolijidad de la tabla.
     const b = (lote.turno !== null ? porId.get(lote.turno) : undefined) ?? sinTurno
     for (const t of lote.tickets) {
-      b.neto    += n(t.valor_servido_crc)
+      b.neto    += netoDe(t)
       b.tickets += 1
       b.pax     += paxDelTicket(t)
     }
@@ -922,6 +967,9 @@ export interface EntradaSnapshot {
 export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
   const armado = armarDia(e.fecha, e.tickets, e.lineas, e.ahora.toISOString(), e.nombres ?? {})
   const neto = Object.values(armado.dia.saloneros).reduce((s, v) => s + v.total, 0)
+  // La MISMA neta por ticket que usó `armarDia`, para que turnos y ritmo sumen lo del total.
+  const netas = netaPorTicket(e.tickets, e.lineas)
+  const netoDe = (t: TicketNdfConId): number => netas.get(t.id) ?? 0
   const comparables = jornadasComparables(e.fecha)
 
   return {
@@ -931,7 +979,7 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
     servicioEnCurso: e.enServicio,
     dia: armado.dia,
     pm: armado.pm,
-    porHora: ritmoPorHora(e.tickets),
+    porHora: ritmoPorHora(e.tickets, netoDe),
     // La proyección no es un dato del PoS: con el servicio terminado no se proyecta nada.
     proyeccionCierre: neto,
     historico: compararContra(e.neto4Sem, comparables),
@@ -947,8 +995,8 @@ export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
     ivaPendiente: armado.iva === 0,
     // Todo lo de acá salió de `pos_ndf_*`. El generador de ejemplo no pasa por esta función.
     fuente: 'pos',
-    turnos: ventasPorTurno(e.tickets),
-    turnosPoS: ventasPorTurnoPoS(e.tickets),
+    turnos: ventasPorTurno(e.tickets, netoDe),
+    turnosPoS: ventasPorTurnoPoS(e.tickets, netoDe),
     canales: armado.canales,
     // Órdenes por clave: el denominador del "neto ÷ órdenes" de cada mesero.
     ordenes: armado.ordenes,

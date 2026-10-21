@@ -6,7 +6,9 @@ import {
   esLineaDeVenta, FAMILIAS_NO_VENTA, netaDelTicket, netaPorTicket, resumirAvisos,
   type AvisoCatalogo,
 } from './netaVenta'
-import { armarDia, armarSnapshot, ventasPorCanal } from './ventasEnVivoDatos'
+import {
+  armarDia, armarSnapshot, lotesDeCierre, netaPorJornada, resumirProvisional, ventasPorCanal,
+} from './ventasEnVivoDatos'
 import { getDayStats } from './ventasUtils'
 import { armarDiasMap } from './ventasDiasDesdePos'
 import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
@@ -158,5 +160,48 @@ describe('armarDiasMap — avisos de catálogo', () => {
     armarDiasMap([ticket({ id: 'a' })], [linea('a', 2, 5000)],
       { desde: '2026-10-02', hasta: '2026-10-02' }, { uploadedAt: 'sello', avisar })
     expect(avisar).not.toHaveBeenCalled()
+  })
+})
+
+describe('«En vivo» — comparativa, lotes y provisional en la MISMA neta', () => {
+  it('netaPorJornada: la comparativa de 4 semanas suma la neta de las líneas, por jornada 07→07', () => {
+    const tickets = [
+      { id: 'a', numero_factura: 'a', fecha_registra: '2026-09-25T20:00:00-06:00', valor_servido_crc: 10000 },
+      // 01:30 del 26 = jornada del 25 (07→07), igual que el día en curso de «En vivo».
+      { id: 'b', numero_factura: 'b', fecha_registra: '2026-09-26T01:30:00-06:00', valor_servido_crc: 5000 },
+      { id: 'c', numero_factura: 'c', fecha_registra: '2026-10-02T20:00:00-06:00', valor_servido_crc: 8000 },
+    ]
+    const lineas = [
+      linea('a', 3, 10000), linea('a', 21, 14000, 'REMERA'),
+      linea('b', 2, 5000),  linea('b', 19, 884.94, 'BOXING'),
+      linea('c', 3, 8000),  linea('c', 17, 2000, 'CORTESIA'),
+    ]
+    const r = netaPorJornada(tickets, lineas, ['2026-09-25', '2026-10-02', '2026-09-18'])
+    expect(Object.keys(r).sort()).toEqual(['2026-09-18', '2026-09-25', '2026-10-02'])
+    expect(r['2026-09-25']).toBeCloseTo(10000 + 14000 + 5000 + 884.94, 6)
+    expect(r['2026-10-02']).toBe(8000)
+    expect(r['2026-09-18']).toBe(0)
+  })
+
+  it('lotesDeCierre con la neta: el lote suma lo mismo que sus tickets en el día', () => {
+    const T = [
+      ticket({ id: 'l1', fecha_cierra: '2026-10-02T22:00:00-06:00', valor_servido_crc: 1000 }),
+      ticket({ id: 'l2', fecha_cierra: '2026-10-02T22:00:00-06:00', valor_servido_crc: 1000 }),
+    ]
+    const L = [linea('l1', 3, 1000), linea('l1', 21, 14000), linea('l2', 2, 1000)]
+    const netas = netaPorTicket(T, L)
+    const lotes = lotesDeCierre(T, t => netas.get(t.id) ?? 0)
+    expect(lotes).toHaveLength(1)
+    expect(lotes[0].neto).toBe(16000)
+    expect(lotes[0].neto).toBe(netaDia(armarDia('2026-10-02', T, L, 'sello', NOMBRES).dia))
+  })
+
+  it('resumirProvisional con la neta: solo las R, medidas como la venta oficial', () => {
+    const T = [
+      ticket({ id: 'r1', estado: 'R', valor_servido_crc: 1000 }),
+      ticket({ id: 'c1', estado: 'C', valor_servido_crc: 9999 }),
+    ]
+    const netas = netaPorTicket(T, [linea('r1', 3, 1000), linea('r1', 19, 884.94)])
+    expect(resumirProvisional(T, t => netas.get(t.id) ?? 0)).toEqual({ monto: 1885, tickets: 1 })
   })
 })

@@ -15,7 +15,7 @@ vi.mock('../../shared/api/posNdf', async (importOriginal) => {
     getTicketsJornada:         vi.fn(async () => CRUDOS),
     getLineasDeTickets:        vi.fn(async () => []),
     getSaloneroNombres:        vi.fn(async () => ({ '026': 'MAXO' })),
-    getNetoPorJornada:         vi.fn(async () => ({})),
+    getTicketsDeJornadas:      vi.fn(async () => []),
     getMesasAbiertas:          vi.fn(async () => []),
     getPedidosCerradosJornada: vi.fn(async () => new Set<string>()),
     getUltimoPollPoS:          vi.fn(async () => ({ ultimoPollAt: null, error: null })),
@@ -68,6 +68,29 @@ describe('getSnapshotEnVivo: oficial = ΣC, provisional = ΣR, separados', () =>
     const posNdf = await import('../../shared/api/posNdf')
     vi.mocked(posNdf.getLineasDeTickets).mockClear()
     await getSnapshotEnVivo('santa-teresa', '2026-09-01')
-    expect(vi.mocked(posNdf.getLineasDeTickets)).toHaveBeenCalledWith(['c1', 'c2'])
+    // La PRIMERA lectura (la del día) es solo de las C. Las R se piden aparte, para el provisional.
+    expect(vi.mocked(posNdf.getLineasDeTickets).mock.calls[0]).toEqual([['c1', 'c2']])
+    expect(vi.mocked(posNdf.getLineasDeTickets)).toHaveBeenCalledWith(['r1', 'r2'])
+    expect(vi.mocked(posNdf.getLineasDeTickets)).not.toHaveBeenCalledWith(expect.arrayContaining(['x1']))
+  })
+
+  it('con líneas, el provisional se mide con la NETA nueva y no toca el día', async () => {
+    const posNdf = await import('../../shared/api/posNdf')
+    const lineasDe = (ids: string[]) => ids.flatMap(id => [
+      { ticket_id: id, codigo_producto: '1', nombre: 'ROLL',   cantidad: 1, monto: 10_000, familia: 3,  usuario_registra: null },
+      { ticket_id: id, codigo_producto: '2', nombre: 'REMERA', cantidad: 1, monto: 14_000, familia: 21, usuario_registra: null },
+      { ticket_id: id, codigo_producto: '3', nombre: 'XX',     cantidad: 1, monto: 5_000,  familia: 6,  usuario_registra: null },
+    ])
+    vi.mocked(posNdf.getLineasDeTickets).mockImplementation(async ids => lineasDe(ids))
+    try {
+      const snap = await getSnapshotEnVivo('santa-teresa', '2026-09-01')
+      // 2 R × (10.000 + 14.000); la familia 6 no es venta.
+      expect(snap.provisional).toEqual({ monto: 48_000, tickets: 2 })
+      // El día: 2 C × 24.000. Ni las R ni la X entran.
+      const neto = Object.values(snap.dia.saloneros).reduce((a, v) => a + v.total, 0)
+      expect(neto).toBe(48_000)
+    } finally {
+      vi.mocked(posNdf.getLineasDeTickets).mockImplementation(async () => [])
+    }
   })
 })

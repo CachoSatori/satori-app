@@ -1,9 +1,9 @@
 import type { CajeroDay, DiaData, ProductMap, SaloneroDay } from '../../shared/types/ventas'
 import {
-  businessDateDe, getLineasDeTickets, getMesasAbiertas, getNetoPorJornada,
+  businessDateDe, getLineasDeTickets, getMesasAbiertas, getTicketsDeJornadas,
   getPedidosCerradosJornada, getSaloneroNombres, getTicketsJornada, getUltimoPollPoS,
   HORA_CORTE_JORNADA, type LatidoPoS, type LineaNdfRow, type MesaAbiertaRow,
-  type TicketNdfConId,
+  type TicketComparable, type TicketNdfConId,
 } from '../../shared/api/posNdf'
 import {
   agruparEnLotes, etiquetaTurno, turnosConocidos, type Turno,
@@ -210,14 +210,20 @@ export function partirPorEstado<T extends Pick<TicketNdfConId, 'estado'>>(
   return { oficiales, provisionales }
 }
 
-/** Lo provisional resumido: cuánto hay en cuentas abiertas y cuántas son. Solo «En vivo». */
-export function resumirProvisional(
-  tickets: readonly Pick<TicketNdfConId, 'estado' | 'valor_servido_crc'>[],
+/**
+ * Lo provisional resumido: cuánto hay en cuentas abiertas y cuántas son. Solo «En vivo».
+ *
+ * `netoDe` es la neta de cada ticket (desde las líneas, `netaVenta.ts`), la MISMA unidad que la
+ * venta oficial del día. Sin él se cae al valor servido de la cabecera.
+ */
+export function resumirProvisional<T extends Pick<TicketNdfConId, 'estado' | 'valor_servido_crc'>>(
+  tickets: readonly T[],
+  netoDe: (t: T) => number = t => n(t.valor_servido_crc),
 ): { monto: number; tickets: number } {
   let monto = 0, cuenta = 0
   for (const t of tickets) {
     if (!esTicketProvisional(t)) continue
-    monto += n(t.valor_servido_crc)
+    monto += netoDe(t)
     cuenta += 1
   }
   return { monto: Math.round(monto), tickets: cuenta }
@@ -637,7 +643,10 @@ export interface LoteResumen {
   pax:         number
 }
 
-export function lotesDeCierre(tickets: TicketNdfConId[]): LoteResumen[] {
+export function lotesDeCierre(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): LoteResumen[] {
   return agruparEnLotes(tickets).map(l => ({
     clave:       l.clave,
     cajeroLogin: l.cajeroLogin,
@@ -647,7 +656,7 @@ export function lotesDeCierre(tickets: TicketNdfConId[]): LoteResumen[] {
     apertura:    l.apertura,
     fechaCierra: l.fechaCierra,
     abierto:     l.abierto,
-    neto:        Math.round(l.tickets.reduce((s, t) => s + n(t.valor_servido_crc), 0)),
+    neto:        Math.round(l.tickets.reduce((s, t) => s + netoDe(t), 0)),
     tickets:     l.tickets.length,
     pax:         l.tickets.reduce((s, t) => s + paxDelTicket(t), 0),
   }))
@@ -928,6 +937,26 @@ export function calidadPaxPorSalonero(
 
 // ── Comparativa ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * La NETA de cada jornada pedida, desde las líneas (`netaVenta.ts`): la misma medida que el día
+ * que se compara. La jornada es la del selector de «En vivo» (07→07 CR, `businessDateDe`), igual
+ * que la del día en curso. Toda fecha pedida sale, en 0 si no tuvo ventas.
+ */
+export function netaPorJornada(
+  tickets: readonly TicketComparable[],
+  lineas: readonly LineaNdfRow[],
+  fechas: readonly string[],
+): Record<string, number> {
+  const netas = netaPorTicket(tickets, lineas)
+  const out: Record<string, number> = {}
+  for (const f of fechas) out[f] = 0
+  for (const t of tickets) {
+    const j = businessDateDe(t.fecha_registra)
+    if (j in out) out[j] += netas.get(t.id) ?? 0
+  }
+  return out
+}
+
 /** Las cuatro jornadas del mismo día de semana, hacia atrás. */
 export function jornadasComparables(businessDate: string, semanas = 4): string[] {
   const [y, m, d] = businessDate.split('-').map(Number)
@@ -1081,11 +1110,20 @@ export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise
   // ritmo por hora, turnos y calidad de pax de la lista que recibe, y todo eso tiene que ser
   // C-only igual que el día. Lo provisional se resume aparte y nunca toca el `DiaData`.
   const crudos = await getTicketsJornada(local, jornada)
-  const { oficiales: tickets } = partirPorEstado(crudos)
-  const provisional = resumirProvisional(crudos)
+  const { oficiales: tickets, provisionales } = partirPorEstado(crudos)
+  // Dos lecturas separadas A PROPÓSITO: las líneas del día son SOLO de las C (una R no arrastra su
+  // detalle al `DiaData`); las de las R se piden aparte y solo sirven para medir lo provisional
+  // con la MISMA neta que la venta oficial.
   const lineas  = await getLineasDeTickets(tickets.map(t => t.id))
+  const lineasR = provisionales.length > 0 ? await getLineasDeTickets(provisionales.map(t => t.id)) : []
+  const netasProvisionales = netaPorTicket(provisionales, lineasR)
+  const provisional = resumirProvisional(crudos, t => netasProvisionales.get(t.id) ?? 0)
   const nombres = await getSaloneroNombres()
-  const neto4Sem = await getNetoPorJornada(local, jornadasComparables(jornada))
+  // La comparativa en la MISMA neta que el día: facturas de las 4 jornadas + sus líneas.
+  const comparables = jornadasComparables(jornada)
+  const ticketsComparables = await getTicketsDeJornadas(local, comparables)
+  const lineasComparables  = await getLineasDeTickets(ticketsComparables.map(t => t.id))
+  const neto4Sem = netaPorJornada(ticketsComparables, lineasComparables, comparables)
   // El snapshot de mesas abiertas es de AHORA: mirando un día viejo no significa nada.
   const crudas = enCurso ? await getMesasAbiertas(local) : []
   // La llave de exclusión y el latido del agente solo se piden cuando hay algo en vivo que mirar.

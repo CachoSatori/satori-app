@@ -25,13 +25,19 @@
 // · Delivery (`tipo = 'D'`) no se separa: cuenta en el día como cualquier factura. Es otro pase.
 // · PAX propio cuenta SOLO el código 677 (1 persona). El 678 (×2) queda para v2, firmado así.
 // · IVA y servicio propios van PRORRATEADOS, no leídos por línea: ver `prorratear` abajo.
+//
+// ── QUÉ PLATA CUENTA ───────────────────────────────────────────────────────────────────────
+// La NETA de venta (`netaVenta.ts`: toda línea menos 6/17/20), la misma que el total del día en
+// Ventas y en «En vivo». La ATRIBUCIÓN no cambia: quién comandó cada línea (A), el dueño de la
+// mesa (B, desempate por valor servido en `duenoDeMesa`) y el turno por lote de cierre.
 
 import {
-  COD_PAX_1, esValorServido,
+  COD_PAX_1, COD_PAX_2, esValorServido,
 } from '../../shared/ndf/mapTicket'
 import {
   clasificarCodigo, type PersonaNdf, type RolCodigo,
 } from '../../shared/ndf/personasNdf'
+import { esLineaDeVenta, netaDelTicket } from './netaVenta'
 import {
   type Turno, etiquetaTurno, turnoDeCajero, turnosConocidos,
 } from '../../shared/ndf/jornada'
@@ -78,7 +84,7 @@ export function turnosSalonero(): { turno: Turno; etiqueta: string; orden: numbe
 export interface TicketLente {
   id:                string
   cajero_login:      string | null
-  /** La neta de la factura. Es la que reparte la lente B, ENTERA, al dueño de la mesa. */
+  /** Valor servido de la cabecera. Solo es la neta de una factura SIN líneas (ver `netaDelTicket`). */
   valor_servido_crc: number | null
   iva_crc:           number | null
   servicio_crc:      number | null
@@ -103,7 +109,7 @@ export interface FilaVentaPropia {
   persona:     PersonaNdf
   rol:         RolCodigo
   turno:       Turno
-  /** Σ `monto` de sus líneas de valor servido. */
+  /** Σ `monto` de sus líneas de venta (`netaVenta.ts`). */
   netaCrc:     number
   /** Prorrateados desde la factura — no vienen por línea. Ver `prorratear`. */
   ivaCrc:      number
@@ -112,7 +118,7 @@ export interface FilaVentaPropia {
   paxPropio:   number
   /** Neta propia ÷ pax propio. `null` si no registró ningún pax. */
   promPorPax:  number | null
-  /** Cuántas líneas de valor servido comandó. Para ver de dónde sale el número. */
+  /** Cuántas líneas de venta comandó. Para ver de dónde sale el número. */
   lineas:      number
 }
 
@@ -140,16 +146,16 @@ export interface LentesSaloneros {
   ventaPropia:    FilaVentaPropia[]
   /** Lente B. Ordenada por neta de mesas descendente dentro de cada turno. */
   mesaPropia:     FilaMesaPropia[]
-  /** La neta del día según las FACTURAS (`valor_servido_crc`). Es la que muestra el resto de la app. */
+  /** La neta del día según las FACTURAS (`netaDelTicket`). Es la que muestra el resto de la app. */
   netaDiaCrc:     number
   /** La neta según las LÍNEAS, que es la que reparte la lente A. */
   netaLineasCrc:  number
   /**
    * `netaDiaCrc − netaLineasCrc`. Debería ser 0.
    *
-   * No se esconde: si las líneas no suman lo que dice la factura (una factura ingestada sin su
-   * detalle, un redondeo raro), el ranking está repartiendo un total distinto al del día y hay
-   * que verlo, no taparlo.
+   * No se esconde: una factura ingestada SIN su detalle cuenta en el día por su valor servido
+   * (`netaDelTicket`) pero no tiene líneas que repartir, así que el ranking reparte un total
+   * distinto al del día y hay que verlo, no taparlo.
    */
   descuadreCrc:   number
   turnos:         { turno: Turno; etiqueta: string; orden: number }[]
@@ -203,6 +209,12 @@ interface AcumB {
   pax:      number
 }
 
+/** 677/678: los artículos que acreditan pax. Valen ₡0 y no son un producto vendido. */
+const esArticuloPax = (codigo: string | null): boolean => {
+  const c = (codigo ?? '').trim()
+  return c === COD_PAX_1 || c === COD_PAX_2
+}
+
 /** Clave de una fila: la persona Y el turno. Una persona que trabajó los dos turnos da dos filas. */
 const clave = (personaId: string, turno: Turno): string => `${personaId}|${turno}`
 
@@ -231,7 +243,7 @@ export function calcularLentes(
   for (const t of tickets) {
     const turno = turnoDeFactura(t.cajero_login)
     const propias = porTicket.get(t.id) ?? []
-    netaDia += num(t.valor_servido_crc)
+    netaDia += netaDelTicket(t, propias)
 
     // ── Lente A: la factura se parte por quién comandó cada línea ──
     // Los pesos del prorrateo salen de la MISMA partición, así que el IVA sigue a la plata.
@@ -243,13 +255,14 @@ export function calcularLentes(
         acc = { persona, neta: 0, pax: 0, lineas: 0 }
         netaPorPersona.set(persona.id, acc)
       }
-      if (esValorServido(l.familia)) {
+      if (esLineaDeVenta(l.familia)) {
         acc.neta += num(l.monto)
-        acc.lineas++
         netaLineas += num(l.monto)
+        // El artículo pax (677/678) cuenta comensales, no es un producto: no suma al conteo.
+        if (!esArticuloPax(l.codigo_producto)) acc.lineas++
       }
-      // El pax propio se cuenta por CÓDIGO (677), no por familia, y va aparte de la neta: la
-      // familia 19 "A PAX" no es valor servido, así que estas líneas no suman plata.
+      // El pax propio se cuenta por CÓDIGO (677), no por familia, y va aparte de la neta: los
+      // artículos de pax valen ₡0, así que aunque la familia 19 sea venta no suman plata.
       if ((l.codigo_producto ?? '').trim() === COD_PAX_1) acc.pax += num(l.cantidad)
     }
 
@@ -281,7 +294,7 @@ export function calcularLentes(
     // que igual corrió esa persona, y agruparlas todas bajo un `null` las contaría como una.
     accB.mesas.add((t.mesa ?? '').trim() || `factura:${t.id}`)
     accB.tickets++
-    accB.neta += num(t.valor_servido_crc)
+    accB.neta += netaDelTicket(t, propias)
     accB.pax  += num(t.pax)
   }
 

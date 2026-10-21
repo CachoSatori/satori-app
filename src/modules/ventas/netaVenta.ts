@@ -32,6 +32,15 @@ export const FAMILIAS_CATALOGO: readonly number[] = [
   1, 2, 3, 4, 5, 6, 9, 11, 12, 13, 15, 16, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
 ]
 
+/**
+ * Lo mínimo que hace falta de una línea. Estructural a propósito: sirve la fila de
+ * `pos_ndf_ticket_lines` y también la `LineaLente` de las lentes de saloneros.
+ */
+export type LineaNeta = Pick<LineaNdfRow, 'familia' | 'monto' | 'codigo_producto'> & { nombre?: string | null }
+
+/** Lo mínimo de una factura. `numero_factura` solo sirve para rotular los avisos. */
+export type TicketNeta = Pick<TicketNdfConId, 'valor_servido_crc'> & { numero_factura?: string }
+
 const n = (v: number | null | undefined): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
 
 /** ¿La plata de esta línea es venta? `null` (sin familia) también: se cuenta y se avisa. */
@@ -58,14 +67,14 @@ export interface AvisoCatalogo {
  * hueco de ingesta, no un ticket sin venta.
  */
 export function netaDelTicket(
-  t: Pick<TicketNdfConId, 'numero_factura' | 'valor_servido_crc'>,
-  lineas: readonly LineaNdfRow[] | undefined,
+  t: TicketNeta,
+  lineas: readonly LineaNeta[] | undefined,
   avisos?: AvisoCatalogo[],
 ): number {
   if (!lineas || lineas.length === 0) {
     const vs = n(t.valor_servido_crc)
     if (avisos && vs !== 0) {
-      avisos.push({ tipo: 'sin_lineas', numero_factura: t.numero_factura, codigo: null, nombre: null, familia: null, monto: vs })
+      avisos.push({ tipo: 'sin_lineas', numero_factura: t.numero_factura ?? '?', codigo: null, nombre: null, familia: null, monto: vs })
     }
     return vs
   }
@@ -80,8 +89,8 @@ export function netaDelTicket(
       : 'familia_desconocida'
     if (tipo) {
       avisos.push({
-        tipo, numero_factura: t.numero_factura,
-        codigo: l.codigo_producto, nombre: l.nombre, familia: l.familia ?? null, monto,
+        tipo, numero_factura: t.numero_factura ?? '?',
+        codigo: l.codigo_producto, nombre: l.nombre ?? null, familia: l.familia ?? null, monto,
       })
     }
   }
@@ -93,10 +102,10 @@ export function netaDelTicket(
  * ticket (turnos, ritmo por hora) y tienen que dar lo MISMO que el total de `armarDia`.
  */
 export function netaPorTicket(
-  tickets: readonly Pick<TicketNdfConId, 'id' | 'numero_factura' | 'valor_servido_crc'>[],
-  lineas: readonly LineaNdfRow[],
+  tickets: readonly (TicketNeta & { id: string })[],
+  lineas: readonly (LineaNeta & { ticket_id: string })[],
 ): Map<string, number> {
-  const porTicket = new Map<string, LineaNdfRow[]>()
+  const porTicket = new Map<string, LineaNeta[]>()
   for (const l of lineas) {
     const lista = porTicket.get(l.ticket_id)
     if (lista) lista.push(l)

@@ -71,7 +71,7 @@ function fakePostgrest(filas: Fila[]) {
 const mock = vi.hoisted(() => ({ cliente: { from: (): unknown => ({}) } }))
 vi.mock('./supabase', () => ({ supabase: mock.cliente }))
 
-const { getLineasDeTickets, getNetoPorJornada, getTicketsRango } = await import('./posNdf')
+const { getLineasDeTickets, getTicketsDeJornadas, getTicketsRango } = await import('./posNdf')
 
 /** Facturas de una misma jornada, con `fecha_registra` REPETIDA a propósito (ver más abajo). */
 const tickets = (n: number): Fila[] =>
@@ -198,23 +198,23 @@ describe('getLineasDeTickets — una tanda de 200 facturas YA pasa las 1.000 lí
   })
 })
 
-// ── getNetoPorJornada ──────────────────────────────────────────────────────────────────────
+// ── getTicketsDeJornadas ───────────────────────────────────────────────────────────────────
 
-describe('getNetoPorJornada — el neto no puede salir corto por truncación', () => {
-  it('suma las 2.500 facturas del rango, no las primeras 1.000', async () => {
+describe('getTicketsDeJornadas — la comparativa no puede salir corta por truncación', () => {
+  it('devuelve las 2.500 facturas del rango, no las primeras 1.000', async () => {
     const fake = fakePostgrest(tickets(2_500))
     mock.cliente.from = fake.from
 
-    const neto = await getNetoPorJornada('x', ['2026-08-30'])
+    const filas = await getTicketsDeJornadas('x', ['2026-08-30'])
 
-    // 2.500 × ₡1.000. Truncado daban ₡1.000.000 — un día flojo perfectamente creíble.
-    expect(neto['2026-08-30']).toBe(2_500_000)
+    // Truncado daban 1.000 — un día flojo perfectamente creíble.
+    expect(filas).toHaveLength(2_500)
   })
 
   it('pagina con `.range()` y con orden total', async () => {
     const fake = fakePostgrest(tickets(1_500))
     mock.cliente.from = fake.from
-    await getNetoPorJornada('x', ['2026-08-30'])
+    await getTicketsDeJornadas('x', ['2026-08-30'])
 
     expect(fake.viajes.every(v => v.rango !== null)).toBe(true)
     expect(fake.viajes[0].orden).toEqual(['fecha_registra', 'id'])
@@ -223,7 +223,7 @@ describe('getNetoPorJornada — el neto no puede salir corto por truncación', (
   it('sin fechas no consulta', async () => {
     const fake = fakePostgrest(tickets(10))
     mock.cliente.from = fake.from
-    expect(await getNetoPorJornada('x', [])).toEqual({})
+    expect(await getTicketsDeJornadas('x', [])).toEqual([])
     expect(fake.viajes).toHaveLength(0)
   })
 })

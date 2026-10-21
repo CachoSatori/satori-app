@@ -293,7 +293,7 @@ export interface SnapshotEnVivo {
    * Cuentas EN CURSO (`estado = 'R'`): plata que todavía puede cambiar y por eso NO está en
    * `dia` ni en ninguna cifra oficial. Es un concepto de «En vivo»: «Hoy» no lo lleva.
    *
-   * `monto` es la Σ de `valor_servido_crc` de esos tickets, o sea la misma unidad que el neto
+   * `monto` es la Σ de la NETA de esos tickets (`netaVenta.ts`, desde sus líneas), la misma unidad que el neto
    * oficial, para que se puedan leer lado a lado sin convertir nada. Siempre presente cuando
    * el snapshot sale del PoS, en 0 si no hay nada abierto; el generador de ejemplo no lo trae.
    */

@@ -276,45 +276,52 @@ export async function getLineasDeTickets(ticketIds: string[]): Promise<LineaNdfR
   return out
 }
 
+/** Lo que la comparativa necesita de cada factura: a qué jornada cae y con qué armar su neta. */
+export interface TicketComparable {
+  id:                string
+  numero_factura:    string
+  fecha_registra:    string
+  valor_servido_crc: number | null
+}
+
 /**
- * El NETO de varias jornadas de una sola consulta, para la comparativa.
+ * Las facturas CERRADAS de varias jornadas, de una sola consulta, para la comparativa.
  *
- * Se pide el rango completo (de la jornada más vieja a la más nueva) y se reparte por jornada
- * acá: son cinco fechas sueltas y traer cinco rangos serían cinco viajes.
+ * Devuelve las FACTURAS y no un total: la neta se arma en la app desde las líneas
+ * (`modules/ventas/netaVenta.ts`), igual que la del día que se compara. Sumar acá
+ * `valor_servido_crc` comparaba el día contra una base ~1,3 % más baja (sin merch ni BOXING).
+ *
+ * Se pide el rango completo (de la jornada más vieja a la más nueva) y se descarta acá lo que no
+ * cae en ninguna de las fechas pedidas: son cuatro fechas sueltas y traer cuatro rangos serían
+ * cuatro viajes. Solo vuelven las facturas de esas fechas, así que las líneas se piden de pocas.
  */
-export async function getNetoPorJornada(
+export async function getTicketsDeJornadas(
   local: string,
   businessDates: string[],
-): Promise<Record<string, number>> {
-  if (businessDates.length === 0) return {}
+): Promise<TicketComparable[]> {
+  if (businessDates.length === 0) return []
   const ordenadas = [...businessDates].sort()
   const { desde } = ventanaJornada(ordenadas[0])
   const { hasta } = ventanaJornada(ordenadas[ordenadas.length - 1])
 
   // Paginado por el mismo motivo: un rango de varias jornadas pasa las 1.000 facturas y sin
   // esto el neto salía corto — con la pinta de un día flojo, no de una lectura incompleta.
-  // El `id` va en el select SOLO para poder desempatar el orden; no se usa para nada más.
-  const filas = await leerTodo<{ fecha_registra: string; valor_servido_crc: number | null }>(
+  // El `id` además desempata el orden.
+  const filas = await leerTodo<TicketComparable>(
     (d, h) => sb
       .from('pos_ndf_tickets')
-      .select('id, fecha_registra, valor_servido_crc')
+      .select('id, numero_factura, fecha_registra, valor_servido_crc')
       .eq('local', local)
-      // Solo CERRADAS. La comparativa mira jornadas pasadas, que ya son todas C, así que hoy
-      // no cambia nada; pero desde B la tabla trae R y X, y una R viva en el rango (o una R
-      // huérfana que nunca cerró) inflaría el «promedio de 4 semanas» con plata que no es venta.
+      // Solo CERRADAS. Una R viva en el rango (o una R huérfana que nunca cerró) inflaría el
+      // «promedio de 4 semanas» con plata que no es venta.
       .eq('estado', 'C')
       .gte('fecha_registra', desde)
       .lt('fecha_registra', hasta)
       .order('fecha_registra', { ascending: true })
       .order('id', { ascending: true })
       .range(d, h))
-  const out: Record<string, number> = {}
-  for (const f of businessDates) out[f] = 0
-  for (const r of filas) {
-    const j = businessDateDe(r.fecha_registra)
-    if (j in out) out[j] += Number(r.valor_servido_crc ?? 0)
-  }
-  return out
+  const pedidas = new Set(businessDates)
+  return filas.filter(r => pedidas.has(businessDateDe(r.fecha_registra)))
 }
 
 // ── Mesas abiertas (snapshot del PoS, "ahora") ─────────────────────────────────────────────

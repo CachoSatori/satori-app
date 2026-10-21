@@ -261,7 +261,7 @@ export default function VentasEnVivo({ metas }: Props) {
   // principal, que decía «al cierre de las HH:00» con este reloj y se leía como un corte.
   const hora       = horaCorteCR()
   // Lo provisional (cuentas en curso, estado R) viaja APARTE del día en `snap.provisional`,
-  // en la misma unidad que la neta (valor_servido). El generador de ejemplo no lo trae: 0.
+  // en la misma unidad que la neta (`netaVenta.ts`). El generador de ejemplo no lo trae: 0.
   const sinCerrar          = snap.provisional?.monto   ?? 0
   const provisionalTickets = snap.provisional?.tickets ?? 0
 

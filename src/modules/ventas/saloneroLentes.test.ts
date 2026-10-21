@@ -147,8 +147,8 @@ describe('Σ(meseros) + caja + genérico + otro = neta del día', () => {
     expect(r.descuadreCrc).toBe(5_000)   // visible, no escondido
   })
 
-  it('las líneas que no son valor servido no suman plata (pero sí pax)', () => {
-    // La familia 19 "A PAX" no es ingreso: si sumara, el día quedaría inflado.
+  it('el artículo pax no suma plata ni cuenta como línea (pero sí pax)', () => {
+    // El 677 vale ₡0: la familia 19 es venta (por el BOXING), pero el pax no infla nada.
     const r = calcularLentes(
       [ticket({ id: 't9', valor_servido_crc: 1_000 })],
       [linea('t9', '032', 1_000), pax('t9', '032', 3)],
@@ -156,6 +156,26 @@ describe('Σ(meseros) + caja + genérico + otro = neta del día', () => {
     expect(fila(r, '032')?.netaCrc).toBe(1_000)
     expect(fila(r, '032')?.paxPropio).toBe(3)
     expect(fila(r, '032')?.lineas).toBe(1)
+  })
+
+  it('la plata es la NETA de venta: merch y BOXING suman; 6/17/20 no', () => {
+    const r = calcularLentes(
+      [ticket({ id: 'v1', valor_servido_crc: 10_000 })],
+      [
+        linea('v1', '032', 10_000),                                       // comida
+        linea('v1', '032', 14_000, { familia: 21, codigo_producto: 'R1' }),   // remera
+        linea('v1', '026', 884.94, { familia: 19, codigo_producto: 'BOX' }),  // BOXING
+        linea('v1', '026', 3_000,  { familia: 17, codigo_producto: 'C1' }),   // cortesía
+        linea('v1', '026', 5_000,  { familia: 6,  codigo_producto: 'XX' }),   // personal
+      ],
+    )
+    expect(fila(r, '032')?.netaCrc).toBe(24_000)
+    expect(fila(r, '026')?.netaCrc).toBe(885)
+    expect(r.netaDiaCrc).toBe(Math.round(24_000 + 884.94))
+    expect(r.descuadreCrc).toBe(0)
+    // Lente B: la factura entera, en la misma neta.
+    const b = r.mesaPropia.reduce((s, f) => s + f.netaMesasCrc, 0)
+    expect(b).toBe(r.netaDiaCrc)
   })
 })
 

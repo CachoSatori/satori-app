@@ -15,7 +15,13 @@
 import { useState, useMemo } from 'react'
 import type { DiasMap, ProductMap, HistMap } from '../../shared/types/ventas'
 import { availableMonths, availableYears, fi } from './ventasUtils'
-import { isCajeroName } from '../../shared/utils'
+import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
+
+// ── Qué cuenta como DELIVERY acá ───────────────────────────────────────────────────────────
+// Las DOS cajas de turno, no la marca `esCajero`: «Salón sin mesero» también la lleva y su
+// plata es de SALÓN por definición (`canal = 'salon'`).
+const esCajaDeTurno = (clave: string): boolean =>
+  (CLAVES_CAJERO_TURNO as readonly string[]).includes(clave)
 
 interface MenuEngItem {
   nombre:     string
@@ -78,7 +84,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
       const dia = dias[date]
       if (!dia) continue
       for (const [salName, s] of Object.entries(dia.saloneros)) {
-        const isCaj = isCajeroName(salName)
+        const isCaj = esCajaDeTurno(salName)
         if (canal === 'salon'    && isCaj)  continue
         if (canal === 'delivery' && !isCaj) continue
         const prods = (s as { prods?: [string, number, number][] }).prods ?? []
@@ -226,7 +232,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
           <div className="vt-kpi-val" style={{ color: withCostPct > 80 ? 'var(--vt-green)' : withCostPct > 50 ? '#c8a96e' : 'var(--vt-red)' }}>
             {withCostPct.toFixed(0)}%
           </div>
-          <div className="vt-kpi-sub">de items con costo</div>
+          <div className="vt-kpi-sub">de ítems con costo</div>
         </div>
         {withCost.length > 0 && (
           <>
@@ -301,7 +307,7 @@ export default function VentasMenuEng({ dias, pm }: Props) {
                       <div style={{ fontSize:'0.65rem', color:'#444', marginTop:2 }}>+{qItems.length-6} más…</div>
                     )}
                     {qItems.length === 0 && (
-                      <div style={{ fontSize:'0.72rem', color:'#333', padding:'0.5rem 0' }}>Sin items en este cuadrante</div>
+                      <div style={{ fontSize:'0.72rem', color:'#333', padding:'0.5rem 0' }}>Sin ítems en este cuadrante</div>
                     )}
                   </div>
                 </div>

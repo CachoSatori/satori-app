@@ -26,10 +26,14 @@ export async function getVentasDias(days = 400): Promise<Record<string, DiaData>
 }
 
 export async function getAllVentasDias(): Promise<Record<string, DiaData>> {
+  // PostgREST corta callado en 1000 filas: sin este limit el histórico se truncaba y los días
+  // más viejos (2023 / inicio 2024) desaparecían sin error. Mismo motivo y mismo número que
+  // `getVentasHist()`.
   const { data, error } = await supabase
     .from('ventas_dias')
     .select('session_date, data')
     .order('session_date', { ascending: true })
+    .limit(5000)
   if (error) throw new Error(error.message)
   const result: Record<string, DiaData> = {}
   for (const row of (data as unknown as Array<{ session_date: string; data: DiaData }> ?? [])) {
@@ -133,10 +137,15 @@ export async function saveProductMapItems(
 }
 
 export async function updateProductInfo(nombre: string, info: Partial<ProductInfo>): Promise<void> {
+  // `tipoDeFamilia` es una marca de RUNTIME (quién puso el tipo: la familia del PoS o una
+  // persona). No es una columna de `product_map` y no se persiste — se descarta acá para que
+  // no viaje nunca al upsert.
+  const persistible: Record<string, unknown> = { ...info }
+  delete persistible.tipoDeFamilia
   const { error } = await supabase
     .from('product_map')
     .upsert(
-      { nombre, ...info, updated_at: new Date().toISOString() },
+      { nombre, ...persistible, updated_at: new Date().toISOString() },
       { onConflict: 'nombre' },
     )
   if (error) throw new Error(error.message)

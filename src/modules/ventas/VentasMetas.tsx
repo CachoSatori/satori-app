@@ -218,7 +218,7 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
           ['promPax',    'Prom/PAX (₡)',    1000, '₡ '],
           ['bebPax',     'Beb/PAX',         0.1,  ''],
           ['ratioCB',    'Ratio C/B (₡)',   0.1,  ''],
-          ['ticketItem', 'Ticket/item (₡)', 500,  '₡ '],
+          ['ticketItem', 'Ticket/ítem (₡)', 500,  '₡ '],
           ['ventas',     'Ventas/día (₡)',  50000,'₡ '],
         ] as [keyof Meta['global'], string, number, string][]).map(([key, label, step, prefix]) => (
           <div key={key} className="vt-kpi">
@@ -238,7 +238,7 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
       {/* Individual overrides */}
       {sals.length > 0 && (
         <>
-          <div className="vt-sl" style={{ marginTop: '1.5rem' }}>Metas individuales (sobreescriben globales)</div>
+          <div className="vt-sl" style={{ marginTop: '1.5rem' }}>Metas individuales (sobrescriben globales)</div>
           <div className="vt-tbl-wrap">
             <table className="vt-tbl">
               <thead>
@@ -247,7 +247,7 @@ export default function VentasMetas({ dias, hist, metas, onMetasUpdated }: Props
                   <th className="r">Prom/PAX</th>
                   <th className="r">Beb/PAX</th>
                   <th className="r">Ratio C/B</th>
-                  <th className="r">Ticket/item</th>
+                  <th className="r">Ticket/ítem</th>
                   <th className="r">Ventas/día</th>
                 </tr>
               </thead>

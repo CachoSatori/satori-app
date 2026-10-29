@@ -210,12 +210,11 @@
    (3) verificar por SQL que esos tickets pasan a `registrado_por='salonero'`, `salonero_login='01'`.
    Límite conocido: los **2.729 tickets `sin_pedido` del `01` (₡89,9M)** no tienen pedido en el PoS → el ranking
    por factura no puede atribuirlos a nadie (por diseño); sí le quedan a ROSAURA en las lentes por línea.
-10. **👁️ Ventas · tarea «Satori PoS Bridge PROD» no arrancó al reiniciar la PC (2026-10-29).** Última ejecución
-   1999 / `0x41303` = nunca corrió; Ismael la arrancó a mano y quedó viva (sin hueco: prod ≡ staging factura por
-   factura desde el 28/10). La config es IDÉNTICA a la de staging (comparada por XML). **Hipótesis:** se registró
-   después del último reinicio, así que el disparador «al iniciar el sistema» todavía no tuvo ocasión. **Validar
-   con un reinicio de la PC antes de abrir** (las dos tareas tienen que quedar `Running` sin tocarlas) y después
-   confirmar en prod `pos_ndf_cursor.last_poll_at` reciente y `last_error` null.
+10. **✅ CERRADO (2026-10-29) · Ventas · tarea «Satori PoS Bridge PROD» arranca sola.** El 29/10 no había
+   arrancado tras un reinicio (última ejecución 1999 / `0x41303`); la config era idéntica a la de staging y la
+   hipótesis era que se registró después del último reinicio. **Validado:** reinicio de la PC el 29/10 a las 13:39 →
+   las DOS tareas arrancaron solas (`LastTaskResult` 267009 = Running). En prod `pos_ndf_cursor.last_poll_at` =
+   13:56:19 CR (posterior a 13:40), `last_error` null; staging igual (13:55:16, sin error).
 
 ## 🟦 P3 — LEJOS / BLOQUEANTE
 

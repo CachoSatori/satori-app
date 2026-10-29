@@ -5,8 +5,9 @@ import {
   aggGeneral, aggSalonero, aggCajero, getDayStats,
   fi, fmtDate, metaColor, getMeta,
   topProds, metaProgress, ratioCBClass,
-  allSaloneros, esCajero,
+  allSaloneros, esEntradaCajero, mixPorFamilia,
 } from './ventasUtils'
+import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
 import { esPostCorte } from '../cash/cierrePozo'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -46,9 +47,20 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
 
   const dia  = activeDate ? dias[activeDate] : null
   const sals = useMemo(() => dia ? allSaloneros({ [activeDate!]: dia }) : [], [dia, activeDate])
-  const cajs = useMemo(() => dia
-    ? Object.keys(dia.saloneros).filter(n => esCajero(n))
-    : [], [dia])
+  // ── Las TARJETAS de caja del bloque «Restaurante» ─────────────────────────────────────
+  // Solo los dos turnos. Los otros dos baldes que arma `claveNoMesero()` no son caja y no
+  // van acá: «Salón sin mesero» vive en Saloneros y «Sistema y otros» en la pestaña Cajeros.
+  //
+  // ⚠️ Esto es SOLO la lista de tarjetas. El gate del bloque va aparte, abajo — ver `hayCaja`.
+  const cajs = CLAVES_CAJERO_TURNO as readonly string[]
+
+  // El GATE del bloque, en cambio, mira si el día tiene CUALQUIER bucket de caja, por la marca.
+  // Atarlo a `cajs` sería repetir el bug que arregló el pase anterior: un día cuya única plata
+  // no-mesero fuera «Salón sin mesero» dejaría el bloque sin renderizar, y con él desaparecería
+  // de la pantalla el KPI «Venta Total Restaurante», que es la NETA DEL DÍA.
+  const hayCaja = useMemo(
+    () => Object.values(dia?.saloneros ?? {}).some(esEntradaCajero),
+    [dia])
 
   const gen = useMemo(() =>
     activeDate ? aggGeneral([activeDate], dias, pm) : null,
@@ -81,10 +93,31 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   [prevDate, dias, pm])
 
   // Derived metrics not in aggGeneral
-  const com  = useMemo(() => gen ? Object.entries(gen.prods).reduce((s,[n,v]) => s + (pm[n]?.tipo==='comida' ? v.m : 0), 0) : 0, [gen, pm])
-  const beb  = useMemo(() => gen ? Object.entries(gen.prods).reduce((s,[n,v]) => s + (pm[n]?.tipo==='bebida' ? v.m : 0), 0) : 0, [gen, pm])
+  //
+  // ── El ₡ de comida/bebida sale de la FAMILIA del PoS, no del `ProductMap` ──────────────
+  // Antes las dos tarjetas sumaban ₡ recorriendo `gen.prods` y preguntándole `pm[n]?.tipo` al
+  // `ProductMap`. Ese mapa se carga a mano con los nombres del .xls, mientras que los
+  // productos del PoS entran en MAYÚSCULAS desde `pos_ndf_lineas`: los que no estaban
+  // cargados no matcheaban, no sumaban ₡ y la tarjeta quedaba en ₡0 aunque `gen.iCom`/
+  // `gen.iBeb` —que salen de la familia— mostraran unidades. `mixPorFamilia` lee el mismo
+  // desglose por familia (`FAMILIAS_VALOR_SERVIDO`, bebida = 5) del que salen esas unidades,
+  // así que ₡ y unidades ya no pueden discrepar.
+  //
+  // NO es la neta del día y se rotula como tal: los buckets de caja (`CajeroDay`) no traen
+  // desglose comida/bebida, así que su plata cuenta en el total del día pero no acá. El
+  // total, la neta y `gen` quedan exactamente como estaban.
+  const mixFam     = useMemo(() => mixPorFamilia(dias, activeDate ? [activeDate] : []), [dias, activeDate])
+  const mixFamPrev = useMemo(() => mixPorFamilia(dias, prevDate   ? [prevDate]   : []), [dias, prevDate])
+  const com  = mixFam.com
+  const beb  = mixFam.beb
   const promPlato   = gen && gen.iCom > 0 ? com   / gen.iCom : 0
   const promBebida  = gen && gen.iBeb > 0 ? beb   / gen.iBeb : 0
+  // El Ratio C/B (₡) que se MUESTRA sale de la misma base que las tarjetas Comidas/Bebidas.
+  // `gen.ratioCB` lo calcula `aggGeneral` con la cuenta por `pm[nombre]?.tipo`, que en un día
+  // del PoS no matchea y deja com y beb en 0 → el ratio salía `0.00:1` al lado de dos tarjetas
+  // con plata. `aggGeneral` no se toca: la tabla por salonero usa `aggSalonero`, que YA suma
+  // por familia, y su ratio queda como está.
+  const ratioCB     = beb > 0 ? com / beb : 0
 
   // Special product categories for bottom section
   const cortProds = useMemo(() => gen ? topProds(gen.prods, 'monto', 8, ['cortesia'],    pm) : [], [gen, pm])
@@ -132,7 +165,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   }
 
   const stats      = getDayStats(dia)
-  const hasCajeros = cajAggs.length > 0
+  const hasCajeros = hayCaja
 
   // ▲/▼ delta vs día anterior
   function delta(cur: number, prev: number | undefined, isInt = false): React.ReactNode {
@@ -213,7 +246,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               `💰 Ventas: *${fi(gen.totalRest)}*`,
               gen.pax > 0 ? `👥 PAX: ${gen.pax}  •  Prom/PAX: *${fi(gen.promPax)}*` : '',
               gen.cajDelivery > 0 ? `🛵 Delivery: ${fi(gen.cajDelivery)}` : '',
-              `🍺 Beb/PAX: ${gen.bebPax.toFixed(2)}  •  Ratio C/B: ${gen.ratioCB.toFixed(1)}`,
+              `🍺 Beb/PAX: ${gen.bebPax.toFixed(2)}  •  Ratio C/B: ${ratioCB.toFixed(1)}`,
               topLines ? '━━━━━━━━━━━━━━━━━━━━\n' + topLines : '',
               '━━━━━━━━━━━━━━━━━━━━',
               '_Satori · Santa Teresa, CR_',
@@ -305,7 +338,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               <div className="vt-kpi-val">{fi(gen.cajDelivery)}</div>
               <div className="vt-kpi-sub">{gen.totalRest > 0 ? (gen.cajDelivery / gen.totalRest * 100).toFixed(1) : 0}%</div>
             </div>
-            {cajAggs.map(c => (
+            {cajAggs.filter(c => c.total !== 0).map(c => (
               <div key={c.nombre} className="vt-kpi">
                 <div className="vt-kpi-label">{c.nombre}</div>
                 <div className="vt-kpi-val" style={{ fontSize: '0.9rem' }}>{fi(c.total)}</div>
@@ -367,7 +400,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
         <div className="vt-kpi">
           <div className="vt-kpi-label">Prom/Plato</div>
           <div className="vt-kpi-val">{fi(promPlato)}</div>
-          {delta(promPlato, genPrev && genPrev.iCom > 0 ? Object.entries(genPrev.prods).reduce((s,[n,v]) => s+(pm[n]?.tipo==='comida'?v.m:0),0) / genPrev.iCom : undefined)}
+          {delta(promPlato, genPrev && genPrev.iCom > 0 ? mixFamPrev.com / genPrev.iCom : undefined)}
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Prom/Bebida</div>
@@ -382,17 +415,17 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Ratio C/B (₡)</div>
-          <div className={`vt-kpi-val ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</div>
+          <div className={`vt-kpi-val ${ratioCBClass(ratioCB)}`}>{ratioCB.toFixed(2)}:1</div>
         </div>
-        <div className="vt-kpi">
+        <div className="vt-kpi" title="₡ por familia del PoS (comida = 2·3·4·13·16·29). No es la neta del día: la caja no trae desglose comida/bebida.">
           <div className="vt-kpi-label">Comidas</div>
           <div className="vt-kpi-val" style={{ fontSize:'0.85rem' }}>{fi(com)}</div>
-          <div className="vt-kpi-sub">{gen.iCom} platos</div>
+          <div className="vt-kpi-sub">{gen.iCom} platos · no neta</div>
         </div>
-        <div className="vt-kpi blue">
+        <div className="vt-kpi blue" title="₡ por familia del PoS (bebida = familia 5). No es la neta del día: la caja no trae desglose comida/bebida.">
           <div className="vt-kpi-label">Bebidas</div>
           <div className="vt-kpi-val" style={{ fontSize:'0.85rem' }}>{fi(beb)}</div>
-          <div className="vt-kpi-sub">{gen.iBeb} bebidas</div>
+          <div className="vt-kpi-sub">{gen.iBeb} bebidas · no neta</div>
         </div>
       </div>
 
@@ -403,7 +436,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
           {(['promPax','total','pax','ticket'] as const).map(k => (
             <button key={k} className={`vt-sort-tab ${sortBy === k ? 'active' : ''}`}
               onClick={() => setSortBy(k)}>
-              {k === 'promPax' ? 'Prom/PAX' : k === 'total' ? 'Ventas' : k === 'ticket' ? 'Ticket/item' : 'PAX'}
+              {k === 'promPax' ? 'Prom/PAX' : k === 'total' ? 'Ventas' : k === 'ticket' ? 'Ticket/ítem' : 'PAX'}
             </button>
           ))}
         </div>
@@ -417,7 +450,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
               <th className="r">PAX</th>
               <th className="r">Ventas</th>
               <th className="r">Prom/PAX</th>
-              <th className="r">Ticket/item</th>
+              <th className="r">Ticket/ítem</th>
               <th className="r">Beb/PAX</th>
               <th className="r">Ratio C/B</th>
               <th className="r" style={{ color:'#555', fontSize:'0.65rem' }}>vs General</th>

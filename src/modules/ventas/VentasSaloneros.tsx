@@ -7,10 +7,12 @@ function addDays(date: string, n: number): string {
 }
 import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
-  aggSalonero, aggGeneral, allSaloneros,
+  aggSalonero, aggCajero, aggGeneral, allSaloneros,
+  mixPorFamilia,
   fi, fmtDate, metaColor, getMeta, ratioCBClass,
   topProds, datesInRange, allDates,
 } from './ventasUtils'
+import { CLAVE_SALON_SIN_MESERO } from './baldesNoMesero'
 
 interface Props {
   dias:  DiasMap
@@ -48,6 +50,19 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
   }, [dates, preset, from, to])
 
   const gen = useMemo(() => aggGeneral(rangeDates, dias, pm), [rangeDates, dias, pm])
+
+  // ── El Ratio C/B (₡) GENERAL, por familia ──────────────────────────────────────────────
+  // `gen.ratioCB` lo calcula `aggGeneral` con la cuenta por `pm[nombre]?.tipo`
+  // (`ventasUtils.ts:304-305,321`), el mismo `ProductMap` curado a mano que en un día del PoS
+  // no matchea: com y beb quedan en 0 y el ratio sale `0.00:1` — al lado de una tabla cuyas
+  // filas SÍ tienen valor, porque `aggSalonero` acumula `com`/`beb` desde `SaloneroDay`, que
+  // ya viene partido por familia. Era la misma incoherencia que #6 arregló en «Hoy».
+  //
+  // Acá se deriva de `mixPorFamilia`, la MISMA fuente que usan las filas de abajo, así que el
+  // general y el por-salonero por fin hablan el mismo idioma. `aggGeneral` NO se toca: lo
+  // consumen otras pantallas con días del .xls, donde la cuenta por `ProductMap` sí matchea.
+  const mixFam  = useMemo(() => mixPorFamilia(dias, rangeDates), [dias, rangeDates])
+  const ratioCB = mixFam.beb > 0 ? mixFam.com / mixFam.beb : 0
   const [viewMode, setViewMode] = useState<'cards' | 'tabla'>('cards')
   const [sortCol,  setSortCol]  = useState<string>('promPax')
 
@@ -63,6 +78,21 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
       return b.promPax - a.promPax
     })
   }, [sals, rangeDates, dias, pm, sortCol])
+
+  // ── «Salón sin mesero» ─────────────────────────────────────────────────────────────────────
+  // Venta de SALÓN que la factura no le acredita a nadie: `registrado_por = 'sin_pedido'` con
+  // `canal = 'salon'` (el balde lo arma `claveNoMesero()`). La caja timbrando en el salón ya
+  // NO cae acá: es «Cajero-salón», tarjeta propia en la pestaña Cajeros (SPEC atribución).
+  //
+  // NO es una persona: no compite en el ranking, no tiene meta y no entra a Competencias ni
+  // a Empleados — eso sale gratis porque el balde conserva la marca `esCajero`, que es lo que
+  // `allSaloneros()` usa para excluirlo. Por la misma razón se lee con `aggCajero`.
+  //
+  // ⚠️ Que la FACTURA no tenga dueño NO quiere decir que no se sepa quién comandó: la línea
+  // sí lo dice (`pos_ndf_lineas.usuario_registra`), y esa atribución vive en la lente «venta
+  // propia» de Saloneros por línea. Las dos lentes no se suman (regla firmada), así que en
+  // esta vista —que es POR FACTURA— el rótulo honesto es este.
+  const sinAsignar = useMemo(() => aggCajero(CLAVE_SALON_SIN_MESERO, rangeDates, dias), [rangeDates, dias])
 
   const firstDate = rangeDates[0] ?? ''
   const lastDate  = rangeDates[rangeDates.length - 1] ?? ''
@@ -114,7 +144,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Ratio C/B</div>
-          <div className={`vt-kpi-val ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</div>
+          <div className={`vt-kpi-val ${ratioCBClass(ratioCB)}`}>{ratioCB.toFixed(2)}:1</div>
         </div>
       </div>
 
@@ -125,6 +155,24 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
           <button className={`vt-tab-btn ${viewMode==='tabla'?'active':''}`} onClick={() => setViewMode('tabla')}>⊞ Tabla</button>
         </div>
       </div>
+
+      {/* «Salón sin mesero»: visible en los dos modos, siempre fuera del ranking. */}
+      {sinAsignar.total !== 0 && (
+        <div style={{ background:'var(--vt-paper)', border:'1px dashed var(--vt-border)', borderRadius:3, padding:'0.75rem 1rem', marginBottom:'1rem', display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'1rem', flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:'0.85rem' }}>{CLAVE_SALON_SIN_MESERO}</div>
+            <div style={{ fontSize:'0.62rem', color:'#888', marginTop:'0.15rem' }}>
+              Venta de salón que la factura no le acredita a nadie · el nombre de quien comandó
+              se busca en la lente por línea (Saloneros por línea) · no compite en el
+              ranking · <strong>no suma al Total Cajeros</strong>
+            </div>
+          </div>
+          <div style={{ fontFamily:"'DM Mono',monospace", fontWeight:700, fontSize:'0.9rem' }}>
+            {fi(sinAsignar.total)}
+            <span style={{ fontSize:'0.62rem', color:'#888', fontWeight:400 }}> · {sinAsignar.ordenes} órdenes</span>
+          </div>
+        </div>
+      )}
 
       {/* ── TABLA MODE ── */}
       {viewMode === 'tabla' && (
@@ -138,7 +186,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                   { id:'total',    label:'Ventas' },
                   { id:'pax',      label:'PAX' },
                   { id:'promPax',  label:'Prom/PAX' },
-                  { id:'ticket',   label:'Ticket/item' },
+                  { id:'ticket',   label:'Ticket/ítem' },
                   { id:'bebPax',   label:'Beb/PAX' },
                   { id:'ratioCB',  label:'Ratio C/B' },
                   { id:'promPlato',label:'Prom/plato' },
@@ -183,6 +231,21 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
               })}
             </tbody>
             <tfoot>
+              {sinAsignar.total !== 0 && (
+                <tr style={{ color:'#777', fontStyle:'italic' }}>
+                  <td style={{ textAlign:'center' }}>—</td>
+                  <td>
+                    <div style={{ fontWeight:600 }}>{CLAVE_SALON_SIN_MESERO}</div>
+                    <div style={{ fontSize:'0.65rem' }}>
+                      salón sin mesero en la factura · no compite en el ranking
+                    </div>
+                  </td>
+                  <td className="r vt-bold">{fi(sinAsignar.total)}</td>
+                  <td className="r" colSpan={7} style={{ fontSize:'0.68rem', textAlign:'right' }}>
+                    quién comandó cada línea se ve en «Saloneros por línea»
+                  </td>
+                </tr>
+              )}
               <tr className="vt-tbl-footer">
                 <td colSpan={2}>GENERAL</td>
                 <td className="r">{fi(gen.total)}</td>
@@ -190,7 +253,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                 <td className="r vt-bold">{fi(gen.promPax)}</td>
                 <td className="r" style={{ fontSize:'0.75rem' }}>{fi(gen.promTicket)}</td>
                 <td className="r">{gen.bebPax.toFixed(2)}</td>
-                <td className={`r ${ratioCBClass(gen.ratioCB)}`}>{gen.ratioCB.toFixed(2)}:1</td>
+                <td className={`r ${ratioCBClass(ratioCB)}`}>{ratioCB.toFixed(2)}:1</td>
                 <td colSpan={2}/>
               </tr>
             </tfoot>
@@ -272,7 +335,7 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
                   <div className="vt-sal-metrics" style={{ marginTop: '0.75rem' }}>
                     <div><span>Prom/plato</span> <strong>{fi(s.promPlato)}</strong></div>
                     <div><span>Prom/bebida</span> <strong>{fi(s.promBebida)}</strong></div>
-                    <div><span>Ticket/item</span> <strong>{fi(s.promTicket)}</strong></div>
+                    <div><span>Ticket/ítem</span> <strong>{fi(s.promTicket)}</strong></div>
                   </div>
                 </div>
               )}

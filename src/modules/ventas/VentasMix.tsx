@@ -8,7 +8,7 @@
 import { useState, useMemo, useCallback, type ReactElement } from 'react'
 import type { DiasMap, ProductMap, HistMap } from '../../shared/types/ventas'
 import { availableMonths, availableYears, fi } from './ventasUtils'
-import { isCajeroName } from '../../shared/utils'
+import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
 
 // ── Types ─────────────────────────────────────────────────────────
 interface PMItem {
@@ -42,6 +42,15 @@ const SECTIONS: Section[] = [
   { label: 'COMENSALES / A PAX',    color: '#666',    filterFn: p => p.tipo === 'comensales' },
 ]
 
+// ── Qué cuenta como DELIVERY en el Mix ─────────────────────────────────────────────────────
+//
+// Las DOS cajas de turno, y nada más. El criterio no es la marca `esCajero`: desde el pase de
+// cajeros por turno, «Salón sin mesero» TAMBIÉN la lleva, y su plata es de SALÓN por
+// definición (`canal = 'salon'`) — mandarla a delivery sería inventar reparto. Las claves de
+// turno, en cambio, son `canal <> 'salon'` por construcción.
+const esCajaDeTurno = (clave: string): boolean =>
+  (CLAVES_CAJERO_TURNO as readonly string[]).includes(clave)
+
 // ── Helpers ───────────────────────────────────────────────────────
 function getMonto(p: PMItem | { monto: number; salon: number; delivery: number }, canal: 'todos'|'salon'|'delivery'): number {
   if (canal === 'salon')    return (p as PMItem).salon
@@ -64,7 +73,7 @@ function buildPMRaw(dates: string[], dias: DiasMap, pm: ProductMap, canal: 'todo
     const dia = dias[date]
     if (!dia) continue
     for (const [salName, s] of Object.entries(dia.saloneros)) {
-      const isCaj = isCajeroName(salName)
+      const isCaj = esCajaDeTurno(salName)
       if (canal === 'salon'    && isCaj)  continue
       if (canal === 'delivery' && !isCaj) continue
       const prods = (s as { prods?: [string, number, number][] }).prods ?? []
@@ -410,7 +419,7 @@ function VerKPIs({ tots }: { tots: Tots }) {
     { label:'Local Club',    val:fi(totLC)  + (totG ? ' · ' + (totLC/totG*100).toFixed(1)+'%' : ''),         color:'#d4a84b' },
     { label:'Merchandising', val:fi(totMerch) + (totG ? ' · ' + (totMerch/totG*100).toFixed(1)+'%' : ''),    color:'#c890e8' },
     { label:'Unidades',      val:Math.round(totUn).toLocaleString('es-CR'),                                   color:'#aaa' },
-    { label:'Ticket / item', val:fi(totUn ? totG / totUn : 0),                                               color:'var(--vt-gold)' },
+    { label:'Ticket / ítem', val:fi(totUn ? totG / totUn : 0),                                               color:'var(--vt-gold)' },
   ]
   return (
     <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'0.5rem', marginBottom:'1rem' }}>
@@ -510,7 +519,7 @@ function CmpKPIs({ cmpData }: { cmpData: Array<{ key: string; label: string; PM:
     { label:'Bebidas',      fn: t => t.totBeb },
     { label:'Comidas',      fn: t => t.totCom },
     { label:'Local Club',   fn: t => t.totLC },
-    { label:'Ticket/item',  fn: t => t.totUn ? t.totG / t.totUn : 0 },
+    { label:'Ticket/ítem',  fn: t => t.totUn ? t.totG / t.totUn : 0 },
   ]
   return (
     <div style={{ background:'var(--vt-ink)', borderRadius:2, padding:'0.75rem', marginBottom:'1rem', overflowX:'auto' }}>
@@ -737,7 +746,7 @@ function VerTable({ CM, PM, tots, canal, search, pctScale, openClas, openSubcl, 
         <thead>
           <tr style={{ background:'var(--vt-ink)', color:'#aaa' }}>
             {[
-              ['Clasificacion / Producto','left','28%'],['Uds','right','7%'],['Monto','right',''],
+              ['Clasificación / Producto','left','28%'],['Uds','right','7%'],['Monto','right',''],
               ['% Total','right','8%'],['% Secc','right','8%'],['Salón','right',''],['Delivery','right',''],['Tipo','center','7%'],
             ].map(([h,a,w]) => (
               <th key={h} style={{ padding:'0.55rem 0.5rem', textAlign:a as 'left'|'right'|'center', fontSize:'0.62rem', letterSpacing:'0.12em', textTransform:'uppercase', fontWeight:500, whiteSpace:'nowrap', ...(w ? {width:w} : {}) }}>

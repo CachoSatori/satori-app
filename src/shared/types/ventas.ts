@@ -16,10 +16,28 @@ export interface SaloneroDay {
   ratioU:      number
   bebPax:      number
   prods:       [string, number, number][]  // [nombre, qty, monto]
+  /**
+   * La parte de `total` que fue DELIVERY (canal del ticket). OPCIONAL: solo la fuente PoS la
+   * llena, y solo cuando hubo; el `xlsParser` nunca la tuvo, así que sus días quedan iguales
+   * (`?? 0`). Sirve para que `getDayStats` no cuente como salón el delivery de un mesero.
+   */
+  delivery?:   number
 }
 
 export interface CajeroDay {
   esCajero:   true
+  /**
+   * Comensales de los tickets que cayeron en este bucket.
+   *
+   * OPCIONAL porque solo la fuente PoS lo llena: el `xlsParser` nunca calculó el pax de un
+   * bucket de caja, así que sus días quedan exactamente como estaban (`?? 0`).
+   *
+   * Existe porque en el PoS hay tickets de SALÓN registrados bajo un login de caja
+   * (`111`/`222`/`388`). Su plata siempre contó en el total del día; su pax se descartaba, y
+   * eso hacía que el PAX del PoS saliera ~9% por debajo del xls en la Paridad aunque el crudo
+   * (`pos_ndf_tickets.pax_articulo`) diera exactamente lo mismo.
+   */
+  pax?:       number
   total:      number
   salon:      number
   delivery:   number
@@ -58,6 +76,16 @@ export interface ProductInfo {
   subclasificacion: string
   multiplicador:    number
   costo_unitario:   number  // costo de insumos por unidad vendida (food cost)
+  /**
+   * `true` si el `tipo` lo puso la FAMILIA del PoS y no una persona.
+   *
+   * Existe para CONGELAR `aggSalonero.iBebAdj`: ese cálculo aplica el `multiplicador` a los
+   * productos de tipo `bebida`, y antes de la fusión los del PoS no estaban en el mapa, así
+   * que nunca entraban. Sin esta marca, la fusión los activaría de golpe y movería
+   * `bebPax` / `promBebida` / `ratioU` / `promTicket` en los días del PoS. El multiplicador
+   * sigue aplicándose donde siempre se aplicó: los productos clasificados a mano.
+   */
+  tipoDeFamilia?:   boolean
 }
 
 export type ProductMap = Record<string, ProductInfo>
@@ -120,7 +148,18 @@ export interface AggGeneral {
   cajSalon:    number
   totalRest:   number
   salon:       number
+  /** Comensales de TODO el día: los de los meseros MÁS los de los buckets de caja. */
   pax:         number
+  /**
+   * Solo los comensales de los MESEROS. Es el denominador de `promPax` y `bebPax`.
+   *
+   * No es lo mismo que `pax` a propósito: esos dos ratios son el BENCHMARK contra el que se
+   * compara a un mesero (`aggSalonero`), y el numerador de los dos —`total`, `iBeb`— es de
+   * meseros. Meter el pax de caja abajo y dejar la plata de caja afuera arriba desinflaría el
+   * benchmark y movería las evaluaciones. `pax` sirve para "cuánta gente vino"; estos dos, para
+   * "cómo vende un mesero".
+   */
+  paxSaloneros: number
   promPax:     number
   iCom:        number
   iBeb:        number

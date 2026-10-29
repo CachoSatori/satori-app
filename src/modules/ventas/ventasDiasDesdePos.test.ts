@@ -1,0 +1,445 @@
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
+
+import { aHistDay, aHistMap, armarDiasMap, type RangoJornadas } from './ventasDiasDesdePos'
+import { armarDia } from './ventasEnVivoDatos'
+import { getDayStats } from './ventasUtils'
+import { ventanaRangoJornadas } from '../../shared/api/posNdf'
+import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
+import type { DiaData, HistDay } from '../../shared/types/ventas'
+
+const NOMBRES = { '026': 'MAXO', '027': 'GUILLE' }
+const SELLO = '2026-09-05'
+
+const ticket = (over: Partial<TicketNdfConId> & { id: string }): TicketNdfConId => ({
+  numero_factura: over.id, estado: 'C', fecha_registra: '2026-09-05T19:00:00-06:00',
+  fecha_cierra: null, cajero_login: '222',
+  canal: 'salon', mesa: null, salonero_login: '026', registrado_por: 'salonero', turno: 'noche',
+  con_servicio: true, servicio_crc: 1200, total_crc: 13560, valor_servido_crc: 12000,
+  iva_crc: 0, regalia_crc: 0, descuento_crc: 0, clase_ingreso: 'cobrada',
+  pax: 2, pax_nativo: 2, pax_articulo: 2, pax_alerta: 'ok', ...over,
+})
+
+const linea = (ticketId: string, over: Partial<LineaNdfRow> = {}): LineaNdfRow => ({
+  ticket_id: ticketId, codigo_producto: '100', nombre: 'ROLL SATORI',
+  cantidad: 2, monto: 12000, familia: 2, usuario_registra: null, ...over,
+})
+
+// ── Los lotes REALES de staging ────────────────────────────────────────────────────────────
+// Mismos números y horas de cierre que fija `shared/ndf/jornada.test.ts`.
+
+/** `desde..hasta` de números de factura, todos del mismo lote. */
+const lote = (
+  desde: number, hasta: number,
+  o: { cajero: string; cierre: string | null; primero: string; pasoMin?: number },
+): TicketNdfConId[] => {
+  const t0 = Date.parse(o.primero)
+  const paso = o.pasoMin ?? 10
+  const out: TicketNdfConId[] = []
+  for (let nro = desde; nro <= hasta; nro++) {
+    out.push(ticket({
+      id:             String(nro),
+      fecha_registra: new Date(t0 + (nro - desde) * paso * 60_000).toISOString(),
+      fecha_cierra:   o.cierre,
+      cajero_login:   o.cajero,
+    }))
+  }
+  return out
+}
+
+/** 110826–110838 · 13 facturas · 222 · cierra 22:07:59 CR del 4-sep → jornada 2026-09-04. */
+const LOTE_4_TARDE = lote(110826, 110838, {
+  cajero: '222', cierre: '2026-09-04T22:07:59-06:00', primero: '2026-09-04T18:05:00-06:00',
+})
+/** 110840 · 1 factura · 111 · cierra 16:07:03 CR del 5-sep → jornada 2026-09-05. */
+const LOTE_5_MANANA = lote(110840, 110840, {
+  cajero: '111', cierre: '2026-09-05T16:07:03-06:00', primero: '2026-09-05T12:20:00-06:00',
+})
+/** 110843–110866 · 24 facturas · 222 · cierra 22:30:06 CR del 5-sep → jornada 2026-09-05. */
+const LOTE_5_TARDE = lote(110843, 110866, {
+  cajero: '222', cierre: '2026-09-05T22:30:06-06:00', primero: '2026-09-05T17:15:00-06:00',
+})
+
+const TODOS  = [...LOTE_4_TARDE, ...LOTE_5_MANANA, ...LOTE_5_TARDE]
+const LINEAS = TODOS.map(t => linea(t.id))
+const RANGO: RangoJornadas = { desde: '2026-09-04', hasta: '2026-09-05' }
+
+const armar = (
+  tickets: TicketNdfConId[], lineas: LineaNdfRow[], rango: RangoJornadas,
+) => armarDiasMap(tickets, lineas, rango, { uploadedAt: SELLO, nombres: NOMBRES }).dias
+
+// ── Un DiaData por jornada ─────────────────────────────────────────────────────────────────
+
+// ── P2: el eager y el full tienen que dar LO MISMO donde se solapan ────────────────────────
+//
+// «Hoy» lee el eager (últimos 400 días) y «Análisis» el full (todo el PoS). Los dos piden al
+// MISMO adaptador, con rangos distintos. Si una jornada que cae dentro de los dos diera
+// distinto, la plata de esa fecha CAMBIARÍA en pantalla cuando el full termina de cargar en
+// segundo plano — y el usuario vería saltar un número sin tocar nada.
+//
+// Que no pase depende de dos cosas que ya están en P1b y se fijan acá:
+//   · `ventanaRangoJornadas` lee un SUPERSET por los dos lados (−1 día al principio, +2 al
+//     final), así que un lote que cruza el borde del rango entra COMPLETO.
+//   · `armarDiasMap` agrupa primero por lote y recién después descarta las jornadas de afuera.
+describe('P2 · el eager y el full coinciden en las fechas solapadas', () => {
+  it('la jornada del borde da el MISMO DiaData pedida sola o dentro del rango largo', () => {
+    // El 5-sep es el borde: en el rango corto es su primer día, en el largo está en el medio.
+    const corto = armar(TODOS, LINEAS, { desde: '2026-09-05', hasta: '2026-09-05' })
+    const largo = armar(TODOS, LINEAS, { desde: '2026-09-01', hasta: '2026-09-30' })
+
+    expect(corto['2026-09-05']).toEqual(largo['2026-09-05'])
+  })
+
+  it('el lote que abrió ANTES del rango corto no se cuela truncado en su primer día', () => {
+    // El lote del 4 abre el 4 a las 18:05. Pedido desde el 5, sus facturas entran por el
+    // superset pero su jornada da 2026-09-04, así que se descartan enteras — no se parten ni
+    // inflan el 5. Sin eso, el eager mostraría un 5-sep más grande que el full.
+    const corto = armar(TODOS, LINEAS, { desde: '2026-09-05', hasta: '2026-09-05' })
+    expect(Object.keys(corto)).toEqual(['2026-09-05'])
+  })
+
+  it('las dos jornadas dan igual en los dos rangos, no solo la del borde', () => {
+    const corto = armar(TODOS, LINEAS, RANGO)
+    const largo = armar(TODOS, LINEAS, { desde: '2026-08-01', hasta: '2026-10-31' })
+    for (const f of Object.keys(corto)) expect(corto[f]).toEqual(largo[f])
+  })
+})
+
+describe('armarDiasMap — un DiaData por jornada', () => {
+  it('el rango multi-día parte los lotes reales en sus dos jornadas', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    expect(Object.keys(dias)).toEqual(['2026-09-04', '2026-09-05'])
+  })
+
+  it('110826–110838 caen enteras en la jornada 2026-09-04', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    const d4 = dias['2026-09-04']
+    // 13 facturas del fixture, todas del mismo salonero: 2 pax y ₡12.000 netos cada una.
+    const pax   = Object.values(d4.saloneros).reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
+    const total = Object.values(d4.saloneros).reduce((s, x) => s + x.total, 0)
+    expect(pax).toBe(13 * 2)
+    expect(total).toBe(13 * 12000)
+    expect(d4.fileName).toBe('ndf 2026-09-04')
+  })
+
+  it('110840 + 110843–110866 caen juntas en la jornada 2026-09-05', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    const pax = Object.values(dias['2026-09-05'].saloneros)
+      .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
+    expect(pax).toBe(25 * 2)                  // 1 del 111 + 24 del 222
+    expect(dias['2026-09-05'].fileName).toBe('ndf 2026-09-05')
+  })
+
+  it('ninguna de las 38 facturas se pierde ni se duplica entre las dos jornadas', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    const pax = Object.values(dias).flatMap(d => Object.values(d.saloneros))
+      .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
+    expect(pax).toBe(38 * 2)
+  })
+
+  it('sin tickets, un DiasMap vacío (no se inventa un día en cero)', () => {
+    expect(armar([], [], RANGO)).toEqual({})
+  })
+})
+
+// ── Paridad de forma con «En vivo» ─────────────────────────────────────────────────────────
+
+describe('paridad de FORMA con armarDia / «En vivo»', () => {
+  it('el DiaData del adaptador es EXACTAMENTE el de armarDia para los mismos tickets', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    // Lo que «En vivo» hubiera armado para esa jornada, con los mismos tickets y líneas.
+    const delDia = [...LOTE_5_MANANA, ...LOTE_5_TARDE]
+    const esperado = armarDia(
+      '2026-09-05', delDia, delDia.map(t => linea(t.id)), SELLO, NOMBRES,
+    ).dia
+    expect(dias['2026-09-05']).toEqual(esperado)
+  })
+
+  it('tiene las claves de DiaData y nada más', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    for (const d of Object.values(dias)) {
+      expect(Object.keys(d).sort()).toEqual(['fileName', 'saloneros', 'uploadedAt'])
+      expect(typeof d.fileName).toBe('string')
+      expect(typeof d.uploadedAt).toBe('string')
+      expect(typeof d.saloneros).toBe('object')
+    }
+  })
+
+  it('las entradas de saloneros tienen la forma que consumen Hoy/Mix/Saloneros', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    const entradas = Object.values(dias['2026-09-05'].saloneros)
+    expect(entradas.length).toBeGreaterThan(0)
+    for (const e of entradas) {
+      if ('esCajero' in e && e.esCajero) {
+        expect(Object.keys(e).sort()).toEqual(
+          ['delivery', 'esCajero', 'iva', 'ordenes', 'prods', 'salon', 'serv', 'ticketProm', 'total'])
+      } else {
+        expect(Object.keys(e).sort()).toEqual(
+          ['bebPax', 'beb', 'com', 'iBeb', 'iCom', 'iva', 'pax', 'promBebida', 'promPax',
+           'promPlato', 'prods', 'ratioCB', 'ratioU', 'serv', 'total'].sort())
+      }
+      expect(Array.isArray(e.prods)).toBe(true)
+    }
+  })
+
+  it('un DiasMap del adaptador es asignable a DiasMap sin castear', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    const uno: DiaData = dias['2026-09-04']
+    expect(uno.saloneros).toBeDefined()
+  })
+})
+
+// ── El borde del superset ──────────────────────────────────────────────────────────────────
+
+describe('el corte de día — por FACTURA, no por lote de cierre', () => {
+  // 222 que abre el 5-sep 18:30 y cierra el 6-sep 01:00. Antes, el lote entero iba al 5. Ahora
+  // cada factura va al día CR de su `fecha_registra`: el corte del reporte del PoS.
+  const CRUZA = lote(200001, 200003, {
+    cajero: '222', cierre: '2026-09-06T01:00:00-06:00', primero: '2026-09-05T18:30:00-06:00',
+    pasoMin: 200,   // 18:30 · 21:50 · 01:10 del día siguiente
+  })
+  const paxDe = (d: DiaData) => Object.values(d.saloneros)
+    .reduce((s, x) => s + ('pax' in x ? x.pax ?? 0 : 0), 0)
+
+  it('la factura de después de medianoche va al día SIGUIENTE, aunque su lote abriera antes', () => {
+    const dias = armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-05', hasta: '2026-09-06' })
+    expect(Object.keys(dias)).toEqual(['2026-09-05', '2026-09-06'])
+    expect(paxDe(dias['2026-09-05'])).toBe(2 * 2)     // 18:30 y 21:50
+    expect(paxDe(dias['2026-09-06'])).toBe(1 * 2)     // la de la 01:10
+  })
+
+  it('pedir solo el 6 trae SOLO la factura de la madrugada', () => {
+    const dias = armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-06', hasta: '2026-09-06' })
+    expect(Object.keys(dias)).toEqual(['2026-09-06'])
+    expect(paxDe(dias['2026-09-06'])).toBe(2)
+  })
+
+  it('el superset del fetch no se cuela: las facturas del 4 quedan afuera del 5', () => {
+    const dias = armar([...CRUZA, ...LOTE_4_TARDE], [], { desde: '2026-09-05', hasta: '2026-09-05' })
+    expect(Object.keys(dias)).toEqual(['2026-09-05'])
+    expect(paxDe(dias['2026-09-05'])).toBe(2 * 2)     // las dos del 5; las 13 del 4 y la del 6, afuera
+  })
+
+  it('caja cerrada al día siguiente (corte de luz 10-oct-2026): el lote NO arrastra el día', () => {
+    // El 222 del 10 no pudo cerrar y cerró el 11 a las 12:00, en la MISMA pasada que lo que se
+    // vendió el 11 a la mañana. Con el lote, todo caía en el 10 (su apertura). Por factura, no.
+    const CIERRE_TARDIO = '2026-10-11T12:00:00-06:00'
+    const tickets = [
+      ticket({ id: 'n1', fecha_registra: '2026-10-10T20:00:00-06:00', fecha_cierra: CIERRE_TARDIO, valor_servido_crc: 50000 }),
+      ticket({ id: 'n2', fecha_registra: '2026-10-11T10:30:00-06:00', fecha_cierra: CIERRE_TARDIO, valor_servido_crc: 83000 }),
+    ]
+    const lineas = [linea('n1', { monto: 50000 }), linea('n2', { monto: 83000 })]
+    const h = aHistMap(armar(tickets, lineas, { desde: '2026-10-10', hasta: '2026-10-11' }))
+    expect(h['2026-10-10'].ventaNeta).toBe(50000)
+    expect(h['2026-10-11'].ventaNeta).toBe(83000)
+  })
+
+  it('la ventana de fetch es un superset por los DOS lados', () => {
+    // +1 día al final por el turno que cierra pasada la medianoche; −1 al principio para no
+    // ver truncado un lote que abrió el día anterior.
+    expect(ventanaRangoJornadas('2026-09-05', '2026-09-05')).toEqual({
+      desde: '2026-09-04T00:00:00-06:00',
+      hasta: '2026-09-07T00:00:00-06:00',
+    })
+    expect(ventanaRangoJornadas('2026-09-01', '2026-09-30')).toEqual({
+      desde: '2026-08-31T00:00:00-06:00',
+      hasta: '2026-10-02T00:00:00-06:00',
+    })
+  })
+
+  it('la ventana se escribe en hora de CR, nunca en UTC', () => {
+    const v = ventanaRangoJornadas('2026-09-04', '2026-09-04')
+    expect(v.desde.endsWith('-06:00')).toBe(true)
+    expect(v.hasta.endsWith('-06:00')).toBe(true)
+    expect(v.desde).not.toMatch(/Z$/)
+  })
+})
+
+// ── Recortes del rango ─────────────────────────────────────────────────────────────────────
+
+describe('el rango recorta por día de FACTURA', () => {
+  it('pedir solo el 4 deja afuera los dos lotes del 5', () => {
+    const dias = armar(TODOS, LINEAS, { desde: '2026-09-04', hasta: '2026-09-04' })
+    expect(Object.keys(dias)).toEqual(['2026-09-04'])
+  })
+
+  it('pedir solo el 5 deja afuera el lote del 4', () => {
+    const dias = armar(TODOS, LINEAS, { desde: '2026-09-05', hasta: '2026-09-05' })
+    expect(Object.keys(dias)).toEqual(['2026-09-05'])
+  })
+
+  it('un rango sin jornadas devuelve vacío', () => {
+    expect(armar(TODOS, LINEAS, { desde: '2026-10-01', hasta: '2026-10-31' })).toEqual({})
+  })
+})
+
+
+// ── P1c · el histórico ─────────────────────────────────────────────────────────────────────
+
+describe('aHistMap / getHistDesdePos — el equivalente de ventas_hist', () => {
+  const hist = () => aHistMap(armar(TODOS, LINEAS, RANGO))
+
+  it('un HistDay por jornada, con las MISMAS claves del rango', () => {
+    expect(Object.keys(hist())).toEqual(['2026-09-04', '2026-09-05'])
+  })
+
+  it('la forma es EXACTAMENTE la de HistDay: ni un campo de más ni de menos', () => {
+    for (const d of Object.values(hist())) {
+      expect(Object.keys(d).sort()).toEqual([
+        'delivery', 'iva', 'pax', 'promPax', 'salon', 'serv', 'source', 'ventaBruta', 'ventaNeta',
+      ])
+      for (const k of ['ventaBruta', 'ventaNeta', 'iva', 'serv', 'salon', 'delivery', 'pax', 'promPax'] as const) {
+        expect(typeof d[k], k).toBe('number')
+        expect(Number.isFinite(d[k]), k).toBe(true)
+      }
+    }
+  })
+
+  it('source es «hist» — el literal que el tipo exige y que los consumidores ya manejan', () => {
+    for (const d of Object.values(hist())) expect(d.source).toBe('hist')
+    // Y es asignable a HistDay sin castear.
+    const uno: HistDay = hist()['2026-09-04']
+    expect(uno.source).toBe('hist')
+  })
+
+  it('CADA campo coincide con la proyección del DiaData de esa jornada', () => {
+    const dias = armar(TODOS, LINEAS, RANGO)
+    for (const [jornada, dia] of Object.entries(dias)) {
+      const s = getDayStats(dia)
+      expect(aHistDay(dia), jornada).toEqual({
+        ventaBruta: s.ventaBruta,
+        ventaNeta:  s.ventaNeta,
+        iva:        s.iva,
+        serv:       s.serv,
+        salon:      s.salon,
+        delivery:   s.delivery,
+        pax:        s.pax,
+        promPax:    s.promPax,
+        source:     'hist',
+      })
+    }
+  })
+
+  it('no reimplementa nada: es getDayStats + source, campo por campo', () => {
+    const dia = armar(TODOS, LINEAS, RANGO)['2026-09-05']
+    const s = getDayStats(dia)
+    const h = aHistDay(dia)
+    // `getDayStats` trae dos campos que `HistDay` no tiene; el resto es idéntico.
+    const numeros = { ...s } as Partial<typeof s>
+    delete numeros.fecha
+    delete numeros.saloneroNames
+    expect(h).toEqual({ ...numeros, source: 'hist' })
+  })
+
+  // ── Los días reales de staging ───────────────────────────────────────────────────────────
+  // 13 facturas el 4-sep y 25 el 5-sep, todas del fixture: neto ₡12.000, servicio ₡1.200,
+  // IVA 0, bruto ₡13.560 y 2 pax cada una, canal salón y con mesero.
+
+  it('4-sep: el HistDay de las 13 facturas del lote del 222', () => {
+    expect(hist()['2026-09-04']).toEqual({
+      ventaNeta:  13 * 12000,
+      serv:       13 * 1200,
+      iva:        0,
+      ventaBruta: 13 * 12000 + 13 * 1200,     // neta + IVA + servicio
+      salon:      13 * 12000,                  // todo por mesero, canal salón
+      delivery:   0,
+      pax:        26,
+      promPax:    (13 * 12000) / 26,           // OJO: salon / pax, no ventaNeta / pax
+      source:     'hist',
+    })
+  })
+
+  it('5-sep: el HistDay junta el lote del 111 y el del 222', () => {
+    expect(hist()['2026-09-05']).toEqual({
+      ventaNeta:  25 * 12000,
+      serv:       25 * 1200,
+      iva:        0,
+      ventaBruta: 25 * 12000 + 25 * 1200,
+      salon:      25 * 12000,
+      delivery:   0,
+      pax:        50,
+      promPax:    (25 * 12000) / 50,
+      source:     'hist',
+    })
+  })
+
+  it('el bruto es neta + IVA + servicio, y el neto NO lo incluye', () => {
+    const d = hist()['2026-09-04']
+    expect(d.ventaBruta).toBe(d.ventaNeta + d.iva + d.serv)
+    expect(d.ventaBruta).toBeGreaterThan(d.ventaNeta)
+  })
+
+  it('el HistDay corta por día de FACTURA: la de la 01:00 es del día siguiente', () => {
+    const CRUZA = lote(300001, 300002, {
+      cajero: '222', cierre: '2026-09-06T01:00:00-06:00', primero: '2026-09-05T20:00:00-06:00',
+      pasoMin: 300,   // 20:00 y 01:00 del día siguiente
+    })
+    const h = aHistMap(armar(CRUZA, CRUZA.map(t => linea(t.id)), { desde: '2026-09-05', hasta: '2026-09-06' }))
+    expect(Object.keys(h)).toEqual(['2026-09-05', '2026-09-06'])
+    expect(h['2026-09-05'].ventaNeta).toBe(12000)
+    expect(h['2026-09-06'].ventaNeta).toBe(12000)
+  })
+
+  it('el delivery sale del CANAL de la factura, no del cajero', () => {
+    const conDelivery = [
+      ticket({ id: 'd1', canal: 'delivery', salonero_login: null, registrado_por: 'cajero',
+               cajero_login: '222', fecha_cierra: '2026-09-05T22:30:06-06:00',
+               fecha_registra: '2026-09-05T19:00:00-06:00', valor_servido_crc: 5000,
+               servicio_crc: 0, pax: 0, pax_articulo: 0 }),
+      ...LOTE_5_MANANA,
+    ]
+    const h = aHistMap(armar(conDelivery, [], { desde: '2026-09-05', hasta: '2026-09-05' }))
+    expect(h['2026-09-05'].delivery).toBe(5000)
+    expect(h['2026-09-05'].salon).toBe(12000)            // la del 111, por mesero
+  })
+
+  it('rango sin jornadas → HistMap vacío, no un día en cero', () => {
+    expect(aHistMap(armar(TODOS, LINEAS, { desde: '2026-10-01', hasta: '2026-10-31' }))).toEqual({})
+    expect(aHistMap({})).toEqual({})
+  })
+})
+
+// ── A1 · El camino de «Hoy» no se infla con cuentas abiertas (R) ──────────────────────────
+//
+// `armarDiasMap` es lo que arma el módulo entero desde el PoS. Si un `R` entrara por acá, «Hoy»
+// mostraría plata que todavía puede cambiar. El filtro NO está en este archivo: vive en
+// `armarDia`, y esto prueba que alcanza para que este caller quede C-only sin tocarlo.
+
+describe('armarDiasMap con R presentes: neta idéntica a solo-C', () => {
+  // Dos cuentas abiertas realistas: sin `fecha_cierra` (todavía no cerró la caja), con plata
+  // y con pax. Una del turno tarde y otra suelta sin cajero, para cubrir los dos lotes posibles.
+  const ABIERTAS = [
+    ticket({ id: 'r1', estado: 'R', fecha_registra: '2026-09-05T20:10:00-06:00', fecha_cierra: null,
+             cajero_login: '222', valor_servido_crc: 95_000, pax: 6, pax_articulo: 6 }),
+    ticket({ id: 'r2', estado: 'R', fecha_registra: '2026-09-05T20:40:00-06:00', fecha_cierra: null,
+             cajero_login: null, valor_servido_crc: 40_000, pax: 2, pax_articulo: 2 }),
+  ]
+  const ANULADA = [ticket({ id: 'x1', estado: 'X', fecha_registra: '2026-09-05T19:30:00-06:00',
+                            fecha_cierra: null, cajero_login: '222', valor_servido_crc: 33_000 })]
+  const LINEAS_EXTRA = [linea('r1', { monto: 95_000 }), linea('r2', { monto: 40_000 }), linea('x1', { monto: 33_000 })]
+
+  const soloC = armar(TODOS, LINEAS, RANGO)
+  const conR  = armar([...TODOS, ...ABIERTAS, ...ANULADA], [...LINEAS, ...LINEAS_EXTRA], RANGO)
+  const neto  = (d: DiaData) => Object.values(d.saloneros).reduce((a, v) => a + v.total, 0)
+
+  it('las mismas jornadas, ni una más', () => {
+    expect(Object.keys(conR).sort()).toEqual(Object.keys(soloC).sort())
+  })
+
+  it('cada jornada queda byte-idéntica', () => {
+    for (const j of Object.keys(soloC)) {
+      expect(JSON.stringify(conR[j])).toBe(JSON.stringify(soloC[j]))
+    }
+  })
+
+  it('la neta del 5-sep es Σ de las C y no suma los ₡135.000 abiertos ni los ₡33.000 anulados', () => {
+    expect(neto(conR['2026-09-05'])).toBe(neto(soloC['2026-09-05']))
+    // 25 facturas C del 5-sep × 12.000 (el helper) = 300.000
+    expect(neto(conR['2026-09-05'])).toBe(300_000)
+  })
+
+  it('getDayStats sobre el día con R da lo mismo que sobre el día solo-C', () => {
+    expect(getDayStats(conR['2026-09-05'])).toEqual(getDayStats(soloC['2026-09-05']))
+  })
+})

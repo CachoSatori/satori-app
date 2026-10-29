@@ -1,10 +1,13 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { todayCR } from '../../shared/utils'
 import type { DiasMap } from '../../shared/types/ventas'
 import {
-  aggCajero,
-  fi, fmtDate, datesInRange, allDates, dowLabel, dayOfWeek, esCajero,
+  aggCajero, esEntradaCajero,
+  fi, fmtDate, datesInRange, allDates, dowLabel, dayOfWeek,
 } from './ventasUtils'
+import { CLAVES_CAJERO_TURNO, CLAVE_CAJERO_SALON, CLAVE_SISTEMA_OTROS } from './baldesNoMesero'
+import { BloquesLentes } from './VentasSaloneroLineas'
+import { getLentesDesdePos, type LentesConNombres } from './saloneroLentesDatos'
 
 interface Props {
   dias: DiasMap
@@ -30,24 +33,64 @@ export default function VentasCajeros({ dias }: Props) {
   const dates = useMemo(() => allDates(dias), [dias])
   const range = useMemo(() => datesInRange(dates, from, to), [dates, from, to])
 
-  // Find all cajero names across all loaded dates
-  const cajeroNames = useMemo(() => {
-    const names = new Set<string>()
-    for (const dia of Object.values(dias)) {
-      for (const name of Object.keys(dia.saloneros)) {
-        if (esCajero(name)) names.add(name)
-      }
-    }
-    return [...names].sort()
-  }, [dias])
+  // ── QUÉ ES UN CAJERO ACÁ (regla firmada 2026-09-08) ────────────────────────────────────
+  // `registrado_por = 'cajero'` Y `canal <> 'salon'`, partido por la CAJA QUE COBRÓ:
+  // 111 → Mañana, 222 → Tarde (etiqueta «Tarde», nunca «noche»). El balde lo arma
+  // `claveNoMesero()` en `ventasEnVivoDatos`, así que acá las claves son FIJAS y conocidas —
+  // ya no se descubren por login, que era lo que abría tarjetas `Caja · 388` sin sentido.
+  //
+  // El TOTAL CAJEROS es la suma de esas dos y NADA más. Los otros tres baldes que arma el
+  // mapeo se muestran o se derivan aparte, a propósito:
+  //   · `Cajero-salón` (caja timbrando en el SALÓN, sin mesero en la factura) se muestra
+  //     abajo como tarjeta propia, fuera del total: no es delivery/llevar y no es un mesero.
+  //     Quién comandó cada línea se lee en la lente por línea, también abajo.
+  //   · `Salón sin mesero` vive en la pestaña Saloneros, no acá.
+  //   · `Sistema y otros` se muestra abajo, fuera del total.
+  const cajeroNames = CLAVES_CAJERO_TURNO as readonly string[]
 
   const cajAggs = useMemo(() =>
     cajeroNames.map(n => aggCajero(n, range, dias)),
   [cajeroNames, range, dias])
 
+  /** Fuera del Total Cajeros, pero su plata tiene que verse. */
+  const otrosAgg = useMemo(() => aggCajero(CLAVE_SISTEMA_OTROS, range, dias), [range, dias])
+  /** Idem: la venta de salón que timbró la caja. Fuera del total, en su propia tarjeta. */
+  const cajeroSalonAgg = useMemo(() => aggCajero(CLAVE_CAJERO_SALON, range, dias), [range, dias])
+
+  // ── La lente por LÍNEA, expuesta acá (SPEC atribución, lectura mínima) ─────────────────
+  // El balde por FACTURA no sabe quién comandó; la lente por línea sí (`usuario_registra`).
+  // Se lee a pedido, con el mismo rango de arriba, y se pinta con el mismo componente de
+  // Saloneros por línea: es la MISMA lente, no otra cuenta. Las lentes no se suman con los
+  // baldes de esta pantalla (regla firmada). Solo lectura.
+  const [lente, setLente]               = useState<({ desde: string; hasta: string } & LentesConNombres) | null>(null)
+  const [lenteCargando, setLenteCargando] = useState(false)
+  const [lenteError, setLenteError]     = useState<string | null>(null)
+  const leerLente = useCallback(async () => {
+    setLenteCargando(true)
+    setLenteError(null)
+    try {
+      const datos = await getLentesDesdePos({ desde: from, hasta: to })
+      setLente({ desde: from, hasta: to, ...datos })
+    } catch (e) {
+      setLenteError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLenteCargando(false)
+    }
+  }, [from, to])
+  const lenteVigente = lente !== null && lente.desde === from && lente.hasta === to
+
   const totTotal    = cajAggs.reduce((s, c) => s + c.total, 0)
   const totSalon    = cajAggs.reduce((s, c) => s + c.salon, 0)
   const totDelivery = cajAggs.reduce((s, c) => s + c.delivery, 0)
+  const totOrdenes  = cajAggs.reduce((s, c) => s + c.ordenes, 0)
+
+  /** ¿Hay algún día del período con movimiento en cualquiera de los baldes de no-mesero? */
+  const hayDatosEnRango = useMemo(() =>
+    range.some(d => Object.values(dias[d]?.saloneros ?? {}).some(esEntradaCajero)),
+  [range, dias])
+  const hayDatosCargados = useMemo(() =>
+    Object.values(dias).some(dia => Object.values(dia.saloneros).some(esEntradaCajero)),
+  [dias])
 
   // Day-of-week averages
   const dowData = useMemo(() => {
@@ -55,21 +98,26 @@ export default function VentasCajeros({ dias }: Props) {
     for (const date of range) {
       if (!dias[date]) continue
       const dow  = dayOfWeek(date)
-      const cajTotal = Object.entries(dias[date].saloneros)
-        .filter(([n]) => esCajero(n))
-        .reduce((s, [, v]) => s + (v as { total: number }).total, 0)
+      // Mismo universo que el «Total Cajeros» de arriba: solo los dos turnos.
+      const cajTotal = cajeroNames.reduce((s, n) => {
+        const e = dias[date]?.saloneros[n]
+        return s + (esEntradaCajero(e) ? e.total : 0)
+      }, 0)
       if (!acc[dow]) acc[dow] = { sum: 0, cnt: 0 }
       acc[dow].sum += cajTotal; acc[dow].cnt++
     }
     return acc
-  }, [range, dias])
+  }, [range, dias, cajeroNames])
 
-  if (!cajeroNames.length) {
+  // Vacío de verdad: no hay NINGÚN día cargado con ventas de caja. Solo acá se esconde la
+  // barra de rango — si el período elegido es el que está vacío, la barra tiene que seguir
+  // en pantalla para poder cambiarlo (ver el vacío de período, más abajo).
+  if (!hayDatosCargados) {
     return (
       <div className="vt-empty">
         <div className="vt-empty-icon">🏦</div>
         <div className="vt-empty-title">Sin datos de cajeros</div>
-        <div className="vt-empty-sub">Los cajeros aparecen cuando cargás archivos XLS con ventas de delivery</div>
+        <div className="vt-empty-sub">Todavía no hay ventas de caja en los días cargados</div>
       </div>
     )
   }
@@ -92,29 +140,42 @@ export default function VentasCajeros({ dias }: Props) {
         <span className="vt-range-label">{range.length} días</span>
       </div>
 
-      {/* KPIs */}
+      {!hayDatosEnRango ? (
+        <div className="vt-empty">
+          <div className="vt-empty-icon">🏦</div>
+          <div className="vt-empty-title">Sin ventas de caja en el período</div>
+          <div className="vt-empty-sub">
+            No hay movimiento de caja entre {fmtDate(from)} y {fmtDate(to)}. Elegí otro rango.
+          </div>
+        </div>
+      ) : (
+      <>
+      {/* KPIs — el total son los DOS turnos y nada más */}
       <div className="vt-kpi-grid">
-        <div className="vt-kpi red">
+        <div className="vt-kpi red" title="Suma de Cajero turno mañana + Cajero turno tarde. No incluye «Cajero-salón» (venta de salón timbrada por la caja, abajo), «Salón sin mesero» (en la pestaña Saloneros) ni «Sistema y otros».">
           <div className="vt-kpi-label">Total cajeros</div>
           <div className="vt-kpi-val">{fi(totTotal)}</div>
-        </div>
-        <div className="vt-kpi">
-          <div className="vt-kpi-label">Salón</div>
-          <div className="vt-kpi-val">{fi(totSalon)}</div>
-          <div className="vt-kpi-sub">{totTotal > 0 ? (totSalon/totTotal*100).toFixed(1) : 0}%</div>
+          <div className="vt-kpi-sub">mañana + tarde</div>
         </div>
         <div className="vt-kpi blue">
           <div className="vt-kpi-label">Delivery</div>
           <div className="vt-kpi-val">{fi(totDelivery)}</div>
           <div className="vt-kpi-sub">{totTotal > 0 ? (totDelivery/totTotal*100).toFixed(1) : 0}%</div>
         </div>
+        {/* La venta de SALÓN de la caja no vive acá: por definición se fue a «Salón sin mesero».
+            Lo que queda es barra / para llevar / otro, que casi nunca hay — se pinta solo
+            cuando existe, para no esconder plata ni mostrar un cero permanente. */}
+        {totSalon !== 0 && (
+          <div className="vt-kpi" title="Canales que no son delivery ni salón: barra, para llevar, otro.">
+            <div className="vt-kpi-label">Otros canales</div>
+            <div className="vt-kpi-val">{fi(totSalon)}</div>
+            <div className="vt-kpi-sub">{totTotal > 0 ? (totSalon/totTotal*100).toFixed(1) : 0}%</div>
+          </div>
+        )}
         <div className="vt-kpi">
           <div className="vt-kpi-label">Ticket prom.</div>
-          <div className="vt-kpi-val">
-            {fi(cajAggs.reduce((s,c) => s + c.ordenes, 0) > 0
-              ? totTotal / cajAggs.reduce((s,c) => s + c.ordenes, 0)
-              : 0)}
-          </div>
+          <div className="vt-kpi-val">{fi(totOrdenes > 0 ? totTotal / totOrdenes : 0)}</div>
+          <div className="vt-kpi-sub">{totOrdenes} órdenes</div>
         </div>
       </div>
 
@@ -135,8 +196,8 @@ export default function VentasCajeros({ dias }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
                 {[
                   { label: 'Total', val: fi(c.total), color: 'var(--vt-gold-dark,#a07830)' },
-                  { label: 'Salón', val: fi(c.salon), color: 'var(--vt-ink)' },
                   { label: 'Delivery', val: fi(c.delivery), color: 'var(--vt-delivery,#2a6080)' },
+                  { label: 'Órdenes', val: String(c.ordenes), color: 'var(--vt-ink)' },
                 ].map(kpi => (
                   <div key={kpi.label} style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#888', marginBottom: '0.2rem' }}>{kpi.label}</div>
@@ -148,11 +209,13 @@ export default function VentasCajeros({ dias }: Props) {
                 <span style={{ color: '#888' }}>Ticket promedio</span>
                 <strong>{fi(c.ticketProm)}</strong>
               </div>
-              {/* Delivery % bar */}
+              {/* Delivery % bar. La venta de salón de la caja se fue a «Salón sin mesero», así que
+                  esto normalmente es 100% delivery; el resto es barra / llevar / otro. */}
               {c.total > 0 && (
                 <div style={{ marginTop: '0.5rem' }}>
                   <div style={{ fontSize: '0.6rem', color: '#888', marginBottom: '0.2rem' }}>
-                    Delivery {(c.delivery/c.total*100).toFixed(1)}% · Salón {(c.salon/c.total*100).toFixed(1)}%
+                    Delivery {(c.delivery/c.total*100).toFixed(1)}%
+                    {c.salon !== 0 && ` · Otros canales ${(c.salon/c.total*100).toFixed(1)}%`}
                   </div>
                   <div className="vt-progress-track">
                     <div className="vt-progress-fill" style={{ width: `${c.delivery/c.total*100}%`, background: 'var(--vt-delivery,#2a6080)' }} />
@@ -169,6 +232,82 @@ export default function VentasCajeros({ dias }: Props) {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* «Cajero-salón»: la caja timbrando en el SALÓN. Tarjeta propia, fuera del Total Cajeros
+          (no es delivery/llevar) y fuera del ranking (no es una persona). El nombre de quien
+          comandó no está en la factura: se lee en la lente por línea, más abajo. */}
+      {cajeroSalonAgg.total !== 0 && (
+        <div style={{ background: 'var(--vt-paper)', border: '1px dashed var(--vt-border)', borderRadius: 3, padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.85rem' }}>
+                {CLAVE_CAJERO_SALON}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#888', marginTop: '0.15rem' }}>
+                Venta de salón timbrada por la caja, sin mesero en la factura · quién comandó
+                se lee en la lente por línea · <strong>no suma al Total Cajeros</strong>
+              </div>
+            </div>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.9rem' }}>
+              {fi(cajeroSalonAgg.total)}
+              <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 400 }}> · {cajeroSalonAgg.ordenes} órdenes</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fuera del Total Cajeros, pero a la vista: si esta plata existe, tiene que verse. */}
+      {otrosAgg.total !== 0 && (
+        <div style={{ background: 'var(--vt-paper)', border: '1px dashed var(--vt-border)', borderRadius: 3, padding: '0.75rem 1rem', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.85rem' }}>
+                {CLAVE_SISTEMA_OTROS}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#888', marginTop: '0.15rem' }}>
+                Facturas del PoS sin cajero ni mesero · <strong>no suma al Total Cajeros</strong>
+              </div>
+            </div>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontWeight: 700, fontSize: '0.9rem' }}>
+              {fi(otrosAgg.total)}
+              <span style={{ fontSize: '0.62rem', color: '#888', fontWeight: 400 }}> · {otrosAgg.ordenes} órdenes</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── La lente por línea: quién comandó lo que la caja timbró ───────────────────── */}
+      <div className="vt-sl">Atribución por línea</div>
+      <div style={{ background: 'var(--vt-paper)', border: '1px solid var(--vt-border)', borderRadius: 3, padding: '0.75rem 1rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '0.72rem', color: '#555', maxWidth: '48rem' }}>
+            Las tarjetas de arriba van por <strong>factura</strong>: la caja timbró, y la factura no
+            dice quién comandó. La lente por <strong>línea</strong> sí lo sabe
+            (<code>UsuarioRegistra</code>): con ella lo que timbró la caja en el salón se lee
+            por persona. Es la misma lente de Saloneros por línea, para el rango de arriba.{' '}
+            <strong>No se suma</strong> con las tarjetas.
+          </div>
+          <button type="button" className="vt-range-btn" disabled={lenteCargando} onClick={leerLente}>
+            {lenteCargando ? 'Leyendo…' : lenteVigente ? 'Volver a leer' : 'Leer lente por línea'}
+          </button>
+        </div>
+        {lenteError && (
+          <div style={{ fontSize: '0.72rem', color: 'var(--vt-red,#a03030)', marginTop: '0.5rem' }}>
+            <strong>No se pudo leer:</strong> {lenteError}
+          </div>
+        )}
+        {lente && !lenteVigente && (
+          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '0.5rem' }}>
+            <strong>Moviste el rango.</strong> Lo de abajo es de {lente.desde} → {lente.hasta}.
+            Tocá <strong>Volver a leer</strong> para el rango nuevo.
+          </div>
+        )}
+        {lente && (
+          <div className="apos" style={{ marginTop: '0.75rem' }}>
+            <BloquesLentes lentes={lente.lentes} nombres={lente.nombres} />
+          </div>
+        )}
       </div>
 
       {/* Day-of-week averages */}
@@ -205,17 +344,20 @@ export default function VentasCajeros({ dias }: Props) {
           </thead>
           <tbody>
             {range.filter(d => dias[d]).map(date => {
-              const rowTotal = cajeroNames.reduce((s, n) => {
-                const e = dias[date]?.saloneros[n] as { total?: number } | undefined
-                return s + (e?.total ?? 0)
-              }, 0)
+              // El guard `esEntradaCajero` es el mismo con el que se armó `cajeroNames`: la
+              // fila nunca puede sumar una clave que ese día no sea un bucket de caja.
+              const cajDelDia = (n: string) => {
+                const e = dias[date]?.saloneros[n]
+                return esEntradaCajero(e) ? e : undefined
+              }
+              const rowTotal = cajeroNames.reduce((s, n) => s + (cajDelDia(n)?.total ?? 0), 0)
               if (rowTotal === 0) return null
               return (
                 <tr key={date}>
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(date)}</td>
                   <td className="vt-muted">{dowLabel(dayOfWeek(date))}</td>
                   {cajeroNames.map(n => {
-                    const e = dias[date]?.saloneros[n] as { total?: number } | undefined
+                    const e = cajDelDia(n)
                     return (
                       <td key={n} className="r">
                         {e?.total ? fi(e.total) : '—'}
@@ -229,6 +371,8 @@ export default function VentasCajeros({ dias }: Props) {
           </tbody>
         </table>
       </div>
+      </>
+      )}
     </div>
   )
 }

@@ -1,0 +1,1168 @@
+import type { CajeroDay, DiaData, ProductMap, SaloneroDay } from '../../shared/types/ventas'
+import {
+  businessDateDe, getLineasDeTickets, getMesasAbiertas, getTicketsDeJornadas,
+  getPedidosCerradosJornada, getSaloneroNombres, getTicketsJornada, getUltimoPollPoS,
+  HORA_CORTE_JORNADA, type LatidoPoS, type LineaNdfRow, type MesaAbiertaRow,
+  type TicketComparable, type TicketNdfConId,
+} from '../../shared/api/posNdf'
+import {
+  agruparEnLotes, etiquetaTurno, turnosConocidos, type Turno,
+} from '../../shared/ndf/jornada'
+import {
+  esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO,
+  type EstadoFactura,
+} from '../../shared/ndf/mapTicket'
+import { nombreDeCodigo } from '../../shared/ndf/personasNdf'
+import { claveNoMesero, etiquetaNoMesero, etiquetaTurnoPoS } from './baldesNoMesero'
+import { netaDelTicket, netaPorTicket, type AvisoCatalogo } from './netaVenta'
+import { horaCorteCR } from './ventasEnVivoMock'
+import { ARTICULO_PAX, type CalidadPax, type ComparativaHistorico, type FrescuraPoS,
+         type LocalId, type MesaAbiertaDetalle, type SnapshotEnVivo,
+         type VentaPorHora } from './ventasEnVivoTypes'
+
+// ╔══════════════════════════════════════════════════════════════════════════════════════╗
+// ║ Ventas · EN VIVO — el snapshot REAL, armado desde `pos_ndf_*` de staging                ║
+// ╚══════════════════════════════════════════════════════════════════════════════════════╝
+//
+// Reemplaza al mock sin cambiarle una coma al contrato: produce el MISMO `SnapshotEnVivo`, así
+// que la pantalla no sabe de dónde salió. Todo lo de acá es SOLO LECTURA y ADITIVO: no se toca
+// `xlsParser`, ni `ventasUtils`, ni ninguna pestaña que ya existía.
+//
+// ── DE DÓNDE SALE CADA NÚMERO ──────────────────────────────────────────────────────────────
+// Casi ninguno se recalcula acá: los resolvió el mapper del puente en la ingesta y viven en columnas.
+//   neto      → Σ líneas de VENTA (`netaVenta.ts`: todo menos 6/17/20). Se arma acá, desde
+//               `pos_ndf_ticket_lines`, porque tiene que cuadrar con la Venta Neta del PoS.
+//   valor servido → `valor_servido_crc` (comida 2,3,4,13,16,29 + bebida 5): la base del mix y
+//               de la analítica por PAX. NO es la neta — ver `netaVenta.ts`.
+//   bruto     → `total_crc`           (Σ medios de pago − vuelto)
+//   servicio  → `servicio_crc`        (Σ ImpS, el 10 %)
+//   IVA       → `iva_crc`             (ImpV del PoS; hoy 0 en el histórico — no se deriva)
+//   regalía   → `regalia_crc` · clase → `clase_ingreso` · pax → `pax`
+//
+// ── EL NETO ES EL QUE MANDA ────────────────────────────────────────────────────────────────
+// `SaloneroDay.total` se llena con el NETO, no con el bruto: la pestaña muestra «venta» y el
+// resto del módulo (`getDayStats`) trata ese campo como la venta del salonero. El bruto y el
+// servicio viajan igual, en los extras del snapshot, para poder mirarlos al lado.
+
+/**
+ * Familias que suman al valor servido. **Importadas de la fuente de verdad**, no copiadas:
+ * `FAMILIAS_VALOR_SERVIDO` de `src/shared/ndf/mapTicket.ts` es el mismo conjunto que usa el
+ * mapper del puente para calcular `valor_servido_crc` en la ingesta.
+ *
+ * Acá solo sirve para FILTRAR el mix de producto. Que sea el MISMO array es lo que garantiza la
+ * invariante: la suma del mix es el VALOR SERVIDO del día (no la neta, que suma además merch,
+ * BOXING, gift cards… — ver `netaVenta.ts`).
+ */
+export const FAMILIAS_NETO = FAMILIAS_VALOR_SERVIDO
+
+/** La familia de bebidas. Lo único que parte el mix en comida/bebida. */
+export const FAMILIA_BEBIDA = 5
+
+/**
+ * Familia del PoS → la etiqueta con la que se agrupa el mix.
+ *
+ * Se agrupa por el NÚMERO de familia, que es dato duro del PoS, y no por el `ProductMap` de
+ * la app: el ProductMap se carga a mano producto por producto y un producto sin cargar caería
+ * en «SIN CLASIFICAR» aunque el PoS sí sepa qué es. Esto es ETIQUETAR, no recalcular plata.
+ *
+ * ⚠️ INVARIANTE: las claves de este mapa son EXACTAMENTE `FAMILIAS_NETO`, las mismas que
+ * alimentan `valor_servido_crc`. Por eso **la suma del mix es el valor servido del día**.
+ * Agregar acá una familia que no esté en el valor servido rompería esa igualdad — hay un test
+ * que lo fija.
+ */
+const CATEGORIA_FAMILIA: Record<number, string> = {
+  3:  'Rolls',
+  5:  'Bebidas',
+  2:  'Entradas',
+  16: 'Platos fuertes',
+  29: 'GreenSeason',
+  4:  'Otros',
+  13: 'Otros',
+}
+
+const esFamiliaNeto = (f: number | null): boolean =>
+  f !== null && (FAMILIAS_NETO as readonly number[]).includes(f)
+
+const n = (v: number | null | undefined): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+/**
+ * Los comensales de un ticket, con la **fuente primaria del SPEC §3.F: el ARTÍCULO pax**.
+ *
+ * NO se usa la columna `pax` directamente. Esa la resuelve el mapper con la regla del puente
+ * (manda el nativo cuando está), y el SPEC dice lo contrario mientras el nativo no sea
+ * confiable: el campo nativo no es obligatorio y hoy viene sin cargar. Si no hay artículo, se
+ * cae al `pax` ya resuelto — así un ticket con solo nativo no queda en cero.
+ *
+ * El día que el nativo llegue al 100 % (§3.F) esto se invierte y el artículo se retira.
+ */
+export function paxDelTicket(t: Pick<TicketNdfConId, 'pax' | 'pax_articulo'>): number {
+  const articulo = n(t.pax_articulo)
+  return articulo > 0 ? articulo : n(t.pax)
+}
+
+/** Con quién se acredita el ticket. `null` = cajero, sistema o sin pedido: no es un mesero. */
+export function claveSalonero(t: Pick<TicketNdfConId, 'salonero_login' | 'registrado_por'>): string | null {
+  if (t.registrado_por !== 'salonero') return null
+  return t.salonero_login ?? null
+}
+
+// ── El día, en el modelo de siempre ────────────────────────────────────────────────────────
+
+export interface DiaArmado {
+  dia:      DiaData
+  pm:       ProductMap
+  /** Extras del PoS que `DiaData` no tiene campo para guardar. */
+  bruto:    number
+  servicio: number
+  iva:      number
+  regalia:  number
+  tickets:  number
+  /** El neto partido en salón / delivery. */
+  canales:  VentasPorCanal
+  /**
+   * Líneas con plata que cuentan en la neta pero que el catálogo no tiene bien identificadas
+   * (sin familia, familia desconocida) y tickets sin líneas. La plata YA está en la neta: esto
+   * es para que alguien mire el hueco de catálogo, no una corrección.
+   */
+  avisosCatalogo: AvisoCatalogo[]
+  /**
+   * Cuántas FACTURAS lleva cada clave de `dia.saloneros` (meseros, caja y sistema).
+   *
+   * `SaloneroDay` no tiene campo para las órdenes —el modelo del xls nunca las tuvo—, pero
+   * `armarDia` ya las cuenta para poder sacar el ticket promedio de la caja. Se expone en vez
+   * de recontarlas afuera, así el denominador del "neto ÷ órdenes" de cada mesero es el MISMO
+   * número que usa la fila de caja.
+   */
+  ordenes:  Record<string, number>
+}
+
+export interface VentasPorCanal { salon: number; delivery: number }
+
+/** ¿El ticket es delivery? El ÚNICO predicado del canal: lo usan `ventasPorCanal` y `armarDia`. */
+export function esDelivery(t: Pick<TicketNdfConId, 'canal'>): boolean {
+  return t.canal === 'delivery'
+}
+
+/**
+ * Salón vs delivery, en NETO y **ticket por ticket**.
+ *
+ * En el modelo del xls el delivery solo se puede ver por el cajero que lo cobró; el PoS lo sabe
+ * factura por factura (`canal`), así que acá se parte por el dato duro y no por quién la cerró.
+ * Todo lo que no es delivery cuenta como salón: barra, para llevar y mesa son piso.
+ *
+ * `netoDe` es la neta de cada ticket (la de `armarDia`, desde las líneas). Sin él se cae al
+ * valor servido de la cabecera, que es lo que devolvía antes.
+ */
+export function ventasPorCanal(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): VentasPorCanal {
+  let salon = 0, delivery = 0
+  for (const t of tickets) {
+    const v = netoDe(t)
+    if (esDelivery(t)) delivery += v
+    else salon += v
+  }
+  return { salon: Math.round(salon), delivery: Math.round(delivery) }
+}
+
+/**
+ * Tickets + líneas → `DiaData`, exactamente la forma que produce el import de xls.
+ *
+ * Las facturas que no son de un mesero (cajero 111/222, sistema, sin pedido) NO se pierden:
+ * van a su propia clave, porque cuentan en el día aunque no se le acrediten a nadie.
+ */
+// ── Oficial vs provisional: la ÚNICA definición ────────────────────────────────────────────
+//
+// `pos_ndf_tickets.estado`: `C` cerrada · `X` anulada · `R` en curso. La venta OFICIAL del día
+// son SOLO las `C`. Las `R` son cuentas abiertas que todavía pueden cambiar (y las `X` ya no
+// valen nada), así que no pueden entrar en un neto que después se compara contra el cierre.
+//
+// El filtro se aplica en `armarDia`, que es el EMBUDO: por ahí pasan «En vivo» (`armarSnapshot`),
+// «Hoy» y el módulo entero (`armarDiasMap`) y el split por turno (`diasPorTurno`). Filtrando ahí
+// quedan todos C-only sin que cada caller tenga que acordarse. `getSnapshotEnVivo` usa el MISMO
+// predicado para partir la lista cruda y calcular el provisional aparte — una definición, no dos.
+
+/** El único estado que cuenta como venta del día. */
+export const ESTADO_OFICIAL: EstadoFactura = 'C'
+
+/** ¿Este ticket entra en la venta oficial? */
+export function esTicketOficial(t: Pick<TicketNdfConId, 'estado'>): boolean {
+  return t.estado === ESTADO_OFICIAL
+}
+
+/** ¿Este ticket es una cuenta EN CURSO (provisional)? Ni oficial ni anulada. */
+export function esTicketProvisional(t: Pick<TicketNdfConId, 'estado'>): boolean {
+  return t.estado === 'R'
+}
+
+/**
+ * La lista cruda partida en dos: lo que cuenta y lo que todavía no. Las `X` no van a ningún
+ * lado — anuladas no son venta ni provisional.
+ */
+export function partirPorEstado<T extends Pick<TicketNdfConId, 'estado'>>(
+  tickets: readonly T[],
+): { oficiales: T[]; provisionales: T[] } {
+  const oficiales: T[] = [], provisionales: T[] = []
+  for (const t of tickets) {
+    if (esTicketOficial(t)) oficiales.push(t)
+    else if (esTicketProvisional(t)) provisionales.push(t)
+  }
+  return { oficiales, provisionales }
+}
+
+/**
+ * Lo provisional resumido: cuánto hay en cuentas abiertas y cuántas son. Solo «En vivo».
+ *
+ * `netoDe` es la neta de cada ticket (desde las líneas, `netaVenta.ts`), la MISMA unidad que la
+ * venta oficial del día. Sin él se cae al valor servido de la cabecera.
+ */
+export function resumirProvisional<T extends Pick<TicketNdfConId, 'estado' | 'valor_servido_crc'>>(
+  tickets: readonly T[],
+  netoDe: (t: T) => number = t => n(t.valor_servido_crc),
+): { monto: number; tickets: number } {
+  let monto = 0, cuenta = 0
+  for (const t of tickets) {
+    if (!esTicketProvisional(t)) continue
+    monto += netoDe(t)
+    cuenta += 1
+  }
+  return { monto: Math.round(monto), tickets: cuenta }
+}
+
+export function armarDia(
+  fecha: string,
+  entrada: TicketNdfConId[],
+  lineas: LineaNdfRow[],
+  uploadedAt: string,
+  nombres: Record<string, string> = {},
+): DiaArmado {
+  // EL filtro. Todo lo que sigue —sumas, buckets, órdenes, canales, el conteo de tickets— ve
+  // solo las cerradas. Un `R` que se colara acá sería venta que después no cuadra con el cierre.
+  const tickets = entrada.filter(esTicketOficial)
+
+  const porTicket = new Map<string, LineaNdfRow[]>()
+  for (const l of lineas) {
+    const lista = porTicket.get(l.ticket_id)
+    if (lista) lista.push(l)
+    else porTicket.set(l.ticket_id, [l])
+  }
+
+  // La NETA de cada ticket, una sola vez: la usan los buckets, el delivery y los canales.
+  const avisosCatalogo: AvisoCatalogo[] = []
+  const netaPorTicket = new Map<string, number>()
+  for (const t of tickets) netaPorTicket.set(t.id, netaDelTicket(t, porTicket.get(t.id), avisosCatalogo))
+  const netoDe = (t: TicketNdfConId): number => netaPorTicket.get(t.id) ?? 0
+
+  const acc = new Map<string, AccEntrada>()
+  const pm: ProductMap = {}
+  let bruto = 0, servicio = 0, iva = 0, regalia = 0
+
+  for (const t of tickets) {
+    bruto    += n(t.total_crc)
+    servicio += n(t.servicio_crc)
+    iva      += n(t.iva_crc)
+    regalia  += n(t.regalia_crc)
+
+    const login = claveSalonero(t)
+    const esMesero = login !== null
+    const clave = esMesero
+      ? nombreSalonero(login, nombres)
+      // El balde sale de (registrado_por, cajero que cobró, canal) — NO del login de la
+      // factura. `cajero_login` es la CAJA que cerró, que es la que define el turno.
+      : claveNoMesero(t.registrado_por, t.cajero_login, t.canal)
+    const e = acc.get(clave) ?? {
+      esCajero: !esMesero,
+      pax: 0, total: 0, com: 0, beb: 0, iCom: 0, iBeb: 0, iva: 0, serv: 0,
+      delivery: 0, ordenes: 0,
+      prods: new Map<string, { q: number; m: number }>(),
+    }
+    e.pax     += paxDelTicket(t)
+    e.total   += netoDe(t)   // el NETO desde las líneas — ver `netaVenta.ts`
+    e.serv    += n(t.servicio_crc)
+    e.iva     += n(t.iva_crc)
+    e.ordenes += 1
+    // Para TODOS los baldes, meseros incluidos: así `getDayStats` separa el delivery también en
+    // la venta de un salonero (antes solo lo hacía en los baldes de caja).
+    if (esDelivery(t)) e.delivery += netoDe(t)
+
+    for (const l of porTicket.get(t.id) ?? []) {
+      // El "artículo pax" cuenta comensales, no es algo que se venda: fuera del mix, igual
+      // que hace `xlsParser`. Y fuera también todo lo que no es neto (extras, gift, merch…).
+      if (!esFamiliaNeto(l.familia)) continue
+      const nombre = (l.nombre ?? l.codigo_producto ?? '').trim().toUpperCase()
+      if (nombre === '' || nombre === ARTICULO_PAX) continue
+
+      const cat = CATEGORIA_FAMILIA[l.familia as number] ?? 'Otros'
+      const esBebida = l.familia === FAMILIA_BEBIDA
+      const monto = n(l.monto), qty = Math.round(n(l.cantidad))
+      if (esBebida) { e.beb += monto; e.iBeb += qty }
+      else          { e.com += monto; e.iCom += qty }
+
+      const p = e.prods.get(nombre) ?? { q: 0, m: 0 }
+      p.q += qty; p.m += monto
+      e.prods.set(nombre, p)
+
+      if (!pm[nombre]) {
+        pm[nombre] = {
+          tipo: esBebida ? 'bebida' : 'comida',
+          clasificacion: cat, subclasificacion: '', multiplicador: 1, costo_unitario: 0,
+          // Todo lo de acá sale de la familia, no de una persona. Es un no-op para «En vivo»
+          // (su multiplicador es 1, así que la cuenta da lo mismo por los dos caminos) pero
+          // deja la marca coherente en el único lugar que la produce.
+          tipoDeFamilia: true,
+        }
+      }
+    }
+    acc.set(clave, e)
+  }
+
+  const saloneros: Record<string, SaloneroDay | CajeroDay> = {}
+  for (const [nombre, e] of acc) {
+    const prods = [...e.prods.entries()]
+      .sort((a, b) => b[1].m - a[1].m)
+      .map(([nom, v]) => [nom, v.q, Math.round(v.m)] as [string, number, number])
+    const total = Math.round(e.total)
+
+    if (e.esCajero) {
+      // Caja y sistema NO son meseros: van con la marca `esCajero`, que es lo que hace que
+      // `aggSalonero` los saltee, `aggGeneral` los mande a `cajTotal` y el ranking del día no
+      // los liste. `getDayStats` los sigue sumando al total del restaurante — que es el punto:
+      // su venta cuenta, pero no compite con la de nadie.
+      const delivery = Math.round(e.delivery)
+      saloneros[nombre] = {
+        esCajero: true,
+        // El pax VIAJA aunque el bucket sea de caja. En el PoS hay tickets de salón cobrados
+        // bajo un login de caja; su plata siempre contó en el total del día, y tirar su pax
+        // hacía que el día entero informara menos comensales de los que hubo. No compite con
+        // nadie —`esCajero` lo saca igual del ranking—, pero suma al total.
+        pax:        e.pax,
+        total,
+        salon:      total - delivery,
+        delivery,
+        iva: Math.round(e.iva), serv: Math.round(e.serv),
+        ordenes:    e.ordenes,
+        ticketProm: e.ordenes ? total / e.ordenes : 0,
+        prods,
+      }
+      continue
+    }
+
+    // `delivery` solo si hubo: el modelo del xls no tiene el campo y un 0 de más cambiaría la
+    // forma de todos los días sin delivery de mesero.
+    const deliveryMesero = Math.round(e.delivery)
+    saloneros[nombre] = {
+      pax: e.pax, total, com: Math.round(e.com), beb: Math.round(e.beb),
+      iCom: e.iCom, iBeb: e.iBeb,
+      ...(deliveryMesero !== 0 ? { delivery: deliveryMesero } : {}),
+      // IVA y servicio ATRIBUIDOS, los dos igual: Σ de los tickets de este salonero
+      // (`iva_crc` / `servicio_crc`), tal como los informa el PoS. El IVA estaba clavado en 0
+      // porque el bridge leía mal la columna y venía 0 en toda la base; con `IV` resuelto ya
+      // trae el dato, y dejarlo en 0 acá hacía que `getDayStats` —que lee el IVA POR
+      // SALONERO— calculara la bruta ~11% corta. NUNCA se deriva del 13%: se suma lo que vino.
+      iva: Math.round(e.iva), serv: Math.round(e.serv),
+      promPax:    e.pax  ? e.total / e.pax  : 0,
+      promPlato:  e.iCom ? e.com   / e.iCom : 0,
+      promBebida: e.iBeb ? e.beb   / e.iBeb : 0,
+      ratioCB:    e.beb  ? e.com   / e.beb  : 0,
+      ratioU:     e.iBeb ? e.iCom  / e.iBeb : 0,
+      bebPax:     e.pax  ? e.iBeb  / e.pax  : 0,
+      prods,
+    }
+  }
+
+  return {
+    dia: { fileName: `ndf ${fecha}`, uploadedAt, saloneros },
+    ordenes: Object.fromEntries([...acc.entries()].map(([k, v]) => [k, v.ordenes])),
+    pm,
+    bruto: Math.round(bruto), servicio: Math.round(servicio),
+    iva: Math.round(iva), regalia: Math.round(regalia),
+    tickets: tickets.length,
+    canales: ventasPorCanal(tickets, netoDe),
+    avisosCatalogo,
+  }
+}
+
+/** Lo que se va acumulando por clave mientras se recorren los tickets. */
+interface AccEntrada {
+  esCajero: boolean
+  pax: number; total: number; com: number; beb: number; iCom: number; iBeb: number
+  iva: number; serv: number; delivery: number; ordenes: number
+  prods: Map<string, { q: number; m: number }>
+}
+
+/**
+ * El login del PoS → cómo se muestra. Es la CLAVE del ranking: todo lo que agrupa por salonero
+ * (ranking, comparativos, metas, ICP, Mi Rendimiento…) agrupa por este nombre.
+ *
+ * · Si el login es de una persona conocida (`personasNdf.ts`), sale el nombre de la PERSONA
+ *   (`nombreDePersona`), buscado por todos sus códigos. Así dos logins de la misma persona
+ *   (`266`/`038` NACHO, `01`/`235` ROSAURA, `023`/`555` ESTEBAN) caen en UNA sola fila, con el
+ *   mismo nombre que en las lentes por línea.
+ * · Si no, las tres capas de siempre:
+ *   1. `employees.pos_login` — el mapeo que mantiene el negocio en Empleados.
+ *   2. `SALONEROS_CONOCIDOS` — el roster que viaja con el código.
+ *   3. El número **marcado** `«026 · sin asignar»`. No se inventa un nombre y tampoco se lo
+ *      esconde: sigue en el ranking, con la marca puesta, que es lo que hace visible el mapeo
+ *      que falta.
+ */
+export function nombreSalonero(login: string, nombres: Record<string, string>): string {
+  return nombreDeCodigo(login, nombres) ?? `${login} · sin asignar`
+}
+
+/** ¿Este salonero quedó sin mapear a un empleado? */
+export function esSinAsignar(clave: string): boolean {
+  return clave.endsWith(' · sin asignar')
+}
+
+/**
+ * Cuántas facturas y cuánto neto hay en cada turno **según el PoS** (el que decide 111/222).
+ *
+ * Es la otra lectura del mismo día: el corte de las 16:00 se calcula del reloj de cada ticket,
+ * este sale de qué caja estaba abierta. Cuando las dos no coinciden hay algo que mirar.
+ */
+export function ventasPorTurnoPoS(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): { turno: string; neto: number; tickets: number }[] {
+  const acc = new Map<string, { neto: number; tickets: number }>()
+  for (const t of tickets) {
+    const k = etiquetaTurnoPoS(t.turno)
+    const e = acc.get(k) ?? { neto: 0, tickets: 0 }
+    e.neto += netoDe(t)
+    e.tickets += 1
+    acc.set(k, e)
+  }
+  return [...acc.entries()]
+    .map(([turno, e]) => ({ turno, neto: Math.round(e.neto), tickets: e.tickets }))
+    .sort((a, b) => b.neto - a.neto)
+}
+
+// Las etiquetas de turno y los baldes de no-mesero viven en `baldesNoMesero` (módulo PURO):
+// las pantallas los necesitan y no pueden arrastrar el cliente de Supabase por eso. Se
+// re-exportan acá para no romper a quien ya los importaba desde este módulo.
+export {
+  ETIQUETA_TURNO_POS, etiquetaTurnoPoS, claveNoMesero, etiquetaNoMesero,
+  CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_CAJERO_SALON, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS,
+  CLAVES_CAJERO_TURNO,
+} from './baldesNoMesero'
+
+
+// ── Ritmo por hora ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * El neto y las cuentas hora por hora, en hora de RELOJ de Costa Rica.
+ *
+ * Se recorren solo las horas con movimiento: un día que arrancó a las 11 no tiene por qué
+ * mostrar diez horas en cero adelante.
+ */
+export function ritmoPorHora(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): VentaPorHora[] {
+  const acc = new Map<number, { monto: number; tickets: number }>()
+  for (const t of tickets) {
+    const h = horaCRDe(t.fecha_registra)
+    if (h === null) continue
+    const e = acc.get(h) ?? { monto: 0, tickets: 0 }
+    e.monto += netoDe(t)
+    e.tickets += 1
+    acc.set(h, e)
+  }
+  return [...acc.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([hora, e]) => ({ hora, monto: Math.round(e.monto), tickets: e.tickets }))
+}
+
+/** Hora de pared de Costa Rica (0–23) de un instante con zona. */
+export function horaCRDe(instante: string): number | null {
+  const t = Date.parse(instante)
+  if (Number.isNaN(t)) return null
+  return new Date(t - 6 * 3_600_000).getUTCHours()
+}
+
+// ── Turnos: mañana / tarde ─────────────────────────────────────────────────────────────────
+//
+// ── LO QUE CAMBIÓ (P1a) ────────────────────────────────────────────────────────────────────
+// Antes el turno salía del RELOJ: la jornada 07→07 partida a las 16:00 CR. Era un relleno
+// mientras `fecha_cierra` venía NULL en toda la tabla. Ya no viene NULL: el PoS dice quién
+// cerró la caja y cuándo, así que el turno lo define el CAJERO (`111` mañana · `222` tarde) y
+// el día lo define la APERTURA del lote de cierre. La definición vive en `shared/ndf/jornada.ts`
+// y la comparten esta pantalla y (en P1b) el adaptador, para que no puedan discrepar.
+//
+// El corte de las 16:00 murió acá. La mesa que se abre a las 15:50 y se cobra a las 16:30 ya no
+// se decide por la hora: cuenta en el turno del cajero que la cobró.
+
+export type { Turno } from '../../shared/ndf/jornada'
+
+export interface BloqueTurno {
+  /** Id del turno, del mapa de cajas. `null` en el bloque de las facturas sin caja conocida. */
+  turno:    Turno | null
+  etiqueta: string
+  neto:     number
+  tickets:  number
+  pax:      number
+}
+
+export interface VentasTurno {
+  /**
+   * Un bloque por turno DEL MAPA, en el orden del mapa. Siempre están todos, aunque un turno
+   * no haya vendido nada: la tabla tiene que ser estable entre jornadas.
+   */
+  turnos:   BloqueTurno[]
+  /**
+   * Las facturas que no cerró ninguna caja del mapa (login vacío, un salonero, un login de
+   * sistema, o histórico). NO se reparten a ojo — pero SÍ cuentan en el total del día.
+   */
+  sinTurno: BloqueTurno
+}
+
+/**
+ * Cuánto vendió cada turno, agrupando por LOTE de cierre.
+ *
+ * Los bloques salen del MAPA de cajas (`CAJAS_POR_LOGIN`): sumar una caja de barra o un
+ * desayuno agrega su fila sola, sin tocar esta función ni la pantalla.
+ *
+ * Invariante: Σ turnos + sinTurno = el neto del día. Ninguna factura se cae por no tener turno.
+ */
+export function ventasPorTurno(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): VentasTurno {
+  const vacio = (turno: Turno | null, etiqueta: string): BloqueTurno =>
+    ({ turno, etiqueta, neto: 0, tickets: 0, pax: 0 })
+
+  const turnos = turnosConocidos().map(t => vacio(t.turno, t.etiqueta))
+  const porId  = new Map(turnos.map(b => [b.turno, b]))
+  const sinTurno = vacio(null, etiquetaTurno(null))
+
+  for (const lote of agruparEnLotes(tickets)) {
+    // Un turno que el mapa no conoce (login mapeado y después borrado del mapa) cae igual acá
+    // en vez de perderse: el total del día manda sobre la prolijidad de la tabla.
+    const b = (lote.turno !== null ? porId.get(lote.turno) : undefined) ?? sinTurno
+    for (const t of lote.tickets) {
+      b.neto    += netoDe(t)
+      b.tickets += 1
+      b.pax     += paxDelTicket(t)
+    }
+  }
+
+  for (const b of [...turnos, sinTurno]) b.neto = Math.round(b.neto)
+  return { turnos, sinTurno }
+}
+
+// ── El día PARTIDO POR TURNO ───────────────────────────────────────────────────────────────
+//
+// La partición que va a reusar el dashboard por empleado: **por turno + general**. Cada turno
+// arma su propio `DiaData` con el MISMO `armarDia`, así que todo lo que sabe leer un `DiaData`
+// (`aggSalonero`, `aggGeneral`, `getDayStats`, el mix) funciona igual sobre un turno suelto.
+// Nada de agregadores nuevos: cambia el conjunto de tickets, no la matemática.
+
+export interface DiaDeTurno {
+  turno:    Turno | null
+  etiqueta: string
+  /** El día de ESE turno, con la misma forma que el día completo. */
+  dia:      DiaData
+  pm:       ProductMap
+  /** Órdenes por clave de `dia.saloneros`, para el "neto ÷ órdenes" de cada mesero. */
+  ordenes:  Record<string, number>
+  neto:     number
+  tickets:  number
+  pax:      number
+}
+
+/**
+ * La jornada partida en turnos, cada uno con su `DiaData` completo.
+ *
+ * Los turnos salen del MAPA de cajas y del lote de cierre (`shared/ndf/jornada.ts`), igual que
+ * `ventasPorTurno`: un turno es una pasada de caja, no una franja horaria. Solo se devuelven
+ * los turnos que efectivamente vendieron — una tabla con un turno en cero por cada caja del
+ * mapa sería ruido.
+ */
+export function diasPorTurno(
+  fecha: string,
+  tickets: TicketNdfConId[],
+  lineas: LineaNdfRow[],
+  uploadedAt: string,
+  nombres: Record<string, string> = {},
+): DiaDeTurno[] {
+  const porTurno = new Map<Turno | null, TicketNdfConId[]>()
+  for (const lote of agruparEnLotes(tickets)) {
+    const lista = porTurno.get(lote.turno)
+    if (lista) lista.push(...lote.tickets)
+    else porTurno.set(lote.turno, [...lote.tickets])
+  }
+
+  const lineasPorTicket = new Map<string, LineaNdfRow[]>()
+  for (const l of lineas) {
+    const lista = lineasPorTicket.get(l.ticket_id)
+    if (lista) lista.push(l)
+    else lineasPorTicket.set(l.ticket_id, [l])
+  }
+
+  const orden = new Map(turnosConocidos().map((t, i) => [t.turno, i]))
+  const salida: DiaDeTurno[] = []
+  for (const [turno, delTurno] of porTurno) {
+    const suyas = delTurno.flatMap(t => lineasPorTicket.get(t.id) ?? [])
+    const armado = armarDia(fecha, delTurno, suyas, uploadedAt, nombres)
+    salida.push({
+      turno,
+      etiqueta: etiquetaTurno(turno),
+      dia:      armado.dia,
+      pm:       armado.pm,
+      ordenes:  armado.ordenes,
+      neto:     Math.round(Object.values(armado.dia.saloneros).reduce((a, v) => a + v.total, 0)),
+      // Del ARMADO, no de `delTurno`: ese todavía trae los `R`, y el filtro vive en `armarDia`.
+      // Σ pax de los buckets = Σ `paxDelTicket` de las cerradas, ticket por ticket.
+      tickets:  armado.tickets,
+      pax:      Object.values(armado.dia.saloneros).reduce((a, v) => a + (v.pax ?? 0), 0),
+    })
+  }
+  // En el orden del mapa; lo que no está en el mapa (sin caja conocida), al final.
+  return salida.sort((a, b) =>
+    (orden.get(a.turno ?? '') ?? 99) - (orden.get(b.turno ?? '') ?? 99))
+}
+
+/**
+ * Los lotes de cierre de la jornada que se está mirando, en orden de apertura.
+ *
+ * Es el detalle detrás del panel de turnos: cada fila es una pasada de caja real (quién cerró,
+ * cuándo, cuántas facturas). Un lote nunca se parte entre dos turnos.
+ */
+export interface LoteResumen {
+  clave:       string
+  cajeroLogin: string | null
+  turno:       Turno | null
+  etiqueta:    string
+  jornada:     string | null
+  apertura:    string | null
+  fechaCierra: string | null
+  abierto:     boolean
+  neto:        number
+  tickets:     number
+  pax:         number
+}
+
+export function lotesDeCierre(
+  tickets: TicketNdfConId[],
+  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+): LoteResumen[] {
+  return agruparEnLotes(tickets).map(l => ({
+    clave:       l.clave,
+    cajeroLogin: l.cajeroLogin,
+    turno:       l.turno,
+    etiqueta:    etiquetaTurno(l.turno),
+    jornada:     l.jornada,
+    apertura:    l.apertura,
+    fechaCierra: l.fechaCierra,
+    abierto:     l.abierto,
+    neto:        Math.round(l.tickets.reduce((s, t) => s + netoDe(t), 0)),
+    tickets:     l.tickets.length,
+    pax:         l.tickets.reduce((s, t) => s + paxDelTicket(t), 0),
+  }))
+}
+
+// ── Mesas abiertas AHORA ───────────────────────────────────────────────────────────────────
+
+export interface MesaAbiertaResumen {
+  salonero: string
+  mesas:    number
+  pax:      number
+}
+
+/**
+ * Lo que está abierto en este momento, agrupado por quién lo tiene.
+ *
+ * ⚠️ SIN MONTO, a propósito: `pos_ndf_open` todavía no trae lo consumido por mesa. Mostrar un
+ * monto acá obligaría a inventarlo, y una mesa abierta con una cifra al lado se lee como venta.
+ * // TODO monto: pendiente de columna en el bridge.
+ */
+/**
+ * Quién tiene la mesa, en texto. Es la MISMA regla para el agrupado y para el detalle: si las
+ * dos vistas resolvieran el nombre por su cuenta, un día dirían cosas distintas de la misma
+ * mesa. Un nombre NUNCA se inventa — lo que no está en Empleados ni en el roster sale marcado.
+ */
+function quienTieneLaMesa(
+  login: string | null,
+  nombres: Record<string, string>,
+): string {
+  if (login === null || login === '') return 'Sin salonero'
+  if (esCajeroTurno(login))           return etiquetaNoMesero('cajero', login)
+  if (esLoginSistema(login))          return etiquetaNoMesero('sistema', login)
+  return nombreSalonero(login, nombres)
+}
+
+export function resumirMesasAbiertas(
+  abiertas: MesaAbiertaRow[],
+  nombres: Record<string, string> = {},
+): MesaAbiertaResumen[] {
+  const acc = new Map<string, { mesas: number; pax: number }>()
+  for (const m of abiertas) {
+    const clave = quienTieneLaMesa(m.salonero_login, nombres)
+    const e = acc.get(clave) ?? { mesas: 0, pax: 0 }
+    e.mesas += 1
+    e.pax   += n(m.pax)
+    acc.set(clave, e)
+  }
+  return [...acc.entries()]
+    .map(([salonero, e]) => ({ salonero, mesas: e.mesas, pax: e.pax }))
+    .sort((a, b) => b.mesas - a.mesas || a.salonero.localeCompare(b.salonero, 'es'))
+}
+
+// ── Frescura del feed y mesas abiertas, una por una ────────────────────────────────────────
+
+/**
+ * Cada cuánto lee el agente el PoS en horario de operación (`POLL_OPERACION_MS` en
+ * `pos-bridge/configAgente.ts`). Si allá cambia el ritmo, acá se afloja la guarda: es el margen
+ * con el que se decide si `updated_at` es hora de apertura o sello del lote.
+ */
+export const VENTANA_POLL_MS = 75_000
+
+/** A partir de acá lo que se ve puede estar viejo y la pantalla lo dice. */
+export const UMBRAL_DESACTUALIZADO_MS = 5 * 60_000
+
+/**
+ * Saca del snapshot las mesas que YA se cobraron.
+ *
+ * El snapshot de abiertas no se limpia al instante: la Edge borra las claves que no vinieron en
+ * el lote, y entre poll y poll pasan ~75 s. En esa ventana la misma mesa está en `pos_ndf_open`
+ * y en `pos_ndf_tickets`, y sin este filtro se vería a la vez como cerrada en «Hoy» y como
+ * abierta en «En vivo».
+ *
+ * La llave es `id_pedido` ↔ `numero_pedido`: los dos salen del mismo `FAC_Pedidos.NumeroPedido`.
+ * Una fila sin `id_pedido` NO se descarta — no hay con qué probar que se cerró, y esconder una
+ * mesa abierta de verdad es peor que mostrarla.
+ *
+ * ⚠️ Esto NO resta plata en ningún lado: las mesas abiertas nunca sumaron al neto ni al total
+ * del día. Es un filtro de lo que se PINTA, y nada más.
+ */
+export function excluirCerradas(
+  abiertas: MesaAbiertaRow[],
+  pedidosCerrados: ReadonlySet<string>,
+): MesaAbiertaRow[] {
+  return abiertas.filter(m => {
+    const id = (m.id_pedido ?? '').trim()
+    if (id === '') return true
+    return !pedidosCerrados.has(id)
+  })
+}
+
+/**
+ * ¿Se puede afirmar que `updated_at` es la hora de APERTURA de la mesa?
+ *
+ * El agente lo copia de `FAC_Pedidos.FechaRegistra`, que no se mueve mientras la mesa siga
+ * abierta: por eso el upsert de cada poll reescribe siempre el mismo instante y la resta contra
+ * ahora da el tiempo real que la mesa lleva abierta.
+ *
+ * Pero esa columna del PoS es OPCIONAL en el mapeo del puente (`esquema.ts`, `opt(...)`), y
+ * `puedeLeerAbiertas` solo exige el número de pedido. En una instalación sin ella el agente
+ * manda `updated_at: null` y `normalizarOpen` lo rellena con el instante del LOTE. Ahí la misma
+ * columna pasa a significar «cuándo se leyó», y todas las mesas se verían recién abiertas.
+ *
+ * La firma de esa ruta es que el lote sella TODAS las filas con el mismo `ahora`, así que la
+ * dispersión es cero. Con dos o más mesas se exige que se separen por más de una ventana de
+ * poll. Con una sola no hay dispersión, pero sí antigüedad: un sello de lote es siempre
+ * reciente, así que una mesa cuyo sello ya tiene más de una ventana de poll es apertura real.
+ */
+export function tiempoAbiertaConfiable(
+  abiertas: MesaAbiertaRow[],
+  ventanaMs: number = VENTANA_POLL_MS,
+  ahora: Date = new Date(),
+): boolean {
+  const ts: number[] = []
+  for (const m of abiertas) {
+    const t = Date.parse(m.updated_at)
+    if (Number.isFinite(t)) ts.push(t)
+  }
+  if (ts.length === 0) return false
+  // Con UNA sola mesa no hay dispersión que medir, pero sí antigüedad: el sello del lote
+  // (la ruta fallback) es siempre de hace segundos, y una hora de apertura real se aleja del
+  // reloj a medida que la mesa sigue abierta. Pasada una ventana de poll, es apertura. Así
+  // «abierta hace 40 min» se ve aunque haya una sola mesa, y la que se abrió hace 30 s dice
+  // «—» un minuto y después se afirma sola.
+  if (ts.length === 1) return ahora.getTime() - ts[0] > ventanaMs
+  return Math.max(...ts) - Math.min(...ts) > ventanaMs
+}
+
+/**
+ * ¿Esta mesa se abrió en una jornada ANTERIOR a la que se está mirando?
+ *
+ * Un servicio no cruza jornadas: si el sello de apertura cae en una jornada previa, o al
+ * personal se le olvidó cerrar la mesa en el PoS, o el puente la está reportando abierta
+ * cuando ya no lo está. Las dos cosas hay que ir a mirarlas, así que la fila se MARCA.
+ *
+ * Se mide sobre el `updated_at` CRUDO y no sobre `abiertaDesde`. Ese último llega en `null`
+ * cuando `tiempoAbiertaConfiable` no concluye, y colgar la marca de él la apagaría justo
+ * cuando el feed está más raro. La ruta fallback sella todas las filas con el `ahora` del
+ * lote, o sea con la jornada en curso, así que ese caso no puede producir un falso positivo.
+ *
+ * Un sello ilegible devuelve `false`: no se puede ubicar en ninguna jornada.
+ */
+export function esDeJornadaAnterior(updatedAt: string | null | undefined, jornada: string): boolean {
+  const suya = jornadaDeInstante(updatedAt)
+  return suya !== null && suya < jornada
+}
+
+/**
+ * Las mesas abiertas una por una, con el nombre del salonero ya resuelto.
+ *
+ * `abiertaDesde` viaja como `null` cuando la guarda de arriba no puede afirmar la semántica: la
+ * pantalla muestra «—». Y no lleva monto en ninguna forma, porque `pos_ndf_open` no lo trae.
+ *
+ * `jornada` es la que se está mirando; contra ella se marca `deJornadaAnterior`. Se pasa
+ * explícita desde `getSnapshotEnVivo` — el default es solo para llamadas sueltas.
+ */
+export function detallarMesasAbiertas(
+  abiertas: MesaAbiertaRow[],
+  nombres: Record<string, string> = {},
+  confiable: boolean = tiempoAbiertaConfiable(abiertas),
+  jornada: string = jornadaActualCR(),
+): MesaAbiertaDetalle[] {
+  return abiertas
+    .map(m => {
+      const salonero = quienTieneLaMesa(m.salonero_login, nombres)
+      const abierta = Date.parse(m.updated_at)
+      return {
+        clave:        m.clave,
+        idPedido:     m.id_pedido,
+        mesa:         m.mesa,
+        salonero,
+        canal:        m.canal,
+        pax:          n(m.pax),
+        abiertaDesde: confiable && Number.isFinite(abierta) ? m.updated_at : null,
+        deJornadaAnterior: esDeJornadaAnterior(m.updated_at, jornada),
+        // Frente C: se copian tal cual. Un `null` sigue siendo «sin total», no un cero.
+        montoEstimado: m.monto_estimado_crc ?? null,
+        paxPedido:     m.pax_pedido ?? null,
+        itemsValor:    m.items_valor ?? null,
+        // Mig 065: la lista viaja tal cual. Lo que no sea un array con algo adentro es «sin
+        // detalle» — la base ya la validó al entrar (`productosComandados`), acá no se reinterpreta.
+        productos:     Array.isArray(m.detalle_productos) && m.detalle_productos.length > 0
+                         ? m.detalle_productos : null,
+      }
+    })
+    .sort((a, b) => {
+      // Lo que hay que ir a mirar primero: la mesa arrastrada de otra jornada es más urgente
+      // que la que lleva tres horas abierta hoy, y la duración puede venir en «—».
+      if (a.deJornadaAnterior !== b.deJornadaAnterior) return a.deJornadaAnterior ? -1 : 1
+      // Después, la que lleva más tiempo abierta.
+      const ta = a.abiertaDesde === null ? Infinity : Date.parse(a.abiertaDesde)
+      const tb = b.abiertaDesde === null ? Infinity : Date.parse(b.abiertaDesde)
+      if (ta !== tb) return ta - tb
+      return (a.mesa ?? '').localeCompare(b.mesa ?? '', 'es', { numeric: true })
+    })
+}
+
+/** Cuántas de las mesas listadas vienen de una jornada anterior. Es el contador de la nota. */
+export function contarJornadaAnterior(detalle: readonly MesaAbiertaDetalle[]): number {
+  return detalle.reduce((n, m) => n + (m.deJornadaAnterior ? 1 : 0), 0)
+}
+
+/**
+ * Qué tan viejo es el feed, a partir del latido del agente (`pos_ndf_cursor`).
+ *
+ * Mira las DOS señales de la fila del cursor, no solo la hora:
+ *
+ *   · `last_poll_at` pasado el umbral → el agente dejó de reportar.
+ *   · `last_error` presente          → el agente corrió y el lote NO entró.
+ *
+ * El segundo caso es el que se veía sano y no lo estaba: un poll de hace 30 s con un error
+ * encima deja `pos_ndf_open` con el snapshot VIEJO, y mirando solo el reloj la pantalla lo
+ * pintaba como actual. Los dos casos caen en el mismo aviso, que es lo que el operador
+ * necesita saber: lo de abajo puede no ser de ahora.
+ *
+ * Acepta el latido entero o solo la hora — así una llamada suelta puede seguir pasando el ISO.
+ *
+ * Sin cursor se considera desactualizado a propósito: no poder probar que el agente respira no
+ * es lo mismo que probar que respira, y de las dos lecturas la única honesta es la pesimista.
+ */
+export function frescuraDe(
+  latido: string | LatidoPoS | null,
+  ahora: Date = new Date(),
+  umbralMs: number = UMBRAL_DESACTUALIZADO_MS,
+): FrescuraPoS {
+  const { ultimoPollAt, error } = typeof latido === 'string' || latido === null
+    ? { ultimoPollAt: latido, error: null }
+    : latido
+
+  const t = ultimoPollAt === null ? NaN : Date.parse(ultimoPollAt)
+  if (!Number.isFinite(t)) return { ultimoPollAt, minutos: null, desactualizado: true, error }
+  // Un reloj adelantado en la PC del PoS daría negativo: se piso en 0 en vez de mostrar futuro.
+  const transcurrido = Math.max(0, ahora.getTime() - t)
+  return {
+    ultimoPollAt,
+    minutos:        Math.floor(transcurrido / 60_000),
+    // El error pesa igual que el reloj: un lote que falló no es un feed fresco.
+    desactualizado: transcurrido > umbralMs || error !== null,
+    error,
+  }
+}
+
+// ── Calidad del pax (§3.F) ─────────────────────────────────────────────────────────────────
+
+/**
+ * Por salonero: cuántas de sus mesas traen el pax en el campo NATIVO del PoS, y de las que
+ * además lo traen como artículo, en cuántas coinciden.
+ *
+ * Sale de `pax_nativo` / `pax_articulo` / `pax_alerta`, que el mapper ya resolvió por ticket.
+ * Solo se miden los meseros de verdad: al cajero de turno no se le exige cargar comensales.
+ */
+export function calidadPaxPorSalonero(
+  tickets: TicketNdfConId[],
+  nombres: Record<string, string> = {},
+): CalidadPax[] {
+  const acc = new Map<string, { mesas: number; conNativo: number; conAmbos: number; coinciden: number }>()
+  for (const t of tickets) {
+    const login = claveSalonero(t)
+    if (login === null) continue
+    // Por PERSONA, no por login: dos códigos de la misma persona (266/038) son una sola fila.
+    const clave = nombreSalonero(login, nombres)
+    const e = acc.get(clave) ?? { mesas: 0, conNativo: 0, conAmbos: 0, coinciden: 0 }
+    e.mesas += 1
+    const nativo = n(t.pax_nativo), articulo = n(t.pax_articulo)
+    if (nativo > 0) e.conNativo += 1
+    if (nativo > 0 && articulo > 0) {
+      e.conAmbos += 1
+      if (t.pax_alerta === 'ok') e.coinciden += 1
+    }
+    acc.set(clave, e)
+  }
+  return [...acc.entries()]
+    .map(([salonero, e]) => ({
+      salonero,
+      mesas: e.mesas,
+      pctPaxNativoCargado:   e.mesas ? (e.conNativo / e.mesas) * 100 : 0,
+      matchArticuloVsNativo: e.conAmbos ? (e.coinciden / e.conAmbos) * 100 : 0,
+    }))
+    .sort((a, b) => b.mesas - a.mesas)
+}
+
+// ── Comparativa ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * La NETA de cada jornada pedida, desde las líneas (`netaVenta.ts`): la misma medida que el día
+ * que se compara. La jornada es la del selector de «En vivo» (07→07 CR, `businessDateDe`), igual
+ * que la del día en curso. Toda fecha pedida sale, en 0 si no tuvo ventas.
+ */
+export function netaPorJornada(
+  tickets: readonly TicketComparable[],
+  lineas: readonly LineaNdfRow[],
+  fechas: readonly string[],
+): Record<string, number> {
+  const netas = netaPorTicket(tickets, lineas)
+  const out: Record<string, number> = {}
+  for (const f of fechas) out[f] = 0
+  for (const t of tickets) {
+    const j = businessDateDe(t.fecha_registra)
+    if (j in out) out[j] += netas.get(t.id) ?? 0
+  }
+  return out
+}
+
+/** Las cuatro jornadas del mismo día de semana, hacia atrás. */
+export function jornadasComparables(businessDate: string, semanas = 4): string[] {
+  const [y, m, d] = businessDate.split('-').map(Number)
+  const base = Date.UTC(y, m - 1, d)
+  return Array.from({ length: semanas }, (_, i) =>
+    new Date(base - (i + 1) * 7 * 86_400_000).toISOString().slice(0, 10))
+}
+
+export function compararContra(netoPorJornada: Record<string, number>, comparables: string[]): ComparativaHistorico {
+  const valores = comparables.map(f => netoPorJornada[f] ?? 0)
+  const conVenta = valores.filter(v => v > 0)
+  return {
+    mismoDiaSemanaPasada: Math.round(valores[0] ?? 0),
+    // Promedio de los días que EXISTIERON: incluir un cero de un día cerrado hundiría la
+    // referencia y la comparación diría que hoy va bárbaro.
+    promedio4Semanas: conVenta.length
+      ? Math.round(conVenta.reduce((s, v) => s + v, 0) / conVenta.length)
+      : 0,
+  }
+}
+
+// ── El snapshot completo ───────────────────────────────────────────────────────────────────
+
+export interface EntradaSnapshot {
+  local:      LocalId
+  fecha:      string
+  tickets:    TicketNdfConId[]
+  lineas:     LineaNdfRow[]
+  neto4Sem:   Record<string, number>
+  ahora:      Date
+  enServicio: boolean
+  /** `pos_login` → nombre del empleado. Sin él, los saloneros salen por número. */
+  nombres?:   Record<string, string>
+}
+
+/** PURO: todo lo de arriba junto. Se prueba sin Supabase. */
+export function armarSnapshot(e: EntradaSnapshot): SnapshotEnVivo {
+  const armado = armarDia(e.fecha, e.tickets, e.lineas, e.ahora.toISOString(), e.nombres ?? {})
+  const neto = Object.values(armado.dia.saloneros).reduce((s, v) => s + v.total, 0)
+  // La MISMA neta por ticket que usó `armarDia`, para que turnos y ritmo sumen lo del total.
+  const netas = netaPorTicket(e.tickets, e.lineas)
+  const netoDe = (t: TicketNdfConId): number => netas.get(t.id) ?? 0
+  const comparables = jornadasComparables(e.fecha)
+
+  return {
+    local: e.local,
+    fecha: e.fecha,
+    generadoEn: e.ahora.toISOString(),
+    servicioEnCurso: e.enServicio,
+    dia: armado.dia,
+    pm: armado.pm,
+    porHora: ritmoPorHora(e.tickets, netoDe),
+    // La proyección no es un dato del PoS: con el servicio terminado no se proyecta nada.
+    proyeccionCierre: neto,
+    historico: compararContra(e.neto4Sem, comparables),
+    calidadPax: calidadPaxPorSalonero(e.tickets, e.nombres ?? {}),
+
+    // Extras del feed real (campos opcionales del contrato).
+    bruto:    armado.bruto,
+    servicio: armado.servicio,
+    iva:      armado.iva,
+    regalia:  armado.regalia,
+    // El PoS informa el IVA en 0 en todo el histórico. Se marca PENDIENTE en vez de mostrar
+    // un cero que se lee como "no hubo impuesto" — y NUNCA se deriva de neto × 0,13.
+    ivaPendiente: armado.iva === 0,
+    // Todo lo de acá salió de `pos_ndf_*`. El generador de ejemplo no pasa por esta función.
+    fuente: 'pos',
+    turnos: ventasPorTurno(e.tickets, netoDe),
+    turnosPoS: ventasPorTurnoPoS(e.tickets, netoDe),
+    canales: armado.canales,
+    // Órdenes por clave: el denominador del "neto ÷ órdenes" de cada mesero.
+    ordenes: armado.ordenes,
+    // La jornada partida por turno, cada uno con su `DiaData` completo.
+    porTurno: diasPorTurno(e.fecha, e.tickets, e.lineas, e.ahora.toISOString(), e.nombres ?? {}),
+  }
+}
+
+// ── Qué jornada se está mirando ────────────────────────────────────────────────────────────
+
+/**
+ * La jornada en curso, con la regla del negocio: **07:00 → 07:00 hora de Costa Rica**.
+ *
+ * ⚠️ P1a: esto YA NO define a qué jornada pertenece un ticket — eso lo decide el LOTE de cierre
+ * (`shared/ndf/jornada.ts`). Lo que sigue haciendo es elegir QUÉ VENTANA se pide a la base y
+ * cuál es el día que abre el selector, y para eso el 07→07 sirve: es un superset que contiene
+ * los lotes del día (incluidas las facturas de después de medianoche). No se puede reemplazar
+ * por la definición del lote sin caer en un círculo — habría que leer los tickets para saber
+ * qué tickets pedir. Si algún día un cajero abriera antes de las 07:00 CR, su lote caería en la
+ * ventana del día anterior; con los turnos reales (111 abre ~11:00) no pasa.
+ *
+ *
+ * ⚠️ NO se usa el `fechaServicioCR()` del mock. Ese decide con un horario de atención
+ * (11:00–23:00) y devuelve "ayer" entre las 00:00 y las 11:00 — o sea que a las 09:00 de la
+ * mañana pedía el día equivocado. La jornada del negocio y el horario de atención son dos
+ * cosas distintas, y la que manda acá es la primera: es la misma con la que se filtran los
+ * tickets (`ventanaJornada`) y la que usa el cuadre contra el reporte del PoS.
+ */
+export function jornadaActualCR(ahora: Date = new Date()): string {
+  const cr = new Date(ahora.getTime() - 6 * 3_600_000 - HORA_CORTE_JORNADA * 3_600_000)
+  return cr.toISOString().slice(0, 10)
+}
+
+/**
+ * A qué JORNADA pertenece un instante cualquiera. Es `jornadaActualCR` aplicada a una fecha que
+ * no es «ahora»: misma regla 07→07 en hora CR, así que una mesa y el selector de día hablan
+ * siempre de la misma cosa.
+ *
+ * `null` cuando el sello no se puede leer. Un instante ilegible no pertenece a ninguna jornada,
+ * y devolver una igual sería inventarla.
+ */
+export function jornadaDeInstante(iso: string | null | undefined): string | null {
+  if (iso === null || iso === undefined) return null
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return null
+  return jornadaActualCR(new Date(t))
+}
+
+/**
+ * La jornada N días para adelante o para atrás. Es aritmética de CALENDARIO sobre la etiqueta
+ * de la jornada (`YYYY-MM-DD`), no de instantes: la jornada anterior al 1-sep es el 31-ago,
+ * dure lo que dure cada servicio. Se hace en UTC para que no la corra la zona del navegador.
+ */
+export function jornadaDesplazada(fecha: string, dias: number): string {
+  const [y, m, d] = fecha.split('-').map(Number)
+  if (!y || !m || !d) return fecha
+  return new Date(Date.UTC(y, m - 1, d + dias)).toISOString().slice(0, 10)
+}
+
+/** ¿La jornada que se está mirando es la de hoy? Solo entonces hay "en vivo" que refrescar. */
+export function esJornadaEnCurso(fecha: string, ahora: Date = new Date()): boolean {
+  return fecha === jornadaActualCR(ahora)
+}
+
+// ── La carga (I/O) ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Misma firma que el mock (más una fecha opcional): la pantalla no se entera del resto.
+ *
+ * `fecha` permite mirar CUALQUIER jornada ya cargada — es lo que hace falta para cuadrar
+ * contra el reporte del PoS sin esperar a que el día de hoy tenga ventas. Sin fecha, la
+ * jornada en curso.
+ *
+ * **Nunca simula.** Un día sin ventas devuelve un snapshot en cero, y la pantalla lo dice.
+ */
+export async function getSnapshotEnVivo(local: LocalId, fecha?: string): Promise<SnapshotEnVivo> {
+  const ahora = new Date()
+  const jornada = fecha ?? jornadaActualCR(ahora)
+  const enCurso = esJornadaEnCurso(jornada, ahora)
+
+  // La lista CRUDA trae C, X y R. Se parte ACÁ, antes de armar nada: `armarSnapshot` deriva
+  // ritmo por hora, turnos y calidad de pax de la lista que recibe, y todo eso tiene que ser
+  // C-only igual que el día. Lo provisional se resume aparte y nunca toca el `DiaData`.
+  const crudos = await getTicketsJornada(local, jornada)
+  const { oficiales: tickets, provisionales } = partirPorEstado(crudos)
+  // Dos lecturas separadas A PROPÓSITO: las líneas del día son SOLO de las C (una R no arrastra su
+  // detalle al `DiaData`); las de las R se piden aparte y solo sirven para medir lo provisional
+  // con la MISMA neta que la venta oficial.
+  const lineas  = await getLineasDeTickets(tickets.map(t => t.id))
+  const lineasR = provisionales.length > 0 ? await getLineasDeTickets(provisionales.map(t => t.id)) : []
+  const netasProvisionales = netaPorTicket(provisionales, lineasR)
+  const provisional = resumirProvisional(crudos, t => netasProvisionales.get(t.id) ?? 0)
+  const nombres = await getSaloneroNombres()
+  // La comparativa en la MISMA neta que el día: facturas de las 4 jornadas + sus líneas.
+  const comparables = jornadasComparables(jornada)
+  const ticketsComparables = await getTicketsDeJornadas(local, comparables)
+  const lineasComparables  = await getLineasDeTickets(ticketsComparables.map(t => t.id))
+  const neto4Sem = netaPorJornada(ticketsComparables, lineasComparables, comparables)
+  // El snapshot de mesas abiertas es de AHORA: mirando un día viejo no significa nada.
+  const crudas = enCurso ? await getMesasAbiertas(local) : []
+  // La llave de exclusión y el latido del agente solo se piden cuando hay algo en vivo que mirar.
+  const cerrados = enCurso && crudas.length > 0
+    ? await getPedidosCerradosJornada(local, jornada)
+    : new Set<string>()
+  const frescura = enCurso ? frescuraDe(await getUltimoPollPoS(local), ahora) : undefined
+
+  // Una mesa que ya se cobró está en las dos tablas hasta el próximo poll. Se saca ACÁ, antes
+  // de contar nada, para que el conteo, el pax y el detalle hablen todos del mismo universo.
+  const abiertas = excluirCerradas(crudas, cerrados)
+
+  // Con el feed viejo las duraciones no se muestran: no se sabe cuánto de lo que se ve sigue
+  // siendo cierto, y una mesa «abierta hace 3 h» que en realidad se cobró hace rato miente.
+  const confiable = tiempoAbiertaConfiable(abiertas, VENTANA_POLL_MS, ahora) && frescura?.desactualizado !== true
+
+  // La jornada que se está mirando es la vara del guard de mesas viejas: se pasa explícita
+  // para que el detalle no dependa del reloj del navegador.
+  const detalle = enCurso ? detallarMesasAbiertas(abiertas, nombres, confiable, jornada) : undefined
+
+  const snap = armarSnapshot({
+    local, fecha: jornada, tickets, lineas, neto4Sem, ahora, enServicio: enCurso, nombres,
+  })
+  return {
+    ...snap,
+    mesasAbiertas: enCurso ? abiertas.length : undefined,
+    paxAbierto:    enCurso ? abiertas.reduce((s, m) => s + n(m.pax), 0) : undefined,
+    abiertasPorSalonero: enCurso ? resumirMesasAbiertas(abiertas, nombres) : undefined,
+    mesasDetalle:  detalle,
+    // Rótulo, no filtro: `mesasAbiertas` las sigue contando a todas.
+    mesasJornadaAnterior: detalle === undefined ? undefined : contarJornadaAnterior(detalle),
+    frescura,
+    tiempoAbiertaConfiable: enCurso ? confiable : undefined,
+    // Concepto de «En vivo»: cuentas abiertas que todavía pueden cambiar. «Hoy» no lo lleva.
+    provisional,
+  }
+}
+
+export { horaCorteCR, businessDateDe }
+export const REFRESH_MS = 30_000

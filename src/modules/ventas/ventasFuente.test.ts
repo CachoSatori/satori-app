@@ -24,7 +24,7 @@ vi.mock('./ventasDiasDesdePos', () => ({
 }))
 
 const {
-  DIAS_EAGER, PRIMERA_JORNADA_POS, cargarDeFondo, cargarDiasEager, cargarHistEager,
+  DIAS_EAGER, PRIMERA_JORNADA_POS, cargarDeFondo, cargarDias, cargarDiasEager, cargarHistEager,
   fusionarDias, fusionarHist, hoyCR, rangoPos, restarDias,
 } = await import('./ventasFuente')
 
@@ -228,5 +228,37 @@ describe('el eager y el full no se pelean', () => {
     expect(eager['2026-09-07']).toEqual(full['2026-09-07'])
     // Y el full agrega historia sin tocar lo que el eager ya mostraba.
     expect(full['2023-01-01']).toBeDefined()
+  })
+})
+
+// ── Mi Rendimiento: la misma carga, con su rango ───────────────────────────────────────────
+
+describe('cargarDias — la carga de N días que usa Mi Rendimiento', () => {
+  const AHORA = new Date('2026-10-29T18:00:00Z')
+
+  it("en 'xls' es getVentasDias(365) tal cual: el mismo objeto y sin una consulta al PoS", async () => {
+    const soloXls = { '2026-10-07': dia('xls') }
+    api.getVentasDias.mockResolvedValue(soloXls)
+    const r = await cargarDias(365, 'xls', 'santa-teresa', AHORA)
+    expect(api.getVentasDias).toHaveBeenCalledWith(365)
+    expect(r.dias).toBe(soloXls)
+    expect(r.pm).toEqual({})
+    expect(pos.getDiasMapDesdePos).not.toHaveBeenCalled()
+  })
+
+  it("en 'pos' fusiona con la MISMA regla que el eager, sobre 365 días de PoS", async () => {
+    api.getVentasDias.mockResolvedValue({ '2026-10-07': dia('xls'), '2026-10-25': dia('xls viejo') })
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2026-10-25': dia('pos') }, pm: { X: { tipo: 'comida' } } })
+    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
+    expect(pos.getDiasMapDesdePos).toHaveBeenCalledWith(rangoPos(365, AHORA), 'santa-teresa')
+    expect(r.dias['2026-10-07'].fileName).toBe('xls')
+    expect(r.dias['2026-10-25'].fileName).toBe('pos')
+    expect(r.pm).toEqual({ X: { tipo: 'comida' } })
+  })
+
+  it('el eager es cargarDias(DIAS_EAGER): una sola implementación', async () => {
+    api.getVentasDias.mockResolvedValue({})
+    await cargarDiasEager('xls', 'santa-teresa', AHORA)
+    expect(api.getVentasDias).toHaveBeenCalledWith(DIAS_EAGER)
   })
 })

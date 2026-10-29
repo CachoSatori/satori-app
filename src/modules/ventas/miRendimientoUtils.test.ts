@@ -3,7 +3,7 @@ import {
   addDays, mondayOf, resolvePeriod, datesInPeriod, lastWorkedDate,
   dailyPromPaxSeries, movingAverage,
   dowBreakdown, bestDowIndex, computeICP, icpVsTeam,
-  electronicTipCrc, sumElectronicTips,
+  electronicTipCrc, sumElectronicTips, icpEquipoDelMes,
   shiftMonth, monthLabelLong,
   type Period,
 } from './miRendimientoUtils'
@@ -327,5 +327,33 @@ describe('monthLabelLong', () => {
   })
   it('null-safe', () => {
     expect(monthLabelLong('')).toBe('')
+  })
+})
+
+// ── ICP del equipo: una sola fórmula para Mi Rendimiento y la pestaña ICP ─────
+describe('icpEquipoDelMes', () => {
+  const conCaja: DiasMap = {
+    '2026-07-06': {
+      ...dia({ ANA: sal({ total: 100000 }), BETO: sal({ total: 50000 }) }),
+    },
+  }
+  // Una caja de turno: su plata NO va al denominador (solo saloneros).
+  ;(conCaja['2026-07-06'].saloneros as Record<string, unknown>)['Cajero Turno Mañana'] =
+    { esCajero: true, total: 999999, delivery: 0, salon: 999999 }
+
+  it('Σ propina electrónica (crc + usd×TC) / Σ ventas de saloneros, sin caja', () => {
+    const filas = [
+      { tip_amount_crc: 10000, tip_amount_usd: 0,  exchange_rate: 500 },
+      { tip_amount_crc: 0,     tip_amount_usd: 10, exchange_rate: 500 },   // ₡5.000
+      { tip_amount_crc: null,  tip_amount_usd: null, exchange_rate: null },
+    ]
+    const r = icpEquipoDelMes(filas, ['2026-07-06'], conCaja, PM)
+    expect(r.gen).toBe(15000)
+    expect(r.ventas).toBe(150000)
+    expect(r.icp).toBeCloseTo(10)
+  })
+
+  it('sin ventas da 0, no NaN', () => {
+    expect(icpEquipoDelMes([{ tip_amount_crc: 1000 }], [], conCaja, PM).icp).toBe(0)
   })
 })

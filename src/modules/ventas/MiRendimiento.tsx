@@ -1,6 +1,7 @@
 /**
  * MiRendimiento — "La casa del empleado" (TEMA CLARO, espeja Caja)
- * Ruta /mi-rendimiento — roles: salonero, barman, barback, runner, cocina.
+ * Ruta /mi-rendimiento — roles: salonero, barman, barback, runner, cocina, manager (solo lo suyo) y
+ * owner (además «Ver como» a otro empleado, solo lectura — ver MiRendimientoWrap).
  *
  * Hub personal donde el empleado ve su rendimiento y sus propinas:
  *   Resumen      — KPIs ricos del período (vs general y vs meta)
@@ -43,6 +44,12 @@ interface Props {
   employee:   Employee | null    // empleado vinculado (para propinas)
   attendance: AttendanceRow[]     // TODAS las filas (para benchmark del equipo)
   noLink:     boolean             // perfil sin empleado vinculado
+  /**
+   * El OWNER está mirando a OTRO empleado («Ver como», solo lectura). Cambia de quién es la vista:
+   * nombre, rol y vínculo salen de `employee`, no del perfil logueado, y se apaga la heurística que
+   * adivina el nombre de ventas por el perfil (adivinaría el del owner). Sin esto, todo igual que antes.
+   */
+  verComo?:   boolean
 }
 
 type Tab = 'resumen' | 'dia' | 'productos' | 'semana' | 'propinas' | 'competencias'
@@ -65,8 +72,15 @@ const PERIODS: { id: PeriodKind; label: string }[] = [
   { id: 'rango',  label: 'Rango' },
 ]
 
-export default function MiRendimiento({ dias, pm, metas, comps = [], employee, attendance, noLink }: Props) {
-  const { profile } = useAuth()
+export default function MiRendimiento({ dias, pm, metas, comps = [], employee, attendance, noLink, verComo = false }: Props) {
+  const { profile: perfilLogueado } = useAuth()
+  // De quién es la vista: el perfil logueado, o el empleado que el owner eligió en «Ver como».
+  const profile = useMemo(
+    () => verComo
+      ? (employee ? { role: employee.role, full_name: employee.full_name } : null)
+      : perfilLogueado,
+    [verComo, employee, perfilLogueado],
+  )
   const navigate    = useNavigate()
   const [params]    = useSearchParams()
   const today       = todayCR()
@@ -76,12 +90,12 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
 
   // ── Match nombre ↔ empleado (heurístico ACTUAL, sin cambios) ──
   const inferredName = useMemo(() => {
-    if (!profile?.full_name) return null
+    if (verComo || !profile?.full_name) return null
     const firstName = profile.full_name.split(' ')[0].toUpperCase()
     const exact = allSals.find(n => n.toUpperCase() === profile.full_name!.toUpperCase())
     if (exact) return exact
     return allSals.find(n => n.toUpperCase().startsWith(firstName)) ?? null
-  }, [profile, allSals])
+  }, [verComo, profile, allSals])
 
   // Vínculo explícito: primero `pos_login` con la regla de nombre del ranking (ventas del PoS), y si
   // esa clave no está en los datos, `pos_name` (Admin → Empleados; es el vínculo del modo Excel).

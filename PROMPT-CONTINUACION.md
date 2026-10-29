@@ -226,6 +226,11 @@
    (monthly-report false · extract-document true · cierre-email true · pago-notificar true · ingest-ndf false) y
    validar en un proyecto aparte. Con firma.
 
+12. **🖊️ Ventas · merch de mostrador (familia 21) en una categoría propia (decide Ismael).** Hoy una remera
+   vendida en la caja va a «salón» en el PoS (canal real del pedido) y a «delivery» en el .xls (venta de caja sin
+   10% de servicio) — p. ej. factura 111584, 03/10, ₡14.000. Propuesta: canal/categoría «mostrador» para merch
+   (familias 21/23/24/26/27), fuera de salón y de delivery. Sin construir hasta la decisión.
+
 ## 🟦 P3 — LEJOS / BLOQUEANTE
 
 1. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant.** **Bloquea el GRAN PASE del

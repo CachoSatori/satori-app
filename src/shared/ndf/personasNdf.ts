@@ -188,3 +188,96 @@ export function nombreDePersona(
   }
   return persona.etiqueta
 }
+
+// ── El vínculo empleado → ventas ───────────────────────────────────────────────────────────
+//
+// Mi Rendimiento e ICP tienen un EMPLEADO y buscan su fila de ventas, que es la clave del ranking
+// (`DiaData.saloneros`). Antes buscaban solo por `pos_name`, el nombre del Excel: con ventas del
+// PoS la clave es el nombre de la persona y no coincide (034 PECHE/INE, 035 RODRI/RODRIGO BAR,
+// 444 MAXI BARRA/Maxi, mayúsculas de 025/029/030, FRANCO y VALENTINO sin `pos_name`), y esos
+// empleados se veían en cero. Ahora se busca primero por `pos_login` con LA MISMA regla de nombre
+// que arma el ranking, y solo si no hay match se cae a `pos_name` — el modo Excel queda igual.
+
+/**
+ * El nombre con el que un login del PoS aparece en el ranking, o `null` si no hay ninguno.
+ *
+ * Persona conocida → `nombreDePersona` (sus alias dan el mismo nombre). Si no: `employees` y
+ * después el roster. Es la regla que usa `nombreSalonero` (que además marca «sin asignar").
+ */
+export function nombreDeCodigo(
+  codigo: string | null | undefined,
+  nombres: Readonly<Record<string, string>>,
+): string | null {
+  const c = (codigo ?? '').trim()
+  if (c === '') return null
+  const persona = clasificarCodigo(c)
+  if (persona.rol === 'mesero') return nombreDePersona(persona, nombres)
+  return nombres[c]?.trim() || SALONEROS_CONOCIDOS[c]?.trim() || null
+}
+
+/** Lo mínimo de un empleado para vincularlo. `pos_login` es opcional en el tipo de la app. */
+export interface EmpleadoVinculable {
+  full_name?: string | null
+  pos_name?:  string | null
+  pos_login?: string | null
+}
+
+/**
+ * `pos_login → full_name` de una lista de empleados: el mismo mapa que lee el ranking
+ * (`getSaloneroNombres`), armado de lo que la vista ya tiene cargado.
+ */
+export function nombresDeEmpleados(empleados: readonly EmpleadoVinculable[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const e of empleados) {
+    const login = (e.pos_login ?? '').trim()
+    const nombre = (e.full_name ?? '').trim()
+    if (login && nombre) out[login] = nombre
+  }
+  return out
+}
+
+/**
+ * La clave de ventas del empleado POR SU `pos_login`, solo si esa clave existe en los datos
+ * cargados (`claves` = `allSaloneros(dias)`). `null` = no hay match: el que llama sigue con su
+ * regla de antes (`pos_name`).
+ */
+export function claveDeEmpleadoPorLogin(
+  empleado: EmpleadoVinculable | null | undefined,
+  nombres: Readonly<Record<string, string>>,
+  claves: readonly string[],
+): string | null {
+  const clave = nombreDeCodigo(empleado?.pos_login, nombres)
+  return clave !== null && claves.includes(clave) ? clave : null
+}
+
+/**
+ * La clave de ventas del empleado: por `pos_login` si matchea; si no, su `pos_name` tal cual
+ * (el comportamiento de siempre, que es el del modo Excel). `null` = sin vínculo.
+ */
+export function claveDeEmpleado(
+  empleado: EmpleadoVinculable | null | undefined,
+  nombres: Readonly<Record<string, string>>,
+  claves: readonly string[],
+): string | null {
+  return claveDeEmpleadoPorLogin(empleado, nombres, claves) ?? (empleado?.pos_name?.trim() || null)
+}
+
+/**
+ * Bajo qué claves (ya normalizadas con `norm`) van las propinas de un empleado en el ICP.
+ *
+ * Si su `pos_login` da una clave que existe en los datos, va SOLO ahí. Si no, las claves de
+ * siempre: `pos_name` y `full_name` (las dos, si difieren) — el comportamiento del modo Excel.
+ */
+export function clavesPropinaDeEmpleado(
+  empleado: EmpleadoVinculable,
+  nombres: Readonly<Record<string, string>>,
+  claves: readonly string[],
+  norm: (s: string) => string,
+): string[] {
+  const porLogin = claveDeEmpleadoPorLogin(empleado, nombres, claves)
+  if (porLogin) return [norm(porLogin)]
+  const fullKey = norm(empleado.full_name ?? '')
+  const posKey  = empleado.pos_name ? norm(empleado.pos_name) : null
+  return posKey && posKey !== fullKey ? [posKey, fullKey] : [posKey ?? fullKey]
+}
+

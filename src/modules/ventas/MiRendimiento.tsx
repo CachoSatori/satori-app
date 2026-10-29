@@ -33,6 +33,7 @@ import {
 } from './miRendimientoUtils'
 import { todayCR } from '../../shared/utils'
 import { ROLE_LABELS } from '../../shared/constants'
+import { claveDeEmpleado, nombresDeEmpleados } from '../../shared/ndf/personasNdf'
 
 interface Props {
   dias:       DiasMap
@@ -82,9 +83,14 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
     return allSals.find(n => n.toUpperCase().startsWith(firstName)) ?? null
   }, [profile, allSals])
 
-  // Vínculo explícito: employee.pos_name (seteado en Admin desde el dropdown de nombres reales de ventas).
+  // Vínculo explícito: primero `pos_login` con la regla de nombre del ranking (ventas del PoS), y si
+  // esa clave no está en los datos, `pos_name` (Admin → Empleados; es el vínculo del modo Excel).
   // Fallback null-safe: sin vínculo → heurística actual; si tampoco matchea → '' (arranca en Propinas).
-  const activeName = employee?.pos_name ?? inferredName ?? ''
+  const linkedName = useMemo(
+    () => claveDeEmpleado(employee, nombresDeEmpleados(employee ? [employee] : []), allSals),
+    [employee, allSals],
+  )
+  const activeName = linkedName ?? inferredName ?? ''
 
   // Rol sin venta individual (cocina/runner/barback) → arranca en Propinas.
   const isTipsFirst = !activeName || ['cocina', 'runner', 'barback'].includes(profile?.role ?? '')

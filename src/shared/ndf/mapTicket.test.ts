@@ -250,11 +250,12 @@ describe('esCajeroTurno / esLoginSistema / mapSalonero', () => {
     expect(mapSalonero('022')).toBe('022')
   })
 
-  it('002, 01 y 02 son logins de sistema', () => {
+  it('002 y 02 son logins de sistema; el 01 NO (es ROSAURA, firmado 2026-10-29)', () => {
     expect(esLoginSistema('002')).toBe(true)
-    expect(esLoginSistema('01')).toBe(true)
     expect(esLoginSistema('02')).toBe(true)
+    expect(esLoginSistema('01')).toBe(false)
     expect(esLoginSistema('023')).toBe(false)
+    expect(mapSalonero('01')).toBe('01')
   })
 
   it('mapSalonero: mesero → login · cajero/sistema/vacío → null', () => {

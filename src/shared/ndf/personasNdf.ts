@@ -22,6 +22,8 @@
 // El ranking muestra solo `mesero`; los otros tres cuentan igual en el total. Esa igualdad es
 // la que hace que la lente A sea auditable, y está clavada en un test.
 
+import { SALONEROS_CONOCIDOS } from './mapTicket.ts'
+
 /**
  * En qué balde cae un código.
  *
@@ -67,7 +69,6 @@ const PERSONAS: readonly PersonaNdf[] = [
   { id: '0909', rol: 'mesero', etiqueta: 'Rocío',     codigos: ['0909'] },
   { id: '333',  rol: 'mesero', etiqueta: 'Emma',      codigos: ['333']  },
   { id: '999',  rol: 'mesero', etiqueta: 'Jazmín',    codigos: ['999'],  inactivo: true },
-  { id: '266',  rol: 'mesero', etiqueta: 'Nacho',     codigos: ['266']  },
   { id: '444',  rol: 'mesero', etiqueta: 'Maxi',      codigos: ['444']  },
   { id: '026',  rol: 'mesero', etiqueta: 'Maxo',      codigos: ['026']  },
   { id: '028',  rol: 'mesero', etiqueta: 'Francisco', codigos: ['028']  },
@@ -81,10 +82,17 @@ const PERSONAS: readonly PersonaNdf[] = [
   { id: '04',   rol: 'mesero', etiqueta: 'Wesley',    codigos: ['04'],   inactivo: true },
   { id: '030',  rol: 'mesero', etiqueta: 'Jota',      codigos: ['030']  },
   { id: '033',  rol: 'mesero', etiqueta: 'Federico',  codigos: ['033']  },
-  // Los dos casos de unificación, curados a mano. `01` es la salonera y `235` su login de
-  // manager ("M"); `023` es el activo de ESTEBAN y `555` el viejo. Una sola fila cada uno.
+  // Barmen: también comandan y van al ranking (firmado por Ismael, 2026-10-29).
+  { id: '035',  rol: 'mesero', etiqueta: 'Rodri',     codigos: ['035']  },
+  { id: '036',  rol: 'mesero', etiqueta: 'Franco',    codigos: ['036']  },
+  { id: '037',  rol: 'mesero', etiqueta: 'Valentino', codigos: ['037']  },
+  // Los casos de unificación, curados a mano. Una sola fila cada uno, el canónico primero:
+  //   · `01` es la salonera ROSAURA y `235` su login de manager ("M").
+  //   · `023` es el activo de ESTEBAN y `555` el viejo.
+  //   · `038` es el login NUEVO de NACHO; `266` es su histórico (borrado del PoS 2026-10-29).
   { id: '01',   rol: 'mesero', etiqueta: 'Rosaura',   codigos: ['01', '235']  },
   { id: '023',  rol: 'mesero', etiqueta: 'Esteban',   codigos: ['023', '555'] },
+  { id: '038',  rol: 'mesero', etiqueta: 'Nacho',     codigos: ['038', '266'] },
 
   // ── CAJA (cobra, no comanda) ──
   // Son los mismos logins que en `jornada.ts` definen el turno. Acá aparecen como AUTORES de
@@ -155,12 +163,16 @@ export function personasConocidas(): readonly PersonaNdf[] {
 }
 
 /**
- * El nombre a mostrar de una persona.
+ * El nombre a mostrar de una persona. Es LA regla de nombre de todas las vistas de ventas:
+ * el ranking por factura (`nombreSalonero`) y las lentes por línea la usan igual, así que una
+ * persona con dos códigos sale con el MISMO nombre en una sola fila en todas partes.
  *
- * Manda `employees` (`pos_login → full_name`, que viene de `FAC_Empleados` con el roster
- * completo incluidos los inactivos): es el nombre que el dueño mantiene. Se busca por cada
- * código de la persona, el canónico primero, así ROSAURA sale con SU nombre y no con el del
- * login de manager. Si no hay fila, cae en la etiqueta curada; nunca se muestra un número solo.
+ * Tres capas, y en cada una se busca por TODOS los códigos de la persona, el canónico primero:
+ *   1. `employees` (`pos_login → full_name`): el nombre que el dueño mantiene. Así ROSAURA sale
+ *      con su nombre aunque el `pos_login` cargado sea el de su login de manager.
+ *   2. `SALONEROS_CONOCIDOS`, el roster que viaja con el código, para el entorno que todavía
+ *      no tiene `pos_login` cargado.
+ *   3. La etiqueta curada. Nunca se muestra un número solo.
  */
 export function nombreDePersona(
   persona: PersonaNdf,
@@ -168,6 +180,10 @@ export function nombreDePersona(
 ): string {
   for (const c of persona.codigos) {
     const n = nombres[c]?.trim()
+    if (n) return n
+  }
+  for (const c of persona.codigos) {
+    const n = SALONEROS_CONOCIDOS[c]?.trim()
     if (n) return n
   }
   return persona.etiqueta

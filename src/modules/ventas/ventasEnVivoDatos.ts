@@ -12,6 +12,7 @@ import {
   esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO, SALONEROS_CONOCIDOS,
   type EstadoFactura,
 } from '../../shared/ndf/mapTicket'
+import { clasificarCodigo, nombreDePersona } from '../../shared/ndf/personasNdf'
 import { claveNoMesero, etiquetaNoMesero, etiquetaTurnoPoS } from './baldesNoMesero'
 import { netaDelTicket, netaPorTicket, type AvisoCatalogo } from './netaVenta'
 import { horaCorteCR } from './ventasEnVivoMock'
@@ -391,18 +392,23 @@ interface AccEntrada {
 }
 
 /**
- * El login del PoS → cómo se muestra, en TRES CAPAS y en este orden:
+ * El login del PoS → cómo se muestra. Es la CLAVE del ranking: todo lo que agrupa por salonero
+ * (ranking, comparativos, metas, ICP, Mi Rendimiento…) agrupa por este nombre.
  *
- *   1. `employees.pos_login` — el mapeo que mantiene el negocio en Empleados. Manda siempre:
- *      si alguien corrigió un nombre ahí, eso es lo que tiene que verse.
- *   2. `SALONEROS_CONOCIDOS` — el roster de `FAC_Empleados` que viaja con el código. Es el
- *      respaldo para el login que todavía nadie cargó en Empleados, y es lo que hace que la
- *      pantalla deje de mostrar números.
- *   3. El número **marcado** `«026 · sin asignar»` — cuando no está en ninguna de las dos. No
- *      se inventa un nombre y tampoco se lo esconde: sigue en el ranking, con la marca puesta,
- *      que es lo que hace visible el mapeo que falta.
+ * · Si el login es de una persona conocida (`personasNdf.ts`), sale el nombre de la PERSONA
+ *   (`nombreDePersona`), buscado por todos sus códigos. Así dos logins de la misma persona
+ *   (`266`/`038` NACHO, `01`/`235` ROSAURA, `023`/`555` ESTEBAN) caen en UNA sola fila, con el
+ *   mismo nombre que en las lentes por línea.
+ * · Si no, las tres capas de siempre:
+ *   1. `employees.pos_login` — el mapeo que mantiene el negocio en Empleados.
+ *   2. `SALONEROS_CONOCIDOS` — el roster que viaja con el código.
+ *   3. El número **marcado** `«026 · sin asignar»`. No se inventa un nombre y tampoco se lo
+ *      esconde: sigue en el ranking, con la marca puesta, que es lo que hace visible el mapeo
+ *      que falta.
  */
 export function nombreSalonero(login: string, nombres: Record<string, string>): string {
+  const persona = clasificarCodigo(login)
+  if (persona.rol === 'mesero') return nombreDePersona(persona, nombres)
   const deEmpleados = nombres[login]?.trim()
   if (deEmpleados) return deEmpleados
   const delRoster = SALONEROS_CONOCIDOS[login]?.trim()
@@ -913,8 +919,10 @@ export function calidadPaxPorSalonero(
 ): CalidadPax[] {
   const acc = new Map<string, { mesas: number; conNativo: number; conAmbos: number; coinciden: number }>()
   for (const t of tickets) {
-    const clave = claveSalonero(t)
-    if (clave === null) continue
+    const login = claveSalonero(t)
+    if (login === null) continue
+    // Por PERSONA, no por login: dos códigos de la misma persona (266/038) son una sola fila.
+    const clave = nombreSalonero(login, nombres)
     const e = acc.get(clave) ?? { mesas: 0, conNativo: 0, conAmbos: 0, coinciden: 0 }
     e.mesas += 1
     const nativo = n(t.pax_nativo), articulo = n(t.pax_articulo)
@@ -926,8 +934,8 @@ export function calidadPaxPorSalonero(
     acc.set(clave, e)
   }
   return [...acc.entries()]
-    .map(([login, e]) => ({
-      salonero: nombreSalonero(login, nombres),
+    .map(([salonero, e]) => ({
+      salonero,
       mesas: e.mesas,
       pctPaxNativoCargado:   e.mesas ? (e.conNativo / e.mesas) * 100 : 0,
       matchArticuloVsNativo: e.conAmbos ? (e.coinciden / e.conAmbos) * 100 : 0,

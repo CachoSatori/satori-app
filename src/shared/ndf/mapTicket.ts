@@ -66,9 +66,14 @@ export const LOGIN_CAJERO_TARDE_SIN_CONFIRMAR = '022'
 
 /**
  * Logins de sistema: fuera del breakdown de mesero, NUNCA fuera del total.
- *   · 002 = cocina express · 01 / 02 = bajas
+ *   · 002 = cocina express · 02 = login compartido / bajas
+ *
+ * El `01` NO es sistema: es ROSAURA (salonera), unificada con su login de manager `235` en
+ * `personasNdf.ts`. Firmado por Ismael el 2026-10-29. Ojo: esto decide `registrado_por` al
+ * INGESTAR; los tickets del `01` ya guardados como `sistema` no cambian solos (hace falta
+ * re-ingestarlos con el backfill).
  */
-export const LOGINS_SISTEMA = ['002', '01', '02'] as const
+export const LOGINS_SISTEMA = ['002', '02'] as const
 
 /**
  * Roster activo de `FAC_Empleados`, login → nombre. **Solo para MOSTRAR**: no decide quién es
@@ -99,6 +104,12 @@ export const SALONEROS_CONOCIDOS: Record<string, string> = {
   '235': 'ROSAURA M',
   '266': 'NACHO',
   '444': 'MAXI',
+  // Alta 2026-10-29 (Ismael): barmen nuevos, el login nuevo de NACHO (el 266 se borró del PoS)
+  // y el `01`, que es ROSAURA (antes se trataba como login de sistema).
+  '01':  'ROSAURA M',
+  '036': 'FRANCO',
+  '037': 'VALENTINO',
+  '038': 'NACHO',
 }
 
 /**

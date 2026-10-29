@@ -54,7 +54,7 @@ describe('unificación de personas — un código no es una persona', () => {
 
   it('el resto son uno a uno', () => {
     const unificados = personasConocidas().filter(p => p.codigos.length > 1)
-    expect(unificados.map(p => p.id).sort()).toEqual(['01', '023'])
+    expect(unificados.map(p => p.id).sort()).toEqual(['01', '023', '038'])
   })
 
   it('ningún código está en dos personas', () => {
@@ -115,8 +115,11 @@ describe('nombreDePersona — manda `employees`, la etiqueta es respaldo', () =>
     expect(nombreDePersona(rosaura, { '235': 'Rosaura M.' })).toBe('Rosaura M.')
   })
 
-  it('sin fila en `employees`, la etiqueta curada — nunca un número pelado', () => {
-    expect(nombreDePersona(rosaura, {})).toBe('Rosaura')
+  it('sin fila en `employees`, el roster del código; sin roster, la etiqueta — nunca un número pelado', () => {
+    // ROSAURA: el `01` no está en el roster pero su login de manager `235` sí.
+    expect(nombreDePersona(rosaura, {})).toBe('ROSAURA M')
+    // Rocío (`0909`) no está en el roster: etiqueta curada.
+    expect(nombreDePersona(clasificarCodigo('0909'), {})).toBe('Rocío')
     expect(nombreDePersona(clasificarCodigo('777'), {})).toBe('777')
     expect(nombreDePersona(clasificarCodigo(null), {})).toBe('Sin código')
   })
@@ -127,8 +130,8 @@ describe('nombreDePersona — manda `employees`, la etiqueta es respaldo', () =>
 })
 
 describe('la tabla firmada 2026-09-07', () => {
-  it('tiene los 19 meseros de la SPEC', () => {
-    expect(personasConocidas().filter(p => p.rol === 'mesero')).toHaveLength(19)
+  it('tiene los 19 meseros de la SPEC + los 3 barmen firmados el 2026-10-29', () => {
+    expect(personasConocidas().filter(p => p.rol === 'mesero')).toHaveLength(22)
   })
 
   it('marca a los inactivos que la SPEC anota con (I)', () => {
@@ -145,3 +148,24 @@ describe('la tabla firmada 2026-09-07', () => {
     expect(codigos).toHaveLength(21)
   })
 })
+
+describe('alta 2026-10-29 — una persona, una fila', () => {
+  it('NACHO: el 038 (nuevo) y el 266 (histórico) son la MISMA persona, con el 038 canónico', () => {
+    const nuevo = clasificarCodigo('038'), viejo = clasificarCodigo('266')
+    expect(nuevo).toBe(viejo)
+    expect(nuevo.id).toBe('038')
+    expect(nuevo.codigos).toEqual(['038', '266'])
+    expect(nuevo.rol).toBe('mesero')
+  })
+
+  it('los barmen 035, 036 y 037 van al ranking como meseros', () => {
+    for (const c of ['035', '036', '037']) expect(esMesero(c)).toBe(true)
+  })
+
+  it('el nombre de NACHO es el mismo por los dos códigos, con o sin `employees`', () => {
+    const nacho = clasificarCodigo('266')
+    expect(nombreDePersona(nacho, {})).toBe('NACHO')                // roster del 038
+    expect(nombreDePersona(nacho, { '038': 'NACHO' })).toBe('NACHO') // prod: pos_login 038
+  })
+})
+

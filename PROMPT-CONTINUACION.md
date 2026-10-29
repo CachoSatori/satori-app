@@ -201,6 +201,21 @@
    esquema** ⇒ necesita firma propia antes de aplicar (0 → 1 → 2 → {3,4} → 5).
 8. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy
    diseñada sin código) — construir **solo si** tras usar la Etapa 1 en prod sigue haciendo falta.
+9. **🖊️ Ventas · re-ingesta del `01` → ROSAURA (POST go-live, con firma; NO ejecutar antes).** El `01` salió de
+   `LOGINS_SISTEMA` (`f998e51`/`5343856`), pero eso decide `registrado_por` al INGESTAR: lo ya guardado no cambia.
+   Medido en prod y staging (2026-10-29): **450 tickets del `01` marcados `sistema` = ₡19,06M** (2025-01-01 →
+   2025-09-21). Plan: (1) actualizar los **DOS agentes** de la PC del PoS (`C:\satori\satori-app` hoy en `14bd278`
+   y `C:\satori\satori-app-prod` hoy en `4d3513a`) a la versión con el cambio; (2) re-correr el backfill
+   `--desde 2025-01-01 --hasta 2025-09-21` en los dos entornos (re-enviar no duplica: upsert por factura);
+   (3) verificar por SQL que esos tickets pasan a `registrado_por='salonero'`, `salonero_login='01'`.
+   Límite conocido: los **2.729 tickets `sin_pedido` del `01` (₡89,9M)** no tienen pedido en el PoS → el ranking
+   por factura no puede atribuirlos a nadie (por diseño); sí le quedan a ROSAURA en las lentes por línea.
+10. **👁️ Ventas · tarea «Satori PoS Bridge PROD» no arrancó al reiniciar la PC (2026-10-29).** Última ejecución
+   1999 / `0x41303` = nunca corrió; Ismael la arrancó a mano y quedó viva (sin hueco: prod ≡ staging factura por
+   factura desde el 28/10). La config es IDÉNTICA a la de staging (comparada por XML). **Hipótesis:** se registró
+   después del último reinicio, así que el disparador «al iniciar el sistema» todavía no tuvo ocasión. **Validar
+   con un reinicio de la PC antes de abrir** (las dos tareas tienen que quedar `Running` sin tocarlas) y después
+   confirmar en prod `pos_ndf_cursor.last_poll_at` reciente y `last_error` null.
 
 ## 🟦 P3 — LEJOS / BLOQUEANTE
 

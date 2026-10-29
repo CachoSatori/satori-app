@@ -11,7 +11,7 @@
  *
  * Connects ventas_dias salonero sales with tip_entries payout_crc via name matching.
  */
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { DiasMap } from '../../shared/types/ventas'
 import type { Employee } from '../../shared/types/database'
 import {
@@ -31,6 +31,7 @@ import { getAttendanceHistory } from '../../shared/api/tips'
 import { getAllEmployees } from '../../shared/api/admin'
 import type { AttendanceRow } from '../../shared/api/tips'
 import type { ProductMap } from '../../shared/types/ventas'
+import { clavesPropinaDeEmpleado, nombresDeEmpleados } from '../../shared/ndf/personasNdf'
 
 interface Props {
   dias: DiasMap
@@ -65,7 +66,18 @@ export default function VentasICP({ dias, pm }: Props) {
       .finally(() => setLoading(false))
   }, [])
 
-  // Tip data indexed by normalized name — prefers pos_name (exact POS match)
+  const sals = useMemo(() => allSaloneros(dias), [dias])
+  // `pos_login → full_name` de los empleados: el mismo mapa que usa el ranking para nombrar.
+  const nombres = useMemo(() => nombresDeEmpleados(employees), [employees])
+
+  // Bajo qué claves van las propinas de un empleado: `pos_login` si matchea; si no, `pos_name` +
+  // `full_name` como siempre. La regla vive en `personasNdf` (`clavesPropinaDeEmpleado`).
+  const clavesDeEmpleado = useCallback(
+    (emp: Employee): string[] => clavesPropinaDeEmpleado(emp, nombres, sals, normName),
+    [nombres, sals],
+  )
+
+  // Tip data indexed by normalized name — prefers pos_login, then pos_name (exact POS match)
   const empTipMap = useMemo(() => {
     const m: Record<string, { payout: number; hours: number; shifts: number }> = {}
     const add = (key: string, payout: number, hours: number) => {
@@ -80,14 +92,10 @@ export default function VentasICP({ dias, pm }: Props) {
       if (!emp) continue
       const payout = r.payout_crc ?? 0
       const hours  = r.hours_worked ?? 0
-      const posName = emp.pos_name
-      if (posName) add(normName(posName), payout, hours)
-      const fullKey = normName(emp.full_name)
-      const posKey  = posName ? normName(posName) : null
-      if (!posKey || fullKey !== posKey) add(fullKey, payout, hours)
+      for (const k of clavesDeEmpleado(emp)) add(k, payout, hours)
     }
     return m
-  }, [tipData, employees, month])
+  }, [tipData, employees, month, clavesDeEmpleado])
 
   // Ventas dates for selected month
   const monthDates = useMemo(() => {
@@ -95,8 +103,6 @@ export default function VentasICP({ dias, pm }: Props) {
     if (!month) return all
     return all.filter(d => d.startsWith(month))
   }, [dates, month, dias])
-
-  const sals = useMemo(() => allSaloneros(dias), [dias])
 
   // Build ICP per salonero
   const icpData = useMemo(() => {
@@ -328,9 +334,7 @@ export default function VentasICP({ dias, pm }: Props) {
                   tipData.filter(r => r.session_date.startsWith(ym)).forEach(r => {
                     const emp = employees.find(e => e.id === r.employee_id)
                     if (!emp) return
-                    const posName = emp.pos_name
-                    const keys = posName ? [normName(posName), normName(emp.full_name)] : [normName(emp.full_name)]
-                    keys.forEach(k => { m[k] = (m[k] ?? 0) + (r.payout_crc ?? 0) })
+                    clavesDeEmpleado(emp).forEach(k => { m[k] = (m[k] ?? 0) + (r.payout_crc ?? 0) })
                   })
                   return m[normName(d.name)] ?? 0
                 })()

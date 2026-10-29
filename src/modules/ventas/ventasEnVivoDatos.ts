@@ -9,10 +9,10 @@ import {
   agruparEnLotes, etiquetaTurno, turnosConocidos, type Turno,
 } from '../../shared/ndf/jornada'
 import {
-  esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO, SALONEROS_CONOCIDOS,
+  esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO,
   type EstadoFactura,
 } from '../../shared/ndf/mapTicket'
-import { clasificarCodigo, nombreDePersona } from '../../shared/ndf/personasNdf'
+import { nombreDeCodigo } from '../../shared/ndf/personasNdf'
 import { claveNoMesero, etiquetaNoMesero, etiquetaTurnoPoS } from './baldesNoMesero'
 import { netaDelTicket, netaPorTicket, type AvisoCatalogo } from './netaVenta'
 import { horaCorteCR } from './ventasEnVivoMock'
@@ -407,13 +407,7 @@ interface AccEntrada {
  *      que falta.
  */
 export function nombreSalonero(login: string, nombres: Record<string, string>): string {
-  const persona = clasificarCodigo(login)
-  if (persona.rol === 'mesero') return nombreDePersona(persona, nombres)
-  const deEmpleados = nombres[login]?.trim()
-  if (deEmpleados) return deEmpleados
-  const delRoster = SALONEROS_CONOCIDOS[login]?.trim()
-  if (delRoster) return delRoster
-  return `${login} · sin asignar`
+  return nombreDeCodigo(login, nombres) ?? `${login} · sin asignar`
 }
 
 /** ¿Este salonero quedó sin mapear a un empleado? */

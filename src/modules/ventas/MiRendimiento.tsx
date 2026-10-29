@@ -28,7 +28,7 @@ import {
 } from './ventasUtils'
 import {
   resolvePeriod, datesInPeriod, dowBreakdown, bestDowIndex,
-  icpVsTeam, sumElectronicTips, shiftMonth, monthLabelLong, lastWorkedDate,
+  icpVsTeam, icpEquipoDelMes, sumElectronicTips, shiftMonth, monthLabelLong, lastWorkedDate,
   dailyPromPaxSeries, movingAverage,
   type PeriodKind,
 } from './miRendimientoUtils'
@@ -234,9 +234,10 @@ export default function MiRendimiento({ dias, pm, metas, comps = [], employee, a
   const icp = useMemo(() => {
     const monthDates = dates.filter(d => d.startsWith(selMonth))
     const myVentas   = activeName ? aggSalonero(activeName, monthDates, dias, pm).total : 0
-    const teamVentas = aggGeneral(monthDates, dias, pm).total
     const myGen      = sumElectronicTips(myAttendance.filter(r => r.session_date.startsWith(selMonth)))
-    const teamGen    = sumElectronicTips(attendance.filter(r => r.session_date.startsWith(selMonth)))
+    const equipo     = icpEquipoDelMes(attendance.filter(r => r.session_date.startsWith(selMonth)), monthDates, dias, pm)
+    const teamGen    = equipo.gen
+    const teamVentas = equipo.ventas
     const res = icpVsTeam(myGen, myVentas, teamGen, teamVentas)
     return { ...res, myGen, myVentas, teamGen, teamVentas }
   }, [selMonth, dates, activeName, dias, pm, myAttendance, attendance])

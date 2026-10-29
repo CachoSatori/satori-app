@@ -169,9 +169,24 @@ export async function cargarDiasEager(
   local: string = LOCAL_POR_DEFECTO,
   ahora: Date = new Date(),
 ): Promise<CargaDias> {
-  const xls = await getVentasDias(DIAS_EAGER)
+  return cargarDias(DIAS_EAGER, fuente, local, ahora)
+}
+
+/**
+ * Los últimos `dias` días, fusionados con la MISMA regla que el eager. La usa Mi Rendimiento
+ * (365 días), que tiene que ver los mismos números que el módulo Ventas.
+ *
+ * Con `FUENTE_VENTAS = 'xls'` es `getVentasDias(dias)` tal cual: no consulta el PoS.
+ */
+export async function cargarDias(
+  dias: number,
+  fuente: FuenteVentas = FUENTE_VENTAS,
+  local: string = LOCAL_POR_DEFECTO,
+  ahora: Date = new Date(),
+): Promise<CargaDias> {
+  const xls = await getVentasDias(dias)
   if (fuente === 'xls') return { dias: xls, pm: {} }
-  const pos = await getDiasMapDesdePos(rangoPos(DIAS_EAGER, ahora), local)
+  const pos = await getDiasMapDesdePos(rangoPos(dias, ahora), local)
   return { dias: fusionarDias(xls, pos.dias), pm: pos.pm }
 }
 

@@ -1,7 +1,7 @@
 /**
  * Wrapper de datos de Mi Rendimiento ("casa del empleado").
  * Carga en paralelo:
- *   - Ventas (ventas_dias 365d + product_map + metas + comps) para las sub-vistas de ventas
+ *   - Ventas (365d según FUENTE_VENTAS, como el módulo Ventas + product_map + metas + comps)
  *   - Propinas (empleado vinculado + historial de asistencia 12m) para la pestaña Propinas
  * Mantiene el bundle separado del VentasModule completo.
  *
@@ -12,7 +12,9 @@
  */
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { getVentasDias, getProductMap, getMetas, getComps } from '../../shared/api/ventas'
+import { getProductMap, getMetas, getComps } from '../../shared/api/ventas'
+import { cargarDias } from './ventasFuente'
+import { fusionarProductMap } from './ventasUtils'
 import { getAttendanceHistory } from '../../shared/api/tips'
 import { getAllEmployees, getEmployeeByProfileId } from '../../shared/api/admin'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -44,8 +46,13 @@ export default function MiRendimientoWrap() {
   useEffect(() => {
     let alive = true
     // Ventas: no bloquean la vista si fallan (un empleado de cocina igual ve propinas).
-    const ventasP = Promise.all([getVentasDias(365), getProductMap(), getMetas(), getComps()])
-      .then(([d, p, m, c]) => { if (!alive) return; setDias(d); setPm(p); setMetas(m); setComps(c) })
+    // Los días salen de la MISMA carga que el módulo Ventas (`FUENTE_VENTAS`), y el `pm` con la
+    // misma fusión curado + familia. En 'xls' es `getVentasDias(365)` y el curado tal cual.
+    const ventasP = Promise.all([cargarDias(365), getProductMap(), getMetas(), getComps()])
+      .then(([d, p, m, c]) => {
+        if (!alive) return
+        setDias(d.dias); setPm(fusionarProductMap(p, d.pm)); setMetas(m); setComps(c)
+      })
       .catch(() => { /* ventas opcionales para roles sin venta individual */ })
 
     // Propinas: empleado vinculado (o el elegido por el owner) + su historial (getAttendanceHistory

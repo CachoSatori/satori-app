@@ -216,6 +216,16 @@
    las DOS tareas arrancaron solas (`LastTaskResult` 267009 = Running). En prod `pos_ndf_cursor.last_poll_at` =
    13:56:19 CR (posterior a 13:40), `last_error` null; staging igual (13:55:16, sin error).
 
+11. **🖊️ Ventas · versionar `ingest-ndf` en `main` con `supabase/config.toml` (POST go-live, estudiar aparte).** En
+   el release a prod (PR #13, merge `9ada841`, 29/10) la carpeta `supabase/functions/ingest-ndf/` quedó AFUERA a
+   propósito: prod tiene la integración GitHub/Branching de Supabase atada a `main`, que despliega las funciones que
+   cambian con `verify_jwt=true` por defecto (no hay `config.toml`), y el agente solo manda `x-ingest-secret` → 401.
+   Hoy la función corre en prod como v1 desplegada a mano (`verify_jwt=false`) y su código vive en
+   `integracion/analitica-staging`. Antes de traerla a `main`: estudiar qué más sincroniza un `config.toml` en la
+   rama de producción (auth, API, otras funciones), declarar las 5 funciones con su `verify_jwt` actual
+   (monthly-report false · extract-document true · cierre-email true · pago-notificar true · ingest-ndf false) y
+   validar en un proyecto aparte. Con firma.
+
 ## 🟦 P3 — LEJOS / BLOQUEANTE
 
 1. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant.** **Bloquea el GRAN PASE del

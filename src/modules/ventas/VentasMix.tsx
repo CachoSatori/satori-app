@@ -8,7 +8,9 @@
 import { useState, useMemo, useCallback, type ReactElement } from 'react'
 import type { DiasMap, ProductMap, HistMap } from '../../shared/types/ventas'
 import { availableMonths, availableYears, fi } from './ventasUtils'
-import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
+// Caja de turno con la regla central: sin mayúsculas ni tildes, y reconoce los nombres del
+// .xls («Cajero Turno Mañana», «cajero turno tarde»), que la clave exacta dejaba afuera.
+import { esCajaDeTurno } from './baldesNoMesero'
 
 // ── Types ─────────────────────────────────────────────────────────
 interface PMItem {
@@ -48,8 +50,6 @@ const SECTIONS: Section[] = [
 // cajeros por turno, «Salón sin mesero» TAMBIÉN la lleva, y su plata es de SALÓN por
 // definición (`canal = 'salon'`) — mandarla a delivery sería inventar reparto. Las claves de
 // turno, en cambio, son `canal <> 'salon'` por construcción.
-const esCajaDeTurno = (clave: string): boolean =>
-  (CLAVES_CAJERO_TURNO as readonly string[]).includes(clave)
 
 // ── Helpers ───────────────────────────────────────────────────────
 function getMonto(p: PMItem | { monto: number; salon: number; delivery: number }, canal: 'todos'|'salon'|'delivery'): number {

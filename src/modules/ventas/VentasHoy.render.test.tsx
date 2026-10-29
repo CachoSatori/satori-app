@@ -157,3 +157,42 @@ describe('VentasHoy · el ranking no lista buckets de caja', () => {
     expect(ranking).not.toContain(plano(fi(0)))
   })
 })
+
+// ── Modo 'xls' (prod, 2026-10-29) ──────────────────────────────────────────────────────────
+// Un día del Excel: cajas con los nombres REALES de prod y com/beb por `ProductMap`, como antes
+// del merge 9ada841 (que buscaba las cajas por clave exacta y pasaba com/beb a la familia).
+describe("VentasHoy · modo 'xls' con los nombres REALES del Excel de prod", () => {
+  const PM = {
+    'ROLL SATORI': { tipo: 'comida', clasificacion: '', subclasificacion: '', multiplicador: 1, costo_unitario: 0 },
+    'IMPERIAL':    { tipo: 'bebida', clasificacion: '', subclasificacion: '', multiplicador: 1, costo_unitario: 0 },
+  }
+  const DIAS_XLS: DiasMap = {
+    '2026-10-05': {
+      fileName: 'ventas 05-10.xls', uploadedAt: '2026-10-06',
+      saloneros: {
+        // Las columnas del Excel (com/beb) dicen otra cosa que el ProductMap: manda el ProductMap.
+        GONZA: sal({
+          pax: 4, total: 95_000, com: 1_000, beb: 1_000, iCom: 6, iBeb: 4,
+          prods: [['ROLL SATORI', 6, 75_000], ['IMPERIAL', 4, 20_000]],
+        }),
+        'Cajero Turno Mañana': caj({ total: 90_756, salon: 20_000, delivery: 70_756, ordenes: 10 }),
+        'cajero turno tarde':  caj({ total: 56_345, salon: 0, delivery: 56_345, ordenes: 6 }),
+      },
+    },
+  }
+
+  it('las tarjetas de caja aparecen con su plata (no se pierden por la mayúscula)', () => {
+    render(<VentasHoy dias={DIAS_XLS} pm={PM} metas={METAS} />)
+    expect(texto()).toContain(`Cajero turno mañana${plano(fi(90_756))}`)
+    expect(texto()).toContain(`Cajero turno tarde${plano(fi(56_345))}`)
+  })
+
+  it('comidas, bebidas y ratio por ProductMap, como antes del merge', () => {
+    render(<VentasHoy dias={DIAS_XLS} pm={PM} metas={METAS} />)
+    expect(texto()).toContain(`Comidas${plano(fi(75_000))}`)
+    expect(texto()).toContain(`Bebidas${plano(fi(20_000))}`)
+    expect(texto()).toContain('Ratio C/B (₡)3.75:1')                 // 75.000 ÷ 20.000
+    expect(aggGeneral(['2026-10-05'], DIAS_XLS, PM).ratioCB).toBe(3.75) // = lo que pintaba antes
+  })
+})
+

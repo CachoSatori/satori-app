@@ -74,6 +74,7 @@ function FilaTabla({ fila, total }: { fila: FilaParidad; total?: boolean }) {
           <td key={c.clave} className={`r ${c.fuera ? 'apos-celda-fuera' : ''}`}>
             {num(c, c.pos)}
             <div className="apos-mini">{signo(c)} · {pct(c.diffPct)}</div>
+            {c.nota && <div className="apos-mini">{c.nota}</div>}
           </td>
         ))}
       </tr>
@@ -245,15 +246,20 @@ export default function VentasParidad() {
 
             {/* ── Por qué el total manda ──────────────────────────────────── */}
             <div className="apos-panel">
+              <p className="apos-nota">
+                <strong>Las dos fuentes cortan el día igual:</strong> por el día de la factura, en
+                hora de Costa Rica. La <strong>venta neta por día tiene que coincidir</strong>; si
+                no coincide, es para mirar.
+              </p>
               <p className="apos-nota" style={{ marginBottom: 0 }}>
-                <strong>Los diffs por día no son necesariamente errores.</strong> El xls y{' '}
-                <code>pos_ndf</code> <strong>no cortan el día igual</strong>: el xls usa el corte
-                del reporte del PoS, y <code>pos_ndf</code> usa el <strong>lote de cierre</strong>{' '}
-                (la factura de después de medianoche cuenta en la jornada que ABRIÓ). La misma
-                plata puede caer en días distintos según quién la mire — y eso{' '}
-                <strong>se cancela en el total del rango</strong>. Por eso el TOTAL es lo que se
-                mira para firmar la paridad, y las filas por día sirven para investigar las
-                diferencias grandes, no para exigir cero.
+                Lo que sí difiere es por <strong>reglas distintas</strong>, no por plata:{' '}
+                <strong>Comidas/Bebidas</strong> se comparan sumando saloneros y caja (el PoS manda
+                a la caja facturas que el xls le asigna a una persona) ·{' '}
+                <strong>PAX</strong>: el PoS cuenta todas las mesas, también las cobradas por caja,
+                y el xls no le pone pax a la caja — si el PoS da más dice «PoS más completo» y no se
+                marca · <strong>Salón/Delivery</strong>: el xls cuenta como delivery toda venta de
+                caja sin el 10% de servicio (por ejemplo una remera de mostrador) y el PoS usa el
+                canal real del pedido, así que la plata puede pasar de uno a otro con la misma neta.
               </p>
             </div>
 

@@ -8,20 +8,28 @@
 // Este módulo es PURO: recibe los dos `DiasMap` ya cargados y devuelve el reporte. No lee, no
 // escribe, no toca la base. Nada de lo que hay acá puede modificar un dato.
 //
-// ── POR QUÉ EL TOTAL DEL RANGO ES LA SEÑAL QUE MANDA ───────────────────────────────────────
-// El xls y `pos_ndf` NO cortan el día igual: el xls usa el corte del reporte del PoS, y
-// `pos_ndf` usa el LOTE DE CIERRE (ver `shared/ndf/jornada.ts`). Una factura de después de
-// medianoche puede caer en un día para uno y en el otro para el otro. Eso produce diferencias
-// por día que NO son errores: son la misma plata puesta en dos casilleros distintos, y **se
-// cancelan en el total del rango**. Por eso el total es lo que se mira para firmar la paridad,
-// y las filas por día sirven para investigar las diferencias GRANDES, no para exigir cero.
+// ── EL CORTE DEL DÍA ES EL MISMO EN LAS DOS FUENTES ─────────────────────────────────────────
+// Desde `dc51778` el lado `pos_ndf` corta por DÍA DE FACTURA — `(fecha_registra AT TIME ZONE
+// 'America/Costa_Rica')::date`, `diaDeFactura` en `ventasDiasDesdePos.ts` —, igual que el xls
+// (el reporte del PoS). Ya no hay corrimiento de plata entre días: la NETA por día tiene que
+// coincidir. Las diferencias que quedan son de REGLAS distintas entre las dos fuentes, no de
+// plata, y están explicadas acá y en la pantalla:
+//   · Comidas/Bebidas se comparan sumando TODOS los baldes (saloneros + caja): el PoS manda a
+//     «Salón sin mesero» / «Cajero-salón» facturas que el xls le asigna a una persona.
+//   · PAX: el PoS cuenta el artículo pax de TODAS las mesas, también las cobradas por caja y las
+//     de quien no tiene fila en el xls; el xls no le pone pax a la caja. PoS > xls = «PoS más
+//     completo», no es un error.
+//   · Salón/Delivery: el xls manda a delivery toda venta de caja SIN servicio 10% (p. ej. una
+//     remera de mostrador); el PoS usa el canal real del pedido. Se mueve plata entre los dos
+//     con la misma neta.
 //
 // ── NO REIMPLEMENTA MÉTRICAS ───────────────────────────────────────────────────────────────
-// Las nueve cifras salen de `getDayStats` y `aggGeneral`, las mismas que usa toda la app. Los
-// dos lados se miden con la MISMA función, que es lo único que hace la comparación honesta.
+// Las cifras salen de `getDayStats` (la misma función de toda la app) y comidas/bebidas de los
+// `prods` de cada balde con el `ProductMap`. Los dos lados se miden con la MISMA función, que es
+// lo único que hace la comparación honesta.
 
 import type { DiaData, DiasMap, ProductMap } from '../../shared/types/ventas'
-import { aggGeneral, getDayStats } from './ventasUtils'
+import { getDayStats } from './ventasUtils'
 
 /** Las nueve métricas que se comparan, en el orden en que se muestran. */
 export const METRICAS = [
@@ -61,6 +69,8 @@ export interface Tolerancia {
 export const TOLERANCIA_POR_DEFECTO: Tolerancia = { pct: 1, abs: 1000, absPax: 2 }
 
 export interface Comparacion {
+  /** Una aclaración de la diferencia que NO es error (p. ej. «PoS más completo» en el PAX). */
+  nota?:    string
   clave:    ClaveMetrica
   etiqueta: string
   unidad:   'crc' | 'pax'
@@ -107,21 +117,28 @@ const CERO: Cifras = {
 /**
  * Un `DiaData` → sus nueve cifras.
  *
- * Todo sale de `getDayStats` y de `aggGeneral`; acá no se calcula nada nuevo. Comidas y bebidas
- * se derivan de `prods` con el `ProductMap`, exactamente como lo hacen «En vivo» y Mix — o sea
- * que, por la convención de `aggGeneral`, NO incluyen lo que facturó caja/sistema. Da igual
- * para la paridad: los dos lados se miden con la misma función.
+ * Neta, bruta, IVA, servicio, salón, delivery y PAX salen de `getDayStats`. Comidas y bebidas
+ * se derivan de los `prods` de TODOS los baldes del día —saloneros Y caja— con el `ProductMap`:
+ * el PoS y el xls reparten distinto las facturas sin mesero (el PoS las manda a baldes de caja,
+ * el xls se las asigna a una persona), y comparando solo saloneros la misma plata aparecía como
+ * diferencia. Sumando todo, las dos fuentes miden lo mismo.
  */
 export function cifrasDeDia(
-  fecha: string,
+  _fecha: string,
   dia: DiaData | undefined,
   pm: ProductMap,
 ): Cifras {
   if (!dia) return { ...CERO }
   const s = getDayStats(dia)
-  const g = aggGeneral([fecha], { [fecha]: dia }, pm)
-  const porTipo = (tipo: string): number =>
-    Object.entries(g.prods).reduce((a, [n, v]) => a + (pm[n]?.tipo === tipo ? v.m : 0), 0)
+  const porTipo = (tipo: string): number => {
+    let total = 0
+    for (const entrada of Object.values(dia.saloneros)) {
+      for (const [nombre, , monto] of entrada.prods ?? []) {
+        if (pm[nombre]?.tipo === tipo) total += monto
+      }
+    }
+    return total
+  }
 
   return {
     ventaNeta:  s.ventaNeta,
@@ -154,10 +171,16 @@ export function fueraDeTolerancia(
   return (diff / Math.abs(xls)) * 100 > tol.pct
 }
 
+/** La nota del PAX cuando el PoS cuenta más: no es un error, es la fuente más completa. */
+export const NOTA_PAX_POS = 'PoS más completo'
+
 function comparar(xls: Cifras, pos: Cifras, tol: Tolerancia): Comparacion[] {
   return METRICAS.map(m => {
     const a = xls[m.clave]
     const b = pos[m.clave]
+    // PAX: el PoS cuenta TODAS las mesas (también las cobradas por caja); el xls no le pone pax a
+    // la caja. PoS > xls se rotula y NO marca el día. PoS < xls sí se marca: eso no se explica.
+    const paxPosMas = m.clave === 'pax' && b > a
     return {
       clave:    m.clave,
       etiqueta: m.etiqueta,
@@ -166,7 +189,8 @@ function comparar(xls: Cifras, pos: Cifras, tol: Tolerancia): Comparacion[] {
       pos:      b,
       diff:     b - a,
       diffPct:  a === 0 ? null : ((b - a) / Math.abs(a)) * 100,
-      fuera:    fueraDeTolerancia(a, b, m.unidad, tol),
+      fuera:    paxPosMas ? false : fueraDeTolerancia(a, b, m.unidad, tol),
+      ...(paxPosMas ? { nota: NOTA_PAX_POS } : {}),
     }
   })
 }

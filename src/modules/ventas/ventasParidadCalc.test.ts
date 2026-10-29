@@ -201,3 +201,48 @@ describe('compararParidad', () => {
     expect(r.total.flag).toBe(false)
   })
 })
+
+// ── Reglas de la Paridad (firmadas 2026-10-29) ─────────────────────────────────────────────
+describe('Paridad · comidas/bebidas con TODOS los baldes, y PAX «PoS más completo»', () => {
+  const caja = (prods: [string, number, number][], total: number) => ({
+    esCajero: true as const, total, salon: total, delivery: 0, iva: 0, serv: 0, ordenes: 1, ticketProm: total, prods,
+  })
+
+  it('comidas/bebidas suman también lo que está en baldes de caja', () => {
+    const d = dia({ total: 100_000, pax: 4, com: 70_000, beb: 30_000 })
+    d.saloneros['Salón sin mesero'] = caja([['ROLL SATORI', 1, 5_000], ['CERVEZA', 1, 2_000]], 7_000)
+    const c = cifrasDeDia('2026-10-01', d, PM)
+    expect(c.comidas).toBe(75_000)
+    expect(c.bebidas).toBe(32_000)
+  })
+
+  it('la misma venta repartida distinto (salonero en el xls, caja en el PoS) ya no es diferencia', () => {
+    const xls: DiasMap = { '2026-10-01': dia({ total: 100_000, pax: 4, com: 70_000, beb: 30_000 }) }
+    const posDia = dia({ total: 90_000, pax: 4, com: 63_000, beb: 27_000 })
+    posDia.saloneros['Salón sin mesero'] = caja([['ROLL SATORI', 1, 7_000], ['CERVEZA', 1, 3_000]], 10_000)
+    const r = compararParidad(xls, { '2026-10-01': posDia }, PM)
+    const c = Object.fromEntries(r.filas[0].comparaciones.map(x => [x.clave, x]))
+    expect(c.comidas.diff).toBe(0)
+    expect(c.bebidas.diff).toBe(0)
+  })
+
+  it('PAX: si el PoS cuenta MÁS se rotula «PoS más completo» y no marca el día', () => {
+    const r = compararParidad(
+      { '2026-10-05': dia({ total: 100_000, pax: 4 }) },
+      { '2026-10-05': dia({ total: 100_000, pax: 12 }) }, PM)
+    const pax = r.filas[0].comparaciones.find(x => x.clave === 'pax')!
+    expect(pax.nota).toBe('PoS más completo')
+    expect(pax.fuera).toBe(false)
+    expect(r.filas[0].flag).toBe(false)
+  })
+
+  it('PAX: si el PoS cuenta MENOS se sigue marcando (eso no se explica)', () => {
+    const r = compararParidad(
+      { '2026-10-05': dia({ total: 100_000, pax: 12 }) },
+      { '2026-10-05': dia({ total: 100_000, pax: 4 }) }, PM)
+    const pax = r.filas[0].comparaciones.find(x => x.clave === 'pax')!
+    expect(pax.nota).toBeUndefined()
+    expect(pax.fuera).toBe(true)
+  })
+})
+

@@ -4,6 +4,7 @@ import type {
   ProductMap, HistMap, Meta,
 } from '../../shared/types/ventas'
 import { isCajeroName, todayCR } from '../../shared/utils'
+import { claveCajeroDeTurno } from './baldesNoMesero'
 
 // ── Cajeros detection ────────────────────────────────────────
 export function esCajero(name: string): boolean { return isCajeroName(name) }
@@ -402,6 +403,97 @@ export function aggGeneral(dates: string[], dias: DiasMap, pm: ProductMap): AggG
     cortTotal,
     persTotal,
     prods,
+  }
+}
+
+// ── Las cajas de turno, con su nombre canónico ───────────────
+/**
+ * El día con sus cajas de TURNO renombradas a la clave canónica (`Cajero turno mañana` /
+ * `Cajero turno tarde`), sumando si en el mismo día hubiera más de un nombre para el mismo turno.
+ *
+ * Existe por el modo 'xls': el Excel trae las cajas como «Cajero Turno Mañana» o «cajero turno
+ * tarde», y las pantallas que buscan la clave exacta (Cajeros, Hoy) las dejaban en ₡0. Solo se
+ * tocan las entradas con la marca `esCajero` cuyo nombre es una caja de turno; todo lo demás
+ * (meseros, `Cajero-salón`, `Salón sin mesero`, `Sistema y otros`) queda igual. No cambia la plata
+ * del día: es la misma suma con otra etiqueta. Un día que ya está en claves canónicas vuelve
+ * idéntico (mismo objeto).
+ */
+export function diaConCajasDeTurno(dia: DiaData): DiaData {
+  let cambio = false
+  const saloneros: DiaData['saloneros'] = {}
+  for (const [nombre, entrada] of Object.entries(dia.saloneros)) {
+    const clave = esEntradaCajero(entrada) ? claveCajeroDeTurno(nombre) : null
+    const destino = clave ?? nombre
+    const previo = saloneros[destino]
+    if (clave !== null && previo && esEntradaCajero(previo)) {
+      saloneros[destino] = sumarCajeroDay(previo, entrada as CajeroDay)   // dos nombres, un turno
+      cambio = true
+    } else {
+      saloneros[destino] = entrada
+      if (destino !== nombre) cambio = true
+    }
+  }
+  return cambio ? { ...dia, saloneros } : dia
+}
+
+/**
+ * ¿El día lo armó el PoS (`armarDia` lo rotula `ndf <fecha>`) y no el import del .xls?
+ * Sirve para las métricas que en el PoS salen de la familia y en el .xls del `ProductMap`.
+ */
+export function esDiaDelPos(dia: DiaData | null | undefined): boolean {
+  return typeof dia?.fileName === 'string' && dia.fileName.startsWith('ndf ')
+}
+
+/**
+ * ₡ de comida y bebida de `dates`, con la fuente que corresponde a CADA día:
+ *   · día del PoS → por FAMILIA (`mixPorFamilia`, comida 2·3·4·13·16·29, bebida 5);
+ *   · día del .xls → por `ProductMap` sobre los productos de los saloneros (`aggGeneral`), que es
+ *     la cuenta de siempre del modo Excel.
+ * Así el modo 'xls' da exactamente lo de antes y el modo 'pos' no queda en ₡0 por nombres que
+ * el `ProductMap` no conoce.
+ */
+export function mixComBeb(dias: DiasMap, dates: string[], pm: ProductMap): { com: number; beb: number } {
+  let com = 0, beb = 0
+  for (const d of dates) {
+    const dia = dias[d]
+    if (!dia) continue
+    if (esDiaDelPos(dia)) {
+      const m = mixPorFamilia(dias, [d])
+      com += m.com; beb += m.beb
+    } else {
+      const g = aggGeneral([d], dias, pm)
+      for (const [n, v] of Object.entries(g.prods)) {
+        if (pm[n]?.tipo === 'comida') com += v.m
+        else if (pm[n]?.tipo === 'bebida') beb += v.m
+      }
+    }
+  }
+  return { com, beb }
+}
+
+/** `diaConCajasDeTurno` para todos los días. */
+export function diasConCajasDeTurno(dias: DiasMap): DiasMap {
+  const out: DiasMap = {}
+  for (const [fecha, dia] of Object.entries(dias)) out[fecha] = diaConCajasDeTurno(dia)
+  return out
+}
+
+function sumarCajeroDay(a: CajeroDay, b: CajeroDay): CajeroDay {
+  const prods = new Map<string, [string, number, number]>()
+  for (const [n, q, m] of [...a.prods, ...b.prods]) {
+    const p = prods.get(n)
+    prods.set(n, p ? [n, p[1] + q, p[2] + m] : [n, q, m])
+  }
+  const ordenes = a.ordenes + b.ordenes
+  const total = a.total + b.total
+  const pax = (a.pax ?? 0) + (b.pax ?? 0)
+  return {
+    esCajero: true,
+    ...(a.pax !== undefined || b.pax !== undefined ? { pax } : {}),
+    total, salon: a.salon + b.salon, delivery: a.delivery + b.delivery,
+    iva: a.iva + b.iva, serv: a.serv + b.serv, ordenes,
+    ticketProm: ordenes ? total / ordenes : 0,
+    prods: [...prods.values()].sort((x, y) => y[2] - x[2]),
   }
 }
 

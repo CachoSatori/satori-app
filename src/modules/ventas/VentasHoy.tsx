@@ -5,7 +5,7 @@ import {
   aggGeneral, aggSalonero, aggCajero, getDayStats,
   fi, fmtDate, metaColor, getMeta,
   topProds, metaProgress, ratioCBClass,
-  allSaloneros, esEntradaCajero, mixPorFamilia,
+  allSaloneros, diaConCajasDeTurno, esEntradaCajero, mixComBeb,
 } from './ventasUtils'
 import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
 import { getOpenCashSession, createCashMovement } from '../../shared/api/cash'
@@ -106,10 +106,11 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
   // NO es la neta del día y se rotula como tal: los buckets de caja (`CajeroDay`) no traen
   // desglose comida/bebida, así que su plata cuenta en el total del día pero no acá. El
   // total, la neta y `gen` quedan exactamente como estaban.
-  const mixFam     = useMemo(() => mixPorFamilia(dias, activeDate ? [activeDate] : []), [dias, activeDate])
-  const mixFamPrev = useMemo(() => mixPorFamilia(dias, prevDate   ? [prevDate]   : []), [dias, prevDate])
-  const com  = mixFam.com
-  const beb  = mixFam.beb
+  //
+  // ⚠️ Por día: un día del PoS va por familia, un día del .xls (modo 'xls') por `ProductMap`
+  // como siempre — ver `mixComBeb`. Así el modo Excel no cambia.
+  const { com, beb } = useMemo(() => mixComBeb(dias, activeDate ? [activeDate] : [], pm), [dias, activeDate, pm])
+  const comPrev      = useMemo(() => mixComBeb(dias, prevDate   ? [prevDate]   : [], pm).com, [dias, prevDate, pm])
   const promPlato   = gen && gen.iCom > 0 ? com   / gen.iCom : 0
   const promBebida  = gen && gen.iBeb > 0 ? beb   / gen.iBeb : 0
   // El Ratio C/B (₡) que se MUESTRA sale de la misma base que las tarjetas Comidas/Bebidas.
@@ -128,9 +129,13 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
     sals.map(n => aggSalonero(n, activeDate ? [activeDate] : [], dias, pm)),
   [sals, activeDate, dias, pm])
 
-  const cajAggs = useMemo(() =>
-    cajs.map(n => aggCajero(n, activeDate ? [activeDate] : [], dias)),
-  [cajs, activeDate, dias])
+  // Con las cajas de turno en su clave canónica: el .xls las trae como «Cajero Turno Mañana» /
+  // «cajero turno tarde» y buscarlas por la clave exacta las dejaba afuera (ver `diaConCajasDeTurno`).
+  const cajAggs = useMemo(() => {
+    if (!activeDate || !dia) return cajs.map(n => aggCajero(n, [], {}))
+    const delDia = { [activeDate]: diaConCajasDeTurno(dia) }
+    return cajs.map(n => aggCajero(n, [activeDate], delDia))
+  }, [cajs, activeDate, dia])
 
   const sorted = useMemo(() =>
     [...salAggs].sort((a, b) => {
@@ -400,7 +405,7 @@ export default function VentasHoy({ dias, pm, metas }: Props) {
         <div className="vt-kpi">
           <div className="vt-kpi-label">Prom/Plato</div>
           <div className="vt-kpi-val">{fi(promPlato)}</div>
-          {delta(promPlato, genPrev && genPrev.iCom > 0 ? mixFamPrev.com / genPrev.iCom : undefined)}
+          {delta(promPlato, genPrev && genPrev.iCom > 0 ? comPrev / genPrev.iCom : undefined)}
         </div>
         <div className="vt-kpi">
           <div className="vt-kpi-label">Prom/Bebida</div>

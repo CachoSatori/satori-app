@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { todayCR } from '../../shared/utils'
 import type { DiasMap } from '../../shared/types/ventas'
 import {
-  aggCajero, esEntradaCajero,
+  aggCajero, diasConCajasDeTurno, esEntradaCajero,
   fi, fmtDate, datesInRange, allDates, dowLabel, dayOfWeek,
 } from './ventasUtils'
 import { CLAVES_CAJERO_TURNO, CLAVE_CAJERO_SALON, CLAVE_SISTEMA_OTROS } from './baldesNoMesero'
@@ -25,7 +25,11 @@ const PRESETS = [
   { label: 'Todo',    from: () => '2020-01-01' },
 ]
 
-export default function VentasCajeros({ dias }: Props) {
+export default function VentasCajeros({ dias: diasEntrada }: Props) {
+  // Las cajas de turno con su clave canónica: en modo 'xls' el Excel las trae como «Cajero Turno
+  // Mañana» / «cajero turno tarde» y buscarlas por la clave exacta las dejaba en ₡0. Si hay más
+  // de un nombre para el mismo turno en un día, se suman. Ver `diaConCajasDeTurno`.
+  const dias = useMemo(() => diasConCajasDeTurno(diasEntrada), [diasEntrada])
   const [preset, setPreset] = useState(2)
   const [from, setFrom] = useState(PRESETS[2].from())
   const [to,   setTo]   = useState(todayCR())

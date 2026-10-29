@@ -82,6 +82,37 @@ export const CLAVE_SISTEMA_OTROS = 'Sistema y otros'
 /** Las dos tarjetas que suman el «Total Cajeros», en orden de turno. */
 export const CLAVES_CAJERO_TURNO = [CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE] as const
 
+/** Clave canónica de una caja de turno. */
+export type ClaveCajeroTurno = (typeof CLAVES_CAJERO_TURNO)[number]
+
+/** Un nombre de balde, listo para comparar: minúsculas, sin tildes y con espacios simples. */
+export function normalizarNombreBalde(nombre: string): string {
+  return nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * El nombre de una caja de turno → su clave canónica (`Cajero turno mañana` / `Cajero turno
+ * tarde`), o `null` si no es una caja de turno.
+ *
+ * Compara SIN mayúsculas, tildes ni espacios de más, y reconoce también los nombres que trae el
+ * .xls (`CAJEROS_IDS`): en prod las cajas del Excel se llaman «Cajero Turno Mañana» y «cajero
+ * turno tarde». Buscarlas por la clave exacta las dejaba en ₡0 en modo 'xls'. El «mediodía» del
+ * .xls es el turno del almuerzo, o sea la caja de la MAÑANA.
+ */
+export function claveCajeroDeTurno(nombre: string | null | undefined): ClaveCajeroTurno | null {
+  const n = normalizarNombreBalde(nombre ?? '')
+  if (n === '') return null
+  if (n === normalizarNombreBalde(CLAVE_CAJERO_MANANA)
+    || n === 'cajero turno manana' || n === 'cajero turno mediodia') return CLAVE_CAJERO_MANANA
+  if (n === normalizarNombreBalde(CLAVE_CAJERO_TARDE) || n === 'cajero turno tarde') return CLAVE_CAJERO_TARDE
+  return null
+}
+
+/** ¿Es una caja de turno (del PoS o del .xls, con cualquier mayúscula)? */
+export function esCajaDeTurno(nombre: string | null | undefined): boolean {
+  return claveCajeroDeTurno(nombre) !== null
+}
+
 /**
  * El balde de una factura que no es de un mesero. Ver el bloque de arriba.
  *

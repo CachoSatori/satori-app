@@ -15,13 +15,13 @@
 import { useState, useMemo } from 'react'
 import type { DiasMap, ProductMap, HistMap } from '../../shared/types/ventas'
 import { availableMonths, availableYears, fi } from './ventasUtils'
-import { CLAVES_CAJERO_TURNO } from './baldesNoMesero'
+// Caja de turno con la regla central: sin mayúsculas ni tildes, y reconoce los nombres del
+// .xls («Cajero Turno Mañana», «cajero turno tarde»), que la clave exacta dejaba afuera.
+import { esCajaDeTurno } from './baldesNoMesero'
 
 // ── Qué cuenta como DELIVERY acá ───────────────────────────────────────────────────────────
 // Las DOS cajas de turno, no la marca `esCajero`: «Salón sin mesero» también la lleva y su
 // plata es de SALÓN por definición (`canal = 'salon'`).
-const esCajaDeTurno = (clave: string): boolean =>
-  (CLAVES_CAJERO_TURNO as readonly string[]).includes(clave)
 
 interface MenuEngItem {
   nombre:     string

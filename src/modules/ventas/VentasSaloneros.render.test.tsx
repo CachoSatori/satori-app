@@ -44,7 +44,7 @@ const FECHA = '2026-09-07'
 // — es el caso de staging: los días vienen del PoS y `product_map` se cura a mano.
 const DIAS: DiasMap = {
   [FECHA]: {
-    fileName: 'ndf', uploadedAt: '2026-09-08',
+    fileName: `ndf ${FECHA}`, uploadedAt: '2026-09-08',
     saloneros: {
       MAXO: sal({
         pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25,
@@ -90,13 +90,26 @@ describe('VentasSaloneros · Ratio C/B general por familia', () => {
   it('sin bebida no divide por cero: 0 y sin NaN', () => {
     const sinBebida: DiasMap = {
       [FECHA]: {
-        fileName: 'ndf', uploadedAt: '2026-09-08',
+        fileName: `ndf ${FECHA}`, uploadedAt: '2026-09-08',
         saloneros: { MAXO: sal({ pax: 5, total: 50_000, com: 50_000, beb: 0, iCom: 10, iBeb: 0 }) },
       },
     }
     render(<VentasSaloneros dias={sinBebida} pm={{}} metas={METAS} />)
     expect(texto()).not.toContain('NaN')
     expect(texto()).toContain('0.00:1')
+  })
+
+  it("modo 'xls': un día del Excel usa la cuenta de siempre (ProductMap), no la familia", () => {
+    // Mismo día pero cargado del .xls: com/beb del Excel dicen 3:1, el ProductMap dice 1:1.
+    // La pantalla tiene que mostrar lo de `aggGeneral` (1:1), exactamente como antes del pase.
+    const xls: DiasMap = { [FECHA]: { ...DIAS[FECHA], fileName: 'ventas 07-09.xls' } }
+    const pm = {
+      'ROLL SATORI': { tipo: 'comida', clasificacion: '', subclasificacion: '', multiplicador: 1, costo_unitario: 0 },
+      'IMPERIAL':    { tipo: 'comida', clasificacion: '', subclasificacion: '', multiplicador: 1, costo_unitario: 0 },
+    }
+    expect(aggGeneral([FECHA], xls, pm).ratioCB).toBe(0)   // todo comida según el ProductMap
+    render(<VentasSaloneros dias={xls} pm={pm} metas={METAS} />)
+    expect(texto()).toContain('Ratio C/B0.00:1')
   })
 
   it('el total y la neta no se movieron', () => {

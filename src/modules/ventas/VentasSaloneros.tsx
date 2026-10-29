@@ -8,7 +8,7 @@ function addDays(date: string, n: number): string {
 import type { DiasMap, ProductMap, Meta } from '../../shared/types/ventas'
 import {
   aggSalonero, aggCajero, aggGeneral, allSaloneros,
-  mixPorFamilia,
+  mixComBeb,
   fi, fmtDate, metaColor, getMeta, ratioCBClass,
   topProds, datesInRange, allDates,
 } from './ventasUtils'
@@ -58,10 +58,10 @@ export default function VentasSaloneros({ dias, pm, metas }: Props) {
   // filas SÍ tienen valor, porque `aggSalonero` acumula `com`/`beb` desde `SaloneroDay`, que
   // ya viene partido por familia. Era la misma incoherencia que #6 arregló en «Hoy».
   //
-  // Acá se deriva de `mixPorFamilia`, la MISMA fuente que usan las filas de abajo, así que el
-  // general y el por-salonero por fin hablan el mismo idioma. `aggGeneral` NO se toca: lo
-  // consumen otras pantallas con días del .xls, donde la cuenta por `ProductMap` sí matchea.
-  const mixFam  = useMemo(() => mixPorFamilia(dias, rangeDates), [dias, rangeDates])
+  // Acá se deriva día por día con `mixComBeb`: un día del PoS por FAMILIA (la misma fuente que
+  // usan las filas de abajo) y un día del .xls por `ProductMap`, que es la cuenta de siempre del
+  // modo Excel y la que sí matchea ahí. Así el modo 'xls' muestra exactamente lo de antes.
+  const mixFam  = useMemo(() => mixComBeb(dias, rangeDates, pm), [dias, rangeDates, pm])
   const ratioCB = mixFam.beb > 0 ? mixFam.com / mixFam.beb : 0
   const [viewMode, setViewMode] = useState<'cards' | 'tabla'>('cards')
   const [sortCol,  setSortCol]  = useState<string>('promPax')

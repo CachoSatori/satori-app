@@ -145,3 +145,32 @@ describe('VentasCajeros · render', () => {
     expect(texto()).not.toMatch(/XLS/i)
   })
 })
+
+// ── Modo 'xls' (prod, 2026-10-29) ──────────────────────────────────────────────────────────
+// El Excel de prod trae las cajas como «Cajero Turno Mañana» / «cajero turno tarde». El merge
+// 9ada841 las buscaba por la clave exacta del PoS y la pantalla quedaba toda en ₡0.
+describe("VentasCajeros · modo 'xls' con los nombres REALES del Excel de prod", () => {
+  const DIAS_XLS: DiasMap = {
+    [DIA_1]: dia({
+      GONZA: sal({ pax: 4, total: 95_451 }),
+      'Cajero Turno Mañana': caj({ total: 90_756, salon: 20_000, delivery: 70_756, ordenes: 10 }),
+      'cajero turno tarde':  caj({ total: 56_345, salon: 0, delivery: 56_345, ordenes: 6 }),
+    }),
+  }
+
+  it('Total Cajeros suma las dos cajas del Excel (no ₡0)', () => {
+    render(<VentasCajeros dias={DIAS_XLS} />)
+    expect(texto()).toContain(`Total cajeros${plano(fi(147_101))}`)   // 90.756 + 56.345
+    expect(texto()).toContain(`Delivery${plano(fi(127_101))}`)        // 70.756 + 56.345
+    expect(texto()).not.toContain(`Total cajeros${plano(fi(0))}`)
+  })
+
+  it('las dos tarjetas de turno muestran su plata, con el nombre canónico', () => {
+    render(<VentasCajeros dias={DIAS_XLS} />)
+    expect(texto()).toContain('Cajero turno mañana')
+    expect(texto()).toContain('Cajero turno tarde')
+    expect(texto()).toContain(plano(fi(90_756)))
+    expect(texto()).toContain(plano(fi(56_345)))
+  })
+})
+

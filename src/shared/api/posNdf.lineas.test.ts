@@ -31,56 +31,32 @@ const linea = (ticket_id: string, usuario_registra: string | null): Fila => ({
 })
 
 /**
- * Doble de PostgREST que se comporta como el de verdad en lo único que importa acá: devuelve
- * SOLO las columnas pedidas. Si el select no nombra `usuario_registra`, la fila sale sin él.
+ * Doble de la función `pos_ventas_lineas` (mig 067). El contrato de columnas vive ahora en el
+ * `returns table` de la migración (ver `posNdf.contrato067.test.ts`); acá se prueba que lo que la
+ * función devuelve llega entero a la app, tanda por tanda.
  */
 function fakeSupabase(filas: Fila[]) {
-  const selects: string[] = []
   const tandas: string[][] = []
-  // `getLineasDeTickets` pide por tandas de ids Y pagina cada tanda con `.range()` (ver
-  // `posNdf.paginado.test.ts`). Acá la paginación no es lo que se prueba: el doble la soporta
-  // para poder correr, y devuelve la tanda entera en la primera página.
-  let ultimaTanda: Partial<Fila>[] = []
-  const api = {
-    from: () => api,
-    select: (cols: string) => {
-      selects.push(cols)
-      return api
-    },
-    order: () => api,
-    in: (_col: string, ids: string[]) => {
-      tandas.push(ids)
-      const pedidas = selects[selects.length - 1].split(',').map(c => c.trim())
-      ultimaTanda = filas
-        .filter(f => ids.includes(f.ticket_id))
-        .map(f => Object.fromEntries(pedidas.filter(c => c in f).map(c => [c, f[c as keyof Fila]])))
-      return api
-    },
-    range: (a: number, b: number) =>
-      Promise.resolve({ data: ultimaTanda.slice(a, b + 1), error: null }),
+  const rpc = (_fn: string, a: { p_ticket_ids: string[]; p_offset: number; p_limit: number }) => {
+    if (a.p_offset === 0) tandas.push(a.p_ticket_ids)
+    const deLaTanda = filas.filter(f => a.p_ticket_ids.includes(f.ticket_id))
+    return Promise.resolve({ data: deLaTanda.slice(a.p_offset, a.p_offset + a.p_limit), error: null })
   }
-  return { api, selects, tandas }
+  return { rpc, tandas }
 }
 
-const mock = vi.hoisted(() => ({ cliente: { from: (): unknown => ({}) } }))
+const mock = vi.hoisted(() => ({ cliente: {
+  from: (): unknown => ({}),
+  rpc:  ((): unknown => ({})) as (fn: string, args: never) => unknown,
+} }))
 vi.mock('./supabase', () => ({ supabase: mock.cliente }))
 
 const { getLineasDeTickets } = await import('./posNdf')
 
 describe('getLineasDeTickets — trae el mesero de la línea', () => {
-  it('pide `usuario_registra` en el select', async () => {
-    const { api, selects } = fakeSupabase([linea('t1', '023')])
-    mock.cliente.from = () => api
-
-    await getLineasDeTickets(['t1'])
-
-    expect(selects).toHaveLength(1)
-    expect(selects[0].split(',').map(c => c.trim())).toContain('usuario_registra')
-  })
-
   it('devuelve el login que comandó cada línea, no `undefined`', async () => {
-    const { api } = fakeSupabase([linea('t1', '023'), linea('t2', '235')])
-    mock.cliente.from = () => api
+    const { rpc } = fakeSupabase([linea('t1', '023'), linea('t2', '235')])
+    mock.cliente.rpc = rpc
 
     const filas = await getLineasDeTickets(['t1', 't2'])
 
@@ -90,8 +66,8 @@ describe('getLineasDeTickets — trae el mesero de la línea', () => {
 
   it('una MISMA factura con dos meseros conserva los dos', async () => {
     // La factura partida es justo el caso que el mesero-por-ticket no puede representar.
-    const { api } = fakeSupabase([linea('t1', '023'), linea('t1', '01')])
-    mock.cliente.from = () => api
+    const { rpc } = fakeSupabase([linea('t1', '023'), linea('t1', '01')])
+    mock.cliente.rpc = rpc
 
     const filas = await getLineasDeTickets(['t1'])
 
@@ -99,8 +75,8 @@ describe('getLineasDeTickets — trae el mesero de la línea', () => {
   })
 
   it('acepta el `null` del histórico sin inventarle un mesero', async () => {
-    const { api } = fakeSupabase([linea('t1', null)])
-    mock.cliente.from = () => api
+    const { rpc } = fakeSupabase([linea('t1', null)])
+    mock.cliente.rpc = rpc
 
     expect((await getLineasDeTickets(['t1']))[0].usuario_registra).toBeNull()
   })
@@ -108,46 +84,33 @@ describe('getLineasDeTickets — trae el mesero de la línea', () => {
   it('el mesero viaja también cuando hay más tickets que una tanda', async () => {
     // Se pide de a 200 ids; el select se arma en cada vuelta y tiene que llevarlo en TODAS.
     const ids = Array.from({ length: 450 }, (_, i) => `t${i}`)
-    const { api, selects, tandas } = fakeSupabase(ids.map(id => linea(id, '555')))
-    mock.cliente.from = () => api
+    const { rpc, tandas } = fakeSupabase(ids.map(id => linea(id, '555')))
+    mock.cliente.rpc = rpc
 
     const filas = await getLineasDeTickets(ids)
 
     expect(tandas.map(t => t.length)).toEqual([200, 200, 50])
-    expect(selects.every(s => s.includes('usuario_registra'))).toBe(true)
     expect(filas).toHaveLength(450)
     expect(filas.every(f => f.usuario_registra === '555')).toBe(true)
   })
 
   it('sin ids no consulta', async () => {
-    const { api, selects } = fakeSupabase([])
-    mock.cliente.from = () => api
+    const { rpc, tandas } = fakeSupabase([])
+    mock.cliente.rpc = rpc
 
     expect(await getLineasDeTickets([])).toEqual([])
-    expect(selects).toEqual([])
+    expect(tandas).toEqual([])
   })
 })
 
-// La lente de "mesa propia" cuenta MESAS distintas, no facturas: una mesa que pidió la cuenta en
-// dos tandas son dos facturas y una sola mesa. Para eso hace falta el número de mesa, que la
-// tabla siempre tuvo y el select del ticket no pedía.
-describe('getTicketsRango / getTicketsJornada — traen el número de mesa', () => {
-  it('`mesa` está en las columnas que se piden', async () => {
-    const selects: string[] = []
-    const api = {
-      from:   () => api,
-      select: (cols: string) => { selects.push(cols); return api },
-      eq:     () => api,
-      gte:    () => api,
-      lt:     () => api,
-      order:  () => api,
-      range:  () => Promise.resolve({ data: [], error: null }),
-    }
-    mock.cliente.from = () => api
-
+// La lente de "mesa propia" cuenta MESAS distintas, no facturas: hace falta el número de mesa.
+// Desde la mig 067 la columna la decide el `returns table` de `pos_ventas_tickets_rango`
+// (`posNdf.contrato067.test.ts` exige `mesa`); acá, que la app la deje pasar.
+describe('getTicketsRango — trae el número de mesa', () => {
+  it('la `mesa` que devuelve la función llega a la app', async () => {
+    mock.cliente.rpc = () => Promise.resolve({ data: [{ id: 't1', mesa: '14' }], error: null })
     const { getTicketsRango } = await import('./posNdf')
-    await getTicketsRango('santa-teresa', { desde: '2026-09-01', hasta: '2026-09-01' })
-
-    expect(selects[0].split(',').map(c => c.trim())).toContain('mesa')
+    const filas = await getTicketsRango('santa-teresa', { desde: '2026-09-01', hasta: '2026-09-01' })
+    expect(filas[0].mesa).toBe('14')
   })
 })

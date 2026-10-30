@@ -65,10 +65,29 @@ function fakePostgrest(filas: Fila[]) {
     return api
   }
 
-  return { from: () => nuevo(), viajes }
+  // Las funciones de la mig 067 (`pos_ventas_tickets_rango` / `pos_ventas_lineas`): ordenan por
+  // un orden TOTAL y aplican `limit`/`offset` ADENTRO, recortado igual a `MAX_ROWS`.
+  const rpcViajes: { fn: string; offset: number; limit: number; ids?: unknown[] }[] = []
+  const rpc = (fn: string, a: Record<string, unknown>) => {
+    const offset = Number(a.p_offset ?? 0), limit = Math.min(Number(a.p_limit ?? MAX_ROWS), MAX_ROWS)
+    const ids = a.p_ticket_ids as unknown[] | undefined
+    rpcViajes.push({ fn, offset, limit, ids })
+    const base = fn === 'pos_ventas_lineas' ? filas.filter(f => ids!.includes(f.ticket_id)) : filas
+    const clave = fn === 'pos_ventas_lineas' ? ['ticket_id', 'id'] : ['fecha_registra', 'id']
+    const ordenadas = [...base].sort((x, y) => {
+      for (const c of clave) { const p = String(x[c] ?? ''), q = String(y[c] ?? ''); if (p !== q) return p < q ? -1 : 1 }
+      return 0
+    })
+    return Promise.resolve({ data: ordenadas.slice(offset, offset + limit), error: null })
+  }
+
+  return { from: () => nuevo(), rpc, viajes, rpcViajes }
 }
 
-const mock = vi.hoisted(() => ({ cliente: { from: (): unknown => ({}) } }))
+const mock = vi.hoisted(() => ({ cliente: {
+  from: (): unknown => ({}),
+  rpc:  ((): unknown => ({})) as (fn: string, args: never) => unknown,
+} }))
 vi.mock('./supabase', () => ({ supabase: mock.cliente }))
 
 const { getLineasDeTickets, getTicketsDeJornadas, getTicketsRango } = await import('./posNdf')
@@ -90,23 +109,22 @@ const lineas = (ids: string[], porTicket: number): Fila[] =>
     cantidad: 1, monto: 1000, familia: 2, usuario_registra: '032',
   })))
 
-// ── getTicketsRango ────────────────────────────────────────────────────────────────────────
+// ── getTicketsRango (mig 067: por `pos_ventas_tickets_rango`) ───────────────────────────────
 
 describe('getTicketsRango — no puede quedarse en 1.000 facturas', () => {
   it('devuelve las 39.470 de staging, no las 1.000 que corta PostgREST', async () => {
     const fake = fakePostgrest(tickets(39_470))
-    mock.cliente.from = fake.from
+    mock.cliente.rpc = fake.rpc
 
     const filas = await getTicketsRango('santa-teresa', { desde: '2026-08-01', hasta: '2026-08-31' })
 
-    // Ésta es LA aserción del bug: contra el código viejo daba 1.000.
     expect(filas).toHaveLength(39_470)
     expect(new Set(filas.map(t => t.id)).size).toBe(39_470)   // ni un duplicado
   })
 
   it('no saltea ninguna: están la primera, la del borde de página y la última', async () => {
     const fake = fakePostgrest(tickets(2_500))
-    mock.cliente.from = fake.from
+    mock.cliente.rpc = fake.rpc
 
     const ids = new Set((await getTicketsRango('x', { desde: '2026-08-01', hasta: '2026-08-31' }))
       .map(t => t.id))
@@ -117,49 +135,46 @@ describe('getTicketsRango — no puede quedarse en 1.000 facturas', () => {
     expect(ids.has('t002499')).toBe(true)
   })
 
-  it('pagina con `.range()` en todos los viajes, nunca a pelo', async () => {
+  it('pagina en todos los viajes (offset/limit a la función), nunca a pelo', async () => {
     const fake = fakePostgrest(tickets(2_500))
-    mock.cliente.from = fake.from
+    mock.cliente.rpc = fake.rpc
     await getTicketsRango('x', { desde: '2026-08-01', hasta: '2026-08-31' })
 
-    expect(fake.viajes.every(v => v.rango !== null)).toBe(true)
-    expect(fake.viajes.map(v => v.rango)).toEqual([[0, 999], [1000, 1999], [2000, 2999]])
+    expect(fake.rpcViajes.map(v => [v.fn, v.offset, v.limit])).toEqual([
+      ['pos_ventas_tickets_rango', 0, 1000],
+      ['pos_ventas_tickets_rango', 1000, 1000],
+      ['pos_ventas_tickets_rango', 2000, 1000],
+    ])
   })
 
-  it('ordena por `id` además de `fecha_registra`: sin ese desempate la paginación repite filas', async () => {
-    // `fecha_registra` no es única (decenas de facturas por segundo). Con un orden que empata,
-    // el motor puede devolver la misma fila en dos páginas y perder otra. El orden TOTAL es lo
-    // que hace correcta a la paginación por posición, no un detalle de prolijidad.
-    const fake = fakePostgrest(tickets(1_200))
-    mock.cliente.from = fake.from
+  it('lee por la función, no por la tabla (el mismo camino para todos los roles)', async () => {
+    const fake = fakePostgrest(tickets(5))
+    mock.cliente.rpc = fake.rpc
     await getTicketsRango('x', { desde: '2026-08-01', hasta: '2026-08-31' })
-
-    expect(fake.viajes[0].orden).toEqual(['fecha_registra', 'id'])
+    expect(fake.viajes).toHaveLength(0)   // ningún `.from('pos_ndf_tickets')`
   })
 
   it('un rango chico no paga viajes de más', async () => {
     const fake = fakePostgrest(tickets(12))
-    mock.cliente.from = fake.from
+    mock.cliente.rpc = fake.rpc
 
     expect(await getTicketsRango('x', { desde: '2026-08-01', hasta: '2026-08-01' })).toHaveLength(12)
-    expect(fake.viajes).toHaveLength(1)   // vino incompleta: no hace falta preguntar de nuevo
+    expect(fake.rpcViajes).toHaveLength(1)   // vino incompleta: no hace falta preguntar de nuevo
   })
 
   it('sin facturas devuelve vacío', async () => {
-    mock.cliente.from = fakePostgrest([]).from
+    mock.cliente.rpc = fakePostgrest([]).rpc
     expect(await getTicketsRango('x', { desde: '2026-08-01', hasta: '2026-08-01' })).toEqual([])
   })
 })
 
-// ── getLineasDeTickets ─────────────────────────────────────────────────────────────────────
+// ── getLineasDeTickets (mig 067: por `pos_ventas_lineas`) ───────────────────────────────────
 
 describe('getLineasDeTickets — una tanda de 200 facturas YA pasa las 1.000 líneas', () => {
   it('no pierde ninguna de las 1.400 líneas de una sola tanda', async () => {
-    // 200 facturas × 7 líneas = 1.400. Con el corte de PostgREST se veían 1.000 y las otras 400
-    // desaparecían: la venta de esa tanda salía corta y nadie se enteraba.
     const ids = tickets(200).map(t => String(t.id))
     const fake = fakePostgrest(lineas(ids, 7))
-    mock.cliente.from = fake.from
+    mock.cliente.rpc = fake.rpc
 
     const filas = await getLineasDeTickets(ids)
 
@@ -170,31 +185,21 @@ describe('getLineasDeTickets — una tanda de 200 facturas YA pasa las 1.000 lí
   it('a escala de staging: 450 facturas × 6 líneas, en tandas de 200 y sin perder nada', async () => {
     const ids = tickets(450).map(t => String(t.id))
     const fake = fakePostgrest(lineas(ids, 6))
-    mock.cliente.from = fake.from
+    mock.cliente.rpc = fake.rpc
 
     const filas = await getLineasDeTickets(ids)
 
     expect(filas).toHaveLength(2_700)
-    // Las tandas de ids siguen siendo de 200 (la URL no puede crecer), y cada una se pagina.
     // 200 ids -> 1.200 líneas -> dos páginas; los 50 últimos -> 300 líneas -> una.
-    expect(fake.viajes.map(v => v.in?.length)).toEqual([200, 200, 200, 200, 50])
-    expect(fake.viajes.every(v => v.rango !== null)).toBe(true)
-  })
-
-  it('ordena por una columna ÚNICA (`id`), que es lo que `.range()` necesita', async () => {
-    const ids = tickets(10).map(t => String(t.id))
-    const fake = fakePostgrest(lineas(ids, 3))
-    mock.cliente.from = fake.from
-    await getLineasDeTickets(ids)
-
-    expect(fake.viajes[0].orden).toEqual(['ticket_id', 'id'])
+    expect(fake.rpcViajes.map(v => v.ids?.length)).toEqual([200, 200, 200, 200, 50])
+    expect(fake.rpcViajes.map(v => v.offset)).toEqual([0, 1000, 0, 1000, 0])
   })
 
   it('sin ids no consulta', async () => {
     const fake = fakePostgrest([])
-    mock.cliente.from = fake.from
+    mock.cliente.rpc = fake.rpc
     expect(await getLineasDeTickets([])).toEqual([])
-    expect(fake.viajes).toHaveLength(0)
+    expect(fake.rpcViajes).toHaveLength(0)
   })
 })
 

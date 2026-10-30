@@ -32,9 +32,9 @@
    −100 % en vez de «sin dato». *(Nuevo, 30/10.)*
 5. **🖊️ Umbrales del ICP** (hoy ≥13 % excelente, 10–13 % bueno, <10 % a mejorar): recalibrar contra el histórico
    real, que da **5–9 %**. Con el PoS, el ICP del equipo de octubre es 10,6 %. *(Nuevo, 30/10.)*
-6. **Usuarios de la app para RODRI, FRANCO y MAXI BARRA** (barmans activos sin perfil de login), y decidir el
-   perfil «NACHO» (`satorisushibarnacho@gmail.com`, rol salonero, sin empleado vinculado; el empleado NACHO 038
-   ya está vinculado al perfil manager de Ignacio). *(Nuevo, 29–30/10.)*
+6. **Usuarios de la app para RODRI, FRANCO y MAXI BARRA** (barmans activos sin perfil de login). El perfil
+   «NACHO» (`satorisushibarnacho@gmail.com`) es la cuenta de prueba de Ismael, sin empleado vinculado a
+   propósito: no hay nada que decidir. *(Nuevo, 29–30/10; corregido 30/10.)*
 7. **👁️ El deploy de #16 quedó en `waiting`** (job `deploy` del run #247: creado 17:42, arrancó 17:55 UTC). En
    GitHub Actions eso es una regla de protección del environment `github-pages` (aprobación o temporizador). El
    deploy de #15 (run #246, 17:21) no esperó. Revisar **Settings → Environments → github-pages**: si la regla no
@@ -76,6 +76,11 @@
     `public/_redirects`. Barrer en un pase con firma. *(Heredado P1 #6.)*
 22. **🧹 Staging:** el empleado AMPI quedó sin perfil de login de prueba (se le pasó «Test Cajero» a FRANCISCO
     para probar la 067). *(Nuevo, 30/10.)*
+22a. **Prom/PAX explicado** ([SPEC v2.1](docs/SPEC-prompax-explicado.md)). Espera el arreglo de seguridad de
+     roles; el módulo de cálculo puro (`ventasPromPaxExplicado.ts` + tests de propiedad) puede arrancar en rama
+     aparte. *(Nuevo, 30/10.)*
+22b. **Identificar los logins `0909` y `03`** (ventas de noche ene–abr 2026 sin empleado vinculado) y
+     vincularlos. *(Nuevo, 30/10.)*
 
 ## 🟨 P2 — Esperan decisión o firma del dueño
 

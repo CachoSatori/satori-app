@@ -13,7 +13,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getProductMap, getMetas, getComps } from '../../shared/api/ventas'
-import { cargarDias } from './ventasFuente'
+import { cargarDias, type EstadoPos } from './ventasFuente'
+import AvisoFuentePos from './AvisoFuentePos'
 import { fusionarProductMap } from './ventasUtils'
 import { getAttendanceHistory } from '../../shared/api/tips'
 import { getAllEmployees, getEmployeeByProfileId } from '../../shared/api/admin'
@@ -37,6 +38,7 @@ export default function MiRendimientoWrap() {
   const [pm,    setPm]    = useState<ProductMap>({})
   const [metas, setMetas] = useState<Meta>({ restaurante:{}, margen:{}, global:{ promPax:15000, bebPax:1.2, ratioCB:3.0, ticketItem:7500, ventas:800000 }, salMetas:{} })
   const [comps, setComps] = useState<Comp[]>([])
+  const [fuentePos, setFuentePos] = useState<{ estado: EstadoPos | null; ultimoDiaXls: string | null }>({ estado: null, ultimoDiaXls: null })
   const [employee,   setEmployee]   = useState<Employee | null>(null)
   const [empleados,  setEmpleados]  = useState<Employee[]>([])
   const [attendance, setAttendance] = useState<AttendanceRow[]>([])
@@ -52,6 +54,7 @@ export default function MiRendimientoWrap() {
       .then(([d, p, m, c]) => {
         if (!alive) return
         setDias(d.dias); setPm(fusionarProductMap(p, d.pm)); setMetas(m); setComps(c)
+        setFuentePos({ estado: d.estadoPos ?? null, ultimoDiaXls: d.ultimoDiaXls ?? null })
       })
       .catch(() => { /* ventas opcionales para roles sin venta individual */ })
 
@@ -127,6 +130,7 @@ export default function MiRendimientoWrap() {
           )}
         </div>
       )}
+      <AvisoFuentePos estado={fuentePos.estado} ultimoDiaXls={fuentePos.ultimoDiaXls} />
       <MiRendimiento
         dias={dias} pm={pm} metas={metas} comps={comps}
         employee={employee} attendance={attendance} noLink={noLink}

@@ -18,6 +18,8 @@ const pos = vi.hoisted(() => ({
 }))
 
 vi.mock('../../shared/api/ventas', () => api)
+const latido = vi.hoisted(() => ({ getLatidoVentas: vi.fn() }))
+vi.mock('../../shared/api/posNdf', () => latido)
 vi.mock('./ventasDiasDesdePos', () => ({
   ...pos,
   LOCAL_POR_DEFECTO: 'santa-teresa',
@@ -25,7 +27,7 @@ vi.mock('./ventasDiasDesdePos', () => ({
 
 const {
   DIAS_EAGER, PRIMERA_JORNADA_POS, cargarDeFondo, cargarDias, cargarDiasEager, cargarHistEager,
-  fusionarDias, fusionarHist, hoyCR, rangoPos, restarDias,
+  fmtDiaMes, ultimoDia, fusionarDias, fusionarHist, hoyCR, rangoPos, restarDias,
 } = await import('./ventasFuente')
 
 /** Un `DiaData` mínimo, con una marca para saber de qué fuente salió. */
@@ -260,5 +262,74 @@ describe('cargarDias — la carga de N días que usa Mi Rendimiento', () => {
     api.getVentasDias.mockResolvedValue({})
     await cargarDiasEager('xls', 'santa-teresa', AHORA)
     expect(api.getVentasDias).toHaveBeenCalledWith(DIAS_EAGER)
+  })
+})
+
+// ── El estado del PoS: nunca cae en silencio al Excel ──────────────────────────────────────
+
+describe('cargarDias — estadoPos', () => {
+  const AHORA = new Date('2026-10-30T18:00:00Z')
+  const xls = { '2026-10-19': dia('xls'), '2026-10-20': dia('xls último') }
+  let warn: ReturnType<typeof vi.spyOn>
+  beforeEach(() => {
+    api.getVentasDias.mockResolvedValue(xls)
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  it("'xls': estadoPos null, sin PoS ni latido, sin warn", async () => {
+    const r = await cargarDias(365, 'xls', 'santa-teresa', AHORA)
+    expect(r.estadoPos).toBeNull()
+    expect(r.ultimoDiaXls).toBe('2026-10-20')
+    expect(latido.getLatidoVentas).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it("'ok': el PoS trae días → fusión, sin latido ni warn", async () => {
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: { '2026-10-28': dia('pos') }, pm: {} })
+    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
+    expect(r.estadoPos).toBe('ok')
+    expect(r.dias['2026-10-28'].fileName).toBe('pos')
+    expect(latido.getLatidoVentas).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it("'sin_acceso': el PoS vino vacío y el latido no tiene fila → Excel + warn", async () => {
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: {}, pm: {} })
+    latido.getLatidoVentas.mockResolvedValue({ acceso: false, ultimoPollAt: null })
+    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
+    expect(r.estadoPos).toBe('sin_acceso')
+    expect(r.dias).toBe(xls)
+    expect(r.pm).toEqual({})
+    expect(warn).toHaveBeenCalledWith('[ventas] PoS sin_acceso: mostrando solo el Excel (último día: 20/10)')
+  })
+
+  it("'vacio': el PoS vino vacío pero el latido sí responde → Excel + warn", async () => {
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: {}, pm: {} })
+    latido.getLatidoVentas.mockResolvedValue({ acceso: true, ultimoPollAt: '2026-10-30T17:59:00Z' })
+    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
+    expect(r.estadoPos).toBe('vacio')
+    expect(r.dias).toBe(xls)
+    expect(warn).toHaveBeenCalledOnce()
+  })
+
+  it("'error': la lectura del PoS falla → el Excel, NO todo vacío", async () => {
+    pos.getDiasMapDesdePos.mockRejectedValue(new Error('timeout'))
+    const r = await cargarDias(365, 'pos', 'santa-teresa', AHORA)
+    expect(r.estadoPos).toBe('error')
+    expect(r.dias).toBe(xls)
+    expect(warn).toHaveBeenCalledOnce()
+  })
+
+  it("'error' también si falla el latido", async () => {
+    pos.getDiasMapDesdePos.mockResolvedValue({ dias: {}, pm: {} })
+    latido.getLatidoVentas.mockRejectedValue(new Error('rpc'))
+    expect((await cargarDias(365, 'pos', 'santa-teresa', AHORA)).estadoPos).toBe('error')
+  })
+
+  it('ultimoDia / fmtDiaMes', () => {
+    expect(ultimoDia({})).toBeNull()
+    expect(ultimoDia(xls)).toBe('2026-10-20')
+    expect(fmtDiaMes('2026-10-20')).toBe('20/10')
+    expect(fmtDiaMes(null)).toBe('—')
   })
 })

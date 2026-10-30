@@ -3,7 +3,7 @@ import {
   businessDateDe, getLineasDeTickets, getMesasAbiertas, getTicketsDeJornadas,
   getPedidosCerradosJornada, getSaloneroNombres, getTicketsJornada, getUltimoPollPoS,
   HORA_CORTE_JORNADA, type LatidoPoS, type LineaNdfRow, type MesaAbiertaRow,
-  type TicketComparable, type TicketNdfConId,
+  type TicketComparable, type TicketNdfConId, type TicketVentaRow,
 } from '../../shared/api/posNdf'
 import {
   agruparEnLotes, etiquetaTurno, turnosConocidos, type Turno,
@@ -153,9 +153,9 @@ export function esDelivery(t: Pick<TicketNdfConId, 'canal'>): boolean {
  * `netoDe` es la neta de cada ticket (la de `armarDia`, desde las líneas). Sin él se cae al
  * valor servido de la cabecera, que es lo que devolvía antes.
  */
-export function ventasPorCanal(
-  tickets: TicketNdfConId[],
-  netoDe: (t: TicketNdfConId) => number = t => n(t.valor_servido_crc),
+export function ventasPorCanal<T extends TicketVentaRow>(
+  tickets: T[],
+  netoDe: (t: T) => number = t => n(t.valor_servido_crc),
 ): VentasPorCanal {
   let salon = 0, delivery = 0
   for (const t of tickets) {
@@ -232,7 +232,7 @@ export function resumirProvisional<T extends Pick<TicketNdfConId, 'estado' | 'va
 
 export function armarDia(
   fecha: string,
-  entrada: TicketNdfConId[],
+  entrada: TicketVentaRow[],
   lineas: LineaNdfRow[],
   uploadedAt: string,
   nombres: Record<string, string> = {},
@@ -252,7 +252,7 @@ export function armarDia(
   const avisosCatalogo: AvisoCatalogo[] = []
   const netaPorTicket = new Map<string, number>()
   for (const t of tickets) netaPorTicket.set(t.id, netaDelTicket(t, porTicket.get(t.id), avisosCatalogo))
-  const netoDe = (t: TicketNdfConId): number => netaPorTicket.get(t.id) ?? 0
+  const netoDe = (t: TicketVentaRow): number => netaPorTicket.get(t.id) ?? 0
 
   const acc = new Map<string, AccEntrada>()
   const pm: ProductMap = {}

@@ -6,7 +6,8 @@ import { fusionarProductMap } from './ventasUtils'
 import type { DiasMap, HistMap, ProductMap, Meta, Comp } from '../../shared/types/ventas'
 // La fuente de las ventas (P2). `getVentasDias`/`getAllVentasDias`/`getVentasHist` siguen
 // existiendo y se llaman desde acá adentro: el Excel es el piso de la fusión, no se retiró.
-import { cargarDeFondo, cargarDiasEager, cargarHistEager } from './ventasFuente'
+import { cargarDeFondo, cargarDiasEager, cargarHistEager, type EstadoPos } from './ventasFuente'
+import AvisoFuentePos from './AvisoFuentePos'
 
 // Lazy-load every tab — each becomes its own JS chunk (loaded on first access)
 const VentasHoy          = lazy(() => import('./VentasHoy'))
@@ -90,6 +91,7 @@ export default function VentasModule() {
   const [diasFull, setDiasFull] = useState<DiasMap>({})
   /** La carga de fondo (historia completa del PoS) sigue corriendo. Solo para avisar. */
   const [cargandoFondo, setCargandoFondo] = useState(false)
+  const [fuentePos, setFuentePos] = useState<{ estado: EstadoPos | null; ultimoDiaXls: string | null }>({ estado: null, ultimoDiaXls: null })
   const [hist,  setHist]  = useState<HistMap>({})
   const [pm,    setPm]    = useState<ProductMap>({})
   const [metas, setMetas] = useState<Meta>({
@@ -124,6 +126,7 @@ export default function VentasModule() {
         getComps(),
       ])
       setDias(d.dias)
+      setFuentePos({ estado: d.estadoPos ?? null, ultimoDiaXls: d.ultimoDiaXls ?? null })
       setHist(h)
       // ── El ProductMap que ven las pantallas: curado + FAMILIA del PoS ─────────────────
       // `d.pm` lo arma `armarDia` con la familia de cada línea (`FAMILIAS_NETO`), y hasta
@@ -209,6 +212,8 @@ export default function VentasModule() {
           )
         })}
       </div>
+
+      <AvisoFuentePos estado={fuentePos.estado} ultimoDiaXls={fuentePos.ultimoDiaXls} />
 
       {/* La historia completa llega en segundo plano (P2-perf). Sin este aviso, Análisis e
           Histórico muestran los años viejos del Excel y parecen "mal" hasta que el PoS entra. */}

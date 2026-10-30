@@ -17,7 +17,7 @@
 //   Acá solo se DERIVA la misma forma desde el PoS, sin escribir nada en ningún lado.
 
 import { getLineasDeTickets, getSaloneroNombres, getTicketsRango,
-         type LineaNdfRow, type TicketNdfConId } from '../../shared/api/posNdf'
+         type LineaNdfRow, type TicketNdfConId, type TicketVentaRow } from '../../shared/api/posNdf'
 import { fechaCR } from '../../shared/ndf/jornada'
 import type { DiaData, DiasMap, HistDay, HistMap, ProductMap } from '../../shared/types/ventas'
 import { armarDia } from './ventasEnVivoDatos'
@@ -66,13 +66,13 @@ export function diaDeFactura(t: Pick<TicketNdfConId, 'fecha_registra'>): string 
  * que hay de más: los que caen fuera de `[desde, hasta]` por su día de factura se descartan acá.
  */
 export function armarDiasMap(
-  tickets: TicketNdfConId[],
+  tickets: TicketVentaRow[],
   lineas: LineaNdfRow[],
   rango: RangoJornadas,
   opciones: { uploadedAt: string; nombres?: Record<string, string>; avisar?: (msg: string) => void },
 ): DiasDesdePos {
   // 1. Cada factura va al día CR de su `fecha_registra` (ver el encabezado).
-  const porJornada = new Map<string, TicketNdfConId[]>()
+  const porJornada = new Map<string, TicketVentaRow[]>()
   for (const t of tickets) {
     const dia = diaDeFactura(t)
     if (!dentro(dia, rango)) continue

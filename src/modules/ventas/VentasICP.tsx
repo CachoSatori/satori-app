@@ -2,14 +2,26 @@
  * VentasICP — Índice de Conversión de Propina
  * Ported from SATORI PROPINAS standalone app (renderPropinasGerencial)
  *
- * ICP = (propina generada por el salonero / ventas del salonero) × 100
+ * ICP = (propina electrónica declarada por el salonero / ventas netas del salonero) × 100
+ *
+ * Numerador: la propina ELECTRÓNICA que el cliente deja voluntariamente (tarjeta/SINPE),
+ * `tip_amount_crc + tip_amount_usd × TC` — la MISMA función que Mi Rendimiento
+ * (`sumElectronicTips`). El 10 % de servicio es un impuesto aparte: no está en el numerador
+ * ni en el denominador. Lo cobrado del reparto del pool (`payout_crc`) se muestra en su propia
+ * columna y NO entra al ICP.
+ *
+ * «ICP restaurante» = Σ propina electrónica del mes / Σ ventas de los saloneros
+ * (`icpEquipoDelMes`, el mismo benchmark de Mi Rendimiento).
+ *
+ * Barra (barman/barback): no tiene mesas propias, así que el ICP no aplica.
  *
  * Thresholds (from standalone app):
  *   ≥ 13%  → excellent (green)
  *   10-13% → good (gold)
  *   < 10%  → needs improvement (red)
  *
- * Connects ventas_dias salonero sales with tip_entries payout_crc via name matching.
+ * Las ventas salen de `dias` (FUENTE_VENTAS, las mismas del módulo); las propinas de
+ * `tip_entries` (solo lectura), vinculadas por `clavesPropinaDeEmpleado`.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { DiasMap } from '../../shared/types/ventas'
@@ -32,6 +44,10 @@ import { getAllEmployees } from '../../shared/api/admin'
 import type { AttendanceRow } from '../../shared/api/tips'
 import type { ProductMap } from '../../shared/types/ventas'
 import { clavesPropinaDeEmpleado, nombresDeEmpleados } from '../../shared/ndf/personasNdf'
+import { computeICP, electronicTipCrc, icpEquipoDelMes } from './miRendimientoUtils'
+
+/** Roles de barra: sin mesas propias, el ICP no aplica. */
+const ROLES_BARRA = new Set(['barman', 'barback'])
 
 interface Props {
   dias: DiasMap
@@ -79,20 +95,23 @@ export default function VentasICP({ dias, pm }: Props) {
 
   // Tip data indexed by normalized name — prefers pos_login, then pos_name (exact POS match)
   const empTipMap = useMemo(() => {
-    const m: Record<string, { payout: number; hours: number; shifts: number }> = {}
-    const add = (key: string, payout: number, hours: number) => {
-      if (!m[key]) m[key] = { payout: 0, hours: 0, shifts: 0 }
-      m[key].payout += payout
-      m[key].hours  += hours
+    const m: Record<string, { propina: number; payout: number; hours: number; shifts: number; roles: Set<string> }> = {}
+    const add = (key: string, propina: number, payout: number, hours: number, role: string) => {
+      if (!m[key]) m[key] = { propina: 0, payout: 0, hours: 0, shifts: 0, roles: new Set() }
+      m[key].propina += propina
+      m[key].payout  += payout
+      m[key].hours   += hours
       m[key].shifts++
+      m[key].roles.add(role)
     }
     for (const r of tipData) {
       if (month && !r.session_date.startsWith(month)) continue
       const emp = employees.find(e => e.id === r.employee_id)
       if (!emp) continue
-      const payout = r.payout_crc ?? 0
-      const hours  = r.hours_worked ?? 0
-      for (const k of clavesDeEmpleado(emp)) add(k, payout, hours)
+      const propina = electronicTipCrc(r)
+      const payout  = r.payout_crc ?? 0
+      const hours   = r.hours_worked ?? 0
+      for (const k of clavesDeEmpleado(emp)) add(k, propina, payout, hours, emp.role)
     }
     return m
   }, [tipData, employees, month, clavesDeEmpleado])
@@ -110,10 +129,13 @@ export default function VentasICP({ dias, pm }: Props) {
       const agg  = aggSalonero(name, monthDates, dias, pm)
       const key  = normName(name)
       const tips = empTipMap[key]
+      const propina = tips?.propina ?? 0
       const payout  = tips?.payout ?? 0
       const shifts  = tips?.shifts ?? 0
       const hours   = tips?.hours  ?? 0
-      const icp     = agg.total > 0 ? (payout / agg.total * 100) : 0
+      // Barra: los turnos del mes que matchean esta clave son TODOS de barman/barback.
+      const barra   = !!tips && tips.roles.size > 0 && [...tips.roles].every(r => ROLES_BARRA.has(r))
+      const icp     = barra ? 0 : computeICP(propina, agg.total)
       const propTurno = shifts > 0 ? payout / shifts : 0
       const propHora  = hours  > 0 ? payout / hours  : 0
       return {
@@ -122,7 +144,9 @@ export default function VentasICP({ dias, pm }: Props) {
         pax:       agg.pax,
         promPax:   agg.promPax,
         days:      agg.days,
+        propina,
         payout,
+        barra,
         shifts,
         hours,
         icp,
@@ -132,38 +156,29 @@ export default function VentasICP({ dias, pm }: Props) {
       }
     })
     .filter(d => d.days > 0)
-    .sort((a, b) => b.icp - a.icp)
+    // Barra al final: no compite en el ranking del ICP.
+    .sort((a, b) => Number(a.barra) - Number(b.barra) || b.icp - a.icp)
   }, [sals, monthDates, dias, pm, empTipMap])
 
-  // Restaurant-level ICP
-  const restVentas  = icpData.reduce((s, d) => s + d.ventas, 0)
+  // ICP restaurante: el MISMO benchmark de Mi Rendimiento (Σ propina electrónica del mes /
+  // Σ ventas de saloneros). Lo cobrado del reparto se muestra aparte.
+  const rest = useMemo(
+    () => icpEquipoDelMes(tipData.filter(r => !month || r.session_date.startsWith(month)), monthDates, dias, pm),
+    [tipData, month, monthDates, dias, pm],
+  )
+  const restVentas  = rest.ventas
+  const restPropina = rest.gen
+  const restICP     = rest.icp
   const restPayout  = icpData.reduce((s, d) => s + d.payout, 0)
-  const restICP     = restVentas > 0 ? (restPayout / restVentas * 100) : 0
 
-  // Monthly historical ICP
+  // Monthly historical ICP — misma fórmula, mes por mes.
   const monthlyICP = useMemo(() => {
     return months.slice(0, 6).map(ym => {
       const mDates = allDates(dias).filter(d => d.startsWith(ym))
-      let ventas = 0, payout = 0
-      sals.forEach(name => {
-        const agg = aggSalonero(name, mDates, dias, pm)
-        const key = normName(name)
-        const tips = (() => {
-          const m: Record<string, number> = {}
-          tipData.filter(r => r.session_date.startsWith(ym)).forEach(r => {
-            const emp = employees.find(e => e.id === r.employee_id)
-            if (!emp) return
-            const k = normName(emp.full_name)
-            m[k] = (m[k] ?? 0) + (r.payout_crc ?? 0)
-          })
-          return m[key] ?? 0
-        })()
-        ventas  += agg.total
-        payout  += tips
-      })
-      return { ym, ventas, payout, icp: ventas > 0 ? payout / ventas * 100 : 0 }
+      const r = icpEquipoDelMes(tipData.filter(t => t.session_date.startsWith(ym)), mDates, dias, pm)
+      return { ym, ventas: r.ventas, propina: r.gen, icp: r.icp }
     }).reverse()
-  }, [months, sals, dias, pm, tipData, employees])
+  }, [months, dias, pm, tipData])
 
   if (loading) {
     return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--vt-muted)' }}>Cargando datos…</div>
@@ -175,7 +190,7 @@ export default function VentasICP({ dias, pm }: Props) {
         <div className="vt-empty-icon">心</div>
         <div className="vt-empty-title">Sin datos para calcular ICP</div>
         <div className="vt-empty-sub">
-          Necesitás datos de ventas (XLS) y al menos un turno de propinas cerrado en el mismo mes
+          Necesitás ventas del mes y al menos un turno de propinas cerrado en el mismo mes
         </div>
       </div>
     )
@@ -185,7 +200,7 @@ export default function VentasICP({ dias, pm }: Props) {
     <div className="vt-section">
       <div className="vt-sl" style={{ marginBottom: '0.4rem' }}>Índice de Conversión de Propina</div>
       <div style={{ fontSize: '0.72rem', color: 'var(--vt-muted)', marginBottom: '1.25rem' }}>
-        ICP = propinas cobradas / ventas × 100 · Thresholds: ≥13% excelente · 10-13% bueno · &lt;10% a mejorar
+        ICP = propina electrónica declarada (tarjeta/SINPE) / ventas netas × 100 · No incluye el 10 % de servicio ni lo cobrado del reparto · ≥13% excelente · 10-13% bueno · &lt;10% a mejorar · Barra: no aplica
       </div>
 
       {/* Month picker — desplegable */}
@@ -207,7 +222,7 @@ export default function VentasICP({ dias, pm }: Props) {
             {icpLabel(restICP)}
           </div>
           <div style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: '#aaa' }}>
-            {fi(restPayout)} cobrado de {fi(restVentas)} vendido
+            {fi(restPropina)} propina electrónica / {fi(restVentas)} vendido por saloneros
           </div>
         </div>
 
@@ -243,19 +258,20 @@ export default function VentasICP({ dias, pm }: Props) {
               <th>#</th>
               <th>Salonero</th>
               <th className="r">Ventas</th>
-              <th className="r">Propinas cobradas</th>
+              <th className="r">Propina electrónica</th>
               <th className="r">ICP</th>
               <th className="r">Nivel</th>
               <th className="r">Turnos</th>
               <th className="r">Horas</th>
-              <th className="r">Prop/turno</th>
-              <th className="r">Prop/hora</th>
+              <th className="r">Cobrado del reparto</th>
+              <th className="r">Cobrado/turno</th>
+              <th className="r">Cobrado/hora</th>
               <th className="r">Prom/PAX</th>
             </tr>
           </thead>
           <tbody>
             {icpData.map((d, i) => (
-              <tr key={d.name} className={i === 0 ? 'tr-best' : ''}>
+              <tr key={d.name} className={i === 0 && !d.barra ? 'tr-best' : ''}>
                 <td className="vt-muted" style={{ fontWeight: 700 }}>{i + 1}</td>
                 <td style={{ fontWeight: 600 }}>
                   {d.name}
@@ -265,10 +281,14 @@ export default function VentasICP({ dias, pm }: Props) {
                   )}
                 </td>
                 <td className="r">{fi(d.ventas)}</td>
-                <td className="r" style={{ fontWeight: 600, color: d.payout > 0 ? 'var(--vt-green)' : '#888' }}>
-                  {d.payout > 0 ? fi(d.payout) : '—'}
+                <td className="r" style={{ fontWeight: 600, color: d.propina > 0 ? 'var(--vt-green)' : '#888' }}>
+                  {d.propina > 0 ? fi(d.propina) : '—'}
                 </td>
                 <td className="r">
+                  {d.barra ? (
+                    <span className="vt-muted" style={{ fontSize: '0.72rem' }}
+                      title="Barra no tiene mesas propias: el ICP no aplica">no aplica a barra</span>
+                  ) : (
                   <span style={{
                     fontFamily: "'DM Mono',monospace",
                     fontSize: '1rem',
@@ -277,9 +297,10 @@ export default function VentasICP({ dias, pm }: Props) {
                   }}>
                     {d.icp > 0 ? d.icp.toFixed(1) + '%' : '—'}
                   </span>
+                  )}
                 </td>
                 <td className="r">
-                  {d.icp > 0 && (
+                  {!d.barra && d.icp > 0 && (
                     <span style={{
                       fontSize: '0.65rem',
                       fontWeight: 700,
@@ -294,6 +315,7 @@ export default function VentasICP({ dias, pm }: Props) {
                 </td>
                 <td className="r vt-muted">{d.shifts > 0 ? d.shifts : '—'}</td>
                 <td className="r vt-muted">{d.hours > 0 ? d.hours.toFixed(0) + 'h' : '—'}</td>
+                <td className="r vt-muted">{d.payout > 0 ? fi(d.payout) : '—'}</td>
                 <td className="r" style={{ fontSize:'0.8rem', color: d.propTurno > 0 ? '#7ec8a0' : '#555' }}>
                   {d.propTurno > 0 ? fi(d.propTurno) : '—'}
                 </td>
@@ -309,10 +331,12 @@ export default function VentasICP({ dias, pm }: Props) {
               <tr className="vt-tbl-footer">
                 <td colSpan={2}>RESTAURANTE</td>
                 <td className="r">{fi(restVentas)}</td>
-                <td className="r">{fi(restPayout)}</td>
+                <td className="r">{fi(restPropina)}</td>
                 <td className="r" style={{ color: icpColor(restICP), fontWeight: 800 }}>
                   {restICP.toFixed(1)}%
                 </td>
+                <td colSpan={3}></td>
+                <td className="r">{fi(restPayout)}</td>
                 <td colSpan={3}></td>
               </tr>
             </tfoot>
@@ -321,11 +345,11 @@ export default function VentasICP({ dias, pm }: Props) {
       </div>
 
       {/* Per-salonero monthly ICP sparklines */}
-      {icpData.filter(d => d.days > 0 && d.icp > 0).length > 0 && months.length > 1 && (
+      {icpData.filter(d => d.days > 0 && d.icp > 0 && !d.barra).length > 0 && months.length > 1 && (
         <>
           <div className="vt-sl" style={{ marginTop: '1.5rem' }}>Tendencia ICP por salonero</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-            {icpData.filter(d => d.icp > 0).map(d => {
+            {icpData.filter(d => d.icp > 0 && !d.barra).map(d => {
               const sparkData = months.slice(0, 6).map(ym => {
                 const mDates = allDates(dias).filter(date => date.startsWith(ym))
                 const mAgg   = aggSalonero(d.name, mDates, dias, pm)
@@ -334,11 +358,11 @@ export default function VentasICP({ dias, pm }: Props) {
                   tipData.filter(r => r.session_date.startsWith(ym)).forEach(r => {
                     const emp = employees.find(e => e.id === r.employee_id)
                     if (!emp) return
-                    clavesDeEmpleado(emp).forEach(k => { m[k] = (m[k] ?? 0) + (r.payout_crc ?? 0) })
+                    clavesDeEmpleado(emp).forEach(k => { m[k] = (m[k] ?? 0) + electronicTipCrc(r) })
                   })
                   return m[normName(d.name)] ?? 0
                 })()
-                return { ym, icp: mAgg.total > 0 ? mPay / mAgg.total * 100 : 0 }
+                return { ym, icp: computeICP(mPay, mAgg.total) }
               }).reverse()
               const hasData = sparkData.some(s => s.icp > 0)
               if (!hasData) return null

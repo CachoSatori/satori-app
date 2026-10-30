@@ -142,6 +142,17 @@ export interface LineaNdfRow {
 /** El id se pide para poder atar cada línea a su ticket. */
 export interface TicketNdfConId extends TicketNdfRow { id: string }
 
+/**
+ * Lo que devuelve `pos_ventas_tickets_rango` (mig 067): SOLO las columnas que usan el cálculo de
+ * ventas (`getDiasMapDesdePos` → `armarDia`) y las lentes de saloneros. Sin medios de pago ni
+ * `clase_ingreso` — la función es la que lee el equipo (Mi Rendimiento), no solo gerencia.
+ * La justificación de cada columna está en la migración.
+ */
+export type TicketVentaRow = Pick<TicketNdfConId,
+  | 'id' | 'numero_factura' | 'estado' | 'fecha_registra' | 'fecha_cierra' | 'cajero_login'
+  | 'canal' | 'mesa' | 'salonero_login' | 'registrado_por' | 'servicio_crc' | 'total_crc'
+  | 'valor_servido_crc' | 'iva_crc' | 'regalia_crc' | 'pax' | 'pax_articulo'>
+
 const COLS_TICKET =
   'id, numero_factura, estado, fecha_registra, fecha_cierra, cajero_login, canal, mesa, salonero_login, registrado_por, turno, ' +
   'con_servicio, servicio_crc, total_crc, valor_servido_crc, iva_crc, regalia_crc, ' +
@@ -224,27 +235,21 @@ export async function getTicketsJornada(local: string, businessDate: string): Pr
  * pedía. Filtrar acá por fecha sería imposible — la jornada de un ticket no se puede saber sin
  * ver el resto de su lote.
  *
- * `estado = 'C'` explícito: hoy la ingesta solo escribe cerradas, pero el CHECK de la 062
- * admite `X` y `R` para auditoría y un día podrían entrar.
+ * Lee por la función `pos_ventas_tickets_rango` (mig 067), el MISMO camino para todos los roles:
+ * filtra `estado = 'C'` y el rango adentro, y devuelve solo `TicketVentaRow` (sin medios de pago).
+ * Sin acceso devuelve 0 filas, como el RLS — `getLatidoVentas` distingue ese caso.
  */
 export async function getTicketsRango(
   local: string,
   rango: { desde: string; hasta: string },
-): Promise<TicketNdfConId[]> {
+): Promise<TicketVentaRow[]> {
   const v = ventanaRangoJornadas(rango.desde, rango.hasta)
-  // Paginado: un mes de ventas pasa de 1.000 facturas y sin `.range()` se perdían en silencio.
-  // El `id` desempata `fecha_registra` (dos facturas del mismo segundo son normales), que es lo
-  // que hace que la paginación no repita ni saltee filas.
-  return leerTodo<TicketNdfConId>((desde, hasta) => sb
-    .from('pos_ndf_tickets')
-    .select(COLS_TICKET)
-    .eq('local', local)
-    .eq('estado', 'C')
-    .gte('fecha_registra', v.desde)
-    .lt('fecha_registra', v.hasta)
-    .order('fecha_registra', { ascending: true })
-    .order('id', { ascending: true })
-    .range(desde, hasta))
+  // Paginado: un mes de ventas pasa de 1.000 facturas. El orden total (`fecha_registra`, `id`)
+  // y el `limit`/`offset` van DENTRO de la función, que es lo que hace que no repita ni saltee.
+  return leerTodo<TicketVentaRow>((desde, hasta) => sb.rpc('pos_ventas_tickets_rango', {
+    p_local: local, p_desde: v.desde, p_hasta: v.hasta,
+    p_limit: hasta - desde + 1, p_offset: desde,
+  }))
 }
 
 /**
@@ -259,19 +264,15 @@ export async function getLineasDeTickets(ticketIds: string[]): Promise<LineaNdfR
   for (let i = 0; i < ticketIds.length; i += TANDA_IDS) {
     const tanda = ticketIds.slice(i, i + TANDA_IDS)
     // DOS cortes distintos, por dos motivos distintos:
-    //   · `TANDA_IDS` parte la lista de ids porque van en la URL y una lista larga la revienta.
+    //   · `TANDA_IDS` parte la lista de ids para que cada pedido quede chico.
     //   · `leerTodo` pagina las FILAS de cada tanda, porque 200 facturas son ~1.100 líneas
     //     (5,6 por factura en staging) y una sola tanda ya pasa el corte de PostgREST.
     // Sin lo segundo, cada tanda perdía sus líneas de más — callado.
-    out.push(...await leerTodo<LineaNdfRow>((desde, hasta) => sb
-      .from('pos_ndf_ticket_lines')
-      .select('ticket_id, codigo_producto, nombre, cantidad, monto, familia, usuario_registra')
-      .in('ticket_id', tanda)
-      // `id` es la PK de la 062: orden TOTAL, que es lo que `.range()` necesita para no repetir
-      // ni saltear. `ticket_id` primero solo para que las líneas de una factura salgan juntas.
-      .order('ticket_id', { ascending: true })
-      .order('id', { ascending: true })
-      .range(desde, hasta)))
+    // Lee por `pos_ventas_lineas` (mig 067), el mismo camino para todos los roles. El orden
+    // TOTAL (`ticket_id`, `id`) y el `limit`/`offset` van dentro de la función.
+    out.push(...await leerTodo<LineaNdfRow>((desde, hasta) => sb.rpc('pos_ventas_lineas', {
+      p_ticket_ids: tanda, p_limit: hasta - desde + 1, p_offset: desde,
+    })))
   }
   return out
 }
@@ -432,6 +433,20 @@ export async function getUltimoPollPoS(local: string): Promise<LatidoPoS> {
     ultimoPollAt: fila?.last_poll_at ?? null,
     error:        (fila?.last_error ?? '').trim() === '' ? null : String(fila?.last_error),
   }
+}
+
+/**
+ * ¿Este usuario puede leer las ventas del PoS? Por `pos_ventas_latido` (mig 067).
+ *
+ * La función devuelve UNA fila a quien tiene acceso —con la hora del último poll, que puede ser
+ * `null` si el agente nunca corrió— y CERO a quien no. Es lo que separa «sin acceso» de «el PoS
+ * está vacío» cuando `getTicketsRango` vuelve sin filas.
+ */
+export async function getLatidoVentas(local: string): Promise<{ acceso: boolean; ultimoPollAt: string | null }> {
+  const { data, error } = await sb.rpc('pos_ventas_latido', { p_local: local })
+  if (error) throw new Error(error.message)
+  const filas = (data ?? []) as { last_poll_at: string | null }[]
+  return { acceso: filas.length > 0, ultimoPollAt: filas[0]?.last_poll_at ?? null }
 }
 
 // ── La llave de exclusión Hoy ↔ En vivo ────────────────────────────────────────────────────

@@ -267,6 +267,22 @@ export function computeICP(propinaGenerada: number | null | undefined, ventas: n
   return (p / v) * 100
 }
 
+/**
+ * El ICP del EQUIPO de un mes: Σ propina electrónica de todas las filas del mes / Σ ventas de
+ * los saloneros (`aggGeneral`, sin caja). Es el benchmark de Mi Rendimiento y el «ICP
+ * restaurante» de la pestaña ICP: una sola fórmula para que las dos pantallas den lo mismo.
+ */
+export function icpEquipoDelMes(
+  filasDelMes: Array<{ tip_amount_crc?: number | null; tip_amount_usd?: number | null; exchange_rate?: number | null }>,
+  monthDates: string[],
+  dias: DiasMap,
+  pm: ProductMap,
+): { gen: number; ventas: number; icp: number } {
+  const gen    = sumElectronicTips(filasDelMes)
+  const ventas = aggGeneral(monthDates, dias, pm).total
+  return { gen, ventas, icp: computeICP(gen, ventas) }
+}
+
 export interface IcpResult {
   mine: number   // ICP del empleado (%)
   team: number   // ICP del equipo/restaurante (%)

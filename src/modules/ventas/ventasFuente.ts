@@ -34,6 +34,7 @@
 // tiene una sola policy de escritura) ni en `ventas_dias`/`ventas_hist`.
 
 import { getAllVentasDias, getVentasDias, getVentasHist } from '../../shared/api/ventas'
+import { getLatidoVentas } from '../../shared/api/posNdf'
 import type { DiasMap, HistMap, ProductMap } from '../../shared/types/ventas'
 import {
   aHistMap, getDiasMapDesdePos, LOCAL_POR_DEFECTO, type RangoJornadas,
@@ -169,10 +170,66 @@ export async function cargarDiasEager(
   local: string = LOCAL_POR_DEFECTO,
   ahora: Date = new Date(),
 ): Promise<CargaDias> {
-  const xls = await getVentasDias(DIAS_EAGER)
-  if (fuente === 'xls') return { dias: xls, pm: {} }
-  const pos = await getDiasMapDesdePos(rangoPos(DIAS_EAGER, ahora), local)
-  return { dias: fusionarDias(xls, pos.dias), pm: pos.pm }
+  return cargarDias(DIAS_EAGER, fuente, local, ahora)
+}
+
+/**
+ * Los últimos `dias` días, fusionados con la MISMA regla que el eager. La usa Mi Rendimiento
+ * (365 días), que tiene que ver los mismos números que el módulo Ventas.
+ *
+ * Con `FUENTE_VENTAS = 'xls'` es `getVentasDias(dias)` tal cual: no consulta el PoS y
+ * `estadoPos` es `null`.
+ *
+ * Con `'pos'` NUNCA cae en silencio al Excel: si el PoS no se pudo leer, devuelve el Excel igual
+ * (no todo vacío), con `estadoPos` distinto de `'ok'` y un `console.warn`, para que la pantalla
+ * lo diga (`AvisoFuentePos`).
+ */
+export async function cargarDias(
+  dias: number,
+  fuente: FuenteVentas = FUENTE_VENTAS,
+  local: string = LOCAL_POR_DEFECTO,
+  ahora: Date = new Date(),
+): Promise<CargaDias> {
+  const xls = await getVentasDias(dias)
+  if (fuente === 'xls') return { dias: xls, pm: {}, estadoPos: null, ultimoDiaXls: ultimoDia(xls) }
+
+  let estado: EstadoPos
+  try {
+    const pos = await getDiasMapDesdePos(rangoPos(dias, ahora), local)
+    if (Object.keys(pos.dias).length > 0) {
+      return { dias: fusionarDias(xls, pos.dias), pm: pos.pm, estadoPos: 'ok', ultimoDiaXls: ultimoDia(xls) }
+    }
+    // Sin una sola factura: o este usuario no puede leer el PoS (las funciones de la mig 067
+    // devuelven 0 filas, igual que el RLS), o el PoS de verdad no tiene nada. El latido decide.
+    estado = (await getLatidoVentas(local)).acceso ? 'vacio' : 'sin_acceso'
+  } catch {
+    estado = 'error'
+  }
+  const ultimo = ultimoDia(xls)
+  console.warn(`[ventas] PoS ${estado}: mostrando solo el Excel (último día: ${fmtDiaMes(ultimo)})`)
+  return { dias: xls, pm: {}, estadoPos: estado, ultimoDiaXls: ultimo }
+}
+
+/**
+ * Cómo salió la lectura del PoS. `null` = no se leyó (fuente `'xls'`).
+ *   · `'ok'`         → el PoS respondió con días.
+ *   · `'sin_acceso'` → el usuario no puede leer las ventas del PoS (latido sin fila).
+ *   · `'vacio'`      → tiene acceso, pero el PoS no devolvió ninguna factura del rango.
+ *   · `'error'`      → la lectura falló.
+ */
+export type EstadoPos = 'ok' | 'sin_acceso' | 'vacio' | 'error'
+
+/** La fecha más nueva del mapa (`YYYY-MM-DD`), o `null` si está vacío. */
+export function ultimoDia(dias: DiasMap): string | null {
+  let max: string | null = null
+  for (const f of Object.keys(dias)) if (max === null || f > max) max = f
+  return max
+}
+
+/** `'2026-10-20'` → `'20/10'`. Sin fecha, `'—'`. */
+export function fmtDiaMes(fecha: string | null): string {
+  if (!fecha || fecha.length < 10) return '—'
+  return `${fecha.slice(8, 10)}/${fecha.slice(5, 7)}`
 }
 
 /**
@@ -200,6 +257,10 @@ export async function cargarHistEager(): Promise<HistMap> {
 export interface CargaDias {
   dias: DiasMap
   pm:   ProductMap
+  /** Cómo salió la lectura del PoS; `null` con la fuente `'xls'`. */
+  estadoPos?:    EstadoPos | null
+  /** El último día del Excel, para el aviso. */
+  ultimoDiaXls?: string | null
 }
 
 /** Lo que llega en segundo plano: la historia completa, ya fusionada. */

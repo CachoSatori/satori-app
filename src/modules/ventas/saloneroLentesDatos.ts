@@ -8,7 +8,7 @@
 
 import {
   getLineasDeTickets, getSaloneroNombres, getTicketsRango,
-  type LineaNdfRow, type TicketNdfConId,
+  type LineaNdfRow, type TicketVentaRow,
 } from '../../shared/api/posNdf'
 import { agruparEnLotes } from '../../shared/ndf/jornada'
 import { calcularLentes, type LentesSaloneros } from './saloneroLentes'
@@ -34,10 +34,10 @@ export interface LentesConNombres {
  * sin ver el resto de su lote.
  */
 export function filtrarPorJornada(
-  tickets: readonly TicketNdfConId[],
+  tickets: readonly TicketVentaRow[],
   rango: RangoJornadas,
-): TicketNdfConId[] {
-  const out: TicketNdfConId[] = []
+): TicketVentaRow[] {
+  const out: TicketVentaRow[] = []
   for (const lote of agruparEnLotes(tickets)) {
     if (lote.jornada !== null && lote.jornada >= rango.desde && lote.jornada <= rango.hasta) {
       out.push(...lote.tickets)
@@ -48,7 +48,7 @@ export function filtrarPorJornada(
 
 /** El corazón, PURO: tickets del superset + líneas → las dos lentes del rango. */
 export function armarLentes(
-  tickets: readonly TicketNdfConId[],
+  tickets: readonly TicketVentaRow[],
   lineas: readonly LineaNdfRow[],
   rango: RangoJornadas,
 ): { lentes: LentesSaloneros; tickets: number } {

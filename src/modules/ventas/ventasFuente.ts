@@ -56,7 +56,7 @@ import {
  */
 export type FuenteVentas = 'pos' | 'xls'
 
-export const FUENTE_VENTAS: FuenteVentas = 'xls'
+export const FUENTE_VENTAS: FuenteVentas = 'pos'
 
 /**
  * La primera jornada que el PoS tiene ingestada.

@@ -16,6 +16,15 @@ import { describe, it, expect, vi } from 'vitest'
 import { render } from '@testing-library/react'
 
 vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: null }) }))
+// La pantalla ahora importa la capa de I/O de las lentes (para el bloque «venta propia por
+// línea»), y esa arrastra el cliente de Supabase. Se mockea igual que en el test de render de
+// `VentasSaloneroLineas`: lo que se prueba acá es el cableado, no la lectura del PoS.
+vi.mock('./saloneroLentesDatos', () => ({ getLentesDesdePos: vi.fn(async () => ({
+  lentes: {
+    ventaPropia: [], mesaPropia: [], netaDiaCrc: 0, netaLineasCrc: 0, descuadreCrc: 0, turnos: [],
+  },
+  nombres: {}, tickets: 0,
+})) }))
 
 import VentasSaloneros from './VentasSaloneros'
 import type { CajeroDay, DiasMap, Meta, SaloneroDay } from '../../shared/types/ventas'

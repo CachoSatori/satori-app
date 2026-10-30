@@ -3681,6 +3681,74 @@ html, body, #root {
 }
 .vt-sal-metrics div { display: flex; flex-direction: column; gap: 0.1rem; }
 
+/* ── Lente A dentro de la tarjeta de salonero ─────────────────
+   Se enmarca a propósito: NO es el desglose del total de arriba, es otro reparto de la misma
+   neta (la tarjeta va por el salonero del pedido; esto, por quién comandó cada línea). El
+   borde punteado, el título y el tag «otra lectura» están para que nadie los sume. */
+.vt-sal-lente {
+  margin-top: 0.875rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px dashed var(--vt-border);
+  border-radius: 3px;
+  background: var(--vt-paper);
+}
+.vt-sal-lente-hd {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--vt-ink);
+}
+.vt-sal-lente-tag {
+  font-family: inherit;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--vt-border);
+  border-radius: 2px;
+  color: #888;
+}
+.vt-sal-lente-nota {
+  margin: 0.4rem 0 0.6rem;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: #777;
+}
+.vt-sal-lente-msg {
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: #888;
+  padding: 0.3rem 0;
+}
+.vt-sal-lente-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+.vt-sal-lente-tbl th,
+.vt-sal-lente-tbl td { padding: 0.3rem 0.25rem; }
+.vt-sal-lente-tbl th {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+  font-weight: 600;
+  border-bottom: 1px solid var(--vt-border);
+  text-align: left;
+}
+.vt-sal-lente-tbl .r { text-align: right; }
+.vt-sal-lente-tbl tbody tr + tr td { border-top: 1px solid var(--vt-border); }
+.vt-sal-lente-tbl tfoot td {
+  border-top: 2px solid var(--vt-border);
+  font-weight: 700;
+}
+
 /* ── Chart legend ───────────────────────────────────────────── */
 .vt-chart-legend {
   display: flex;

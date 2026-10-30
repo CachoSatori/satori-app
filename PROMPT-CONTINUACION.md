@@ -1,63 +1,301 @@
-# Continuación — backlog priorizado (handoff 2026-07-30)
+# Continuación — backlog priorizado (al día: 2026-10-30)
+
+> **Foto:** `main` = **`43e843d`** (PROD) · `staging` = **`a4b11ae`** · `integracion/analitica-staging` =
+> **`a54d6ec`** (4 atrás de `staging`). **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10**, validado físicamente
+> por Ismael. Migraciones en prod hasta la **067** (ledger 45). Estado completo y reglas operativas →
+> [ESTADO.md](ESTADO.md).
+>
+> **Cómo se armó:** se partió del backlog de `staging` del 29/10 (`a43d3d4`, que sigue abajo completo como
+> detalle) y se sumaron los pendientes que dejaron el go-live del PoS (29–30/10) y el handoff del 30/10. Cada
+> ítem dice de dónde sale. Lo marcado ✅ está verificado contra el repo o la base el 30/10.
+>
+> **El backlog de `main` del 30/07 quedó superado:** su P0 era T3 (endurecimiento de caja), que está ✅ en prod
+> (merges `f11ccdb`, `8c65686`, `5c3b4ff`, `723f734`, `6bb9c33` — todos en `main`, verificado). Su texto sigue en
+> el historial de git (`git show 43e843d:PROMPT-CONTINUACION.md`), y sus líneas propias están al final de este
+> archivo.
+
+**Firmas:** 🖊️ = necesita firma de Ismael · 👁️ = validación en piso · 🔐 = seguridad · 🧹 = limpieza.
+
+---
+
+## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
+
+1. **🔐 Revocar el token `claude-code-prod`.** Se usó durante el go-live; ya no hace falta. *(Nuevo, 30/10.)*
+2. **🔐 Rotar los secretos de ingest** (`x-ingest-secret` de `ingest-ndf` en prod y staging, y su copia en los dos
+   agentes de la PC del PoS). Hacerlo con las dos tareas paradas y verificar `pos_ndf_cursor.last_error` null
+   después. *(Nuevo, 30/10.)*
+3. **🖊️ «Contexto jueves» de «Hoy» mostró un promedio mal** (₡235.773 contra ₡406.064) **mientras cargaba el
+   histórico.** Revisar si mezcla días del Excel y del PoS en la comparativa de las 4 últimas ocurrencias del mismo
+   día de semana (la carga temprana trae 90 días; el histórico completo llega después por `cargarDeFondo`).
+   *(Nuevo, 30/10.)*
+4. **Día sin pax muestra −100 %.** En las comparaciones «vs general», un día (o período) con pax 0 sale como
+   −100 % en vez de «sin dato». *(Nuevo, 30/10.)*
+5. **🖊️ Umbrales del ICP** (hoy ≥13 % excelente, 10–13 % bueno, <10 % a mejorar): recalibrar contra el histórico
+   real, que da **5–9 %**. Con el PoS, el ICP del equipo de octubre es 10,6 %. *(Nuevo, 30/10.)*
+6. **Usuarios de la app para RODRI, FRANCO y MAXI BARRA** (barmans activos sin perfil de login), y decidir el
+   perfil «NACHO» (`satorisushibarnacho@gmail.com`, rol salonero, sin empleado vinculado; el empleado NACHO 038
+   ya está vinculado al perfil manager de Ignacio). *(Nuevo, 29–30/10.)*
+7. **👁️ El deploy de #16 quedó en `waiting`** (job `deploy` del run #247: creado 17:42, arrancó 17:55 UTC). En
+   GitHub Actions eso es una regla de protección del environment `github-pages` (aprobación o temporizador). El
+   deploy de #15 (run #246, 17:21) no esperó. Revisar **Settings → Environments → github-pages**: si la regla no
+   es a propósito, sacarla para que los deploys no queden trabados. *(Nuevo, 30/10.)*
+
+## 🟧 P1 — Deuda corta
+
+8. **🖊️ Retirar el Excel: la pestaña «Cargar XLS» y la Paridad temporal.** Con el PoS como fuente, el Excel solo
+   es respaldo (último día en prod: 20/10). Retirar después de un período con el PoS solo, con firma. Ojo: el
+   respaldo `{...xls, ...pos}` y `ventas_hist` (2023–2025) se siguen usando; lo que se retira es la carga manual y
+   la pantalla de validación. *(Nuevo, 30/10.)*
+9. **🖊️ Ítem 11 · versionar `ingest-ndf` en `main` con `supabase/config.toml`.** Detalle abajo (P2 #11 del
+   backlog heredado). **Hasta cerrarlo, ningún PR a `main` con archivos bajo `supabase/functions/`.**
+10. **🖊️ Ítem 9 · actualizar los dos agentes + re-ingesta 2025 del `01` → ROSAURA** (450 tickets, ₡19,06M,
+    2025-01-01 → 2025-09-21). Detalle abajo (P2 #9). Depende de tener el código del agente con el cambio.
+11. **`version.json` lleva al login** desde el navegador: el service worker responde `index.html` a toda
+    navegación bajo `/satori-app/`. Arreglo: agregar `/\/version\.json$/` a `navigateFallbackDenylist` en
+    `vite.config.ts`. Mientras tanto se ve con Cmd+Shift+R o `view-source:`. *(Nuevo, 30/10.)*
+12. **Mi Rendimiento · Semana → Por día.** Pedido de Ismael; definir con él el alcance (fusionar la pestaña Semana
+    en Por día o renombrarla). *(Nuevo, 30/10.)*
+13. **Empleados inactivos sin nombre para el salonero.** El RLS de `employees` solo le deja ver los activos, así
+    que en 'pos' las facturas de empleados inactivos le quedan con el código del PoS en vez del nombre (el owner
+    los ve con nombre). No cambia montos. *(Nuevo, 30/10.)*
+14. **🧹 Alinear `integracion/analitica-staging` con `staging`** (FF de `a54d6ec` a `a4b11ae`, 4 commits) y
+    confirmar desde qué rama publica Cloudflare Pages la URL principal de staging. *(Nuevo, 30/10.)*
+15. **🧹 Ledger de staging sin las filas 065 y 066** (las columnas existen). Registrar las filas para que un
+    `db push` a staging no intente re-aplicarlas. *(Nuevo, 30/10.)*
+16. **🧹 `pos-bridge/backfill.test.ts` no carga sin el paquete `mssql`** (en staging falla la suite al importar).
+    Instalarlo como dependencia de desarrollo o aislar ese test. *(Nuevo, 30/10.)*
+17. **⚠️ Agente de BioTime parado desde el 14/09** (última sync 17:12 UTC, 22.969 marcas en staging). Dejarlo en
+    Task Scheduler en la PC del reloj y re-arrancarlo. *(Nuevo, medido 30/10.)*
+18. **🔐 Hardening ACL en prod:** quedan **4** `SECURITY DEFINER` ejecutables por `anon` (`get_my_role`,
+    `handle_new_user`, `log_movement_edit`, `unif_on_cash_movement`). `get_my_role` necesita un análisis de
+    policies antes del revoke. *(Heredado P1 #3, actualizado: eran 3.)*
+19. **Gate de tests en `deploy.yml`:** hoy publica sin correr `vitest`. *(HALLAZGOS #14.)*
+20. **👁️ Validar Proveedores A+B en piso** y **📮 DNS de Resend + `RESEND_API_KEY`** (depende del dueño).
+    *(Heredado P0 #1 y #2.)*
+21. **🧹 Limpieza en `main`:** `src/shared/api/auth.ts` sin ningún import (verificado 30/10), assets sin uso y
+    `public/_redirects`. Barrer en un pase con firma. *(Heredado P1 #6.)*
+22. **🧹 Staging:** el empleado AMPI quedó sin perfil de login de prueba (se le pasó «Test Cajero» a FRANCISCO
+    para probar la 067). *(Nuevo, 30/10.)*
+
+## 🟨 P2 — Esperan decisión o firma del dueño
+
+23. **🖊️ Salarios:** pase a prod por fase (migs 055–061 solo en staging), insumos humanos (6 activos sin código
+    BioTime, `fecha_ingreso`), consulta al contador (bruto vs neto, vacaciones). *(Heredado P0 #3–#5, P2 #7.)*
+24. **🖊️ Edición de propinas en Historial por cajero** con autorización · **foto de comprobante obligatoria**
+    (diferida) · **`propina-pool`** (¿la propina electrónica va al mismo pool?). *(Heredado P2 #2–#4.)*
+25. **🖊️ Reconciliación prod vs Excel del dueño** · **Etapa 2 de la Bandeja**. *(Heredado P2 #5 y #8.)*
+26. **🖊️ Merch de mostrador (familia 21) en categoría propia.** *(Heredado P2 #12.)*
+
+## 🟦 P3 — Lejos / bloqueante
+
+27. **🚧 PILAR — sesión/auth escalable y multi-tenant.** Bloquea el gran pase del PoS.
+28. **🧾 FE-CR** (factura electrónica real).
+29. **🧪 Gran pase del PoS propio a prod**, detrás del PILAR.
+
+## ✅ Cerrado en el go-live (29–30/10), para no reabrir
+
+- #13 `9ada841`, #14 `c7b2f4b`, #15 `ba23a24`, #16 `43e843d` en prod; Pages, Branching («All migrations are up to
+  date» / «No functions to deploy»), Edge Functions y agente verificados después de cada merge.
+- Mig 067 aplicada a mano en prod antes del merge de #15 y verificada por JWT (owner, manager, salonero, cajero,
+  `anon`).
+- Tarea «Satori PoS Bridge PROD» arranca sola tras un reinicio (heredado P2 #10).
+- ICP: numerador = propina electrónica declarada (no `payout_crc`); el 10 % de servicio no entra.
+
+---
+
+# 📚 Detalle heredado — backlog de `staging` al 29/10 (`a43d3d4`), sin editar
+
+> Lo que sigue es el `PROMPT-CONTINUACION.md` de `staging` tal cual estaba el 29/10, con los títulos bajados un
+> nivel. La numeración (P0 #1, P2 #9, P2 #11…) es la que citan los ítems de arriba. Si algo de abajo contradice
+> el backlog vigente, gana el de arriba.
+
+## Continuación — backlog priorizado (al día: 2026-09-11)
 
 > **✅ EL REDISEÑO DE CAJAS (POZO ÚNICO) ESTÁ EN PROD Y VALIDADO.** Se firmó, construyó, pasó y se
 > validó físicamente en un día: el **primer cierre real bajo el pozo (22/07) CUADRÓ** y las cargas
-> reales del dueño reconciliaron **al colón**. `main` = **`8d41d1a`** · `staging` = **`1b79265`**
-> (base en CERO). **Cero migraciones** en todo el rediseño del pozo. Encima del pozo, `main` ya lleva
-> los **3 pases de jul-2026** (vista del empleado · Reporte de Ventas · panel "Nombres sin asignar"),
-> con **código real**. **Deuda de docs (repo-truth) SALDADA 2026-07-30.**
+> reales del dueño reconciliaron **al colón**. `main` código = **`1c8a9ad`** · `staging` =
+> **`5ae267f`** (base en CERO). **Cero migraciones** en todo el rediseño.
 > Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · contexto del modelo → [ESTADO.md](ESTADO.md).
 >
 > Lo de abajo es el **backlog vigente**. Las secciones numeradas más abajo (§0…, RCAs, planes de
 > pases viejos) son **referencia histórica**.
 
+> **AL DÍA (2026-09-11):** `main` = **`3e54aa4`** (PROD, intacto) · `staging` **≡** `integracion/analitica-staging` = **`35eeaff`** (las dos, mismo hash) · agente del PoS `feat/pos-desglose` = **`14bd278`**. **PoS "Nube de Fuego" EN VIVO en staging**: migs **062–065**, Edge `ingest-ndf`, agente `pos-bridge/` corriendo en la PC del PoS, módulo Ventas leyendo del PoS (P2), En vivo. **Validados en staging:** Frente C (≈₡/pax/prom-pax de mesa abierta, provisional, nunca en neta/Hoy/cuadre) · atribución de salón por línea · desplegable de productos por mesa abierta · fix 388. Auditoría 388 + 266: sin bug de plata (266 = fan-out colapsado por el Edge y el `unique (local, numero_factura)`). **Sigue:** (1) backfill histórico 388 (mapa read-only → firma) · (2) pase de todo a `main` (validación física sostenida + firma; ⚠️ auto-aplica 064/065 a prod) · (3) catálogo del PoS (tildes en `FAC_Productos`). Detalle vivo → PROYECTO claude.ai (HANDOFF consolidado 2026-09-11; CC no lo ve → texto verbatim). Todo toca plata/esquema → firma.
+>
+> **Ramas canónicas (fijado 2026-09-11):** `main` = PROD · `staging` **≡** `integracion/analitica-staging` = la **misma verdad**, alineadas — **todo FF va a las DOS** (Cloudflare Pages despliega desde `integracion/analitica-staging`) · `feat/pos-desglose` = la rama del **agente** del PoS (no se mergea a `main`). La `origin/staging` que citan las secciones históricas de abajo es **legado**: la canónica es el par.
+
+> **🔌 MODELO DE MIGRACIONES A PROD — ADOPTADO (2026-08-10, REEMPLAZA el viejo "db push frenado / prod solo por
+> canal firmado"):** `main` = la **base de producción** del proyecto Supabase de prod (`yiczgdti`, **Branching
+> ON**). **Mergear/pushear una migración a `main` la AUTO-APLICA a prod** (`db push` de la integración) + la
+> registra en `schema_migrations`. El check **"Supabase Preview"** verde sobre un commit de main con `.sql` nuevo =
+> **ya está en prod** (⚠️ NO correr apply/repair manual). **Guardrails:** (1) una migración llega a `main` **solo
+> cuando ya está lista para prod**, con el **ledger de prod consistente** (si hay drift → db push falla → check
+> rojo → no aplica); (2) **STAGING sigue MANUAL** (CLI `db query --linked` / Management API firmada), NO está atado
+> a la integración. Interruptor para desactivar: Dashboard → `yiczgdti` → Branches. Detalle + TODO de edge
+> functions → [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
+
 ---
 
-## 🟥 P0 — T3 · ENDURECIMIENTO DE CAJA (sesión propia; firma del dueño donde toque plata)
+### ✅ T3 · ENDURECIMIENTO DE CAJA — COMPLETO EN PROD (2026-08-10)
 
-El pozo cerró el agujero conceptual. T3 cierra las puertas por las que todavía puede entrar un dato
-que lo ensucie. **Ninguno es urgente hoy** — el sistema cuadra —, pero cada uno es una forma
-conocida de volver a descuadrar.
+> **Los 8 ítems en prod.** El pozo cerró el agujero conceptual; T3 cerró las puertas por las que aún podía
+> entrar un dato que lo ensucie. El ítem **5** (auditoría de EDICIONES, mig `052`) fue el último y ya está
+> **en staging Y en prod** — a prod lo **auto-aplicó la integración Supabase Branching** al pushear la mig a
+> `main` (`6bb9c33`), sin apply manual.
 
-1. **🖊️ Dirección obligatoria en traspasos.** Hoy un traspaso sin dirección legible (`subcategory`
-   nula, `'Ajuste'`, `'Otro traspaso'`, texto libre) queda **neutro** y se cuenta aparte en
-   `indeterminados`. Está bien como red de contención, pero el alta debería **exigir** origen→destino.
-   Resolver además los `'Otro traspaso'` que ya existan. **Toca plata → firma.**
-2. **🖊️ Prohibir montos negativos MANUALES.** Un monto negativo invierte el asiento en silencio
-   (`hayMontosNegativos` ya lo detecta en el cierre; falta en el alta manual). ⚠️ **Los negativos
-   bicurrency del SISTEMA son LEGÍTIMOS** (pago en USD con vuelto en colones) — la regla es solo para
-   la carga **manual**, no para el motor. **Toca plata → firma.**
-3. **🖊️ `ajuste_tipo` derivado del signo**, en vez de cargarse aparte y poder contradecirlo.
-4. **🖊️ Impedir operar cajas de fechas pasadas** (abrir/cargar sobre un día ya cerrado).
-5. **🖊️ Auditoría de ediciones** de movimientos (hoy hay auditoría de borrados vía
-   `movement_deletions`; la edición pasa por reemplazo y no deja el mismo rastro).
-6. **👁️ Vigilar "Ingreso adicional".** Es la vía más fácil de meter plata sin respaldo; ver si
-   merece categoría propia o justificación obligatoria.
-7. **🧹 Limpiar los 2 huérfanos de fecha imposible:** `9b79e731` (2020-07-09, ₡74.126,92) y uno de
-   **2016** (₡54.978). **La app NO los muestra** — `getAllCashMovements(days = 1000)` arranca ~1.000
-   días atrás — por eso la verificación de pantalla nunca los vio. Son pendientes que nadie va a pagar.
-8. **🧹 Comentarios "la dueña" → "el dueño"** en el código. Cosmético, cero riesgo, pero el repo
-   está mal generizado en varios comentarios viejos.
+1. **✅ EN PROD** (ítem 1a, merge `f11ccdb`; `main` = `5c3b4ff`) — **dirección obligatoria en traspasos**: el
+   `<select>` de Tipo de la fila ya no ofrece 'traspaso' (UI) + `createDayMovement`/`updateCashMovement`
+   rechazan un traspaso cuyo `subcategory` no parsee 'A → B' (API, vía `parseTraspaso`); `recordCierreRetiro`
+   intacto. **1b: cerrado SIN acción** — los 154 "indeterminados" en prod eran **ajustes de diferencia de caja**
+   (Registradora), no transferencias → la data de prod está correcta, no hay que darles dirección.
+2. **✅ EN PROD** (merge `8c65686`; staging `6479eb8`) — **Prohibir montos negativos MANUALES** (asistente /
+   nuevo mov / edición inline / draft de pago = 4 puntos de carga). ⚠️ Los negativos bicurrency del SISTEMA
+   son LEGÍTIMOS — la regla es solo para la carga **manual**.
+3. **✅ EN PROD** (mismo `8c65686`) — **`ajuste_tipo` del cierre derivado del SIGNO** de la diferencia (₡ manda;
+   si solo hay $, manda $), en vez de cargarse aparte y poder contradecirlo. El `select` queda solo-lectura.
+4. **✅ EN PROD** (`b36a382`→`723f734`) — **guard de fechas de caja**: apertura fija en hoy (`min=max` +
+   revalida en `handleApertura`); "Nuevo movimiento" con backdateo solo owner/manager/contador + confirm
+   reforzado si el día ya tiene cierre `'completo'`.
+5. **✅ EN PROD Y STAGING (mig `052`; staging `2ccdfa0`, prod `6bb9c33`) — Auditoría de EDICIONES** de movimientos
+   (antes solo había auditoría de borrados vía `movement_deletions`). Tabla `movement_edits` **append-only** +
+   trigger `AFTER UPDATE` `log_movement_edit()` que registra **solo** cambios en 10 columnas sensibles (plata /
+   estado / clasificación / cuenta / proveedor); ignora no-op y cosméticos (p. ej. `description`). RLS
+   **solo-SELECT** owner/manager/contador (escribe únicamente el trigger, `SECURITY DEFINER`). Verificada punta a
+   punta en staging (una edición real por la app dejó su fila con `edited_by`=usuario) + estructural read-only en
+   prod. **A prod la AUTO-APLICÓ la integración Supabase Branching** al pushear `6bb9c33` (ledger 35→36, registrada)
+   — el apply/repair manual fue **STOP** porque ya estaba (ver [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md)).
+6. **✅ EN PROD** (`b36a382`→`723f734`) — **"Ingreso adicional" endurecido**: categoría (dropdown) + motivo
+   obligatorios + umbral ₡100.000 (equiv. CRC) con autorización de gerencia. subcategory sigue
+   `'Ingreso adicional'`; categoría+motivo en `description`. **Sin esquema.**
+7. **✅ RESUELTO POR CORRECCIÓN (2026-08-07).** Era **1 huérfano, no 2**: `9b79e731` NO era basura — es una
+   compra REAL de mercadería a Distribuidora Isleña (factura electrónica **2026-06-18**, ₡74.126,92) mal
+   importada con `created_at=2020-07-09` y en `pendiente`. **Corregida** (UPDATE de UNA fila, solo
+   `created_at`→2026-06-18 · `status`→aprobado · `method`→Transferencia; pagada por banco ese día); las 5
+   `inventory_movements` y la foto (`6aef3a0b`) intactas, invariante de cajas físicas idéntica antes/después.
+   El **"2016 · ₡54.978" NO existe en prod** (verificado read-only: sin created_at 2016, sin monto 54.978,
+   sin fila en `movement_deletions`) → era **stale**.
+8. **✅ EN PROD** (merge `5c3b4ff`) — cosmético "la dueña" → "el dueño": se pasaron **solo los 11 archivos
+   no-PoS** de `6b7a7bc` (se omitieron los 6 solo-PoS que no existen en main). **Convergió la divergencia
+   no-PoS** main↔staging (`AgregarAsistente.tsx` et al. ya no difieren). Cero riesgo (comentarios/strings).
 
-## 🟧 P1 — DEUDA CORTA (técnica / datos)
+> ✅ **EN PROD además** (fuera de T3): **`covered_role` canónico en los reportes de propinas** = **₡2.167.131**
+> Jul (invariante de conservación pool==payout ±₡1 confirmada, 61/61). **`723f734`**: correo mensual (replica
+> `calcTurno.totalPool` vía `monthly-report/pool.ts` + oracle test) + Estadísticas (TipStats pasa
+> `covered_role` a `calcHistory`) + Historial (ya lo hacía). **`a6192cd`**: la pestaña **Quincenal**
+> (`TipQuincenal.tsx`) —el último que quedaba en rol base— + "Total mes"=pool. **`5e85abc` (ítem B):**
+> **`pool_total_crc` = fuente única del total del pool** — mig 051 (out-of-band en ambos entornos) + escritura
+> al cerrar/editar (`updateSessionPools`) + **backfill de las 266 sesiones** (solo esa columna); Historial
+> muestra el total real **sin expandir** (`poolTotalOf = pool_total_crc ?? fallback`). **Pendiente UI (letra
+> chica):** "generado por cobertura" en Estadísticas cuando alguien cubrió otro puesto ese turno.
 
-1. **✅ Mergear `main → staging` — HECHO (2026-07-23).** La parte común quedó re-sincronizada (los pases
-   entran a prod por ramas **desde `main`**; staging arrastra el PoS, que no va a prod). Para volver staging
-   a espejo de prod: runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
-2. **✅ Reconciliación del ledger de migraciones — HECHA.** A + **B1 (staging, 2026-07-23)** + **B2 (prod,
-   2026-07-27, con firma)**: prod pasó de 4 → **33 filas** en `schema_migrations` (`009`→`0090`; mig 049
-   aplicada por `db push`), staging al día (**49 filas**). **`db push` DESBLOQUEADO.** La **mig 050**
-   (`employees.pos_name`, idempotente, ya viva out-of-band) queda en el repo esperando un push firmado.
-   ⚠️ **047 sigue RESERVADA** para proveedores — el hueco 046→048 es intencional. Detalle → [ESTADO.md](ESTADO.md) §c.
-3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
+---
+
+### 🟥 P0 — LO QUE SIGUE AHORA
+
+1. **👁️ Validar PROVEEDORES A+B en piso (prod).** Está desplegado y verificado por esquema/chunk, pero **sin uso
+   real**: registrar un **saldo a favor** de un proveedor, **aplicarlo** a una y a varias facturas (reparto FIFO),
+   emitir el comprobante de **liquidación** y el **post-pago**, y mandar uno por **WhatsApp desde el celular**
+   (ahí se prueba de verdad el Web Share con imagen; en desktop cae a `wa.me` texto, que es lo esperado).
+   Mirar que el **residual** (`amount_crc − crédito`) cuadre en las 3 superficies y que `amount_crc` **no** cambie.
+
+2. **📮 DNS de Resend + `RESEND_API_KEY` en prod — DEPENDE DEL DUEÑO.** Es lo único que separa a la Fase A de
+   enviar correo. Hoy el sender sandbox solo entrega a una dirección. Hasta que se configure, el correo **no
+   sale** y no rompe nada (la llamada a `pago-notificar` es fire-and-forget). **El WhatsApp ya funciona.**
+   Cuando esté: smoke de un pago real con `notificar_pago='email'`.
+
+3. **✅🧪 SALARIOS · Fase 0 — Maestro de empleados: HECHA EN STAGING (2026-08-19).** Se entregó en los 2
+   tiempos de la regla §10 del SPEC: **mig `055`** (`f158bc2`, aditiva e idempotente, aplicada a `hwiatgic` con
+   `db push`) y **después la UI** (`82bd0ce`: sección Salarios → pestaña Empleados/Tarifas). **Maestro cargado:
+   18 empleados con código BioTime** (42 empleados · 24 activos). Prompt de la fase →
+   [`claude/PROMPT-salarios-fase0.md`](claude/PROMPT-salarios-fase0.md).
+   - **Queda del insumo humano:** **6 activos sin código BioTime** (`COCINA`, `JOTA`, `MAXI BARRA`, `MAXO`,
+     `NACHO` manager, `ROMAN`) y **`fecha_ingreso` null en TODOS** (la pestaña muestra el contador de *"sin
+     código de BioTime"*). Sin código, esa gente no entra al cálculo automático de la Fase 1.
+   - **Queda el pase a PROD, con firma y en su propio ciclo:** la `055` toca esquema y **Branching ON** hace
+     que pushearla a `main` **la aplique sola a la base de prod**. Hoy `main` sigue en `3e54aa4`, intacto.
+
+4. **✅🧪 SALARIOS · Fase 1 — EN VIVO en staging (F1a/F1b/F1c). El bloqueo de credenciales está RESUELTO.**
+   mig **057** (marcas) + Edge Function **`ingest-punches`** + agente **`tools/biotime-bridge/`** corriendo en la
+   PC del reloj de Santa Teresa: **22.403 marcas** ingeridas (`last_id=213972`, ~68% mapeadas, 15 códigos sin mapear).
+   **Lo que queda de la fase:** **(a)** dejar el agente en **Task Scheduler** de esa PC (pendiente humano: sin eso,
+   un reinicio corta la captura sin avisar) · **(b)** la **decisión de identidad BioTime §7** (`emp_code` se recicla
+   → capturar `emp_id` estable: 5 SELECT → decidir → re-drenar + mapear + Angela) · **(c)** **F1d** (derivación de
+   horas a `work_days` + validación de fichajes), sin arrancar.
+   Aceptación de la fase: las horas de la app **cuadran contra el reporte real de BioTime** de un día.
+
+5. **🧮 SALARIOS · consultar al CONTADOR: bruto vs neto y modelo de vacaciones.** Condiciona las **Fases 2 y 5**
+   (qué número es el que se paga y cómo se acumulan/liquidan las vacaciones). Es una decisión externa: conviene
+   preguntarla **antes** de construir la Fase 2, no después.
+
+### 🟧 P1 — DEUDA CORTA (técnica / datos)
+
+1. **✅ Mergear `main → staging` — EJECUTADO 2026-07-23.** `origin/staging` `5ae267f → ec8070a`
+   (merge commit `3f54b99`; `main`=`c77ced0` ahora ancestro de staging). Se re-sincronizó la parte
+   común: sagrados byte-idénticos (`7603ba5a`/`b597c697`/`a3fd445f`), `cierrePozo`+`CashMovimientos`+
+   `CashTurno` idénticos a main, **490 tests / 58 archivos** verdes, `build:staging` y
+   `VITE_APP_ENV=production build` EXIT 0, cero migraciones nuevas, deploy Cloudflare verificado por
+   grafo de chunks (corte `2026-07-22` + filtro nuevo presentes en el bundle servido). El **contrato
+   de divergencia** (76 archivos, **cero de plata**) quedó fijado en `ESTADO.md §(b)`. `main` intacto.
+   Para volver staging a espejo de prod: runbook [`scripts/refresh-staging/`](scripts/refresh-staging/PLAN.md).
+2. **✅ Reconciliación del ledger — A + B1 + B2 COMPLETAS (B2: prod, 2026-07-27).**
+   **✅ FASE A** (diagnóstico read-only, 2026-07-23) →
+   [`_handoff/FASE-A-LEDGER-2026-07-23.md`](_handoff/FASE-A-LEDGER-2026-07-23.md).
+   **✅ FASE B1 COMPLETA** (staging, 2026-07-23, con firma) — 3 movimientos:
+   (a) archivo `035` traído de `propina-pool` (solo el DDL; el código de la feature NO se mergeó);
+   (b) `repair --status applied` de las 9 out-of-band → ledger de **39 → 48 filas**, cero out-of-band;
+   (c) fix del `009`: rename a `0090_user_selfsignup.sql` + `UPDATE` de **1 fila** del ledger
+   (`009`→`0090`) → **`db push` DESBLOQUEADO** (`Remote database is up to date`, `migration list`
+   alineado sin huérfanos). 4 backups del ledger en `_handoff/`.
+   **✅ FASE B2 COMPLETA** (prod, 2026-07-27, con firma) — vía CLI re-linkeado a prod (ref verificado
+   antes de cada comando, devuelto a staging al terminar):
+   - **28 `repair --status applied`** (con `0090`) → ledger de prod **4 → 33 filas**, alineado sin huérfanos;
+   - **rename `009`→`0090` replicado en `main`** por FF (cierra `R100` del §b);
+   - **mig 049** aplicada por `db push` → `delete_movement_cascade` y `mark_factura_verified` a `anon`=false
+     (ACL de prod medido: **5/10 → 3/10**; ver HALLAZGOS 2026-07-23 y `_handoff/acl-prod-2026-07-27.md`);
+   - la 049 se **portó a staging** (10/17) y el **tooling `ledger-reconciliacion` se portó a `main`**.
+   Backups: `_handoff/ledger-prod-2026-07-27-{pre,post}-B2.json`.
+   **B3 = DECIDIDO:** la `026` en prod se **documenta como excepción permanente**, no se repara.
+   ⚠️ **047 está RESERVADA** para proveedores — el hueco 046→048 es intencional.
+   **🆕 RECONCILIACIÓN 2026-08-07 (staging):** las 3 out-of-band posteriores (`050 employee_pos_name`,
+   `051 pool_total_crc`, `052 movement_edit_audit`) se registraron con `repair --status applied 050 051 052`
+   → **staging 49 → 52 filas**, `migration list` alineado sin huérfanos, **`db push` desbloqueado** (no-op).
+   Backups: `_handoff/ledger-staging-2026-08-07-{pre,post}-reconciliacion.json`. **Prod** estaba consistente
+   (foto read-only 08-07: 35 filas, `050`/`051` en el ledger) y **la `052` entró sola a prod** al pushear `6bb9c33`
+   (integración Supabase Branching → **prod 35 → 36 filas**). Ver [`_handoff/INTEGRACION-SUPABASE.md`](_handoff/INTEGRACION-SUPABASE.md).
+3. **🔐🖊️ Hardening ACL — `get_my_role` + 2 triggers (los 3 que faltan en prod).** Tras B2, prod quedó
+   en **3/10** `SECURITY DEFINER` ejecutables por `anon`: `get_my_role`, `unif_on_cash_movement`,
+   `handle_new_user`. NO entraron en la 049 **a propósito**. **Accionable, sin urgencia, su propia sesión:**
+   - `get_my_role` es **helper de policies RLS** (algunas sin cláusula `TO` → PUBLIC). Antes de cualquier
+     `revoke`, hacer un **mini-análisis READ-ONLY**: barrer las policies que lo llaman y confirmar que
+     ninguna `TO public` alcanzable por `anon` dependa de él (si no, el revoke cambia "RLS niega" por
+     "permission denied for function"). A `anon` hoy **no le filtra nada** (devuelve NULL) → no es urgente.
+   - Los 2 triggers son **inertes** (no invocables directo; el revoke no frena el disparo) → van en el
+     mismo lote, sin análisis extra. Fix = `revoke all … from public, anon` (patrón mig 045), con firma.
+     Ver [`_handoff/acl-prod-2026-07-27.md`](_handoff/acl-prod-2026-07-27.md) y el bloque `anon` de HALLAZGOS.
+4. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
    y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
-4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
+5. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
    sandbox de Resend) se manda solo al confirmarse un cierre completo.
+6. **🧹 Deuda de limpieza en `main` (barrer en el PRÓXIMO pase a prod, NO suelta).** `main` todavía
+   carga archivos que `staging` ya eliminó y que no aportan nada: `src/shared/api/auth.ts` (código
+   muerto — confirmado 2026-07-23 que nadie lo importa) y `src/assets/{hero.png,react.svg,vite.svg}`
+   (sin referencias). Aparte, `public/_redirects` (staging lo quitó porque en Cloudflare daba
+   "Infinite loop"; en `main` es config de **GitHub Pages** → revisar si aplica **antes** de tocarlo).
+   ⚠️ **Barrer esto modifica `main` = PASE A PROD**: sesión propia, **firma del dueño** y validación
+   física; **jamás colado en un cleanup**. Solo anotado (también en `ESTADO.md §(b)`).
+   📄 **Deuda de DOCS en `main` (misma regla):** la copia de **`ESTADO.md §(c)`** que vive en `main`
+   sigue con los números viejos del ledger ("PROD ≤021"). Se corrigió en `staging` el 2026-07-23 con
+   el resultado de la Fase A; **portarla a `main` en el próximo pase de docs a prod.**
+   🔢 **✅ Deuda de MIGRACIONES en `main` — SALDADA en B2 (2026-07-27).** El rename
+   **`009_user_selfsignup.sql` → `0090_user_selfsignup.sql`** se replicó en `main` por FF y el ledger de
+   prod se reconcilió con `0090` (28 repairs). **`R100` cerrado** en el contrato §(b); prod ya no arrastra
+   el bug de ordenamiento.
 
-## 🟨 P2 — ESPERAN DECISIÓN O FIRMA DEL DUEÑO
+### 🟨 P2 — ESPERAN DECISIÓN O FIRMA DEL DUEÑO
 
-1. **🖊️ SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de **DNS**
-   (dominio propio en Resend; hoy el sender sandbox solo entrega a una dirección).
+1. **✅ SPEC notificación a proveedores — CONSTRUIDO Y EN PROD (2026-08-17).** Firma dada, **mig 047 aplicada**,
+   Edge Fn `pago-notificar` desplegada. Lo único que queda es la **tarea de DNS** (dominio propio en Resend) +
+   `RESEND_API_KEY` → movido a **P0 §2**. La Fase B (saldo a favor, migs 053/054) también entró en el mismo pase.
 2. **🖊️ Edición de propinas en Historial por CAJERO** con autorización de gerencia — FIRMADO
    2026-07-17, sin construir. Patrón mig 045 `requireManager`. **Plata-adyacente → revisión estricta.**
 3. **🖊️ Foto de comprobante obligatoria al pagar propina** — firmado, DIFERIDO. Toca
@@ -66,19 +304,52 @@ conocida de volver a descuadrar.
    efectivo o separada?
 5. **🖊️ Reconciliación prod-vs-Excel.** **Ahora es viable**: el pozo da **UN número por día**, que es
    exactamente lo que el Excel del dueño tiene enfrente. Antes no había con qué comparar.
-6. **🖊️👁️ Hora-CR en bordes de período.** Las queries de plata (P&L, `finance.ts`) acotan `created_at`
-   en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. **Cambia números.**
-7. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy
+6. **✅ Hora-CR en bordes de período — RESUELTO Y EN PROD.** `monthRangeBounds` (`dateRange.ts`) acota
+   `created_at` a **T06:00:00Z = medianoche de Costa Rica**; helper compartido por ReporteMensual + InvFoodCost.
+   Impacto medido en el borde Jul/Ago 2026: 7 movimientos de caja (₡122.544,37) y 3 de mercadería pasaron al mes
+   correcto. **Queda pendiente barrer el resto de las queries de plata** (P&L / `finance.ts`) con el mismo helper.
+7. **🖊️ SALARIOS — firma por FASE.** El SPEC está firmado a nivel diseño, pero **cada fase toca dinero y/o
+   esquema** ⇒ necesita firma propia antes de aplicar (0 → 1 → 2 → {3,4} → 5).
+8. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy
    diseñada sin código) — construir **solo si** tras usar la Etapa 1 en prod sigue haciendo falta.
+9. **🖊️ Ventas · re-ingesta del `01` → ROSAURA (POST go-live, con firma; NO ejecutar antes).** El `01` salió de
+   `LOGINS_SISTEMA` (`f998e51`/`5343856`), pero eso decide `registrado_por` al INGESTAR: lo ya guardado no cambia.
+   Medido en prod y staging (2026-10-29): **450 tickets del `01` marcados `sistema` = ₡19,06M** (2025-01-01 →
+   2025-09-21). Plan: (1) actualizar los **DOS agentes** de la PC del PoS (`C:\satori\satori-app` hoy en `14bd278`
+   y `C:\satori\satori-app-prod` hoy en `4d3513a`) a la versión con el cambio; (2) re-correr el backfill
+   `--desde 2025-01-01 --hasta 2025-09-21` en los dos entornos (re-enviar no duplica: upsert por factura);
+   (3) verificar por SQL que esos tickets pasan a `registrado_por='salonero'`, `salonero_login='01'`.
+   Límite conocido: los **2.729 tickets `sin_pedido` del `01` (₡89,9M)** no tienen pedido en el PoS → el ranking
+   por factura no puede atribuirlos a nadie (por diseño); sí le quedan a ROSAURA en las lentes por línea.
+10. **✅ CERRADO (2026-10-29) · Ventas · tarea «Satori PoS Bridge PROD» arranca sola.** El 29/10 no había
+   arrancado tras un reinicio (última ejecución 1999 / `0x41303`); la config era idéntica a la de staging y la
+   hipótesis era que se registró después del último reinicio. **Validado:** reinicio de la PC el 29/10 a las 13:39 →
+   las DOS tareas arrancaron solas (`LastTaskResult` 267009 = Running). En prod `pos_ndf_cursor.last_poll_at` =
+   13:56:19 CR (posterior a 13:40), `last_error` null; staging igual (13:55:16, sin error).
 
-## 🟦 P3 — LEJOS / BLOQUEANTE
+11. **🖊️ Ventas · versionar `ingest-ndf` en `main` con `supabase/config.toml` (POST go-live, estudiar aparte).** En
+   el release a prod (PR #13, merge `9ada841`, 29/10) la carpeta `supabase/functions/ingest-ndf/` quedó AFUERA a
+   propósito: prod tiene la integración GitHub/Branching de Supabase atada a `main`, que despliega las funciones que
+   cambian con `verify_jwt=true` por defecto (no hay `config.toml`), y el agente solo manda `x-ingest-secret` → 401.
+   Hoy la función corre en prod como v1 desplegada a mano (`verify_jwt=false`) y su código vive en
+   `integracion/analitica-staging`. Antes de traerla a `main`: estudiar qué más sincroniza un `config.toml` en la
+   rama de producción (auth, API, otras funciones), declarar las 5 funciones con su `verify_jwt` actual
+   (monthly-report false · extract-document true · cierre-email true · pago-notificar true · ingest-ndf false) y
+   validar en un proyecto aparte. Con firma.
+
+12. **🖊️ Ventas · merch de mostrador (familia 21) en una categoría propia (decide Ismael).** Hoy una remera
+   vendida en la caja va a «salón» en el PoS (canal real del pedido) y a «delivery» en el .xls (venta de caja sin
+   10% de servicio) — p. ej. factura 111584, 03/10, ₡14.000. Propuesta: canal/categoría «mostrador» para merch
+   (familias 21/23/24/26/27), fuera de salón y de delivery. Sin construir hasta la decisión.
+
+### 🟦 P3 — LEJOS / BLOQUEANTE
 
 1. **🚧 PILAR — arquitectura de sesión/auth escalable y multi-tenant.** **Bloquea el GRAN PASE del
    PoS** a prod (~10 dispositivos concurrentes; hotelería/franquicias).
 2. **🧾 FE-CR** (factura electrónica real de Costa Rica) — hoy solo estructura SIM en staging.
 3. **🧪 Gran pase del PoS** a prod — proyecto aparte, detrás del PILAR.
 
-## ⛔ Fuera de alcance (no reabrir sin firma nueva)
+### ⛔ Fuera de alcance (no reabrir sin firma nueva)
 
 - **Tier 1 — monto-on-modify desde Revisión: DESCARTADO por el dueño.** La Revisión **no** modifica caja.
 - **El SOP interino de recategorizar un pago de proveedor a `Caja Fuerte`: RETIRADO.** Era el parche
@@ -88,13 +359,13 @@ conocida de volver a descuadrar.
 
 ---
 
-# 📚 Referencia histórica (secciones de abajo)
+## 📚 Referencia histórica (secciones de abajo)
 
 > Lo que sigue es el **registro histórico** de las sesiones 2026-06-22 → 2026-07-03 (RCAs, el plan viejo de "PASE A PROD" y las prioridades previas, ya cumplidas o subsumidas por el pase único). Se conserva como contexto de ingeniería. **El backlog vigente es el de arriba (P0–P3).**
 
 ---
 
-## 🗄️ (histórico) PASE A PROD — PLAN DE LA SESIÓN ANTERIOR — ✅ EJECUTADO 2026-07-04
+### 🗄️ (histórico) PASE A PROD — PLAN DE LA SESIÓN ANTERIOR — ✅ EJECUTADO 2026-07-04
 
 > **✅ CÓMO SE EJECUTÓ REALMENTE (vs este plan):** NO fue cherry-pick FF-only de los 10 commits (conflictúan — la ola edita archivos que main no tenía). Se **portó el CONTENIDO** de los archivos de staging a la rama `prod/pase-ola-2026-07` sobre `main`, **excluyendo el PoS**, y se hizo **FF a main** (`92c0831`). Las **migs 038–045 se aplicaron a prod out-of-band vía Management API curl** (`db query --linked` colgaba) **SIN** la reconciliación previa del ledger (el paso 1 quedó como deuda P1, no bloqueó). Secret Sonnet ✅. Sinceramiento USD y smoke físico → **quedaron pendientes (P0)**.
 >
@@ -113,7 +384,7 @@ conocida de volver a descuadrar.
 
 ---
 
-## ★ (histórico) PENDIENTES NUEVOS — por prioridad (previos al pase)
+### ★ (histórico) PENDIENTES NUEVOS — por prioridad (previos al pase)
 
 > **Nota:** el pase a prod YA se ejecutó (2026-07-04). El backlog vigente está arriba (**P0–P3**); esta sección se conserva como contexto previo.
 
@@ -162,7 +433,7 @@ Marcadores: ✅ hecho · 🖊️ espera FIRMA/DECISIÓN de la dueña (plata) · 
 
 ---
 
-## ★ PRÓXIMO (2026-06-26) — construcción del módulo de unificación Bandeja↔Caja
+### ★ PRÓXIMO (2026-06-26) — construcción del módulo de unificación Bandeja↔Caja
 
 El **diseño** (SPEC firmado) y el **esquema** (migraciones 040–043) ya están: las 4 fueron **firmadas y aplicadas a la
 base de staging** vía `supabase db query` (NO `db push` → no en `schema_migrations`; archivos ✅ **MERGEADOS a
@@ -182,7 +453,7 @@ auditoría/reversión, **no alimenta el P&L** (ver SPEC §19). Lo que sigue:
 > `cat supabase/.temp/linked-project.json` → el `"ref"` DEBE ser `hwiatgicyyqyezqwldia` (staging). El CLI estaba
 > **enlazado a PROD** (`yiczgdtirrkdvohdquzf`) sin avisar; lo cazó el guardrail. Nunca correr DB sin confirmar el ref.
 
-### DIFERIDOS (sesiones dedicadas, no bloquean lo de arriba)
+#### DIFERIDOS (sesiones dedicadas, no bloquean lo de arriba)
 - **Reconciliación del ledger de migraciones** (009 drift · 035 fantasma en `propina-pool` · 039 dashboard · 040–043 por
   `db query`): `db push` se frena por 009/035; NO usar `push`/`repair` hasta una **sesión dedicada de infraestructura**
   (resolver 035/`propina-pool` primero). Todo es idempotente. Ver ESTADO §d.
@@ -192,7 +463,7 @@ auditoría/reversión, **no alimenta el P&L** (ver SPEC §19). Lo que sigue:
 
 ---
 
-## 0. ✅ RESUELTO esta sesión — Realtime tras suspensión profunda (máquina de 3 estados + gateo + endurecimiento)
+### 0. ✅ RESUELTO esta sesión — Realtime tras suspensión profunda (máquina de 3 estados + gateo + endurecimiento)
 
 `ensureRealtimeHealthy` (en `src/shared/api/supabase.ts`) quedó rediseñada como **MÁQUINA DE 3 ESTADOS** y **validada
 físicamente** en el staging desplegado. **Ya NO es un pendiente** — queda acá como referencia para la Ola 1 (pase quirúrgico, §1).
@@ -210,7 +481,7 @@ byte-idéntico (su contrato no cambió). Cronología → **`docs/rca/2026-06-22-
 
 ---
 
-## 0-bis. ✅ Auth-recovery — el loop `OFFLINE_WAITING` tras suspensión LARGA (MERGEADO en staging · DIFERIDO)
+### 0-bis. ✅ Auth-recovery — el loop `OFFLINE_WAITING` tras suspensión LARGA (MERGEADO en staging · DIFERIDO)
 
 La máquina de 3 estados (§0, EN PROD) cubría el caso validado, pero **quedaba un modo de falla distinto**: tras una
 suspensión **larga**, `getSession`/`refreshSession` **no vuelven** (el fetch interno queda sobre el socket zombi) y
@@ -234,7 +505,7 @@ adquisición del lock. Queda como hardening inofensivo.
 
 ---
 
-## 0-ter. ✅ PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch) — RESUELTO y EN PROD (`5f22754`)
+### 0-ter. ✅ PANTALLA NEGRA (splash 祭 eterno tras suspensión / cold-launch) — RESUELTO y EN PROD (`5f22754`)
 
 **Causa raíz (capa de ARRANQUE, NO realtime):** en `useAuth.tsx` el bootstrap llamaba `getSession()` **y** `loadProfile()`
 **sin tope**; sus `.finally(setLoading(false))`/`await` solo corren si la promesa SETTLEA → sobre el socket zombi se
@@ -263,7 +534,7 @@ con `armBootHang` + natural; Service Worker Clients mostró `…/login`; build p
 
 ---
 
-## 0-quater. 🆕 RESUELTO esta sesión (2026-06-26, SOLO en staging) — IDOR de `extract-document` + integridad borrado→inventario
+### 0-quater. 🆕 RESUELTO esta sesión (2026-06-26, SOLO en staging) — IDOR de `extract-document` + integridad borrado→inventario
 
 **(1) IDOR de la Edge Function `extract-document` — CERRADO** (`c38a252`, desplegado a staging Supabase, **validado los 2 lados**).
 Bajaba del bucket privado `documents` con la `service_role` **sin verificar al llamante** → cualquiera con la URL bajaba
@@ -289,7 +560,7 @@ en CashMovimientos y CashTurno. Test `cash.cascade.test.ts`. NO toca sagrados.
 
 ---
 
-## ★ PRIORIDAD 1 (pases a prod pendientes) — integridad mig 039 (+ auth-recovery diferido)
+### ★ PRIORIDAD 1 (pases a prod pendientes) — integridad mig 039 (+ auth-recovery diferido)
 > ✅ La **PANTALLA NEGRA** (`5f22754`, §0-ter), **la durabilidad de `createDayMovement`** (`79d8004`) **y 🆕 el IDOR de
 > `extract-document`** (desplegado al Supabase de prod + `main` alineado `a0d9f0d`, 2026-06-28) **ya pasaron a prod,
 > validados** — salen de esta lista.
@@ -304,7 +575,7 @@ EXIT 0 + suite verde + ritual de identidad `{base}version.json`→`.commit`; fir
 
 > ✅ **El IDOR de `extract-document` ya NO está en esta lista — pasó a prod el 2026-06-28** (ver §0-quater).
 
-## ★ PRIORIDAD 2 — ✅ RESUELTO Y EN PROD — Hallazgo B: drain del outbox en `SIGNED_IN` (PLATA)
+### ★ PRIORIDAD 2 — ✅ RESUELTO Y EN PROD — Hallazgo B: drain del outbox en `SIGNED_IN` (PLATA)
 **CERRADO en staging y 🆕 PORTADO A PROD** (`a14da50`, cherry-pick `52d26b9`; smoke en prod pendiente del OK de la dueña). Origen: `492eaa5`, rama `fix/outbox-flush-on-signin`, mergeada por FF; client-side, **sin migración**. Antes
 `outbox.ts` flusheaba por `'online'` / arranque / un backoff que se apaga con la cola vacía; faltaba el disparo en
 `SIGNED_IN`/re-login → "el outbox drena al reloguear" (premisa del fix de auth-recovery, §0-bis) no estaba garantizado. **Fix:**
@@ -316,25 +587,25 @@ pendiente (es plata). → **desbloquea la precondición del auth-recovery**. Det
 
 ---
 
-## 1. 🟢 PLAN DE PASE A PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS — **Ola 1 y 1.1 ✅ HECHAS**
+### 1. 🟢 PLAN DE PASE A PROD — OPCIÓN A de la dueña: ESTABILIDAD primero, en 3 OLAS — **Ola 1 y 1.1 ✅ HECHAS**
 **Principio:** la **estabilidad (Olas 1 + 1.1) fue ANTES que cualquier feature** y **ya está en prod, validada**.
 ⚠️ **Staging está ~143 commits y ~16 migraciones adelante de main → NUNCA mergear `staging`→`main`; a prod se va por
 _cherry-pick selectivo_.** Hacer las olas EN ORDEN → **la SIGUIENTE es la Ola 2**.
 
-### Ola 1 ✅ HECHA (en prod `2358f6c`, validada físicamente) — pase QUIRÚRGICO de estabilidad a MAIN
+#### Ola 1 ✅ HECHA (en prod `2358f6c`, validada físicamente) — pase QUIRÚRGICO de estabilidad a MAIN
 **Qué se hizo:** cherry-pick/port de la **cadena de la saga Realtime** (worker:true + blindaje por timeout + máquina de 3
 estados + gateo del emit + endurecimiento `SESSION_EXPIRED`) **+ la durabilidad de escritura de caja (§0.2)**, SIN el PoS,
 sin la Bandeja, sin migraciones (client-side puro). **La instrumentación se borró por prefijo:** logs `[rt-diag]` +
 módulo `realtimeReproSwitch` fuera de main; tree-shaking confirmado (grep del dist de prod por `__satoriDiag|rt-diag|armZombie`
 → VACÍO). En `staging` el diag sigue activo por diseño. Caja/propinas/ventas de vuelta en prod **sin cuelgues**.
 
-### Ola 1.1 ✅ HECHA (en prod `ead4727`+`483d29c`, validada físicamente) — timeout/abort del flush del outbox
+#### Ola 1.1 ✅ HECHA (en prod `ead4727`+`483d29c`, validada físicamente) — timeout/abort del flush del outbox
 **Qué se hizo:** las 5 llamadas de red del `supabaseExecutor` (`src/shared/offline/outbox.ts`) envueltas en
 `withWriteTimeout` + `.abortSignal()` (mismo patrón que `cash.ts`), con **GUARDARRAÍL DE PLATA**: un timeout devuelve
 `'retry'`, NUNCA `'fatal'` (fatal borra la op de la cola = pago perdido). **La cola del outbox drena sola tras suspender
 la máquina** (antes el flush quedaba colgado en "por sincronizar" sobre el socket TCP zombi). Tests en `outbox.test.ts`.
 
-### Ola 2 🟢🖊️ — (SIGUIENTE foco de features, tras la estabilidad ya pasada) — Bandeja ETAPA 1 a prod con la mig 038
+#### Ola 2 🟢🖊️ — (SIGUIENTE foco de features, tras la estabilidad ya pasada) — Bandeja ETAPA 1 a prod con la mig 038
 **Qué:** la **Etapa 1** (bandeja unificada `/inbox`, foto+IA Claude, enlace proveedor↔caja, visibilidad de pendientes)
 **ya está construida y validada en staging** — esta ola la **activa en prod**. Da **foto+IA real sin construir nada nuevo**.
 Es **esquema → firma de la dueña** (mig 038). ⚠️ **A verificar al planearla:** si la **mig 038 / la Etapa 1 se separan
@@ -343,13 +614,13 @@ limpio de las migraciones del PoS (022–037)** o vienen acopladas (define si se
 > está corregido **y desplegado en el Supabase de prod** + `main` alineado (`a0d9f0d`). **Ya NO es un pendiente de la Ola 2:**
 > la Bandeja puede subir a prod sin arrastrar este fix (ya está allí). Pendiente OPCIONAL: prueba cross-user (→ `403`). Detalle → [HALLAZGOS.md](HALLAZGOS.md).
 
-### Ola 3 🔲 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2
+#### Ola 3 🔲 — (cuando la base esté sólida y probada) — CONSTRUIR la Bandeja ETAPA 2
 **Qué:** entrada **foto-primero 100% dentro de Caja Diaria** — hoy **🔲 DISEÑADA, SIN código** (no hay nada en
 `src/modules/cash` ni `inbox`). Se construye **solo si** tras usar la Etapa 1 sigue haciendo falta.
 > **🖊️ DECISIÓN ABIERTA de la dueña (define si la Ola 3 se hace):** *¿la Bandeja **Etapa 1** (unificada con IA, ya lista
 > y validada) ALCANZA, o se necesita la **Etapa 2** (integración foto-primero dentro de Caja Diaria, a construir)?*
 
-### 🆕 PRÓXIMO PROYECTO — SPEC de la unificación Bandeja↔Caja (arranca por DISEÑO, NO construir todavía)
+#### 🆕 PRÓXIMO PROYECTO — SPEC de la unificación Bandeja↔Caja (arranca por DISEÑO, NO construir todavía)
 Colapsar Bandeja y Caja Diaria en un solo flujo: **un único "Agregar"** en Caja Diaria · **auto-clasificar**
 Proveedores/Operativa como ayuda visual (sugerencia, el humano confirma) · **sacar "Ingresar a inventario" del cajero** →
 que el **contador/manager** lo revise y complete en el módulo de **Inventarios** · **asiento contable automático**.
@@ -359,7 +630,7 @@ que el **contador/manager** lo revise y complete en el módulo de **Inventarios*
 > posterior a estas olas y **bloqueado por el PILAR de escalabilidad de sesión/auth** (abajo) + validación física del PoS (§6).
 > La dueña eligió OPCIÓN A (estabilidad), **no** el gran pase del PoS.
 
-### 0.1 — Pendientes secundarios anotados (del trabajo de Realtime/caja)
+#### 0.1 — Pendientes secundarios anotados (del trabajo de Realtime/caja)
 - **(a) UX — el revive tarda hasta ~30 s en encolar tras suspensión.** Con la red zombi, la primera escritura de caja
   puede tardar hasta ~30 s en caer al outbox (suma de topes de 8s + reintentos). **Funciona** (no se pierde el pago,
   ver durabilidad de caja, ítem 0.2), pero la espera se nota. Ya con la máquina de 3 estados; re-evaluar la UX si molesta.
@@ -381,7 +652,7 @@ que el **contador/manager** lo revise y complete en el módulo de **Inventarios*
   tope** — bajo red zombi podrían colgar en vez de redirigir. **Decisión de la dueña:** registrado, **diferido, NO
   bloquea el módulo nuevo.**
 
-### 0.2 — ✅ Durabilidad de escritura de Caja (ya en staging `0dd258b`)
+#### 0.2 — ✅ Durabilidad de escritura de Caja (ya en staging `0dd258b`)
 `registerCashMovement`/`updateCashMovement`/`deleteCashMovement`: el reintento ahora corre con `withWriteTimeout` (no
 puede colgar) y, ante timeout o error de red, **encola INCONDICIONALMENTE en el outbox** (idempotente por
 `client_op_id`); solo errores reales del server (RLS/FK/constraint) suben con throw. **Root cause** del bug viejo:
@@ -389,7 +660,7 @@ confiar en `isOffline()`/`navigator.onLine`, que en red zombi vale `true` → nu
 Invariante: **toda escritura de caja termina confirmada en el server o encolada — nunca colgada, nunca descartada.**
 Test `cash.durability.test.ts`. (No requiere acción; queda como referencia del patrón a replicar en (b).)
 
-## 0bis-A. ⚠️ FOOTGUN de build — `npm run build` local compila como STAGING
+### 0bis-A. ⚠️ FOOTGUN de build — `npm run build` local compila como STAGING
 Cualquier `npm run build` local **SIN forzar `VITE_APP_ENV`** compila como **STAGING**, no como prod: hay un
 `.env.local` que setea `VITE_APP_ENV=staging` y Vite lo carga en **todos** los modos. Consecuencia: el bloque de
 diagnóstico gateado por `VITE_APP_ENV==='staging'` (y cualquier código solo-staging) **queda incluido**, no se
@@ -398,7 +669,7 @@ tree-shakea. **Para verificar tree-shaking / un build prod real:** forzar el val
 en esta sesión: con `VITE_APP_ENV` ≠ staging (explícito **o** sin setear, como en CI) el DCE **elimina** el bloque +
 su `import()` → no queda chunk del diag y `window.__satoriDiag` es `undefined`.
 
-## 0bis-B. ⚠️ GOTCHA DE VERIFICACIÓN — `tsc --noEmit` es un FALSO VERDE (usar `npm run build`)
+### 0bis-B. ⚠️ GOTCHA DE VERIFICACIÓN — `tsc --noEmit` es un FALSO VERDE (usar `npm run build`)
 El `tsconfig.json` raíz tiene `"files": []` + `references` (estilo solución) → **`npx tsc --noEmit` no chequea NINGÚN
 archivo** (es no-op). El typecheck REAL es **`npm run build`** = `tsc -b` (compila los proyectos referenciados, incl. los
 `*.test.ts` vía `tsconfig.app.json`). En el pase de la Ola 1.1 un cast en un test (`SupabaseClient as Record<…>`) pasó
@@ -408,7 +679,7 @@ incompatibles en tests: `x as unknown as T`.
 
 ---
 
-## 0bis. 🔐 Rotar los 2 tokens de GitHub (seguridad — pendiente de la sesión)
+### 0bis. 🔐 Rotar los 2 tokens de GitHub (seguridad — pendiente de la sesión)
 
 1. **`gh auth refresh -s repo,read:org,workflow`** (correr en terminal interactiva — abre device-flow en el navegador).
    El token `gho_` que estaba **embebido en el remote de `SATORI PROPINAS`** ya se limpió del `.git/config`
@@ -419,7 +690,7 @@ incompatibles en tests: `x as unknown as T`.
 
 ---
 
-## 🚧 PILAR BLOQUEANTE — Arquitectura de sesión/auth escalable y multi-tenant (ALTA prioridad)
+### 🚧 PILAR BLOQUEANTE — Arquitectura de sesión/auth escalable y multi-tenant (ALTA prioridad)
 
 > **🔴 BLOQUEA el pase del PoS a PROD (ítem 5).**
 
@@ -433,7 +704,7 @@ pase del PoS a producción.**
 
 ---
 
-## 1. 🖊️👁️ Hora-CR en bordes de período (PLATA — cambia números, valida la dueña)
+### 1. 🖊️👁️ Hora-CR en bordes de período (PLATA — cambia números, valida la dueña)
 **Misma familia que el `-31`, NO tocada en el fix porque cambia atribuciones.** El fix de fechas resolvió el
 400 (cobertura por día), pero las queries de plata siguen acotando `created_at` en **UTC** (`…Z`), con offset
 **+6h** vs CR. Lugares: `finance.ts:132/139` (P&L borde de **año** — NO da 400 porque dic tiene 31, pero el
@@ -441,7 +712,7 @@ pase del PoS a producción.**
 `dateCR` ya usado). **Bloqueado por:** validación física de la dueña contra un cierre conocido (cambia números).
 Ver `_handoff/RCA-FECHAS-BORDE.md` §5 + `fix/fecha-cr-consistente` (ya en staging, también pendiente de validar).
 
-## 2. 🔲 Pendientes menores en PROD (prolijidad, NO bloquean — detectados en la validación física de las Olas)
+### 2. 🔲 Pendientes menores en PROD (prolijidad, NO bloquean — detectados en la validación física de las Olas)
 - **404 de un recurso en la ruta `/caja`** (🆕 esta sesión) — aparece en consola, no rompe el flujo. Identificar el
   recurso (asset/manifest/SW/icono) en DevTools → Network y agregarlo o quitar la referencia. *(Relacionado, a mirar
   junto: §0.1(c) "Cmd+Shift+R en `/caja` → redirige a /login tras ~20s, riesgo latente".)*
@@ -451,14 +722,14 @@ Ver `_handoff/RCA-FECHAS-BORDE.md` §5 + `fix/fecha-cr-consistente` (ya en stagi
 - **La Lenovo del restaurante (KDS de cocina) quedó con bundle viejo** (🆕) — requiere **Unregister SW + Clear site data**
   una vez en ese equipo para tomar el deploy nuevo (el watchdog de arranque debería curarlo solo; si no, a mano).
 
-## 3. 🖊️ Migraciones — discrepancia 035 + verificar 038
+### 3. 🖊️ Migraciones — discrepancia 035 + verificar 038
 - **035:** el ledger de staging la tiene **como aplicada** aunque el archivo solo vive en `propina-pool` (sin merge).
   Sesión dedicada de propinas: entender el origen ANTES de tocar nada. **NO tocar el historial de migraciones**.
 - **038 (Bandeja):** el registro previo la marca **aplicada y firmada en STAGING** (`0205654`); este handoff la dejó
   anotada para **confirmar su estado real en el ledger** antes de actuar. A **PROD va con el pase del PoS** (sin aplicar aún ahí).
 - Detalle en `_handoff/038-apply.log`. (No puedo verificar el estado del ledger desde acá — cero contacto con la base.)
 
-## 4. 🔲 Bandeja ETAPA 2 — entrada única foto-primero 100% dentro de Caja Diaria (DISEÑADA, SIN código → es la Ola 3)
+### 4. 🔲 Bandeja ETAPA 2 — entrada única foto-primero 100% dentro de Caja Diaria (DISEÑADA, SIN código → es la Ola 3)
 **= la Ola 3 de §1, y solo si la DECISIÓN ABIERTA de la dueña dice que la Etapa 1 no alcanza.** Hoy no hay código en
 `src/modules/cash` ni `inbox`. La Bandeja **Etapa 1** (lo que SÍ está hecho y validado en staging) es distinta. Diseño de la Etapa 2:
 - **Una sola entrada foto-primero** dentro de **Caja Diaria**; se **retira** el camino `facturas` (queda legacy).
@@ -467,29 +738,29 @@ Ver `_handoff/RCA-FECHAS-BORDE.md` §5 + `fix/fecha-cr-consistente` (ya en stagi
 - **Propinas:** pide **turno (AM/PM)+fecha** en vez de proveedor y **concilia el pendiente**.
 - **Offline — Opción A:** se registra el pago igual sin red; la IA procesa la foto al volver internet.
 
-## 5. 🖊️ GRAN PASE del PoS a PROD — DIFERIDO (NO es una de las 3 olas)
+### 5. 🖊️ GRAN PASE del PoS a PROD — DIFERIDO (NO es una de las 3 olas)
 La dueña eligió OPCIÓN A (estabilidad, §1). El gran pase del PoS es un **proyecto aparte y posterior**: consolidar las
 migraciones del PoS (**022–037**) con guard anti-staging; crear buckets `facturas`/`productos`/`documents` en prod;
 regenerar tipos. Bloqueado por el **PILAR de escalabilidad de sesión/auth** (abajo) + validación física del PoS (§6).
 (La **Bandeja Etapa 1 + mig 038** NO espera a esto: va sola en la **Ola 2** — ver §1, sujeto a verificar que la 038 se
 separe limpio de 022–037.)
 
-## 6. 👁️ Validación física pendiente en staging (construido, verde, sin probar en piso)
+### 6. 👁️ Validación física pendiente en staging (construido, verde, sin probar en piso)
 Checklist en [REPORTE-NOCHE-2.md](REPORTE-NOCHE-2.md): **cobro + anti-doble-cobro** (mig 033), **comandero pro**,
 **FE estructura (SIM)**, **inventario activo** (stock baja por receta + COGS al cerrar).
 
-## 7. 🖊️ DECISIÓN dueña — propina PoS → pool (`propina-pool`, sin merge)
+### 7. 🖊️ DECISIÓN dueña — propina PoS → pool (`propina-pool`, sin merge)
 ¿Propina de tarjeta/SINPE al **mismo** pool que efectivo (implementado) o **separada**? Sin tocar
 `tipCalculations`. `git show propina-pool:ESTADO-PROPINA-POOL.md`.
 
-## 8. 🟢 Deudas a futuro (documentadas, no urgentes)
+### 8. 🟢 Deudas a futuro (documentadas, no urgentes)
 - **Cuentas por pagar / crédito a proveedores 7-15-30 días** (fecha de PAGO ≠ fecha de registro).
 - **Alerta de cambio de precio** de un producto (que el contador la detecte → ajustar la receta).
 - **Offline robusto** con base local que sincroniza al volver internet.
 - **Unidades de inventario por presentación** (kilo/litro/gramos; huevos por maple/caja) por ingrediente.
 - **FE real:** emisor certificado CR (Hacienda 4.4) detrás de `FeProvider`. Bloqueado por CIIU/CABYS de la contadora.
 
-## 9. 🟢 Deuda de lint del repo (ingeniería lista, baja prioridad)
+### 9. 🟢 Deuda de lint del repo (ingeniería lista, baja prioridad)
 `npm run lint` (eslint .) reporta **81 problemas (69 err + 12 warn) preexistentes** repartidos en ~30 archivos —
 NO de ningún fix reciente. **Se absorbe en la estabilización por módulo:** al tocar un módulo, se limpia su lint
 ahí; **NO barrido masivo** (68/69 son manuales — solo 1 autofixable con `--fix` — y caen en módulos en uso →
@@ -498,3 +769,52 @@ riesgo sin ganancia funcional). Dos grupos:
   observabilidad — NO matemática), `react-refresh/only-export-components`, `eslint-disable` muertos.
 - **Grupo B (~41, correctness/perf-adjacent — revisar por archivo, NO `--fix` a ciegas):**
   `react-hooks/set-state-in-effect`, `react-hooks/refs`, `react-hooks/preserve-manual-memoization`.
+
+---
+
+# 🗄️ Histórico — lo que solo tenía el backlog de `main` (2026-07-30)
+
+> Superado: el P0 «T3 · endurecimiento de caja» está ✅ en prod desde el 10/08. Se conserva sin editar.
+
+> L1: # Continuación — backlog priorizado (handoff 2026-07-30)
+> L5: > reales del dueño reconciliaron **al colón**. `main` = **`8d41d1a`** · `staging` = **`1b79265`**
+> L6: > (base en CERO). **Cero migraciones** en todo el rediseño del pozo. Encima del pozo, `main` ya lleva
+> L7: > los **3 pases de jul-2026** (vista del empleado · Reporte de Ventas · panel "Nombres sin asignar"),
+> L8: > con **código real**. **Deuda de docs (repo-truth) SALDADA 2026-07-30.**
+> L16: ## 🟥 P0 — T3 · ENDURECIMIENTO DE CAJA (sesión propia; firma del dueño donde toque plata)
+> L18: El pozo cerró el agujero conceptual. T3 cierra las puertas por las que todavía puede entrar un dato
+> L19: que lo ensucie. **Ninguno es urgente hoy** — el sistema cuadra —, pero cada uno es una forma
+> L20: conocida de volver a descuadrar.
+> L22: 1. **🖊️ Dirección obligatoria en traspasos.** Hoy un traspaso sin dirección legible (`subcategory`
+> L23:    nula, `'Ajuste'`, `'Otro traspaso'`, texto libre) queda **neutro** y se cuenta aparte en
+> L24:    `indeterminados`. Está bien como red de contención, pero el alta debería **exigir** origen→destino.
+> L25:    Resolver además los `'Otro traspaso'` que ya existan. **Toca plata → firma.**
+> L26: 2. **🖊️ Prohibir montos negativos MANUALES.** Un monto negativo invierte el asiento en silencio
+> L27:    (`hayMontosNegativos` ya lo detecta en el cierre; falta en el alta manual). ⚠️ **Los negativos
+> L28:    bicurrency del SISTEMA son LEGÍTIMOS** (pago en USD con vuelto en colones) — la regla es solo para
+> L29:    la carga **manual**, no para el motor. **Toca plata → firma.**
+> L30: 3. **🖊️ `ajuste_tipo` derivado del signo**, en vez de cargarse aparte y poder contradecirlo.
+> L31: 4. **🖊️ Impedir operar cajas de fechas pasadas** (abrir/cargar sobre un día ya cerrado).
+> L32: 5. **🖊️ Auditoría de ediciones** de movimientos (hoy hay auditoría de borrados vía
+> L33:    `movement_deletions`; la edición pasa por reemplazo y no deja el mismo rastro).
+> L34: 6. **👁️ Vigilar "Ingreso adicional".** Es la vía más fácil de meter plata sin respaldo; ver si
+> L35:    merece categoría propia o justificación obligatoria.
+> L36: 7. **🧹 Limpiar los 2 huérfanos de fecha imposible:** `9b79e731` (2020-07-09, ₡74.126,92) y uno de
+> L37:    **2016** (₡54.978). **La app NO los muestra** — `getAllCashMovements(days = 1000)` arranca ~1.000
+> L38:    días atrás — por eso la verificación de pantalla nunca los vio. Son pendientes que nadie va a pagar.
+> L39: 8. **🧹 Comentarios "la dueña" → "el dueño"** en el código. Cosmético, cero riesgo, pero el repo
+> L40:    está mal generizado en varios comentarios viejos.
+> L44: 1. **✅ Mergear `main → staging` — HECHO (2026-07-23).** La parte común quedó re-sincronizada (los pases
+> L45:    entran a prod por ramas **desde `main`**; staging arrastra el PoS, que no va a prod). Para volver staging
+> L47: 2. **✅ Reconciliación del ledger de migraciones — HECHA.** A + **B1 (staging, 2026-07-23)** + **B2 (prod,
+> L48:    2026-07-27, con firma)**: prod pasó de 4 → **33 filas** en `schema_migrations` (`009`→`0090`; mig 049
+> L49:    aplicada por `db push`), staging al día (**49 filas**). **`db push` DESBLOQUEADO.** La **mig 050**
+> L50:    (`employees.pos_name`, idempotente, ya viva out-of-band) queda en el repo esperando un push firmado.
+> L51:    ⚠️ **047 sigue RESERVADA** para proveedores — el hueco 046→048 es intencional. Detalle → [ESTADO.md](ESTADO.md) §c.
+> L52: 3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
+> L54: 4. **⏳ Smoke real de C3** — el email del cierre nocturno (a `cachorrogp@gmail.com` por la restricción
+> L59: 1. **🖊️ SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de **DNS**
+> L60:    (dominio propio en Resend; hoy el sender sandbox solo entrega a una dirección).
+> L69: 6. **🖊️👁️ Hora-CR en bordes de período.** Las queries de plata (P&L, `finance.ts`) acotan `created_at`
+> L70:    en **UTC** (+6h vs CR) → un cierre de noche puede caer en el período equivocado. **Cambia números.**
+> L71: 7. **🖊️ Decisión Etapa 2 de la Bandeja** (entrada foto-primero 100% dentro de Caja Diaria, hoy

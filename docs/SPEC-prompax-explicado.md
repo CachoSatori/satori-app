@@ -1,4 +1,4 @@
-# SPEC v2.1 — «Prom/PAX explicado» (Análisis de ventas con causas) · 2026-10-30
+# SPEC v2.2 — «Prom/PAX explicado» (Análisis de ventas con causas) · 2026-10-30
 
 > v1 (30/10 13:00) revisada por Grok y Auditor Satori; esta v2 incorpora los ajustes aceptados.
 > **EN ESPERA:** la pantalla y el RPC esperan el arreglo de seguridad de roles (`get_my_role` sin `is_active`,
@@ -51,8 +51,8 @@ Cuánto vendimos, cuántos pax, cuál fue el prom/pax, cuánto cambió contra la
 - **Ventas totales** = neta de todos los canales.
 - **Turno** = `pos_ndf_tickets.turno`. **Salonero** = nombre unificado (`personasNdf.ts`); `salonero_login` null →
   «Caja / sin mesero». Toda factura cae en algún grupo de cada corte (participaciones suman 1).
-  Un login sin empleado vinculado se muestra como «login XXXX» (ej. 0909 y 03 en ene–abr 2026, pendientes de
-  identificar); nunca se descarta.
+  Un login sin empleado vinculado se muestra como «login XXXX» (ej. un código reutilizado, fuera de la vigencia
+  de su titular); nunca se descarta.
 
 ## 6. Cómo explica
 ### 6.1 Ventas totales (cuadre exacto)

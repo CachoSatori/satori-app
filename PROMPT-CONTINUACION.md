@@ -76,16 +76,17 @@
     `public/_redirects`. Barrer en un pase con firma. *(Heredado P1 #6.)*
 22. **🧹 Staging:** el empleado AMPI quedó sin perfil de login de prueba (se le pasó «Test Cajero» a FRANCISCO
     para probar la 067). *(Nuevo, 30/10.)*
-22a. **Prom/PAX explicado** ([SPEC v2.1](docs/SPEC-prompax-explicado.md)). Espera el arreglo de seguridad de
+22a. **Prom/PAX explicado** ([SPEC v2.2](docs/SPEC-prompax-explicado.md)). Espera el arreglo de seguridad de
      roles; el módulo de cálculo puro (`ventasPromPaxExplicado.ts` + tests de propiedad) puede arrancar en rama
      aparte. *(Nuevo, 30/10.)*
-22b. **Identificar y vincular los logins viejos sin empleado** (`0909`, `333`, `999`, `03`, `02`, `04`): en dic-2025
-     se renumeró a la serie `02x`; vincular código viejo y nuevo a la misma persona, como `266`/`038` NACHO y
-     `01`/`235` ROSAURA. Según `FAC_Empleados` del PoS: `0909` = Rocío · `333` = Emma · `999` = Jazmín ·
-     `03` = Alan · `04` = Wesley · `02` = «xx» (genérico). **Pendiente de confirmación de Ismael antes de
-     vincular.** Volumen (`FAC_Pedidos.UsuarioRegistra`, desde 2025): `0909` 3.270 facturas
-     (07/01/2025–09/05/2026) · `333` 840 (hasta 22/10/2025) · `999` 729 (hasta 30/06/2025) · `03` 962 (hasta
-     18/01/2026) · `02` 125 · `04` 22. *(Nuevo, 30/10; ampliado 03/11.)*
+22b. **Vigencia por fechas de los logins viejos** (`0909`, `333`, `999`, `03`, `04`). Ya están identificados y la
+     app ya los nombra (roster curado en `personasNdf.ts`): `0909` = Rocío · `333` = Emma · `999` = Jazmín ·
+     `03` = Alan · `04` = Wesley · `02` = «xx» (genérico, fuera del ranking). Falta que el nombre valga solo dentro
+     de la ventana de cada titular, porque los códigos se reciclan: rama `claude/trusting-euler-xmzzjo`,
+     pendiente de ajuste (las vigencias arrancan en la primera actividad real, fechas a confirmar por Ismael).
+     Volumen (`FAC_Pedidos.UsuarioRegistra`, desde 2025): `0909` 3.270 facturas (07/01/2025–09/05/2026) · `333`
+     840 (hasta 22/10/2025) · `999` 729 (hasta 30/06/2025) · `03` 962 (hasta 18/01/2026) · `02` 125 · `04` 22.
+     *(Nuevo, 30/10; ampliado 03/11.)*
 
 ## 🟨 P2 — Esperan decisión o firma del dueño
 

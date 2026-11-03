@@ -89,7 +89,8 @@ export const SIN_CODIGO = '(sin codigo)'
 
 // Vigencias de los logins viejos: firmadas por Ismael el 2026-11-03 (`FAC_Empleados` + actividad en
 // `FAC_Pedidos.UsuarioRegistra`). Lo anterior a 2025 queda AFUERA a propósito: `333`, `999`, `03` y
-// `04` tienen líneas en 2024 y quién era cada código ese año lo decide Ismael.
+// `04` tienen líneas en 2024 y no se puede confirmar quién usaba cada código ese año, así que 2024
+// sale «login XXXX». Los huecos de 2025 (Alan, Emma) son de ellos: no cortan la vigencia.
 const PERSONAS: readonly PersonaNdf[] = [
   // ── MESEROS (los del ranking) ──
   { id: '0909', rol: 'mesero', etiqueta: 'Rocío',     codigos: ['0909'],
@@ -97,7 +98,7 @@ const PERSONAS: readonly PersonaNdf[] = [
   { id: '333',  rol: 'mesero', etiqueta: 'Emma',      codigos: ['333'],
     vigencias: { '333': { desde: '2025-01-01', hasta: '2025-10-22' } } },
   { id: '999',  rol: 'mesero', etiqueta: 'Jazmín',    codigos: ['999'],  inactivo: true,
-    vigencias: { '999': { desde: '2025-01-01', hasta: '2025-06-30' } } },
+    vigencias: { '999': { desde: '2025-01-01', hasta: '2025-07-02' } } },
   { id: '444',  rol: 'mesero', etiqueta: 'Maxi',      codigos: ['444']  },
   { id: '026',  rol: 'mesero', etiqueta: 'Maxo',      codigos: ['026']  },
   { id: '028',  rol: 'mesero', etiqueta: 'Francisco', codigos: ['028']  },

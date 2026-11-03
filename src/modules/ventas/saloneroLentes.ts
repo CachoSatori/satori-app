@@ -39,7 +39,7 @@ import {
 } from '../../shared/ndf/personasNdf'
 import { esLineaDeVenta, netaDelTicket } from './netaVenta'
 import {
-  type Turno, etiquetaTurno, turnoDeCajero, turnosConocidos,
+  type Turno, etiquetaTurno, fechaCR, turnoDeCajero, turnosConocidos,
 } from '../../shared/ndf/jornada'
 
 // ── Turno ──────────────────────────────────────────────────────────────────────────────────
@@ -90,6 +90,8 @@ export interface TicketLente {
   servicio_crc:      number | null
   pax:               number | null
   mesa?:             string | null
+  /** Para la vigencia de los códigos reciclados (`personasNdf.ts`). Sin fecha no se mira. */
+  fecha_registra?:   string | null
 }
 
 export interface LineaLente {
@@ -242,6 +244,7 @@ export function calcularLentes(
 
   for (const t of tickets) {
     const turno = turnoDeFactura(t.cajero_login)
+    const fecha = fechaCR(t.fecha_registra)
     const propias = porTicket.get(t.id) ?? []
     netaDia += netaDelTicket(t, propias)
 
@@ -249,7 +252,7 @@ export function calcularLentes(
     // Los pesos del prorrateo salen de la MISMA partición, así que el IVA sigue a la plata.
     const netaPorPersona = new Map<string, { persona: PersonaNdf; neta: number; pax: number; lineas: number }>()
     for (const l of propias) {
-      const persona = clasificarCodigo(l.usuario_registra)
+      const persona = clasificarCodigo(l.usuario_registra, fecha)
       let acc = netaPorPersona.get(persona.id)
       if (!acc) {
         acc = { persona, neta: 0, pax: 0, lineas: 0 }
@@ -283,7 +286,7 @@ export function calcularLentes(
     })
 
     // ── Lente B: la factura ENTERA va a un solo dueño ──
-    const dueno = duenoDeMesa(propias)
+    const dueno = duenoDeMesa(propias, fecha)
     const k = clave(dueno.id, turno)
     let accB = b.get(k)
     if (!accB) {
@@ -354,20 +357,28 @@ function sumarA(
 }
 
 /**
+ * La clave del tercer desempate. Es el id de la persona, salvo para un código fuera de su vigencia
+ * («login XXXX»), que desempata por su CÓDIGO: así la vigencia cambia el nombre del dueño de la
+ * mesa, nunca QUIÉN es el dueño.
+ */
+const desempate = (p: PersonaNdf): string => (p.fueraDeVigencia ? p.codigos[0] : p.id)
+
+/**
  * El dueño de la mesa: **quien registró el 677**.
  *
  * Desempates, en orden (todos deterministas — mismo input, mismo dueño):
  *   1. Más unidades de 677.
  *   2. Si empatan (o si la factura no tiene ningún 677): más neta en ESA factura.
- *   3. Si siguen empatados: el id de persona, alfabético. Nunca "el primero que apareció",
+ *   3. Si siguen empatados: el id de persona (`desempate`), alfabético. Nunca "el primero que apareció",
  *      que dependería del orden en que vinieron las filas.
  *
  * Sin líneas, la factura queda a nombre del balde "sin código": no se la regala a nadie.
+ * `fecha` = día CR de la factura, para la vigencia de los códigos (`clasificarCodigo`).
  */
-export function duenoDeMesa(lineas: readonly LineaLente[]): PersonaNdf {
+export function duenoDeMesa(lineas: readonly LineaLente[], fecha?: string | null): PersonaNdf {
   const por = new Map<string, { persona: PersonaNdf; pax: number; neta: number }>()
   for (const l of lineas) {
-    const persona = clasificarCodigo(l.usuario_registra)
+    const persona = clasificarCodigo(l.usuario_registra, fecha)
     let acc = por.get(persona.id)
     if (!acc) {
       acc = { persona, pax: 0, neta: 0 }
@@ -381,7 +392,7 @@ export function duenoDeMesa(lineas: readonly LineaLente[]): PersonaNdf {
   // El orden ES la regla: primero el 677, después la plata, después el id. Una factura sin
   // ningún 677 cae sola en el segundo criterio, porque ahí todos empatan en 0 pax.
   return candidatos.sort((x, y) =>
-    y.pax - x.pax || y.neta - x.neta || x.persona.id.localeCompare(y.persona.id))[0].persona
+    y.pax - x.pax || y.neta - x.neta || desempate(x.persona).localeCompare(desempate(y.persona)))[0].persona
 }
 
 /**

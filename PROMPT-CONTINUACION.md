@@ -81,9 +81,11 @@
      aparte. *(Nuevo, 30/10.)*
 22b. **Identificar y vincular los logins viejos sin empleado** (`0909`, `333`, `999`, `03`, `02`, `04`): en dic-2025
      se renumeró a la serie `02x`; vincular código viejo y nuevo a la misma persona, como `266`/`038` NACHO y
-     `01`/`235` ROSAURA. Volumen (`FAC_Pedidos.UsuarioRegistra`, desde 2025): `0909` 3.270 facturas
+     `01`/`235` ROSAURA. Según `FAC_Empleados` del PoS: `0909` = Rocío · `333` = Emma · `999` = Jazmín ·
+     `03` = Alan · `04` = Wesley · `02` = «xx» (genérico). **Pendiente de confirmación de Ismael antes de
+     vincular.** Volumen (`FAC_Pedidos.UsuarioRegistra`, desde 2025): `0909` 3.270 facturas
      (07/01/2025–09/05/2026) · `333` 840 (hasta 22/10/2025) · `999` 729 (hasta 30/06/2025) · `03` 962 (hasta
-     18/01/2026; probablemente FRANCISCO antes del `028`) · `02` 125 · `04` 22. *(Nuevo, 30/10; ampliado 03/11.)*
+     18/01/2026) · `02` 125 · `04` 22. *(Nuevo, 30/10; ampliado 03/11.)*
 
 ## 🟨 P2 — Esperan decisión o firma del dueño
 

@@ -79,14 +79,11 @@
 22a. **Prom/PAX explicado** ([SPEC v2.2](docs/SPEC-prompax-explicado.md)). Espera el arreglo de seguridad de
      roles; el módulo de cálculo puro (`ventasPromPaxExplicado.ts` + tests de propiedad) puede arrancar en rama
      aparte. *(Nuevo, 30/10.)*
-22b. **Vigencia por fechas de los logins viejos** (`0909`, `333`, `999`, `03`, `04`). Ya están identificados y la
-     app ya los nombra (roster curado en `personasNdf.ts`): `0909` = Rocío · `333` = Emma · `999` = Jazmín ·
-     `03` = Alan · `04` = Wesley · `02` = «xx» (genérico, fuera del ranking). Falta que el nombre valga solo dentro
-     de la ventana de cada titular, porque los códigos se reciclan: rama `claude/trusting-euler-xmzzjo`,
-     pendiente de ajuste (las vigencias arrancan en la primera actividad real, fechas a confirmar por Ismael).
-     Volumen (`FAC_Pedidos.UsuarioRegistra`, desde 2025): `0909` 3.270 facturas (07/01/2025–09/05/2026) · `333`
-     840 (hasta 22/10/2025) · `999` 729 (hasta 30/06/2025) · `03` 962 (hasta 18/01/2026) · `02` 125 · `04` 22.
-     *(Nuevo, 30/10; ampliado 03/11.)*
+22b. **✅ HECHO (03/11) · Vigencia por fechas de los logins viejos** — en prod, PR #19, `main` = `ec37a6c`.
+     Logins identificados (`0909` Rocío · `333` Emma · `999` Jazmín · `03` Alan · `04` Wesley · `02` genérico,
+     fuera del ranking). El nombre vale desde 2025-01-01 (Rocío desde 07/01, Wesley desde 23/02) hasta el último
+     día de cada titular; 2024 queda como «login XXXX» a propósito, porque no se puede confirmar quién usaba los
+     códigos ese año. Validado físicamente por Ismael en staging.
 
 ## 🟨 P2 — Esperan decisión o firma del dueño
 

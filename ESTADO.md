@@ -176,6 +176,11 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 
 ## 📝 Notas que ahorran una sesión
 
+- **Análisis mediodía, menú y Local Club (nov 2026):** resultados, definiciones (neta, clases de mesa por ratio de
+  descuento, costo), glosario del PoS y huecos de datos en
+  [docs/analisis/2026-11-mediodia-localclub/README.md](docs/analisis/2026-11-mediodia-localclub/README.md).
+  Partir de ahí para specs y reportes de ventas.
+
 - **Qué cubre cada fuente de ventas:** `ventas_dias` (detalle diario con saloneros) = enero 2026 → 20/10/2026 en
   prod · `ventas_hist` (reporte general, sin salonero) = 2023–2025 · `pos_ndf_*` = 6-ene-2024 → hoy. 2023 no tiene
   detalle diario en ninguna fuente; sobrevive por `ventas_hist`.

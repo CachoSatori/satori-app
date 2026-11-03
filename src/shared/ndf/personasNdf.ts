@@ -54,6 +54,29 @@ export interface PersonaNdf {
   codigos:  readonly string[]
   /** Ya no trabaja acá. Solo informativo: su histórico se muestra igual. */
   inactivo?: boolean
+  /**
+   * Por código, la ventana en que ese código fue DE ESTA PERSONA. Un código sin entrada acá vale
+   * siempre (es lo de antes: `266`/`038` NACHO, `01`/`235` ROSAURA). Ver `Vigencia`.
+   */
+  vigencias?: Readonly<Record<string, Vigencia>>
+  /**
+   * `true` = no es una persona: es un código de la tabla usado FUERA de su vigencia. Sale como
+   * «login XXXX», sin nombre. Lo arma `clasificarCodigo`, nunca se escribe en la tabla.
+   */
+  fueraDeVigencia?: true
+}
+
+/**
+ * Desde/hasta en que un código fue de una persona, en días de Costa Rica (`YYYY-MM-DD`, el de
+ * `fechaCR(fecha_registra)`), las dos puntas INCLUIDAS. Sin `desde` = desde siempre; sin `hasta`
+ * = hasta hoy.
+ *
+ * Existe porque los códigos del PoS se reciclan: el mismo número pudo ser de otra persona antes
+ * o después. Afuera de la ventana NO se adivina: la línea queda como «login XXXX».
+ */
+export interface Vigencia {
+  desde?: string
+  hasta?: string
 }
 
 /** El código que se usa como id cuando la línea no trae ninguno. */
@@ -64,22 +87,31 @@ export const SIN_CODIGO = '(sin codigo)'
 // Para agregar un mesero nuevo: UNA fila acá. Para unificar dos códigos en una persona: los dos
 // códigos en `codigos`, el canónico primero. Nada más se toca.
 
+// Vigencias de los logins viejos: firmadas por Ismael el 2026-11-03 (`FAC_Empleados` + actividad en
+// `FAC_Pedidos.UsuarioRegistra`). Lo anterior a 2025 queda AFUERA a propósito: `333`, `999`, `03` y
+// `04` tienen líneas en 2024 y no se puede confirmar quién usaba cada código ese año, así que 2024
+// sale «login XXXX». Los huecos de 2025 (Alan, Emma) son de ellos: no cortan la vigencia.
 const PERSONAS: readonly PersonaNdf[] = [
   // ── MESEROS (los del ranking) ──
-  { id: '0909', rol: 'mesero', etiqueta: 'Rocío',     codigos: ['0909'] },
-  { id: '333',  rol: 'mesero', etiqueta: 'Emma',      codigos: ['333']  },
-  { id: '999',  rol: 'mesero', etiqueta: 'Jazmín',    codigos: ['999'],  inactivo: true },
+  { id: '0909', rol: 'mesero', etiqueta: 'Rocío',     codigos: ['0909'],
+    vigencias: { '0909': { desde: '2025-01-07', hasta: '2026-05-09' } } },
+  { id: '333',  rol: 'mesero', etiqueta: 'Emma',      codigos: ['333'],
+    vigencias: { '333': { desde: '2025-01-01', hasta: '2025-10-22' } } },
+  { id: '999',  rol: 'mesero', etiqueta: 'Jazmín',    codigos: ['999'],  inactivo: true,
+    vigencias: { '999': { desde: '2025-01-01', hasta: '2025-07-02' } } },
   { id: '444',  rol: 'mesero', etiqueta: 'Maxi',      codigos: ['444']  },
   { id: '026',  rol: 'mesero', etiqueta: 'Maxo',      codigos: ['026']  },
   { id: '028',  rol: 'mesero', etiqueta: 'Francisco', codigos: ['028']  },
-  { id: '03',   rol: 'mesero', etiqueta: 'Alan',      codigos: ['03']   },
+  { id: '03',   rol: 'mesero', etiqueta: 'Alan',      codigos: ['03'],
+    vigencias: { '03': { desde: '2025-01-01', hasta: '2026-01-18' } } },
   { id: '027',  rol: 'mesero', etiqueta: 'Guille',    codigos: ['027']  },
   { id: '025',  rol: 'mesero', etiqueta: 'Dolores',   codigos: ['025']  },
   { id: '032',  rol: 'mesero', etiqueta: 'Gonza',     codigos: ['032']  },
   { id: '029',  rol: 'mesero', etiqueta: 'Ignacio',   codigos: ['029']  },
   { id: '034',  rol: 'mesero', etiqueta: 'Ine',       codigos: ['034']  },
   { id: '024',  rol: 'mesero', etiqueta: 'Juancho',   codigos: ['024']  },
-  { id: '04',   rol: 'mesero', etiqueta: 'Wesley',    codigos: ['04'],   inactivo: true },
+  { id: '04',   rol: 'mesero', etiqueta: 'Wesley',    codigos: ['04'],   inactivo: true,
+    vigencias: { '04': { desde: '2025-02-23', hasta: '2025-05-07' } } },
   { id: '030',  rol: 'mesero', etiqueta: 'Jota',      codigos: ['030']  },
   { id: '033',  rol: 'mesero', etiqueta: 'Federico',  codigos: ['033']  },
   // Barmen: también comandan y van al ranking (firmado por Ismael, 2026-10-29).
@@ -113,8 +145,40 @@ const POR_CODIGO: ReadonlyMap<string, PersonaNdf> = new Map(
 /** El balde de los códigos sin dueño conocido. Uno por código, para no perder de vista cuál era. */
 const desconocidas = new Map<string, PersonaNdf>()
 
+/** Los códigos de la tabla usados fuera de su vigencia. Uno por código, como `desconocidas`. */
+const sinNombre = new Map<string, PersonaNdf>()
+
+/** ¿El código vale para esta persona ese día? Sin fecha o sin vigencia, vale (lo de siempre). */
+function vigente(persona: PersonaNdf, codigo: string, fecha: string | null | undefined): boolean {
+  const v = persona.vigencias?.[codigo]
+  if (!v || !fecha) return true
+  return (v.desde === undefined || fecha >= v.desde) && (v.hasta === undefined || fecha <= v.hasta)
+}
+
+/**
+ * El mismo código, pero sin persona: «login XXXX». Conserva el ROL de la tabla (un `0909` fuera
+ * de fecha sigue siendo un mesero: va al ranking en su propia fila, sin nombre). `codigos` es el
+ * código mismo —sirve de desempate estable, ver `duenoDeMesa`— y `nombreDePersona` no lo busca
+ * en ninguna capa: devuelve la etiqueta.
+ */
+function loginSinNombre(persona: PersonaNdf, codigo: string): PersonaNdf {
+  let p = sinNombre.get(codigo)
+  if (!p) {
+    p = Object.freeze({
+      id: `login ${codigo}`, rol: persona.rol, etiqueta: `login ${codigo}`,
+      codigos: Object.freeze([codigo]), fueraDeVigencia: true as const,
+    })
+    sinNombre.set(codigo, p)
+  }
+  return p
+}
+
 /**
  * `usuario_registra` de una línea → su persona.
+ *
+ * `fecha` es el día CR de la factura (`fechaCR(fecha_registra)`). Si el código tiene vigencia y
+ * la fecha cae afuera, devuelve «login XXXX» (`fueraDeVigencia`). Sin `fecha` no se mira la
+ * vigencia: es para lo que no tiene un día detrás (el vínculo empleado → ventas).
  *
  * NUNCA devuelve `null`: la plata de una línea siempre tiene que caer en algún balde (regla 4
  * de la firma). Los tres casos que no están en la tabla:
@@ -127,11 +191,14 @@ const desconocidas = new Map<string, PersonaNdf>()
  *   tabla de arriba. Adivinar sería repetir el error de `01`.
  * · Espacios alrededor → se recortan antes de buscar.
  */
-export function clasificarCodigo(codigo: string | null | undefined): PersonaNdf {
+export function clasificarCodigo(
+  codigo: string | null | undefined,
+  fecha?: string | null,
+): PersonaNdf {
   const c = (codigo ?? '').trim()
   if (c === '') return PERSONA_SIN_CODIGO
   const conocida = POR_CODIGO.get(c)
-  if (conocida) return conocida
+  if (conocida) return vigente(conocida, c, fecha) ? conocida : loginSinNombre(conocida, c)
   let suelta = desconocidas.get(c)
   if (!suelta) {
     suelta = Object.freeze({ id: c, rol: 'otro' as const, etiqueta: c, codigos: Object.freeze([c]) })
@@ -147,7 +214,7 @@ const PERSONA_SIN_CODIGO: PersonaNdf = Object.freeze({
   codigos:  Object.freeze([]),
 })
 
-/** El rol de un código, sin pasar por la persona. */
+/** El rol de un código, sin pasar por la persona. No lleva fecha: la vigencia no cambia el rol. */
 export function rolDeCodigo(codigo: string | null | undefined): RolCodigo {
   return clasificarCodigo(codigo).rol
 }
@@ -178,6 +245,7 @@ export function nombreDePersona(
   persona: PersonaNdf,
   nombres: Readonly<Record<string, string>>,
 ): string {
+  if (persona.fueraDeVigencia) return persona.etiqueta
   for (const c of persona.codigos) {
     const n = nombres[c]?.trim()
     if (n) return n
@@ -203,14 +271,16 @@ export function nombreDePersona(
  *
  * Persona conocida → `nombreDePersona` (sus alias dan el mismo nombre). Si no: `employees` y
  * después el roster. Es la regla que usa `nombreSalonero` (que además marca «sin asignar").
+ * Con `fecha` (día CR de la factura) y el código fuera de su vigencia → «login XXXX».
  */
 export function nombreDeCodigo(
   codigo: string | null | undefined,
   nombres: Readonly<Record<string, string>>,
+  fecha?: string | null,
 ): string | null {
   const c = (codigo ?? '').trim()
   if (c === '') return null
-  const persona = clasificarCodigo(c)
+  const persona = clasificarCodigo(c, fecha)
   if (persona.rol === 'mesero') return nombreDePersona(persona, nombres)
   return nombres[c]?.trim() || SALONEROS_CONOCIDOS[c]?.trim() || null
 }

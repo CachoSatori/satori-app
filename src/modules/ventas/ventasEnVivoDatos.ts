@@ -6,7 +6,7 @@ import {
   type TicketComparable, type TicketNdfConId, type TicketVentaRow,
 } from '../../shared/api/posNdf'
 import {
-  agruparEnLotes, etiquetaTurno, turnosConocidos, type Turno,
+  agruparEnLotes, etiquetaTurno, fechaCR, turnosConocidos, type Turno,
 } from '../../shared/ndf/jornada'
 import {
   esCajeroTurno, esLoginSistema, FAMILIAS_VALOR_SERVIDO,
@@ -103,6 +103,9 @@ export function paxDelTicket(t: Pick<TicketNdfConId, 'pax' | 'pax_articulo'>): n
 /** Con quién se acredita el ticket. `null` = cajero, sistema o sin pedido: no es un mesero. */
 export function claveSalonero(t: Pick<TicketNdfConId, 'salonero_login' | 'registrado_por'>): string | null {
   if (t.registrado_por !== 'salonero') return null
+  // Un login de sistema (`02` compartido, `002`) no es mesero aunque el ticket diga lo contrario:
+  // la ingesta ya los saca (`mapSalonero`), esto es la red por si un ticket viejo vino distinto.
+  if (esLoginSistema(t.salonero_login)) return null
   return t.salonero_login ?? null
 }
 
@@ -267,7 +270,7 @@ export function armarDia(
     const login = claveSalonero(t)
     const esMesero = login !== null
     const clave = esMesero
-      ? nombreSalonero(login, nombres)
+      ? nombreSalonero(login, nombres, fechaCR(t.fecha_registra))
       // El balde sale de (registrado_por, cajero que cobró, canal) — NO del login de la
       // factura. `cajero_login` es la CAJA que cerró, que es la que define el turno.
       : claveNoMesero(t.registrado_por, t.cajero_login, t.canal)
@@ -405,9 +408,17 @@ interface AccEntrada {
  *   3. El número **marcado** `«026 · sin asignar»`. No se inventa un nombre y tampoco se lo
  *      esconde: sigue en el ranking, con la marca puesta, que es lo que hace visible el mapeo
  *      que falta.
+ *
+ * `fecha` = día CR de la factura. Un código de la tabla usado fuera de su vigencia (códigos
+ * reciclados, ver `Vigencia` en `personasNdf.ts`) sale «login XXXX»: sin nombre y sin la marca de
+ * «sin asignar», porque no falta un mapeo, falta saber quién era.
  */
-export function nombreSalonero(login: string, nombres: Record<string, string>): string {
-  return nombreDeCodigo(login, nombres) ?? `${login} · sin asignar`
+export function nombreSalonero(
+  login: string,
+  nombres: Record<string, string>,
+  fecha?: string | null,
+): string {
+  return nombreDeCodigo(login, nombres, fecha) ?? `${login} · sin asignar`
 }
 
 /** ¿Este salonero quedó sin mapear a un empleado? */
@@ -685,11 +696,12 @@ export interface MesaAbiertaResumen {
 function quienTieneLaMesa(
   login: string | null,
   nombres: Record<string, string>,
+  fecha?: string | null,
 ): string {
   if (login === null || login === '') return 'Sin salonero'
   if (esCajeroTurno(login))           return etiquetaNoMesero('cajero', login)
   if (esLoginSistema(login))          return etiquetaNoMesero('sistema', login)
-  return nombreSalonero(login, nombres)
+  return nombreSalonero(login, nombres, fecha)
 }
 
 export function resumirMesasAbiertas(
@@ -698,7 +710,7 @@ export function resumirMesasAbiertas(
 ): MesaAbiertaResumen[] {
   const acc = new Map<string, { mesas: number; pax: number }>()
   for (const m of abiertas) {
-    const clave = quienTieneLaMesa(m.salonero_login, nombres)
+    const clave = quienTieneLaMesa(m.salonero_login, nombres, fechaCR(m.updated_at))
     const e = acc.get(clave) ?? { mesas: 0, pax: 0 }
     e.mesas += 1
     e.pax   += n(m.pax)
@@ -820,7 +832,7 @@ export function detallarMesasAbiertas(
 ): MesaAbiertaDetalle[] {
   return abiertas
     .map(m => {
-      const salonero = quienTieneLaMesa(m.salonero_login, nombres)
+      const salonero = quienTieneLaMesa(m.salonero_login, nombres, fechaCR(m.updated_at))
       const abierta = Date.parse(m.updated_at)
       return {
         clave:        m.clave,
@@ -916,7 +928,7 @@ export function calidadPaxPorSalonero(
     const login = claveSalonero(t)
     if (login === null) continue
     // Por PERSONA, no por login: dos códigos de la misma persona (266/038) son una sola fila.
-    const clave = nombreSalonero(login, nombres)
+    const clave = nombreSalonero(login, nombres, fechaCR(t.fecha_registra))
     const e = acc.get(clave) ?? { mesas: 0, conNativo: 0, conAmbos: 0, coinciden: 0 }
     e.mesas += 1
     const nativo = n(t.pax_nativo), articulo = n(t.pax_articulo)

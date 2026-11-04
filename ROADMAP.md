@@ -73,6 +73,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | **SEC-01 · cierre de la escalada de roles** (mig 068: rol fijo al dar de alta, guarda de owner activo, nunca 0 owners) | 🧪 staging (04/11) | Paso A (signup apagado + bans) ya en prod. Paso 2 (prod) con firma aparte, fuera de 17–23 h. |
 | **SEC-01b · `get_my_role()` mira `is_active`** | 🔲 🔴 | **CRÍTICO.** Antes o en la misma migración: corregir las 6 guardas `not in` que se abren con NULL y las 3 policies que leen `profiles.role` sin `is_active` (`cierre_write`, `inv_write_recipes`, `inv_write_ri`). |
 | Versionar en migraciones las policies reales de `profiles` (y revisar drift en el resto) | 🔲 | Hoy prod y staging tienen 3 policies que no están en el repo. También el nombre distinto del trigger de `auth.users`. |
+| 🔴 **Prioridad alta · Alta de empleados desde Admin** (Edge Function con `service_role`: el owner crea la cuenta y asigna rol; nunca el cliente) | 🔲 🖊️ | El auto-registro quedó cerrado el 04/11 (`disable_signup`): hoy no hay forma de sumar empleados desde la app. La función tiene que verificar que quien llama sea un owner activo. Va con `supabase/config.toml` (ítem 11) para fijar `verify_jwt`. |
 | Decidir si se reactiva el auto-registro de empleados | 🔲 🖊️ | Apagado desde el 04/11 (`disable_signup`). Con la 068 sería seguro (salonero + inactivo), pero cualquiera podría crear cuentas pendientes. Alternativa: alta solo por el owner. |
 | `LoginPage` sigue ofreciendo «crear cuenta» de empleado | 🔲 | Con el signup apagado devuelve un error técnico (`Signups not allowed`). Ocultar el botón o poner un mensaje claro («pedile el alta al encargado»). Toca `src/`. |
 | Hardening ACL: 4 `SECURITY DEFINER` ejecutables por `anon` en prod | 🔲 | `get_my_role` exige análisis de policies antes del revoke. Higiene (en prod no son de plata). |
@@ -83,7 +84,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 
 ## Lo próximo, en orden
 
-0. **SEC-01:** Paso 2 en prod (firma aparte) → SEC-01b → SEC-02.
+0. **SEC-01:** Paso 2 en prod (firma aparte) → **alta de empleados desde Admin** → SEC-01b → SEC-02.
 1. Cerrar lo que quedó del go-live del PoS: rotación de secretos de ingest, revocar el token `claude-code-prod`,
    usuarios de la app para RODRI/FRANCO/MAXI BARRA, recalibrar los umbrales del ICP.
 2. Retirar el Excel y Paridad cuando Ismael lo firme.

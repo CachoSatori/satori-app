@@ -31,6 +31,10 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
   `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`).
 - **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1293 tests** (con env dummy) · lint de lo tocado.
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
+- **🔐 SEC-01 (04/11, rama `claude/sec-01-perfiles`):**
+  - **Paso A hecho en prod y staging:** `disable_signup=true` (antes `false`). El signup con anon da `422`.
+  - **Bans firmados en prod:** Rosaura (`f54e3eff…`) y LE - Consultorias (`e317ac97…`), por `banned_until` directo (desvío aceptado), `is_active=false`, y borrado de sus 6 sesiones y 15 refresh tokens.
+  - **Mig 068 aplicada solo en staging** (ledger 67) y probada. **Prod: Paso 2 pendiente, con firma aparte.** Detalle en [HALLAZGOS.md](HALLAZGOS.md).
 
 Documentos: fases → [ROADMAP.md](ROADMAP.md) · backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) ·
 hallazgos → [HALLAZGOS.md](HALLAZGOS.md) · historial → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) ·
@@ -128,9 +132,9 @@ solas tras un reinicio (validado el 29/10).
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
 | **PROD** | **45 filas** | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–067`. **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
-| **STAGING** | 66 filas | Hasta la 064 + la 067. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
+| **STAGING** | 67 filas | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01)**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
-- **Próximo número libre: `068`** (ninguna rama tiene un archivo ≥ 068).
+- **Próximo número libre: `069`.** La `068_profiles_cierre_escalada` está en `claude/sec-01-perfiles`: aplicada en staging, **pendiente en prod** (Paso 2, firma aparte; aplicar a mano antes del merge, igual que la 067).
 - 🚫 Nunca `repair --status reverted` sobre algo aplicado. El CLI ordena archivos por **nombre** y el ledger por
   **versión** (por eso `009` → `0090`). La `026` en prod es una excepción permanente documentada.
 
@@ -164,7 +168,10 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | PoS propio (comandero, KDS, cobro + splits, ticket/FE SIM, inventario COGS; migs 022–037, `posFiscal.ts`) | 🧪 staging · bloqueado por el PILAR de auth |
 | PILAR de auth multi-tenant · FE-CR real | 🔲 |
 
-### Seguridad que sigue abierta en prod (medido 30/10)
+### Seguridad que sigue abierta en prod (medido 30/10; SEC-01 al 04/11)
+
+- **SEC-01 (escalada de roles):** contenida con el Paso A (signup apagado + bans). El fix de base (mig 068) está probado en staging y falta en prod.
+- **SEC-01b CRÍTICO:** 6 guardas `not in` que se abren con NULL y 3 policies que leen `profiles.role` sin `is_active` (ver [HALLAZGOS.md](HALLAZGOS.md)).
 
 - **4 funciones `SECURITY DEFINER` ejecutables por `anon`:** `get_my_role`, `handle_new_user`,
   `log_movement_edit` (052) y `unif_on_cash_movement`. Las de la 067 y las de plata no.

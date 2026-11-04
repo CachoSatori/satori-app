@@ -18,6 +18,24 @@
 
 ---
 
+## 🟥 P0-SEC — SEC-01 al cierre del 04/11
+
+- **Hecho:**
+  - **Paso A** (prod y staging): `disable_signup=true`; el signup con anon da 422. Bans de Rosaura y LE - Consultorias (desvío aceptado: por `banned_until` directo, no por la Admin API) y borrado de sus sesiones (6) y refresh tokens (15).
+  - **Paso 0** revisado por el asesor.
+  - **Paso 1** (staging): mig 068 aplicada (3 corridas sin error), pruebas 1–7 y alta real OK, rollback probado, ledger 67.
+- **Ahora:** Ismael valida en staging:
+  - login owner;
+  - Admin: activar «SEC01 Objetivo» (pendiente) y cambiar un rol;
+  - Test Cajero en Mi Rendimiento.
+- **Después (firma aparte, fuera de 17–23 h):** Paso 2 en prod.
+  - Re-chequear 3 owners, 0 metadata y perfiles elevados contra el Paso 0. La línea base ya incluye los 2 bans.
+  - Aplicar a mano.
+  - Catálogo + prueba 4 + prueba 1 con rollback.
+  - Ledger 46.
+  - PR a `main` con la rama `claude/sec-01-perfiles`, que solo trae `.sql` y docs.
+- **Siguiente:** SEC-01b (CRÍTICO, ver [HALLAZGOS.md](HALLAZGOS.md)) y SEC-02. Rollback: `scripts/sql/068_rollback.sql`.
+
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
 
 1. **🔐 Revocar el token `claude-code-prod`.** Se usó durante el go-live; ya no hace falta. *(Nuevo, 30/10.)*

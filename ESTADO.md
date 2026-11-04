@@ -176,10 +176,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 
 ## 📝 Notas que ahorran una sesión
 
-- **Análisis mediodía, menú y Local Club (nov 2026):** resultados, definiciones (neta, clases de mesa por ratio de
-  descuento, costo), glosario del PoS y huecos de datos en
-  [docs/analisis/2026-11-mediodia-localclub/README.md](docs/analisis/2026-11-mediodia-localclub/README.md).
-  Partir de ahí para specs y reportes de ventas.
+- **Análisis mediodía, Local Club y descuentos (nov 2026), cerrado:** conclusiones vigentes en `docs/analisis/2026-11-mediodia-localclub/README.md` §0. Resumen: menú por temporada (inserto en baja, a pedido en alta) sin platos que canibalizan; Local Club 2.0 al 10 % + regalo; créditos de ₡18.000 cada 6 personas; conciliar comisiones PM; código de empleado para el 30 %. Escenario 2027: +₡3,9–9,1M de margen por año.
 
 - **Qué cubre cada fuente de ventas:** `ventas_dias` (detalle diario con saloneros) = enero 2026 → 20/10/2026 en
   prod · `ventas_hist` (reporte general, sin salonero) = 2023–2025 · `pos_ndf_*` = 6-ene-2024 → hoy. 2023 no tiene

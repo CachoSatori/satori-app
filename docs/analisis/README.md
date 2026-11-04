@@ -7,7 +7,7 @@ Son **solo lectura**: no tocan la base ni el código de la app.
 
 | Fecha | Tema | README |
 |---|---|---|
-| 2026-11 | Mediodía, menú (familia 29 GREENSEASON) y descuento Local Club | [2026-11-mediodia-localclub/README.md](2026-11-mediodia-localclub/README.md) |
+| 2026-11 | Mediodía, menú, Local Club, tarjetas/créditos, PM y personal | [2026-11-mediodia-localclub/README.md](2026-11-mediodia-localclub/README.md) |
 
 ## Convención
 

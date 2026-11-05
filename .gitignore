@@ -7,3 +7,7 @@ dist
 .DS_Store
 .staging-backups/
 supabase/.temp/
+
+# Python
+__pycache__/
+*.pyc

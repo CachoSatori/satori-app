@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { getReporteMes, getLocalesClub, aClubError, fmtCreditos, type ReporteMes, type FilaReporte } from '../../shared/api/club'
 import { Aviso, Btn, Card } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
+import { esParcial } from './reporteSaldo'
 
 const mesAnterior = () => {
   const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Costa_Rica' }))
@@ -74,7 +75,7 @@ export default function Reportes() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
               <Kpi v={n0(k.personas)} e="personas referidas" a={`mes anterior: ${n0(k.anterior.personas)}`} />
               <Kpi v={fmtCreditos(k.creditos_canjeados)} e="créditos canjeados" a={crc(k.valor_canjeado_crc)} />
-              <Kpi v={fmtCreditos(k.saldo_creditos_al_cierre)} e="créditos en saldo al cierre" a={`${n0(k.cuentas_con_saldo)} cuentas`} />
+              <Kpi v={fmtCreditos(k.saldo_creditos_al_cierre)} e={esParcial(rep) ? `créditos en saldo hoy (mes en curso)` : `créditos en saldo al cierre del mes`} a={`${n0(k.cuentas_con_saldo)} cuentas`} />
               <Kpi v={n0(k.cupones_usados)} e="cupones usados" a={`de ${n0(k.cupones_generados)} generados`} />
             </div>
           </Card>

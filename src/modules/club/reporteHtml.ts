@@ -11,6 +11,7 @@ import dm400 from '@fontsource/dm-sans/files/dm-sans-latin-400-normal.woff2?inli
 import dm500 from '@fontsource/dm-sans/files/dm-sans-latin-500-normal.woff2?inline'
 import dm600 from '@fontsource/dm-sans/files/dm-sans-latin-600-normal.woff2?inline'
 import type { ReporteMes, FilaReporte } from '../../shared/api/club'
+import { esParcial } from './reporteSaldo'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -101,7 +102,8 @@ export function reporteHtml(r: ReporteMes): string {
   const mes = nombreMes(r.mes)
   const loc = r.local === 'santa-teresa' ? 'Santa Teresa' : r.local === 'nosara' ? 'Nosara' : r.local
   const pie = (n: number) => `<div class="pie"><span>Satori, Club Satori, ${esc(mes)}</span><span>${n} de 3</span></div>`
-  const cab = `<div class="cab"><div class="marca">Satori</div><div class="cab-der">Club Satori · ${esc(loc)}<br>Reporte de ${esc(mes)}</div></div>`
+  const parcial = esParcial(r)
+  const cab = `<div class="cab"><div class="marca">Satori</div><div class="cab-der">Club Satori · ${esc(loc)}<br>Reporte de ${esc(mes)}${parcial ? ` (parcial al ${esc(fechaCorta(r.generado_en))})` : ''}</div></div>`
 
   const bajada1 = k.personas > 0
     ? `${num(k.personas)} personas llegaron por referentes en ${num(k.tarjetas)} visitas, y se canjearon ${cred(k.creditos_canjeados)} créditos (${crc(k.valor_canjeado_crc)}).`
@@ -122,7 +124,7 @@ export function reporteHtml(r: ReporteMes): string {
     <div class="cifras">
       <div class="cifra"><div class="v">${num(k.personas)}</div><div class="e">personas referidas</div>${variacion(k.personas, k.anterior.personas)}</div>
       <div class="cifra"><div class="v">${cred(k.creditos_canjeados)}</div><div class="e">créditos canjeados</div>${variacion(k.creditos_canjeados, k.anterior.creditos_canjeados)}</div>
-      <div class="cifra"><div class="v">${cred(k.saldo_creditos_al_cierre)}</div><div class="e">créditos en saldo al cierre</div><span class="var">${num(k.cuentas_con_saldo)} cuentas</span></div>
+      <div class="cifra"><div class="v">${cred(k.saldo_creditos_al_cierre)}</div><div class="e">${parcial ? 'créditos en saldo hoy' : 'créditos en saldo al cierre'}</div><span class="var">${num(k.cuentas_con_saldo)} cuentas</span></div>
       <div class="cifra"><div class="v">${num(k.cupones_usados)}</div><div class="e">cupones usados</div><span class="var">de ${num(k.cupones_generados)} generados</span></div>
     </div>
     <h2>Acciones</h2><p class="nota">Lo que conviene hacer este mes, en orden.</p>

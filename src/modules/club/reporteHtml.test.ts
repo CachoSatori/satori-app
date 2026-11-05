@@ -46,3 +46,14 @@ describe('reporte mensual (ESTANDAR-reportes)', () => {
   })
   it('nombre del mes en minúscula', () => { expect(nombreMes('2026-10')).toBe('octubre 2026') })
 })
+
+describe('saldo del reporte: al cierre o a hoy', () => {
+  it('mes cerrado → «al cierre»; mes en curso → «hoy» y «parcial»', () => {
+    const cerrado = reporteHtml({ ...rep, mes: '2026-10', generado_en: '2026-11-05T18:00:00Z' })
+    expect(cerrado).toContain('créditos en saldo al cierre')
+    expect(cerrado).not.toContain('parcial al')
+    const enCurso = reporteHtml({ ...rep, mes: '2026-11', generado_en: '2026-11-05T18:00:00Z' })
+    expect(enCurso).toContain('créditos en saldo hoy')
+    expect(enCurso).toContain('parcial al 5 nov 26')
+  })
+})

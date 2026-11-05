@@ -116,6 +116,10 @@ create table if not exists public.club_negocios (
   updated_at  timestamptz not null default now()
 );
 
+-- F1b: origen del negocio (la migración re-ejecutable borra solo los suyos).
+alter table public.club_negocios
+  add column if not exists origen text not null default 'app' check (origen in ('app','migracion'));
+
 -- Único por local, sin distinguir mayúsculas, tildes ni espacios sobrantes.
 create unique index if not exists club_negocios_nombre_norm_uq
   on public.club_negocios (

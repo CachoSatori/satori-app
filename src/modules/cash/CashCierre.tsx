@@ -17,11 +17,12 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
 import { ajusteTipoPorSigno } from './ajusteTipo'
+import { textoConfirmacionBorrado, type PlanBorradoDia } from './borrarDia'
 import { propinaEgresoFields, propinasPorPagarDe, propinasPagadasEnFecha } from './propinaPago'
 import {
   basePozoParaCierre, deberiaPozo, diasPendientesDeCierre, esPostCorte,
@@ -431,17 +432,20 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   // Acción EXPLÍCITA y aparte: deshacer el cierre Y borrar TODOS los movimientos del día
   // (para recargar el día de cero sin duplicar pagos). Destructivo — confirmación doble.
   const handleBorrarDia = async () => {
-    if (!window.confirm(
-      `¿BORRAR TODO el día ${fecha}?\n\n` +
-      `Esto borra el cierre, las ventas, el retiro, los PAGOS A PROVEEDORES, gastos, ingresos manuales ` +
-      `y los turnos de caja del ${fecha}. Sirve para recargar el día desde cero.\n\n` +
-      `NO toca propinas. NO se puede deshacer.`)) return
+    // Vista previa ANTES de confirmar (fix 05/11): qué se borra por día operativo, montos ₡/US$,
+    // manuales con su hora de carga, y las filas cargadas este día pero de OTRO día operativo
+    // (esas NO se borran). Ver modules/cash/borrarDia.ts.
+    setError(null)
+    let plan: PlanBorradoDia
+    try { plan = await previewDiaCompleto(fecha) }
+    catch (e) { setError(`No se pudo armar la vista previa del borrado: ${e instanceof Error ? e.message : String(e)}`); return }
+    if (!window.confirm(textoConfirmacionBorrado(plan, fi2))) return
     const auth = await requireManager()
     if (!auth.ok) return
     setSaving(true); setError(null)
     try {
-      await discardDiaCompleto(fecha, auth.managerEmail, auth.managerPassword)
-      setMsg('✓ Día borrado completo — podés recargar desde cero.')
+      await discardDiaCompleto(fecha, auth.managerEmail, auth.managerPassword, plan.borrar.map(f => f.id))
+      setMsg(`✓ Día borrado completo (${plan.borrar.length} movimiento(s))${plan.ajenas.length ? ` · ${plan.ajenas.length} de otro día operativo quedaron intactos` : ''} — podés recargar desde cero.`)
       await loadCierres(); onRefresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al borrar el día')

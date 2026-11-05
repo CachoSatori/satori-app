@@ -56,6 +56,12 @@ export default function AdminModule() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // Refresco liviano (sin `loading`): no desmonta la pestaña, así el modal de «Nuevo empleado» sigue
+  // mostrando la contraseña temporal mientras se actualiza el vínculo con el empleado.
+  const refreshEmployees = useCallback(async () => {
+    try { setEmployees(await getAllEmployees()) } catch { /* la lista vieja sigue sirviendo */ }
+  }, [])
+
   if (loading) {
     return (
       <div className="module-loading">
@@ -142,7 +148,7 @@ export default function AdminModule() {
           <EmployeeList employees={employees} onRefresh={loadData} />
         )}
         {tab === 'users' && (
-          <UserApprovals employees={employees} currentUserId={profile?.id} />
+          <UserApprovals employees={employees} currentUserId={profile?.id} onEmployeesChanged={refreshEmployees} />
         )}
         {tab === 'rolepoints' && (
           <RolePointsConfig rolePoints={rolePoints} onRefresh={loadData} />

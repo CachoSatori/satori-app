@@ -5069,3 +5069,12 @@ html, body, #root {
   .mr-icp { grid-template-columns: 1fr; }
   .mr-bar-track { height: 80px; }
 }
+
+/* Admin → Usuarios → «Nuevo empleado» */
+.nuevo-emp-field { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.6rem 0; font-size: 0.78rem; }
+.nuevo-emp-field > span { font-weight: 600; }
+.nuevo-emp-field input, .nuevo-emp-field select {
+  padding: 0.4rem 0.55rem; font-size: 0.85rem; border: 1px solid var(--t-border); border-radius: 2px;
+  background: var(--t-paper); color: var(--t-ink);
+}
+.nuevo-emp-field small { font-size: 0.68rem; color: var(--t-muted); }

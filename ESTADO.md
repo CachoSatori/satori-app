@@ -29,6 +29,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
   leen el PoS fusionado con el Excel de respaldo (`{...xls, ...pos}`). Volver atrás = revert del merge de #16.
 - **🧯 Fix «Borrar TODO el día» (05/11, rama `claude/fix-borrar-dia`):** elige por día operativo, no por `created_at`; vista previa antes de confirmar; ningún delete sin chequear el error. Validado por Ismael en la preview de staging; **en prod desde el 05/11** (PR #25, merge `781eb72`). Rollback = revert del merge. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **🧾 Cierre del día atómico (05/11, rama `claude/cierre-atomico`, mig 071):** aplicada en staging (ledger 70) y **en prod el 05/11 a las 19:20 UTC** (ledger 47 → 48), a mano **antes** del merge del #29. En prod se verificó el catálogo (idéntico a staging) y se corrieron pruebas sin escribir datos. Rollback: revert del merge + `scripts/sql/071_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
+- **👤 Alta de empleados desde Admin (06/11, firmado por Ismael, PR #39):** el owner crea las cuentas desde Admin → Usuarios → «+ Nuevo empleado», con la Edge Function `alta-empleado` (prod v1, `verify_jwt` on, desplegada a mano; su código vive en la rama `claude/alta-empleado-fn`, **no en `main`** hasta el ítem 11). Contraseña temporal que se muestra una vez, y cambio obligatorio en el primer ingreso (flag en `app_metadata.cambiar_password`, que solo baja la función). El login ya no tiene «Crear cuenta». **Auth de prod (06/11, Management API, GET antes y después):** `site_url` `http://localhost:3000` → `https://cachosatori.github.io/satori-app/`, redirects `''` → `https://cachosatori.github.io/satori-app/**` y `password_min_length` 6 → 8. Nada más cambió y `disable_signup` sigue en `true`. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **🔁 «Recontar» una vez en el cierre del día + cierre de turno sin efectivo (06/11, rama `claude/recontar-cierre`, firmado por Ismael):** sin migración nueva, usa las columnas `primer_conteo_crc/usd` de la **074**, que ya estaba en prod. Primero se probó un conteo ciego (#31) y se revirtió (#32) a pedido de Ismael. La versión final mantiene la verificación en vivo. Recorrido real en staging con la pantalla montada contra la base: 4 casos, ver [HALLAZGOS.md](HALLAZGOS.md).
 - **🔐 SEC-03 y SEC-04 (05/11, rama `claude/brave-brown-m45jd7`, PR #28, migs 072 y 073):** escritura anónima en el CRM y lectura anónima de propinas y empleados. Aplicadas en staging (ledger 72) y **en prod el 05/11 ~20:05 UTC** (ledger 48 → 50), a mano antes del merge. `/registro` y el QR del CRM quedan apagados hasta la F1 del Club Satori. Rollback: `scripts/sql/072_rollback.sql` y `073_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
@@ -121,7 +122,7 @@ pos_ndf_tickets · pos_ndf_ticket_lines · pos_ndf_open · pos_ndf_cursor   (RLS
 ¹ Versión según el backlog del 29/10 (no verificable desde fuera de la PC). Las dos tareas del PoS arrancan
 solas tras un reinicio (validado el 29/10).
 
-### Edge Functions (Management API, 30/10)
+### Edge Functions (Management API, 30/10; `alta-empleado` 06/11)
 
 | Función | PROD | STAGING |
 |---|---|---|
@@ -131,6 +132,7 @@ solas tras un reinicio (validado el 29/10).
 | `pago-notificar` | v2 · on | — |
 | `ingest-ndf` | **v1 · off** (desplegada a mano; su código no está en `main`) | v10 · off |
 | `ingest-punches` | — | v6 · off |
+| `alta-empleado` | v1 · on (06/11, a mano; código en `claude/alta-empleado-fn`, no en `main`) | v1 · on |
 
 ---
 

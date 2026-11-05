@@ -7,6 +7,40 @@
 
 ---
 
+## 👤 Noviembre 2026 — Alta de empleados desde Admin (✅ prod, 06/11, PR #39)
+
+- **Problema:** desde SEC-01 (04/11, `disable_signup`) no había forma de sumar empleados desde la app. El texto de ayuda y el login todavía decían «Crear cuenta», que fallaba con «Signups not allowed».
+- **Ahora:** Admin → Usuarios → **«+ Nuevo empleado»**, con nombre, correo, rol y un vínculo opcional con un empleado activo sin cuenta. Llama a la Edge Function **`alta-empleado`**, que:
+  - verifica el JWT (en el gateway y otra vez adentro) y que quien llama sea **owner activo**;
+  - acepta solo los roles permitidos, **sin owner** (un owner nuevo se promueve desde la lista);
+  - rechaza el email repetido sin distinguir mayúsculas, y el empleado inexistente, inactivo o ya vinculado;
+  - crea el usuario con service_role. El perfil nace salonero inactivo por la 068;
+  - asigna el rol, la activación y el vínculo **con el JWT del owner**, así la guarda de la 068 y las policies (`get_my_role`, 069) lo vuelven a verificar en la base;
+  - si algo falla, borra el usuario: el cascade se lleva el perfil y el vínculo queda en null. No quedan restos;
+  - devuelve una **contraseña temporal** que se muestra una vez, con «Copiar».
+- **Primer ingreso:** el flag `app_metadata.cambiar_password` (solo lo escribe service_role) muestra «Elegí tu contraseña».
+  - Lo baja **solo** la función, en la misma llamada que cambia la contraseña, después de verificar la temporal y exigir una nueva distinta, de 8 a 72 caracteres.
+  - GoTrue revoca los refresh tokens al cambiar la contraseña (visto en staging), así que la pantalla vuelve a entrar sola con la nueva.
+- **Errores:** al cliente solo llegan códigos y mensajes fijos más una ref. El detalle va al log de la función, sin contraseñas ni tokens.
+- **Invitación por correo descartada por ahora:** prod no tiene SMTP propio (el de Supabase solo entrega al equipo de la organización) y `site_url` apuntaba a localhost. El `site_url` ya está corregido (06/11).
+- **Deploy:** a mano, por la regla del ítem 11. El código de la función entra a `main` con `config.toml` (`alta-empleado` → `verify_jwt = true`).
+- **Pruebas en staging, con usuarios reales de cada rol:**
+
+  | Caso | Resultado |
+  |---|---|
+  | Owner activo crea cajero vinculado / manager | 201; el primer ingreso exige el cambio y la temporal deja de entrar |
+  | Manager, cajero, owner inactivo | 403, 0 cuentas |
+  | Sin token / token basura | 401 |
+  | Email repetido | 409 |
+  | Rol owner / rol inventado | 400 |
+  | Empleado ya vinculado | 409, sin huérfano |
+  | Falla simulada del vínculo | sin restos |
+  | Owners activos | sin cambios |
+  | CORS | origen ajeno sin permiso |
+
+  También se montaron las pantallas reales contra la base. Staging quedó limpio.
+- **En prod, pruebas sin escribir:** sin token → 401, token sin usuario → 401 `sin_sesion`, el origen de prod con permiso y otro origen sin permiso.
+
 ## 🔁 Noviembre 2026 — «Recontar» una vez en el cierre del día; el cierre de turno deja de contar (✅ prod, 06/11)
 
 - **Cierre del día:** el «Debería quedar», el «Cuadra / Diferencia» y la verificación se siguen viendo **en vivo**.

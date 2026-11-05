@@ -46,7 +46,7 @@
 
 ## 🟧 Después
 
-1. **🖊️ Alta de empleados desde Admin** (Edge Function con `service_role`, que verifica owner activo). El auto-registro está cerrado desde el 04/11: hoy no hay forma de sumar empleados desde la app. Va con `supabase/config.toml` (ítem 11) para fijar `verify_jwt`.
+1. ✅ **Alta de empleados desde Admin**: en prod desde el 06/11 (PR #39, función `alta-empleado` desplegada a mano). Su código entra a `main` con el ítem 11.
 2. **🔐 Revocar el token `claude-code-prod` y rotar los secretos de ingesta** (ítems 1 y 2 del P0 de abajo).
 3. **🔐 SEC-02.**
 4. **🧹 Sincronizar `staging` con `main`** (~20 commits: PRs #18–#22, migraciones 065–068 de archivo, código de logins viejos). Hay conflictos en los docs, y al ledger de staging le faltan las filas 065/066.

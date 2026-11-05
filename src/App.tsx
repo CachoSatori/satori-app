@@ -7,6 +7,8 @@ import ErrorBoundary from './shared/ErrorBoundary'
 import OfflineBanner from './shared/offline/OfflineBanner'
 import type { UserRole } from './shared/types/database'
 import LoginPage from './pages/auth/LoginPage'
+import CambiarPasswordInicial from './pages/auth/CambiarPasswordInicial'
+import { debeCambiarPassword } from './shared/api/altaEmpleado'
 import HomePage from './pages/HomePage'
 
 // ── Lazy-loaded modules — each chunk only loads when navigated ─
@@ -32,18 +34,18 @@ function ModuleLoading({ kanji = '祭' }: { kanji?: string }) {
   return <div className="loading-screen"><span className="loading-mark">{kanji}</span></div>
 }
 
-// ── Pantalla: cuenta creada pero pendiente de aprobación ───────
+// ── Pantalla: cuenta deshabilitada (sin acceso) ────────────────
 function PendingApproval() {
   const { profile, signOut } = useAuth()
   return (
     <div className="login-container">
       <div className="pending-card">
         <div className="pending-mark">承</div>
-        <h1>Cuenta pendiente</h1>
+        <h1>Cuenta deshabilitada</h1>
         <p>
-          Hola{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}. Tu cuenta se creó
-          correctamente pero todavía no está habilitada.<br />
-          La gerencia debe asignarte un rol para darte acceso. Cuando te avisen que ya está, tocá "Reintentar".
+          Hola{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}. Tu cuenta no tiene
+          acceso en este momento.<br />
+          Hablá con la gerencia. Cuando te avisen que ya está, tocá "Reintentar".
         </p>
         <div style={{ display: 'flex', gap: '0.625rem' }}>
           <button className="login-btn" style={{ maxWidth: 160 }} onClick={() => window.location.reload()}>
@@ -68,8 +70,10 @@ function PrivateRoute({ children, roles }: { children: React.ReactNode; roles?: 
   // Sesión presente pero perfil NO cargado (p. ej. loadProfile venció tras suspensión): NO renderizar
   // el módulo a ciegas → /login; el relogueo recarga el perfil. Espejo de OwnerRoute (Fix A addendum).
   if (!profile) return <Navigate to="/login" replace />
-  // Cuenta creada pero aún no aprobada por la gerencia → sin acceso
+  // Cuenta deshabilitada por la gerencia → sin acceso
   if (profile && !profile.is_active) return <PendingApproval />
+  // Primer ingreso con contraseña temporal → elegir una nueva antes de usar la app
+  if (debeCambiarPassword(user)) return <CambiarPasswordInicial />
   if (roles && profile && !roles.includes(profile.role)) return <Navigate to="/" replace />
   return <>{children}</>
 }
@@ -84,9 +88,10 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 }
 
 function OwnerRoute({ children }: { children: React.ReactNode }) {
-  const { profile, loading } = useAuth()
+  const { user, profile, loading } = useAuth()
   if (loading) return <ModuleLoading />
   if (!profile) return <Navigate to="/login" replace />
+  if (debeCambiarPassword(user)) return <CambiarPasswordInicial />
   return profile.role === 'owner' ? <>{children}</> : <Navigate to="/" replace />
 }
 

@@ -320,6 +320,7 @@ export default function HomePage() {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
   const [status, setStatus] = useState<HomeStatus | null>(null)
+  const [clubAbiertas, setClubAbiertas] = useState(0)   // excepciones del puente abiertas (owner, manager)
 
   const landing = profile ? ROLE_LANDING[profile.role] : undefined
   const landKey = profile ? `satori-landed-${profile.id}` : ''
@@ -335,6 +336,12 @@ export default function HomePage() {
     if (mustLand) return   // nos vamos ya — no dispares las consultas del Home
     fetchHomeStatus().then(setStatus).catch(() => {})
   }, [mustLand])
+
+  const gestionaClub = profile?.role === 'owner' || profile?.role === 'manager'
+  useEffect(() => {
+    if (mustLand || !gestionaClub) return
+    import('../shared/api/club').then(m => m.getExcepcionesAbiertas(30)).then(setClubAbiertas).catch(() => {})
+  }, [mustLand, gestionaClub])
 
   if (!profile) return null
   if (mustLand) return null   // redirigiendo al aterrizaje del rol
@@ -384,6 +391,9 @@ export default function HomePage() {
         if (status.invLowStock > 0) return <StatusBadge color="warn" text={`${status.invLowStock} stock bajo`} />
         if (status.invTotal > 0)    return <StatusBadge color="ok" text="Stock OK" />
         return <StatusBadge color="dim" text="Sin datos" />
+      case 'club':
+        if (clubAbiertas > 0) return <StatusBadge color="warn" text={`${clubAbiertas} excepcion${clubAbiertas > 1 ? 'es' : ''}`} />
+        return null
       case 'sops':
         if (status.sopsCount > 0) return <StatusBadge color="dim" text={`${status.sopsCount} procedimientos`} />
         return <StatusBadge color="warn" text="Sin contenido" />

@@ -1,6 +1,6 @@
 /**
  * ClubModule — Club Satori F1c (SPEC §2 y §4): Escanear (caja), Miembros y Negocios.
- * Fuera de la F1c: PM (en pausa), Excepciones y Reportes (F1f), socio de Local Club (F3).
+ * F1f: Excepciones del puente y Reportes (owner, manager). Fuera: PM (en pausa), socio de Local Club (F3).
  */
 import { lazy, Suspense, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -9,8 +9,10 @@ import { useAuth } from '../../shared/hooks/useAuth'
 const Escanear = lazy(() => import('./Escanear'))
 const Miembros = lazy(() => import('./Miembros'))
 const Negocios = lazy(() => import('./Negocios'))
+const Excepciones = lazy(() => import('./Excepciones'))
+const Reportes = lazy(() => import('./Reportes'))
 
-type Vista = 'escanear' | 'miembros' | 'negocios'
+type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes'
 
 export default function ClubModule() {
   const { profile } = useAuth()
@@ -38,6 +40,8 @@ export default function ClubModule() {
           <div className={`vt-nav-tab ${vista === 'escanear' ? 'active' : ''}`} onClick={() => setVista('escanear')}>Escanear</div>
           <div className={`vt-nav-tab ${vista === 'miembros' ? 'active' : ''}`} onClick={() => setVista('miembros')}>Miembros</div>
           <div className={`vt-nav-tab ${vista === 'negocios' ? 'active' : ''}`} onClick={() => setVista('negocios')}>Negocios</div>
+          <div className={`vt-nav-tab ${vista === 'excepciones' ? 'active' : ''}`} onClick={() => setVista('excepciones')}>Excepciones</div>
+          <div className={`vt-nav-tab ${vista === 'reportes' ? 'active' : ''}`} onClick={() => setVista('reportes')}>Reportes</div>
         </div>
       )}
 
@@ -45,6 +49,8 @@ export default function ClubModule() {
         {vista === 'escanear' && <Escanear />}
         {vista === 'miembros' && gestiona && <Miembros />}
         {vista === 'negocios' && gestiona && <Negocios />}
+        {vista === 'excepciones' && gestiona && <Excepciones />}
+        {vista === 'reportes' && gestiona && <Reportes />}
       </Suspense>
     </div>
   )

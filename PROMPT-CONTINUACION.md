@@ -36,7 +36,25 @@
   - Catálogo + prueba 4 + prueba 1 con rollback.
   - Ledger 46.
   - PR a `main` con la rama `claude/sec-01-perfiles`, que solo trae `.sql` y docs.
-- **Siguiente:** SEC-01b (CRÍTICO, ver [HALLAZGOS.md](HALLAZGOS.md)) y SEC-02. Rollback: `scripts/sql/068_rollback.sql`.
+- **Siguiente:** SEC-01b y SEC-02. Rollback de la 068: `scripts/sql/068_rollback.sql`.
+
+## 🟥 P0-SEC — SEC-01b al 05/11 ✅ (staging y prod)
+
+- **Hecho en staging:**
+  - Paso 0 (revisado por el asesor, opción B).
+  - Revoke de EXECUTE de `anon` en las 6 funciones del PoS propio.
+  - **070** (guardas del PoS) y después **069** (`get_my_role` con `is_active`, 6 guardas de prod y 3 policies). Las dos corrieron 2 veces sin error.
+  - Rollback de la 069 probado y reaplicado. Ledger de staging: 69 filas.
+- **Pruebas:** el owner inactivo queda bloqueado en todo; los activos se comportan igual que antes; el cobro real con rollback funciona para owner, manager, cajero y salonero.
+- **Ahora:** Ismael valida en staging:
+  - owner abre y guarda un cierre de prueba;
+  - Admin;
+  - bandeja de facturas (marcar verificada);
+  - un salonero en Mi Rendimiento.
+  - ⚠️ Test Cajero quedó como **manager** después de la validación del 04/11. Si tiene que volver a salonero, se cambia desde Admin.
+- ✅ **Prod (05/11 09:22 CR):** la 069 se aplicó (ledger 46 → 47), con el catálogo verificado y la prueba de Rosaura con rollback. El PR #22 se mergeó con el deploy OK. **Falta:** el merge del PR de la 069.
+- ~~Plan de prod~~ (seguido): Re-chequeo de los textos del Paso 0 (md5), aplicar, revisar el catálogo y correr la prueba del owner inactivo **solo con rollback**. La 070 **no** va a prod: va con el pase del PoS propio.
+- **Pendiente del bloqueante del PoS:** `my_turno_stats` sigue ejecutable por `anon` en staging.
 
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
 

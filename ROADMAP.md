@@ -60,6 +60,8 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Código de quien entregó la tarjeta de hotel o tienda en cada mesa + conciliación automática de créditos (sistema web ↔ `CuentaCobrar`) | 🔲 | Backlog, sin fecha. Requiere ingesta → firma. Ver [r9](docs/analisis/2026-11-mediodia-localclub/rondas/r9-programa-creditos-PM.md). |
 | Descuento al personal (30 %): código de empleado obligatorio y reporte mensual por persona | 🔲 | Backlog, sin fecha. Va con firma. Ver D14/D15 en [r8](docs/analisis/2026-11-mediodia-localclub/rondas/r8-Q27-D14-D15.md). |
 | Comisiones PM como costo del programa en los reportes | 🔲 | Backlog, sin fecha. Hoy se pagan en efectivo por caja de proveedores, fuera del PoS. Ver [r9](docs/analisis/2026-11-mediodia-localclub/rondas/r9-programa-creditos-PM.md). |
+| Tablero mensual supuesto vs realidad de programas (LC, créditos, menú) | 🔲 | Backlog, sin fecha. Con firma. Solo lectura, por hora de factura. Ver [ESCENARIOS-cambios-programas.md §4](docs/analisis/2026-11-mediodia-localclub/ESCENARIOS-cambios-programas.md). |
+| Local Club 3.0: tarjeta en Wallet con QR único, referidos que suman puntos, sin descuento fijo | 🔲 | Backlog, sin fecha. Toca ingesta y esquema → firma. Datos personales nunca en el repo. Ver [ESCENARIOS §6](docs/analisis/2026-11-mediodia-localclub/ESCENARIOS-cambios-programas.md). |
 
 ## 4. PoS propio (gran pase)
 

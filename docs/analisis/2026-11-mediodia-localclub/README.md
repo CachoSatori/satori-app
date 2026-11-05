@@ -55,6 +55,9 @@ Todo es **solo lectura**: nada de esto toca la base ni el código de la app.
 
 8. **Escenario 2027:** ver [ESCENARIO-2027.md](ESCENARIO-2027.md). Sobre el presupuesto 2026, las propuestas suman +₡3,9 a 9,1M de margen por año.
 
+9. **Escenarios de cambios (04-nov):** supuesto contra realidad y tablero mensual en
+   [`ESCENARIOS-cambios-programas.md`](ESCENARIOS-cambios-programas.md). Contra hoy: +₡7,3 a 8,0M/año (prudente +₡3–5M).
+
 > Si alguna cifra de la sección 1 o de r8 no coincide con esta, vale esta (más reciente).
 > En r8 y en la sección 1 quedan como historia la recomendación de «menú fijo todo el año» y los 71–79 extra.
 

@@ -812,6 +812,45 @@ begin
       and r::text !~ '@|\+506|\+[1-9][0-9]{7,}', '');
 end $$;
 
+-- ═══ 26. Bajas: el saldo vence en la misma transacción; volver a activo no restituye;
+--        un mes cerrado da siempre lo mismo ═══
+do $$
+declare v_m uuid; r1 jsonb; r2 jsonb; v_s int; v_venc int;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Baja Prueba Oct', 'app') returning id into v_m;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen)
+  values (v_m, 'tarjeta', 10, 6, 18000, '990777', timestamptz '2026-10-15 20:00:00-06', timestamptz '2026-10-15 20:00:00-06', 'app');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  r1 := public.club_reporte_mes('2026-10-01');
+  perform public.club_miembro_guardar(v_m, 'referente', 'Baja Prueba Oct', null, 'baja', null);
+  r2 := public.club_reporte_mes('2026-10-01');
+  perform pg_temp.yo();
+  select public.club_saldo_personas(v_m) into v_s;
+  select count(*) into v_venc from club_movimientos where miembro_id = v_m and tipo = 'vencimiento' and personas = -10 and nota = 'baja: saldo vencido';
+  perform pg_temp.r('26', 'baja con saldo → vencimiento por el saldo («baja: saldo vencido»), saldo 0',
+    v_s = 0 and v_venc = 1, format('saldo=%s, vencimientos=%s', v_s, v_venc));
+  perform pg_temp.r('26', 'el reporte de octubre da lo mismo antes y después de la baja',
+    r1->'kpis' = r2->'kpis' and r1->'antiguedad' = r2->'antiguedad' and r1->'dormidos'->'cuentas' = r2->'dormidos'->'cuentas',
+    format('saldo al cierre: %s → %s · cuentas: %s → %s', r1->'kpis'->>'saldo_creditos_al_cierre', r2->'kpis'->>'saldo_creditos_al_cierre',
+           r1->'kpis'->>'cuentas_con_saldo', r2->'kpis'->>'cuentas_con_saldo'));
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_miembro_guardar(v_m, 'referente', 'Baja Prueba Oct', null, 'activo', null);
+  perform pg_temp.yo();
+  perform pg_temp.r('26', 'volver a activo no restituye (saldo sigue en 0)', public.club_saldo_personas(v_m) = 0,
+    format('saldo=%s', public.club_saldo_personas(v_m)));
+  -- una segunda baja con saldo 0 no inserta nada
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_miembro_guardar(v_m, 'referente', 'Baja Prueba Oct', null, 'baja', null);
+  perform pg_temp.yo();
+  perform pg_temp.r('26', 'baja con saldo 0 → no inserta vencimiento',
+    (select count(*) from club_movimientos where miembro_id = v_m and tipo = 'vencimiento') = 1, '');
+  -- la restitución es solo del owner (club_ajuste)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_ajuste(v_m, 10, 'restitucion', 'prueba: restituir lo vencido por la baja');
+  perform pg_temp.yo();
+  perform pg_temp.r('26', 'owner restituye con club_ajuste (restitucion)', public.club_saldo_personas(v_m) = 10, '');
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

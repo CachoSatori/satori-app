@@ -876,6 +876,9 @@ declare
   v_id     uuid;
   v_tel    text;
   v_email  text;
+  v_antes  text;
+  v_saldo  int;
+  v_cfg    public.club_config%rowtype;
 begin
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
@@ -909,6 +912,7 @@ begin
     values (p_tipo, v_nombre, p_negocio_id, coalesce(p_estado, 'activo'), 'app')
     returning id into v_id;
   else
+    select m.estado into v_antes from public.club_miembros m where m.id = p_id for update;
     update public.club_miembros
        set tipo = p_tipo, nombre = v_nombre, negocio_id = p_negocio_id,
            estado = coalesce(p_estado, estado), updated_at = now()
@@ -916,6 +920,21 @@ begin
     returning id into v_id;
     if v_id is null then
       raise exception 'Miembro no encontrado' using errcode = 'P0001';
+    end if;
+    -- Baja: el saldo vence en la misma transacción. Volver a activo NO restituye
+    -- (eso es club_ajuste tipo restitucion, solo owner).
+    if v_antes = 'activo' and p_estado = 'baja' then
+      v_saldo := public.club_saldo_personas(v_id);
+      if v_saldo > 0 then
+        select * into v_cfg from public.club_config c
+         where c.location_id = (select m.location_id from public.club_miembros m where m.id = v_id);
+        insert into public.club_movimientos
+          (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+           fecha_visita, registrado_por, origen, nota)
+        values
+          (v_cfg.location_id, v_id, 'vencimiento', -v_saldo, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
+           now(), auth.uid(), 'app', 'baja: saldo vencido');
+      end if;
     end if;
   end if;
 
@@ -1580,8 +1599,8 @@ begin
         'referentes_con_visitas', (select count(*) from pm where pm.tipo <> 'equipo' and pm.t_mes > 0),
         'cupones_generados', (select count(*) from public.club_cupones c where c.location_id = p_location and c.creado_en >= v_ini and c.creado_en < v_fin),
         'cupones_usados', (select count(*) from public.club_cupones c where c.location_id = p_location and c.usado_en >= v_ini and c.usado_en < v_fin),
-        'saldo_creditos_al_cierre', (select coalesce(sum(cr), 0) from pm where pm.estado = 'activo'),
-        'cuentas_con_saldo', (select count(*) from pm where pm.estado = 'activo' and pm.cr > 0),
+        'saldo_creditos_al_cierre', (select coalesce(sum(cr), 0) from pm),
+        'cuentas_con_saldo', (select count(*) from pm where pm.cr > 0),
         'anterior', jsonb_build_object('tarjetas', k.tarjetas_ant, 'personas', k.personas_ant, 'canjes', k.canjes_ant,
                                        'creditos_canjeados', k.creditos_canjeados_ant)) from k),
     'ranking', (select coalesce(jsonb_agg(f.base || jsonb_build_object('personas', f.pers_mes, 'tarjetas', f.t_mes, 'prom_3m', round(f.prom3, 1))
@@ -1594,12 +1613,12 @@ begin
                   from (select * from fila where tipo <> 'equipo' and prom3 > 0 and pers_mes < prom3 * 0.7 order by pers_mes - prom3 limit 5) f),
     'dormidos', (select jsonb_build_object('cuentas', count(*), 'creditos', coalesce(sum(cr), 0),
                    'lista', coalesce((select jsonb_agg(x.base || jsonb_build_object('creditos', x.cr, 'ultima_actividad', x.ult) order by x.cr desc)
-                                        from (select * from fila where estado = 'activo' and tipo <> 'equipo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')
+                                        from (select * from fila where tipo <> 'equipo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')
                                                order by cr desc) x), '[]'))   -- lista completa: el PDF muestra 10, el CSV todas
-                   from pm where estado = 'activo' and tipo <> 'equipo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')),
+                   from pm where tipo <> 'equipo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')),
     'a_contactar', (select coalesce(jsonb_agg(x.base || jsonb_build_object('creditos', x.cr, 'vence_en', x.vence) order by x.vence), '[]')
                       from (select f.*, f.ult + make_interval(months => v_cfg.vencimiento_meses) as vence from fila f
-                             where f.estado = 'activo' and f.tipo <> 'equipo' and f.cr > 0 and f.ult is not null
+                             where f.tipo <> 'equipo' and f.cr > 0 and f.ult is not null
                                and f.ult + make_interval(months => v_cfg.vencimiento_meses) >= v_fin
                                and f.ult + make_interval(months => v_cfg.vencimiento_meses) < v_fin + interval '30 days'
                              order by vence limit 10) x),
@@ -1607,9 +1626,9 @@ begin
                  'lista', coalesce((select jsonb_agg(x.base || jsonb_build_object('personas', x.pers_mes) order by x.pers_mes desc)
                                       from (select * from fila where tipo <> 'equipo' and primera >= v_ini order by pers_mes desc limit 10) x), '[]'))
                  from pm where tipo <> 'equipo' and primera >= v_ini),
-    'equipo', (select jsonb_build_object('personas_mes', coalesce(sum(pers_mes), 0), 'creditos', coalesce(sum(cr) filter (where estado = 'activo'), 0),
+    'equipo', (select jsonb_build_object('personas_mes', coalesce(sum(pers_mes), 0), 'creditos', coalesce(sum(cr), 0),
                  'lista', coalesce((select jsonb_agg(x.base || jsonb_build_object('personas', x.pers_mes, 'creditos', x.cr) order by x.cr desc, x.pers_mes desc)
-                                      from (select * from fila where tipo = 'equipo' and estado = 'activo' and (cr > 0 or pers_mes > 0)
+                                      from (select * from fila where tipo = 'equipo' and (cr > 0 or pers_mes > 0)
                                              order by cr desc, pers_mes desc limit 10) x), '[]'))
                  from pm where tipo = 'equipo'),
     'antiguedad', (select coalesce(jsonb_agg(jsonb_build_object('tramo', b.tramo, 'cuentas', b.cuentas, 'creditos', b.creditos,
@@ -1620,14 +1639,14 @@ begin
                                        when ult >= v_fin - interval '6 months' then '3 a 6 meses'
                                        when ult >= v_fin - interval '12 months' then '6 a 12 meses' else 'más de 12 meses' end as tramo,
                                   count(*) as cuentas, sum(cr) as creditos
-                             from pm where estado = 'activo' and cr > 0 group by 1, 2) b),
+                             from pm where cr > 0 group by 1, 2) b),
     'pm', jsonb_build_object(
         'pausado', v_cfg.pm_pausado,
         'nota', case when v_cfg.pm_pausado then 'Programa PM en pausa por temas contables: los montos son informativos.' else null end,
         'pendiente_crc', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c join mi on mi.id = c.miembro_id
-                           where mi.estado = 'activo' and c.estado in ('pendiente','aprobado') and c.created_at < v_fin)
+                           where c.estado in ('pendiente','aprobado') and c.created_at < v_fin)
                        - (select coalesce(sum(p.monto_crc), 0) from public.club_pm_pagos p join mi on mi.id = p.miembro_id
-                           where mi.estado = 'activo' and p.pagado_en < v_fin),
+                           where p.pagado_en < v_fin),
         'cargos_mes_crc', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c join mi on mi.id = c.miembro_id
                             where c.created_at >= v_ini and c.created_at < v_fin),
         'pagos_mes_crc', (select coalesce(sum(p.monto_crc), 0) from public.club_pm_pagos p join mi on mi.id = p.miembro_id

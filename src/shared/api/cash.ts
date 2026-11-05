@@ -140,10 +140,8 @@ export async function updateMiddayCheck(sessionId: string, profileId: string): P
 export async function closeCashSession(
   sessionId: string,
   finalData: {
-    // null en turnos nuevos (05/11): el cierre de turno ya no pide efectivo — el «debería» de un
-    // solo cajón quedaba incompleto por diseño del pozo y el control real es el cierre del día.
-    final_cash_crc: number | null
-    final_cash_usd: number | null
+    final_cash_crc: number
+    final_cash_usd: number
     final_safe_crc?: number
     final_bank_crc?: number
     notes?: string
@@ -1014,8 +1012,6 @@ export async function cerrarDiaCompleto(params: {
   cierre: Pick<CashCierreDia, 'vn_crc' | 'vn_usd' | 'propinas_n_crc' | 'otros_n_crc' | 'ef_real_n_crc'
     | 'sep_diaria_crc' | 'sep_diaria_usd' | 'sep_registradora_crc' | 'sep_registradora_usd'
     | 'remanente_crc' | 'remanente_usd' | 'diferencia_crc' | 'ajuste_tipo' | 'ajuste_motivo' | 'notas' | 'tipo_cambio'>
-    // Conteo ciego (mig 074): el PRIMER conteo si hubo reconteo; null si no hubo.
-    & { primer_conteo_crc: number | null; primer_conteo_usd: number | null }
   ventas:     { mediodia: { crc: number; usd: number }; noche: { crc: number; usd: number } }
   retiro_crc: number
   ajuste:     { crc: number; usd: number; motivo: string }

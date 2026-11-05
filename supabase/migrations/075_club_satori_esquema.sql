@@ -245,6 +245,9 @@ create table if not exists public.club_pm_cargos (
   created_at        timestamptz not null default now()
 );
 
+-- Anulación de cargos PM con fecha (D2: el PM de las cuentas borradas se anula en la fecha de la baja).
+alter table public.club_pm_cargos add column if not exists anulado_en timestamptz;
+
 -- F3: se crea vacía.
 create table if not exists public.club_visitas (
   id              uuid primary key default gen_random_uuid(),
@@ -1644,7 +1647,8 @@ begin
         'pausado', v_cfg.pm_pausado,
         'nota', case when v_cfg.pm_pausado then 'Programa PM en pausa por temas contables: los montos son informativos.' else null end,
         'pendiente_crc', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c join mi on mi.id = c.miembro_id
-                           where c.estado in ('pendiente','aprobado') and c.created_at < v_fin)
+                           where c.created_at < v_fin
+                             and (c.estado in ('pendiente','aprobado') or (c.estado = 'anulado' and c.anulado_en >= v_fin)))
                        - (select coalesce(sum(p.monto_crc), 0) from public.club_pm_pagos p join mi on mi.id = p.miembro_id
                            where p.pagado_en < v_fin),
         'cargos_mes_crc', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c join mi on mi.id = c.miembro_id

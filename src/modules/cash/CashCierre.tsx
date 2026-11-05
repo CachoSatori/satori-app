@@ -230,6 +230,17 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   // select manual que podría contradecir a la plata. La plata ya se deriva del mismo signo en recordCierreAjuste.
   const ajusteTipoDerivado = ajusteTipoPorSigno(diferencia, difUSD)
   const [ajusteMotivo, setAjusteMotivo] = useState('')
+  // ── Conteo CIEGO de la Fase 2 (05/11, mig 074) ──
+  // Antes de «Confirmar conteo» solo se ve la tabla de separaciones y el total contado: NI el
+  // esperado NI la diferencia. Al confirmar se bloquean los campos de la Fase 2 y aparece la
+  // verificación. Fuera de tolerancia → UN reconteo (se guarda el primer conteo); si sigue fuera,
+  // motivo obligatorio. La tolerancia, requiresAjuste y cuadra/cuadraUSD NO cambian: solo CUÁNDO
+  // se muestran.
+  const [conteoConfirmado, setConteoConfirmado] = useState(false)
+  const [primerConteo, setPrimerConteo] = useState<{ crc: number; usd: number } | null>(null)
+  // Al cambiar de fecha el conteo vuelve a ser ciego (estado derivado de la fecha, sin efecto).
+  const [conteoFecha, setConteoFecha] = useState(fecha)
+  if (conteoFecha !== fecha) { setConteoFecha(fecha); setConteoConfirmado(false); setPrimerConteo(null) }
   const [notas,        setNotas]        = useState('')
 
   // CAMBIO A — cerrar con ventas en ₡0: confirmación explícita por fase (checkbox).
@@ -249,6 +260,19 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
   // Opción B (firmada): el gate cubre AMBAS monedas — antes un faltante solo-USD cerraba sin motivo.
   const requiresAjuste = cierreNecesitaAjuste(diferencia, difUSD)
+  // Conteo ciego: fuera de tolerancia hay que recontar UNA vez antes de poder cargar el motivo.
+  const debeRecontar = conteoConfirmado && requiresAjuste && primerConteo === null
+  const confirmarConteo = () => {
+    if (totalContadoCRC === 0) { setError('Completá el conteo físico (separaciones)'); return }
+    setError(null); setConteoConfirmado(true)
+  }
+  const recontar = () => {
+    // Se guarda el primer conteo (mig 074) y se vuelve a contar a ciegas: campos del conteo en
+    // blanco y el esperado oculto de nuevo. Ventas de noche y retiro quedan como estaban.
+    setPrimerConteo({ crc: totalContadoCRC, usd: totalContadoUSD })
+    setSepDiariaCRC(''); setSepDiariaUSD(''); setSepRegCRC(''); setSepRegUSD(''); setRemCRC(''); setRemUSD('')
+    setAjusteMotivo(''); setConteoConfirmado(false); setError(null)
+  }
 
   // ── Confirmar cierre parcial (Fase 1) ─────────────────────────
   // El turno abierto NO bloquea el sellado del Mediodía: al mediodía la caja sigue operando
@@ -328,6 +352,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     if (requiresAjuste && !ajusteMotivo.trim()) {
       setError('⚠ Hay diferencia — el motivo es obligatorio antes de cerrar'); return
     }
+    if (!conteoConfirmado) { setError('Confirmá el conteo antes de cerrar el día'); return }
+    if (debeRecontar) { setError('Hay diferencia: recontá una vez antes de cerrar'); return }
     // Orden de fases: la noche NO se puede cerrar sin el Mediodía confirmado (Fase 1).
     // Sin `parcial`, las ventas de mediodía se perderían y el cierre quedaría a medias.
     if (!parcial) { setError('Cerrá primero el Mediodía (Fase 1) antes de cerrar la noche.'); return }
@@ -362,6 +388,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
           ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
           notas,
           tipo_cambio:          tc,
+          // Conteo ciego (mig 074): el primer conteo si hubo reconteo; null si no hubo.
+          primer_conteo_crc:    primerConteo ? primerConteo.crc : null,
+          primer_conteo_usd:    primerConteo ? primerConteo.usd : null,
         },
         // IDENTIDAD (FIRMADA): post-corte entra la venta BRUTA (las propinas ya restan como
         // movimientos); pre-corte el NETO de siempre. Igual que antes en recordCierreSales.
@@ -378,6 +407,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         },
       })
       cierreOpId.current = null
+      setConteoConfirmado(false); setPrimerConteo(null)
       setMsg('✓ Día cerrado completamente')
       // C3 — email de cortesía al owner con el resumen (fire-and-forget). La plata ya
       // quedó sellada arriba; si el email falla no rompe ni bloquea el cierre.
@@ -406,6 +436,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       // ATÓMICO (mig 071): ventas + retiro + ajuste + fila del cierre en una transacción. La
       // contraseña de gerencia (cajero) se verifica EN EL SERVIDOR (verify_manager).
       await deshacerCierreDia(fecha, auth.managerEmail, auth.managerPassword)
+      setConteoConfirmado(false); setPrimerConteo(null)
       setMsg('✓ Cierre deshecho — los movimientos del día se mantienen.')
       await loadCierres(); onRefresh()
     } catch (e) {
@@ -710,10 +741,10 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
               <Section title="Ventas noche" icon="🌙" color="#3a7794">
                 <Row2>
                   <Field label="Ventas PoS ₡">
-                    <MontoInput prefix="₡" value={vnCRC} onChange={setVnCRC} />
+                    <MontoInput prefix="₡" value={vnCRC} onChange={setVnCRC} disabled={conteoConfirmado} />
                   </Field>
                   <Field label={`Dólares $ → ₡${N(vnUSD) > 0 ? (N(vnUSD)*tc).toLocaleString('es-CR') : '—'}`}>
-                    <MontoInput prefix="$" value={vnUSD} onChange={setVnUSD} />
+                    <MontoInput prefix="$" value={vnUSD} onChange={setVnUSD} disabled={conteoConfirmado} />
                   </Field>
                 </Row2>
                 {(N(vnCRC) > 0 || N(vnUSD) > 0) && (
@@ -745,7 +776,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                     </div>
                   </Field>
                   <Field label="Retiro dueños → banco ₡">
-                    <MontoInput prefix="₡" value={retiroN} onChange={setRetiroN} />
+                    <MontoInput prefix="₡" value={retiroN} onChange={setRetiroN} disabled={conteoConfirmado} />
                   </Field>
                 </Row2>
                 {N(retiroN) > 0 && (
@@ -783,10 +814,10 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                           <div style={{ fontSize:'0.65rem', color:'#8a8272', marginTop:1 }}>{row.sub}</div>
                         </td>
                         <td style={{ padding:'0.3rem 0.5rem' }}>
-                          <MontoInput prefix="₡" value={row.crc} onChange={row.setCRC} compact />
+                          <MontoInput prefix="₡" value={row.crc} onChange={row.setCRC} compact disabled={conteoConfirmado} />
                         </td>
                         <td style={{ padding:'0.3rem 0.5rem' }}>
-                          <MontoInput prefix="$" value={row.usd} onChange={row.setUSD} compact />
+                          <MontoInput prefix="$" value={row.usd} onChange={row.setUSD} compact disabled={conteoConfirmado} />
                         </td>
                       </tr>
                     ))}
@@ -802,8 +833,32 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   </tbody>
                 </table>
 
-                {/* Verificación */}
-                {totalContadoCRC > 0 && (
+                {/* Conteo ciego (05/11): el esperado y la diferencia se ven recién después de confirmar. */}
+                {!conteoConfirmado ? (
+                  <div style={{ margin:'0.5rem 0 0.75rem' }}>
+                    {primerConteo && (
+                      <div style={{ fontSize:'0.72rem', color:'#8a5040', marginBottom:'0.4rem' }}>
+                        ↺ Reconteo — el primer conteo ({fi2(primerConteo.crc)}{primerConteo.usd ? ` · $${primerConteo.usd.toFixed(2)}` : ''}) quedó guardado. Contá de nuevo.
+                      </div>
+                    )}
+                    <button className="cierre-btn green" onClick={confirmarConteo} disabled={saving || totalContadoCRC === 0}>
+                      ✓ Confirmar conteo
+                    </button>
+                    <div style={{ fontSize:'0.66rem', color:'#8a8272', marginTop:'0.3rem' }}>
+                      El esperado y la diferencia se muestran después de confirmar el conteo.
+                    </div>
+                  </div>
+                ) : debeRecontar ? (
+                  <div style={{ background:'#fdf0ee', border:'2px solid #c23b22', borderRadius:2, padding:'0.75rem', margin:'0.5rem 0 0.75rem' }}>
+                    <div style={{ fontSize:'0.8rem', fontWeight:700, color:'#c23b22', marginBottom:'0.4rem' }}>
+                      ⚠ El conteo no cuadra — volvé a contar una vez antes de cerrar
+                    </div>
+                    <button className="cierre-btn" onClick={recontar} disabled={saving}>↺ Recontar</button>
+                  </div>
+                ) : null}
+
+                {/* Verificación — solo después de «Confirmar conteo» */}
+                {totalContadoCRC > 0 && conteoConfirmado && (
                   <>
                     <div className="cierre-resumen">
                       <div className="cierre-resumen-header">Verificación — Cierre del Día</div>
@@ -891,8 +946,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   </>
                 )}
 
-                {/* Ajuste obligatorio si hay diferencia */}
-                {requiresAjuste && (
+                {/* Ajuste obligatorio si hay diferencia — después del reconteo (conteo ciego) */}
+                {requiresAjuste && conteoConfirmado && !debeRecontar && (
                   <div style={{ background:'#fdf0ee', border:'2px solid #c23b22', borderRadius:2, padding:'0.875rem', marginBottom:'0.75rem' }}>
                     <div style={{ fontSize:'0.82rem', fontWeight:700, color:'#c23b22', marginBottom:'0.4rem' }}>
                       ⚠ Diferencia detectada — registrá el motivo para cerrar
@@ -953,7 +1008,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 onClick={() => setShowResumen(true)}
                 disabled={saving || turnoAbierto || ventasNVacias || (ventasNCeroReal && !confirmVentasCeroN)
                   || (postCorte && ventaSospechosaDeSerNeta(N(vnCRC), propinasPagadasDia) && !confirmVentaBrutaN)
-                  || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())}
+                  || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())
+                  || !conteoConfirmado || debeRecontar}
                 className="cierre-btn green">
                 👁 Revisar resumen y cerrar el día →
               </button>
@@ -1005,6 +1061,12 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 <span>Total contado</span>
                 <strong>{fi2(totalContadoCRC)}{totalContadoUSD > 0 ? ` · $${totalContadoUSD.toFixed(2)}` : ''}</strong>
               </div>
+              {primerConteo && (
+                <div className="cd-resumen-row">
+                  <span>Primer conteo (antes del reconteo)</span>
+                  <strong>{fi2(primerConteo.crc)}{primerConteo.usd > 0 ? ` · $${primerConteo.usd.toFixed(2)}` : ''}</strong>
+                </div>
+              )}
             </div>
 
             {/* Diferencia / ajuste (ya calculado) */}
@@ -1084,14 +1146,14 @@ function Field({ label, children }: { label:string; children: React.ReactNode })
   )
 }
 
-function MontoInput({ prefix, value, onChange, compact }: {
-  prefix: string; value: number|''; onChange: (v: number|'') => void; compact?: boolean
+function MontoInput({ prefix, value, onChange, compact, disabled }: {
+  prefix: string; value: number|''; onChange: (v: number|'') => void; compact?: boolean; disabled?: boolean
 }) {
   return (
     <div className="cierre-monto" style={{ height: compact ? 34 : 38 }}>
       <span className="pfx" style={{ fontSize: compact ? '0.72rem' : '0.82rem' }}>{prefix}</span>
       <input
-        type="number" min={0} step={100} value={value}
+        type="number" min={0} step={100} value={value} disabled={disabled}
         onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))}
         style={{ fontSize: compact ? '0.82rem' : '0.9rem' }}
         placeholder="0"

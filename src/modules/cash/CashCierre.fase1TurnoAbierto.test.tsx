@@ -129,6 +129,9 @@ describe('CashCierre · Fase 2 sigue bloqueada con la Caja Diaria abierta', () =
 
     const btn = await screen.findByText(/Revisar resumen y cerrar el día/)
     prepararFase2()
+    // Conteo ciego (05/11): hasta «Confirmar conteo» el botón de cierre sigue deshabilitado.
+    expect((btn as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByText(/Confirmar conteo/))
 
     expect((btn as HTMLButtonElement).disabled).toBe(false)
   })

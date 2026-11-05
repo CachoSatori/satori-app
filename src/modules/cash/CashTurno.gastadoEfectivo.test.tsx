@@ -119,18 +119,29 @@ describe('CashTurno — la tarjeta "Gastado efectivo" suma también los otros eg
     expect(tarjeta('Disponible')).toBe(fi(50000))
   })
 
-  it('la tarjeta usa la MISMA suma que resta la verificación del cierre (gastado + disponible = asignado)', () => {
+  it('gastado + disponible = fondo del turno (el invariante de la tarjeta se mantiene)', () => {
+    renderTurno([pagoProveedor, propinaEgreso])
+    // fondo 100.000 · gastado = 10.000 proveedor + 40.000 propina
+    expect(monto(tarjeta('Gastado efectivo'))).toBe(50000)
+    expect(monto(tarjeta('Gastado efectivo')) + monto(tarjeta('Disponible'))).toBe(100000)
+  })
+
+  it('05/11: el cierre de turno ya no pide efectivo ni muestra «debería / Cuadra»', () => {
     const { container } = renderTurno([pagoProveedor, propinaEgreso])
+    expect(container.querySelector('.cd-verificacion')).toBeNull()
+    expect(screen.queryByText('Efectivo al cierre ₡')).toBeNull()
+    expect(screen.queryByText('Efectivo al cierre $')).toBeNull()
+    expect(screen.queryByText(/Debería quedar en la Caja Diaria/)).toBeNull()
+    expect(screen.queryByText(/Cuadra correctamente/)).toBeNull()
+    expect(screen.getByText(/El efectivo se cuenta en el/)).toBeTruthy()
+  })
 
-    const verif = container.querySelector('.cd-verificacion') as HTMLElement
-    const asignado = monto(fila(verif, 'Fondo inicial'))
-    const restados = monto(fila(verif, '− Pagos a proveedores (efectivo)'))
-                   + monto(fila(verif, '− Otros egresos efectivo'))
-
-    // El invariante del fix: la tarjeta ES lo que el cierre resta, ni más ni menos.
-    expect(monto(tarjeta('Gastado efectivo'))).toBe(restados)
-    expect(monto(tarjeta('Gastado efectivo')) + monto(tarjeta('Disponible'))).toBe(asignado)
-    expect(monto(fila(verif, 'Debería quedar en la Caja Diaria'))).toBe(asignado - restados)
+  it('«Disponible»: texto nuevo y sin aviso de déficit aunque dé negativo', () => {
+    const propinaGrande = { ...propinaEgreso, amount_crc: 133800 } as CashMovement
+    renderTurno([{ ...pagoProveedor, amount_crc: 86000 } as CashMovement, propinaGrande])
+    expect(screen.getByText('Fondo menos pagos del día (no incluye reposiciones)')).toBeTruthy()
+    expect(screen.queryByText(/déficit en caja/)).toBeNull()
+    expect(screen.queryByText(/restante en caja/)).toBeNull()
   })
 
   it('sin otros egresos la tarjeta sigue mostrando solo los proveedores (sin regresión)', () => {
@@ -162,26 +173,34 @@ describe('CashTurno — el "Resumen del Turno" reconstruye el efectivo línea po
     expect(monto(filaPago(modal, 'Propinas por turno'))).toBe(40000)
   })
 
-  it('los subtotales cierran contra el "Efectivo que debería quedar"', () => {
+  it('el desglose sigue (asignado, proveedores, otros) pero SIN la línea «debería» ni «Cuadra / Dif» (05/11)', () => {
     const modal = abrirResumen([pagoProveedor, propinaEgreso])
 
-    const asignado  = monto(fila(modal, 'Total asignado'))
-    const proveedor = monto(fila(modal, '− Pagos a proveedores (efectivo)'))
-    const otros     = monto(fila(modal, '− Otros egresos (efectivo)'))
-    const deberia   = monto(fila(modal, 'Efectivo que debería quedar (Caja Diaria)'))
-
-    expect(asignado).toBe(100000)
-    expect(proveedor).toBe(10000)
-    expect(otros).toBe(40000)
-    // Lo que el modal promete: el "debería" se reconstruye con las filas que muestra.
-    expect(asignado - proveedor - otros).toBe(deberia)
-    expect(deberia).toBe(50000)
+    expect(monto(fila(modal, 'Total asignado'))).toBe(100000)
+    expect(monto(fila(modal, '− Pagos a proveedores (efectivo)'))).toBe(10000)
+    expect(monto(fila(modal, '− Otros egresos (efectivo)'))).toBe(40000)
+    expect(within(modal).queryByText(/Efectivo que debería quedar/)).toBeNull()
+    expect(within(modal).queryByText(/Cuadra|Dif:/)).toBeNull()
   })
 
   it('sin otros egresos no aparece el subtotal vacío (el desglose no cambia)', () => {
     const modal = abrirResumen([pagoProveedor])
-
     expect(within(modal).queryByText('− Otros egresos (efectivo)')).toBeNull()
-    expect(monto(fila(modal, 'Efectivo que debería quedar (Caja Diaria)'))).toBe(90000)
+    expect(within(modal).queryByText(/Efectivo que debería quedar/)).toBeNull()
+  })
+})
+
+describe('CashTurno — cierre sin efectivo (05/11)', () => {
+  it('al confirmar, closeCashSession recibe final_cash_crc/usd = null', async () => {
+    const api = await import('../../shared/api/cash')
+    const close = vi.mocked(api.closeCashSession)
+    close.mockResolvedValue(undefined)
+    Object.defineProperty(globalThis.navigator, 'onLine', { value: true, configurable: true })
+    renderTurno([pagoProveedor])
+    fireEvent.click(screen.getByRole('button', { name: /VER RESUMEN Y CONFIRMAR CIERRE/ }))
+    const modal = document.querySelector('.cd-modal') as HTMLElement
+    fireEvent.click(within(modal).getByRole('button', { name: /CERRAR/i }))
+    await vi.waitFor(() => expect(close).toHaveBeenCalled())
+    expect(close.mock.calls[0][1]).toMatchObject({ final_cash_crc: null, final_cash_usd: null })
   })
 })

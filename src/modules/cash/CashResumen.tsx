@@ -326,12 +326,13 @@ export default function CashResumen({ movements, sessions }: Props) {
                   <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', paddingLeft: '0.5rem', fontSize: '0.72rem' }}>
                     {[
                       { label: 'Caja inicial', val: s.initial_cash_crc, color: '#5a5040' },
-                      { label: 'Final registradora', val: s.final_cash_crc, color: '#5a5040' },
+                      { label: 'Caja Diaria al cerrar (histórico)', val: s.final_cash_crc, color: '#5a5040' },
                       { label: 'Caja fuerte', val: s.final_safe_crc, color: 'var(--t-teal)' },
                       { label: 'Depósito banco', val: s.final_bank_crc, color: 'var(--t-teal)' },
-                    ].filter(k => k.val != null && k.val > 0).map(k => (
+                    ].filter(k => (k.val != null && k.val > 0) || (k.label.startsWith('Caja Diaria') && k.val == null)).map(k => (
                       <span key={k.label} style={{ color: k.color }}>
-                        {k.label}: <strong>{fi(k.val!)}</strong>
+                        {/* 05/11: los turnos nuevos ya no cargan efectivo al cerrar → null → «—». */}
+                        {k.label}: <strong>{k.val == null ? '—' : fi(k.val)}</strong>
                       </span>
                     ))}
                   </div>

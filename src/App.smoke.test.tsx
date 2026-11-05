@@ -61,8 +61,8 @@ describe('App routing smoke (DOM) — sesión sin perfil NO entra en loop /↔/l
     const { default: App } = await import('./App')
     render(<App />)
 
-    // El LoginPage real (servido por PublicRoute) muestra el toggle "Crear cuenta".
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Crear cuenta' })).toBeTruthy())
+    // El LoginPage real (servido por PublicRoute): botón «Ingresar» (sin «Crear cuenta» desde el 05/11).
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ingresar' })).toBeTruthy())
 
     // Confirmación dura del NO-loop: quedó estable en /login (PublicRoute no rebotó a '/').
     expect(window.location.pathname).toBe('/login')

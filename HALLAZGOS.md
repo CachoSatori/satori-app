@@ -7,6 +7,19 @@
 
 ---
 
+## 🙈 Noviembre 2026 — Conteo ciego en el cierre del día; el cierre de turno deja de contar (✅ mig 074 en prod, 05/11)
+
+- **Cierre del día:** antes, apenas el «Total contado» pasaba de 0 se veían en vivo el «Debería quedar» y el «Cuadra / Diferencia». Desde la mig 074 el conteo es **ciego**:
+  - hasta «Confirmar conteo» se ven solo la tabla de separaciones y el total;
+  - al confirmar se bloquean los campos de la Fase 2 y aparece la verificación;
+  - fuera de tolerancia hay que **recontar una vez**, y el primer conteo se guarda en `cash_cierres_dia.primer_conteo_crc/usd` (null si no hubo reconteo);
+  - si después del reconteo sigue fuera, el motivo es obligatorio.
+  - La tolerancia (₡500 / US$1), `requiresAjuste` y `cuadra`/`cuadraUSD` no cambian: solo cambia **cuándo** se muestran.
+- **Cierre de turno:** ya no pide efectivo ni muestra «debería / Cuadra». `final_cash_*` queda null en los turnos nuevos y no lo usa ningún cálculo; CashResumen lo muestra como «Caja Diaria al cerrar (histórico)».
+  - **Por qué:** el «debería» de un solo cajón queda incompleto **por diseño del pozo** (`pozo.ts`, REPORTE-T1B §3.1). La plata pasa entre la Caja Fuerte, la Registradora y la Caja Diaria sin registrar el traspaso (es neutro para el pozo), así que restar las propinas (fijas como `caja_origen = 'Registradora'` en `propinaPago.ts`) daba negativos imposibles, como −₡119.800 el 17/08.
+  - El control real del efectivo es el **cierre del día**. «Disponible» pasa a decir «Fondo menos pagos del día (no incluye reposiciones)» y ya no avisa «déficit».
+- **🟡 Baja · fuga del conteo ciego:** la tarjeta de efectivo de **Movimientos** (`CashMovimientos.tsx` vía `tarjetaPozo.ts`) muestra el saldo del pozo. Sumándole las ventas del día se puede deducir el esperado. El conteo es ciego en la práctica, no de forma absoluta.
+
 ## 🧾 Noviembre 2026 — El cierre del día se guardaba en 4 llamadas sueltas (✅ mig 071 en prod, 05/11)
 
 - **Antes:** Fase 2 = `updateCierreCompleto` → `recordCierreSales` → `recordCierreRetiro` → `recordCierreAjuste`, cada una por su lado.

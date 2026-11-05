@@ -21,6 +21,17 @@
   - Idempotencia con `close_op_id`, más `UNIQUE(session_date)`.
   - Contador excluido. La regla de turno abierto es la misma de la pantalla.
   - La contraseña de gerencia se verifica en el servidor (`verify_manager`).
+- **Recorrido real en staging (05/11, sin rollback, funciones del cliente con sesión real):**
+  - diferencia chica → cierra sin ajuste;
+  - deshacer como cajero: sin credenciales «No autorizado», con las de gerencia borra todo junto;
+  - diferencia grande → ajuste ₡; solo US$ → ajuste US$ (ids de ajuste = los del cliente);
+  - Fase 1 dos veces → «el mediodía ya está sellado».
+  - Encontró un bug que los tests no veían: `supabase.rpc` sin `bind` perdía el `this`. Corregido, y el test ahora lo atrapa.
+- **Replay de los 120 cierres completos de prod contra las validaciones de la RPC:** 115 pasan. Los 5 que no, no los produce el cliente actual:
+  - 29/06, 18/07 y 29/07: el tipo era un selector manual (hasta el 05/08) y no coincide con el signo («Faltante» con sobrante, «Otro»);
+  - 02/08: el ajuste en US$ (US$236) se borró a mano el 04/08 («error»);
+  - 19/10: el ajuste lo borró el «Borrar TODO» (#25).
+  - El cliente actual deriva el tipo del signo y manda `''` sin ajuste, con los mismos umbrales que la RPC: no hace falta otro arreglo.
 
 ## 🧯 Noviembre 2026 — «Borrar TODO el día» borraba movimientos de OTRO día operativo (✅ fix en prod, 05/11, PR #25)
 

@@ -8,9 +8,15 @@ const { rpcSpy, insertResult } = vi.hoisted(() => ({
   insertResult: { data: null as unknown, error: null as { message: string; code?: string } | null },
 }))
 
-vi.mock('./supabase', () => ({
-  supabase: {
-    rpc: rpcSpy,
+vi.mock('./supabase', () => {
+  // `rpc` real usa `this` (el cliente): este mock lo exige, así un `supabase.rpc` suelto (sin bind)
+  // revienta acá igual que en la base (bug real encontrado en staging).
+  const cliente: { rest: object; rpc: (...a: unknown[]) => unknown; from: () => unknown } = {
+    rest: {},
+    rpc(this: { rest?: object } | undefined, ...args: unknown[]) {
+      if (!this || !this.rest) throw new TypeError("Cannot read properties of undefined (reading 'rest')")
+      return rpcSpy(...args)
+    },
     from: () => {
       const b = {
         insert: () => b, select: () => b,
@@ -18,8 +24,9 @@ vi.mock('./supabase', () => ({
       }
       return b
     },
-  },
-}))
+  }
+  return { supabase: cliente }
+})
 vi.mock('../offline/outbox', () => ({ enqueue: vi.fn(), pendingOps: vi.fn(async () => []) }))
 
 const resultado = (data: unknown, error: { message: string; code?: string } | null = null) => {

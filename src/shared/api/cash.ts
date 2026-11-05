@@ -996,7 +996,9 @@ export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created
 // RPC sin tipos generados (mig 071): mismo cast acotado que deleteCashMovement.
 type RpcConSignal = (fn: string, args: Record<string, unknown>) =>
   { abortSignal: (s: AbortSignal) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> }
-const rpcConSignal = () => supabase.rpc as unknown as RpcConSignal
+// `bind`: supabase.rpc usa `this` (el cliente). Suelta, pierde el `this` y revienta con
+// «Cannot read properties of undefined (reading 'rest')» — lo encontró la prueba real en staging.
+const rpcConSignal = () => supabase.rpc.bind(supabase) as unknown as RpcConSignal
 
 // Cierre del día (Fase 2) ATÓMICO — mig 071, RPC `cerrar_dia_completo`: la fila del cierre, las
 // ventas en efectivo, el retiro a banco y el ajuste de la diferencia se escriben en UNA transacción

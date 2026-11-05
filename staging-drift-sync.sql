@@ -334,7 +334,7 @@ create policy "crm_gestionan_interacciones" on public.customer_interactions for 
 create policy "crm_ver_interacciones" on public.customer_interactions for select using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role, 'cajero'::user_role])));
 create policy "crm_gestionan_clientes" on public.customers for all using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role])));
 create policy "crm_ver_clientes" on public.customers for select using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role, 'cajero'::user_role])));
-create policy "customers_anon_insert" on public.customers for insert to anon with check (true);
+-- CERRADA por la 072 (SEC-03): no recrear. create policy "customers_anon_insert" on public.customers for insert to anon with check (true);
 create policy "documents_rw" on public.documents for all using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role, 'cajero'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role, 'cajero'::user_role])));
 create policy "Owners y managers gestionan empleados" on public.employees for all using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role])));
 create policy "Todos ven empleados activos" on public.employees for select using ((is_active = true));

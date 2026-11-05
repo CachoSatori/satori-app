@@ -51,6 +51,7 @@
 5. **Club Satori (reemplazo de la página de créditos).** Spec v2 en revisión, nada construido → [docs/club-satori/](docs/club-satori/). *(Nuevo, 05/11.)*
    - **Primer paso — F0 · 🔐🖊️ cerrar `customers_anon_insert` (mig 007).** La policy es `WITH CHECK (true)` para `anon`: cualquiera, sin cuenta, crea clientes con `points`, `tier`, `total_spent_crc` o `total_visits` arbitrarios. Sigue vigente en `main` y en prod (verificado el 05/11). Va después de SEC-01. Detalle en [HALLAZGOS.md](HALLAZGOS.md) (SEC-03).
    - Después, F1–F3 según el §1 del spec (ver [ROADMAP.md](ROADMAP.md)).
+6. **🧹🖊️ Respaldos de staging `cash_movements_pre_migracion_2026_07` y `suppliers_pre_migracion_2026_07`: decidir si se borran.** Tenían RLS apagado; el 05/11 se cerraron (RLS sin policies + `revoke all` a `anon` y `authenticated`) con `scripts/sql/staging_respaldos_cierre_anon.sql`, sin borrarlos. Solo staging.
 
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
 

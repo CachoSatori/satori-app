@@ -1,9 +1,9 @@
-# Continuación — backlog priorizado (al día: 2026-10-30)
+# Continuación — backlog priorizado (al día: 2026-11-05)
 
-> **Foto:** `main` = **`43e843d`** (PROD) · `staging` = **`a4b11ae`** · `integracion/analitica-staging` =
-> **`a54d6ec`** (4 atrás de `staging`). **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10**, validado físicamente
-> por Ismael. Migraciones en prod hasta la **067** (ledger 45). Estado completo y reglas operativas →
-> [ESTADO.md](ESTADO.md).
+> **Foto al cierre del 05/11:** `main` = **`5631681`** (PROD; merges de #23, #24 y #26 el 05/11) · `staging` =
+> **`cef4f95`** (~20 commits atrás de `main`; el fix #25 entró como cherry-pick). **`FUENTE_VENTAS = 'pos'` en prod
+> desde el 30/10.** Migraciones en prod hasta la **069** (ledger **47**); staging tiene además 055–061 y la **070**
+> (ledger 69). Estado completo y reglas operativas → [ESTADO.md](ESTADO.md).
 >
 > **Cómo se armó:** se partió del backlog de `staging` del 29/10 (`a43d3d4`, que sigue abajo completo como
 > detalle) y se sumaron los pendientes que dejaron el go-live del PoS (29–30/10) y el handoff del 30/10. Cada
@@ -18,43 +18,36 @@
 
 ---
 
-## 🟥 P0-SEC — SEC-01 al cierre del 04/11
+## ✅ Hecho 04–05/11
 
-- **Hecho:**
-  - **Paso A** (prod y staging): `disable_signup=true`; el signup con anon da 422. Bans de Rosaura y LE - Consultorias (desvío aceptado: por `banned_until` directo, no por la Admin API) y borrado de sus sesiones (6) y refresh tokens (15).
-  - **Paso 0** revisado por el asesor.
-  - **Paso 1** (staging): mig 068 aplicada (3 corridas sin error), pruebas 1–7 y alta real OK, rollback probado, ledger 67.
-- **Paso 2 hecho (04/11 23:30 CR):** re-chequeo igual a la línea base; 068 aplicada a mano en prod; catálogo OK; prueba 4 (anon, SQL y REST) y prueba 1 (manager, con rollback) OK; ledger de prod 45 → 46. **Falta:** que Ismael valide en prod (login de los 3 owners, Admin, un salonero real en Mi Rendimiento) y mergee el PR.
-- **Drift de ledger:** prod 46 contra staging 67. Es esperable: 055–061 solo están en staging, y a staging le faltan las filas 065/066.
-- **Validado en staging por Ismael (04/11):**
-  - login owner;
-  - Admin: activar «SEC01 Objetivo» (pendiente) y cambiar un rol;
-  - Test Cajero en Mi Rendimiento.
-- ~~Paso 2 en prod~~ ✅ (ver arriba). Plan que se siguió:
-  - Re-chequear 3 owners, 0 metadata y perfiles elevados contra el Paso 0. La línea base ya incluye los 2 bans.
-  - Aplicar a mano.
-  - Catálogo + prueba 4 + prueba 1 con rollback.
-  - Ledger 46.
-  - PR a `main` con la rama `claude/sec-01-perfiles`, que solo trae `.sql` y docs.
-- **Siguiente:** SEC-01b y SEC-02. Rollback de la 068: `scripts/sql/068_rollback.sql`.
+- **SEC-01 · escalada de roles (mig 068)** — en prod, PR #22 (`81ac2d4`).
+  - Paso A: `disable_signup=true` en prod y staging, más los bans de Rosaura y LE - Consultorias. El ban se hizo con `banned_until` directo (desvío aceptado) y se borraron 6 sesiones y 15 refresh tokens.
+  - `handle_new_user` da de alta siempre `salonero` inactivo. Además: guarda de owner activo sobre `role`/`is_active`/borrados, y nunca 0 owners activos.
+  - Rollback: `scripts/sql/068_rollback.sql`.
+- **SEC-01b · las cuentas inactivas pierden permisos (mig 069)** — en prod, PR #23 (`b82ed81`). Aplicada a mano el 05/11 a las 15:22 UTC.
+  - `get_my_role()` con `is_active`; las 6 guardas NULL-seguras y las 3 policies con `is_active`.
+  - Ismael validó en staging. Rollback: `scripts/sql/069_rollback.sql`.
+- **Fix «Borrar TODO el día»** — en prod, PR #25 (`781eb72`), solo código.
+  - Elige por día operativo y no por `created_at`; vista previa antes de confirmar; ningún delete sin chequear el error (incluido «Deshacer cierre»).
+  - Ismael validó en la preview de staging. Rollback: revert del merge.
+- **Mig 070 · guardas NULL-seguras del PoS propio + revoke de EXECUTE a `anon`** — **solo en staging** (rama `claude/sec-01b-pos-guardas`). Va a prod con el pase del PoS propio. Pendiente del mismo bloqueante: `my_turno_stats` sigue ejecutable por `anon` en staging.
+- Docs: ROADMAP de tolerancia de cierre (#24) y de sincronizar staging + modal (#26).
+- Detalle y evidencia: [HALLAZGOS.md](HALLAZGOS.md) (SEC-01, SEC-01b y «Borrar TODO el día»).
 
-## 🟥 P0-SEC — SEC-01b al 05/11 ✅ (staging y prod)
+## 🟥 P0 — Cola de estabilización de caja (en este orden; todo 🖊️, toca cierres)
 
-- **Hecho en staging:**
-  - Paso 0 (revisado por el asesor, opción B).
-  - Revoke de EXECUTE de `anon` en las 6 funciones del PoS propio.
-  - **070** (guardas del PoS) y después **069** (`get_my_role` con `is_active`, 6 guardas de prod y 3 policies). Las dos corrieron 2 veces sin error.
-  - Rollback de la 069 probado y reaplicado. Ledger de staging: 69 filas.
-- **Pruebas:** el owner inactivo queda bloqueado en todo; los activos se comportan igual que antes; el cobro real con rollback funciona para owner, manager, cajero y salonero.
-- **Ahora:** Ismael valida en staging:
-  - owner abre y guarda un cierre de prueba;
-  - Admin;
-  - bandeja de facturas (marcar verificada);
-  - un salonero en Mi Rendimiento.
-  - ⚠️ Test Cajero quedó como **manager** después de la validación del 04/11. Si tiene que volver a salonero, se cambia desde Admin.
-- ✅ **Prod (05/11 09:22 CR):** la 069 se aplicó (ledger 46 → 47), con el catálogo verificado y la prueba de Rosaura con rollback. El PR #22 se mergeó con el deploy OK. **Falta:** el merge del PR de la 069.
-- ~~Plan de prod~~ (seguido): Re-chequeo de los textos del Paso 0 (md5), aplicar, revisar el catálogo y correr la prueba del owner inactivo **solo con rollback**. La 070 **no** va a prod: va con el pase del PoS propio.
-- **Pendiente del bloqueante del PoS:** `my_turno_stats` sigue ejecutable por `anon` en staging.
+1. **Cierre del día + ajuste atómicos, sin errores tragados.** Guardar el cierre, las ventas, el retiro y el ajuste en una sola operación (RPC transaccional) o fallar entero con un mensaje claro. Hoy son llamadas separadas (`CashCierre.tsx` ~330–405). `recordCierreAjuste` no chequea el borrado previo y se traga el `23505`. Contexto: el ajuste del 19/10 lo borró el bug del «Borrar TODO» (ya resuelto con #25), pero la falta de atomicidad sigue.
+2. **Conteo ciego en el cierre de turno.** Hoy `final_cash_crc` = el «debería» de la pantalla (75 de 86 turnos iguales al colón, incluso negativos). El cajero cuenta sin ver el esperado, y se guardan esperado, contado y diferencia.
+3. **Alerta de días sin cierre.** En prod faltan el cierre del día del 26/09 y los turnos del 18/10 y del 27/10.
+
+(Más abajo en el ROADMAP, sin apuro: `diferencia_usd` en `cash_cierres_dia` y el modal propio para «Borrar TODO».)
+
+## 🟧 Después
+
+1. **🖊️ Alta de empleados desde Admin** (Edge Function con `service_role`, que verifica owner activo). El auto-registro está cerrado desde el 04/11: hoy no hay forma de sumar empleados desde la app. Va con `supabase/config.toml` (ítem 11) para fijar `verify_jwt`.
+2. **🔐 Revocar el token `claude-code-prod` y rotar los secretos de ingesta** (ítems 1 y 2 del P0 de abajo).
+3. **🔐 SEC-02.**
+4. **🧹 Sincronizar `staging` con `main`** (~20 commits: PRs #18–#22, migraciones 065–068 de archivo, código de logins viejos). Hay conflictos en los docs, y al ledger de staging le faltan las filas 065/066.
 
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
 

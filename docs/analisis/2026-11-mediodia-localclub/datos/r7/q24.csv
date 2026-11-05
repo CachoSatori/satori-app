@@ -1,0 +1,1132 @@
+periodo,turno,clase,dow,hora,mesas,pax,invitados,neta,descuento
+0 ago-2024 a abr-2025,mañana,LC marcado,3,14,2,5,3,73610,12990
+0 ago-2024 a abr-2025,mañana,LC marcado,4,14,1,2,1,14960,2640
+0 ago-2024 a abr-2025,mañana,LC marcado,5,15,1,1,0,10455,1845
+0 ago-2024 a abr-2025,mañana,LC marcado,6,0,1,0,0,2040,360
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,1,12,1,2,0,29250,6150
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,1,15,2,4,0,56355,11535
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,2,12,1,1,0,7200,1700
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,2,13,1,1,0,13410,2090
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,2,14,2,3,0,50236,8865
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,2,16,1,1,0,37740,6660
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,3,14,2,2,0,38760,6840
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,3,16,2,2,0,30280,5720
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,4,14,2,2,0,28423,5280
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,4,15,1,3,0,33700,6830
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,4,16,2,2,0,35935,6769
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,5,12,1,1,0,13005,2295
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,5,13,1,2,0,21590,3810
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,5,14,1,2,0,47260,8340
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,5,16,1,1,0,7673,1354
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,6,0,1,0,0,2040,360
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,6,12,1,1,0,7480,1320
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,6,13,1,0,0,7070,1740
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,6,14,5,6,0,105925,20575
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,6,15,2,3,0,31365,5535
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,7,12,1,1,0,7200,1700
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,7,13,2,4,0,25585,4515
+0 ago-2024 a abr-2025,mañana,LC sin marcar 15%,7,14,1,1,0,14700,2900
+0 ago-2024 a abr-2025,mañana,otro,1,13,4,6,0,35280,15120
+0 ago-2024 a abr-2025,mañana,otro,1,16,1,0,0,2100,900
+0 ago-2024 a abr-2025,mañana,otro,2,12,1,2,0,13880,720
+0 ago-2024 a abr-2025,mañana,otro,2,13,2,3,0,27370,11730
+0 ago-2024 a abr-2025,mañana,otro,2,14,1,1,0,12700,500
+0 ago-2024 a abr-2025,mañana,otro,2,15,1,2,0,22566,1034
+0 ago-2024 a abr-2025,mañana,otro,2,16,1,0,0,2800,1200
+0 ago-2024 a abr-2025,mañana,otro,3,13,1,3,0,22890,9810
+0 ago-2024 a abr-2025,mañana,otro,3,14,1,1,0,25752,968
+0 ago-2024 a abr-2025,mañana,otro,3,15,2,3,0,50853,7629
+0 ago-2024 a abr-2025,mañana,otro,4,13,1,3,0,43300,2900
+0 ago-2024 a abr-2025,mañana,otro,4,14,2,3,0,45060,1965
+0 ago-2024 a abr-2025,mañana,otro,4,15,1,1,0,9125,3375
+0 ago-2024 a abr-2025,mañana,otro,5,14,1,2,0,13500,13403
+0 ago-2024 a abr-2025,mañana,otro,6,0,1,0,0,5040,2160
+0 ago-2024 a abr-2025,mañana,otro,6,14,1,2,0,17200,1119
+0 ago-2024 a abr-2025,mañana,otro,6,15,2,0,0,22990,1710
+0 ago-2024 a abr-2025,mañana,otro,7,14,3,3,0,42823,5977
+0 ago-2024 a abr-2025,mañana,otro,7,16,1,0,0,3841,1646
+0 ago-2024 a abr-2025,mañana,sin descuento,1,11,1,2,0,24000,0
+0 ago-2024 a abr-2025,mañana,sin descuento,1,12,15,30,0,391900,-366
+0 ago-2024 a abr-2025,mañana,sin descuento,1,13,23,47,0,668147,-737
+0 ago-2024 a abr-2025,mañana,sin descuento,1,14,36,68,0,1016664,-1841
+0 ago-2024 a abr-2025,mañana,sin descuento,1,15,27,59,0,1097328,-1829
+0 ago-2024 a abr-2025,mañana,sin descuento,1,16,21,37,0,661859,-2654
+0 ago-2024 a abr-2025,mañana,sin descuento,2,12,10,14,0,243138,0
+0 ago-2024 a abr-2025,mañana,sin descuento,2,13,25,50,0,726421,-3
+0 ago-2024 a abr-2025,mañana,sin descuento,2,14,30,50,0,770231,0
+0 ago-2024 a abr-2025,mañana,sin descuento,2,15,30,43,0,641833,1031
+0 ago-2024 a abr-2025,mañana,sin descuento,2,16,17,22,0,493015,0
+0 ago-2024 a abr-2025,mañana,sin descuento,3,12,10,21,0,237141,-1
+0 ago-2024 a abr-2025,mañana,sin descuento,3,13,27,42,0,794309,-819
+0 ago-2024 a abr-2025,mañana,sin descuento,3,14,36,56,0,966708,-950
+0 ago-2024 a abr-2025,mañana,sin descuento,3,15,28,48,0,651056,-1020
+0 ago-2024 a abr-2025,mañana,sin descuento,3,16,20,33,0,742708,-2559
+0 ago-2024 a abr-2025,mañana,sin descuento,4,0,2,6,0,82200,-4782
+0 ago-2024 a abr-2025,mañana,sin descuento,4,12,19,29,0,463315,-2283
+0 ago-2024 a abr-2025,mañana,sin descuento,4,13,31,43,0,863996,-3
+0 ago-2024 a abr-2025,mañana,sin descuento,4,14,39,71,0,1051111,-370
+0 ago-2024 a abr-2025,mañana,sin descuento,4,15,50,102,0,1483866,-1373
+0 ago-2024 a abr-2025,mañana,sin descuento,4,16,15,25,0,456484,1416
+0 ago-2024 a abr-2025,mañana,sin descuento,4,17,1,2,0,53451,0
+0 ago-2024 a abr-2025,mañana,sin descuento,5,12,12,13,0,219876,0
+0 ago-2024 a abr-2025,mañana,sin descuento,5,13,40,69,0,957541,1133
+0 ago-2024 a abr-2025,mañana,sin descuento,5,14,48,77,0,1180689,-974
+0 ago-2024 a abr-2025,mañana,sin descuento,5,15,25,55,0,947711,-1287
+0 ago-2024 a abr-2025,mañana,sin descuento,5,16,14,23,0,355268,0
+0 ago-2024 a abr-2025,mañana,sin descuento,6,0,34,0,0,323800,-1020
+0 ago-2024 a abr-2025,mañana,sin descuento,6,1,2,0,0,160500,0
+0 ago-2024 a abr-2025,mañana,sin descuento,6,11,1,0,0,12500,0
+0 ago-2024 a abr-2025,mañana,sin descuento,6,12,13,15,0,229635,-1734
+0 ago-2024 a abr-2025,mañana,sin descuento,6,13,31,48,0,845323,950
+0 ago-2024 a abr-2025,mañana,sin descuento,6,14,45,92,0,1584732,-1329
+0 ago-2024 a abr-2025,mañana,sin descuento,6,15,56,87,0,1667447,-99
+0 ago-2024 a abr-2025,mañana,sin descuento,6,16,17,38,0,588406,65
+0 ago-2024 a abr-2025,mañana,sin descuento,7,12,17,27,0,319129,0
+0 ago-2024 a abr-2025,mañana,sin descuento,7,13,42,84,0,1130645,-6497
+0 ago-2024 a abr-2025,mañana,sin descuento,7,14,54,79,0,1303606,-9931
+0 ago-2024 a abr-2025,mañana,sin descuento,7,15,54,86,0,1547285,-5413
+0 ago-2024 a abr-2025,mañana,sin descuento,7,16,12,15,0,277378,-559
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,1,12,2,4,0,34650,3850
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,1,13,5,7,0,98758,10973
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,1,14,3,7,0,103680,11520
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,1,15,1,0,0,4320,480
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,1,16,1,1,0,34677,3730
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,2,12,1,2,0,22700,1700
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,2,13,2,4,0,41760,4640
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,2,14,9,15,0,164036,17148
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,2,15,1,3,0,37752,4194
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,3,13,2,2,0,32220,3580
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,3,14,6,9,0,127730,14237
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,3,15,1,0,0,30855,3510
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,4,13,3,2,0,87660,9740
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,4,14,3,5,0,62290,6248
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,4,15,3,5,0,138960,15040
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,4,16,4,8,0,70660,7730
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,5,12,3,5,0,80010,8890
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,5,13,7,17,0,235008,27518
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,5,14,7,12,0,171370,19395
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,5,15,10,12,0,177553,19019
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,5,16,3,3,0,35260,3640
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,6,0,1,0,0,5220,580
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,6,13,1,2,0,16110,1790
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,6,14,3,5,0,54279,6030
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,6,15,3,6,0,53730,5970
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,6,16,1,2,0,19530,2170
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,7,12,2,2,0,48870,5430
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,7,13,4,12,0,136530,15170
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,7,14,7,12,0,162570,16916
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,7,15,4,5,0,69445,7415
+0 ago-2024 a abr-2025,mañana,tarjeta 10%,7,16,4,5,0,78494,8721
+0 ago-2024 a abr-2025,noche,LC marcado,1,16,1,1,0,20315,2295
+0 ago-2024 a abr-2025,noche,LC marcado,1,17,1,1,0,34085,4080
+0 ago-2024 a abr-2025,noche,LC marcado,1,18,1,1,0,40630,4590
+0 ago-2024 a abr-2025,noche,LC marcado,1,19,3,7,1,94435,18665
+0 ago-2024 a abr-2025,noche,LC marcado,1,20,10,16,0,280765,44415
+0 ago-2024 a abr-2025,noche,LC marcado,1,21,11,15,11,393330,62885
+0 ago-2024 a abr-2025,noche,LC marcado,1,22,20,18,4,397800,74880
+0 ago-2024 a abr-2025,noche,LC marcado,1,23,8,8,1,160650,29850
+0 ago-2024 a abr-2025,noche,LC marcado,2,0,1,0,0,2040,360
+0 ago-2024 a abr-2025,noche,LC marcado,2,17,1,1,0,24221,3080
+0 ago-2024 a abr-2025,noche,LC marcado,2,18,3,5,3,107186,14230
+0 ago-2024 a abr-2025,noche,LC marcado,2,19,1,2,1,58140,5280
+0 ago-2024 a abr-2025,noche,LC marcado,2,20,5,6,0,146939,24836
+0 ago-2024 a abr-2025,noche,LC marcado,2,21,3,4,1,57375,10125
+0 ago-2024 a abr-2025,noche,LC marcado,2,22,1,2,0,19550,3450
+0 ago-2024 a abr-2025,noche,LC marcado,2,23,1,0,0,25670,2120
+0 ago-2024 a abr-2025,noche,LC marcado,3,18,2,2,0,71667,8275
+0 ago-2024 a abr-2025,noche,LC marcado,3,20,14,21,4,401017,68968
+0 ago-2024 a abr-2025,noche,LC marcado,3,21,14,17,1,439875,74625
+0 ago-2024 a abr-2025,noche,LC marcado,3,22,6,13,4,198220,34185
+0 ago-2024 a abr-2025,noche,LC marcado,4,16,1,0,0,25726,3079
+0 ago-2024 a abr-2025,noche,LC marcado,4,17,3,5,0,69530,10335
+0 ago-2024 a abr-2025,noche,LC marcado,4,18,2,0,0,53550,9450
+0 ago-2024 a abr-2025,noche,LC marcado,4,19,2,5,0,64940,11460
+0 ago-2024 a abr-2025,noche,LC marcado,4,20,2,5,3,78965,13935
+0 ago-2024 a abr-2025,noche,LC marcado,4,21,6,5,4,90261,11115
+0 ago-2024 a abr-2025,noche,LC marcado,4,22,17,9,1,321910,59590
+0 ago-2024 a abr-2025,noche,LC marcado,4,23,3,1,0,20655,3645
+0 ago-2024 a abr-2025,noche,LC marcado,5,17,2,1,0,58536,6935
+0 ago-2024 a abr-2025,noche,LC marcado,5,18,1,0,1,48535,5985
+0 ago-2024 a abr-2025,noche,LC marcado,5,19,2,3,0,73992,12359
+0 ago-2024 a abr-2025,noche,LC marcado,5,20,10,16,0,193970,35430
+0 ago-2024 a abr-2025,noche,LC marcado,5,21,7,11,3,181915,32104
+0 ago-2024 a abr-2025,noche,LC marcado,5,22,14,18,5,301207,47034
+0 ago-2024 a abr-2025,noche,LC marcado,5,23,16,8,0,264520,43460
+0 ago-2024 a abr-2025,noche,LC marcado,6,18,3,3,0,81617,11823
+0 ago-2024 a abr-2025,noche,LC marcado,6,19,4,6,1,62475,16325
+0 ago-2024 a abr-2025,noche,LC marcado,6,20,5,5,2,137526,24270
+0 ago-2024 a abr-2025,noche,LC marcado,6,21,8,10,5,150064,23385
+0 ago-2024 a abr-2025,noche,LC marcado,6,22,14,26,5,380189,57818
+0 ago-2024 a abr-2025,noche,LC marcado,6,23,14,9,3,215260,37140
+0 ago-2024 a abr-2025,noche,LC marcado,7,0,6,0,0,36210,6390
+0 ago-2024 a abr-2025,noche,LC marcado,7,1,1,0,0,2040,360
+0 ago-2024 a abr-2025,noche,LC marcado,7,17,1,1,0,34085,4080
+0 ago-2024 a abr-2025,noche,LC marcado,7,18,2,4,0,58290,8996
+0 ago-2024 a abr-2025,noche,LC marcado,7,19,3,8,2,125800,22200
+0 ago-2024 a abr-2025,noche,LC marcado,7,20,8,8,16,379167,72713
+0 ago-2024 a abr-2025,noche,LC marcado,7,21,8,10,3,194199,27680
+0 ago-2024 a abr-2025,noche,LC marcado,7,22,1,0,0,4930,870
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,1,17,1,2,0,23655,3861
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,1,18,3,5,0,39625,7675
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,1,19,6,7,2,150625,26975
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,1,20,10,14,0,196806,34084
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,1,21,29,26,0,550631,102758
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,1,22,43,47,0,837765,144872
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,1,23,28,31,4,674470,122830
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,2,0,2,0,0,17680,4120
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,2,16,1,2,0,20836,3080
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,2,18,1,2,0,41650,7350
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,2,19,5,10,0,177536,33912
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,2,20,8,14,0,327611,56977
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,2,21,10,27,0,448206,83275
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,2,22,14,10,0,310311,52303
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,2,23,5,5,0,78423,14963
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,3,18,1,0,0,5566,983
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,3,19,2,4,0,84490,14010
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,3,20,11,32,0,411153,69398
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,3,21,24,54,3,888549,151090
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,3,22,13,17,0,196397,34000
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,3,23,14,11,0,279480,49658
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,4,0,4,0,0,43860,7740
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,4,17,1,0,0,22416,3955
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,4,19,4,7,2,171238,27275
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,4,20,9,17,2,282214,49710
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,4,21,25,23,1,412625,71955
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,4,22,26,43,2,785440,136613
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,4,23,12,11,0,117194,20618
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,5,0,1,2,0,26320,6580
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,5,1,1,0,0,5780,1020
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,5,18,1,3,0,38760,6840
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,5,19,8,15,0,190170,31175
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,5,20,12,7,0,202778,34220
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,5,21,40,73,1,1207831,211654
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,5,22,39,42,0,878149,150188
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,5,23,6,0,0,119185,25315
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,6,17,1,0,0,15570,2330
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,6,18,2,2,0,33434,5901
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,6,19,3,5,0,75245,14055
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,6,20,13,14,5,299393,58788
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,6,21,20,24,3,427919,78474
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,6,22,36,44,0,720454,125353
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,6,23,32,24,5,597299,101525
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,7,0,6,3,0,49590,10710
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,7,1,3,0,0,10200,1800
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,7,16,1,2,0,29495,5205
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,7,18,2,3,0,34640,5512
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,7,19,3,7,0,104275,18885
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,7,20,7,3,0,103896,18235
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,7,21,8,9,0,164290,28440
+0 ago-2024 a abr-2025,noche,LC sin marcar 15%,7,22,2,1,0,70820,12680
+0 ago-2024 a abr-2025,noche,otro,1,17,1,0,0,3850,1650
+0 ago-2024 a abr-2025,noche,otro,1,18,1,2,0,40800,1600
+0 ago-2024 a abr-2025,noche,otro,1,19,5,13,0,225080,15660
+0 ago-2024 a abr-2025,noche,otro,1,20,10,19,0,440684,20987
+0 ago-2024 a abr-2025,noche,otro,1,21,8,14,0,248535,35678
+0 ago-2024 a abr-2025,noche,otro,1,22,22,21,0,334883,79001
+0 ago-2024 a abr-2025,noche,otro,1,23,2,1,2,14265,5035
+0 ago-2024 a abr-2025,noche,otro,2,0,6,0,0,32520,12230
+0 ago-2024 a abr-2025,noche,otro,2,18,2,5,0,134188,10753
+0 ago-2024 a abr-2025,noche,otro,2,19,5,9,0,124874,54426
+0 ago-2024 a abr-2025,noche,otro,2,20,2,1,0,40244,11583
+0 ago-2024 a abr-2025,noche,otro,2,21,11,8,0,273705,52402
+0 ago-2024 a abr-2025,noche,otro,2,22,10,12,0,275755,50459
+0 ago-2024 a abr-2025,noche,otro,2,23,2,2,0,34845,6145
+0 ago-2024 a abr-2025,noche,otro,3,0,1,0,0,1680,720
+0 ago-2024 a abr-2025,noche,otro,3,1,1,0,0,3360,1440
+0 ago-2024 a abr-2025,noche,otro,3,17,1,2,0,38500,1600
+0 ago-2024 a abr-2025,noche,otro,3,19,2,2,0,59190,3710
+0 ago-2024 a abr-2025,noche,otro,3,20,6,8,0,137510,30625
+0 ago-2024 a abr-2025,noche,otro,3,21,4,4,0,45400,10504
+0 ago-2024 a abr-2025,noche,otro,3,22,6,5,0,74969,17843
+0 ago-2024 a abr-2025,noche,otro,3,23,2,9,0,98531,59341
+0 ago-2024 a abr-2025,noche,otro,4,0,2,0,0,15280,8720
+0 ago-2024 a abr-2025,noche,otro,4,17,3,0,0,33040,14160
+0 ago-2024 a abr-2025,noche,otro,4,18,1,2,0,57100,2500
+0 ago-2024 a abr-2025,noche,otro,4,19,2,3,0,22140,4840
+0 ago-2024 a abr-2025,noche,otro,4,20,4,9,0,132720,12880
+0 ago-2024 a abr-2025,noche,otro,4,21,5,9,0,151783,6770
+0 ago-2024 a abr-2025,noche,otro,4,22,10,12,0,219781,25064
+0 ago-2024 a abr-2025,noche,otro,4,23,8,2,0,155940,101158
+0 ago-2024 a abr-2025,noche,otro,5,0,3,0,0,11265,3435
+0 ago-2024 a abr-2025,noche,otro,5,16,1,0,0,4340,1678
+0 ago-2024 a abr-2025,noche,otro,5,20,6,14,0,242820,12032
+0 ago-2024 a abr-2025,noche,otro,5,21,3,9,0,150535,12246
+0 ago-2024 a abr-2025,noche,otro,5,22,17,14,0,279275,100960
+0 ago-2024 a abr-2025,noche,otro,5,23,7,5,0,65973,17122
+0 ago-2024 a abr-2025,noche,otro,6,18,1,2,0,39000,1600
+0 ago-2024 a abr-2025,noche,otro,6,19,3,7,0,88444,27734
+0 ago-2024 a abr-2025,noche,otro,6,20,9,8,0,252028,29195
+0 ago-2024 a abr-2025,noche,otro,6,21,3,7,0,89043,46125
+0 ago-2024 a abr-2025,noche,otro,6,22,9,8,0,211521,42157
+0 ago-2024 a abr-2025,noche,otro,6,23,4,2,0,62065,8125
+0 ago-2024 a abr-2025,noche,otro,7,0,10,0,0,57584,16176
+0 ago-2024 a abr-2025,noche,otro,7,1,3,0,0,12442,4063
+0 ago-2024 a abr-2025,noche,otro,7,2,1,0,0,12750,720
+0 ago-2024 a abr-2025,noche,otro,7,18,1,1,0,25900,1400
+0 ago-2024 a abr-2025,noche,otro,7,19,5,5,0,182430,40607
+0 ago-2024 a abr-2025,noche,otro,7,20,12,26,0,393970,33844
+0 ago-2024 a abr-2025,noche,otro,7,21,6,12,0,245540,82424
+0 ago-2024 a abr-2025,noche,otro,7,22,5,4,0,74580,4920
+0 ago-2024 a abr-2025,noche,sin descuento,1,16,15,20,0,359402,-450
+0 ago-2024 a abr-2025,noche,sin descuento,1,17,18,32,0,555875,1
+0 ago-2024 a abr-2025,noche,sin descuento,1,18,47,61,0,1297632,78
+0 ago-2024 a abr-2025,noche,sin descuento,1,19,123,269,0,4970420,-9387
+0 ago-2024 a abr-2025,noche,sin descuento,1,20,166,363,0,7581675,-2943
+0 ago-2024 a abr-2025,noche,sin descuento,1,21,233,440,0,9255081,-23730
+0 ago-2024 a abr-2025,noche,sin descuento,1,22,262,395,0,7324612,-10124
+0 ago-2024 a abr-2025,noche,sin descuento,1,23,150,179,0,3882338,1108
+0 ago-2024 a abr-2025,noche,sin descuento,2,0,11,19,0,292600,-600
+0 ago-2024 a abr-2025,noche,sin descuento,2,16,9,16,0,259366,-292
+0 ago-2024 a abr-2025,noche,sin descuento,2,17,28,54,0,830199,1139
+0 ago-2024 a abr-2025,noche,sin descuento,2,18,39,61,0,1104221,-3065
+0 ago-2024 a abr-2025,noche,sin descuento,2,19,110,261,0,4418817,-7685
+0 ago-2024 a abr-2025,noche,sin descuento,2,20,227,455,0,9123116,-20872
+0 ago-2024 a abr-2025,noche,sin descuento,2,21,228,422,0,9013050,-24892
+0 ago-2024 a abr-2025,noche,sin descuento,2,22,96,193,0,4774889,-939
+0 ago-2024 a abr-2025,noche,sin descuento,2,23,42,52,0,1721029,-471
+0 ago-2024 a abr-2025,noche,sin descuento,3,0,17,13,0,158600,-755
+0 ago-2024 a abr-2025,noche,sin descuento,3,1,6,1,0,48700,0
+0 ago-2024 a abr-2025,noche,sin descuento,3,2,1,0,0,7200,0
+0 ago-2024 a abr-2025,noche,sin descuento,3,16,7,7,0,200296,-450
+0 ago-2024 a abr-2025,noche,sin descuento,3,17,20,27,0,580782,-1
+0 ago-2024 a abr-2025,noche,sin descuento,3,18,35,75,0,1253060,-134
+0 ago-2024 a abr-2025,noche,sin descuento,3,19,134,286,0,5171410,-11342
+0 ago-2024 a abr-2025,noche,sin descuento,3,20,315,569,0,11682861,-22031
+0 ago-2024 a abr-2025,noche,sin descuento,3,21,269,454,0,10106173,-6447
+0 ago-2024 a abr-2025,noche,sin descuento,3,22,137,275,0,5440376,-9074
+0 ago-2024 a abr-2025,noche,sin descuento,3,23,21,41,0,743340,-1096
+0 ago-2024 a abr-2025,noche,sin descuento,4,0,2,9,0,25500,0
+0 ago-2024 a abr-2025,noche,sin descuento,4,16,14,32,0,488642,-1490
+0 ago-2024 a abr-2025,noche,sin descuento,4,17,24,47,0,936091,-1620
+0 ago-2024 a abr-2025,noche,sin descuento,4,18,46,83,0,1701628,-643
+0 ago-2024 a abr-2025,noche,sin descuento,4,19,117,248,0,4617286,-13035
+0 ago-2024 a abr-2025,noche,sin descuento,4,20,240,479,0,9140989,1930
+0 ago-2024 a abr-2025,noche,sin descuento,4,21,257,454,0,9897229,-31345
+0 ago-2024 a abr-2025,noche,sin descuento,4,22,167,225,0,4559043,-4725
+0 ago-2024 a abr-2025,noche,sin descuento,4,23,76,33,0,1048963,-7032
+0 ago-2024 a abr-2025,noche,sin descuento,5,0,10,0,0,50900,0
+0 ago-2024 a abr-2025,noche,sin descuento,5,16,16,26,0,471365,-1977
+0 ago-2024 a abr-2025,noche,sin descuento,5,17,25,44,0,686310,-5958
+0 ago-2024 a abr-2025,noche,sin descuento,5,18,41,68,0,1156844,0
+0 ago-2024 a abr-2025,noche,sin descuento,5,19,129,245,0,4113384,-8137
+0 ago-2024 a abr-2025,noche,sin descuento,5,20,291,558,0,10952042,-16196
+0 ago-2024 a abr-2025,noche,sin descuento,5,21,346,611,0,12003669,-29045
+0 ago-2024 a abr-2025,noche,sin descuento,5,22,209,344,0,7293880,-12797
+0 ago-2024 a abr-2025,noche,sin descuento,5,23,80,89,0,2052278,-2731
+0 ago-2024 a abr-2025,noche,sin descuento,6,16,13,18,0,276000,0
+0 ago-2024 a abr-2025,noche,sin descuento,6,17,24,41,0,856024,-13231
+0 ago-2024 a abr-2025,noche,sin descuento,6,18,32,72,0,1449840,-4037
+0 ago-2024 a abr-2025,noche,sin descuento,6,19,134,293,0,5226369,-7709
+0 ago-2024 a abr-2025,noche,sin descuento,6,20,273,540,0,9971506,-29722
+0 ago-2024 a abr-2025,noche,sin descuento,6,21,415,761,0,15377768,-75651
+0 ago-2024 a abr-2025,noche,sin descuento,6,22,287,449,0,8387753,-34223
+0 ago-2024 a abr-2025,noche,sin descuento,6,23,116,114,0,2589660,-10672
+0 ago-2024 a abr-2025,noche,sin descuento,7,0,20,0,0,132950,-1585
+0 ago-2024 a abr-2025,noche,sin descuento,7,16,12,17,0,263744,0
+0 ago-2024 a abr-2025,noche,sin descuento,7,17,29,46,0,828500,-3220
+0 ago-2024 a abr-2025,noche,sin descuento,7,18,49,96,0,1810200,-12240
+0 ago-2024 a abr-2025,noche,sin descuento,7,19,146,305,0,5573174,-13256
+0 ago-2024 a abr-2025,noche,sin descuento,7,20,239,446,0,9042153,-24536
+0 ago-2024 a abr-2025,noche,sin descuento,7,21,170,359,0,7336011,-29147
+0 ago-2024 a abr-2025,noche,sin descuento,7,22,99,205,0,3801153,-4370
+0 ago-2024 a abr-2025,noche,sin descuento,7,23,10,15,0,852249,-1117
+0 ago-2024 a abr-2025,noche,tarjeta 10%,1,16,1,1,0,25400,1800
+0 ago-2024 a abr-2025,noche,tarjeta 10%,1,17,3,3,0,97378,11399
+0 ago-2024 a abr-2025,noche,tarjeta 10%,1,18,7,16,0,275153,30340
+0 ago-2024 a abr-2025,noche,tarjeta 10%,1,19,17,25,0,501457,55708
+0 ago-2024 a abr-2025,noche,tarjeta 10%,1,20,31,60,0,1144401,123292
+0 ago-2024 a abr-2025,noche,tarjeta 10%,1,21,38,70,0,1194803,130821
+0 ago-2024 a abr-2025,noche,tarjeta 10%,1,22,36,64,0,1258191,139786
+0 ago-2024 a abr-2025,noche,tarjeta 10%,1,23,13,19,0,549328,64223
+0 ago-2024 a abr-2025,noche,tarjeta 10%,2,0,2,0,0,37710,4190
+0 ago-2024 a abr-2025,noche,tarjeta 10%,2,16,3,2,0,71792,8230
+0 ago-2024 a abr-2025,noche,tarjeta 10%,2,17,4,4,0,83762,9560
+0 ago-2024 a abr-2025,noche,tarjeta 10%,2,18,3,5,0,74710,7920
+0 ago-2024 a abr-2025,noche,tarjeta 10%,2,19,17,25,0,574835,61460
+0 ago-2024 a abr-2025,noche,tarjeta 10%,2,20,31,76,0,1044188,118023
+0 ago-2024 a abr-2025,noche,tarjeta 10%,2,21,30,72,0,1285972,138923
+0 ago-2024 a abr-2025,noche,tarjeta 10%,2,22,27,57,0,850690,87800
+0 ago-2024 a abr-2025,noche,tarjeta 10%,2,23,4,5,0,76766,8530
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,0,3,2,0,17190,2110
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,1,1,1,0,18630,2170
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,16,2,3,0,63389,7976
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,17,4,7,0,114350,12345
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,18,6,9,0,142978,15924
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,19,10,20,0,338253,37651
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,20,38,74,0,1283112,138162
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,21,27,61,0,1006081,107089
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,22,24,39,0,554790,58730
+0 ago-2024 a abr-2025,noche,tarjeta 10%,3,23,8,9,0,206895,21127
+0 ago-2024 a abr-2025,noche,tarjeta 10%,4,16,5,11,0,129330,14370
+0 ago-2024 a abr-2025,noche,tarjeta 10%,4,17,3,6,0,89366,10400
+0 ago-2024 a abr-2025,noche,tarjeta 10%,4,18,3,3,0,108962,11560
+0 ago-2024 a abr-2025,noche,tarjeta 10%,4,19,13,33,0,413338,45170
+0 ago-2024 a abr-2025,noche,tarjeta 10%,4,20,36,74,0,1305387,138628
+0 ago-2024 a abr-2025,noche,tarjeta 10%,4,21,48,82,0,1588166,169637
+0 ago-2024 a abr-2025,noche,tarjeta 10%,4,22,35,65,0,1166083,125946
+0 ago-2024 a abr-2025,noche,tarjeta 10%,4,23,17,15,0,224933,24162
+0 ago-2024 a abr-2025,noche,tarjeta 10%,5,0,4,6,0,115560,12840
+0 ago-2024 a abr-2025,noche,tarjeta 10%,5,16,3,3,0,37260,3770
+0 ago-2024 a abr-2025,noche,tarjeta 10%,5,17,2,2,0,51421,6590
+0 ago-2024 a abr-2025,noche,tarjeta 10%,5,18,5,9,0,187711,21355
+0 ago-2024 a abr-2025,noche,tarjeta 10%,5,19,25,49,0,796333,86778
+0 ago-2024 a abr-2025,noche,tarjeta 10%,5,20,38,67,0,1064256,113551
+0 ago-2024 a abr-2025,noche,tarjeta 10%,5,21,52,101,1,1627229,177673
+0 ago-2024 a abr-2025,noche,tarjeta 10%,5,22,46,70,0,1493061,167893
+0 ago-2024 a abr-2025,noche,tarjeta 10%,5,23,11,17,0,284965,34112
+0 ago-2024 a abr-2025,noche,tarjeta 10%,6,16,1,2,0,27720,2015
+0 ago-2024 a abr-2025,noche,tarjeta 10%,6,17,3,6,0,90410,10045
+0 ago-2024 a abr-2025,noche,tarjeta 10%,6,18,1,2,0,4320,480
+0 ago-2024 a abr-2025,noche,tarjeta 10%,6,19,10,17,0,284405,31228
+0 ago-2024 a abr-2025,noche,tarjeta 10%,6,20,42,55,0,944452,101340
+0 ago-2024 a abr-2025,noche,tarjeta 10%,6,21,47,84,0,1402661,150647
+0 ago-2024 a abr-2025,noche,tarjeta 10%,6,22,40,69,0,1240998,136291
+0 ago-2024 a abr-2025,noche,tarjeta 10%,6,23,16,12,0,358485,36559
+0 ago-2024 a abr-2025,noche,tarjeta 10%,7,0,4,0,0,16920,1880
+0 ago-2024 a abr-2025,noche,tarjeta 10%,7,1,1,0,0,9180,1020
+0 ago-2024 a abr-2025,noche,tarjeta 10%,7,16,1,4,0,1513,168
+0 ago-2024 a abr-2025,noche,tarjeta 10%,7,18,8,13,0,197454,22237
+0 ago-2024 a abr-2025,noche,tarjeta 10%,7,19,17,28,0,505090,56770
+0 ago-2024 a abr-2025,noche,tarjeta 10%,7,20,25,49,0,755593,80057
+0 ago-2024 a abr-2025,noche,tarjeta 10%,7,21,26,43,0,791693,90133
+0 ago-2024 a abr-2025,noche,tarjeta 10%,7,22,16,23,0,354259,39978
+0 ago-2024 a abr-2025,noche,tarjeta 10%,7,23,1,2,0,22950,2550
+1 may-dic 2025,mañana,LC marcado,1,13,2,2,0,13358,890
+1 may-dic 2025,mañana,LC marcado,1,14,1,2,1,12659,438
+1 may-dic 2025,mañana,LC marcado,1,15,3,5,1,66393,6836
+1 may-dic 2025,mañana,LC marcado,1,16,1,1,0,9327,1050
+1 may-dic 2025,mañana,LC marcado,1,17,4,4,0,99367,10277
+1 may-dic 2025,mañana,LC marcado,2,13,4,8,6,72297,13382
+1 may-dic 2025,mañana,LC marcado,2,14,2,3,1,42403,-343
+1 may-dic 2025,mañana,LC marcado,2,15,1,2,1,20654,849
+1 may-dic 2025,mañana,LC marcado,2,16,4,5,0,81080,8259
+1 may-dic 2025,mañana,LC marcado,2,17,1,1,0,30314,4156
+1 may-dic 2025,mañana,LC marcado,2,18,1,4,3,35292,-4
+1 may-dic 2025,mañana,LC marcado,3,13,1,1,0,22027,2116
+1 may-dic 2025,mañana,LC marcado,3,14,3,3,0,40792,6239
+1 may-dic 2025,mañana,LC marcado,3,15,3,4,0,60699,6173
+1 may-dic 2025,mañana,LC marcado,3,16,2,5,1,29531,3450
+1 may-dic 2025,mañana,LC marcado,3,17,1,1,0,11058,1951
+1 may-dic 2025,mañana,LC marcado,4,12,1,1,0,6469,1141
+1 may-dic 2025,mañana,LC marcado,4,13,5,4,1,81468,18001
+1 may-dic 2025,mañana,LC marcado,4,15,3,8,4,86757,9439
+1 may-dic 2025,mañana,LC marcado,4,16,4,6,2,80562,7685
+1 may-dic 2025,mañana,LC marcado,4,17,3,6,3,152624,22616
+1 may-dic 2025,mañana,LC marcado,5,12,3,4,1,46341,4263
+1 may-dic 2025,mañana,LC marcado,5,13,4,7,2,102398,7965
+1 may-dic 2025,mañana,LC marcado,5,14,5,10,4,103204,14822
+1 may-dic 2025,mañana,LC marcado,5,15,5,10,2,64115,17388
+1 may-dic 2025,mañana,LC marcado,5,16,3,7,1,100403,16502
+1 may-dic 2025,mañana,LC marcado,6,12,1,2,1,27456,4844
+1 may-dic 2025,mañana,LC marcado,6,13,2,3,2,71385,10368
+1 may-dic 2025,mañana,LC marcado,6,14,2,3,1,25341,14097
+1 may-dic 2025,mañana,LC marcado,6,15,4,6,4,83638,8727
+1 may-dic 2025,mañana,LC marcado,6,16,1,2,0,13615,2403
+1 may-dic 2025,mañana,LC marcado,6,17,2,2,0,27080,3585
+1 may-dic 2025,mañana,LC marcado,7,14,4,10,6,98482,11312
+1 may-dic 2025,mañana,LC marcado,7,15,3,2,1,76951,9281
+1 may-dic 2025,mañana,LC marcado,7,16,2,2,0,35049,6058
+1 may-dic 2025,mañana,LC marcado,7,18,1,1,0,14442,1355
+1 may-dic 2025,mañana,LC sin marcar 15%,1,13,2,1,0,22407,4809
+1 may-dic 2025,mañana,LC sin marcar 15%,1,15,3,5,0,38548,7735
+1 may-dic 2025,mañana,LC sin marcar 15%,1,16,1,2,0,30314,5349
+1 may-dic 2025,mañana,LC sin marcar 15%,1,17,1,1,0,25350,4474
+1 may-dic 2025,mañana,LC sin marcar 15%,2,12,3,5,0,47013,8296
+1 may-dic 2025,mañana,LC sin marcar 15%,2,13,1,0,0,7447,1314
+1 may-dic 2025,mañana,LC sin marcar 15%,2,15,1,2,0,49796,8787
+1 may-dic 2025,mañana,LC sin marcar 15%,2,17,2,2,0,17243,3554
+1 may-dic 2025,mañana,LC sin marcar 15%,3,15,1,2,0,55889,9863
+1 may-dic 2025,mañana,LC sin marcar 15%,4,13,6,9,2,142319,25111
+1 may-dic 2025,mañana,LC sin marcar 15%,4,15,2,3,0,43252,7035
+1 may-dic 2025,mañana,LC sin marcar 15%,4,16,1,1,0,8124,1433
+1 may-dic 2025,mañana,LC sin marcar 15%,5,12,3,5,1,51752,8533
+1 may-dic 2025,mañana,LC sin marcar 15%,5,14,2,1,0,50624,8933
+1 may-dic 2025,mañana,LC sin marcar 15%,5,15,1,2,0,14518,2563
+1 may-dic 2025,mañana,LC sin marcar 15%,6,12,1,0,0,2482,438
+1 may-dic 2025,mañana,LC sin marcar 15%,6,13,1,1,0,5416,956
+1 may-dic 2025,mañana,LC sin marcar 15%,6,14,2,2,0,15496,2734
+1 may-dic 2025,mañana,LC sin marcar 15%,7,12,1,1,0,9628,1699
+1 may-dic 2025,mañana,LC sin marcar 15%,7,13,1,0,0,14796,3700
+1 may-dic 2025,mañana,otro,1,13,1,0,0,1735,743
+1 may-dic 2025,mañana,otro,1,14,1,1,0,9624,465
+1 may-dic 2025,mañana,otro,1,15,1,2,0,44513,1875
+1 may-dic 2025,mañana,otro,2,14,1,0,0,11646,4991
+1 may-dic 2025,mañana,otro,2,15,1,0,0,3407,1460
+1 may-dic 2025,mañana,otro,2,16,1,3,0,19452,8338
+1 may-dic 2025,mañana,otro,3,14,1,1,0,9602,9601
+1 may-dic 2025,mañana,otro,4,13,1,2,0,19531,1354
+1 may-dic 2025,mañana,otro,4,16,1,2,0,20009,1141
+1 may-dic 2025,mañana,otro,4,21,1,0,0,8611,3690
+1 may-dic 2025,mañana,otro,5,14,1,1,0,14372,6157
+1 may-dic 2025,mañana,otro,6,16,1,0,0,4150,1779
+1 may-dic 2025,mañana,otro,7,11,1,0,0,991,425
+1 may-dic 2025,mañana,otro,7,14,1,0,0,44618,2229
+1 may-dic 2025,mañana,otro,7,16,1,0,0,3345,1434
+1 may-dic 2025,mañana,sin descuento,1,11,1,0,0,6283,0
+1 may-dic 2025,mañana,sin descuento,1,12,10,17,0,217257,-1197
+1 may-dic 2025,mañana,sin descuento,1,13,29,53,0,636522,-1585
+1 may-dic 2025,mañana,sin descuento,1,14,31,52,0,660401,-463
+1 may-dic 2025,mañana,sin descuento,1,15,24,41,0,549037,-2557
+1 may-dic 2025,mañana,sin descuento,1,16,29,52,0,663276,-1
+1 may-dic 2025,mañana,sin descuento,1,17,16,32,0,579822,-8683
+1 may-dic 2025,mañana,sin descuento,1,18,3,9,0,160089,-1116
+1 may-dic 2025,mañana,sin descuento,2,12,13,17,0,179314,3
+1 may-dic 2025,mañana,sin descuento,2,13,25,44,0,506283,-1899
+1 may-dic 2025,mañana,sin descuento,2,14,22,50,0,777545,-2385
+1 may-dic 2025,mañana,sin descuento,2,15,29,43,0,542570,-930
+1 may-dic 2025,mañana,sin descuento,2,16,28,54,0,940489,-12355
+1 may-dic 2025,mañana,sin descuento,2,17,9,25,0,483097,-1116
+1 may-dic 2025,mañana,sin descuento,3,11,1,1,0,10708,0
+1 may-dic 2025,mañana,sin descuento,3,12,10,15,0,182389,-198
+1 may-dic 2025,mañana,sin descuento,3,13,44,74,0,727213,-1909
+1 may-dic 2025,mañana,sin descuento,3,14,36,54,0,652400,-1849
+1 may-dic 2025,mañana,sin descuento,3,15,30,52,0,593910,524
+1 may-dic 2025,mañana,sin descuento,3,16,20,32,0,478452,-979
+1 may-dic 2025,mañana,sin descuento,3,17,8,9,0,218291,-1797
+1 may-dic 2025,mañana,sin descuento,3,18,1,1,0,12743,0
+1 may-dic 2025,mañana,sin descuento,4,11,2,3,0,11681,-1
+1 may-dic 2025,mañana,sin descuento,4,12,12,21,0,278938,-998
+1 may-dic 2025,mañana,sin descuento,4,13,32,44,0,671461,-287
+1 may-dic 2025,mañana,sin descuento,4,14,35,55,0,684071,3
+1 may-dic 2025,mañana,sin descuento,4,15,31,44,0,638371,-3532
+1 may-dic 2025,mañana,sin descuento,4,16,21,33,0,490045,-998
+1 may-dic 2025,mañana,sin descuento,4,17,7,14,0,181681,-1
+1 may-dic 2025,mañana,sin descuento,4,20,8,16,0,245310,-1
+1 may-dic 2025,mañana,sin descuento,4,21,3,8,0,138496,0
+1 may-dic 2025,mañana,sin descuento,4,22,3,13,0,175045,-3
+1 may-dic 2025,mañana,sin descuento,5,11,1,1,0,1770,-443
+1 may-dic 2025,mañana,sin descuento,5,12,15,22,0,285885,-992
+1 may-dic 2025,mañana,sin descuento,5,13,32,65,0,634249,-2491
+1 may-dic 2025,mañana,sin descuento,5,14,43,82,0,1025315,-2642
+1 may-dic 2025,mañana,sin descuento,5,15,30,56,0,885044,-3617
+1 may-dic 2025,mañana,sin descuento,5,16,24,33,0,643265,-2881
+1 may-dic 2025,mañana,sin descuento,5,17,10,17,0,317610,-3103
+1 may-dic 2025,mañana,sin descuento,5,18,1,2,0,7611,-1
+1 may-dic 2025,mañana,sin descuento,6,12,10,14,0,186196,-3
+1 may-dic 2025,mañana,sin descuento,6,13,37,56,0,856433,-5555
+1 may-dic 2025,mañana,sin descuento,6,14,40,67,0,917278,-3435
+1 may-dic 2025,mañana,sin descuento,6,15,32,47,0,802656,-1767
+1 may-dic 2025,mañana,sin descuento,6,16,31,66,0,936597,-471
+1 may-dic 2025,mañana,sin descuento,6,17,22,43,0,661948,-1615
+1 may-dic 2025,mañana,sin descuento,7,11,1,2,0,21239,-1
+1 may-dic 2025,mañana,sin descuento,7,12,15,18,0,274736,-461
+1 may-dic 2025,mañana,sin descuento,7,13,22,50,0,623187,-1115
+1 may-dic 2025,mañana,sin descuento,7,14,37,57,0,841124,-1903
+1 may-dic 2025,mañana,sin descuento,7,15,35,48,0,707083,-887
+1 may-dic 2025,mañana,sin descuento,7,16,35,69,0,1142787,3
+1 may-dic 2025,mañana,sin descuento,7,17,4,5,0,88938,0
+1 may-dic 2025,mañana,sin descuento,7,18,1,1,0,12566,0
+1 may-dic 2025,mañana,tarjeta 10%,1,13,2,4,0,41018,4558
+1 may-dic 2025,mañana,tarjeta 10%,1,14,4,5,0,139582,13455
+1 may-dic 2025,mañana,tarjeta 10%,1,15,8,11,0,117829,12591
+1 may-dic 2025,mañana,tarjeta 10%,1,16,1,1,0,30540,4195
+1 may-dic 2025,mañana,tarjeta 10%,1,17,2,4,0,53133,5518
+1 may-dic 2025,mañana,tarjeta 10%,2,13,2,2,0,49938,5548
+1 may-dic 2025,mañana,tarjeta 10%,2,14,1,3,1,20987,2775
+1 may-dic 2025,mañana,tarjeta 10%,2,17,3,4,0,61729,6081
+1 may-dic 2025,mañana,tarjeta 10%,3,12,1,1,0,6850,760
+1 may-dic 2025,mañana,tarjeta 10%,3,13,2,3,0,77336,8593
+1 may-dic 2025,mañana,tarjeta 10%,3,14,1,5,0,39345,4372
+1 may-dic 2025,mañana,tarjeta 10%,3,15,1,2,0,10752,1195
+1 may-dic 2025,mañana,tarjeta 10%,3,16,1,2,0,15690,1743
+1 may-dic 2025,mañana,tarjeta 10%,4,12,1,2,0,13301,1013
+1 may-dic 2025,mañana,tarjeta 10%,4,14,2,6,0,49392,5488
+1 may-dic 2025,mañana,tarjeta 10%,4,22,1,7,0,86575,9622
+1 may-dic 2025,mañana,tarjeta 10%,5,12,1,0,0,15088,1724
+1 may-dic 2025,mañana,tarjeta 10%,5,13,1,2,0,32177,3574
+1 may-dic 2025,mañana,tarjeta 10%,6,13,1,1,0,7146,797
+1 may-dic 2025,mañana,tarjeta 10%,6,14,3,7,0,49699,4547
+1 may-dic 2025,mañana,tarjeta 10%,6,15,1,1,0,11412,1154
+1 may-dic 2025,mañana,tarjeta 10%,6,16,3,3,0,25407,2824
+1 may-dic 2025,mañana,tarjeta 10%,6,17,1,2,0,40922,3053
+1 may-dic 2025,mañana,tarjeta 10%,7,14,3,3,0,97924,9044
+1 may-dic 2025,mañana,tarjeta 10%,7,15,2,2,0,61487,6831
+1 may-dic 2025,mañana,tarjeta 10%,7,16,1,2,0,39664,4407
+1 may-dic 2025,mañana,tarjeta 10%,7,17,1,3,0,22943,2775
+1 may-dic 2025,noche,LC marcado,1,17,6,7,1,117447,7117
+1 may-dic 2025,noche,LC marcado,1,18,2,4,0,52146,5735
+1 may-dic 2025,noche,LC marcado,1,19,16,21,4,268177,39725
+1 may-dic 2025,noche,LC marcado,1,20,27,51,19,657142,115390
+1 may-dic 2025,noche,LC marcado,1,21,47,102,40,1476725,232520
+1 may-dic 2025,noche,LC marcado,1,22,29,56,21,866396,144942
+1 may-dic 2025,noche,LC marcado,1,23,1,7,6,77628,7262
+1 may-dic 2025,noche,LC marcado,2,17,4,2,0,83646,9295
+1 may-dic 2025,noche,LC marcado,2,18,12,18,6,301169,41810
+1 may-dic 2025,noche,LC marcado,2,19,16,34,13,529908,67837
+1 may-dic 2025,noche,LC marcado,2,20,18,39,22,653218,104635
+1 may-dic 2025,noche,LC marcado,2,21,32,48,12,745448,87426
+1 may-dic 2025,noche,LC marcado,2,22,21,52,22,742147,114106
+1 may-dic 2025,noche,LC marcado,2,23,1,3,0,26553,4685
+1 may-dic 2025,noche,LC marcado,3,17,7,10,4,151895,18016
+1 may-dic 2025,noche,LC marcado,3,18,10,14,1,288139,39786
+1 may-dic 2025,noche,LC marcado,3,19,16,31,13,445573,65896
+1 may-dic 2025,noche,LC marcado,3,20,16,43,24,618781,82286
+1 may-dic 2025,noche,LC marcado,3,21,11,23,7,503097,81815
+1 may-dic 2025,noche,LC marcado,3,22,13,31,6,531272,68994
+1 may-dic 2025,noche,LC marcado,3,23,3,7,4,122058,14140
+1 may-dic 2025,noche,LC marcado,4,17,6,5,0,138619,16764
+1 may-dic 2025,noche,LC marcado,4,18,5,6,0,162867,24326
+1 may-dic 2025,noche,LC marcado,4,19,13,26,9,377106,43664
+1 may-dic 2025,noche,LC marcado,4,20,18,37,15,567165,81548
+1 may-dic 2025,noche,LC marcado,4,21,19,47,22,567603,97329
+1 may-dic 2025,noche,LC marcado,4,22,14,23,11,374161,46175
+1 may-dic 2025,noche,LC marcado,4,23,4,5,2,94386,6462
+1 may-dic 2025,noche,LC marcado,5,17,3,3,0,51695,6253
+1 may-dic 2025,noche,LC marcado,5,18,8,21,13,274695,33856
+1 may-dic 2025,noche,LC marcado,5,19,12,30,19,430301,71582
+1 may-dic 2025,noche,LC marcado,5,20,26,56,27,1038389,160965
+1 may-dic 2025,noche,LC marcado,5,21,35,79,41,1207117,215785
+1 may-dic 2025,noche,LC marcado,5,22,31,68,28,826646,139178
+1 may-dic 2025,noche,LC marcado,5,23,9,8,3,147845,18054
+1 may-dic 2025,noche,LC marcado,6,16,1,3,2,26956,1540
+1 may-dic 2025,noche,LC marcado,6,17,5,6,1,77801,8989
+1 may-dic 2025,noche,LC marcado,6,18,9,13,6,406137,47115
+1 may-dic 2025,noche,LC marcado,6,19,11,29,14,366027,60479
+1 may-dic 2025,noche,LC marcado,6,20,23,52,17,685540,109218
+1 may-dic 2025,noche,LC marcado,6,21,26,49,25,701387,89839
+1 may-dic 2025,noche,LC marcado,6,22,46,114,43,1540108,240936
+1 may-dic 2025,noche,LC marcado,6,23,5,8,2,159748,27054
+1 may-dic 2025,noche,LC marcado,7,16,1,1,0,10947,1088
+1 may-dic 2025,noche,LC marcado,7,17,4,7,3,138836,13004
+1 may-dic 2025,noche,LC marcado,7,18,10,19,11,341279,50496
+1 may-dic 2025,noche,LC marcado,7,19,18,46,28,663674,95841
+1 may-dic 2025,noche,LC marcado,7,20,15,28,13,342957,54567
+1 may-dic 2025,noche,LC marcado,7,21,18,37,16,565514,78224
+1 may-dic 2025,noche,LC marcado,7,22,12,22,6,341659,44290
+1 may-dic 2025,noche,LC marcado,7,23,4,11,6,133066,15348
+1 may-dic 2025,noche,LC sin marcar 15%,1,17,1,2,0,25575,4514
+1 may-dic 2025,noche,LC sin marcar 15%,1,18,2,4,0,59876,9969
+1 may-dic 2025,noche,LC sin marcar 15%,1,19,2,3,1,69354,12238
+1 may-dic 2025,noche,LC sin marcar 15%,1,20,2,6,1,92912,17412
+1 may-dic 2025,noche,LC sin marcar 15%,1,21,10,18,3,271310,45624
+1 may-dic 2025,noche,LC sin marcar 15%,1,22,24,29,0,530847,91237
+1 may-dic 2025,noche,LC sin marcar 15%,1,23,4,0,0,24973,4407
+1 may-dic 2025,noche,LC sin marcar 15%,2,17,1,0,0,19257,3398
+1 may-dic 2025,noche,LC sin marcar 15%,2,19,1,2,0,24898,4393
+1 may-dic 2025,noche,LC sin marcar 15%,2,20,8,14,0,194545,35541
+1 may-dic 2025,noche,LC sin marcar 15%,2,21,10,10,3,153739,26747
+1 may-dic 2025,noche,LC sin marcar 15%,2,22,2,3,0,48668,8589
+1 may-dic 2025,noche,LC sin marcar 15%,3,18,2,3,0,52504,9267
+1 may-dic 2025,noche,LC sin marcar 15%,3,19,1,5,4,102452,17295
+1 may-dic 2025,noche,LC sin marcar 15%,3,20,5,4,3,118624,20086
+1 may-dic 2025,noche,LC sin marcar 15%,3,21,5,11,4,127500,20949
+1 may-dic 2025,noche,LC sin marcar 15%,3,22,5,16,9,209022,37171
+1 may-dic 2025,noche,LC sin marcar 15%,4,20,7,12,0,161696,26929
+1 may-dic 2025,noche,LC sin marcar 15%,4,21,4,7,0,119553,25847
+1 may-dic 2025,noche,LC sin marcar 15%,4,22,7,6,0,68947,12181
+1 may-dic 2025,noche,LC sin marcar 15%,5,17,1,0,0,45509,7620
+1 may-dic 2025,noche,LC sin marcar 15%,5,19,6,10,2,164717,27252
+1 may-dic 2025,noche,LC sin marcar 15%,5,20,19,27,2,508531,86449
+1 may-dic 2025,noche,LC sin marcar 15%,5,21,20,34,0,464155,84190
+1 may-dic 2025,noche,LC sin marcar 15%,5,22,26,31,8,482412,93302
+1 may-dic 2025,noche,LC sin marcar 15%,5,23,3,5,3,22350,4552
+1 may-dic 2025,noche,LC sin marcar 15%,6,18,1,1,0,9478,1672
+1 may-dic 2025,noche,LC sin marcar 15%,6,19,1,2,0,25429,3864
+1 may-dic 2025,noche,LC sin marcar 15%,6,20,15,16,8,248381,43368
+1 may-dic 2025,noche,LC sin marcar 15%,6,21,8,14,0,158878,29969
+1 may-dic 2025,noche,LC sin marcar 15%,6,22,18,18,5,379115,66903
+1 may-dic 2025,noche,LC sin marcar 15%,6,23,2,0,0,73266,11469
+1 may-dic 2025,noche,LC sin marcar 15%,7,19,5,20,0,237851,39717
+1 may-dic 2025,noche,LC sin marcar 15%,7,20,1,3,0,28434,5019
+1 may-dic 2025,noche,LC sin marcar 15%,7,21,2,3,3,45885,7170
+1 may-dic 2025,noche,LC sin marcar 15%,7,22,2,2,3,21403,3465
+1 may-dic 2025,noche,LC sin marcar 15%,7,23,4,4,0,15044,2655
+1 may-dic 2025,noche,otro,1,17,1,0,0,2788,1194
+1 may-dic 2025,noche,otro,1,18,1,4,0,95000,3495
+1 may-dic 2025,noche,otro,1,19,1,1,0,10841,4646
+1 may-dic 2025,noche,otro,1,21,2,1,0,28438,15877
+1 may-dic 2025,noche,otro,1,22,6,15,0,89097,13572
+1 may-dic 2025,noche,otro,1,23,2,0,0,129387,104507
+1 may-dic 2025,noche,otro,2,19,1,2,0,36708,2205
+1 may-dic 2025,noche,otro,2,20,1,2,0,58062,3778
+1 may-dic 2025,noche,otro,2,21,5,9,0,128775,29945
+1 may-dic 2025,noche,otro,2,22,2,4,0,60416,10824
+1 may-dic 2025,noche,otro,3,18,1,1,0,1735,743
+1 may-dic 2025,noche,otro,3,20,2,4,3,44788,2670
+1 may-dic 2025,noche,otro,3,21,2,4,0,84903,4248
+1 may-dic 2025,noche,otro,3,22,1,4,0,82478,3983
+1 may-dic 2025,noche,otro,4,19,2,4,0,89044,5144
+1 may-dic 2025,noche,otro,4,20,1,2,0,3345,1434
+1 may-dic 2025,noche,otro,4,21,3,7,0,160460,11490
+1 may-dic 2025,noche,otro,4,22,6,14,0,209091,104348
+1 may-dic 2025,noche,otro,4,23,1,0,0,18690,31843
+1 may-dic 2025,noche,otro,5,19,1,1,0,1177,504
+1 may-dic 2025,noche,otro,5,20,4,5,1,59460,27443
+1 may-dic 2025,noche,otro,5,21,5,7,0,135765,19214
+1 may-dic 2025,noche,otro,5,22,2,1,0,8903,7557
+1 may-dic 2025,noche,otro,5,23,1,0,1,4602,287
+1 may-dic 2025,noche,otro,6,21,2,2,0,61735,24903
+1 may-dic 2025,noche,otro,6,22,4,4,0,67580,9855
+1 may-dic 2025,noche,otro,6,23,1,3,0,20230,1398
+1 may-dic 2025,noche,otro,7,17,1,1,0,20611,1155
+1 may-dic 2025,noche,otro,7,22,3,1,0,10531,4514
+1 may-dic 2025,noche,sin descuento,1,17,8,20,0,305753,-1
+1 may-dic 2025,noche,sin descuento,1,18,32,76,1,1145068,-2899
+1 may-dic 2025,noche,sin descuento,1,19,68,138,0,2431423,-1537
+1 may-dic 2025,noche,sin descuento,1,20,146,308,0,5136845,-4615
+1 may-dic 2025,noche,sin descuento,1,21,158,293,0,5343953,-9404
+1 may-dic 2025,noche,sin descuento,1,22,113,233,0,3679983,-8890
+1 may-dic 2025,noche,sin descuento,1,23,23,52,0,824978,-1293
+1 may-dic 2025,noche,sin descuento,2,0,1,4,0,83451,-2
+1 may-dic 2025,noche,sin descuento,2,2,1,2,0,63805,1
+1 may-dic 2025,noche,sin descuento,2,16,1,2,0,22566,0
+1 may-dic 2025,noche,sin descuento,2,17,9,19,0,326989,-3
+1 may-dic 2025,noche,sin descuento,2,18,27,53,2,848025,-7024
+1 may-dic 2025,noche,sin descuento,2,19,75,165,0,2793301,-10662
+1 may-dic 2025,noche,sin descuento,2,20,123,224,0,4418812,-1731
+1 may-dic 2025,noche,sin descuento,2,21,95,172,0,3039639,-3517
+1 may-dic 2025,noche,sin descuento,2,22,50,111,3,2179496,-6074
+1 may-dic 2025,noche,sin descuento,2,23,5,18,0,471593,-1940
+1 may-dic 2025,noche,sin descuento,3,16,1,3,0,79912,3
+1 may-dic 2025,noche,sin descuento,3,17,12,24,0,288407,-902
+1 may-dic 2025,noche,sin descuento,3,18,24,47,0,732833,-1360
+1 may-dic 2025,noche,sin descuento,3,19,77,178,1,3219298,-4961
+1 may-dic 2025,noche,sin descuento,3,20,125,276,0,4810698,-2446
+1 may-dic 2025,noche,sin descuento,3,21,127,242,0,4693383,-10640
+1 may-dic 2025,noche,sin descuento,3,22,59,109,0,2118678,-1180
+1 may-dic 2025,noche,sin descuento,3,23,15,33,0,530177,0
+1 may-dic 2025,noche,sin descuento,4,16,1,0,0,1327,0
+1 may-dic 2025,noche,sin descuento,4,17,10,16,0,185354,-1653
+1 may-dic 2025,noche,sin descuento,4,18,29,57,0,1026591,-979
+1 may-dic 2025,noche,sin descuento,4,19,69,128,0,2273984,-7366
+1 may-dic 2025,noche,sin descuento,4,20,93,216,0,4055566,-6892
+1 may-dic 2025,noche,sin descuento,4,21,103,195,0,3835294,-16168
+1 may-dic 2025,noche,sin descuento,4,22,65,108,0,2072476,-10384
+1 may-dic 2025,noche,sin descuento,4,23,4,3,0,74485,2
+1 may-dic 2025,noche,sin descuento,5,16,3,2,0,29381,0
+1 may-dic 2025,noche,sin descuento,5,17,11,19,0,272566,-1113
+1 may-dic 2025,noche,sin descuento,5,18,40,91,0,1470443,-5880
+1 may-dic 2025,noche,sin descuento,5,19,75,143,0,2405668,-18045
+1 may-dic 2025,noche,sin descuento,5,20,133,261,0,4966816,-8954
+1 may-dic 2025,noche,sin descuento,5,21,176,297,1,5561811,-9864
+1 may-dic 2025,noche,sin descuento,5,22,82,154,2,2787550,1574
+1 may-dic 2025,noche,sin descuento,5,23,16,19,0,513097,2
+1 may-dic 2025,noche,sin descuento,6,16,1,2,0,8673,-1
+1 may-dic 2025,noche,sin descuento,6,17,15,29,0,495577,-1210
+1 may-dic 2025,noche,sin descuento,6,18,23,46,0,790974,-1552
+1 may-dic 2025,noche,sin descuento,6,19,78,165,1,2541690,-2613
+1 may-dic 2025,noche,sin descuento,6,20,137,293,0,5222838,-7152
+1 may-dic 2025,noche,sin descuento,6,21,150,301,1,5847651,941
+1 may-dic 2025,noche,sin descuento,6,22,109,226,3,4307946,-2619
+1 may-dic 2025,noche,sin descuento,6,23,25,30,0,766816,-469
+1 may-dic 2025,noche,sin descuento,7,16,4,4,0,57257,4
+1 may-dic 2025,noche,sin descuento,7,17,14,24,0,408851,-3
+1 may-dic 2025,noche,sin descuento,7,18,27,49,0,983453,-89
+1 may-dic 2025,noche,sin descuento,7,19,94,208,0,3471349,-2948
+1 may-dic 2025,noche,sin descuento,7,20,122,268,0,5073621,-10045
+1 may-dic 2025,noche,sin descuento,7,21,114,219,0,4071916,-5318
+1 may-dic 2025,noche,sin descuento,7,22,29,72,1,1338408,-7526
+1 may-dic 2025,noche,sin descuento,7,23,3,16,0,248142,1
+1 may-dic 2025,noche,tarjeta 10%,1,19,8,17,0,271833,29009
+1 may-dic 2025,noche,tarjeta 10%,1,20,9,18,0,210889,23798
+1 may-dic 2025,noche,tarjeta 10%,1,21,8,18,0,281434,31208
+1 may-dic 2025,noche,tarjeta 10%,1,22,9,16,0,321190,37398
+1 may-dic 2025,noche,tarjeta 10%,1,23,1,2,0,25566,2841
+1 may-dic 2025,noche,tarjeta 10%,2,18,3,7,0,120314,11588
+1 may-dic 2025,noche,tarjeta 10%,2,19,4,7,0,118673,12319
+1 may-dic 2025,noche,tarjeta 10%,2,20,11,25,0,408491,45920
+1 may-dic 2025,noche,tarjeta 10%,2,21,5,25,0,516504,52829
+1 may-dic 2025,noche,tarjeta 10%,2,22,3,11,0,167973,14484
+1 may-dic 2025,noche,tarjeta 10%,3,17,1,1,0,28558,3079
+1 may-dic 2025,noche,tarjeta 10%,3,19,6,17,1,289925,32430
+1 may-dic 2025,noche,tarjeta 10%,3,20,5,11,0,209867,21738
+1 may-dic 2025,noche,tarjeta 10%,3,21,4,9,0,176779,18444
+1 may-dic 2025,noche,tarjeta 10%,3,22,5,13,0,185451,22716
+1 may-dic 2025,noche,tarjeta 10%,4,17,1,2,0,27558,3061
+1 may-dic 2025,noche,tarjeta 10%,4,18,4,6,0,122257,13582
+1 may-dic 2025,noche,tarjeta 10%,4,19,5,10,0,171381,19483
+1 may-dic 2025,noche,tarjeta 10%,4,20,16,44,4,701009,75366
+1 may-dic 2025,noche,tarjeta 10%,4,21,3,7,0,110310,13386
+1 may-dic 2025,noche,tarjeta 10%,4,22,9,16,0,195342,19789
+1 may-dic 2025,noche,tarjeta 10%,5,17,1,1,0,9880,1182
+1 may-dic 2025,noche,tarjeta 10%,5,19,5,11,0,118753,12823
+1 may-dic 2025,noche,tarjeta 10%,5,20,15,27,0,468597,47951
+1 may-dic 2025,noche,tarjeta 10%,5,21,5,8,0,195451,21719
+1 may-dic 2025,noche,tarjeta 10%,5,22,10,19,0,342922,39210
+1 may-dic 2025,noche,tarjeta 10%,6,18,1,2,0,29150,3240
+1 may-dic 2025,noche,tarjeta 10%,6,19,9,14,0,228637,26097
+1 may-dic 2025,noche,tarjeta 10%,6,20,10,26,0,398667,37470
+1 may-dic 2025,noche,tarjeta 10%,6,21,6,9,1,174393,19062
+1 may-dic 2025,noche,tarjeta 10%,6,22,9,10,2,221093,24146
+1 may-dic 2025,noche,tarjeta 10%,6,23,3,6,1,55341,5809
+1 may-dic 2025,noche,tarjeta 10%,7,18,2,0,0,43100,4790
+1 may-dic 2025,noche,tarjeta 10%,7,19,2,4,0,49381,4858
+1 may-dic 2025,noche,tarjeta 10%,7,20,6,21,0,304828,30194
+1 may-dic 2025,noche,tarjeta 10%,7,21,14,22,3,410186,45608
+1 may-dic 2025,noche,tarjeta 10%,7,22,2,2,0,31619,3514
+1 may-dic 2025,noche,tarjeta 10%,7,23,1,1,0,24929,2770
+2 2026,mañana,LC marcado,1,13,1,1,0,18354,3239
+2 2026,mañana,LC marcado,1,14,2,2,0,11341,2287
+2 2026,mañana,LC marcado,1,16,6,13,7,147483,7300
+2 2026,mañana,LC marcado,2,13,4,5,2,53580,7392
+2 2026,mañana,LC marcado,2,14,2,4,2,43102,7606
+2 2026,mañana,LC marcado,2,15,3,4,0,46788,8256
+2 2026,mañana,LC marcado,2,16,3,6,3,80650,5046
+2 2026,mañana,LC marcado,2,17,1,1,0,32721,2908
+2 2026,mañana,LC marcado,3,12,1,1,0,5566,982
+2 2026,mañana,LC marcado,3,13,3,3,1,82171,6208
+2 2026,mañana,LC marcado,3,14,2,2,0,25726,4539
+2 2026,mañana,LC marcado,3,15,3,4,0,33097,3850
+2 2026,mañana,LC marcado,3,16,1,1,0,19783,1501
+2 2026,mañana,LC marcado,4,13,5,13,6,155545,23749
+2 2026,mañana,LC marcado,4,14,6,11,4,131775,14536
+2 2026,mañana,LC marcado,4,15,3,4,1,30208,2890
+2 2026,mañana,LC marcado,4,16,4,7,1,83845,6230
+2 2026,mañana,LC marcado,5,12,2,3,0,31058,3013
+2 2026,mañana,LC marcado,5,14,1,2,1,13982,2
+2 2026,mañana,LC marcado,5,15,1,1,0,5310,0
+2 2026,mañana,LC marcado,5,16,2,3,1,12938,2284
+2 2026,mañana,LC marcado,6,13,3,8,4,79134,13964
+2 2026,mañana,LC marcado,6,15,1,2,1,42425,3091
+2 2026,mañana,LC marcado,6,16,2,2,0,13181,3810
+2 2026,mañana,LC marcado,7,13,3,6,3,101699,17947
+2 2026,mañana,LC marcado,7,14,1,1,0,6991,1
+2 2026,mañana,LC marcado,7,15,1,1,0,22942,2244
+2 2026,mañana,LC marcado,7,16,3,5,2,52305,7074
+2 2026,mañana,LC marcado,7,17,1,3,2,31969,5640
+2 2026,mañana,LC sin marcar 15%,1,13,1,2,0,16925,2986
+2 2026,mañana,LC sin marcar 15%,1,14,3,4,0,38628,6904
+2 2026,mañana,LC sin marcar 15%,1,15,4,10,0,88571,17095
+2 2026,mañana,LC sin marcar 15%,2,12,1,2,0,23619,4167
+2 2026,mañana,LC sin marcar 15%,2,13,1,1,0,6469,1141
+2 2026,mañana,LC sin marcar 15%,2,14,2,3,0,22522,4380
+2 2026,mañana,LC sin marcar 15%,2,15,2,7,0,127350,22222
+2 2026,mañana,LC sin marcar 15%,3,15,1,2,0,27832,4911
+2 2026,mañana,LC sin marcar 15%,4,15,1,2,0,12938,2284
+2 2026,mañana,LC sin marcar 15%,4,16,1,2,0,13314,2349
+2 2026,mañana,LC sin marcar 15%,5,12,1,2,0,14819,2616
+2 2026,mañana,LC sin marcar 15%,5,13,1,2,0,33278,5575
+2 2026,mañana,LC sin marcar 15%,5,16,1,1,0,2482,438
+2 2026,mañana,LC sin marcar 15%,6,14,2,5,0,54236,9570
+2 2026,mañana,LC sin marcar 15%,6,15,1,1,0,8801,1291
+2 2026,mañana,LC sin marcar 15%,7,12,1,2,0,20987,3703
+2 2026,mañana,LC sin marcar 15%,7,13,1,2,0,13013,2297
+2 2026,mañana,LC sin marcar 15%,7,16,1,2,0,29938,5282
+2 2026,mañana,otro,1,13,1,3,0,17159,7354
+2 2026,mañana,otro,1,14,3,2,0,30912,13246
+2 2026,mañana,otro,2,13,1,1,0,6195,2305
+2 2026,mañana,otro,2,16,1,2,0,15363,6585
+2 2026,mañana,otro,3,12,1,2,0,20457,1226
+2 2026,mañana,otro,3,13,2,2,0,40481,2385
+2 2026,mañana,otro,3,15,1,2,0,18681,1142
+2 2026,mañana,otro,4,11,1,0,0,1177,504
+2 2026,mañana,otro,4,15,2,3,0,39133,4052
+2 2026,mañana,otro,5,13,1,0,0,1177,504
+2 2026,mañana,otro,5,14,1,2,0,15319,610
+2 2026,mañana,otro,6,14,3,2,0,63212,13335
+2 2026,mañana,otro,6,16,2,1,0,9230,3956
+2 2026,mañana,otro,7,13,1,2,0,6814,2920
+2 2026,mañana,otro,7,15,1,2,0,27752,11894
+2 2026,mañana,otro,7,16,1,0,0,2168,929
+2 2026,mañana,sin descuento,1,11,1,1,0,3451,0
+2 2026,mañana,sin descuento,1,12,11,25,0,256108,-3
+2 2026,mañana,sin descuento,1,13,50,88,0,1014609,-828
+2 2026,mañana,sin descuento,1,14,77,135,0,1396483,-18
+2 2026,mañana,sin descuento,1,15,41,75,0,923550,-1101
+2 2026,mañana,sin descuento,1,16,15,23,0,279735,0
+2 2026,mañana,sin descuento,1,17,1,2,0,24248,-1
+2 2026,mañana,sin descuento,2,12,28,51,0,577616,-6
+2 2026,mañana,sin descuento,2,13,49,92,1,1019270,-994
+2 2026,mañana,sin descuento,2,14,67,127,0,1458327,-5578
+2 2026,mañana,sin descuento,2,15,53,84,0,1152369,2075
+2 2026,mañana,sin descuento,2,16,30,47,0,542125,-2
+2 2026,mañana,sin descuento,2,17,7,11,0,140177,2
+2 2026,mañana,sin descuento,3,12,23,42,0,383985,4
+2 2026,mañana,sin descuento,3,13,62,104,0,1220467,696
+2 2026,mañana,sin descuento,3,14,59,108,0,1032655,-4
+2 2026,mañana,sin descuento,3,15,24,47,0,567258,-3
+2 2026,mañana,sin descuento,3,16,26,42,0,459411,0
+2 2026,mañana,sin descuento,3,17,2,2,0,26726,-1
+2 2026,mañana,sin descuento,4,11,1,2,0,4956,0
+2 2026,mañana,sin descuento,4,12,9,13,0,127235,1
+2 2026,mañana,sin descuento,4,13,51,84,0,1034139,-652
+2 2026,mañana,sin descuento,4,14,54,102,0,1248652,-257
+2 2026,mañana,sin descuento,4,15,57,105,0,1368882,-3170
+2 2026,mañana,sin descuento,4,16,38,55,0,637966,-908
+2 2026,mañana,sin descuento,4,17,1,1,0,4248,0
+2 2026,mañana,sin descuento,5,12,18,25,0,296915,0
+2 2026,mañana,sin descuento,5,13,48,82,0,853192,-980
+2 2026,mañana,sin descuento,5,14,64,120,0,1488554,-1926
+2 2026,mañana,sin descuento,5,15,59,114,0,1222932,-1769
+2 2026,mañana,sin descuento,5,16,50,87,0,1055580,608
+2 2026,mañana,sin descuento,5,17,7,7,0,58319,-462
+2 2026,mañana,sin descuento,6,12,18,32,0,314337,-1
+2 2026,mañana,sin descuento,6,13,57,98,0,1180891,-875
+2 2026,mañana,sin descuento,6,14,70,98,0,1345229,-16
+2 2026,mañana,sin descuento,6,15,91,155,0,1765210,-1721
+2 2026,mañana,sin descuento,6,16,47,81,2,864009,-1
+2 2026,mañana,sin descuento,6,17,1,2,0,18673,1
+2 2026,mañana,sin descuento,7,11,2,5,0,26460,0
+2 2026,mañana,sin descuento,7,12,19,29,0,297434,-916
+2 2026,mañana,sin descuento,7,13,39,67,0,965763,-3915
+2 2026,mañana,sin descuento,7,14,64,133,0,1530002,-5311
+2 2026,mañana,sin descuento,7,15,60,105,0,1358703,-1533
+2 2026,mañana,sin descuento,7,16,32,65,0,712275,-6
+2 2026,mañana,sin descuento,7,17,8,7,0,130708,-2
+2 2026,mañana,tarjeta 10%,1,13,4,13,0,76062,8452
+2 2026,mañana,tarjeta 10%,1,14,3,3,0,54637,6074
+2 2026,mañana,tarjeta 10%,1,15,5,6,0,57002,5938
+2 2026,mañana,tarjeta 10%,1,16,3,11,0,91686,10157
+2 2026,mañana,tarjeta 10%,2,13,2,2,0,54159,6017
+2 2026,mañana,tarjeta 10%,2,14,2,4,0,28031,3295
+2 2026,mañana,tarjeta 10%,2,15,1,3,0,50018,5557
+2 2026,mañana,tarjeta 10%,2,16,1,1,0,13314,1447
+2 2026,mañana,tarjeta 10%,3,13,1,0,0,30504,3389
+2 2026,mañana,tarjeta 10%,3,14,3,4,0,60997,6328
+2 2026,mañana,tarjeta 10%,3,15,1,2,0,38389,4264
+2 2026,mañana,tarjeta 10%,4,12,2,5,0,61487,6255
+2 2026,mañana,tarjeta 10%,4,13,3,5,0,50239,4805
+2 2026,mañana,tarjeta 10%,4,14,4,7,0,148684,14648
+2 2026,mañana,tarjeta 10%,4,15,2,4,0,48743,5416
+2 2026,mañana,tarjeta 10%,4,16,3,4,0,48013,4456
+2 2026,mañana,tarjeta 10%,4,17,1,1,0,12106,1346
+2 2026,mañana,tarjeta 10%,5,13,1,2,0,19434,2160
+2 2026,mañana,tarjeta 10%,5,14,2,4,0,59099,6565
+2 2026,mañana,tarjeta 10%,5,15,2,1,0,34726,3548
+2 2026,mañana,tarjeta 10%,5,16,4,7,0,80589,9943
+2 2026,mañana,tarjeta 10%,6,13,5,8,0,89805,10222
+2 2026,mañana,tarjeta 10%,6,14,5,8,0,152381,17090
+2 2026,mañana,tarjeta 10%,6,15,2,5,0,70372,8038
+2 2026,mañana,tarjeta 10%,6,16,1,2,0,12089,1007
+2 2026,mañana,tarjeta 10%,7,12,1,1,0,13699,1522
+2 2026,mañana,tarjeta 10%,7,14,2,3,0,28513,3037
+2 2026,mañana,tarjeta 10%,7,15,5,14,0,185655,20625
+2 2026,mañana,tarjeta 10%,7,16,2,2,0,50624,4937
+2 2026,noche,LC marcado,1,16,2,2,0,38363,4965
+2 2026,noche,LC marcado,1,17,13,14,1,203925,28302
+2 2026,noche,LC marcado,1,18,3,5,1,70633,11692
+2 2026,noche,LC marcado,1,19,15,32,9,444996,75085
+2 2026,noche,LC marcado,1,20,40,83,33,1304757,203330
+2 2026,noche,LC marcado,1,21,48,82,23,1098680,190709
+2 2026,noche,LC marcado,1,22,32,55,21,665460,110569
+2 2026,noche,LC marcado,1,23,4,13,9,183969,49310
+2 2026,noche,LC marcado,2,16,2,3,0,26177,3717
+2 2026,noche,LC marcado,2,17,8,11,4,200394,20934
+2 2026,noche,LC marcado,2,18,5,10,5,163983,28035
+2 2026,noche,LC marcado,2,19,12,29,6,354815,47348
+2 2026,noche,LC marcado,2,20,21,50,22,687488,112311
+2 2026,noche,LC marcado,2,21,38,56,15,877497,144143
+2 2026,noche,LC marcado,2,22,20,53,30,733775,126950
+2 2026,noche,LC marcado,3,17,11,15,4,193246,27862
+2 2026,noche,LC marcado,3,18,4,6,3,123291,16501
+2 2026,noche,LC marcado,3,19,20,51,13,657704,101261
+2 2026,noche,LC marcado,3,20,17,40,14,487133,83345
+2 2026,noche,LC marcado,3,21,22,54,28,748300,100151
+2 2026,noche,LC marcado,3,22,32,57,16,948613,122740
+2 2026,noche,LC marcado,3,23,2,3,0,51726,17654
+2 2026,noche,LC marcado,4,16,2,3,0,33925,5986
+2 2026,noche,LC marcado,4,17,10,15,5,159927,23354
+2 2026,noche,LC marcado,4,18,2,2,0,21589,3809
+2 2026,noche,LC marcado,4,19,18,39,13,607714,94167
+2 2026,noche,LC marcado,4,20,23,55,12,681873,101417
+2 2026,noche,LC marcado,4,21,30,69,29,985183,147756
+2 2026,noche,LC marcado,4,22,41,77,29,1218050,212768
+2 2026,noche,LC marcado,4,23,2,3,2,49796,8788
+2 2026,noche,LC marcado,5,16,1,1,0,7673,1354
+2 2026,noche,LC marcado,5,17,4,6,1,103279,17321
+2 2026,noche,LC marcado,5,18,10,25,10,385296,31604
+2 2026,noche,LC marcado,5,19,21,42,11,543024,87755
+2 2026,noche,LC marcado,5,20,20,50,9,733511,117027
+2 2026,noche,LC marcado,5,21,41,74,14,1185356,200582
+2 2026,noche,LC marcado,5,22,47,98,35,1646597,240667
+2 2026,noche,LC marcado,6,16,1,1,0,11133,1964
+2 2026,noche,LC marcado,6,17,6,8,1,85150,13221
+2 2026,noche,LC marcado,6,18,6,13,2,237774,33569
+2 2026,noche,LC marcado,6,19,13,26,11,337067,53576
+2 2026,noche,LC marcado,6,20,22,60,28,977242,141100
+2 2026,noche,LC marcado,6,21,43,83,23,1132647,182669
+2 2026,noche,LC marcado,6,22,39,84,24,1101815,145710
+2 2026,noche,LC marcado,6,23,1,2,0,18881,3332
+2 2026,noche,LC marcado,7,0,1,4,1,25876,4567
+2 2026,noche,LC marcado,7,13,1,3,0,106589,14829
+2 2026,noche,LC marcado,7,16,2,3,0,35805,5417
+2 2026,noche,LC marcado,7,17,2,6,3,100947,14204
+2 2026,noche,LC marcado,7,18,9,21,11,320325,47987
+2 2026,noche,LC marcado,7,19,12,28,10,472465,74792
+2 2026,noche,LC marcado,7,20,12,23,8,367006,60198
+2 2026,noche,LC marcado,7,21,24,45,11,652394,112033
+2 2026,noche,LC marcado,7,22,23,53,27,800762,140602
+2 2026,noche,LC sin marcar 15%,1,17,2,4,0,41296,7287
+2 2026,noche,LC sin marcar 15%,1,19,1,1,0,12336,2177
+2 2026,noche,LC sin marcar 15%,1,20,6,12,5,97850,16696
+2 2026,noche,LC sin marcar 15%,1,21,15,30,4,447311,81366
+2 2026,noche,LC sin marcar 15%,1,22,15,19,13,255297,43602
+2 2026,noche,LC sin marcar 15%,1,23,1,0,0,5416,956
+2 2026,noche,LC sin marcar 15%,2,17,2,4,0,33558,8211
+2 2026,noche,LC sin marcar 15%,2,18,2,7,0,57792,9729
+2 2026,noche,LC sin marcar 15%,2,19,6,6,4,65743,11601
+2 2026,noche,LC sin marcar 15%,2,20,14,30,1,384938,67837
+2 2026,noche,LC sin marcar 15%,2,21,9,13,3,156195,29468
+2 2026,noche,LC sin marcar 15%,2,22,5,7,3,110863,20166
+2 2026,noche,LC sin marcar 15%,3,17,3,6,0,78230,13806
+2 2026,noche,LC sin marcar 15%,3,18,4,5,0,84217,14366
+2 2026,noche,LC sin marcar 15%,3,19,3,6,1,70106,12371
+2 2026,noche,LC sin marcar 15%,3,20,6,15,2,148938,26281
+2 2026,noche,LC sin marcar 15%,3,21,3,5,1,72239,13956
+2 2026,noche,LC sin marcar 15%,3,22,10,16,0,204554,33248
+2 2026,noche,LC sin marcar 15%,3,23,2,4,0,79661,14058
+2 2026,noche,LC sin marcar 15%,4,0,1,0,0,2633,464
+2 2026,noche,LC sin marcar 15%,4,16,1,2,0,17677,3119
+2 2026,noche,LC sin marcar 15%,4,19,1,4,0,44004,7767
+2 2026,noche,LC sin marcar 15%,4,20,6,19,0,213912,38652
+2 2026,noche,LC sin marcar 15%,4,21,14,27,1,296258,54184
+2 2026,noche,LC sin marcar 15%,4,22,6,7,5,80071,14708
+2 2026,noche,LC sin marcar 15%,5,17,2,2,0,48670,8588
+2 2026,noche,LC sin marcar 15%,5,19,4,6,0,71611,12328
+2 2026,noche,LC sin marcar 15%,5,20,6,14,1,228748,37043
+2 2026,noche,LC sin marcar 15%,5,21,17,27,3,277554,51529
+2 2026,noche,LC sin marcar 15%,5,22,13,19,3,240619,46723
+2 2026,noche,LC sin marcar 15%,6,16,1,2,0,8575,1513
+2 2026,noche,LC sin marcar 15%,6,18,1,2,0,40619,7168
+2 2026,noche,LC sin marcar 15%,6,19,2,3,1,32668,7686
+2 2026,noche,LC sin marcar 15%,6,20,9,20,3,210093,37072
+2 2026,noche,LC sin marcar 15%,6,21,15,27,12,329919,56307
+2 2026,noche,LC sin marcar 15%,6,22,14,20,4,197783,37259
+2 2026,noche,LC sin marcar 15%,6,23,5,4,0,63912,12192
+2 2026,noche,LC sin marcar 15%,7,17,2,4,0,41597,7341
+2 2026,noche,LC sin marcar 15%,7,18,2,2,0,27606,4872
+2 2026,noche,LC sin marcar 15%,7,19,2,1,0,20310,3584
+2 2026,noche,LC sin marcar 15%,7,20,3,0,0,84023,14826
+2 2026,noche,LC sin marcar 15%,7,21,9,18,2,233112,38853
+2 2026,noche,LC sin marcar 15%,7,22,5,12,2,220518,35055
+2 2026,noche,otro,1,19,1,3,0,37701,2036
+2 2026,noche,otro,1,20,1,2,0,28248,12105
+2 2026,noche,otro,1,21,3,4,0,81106,10663
+2 2026,noche,otro,1,22,7,7,0,82266,24375
+2 2026,noche,otro,1,23,3,1,0,66220,18814
+2 2026,noche,otro,2,19,1,2,0,46986,2412
+2 2026,noche,otro,2,20,1,3,0,79089,4274
+2 2026,noche,otro,2,21,2,1,0,7681,3292
+2 2026,noche,otro,2,22,5,10,0,156425,15964
+2 2026,noche,otro,2,23,1,2,0,23045,9877
+2 2026,noche,otro,3,19,1,3,0,64593,4469
+2 2026,noche,otro,3,21,1,1,0,12823,5495
+2 2026,noche,otro,3,22,2,3,0,35743,15319
+2 2026,noche,otro,4,18,1,2,0,16248,942
+2 2026,noche,otro,4,19,1,1,0,24945,1371
+2 2026,noche,otro,4,20,2,3,0,49381,5050
+2 2026,noche,otro,4,21,3,6,0,84482,13849
+2 2026,noche,otro,4,22,6,9,0,82204,28815
+2 2026,noche,otro,4,23,2,2,0,6814,2920
+2 2026,noche,otro,5,21,3,5,0,88814,5083
+2 2026,noche,otro,5,23,3,3,0,16912,7247
+2 2026,noche,otro,6,17,1,0,0,2912,1248
+2 2026,noche,otro,6,18,1,1,0,2788,1194
+2 2026,noche,otro,6,19,4,7,0,129558,16197
+2 2026,noche,otro,6,20,1,4,0,103806,6130
+2 2026,noche,otro,6,21,5,9,1,89624,11642
+2 2026,noche,otro,6,22,3,4,0,45204,16123
+2 2026,noche,otro,6,23,3,24,0,207443,170605
+2 2026,noche,otro,7,17,1,3,0,63451,2304
+2 2026,noche,otro,7,19,2,5,0,65898,7818
+2 2026,noche,otro,7,21,1,1,0,13566,5814
+2 2026,noche,otro,7,22,1,0,0,3469,1487
+2 2026,noche,sin descuento,1,16,7,14,0,222571,-2
+2 2026,noche,sin descuento,1,17,10,20,0,284773,-6
+2 2026,noche,sin descuento,1,18,27,52,0,767367,-827
+2 2026,noche,sin descuento,1,19,123,263,0,4386514,-4766
+2 2026,noche,sin descuento,1,20,183,405,0,7103019,-12642
+2 2026,noche,sin descuento,1,21,220,416,0,7113090,-8834
+2 2026,noche,sin descuento,1,22,177,294,0,4421516,-8608
+2 2026,noche,sin descuento,1,23,19,30,0,442463,-379
+2 2026,noche,sin descuento,2,16,11,27,0,303982,-3
+2 2026,noche,sin descuento,2,17,21,44,0,732479,-12
+2 2026,noche,sin descuento,2,18,42,104,0,1716372,598
+2 2026,noche,sin descuento,2,19,101,215,1,3583408,-6726
+2 2026,noche,sin descuento,2,20,174,379,0,7119506,-8543
+2 2026,noche,sin descuento,2,21,168,309,0,6601266,-10722
+2 2026,noche,sin descuento,2,22,108,171,6,3281303,-35
+2 2026,noche,sin descuento,2,23,3,6,0,123628,0
+2 2026,noche,sin descuento,3,16,7,16,0,259561,-1
+2 2026,noche,sin descuento,3,17,21,41,0,438407,-1
+2 2026,noche,sin descuento,3,18,25,49,0,743451,-8
+2 2026,noche,sin descuento,3,19,109,242,0,4103711,-5414
+2 2026,noche,sin descuento,3,20,181,364,0,6588604,-9643
+2 2026,noche,sin descuento,3,21,218,454,1,8419383,-264
+2 2026,noche,sin descuento,3,22,114,223,0,3933807,-3285
+2 2026,noche,sin descuento,3,23,16,32,0,559195,-489
+2 2026,noche,sin descuento,4,0,1,2,0,53097,1
+2 2026,noche,sin descuento,4,16,15,26,0,335134,-6
+2 2026,noche,sin descuento,4,17,25,54,0,806195,-1355
+2 2026,noche,sin descuento,4,18,38,79,0,1275842,-2840
+2 2026,noche,sin descuento,4,19,135,268,0,4412048,-2353
+2 2026,noche,sin descuento,4,20,200,431,0,7454941,-1540
+2 2026,noche,sin descuento,4,21,191,366,0,6728552,-14043
+2 2026,noche,sin descuento,4,22,107,222,0,3927281,-693
+2 2026,noche,sin descuento,4,23,11,19,0,325771,-6
+2 2026,noche,sin descuento,5,0,2,10,0,141062,882
+2 2026,noche,sin descuento,5,1,3,6,0,117788,531
+2 2026,noche,sin descuento,5,16,11,18,0,267169,-6
+2 2026,noche,sin descuento,5,17,18,27,0,412258,-388
+2 2026,noche,sin descuento,5,18,33,64,0,972643,-688
+2 2026,noche,sin descuento,5,19,78,171,0,2851333,-5280
+2 2026,noche,sin descuento,5,20,162,349,0,6148897,-7295
+2 2026,noche,sin descuento,5,21,247,523,0,9545693,-3914
+2 2026,noche,sin descuento,5,22,196,377,2,6701304,-4377
+2 2026,noche,sin descuento,5,23,13,29,0,529205,-1138
+2 2026,noche,sin descuento,6,16,14,32,0,266993,-1
+2 2026,noche,sin descuento,6,17,30,74,0,1068237,-1975
+2 2026,noche,sin descuento,6,18,35,67,0,925312,206
+2 2026,noche,sin descuento,6,19,138,278,0,4541700,-8057
+2 2026,noche,sin descuento,6,20,213,459,3,8043934,-1813
+2 2026,noche,sin descuento,6,21,231,490,1,8375015,-19432
+2 2026,noche,sin descuento,6,22,225,371,4,6148352,-14216
+2 2026,noche,sin descuento,6,23,39,66,0,962909,883
+2 2026,noche,sin descuento,7,0,1,2,0,34336,0
+2 2026,noche,sin descuento,7,10,1,7,0,83453,0
+2 2026,noche,sin descuento,7,11,5,11,0,182832,-625
+2 2026,noche,sin descuento,7,13,9,23,0,387080,-1233
+2 2026,noche,sin descuento,7,16,11,22,0,293982,-7
+2 2026,noche,sin descuento,7,17,26,36,0,536824,-1419
+2 2026,noche,sin descuento,7,18,58,114,0,1856306,-13
+2 2026,noche,sin descuento,7,19,129,244,0,4076502,-6014
+2 2026,noche,sin descuento,7,20,151,288,0,5130891,-7748
+2 2026,noche,sin descuento,7,21,195,424,0,7587123,561
+2 2026,noche,sin descuento,7,22,112,195,0,3976046,-7312
+2 2026,noche,sin descuento,7,23,3,10,0,329566,2
+2 2026,noche,tarjeta 10%,1,16,2,2,0,31239,3439
+2 2026,noche,tarjeta 10%,1,18,4,7,1,70947,6895
+2 2026,noche,tarjeta 10%,1,19,9,25,0,437422,47535
+2 2026,noche,tarjeta 10%,1,20,13,29,0,473911,48785
+2 2026,noche,tarjeta 10%,1,21,13,40,0,677469,69450
+2 2026,noche,tarjeta 10%,1,22,16,33,6,676116,74132
+2 2026,noche,tarjeta 10%,1,23,5,21,0,584732,64546
+2 2026,noche,tarjeta 10%,2,16,2,2,0,26628,2894
+2 2026,noche,tarjeta 10%,2,17,3,4,0,66850,7432
+2 2026,noche,tarjeta 10%,2,18,4,10,0,137070,15616
+2 2026,noche,tarjeta 10%,2,19,8,15,0,281443,30124
+2 2026,noche,tarjeta 10%,2,20,13,33,0,412255,46650
+2 2026,noche,tarjeta 10%,2,21,16,50,1,824271,87215
+2 2026,noche,tarjeta 10%,2,22,7,26,0,446472,43477
+2 2026,noche,tarjeta 10%,3,16,1,1,0,10035,1116
+2 2026,noche,tarjeta 10%,3,17,2,2,0,26628,2894
+2 2026,noche,tarjeta 10%,3,18,2,4,0,68496,7610
+2 2026,noche,tarjeta 10%,3,19,13,22,0,317804,32253
+2 2026,noche,tarjeta 10%,3,20,14,36,0,596763,62160
+2 2026,noche,tarjeta 10%,3,21,22,56,0,847953,88999
+2 2026,noche,tarjeta 10%,3,22,10,29,0,739615,70726
+2 2026,noche,tarjeta 10%,4,17,1,5,0,77496,8609
+2 2026,noche,tarjeta 10%,4,18,5,11,0,166359,18107
+2 2026,noche,tarjeta 10%,4,19,10,18,0,304106,30178
+2 2026,noche,tarjeta 10%,4,20,10,32,0,573055,55610
+2 2026,noche,tarjeta 10%,4,21,14,30,0,581146,63952
+2 2026,noche,tarjeta 10%,4,22,11,12,1,346491,34514
+2 2026,noche,tarjeta 10%,4,23,2,7,0,106350,12478
+2 2026,noche,tarjeta 10%,5,16,3,5,0,48279,5332
+2 2026,noche,tarjeta 10%,5,17,5,10,0,164870,18318
+2 2026,noche,tarjeta 10%,5,19,8,12,0,237784,24916
+2 2026,noche,tarjeta 10%,5,20,8,17,0,301301,32872
+2 2026,noche,tarjeta 10%,5,21,15,38,0,645903,70262
+2 2026,noche,tarjeta 10%,5,22,13,26,3,429328,48208
+2 2026,noche,tarjeta 10%,6,18,5,9,0,123513,13686
+2 2026,noche,tarjeta 10%,6,19,15,35,0,480656,49272
+2 2026,noche,tarjeta 10%,6,20,14,37,0,474850,50772
+2 2026,noche,tarjeta 10%,6,21,12,21,1,448566,50719
+2 2026,noche,tarjeta 10%,6,22,11,22,2,363814,42620
+2 2026,noche,tarjeta 10%,7,13,1,2,0,43248,4804
+2 2026,noche,tarjeta 10%,7,17,1,1,0,9177,1049
+2 2026,noche,tarjeta 10%,7,18,2,4,0,37451,4832
+2 2026,noche,tarjeta 10%,7,19,9,23,0,327260,36263
+2 2026,noche,tarjeta 10%,7,20,10,26,0,347298,36667
+2 2026,noche,tarjeta 10%,7,21,13,36,0,466650,51212
+2 2026,noche,tarjeta 10%,7,22,15,19,0,433513,48672

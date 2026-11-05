@@ -53,6 +53,15 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Re-ingesta 2025 del `01` → ROSAURA (450 tickets, ₡19,06M) | 🔲 | Con firma; requiere actualizar los dos agentes. |
 | Agregación server-side de días del PoS (`pos_ndf_dias` o RPC) | 🔲 | Solo si el cálculo en el navegador se vuelve lento. Toca esquema e ingest. |
 | Merch de mostrador (familia 21) en categoría propia | 🔲 | Decide Ismael. |
+| Ingestar el % de descuento por línea (`FAC_PedidosDet.Descuento` / `TipoDescuento`) | 🔲 | Backlog, sin fecha. Separa Local Club, tarjeta 10 %, personal 30 % y cortesías. Bridge + Edge + columna → firma. Hueco #3 de [SPEC-analisis-ventas-integrado §6](docs/analisis/2026-11-mediodia-localclub/specs/SPEC-analisis-ventas-integrado.md). |
+| Ingestar `FAC_Facturas.CuentaCobrar` (cerrada «a crédito») | 🔲 | Backlog, sin fecha. Mostrar aparte los créditos de tarjetas (~₡260k/mes). Bridge + Edge + columna → firma. Hueco #6 de la misma SPEC. |
+| Revisar `regalia_crc` en tickets `cortesia` | 🔲 | Backlog, sin fecha. Tickets con `valor_servido` > 0 y `regalia_crc` = 0. Revisión, sin esquema. Hueco #7 de la misma SPEC. |
+| Franja mediodía/noche por hora de la factura, no por turno de caja | 🔲 | Backlog, sin fecha. El turno queda mal anotado en los dos sentidos (Q27 en [r8](docs/analisis/2026-11-mediodia-localclub/rondas/r8-Q27-D14-D15.md)). Solo lectura y cálculo, sin esquema. |
+| Código de quien entregó la tarjeta de hotel o tienda en cada mesa + conciliación automática de créditos (sistema web ↔ `CuentaCobrar`) | 🔲 | Backlog, sin fecha. Requiere ingesta → firma. Ver [r9](docs/analisis/2026-11-mediodia-localclub/rondas/r9-programa-creditos-PM.md). |
+| Descuento al personal (30 %): código de empleado obligatorio y reporte mensual por persona | 🔲 | Backlog, sin fecha. Va con firma. Ver D14/D15 en [r8](docs/analisis/2026-11-mediodia-localclub/rondas/r8-Q27-D14-D15.md). |
+| Comisiones PM como costo del programa en los reportes | 🔲 | Backlog, sin fecha. Hoy se pagan en efectivo por caja de proveedores, fuera del PoS. Ver [r9](docs/analisis/2026-11-mediodia-localclub/rondas/r9-programa-creditos-PM.md). |
+| Tablero mensual supuesto vs realidad de programas (LC, créditos, menú) | 🔲 | Backlog, sin fecha. Con firma. Solo lectura, por hora de factura. Ver [ESCENARIOS-cambios-programas.md §4](docs/analisis/2026-11-mediodia-localclub/ESCENARIOS-cambios-programas.md). |
+| Local Club 3.0: tarjeta en Wallet con QR único, referidos que suman puntos, sin descuento fijo | 🔲 | Backlog, sin fecha. Toca ingesta y esquema → firma. Datos personales nunca en el repo. Ver [ESCENARIOS §6](docs/analisis/2026-11-mediodia-localclub/ESCENARIOS-cambios-programas.md). |
 
 ## 4. PoS propio (gran pase)
 

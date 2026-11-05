@@ -1,0 +1,15 @@
+# Proyecto de Cloudflare Pages del Club (aparte del de la app).
+name = "satori-club"
+pages_build_output_dir = "dist"
+compatibility_date = "2025-10-01"
+
+# Variables NO secretas (la anon key es pública, igual que en el bundle de la app).
+# Se cargan en el panel de Cloudflare → Pages → satori-club → Settings → Variables:
+#   SUPABASE_URL       = https://<ref>.supabase.co   (staging para la prueba)
+#   SUPABASE_ANON_KEY  = anon key del mismo proyecto
+# Opcionales: RL_CREAR_MAX (5), RL_CREAR_VENTANA_S (600), RL_LECTURA_MAX (60), RL_LECTURA_VENTANA_S (60)
+
+# Tope por IP: KV con contador por ventana (lo crea Ismael y pega el id).
+# [[kv_namespaces]]
+# binding = "CLUB_RL"
+# id = "<id del namespace>"

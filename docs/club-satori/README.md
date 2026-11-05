@@ -10,3 +10,6 @@ Módulo propio de la app que reemplaza la página externa de créditos (Firebase
 - [PERFIL-SISTEMA-ACTUAL.md](PERFIL-SISTEMA-ACTUAL.md) — relevamiento de solo lectura del sistema actual (bot de Grok, 05-nov). Sin datos de contacto.
 
 Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Después») · Fases → [ROADMAP.md](../../ROADMAP.md).
+
+**F1d ✅ en staging** (05/11): las páginas públicas `/r/`, `/c/` y `/p/` viven en [`club-web/`](../../club-web/README.md). Es un mini-sitio aparte, con una Pages Function propia y tope por IP, en español e inglés. En la 075 se sumaron `club_cupon_ver` y `club_cupon_contacto` (anon). Pruebas: 85/85. Lighthouse en móvil: 100/100. **Pendiente de Ismael:** crear el proyecto `satori-club` en Cloudflare Pages, cargar las variables y el KV, y apuntar `club.satoricostarica.com`. Los pasos están en el README de `club-web`.
+

@@ -1,0 +1,21 @@
+{
+  "name": "club-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Club Satori — páginas públicas del cupón y del portal (Cloudflare Pages)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "local": "node dev-server.mjs"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "@types/qrcode": "1.5.6",
+    "typescript": "6.0.3",
+    "vite": "8.0.14"
+  }
+}

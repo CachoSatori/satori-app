@@ -7,7 +7,7 @@
 
 ---
 
-## 🧾 Noviembre 2026 — El cierre del día se guardaba en 4 llamadas sueltas (mig 071 en staging, 05/11)
+## 🧾 Noviembre 2026 — El cierre del día se guardaba en 4 llamadas sueltas (✅ mig 071 en prod, 05/11)
 
 - **Antes:** Fase 2 = `updateCierreCompleto` → `recordCierreSales` → `recordCierreRetiro` → `recordCierreAjuste`, cada una por su lado.
   - Si una fallaba, el cierre quedaba «completo» a medias.

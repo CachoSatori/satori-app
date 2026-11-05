@@ -39,7 +39,6 @@ const cierre = {
   sep_diaria_crc: 100000, sep_diaria_usd: 0, sep_registradora_crc: 50000, sep_registradora_usd: 0,
   remanente_crc: 400000, remanente_usd: 2000, diferencia_crc: -567, ajuste_tipo: 'Faltante',
   ajuste_motivo: 'cambio mal dado', notas: '', tipo_cambio: 505,
-  primer_conteo_crc: null, primer_conteo_usd: null,
 }
 
 describe('cash.ts — cerrarDiaCompleto / deshacerCierreDia (RPC atómica, mig 071)', () => {

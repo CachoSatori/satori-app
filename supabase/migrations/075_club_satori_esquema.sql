@@ -1218,6 +1218,102 @@ revoke select on public.club_miembros from authenticated;
 grant select (id, location_id, tipo, nombre, negocio_id, codigo, estado, origen, legacy_id, created_at, updated_at)
   on public.club_miembros to authenticated;
 
+-- ── 4c. F1d: páginas públicas (cupón del turista y portal) ─────────────────
+
+-- Nombre de pila para mostrar en público: sin el prefijo «NN/», sin el sufijo «PM», primera palabra.
+create or replace function public.club_nombre_pila(p text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select nullif(split_part(btrim(regexp_replace(regexp_replace(coalesce(p, ''), '^\s*\d+\s*/\s*', ''), '\s+PM\s*$', '', 'i')), ' ', 1), '');
+$$;
+
+-- Ver un cupón (PÚBLICA: anon y authenticated). Solo estado, vence_en y el nombre de pila del referente.
+-- Si el referente está dado de baja o el cupón fue anulado, se informa como «vencido» (no se puede usar).
+create or replace function public.club_cupon_ver(p_codigo text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cod text := upper(btrim(coalesce(p_codigo, '')));
+  v_c   public.club_cupones%rowtype;
+  v_m   public.club_miembros%rowtype;
+begin
+  if v_cod !~ '^[A-HJ-NP-Z2-9]{10}$' then
+    raise exception 'Cupón no válido' using errcode = 'P0001';
+  end if;
+  select * into v_c from public.club_cupones c where c.codigo = v_cod;
+  if not found then
+    raise exception 'Cupón no válido' using errcode = 'P0001';
+  end if;
+  select * into v_m from public.club_miembros m where m.id = v_c.referente_id;
+  return jsonb_build_object(
+    'estado', case
+                when v_c.estado = 'usado' then 'usado'
+                when v_c.estado = 'anulado' or v_m.estado <> 'activo' or v_c.vence_en <= now() then 'vencido'
+                else 'vigente' end,
+    'vence_en', v_c.vence_en,
+    'referente', public.club_nombre_pila(v_m.nombre));
+end;
+$$;
+
+-- Opt-in del turista DESPUÉS de obtener el cupón (PÚBLICA). Solo sobre un cupón vigente y sin
+-- contacto previo (una sola vez). Mismas validaciones que club_cupon_crear. No revela nada.
+create or replace function public.club_cupon_contacto(p_codigo text, p_contacto jsonb)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cod    text := upper(btrim(coalesce(p_codigo, '')));
+  v_c      public.club_cupones%rowtype;
+  v_nombre text;
+  v_wa     text;
+  v_email  text;
+begin
+  if v_cod !~ '^[A-HJ-NP-Z2-9]{10}$' or p_contacto is null or jsonb_typeof(p_contacto) <> 'object' then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  if coalesce(jsonb_typeof(p_contacto->'optin'), '') <> 'boolean' or not (p_contacto->>'optin')::boolean then
+    raise exception 'Falta el consentimiento' using errcode = 'P0001';
+  end if;
+  select * into v_c from public.club_cupones c where c.codigo = v_cod for update;
+  if not found or v_c.estado <> 'vigente' or v_c.vence_en <= now() then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  if v_c.contacto_whatsapp is not null or v_c.contacto_email is not null then
+    return true;   -- ya cargado: no se pisa ni se informa nada más
+  end if;
+  v_nombre := nullif(btrim(regexp_replace(coalesce(p_contacto->>'nombre', ''), '[[:cntrl:]]', '', 'g')), '');
+  if v_nombre is not null and length(v_nombre) > 80 then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  begin
+    v_wa := public.club_norm_telefono(p_contacto->>'whatsapp');
+  exception when others then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end;
+  v_email := nullif(lower(btrim(coalesce(p_contacto->>'email', ''))), '');
+  if v_email is not null and (length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  if v_wa is null and v_email is null then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  update public.club_cupones
+     set contacto_nombre = v_nombre, contacto_whatsapp = v_wa, contacto_email = v_email, contacto_optin = true
+   where id = v_c.id;
+  return true;
+end;
+$$;
+
 -- ── 5. EXECUTE: nada por defecto, grant explícito ───────────────────────────
 
 revoke all on function public.club_gen_codigo(int)                       from public, anon, authenticated;
@@ -1257,6 +1353,11 @@ grant execute on function public.club_personas_proximo(bigint, int)  to authenti
 -- Públicas
 grant execute on function public.club_cupon_crear(text, jsonb)       to anon, authenticated;
 grant execute on function public.club_portal(text)                   to anon, authenticated;
+revoke all on function public.club_nombre_pila(text)                  from public, anon, authenticated;
+revoke all on function public.club_cupon_ver(text)                    from public, anon, authenticated;
+revoke all on function public.club_cupon_contacto(text, jsonb)        from public, anon, authenticated;
+grant execute on function public.club_cupon_ver(text)                 to anon, authenticated;
+grant execute on function public.club_cupon_contacto(text, jsonb)     to anon, authenticated;
 -- Staff (la guarda de rol está adentro)
 grant execute on function public.club_cupon_usar(text, int, text, uuid)  to authenticated;
 grant execute on function public.club_canje(uuid, numeric, text, uuid)   to authenticated;

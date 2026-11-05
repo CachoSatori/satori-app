@@ -624,6 +624,88 @@ begin
   update profiles set role = 'salonero' where id = '<SALONERO_UUID>';
 end $$;
 
+-- ═══ F1d · 19. club_cupon_ver (anon): solo estado, vence_en y nombre de pila ═══
+do $$
+declare v_pm uuid; v_cod text; v_cup text; j jsonb; j2 jsonb;
+begin
+  insert into club_miembros(tipo, nombre) values ('concierge_pm', '07/ Lola Pruebita Apellido PM') returning id, codigo into v_pm, v_cod;
+  perform pg_temp.como('anon', null);
+  select x.codigo into v_cup from public.club_cupon_crear(v_cod, null) x;
+  j := public.club_cupon_ver(v_cup);
+  j2 := public.club_cupon_ver(lower(v_cup));
+  perform pg_temp.yo();
+  insert into _ids values ('cup_pm', v_cup);
+  perform pg_temp.r('19', 'anon ve el cupón: solo {estado, vence_en, referente} y el referente es el nombre de pila',
+    (select array_agg(x order by x) from jsonb_object_keys(j) x) = array['estado','referente','vence_en']
+      and j->>'estado' = 'vigente' and j->>'referente' = 'Lola' and j2->>'estado' = 'vigente'
+      and j::text !~ 'Pruebita|Apellido|PM|07', j::text);
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_cupon_ver('ZZZZZZZZZZ');
+    perform pg_temp.yo(); perform pg_temp.r('19', 'cupón inexistente', false, 'respondió');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('19', 'cupón inexistente → error genérico', sqlerrm = 'Cupón no válido', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_cupon_ver('<b>x</b>');
+    perform pg_temp.yo(); perform pg_temp.r('19', 'código mal formado', false, 'respondió');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('19', 'código mal formado → mismo error', sqlerrm = 'Cupón no válido', sqlerrm);
+  end;
+  -- usado → «usado»; vencido → «vencido»; referente de baja → «vencido»
+  perform pg_temp.como('anon', null);
+  j := public.club_cupon_ver((select i.v from _ids i where i.k = 'cupon1'));
+  perform pg_temp.yo();
+  update club_cupones set vence_en = now() - interval '1 minute' where codigo = v_cup;
+  perform pg_temp.como('anon', null);
+  j2 := public.club_cupon_ver(v_cup);
+  perform pg_temp.yo();
+  perform pg_temp.r('19', 'cupón usado → «usado»; vencido → «vencido»', j->>'estado' = 'usado' and j2->>'estado' = 'vencido',
+    concat_ws(' · ', j->>'estado', j2->>'estado'));
+end $$;
+
+-- ═══ F1d · 20. club_cupon_contacto (anon): opt-in debajo del cupón ═══
+do $$
+declare v_cup text; v_wa text; v_ok boolean;
+begin
+  perform pg_temp.como('anon', null);
+  select x.codigo into v_cup from public.club_cupon_crear((select v from _ids where k='ref_cod'), null) x;
+  perform pg_temp.yo();
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_cupon_contacto(v_cup, '{"whatsapp":"8888 2222"}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('20', 'opt-in sin consentimiento', false, 'guardó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('20', 'opt-in sin consentimiento → error', sqlerrm = 'Falta el consentimiento', sqlerrm);
+  end;
+  perform pg_temp.como('anon', null);
+  v_ok := public.club_cupon_contacto(v_cup, '{"nombre":"Tina","whatsapp":"8888 2222","optin":true}'::jsonb);
+  perform public.club_cupon_contacto(v_cup, '{"whatsapp":"8888 3333","optin":true}'::jsonb);
+  perform pg_temp.yo();
+  select contacto_whatsapp into v_wa from club_cupones where codigo = v_cup;
+  perform pg_temp.r('20', 'opt-in con consentimiento → guardado normalizado; el segundo no lo pisa',
+    v_ok and v_wa = '+50688882222' and (select contacto_optin from club_cupones where codigo = v_cup), v_wa);
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_cupon_contacto((select v from _ids where k='cupon1'), '{"whatsapp":"8888 4444","optin":true}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('20', 'opt-in sobre cupón usado', false, 'guardó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('20', 'opt-in sobre cupón usado → error genérico', sqlerrm = 'Datos no válidos', sqlerrm);
+  end;
+end $$;
+
+-- ═══ F1d · 21. Barrido de funciones club_* ejecutables por anon ═══
+do $$
+declare v text;
+begin
+  select string_agg(p.proname, ',' order by p.proname) into v
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname like 'club\_%' and has_function_privilege('anon', p.oid, 'EXECUTE');
+  perform pg_temp.r('21', 'anon solo ejecuta club_cupon_contacto, club_cupon_crear, club_cupon_ver y club_portal',
+    v = 'club_cupon_contacto,club_cupon_crear,club_cupon_ver,club_portal', v);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

@@ -1314,6 +1314,335 @@ begin
 end;
 $$;
 
+-- ── 4d. F1f: bandeja de excepciones del puente y reporte mensual ───────────
+-- Las tablas pos_ndf_* son SOLO LECTURA acá: se consultan, nunca se escriben.
+
+-- Config: artículo marcador de la promo en el PoS (opción 2, apagado mientras sea NULL)
+-- y margen de latencia del puente antes de marcar REGISTRO_SIN_FACTURA.
+alter table public.club_config add column if not exists promo_articulo_codigo text;
+alter table public.club_config add column if not exists puente_latencia_min int not null default 30
+  check (puente_latencia_min between 1 and 1440);
+
+-- Clave de comparación de facturas: solo dígitos, sin ceros a la izquierda.
+create or replace function public.club_factura_clave(p text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select nullif(ltrim(regexp_replace(coalesce(p, ''), '\D', '', 'g'), '0'), '');
+$$;
+
+-- Nombre para reportes (ESTANDAR-reportes §7): sin «NN/», «(Grupo)» ni «PM» final.
+create or replace function public.club_nombre_limpio(p text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select btrim(regexp_replace(
+           regexp_replace(regexp_replace(regexp_replace(coalesce(p, ''), '^\s*\d+\s*/\s*', ''),
+                                         '\(\s*grupo\s*\)', '', 'gi'),
+                          '\s+PM\s*$', '', 'i'),
+           '\s+', ' ', 'g'));
+$$;
+
+create table if not exists public.club_excepciones_resueltas (
+  id            bigint generated always as identity primary key,
+  location_id   text not null default 'santa-teresa',
+  tipo          text not null check (tipo in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA')),
+  ref           text not null check (length(ref) between 1 and 100),
+  nota          text not null check (length(btrim(nota)) between 1 and 500),
+  resuelto_por  uuid,
+  resuelto_en   timestamptz not null default now(),
+  unique (location_id, tipo, ref)
+);
+alter table public.club_excepciones_resueltas enable row level security;
+revoke all on public.club_excepciones_resueltas from anon, public, authenticated;
+grant select on public.club_excepciones_resueltas to authenticated;
+drop policy if exists club_exc_gerencia on public.club_excepciones_resueltas;
+create policy club_exc_gerencia on public.club_excepciones_resueltas for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
+
+-- Excepciones del puente en un rango de fechas (hora CR). owner, manager.
+--   REGISTRO_SIN_FACTURA (exacta)  · cupón/tarjeta/canje de la app con factura que no está en el puente
+--   CREDITOS_SIN_CANJE   (probable)· factura con cxc múltiplo de medio crédito y sin canje
+--   CANJE_MONTO_DISTINTO (probable)· canjes de una factura cuyo valor ≠ cxc de la factura (±₡1)
+--   PROMO_SIN_CUPON      (exacta)  · solo si club_config.promo_articulo_codigo está cargado
+create or replace function public.club_excepciones(p_desde date, p_hasta date, p_location text default 'santa-teresa')
+returns table (tipo text, ref text, fecha timestamptz, factura text, certeza text, detalle jsonb,
+               resuelta boolean, nota text, resuelta_en timestamptz)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_cfg public.club_config%rowtype;
+  v_ini timestamptz;
+  v_fin timestamptz;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_desde is null or p_hasta is null or p_hasta < p_desde or p_hasta - p_desde > 400 then
+    raise exception 'Rango de fechas no válido (máximo 400 días)' using errcode = 'P0001';
+  end if;
+  select * into v_cfg from public.club_config c where c.location_id = p_location;
+  if not found then
+    raise exception 'Local no válido' using errcode = 'P0001';
+  end if;
+  v_ini := p_desde::timestamp at time zone 'America/Costa_Rica';
+  v_fin := (p_hasta + 1)::timestamp at time zone 'America/Costa_Rica';
+
+  return query
+  with tk as (
+    select t.id, t.numero_factura, ltrim(t.numero_factura, '0') as clave,
+           coalesce(t.fecha_registra, t.fecha_cierra) as f, coalesce(t.cxc_crc, 0) as cxc, t.total_crc
+      from public.pos_ndf_tickets t
+     where t.local = p_location and coalesce(t.fecha_registra, t.fecha_cierra) >= v_ini
+       and coalesce(t.fecha_registra, t.fecha_cierra) < v_fin),
+  mv as (
+    select m.*, public.club_factura_clave(m.factura_pos) as clave
+      from public.club_movimientos m
+     where m.location_id = p_location and m.origen = 'app' and m.tipo in ('tarjeta','canje') and m.factura_pos is not null),
+  ex as (
+    -- REGISTRO_SIN_FACTURA
+    select 'REGISTRO_SIN_FACTURA'::text as tipo, m.id::text as ref, m.fecha_visita as fecha, m.factura_pos as factura,
+           'exacta'::text as certeza,
+           jsonb_build_object('movimiento', case when m.cupon_id is not null then 'cupon' when m.tipo = 'canje' then 'canje' else 'tarjeta_manual' end,
+                              'personas', m.personas, 'creditos', m.creditos,
+                              'miembro', public.club_nombre_limpio(mi.nombre)) as detalle
+      from mv m join public.club_miembros mi on mi.id = m.miembro_id
+     where m.fecha_visita >= v_ini and m.fecha_visita < v_fin
+       and m.registrado_en < now() - make_interval(mins => v_cfg.puente_latencia_min)
+       and not exists (select 1 from public.pos_ndf_tickets t
+                        where t.local = p_location and ltrim(t.numero_factura, '0') = m.clave)
+    union all
+    -- CREDITOS_SIN_CANJE (heurística: cxc múltiplo de medio crédito)
+    select 'CREDITOS_SIN_CANJE', 'factura:' || t.clave, t.f, t.numero_factura, 'probable',
+           jsonb_build_object('cxc_crc', t.cxc, 'creditos_estimados', round(t.cxc / v_cfg.valor_credito_crc, 1), 'total_crc', t.total_crc)
+      from tk t
+     where t.cxc > 0 and t.cxc % (v_cfg.valor_credito_crc / 2.0) = 0
+       and not exists (select 1 from mv m where m.tipo = 'canje' and m.clave = t.clave)
+    union all
+    -- CANJE_MONTO_DISTINTO (por factura: Σ créditos × valor vs cxc)
+    select 'CANJE_MONTO_DISTINTO', 'factura:' || c.clave, c.f, c.factura, 'probable',
+           jsonb_build_object('canje_crc', c.valor, 'cxc_crc', c.cxc, 'diferencia_crc', c.valor - c.cxc, 'creditos', c.creditos,
+                              'miembro', c.miembro)
+      from (select m.clave, min(m.factura_pos) as factura, min(m.fecha_visita) as f,
+                   sum(m.creditos * m.valor_credito_crc) as valor, sum(m.creditos) as creditos,
+                   string_agg(distinct public.club_nombre_limpio(mi.nombre), ', ') as miembro,
+                   (select coalesce(max(t.cxc_crc), 0) from public.pos_ndf_tickets t
+                     where t.local = p_location and ltrim(t.numero_factura, '0') = m.clave) as cxc,
+                   exists (select 1 from public.pos_ndf_tickets t
+                            where t.local = p_location and ltrim(t.numero_factura, '0') = m.clave) as en_puente
+              from mv m join public.club_miembros mi on mi.id = m.miembro_id
+             where m.tipo = 'canje' and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
+             group by m.clave) c
+     where c.en_puente and abs(c.valor - c.cxc) > 1
+    union all
+    -- PROMO_SIN_CUPON (apagada mientras no haya artículo marcador)
+    select 'PROMO_SIN_CUPON', 'factura:' || t.clave, t.f, t.numero_factura, 'exacta',
+           jsonb_build_object('articulo', v_cfg.promo_articulo_codigo, 'total_crc', t.total_crc)
+      from tk t
+     where v_cfg.promo_articulo_codigo is not null
+       and exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = t.id and l.codigo_producto = v_cfg.promo_articulo_codigo)
+       and not exists (select 1 from mv m where m.tipo = 'tarjeta' and m.clave = t.clave)
+  )
+  select ex.tipo, ex.ref, ex.fecha, ex.factura, ex.certeza, ex.detalle,
+         r.id is not null, r.nota, r.resuelto_en
+    from ex
+    left join public.club_excepciones_resueltas r
+      on r.location_id = p_location and r.tipo = ex.tipo and r.ref = ex.ref
+   order by ex.fecha desc;
+end;
+$$;
+
+-- Cantidad de excepciones abiertas de los últimos N días (contador de la tarjeta Club). owner, manager.
+create or replace function public.club_excepciones_abiertas(p_dias int default 30, p_location text default 'santa-teresa')
+returns int
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select count(*)::int
+    from public.club_excepciones(((now() at time zone 'America/Costa_Rica')::date - least(greatest(coalesce(p_dias, 30), 1), 400)),
+                                 (now() at time zone 'America/Costa_Rica')::date, p_location) e
+   where not e.resuelta;
+$$;
+
+-- Resolver una excepción con nota (owner, manager). No modifica el libro.
+create or replace function public.club_excepcion_resolver(p_tipo text, p_ref text, p_nota text, p_location text default 'santa-teresa')
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_nota text := btrim(coalesce(p_nota, ''));
+  v_ref  text := btrim(coalesce(p_ref, ''));
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_tipo is null or p_tipo not in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA') then
+    raise exception 'Tipo de excepción no válido' using errcode = 'P0001';
+  end if;
+  if length(v_ref) not between 1 and 100 then
+    raise exception 'Referencia no válida' using errcode = 'P0001';
+  end if;
+  if length(v_nota) not between 1 and 500 then
+    raise exception 'La nota es obligatoria (hasta 500 caracteres)' using errcode = 'P0001';
+  end if;
+  insert into public.club_excepciones_resueltas (location_id, tipo, ref, nota, resuelto_por)
+  values (p_location, p_tipo, v_ref, v_nota, auth.uid())
+  on conflict (location_id, tipo, ref) do update
+    set nota = excluded.nota, resuelto_por = excluded.resuelto_por, resuelto_en = now();
+  return true;
+end;
+$$;
+
+-- Reporte mensual (owner, manager). JSON sin teléfonos ni emails.
+create or replace function public.club_reporte_mes(p_mes date, p_location text default 'santa-teresa')
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_cfg  public.club_config%rowtype;
+  v_mes  date;
+  v_ini  timestamptz;
+  v_fin  timestamptz;
+  v_pini timestamptz;   -- mes anterior
+  v_3ini timestamptz;   -- 3 meses previos
+  r      jsonb;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  select * into v_cfg from public.club_config c where c.location_id = p_location;
+  if not found then
+    raise exception 'Local no válido' using errcode = 'P0001';
+  end if;
+  v_mes  := date_trunc('month', coalesce(p_mes, now()::date))::date;
+  v_ini  := v_mes::timestamp at time zone 'America/Costa_Rica';
+  v_fin  := (v_mes + interval '1 month')::timestamp at time zone 'America/Costa_Rica';
+  v_pini := (v_mes - interval '1 month')::timestamp at time zone 'America/Costa_Rica';
+  v_3ini := (v_mes - interval '3 months')::timestamp at time zone 'America/Costa_Rica';
+
+  with mi as (
+    select m.id, m.tipo, m.estado, public.club_nombre_limpio(m.nombre) as nombre, n.nombre as negocio
+      from public.club_miembros m left join public.club_negocios n on n.id = m.negocio_id
+     where m.location_id = p_location and m.tipo in ('referente','concierge_pm','equipo')),
+  mv as (select v.* from public.club_movimientos v join mi on mi.id = v.miembro_id where v.fecha_visita < v_fin),
+  por_m as (
+    select mi.id, mi.tipo, mi.estado, mi.nombre, mi.negocio,
+           coalesce(sum(v.personas), 0)::int as saldo_p,
+           coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini), 0)::int as pers_mes,
+           count(*) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini)::int as t_mes,
+           coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_3ini and v.fecha_visita < v_ini), 0) / 3.0 as prom3,
+           max(v.fecha_visita) filter (where v.tipo in ('tarjeta','canje')) as ult,
+           min(v.fecha_visita) filter (where v.tipo = 'tarjeta') as primera
+      from mi left join mv v on v.miembro_id = mi.id
+     group by 1,2,3,4,5),
+  pm as (select p.*, public.club_creditos(greatest(p.saldo_p, 0), v_cfg.personas_por_credito) as cr from por_m p),
+  k as (
+    select
+      count(*) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini)                              as tarjetas,
+      coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini), 0)          as personas,
+      count(*) filter (where v.tipo = 'canje' and v.fecha_visita >= v_ini)                                as canjes,
+      coalesce(sum(v.creditos) filter (where v.tipo = 'canje' and v.fecha_visita >= v_ini), 0)            as creditos_canjeados,
+      coalesce(sum(v.creditos * v.valor_credito_crc) filter (where v.tipo = 'canje' and v.fecha_visita >= v_ini), 0) as valor_canjeado_crc,
+      coalesce(-sum(v.personas) filter (where v.tipo = 'vencimiento' and v.fecha_visita >= v_ini), 0)     as personas_vencidas,
+      count(*) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini)  as tarjetas_ant,
+      coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini), 0) as personas_ant,
+      count(*) filter (where v.tipo = 'canje' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini)    as canjes_ant,
+      coalesce(sum(v.creditos) filter (where v.tipo = 'canje' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini), 0) as creditos_canjeados_ant
+    from mv v),
+  fila as (select p.*, jsonb_build_object('nombre', p.nombre, 'negocio', p.negocio, 'tipo', p.tipo) as base from pm p)
+  select jsonb_build_object(
+    'mes', to_char(v_mes, 'YYYY-MM'), 'local', p_location, 'generado_en', now(),
+    'config', jsonb_build_object('valor_credito_crc', v_cfg.valor_credito_crc, 'personas_por_credito', v_cfg.personas_por_credito,
+                                 'vencimiento_meses', v_cfg.vencimiento_meses, 'pm_pausado', v_cfg.pm_pausado),
+    'kpis', (select jsonb_build_object(
+        'tarjetas', k.tarjetas, 'personas', k.personas,
+        'creditos_generados', round(k.personas::numeric / v_cfg.personas_por_credito, 1),
+        'canjes', k.canjes, 'creditos_canjeados', k.creditos_canjeados, 'valor_canjeado_crc', k.valor_canjeado_crc,
+        'personas_vencidas', k.personas_vencidas,
+        'referentes_con_visitas', (select count(*) from pm where pm.tipo <> 'equipo' and pm.t_mes > 0),
+        'cupones_generados', (select count(*) from public.club_cupones c where c.location_id = p_location and c.creado_en >= v_ini and c.creado_en < v_fin),
+        'cupones_usados', (select count(*) from public.club_cupones c where c.location_id = p_location and c.usado_en >= v_ini and c.usado_en < v_fin),
+        'saldo_creditos_al_cierre', (select coalesce(sum(cr), 0) from pm where pm.estado = 'activo'),
+        'cuentas_con_saldo', (select count(*) from pm where pm.estado = 'activo' and pm.cr > 0),
+        'anterior', jsonb_build_object('tarjetas', k.tarjetas_ant, 'personas', k.personas_ant, 'canjes', k.canjes_ant,
+                                       'creditos_canjeados', k.creditos_canjeados_ant)) from k),
+    'ranking', (select coalesce(jsonb_agg(f.base || jsonb_build_object('personas', f.pers_mes, 'tarjetas', f.t_mes, 'prom_3m', round(f.prom3, 1))
+                                          order by f.pers_mes desc, f.nombre), '[]') from (select * from fila where tipo <> 'equipo' and pers_mes > 0 order by pers_mes desc, nombre limit 10) f),
+    'subiendo', (select coalesce(jsonb_agg(f.base || jsonb_build_object('personas', f.pers_mes, 'prom_3m', round(f.prom3, 1), 'nuevo_ritmo', f.prom3 = 0)
+                                           order by f.pers_mes - f.prom3 desc), '[]')
+                   from (select * from fila where tipo <> 'equipo' and pers_mes > 0 and (prom3 = 0 or pers_mes > prom3 * 1.3)
+                          order by pers_mes - prom3 desc limit 5) f),
+    'bajando', (select coalesce(jsonb_agg(f.base || jsonb_build_object('personas', f.pers_mes, 'prom_3m', round(f.prom3, 1)) order by f.pers_mes - f.prom3), '[]')
+                  from (select * from fila where tipo <> 'equipo' and prom3 > 0 and pers_mes < prom3 * 0.7 order by pers_mes - prom3 limit 5) f),
+    'dormidos', (select jsonb_build_object('cuentas', count(*), 'creditos', coalesce(sum(cr), 0),
+                   'lista', coalesce((select jsonb_agg(x.base || jsonb_build_object('creditos', x.cr, 'ultima_actividad', x.ult) order by x.cr desc)
+                                        from (select * from fila where estado = 'activo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')
+                                               order by cr desc limit 10) x), '[]'))
+                   from pm where estado = 'activo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')),
+    'a_contactar', (select coalesce(jsonb_agg(x.base || jsonb_build_object('creditos', x.cr, 'vence_en', x.vence) order by x.vence), '[]')
+                      from (select f.*, f.ult + make_interval(months => v_cfg.vencimiento_meses) as vence from fila f
+                             where f.estado = 'activo' and f.cr > 0 and f.ult is not null
+                               and f.ult + make_interval(months => v_cfg.vencimiento_meses) >= v_fin
+                               and f.ult + make_interval(months => v_cfg.vencimiento_meses) < v_fin + interval '30 days'
+                             order by vence limit 10) x),
+    'nuevos', (select jsonb_build_object('cuentas', count(*),
+                 'lista', coalesce((select jsonb_agg(x.base || jsonb_build_object('personas', x.pers_mes) order by x.pers_mes desc)
+                                      from (select * from fila where tipo <> 'equipo' and primera >= v_ini order by pers_mes desc limit 10) x), '[]'))
+                 from pm where tipo <> 'equipo' and primera >= v_ini),
+    'equipo', (select jsonb_build_object('personas_mes', coalesce(sum(pers_mes), 0), 'creditos', coalesce(sum(cr) filter (where estado = 'activo'), 0),
+                 'lista', coalesce((select jsonb_agg(x.base || jsonb_build_object('personas', x.pers_mes, 'creditos', x.cr) order by x.cr desc, x.pers_mes desc)
+                                      from (select * from fila where tipo = 'equipo' and estado = 'activo' and (cr > 0 or pers_mes > 0)
+                                             order by cr desc, pers_mes desc limit 10) x), '[]'))
+                 from pm where tipo = 'equipo'),
+    'antiguedad', (select coalesce(jsonb_agg(jsonb_build_object('tramo', b.tramo, 'cuentas', b.cuentas, 'creditos', b.creditos,
+                                                               'valor_crc', b.creditos * v_cfg.valor_credito_crc) order by b.orden), '[]')
+                     from (select case when ult >= v_fin - interval '3 months' then 1 when ult >= v_fin - interval '6 months' then 2
+                                       when ult >= v_fin - interval '12 months' then 3 else 4 end as orden,
+                                  case when ult >= v_fin - interval '3 months' then 'menos de 3 meses'
+                                       when ult >= v_fin - interval '6 months' then '3 a 6 meses'
+                                       when ult >= v_fin - interval '12 months' then '6 a 12 meses' else 'más de 12 meses' end as tramo,
+                                  count(*) as cuentas, sum(cr) as creditos
+                             from pm where estado = 'activo' and cr > 0 group by 1, 2) b),
+    'pm', jsonb_build_object(
+        'pausado', v_cfg.pm_pausado,
+        'nota', case when v_cfg.pm_pausado then 'Programa PM en pausa por temas contables: los montos son informativos.' else null end,
+        'pendiente_crc', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c join mi on mi.id = c.miembro_id
+                           where mi.estado = 'activo' and c.estado in ('pendiente','aprobado') and c.created_at < v_fin)
+                       - (select coalesce(sum(p.monto_crc), 0) from public.club_pm_pagos p join mi on mi.id = p.miembro_id
+                           where mi.estado = 'activo' and p.pagado_en < v_fin),
+        'cargos_mes_crc', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c join mi on mi.id = c.miembro_id
+                            where c.created_at >= v_ini and c.created_at < v_fin),
+        'pagos_mes_crc', (select coalesce(sum(p.monto_crc), 0) from public.club_pm_pagos p join mi on mi.id = p.miembro_id
+                           where p.pagado_en >= v_ini and p.pagado_en < v_fin)),
+    'calidad', (select jsonb_build_object('abiertas', coalesce(sum(e.n_ab), 0), 'resueltas', coalesce(sum(e.n_res), 0),
+                                          'por_tipo', coalesce(jsonb_object_agg(e.tipo, e.n_ab) filter (where e.n_ab > 0), '{}'),
+                                          'promo_activa', v_cfg.promo_articulo_codigo is not null)
+                  from (select x.tipo, count(*) filter (where not x.resuelta) as n_ab, count(*) filter (where x.resuelta) as n_res
+                          from public.club_excepciones(v_mes, (v_mes + interval '1 month' - interval '1 day')::date, p_location) x
+                         group by x.tipo) e)
+  ) into r;
+  return r;
+end;
+$$;
+
 -- ── 5. EXECUTE: nada por defecto, grant explícito ───────────────────────────
 
 revoke all on function public.club_gen_codigo(int)                       from public, anon, authenticated;
@@ -1358,6 +1687,16 @@ revoke all on function public.club_cupon_ver(text)                    from publi
 revoke all on function public.club_cupon_contacto(text, jsonb)        from public, anon, authenticated;
 grant execute on function public.club_cupon_ver(text)                 to anon, authenticated;
 grant execute on function public.club_cupon_contacto(text, jsonb)     to anon, authenticated;
+revoke all on function public.club_factura_clave(text)                from public, anon, authenticated;
+revoke all on function public.club_nombre_limpio(text)                from public, anon, authenticated;
+revoke all on function public.club_excepciones(date, date, text)      from public, anon, authenticated;
+revoke all on function public.club_excepciones_abiertas(int, text)    from public, anon, authenticated;
+revoke all on function public.club_excepcion_resolver(text, text, text, text) from public, anon, authenticated;
+revoke all on function public.club_reporte_mes(date, text)            from public, anon, authenticated;
+grant execute on function public.club_excepciones(date, date, text)   to authenticated;
+grant execute on function public.club_excepciones_abiertas(int, text) to authenticated;
+grant execute on function public.club_excepcion_resolver(text, text, text, text) to authenticated;
+grant execute on function public.club_reporte_mes(date, text)         to authenticated;
 -- Staff (la guarda de rol está adentro)
 grant execute on function public.club_cupon_usar(text, int, text, uuid)  to authenticated;
 grant execute on function public.club_canje(uuid, numeric, text, uuid)   to authenticated;

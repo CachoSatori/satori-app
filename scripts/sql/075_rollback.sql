@@ -12,6 +12,12 @@ drop function if exists public.club_miembro_token(uuid);
 drop function if exists public.club_miembro_regenerar_codigo(uuid);
 drop function if exists public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb);
 drop function if exists public.club_negocio_guardar(uuid, text, text, boolean);
+drop function if exists public.club_reporte_mes(date, text);
+drop function if exists public.club_excepcion_resolver(text, text, text, text);
+drop function if exists public.club_excepciones_abiertas(int, text);
+drop function if exists public.club_excepciones(date, date, text);
+drop function if exists public.club_nombre_limpio(text);
+drop function if exists public.club_factura_clave(text);
 drop function if exists public.club_cupon_contacto(text, jsonb);
 drop function if exists public.club_cupon_ver(text);
 drop function if exists public.club_nombre_pila(text);
@@ -25,6 +31,7 @@ drop function if exists public.club_saldo_personas(uuid);
 
 drop view if exists public.club_saldos;
 
+drop table if exists public.club_excepciones_resueltas;
 drop table if exists public.club_config_historial;
 drop table if exists public.club_visitas;
 drop table if exists public.club_pm_cargos;

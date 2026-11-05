@@ -638,7 +638,7 @@ begin
   perform pg_temp.r('19', 'anon ve el cupón: solo {estado, vence_en, referente} y el referente es el nombre de pila',
     (select array_agg(x order by x) from jsonb_object_keys(j) x) = array['estado','referente','vence_en']
       and j->>'estado' = 'vigente' and j->>'referente' = 'Lola' and j2->>'estado' = 'vigente'
-      and j::text !~ 'Pruebita|Apellido|PM|07', j::text);
+      and (j->>'referente') !~ 'Pruebita|Apellido|PM|07', j::text);
   begin
     perform pg_temp.como('anon', null);
     perform public.club_cupon_ver('ZZZZZZZZZZ');
@@ -704,6 +704,112 @@ begin
    where n.nspname = 'public' and p.proname like 'club\_%' and has_function_privilege('anon', p.oid, 'EXECUTE');
   perform pg_temp.r('21', 'anon solo ejecuta club_cupon_contacto, club_cupon_crear, club_cupon_ver y club_portal',
     v = 'club_cupon_contacto,club_cupon_crear,club_cupon_ver,club_portal', v);
+end $$;
+
+-- ═══ F1f · 22. Excepciones del puente (facturas sembradas; todo se deshace) ═══
+do $$
+declare v_ref uuid := (select i.v::uuid from _ids i where i.k = 'ref'); v_t5 uuid; v_t3 uuid; v_mv uuid;
+begin
+  update club_config set valor_credito_crc = 18000, promo_articulo_codigo = null where location_id = 'santa-teresa';
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, cxc_crc, total_crc)
+  values ('990001', now() - interval '1 day', 'C', 'salon', 'cajero', true, 'ok', 18000, 25000),
+         ('990002', now() - interval '1 day', 'C', 'salon', 'cajero', true, 'ok', 36000, 40000);
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+  values ('990003', now() - interval '1 day', 'C', 'salon', 'cajero', true, 'ok', 30000) returning id into v_t3;
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+  values ('990005', now() - interval '1 day', 'C', 'salon', 'cajero', true, 'ok', 30000) returning id into v_t5;
+  insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values
+    (v_t3, 'PRUEBA-PROMO', 'PROMO CLUB 10% (prueba)', 1, 0), (v_t5, 'PRUEBA-PROMO', 'PROMO CLUB 10% (prueba)', 1, 0);
+  -- canje de 1,5 (₡27.000) sobre una factura con cxc ₡36.000
+  insert into club_movimientos (miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen)
+  values (v_ref, 'canje', -9, 1.5, 6, 18000, 'FE-990002', now() - interval '1 day', now() - interval '2 hours', 'app');
+  -- tarjeta manual con factura inexistente (hace 2 h) y otra que sí existe con ceros/prefijo
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota)
+  values (v_ref, 'tarjeta', 3, 6, 18000, '990099', now() - interval '1 day', now() - interval '2 hours', 'app', 'manual') returning id into v_mv;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota)
+  values (v_ref, 'tarjeta', 2, 6, 18000, 'FE-0990003', now() - interval '1 day', now() - interval '2 hours', 'app', 'manual');
+  insert into _ids values ('mv_sin_factura', v_mv);
+end $$;
+do $$
+declare j jsonb; v_ab1 int; v_ab2 int;
+begin
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select jsonb_agg(to_jsonb(e)) into j from public.club_excepciones(current_date - 3, current_date) e where e.factura ~ '99000|990099';
+  perform pg_temp.yo();
+  perform pg_temp.r('22', 'CREDITOS_SIN_CANJE (probable): factura 990001 con cxc ₡18.000 y sin canje',
+    exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'CREDITOS_SIN_CANJE' and x->>'ref' = 'factura:990001' and x->>'certeza' = 'probable'),
+    (select string_agg(x->>'tipo' || ' ' || (x->>'ref'), ' · ') from jsonb_array_elements(j) x));
+  perform pg_temp.r('22', 'CANJE_MONTO_DISTINTO: canje 1,5 (₡27.000) vs cxc ₡36.000 → diferencia −₡9.000; esa factura no cuenta como «sin canje»',
+    exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'CANJE_MONTO_DISTINTO' and x->>'ref' = 'factura:990002' and (x->'detalle'->>'diferencia_crc')::numeric = -9000)
+      and not exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'CREDITOS_SIN_CANJE' and x->>'ref' = 'factura:990002'), '');
+  perform pg_temp.r('22', 'REGISTRO_SIN_FACTURA (exacta): 990099 no está en el puente; «FE-0990003» sí (solo dígitos, sin ceros)',
+    exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'REGISTRO_SIN_FACTURA' and x->>'ref' = (select i.v from _ids i where i.k = 'mv_sin_factura'))
+      and not exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'REGISTRO_SIN_FACTURA' and x->>'factura' = 'FE-0990003'), '');
+  perform pg_temp.r('22', 'PROMO_SIN_CUPON apagada mientras no hay artículo marcador',
+    not exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'PROMO_SIN_CUPON'), '');
+  update club_config set promo_articulo_codigo = 'PRUEBA-PROMO' where location_id = 'santa-teresa';
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select jsonb_agg(to_jsonb(e)) into j from public.club_excepciones(current_date - 3, current_date) e where e.tipo = 'PROMO_SIN_CUPON' and e.factura ~ '99000';
+  v_ab1 := public.club_excepciones_abiertas(30);
+  perform pg_temp.yo();
+  perform pg_temp.r('22', 'con el artículo cargado en club_config, PROMO_SIN_CUPON se enciende: 990005 sí, 990003 no (tiene tarjeta)',
+    jsonb_array_length(j) = 1 and j->0->>'ref' = 'factura:990005', coalesce(j::text, 'null'));
+  -- ═══ 23. Resolver ═══
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    perform public.club_excepcion_resolver('CREDITOS_SIN_CANJE', 'factura:990001', '   ');
+    perform pg_temp.yo(); perform pg_temp.r('23', 'resolver sin nota', false, 'resolvió');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('23', 'resolver sin nota → error', true, sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_excepcion_resolver('CREDITOS_SIN_CANJE', 'factura:990001', 'Era una cuenta de hotel, no créditos');
+  v_ab2 := public.club_excepciones_abiertas(30);
+  select jsonb_agg(to_jsonb(e)) into j from public.club_excepciones(current_date - 3, current_date) e where e.ref = 'factura:990001';
+  perform pg_temp.yo();
+  perform pg_temp.r('23', 'resolver con nota → queda resuelta (quién, cuándo, nota) y baja el contador',
+    (j->0->>'resuelta')::boolean and j->0->>'nota' = 'Era una cuenta de hotel, no créditos' and v_ab2 = v_ab1 - 1
+      and (select resuelto_por from club_excepciones_resueltas where ref = 'factura:990001') = '<OWNER_UUID>',
+    format('abiertas %s → %s', v_ab1, v_ab2));
+  perform pg_temp.r('23', 'resolver no modifica el libro', (select count(*) from club_movimientos where factura_pos = 'FE-990002') = 1, '');
+end $$;
+
+-- ═══ F1f · 24. El cajero no ve excepciones ni reportes ═══
+do $$
+declare f text; v_n int;
+begin
+  foreach f in array array[
+    'select count(*) from public.club_excepciones(current_date - 3, current_date)',
+    'select public.club_excepciones_abiertas(30)',
+    'select public.club_excepcion_resolver(''CREDITOS_SIN_CANJE'', ''factura:990002'', ''x'')',
+    'select public.club_reporte_mes(''2026-10-01'')'] loop
+    begin
+      perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+      execute f;
+      perform pg_temp.yo(); perform pg_temp.r('24', 'cajero: ' || substring(f from 'club_[a-z_]+'), false, 'pudo');
+    exception when insufficient_privilege then
+      perform pg_temp.yo(); perform pg_temp.r('24', 'cajero: ' || substring(f from 'club_[a-z_]+') || ' → sin permiso', true, sqlerrm);
+    end;
+  end loop;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select count(*) into v_n from public.club_excepciones_resueltas;
+  perform pg_temp.yo();
+  perform pg_temp.r('24', 'cajero lee club_excepciones_resueltas → 0 filas', v_n = 0, format('%s', v_n));
+end $$;
+
+-- ═══ F1f · 25. Reporte de oct-2026 = validacion.json de la F1b (hora CR) y sin contactos ═══
+do $$
+declare r jsonb;
+begin
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  r := public.club_reporte_mes('2026-10-01');
+  perform pg_temp.yo();
+  perform pg_temp.r('25', 'oct-2026: tarjetas 0 personas y canjes 6 créditos, igual que validacion.json (por_mes_cr)',
+    (r->'kpis'->>'personas')::int = 0 and (r->'kpis'->>'creditos_canjeados')::numeric = 6,
+    format('personas=%s, créditos canjeados=%s, valor=₡%s', r->'kpis'->>'personas', r->'kpis'->>'creditos_canjeados', r->'kpis'->>'valor_canjeado_crc'));
+  perform pg_temp.r('25', 'el reporte trae todas las secciones y ningún teléfono ni email',
+    r ?& array['kpis','ranking','subiendo','bajando','dormidos','a_contactar','nuevos','equipo','antiguedad','pm','calidad']
+      and r::text !~ '@|\+506|\+[1-9][0-9]{7,}', '');
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

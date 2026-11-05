@@ -7,7 +7,7 @@
 
 ---
 
-## 🙈 Noviembre 2026 — Conteo ciego en el cierre del día; el cierre de turno deja de contar (mig 074 en staging, 05/11)
+## 🙈 Noviembre 2026 — Conteo ciego en el cierre del día; el cierre de turno deja de contar (✅ mig 074 en prod, 05/11)
 
 - **Cierre del día:** antes, apenas el «Total contado» pasaba de 0 se veían en vivo el «Debería quedar» y el «Cuadra / Diferencia». Desde la mig 074 el conteo es **ciego**:
   - hasta «Confirmar conteo» se ven solo la tabla de separaciones y el total;

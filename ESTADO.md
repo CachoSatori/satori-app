@@ -137,11 +137,11 @@ solas tras un reinicio (validado el 29/10).
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
-| **PROD** | **50 filas** | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–073` (068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
+| **PROD** | **51 filas** | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074` (068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
 | **STAGING** | 73 filas | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego)**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
 - **Próximo número libre: `075`.**
-  - La **074** (conteo ciego: `primer_conteo_crc/usd` + `cerrar_dia_completo` los escribe, rama `claude/conteo-ciego`) está en staging (ledger 73). Prod: a mano antes del merge.
+  - La **074** (conteo ciego: `primer_conteo_crc/usd` + `cerrar_dia_completo` los escribe, rama `claude/conteo-ciego`) está en staging (ledger 73) y **en prod el 05/11 a las 20:20 UTC** (ledger 50 → 51), a mano antes del merge. Rollback: revert del merge + `scripts/sql/074_rollback.sql`.
   - La **072** (SEC-03, cierre de la escritura anónima del CRM) y la **073** (SEC-04, lecturas sin sesión → `authenticated`) están en staging y en prod (prod: 05/11 ~20:05 UTC, a mano antes del merge del PR #28).
   - La **071** (cierre del día atómico, `claude/cierre-atomico`, PR #29) está en staging y en prod (prod: 05/11 19:20 UTC, a mano antes del merge).
   - La 068 está en staging y en prod (PR de `claude/sec-01-perfiles`).

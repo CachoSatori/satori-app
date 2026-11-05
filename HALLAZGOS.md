@@ -7,6 +7,31 @@
 
 ---
 
+## 🔁 Noviembre 2026 — «Recontar» una vez en el cierre del día; el cierre de turno deja de contar (✅ prod, 06/11)
+
+- **Cierre del día:** el «Debería quedar», el «Cuadra / Diferencia» y la verificación se siguen viendo **en vivo**.
+  - **Dentro de tolerancia** (₡500 / US$1): sin pasos extra, igual que antes.
+  - **Fuera de tolerancia:** al pedir el cierre aparece «El conteo no cuadra» con dos opciones:
+    - **«↺ Recontar»** (una sola vez): el primer conteo se guarda en `cash_cierres_dia.primer_conteo_crc/usd` (mig 074) y las 6 separaciones quedan en blanco; ventas, retiro y notas no se tocan. Si después sigue fuera, el motivo es obligatorio y no hay un segundo reconteo.
+    - **«No recontar — registrar el motivo»** (se queda, firmado por Ismael): motivo obligatorio y `primer_conteo_*` en null.
+  - El resumen muestra «Primer conteo (antes del reconteo)» cuando lo hubo.
+  - No cambian la tolerancia, `requiresAjuste`, `cuadra`/`cuadraUSD` ni los montos que se guardan.
+- **Antes se probó un conteo ciego** (#31: esperado oculto hasta «Confirmar conteo»). Ismael lo descartó y se revirtió (#32) **sin tocar la base**: la 074 quedó con columnas nulas, compatible con el cliente de la 071.
+- **Cierre de turno:** ya no pide efectivo ni muestra «debería / Cuadra». `final_cash_*` queda null y ningún cálculo lo usa; CashResumen lo muestra como «Caja Diaria al cerrar (histórico)», con «—» si falta.
+  - **Por qué:** el «debería» de un solo cajón queda incompleto **por diseño del pozo** (`pozo.ts`, REPORTE-T1B §3.1). La plata pasa entre la Caja Fuerte, la Registradora y la Caja Diaria sin registrar el traspaso, y las propinas salen de la Registradora (`propinaPago.ts`), así que daba negativos imposibles (−₡119.800 el 17/08). El control real del efectivo es el **cierre del día**.
+  - «Disponible» pasa a decir «Fondo menos pagos del día (no incluye reposiciones)» y ya no avisa «déficit».
+- **Recorrido real en staging (05/11):** el `CashCierre` de la rama se montó en happy-dom contra la base de staging, con sesión real de un cajero de prueba. Resultados:
+
+  | Caso | Resultado |
+  |---|---|
+  | Turno | se cierra con `final_cash_*` null |
+  | −₡200 | directo al resumen, sin oferta; dif −200, `primer_conteo` null |
+  | +₡1.500 → recuenta y cuadra | dif 0, `primer_conteo` ₡866.070 / US$3.441 |
+  | −₡2.000 → recuenta y da −₡1.500 | sin motivo no cierra; ajuste −₡1.500, `primer_conteo` ₡862.570 |
+  | −₡2.000 → «No recontar» | ajuste −₡2.000, `primer_conteo` null |
+
+  Staging quedó limpio.
+
 ## 🧾 Noviembre 2026 — El cierre del día se guardaba en 4 llamadas sueltas (✅ mig 071 en prod, 05/11)
 
 - **Antes:** Fase 2 = `updateCierreCompleto` → `recordCierreSales` → `recordCierreRetiro` → `recordCierreAjuste`, cada una por su lado.

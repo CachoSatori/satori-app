@@ -133,7 +133,7 @@ export function reporteHtml(r: ReporteMes): string {
     ${pie(1)}</section>`
 
   const p2 = `<section class="pagina">${cab}
-    <h1>Referentes</h1><p class="bajada">${esc(`${num(r.dormidos.cuentas)} cuentas tienen saldo y no se mueven hace más de 60 días; ${r.a_contactar.length ? `${r.a_contactar.length} vencen en los próximos 30 días.` : 'ninguna vence en los próximos 30 días.'}`)}</p>
+    <h1>Referentes</h1><p class="bajada">${esc(`${num(r.dormidos.cuentas)} cuentas tienen saldo y no se mueven hace más de 60 días; ${r.a_contactar.length === 1 ? '1 vence en los próximos 30 días.' : r.a_contactar.length ? `${r.a_contactar.length} vencen en los próximos 30 días.` : 'ninguna vence en los próximos 30 días.'}`)}</p>
     <div class="dos">
       <div><h2>Vienen subiendo</h2><p class="nota">Más de 30 % sobre su promedio.</p>
         ${tabla([{ t: 'referente', w: '70%' }, { t: 'personas', w: '30%', der: true }], r.subiendo.map(f => [quien(f), f.nuevo_ritmo ? '<span class="var nuevo" style="display:inline">nuevo ritmo</span>' : `${num(f.personas ?? 0)} <span class="neg">vs. ${num(f.prom_3m ?? 0, 1)}</span>`]), 'Nadie subió este mes.')}</div>
@@ -142,13 +142,13 @@ export function reporteHtml(r: ReporteMes): string {
     </div>
     <h2>A contactar</h2><p class="nota">Créditos que vencen en los próximos 30 días si no vuelven.</p>
     ${tabla([{ t: 'referente', w: '60%' }, { t: 'vence', w: '20%', der: true }, { t: 'créditos', w: '20%', der: true }], r.a_contactar.map(f => [quien(f), esc(fechaCorta(f.vence_en)), cred(f.creditos ?? 0)]), 'Nadie vence en los próximos 30 días.')}
-    <h2>Dormidos</h2><p class="nota">Con saldo y sin actividad hace más de 60 días (los 10 de más saldo; el resto, en el CSV).</p>
-    ${tabla([{ t: 'referente', w: '60%' }, { t: 'última actividad', w: '22%', der: true }, { t: 'créditos', w: '18%', der: true }], r.dormidos.lista.map(f => [quien(f), esc(fechaCorta(f.ultima_actividad)), cred(f.creditos ?? 0)]), 'No hay cuentas dormidas.')}
+    <h2>Dormidos</h2><p class="nota">Con saldo y sin actividad hace más de 60 días: los 6 de más saldo (todos, en el CSV).</p>
+    ${tabla([{ t: 'referente', w: '60%' }, { t: 'última actividad', w: '22%', der: true }, { t: 'créditos', w: '18%', der: true }], r.dormidos.lista.slice(0, 6).map(f => [quien(f), esc(fechaCorta(f.ultima_actividad)), cred(f.creditos ?? 0)]), 'No hay cuentas dormidas.')}
     <div class="dos">
       <div><h2>Nuevos</h2><p class="nota">${num(r.nuevos.cuentas)} referentes mandaron gente por primera vez.</p>
-        ${tabla([{ t: 'referente', w: '70%' }, { t: 'personas', w: '30%', der: true }], r.nuevos.lista.slice(0, 5).map(f => [quien(f), num(f.personas ?? 0)]), 'Ningún referente nuevo.')}</div>
+        ${tabla([{ t: 'referente', w: '70%' }, { t: 'personas', w: '30%', der: true }], r.nuevos.lista.slice(0, 3).map(f => [quien(f), num(f.personas ?? 0)]), 'Ningún referente nuevo.')}</div>
       <div><h2>Equipo Satori</h2><p class="nota">Aparte: ${num(r.equipo.personas_mes)} personas en el mes y ${cred(r.equipo.creditos)} créditos en saldo.</p>
-        ${tabla([{ t: 'persona', w: '70%' }, { t: 'créditos', w: '30%', der: true }], r.equipo.lista.slice(0, 5).map(f => [quien(f), cred(f.creditos ?? 0)]), 'Sin movimientos del equipo.')}</div>
+        ${tabla([{ t: 'persona', w: '70%' }, { t: 'créditos', w: '30%', der: true }], r.equipo.lista.slice(0, 3).map(f => [quien(f), cred(f.creditos ?? 0)]), 'Sin movimientos del equipo.')}</div>
     </div>
     ${pie(2)}</section>`
 

@@ -1594,12 +1594,12 @@ begin
                   from (select * from fila where tipo <> 'equipo' and prom3 > 0 and pers_mes < prom3 * 0.7 order by pers_mes - prom3 limit 5) f),
     'dormidos', (select jsonb_build_object('cuentas', count(*), 'creditos', coalesce(sum(cr), 0),
                    'lista', coalesce((select jsonb_agg(x.base || jsonb_build_object('creditos', x.cr, 'ultima_actividad', x.ult) order by x.cr desc)
-                                        from (select * from fila where estado = 'activo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')
+                                        from (select * from fila where estado = 'activo' and tipo <> 'equipo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')
                                                order by cr desc) x), '[]'))   -- lista completa: el PDF muestra 10, el CSV todas
-                   from pm where estado = 'activo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')),
+                   from pm where estado = 'activo' and tipo <> 'equipo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')),
     'a_contactar', (select coalesce(jsonb_agg(x.base || jsonb_build_object('creditos', x.cr, 'vence_en', x.vence) order by x.vence), '[]')
                       from (select f.*, f.ult + make_interval(months => v_cfg.vencimiento_meses) as vence from fila f
-                             where f.estado = 'activo' and f.cr > 0 and f.ult is not null
+                             where f.estado = 'activo' and f.tipo <> 'equipo' and f.cr > 0 and f.ult is not null
                                and f.ult + make_interval(months => v_cfg.vencimiento_meses) >= v_fin
                                and f.ult + make_interval(months => v_cfg.vencimiento_meses) < v_fin + interval '30 days'
                              order by vence limit 10) x),

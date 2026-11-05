@@ -1595,7 +1595,7 @@ begin
     'dormidos', (select jsonb_build_object('cuentas', count(*), 'creditos', coalesce(sum(cr), 0),
                    'lista', coalesce((select jsonb_agg(x.base || jsonb_build_object('creditos', x.cr, 'ultima_actividad', x.ult) order by x.cr desc)
                                         from (select * from fila where estado = 'activo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')
-                                               order by cr desc limit 10) x), '[]'))
+                                               order by cr desc) x), '[]'))   -- lista completa: el PDF muestra 10, el CSV todas
                    from pm where estado = 'activo' and cr > 0 and (ult is null or ult < v_fin - interval '60 days')),
     'a_contactar', (select coalesce(jsonb_agg(x.base || jsonb_build_object('creditos', x.cr, 'vence_en', x.vence) order by x.vence), '[]')
                       from (select f.*, f.ult + make_interval(months => v_cfg.vencimiento_meses) as vence from fila f

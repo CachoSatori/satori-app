@@ -19,6 +19,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Fase | Estado | Notas |
 |---|---|---|
 | Caja diaria + cierre · Caja Fuerte · movimientos | ✅ prod | Sagrado `cashUtils.ts` `b597c697`. |
+| **Fix «Borrar TODO el día»** (elegir por día operativo, vista previa, errores chequeados) | 🧪 staging (05/11) | Borraba filas de cierres de otro día (20/07 y 20/10). Prod con firma aparte. Ver [HALLAZGOS.md](HALLAZGOS.md). |
 | **POZO único** (tres cajas = un saldo; corte 2026-07-22) | ✅ prod | Primer cierre real cuadró. Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md). |
 | **T3 · endurecimiento de caja** (los 8 ítems; mig 052 auditoría de ediciones) | ✅ prod | Cerrado el 10/08. |
 | Bandeja unificada + Revisión de inventario · autorización por contraseña (045) | ✅ prod | Etapa 2 de la Bandeja (foto-primero dentro de Caja) 🔲 diseñada, espera decisión. |

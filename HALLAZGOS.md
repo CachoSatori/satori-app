@@ -7,6 +7,20 @@
 
 ---
 
+## 🧯 Noviembre 2026 — «Borrar TODO el día» borraba movimientos de OTRO día operativo (fix en staging, 05/11)
+
+- **Síntoma:** el ajuste del 19/10 (+₡54.107, «Sobrante») no existía en movimientos y nadie vio un error.
+- **Causa:** `discardDiaCompleto` (`src/shared/api/cash.ts`, paso 2) elegía los movimientos sin turno por `created_at` dentro del día calendario de CR. Un cierre sellado después de medianoche crea sus filas con `created_at` del día siguiente, y el «Borrar TODO» de ese día siguiente se las llevaba.
+- **Casos en prod** (`movement_deletions`):
+  - **20/10:** se borraron «Ventas cierre» y «Ajuste de cierre» del 19/10 (₡15.600 + US$100 y ₡54.106,70). No se recrearon; el ajuste del 20/10 los volvió a sumar como ajuste.
+  - **20/07:** se borraron «Ventas cierre» del 19/07 y «Propinas turno 2026-07-17 Noche» (₡70.775). Las ventas se recrearon al re-cerrar y las propinas se recargaron con turno.
+- **Fix** (rama `claude/fix-borrar-dia`; solo `discardDiaCompleto`, `discardCierreDia` y la confirmación):
+  - selección por **día operativo**: con turno, el `session_date`; sin turno, la fecha que escribe el sistema en la descripción (cierre, apertura de pozo, retiro, «Propinas turno»); los manuales, por `created_at`. `fechaOperativa` (`cierrePozo.ts`) no se tocó;
+  - **vista previa** antes de confirmar: cantidad, ₡ y US$ por día operativo, manuales con su hora de carga, y las filas de otro día operativo listadas como aviso, que **no se borran**. Si la lista cambió entre la vista previa y el borrado, no se borra nada;
+  - **ningún delete sin chequear el error:** el paso 3 de `discardDiaCompleto` y los 3 deletes de `discardCierreDia` («Deshacer cierre») antes se tragaban el fallo;
+  - el texto ya no dice «NO toca propinas»: borra los **pagos** de propinas del día, no las propinas asignadas.
+- **Datos históricos:** no se corrigen; el 19/10 se decide aparte.
+
 ## 🆕 Hallazgos de octubre 2026 (go-live del PoS)
 
 1. **Branching corre `migrate` contra PROD en cada push a `main`** (confirmado de nuevo en los logs de #13–#16:

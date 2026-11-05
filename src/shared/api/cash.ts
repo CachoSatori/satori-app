@@ -4,6 +4,7 @@ import type { Database } from '../types/supabase.gen'
 import { cachedFetch } from '../offline/cache'
 import { enqueue, pendingOps } from '../offline/outbox'
 import { parseTraspaso } from '../../modules/cash/pozo'
+import { planBorradoDia, type MovimientoBorrable, type PlanBorradoDia } from '../../modules/cash/borrarDia'
 
 type Tables = Database['public']['Tables']
 
@@ -991,16 +992,60 @@ export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created
 // arrastraría/duplicaría la corrección (Opción B). Mismo delete plano que ventas/retiro
 // (movimientos generados por el propio cierre, sin inventario ligado → sin cascada).
 export async function discardCierreDia(date: string): Promise<void> {
-  await supabase.from('cash_movements').delete().eq('subcategory', 'Ventas cierre').like('description', `%${date}`)
-  await supabase.from('cash_movements').delete().eq('description', `Retiro dueños a banco ${date}`)
-  await supabase.from('cash_movements').delete().eq('subcategory', 'Ajuste de cierre').like('description', `Ajuste de cierre ${date}%`)
-  const { error } = await supabase.from('cash_cierres_dia').delete().eq('session_date', date)
-  if (error) throw new Error(error.message)
+  // Cada delete chequea su error (05/11): antes los 3 primeros se tragaban el fallo y el
+  // «Deshacer cierre» decía «✓ Cierre deshecho» aunque las filas siguieran ahí.
+  const borrar = async (label: string, run: () => PromiseLike<{ error: { message: string } | null }>) => {
+    const { error } = await run()
+    if (error) throw new Error(`No se pudo deshacer el cierre del ${date} (${label}): ${error.message}`)
+  }
+  await borrar('ventas del cierre', () => supabase.from('cash_movements').delete().eq('subcategory', 'Ventas cierre').like('description', `%${date}`))
+  await borrar('retiro', () => supabase.from('cash_movements').delete().eq('description', `Retiro dueños a banco ${date}`))
+  await borrar('ajuste de diferencia', () => supabase.from('cash_movements').delete().eq('subcategory', 'Ajuste de cierre').like('description', `Ajuste de cierre ${date}%`))
+  await borrar('cierre', () => supabase.from('cash_cierres_dia').delete().eq('session_date', date))
+}
+
+const COLS_BORRABLE = 'id, session_id, created_at, subcategory, description, amount_crc, amount_usd, movement_type'
+
+// Vista previa del «Borrar TODO el día»: qué se borraría y qué NO (filas cargadas ese día pero de
+// otro día operativo). Criterio y casos reales en `modules/cash/borrarDia.ts`. Solo lectura.
+export async function previewDiaCompleto(date: string): Promise<PlanBorradoDia> {
+  const { data: sess, error: eSess } = await withWriteTimeout(signal => supabase.from('cash_sessions').select('id, session_date').eq('session_date', date).abortSignal(signal))
+  if (eSess) throw new Error(eSess.message)
+  const sesiones = (sess ?? []) as { id: string; session_date: string }[]
+  const sesionFecha = new Map(sesiones.map(s => [s.id, s.session_date]))
+
+  let filasTurno: MovimientoBorrable[] = []
+  if (sesiones.length) {
+    const { data, error } = await withWriteTimeout(signal => supabase.from('cash_movements').select(COLS_BORRABLE).in('session_id', sesiones.map(s => s.id)).abortSignal(signal))
+    if (error) throw new Error(error.message)
+    filasTurno = (data ?? []) as MovimientoBorrable[]
+  }
+
+  // Candidatas sin turno: (a) creadas ese día calendario CR — lo que miraba el criterio viejo,
+  // para poder AVISAR de las ajenas — y (b) con la fecha en la descripción — un cierre sellado
+  // después de medianoche se creó el día siguiente pero pertenece a éste.
+  const next = new Date(date + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + 1)
+  const nextStr = next.toISOString().slice(0, 10)
+  const { data: porCreacion, error: eA } = await withWriteTimeout(signal => supabase.from('cash_movements').select(COLS_BORRABLE)
+    .is('session_id', null)
+    .gte('created_at', `${date}T06:00:00Z`).lt('created_at', `${nextStr}T06:00:00Z`)
+    .abortSignal(signal))
+  if (eA) throw new Error(eA.message)
+  const { data: porDescripcion, error: eB } = await withWriteTimeout(signal => supabase.from('cash_movements').select(COLS_BORRABLE)
+    .is('session_id', null)
+    .like('description', `%${date}%`)
+    .abortSignal(signal))
+  if (eB) throw new Error(eB.message)
+
+  return planBorradoDia(date, filasTurno,
+    [...((porCreacion ?? []) as MovimientoBorrable[]), ...((porDescripcion ?? []) as MovimientoBorrable[])],
+    sesionFecha)
 }
 
 // Reset COMPLETO de un día (recargar de cero SIN duplicar): borra el cierre + TODOS los
 // movimientos del día (los de los turnos de esa fecha + los a nivel día) + los turnos de
-// caja de esa fecha. NO toca propinas (tip_sessions / tip_entries). Acción destructiva
+// caja de esa fecha. NO toca las propinas asignadas (tip_sessions / tip_entries); SÍ borra los
+// movimientos de PAGO de propinas del día (son movimientos de caja). Acción destructiva
 // explícita (la dispara el usuario con confirmación + autorización de gerencia).
 //
 // Los MOVIMIENTOS se borran UNO POR UNO por la cascada (deleteCashMovement → RPC
@@ -1012,7 +1057,12 @@ export async function discardCierreDia(date: string): Promise<void> {
 // cierre y sesiones. Es secuencial: si una llamada falla, se frena y se propaga indicando
 // cuántos movimientos se borraron (parcial recuperable: volver a correrlo termina el borrado).
 // `managerEmail/managerPassword` (mig 044) los pasa el cajero; owner/manager logueado no.
-export async function discardDiaCompleto(date: string, managerEmail?: string, managerPassword?: string): Promise<void> {
+//
+// Selección por DÍA OPERATIVO (fix 05/11, ver `modules/cash/borrarDia.ts`), no por `created_at`:
+// el criterio viejo borró filas de cierres de otro día el 20/07 y el 20/10. `idsConfirmados` son
+// los ids que la persona vio en la vista previa: si el plan recalculado acá no coincide (alguien
+// cargó o borró algo en el medio), no se borra nada y se pide volver a confirmar.
+export async function discardDiaCompleto(date: string, managerEmail?: string, managerPassword?: string, idsConfirmados?: string[]): Promise<void> {
   const note = `Borrado de día completo ${date}`
   let deleted = 0
   // Propaga el error sin tragarlo, anotando el conteo parcial para que la UI avise.
@@ -1025,28 +1075,21 @@ export async function discardDiaCompleto(date: string, managerEmail?: string, ma
     catch (e) { failPartial(e) }
   }
 
-  // 1) Movimientos ligados a turnos de esa fecha → por la cascada (RPC), uno por uno
-  const { data: sess, error: eSess } = await withWriteTimeout(signal => supabase.from('cash_sessions').select('id').eq('session_date', date).abortSignal(signal))
-  if (eSess) throw new Error(eSess.message)
-  const sessionIds = ((sess ?? []) as { id: string }[]).map(s => s.id)
-  if (sessionIds.length) {
-    const { data: turnMovs, error: eTurn } = await withWriteTimeout(signal => supabase.from('cash_movements').select('id').in('session_id', sessionIds).abortSignal(signal))
-    if (eTurn) throw new Error(eTurn.message)
-    for (const m of (turnMovs ?? []) as { id: string }[]) await cascadeDelete(m.id)
+  const plan = await previewDiaCompleto(date)
+  if (idsConfirmados) {
+    const a = [...plan.borrar.map(f => f.id)].sort().join(',')
+    const b = [...idsConfirmados].sort().join(',')
+    if (a !== b) throw new Error(`Los movimientos del ${date} cambiaron desde la vista previa. No se borró nada: volvé a abrir "Borrar TODO el día" para ver la lista actualizada.`)
   }
 
-  // 2) Movimientos a nivel día (sin turno) de esa fecha — rango horario de Costa Rica (UTC-6)
-  const next = new Date(date + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + 1)
-  const nextStr = next.toISOString().slice(0, 10)
-  const { data: dayMovs, error: eDay } = await withWriteTimeout(signal => supabase.from('cash_movements').select('id')
-    .is('session_id', null)
-    .gte('created_at', `${date}T06:00:00Z`).lt('created_at', `${nextStr}T06:00:00Z`)
-    .abortSignal(signal))
-  if (eDay) throw new Error(eDay.message)
-  for (const m of (dayMovs ?? []) as { id: string }[]) await cascadeDelete(m.id)
+  // 1) Movimientos de turnos de esa fecha · 2) movimientos sin turno de ese DÍA OPERATIVO —
+  // por la cascada (RPC), uno por uno, turnos primero. Las ajenas (otro día operativo) NO se tocan.
+  for (const f of plan.borrar.filter(f => f.origen === 'turno')) await cascadeDelete(f.id)
+  for (const f of plan.borrar.filter(f => f.origen === 'dia')) await cascadeDelete(f.id)
 
-  // 3) Cierre del día — `.delete()` crudo (no toca el libro contable)
-  await withWriteTimeout(signal => supabase.from('cash_cierres_dia').delete().eq('session_date', date).abortSignal(signal))
+  // 3) Cierre del día — `.delete()` crudo (no toca el libro contable). Ahora chequea el error.
+  const { error: e3 } = await withWriteTimeout(signal => supabase.from('cash_cierres_dia').delete().eq('session_date', date).abortSignal(signal))
+  if (e3) throw new Error(`Se borraron ${deleted} movimiento(s) pero NO el cierre del ${date}: ${e3.message}`)
   // 4) Turnos de caja de esa fecha — `.delete()` crudo
   const { error: e4 } = await withWriteTimeout(signal => supabase.from('cash_sessions').delete().eq('session_date', date).abortSignal(signal))
   if (e4) throw new Error(e4.message)

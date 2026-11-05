@@ -30,8 +30,8 @@ python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --
 | `referrals` credit | `club_movimientos` `tarjeta` | `personas = peopleCount` · `fecha_visita = createdAt` · nota «fecha aproximada (carga)». |
 | `referrals` debit (sin los de `vencimientos_*.json`) | `club_movimientos` `canje` | Se agrupan por referente y minuto UTC: un canje por grupo, con `personas = −Σ`, `creditos = Σ/6` y los ids viejos en `legacy_ids`. Los canjes de más de 2 créditos se migran como están (D3). |
 | ids de `vencimientos_*.json` | `club_movimientos` `vencimiento` | Uno por referente, con nota «cancelación inactividad 05-nov-2026». |
-| cuentas `deleted` con saldo > 0 | `club_movimientos` `vencimiento` | D1: por el saldo, con la fecha de la migración y la nota «cuenta borrada en el sistema viejo». |
-| `referrals_club` credit / debit | `club_pm_cargos` (`pendiente`) / `club_pm_pagos` | `amount / 100` = colones. |
+| cuentas `deleted` con saldo > 0 | `club_movimientos` `vencimiento` | D1 (corregida el 05-nov): por el saldo, fechado en la baja = la más tardía entre `updatedAt` y el último movimiento de la cuenta, con la nota «cuenta borrada en el sistema viejo». Si alguna fecha cae desde el 1-nov-2026, el script frena. Así un mes cerrado da siempre lo mismo. |
+| `referrals_club` credit / debit | `club_pm_cargos` (`pendiente`) / `club_pm_pagos` | `amount / 100` = colones. Los cargos de cuentas borradas pasan a `anulado`, con `anulado_en` = la fecha de la baja (D2). |
 
 ## Validación (`validacion.json`, solo agregados)
 - **Saldo por miembro:** la suma del libro, sin el vencimiento D1, tiene que ser igual al credit − debit de Firestore, con **0 diferencias**.

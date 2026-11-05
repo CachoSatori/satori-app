@@ -42,6 +42,7 @@ VALOR_CREDITO_CRC = 18000
 NOTA_TARJETA = 'fecha aproximada (carga)'
 NOTA_VENC_136 = 'cancelación inactividad 05-nov-2026'
 NOTA_D1 = 'cuenta borrada en el sistema viejo'
+CORTE_D1 = '2026-11-01T06:00:00'   # 1-nov-2026 00:00 hora CR, en UTC
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ACENTOS = str.maketrans('áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunaeiouun')
@@ -146,6 +147,13 @@ def armar_plan(d: dict) -> Plan:
 
     con_club = {x['referrerId'] for x in club if int(x['amount']) != 0}
 
+    # [D1 corregida, firmada 05-nov] Fecha de la baja de una cuenta borrada:
+    # max(updatedAt, último movimiento en referrals o referrals_club).
+    ultimo = {}
+    for x in referrals + club:
+        ultimo[x['referrerId']] = max(ultimo.get(x['referrerId'], ''), x['createdAt'])
+    fecha_baja = {r['_id']: max(r.get('updatedAt') or '', ultimo.get(r['_id'], '')) for r in referrers if r.get('deleted')}
+
     # Negocios: variantes → clave normalizada → nombre más frecuente.
     por_norm: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for r in referrers:
@@ -179,6 +187,7 @@ def armar_plan(d: dict) -> Plan:
             'id': uid, 'legacy_id': r['_id'], 'tipo': tipo, 'nombre': nombre,
             'negocio_norm': norm_texto(wp) if wp else None,
             'estado': 'baja' if r.get('deleted') else 'activo',
+            'fecha_baja': fecha_baja.get(r['_id']),
             'created_at': r.get('createdAt'), 'updated_at': r.get('updatedAt') or r.get('createdAt'),
             'sufijo_pm': bool(RE_PM.search(nombre)),
         })
@@ -247,13 +256,18 @@ def armar_plan(d: dict) -> Plan:
             'legacy_ids': sorted(x['_id'] for x in xs),
         })
 
-    # [D1] Cuentas borradas con saldo > 0 → vencimiento por el saldo, con fecha de la migración.
+    # [D1] Cuentas borradas con saldo > 0 → vencimiento por el saldo, fechado en la baja
+    # (max(updatedAt, último movimiento)). Si alguna fecha cae desde CORTE_D1, se frena.
+    tardias = [m for m in p.miembros if m['estado'] == 'baja' and p.neto_firestore[m['legacy_id']] > 0
+               and (not m['fecha_baja'] or m['fecha_baja'] >= CORTE_D1)]
+    if tardias:
+        sys.exit(f'FRENADO: {len(tardias)} cuentas borradas con saldo tienen fecha de baja desde {CORTE_D1} (o sin fecha)')
     for m in p.miembros:
         s = p.neto_firestore[m['legacy_id']]
         if m['estado'] == 'baja' and s > 0:
             p.movimientos.append({
                 'miembro_id': m['id'], 'tipo': 'vencimiento', 'personas': -s, 'creditos': None,
-                'fecha': None, 'nota': NOTA_D1, 'legacy_ids': None,
+                'fecha': m['fecha_baja'], 'nota': NOTA_D1, 'legacy_ids': None,
             })
         if s < 0:
             p.avisos['saldo_negativo_en_firestore'] += 1
@@ -261,7 +275,9 @@ def armar_plan(d: dict) -> Plan:
     # PM: amount/100 = colones.
     for x in club:
         monto = Decimal(int(x['amount'])) / 100
-        reg = {'miembro_id': uid_por_legacy[x['referrerId']], 'monto': monto, 'fecha': x['createdAt'], 'legacy_ids': [x['_id']]}
+        reg = {'miembro_id': uid_por_legacy[x['referrerId']], 'monto': monto, 'fecha': x['createdAt'], 'legacy_ids': [x['_id']],
+               # [D2] el PM de una cuenta borrada se anula en la fecha de su baja
+               'anulado_en': fecha_baja.get(x['referrerId'])}
         (p.pm_cargos if x['referralType'] == 'credit' else p.pm_pagos).append(reg)
     return p
 
@@ -387,8 +403,8 @@ end $$;""")
     for i in range(0, len(filas), 500):
         L.append("insert into public.club_movimientos (location_id, miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, nota, legacy_ids) values " + ','.join(filas[i:i + 500]) + ';')
     if p.pm_cargos:
-        vals = ','.join(f"({q(LOCATION)},{q(c['miembro_id'])}::uuid,{q(c['monto'])},'pendiente','migracion',{arr(c['legacy_ids'])},{q(c['fecha'])}::timestamptz)" for c in p.pm_cargos)
-        L.append("insert into public.club_pm_cargos (location_id, miembro_id, monto_crc, estado, origen, legacy_ids, created_at) values " + vals + ';')
+        vals = ','.join(f"({q(LOCATION)},{q(c['miembro_id'])}::uuid,{q(c['monto'])},{q('anulado' if c['anulado_en'] else 'pendiente')},'migracion',{arr(c['legacy_ids'])},{q(c['fecha'])}::timestamptz,{q(c['anulado_en'])}::timestamptz)" for c in p.pm_cargos)
+        L.append("insert into public.club_pm_cargos (location_id, miembro_id, monto_crc, estado, origen, legacy_ids, created_at, anulado_en) values " + vals + ';')
     if p.pm_pagos:
         vals = ','.join(f"({q(LOCATION)},{q(c['miembro_id'])}::uuid,{q(c['monto'])},{q(c['fecha'])}::timestamptz,'migracion',{arr(c['legacy_ids'])},{q(c['fecha'])}::timestamptz)" for c in p.pm_pagos)
         L.append("insert into public.club_pm_pagos (location_id, miembro_id, monto_crc, pagado_en, origen, legacy_ids, created_at) values " + vals + ';')
@@ -442,6 +458,11 @@ select json_build_object(
   'pm_neto_con_sufijo', (select sum(neto) from pm where estado = 'activo' and sufijo),
   'pm_neto_sin_sufijo', (select sum(neto) from pm where estado = 'activo' and not sufijo),
   'pm_neto_borrados', (select sum(neto) from pm where estado = 'baja'),
+  'pm_pendiente_total', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c where c.origen = 'migracion' and c.estado in ('pendiente','aprobado'))
+                      - (select coalesce(sum(p.monto_crc), 0) from public.club_pm_pagos p where p.origen = 'migracion'),
+  'pm_anulados', (select json_build_object('cargos', count(*), 'monto', coalesce(sum(monto_crc), 0), 'ultima_fecha', max(anulado_en))
+                    from public.club_pm_cargos where origen = 'migracion' and estado = 'anulado'),
+  'd1_rango_fechas', (select json_build_object('desde', min(fecha_visita), 'hasta', max(fecha_visita)) from mov where tipo = 'vencimiento' and nota = {q(NOTA_D1)}),
   'por_mes_utc', (select json_object_agg(mes, v order by mes) from (select mes_utc as mes, json_build_object('tarjetas_personas', sum(personas) filter (where tipo='tarjeta'), 'canjes_creditos', sum(creditos) filter (where tipo='canje')) v from mes group by mes_utc) a),
   'por_mes_cr', (select json_object_agg(mes, v order by mes) from (select mes_cr as mes, json_build_object('tarjetas_personas', sum(personas) filter (where tipo='tarjeta'), 'canjes_creditos', sum(creditos) filter (where tipo='canje')) v from mes group by mes_cr) a),
   'movimientos_que_cambian_de_mes', (select count(*) from mes where mes_utc <> mes_cr)

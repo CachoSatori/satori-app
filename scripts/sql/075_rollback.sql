@@ -1,0 +1,32 @@
+-- 075_rollback.sql — Club Satori F1a: borra TODO lo club_* y la fila 075 del ledger.
+-- ⚠️ Destruye los datos del Club (miembros, movimientos, cupones, PM). Pensado para STAGING
+-- antes del piloto. En prod, solo con firma y después de exportar los datos.
+begin;
+
+drop function if exists public.club_vencer(date);
+drop function if exists public.club_portal(text);
+drop function if exists public.club_ajuste(uuid, int, text, text);
+drop function if exists public.club_canje(uuid, numeric, text, uuid);
+drop function if exists public.club_cupon_usar(text, int, text, uuid);
+drop function if exists public.club_cupon_crear(text, jsonb);
+drop function if exists public.club_saldo_personas(uuid);
+
+drop view if exists public.club_saldos;
+
+drop table if exists public.club_visitas;
+drop table if exists public.club_pm_cargos;
+drop table if exists public.club_pm_pagos;
+drop table if exists public.club_movimientos;
+drop table if exists public.club_cupones;
+drop table if exists public.club_miembros_contacto;
+drop table if exists public.club_miembros;
+drop table if exists public.club_negocios;
+drop table if exists public.club_config;
+
+drop function if exists public.club_personas_proximo(bigint, int);
+drop function if exists public.club_creditos(bigint, int);
+drop function if exists public.club_gen_codigo(int);
+
+delete from supabase_migrations.schema_migrations where version = '075';
+
+commit;

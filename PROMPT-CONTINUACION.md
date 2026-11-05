@@ -24,11 +24,13 @@
   - **Paso A** (prod y staging): `disable_signup=true`; el signup con anon da 422. Bans de Rosaura y LE - Consultorias (desvío aceptado: por `banned_until` directo, no por la Admin API) y borrado de sus sesiones (6) y refresh tokens (15).
   - **Paso 0** revisado por el asesor.
   - **Paso 1** (staging): mig 068 aplicada (3 corridas sin error), pruebas 1–7 y alta real OK, rollback probado, ledger 67.
-- **Ahora:** Ismael valida en staging:
+- **Paso 2 hecho (04/11 23:30 CR):** re-chequeo igual a la línea base; 068 aplicada a mano en prod; catálogo OK; prueba 4 (anon, SQL y REST) y prueba 1 (manager, con rollback) OK; ledger de prod 45 → 46. **Falta:** que Ismael valide en prod (login de los 3 owners, Admin, un salonero real en Mi Rendimiento) y mergee el PR.
+- **Drift de ledger:** prod 46 contra staging 67. Es esperable: 055–061 solo están en staging, y a staging le faltan las filas 065/066.
+- **Validado en staging por Ismael (04/11):**
   - login owner;
   - Admin: activar «SEC01 Objetivo» (pendiente) y cambiar un rol;
   - Test Cajero en Mi Rendimiento.
-- **Después (firma aparte, fuera de 17–23 h):** Paso 2 en prod.
+- ~~Paso 2 en prod~~ ✅ (ver arriba). Plan que se siguió:
   - Re-chequear 3 owners, 0 metadata y perfiles elevados contra el Paso 0. La línea base ya incluye los 2 bans.
   - Aplicar a mano.
   - Catálogo + prueba 4 + prueba 1 con rollback.

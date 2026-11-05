@@ -1,9 +1,10 @@
-# Continuación — backlog priorizado (al día: 2026-11-05)
+# Continuación — backlog priorizado (al día: cierre del 2026-11-05)
 
-> **Foto al cierre del 05/11:** `main` = **`5631681`** (PROD; merges de #23, #24 y #26 el 05/11) · `staging` =
-> **`cef4f95`** (~20 commits atrás de `main`; el fix #25 entró como cherry-pick). **`FUENTE_VENTAS = 'pos'` en prod
-> desde el 30/10.** Migraciones en prod hasta la **069** (ledger **47**); staging tiene además 055–061 y la **070**
-> (ledger 69). Estado completo y reglas operativas → [ESTADO.md](ESTADO.md).
+> **Foto al cierre del 05/11:** `main` = **`bddbef2`** (PROD; último merge #39, alta de empleados) · `staging` =
+> **`cef4f95`** (**114 commits atrás de `main`**). **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10.**
+> Migraciones en prod hasta la **074** (ledger **51**). Staging tiene además 055–061, la **070** y la **075**
+> (Club Satori F1a, reservada; ledger 74). **Próximo número libre: `076`.** Edge Functions: `alta-empleado`
+> nueva en prod y staging (v1, `verify_jwt` on, desplegada a mano). Estado completo y reglas → [ESTADO.md](ESTADO.md).
 >
 > **Cómo se armó:** se partió del backlog de `staging` del 29/10 (`a43d3d4`, que sigue abajo completo como
 > detalle) y se sumaron los pendientes que dejaron el go-live del PoS (29–30/10) y el handoff del 30/10. Cada
@@ -18,42 +19,39 @@
 
 ---
 
-## ✅ Hecho 04–05/11
+## ✅ Hecho 05/11 (todo en prod; detalle y evidencia en [HALLAZGOS.md](HALLAZGOS.md))
 
-- **SEC-03 + SEC-04 (migs 072 y 073)** — en prod el 05/11 ~20:05 UTC, a mano antes del merge del PR #28. Cierran la escritura anónima en el CRM (Club Satori F0) y la lectura anónima de propinas y empleados. Ismael validó en staging. Rollback: `scripts/sql/072_rollback.sql` y `073_rollback.sql`. **Próximo: el P0 de caja (ítems 2 y 3).**
+- **Cierre del día atómico (mig 071, PR #29):** `cerrar_dia_completo` / `deshacer_cierre_dia` escriben cierre, ventas, retiro y ajuste en una transacción, de forma idempotente y con `UNIQUE(session_date)`. La contraseña de gerencia se verifica en el servidor. Aplicada a mano a las 19:20 UTC. Rollback: revert + `scripts/sql/071_rollback.sql`.
+- **Fix «Borrar TODO el día» (PR #25):** elige por día operativo, muestra una vista previa y ningún delete queda sin chequear el error. Solo código.
+- **«Recontar» una vez + cierre de turno sin efectivo (PR #36, usa la mig 074):**
+  - **Cierre del día:** la verificación sigue en vivo. Fuera de tolerancia (₡500 / US$1) se ofrece recontar una vez, y el primer conteo se guarda en `primer_conteo_crc/usd`. Si no, se elige «No recontar — registrar el motivo».
+  - **Turno:** ya no cuenta efectivo; `final_cash_*` queda null.
+  - El conteo ciego (#31) se probó y se revirtió (#32) sin tocar la base.
+- **Alta de empleados desde Admin + config de Auth (PR #39, Edge Function `alta-empleado`):**
+  - el owner activo crea la cuenta (sin crear owners) con una contraseña temporal que se muestra una vez;
+  - en el primer ingreso el cambio es obligatorio (flag en `app_metadata`, que solo baja la función);
+  - el login ya no tiene «Crear cuenta»;
+  - **Auth de prod:** `site_url` → `https://cachosatori.github.io/satori-app/`, redirects → `https://cachosatori.github.io/satori-app/**`, contraseña mínima 8. Nada más cambió (`disable_signup` sigue en `true`);
+  - **Ismael lo validó en prod.**
+- **Antes, 04–05/11:** SEC-01 (068), SEC-01b (069), SEC-03 y SEC-04 (072 y 073), todas en prod. La 070 está solo en staging (va con el pase del PoS propio).
 
-- **SEC-01 · escalada de roles (mig 068)** — en prod, PR #22 (`81ac2d4`).
-  - Paso A: `disable_signup=true` en prod y staging, más los bans de Rosaura y LE - Consultorias. El ban se hizo con `banned_until` directo (desvío aceptado) y se borraron 6 sesiones y 15 refresh tokens.
-  - `handle_new_user` da de alta siempre `salonero` inactivo. Además: guarda de owner activo sobre `role`/`is_active`/borrados, y nunca 0 owners activos.
-  - Rollback: `scripts/sql/068_rollback.sql`.
-- **SEC-01b · las cuentas inactivas pierden permisos (mig 069)** — en prod, PR #23 (`b82ed81`). Aplicada a mano el 05/11 a las 15:22 UTC.
-  - `get_my_role()` con `is_active`; las 6 guardas NULL-seguras y las 3 policies con `is_active`.
-  - Ismael validó en staging. Rollback: `scripts/sql/069_rollback.sql`.
-- **Fix «Borrar TODO el día»** — en prod, PR #25 (`781eb72`), solo código.
-  - Elige por día operativo y no por `created_at`; vista previa antes de confirmar; ningún delete sin chequear el error (incluido «Deshacer cierre»).
-  - Ismael validó en la preview de staging. Rollback: revert del merge.
-- **Mig 070 · guardas NULL-seguras del PoS propio + revoke de EXECUTE a `anon`** — **solo en staging** (rama `claude/sec-01b-pos-guardas`). Va a prod con el pase del PoS propio. Pendiente del mismo bloqueante: `my_turno_stats` sigue ejecutable por `anon` en staging.
-- Docs: ROADMAP de tolerancia de cierre (#24) y de sincronizar staging + modal (#26).
-- Detalle y evidencia: [HALLAZGOS.md](HALLAZGOS.md) (SEC-01, SEC-01b y «Borrar TODO el día»).
+## 🟥 Pendiente — en este orden
 
-## 🟥 P0 — Cola de estabilización de caja (en este orden; todo 🖊️, toca cierres)
-
-1. **Cierre del día + ajuste atómicos, sin errores tragados.** Guardar el cierre, las ventas, el retiro y el ajuste en una sola operación (RPC transaccional) o fallar entero con un mensaje claro. Hoy son llamadas separadas (`CashCierre.tsx` ~330–405). `recordCierreAjuste` no chequea el borrado previo y se traga el `23505`. Contexto: el ajuste del 19/10 lo borró el bug del «Borrar TODO» (ya resuelto con #25), pero la falta de atomicidad sigue.
-2. **Conteo ciego en el cierre de turno.** Hoy `final_cash_crc` = el «debería» de la pantalla (75 de 86 turnos iguales al colón, incluso negativos). El cajero cuenta sin ver el esperado, y se guardan esperado, contado y diferencia.
-3. **Alerta de días sin cierre.** En prod faltan el cierre del día del 26/09 y los turnos del 18/10 y del 27/10.
-
-(Más abajo en el ROADMAP, sin apuro: `diferencia_usd` en `cash_cierres_dia` y el modal propio para «Borrar TODO».)
-
-## 🟧 Después
-
-1. ✅ **Alta de empleados desde Admin**: en prod desde el 06/11 (PR #39, función `alta-empleado` desplegada a mano). Su código entra a `main` con el ítem 11.
-2. **🔐 Revocar el token `claude-code-prod` y rotar los secretos de ingesta** (ítems 1 y 2 del P0 de abajo).
+1. **🖊️ Alerta de días sin cierre** (lo único que queda de la cola de caja). En prod faltan el cierre del día del 26/09 y los turnos del 18/10 y del 27/10.
+2. **🔐 Revocar el token `claude-code-prod` y rotar los secretos de ingesta** (`x-ingest-secret` de `ingest-ndf` en prod y staging, y su copia en los dos agentes de la PC del PoS). Hacerlo con las dos tareas paradas, y después verificar que `pos_ndf_cursor.last_error` quede null. Detalle: ítems 1 y 2 del P0 de abajo.
 3. **🔐 SEC-02.**
-4. **🧹 Sincronizar `staging` con `main`** (~20 commits: PRs #18–#22, migraciones 065–068 de archivo, código de logins viejos). Hay conflictos en los docs, y al ledger de staging le faltan las filas 065/066.
-5. **Club Satori (reemplazo de la página de créditos).** Spec v2 en revisión → [docs/club-satori/](docs/club-satori/). *(Nuevo, 05/11.)*
-   - ✅ **F0 hecha (05/11):** mig 072 (SEC-03) en staging y prod; `/registro` y el QR del CRM apagados hasta la F1. Con el Paso 0 salió y se cerró también SEC-04 (mig 073). Detalle en [HALLAZGOS.md](HALLAZGOS.md).
-   - Sigue: F1–F3 según el §1 del spec (ver [ROADMAP.md](ROADMAP.md)), después del P0 de caja.
-6. **🧹🖊️ Respaldos de staging `cash_movements_pre_migracion_2026_07` y `suppliers_pre_migracion_2026_07`: decidir si se borran.** Tenían RLS apagado; el 05/11 se cerraron (RLS sin policies + `revoke all` a `anon` y `authenticated`) con `scripts/sql/staging_respaldos_cierre_anon.sql`, sin borrarlos. Solo staging.
+4. **🖊️ Ítem 11 · `supabase/config.toml`:** versionar `ingest-ndf` y las 6 funciones con su `verify_jwt` actual:
+   - `monthly-report` false · `extract-document` true · `cierre-email` true · `pago-notificar` true · `ingest-ndf` false · `alta-empleado` true;
+   - el código de `alta-empleado` está en la rama `claude/alta-empleado-fn`;
+   - **ojo:** el `config.toml` también sincroniza `[auth]`/`[api]` de prod. Tiene que copiar la config actual (`disable_signup = true`, el `site_url` y los redirects nuevos, mínimo 8) o un merge la pisaría.
+   - Hasta cerrarlo, **ningún PR a `main` con `supabase/functions/`**. Detalle: P2 #11 de abajo.
+5. **🧹 Sincronizar `staging` con `main`:** 114 commits atrás. Hay conflictos esperables en los docs, y al ledger de staging le faltan las filas 065/066.
+
+**También abierto, sin orden:**
+- **Club Satori** F1–F3: la 075 está reservada y solo en staging. Spec en [docs/club-satori/](docs/club-satori/).
+- **🧹🖊️ Respaldos `*_pre_migracion_2026_07` de staging:** decidir si se borran. Ya están cerrados a `anon` y `authenticated`.
+- **Usuarios para RODRI, FRANCO y MAXI BARRA:** ahora se crean desde Admin → «+ Nuevo empleado», con vínculo al empleado.
+- El resto del backlog sigue abajo, sin cambios.
 
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
 

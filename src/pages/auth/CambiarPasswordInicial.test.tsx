@@ -3,9 +3,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-const sb = vi.hoisted(() => ({ invoke: vi.fn(), refreshSession: vi.fn(async () => ({ data: {}, error: null })) }))
-vi.mock('../../shared/api/supabase', () => ({ supabase: { functions: { invoke: sb.invoke }, auth: { refreshSession: sb.refreshSession } } }))
-vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { full_name: 'Ana Pérez' }, signOut: vi.fn(), signIn: vi.fn() }) }))
+const sb = vi.hoisted(() => ({ invoke: vi.fn(), signIn: vi.fn(async (_c: { email: string; password: string }) => { void _c; return { data: {}, error: null as null | { message: string } } }), signOut: vi.fn() }))
+vi.mock('../../shared/api/supabase', () => ({ supabase: { functions: { invoke: sb.invoke }, auth: { signInWithPassword: sb.signIn } } }))
+vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ user: { email: 'ana@x.com' }, profile: { full_name: 'Ana Pérez' }, signOut: sb.signOut, signIn: vi.fn() }) }))
 
 import CambiarPasswordInicial from './CambiarPasswordInicial'
 import LoginPage from './LoginPage'
@@ -19,7 +19,7 @@ const llenar = (actual: string, nueva: string, nueva2 = nueva) => {
   fireEvent.click(screen.getByText('Guardar y entrar'))
 }
 
-beforeEach(() => { sb.invoke.mockReset(); sb.refreshSession.mockClear() })
+beforeEach(() => { sb.invoke.mockReset(); sb.signIn.mockClear(); sb.signOut.mockClear() })
 
 describe('CambiarPasswordInicial', () => {
   it.each([
@@ -33,11 +33,12 @@ describe('CambiarPasswordInicial', () => {
     expect(sb.invoke).not.toHaveBeenCalled()
   })
 
-  it('ok → llama a la función y refresca la sesión (el flag nuevo viene en el token)', async () => {
+  it('ok → llama a la función y vuelve a entrar con la nueva (GoTrue revoca los refresh tokens)', async () => {
     sb.invoke.mockResolvedValue({ data: { ok: true }, error: null })
     render(<CambiarPasswordInicial />)
     llenar('Temp12345678', 'mi-clave-nueva')
-    await waitFor(() => expect(sb.refreshSession).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(sb.signIn).toHaveBeenCalledWith({ email: 'ana@x.com', password: 'mi-clave-nueva' }))
+    expect(sb.signOut).not.toHaveBeenCalled()
     expect(sb.invoke).toHaveBeenCalledWith('alta-empleado', { body: { action: 'cambiar_password', actual: 'Temp12345678', nueva: 'mi-clave-nueva' } })
   })
 
@@ -46,7 +47,7 @@ describe('CambiarPasswordInicial', () => {
     render(<CambiarPasswordInicial />)
     llenar('mala-temporal', 'mi-clave-nueva')
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('La contraseña actual no es correcta'))
-    expect(sb.refreshSession).not.toHaveBeenCalled()
+    expect(sb.signIn).not.toHaveBeenCalled()
   })
 
   it('debeCambiarPassword lee SOLO app_metadata (user_metadata no cuenta)', () => {

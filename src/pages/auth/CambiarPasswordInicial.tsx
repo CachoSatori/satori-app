@@ -8,7 +8,7 @@ import { supabase } from '../../shared/api/supabase'
 import { cambiarPasswordInicial, AltaEmpleadoError, PASSWORD_MIN } from '../../shared/api/altaEmpleado'
 
 export default function CambiarPasswordInicial() {
-  const { profile, signOut } = useAuth()
+  const { user, profile, signOut } = useAuth()
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
   const [nueva2, setNueva2] = useState('')
@@ -24,9 +24,14 @@ export default function CambiarPasswordInicial() {
     setSaving(true)
     try {
       await cambiarPasswordInicial(actual, nueva)
-      // El token vigente todavía trae el flag: se refresca la sesión para leer el app_metadata nuevo
+      // Al cambiar la contraseña, GoTrue revoca los refresh tokens de la cuenta (probado en staging):
+      // se vuelve a entrar con la nueva → sesión nueva, con el app_metadata ya sin el flag
       // (onAuthStateChange actualiza `user` y la app sigue sola).
-      await supabase.auth.refreshSession()
+      const { error: le } = await supabase.auth.signInWithPassword({ email: user?.email ?? '', password: nueva })
+      if (le) {
+        await signOut()
+        return
+      }
     } catch (err) {
       setError(err instanceof AltaEmpleadoError ? err.message : 'No se pudo cambiar la contraseña')
       setSaving(false)

@@ -25,6 +25,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | **Proveedores A** (notificación de pago, mig 047) + **B** (saldo a favor FIFO, migs 053/054) + comprobantes | 🟢 prod | Falta validar en piso. El correo sale recién con el DNS de Resend (depende del dueño). |
 | Finanzas / P&L | ✅ prod | Hora-CR en bordes de período resuelta. |
 | Reconciliación prod vs Excel del dueño | 🔲 | Viable desde el pozo (un número por día). |
+| 🔴 **Prioridad alta · Estabilización de caja · Tolerancia de cierre:** mantener ₡500 solo para no exigir motivo, pero registrar siempre la diferencia real y mostrar un acumulado mensual de diferencias chicas con alerta. | 🔲 🖊️ | **Con firma: toca cierres** (`CashCierre.tsx:216` y `:391`, `cierreNecesitaAjuste`; turno en `CashTurno.tsx:312`). Hoy, si cuadra, el ajuste va con `dif_crc = 0` y la diferencia queda arrastrada en el sistema hasta el próximo ajuste. Medición de solo lectura en prod (90 días, 05/11): 61 de 89 cierres con diferencia ≠0 y <₡500, y nunca más de ₡498 sin corregir. También: el ajuste del 19/10 (+₡54.107) no se creó, y el «conteo» del turno coincide al colón con el «debería» en 75 de 86 días, así que no es un conteo independiente. |
 
 ## 2. Propinas y personal
 

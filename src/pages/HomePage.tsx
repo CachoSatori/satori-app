@@ -67,6 +67,11 @@ const MODULES: Module[] = [
     roles: ['owner', 'manager', 'cajero'],
   },
   {
+    id: 'club', path: '/club', label: 'Club', kanji: '縁',
+    description: 'Referentes · cupones · canjes', ready: true,
+    roles: ['owner', 'manager', 'cajero'],
+  },
+  {
     id: 'finanzas', path: '/finanzas', label: 'Finanzas', kanji: '財',
     description: 'P&L · Presupuesto vs Real', ready: true,
     roles: ['owner', 'manager', 'contador'],

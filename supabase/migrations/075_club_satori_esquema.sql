@@ -511,7 +511,8 @@ begin
 
   select * into v_ref from public.club_miembros m where m.id = v_cupon.referente_id;
   if v_ref.estado <> 'activo' then
-    raise exception 'El referente está dado de baja' using errcode = 'P0001';
+    raise exception 'REFERENTE_INACTIVO' using errcode = 'P0001',
+      hint = 'Referente dado de baja: seguí con la cuenta sin crédito';
   end if;
   select * into v_cfg from public.club_config where location_id = v_cupon.location_id;
 
@@ -774,6 +775,445 @@ begin
 end;
 $$;
 
+-- ── 4b. F1c: funciones de staff, resolución de QR e historial de config ─────
+
+-- Formato de los QR (lo usa también el front: src/modules/club/qrFormato.ts):
+--   referente: https://club.satoricostarica.com/r/{codigo8}
+--   cupón:     https://club.satoricostarica.com/c/{codigo10}
+
+-- Teléfono a E.164 (+506 por defecto si vienen 8 dígitos). NULL si viene vacío; error si no es válido.
+create or replace function public.club_norm_telefono(p text)
+returns text
+language plpgsql
+immutable
+set search_path = public, pg_temp
+as $$
+declare v text := nullif(regexp_replace(coalesce(p, ''), '[\s\-().]', '', 'g'), '');
+begin
+  if v is null then return null; end if;
+  if v ~ '^[0-9]{8}$' then v := '+506' || v;
+  elsif v ~ '^[1-9][0-9]{7,14}$' then v := '+' || v;
+  end if;
+  if v !~ '^\+[1-9][0-9]{6,14}$' then
+    raise exception 'Teléfono no válido' using errcode = 'P0001';
+  end if;
+  return v;
+end;
+$$;
+
+-- Texto normalizado para buscar sin mayúsculas ni tildes.
+create or replace function public.club_norm_texto(p text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select lower(translate(regexp_replace(btrim(coalesce(p, '')), '\s+', ' ', 'g'),
+                         'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunaeiouun'));
+$$;
+
+-- Negocios: alta y edición (owner, manager).
+create or replace function public.club_negocio_guardar(p_id uuid, p_nombre text, p_tipo text, p_activo boolean)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol    public.user_role := public.get_my_role();
+  v_nombre text := regexp_replace(btrim(coalesce(p_nombre, '')), '\s+', ' ', 'g');
+  v_id     uuid;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if length(v_nombre) not between 1 and 120 then
+    raise exception 'El nombre es obligatorio (hasta 120 caracteres)' using errcode = 'P0001';
+  end if;
+  if p_tipo is null or p_tipo not in ('hotel','tienda','host','delivery','concierge','otro') then
+    raise exception 'Tipo de negocio no válido' using errcode = 'P0001';
+  end if;
+  begin
+    if p_id is null then
+      insert into public.club_negocios (nombre, tipo, activo)
+      values (v_nombre, p_tipo, coalesce(p_activo, true))
+      returning id into v_id;
+    else
+      update public.club_negocios
+         set nombre = v_nombre, tipo = p_tipo, activo = coalesce(p_activo, activo), updated_at = now()
+       where id = p_id
+      returning id into v_id;
+      if v_id is null then
+        raise exception 'Negocio no encontrado' using errcode = 'P0001';
+      end if;
+    end if;
+  exception when unique_violation then
+    raise exception 'Ya existe un negocio con ese nombre' using errcode = 'P0001';
+  end;
+  return v_id;
+end;
+$$;
+
+-- Miembros: alta y edición (owner, manager). El contacto va a club_miembros_contacto.
+-- p_contacto NULL = no tocar el contacto; un objeto = reemplazarlo
+-- ({telefono, email, optin_whatsapp, optin_email}; claves ausentes o vacías = sin dato).
+create or replace function public.club_miembro_guardar(
+  p_id uuid, p_tipo text, p_nombre text, p_negocio_id uuid, p_estado text, p_contacto jsonb)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol    public.user_role := public.get_my_role();
+  v_nombre text := regexp_replace(btrim(coalesce(p_nombre, '')), '\s+', ' ', 'g');
+  v_id     uuid;
+  v_tel    text;
+  v_email  text;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if length(v_nombre) not between 1 and 120 then
+    raise exception 'El nombre es obligatorio (hasta 120 caracteres)' using errcode = 'P0001';
+  end if;
+  if p_tipo is null or p_tipo not in ('referente','concierge_pm','equipo') then
+    raise exception 'Tipo no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+  end if;
+  if p_estado is not null and p_estado not in ('activo','baja') then
+    raise exception 'Estado no válido' using errcode = 'P0001';
+  end if;
+  if p_negocio_id is not null and not exists (select 1 from public.club_negocios n where n.id = p_negocio_id) then
+    raise exception 'Negocio no encontrado' using errcode = 'P0001';
+  end if;
+
+  if p_contacto is not null then
+    if jsonb_typeof(p_contacto) <> 'object' then
+      raise exception 'Contacto no válido' using errcode = 'P0001';
+    end if;
+    v_tel := public.club_norm_telefono(p_contacto->>'telefono');
+    v_email := nullif(lower(btrim(coalesce(p_contacto->>'email', ''))), '');
+    if v_email is not null and (length(v_email) > 254 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+      raise exception 'Email no válido' using errcode = 'P0001';
+    end if;
+  end if;
+
+  if p_id is null then
+    insert into public.club_miembros (tipo, nombre, negocio_id, estado, origen)
+    values (p_tipo, v_nombre, p_negocio_id, coalesce(p_estado, 'activo'), 'app')
+    returning id into v_id;
+  else
+    update public.club_miembros
+       set tipo = p_tipo, nombre = v_nombre, negocio_id = p_negocio_id,
+           estado = coalesce(p_estado, estado), updated_at = now()
+     where id = p_id
+    returning id into v_id;
+    if v_id is null then
+      raise exception 'Miembro no encontrado' using errcode = 'P0001';
+    end if;
+  end if;
+
+  if p_contacto is not null then
+    insert into public.club_miembros_contacto (miembro_id, location_id, telefono, email, optin_whatsapp, optin_email)
+    values (v_id, (select location_id from public.club_miembros where id = v_id), v_tel, v_email,
+            coalesce((p_contacto->>'optin_whatsapp')::boolean, false) and v_tel is not null,
+            coalesce((p_contacto->>'optin_email')::boolean, false) and v_email is not null)
+    on conflict (miembro_id) do update
+      set telefono = excluded.telefono, email = excluded.email,
+          optin_whatsapp = excluded.optin_whatsapp, optin_email = excluded.optin_email, updated_at = now();
+  end if;
+  return v_id;
+end;
+$$;
+
+-- Regenerar código y token (owner, manager): los anteriores dejan de valer.
+create or replace function public.club_miembro_regenerar_codigo(p_id uuid)
+returns table (codigo text, token_portal text)
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_m   public.club_miembros%rowtype;
+  i int;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  for i in 1 .. 5 loop
+    begin
+      update public.club_miembros m
+         set codigo = public.club_gen_codigo(8),
+             token_portal = encode(extensions.gen_random_bytes(32), 'hex'),
+             updated_at = now()
+       where m.id = p_id
+      returning * into v_m;
+      exit;
+    exception when unique_violation then
+      if i = 5 then raise exception 'No se pudo regenerar el código' using errcode = 'P0001'; end if;
+    end;
+  end loop;
+  if v_m.id is null then
+    raise exception 'Miembro no encontrado' using errcode = 'P0001';
+  end if;
+  codigo := v_m.codigo; token_portal := v_m.token_portal;
+  return next;
+end;
+$$;
+
+-- Token del portal para copiar el link (owner, manager). La caja no lo ve.
+create or replace function public.club_miembro_token(p_id uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role(); v text;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  select m.token_portal into v from public.club_miembros m where m.id = p_id;
+  if v is null then
+    raise exception 'Miembro no encontrado' using errcode = 'P0001';
+  end if;
+  return v;
+end;
+$$;
+
+-- Búsqueda (plan B de caja): nombre, negocio o últimos 4 dígitos del teléfono.
+-- NUNCA devuelve teléfono ni email. Máximo 20.
+create or replace function public.club_buscar(p_q text)
+returns table (id uuid, nombre text, negocio text, tipo text, estado text, personas int, creditos numeric)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_q   text := public.club_norm_texto(p_q);
+  v_dig boolean;
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  v_dig := v_q ~ '^[0-9]{4}$';
+  if not v_dig and length(v_q) < 3 then
+    raise exception 'Escribí al menos 3 letras o los últimos 4 dígitos del teléfono' using errcode = 'P0001';
+  end if;
+  return query
+    select m.id, m.nombre, n.nombre, m.tipo, m.estado, s.personas, s.creditos
+      from public.club_miembros m
+      left join public.club_negocios n on n.id = m.negocio_id
+      left join public.club_saldos s on s.miembro_id = m.id
+     where m.tipo in ('referente','concierge_pm','equipo')
+       and case when v_dig then
+             exists (select 1 from public.club_miembros_contacto c
+                      where c.miembro_id = m.id and right(c.telefono, 4) = v_q)
+           else
+             public.club_norm_texto(m.nombre) like '%' || v_q || '%'
+             or public.club_norm_texto(n.nombre) like '%' || v_q || '%'
+           end
+     order by (m.estado = 'activo') desc, m.nombre
+     limit 20;
+end;
+$$;
+
+-- Tarjeta física ya repartida (owner, manager, cajero): movimiento `tarjeta` con nota «manual».
+create or replace function public.club_tarjeta_manual(p_miembro uuid, p_personas int, p_factura text, p_op uuid)
+returns table (personas int, creditos numeric)
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol   public.user_role := public.get_my_role();
+  v_fac   text := public.club_norm_factura(p_factura);
+  v_m     public.club_miembros%rowtype;
+  v_cfg   public.club_config%rowtype;
+  v_prev  public.club_movimientos%rowtype;
+  v_saldo int;
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_op is null then
+    raise exception 'Falta el id de operación' using errcode = 'P0001';
+  end if;
+
+  select * into v_prev from public.club_movimientos where client_op_id = p_op;
+  if found then
+    if v_prev.tipo <> 'tarjeta' or v_prev.miembro_id is distinct from p_miembro or v_prev.cupon_id is not null then
+      raise exception 'El id de operación ya se usó para otra cosa' using errcode = 'P0001';
+    end if;
+    select * into v_cfg from public.club_config where location_id = v_prev.location_id;
+    v_saldo := public.club_saldo_personas(p_miembro);
+    personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+    return next; return;
+  end if;
+
+  if p_personas is null or p_personas < 1 or p_personas > 30 then
+    raise exception 'Personas fuera de rango (1 a 30)' using errcode = 'P0001';
+  end if;
+  if v_fac = '' or length(v_fac) > 40 then
+    raise exception 'Falta el número de factura' using errcode = 'P0001';
+  end if;
+
+  select * into v_m from public.club_miembros m where m.id = p_miembro for update;
+  if not found or v_m.tipo not in ('referente','concierge_pm','equipo') then
+    raise exception 'Miembro no encontrado' using errcode = 'P0001';
+  end if;
+  if v_m.estado <> 'activo' then
+    raise exception 'REFERENTE_INACTIVO' using errcode = 'P0001',
+      hint = 'Referente dado de baja: seguí con la cuenta sin crédito';
+  end if;
+  select * into v_cfg from public.club_config where location_id = v_m.location_id;
+
+  insert into public.club_movimientos
+    (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
+     factura_pos, fecha_visita, registrado_por, origen, client_op_id, nota)
+  values
+    (v_m.location_id, p_miembro, 'tarjeta', p_personas, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
+     v_fac, now(), auth.uid(), 'app', p_op, 'manual');
+
+  v_saldo := public.club_saldo_personas(p_miembro);
+  personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+  return next;
+end;
+$$;
+
+-- Resolver lo leído en un QR (URL completa o solo el código). owner, manager, cajero.
+-- {tipo: 'cupon'|'referente'|'desconocido', datos: {...}}
+create or replace function public.club_resolver(p_texto text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol   public.user_role := public.get_my_role();
+  v_t     text := btrim(coalesce(p_texto, ''));
+  v_kind  text;
+  v_cod   text;
+  v_c     public.club_cupones%rowtype;
+  v_m     public.club_miembros%rowtype;
+  v_cfg   public.club_config%rowtype;
+  v_saldo int;
+  v_hoy   timestamptz;
+  v_dia   numeric;
+  v_neg   text;
+  mm      text[];
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+
+  mm := regexp_match(v_t, '^https?://club\.satoricostarica\.com/([rcRC])/([A-Za-z0-9]+)/?$', 'i');
+  if mm is not null then
+    v_kind := lower(mm[1]); v_cod := upper(mm[2]);
+  else
+    v_cod := upper(regexp_replace(v_t, '\s', '', 'g'));
+    v_kind := case length(v_cod) when 8 then 'r' when 10 then 'c' else null end;
+  end if;
+
+  if v_kind = 'c' and v_cod ~ '^[A-HJ-NP-Z2-9]{10}$' then
+    select * into v_c from public.club_cupones c where c.codigo = v_cod;
+    if found then
+      select * into v_m from public.club_miembros m where m.id = v_c.referente_id;
+      return jsonb_build_object('tipo', 'cupon', 'datos', jsonb_build_object(
+        'codigo',           v_c.codigo,
+        'estado',           case when v_c.estado = 'vigente' and v_c.vence_en <= now() then 'vencido' else v_c.estado end,
+        'vence_en',         v_c.vence_en,
+        'usado_en',         v_c.usado_en,
+        'referente_id',     v_m.id,
+        'referente',        v_m.nombre,
+        'referente_estado', v_m.estado));
+    end if;
+  elsif v_kind = 'r' and v_cod ~ '^[A-HJ-NP-Z2-9]{8}$' then
+    select * into v_m from public.club_miembros m
+     where m.codigo = v_cod and m.tipo in ('referente','concierge_pm','equipo');
+    if found then
+      select * into v_cfg from public.club_config where location_id = v_m.location_id;
+      select n.nombre into v_neg from public.club_negocios n where n.id = v_m.negocio_id;
+      v_saldo := public.club_saldo_personas(v_m.id);
+      v_hoy := date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica';
+      select coalesce(sum(mv.creditos), 0) into v_dia from public.club_movimientos mv
+       where mv.miembro_id = v_m.id and mv.tipo = 'canje' and mv.fecha_visita >= v_hoy;
+      return jsonb_build_object('tipo', 'referente', 'datos', jsonb_build_object(
+        'id',                       v_m.id,
+        'nombre',                   v_m.nombre,
+        'tipo_miembro',             v_m.tipo,
+        'negocio',                  v_neg,
+        'estado',                   v_m.estado,
+        'personas',                 v_saldo,
+        'creditos',                 public.club_creditos(v_saldo, v_cfg.personas_por_credito),
+        'personas_proximo',         public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
+        'personas_por_credito',     v_cfg.personas_por_credito,
+        'canjeado_hoy',             v_dia,
+        'canje_min',                v_cfg.canje_min,
+        'canje_paso',               v_cfg.canje_paso,
+        'max_creditos_por_visita',  v_cfg.max_creditos_por_visita));
+    end if;
+  end if;
+  return jsonb_build_object('tipo', 'desconocido', 'datos', '{}'::jsonb);
+end;
+$$;
+
+-- Historial de club_config: quién, cuándo, campo, valor anterior y nuevo. Solo owner lo lee.
+create table if not exists public.club_config_historial (
+  id              bigint generated always as identity primary key,
+  location_id     text not null,
+  campo           text not null,
+  valor_anterior  text,
+  valor_nuevo     text,
+  cambiado_por    uuid,
+  cambiado_en     timestamptz not null default now()
+);
+alter table public.club_config_historial enable row level security;
+revoke all on public.club_config_historial from anon, public, authenticated;
+grant select on public.club_config_historial to authenticated;
+drop policy if exists club_config_hist_owner on public.club_config_historial;
+create policy club_config_hist_owner on public.club_config_historial for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() = 'owner');
+
+create or replace function public.club_config_auditar()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_old jsonb := to_jsonb(old);
+  v_new jsonb := to_jsonb(new);
+  k text;
+begin
+  for k in select jsonb_object_keys(v_new) loop
+    if k not in ('updated_at','created_at') and (v_old->k) is distinct from (v_new->k) then
+      insert into public.club_config_historial (location_id, campo, valor_anterior, valor_nuevo, cambiado_por)
+      values (new.location_id, k, v_old->>k, v_new->>k, auth.uid());
+    end if;
+  end loop;
+  return new;
+end;
+$$;
+
+drop trigger if exists club_config_auditar_trg on public.club_config;
+create trigger club_config_auditar_trg after update on public.club_config
+  for each row execute function public.club_config_auditar();
+
+-- club_miembros: la caja lee todo MENOS el token del portal (privilegio por columna).
+revoke select on public.club_miembros from authenticated;
+grant select (id, location_id, tipo, nombre, negocio_id, codigo, estado, origen, legacy_id, created_at, updated_at)
+  on public.club_miembros to authenticated;
+
 -- ── 5. EXECUTE: nada por defecto, grant explícito ───────────────────────────
 
 revoke all on function public.club_gen_codigo(int)                       from public, anon, authenticated;
@@ -787,6 +1227,25 @@ revoke all on function public.club_canje(uuid, numeric, text, uuid)      from pu
 revoke all on function public.club_ajuste(uuid, int, text, text)         from public, anon, authenticated;
 revoke all on function public.club_portal(text)                          from public, anon, authenticated;
 revoke all on function public.club_vencer(date)                          from public, anon, authenticated;
+
+revoke all on function public.club_norm_telefono(text)                    from public, anon, authenticated;
+revoke all on function public.club_norm_texto(text)                       from public, anon, authenticated;
+revoke all on function public.club_negocio_guardar(uuid, text, text, boolean)            from public, anon, authenticated;
+revoke all on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb)  from public, anon, authenticated;
+revoke all on function public.club_miembro_regenerar_codigo(uuid)         from public, anon, authenticated;
+revoke all on function public.club_miembro_token(uuid)                    from public, anon, authenticated;
+revoke all on function public.club_buscar(text)                           from public, anon, authenticated;
+revoke all on function public.club_tarjeta_manual(uuid, int, text, uuid)  from public, anon, authenticated;
+revoke all on function public.club_resolver(text)                         from public, anon, authenticated;
+revoke all on function public.club_config_auditar()                       from public, anon, authenticated;
+
+grant execute on function public.club_negocio_guardar(uuid, text, text, boolean)           to authenticated;
+grant execute on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb) to authenticated;
+grant execute on function public.club_miembro_regenerar_codigo(uuid)        to authenticated;
+grant execute on function public.club_miembro_token(uuid)                   to authenticated;
+grant execute on function public.club_buscar(text)                          to authenticated;
+grant execute on function public.club_tarjeta_manual(uuid, int, text, uuid) to authenticated;
+grant execute on function public.club_resolver(text)                        to authenticated;
 
 -- La vista los usa con los permisos de quien consulta (staff).
 grant execute on function public.club_creditos(bigint, int)          to authenticated;

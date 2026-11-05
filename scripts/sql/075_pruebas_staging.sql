@@ -381,6 +381,249 @@ begin
     format('vencidos=%s, saldo de «Viejo»=%s', v_n, v_s));
 end $$;
 
+-- ═══ F1c · 11. club_buscar sin contactos ═══
+do $$
+declare j jsonb; v_n int;
+begin
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select jsonb_agg(to_jsonb(b)) into j from public.club_buscar('ref pru') b;
+  perform pg_temp.yo();
+  perform pg_temp.r('11', 'cajero busca «ref pru» → sin teléfono ni email',
+    jsonb_array_length(j) = 1 and not (j::text ~* 'telefono|email|\+506|8888'), j::text);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select count(*) into v_n from public.club_buscar('7777') b where b.nombre = 'Ref Prueba';
+  perform pg_temp.yo();
+  perform pg_temp.r('11', 'cajero busca por últimos 4 dígitos (7777) → lo encuentra', v_n = 1, format('%s resultado(s)', v_n));
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_buscar('ab');
+    perform pg_temp.yo(); perform pg_temp.r('11', 'búsqueda de 2 letras', false, 'buscó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('11', 'búsqueda de 2 letras → error', true, sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<SALONERO_UUID>');
+    perform public.club_buscar('ref pru');
+    perform pg_temp.yo(); perform pg_temp.r('11', 'salonero busca', false, 'pudo');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('11', 'salonero busca → sin permiso', true, sqlerrm);
+  end;
+end $$;
+
+-- ═══ F1c · 12. Alta y edición: cajero no; manager sí ═══
+do $$
+declare v_neg uuid; v_m uuid; v_tel text;
+begin
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_miembro_guardar(null, 'referente', 'Hackeo Cajero', null, null, null);
+    perform pg_temp.yo(); perform pg_temp.r('12', 'cajero club_miembro_guardar', false, 'pudo');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('12', 'cajero club_miembro_guardar → sin permiso', true, sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_negocio_guardar(null, 'Negocio Cajero', 'hotel', true);
+    perform pg_temp.yo(); perform pg_temp.r('12', 'cajero club_negocio_guardar', false, 'pudo');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('12', 'cajero club_negocio_guardar → sin permiso', true, sqlerrm);
+  end;
+  -- manager simulado: el salonero de prueba pasa a manager dentro de la transacción
+  update profiles set role = 'manager' where id = '<SALONERO_UUID>';
+  perform pg_temp.como('authenticated', '<SALONERO_UUID>');
+  v_neg := public.club_negocio_guardar(null, 'Casa Pruebas', 'host', true);
+  v_m := public.club_miembro_guardar(null, 'referente', '  Manu   Alta ', v_neg, null,
+          '{"telefono":"8888 9999","email":"Manu@Ejemplo.com","optin_whatsapp":true}'::jsonb);
+  perform pg_temp.yo();
+  select telefono into v_tel from club_miembros_contacto where miembro_id = v_m;
+  insert into _ids values ('manu', v_m), ('manu_cod', (select codigo from club_miembros where id = v_m)),
+                          ('manu_tok', (select token_portal from club_miembros where id = v_m));
+  perform pg_temp.r('12', 'manager crea negocio + referente con contacto',
+    v_tel = '+50688889999' and (select nombre from club_miembros where id = v_m) = 'Manu Alta'
+      and (select email from club_miembros_contacto where miembro_id = v_m) = 'manu@ejemplo.com',
+    format('nombre=%s tel=%s', (select nombre from club_miembros where id = v_m), v_tel));
+  begin
+    perform pg_temp.como('authenticated', '<SALONERO_UUID>');
+    perform public.club_miembro_guardar(v_m, 'referente', 'Manu Alta', v_neg, null, '{"email":"sin-arroba"}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('12', 'email inválido', false, 'guardó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('12', 'email inválido → error', sqlerrm = 'Email no válido', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<SALONERO_UUID>');
+    perform public.club_miembro_guardar(v_m, 'referente', 'Manu Alta', v_neg, null, '{"telefono":"12"}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('12', 'teléfono inválido', false, 'guardó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('12', 'teléfono inválido → error', sqlerrm = 'Teléfono no válido', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<SALONERO_UUID>');
+    perform public.club_negocio_guardar(null, 'casa  PRUEBAS', 'host', true);
+    perform pg_temp.yo(); perform pg_temp.r('12', 'negocio duplicado', false, 'creó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('12', 'negocio duplicado (casa  PRUEBAS) → error claro', sqlerrm = 'Ya existe un negocio con ese nombre', sqlerrm);
+  end;
+end $$;
+
+-- ═══ F1c · 13. Regenerar invalida el código y el token anteriores ═══
+do $$
+declare v_old text := (select v from _ids where k='manu_cod'); v_oldtok text := (select v from _ids where k='manu_tok');
+        v_new text; v_newtok text; v_res jsonb;
+begin
+  perform pg_temp.como('authenticated', '<SALONERO_UUID>');
+  select g.codigo, g.token_portal into v_new, v_newtok from public.club_miembro_regenerar_codigo((select v::uuid from _ids where k='manu')) g;
+  v_res := public.club_resolver(v_old);
+  perform pg_temp.yo();
+  perform pg_temp.r('13', 'regenerar → código nuevo; el viejo resuelve «desconocido»',
+    v_new <> v_old and v_newtok <> v_oldtok and v_res->>'tipo' = 'desconocido', format('%s → %s; viejo: %s', v_old, v_new, v_res->>'tipo'));
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_cupon_crear(v_old, null);
+    perform pg_temp.yo(); perform pg_temp.r('13', 'cupón con el código viejo', false, 'creó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('13', 'cupón con el código viejo → «Código no válido»', sqlerrm = 'Código no válido', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_portal(v_oldtok);
+    perform pg_temp.yo(); perform pg_temp.r('13', 'portal con el token viejo', false, 'respondió');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('13', 'portal con el token viejo → «Enlace no válido»', sqlerrm = 'Enlace no válido', sqlerrm);
+  end;
+  update _ids set v = v_new where k = 'manu_cod';
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_miembro_regenerar_codigo((select v::uuid from _ids where k='manu'));
+    perform pg_temp.yo(); perform pg_temp.r('13', 'cajero regenera', false, 'pudo');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('13', 'cajero regenera → sin permiso', true, sqlerrm);
+  end;
+end $$;
+
+-- ═══ F1c · 14. club_resolver: URL, código y basura ═══
+do $$
+declare v_cup text; a jsonb; b jsonb; c jsonb; d jsonb; e jsonb; f jsonb; g jsonb;
+begin
+  perform pg_temp.como('anon', null);
+  select x.codigo into v_cup from public.club_cupon_crear((select v from _ids where k='manu_cod'), null) x;
+  perform pg_temp.yo();
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  a := public.club_resolver('https://club.satoricostarica.com/c/' || v_cup);
+  b := public.club_resolver('  ' || lower(v_cup) || ' ');
+  c := public.club_resolver('https://club.satoricostarica.com/r/' || (select v from _ids where k='manu_cod'));
+  d := public.club_resolver((select v from _ids where k='manu_cod'));
+  e := public.club_resolver('<script>alert(1)</script>');
+  f := public.club_resolver('https://otro-sitio.com/c/' || v_cup);
+  g := public.club_resolver('');
+  perform pg_temp.yo();
+  perform pg_temp.r('14', 'URL de cupón → cupón vigente', a->>'tipo' = 'cupon' and a->'datos'->>'estado' = 'vigente' and a->'datos'->>'referente' = 'Manu Alta', a::text);
+  perform pg_temp.r('14', 'código de cupón en minúsculas con espacios → cupón', b->>'tipo' = 'cupon', b->>'tipo');
+  perform pg_temp.r('14', 'URL de referente → referente con saldo', c->>'tipo' = 'referente' and (c->'datos') ? 'personas' and (c->'datos') ? 'personas_proximo', c::text);
+  perform pg_temp.r('14', 'código de referente solo → referente', d->>'tipo' = 'referente', d->>'tipo');
+  perform pg_temp.r('14', 'basura / otro dominio / vacío → desconocido',
+    e->>'tipo' = 'desconocido' and f->>'tipo' = 'desconocido' and g->>'tipo' = 'desconocido', concat_ws(' · ', e->>'tipo', f->>'tipo', g->>'tipo'));
+  update club_cupones set vence_en = now() - interval '1 minute' where codigo = v_cup;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  a := public.club_resolver(v_cup);
+  b := public.club_resolver((select v from _ids where k='cupon1'));
+  perform pg_temp.yo();
+  perform pg_temp.r('14', 'cupón vencido → «vencido»; cupón usado → «usado»', a->'datos'->>'estado' = 'vencido' and b->'datos'->>'estado' = 'usado',
+    concat_ws(' · ', a->'datos'->>'estado', b->'datos'->>'estado'));
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_resolver(v_cup);
+    perform pg_temp.yo(); perform pg_temp.r('14', 'anon club_resolver', false, 'pudo');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('14', 'anon club_resolver → sin permiso', true, sqlerrm);
+  end;
+end $$;
+
+-- ═══ F1c · 15. Tarjeta manual ═══
+do $$
+declare v_op uuid := gen_random_uuid(); v_p int; v_p2 int; v_n int;
+begin
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select t.personas into v_p from public.club_tarjeta_manual((select v::uuid from _ids where k='manu'), 3, ' fx 9 ', v_op) t;
+  select t.personas into v_p2 from public.club_tarjeta_manual((select v::uuid from _ids where k='manu'), 3, ' fx 9 ', v_op) t;
+  perform pg_temp.yo();
+  select count(*) into v_n from club_movimientos where client_op_id = v_op;
+  perform pg_temp.r('15', 'tarjeta manual 3 personas (nota «manual», factura FX9), idempotente',
+    v_p = 3 and v_p2 = 3 and v_n = 1 and (select nota from club_movimientos where client_op_id = v_op) = 'manual'
+      and (select factura_pos from club_movimientos where client_op_id = v_op) = 'FX9',
+    format('saldo=%s / %s, movimientos=%s', v_p, v_p2, v_n));
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual((select v::uuid from _ids where k='manu'), 0, 'FX10', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('15', 'tarjeta manual 0 personas', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('15', 'tarjeta manual 0 personas → error', true, sqlerrm);
+  end;
+end $$;
+
+-- ═══ F1c · 16. REFERENTE_INACTIVO ═══
+do $$
+declare v_cup text;
+begin
+  perform pg_temp.como('anon', null);
+  select x.codigo into v_cup from public.club_cupon_crear((select v from _ids where k='manu_cod'), null) x;
+  perform pg_temp.yo();
+  update club_miembros set estado = 'baja' where id = (select v::uuid from _ids where k='manu');
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_cupon_usar(v_cup, 2, 'FX20', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('16', 'cupón de referente dado de baja', false, 'acreditó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('16', 'cupón de referente dado de baja → REFERENTE_INACTIVO', sqlerrm = 'REFERENTE_INACTIVO', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual((select v::uuid from _ids where k='manu'), 2, 'FX21', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('16', 'tarjeta manual de referente dado de baja', false, 'acreditó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('16', 'tarjeta manual de referente dado de baja → REFERENTE_INACTIVO', sqlerrm = 'REFERENTE_INACTIVO', sqlerrm);
+  end;
+  update club_miembros set estado = 'activo' where id = (select v::uuid from _ids where k='manu');
+end $$;
+
+-- ═══ F1c · 17. Historial de club_config ═══
+do $$
+declare v_n int; v_c int; v_upd int;
+begin
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  update public.club_config set valor_credito_crc = 19000 where location_id = 'santa-teresa';
+  select count(*) into v_n from public.club_config_historial
+   where campo = 'valor_credito_crc' and valor_anterior = '18000' and valor_nuevo = '19000'
+     and cambiado_por = '<OWNER_UUID>';
+  perform pg_temp.yo();
+  perform pg_temp.r('17', 'owner cambia valor_credito_crc 18000→19000 → historial (quién, campo, antes, después)', v_n = 1, format('%s fila(s)', v_n));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select count(*) into v_c from public.club_config_historial;
+  update public.club_config set valor_credito_crc = 1 where location_id = 'santa-teresa';
+  get diagnostics v_upd = row_count;
+  perform pg_temp.yo();
+  perform pg_temp.r('17', 'cajero: no lee el historial ni edita la config', v_c = 0 and v_upd = 0
+      and (select valor_credito_crc from club_config where location_id = 'santa-teresa') = 19000,
+    format('historial visible=%s, filas editadas=%s', v_c, v_upd));
+end $$;
+
+-- ═══ F1c · 18. Token del portal: la caja no lo ve ═══
+do $$
+declare v_tok text;
+begin
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform token_portal from public.club_miembros limit 1;
+    perform pg_temp.yo(); perform pg_temp.r('18', 'cajero lee token_portal', false, 'leyó');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('18', 'cajero lee token_portal → sin permiso (columna)', true, sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<SALONERO_UUID>');
+  v_tok := public.club_miembro_token((select i.v::uuid from _ids i where i.k='manu'));
+  perform pg_temp.yo();
+  perform pg_temp.r('18', 'manager obtiene el token por club_miembro_token', v_tok ~ '^[0-9a-f]{64}$', left(v_tok, 8) || '…');
+  update profiles set role = 'salonero' where id = '<SALONERO_UUID>';
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

@@ -3,6 +3,15 @@
 -- antes del piloto. En prod, solo con firma y después de exportar los datos.
 begin;
 
+drop trigger if exists club_config_auditar_trg on public.club_config;
+drop function if exists public.club_config_auditar();
+drop function if exists public.club_resolver(text);
+drop function if exists public.club_tarjeta_manual(uuid, int, text, uuid);
+drop function if exists public.club_buscar(text);
+drop function if exists public.club_miembro_token(uuid);
+drop function if exists public.club_miembro_regenerar_codigo(uuid);
+drop function if exists public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb);
+drop function if exists public.club_negocio_guardar(uuid, text, text, boolean);
 drop function if exists public.club_vencer(date);
 drop function if exists public.club_portal(text);
 drop function if exists public.club_ajuste(uuid, int, text, text);
@@ -13,6 +22,7 @@ drop function if exists public.club_saldo_personas(uuid);
 
 drop view if exists public.club_saldos;
 
+drop table if exists public.club_config_historial;
 drop table if exists public.club_visitas;
 drop table if exists public.club_pm_cargos;
 drop table if exists public.club_pm_pagos;
@@ -25,6 +35,8 @@ drop table if exists public.club_config;
 
 drop function if exists public.club_personas_proximo(bigint, int);
 drop function if exists public.club_norm_factura(text);
+drop function if exists public.club_norm_texto(text);
+drop function if exists public.club_norm_telefono(text);
 drop function if exists public.club_creditos(bigint, int);
 drop function if exists public.club_gen_codigo(int);
 

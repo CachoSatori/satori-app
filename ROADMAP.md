@@ -62,7 +62,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Inventario activo + recetas + COGS | 🧪 staging | |
 | FE-CR (factura electrónica real) | 🔲 | Hoy solo estructura SIM en staging. |
 | **PILAR · sesión/auth escalable y multi-tenant** (~10 dispositivos concurrentes) | 🚧 🔲 | **Bloquea el gran pase del PoS.** |
-| **Requisito del pase: revocar EXECUTE de `anon` en las `SECURITY DEFINER` del PoS propio** (`pos_cobrar_*`, `pos_merge_orden`, `pos_unmerge_orden`, `pos_reopen_orden`, `sync_pos_tips_to_pool`, `my_turno_stats`) | 🚧 🔲 | **Bloqueante:** medido en staging el 04/11. No pasa a prod sin revocarlo y verificarlo con `has_function_privilege`. Ver [HALLAZGOS.md](HALLAZGOS.md). |
+| **Requisito del pase: revocar EXECUTE de `anon` en las `SECURITY DEFINER` del PoS propio** (`pos_cobrar_*`, `pos_merge_orden`, `pos_unmerge_orden`, `pos_reopen_orden`, `sync_pos_tips_to_pool`, `my_turno_stats`) | 🟠 parcial | **Bloqueante:** medido en staging el 04/11. No pasa a prod sin revocarlo y verificarlo con `has_function_privilege`. Ver [HALLAZGOS.md](HALLAZGOS.md). **05/11:** las 6 revocadas en staging y versionadas en la 070; falta `my_turno_stats`. |
 
 ## 5. Plataforma y deuda técnica
 
@@ -71,7 +71,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Estabilidad (pantalla negra, realtime tras suspensión, outbox en `SIGNED_IN`, offline) | ✅ prod | |
 | Versionar `ingest-ndf` en `main` con `supabase/config.toml` (ítem 11) | 🔲 | Hasta entonces, ningún PR a `main` con `supabase/functions/`. |
 | **SEC-01 · cierre de la escalada de roles** (mig 068: rol fijo al dar de alta, guarda de owner activo, nunca 0 owners) | 🟢 prod (05/11) | Paso A y mig 068 aplicados en prod. Falta que Ismael valide (3 owners, Admin, un salonero real en Mi Rendimiento) y el merge del PR. |
-| **SEC-01b · `get_my_role()` mira `is_active`** | 🔲 🔴 | **CRÍTICO.** Antes o en la misma migración: corregir las 6 guardas `not in` que se abren con NULL y las 3 policies que leen `profiles.role` sin `is_active` (`cierre_write`, `inv_write_recipes`, `inv_write_ri`). |
+| **SEC-01b · `get_my_role()` mira `is_active`** (mig 069; en staging también la 070 del PoS) | 🧪 staging (05/11) 🔴 | **CRÍTICO.** Antes o en la misma migración: corregir las 6 guardas `not in` que se abren con NULL y las 3 policies que leen `profiles.role` sin `is_active` (`cierre_write`, `inv_write_recipes`, `inv_write_ri`). |
 | Versionar en migraciones las policies reales de `profiles` (y revisar drift en el resto) | 🔲 | Hoy prod y staging tienen 3 policies que no están en el repo. También el nombre distinto del trigger de `auth.users`. |
 | 🔴 **Prioridad alta · Alta de empleados desde Admin** (Edge Function con `service_role`: el owner crea la cuenta y asigna rol; nunca el cliente) | 🔲 🖊️ | El auto-registro quedó cerrado el 04/11 (`disable_signup`): hoy no hay forma de sumar empleados desde la app. La función tiene que verificar que quien llama sea un owner activo. Va con `supabase/config.toml` (ítem 11) para fijar `verify_jwt`. |
 | Decidir si se reactiva el auto-registro de empleados | 🔲 🖊️ | Apagado desde el 04/11 (`disable_signup`). Con la 068 sería seguro (salonero + inactivo), pero cualquiera podría crear cuentas pendientes. Alternativa: alta solo por el owner. |
@@ -84,7 +84,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 
 ## Lo próximo, en orden
 
-0. **SEC-01:** validación de Ismael en prod + merge → **alta de empleados desde Admin** → SEC-01b → SEC-02.
+0. **SEC-01:** validación de Ismael en prod + merge → **alta de empleados desde Admin** → SEC-01b en prod (firma aparte) → SEC-02.
 1. Cerrar lo que quedó del go-live del PoS: rotación de secretos de ingest, revocar el token `claude-code-prod`,
    usuarios de la app para RODRI/FRANCO/MAXI BARRA, recalibrar los umbrales del ICP.
 2. Retirar el Excel y Paridad cuando Ismael lo firme.

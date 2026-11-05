@@ -13,11 +13,11 @@
  * Verificación: compara "debería quedar" vs total contado.
  * Si diferencia > ₡500 → campo obligatorio tipo + motivo.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, cerrarDiaCompleto, deshacerCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
@@ -83,6 +83,10 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const [error,    setError]    = useState<string | null>(null)
   const [msg,      setMsg]      = useState<string | null>(null)
   const [fecha,    setFecha]    = useState(today)
+  // Id del intento de cierre (Fase 2) en curso: se reusa en los reintentos del MISMO cierre y se
+  // descarta al confirmar bien o al cambiar de fecha (mig 071, idempotencia en la base).
+  const cierreOpId = useRef<string | null>(null)
+  useEffect(() => { cierreOpId.current = null }, [fecha])
   const [movs,     setMovs]     = useState<CashMovement[]>([])   // ledger para saldoCajaFuerte
   const [sessions, setSessions] = useState<CashSession[]>([])    // para gatear: caja de proveedores cerrada
 
@@ -329,74 +333,51 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     if (!parcial) { setError('Cerrá primero el Mediodía (Fase 1) antes de cerrar la noche.'); return }
     setSaving(true); setError(null)
     try {
-      // Fase 1 ya confirmada → pasar el cierre a 'completo'.
-      await updateCierreCompleto(parcial.id, {
-        tipo:                 'completo',
-        vn_crc:               N(vnCRC),
-        vn_usd:               N(vnUSD),
-        // Pierna N pagada (vía real) — mismo campo que siempre (compat con KPIs e históricos).
-        propinas_n_crc:       propNLeg,
-        otros_n_crc:          N(retiroN),
-        ef_real_n_crc:        efRealN,
-        sep_diaria_crc:       N(sepDiariaCRC),
-        sep_diaria_usd:       N(sepDiariaUSD),
-        sep_registradora_crc: N(sepRegCRC),
-        sep_registradora_usd: N(sepRegUSD),
-        remanente_crc:        N(remCRC),
-        remanente_usd:        N(remUSD),
-        diferencia_crc:       diferencia ?? 0,
-        ajuste_tipo:          requiresAjuste ? ajusteTipoDerivado : '',
-        ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
-        notas,
-        tipo_cambio:          tc,
-      })
-      // Fase 3 — registrar las ventas en EFECTIVO en el ledger. ES PARTE ESENCIAL del
-      // cierre (alimenta el saldo de Caja Fuerte), NO es complementario. Si falla, el día
-      // quedó guardado pero las ventas NO están → avisar explícito, nunca ocultar.
-      try {
-        // IDENTIDAD (FIRMADA): 'Ventas cierre' ingresa a Caja Fuerte el NETO de propinas
-        // pagadas (efReal − pierna pagada de cada fase) — lo que efectivamente llega a la
-        // bóveda. Así ledger post-cierre = deberia + ajuste = físico contado, EXACTO.
-        // (Los egresos de propinas viven en Registradora — no tocan el ledger de CF.)
-        await recordCierreSales({
-          session_date:  fecha,
-          created_by:    profile?.id ?? '',
-          exchange_rate: tc,
-          // Post-corte entra la venta BRUTA: las propinas ya son movimientos propios y restan
-          // del pozo por su cuenta. Pre-corte se mantiene el NETO de siempre (identidad firmada).
+      // ATÓMICO (mig 071): fila del cierre + ventas + retiro + ajuste en UNA transacción de la base
+      // (RPC cerrar_dia_completo), o nada. Los MONTOS son exactamente los de siempre — calculados
+      // acá arriba (deberia/diferencia/tolerancias/identidad bruta-neta) — y la RPC escribe las
+      // MISMAS filas que antes escribían updateCierreCompleto/recordCierreSales/Retiro/Ajuste.
+      // `cierreOpId` se mantiene entre reintentos del mismo cierre: si la respuesta se pierde
+      // (timeout) y se reintenta, la base reconoce el intento y no duplica nada.
+      if (!cierreOpId.current) cierreOpId.current = crypto.randomUUID()
+      await cerrarDiaCompleto({
+        fecha,
+        client_op_id:  cierreOpId.current,
+        exchange_rate: tc,
+        cierre: {
+          vn_crc:               N(vnCRC),
+          vn_usd:               N(vnUSD),
+          // Pierna N pagada (vía real) — mismo campo que siempre (compat con KPIs e históricos).
+          propinas_n_crc:       propNLeg,
+          otros_n_crc:          N(retiroN),
+          ef_real_n_crc:        efRealN,
+          sep_diaria_crc:       N(sepDiariaCRC),
+          sep_diaria_usd:       N(sepDiariaUSD),
+          sep_registradora_crc: N(sepRegCRC),
+          sep_registradora_usd: N(sepRegUSD),
+          remanente_crc:        N(remCRC),
+          remanente_usd:        N(remUSD),
+          diferencia_crc:       diferencia ?? 0,
+          ajuste_tipo:          requiresAjuste ? ajusteTipoDerivado : '',
+          ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
+          notas,
+          tipo_cambio:          tc,
+        },
+        // IDENTIDAD (FIRMADA): post-corte entra la venta BRUTA (las propinas ya restan como
+        // movimientos); pre-corte el NETO de siempre. Igual que antes en recordCierreSales.
+        ventas: {
           mediodia: { crc: postCorte ? efRealMFromParcial : efRealMFromParcial - propMFromParcial, usd: vmUSDFromParcial },
           noche:    { crc: postCorte ? efRealN            : efRealN - propNLeg,                    usd: N(vnUSD) },
-        })
-        await recordCierreRetiro({
-          session_date:  fecha,
-          created_by:    profile?.id ?? '',
-          exchange_rate: tc,
-          amount_crc:    N(retiroN),
-        })
-      } catch (e3) {
-        await loadCierres(); onRefresh()
-        setError(`El día se guardó pero las VENTAS no se registraron en movimientos: ${e3 instanceof Error ? e3.message : String(e3)}. Deshacé el cierre y volvé a cerrarlo.`)
-        return
-      }
-      // Fase 4 — Opción B (FIRMADA): materializar la diferencia como movimiento(s) de AJUSTE en
-      // Caja Fuerte (faltante → egreso resta · sobrante → ingreso suma), para que el ledger
-      // arranque mañana del físico contado. ORDEN CRÍTICO: va DESPUÉS de sellar el cierre y
-      // registrar ventas/retiro — la diferencia ya quedó calculada y guardada SIN este ajuste.
-      // Se llama SIEMPRE (aun cuadrando): su limpieza inicial borra ajustes viejos del día.
-      try {
-        await recordCierreAjuste({
-          session_date:  fecha,
-          created_by:    profile?.id ?? '',
-          exchange_rate: tc,
-          motivo:        ajusteMotivo.trim(),
-          dif_crc:       diferencia !== null && !cuadra    ? diferencia : 0,
-          dif_usd:       difUSD     !== null && !cuadraUSD ? difUSD     : 0,
-        })
-      } catch (e4) {
-        await loadCierres(); onRefresh()
-        setError(`El día se cerró pero el AJUSTE de la diferencia no quedó en movimientos: ${e4 instanceof Error ? e4.message : String(e4)}. Deshacé el cierre y volvé a cerrarlo.`)
-        return
-      }
+        },
+        retiro_crc: N(retiroN),
+        // Opción B (FIRMADA): solo la diferencia que supera su tolerancia (₡500 / US$1, calculada acá).
+        ajuste: {
+          crc:    diferencia !== null && !cuadra    ? diferencia : 0,
+          usd:    difUSD     !== null && !cuadraUSD ? difUSD     : 0,
+          motivo: ajusteMotivo.trim(),
+        },
+      })
+      cierreOpId.current = null
       setMsg('✓ Día cerrado completamente')
       // C3 — email de cortesía al owner con el resumen (fire-and-forget). La plata ya
       // quedó sellada arriba; si el email falla no rompe ni bloquea el cierre.
@@ -418,10 +399,13 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       `Se borran SOLO los datos del cierre y lo que generó (ventas del cierre + retiro + ajuste de diferencia).\n\n` +
       `⚠ NO se borran los pagos a proveedores, gastos ni ingresos manuales del día — esos quedan. ` +
       `Si querés recargar el día desde cero (sin duplicar), usá el botón "Borrar TODO el día".`)) return
-    if (!(await requireManager()).ok) return
+    const auth = await requireManager()
+    if (!auth.ok) return
     setSaving(true); setError(null)
     try {
-      await discardCierreDia(fecha)
+      // ATÓMICO (mig 071): ventas + retiro + ajuste + fila del cierre en una transacción. La
+      // contraseña de gerencia (cajero) se verifica EN EL SERVIDOR (verify_manager).
+      await deshacerCierreDia(fecha, auth.managerEmail, auth.managerPassword)
       setMsg('✓ Cierre deshecho — los movimientos del día se mantienen.')
       await loadCierres(); onRefresh()
     } catch (e) {

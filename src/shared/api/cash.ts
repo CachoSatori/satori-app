@@ -982,8 +982,62 @@ export async function saveCierreParcial(cierre: Omit<CashCierreDia,'id'|'created
     .from('cash_cierres_dia')
     .insert({ ...cierre, updated_at: new Date().toISOString() })
     .select().single()
-  if (error) throw new Error(error.message)
+  if (error) {
+    // UNIQUE(session_date) (mig 071): ya hay un cierre de ese día → el mediodía ya está sellado
+    // (doble «Confirmar», reintento tras timeout u otro dispositivo). Mensaje claro, no técnico.
+    if ((error as { code?: string }).code === '23505') {
+      throw new Error(`El mediodía del ${cierre.session_date} ya está sellado. Recargá la pantalla para verlo.`)
+    }
+    throw new Error(error.message)
+  }
   return data as CashCierreDia
+}
+
+// RPC sin tipos generados (mig 071): mismo cast acotado que deleteCashMovement.
+type RpcConSignal = (fn: string, args: Record<string, unknown>) =>
+  { abortSignal: (s: AbortSignal) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> }
+const rpcConSignal = () => supabase.rpc as unknown as RpcConSignal
+
+// Cierre del día (Fase 2) ATÓMICO — mig 071, RPC `cerrar_dia_completo`: la fila del cierre, las
+// ventas en efectivo, el retiro a banco y el ajuste de la diferencia se escriben en UNA transacción
+// de la base, o nada. Los montos los calcula CashCierre exactamente como antes; la RPC escribe las
+// MISMAS filas que antes escribían updateCierreCompleto + recordCierreSales/Retiro/Ajuste.
+// `client_op_id`: el mismo en los reintentos del mismo cierre → la base no duplica.
+export async function cerrarDiaCompleto(params: {
+  fecha:         string
+  client_op_id:  string
+  exchange_rate: number
+  cierre: Pick<CashCierreDia, 'vn_crc' | 'vn_usd' | 'propinas_n_crc' | 'otros_n_crc' | 'ef_real_n_crc'
+    | 'sep_diaria_crc' | 'sep_diaria_usd' | 'sep_registradora_crc' | 'sep_registradora_usd'
+    | 'remanente_crc' | 'remanente_usd' | 'diferencia_crc' | 'ajuste_tipo' | 'ajuste_motivo' | 'notas' | 'tipo_cambio'>
+  ventas:     { mediodia: { crc: number; usd: number }; noche: { crc: number; usd: number } }
+  retiro_crc: number
+  ajuste:     { crc: number; usd: number; motivo: string }
+}): Promise<{ cierre_id: string; idempotente: boolean }> {
+  const { data, error } = await withWriteTimeout(signal => rpcConSignal()('cerrar_dia_completo', {
+    p_fecha:         params.fecha,
+    p_client_op_id:  params.client_op_id,
+    p_cierre:        params.cierre,
+    p_ventas:        [
+      { turno: 'Mediodía', ...params.ventas.mediodia },
+      { turno: 'Noche',    ...params.ventas.noche },
+    ],
+    p_retiro_crc:    params.retiro_crc,
+    p_ajuste:        params.ajuste,
+    p_exchange_rate: params.exchange_rate,
+  }).abortSignal(signal))
+  if (error) throw new Error(error.message)
+  return data as { cierre_id: string; idempotente: boolean }
+}
+
+// Deshacer el cierre del día ATÓMICO — mig 071, RPC `deshacer_cierre_dia`: ventas + retiro + ajuste
+// + fila del cierre en una transacción. owner/manager directo; cajero con la contraseña de gerencia
+// verificada EN EL SERVIDOR (verify_manager, misma regla que mig 044).
+export async function deshacerCierreDia(fecha: string, managerEmail?: string, managerPassword?: string): Promise<void> {
+  const args: Record<string, unknown> = { p_fecha: fecha }
+  if (managerEmail && managerPassword) { args.p_manager_email = managerEmail; args.p_manager_password = managerPassword }
+  const { error } = await withWriteTimeout(signal => rpcConSignal()('deshacer_cierre_dia', args).abortSignal(signal))
+  if (error) throw new Error(`No se pudo deshacer el cierre del ${fecha}: ${error.message}`)
 }
 
 // Deshacer el cierre del día (error de fecha / empezar de nuevo): borra los

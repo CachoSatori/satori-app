@@ -7,6 +7,21 @@
 
 ---
 
+## 🧾 Noviembre 2026 — El cierre del día se guardaba en 4 llamadas sueltas (mig 071 en staging, 05/11)
+
+- **Antes:** Fase 2 = `updateCierreCompleto` → `recordCierreSales` → `recordCierreRetiro` → `recordCierreAjuste`, cada una por su lado.
+  - Si una fallaba, el cierre quedaba «completo» a medias.
+  - Los deletes previos no chequeaban su error, y el `23505` del ajuste se tragaba. Si el delete no había borrado y el monto cambió, quedaba el ajuste viejo sin aviso.
+  - «Deshacer» eran 4 deletes sueltos, y la contraseña de gerencia se validaba solo en el cliente.
+  - `cash_cierres_dia` no tenía UNIQUE por fecha: un doble «Confirmar» de la Fase 1 podía duplicar el día.
+  - En prod (120 cierres) el único a medias fue el 19/10, y lo causó el «Borrar TODO» (#25).
+- **Ahora (mig 071):**
+  - `cerrar_dia_completo` y `deshacer_cierre_dia` escriben todo en **una transacción** (SECURITY INVOKER: el RLS aplica igual).
+  - Los montos los sigue calculando el cliente; la RPC solo valida coherencia y escribe **las mismas filas** que antes (comparado fila por fila en staging).
+  - Idempotencia con `close_op_id`, más `UNIQUE(session_date)`.
+  - Contador excluido. La regla de turno abierto es la misma de la pantalla.
+  - La contraseña de gerencia se verifica en el servidor (`verify_manager`).
+
 ## 🧯 Noviembre 2026 — «Borrar TODO el día» borraba movimientos de OTRO día operativo (✅ fix en prod, 05/11, PR #25)
 
 - **Síntoma:** el ajuste del 19/10 (+₡54.107, «Sobrante») no existía en movimientos y nadie vio un error.

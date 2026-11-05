@@ -96,6 +96,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | `LoginPage` sigue ofreciendo «crear cuenta» de empleado | 🔲 | Con el signup apagado devuelve un error técnico (`Signups not allowed`). Ocultar el botón o poner un mensaje claro («pedile el alta al encargado»). Toca `src/`. |
 | Hardening ACL: 4 `SECURITY DEFINER` ejecutables por `anon` en prod | 🔲 | `get_my_role` exige análisis de policies antes del revoke. Higiene (en prod no son de plata). |
 | Gate de tests en `deploy.yml` | 🔲 | Hoy publica sin correr `vitest`. |
+| Higiene · 2 cierres de Fase 1 nunca completados en prod (07/06 y 06/07) | 🔲 🖊️ | `cash_cierres_dia` con `tipo='parcial_mediodia'`: **07/06/2026** (Caja Satori, ventas mediodía ₡32.546) y **06/07/2026** (Cacho, ₡145.000). No tienen Fase 2 ni movimientos de cierre. Decidir si se completan o se borran (con «Deshacer cierre»). Detectados el 05/11 al aplicar la mig 071. |
 | Higiene · Sincronizar la rama `staging` con `main` | 🔲 | Al 05/11, `staging` está ~20 commits atrás de `main` (PRs #18–#22, archivos de las migraciones 065–068, código de logins viejos). El fix del #25 entró a `staging` como cherry-pick (`3f6fcb1`, merge `cef4f95`) justo para no arrastrarlos. Mergear `main` → `staging` con cuidado: hay conflictos en los docs y el ledger de staging no tiene las filas 065/066. |
 | `version.json` → login por el service worker | 🔲 | Agregar `/\/version\.json$/` a `navigateFallbackDenylist`. |
 

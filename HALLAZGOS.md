@@ -7,7 +7,7 @@
 
 ---
 
-## 🧯 Noviembre 2026 — «Borrar TODO el día» borraba movimientos de OTRO día operativo (fix en staging, 05/11)
+## 🧯 Noviembre 2026 — «Borrar TODO el día» borraba movimientos de OTRO día operativo (✅ fix en prod, 05/11, PR #25)
 
 - **Síntoma:** el ajuste del 19/10 (+₡54.107, «Sobrante») no existía en movimientos y nadie vio un error.
 - **Causa:** `discardDiaCompleto` (`src/shared/api/cash.ts`, paso 2) elegía los movimientos sin turno por `created_at` dentro del día calendario de CR. Un cierre sellado después de medianoche crea sus filas con `created_at` del día siguiente, y el «Borrar TODO» de ese día siguiente se las llevaba.

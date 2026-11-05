@@ -29,7 +29,7 @@ $f$;
 
 -- ── Datos de prueba (como postgres; todo se deshace al final) ──
 do $$
-declare v_neg uuid; v_ref uuid; v_m2 uuid; v_m3 uuid; v_old uuid;
+declare v_neg uuid; v_ref uuid; v_m2 uuid; v_m3 uuid; v_old uuid; v_m4 uuid; v_m5 uuid;
 begin
   insert into club_negocios(nombre, tipo) values ('Hotel Prueba F1a', 'hotel') returning id into v_neg;
   insert into club_miembros(tipo, nombre, negocio_id) values ('referente','Ref Prueba', v_neg) returning id into v_ref;
@@ -41,6 +41,11 @@ begin
   values (v_m2, 'tarjeta', 9, 6, 18000, now(), 'migracion'),
          (v_m3, 'tarjeta', 2, 6, 18000, now(), 'migracion'),
          (v_old,'tarjeta', 13, 6, 18000, now() - interval '13 months', 'migracion');
+  insert into club_miembros(tipo, nombre) values ('referente','Factura Prueba') returning id into v_m4;
+  insert into club_miembros(tipo, nombre) values ('referente','Tope Dia Prueba') returning id into v_m5;
+  insert into club_movimientos(miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
+  values (v_m4, 'tarjeta', 18, 6, 18000, now(), 'migracion'), (v_m5, 'tarjeta', 18, 6, 18000, now(), 'migracion');
+  insert into _ids values ('m4', v_m4), ('m5', v_m5);
   insert into club_miembros_contacto(miembro_id, telefono, email) values (v_ref, '+50688887777', 'x@ejemplo.com');
   insert into _ids values ('ref', v_ref), ('m2', v_m2), ('m3', v_m3), ('old', v_old),
     ('ref_cod', (select codigo from club_miembros where id = v_ref)),
@@ -153,9 +158,13 @@ do $$
 declare v_op uuid := gen_random_uuid(); v_p1 int; v_p2 int; v_cr numeric; v_n int;
 begin
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  select u.personas, u.creditos into v_p1, v_cr from public.club_cupon_usar((select v from _ids where k='cupon1'), 4, 'FAC-001', v_op) u;
+  select u.personas, u.creditos into v_p1, v_cr from public.club_cupon_usar((select v from _ids where k='cupon1'), 4, ' fac - 001 ', v_op) u;
   perform pg_temp.yo();
-  perform pg_temp.r('3', 'primer uso → tarjeta +4', v_p1 = 4, format('saldo=%s personas, %s créditos', v_p1, v_cr));
+  perform pg_temp.r('3', 'primer uso → tarjeta +4, factura « fac - 001 » guardada como FAC-001',
+    v_p1 = 4 and (select factura_pos from club_cupones where codigo = (select v from _ids where k='cupon1')) = 'FAC-001'
+             and (select factura_pos from club_movimientos where cupon_id = (select id from club_cupones where codigo = (select v from _ids where k='cupon1'))) = 'FAC-001',
+    format('saldo=%s personas, %s créditos; factura=%s', v_p1, v_cr,
+      (select factura_pos from club_cupones where codigo = (select v from _ids where k='cupon1'))));
 
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   select u.personas into v_p2 from public.club_cupon_usar((select v from _ids where k='cupon1'), 4, 'FAC-001', v_op) u;
@@ -221,6 +230,56 @@ begin
         where miembro_id = (select v::uuid from _ids where k='m2') and tipo='canje')));
 end $$;
 
+-- ═══ 10. Factura obligatoria y normalizada; tope por día ═══
+do $$
+declare v_cnt int;
+begin
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje((select v::uuid from _ids where k='m4'), 1, '   ', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('10', 'canje con factura vacía', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('10', 'canje con factura vacía → error', sqlerrm = 'Falta el número de factura', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_cupon_usar('AAAAAAAAAA', 2, '', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('10', 'cupón con factura vacía', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('10', 'cupón con factura vacía → error', sqlerrm = 'Falta el número de factura', sqlerrm);
+  end;
+  -- «fe-123» y « FE-123 » son la misma visita: 1 + 1,5 supera el máximo por visita
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_canje((select v::uuid from _ids where k='m4'), 1, 'fe-123', gen_random_uuid());
+  perform pg_temp.yo();
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje((select v::uuid from _ids where k='m4'), 1.5, ' FE-123 ', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('10', '«fe-123» + « FE-123 » = misma visita', false, 'aceptó 2,5 en la misma factura');
+  exception when others then
+    perform pg_temp.yo();
+    perform pg_temp.r('10', '«fe-123» + « FE-123 » = misma visita → falla por visita',
+      sqlerrm like '%por visita%' and (select string_agg(distinct factura_pos, ',') from club_movimientos
+                                       where miembro_id = (select v::uuid from _ids where k='m4') and tipo = 'canje') = 'FE-123',
+      sqlerrm || ' · guardada como ' || (select string_agg(distinct factura_pos, ',') from club_movimientos
+                                       where miembro_id = (select v::uuid from _ids where k='m4') and tipo = 'canje'));
+  end;
+  -- dos canjes de 1,5 el mismo día con facturas distintas → el segundo falla por día
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_canje((select v::uuid from _ids where k='m5'), 1.5, 'FE-200', gen_random_uuid());
+  perform pg_temp.yo();
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje((select v::uuid from _ids where k='m5'), 1.5, 'FE-201', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('10', 'dos canjes de 1,5 el mismo día', false, 'aceptó el segundo');
+  exception when others then
+    perform pg_temp.yo();
+    select count(*) into v_cnt from club_movimientos where miembro_id = (select v::uuid from _ids where k='m5') and tipo = 'canje';
+    perform pg_temp.r('10', 'dos canjes de 1,5 el mismo día, facturas distintas → el segundo falla',
+      sqlerrm like '%por día%' and v_cnt = 1, sqlerrm || format(' · canjes guardados=%s', v_cnt));
+  end;
+end $$;
+
 -- ═══ 5. Cajero no ve contactos ═══
 do $$
 declare v_n int; v_o int;
@@ -256,6 +315,16 @@ begin
       = array[0,0,0.5,0.5,1,1,1.5,2]::numeric[], v);
 end $$;
 
+do $$
+declare v text;
+begin
+  select string_agg(format('%s→%s', p, public.club_personas_proximo(p, 6)), ' · ' order by p) into v
+    from unnest(array[0,2,3,4,5,6,8,9]) p;
+  perform pg_temp.r('7b', 'próximo medio crédito: 0,2,3,4,5,6,8,9 → 3,1,3,2,1,3,1,3',
+    (select array_agg(public.club_personas_proximo(p, 6) order by p) from unnest(array[0,2,3,4,5,6,8,9]) p)
+      = array[3,1,3,2,1,3,1,3], v);
+end $$;
+
 -- ═══ 9. Unicidad de club_negocios ═══
 do $$
 begin
@@ -281,7 +350,7 @@ begin
   perform pg_temp.como('anon', null);
   j := public.club_portal((select v from _ids where k='ref_tok'));
   perform pg_temp.yo();
-  perform pg_temp.r('extra', 'portal por token (anon)', j ? 'nombre' and (j->>'personas')::int = 4 and not (j::text ~ 'FAC-|factura|registrado'),
+  perform pg_temp.r('extra', 'portal por token (anon)', j ? 'nombre' and (j->>'personas')::int = 4 and (j->>'personas_proximo_credito')::int = 2 and not (j::text ~ 'FAC-|factura|registrado'),
     j::text);
   begin
     perform pg_temp.como('anon', null);

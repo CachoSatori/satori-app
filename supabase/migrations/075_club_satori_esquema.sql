@@ -58,7 +58,8 @@ as $$
   end;
 $$;
 
--- Personas que faltan para el próximo crédito entero.
+-- Personas que faltan para el próximo MEDIO crédito (múltiplo de ppc/2: con ppc=6, de 3 en 3).
+-- 0→3 · 4→2 · 5→1 · 6→3. Si ppc es impar, el medio se redondea hacia arriba.
 create or replace function public.club_personas_proximo(p_personas bigint, p_ppc int)
 returns int
 language sql
@@ -67,8 +68,18 @@ set search_path = public, pg_temp
 as $$
   select case
     when p_ppc is null or p_ppc <= 0 then null
-    else (p_ppc - mod(greatest(coalesce(p_personas, 0), 0), p_ppc))::int
+    else (ceil(p_ppc / 2.0)::int - mod(greatest(coalesce(p_personas, 0), 0), ceil(p_ppc / 2.0)::int))::int
   end;
+$$;
+
+-- Factura del PoS normalizada: sin espacios (ni internos) y en mayúsculas. '' si viene vacía.
+create or replace function public.club_norm_factura(p text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select upper(regexp_replace(coalesce(p, ''), '\s+', '', 'g'));
 $$;
 
 -- ── 1. Tablas ───────────────────────────────────────────────────────────────
@@ -452,7 +463,7 @@ as $$
 declare
   v_rol     public.user_role := public.get_my_role();
   v_cod     text := upper(btrim(coalesce(p_codigo, '')));
-  v_fac     text := btrim(coalesce(p_factura, ''));
+  v_fac     text := public.club_norm_factura(p_factura);
   v_cupon   public.club_cupones%rowtype;
   v_ref     public.club_miembros%rowtype;
   v_cfg     public.club_config%rowtype;
@@ -532,13 +543,15 @@ set search_path = public, pg_temp
 as $$
 declare
   v_rol      public.user_role := public.get_my_role();
-  v_fac      text := btrim(coalesce(p_factura, ''));
+  v_fac      text := public.club_norm_factura(p_factura);
   v_m        public.club_miembros%rowtype;
   v_cfg      public.club_config%rowtype;
   v_prev     public.club_movimientos%rowtype;
   v_saldo    int;
   v_necesita numeric;
   v_ya_fac   numeric;
+  v_ya_dia   numeric;
+  v_hoy      timestamptz;
 begin
   if v_rol is null or v_rol not in ('owner','manager','cajero') then
     raise exception 'Sin permiso' using errcode = '42501';
@@ -589,6 +602,15 @@ begin
    where mv.miembro_id = p_miembro and mv.tipo = 'canje' and mv.factura_pos = v_fac;
   if v_ya_fac + p_creditos > v_cfg.max_creditos_por_visita then
     raise exception 'Supera el máximo de % créditos por visita', v_cfg.max_creditos_por_visita
+      using errcode = 'P0001';
+  end if;
+
+  -- Tope por día (hora CR): suma de créditos canjeados hoy por el miembro, con cualquier factura.
+  v_hoy := date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica';
+  select coalesce(sum(mv.creditos), 0) into v_ya_dia from public.club_movimientos mv
+   where mv.miembro_id = p_miembro and mv.tipo = 'canje' and mv.fecha_visita >= v_hoy;
+  if v_ya_dia + p_creditos > v_cfg.max_creditos_por_visita then
+    raise exception 'Supera el máximo de % créditos por día', v_cfg.max_creditos_por_visita
       using errcode = 'P0001';
   end if;
 
@@ -757,6 +779,7 @@ $$;
 revoke all on function public.club_gen_codigo(int)                       from public, anon, authenticated;
 revoke all on function public.club_creditos(bigint, int)                 from public, anon;
 revoke all on function public.club_personas_proximo(bigint, int)         from public, anon;
+revoke all on function public.club_norm_factura(text)                     from public, anon, authenticated;
 revoke all on function public.club_saldo_personas(uuid)                  from public, anon, authenticated;
 revoke all on function public.club_cupon_crear(text, jsonb)              from public, anon, authenticated;
 revoke all on function public.club_cupon_usar(text, int, text, uuid)     from public, anon, authenticated;

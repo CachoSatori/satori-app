@@ -24,6 +24,7 @@ drop table if exists public.club_negocios;
 drop table if exists public.club_config;
 
 drop function if exists public.club_personas_proximo(bigint, int);
+drop function if exists public.club_norm_factura(text);
 drop function if exists public.club_creditos(bigint, int);
 drop function if exists public.club_gen_codigo(int);
 

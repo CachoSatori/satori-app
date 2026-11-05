@@ -34,7 +34,7 @@
 - `perfil_propio_update` (`001:107` del repo) **no existe** en ninguna base. La 068 la borra si existiera.
 - **Drift de trigger:** el trigger de `auth.users` se llama `trg_on_auth_user_created` en prod y `on_auth_user_created` en staging. Las dos llaman a `handle_new_user()`. La 068 solo reemplaza la función.
 
-### SEC-01b · 🟢 Resuelto en staging (05/11) · prod pendiente con firma — guardas que se abren con NULL o no miran `is_active`
+### SEC-01b · ✅ Resuelto en staging y en prod (05/11) — guardas que se abren con NULL o no miran `is_active`
 
 **Cierre (05/11):**
 - **Mig 069** (rama `claude/sec-01b-is-active`):
@@ -43,6 +43,13 @@
   - las 3 policies llevan `and profiles.is_active` (`alter policy`, con todo lo demás igual).
 - **Mig 070** (rama `claude/sec-01b-pos-guardas`, solo la línea `staging`): la misma corrección de guarda en las 6 funciones del PoS propio, más el revoke de EXECUTE a `public`/`anon`. Se aplicó en staging **antes** que la 069.
 - **Pruebas en staging** (JWT simulado, todo con rollback): un owner **inactivo** queda bloqueado en las 12 funciones, en las 3 policies y en el cobro real (`get_my_role()` = NULL). Owner, manager, cajero y salonero activos se comportan igual que antes de la 069.
+
+**Prod (05/11 09:22 CR, firmado):**
+- Re-chequeo previo: los md5 de las 7 funciones y las 3 policies, idénticos al Paso 0.
+- Todos los que usaron cierres, movimientos, facturas, inventario y créditos en los últimos 30 días están activos (Inés, Caja Satori, Cacho). Los únicos inactivos con esos roles son Rosaura y LE - Consultorias, baneadas.
+- 069 aplicada a mano. Catálogo: diff de 1 línea por función, policies con `is_active` y todo idéntico a staging después de la 069.
+- Owner, manager y cajero activos conservan su rol (solo lectura). Rosaura, con rollback: `get_my_role()` = NULL y `delete_supplier_credit` da raise.
+- Ledger de prod: 46 → 47.
 
 **Hallazgo del re-escaneo (05/11):** en staging había 6 guardas `not in` más, en el PoS propio (`pos_cobrar_check`, `pos_cobrar_orden`, `pos_merge_orden`, `pos_reopen_orden`, `pos_unmerge_orden`, `sync_pos_tips_to_pool`). Como `anon` las podía ejecutar y no tiene `auth.uid()`, **la guarda ya estaba abierta para `anon`**. Quedó cerrado con el revoke y la 070.
 
@@ -72,7 +79,7 @@ Escaneo de `pg_proc.prosrc` y `pg_policies` en prod (04/11):
 ### 🟠 BLOQUEANTE del PoS propio — `anon` ejecuta funciones `SECURITY DEFINER` del PoS en staging (6 de 7 cerradas el 05/11)
 
 - **05/11 (firmado, solo staging):** se revocó EXECUTE a `public`/`anon` en las 6 de cobro, fusión, reapertura y propinas; `authenticated` y `service_role` lo conservan. Verificado con `has_function_privilege('anon', …) = false`. Antes se buscó en `src/`: solo se llaman desde `/comandero` (`PrivateRoute`), y `sync_pos_tips_to_pool` no se llama desde la app. Versionado en la 070.
-- **Sigue abierta:** `my_turno_stats` (staging) todavía es ejecutable por `anon`.
+- **Sigue abierta:** `my_turno_stats` (solo staging) todavía es ejecutable por `anon`. Está en el ROADMAP como pendiente del requisito del pase.
 
 - En staging, `anon` tiene EXECUTE sobre `pos_cobrar_check`, `pos_cobrar_orden`, `pos_merge_orden`, `pos_unmerge_orden`, `pos_reopen_orden`, `sync_pos_tips_to_pool` y `my_turno_stats` (además de las 4 de siempre).
   - Medido con `has_function_privilege('anon', …)` el 04/11. Staging tiene 25 SD; prod, 17.

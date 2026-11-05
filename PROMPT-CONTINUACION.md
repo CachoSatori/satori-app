@@ -38,7 +38,7 @@
   - PR a `main` con la rama `claude/sec-01-perfiles`, que solo trae `.sql` y docs.
 - **Siguiente:** SEC-01b y SEC-02. Rollback de la 068: `scripts/sql/068_rollback.sql`.
 
-## 🟥 P0-SEC — SEC-01b al 05/11 (staging hecho; prod con firma aparte)
+## 🟥 P0-SEC — SEC-01b al 05/11 ✅ (staging y prod)
 
 - **Hecho en staging:**
   - Paso 0 (revisado por el asesor, opción B).
@@ -52,7 +52,8 @@
   - bandeja de facturas (marcar verificada);
   - un salonero en Mi Rendimiento.
   - ⚠️ Test Cajero quedó como **manager** después de la validación del 04/11. Si tiene que volver a salonero, se cambia desde Admin.
-- **Después (firma aparte, fuera de 17–23 h):** 069 en prod. Re-chequeo de los textos del Paso 0 (md5), aplicar, revisar el catálogo y correr la prueba del owner inactivo **solo con rollback**. La 070 **no** va a prod: va con el pase del PoS propio.
+- ✅ **Prod (05/11 09:22 CR):** la 069 se aplicó (ledger 46 → 47), con el catálogo verificado y la prueba de Rosaura con rollback. El PR #22 se mergeó con el deploy OK. **Falta:** el merge del PR de la 069.
+- ~~Plan de prod~~ (seguido): Re-chequeo de los textos del Paso 0 (md5), aplicar, revisar el catálogo y correr la prueba del owner inactivo **solo con rollback**. La 070 **no** va a prod: va con el pase del PoS propio.
 - **Pendiente del bloqueante del PoS:** `my_turno_stats` sigue ejecutable por `anon` en staging.
 
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)

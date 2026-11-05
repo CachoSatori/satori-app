@@ -125,6 +125,15 @@ Escaneo de `pg_proc.prosrc` y `pg_policies` en prod (04/11):
   - Medido con `has_function_privilege('anon', …)` el 04/11. Staging tiene 25 SD; prod, 17.
 - Son funciones de plata (cobro, propinas): **requisito bloqueante antes de pasar el PoS propio a prod**. Hay que revocarlas de `public`/`anon` (ver B1, 2026-07-23: el `revoke from anon` solo no alcanza) y verificarlo.
 
+## 🔐 Noviembre 2026 — SEC-03 · 🔴 ALTA · `anon` inserta en `customers` sin validación (mig 007) — abierto (05/11)
+
+- **Dónde:** [`supabase/migrations/007_customer_selfsignup.sql:11-15`](supabase/migrations/007_customer_selfsignup.sql) — `create policy customers_anon_insert on public.customers for insert to anon with check (true);` y en la línea 18 `grant insert on public.customers to anon;`. También la recrea [`staging-drift-sync.sql:337`](staging-drift-sync.sql).
+- **Qué permite:** cualquiera, sin cuenta y con la anon key pública, inserta clientes con **cualquier valor** en `points`, `tier`, `total_spent_crc`, `total_visits`, `notes`, `active`, `channel_origin`, etc. El formulario `/registro` (`src/pages/RegistroCliente.tsx`) manda solo nombre, teléfono, email y cumpleaños, pero la policy no restringe columnas.
+  - Efecto lateral: `phone` es `UNIQUE`, así que el error `23505` le dice a un anónimo si un teléfono ya está en la base.
+- **Estado (05/11):** en `main` ninguna migración posterior la borra. **En prod está vigente** (`pg_policies`: `customers_anon_insert`, `INSERT`, `{anon}`, `with_check = true`; `has_table_privilege('anon','public.customers','INSERT') = true`). La lectura sigue cerrada: las policies de SELECT/ALL de la 004 dependen de `get_my_role()`.
+- **Severidad ALTA:** escritura anónima en una tabla del CRM. Hoy el CRM no se usa en operación (2 clientes en prod), pero la tabla existe en prod y el Club Satori F3 la va a reusar.
+- **Arreglo propuesto (F0 del [Club Satori](docs/club-satori/SPEC.md), 🔐🖊️, después de SEC-01):** `drop policy customers_anon_insert` + `revoke insert on public.customers from anon`, y si se quiere conservar el registro público, una función `SECURITY DEFINER` que valide cada campo y fije `points`/`tier`/agregados por defecto, con límite de tasa. Antes, decidir con Ismael qué hacer con `/registro` y `CrmQR` (dejarían de funcionar).
+
 ## 🆕 Hallazgos de octubre 2026 (go-live del PoS)
 
 1. **Branching corre `migrate` contra PROD en cada push a `main`** (confirmado de nuevo en los logs de #13–#16:

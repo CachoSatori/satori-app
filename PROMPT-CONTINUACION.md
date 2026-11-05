@@ -48,6 +48,9 @@
 2. **🔐 Revocar el token `claude-code-prod` y rotar los secretos de ingesta** (ítems 1 y 2 del P0 de abajo).
 3. **🔐 SEC-02.**
 4. **🧹 Sincronizar `staging` con `main`** (~20 commits: PRs #18–#22, migraciones 065–068 de archivo, código de logins viejos). Hay conflictos en los docs, y al ledger de staging le faltan las filas 065/066.
+5. **Club Satori (reemplazo de la página de créditos).** Spec v2 en revisión, nada construido → [docs/club-satori/](docs/club-satori/). *(Nuevo, 05/11.)*
+   - **Primer paso — F0 · 🔐🖊️ cerrar `customers_anon_insert` (mig 007).** La policy es `WITH CHECK (true)` para `anon`: cualquiera, sin cuenta, crea clientes con `points`, `tier`, `total_spent_crc` o `total_visits` arbitrarios. Sigue vigente en `main` y en prod (verificado el 05/11). Va después de SEC-01. Detalle en [HALLAZGOS.md](HALLAZGOS.md) (SEC-03).
+   - Después, F1–F3 según el §1 del spec (ver [ROADMAP.md](ROADMAP.md)).
 
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
 

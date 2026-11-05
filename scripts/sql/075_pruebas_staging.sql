@@ -289,9 +289,9 @@ begin
     select count(*) into v_n from public.club_miembros_contacto;
     perform pg_temp.yo();
     perform pg_temp.como('authenticated', '<OWNER_UUID>');
-    select count(*) into v_o from public.club_miembros_contacto;
+    select count(*) into v_o from public.club_miembros_contacto where miembro_id = (select i.v::uuid from _ids i where i.k = 'ref');
     perform pg_temp.yo();
-    perform pg_temp.r('5', 'cajero lee contactos → 0 filas (owner ve 1)', v_n = 0 and v_o = 1, format('cajero=%s, owner=%s', v_n, v_o));
+    perform pg_temp.r('5', 'cajero lee contactos → 0 filas (owner ve el de la prueba)', v_n = 0 and v_o = 1, format('cajero=%s, owner=%s', v_n, v_o));
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('5', 'cajero lee contactos → error', true, sqlerrm);
   end;
@@ -328,18 +328,18 @@ end $$;
 -- ═══ 9. Unicidad de club_negocios ═══
 do $$
 begin
-  insert into club_negocios(nombre) values ('Atrapasueños');
+  insert into club_negocios(nombre) values ('Prueba Ñandú Único');
   begin
-    insert into club_negocios(nombre) values (' atrapasuenos ');
-    perform pg_temp.r('9', '« atrapasuenos » después de «Atrapasueños»', false, 'insertó');
+    insert into club_negocios(nombre) values (' prueba  nandu unico ');
+    perform pg_temp.r('9', '« prueba  nandu unico » después de «Prueba Ñandú Único»', false, 'insertó');
   exception when unique_violation then
-    perform pg_temp.r('9', '« atrapasuenos » después de «Atrapasueños» → falla', true, sqlerrm);
+    perform pg_temp.r('9', '« prueba  nandu unico » después de «Prueba Ñandú Único» → falla', true, sqlerrm);
   end;
   begin
-    insert into club_negocios(nombre) values ('ATRAPA   SUEÑOS');
-    perform pg_temp.r('9', 'control: «ATRAPA SUEÑOS» es otro nombre → entra', true, 'insertó (distinto: tiene espacio)');
+    insert into club_negocios(nombre) values ('PRUEBA ÑANDÚ ÚNICO DOS');
+    perform pg_temp.r('9', 'control: «PRUEBA ÑANDÚ ÚNICO DOS» es otro nombre → entra', true, 'insertó (nombre distinto)');
   exception when unique_violation then
-    perform pg_temp.r('9', 'control: «ATRAPA SUEÑOS»', false, sqlerrm);
+    perform pg_temp.r('9', 'control: «PRUEBA ÑANDÚ ÚNICO DOS»', false, sqlerrm);
   end;
 end $$;
 

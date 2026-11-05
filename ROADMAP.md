@@ -19,7 +19,8 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Fase | Estado | Notas |
 |---|---|---|
 | Caja diaria + cierre · Caja Fuerte · movimientos | ✅ prod | Sagrado `cashUtils.ts` `b597c697`. |
-| **Fix «Borrar TODO el día»** (elegir por día operativo, vista previa, errores chequeados) | 🧪 staging (05/11) | Borraba filas de cierres de otro día (20/07 y 20/10). Prod con firma aparte. Ver [HALLAZGOS.md](HALLAZGOS.md). |
+| **Fix «Borrar TODO el día»** (elegir por día operativo, vista previa, errores chequeados) | ✅ prod (05/11) | Borraba filas de cierres de otro día (20/07 y 20/10). PR #25 (`781eb72`), validado por Ismael en la preview de staging. Ver [HALLAZGOS.md](HALLAZGOS.md). |
+| Baja · Confirmación de «Borrar TODO» en un modal propio | 🔲 | Hoy es un `window.confirm` con texto largo (vista previa, manuales, aviso de filas de otro día). Pasarlo a un modal con tabla, montos y botón de confirmar. Solo UI. |
 | **POZO único** (tres cajas = un saldo; corte 2026-07-22) | ✅ prod | Primer cierre real cuadró. Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md). |
 | **T3 · endurecimiento de caja** (los 8 ítems; mig 052 auditoría de ediciones) | ✅ prod | Cerrado el 10/08. |
 | Bandeja unificada + Revisión de inventario · autorización por contraseña (045) | ✅ prod | Etapa 2 de la Bandeja (foto-primero dentro de Caja) 🔲 diseñada, espera decisión. |
@@ -94,6 +95,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | `LoginPage` sigue ofreciendo «crear cuenta» de empleado | 🔲 | Con el signup apagado devuelve un error técnico (`Signups not allowed`). Ocultar el botón o poner un mensaje claro («pedile el alta al encargado»). Toca `src/`. |
 | Hardening ACL: 4 `SECURITY DEFINER` ejecutables por `anon` en prod | 🔲 | `get_my_role` exige análisis de policies antes del revoke. Higiene (en prod no son de plata). |
 | Gate de tests en `deploy.yml` | 🔲 | Hoy publica sin correr `vitest`. |
+| Higiene · Sincronizar la rama `staging` con `main` | 🔲 | Al 05/11, `staging` está ~20 commits atrás de `main` (PRs #18–#22, archivos de las migraciones 065–068, código de logins viejos). El fix del #25 entró a `staging` como cherry-pick (`3f6fcb1`, merge `cef4f95`) justo para no arrastrarlos. Mergear `main` → `staging` con cuidado: hay conflictos en los docs y el ledger de staging no tiene las filas 065/066. |
 | `version.json` → login por el service worker | 🔲 | Agregar `/\/version\.json$/` a `navigateFallbackDenylist`. |
 
 ---

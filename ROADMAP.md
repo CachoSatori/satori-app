@@ -72,6 +72,18 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Tablero mensual supuesto vs realidad de programas (LC, créditos, menú) | 🔲 | Backlog, sin fecha. Con firma. Solo lectura, por hora de factura. Ver [ESCENARIOS-cambios-programas.md §4](docs/analisis/2026-11-mediodia-localclub/ESCENARIOS-cambios-programas.md). |
 | Local Club 3.0: tarjeta en Wallet con QR único, referidos que suman puntos, sin descuento fijo | 🔲 | Backlog, sin fecha. Toca ingesta y esquema → firma. Datos personales nunca en el repo. Ver [ESCENARIOS §6](docs/analisis/2026-11-mediodia-localclub/ESCENARIOS-cambios-programas.md). |
 
+## 3.1 Club Satori (reemplazo de la página de créditos)
+
+Un solo módulo para referentes y créditos, concierges PM y el Local Club, con pases de Wallet. Spec v2 (05/11) en
+revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuestas, copiadas del §1 del spec.
+
+| Fase | Qué | Cuándo (propuesto) | Estado |
+|---|---|---|---|
+| **F0** | Cerrar el registro público del CRM (`customers_anon_insert WITH CHECK (true)`, SEC-03). Va después de SEC-01. | Inmediato | ✅ prod (05/11, mig 072; con SEC-04 en la 073) |
+| **F1** | Referentes y concierges con pase de Wallet + QR; cupón digital del turista; escáner único en caja; créditos, canjes y PM; portal; alertas; reportes; migración completa. Se dejan la página y las tarjetas físicas. | Construcción nov–dic. Piloto con 3-5 referentes antes del 10-dic; salida general después del 15-ene | 🔲 |
+| **F2** | Mejoras del cupón (en el Wallet del turista, ofertas con opt-in) y QR dinámico si hay abuso. | Feb–mar | 🔲 |
+| **F3** | Local Club en el Wallet: socios, ofertas que cambian, premios por frecuencia, referidos, sorpresas. Reemplaza el descuento fijo. | Desde may (temporada baja) | 🔲 |
+
 ## 4. PoS propio (gran pase)
 
 | Fase | Estado | Notas |

@@ -76,6 +76,7 @@ export default function Miembros() {
       <div className="tips-body" style={{ maxWidth: 640 }}>
         <FormMiembro inicial={editando === 'nuevo' ? null : editando} tipoPorDefecto={pestana === 'equipo' ? 'equipo' : 'referente'}
           negocios={negocios}
+          saldoPersonas={editando === 'nuevo' ? 0 : (todas.find(f => f.id === editando.id)?.saldo?.personas ?? 0)}
           onNegocioCreado={n => setNegocios(prev => [...prev, n].sort((a, b) => a.nombre.localeCompare(b.nombre)))}
           onCancelar={() => setEditando(null)}
           onGuardado={async id => { setEditando(null); await cargar(); setSel(id) }} />
@@ -253,8 +254,8 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
 
 // ── Formulario ───────────────────────────────────────────────────────────────
 
-function FormMiembro({ inicial, tipoPorDefecto, negocios, onNegocioCreado, onCancelar, onGuardado }: {
-  inicial: ClubMiembro | null; tipoPorDefecto: TipoMiembro; negocios: ClubNegocio[]
+function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegocioCreado, onCancelar, onGuardado }: {
+  inicial: ClubMiembro | null; tipoPorDefecto: TipoMiembro; negocios: ClubNegocio[]; saldoPersonas: number
   onNegocioCreado: (n: ClubNegocio) => void; onCancelar: () => void; onGuardado: (id: string) => Promise<void>
 }) {
   const [tipo, setTipo] = useState<TipoMiembro>(inicial?.tipo ?? tipoPorDefecto)
@@ -291,6 +292,9 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, onNegocioCreado, onCan
   }
 
   async function guardar() {
+    // La baja vence el saldo en el momento (decisión de Ismael); volver a activo no lo restituye.
+    if (inicial?.estado === 'activo' && estado === 'baja' && saldoPersonas > 0 &&
+        !window.confirm(`Dar de baja a ${inicial.nombre} vence su saldo (${saldoPersonas} personas). Volver a activarlo no lo restituye: eso solo lo hace el owner con un ajuste. ¿Seguir?`)) return
     setGuardando(true); setError(null)
     try {
       const id = await guardarMiembro({

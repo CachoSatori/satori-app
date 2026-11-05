@@ -7,6 +7,64 @@
 
 ---
 
+## 🔐 Noviembre 2026 — SEC-01: escalada de roles en `profiles`
+
+### SEC-01 · 🔴→🟢 Cualquiera podía registrarse como owner (prod; staging cerrado, prod pendiente del Paso 2)
+
+- **Evidencia (03–04/11, prod y staging idénticos):**
+  - `handle_new_user()` (trigger `AFTER INSERT` sobre `auth.users`) tomaba `COALESCE((raw_user_meta_data->>'role')::user_role, 'salonero')`.
+  - `disable_signup=false` y `mailer_autoconfirm=true`: con la anon key (pública) se podía hacer `POST /auth/v1/signup` con `data.role='owner'`, y la cuenta quedaba confirmada al instante.
+  - La cuenta nacía con `is_active=false`, pero `get_my_role()` (`SELECT role FROM profiles WHERE id = auth.uid()`, sin `search_path`) no mira `is_active`. Resultado: permisos de owner en todas las policies.
+  - `anon` y `authenticated` tienen INSERT, UPDATE y DELETE en todas las columnas de `profiles`. Lo único que frena es RLS.
+  - **Sin explotación:** 0 usuarios con `role` en la metadata (sin filtro de fecha), 3 owners legítimos.
+- **Causa:** la mig `0090_user_selfsignup` confió en la metadata del cliente. La activación (`is_active`) no estaba conectada con el rol a nivel base.
+- **Contención (Paso A, 04/11, firmado):**
+  - `disable_signup=true` en los dos proyectos. El signup con anon da `422 signup_disabled`.
+  - Bans de 2 managers que ya no usan la app (Rosaura y LE - Consultorias), más el borrado de sus 6 sesiones y 15 refresh tokens.
+- **Fix (mig 068):**
+  - `handle_new_user` siempre da de alta `salonero` + inactivo.
+  - Trigger `profiles_guarda_roles`: cambiar `role` o `is_active`, insertar un perfil elevado o activo, o borrar un perfil exige un owner **activo**. Bypass solo sin JWT o con `service_role`.
+  - Constraint trigger diferido que impide quedar con 0 owners activos.
+  - `drop policy if exists perfil_propio_update`.
+  - `search_path` en `get_my_role`, con el mismo cuerpo.
+
+### Drift de policies de `profiles` (prod = staging ≠ repo)
+
+- En las bases están «Perfil propio visible» (SELECT `id = auth.uid()`), «Owners y managers ven todos los perfiles» (SELECT) y «Solo owners crean/editan perfiles» (ALL, `get_my_role()='owner'`, sin `with_check`). Se aplicaron fuera de migraciones.
+- `perfil_propio_update` (`001:107` del repo) **no existe** en ninguna base. La 068 la borra si existiera.
+- **Drift de trigger:** el trigger de `auth.users` se llama `trg_on_auth_user_created` en prod y `on_auth_user_created` en staging. Las dos llaman a `handle_new_user()`. La 068 solo reemplaza la función.
+
+### SEC-01b · 🔴 CRÍTICO — guardas que se abren con NULL o no miran `is_active`
+
+**Criterio:** las guardas NULL-inseguras se corrigen **antes o en la misma migración** que el cambio de `get_my_role()` para que mire `is_active`. Si `get_my_role()` pasa a devolver NULL para inactivos sin eso, esas guardas les **abren** la función.
+
+Escaneo de `pg_proc.prosrc` y `pg_policies` en prod (04/11):
+
+| Objeto | Patrón | ¿Abre con NULL? |
+|---|---|---|
+| `mark_factura_verified` (038) | `if get_my_role() not in (…) then raise` | **Sí** |
+| `complete_inventory_review` (043) | ídem | **Sí** |
+| `discard_inventory_review` (043) | ídem | **Sí** |
+| `apply_supplier_credit` (053) | ídem | **Sí** |
+| `delete_supplier_credit` (053) | ídem | **Sí** |
+| `create_supplier_credit` (054) | ídem | **Sí** |
+| policy `cash_cierres_dia.cierre_write` (ALL) | lee `profiles.role = any(…)` directo, **sin `is_active`** | No, pero un inactivo conserva el permiso → **CRÍTICO** |
+| policy `recipes.inv_write_recipes` (ALL) | ídem | ídem → **CRÍTICO** |
+| policy `recipe_ingredients.inv_write_ri` (ALL) | ídem | ídem → **CRÍTICO** |
+| `delete_movement_cascade` | `if get_my_role() in (…)`; si no, contraseña de gerencia con `p.is_active`; si no, raise | No |
+| `verify_manager`, `verify_manager_password` | `p.role in (…) and p.is_active` | No |
+| `pos_ventas_*` (067) y ~60 policies | `get_my_role() = any(…)` / `= 'x'` | No (NULL deniega) |
+
+- Son **6 guardas vivas, no 8:** las del repo en 039:53 y 043:147 (`delete_movement_cascade`) ya están reemplazadas en prod por la versión con contraseña.
+- No hay usos con `<>`, `!=`, `is distinct from`, `coalesce(get_my_role…)` ni `is null`. La única `SECURITY DEFINER` que escribe en `profiles` es `handle_new_user`.
+- Hoy ninguna cuenta de Auth está sin perfil, así que nadie recibe NULL. Las 6 guardas son una bomba para el día en que cambie `get_my_role()`.
+
+### 🔴 BLOQUEANTE del PoS propio — `anon` ejecuta funciones `SECURITY DEFINER` del PoS en staging
+
+- En staging, `anon` tiene EXECUTE sobre `pos_cobrar_check`, `pos_cobrar_orden`, `pos_merge_orden`, `pos_unmerge_orden`, `pos_reopen_orden`, `sync_pos_tips_to_pool` y `my_turno_stats` (además de las 4 de siempre).
+  - Medido con `has_function_privilege('anon', …)` el 04/11. Staging tiene 25 SD; prod, 17.
+- Son funciones de plata (cobro, propinas): **requisito bloqueante antes de pasar el PoS propio a prod**. Hay que revocarlas de `public`/`anon` (ver B1, 2026-07-23: el `revoke from anon` solo no alcanza) y verificarlo.
+
 ## 🆕 Hallazgos de octubre 2026 (go-live del PoS)
 
 1. **Branching corre `migrate` contra PROD en cada push a `main`** (confirmado de nuevo en los logs de #13–#16:

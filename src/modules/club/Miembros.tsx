@@ -49,22 +49,27 @@ export default function Miembros() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { cargar() }, [cargar])
 
-  const filas: Fila[] = useMemo(() => {
+  // Todas las filas con saldo y negocio (el detalle busca acá: un miembro recién dado de baja
+  // no desaparece aunque el filtro de la lista sea «Activos»).
+  const todas: Fila[] = useMemo(() => {
     const sMap = new Map(saldos.map(s => [s.miembro_id, s]))
     const nMap = new Map(negocios.map(n => [n.id, n.nombre]))
+    return miembros.map(m => ({ ...m, saldo: sMap.get(m.id) ?? null, negocio: m.negocio_id ? nMap.get(m.negocio_id) ?? null : null }))
+  }, [miembros, saldos, negocios])
+
+  const filas: Fila[] = useMemo(() => {
     const txt = fTexto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
-    return miembros
+    return todas
       .filter(m => (pestana === 'equipo' ? m.tipo === 'equipo' : m.tipo === 'referente' || m.tipo === 'concierge_pm'))
-      .map(m => ({ ...m, saldo: sMap.get(m.id) ?? null, negocio: m.negocio_id ? nMap.get(m.negocio_id) ?? null : null }))
       .filter(f => !fTipo || f.tipo === fTipo)
       .filter(f => !fNegocio || f.negocio_id === fNegocio)
       .filter(f => !fEstado || f.estado === fEstado)
       .filter(f => !fSaldo || (f.saldo?.personas ?? 0) > 0)
       .filter(f => !fDormido || !f.saldo?.ultima_actividad || ahora - new Date(f.saldo.ultima_actividad).getTime() > SEIS_MESES_MS)
       .filter(f => !txt || `${f.nombre} ${f.negocio ?? ''} ${f.codigo}`.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').includes(txt))
-  }, [miembros, saldos, negocios, pestana, fTipo, fNegocio, fEstado, fSaldo, fDormido, fTexto, ahora])
+  }, [todas, pestana, fTipo, fNegocio, fEstado, fSaldo, fDormido, fTexto, ahora])
 
-  const seleccionado = filas.find(f => f.id === sel) ?? null
+  const seleccionado = todas.find(f => f.id === sel) ?? null
 
   if (editando) {
     return (

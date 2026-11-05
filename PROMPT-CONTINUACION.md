@@ -20,6 +20,8 @@
 
 ## ✅ Hecho 04–05/11
 
+- **SEC-03 + SEC-04 (migs 072 y 073)** — en prod el 05/11 ~20:05 UTC, a mano antes del merge del PR #28. Cierran la escritura anónima en el CRM (Club Satori F0) y la lectura anónima de propinas y empleados. Ismael validó en staging. Rollback: `scripts/sql/072_rollback.sql` y `073_rollback.sql`. **Próximo: el P0 de caja (ítems 2 y 3).**
+
 - **SEC-01 · escalada de roles (mig 068)** — en prod, PR #22 (`81ac2d4`).
   - Paso A: `disable_signup=true` en prod y staging, más los bans de Rosaura y LE - Consultorias. El ban se hizo con `banned_until` directo (desvío aceptado) y se borraron 6 sesiones y 15 refresh tokens.
   - `handle_new_user` da de alta siempre `salonero` inactivo. Además: guarda de owner activo sobre `role`/`is_active`/borrados, y nunca 0 owners activos.
@@ -48,9 +50,9 @@
 2. **🔐 Revocar el token `claude-code-prod` y rotar los secretos de ingesta** (ítems 1 y 2 del P0 de abajo).
 3. **🔐 SEC-02.**
 4. **🧹 Sincronizar `staging` con `main`** (~20 commits: PRs #18–#22, migraciones 065–068 de archivo, código de logins viejos). Hay conflictos en los docs, y al ledger de staging le faltan las filas 065/066.
-5. **Club Satori (reemplazo de la página de créditos).** Spec v2 en revisión, nada construido → [docs/club-satori/](docs/club-satori/). *(Nuevo, 05/11.)*
-   - **Primer paso — F0 · 🔐🖊️ cerrar `customers_anon_insert` (mig 007).** La policy es `WITH CHECK (true)` para `anon`: cualquiera, sin cuenta, crea clientes con `points`, `tier`, `total_spent_crc` o `total_visits` arbitrarios. Sigue vigente en `main` y en prod (verificado el 05/11). Va después de SEC-01. Detalle en [HALLAZGOS.md](HALLAZGOS.md) (SEC-03).
-   - Después, F1–F3 según el §1 del spec (ver [ROADMAP.md](ROADMAP.md)).
+5. **Club Satori (reemplazo de la página de créditos).** Spec v2 en revisión → [docs/club-satori/](docs/club-satori/). *(Nuevo, 05/11.)*
+   - ✅ **F0 hecha (05/11):** mig 072 (SEC-03) en staging y prod; `/registro` y el QR del CRM apagados hasta la F1. Con el Paso 0 salió y se cerró también SEC-04 (mig 073). Detalle en [HALLAZGOS.md](HALLAZGOS.md).
+   - Sigue: F1–F3 según el §1 del spec (ver [ROADMAP.md](ROADMAP.md)), después del P0 de caja.
 6. **🧹🖊️ Respaldos de staging `cash_movements_pre_migracion_2026_07` y `suppliers_pre_migracion_2026_07`: decidir si se borran.** Tenían RLS apagado; el 05/11 se cerraron (RLS sin policies + `revoke all` a `anon` y `authenticated`) con `scripts/sql/staging_respaldos_cierre_anon.sql`, sin borrarlos. Solo staging.
 
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)

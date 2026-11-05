@@ -79,7 +79,7 @@ revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuesta
 
 | Fase | Qué | Cuándo (propuesto) | Estado |
 |---|---|---|---|
-| **F0** | Cerrar el registro público del CRM (`customers_anon_insert WITH CHECK (true)`, SEC-03). Va después de SEC-01. | Inmediato | 🔲 🔐🖊️ |
+| **F0** | Cerrar el registro público del CRM (`customers_anon_insert WITH CHECK (true)`, SEC-03). Va después de SEC-01. | Inmediato | ✅ prod (05/11, mig 072; con SEC-04 en la 073) |
 | **F1** | Referentes y concierges con pase de Wallet + QR; cupón digital del turista; escáner único en caja; créditos, canjes y PM; portal; alertas; reportes; migración completa. Se dejan la página y las tarjetas físicas. | Construcción nov–dic. Piloto con 3-5 referentes antes del 10-dic; salida general después del 15-ene | 🔲 |
 | **F2** | Mejoras del cupón (en el Wallet del turista, ofertas con opt-in) y QR dinámico si hay abuso. | Feb–mar | 🔲 |
 | **F3** | Local Club en el Wallet: socios, ofertas que cambian, premios por frecuencia, referidos, sorpresas. Reemplaza el descuento fijo. | Desde may (temporada baja) | 🔲 |

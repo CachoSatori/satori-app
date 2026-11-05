@@ -125,14 +125,31 @@ Escaneo de `pg_proc.prosrc` y `pg_policies` en prod (04/11):
   - Medido con `has_function_privilege('anon', …)` el 04/11. Staging tiene 25 SD; prod, 17.
 - Son funciones de plata (cobro, propinas): **requisito bloqueante antes de pasar el PoS propio a prod**. Hay que revocarlas de `public`/`anon` (ver B1, 2026-07-23: el `revoke from anon` solo no alcanza) y verificarlo.
 
-## 🔐 Noviembre 2026 — SEC-03 · 🔴 ALTA · `anon` inserta en `customers` sin validación (mig 007) — abierto (05/11)
+## 🔐 Noviembre 2026 — SEC-03 y SEC-04: accesos sin sesión (✅ cerrados en prod, 05/11, migs 072 y 073)
 
-- **Dónde:** [`supabase/migrations/007_customer_selfsignup.sql:11-15`](supabase/migrations/007_customer_selfsignup.sql) — `create policy customers_anon_insert on public.customers for insert to anon with check (true);` y en la línea 18 `grant insert on public.customers to anon;`. También la recrea [`staging-drift-sync.sql:337`](staging-drift-sync.sql).
-- **Qué permite:** cualquiera, sin cuenta y con la anon key pública, inserta clientes con **cualquier valor** en `points`, `tier`, `total_spent_crc`, `total_visits`, `notes`, `active`, `channel_origin`, etc. El formulario `/registro` (`src/pages/RegistroCliente.tsx`) manda solo nombre, teléfono, email y cumpleaños, pero la policy no restringe columnas.
-  - Efecto lateral: `phone` es `UNIQUE`, así que el error `23505` le dice a un anónimo si un teléfono ya está en la base.
-- **Estado (05/11):** en `main` ninguna migración posterior la borra. **En prod está vigente** (`pg_policies`: `customers_anon_insert`, `INSERT`, `{anon}`, `with_check = true`; `has_table_privilege('anon','public.customers','INSERT') = true`). La lectura sigue cerrada: las policies de SELECT/ALL de la 004 dependen de `get_my_role()`.
-- **Severidad ALTA:** escritura anónima en una tabla del CRM. Hoy el CRM no se usa en operación (2 clientes en prod), pero la tabla existe en prod y el Club Satori F3 la va a reusar.
-- **Arreglo propuesto (F0 del [Club Satori](docs/club-satori/SPEC.md), 🔐🖊️, después de SEC-01):** `drop policy customers_anon_insert` + `revoke insert on public.customers from anon`, y si se quiere conservar el registro público, una función `SECURITY DEFINER` que valide cada campo y fije `points`/`tier`/agregados por defecto, con límite de tasa. Antes, decidir con Ismael qué hacer con `/registro` y `CrmQR` (dejarían de funcionar).
+### SEC-03 · 🔴 ALTA → ✅ · `anon` insertaba en `customers` sin validación (mig 007)
+
+- **Qué era:** [`007_customer_selfsignup.sql:11-15`](supabase/migrations/007_customer_selfsignup.sql) creaba `customers_anon_insert` (`for insert to anon with check (true)`) y la línea 18 daba `grant insert … to anon`. Cualquiera, sin cuenta, creaba clientes con `points`, `tier`, `total_spent_crc`, `total_visits`, `notes` o `active` arbitrarios, y el `UNIQUE(phone)` (error `23505`) revelaba si un teléfono ya estaba en la base. El CRM no se usa en operación (2 clientes en prod).
+- **Arreglo — mig 072 (`072_crm_cierre_anon.sql`):** drop de la policy + `revoke insert, update, delete` de `anon` en `customers`, `customer_interactions`, `loyalty_config` y `loyalty_rewards`. Las policies de staff de la 004 no cambian. `/registro` y `CrmQR` quedan apagados con el aviso «El registro de clientes vuelve pronto con el Club Satori» (flag en `src/modules/crm/registroPublico.ts`); vuelven en la F1 del Club con una función `SECURITY DEFINER`. `staging-drift-sync.sql:337` quedó comentada.
+- Rollback de emergencia (reabre el agujero): `scripts/sql/072_rollback.sql`.
+
+### SEC-04 · 🔴 ALTA → ✅ · lectura anónima de propinas y empleados
+
+- **Qué era:** cinco policies SELECT `to public` sin exigir sesión: «Todos ven entradas de propinas» (`tip_entries`, `using (true)`), «… sesiones de propinas» (`tip_sessions`), «… puntos por rol» (`role_tip_points`), «… tipos de cambio» (`exchange_rates`) y «Todos ven empleados activos» (`employees`, `using (is_active = true)`). Con la anon key del bundle se leían las propinas y los pagos por empleado (2.095 entradas, 440 sesiones en prod) y nombre, rol, `pos_name` y `pos_login` de los empleados activos. Lo encontró el Paso 0 de la 072.
+- **Arreglo — mig 073 (`073_lecturas_anon_a_authenticated.sql`):** las 5 policies recreadas iguales pero `to authenticated` + `revoke select` de `anon` en las 5 tablas. Antes se comprobó que ninguna pantalla sin sesión (`/login`, `/registro`) ni cron lee esas tablas con la anon key (los crons y las Edge Functions usan `service_role`). Las líneas de `staging-drift-sync.sql` que las recreaban quedaron comentadas.
+- Rollback de emergencia (reabre el agujero): `scripts/sql/073_rollback.sql`.
+
+### Aplicación y verificación (las dos migraciones)
+
+- **Staging (05/11, ~19:30 UTC):** cada una corrida dos veces (idempotentes), ledger 70 → 72. Ismael validó en `satori-staging.pages.dev` con owner y salonero.
+- **Prod (05/11, ~20:05 UTC = 14:05 CR):** Paso 0 repetido sin cambios; aplicadas a mano dos veces **antes del merge** (Branching), ledger 48 → 50.
+- **Verificado en las dos bases:**
+  - `has_table_privilege('anon', …)` = `false` para cada permiso revocado (INSERT/UPDATE/DELETE en las 4 del CRM; SELECT en las 5 de SEC-04); `authenticated` conserva SELECT.
+  - REST con la anon key: HEAD/GET a las 5 tablas → `401` / `42501`; POST a `customers` con `points: 99999` → `401` / `42501`, y no se creó ninguna fila.
+  - Owner y salonero (sesión simulada con su JWT, en transacción con rollback): las mismas filas que antes en las 9 tablas.
+  - Barrido de `public` después: ninguna tabla con permisos de `anon` y una policy que no exija sesión.
+- **Respaldos de staging** `cash_movements_pre_migracion_2026_07` y `suppliers_pre_migracion_2026_07` (solo staging) tenían RLS apagado: se cerraron con `scripts/sql/staging_respaldos_cierre_anon.sql` (RLS sin policies + `revoke all` a `anon`/`authenticated`), sin borrarlos; HEAD/PATCH con la anon key → `401`. Decidir si se borran: en el backlog.
+- **Queda (higiene, no exposición):** `anon` conserva INSERT/UPDATE/DELETE a nivel tabla en las 5 tablas de SEC-04 (grants por defecto de Supabase); RLS los bloquea porque las policies de escritura exigen rol.
 
 ## 🆕 Hallazgos de octubre 2026 (go-live del PoS)
 

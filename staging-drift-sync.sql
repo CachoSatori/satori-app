@@ -337,9 +337,9 @@ create policy "crm_ver_clientes" on public.customers for select using ((get_my_r
 -- CERRADA por la 072 (SEC-03): no recrear. create policy "customers_anon_insert" on public.customers for insert to anon with check (true);
 create policy "documents_rw" on public.documents for all using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role, 'cajero'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role, 'cajero'::user_role])));
 create policy "Owners y managers gestionan empleados" on public.employees for all using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role])));
-create policy "Todos ven empleados activos" on public.employees for select using ((is_active = true));
+-- SEC-04 (mig 073): ahora `to authenticated`. create policy "Todos ven empleados activos" on public.employees for select using ((is_active = true));
 create policy "Managers y owners cargan tipo de cambio" on public.exchange_rates for all using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role])));
-create policy "Todos ven tipos de cambio" on public.exchange_rates for select using (true);
+-- SEC-04 (mig 073): ahora `to authenticated`. create policy "Todos ven tipos de cambio" on public.exchange_rates for select using (true);
 create policy "exchange_rates_read" on public.exchange_rates for select to authenticated using (true);
 create policy "exchange_rates_write" on public.exchange_rates for all to authenticated using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role])));
 create policy "fin_acc_r" on public.finance_accounts for select using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role])));
@@ -372,16 +372,16 @@ create policy "inv_write_recipes" on public.recipes for all using ((EXISTS ( SEL
    FROM profiles
   WHERE ((profiles.id = auth.uid()) AND (profiles.role = ANY (ARRAY['owner'::user_role, 'manager'::user_role]))))));
 create policy "Solo owners editan puntos" on public.role_tip_points for all using ((get_my_role() = 'owner'::user_role));
-create policy "Todos ven puntos por rol" on public.role_tip_points for select using (true);
+-- SEC-04 (mig 073): ahora `to authenticated`. create policy "Todos ven puntos por rol" on public.role_tip_points for select using (true);
 create policy "sops_read" on public.sops for select to authenticated using (true);
 create policy "sops_write" on public.sops for all to authenticated using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role])));
 create policy "sim_read" on public.supplier_item_map for select using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role, 'cajero'::user_role])));
 create policy "sim_write" on public.supplier_item_map for all using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role])));
 create policy "Managers y owners ven proveedores" on public.suppliers for select using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role])));
 create policy "suppliers_op_write" on public.suppliers for all to authenticated using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role])));
-create policy "Todos ven entradas de propinas" on public.tip_entries for select using (true);
+-- SEC-04 (mig 073): ahora `to authenticated`. create policy "Todos ven entradas de propinas" on public.tip_entries for select using (true);
 create policy "tip_entries_op_write" on public.tip_entries for all to authenticated using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role])));
-create policy "Todos ven sesiones de propinas" on public.tip_sessions for select using (true);
+-- SEC-04 (mig 073): ahora `to authenticated`. create policy "Todos ven sesiones de propinas" on public.tip_sessions for select using (true);
 create policy "tip_sessions_op_write" on public.tip_sessions for all to authenticated using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'cajero'::user_role])));
 create policy "ventas_comps_read" on public.ventas_comps for select to authenticated using (true);
 create policy "ventas_comps_write" on public.ventas_comps for all to authenticated using ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role]))) with check ((get_my_role() = ANY (ARRAY['owner'::user_role, 'manager'::user_role, 'contador'::user_role])));

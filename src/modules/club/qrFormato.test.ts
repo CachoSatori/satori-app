@@ -39,3 +39,19 @@ describe('errores y opciones de canje', () => {
     expect(opcionesCanje({ canje_min: 1, canje_paso: 0.5, max_creditos_por_visita: 2 })).toEqual([1, 1.5, 2])
   })
 })
+
+import { planBValido, describirPos, posDeMesa } from '../../shared/api/club'
+describe('mesa del PoS (piloto)', () => {
+  it('plan B: mesa + exactamente 4 números', () => {
+    expect(planBValido('10', '6012')).toBe(true)
+    expect(planBValido('10', '601')).toBe(false)
+    expect(planBValido('10', '60a2')).toBe(false)
+    expect(planBValido('', '6012')).toBe(false)
+  })
+  it('describe la mesa elegida para la confirmación', () => {
+    const p = posDeMesa({ pedido: '91', mesa: '41', salonero: 'X', total_crc: 25000, pax: 2, actualizado: '2026-11-06T01:00:00Z', dia: '2026-11-05' })
+    expect(p).toMatchObject({ modo: 'mesa', mesa: '41', pedido: '91', total: 25000, dia: '2026-11-05' })
+    expect(describirPos(p)).toBe('mesa 41 · ₡25.000')
+    expect(describirPos({ modo: 'manual', mesa: '43', ultimos4: '6012' })).toBe('mesa 43 · tiquete …6012')
+  })
+})

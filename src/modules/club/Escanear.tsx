@@ -1,16 +1,17 @@
 /**
  * Escanear — un solo botón en caja (SPEC §2.4).
- *  · Cupón vigente → personas + factura → confirmar → «+N personas a {referente}».
+ *  · Cupón vigente → personas + MESA (de las abiertas en el PoS) → confirmar → «+N personas a {referente}».
+ *    Plan B si la mesa ya se cerró o la lista no carga: mesa + últimos 4 dígitos del tiquete.
  *  · Pase de referente → saldo + canje (1 / 1,5 / 2) o «Tarjeta física».
  *  · Usado, vencido, dado de baja o desconocido → una línea clara.
  *  Plan B: código a mano y búsqueda (nombre, negocio o últimos 4 del teléfono).
  * Idempotencia: un `p_op` por intento; si falla la red, el reintento usa el mismo.
  */
-import { lazy, Suspense, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, usarCupon, canjear, tarjetaManual, buscar, getMiembro, aClubError, nuevoOp,
-  opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO,
-  type ResolverCupon, type ResolverReferente, type BusquedaFila, type ClubError,
+  opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO, getMesasAbiertas, posDeMesa, describirPos, planBValido,
+  type ResolverCupon, type ResolverReferente, type BusquedaFila, type ClubError, type PosRef, type MesaAbierta,
 } from '../../shared/api/club'
 import { parsearQR } from './qrFormato'
 import { Aviso, Btn, Card, Chip } from './ui'
@@ -35,7 +36,7 @@ export default function Escanear() {
 
   // formularios
   const [personas, setPersonas]   = useState('')
-  const [factura, setFactura]     = useState('')
+  const [pos, setPos]             = useState<PosRef | null>(null)
   const [creditos, setCreditos]   = useState<number | null>(null)
   const [modoRef, setModoRef]     = useState<'canje' | 'tarjeta'>('canje')
   const [confirmando, setConfirmando] = useState(false)
@@ -47,7 +48,7 @@ export default function Escanear() {
   const opDe = (a: Accion) => (ops.current[a] ??= nuevoOp())
 
   function limpiarFormularios() {
-    setPersonas(''); setFactura(''); setCreditos(null); setConfirmando(false); setErrAccion(null); setModoRef('canje')
+    setPersonas(''); setPos(null); setCreditos(null); setConfirmando(false); setErrAccion(null); setModoRef('canje')
   }
 
   async function resolver(texto: string, silencioso = false) {
@@ -102,17 +103,17 @@ export default function Escanear() {
     try {
       if (actual.kind === 'cupon') {
         const n = Number(personas)
-        await usarCupon(actual.codigo, n, factura, opDe('usar'))
+        await usarCupon(actual.codigo, n, pos!, opDe('usar'))
         setMsg({ tono: 'ok', texto: `+${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.referente}` })
         cerrarCuenta()
       } else if (modoRef === 'canje' && creditos != null) {
-        const s = await canjear(actual.r.datos.id, creditos, factura, opDe('canje'))
+        const s = await canjear(actual.r.datos.id, creditos, pos!, opDe('canje'))
         setMsg({ tono: 'ok', texto: `Canje de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le quedan ${fmtCreditos(s.creditos)}.` })
         delete ops.current.canje; limpiarFormularios()
         await resolver(actual.codigo, true)
       } else if (modoRef === 'tarjeta') {
         const n = Number(personas)
-        await tarjetaManual(actual.r.datos.id, n, factura, opDe('tarjeta'))
+        await tarjetaManual(actual.r.datos.id, n, pos!, opDe('tarjeta'))
         setMsg({ tono: 'ok', texto: `Tarjeta física: +${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.nombre}` })
         delete ops.current.tarjeta; limpiarFormularios()
         await resolver(actual.codigo, true)
@@ -127,7 +128,7 @@ export default function Escanear() {
 
   const nPersonas = Number(personas)
   const personasOk = Number.isInteger(nPersonas) && nPersonas >= 1 && nPersonas <= 30
-  const facturaOk = factura.replace(/\s/g, '').length > 0
+  const facturaOk = pos !== null
 
   return (
     <div className="tips-body" style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -190,7 +191,7 @@ export default function Escanear() {
       )}
 
       {actual?.kind === 'cupon' && (
-        <PanelCupon a={actual} personas={personas} setPersonas={setPersonas} factura={factura} setFactura={setFactura}
+        <PanelCupon a={actual} personas={personas} setPersonas={setPersonas} pos={pos} setPos={setPos}
           personasOk={personasOk} facturaOk={facturaOk} confirmando={confirmando} setConfirmando={setConfirmando}
           enviando={enviando} err={errAccion} onConfirmar={confirmar} onCerrar={cerrarCuenta} />
       )}
@@ -198,7 +199,7 @@ export default function Escanear() {
       {actual?.kind === 'referente' && (
         <PanelReferente a={actual} modo={modoRef} setModo={m => { setModoRef(m); setConfirmando(false); setErrAccion(null) }}
           creditos={creditos} setCreditos={setCreditos} personas={personas} setPersonas={setPersonas}
-          factura={factura} setFactura={setFactura} personasOk={personasOk} facturaOk={facturaOk}
+          pos={pos} setPos={setPos} personasOk={personasOk} facturaOk={facturaOk}
           confirmando={confirmando} setConfirmando={setConfirmando} enviando={enviando} err={errAccion}
           onConfirmar={confirmar} onCerrar={cerrarCuenta} />
       )}
@@ -223,13 +224,73 @@ function CampoPersonas({ v, set }: { v: string; set: (s: string) => void }) {
   )
 }
 
-function CampoFactura({ v, set }: { v: string; set: (s: string) => void }) {
+/**
+ * Mesa del PoS: lista de mesas abiertas (puente, ~75 s). Un toque elige. Plan B a mano:
+ * mesa + últimos 4 dígitos del tiquete electrónico.
+ */
+function SelectorMesa({ v, set }: { v: PosRef | null; set: (p: PosRef | null) => void }) {
+  const [mesas, setMesas] = useState<MesaAbierta[] | null>(null)
+  const [err, setErr] = useState(false)
+  const [planB, setPlanB] = useState(v?.modo === 'manual')
+  const [mesaB, setMesaB] = useState(v?.modo === 'manual' ? v.mesa : '')
+  const [u4, setU4] = useState(v?.modo === 'manual' ? v.ultimos4 : '')
+  const cargar = useCallback(() => {
+    setErr(false)
+    getMesasAbiertas().then(m => { setMesas(m); if (m.length === 0) setPlanB(true) })
+      .catch(() => { setErr(true); setMesas([]); setPlanB(true) })
+  }, [])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { cargar() }, [cargar])
+  const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Costa_Rica' })
+  const elegidaPedido = v?.modo === 'mesa' ? `${v.mesa}|${v.pedido}` : null
   return (
-    <label>
-      <span style={labelStyle}>Número de factura del PoS</span>
-      <input value={v} onChange={e => set(e.target.value)} placeholder="Ej. FE-12345" autoCapitalize="characters"
-        autoComplete="off" style={{ ...inputStyle, textTransform: 'uppercase' }} />
-    </label>
+    <div>
+      <span style={labelStyle}>Mesa</span>
+      {!planB && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {mesas === null && <div style={{ color: C.muted }}>Cargando mesas abiertas…</div>}
+          {mesas?.map(m => {
+            const sel = elegidaPedido === `${m.mesa}|${m.pedido}`
+            return (
+              <button key={`${m.mesa}|${m.pedido}`} onClick={() => set(posDeMesa(m))} aria-pressed={sel}
+                style={{ textAlign: 'left', minHeight: 52, borderRadius: 8, cursor: 'pointer', padding: '0.6rem 0.8rem',
+                         border: `2px solid ${sel ? C.ink : C.border}`, background: sel ? C.paper : '#fff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <strong style={{ fontSize: '1.1rem' }}>Mesa {m.mesa}</strong>
+                  <strong>₡{Math.round(Number(m.total_crc ?? 0)).toLocaleString('de-DE')}</strong>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: C.muted }}>
+                  {m.salonero ?? 'sin salonero'}{m.pax ? ` · ${m.pax} pax` : ''} · act. {hora(m.actualizado)}
+                </div>
+              </button>
+            )
+          })}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn variant="secondary" onClick={cargar} style={{ flex: 1 }}>Actualizar</Btn>
+            <Btn variant="ghost" onClick={() => { setPlanB(true); set(null) }} style={{ flex: 2 }}>La mesa no está</Btn>
+          </div>
+        </div>
+      )}
+      {planB && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: '0.85rem', color: C.muted }}>
+            {err ? 'No se pudo cargar la lista de mesas.' : mesas?.length === 0 ? 'No hay mesas abiertas en el PoS.' : 'Mesa ya cerrada:'} Escribí la mesa y los
+            últimos 4 dígitos del tiquete electrónico.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <label style={{ flex: 1 }}><span style={labelStyle}>Mesa</span>
+              <input value={mesaB} inputMode="numeric" maxLength={10} placeholder="Ej. 10" style={inputStyle}
+                onChange={e => { const x = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''); setMesaB(x); set(planBValido(x, u4) ? { modo: 'manual', mesa: x, ultimos4: u4 } : null) }} />
+            </label>
+            <label style={{ flex: 1 }}><span style={labelStyle}>Últimos 4 del tiquete</span>
+              <input value={u4} inputMode="numeric" maxLength={4} placeholder="6012" style={{ ...inputStyle, letterSpacing: '0.2em' }}
+                onChange={e => { const x = e.target.value.replace(/\D/g, '').slice(0, 4); setU4(x); set(planBValido(mesaB, x) ? { modo: 'manual', mesa: mesaB, ultimos4: x } : null) }} />
+            </label>
+          </div>
+          {(mesas?.length ?? 0) > 0 && <Btn variant="ghost" onClick={() => { setPlanB(false); set(null) }}>Volver a la lista de mesas</Btn>}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -255,7 +316,7 @@ function ErrorAccion({ err, onReintentar }: { err: ClubError; onReintentar: () =
 }
 
 interface PanelBase {
-  personas: string; setPersonas: (s: string) => void; factura: string; setFactura: (s: string) => void
+  personas: string; setPersonas: (s: string) => void; pos: PosRef | null; setPos: (p: PosRef | null) => void
   personasOk: boolean; facturaOk: boolean; confirmando: boolean; setConfirmando: (b: boolean) => void
   enviando: boolean; err: ClubError | null; onConfirmar: () => void; onCerrar: () => void
 }
@@ -288,10 +349,10 @@ function PanelCupon({ a, ...p }: PanelBase & { a: Extract<Actual, { kind: 'cupon
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
-          <CampoFactura v={p.factura} set={s => { p.setFactura(s); p.setConfirmando(false) }} />
+          <SelectorMesa v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
           {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
           {p.confirmando ? (
-            <Confirmacion texto={`+${p.personas} personas a ${d.referente} · factura ${p.factura.replace(/\s/g, '').toUpperCase()}`}
+            <Confirmacion texto={`+${p.personas} personas a ${d.referente} · ${p.pos ? describirPos(p.pos) : ''}`}
               enviando={p.enviando} onConfirmar={p.onConfirmar} onVolver={() => p.setConfirmando(false)} />
           ) : (
             <Btn big disabled={!p.personasOk || !p.facturaOk} onClick={() => p.setConfirmando(true)}>Continuar</Btn>
@@ -373,10 +434,10 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, ...p }: Panel
                     </div>
                   )}
                 </div>
-                <CampoFactura v={p.factura} set={s => { p.setFactura(s); p.setConfirmando(false) }} />
+                <SelectorMesa v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando && creditos != null ? (
-                  <Confirmacion texto={`Canjear ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${d.nombre} · factura ${p.factura.replace(/\s/g, '').toUpperCase()}`}
+                  <Confirmacion texto={`Canjear ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
                     enviando={p.enviando} onConfirmar={p.onConfirmar} onVolver={() => p.setConfirmando(false)} />
                 ) : (
                   <Btn big disabled={creditos == null || !p.facturaOk} onClick={() => p.setConfirmando(true)}>Continuar</Btn>
@@ -386,10 +447,10 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, ...p }: Panel
               <>
                 <div style={{ fontSize: '0.85rem', color: C.muted }}>Para tarjetas impresas que ya están repartidas. Queda marcada «manual».</div>
                 <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
-                <CampoFactura v={p.factura} set={s => { p.setFactura(s); p.setConfirmando(false) }} />
+                <SelectorMesa v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando ? (
-                  <Confirmacion texto={`Tarjeta física: +${p.personas} personas a ${d.nombre} · factura ${p.factura.replace(/\s/g, '').toUpperCase()}`}
+                  <Confirmacion texto={`Tarjeta física: +${p.personas} personas a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
                     enviando={p.enviando} onConfirmar={p.onConfirmar} onVolver={() => p.setConfirmando(false)} />
                 ) : (
                   <Btn big disabled={!p.personasOk || !p.facturaOk} onClick={() => p.setConfirmando(true)}>Continuar</Btn>

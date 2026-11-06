@@ -108,15 +108,37 @@ const primero = <T>(d: T | T[]): T => (Array.isArray(d) ? d[0] : d)
 // ── Caja ─────────────────────────────────────────────────────────────────────
 export const resolverQR = (texto: string) => llamar<ResolverResultado>('club_resolver', { p_texto: texto })
 
-export const usarCupon = async (codigo: string, personas: number, factura: string, op: string) =>
+/**
+ * Referencia al PoS para el piloto (decisión de Ismael, 06-nov): la caja elige la MESA ABIERTA del
+ * puente; si la mesa ya se cerró o la lista no carga, plan B: mesa + últimos 4 dígitos del tiquete.
+ * El cruce con la factura cerrada es «probable» hasta que el puente traiga el consecutivo (ítem 11).
+ */
+export type PosRef =
+  | { modo: 'mesa'; dia: string; pedido: string; mesa: string; total: number; hora: string }
+  | { modo: 'manual'; mesa: string; ultimos4: string }
+export interface MesaAbierta {
+  pedido: string; mesa: string; salonero: string | null; total_crc: number | null; pax: number | null
+  actualizado: string; dia: string
+}
+export const getMesasAbiertas = (local = 'santa-teresa') => llamar<MesaAbierta[]>('club_mesas_abiertas', { p_location: local })
+export const posDeMesa = (m: MesaAbierta): PosRef =>
+  ({ modo: 'mesa', dia: m.dia, pedido: m.pedido, mesa: m.mesa, total: Number(m.total_crc ?? 0), hora: new Date().toISOString() })
+export const describirPos = (p: PosRef) =>
+  p.modo === 'mesa'
+    ? `mesa ${p.mesa} · ₡${Math.round(p.total).toLocaleString('de-DE')}`
+    : `mesa ${p.mesa} · tiquete …${p.ultimos4}`
+/** Plan B válido: mesa (1–10 letras o números) y exactamente 4 números. */
+export const planBValido = (mesa: string, ultimos4: string) => /^[0-9A-Za-z]{1,10}$/.test(mesa.trim()) && /^[0-9]{4}$/.test(ultimos4)
+
+export const usarCupon = async (codigo: string, personas: number, pos: PosRef, op: string) =>
   primero(await llamar<Array<Saldo & { miembro_id: string }>>('club_cupon_usar',
-    { p_codigo: codigo, p_personas: personas, p_factura: factura, p_op: op }))
+    { p_codigo: codigo, p_personas: personas, p_factura: null, p_op: op, p_pos: pos }))
 
-export const canjear = async (miembro: string, creditos: number, factura: string, op: string) =>
-  primero(await llamar<Saldo[]>('club_canje', { p_miembro: miembro, p_creditos: creditos, p_factura: factura, p_op: op }))
+export const canjear = async (miembro: string, creditos: number, pos: PosRef, op: string) =>
+  primero(await llamar<Saldo[]>('club_canje', { p_miembro: miembro, p_creditos: creditos, p_factura: null, p_op: op, p_pos: pos }))
 
-export const tarjetaManual = async (miembro: string, personas: number, factura: string, op: string) =>
-  primero(await llamar<Saldo[]>('club_tarjeta_manual', { p_miembro: miembro, p_personas: personas, p_factura: factura, p_op: op }))
+export const tarjetaManual = async (miembro: string, personas: number, pos: PosRef, op: string) =>
+  primero(await llamar<Saldo[]>('club_tarjeta_manual', { p_miembro: miembro, p_personas: personas, p_factura: null, p_op: op, p_pos: pos }))
 
 export const buscar = (q: string) => llamar<BusquedaFila[]>('club_buscar', { p_q: q })
 

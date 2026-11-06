@@ -419,6 +419,13 @@ export interface SOP {
   created_by:    string | null
   created_at:    string
   updated_at:    string
+  // ── Mig 076 (SoP noviembre 2026). Opcionales: las filas viejas no los tienen. ──
+  code?:          string | null   // código del documento ("2.5"); único cuando no es null
+  area?:          string | null   // "2. Salón y recepción"; null = se agrupa por category
+  doc_type?:      'SOP' | 'Documento' | null
+  version?:       string | null
+  employee_book?: boolean
+  pdf_path?:      string | null
 }
 
 // ── Tipo Database para el cliente de Supabase ────────────────

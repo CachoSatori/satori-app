@@ -1,0 +1,2264 @@
+mes,turno,clase,con_md,familia,cantidad,neta,lista
+2024-08-01,mañana,LC sin marcar 15%,false,__MESAS__,1,4,0
+2024-08-01,mañana,LC sin marcar 15%,false,13,1,3825,4500
+2024-08-01,mañana,LC sin marcar 15%,false,16,1,6375,7500
+2024-08-01,mañana,LC sin marcar 15%,false,2,2,8415,9900
+2024-08-01,mañana,LC sin marcar 15%,false,3,3,14705,17300
+2024-08-01,mañana,LC sin marcar 15%,false,5,2,4590,5400
+2024-08-01,mañana,otro,false,__MESAS__,2,0,0
+2024-08-01,mañana,otro,false,5,2,2380,3400
+2024-08-01,mañana,sin descuento,false,__MESAS__,92,168,0
+2024-08-01,mañana,sin descuento,false,13,6,24000,24000
+2024-08-01,mañana,sin descuento,false,16,44,323800,323800
+2024-08-01,mañana,sin descuento,false,2,71,322500,322500
+2024-08-01,mañana,sin descuento,false,21,7,97860,98000
+2024-08-01,mañana,sin descuento,false,23,1,12000,12000
+2024-08-01,mañana,sin descuento,false,24,1,10000,9000
+2024-08-01,mañana,sin descuento,false,3,144,1214924,1215400
+2024-08-01,mañana,sin descuento,false,4,3,7900,7450
+2024-08-01,mañana,sin descuento,false,5,164,572900,571700
+2024-08-01,mañana,tarjeta 10%,false,__MESAS__,14,29,0
+2024-08-01,mañana,tarjeta 10%,false,16,12,79380,88200
+2024-08-01,mañana,tarjeta 10%,false,2,19,69390,77100
+2024-08-01,mañana,tarjeta 10%,false,3,27,180360,200400
+2024-08-01,mañana,tarjeta 10%,false,4,1,4230,4700
+2024-08-01,mañana,tarjeta 10%,false,5,16,34560,38400
+2024-08-01,noche,LC marcado,false,__MESAS__,1,2,2
+2024-08-01,noche,LC marcado,false,3,3,15130,17800
+2024-08-01,noche,LC marcado,false,5,5,12155,13445
+2024-08-01,noche,LC sin marcar 15%,false,__MESAS__,78,87,0
+2024-08-01,noche,LC sin marcar 15%,false,13,3,11475,13500
+2024-08-01,noche,LC sin marcar 15%,false,16,17,102450,125400
+2024-08-01,noche,LC sin marcar 15%,false,2,44,175255,204400
+2024-08-01,noche,LC sin marcar 15%,false,25,15,44625,52500
+2024-08-01,noche,LC sin marcar 15%,false,3,104,675375,793400
+2024-08-01,noche,LC sin marcar 15%,false,4,6,21590,25175
+2024-08-01,noche,LC sin marcar 15%,false,5,201,657786,762365
+2024-08-01,noche,otro,false,__MESAS__,18,14,0
+2024-08-01,noche,otro,false,13,2,4900,7000
+2024-08-01,noche,otro,false,16,2,11800,14800
+2024-08-01,noche,otro,false,2,3,11250,14900
+2024-08-01,noche,otro,false,3,10,51720,64900
+2024-08-01,noche,otro,false,5,49,155730,194480
+2024-08-01,noche,sin descuento,false,__MESAS__,631,1194,0
+2024-08-01,noche,sin descuento,false,13,25,98500,98300
+2024-08-01,noche,sin descuento,false,16,287,2123500,2116780
+2024-08-01,noche,sin descuento,false,2,659,2995900,2995900
+2024-08-01,noche,sin descuento,false,21,2,28000,28000
+2024-08-01,noche,sin descuento,false,23,1,12000,12000
+2024-08-01,noche,sin descuento,false,25,41,146500,146500
+2024-08-01,noche,sin descuento,false,26,1,2000,2000
+2024-08-01,noche,sin descuento,false,3,1334,10483200,10483200
+2024-08-01,noche,sin descuento,false,4,57,272100,272100
+2024-08-01,noche,sin descuento,false,5,1289,5775155,5767875
+2024-08-01,noche,tarjeta 10%,false,__MESAS__,126,217,0
+2024-08-01,noche,tarjeta 10%,false,13,3,8100,8600
+2024-08-01,noche,tarjeta 10%,false,16,52,351795,388740
+2024-08-01,noche,tarjeta 10%,false,2,147,602795,673800
+2024-08-01,noche,tarjeta 10%,false,21,1,12600,14000
+2024-08-01,noche,tarjeta 10%,false,23,1,10800,10800
+2024-08-01,noche,tarjeta 10%,false,24,2,18000,18000
+2024-08-01,noche,tarjeta 10%,false,25,17,52510,57060
+2024-08-01,noche,tarjeta 10%,false,3,227,1652380,1847100
+2024-08-01,noche,tarjeta 10%,false,4,12,51660,57400
+2024-08-01,noche,tarjeta 10%,false,5,273,948080,1036600
+2024-09-01,mañana,LC sin marcar 15%,false,__MESAS__,2,2,0
+2024-09-01,mañana,LC sin marcar 15%,false,16,2,12580,14800
+2024-09-01,mañana,LC sin marcar 15%,false,2,1,4930,5800
+2024-09-01,mañana,LC sin marcar 15%,false,3,3,17935,21100
+2024-09-01,mañana,LC sin marcar 15%,false,5,1,1445,1700
+2024-09-01,mañana,otro,false,__MESAS__,2,0,0
+2024-09-01,mañana,otro,false,13,4,10500,15000
+2024-09-01,mañana,otro,false,16,1,5250,7500
+2024-09-01,mañana,sin descuento,false,__MESAS__,81,126,0
+2024-09-01,mañana,sin descuento,false,13,6,21500,21500
+2024-09-01,mañana,sin descuento,false,16,56,411000,411000
+2024-09-01,mañana,sin descuento,false,2,46,219700,219700
+2024-09-01,mañana,sin descuento,false,3,95,809500,808880
+2024-09-01,mañana,sin descuento,false,4,4,19400,19400
+2024-09-01,mañana,sin descuento,false,5,109,416200,415345
+2024-09-01,mañana,tarjeta 10%,false,__MESAS__,13,12,0
+2024-09-01,mañana,tarjeta 10%,false,16,9,59490,66100
+2024-09-01,mañana,tarjeta 10%,false,2,1,4500,5000
+2024-09-01,mañana,tarjeta 10%,false,3,1,7020,7800
+2024-09-01,mañana,tarjeta 10%,false,4,1,4230,4700
+2024-09-01,mañana,tarjeta 10%,false,5,15,29929,33300
+2024-09-01,noche,LC marcado,false,__MESAS__,9,17,10
+2024-09-01,noche,LC marcado,false,16,3,19040,22400
+2024-09-01,noche,LC marcado,false,2,6,24905,29300
+2024-09-01,noche,LC marcado,false,25,1,2975,3500
+2024-09-01,noche,LC marcado,false,3,16,89590,105400
+2024-09-01,noche,LC marcado,false,5,18,60605,68890
+2024-09-01,noche,LC sin marcar 15%,false,__MESAS__,40,54,0
+2024-09-01,noche,LC sin marcar 15%,false,13,2,6800,7500
+2024-09-01,noche,LC sin marcar 15%,false,16,12,75055,88300
+2024-09-01,noche,LC sin marcar 15%,false,2,20,87735,103900
+2024-09-01,noche,LC sin marcar 15%,false,25,3,9430,11300
+2024-09-01,noche,LC sin marcar 15%,false,3,57,377235,445380
+2024-09-01,noche,LC sin marcar 15%,false,4,1,4165,4900
+2024-09-01,noche,LC sin marcar 15%,false,5,87,238345,281700
+2024-09-01,noche,otro,false,__MESAS__,34,24,0
+2024-09-01,noche,otro,false,13,3,8400,11500
+2024-09-01,noche,otro,false,16,1,5250,7500
+2024-09-01,noche,otro,false,2,7,27690,37700
+2024-09-01,noche,otro,false,21,1,12600,12600
+2024-09-01,noche,otro,false,25,6,18555,23000
+2024-09-01,noche,otro,false,3,19,146060,180500
+2024-09-01,noche,otro,false,5,70,202740,264080
+2024-09-01,noche,sin descuento,false,__MESAS__,777,997,0
+2024-09-01,noche,sin descuento,false,13,31,114500,113500
+2024-09-01,noche,sin descuento,false,16,211,1543300,1543300
+2024-09-01,noche,sin descuento,false,2,521,2443800,2443800
+2024-09-01,noche,sin descuento,false,21,1,14000,14000
+2024-09-01,noche,sin descuento,false,23,1,12000,12000
+2024-09-01,noche,sin descuento,false,25,185,702400,702100
+2024-09-01,noche,sin descuento,false,3,1075,8503000,8498040
+2024-09-01,noche,sin descuento,false,4,44,197600,197600
+2024-09-01,noche,sin descuento,false,5,1596,6674445,6659070
+2024-09-01,noche,tarjeta 10%,false,__MESAS__,101,142,0
+2024-09-01,noche,tarjeta 10%,false,13,1,4500,4500
+2024-09-01,noche,tarjeta 10%,false,16,30,198990,221100
+2024-09-01,noche,tarjeta 10%,false,2,87,370100,413000
+2024-09-01,noche,tarjeta 10%,false,25,17,56985,63900
+2024-09-01,noche,tarjeta 10%,false,3,162,1127295,1252680
+2024-09-01,noche,tarjeta 10%,false,4,6,25740,28600
+2024-09-01,noche,tarjeta 10%,false,5,240,798850,879760
+2024-10-01,mañana,LC marcado,false,__MESAS__,1,1,1
+2024-10-01,mañana,LC marcado,false,3,2,10455,12300
+2024-10-01,mañana,LC sin marcar 15%,false,__MESAS__,7,8,0
+2024-10-01,mañana,LC sin marcar 15%,false,13,2,8000,10000
+2024-10-01,mañana,LC sin marcar 15%,false,16,4,32775,39000
+2024-10-01,mañana,LC sin marcar 15%,false,2,6,26095,30700
+2024-10-01,mañana,LC sin marcar 15%,false,3,12,77985,92600
+2024-10-01,mañana,LC sin marcar 15%,false,4,1,3995,4700
+2024-10-01,mañana,LC sin marcar 15%,false,5,10,35275,41500
+2024-10-01,mañana,otro,false,__MESAS__,2,2,0
+2024-10-01,mañana,otro,false,13,1,2100,3000
+2024-10-01,mañana,otro,false,16,2,13880,14600
+2024-10-01,mañana,sin descuento,false,__MESAS__,104,160,0
+2024-10-01,mañana,sin descuento,false,13,6,25800,25800
+2024-10-01,mañana,sin descuento,false,16,63,497900,497900
+2024-10-01,mañana,sin descuento,false,2,55,268000,268000
+2024-10-01,mañana,sin descuento,false,21,3,42000,42000
+2024-10-01,mañana,sin descuento,false,3,151,1268700,1268700
+2024-10-01,mañana,sin descuento,false,4,4,19200,19200
+2024-10-01,mañana,sin descuento,false,5,153,740900,736985
+2024-10-01,mañana,tarjeta 10%,false,__MESAS__,10,10,0
+2024-10-01,mañana,tarjeta 10%,false,16,8,58500,65000
+2024-10-01,mañana,tarjeta 10%,false,2,3,14940,16600
+2024-10-01,mañana,tarjeta 10%,false,3,11,67140,74600
+2024-10-01,mañana,tarjeta 10%,false,5,10,31320,34800
+2024-10-01,noche,LC marcado,false,__MESAS__,7,6,7
+2024-10-01,noche,LC marcado,false,16,1,6375,7500
+2024-10-01,noche,LC marcado,false,2,8,33905,39400
+2024-10-01,noche,LC marcado,false,25,1,4410,4410
+2024-10-01,noche,LC marcado,false,3,14,92945,108000
+2024-10-01,noche,LC marcado,false,5,13,47000,53085
+2024-10-01,noche,LC sin marcar 15%,false,__MESAS__,72,75,0
+2024-10-01,noche,LC sin marcar 15%,false,13,5,15915,18900
+2024-10-01,noche,LC sin marcar 15%,false,16,17,148545,176700
+2024-10-01,noche,LC sin marcar 15%,false,2,39,152420,182900
+2024-10-01,noche,LC sin marcar 15%,false,25,14,44275,49000
+2024-10-01,noche,LC sin marcar 15%,false,3,86,547220,641600
+2024-10-01,noche,LC sin marcar 15%,false,4,1,3995,4700
+2024-10-01,noche,LC sin marcar 15%,false,5,163,524110,618820
+2024-10-01,noche,otro,false,__MESAS__,34,12,0
+2024-10-01,noche,otro,false,13,2,4900,7000
+2024-10-01,noche,otro,false,16,1,8580,11000
+2024-10-01,noche,otro,false,2,14,50555,62300
+2024-10-01,noche,otro,false,21,4,54600,54600
+2024-10-01,noche,otro,false,24,2,20000,20000
+2024-10-01,noche,otro,false,25,6,20800,20400
+2024-10-01,noche,otro,false,3,13,80000,98100
+2024-10-01,noche,otro,false,4,2,8640,9600
+2024-10-01,noche,otro,false,5,105,229846,301215
+2024-10-01,noche,sin descuento,false,__MESAS__,625,1096,0
+2024-10-01,noche,sin descuento,false,13,62,238800,238800
+2024-10-01,noche,sin descuento,false,16,392,3103800,3103800
+2024-10-01,noche,sin descuento,false,2,528,2475900,2475900
+2024-10-01,noche,sin descuento,false,21,6,84000,84000
+2024-10-01,noche,sin descuento,false,23,1,12000,12000
+2024-10-01,noche,sin descuento,false,25,76,288000,280420
+2024-10-01,noche,sin descuento,false,3,995,8076800,8076800
+2024-10-01,noche,sin descuento,false,4,60,283600,283600
+2024-10-01,noche,sin descuento,false,5,1209,5211125,5180415
+2024-10-01,noche,tarjeta 10%,false,__MESAS__,125,181,0
+2024-10-01,noche,tarjeta 10%,false,13,5,16920,18800
+2024-10-01,noche,tarjeta 10%,false,16,38,265550,296700
+2024-10-01,noche,tarjeta 10%,false,2,98,428145,479600
+2024-10-01,noche,tarjeta 10%,false,21,1,12600,12600
+2024-10-01,noche,tarjeta 10%,false,25,39,125950,136900
+2024-10-01,noche,tarjeta 10%,false,3,182,1266080,1419200
+2024-10-01,noche,tarjeta 10%,false,4,8,34560,38400
+2024-10-01,noche,tarjeta 10%,false,5,272,1015510,1107250
+2024-11-01,mañana,LC sin marcar 15%,false,__MESAS__,4,3,0
+2024-11-01,mañana,LC sin marcar 15%,false,13,1,3010,3010
+2024-11-01,mañana,LC sin marcar 15%,false,16,4,25160,29600
+2024-11-01,mañana,LC sin marcar 15%,false,2,2,8990,11600
+2024-11-01,mañana,LC sin marcar 15%,false,3,3,22100,26000
+2024-11-01,mañana,otro,false,__MESAS__,4,7,0
+2024-11-01,mañana,otro,false,13,2,6450,9000
+2024-11-01,mañana,otro,false,16,1,5475,7500
+2024-11-01,mañana,otro,false,2,2,7000,10000
+2024-11-01,mañana,otro,false,3,2,10150,14500
+2024-11-01,mañana,otro,false,5,2,2380,3400
+2024-11-01,mañana,sin descuento,false,__MESAS__,94,163,0
+2024-11-01,mañana,sin descuento,false,13,2,8000,8000
+2024-11-01,mañana,sin descuento,false,16,65,525700,525700
+2024-11-01,mañana,sin descuento,false,2,76,361200,361200
+2024-11-01,mañana,sin descuento,false,21,3,42000,42000
+2024-11-01,mañana,sin descuento,false,23,1,12000,12000
+2024-11-01,mañana,sin descuento,false,25,6,21000,21000
+2024-11-01,mañana,sin descuento,false,3,159,1219300,1219300
+2024-11-01,mañana,sin descuento,false,4,3,14300,14300
+2024-11-01,mañana,sin descuento,false,5,161,637600,636555
+2024-11-01,mañana,tarjeta 10%,false,__MESAS__,11,19,0
+2024-11-01,mañana,tarjeta 10%,false,16,10,66420,73800
+2024-11-01,mañana,tarjeta 10%,false,2,7,27720,30800
+2024-11-01,mañana,tarjeta 10%,false,25,1,3150,3500
+2024-11-01,mañana,tarjeta 10%,false,3,12,85680,96500
+2024-11-01,mañana,tarjeta 10%,false,4,1,4230,4700
+2024-11-01,mañana,tarjeta 10%,false,5,9,27795,29265
+2024-11-01,noche,LC marcado,false,__MESAS__,54,55,65
+2024-11-01,noche,LC marcado,false,13,4,13005,13710
+2024-11-01,noche,LC marcado,false,16,13,81685,96100
+2024-11-01,noche,LC marcado,false,2,32,126990,149400
+2024-11-01,noche,LC marcado,false,25,3,9945,9945
+2024-11-01,noche,LC marcado,false,3,61,417075,489300
+2024-11-01,noche,LC marcado,false,4,3,12155,14300
+2024-11-01,noche,LC marcado,false,5,116,384835,437005
+2024-11-01,noche,LC sin marcar 15%,false,__MESAS__,24,50,0
+2024-11-01,noche,LC sin marcar 15%,false,13,4,11475,13200
+2024-11-01,noche,LC sin marcar 15%,false,16,9,56270,66200
+2024-11-01,noche,LC sin marcar 15%,false,2,19,71145,89050
+2024-11-01,noche,LC sin marcar 15%,false,3,49,361265,419900
+2024-11-01,noche,LC sin marcar 15%,false,4,8,27030,31800
+2024-11-01,noche,LC sin marcar 15%,false,5,72,255985,294220
+2024-11-01,noche,otro,false,__MESAS__,12,7,0
+2024-11-01,noche,otro,false,13,1,2100,3000
+2024-11-01,noche,otro,false,16,1,6660,7400
+2024-11-01,noche,otro,false,2,2,7840,11200
+2024-11-01,noche,otro,false,3,10,70490,93900
+2024-11-01,noche,otro,false,5,22,80290,95180
+2024-11-01,noche,sin descuento,false,__MESAS__,710,1194,0
+2024-11-01,noche,sin descuento,false,13,30,111300,109710
+2024-11-01,noche,sin descuento,false,16,359,2775700,2775700
+2024-11-01,noche,sin descuento,false,2,628,2916600,2916525
+2024-11-01,noche,sin descuento,false,21,9,126000,126000
+2024-11-01,noche,sin descuento,false,24,1,10000,10000
+2024-11-01,noche,sin descuento,false,25,60,211500,211500
+2024-11-01,noche,sin descuento,false,26,2,3000,3000
+2024-11-01,noche,sin descuento,false,3,1197,9849500,9849500
+2024-11-01,noche,sin descuento,false,4,43,199100,199100
+2024-11-01,noche,sin descuento,false,5,1426,6368180,6348445
+2024-11-01,noche,tarjeta 10%,false,__MESAS__,106,168,0
+2024-11-01,noche,tarjeta 10%,false,13,3,8100,9000
+2024-11-01,noche,tarjeta 10%,false,16,50,365750,407200
+2024-11-01,noche,tarjeta 10%,false,2,92,381195,425400
+2024-11-01,noche,tarjeta 10%,false,21,1,14000,14000
+2024-11-01,noche,tarjeta 10%,false,25,16,51300,57000
+2024-11-01,noche,tarjeta 10%,false,3,170,1361875,1520600
+2024-11-01,noche,tarjeta 10%,false,4,9,38735,43300
+2024-11-01,noche,tarjeta 10%,false,5,209,822030,895165
+2024-12-01,mañana,LC sin marcar 15%,false,__MESAS__,11,11,0
+2024-12-01,mañana,LC sin marcar 15%,false,13,2,8755,10300
+2024-12-01,mañana,LC sin marcar 15%,false,16,10,71820,88500
+2024-12-01,mañana,LC sin marcar 15%,false,2,2,9225,11100
+2024-12-01,mañana,LC sin marcar 15%,false,3,5,37330,42900
+2024-12-01,mañana,LC sin marcar 15%,false,5,7,17500,20300
+2024-12-01,mañana,otro,false,__MESAS__,5,7,0
+2024-12-01,mañana,otro,false,13,1,3600,5500
+2024-12-01,mañana,otro,false,16,3,26980,30800
+2024-12-01,mañana,otro,false,2,6,32000,34000
+2024-12-01,mañana,otro,false,3,6,40600,42800
+2024-12-01,mañana,otro,false,5,10,20580,20900
+2024-12-01,mañana,sin descuento,false,__MESAS__,104,201,0
+2024-12-01,mañana,sin descuento,false,13,9,48800,48800
+2024-12-01,mañana,sin descuento,false,16,78,753900,753900
+2024-12-01,mañana,sin descuento,false,2,53,259100,262700
+2024-12-01,mañana,sin descuento,false,21,1,14000,14000
+2024-12-01,mañana,sin descuento,false,3,207,1714300,1715600
+2024-12-01,mañana,sin descuento,false,4,5,24100,24100
+2024-12-01,mañana,sin descuento,false,5,160,650300,648065
+2024-12-01,mañana,tarjeta 10%,false,__MESAS__,20,41,0
+2024-12-01,mañana,tarjeta 10%,false,15,1,8280,8280
+2024-12-01,mañana,tarjeta 10%,false,16,17,143720,162900
+2024-12-01,mañana,tarjeta 10%,false,2,11,44450,47900
+2024-12-01,mañana,tarjeta 10%,false,3,32,258965,286900
+2024-12-01,mañana,tarjeta 10%,false,5,38,122105,132355
+2024-12-01,noche,LC marcado,false,__MESAS__,96,83,97
+2024-12-01,noche,LC marcado,false,13,8,35445,41700
+2024-12-01,noche,LC marcado,false,16,54,400095,488100
+2024-12-01,noche,LC marcado,false,2,59,249985,298900
+2024-12-01,noche,LC marcado,false,25,3,8925,10500
+2024-12-01,noche,LC marcado,false,3,144,947240,1119400
+2024-12-01,noche,LC marcado,false,4,8,32470,38200
+2024-12-01,noche,LC marcado,false,5,211,641325,737515
+2024-12-01,noche,LC sin marcar 15%,false,__MESAS__,76,113,0
+2024-12-01,noche,LC sin marcar 15%,false,13,7,27030,35800
+2024-12-01,noche,LC sin marcar 15%,false,16,47,343041,418100
+2024-12-01,noche,LC sin marcar 15%,false,2,55,240385,286300
+2024-12-01,noche,LC sin marcar 15%,false,25,3,8925,10500
+2024-12-01,noche,LC sin marcar 15%,false,3,86,583188,674000
+2024-12-01,noche,LC sin marcar 15%,false,4,1,3995,4700
+2024-12-01,noche,LC sin marcar 15%,false,5,106,329295,377430
+2024-12-01,noche,otro,false,__MESAS__,78,138,0
+2024-12-01,noche,otro,false,13,2,7000,10000
+2024-12-01,noche,otro,false,16,32,233310,287600
+2024-12-01,noche,otro,false,2,87,407269,452300
+2024-12-01,noche,otro,false,24,1,10000,10000
+2024-12-01,noche,otro,false,25,6,21000,21000
+2024-12-01,noche,otro,false,3,174,1250383,1331200
+2024-12-01,noche,otro,false,4,6,28800,28800
+2024-12-01,noche,otro,false,5,170,753268,881280
+2024-12-01,noche,sin descuento,false,__MESAS__,652,1240,0
+2024-12-01,noche,sin descuento,false,11,40,1960000,1960000
+2024-12-01,noche,sin descuento,false,13,40,207100,211400
+2024-12-01,noche,sin descuento,false,16,277,2638700,2642900
+2024-12-01,noche,sin descuento,false,2,641,3270100,3288300
+2024-12-01,noche,sin descuento,false,21,10,137200,137200
+2024-12-01,noche,sin descuento,false,23,2,24000,24000
+2024-12-01,noche,sin descuento,false,25,84,297900,297900
+2024-12-01,noche,sin descuento,false,27,1,8000,8000
+2024-12-01,noche,sin descuento,false,3,1349,11646300,11661900
+2024-12-01,noche,sin descuento,false,4,71,315700,315700
+2024-12-01,noche,sin descuento,false,5,1542,7943060,7940300
+2024-12-01,noche,tarjeta 10%,false,__MESAS__,117,201,0
+2024-12-01,noche,tarjeta 10%,false,13,8,30770,35900
+2024-12-01,noche,tarjeta 10%,false,16,72,557695,648000
+2024-12-01,noche,tarjeta 10%,false,2,96,425655,475400
+2024-12-01,noche,tarjeta 10%,false,21,1,12600,12600
+2024-12-01,noche,tarjeta 10%,false,25,11,35000,38500
+2024-12-01,noche,tarjeta 10%,false,3,195,1435830,1590700
+2024-12-01,noche,tarjeta 10%,false,4,9,38720,42500
+2024-12-01,noche,tarjeta 10%,false,5,246,977865,1057375
+2025-01-01,mañana,LC marcado,false,__MESAS__,1,4,1
+2025-01-01,mañana,LC marcado,false,16,1,7650,9000
+2025-01-01,mañana,LC marcado,false,2,2,9095,10700
+2025-01-01,mañana,LC marcado,false,3,4,30515,35900
+2025-01-01,mañana,LC marcado,false,4,1,4165,4900
+2025-01-01,mañana,LC marcado,false,5,4,10200,12000
+2025-01-01,mañana,otro,false,__MESAS__,2,4,0
+2025-01-01,mañana,otro,false,16,2,14240,17800
+2025-01-01,mañana,otro,false,3,1,16660,23800
+2025-01-01,mañana,otro,false,5,1,4050,3825
+2025-01-01,mañana,sin descuento,false,__MESAS__,156,254,0
+2025-01-01,mañana,sin descuento,false,13,8,43700,43700
+2025-01-01,mañana,sin descuento,false,15,1,8280,8280
+2025-01-01,mañana,sin descuento,false,16,92,826710,827600
+2025-01-01,mañana,sin descuento,false,2,101,480100,480100
+2025-01-01,mañana,sin descuento,false,3,249,2059200,2059200
+2025-01-01,mañana,sin descuento,false,4,4,19000,19000
+2025-01-01,mañana,sin descuento,false,5,237,1100030,1099750
+2025-01-01,mañana,tarjeta 10%,false,__MESAS__,13,14,0
+2025-01-01,mañana,tarjeta 10%,false,13,4,20532,23200
+2025-01-01,mañana,tarjeta 10%,false,16,7,58140,64600
+2025-01-01,mañana,tarjeta 10%,false,2,10,49560,55200
+2025-01-01,mañana,tarjeta 10%,false,3,23,170020,189400
+2025-01-01,mañana,tarjeta 10%,false,4,1,4410,4900
+2025-01-01,mañana,tarjeta 10%,false,5,20,60682,67500
+2025-01-01,noche,LC marcado,false,__MESAS__,57,79,60
+2025-01-01,noche,LC marcado,false,1,1,680,680
+2025-01-01,noche,LC marcado,false,13,7,31620,37200
+2025-01-01,noche,LC marcado,false,16,13,106525,123700
+2025-01-01,noche,LC marcado,false,2,50,228735,269100
+2025-01-01,noche,LC marcado,false,21,2,28000,28000
+2025-01-01,noche,LC marcado,false,25,4,14450,18000
+2025-01-01,noche,LC marcado,false,3,98,752960,884600
+2025-01-01,noche,LC marcado,false,4,4,13430,15800
+2025-01-01,noche,LC marcado,false,5,119,450780,521940
+2025-01-01,noche,LC sin marcar 15%,false,__MESAS__,89,82,0
+2025-01-01,noche,LC sin marcar 15%,false,13,2,9605,11300
+2025-01-01,noche,LC sin marcar 15%,false,16,29,226950,267000
+2025-01-01,noche,LC sin marcar 15%,false,2,64,283450,335000
+2025-01-01,noche,LC sin marcar 15%,false,25,12,41600,54000
+2025-01-01,noche,LC sin marcar 15%,false,3,117,807310,953600
+2025-01-01,noche,LC sin marcar 15%,false,4,5,20420,24300
+2025-01-01,noche,LC sin marcar 15%,false,5,158,587800,692800
+2025-01-01,noche,otro,false,__MESAS__,13,10,0
+2025-01-01,noche,otro,false,13,2,12400,12400
+2025-01-01,noche,otro,false,16,6,43670,56100
+2025-01-01,noche,otro,false,2,19,77520,102000
+2025-01-01,noche,otro,false,25,13,42350,58500
+2025-01-01,noche,otro,false,3,12,62145,91900
+2025-01-01,noche,otro,false,5,24,59835,94300
+2025-01-01,noche,sin descuento,false,__MESAS__,1007,1886,0
+2025-01-01,noche,sin descuento,false,1,1,800,680
+2025-01-01,noche,sin descuento,false,13,67,360600,360600
+2025-01-01,noche,sin descuento,false,16,541,5134100,5134100
+2025-01-01,noche,sin descuento,false,2,941,4685600,4685600
+2025-01-01,noche,sin descuento,false,21,8,110600,109200
+2025-01-01,noche,sin descuento,false,24,1,10000,10000
+2025-01-01,noche,sin descuento,false,25,54,186000,190000
+2025-01-01,noche,sin descuento,false,3,2039,17116645,17117700
+2025-01-01,noche,sin descuento,false,4,93,435300,435300
+2025-01-01,noche,sin descuento,false,5,2363,11097168,11089605
+2025-01-01,noche,tarjeta 10%,false,__MESAS__,126,235,0
+2025-01-01,noche,tarjeta 10%,false,13,10,47970,53300
+2025-01-01,noche,tarjeta 10%,false,16,69,586480,652100
+2025-01-01,noche,tarjeta 10%,false,2,142,647650,720200
+2025-01-01,noche,tarjeta 10%,false,25,2,7550,9000
+2025-01-01,noche,tarjeta 10%,false,3,267,2039200,2268900
+2025-01-01,noche,tarjeta 10%,false,4,14,60300,67000
+2025-01-01,noche,tarjeta 10%,false,5,325,1310600,1442350
+2025-02-01,mañana,LC marcado,false,__MESAS__,3,3,3
+2025-02-01,mañana,LC marcado,false,16,2,14960,17600
+2025-02-01,mañana,LC marcado,false,2,1,3910,4600
+2025-02-01,mañana,LC marcado,false,3,1,6630,7800
+2025-02-01,mañana,LC marcado,false,5,2,3485,4100
+2025-02-01,mañana,LC sin marcar 15%,false,__MESAS__,4,5,0
+2025-02-01,mañana,LC sin marcar 15%,false,13,1,5270,6200
+2025-02-01,mañana,LC sin marcar 15%,false,16,2,15130,17800
+2025-02-01,mañana,LC sin marcar 15%,false,2,1,5185,6100
+2025-02-01,mañana,LC sin marcar 15%,false,3,1,5270,6200
+2025-02-01,mañana,LC sin marcar 15%,false,5,2,4080,4800
+2025-02-01,mañana,otro,false,__MESAS__,3,3,0
+2025-02-01,mañana,otro,false,16,2,12460,17800
+2025-02-01,mañana,otro,false,2,1,3220,4600
+2025-02-01,mañana,otro,false,3,2,11690,16700
+2025-02-01,mañana,otro,false,5,3,5040,7200
+2025-02-01,mañana,sin descuento,false,__MESAS__,173,247,0
+2025-02-01,mañana,sin descuento,false,13,3,17900,17900
+2025-02-01,mañana,sin descuento,false,15,1,8300,8300
+2025-02-01,mañana,sin descuento,false,16,93,844100,844100
+2025-02-01,mañana,sin descuento,false,2,81,419400,419400
+2025-02-01,mañana,sin descuento,false,21,1,14000,14000
+2025-02-01,mañana,sin descuento,false,23,1,12000,12000
+2025-02-01,mañana,sin descuento,false,25,15,40500,40500
+2025-02-01,mañana,sin descuento,false,3,174,1403000,1402340
+2025-02-01,mañana,sin descuento,false,4,11,55700,55700
+2025-02-01,mañana,sin descuento,false,5,391,1405100,1404080
+2025-02-01,mañana,tarjeta 10%,false,__MESAS__,8,19,0
+2025-02-01,mañana,tarjeta 10%,false,16,4,31950,35500
+2025-02-01,mañana,tarjeta 10%,false,2,9,39150,43500
+2025-02-01,mañana,tarjeta 10%,false,3,15,104580,116200
+2025-02-01,mañana,tarjeta 10%,false,5,17,49770,55300
+2025-02-01,noche,LC marcado,false,__MESAS__,26,38,26
+2025-02-01,noche,LC marcado,false,13,1,5270,6200
+2025-02-01,noche,LC marcado,false,16,15,113050,133000
+2025-02-01,noche,LC marcado,false,2,28,126320,142400
+2025-02-01,noche,LC marcado,false,25,1,3825,4500
+2025-02-01,noche,LC marcado,false,3,28,222915,256200
+2025-02-01,noche,LC marcado,false,4,3,9010,15900
+2025-02-01,noche,LC marcado,false,5,49,169125,195855
+2025-02-01,noche,LC sin marcar 15%,false,__MESAS__,61,59,0
+2025-02-01,noche,LC sin marcar 15%,false,13,6,27540,32400
+2025-02-01,noche,LC sin marcar 15%,false,16,24,186000,220400
+2025-02-01,noche,LC sin marcar 15%,false,2,46,203985,241000
+2025-02-01,noche,LC sin marcar 15%,false,21,1,11900,11900
+2025-02-01,noche,LC sin marcar 15%,false,25,8,30600,36000
+2025-02-01,noche,LC sin marcar 15%,false,3,104,745138,878730
+2025-02-01,noche,LC sin marcar 15%,false,4,12,52156,61600
+2025-02-01,noche,LC sin marcar 15%,false,5,124,412044,481005
+2025-02-01,noche,otro,false,__MESAS__,16,19,0
+2025-02-01,noche,otro,false,13,6,21700,31000
+2025-02-01,noche,otro,false,16,4,23698,35200
+2025-02-01,noche,otro,false,2,13,46984,58300
+2025-02-01,noche,otro,false,25,4,13140,18000
+2025-02-01,noche,otro,false,3,22,114610,179800
+2025-02-01,noche,otro,false,4,6,10517,27600
+2025-02-01,noche,otro,false,5,28,70950,103700
+2025-02-01,noche,sin descuento,false,__MESAS__,933,1734,0
+2025-02-01,noche,sin descuento,false,13,47,246600,246600
+2025-02-01,noche,sin descuento,false,15,1,8280,8280
+2025-02-01,noche,sin descuento,false,16,475,4431000,4431000
+2025-02-01,noche,sin descuento,false,2,887,4527000,4527000
+2025-02-01,noche,sin descuento,false,21,5,70000,70000
+2025-02-01,noche,sin descuento,false,23,1,12000,12000
+2025-02-01,noche,sin descuento,false,24,1,10000,10000
+2025-02-01,noche,sin descuento,false,25,86,379000,379000
+2025-02-01,noche,sin descuento,false,3,1776,14991890,14990015
+2025-02-01,noche,sin descuento,false,4,141,701500,701500
+2025-02-01,noche,sin descuento,false,5,2360,11423600,11414830
+2025-02-01,noche,tarjeta 10%,false,__MESAS__,95,193,0
+2025-02-01,noche,tarjeta 10%,false,13,18,89460,99400
+2025-02-01,noche,tarjeta 10%,false,16,46,384300,426000
+2025-02-01,noche,tarjeta 10%,false,2,87,398737,442800
+2025-02-01,noche,tarjeta 10%,false,25,11,43290,48150
+2025-02-01,noche,tarjeta 10%,false,3,223,1724138,1915775
+2025-02-01,noche,tarjeta 10%,false,4,14,60765,68400
+2025-02-01,noche,tarjeta 10%,false,5,191,776933,858515
+2025-03-01,mañana,LC sin marcar 15%,false,__MESAS__,4,10,0
+2025-03-01,mañana,LC sin marcar 15%,false,16,4,34673,38496
+2025-03-01,mañana,LC sin marcar 15%,false,3,7,60846,74247
+2025-03-01,mañana,LC sin marcar 15%,false,4,1,0,4602
+2025-03-01,mañana,LC sin marcar 15%,false,5,10,19722,20705
+2025-03-01,mañana,otro,false,__MESAS__,6,11,0
+2025-03-01,mañana,otro,false,16,3,17800,28054
+2025-03-01,mañana,otro,false,2,3,10990,13452
+2025-03-01,mañana,otro,false,3,7,94070,98103
+2025-03-01,mañana,otro,false,5,8,23171,26339
+2025-03-01,mañana,sin descuento,false,__MESAS__,134,213,0
+2025-03-01,mañana,sin descuento,false,13,7,37420,36019
+2025-03-01,mañana,sin descuento,false,15,1,7820,7372
+2025-03-01,mañana,sin descuento,false,16,85,781650,782386
+2025-03-01,mañana,sin descuento,false,2,62,318117,316645
+2025-03-01,mañana,sin descuento,false,21,1,12389,12389
+2025-03-01,mañana,sin descuento,false,3,172,1317619,1291785
+2025-03-01,mañana,sin descuento,false,4,11,51421,49558
+2025-03-01,mañana,sin descuento,false,5,228,764564,756780
+2025-03-01,mañana,tarjeta 10%,false,__MESAS__,11,21,0
+2025-03-01,mañana,tarjeta 10%,false,15,1,7372,7372
+2025-03-01,mañana,tarjeta 10%,false,16,7,60645,68054
+2025-03-01,mañana,tarjeta 10%,false,2,10,45965,50090
+2025-03-01,mañana,tarjeta 10%,false,3,16,118715,131798
+2025-03-01,mañana,tarjeta 10%,false,5,19,43934,48952
+2025-03-01,noche,LC marcado,false,__MESAS__,13,23,14
+2025-03-01,noche,LC marcado,false,16,3,23596,26372
+2025-03-01,noche,LC marcado,false,2,10,47318,54515
+2025-03-01,noche,LC marcado,false,3,31,193620,222216
+2025-03-01,noche,LC marcado,false,5,28,103619,110406
+2025-03-01,noche,LC sin marcar 15%,false,__MESAS__,71,91,0
+2025-03-01,noche,LC sin marcar 15%,false,13,4,19558,23010
+2025-03-01,noche,LC sin marcar 15%,false,16,30,232636,275968
+2025-03-01,noche,LC sin marcar 15%,false,2,36,158593,185755
+2025-03-01,noche,LC sin marcar 15%,false,25,7,26455,30975
+2025-03-01,noche,LC sin marcar 15%,false,3,96,638142,747596
+2025-03-01,noche,LC sin marcar 15%,false,4,7,24430,31948
+2025-03-01,noche,LC sin marcar 15%,false,5,144,475882,564231
+2025-03-01,noche,otro,false,__MESAS__,42,70,0
+2025-03-01,noche,otro,false,13,5,25307,28851
+2025-03-01,noche,otro,false,16,14,107845,131683
+2025-03-01,noche,otro,false,2,28,123437,142128
+2025-03-01,noche,otro,false,25,5,14950,18700
+2025-03-01,noche,otro,false,3,94,650880,762224
+2025-03-01,noche,otro,false,4,10,26341,45488
+2025-03-01,noche,otro,false,5,98,358409,408860
+2025-03-01,noche,sin descuento,false,__MESAS__,877,1670,0
+2025-03-01,noche,sin descuento,false,13,37,189708,185049
+2025-03-01,noche,sin descuento,false,16,458,4331629,4336809
+2025-03-01,noche,sin descuento,false,2,861,4313152,4285583
+2025-03-01,noche,sin descuento,false,21,11,147558,147556
+2025-03-01,noche,sin descuento,false,23,1,12000,12000
+2025-03-01,noche,sin descuento,false,25,20,89097,88500
+2025-03-01,noche,sin descuento,false,3,1742,13667291,13389000
+2025-03-01,noche,sin descuento,false,4,131,607073,591424
+2025-03-01,noche,sin descuento,false,5,2101,9339523,9192054
+2025-03-01,noche,tarjeta 10%,false,__MESAS__,108,212,0
+2025-03-01,noche,tarjeta 10%,false,13,4,19912,22125
+2025-03-01,noche,tarjeta 10%,false,16,52,433075,484553
+2025-03-01,noche,tarjeta 10%,false,2,100,449874,499129
+2025-03-01,noche,tarjeta 10%,false,25,5,19537,22125
+2025-03-01,noche,tarjeta 10%,false,3,207,1417082,1577209
+2025-03-01,noche,tarjeta 10%,false,4,17,67821,77170
+2025-03-01,noche,tarjeta 10%,false,5,245,942387,1035965
+2025-04-01,mañana,LC sin marcar 15%,false,__MESAS__,2,2,0
+2025-04-01,mañana,LC sin marcar 15%,false,2,3,14142,16637
+2025-04-01,mañana,LC sin marcar 15%,false,3,3,18128,21328
+2025-04-01,mañana,LC sin marcar 15%,false,5,4,6920,8140
+2025-04-01,mañana,otro,false,__MESAS__,2,1,0
+2025-04-01,mañana,otro,false,13,1,3841,5487
+2025-04-01,mañana,otro,false,16,1,7062,10089
+2025-04-01,mañana,otro,false,2,1,4274,6106
+2025-04-01,mañana,otro,false,5,1,1177,1681
+2025-04-01,mañana,sin descuento,false,__MESAS__,92,176,0
+2025-04-01,mañana,sin descuento,false,13,4,22832,22833
+2025-04-01,mañana,sin descuento,false,15,1,7805,7805
+2025-04-01,mañana,sin descuento,false,16,48,449469,449470
+2025-04-01,mañana,sin descuento,false,2,58,282655,282664
+2025-04-01,mañana,sin descuento,false,3,149,1180885,1180894
+2025-04-01,mañana,sin descuento,false,4,6,27345,27346
+2025-04-01,mañana,sin descuento,false,5,171,562058,561138
+2025-04-01,mañana,tarjeta 10%,false,__MESAS__,7,9,0
+2025-04-01,mañana,tarjeta 10%,false,16,3,23973,26638
+2025-04-01,mañana,tarjeta 10%,false,2,1,4142,4602
+2025-04-01,mañana,tarjeta 10%,false,3,13,68186,76903
+2025-04-01,mañana,tarjeta 10%,false,4,3,11491,13008
+2025-04-01,mañana,tarjeta 10%,false,5,8,25965,27344
+2025-04-01,noche,LC marcado,false,__MESAS__,10,14,10
+2025-04-01,noche,LC marcado,false,16,8,67624,79559
+2025-04-01,noche,LC marcado,false,2,7,26854,31594
+2025-04-01,noche,LC marcado,false,3,18,108996,128232
+2025-04-01,noche,LC marcado,false,4,3,11058,13008
+2025-04-01,noche,LC marcado,false,5,18,54387,58952
+2025-04-01,noche,LC sin marcar 15%,false,__MESAS__,48,93,0
+2025-04-01,noche,LC sin marcar 15%,false,13,6,24823,29204
+2025-04-01,noche,LC sin marcar 15%,false,16,13,109447,128763
+2025-04-01,noche,LC sin marcar 15%,false,2,48,205354,241507
+2025-04-01,noche,LC sin marcar 15%,false,3,121,784708,921700
+2025-04-01,noche,LC sin marcar 15%,false,4,4,15420,18142
+2025-04-01,noche,LC sin marcar 15%,false,5,129,397171,459496
+2025-04-01,noche,otro,false,__MESAS__,7,4,0
+2025-04-01,noche,otro,false,2,1,6137,6460
+2025-04-01,noche,otro,false,25,2,9900,9900
+2025-04-01,noche,otro,false,3,3,20792,22301
+2025-04-01,noche,otro,false,4,2,6442,9204
+2025-04-01,noche,otro,false,5,5,9673,14069
+2025-04-01,noche,sin descuento,false,__MESAS__,712,1401,0
+2025-04-01,noche,sin descuento,false,13,45,220443,220447
+2025-04-01,noche,sin descuento,false,16,363,3466372,3466411
+2025-04-01,noche,sin descuento,false,2,662,3255664,3255665
+2025-04-01,noche,sin descuento,false,21,1,12389,12389
+2025-04-01,noche,sin descuento,false,24,1,8850,8850
+2025-04-01,noche,sin descuento,false,25,2,11000,9900
+2025-04-01,noche,sin descuento,false,3,1432,11164425,11163052
+2025-04-01,noche,sin descuento,false,4,110,493274,493280
+2025-04-01,noche,sin descuento,false,5,1627,6926221,6914387
+2025-04-01,noche,tarjeta 10%,false,__MESAS__,91,202,0
+2025-04-01,noche,tarjeta 10%,false,13,12,56867,63188
+2025-04-01,noche,tarjeta 10%,false,16,39,328062,364515
+2025-04-01,noche,tarjeta 10%,false,2,68,301380,334875
+2025-04-01,noche,tarjeta 10%,false,25,3,13882,13882
+2025-04-01,noche,tarjeta 10%,false,3,207,1490022,1666665
+2025-04-01,noche,tarjeta 10%,false,4,17,66695,75308
+2025-04-01,noche,tarjeta 10%,false,5,233,786082,850461
+2025-05-01,mañana,LC marcado,false,__MESAS__,7,8,7
+2025-05-01,mañana,LC marcado,false,16,6,44040,54426
+2025-05-01,mañana,LC marcado,false,3,3,37425,35328
+2025-05-01,mañana,LC marcado,false,5,6,14305,18557
+2025-05-01,mañana,LC sin marcar 15%,false,__MESAS__,4,3,0
+2025-05-01,mañana,LC sin marcar 15%,false,13,1,4814,6018
+2025-05-01,mañana,LC sin marcar 15%,false,2,1,3611,4248
+2025-05-01,mañana,LC sin marcar 15%,false,3,8,46730,56637
+2025-05-01,mañana,LC sin marcar 15%,false,5,2,4730,5066
+2025-05-01,mañana,otro,false,__MESAS__,2,1,0
+2025-05-01,mañana,otro,false,13,1,3841,5487
+2025-05-01,mañana,otro,false,16,1,4292,8584
+2025-05-01,mañana,otro,false,2,1,3593,5133
+2025-05-01,mañana,otro,false,3,1,3850,7699
+2025-05-01,mañana,otro,false,5,2,2637,4601
+2025-05-01,mañana,sin descuento,false,__MESAS__,114,208,0
+2025-05-01,mañana,sin descuento,false,13,6,28673,28673
+2025-05-01,mañana,sin descuento,false,16,65,603717,603723
+2025-05-01,mañana,sin descuento,false,2,83,417699,417713
+2025-05-01,mañana,sin descuento,false,21,1,14000,14000
+2025-05-01,mañana,sin descuento,false,3,192,1395133,1395146
+2025-05-01,mañana,sin descuento,false,4,18,80708,80708
+2025-05-01,mañana,sin descuento,false,5,193,620622,619588
+2025-05-01,mañana,tarjeta 10%,false,__MESAS__,7,19,0
+2025-05-01,mañana,tarjeta 10%,false,16,7,63080,70090
+2025-05-01,mañana,tarjeta 10%,false,2,8,35602,39559
+2025-05-01,mañana,tarjeta 10%,false,25,1,4950,5500
+2025-05-01,mañana,tarjeta 10%,false,3,8,52885,58763
+2025-05-01,mañana,tarjeta 10%,false,4,1,3903,4336
+2025-05-01,mañana,tarjeta 10%,false,5,13,50973,56637
+2025-05-01,noche,LC marcado,false,__MESAS__,55,100,74
+2025-05-01,noche,LC marcado,false,13,4,18929,21948
+2025-05-01,noche,LC marcado,false,16,32,243212,303456
+2025-05-01,noche,LC marcado,false,2,51,210642,255422
+2025-05-01,noche,LC marcado,false,3,106,643120,788168
+2025-05-01,noche,LC marcado,false,4,9,34292,40088
+2025-05-01,noche,LC marcado,false,5,114,374467,440398
+2025-05-01,noche,LC sin marcar 15%,false,__MESAS__,47,69,0
+2025-05-01,noche,LC sin marcar 15%,false,13,2,7022,8584
+2025-05-01,noche,LC sin marcar 15%,false,16,20,162991,193365
+2025-05-01,noche,LC sin marcar 15%,false,2,51,217252,253087
+2025-05-01,noche,LC sin marcar 15%,false,3,88,584305,697578
+2025-05-01,noche,LC sin marcar 15%,false,4,10,38429,45754
+2025-05-01,noche,LC sin marcar 15%,false,5,101,352687,411529
+2025-05-01,noche,otro,false,__MESAS__,7,9,0
+2025-05-01,noche,otro,false,16,11,52712,95842
+2025-05-01,noche,otro,false,2,8,29204,39274
+2025-05-01,noche,otro,false,3,14,79150,100886
+2025-05-01,noche,otro,false,4,14,33389,60704
+2025-05-01,noche,otro,false,5,27,91108,110290
+2025-05-01,noche,sin descuento,false,__MESAS__,410,756,0
+2025-05-01,noche,sin descuento,false,13,21,96637,96638
+2025-05-01,noche,sin descuento,false,16,177,1725133,1725154
+2025-05-01,noche,sin descuento,false,2,364,1781770,1778007
+2025-05-01,noche,sin descuento,false,21,2,26389,26389
+2025-05-01,noche,sin descuento,false,23,1,10619,10619
+2025-05-01,noche,sin descuento,false,25,9,45611,44283
+2025-05-01,noche,sin descuento,false,3,763,5904646,5896206
+2025-05-01,noche,sin descuento,false,4,76,327876,327878
+2025-05-01,noche,sin descuento,false,5,895,3680142,3665811
+2025-05-01,noche,tarjeta 10%,false,__MESAS__,36,59,0
+2025-05-01,noche,tarjeta 10%,false,13,1,4938,5487
+2025-05-01,noche,tarjeta 10%,false,16,9,81717,90796
+2025-05-01,noche,tarjeta 10%,false,2,38,165327,183864
+2025-05-01,noche,tarjeta 10%,false,25,3,12472,13022
+2025-05-01,noche,tarjeta 10%,false,3,78,506133,573592
+2025-05-01,noche,tarjeta 10%,false,4,9,36535,40354
+2025-05-01,noche,tarjeta 10%,false,5,76,356977,384459
+2025-06-01,mañana,LC marcado,false,__MESAS__,14,20,16
+2025-06-01,mañana,LC marcado,false,16,8,58022,72302
+2025-06-01,mañana,LC marcado,false,2,7,25757,30708
+2025-06-01,mañana,LC marcado,false,3,20,102615,132746
+2025-06-01,mañana,LC marcado,false,4,1,3912,4602
+2025-06-01,mañana,LC marcado,false,5,20,95527,108909
+2025-06-01,mañana,LC sin marcar 15%,false,__MESAS__,2,4,0
+2025-06-01,mañana,LC sin marcar 15%,false,16,1,8650,10177
+2025-06-01,mañana,LC sin marcar 15%,false,2,2,8801,10354
+2025-06-01,mañana,LC sin marcar 15%,false,3,2,28810,33894
+2025-06-01,mañana,LC sin marcar 15%,false,5,3,7898,9291
+2025-06-01,mañana,otro,false,__MESAS__,1,2,0
+2025-06-01,mañana,otro,false,21,1,12389,12389
+2025-06-01,mañana,otro,false,23,1,10619,10619
+2025-06-01,mañana,otro,false,3,2,13779,15310
+2025-06-01,mañana,otro,false,5,2,7726,8070
+2025-06-01,mañana,sin descuento,false,__MESAS__,84,143,0
+2025-06-01,mañana,sin descuento,false,13,5,26106,26107
+2025-06-01,mañana,sin descuento,false,15,2,13991,13992
+2025-06-01,mañana,sin descuento,false,16,48,466814,466816
+2025-06-01,mañana,sin descuento,false,2,66,309115,305934
+2025-06-01,mañana,sin descuento,false,21,5,68389,68389
+2025-06-01,mañana,sin descuento,false,23,1,10619,9027
+2025-06-01,mañana,sin descuento,false,24,3,26549,26550
+2025-06-01,mañana,sin descuento,false,25,4,11504,11504
+2025-06-01,mañana,sin descuento,false,26,2,1770,1770
+2025-06-01,mañana,sin descuento,false,3,134,1032478,1032490
+2025-06-01,mañana,sin descuento,false,4,4,17876,17876
+2025-06-01,mañana,sin descuento,false,5,160,656915,651219
+2025-06-01,mañana,tarjeta 10%,false,__MESAS__,8,13,0
+2025-06-01,mañana,tarjeta 10%,false,13,1,5416,6018
+2025-06-01,mañana,tarjeta 10%,false,16,2,15850,17611
+2025-06-01,mañana,tarjeta 10%,false,2,4,15836,17787
+2025-06-01,mañana,tarjeta 10%,false,21,1,12600,12600
+2025-06-01,mañana,tarjeta 10%,false,3,21,125907,142391
+2025-06-01,mañana,tarjeta 10%,false,5,21,78418,83391
+2025-06-01,noche,LC marcado,false,__MESAS__,124,243,152
+2025-06-01,noche,LC marcado,false,1,1,602,602
+2025-06-01,noche,LC marcado,false,13,16,71310,78905
+2025-06-01,noche,LC marcado,false,16,48,385770,455052
+2025-06-01,noche,LC marcado,false,2,108,433681,514740
+2025-06-01,noche,LC marcado,false,21,7,79193,79193
+2025-06-01,noche,LC marcado,false,23,1,9027,9027
+2025-06-01,noche,LC marcado,false,24,1,7522,8850
+2025-06-01,noche,LC marcado,false,25,2,9027,9624
+2025-06-01,noche,LC marcado,false,3,238,1499584,1804172
+2025-06-01,noche,LC marcado,false,4,15,54686,64070
+2025-06-01,noche,LC marcado,false,5,297,924474,1019937
+2025-06-01,noche,LC sin marcar 15%,false,__MESAS__,27,41,0
+2025-06-01,noche,LC sin marcar 15%,false,1,2,1204,1204
+2025-06-01,noche,LC sin marcar 15%,false,13,1,2633,3097
+2025-06-01,noche,LC sin marcar 15%,false,16,8,71841,84515
+2025-06-01,noche,LC sin marcar 15%,false,2,23,94093,109381
+2025-06-01,noche,LC sin marcar 15%,false,3,32,230182,276373
+2025-06-01,noche,LC sin marcar 15%,false,4,3,11053,13274
+2025-06-01,noche,LC sin marcar 15%,false,5,32,97874,112116
+2025-06-01,noche,otro,false,__MESAS__,14,26,0
+2025-06-01,noche,otro,false,16,4,27336,42213
+2025-06-01,noche,otro,false,2,13,44124,61904
+2025-06-01,noche,otro,false,25,1,0,5642
+2025-06-01,noche,otro,false,3,17,70473,116906
+2025-06-01,noche,otro,false,4,1,3221,4602
+2025-06-01,noche,otro,false,5,49,124040,159612
+2025-06-01,noche,sin descuento,false,__MESAS__,288,633,0
+2025-06-01,noche,sin descuento,false,1,1,708,602
+2025-06-01,noche,sin descuento,false,13,15,71947,71125
+2025-06-01,noche,sin descuento,false,16,151,1461947,1461969
+2025-06-01,noche,sin descuento,false,2,384,1773066,1757060
+2025-06-01,noche,sin descuento,false,21,2,28000,28000
+2025-06-01,noche,sin descuento,false,25,9,31416,31414
+2025-06-01,noche,sin descuento,false,3,634,4972546,4973146
+2025-06-01,noche,sin descuento,false,4,45,199734,199470
+2025-06-01,noche,sin descuento,false,5,775,3518900,3486298
+2025-06-01,noche,tarjeta 10%,false,__MESAS__,21,40,0
+2025-06-01,noche,tarjeta 10%,false,13,1,5097,4814
+2025-06-01,noche,tarjeta 10%,false,16,8,64593,73276
+2025-06-01,noche,tarjeta 10%,false,2,18,70646,78232
+2025-06-01,noche,tarjeta 10%,false,3,46,361889,403013
+2025-06-01,noche,tarjeta 10%,false,4,4,16566,18408
+2025-06-01,noche,tarjeta 10%,false,5,58,193396,203274
+2025-07-01,mañana,LC marcado,false,__MESAS__,9,16,10
+2025-07-01,mañana,LC marcado,false,16,5,39792,46815
+2025-07-01,mañana,LC marcado,false,2,4,16097,18938
+2025-07-01,mañana,LC marcado,false,3,20,125774,153366
+2025-07-01,mañana,LC marcado,false,4,3,11283,13274
+2025-07-01,mañana,LC marcado,false,5,16,59876,63381
+2025-07-01,mañana,LC marcado,true,__MESAS__,3,3,3
+2025-07-01,mañana,LC marcado,true,29,16,31680,31680
+2025-07-01,mañana,LC marcado,true,5,1,4336,3686
+2025-07-01,mañana,LC sin marcar 15%,false,__MESAS__,7,8,0
+2025-07-01,mañana,LC sin marcar 15%,false,13,1,2633,3097
+2025-07-01,mañana,LC sin marcar 15%,false,16,2,16022,18850
+2025-07-01,mañana,LC sin marcar 15%,false,2,9,34000,39999
+2025-07-01,mañana,LC sin marcar 15%,false,3,11,87106,102477
+2025-07-01,mañana,LC sin marcar 15%,false,5,17,58522,68845
+2025-07-01,mañana,LC sin marcar 15%,true,__MESAS__,1,0,0
+2025-07-01,mañana,LC sin marcar 15%,true,2,1,2124,2655
+2025-07-01,mañana,LC sin marcar 15%,true,29,4,6336,7128
+2025-07-01,mañana,otro,false,__MESAS__,2,0,0
+2025-07-01,mañana,otro,false,2,1,5336,5929
+2025-07-01,mañana,otro,false,21,2,23750,23750
+2025-07-01,mañana,otro,false,26,1,796,796
+2025-07-01,mañana,otro,false,3,1,8841,9823
+2025-07-01,mañana,otro,false,5,3,7629,9027
+2025-07-01,mañana,sin descuento,false,__MESAS__,99,168,0
+2025-07-01,mañana,sin descuento,false,13,5,25044,25045
+2025-07-01,mañana,sin descuento,false,16,47,468673,468675
+2025-07-01,mañana,sin descuento,false,2,90,421416,421416
+2025-07-01,mañana,sin descuento,false,21,6,79168,77767
+2025-07-01,mañana,sin descuento,false,26,2,3540,3540
+2025-07-01,mañana,sin descuento,false,3,180,1470177,1470185
+2025-07-01,mañana,sin descuento,false,4,16,71239,71238
+2025-07-01,mañana,sin descuento,false,5,211,713546,704710
+2025-07-01,mañana,sin descuento,true,__MESAS__,19,22,0
+2025-07-01,mañana,sin descuento,true,16,6,62035,62036
+2025-07-01,mañana,sin descuento,true,2,5,25841,25841
+2025-07-01,mañana,sin descuento,true,29,99,196020,194832
+2025-07-01,mañana,sin descuento,true,3,8,51770,51772
+2025-07-01,mañana,sin descuento,true,4,1,4602,4602
+2025-07-01,mañana,sin descuento,true,5,26,103009,102029
+2025-07-01,mañana,tarjeta 10%,false,__MESAS__,7,15,0
+2025-07-01,mañana,tarjeta 10%,false,16,3,25646,28496
+2025-07-01,mañana,tarjeta 10%,false,2,6,25566,28408
+2025-07-01,mañana,tarjeta 10%,false,3,19,125283,139203
+2025-07-01,mañana,tarjeta 10%,false,4,3,12646,13540
+2025-07-01,mañana,tarjeta 10%,false,5,14,42292,45492
+2025-07-01,mañana,tarjeta 10%,true,__MESAS__,2,0,0
+2025-07-01,mañana,tarjeta 10%,true,29,8,13860,15840
+2025-07-01,mañana,tarjeta 10%,true,5,1,3686,3686
+2025-07-01,noche,LC marcado,false,__MESAS__,78,185,86
+2025-07-01,noche,LC marcado,false,13,11,54230,62835
+2025-07-01,noche,LC marcado,false,16,40,321044,377705
+2025-07-01,noche,LC marcado,false,2,88,366177,427266
+2025-07-01,noche,LC marcado,false,25,5,17124,19910
+2025-07-01,noche,LC marcado,false,3,198,1266390,1482584
+2025-07-01,noche,LC marcado,false,4,18,69721,80974
+2025-07-01,noche,LC marcado,false,5,270,961380,1054244
+2025-07-01,noche,LC sin marcar 15%,false,__MESAS__,50,49,0
+2025-07-01,noche,LC sin marcar 15%,false,13,1,2332,2332
+2025-07-01,noche,LC sin marcar 15%,false,16,18,145252,170889
+2025-07-01,noche,LC sin marcar 15%,false,2,30,122676,144691
+2025-07-01,noche,LC sin marcar 15%,false,25,3,10155,11946
+2025-07-01,noche,LC sin marcar 15%,false,3,69,442888,521422
+2025-07-01,noche,LC sin marcar 15%,false,5,85,248873,291535
+2025-07-01,noche,LC sin marcar 15%,true,__MESAS__,1,0,0
+2025-07-01,noche,LC sin marcar 15%,true,29,4,6336,7128
+2025-07-01,noche,LC sin marcar 15%,true,5,1,1345,1681
+2025-07-01,noche,otro,false,__MESAS__,14,28,0
+2025-07-01,noche,otro,false,13,1,3841,5487
+2025-07-01,noche,otro,false,16,2,21239,21239
+2025-07-01,noche,otro,false,2,11,54628,58320
+2025-07-01,noche,otro,false,3,23,181451,207793
+2025-07-01,noche,otro,false,4,4,11894,17876
+2025-07-01,noche,otro,false,5,26,131252,149667
+2025-07-01,noche,sin descuento,false,__MESAS__,521,1005,0
+2025-07-01,noche,sin descuento,false,1,1,708,708
+2025-07-01,noche,sin descuento,false,13,49,259646,259245
+2025-07-01,noche,sin descuento,false,16,259,2563363,2563394
+2025-07-01,noche,sin descuento,false,2,514,2367434,2367479
+2025-07-01,noche,sin descuento,false,21,4,52779,52778
+2025-07-01,noche,sin descuento,false,25,11,43805,43802
+2025-07-01,noche,sin descuento,false,26,1,1770,1770
+2025-07-01,noche,sin descuento,false,3,974,7745838,7745905
+2025-07-01,noche,sin descuento,false,4,95,425044,425048
+2025-07-01,noche,sin descuento,false,5,1177,4756392,4716426
+2025-07-01,noche,sin descuento,true,__MESAS__,2,3,0
+2025-07-01,noche,sin descuento,true,29,12,23760,23760
+2025-07-01,noche,sin descuento,true,3,2,12035,12036
+2025-07-01,noche,sin descuento,true,5,1,3982,3982
+2025-07-01,noche,tarjeta 10%,false,__MESAS__,54,142,0
+2025-07-01,noche,tarjeta 10%,false,13,5,25805,28674
+2025-07-01,noche,tarjeta 10%,false,16,34,299208,332924
+2025-07-01,noche,tarjeta 10%,false,2,69,282381,313812
+2025-07-01,noche,tarjeta 10%,false,21,2,25200,25200
+2025-07-01,noche,tarjeta 10%,false,25,3,10752,11946
+2025-07-01,noche,tarjeta 10%,false,3,149,998863,1114702
+2025-07-01,noche,tarjeta 10%,false,4,19,76557,85576
+2025-07-01,noche,tarjeta 10%,false,5,161,589990,644562
+2025-08-01,mañana,LC marcado,false,__MESAS__,9,12,9
+2025-08-01,mañana,LC marcado,false,16,3,24973,29380
+2025-08-01,mañana,LC marcado,false,2,4,17903,21062
+2025-08-01,mañana,LC marcado,false,3,20,135022,158850
+2025-08-01,mañana,LC marcado,false,5,19,87858,96061
+2025-08-01,mañana,LC marcado,true,__MESAS__,4,8,4
+2025-08-01,mañana,LC marcado,true,13,1,2633,2633
+2025-08-01,mañana,LC marcado,true,16,1,7673,9027
+2025-08-01,mañana,LC marcado,true,29,28,54252,55440
+2025-08-01,mañana,LC marcado,true,5,5,15106,17255
+2025-08-01,mañana,LC sin marcar 15%,false,__MESAS__,5,6,0
+2025-08-01,mañana,LC sin marcar 15%,false,2,3,12261,14425
+2025-08-01,mañana,LC sin marcar 15%,false,3,8,50624,59559
+2025-08-01,mañana,LC sin marcar 15%,false,5,8,16248,19114
+2025-08-01,mañana,LC sin marcar 15%,true,__MESAS__,1,2,0
+2025-08-01,mañana,LC sin marcar 15%,true,29,8,12672,15840
+2025-08-01,mañana,otro,false,__MESAS__,2,1,0
+2025-08-01,mañana,otro,false,16,1,6133,8761
+2025-08-01,mañana,otro,false,3,2,9664,13805
+2025-08-01,mañana,otro,false,5,5,10221,14600
+2025-08-01,mañana,sin descuento,false,__MESAS__,79,127,0
+2025-08-01,mañana,sin descuento,false,13,5,22743,21815
+2025-08-01,mañana,sin descuento,false,16,38,358584,358587
+2025-08-01,mañana,sin descuento,false,2,57,278319,278325
+2025-08-01,mañana,sin descuento,false,3,106,816460,816472
+2025-08-01,mañana,sin descuento,false,4,4,18407,18408
+2025-08-01,mañana,sin descuento,false,5,155,487789,484185
+2025-08-01,mañana,sin descuento,true,__MESAS__,28,45,0
+2025-08-01,mañana,sin descuento,true,13,1,5487,5487
+2025-08-01,mañana,sin descuento,true,16,7,66018,66019
+2025-08-01,mañana,sin descuento,true,2,4,21947,21947
+2025-08-01,mañana,sin descuento,true,29,156,308880,308880
+2025-08-01,mañana,sin descuento,true,3,1,6549,6549
+2025-08-01,mañana,sin descuento,true,4,2,3540,3540
+2025-08-01,mañana,sin descuento,true,5,14,40531,40528
+2025-08-01,mañana,tarjeta 10%,false,__MESAS__,5,9,0
+2025-08-01,mañana,tarjeta 10%,false,16,3,23124,24881
+2025-08-01,mañana,tarjeta 10%,false,2,4,14867,15718
+2025-08-01,mañana,tarjeta 10%,false,3,8,49181,55487
+2025-08-01,mañana,tarjeta 10%,false,4,4,15872,17876
+2025-08-01,mañana,tarjeta 10%,false,5,10,24164,25905
+2025-08-01,noche,LC marcado,false,__MESAS__,70,155,79
+2025-08-01,noche,LC marcado,false,13,13,55363,61366
+2025-08-01,noche,LC marcado,false,16,25,214655,244607
+2025-08-01,noche,LC marcado,false,2,68,280531,327485
+2025-08-01,noche,LC marcado,false,3,166,1127446,1291058
+2025-08-01,noche,LC marcado,false,4,8,31690,35752
+2025-08-01,noche,LC marcado,false,5,169,647170,711248
+2025-08-01,noche,LC sin marcar 15%,false,__MESAS__,30,38,0
+2025-08-01,noche,LC sin marcar 15%,false,13,1,4664,5487
+2025-08-01,noche,LC sin marcar 15%,false,16,10,82668,95945
+2025-08-01,noche,LC sin marcar 15%,false,2,21,82509,95838
+2025-08-01,noche,LC sin marcar 15%,false,3,35,241164,279649
+2025-08-01,noche,LC sin marcar 15%,false,4,2,8288,8938
+2025-08-01,noche,LC sin marcar 15%,false,5,81,185456,223315
+2025-08-01,noche,otro,false,__MESAS__,6,9,0
+2025-08-01,noche,otro,false,16,1,7991,11416
+2025-08-01,noche,otro,false,3,12,116407,118851
+2025-08-01,noche,otro,false,4,3,12425,13806
+2025-08-01,noche,otro,false,5,12,42531,53628
+2025-08-01,noche,sin descuento,false,__MESAS__,379,723,0
+2025-08-01,noche,sin descuento,false,13,21,112566,111643
+2025-08-01,noche,sin descuento,false,16,155,1517168,1515873
+2025-08-01,noche,sin descuento,false,2,390,1882213,1880774
+2025-08-01,noche,sin descuento,false,21,2,24779,24778
+2025-08-01,noche,sin descuento,false,25,22,87611,87604
+2025-08-01,noche,sin descuento,false,26,1,885,885
+2025-08-01,noche,sin descuento,false,3,687,5311905,5311964
+2025-08-01,noche,sin descuento,false,4,43,194159,194162
+2025-08-01,noche,sin descuento,false,5,832,3647347,3645455
+2025-08-01,noche,tarjeta 10%,false,__MESAS__,35,82,0
+2025-08-01,noche,tarjeta 10%,false,13,4,17602,19094
+2025-08-01,noche,tarjeta 10%,false,16,27,232168,259473
+2025-08-01,noche,tarjeta 10%,false,2,32,139823,153349
+2025-08-01,noche,tarjeta 10%,false,3,81,557885,617440
+2025-08-01,noche,tarjeta 10%,false,4,11,43934,49824
+2025-08-01,noche,tarjeta 10%,false,5,103,336009,373929
+2025-09-01,mañana,LC marcado,false,__MESAS__,4,7,5
+2025-09-01,mañana,LC marcado,false,16,6,51602,55969
+2025-09-01,mañana,LC marcado,false,2,7,19482,22920
+2025-09-01,mañana,LC marcado,false,29,2,2456,2654
+2025-09-01,mañana,LC marcado,false,3,5,32195,35992
+2025-09-01,mañana,LC marcado,false,4,2,7597,8938
+2025-09-01,mañana,LC marcado,false,5,5,12261,12513
+2025-09-01,mañana,LC marcado,true,__MESAS__,4,8,6
+2025-09-01,mañana,LC marcado,true,2,2,10381,12212
+2025-09-01,mañana,LC marcado,true,29,17,32226,33278
+2025-09-01,mañana,LC marcado,true,5,5,11208,12587
+2025-09-01,mañana,LC sin marcar 15%,true,__MESAS__,4,7,0
+2025-09-01,mañana,LC sin marcar 15%,true,2,2,8876,10443
+2025-09-01,mañana,LC sin marcar 15%,true,29,13,28987,34514
+2025-09-01,mañana,LC sin marcar 15%,true,5,6,14359,16990
+2025-09-01,mañana,sin descuento,false,__MESAS__,50,107,0
+2025-09-01,mañana,sin descuento,false,13,1,5487,5487
+2025-09-01,mañana,sin descuento,false,16,17,154779,154781
+2025-09-01,mañana,sin descuento,false,2,50,239912,239200
+2025-09-01,mañana,sin descuento,false,21,2,24779,24778
+2025-09-01,mañana,sin descuento,false,24,2,17699,17700
+2025-09-01,mañana,sin descuento,false,25,2,3540,3540
+2025-09-01,mañana,sin descuento,false,29,2,2655,2654
+2025-09-01,mañana,sin descuento,false,3,106,773894,766439
+2025-09-01,mañana,sin descuento,false,4,2,9558,9558
+2025-09-01,mañana,sin descuento,false,5,112,408766,409720
+2025-09-01,mañana,sin descuento,true,__MESAS__,87,141,0
+2025-09-01,mañana,sin descuento,true,13,4,11681,10752
+2025-09-01,mañana,sin descuento,true,16,4,43451,41871
+2025-09-01,mañana,sin descuento,true,2,19,86195,86194
+2025-09-01,mañana,sin descuento,true,25,5,8850,8850
+2025-09-01,mañana,sin descuento,true,29,335,851564,831228
+2025-09-01,mañana,sin descuento,true,3,22,158053,155400
+2025-09-01,mañana,sin descuento,true,4,6,27522,28054
+2025-09-01,mañana,sin descuento,true,5,71,223780,221470
+2025-09-01,mañana,tarjeta 10%,false,__MESAS__,4,4,0
+2025-09-01,mañana,tarjeta 10%,false,16,1,9159,10177
+2025-09-01,mañana,tarjeta 10%,false,2,2,7965,8850
+2025-09-01,mañana,tarjeta 10%,false,29,4,5310,5308
+2025-09-01,mañana,tarjeta 10%,false,3,2,12265,13628
+2025-09-01,mañana,tarjeta 10%,false,5,3,11292,13185
+2025-09-01,mañana,tarjeta 10%,true,__MESAS__,2,2,0
+2025-09-01,mañana,tarjeta 10%,true,29,5,10456,12302
+2025-09-01,mañana,tarjeta 10%,true,5,3,9403,9403
+2025-09-01,noche,LC marcado,false,__MESAS__,57,106,69
+2025-09-01,noche,LC marcado,false,13,4,14593,16240
+2025-09-01,noche,LC marcado,false,16,12,97947,108274
+2025-09-01,noche,LC marcado,false,2,41,175588,200400
+2025-09-01,noche,LC marcado,false,25,22,44558,45030
+2025-09-01,noche,LC marcado,false,29,3,3783,3981
+2025-09-01,noche,LC marcado,false,3,147,923009,1045572
+2025-09-01,noche,LC marcado,false,4,10,36296,47170
+2025-09-01,noche,LC marcado,false,5,141,610097,659095
+2025-09-01,noche,LC marcado,true,__MESAS__,23,33,23
+2025-09-01,noche,LC marcado,true,13,3,14442,16089
+2025-09-01,noche,LC marcado,true,2,6,24142,25655
+2025-09-01,noche,LC marcado,true,25,4,9292,9292
+2025-09-01,noche,LC marcado,true,29,87,214845,215514
+2025-09-01,noche,LC marcado,true,3,17,107956,119162
+2025-09-01,noche,LC marcado,true,4,1,4062,4779
+2025-09-01,noche,LC marcado,true,5,25,76613,82080
+2025-09-01,noche,LC sin marcar 15%,false,__MESAS__,19,36,0
+2025-09-01,noche,LC sin marcar 15%,false,13,6,23456,27214
+2025-09-01,noche,LC sin marcar 15%,false,16,5,41522,48850
+2025-09-01,noche,LC sin marcar 15%,false,2,11,45058,53009
+2025-09-01,noche,LC sin marcar 15%,false,25,4,6814,7080
+2025-09-01,noche,LC sin marcar 15%,false,29,4,4712,5308
+2025-09-01,noche,LC sin marcar 15%,false,3,32,193319,227436
+2025-09-01,noche,LC sin marcar 15%,false,4,2,7748,9115
+2025-09-01,noche,LC sin marcar 15%,false,5,25,81691,96105
+2025-09-01,noche,LC sin marcar 15%,true,__MESAS__,1,3,0
+2025-09-01,noche,LC sin marcar 15%,true,13,1,4664,5487
+2025-09-01,noche,LC sin marcar 15%,true,2,3,9779,11504
+2025-09-01,noche,LC sin marcar 15%,true,29,1,4513,5310
+2025-09-01,noche,LC sin marcar 15%,true,3,3,16022,18850
+2025-09-01,noche,LC sin marcar 15%,true,5,3,9327,10973
+2025-09-01,noche,otro,false,__MESAS__,4,6,0
+2025-09-01,noche,otro,false,13,2,10425,10974
+2025-09-01,noche,otro,false,16,2,17602,17978
+2025-09-01,noche,otro,false,2,1,4142,4602
+2025-09-01,noche,otro,false,3,7,46783,47940
+2025-09-01,noche,otro,false,4,1,3221,4779
+2025-09-01,noche,otro,false,5,6,32129,35740
+2025-09-01,noche,otro,true,__MESAS__,2,2,0
+2025-09-01,noche,otro,true,2,2,3186,10620
+2025-09-01,noche,otro,true,21,1,3717,3717
+2025-09-01,noche,otro,true,25,1,1328,1328
+2025-09-01,noche,otro,true,29,5,7535,12302
+2025-09-01,noche,otro,true,3,7,26093,47939
+2025-09-01,noche,otro,true,5,4,13540,13540
+2025-09-01,noche,sin descuento,false,__MESAS__,256,536,0
+2025-09-01,noche,sin descuento,false,1,1,708,708
+2025-09-01,noche,sin descuento,false,13,22,121133,120235
+2025-09-01,noche,sin descuento,false,16,93,885487,883924
+2025-09-01,noche,sin descuento,false,2,278,1280878,1285909
+2025-09-01,noche,sin descuento,false,21,1,13274,13274
+2025-09-01,noche,sin descuento,false,25,23,40708,40712
+2025-09-01,noche,sin descuento,false,26,2,2655,2655
+2025-09-01,noche,sin descuento,false,29,16,21681,21675
+2025-09-01,noche,sin descuento,false,3,510,4013098,4000877
+2025-09-01,noche,sin descuento,false,4,35,161416,162482
+2025-09-01,noche,sin descuento,false,5,691,2760330,2738858
+2025-09-01,noche,sin descuento,true,__MESAS__,8,10,0
+2025-09-01,noche,sin descuento,true,16,3,27965,27965
+2025-09-01,noche,sin descuento,true,25,2,3540,3540
+2025-09-01,noche,sin descuento,true,29,23,65088,64159
+2025-09-01,noche,sin descuento,true,3,1,7699,7699
+2025-09-01,noche,sin descuento,true,5,2,9735,9137
+2025-09-01,noche,tarjeta 10%,false,__MESAS__,13,26,0
+2025-09-01,noche,tarjeta 10%,false,16,7,61686,66133
+2025-09-01,noche,tarjeta 10%,false,2,13,52885,58311
+2025-09-01,noche,tarjeta 10%,false,25,1,1328,1328
+2025-09-01,noche,tarjeta 10%,false,3,29,188155,211577
+2025-09-01,noche,tarjeta 10%,false,4,4,16248,18230
+2025-09-01,noche,tarjeta 10%,false,5,26,88721,97929
+2025-09-01,noche,tarjeta 10%,true,__MESAS__,4,7,0
+2025-09-01,noche,tarjeta 10%,true,2,1,3912,4602
+2025-09-01,noche,tarjeta 10%,true,29,8,26991,26992
+2025-09-01,noche,tarjeta 10%,true,3,4,25951,30531
+2025-09-01,noche,tarjeta 10%,true,5,3,13765,16194
+2025-10-01,mañana,LC marcado,false,__MESAS__,6,12,6
+2025-10-01,mañana,LC marcado,false,16,1,7673,9027
+2025-10-01,mañana,LC marcado,false,2,5,20686,24336
+2025-10-01,mañana,LC marcado,false,29,8,10619,10616
+2025-10-01,mañana,LC marcado,false,3,10,59350,69824
+2025-10-01,mañana,LC marcado,false,5,11,49646,53016
+2025-10-01,mañana,LC marcado,true,__MESAS__,10,15,10
+2025-10-01,mañana,LC marcado,true,2,8,34442,35399
+2025-10-01,mañana,LC marcado,true,29,41,92416,94520
+2025-10-01,mañana,LC marcado,true,3,1,7876,7876
+2025-10-01,mañana,LC marcado,true,5,6,18695,16837
+2025-10-01,mañana,LC sin marcar 15%,false,__MESAS__,2,3,0
+2025-10-01,mañana,LC sin marcar 15%,false,2,1,4889,5752
+2025-10-01,mañana,LC sin marcar 15%,false,29,3,3385,3981
+2025-10-01,mañana,LC sin marcar 15%,false,3,4,22115,26018
+2025-10-01,mañana,LC sin marcar 15%,false,5,2,2708,3186
+2025-10-01,mañana,LC sin marcar 15%,true,__MESAS__,3,5,0
+2025-10-01,mañana,LC sin marcar 15%,true,16,1,7447,8761
+2025-10-01,mañana,LC sin marcar 15%,true,29,12,22341,26284
+2025-10-01,mañana,otro,false,__MESAS__,1,0,0
+2025-10-01,mañana,otro,false,4,1,3345,4779
+2025-10-01,mañana,sin descuento,false,__MESAS__,37,64,0
+2025-10-01,mañana,sin descuento,false,13,4,22301,22302
+2025-10-01,mañana,sin descuento,false,16,5,45841,45842
+2025-10-01,mañana,sin descuento,false,2,39,185929,185929
+2025-10-01,mañana,sin descuento,false,25,4,7080,7080
+2025-10-01,mañana,sin descuento,false,29,4,6195,6194
+2025-10-01,mañana,sin descuento,false,3,70,498673,497991
+2025-10-01,mañana,sin descuento,false,5,65,231772,229443
+2025-10-01,mañana,sin descuento,true,__MESAS__,90,173,0
+2025-10-01,mañana,sin descuento,true,13,14,58407,58406
+2025-10-01,mañana,sin descuento,true,16,3,25752,25753
+2025-10-01,mañana,sin descuento,true,2,32,124071,124071
+2025-10-01,mañana,sin descuento,true,25,7,12389,12390
+2025-10-01,mañana,sin descuento,true,29,367,983629,983666
+2025-10-01,mañana,sin descuento,true,3,35,250531,250532
+2025-10-01,mañana,sin descuento,true,4,4,18496,18496
+2025-10-01,mañana,sin descuento,true,5,86,274486,273200
+2025-10-01,mañana,tarjeta 10%,false,__MESAS__,1,2,0
+2025-10-01,mañana,tarjeta 10%,false,2,3,14177,15752
+2025-10-01,mañana,tarjeta 10%,false,5,1,1513,1681
+2025-10-01,mañana,tarjeta 10%,true,__MESAS__,3,5,0
+2025-10-01,mañana,tarjeta 10%,true,2,1,3611,4248
+2025-10-01,mañana,tarjeta 10%,true,29,13,26933,31041
+2025-10-01,mañana,tarjeta 10%,true,5,7,17942,18297
+2025-10-01,noche,LC marcado,false,__MESAS__,68,128,86
+2025-10-01,noche,LC marcado,false,13,8,31367,36903
+2025-10-01,noche,LC marcado,false,16,17,140889,162570
+2025-10-01,noche,LC marcado,false,2,61,256097,293720
+2025-10-01,noche,LC marcado,false,29,15,18119,19905
+2025-10-01,noche,LC marcado,false,3,148,878460,1014191
+2025-10-01,noche,LC marcado,false,4,6,23894,27345
+2025-10-01,noche,LC marcado,false,5,140,547082,597633
+2025-10-01,noche,LC marcado,true,__MESAS__,28,45,36
+2025-10-01,noche,LC marcado,true,16,1,11062,11062
+2025-10-01,noche,LC marcado,true,2,14,55212,64955
+2025-10-01,noche,LC marcado,true,25,7,11062,11064
+2025-10-01,noche,LC marcado,true,29,92,228779,233198
+2025-10-01,noche,LC marcado,true,3,23,134496,155922
+2025-10-01,noche,LC marcado,true,4,2,7597,8938
+2025-10-01,noche,LC marcado,true,5,54,171855,177657
+2025-10-01,noche,LC sin marcar 15%,false,__MESAS__,19,31,0
+2025-10-01,noche,LC sin marcar 15%,false,13,6,28434,33453
+2025-10-01,noche,LC sin marcar 15%,false,16,4,30916,36372
+2025-10-01,noche,LC sin marcar 15%,false,2,23,95982,112921
+2025-10-01,noche,LC sin marcar 15%,false,29,3,3761,4424
+2025-10-01,noche,LC sin marcar 15%,false,3,36,226040,265930
+2025-10-01,noche,LC sin marcar 15%,false,4,3,12186,14337
+2025-10-01,noche,LC sin marcar 15%,false,5,42,123288,142469
+2025-10-01,noche,LC sin marcar 15%,true,__MESAS__,3,6,0
+2025-10-01,noche,LC sin marcar 15%,true,13,2,5266,6194
+2025-10-01,noche,LC sin marcar 15%,true,29,9,19482,22921
+2025-10-01,noche,LC sin marcar 15%,true,3,7,42876,50443
+2025-10-01,noche,LC sin marcar 15%,true,5,7,27004,31770
+2025-10-01,noche,otro,false,__MESAS__,7,9,0
+2025-10-01,noche,otro,false,13,5,23628,26638
+2025-10-01,noche,otro,false,16,3,25075,27345
+2025-10-01,noche,otro,false,2,6,27637,30708
+2025-10-01,noche,otro,false,21,5,63540,63538
+2025-10-01,noche,otro,false,3,3,16407,17610
+2025-10-01,noche,otro,false,4,2,6690,9558
+2025-10-01,noche,otro,false,5,4,36624,37416
+2025-10-01,noche,otro,true,__MESAS__,2,3,0
+2025-10-01,noche,otro,true,29,8,13982,13984
+2025-10-01,noche,otro,true,3,1,3611,4248
+2025-10-01,noche,otro,true,5,2,5066,5663
+2025-10-01,noche,sin descuento,false,__MESAS__,263,513,0
+2025-10-01,noche,sin descuento,false,13,26,138673,138678
+2025-10-01,noche,sin descuento,false,16,121,1127699,1127726
+2025-10-01,noche,sin descuento,false,2,306,1434159,1434168
+2025-10-01,noche,sin descuento,false,21,5,65159,65158
+2025-10-01,noche,sin descuento,false,25,12,21239,21240
+2025-10-01,noche,sin descuento,false,29,12,15929,15924
+2025-10-01,noche,sin descuento,false,3,447,3443983,3436633
+2025-10-01,noche,sin descuento,false,4,34,155664,155665
+2025-10-01,noche,sin descuento,false,5,622,2723851,2695778
+2025-10-01,noche,sin descuento,true,__MESAS__,25,41,0
+2025-10-01,noche,sin descuento,true,13,1,5487,5487
+2025-10-01,noche,sin descuento,true,16,1,11062,11062
+2025-10-01,noche,sin descuento,true,2,7,29628,30266
+2025-10-01,noche,sin descuento,true,25,1,1770,1770
+2025-10-01,noche,sin descuento,true,29,89,238230,238231
+2025-10-01,noche,sin descuento,true,3,11,71062,71061
+2025-10-01,noche,sin descuento,true,4,3,13451,13451
+2025-10-01,noche,sin descuento,true,5,34,81756,81860
+2025-10-01,noche,tarjeta 10%,false,__MESAS__,19,26,0
+2025-10-01,noche,tarjeta 10%,false,13,1,4938,5487
+2025-10-01,noche,tarjeta 10%,false,16,13,110788,123099
+2025-10-01,noche,tarjeta 10%,false,2,18,85301,94779
+2025-10-01,noche,tarjeta 10%,false,3,19,121500,134799
+2025-10-01,noche,tarjeta 10%,false,5,36,126336,139431
+2025-10-01,noche,tarjeta 10%,true,__MESAS__,2,1,0
+2025-10-01,noche,tarjeta 10%,true,13,1,2743,2743
+2025-10-01,noche,tarjeta 10%,true,2,1,810,1327
+2025-10-01,noche,tarjeta 10%,true,29,13,22913,25422
+2025-10-01,noche,tarjeta 10%,true,5,2,3425,3806
+2025-11-01,mañana,LC marcado,false,__MESAS__,9,16,9
+2025-11-01,mañana,LC marcado,false,13,1,4664,5487
+2025-11-01,mañana,LC marcado,false,16,5,38363,45135
+2025-11-01,mañana,LC marcado,false,2,3,12487,14690
+2025-11-01,mañana,LC marcado,false,29,1,1327,1327
+2025-11-01,mañana,LC marcado,false,3,16,83044,97698
+2025-11-01,mañana,LC marcado,false,5,19,64314,70884
+2025-11-01,mañana,LC marcado,true,__MESAS__,6,13,6
+2025-11-01,mañana,LC marcado,true,13,1,2633,3097
+2025-11-01,mañana,LC marcado,true,2,3,10748,12106
+2025-11-01,mañana,LC marcado,true,29,36,80646,82749
+2025-11-01,mañana,LC marcado,true,3,1,6695,7876
+2025-11-01,mañana,LC marcado,true,5,11,33323,39202
+2025-11-01,mañana,LC sin marcar 15%,false,__MESAS__,1,0,0
+2025-11-01,mañana,LC sin marcar 15%,false,5,1,2482,2920
+2025-11-01,mañana,LC sin marcar 15%,true,__MESAS__,1,1,0
+2025-11-01,mañana,LC sin marcar 15%,true,29,1,4137,4867
+2025-11-01,mañana,otro,false,__MESAS__,1,0,0
+2025-11-01,mañana,otro,false,5,1,991,1416
+2025-11-01,mañana,otro,true,__MESAS__,1,2,0
+2025-11-01,mañana,otro,true,29,4,12920,13274
+2025-11-01,mañana,otro,true,3,1,7089,7876
+2025-11-01,mañana,sin descuento,false,__MESAS__,69,104,0
+2025-11-01,mañana,sin descuento,false,13,2,11504,11505
+2025-11-01,mañana,sin descuento,false,16,17,167257,167258
+2025-11-01,mañana,sin descuento,false,2,38,186726,186729
+2025-11-01,mañana,sin descuento,false,21,2,28000,28000
+2025-11-01,mañana,sin descuento,false,29,39,55752,51753
+2025-11-01,mañana,sin descuento,false,3,86,630974,630977
+2025-11-01,mañana,sin descuento,false,4,2,9381,9381
+2025-11-01,mañana,sin descuento,false,5,109,418143,418126
+2025-11-01,mañana,sin descuento,true,__MESAS__,103,177,0
+2025-11-01,mañana,sin descuento,true,13,3,16991,16992
+2025-11-01,mañana,sin descuento,true,16,4,37876,37876
+2025-11-01,mañana,sin descuento,true,2,24,118053,118052
+2025-11-01,mañana,sin descuento,true,29,346,962855,958885
+2025-11-01,mañana,sin descuento,true,3,28,194336,194339
+2025-11-01,mañana,sin descuento,true,4,1,4779,4779
+2025-11-01,mañana,sin descuento,true,5,116,311508,310366
+2025-11-01,mañana,tarjeta 10%,false,__MESAS__,4,7,0
+2025-11-01,mañana,tarjeta 10%,false,13,1,4938,5487
+2025-11-01,mañana,tarjeta 10%,false,16,1,7646,8496
+2025-11-01,mañana,tarjeta 10%,false,2,4,20788,23097
+2025-11-01,mañana,tarjeta 10%,false,3,4,25805,28673
+2025-11-01,mañana,tarjeta 10%,false,5,6,12266,13626
+2025-11-01,mañana,tarjeta 10%,true,__MESAS__,3,5,0
+2025-11-01,mañana,tarjeta 10%,true,16,1,8124,9027
+2025-11-01,mañana,tarjeta 10%,true,2,1,5177,5752
+2025-11-01,mañana,tarjeta 10%,true,29,6,15301,16461
+2025-11-01,mañana,tarjeta 10%,true,3,2,13633,15575
+2025-11-01,mañana,tarjeta 10%,true,5,3,8204,8946
+2025-11-01,noche,LC marcado,false,__MESAS__,105,217,126
+2025-11-01,noche,LC marcado,false,13,8,34752,40886
+2025-11-01,noche,LC marcado,false,16,45,358319,418330
+2025-11-01,noche,LC marcado,false,2,101,400801,467521
+2025-11-01,noche,LC marcado,false,25,6,14137,14139
+2025-11-01,noche,LC marcado,false,29,6,8164,8405
+2025-11-01,noche,LC marcado,false,3,214,1331062,1549943
+2025-11-01,noche,LC marcado,false,4,14,48367,56369
+2025-11-01,noche,LC marcado,false,5,225,728407,820905
+2025-11-01,noche,LC marcado,true,__MESAS__,10,25,12
+2025-11-01,noche,LC marcado,true,2,5,16372,19027
+2025-11-01,noche,LC marcado,true,29,45,114159,114156
+2025-11-01,noche,LC marcado,true,3,9,90566,106551
+2025-11-01,noche,LC marcado,true,5,21,71784,79495
+2025-11-01,noche,LC sin marcar 15%,false,__MESAS__,21,29,0
+2025-11-01,noche,LC sin marcar 15%,false,16,5,41296,48585
+2025-11-01,noche,LC sin marcar 15%,false,2,15,56190,66106
+2025-11-01,noche,LC sin marcar 15%,false,29,2,2257,2654
+2025-11-01,noche,LC sin marcar 15%,false,3,35,207310,243896
+2025-11-01,noche,LC sin marcar 15%,false,4,1,4062,4779
+2025-11-01,noche,LC sin marcar 15%,false,5,37,99743,113693
+2025-11-01,noche,otro,false,__MESAS__,5,4,0
+2025-11-01,noche,otro,false,2,12,42496,60710
+2025-11-01,noche,otro,false,29,1,929,1327
+2025-11-01,noche,otro,false,3,3,14301,19027
+2025-11-01,noche,otro,false,4,1,3345,4779
+2025-11-01,noche,otro,false,5,4,16781,17977
+2025-11-01,noche,sin descuento,false,__MESAS__,418,825,0
+2025-11-01,noche,sin descuento,false,13,14,66814,66815
+2025-11-01,noche,sin descuento,false,16,140,1317876,1317905
+2025-11-01,noche,sin descuento,false,2,497,2358762,2358704
+2025-11-01,noche,sin descuento,false,21,1,12389,12389
+2025-11-01,noche,sin descuento,false,29,11,14602,14597
+2025-11-01,noche,sin descuento,false,3,806,6621594,6621646
+2025-11-01,noche,sin descuento,false,4,61,281062,281066
+2025-11-01,noche,sin descuento,false,5,1071,4597030,4583280
+2025-11-01,noche,sin descuento,true,__MESAS__,15,26,0
+2025-11-01,noche,sin descuento,true,13,2,8296,8761
+2025-11-01,noche,sin descuento,true,16,1,9027,9027
+2025-11-01,noche,sin descuento,true,2,2,9027,9027
+2025-11-01,noche,sin descuento,true,25,1,3982,3385
+2025-11-01,noche,sin descuento,true,29,40,124336,124340
+2025-11-01,noche,sin descuento,true,3,5,33982,33984
+2025-11-01,noche,sin descuento,true,5,17,51150,51148
+2025-11-01,noche,tarjeta 10%,false,__MESAS__,18,43,0
+2025-11-01,noche,tarjeta 10%,false,13,1,4938,5487
+2025-11-01,noche,tarjeta 10%,false,16,13,107920,119912
+2025-11-01,noche,tarjeta 10%,false,2,23,99239,109879
+2025-11-01,noche,tarjeta 10%,false,3,43,320677,357168
+2025-11-01,noche,tarjeta 10%,false,4,10,40938,45487
+2025-11-01,noche,tarjeta 10%,false,5,48,151258,166644
+2025-11-01,noche,tarjeta 10%,true,__MESAS__,1,2,0
+2025-11-01,noche,tarjeta 10%,true,16,1,7673,9027
+2025-11-01,noche,tarjeta 10%,true,29,2,5465,5663
+2025-11-01,noche,tarjeta 10%,true,3,2,8575,10088
+2025-11-01,noche,tarjeta 10%,true,5,2,3522,3628
+2025-12-01,mañana,LC marcado,false,__MESAS__,3,3,3
+2025-12-01,mañana,LC marcado,false,13,1,4664,4664
+2025-12-01,mañana,LC marcado,false,2,2,8801,10354
+2025-12-01,mañana,LC marcado,false,29,1,1504,1770
+2025-12-01,mañana,LC marcado,false,3,5,22040,25929
+2025-12-01,mañana,LC marcado,false,5,6,24372,26761
+2025-12-01,mañana,LC marcado,true,__MESAS__,4,6,4
+2025-12-01,mañana,LC marcado,true,2,1,2934,3451
+2025-12-01,mañana,LC marcado,true,29,16,32752,36286
+2025-12-01,mañana,LC marcado,true,3,1,7221,8496
+2025-12-01,mañana,LC marcado,true,4,1,3345,4779
+2025-12-01,mañana,LC marcado,true,5,1,2482,2920
+2025-12-01,mañana,LC sin marcar 15%,false,__MESAS__,4,5,0
+2025-12-01,mañana,LC sin marcar 15%,false,16,2,18053,21239
+2025-12-01,mañana,LC sin marcar 15%,false,2,2,7522,8850
+2025-12-01,mañana,LC sin marcar 15%,false,29,3,3385,3384
+2025-12-01,mañana,LC sin marcar 15%,false,3,12,59425,69912
+2025-12-01,mañana,LC sin marcar 15%,false,5,6,20085,23628
+2025-12-01,mañana,LC sin marcar 15%,true,__MESAS__,1,1,0
+2025-12-01,mañana,LC sin marcar 15%,true,2,1,5491,6460
+2025-12-01,mañana,LC sin marcar 15%,true,29,1,4137,4867
+2025-12-01,mañana,otro,false,__MESAS__,1,0,0
+2025-12-01,mañana,otro,false,3,1,4150,5929
+2025-12-01,mañana,otro,true,__MESAS__,4,6,0
+2025-12-01,mañana,otro,true,2,2,5903,7256
+2025-12-01,mañana,otro,true,29,18,36230,42923
+2025-12-01,mañana,otro,true,4,1,3345,4779
+2025-12-01,mañana,otro,true,5,3,6536,8673
+2025-12-01,mañana,sin descuento,false,__MESAS__,49,68,0
+2025-12-01,mañana,sin descuento,false,16,9,83894,83894
+2025-12-01,mañana,sin descuento,false,2,53,272389,272392
+2025-12-01,mañana,sin descuento,false,29,4,7080,7080
+2025-12-01,mañana,sin descuento,false,3,93,654690,654695
+2025-12-01,mañana,sin descuento,false,4,4,18938,18939
+2025-12-01,mañana,sin descuento,false,5,93,405755,402872
+2025-12-01,mañana,sin descuento,true,__MESAS__,143,252,0
+2025-12-01,mañana,sin descuento,true,13,6,25752,24929
+2025-12-01,mañana,sin descuento,true,16,9,83982,83983
+2025-12-01,mañana,sin descuento,true,2,54,225664,225663
+2025-12-01,mañana,sin descuento,true,21,1,14000,14000
+2025-12-01,mañana,sin descuento,true,29,570,1564296,1564335
+2025-12-01,mañana,sin descuento,true,3,49,315221,315225
+2025-12-01,mañana,sin descuento,true,4,6,21770,21770
+2025-12-01,mañana,sin descuento,true,5,183,587418,587596
+2025-12-01,mañana,tarjeta 10%,false,__MESAS__,3,4,0
+2025-12-01,mañana,tarjeta 10%,false,2,4,13858,15398
+2025-12-01,mañana,tarjeta 10%,false,29,2,2655,2654
+2025-12-01,mañana,tarjeta 10%,false,3,10,84903,94337
+2025-12-01,mañana,tarjeta 10%,false,5,3,8522,9469
+2025-12-01,mañana,tarjeta 10%,true,__MESAS__,2,3,0
+2025-12-01,mañana,tarjeta 10%,true,29,3,12903,14336
+2025-12-01,mañana,tarjeta 10%,true,5,1,1513,1681
+2025-12-01,noche,LC marcado,false,__MESAS__,100,222,158
+2025-12-01,noche,LC marcado,false,13,3,14292,16815
+2025-12-01,noche,LC marcado,false,16,32,263465,308324
+2025-12-01,noche,LC marcado,false,2,141,610110,711868
+2025-12-01,noche,LC marcado,false,25,6,20310,23892
+2025-12-01,noche,LC marcado,false,29,1,1128,1327
+2025-12-01,noche,LC marcado,false,3,259,1616513,1892950
+2025-12-01,noche,LC marcado,false,4,13,50982,60621
+2025-12-01,noche,LC marcado,false,5,271,912492,1048081
+2025-12-01,noche,LC marcado,true,__MESAS__,1,3,1
+2025-12-01,noche,LC marcado,true,29,3,15310,15310
+2025-12-01,noche,LC marcado,true,5,3,11646,13186
+2025-12-01,noche,LC sin marcar 15%,false,__MESAS__,18,37,0
+2025-12-01,noche,LC sin marcar 15%,false,13,1,2633,3097
+2025-12-01,noche,LC sin marcar 15%,false,16,13,100876,116727
+2025-12-01,noche,LC sin marcar 15%,false,2,21,94252,107966
+2025-12-01,noche,LC sin marcar 15%,false,3,22,128097,149204
+2025-12-01,noche,LC sin marcar 15%,false,4,1,4062,4779
+2025-12-01,noche,LC sin marcar 15%,false,5,35,92646,116807
+2025-12-01,noche,LC sin marcar 15%,true,__MESAS__,1,6,0
+2025-12-01,noche,LC sin marcar 15%,true,16,1,7447,8761
+2025-12-01,noche,LC sin marcar 15%,true,29,2,7823,9204
+2025-12-01,noche,LC sin marcar 15%,true,3,4,24146,28408
+2025-12-01,noche,LC sin marcar 15%,true,5,6,14218,16726
+2025-12-01,noche,otro,false,__MESAS__,4,7,0
+2025-12-01,noche,otro,false,16,4,28885,33984
+2025-12-01,noche,otro,false,2,2,7646,8496
+2025-12-01,noche,otro,false,3,9,50376,58762
+2025-12-01,noche,otro,false,4,4,4301,19116
+2025-12-01,noche,otro,false,5,8,25199,49113
+2025-12-01,noche,sin descuento,false,__MESAS__,641,1388,0
+2025-12-01,noche,sin descuento,false,11,4,164780,164780
+2025-12-01,noche,sin descuento,false,13,34,175133,175138
+2025-12-01,noche,sin descuento,false,16,286,2668407,2668455
+2025-12-01,noche,sin descuento,false,2,858,4173363,4173430
+2025-12-01,noche,sin descuento,false,21,4,51159,51158
+2025-12-01,noche,sin descuento,false,25,30,119469,119460
+2025-12-01,noche,sin descuento,false,29,5,8407,8208
+2025-12-01,noche,sin descuento,false,3,1375,10530886,10530295
+2025-12-01,noche,sin descuento,false,4,64,283363,288149
+2025-12-01,noche,sin descuento,false,5,1739,7328006,7319325
+2025-12-01,noche,sin descuento,true,__MESAS__,4,4,0
+2025-12-01,noche,sin descuento,true,29,27,46814,46819
+2025-12-01,noche,sin descuento,true,5,2,10442,10442
+2025-12-01,noche,tarjeta 10%,false,__MESAS__,18,37,0
+2025-12-01,noche,tarjeta 10%,false,13,4,15451,16345
+2025-12-01,noche,tarjeta 10%,false,16,9,75504,83895
+2025-12-01,noche,tarjeta 10%,false,2,16,74469,82743
+2025-12-01,noche,tarjeta 10%,false,3,33,193221,214694
+2025-12-01,noche,tarjeta 10%,false,4,2,8442,9381
+2025-12-01,noche,tarjeta 10%,false,5,51,180080,197285
+2026-01-01,mañana,LC marcado,false,__MESAS__,3,4,3
+2026-01-01,mañana,LC marcado,false,2,2,7522,8850
+2026-01-01,mañana,LC marcado,false,29,2,3009,3540
+2026-01-01,mañana,LC marcado,false,3,10,51978,61151
+2026-01-01,mañana,LC marcado,false,5,5,22040,23061
+2026-01-01,mañana,LC marcado,true,__MESAS__,1,2,1
+2026-01-01,mañana,LC marcado,true,29,7,16726,16726
+2026-01-01,mañana,LC sin marcar 15%,false,__MESAS__,1,1,0
+2026-01-01,mañana,LC sin marcar 15%,false,29,1,1327,1327
+2026-01-01,mañana,LC sin marcar 15%,false,3,3,20761,24426
+2026-01-01,mañana,LC sin marcar 15%,true,__MESAS__,1,2,0
+2026-01-01,mañana,LC sin marcar 15%,true,29,8,11885,13984
+2026-01-01,mañana,LC sin marcar 15%,true,5,1,2934,3451
+2026-01-01,mañana,otro,true,__MESAS__,2,4,0
+2026-01-01,mañana,otro,true,16,1,10531,11947
+2026-01-01,mañana,otro,true,29,5,21239,24158
+2026-01-01,mañana,otro,true,5,1,3451,3451
+2026-01-01,mañana,sin descuento,false,__MESAS__,68,118,0
+2026-01-01,mañana,sin descuento,false,13,3,14071,14071
+2026-01-01,mañana,sin descuento,false,16,9,92389,93274
+2026-01-01,mañana,sin descuento,false,2,52,249735,248766
+2026-01-01,mañana,sin descuento,false,29,48,83186,83178
+2026-01-01,mañana,sin descuento,false,3,110,810708,810722
+2026-01-01,mañana,sin descuento,false,4,1,4336,4336
+2026-01-01,mañana,sin descuento,false,5,84,354514,354498
+2026-01-01,mañana,sin descuento,true,__MESAS__,173,290,0
+2026-01-01,mañana,sin descuento,true,13,4,22301,20602
+2026-01-01,mañana,sin descuento,true,16,7,68230,68230
+2026-01-01,mañana,sin descuento,true,2,32,152389,151418
+2026-01-01,mañana,sin descuento,true,29,588,1702944,1702964
+2026-01-01,mañana,sin descuento,true,3,46,344602,344606
+2026-01-01,mañana,sin descuento,true,4,4,15487,15487
+2026-01-01,mañana,sin descuento,true,5,120,344781,344751
+2026-01-01,mañana,tarjeta 10%,false,__MESAS__,2,2,0
+2026-01-01,mañana,tarjeta 10%,false,13,1,5416,6018
+2026-01-01,mañana,tarjeta 10%,false,16,1,9398,10442
+2026-01-01,mañana,tarjeta 10%,false,2,1,5894,6549
+2026-01-01,mañana,tarjeta 10%,false,29,2,3186,3540
+2026-01-01,mañana,tarjeta 10%,false,3,4,29788,33097
+2026-01-01,mañana,tarjeta 10%,false,4,2,8283,9204
+2026-01-01,mañana,tarjeta 10%,false,5,5,14098,15663
+2026-01-01,mañana,tarjeta 10%,true,__MESAS__,5,7,0
+2026-01-01,mañana,tarjeta 10%,true,29,19,37513,41685
+2026-01-01,mañana,tarjeta 10%,true,3,4,24053,26726
+2026-01-01,mañana,tarjeta 10%,true,5,5,13221,14689
+2026-01-01,noche,LC marcado,false,__MESAS__,106,216,157
+2026-01-01,noche,LC marcado,false,13,8,38814,42266
+2026-01-01,noche,LC marcado,false,16,36,298549,354333
+2026-01-01,noche,LC marcado,false,2,130,547513,639919
+2026-01-01,noche,LC marcado,false,25,5,17522,19910
+2026-01-01,noche,LC marcado,false,29,17,28761,30090
+2026-01-01,noche,LC marcado,false,3,242,1482717,1711878
+2026-01-01,noche,LC marcado,false,4,11,38965,50620
+2026-01-01,noche,LC marcado,false,5,268,893992,1024923
+2026-01-01,noche,LC sin marcar 15%,false,__MESAS__,38,55,0
+2026-01-01,noche,LC sin marcar 15%,false,13,4,16774,18885
+2026-01-01,noche,LC sin marcar 15%,false,16,15,127730,149823
+2026-01-01,noche,LC sin marcar 15%,false,2,16,68412,78409
+2026-01-01,noche,LC sin marcar 15%,false,3,58,372120,437791
+2026-01-01,noche,LC sin marcar 15%,false,4,5,19796,23009
+2026-01-01,noche,LC sin marcar 15%,false,5,56,161214,192507
+2026-01-01,noche,otro,false,__MESAS__,20,36,0
+2026-01-01,noche,otro,false,13,1,2168,3097
+2026-01-01,noche,otro,false,15,2,6814,9734
+2026-01-01,noche,otro,false,16,15,136823,157080
+2026-01-01,noche,otro,false,2,6,24920,27169
+2026-01-01,noche,otro,false,21,1,12600,12600
+2026-01-01,noche,otro,false,25,1,3982,3982
+2026-01-01,noche,otro,false,3,13,82009,95753
+2026-01-01,noche,otro,false,4,2,6381,9115
+2026-01-01,noche,otro,false,5,34,98896,117875
+2026-01-01,noche,sin descuento,false,__MESAS__,747,1605,0
+2026-01-01,noche,sin descuento,false,13,42,227611,225919
+2026-01-01,noche,sin descuento,false,15,17,80089,80085
+2026-01-01,noche,sin descuento,false,16,322,3157434,3186175
+2026-01-01,noche,sin descuento,false,2,918,4479027,4462546
+2026-01-01,noche,sin descuento,false,21,4,55274,55274
+2026-01-01,noche,sin descuento,false,25,16,63717,63712
+2026-01-01,noche,sin descuento,false,29,2,3097,3097
+2026-01-01,noche,sin descuento,false,3,1613,12263806,12263480
+2026-01-01,noche,sin descuento,false,4,110,488407,488406
+2026-01-01,noche,sin descuento,false,5,2027,8204474,8198085
+2026-01-01,noche,sin descuento,true,__MESAS__,1,4,0
+2026-01-01,noche,sin descuento,true,29,17,29735,29738
+2026-01-01,noche,sin descuento,true,5,3,7877,7877
+2026-01-01,noche,tarjeta 10%,false,__MESAS__,48,127,0
+2026-01-01,noche,tarjeta 10%,false,13,3,14991,16992
+2026-01-01,noche,tarjeta 10%,false,16,26,227150,254866
+2026-01-01,noche,tarjeta 10%,false,2,53,231929,253809
+2026-01-01,noche,tarjeta 10%,false,21,1,11947,11947
+2026-01-01,noche,tarjeta 10%,false,25,1,3584,3982
+2026-01-01,noche,tarjeta 10%,false,3,131,1027947,1144593
+2026-01-01,noche,tarjeta 10%,false,4,10,40301,44778
+2026-01-01,noche,tarjeta 10%,false,5,145,406334,447203
+2026-02-01,mañana,LC marcado,false,__MESAS__,2,5,3
+2026-02-01,mañana,LC marcado,false,16,1,8199,9646
+2026-02-01,mañana,LC marcado,false,2,1,3611,4248
+2026-02-01,mañana,LC marcado,false,3,8,41071,48318
+2026-02-01,mañana,LC marcado,true,__MESAS__,3,7,3
+2026-02-01,mañana,LC marcado,true,16,1,7447,8761
+2026-02-01,mañana,LC marcado,true,2,1,3912,4602
+2026-02-01,mañana,LC marcado,true,29,21,36071,40270
+2026-02-01,mañana,LC marcado,true,3,1,8350,9823
+2026-02-01,mañana,LC marcado,true,5,8,18531,21502
+2026-02-01,mañana,LC sin marcar 15%,false,__MESAS__,3,5,0
+2026-02-01,mañana,LC sin marcar 15%,false,16,1,8876,10442
+2026-02-01,mañana,LC sin marcar 15%,false,3,8,44336,52568
+2026-02-01,mañana,LC sin marcar 15%,false,5,1,2482,2920
+2026-02-01,mañana,otro,false,__MESAS__,3,3,0
+2026-02-01,mañana,otro,false,13,1,3841,5487
+2026-02-01,mañana,otro,false,3,2,27752,39646
+2026-02-01,mañana,otro,false,4,1,3035,4336
+2026-02-01,mañana,otro,true,__MESAS__,2,2,0
+2026-02-01,mañana,otro,true,2,1,1195,1327
+2026-02-01,mañana,otro,true,21,1,12600,12600
+2026-02-01,mañana,otro,true,29,10,15673,16638
+2026-02-01,mañana,otro,true,3,2,30195,40708
+2026-02-01,mañana,otro,true,5,2,4088,5840
+2026-02-01,mañana,sin descuento,false,__MESAS__,70,128,0
+2026-02-01,mañana,sin descuento,false,13,6,32920,32922
+2026-02-01,mañana,sin descuento,false,16,23,231504,231502
+2026-02-01,mañana,sin descuento,false,2,55,279655,281593
+2026-02-01,mañana,sin descuento,false,29,25,39380,39377
+2026-02-01,mañana,sin descuento,false,3,113,748089,749597
+2026-02-01,mañana,sin descuento,false,4,2,8673,8672
+2026-02-01,mañana,sin descuento,false,5,116,451350,449408
+2026-02-01,mañana,sin descuento,true,__MESAS__,174,288,0
+2026-02-01,mañana,sin descuento,true,13,3,14248,13784
+2026-02-01,mañana,sin descuento,true,16,3,31150,31150
+2026-02-01,mañana,sin descuento,true,2,21,88319,88320
+2026-02-01,mañana,sin descuento,true,21,1,12389,12389
+2026-02-01,mañana,sin descuento,true,29,654,1793187,1793221
+2026-02-01,mañana,sin descuento,true,3,34,233186,233190
+2026-02-01,mañana,sin descuento,true,4,7,30619,30618
+2026-02-01,mañana,sin descuento,true,5,129,398500,396884
+2026-02-01,mañana,tarjeta 10%,false,__MESAS__,6,9,0
+2026-02-01,mañana,tarjeta 10%,false,2,7,34327,38142
+2026-02-01,mañana,tarjeta 10%,false,29,1,1327,1327
+2026-02-01,mañana,tarjeta 10%,false,3,12,75606,84337
+2026-02-01,mañana,tarjeta 10%,false,5,8,19912,22122
+2026-02-01,mañana,tarjeta 10%,true,__MESAS__,9,17,0
+2026-02-01,mañana,tarjeta 10%,true,13,1,5097,5664
+2026-02-01,mañana,tarjeta 10%,true,16,1,9398,10442
+2026-02-01,mañana,tarjeta 10%,true,2,1,5496,6106
+2026-02-01,mañana,tarjeta 10%,true,29,39,76363,81157
+2026-02-01,mañana,tarjeta 10%,true,3,4,42447,48939
+2026-02-01,mañana,tarjeta 10%,true,4,1,3903,4336
+2026-02-01,mañana,tarjeta 10%,true,5,8,22894,26015
+2026-02-01,noche,LC marcado,false,__MESAS__,115,241,165
+2026-02-01,noche,LC marcado,false,13,3,10080,10930
+2026-02-01,noche,LC marcado,false,16,50,409540,478404
+2026-02-01,noche,LC marcado,false,2,148,639376,750446
+2026-02-01,noche,LC marcado,false,21,1,11283,13274
+2026-02-01,noche,LC marcado,false,25,3,10155,11946
+2026-02-01,noche,LC marcado,false,29,1,1327,1327
+2026-02-01,noche,LC marcado,false,3,226,1435907,1678415
+2026-02-01,noche,LC marcado,false,4,15,52956,61769
+2026-02-01,noche,LC marcado,false,5,307,1013200,1141692
+2026-02-01,noche,LC marcado,true,__MESAS__,1,2,1
+2026-02-01,noche,LC marcado,true,2,2,8350,9823
+2026-02-01,noche,LC marcado,true,29,3,9628,11327
+2026-02-01,noche,LC marcado,true,3,2,14668,17257
+2026-02-01,noche,LC sin marcar 15%,false,__MESAS__,30,37,0
+2026-02-01,noche,LC sin marcar 15%,false,13,1,4814,5664
+2026-02-01,noche,LC sin marcar 15%,false,16,3,25248,30354
+2026-02-01,noche,LC sin marcar 15%,false,2,24,89341,106193
+2026-02-01,noche,LC sin marcar 15%,false,25,1,3385,3982
+2026-02-01,noche,LC sin marcar 15%,false,3,40,221615,261416
+2026-02-01,noche,LC sin marcar 15%,false,5,37,81041,97874
+2026-02-01,noche,otro,false,__MESAS__,5,11,0
+2026-02-01,noche,otro,false,16,3,24195,28053
+2026-02-01,noche,otro,false,2,3,14743,17080
+2026-02-01,noche,otro,false,3,12,84425,91859
+2026-02-01,noche,otro,false,4,1,4301,4779
+2026-02-01,noche,otro,false,5,13,57894,67201
+2026-02-01,noche,sin descuento,false,__MESAS__,778,1563,0
+2026-02-01,noche,sin descuento,false,13,22,122389,118319
+2026-02-01,noche,sin descuento,false,16,321,3162310,3162211
+2026-02-01,noche,sin descuento,false,2,794,3979735,3979732
+2026-02-01,noche,sin descuento,false,21,3,40549,40548
+2026-02-01,noche,sin descuento,false,25,16,63717,63712
+2026-02-01,noche,sin descuento,false,29,4,5310,5308
+2026-02-01,noche,sin descuento,false,3,1523,11944656,11942844
+2026-02-01,noche,sin descuento,false,4,85,381239,385840
+2026-02-01,noche,sin descuento,false,5,1908,8286267,8233423
+2026-02-01,noche,sin descuento,true,__MESAS__,6,14,0
+2026-02-01,noche,sin descuento,true,13,1,5664,5664
+2026-02-01,noche,sin descuento,true,2,4,16991,16991
+2026-02-01,noche,sin descuento,true,29,20,59204,59201
+2026-02-01,noche,sin descuento,true,3,6,41150,41150
+2026-02-01,noche,sin descuento,true,5,6,18319,18318
+2026-02-01,noche,tarjeta 10%,false,__MESAS__,48,132,0
+2026-02-01,noche,tarjeta 10%,false,13,11,54876,57502
+2026-02-01,noche,tarjeta 10%,false,16,29,254389,281610
+2026-02-01,noche,tarjeta 10%,false,2,79,362938,403631
+2026-02-01,noche,tarjeta 10%,false,25,9,32257,35838
+2026-02-01,noche,tarjeta 10%,false,3,140,918615,1021605
+2026-02-01,noche,tarjeta 10%,false,4,5,19911,22123
+2026-02-01,noche,tarjeta 10%,false,5,180,723562,789537
+2026-03-01,mañana,LC marcado,false,__MESAS__,4,5,5
+2026-03-01,mañana,LC marcado,false,16,2,16323,19203
+2026-03-01,mañana,LC marcado,false,3,3,33850,39824
+2026-03-01,mañana,LC marcado,false,5,4,7673,9026
+2026-03-01,mañana,LC marcado,true,__MESAS__,1,2,1
+2026-03-01,mañana,LC marcado,true,29,4,5942,6992
+2026-03-01,mañana,LC marcado,true,3,1,6695,7876
+2026-03-01,mañana,LC marcado,true,5,1,2482,2920
+2026-03-01,mañana,LC sin marcar 15%,false,__MESAS__,3,8,0
+2026-03-01,mañana,LC sin marcar 15%,false,16,3,27757,32655
+2026-03-01,mañana,LC sin marcar 15%,false,2,2,7221,8496
+2026-03-01,mañana,LC sin marcar 15%,false,3,7,45208,53188
+2026-03-01,mañana,LC sin marcar 15%,false,5,13,48292,56559
+2026-03-01,mañana,otro,false,__MESAS__,1,0,0
+2026-03-01,mañana,otro,false,16,1,7310,10442
+2026-03-01,mañana,otro,false,3,2,10593,15133
+2026-03-01,mañana,otro,false,5,4,6566,9380
+2026-03-01,mañana,sin descuento,false,__MESAS__,93,152,0
+2026-03-01,mañana,sin descuento,false,13,2,11504,11505
+2026-03-01,mañana,sin descuento,false,16,24,236814,236812
+2026-03-01,mañana,sin descuento,false,2,67,327965,327963
+2026-03-01,mañana,sin descuento,false,21,2,16637,16638
+2026-03-01,mañana,sin descuento,false,29,1,1327,1327
+2026-03-01,mañana,sin descuento,false,3,137,996460,996465
+2026-03-01,mañana,sin descuento,false,4,2,9115,9115
+2026-03-01,mañana,sin descuento,false,5,166,566987,566963
+2026-03-01,mañana,sin descuento,true,__MESAS__,94,199,0
+2026-03-01,mañana,sin descuento,true,13,5,26106,26107
+2026-03-01,mañana,sin descuento,true,16,6,57522,57522
+2026-03-01,mañana,sin descuento,true,2,19,83894,83893
+2026-03-01,mañana,sin descuento,true,29,306,917966,918001
+2026-03-01,mañana,sin descuento,true,3,30,222035,222038
+2026-03-01,mañana,sin descuento,true,4,2,9115,9115
+2026-03-01,mañana,sin descuento,true,5,154,401333,401307
+2026-03-01,mañana,tarjeta 10%,true,__MESAS__,5,14,0
+2026-03-01,mañana,tarjeta 10%,true,29,29,71062,77748
+2026-03-01,mañana,tarjeta 10%,true,3,1,6929,7699
+2026-03-01,mañana,tarjeta 10%,true,5,9,15894,18404
+2026-03-01,noche,LC marcado,false,__MESAS__,127,253,186
+2026-03-01,noche,LC marcado,false,13,10,47389,55755
+2026-03-01,noche,LC marcado,false,16,39,339013,391326
+2026-03-01,noche,LC marcado,false,2,131,544756,638227
+2026-03-01,noche,LC marcado,false,3,245,1578071,1829487
+2026-03-01,noche,LC marcado,false,4,10,29327,40000
+2026-03-01,noche,LC marcado,false,5,277,806681,925418
+2026-03-01,noche,LC sin marcar 15%,false,__MESAS__,34,75,0
+2026-03-01,noche,LC sin marcar 15%,false,13,1,4664,5487
+2026-03-01,noche,LC sin marcar 15%,false,16,12,101925,119911
+2026-03-01,noche,LC sin marcar 15%,false,2,31,137465,160884
+2026-03-01,noche,LC sin marcar 15%,false,3,74,452142,531084
+2026-03-01,noche,LC sin marcar 15%,false,4,4,16522,18673
+2026-03-01,noche,LC sin marcar 15%,false,5,76,225918,266056
+2026-03-01,noche,otro,false,__MESAS__,4,5,0
+2026-03-01,noche,otro,false,13,1,2168,3097
+2026-03-01,noche,otro,false,16,2,18730,20177
+2026-03-01,noche,otro,false,2,5,21699,26637
+2026-03-01,noche,otro,false,3,4,23186,30354
+2026-03-01,noche,otro,false,5,9,34071,43185
+2026-03-01,noche,otro,true,__MESAS__,1,1,0
+2026-03-01,noche,otro,true,29,2,8177,10177
+2026-03-01,noche,otro,true,5,1,2354,3098
+2026-03-01,noche,sin descuento,false,__MESAS__,711,1372,0
+2026-03-01,noche,sin descuento,false,13,28,147434,147439
+2026-03-01,noche,sin descuento,false,16,276,2728407,2728393
+2026-03-01,noche,sin descuento,false,2,762,3829380,3829355
+2026-03-01,noche,sin descuento,false,25,36,143363,143352
+2026-03-01,noche,sin descuento,false,29,3,3982,3981
+2026-03-01,noche,sin descuento,false,3,1317,10043275,10042393
+2026-03-01,noche,sin descuento,false,4,62,269734,269741
+2026-03-01,noche,sin descuento,false,5,1662,6331610,6328366
+2026-03-01,noche,sin descuento,true,__MESAS__,2,2,0
+2026-03-01,noche,sin descuento,true,29,5,12301,12302
+2026-03-01,noche,sin descuento,true,4,1,4779,4779
+2026-03-01,noche,sin descuento,true,5,2,4602,4601
+2026-03-01,noche,tarjeta 10%,false,__MESAS__,43,88,0
+2026-03-01,noche,tarjeta 10%,false,13,1,5097,5664
+2026-03-01,noche,tarjeta 10%,false,16,13,116920,129911
+2026-03-01,noche,tarjeta 10%,false,2,61,289770,321062
+2026-03-01,noche,tarjeta 10%,false,21,1,4159,8319
+2026-03-01,noche,tarjeta 10%,false,25,1,3584,3982
+2026-03-01,noche,tarjeta 10%,false,29,1,1195,1327
+2026-03-01,noche,tarjeta 10%,false,3,110,710257,786286
+2026-03-01,noche,tarjeta 10%,false,4,3,12504,13894
+2026-03-01,noche,tarjeta 10%,false,5,104,400416,435796
+2026-04-01,mañana,LC marcado,false,__MESAS__,7,10,9
+2026-04-01,mañana,LC marcado,false,16,1,8199,9646
+2026-04-01,mañana,LC marcado,false,2,6,26403,31063
+2026-04-01,mañana,LC marcado,false,29,1,1128,1327
+2026-04-01,mañana,LC marcado,false,3,2,28810,33894
+2026-04-01,mañana,LC marcado,false,5,17,60553,67257
+2026-04-01,mañana,LC marcado,true,__MESAS__,5,9,6
+2026-04-01,mañana,LC marcado,true,13,1,4814,5664
+2026-04-01,mañana,LC marcado,true,16,2,17075,20088
+2026-04-01,mañana,LC marcado,true,2,1,1947,1947
+2026-04-01,mañana,LC marcado,true,29,18,38522,39561
+2026-04-01,mañana,LC marcado,true,3,1,6544,7699
+2026-04-01,mañana,LC marcado,true,5,16,40169,47256
+2026-04-01,mañana,otro,false,__MESAS__,1,1,0
+2026-04-01,mañana,otro,false,3,1,5513,7876
+2026-04-01,mañana,sin descuento,false,__MESAS__,81,158,0
+2026-04-01,mañana,sin descuento,false,13,6,32301,32302
+2026-04-01,mañana,sin descuento,false,16,38,376283,376281
+2026-04-01,mañana,sin descuento,false,2,68,349469,348551
+2026-04-01,mañana,sin descuento,false,21,1,8319,7071
+2026-04-01,mañana,sin descuento,false,3,114,838142,838149
+2026-04-01,mañana,sin descuento,false,5,161,504105,498743
+2026-04-01,mañana,sin descuento,true,__MESAS__,71,123,0
+2026-04-01,mañana,sin descuento,true,13,4,19912,19912
+2026-04-01,mañana,sin descuento,true,16,3,31593,31593
+2026-04-01,mañana,sin descuento,true,2,14,59558,59557
+2026-04-01,mañana,sin descuento,true,29,265,655908,655942
+2026-04-01,mañana,sin descuento,true,3,12,113451,113452
+2026-04-01,mañana,sin descuento,true,4,2,9558,9558
+2026-04-01,mañana,sin descuento,true,5,95,219178,219159
+2026-04-01,mañana,tarjeta 10%,false,__MESAS__,4,9,0
+2026-04-01,mañana,tarjeta 10%,false,16,3,29628,32920
+2026-04-01,mañana,tarjeta 10%,false,2,6,24212,26902
+2026-04-01,mañana,tarjeta 10%,false,3,9,38389,42656
+2026-04-01,mañana,tarjeta 10%,false,5,16,42586,46919
+2026-04-01,mañana,tarjeta 10%,true,__MESAS__,1,2,0
+2026-04-01,mañana,tarjeta 10%,true,29,8,12584,13984
+2026-04-01,mañana,tarjeta 10%,true,3,1,3823,4248
+2026-04-01,mañana,tarjeta 10%,true,5,2,3027,3362
+2026-04-01,noche,LC marcado,false,__MESAS__,75,158,120
+2026-04-01,noche,LC marcado,false,1,1,602,602
+2026-04-01,noche,LC marcado,false,13,11,45509,59029
+2026-04-01,noche,LC marcado,false,16,28,237066,279468
+2026-04-01,noche,LC marcado,false,2,85,343022,395650
+2026-04-01,noche,LC marcado,false,21,1,7071,7071
+2026-04-01,noche,LC marcado,false,25,2,6770,7964
+2026-04-01,noche,LC marcado,false,29,1,1128,1327
+2026-04-01,noche,LC marcado,false,3,158,996690,1169748
+2026-04-01,noche,LC marcado,false,4,9,35429,41682
+2026-04-01,noche,LC marcado,false,5,180,573242,645798
+2026-04-01,noche,LC sin marcar 15%,false,__MESAS__,34,75,0
+2026-04-01,noche,LC sin marcar 15%,false,16,18,150819,177433
+2026-04-01,noche,LC sin marcar 15%,false,2,28,121314,142150
+2026-04-01,noche,LC sin marcar 15%,false,29,4,4911,5308
+2026-04-01,noche,LC sin marcar 15%,false,3,61,382195,451064
+2026-04-01,noche,LC sin marcar 15%,false,4,6,23619,27788
+2026-04-01,noche,LC sin marcar 15%,false,5,77,208524,243250
+2026-04-01,noche,otro,false,__MESAS__,3,6,0
+2026-04-01,noche,otro,false,2,3,12496,15044
+2026-04-01,noche,otro,false,3,9,44788,63983
+2026-04-01,noche,otro,false,5,6,14965,16437
+2026-04-01,noche,sin descuento,false,__MESAS__,572,1165,0
+2026-04-01,noche,sin descuento,false,13,37,200000,200008
+2026-04-01,noche,sin descuento,false,16,251,2515487,2515479
+2026-04-01,noche,sin descuento,false,2,645,3111504,3106896
+2026-04-01,noche,sin descuento,false,25,20,79646,79640
+2026-04-01,noche,sin descuento,false,29,5,6637,6635
+2026-04-01,noche,sin descuento,false,3,1169,8825487,8825564
+2026-04-01,noche,sin descuento,false,4,88,397168,397171
+2026-04-01,noche,sin descuento,false,5,1454,5627269,5609348
+2026-04-01,noche,sin descuento,true,__MESAS__,3,4,0
+2026-04-01,noche,sin descuento,true,2,3,10354,10353
+2026-04-01,noche,sin descuento,true,29,14,31593,31596
+2026-04-01,noche,sin descuento,true,3,2,15664,15664
+2026-04-01,noche,sin descuento,true,4,1,4779,4779
+2026-04-01,noche,sin descuento,true,5,5,18142,16175
+2026-04-01,noche,tarjeta 10%,false,__MESAS__,45,109,0
+2026-04-01,noche,tarjeta 10%,false,13,2,10035,11151
+2026-04-01,noche,tarjeta 10%,false,16,21,183451,202566
+2026-04-01,noche,tarjeta 10%,false,2,56,245164,270702
+2026-04-01,noche,tarjeta 10%,false,21,1,7487,7071
+2026-04-01,noche,tarjeta 10%,false,25,4,14336,15928
+2026-04-01,noche,tarjeta 10%,false,3,112,822819,914255
+2026-04-01,noche,tarjeta 10%,false,4,11,45956,51329
+2026-04-01,noche,tarjeta 10%,false,5,138,438481,483083
+2026-05-01,mañana,LC marcado,false,__MESAS__,6,11,7
+2026-05-01,mañana,LC marcado,false,2,7,26177,30796
+2026-05-01,mañana,LC marcado,false,3,8,41447,48761
+2026-05-01,mañana,LC marcado,false,4,1,3686,4336
+2026-05-01,mañana,LC marcado,false,5,9,22566,25644
+2026-05-01,mañana,LC marcado,true,__MESAS__,6,8,6
+2026-05-01,mañana,LC marcado,true,13,1,4664,5487
+2026-05-01,mañana,LC marcado,true,16,1,8199,9646
+2026-05-01,mañana,LC marcado,true,2,1,4062,4779
+2026-05-01,mañana,LC marcado,true,29,15,37257,38056
+2026-05-01,mañana,LC marcado,true,3,3,17978,21151
+2026-05-01,mañana,LC marcado,true,5,8,17482,20441
+2026-05-01,mañana,LC sin marcar 15%,true,__MESAS__,2,4,0
+2026-05-01,mañana,LC sin marcar 15%,true,2,1,5190,6106
+2026-05-01,mañana,LC sin marcar 15%,true,29,8,18655,21814
+2026-05-01,mañana,LC sin marcar 15%,true,5,2,3535,4159
+2026-05-01,mañana,otro,false,__MESAS__,2,0,0
+2026-05-01,mañana,otro,false,13,1,2168,3097
+2026-05-01,mañana,otro,false,5,1,1177,1681
+2026-05-01,mañana,otro,true,__MESAS__,1,3,0
+2026-05-01,mañana,otro,true,29,7,14743,21062
+2026-05-01,mañana,otro,true,5,1,2416,3451
+2026-05-01,mañana,sin descuento,false,__MESAS__,76,142,0
+2026-05-01,mañana,sin descuento,false,13,4,17168,17168
+2026-05-01,mañana,sin descuento,false,16,47,460089,460087
+2026-05-01,mañana,sin descuento,false,2,65,312920,312920
+2026-05-01,mañana,sin descuento,false,3,122,858584,858590
+2026-05-01,mañana,sin descuento,false,4,11,38142,38141
+2026-05-01,mañana,sin descuento,false,5,160,513191,505849
+2026-05-01,mañana,sin descuento,true,__MESAS__,42,69,0
+2026-05-01,mañana,sin descuento,true,13,3,11681,11681
+2026-05-01,mañana,sin descuento,true,16,1,10442,10442
+2026-05-01,mañana,sin descuento,true,2,6,26195,26194
+2026-05-01,mañana,sin descuento,true,29,141,398142,398159
+2026-05-01,mañana,sin descuento,true,3,7,37611,37611
+2026-05-01,mañana,sin descuento,true,5,62,137844,138308
+2026-05-01,mañana,tarjeta 10%,false,__MESAS__,4,14,0
+2026-05-01,mañana,tarjeta 10%,false,13,2,9876,10974
+2026-05-01,mañana,tarjeta 10%,false,16,9,79566,88406
+2026-05-01,mañana,tarjeta 10%,false,2,7,32416,36018
+2026-05-01,mañana,tarjeta 10%,false,3,10,62602,69557
+2026-05-01,mañana,tarjeta 10%,false,5,16,30823,34244
+2026-05-01,noche,LC marcado,false,__MESAS__,82,154,149
+2026-05-01,noche,LC marcado,false,13,3,10381,12212
+2026-05-01,noche,LC marcado,false,16,36,303367,356901
+2026-05-01,noche,LC marcado,false,2,79,323787,377522
+2026-05-01,noche,LC marcado,false,3,179,1111151,1295762
+2026-05-01,noche,LC marcado,false,4,8,31819,37435
+2026-05-01,noche,LC marcado,false,5,201,610420,686565
+2026-05-01,noche,LC marcado,true,__MESAS__,1,3,1
+2026-05-01,noche,LC marcado,true,29,9,19292,19294
+2026-05-01,noche,LC marcado,true,5,8,12509,13717
+2026-05-01,noche,LC sin marcar 15%,false,__MESAS__,29,47,0
+2026-05-01,noche,LC sin marcar 15%,false,13,1,4664,5487
+2026-05-01,noche,LC sin marcar 15%,false,16,8,62854,74513
+2026-05-01,noche,LC sin marcar 15%,false,2,18,78416,89912
+2026-05-01,noche,LC sin marcar 15%,false,29,2,2456,2654
+2026-05-01,noche,LC sin marcar 15%,false,3,45,280854,335488
+2026-05-01,noche,LC sin marcar 15%,false,4,4,16097,18939
+2026-05-01,noche,LC sin marcar 15%,false,5,55,146501,171850
+2026-05-01,noche,otro,false,__MESAS__,4,26,0
+2026-05-01,noche,otro,false,13,5,16684,27966
+2026-05-01,noche,otro,false,16,8,40207,74513
+2026-05-01,noche,otro,false,2,12,36031,65663
+2026-05-01,noche,otro,false,3,18,64093,101948
+2026-05-01,noche,otro,false,4,18,37934,78048
+2026-05-01,noche,otro,false,5,28,65291,88848
+2026-05-01,noche,sin descuento,false,__MESAS__,551,998,0
+2026-05-01,noche,sin descuento,false,13,26,139469,139474
+2026-05-01,noche,sin descuento,false,16,216,2128850,2128840
+2026-05-01,noche,sin descuento,false,2,522,2562566,2562560
+2026-05-01,noche,sin descuento,false,21,1,8319,8319
+2026-05-01,noche,sin descuento,false,25,12,47788,47784
+2026-05-01,noche,sin descuento,false,29,4,5310,5308
+2026-05-01,noche,sin descuento,false,3,946,7262744,7261296
+2026-05-01,noche,sin descuento,false,4,56,253363,253365
+2026-05-01,noche,sin descuento,false,5,1241,4721423,4707579
+2026-05-01,noche,sin descuento,true,__MESAS__,5,6,0
+2026-05-01,noche,sin descuento,true,16,1,10442,10442
+2026-05-01,noche,sin descuento,true,2,1,3451,3451
+2026-05-01,noche,sin descuento,true,29,5,24779,24779
+2026-05-01,noche,sin descuento,true,3,2,14336,14336
+2026-05-01,noche,sin descuento,true,5,6,11770,11768
+2026-05-01,noche,tarjeta 10%,false,__MESAS__,35,67,0
+2026-05-01,noche,tarjeta 10%,false,16,12,117159,130176
+2026-05-01,noche,tarjeta 10%,false,2,32,145261,160708
+2026-05-01,noche,tarjeta 10%,false,3,94,634819,704963
+2026-05-01,noche,tarjeta 10%,false,4,8,32416,36017
+2026-05-01,noche,tarjeta 10%,false,5,88,254305,284023
+2026-06-01,mañana,LC marcado,false,__MESAS__,2,2,2
+2026-06-01,mañana,LC marcado,false,16,1,8199,9646
+2026-06-01,mañana,LC marcado,false,3,1,5040,5929
+2026-06-01,mañana,LC marcado,false,4,1,3686,4336
+2026-06-01,mañana,LC marcado,false,5,3,12863,13328
+2026-06-01,mañana,LC marcado,true,__MESAS__,2,3,3
+2026-06-01,mañana,LC marcado,true,29,9,19292,19294
+2026-06-01,mañana,LC sin marcar 15%,false,__MESAS__,3,5,0
+2026-06-01,mañana,LC sin marcar 15%,false,16,1,8199,9646
+2026-06-01,mañana,LC sin marcar 15%,false,2,1,5190,6106
+2026-06-01,mañana,LC sin marcar 15%,false,3,3,17894,21504
+2026-06-01,mañana,LC sin marcar 15%,false,4,1,3686,4336
+2026-06-01,mañana,LC sin marcar 15%,false,5,1,1429,1681
+2026-06-01,mañana,LC sin marcar 15%,true,__MESAS__,3,8,0
+2026-06-01,mañana,LC sin marcar 15%,true,2,2,4810,5929
+2026-06-01,mañana,LC sin marcar 15%,true,29,19,36788,43809
+2026-06-01,mañana,LC sin marcar 15%,true,3,1,6301,7876
+2026-06-01,mañana,LC sin marcar 15%,true,5,4,9080,10885
+2026-06-01,mañana,otro,false,__MESAS__,1,0,0
+2026-06-01,mañana,otro,false,5,1,1177,1681
+2026-06-01,mañana,otro,true,__MESAS__,3,4,0
+2026-06-01,mañana,otro,true,29,18,29522,33720
+2026-06-01,mañana,otro,true,5,6,11518,14954
+2026-06-01,mañana,sin descuento,false,__MESAS__,94,161,0
+2026-06-01,mañana,sin descuento,false,13,9,48407,47945
+2026-06-01,mañana,sin descuento,false,16,49,485221,485219
+2026-06-01,mañana,sin descuento,false,2,77,377257,377254
+2026-06-01,mañana,sin descuento,false,3,122,892832,892838
+2026-06-01,mañana,sin descuento,false,4,5,23274,23275
+2026-06-01,mañana,sin descuento,false,5,150,369488,367322
+2026-06-01,mañana,sin descuento,true,__MESAS__,38,58,0
+2026-06-01,mañana,sin descuento,true,16,2,20708,20708
+2026-06-01,mañana,sin descuento,true,2,5,27257,27256
+2026-06-01,mañana,sin descuento,true,29,128,331947,331964
+2026-06-01,mañana,sin descuento,true,3,7,41858,41859
+2026-06-01,mañana,sin descuento,true,4,2,6106,6106
+2026-06-01,mañana,sin descuento,true,5,48,119487,118745
+2026-06-01,mañana,tarjeta 10%,false,__MESAS__,3,6,0
+2026-06-01,mañana,tarjeta 10%,false,13,1,4938,5487
+2026-06-01,mañana,tarjeta 10%,false,16,2,16398,19292
+2026-06-01,mañana,tarjeta 10%,false,2,3,16009,17787
+2026-06-01,mañana,tarjeta 10%,false,3,2,11628,12920
+2026-06-01,mañana,tarjeta 10%,false,5,9,31708,33468
+2026-06-01,mañana,tarjeta 10%,true,__MESAS__,2,4,0
+2026-06-01,mañana,tarjeta 10%,true,2,1,1752,1947
+2026-06-01,mañana,tarjeta 10%,true,29,7,22062,24514
+2026-06-01,mañana,tarjeta 10%,true,3,1,4619,5133
+2026-06-01,mañana,tarjeta 10%,true,5,3,6850,7610
+2026-06-01,noche,LC marcado,false,__MESAS__,94,199,168
+2026-06-01,noche,LC marcado,false,13,7,29637,33117
+2026-06-01,noche,LC marcado,false,16,32,268797,309733
+2026-06-01,noche,LC marcado,false,2,96,416053,480889
+2026-06-01,noche,LC marcado,false,3,180,1253845,1460890
+2026-06-01,noche,LC marcado,false,4,11,39504,50443
+2026-06-01,noche,LC marcado,false,5,269,864422,966611
+2026-06-01,noche,LC marcado,true,__MESAS__,1,4,4
+2026-06-01,noche,LC marcado,true,29,2,13805,13806
+2026-06-01,noche,LC marcado,true,3,3,19204,19204
+2026-06-01,noche,LC marcado,true,5,2,3186,3186
+2026-06-01,noche,LC sin marcar 15%,false,__MESAS__,13,27,0
+2026-06-01,noche,LC sin marcar 15%,false,13,1,2633,2633
+2026-06-01,noche,LC sin marcar 15%,false,16,4,35730,42035
+2026-06-01,noche,LC sin marcar 15%,false,2,18,72252,85309
+2026-06-01,noche,LC sin marcar 15%,false,3,25,154066,183805
+2026-06-01,noche,LC sin marcar 15%,false,5,22,55064,65486
+2026-06-01,noche,otro,false,__MESAS__,3,5,0
+2026-06-01,noche,otro,false,2,1,2389,2655
+2026-06-01,noche,otro,false,3,11,69230,78674
+2026-06-01,noche,otro,false,5,14,42160,42855
+2026-06-01,noche,sin descuento,false,__MESAS__,353,711,0
+2026-06-01,noche,sin descuento,false,13,13,75575,75579
+2026-06-01,noche,sin descuento,false,16,179,1808142,1808135
+2026-06-01,noche,sin descuento,false,2,431,2112301,2112290
+2026-06-01,noche,sin descuento,false,3,667,4948319,4948366
+2026-06-01,noche,sin descuento,false,4,47,217345,217349
+2026-06-01,noche,sin descuento,false,5,848,3201800,3181920
+2026-06-01,noche,sin descuento,true,__MESAS__,2,2,0
+2026-06-01,noche,sin descuento,true,29,5,13894,13895
+2026-06-01,noche,sin descuento,true,5,2,4602,4601
+2026-06-01,noche,tarjeta 10%,false,__MESAS__,24,60,0
+2026-06-01,noche,tarjeta 10%,false,16,13,110606,125575
+2026-06-01,noche,tarjeta 10%,false,2,30,137469,152742
+2026-06-01,noche,tarjeta 10%,false,3,66,429491,478063
+2026-06-01,noche,tarjeta 10%,false,4,5,20788,23098
+2026-06-01,noche,tarjeta 10%,false,5,53,175709,187427
+2026-07-01,mañana,LC marcado,false,__MESAS__,4,5,4
+2026-07-01,mañana,LC marcado,false,16,1,7447,8761
+2026-07-01,mañana,LC marcado,false,3,5,30991,36460
+2026-07-01,mañana,LC marcado,false,5,5,15722,16690
+2026-07-01,mañana,LC marcado,true,__MESAS__,1,1,1
+2026-07-01,mañana,LC marcado,true,29,4,5593,6992
+2026-07-01,mañana,LC marcado,true,5,1,1345,1681
+2026-07-01,mañana,LC sin marcar 15%,false,__MESAS__,1,3,0
+2026-07-01,mañana,LC sin marcar 15%,false,16,1,8199,9646
+2026-07-01,mañana,LC sin marcar 15%,false,2,3,8124,9557
+2026-07-01,mañana,LC sin marcar 15%,false,3,2,11960,14071
+2026-07-01,mañana,LC sin marcar 15%,false,5,3,7900,9294
+2026-07-01,mañana,otro,false,__MESAS__,1,0,0
+2026-07-01,mañana,otro,false,5,1,1177,1681
+2026-07-01,mañana,otro,true,__MESAS__,1,2,0
+2026-07-01,mañana,otro,true,29,2,12212,12213
+2026-07-01,mañana,otro,true,3,1,5040,5929
+2026-07-01,mañana,otro,true,5,1,1429,1681
+2026-07-01,mañana,sin descuento,false,__MESAS__,124,258,0
+2026-07-01,mañana,sin descuento,false,13,8,40177,40178
+2026-07-01,mañana,sin descuento,false,16,60,592566,592564
+2026-07-01,mañana,sin descuento,false,2,117,586460,586460
+2026-07-01,mañana,sin descuento,false,29,1,885,885
+2026-07-01,mañana,sin descuento,false,3,193,1406460,1406473
+2026-07-01,mañana,sin descuento,false,4,4,18496,18496
+2026-07-01,mañana,sin descuento,false,5,276,788265,788213
+2026-07-01,mañana,sin descuento,true,__MESAS__,38,58,0
+2026-07-01,mañana,sin descuento,true,16,3,27168,27168
+2026-07-01,mañana,sin descuento,true,2,6,27699,27698
+2026-07-01,mañana,sin descuento,true,29,138,368142,368163
+2026-07-01,mañana,sin descuento,true,3,9,58673,58674
+2026-07-01,mañana,sin descuento,true,4,1,1770,1770
+2026-07-01,mañana,sin descuento,true,5,42,100713,100701
+2026-07-01,mañana,tarjeta 10%,false,__MESAS__,4,4,0
+2026-07-01,mañana,tarjeta 10%,false,16,1,8199,9646
+2026-07-01,mañana,tarjeta 10%,false,2,3,14257,15841
+2026-07-01,mañana,tarjeta 10%,false,3,3,14575,16195
+2026-07-01,mañana,tarjeta 10%,false,5,5,19690,20513
+2026-07-01,mañana,tarjeta 10%,true,__MESAS__,4,13,0
+2026-07-01,mañana,tarjeta 10%,true,13,2,5575,6194
+2026-07-01,mañana,tarjeta 10%,true,2,1,4965,5841
+2026-07-01,mañana,tarjeta 10%,true,29,14,40991,45844
+2026-07-01,mañana,tarjeta 10%,true,3,4,27111,31416
+2026-07-01,mañana,tarjeta 10%,true,5,9,20500,21882
+2026-07-01,noche,LC marcado,false,__MESAS__,61,135,74
+2026-07-01,noche,LC marcado,false,13,6,23920,28142
+2026-07-01,noche,LC marcado,false,16,19,159398,187168
+2026-07-01,noche,LC marcado,false,2,52,221703,261241
+2026-07-01,noche,LC marcado,false,3,145,948859,1117533
+2026-07-01,noche,LC marcado,false,4,3,11810,13894
+2026-07-01,noche,LC marcado,false,5,169,524581,592566
+2026-07-01,noche,LC sin marcar 15%,false,__MESAS__,21,26,0
+2026-07-01,noche,LC sin marcar 15%,false,13,2,9929,11682
+2026-07-01,noche,LC sin marcar 15%,false,16,3,23093,27168
+2026-07-01,noche,LC sin marcar 15%,false,2,25,108664,131414
+2026-07-01,noche,LC sin marcar 15%,false,21,4,42931,42931
+2026-07-01,noche,LC sin marcar 15%,false,3,43,277898,330443
+2026-07-01,noche,LC sin marcar 15%,false,4,3,12035,14160
+2026-07-01,noche,LC sin marcar 15%,false,5,49,84908,100907
+2026-07-01,noche,LC sin marcar 15%,true,__MESAS__,1,0,0
+2026-07-01,noche,LC sin marcar 15%,true,29,4,5942,6992
+2026-07-01,noche,LC sin marcar 15%,true,5,1,1429,1681
+2026-07-01,noche,otro,false,__MESAS__,6,10,0
+2026-07-01,noche,otro,false,13,3,12265,15877
+2026-07-01,noche,otro,false,16,1,10442,10442
+2026-07-01,noche,otro,false,2,6,25407,29558
+2026-07-01,noche,otro,false,21,1,11947,10619
+2026-07-01,noche,otro,false,3,5,21062,26903
+2026-07-01,noche,otro,false,4,1,3345,4779
+2026-07-01,noche,otro,false,5,9,26336,29558
+2026-07-01,noche,sin descuento,false,__MESAS__,411,968,0
+2026-07-01,noche,sin descuento,false,12,2,32301,32301
+2026-07-01,noche,sin descuento,false,13,35,193009,193017
+2026-07-01,noche,sin descuento,false,16,209,2089292,2089283
+2026-07-01,noche,sin descuento,false,2,446,2182035,2182025
+2026-07-01,noche,sin descuento,false,21,9,115469,115468
+2026-07-01,noche,sin descuento,false,29,2,2655,2654
+2026-07-01,noche,sin descuento,false,3,883,6633275,6633320
+2026-07-01,noche,sin descuento,false,4,51,238319,238326
+2026-07-01,noche,sin descuento,false,5,1138,4261744,4251119
+2026-07-01,noche,tarjeta 10%,false,__MESAS__,26,70,0
+2026-07-01,noche,tarjeta 10%,false,16,27,234230,261326
+2026-07-01,noche,tarjeta 10%,false,2,31,136438,152568
+2026-07-01,noche,tarjeta 10%,false,21,1,11150,11150
+2026-07-01,noche,tarjeta 10%,false,3,57,348217,386497
+2026-07-01,noche,tarjeta 10%,false,4,3,12504,13894
+2026-07-01,noche,tarjeta 10%,false,5,81,232452,254856
+2026-08-01,mañana,LC marcado,false,__MESAS__,5,6,5
+2026-08-01,mañana,LC marcado,false,2,4,18504,21770
+2026-08-01,mañana,LC marcado,false,3,7,38810,45752
+2026-08-01,mañana,LC marcado,false,4,1,4336,4336
+2026-08-01,mañana,LC marcado,false,5,5,9102,10707
+2026-08-01,mañana,LC marcado,true,__MESAS__,4,8,4
+2026-08-01,mañana,LC marcado,true,16,1,8761,8761
+2026-08-01,mañana,LC marcado,true,2,6,17677,20796
+2026-08-01,mañana,LC marcado,true,29,7,19535,22036
+2026-08-01,mañana,LC marcado,true,3,3,16624,19558
+2026-08-01,mañana,LC marcado,true,5,6,15170,16815
+2026-08-01,mañana,LC sin marcar 15%,false,__MESAS__,2,3,0
+2026-08-01,mañana,LC sin marcar 15%,false,16,1,7447,8761
+2026-08-01,mañana,LC sin marcar 15%,false,3,3,19633,23097
+2026-08-01,mañana,LC sin marcar 15%,false,5,5,10230,12035
+2026-08-01,mañana,LC sin marcar 15%,true,__MESAS__,1,1,0
+2026-08-01,mañana,LC sin marcar 15%,true,29,1,3987,4690
+2026-08-01,mañana,LC sin marcar 15%,true,5,1,2482,2920
+2026-08-01,mañana,otro,false,__MESAS__,2,3,0
+2026-08-01,mañana,otro,false,16,2,18407,18407
+2026-08-01,mañana,otro,false,2,1,5336,5929
+2026-08-01,mañana,otro,false,3,2,12965,16022
+2026-08-01,mañana,otro,false,5,1,3106,3451
+2026-08-01,mañana,sin descuento,false,__MESAS__,78,146,0
+2026-08-01,mañana,sin descuento,false,13,4,22832,22833
+2026-08-01,mañana,sin descuento,false,16,37,361947,361945
+2026-08-01,mañana,sin descuento,false,2,49,237080,237078
+2026-08-01,mañana,sin descuento,false,29,2,1770,1504
+2026-08-01,mañana,sin descuento,false,3,109,808606,808613
+2026-08-01,mañana,sin descuento,false,4,5,22389,22389
+2026-08-01,mañana,sin descuento,false,5,145,516082,516053
+2026-08-01,mañana,sin descuento,true,__MESAS__,83,120,0
+2026-08-01,mañana,sin descuento,true,2,8,37965,37964
+2026-08-01,mañana,sin descuento,true,29,258,736549,736586
+2026-08-01,mañana,sin descuento,true,3,11,71062,71063
+2026-08-01,mañana,sin descuento,true,4,1,4779,4779
+2026-08-01,mañana,sin descuento,true,5,90,232825,232800
+2026-08-01,mañana,tarjeta 10%,false,__MESAS__,3,3,0
+2026-08-01,mañana,tarjeta 10%,false,16,1,7885,8761
+2026-08-01,mañana,tarjeta 10%,false,2,3,14655,16283
+2026-08-01,mañana,tarjeta 10%,false,3,5,31416,35669
+2026-08-01,mañana,tarjeta 10%,false,5,9,28177,29610
+2026-08-01,mañana,tarjeta 10%,true,__MESAS__,1,1,0
+2026-08-01,mañana,tarjeta 10%,true,29,1,4779,5310
+2026-08-01,mañana,tarjeta 10%,true,5,1,2628,2920
+2026-08-01,noche,LC marcado,false,__MESAS__,82,163,86
+2026-08-01,noche,LC marcado,false,13,3,12863,15133
+2026-08-01,noche,LC marcado,false,16,42,346090,403892
+2026-08-01,noche,LC marcado,false,2,68,295320,345224
+2026-08-01,noche,LC marcado,false,3,159,1065591,1261078
+2026-08-01,noche,LC marcado,false,4,10,32058,45664
+2026-08-01,noche,LC marcado,false,5,179,588154,677684
+2026-08-01,noche,LC sin marcar 15%,false,__MESAS__,24,42,0
+2026-08-01,noche,LC sin marcar 15%,false,13,1,4664,5487
+2026-08-01,noche,LC sin marcar 15%,false,16,12,99863,118053
+2026-08-01,noche,LC sin marcar 15%,false,2,10,42650,50177
+2026-08-01,noche,LC sin marcar 15%,false,3,31,173190,205317
+2026-08-01,noche,LC sin marcar 15%,false,5,38,116341,135128
+2026-08-01,noche,LC sin marcar 15%,true,__MESAS__,1,2,0
+2026-08-01,noche,LC sin marcar 15%,true,13,1,2633,3097
+2026-08-01,noche,LC sin marcar 15%,true,29,5,11810,13895
+2026-08-01,noche,otro,false,__MESAS__,11,20,0
+2026-08-01,noche,otro,false,16,5,35332,50353
+2026-08-01,noche,otro,false,2,8,34173,34955
+2026-08-01,noche,otro,false,3,20,172443,190205
+2026-08-01,noche,otro,false,5,28,90146,98227
+2026-08-01,noche,sin descuento,false,__MESAS__,477,926,0
+2026-08-01,noche,sin descuento,false,13,20,106814,106818
+2026-08-01,noche,sin descuento,false,16,223,2250620,2250613
+2026-08-01,noche,sin descuento,false,2,467,2291151,2290949
+2026-08-01,noche,sin descuento,false,21,3,42000,42000
+2026-08-01,noche,sin descuento,false,22,3,4200,4200
+2026-08-01,noche,sin descuento,false,3,847,6643554,6643538
+2026-08-01,noche,sin descuento,false,4,54,243894,243718
+2026-08-01,noche,sin descuento,false,5,1134,4594503,4587392
+2026-08-01,noche,sin descuento,true,__MESAS__,4,6,0
+2026-08-01,noche,sin descuento,true,29,10,38230,38230
+2026-08-01,noche,sin descuento,true,5,6,10089,10086
+2026-08-01,noche,tarjeta 10%,false,__MESAS__,47,95,0
+2026-08-01,noche,tarjeta 10%,false,16,20,178845,199203
+2026-08-01,noche,tarjeta 10%,false,2,45,189518,211577
+2026-08-01,noche,tarjeta 10%,false,3,123,873441,973810
+2026-08-01,noche,tarjeta 10%,false,4,4,14336,15753
+2026-08-01,noche,tarjeta 10%,false,5,106,410881,452719
+2026-08-01,noche,tarjeta 10%,true,__MESAS__,1,1,0
+2026-08-01,noche,tarjeta 10%,true,29,5,6695,7744
+2026-08-01,noche,tarjeta 10%,true,5,1,2482,2482
+2026-09-01,mañana,LC marcado,false,__MESAS__,7,14,7
+2026-09-01,mañana,LC marcado,false,13,2,9115,9115
+2026-09-01,mañana,LC marcado,false,16,4,35792,40265
+2026-09-01,mañana,LC marcado,false,2,6,19801,19999
+2026-09-01,mañana,LC marcado,false,3,15,100504,110979
+2026-09-01,mañana,LC marcado,false,5,18,62529,61855
+2026-09-01,mañana,LC marcado,true,__MESAS__,3,5,3
+2026-09-01,mañana,LC marcado,true,2,2,7522,8850
+2026-09-01,mañana,LC marcado,true,29,10,25022,25754
+2026-09-01,mañana,LC marcado,true,3,3,21142,22125
+2026-09-01,mañana,LC marcado,true,5,7,19717,19625
+2026-09-01,mañana,LC sin marcar 15%,false,__MESAS__,2,4,0
+2026-09-01,mañana,LC sin marcar 15%,false,3,8,42729,50269
+2026-09-01,mañana,LC sin marcar 15%,false,5,5,14168,16370
+2026-09-01,mañana,LC sin marcar 15%,true,__MESAS__,2,5,0
+2026-09-01,mañana,LC sin marcar 15%,true,29,10,20535,24161
+2026-09-01,mañana,LC sin marcar 15%,true,4,1,3912,4602
+2026-09-01,mañana,LC sin marcar 15%,true,5,7,13841,16281
+2026-09-01,mañana,otro,true,__MESAS__,1,1,0
+2026-09-01,mañana,otro,true,29,1,3407,4867
+2026-09-01,mañana,sin descuento,false,__MESAS__,52,89,0
+2026-09-01,mañana,sin descuento,false,13,9,48230,48232
+2026-09-01,mañana,sin descuento,false,16,21,210531,210529
+2026-09-01,mañana,sin descuento,false,2,32,168053,168053
+2026-09-01,mañana,sin descuento,false,3,79,638951,638955
+2026-09-01,mañana,sin descuento,false,4,3,13717,13717
+2026-09-01,mañana,sin descuento,false,5,109,333103,332478
+2026-09-01,mañana,sin descuento,true,__MESAS__,44,63,0
+2026-09-01,mañana,sin descuento,true,16,1,8761,8761
+2026-09-01,mañana,sin descuento,true,2,5,17168,17167
+2026-09-01,mañana,sin descuento,true,29,149,390890,389609
+2026-09-01,mañana,sin descuento,true,3,7,41071,41070
+2026-09-01,mañana,sin descuento,true,5,67,197068,197055
+2026-09-01,mañana,tarjeta 10%,false,__MESAS__,7,10,0
+2026-09-01,mañana,tarjeta 10%,false,2,4,19195,21328
+2026-09-01,mañana,tarjeta 10%,false,3,11,69292,76993
+2026-09-01,mañana,tarjeta 10%,false,5,10,30015,32897
+2026-09-01,noche,LC marcado,false,__MESAS__,60,113,61
+2026-09-01,noche,LC marcado,false,13,3,11217,11681
+2026-09-01,noche,LC marcado,false,16,30,250867,294159
+2026-09-01,noche,LC marcado,false,2,51,241872,277081
+2026-09-01,noche,LC marcado,false,3,114,726264,839487
+2026-09-01,noche,LC marcado,false,4,3,11810,13894
+2026-09-01,noche,LC marcado,false,5,136,477544,525354
+2026-09-01,noche,LC sin marcar 15%,false,__MESAS__,10,18,0
+2026-09-01,noche,LC sin marcar 15%,false,13,1,4664,5487
+2026-09-01,noche,LC sin marcar 15%,false,16,2,16398,19292
+2026-09-01,noche,LC sin marcar 15%,false,2,5,19633,23096
+2026-09-01,noche,LC sin marcar 15%,false,3,17,96735,113809
+2026-09-01,noche,LC sin marcar 15%,false,4,3,11434,13451
+2026-09-01,noche,LC sin marcar 15%,false,5,14,24823,28735
+2026-09-01,noche,otro,false,__MESAS__,2,3,0
+2026-09-01,noche,otro,false,2,1,4142,4602
+2026-09-01,noche,otro,false,3,4,19142,20797
+2026-09-01,noche,otro,false,5,5,13867,16305
+2026-09-01,noche,sin descuento,false,__MESAS__,299,570,0
+2026-09-01,noche,sin descuento,false,13,15,76195,76197
+2026-09-01,noche,sin descuento,false,16,119,1179115,1179110
+2026-09-01,noche,sin descuento,false,2,273,1342407,1342821
+2026-09-01,noche,sin descuento,false,21,2,26389,26389
+2026-09-01,noche,sin descuento,false,3,513,3879947,3881098
+2026-09-01,noche,sin descuento,false,4,36,163186,163189
+2026-09-01,noche,sin descuento,false,5,694,2632922,2613354
+2026-09-01,noche,sin descuento,true,__MESAS__,1,1,0
+2026-09-01,noche,sin descuento,true,29,1,4867,4867
+2026-09-01,noche,tarjeta 10%,false,__MESAS__,26,56,0
+2026-09-01,noche,tarjeta 10%,false,13,1,5416,6018
+2026-09-01,noche,tarjeta 10%,false,16,19,168053,186725
+2026-09-01,noche,tarjeta 10%,false,2,32,153027,171503
+2026-09-01,noche,tarjeta 10%,false,21,1,12600,12600
+2026-09-01,noche,tarjeta 10%,false,22,1,2671,2671
+2026-09-01,noche,tarjeta 10%,false,3,45,299892,335988
+2026-09-01,noche,tarjeta 10%,false,4,4,16646,18496
+2026-09-01,noche,tarjeta 10%,false,5,80,268400,288357
+2026-10-01,mañana,LC marcado,false,__MESAS__,2,6,2
+2026-10-01,mañana,LC marcado,false,2,5,20987,24691
+2026-10-01,mañana,LC marcado,false,3,3,18956,22301
+2026-10-01,mañana,LC marcado,false,5,5,38439,39938
+2026-10-01,mañana,LC marcado,true,__MESAS__,2,4,2
+2026-10-01,mañana,LC marcado,true,29,16,25867,27968
+2026-10-01,mañana,LC marcado,true,5,6,16097,18936
+2026-10-01,mañana,LC sin marcar 15%,false,__MESAS__,1,2,0
+2026-10-01,mañana,LC sin marcar 15%,false,2,1,4438,5221
+2026-10-01,mañana,LC sin marcar 15%,false,3,3,20535,24159
+2026-10-01,mañana,LC sin marcar 15%,false,5,2,4965,5840
+2026-10-01,mañana,LC sin marcar 15%,true,__MESAS__,1,1,0
+2026-10-01,mañana,LC sin marcar 15%,true,29,4,5942,6730
+2026-10-01,mañana,LC sin marcar 15%,true,5,2,2858,3362
+2026-10-01,mañana,otro,false,__MESAS__,2,3,0
+2026-10-01,mañana,otro,false,13,1,4212,6018
+2026-10-01,mañana,otro,false,3,2,14177,15752
+2026-10-01,mañana,otro,false,5,3,7457,7612
+2026-10-01,mañana,sin descuento,false,__MESAS__,51,88,0
+2026-10-01,mañana,sin descuento,false,13,5,25929,25466
+2026-10-01,mañana,sin descuento,false,16,35,349735,349730
+2026-10-01,mañana,sin descuento,false,2,29,148407,148408
+2026-10-01,mañana,sin descuento,false,3,57,497912,494956
+2026-10-01,mañana,sin descuento,false,4,2,8673,8672
+2026-10-01,mañana,sin descuento,false,5,89,257795,257777
+2026-10-01,mañana,sin descuento,true,__MESAS__,41,61,0
+2026-10-01,mañana,sin descuento,true,13,2,8761,8297
+2026-10-01,mañana,sin descuento,true,16,1,8761,8761
+2026-10-01,mañana,sin descuento,true,2,2,8850,8850
+2026-10-01,mañana,sin descuento,true,29,136,359801,359033
+2026-10-01,mañana,sin descuento,true,3,5,36469,36469
+2026-10-01,mañana,sin descuento,true,5,46,119030,119019
+2026-10-01,mañana,tarjeta 10%,false,__MESAS__,10,14,0
+2026-10-01,mañana,tarjeta 10%,false,16,7,61566,68407
+2026-10-01,mañana,tarjeta 10%,false,2,5,25566,28406
+2026-10-01,mañana,tarjeta 10%,false,3,14,124726,138586
+2026-10-01,mañana,tarjeta 10%,false,5,27,60296,66682
+2026-10-01,mañana,tarjeta 10%,true,__MESAS__,3,3,0
+2026-10-01,mañana,tarjeta 10%,true,13,1,2633,2633
+2026-10-01,mañana,tarjeta 10%,true,2,1,4438,5221
+2026-10-01,mañana,tarjeta 10%,true,29,16,23770,26920
+2026-10-01,mañana,tarjeta 10%,true,3,1,6695,7876
+2026-10-01,mañana,tarjeta 10%,true,5,9,20460,21322
+2026-10-01,noche,LC marcado,false,__MESAS__,54,102,55
+2026-10-01,noche,LC marcado,false,13,5,20159,22789
+2026-10-01,noche,LC marcado,false,16,23,192659,228672
+2026-10-01,noche,LC marcado,false,2,75,331217,369142
+2026-10-01,noche,LC marcado,false,3,84,534831,623294
+2026-10-01,noche,LC marcado,false,4,7,27381,32213
+2026-10-01,noche,LC marcado,false,5,136,445334,484234
+2026-10-01,noche,LC sin marcar 15%,false,__MESAS__,15,28,0
+2026-10-01,noche,LC sin marcar 15%,false,16,9,73659,84955
+2026-10-01,noche,LC sin marcar 15%,false,2,3,13779,15399
+2026-10-01,noche,LC sin marcar 15%,false,3,26,141650,165045
+2026-10-01,noche,LC sin marcar 15%,false,5,34,85184,104140
+2026-10-01,noche,otro,false,__MESAS__,14,8,0
+2026-10-01,noche,otro,false,13,2,9327,12036
+2026-10-01,noche,otro,false,16,1,7991,11416
+2026-10-01,noche,otro,false,2,12,51039,64920
+2026-10-01,noche,otro,false,3,9,54279,66288
+2026-10-01,noche,otro,false,5,35,99955,117802
+2026-10-01,noche,sin descuento,false,__MESAS__,263,483,0
+2026-10-01,noche,sin descuento,false,13,13,75398,75402
+2026-10-01,noche,sin descuento,false,16,138,1382124,1382119
+2026-10-01,noche,sin descuento,false,2,242,1177505,1172293
+2026-10-01,noche,sin descuento,false,21,5,66779,66778
+2026-10-01,noche,sin descuento,false,22,2,6284,6284
+2026-10-01,noche,sin descuento,false,3,407,3204465,3201573
+2026-10-01,noche,sin descuento,false,4,25,115575,115578
+2026-10-01,noche,sin descuento,false,5,612,2315092,2283199
+2026-10-01,noche,sin descuento,true,__MESAS__,1,1,0
+2026-10-01,noche,sin descuento,true,29,4,6991,6992
+2026-10-01,noche,tarjeta 10%,false,__MESAS__,49,100,0
+2026-10-01,noche,tarjeta 10%,false,13,3,12668,13784
+2026-10-01,noche,tarjeta 10%,false,16,36,326783,364776
+2026-10-01,noche,tarjeta 10%,false,2,82,355770,392627
+2026-10-01,noche,tarjeta 10%,false,3,108,685338,765122
+2026-10-01,noche,tarjeta 10%,false,4,16,67478,74250
+2026-10-01,noche,tarjeta 10%,false,5,161,566265,608824
+2026-11-01,mañana,LC marcado,true,__MESAS__,1,2,1
+2026-11-01,mañana,LC marcado,true,29,2,10177,10177
+2026-11-01,mañana,LC marcado,true,5,2,6195,6194
+2026-11-01,mañana,sin descuento,false,__MESAS__,2,3,0
+2026-11-01,mañana,sin descuento,false,2,3,17345,16770
+2026-11-01,mañana,sin descuento,false,3,1,7876,7876
+2026-11-01,mañana,sin descuento,false,5,2,5841,5256
+2026-11-01,mañana,sin descuento,true,__MESAS__,4,8,0
+2026-11-01,mañana,sin descuento,true,29,23,49558,49561
+2026-11-01,mañana,sin descuento,true,5,6,18939,18472
+2026-11-01,noche,LC marcado,false,__MESAS__,1,3,1
+2026-11-01,noche,LC marcado,false,3,4,21212,22394
+2026-11-01,noche,LC marcado,false,5,1,2633,2633
+2026-11-01,noche,sin descuento,false,__MESAS__,9,18,0
+2026-11-01,noche,sin descuento,false,16,10,97018,95912
+2026-11-01,noche,sin descuento,false,2,12,59965,59045
+2026-11-01,noche,sin descuento,false,3,12,76699,76074
+2026-11-01,noche,sin descuento,false,4,2,8044,8045
+2026-11-01,noche,sin descuento,false,5,20,52983,52810
+2026-11-01,noche,sin descuento,true,__MESAS__,1,5,0
+2026-11-01,noche,sin descuento,true,29,2,9735,9734
+2026-11-01,noche,sin descuento,true,5,1,2920,2628

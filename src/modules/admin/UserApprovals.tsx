@@ -3,15 +3,19 @@ import type { Profile, Employee, UserRole } from '../../shared/types/database'
 import { getAllProfiles, updateProfileRole, setProfileActive } from '../../shared/api/admin'
 
 import { ROLE_LABELS } from '../../shared/constants'
+import NuevoEmpleado from './NuevoEmpleado'
 
 const ROLES: UserRole[] = ['owner', 'contador', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina', 'proveedor']
 
 interface Props {
   employees: Employee[]
   currentUserId?: string
+  // Refresca la lista de empleados (vínculo nuevo) SIN desmontar esta pantalla.
+  onEmployeesChanged?: () => void
 }
 
-export default function UserApprovals({ employees, currentUserId }: Props) {
+export default function UserApprovals({ employees, currentUserId, onEmployeesChanged }: Props) {
+  const [nuevo, setNuevo] = useState(false)
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -90,29 +94,37 @@ export default function UserApprovals({ employees, currentUserId }: Props) {
     <div className="admin-section" style={{ maxWidth: 720 }}>
       {error && <p className="field-error" style={{ marginBottom: '0.75rem' }}>{error}</p>}
 
-      {/* Flujo de alta (operación por roles 06-12): acá NO se crean cuentas — el
-          empleado se registra solo y el owner le da rol + acceso desde esta pantalla. */}
+      {/* Alta de empleados (05/11): el registro abierto está cerrado desde SEC-01; las cuentas las crea
+          el owner desde acá con la Edge Function `alta-empleado`. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+        <button className="btn-save-inline" onClick={() => setNuevo(true)}>+ Nuevo empleado</button>
+      </div>
       <div style={{ border: '1px solid var(--t-border)', borderRadius: 4, padding: '0.75rem 0.875rem',
         marginBottom: '1.25rem', fontSize: '0.74rem', lineHeight: 1.6, color: 'var(--t-muted)' }}>
         <strong style={{ color: 'var(--t-ink)' }}>¿Cómo dar de alta a alguien?</strong><br />
-        1. La persona abre la app en su dispositivo y toca <strong>Crear cuenta</strong> con su correo real
-        (o un alias <code>satorisushibar+nombre@gmail.com</code> — los correos llegan a la casilla principal).<br />
-        2. Su cuenta aparece acá en <strong>Cuentas pendientes</strong>.<br />
-        3. Le asignás el rol y tocás <strong>Habilitar</strong> — al reintentar ya entra, y aterriza directo
-        en su pantalla (cajero → Caja, salonero → Comandero, bandeja proveedores → Registrar pago).
+        1. Tocá <strong>+ Nuevo empleado</strong> y cargá nombre, correo (el suyo o un alias
+        <code> satorisushibar+nombre@gmail.com</code>) y rol. Si ya está en Empleados, vinculalo.<br />
+        2. Copiá la <strong>contraseña temporal</strong> y entregásela en persona: no se vuelve a mostrar.<br />
+        3. La persona entra con su correo y esa contraseña, elige una nueva y aterriza directo en su
+        pantalla (cajero → Caja, bandeja proveedores → Registrar pago).
       </div>
 
+      {nuevo && (
+        <NuevoEmpleado employees={employees} onClose={() => setNuevo(false)}
+          onCreated={() => { load(); onEmployeesChanged?.() }} />
+      )}
+
       <div className="admin-section-header">
-        <span className="admin-section-title">Cuentas pendientes {pending.length > 0 && `(${pending.length})`}</span>
+        <span className="admin-section-title">Cuentas deshabilitadas {pending.length > 0 && `(${pending.length})`}</span>
       </div>
       {pending.length === 0 ? (
         <p style={{ fontSize: '0.8rem', color: 'var(--t-muted)', marginBottom: '1.5rem' }}>
-          No hay cuentas esperando aprobación.
+          No hay cuentas deshabilitadas.
         </p>
       ) : (
         <>
           <p style={{ fontSize: '0.72rem', color: 'var(--t-muted)', marginBottom: '0.6rem', lineHeight: 1.5 }}>
-            Estas personas crearon su cuenta y esperan acceso. Asignales el rol correcto y tocá <strong>Habilitar</strong>.
+            Estas cuentas no pueden entrar. Para devolverle el acceso a alguien, revisá el rol y tocá <strong>Habilitar</strong>.
           </p>
           <table className="admin-table" style={{ marginBottom: '2rem' }}>
             <thead><tr><th>Usuario</th><th>Rol</th><th></th></tr></thead>

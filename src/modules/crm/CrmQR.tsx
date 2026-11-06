@@ -2,9 +2,12 @@
  * CrmQR — QR de auto-registro de clientes (gerencia)
  * Genera el QR del formulario público /registro para compartir por WhatsApp.
  * El cliente lo escanea → se registra solo en la base.
+ *
+ * APAGADO desde la mig 072 (SEC-03): muestra el aviso en lugar del QR.
  */
 import { useState, useEffect } from 'react'
 import QRCode from 'qrcode'
+import { REGISTRO_PUBLICO_ACTIVO, AVISO_REGISTRO } from './registroPublico'
 
 const MUTED = '#5a5040', GOLD = '#a07830'
 
@@ -16,12 +19,28 @@ export default function CrmQR() {
   const regUrl = `${window.location.origin}${import.meta.env.BASE_URL}registro`
 
   useEffect(() => {
+    if (!REGISTRO_PUBLICO_ACTIVO) return
     QRCode.toDataURL(regUrl, { width: 720, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#0d0d0d', light: '#f5f0e8' } })
       .then(setDataUrl).catch(() => {})
   }, [regUrl])
 
   function copy() {
     navigator.clipboard?.writeText(regUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500) }).catch(() => {})
+  }
+
+  if (!REGISTRO_PUBLICO_ACTIVO) {
+    return (
+      <div className="tips-body">
+        <div style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center' }}>
+          <h3 style={{ fontFamily: 'var(--font-serif)', color: 'var(--t-ink,#0d0d0d)', fontSize: '1.2rem', marginBottom: '0.25rem' }}>
+            QR de registro de clientes
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: MUTED, lineHeight: 1.5 }}>
+            {AVISO_REGISTRO}. El auto-registro público está apagado por seguridad hasta la F1.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (

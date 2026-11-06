@@ -27,11 +27,22 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 - **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10, validado físicamente por Ismael.** Ventas y Mi Rendimiento
   leen el PoS fusionado con el Excel de respaldo (`{...xls, ...pos}`). Volver atrás = revert del merge de #16.
-- **🧯 Fix «Borrar TODO el día» (05/11, rama `claude/fix-borrar-dia`):** elige por día operativo, no por `created_at`; vista previa antes de confirmar; ningún delete sin chequear el error. Probado en staging con datos de prueba; **prod va con firma aparte**. Ver [HALLAZGOS.md](HALLAZGOS.md).
+- **🧯 Fix «Borrar TODO el día» (05/11, rama `claude/fix-borrar-dia`):** elige por día operativo, no por `created_at`; vista previa antes de confirmar; ningún delete sin chequear el error. Validado por Ismael en la preview de staging; **en prod desde el 05/11** (PR #25, merge `781eb72`). Rollback = revert del merge. Ver [HALLAZGOS.md](HALLAZGOS.md).
+- **🧾 Cierre del día atómico (05/11, rama `claude/cierre-atomico`, mig 071):** aplicada en staging (ledger 70) y **en prod el 05/11 a las 19:20 UTC** (ledger 47 → 48), a mano **antes** del merge del #29. En prod se verificó el catálogo (idéntico a staging) y se corrieron pruebas sin escribir datos. Rollback: revert del merge + `scripts/sql/071_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
+- **👤 Alta de empleados desde Admin (06/11, firmado por Ismael, PR #39):** el owner crea las cuentas desde Admin → Usuarios → «+ Nuevo empleado», con la Edge Function `alta-empleado` (prod v1, `verify_jwt` on, desplegada a mano; su código vive en la rama `claude/alta-empleado-fn`, **no en `main`** hasta el ítem 11). Contraseña temporal que se muestra una vez, y cambio obligatorio en el primer ingreso (flag en `app_metadata.cambiar_password`, que solo baja la función). El login ya no tiene «Crear cuenta». **Auth de prod (06/11, Management API, GET antes y después):** `site_url` `http://localhost:3000` → `https://cachosatori.github.io/satori-app/`, redirects `''` → `https://cachosatori.github.io/satori-app/**` y `password_min_length` 6 → 8. Nada más cambió y `disable_signup` sigue en `true`. Ver [HALLAZGOS.md](HALLAZGOS.md).
+- **🔁 «Recontar» una vez en el cierre del día + cierre de turno sin efectivo (06/11, rama `claude/recontar-cierre`, firmado por Ismael):** sin migración nueva, usa las columnas `primer_conteo_crc/usd` de la **074**, que ya estaba en prod. Primero se probó un conteo ciego (#31) y se revirtió (#32) a pedido de Ismael. La versión final mantiene la verificación en vivo. Recorrido real en staging con la pantalla montada contra la base: 4 casos, ver [HALLAZGOS.md](HALLAZGOS.md).
+- **🔐 SEC-03 y SEC-04 (05/11, rama `claude/brave-brown-m45jd7`, PR #28, migs 072 y 073):** escritura anónima en el CRM y lectura anónima de propinas y empleados. Aplicadas en staging (ledger 72) y **en prod el 05/11 ~20:05 UTC** (ledger 48 → 50), a mano antes del merge. `/registro` y el QR del CRM quedan apagados hasta la F1 del Club Satori. Rollback: `scripts/sql/072_rollback.sql` y `073_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
   `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`).
 - **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1293 tests** (con env dummy) · lint de lo tocado.
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
+- **🔐 SEC-01 (04/11, rama `claude/sec-01-perfiles`):**
+  - **Paso A hecho en prod y staging:** `disable_signup=true` (antes `false`). El signup con anon da `422`.
+  - **Bans firmados en prod:** Rosaura (`f54e3eff…`) y LE - Consultorias (`e317ac97…`), por `banned_until` directo (desvío aceptado), `is_active=false`, y borrado de sus 6 sesiones y 15 refresh tokens.
+  - **Mig 068 en staging (04/11) y en prod (04/11 23:30 CR = 05/11 05:30 UTC, ledger 45 → 46), aplicada a mano antes del merge.** PR #22 mergeado el 05/11 (`81ac2d4`); el deploy de Pages (run #252) dio OK.
+  - **Mig 069 (SEC-01b) en prod el 05/11 15:22 UTC (ledger 46 → 47).** Ismael validó en staging.
+    - En prod se verificó el catálogo y se corrieron la prueba 4 (anon, por SQL y REST) y la prueba 1 (manager, con rollback). No se corrió ninguna prueba que mute datos.
+    - El merge del PR queda como no-op para la base. Detalle en [HALLAZGOS.md](HALLAZGOS.md).
 
 Documentos: fases → [ROADMAP.md](ROADMAP.md) · backlog → [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) ·
 hallazgos → [HALLAZGOS.md](HALLAZGOS.md) · historial → [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md) ·
@@ -111,7 +122,7 @@ pos_ndf_tickets · pos_ndf_ticket_lines · pos_ndf_open · pos_ndf_cursor   (RLS
 ¹ Versión según el backlog del 29/10 (no verificable desde fuera de la PC). Las dos tareas del PoS arrancan
 solas tras un reinicio (validado el 29/10).
 
-### Edge Functions (Management API, 30/10)
+### Edge Functions (Management API, 30/10; `alta-empleado` 06/11)
 
 | Función | PROD | STAGING |
 |---|---|---|
@@ -121,6 +132,7 @@ solas tras un reinicio (validado el 29/10).
 | `pago-notificar` | v2 · on | — |
 | `ingest-ndf` | **v1 · off** (desplegada a mano; su código no está en `main`) | v10 · off |
 | `ingest-punches` | — | v6 · off |
+| `alta-empleado` | v1 · on (06/11, a mano; código en `claude/alta-empleado-fn`, no en `main`) | v1 · on |
 
 ---
 
@@ -128,10 +140,16 @@ solas tras un reinicio (validado el 29/10).
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
-| **PROD** | **45 filas** | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–067`. **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
-| **STAGING** | 66 filas | Hasta la 064 + la 067. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
+| **PROD** | **51 filas** | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074` (068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego — ver abajo). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
+| **STAGING** | 74 filas | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging)**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
-- **Próximo número libre: `068`** (ninguna rama tiene un archivo ≥ 068).
+- **Próximo número libre: `076`.** La **`075` está reservada — Club Satori F1a (PR sin mergear hasta el piloto)**: esquema `club_*`, solo en staging. No usarla para otra cosa.
+  - La **074** (`cash_cierres_dia.primer_conteo_crc/usd` + `cerrar_dia_completo` las escribe; null si no vienen) está en staging y en prod (prod: 05/11 20:20 UTC). Su primer cliente, el conteo ciego (#31), se revirtió (#32). Desde el 06/11 la usa el «Recontar» del cierre del día (`claude/recontar-cierre`). El `.sql` y su rollback están en la historia de git (commit `d4012ec`): el archivo no está en `supabase/migrations/` de `main`.
+  - La **072** (SEC-03, cierre de la escritura anónima del CRM) y la **073** (SEC-04, lecturas sin sesión → `authenticated`) están en staging y en prod (prod: 05/11 ~20:05 UTC, a mano antes del merge del PR #28).
+  - La **071** (cierre del día atómico, `claude/cierre-atomico`, PR #29) está en staging y en prod (prod: 05/11 19:20 UTC, a mano antes del merge).
+  - La 068 está en staging y en prod (PR de `claude/sec-01-perfiles`).
+  - La **069** (SEC-01b, `claude/sec-01b-is-active`) está **aplicada en staging y en prod** (prod: 05/11 15:22 UTC, a mano antes del merge).
+  - La **070** (guardas del PoS propio, `claude/sec-01b-pos-guardas`, desde `staging`) está **aplicada solo en staging**. Se aplicó antes que la 069 y no va a prod hasta el pase del PoS.
 - 🚫 Nunca `repair --status reverted` sobre algo aplicado. El CLI ordena archivos por **nombre** y el ledger por
   **versión** (por eso `009` → `0090`). La `026` en prod es una excepción permanente documentada.
 
@@ -165,7 +183,11 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | PoS propio (comandero, KDS, cobro + splits, ticket/FE SIM, inventario COGS; migs 022–037, `posFiscal.ts`) | 🧪 staging · bloqueado por el PILAR de auth |
 | PILAR de auth multi-tenant · FE-CR real | 🔲 |
 
-### Seguridad que sigue abierta en prod (medido 30/10)
+### Seguridad que sigue abierta en prod (medido 30/10; SEC-01 al 04/11)
+
+- **SEC-01 (escalada de roles):** ✅ cerrada en prod: Paso A (signup apagado + bans) y mig 068 (05/11). Rollback: `scripts/sql/068_rollback.sql`.
+- **SEC-03 y SEC-04:** ✅ cerradas en prod con la 072 y la 073 (05/11). `anon` ya no escribe en el CRM ni lee propinas, sesiones, puntos por rol, tipo de cambio ni empleados.
+- **SEC-01b:** ✅ cerrada en prod con la 069 (05/11). Las cuentas inactivas pierden permisos. Rollback: `scripts/sql/069_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
 
 - **4 funciones `SECURITY DEFINER` ejecutables por `anon`:** `get_my_role`, `handle_new_user`,
   `log_movement_edit` (052) y `unif_on_cash_movement`. Las de la 067 y las de plata no.
@@ -176,6 +198,8 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 ---
 
 ## 📝 Notas que ahorran una sesión
+
+- **Análisis mediodía, Local Club y descuentos (nov 2026), cerrado:** conclusiones vigentes en `docs/analisis/2026-11-mediodia-localclub/README.md` §0. Resumen: menú por temporada (inserto en baja, a pedido en alta) sin platos que canibalizan; Local Club 2.0 al 10 % + regalo; créditos de ₡18.000 cada 6 personas; conciliar comisiones PM; código de empleado para el 30 %. Escenario 2027: +₡3,9–9,1M de margen por año.
 
 - **Qué cubre cada fuente de ventas:** `ventas_dias` (detalle diario con saloneros) = enero 2026 → 20/10/2026 en
   prod · `ventas_hist` (reporte general, sin salonero) = 2023–2025 · `pos_ndf_*` = 6-ene-2024 → hoy. 2023 no tiene

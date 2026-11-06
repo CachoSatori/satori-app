@@ -3,9 +3,13 @@
  * Página pública (sin login). El cliente escanea el QR compartido por WhatsApp,
  * completa sus datos y queda en la base de clientes (channel_origin='whatsapp').
  * Requiere migration 007 (policy de insert anónimo).
+ *
+ * APAGADO desde la mig 072 (SEC-03): muestra solo el aviso, sin formulario ni llamadas
+ * a la base. Vuelve en la F1 del Club Satori (ver src/modules/crm/registroPublico.ts).
  */
 import { useState } from 'react'
 import { supabase } from '../shared/api/supabase'
+import { REGISTRO_PUBLICO_ACTIVO, AVISO_REGISTRO } from '../modules/crm/registroPublico'
 
 const GOLD = '#c8a96e', INK = '#0d0d0d', PAPER = '#f5f0e8'
 
@@ -20,6 +24,7 @@ export default function RegistroCliente() {
   const phoneDigits = phone.replace(/[^\d]/g, '')
 
   async function submit() {
+    if (!REGISTRO_PUBLICO_ACTIVO) return
     setError(null)
     if (!name.trim())       { setError('Poné tu nombre'); return }
     if (phoneDigits.length < 8) { setError('Poné un teléfono válido (8 dígitos)'); return }
@@ -60,7 +65,15 @@ export default function RegistroCliente() {
 
       {/* Tarjeta */}
       <div style={{ background: PAPER, color: INK, width: '100%', maxWidth: 440, borderRadius: '16px 16px 0 0', flex: 1, padding: '1.75rem 1.5rem 2.5rem', marginTop: '0.5rem' }}>
-        {state === 'ok' ? (
+        {!REGISTRO_PUBLICO_ACTIVO ? (
+          <div style={{ textAlign: 'center', paddingTop: '2rem' }}>
+            <div style={{ fontSize: '3rem' }}>🍣</div>
+            <h2 style={{ color: INK, margin: '0.5rem 0', fontFamily: 'var(--font-serif)' }}>{AVISO_REGISTRO}</h2>
+            <p style={{ color: '#5a5040', fontSize: '0.95rem', lineHeight: 1.5 }}>
+              Gracias por tu interés en <strong>Satori</strong>. ¡Te esperamos!
+            </p>
+          </div>
+        ) : state === 'ok' ? (
           <div style={{ textAlign: 'center', paddingTop: '2rem' }}>
             <div style={{ fontSize: '3rem' }}>🎉</div>
             <h2 style={{ color: INK, margin: '0.5rem 0', fontFamily: 'var(--font-serif)' }}>¡Listo, {name.split(' ')[0]}!</h2>

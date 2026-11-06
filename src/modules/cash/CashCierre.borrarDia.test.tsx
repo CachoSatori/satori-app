@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
   getAllCashMovements: vi.fn(async () => [] as unknown[]),
   getCashSessions:     vi.fn(async () => [] as unknown[]),
   discardCierreDia:    vi.fn(async () => {}),
+  deshacerCierreDia:   vi.fn(async () => {}),
+  cerrarDiaCompleto:   vi.fn(async () => ({ cierre_id: 'c1', idempotente: false })),
   discardDiaCompleto:  vi.fn(async () => {}),
   previewDiaCompleto:  vi.fn(async () => ({ fecha: '', borrar: [], ajenas: [] }) as PlanBorradoDia),
 }))
@@ -34,8 +36,9 @@ vi.mock('../../shared/api/tips', () => ({ getTipPayoutsSince: vi.fn(async () => 
 vi.mock('../../shared/hooks/useAuth', () => ({
   useAuth: () => ({ profile: { id: 'u1', role: 'owner', full_name: 'Dueño' } }),
 }))
+const mgr = vi.hoisted(() => ({ fn: vi.fn(async () => ({ ok: true }) as { ok: boolean; managerEmail?: string; managerPassword?: string }) }))
 vi.mock('../../shared/ManagerOverride', () => ({
-  useManagerOverride: () => vi.fn(async () => ({ ok: true })),
+  useManagerOverride: () => mgr.fn,
 }))
 
 import CashCierre from './CashCierre'
@@ -58,12 +61,29 @@ beforeEach(() => {
 afterEach(() => { Reflect.deleteProperty(window, 'confirm') })
 
 describe('Deshacer cierre — un error forzado se ve en pantalla', () => {
-  it('muestra el error de discardCierreDia y no el mensaje de éxito', async () => {
-    api.discardCierreDia.mockRejectedValueOnce(new Error(`No se pudo deshacer el cierre del ${HOY} (ventas del cierre): JWT expired`))
+  it('muestra el error de deshacerCierreDia (RPC atómica, mig 071) y no el mensaje de éxito', async () => {
+    api.deshacerCierreDia.mockRejectedValueOnce(new Error(`No se pudo deshacer el cierre del ${HOY} (ventas del cierre): JWT expired`))
     render(<CashCierre onRefresh={() => {}} openSession={null} />)
     fireEvent.click(await screen.findByText(/Deshacer cierre/))
     expect(await screen.findByText(new RegExp(`No se pudo deshacer el cierre del ${HOY} \\(ventas del cierre\\): JWT expired`))).toBeTruthy()
     expect(screen.queryByText(/Cierre deshecho/)).toBeNull()
+  })
+})
+
+describe('Deshacer cierre — credenciales de gerencia al servidor (mig 071)', () => {
+  it('cajero: pasa email y contraseña de gerencia a deshacerCierreDia', async () => {
+    mgr.fn.mockResolvedValueOnce({ ok: true, managerEmail: 'jefe@satori.cr', managerPassword: 'secreta' })
+    render(<CashCierre onRefresh={() => {}} openSession={null} />)
+    fireEvent.click(await screen.findByText(/Deshacer cierre/))
+    await waitFor(() => expect(api.deshacerCierreDia).toHaveBeenCalledWith(HOY, 'jefe@satori.cr', 'secreta'))
+    expect(await screen.findByText(/Cierre deshecho/)).toBeTruthy()
+  })
+  it('si la autorización se cancela, no llama a la RPC', async () => {
+    mgr.fn.mockResolvedValueOnce({ ok: false })
+    render(<CashCierre onRefresh={() => {}} openSession={null} />)
+    fireEvent.click(await screen.findByText(/Deshacer cierre/))
+    await waitFor(() => expect(mgr.fn).toHaveBeenCalled())
+    expect(api.deshacerCierreDia).not.toHaveBeenCalled()
   })
 })
 

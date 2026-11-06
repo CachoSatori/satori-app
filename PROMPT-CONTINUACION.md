@@ -1,9 +1,10 @@
-# Continuación — backlog priorizado (al día: 2026-10-30)
+# Continuación — backlog priorizado (al día: cierre del 2026-11-05)
 
-> **Foto:** `main` = **`43e843d`** (PROD) · `staging` = **`a4b11ae`** · `integracion/analitica-staging` =
-> **`a54d6ec`** (4 atrás de `staging`). **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10**, validado físicamente
-> por Ismael. Migraciones en prod hasta la **067** (ledger 45). Estado completo y reglas operativas →
-> [ESTADO.md](ESTADO.md).
+> **Foto al cierre del 05/11:** `main` = **`bddbef2`** (PROD; último merge #39, alta de empleados) · `staging` =
+> **`cef4f95`** (**114 commits atrás de `main`**). **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10.**
+> Migraciones en prod hasta la **074** (ledger **51**). Staging tiene además 055–061, la **070** y la **075**
+> (Club Satori F1a, reservada; ledger 74). **Próximo número libre: `076`.** Edge Functions: `alta-empleado`
+> nueva en prod y staging (v1, `verify_jwt` on, desplegada a mano). Estado completo y reglas → [ESTADO.md](ESTADO.md).
 >
 > **Cómo se armó:** se partió del backlog de `staging` del 29/10 (`a43d3d4`, que sigue abajo completo como
 > detalle) y se sumaron los pendientes que dejaron el go-live del PoS (29–30/10) y el handoff del 30/10. Cada
@@ -17,6 +18,40 @@
 **Firmas:** 🖊️ = necesita firma de Ismael · 👁️ = validación en piso · 🔐 = seguridad · 🧹 = limpieza.
 
 ---
+
+## ✅ Hecho 05/11 (todo en prod; detalle y evidencia en [HALLAZGOS.md](HALLAZGOS.md))
+
+- **Cierre del día atómico (mig 071, PR #29):** `cerrar_dia_completo` / `deshacer_cierre_dia` escriben cierre, ventas, retiro y ajuste en una transacción, de forma idempotente y con `UNIQUE(session_date)`. La contraseña de gerencia se verifica en el servidor. Aplicada a mano a las 19:20 UTC. Rollback: revert + `scripts/sql/071_rollback.sql`.
+- **Fix «Borrar TODO el día» (PR #25):** elige por día operativo, muestra una vista previa y ningún delete queda sin chequear el error. Solo código.
+- **«Recontar» una vez + cierre de turno sin efectivo (PR #36, usa la mig 074):**
+  - **Cierre del día:** la verificación sigue en vivo. Fuera de tolerancia (₡500 / US$1) se ofrece recontar una vez, y el primer conteo se guarda en `primer_conteo_crc/usd`. Si no, se elige «No recontar — registrar el motivo».
+  - **Turno:** ya no cuenta efectivo; `final_cash_*` queda null.
+  - El conteo ciego (#31) se probó y se revirtió (#32) sin tocar la base.
+- **Alta de empleados desde Admin + config de Auth (PR #39, Edge Function `alta-empleado`):**
+  - el owner activo crea la cuenta (sin crear owners) con una contraseña temporal que se muestra una vez;
+  - en el primer ingreso el cambio es obligatorio (flag en `app_metadata`, que solo baja la función);
+  - el login ya no tiene «Crear cuenta»;
+  - **Auth de prod:** `site_url` → `https://cachosatori.github.io/satori-app/`, redirects → `https://cachosatori.github.io/satori-app/**`, contraseña mínima 8. Nada más cambió (`disable_signup` sigue en `true`);
+  - **Ismael lo validó en prod.**
+- **Antes, 04–05/11:** SEC-01 (068), SEC-01b (069), SEC-03 y SEC-04 (072 y 073), todas en prod. La 070 está solo en staging (va con el pase del PoS propio).
+
+## 🟥 Pendiente — en este orden
+
+1. **🖊️ Alerta de días sin cierre** (lo único que queda de la cola de caja). En prod faltan el cierre del día del 26/09 y los turnos del 18/10 y del 27/10.
+2. **🔐 Revocar el token `claude-code-prod` y rotar los secretos de ingesta** (`x-ingest-secret` de `ingest-ndf` en prod y staging, y su copia en los dos agentes de la PC del PoS). Hacerlo con las dos tareas paradas, y después verificar que `pos_ndf_cursor.last_error` quede null. Detalle: ítems 1 y 2 del P0 de abajo.
+3. **🔐 SEC-02.**
+4. **🖊️ Ítem 11 · `supabase/config.toml`:** versionar `ingest-ndf` y las 6 funciones con su `verify_jwt` actual:
+   - `monthly-report` false · `extract-document` true · `cierre-email` true · `pago-notificar` true · `ingest-ndf` false · `alta-empleado` true;
+   - el código de `alta-empleado` está en la rama `claude/alta-empleado-fn`;
+   - **ojo:** el `config.toml` también sincroniza `[auth]`/`[api]` de prod. Tiene que copiar la config actual (`disable_signup = true`, el `site_url` y los redirects nuevos, mínimo 8) o un merge la pisaría.
+   - Hasta cerrarlo, **ningún PR a `main` con `supabase/functions/`**. Detalle: P2 #11 de abajo.
+5. **🧹 Sincronizar `staging` con `main`:** 114 commits atrás. Hay conflictos esperables en los docs, y al ledger de staging le faltan las filas 065/066.
+
+**También abierto, sin orden:**
+- **Club Satori** F1–F3: la 075 está reservada y solo en staging. Spec en [docs/club-satori/](docs/club-satori/).
+- **🧹🖊️ Respaldos `*_pre_migracion_2026_07` de staging:** decidir si se borran. Ya están cerrados a `anon` y `authenticated`.
+- **Usuarios para RODRI, FRANCO y MAXI BARRA:** ahora se crean desde Admin → «+ Nuevo empleado», con vínculo al empleado.
+- El resto del backlog sigue abajo, sin cambios.
 
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
 

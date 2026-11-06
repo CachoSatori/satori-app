@@ -4395,6 +4395,15 @@ html, body, #root {
 }
 .sop-card:hover { border-color: var(--t-teal); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .sop-card-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.4rem; color: var(--t-ink); }
+/* Código del documento (mig 076): badge chico antes del título y en el detalle. */
+.sop-code {
+  display: inline-block; margin-right: 0.45rem; padding: 1px 6px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--t-teal, #2a7a6a); border: 1px solid var(--t-teal, #2a7a6a); border-radius: 3px;
+  vertical-align: 1px;
+}
+.sop-code-detail { margin-left: 0.6rem; margin-right: 0; letter-spacing: 0.04em; }
 .sop-card-preview { font-size: 0.75rem; color: #5a5040; line-height: 1.5; }
 .sop-card-actions {
   display: flex;
@@ -5223,3 +5232,11 @@ html, body, #root {
   font-size: 0.66rem;
   color: var(--t-red, #c23b22);
 }
+/* Admin → Usuarios → «Nuevo empleado» */
+.nuevo-emp-field { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.6rem 0; font-size: 0.78rem; }
+.nuevo-emp-field > span { font-weight: 600; }
+.nuevo-emp-field input, .nuevo-emp-field select {
+  padding: 0.4rem 0.55rem; font-size: 0.85rem; border: 1px solid var(--t-border); border-radius: 2px;
+  background: var(--t-paper); color: var(--t-ink);
+}
+.nuevo-emp-field small { font-size: 0.68rem; color: var(--t-muted); }

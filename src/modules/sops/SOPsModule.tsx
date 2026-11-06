@@ -2,120 +2,12 @@ import { useState, useEffect, useMemo } from 'react'
 import DOMPurify from 'dompurify'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
-import { getSOPs, saveSOPItem, deleteSOPItem, SOP_CATEGORIES } from '../../shared/api/sops'
+import { getSOPs, saveSOPItem, deleteSOPItem, SOP_CATEGORIES, SOP_AREAS } from '../../shared/api/sops'
 import type { SOP } from '../../shared/api/sops'
-
-// ── Markdown renderer (parser por líneas → HTML limpio) ───────
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-function inline(s: string): string {
-  return escapeHtml(s)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
-    .replace(/\[(.+?)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-}
-function renderContent(text: string): string {
-  const lines = text.replace(/\r/g, '').split('\n')
-  const out: string[] = []
-  let i = 0
-  let h1done = false
-  let list: 'ul' | 'ol' | null = null
-  const closeList = () => { if (list) { out.push(list === 'ul' ? '</ul>' : '</ol>'); list = null } }
-
-  while (i < lines.length) {
-    const t = lines[i].trim()
-    if (t === '') { closeList(); i++; continue }
-
-    // Saltar el primer "# Título" (ya se muestra en el encabezado del modal)
-    if (/^#\s+/.test(t) && !h1done) { h1done = true; i++; continue }
-
-    // Línea meta: **Categoría:** … · **Aplica a:** …  → subtítulo "Aplica a"
-    if (/^\*\*(Categoría|Aplica a)/.test(t)) {
-      closeList()
-      const m = t.match(/\*\*Aplica a:\*\*\s*(.+)$/)
-      if (m) out.push(`<div class="sop-meta">👥 ${inline(m[1].replace(/\s*·\s*$/, ''))}</div>`)
-      i++; continue
-    }
-
-    // Encabezados ## ### ####
-    const h = t.match(/^(#{2,5})\s+(.*)/)
-    if (h) { closeList(); const cls = h[1].length === 2 ? 'sop-h2' : h[1].length === 3 ? 'sop-h3' : 'sop-h4'; out.push(`<div class="${cls}">${inline(h[2])}</div>`); i++; continue }
-
-    // Cita / nota (>)
-    if (t.startsWith('>')) {
-      closeList()
-      const parts: string[] = []
-      while (i < lines.length && lines[i].trim().startsWith('>')) { parts.push(lines[i].trim().replace(/^>\s?/, '')); i++ }
-      out.push(`<div class="sop-note">${inline(parts.join(' '))}</div>`)
-      continue
-    }
-
-    // Tabla
-    if (t.startsWith('|') && i + 1 < lines.length && /^\|[\s:|-]+\|$/.test(lines[i + 1].trim())) {
-      closeList()
-      const head = t.split('|').slice(1, -1).map(c => c.trim())
-      i += 2
-      const body: string[][] = []
-      while (i < lines.length && lines[i].trim().startsWith('|')) { body.push(lines[i].trim().split('|').slice(1, -1).map(c => c.trim())); i++ }
-      let tb = '<table class="sop-table"><thead><tr>' + head.map(c => `<th>${inline(c)}</th>`).join('') + '</tr></thead><tbody>'
-      for (const r of body) tb += '<tr>' + r.map(c => `<td>${inline(c)}</td>`).join('') + '</tr>'
-      out.push(tb + '</tbody></table>'); continue
-    }
-
-    // Lista numerada
-    const ol = t.match(/^\d+\.\s+(.*)/)
-    if (ol) { if (list !== 'ol') { closeList(); out.push('<ol class="sop-ol">'); list = 'ol' } out.push(`<li>${inline(ol[1])}</li>`); i++; continue }
-
-    // Lista con viñetas
-    const ul = t.match(/^[-*]\s+(.*)/)
-    if (ul) { if (list !== 'ul') { closeList(); out.push('<ul class="sop-ul">'); list = 'ul' } out.push(`<li>${inline(ul[1])}</li>`); i++; continue }
-
-    // Párrafo
-    closeList()
-    out.push(`<p class="sop-p">${inline(t)}</p>`)
-    i++
-  }
-  closeList()
-  return out.join('\n')
-}
-
-// Imprimir un SOP en una ventana limpia (útil para pegarlo en la pared / caja)
-function printSOP(sop: SOP): void {
-  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${sop.title}</title>
-  <style>
-    body{font-family:-apple-system,'Segoe UI',Roboto,sans-serif;max-width:720px;margin:2rem auto;padding:0 1.5rem;color:#1a1a1a;line-height:1.55}
-    h1{font-size:1.4rem;border-bottom:2px solid #c8a96e;padding-bottom:.4rem;margin:.2rem 0 .3rem}
-    .cat{font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:#999}
-    .sop-meta{color:#888;font-size:.82rem;margin-bottom:1rem}
-    .sop-h2{font-size:1.05rem;font-weight:700;border-bottom:1px solid #ddd;padding-bottom:.2rem;margin:1.2rem 0 .5rem}
-    .sop-h3{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#2a7a6a;margin:1rem 0 .3rem}
-    .sop-h4{font-weight:700;margin:.7rem 0 .2rem}
-    p{margin:.1rem 0 .6rem} ol,ul{padding-left:1.5rem;margin:.2rem 0 .8rem} li{margin-bottom:.3rem}
-    .sop-note{background:#faf6ec;border-left:3px solid #c8a96e;padding:.5rem .8rem;margin:.5rem 0 .8rem}
-    table{border-collapse:collapse;width:100%;margin:.3rem 0 .9rem} th,td{border:1px solid #ccc;padding:.4rem .6rem;text-align:left;font-size:.85rem}
-    th{background:#f3efe6} code{background:#eee;padding:.05rem .3rem;border-radius:3px;font-family:monospace}
-    .ftr{margin-top:2rem;border-top:1px solid #ddd;padding-top:.5rem;font-size:.65rem;color:#aaa}
-  </style></head><body>
-  <div class="cat">${sop.category}</div><h1>${sop.title}</h1>
-  ${renderContent(sop.content)}
-  <div class="ftr">Satori Sushi Bar · Procedimiento operativo · ${new Date().toLocaleDateString('es-CR')}</div>
-  </body></html>`
-  const w = window.open('', '_blank')
-  if (!w) { window.alert('Permití las ventanas emergentes para imprimir.'); return }
-  w.document.write(html); w.document.close(); w.focus()
-  setTimeout(() => w.print(), 350)
-}
-
-// Resumen plano para la tarjeta (sin markdown ni título)
-function cardPreview(content: string): string {
-  const text = content.split('\n').map(l => l.trim())
-    .filter(l => l && !l.startsWith('#') && !/^\*\*(Categoría|Aplica a)/.test(l))
-    .join(' ')
-    .replace(/[*#>`|]/g, '').replace(/\s+/g, ' ').trim()
-  return text.slice(0, 120)
-}
+import { agruparSops, compararGrupos, grupoDe, nombreCorto } from './sopsOrden'
+import { renderContent, resumenTarjeta } from './sopsRender'
+import SopLector from './SopLector'
+import SopLibros from './SopLibros'
 
 const CATEGORY_ICONS: Record<string, string> = {
   'Apertura':    '🌅',
@@ -127,6 +19,12 @@ const CATEGORY_ICONS: Record<string, string> = {
   'Propinas':    '💰',
   'Emergencias': '🚨',
   'General':     '📋',
+  // Áreas del paquete de SoP (mig 076)
+  '1. Cultura y servicio':    '🎌',
+  '2. Salón y recepción':     '🍽️',
+  '3. Menú y producto':       '🍣',
+  '4. Administración y caja': '🧾',
+  '5. Equipo':                '👥',
 }
 
 export default function SOPsModule() {
@@ -150,23 +48,10 @@ export default function SOPsModule() {
   }
   useEffect(() => { load() }, [])
 
-  // Group by category
-  const byCategory = useMemo(() => {
-    const filtered = sops.filter(s => {
-      if (catFilter !== 'all' && s.category !== catFilter) return false
-      if (search && !s.title.toLowerCase().includes(search.toLowerCase()) &&
-          !s.content.toLowerCase().includes(search.toLowerCase())) return false
-      return true
-    })
-    const groups: Record<string, SOP[]> = {}
-    for (const s of filtered) {
-      if (!groups[s.category]) groups[s.category] = []
-      groups[s.category].push(s)
-    }
-    return groups
-  }, [sops, catFilter, search])
+  // Agrupado por área (o por categoría si la fila todavía no tiene área), orden por código.
+  const grupos = useMemo(() => agruparSops(sops, catFilter, search), [sops, catFilter, search])
 
-  const categories = [...new Set(sops.map(s => s.category))].sort()
+  const categories = useMemo(() => [...new Set(sops.map(grupoDe))].sort(compararGrupos), [sops])
 
   const handleSave = async () => {
     if (!editSOP || !profile) return
@@ -181,6 +66,8 @@ export default function SOPsModule() {
         content:    editSOP.content!,
         display_order: editSOP.display_order ?? 0,
         created_by: profile.id,
+        code:       editSOP.code ?? null,
+        area:       editSOP.area ?? null,
       })
       setShowEditor(false)
       setEditSOP(null)
@@ -233,7 +120,7 @@ export default function SOPsModule() {
           className="sop-search"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar procedimiento…"
+          placeholder="Buscar por código, título o texto…"
         />
         <div className="sop-cat-tabs">
           <button className={`sop-cat-tab ${catFilter === 'all' ? 'active' : ''}`}
@@ -243,7 +130,7 @@ export default function SOPsModule() {
           {categories.map(cat => (
             <button key={cat} className={`sop-cat-tab ${catFilter === cat ? 'active' : ''}`}
               onClick={() => setCatFilter(cat)}>
-              {CATEGORY_ICONS[cat] ?? '📋'} {cat}
+              {CATEGORY_ICONS[cat] ?? '📋'} {nombreCorto(cat)}
             </button>
           ))}
         </div>
@@ -251,6 +138,7 @@ export default function SOPsModule() {
 
       {/* Content */}
       <div className="sop-body">
+        {!loading && sops.length > 0 && <SopLibros rol={profile?.role} />}
         {loading ? (
           <div style={{ padding: '4rem', textAlign: 'center', color: '#888' }}>Cargando…</div>
         ) : sops.length === 0 ? (
@@ -269,26 +157,30 @@ export default function SOPsModule() {
               </button>
             )}
           </div>
-        ) : Object.keys(byCategory).length === 0 ? (
+        ) : grupos.length === 0 ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: '#888', fontSize: '0.85rem' }}>
             Sin resultados para "{search}"
           </div>
         ) : (
-          Object.entries(byCategory).map(([cat, items]) => (
+          grupos.map(([cat, items]) => (
             <div key={cat} className="sop-category-section">
               <div className="sop-category-header">
                 <span>{CATEGORY_ICONS[cat] ?? '📋'}</span>
-                <span>{cat}</span>
+                <span>{nombreCorto(cat)}</span>
                 <span className="sop-category-count">{items.length}</span>
               </div>
               <div className="sop-cards">
                 {items.map(sop => (
                   <div key={sop.id} className="sop-card"
                     onClick={() => setSelectedSOP(sop)}>
-                    <div className="sop-card-title">{sop.title}</div>
-                    <div className="sop-card-preview">
-                      {cardPreview(sop.content)}…
+                    <div className="sop-card-title">
+                      {sop.code && <span className="sop-code">{sop.code}</span>}
+                      {sop.title}
                     </div>
+                    <div className="sop-card-preview">
+                      {resumenTarjeta(sop.content)}
+                    </div>
+                    {sop.pdf_path && sop.doc_type === 'Documento' && <div className="sop-card-pdf">PDF con fotos</div>}
                     {canEdit && (
                       <div className="sop-card-actions" onClick={e => e.stopPropagation()}>
                         <button className="sop-edit-btn"
@@ -306,38 +198,14 @@ export default function SOPsModule() {
         )}
       </div>
 
-      {/* SOP Detail modal */}
+      {/* Lector del SoP (detalle) */}
       {selectedSOP && (
-        <div className="sop-overlay" onClick={() => setSelectedSOP(null)}>
-          <div className="sop-detail" onClick={e => e.stopPropagation()}>
-            <div className="sop-detail-header">
-              <div>
-                <div className="sop-detail-cat">
-                  {CATEGORY_ICONS[selectedSOP.category] ?? '📋'} {selectedSOP.category}
-                </div>
-                <div className="sop-detail-title">{selectedSOP.title}</div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
-                <button className="sop-close-btn" title="Imprimir" style={{ fontSize: '0.95rem' }}
-                  onClick={() => printSOP(selectedSOP)}>🖨</button>
-                <button className="sop-close-btn" onClick={() => setSelectedSOP(null)}>✕</button>
-              </div>
-            </div>
-            <div className="sop-detail-body">
-              <div className="sop-content"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderContent(selectedSOP.content), { ADD_ATTR: ['target'] }) }}
-              />
-            </div>
-            {canEdit && (
-              <div className="sop-detail-footer">
-                <button className="tips-btn-ghost" style={{ fontSize: '0.8rem' }}
-                  onClick={() => { setEditSOP({...selectedSOP}); setSelectedSOP(null); setShowEditor(true) }}>
-                  Editar
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <SopLector
+          sop={selectedSOP}
+          canEdit={canEdit}
+          onClose={() => setSelectedSOP(null)}
+          onEdit={() => { setEditSOP({ ...selectedSOP }); setSelectedSOP(null); setShowEditor(true) }}
+        />
       )}
 
       {/* Editor modal */}
@@ -380,6 +248,26 @@ export default function SOPsModule() {
                     value={editSOP.display_order ?? 0} min={0}
                     style={{ width: '100%' }}
                     onChange={e => setEditSOP(p => ({ ...p, display_order: Number(e.target.value) }))} />
+                </div>
+              </div>
+
+              <div className="sop-editor-row">
+                <div className="tips-field" style={{ width: 90 }}>
+                  <div className="tips-field-label">Código</div>
+                  <input className="tips-input-dark"
+                    value={editSOP.code ?? ''}
+                    style={{ width: '100%' }}
+                    onChange={e => setEditSOP(p => ({ ...p, code: e.target.value }))}
+                    placeholder="ej: 2.5" />
+                </div>
+                <div className="tips-field" style={{ flex: 1 }}>
+                  <div className="tips-field-label">Área</div>
+                  <select className="tips-input-dark"
+                    value={editSOP.area ?? ''}
+                    onChange={e => setEditSOP(p => ({ ...p, area: e.target.value || null }))}>
+                    <option value="">— Sin área (se agrupa por categoría) —</option>
+                    {SOP_AREAS.map(a => <option key={a}>{a}</option>)}
+                  </select>
                 </div>
               </div>
 

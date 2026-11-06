@@ -7,6 +7,64 @@
 
 ---
 
+## 🔐 Noviembre 2026 — SEC-02: `monthly-report` respondía ventas y mandaba los correos a cualquiera (✅ prod, 06/11)
+
+- **Qué es SEC-02:** la Edge Function `monthly-report` (prod v9, `verify_jwt` off) usaba service_role **sin pedir nada**. Cualquiera, sin token o con la anon key (que es pública), podía:
+  - **leer** el total de ventas del mes, los días con venta, el top salonero por IRS y el pool de propinas. La respuesta del cron del 01/11 traía «ventas: ₡ 9 611 259 · 20 días · IRS top: MAXO (84)» y «propinas: ₡ 1 518 220 pool · 58 turnos»;
+  - **disparar** los dos correos del reporte, cuantas veces quisiera y para el mes que quisiera (`month`/`tipo` sin validar);
+  - recibir el texto crudo de los errores (`String(err)`).
+- **Quién la llama hoy:**
+  - **Cron de prod:** jobs `satori-monthly-report` (3) y `satori-quincenal-report` (4) a las `0 8 1/15 * *` UTC (**02:00 CR**, no 08:00), con `body {}` y **sin header Authorization**. Los dos mandan «mes anterior, ambos»: el del 15 **no** es el quincenal de propinas que describe la 003.
+  - **Cron de staging** (jobs 1 y 2 de la mig 003): apunta a la **URL de prod** con `Bearer` + un secreto de un Vault **vacío**. El 01/11 a las 14:00 UTC su llamada a prod cortó por timeout a los 5 s del lado de staging. Probablemente prod igual corrió y mandó los correos otra vez. No se pudo confirmar con los logs de prod.
+  - **Botón de Admin** (owner): `fetch` sin Authorization.
+  - El Vault de prod también está vacío.
+- **Las otras funciones (06/11, código + sondas con la anon key a staging):**
+
+  | Función | Con la anon key |
+  |---|---|
+  | `extract-document`, `cierre-email`, `pago-notificar` | `getUser` → 401 sin usuario; leen con el RLS del usuario |
+  | `ingest-ndf`, `ingest-punches` | exigen `x-ingest-secret` (comparación constante, fail-closed) → 401 |
+  | `alta-empleado` | owner activo → 401/403 |
+
+  **Ninguna otra responde datos ni hace acciones con la anon key.**
+- **Arreglo (rama `claude/sec-02-monthly-report-fn`, desplegada a mano en staging v2 con `verify_jwt = true`):**
+  - **Autenticación:** Authorization = **service_role**, verificada por el servidor con un endpoint de admin de GoTrue (sirve para el JWT viejo y para las claves nuevas), **o el JWT de un owner activo** (`profiles.role = 'owner' and is_active`).
+  - **CORS:** allowlist (prod y `*.satori-staging.pages.dev`).
+  - **Validación:** `month` = `YYYY-MM` entre 2024-01 y el mes en curso; `tipo` ∈ {ventas, propinas, ambos}; `dry_run` booleano.
+  - **Respuesta:** **sin montos ni nombres** (`{ ok, month, dry_run, enviados, sin_datos }`). Errores fijos con ref; el detalle solo va al log.
+  - **`dry_run`:** calcula todo sin llamar a Resend.
+  - **Botón de Admin** (rama `claude/sec-02-monthly-report`): usa `functions.invoke`, que reenvía el JWT.
+- **Pruebas en staging (06/11, todas con `dry_run: true`; la anon key se probó sin `dry_run` y se cortó antes de calcular):**
+
+  | Caso | Resultado |
+  |---|---|
+  | Sin token | 401 |
+  | Anon key | 401 sin datos |
+  | Manager, cajero, owner inactivo con token vigente | 403 |
+  | service_role con el body del cron del día 1 y del día 15 | 200 |
+  | Owner activo | 200 |
+  | Mes 2026-13, futuro o con basura; tipo inválido; `dry_run` no booleano | 400 |
+  | CORS | origen ajeno sin header; preview y prod con el header |
+
+  Staging tiene `RESEND_API_KEY` y no tiene `REPORT_TO_EMAIL`, así que un envío real habría ido al destinatario por defecto. Por eso todo fue en seco.
+- **✅ En prod el 06/11 (firmado por Ismael), en este orden, entre las 08:01 y las 08:10 CR:**
+  1. `service_role_key` en el Vault de prod (`ref` de prod, rol `service_role`) y `Authorization: Bearer <vault>` en los jobs 3 y 4, **sin cambiar horario (02:00 CR) ni body**.
+  2. Merge del PR #42 (botón con JWT) y deploy de Pages en verde (run #268).
+  3. `monthly-report` **v10** desplegada a mano con `verify_jwt = true` (rama `claude/sec-02-monthly-report-fn`, `9ac28b0`).
+  4. **Pruebas sin escribir:**
+     - sin token → 401;
+     - anon key → 401;
+     - service_role con `dry_run` → 200 (`enviados` sin montos);
+     - **`net.http_post` desde la base de prod con el header del Vault y `dry_run` → 200**, así que el cron va a funcionar;
+     - CORS: prod con el header, otro origen sin él.
+- **Plan original (referencia):**
+  1. Guardar la service_role de prod en el Vault de prod y agregar `Authorization: Bearer <vault>` a los jobs 3 y 4. Con la función vieja no cambia nada.
+  2. Mergear el frontend (el botón manda el JWT; con la función vieja también funciona).
+  3. Desplegar la función nueva con `verify_jwt = true`.
+  4. Probar sin escribir: sin token → 401, anon → 401, service_role en seco → 200.
+
+  **Decisiones para Ismael:** el horario (02:00 CR hoy) y si el job del 15 pasa a «propinas del mes en curso» como dice la 003. Además, en staging, apuntar sus jobs a la URL de staging o apagarlos.
+
 ## 👤 Noviembre 2026 — Alta de empleados desde Admin (✅ prod, 06/11, PR #39)
 
 - **Problema:** desde SEC-01 (04/11, `disable_signup`) no había forma de sumar empleados desde la app. El texto de ayuda y el login todavía decían «Crear cuenta», que fallaba con «Signups not allowed».
@@ -41,6 +99,18 @@
   También se montaron las pantallas reales contra la base. Staging quedó limpio.
 - **En prod, pruebas sin escribir:** sin token → 401, token sin usuario → 401 `sin_sesion`, el origen de prod con permiso y otro origen sin permiso.
 
+## ↩️ Noviembre 2026 — El cierre de turno vuelve a contar efectivo (06/11)
+
+- **Motivo:** en el primer cierre de turno sin efectivo (05/11, #36) el turno quedó **sin total de caja ni total de gastos**, y el encargado no tenía cómo verificar. El equipo necesita esos totales para controlar el turno.
+- **Qué se hizo:** `CashTurno.tsx`, `CashResumen.tsx` y `CashTurno.gastadoEfectivo.test.tsx` volvieron, idénticos, al código previo al #36 (`342c5f0^1`). Vuelven:
+  - el campo de efectivo al cierre (`final_cash_*` se guarda otra vez);
+  - «Debería quedar en la Caja Diaria» y «Cuadra / Diferencia»;
+  - los totales de gastos y egresos, y el resumen;
+  - «Disponible» con su texto y el aviso de déficit;
+  - CashResumen con la columna original.
+- **Lo que se queda:** el «Recontar» del cierre del día (`CashCierre.tsx` sin cambios) y la mig 074.
+- **Sigue valiendo:** el «debería» del turno mira un solo cajón y puede dar negativo, por el diseño del pozo (ver la sección siguiente). Ahora se acepta como dato para que el encargado verifique, no como control del efectivo, que sigue estando en el cierre del día.
+
 ## 🔁 Noviembre 2026 — «Recontar» una vez en el cierre del día; el cierre de turno deja de contar (✅ prod, 06/11)
 
 - **Cierre del día:** el «Debería quedar», el «Cuadra / Diferencia» y la verificación se siguen viendo **en vivo**.
@@ -51,6 +121,7 @@
   - El resumen muestra «Primer conteo (antes del reconteo)» cuando lo hubo.
   - No cambian la tolerancia, `requiresAjuste`, `cuadra`/`cuadraUSD` ni los montos que se guardan.
 - **Antes se probó un conteo ciego** (#31: esperado oculto hasta «Confirmar conteo»). Ismael lo descartó y se revirtió (#32) **sin tocar la base**: la 074 quedó con columnas nulas, compatible con el cliente de la 071.
+- ⚠️ **Revertido el 06/11** (ver la sección de arriba): el cierre de turno volvió a contar efectivo.
 - **Cierre de turno:** ya no pide efectivo ni muestra «debería / Cuadra». `final_cash_*` queda null y ningún cálculo lo usa; CashResumen lo muestra como «Caja Diaria al cerrar (histórico)», con «—» si falta.
   - **Por qué:** el «debería» de un solo cajón queda incompleto **por diseño del pozo** (`pozo.ts`, REPORTE-T1B §3.1). La plata pasa entre la Caja Fuerte, la Registradora y la Caja Diaria sin registrar el traspaso, y las propinas salen de la Registradora (`propinaPago.ts`), así que daba negativos imposibles (−₡119.800 el 17/08). El control real del efectivo es el **cierre del día**.
   - «Disponible» pasa a decir «Fondo menos pagos del día (no incluye reposiciones)» y ya no avisa «déficit».
@@ -260,7 +331,7 @@ Escaneo de `pg_proc.prosrc` y `pg_policies` en prod (04/11):
 | Ritual de `project-ref` antes de comandos de base (2026-07-03) | ✅ **Vigente** | Regla 7 de ESTADO.md |
 | Accionados 2026-06-26/27/28 (IDOR, cascadas, IA desde el teléfono, outbox, render de Propinas, pantalla negra) | ✅ Resueltos y en prod | — |
 | Seguridad #1 IDOR `extract-document` | ✅ Resuelto (prod v7, `verify_jwt` on) | Management API |
-| Seguridad #2 `monthly-report` sin auth | 🔴 **Abierto** (prod v9, `verify_jwt` off) | Management API, 30/10 |
+| Seguridad #2 `monthly-report` sin auth (= **SEC-02**) | ✅ Cerrado en prod (06/11, v10, `verify_jwt` on) | Ver la sección SEC-02 arriba |
 | Seguridad #3 falta `supabase/config.toml` | 🔴 **Abierto** (= ítem 11) | No existe en `main` |
 | Seguridad #14 `deploy.yml` sin gate de tests | 🔴 **Abierto** | `deploy.yml` no corre `vitest` |
 | Seguridad #5 RLS de `cash_cierres_dia` | ✅ Verificado: prod y staging tienen las mismas 2 policies (lectura: cualquier autenticado; escritura: owner/manager/cajero/contador) | `pg_policies`, 30/10 |

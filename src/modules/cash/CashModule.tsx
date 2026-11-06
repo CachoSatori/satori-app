@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
+import { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useRealtimeRefetch } from '../../shared/hooks/useRealtimeRefetch'
@@ -9,8 +9,13 @@ import {
   getSuppliers,
   getSupplierCredits,
   getCreditApplications,
+  getCierresDia,
 } from '../../shared/api/cash'
-import type { CashSession, CashMovement, Supplier, SupplierCredit, CreditApplication } from '../../shared/types/database'
+import type { CashSession, CashMovement, Supplier, SupplierCredit, CreditApplication, CashCierreDia } from '../../shared/types/database'
+import { getJornadasConVentas } from '../../shared/api/jornadasConVentas'
+import { calcularAlertaCierres, desdeVentanaVentas } from './diasSinCierre'
+import AlertaDiasSinCierre from './AlertaDiasSinCierre'
+import { todayStr } from './cashUtils'
 
 const CashTurno       = lazy(() => import('./CashTurno'))
 const CashMovimientos = lazy(() => import('./CashMovimientos'))
@@ -60,6 +65,13 @@ export default function CashModule() {
 
   const pendCount = allMovements.filter(m => m.status === 'pendiente').length
 
+  // ── Alerta de días sin cierre (06/11, solo owner/manager, solo lectura) ──
+  const veAlerta = profile?.role === 'owner' || profile?.role === 'manager'
+  const [cierres, setCierres] = useState<CashCierreDia[]>([])
+  const [jornadasVentas, setJornadasVentas] = useState<string[]>([])
+  // Fecha con la que se abre «Cierre del día» al tocar un día de la alerta (remonta CashCierre).
+  const [fechaCierre, setFechaCierre] = useState<string | null>(null)
+
   const loadAll = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
     setError(null)
@@ -78,14 +90,30 @@ export default function CashModule() {
       setAllMovements(allMovs)
       setCredits(creds)
       setCreditApps(apps)
+      // La alerta no traba la pantalla: si los cierres no cargan, simplemente no se muestra.
+      if (veAlerta) getCierresDia().then(setCierres).catch(() => {})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error cargando datos')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [veAlerta])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  // Ventas del PoS por jornada (ventana de 60 días o desde el corte): carga aparte, sin bloquear.
+  useEffect(() => {
+    if (!veAlerta) return
+    const hoy = todayStr()
+    const [y, m, d] = hoy.split('-').map(Number)
+    const ayer = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10)
+    getJornadasConVentas(desdeVentanaVentas(hoy), ayer).then(setJornadasVentas).catch(() => {})
+  }, [veAlerta])
+
+  const alerta = useMemo(() => veAlerta
+    ? calcularAlertaCierres({ hoy: todayStr(), cierres, movements: allMovements, sessions, jornadasConVentas: jornadasVentas })
+    : { dias: [], turnos: [] },
+  [veAlerta, cierres, allMovements, sessions, jornadasVentas])
 
   // Tiempo real: otro dispositivo registra un pago / abre o cierra la caja →
   // este recarga solo, en silencio (sin spinner). Los borradores locales de
@@ -147,6 +175,10 @@ export default function CashModule() {
         ))}
       </div>
 
+      <AlertaDiasSinCierre alerta={alerta}
+        onIrADia={f => { setFechaCierre(f); setTab('cierre') }}
+        onIrATurno={() => setTab('turno')} />
+
       {error && (
         <div className="tips-error" style={{ margin: '0.75rem 1.5rem' }}>
           <span>{error}</span>
@@ -174,7 +206,7 @@ export default function CashModule() {
           />
         )}
         {tab === 'cierre' && (
-          <CashCierre onRefresh={loadAll} openSession={openSession} />
+          <CashCierre key={fechaCierre ?? 'hoy'} fechaInicial={fechaCierre ?? undefined} onRefresh={loadAll} openSession={openSession} />
         )}
         {tab === 'movimientos' && (
           <CashMovimientos

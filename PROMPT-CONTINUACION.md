@@ -1,10 +1,17 @@
-# Continuación — backlog priorizado (al día: cierre del 2026-11-05)
+# Continuación — backlog priorizado (al día: 2026-11-06)
 
-> **Foto al cierre del 05/11:** `main` = **`bddbef2`** (PROD; último merge #39, alta de empleados) · `staging` =
-> **`cef4f95`** (**114 commits atrás de `main`**). **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10.**
-> Migraciones en prod hasta la **074** (ledger **51**). Staging tiene además 055–061, la **070** y la **075**
-> (Club Satori F1a, reservada; ledger 74). **Próximo número libre: `076`.** Edge Functions: `alta-empleado`
-> nueva en prod y staging (v1, `verify_jwt` on, desplegada a mano). Estado completo y reglas → [ESTADO.md](ESTADO.md).
+> **📍 Punto de arranque: [docs/handoffs/HANDOFF-2026-11-06.md](docs/handoffs/HANDOFF-2026-11-06.md)** (06/11). Lo de abajo es el backlog detallado.
+
+> **Foto al 06/11:** `main` = **`44da704`** + el merge del PR que devuelve el `.sql` de la 074 (PROD; merges del
+> 06/11: #44 turno como antes, #42/#46 SEC-02, #43 alerta de días sin cierre, #48 handoff) · `staging` = **`314cd20`**
+> (le faltan 10 commits de `main`). **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10.** Migraciones en prod hasta la
+> **077** (ledger **53**: la **076** y la **077** de SoP, el 06/11 entre 18:03:48 y 18:05:14 UTC). Staging tiene además
+> 055–061, la **070**, la **075** (Club Satori F1a, reservada) y la **078** (Prom/PAX, rama
+> `claude/busy-brown-ssjq4e-prompax`, solo staging; ledger 77). **Próximo número libre: `079`.**
+> Edge Functions: `alta-empleado` v1 y `monthly-report` v10 en prod (`verify_jwt` on, desplegadas a mano).
+> Estado completo y reglas → [ESTADO.md](ESTADO.md).
+>
+> **Próximo: Prom/PAX explicado** ([SPEC](docs/SPEC-prompax-explicado.md) → v2.3; RPC = mig 078, ya en staging, solo staging hasta la firma).
 >
 > **Cómo se armó:** se partió del backlog de `staging` del 29/10 (`a43d3d4`, que sigue abajo completo como
 > detalle) y se sumaron los pendientes que dejaron el go-live del PoS (29–30/10) y el handoff del 30/10. Cada
@@ -37,15 +44,17 @@
 
 ## 🟥 Pendiente — en este orden
 
-1. **🖊️ Alerta de días sin cierre** (lo único que queda de la cola de caja). En prod faltan el cierre del día del 26/09 y los turnos del 18/10 y del 27/10.
-2. **🔐 Revocar el token `claude-code-prod` y rotar los secretos de ingesta** (`x-ingest-secret` de `ingest-ndf` en prod y staging, y su copia en los dos agentes de la PC del PoS). Hacerlo con las dos tareas paradas, y después verificar que `pos_ndf_cursor.last_error` quede null. Detalle: ítems 1 y 2 del P0 de abajo.
-3. **🔐 SEC-02.**
+1. ✅ **Alerta de días sin cierre: en prod el 06/11 (#43, merge `8c992fc`).** Owner/manager, solo lectura. (Era lo único que quedaba de la cola de caja.) Los huecos que muestra en prod: el cierre del día del 26/09 y los turnos del 18/10 y del 27/10.
+2. **⏸️ POSPUESTO por Ismael (06/11): rotar los secretos de ingesta** (los 3: `POS_INGEST_SECRET` de prod y de staging y el `INGEST_SECRET` de BioTime, con su copia en los `.env` de la PC del PoS y de la PC del reloj). El plan está en el Paso 0 de CC del 06/11; ver también el handoff. **`claude-code-prod`:** Ismael tiene que identificarlo en Supabase → Account → Access Tokens antes de tocarlo. Si es la credencial de las sesiones de CC, se **reemplaza**: nunca se revoca solo.
+3. ✅ **SEC-02**: cerrado en prod el 06/11 (`monthly-report` v10 con `verify_jwt` on; el cron con `Authorization` desde el Vault).
 4. **🖊️ Ítem 11 · `supabase/config.toml`:** versionar `ingest-ndf` y las 6 funciones con su `verify_jwt` actual:
    - `monthly-report` false · `extract-document` true · `cierre-email` true · `pago-notificar` true · `ingest-ndf` false · `alta-empleado` true;
    - el código de `alta-empleado` está en la rama `claude/alta-empleado-fn`;
+   - **`supabase/functions/monthly-report/` de `main` es el código anterior a SEC-02.** El ítem 11 tiene que traer el código de la **v10** (y el de `alta-empleado`) **antes** de que Branching despliegue funciones, o pisaría la v10 de prod;
    - **ojo:** el `config.toml` también sincroniza `[auth]`/`[api]` de prod. Tiene que copiar la config actual (`disable_signup = true`, el `site_url` y los redirects nuevos, mínimo 8) o un merge la pisaría.
    - Hasta cerrarlo, **ningún PR a `main` con `supabase/functions/`**. Detalle: P2 #11 de abajo.
 5. **🧹 Sincronizar `staging` con `main`:** 114 commits atrás. Hay conflictos esperables en los docs, y al ledger de staging le faltan las filas 065/066.
+6. **🔐 Mig 079 · SoP para usuarios inactivos:** `sops_read` (010, `USING (true)`) y `sops_storage_read` (077) no miran `is_active`. Un usuario inactivo con sesión vigente lee todas las filas de `sops` y los PDF de `documents/sops/*` (salvo el libro de franquicia). Corregir **las dos juntas** con `public.get_my_role() is not null`. Detalle en [ESTADO.md](ESTADO.md) § Migraciones.
 
 **También abierto, sin orden:**
 - **Club Satori** F1–F3: la 075 está reservada y solo en staging. Spec en [docs/club-satori/](docs/club-satori/).
@@ -56,7 +65,7 @@
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)
 
 1. **🔐 Revocar el token `claude-code-prod`.** Se usó durante el go-live; ya no hace falta. *(Nuevo, 30/10.)*
-2. **🔐 Rotar los secretos de ingest** (`x-ingest-secret` de `ingest-ndf` en prod y staging, y su copia en los dos
+2. **⏸️ POSPUESTO (06/11) · 🔐 Rotar los secretos de ingest** (`x-ingest-secret` de `ingest-ndf` en prod y staging, y su copia en los dos
    agentes de la PC del PoS). Hacerlo con las dos tareas paradas y verificar `pos_ndf_cursor.last_error` null
    después. *(Nuevo, 30/10.)*
 3. **🖊️ «Contexto jueves» de «Hoy» mostró un promedio mal** (₡235.773 contra ₡406.064) **mientras cargaba el
@@ -99,8 +108,8 @@
     `db push` a staging no intente re-aplicarlas. *(Nuevo, 30/10.)*
 16. **🧹 `pos-bridge/backfill.test.ts` no carga sin el paquete `mssql`** (en staging falla la suite al importar).
     Instalarlo como dependencia de desarrollo o aislar ese test. *(Nuevo, 30/10.)*
-17. **⚠️ Agente de BioTime parado desde el 14/09** (última sync 17:12 UTC, 22.969 marcas en staging). Dejarlo en
-    Task Scheduler en la PC del reloj y re-arrancarlo. *(Nuevo, medido 30/10.)*
+17. ✅ **Agente de BioTime: está ingresando** (corrección del 06/11): la última marca entró a staging el **05/11 a las 17:44 UTC**
+    (24.089 marcas). El «parado desde el 14/09» del 30/10 ya no vale. Sigue publicando solo a staging (`ingest-punches`).
 18. **🔐 Hardening ACL en prod:** quedan **4** `SECURITY DEFINER` ejecutables por `anon` (`get_my_role`,
     `handle_new_user`, `log_movement_edit`, `unif_on_cash_movement`). `get_my_role` necesita un análisis de
     policies antes del revoke. *(Heredado P1 #3, actualizado: eran 3.)*

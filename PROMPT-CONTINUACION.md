@@ -5,12 +5,13 @@
 > **Foto al 06/11:** `main` = **`44da704`** + el merge del PR que devuelve el `.sql` de la 074 (PROD; merges del
 > 06/11: #44 turno como antes, #42/#46 SEC-02, #43 alerta de días sin cierre, #48 handoff) · `staging` = **`314cd20`**
 > (le faltan 10 commits de `main`). **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10.** Migraciones en prod hasta la
-> **074** (ledger **51**). Staging tiene además 055–061, la **070**, la **075** (Club Satori F1a, reservada) y la
-> **076**/**077** (SoP, otra sesión; ledger 76). **Próximo número libre: `078`** (reservado para el RPC de Prom/PAX).
+> **077** (ledger **53**: la **076** y la **077** de SoP, el 06/11 entre 18:03:48 y 18:05:14 UTC). Staging tiene además
+> 055–061, la **070**, la **075** (Club Satori F1a, reservada) y la **078** (Prom/PAX, rama
+> `claude/busy-brown-ssjq4e-prompax`, solo staging; ledger 77). **Próximo número libre: `079`.**
 > Edge Functions: `alta-empleado` v1 y `monthly-report` v10 en prod (`verify_jwt` on, desplegadas a mano).
 > Estado completo y reglas → [ESTADO.md](ESTADO.md).
 >
-> **Próximo: Prom/PAX explicado** ([SPEC](docs/SPEC-prompax-explicado.md) → v2.3; RPC = mig 078, solo staging hasta la firma).
+> **Próximo: Prom/PAX explicado** ([SPEC](docs/SPEC-prompax-explicado.md) → v2.3; RPC = mig 078, ya en staging, solo staging hasta la firma).
 >
 > **Cómo se armó:** se partió del backlog de `staging` del 29/10 (`a43d3d4`, que sigue abajo completo como
 > detalle) y se sumaron los pendientes que dejaron el go-live del PoS (29–30/10) y el handoff del 30/10. Cada
@@ -53,6 +54,7 @@
    - **ojo:** el `config.toml` también sincroniza `[auth]`/`[api]` de prod. Tiene que copiar la config actual (`disable_signup = true`, el `site_url` y los redirects nuevos, mínimo 8) o un merge la pisaría.
    - Hasta cerrarlo, **ningún PR a `main` con `supabase/functions/`**. Detalle: P2 #11 de abajo.
 5. **🧹 Sincronizar `staging` con `main`:** 114 commits atrás. Hay conflictos esperables en los docs, y al ledger de staging le faltan las filas 065/066.
+6. **🔐 Mig 079 · SoP para usuarios inactivos:** `sops_read` (010, `USING (true)`) y `sops_storage_read` (077) no miran `is_active`. Un usuario inactivo con sesión vigente lee todas las filas de `sops` y los PDF de `documents/sops/*` (salvo el libro de franquicia). Corregir **las dos juntas** con `public.get_my_role() is not null`. Detalle en [ESTADO.md](ESTADO.md) § Migraciones.
 
 **También abierto, sin orden:**
 - **Club Satori** F1–F3: la 075 está reservada y solo en staging. Spec en [docs/club-satori/](docs/club-satori/).

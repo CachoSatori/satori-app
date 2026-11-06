@@ -255,8 +255,6 @@ export default function CashTurno({
   }
 
   // Cierre form
-  const [cierreCRC,   setCierreCRC]   = useState<number | ''>(0)
-  const [cierreUSD,   setCierreUSD]   = useState<number | ''>(0)
   const [cierreNotas, setCierreNotas] = useState('')
   const [showResumen, setShowResumen] = useState(false)
 
@@ -307,9 +305,6 @@ export default function CashTurno({
 
   // Lo que debería quedar físicamente en la Caja Diaria al cierre.
   const cajaDeberia  = totalAsig - provGastadoEf - otrosEgresosEf
-  const cierreVal    = Number(cierreCRC) || 0
-  const diferencia   = cierreVal ? cierreVal - cajaDeberia : null
-  const cuadra       = diferencia !== null && Math.abs(diferencia) < 500
 
   // ── Apertura ─────────────────────────────────────────────
   const handleApertura = useCallback(async () => {
@@ -623,8 +618,11 @@ export default function CashTurno({
       await withTimeout(closeCashSession(
         openSession.id,
         {
-          final_cash_crc: Number(cierreCRC) || 0,
-          final_cash_usd: Number(cierreUSD) || 0,
+          // 05/11 (decisión de Ismael): el cierre de turno ya no pide efectivo. El «debería» de un
+          // solo cajón queda incompleto por diseño (las reposiciones entre cajas no se registran:
+          // son neutras para el pozo) y el control real es el cierre del día. Turnos nuevos → null.
+          final_cash_crc: null,
+          final_cash_usd: null,
           final_safe_crc: 0,
           final_bank_crc: 0,
           notes:          cierreNotas || undefined,
@@ -635,15 +633,13 @@ export default function CashTurno({
       setPagos([])
       setIngresos([])
       setShowResumen(false)
-      setCierreCRC(0)
-      setCierreUSD(0)
       setView('apertura')
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Error cerrando turno')
     } finally {
       setSaving(false)
     }
-  }, [openSession, profile, pagos, ingresos, cierreCRC, cierreUSD, cierreNotas,
+  }, [openSession, profile, pagos, ingresos, cierreNotas,
       onSessionClose, onMovAdded, onError])
 
   // ────────────────────────────────────────────────────────
@@ -777,10 +773,12 @@ export default function CashTurno({
         </div>
         <div className="cd-top-card red">
           <div className="cd-tc-label">Disponible</div>
-          <div className="cd-tc-val" style={{ color: cajaDeberia < 0 ? '#c0392b' : cajaDeberia < 10000 ? '#a07030' : '#444' }}>
+          <div className="cd-tc-val" style={{ color: '#444' }}>
             {fi(cajaDeberia)}
           </div>
-          <div className="cd-tc-sub">{cajaDeberia < 0 ? '⚠ déficit en caja' : 'restante en caja'}</div>
+          {/* 05/11: sin aviso de «déficit»: las reposiciones entre cajas no se registran (neutras para
+              el pozo), así que un número negativo acá no es un faltante. */}
+          <div className="cd-tc-sub">Fondo menos pagos del día (no incluye reposiciones)</div>
         </div>
       </div>
 
@@ -1000,62 +998,12 @@ export default function CashTurno({
             <span className="cd-badge-manager">Manager</span>
           </div>
           <div className="cd-section-body">
-            <div className="cd-grid2">
-              <div className="tips-field">
-                <div className="tips-field-label">Efectivo al cierre ₡</div>
-                <div className="cd-monto-wrap">
-                  <span className="cd-prefix">₡</span>
-                  <input type="number" className="cd-monto-input" value={cierreCRC} min={0}
-                    placeholder="0" onChange={e => setCierreCRC(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
-              <div className="tips-field">
-                <div className="tips-field-label">Efectivo al cierre $</div>
-                <div className="cd-monto-wrap usd">
-                  <span className="cd-prefix">$</span>
-                  <input type="number" className="cd-monto-input" value={cierreUSD} min={0}
-                    placeholder="0" onChange={e => setCierreUSD(e.target.value === '' ? '' : Number(e.target.value))} />
-                </div>
-              </div>
+            {/* 05/11: sin campo de efectivo ni «debería / Cuadra»: el «debería» de un solo cajón no
+                incluye las reposiciones entre cajas (neutras para el pozo) y engañaba. El control
+                real del efectivo es el conteo del Cierre del Día. */}
+            <div style={{ fontSize: '0.72rem', color: '#5a6a7a' }}>
+              El efectivo se cuenta en el <strong>Cierre del día</strong>. Acá solo se cierra la caja de proveedores del turno.
             </div>
-
-            {/* Verificación — Caja Diaria */}
-            <div className="cd-verificacion">
-              <div className="cd-verif-header">Verificación — Caja Diaria</div>
-              <div className="cd-verif-row">
-                <span>Fondo inicial{ingresosTotal > 0 ? ' + ingresos' : ''}</span>
-                <strong>{fi(totalAsig)}</strong>
-              </div>
-              {provGastadoEf > 0 && (
-                <div className="cd-verif-row">
-                  <span>− Pagos a proveedores (efectivo)</span>
-                  <strong style={{ color: '#c0392b' }}>− {fi(provGastadoEf)}</strong>
-                </div>
-              )}
-              {otrosEgresosEf > 0 && (
-                <div className="cd-verif-row">
-                  <span>− Otros egresos efectivo</span>
-                  <strong style={{ color: '#c0392b' }}>− {fi(otrosEgresosEf)}</strong>
-                </div>
-              )}
-              <div className="cd-verif-row">
-                <span>Debería quedar en la Caja Diaria</span>
-                <strong>{fi(cajaDeberia)}</strong>
-              </div>
-              <div style={{ fontSize: '0.68rem', color: '#888', marginTop: 4 }}>
-                ℹ La registradora la maneja el PoS — acá solo se cuenta la caja de proveedores.
-              </div>
-            </div>
-
-            {cierreVal > 0 && (
-              <div className={`cd-cierre-resultado ${cuadra ? 'ok' : 'fail'}`}>
-                <span>{cuadra ? '✓' : '⚠'}</span>
-                <span>{cuadra
-                  ? 'Cuadra correctamente'
-                  : `Diferencia: ${fi(Math.abs(diferencia!))}${diferencia! > 0 ? ' de más' : ' faltante'}`
-                }</span>
-              </div>
-            )}
 
             <div className="tips-field" style={{ marginTop: '1rem' }}>
               <div className="tips-field-label">Notas del turno</div>
@@ -1142,18 +1090,7 @@ export default function CashTurno({
                   <strong style={{ color: '#c0392b' }}>− {fi(otrosEgresosEf)}</strong>
                 </div>
               )}
-              <div className="cd-resumen-row">
-                <span>Efectivo que debería quedar (Caja Diaria)</span>
-                <strong style={{ color: '#27874f' }}>{fi(cajaDeberia)}</strong>
-              </div>
             </div>
-
-            {cierreVal > 0 && (
-              <div className={`cd-cierre-resultado ${cuadra ? 'ok' : 'fail'}`} style={{ marginBottom: '1rem' }}>
-                <span>Efectivo real al cierre: <strong>{fi(cierreVal)}</strong></span>
-                <span>{cuadra ? '✓ Cuadra' : `⚠ Dif: ${fi(Math.abs(diferencia!))}`}</span>
-              </div>
-            )}
 
             <div className="cd-modal-note">
               Los pagos en efectivo quedan como Pagados. Las transferencias quedan como Pendientes hasta confirmar.

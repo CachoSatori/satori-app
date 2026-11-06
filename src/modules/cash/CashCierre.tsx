@@ -13,11 +13,11 @@
  * Verificación: compara "debería quedar" vs total contado.
  * Si diferencia > ₡500 → campo obligatorio tipo + motivo.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashCierreDia, CashSession, CashMovement } from '../../shared/types/database'
-import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, updateCierreCompleto, recordCierreSales, recordCierreRetiro, recordCierreAjuste, discardCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
+import { getCierresDia, getAllCashMovements, getCashSessions, saveCierreParcial, cerrarDiaCompleto, deshacerCierreDia, discardDiaCompleto, previewDiaCompleto, createDayMovement, sendCierreEmail } from '../../shared/api/cash'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
 import { getTipPayoutsSince, type TipPayoutSummary } from '../../shared/api/tips'
 import { fi, todayStr, formatDate, saldoCajaFuerte } from './cashUtils'
@@ -83,6 +83,10 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const [error,    setError]    = useState<string | null>(null)
   const [msg,      setMsg]      = useState<string | null>(null)
   const [fecha,    setFecha]    = useState(today)
+  // Id del intento de cierre (Fase 2) en curso: se reusa en los reintentos del MISMO cierre y se
+  // descarta al confirmar bien o al cambiar de fecha (mig 071, idempotencia en la base).
+  const cierreOpId = useRef<string | null>(null)
+  useEffect(() => { cierreOpId.current = null }, [fecha])
   const [movs,     setMovs]     = useState<CashMovement[]>([])   // ledger para saldoCajaFuerte
   const [sessions, setSessions] = useState<CashSession[]>([])    // para gatear: caja de proveedores cerrada
 
@@ -226,6 +230,18 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   // select manual que podría contradecir a la plata. La plata ya se deriva del mismo signo en recordCierreAjuste.
   const ajusteTipoDerivado = ajusteTipoPorSigno(diferencia, difUSD)
   const [ajusteMotivo, setAjusteMotivo] = useState('')
+  // ── «Recontar» UNA vez (decisión de Ismael, 05/11 · columnas de la mig 074) ──
+  // El esperado y la verificación se ven EN VIVO como siempre. Al pedir el cierre FUERA de
+  // tolerancia (₡500 / US$1) se ofrece recontar una vez: el primer conteo se guarda en
+  // cash_cierres_dia.primer_conteo_crc/usd y el conteo queda en blanco. Si después sigue fuera (o
+  // se elige no recontar), el motivo es obligatorio como siempre. Dentro de tolerancia: sin pasos
+  // extra. La tolerancia, requiresAjuste y cuadra/cuadraUSD NO cambian.
+  const [primerConteo, setPrimerConteo] = useState<{ crc: number; usd: number } | null>(null)
+  const [sinRecontar,  setSinRecontar]  = useState(false)
+  const [ofertaRecuento, setOfertaRecuento] = useState(false)
+  // Al cambiar de fecha se resetea (estado derivado de la fecha, sin efecto).
+  const [recuentoFecha, setRecuentoFecha] = useState(fecha)
+  if (recuentoFecha !== fecha) { setRecuentoFecha(fecha); setPrimerConteo(null); setSinRecontar(false); setOfertaRecuento(false) }
   const [notas,        setNotas]        = useState('')
 
   // CAMBIO A — cerrar con ventas en ₡0: confirmación explícita por fase (checkbox).
@@ -245,6 +261,20 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
   // Opción B (firmada): el gate cubre AMBAS monedas — antes un faltante solo-USD cerraba sin motivo.
   const requiresAjuste = cierreNecesitaAjuste(diferencia, difUSD)
+  // Fuera de tolerancia el motivo se pide recién cuando ya se ofreció el reconteo (recontó o eligió no).
+  const recuentoResuelto = primerConteo !== null || sinRecontar
+  const pedirCierre = () => {
+    if (requiresAjuste && !recuentoResuelto) { setOfertaRecuento(true); return }
+    setShowResumen(true)
+  }
+  const recontar = () => {
+    // Guarda el primer conteo (mig 074) y deja el conteo físico en blanco. Ventas, retiro y
+    // notas quedan como estaban; el esperado y la verificación siguen en vivo.
+    setPrimerConteo({ crc: totalContadoCRC, usd: totalContadoUSD })
+    setSepDiariaCRC(''); setSepDiariaUSD(''); setSepRegCRC(''); setSepRegUSD(''); setRemCRC(''); setRemUSD('')
+    setAjusteMotivo(''); setOfertaRecuento(false); setError(null)
+  }
+  const resetRecuento = () => { setPrimerConteo(null); setSinRecontar(false); setOfertaRecuento(false) }
 
   // ── Confirmar cierre parcial (Fase 1) ─────────────────────────
   // El turno abierto NO bloquea el sellado del Mediodía: al mediodía la caja sigue operando
@@ -321,6 +351,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       if (pendientes.length) { setError(mensajeDiasPendientes(pendientes, fi2)); return }
     }
     if (totalContadoCRC === 0) { setError('Completá el conteo físico (separaciones)'); return }
+    if (requiresAjuste && !recuentoResuelto) {
+      setError('⚠ Hay diferencia — elegí si recontás antes de cerrar'); return
+    }
     if (requiresAjuste && !ajusteMotivo.trim()) {
       setError('⚠ Hay diferencia — el motivo es obligatorio antes de cerrar'); return
     }
@@ -329,74 +362,55 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
     if (!parcial) { setError('Cerrá primero el Mediodía (Fase 1) antes de cerrar la noche.'); return }
     setSaving(true); setError(null)
     try {
-      // Fase 1 ya confirmada → pasar el cierre a 'completo'.
-      await updateCierreCompleto(parcial.id, {
-        tipo:                 'completo',
-        vn_crc:               N(vnCRC),
-        vn_usd:               N(vnUSD),
-        // Pierna N pagada (vía real) — mismo campo que siempre (compat con KPIs e históricos).
-        propinas_n_crc:       propNLeg,
-        otros_n_crc:          N(retiroN),
-        ef_real_n_crc:        efRealN,
-        sep_diaria_crc:       N(sepDiariaCRC),
-        sep_diaria_usd:       N(sepDiariaUSD),
-        sep_registradora_crc: N(sepRegCRC),
-        sep_registradora_usd: N(sepRegUSD),
-        remanente_crc:        N(remCRC),
-        remanente_usd:        N(remUSD),
-        diferencia_crc:       diferencia ?? 0,
-        ajuste_tipo:          requiresAjuste ? ajusteTipoDerivado : '',
-        ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
-        notas,
-        tipo_cambio:          tc,
-      })
-      // Fase 3 — registrar las ventas en EFECTIVO en el ledger. ES PARTE ESENCIAL del
-      // cierre (alimenta el saldo de Caja Fuerte), NO es complementario. Si falla, el día
-      // quedó guardado pero las ventas NO están → avisar explícito, nunca ocultar.
-      try {
-        // IDENTIDAD (FIRMADA): 'Ventas cierre' ingresa a Caja Fuerte el NETO de propinas
-        // pagadas (efReal − pierna pagada de cada fase) — lo que efectivamente llega a la
-        // bóveda. Así ledger post-cierre = deberia + ajuste = físico contado, EXACTO.
-        // (Los egresos de propinas viven en Registradora — no tocan el ledger de CF.)
-        await recordCierreSales({
-          session_date:  fecha,
-          created_by:    profile?.id ?? '',
-          exchange_rate: tc,
-          // Post-corte entra la venta BRUTA: las propinas ya son movimientos propios y restan
-          // del pozo por su cuenta. Pre-corte se mantiene el NETO de siempre (identidad firmada).
+      // ATÓMICO (mig 071): fila del cierre + ventas + retiro + ajuste en UNA transacción de la base
+      // (RPC cerrar_dia_completo), o nada. Los MONTOS son exactamente los de siempre — calculados
+      // acá arriba (deberia/diferencia/tolerancias/identidad bruta-neta) — y la RPC escribe las
+      // MISMAS filas que antes escribían updateCierreCompleto/recordCierreSales/Retiro/Ajuste.
+      // `cierreOpId` se mantiene entre reintentos del mismo cierre: si la respuesta se pierde
+      // (timeout) y se reintenta, la base reconoce el intento y no duplica nada.
+      if (!cierreOpId.current) cierreOpId.current = crypto.randomUUID()
+      await cerrarDiaCompleto({
+        fecha,
+        client_op_id:  cierreOpId.current,
+        exchange_rate: tc,
+        cierre: {
+          vn_crc:               N(vnCRC),
+          vn_usd:               N(vnUSD),
+          // Pierna N pagada (vía real) — mismo campo que siempre (compat con KPIs e históricos).
+          propinas_n_crc:       propNLeg,
+          otros_n_crc:          N(retiroN),
+          ef_real_n_crc:        efRealN,
+          sep_diaria_crc:       N(sepDiariaCRC),
+          sep_diaria_usd:       N(sepDiariaUSD),
+          sep_registradora_crc: N(sepRegCRC),
+          sep_registradora_usd: N(sepRegUSD),
+          remanente_crc:        N(remCRC),
+          remanente_usd:        N(remUSD),
+          diferencia_crc:       diferencia ?? 0,
+          ajuste_tipo:          requiresAjuste ? ajusteTipoDerivado : '',
+          ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
+          notas,
+          tipo_cambio:          tc,
+          // Mig 074: el primer conteo si hubo reconteo; null si no hubo.
+          primer_conteo_crc:    primerConteo ? primerConteo.crc : null,
+          primer_conteo_usd:    primerConteo ? primerConteo.usd : null,
+        },
+        // IDENTIDAD (FIRMADA): post-corte entra la venta BRUTA (las propinas ya restan como
+        // movimientos); pre-corte el NETO de siempre. Igual que antes en recordCierreSales.
+        ventas: {
           mediodia: { crc: postCorte ? efRealMFromParcial : efRealMFromParcial - propMFromParcial, usd: vmUSDFromParcial },
           noche:    { crc: postCorte ? efRealN            : efRealN - propNLeg,                    usd: N(vnUSD) },
-        })
-        await recordCierreRetiro({
-          session_date:  fecha,
-          created_by:    profile?.id ?? '',
-          exchange_rate: tc,
-          amount_crc:    N(retiroN),
-        })
-      } catch (e3) {
-        await loadCierres(); onRefresh()
-        setError(`El día se guardó pero las VENTAS no se registraron en movimientos: ${e3 instanceof Error ? e3.message : String(e3)}. Deshacé el cierre y volvé a cerrarlo.`)
-        return
-      }
-      // Fase 4 — Opción B (FIRMADA): materializar la diferencia como movimiento(s) de AJUSTE en
-      // Caja Fuerte (faltante → egreso resta · sobrante → ingreso suma), para que el ledger
-      // arranque mañana del físico contado. ORDEN CRÍTICO: va DESPUÉS de sellar el cierre y
-      // registrar ventas/retiro — la diferencia ya quedó calculada y guardada SIN este ajuste.
-      // Se llama SIEMPRE (aun cuadrando): su limpieza inicial borra ajustes viejos del día.
-      try {
-        await recordCierreAjuste({
-          session_date:  fecha,
-          created_by:    profile?.id ?? '',
-          exchange_rate: tc,
-          motivo:        ajusteMotivo.trim(),
-          dif_crc:       diferencia !== null && !cuadra    ? diferencia : 0,
-          dif_usd:       difUSD     !== null && !cuadraUSD ? difUSD     : 0,
-        })
-      } catch (e4) {
-        await loadCierres(); onRefresh()
-        setError(`El día se cerró pero el AJUSTE de la diferencia no quedó en movimientos: ${e4 instanceof Error ? e4.message : String(e4)}. Deshacé el cierre y volvé a cerrarlo.`)
-        return
-      }
+        },
+        retiro_crc: N(retiroN),
+        // Opción B (FIRMADA): solo la diferencia que supera su tolerancia (₡500 / US$1, calculada acá).
+        ajuste: {
+          crc:    diferencia !== null && !cuadra    ? diferencia : 0,
+          usd:    difUSD     !== null && !cuadraUSD ? difUSD     : 0,
+          motivo: ajusteMotivo.trim(),
+        },
+      })
+      cierreOpId.current = null
+      resetRecuento()
       setMsg('✓ Día cerrado completamente')
       // C3 — email de cortesía al owner con el resumen (fire-and-forget). La plata ya
       // quedó sellada arriba; si el email falla no rompe ni bloquea el cierre.
@@ -418,10 +432,14 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       `Se borran SOLO los datos del cierre y lo que generó (ventas del cierre + retiro + ajuste de diferencia).\n\n` +
       `⚠ NO se borran los pagos a proveedores, gastos ni ingresos manuales del día — esos quedan. ` +
       `Si querés recargar el día desde cero (sin duplicar), usá el botón "Borrar TODO el día".`)) return
-    if (!(await requireManager()).ok) return
+    const auth = await requireManager()
+    if (!auth.ok) return
     setSaving(true); setError(null)
     try {
-      await discardCierreDia(fecha)
+      // ATÓMICO (mig 071): ventas + retiro + ajuste + fila del cierre en una transacción. La
+      // contraseña de gerencia (cajero) se verifica EN EL SERVIDOR (verify_manager).
+      await deshacerCierreDia(fecha, auth.managerEmail, auth.managerPassword)
+      resetRecuento()
       setMsg('✓ Cierre deshecho — los movimientos del día se mantienen.')
       await loadCierres(); onRefresh()
     } catch (e) {
@@ -818,6 +836,12 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   </tbody>
                 </table>
 
+                {primerConteo && (
+                  <div style={{ fontSize:'0.72rem', color:'#8a5040', margin:'0.5rem 0' }}>
+                    ↺ Reconteo — el primer conteo ({fi2(primerConteo.crc)}{primerConteo.usd ? ` · $${primerConteo.usd.toFixed(2)}` : ''}) quedó guardado.
+                  </div>
+                )}
+
                 {/* Verificación */}
                 {totalContadoCRC > 0 && (
                   <>
@@ -911,7 +935,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 {requiresAjuste && (
                   <div style={{ background:'#fdf0ee', border:'2px solid #c23b22', borderRadius:2, padding:'0.875rem', marginBottom:'0.75rem' }}>
                     <div style={{ fontSize:'0.82rem', fontWeight:700, color:'#c23b22', marginBottom:'0.4rem' }}>
-                      ⚠ Diferencia detectada — registrá el motivo para cerrar
+                      {recuentoResuelto
+                        ? '⚠ Diferencia detectada — registrá el motivo para cerrar'
+                        : '⚠ Diferencia detectada — al cerrar vas a poder recontar una vez'}
                     </div>
                     {/* Ambas monedas con la MISMA jerarquía (columnas moneda | monto), cada una con
                         signo — solo las que superan su tolerancia (misma condición de siempre). */}
@@ -936,6 +962,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                     <div style={{ fontSize:'0.68rem', color:'#8a5040', marginBottom:'0.75rem' }}>
                       Al confirmar, la diferencia queda registrada como movimiento de <strong>Ajuste de cierre</strong> en Caja Fuerte (faltante resta · sobrante suma) — el saldo del sistema arranca mañana del físico contado.
                     </div>
+                    {recuentoResuelto && (
                     <div style={{ display:'grid', gridTemplateColumns:'160px 1fr', gap:'0.5rem', alignItems:'end' }}>
                       <Field label="Tipo">
                         {/* Ítem 3: derivado del signo de la diferencia — solo lectura (no un select que contradiga la plata). */}
@@ -952,6 +979,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                           style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem', ...(ajusteMotivo ? {} : { border:'1px solid #c23b22' }) }} />
                       </Field>
                     </div>
+                    )}
                   </div>
                 )}
               </Section>
@@ -966,16 +994,41 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
               </div>
 
               <button
-                onClick={() => setShowResumen(true)}
+                onClick={pedirCierre}
                 disabled={saving || turnoAbierto || ventasNVacias || (ventasNCeroReal && !confirmVentasCeroN)
                   || (postCorte && ventaSospechosaDeSerNeta(N(vnCRC), propinasPagadasDia) && !confirmVentaBrutaN)
-                  || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())}
+                  || totalContadoCRC === 0 || (requiresAjuste && recuentoResuelto && !ajusteMotivo.trim())}
                 className="cierre-btn green">
                 👁 Revisar resumen y cerrar el día →
               </button>
             </>
           )}
         </>
+      )}
+
+      {/* ── «Recontar» una vez: se ofrece al pedir el cierre fuera de tolerancia ── */}
+      {ofertaRecuento && parcial && !completo && (
+        <div className="cd-modal-overlay" onClick={() => setOfertaRecuento(false)}>
+          <div className="cd-modal" onClick={e => e.stopPropagation()}>
+            <div className="cd-modal-title">El conteo no cuadra</div>
+            <div className="cd-modal-meta">Tolerancia ₡500 / US$1 · podés recontar UNA vez</div>
+            <div className="cd-cierre-resultado fail" style={{ marginBottom:'1rem', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
+              <span>
+                Diferencia: {diferencia !== null && !cuadra ? `${diferencia >= 0 ? '+' : ''}${fi2(diferencia)}` : ''}
+                {difUSD !== null && !cuadraUSD ? `${diferencia !== null && !cuadra ? ' · ' : ''}US$ ${difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}` : ''}
+              </span>
+            </div>
+            <div style={{ fontSize:'0.75rem', color:'#6a6250', marginBottom:'1rem' }}>
+              Si recontás, este primer conteo queda guardado y las separaciones quedan en blanco para contar de nuevo. Si después sigue fuera, se pide el motivo.
+            </div>
+            <div className="cd-modal-actions">
+              <button className="tips-btn-ghost" onClick={() => { setSinRecontar(true); setOfertaRecuento(false) }}>
+                No recontar — registrar el motivo
+              </button>
+              <button className="cd-btn-green" onClick={recontar}>↺ Recontar</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── CAMBIO B: resumen del cierre ANTES de confirmar (solo lectura; nada se recalcula) ── */}
@@ -1021,6 +1074,12 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 <span>Total contado</span>
                 <strong>{fi2(totalContadoCRC)}{totalContadoUSD > 0 ? ` · $${totalContadoUSD.toFixed(2)}` : ''}</strong>
               </div>
+              {primerConteo && (
+                <div className="cd-resumen-row">
+                  <span>Primer conteo (antes del reconteo)</span>
+                  <strong>{fi2(primerConteo.crc)}{primerConteo.usd > 0 ? ` · $${primerConteo.usd.toFixed(2)}` : ''}</strong>
+                </div>
+              )}
             </div>
 
             {/* Diferencia / ajuste (ya calculado) */}

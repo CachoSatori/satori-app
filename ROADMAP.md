@@ -19,13 +19,23 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Fase | Estado | Notas |
 |---|---|---|
 | Caja diaria + cierre · Caja Fuerte · movimientos | ✅ prod | Sagrado `cashUtils.ts` `b597c697`. |
-| **Fix «Borrar TODO el día»** (elegir por día operativo, vista previa, errores chequeados) | 🧪 staging (05/11) | Borraba filas de cierres de otro día (20/07 y 20/10). Prod con firma aparte. Ver [HALLAZGOS.md](HALLAZGOS.md). |
+| **Fix «Borrar TODO el día»** (elegir por día operativo, vista previa, errores chequeados) | ✅ prod (05/11) | Borraba filas de cierres de otro día (20/07 y 20/10). PR #25 (`781eb72`), validado por Ismael en la preview de staging. Ver [HALLAZGOS.md](HALLAZGOS.md). |
+| Baja · Confirmación de «Borrar TODO» en un modal propio | 🔲 | Hoy es un `window.confirm` con texto largo (vista previa, manuales, aviso de filas de otro día). Pasarlo a un modal con tabla, montos y botón de confirmar. Solo UI. |
 | **POZO único** (tres cajas = un saldo; corte 2026-07-22) | ✅ prod | Primer cierre real cuadró. Acta → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md). |
 | **T3 · endurecimiento de caja** (los 8 ítems; mig 052 auditoría de ediciones) | ✅ prod | Cerrado el 10/08. |
 | Bandeja unificada + Revisión de inventario · autorización por contraseña (045) | ✅ prod | Etapa 2 de la Bandeja (foto-primero dentro de Caja) 🔲 diseñada, espera decisión. |
 | **Proveedores A** (notificación de pago, mig 047) + **B** (saldo a favor FIFO, migs 053/054) + comprobantes | 🟢 prod | Falta validar en piso. El correo sale recién con el DNS de Resend (depende del dueño). |
 | Finanzas / P&L | ✅ prod | Hora-CR en bordes de período resuelta. |
 | Reconciliación prod vs Excel del dueño | 🔲 | Viable desde el pozo (un número por día). |
+| 🔴 **P1 · Cierre del día + ajuste atómicos** (mig 071: RPC `cerrar_dia_completo` / `deshacer_cierre_dia`) | 🟢 prod (05/11) | **Con firma: toca cierres.** El ajuste del 19/10 (+₡54.107, «Sobrante») no existe en movimientos y nadie vio un error. Guardar cierre y ajuste en una sola operación (RPC transaccional) o fallar entero con mensaje claro. Hoy son llamadas separadas (`CashCierre.tsx` ~330–405). **Diagnóstico (05/11, solo lectura):** el ajuste **sí se creó**. Lo borró el 21/10 el «Borrar TODO el día» del **20/10**, junto con «Ventas cierre» del 19/10 (₡15.600 + US$100). `discardDiaCompleto` (`cash.ts`, paso 2) elige los movimientos sin turno por `created_at` del día calendario de CR, y el cierre del 19/10 se selló a las 00:31 del 20/10. Hay que usar la fecha operativa (la de la descripción, como `fechaOperativa` en `cierrePozo.ts`). Mismo cruce el 20/07 (filas del 19/07, recreadas al re-cerrar). |
+| Multi-local · `cash_cierres_dia` UNIQUE por fecha | 🔲 | La mig 071 crea `UNIQUE(session_date)` porque hoy ni `cash_cierres_dia` ni `cash_sessions` tienen columna de local. **Cuando entre Nosara** pasa a `UNIQUE(local, session_date)`, y las RPC de cierre reciben el local. |
+| **P1 · Cierre del día: «Recontar» una vez + cierre de turno sin efectivo** (columnas de la mig 074) | ✅ prod (06/11) | Reemplazó al «conteo ciego en el cierre de turno». El «debería» del turno mira un solo cajón y queda incompleto **por diseño del pozo**, así que el turno ya no cuenta efectivo. El control está en el cierre del día: verificación en vivo; fuera de tolerancia se ofrece recontar una vez (se guarda el primer conteo) o registrar el motivo directamente. El conteo ciego (#31) se probó y se revirtió (#32). Ver [HALLAZGOS.md](HALLAZGOS.md). |
+| Baja · `diferencia_usd` en `cash_cierres_dia` | 🔲 🖊️ | **Esquema → firma.** Hoy la diferencia chica en US$ no se guarda: solo queda como ajuste cuando es de US$1 o más (2 casos en 90 días: −US$6 el 23/09 y +US$100 el 20/10). |
+| Media · Alerta de días sin cierre | 🔲 | Faltan el cierre del día del 26/09 y los turnos del 18/10 y del 27/10 (prod, 90 días al 05/11). |
+
+> **Cola de caja (06/11):** el único pendiente activo es **«Alerta de días sin cierre»**. Las demás filas 🔲 de esta tabla son backlog sin fecha.
+
+> **Tolerancia de cierre (05/11):** los ₡500 quedan como están. La diferencia real se guarda en `cash_cierres_dia.diferencia_crc` y, si no hay ajuste, se arrastra al «debería» del día siguiente, así que la deriva está acotada a menos de ₡500 (máximo medido: ₡498 en 90 días).
 
 ## 2. Propinas y personal
 
@@ -54,6 +64,27 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Re-ingesta 2025 del `01` → ROSAURA (450 tickets, ₡19,06M) | 🔲 | Con firma; requiere actualizar los dos agentes. |
 | Agregación server-side de días del PoS (`pos_ndf_dias` o RPC) | 🔲 | Solo si el cálculo en el navegador se vuelve lento. Toca esquema e ingest. |
 | Merch de mostrador (familia 21) en categoría propia | 🔲 | Decide Ismael. |
+| Ingestar el % de descuento por línea (`FAC_PedidosDet.Descuento` / `TipoDescuento`) | 🔲 | Backlog, sin fecha. Separa Local Club, tarjeta 10 %, personal 30 % y cortesías. Bridge + Edge + columna → firma. Hueco #3 de [SPEC-analisis-ventas-integrado §6](docs/analisis/2026-11-mediodia-localclub/specs/SPEC-analisis-ventas-integrado.md). |
+| Ingestar `FAC_Facturas.CuentaCobrar` (cerrada «a crédito») | 🔲 | Backlog, sin fecha. Mostrar aparte los créditos de tarjetas (~₡260k/mes). Bridge + Edge + columna → firma. Hueco #6 de la misma SPEC. |
+| Revisar `regalia_crc` en tickets `cortesia` | 🔲 | Backlog, sin fecha. Tickets con `valor_servido` > 0 y `regalia_crc` = 0. Revisión, sin esquema. Hueco #7 de la misma SPEC. |
+| Franja mediodía/noche por hora de la factura, no por turno de caja | 🔲 | Backlog, sin fecha. El turno queda mal anotado en los dos sentidos (Q27 en [r8](docs/analisis/2026-11-mediodia-localclub/rondas/r8-Q27-D14-D15.md)). Solo lectura y cálculo, sin esquema. |
+| Código de quien entregó la tarjeta de hotel o tienda en cada mesa + conciliación automática de créditos (sistema web ↔ `CuentaCobrar`) | 🔲 | Backlog, sin fecha. Requiere ingesta → firma. Ver [r9](docs/analisis/2026-11-mediodia-localclub/rondas/r9-programa-creditos-PM.md). |
+| Descuento al personal (30 %): código de empleado obligatorio y reporte mensual por persona | 🔲 | Backlog, sin fecha. Va con firma. Ver D14/D15 en [r8](docs/analisis/2026-11-mediodia-localclub/rondas/r8-Q27-D14-D15.md). |
+| Comisiones PM como costo del programa en los reportes | 🔲 | Backlog, sin fecha. Hoy se pagan en efectivo por caja de proveedores, fuera del PoS. Ver [r9](docs/analisis/2026-11-mediodia-localclub/rondas/r9-programa-creditos-PM.md). |
+| Tablero mensual supuesto vs realidad de programas (LC, créditos, menú) | 🔲 | Backlog, sin fecha. Con firma. Solo lectura, por hora de factura. Ver [ESCENARIOS-cambios-programas.md §4](docs/analisis/2026-11-mediodia-localclub/ESCENARIOS-cambios-programas.md). |
+| Local Club 3.0: tarjeta en Wallet con QR único, referidos que suman puntos, sin descuento fijo | 🔲 | Backlog, sin fecha. Toca ingesta y esquema → firma. Datos personales nunca en el repo. Ver [ESCENARIOS §6](docs/analisis/2026-11-mediodia-localclub/ESCENARIOS-cambios-programas.md). |
+
+## 3.1 Club Satori (reemplazo de la página de créditos)
+
+Un solo módulo para referentes y créditos, concierges PM y el Local Club, con pases de Wallet. Spec v2 (05/11) en
+revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuestas, copiadas del §1 del spec.
+
+| Fase | Qué | Cuándo (propuesto) | Estado |
+|---|---|---|---|
+| **F0** | Cerrar el registro público del CRM (`customers_anon_insert WITH CHECK (true)`, SEC-03). Va después de SEC-01. | Inmediato | ✅ prod (05/11, mig 072; con SEC-04 en la 073) |
+| **F1** | Referentes y concierges con pase de Wallet + QR; cupón digital del turista; escáner único en caja; créditos, canjes y PM; portal; alertas; reportes; migración completa. Se dejan la página y las tarjetas físicas. | Construcción nov–dic. Piloto con 3-5 referentes antes del 10-dic; salida general después del 15-ene | 🔲 |
+| **F2** | Mejoras del cupón (en el Wallet del turista, ofertas con opt-in) y QR dinámico si hay abuso. | Feb–mar | 🔲 |
+| **F3** | Local Club en el Wallet: socios, ofertas que cambian, premios por frecuencia, referidos, sorpresas. Reemplaza el descuento fijo. | Desde may (temporada baja) | 🔲 |
 
 ## 4. PoS propio (gran pase)
 
@@ -63,21 +94,30 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Inventario activo + recetas + COGS | 🧪 staging | |
 | FE-CR (factura electrónica real) | 🔲 | Hoy solo estructura SIM en staging. |
 | **PILAR · sesión/auth escalable y multi-tenant** (~10 dispositivos concurrentes) | 🚧 🔲 | **Bloquea el gran pase del PoS.** |
+| **Requisito del pase: revocar EXECUTE de `anon` en las `SECURITY DEFINER` del PoS propio** (`pos_cobrar_*`, `pos_merge_orden`, `pos_unmerge_orden`, `pos_reopen_orden`, `sync_pos_tips_to_pool`, `my_turno_stats`) | 🟠 parcial | **Bloqueante:** medido en staging el 04/11. No pasa a prod sin revocarlo y verificarlo con `has_function_privilege`. Ver [HALLAZGOS.md](HALLAZGOS.md). **05/11:** las 6 revocadas en staging y versionadas en la 070; **falta `my_turno_stats`, que también es ejecutable por `anon` en staging** (revocar y verificar antes del pase). |
 
 ## 5. Plataforma y deuda técnica
 
 | Tema | Estado | Notas |
 |---|---|---|
 | Estabilidad (pantalla negra, realtime tras suspensión, outbox en `SIGNED_IN`, offline) | ✅ prod | |
-| Versionar `ingest-ndf` en `main` con `supabase/config.toml` (ítem 11) | 🔲 | Hasta entonces, ningún PR a `main` con `supabase/functions/`. |
-| Hardening ACL: 4 `SECURITY DEFINER` ejecutables por `anon` en prod | 🔲 | `get_my_role` exige análisis de policies antes del revoke. |
+| Versionar `ingest-ndf` en `main` con `supabase/config.toml` (ítem 11) | 🔲 | Hasta entonces, ningún PR a `main` con `supabase/functions/`. Al cerrarlo entra también `alta-empleado` (rama `claude/alta-empleado-fn`, `verify_jwt = true`). |
+| **SEC-01 · cierre de la escalada de roles** (mig 068: rol fijo al dar de alta, guarda de owner activo, nunca 0 owners) | 🟢 prod (05/11) | Paso A y mig 068 aplicados en prod. Falta que Ismael valide (3 owners, Admin, un salonero real en Mi Rendimiento) y el merge del PR. |
+| **SEC-01b · `get_my_role()` mira `is_active`** (mig 069; en staging también la 070 del PoS) | 🟢 prod (05/11) | **CRÍTICO.** Antes o en la misma migración: corregir las 6 guardas `not in` que se abren con NULL y las 3 policies que leen `profiles.role` sin `is_active` (`cierre_write`, `inv_write_recipes`, `inv_write_ri`). |
+| Versionar en migraciones las policies reales de `profiles` (y revisar drift en el resto) | 🔲 | Hoy prod y staging tienen 3 policies que no están en el repo. También el nombre distinto del trigger de `auth.users`. |
+| **Alta de empleados desde Admin** (Edge Function `alta-empleado`; el owner crea la cuenta y asigna rol) | ✅ prod (06/11, PR #39) | Owner activo, sin crear owners, contraseña temporal y cambio obligatorio en el primer ingreso. Login sin «Crear cuenta». La función está desplegada a mano (`verify_jwt` on); su código entra a `main` con el ítem 11. Auth de prod: `site_url` y redirects corregidos, contraseña mínima 8. Ver [HALLAZGOS.md](HALLAZGOS.md). |
+| Decidir si se reactiva el auto-registro de empleados | 🔲 🖊️ | Apagado desde el 04/11 (`disable_signup`). Con la 068 sería seguro (salonero + inactivo), pero cualquiera podría crear cuentas pendientes. Alternativa: alta solo por el owner. |
+| `LoginPage` sigue ofreciendo «crear cuenta» de empleado | 🔲 | Con el signup apagado devuelve un error técnico (`Signups not allowed`). Ocultar el botón o poner un mensaje claro («pedile el alta al encargado»). Toca `src/`. |
+| Hardening ACL: 4 `SECURITY DEFINER` ejecutables por `anon` en prod | 🔲 | `get_my_role` exige análisis de policies antes del revoke. Higiene (en prod no son de plata). |
 | Gate de tests en `deploy.yml` | 🔲 | Hoy publica sin correr `vitest`. |
+| Higiene · Sincronizar la rama `staging` con `main` | 🔲 | Al 05/11, `staging` está ~20 commits atrás de `main` (PRs #18–#22, archivos de las migraciones 065–068, código de logins viejos). El fix del #25 entró a `staging` como cherry-pick (`3f6fcb1`, merge `cef4f95`) justo para no arrastrarlos. Mergear `main` → `staging` con cuidado: hay conflictos en los docs y el ledger de staging no tiene las filas 065/066. |
 | `version.json` → login por el service worker | 🔲 | Agregar `/\/version\.json$/` a `navigateFallbackDenylist`. |
 
 ---
 
 ## Lo próximo, en orden
 
+0. **SEC-01:** validación de Ismael en prod + merge → **alta de empleados desde Admin** → ~~SEC-01b~~ ✅ (05/11) → SEC-02.
 1. Cerrar lo que quedó del go-live del PoS: rotación de secretos de ingest, revocar el token `claude-code-prod`,
    usuarios de la app para RODRI/FRANCO/MAXI BARRA, recalibrar los umbrales del ICP.
 2. Retirar el Excel y Paridad cuando Ismael lo firme.

@@ -1,0 +1,1904 @@
+periodo,grupo,con_md,nombre,familia,cantidad,neta
+0 ene-jun 2025,delivery,false,CALAMARES TEMPURA,2,2,10987
+0 ene-jun 2025,delivery,false,CAMARONES TEMPURA,2,6,34789
+0 ene-jun 2025,delivery,false,CREMA DE ZANAHORIA,2,1,4248
+0 ene-jun 2025,delivery,false,EDAMAMES,2,16,68960
+0 ene-jun 2025,delivery,false,EXTRA 1,2,4,4982
+0 ene-jun 2025,delivery,false,EXTRA 2,2,2,3894
+0 ene-jun 2025,delivery,false,GYOZAS DE CERDO,2,32,145855
+0 ene-jun 2025,delivery,false,KOROKKES DE PESCADO,2,1,5133
+0 ene-jun 2025,delivery,false,ORDEN DE ARROZ,2,10,25288
+0 ene-jun 2025,delivery,false,SOPA MISO,2,15,60757
+0 ene-jun 2025,delivery,false,TARTAR DE ATUN,2,4,24519
+0 ene-jun 2025,delivery,false,TIRADITO ACEVICHADO,2,1,5929
+0 ene-jun 2025,delivery,false,TUNA TATAKI,2,5,32541
+0 ene-jun 2025,delivery,false,TUNA TIRADITO,2,2,11641
+0 ene-jun 2025,delivery,false,VEGETALES TEMPURA,2,1,4779
+0 ene-jun 2025,delivery,false,ALASKA ROLL,3,9,70574
+0 ene-jun 2025,delivery,false,ALL TUNA,3,2,53158
+0 ene-jun 2025,delivery,false,CALIFORNIA ROLL,3,49,285351
+0 ene-jun 2025,delivery,false,EDDIE WOULD GO ROLL,3,7,61035
+0 ene-jun 2025,delivery,false,HOSOMAKI AGUACATE,3,4,14549
+0 ene-jun 2025,delivery,false,HOSOMAKI ATUN,3,16,60310
+0 ene-jun 2025,delivery,false,HOSOMAKI PARGO,3,1,4602
+0 ene-jun 2025,delivery,false,HOSOMAKI SALMON,3,16,66720
+0 ene-jun 2025,delivery,false,I LOVE SANTA ROLL,3,8,55708
+0 ene-jun 2025,delivery,false,IM VEGAN,3,4,24342
+0 ene-jun 2025,delivery,false,IM VEGGIE ROLL,3,14,88342
+0 ene-jun 2025,delivery,false,KARI KARI ROLL,3,5,35127
+0 ene-jun 2025,delivery,false,NAMATSUKE ROLL,3,3,23375
+0 ene-jun 2025,delivery,false,NIGIRI ABURI  DORADO  x 6,3,1,10200
+0 ene-jun 2025,delivery,false,NIGIRI SAKE REMON  SALMON,3,4,14834
+0 ene-jun 2025,delivery,false,NIGIRI YAKI   ATUN,3,6,21770
+0 ene-jun 2025,delivery,false,NIGIRI ZANMAI,3,4,39669
+0 ene-jun 2025,delivery,false,ON HOLYDAYS ROLL,3,8,58126
+0 ene-jun 2025,delivery,false,PHILLY,3,20,129224
+0 ene-jun 2025,delivery,false,RAINBOW ROLL,3,33,245673
+0 ene-jun 2025,delivery,false,SASHIMIS ATUN,3,2,9204
+0 ene-jun 2025,delivery,false,SASHIMIS MIX,3,3,26561
+0 ene-jun 2025,delivery,false,SASHIMIS PARGO,3,6,27536
+0 ene-jun 2025,delivery,false,SASHIMIS SALMON,3,3,16133
+0 ene-jun 2025,delivery,false,SATORI MIX,3,1,28761
+0 ene-jun 2025,delivery,false,SATORI ROLL,3,24,184380
+0 ene-jun 2025,delivery,false,SATORI SPECIALS,3,3,98212
+0 ene-jun 2025,delivery,false,SPICY TUNA ROLL,3,26,173533
+0 ene-jun 2025,delivery,false,SUBARASHI,3,27,222973
+0 ene-jun 2025,delivery,false,SUPER MAGURO,3,15,111839
+0 ene-jun 2025,delivery,false,SUSHI CLASSIC,3,4,95742
+0 ene-jun 2025,delivery,false,TAKO ROLL,3,14,106821
+0 ene-jun 2025,delivery,false,TANOSHI ROLL,3,10,81796
+0 ene-jun 2025,delivery,false,THE CRAB,3,5,44487
+0 ene-jun 2025,delivery,false,THE SNAPPER ROLL,3,10,73869
+0 ene-jun 2025,delivery,false,TUNA ROLL,3,33,195034
+0 ene-jun 2025,delivery,false,UNAGUI ROLL,3,12,96384
+0 ene-jun 2025,delivery,false,CREPE,4,1,4336
+0 ene-jun 2025,delivery,false,PANACOTA,4,4,18407
+0 ene-jun 2025,delivery,false,VOLCAN DE CHOCOLATE,4,2,9204
+0 ene-jun 2025,delivery,false,AGUA ALPINA,5,6,9844
+0 ene-jun 2025,delivery,false,AGUA SAN BENEDETTO CON GAS,5,1,3800
+0 ene-jun 2025,delivery,false,CAFE GRANDE,5,1,1681
+0 ene-jun 2025,delivery,false,COCA COLA,5,6,8607
+0 ene-jun 2025,delivery,false,COCA ZERO,5,5,7940
+0 ene-jun 2025,delivery,false,FUZE TEA MELOCOTON,5,1,1400
+0 ene-jun 2025,delivery,false,GINGER ALE,5,8,13600
+0 ene-jun 2025,delivery,false,GREEN APPLE SPRITZER,5,1,3000
+0 ene-jun 2025,delivery,false,HEINEKEN,5,1,3400
+0 ene-jun 2025,delivery,false,MOJITO,5,1,5133
+0 ene-jun 2025,delivery,false,PILSEN,5,5,10176
+0 ene-jun 2025,delivery,false,PURE SNOW JUNMAI,5,2,46903
+0 ene-jun 2025,delivery,false,QUE MAE IPA,5,1,3982
+0 ene-jun 2025,delivery,false,SUIKA SOUR,5,1,4400
+0 ene-jun 2025,delivery,false,DEDOS DE POLLO,13,6,29655
+0 ene-jun 2025,delivery,false,KOROKKES DE PESCADO,13,9,46934
+0 ene-jun 2025,delivery,false,PAPAS FRITAS,13,2,9000
+0 ene-jun 2025,delivery,false,CEVICHE COCO TUNA,16,1,9000
+0 ene-jun 2025,delivery,false,CEVICHE EL DORADO,16,9,89012
+0 ene-jun 2025,delivery,false,CEVICHE PERUANO,16,5,47354
+0 ene-jun 2025,delivery,false,GRULLA DORADO,16,3,28089
+0 ene-jun 2025,delivery,false,KOI ATUN,16,3,23655
+0 ene-jun 2025,delivery,false,POKE WAVE,16,27,233434
+0 ene-jun 2025,delivery,false,POLLO TERIYAKI,16,66,592370
+0 ene-jun 2025,delivery,false,RAMEN KARI,16,2,22832
+0 ene-jun 2025,delivery,false,RAMEN PINATTSU,16,4,43062
+0 ene-jun 2025,delivery,false,RAMEN TRADICIONAL CERDO,16,4,46124
+0 ene-jun 2025,delivery,false,TUNA POKE,16,33,283561
+0 ene-jun 2025,delivery,false,VEGAN POKE,16,1,8407
+0 ene-jun 2025,delivery,false,CALAVERA CLARA L,21,3,35000
+0 ene-jun 2025,delivery,false,CALAVERA NEGRA M,21,1,14000
+0 ene-jun 2025,delivery,false,DARUMA BEIGE L,21,1,14000
+0 ene-jun 2025,delivery,false,DARUMA GRIS L,21,2,28000
+0 ene-jun 2025,delivery,false,DARUMA GRIS XL,21,1,14000
+0 ene-jun 2025,delivery,false,HAPPY SUSHI L,21,5,63000
+0 ene-jun 2025,delivery,false,MANITO ROSA L,21,1,14000
+0 ene-jun 2025,delivery,false,MIYAGHI LILA XL,21,1,14000
+0 ene-jun 2025,delivery,false,SEÑOR MIYAGHI BW L,21,1,14000
+0 ene-jun 2025,delivery,false,SUSHI FELIZ NEGRO Y ROJO L,21,2,24779
+0 ene-jun 2025,delivery,false,SUSHI FELIZ NEGRO Y ROJO XL,21,1,12389
+0 ene-jun 2025,delivery,false,CALAVERA AZUL,23,1,12000
+0 ene-jun 2025,delivery,false,MOJITO PROMO,25,33,0
+0 ene-jun 2025,delivery,false,CAMARONES SALTEADOS,28,1,0
+0 ene-jun 2025,delivery,false,ENSALADA LECHUGA MAIZ,28,5,0
+0 ene-jun 2025,delivery,false,GUACAMOLE,28,2,0
+0 ene-jun 2025,delivery,false,HUEVOS DUROS  2,28,5,0
+0 ene-jun 2025,delivery,false,HUEVOS FRITOS  2,28,5,0
+0 ene-jun 2025,delivery,false,MEDIO AGUACATE,28,1,0
+0 ene-jun 2025,delivery,false,MILANESA DE POLLO,28,10,0
+0 ene-jun 2025,delivery,false,OSOBUCO,28,1,0
+0 ene-jun 2025,delivery,false,PAPAS FRITAS DUEÑOS,28,2,0
+0 ene-jun 2025,delivery,false,PESCADO A LA PLANCHA,28,5,0
+0 ene-jun 2025,delivery,false,POLLO A LA PLANCHA,28,4,0
+0 ene-jun 2025,delivery,false,__TICKETS__,null,322,30
+0 ene-jun 2025,salon,false,CALAMARES TEMPURA,2,14,76907
+0 ene-jun 2025,salon,false,CAMARONES TEMPURA,2,42,250947
+0 ene-jun 2025,salon,false,CARPACCIO DE ATUN,2,27,172681
+0 ene-jun 2025,salon,false,CARPACCION DORADO,2,15,98692
+0 ene-jun 2025,salon,false,CREMA DE ZANAHORIA,2,5,21943
+0 ene-jun 2025,salon,false,CRISPY TUNA BITES,2,13,53947
+0 ene-jun 2025,salon,false,EDAMAMES,2,78,338314
+0 ene-jun 2025,salon,false,EXTRA 1,2,6,6000
+0 ene-jun 2025,salon,false,EXTRA 2,2,8,15788
+0 ene-jun 2025,salon,false,EXTRA QUESO CREMA,2,2,1000
+0 ene-jun 2025,salon,false,GYOZAS DE CERDO,2,108,487021
+0 ene-jun 2025,salon,false,KOROKKES DE PESCADO,2,30,156375
+0 ene-jun 2025,salon,false,ORDEN DE ARROZ,2,7,17810
+0 ene-jun 2025,salon,false,SOPA MISO,2,65,265697
+0 ene-jun 2025,salon,false,SPICY EDAMAME,2,3,12743
+0 ene-jun 2025,salon,false,TARTAR DE ATUN,2,18,108501
+0 ene-jun 2025,salon,false,TIRADITO ACEVICHADO,2,21,123295
+0 ene-jun 2025,salon,false,TUNA TATAKI,2,20,130526
+0 ene-jun 2025,salon,false,TUNA TIRADITO,2,9,51905
+0 ene-jun 2025,salon,false,VEGETALES TEMPURA,2,20,92791
+0 ene-jun 2025,salon,false,YAKI WINGS,2,5,27035
+0 ene-jun 2025,salon,false,ALASKA ROLL,3,26,218265
+0 ene-jun 2025,salon,false,ALL TUNA,3,11,285842
+0 ene-jun 2025,salon,false,CALIFORNIA ROLL,3,99,587353
+0 ene-jun 2025,salon,false,EDDIE WOULD GO ROLL,3,16,144017
+0 ene-jun 2025,salon,false,HOSOMAKI AGUACATE,3,17,61370
+0 ene-jun 2025,salon,false,HOSOMAKI ATUN,3,6,25021
+0 ene-jun 2025,salon,false,HOSOMAKI PEPINO,3,1,3982
+0 ene-jun 2025,salon,false,HOSOMAKI SALMON,3,18,82361
+0 ene-jun 2025,salon,false,I LOVE SANTA ROLL,3,39,268253
+0 ene-jun 2025,salon,false,IM VEGAN,3,13,86649
+0 ene-jun 2025,salon,false,IM VEGGIE ROLL,3,25,160931
+0 ene-jun 2025,salon,false,KARI KARI ROLL,3,60,440094
+0 ene-jun 2025,salon,false,NAMATSUKE ROLL,3,39,297764
+0 ene-jun 2025,salon,false,NIGIRI ABURI  DORADO  x 6,3,5,49470
+0 ene-jun 2025,salon,false,NIGIRI AGURI  DORADO,3,12,44534
+0 ene-jun 2025,salon,false,NIGIRI SAKE REMON  SALMON,3,19,68765
+0 ene-jun 2025,salon,false,NIGIRI SAKE REMON  SALMON  x 6,3,10,101000
+0 ene-jun 2025,salon,false,NIGIRI YAKI   ATUN,3,23,81442
+0 ene-jun 2025,salon,false,NIGIRI YAKI  ATUN  x 6,3,3,29669
+0 ene-jun 2025,salon,false,NIGIRI ZANMAI,3,39,387124
+0 ene-jun 2025,salon,false,NIGIRIS ATUN,3,1,3400
+0 ene-jun 2025,salon,false,NIGIRIS MIX,3,1,8400
+0 ene-jun 2025,salon,false,NIGIRIS SALMON,3,1,3600
+0 ene-jun 2025,salon,false,ON HOLYDAYS ROLL,3,33,273041
+0 ene-jun 2025,salon,false,PHILLY,3,41,263288
+0 ene-jun 2025,salon,false,RAINBOW ROLL,3,81,619487
+0 ene-jun 2025,salon,false,SASHIMIS ATUN,3,25,115763
+0 ene-jun 2025,salon,false,SASHIMIS MIX,3,10,88444
+0 ene-jun 2025,salon,false,SASHIMIS PARGO,3,2,9179
+0 ene-jun 2025,salon,false,SASHIMIS SALMON,3,26,131734
+0 ene-jun 2025,salon,false,SATORI MIX,3,6,170383
+0 ene-jun 2025,salon,false,SATORI ROLL,3,70,579252
+0 ene-jun 2025,salon,false,SATORI SPECIALS,3,8,258790
+0 ene-jun 2025,salon,false,SPICY TUNA ROLL,3,66,431112
+0 ene-jun 2025,salon,false,SUBARASHI,3,110,879375
+0 ene-jun 2025,salon,false,SUPER MAGURO,3,41,301888
+0 ene-jun 2025,salon,false,SUSHI CLASSIC,3,19,435583
+0 ene-jun 2025,salon,false,TAKO ROLL,3,52,395153
+0 ene-jun 2025,salon,false,TANOSHI ROLL,3,26,206566
+0 ene-jun 2025,salon,false,THE CRAB,3,15,134774
+0 ene-jun 2025,salon,false,THE SNAPPER ROLL,3,51,370390
+0 ene-jun 2025,salon,false,TUNA ROLL,3,49,290519
+0 ene-jun 2025,salon,false,UNAGUI ROLL,3,13,111595
+0 ene-jun 2025,salon,false,BANANA FLAMBEADA,4,13,57098
+0 ene-jun 2025,salon,false,CREPE,4,17,75542
+0 ene-jun 2025,salon,false,PANACOTA,4,5,23447
+0 ene-jun 2025,salon,false,VOLCAN DE CHOCOLATE,4,27,123843
+0 ene-jun 2025,salon,false,ABSOLUT,5,1,2832
+0 ene-jun 2025,salon,false,ABSOLUT VODKA ROCKS,5,5,24000
+0 ene-jun 2025,salon,false,AGUA ALPINA,5,15,24489
+0 ene-jun 2025,salon,false,AGUA SAN BENEDETTO,5,86,304998
+0 ene-jun 2025,salon,false,AGUA SAN BENEDETTO CON GAS,5,45,160253
+0 ene-jun 2025,salon,false,AKIRA KAZE,5,3,12582
+0 ene-jun 2025,salon,false,APEROL SPRITZ,5,14,76580
+0 ene-jun 2025,salon,false,ASAHI,5,70,204743
+0 ene-jun 2025,salon,false,BERNARD,5,6,36600
+0 ene-jun 2025,salon,false,BERRY BLOSSOM,5,7,20442
+0 ene-jun 2025,salon,false,BOTELLA LES ROCAILLES CINSAULT ROSE,5,1,19300
+0 ene-jun 2025,salon,false,BOTELLA PINOT GRIGIO BANFI PLACIDO,5,1,19300
+0 ene-jun 2025,salon,false,BOTELLA YAYA RIESLING,5,1,18730
+0 ene-jun 2025,salon,false,CAFE CHICO,5,10,15104
+0 ene-jun 2025,salon,false,CAFE GRANDE,5,12,21489
+0 ene-jun 2025,salon,false,CAIPIRINHA,5,8,43331
+0 ene-jun 2025,salon,false,CAIPIROSKA,5,1,4619
+0 ene-jun 2025,salon,false,CAS COOLER,5,5,14602
+0 ene-jun 2025,salon,false,CASGARITA,5,3,17858
+0 ene-jun 2025,salon,false,CHERRY MEZCALITA,5,5,29504
+0 ene-jun 2025,salon,false,CLUB SODA,5,54,89542
+0 ene-jun 2025,salon,false,COCA COLA,5,87,143890
+0 ene-jun 2025,salon,false,COCA ZERO,5,95,158027
+0 ene-jun 2025,salon,false,COPA CHARDONNAY,5,6,23496
+0 ene-jun 2025,salon,false,COPA CRIOS MALBEC ROSE,5,1,4230
+0 ene-jun 2025,salon,false,COPA EXTRA BRUT,5,14,47588
+0 ene-jun 2025,salon,false,COPA LES JAMELLES ROSE,5,2,9389
+0 ene-jun 2025,salon,false,COPA NAMPE CHARDONNAY,5,2,8930
+0 ene-jun 2025,salon,false,COPA NAMPE MALBEC,5,1,4300
+0 ene-jun 2025,salon,false,COPA PINOT GRIGIO BANFI PLACIDO,5,14,59444
+0 ene-jun 2025,salon,false,COPA ROSE,5,6,23296
+0 ene-jun 2025,salon,false,COPA SAUV BLANC VIEILLE GRANGE,5,1,4300
+0 ene-jun 2025,salon,false,CORONA,5,32,99563
+0 ene-jun 2025,salon,false,COYOTE SHOT,5,2,10600
+0 ene-jun 2025,salon,false,CUBA LIBRE,5,2,11400
+0 ene-jun 2025,salon,false,CUCUMBER SPECIAL,5,13,75522
+0 ene-jun 2025,salon,false,CUCUMBER SPECIAL TITOS,5,3,19389
+0 ene-jun 2025,salon,false,DAIKIRI FRESA   PIÑA,5,6,30796
+0 ene-jun 2025,salon,false,DRAGON FRUIT LEMONADE,5,11,32124
+0 ene-jun 2025,salon,false,EL GUSANO,5,24,138571
+0 ene-jun 2025,salon,false,EXTRA BEBIDAS,5,1,885
+0 ene-jun 2025,salon,false,FLOR DE CAÑA,5,6,21000
+0 ene-jun 2025,salon,false,FLOR DE CAÑA ROCKS,5,1,5000
+0 ene-jun 2025,salon,false,FRESCA,5,15,24962
+0 ene-jun 2025,salon,false,FUZE TEA MELOCOTON,5,2,2913
+0 ene-jun 2025,salon,false,GIN TONIC,5,8,42484
+0 ene-jun 2025,salon,false,GINGER ALE,5,26,43844
+0 ene-jun 2025,salon,false,GINGER MINT LEMONADE,5,99,284957
+0 ene-jun 2025,salon,false,GOLDEN GLOW,5,14,40301
+0 ene-jun 2025,salon,false,GREEN APPLE SPRITZER,5,32,91716
+0 ene-jun 2025,salon,false,GREEN DETOX,5,12,35044
+0 ene-jun 2025,salon,false,GREEN DRAGON,5,8,50757
+0 ene-jun 2025,salon,false,GUREN,5,4,16765
+0 ene-jun 2025,salon,false,HEINEKEN,5,9,29087
+0 ene-jun 2025,salon,false,HEINEKEN 0,5,1,3097
+0 ene-jun 2025,salon,false,HOUSE GINGER BEER,5,9,27412
+0 ene-jun 2025,salon,false,IMPERIAL,5,112,270972
+0 ene-jun 2025,salon,false,IMPERIAL SILVER,5,16,39009
+0 ene-jun 2025,salon,false,JAGGER ROCKS,5,1,6500
+0 ene-jun 2025,salon,false,JOHNNIE BLACK,5,4,18800
+0 ene-jun 2025,salon,false,JOSE CUERVO,5,2,7400
+0 ene-jun 2025,salon,false,LOW TIDE,5,9,52265
+0 ene-jun 2025,salon,false,MANGO FANDANGO,5,9,53961
+0 ene-jun 2025,salon,false,MARGARITA,5,33,178983
+0 ene-jun 2025,salon,false,MARGARITA MEZCAL ESPADIN,5,5,33186
+0 ene-jun 2025,salon,false,MARGARITA PATRON,5,2,14376
+0 ene-jun 2025,salon,false,MEZCAL ESPADIN ROCKS,5,2,13800
+0 ene-jun 2025,salon,false,MICHELADA,5,45,33692
+0 ene-jun 2025,salon,false,MOJITO,5,20,111996
+0 ene-jun 2025,salon,false,MOJITO ZACAPA 23,5,2,12800
+0 ene-jun 2025,salon,false,NEGRONI,5,2,13000
+0 ene-jun 2025,salon,false,odka absolut bnotella,5,1,45000
+0 ene-jun 2025,salon,false,OLD FASHIONED,5,1,5664
+0 ene-jun 2025,salon,false,PERFUME FIRE JWBLACK,5,2,17000
+0 ene-jun 2025,salon,false,PERFUMED FIRE,5,5,28043
+0 ene-jun 2025,salon,false,PILSEN,5,142,338434
+0 ene-jun 2025,salon,false,PROMO COPA LES JAMELLES CAB  SAUV,5,2,9735
+0 ene-jun 2025,salon,false,PURE SNOW JUNMAI,5,2,46903
+0 ene-jun 2025,salon,false,QUE MAE IPA,5,11,47947
+0 ene-jun 2025,salon,false,QUE MAE PALE ALE,5,21,89987
+0 ene-jun 2025,salon,false,QUE MAE RED ALE,5,10,38532
+0 ene-jun 2025,salon,false,SAKE BULZAI GINJO BOT,5,1,28761
+0 ene-jun 2025,salon,false,SAKE C V NIGORI JUNMAI BOT,5,1,27900
+0 ene-jun 2025,salon,false,SAKE CORTESIA SHOT,5,2,0
+0 ene-jun 2025,salon,false,SAKE CRANE KARAKUCHI BOT,5,9,193763
+0 ene-jun 2025,salon,false,SAKE PURE DAWN GINJO 700,5,1,52743
+0 ene-jun 2025,salon,false,SAKE PURE DUSK DAIGINJO 700,5,4,251119
+0 ene-jun 2025,salon,false,SAKE PURE NIGHT DAIGINJO PREM 700,5,1,142300
+0 ene-jun 2025,salon,false,SAKURA BLOSSOM,5,17,102265
+0 ene-jun 2025,salon,false,SATORI,5,21,123414
+0 ene-jun 2025,salon,false,SMOOTHIE,5,28,88511
+0 ene-jun 2025,salon,false,STELLA,5,4,12035
+0 ene-jun 2025,salon,false,SUIKA SOUR,5,27,110103
+0 ene-jun 2025,salon,false,TE CALIENTE,5,4,6726
+0 ene-jun 2025,salon,false,TE FRIO CASERO,5,35,101939
+0 ene-jun 2025,salon,false,TEQUILA PATRON SODA,5,1,6500
+0 ene-jun 2025,salon,false,TICO 75,5,3,18329
+0 ene-jun 2025,salon,false,TONICA,5,3,5044
+0 ene-jun 2025,salon,false,VODKA SODA TITOS,5,2,12743
+0 ene-jun 2025,salon,false,VODKA TITOS,5,2,7917
+0 ene-jun 2025,salon,false,XANETA ROSE,5,1,23622
+0 ene-jun 2025,salon,false,DEDOS DE PESCADO,13,8,43459
+0 ene-jun 2025,salon,false,DEDOS DE POLLO,13,8,40602
+0 ene-jun 2025,salon,false,KOROKKES DE PESCADO,13,7,38420
+0 ene-jun 2025,salon,false,MENU PANCHI,13,12,70571
+0 ene-jun 2025,salon,false,PAPAS FRITAS,13,7,27292
+0 ene-jun 2025,salon,false,TUNA HOSOMAKI TERRAZA,15,3,22291
+0 ene-jun 2025,salon,false,YAKI TERRAZA,15,4,31277
+0 ene-jun 2025,salon,false,CEVICHE COCO TUNA,16,15,138600
+0 ene-jun 2025,salon,false,CEVICHE EL DORADO,16,27,261208
+0 ene-jun 2025,salon,false,CEVICHE PERUANO,16,42,395236
+0 ene-jun 2025,salon,false,GRULLA DORADO,16,29,262835
+0 ene-jun 2025,salon,false,KOI ATUN,16,11,96722
+0 ene-jun 2025,salon,false,POKE WAVE,16,109,951482
+0 ene-jun 2025,salon,false,POLLO TERIYAKI,16,113,978313
+0 ene-jun 2025,salon,false,RAMEN KARI,16,6,71664
+0 ene-jun 2025,salon,false,RAMEN PINATTSU,16,14,148257
+0 ene-jun 2025,salon,false,RAMEN TRADICIONAL CERDO,16,32,358844
+0 ene-jun 2025,salon,false,TUNA POKE,16,81,678402
+0 ene-jun 2025,salon,false,VEGAN POKE,16,15,123514
+0 ene-jun 2025,salon,false,DARUMA BEIGE S,21,2,24779
+0 ene-jun 2025,salon,false,LOGO GRIS L,21,1,12389
+0 ene-jun 2025,salon,false,LOGO VERDE L,21,1,14000
+0 ene-jun 2025,salon,false,LOGO VERDE M,21,1,14000
+0 ene-jun 2025,salon,false,MANITO ROSA L,21,1,14000
+0 ene-jun 2025,salon,false,MARILYN VERDE M,21,1,12600
+0 ene-jun 2025,salon,false,MIYAGI NEGRO L,21,2,28000
+0 ene-jun 2025,salon,false,SUSHI FELIZ BATIK VIOLETA L,21,1,14000
+0 ene-jun 2025,salon,false,CALAVERA GRIS,23,1,10619
+0 ene-jun 2025,salon,false,CALAVERA VERDE,23,1,12000
+0 ene-jun 2025,salon,false,LOGO VERDE,23,1,10619
+0 ene-jun 2025,salon,false,DARUMA SMALL,24,3,26549
+0 ene-jun 2025,salon,false,FUJI BEER,25,13,32500
+0 ene-jun 2025,salon,false,FUJI COCKTAIL,25,2,8000
+0 ene-jun 2025,salon,false,HAPPY HOUR,25,4,11504
+0 ene-jun 2025,salon,false,LA CATRINA,25,1,4950
+0 ene-jun 2025,salon,false,SATORI CLUB MULE,25,1,0
+0 ene-jun 2025,salon,false,STICKERS SMALL,26,2,1770
+0 ene-jun 2025,salon,false,HUEVOS DUROS  2,28,1,0
+0 ene-jun 2025,salon,false,__TICKETS__,null,865,1417
+A jul-nov 2025,delivery,false,CALAMARES TEMPURA,2,1,5487
+A jul-nov 2025,delivery,false,CAMARON EMPANIZADO,2,25,152655
+A jul-nov 2025,delivery,false,CAMARONES TEMPURA,2,5,26867
+A jul-nov 2025,delivery,false,CARPACCION DORADO,2,1,6549
+A jul-nov 2025,delivery,false,CRISPY SHITAKE BITES,2,1,4248
+A jul-nov 2025,delivery,false,CRISPY TUNA BITES,2,3,12743
+A jul-nov 2025,delivery,false,EDAMAMES,2,9,36319
+A jul-nov 2025,delivery,false,EXTRA 1,2,2,2257
+A jul-nov 2025,delivery,false,EXTRA QUESO CREMA,2,1,619
+A jul-nov 2025,delivery,false,GYOZAS DE CERDO,2,19,86743
+A jul-nov 2025,delivery,false,KOROKKES DE PESCADO,2,3,15398
+A jul-nov 2025,delivery,false,ORDEN DE ARROZ,2,10,26549
+A jul-nov 2025,delivery,false,SOPA MISO,2,13,42279
+A jul-nov 2025,delivery,false,TARTAR DE ATUN,2,12,73274
+A jul-nov 2025,delivery,false,TIRADITO ACEVICHADO,2,1,5929
+A jul-nov 2025,delivery,false,TUNA TATAKI,2,2,12920
+A jul-nov 2025,delivery,false,ALASKA ROLL,3,3,23204
+A jul-nov 2025,delivery,false,ALL TUNA,3,1,29558
+A jul-nov 2025,delivery,false,CALIFORNIA ROLL,3,37,214044
+A jul-nov 2025,delivery,false,HOSOMAKI AGUACATE,3,10,33805
+A jul-nov 2025,delivery,false,I LOVE SANTA ROLL,3,2,12770
+A jul-nov 2025,delivery,false,IM VEGAN,3,3,17442
+A jul-nov 2025,delivery,false,IM VEGGIE ROLL,3,3,17150
+A jul-nov 2025,delivery,false,KARI KARI ROLL,3,8,59469
+A jul-nov 2025,delivery,false,NAMATSUKE ROLL,3,2,15575
+A jul-nov 2025,delivery,false,NIGIRI SAKE REMON  SALMON,3,2,7434
+A jul-nov 2025,delivery,false,NIGIRI SAKE REMON  SALMON  x 6,3,2,20000
+A jul-nov 2025,delivery,false,NIGIRI ZANMAI,3,1,9823
+A jul-nov 2025,delivery,false,ON HOLYDAYS ROLL,3,5,38199
+A jul-nov 2025,delivery,false,PHILLY,3,4,21593
+A jul-nov 2025,delivery,false,RAINBOW ROLL,3,12,90080
+A jul-nov 2025,delivery,false,SASHIMIS ATUN,3,3,13805
+A jul-nov 2025,delivery,false,SASHIMIS SALMON,3,1,4619
+A jul-nov 2025,delivery,false,SATORI MIX,3,2,57522
+A jul-nov 2025,delivery,false,SATORI ROLL,3,4,30323
+A jul-nov 2025,delivery,false,SPICY TUNA ROLL,3,13,84150
+A jul-nov 2025,delivery,false,SUBARASHI,3,8,61827
+A jul-nov 2025,delivery,false,SUPER MAGURO,3,39,289912
+A jul-nov 2025,delivery,false,SUSHI CLASSIC,3,3,69805
+A jul-nov 2025,delivery,false,TAKO ROLL,3,4,30088
+A jul-nov 2025,delivery,false,TANOSHI ROLL,3,4,30796
+A jul-nov 2025,delivery,false,THE CRAB,3,6,46372
+A jul-nov 2025,delivery,false,THE SNAPPER ROLL,3,5,37168
+A jul-nov 2025,delivery,false,TUNA ROLL,3,15,78319
+A jul-nov 2025,delivery,false,UNAGUI ROLL,3,1,8496
+A jul-nov 2025,delivery,false,AGUA SAN BENEDETTO CON GAS,5,1,3451
+A jul-nov 2025,delivery,false,AKIRA KAZE,5,1,3982
+A jul-nov 2025,delivery,false,COCA COLA,5,1,1177
+A jul-nov 2025,delivery,false,COCA ZERO,5,1,1681
+A jul-nov 2025,delivery,false,EL GUSANO,5,2,11504
+A jul-nov 2025,delivery,false,NUMU,5,2,7080
+A jul-nov 2025,delivery,false,PILSEN,5,1,2478
+A jul-nov 2025,delivery,false,DEDOS DE POLLO,13,4,21124
+A jul-nov 2025,delivery,false,KOROKKES DE PESCADO,13,14,76814
+A jul-nov 2025,delivery,false,CERDO TONKATSU,16,1,8496
+A jul-nov 2025,delivery,false,CEVICHE EL DORADO,16,1,10442
+A jul-nov 2025,delivery,false,CEVICHE PERUANO,16,1,10177
+A jul-nov 2025,delivery,false,POKE WAVE,16,5,42491
+A jul-nov 2025,delivery,false,POLLO TERIYAKI,16,16,144425
+A jul-nov 2025,delivery,false,RAMEN PINATTSU,16,2,19482
+A jul-nov 2025,delivery,false,RAMEN TRADICIONAL CERDO,16,8,88496
+A jul-nov 2025,delivery,false,DARUMA BATIK ROSA L,21,1,14000
+A jul-nov 2025,delivery,false,DARUMA GRIS M,21,1,12389
+A jul-nov 2025,delivery,false,DARUMA GRIS XL,21,1,12389
+A jul-nov 2025,delivery,false,HAPPY SUSHI M,21,1,11150
+A jul-nov 2025,delivery,false,ENSALADA LECHUGA MAIZ,28,1,0
+A jul-nov 2025,delivery,false,HUEVOS FRITOS  2,28,2,0
+A jul-nov 2025,delivery,false,POLLO A LA PLANCHA,28,2,0
+A jul-nov 2025,delivery,false,PURE DE PAPAS,28,1,0
+A jul-nov 2025,delivery,false,SIPP SEMANAL,28,1,133389
+A jul-nov 2025,delivery,false,COCA GREEN,29,1,1327
+A jul-nov 2025,delivery,false,__TICKETS__,null,141,6
+A jul-nov 2025,delivery,true,EDAMAMES,2,2,8496
+A jul-nov 2025,delivery,true,EXTRA 1,2,1,1327
+A jul-nov 2025,delivery,true,YAKI WINGS,2,1,5752
+A jul-nov 2025,delivery,true,ALASKA ROLL,3,1,8142
+A jul-nov 2025,delivery,true,HOSOMAKI AGUACATE,3,1,3540
+A jul-nov 2025,delivery,true,NAMATSUKE ROLL,3,1,7788
+A jul-nov 2025,delivery,true,RAINBOW ROLL,3,1,7699
+A jul-nov 2025,delivery,true,SUPER MAGURO,3,2,14867
+A jul-nov 2025,delivery,true,TUNA ROLL,3,1,4159
+A jul-nov 2025,delivery,true,SMOOTHIE,5,1,3098
+A jul-nov 2025,delivery,true,KOROKKES DE PESCADO,13,1,5487
+A jul-nov 2025,delivery,true,PAPAS FRITAS,13,1,3097
+A jul-nov 2025,delivery,true,CERDO TONKATSU,16,3,25487
+A jul-nov 2025,delivery,true,POKE WAVE,16,1,8761
+A jul-nov 2025,delivery,true,BENTO LEMONADE,29,2,0
+A jul-nov 2025,delivery,true,BOWL TERIYAKI LUNCH,29,11,58407
+A jul-nov 2025,delivery,true,CALIFORNIA BENTO,29,8,14447
+A jul-nov 2025,delivery,true,CASADO SATORI,29,8,38938
+A jul-nov 2025,delivery,true,CEVICHE TICO NIKKEI,29,1,4336
+A jul-nov 2025,delivery,true,EDAMAME BENTO,29,5,8971
+A jul-nov 2025,delivery,true,ENSALADA BENTO,29,5,9436
+A jul-nov 2025,delivery,true,FISH AND CHIPS,29,1,4602
+A jul-nov 2025,delivery,true,GYOZA BENTO,29,22,39612
+A jul-nov 2025,delivery,true,HOSOMAKI BENTO,29,15,26913
+A jul-nov 2025,delivery,true,KOROKKE BENTO,29,14,24701
+A jul-nov 2025,delivery,true,SAKURA POKE,29,3,14602
+A jul-nov 2025,delivery,true,SASHIMI ATUN BENTO,29,21,36936
+A jul-nov 2025,delivery,true,SATORI BENTO,29,24,42644
+A jul-nov 2025,delivery,true,SPICY BENTO,29,9,16195
+A jul-nov 2025,delivery,true,SUSHI DUO,29,8,55221
+A jul-nov 2025,delivery,true,TEMPURA BENTO,29,4,7223
+A jul-nov 2025,delivery,true,TERIYAKI BENTO,29,33,59070
+A jul-nov 2025,delivery,true,TONKATSU BENTO,29,4,6991
+A jul-nov 2025,delivery,true,__TICKETS__,null,57,0
+A jul-nov 2025,salon,false,CALAMARES TEMPURA,2,3,16460
+A jul-nov 2025,salon,false,CAMARON EMPANIZADO,2,2,12212
+A jul-nov 2025,salon,false,CAMARONES TEMPURA,2,19,112354
+A jul-nov 2025,salon,false,CARPACCIO DE ATUN,2,7,43646
+A jul-nov 2025,salon,false,CARPACCION DORADO,2,12,77602
+A jul-nov 2025,salon,false,CREMA DE ZANAHORIA,2,3,11044
+A jul-nov 2025,salon,false,CRISPY SHITAKE BITES,2,5,21239
+A jul-nov 2025,salon,false,CRISPY TUNA BITES,2,47,195398
+A jul-nov 2025,salon,false,EDAMAMES,2,16,67327
+A jul-nov 2025,salon,false,EXTRA 1,2,7,8695
+A jul-nov 2025,salon,false,EXTRA QUESO CREMA,2,2,1239
+A jul-nov 2025,salon,false,GYOZAS DE CERDO,2,54,245044
+A jul-nov 2025,salon,false,KOROKKES DE PESCADO,2,15,73911
+A jul-nov 2025,salon,false,ORDEN DE ARROZ,2,4,10619
+A jul-nov 2025,salon,false,SOPA MISO,2,43,143748
+A jul-nov 2025,salon,false,SPICY EDAMAME,2,20,83044
+A jul-nov 2025,salon,false,TARTAR DE ATUN,2,9,54040
+A jul-nov 2025,salon,false,TIRADITO ACEVICHADO,2,10,58106
+A jul-nov 2025,salon,false,TUNA TATAKI,2,19,119836
+A jul-nov 2025,salon,false,TUNA TIRADITO,2,12,69212
+A jul-nov 2025,salon,false,VEGETALES TEMPURA,2,4,19115
+A jul-nov 2025,salon,false,YAKI WINGS,2,17,94911
+A jul-nov 2025,salon,false,ALASKA ROLL,3,13,104619
+A jul-nov 2025,salon,false,ALL TUNA,3,4,118230
+A jul-nov 2025,salon,false,CALIFORNIA ROLL,3,52,298535
+A jul-nov 2025,salon,false,EDDIE WOULD GO ROLL,3,5,40774
+A jul-nov 2025,salon,false,HOSOMAKI AGUACATE,3,12,41062
+A jul-nov 2025,salon,false,HOSOMAKI ATUN,3,13,53031
+A jul-nov 2025,salon,false,HOSOMAKI PEPINO,3,2,7965
+A jul-nov 2025,salon,false,HOSOMAKI SALMON,3,5,22549
+A jul-nov 2025,salon,false,I LOVE SANTA ROLL,3,10,69027
+A jul-nov 2025,salon,false,IM VEGAN,3,6,38761
+A jul-nov 2025,salon,false,IM VEGGIE ROLL,3,14,82442
+A jul-nov 2025,salon,false,KARI KARI ROLL,3,33,232301
+A jul-nov 2025,salon,false,NAMATSUKE ROLL,3,19,146018
+A jul-nov 2025,salon,false,NIGIRI ABURI  DORADO  x 6,3,1,10000
+A jul-nov 2025,salon,false,NIGIRI AGURI  DORADO,3,2,7434
+A jul-nov 2025,salon,false,NIGIRI SAKE REMON  SALMON,3,4,14867
+A jul-nov 2025,salon,false,NIGIRI SAKE REMON  SALMON  x 6,3,3,30000
+A jul-nov 2025,salon,false,NIGIRI YAKI   ATUN,3,8,27394
+A jul-nov 2025,salon,false,NIGIRI YAKI  ATUN  x 6,3,7,68142
+A jul-nov 2025,salon,false,NIGIRI ZANMAI,3,41,390956
+A jul-nov 2025,salon,false,ON HOLYDAYS ROLL,3,20,151615
+A jul-nov 2025,salon,false,PHILLY,3,21,110947
+A jul-nov 2025,salon,false,RAINBOW ROLL,3,45,330677
+A jul-nov 2025,salon,false,SASHIMIS ATUN,3,14,63735
+A jul-nov 2025,salon,false,SASHIMIS MIX,3,9,74469
+A jul-nov 2025,salon,false,SASHIMIS PARGO,3,3,14336
+A jul-nov 2025,salon,false,SASHIMIS SALMON,3,10,47734
+A jul-nov 2025,salon,false,SATORI MIX,3,6,168252
+A jul-nov 2025,salon,false,SATORI ROLL,3,32,248097
+A jul-nov 2025,salon,false,SATORI SPECIALS,3,1,32212
+A jul-nov 2025,salon,false,SPICY TUNA ROLL,3,32,209557
+A jul-nov 2025,salon,false,SUBARASHI,3,75,574562
+A jul-nov 2025,salon,false,SUPER MAGURO,3,24,175434
+A jul-nov 2025,salon,false,SUSHI CLASSIC,3,6,140814
+A jul-nov 2025,salon,false,TAKO ROLL,3,31,228296
+A jul-nov 2025,salon,false,TANOSHI ROLL,3,19,142819
+A jul-nov 2025,salon,false,THE CRAB,3,6,46124
+A jul-nov 2025,salon,false,THE SNAPPER ROLL,3,27,192159
+A jul-nov 2025,salon,false,TUNA ROLL,3,28,153252
+A jul-nov 2025,salon,false,UNAGUI ROLL,3,15,107248
+A jul-nov 2025,salon,false,BANANA FLAMBEADA,4,6,24934
+A jul-nov 2025,salon,false,CREPE,4,9,36642
+A jul-nov 2025,salon,false,PANACOTA,4,5,21398
+A jul-nov 2025,salon,false,VOLCAN DE CHOCOLATE,4,17,76354
+A jul-nov 2025,salon,false,AGUA ALPINA,5,10,16562
+A jul-nov 2025,salon,false,AGUA SAN BENEDETTO,5,25,85075
+A jul-nov 2025,salon,false,AGUA SAN BENEDETTO CON GAS,5,26,87491
+A jul-nov 2025,salon,false,AKIRA KAZE,5,4,15929
+A jul-nov 2025,salon,false,APEROL SPRITZ,5,8,40204
+A jul-nov 2025,salon,false,ASAHI,5,24,64832
+A jul-nov 2025,salon,false,BERRY BLOSSOM,5,14,40593
+A jul-nov 2025,salon,false,BOTELLA PIPA SAUV BLANC,5,1,19204
+A jul-nov 2025,salon,false,CAFE CHICO,5,7,9345
+A jul-nov 2025,salon,false,CAFE GRANDE,5,4,6473
+A jul-nov 2025,salon,false,CAIPIRINHA,5,4,20531
+A jul-nov 2025,salon,false,CAMPARI,5,1,3097
+A jul-nov 2025,salon,false,CARAJILLO,5,4,20885
+A jul-nov 2025,salon,false,CAS COOLER,5,6,17522
+A jul-nov 2025,salon,false,CHERRY MEZCALITA,5,2,10642
+A jul-nov 2025,salon,false,CLUB SODA,5,12,19841
+A jul-nov 2025,salon,false,COCA COLA,5,34,54814
+A jul-nov 2025,salon,false,COCA ZERO,5,44,73394
+A jul-nov 2025,salon,false,COPA CHARDONNAY,5,7,27478
+A jul-nov 2025,salon,false,COPA EXTRA BRUT,5,32,111903
+A jul-nov 2025,salon,false,COPA MALBEC,5,4,15332
+A jul-nov 2025,salon,false,COPA PIPA CAB  SAUVIGNON,5,2,10975
+A jul-nov 2025,salon,false,COPA PIPA SAUV  BLANC,5,11,60354
+A jul-nov 2025,salon,false,COPA ROSE,5,5,19912
+A jul-nov 2025,salon,false,CORONA,5,11,32345
+A jul-nov 2025,salon,false,CUCUMBER SPECIAL,5,3,17257
+A jul-nov 2025,salon,false,CUCUMBER SPECIAL TITOS,5,1,6195
+A jul-nov 2025,salon,false,DAIKIRI FRESA   PIÑA,5,1,5133
+A jul-nov 2025,salon,false,DIRTY MARTINI TITOS,5,16,100035
+A jul-nov 2025,salon,false,DON JULIO,5,4,24673
+A jul-nov 2025,salon,false,DRAGON FRUIT LEMONADE,5,19,52712
+A jul-nov 2025,salon,false,EL GUSANO,5,21,113894
+A jul-nov 2025,salon,false,ESPADIN SHOTS X 2,5,1,5133
+A jul-nov 2025,salon,false,EXPRESO MARTINI,5,3,15398
+A jul-nov 2025,salon,false,FRESCA,5,5,8407
+A jul-nov 2025,salon,false,GINGER ALE,5,19,31611
+A jul-nov 2025,salon,false,GINGER MINT LEMONADE,5,38,109659
+A jul-nov 2025,salon,false,GOLDEN GLOW,5,13,37380
+A jul-nov 2025,salon,false,GREEN APPLE SPRITZER,5,5,12850
+A jul-nov 2025,salon,false,GREEN DETOX,5,6,17230
+A jul-nov 2025,salon,false,GREEN DRAGON,5,5,28186
+A jul-nov 2025,salon,false,GUREN,5,4,9292
+A jul-nov 2025,salon,false,HEINEKEN,5,3,9292
+A jul-nov 2025,salon,false,HEINEKEN 0,5,2,5730
+A jul-nov 2025,salon,false,HOUSE GINGER BEER,5,12,37168
+A jul-nov 2025,salon,false,IMPERIAL,5,42,101469
+A jul-nov 2025,salon,false,IMPERIAL SILVER,5,9,22301
+A jul-nov 2025,salon,false,JOSE CUERVO,5,4,13097
+A jul-nov 2025,salon,false,LOW TIDE,5,14,80531
+A jul-nov 2025,salon,false,LOW TIDE ZACAPA,5,1,7522
+A jul-nov 2025,salon,false,MARGARITA,5,17,86487
+A jul-nov 2025,salon,false,MARGARITA MEZCAL ESPADIN,5,1,6637
+A jul-nov 2025,salon,false,MICHELADA,5,27,19009
+A jul-nov 2025,salon,false,MOJITO,5,9,46195
+A jul-nov 2025,salon,false,MOJITO ZACAPA 23,5,3,19115
+A jul-nov 2025,salon,false,MOSCOW MULE,5,1,4699
+A jul-nov 2025,salon,false,NEGRONI,5,1,4889
+A jul-nov 2025,salon,false,PERFUMED FIRE,5,5,28761
+A jul-nov 2025,salon,false,PILSEN,5,41,98991
+A jul-nov 2025,salon,false,PROMO COPA LE JAMELLES CHARDONAY,5,4,19469
+A jul-nov 2025,salon,false,PROMO COPA LES JAMELLES CAB  SAUV,5,11,49159
+A jul-nov 2025,salon,false,PROMO LES JAMELLES CHARDONNAY,5,1,19912
+A jul-nov 2025,salon,false,PURE SNOW JUNMAI,5,1,23451
+A jul-nov 2025,salon,false,QUE MAE IPA,5,10,39823
+A jul-nov 2025,salon,false,QUE MAE PALE ALE,5,3,13009
+A jul-nov 2025,salon,false,QUE MAE RED ALE,5,1,3686
+A jul-nov 2025,salon,false,SAKE BULZAI GINJO BOT,5,1,24447
+A jul-nov 2025,salon,false,SAKE CORTESIA SHOT,5,1,0
+A jul-nov 2025,salon,false,SAKE CRANE KARAKUCHI BOT,5,2,44071
+A jul-nov 2025,salon,false,SAKURA BLOSSOM,5,6,30487
+A jul-nov 2025,salon,false,SATORI,5,17,92611
+A jul-nov 2025,salon,false,SATORI ZACAPA,5,3,20071
+A jul-nov 2025,salon,false,SHO CHIKU BAI JARRA DE LA CASA,5,6,41947
+A jul-nov 2025,salon,false,SMOOTHIE,5,22,67846
+A jul-nov 2025,salon,false,STELLA,5,7,20159
+A jul-nov 2025,salon,false,SUIKA SOUR,5,11,43805
+A jul-nov 2025,salon,false,TE CALIENTE,5,3,5044
+A jul-nov 2025,salon,false,TE FRIO CASERO,5,16,46288
+A jul-nov 2025,salon,false,TICO 75,5,1,5929
+A jul-nov 2025,salon,false,VODKA SODA TITOS,5,3,19115
+A jul-nov 2025,salon,false,VODKA TITOS,5,6,22301
+A jul-nov 2025,salon,false,DEDOS DE PESCADO,13,2,11327
+A jul-nov 2025,salon,false,DEDOS DE POLLO,13,7,37584
+A jul-nov 2025,salon,false,KIDS ROLL,13,1,4513
+A jul-nov 2025,salon,false,KOROKKES DE PESCADO,13,3,15912
+A jul-nov 2025,salon,false,MENU PANCHI,13,3,18053
+A jul-nov 2025,salon,false,PAPAS FRITAS,13,4,11925
+A jul-nov 2025,salon,false,CERDO TONKATSU,16,4,33133
+A jul-nov 2025,salon,false,CEVICHE EL DORADO,16,8,80929
+A jul-nov 2025,salon,false,CEVICHE PERUANO,16,8,78872
+A jul-nov 2025,salon,false,GRULLA DORADO,16,4,38841
+A jul-nov 2025,salon,false,KOI ATUN,16,1,7885
+A jul-nov 2025,salon,false,POKE WAVE,16,32,273783
+A jul-nov 2025,salon,false,POLLO TERIYAKI,16,38,326310
+A jul-nov 2025,salon,false,RAMEN KARI,16,6,66783
+A jul-nov 2025,salon,false,RAMEN PINATTSU,16,9,90040
+A jul-nov 2025,salon,false,RAMEN TRADICIONAL CERDO,16,27,297013
+A jul-nov 2025,salon,false,TUNA POKE,16,14,118889
+A jul-nov 2025,salon,false,VEGAN POKE,16,4,32788
+A jul-nov 2025,salon,false,BATIK IOLETA XL,21,1,14000
+A jul-nov 2025,salon,false,BATIK ROSA XL,21,1,14000
+A jul-nov 2025,salon,false,CALAVERA CLARA M,21,1,12389
+A jul-nov 2025,salon,false,CALAVERA NEGRA M,21,2,24779
+A jul-nov 2025,salon,false,HAPPY SUSHI XL,21,1,12389
+A jul-nov 2025,salon,false,LOGO NEGRO L,21,1,14000
+A jul-nov 2025,salon,false,MARILYN VERDE L,21,1,14000
+A jul-nov 2025,salon,false,MARILYN VERDE M,21,1,14000
+A jul-nov 2025,salon,false,MIYAGHI LILA M,21,1,11150
+A jul-nov 2025,salon,false,MIYAGHI LILA XL,21,1,12389
+A jul-nov 2025,salon,false,SUSHI FELIZ  ROSA M,21,1,12600
+A jul-nov 2025,salon,false,DARUMA SMALL,24,2,17699
+A jul-nov 2025,salon,false,PROMO HOUSE GINGER BEER,25,4,7080
+A jul-nov 2025,salon,false,REFRESCO DE MANZANA,25,2,3540
+A jul-nov 2025,salon,false,STICKERS LARGE,26,2,3540
+A jul-nov 2025,salon,false,STICKERS SMALL,26,1,796
+A jul-nov 2025,salon,false,ENSALADA LECHUGA MAIZ,28,1,0
+A jul-nov 2025,salon,false,ASAHI GREEN,29,9,13518
+A jul-nov 2025,salon,false,CLUB SODA,29,3,3385
+A jul-nov 2025,salon,false,COCA GREEN,29,3,3982
+A jul-nov 2025,salon,false,COCA ZERO GREEN,29,4,5310
+A jul-nov 2025,salon,false,IMPERIAL GREEN,29,26,35841
+A jul-nov 2025,salon,false,PILSEN GREEN,29,16,22124
+A jul-nov 2025,salon,false,SMOOTHIE LUNCH,29,2,3540
+A jul-nov 2025,salon,false,__TICKETS__,null,413,688
+A jul-nov 2025,salon,true,CALAMARES TEMPURA,2,1,5487
+A jul-nov 2025,salon,true,CAMARON EMPANIZADO,2,5,28699
+A jul-nov 2025,salon,true,CAMARONES TEMPURA,2,7,42743
+A jul-nov 2025,salon,true,CARPACCIO DE ATUN,2,3,18159
+A jul-nov 2025,salon,true,CARPACCION DORADO,2,1,6549
+A jul-nov 2025,salon,true,CRISPY SHITAKE BITES,2,4,16354
+A jul-nov 2025,salon,true,CRISPY TUNA BITES,2,10,42478
+A jul-nov 2025,salon,true,EDAMAMES,2,8,33982
+A jul-nov 2025,salon,true,EXTRA 1,2,7,9292
+A jul-nov 2025,salon,true,EXTRA 2,2,6,11681
+A jul-nov 2025,salon,true,GYOZAS DE CERDO,2,6,26230
+A jul-nov 2025,salon,true,ORDEN DE ARROZ,2,4,10089
+A jul-nov 2025,salon,true,SOPA MISO,2,10,34513
+A jul-nov 2025,salon,true,SPICY EDAMAME,2,4,16991
+A jul-nov 2025,salon,true,TARTAR DE ATUN,2,4,24425
+A jul-nov 2025,salon,true,TIRADITO ACEVICHADO,2,1,5929
+A jul-nov 2025,salon,true,TUNA TATAKI,2,4,25841
+A jul-nov 2025,salon,true,TUNA TIRADITO,2,5,28327
+A jul-nov 2025,salon,true,VEGETALES TEMPURA,2,4,19115
+A jul-nov 2025,salon,true,YAKI WINGS,2,8,44580
+A jul-nov 2025,salon,true,ALASKA ROLL,3,3,24425
+A jul-nov 2025,salon,true,CALIFORNIA ROLL,3,8,47434
+A jul-nov 2025,salon,true,HOSOMAKI AGUACATE,3,3,10619
+A jul-nov 2025,salon,true,HOSOMAKI ATUN,3,1,4159
+A jul-nov 2025,salon,true,HOSOMAKI SALMON,3,2,9204
+A jul-nov 2025,salon,true,I LOVE SANTA ROLL,3,1,6903
+A jul-nov 2025,salon,true,IM VEGGIE ROLL,3,1,6018
+A jul-nov 2025,salon,true,KARI KARI ROLL,3,4,29735
+A jul-nov 2025,salon,true,NAMATSUKE ROLL,3,3,23363
+A jul-nov 2025,salon,true,NIGIRI ABURI  DORADO  x 6,3,1,10000
+A jul-nov 2025,salon,true,NIGIRI AGURI  DORADO,3,4,14867
+A jul-nov 2025,salon,true,NIGIRI SAKE REMON  SALMON,3,1,3717
+A jul-nov 2025,salon,true,NIGIRI SAKE REMON  SALMON  x 6,3,2,20000
+A jul-nov 2025,salon,true,NIGIRI ZANMAI,3,4,39292
+A jul-nov 2025,salon,true,ON HOLYDAYS ROLL,3,8,62221
+A jul-nov 2025,salon,true,PHILLY,3,2,10796
+A jul-nov 2025,salon,true,RAINBOW ROLL,3,8,60438
+A jul-nov 2025,salon,true,SASHIMIS MIX,3,2,17522
+A jul-nov 2025,salon,true,SASHIMIS SALMON,3,2,10265
+A jul-nov 2025,salon,true,SATORI ROLL,3,2,15752
+A jul-nov 2025,salon,true,SPICY TUNA ROLL,3,4,26195
+A jul-nov 2025,salon,true,SUBARASHI,3,6,45288
+A jul-nov 2025,salon,true,SUPER MAGURO,3,4,29735
+A jul-nov 2025,salon,true,TAKO ROLL,3,5,37611
+A jul-nov 2025,salon,true,TANOSHI ROLL,3,8,61593
+A jul-nov 2025,salon,true,THE CRAB,3,1,6195
+A jul-nov 2025,salon,true,THE SNAPPER ROLL,3,6,44602
+A jul-nov 2025,salon,true,UNAGUI ROLL,3,3,18584
+A jul-nov 2025,salon,true,BANANA FLAMBEADA,4,1,4336
+A jul-nov 2025,salon,true,BOCHA DE HELADO,4,2,3540
+A jul-nov 2025,salon,true,CREPE,4,1,4336
+A jul-nov 2025,salon,true,PANACOTA,4,2,9204
+A jul-nov 2025,salon,true,VOLCAN DE CHOCOLATE,4,8,37522
+A jul-nov 2025,salon,true,AGUA ALPINA,5,4,6726
+A jul-nov 2025,salon,true,AGUA SAN BENEDETTO,5,18,61606
+A jul-nov 2025,salon,true,AGUA SAN BENEDETTO CON GAS,5,11,37447
+A jul-nov 2025,salon,true,APEROL SPRITZ,5,2,10442
+A jul-nov 2025,salon,true,ASAHI,5,10,29204
+A jul-nov 2025,salon,true,BERRY BLOSSOM,5,6,17522
+A jul-nov 2025,salon,true,CAFE CHICO,5,4,5664
+A jul-nov 2025,salon,true,CAFE GRANDE,5,2,3363
+A jul-nov 2025,salon,true,CAIPIRINHA,5,1,5133
+A jul-nov 2025,salon,true,CAS COOLER,5,4,11681
+A jul-nov 2025,salon,true,CAS DE LUZ ROCKS,5,3,15398
+A jul-nov 2025,salon,true,CLUB SODA,5,8,13451
+A jul-nov 2025,salon,true,COCA COLA,5,21,34974
+A jul-nov 2025,salon,true,COCA ZERO,5,24,40186
+A jul-nov 2025,salon,true,COPA CHARDONNAY,5,3,11947
+A jul-nov 2025,salon,true,COPA EXTRA BRUT,5,6,20310
+A jul-nov 2025,salon,true,COPA LES JAMELLES ROSE,5,1,5752
+A jul-nov 2025,salon,true,COPA MALBEC,5,2,7965
+A jul-nov 2025,salon,true,COPA PIPA SAUV  BLANC,5,2,10973
+A jul-nov 2025,salon,true,CORONA,5,4,11584
+A jul-nov 2025,salon,true,CUCUMBER SPECIAL,5,1,5752
+A jul-nov 2025,salon,true,CUCUMBER SPECIAL TITOS,5,4,24779
+A jul-nov 2025,salon,true,DRAGON FRUIT LEMONADE,5,6,12920
+A jul-nov 2025,salon,true,EL GUSANO,5,3,17257
+A jul-nov 2025,salon,true,FRESCA,5,2,3111
+A jul-nov 2025,salon,true,GIN TONIC,5,1,5133
+A jul-nov 2025,salon,true,GINGER ALE,5,14,23540
+A jul-nov 2025,salon,true,GINGER MINT LEMONADE,5,25,71257
+A jul-nov 2025,salon,true,GOLDEN GLOW,5,6,17522
+A jul-nov 2025,salon,true,GREEN APPLE SPRITZER,5,7,19566
+A jul-nov 2025,salon,true,GREEN DETOX,5,1,2920
+A jul-nov 2025,salon,true,GREEN DRAGON,5,1,5752
+A jul-nov 2025,salon,true,GUREN,5,1,1770
+A jul-nov 2025,salon,true,HEINEKEN,5,4,12080
+A jul-nov 2025,salon,true,HEINEKEN 0,5,1,2633
+A jul-nov 2025,salon,true,HOUSE GINGER BEER,5,14,41505
+A jul-nov 2025,salon,true,IMPERIAL,5,10,24779
+A jul-nov 2025,salon,true,IMPERIAL SILVER,5,15,37168
+A jul-nov 2025,salon,true,LONG ISLAND ICED TEA,5,2,12035
+A jul-nov 2025,salon,true,LOW TIDE,5,1,5752
+A jul-nov 2025,salon,true,MARGARITA,5,8,38752
+A jul-nov 2025,salon,true,MICHELADA,5,16,11257
+A jul-nov 2025,salon,true,MOJITO,5,2,10265
+A jul-nov 2025,salon,true,PERFUME FIRE JWBLACK,5,1,7522
+A jul-nov 2025,salon,true,PERFUMED FIRE,5,4,23009
+A jul-nov 2025,salon,true,PILSEN,5,9,22301
+A jul-nov 2025,salon,true,PROMO COPA LE JAMELLES CHARDONAY,5,5,24336
+A jul-nov 2025,salon,true,PROMO COPA LES JAMELLES CAB  SAUV,5,1,4867
+A jul-nov 2025,salon,true,PROMO COPA LES JAMELLES SYRAH,5,2,9735
+A jul-nov 2025,salon,true,PROMO ROSE LES JAMELLES,5,3,15531
+A jul-nov 2025,salon,true,QUE MAE IPA,5,1,3385
+A jul-nov 2025,salon,true,QUE MAE PALE ALE,5,1,4336
+A jul-nov 2025,salon,true,QUE MAE RED ALE,5,6,23416
+A jul-nov 2025,salon,true,SAKURA BLOSSOM,5,1,5752
+A jul-nov 2025,salon,true,SATORI,5,11,62699
+A jul-nov 2025,salon,true,SHO CHIKU BAI JARRA DE LA CASA,5,4,27965
+A jul-nov 2025,salon,true,SMOOTHIE,5,20,61495
+A jul-nov 2025,salon,true,STELLA,5,1,3009
+A jul-nov 2025,salon,true,TE CALIENTE,5,3,4540
+A jul-nov 2025,salon,true,TE FRIO CASERO,5,6,15332
+A jul-nov 2025,salon,true,TONICA,5,1,1513
+A jul-nov 2025,salon,true,DEDOS DE POLLO,13,6,32920
+A jul-nov 2025,salon,true,KOROKKES DE PESCADO,13,1,5487
+A jul-nov 2025,salon,true,MENU PANCHI,13,3,18053
+A jul-nov 2025,salon,true,PAPAS FRITAS,13,11,33142
+A jul-nov 2025,salon,true,TE FRIO  LIMONADA  APPLE SODA,13,3,8230
+A jul-nov 2025,salon,true,CERDO TONKATSU,16,2,16991
+A jul-nov 2025,salon,true,CEVICHE EL DORADO,16,1,10442
+A jul-nov 2025,salon,true,CURRY VERDE,16,1,9292
+A jul-nov 2025,salon,true,POKE WAVE,16,6,51252
+A jul-nov 2025,salon,true,POLLO TERIYAKI,16,6,51903
+A jul-nov 2025,salon,true,RAMEN KARI,16,1,11416
+A jul-nov 2025,salon,true,RAMEN PINATTSU,16,2,21062
+A jul-nov 2025,salon,true,RAMEN TRADICIONAL CERDO,16,7,77434
+A jul-nov 2025,salon,true,TUNA POKE,16,1,8584
+A jul-nov 2025,salon,true,PROMO HOUSE GINGER BEER,25,11,19469
+A jul-nov 2025,salon,true,TINTO DE VERANO,25,1,1770
+A jul-nov 2025,salon,true,HUEVOS DUROS  2,28,1,0
+A jul-nov 2025,salon,true,HUEVOS FRITOS  2,28,1,0
+A jul-nov 2025,salon,true,ASAHI GREEN,29,20,26792
+A jul-nov 2025,salon,true,ASIAN CESAR SALAD,29,7,32832
+A jul-nov 2025,salon,true,BENTO LEMONADE,29,95,0
+A jul-nov 2025,salon,true,BOWL TERIYAKI LUNCH,29,70,370354
+A jul-nov 2025,salon,true,CALIFORNIA BENTO,29,38,70368
+A jul-nov 2025,salon,true,CASADO SATORI,29,49,237036
+A jul-nov 2025,salon,true,CEVICHE TICO NIKKEI,29,41,176053
+A jul-nov 2025,salon,true,CLUB SODA,29,15,19580
+A jul-nov 2025,salon,true,COCA GREEN,29,11,14602
+A jul-nov 2025,salon,true,COCA ZERO GREEN,29,17,22566
+A jul-nov 2025,salon,true,EDAMAME BENTO,29,42,77378
+A jul-nov 2025,salon,true,ENSALADA BENTO,29,32,57342
+A jul-nov 2025,salon,true,FISH AND CHIPS,29,44,201327
+A jul-nov 2025,salon,true,FRESCA GREEN,29,4,5310
+A jul-nov 2025,salon,true,GYOZA BENTO,29,154,279407
+A jul-nov 2025,salon,true,HOSOMAKI BENTO,29,106,192874
+A jul-nov 2025,salon,true,IMPERIAL GREEN,29,28,37611
+A jul-nov 2025,salon,true,KOROKKE BENTO,29,73,132467
+A jul-nov 2025,salon,true,PILSEN GREEN,29,13,19911
+A jul-nov 2025,salon,true,SAKURA POKE,29,57,275244
+A jul-nov 2025,salon,true,SASHIMI ATUN BENTO,29,132,240522
+A jul-nov 2025,salon,true,SATORI BENTO,29,147,264612
+A jul-nov 2025,salon,true,SMOOTHIE LUNCH,29,18,31681
+A jul-nov 2025,salon,true,SPICY BENTO,29,68,125824
+A jul-nov 2025,salon,true,SUSHI DUO,29,47,324425
+A jul-nov 2025,salon,true,TEMPURA BENTO,29,40,72490
+A jul-nov 2025,salon,true,TERIYAKI BENTO,29,162,294810
+A jul-nov 2025,salon,true,TONKATSU BENTO,29,66,120467
+A jul-nov 2025,salon,true,VEGGIE BENTO,29,14,24226
+A jul-nov 2025,salon,true,__TICKETS__,null,375,634
+B dic 2025-feb 2026,delivery,false,CAMARON EMPANIZADO,2,27,164867
+B dic 2025-feb 2026,delivery,false,CAMARONES TEMPURA,2,19,116018
+B dic 2025-feb 2026,delivery,false,CRISPY TUNA BITES,2,8,38257
+B dic 2025-feb 2026,delivery,false,EDAMAMES,2,5,20602
+B dic 2025-feb 2026,delivery,false,EXTRA 1,2,1,1327
+B dic 2025-feb 2026,delivery,false,GYOZAS DE CERDO,2,16,70407
+B dic 2025-feb 2026,delivery,false,KOROKKES DE PESCADO,2,9,46195
+B dic 2025-feb 2026,delivery,false,ORDEN DE ARROZ,2,5,13274
+B dic 2025-feb 2026,delivery,false,SOPA MISO,2,9,31062
+B dic 2025-feb 2026,delivery,false,TARTAR DE ATUN,2,5,30531
+B dic 2025-feb 2026,delivery,false,TIRADITO ACEVICHADO,2,1,5929
+B dic 2025-feb 2026,delivery,false,TUNA TATAKI,2,4,24872
+B dic 2025-feb 2026,delivery,false,ALASKA ROLL,3,10,75717
+B dic 2025-feb 2026,delivery,false,ALL TUNA,3,1,29558
+B dic 2025-feb 2026,delivery,false,CALIFORNIA ROLL,3,22,124513
+B dic 2025-feb 2026,delivery,false,EDDIE WOULD GO ROLL,3,2,16814
+B dic 2025-feb 2026,delivery,false,HOSOMAKI AGUACATE,3,2,7080
+B dic 2025-feb 2026,delivery,false,HOSOMAKI ATUN,3,2,7071
+B dic 2025-feb 2026,delivery,false,HOSOMAKI SALMON,3,3,13805
+B dic 2025-feb 2026,delivery,false,IM VEGAN,3,1,6460
+B dic 2025-feb 2026,delivery,false,IM VEGGIE ROLL,3,9,54159
+B dic 2025-feb 2026,delivery,false,KARI KARI ROLL,3,7,45345
+B dic 2025-feb 2026,delivery,false,NAMATSUKE ROLL,3,2,15575
+B dic 2025-feb 2026,delivery,false,NIGIRI SAKE REMON  SALMON,3,4,14867
+B dic 2025-feb 2026,delivery,false,NIGIRI SAKE REMON  SALMON  x 6,3,1,8500
+B dic 2025-feb 2026,delivery,false,NIGIRI YAKI  ATUN  x 6,3,1,8274
+B dic 2025-feb 2026,delivery,false,ON HOLYDAYS ROLL,3,4,31504
+B dic 2025-feb 2026,delivery,false,PHILLY,3,14,57770
+B dic 2025-feb 2026,delivery,false,RAINBOW ROLL,3,6,46195
+B dic 2025-feb 2026,delivery,false,SASHIMIS ATUN,3,1,3912
+B dic 2025-feb 2026,delivery,false,SASHIMIS SALMON,3,2,10265
+B dic 2025-feb 2026,delivery,false,SATORI ROLL,3,9,70885
+B dic 2025-feb 2026,delivery,false,SPICY TUNA ROLL,3,7,45841
+B dic 2025-feb 2026,delivery,false,SUBARASHI,3,8,63009
+B dic 2025-feb 2026,delivery,false,SUPER MAGURO,3,40,288425
+B dic 2025-feb 2026,delivery,false,SUSHI CLASSIC,3,1,24071
+B dic 2025-feb 2026,delivery,false,TANOSHI ROLL,3,2,15398
+B dic 2025-feb 2026,delivery,false,THE CRAB,3,5,42478
+B dic 2025-feb 2026,delivery,false,THE SNAPPER ROLL,3,5,37168
+B dic 2025-feb 2026,delivery,false,TUNA ROLL,3,22,91088
+B dic 2025-feb 2026,delivery,false,UNAGUI ROLL,3,3,18584
+B dic 2025-feb 2026,delivery,false,VOLCAN DE CHOCOLATE,4,1,4779
+B dic 2025-feb 2026,delivery,false,AGUA ALPINA,5,1,1681
+B dic 2025-feb 2026,delivery,false,CAS COOLER,5,2,4965
+B dic 2025-feb 2026,delivery,false,HOUSE GINGER BEER,5,1,2633
+B dic 2025-feb 2026,delivery,false,MARGARITA,5,1,5133
+B dic 2025-feb 2026,delivery,false,PERFUMED FIRE,5,2,9779
+B dic 2025-feb 2026,delivery,false,100 USS CARD,12,1,44248
+B dic 2025-feb 2026,delivery,false,50 USS CARD,12,1,22124
+B dic 2025-feb 2026,delivery,false,DEDOS DE POLLO,13,3,16460
+B dic 2025-feb 2026,delivery,false,KOROKKES DE PESCADO,13,5,27434
+B dic 2025-feb 2026,delivery,false,MENU PANCHI,13,3,18053
+B dic 2025-feb 2026,delivery,false,CERDO TONKATSU,16,2,17522
+B dic 2025-feb 2026,delivery,false,CEVICHE COCO TUNA,16,1,8951
+B dic 2025-feb 2026,delivery,false,CEVICHE PERUANO,16,3,29496
+B dic 2025-feb 2026,delivery,false,CURRY VERDE,16,3,27876
+B dic 2025-feb 2026,delivery,false,POKE WAVE,16,3,26283
+B dic 2025-feb 2026,delivery,false,POLLO TERIYAKI,16,8,75929
+B dic 2025-feb 2026,delivery,false,RAMEN PINATTSU,16,1,11947
+B dic 2025-feb 2026,delivery,false,RAMEN TRADICIONAL CERDO,16,7,77434
+B dic 2025-feb 2026,delivery,false,BOXING,19,82,35752
+B dic 2025-feb 2026,delivery,false,LOGO NEGRO L,21,1,12320
+B dic 2025-feb 2026,delivery,false,MANITO ROSA M,21,1,12389
+B dic 2025-feb 2026,delivery,false,SUSHI FELIZ ROSA BATIK L,21,1,14000
+B dic 2025-feb 2026,delivery,false,PROMO PILSEN 1500 LOCAL CLUB,25,6,7965
+B dic 2025-feb 2026,delivery,false,SMOOTHIE LUNCH,29,1,1881
+B dic 2025-feb 2026,delivery,false,__TICKETS__,null,101,4
+B dic 2025-feb 2026,delivery,true,CAMARON EMPANIZADO,2,3,18319
+B dic 2025-feb 2026,delivery,true,CAMARONES TEMPURA,2,2,12212
+B dic 2025-feb 2026,delivery,true,CARPACCIO DE ATUN,2,1,6372
+B dic 2025-feb 2026,delivery,true,CRISPY TUNA BITES,2,1,4248
+B dic 2025-feb 2026,delivery,true,EDAMAMES,2,2,8496
+B dic 2025-feb 2026,delivery,true,EXTRA 2,2,1,1947
+B dic 2025-feb 2026,delivery,true,GYOZAS DE CERDO,2,1,4602
+B dic 2025-feb 2026,delivery,true,TUNA TATAKI,2,1,6460
+B dic 2025-feb 2026,delivery,true,VEGETALES TEMPURA,2,3,14336
+B dic 2025-feb 2026,delivery,true,ALASKA ROLL,3,1,8142
+B dic 2025-feb 2026,delivery,true,CALIFORNIA ROLL,3,4,23717
+B dic 2025-feb 2026,delivery,true,I LOVE SANTA ROLL,3,1,6903
+B dic 2025-feb 2026,delivery,true,IM VEGGIE ROLL,3,1,6018
+B dic 2025-feb 2026,delivery,true,ON HOLYDAYS ROLL,3,1,7876
+B dic 2025-feb 2026,delivery,true,PHILLY,3,2,7858
+B dic 2025-feb 2026,delivery,true,RAINBOW ROLL,3,1,7699
+B dic 2025-feb 2026,delivery,true,SPICY TUNA ROLL,3,1,6549
+B dic 2025-feb 2026,delivery,true,SUBARASHI,3,1,7876
+B dic 2025-feb 2026,delivery,true,SUPER MAGURO,3,3,22301
+B dic 2025-feb 2026,delivery,true,THE CRAB,3,1,8496
+B dic 2025-feb 2026,delivery,true,TUNA ROLL,3,1,4159
+B dic 2025-feb 2026,delivery,true,GINGER MINT LEMONADE,5,2,5841
+B dic 2025-feb 2026,delivery,true,HOUSE GINGER BEER,5,1,3097
+B dic 2025-feb 2026,delivery,true,DEDOS DE POLLO,13,1,5487
+B dic 2025-feb 2026,delivery,true,KOROKKES DE PESCADO,13,2,10973
+B dic 2025-feb 2026,delivery,true,BOXING,19,109,48096
+B dic 2025-feb 2026,delivery,true,ASIAN CESAR SALAD,29,1,4690
+B dic 2025-feb 2026,delivery,true,BOWL TERIYAKI LUNCH,29,36,189558
+B dic 2025-feb 2026,delivery,true,CALIFORNIA BENTO,29,7,12235
+B dic 2025-feb 2026,delivery,true,CASADO SATORI,29,25,120221
+B dic 2025-feb 2026,delivery,true,COCA GREEN,29,1,1327
+B dic 2025-feb 2026,delivery,true,EDAMAME BENTO,29,5,8739
+B dic 2025-feb 2026,delivery,true,EXTRA LUNCH,29,2,1770
+B dic 2025-feb 2026,delivery,true,FISH AND CHIPS,29,5,23009
+B dic 2025-feb 2026,delivery,true,GYOZA BENTO,29,33,57153
+B dic 2025-feb 2026,delivery,true,HOSOMAKI BENTO,29,23,40199
+B dic 2025-feb 2026,delivery,true,KOROKKE BENTO,29,11,19226
+B dic 2025-feb 2026,delivery,true,SAKURA POKE,29,34,165487
+B dic 2025-feb 2026,delivery,true,SASHIMI ATUN BENTO,29,26,44918
+B dic 2025-feb 2026,delivery,true,SATORI BENTO,29,25,43170
+B dic 2025-feb 2026,delivery,true,SMOOTHIE LUNCH,29,1,2212
+B dic 2025-feb 2026,delivery,true,SPICY BENTO,29,14,24469
+B dic 2025-feb 2026,delivery,true,SUSHI DUO,29,8,55221
+B dic 2025-feb 2026,delivery,true,TEMPURA BENTO,29,3,5243
+B dic 2025-feb 2026,delivery,true,TERIYAKI BENTO,29,37,64144
+B dic 2025-feb 2026,delivery,true,TONKATSU BENTO,29,9,15730
+B dic 2025-feb 2026,delivery,true,VEGGIE BENTO,29,3,5243
+B dic 2025-feb 2026,delivery,true,__TICKETS__,null,121,2
+B dic 2025-feb 2026,salon,false,CAMARON EMPANIZADO,2,3,17403
+B dic 2025-feb 2026,salon,false,CAMARONES TEMPURA,2,19,115407
+B dic 2025-feb 2026,salon,false,CARPACCIO DE ATUN,2,9,57345
+B dic 2025-feb 2026,salon,false,CARPACCION DORADO,2,11,70071
+B dic 2025-feb 2026,salon,false,CRISPY SHITAKE BITES,2,2,9469
+B dic 2025-feb 2026,salon,false,CRISPY TUNA BITES,2,22,100319
+B dic 2025-feb 2026,salon,false,EDAMAMES,2,23,94938
+B dic 2025-feb 2026,salon,false,EXTRA 1,2,1,1327
+B dic 2025-feb 2026,salon,false,EXTRA 2,2,2,3894
+B dic 2025-feb 2026,salon,false,GYOZAS DE CERDO,2,33,150478
+B dic 2025-feb 2026,salon,false,KOROKKES DE PESCADO,2,3,15398
+B dic 2025-feb 2026,salon,false,ORDEN DE ARROZ,2,1,2655
+B dic 2025-feb 2026,salon,false,SOPA MISO,2,16,54531
+B dic 2025-feb 2026,salon,false,SPICY EDAMAME,2,7,29097
+B dic 2025-feb 2026,salon,false,TARTAR DE ATUN,2,2,12212
+B dic 2025-feb 2026,salon,false,TIRADITO ACEVICHADO,2,1,5929
+B dic 2025-feb 2026,salon,false,TUNA TATAKI,2,15,94965
+B dic 2025-feb 2026,salon,false,VEGETALES TEMPURA,2,4,19115
+B dic 2025-feb 2026,salon,false,YAKI WINGS,2,5,28761
+B dic 2025-feb 2026,salon,false,ALASKA ROLL,3,8,65133
+B dic 2025-feb 2026,salon,false,CALIFORNIA ROLL,3,12,66704
+B dic 2025-feb 2026,salon,false,EDDIE WOULD GO ROLL,3,9,73562
+B dic 2025-feb 2026,salon,false,HOSOMAKI AGUACATE,3,1,3540
+B dic 2025-feb 2026,salon,false,HOSOMAKI ATUN,3,23,90257
+B dic 2025-feb 2026,salon,false,HOSOMAKI SALMON,3,5,21628
+B dic 2025-feb 2026,salon,false,I LOVE SANTA ROLL,3,8,52805
+B dic 2025-feb 2026,salon,false,IM VEGAN,3,4,25195
+B dic 2025-feb 2026,salon,false,IM VEGGIE ROLL,3,7,40619
+B dic 2025-feb 2026,salon,false,KARI KARI ROLL,3,12,88089
+B dic 2025-feb 2026,salon,false,NAMATSUKE ROLL,3,12,91504
+B dic 2025-feb 2026,salon,false,NIGIRI AGURI  DORADO,3,4,14310
+B dic 2025-feb 2026,salon,false,NIGIRI SAKE REMON  SALMON,3,16,57425
+B dic 2025-feb 2026,salon,false,NIGIRI SAKE REMON  SALMON  x 6,3,2,20000
+B dic 2025-feb 2026,salon,false,NIGIRI YAKI   ATUN,3,12,42451
+B dic 2025-feb 2026,salon,false,NIGIRI YAKI  ATUN  x 6,3,2,19469
+B dic 2025-feb 2026,salon,false,NIGIRI ZANMAI,3,15,144398
+B dic 2025-feb 2026,salon,false,ON HOLYDAYS ROLL,3,8,61040
+B dic 2025-feb 2026,salon,false,PHILLY,3,17,71788
+B dic 2025-feb 2026,salon,false,RAINBOW ROLL,3,24,179774
+B dic 2025-feb 2026,salon,false,SASHIMIS ATUN,3,19,82832
+B dic 2025-feb 2026,salon,false,SASHIMIS MIX,3,14,119150
+B dic 2025-feb 2026,salon,false,SASHIMIS PARGO,3,3,14336
+B dic 2025-feb 2026,salon,false,SASHIMIS SALMON,3,16,78274
+B dic 2025-feb 2026,salon,false,SATORI MIX,3,3,86283
+B dic 2025-feb 2026,salon,false,SATORI ROLL,3,15,116173
+B dic 2025-feb 2026,salon,false,SATORI SPECIALS,3,4,115965
+B dic 2025-feb 2026,salon,false,SPICY TUNA ROLL,3,16,104124
+B dic 2025-feb 2026,salon,false,SUBARASHI,3,27,206748
+B dic 2025-feb 2026,salon,false,SUPER MAGURO,3,25,180637
+B dic 2025-feb 2026,salon,false,SUSHI CLASSIC,3,1,24071
+B dic 2025-feb 2026,salon,false,TAKO ROLL,3,4,30088
+B dic 2025-feb 2026,salon,false,TANOSHI ROLL,3,6,46195
+B dic 2025-feb 2026,salon,false,THE CRAB,3,11,89204
+B dic 2025-feb 2026,salon,false,THE SNAPPER ROLL,3,11,78796
+B dic 2025-feb 2026,salon,false,TUNA ROLL,3,9,35562
+B dic 2025-feb 2026,salon,false,UNAGUI ROLL,3,6,37168
+B dic 2025-feb 2026,salon,false,CREPE,4,4,16044
+B dic 2025-feb 2026,salon,false,PANACOTA,4,3,12885
+B dic 2025-feb 2026,salon,false,VOLCAN DE CHOCOLATE,4,3,14336
+B dic 2025-feb 2026,salon,false,AGUA ALPINA,5,5,8407
+B dic 2025-feb 2026,salon,false,AGUA SAN BENEDETTO,5,23,78690
+B dic 2025-feb 2026,salon,false,AGUA SAN BENEDETTO CON GAS,5,16,54876
+B dic 2025-feb 2026,salon,false,APEROL SPRITZ,5,1,5221
+B dic 2025-feb 2026,salon,false,ASAHI,5,7,19115
+B dic 2025-feb 2026,salon,false,BERRY BLOSSOM,5,8,23071
+B dic 2025-feb 2026,salon,false,CAFE GRANDE,5,3,5044
+B dic 2025-feb 2026,salon,false,CAIPIRINHA,5,4,19504
+B dic 2025-feb 2026,salon,false,CAS COOLER,5,6,15770
+B dic 2025-feb 2026,salon,false,CLUB SODA,5,6,10089
+B dic 2025-feb 2026,salon,false,COCA COLA,5,18,29677
+B dic 2025-feb 2026,salon,false,COCA ZERO,5,22,36655
+B dic 2025-feb 2026,salon,false,COPA CHARDONNAY,5,3,11350
+B dic 2025-feb 2026,salon,false,COPA PIPA SAUV  BLANC,5,13,71327
+B dic 2025-feb 2026,salon,false,COPA SAUV BLANC,5,4,15929
+B dic 2025-feb 2026,salon,false,CORONA,5,5,14442
+B dic 2025-feb 2026,salon,false,CUCUMBER SPECIAL,5,4,23009
+B dic 2025-feb 2026,salon,false,DIRTY MARTINI,5,1,5133
+B dic 2025-feb 2026,salon,false,DIRTY MARTINI TITOS,5,5,29947
+B dic 2025-feb 2026,salon,false,DON JULIO,5,1,7257
+B dic 2025-feb 2026,salon,false,EL GUSANO,5,9,51770
+B dic 2025-feb 2026,salon,false,FRESCA,5,1,1681
+B dic 2025-feb 2026,salon,false,GIN TONIC,5,2,10265
+B dic 2025-feb 2026,salon,false,GIN TONIC BOMBAY,5,2,11133
+B dic 2025-feb 2026,salon,false,GINGER ALE,5,6,9920
+B dic 2025-feb 2026,salon,false,GINGER MINT LEMONADE,5,16,46726
+B dic 2025-feb 2026,salon,false,GOLDEN GLOW,5,5,14602
+B dic 2025-feb 2026,salon,false,GREEN DETOX,5,9,25845
+B dic 2025-feb 2026,salon,false,HEINEKEN,5,4,11770
+B dic 2025-feb 2026,salon,false,HOUSE GINGER BEER,5,7,21681
+B dic 2025-feb 2026,salon,false,IMPERIAL,5,8,19823
+B dic 2025-feb 2026,salon,false,IMPERIAL SILVER,5,13,32212
+B dic 2025-feb 2026,salon,false,LOW TIDE,5,3,17257
+B dic 2025-feb 2026,salon,false,MARGARITA,5,14,71858
+B dic 2025-feb 2026,salon,false,MARGARITA MEZCAL ESPADIN,5,9,59735
+B dic 2025-feb 2026,salon,false,MARGARITA PATRON,5,2,15752
+B dic 2025-feb 2026,salon,false,MICHELADA,5,8,5557
+B dic 2025-feb 2026,salon,false,MOJITO,5,10,49788
+B dic 2025-feb 2026,salon,false,NEGRONI,5,1,5752
+B dic 2025-feb 2026,salon,false,PATRON,5,2,7965
+B dic 2025-feb 2026,salon,false,PILSEN,5,5,12389
+B dic 2025-feb 2026,salon,false,PURE SNOW JUNMAI,5,2,46903
+B dic 2025-feb 2026,salon,false,QUE MAE IPA,5,1,3982
+B dic 2025-feb 2026,salon,false,QUE MAE PALE ALE,5,1,4336
+B dic 2025-feb 2026,salon,false,QUE MAE RED ALE,5,2,8673
+B dic 2025-feb 2026,salon,false,SAKE C V NIGORI JUNMAI BOT,5,1,26726
+B dic 2025-feb 2026,salon,false,SAKE CRANE KARAKUCHI BOT,5,1,22035
+B dic 2025-feb 2026,salon,false,SAKE PURE DUSK DAIGINJO 700,5,1,51527
+B dic 2025-feb 2026,salon,false,SAKE PURE DUSK JARRA 250 ML,5,2,44071
+B dic 2025-feb 2026,salon,false,SATORI,5,5,28761
+B dic 2025-feb 2026,salon,false,SHO CHIKU BAI JARRA DE LA CASA,5,10,66765
+B dic 2025-feb 2026,salon,false,SMOOTHIE,5,7,20912
+B dic 2025-feb 2026,salon,false,TE FRIO CASERO,5,2,5841
+B dic 2025-feb 2026,salon,false,TITOS ROCKS,5,1,4602
+B dic 2025-feb 2026,salon,false,DEDOS DE POLLO,13,7,36761
+B dic 2025-feb 2026,salon,false,KOROKKES DE PESCADO,13,3,15637
+B dic 2025-feb 2026,salon,false,MENU PANCHI,13,1,5416
+B dic 2025-feb 2026,salon,false,PAPAS FRITAS,13,1,3097
+B dic 2025-feb 2026,salon,false,CERDO TONKATSU,16,2,17257
+B dic 2025-feb 2026,salon,false,CEVICHE COCO TUNA,16,1,10531
+B dic 2025-feb 2026,salon,false,CEVICHE EL DORADO,16,1,10442
+B dic 2025-feb 2026,salon,false,CEVICHE PERUANO,16,9,89314
+B dic 2025-feb 2026,salon,false,CURRY VERDE,16,3,28230
+B dic 2025-feb 2026,salon,false,POKE WAVE,16,8,70088
+B dic 2025-feb 2026,salon,false,POLLO TERIYAKI,16,12,113066
+B dic 2025-feb 2026,salon,false,RAMEN PINATTSU,16,5,59735
+B dic 2025-feb 2026,salon,false,RAMEN TRADICIONAL CERDO,16,5,53650
+B dic 2025-feb 2026,salon,false,BOXING,19,5,2212
+B dic 2025-feb 2026,salon,false,ASAHI GREEN,29,28,49027
+B dic 2025-feb 2026,salon,false,CLUB SODA,29,5,6040
+B dic 2025-feb 2026,salon,false,COCA GREEN,29,11,14602
+B dic 2025-feb 2026,salon,false,COCA ZERO GREEN,29,15,19911
+B dic 2025-feb 2026,salon,false,FRESCA GREEN,29,1,1327
+B dic 2025-feb 2026,salon,false,IMPERIAL GREEN,29,14,24425
+B dic 2025-feb 2026,salon,false,PILSEN GREEN,29,5,8584
+B dic 2025-feb 2026,salon,false,SMOOTHIE LUNCH,29,10,22124
+B dic 2025-feb 2026,salon,false,__TICKETS__,null,218,355
+B dic 2025-feb 2026,salon,true,CAMARON EMPANIZADO,2,2,12212
+B dic 2025-feb 2026,salon,true,CAMARONES TEMPURA,2,8,48239
+B dic 2025-feb 2026,salon,true,CARPACCIO DE ATUN,2,15,95575
+B dic 2025-feb 2026,salon,true,CARPACCION DORADO,2,4,26195
+B dic 2025-feb 2026,salon,true,CRISPY SHITAKE BITES,2,2,8496
+B dic 2025-feb 2026,salon,true,CRISPY TUNA BITES,2,10,44425
+B dic 2025-feb 2026,salon,true,EDAMAMES,2,11,46726
+B dic 2025-feb 2026,salon,true,EXTRA 1,2,17,21969
+B dic 2025-feb 2026,salon,true,EXTRA 2,2,6,11681
+B dic 2025-feb 2026,salon,true,GYOZAS DE CERDO,2,7,31522
+B dic 2025-feb 2026,salon,true,KOROKKES DE PESCADO,2,1,5133
+B dic 2025-feb 2026,salon,true,ORDEN DE ARROZ,2,3,7965
+B dic 2025-feb 2026,salon,true,SOPA MISO,2,10,33996
+B dic 2025-feb 2026,salon,true,SPICY EDAMAME,2,4,16991
+B dic 2025-feb 2026,salon,true,TARTAR DE ATUN,2,1,6106
+B dic 2025-feb 2026,salon,true,TIRADITO ACEVICHADO,2,2,10969
+B dic 2025-feb 2026,salon,true,TUNA TATAKI,2,5,31332
+B dic 2025-feb 2026,salon,true,TUNA TIRADITO,2,2,11681
+B dic 2025-feb 2026,salon,true,VEGETALES TEMPURA,2,3,14336
+B dic 2025-feb 2026,salon,true,YAKI WINGS,2,1,5752
+B dic 2025-feb 2026,salon,true,ALL TUNA,3,1,29558
+B dic 2025-feb 2026,salon,true,CALIFORNIA ROLL,3,4,23717
+B dic 2025-feb 2026,salon,true,EDDIE WOULD GO ROLL,3,6,50442
+B dic 2025-feb 2026,salon,true,HOSOMAKI AGUACATE,3,5,17699
+B dic 2025-feb 2026,salon,true,HOSOMAKI ATUN,3,2,8319
+B dic 2025-feb 2026,salon,true,HOSOMAKI PARGO,3,1,4602
+B dic 2025-feb 2026,salon,true,HOSOMAKI PEPINO,3,1,3982
+B dic 2025-feb 2026,salon,true,HOSOMAKI SALMON,3,2,9204
+B dic 2025-feb 2026,salon,true,I LOVE SANTA ROLL,3,1,6903
+B dic 2025-feb 2026,salon,true,IM VEGGIE ROLL,3,7,42124
+B dic 2025-feb 2026,salon,true,KARI KARI ROLL,3,5,36425
+B dic 2025-feb 2026,salon,true,NAMATSUKE ROLL,3,3,23363
+B dic 2025-feb 2026,salon,true,NIGIRI AGURI  DORADO,3,2,7434
+B dic 2025-feb 2026,salon,true,NIGIRI SAKE REMON  SALMON,3,2,7434
+B dic 2025-feb 2026,salon,true,NIGIRI YAKI   ATUN,3,1,3628
+B dic 2025-feb 2026,salon,true,NIGIRI YAKI  ATUN  x 6,3,1,9735
+B dic 2025-feb 2026,salon,true,NIGIRI ZANMAI,3,1,8350
+B dic 2025-feb 2026,salon,true,ON HOLYDAYS ROLL,3,3,22447
+B dic 2025-feb 2026,salon,true,PHILLY,3,7,29735
+B dic 2025-feb 2026,salon,true,RAINBOW ROLL,3,13,99319
+B dic 2025-feb 2026,salon,true,SASHIMIS ATUN,3,6,27611
+B dic 2025-feb 2026,salon,true,SASHIMIS MIX,3,4,35044
+B dic 2025-feb 2026,salon,true,SASHIMIS PARGO,3,1,4779
+B dic 2025-feb 2026,salon,true,SASHIMIS SALMON,3,3,15398
+B dic 2025-feb 2026,salon,true,SATORI ROLL,3,4,31504
+B dic 2025-feb 2026,salon,true,SATORI SPECIALS,3,2,54761
+B dic 2025-feb 2026,salon,true,SPICY TUNA ROLL,3,5,32743
+B dic 2025-feb 2026,salon,true,SUBARASHI,3,13,102389
+B dic 2025-feb 2026,salon,true,SUPER MAGURO,3,8,58726
+B dic 2025-feb 2026,salon,true,SUSHI CLASSIC,3,1,20460
+B dic 2025-feb 2026,salon,true,TAKO ROLL,3,3,22566
+B dic 2025-feb 2026,salon,true,TANOSHI ROLL,3,3,23097
+B dic 2025-feb 2026,salon,true,THE CRAB,3,7,55646
+B dic 2025-feb 2026,salon,true,THE SNAPPER ROLL,3,5,37168
+B dic 2025-feb 2026,salon,true,TUNA ROLL,3,5,20381
+B dic 2025-feb 2026,salon,true,UNAGUI ROLL,3,3,18584
+B dic 2025-feb 2026,salon,true,BANANA FLAMBEADA,4,2,8239
+B dic 2025-feb 2026,salon,true,BOCHA DE HELADO,4,3,5310
+B dic 2025-feb 2026,salon,true,CREPE,4,8,34690
+B dic 2025-feb 2026,salon,true,PANACOTA,4,2,9204
+B dic 2025-feb 2026,salon,true,VOLCAN DE CHOCOLATE,4,5,21027
+B dic 2025-feb 2026,salon,true,ABSOLUT,5,1,2832
+B dic 2025-feb 2026,salon,true,AGUA ALPINA,5,4,6726
+B dic 2025-feb 2026,salon,true,AGUA SAN BENEDETTO,5,37,126491
+B dic 2025-feb 2026,salon,true,AGUA SAN BENEDETTO CON GAS,5,23,78863
+B dic 2025-feb 2026,salon,true,AMARETTO SOUR,5,1,5487
+B dic 2025-feb 2026,salon,true,APEROL SPRITZ,5,2,9398
+B dic 2025-feb 2026,salon,true,ASAHI,5,8,22035
+B dic 2025-feb 2026,salon,true,BERRY BLOSSOM,5,9,25699
+B dic 2025-feb 2026,salon,true,CAFE CHICO,5,4,5664
+B dic 2025-feb 2026,salon,true,CAFE GRANDE,5,8,13031
+B dic 2025-feb 2026,salon,true,CAIPIRINHA,5,2,10265
+B dic 2025-feb 2026,salon,true,CARAJILLO,5,1,5221
+B dic 2025-feb 2026,salon,true,CAS COOLER,5,3,8469
+B dic 2025-feb 2026,salon,true,CLUB SODA,5,10,16814
+B dic 2025-feb 2026,salon,true,COCA COLA,5,17,28584
+B dic 2025-feb 2026,salon,true,COCA ZERO,5,34,56916
+B dic 2025-feb 2026,salon,true,COPA CHARDONNAY,5,3,11947
+B dic 2025-feb 2026,salon,true,COPA PIPA CAB  SAUVIGNON,5,2,10975
+B dic 2025-feb 2026,salon,true,COPA PIPA SAUV  BLANC,5,2,10973
+B dic 2025-feb 2026,salon,true,COPA ROSE,5,3,11947
+B dic 2025-feb 2026,salon,true,COPA SAUV BLANC,5,8,31858
+B dic 2025-feb 2026,salon,true,COPA YAYA PINOT NOIR,5,2,10975
+B dic 2025-feb 2026,salon,true,CORONA,5,7,20611
+B dic 2025-feb 2026,salon,true,CUBA LIBRE,5,2,10265
+B dic 2025-feb 2026,salon,true,CUCUMBER SPECIAL,5,15,86283
+B dic 2025-feb 2026,salon,true,DAIKIRI FRESA   PIÑA,5,4,20531
+B dic 2025-feb 2026,salon,true,DON JULIO,5,1,7257
+B dic 2025-feb 2026,salon,true,EL GUSANO,5,14,80531
+B dic 2025-feb 2026,salon,true,FRESCA,5,3,5044
+B dic 2025-feb 2026,salon,true,GINGER ALE,5,24,40186
+B dic 2025-feb 2026,salon,true,GINGER MINT LEMONADE,5,50,142513
+B dic 2025-feb 2026,salon,true,GOLDEN GLOW,5,9,25407
+B dic 2025-feb 2026,salon,true,GREEN DETOX,5,1,2044
+B dic 2025-feb 2026,salon,true,GREEN DRAGON,5,3,17257
+B dic 2025-feb 2026,salon,true,HEINEKEN,5,5,15487
+B dic 2025-feb 2026,salon,true,HEINEKEN 0,5,3,9292
+B dic 2025-feb 2026,salon,true,HOUSE GINGER BEER,5,5,15022
+B dic 2025-feb 2026,salon,true,IMPERIAL,5,10,24531
+B dic 2025-feb 2026,salon,true,IMPERIAL SILVER,5,8,19823
+B dic 2025-feb 2026,salon,true,JOSE CUERVO,5,1,3274
+B dic 2025-feb 2026,salon,true,LOW TIDE,5,3,17257
+B dic 2025-feb 2026,salon,true,MARGARITA,5,9,46195
+B dic 2025-feb 2026,salon,true,MARGARITA MEZCAL ESPADIN,5,1,6637
+B dic 2025-feb 2026,salon,true,MICHELADA,5,23,16071
+B dic 2025-feb 2026,salon,true,MOJITO,5,6,30796
+B dic 2025-feb 2026,salon,true,OLD FASHIONED,5,1,5664
+B dic 2025-feb 2026,salon,true,PILSEN,5,11,26513
+B dic 2025-feb 2026,salon,true,QUE MAE IPA,5,3,11947
+B dic 2025-feb 2026,salon,true,QUE MAE RED ALE,5,2,8673
+B dic 2025-feb 2026,salon,true,SAKE PURE DUSK SHOT,5,3,7699
+B dic 2025-feb 2026,salon,true,SATORI,5,6,34513
+B dic 2025-feb 2026,salon,true,SHO CHIKU BAI JARRA DE LA CASA,5,1,6991
+B dic 2025-feb 2026,salon,true,SMOOTHIE,5,35,107501
+B dic 2025-feb 2026,salon,true,STELLA,5,1,3009
+B dic 2025-feb 2026,salon,true,TE CALIENTE,5,2,3363
+B dic 2025-feb 2026,salon,true,TE FRIO CASERO,5,4,11681
+B dic 2025-feb 2026,salon,true,TITOS ROCKS,5,1,4602
+B dic 2025-feb 2026,salon,true,VASO MICHELADO,5,1,708
+B dic 2025-feb 2026,salon,true,DEDOS DE PESCADO,13,4,22089
+B dic 2025-feb 2026,salon,true,DEDOS DE POLLO,13,4,21947
+B dic 2025-feb 2026,salon,true,KOROKKES DE PESCADO,13,2,10973
+B dic 2025-feb 2026,salon,true,PAPAS FRITAS,13,4,12389
+B dic 2025-feb 2026,salon,true,CERDO TONKATSU,16,4,33199
+B dic 2025-feb 2026,salon,true,CEVICHE PERUANO,16,2,19841
+B dic 2025-feb 2026,salon,true,CURRY VERDE,16,2,18584
+B dic 2025-feb 2026,salon,true,POKE WAVE,16,6,52566
+B dic 2025-feb 2026,salon,true,POLLO TERIYAKI,16,1,9646
+B dic 2025-feb 2026,salon,true,RAMEN PINATTSU,16,1,10531
+B dic 2025-feb 2026,salon,true,RAMEN TRADICIONAL CERDO,16,6,66372
+B dic 2025-feb 2026,salon,true,BOXING,19,2,885
+B dic 2025-feb 2026,salon,true,CALAVERA BATICK ROSA L,21,1,12600
+B dic 2025-feb 2026,salon,true,MANITO NEGRA L,21,1,14000
+B dic 2025-feb 2026,salon,true,MANITO ROSA S,21,1,12389
+B dic 2025-feb 2026,salon,true,ASAHI GREEN,29,63,110265
+B dic 2025-feb 2026,salon,true,ASIAN CESAR SALAD,29,16,75044
+B dic 2025-feb 2026,salon,true,BENTO SHOT,29,1,1770
+B dic 2025-feb 2026,salon,true,BOWL TERIYAKI LUNCH,29,116,615930
+B dic 2025-feb 2026,salon,true,CALIFORNIA BENTO,29,57,98750
+B dic 2025-feb 2026,salon,true,CASADO SATORI,29,106,511062
+B dic 2025-feb 2026,salon,true,CEVICHE TICO NIKKEI,29,45,195133
+B dic 2025-feb 2026,salon,true,CLUB SODA,29,11,14602
+B dic 2025-feb 2026,salon,true,COCA GREEN,29,62,82168
+B dic 2025-feb 2026,salon,true,COCA ZERO GREEN,29,54,71548
+B dic 2025-feb 2026,salon,true,EDAMAME BENTO,29,76,132308
+B dic 2025-feb 2026,salon,true,ENSALADA BENTO,29,25,43345
+B dic 2025-feb 2026,salon,true,EXTRA LUNCH,29,8,7080
+B dic 2025-feb 2026,salon,true,FISH AND CHIPS,29,52,238372
+B dic 2025-feb 2026,salon,true,FRESCA GREEN,29,7,9292
+B dic 2025-feb 2026,salon,true,GYOZA BENTO,29,161,278860
+B dic 2025-feb 2026,salon,true,HOSOMAKI BENTO,29,96,166302
+B dic 2025-feb 2026,salon,true,IMPERIAL GREEN,29,36,63363
+B dic 2025-feb 2026,salon,true,KOROKKE BENTO,29,26,44831
+B dic 2025-feb 2026,salon,true,PILSEN GREEN,29,22,38938
+B dic 2025-feb 2026,salon,true,SAKURA POKE,29,143,691881
+B dic 2025-feb 2026,salon,true,SASHIMI ATUN BENTO,29,140,242855
+B dic 2025-feb 2026,salon,true,SATORI BENTO,29,125,216901
+B dic 2025-feb 2026,salon,true,SMOOTHIE LUNCH,29,72,159071
+B dic 2025-feb 2026,salon,true,SPICY BENTO,29,67,116141
+B dic 2025-feb 2026,salon,true,SUSHI DUO,29,96,657823
+B dic 2025-feb 2026,salon,true,TEMPURA BENTO,29,29,50162
+B dic 2025-feb 2026,salon,true,TERIYAKI BENTO,29,171,296862
+B dic 2025-feb 2026,salon,true,TONKATSU BENTO,29,60,103557
+B dic 2025-feb 2026,salon,true,VEGGIE BENTO,29,16,27702
+B dic 2025-feb 2026,salon,true,__TICKETS__,null,524,887
+C mar-jul 2026,delivery,false,CAMARON EMPANIZADO,2,12,72053
+C mar-jul 2026,delivery,false,CARPACCIO DE ATUN,2,1,6372
+C mar-jul 2026,delivery,false,CARPACCION DORADO,2,4,26195
+C mar-jul 2026,delivery,false,CRISPY SHITAKE BITES,2,1,5221
+C mar-jul 2026,delivery,false,CRISPY TUNA BITES,2,12,62655
+C mar-jul 2026,delivery,false,EDAMAMES,2,3,12743
+C mar-jul 2026,delivery,false,EXTRA 1,2,1,1327
+C mar-jul 2026,delivery,false,EXTRA 2,2,3,5841
+C mar-jul 2026,delivery,false,GYOZAS DE CERDO,2,6,27611
+C mar-jul 2026,delivery,false,KOROKKES DE PESCADO,2,3,15398
+C mar-jul 2026,delivery,false,ORDEN DE ARROZ,2,8,21239
+C mar-jul 2026,delivery,false,SOPA MISO,2,5,17257
+C mar-jul 2026,delivery,false,VEGETALES TEMPURA,2,3,14336
+C mar-jul 2026,delivery,false,ALASKA ROLL,3,4,32566
+C mar-jul 2026,delivery,false,CALIFORNIA ROLL,3,51,289938
+C mar-jul 2026,delivery,false,EDDIE WOULD GO ROLL,3,2,16814
+C mar-jul 2026,delivery,false,HOSOMAKI AGUACATE,3,4,14159
+C mar-jul 2026,delivery,false,HOSOMAKI ATUN,3,4,16637
+C mar-jul 2026,delivery,false,HOSOMAKI PEPINO,3,1,3982
+C mar-jul 2026,delivery,false,IM VEGAN,3,1,6460
+C mar-jul 2026,delivery,false,IM VEGGIE ROLL,3,13,78230
+C mar-jul 2026,delivery,false,KARI KARI ROLL,3,6,44602
+C mar-jul 2026,delivery,false,NAMATSUKE ROLL,3,2,15575
+C mar-jul 2026,delivery,false,NIGIRI SAKE REMON  SALMON,3,1,3717
+C mar-jul 2026,delivery,false,NIGIRI YAKI   ATUN,3,1,3628
+C mar-jul 2026,delivery,false,NIGIRI ZANMAI,3,5,49115
+C mar-jul 2026,delivery,false,ON HOLYDAYS ROLL,3,9,70885
+C mar-jul 2026,delivery,false,PHILLY,3,28,107469
+C mar-jul 2026,delivery,false,RAINBOW ROLL,3,10,76991
+C mar-jul 2026,delivery,false,SASHIMIS ATUN,3,1,4602
+C mar-jul 2026,delivery,false,SASHIMIS MIX,3,2,17522
+C mar-jul 2026,delivery,false,SASHIMIS SALMON,3,3,15398
+C mar-jul 2026,delivery,false,SATORI MIX,3,2,57522
+C mar-jul 2026,delivery,false,SATORI ROLL,3,13,102389
+C mar-jul 2026,delivery,false,SPICY TUNA ROLL,3,27,176814
+C mar-jul 2026,delivery,false,SUBARASHI,3,19,135469
+C mar-jul 2026,delivery,false,SUPER MAGURO,3,26,184354
+C mar-jul 2026,delivery,false,SUSHI CLASSIC,3,1,24071
+C mar-jul 2026,delivery,false,TAKO ROLL,3,2,15044
+C mar-jul 2026,delivery,false,TANOSHI ROLL,3,1,7699
+C mar-jul 2026,delivery,false,THE SNAPPER ROLL,3,1,7434
+C mar-jul 2026,delivery,false,TUNA ROLL,3,44,175522
+C mar-jul 2026,delivery,false,UNAGUI ROLL,3,2,12389
+C mar-jul 2026,delivery,false,AGUA ALPINA,5,6,10089
+C mar-jul 2026,delivery,false,BERRY BLOSSOM,5,2,4965
+C mar-jul 2026,delivery,false,COCA COLA,5,5,7735
+C mar-jul 2026,delivery,false,COCA ZERO,5,2,3363
+C mar-jul 2026,delivery,false,GOLDEN GLOW,5,2,5841
+C mar-jul 2026,delivery,false,GREEN DETOX,5,2,5841
+C mar-jul 2026,delivery,false,HOUSE GINGER BEER,5,2,6195
+C mar-jul 2026,delivery,false,MARGARITA,5,3,15398
+C mar-jul 2026,delivery,false,VODKA SODA TITOS,5,2,12743
+C mar-jul 2026,delivery,false,DEDOS DE PESCADO,13,1,5664
+C mar-jul 2026,delivery,false,DEDOS DE POLLO,13,6,32920
+C mar-jul 2026,delivery,false,MENU PANCHI,13,4,22867
+C mar-jul 2026,delivery,false,PAPAS FRITAS,13,1,3097
+C mar-jul 2026,delivery,false,CERDO TONKATSU,16,1,8761
+C mar-jul 2026,delivery,false,CURRY VERDE,16,1,9646
+C mar-jul 2026,delivery,false,POKE WAVE,16,18,151128
+C mar-jul 2026,delivery,false,POLLO TERIYAKI,16,13,123469
+C mar-jul 2026,delivery,false,RAMEN KARI,16,2,22832
+C mar-jul 2026,delivery,false,RAMEN PINATTSU,16,1,11947
+C mar-jul 2026,delivery,false,RAMEN TRADICIONAL CERDO,16,3,33186
+C mar-jul 2026,delivery,false,BOXING,19,143,62256
+C mar-jul 2026,delivery,false,SALE 20USD,21,5,39513
+C mar-jul 2026,delivery,false,MILANESA DE POLLO,28,1,0
+C mar-jul 2026,delivery,false,__TICKETS__,null,172,2
+C mar-jul 2026,delivery,true,CAMARONES TEMPURA,2,1,5190
+C mar-jul 2026,delivery,true,EDAMAMES,2,2,8496
+C mar-jul 2026,delivery,true,EXTRA 1,2,2,2655
+C mar-jul 2026,delivery,true,GYOZAS DE CERDO,2,1,4602
+C mar-jul 2026,delivery,true,SOPA MISO,2,2,6903
+C mar-jul 2026,delivery,true,YAKI WINGS,2,1,5752
+C mar-jul 2026,delivery,true,ALASKA ROLL,3,1,8142
+C mar-jul 2026,delivery,true,CALIFORNIA ROLL,3,2,11858
+C mar-jul 2026,delivery,true,HOSOMAKI AGUACATE,3,1,3540
+C mar-jul 2026,delivery,true,I LOVE SANTA ROLL,3,1,6903
+C mar-jul 2026,delivery,true,IM VEGAN,3,2,11951
+C mar-jul 2026,delivery,true,IM VEGGIE ROLL,3,2,11133
+C mar-jul 2026,delivery,true,KARI KARI ROLL,3,1,7434
+C mar-jul 2026,delivery,true,SATORI ROLL,3,1,7876
+C mar-jul 2026,delivery,true,TUNA ROLL,3,2,8319
+C mar-jul 2026,delivery,true,COCA COLA,5,2,3363
+C mar-jul 2026,delivery,true,COCA ZERO,5,2,3363
+C mar-jul 2026,delivery,true,GINGER MINT LEMONADE,5,1,2920
+C mar-jul 2026,delivery,true,IMPERIAL,5,1,2478
+C mar-jul 2026,delivery,true,MICHELADA,5,1,708
+C mar-jul 2026,delivery,true,PILSEN,5,2,4956
+C mar-jul 2026,delivery,true,PAPAS FRITAS,13,1,2633
+C mar-jul 2026,delivery,true,POLLO TERIYAKI,16,1,9646
+C mar-jul 2026,delivery,true,BOXING,19,126,55486
+C mar-jul 2026,delivery,true,ASIAN CESAR SALAD,29,1,4690
+C mar-jul 2026,delivery,true,BOWL TERIYAKI LUNCH,29,18,94779
+C mar-jul 2026,delivery,true,CALIFORNIA BENTO,29,12,20973
+C mar-jul 2026,delivery,true,CASADO SATORI,29,8,38208
+C mar-jul 2026,delivery,true,EDAMAME BENTO,29,17,29712
+C mar-jul 2026,delivery,true,ENSALADA BENTO,29,2,3496
+C mar-jul 2026,delivery,true,EXTRA LUNCH,29,2,1770
+C mar-jul 2026,delivery,true,FISH AND CHIPS,29,1,4602
+C mar-jul 2026,delivery,true,GYOZA BENTO,29,63,110111
+C mar-jul 2026,delivery,true,HOSOMAKI BENTO,29,49,85642
+C mar-jul 2026,delivery,true,INTERNATIONAL SUSHI DAY,29,2,13805
+C mar-jul 2026,delivery,true,KOROKKE BENTO,29,12,20711
+C mar-jul 2026,delivery,true,SAKURA POKE,29,24,116084
+C mar-jul 2026,delivery,true,SASHIMI ATUN BENTO,29,42,73145
+C mar-jul 2026,delivery,true,SATORI BENTO,29,50,87127
+C mar-jul 2026,delivery,true,SPICY BENTO,29,28,48938
+C mar-jul 2026,delivery,true,SUSHI DUO,29,18,123212
+C mar-jul 2026,delivery,true,TEMPURA BENTO,29,5,8739
+C mar-jul 2026,delivery,true,TERIYAKI BENTO,29,73,127589
+C mar-jul 2026,delivery,true,TONKATSU BENTO,29,14,24207
+C mar-jul 2026,delivery,true,VEGGIE BENTO,29,5,8739
+C mar-jul 2026,delivery,true,__TICKETS__,null,130,2
+C mar-jul 2026,salon,false,CAMARON EMPANIZADO,2,5,29615
+C mar-jul 2026,salon,false,CAMARONES TEMPURA,2,21,126703
+C mar-jul 2026,salon,false,CARPACCIO DE ATUN,2,12,74230
+C mar-jul 2026,salon,false,CARPACCION DORADO,2,12,77602
+C mar-jul 2026,salon,false,CRISPY SHITAKE BITES,2,15,77274
+C mar-jul 2026,salon,false,CRISPY TUNA BITES,2,72,374885
+C mar-jul 2026,salon,false,EDAMAMES,2,48,202407
+C mar-jul 2026,salon,false,EXTRA 1,2,5,6305
+C mar-jul 2026,salon,false,EXTRA 2,2,5,9735
+C mar-jul 2026,salon,false,GYOZAS DE CERDO,2,56,256088
+C mar-jul 2026,salon,false,KOROKKES DE PESCADO,2,15,75451
+C mar-jul 2026,salon,false,ORDEN DE ARROZ,2,5,12876
+C mar-jul 2026,salon,false,SOPA MISO,2,38,128735
+C mar-jul 2026,salon,false,SPICY EDAMAME,2,30,126159
+C mar-jul 2026,salon,false,TARTAR DE ATUN,2,33,200894
+C mar-jul 2026,salon,false,TIRADITO ACEVICHADO,2,14,82119
+C mar-jul 2026,salon,false,TUNA TATAKI,2,14,89150
+C mar-jul 2026,salon,false,TUNA TIRADITO,2,3,17522
+C mar-jul 2026,salon,false,VEGETALES TEMPURA,2,18,83628
+C mar-jul 2026,salon,false,YAKI WINGS,2,11,62699
+C mar-jul 2026,salon,false,ALASKA ROLL,3,18,144513
+C mar-jul 2026,salon,false,ALL TUNA,3,2,54681
+C mar-jul 2026,salon,false,CALIFORNIA ROLL,3,44,257327
+C mar-jul 2026,salon,false,EDDIE WOULD GO ROLL,3,19,159735
+C mar-jul 2026,salon,false,HOSOMAKI AGUACATE,3,8,27080
+C mar-jul 2026,salon,false,HOSOMAKI ATUN,3,5,20796
+C mar-jul 2026,salon,false,HOSOMAKI PARGO,3,1,4602
+C mar-jul 2026,salon,false,HOSOMAKI SALMON,3,5,21628
+C mar-jul 2026,salon,false,I LOVE SANTA ROLL,3,17,117345
+C mar-jul 2026,salon,false,IM VEGAN,3,4,25841
+C mar-jul 2026,salon,false,IM VEGGIE ROLL,3,12,72212
+C mar-jul 2026,salon,false,KARI KARI ROLL,3,17,126372
+C mar-jul 2026,salon,false,NAMATSUKE ROLL,3,18,140177
+C mar-jul 2026,salon,false,NIGIRI AGURI  DORADO,3,1,3717
+C mar-jul 2026,salon,false,NIGIRI SAKE REMON  SALMON,3,7,24903
+C mar-jul 2026,salon,false,NIGIRI YAKI   ATUN,3,5,17779
+C mar-jul 2026,salon,false,NIGIRI YAKI  ATUN  x 6,3,1,9735
+C mar-jul 2026,salon,false,NIGIRI ZANMAI,3,22,214633
+C mar-jul 2026,salon,false,ON HOLYDAYS ROLL,3,26,202810
+C mar-jul 2026,salon,false,PHILLY,3,46,194761
+C mar-jul 2026,salon,false,RAINBOW ROLL,3,52,392655
+C mar-jul 2026,salon,false,SASHIMIS ATUN,3,8,36814
+C mar-jul 2026,salon,false,SASHIMIS MIX,3,13,113018
+C mar-jul 2026,salon,false,SASHIMIS PARGO,3,3,14336
+C mar-jul 2026,salon,false,SASHIMIS SALMON,3,15,75451
+C mar-jul 2026,salon,false,SATORI MIX,3,1,28761
+C mar-jul 2026,salon,false,SATORI ROLL,3,48,374509
+C mar-jul 2026,salon,false,SATORI SPECIALS,3,2,64425
+C mar-jul 2026,salon,false,SPICY TUNA ROLL,3,43,280938
+C mar-jul 2026,salon,false,SUBARASHI,3,90,700974
+C mar-jul 2026,salon,false,SUPER MAGURO,3,43,311841
+C mar-jul 2026,salon,false,SUSHI CLASSIC,3,11,261168
+C mar-jul 2026,salon,false,TAKO ROLL,3,31,231305
+C mar-jul 2026,salon,false,TANOSHI ROLL,3,15,115487
+C mar-jul 2026,salon,false,THE CRAB,3,2,16991
+C mar-jul 2026,salon,false,THE SNAPPER ROLL,3,27,197735
+C mar-jul 2026,salon,false,TUNA ROLL,3,49,201934
+C mar-jul 2026,salon,false,UNAGUI ROLL,3,15,91991
+C mar-jul 2026,salon,false,BANANA FLAMBEADA,4,2,8022
+C mar-jul 2026,salon,false,BOCHA DE HELADO,4,4,7080
+C mar-jul 2026,salon,false,CREPE,4,9,37726
+C mar-jul 2026,salon,false,PANACOTA,4,3,13805
+C mar-jul 2026,salon,false,VOLCAN DE CHOCOLATE,4,7,33451
+C mar-jul 2026,salon,false,AGUA ALPINA,5,8,13199
+C mar-jul 2026,salon,false,AGUA SAN BENEDETTO,5,50,171531
+C mar-jul 2026,salon,false,AGUA SAN BENEDETTO CON GAS,5,29,99226
+C mar-jul 2026,salon,false,ASAHI,5,85,207646
+C mar-jul 2026,salon,false,BERNARD,5,2,11504
+C mar-jul 2026,salon,false,BERRY BLOSSOM,5,24,69796
+C mar-jul 2026,salon,false,BOTELLA PETIT CAYETA,5,1,17611
+C mar-jul 2026,salon,false,BOTELLA PIPA SAUV BLANC,5,2,36460
+C mar-jul 2026,salon,false,BOTELLA YAYA RIESLING,5,2,36150
+C mar-jul 2026,salon,false,CAFE CHICO,5,11,15575
+C mar-jul 2026,salon,false,CAFE GRANDE,5,5,8155
+C mar-jul 2026,salon,false,CAIPIRINHA,5,4,20531
+C mar-jul 2026,salon,false,CAS COOLER,5,10,28619
+C mar-jul 2026,salon,false,CLUB SODA,5,41,68938
+C mar-jul 2026,salon,false,COCA COLA,5,72,117952
+C mar-jul 2026,salon,false,COCA ZERO,5,88,146199
+C mar-jul 2026,salon,false,COPA CAB  DE LA CASA,5,2,9000
+C mar-jul 2026,salon,false,COPA CHARDONNAY,5,9,35442
+C mar-jul 2026,salon,false,COPA EXTRA BRUT,5,2,7168
+C mar-jul 2026,salon,false,COPA LES JAMELLES ROSE,5,3,16681
+C mar-jul 2026,salon,false,COPA MALBEC,5,2,7965
+C mar-jul 2026,salon,false,COPA MERLOT,5,2,7080
+C mar-jul 2026,salon,false,COPA PIPA CAB  SAUVIGNON,5,3,16460
+C mar-jul 2026,salon,false,COPA PIPA SAUV  BLANC,5,1,5487
+C mar-jul 2026,salon,false,COPA ROSE,5,5,19912
+C mar-jul 2026,salon,false,COPA SAUV BLANC,5,5,19912
+C mar-jul 2026,salon,false,CORONA,5,18,51150
+C mar-jul 2026,salon,false,CUCUMBER SPECIAL,5,4,23009
+C mar-jul 2026,salon,false,CUCUMBER SPECIAL TITOS,5,1,6195
+C mar-jul 2026,salon,false,DON JULIO,5,4,29027
+C mar-jul 2026,salon,false,EL GUSANO,5,22,122234
+C mar-jul 2026,salon,false,ESPADIN SHOTS X 2,5,2,10265
+C mar-jul 2026,salon,false,EXPRESO MARTINI,5,1,5133
+C mar-jul 2026,salon,false,EXTRA FLOR DE CAñA 7 AñOS,5,7,6525
+C mar-jul 2026,salon,false,EXTRA GREYGOOSE,5,1,2472
+C mar-jul 2026,salon,false,EXTRA JOHNNY WALKER RED,5,1,989
+C mar-jul 2026,salon,false,FLOR DE CAÑA,5,1,3097
+C mar-jul 2026,salon,false,FLOR DE CAÑA ROCKS,5,2,8850
+C mar-jul 2026,salon,false,FRESCA,5,13,21354
+C mar-jul 2026,salon,false,GIN TONIC,5,1,5133
+C mar-jul 2026,salon,false,GIN TONIC BOMBAY,5,10,53858
+C mar-jul 2026,salon,false,GIN TONIC HENDRICKS,5,1,5566
+C mar-jul 2026,salon,false,GINGER ALE,5,23,38084
+C mar-jul 2026,salon,false,GINGER MINT LEMONADE,5,74,213332
+C mar-jul 2026,salon,false,GOLDEN GLOW,5,19,55195
+C mar-jul 2026,salon,false,GREEN DETOX,5,10,28619
+C mar-jul 2026,salon,false,GREEN DRAGON,5,9,51770
+C mar-jul 2026,salon,false,HEINEKEN 0,5,6,18274
+C mar-jul 2026,salon,false,HOUSE GINGER BEER,5,13,39646
+C mar-jul 2026,salon,false,IMPERIAL,5,66,163292
+C mar-jul 2026,salon,false,IMPERIAL SILVER,5,17,42124
+C mar-jul 2026,salon,false,JABALI SHOT,5,2,11150
+C mar-jul 2026,salon,false,JACK DANIELS ROCKS,5,1,4602
+C mar-jul 2026,salon,false,LOW TIDE,5,13,71615
+C mar-jul 2026,salon,false,MANGO FANDANGO,5,2,11504
+C mar-jul 2026,salon,false,MARGARITA,5,9,45681
+C mar-jul 2026,salon,false,MARGARITA DON JULIO,5,5,39381
+C mar-jul 2026,salon,false,MARGARITA MEZCAL ESPADIN,5,8,49115
+C mar-jul 2026,salon,false,MICHELADA,5,19,13274
+C mar-jul 2026,salon,false,MOJITO,5,2,9496
+C mar-jul 2026,salon,false,PERFUMED FIRE,5,7,35951
+C mar-jul 2026,salon,false,PERFUMED FIRE JACK DANIELS,5,1,6018
+C mar-jul 2026,salon,false,PILSEN,5,47,115841
+C mar-jul 2026,salon,false,QUE MAE IPA,5,9,35841
+C mar-jul 2026,salon,false,QUE MAE PALE ALE,5,12,52035
+C mar-jul 2026,salon,false,QUE MAE RED ALE,5,6,26018
+C mar-jul 2026,salon,false,SAKE PURE DAWN GINGO JARRA 250,5,1,17611
+C mar-jul 2026,salon,false,SAKE PURE DUSK JARRA 250 ML,5,3,66106
+C mar-jul 2026,salon,false,SAKE PURE DUSK SHOT,5,5,12832
+C mar-jul 2026,salon,false,SATORI,5,13,74779
+C mar-jul 2026,salon,false,SMOOTHIE,5,27,81323
+C mar-jul 2026,salon,false,TE CALIENTE,5,1,1681
+C mar-jul 2026,salon,false,TE FRIO CASERO,5,3,8323
+C mar-jul 2026,salon,false,TINTO DE SATORI,5,4,15929
+C mar-jul 2026,salon,false,TONICA,5,1,1429
+C mar-jul 2026,salon,false,VASO MICHELADO,5,24,16920
+C mar-jul 2026,salon,false,VODKA SODA TITOS,5,1,6372
+C mar-jul 2026,salon,false,VODKA TITOS,5,1,3717
+C mar-jul 2026,salon,false,DEDOS DE PESCADO,13,3,16991
+C mar-jul 2026,salon,false,DEDOS DE POLLO,13,13,69681
+C mar-jul 2026,salon,false,KOROKKES DE PESCADO,13,2,10973
+C mar-jul 2026,salon,false,MENU PANCHI,13,8,48142
+C mar-jul 2026,salon,false,PAPAS FRITAS,13,7,20752
+C mar-jul 2026,salon,false,CERDO TONKATSU,16,21,183982
+C mar-jul 2026,salon,false,CEVICHE COCO TUNA,16,8,84248
+C mar-jul 2026,salon,false,CEVICHE PERUANO,16,23,232345
+C mar-jul 2026,salon,false,CURRY VERDE,16,21,198708
+C mar-jul 2026,salon,false,POKE WAVE,16,49,424911
+C mar-jul 2026,salon,false,POLLO TERIYAKI,16,69,654000
+C mar-jul 2026,salon,false,RAMEN KARI,16,8,89044
+C mar-jul 2026,salon,false,RAMEN PINATTSU,16,18,213252
+C mar-jul 2026,salon,false,RAMEN TRADICIONAL CERDO,16,27,295907
+C mar-jul 2026,salon,false,BOXING,19,5,2212
+C mar-jul 2026,salon,false,SALE 20USD,21,3,24956
+C mar-jul 2026,salon,false,CLUB SODA,29,2,2456
+C mar-jul 2026,salon,false,EXTRA LUNCH,29,1,885
+C mar-jul 2026,salon,false,__TICKETS__,null,519,954
+C mar-jul 2026,salon,true,CAMARONES TEMPURA,2,3,17403
+C mar-jul 2026,salon,true,CARPACCIO DE ATUN,2,1,6372
+C mar-jul 2026,salon,true,CARPACCION DORADO,2,1,6549
+C mar-jul 2026,salon,true,CRISPY SHITAKE BITES,2,2,10442
+C mar-jul 2026,salon,true,CRISPY TUNA BITES,2,11,57434
+C mar-jul 2026,salon,true,EDAMAMES,2,6,25487
+C mar-jul 2026,salon,true,EXTRA 1,2,3,3783
+C mar-jul 2026,salon,true,EXTRA 2,2,3,5646
+C mar-jul 2026,salon,true,EXTRA QUESO CREMA,2,1,619
+C mar-jul 2026,salon,true,GYOZAS DE CERDO,2,7,31292
+C mar-jul 2026,salon,true,ORDEN DE ARROZ,2,2,5310
+C mar-jul 2026,salon,true,SOPA MISO,2,7,24159
+C mar-jul 2026,salon,true,SPICY EDAMAME,2,2,8496
+C mar-jul 2026,salon,true,TARTAR DE ATUN,2,3,18319
+C mar-jul 2026,salon,true,TUNA TATAKI,2,1,6460
+C mar-jul 2026,salon,true,TUNA TIRADITO,2,1,4965
+C mar-jul 2026,salon,true,VEGETALES TEMPURA,2,2,8841
+C mar-jul 2026,salon,true,YAKI WINGS,2,1,5752
+C mar-jul 2026,salon,true,ALASKA ROLL,3,4,31752
+C mar-jul 2026,salon,true,CALIFORNIA ROLL,3,11,63442
+C mar-jul 2026,salon,true,EDDIE WOULD GO ROLL,3,2,16814
+C mar-jul 2026,salon,true,HOSOMAKI AGUACATE,3,1,3540
+C mar-jul 2026,salon,true,HOSOMAKI ATUN,3,1,4159
+C mar-jul 2026,salon,true,I LOVE SANTA ROLL,3,1,6903
+C mar-jul 2026,salon,true,IM VEGAN,3,2,12920
+C mar-jul 2026,salon,true,IM VEGGIE ROLL,3,1,6018
+C mar-jul 2026,salon,true,KARI KARI ROLL,3,3,22301
+C mar-jul 2026,salon,true,NAMATSUKE ROLL,3,3,22195
+C mar-jul 2026,salon,true,NIGIRI SAKE REMON  SALMON  x 6,3,3,30000
+C mar-jul 2026,salon,true,ON HOLYDAYS ROLL,3,2,14571
+C mar-jul 2026,salon,true,PHILLY,3,6,25062
+C mar-jul 2026,salon,true,RAINBOW ROLL,3,1,6544
+C mar-jul 2026,salon,true,SASHIMIS MIX,3,1,8761
+C mar-jul 2026,salon,true,SASHIMIS SALMON,3,5,25150
+C mar-jul 2026,salon,true,SATORI ROLL,3,2,15752
+C mar-jul 2026,salon,true,SATORI SPECIALS,3,1,32212
+C mar-jul 2026,salon,true,SPICY TUNA ROLL,3,3,19646
+C mar-jul 2026,salon,true,SUBARASHI,3,11,82699
+C mar-jul 2026,salon,true,SUPER MAGURO,3,7,50920
+C mar-jul 2026,salon,true,TAKO ROLL,3,1,6394
+C mar-jul 2026,salon,true,TANOSHI ROLL,3,4,30027
+C mar-jul 2026,salon,true,THE CRAB,3,1,8496
+C mar-jul 2026,salon,true,UNAGUI ROLL,3,2,12389
+C mar-jul 2026,salon,true,BANANA FLAMBEADA,4,2,8673
+C mar-jul 2026,salon,true,BOCHA DE HELADO,4,2,3540
+C mar-jul 2026,salon,true,VOLCAN DE CHOCOLATE,4,3,14336
+C mar-jul 2026,salon,true,AGUA ALPINA,5,3,4876
+C mar-jul 2026,salon,true,AGUA SAN BENEDETTO,5,12,40381
+C mar-jul 2026,salon,true,AGUA SAN BENEDETTO CON GAS,5,8,25540
+C mar-jul 2026,salon,true,APEROL SPRITZ,5,1,5221
+C mar-jul 2026,salon,true,ASAHI,5,29,70496
+C mar-jul 2026,salon,true,BERRY BLOSSOM,5,5,14310
+C mar-jul 2026,salon,true,BOTELLA LE JAMELLES REFLEX ROSE,5,1,20089
+C mar-jul 2026,salon,true,CAFE CHICO,5,12,16991
+C mar-jul 2026,salon,true,CAFE GRANDE,5,2,3363
+C mar-jul 2026,salon,true,CAS COOLER,5,12,34606
+C mar-jul 2026,salon,true,CLUB SODA,5,18,28584
+C mar-jul 2026,salon,true,COCA COLA,5,61,101306
+C mar-jul 2026,salon,true,COCA ZERO,5,49,80204
+C mar-jul 2026,salon,true,COPA CHARDONNAY,5,1,3982
+C mar-jul 2026,salon,true,COPA LES JAMELLES ROSE,5,1,5752
+C mar-jul 2026,salon,true,COPA SAUV BLANC,5,3,11947
+C mar-jul 2026,salon,true,CORONA,5,9,27080
+C mar-jul 2026,salon,true,EL GUSANO,5,3,15531
+C mar-jul 2026,salon,true,FRESCA,5,10,16646
+C mar-jul 2026,salon,true,GIN TONIC,5,2,10265
+C mar-jul 2026,salon,true,GINGER ALE,5,14,23035
+C mar-jul 2026,salon,true,GINGER MINT LEMONADE,5,49,140761
+C mar-jul 2026,salon,true,GOLDEN GLOW,5,15,43805
+C mar-jul 2026,salon,true,GREEN DETOX,5,2,5841
+C mar-jul 2026,salon,true,HEINEKEN,5,3,9292
+C mar-jul 2026,salon,true,HEINEKEN 0,5,1,2633
+C mar-jul 2026,salon,true,HOUSE GINGER BEER,5,9,27876
+C mar-jul 2026,salon,true,IMPERIAL,5,10,24407
+C mar-jul 2026,salon,true,IMPERIAL SILVER,5,12,28991
+C mar-jul 2026,salon,true,MARGARITA,5,9,46195
+C mar-jul 2026,salon,true,MARGARITA DON JULIO,5,3,21265
+C mar-jul 2026,salon,true,MICHELADA,5,23,15858
+C mar-jul 2026,salon,true,MOSCOW MULE,5,3,14097
+C mar-jul 2026,salon,true,PILSEN,5,18,43982
+C mar-jul 2026,salon,true,QUE MAE IPA,5,5,17522
+C mar-jul 2026,salon,true,QUE MAE RED ALE,5,1,4336
+C mar-jul 2026,salon,true,RED WALKER ON THE ROCKS,5,2,9000
+C mar-jul 2026,salon,true,SMOOTHIE,5,25,76521
+C mar-jul 2026,salon,true,TE CALIENTE,5,3,4792
+C mar-jul 2026,salon,true,TE FRIO CASERO,5,3,8761
+C mar-jul 2026,salon,true,VASO MICHELADO,5,12,8142
+C mar-jul 2026,salon,true,DEDOS DE PESCADO,13,3,16142
+C mar-jul 2026,salon,true,DEDOS DE POLLO,13,4,21947
+C mar-jul 2026,salon,true,KOROKKES DE PESCADO,13,1,4664
+C mar-jul 2026,salon,true,MENU PANCHI,13,2,12035
+C mar-jul 2026,salon,true,PAPAS FRITAS,13,6,17965
+C mar-jul 2026,salon,true,CERDO TONKATSU,16,2,17522
+C mar-jul 2026,salon,true,CEVICHE COCO TUNA,16,1,10531
+C mar-jul 2026,salon,true,CEVICHE PERUANO,16,2,19319
+C mar-jul 2026,salon,true,POKE WAVE,16,2,17522
+C mar-jul 2026,salon,true,POLLO TERIYAKI,16,8,74274
+C mar-jul 2026,salon,true,RAMEN KARI,16,1,11416
+C mar-jul 2026,salon,true,RAMEN TRADICIONAL CERDO,16,2,22124
+C mar-jul 2026,salon,true,BOXING,19,2,885
+C mar-jul 2026,salon,true,ASIAN CESAR SALAD,29,10,46903
+C mar-jul 2026,salon,true,BOWL TERIYAKI LUNCH,29,67,349381
+C mar-jul 2026,salon,true,CALIFORNIA BENTO,29,35,60823
+C mar-jul 2026,salon,true,CASADO SATORI,29,67,323916
+C mar-jul 2026,salon,true,CEVICHE TICO NIKKEI,29,34,144181
+C mar-jul 2026,salon,true,CLUB SODA,29,9,11947
+C mar-jul 2026,salon,true,COCA ZERO GREEN,29,1,1195
+C mar-jul 2026,salon,true,EDAMAME BENTO,29,39,66066
+C mar-jul 2026,salon,true,ENSALADA BENTO,29,19,33208
+C mar-jul 2026,salon,true,EXTRA LUNCH,29,22,19072
+C mar-jul 2026,salon,true,FISH AND CHIPS,29,33,150478
+C mar-jul 2026,salon,true,GYOZA BENTO,29,111,192606
+C mar-jul 2026,salon,true,HOSOMAKI BENTO,29,92,159573
+C mar-jul 2026,salon,true,KOROKKE BENTO,29,45,77078
+C mar-jul 2026,salon,true,SAKURA POKE,29,73,352146
+C mar-jul 2026,salon,true,SASHIMI ATUN BENTO,29,84,142969
+C mar-jul 2026,salon,true,SATORI BENTO,29,95,163855
+C mar-jul 2026,salon,true,SPICY BENTO,29,49,83282
+C mar-jul 2026,salon,true,SUSHI DUO,29,43,293363
+C mar-jul 2026,salon,true,TEMPURA BENTO,29,19,33033
+C mar-jul 2026,salon,true,TERIYAKI BENTO,29,132,228349
+C mar-jul 2026,salon,true,TONKATSU BENTO,29,39,66154
+C mar-jul 2026,salon,true,VEGGIE BENTO,29,22,37752
+C mar-jul 2026,salon,true,__TICKETS__,null,320,584
+D ago-oct 2026,delivery,false,CAMARON EMPANIZADO,2,3,18319
+D ago-oct 2026,delivery,false,CAMARONES TEMPURA,2,2,12212
+D ago-oct 2026,delivery,false,CARPACCION DORADO,2,1,6549
+D ago-oct 2026,delivery,false,CRISPY SHITAKE BITES,2,1,5221
+D ago-oct 2026,delivery,false,CRISPY TUNA BITES,2,9,46469
+D ago-oct 2026,delivery,false,EDAMAMES,2,2,8071
+D ago-oct 2026,delivery,false,GYOZAS DE CERDO,2,5,23009
+D ago-oct 2026,delivery,false,KOROKKES DE PESCADO,2,1,5133
+D ago-oct 2026,delivery,false,SOPA MISO,2,9,31062
+D ago-oct 2026,delivery,false,SPICY EDAMAME,2,1,4248
+D ago-oct 2026,delivery,false,TARTAR DE ATUN,2,1,6106
+D ago-oct 2026,delivery,false,TIRADITO ACEVICHADO,2,1,5929
+D ago-oct 2026,delivery,false,VEGETALES TEMPURA,2,1,4779
+D ago-oct 2026,delivery,false,CALIFORNIA ROLL,3,13,75301
+D ago-oct 2026,delivery,false,EDDIE WOULD GO ROLL,3,4,33814
+D ago-oct 2026,delivery,false,HOSOMAKI ATUN,3,2,8319
+D ago-oct 2026,delivery,false,HOSOMAKI PEPINO,3,3,11947
+D ago-oct 2026,delivery,false,I LOVE SANTA ROLL,3,1,6903
+D ago-oct 2026,delivery,false,IM VEGAN,3,1,6460
+D ago-oct 2026,delivery,false,KARI KARI ROLL,3,7,49805
+D ago-oct 2026,delivery,false,NAMATSUKE ROLL,3,2,15575
+D ago-oct 2026,delivery,false,NIGIRI AGURI  DORADO,3,1,3717
+D ago-oct 2026,delivery,false,NIGIRI YAKI   ATUN,3,1,3628
+D ago-oct 2026,delivery,false,ON HOLYDAYS ROLL,3,1,7876
+D ago-oct 2026,delivery,false,PHILLY,3,11,37593
+D ago-oct 2026,delivery,false,RAINBOW ROLL,3,13,100089
+D ago-oct 2026,delivery,false,SASHIMIS MIX,3,1,8761
+D ago-oct 2026,delivery,false,SASHIMIS SALMON,3,2,10265
+D ago-oct 2026,delivery,false,SATORI ROLL,3,9,70885
+D ago-oct 2026,delivery,false,SPICY TUNA ROLL,3,3,19646
+D ago-oct 2026,delivery,false,SUBARASHI,3,3,23628
+D ago-oct 2026,delivery,false,SUPER MAGURO,3,5,37168
+D ago-oct 2026,delivery,false,TAKO ROLL,3,2,15044
+D ago-oct 2026,delivery,false,TANOSHI ROLL,3,3,21558
+D ago-oct 2026,delivery,false,THE SNAPPER ROLL,3,2,14867
+D ago-oct 2026,delivery,false,TUNA ROLL,3,18,68004
+D ago-oct 2026,delivery,false,UNAGUI ROLL,3,3,23195
+D ago-oct 2026,delivery,false,CREPE,4,2,5637
+D ago-oct 2026,delivery,false,AGUA ALPINA,5,1,1681
+D ago-oct 2026,delivery,false,ASAHI,5,1,2478
+D ago-oct 2026,delivery,false,CAFE GRANDE,5,1,1177
+D ago-oct 2026,delivery,false,COCA COLA,5,1,1681
+D ago-oct 2026,delivery,false,COCA ZERO,5,2,3363
+D ago-oct 2026,delivery,false,EL GUSANO,5,1,4889
+D ago-oct 2026,delivery,false,IMPERIAL,5,10,24779
+D ago-oct 2026,delivery,false,SMOOTHIE,5,1,3098
+D ago-oct 2026,delivery,false,MENU PANCHI,13,1,6018
+D ago-oct 2026,delivery,false,CERDO TONKATSU,16,1,8761
+D ago-oct 2026,delivery,false,CEVICHE PERUANO,16,1,10442
+D ago-oct 2026,delivery,false,CURRY VERDE,16,1,9646
+D ago-oct 2026,delivery,false,POKE WAVE,16,4,29788
+D ago-oct 2026,delivery,false,POLLO TERIYAKI,16,5,48230
+D ago-oct 2026,delivery,false,BOXING,19,54,23539
+D ago-oct 2026,delivery,false,MIYAGI NEGRO M,21,1,14000
+D ago-oct 2026,delivery,false,__TICKETS__,null,69,4
+D ago-oct 2026,delivery,true,CAMARON EMPANIZADO,2,1,6106
+D ago-oct 2026,delivery,true,EXTRA 1,2,1,1327
+D ago-oct 2026,delivery,true,EXTRA QUESO CREMA,2,2,1239
+D ago-oct 2026,delivery,true,GYOZAS DE CERDO,2,1,4602
+D ago-oct 2026,delivery,true,CALIFORNIA ROLL,3,3,17788
+D ago-oct 2026,delivery,true,SPICY TUNA ROLL,3,1,6549
+D ago-oct 2026,delivery,true,SUBARASHI,3,1,5513
+D ago-oct 2026,delivery,true,TAKO ROLL,3,1,5265
+D ago-oct 2026,delivery,true,VOLCAN DE CHOCOLATE,4,1,4779
+D ago-oct 2026,delivery,true,COCA ZERO,5,5,8407
+D ago-oct 2026,delivery,true,IMPERIAL,5,1,2478
+D ago-oct 2026,delivery,true,SMOOTHIE,5,1,3098
+D ago-oct 2026,delivery,true,CERDO TONKATSU,16,1,6133
+D ago-oct 2026,delivery,true,POKE WAVE,16,1,8761
+D ago-oct 2026,delivery,true,BOXING,19,56,24513
+D ago-oct 2026,delivery,true,BOWL TERIYAKI LUNCH,29,7,37168
+D ago-oct 2026,delivery,true,CALIFORNIA BENTO,29,7,12235
+D ago-oct 2026,delivery,true,CASADO SATORI,29,12,56947
+D ago-oct 2026,delivery,true,CEVICHE TICO NIKKEI,29,3,11708
+D ago-oct 2026,delivery,true,EDAMAME BENTO,29,5,8739
+D ago-oct 2026,delivery,true,ENSALADA BENTO,29,2,3496
+D ago-oct 2026,delivery,true,FISH AND CHIPS,29,2,7823
+D ago-oct 2026,delivery,true,GYOZA BENTO,29,23,40199
+D ago-oct 2026,delivery,true,HOSOMAKI BENTO,29,21,36179
+D ago-oct 2026,delivery,true,KOROKKE BENTO,29,10,16954
+D ago-oct 2026,delivery,true,SAKURA POKE,29,18,87611
+D ago-oct 2026,delivery,true,SASHIMI ATUN BENTO,29,15,26217
+D ago-oct 2026,delivery,true,SATORI BENTO,29,23,40199
+D ago-oct 2026,delivery,true,SPICY BENTO,29,8,13458
+D ago-oct 2026,delivery,true,SUSHI DUO,29,6,41416
+D ago-oct 2026,delivery,true,TEMPURA BENTO,29,1,1748
+D ago-oct 2026,delivery,true,TERIYAKI BENTO,29,29,50162
+D ago-oct 2026,delivery,true,TONKATSU BENTO,29,8,13982
+D ago-oct 2026,delivery,true,__TICKETS__,null,68,8
+D ago-oct 2026,salon,false,CAMARON EMPANIZADO,2,4,23509
+D ago-oct 2026,salon,false,CAMARONES TEMPURA,2,8,48239
+D ago-oct 2026,salon,false,CARPACCIO DE ATUN,2,3,18159
+D ago-oct 2026,salon,false,CARPACCION DORADO,2,5,32743
+D ago-oct 2026,salon,false,CRISPY SHITAKE BITES,2,6,31327
+D ago-oct 2026,salon,false,CRISPY TUNA BITES,2,21,107296
+D ago-oct 2026,salon,false,EDAMAMES,2,10,40354
+D ago-oct 2026,salon,false,EXTRA 1,2,3,3783
+D ago-oct 2026,salon,false,GYOZAS DE CERDO,2,26,118265
+D ago-oct 2026,salon,false,KOROKKES DE PESCADO,2,5,25150
+D ago-oct 2026,salon,false,ORDEN DE ARROZ,2,4,10619
+D ago-oct 2026,salon,false,SOPA MISO,2,8,27266
+D ago-oct 2026,salon,false,SPICY EDAMAME,2,7,29735
+D ago-oct 2026,salon,false,TARTAR DE ATUN,2,4,23204
+D ago-oct 2026,salon,false,TIRADITO ACEVICHADO,2,7,39726
+D ago-oct 2026,salon,false,TUNA TATAKI,2,5,31009
+D ago-oct 2026,salon,false,TUNA TIRADITO,2,3,16062
+D ago-oct 2026,salon,false,VEGETALES TEMPURA,2,2,9558
+D ago-oct 2026,salon,false,YAKI WINGS,2,8,46018
+D ago-oct 2026,salon,false,ALASKA ROLL,3,15,119274
+D ago-oct 2026,salon,false,ALL TUNA,3,2,59115
+D ago-oct 2026,salon,false,CALIFORNIA ROLL,3,20,115323
+D ago-oct 2026,salon,false,EDDIE WOULD GO ROLL,3,11,92225
+D ago-oct 2026,salon,false,HOSOMAKI AGUACATE,3,1,3540
+D ago-oct 2026,salon,false,HOSOMAKI ATUN,3,2,8319
+D ago-oct 2026,salon,false,I LOVE SANTA ROLL,3,8,53841
+D ago-oct 2026,salon,false,IM VEGAN,3,2,12920
+D ago-oct 2026,salon,false,IM VEGGIE ROLL,3,10,57469
+D ago-oct 2026,salon,false,KARI KARI ROLL,3,11,80283
+D ago-oct 2026,salon,false,NAMATSUKE ROLL,3,9,69310
+D ago-oct 2026,salon,false,NIGIRI SAKE REMON  SALMON,3,5,18584
+D ago-oct 2026,salon,false,NIGIRI SAKE REMON  SALMON  x 6,3,2,20000
+D ago-oct 2026,salon,false,NIGIRI YAKI   ATUN,3,4,14513
+D ago-oct 2026,salon,false,NIGIRI ZANMAI,3,5,49115
+D ago-oct 2026,salon,false,ON HOLYDAYS ROLL,3,11,83487
+D ago-oct 2026,salon,false,PHILLY,3,13,52673
+D ago-oct 2026,salon,false,RAINBOW ROLL,3,19,142819
+D ago-oct 2026,salon,false,SASHIMIS ATUN,3,8,35664
+D ago-oct 2026,salon,false,SASHIMIS MIX,3,7,58699
+D ago-oct 2026,salon,false,SASHIMIS PARGO,3,3,14336
+D ago-oct 2026,salon,false,SASHIMIS SALMON,3,6,29257
+D ago-oct 2026,salon,false,SATORI MIX,3,3,86283
+D ago-oct 2026,salon,false,SATORI ROLL,3,14,107903
+D ago-oct 2026,salon,false,SATORI SPECIALS,3,4,125628
+D ago-oct 2026,salon,false,SPICY TUNA ROLL,3,9,57301
+D ago-oct 2026,salon,false,SUBARASHI,3,47,359938
+D ago-oct 2026,salon,false,SUPER MAGURO,3,6,42743
+D ago-oct 2026,salon,false,SUSHI CLASSIC,3,3,69805
+D ago-oct 2026,salon,false,TAKO ROLL,3,17,124115
+D ago-oct 2026,salon,false,TANOSHI ROLL,3,8,59283
+D ago-oct 2026,salon,false,THE CRAB,3,6,50124
+D ago-oct 2026,salon,false,THE SNAPPER ROLL,3,7,50177
+D ago-oct 2026,salon,false,TUNA ROLL,3,11,43257
+D ago-oct 2026,salon,false,UNAGUI ROLL,3,9,71889
+D ago-oct 2026,salon,false,BANANA FLAMBEADA,4,2,8673
+D ago-oct 2026,salon,false,CREPE,4,5,21681
+D ago-oct 2026,salon,false,PANACOTA,4,2,9204
+D ago-oct 2026,salon,false,VOLCAN DE CHOCOLATE,4,2,9558
+D ago-oct 2026,salon,false,AGUA ALPINA,5,7,11770
+D ago-oct 2026,salon,false,AGUA SAN BENEDETTO,5,10,34513
+D ago-oct 2026,salon,false,AGUA SAN BENEDETTO CON GAS,5,14,47973
+D ago-oct 2026,salon,false,ASAHI,5,10,24035
+D ago-oct 2026,salon,false,BERRY BLOSSOM,5,19,53734
+D ago-oct 2026,salon,false,BOTELLA NAMPE CHARDONNAY,5,1,15487
+D ago-oct 2026,salon,false,BOTELLA PETIT CAYETA,5,3,47549
+D ago-oct 2026,salon,false,BOTELLA PIPA CAB  SAUVIGNON,5,1,17257
+D ago-oct 2026,salon,false,BOTELLA PIPA SAUV BLANC,5,1,17257
+D ago-oct 2026,salon,false,BOTELLA YAYA RIESLING,5,1,19027
+D ago-oct 2026,salon,false,CAFE CHICO,5,2,2832
+D ago-oct 2026,salon,false,CAFE GRANDE,5,4,6726
+D ago-oct 2026,salon,false,CAIPIRINHA,5,1,5133
+D ago-oct 2026,salon,false,CAS COOLER,5,10,28473
+D ago-oct 2026,salon,false,CLUB SODA,5,17,27828
+D ago-oct 2026,salon,false,COCA COLA,5,24,39850
+D ago-oct 2026,salon,false,COCA ZERO,5,50,83483
+D ago-oct 2026,salon,false,COPA CAB  DE LA CASA,5,4,17100
+D ago-oct 2026,salon,false,COPA EXTRA BRUT,5,2,7965
+D ago-oct 2026,salon,false,COPA LES JAMELLES BRUT,5,2,9250
+D ago-oct 2026,salon,false,COPA LES JAMELLES ROSE,5,3,14668
+D ago-oct 2026,salon,false,COPA MALBEC,5,5,17920
+D ago-oct 2026,salon,false,COPA PIPA CAB  SAUVIGNON,5,2,9876
+D ago-oct 2026,salon,false,COPA ROSE,5,3,10752
+D ago-oct 2026,salon,false,CORONA,5,9,27080
+D ago-oct 2026,salon,false,CUCUMBER SPECIAL TITOS,5,1,6195
+D ago-oct 2026,salon,false,DIRTY MARTINI TITOS,5,2,12743
+D ago-oct 2026,salon,false,DON JULIO,5,6,43540
+D ago-oct 2026,salon,false,EL GUSANO,5,7,40265
+D ago-oct 2026,salon,false,ESPADIN SHOTS X 2,5,2,10265
+D ago-oct 2026,salon,false,FRESCA,5,6,9920
+D ago-oct 2026,salon,false,GIN TONIC BOMBAY,5,4,21363
+D ago-oct 2026,salon,false,GINGER ALE,5,11,18327
+D ago-oct 2026,salon,false,GINGER MINT LEMONADE,5,28,78557
+D ago-oct 2026,salon,false,GOLDEN GLOW,5,9,25553
+D ago-oct 2026,salon,false,GREEN DETOX,5,5,14602
+D ago-oct 2026,salon,false,GREEN DRAGON,5,6,34513
+D ago-oct 2026,salon,false,GUSANO TOBALA,5,1,7876
+D ago-oct 2026,salon,false,HEINEKEN,5,7,21681
+D ago-oct 2026,salon,false,HEINEKEN 0,5,1,3097
+D ago-oct 2026,salon,false,HOUSE GINGER BEER,5,6,17810
+D ago-oct 2026,salon,false,IMPERIAL,5,25,60832
+D ago-oct 2026,salon,false,IMPERIAL SILVER,5,11,26018
+D ago-oct 2026,salon,false,LOW TIDE,5,1,5752
+D ago-oct 2026,salon,false,MANGO FANDANGO,5,5,27898
+D ago-oct 2026,salon,false,PATRON,5,3,11947
+D ago-oct 2026,salon,false,PERFUMED FIRE,5,1,5752
+D ago-oct 2026,salon,false,PERFUMED FIRE JACK DANIELS,5,1,6018
+D ago-oct 2026,salon,false,PILSEN,5,8,18956
+D ago-oct 2026,salon,false,QUE MAE IPA,5,3,11350
+D ago-oct 2026,salon,false,QUE MAE RED ALE,5,1,4336
+D ago-oct 2026,salon,false,SAKE PURE DAWN GINGO JARRA 250,5,2,35222
+D ago-oct 2026,salon,false,SAKE PURE DUSK JARRA 250 ML,5,1,22035
+D ago-oct 2026,salon,false,SATORI,5,4,23009
+D ago-oct 2026,salon,false,SATORI ZACAPA,5,1,7434
+D ago-oct 2026,salon,false,SHOT CASCAHUIN,5,1,4425
+D ago-oct 2026,salon,false,SMOOTHIE,5,27,81323
+D ago-oct 2026,salon,false,STELLA,5,3,9027
+D ago-oct 2026,salon,false,TEQUILA PATRON SODA,5,5,28761
+D ago-oct 2026,salon,false,VASO MICHELADO,5,22,15150
+D ago-oct 2026,salon,false,VODKA SODA TITOS,5,1,6372
+D ago-oct 2026,salon,false,DEDOS DE PESCADO,13,8,45310
+D ago-oct 2026,salon,false,DEDOS DE POLLO,13,5,27434
+D ago-oct 2026,salon,false,MENU PANCHI,13,5,28283
+D ago-oct 2026,salon,false,PAPAS FRITAS,13,3,9292
+D ago-oct 2026,salon,false,CERDO TONKATSU,16,7,61327
+D ago-oct 2026,salon,false,CEVICHE COCO TUNA,16,9,88460
+D ago-oct 2026,salon,false,CEVICHE PERUANO,16,17,177522
+D ago-oct 2026,salon,false,CURRY VERDE,16,9,86814
+D ago-oct 2026,salon,false,POKE WAVE,16,26,222531
+D ago-oct 2026,salon,false,POLLO TERIYAKI,16,23,219929
+D ago-oct 2026,salon,false,RAMEN KARI,16,2,22832
+D ago-oct 2026,salon,false,RAMEN PINATTSU,16,9,107522
+D ago-oct 2026,salon,false,RAMEN TRADICIONAL CERDO,16,6,66372
+D ago-oct 2026,salon,false,BOXING,19,2,841
+D ago-oct 2026,salon,false,EXTRA LUNCH,29,2,1770
+D ago-oct 2026,salon,false,__TICKETS__,null,225,391
+D ago-oct 2026,salon,true,CAMARONES TEMPURA,2,2,12212
+D ago-oct 2026,salon,true,CRISPY TUNA BITES,2,2,9659
+D ago-oct 2026,salon,true,EDAMAMES,2,4,16354
+D ago-oct 2026,salon,true,EXTRA 1,2,2,2655
+D ago-oct 2026,salon,true,GYOZAS DE CERDO,2,3,13115
+D ago-oct 2026,salon,true,KOROKKES DE PESCADO,2,1,4363
+D ago-oct 2026,salon,true,ORDEN DE ARROZ,2,2,4513
+D ago-oct 2026,salon,true,SOPA MISO,2,6,19155
+D ago-oct 2026,salon,true,TUNA TIRADITO,2,1,5841
+D ago-oct 2026,salon,true,YAKI WINGS,2,1,5752
+D ago-oct 2026,salon,true,ALASKA ROLL,3,3,24425
+D ago-oct 2026,salon,true,CALIFORNIA ROLL,3,2,11858
+D ago-oct 2026,salon,true,EDDIE WOULD GO ROLL,3,2,17000
+D ago-oct 2026,salon,true,HOSOMAKI ATUN,3,2,8319
+D ago-oct 2026,salon,true,KARI KARI ROLL,3,3,21186
+D ago-oct 2026,salon,true,NIGIRI ZANMAI,3,1,9823
+D ago-oct 2026,salon,true,PHILLY,3,2,7858
+D ago-oct 2026,salon,true,SASHIMIS ATUN,3,1,4602
+D ago-oct 2026,salon,true,SASHIMIS PARGO,3,1,4779
+D ago-oct 2026,salon,true,SATORI ROLL,3,1,7876
+D ago-oct 2026,salon,true,SPICY TUNA ROLL,3,1,5566
+D ago-oct 2026,salon,true,SUBARASHI,3,3,21265
+D ago-oct 2026,salon,true,THE SNAPPER ROLL,3,2,14867
+D ago-oct 2026,salon,true,TUNA ROLL,3,4,16637
+D ago-oct 2026,salon,true,UNAGUI ROLL,3,2,17000
+D ago-oct 2026,salon,true,PANACOTA,4,1,3912
+D ago-oct 2026,salon,true,VOLCAN DE CHOCOLATE,4,1,4779
+D ago-oct 2026,salon,true,AGUA SAN BENEDETTO,5,3,10354
+D ago-oct 2026,salon,true,AGUA SAN BENEDETTO CON GAS,5,2,6385
+D ago-oct 2026,salon,true,ASAHI,5,8,19451
+D ago-oct 2026,salon,true,BERRY BLOSSOM,5,6,17522
+D ago-oct 2026,salon,true,BOTELLA PETIT CAYETA,5,1,17611
+D ago-oct 2026,salon,true,CAFE CHICO,5,3,3823
+D ago-oct 2026,salon,true,CAFE GRANDE,5,6,10089
+D ago-oct 2026,salon,true,CAS COOLER,5,1,2920
+D ago-oct 2026,salon,true,CLUB SODA,5,11,17487
+D ago-oct 2026,salon,true,COCA COLA,5,31,51367
+D ago-oct 2026,salon,true,COCA ZERO,5,31,51620
+D ago-oct 2026,salon,true,COPA CAB  DE LA CASA,5,1,4500
+D ago-oct 2026,salon,true,COPA ROSE,5,7,25487
+D ago-oct 2026,salon,true,CORONA,5,2,6018
+D ago-oct 2026,salon,true,DAIKIRI FRESA   PIÑA,5,1,5133
+D ago-oct 2026,salon,true,FRESCA,5,6,10089
+D ago-oct 2026,salon,true,GIN TONIC HENDRICKS,5,1,5566
+D ago-oct 2026,salon,true,GINGER ALE,5,6,10089
+D ago-oct 2026,salon,true,GINGER MINT LEMONADE,5,16,45411
+D ago-oct 2026,salon,true,GOLDEN GLOW,5,9,25553
+D ago-oct 2026,salon,true,GREEN DETOX,5,3,8323
+D ago-oct 2026,salon,true,HEINEKEN,5,3,9292
+D ago-oct 2026,salon,true,HEINEKEN 0,5,9,25553
+D ago-oct 2026,salon,true,HOUSE GINGER BEER,5,4,12389
+D ago-oct 2026,salon,true,IMPERIAL,5,12,29735
+D ago-oct 2026,salon,true,IMPERIAL SILVER,5,6,14867
+D ago-oct 2026,salon,true,MANGO FANDANGO,5,1,5752
+D ago-oct 2026,salon,true,MARGARITA DON JULIO,5,5,39381
+D ago-oct 2026,salon,true,MOJITO,5,1,5133
+D ago-oct 2026,salon,true,PILSEN,5,2,4956
+D ago-oct 2026,salon,true,PROMO MARGARITA,5,4,16000
+D ago-oct 2026,salon,true,QUE MAE IPA,5,7,27876
+D ago-oct 2026,salon,true,QUE MAE RED ALE,5,1,4336
+D ago-oct 2026,salon,true,SMOOTHIE,5,26,79154
+D ago-oct 2026,salon,true,VASO MICHELADO,5,4,2619
+D ago-oct 2026,salon,true,WISKY SOUR BLACK LABEL,5,1,5115
+D ago-oct 2026,salon,true,ZACAPA ROCKS,5,1,5221
+D ago-oct 2026,salon,true,DEDOS DE PESCADO,13,1,5664
+D ago-oct 2026,salon,true,PAPAS FRITAS,13,2,5730
+D ago-oct 2026,salon,true,CERDO TONKATSU,16,2,17522
+D ago-oct 2026,salon,true,POKE WAVE,16,1,8761
+D ago-oct 2026,salon,true,BOXING,19,2,885
+D ago-oct 2026,salon,true,ASIAN CESAR SALAD,29,7,32128
+D ago-oct 2026,salon,true,BOWL TERIYAKI LUNCH,29,35,183717
+D ago-oct 2026,salon,true,CALIFORNIA BENTO,29,18,31198
+D ago-oct 2026,salon,true,CASADO SATORI,29,55,264536
+D ago-oct 2026,salon,true,CEVICHE TICO NIKKEI,29,12,50734
+D ago-oct 2026,salon,true,EDAMAME BENTO,29,15,25955
+D ago-oct 2026,salon,true,ENSALADA BENTO,29,9,15730
+D ago-oct 2026,salon,true,EXTRA LUNCH,29,4,3540
+D ago-oct 2026,salon,true,FISH AND CHIPS,29,9,41416
+D ago-oct 2026,salon,true,GYOZA BENTO,29,75,130036
+D ago-oct 2026,salon,true,HOSOMAKI BENTO,29,46,79874
+D ago-oct 2026,salon,true,KOROKKE BENTO,29,19,32159
+D ago-oct 2026,salon,true,SAKURA POKE,29,24,115354
+D ago-oct 2026,salon,true,SASHIMI ATUN BENTO,29,54,92545
+D ago-oct 2026,salon,true,SATORI BENTO,29,57,98575
+D ago-oct 2026,salon,true,SPICY BENTO,29,32,54881
+D ago-oct 2026,salon,true,SUSHI DUO,29,25,172567
+D ago-oct 2026,salon,true,TEMPURA BENTO,29,8,13720
+D ago-oct 2026,salon,true,TERIYAKI BENTO,29,80,138250
+D ago-oct 2026,salon,true,TONKATSU BENTO,29,23,39675
+D ago-oct 2026,salon,true,VEGGIE BENTO,29,2,3496
+D ago-oct 2026,salon,true,__TICKETS__,null,186,273

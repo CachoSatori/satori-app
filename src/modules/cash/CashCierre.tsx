@@ -32,7 +32,7 @@ import { shiftLabel } from '../../shared/utils'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
-interface Props { onRefresh: () => void; openSession?: CashSession | null }
+interface Props { onRefresh: () => void; openSession?: CashSession | null; fechaInicial?: string }
 
 function N(v: number | ''): number { return Number(v) || 0 }
 
@@ -69,7 +69,7 @@ export function puedeCerrarVentas(crc: number | '', usd: number | '', confirmado
   return estado === 'ok' || (estado === 'cero' && confirmadoCero)
 }
 
-export default function CashCierre({ onRefresh, openSession }: Props) {
+export default function CashCierre({ onRefresh, openSession, fechaInicial }: Props) {
   const { profile } = useAuth()
   const requireManager = useManagerOverride()
   const today       = todayStr()
@@ -82,7 +82,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
   const [msg,      setMsg]      = useState<string | null>(null)
-  const [fecha,    setFecha]    = useState(today)
+  // Fecha inicial: hoy, o el día que se eligió en la alerta de días sin cierre.
+  const [fecha,    setFecha]    = useState(fechaInicial && fechaInicial <= today ? fechaInicial : today)
   // Id del intento de cierre (Fase 2) en curso: se reusa en los reintentos del MISMO cierre y se
   // descarta al confirmar bien o al cambiar de fecha (mig 071, idempotencia en la base).
   const cierreOpId = useRef<string | null>(null)

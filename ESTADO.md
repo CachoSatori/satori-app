@@ -29,6 +29,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
   leen el PoS fusionado con el Excel de respaldo (`{...xls, ...pos}`). Volver atrás = revert del merge de #16.
 - **🧯 Fix «Borrar TODO el día» (05/11, rama `claude/fix-borrar-dia`):** elige por día operativo, no por `created_at`; vista previa antes de confirmar; ningún delete sin chequear el error. Validado por Ismael en la preview de staging; **en prod desde el 05/11** (PR #25, merge `781eb72`). Rollback = revert del merge. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **🧾 Cierre del día atómico (05/11, rama `claude/cierre-atomico`, mig 071):** aplicada en staging (ledger 70) y **en prod el 05/11 a las 19:20 UTC** (ledger 47 → 48), a mano **antes** del merge del #29. En prod se verificó el catálogo (idéntico a staging) y se corrieron pruebas sin escribir datos. Rollback: revert del merge + `scripts/sql/071_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
+- **🔐 SEC-02 cerrado en prod (06/11, firmado por Ismael):** `monthly-report` v10 (`verify_jwt` on) exige service_role u owner activo, valida los parámetros y no devuelve montos ni nombres. El cron (jobs 3 y 4, 02:00 CR) manda `Authorization` desde el Vault (`service_role_key`), y el botón de Admin manda el JWT (PR #42). En staging se apagaron los jobs del cron (apuntaban a prod). Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **👤 Alta de empleados desde Admin (06/11, firmado por Ismael, PR #39):** el owner crea las cuentas desde Admin → Usuarios → «+ Nuevo empleado», con la Edge Function `alta-empleado` (prod v1, `verify_jwt` on, desplegada a mano; su código vive en la rama `claude/alta-empleado-fn`, **no en `main`** hasta el ítem 11). Contraseña temporal que se muestra una vez, y cambio obligatorio en el primer ingreso (flag en `app_metadata.cambiar_password`, que solo baja la función). El login ya no tiene «Crear cuenta». **Auth de prod (06/11, Management API, GET antes y después):** `site_url` `http://localhost:3000` → `https://cachosatori.github.io/satori-app/`, redirects `''` → `https://cachosatori.github.io/satori-app/**` y `password_min_length` 6 → 8. Nada más cambió y `disable_signup` sigue en `true`. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **↩️ Cierre de TURNO vuelto a como estaba antes del #36 (06/11, firmado por Ismael):** el cierre de turno sin efectivo dejó al encargado sin el total de caja ni el total de gastos, y no podía verificar. `CashTurno.tsx`, `CashResumen.tsx` y su test vuelven **idénticos** al código previo al #36 (`342c5f0^1`): campo de efectivo, «Debería quedar en la Caja Diaria», «Cuadra / Diferencia», totales, resumen y «Disponible» con su aviso de déficit. `final_cash_*` se vuelve a guardar. **El «Recontar» del cierre del día se queda** (`CashCierre.tsx` sin cambios).
 - **🔁 «Recontar» una vez en el cierre del día + cierre de turno sin efectivo (06/11, rama `claude/recontar-cierre`, firmado por Ismael):** sin migración nueva, usa las columnas `primer_conteo_crc/usd` de la **074**, que ya estaba en prod. Primero se probó un conteo ciego (#31) y se revirtió (#32) a pedido de Ismael. La versión final mantiene la verificación en vivo. Recorrido real en staging con la pantalla montada contra la base: 4 casos, ver [HALLAZGOS.md](HALLAZGOS.md).
@@ -127,7 +128,7 @@ solas tras un reinicio (validado el 29/10).
 
 | Función | PROD | STAGING |
 |---|---|---|
-| `monthly-report` | v9 · `verify_jwt` off | — |
+| `monthly-report` | **v10 · on** (06/11, SEC-02; a mano, código en `claude/sec-02-monthly-report-fn`) | v2 · on |
 | `extract-document` | v7 · on | v15 · on |
 | `cierre-email` | v2 · on | v8 · on |
 | `pago-notificar` | v2 · on | — |
@@ -194,7 +195,7 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
   `log_movement_edit` (052) y `unif_on_cash_movement`. Las de la 067 y las de plata no.
 - **Sin `supabase/config.toml`:** el `verify_jwt` de las funciones no está versionado.
 - **`deploy.yml` no corre `vitest`** antes de publicar a prod.
-- **`monthly-report` con `verify_jwt` off.**
+- ~~**`monthly-report` con `verify_jwt` off.**~~ ✅ Cerrado el 06/11 (SEC-02).
 
 ---
 

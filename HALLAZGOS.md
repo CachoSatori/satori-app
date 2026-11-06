@@ -7,7 +7,7 @@
 
 ---
 
-## 🔐 Noviembre 2026 — SEC-02: `monthly-report` respondía ventas y mandaba los correos a cualquiera (🧪 staging, 06/11; prod con firma)
+## 🔐 Noviembre 2026 — SEC-02: `monthly-report` respondía ventas y mandaba los correos a cualquiera (✅ prod, 06/11)
 
 - **Qué es SEC-02:** la Edge Function `monthly-report` (prod v9, `verify_jwt` off) usaba service_role **sin pedir nada**. Cualquiera, sin token o con la anon key (que es pública), podía:
   - **leer** el total de ventas del mes, los días con venta, el top salonero por IRS y el pool de propinas. La respuesta del cron del 01/11 traía «ventas: ₡ 9 611 259 · 20 días · IRS top: MAXO (84)» y «propinas: ₡ 1 518 220 pool · 58 turnos»;
@@ -47,7 +47,17 @@
   | CORS | origen ajeno sin header; preview y prod con el header |
 
   Staging tiene `RESEND_API_KEY` y no tiene `REPORT_TO_EMAIL`, así que un envío real habría ido al destinatario por defecto. Por eso todo fue en seco.
-- **Para prod (con firma), en este orden:**
+- **✅ En prod el 06/11 (firmado por Ismael), en este orden, entre las 08:01 y las 08:10 CR:**
+  1. `service_role_key` en el Vault de prod (`ref` de prod, rol `service_role`) y `Authorization: Bearer <vault>` en los jobs 3 y 4, **sin cambiar horario (02:00 CR) ni body**.
+  2. Merge del PR #42 (botón con JWT) y deploy de Pages en verde (run #268).
+  3. `monthly-report` **v10** desplegada a mano con `verify_jwt = true` (rama `claude/sec-02-monthly-report-fn`, `9ac28b0`).
+  4. **Pruebas sin escribir:**
+     - sin token → 401;
+     - anon key → 401;
+     - service_role con `dry_run` → 200 (`enviados` sin montos);
+     - **`net.http_post` desde la base de prod con el header del Vault y `dry_run` → 200**, así que el cron va a funcionar;
+     - CORS: prod con el header, otro origen sin él.
+- **Plan original (referencia):**
   1. Guardar la service_role de prod en el Vault de prod y agregar `Authorization: Bearer <vault>` a los jobs 3 y 4. Con la función vieja no cambia nada.
   2. Mergear el frontend (el botón manda el JWT; con la función vieja también funciona).
   3. Desplegar la función nueva con `verify_jwt = true`.
@@ -321,7 +331,7 @@ Escaneo de `pg_proc.prosrc` y `pg_policies` en prod (04/11):
 | Ritual de `project-ref` antes de comandos de base (2026-07-03) | ✅ **Vigente** | Regla 7 de ESTADO.md |
 | Accionados 2026-06-26/27/28 (IDOR, cascadas, IA desde el teléfono, outbox, render de Propinas, pantalla negra) | ✅ Resueltos y en prod | — |
 | Seguridad #1 IDOR `extract-document` | ✅ Resuelto (prod v7, `verify_jwt` on) | Management API |
-| Seguridad #2 `monthly-report` sin auth (= **SEC-02**) | 🧪 Arreglo en staging (06/11); prod con firma | Ver la sección SEC-02 arriba |
+| Seguridad #2 `monthly-report` sin auth (= **SEC-02**) | ✅ Cerrado en prod (06/11, v10, `verify_jwt` on) | Ver la sección SEC-02 arriba |
 | Seguridad #3 falta `supabase/config.toml` | 🔴 **Abierto** (= ítem 11) | No existe en `main` |
 | Seguridad #14 `deploy.yml` sin gate de tests | 🔴 **Abierto** | `deploy.yml` no corre `vitest` |
 | Seguridad #5 RLS de `cash_cierres_dia` | ✅ Verificado: prod y staging tienen las mismas 2 policies (lectura: cualquier autenticado; escritura: owner/manager/cajero/contador) | `pg_policies`, 30/10 |

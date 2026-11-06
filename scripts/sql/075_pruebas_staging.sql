@@ -851,6 +851,121 @@ begin
   perform pg_temp.r('26', 'owner restituye con club_ajuste (restitucion)', public.club_saldo_personas(v_m) = 10, '');
 end $$;
 
+-- ═══ 27. Mesa abierta (piloto): la caja elige la mesa del puente; cruce «probable» con la factura ═══
+do $$
+declare v_m uuid; v_c uuid; v_cod text; v_cup text; j jsonb; v_mv uuid; v_hoy date := (now() at time zone 'America/Costa_Rica')::date;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Mesa Prueba', 'app') returning id, codigo into v_m, v_cod;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Canje Mesa Prueba', 'app') returning id into v_c;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
+  values (v_c, 'tarjeta', 24, 6, 18000, now() - interval '3 days', 'migracion');
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, monto_estimado_crc, updated_at) values
+    ('santa-teresa', 'pedido:P91', 'P91', '41', 'salon', 2, 25000, now()),
+    ('santa-teresa', 'pedido:P92', 'P92', '42', 'salon', 3, 25000, now()),
+    ('santa-teresa', 'pedido:P94', 'P94', '44', 'salon', 4, 40000, now());
+  insert into _ids values ('mesa_m', v_m), ('mesa_c', v_c), ('mesa_cod', v_cod);
+end $$;
+do $$
+declare j jsonb; v_n int; v_cup text; v_hoy text := (now() at time zone 'America/Costa_Rica')::date::text;
+        v_m uuid := (select i.v::uuid from _ids i where i.k = 'mesa_m'); v_c uuid := (select i.v::uuid from _ids i where i.k = 'mesa_c');
+begin
+  -- 27a. la caja ve la lista; el salonero no
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select jsonb_agg(to_jsonb(x)) into j from public.club_mesas_abiertas() x where x.pedido in ('P91','P92','P94');
+  perform pg_temp.yo();
+  perform pg_temp.r('27', 'cajero ve las mesas abiertas (mesa, salonero, total, hora)', jsonb_array_length(j) = 3
+      and (j->0) ?& array['mesa','salonero','total_crc','actualizado','pedido','dia'], left(j::text, 160));
+  begin
+    perform pg_temp.como('authenticated', '<SALONERO_UUID>');
+    perform public.club_mesas_abiertas();
+    perform pg_temp.yo(); perform pg_temp.r('27', 'salonero ve las mesas', false, 'pudo');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('27', 'salonero ve las mesas → sin permiso', true, sqlerrm);
+  end;
+
+  -- 27b. elegir mesa: cupón con la mesa 41 (sin factura tipeada)
+  perform pg_temp.como('anon', null);
+  select x.codigo into v_cup from public.club_cupon_crear((select i.v from _ids i where i.k = 'mesa_cod'), null) x;
+  perform pg_temp.yo();
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_cupon_usar(v_cup, 2, null, gen_random_uuid(),
+    jsonb_build_object('modo','mesa','dia',v_hoy,'pedido','P91','mesa','41','total',25000,'hora',now() - interval '1 hour'));
+  -- 27c. canje con la mesa 42 (mismo total que la 41)
+  perform public.club_canje(v_c, 1, null, gen_random_uuid(),
+    jsonb_build_object('modo','mesa','dia',v_hoy,'pedido','P92','mesa','42','total',25000,'hora',now() - interval '1 hour'));
+  perform pg_temp.yo();
+  select count(*) into v_n from club_movimientos where miembro_id = v_m and pos_ref->>'pedido' = 'P91' and factura_pos is null
+     and visita_clave = format('mesa:%s:41:P91', v_hoy);
+  perform pg_temp.r('27', 'elegir mesa: el movimiento guarda día, pedido, mesa, total y hora (sin factura tipeada)', v_n = 1, '');
+  -- se cierran las mesas: facturas del puente (la 42 pagada «a crédito» ₡18.000; otra 42 vieja con el mismo total)
+  update club_movimientos set registrado_en = now() - interval '2 hours' where miembro_id in (v_m, v_c) and origen = 'app';
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, total_crc, cxc_crc) values
+    ('990841', now() - interval '50 minutes', 'C', 'salon', 'cajero', true, 'ok', '41', 25000.40, 0),
+    ('990842', now() - interval '50 minutes', 'C', 'salon', 'cajero', true, 'ok', '42', 25000.00, 18000),
+    ('990840', now() - interval '6 hours',    'C', 'salon', 'cajero', true, 'ok', '42', 25000.00, 0);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(current_date - 1, current_date) e
+   where e.factura ~ '99084|mesa 4[12]' or e.ref in (select m.id::text from club_movimientos m where m.miembro_id in (v_m, v_c));
+  perform pg_temp.yo();
+  perform pg_temp.r('27', 'cruce probable: mesa 41 → su factura (total ±₡1); mesa 42 → la de la hora más cercana (no la vieja con igual total)',
+    jsonb_array_length(j) = 0, j::text);
+end $$;
+do $$
+declare j jsonb; v_hoy text := (now() at time zone 'America/Costa_Rica')::date::text; v_c uuid := (select i.v::uuid from _ids i where i.k = 'mesa_c');
+        v_m uuid := (select i.v::uuid from _ids i where i.k = 'mesa_m'); v_mv uuid;
+begin
+  -- 27d. plan B: la mesa ya se cerró → mesa + últimos 4 dígitos del tiquete, a mano
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"manual","mesa":"43","ultimos4":"601"}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('27', 'plan B con 3 dígitos', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('27', 'plan B con 3 dígitos → error claro', sqlerrm like '%exactamente 4 números%', sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"manual","mesa":"43","ultimos4":"6012"}'::jsonb);
+  perform pg_temp.yo();
+  select id into v_mv from club_movimientos where miembro_id = v_m and pos_ref->>'modo' = 'manual';
+  update club_movimientos set registrado_en = now() - interval '2 hours' where id = v_mv;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(current_date - 1, current_date) e where e.ref = v_mv::text;
+  perform pg_temp.yo();
+  perform pg_temp.r('27', 'plan B sin factura de la mesa 43 en el puente → REGISTRO_SIN_FACTURA «probable» con «mesa 43 · tiquete …6012»',
+    jsonb_array_length(j) = 1 and j->0->>'certeza' = 'probable' and j->0->>'factura' = 'mesa 43 · tiquete …6012', j::text);
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, total_crc)
+  values ('990843', now() - interval '90 minutes', 'C', 'salon', 'cajero', true, 'ok', '43', 31000);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(current_date - 1, current_date) e where e.ref = v_mv::text;
+  perform pg_temp.yo();
+  perform pg_temp.r('27', 'plan B: aparece la factura de la mesa 43 ese día → se concilia (sin excepción)', jsonb_array_length(j) = 0, j::text);
+
+  -- 27e. cuenta dividida: mesa 44 elegida con ₡40.000; se cobró en dos facturas (₡25.000 + ₡15.000)
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_tarjeta_manual(v_m, 3, null, gen_random_uuid(),
+    jsonb_build_object('modo','mesa','dia',v_hoy,'pedido','P94','mesa','44','total',40000,'hora',now() - interval '1 hour'));
+  perform pg_temp.yo();
+  select id into v_mv from club_movimientos where miembro_id = v_m and pos_ref->>'pedido' = 'P94';
+  update club_movimientos set registrado_en = now() - interval '2 hours' where id = v_mv;
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, total_crc) values
+    ('990844', now() - interval '40 minutes', 'C', 'salon', 'cajero', true, 'ok', '44', 25000),
+    ('990845', now() - interval '39 minutes', 'C', 'salon', 'cajero', true, 'ok', '44', 15000);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(current_date - 1, current_date) e where e.ref = v_mv::text;
+  perform pg_temp.yo();
+  perform pg_temp.r('27', 'cuenta dividida (₡40.000 → ₡25.000 + ₡15.000) → REGISTRO_SIN_FACTURA «probable» para revisar',
+    jsonb_array_length(j) = 1 and j->0->>'certeza' = 'probable', j::text);
+
+  -- 27f. máximo por visita con mesa: 1,5 + 1 en la misma mesa/pedido → el segundo falla
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin
+    perform public.club_canje(v_c, 1.5, null, gen_random_uuid(),
+      jsonb_build_object('modo','mesa','dia',v_hoy,'pedido','P92','mesa','42','total',25000,'hora',now()));
+    perform pg_temp.yo(); perform pg_temp.r('27', 'segundo canje en la misma mesa supera 2', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('27', 'misma mesa y pedido = misma visita: 1 + 1,5 → falla por visita', sqlerrm like '%por visita%', sqlerrm);
+  end;
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

@@ -459,8 +459,75 @@ begin
 end;
 $$;
 
+-- Piloto (decisión de Ismael, 06-nov): la caja elige la MESA ABIERTA del puente en lugar de tipear la
+-- factura (el ticket muestra el consecutivo electrónico, que el puente todavía no trae: ítem 11).
+alter table public.club_movimientos add column if not exists pos_ref jsonb;
+alter table public.club_movimientos add column if not exists visita_clave text;
+alter table public.club_cupones     add column if not exists pos_ref jsonb;
+
+-- Normaliza la referencia al PoS que manda la caja. NULL si no vino; error si es inválida.
+--   {modo:'mesa',   dia, pedido, mesa, total, hora}  → mesa abierta elegida de la lista
+--   {modo:'manual', mesa, ultimos4[, dia]}           → plan B (mesa ya cerrada o la lista no carga)
+-- Devuelve además `visita`: la clave de la visita (máximo de créditos por visita).
+create or replace function public.club_pos_ref(p jsonb)
+returns jsonb
+language plpgsql
+stable
+set search_path = public, pg_temp
+as $$
+declare
+  v_modo text; v_mesa text; v_dia date; v_ped text; v_tot numeric; v_hora timestamptz; v_u4 text;
+begin
+  if p is null or p = '{}'::jsonb or jsonb_typeof(p) = 'null' then
+    return null;
+  end if;
+  if jsonb_typeof(p) <> 'object' then
+    raise exception 'Mesa no válida' using errcode = 'P0001';
+  end if;
+  v_modo := p->>'modo';
+  v_mesa := upper(btrim(coalesce(p->>'mesa', '')));
+  if v_mesa !~ '^[0-9A-Z]{1,10}$' then
+    raise exception 'Mesa no válida' using errcode = 'P0001';
+  end if;
+  begin
+    v_dia := coalesce((p->>'dia')::date, (now() at time zone 'America/Costa_Rica')::date);
+  exception when others then
+    raise exception 'Mesa no válida' using errcode = 'P0001';
+  end;
+  if v_dia < (now() at time zone 'America/Costa_Rica')::date - 1 or v_dia > (now() at time zone 'America/Costa_Rica')::date then
+    raise exception 'La mesa tiene que ser de hoy' using errcode = 'P0001';
+  end if;
+  if v_modo = 'mesa' then
+    v_ped := btrim(coalesce(p->>'pedido', ''));
+    if v_ped !~ '^[0-9A-Za-z]{1,20}$' then
+      raise exception 'Mesa no válida' using errcode = 'P0001';
+    end if;
+    begin
+      v_tot := (p->>'total')::numeric;
+      v_hora := coalesce((p->>'hora')::timestamptz, now());
+    exception when others then
+      raise exception 'Mesa no válida' using errcode = 'P0001';
+    end;
+    if v_tot is null or v_tot < 0 or v_tot > 100000000 then
+      raise exception 'Mesa no válida' using errcode = 'P0001';
+    end if;
+    return jsonb_build_object('modo', 'mesa', 'dia', v_dia, 'pedido', v_ped, 'mesa', v_mesa, 'total', round(v_tot, 2),
+                              'hora', v_hora, 'visita', format('mesa:%s:%s:%s', v_dia, v_mesa, v_ped));
+  elsif v_modo = 'manual' then
+    v_u4 := btrim(coalesce(p->>'ultimos4', ''));
+    if v_u4 !~ '^[0-9]{4}$' then
+      raise exception 'Los últimos 4 dígitos del tiquete tienen que ser exactamente 4 números' using errcode = 'P0001';
+    end if;
+    return jsonb_build_object('modo', 'manual', 'dia', v_dia, 'mesa', v_mesa, 'ultimos4', v_u4, 'hora', now(),
+                              'visita', format('m4:%s:%s:%s', v_dia, v_mesa, v_u4));
+  end if;
+  raise exception 'Mesa no válida' using errcode = 'P0001';
+end;
+$$;
+
 -- 4.2 Usar el cupón en caja → movimiento `tarjeta` del referente.
-create or replace function public.club_cupon_usar(p_codigo text, p_personas int, p_factura text, p_op uuid)
+drop function if exists public.club_cupon_usar(text, int, text, uuid);
+create or replace function public.club_cupon_usar(p_codigo text, p_personas int, p_factura text, p_op uuid, p_pos jsonb default null)
 returns table (miembro_id uuid, personas int, creditos numeric)
 language plpgsql
 volatile
@@ -471,6 +538,7 @@ declare
   v_rol     public.user_role := public.get_my_role();
   v_cod     text := upper(btrim(coalesce(p_codigo, '')));
   v_fac     text := public.club_norm_factura(p_factura);
+  v_pos     jsonb := public.club_pos_ref(p_pos);
   v_cupon   public.club_cupones%rowtype;
   v_ref     public.club_miembros%rowtype;
   v_cfg     public.club_config%rowtype;
@@ -501,7 +569,7 @@ begin
   if p_personas is null or p_personas < 1 or p_personas > 30 then
     raise exception 'Personas fuera de rango (1 a 30)' using errcode = 'P0001';
   end if;
-  if v_fac = '' or length(v_fac) > 40 then
+  if v_pos is null and (v_fac = '' or length(v_fac) > 40) then
     raise exception 'Falta el número de factura' using errcode = 'P0001';
   end if;
 
@@ -524,15 +592,15 @@ begin
   select * into v_cfg from public.club_config where location_id = v_cupon.location_id;
 
   update public.club_cupones
-     set estado = 'usado', usado_en = now(), usado_por = auth.uid(), factura_pos = v_fac, personas = p_personas
+     set estado = 'usado', usado_en = now(), usado_por = auth.uid(), factura_pos = nullif(v_fac, ''), personas = p_personas, pos_ref = v_pos
    where id = v_cupon.id;
 
   insert into public.club_movimientos
     (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
-     factura_pos, cupon_id, fecha_visita, registrado_por, origen, client_op_id)
+     factura_pos, cupon_id, fecha_visita, registrado_por, origen, client_op_id, pos_ref, visita_clave)
   values
     (v_cupon.location_id, v_ref.id, 'tarjeta', p_personas, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
-     v_fac, v_cupon.id, now(), auth.uid(), 'app', p_op);
+     nullif(v_fac, ''), v_cupon.id, now(), auth.uid(), 'app', p_op, v_pos, coalesce(v_pos->>'visita', v_fac));
 
   v_saldo := public.club_saldo_personas(v_ref.id);
   miembro_id := v_ref.id; personas := v_saldo;
@@ -542,7 +610,8 @@ end;
 $$;
 
 -- 4.3 Canje de créditos (1 / 1,5 / 2 por visita, de a 0,5).
-create or replace function public.club_canje(p_miembro uuid, p_creditos numeric, p_factura text, p_op uuid)
+drop function if exists public.club_canje(uuid, numeric, text, uuid);
+create or replace function public.club_canje(p_miembro uuid, p_creditos numeric, p_factura text, p_op uuid, p_pos jsonb default null)
 returns table (personas int, creditos numeric)
 language plpgsql
 volatile
@@ -552,6 +621,8 @@ as $$
 declare
   v_rol      public.user_role := public.get_my_role();
   v_fac      text := public.club_norm_factura(p_factura);
+  v_pos      jsonb := public.club_pos_ref(p_pos);
+  v_visita   text;
   v_m        public.club_miembros%rowtype;
   v_cfg      public.club_config%rowtype;
   v_prev     public.club_movimientos%rowtype;
@@ -596,9 +667,10 @@ begin
     raise exception 'Créditos no válidos: de % a %, de a %',
       v_cfg.canje_min, v_cfg.max_creditos_por_visita, v_cfg.canje_paso using errcode = 'P0001';
   end if;
-  if v_fac = '' or length(v_fac) > 40 then
+  if v_pos is null and (v_fac = '' or length(v_fac) > 40) then
     raise exception 'Falta el número de factura' using errcode = 'P0001';
   end if;
+  v_visita := coalesce(v_pos->>'visita', v_fac);
 
   v_necesita := p_creditos * v_cfg.personas_por_credito;
   if v_necesita <> trunc(v_necesita) then
@@ -607,7 +679,7 @@ begin
 
   -- Máximo por visita: suma de canjes del miembro con la misma factura.
   select coalesce(sum(mv.creditos), 0) into v_ya_fac from public.club_movimientos mv
-   where mv.miembro_id = p_miembro and mv.tipo = 'canje' and mv.factura_pos = v_fac;
+   where mv.miembro_id = p_miembro and mv.tipo = 'canje' and coalesce(mv.visita_clave, mv.factura_pos) = v_visita;
   if v_ya_fac + p_creditos > v_cfg.max_creditos_por_visita then
     raise exception 'Supera el máximo de % créditos por visita', v_cfg.max_creditos_por_visita
       using errcode = 'P0001';
@@ -629,10 +701,10 @@ begin
 
   insert into public.club_movimientos
     (location_id, miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc,
-     factura_pos, fecha_visita, registrado_por, origen, client_op_id)
+     factura_pos, fecha_visita, registrado_por, origen, client_op_id, pos_ref, visita_clave)
   values
     (v_m.location_id, p_miembro, 'canje', -v_necesita::int, p_creditos, v_cfg.personas_por_credito,
-     v_cfg.valor_credito_crc, v_fac, now(), auth.uid(), 'app', p_op);
+     v_cfg.valor_credito_crc, nullif(v_fac, ''), now(), auth.uid(), 'app', p_op, v_pos, v_visita);
 
   v_saldo := v_saldo - v_necesita::int;
   personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
@@ -1052,7 +1124,8 @@ end;
 $$;
 
 -- Tarjeta física ya repartida (owner, manager, cajero): movimiento `tarjeta` con nota «manual».
-create or replace function public.club_tarjeta_manual(p_miembro uuid, p_personas int, p_factura text, p_op uuid)
+drop function if exists public.club_tarjeta_manual(uuid, int, text, uuid);
+create or replace function public.club_tarjeta_manual(p_miembro uuid, p_personas int, p_factura text, p_op uuid, p_pos jsonb default null)
 returns table (personas int, creditos numeric)
 language plpgsql
 volatile
@@ -1062,6 +1135,7 @@ as $$
 declare
   v_rol   public.user_role := public.get_my_role();
   v_fac   text := public.club_norm_factura(p_factura);
+  v_pos   jsonb := public.club_pos_ref(p_pos);
   v_m     public.club_miembros%rowtype;
   v_cfg   public.club_config%rowtype;
   v_prev  public.club_movimientos%rowtype;
@@ -1088,7 +1162,7 @@ begin
   if p_personas is null or p_personas < 1 or p_personas > 30 then
     raise exception 'Personas fuera de rango (1 a 30)' using errcode = 'P0001';
   end if;
-  if v_fac = '' or length(v_fac) > 40 then
+  if v_pos is null and (v_fac = '' or length(v_fac) > 40) then
     raise exception 'Falta el número de factura' using errcode = 'P0001';
   end if;
 
@@ -1104,10 +1178,10 @@ begin
 
   insert into public.club_movimientos
     (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
-     factura_pos, fecha_visita, registrado_por, origen, client_op_id, nota)
+     factura_pos, fecha_visita, registrado_por, origen, client_op_id, nota, pos_ref, visita_clave)
   values
     (v_m.location_id, p_miembro, 'tarjeta', p_personas, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
-     v_fac, now(), auth.uid(), 'app', p_op, 'manual');
+     nullif(v_fac, ''), now(), auth.uid(), 'app', p_op, 'manual', v_pos, coalesce(v_pos->>'visita', v_fac));
 
   v_saldo := public.club_saldo_personas(p_miembro);
   personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
@@ -1190,6 +1264,30 @@ begin
     end if;
   end if;
   return jsonb_build_object('tipo', 'desconocido', 'datos', '{}'::jsonb);
+end;
+$$;
+
+-- Mesas abiertas del local según el puente (pos_ndf_open, refresco ~75 s). owner, manager, cajero.
+-- Lo que la caja ve para elegir la mesa del cupón, el canje o la tarjeta física.
+create or replace function public.club_mesas_abiertas(p_location text default 'santa-teresa')
+returns table (pedido text, mesa text, salonero text, total_crc numeric, pax int, actualizado timestamptz, dia date)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  return query
+    select o.id_pedido, upper(btrim(o.mesa)),
+           coalesce((select e.full_name from public.employees e where e.pos_login = o.salonero_login and e.is_active limit 1), o.salonero_login),
+           o.monto_estimado_crc, o.pax, o.updated_at, (o.updated_at at time zone 'America/Costa_Rica')::date
+      from public.pos_ndf_open o
+     where o.local = p_location and o.id_pedido is not null and o.mesa is not null
+     order by case when o.mesa ~ '^[0-9]+$' then lpad(o.mesa, 6, '0') else o.mesa end, o.id_pedido;
 end;
 $$;
 
@@ -1425,45 +1523,63 @@ begin
       from public.pos_ndf_tickets t
      where t.local = p_location and coalesce(t.fecha_registra, t.fecha_cierra) >= v_ini
        and coalesce(t.fecha_registra, t.fecha_cierra) < v_fin),
-  mv as (
+  mv0 as (
     select m.*, public.club_factura_clave(m.factura_pos) as clave
       from public.club_movimientos m
-     where m.location_id = p_location and m.origen = 'app' and m.tipo in ('tarjeta','canje') and m.factura_pos is not null),
+     where m.location_id = p_location and m.origen = 'app' and m.tipo in ('tarjeta','canje')
+       and (m.factura_pos is not null or m.pos_ref is not null)),
+  -- Factura del puente de cada registro: por número (exacta) o, si la caja eligió la mesa,
+  -- por día + mesa + total (±₡1) + hora más cercana (probable). Plan B (mesa + últimos 4): día + mesa + hora.
+  mv as (
+    select m.*,
+           case when m.pos_ref is null then
+             (select t.id from public.pos_ndf_tickets t
+               where t.local = p_location and m.clave is not null and ltrim(t.numero_factura, '0') = m.clave limit 1)
+           else
+             (select t.id from public.pos_ndf_tickets t
+               where t.local = p_location
+                 and (coalesce(t.fecha_registra, t.fecha_cierra) at time zone 'America/Costa_Rica')::date = (m.pos_ref->>'dia')::date
+                 and upper(btrim(t.mesa)) = m.pos_ref->>'mesa'
+                 and (m.pos_ref->>'modo' <> 'mesa' or abs(t.total_crc - (m.pos_ref->>'total')::numeric) <= 1)
+               order by abs(extract(epoch from coalesce(t.fecha_registra, t.fecha_cierra) - (m.pos_ref->>'hora')::timestamptz))
+               limit 1)
+           end as ticket_id,
+           case when m.pos_ref is null then 'exacta' else 'probable' end as cert,
+           coalesce(m.factura_pos,
+                    case m.pos_ref->>'modo' when 'mesa' then format('mesa %s · pedido %s', m.pos_ref->>'mesa', m.pos_ref->>'pedido')
+                                           else format('mesa %s · tiquete …%s', m.pos_ref->>'mesa', m.pos_ref->>'ultimos4') end) as ref_factura
+      from mv0 m),
   ex as (
     -- REGISTRO_SIN_FACTURA
-    select 'REGISTRO_SIN_FACTURA'::text as tipo, m.id::text as ref, m.fecha_visita as fecha, m.factura_pos as factura,
-           'exacta'::text as certeza,
+    select 'REGISTRO_SIN_FACTURA'::text as tipo, m.id::text as ref, m.fecha_visita as fecha, m.ref_factura as factura,
+           m.cert as certeza,
            jsonb_build_object('movimiento', case when m.cupon_id is not null then 'cupon' when m.tipo = 'canje' then 'canje' else 'tarjeta_manual' end,
                               'personas', m.personas, 'creditos', m.creditos,
                               'miembro', public.club_nombre_limpio(mi.nombre)) as detalle
       from mv m join public.club_miembros mi on mi.id = m.miembro_id
      where m.fecha_visita >= v_ini and m.fecha_visita < v_fin
        and m.registrado_en < now() - make_interval(mins => v_cfg.puente_latencia_min)
-       and not exists (select 1 from public.pos_ndf_tickets t
-                        where t.local = p_location and ltrim(t.numero_factura, '0') = m.clave)
+       and m.ticket_id is null
     union all
     -- CREDITOS_SIN_CANJE (heurística: cxc múltiplo de medio crédito)
     select 'CREDITOS_SIN_CANJE', 'factura:' || t.clave, t.f, t.numero_factura, 'probable',
            jsonb_build_object('cxc_crc', t.cxc, 'creditos_estimados', round(t.cxc / v_cfg.valor_credito_crc, 1), 'total_crc', t.total_crc)
       from tk t
      where t.cxc > 0 and t.cxc % (v_cfg.valor_credito_crc / 2.0) = 0
-       and not exists (select 1 from mv m where m.tipo = 'canje' and m.clave = t.clave)
+       and not exists (select 1 from mv m where m.tipo = 'canje' and m.ticket_id = t.id)
     union all
-    -- CANJE_MONTO_DISTINTO (por factura: Σ créditos × valor vs cxc)
-    select 'CANJE_MONTO_DISTINTO', 'factura:' || c.clave, c.f, c.factura, 'probable',
-           jsonb_build_object('canje_crc', c.valor, 'cxc_crc', c.cxc, 'diferencia_crc', c.valor - c.cxc, 'creditos', c.creditos,
-                              'miembro', c.miembro)
-      from (select m.clave, min(m.factura_pos) as factura, min(m.fecha_visita) as f,
+    -- CANJE_MONTO_DISTINTO (por factura resuelta: Σ créditos × valor vs cxc)
+    select 'CANJE_MONTO_DISTINTO', 'factura:' || ltrim(t.numero_factura, '0'), c.f, t.numero_factura, 'probable',
+           jsonb_build_object('canje_crc', c.valor, 'cxc_crc', coalesce(t.cxc_crc, 0), 'diferencia_crc', c.valor - coalesce(t.cxc_crc, 0),
+                              'creditos', c.creditos, 'miembro', c.miembro, 'mesa', t.mesa, 'total_crc', t.total_crc)
+      from (select m.ticket_id, min(m.fecha_visita) as f,
                    sum(m.creditos * m.valor_credito_crc) as valor, sum(m.creditos) as creditos,
-                   string_agg(distinct public.club_nombre_limpio(mi.nombre), ', ') as miembro,
-                   (select coalesce(max(t.cxc_crc), 0) from public.pos_ndf_tickets t
-                     where t.local = p_location and ltrim(t.numero_factura, '0') = m.clave) as cxc,
-                   exists (select 1 from public.pos_ndf_tickets t
-                            where t.local = p_location and ltrim(t.numero_factura, '0') = m.clave) as en_puente
+                   string_agg(distinct public.club_nombre_limpio(mi.nombre), ', ') as miembro
               from mv m join public.club_miembros mi on mi.id = m.miembro_id
-             where m.tipo = 'canje' and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
-             group by m.clave) c
-     where c.en_puente and abs(c.valor - c.cxc) > 1
+             where m.tipo = 'canje' and m.ticket_id is not null and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
+             group by m.ticket_id) c
+      join public.pos_ndf_tickets t on t.id = c.ticket_id
+     where abs(c.valor - coalesce(t.cxc_crc, 0)) > 1
     union all
     -- PROMO_SIN_CUPON (apagada mientras no haya artículo marcador)
     select 'PROMO_SIN_CUPON', 'factura:' || t.clave, t.f, t.numero_factura, 'exacta',
@@ -1471,7 +1587,7 @@ begin
       from tk t
      where v_cfg.promo_articulo_codigo is not null
        and exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = t.id and l.codigo_producto = v_cfg.promo_articulo_codigo)
-       and not exists (select 1 from mv m where m.tipo = 'tarjeta' and m.clave = t.clave)
+       and not exists (select 1 from mv m where m.tipo = 'tarjeta' and m.ticket_id = t.id)
   )
   select ex.tipo, ex.ref, ex.fecha, ex.factura, ex.certeza, ex.detalle,
          r.id is not null, r.nota, r.resuelto_en
@@ -1674,8 +1790,8 @@ revoke all on function public.club_personas_proximo(bigint, int)         from pu
 revoke all on function public.club_norm_factura(text)                     from public, anon, authenticated;
 revoke all on function public.club_saldo_personas(uuid)                  from public, anon, authenticated;
 revoke all on function public.club_cupon_crear(text, jsonb)              from public, anon, authenticated;
-revoke all on function public.club_cupon_usar(text, int, text, uuid)     from public, anon, authenticated;
-revoke all on function public.club_canje(uuid, numeric, text, uuid)      from public, anon, authenticated;
+revoke all on function public.club_cupon_usar(text, int, text, uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.club_canje(uuid, numeric, text, uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.club_ajuste(uuid, int, text, text)         from public, anon, authenticated;
 revoke all on function public.club_portal(text)                          from public, anon, authenticated;
 revoke all on function public.club_vencer(date)                          from public, anon, authenticated;
@@ -1687,7 +1803,10 @@ revoke all on function public.club_miembro_guardar(uuid, text, text, uuid, text,
 revoke all on function public.club_miembro_regenerar_codigo(uuid)         from public, anon, authenticated;
 revoke all on function public.club_miembro_token(uuid)                    from public, anon, authenticated;
 revoke all on function public.club_buscar(text)                           from public, anon, authenticated;
-revoke all on function public.club_tarjeta_manual(uuid, int, text, uuid)  from public, anon, authenticated;
+revoke all on function public.club_tarjeta_manual(uuid, int, text, uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.club_pos_ref(jsonb) from public, anon, authenticated;
+revoke all on function public.club_mesas_abiertas(text) from public, anon, authenticated;
+grant execute on function public.club_mesas_abiertas(text) to authenticated;
 revoke all on function public.club_resolver(text)                         from public, anon, authenticated;
 revoke all on function public.club_config_auditar()                       from public, anon, authenticated;
 
@@ -1696,7 +1815,7 @@ grant execute on function public.club_miembro_guardar(uuid, text, text, uuid, te
 grant execute on function public.club_miembro_regenerar_codigo(uuid)        to authenticated;
 grant execute on function public.club_miembro_token(uuid)                   to authenticated;
 grant execute on function public.club_buscar(text)                          to authenticated;
-grant execute on function public.club_tarjeta_manual(uuid, int, text, uuid) to authenticated;
+grant execute on function public.club_tarjeta_manual(uuid, int, text, uuid, jsonb) to authenticated;
 grant execute on function public.club_resolver(text)                        to authenticated;
 
 -- La vista los usa con los permisos de quien consulta (staff).
@@ -1721,8 +1840,8 @@ grant execute on function public.club_excepciones_abiertas(int, text) to authent
 grant execute on function public.club_excepcion_resolver(text, text, text, text) to authenticated;
 grant execute on function public.club_reporte_mes(date, text)         to authenticated;
 -- Staff (la guarda de rol está adentro)
-grant execute on function public.club_cupon_usar(text, int, text, uuid)  to authenticated;
-grant execute on function public.club_canje(uuid, numeric, text, uuid)   to authenticated;
+grant execute on function public.club_cupon_usar(text, int, text, uuid, jsonb) to authenticated;
+grant execute on function public.club_canje(uuid, numeric, text, uuid, jsonb) to authenticated;
 grant execute on function public.club_ajuste(uuid, int, text, text)      to authenticated;
 grant execute on function public.club_vencer(date)                       to authenticated;
 

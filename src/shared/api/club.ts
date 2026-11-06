@@ -194,3 +194,44 @@ export const nuevoOp = (): string =>
 
 export const fmtCreditos = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
+
+// ── F1f: excepciones del puente y reporte mensual (owner, manager) ───────────
+export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA'
+export interface Excepcion {
+  tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable'
+  detalle: Record<string, unknown>; resuelta: boolean; nota: string | null; resuelta_en: string | null
+}
+
+export const getExcepciones = (desde: string, hasta: string, local = 'santa-teresa') =>
+  llamar<Excepcion[]>('club_excepciones', { p_desde: desde, p_hasta: hasta, p_location: local })
+export const getExcepcionesAbiertas = (dias = 30, local = 'santa-teresa') =>
+  llamar<number>('club_excepciones_abiertas', { p_dias: dias, p_location: local })
+export const resolverExcepcion = (tipo: TipoExcepcion, ref: string, nota: string, local = 'santa-teresa') =>
+  llamar<boolean>('club_excepcion_resolver', { p_tipo: tipo, p_ref: ref, p_nota: nota, p_location: local })
+
+export interface FilaReporte {
+  nombre: string; negocio: string | null; tipo: TipoMiembro
+  personas?: number; tarjetas?: number; prom_3m?: number; nuevo_ritmo?: boolean
+  creditos?: number; ultima_actividad?: string | null; vence_en?: string
+}
+export interface ReporteMes {
+  mes: string; local: string; generado_en: string
+  config: { valor_credito_crc: number; personas_por_credito: number; vencimiento_meses: number; pm_pausado: boolean }
+  kpis: {
+    tarjetas: number; personas: number; creditos_generados: number; canjes: number; creditos_canjeados: number
+    valor_canjeado_crc: number; personas_vencidas: number; referentes_con_visitas: number
+    cupones_generados: number; cupones_usados: number; saldo_creditos_al_cierre: number; cuentas_con_saldo: number
+    anterior: { tarjetas: number; personas: number; canjes: number; creditos_canjeados: number }
+  }
+  ranking: FilaReporte[]; subiendo: FilaReporte[]; bajando: FilaReporte[]; a_contactar: FilaReporte[]
+  dormidos: { cuentas: number; creditos: number; lista: FilaReporte[] }
+  nuevos: { cuentas: number; lista: FilaReporte[] }
+  equipo: { personas_mes: number; creditos: number; lista: FilaReporte[] }
+  antiguedad: Array<{ tramo: string; cuentas: number; creditos: number; valor_crc: number }>
+  pm: { pausado: boolean; nota: string | null; pendiente_crc: number; cargos_mes_crc: number; pagos_mes_crc: number }
+  calidad: { abiertas: number; resueltas: number; por_tipo: Record<string, number>; promo_activa: boolean }
+}
+export const getReporteMes = (mes: string, local = 'santa-teresa') =>
+  llamar<ReporteMes>('club_reporte_mes', { p_mes: mes, p_location: local })
+export const getLocalesClub = async () =>
+  (await leer(from<{ location_id: string }>('club_config').select('location_id').order('location_id'))).map(r => r.location_id)

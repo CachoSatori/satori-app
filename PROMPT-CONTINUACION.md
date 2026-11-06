@@ -53,6 +53,19 @@
 5. **Club Satori (reemplazo de la página de créditos).** Spec v2 en revisión → [docs/club-satori/](docs/club-satori/). *(Nuevo, 05/11.)*
    - ✅ **F0 hecha (05/11):** mig 072 (SEC-03) en staging y prod; `/registro` y el QR del CRM apagados hasta la F1. Con el Paso 0 salió y se cerró también SEC-04 (mig 073). Detalle en [HALLAZGOS.md](HALLAZGOS.md).
    - Sigue: F1–F3 según el §1 del spec (ver [ROADMAP.md](ROADMAP.md)), después del P0 de caja.
+   - **🔴 Requisito ANTES de la salida general del Club (15-ene) — ítem 11 + puente del PoS** (decisión de Ismael, 06-nov). En el piloto, la caja elige la **mesa abierta** del puente y el cruce con la factura es «probable» (día + mesa + total ±₡1 + hora más cercana; plan B: mesa + últimos 4 del tiquete). Para pasar a exacto, `ingest-ndf` tiene que traer:
+     - **el consecutivo de la factura electrónica (20 dígitos) y la clave de 50 dígitos** de cada factura cerrada. Formato confirmado con un ticket real: `002 00001 04 0000016012` = sucursal (3), terminal (5), tipo (2; `04` tiquete, `01` factura) y número (10). El ticket no muestra el número interno.
+     - **la clave completa del pedido** en las mesas abiertas (`Periodo`/`Mes`/`Dia`/`NumeroPedido`; el `NumeroPedido` solo se repite: es un contador) y **la lista de todos los pedidos** de cada factura (hoy se guarda solo el menor).
+     - `NombreCliente` («CREDITOS NUEVO»), `MotivoRegalia`, el descuento por línea (`Descuento` / `TipoDescuento`) y la hora real de cobro: con eso las excepciones de créditos dejan de ser «probables» y la promo 10 % se detecta sin artículo marcador.
+     - **Qué mirar en la PC del PoS (base de Nube de Fuego):**
+       1. en `FAC_Facturas`, el nombre de las columnas del consecutivo y de la clave de 50 dígitos, y si el tipo (01 / 04) está en una columna propia;
+       2. si tiquetes y facturas comparten la tabla y cómo se numera cada uno (serie por tipo);
+       3. en `FAC_Pedidos`, si `NumeroPedido` se reinicia por día, por turno o por caja (en staging, el pedido «14» aparece dos veces el 11-oct, en mesas distintas);
+       4. qué pasa con los pedidos al **dividir una cuenta**, al **unir mesas** y al **cambiar de mesa** (si se crean pedidos nuevos y cuál mesa queda);
+       5. qué marca la hora de cobro de cada factura (`FechaRegistra` contra `FechaCierra`: hoy `fecha_cierra` llega agrupada por cierre);
+       6. dónde quedan `NombreCliente`, `MotivoRegalia` y `Descuento` / `TipoDescuento` en `FAC_PedidosDet`;
+       7. si hay forma de leer las mesas abiertas con su hora de apertura.
+     - Lleva firma: toca el agente de la PC del PoS y la Edge `ingest-ndf`.
 6. **🧹🖊️ Respaldos de staging `cash_movements_pre_migracion_2026_07` y `suppliers_pre_migracion_2026_07`: decidir si se borran.** Tenían RLS apagado; el 05/11 se cerraron (RLS sin policies + `revoke all` a `anon` y `authenticated`) con `scripts/sql/staging_respaldos_cierre_anon.sql`, sin borrarlos. Solo staging.
 
 ## 🟥 P0 — Cerrar el go-live del PoS (seguridad y números que se ven mal)

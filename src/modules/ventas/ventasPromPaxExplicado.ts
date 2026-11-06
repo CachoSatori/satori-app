@@ -122,11 +122,15 @@ export function cuadreVentas(v: Totales, n: Totales): CuadreVentas {
 
 // ── Cortes y descomposición del prom/pax (§6.2) ────────────────────────────────────────────
 
-export type Corte = 'turno' | 'dia' | 'salonero' | 'semana'
-export const CORTES: readonly Corte[] = ['turno', 'dia', 'salonero', 'semana']
+/**
+ * `saloneroTurno` es interno: la tabla de saloneros con turno = «ambos» tiene una fila por
+ * salonero y turno (§7.3), y su rendimiento/mezcla sale de este corte (también cuadra).
+ */
+export type Corte = 'turno' | 'dia' | 'salonero' | 'semana' | 'saloneroTurno'
+export const CORTES: readonly Corte[] = ['turno', 'dia', 'salonero', 'semana', 'saloneroTurno']
 
 export const NOMBRE_CORTE: Record<Corte, string> = {
-  turno: 'turno', dia: 'día', salonero: 'salonero', semana: 'semana',
+  turno: 'turno', dia: 'día', salonero: 'salonero', semana: 'semana', saloneroTurno: 'salonero y turno',
 }
 
 /** Un grupo de un corte en UN período: solo salón. `neta` = la parte CON pax (N_i). */
@@ -159,6 +163,11 @@ function claveDe(corte: Corte, f: FilaAgregada, periodo: Rango, resolver: Resolv
     case 'salonero': {
       const s = resolver(f.salonero_login, f.dia)
       return { clave: s.clave, etiqueta: s.nombre, orden: 0 }
+    }
+    case 'saloneroTurno': {
+      const s = resolver(f.salonero_login, f.dia)
+      const t = turnoDeFranja(f.franja)
+      return { clave: `${s.clave}|${t}`, etiqueta: `${s.nombre} · ${t === 'mañana' ? 'Mañana' : 'Noche'}`, orden: t === 'mañana' ? 0 : 1 }
     }
     case 'semana': {
       const k = Math.round((Date.parse(lunesDe(f.dia)) - Date.parse(lunesDe(periodo.desde))) / (7 * 86_400_000))
@@ -248,7 +257,9 @@ export function descomponerPromPax(gv: readonly Grupo[], gn: readonly Grupo[], v
     const s_n = b ? b.pax / n.PAX : 0
     const p_v = a ? a.neta / a.pax : null
     const p_n = b ? b.neta / b.pax : null
-    let rendimiento = 0, mezcla = 0, estado: EstadoGrupo
+    let rendimiento = 0
+    let mezcla: number
+    let estado: EstadoGrupo
     if (a && b) {
       estado = 'ambos'
       rendimiento = s_n * (p_n! - p_v!)

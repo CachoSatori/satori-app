@@ -492,3 +492,31 @@ export async function getPedidosCerradosJornada(
   }
   return out
 }
+
+// ── Prom/PAX explicado (mig 078) ───────────────────────────────────────────────────────────
+
+/** Una fila del agregado: (día CR, franja horaria CR, salonero, canal) → facturas, pax, neta. */
+export interface FilaPromPaxRpc {
+  dia:             string
+  franja:          'mañana' | 'noche' | 'madrugada'
+  salonero_login:  string | null
+  canal:           string
+  tickets:         number
+  pax:             number
+  neta:            number
+  neta_sin_pax:    number
+  tickets_sin_pax: number
+}
+
+/**
+ * `pos_prompax_agregado`: owner/manager/contador activos (si no, 42501). Rango ≤ 731 días.
+ * Devuelve jsonb (no filas) para no chocar con el tope de filas de PostgREST.
+ */
+export async function getPromPaxAgregado(local: string, desde: string, hasta: string): Promise<FilaPromPaxRpc[]> {
+  const { data, error } = await sb.rpc('pos_prompax_agregado', { p_local: local, p_desde: desde, p_hasta: hasta })
+  if (error) throw new Error(error.message)
+  return ((data ?? []) as FilaPromPaxRpc[]).map(f => ({
+    ...f, tickets: Number(f.tickets), pax: Number(f.pax), neta: Number(f.neta),
+    neta_sin_pax: Number(f.neta_sin_pax), tickets_sin_pax: Number(f.tickets_sin_pax),
+  }))
+}

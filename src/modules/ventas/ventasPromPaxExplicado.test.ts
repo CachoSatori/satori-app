@@ -85,8 +85,8 @@ describe('§6.1 — propiedad: Δ ventas = Σ Δ líneas, Δ salón = volumen + 
 })
 
 describe('§6.2 — propiedad: Σ rendimiento + Σ mezcla + venta sin pax = P_n − P_v (1e-9)', () => {
-  const cortes: Corte[] = ['turno', 'dia', 'salonero', 'semana']
-  it('10.000 casos aleatorios, los cuatro cortes', () => {
+  const cortes: Corte[] = ['turno', 'dia', 'salonero', 'semana', 'saloneroTurno']
+  it('12.500 casos aleatorios, los cinco cortes', () => {
     const r = prng(42)
     let probados = 0
     for (let k = 0; k < 2500; k++) {
@@ -105,7 +105,7 @@ describe('§6.2 — propiedad: Σ rendimiento + Σ mezcla + venta sin pax = P_n 
         expect(sn).toBeCloseTo(1, 9)
       }
     }
-    expect(probados).toBeGreaterThan(9000)
+    expect(probados).toBeGreaterThan(11000)
   })
 
   it('magnitudes reales (₡ millones y miles de pax) también cuadran a 1e-9 relativo', () => {

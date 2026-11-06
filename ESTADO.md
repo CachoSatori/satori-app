@@ -102,9 +102,9 @@ pozo de caja → [PASE-POZO-A-PROD.md](PASE-POZO-A-PROD.md) · índice de SPECs 
 8. **Sagrados por hash de blob, no por `git diff`** (ver arriba). Nunca reimplementarlos sin acuerdo explícito.
 9. **Verificar un deploy por contenido, no por HTTP 200:** el fallback del SPA devuelve `index.html` para
    cualquier ruta.
-8. **Nunca revertir (ni borrar) el `.sql` de una migración que ya está en el ledger de prod.** Si se revierte el
-   código de un PR, el archivo de su migración se queda en `supabase/migrations/`; si no, Branching falla en cada
-   push a `main` (pasó con la 074 entre el 05 y el 06/11).
+10. **Nunca revertir (ni borrar) el `.sql` de una migración que ya está en el ledger de prod.** Si se revierte el
+    código de un PR, el archivo de su migración se queda en `supabase/migrations/`; si no, Branching falla en cada
+    push a `main` (pasó con la 074 entre el 05 y el 06/11).
 
 ---
 

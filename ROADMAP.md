@@ -123,9 +123,9 @@ revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuesta
    usuarios de la app para RODRI/FRANCO/MAXI BARRA, recalibrar los umbrales del ICP.
 2. Retirar el Excel y Paridad cuando Ismael lo firme.
 3. Ítem 11 (`config.toml` + `ingest-ndf` versionado, con el código de `monthly-report` **v10** y de `alta-empleado`: el de `main` es anterior a SEC-02), y después re-ingesta 2025 con los agentes actualizados.
-
-**⏸️ Diferido por Ismael (06/11): rotación de secretos de ingesta** (`POS_INGEST_SECRET` de prod y de staging, `INGEST_SECRET` de BioTime, y sus copias en los `.env` de las PCs del PoS y del reloj). No se hace hasta que Ismael lo reactive; el plan está en [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) (ítem 2).
 4. Salarios: destrabar BioTime (agente parado) y los bloqueos humanos; pase a prod por fase, con firma.
 5. PILAR de auth → gran pase del PoS.
+
+**⏸️ Diferido por Ismael (06/11): rotación de secretos de ingesta** (`POS_INGEST_SECRET` de prod y de staging, `INGEST_SECRET` de BioTime, y sus copias en los `.env` de las PCs del PoS y del reloj). No se hace hasta que Ismael lo reactive; el plan está en [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) (ítem 2).
 
 El detalle y la prioridad de cada ítem están en [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md).

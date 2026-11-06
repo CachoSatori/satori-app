@@ -32,9 +32,9 @@ estado: "borrador, validar en el local"
 | owner | … | … |
 | manager | … | … |
 
-> «Qué puede» y «qué no» salen de dos lugares, y los dos se indican: lo que **muestra la pantalla**
-> (botones que aparecen u ocultan por rol) y lo que **permite la base** (RLS / funciones). Si la pantalla
-> oculta algo pero la base lo permite, se anota.
+> «Qué puede» y «qué no» describen **solo el comportamiento esperado**: lo que la pantalla permite a cada
+> rol (tarjetas, pestañas, botones, contraseña de gerencia). Nada de detalles internos de la base ni de
+> diferencias de permisos: esas se documentan fuera del repo.
 
 ### Controles del manager
 

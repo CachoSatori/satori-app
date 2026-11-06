@@ -39,7 +39,7 @@
 
 1. **🖊️ Alerta de días sin cierre** (lo único que queda de la cola de caja). En prod faltan el cierre del día del 26/09 y los turnos del 18/10 y del 27/10.
 2. **🔐 Revocar el token `claude-code-prod` y rotar los secretos de ingesta** (`x-ingest-secret` de `ingest-ndf` en prod y staging, y su copia en los dos agentes de la PC del PoS). Hacerlo con las dos tareas paradas, y después verificar que `pos_ndf_cursor.last_error` quede null. Detalle: ítems 1 y 2 del P0 de abajo.
-3. **🔐 SEC-02.**
+3. ✅ **SEC-02**: cerrado en prod el 06/11 (`monthly-report` v10 con `verify_jwt` on; el cron con `Authorization` desde el Vault).
 4. **🖊️ Ítem 11 · `supabase/config.toml`:** versionar `ingest-ndf` y las 6 funciones con su `verify_jwt` actual:
    - `monthly-report` false · `extract-document` true · `cierre-email` true · `pago-notificar` true · `ingest-ndf` false · `alta-empleado` true;
    - el código de `alta-empleado` está en la rama `claude/alta-empleado-fn`;

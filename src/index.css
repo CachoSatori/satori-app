@@ -5404,14 +5404,17 @@ html, body, #root {
 .sop-libros-aviso { margin-top: 0.4rem; font-size: 0.8rem; color: #6e706c; }
 .sop-libros-aviso a { color: #8a6a33; }
 
-/* Impresión del lector: copia montada en <body>; el resto de la app se oculta. */
+/* Impresión del lector: copia montada en <body>; el resto de la app se oculta.
+   La página A4 con estos márgenes es una página CON NOMBRE (sop-a4) y solo la usa
+   .sopl-print: un @page sin nombre acá cambiaría los márgenes de todas las demás
+   impresiones de la app (Propinas quincenal, Ventas evaluación, reportes mensuales). */
 #sop-print-root { display: none; }
+@page sop-a4 { size: A4; margin: 16mm 16mm 18mm; }
 @media print {
-  @page { size: A4; margin: 16mm 16mm 18mm; }
   body.sop-imprimiendo > *:not(#sop-print-root) { display: none !important; }
   body.sop-imprimiendo { background: #fff !important; }
   body.sop-imprimiendo #sop-print-root { display: block; }
-  .sopl-print { font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sopl-print { page: sop-a4; font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .sopl-print-cab {
     display: flex; justify-content: space-between; align-items: flex-end;
     padding-bottom: 6pt; border-bottom: 0.75pt solid var(--sopl-oro); margin-bottom: 14pt;

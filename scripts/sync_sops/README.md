@@ -16,7 +16,7 @@ Lee `indice.json` y `sops/*.md` del paquete ("paquete app SoP") y deja la tabla 
 export SUPABASE_ACCESS_TOKEN=...   # token de la Management API; nunca en un archivo del repo
 
 # Ensayo (no escribe nada)
-node scripts/sync_sops/sync.ts --paquete "~/Downloads/SoP Satori Claude/claude/paquete app SoP"
+node scripts/sync_sops/sync.ts --paquete "$HOME/Downloads/SoP Satori Claude/claude/paquete app SoP"
 
 # Aplicar en STAGING
 node scripts/sync_sops/sync.ts --paquete "<carpeta>" --aplicar
@@ -42,8 +42,8 @@ export SUPABASE_SERVICE_ROLE_KEY=...   # la de STAGING
 
 # Ensayo (no sube nada)
 node scripts/sync_sops/subir_pdfs.ts \
-  --paquete "~/Downloads/SoP Satori Claude/claude/paquete app SoP" \
-  --pdfs "~/Downloads/SoP Satori Claude/claude/Satori - Documentos noviembre 2026"
+  --paquete "$HOME/Downloads/SoP Satori Claude/claude/paquete app SoP" \
+  --pdfs "$HOME/Downloads/SoP Satori Claude/claude/Satori - Documentos noviembre 2026"
 
 # Subir a STAGING
 node scripts/sync_sops/subir_pdfs.ts --paquete "<carpeta>" --pdfs "<carpeta>" --aplicar

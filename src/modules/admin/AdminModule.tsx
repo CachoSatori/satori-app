@@ -9,19 +9,10 @@ import ExchangeRateWidget from './ExchangeRateWidget'
 import EmployeeHours from './EmployeeHours'
 import UserApprovals from './UserApprovals'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { enviarReporteMensual, mensajeReporte } from '../../shared/api/reporteMensual'
 
 type Tab = 'employees' | 'users' | 'rolepoints' | 'exchange' | 'hours'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
-
-async function sendMonthlyReport(month?: string, tipo?: string): Promise<{ ok: boolean; month?: string; results?: string[]; error?: string }> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/monthly-report`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ ...(month ? { month } : {}), ...(tipo ? { tipo } : {}) }),
-  })
-  return res.json()
-}
 
 export default function AdminModule() {
   const navigate = useNavigate()
@@ -116,12 +107,8 @@ export default function AdminModule() {
             onClick={async () => {
               setSendingReport(true)
               setReportMsg(null)
-              const result = await sendMonthlyReport(undefined, tipo)
-              if (result.ok) {
-                setReportMsg(`✓ ${tipo === 'ambos' ? 'Ambos reportes' : 'Reporte '+tipo} enviado — ${result.month}`)
-              } else {
-                setReportMsg(`✗ ${result.error?.slice(0, 80)}`)
-              }
+              // SEC-02: la función exige el JWT del owner activo (functions.invoke lo reenvía).
+              setReportMsg(mensajeReporte(tipo, await enviarReporteMensual(tipo)))
               setSendingReport(false)
               setTimeout(() => setReportMsg(null), 6000)
             }}

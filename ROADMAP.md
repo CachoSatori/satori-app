@@ -101,13 +101,14 @@ revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuesta
 | Tema | Estado | Notas |
 |---|---|---|
 | Estabilidad (pantalla negra, realtime tras suspensión, outbox en `SIGNED_IN`, offline) | ✅ prod | |
-| Versionar `ingest-ndf` en `main` con `supabase/config.toml` (ítem 11) | 🔲 | Hasta entonces, ningún PR a `main` con `supabase/functions/`. Al cerrarlo entra también `alta-empleado` (rama `claude/alta-empleado-fn`, `verify_jwt = true`). |
+| Versionar `ingest-ndf` en `main` con `supabase/config.toml` (ítem 11) | 🔲 | Hasta entonces, ningún PR a `main` con `supabase/functions/`. Con SEC-02 en prod, `monthly-report` pasa a `verify_jwt = true`. Al cerrarlo entra también `alta-empleado` (rama `claude/alta-empleado-fn`, `verify_jwt = true`). |
 | **SEC-01 · cierre de la escalada de roles** (mig 068: rol fijo al dar de alta, guarda de owner activo, nunca 0 owners) | 🟢 prod (05/11) | Paso A y mig 068 aplicados en prod. Falta que Ismael valide (3 owners, Admin, un salonero real en Mi Rendimiento) y el merge del PR. |
 | **SEC-01b · `get_my_role()` mira `is_active`** (mig 069; en staging también la 070 del PoS) | 🟢 prod (05/11) | **CRÍTICO.** Antes o en la misma migración: corregir las 6 guardas `not in` que se abren con NULL y las 3 policies que leen `profiles.role` sin `is_active` (`cierre_write`, `inv_write_recipes`, `inv_write_ri`). |
 | Versionar en migraciones las policies reales de `profiles` (y revisar drift en el resto) | 🔲 | Hoy prod y staging tienen 3 policies que no están en el repo. También el nombre distinto del trigger de `auth.users`. |
 | **Alta de empleados desde Admin** (Edge Function `alta-empleado`; el owner crea la cuenta y asigna rol) | ✅ prod (06/11, PR #39) | Owner activo, sin crear owners, contraseña temporal y cambio obligatorio en el primer ingreso. Login sin «Crear cuenta». La función está desplegada a mano (`verify_jwt` on); su código entra a `main` con el ítem 11. Auth de prod: `site_url` y redirects corregidos, contraseña mínima 8. Ver [HALLAZGOS.md](HALLAZGOS.md). |
 | Decidir si se reactiva el auto-registro de empleados | 🔲 🖊️ | Apagado desde el 04/11 (`disable_signup`). Con la 068 sería seguro (salonero + inactivo), pero cualquiera podría crear cuentas pendientes. Alternativa: alta solo por el owner. |
 | `LoginPage` sigue ofreciendo «crear cuenta» de empleado | 🔲 | Con el signup apagado devuelve un error técnico (`Signups not allowed`). Ocultar el botón o poner un mensaje claro («pedile el alta al encargado»). Toca `src/`. |
+| 🔴 **SEC-02 · `monthly-report` sin auth** (respondía el total de ventas y el top salonero y mandaba los correos a cualquiera, incluso sin token) | 🧪 staging (06/11) 🖊️ | Rama de la función `claude/sec-02-monthly-report-fn` (staging v2, `verify_jwt` on: service_role u owner activo, CORS, parámetros validados, respuesta sin datos) + rama de frontend `claude/sec-02-monthly-report` (botón con JWT). **Prod:** primero el Vault + Authorization en los jobs 3 y 4 del cron (hoy llaman sin header), después el frontend y al final la función. Ver [HALLAZGOS.md](HALLAZGOS.md). |
 | Hardening ACL: 4 `SECURITY DEFINER` ejecutables por `anon` en prod | 🔲 | `get_my_role` exige análisis de policies antes del revoke. Higiene (en prod no son de plata). |
 | Gate de tests en `deploy.yml` | 🔲 | Hoy publica sin correr `vitest`. |
 | Higiene · Sincronizar la rama `staging` con `main` | 🔲 | Al 05/11, `staging` está ~20 commits atrás de `main` (PRs #18–#22, archivos de las migraciones 065–068, código de logins viejos). El fix del #25 entró a `staging` como cherry-pick (`3f6fcb1`, merge `cef4f95`) justo para no arrastrarlos. Mergear `main` → `staging` con cuidado: hay conflictos en los docs y el ledger de staging no tiene las filas 065/066. |
@@ -117,7 +118,7 @@ revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuesta
 
 ## Lo próximo, en orden
 
-0. **SEC-01:** validación de Ismael en prod + merge → **alta de empleados desde Admin** → ~~SEC-01b~~ ✅ (05/11) → SEC-02.
+0. ~~SEC-01~~ ✅ → ~~alta de empleados~~ ✅ → ~~SEC-01b~~ ✅ → **SEC-02**: en staging (06/11); prod con firma (cron, frontend y función).
 1. Cerrar lo que quedó del go-live del PoS: rotación de secretos de ingest, revocar el token `claude-code-prod`,
    usuarios de la app para RODRI/FRANCO/MAXI BARRA, recalibrar los umbrales del ICP.
 2. Retirar el Excel y Paridad cuando Ismael lo firme.

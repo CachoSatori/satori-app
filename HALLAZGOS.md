@@ -41,6 +41,18 @@
   También se montaron las pantallas reales contra la base. Staging quedó limpio.
 - **En prod, pruebas sin escribir:** sin token → 401, token sin usuario → 401 `sin_sesion`, el origen de prod con permiso y otro origen sin permiso.
 
+## ↩️ Noviembre 2026 — El cierre de turno vuelve a contar efectivo (06/11)
+
+- **Motivo:** en el primer cierre de turno sin efectivo (05/11, #36) el turno quedó **sin total de caja ni total de gastos**, y el encargado no tenía cómo verificar. El equipo necesita esos totales para controlar el turno.
+- **Qué se hizo:** `CashTurno.tsx`, `CashResumen.tsx` y `CashTurno.gastadoEfectivo.test.tsx` volvieron, idénticos, al código previo al #36 (`342c5f0^1`). Vuelven:
+  - el campo de efectivo al cierre (`final_cash_*` se guarda otra vez);
+  - «Debería quedar en la Caja Diaria» y «Cuadra / Diferencia»;
+  - los totales de gastos y egresos, y el resumen;
+  - «Disponible» con su texto y el aviso de déficit;
+  - CashResumen con la columna original.
+- **Lo que se queda:** el «Recontar» del cierre del día (`CashCierre.tsx` sin cambios) y la mig 074.
+- **Sigue valiendo:** el «debería» del turno mira un solo cajón y puede dar negativo, por el diseño del pozo (ver la sección siguiente). Ahora se acepta como dato para que el encargado verifique, no como control del efectivo, que sigue estando en el cierre del día.
+
 ## 🔁 Noviembre 2026 — «Recontar» una vez en el cierre del día; el cierre de turno deja de contar (✅ prod, 06/11)
 
 - **Cierre del día:** el «Debería quedar», el «Cuadra / Diferencia» y la verificación se siguen viendo **en vivo**.
@@ -51,6 +63,7 @@
   - El resumen muestra «Primer conteo (antes del reconteo)» cuando lo hubo.
   - No cambian la tolerancia, `requiresAjuste`, `cuadra`/`cuadraUSD` ni los montos que se guardan.
 - **Antes se probó un conteo ciego** (#31: esperado oculto hasta «Confirmar conteo»). Ismael lo descartó y se revirtió (#32) **sin tocar la base**: la 074 quedó con columnas nulas, compatible con el cliente de la 071.
+- ⚠️ **Revertido el 06/11** (ver la sección de arriba): el cierre de turno volvió a contar efectivo.
 - **Cierre de turno:** ya no pide efectivo ni muestra «debería / Cuadra». `final_cash_*` queda null y ningún cálculo lo usa; CashResumen lo muestra como «Caja Diaria al cerrar (histórico)», con «—» si falta.
   - **Por qué:** el «debería» de un solo cajón queda incompleto **por diseño del pozo** (`pozo.ts`, REPORTE-T1B §3.1). La plata pasa entre la Caja Fuerte, la Registradora y la Caja Diaria sin registrar el traspaso, y las propinas salen de la Registradora (`propinaPago.ts`), así que daba negativos imposibles (−₡119.800 el 17/08). El control real del efectivo es el **cierre del día**.
   - «Disponible» pasa a decir «Fondo menos pagos del día (no incluye reposiciones)» y ya no avisa «déficit».

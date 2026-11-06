@@ -2,7 +2,7 @@
 -- ║ 067 · Lectura de ventas del PoS para el EQUIPO (Mi Rendimiento) — sin medios de pago ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
--- Firma de Ismael, 2026-10-30 (opción B). Las tablas `pos_ndf_*` NO se abren: sus policies de la
+-- Firma del dueño, 2026-10-30 (opción B). Las tablas `pos_ndf_*` NO se abren: sus policies de la
 -- 062 (owner/manager/contador) quedan como están. Lo que se agrega son TRES funciones de lectura
 -- `security definer` que:
 --   · chequean el rol ADENTRO (`get_my_role()`): gerencia + contador + los roles de Mi Rendimiento;

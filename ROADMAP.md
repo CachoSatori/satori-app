@@ -119,10 +119,12 @@ revisión de Ismael → [docs/club-satori/](docs/club-satori/). Fechas propuesta
 ## Lo próximo, en orden
 
 0. ~~SEC-01~~ ✅ → ~~alta de empleados~~ ✅ → ~~SEC-01b~~ ✅ → ~~SEC-02~~ ✅ (06/11).
-1. Cerrar lo que quedó del go-live del PoS: rotación de secretos de ingest, revocar el token `claude-code-prod`,
+1. Cerrar lo que quedó del go-live del PoS: revocar/reemplazar el token `claude-code-prod`,
    usuarios de la app para RODRI/FRANCO/MAXI BARRA, recalibrar los umbrales del ICP.
 2. Retirar el Excel y Paridad cuando Ismael lo firme.
-3. Ítem 11 (`config.toml` + `ingest-ndf` versionado), y después re-ingesta 2025 con los agentes actualizados.
+3. Ítem 11 (`config.toml` + `ingest-ndf` versionado, con el código de `monthly-report` **v10** y de `alta-empleado`: el de `main` es anterior a SEC-02), y después re-ingesta 2025 con los agentes actualizados.
+
+**⏸️ Diferido por Ismael (06/11): rotación de secretos de ingesta** (`POS_INGEST_SECRET` de prod y de staging, `INGEST_SECRET` de BioTime, y sus copias en los `.env` de las PCs del PoS y del reloj). No se hace hasta que Ismael lo reactive; el plan está en [PROMPT-CONTINUACION.md](PROMPT-CONTINUACION.md) (ítem 2).
 4. Salarios: destrabar BioTime (agente parado) y los bloqueos humanos; pase a prod por fase, con firma.
 5. PILAR de auth → gran pase del PoS.
 

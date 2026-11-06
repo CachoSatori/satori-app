@@ -7,9 +7,13 @@
  *   2. 💰 Reporte de Propinas — distribución sector, AM/PM split, top take-home
  *
  * Triggers:
- *   - Día 1 del mes 08:00 CR (pg_cron → mes anterior)
- *   - Día 15 del mes 08:00 CR (pg_cron → mes actual acumulado)
- *   - POST manual: body { "month": "2026-04", "tipo": "ventas"|"propinas"|"ambos" }
+ *   - pg_cron (día 1 y día 15) con Authorization: Bearer <service_role, desde Vault>
+ *   - Botón de Admin (owner activo) con su JWT
+ *   - body { "month"?: "YYYY-MM", "tipo"?: "ventas"|"propinas"|"ambos", "dry_run"?: boolean }
+ *
+ * SEC-02 (06/11): exige service_role u owner activo; CORS con allowlist; parámetros validados;
+ * la respuesta NO trae montos ni nombres; errores fijos. Deploy A MANO con verify_jwt = true
+ * (regla: ningún PR a main con supabase/functions/ hasta el ítem 11).
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -434,54 +438,128 @@ ${p.sectores.length>0?`
 </div>${emailFooter(mes,anio)}</div>`
 }
 
+// ── SEC-02 (06/11): autenticación, CORS y validación ─────────────────────────
+// Antes la función corría con service_role SIN pedir nada (verify_jwt off): cualquiera podía pedirle
+// el total de ventas y el top salonero del mes, y disparar los correos del reporte.
+// Ahora: Authorization = service_role (el cron, desde Vault) o el JWT de un OWNER ACTIVO (botón de
+// Admin). La respuesta ya no trae montos ni nombres; los errores son fijos (+ ref en el log).
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+
+function origenPermitido(origin: string): boolean {
+  return origin === 'https://cachosatori.github.io'
+    || /^https:\/\/([a-z0-9-]+\.)?satori-staging\.pages\.dev$/.test(origin)
+}
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') ?? ''
+  const h: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+  if (origenPermitido(origin)) h['Access-Control-Allow-Origin'] = origin
+  return h
+}
+function igualConstante(a: string, b: string): boolean {
+  const ea = new TextEncoder().encode(a), eb = new TextEncoder().encode(b)
+  let diff = ea.length ^ eb.length
+  for (let i = 0; i < Math.max(ea.length, eb.length); i++) diff |= (ea[i] ?? 0) ^ (eb[i] ?? 0)
+  return diff === 0
+}
+// month: YYYY-MM entre 2024-01 y el mes en curso (CR). tipo: ventas | propinas | ambos.
+function mesValido(ym: string): boolean {
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(ym)
+  if (!m) return false
+  const hoy = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Costa_Rica' }))
+  const actual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`
+  return ym >= '2024-01' && ym <= actual
+}
+
 // ── Main handler ─────────────────────────────────────────────
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, {
-    headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type' }
-  })
+  const cors = corsHeaders(req)
+  const ref = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+  const responder = (status: number, body: Record<string, unknown>) =>
+    new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+  const falla = (status: number, code: string, error: string) => responder(status, { ok: false, code, error, ref })
+
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+  if (req.method !== 'POST') return falla(405, 'metodo', 'Método no permitido')
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
-    const body = await req.json().catch(() => ({})) as { month?: string; tipo?: string }
-
-    // Determine month
-    let ym = body.month ?? ''
-    if (!ym) {
-      const now = new Date(new Date().toLocaleString('en-US', {timeZone: 'America/Costa_Rica'}))
-      now.setMonth(now.getMonth() - 1)
-      ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+    // 1) Quién llama: service_role (cron) u owner activo (botón de Admin). Nada más.
+    const auth = req.headers.get('Authorization') ?? ''
+    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : ''
+    if (!token) return falla(401, 'sin_sesion', 'No autorizado')
+    let quien = 'service_role'
+    // service_role: igual a la del entorno, o verificada POR EL SERVIDOR (un endpoint de admin de GoTrue
+    // solo responde a una clave service_role real; sirve para el JWT viejo y para las claves nuevas).
+    const esServiceRole = igualConstante(token, SUPABASE_KEY) || await (async () => {
+      try {
+        const c = createClient(SUPABASE_URL, token, { auth: { persistSession: false, autoRefreshToken: false } })
+        const { error } = await c.auth.admin.listUsers({ page: 1, perPage: 1 })
+        return !error
+      } catch { return false }
+    })()
+    if (!esServiceRole) {
+      const comoUsuario = createClient(SUPABASE_URL, ANON_KEY, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      })
+      const { data: ud } = await comoUsuario.auth.getUser()
+      if (!ud?.user) return falla(401, 'sin_sesion', 'No autorizado')
+      const admin = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+      const { data: owner, error: oe } = await admin.from('profiles').select('id')
+        .eq('id', ud.user.id).eq('role', 'owner').eq('is_active', true).maybeSingle()
+      if (oe) { console.error(JSON.stringify({ ref, etapa: 'owner', detalle: oe.message })); return falla(500, 'interno', 'No se pudo generar el reporte') }
+      if (!owner) return falla(403, 'no_autorizado', 'Solo un owner activo puede pedir el reporte')
+      quien = `owner:${ud.user.id}`
     }
 
-    const [y, m] = ym.split('-')
-    const mes    = MONTHS_ES[Number(m)-1] ?? m
-    const anio   = Number(y)
-    const tipo   = body.tipo ?? 'ambos'
+    // 2) Parámetros.
+    const body = await req.json().catch(() => ({})) as { month?: unknown; tipo?: unknown; dry_run?: unknown }
+    if (body === null || typeof body !== 'object') return falla(400, 'entrada', 'Datos inválidos')
+    let ym = ''
+    if (body.month !== undefined && body.month !== null && body.month !== '') {
+      if (typeof body.month !== 'string' || !mesValido(body.month)) return falla(400, 'mes', 'Mes inválido (YYYY-MM)')
+      ym = body.month
+    } else {
+      const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Costa_Rica' }))
+      now.setMonth(now.getMonth() - 1)
+      ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    }
+    const tipo = body.tipo === undefined || body.tipo === null || body.tipo === '' ? 'ambos' : body.tipo
+    if (tipo !== 'ventas' && tipo !== 'propinas' && tipo !== 'ambos') return falla(400, 'tipo', 'Tipo inválido (ventas, propinas o ambos)')
+    if (body.dry_run !== undefined && typeof body.dry_run !== 'boolean') return falla(400, 'dry_run', 'dry_run inválido')
+    const dry = body.dry_run === true   // modo seco: calcula todo, NO manda correos
 
-    const results: string[] = []
+    // 3) Reporte. La respuesta dice qué se envió, sin montos ni nombres (van solo en el correo).
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    const [y, m] = ym.split('-')
+    const mes  = MONTHS_ES[Number(m) - 1] ?? m
+    const anio = Number(y)
+    const enviados: string[] = [], sinDatos: string[] = []
 
     if (tipo === 'ventas' || tipo === 'ambos') {
       const v = await calcVentas(supabase, ym)
       if (v.diasVentas > 0) {
-        await send(`📈 Satori — Ventas ${mes} ${anio}`, buildVentasEmail(v, mes, anio))
-        results.push(`ventas: ${fi(v.total)} · ${v.diasVentas} días · IRS top: ${v.topSal[0]?.nombre??'—'} (${v.topSal[0]?.irs??0})`)
-      } else results.push('ventas: sin datos')
+        const html = buildVentasEmail(v, mes, anio)
+        if (!dry) await send(`📈 Satori — Ventas ${mes} ${anio}`, html)
+        enviados.push('ventas')
+      } else sinDatos.push('ventas')
     }
-
     if (tipo === 'propinas' || tipo === 'ambos') {
       const p = await calcPropinas(supabase, ym)
       if (p.turnos > 0) {
-        await send(`💰 Satori — Propinas ${mes} ${anio}`, buildPropinasEmail(p, mes, anio))
-        results.push(`propinas: ${fi(p.pool)} pool · ${p.turnos} turnos`)
-      } else results.push('propinas: sin datos')
+        const html = buildPropinasEmail(p, mes, anio)
+        if (!dry) await send(`💰 Satori — Propinas ${mes} ${anio}`, html)
+        enviados.push('propinas')
+      } else sinDatos.push('propinas')
     }
 
-    return new Response(JSON.stringify({ ok: true, month: `${mes} ${anio}`, results }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    })
-  } catch(err) {
-    console.error(err)
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), {
-      status: 500, headers: { 'Content-Type': 'application/json' }
-    })
+    console.log(JSON.stringify({ ref, quien, ym, tipo, dry, enviados, sinDatos }))
+    return responder(200, { ok: true, month: `${mes} ${anio}`, dry_run: dry, enviados, sin_datos: sinDatos })
+  } catch (err) {
+    console.error(JSON.stringify({ ref, etapa: 'no_controlado', detalle: String(err) }))
+    return falla(500, 'interno', 'No se pudo generar el reporte')
   }
 })

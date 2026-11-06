@@ -1,27 +1,86 @@
 {
-  "_nota": "Ids de las filas viejas de public.sops (iguales en STAGING y PROD al 2026-11-06). reemplazadas: pasan a is_active=false porque el paquete tiene su documento. solo_app: siguen activas con área provisional hasta que se incorporen al paquete.",
+  "_nota": "Ids de las filas viejas de public.sops (iguales en STAGING y PROD al 2026-11-06). reemplazadas: pasan a is_active=false porque el paquete tiene su documento (las 6 con código 4.1 están cubiertas completas dentro de Tareas del manager). solo_app: siguen activas con área provisional hasta que se incorporen al paquete.",
   "reemplazadas": {
-    "ca561e27-acae-4ff3-8888-d26d3b4d770d": { "titulo": "Delivery & Takeaway", "codigo": "2.9" },
-    "dcc4de45-2186-4602-ae19-70ac238a0f3c": { "titulo": "Planilla de Proveedores (caja de proveedores)", "codigo": "4.2" },
-    "6a6c1a39-51be-4b60-9bf3-2fc6e2084b7d": { "titulo": "Transferencias a Proveedores", "codigo": "4.3" },
-    "0937ed48-032e-41cd-b991-70c661a012ee": { "titulo": "Factura Electrónica", "codigo": "2.8" },
-    "7303124a-9c10-4b4e-aacd-addf836eeb22": { "titulo": "Bienvenida y Asiento", "codigo": "2.3" },
-    "b0398b7f-fa10-42c5-bf09-b6232a959197": { "titulo": "Servicio en Salón (flujo completo)", "codigo": "1.2" },
-    "703ea077-80d8-4af6-9a2c-6c84906d7943": { "titulo": "Cobro de Mesa y Separación de Cuentas", "codigo": "2.5" },
-    "8acb08cb-9f53-48ca-8114-4f7a53702387": { "titulo": "Créditos", "codigo": "2.7" },
-    "a1a6fd70-8daa-4256-aa58-5e64fb57fe97": { "titulo": "Local Club — Cortesías y Descuentos", "codigo": "2.6" },
-    "cea4a9aa-e42e-442a-b977-3ce7a4084b56": { "titulo": "Gestión de Reservas", "codigo": "2.4" }
+    "ca561e27-acae-4ff3-8888-d26d3b4d770d": {
+      "titulo": "Delivery & Takeaway",
+      "codigo": "2.9"
+    },
+    "dcc4de45-2186-4602-ae19-70ac238a0f3c": {
+      "titulo": "Planilla de Proveedores (caja de proveedores)",
+      "codigo": "4.2"
+    },
+    "6a6c1a39-51be-4b60-9bf3-2fc6e2084b7d": {
+      "titulo": "Transferencias a Proveedores",
+      "codigo": "4.3"
+    },
+    "0937ed48-032e-41cd-b991-70c661a012ee": {
+      "titulo": "Factura Electrónica",
+      "codigo": "2.8"
+    },
+    "7303124a-9c10-4b4e-aacd-addf836eeb22": {
+      "titulo": "Bienvenida y Asiento",
+      "codigo": "2.3"
+    },
+    "b0398b7f-fa10-42c5-bf09-b6232a959197": {
+      "titulo": "Servicio en Salón (flujo completo)",
+      "codigo": "1.2"
+    },
+    "703ea077-80d8-4af6-9a2c-6c84906d7943": {
+      "titulo": "Cobro de Mesa y Separación de Cuentas",
+      "codigo": "2.5"
+    },
+    "8acb08cb-9f53-48ca-8114-4f7a53702387": {
+      "titulo": "Créditos",
+      "codigo": "2.7"
+    },
+    "a1a6fd70-8daa-4256-aa58-5e64fb57fe97": {
+      "titulo": "Local Club — Cortesías y Descuentos",
+      "codigo": "2.6"
+    },
+    "cea4a9aa-e42e-442a-b977-3ce7a4084b56": {
+      "titulo": "Gestión de Reservas",
+      "codigo": "2.4"
+    },
+    "fd0a7ba8-4cd4-4613-a322-168bd67f3546": {
+      "titulo": "Montaje de Mesas",
+      "codigo": "2.2"
+    },
+    "e97d5d6b-b82b-4c09-b2e3-4d78c8b1ef37": {
+      "titulo": "Inventario de Bebidas",
+      "codigo": "4.4"
+    },
+    "a912c4be-6efd-46af-8d2f-1f4dcd228181": {
+      "titulo": "Link de Pago (Banco Lafise)",
+      "codigo": "2.10"
+    },
+    "fd037d57-9969-4079-b42e-5d0fe1ed34ba": {
+      "titulo": "Pizarra de Recomendaciones Semanales",
+      "codigo": "2.11"
+    },
+    "01c81469-0f6e-4be8-b95c-f7440c8741f7": {
+      "titulo": "Cierre de Caja (cierre del día)",
+      "codigo": "4.1"
+    },
+    "7e54e7b7-d751-4872-8bfb-502909d818bc": {
+      "titulo": "SIPP Delivery (plataforma)",
+      "codigo": "4.1"
+    },
+    "30203d11-2c24-4251-899d-b1af4656b239": {
+      "titulo": "Reporte de Horas (BioTime Pro)",
+      "codigo": "4.1"
+    },
+    "190f3b2f-69cd-4f69-a97e-f8b21f024e99": {
+      "titulo": "Reportes de Ventas (quincenales y mensuales)",
+      "codigo": "4.1"
+    },
+    "ff2415b4-22d9-42a7-a486-49c98ffe5e21": {
+      "titulo": "Regalías",
+      "codigo": "4.1"
+    },
+    "212bdc4f-3ad6-4ab2-893e-94150fd90212": {
+      "titulo": "SINPE y Bitcoin",
+      "codigo": "4.1"
+    }
   },
-  "solo_app": {
-    "fd0a7ba8-4cd4-4613-a322-168bd67f3546": { "titulo": "Montaje de Mesas", "area": "2. Salón y recepción" },
-    "fd037d57-9969-4079-b42e-5d0fe1ed34ba": { "titulo": "Pizarra de Recomendaciones Semanales", "area": "2. Salón y recepción" },
-    "a912c4be-6efd-46af-8d2f-1f4dcd228181": { "titulo": "Link de Pago (Banco Lafise)", "area": "2. Salón y recepción" },
-    "01c81469-0f6e-4be8-b95c-f7440c8741f7": { "titulo": "Cierre de Caja (cierre del día)", "area": "4. Administración y caja" },
-    "7e54e7b7-d751-4872-8bfb-502909d818bc": { "titulo": "SIPP Delivery (plataforma)", "area": "4. Administración y caja" },
-    "30203d11-2c24-4251-899d-b1af4656b239": { "titulo": "Reporte de Horas (BioTime Pro)", "area": "4. Administración y caja" },
-    "190f3b2f-69cd-4f69-a97e-f8b21f024e99": { "titulo": "Reportes de Ventas (quincenales y mensuales)", "area": "4. Administración y caja" },
-    "ff2415b4-22d9-42a7-a486-49c98ffe5e21": { "titulo": "Regalías", "area": "4. Administración y caja" },
-    "212bdc4f-3ad6-4ab2-893e-94150fd90212": { "titulo": "SINPE y Bitcoin", "area": "4. Administración y caja" },
-    "e97d5d6b-b82b-4c09-b2e3-4d78c8b1ef37": { "titulo": "Inventario de Bebidas", "area": "4. Administración y caja" }
-  }
+  "solo_app": {}
 }

@@ -75,6 +75,8 @@ async function main() {
 
   const filas = leerPaquete(paquete)
   console.log(`Paquete: ${filas.length} documentos, sin datos sensibles.`)
+  // Valida el mapeo contra el índice también en el ensayo (códigos que faltan, ids, áreas).
+  const sql = armarSql(filas, mapeo)
 
   // Chequeo de schema: la 076 tiene que estar aplicada.
   const cols = await consulta(ref, `select column_name from information_schema.columns
@@ -109,7 +111,7 @@ async function main() {
   writeFileSync(archivo, JSON.stringify(actuales, null, 1))
   console.log(`Respaldo: ${archivo}`)
 
-  const res = await consulta(ref, armarSql(filas, mapeo))
+  const res = await consulta(ref, sql)
   const conteo: Record<string, number> = {}
   for (const r of res) conteo[r.accion as string] = (conteo[r.accion as string] ?? 0) + 1
   console.log('Aplicado:', JSON.stringify(conteo))

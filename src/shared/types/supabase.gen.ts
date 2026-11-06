@@ -2172,6 +2172,12 @@ export type Database = {
           is_active: boolean | null
           title: string
           updated_at: string | null
+          area: string | null
+          code: string | null
+          doc_type: string | null
+          employee_book: boolean
+          pdf_path: string | null
+          version: string | null
         }
         Insert: {
           category?: string
@@ -2183,6 +2189,12 @@ export type Database = {
           is_active?: boolean | null
           title: string
           updated_at?: string | null
+          area?: string | null
+          code?: string | null
+          doc_type?: string | null
+          employee_book?: boolean
+          pdf_path?: string | null
+          version?: string | null
         }
         Update: {
           category?: string
@@ -2194,6 +2206,12 @@ export type Database = {
           is_active?: boolean | null
           title?: string
           updated_at?: string | null
+          area?: string | null
+          code?: string | null
+          doc_type?: string | null
+          employee_book?: boolean
+          pdf_path?: string | null
+          version?: string | null
         }
         Relationships: [
           {

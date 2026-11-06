@@ -86,3 +86,24 @@ export async function deleteSOPItem(id: string): Promise<void> {
     .eq('id', id)
   if (error) throw new Error(error.message)
 }
+
+// ── PDF de los SoP y libros (mig 077) ─────────────────────────
+// Bucket privado `documents`. Las rutas las sube scripts/sync_sops/subir_pdfs.ts
+// (mismas constantes en scripts/sync_sops/pdfs.ts).
+export const SOP_BUCKET = 'documents'
+
+export const SOP_LIBROS = [
+  { id: 'empleado',   nombre: 'Libro del empleado',  ruta: 'sops/libros/libro-empleado.pdf',              archivo: 'Satori - Libro del empleado.pdf',  soloGerencia: false },
+  { id: 'franquicia', nombre: 'Libro de franquicia', ruta: 'sops/libros/franquicia/libro-franquicia.pdf', archivo: 'Satori - Libro de franquicia.pdf', soloGerencia: true  },
+] as const
+
+/**
+ * URL firmada y temporal (10 min) para abrir un PDF del bucket. Con `descarga`
+ * (nombre de archivo) el navegador lo baja en vez de mostrarlo.
+ */
+export async function urlPdfSop(ruta: string, segundos = 600, descarga?: string): Promise<string> {
+  const { data, error } = await supabase.storage.from(SOP_BUCKET)
+    .createSignedUrl(ruta, segundos, descarga ? { download: descarga } : undefined)
+  if (error || !data?.signedUrl) throw new Error(error?.message || 'No se pudo abrir el PDF.')
+  return data.signedUrl
+}

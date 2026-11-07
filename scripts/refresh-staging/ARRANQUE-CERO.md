@@ -24,7 +24,7 @@ ejercicio buscaba habilitar. La base quedó **con los datos de ella**, no vacía
 | | |
 |---|---|
 | `cash_movements` | **1** — su ingreso `Banco → Caja Fuerte` **₡744.570 / $3.441** |
-| `cash_sessions` | **1** — Caja Diaria del **22/07**, **abierta**, fondo **₡100.000**, cajero *Cacho* |
+| `cash_sessions` | **1** — Caja Diaria del **22/07**, **abierta**, fondo **₡100.000**, cajero *el dueño* |
 | `cash_cierres_dia` · `tip_sessions` · `tip_entries` · `documents` · `movement_deletions` | **0** |
 | restos de las pruebas de este trabajo | **0** ✅ |
 

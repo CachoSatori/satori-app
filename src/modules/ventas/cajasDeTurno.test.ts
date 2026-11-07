@@ -1,4 +1,4 @@
-// Las cajas de turno con su nombre canónico (firmado por Ismael, 2026-10-29).
+// Las cajas de turno con su nombre canónico (firmado por el dueño, 2026-10-29).
 //
 // En prod, con FUENTE_VENTAS='xls', el Excel trae las cajas como «Cajero Turno Mañana» y
 // «cajero turno tarde». El merge 9ada841 las buscaba por la clave exacta del PoS
@@ -34,7 +34,7 @@ describe('claveCajeroDeTurno — sin mayúsculas, tildes ni espacios de más', (
     expect(esCajaDeTurno(nombre)).toBe(true)
   })
 
-  it.each(['MAXO', 'Cajero-salón', 'Salón sin mesero', 'Sistema y otros', '', null])(
+  it.each(['TITO', 'Cajero-salón', 'Salón sin mesero', 'Sistema y otros', '', null])(
     '%s no es una caja de turno', (nombre) => {
       expect(claveCajeroDeTurno(nombre)).toBeNull()
     })
@@ -46,14 +46,14 @@ describe('claveCajeroDeTurno — sin mayúsculas, tildes ni espacios de más', (
 
 describe('diaConCajasDeTurno — renombra a la clave canónica sin tocar la plata', () => {
   const xls = dia({
-    GONZA: sal({ total: 95_451, pax: 4 }),
+    DIEGO: sal({ total: 95_451, pax: 4 }),
     'Cajero Turno Mañana': caj({ total: 90_756, salon: 20_000, delivery: 70_756, ordenes: 10, prods: [['ROLL', 2, 9_000]] }),
     'cajero turno tarde':  caj({ total: 56_345, salon: 0, delivery: 56_345, ordenes: 6 }),
   })
 
   it('las cajas del Excel pasan a las claves que buscan Cajeros y Hoy', () => {
     const d = diaConCajasDeTurno(xls)
-    expect(Object.keys(d.saloneros).sort()).toEqual(['Cajero turno mañana', 'Cajero turno tarde', 'GONZA'])
+    expect(Object.keys(d.saloneros).sort()).toEqual(['Cajero turno mañana', 'Cajero turno tarde', 'DIEGO'])
     const dias = { '2026-10-05': d }
     expect(aggCajero(CLAVE_CAJERO_MANANA, ['2026-10-05'], dias).total).toBe(90_756)
     expect(aggCajero(CLAVE_CAJERO_TARDE,  ['2026-10-05'], dias).total).toBe(56_345)
@@ -101,10 +101,10 @@ describe('mixComBeb — cada día con su fuente', () => {
   const s = sal({ total: 3_500, com: 1_000, beb: 1_000, prods: [['ROLL', 1, 3_000], ['IMPERIAL', 1, 500]] })
 
   it("día del .xls → ProductMap (la cuenta de siempre del modo 'xls')", () => {
-    expect(mixComBeb({ d: dia({ MAXO: s }) }, ['d'], PM)).toEqual({ com: 3_000, beb: 500 })
+    expect(mixComBeb({ d: dia({ TITO: s }) }, ['d'], PM)).toEqual({ com: 3_000, beb: 500 })
   })
 
   it('día del PoS → familia (SaloneroDay.com/.beb)', () => {
-    expect(mixComBeb({ d: dia({ MAXO: s }, 'ndf 2026-10-05') }, ['d'], PM)).toEqual({ com: 1_000, beb: 1_000 })
+    expect(mixComBeb({ d: dia({ TITO: s }, 'ndf 2026-10-05') }, ['d'], PM)).toEqual({ com: 1_000, beb: 1_000 })
   })
 })

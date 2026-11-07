@@ -5,7 +5,7 @@
  *   - Propinas (empleado vinculado + historial de asistencia 12m) para la pestaña Propinas
  * Mantiene el bundle separado del VentasModule completo.
  *
- * «Ver como» (firmado por Ismael, 2026-10-29): SOLO el OWNER puede elegir a otro empleado
+ * «Ver como» (firmado por el dueño, 2026-10-29): SOLO el OWNER puede elegir a otro empleado
  * (`?empleado=<id>`), en solo lectura. Cualquier otro rol —manager incluido— ve SOLO su propio
  * rendimiento: el parámetro se ignora y no se ofrece el selector. No cambia permisos ni RLS:
  * el owner ya lee empleados, propinas y ventas de todos.

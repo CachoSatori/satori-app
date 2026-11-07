@@ -77,7 +77,7 @@ describe('armarLentes — no cuenta líneas de facturas que quedaron afuera', ()
     expect(r.tickets).toBe(1)
     expect(r.lentes.netaDiaCrc).toBe(10_000)
     // Los ₡99.000 del día de atrás vienen en el mismo arreglo de líneas (el superset trae ese
-    // lote entero) y no se le pueden sumar a Gonza: su factura quedó afuera del rango.
+    // lote entero) y no se le pueden sumar a Diego: su factura quedó afuera del rango.
     expect(r.lentes.ventaPropia.find(f => f.personaId === '032')?.netaCrc).toBe(10_000)
     expect(r.lentes.descuadreCrc).toBe(0)
   })

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// La franja «no se pudo leer el PoS» (firma de Ismael, 2026-10-30): se ve en cualquier estado
+// La franja «no se pudo leer el PoS» (firma del dueño, 2026-10-30): se ve en cualquier estado
 // que no sea 'ok', con el último día del Excel, y en 'ok' / 'xls' no aparece.
 import { describe, it, expect, vi } from 'vitest'
 import { render } from '@testing-library/react'

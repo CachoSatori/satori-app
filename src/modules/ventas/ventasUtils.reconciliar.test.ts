@@ -46,7 +46,7 @@ const dia = (saloneros: Record<string, SaloneroDay | CajeroDay>): DiaData =>
  */
 const DIAS: DiasMap = {
   '2026-09-07': dia({
-    MAXO: sal({
+    TITO: sal({
       pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25,
       prods: [['ROLL SATORI', 40, 150_000], ['IMPERIAL', 25, 50_000]],
     }),
@@ -94,7 +94,7 @@ describe('A · los cajeros salen de la MARCA `esCajero`, no del nombre', () => {
   it('`esEntradaCajero` distingue el bucket de caja del mesero', () => {
     const d = DIAS['2026-09-07'].saloneros
     expect(esEntradaCajero(d['Caja · 388'])).toBe(true)
-    expect(esEntradaCajero(d['MAXO'])).toBe(false)
+    expect(esEntradaCajero(d['TITO'])).toBe(false)
     expect(esEntradaCajero(undefined)).toBe(false)
   })
 })
@@ -165,23 +165,23 @@ describe('el Ratio C/B general se puede derivar del mix por familia', () => {
   it('la tabla por salonero YA era por familia: `aggSalonero.ratioCB` no se toca', () => {
     // `aggSalonero` acumula `com`/`beb` desde `SaloneroDay`, que ya viene partido por familia.
     // Su ratio coincide con el general por familia — que es justamente el punto de coherencia.
-    expect(aggSalonero('MAXO', ['2026-09-07'], DIAS, PM_SIN_MATCH).ratioCB).toBe(3)
+    expect(aggSalonero('TITO', ['2026-09-07'], DIAS, PM_SIN_MATCH).ratioCB).toBe(3)
   })
 })
 
 describe('`allSaloneros` excluye la caja por MARCA, no por nombre', () => {
   it('los buckets de caja del PoS ya no entran a la lista de meseros', () => {
-    expect(allSaloneros(DIAS)).toEqual(['MAXO'])
+    expect(allSaloneros(DIAS)).toEqual(['TITO'])
   })
 
   it('las etiquetas del .xls también quedan afuera (no hay regresión del caso viejo)', () => {
     const soloXls: DiasMap = {
       '2026-09-07': dia({
-        MAXO: sal({ total: 100_000 }),
+        TITO: sal({ total: 100_000 }),
         'Cajero turno mañana': caj({ total: 50_000 }),
       }),
     }
-    expect(allSaloneros(soloXls)).toEqual(['MAXO'])
+    expect(allSaloneros(soloXls)).toEqual(['TITO'])
   })
 
   it('las filas que se van eran fantasmas: `aggSalonero` ya les daba cero', () => {

@@ -139,8 +139,8 @@ export async function linkProfileToEmployee(employeeId: string, profileId: strin
 }
 
 export async function getEmployeeByProfileId(profileId: string): Promise<Employee | null> {
-  // Un perfil puede tener MÁS de una fila de empleado (p. ej. PECHE: la de manager activa y la de
-  // salonero inactiva). Con `maybeSingle()` sobre dos filas PostgREST tira error y Mi Rendimiento lo
+  // Un perfil puede tener MÁS de una fila de empleado (p. ej. alguien que pasó de salonero a
+  // manager: la de manager activa y la de salonero inactiva). Con `maybeSingle()` sobre dos filas PostgREST tira error y Mi Rendimiento lo
   // mostraba como «sin vínculo». Se toma la ACTIVA primero (y la más nueva si empatan).
   const { data, error } = await supabase
     .from('employees')

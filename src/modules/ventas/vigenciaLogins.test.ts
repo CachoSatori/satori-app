@@ -1,9 +1,9 @@
-// Logins viejos del PoS con VIGENCIA (firmado por Ismael, 2026-11-03).
+// Logins viejos del PoS con VIGENCIA (firmado por el dueño, 2026-11-03).
 //
 // Los códigos del PoS se reciclan, así que el nombre de `0909`, `03`, `333`, `999` y `04` vale solo
 // dentro de su ventana (día CR de `fecha_registra`, puntas incluidas). Afuera la fila queda como
 // «login XXXX», sin nombre, y la plata NO se mueve: sigue en la misma fila del ranking, solo
-// cambia cómo se llama. `02` (genérico) nunca entra al ranking. NACHO y ROSAURA, sin vigencia,
+// cambia cómo se llama. `02` (genérico) nunca entra al ranking. CHEMA y MARISOL, sin vigencia,
 // quedan idénticos a antes.
 import { describe, it, expect, vi } from 'vitest'
 
@@ -29,7 +29,7 @@ const linea = (ticketId: string, login: string, monto = 1000): LineaNdfRow => ({
   usuario_registra: login,
 })
 
-/** [código, nombre, primer día vigente, último día vigente]: lo firmado por Ismael el 2026-11-03. */
+/** [código, nombre, primer día vigente, último día vigente]: lo firmado por el dueño el 2026-11-03. */
 const VIGENCIAS: [string, string, string, string][] = [
   ['0909', 'Rocío',  '2025-01-07', '2026-05-09'],
   ['03',   'Alan',   '2025-01-01', '2026-01-18'],
@@ -133,9 +133,9 @@ describe('`02` (genérico) nunca entra al ranking', () => {
   })
 })
 
-describe('NACHO y ROSAURA (y todo código sin vigencia): idénticos a hoy, cualquier día', () => {
+describe('CHEMA y MARISOL (y todo código sin vigencia): idénticos a hoy, cualquier día', () => {
   const FECHAS = ['2024-01-05', '2024-12-31', '2025-01-01', '2025-07-15', '2026-05-10', '2026-10-30', '2030-01-01']
-  const PROD = { '038': 'NACHO', '235': 'ROSAURA M' }
+  const PROD = { '038': 'CHEMA', '235': 'MARISOL M' }
 
   it.each(['266', '038', '01', '235'])('%s: misma persona y mismo nombre con o sin fecha', codigo => {
     for (const f of FECHAS) {
@@ -144,8 +144,8 @@ describe('NACHO y ROSAURA (y todo código sin vigencia): idénticos a hoy, cualq
         expect(nombreSalonero(codigo, nombres, f)).toBe(nombreSalonero(codigo, nombres))
       }
     }
-    expect(nombreSalonero('266', PROD, '2024-07-25')).toBe('NACHO')
-    expect(nombreSalonero('01', PROD, '2024-01-06')).toBe('ROSAURA M')
+    expect(nombreSalonero('266', PROD, '2024-07-25')).toBe('CHEMA')
+    expect(nombreSalonero('01', PROD, '2024-01-06')).toBe('MARISOL M')
   })
 
   it('ninguna persona de la tabla sin `vigencias` cambia por la fecha', () => {

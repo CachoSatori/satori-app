@@ -27,7 +27,7 @@ const linea = (ticketId: string, familia: number | null, monto: number, nombre =
   cantidad: 1, monto, familia, usuario_registra: null,
 })
 
-const NOMBRES = { '026': 'MAXO', '027': 'GUILLE' }
+const NOMBRES = { '026': 'TITO', '027': 'JULIAN' }
 const netaDia = (dia: Parameters<typeof getDayStats>[0]) => getDayStats(dia).ventaNeta
 
 describe('qué es venta', () => {
@@ -99,8 +99,8 @@ describe('armarDia — la neta del día sale de las líneas; el valor servido qu
 
   it('NO cambia valor_servido_crc ni el mix: comida + bebida = Σ valor servido de los meseros', () => {
     const a = armarDia('2026-10-02', T, L, 'sello', NOMBRES)
-    const maxo = a.dia.saloneros['MAXO'] as { com: number; beb: number }
-    expect(maxo.com + maxo.beb).toBe(20000 + 8000)
+    const tito = a.dia.saloneros['TITO'] as { com: number; beb: number }
+    expect(tito.com + tito.beb).toBe(20000 + 8000)
     expect(T.map(t => t.valor_servido_crc)).toEqual([20000, 8000, 5000])
   })
 

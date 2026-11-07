@@ -1,6 +1,6 @@
 // El vínculo empleado → ventas de Mi Rendimiento e ICP, en los DOS modos de `FUENTE_VENTAS`
-// (firmado por Ismael, 2026-10-29). Los empleados son los de PROD con su `pos_login` y su
-// `pos_name` reales: los casos en que el nombre del Excel y el del PoS NO coinciden.
+// (firmado por el dueño, 2026-10-29). Los empleados imitan los de PROD (con nombres ficticios), con
+// su `pos_login` y su `pos_name`: los casos en que el nombre del Excel y el del PoS NO coinciden.
 import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
@@ -15,16 +15,16 @@ import type { DiaData, DiasMap, SaloneroDay } from '../../shared/types/ventas'
 
 // ── Empleados de prod (pos_login cargado el 2026-10-29) ────────────────────────────────────
 const EMPLEADOS: (EmpleadoVinculable & { full_name: string; codigos: string[] })[] = [
-  { full_name: 'PECHE',      pos_login: '034', pos_name: 'INE',         codigos: ['034'] },
-  { full_name: 'RODRI',      pos_login: '035', pos_name: 'RODRIGO BAR', codigos: ['035'] },
-  { full_name: 'MAXI BARRA', pos_login: '444', pos_name: 'Maxi',        codigos: ['444'] },
-  { full_name: 'DOLORES',    pos_login: '025', pos_name: 'Dolores',     codigos: ['025'] },
-  { full_name: 'IGNACIO',    pos_login: '029', pos_name: 'Ignacio',     codigos: ['029'] },
-  { full_name: 'JOTA',       pos_login: '030', pos_name: 'Jota',        codigos: ['030'] },
-  { full_name: 'FRANCO',     pos_login: '036', pos_name: null,          codigos: ['036'] },
-  { full_name: 'VALENTINO',  pos_login: '037', pos_name: null,          codigos: ['037'] },
-  // NACHO: el 266 es su histórico (sin pos_login), el 038 el nuevo.
-  { full_name: 'NACHO',      pos_login: '038', pos_name: 'NACHO',       codigos: ['266', '038'] },
+  { full_name: 'PIPO',      pos_login: '034', pos_name: 'OLI',         codigos: ['034'] },
+  { full_name: 'NICO',      pos_login: '035', pos_name: 'NICOLAS BAR', codigos: ['035'] },
+  { full_name: 'TOTI BARRA', pos_login: '444', pos_name: 'Toti',        codigos: ['444'] },
+  { full_name: 'REMEDIOS',    pos_login: '025', pos_name: 'Remedios',     codigos: ['025'] },
+  { full_name: 'ANSELMO',    pos_login: '029', pos_name: 'Anselmo',     codigos: ['029'] },
+  { full_name: 'KIKO',       pos_login: '030', pos_name: 'Kiko',        codigos: ['030'] },
+  { full_name: 'MARCOS',     pos_login: '036', pos_name: null,          codigos: ['036'] },
+  { full_name: 'FLORENCIO',  pos_login: '037', pos_name: null,          codigos: ['037'] },
+  // CHEMA: el 266 es su histórico (sin pos_login), el 038 el nuevo.
+  { full_name: 'CHEMA',      pos_login: '038', pos_name: 'CHEMA',       codigos: ['266', '038'] },
 ]
 const NOMBRES = nombresDeEmpleados(EMPLEADOS)
 
@@ -56,7 +56,7 @@ describe("FUENTE_VENTAS = 'pos' — ningún empleado con ventas en cero", () => 
   const dias: DiasMap = { '2026-10-02': armarDia('2026-10-02', tickets, lineas, 'sello', NOMBRES).dia }
   const claves = allSaloneros(dias)
 
-  it('una fila por empleado en el ranking (NACHO junta 266 y 038)', () => {
+  it('una fila por empleado en el ranking (CHEMA junta 266 y 038)', () => {
     expect(claves).toHaveLength(EMPLEADOS.length)
   })
 
@@ -68,10 +68,10 @@ describe("FUENTE_VENTAS = 'pos' — ningún empleado con ventas en cero", () => 
   })
 
   it('el vínculo por pos_login gana sobre pos_name cuando no coinciden', () => {
-    expect(claveDeEmpleado(EMPLEADOS[0], NOMBRES, claves)).toBe('PECHE')      // pos_name INE
-    expect(claveDeEmpleado(EMPLEADOS[1], NOMBRES, claves)).toBe('RODRI')      // pos_name RODRIGO BAR
-    expect(claveDeEmpleado(EMPLEADOS[2], NOMBRES, claves)).toBe('MAXI BARRA') // pos_name Maxi
-    expect(claveDeEmpleado(EMPLEADOS[3], NOMBRES, claves)).toBe('DOLORES')    // pos_name Dolores
+    expect(claveDeEmpleado(EMPLEADOS[0], NOMBRES, claves)).toBe('PIPO')      // pos_name OLI
+    expect(claveDeEmpleado(EMPLEADOS[1], NOMBRES, claves)).toBe('NICO')      // pos_name NICOLAS BAR
+    expect(claveDeEmpleado(EMPLEADOS[2], NOMBRES, claves)).toBe('TOTI BARRA') // pos_name Toti
+    expect(claveDeEmpleado(EMPLEADOS[3], NOMBRES, claves)).toBe('REMEDIOS')    // pos_name Remedios
   })
 
   it.each(EMPLEADOS.map(e => [e.full_name, e] as const))('%s: ICP suma sus propinas en la fila de sus ventas', (_n, e) => {
@@ -122,7 +122,7 @@ describe("FUENTE_VENTAS = 'xls' — sin regresión", () => {
 
 describe('sin vínculo', () => {
   it('empleado sin pos_login ni pos_name → null (Mi Rendimiento cae a su heurística de siempre)', () => {
-    expect(claveDeEmpleado({ full_name: 'X', pos_login: null, pos_name: null }, {}, ['MAXO'])).toBeNull()
-    expect(claveDeEmpleado(null, {}, ['MAXO'])).toBeNull()
+    expect(claveDeEmpleado({ full_name: 'X', pos_login: null, pos_name: null }, {}, ['TITO'])).toBeNull()
+    expect(claveDeEmpleado(null, {}, ['TITO'])).toBeNull()
   })
 })

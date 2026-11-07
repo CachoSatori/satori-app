@@ -1,13 +1,13 @@
-// getEmployeeByProfileId con un perfil que tiene DOS filas de empleado (caso real de prod: PECHE,
-// manager activa + salonero inactiva). Antes `maybeSingle()` sobre dos filas tiraba error y Mi
+// getEmployeeByProfileId con un perfil que tiene DOS filas de empleado (caso real de prod: una persona con
+// fila de manager activa + salonero inactiva). Antes `maybeSingle()` sobre dos filas tiraba error y Mi
 // Rendimiento lo mostraba como «sin vínculo». Ahora pide la activa primero y UNA sola fila.
 import { describe, it, expect, vi } from 'vitest'
 
 const H = vi.hoisted(() => {
   const llamadas: { metodo: string; args: unknown[] }[] = []
   const filas = [
-    { id: 'e-peche-activa', full_name: 'PECHE', is_active: true },
-    { id: 'e-peche-vieja',  full_name: 'PECHE', is_active: false },
+    { id: 'e-pipo-activa', full_name: 'PIPO', is_active: true },
+    { id: 'e-pipo-vieja',  full_name: 'PIPO', is_active: false },
   ]
   const api: Record<string, (...a: unknown[]) => unknown> = {}
   for (const m of ['select', 'eq', 'order', 'limit']) {
@@ -33,12 +33,12 @@ import { getEmployeeByProfileId } from './admin'
 
 describe('getEmployeeByProfileId — perfil con dos filas de empleado', () => {
   it('devuelve la fila ACTIVA en vez de tirar error', async () => {
-    const e = await getEmployeeByProfileId('p-peche')
-    expect(e?.id).toBe('e-peche-activa')
+    const e = await getEmployeeByProfileId('p-pipo')
+    expect(e?.id).toBe('e-pipo-activa')
   })
 
   it('pide activa primero y UNA sola fila', () => {
-    expect(H.llamadas).toContainEqual({ metodo: 'eq', args: ['profile_id', 'p-peche'] })
+    expect(H.llamadas).toContainEqual({ metodo: 'eq', args: ['profile_id', 'p-pipo'] })
     expect(H.llamadas).toContainEqual({ metodo: 'order', args: ['is_active', { ascending: false }] })
     expect(H.llamadas).toContainEqual({ metodo: 'limit', args: [1] })
   })

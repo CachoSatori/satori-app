@@ -48,7 +48,7 @@ const factura = (over: Partial<TicketCrudo> = {}): TicketCrudo => ({
   area:             'SALON 1',
   login_cajero:     '222',
   usuario_registra: '026',
-  salonero_nombre:  'MAXO',
+  salonero_nombre:  'TITO',
   personas:         0,
   medios:           { efectivo: 10000 },
   items:            [item()],
@@ -250,7 +250,7 @@ describe('esCajeroTurno / esLoginSistema / mapSalonero', () => {
     expect(mapSalonero('022')).toBe('022')
   })
 
-  it('002 y 02 son logins de sistema; el 01 NO (es ROSAURA, firmado 2026-10-29)', () => {
+  it('002 y 02 son logins de sistema; el 01 NO (es una salonera, firmado 2026-10-29)', () => {
     expect(esLoginSistema('002')).toBe(true)
     expect(esLoginSistema('02')).toBe(true)
     expect(esLoginSistema('01')).toBe(false)
@@ -367,10 +367,10 @@ describe('mapTicket', () => {
   it('el cajero que cobró NO pisa al salonero que registró', () => {
     const t = mapTicket(factura({ usuario_registra: '026', login_cajero: '222' }))
     expect(t.salonero_login).toBe('026')
-    expect(t.salonero).toBe('MAXO')
+    expect(t.salonero).toBe('TITO')
     expect(t.registrado_por).toBe('salonero')
     expect(t.login_cajero).toBe('222')
-    expect(t.turno).toBe('noche')        // la caja de la noche, el mesero es MAXO
+    expect(t.turno).toBe('noche')        // la caja de la noche, el mesero es TITO
   })
 
   it('login de sistema (002 cocina express) sale del breakdown, no del total', () => {
@@ -449,12 +449,12 @@ describe('mapTicket', () => {
 describe('construirDiaData', () => {
   const tickets = [
     mapTicket(factura({
-      numero_factura: '1001', usuario_registra: '026', salonero_nombre: 'MAXO',
+      numero_factura: '1001', usuario_registra: '026', salonero_nombre: 'TITO',
       medios: { efectivo: 10000 }, imp_servicio: 1000,
       items: [item({ monto: 6000, cantidad: 1 }), item({ familia: 5, monto: 3000, cantidad: 2, codigo: '200', nombre: 'IMPERIAL' })],
     })),
     mapTicket(factura({
-      numero_factura: '1002', usuario_registra: '027', salonero_nombre: 'GUILLE',
+      numero_factura: '1002', usuario_registra: '027', salonero_nombre: 'JULIAN',
       medios: { tarjeta: 25000 }, imp_servicio: 2500,
       items: [item({ monto: 20000, cantidad: 3 })],
     })),
@@ -471,19 +471,19 @@ describe('construirDiaData', () => {
   it('arma la forma DiaData con la clave por salonero', () => {
     expect(dia.fileName).toBe('ndf 2026-09-01')
     expect(dia.uploadedAt).toBe('2026-09-02')
-    expect(Object.keys(dia.saloneros).sort()).toEqual(['Cajero turno noche', 'GUILLE', 'MAXO'])
+    expect(Object.keys(dia.saloneros).sort()).toEqual(['Cajero turno noche', 'JULIAN', 'TITO'])
   })
 
   it('el salonero trae total, mix, servicio y productos ordenados por monto', () => {
-    const maxo = dia.saloneros['MAXO'] as SaloneroDay
-    expect(maxo.total).toBe(10000)
-    expect(maxo.com).toBe(6000)
-    expect(maxo.beb).toBe(3000)
-    expect(maxo.iCom).toBe(1)
-    expect(maxo.iBeb).toBe(2)
-    expect(maxo.serv).toBe(1000)
-    expect(maxo.iva).toBe(0)             // la Fase 1a no toca impuestos de venta
-    expect(maxo.prods[0][0]).toBe('ROLL SATORI')
+    const tito = dia.saloneros['TITO'] as SaloneroDay
+    expect(tito.total).toBe(10000)
+    expect(tito.com).toBe(6000)
+    expect(tito.beb).toBe(3000)
+    expect(tito.iCom).toBe(1)
+    expect(tito.iBeb).toBe(2)
+    expect(tito.serv).toBe(1000)
+    expect(tito.iva).toBe(0)             // la Fase 1a no toca impuestos de venta
+    expect(tito.prods[0][0]).toBe('ROLL SATORI')
   })
 
   it('las facturas del cajero van a su propia línea, con la forma CajeroDay', () => {

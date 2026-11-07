@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// Pestaña ICP (firmado por Ismael, 2026-10-29):
+// Pestaña ICP (firmado por el dueño, 2026-10-29):
 //   · Numerador = propina ELECTRÓNICA declarada (tip_amount_crc + usd×TC), la misma función que
 //     Mi Rendimiento. `payout_crc` se muestra aparte («cobrado del reparto») y no entra al ICP.
 //   · «ICP restaurante» = Σ propina electrónica del mes / Σ ventas de saloneros.
@@ -29,13 +29,13 @@ const fila = (employee_id: string, tip_amount_crc: number, payout_crc: number, t
 const DIAS: DiasMap = {
   '2026-10-07': {
     fileName: 'x.xls', uploadedAt: '2026-10-08',
-    saloneros: { FRANCISCO: sal(1_000_000), FRANCO: sal(20_000) },
+    saloneros: { SEBASTIAN: sal(1_000_000), MARCOS: sal(20_000) },
   },
 }
 
 describe('VentasICP', () => {
   it('ICP = propina electrónica / ventas; payout aparte; barra no aplica; restaurante = Σ electrónica / Σ ventas saloneros', async () => {
-    H.emps = [emp('e-fr', 'FRANCISCO', 'salonero'), emp('e-fo', 'FRANCO', 'barman'), emp('e-aj', 'AMPI', 'cajero')]
+    H.emps = [emp('e-fr', 'SEBASTIAN', 'salonero'), emp('e-fo', 'MARCOS', 'barman'), emp('e-aj', 'CUCA', 'cajero')]
     H.tips = [
       fila('e-fr', 150_000, 90_000, 20),   // ₡160.000 electrónica (150k + 20×500), cobró 90k
       fila('e-fo', 0, 85_000),             // barra: cobró del pool, sin propina declarada
@@ -45,18 +45,18 @@ describe('VentasICP', () => {
     await waitFor(() => expect(container.querySelector('tbody tr')).not.toBeNull())
 
     const filas = [...container.querySelectorAll('tbody tr')]
-    const francisco = filas.find(f => f.textContent?.includes('FRANCISCO'))!
-    const franco    = filas.find(f => f.textContent?.includes('FRANCO'))!
+    const sebastian = filas.find(f => f.textContent?.includes('SEBASTIAN'))!
+    const marcos    = filas.find(f => f.textContent?.includes('MARCOS'))!
 
-    // FRANCISCO: 160.000 / 1.000.000 = 16,0 % — no 9,0 % (payout).
-    expect(within(francisco as HTMLElement).getByText('16.0%')).toBeTruthy()
+    // SEBASTIAN: 160.000 / 1.000.000 = 16,0 % — no 9,0 % (payout).
+    expect(within(sebastian as HTMLElement).getByText('16.0%')).toBeTruthy()
     const plano = (t: string | null) => (t ?? '').replace(/\s/g, '')
-    expect(plano(francisco.textContent)).toContain('₡90000')     // «cobrado del reparto», aparte
-    expect(plano(francisco.textContent)).toContain('₡160000')    // propina electrónica
-    // FRANCO (barman): sin %; al final del ranking.
-    expect(franco.textContent).toContain('no aplica a barra')
-    expect(franco.textContent).not.toMatch(/\d+\.\d%/)
-    expect(filas.indexOf(franco)).toBe(filas.length - 1)
+    expect(plano(sebastian.textContent)).toContain('₡90000')     // «cobrado del reparto», aparte
+    expect(plano(sebastian.textContent)).toContain('₡160000')    // propina electrónica
+    // MARCOS (barman): sin %; al final del ranking.
+    expect(marcos.textContent).toContain('no aplica a barra')
+    expect(marcos.textContent).not.toMatch(/\d+\.\d%/)
+    expect(filas.indexOf(marcos)).toBe(filas.length - 1)
 
     // Restaurante: (160.000 + 0 + 8.000) / (1.000.000 + 20.000) = 16,47 %.
     const pie = container.querySelector('tfoot')!

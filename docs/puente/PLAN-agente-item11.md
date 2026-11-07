@@ -122,16 +122,16 @@ agente ahora manda también:
 de hoy, `e84c388`, sigue entrando bien con este Edge: se verificó un ciclo a las 14:45Z.
 
 **Falta, en la PC, con los mismos pasos 1 a 7 de arriba:**
-1. La rama ahora es `claude/puente-item11` @ **`c7d206e`**. Hay que hacer `git pull` en `C:\satori\satori-app` y reiniciar la tarea «Satori PoS Bridge».
+1. La rama ahora es `claude/puente-item11` @ **`283e3c4`** (el área de la mesa; ya sin la 081). Hay que hacer `git pull` en `C:\satori\satori-app` y reiniciar la tarea «Satori PoS Bridge».
 2. Repetir el backfill desde el 1-sep. Así se llena `area_factura` en el histórico. Re-correrlo no duplica nada.
 3. Mientras tanto el cruce usa `area`, que en las facturas sin pedido ya es la de la factura. El cruce queda bien también antes del backfill.
 
 ## Pase a prod — anotado, NO se hace ahora (lleva firma de Ismael)
 Orden obligatorio, sin saltos:
-1. **Migración 081** en prod, a mano, con el ritual del ref y registrada en el ledger. Hay que aplicar la versión **final**, la del PR #59, que suma dos índices (CLUB-AUD-13). La copia que viaja en `claude/puente-item11` y en `claude/puente-item11-prod` es la primera versión; el agente no la usa.
+1. **Migración 081** en prod, a mano, con el ritual del ref y registrada en el ledger. Hay **una sola versión**, la final, en el PR #59 (con el área de la mesa y los índices del CLUB-AUD-13). Las ramas del agente ya no la traen, así que no hay ninguna 081 vieja para aplicar por error. El agente no la usa.
 2. **Edge `ingest-ndf` v11** en prod, a mano. Con el Edge nuevo y sin la 081, el upsert falla y no
    entra ninguna venta: **la migración va siempre primero**.
-3. **Agente de prod** en `C:\satori\satori-app-prod`. **Ojo con la base:** prod corre `4d3513a`, que viene de la línea `staging`, y no `feat/pos-desglose`. Para que prod cambie **solo** el ítem 11, su rama es **`claude/puente-item11-prod`** (`4d3513a` + los commits del ítem 11; hoy @ `1d1016d`, con el área) (`cherry-pick e84c388`; entra limpio, con 459/459 pruebas), **no** `claude/puente-item11`.
+3. **Agente de prod** en `C:\satori\satori-app-prod`. **Ojo con la base:** prod corre `4d3513a`, que viene de la línea `staging`, y no `feat/pos-desglose`. Para que prod cambie **solo** el ítem 11, su rama es **`claude/puente-item11-prod`** (`4d3513a` + los commits del ítem 11; hoy @ `eee0515`, con el área y sin la 081; 459/459 pruebas), **no** `claude/puente-item11`.
    - Pasar prod a `claude/puente-item11` cambiaría además `mapTicket.ts`: la lista de nombres de saloneros que se usa solo para mostrar en el dry-run, y el nombre de la constante de la familia 29, que vale lo mismo. Ninguno de los dos llega a la base, pero no es lo que se firma.
    - Las facturas en curso (R) y las anuladas (X) se releen igual en las dos versiones: en ese comportamiento no cambia nada. Mismo procedimiento que este plan, con la
    tarea «Satori PoS Bridge PROD» y su log `C:\satori\logs\pos-agente-prod.log`. Después, el backfill.

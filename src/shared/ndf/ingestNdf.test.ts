@@ -516,11 +516,11 @@ describe('normalizarLote', () => {
 describe('ítem 11 · mesa de la factura, consecutivo, clave y apertura del pedido', () => {
   it('pasan a la fila de pos_ndf_tickets', () => {
     const r = normalizarTicket('santa-teresa', {
-      ...ticket(), mesa_factura: '19', consecutivo_fe: '00200001040000016012',
+      ...ticket(), area_factura: '3', mesa_factura: '19', consecutivo_fe: '00200001040000016012',
       clave_fe: '5'.repeat(50), pedido_abierto_en: '2026-11-05T18:39:48-06:00',
     })
     expect(r.ok && r.valor.fila).toMatchObject({
-      mesa_factura: '19', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
+      area_factura: '3', mesa_factura: '19', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
       pedido_abierto_en: '2026-11-06T00:39:48.000Z',
     })
   })
@@ -536,8 +536,9 @@ describe('ítem 11 · mesa de la factura, consecutivo, clave y apertura del pedi
     expect(r.ok && r.valor.fila).toMatchObject({ mesa_factura: null, consecutivo_fe: null, clave_fe: null, pedido_abierto_en: null })
   })
   it('la mesa abierta lleva la apertura del pedido', () => {
-    const r = normalizarOpen('santa-teresa', { clave: 'pedido:14', pedido_abierto_en: '2026-11-05T18:39:48-06:00' }, '2026-11-06T01:00:00.000Z')
+    const r = normalizarOpen('santa-teresa', { clave: 'pedido:14', pedido_abierto_en: '2026-11-05T18:39:48-06:00', area: ' 3 ' }, '2026-11-06T01:00:00.000Z')
     expect(r.ok && r.valor.pedido_abierto_en).toBe('2026-11-06T00:39:48.000Z')
+    expect(r.ok && r.valor.area).toBe('3')
     const s = normalizarOpen('santa-teresa', { clave: 'pedido:14', pedido_abierto_en: '18:39' }, '2026-11-06T01:00:00.000Z')
     expect(s.ok && s.valor.pedido_abierto_en).toBeNull()
   })

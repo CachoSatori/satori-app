@@ -5,11 +5,14 @@
 begin;
 drop index if exists public.pos_ndf_tickets_consecutivo_fe_idx;
 drop index if exists public.pos_ndf_tickets_pedido_idx;
+drop index if exists public.pos_ndf_tickets_factura_clave_idx;
+drop index if exists public.pos_ndf_tickets_mesa_sin_pedido_idx;
 alter table public.pos_ndf_tickets
+  drop column if exists area_factura,
   drop column if exists mesa_factura,
   drop column if exists consecutivo_fe,
   drop column if exists clave_fe,
   drop column if exists pedido_abierto_en;
-alter table public.pos_ndf_open drop column if exists pedido_abierto_en;
+alter table public.pos_ndf_open drop column if exists pedido_abierto_en, drop column if exists area;
 delete from supabase_migrations.schema_migrations where version = '081';
 commit;

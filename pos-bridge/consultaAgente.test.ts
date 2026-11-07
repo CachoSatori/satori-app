@@ -215,6 +215,7 @@ describe('mapAbierta', () => {
       salonero_login: '026', canal: 'salon', pax: 4, pax_alerta: 'falta_articulo',
       updated_at: '2026-09-01T20:05:00-06:00',
       pedido_abierto_en: '2026-09-01T20:05:00-06:00',
+      area: 'SALON 1',
       // Frente C: sin líneas, los tres provisionales van en null («sin total»), nunca en 0.
       monto_estimado_crc: null, pax_pedido: null, items_valor: null,
     })
@@ -803,11 +804,11 @@ describe('ítem 11 · campos nuevos de la factura', () => {
 
   it('pega la mesa de la factura, el consecutivo, la clave y la apertura (con zona)', () => {
     const i = aTicketIngest(t, {
-      mesa_factura: ' 19 ', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
+      area_factura: ' 3 ', mesa_factura: ' 19 ', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
       pedido_abierto_en: '2026-11-05 18:39:48',
     })
     expect(i).toMatchObject({
-      mesa_factura: '19', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
+      area_factura: '3', mesa_factura: '19', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
       pedido_abierto_en: '2026-11-05T18:39:48-06:00',
     })
   })
@@ -819,7 +820,7 @@ describe('ítem 11 · campos nuevos de la factura', () => {
   })
 
   it('sin las columnas, los cuatro quedan en null', () => {
-    expect(aTicketIngest(t)).toMatchObject({ mesa_factura: null, consecutivo_fe: null, clave_fe: null, pedido_abierto_en: null })
+    expect(aTicketIngest(t)).toMatchObject({ area_factura: null, mesa_factura: null, consecutivo_fe: null, clave_fe: null, pedido_abierto_en: null })
   })
 
   it('el backfill arma los mismos extras que el agente (un solo camino)', () => {

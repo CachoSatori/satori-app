@@ -176,6 +176,10 @@ export const canjeAprobado = async (miembro: string, creditos: number, pos: PosR
   primero(await llamar<Saldo[]>('club_canje_aprobado', { p_miembro: miembro, p_creditos: creditos, p_factura: null,
                                                          p_op: op, p_pos: posParaServidor(pos), p_nota: nota }))
 
+/** Ajuste o restitución (solo owner, nota obligatoria). Idempotente con `op`. */
+export const ajustarSaldo = (miembro: string, personas: number, tipo: 'ajuste' | 'restitucion', nota: string, op: string) =>
+  llamar<unknown>('club_ajuste', { p_miembro: miembro, p_personas: personas, p_tipo: tipo, p_nota: nota, p_op: op })
+
 export const tarjetaManual = async (miembro: string, personas: number, pos: PosRef, op: string) =>
   primero(await llamar<Saldo[]>('club_tarjeta_manual', { p_miembro: miembro, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 

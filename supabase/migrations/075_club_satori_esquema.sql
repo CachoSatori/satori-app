@@ -53,6 +53,14 @@ begin
 end;
 $$;
 
+-- Número para los mensajes de la caja: «2» y «1,5» (no «2.0» ni «1.5»).
+create or replace function public.club_num(p numeric)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$ select replace(trim_scale(p)::text, '.', ',') $$;
+
 -- Créditos derivados de un saldo en personas: floor(p/ppc) + 0,5 si el resto ≥ ppc/2.
 create or replace function public.club_creditos(p_personas bigint, p_ppc int)
 returns numeric
@@ -1014,7 +1022,7 @@ begin
      or p_creditos > v_cfg.max_creditos_por_visita
      or mod(p_creditos, v_cfg.canje_paso) <> 0 then
     raise exception 'Créditos no válidos: de % a %, de a %',
-      v_cfg.canje_min, v_cfg.max_creditos_por_visita, v_cfg.canje_paso using errcode = 'P0001';
+      public.club_num(v_cfg.canje_min), public.club_num(v_cfg.max_creditos_por_visita), public.club_num(v_cfg.canje_paso) using errcode = 'P0001';
   end if;
   if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
     raise exception 'Falta el número de factura' using errcode = 'P0001';
@@ -1031,7 +1039,7 @@ begin
   select coalesce(sum(mv.creditos), 0) into v_ya_fac from public.club_movimientos mv
    where mv.miembro_id = p_miembro and mv.tipo = 'canje' and coalesce(mv.visita_clave, mv.factura_pos) = v_visita;
   if v_ya_fac + p_creditos > v_cfg.max_creditos_por_visita then
-    raise exception 'Supera el máximo de % créditos por visita', v_cfg.max_creditos_por_visita
+    raise exception 'Supera el máximo de % créditos por visita', public.club_num(v_cfg.max_creditos_por_visita)
       using errcode = 'P0001';
   end if;
 
@@ -1040,7 +1048,7 @@ begin
   select coalesce(sum(mv.creditos), 0) into v_ya_dia from public.club_movimientos mv
    where mv.miembro_id = p_miembro and mv.tipo = 'canje' and mv.fecha_visita >= v_hoy;
   if v_ya_dia + p_creditos > v_cfg.max_creditos_por_visita then
-    raise exception 'Supera el máximo de % créditos por día', v_cfg.max_creditos_por_visita
+    raise exception 'Supera el máximo de % créditos por día', public.club_num(v_cfg.max_creditos_por_visita)
       using errcode = 'P0001';
   end if;
 
@@ -2774,7 +2782,8 @@ begin
   v_hash  := encode(extensions.digest(coalesce(v_prev, '') || v_datos::text, 'sha256'), 'hex');
   insert into public.club_reportes_cerrados (location_id, mes, version, datos, sha256, sha256_prev, motivo, cerrado_por)
   values (p_location, v_mes, v_ver, v_datos, v_hash, v_prev, v_motivo, auth.uid());
-  return v_datos || jsonb_build_object('cerrado', true, 'version', v_ver, 'sha256', v_hash, 'sha256_prev', v_prev, 'motivo', v_motivo);
+  return v_datos || jsonb_build_object('cerrado', true, 'version', v_ver, 'sha256', v_hash, 'sha256_prev', v_prev, 'motivo', v_motivo,
+                                       'cerrado_en', now());   -- la pantalla muestra la fecha (sin generado_en: CLUB-AUD-16)
 end;
 $$;
 
@@ -2808,6 +2817,7 @@ revoke all on function public.club_gen_codigo(int)                       from pu
 revoke all on function public.club_creditos(bigint, int)                 from public, anon;
 revoke all on function public.club_personas_proximo(bigint, int)         from public, anon;
 revoke all on function public.club_norm_factura(text)                     from public, anon, authenticated;
+revoke all on function public.club_num(numeric)                           from public, anon, authenticated;
 revoke all on function public.club_saldo_personas(uuid)                  from public, anon, authenticated;
 revoke all on function public.club_cupon_crear(text, jsonb)              from public, anon, authenticated;
 revoke all on function public.club_cupon_usar(text, int, text, uuid, jsonb) from public, anon, authenticated;

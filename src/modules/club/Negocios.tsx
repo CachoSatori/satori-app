@@ -69,7 +69,7 @@ export default function Negocios() {
           {negocios.length === 0 && <div style={{ color: C.muted, textAlign: 'center', padding: '1.5rem' }}>Todavía no hay negocios.</div>}
           {negocios.map(n => (
             <button key={n.id} onClick={() => setEdit({ id: n.id, nombre: n.nombre, tipo: n.tipo, activo: n.activo })}
-              style={{ textAlign: 'left', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.7rem 0.8rem', cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center' }}>
+              style={{ textAlign: 'left', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '0.7rem 0.8rem', cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center', minHeight: 48 }}>
               <strong style={{ flex: 1 }}>{n.nombre}</strong>
               <Chip>{TIPO_NEGOCIO_LABEL[n.tipo]}</Chip>
               {!n.activo && <Chip color={C.red}>inactivo</Chip>}

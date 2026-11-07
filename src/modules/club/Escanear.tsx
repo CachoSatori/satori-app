@@ -122,11 +122,11 @@ export default function Escanear() {
       } else if (actual.kind === 'canje' && creditos != null) {
         // El código queda usado: se cierra la cuenta (volver a escanearlo diría «ya se usó»).
         const s = await canjear(actual.r.datos.id, actual.codigo, creditos, pos!, opDe('canje'))
-        setMsg({ tono: 'ok', texto: `Canje de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le quedan ${fmtCreditos(s.creditos)}.` })
+        setMsg({ tono: 'ok', texto: `Canje de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditos(s.creditos)} ${Number(s.creditos) === 1 ? 'crédito' : 'créditos'}.` })
         cerrarCuenta()
       } else if (modoRef === 'aprobado' && creditos != null) {
         const s = await canjeAprobado(actual.r.datos.id, creditos, pos!, opDe('aprobado'), nota.trim())
-        setMsg({ tono: 'ok', texto: `Canje sin celular de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le quedan ${fmtCreditos(s.creditos)}.` })
+        setMsg({ tono: 'ok', texto: `Canje sin celular de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditos(s.creditos)} ${Number(s.creditos) === 1 ? 'crédito' : 'créditos'}.` })
         delete ops.current.aprobado; limpiarFormularios()
         await resolver(actual.codigo, true)
       } else if (modoRef === 'tarjeta') {
@@ -165,11 +165,11 @@ export default function Escanear() {
           )}
 
           <Card>
-            <form onSubmit={e => { e.preventDefault(); if (manual.trim()) resolver(manual) }}
+            <form onSubmit={e => { e.preventDefault(); if (manual.trim()) { resolver(manual); setManual('') } }}
               style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
               <label style={{ flex: 1 }}>
                 <span style={labelStyle}>Código a mano</span>
-                <input value={manual} onChange={e => setManual(e.target.value)} placeholder="Cupón (10), canje (6) o pase (8)"
+                <input value={manual} onChange={e => setManual(e.target.value)} placeholder="Cupón, canje o pase" aria-label="Código a mano: cupón (10), canje (6) o pase (8)"
                   autoCapitalize="characters" autoComplete="off" style={{ ...inputStyle, textTransform: 'uppercase', letterSpacing: '0.12em' }} />
               </label>
               <Btn type="submit" disabled={cargando || !manual.trim()}>Ver</Btn>
@@ -180,7 +180,7 @@ export default function Escanear() {
             <form onSubmit={e => { e.preventDefault(); onBuscar() }} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
               <label style={{ flex: 1 }}>
                 <span style={labelStyle}>Buscar referente (plan B)</span>
-                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Nombre, negocio o últimos 4 del tel."
+                <input value={q} onChange={e => setQ(e.target.value)} placeholder="Nombre, negocio o tel." aria-label="Buscar referente por nombre, negocio o últimos 4 del teléfono"
                   autoComplete="off" style={inputStyle} />
               </label>
               <Btn type="submit" variant="secondary" disabled={cargando || q.trim().length < 3}>Buscar</Btn>
@@ -298,8 +298,8 @@ function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) 
       {planB && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: '0.85rem', color: C.muted }}>
-            {err ? 'No se pudo cargar la lista de pedidos.' : pedidos?.length === 0 ? 'No hay pedidos abiertos en el PoS.' : 'Pedido ya cerrado:'}{' '}
-            elegí la factura de la lista (cerradas en las últimas 2 horas).
+            {err ? 'No se pudo cargar la lista de pedidos. Elegí' : pedidos?.length === 0 ? 'No hay pedidos abiertos en el PoS. Elegí' : 'Pedido ya cerrado: elegí'}{' '}
+            la factura de la lista (cerradas en las últimas 2 horas).
           </div>
           {facturas === null && <div style={{ color: C.muted }}>Cargando facturas…</div>}
           {errB && <div style={{ color: C.red, fontSize: '0.85rem' }}>No se pudo cargar la lista de facturas. Probá «Actualizar».</div>}

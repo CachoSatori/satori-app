@@ -239,20 +239,22 @@ async function paginaPortal(token: string) {
       h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)), h('span', {}, t.portal_creditos)),
       h('p', { class: 'sub' }, t.portal_personas(p.personas)),
       h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito)))),
+    p.creditos >= 1 && seccionCanje(token),
     h('section', { class: 'tarjeta portal-qr' },
       h('h2', {}, t.portal_qr), canvas, h('p', { class: 'codigo', style: 'text-align:center' }, p.codigo),
       h('p', {}, t.portal_indicaciones),
       h('div', { class: 'fila' }, compartir, descargar),
       // F1e: botón «Agregar a Wallet» (oculto hasta tener la clase del pase).
     ),
-    p.creditos >= 1 && seccionCanje(token),
     h('section', { class: 'tarjeta' },
       h('h2', {}, t.historial),
       p.movimientos.length === 0 ? h('p', { class: 'sub' }, t.sin_movimientos) :
         h('ul', { class: 'movs' }, ...p.movimientos.map(m => h('li', {},
           h('span', {}, h('span', {}, t.mov[m.tipo] ?? m.tipo), h('br'), h('span', { class: 'f' }, fecha(m.fecha, false))),
           h('span', { class: m.personas > 0 ? 'mas' : 'menos' },
-            `${m.personas > 0 ? '+' : '−'}${Math.abs(m.personas)}`)))),
+            // el canje se muestra en créditos (lo que el referente canjeó); el resto, en personas
+            m.tipo === 'canje' && m.creditos != null ? t.canje_creditos(num(Number(m.creditos)), Number(m.creditos))
+              : `${m.personas > 0 ? '+' : '−'}${Math.abs(m.personas)}`)))),
     ),
   )
 }

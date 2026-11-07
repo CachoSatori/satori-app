@@ -119,7 +119,7 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
     ...(d.cxc_crc != null ? [['Cobrado «a crédito»', crc(d.cxc_crc)] as [string, string]] : []),
     ...(d.canje_crc != null ? [['Valor del canje', crc(d.canje_crc)] as [string, string]] : []),
     ...(d.diferencia_crc != null ? [['Diferencia', crc(d.diferencia_crc)] as [string, string]] : []),
-    ...(d.total_crc != null ? [['Total de la factura', crc(d.total_crc)] as [string, string]] : []),
+    ...(d.total_crc != null ? [[e.tipo === 'SIN_CRUCE' ? 'Total del pedido' : 'Total de la factura', crc(d.total_crc)] as [string, string]] : []),
   ]
   async function resolver() {
     setEnviando(true); setError(null)
@@ -136,10 +136,17 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
         <Aviso tono="ok">
           Resuelta el {fmtFechaHora(e.resuelta_en)}{typeof d.resuelta_por === 'string' ? ` por ${d.resuelta_por}` : ''}: {e.nota}
         </Aviso>
-      ) : e.tipo === 'SIN_CRUCE' ? (
-        <ElegirFactura e={e} onElegida={onResuelta} />
       ) : (
         <>
+          {e.tipo === 'SIN_CRUCE' && (
+            <>
+              <ElegirFactura e={e} onElegida={onResuelta} />
+              <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 6 }}>
+                Si ninguna factura corresponde (pedido anulado, registro equivocado), resolvela con una nota; si hay que
+                corregir el saldo, se hace con un ajuste.
+              </div>
+            </>
+          )}
           {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
           <label><span style={labelStyle}>Nota para resolver</span>
             <textarea value={nota} onChange={ev => setNota(ev.target.value)} rows={2} maxLength={500}
@@ -187,7 +194,7 @@ function ElegirFactura({ e, onElegida }: { e: Excepcion; onElegida: () => Promis
       </form>
       <span style={labelStyle}>{buscado ? `Facturas con el tiquete terminado en …${buscado}` : 'Facturas sin pedido de ese día (la misma mesa primero)'}</span>
       {lista === null && <div style={{ color: C.muted }}>Cargando…</div>}
-      {lista?.length === 0 && <div style={{ color: C.muted, fontSize: '0.88rem' }}>{buscado ? 'No hay facturas con ese tiquete.' : 'No hay facturas sin pedido ese día.'} Si no aparece, resolvelo con una nota (y un ajuste si hace falta).</div>}
+      {lista?.length === 0 && <div style={{ color: C.muted, fontSize: '0.88rem' }}>{buscado ? 'No hay facturas con ese tiquete.' : 'No hay facturas sin pedido ese día.'}</div>}
       {lista?.map(f => {
         const sel = elegida === f.numero_factura
         return (

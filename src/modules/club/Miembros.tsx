@@ -7,12 +7,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import {
   getMiembros, getSaldos, getNegocios, getMovimientos, getContacto, guardarMiembro, guardarNegocio,
-  regenerarCodigo, tokenPortal, aClubError, fmtCreditos,
+  regenerarCodigo, tokenPortal, aClubError, fmtCreditos, ajustarSaldo, nuevoOp,
   type ClubMiembro, type ClubSaldo, type ClubNegocio, type ClubMovimiento, type TipoMiembro, type TipoNegocio,
 } from '../../shared/api/club'
 import { urlPortal, urlReferente } from './qrFormato'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha, fmtFechaHora, TIPO_MIEMBRO_LABEL, TIPO_NEGOCIO_LABEL, TIPO_MOV_LABEL } from './estilos'
+import { useAuth } from '../../shared/hooks/useAuth'
 
 type Pestana = 'referentes' | 'equipo'
 type Fila = ClubMiembro & { saldo: ClubSaldo | null; negocio: string | null }
@@ -102,7 +103,7 @@ export default function Miembros() {
 
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', gap: 8 }}>
-          <input value={fTexto} onChange={e => setFTexto(e.target.value)} placeholder="Filtrar por nombre, negocio o código" style={{ ...inputStyle, flex: 1 }} />
+          <input value={fTexto} onChange={e => setFTexto(e.target.value)} placeholder="Filtrar por nombre, negocio o código" aria-label="Filtrar miembros por nombre, negocio o código" style={{ ...inputStyle, flex: 1 }} />
           <Btn onClick={() => setEditando('nuevo')}>+ Nuevo</Btn>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
@@ -157,6 +158,8 @@ export default function Miembros() {
 // ── Detalle ──────────────────────────────────────────────────────────────────
 
 function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () => void; onEditar: () => void; onCambio: () => Promise<void> }) {
+  const { profile } = useAuth()
+  const [recarga, setRecarga] = useState(0)
   const [movs, setMovs] = useState<ClubMovimiento[] | null>(null)
   const [contacto, setContacto] = useState<{ telefono: string | null; email: string | null } | null>(null)
   const [qr, setQr] = useState('')
@@ -171,7 +174,7 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
     QRCode.toDataURL(urlReferente(f.codigo), { width: 480, margin: 2, errorCorrectionLevel: 'M' })
       .then(u => { if (vivo) setQr(u) }).catch(() => {})
     return () => { vivo = false }
-  }, [f.id, f.codigo])
+  }, [f.id, f.codigo, recarga])
 
   async function copiarPortal() {
     setOcupado(true)
@@ -228,6 +231,10 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
         </div>
       </Card>
 
+      {profile?.role === 'owner' && (
+        <AjusteOwner f={f} onHecho={async t => { await onCambio(); setRecarga(n => n + 1); setAviso({ tono: 'ok', t }) }} />
+      )}
+
       <Card>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Historial</div>
         {movs === null ? <div style={{ color: C.muted }}>Cargando…</div> : movs.length === 0 ? (
@@ -249,6 +256,56 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
         )}
       </Card>
     </div>
+  )
+}
+
+/**
+ * Ajuste o restitución del saldo (solo owner, nota obligatoria). La restitución es la única forma de devolver
+ * un saldo vencido (por inactividad o por la baja): reactivar la cuenta no lo devuelve.
+ */
+function AjusteOwner({ f, onHecho }: { f: Fila; onHecho: (texto: string) => Promise<void> }) {
+  const [tipo, setTipo] = useState<'restitucion' | 'ajuste'>('restitucion')
+  const [personas, setPersonas] = useState('')
+  const [nota, setNota] = useState('')
+  const [op, setOp] = useState(nuevoOp)
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const n = Number(personas)
+  const ok = Number.isInteger(n) && n !== 0 && Math.abs(n) <= 1000 && (tipo === 'ajuste' || n > 0) && nota.trim().length > 0
+  async function guardar() {
+    if (!window.confirm(`¿${tipo === 'restitucion' ? 'Restituir' : 'Ajustar'} ${n > 0 ? '+' : ''}${n} personas a ${f.nombre}?`)) return
+    setEnviando(true); setError(null)
+    try {
+      await ajustarSaldo(f.id, n, tipo, nota.trim(), op)
+      setPersonas(''); setNota(''); setOp(nuevoOp())
+      await onHecho(`${tipo === 'restitucion' ? 'Restitución' : 'Ajuste'} de ${n > 0 ? '+' : ''}${n} personas a ${f.nombre}.`)
+    } catch (e) { setError(aClubError(e).message) }   // el op se conserva: el reintento no duplica
+    finally { setEnviando(false) }
+  }
+  return (
+    <Card>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Ajuste o restitución (solo owner)</div>
+      <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
+        Restitución: devuelve personas vencidas (por inactividad o por la baja). Ajuste: corrige un error (puede ser negativo).
+      </div>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+        <label><span style={labelStyle}>Tipo</span>
+          <select value={tipo} onChange={e => setTipo(e.target.value as 'restitucion' | 'ajuste')} style={inputStyle}>
+            <option value="restitucion">Restitución</option>
+            <option value="ajuste">Ajuste</option>
+          </select>
+        </label>
+        <label><span style={labelStyle}>Personas</span>
+          <input value={personas} onChange={e => setPersonas(e.target.value.replace(/[^\d-]/g, ''))} inputMode="numeric"
+            placeholder={tipo === 'restitucion' ? 'Ej. 12' : 'Ej. -3 o 3'} style={inputStyle} />
+        </label>
+      </div>
+      <label><span style={labelStyle}>Nota (obligatoria)</span>
+        <input value={nota} onChange={e => setNota(e.target.value)} maxLength={300} placeholder="Por qué" style={inputStyle} />
+      </label>
+      <Btn onClick={guardar} disabled={!ok || enviando} style={{ marginTop: 8, width: '100%' }}>{enviando ? 'Guardando…' : 'Guardar'}</Btn>
+    </Card>
   )
 }
 

@@ -92,3 +92,25 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 **Columnas nuevas en la 081:** `pos_ndf_tickets.area_factura` y `pos_ndf_open.area`. El agente las manda desde `c7d206e`, con el Edge v12. Hasta el nuevo backfill, el cruce usa `area`, que en las facturas sin pedido ya es la de la factura.
 
 **Verificación:** 1.414 cerradas desde el 1-sep (M 1.363, área 3 49, B 2). Prueba 42: misma hora, mesa 3 en dos áreas, cada pedido cruza solo con la suya. La batería da 200/200.
+
+**Revisión integral antes del piloto** (07-nov):
+- **R-01 · el QR público ya no canjea.** El `/r/` del referente está en la recepción: cualquiera con una foto podía canjear.
+  Ahora el canje exige un **código de canje** de 6 caracteres, de un solo uso, que vence a los 10 minutos.
+  - El referente lo genera en su portal (`/p/`) con «Canjear»: ve el QR `/k/{código}` y una cuenta regresiva. Tope: 5 por hora.
+  - Generar otro invalida el anterior.
+  - La caja escanea el `/k/` (o escribe los 6 caracteres). El `/r/` muestra el saldo, pero no el canje.
+  - El código queda usado en la misma transacción que el canje.
+  - Respaldo sin celular: «Canje sin celular», solo owner o manager, con nota. El cajero no lo ve y la base se lo rechaza.
+  - Tabla `club_codigos_canje` (nadie la lee directo). Funciones `club_canje_codigo_generar` (pública, solo por club-web), `club_canje` con `p_codigo_canje` y `club_canje_aprobado`.
+- **R-02 · `CUPON_SIN_PROMO`:** cupón usado cuyas facturas de la visita no tienen el artículo de la promo. Es exacta y está apagada mientras no se cargue `promo_articulo_codigo`, igual que `PROMO_SIN_CUPON`.
+- **Correcciones del recorrido:**
+  - Ficha del miembro: «Ajuste o restitución» (solo owner). Antes no había dónde restituir lo que vence la baja.
+  - SIN_CRUCE se puede resolver con nota cuando ninguna factura corresponde.
+  - El cierre de mes muestra la fecha.
+  - Los mensajes de la caja dicen «2» y «1,5», no «2.0».
+  - Portal: «Canjear» arriba del QR para turistas y el canje en créditos en el historial.
+  - Textos y etiquetas de accesibilidad; `<html lang="es">`.
+- **Pruebas:**
+  - Batería: 225/225 (nuevas: 43, código de canje; 44, CUPON_SIN_PROMO).
+  - Carrera 16 (el mismo código en dos canjes a la vez): 1 solo canje.
+  - API de club-web: 8 pruebas.

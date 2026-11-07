@@ -27,3 +27,13 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **Plan B:** si el pedido ya se cerró o la lista no carga, la caja elige la factura de la lista de cerradas en las últimas 2 h (`club_facturas_recientes`: hora, total y mesa si tiene). El cruce es exacto. **Ya no se tipean los 4 dígitos del tiquete.**
 - **Pruebas:** `075_pruebas_staging.sql`, 128/128 (pedido normal, medianoche, mismo número al día siguiente, tope de 18 h, cuenta dividida → Excepciones → elegir, plan B). vitest en verde.
 - **Falta (ítem 11 del puente, en el backlog):** el campo que une las facturas sin pedido con su pedido, la fecha de apertura del pedido y el consecutivo fiscal.
+
+**Cruce v2 con el ítem 11 ✅ en staging** (07/11, firma de Ismael para staging). Hallazgos de Ismael en el PoS: la unión pedido → factura es `FAC_Pedidos.NumeroFactura` (una factura por pedido); las cuentas divididas son facturas **sin pedido** con la mesa en la factura.
+- **Escaneo:** se guardan el pedido, la mesa, la apertura del pedido (`pos_ndf_open.pedido_abierto_en`, mig 081) y la hora del escaneo.
+- **Cruce** (`club_cruce_facturas`, devuelve la lista):
+  1. La **principal** es la factura del pedido: número + apertura, exacto cuando la factura trae `pedido_abierto_en`. Sin ese dato (antes del backfill), la primera con ese número desde la apertura, con tope de 18 h.
+  2. Más las facturas **sin pedido de la misma mesa** (`mesa_factura`) registradas entre la apertura y 30 min después de la principal (la cuenta dividida).
+  3. Sin principal → `SIN_CRUCE` en Excepciones. El manager ve las facturas sin pedido del día (la misma mesa primero) o busca por los **últimos dígitos del consecutivo** del tiquete.
+- **Excepciones:** `CANJE_MONTO_DISTINTO` compara contra la suma del `cxc` de todas las facturas de la visita.
+- **Plan B:** la lista de 2 h muestra los últimos 4 dígitos del tiquete cuando llega el consecutivo.
+- **Pruebas:** 135/135 en staging. Incluyen los casos reales: el pedido 14 del 05-nov → 112430, y la mesa 19 del 31-oct → 112313 (pedido 33) + 112310 + 112311 (la mesa de la factura se simula hasta que llegue el backfill). También la medianoche y el mismo número al día siguiente.

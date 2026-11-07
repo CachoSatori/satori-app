@@ -56,5 +56,7 @@ describe('pedido del PoS (piloto)', () => {
   it('plan B: la factura se describe con hora CR, total y mesa si tiene', () => {
     expect(describirFactura({ hora: '2026-11-06T01:21:30Z', total_crc: 48500, mesa: '20' })).toBe('19:21 · ₡48.500 · Mesa 20')
     expect(describirFactura({ hora: '2026-11-06T01:21:30Z', total_crc: 9000, mesa: null })).toBe('19:21 · ₡9.000')
+    expect(describirFactura({ hora: '2026-11-06T01:21:30Z', total_crc: 9000, mesa: '20', consecutivo_fe: '00200001040000016012' }))
+      .toBe('19:21 · ₡9.000 · Mesa 20 · tiquete …6012')
   })
 })

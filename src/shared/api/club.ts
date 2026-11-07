@@ -123,6 +123,8 @@ export interface PedidoAbierto {
 }
 export interface FacturaReciente {
   numero_factura: string; hora: string; total_crc: number; mesa: string | null; pedido: string | null
+  /** Consecutivo de la factura electrónica (20 dígitos, mig 081): el número del tiquete. */
+  consecutivo_fe?: string | null
 }
 export const getPedidosAbiertos = (local = 'santa-teresa') => llamar<PedidoAbierto[]>('club_pedidos_abiertos', { p_location: local })
 export const getFacturasRecientes = (local = 'santa-teresa') => llamar<FacturaReciente[]>('club_facturas_recientes', { p_location: local })
@@ -141,9 +143,10 @@ export const posParaServidor = (p: PosRef) =>
 export const describirPedido = (p: Pick<PedidoAbierto, 'pedido' | 'mesa' | 'total_crc'>) =>
   [`Pedido ${p.pedido}`, p.mesa ? `Mesa ${p.mesa}` : null, p.total_crc == null ? 'sin total' : colones(p.total_crc)]
     .filter(Boolean).join(' · ')
-/** «19:21 · ₡48.500 · Mesa 20» */
-export const describirFactura = (f: Pick<FacturaReciente, 'hora' | 'total_crc' | 'mesa'>) =>
-  [horaCR(f.hora), colones(f.total_crc), f.mesa ? `Mesa ${f.mesa}` : null].filter(Boolean).join(' · ')
+/** «19:21 · ₡48.500 · Mesa 20 · tiquete …6197» (los últimos 4 del consecutivo, si llegó) */
+export const describirFactura = (f: Pick<FacturaReciente, 'hora' | 'total_crc' | 'mesa'> & { consecutivo_fe?: string | null }) =>
+  [horaCR(f.hora), colones(f.total_crc), f.mesa ? `Mesa ${f.mesa}` : null,
+   f.consecutivo_fe ? `tiquete …${f.consecutivo_fe.slice(-4)}` : null].filter(Boolean).join(' · ')
 export const describirPos = (p: PosRef) =>
   p.modo === 'pedido'
     ? describirPedido({ pedido: p.pedido, mesa: p.mesa, total_crc: p.total })
@@ -226,9 +229,13 @@ export const getExcepciones = (desde: string, hasta: string, local = 'santa-tere
 export const getExcepcionesAbiertas = (dias = 30, local = 'santa-teresa') =>
   llamar<number>('club_excepciones_abiertas', { p_dias: dias, p_location: local })
 /** SIN_CRUCE: facturas sin pedido del día del escaneo, para que el manager elija. */
-export interface FacturaCandidata { numero_factura: string; hora: string; total_crc: number; mesa: string | null; asignada_a_otro: boolean }
-export const getCandidatasSinCruce = (movimiento: string) =>
-  llamar<FacturaCandidata[]>('club_sin_cruce_candidatas', { p_movimiento: movimiento })
+export interface FacturaCandidata {
+  numero_factura: string; hora: string; total_crc: number; mesa: string | null; consecutivo_fe: string | null
+  misma_mesa: boolean; asignada_a_otro: boolean
+}
+/** Sin `buscar`: las sin pedido de ese día. Con `buscar`: por los últimos dígitos del consecutivo (3 a 20). */
+export const getCandidatasSinCruce = (movimiento: string, buscar?: string) =>
+  llamar<FacturaCandidata[]>('club_sin_cruce_candidatas', { p_movimiento: movimiento, p_buscar: buscar?.trim() || null })
 export const elegirFacturaSinCruce = (movimiento: string, numeroFactura: string, nota: string) =>
   llamar<string>('club_sin_cruce_elegir', { p_movimiento: movimiento, p_numero_factura: numeroFactura, p_nota: nota.trim() || null })
 export const resolverExcepcion = (tipo: TipoExcepcion, ref: string, nota: string, local = 'santa-teresa') =>

@@ -1,0 +1,510 @@
+From e84c38890a991bbfd62b1e75b74299e08d010765 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 7 Nov 2026 05:41:42 +0000
+Subject: [PATCH] =?UTF-8?q?feat(puente):=20=C3=ADtem=2011=20=E2=80=94=20me?=
+ =?UTF-8?q?sa=20de=20la=20factura,=20consecutivo=20y=20clave=20FE,=20apert?=
+ =?UTF-8?q?ura=20del=20pedido=20(mig=20081,=20solo=20staging)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Firma de Ismael para staging (07-nov); prod aparte y con firma. Hallazgos de Ismael en el PoS:
+NumeroMesa, ConsecutivoElectronico y ClaveElectronica en FAC_Facturas; FAC_Pedidos.FechaRegistra
+es la apertura del pedido; FAC_Facturas.NumeroPedido y FAC_Pedidos.IDPedido vienen vacíos (no se usan).
+
+- Agente: el SELECT de facturas trae NumeroMesa, el consecutivo, la clave (como varchar) y
+  MIN(FAC_Pedidos.FechaRegistra); extrasPorFactura/aTicketIngest los pegan (mismo camino para el
+  agente y el backfill). La mesa abierta manda pedido_abierto_en. Todo opcional.
+- ingest-ndf: mesa_factura, consecutivo_fe (20 dígitos), clave_fe (50) y pedido_abierto_en en
+  pos_ndf_tickets; pedido_abierto_en en pos_ndf_open. Lo que no tiene la forma esperada va null:
+  nunca tumba el ticket.
+- Mig 081 aditiva (columnas que aceptan vacío, sin CHECK) + rollback.
+- Pruebas: vitest 1444/1444; typecheck del puente limpio.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012WttwDN2JPYLqpCXCgWFwh
+---
+ pos-bridge/README.md                          | 28 ++++++++
+ pos-bridge/consulta.ts                        | 21 +++++-
+ pos-bridge/consultaAgente.test.ts             | 66 +++++++++++++++++++
+ pos-bridge/consultaAgente.ts                  | 25 +++++++
+ pos-bridge/esquema.ts                         |  7 ++
+ scripts/sql/081_rollback.sql                  | 15 +++++
+ src/shared/ndf/ingestNdf.test.ts              | 31 +++++++++
+ src/shared/ndf/ingestNdf.ts                   | 43 ++++++++++++
+ .../migrations/081_pos_ndf_campos_factura.sql | 50 ++++++++++++++
+ 9 files changed, 285 insertions(+), 1 deletion(-)
+ create mode 100644 scripts/sql/081_rollback.sql
+ create mode 100644 supabase/migrations/081_pos_ndf_campos_factura.sql
+
+diff --git a/pos-bridge/README.md b/pos-bridge/README.md
+index 0a4232a..b768454 100644
+--- a/pos-bridge/README.md
++++ b/pos-bridge/README.md
+@@ -426,3 +426,31 @@ npm run pos:backfill -- --todo
+ 
+ El re-backfill es **idempotente** (upsert por `(local, numero_factura)`, el detalle se reemplaza
+ entero) y va **sin `open` y sin `cursor`**: no le toca nada al agente en vivo.
++
++---
++
++# Ítem 11 · campos de la factura para el Club (mig 081)
++
++Firma de Ismael para **staging** (07-nov); prod va aparte y con firma. Hallazgos de Ismael en el PoS
++(solo lectura, 06-nov) en la cabecera de `supabase/migrations/081_pos_ndf_campos_factura.sql`.
++
++| Columna nueva | De dónde sale | Para qué |
++|---|---|---|
++| `pos_ndf_tickets.mesa_factura` | `FAC_Facturas.NumeroMesa` | Las cuentas divididas no tienen pedido, pero sí mesa en la factura. |
++| `pos_ndf_tickets.consecutivo_fe` | `FAC_Facturas.ConsecutivoElectronico` (20 dígitos) | El número del tiquete que ve el cliente. |
++| `pos_ndf_tickets.clave_fe` | `FAC_Facturas.ClaveElectronica` (50 dígitos) | Clave de Hacienda. |
++| `pos_ndf_tickets.pedido_abierto_en` | `FAC_Pedidos.FechaRegistra` del pedido de la factura | Con el número de pedido, la clave completa (el número se reinicia cada día). |
++| `pos_ndf_open.pedido_abierto_en` | `FAC_Pedidos.FechaRegistra` | La apertura del pedido abierto. |
++
++- `fecha_registra` **ya era** `FAC_Facturas.FechaRegistra` (la hora real de cobro): no se duplica.
++- `FAC_Facturas.NumeroPedido` y `FAC_Pedidos.IDPedido` vienen vacíos: **no se usan**. La unión
++  pedido → factura sigue siendo `FAC_Pedidos.NumeroFactura`.
++- Todo opcional: si la instalación no tiene la columna, viaja `null` y la venta entra igual. Un
++  consecutivo o una clave con otra forma, o una apertura ilegible, van `null` (nunca tumban el ticket).
++- Sin nombres ni teléfonos.
++
++**Orden (no se puede invertir):** 1) mig 081 → 2) Edge `ingest-ndf` nuevo → 3) agente nuevo →
++4) backfill `npm run pos:backfill -- --desde 2026-09-01 --hasta <ayer>`. Con el Edge nuevo y sin la
++081, el upsert del lote falla y no entra ninguna venta. Un agente viejo contra el Edge nuevo
++funciona (los campos quedan en `null`). Plan paso a paso para la PC del PoS:
++`docs/puente/PLAN-agente-item11.md` (rama del Club).
+diff --git a/pos-bridge/consulta.ts b/pos-bridge/consulta.ts
+index 7e83084..fcbc7dd 100644
+--- a/pos-bridge/consulta.ts
++++ b/pos-bridge/consulta.ts
+@@ -141,10 +141,18 @@ export function sqlFacturas(
+     const real = colOpt(esq, 'facturas', campo)
+     return real ? `CONVERT(varchar(19), f.${q(real)}, 120)` : 'NULL'
+   }
++  // Un texto opcional de la factura (mesa, consecutivo, clave): como varchar, por lo mismo
++  // que el número de factura (si alguna fuera decimal, un Number la truncaría).
++  const ofTexto = (campo: string) => {
++    const real = colOpt(esq, 'facturas', campo)
++    return real ? `CAST(f.${q(real)} AS varchar(60))` : 'NULL'
++  }
+   const op = (campo: string) => {
+     const real = colOpt(esq, 'pedidos', campo)
+     return real ? `MIN(p.${q(real)})` : 'NULL'
+   }
++  // Ítem 11: la apertura del pedido (FAC_Pedidos.FechaRegistra), como texto estilo 120.
++  const pedidoAbierto = colOpt(esq, 'pedidos', 'fecha') ? 'CONVERT(varchar(19), ped.pedido_abierto, 120)' : 'NULL'
+   // El número de pedido también es decimal: sale como varchar por la misma razón que
+   // `NumeroFactura` (un Number lo trunca arriba de 2^53).
+   const opTexto = (campo: string) => {
+@@ -164,6 +172,10 @@ export function sqlFacturas(
+   CAST(f.${cf('numero')} AS varchar(40))            AS numero_factura,
+   CONVERT(varchar(19), f.${cf('fecha')}, 120)       AS fecha_hora,
+   ${ofFecha('fechacierra')}                         AS fecha_cierra,
++  ${ofTexto('numeromesa')}                          AS mesa_factura,
++  ${ofTexto('consecutivofe')}                       AS consecutivo_fe,
++  ${ofTexto('clavefe')}                             AS clave_fe,
++  ${pedidoAbierto}                                  AS pedido_abierto_en,
+   f.${cf('estado')}                                 AS estado,
+   ${of_('login')}                                   AS login_cajero,
+   ${of_('tipo')}                                    AS tipo_factura,
+@@ -197,7 +209,8 @@ LEFT JOIN (
+     ${op('tipo')}                                   AS tipo,
+     ${op('area')}                                   AS area,
+     ${op('mesa')}                                   AS mesa,
+-    ${opTexto('numeropedido')}                      AS numero_pedido_txt
++    ${opTexto('numeropedido')}                      AS numero_pedido_txt,
++    ${op('fecha')}                                  AS pedido_abierto
+   FROM ${P} p
+   INNER JOIN ${F} fp ON fp.${cf('numero')} = p.${cp('numerofactura')}
+   WHERE ${filtroEstado(`fp.${cf('estado')}`, estados)}
+@@ -261,6 +274,12 @@ export interface FilaFactura {
+   fecha_hora:        string
+   /** `FechaCierra` CRUDA (naive = hora CR). Opcional: la columna puede no existir. */
+   fecha_cierra?:     unknown
++  /** Ítem 11 (mig 081). Opcionales: null si la instalación no tiene la columna. */
++  mesa_factura?:      unknown
++  consecutivo_fe?:    unknown
++  clave_fe?:          unknown
++  /** `FAC_Pedidos.FechaRegistra` del pedido de la factura (naive = hora CR). */
++  pedido_abierto_en?: unknown
+   estado:            string | null
+   login_cajero:      unknown
+   tipo_factura:      unknown
+diff --git a/pos-bridge/consultaAgente.test.ts b/pos-bridge/consultaAgente.test.ts
+index c46b4e1..7f58241 100644
+--- a/pos-bridge/consultaAgente.test.ts
++++ b/pos-bridge/consultaAgente.test.ts
+@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
+ 
+ import {
+   agruparProductos,
++  extrasPorFactura,
++  soloDigitos,
+   aTicketIngest,
+   leerAbiertas,
+   leerCerradas,
+@@ -212,6 +214,7 @@ describe('mapAbierta', () => {
+       clave: 'pedido:4477', numero_factura: null, id_pedido: '4477', mesa: '12',
+       salonero_login: '026', canal: 'salon', pax: 4, pax_alerta: 'falta_articulo',
+       updated_at: '2026-09-01T20:05:00-06:00',
++      pedido_abierto_en: '2026-09-01T20:05:00-06:00',
+       // Frente C: sin líneas, los tres provisionales van en null («sin total»), nunca en 0.
+       monto_estimado_crc: null, pax_pedido: null, items_valor: null,
+     })
+@@ -762,3 +765,66 @@ describe('leerAbiertas con líneas (Frente C)', () => {
+     expect(visto).toHaveLength(1)
+   })
+ })
++
++// ── Ítem 11 (mig 081): mesa de la factura, consecutivo, clave y apertura del pedido ───────────
++describe('ítem 11 · campos nuevos de la factura', () => {
++  const CON = {
++    ...COLUMNAS,
++    fac_facturas: [...COLUMNAS.fac_facturas, 'NumeroMesa', 'ConsecutivoElectronico', 'ClaveElectronica', 'NumeroPedido'],
++  }
++  const esq = resolverEsquema(new Map(Object.entries(CON)))
++  const sql = sqlFacturas(esq, true)
++
++  it('el SELECT trae NumeroMesa, el consecutivo, la clave y la apertura del pedido (y sigue read-only)', () => {
++    expect(sql).toContain('CAST(f.[NumeroMesa] AS varchar(60))')
++    expect(sql).toContain('CAST(f.[ConsecutivoElectronico] AS varchar(60))')
++    expect(sql).toContain('CAST(f.[ClaveElectronica] AS varchar(60))')
++    expect(sql).toContain('MIN(p.[FechaRegistra])')
++    expect(sql).toContain('CONVERT(varchar(19), ped.pedido_abierto, 120)')
++    expect(() => assertSoloSelect(sql)).not.toThrow()
++  })
++
++  it('FAC_Facturas.NumeroPedido NO se usa (viene vacío): el pedido sale de FAC_Pedidos.NumeroFactura', () => {
++    expect(sql).not.toContain('f.[NumeroPedido]')
++  })
++
++  it('sin esas columnas, el SELECT las manda en NULL y no aborta', () => {
++    const viejo = sqlFacturas(ESQUEMA, true)
++    expect(viejo).toMatch(/NULL\s+AS mesa_factura/)
++    expect(viejo).toMatch(/NULL\s+AS consecutivo_fe/)
++    expect(viejo).toMatch(/NULL\s+AS clave_fe/)
++  })
++
++  const t = mapTicket({
++    numero_factura: '5001', fecha_hora: '2026-11-05 19:21:30', estado: 'C', tipo: 'M',
++    area: 'SALON 1', login_cajero: '222', usuario_registra: '026', salonero_nombre: 'X',
++    personas: 0, imp_servicio: 1200, medios: { efectivo: 15000, vuelto: 3000 }, items: [],
++  })
++
++  it('pega la mesa de la factura, el consecutivo, la clave y la apertura (con zona)', () => {
++    const i = aTicketIngest(t, {
++      mesa_factura: ' 19 ', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
++      pedido_abierto_en: '2026-11-05 18:39:48',
++    })
++    expect(i).toMatchObject({
++      mesa_factura: '19', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
++      pedido_abierto_en: '2026-11-05T18:39:48-06:00',
++    })
++  })
++
++  it('un consecutivo o una clave con otra forma viajan en null; la venta entra igual', () => {
++    const i = aTicketIngest(t, { consecutivo_fe: '2001040000016012', clave_fe: 'abc', pedido_abierto_en: '2026-02-31 10:00:00' })
++    expect(i).toMatchObject({ consecutivo_fe: null, clave_fe: null, pedido_abierto_en: null, total: 12000 })
++    expect(soloDigitos(' 00200001040000016012 ', 20)).toBe('00200001040000016012')
++  })
++
++  it('sin las columnas, los cuatro quedan en null', () => {
++    expect(aTicketIngest(t)).toMatchObject({ mesa_factura: null, consecutivo_fe: null, clave_fe: null, pedido_abierto_en: null })
++  })
++
++  it('el backfill arma los mismos extras que el agente (un solo camino)', () => {
++    const m = extrasPorFactura([{ numero_factura: '5001', mesa_factura: '19', consecutivo_fe: '00200001040000016012',
++      clave_fe: null, pedido_abierto_en: '2026-11-05 18:39:48' } as unknown as FilaFactura])
++    expect(m.get('5001')).toMatchObject({ mesa_factura: '19', consecutivo_fe: '00200001040000016012', pedido_abierto_en: '2026-11-05 18:39:48' })
++  })
++})
+diff --git a/pos-bridge/consultaAgente.ts b/pos-bridge/consultaAgente.ts
+index 1eda57c..e57ba63 100644
+--- a/pos-bridge/consultaAgente.ts
++++ b/pos-bridge/consultaAgente.ts
+@@ -85,6 +85,11 @@ export interface ExtrasFactura {
+   mesa?:          unknown
+   numero_pedido?: unknown
+   fecha_cierra?:  unknown
++  // Ítem 11 (mig 081)
++  mesa_factura?:      unknown
++  consecutivo_fe?:    unknown
++  clave_fe?:          unknown
++  pedido_abierto_en?: unknown
+ }
+ 
+ /**
+@@ -102,6 +107,10 @@ export function extrasPorFactura(filas: FilaFactura[]): Map<string, ExtrasFactur
+       mesa:          f.mesa,
+       numero_pedido: f.numero_pedido,
+       fecha_cierra:  f.fecha_cierra,
++      mesa_factura:      f.mesa_factura,
++      consecutivo_fe:    f.consecutivo_fe,
++      clave_fe:          f.clave_fe,
++      pedido_abierto_en: f.pedido_abierto_en,
+     })
+   }
+   return out
+@@ -122,9 +131,22 @@ export function aTicketIngest(
+     fecha_cierra:   cierreConZona(extra.fecha_cierra),
+     mesa:           texto(extra.mesa),
+     numero_pedido:  texto(extra.numero_pedido),
++    // Ítem 11 (mig 081). Informativos para la venta: nunca tumban el ticket. Un consecutivo o
++    // una clave con otra forma viajan en null (el Edge vuelve a validar). La apertura del pedido
++    // pasa por el mismo control que FechaCierra: naive completo o null.
++    mesa_factura:      texto(extra.mesa_factura),
++    consecutivo_fe:    soloDigitos(extra.consecutivo_fe, 20),
++    clave_fe:          soloDigitos(extra.clave_fe, 50),
++    pedido_abierto_en: cierreConZona(extra.pedido_abierto_en),
+   }
+ }
+ 
++/** El texto si son exactamente `largo` dígitos (sin espacios alrededor); si no, null. */
++export function soloDigitos(v: unknown, largo: number): string | null {
++  const s = texto(v)
++  return s !== null && s.length === largo && /^[0-9]+$/.test(s) ? s : null
++}
++
+ /**
+  * La lectura común: facturas + detalle de unos estados, mapeadas y listas para mandar.
+  *
+@@ -530,6 +552,9 @@ export function mapAbierta(f: FilaAbierta, lineas: readonly FilaLineaAbierta[] =
+     pax:            pax.pax,
+     pax_alerta:     pax.pax_alerta,
+     updated_at:     naive === null ? null : conOffsetCR(naive),
++    // Ítem 11 (mig 081): la misma FechaRegistra del pedido, con nombre propio. `updated_at`
++    // queda como está para no cambiarle el sentido a «En vivo».
++    pedido_abierto_en: cierreConZona(f.fecha_hora),
+     // Provisionales. Sin líneas (o sin poder leerlas) van en null: «sin total», nunca ₡0.
+     monto_estimado_crc: est.monto_estimado_crc,
+     pax_pedido:         est.pax_pedido,
+diff --git a/pos-bridge/esquema.ts b/pos-bridge/esquema.ts
+index ae6bb6d..805066c 100644
+--- a/pos-bridge/esquema.ts
++++ b/pos-bridge/esquema.ts
+@@ -56,6 +56,13 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
+       login:            opt('cajero que cobró (informativo)', 'Login'),
+       tipo:             opt('canal, si el pedido no lo trae', 'Tipo', 'TipoFactura'),
+       area:             opt('área cruda', 'Area'),
++      // Ítem 11 (mig 081, firma de Ismael 07-nov). OPCIONALES: sin ellas, el campo viaja en
++      // null y la venta entra igual. La mesa de la FACTURA es la que tienen las cuentas divididas,
++      // que no tienen pedido. El consecutivo (20 dígitos) es el número que ve el cliente en el
++      // tiquete. `FAC_Facturas.NumeroPedido` NO se usa: viene vacío siempre.
++      numeromesa:       opt('mesa de la factura (las cuentas divididas no tienen pedido)', 'NumeroMesa'),
++      consecutivofe:    opt('consecutivo de la factura electrónica (20 dígitos)', 'ConsecutivoElectronico'),
++      clavefe:          opt('clave de la factura electrónica (50 dígitos)', 'ClaveElectronica'),
+     },
+   },
+   pedidos: {
+diff --git a/scripts/sql/081_rollback.sql b/scripts/sql/081_rollback.sql
+new file mode 100644
+index 0000000..27329f9
+--- /dev/null
++++ b/scripts/sql/081_rollback.sql
+@@ -0,0 +1,15 @@
++-- 081_rollback.sql — saca las columnas del ítem 11 de pos_ndf_* y la fila 081 del ledger.
++-- ⚠️ ANTES de correrlo, volver el Edge `ingest-ndf` a la versión anterior: el Edge nuevo escribe
++-- estas columnas y, sin ellas, el upsert del lote falla y no entra ninguna venta.
++-- Pierde los datos de esas columnas (se recuperan con el backfill del agente).
++begin;
++drop index if exists public.pos_ndf_tickets_consecutivo_fe_idx;
++drop index if exists public.pos_ndf_tickets_pedido_idx;
++alter table public.pos_ndf_tickets
++  drop column if exists mesa_factura,
++  drop column if exists consecutivo_fe,
++  drop column if exists clave_fe,
++  drop column if exists pedido_abierto_en;
++alter table public.pos_ndf_open drop column if exists pedido_abierto_en;
++delete from supabase_migrations.schema_migrations where version = '081';
++commit;
+diff --git a/src/shared/ndf/ingestNdf.test.ts b/src/shared/ndf/ingestNdf.test.ts
+index 8f389f0..f40a36e 100644
+--- a/src/shared/ndf/ingestNdf.test.ts
++++ b/src/shared/ndf/ingestNdf.test.ts
+@@ -511,3 +511,34 @@ describe('normalizarLote', () => {
+     expect(r.tickets[0].fila.total_crc).toBe(12000)
+   })
+ })
++
++// ── Ítem 11 (mig 081) ──────────────────────────────────────────────────────────
++describe('ítem 11 · mesa de la factura, consecutivo, clave y apertura del pedido', () => {
++  it('pasan a la fila de pos_ndf_tickets', () => {
++    const r = normalizarTicket('santa-teresa', {
++      ...ticket(), mesa_factura: '19', consecutivo_fe: '00200001040000016012',
++      clave_fe: '5'.repeat(50), pedido_abierto_en: '2026-11-05T18:39:48-06:00',
++    })
++    expect(r.ok && r.valor.fila).toMatchObject({
++      mesa_factura: '19', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
++      pedido_abierto_en: '2026-11-06T00:39:48.000Z',
++    })
++  })
++  it('un agente viejo no los manda: quedan en null y el ticket entra', () => {
++    const r = normalizarTicket('santa-teresa', ticket())
++    expect(r.ok && r.valor.fila).toMatchObject({ mesa_factura: null, consecutivo_fe: null, clave_fe: null, pedido_abierto_en: null })
++  })
++  it('con otra forma (consecutivo de 16, apertura sin zona) van en null, nunca tumban la venta', () => {
++    const r = normalizarTicket('santa-teresa', {
++      ...ticket(), consecutivo_fe: '2001040000016012', clave_fe: '12', pedido_abierto_en: '2026-11-05 18:39:48', mesa_factura: 'x'.repeat(30),
++    })
++    expect(r.ok).toBe(true)
++    expect(r.ok && r.valor.fila).toMatchObject({ mesa_factura: null, consecutivo_fe: null, clave_fe: null, pedido_abierto_en: null })
++  })
++  it('la mesa abierta lleva la apertura del pedido', () => {
++    const r = normalizarOpen('santa-teresa', { clave: 'pedido:14', pedido_abierto_en: '2026-11-05T18:39:48-06:00' }, '2026-11-06T01:00:00.000Z')
++    expect(r.ok && r.valor.pedido_abierto_en).toBe('2026-11-06T00:39:48.000Z')
++    const s = normalizarOpen('santa-teresa', { clave: 'pedido:14', pedido_abierto_en: '18:39' }, '2026-11-06T01:00:00.000Z')
++    expect(s.ok && s.valor.pedido_abierto_en).toBeNull()
++  })
++})
+diff --git a/src/shared/ndf/ingestNdf.ts b/src/shared/ndf/ingestNdf.ts
+index 4825ec3..9b13232 100644
+--- a/src/shared/ndf/ingestNdf.ts
++++ b/src/shared/ndf/ingestNdf.ts
+@@ -117,6 +117,15 @@ export interface TicketIngest extends TicketMapeado {
+   tipo?:           string | null
+   mesa?:           string | null
+   numero_pedido?:  string | null
++  // ── Ítem 11 (mig 081). Opcionales: un agente viejo no los manda y quedan en null. ─────────
++  /** `FAC_Facturas.NumeroMesa`: la mesa de la factura (las cuentas divididas no tienen pedido). */
++  mesa_factura?:      string | null
++  /** Consecutivo de la factura electrónica, 20 dígitos. */
++  consecutivo_fe?:    string | null
++  /** Clave de la factura electrónica, 50 dígitos. */
++  clave_fe?:          string | null
++  /** `FAC_Pedidos.FechaRegistra` del pedido de la factura, con zona explícita. */
++  pedido_abierto_en?: string | null
+ }
+ 
+ /** Una línea = el `ItemMapeado` de la Fase 1a más el precio unitario. */
+@@ -145,6 +154,8 @@ export interface OpenIngest {
+   pax?:            number | null
+   pax_alerta?:     PaxAlerta | null
+   updated_at?:     string | null
++  /** Ítem 11 (mig 081): `FAC_Pedidos.FechaRegistra`, con zona explícita. */
++  pedido_abierto_en?: string | null
+   // ── Frente C v1: PROVISIONALES. Nunca entran en neta / cuadre / pos_ndf_tickets. ──────
+   /** Estimado por catálogo, bruto. `null` = no se pudo calcular; `0` = cero real (cortesía). */
+   monto_estimado_crc?: number | null
+@@ -214,6 +225,11 @@ export interface TicketRow {
+   pax_alerta:       PaxAlerta
+   total_crc:        number
+   total_fuente:     string
++  /** Ítem 11 (mig 081). */
++  mesa_factura:      string | null
++  consecutivo_fe:    string | null
++  clave_fe:          string | null
++  pedido_abierto_en: string | null
+ }
+ 
+ export interface LineaRow {
+@@ -245,6 +261,8 @@ export interface OpenRow {
+   pax_pedido:         number | null
+   items_valor:        number | null
+   detalle_productos:  ProductoComandado[] | null
++  /** Ítem 11 (mig 081). */
++  pedido_abierto_en:  string | null
+ }
+ 
+ export interface CursorRow {
+@@ -434,6 +452,11 @@ export function normalizarTicket(local: string, t: unknown): Resultado<TicketNor
+         pax_alerta,
+         total_crc:        recalculado,
+         total_fuente:     texto(x.total_fuente) ?? 'provisorio',
++        // Ítem 11 (mig 081). Nunca tumban el ticket: lo que no tiene la forma esperada va null.
++        mesa_factura:      textoCorto(x.mesa_factura, 20),
++        consecutivo_fe:    digitos(x.consecutivo_fe, 20),
++        clave_fe:          digitos(x.clave_fe, 50),
++        pedido_abierto_en: instanteOpcionalONull(x.pedido_abierto_en),
+       },
+       lineas,
+       totalRecalculado,
+@@ -473,10 +496,30 @@ export function normalizarOpen(local: string, o: unknown, ahora: string): Result
+       // Informativo (mig 065). Fail-closed: cualquier entrada malformada tira el array ENTERO
+       // a null, no se guarda una lista a medias que se leería como «la mesa solo tiene esto».
+       detalle_productos:  productosComandados(x.detalle_productos),
++      // Ítem 11 (mig 081). Sin zona o ilegible → null (no tumba la mesa).
++      pedido_abierto_en:  instanteOpcionalONull(x.pedido_abierto_en),
+     },
+   }
+ }
+ 
++/** Texto recortado, o null si falta o es más largo que `max`. */
++const textoCorto = (v: unknown, max: number): string | null => {
++  const s = texto(v)
++  return s !== null && s.length <= max ? s : null
++}
++
++/** Exactamente `largo` dígitos, o null. */
++const digitos = (v: unknown, largo: number): string | null => {
++  const s = texto(v)
++  return s !== null && s.length === largo && /^[0-9]+$/.test(s) ? s : null
++}
++
++/** Un instante con zona explícita, o null (ausente, sin zona o ilegible: nunca rechaza). */
++const instanteOpcionalONull = (v: unknown): string | null => {
++  const r = instanteOpcional(v)
++  return r.ok ? r.valor : null
++}
++
+ /**
+  * El array de productos comandados, o `null`.
+  *
+diff --git a/supabase/migrations/081_pos_ndf_campos_factura.sql b/supabase/migrations/081_pos_ndf_campos_factura.sql
+new file mode 100644
+index 0000000..e1b5492
+--- /dev/null
++++ b/supabase/migrations/081_pos_ndf_campos_factura.sql
+@@ -0,0 +1,50 @@
++-- ╔══════════════════════════════════════════════════════════════════════════════════════╗
++-- ║ 081 — pos_ndf: campos de la factura para el cruce del Club (ítem 11). ADITIVA.          ║
++-- ╚══════════════════════════════════════════════════════════════════════════════════════╝
++-- Firma de Ismael para STAGING (07-nov). Prod va aparte y con firma: aplicar en prod ANTES de
++-- subir el Edge nuevo (el Edge escribe estas columnas; sin ellas, el upsert del lote falla y no
++-- entra ninguna venta).
++--
++-- Hallazgos de Ismael en el PoS (solo lectura, 06-nov):
++--   · FAC_Facturas.NumeroMesa: la mesa de la FACTURA. Las cuentas divididas no tienen pedido,
++--     pero sí mesa en la factura.
++--   · FAC_Facturas.ConsecutivoElectronico (20 dígitos, el número que ve el cliente en el
++--     tiquete) y ClaveElectronica (50 dígitos).
++--   · FAC_Facturas.FechaRegistra es la hora real de cobro: YA se guarda en
++--     pos_ndf_tickets.fecha_registra desde la 062 (no se duplica). FechaCierra es la del cierre
++--     de caja (fecha_cierra).
++--   · La unión pedido → factura es FAC_Pedidos.NumeroFactura. FAC_Facturas.NumeroPedido y
++--     FAC_Pedidos.IDPedido vienen vacíos: no se usan.
++--   · FAC_Pedidos.FechaRegistra es la apertura del pedido. Con el número de pedido es la clave
++--     completa (el número se reinicia cada día).
++--
++-- SOLO columnas nuevas que aceptan vacío, sin default y sin CHECK: un valor raro lo descarta el
++-- Edge (va null), nunca tumba el lote. No toca ninguna columna existente, ni la neta, ni el
++-- cuadre, ni los sagrados. Nada de nombres ni teléfonos. Idempotente.
++-- Rollback: scripts/sql/081_rollback.sql.
++
++alter table public.pos_ndf_tickets
++  add column if not exists mesa_factura      text,
++  add column if not exists consecutivo_fe    text,
++  add column if not exists clave_fe          text,
++  add column if not exists pedido_abierto_en timestamptz;
++
++alter table public.pos_ndf_open
++  add column if not exists pedido_abierto_en timestamptz;
++
++comment on column public.pos_ndf_tickets.mesa_factura is
++  'FAC_Facturas.NumeroMesa (mig 081). La mesa de la factura: las cuentas divididas no tienen pedido pero si mesa. null = agente viejo o sin dato.';
++comment on column public.pos_ndf_tickets.consecutivo_fe is
++  'FAC_Facturas.ConsecutivoElectronico (mig 081): 20 digitos, el numero que ve el cliente en el tiquete. Otra forma -> null.';
++comment on column public.pos_ndf_tickets.clave_fe is
++  'FAC_Facturas.ClaveElectronica (mig 081): 50 digitos. Otra forma -> null.';
++comment on column public.pos_ndf_tickets.pedido_abierto_en is
++  'FAC_Pedidos.FechaRegistra del pedido de la factura (mig 081): la apertura. Con numero_pedido es la clave completa del pedido. null = sin pedido.';
++comment on column public.pos_ndf_open.pedido_abierto_en is
++  'FAC_Pedidos.FechaRegistra (mig 081): la apertura del pedido abierto.';
++
++-- Búsqueda por los últimos dígitos del consecutivo (Excepciones del Club) y cruce por mesa.
++create index if not exists pos_ndf_tickets_consecutivo_fe_idx on public.pos_ndf_tickets (local, consecutivo_fe)
++  where consecutivo_fe is not null;
++create index if not exists pos_ndf_tickets_pedido_idx on public.pos_ndf_tickets (local, numero_pedido, fecha_registra)
++  where numero_pedido is not null;
+-- 
+2.43.0
+

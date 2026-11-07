@@ -13,7 +13,7 @@ import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora } from './estilos'
 
 const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
-  SIN_CRUCE:            { titulo: 'Sin cruce: posible cuenta dividida', que: 'Registro con pedido que no encontró su factura. Suele ser una cuenta dividida o refacturada: el PoS la cobra en facturas sin pedido. Elegí la factura de la lista.' },
+  SIN_CRUCE:            { titulo: 'Sin cruce: posible cuenta dividida', que: 'Registro con pedido que no encontró la factura de su pedido (anulada, refacturada o cobrada solo en facturas sin pedido). Elegí la factura de la lista o buscala por los últimos dígitos del tiquete.' },
   REGISTRO_SIN_FACTURA: { titulo: 'Registro sin factura', que: 'Cupón, tarjeta o canje con un número de factura que no está en el PoS.' },
   CREDITOS_SIN_CANJE:   { titulo: 'Créditos sin canje',   que: 'Factura pagada «a crédito» por un múltiplo de medio crédito, sin canje en el Club.' },
   CANJE_MONTO_DISTINTO: { titulo: 'Canje con monto distinto', que: 'El valor del canje no coincide con lo cobrado «a crédito» en la factura.' },
@@ -147,16 +147,21 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
   )
 }
 
-/** SIN_CRUCE: lista de facturas sin pedido de ese día; un toque elige, después «Elegir esta factura». */
+/**
+ * SIN_CRUCE: lista de facturas sin pedido de ese día (la misma mesa primero) o búsqueda por los
+ * últimos dígitos del consecutivo del tiquete; un toque elige, después «Elegir esta factura».
+ */
 function ElegirFactura({ e, onElegida }: { e: Excepcion; onElegida: () => Promise<void> }) {
   const [lista, setLista] = useState<FacturaCandidata[] | null>(null)
+  const [buscar, setBuscar] = useState('')
+  const [buscado, setBuscado] = useState('')
   const [elegida, setElegida] = useState<string | null>(null)
   const [nota, setNota] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    getCandidatasSinCruce(e.ref).then(setLista).catch(err => { setError(aClubError(err).message); setLista([]) })
-  }, [e.ref])
+    getCandidatasSinCruce(e.ref, buscado || undefined).then(setLista).catch(err => { setError(aClubError(err).message); setLista([]) })
+  }, [e.ref, buscado])
   async function elegir() {
     if (!elegida) return
     setEnviando(true); setError(null)
@@ -167,9 +172,17 @@ function ElegirFactura({ e, onElegida }: { e: Excepcion; onElegida: () => Promis
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
-      <span style={labelStyle}>Facturas sin pedido de ese día</span>
+      <form onSubmit={ev => { ev.preventDefault(); setLista(null); setElegida(null); setBuscado(buscar.replace(/\D/g, '')) }}
+        style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+        <label style={{ flex: 1 }}><span style={labelStyle}>Últimos dígitos del tiquete (opcional)</span>
+          <input value={buscar} onChange={ev => setBuscar(ev.target.value.replace(/\D/g, '').slice(0, 20))} inputMode="numeric"
+            placeholder="Ej. 6197" style={{ ...inputStyle, letterSpacing: '0.15em' }} />
+        </label>
+        <Btn type="submit" variant="secondary" disabled={buscar.length > 0 && buscar.length < 3}>{buscar ? 'Buscar' : 'Ver las del día'}</Btn>
+      </form>
+      <span style={labelStyle}>{buscado ? `Facturas con el tiquete terminado en …${buscado}` : 'Facturas sin pedido de ese día (la misma mesa primero)'}</span>
       {lista === null && <div style={{ color: C.muted }}>Cargando…</div>}
-      {lista?.length === 0 && <div style={{ color: C.muted, fontSize: '0.88rem' }}>No hay facturas sin pedido ese día. Resolvelo con un ajuste si hace falta.</div>}
+      {lista?.length === 0 && <div style={{ color: C.muted, fontSize: '0.88rem' }}>{buscado ? 'No hay facturas con ese tiquete.' : 'No hay facturas sin pedido ese día.'} Si no aparece, resolvelo con una nota (y un ajuste si hace falta).</div>}
       {lista?.map(f => {
         const sel = elegida === f.numero_factura
         return (
@@ -177,7 +190,7 @@ function ElegirFactura({ e, onElegida }: { e: Excepcion; onElegida: () => Promis
             style={{ textAlign: 'left', minHeight: 44, borderRadius: 8, cursor: 'pointer', padding: '0.5rem 0.8rem',
                      border: `2px solid ${sel ? C.ink : C.border}`, background: sel ? C.paper : '#fff' }}>
             <strong>{describirFactura(f)}</strong>
-            <span style={{ color: C.muted, fontSize: '0.8rem' }}> · factura {f.numero_factura}{f.asignada_a_otro ? ' · ya elegida para otro registro' : ''}</span>
+            <span style={{ color: C.muted, fontSize: '0.8rem' }}> · factura {f.numero_factura}{f.misma_mesa ? ' · misma mesa' : ''}{f.asignada_a_otro ? ' · ya elegida para otro registro' : ''}</span>
           </button>
         )
       })}

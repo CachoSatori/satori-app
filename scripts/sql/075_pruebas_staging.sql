@@ -851,9 +851,10 @@ begin
   perform pg_temp.r('26', 'owner restituye con club_ajuste (restitucion)', public.club_saldo_personas(v_m) = 10, '');
 end $$;
 
--- ═══ 27. Pedido (piloto, decisión de Ismael 07-nov): la caja elige el PEDIDO abierto; cruce = primera
---        factura con ese pedido después del escaneo (tope 18 h); SIN_CRUCE → el manager elige; plan B ═══
--- Números de pedido y de factura de prueba (90xx / 9909xx) para no chocar con los datos reales del puente.
+-- ═══ 27. Pedido (piloto; ítem 11, firma de Ismael 07-nov): la caja elige el PEDIDO abierto; facturas =
+--        la del pedido + las sin pedido de la misma mesa (cuenta dividida); SIN_CRUCE → el manager elige ═══
+-- Números de pedido y de factura de prueba (90xx / 9909xx) para no chocar con los datos reales, salvo
+-- 27h (el pedido 14 del 05-nov y la mesa 19 del 31-oct, que son reales en staging).
 do $$
 declare v_m uuid; v_c uuid; v_cod text; v_d date := (now() at time zone 'America/Costa_Rica')::date - 1;
 begin
@@ -861,14 +862,21 @@ begin
   insert into club_miembros (tipo, nombre, origen) values ('referente', 'Canje Pedido Prueba', 'app') returning id into v_c;
   insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
   values (v_c, 'tarjeta', 24, 6, 18000, now() - interval '3 days', 'migracion');
-  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, monto_estimado_crc, updated_at) values
-    ('santa-teresa', 'pedido:9014', '9014', '20', 'salon', 4, 48500, now() - interval '1 minute'),
-    ('santa-teresa', 'pedido:9009', '9009', '5',  'salon', 2, 21000,    now() - interval '1 minute'),
-    ('santa-teresa', 'pedido:9030', '9030', '51', 'salon', 3, 40000,    now() - interval '1 minute');
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, monto_estimado_crc, updated_at, pedido_abierto_en) values
+    ('santa-teresa', 'pedido:9014', '9014', '20', 'salon', 4, 48500, now() - interval '50 minutes', now() - interval '50 minutes'),
+    ('santa-teresa', 'pedido:9009', '9009', '5',  'salon', 2, 21000, now() - interval '20 minutes', now() - interval '20 minutes'),
+    ('santa-teresa', 'pedido:9030', '9030', '51', 'salon', 3, 40000, now() - interval '40 minutes', now() - interval '40 minutes');
   insert into _ids values ('ped_m', v_m), ('ped_c', v_c), ('ped_cod', v_cod), ('ped_d', v_d);
 end $$;
+create function pg_temp.fac(p_ids uuid[]) returns text language sql as $f$
+  select coalesce(string_agg(t.numero_factura, '+' order by o.n), '') from unnest(p_ids) with ordinality o(id, n)
+    join pos_ndf_tickets t on t.id = o.id;
+$f$;
+create function pg_temp.cruce(p_mov uuid) returns text language sql as $f$
+  select pg_temp.fac(public.club_cruce_facturas('santa-teresa', m.pos_ref, m.factura_pos)) from club_movimientos m where m.id = p_mov;
+$f$;
 do $$
-declare j jsonb; v_cup text; v_mv uuid; v_t1 uuid; v_hoy text := (now() at time zone 'America/Costa_Rica')::date::text;
+declare j jsonb; v_cup text; v_mv uuid; v_hoy text := (now() at time zone 'America/Costa_Rica')::date::text;
         v_m uuid := (select i.v::uuid from _ids i where i.k = 'ped_m');
 begin
   -- 27a. la caja ve la lista de pedidos abiertos; el salonero no
@@ -893,19 +901,28 @@ begin
   perform public.club_cupon_usar(v_cup, 4, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9014","hora":"2020-01-01T00:00:00Z"}'::jsonb);
   perform pg_temp.yo();
   select id into v_mv from club_movimientos where miembro_id = v_m and pos_ref->>'pedido' = '9014';
-  perform pg_temp.r('27', 'pedido normal: guarda pedido, mesa, total, hora del escaneo (del servidor) y visita; sin factura tipeada',
+  insert into _ids values ('mv_9014', v_mv);
+  perform pg_temp.r('27', 'escaneo: guarda pedido, mesa, total, apertura del pedido y hora del escaneo (del servidor); sin factura tipeada',
     (select factura_pos is null and pos_ref->>'mesa' = '20' and (pos_ref->>'total')::numeric = 48500
-            and (pos_ref->>'hora')::timestamptz = now() and visita_clave = format('pedido:%s:9014', v_hoy)
+            and (pos_ref->>'hora')::timestamptz = now() and (pos_ref->>'abierto_en')::timestamptz = now() - interval '50 minutes'
+            and visita_clave = format('pedido:%s:9014', v_hoy)
        from club_movimientos where id = v_mv), (select pos_ref::text from club_movimientos where id = v_mv));
-  perform pg_temp.r('27', 'pedido normal: sin factura todavía → no cruza', public.club_cruce_auto('santa-teresa',
-    (select pos_ref from club_movimientos where id = v_mv), null) is null, '');
-  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc) values
-    ('990901', now() - interval '6 hours',   'C', 'salon', 'cajero', true, 'ok', '20', '9014', 50000),  -- antes del escaneo
-    ('990903', now() + interval '3 hours',   'C', 'salon', 'cajero', true, 'ok', '20', '9014', 10000);
-  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
-  values ('990902', now() + interval '40 minutes', 'C', 'salon', 'cajero', true, 'ok', '20', '9014', 48500) returning id into v_t1;
-  perform pg_temp.r('27', 'pedido normal: cruza con la PRIMERA factura de ese pedido cerrada después del escaneo (no la de antes, no la de después)',
-    public.club_cruce_auto('santa-teresa', (select pos_ref from club_movimientos where id = v_mv), null) = v_t1, '');
+  perform pg_temp.r('27', 'pedido normal: sin factura todavía → no cruza', pg_temp.cruce(v_mv) = '', '');
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc) values
+    ('990901', now() - interval '6 hours',    'C', 'salon', 'cajero', true, 'ok', '20', '20', '9014', 50000),  -- otro 9014, de antes de abrir
+    ('990902', now() + interval '40 minutes', 'C', 'salon', 'cajero', true, 'ok', '20', '20', '9014', 30000),  -- la del pedido
+    ('990913', now() + interval '45 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, '20', null, 18500), -- dividida, misma mesa
+    ('990914', now() + interval '50 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, '21', null, 9000),  -- otra mesa
+    ('990915', now() + interval '2 hours',    'C', 'salon', 'sin_pedido', true, 'ok', null, '20', null, 7000);  -- mesa 20 pero > principal + 30 min
+  perform pg_temp.r('27', 'pedido normal: la factura del pedido + la sin pedido de la misma mesa (no otra mesa, no después de +30 min, no el 9014 de antes)',
+    pg_temp.cruce(v_mv) = '990902+990913', pg_temp.cruce(v_mv));
+  -- con la apertura del pedido en la factura (después del backfill) la clave es exacta: número + apertura
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, pedido_abierto_en, total_crc)
+  values ('990903', now() - interval '45 minutes', 'C', 'salon', 'cajero', true, 'ok', '20', '9014', now() - interval '5 days', 1000);
+  perform pg_temp.r('27', 'una factura del mismo número con OTRA apertura no es la del pedido',
+    split_part(pg_temp.cruce(v_mv), '+', 1) = '990902', pg_temp.cruce(v_mv));
+  update pos_ndf_tickets set pedido_abierto_en = now() - interval '50 minutes' where numero_factura = '990902';
+  perform pg_temp.r('27', 'con la apertura en la factura: cruce exacto número + apertura', split_part(pg_temp.cruce(v_mv), '+', 1) = '990902', pg_temp.cruce(v_mv));
 
   -- 27c. pedido ya cerrado (no está en la lista) → error que manda al plan B
   begin
@@ -918,58 +935,79 @@ begin
 end $$;
 do $$
 declare v_m uuid := (select i.v::uuid from _ids i where i.k = 'ped_m'); v_d date := (select i.v::date from _ids i where i.k = 'ped_d');
-        v_mn uuid; v_tn uuid; v_ma uuid; v_ta uuid; v_mb uuid; v_tb uuid; v_mc uuid; v_h timestamptz;
+        v_mn uuid; v_ma uuid; v_mb uuid; v_mc uuid; v_h timestamptz;
 begin
-  -- 27d. pedido que cruza la medianoche: escaneo ayer 23:50, factura hoy 00:20 (y otra 9007 de ayer al mediodía)
+  -- 27d. pedido que cruza la medianoche: abierto 23:40, escaneo 23:50, factura 00:20 del día siguiente,
+  --      dividida de la misma mesa 00:35; otra de esa mesa a la 01:30 (fuera de +30 min) y un 9007 de ayer al mediodía
   v_h := (v_d + time '23:50') at time zone 'America/Costa_Rica';
   insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
   values (v_m, 'tarjeta', 2, 6, 18000, v_h, v_h, 'app',
-          jsonb_build_object('modo','pedido','pedido','9007','mesa','3','total',30000,'visto',v_h - interval '1 minute','hora',v_h), 'pedido:x:9007')
+          jsonb_build_object('modo','pedido','pedido','9007','mesa','3','total',30000,'abierto_en',v_h - interval '10 minutes','hora',v_h), 'pedido:x:9007')
   returning id into v_mn;
-  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
-  values ('990904', (v_d + time '12:00') at time zone 'America/Costa_Rica', 'C', 'salon', 'cajero', true, 'ok', '9', '9007', 12000);
-  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
-  values ('990905', (v_d + 1 + time '00:20') at time zone 'America/Costa_Rica', 'C', 'salon', 'cajero', true, 'ok', '3', '9007', 30000)
-  returning id into v_tn;
-  perform pg_temp.r('27', 'medianoche: escaneo 23:50 → cruza con la factura de las 00:20 del día siguiente',
-    public.club_cruce_auto('santa-teresa', (select pos_ref from club_movimientos where id = v_mn), null) = v_tn, '');
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc) values
+    ('990904', (v_d + time '12:00') at time zone 'America/Costa_Rica',     'C', 'salon', 'cajero', true, 'ok', '9', '9', '9007', 12000),
+    ('990905', (v_d + 1 + time '00:20') at time zone 'America/Costa_Rica', 'C', 'salon', 'cajero', true, 'ok', '3', '3', '9007', 30000),
+    ('990916', (v_d + 1 + time '00:35') at time zone 'America/Costa_Rica', 'C', 'salon', 'sin_pedido', true, 'ok', null, '3', null, 8000),
+    ('990917', (v_d + 1 + time '01:30') at time zone 'America/Costa_Rica', 'C', 'salon', 'sin_pedido', true, 'ok', null, '3', null, 6000);
+  perform pg_temp.r('27', 'medianoche: escaneo 23:50 → factura 00:20 + dividida 00:35 (no la de la 01:30, no el 9007 del mediodía)',
+    pg_temp.cruce(v_mn) = '990905+990916', pg_temp.cruce(v_mn));
 
   -- 27e. mismo número de pedido al día siguiente: A (ayer, 9009) y B (hoy, 9009) no se mezclan
   v_h := now() - interval '1 day';
   insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
   values (v_m, 'tarjeta', 2, 6, 18000, v_h, v_h, 'app',
-          jsonb_build_object('modo','pedido','pedido','9009','mesa','5','total',21000,'visto',v_h - interval '1 minute','hora',v_h), 'pedido:y:9009')
+          jsonb_build_object('modo','pedido','pedido','9009','mesa','5','total',21000,'abierto_en',v_h - interval '10 minutes','hora',v_h), 'pedido:y:9009')
   returning id into v_ma;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
-  values ('990906', v_h + interval '1 hour', 'C', 'salon', 'cajero', true, 'ok', '5', '9009', 21000) returning id into v_ta;
+  values ('990906', v_h + interval '1 hour', 'C', 'salon', 'cajero', true, 'ok', '5', '9009', 21000);
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9009"}'::jsonb);
   perform pg_temp.yo();
   select id into v_mb from club_movimientos where miembro_id = v_m and pos_ref->>'pedido' = '9009' and (pos_ref->>'hora')::timestamptz = now();
-  perform pg_temp.r('27', 'mismo pedido al día siguiente: el de hoy NO cruza con la factura de ayer',
-    public.club_cruce_auto('santa-teresa', (select pos_ref from club_movimientos where id = v_mb), null) is null, '');
+  perform pg_temp.r('27', 'mismo pedido al día siguiente: el de hoy NO cruza con la factura de ayer', pg_temp.cruce(v_mb) = '', pg_temp.cruce(v_mb));
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
-  values ('990907', now() + interval '30 minutes', 'C', 'salon', 'cajero', true, 'ok', '5', '9009', 26000) returning id into v_tb;
-  perform pg_temp.r('27', 'mismo pedido al día siguiente: hoy → la factura de hoy; ayer → la de ayer',
-    public.club_cruce_auto('santa-teresa', (select pos_ref from club_movimientos where id = v_mb), null) = v_tb
-    and public.club_cruce_auto('santa-teresa', (select pos_ref from club_movimientos where id = v_ma), null) = v_ta, '');
-  -- C: escaneo ayer del 9010 sin factura; la única 9010 es de 24 h después (otro día) → no cruza (tope 18 h)
+  values ('990907', now() + interval '30 minutes', 'C', 'salon', 'cajero', true, 'ok', '5', '9009', 26000);
+  perform pg_temp.r('27', 'mismo pedido al día siguiente: hoy → la de hoy; ayer → la de ayer',
+    pg_temp.cruce(v_mb) = '990907' and pg_temp.cruce(v_ma) = '990906', pg_temp.cruce(v_mb) || ' / ' || pg_temp.cruce(v_ma));
+  -- C: escaneo ayer del 9010 sin factura; la única 9010 es de 24 h después → no cruza (tope 18 h)
   insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
   values (v_m, 'tarjeta', 2, 6, 18000, v_h, v_h, 'app',
-          jsonb_build_object('modo','pedido','pedido','9010','mesa','6','total',15000,'visto',v_h - interval '1 minute','hora',v_h), 'pedido:y:9010')
+          jsonb_build_object('modo','pedido','pedido','9010','mesa','6','total',15000,'abierto_en',v_h - interval '10 minutes','hora',v_h), 'pedido:y:9010')
   returning id into v_mc;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
   values ('990908', now() + interval '10 minutes', 'C', 'salon', 'cajero', true, 'ok', '6', '9010', 15000);
-  perform pg_temp.r('27', 'tope 18 h: la factura del mismo número 24 h después no cruza',
-    public.club_cruce_auto('santa-teresa', (select pos_ref from club_movimientos where id = v_mc), null) is null, '');
+  perform pg_temp.r('27', 'tope 18 h: la factura del mismo número 24 h después no cruza', pg_temp.cruce(v_mc) = '', pg_temp.cruce(v_mc));
   insert into _ids values ('ped_mc', v_mc);
 end $$;
 do $$
-declare j jsonb; v_c uuid := (select i.v::uuid from _ids i where i.k = 'ped_c'); v_mv uuid; v_e text;
+declare v_m uuid := (select i.v::uuid from _ids i where i.k = 'ped_m'); v_m14 uuid; v_m19 uuid;
+begin
+  -- 27h. DATOS REALES de staging.
+  --  · pedido 14 del 05-nov (abierto 18:39:48, mesa 20) → factura 112430 (19:21:30).
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  values (v_m, 'tarjeta', 2, 6, 18000, timestamptz '2026-11-05 19:00:00-06', timestamptz '2026-11-05 19:00:00-06', 'app',
+          jsonb_build_object('modo','pedido','pedido','14','mesa','20','abierto_en','2026-11-05T18:39:48-06:00','hora','2026-11-05T19:00:00-06:00'), 'pedido:2026-11-05:14')
+  returning id into v_m14;
+  perform pg_temp.r('27', 'real: pedido 14 del 05-nov → 112430 (sin la apertura en la factura, antes del backfill)', pg_temp.cruce(v_m14) = '112430', pg_temp.cruce(v_m14));
+  update pos_ndf_tickets set pedido_abierto_en = timestamptz '2026-11-05 18:39:48-06', mesa_factura = '20' where local = 'santa-teresa' and numero_factura = '112430';
+  perform pg_temp.r('27', 'real: pedido 14 del 05-nov → 112430 (con la apertura, como queda después del backfill)', pg_temp.cruce(v_m14) = '112430', pg_temp.cruce(v_m14));
+  --  · mesa 19 del 31-oct: pedido 33 (factura 112313, 22:20:44) cobrado con dos facturas sin pedido de la
+  --    mesa 19 (112310 22:17:35 y 112311 22:18:36). La mesa de la factura llega con el backfill: acá se
+  --    simula dentro de la transacción. Apertura del pedido 33: 21:30 (supuesta; el backfill trae la real).
+  update pos_ndf_tickets set mesa_factura = '19' where local = 'santa-teresa' and numero_factura in ('112310', '112311', '112313', '112293');
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  values (v_m, 'tarjeta', 2, 6, 18000, timestamptz '2026-10-31 21:45:00-06', timestamptz '2026-10-31 21:45:00-06', 'app',
+          jsonb_build_object('modo','pedido','pedido','33','mesa','19','abierto_en','2026-10-31T21:30:00-06:00','hora','2026-10-31T21:45:00-06:00'), 'pedido:2026-10-31:33')
+  returning id into v_m19;
+  perform pg_temp.r('27', 'real: mesa 19 del 31-oct → 112313 (pedido 33) + 112310 + 112311 (cuenta dividida); no la 112293 (pedido 21 de esa mesa)',
+    pg_temp.cruce(v_m19) = '112313+112310+112311', pg_temp.cruce(v_m19));
+end $$;
+do $$
+declare j jsonb; v_c uuid := (select i.v::uuid from _ids i where i.k = 'ped_c'); v_mv uuid;
         v_mc text := (select i.v from _ids i where i.k = 'ped_mc');
         v_dia_ini date := (now() at time zone 'America/Costa_Rica')::date - 2; v_dia_fin date := (now() at time zone 'America/Costa_Rica')::date + 1;
 begin
-  -- 27f. cuenta dividida: canje con el pedido 9030; el PoS anula la factura del pedido y cobra en 2 sin pedido
+  -- 27f. sin la factura del pedido: canje con el pedido 9030; el PoS anula la del pedido y cobra en 2 sin pedido
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_canje(v_c, 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9030"}'::jsonb);
   begin
@@ -986,27 +1024,40 @@ begin
   perform pg_temp.yo();
   perform pg_temp.r('27', 'pedido todavía abierto en el puente → todavía no es excepción', jsonb_array_length(j) = 0, j::text);
   delete from pos_ndf_open where id_pedido = '9030';
-  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc, cxc_crc) values
-    ('990910', now() - interval '20 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, null,   25000, 18000),
-    ('990911', now() - interval '19 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, null,   15000, 0),
-    ('990912', now() - interval '18 minutes', 'X', 'salon', 'cajero',     true, 'ok', '51', '9030', 0,     0);
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc, cxc_crc, consecutivo_fe) values
+    ('990910', now() - interval '20 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, '51', null,   25000, 18000, '00200001040000990910'),
+    ('990911', now() - interval '19 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, '52', null,   15000, 0,     '00200001040000990911'),
+    ('990912', now() - interval '18 minutes', 'X', 'salon', 'cajero',     true, 'ok', '51', '51', '9030', 0,     0,     null);
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(v_dia_ini, v_dia_fin) e where e.ref = v_mv::text;
   perform pg_temp.yo();
-  perform pg_temp.r('27', 'cuenta dividida (pedido anulado + 2 facturas sin pedido) → SIN_CRUCE «posible cuenta dividida»',
+  perform pg_temp.r('27', 'sin la factura del pedido (anulada) → SIN_CRUCE «posible cuenta dividida»',
     jsonb_array_length(j) = 1 and j->0->>'tipo' = 'SIN_CRUCE' and j->0->'detalle'->>'motivo' = 'posible cuenta dividida'
       and j->0->>'factura' = 'pedido 9030 · mesa 51' and not (j->0->>'resuelta')::boolean, j::text);
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(v_dia_ini, v_dia_fin) e where e.ref = v_mc;
   perform pg_temp.yo();
   perform pg_temp.r('27', 'tope 18 h vencido sin factura → SIN_CRUCE', jsonb_array_length(j) = 1 and j->0->>'tipo' = 'SIN_CRUCE', j::text);
-  -- lista para elegir: facturas sin pedido de ese día (las 2 piezas; no la anulada ni las que tienen pedido)
+  -- lista para elegir: sin pedido de ese día, la misma mesa primero
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
-  select jsonb_agg(to_jsonb(x) order by x.numero_factura) into j from public.club_sin_cruce_candidatas(v_mv) x where x.numero_factura in ('990910','990911','990912','990902');
+  select jsonb_agg(to_jsonb(x)) into j from public.club_sin_cruce_candidatas(v_mv) x where x.numero_factura in ('990910','990911','990912','990902');
   perform pg_temp.yo();
-  perform pg_temp.r('27', 'candidatas: las facturas sin pedido del día, con hora y total',
-    jsonb_array_length(j) = 2 and j->0->>'numero_factura' = '990910' and j->1->>'numero_factura' = '990911'
-      and (j->0) ?& array['hora','total_crc','mesa','asignada_a_otro'], coalesce(j::text, 'null'));
+  perform pg_temp.r('27', 'candidatas: facturas sin pedido del día (la de la misma mesa primero), con hora, total y consecutivo',
+    jsonb_array_length(j) = 2 and j->0->>'numero_factura' = '990910' and (j->0->>'misma_mesa')::boolean and j->1->>'numero_factura' = '990911'
+      and (j->0) ?& array['hora','total_crc','mesa','consecutivo_fe','asignada_a_otro'], coalesce(j::text, 'null'));
+  -- búsqueda por los últimos dígitos del consecutivo del tiquete
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select jsonb_agg(to_jsonb(x)) into j from public.club_sin_cruce_candidatas(v_mv, '…0911') x;
+  perform pg_temp.yo();
+  perform pg_temp.r('27', 'búsqueda por los últimos dígitos del consecutivo («…0911») → esa factura',
+    jsonb_array_length(j) = 1 and j->0->>'numero_factura' = '990911', coalesce(j::text, 'null'));
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    perform public.club_sin_cruce_candidatas(v_mv, '12');
+    perform pg_temp.yo(); perform pg_temp.r('27', 'búsqueda con 2 dígitos', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('27', 'búsqueda con menos de 3 dígitos → error', sqlerrm like '%entre 3 y 20%', sqlerrm);
+  end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     perform public.club_sin_cruce_elegir(v_mv, '990910', null);
@@ -1016,16 +1067,16 @@ begin
   end;
   begin
     perform pg_temp.como('authenticated', '<OWNER_UUID>');
-    perform public.club_sin_cruce_elegir(v_mv, '990902', null);
-    perform pg_temp.yo(); perform pg_temp.r('27', 'elegir una factura con pedido', false, 'aceptó');
+    perform public.club_sin_cruce_elegir(v_mv, '112313', null);  -- del 31-oct
+    perform pg_temp.yo(); perform pg_temp.r('27', 'elegir una factura de otro día', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('27', 'elegir una factura que no está en la lista → error', sqlerrm like '%no está en la lista%', sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('27', 'elegir una factura fuera de la fecha del registro → error', sqlerrm like '%no está en la lista%', sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_sin_cruce_elegir(v_mv, '990910', 'cuenta dividida en 2');
   select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(v_dia_ini, v_dia_fin) e where e.ref = v_mv::text or e.factura = '990910';
   perform pg_temp.yo();
-  perform pg_temp.r('27', 'resolver: queda SIN_CRUCE resuelta con «Factura 990910 elegida» y quién la eligió; el canje (₡18.000) cuadra con su cxc',
+  perform pg_temp.r('27', 'resolver: SIN_CRUCE resuelta con «Factura 990910 elegida» y quién la eligió; el canje (₡18.000) cuadra con su cxc',
     jsonb_array_length(j) = 1 and (j->0->>'resuelta')::boolean and j->0->>'nota' = 'Factura 990910 elegida · cuenta dividida en 2'
       and j->0->'detalle'->>'factura_elegida' = '990910' and j->0->'detalle'->>'elegida_por' is not null
       and j->0->'detalle'->>'resuelta_por' is not null, j::text);
@@ -1034,18 +1085,18 @@ begin
       and (select count(*) from club_movimientos where id = v_mv) = 1, '');
 end $$;
 do $$
-declare j jsonb; v_m uuid := (select i.v::uuid from _ids i where i.k = 'ped_m'); v_mv uuid; v_t uuid;
+declare j jsonb; v_m uuid := (select i.v::uuid from _ids i where i.k = 'ped_m'); v_mv uuid;
 begin
   -- 27g. plan B: el pedido ya se cerró → la caja elige la factura de las últimas 2 h
-  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
-  values ('990950', now() - interval '30 minutes', 'C', 'salon', 'cajero', true, 'ok', '12', '9050', 47000) returning id into v_t;
-  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
-  values ('990951', now() - interval '3 hours', 'C', 'salon', 'cajero', true, 'ok', '0', '9051', 9000);
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc, consecutivo_fe) values
+    ('990950', now() - interval '30 minutes', 'C', 'salon', 'cajero', true, 'ok', null, '12', '9050', 47000, '00200001040000990950'),
+    ('990951', now() - interval '3 hours',    'C', 'salon', 'cajero', true, 'ok', '0',  null, '9051', 9000,  null);
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   select jsonb_agg(to_jsonb(x)) into j from public.club_facturas_recientes() x where x.numero_factura in ('990950','990951','990902','990903');
   perform pg_temp.yo();
-  perform pg_temp.r('27', 'plan B: la lista trae las facturas de las últimas 2 h (hora, total, mesa), no las viejas ni las de hora futura',
-    jsonb_array_length(j) = 1 and j->0->>'numero_factura' = '990950' and j->0->>'mesa' = '12' and (j->0) ?& array['hora','total_crc'], coalesce(j::text, 'null'));
+  perform pg_temp.r('27', 'plan B: la lista trae las facturas de las últimas 2 h (hora, total, mesa de la factura, consecutivo), no las viejas ni las de hora futura',
+    jsonb_array_length(j) = 2 and j->0->>'numero_factura' = '990950' and j->0->>'mesa' = '12' and j->0->>'consecutivo_fe' = '00200001040000990950'
+      and j->1->>'numero_factura' = '990903', coalesce(j::text, 'null'));
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"990951"}'::jsonb);
@@ -1070,8 +1121,7 @@ begin
    where e.ref = v_mv::text;
   perform pg_temp.yo();
   perform pg_temp.r('27', 'plan B: cruce exacto con la factura elegida (sin excepción)',
-    public.club_cruce_auto('santa-teresa', (select pos_ref from club_movimientos where id = v_mv), null) = v_t
-      and jsonb_array_length(j) = 0 and (select visita_clave from club_movimientos where id = v_mv) = 'factura:990950', j::text);
+    pg_temp.cruce(v_mv) = '990950' and jsonb_array_length(j) = 0 and (select visita_clave from club_movimientos where id = v_mv) = 'factura:990950', j::text);
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

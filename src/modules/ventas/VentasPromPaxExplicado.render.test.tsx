@@ -3,7 +3,7 @@
 // «Prom/PAX explicado» montado: filtros → RPC (mock con las filas que devolvería) → tarjetas,
 // «Qué explica el cambio», tablas, «Ver detalle» y CSV.
 //
-// Con `PROMPAX_PANTALLA_FILE` (filas REALES del RPC 078 de staging, bajadas como owner simulado)
+// Con `PROMPAX_PANTALLA_FILE` (filas REALES del RPC 080 de staging, bajadas como owner simulado)
 // además verifica en pantalla los números del §9 v2.3. Sin la variable, solo el caso sintético.
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

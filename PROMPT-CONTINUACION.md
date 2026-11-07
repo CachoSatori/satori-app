@@ -7,12 +7,12 @@
 > · `staging` = **`4793cf3`** (al día con `main` desde el 06/11). **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10.**
 > **SoP en prod desde el 06/11:** 27 documentos en 5 áreas, PDF y libros ([handoff](docs/handoffs/HANDOFF-2026-11-06-sop.md)). Migraciones en prod hasta la
 > **077** (ledger **53**: la **076** y la **077** de SoP, el 06/11 entre 18:03:48 y 18:05:14 UTC). Staging tiene además
-> 055–061, la **070**, la **075** (Club Satori F1a, reservada) y la **078** (Prom/PAX, rama
-> `claude/busy-brown-ssjq4e-prompax`, solo staging) y la **079** (SoP solo para activos; ledger 78). **Próximo número libre: `080`.**
+> 055–061, la **070**, la **075** (Club Satori F1a, reservada), la **079** (SoP solo para activos) y la **080** (Prom/PAX, rama
+> `claude/busy-brown-ssjq4e-prompax`, solo staging; antes 078, renumerada el 07/11; ledger 78). **Próximo número libre: `081`.**
 > Edge Functions: `alta-empleado` v1 y `monthly-report` v10 en prod (`verify_jwt` on, desplegadas a mano).
 > Estado completo y reglas → [ESTADO.md](ESTADO.md).
 >
-> **Próximo: Prom/PAX explicado** ([SPEC](docs/SPEC-prompax-explicado.md) → v2.3; RPC = mig 078, ya en staging, solo staging hasta la firma).
+> **Próximo: Prom/PAX explicado** ([SPEC](docs/SPEC-prompax-explicado.md) → v2.3; RPC = mig 080, ya en staging, solo staging hasta la firma).
 >
 > **Cómo se armó:** se partió del backlog de `staging` del 29/10 (`a43d3d4`, que sigue abajo completo como
 > detalle) y se sumaron los pendientes que dejaron el go-live del PoS (29–30/10) y el handoff del 30/10. Cada

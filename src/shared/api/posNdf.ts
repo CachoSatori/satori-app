@@ -493,7 +493,7 @@ export async function getPedidosCerradosJornada(
   return out
 }
 
-// ── Prom/PAX explicado (mig 078) ───────────────────────────────────────────────────────────
+// ── Prom/PAX explicado (mig 080) ───────────────────────────────────────────────────────────
 
 /** Una fila del agregado: (día CR, franja horaria CR, salonero, canal) → facturas, pax, neta. */
 export interface FilaPromPaxRpc {

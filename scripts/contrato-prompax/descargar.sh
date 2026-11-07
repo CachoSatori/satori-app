@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test de contrato del RPC 078 (pos_prompax_agregado) contra netaVenta.ts — baja los datos.
+# Test de contrato del RPC 080 (pos_prompax_agregado) contra netaVenta.ts — baja los datos.
 #
 #   scripts/contrato-prompax/descargar.sh <REF> <DIR> [desde] [hasta]
 #
@@ -20,7 +20,7 @@ case $REF in
 esac
 mkdir -p "$DIR"
 RAIZ=$(cd "$(dirname "$0")/../.." && pwd)
-MIG="$RAIZ/supabase/migrations/078_pos_prompax_agregado.sql"
+MIG="$RAIZ/supabase/migrations/080_pos_prompax_agregado.sql"
 
 q() { # $1 = sql, $2 = read_only (true|false)
   jq -n --arg q "$1" --argjson ro "$2" '{query:$q, read_only:$ro}' \

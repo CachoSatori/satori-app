@@ -1,6 +1,6 @@
 // ── Aceptación §9 (SPEC v2.3) con datos reales de prod ─────────────────────────────────────
 //
-// Corre solo con `PROMPAX_ACEPTACION_FILE` = las filas del RPC 078 de ene–oct 2026 (bajadas con
+// Corre solo con `PROMPAX_ACEPTACION_FILE` = las filas del RPC 080 de ene–oct 2026 (bajadas con
 // `scripts/contrato-prompax/descargar.sh <PROD> <dir> 2026-01-01 2026-10-31`; en prod el cuerpo del
 // RPC corre como SELECT de solo lectura). Sin la variable se salta.
 //

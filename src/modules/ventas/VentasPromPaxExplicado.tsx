@@ -1,7 +1,7 @@
 // ── Ventas → Análisis → «Prom/PAX explicado» (SPEC v2.3 §7) ────────────────────────────────
 //
 // Solo lectura, owner/manager/contador (la pestaña Análisis ya es solo para ellos; la barrera real
-// es el RPC 078, que valida rol + is_active en la base). Todo el cálculo vive en
+// es el RPC 080, que valida rol + is_active en la base). Todo el cálculo vive en
 // `ventasPromPaxExplicado.ts`; acá solo se piden los datos, se arma el período y se muestra.
 
 import { useEffect, useMemo, useState } from 'react'

@@ -2,7 +2,7 @@
 
 > v1 (30/10 13:00) revisada por Grok y Auditor Satori; v2 incorporó los ajustes aceptados.
 > **v2.3 (06/11, decisiones de Ismael):** el turno sale de la HORA de la factura, la madrugada es noche del
-> mismo día, el §9 se recalculó con eso y el RPC es la **mig 078**. El arreglo de roles que bloqueaba la
+> mismo día, el §9 se recalculó con eso y el RPC es la **mig 080**. El arreglo de roles que bloqueaba la
 > pantalla ya está en prod (SEC-01 y SEC-01b, migs 068 y 069).
 
 ## 0.b Cambios v2.2 → v2.3
@@ -11,7 +11,7 @@
 | 1 | **Turno = hora CR de la factura** (`fecha_registra`): 06:00–16:59 mañana · 17:00–23:59 noche · 00:00–05:59 madrugada. Ya **no** se usa `pos_ndf_tickets.turno` | El turno de caja está mal anotado en los dos sentidos (r8, Q27) |
 | 2 | **Madrugada = noche del MISMO día calendario** (opción B). Vive en un solo lugar: `turnoDeFranja` de `ventasPromPaxExplicado.ts`. El día (§5) **no cambia** | Día y mes siguen idénticos a los de Ventas. Volumen chico: 12 facturas / ₡424.084 en el último año (ene y feb 2026) |
 | 3 | §9 recalculado con datos reales de prod (06/11); es la nueva referencia de aceptación | Cambia el turno |
-| 4 | RPC = **mig 078** `pos_prompax_agregado`, devuelve `jsonb` | 076/077 = SoP. El tope de filas de PostgREST es distinto en prod (10.000) y staging (1.000) |
+| 4 | RPC = **mig 080** `pos_prompax_agregado`, devuelve `jsonb` (en staging se aplicó primero como 078 y se renumeró el 07/11: PROD ya tenía la 079 y una versión menor que la última remota puede ser rechazada por Branching) | 076/077/079 = SoP. El tope de filas de PostgREST es distinto en prod (10.000) y staging (1.000) |
 | 5 | Aclaraciones de §6.3 (ver ahí): peso del corte, causa con ≥ 15 pax en el período con menos pax del grupo, la semana no compite por el texto, «pesan» = ≥ 15 % | Hacía falta una regla exacta para el código |
 | 6 | La tabla de saloneros con turno = «ambos» usa un corte «salonero × turno» (también cuadra a 1e-9) | Que rendimiento/mezcla de esa tabla salgan de sus mismas filas |
 | 7 | Sin selector de local por ahora: hay un solo local con datos del PoS (Santa Teresa) | §3: «visible cuando hay más de un local» |
@@ -107,7 +107,7 @@ Para cada grupo *i* con pax > 0: s_i = pax_i / PAX, p_i = neta_i / pax_i, P* = N
 5. Export CSV de cada tabla. Grupos con pax = 0: «sin pax», nunca −100%.
 
 ## 8. Datos y seguridad
-- **Mig 078 · `pos_prompax_agregado(p_local text, p_desde date, p_hasta date) returns jsonb`**: una fila por
+- **Mig 080 · `pos_prompax_agregado(p_local text, p_desde date, p_hasta date) returns jsonb`**: una fila por
   (día CR, franja horaria CR, `salonero_login`, canal) → facturas, pax, neta, neta de facturas sin pax y cuántas.
   `security definer`, `stable`, `search_path` fijo, sin EXECUTE para `anon`/`public`. Solo owner/manager/contador
   **activos** (`get_my_role()` de la 069); el resto → 42501. Rango ≤ 731 días. Sin medios de pago,
@@ -118,7 +118,7 @@ Para cada grupo *i* con pax > 0: s_i = pax_i / PAX, p_i = neta_i / pax_i, P* = N
   oct-2026 → 637 facturas, 153 filas, **0 diferencias** en staging (RPC real) y en prod (mismo cuerpo como SELECT de
   solo lectura); ene–oct 2026 de prod → 10.355 facturas, 0 diferencias.
 - En staging desde el 06/11 (ledger 77). **Prod: con firma aparte**, a mano antes del merge, como siempre.
-  Rollback: `scripts/sql/078_rollback.sql`. Nada en `supabase/functions/`.
+  Rollback: `scripts/sql/080_rollback.sql`. Nada en `supabase/functions/`.
 
 ## 9. Aceptación v2.3 (números reales de prod, 06/11; turno por hora, madrugada = noche del mismo día)
 Santa Teresa, salón, `estado='C'`. Entre paréntesis, pax. En la columna v2.2, el turno de caja.

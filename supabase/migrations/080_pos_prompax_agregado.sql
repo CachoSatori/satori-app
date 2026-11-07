@@ -1,5 +1,5 @@
 -- ╔══════════════════════════════════════════════════════════════════════════════════════╗
--- ║ 078 · Prom/PAX explicado: RPC de agregado de ventas del PoS (SPEC v2.3 §8)            ║
+-- ║ 080 · Prom/PAX explicado: RPC de agregado de ventas del PoS (SPEC v2.3 §8)            ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
 -- `pos_prompax_agregado(p_local, p_desde, p_hasta)` → jsonb: una fila por
@@ -25,7 +25,7 @@
 -- Rango máximo: 731 días. Rendimiento medido en prod (1 año, 12.477 facturas): ~375 ms con los
 -- índices que ya existen (`pos_ndf_tickets_local_fecha_idx`, `pos_ndf_ticket_lines_ticket_idx`).
 --
--- Re-ejecutable. Rollback: scripts/sql/078_rollback.sql.
+-- Re-ejecutable. Rollback: scripts/sql/080_rollback.sql.
 
 create or replace function public.pos_prompax_agregado(
   p_local text,

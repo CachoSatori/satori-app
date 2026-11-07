@@ -1,4 +1,4 @@
-// ── Test de CONTRATO: RPC `pos_prompax_agregado` (mig 078) == `netaVenta.ts` ───────────────
+// ── Test de CONTRATO: RPC `pos_prompax_agregado` (mig 080) == `netaVenta.ts` ───────────────
 //
 // Corre solo con datos bajados por `scripts/contrato-prompax/descargar.sh` (Management API, solo
 // lectura) en `PROMPAX_CONTRATO_DIR`. Sin esa variable se salta: el gate normal no toca ninguna base.
@@ -33,7 +33,7 @@ interface TicketCrudo {
 }
 interface LineaCruda { ticket_id: string; familia: number | null; monto: unknown; codigo_producto: string | null }
 
-describe.skipIf(!DIR)('contrato RPC 078 ↔ netaVenta.ts', () => {
+describe.skipIf(!DIR)('contrato RPC 080 ↔ netaVenta.ts', () => {
   it('cada fila (día, franja, salonero, canal) da lo mismo: facturas, pax, neta y neta sin pax', () => {
     const leer = (f: string) => JSON.parse(readFileSync(join(DIR!, f), 'utf8'))
     const tickets: TicketCrudo[] = leer('tickets.json')

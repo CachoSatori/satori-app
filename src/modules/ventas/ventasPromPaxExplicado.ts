@@ -1,6 +1,6 @@
 // ── «Prom/PAX explicado» — el cálculo (SPEC v2.3 §5–§6) ────────────────────────────────────
 //
-// Módulo PURO: recibe las filas del RPC de agregado (`pos_prompax_agregado`, mig 078) y devuelve
+// Módulo PURO: recibe las filas del RPC de agregado (`pos_prompax_agregado`, mig 080) y devuelve
 // números, tablas y frases. Sin I/O, sin reloj, sin redondeos: se calcula con todos los decimales
 // y se redondea al mostrar (§0 #8).
 //

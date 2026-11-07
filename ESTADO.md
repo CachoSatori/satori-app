@@ -223,6 +223,18 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 ### Pendientes de estabilización
 
 - **Propinas · reparto semanal de cocina:** mover la exclusión del reparto de cocina de un nombre fijo en el código a una marca en la base (requiere spec y firma: toca propinas).
+- **Privacidad · datos reales que siguen en el repo público** (tras #56 y #57, que limpiaron comentarios, tests y docs).
+  No se sacaron porque hacerlo cambia el comportamiento o porque la zona está bloqueada:
+  - **Listas de personal que usa la app** (`src/shared/ndf/personasNdf.ts`, `src/modules/ventas/ventasEnVivoDatos.ts`
+    y los tests que dependen de ellas): la app las usa para mapear los tickets del PoS a personas. Moverlas a la base
+    pide spec y firma.
+  - **Correo y filtro por correo en `scripts/`** (`scripts/clone_prod_to_staging.py` y 4 scripts `.ts` de
+    `refresh-staging/` y `t0-reconciliacion-cajas/`): sacarlos cambia cómo se ubica la cuenta. Pasar a una variable
+    de entorno o a una búsqueda por rol.
+  - **Nombres de proveedores** en los docs de `scripts/refresh-staging/` (corte e informes T0) y en
+    `ESTADO-ARCHIVO.md`: son registros históricos. Anonimizarlos en un PR de docs.
+  - **Alias de correo** en la pantalla de alta (`NuevoEmpleado` / `UserApprovals`) y en la función `cierre-email`:
+    bloqueado hasta el ítem 11 (`supabase/functions/` no se toca).
 
 ### Seguridad que sigue abierta en prod (medido 30/10; SEC-01 al 04/11)
 

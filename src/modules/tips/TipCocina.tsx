@@ -5,14 +5,12 @@
  *  - Agrupar todas las tip_entries con rol = 'cocina' por semana (ISO, lun–dom)
  *  - Sumar el take_home (payout_crc) de esas entradas → pool semanal de cocina
  *  - Dividir en partes iguales entre los empleados de cocina que participaron
- *  - Las personas de `VITE_COCINA_EXCLUIDOS` (configuración fuera del repo, ver cocinaExcluidos.ts)
- *    están EXCLUIDAS como receptoras: su take_home igual entra al pool, pero su parte se
- *    redistribuye entre el resto (no la reciben)
+ *  - Selena está EXCLUIDA como receptora: su take_home igual entra al pool,
+ *    pero su parte se redistribuye entre el resto (no la recibe)
  */
 import { useState, useEffect, useMemo } from 'react'
 import type { Employee } from '../../shared/types/database'
 import { getAttendanceHistory } from '../../shared/api/tips'
-import { COCINA_EXCLUIDOS, esExcluidoCocina } from './cocinaExcluidos'
 import type { AttendanceRow } from '../../shared/api/tips'
 
 interface Props {
@@ -23,6 +21,7 @@ const FETCH_MONTHS = 12
 const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 function fi(n: number) { return '₡ ' + Math.round(n).toLocaleString('es-CR') }
+function isSelena(name: string) { return name.toLowerCase().includes('selena') }
 function fmtMonth(ym: string) { const [y, m] = ym.split('-'); return `${MN[Number(m)]} ${y}` }
 function fmtShort(d: string) { const [, m, dd] = d.split('-'); return `${Number(dd)} ${MN[Number(m)]}` }
 
@@ -38,7 +37,7 @@ interface WeekBucket {
   key:        string                       // lunes ISO
   start:      string                       // fecha real más temprana presente
   end:        string                       // fecha real más tardía presente
-  pool:       number                       // suma take_home (incluye a los excluidos)
+  pool:       number                       // suma take_home (incluye Selena)
   receptores: Array<{ id: string; name: string }>
   perPerson:  number
 }
@@ -99,8 +98,8 @@ export default function TipCocina({ employees }: Props) {
       if (r.session_date < b.start) b.start = r.session_date
       if (r.session_date > b.end)   b.end = r.session_date
       const emp = cocinaIds.get(r.employee_id)
-      // Los excluidos entran al pool pero NO son receptores
-      if (emp && !esExcluidoCocina(emp.full_name)) b.recept.set(emp.id, emp.full_name)
+      // Selena entra al pool pero NO es receptora
+      if (emp && !isSelena(emp.full_name)) b.recept.set(emp.id, emp.full_name)
     }
     return Object.entries(map)
       .sort((a, b) => a[0].localeCompare(b[0]))
@@ -149,11 +148,9 @@ export default function TipCocina({ employees }: Props) {
         </select>
       </div>
 
-      {COCINA_EXCLUIDOS.length > 0 && (
-        <div style={{ fontSize: '0.68rem', color: '#666', marginBottom: '0.75rem' }}>
-          Las personas excluidas en la configuración entran al pool pero no reciben — su parte se reparte entre el resto de cocina.
-        </div>
-      )}
+      <div style={{ fontSize: '0.68rem', color: '#666', marginBottom: '0.75rem' }}>
+        Selena entra al pool pero no recibe — su parte se reparte entre el resto de cocina.
+      </div>
 
       {/* Tabla por semana */}
       <div style={{ overflowX: 'auto' }}>

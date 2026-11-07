@@ -220,6 +220,10 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | PoS propio (comandero, KDS, cobro + splits, ticket/FE SIM, inventario COGS; migs 022–037, `posFiscal.ts`) | 🧪 staging · bloqueado por el PILAR de auth |
 | PILAR de auth multi-tenant · FE-CR real | 🔲 |
 
+### Pendientes de estabilización
+
+- **Propinas · reparto semanal de cocina:** mover la exclusión del reparto de cocina de un nombre fijo en el código a una marca en la base (requiere spec y firma: toca propinas).
+
 ### Seguridad que sigue abierta en prod (medido 30/10; SEC-01 al 04/11)
 
 - **SEC-01 (escalada de roles):** ✅ cerrada en prod: Paso A (signup apagado + bans) y mig 068 (05/11). Rollback: `scripts/sql/068_rollback.sql`.

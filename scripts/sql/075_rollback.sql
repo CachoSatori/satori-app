@@ -75,6 +75,10 @@ drop function if exists public.club_web_ok();
 drop function if exists public.club_web_clave_cargar(text);
 drop function if exists public.club_reportes_cerrados_inmutable();
 drop table if exists public.club_codigos_canje;   -- R-01 (antes que club_movimientos)
+drop table if exists public.club_pase_eventos;      -- LC-A1
+drop table if exists public.club_pase_cursor;
+drop table if exists public.club_pases;
+drop table if exists public.club_miembro_roles;
 drop table if exists public.club_canje_intentos;
 drop table if exists public.club_alertas;
 drop table if exists public.club_auditoria;

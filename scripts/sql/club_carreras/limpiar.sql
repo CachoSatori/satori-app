@@ -5,6 +5,8 @@ delete from club_codigos_canje where miembro_id in (select id from club_miembros
 delete from club_alertas where miembro_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_canje_intentos where miembro_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_auditoria where objeto_id in (select id from club_miembros where nombre like 'Carrera %');
+delete from club_miembro_roles where miembro_id in (select id from club_miembros where nombre like 'Carrera %');
+delete from club_pase_eventos where miembro_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_movimientos where miembro_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_cupones where referente_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_miembros where nombre like 'Carrera %';

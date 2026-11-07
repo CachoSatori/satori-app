@@ -7,7 +7,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import {
   getMiembros, getSaldos, getNegocios, getMovimientos, getContacto, guardarMiembro, guardarNegocio,
-  regenerarCodigo, tokenPortal, codigoMiembro, aClubError, fmtCreditos, ajustarSaldo, nuevoOp,
+  regenerarCodigo, tokenPortal, codigoMiembro, aClubError, fmtCreditos, ajustarSaldo, nuevoOp, getRoles, activarAnfitrion,
+  type ClubRol,
   type ClubMiembro, type ClubSaldo, type ClubNegocio, type ClubMovimiento, type TipoMiembro, type TipoNegocio,
 } from '../../shared/api/club'
 import { urlPortal, urlReferente } from './qrFormato'
@@ -15,8 +16,8 @@ import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha, fmtFechaHora, TIPO_MIEMBRO_LABEL, TIPO_NEGOCIO_LABEL, TIPO_MOV_LABEL } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
 
-type Pestana = 'referentes' | 'equipo'
-type Fila = ClubMiembro & { saldo: ClubSaldo | null; negocio: string | null }
+type Pestana = 'referentes' | 'equipo' | 'socios'
+type Fila = ClubMiembro & { saldo: ClubSaldo | null; negocio: string | null; roles: ClubRol[] }
 const SEIS_MESES_MS = 182 * 24 * 3600 * 1000
 
 export default function Miembros() {
@@ -24,6 +25,7 @@ export default function Miembros() {
   const [miembros, setMiembros] = useState<ClubMiembro[]>([])
   const [saldos, setSaldos] = useState<ClubSaldo[]>([])
   const [negocios, setNegocios] = useState<ClubNegocio[]>([])
+  const [roles, setRoles] = useState<ClubRol[]>([])
   const [cargando, setCargando] = useState(true)
   const [ahora, setAhora] = useState(0)   // momento de la última carga (filtro «sin actividad»)
   const [error, setError] = useState<string | null>(null)
@@ -41,8 +43,8 @@ export default function Miembros() {
   const cargar = useCallback(async () => {
     setCargando(true); setError(null)
     try {
-      const [m, s, n] = await Promise.all([getMiembros(), getSaldos(), getNegocios()])
-      setMiembros(m); setSaldos(s); setNegocios(n); setAhora(Date.now())
+      const [m, s, n, r] = await Promise.all([getMiembros(), getSaldos(), getNegocios(), getRoles()])
+      setMiembros(m); setSaldos(s); setNegocios(n); setRoles(r); setAhora(Date.now())
     } catch (e) { setError(aClubError(e).message) }
     finally { setCargando(false) }
   }, [])
@@ -55,13 +57,17 @@ export default function Miembros() {
   const todas: Fila[] = useMemo(() => {
     const sMap = new Map(saldos.map(s => [s.miembro_id, s]))
     const nMap = new Map(negocios.map(n => [n.id, n.nombre]))
-    return miembros.map(m => ({ ...m, saldo: sMap.get(m.id) ?? null, negocio: m.negocio_id ? nMap.get(m.negocio_id) ?? null : null }))
-  }, [miembros, saldos, negocios])
+    const rMap = new Map<string, ClubRol[]>()
+    for (const r of roles) rMap.set(r.miembro_id, [...(rMap.get(r.miembro_id) ?? []), r])
+    return miembros.map(m => ({ ...m, saldo: sMap.get(m.id) ?? null, negocio: m.negocio_id ? nMap.get(m.negocio_id) ?? null : null,
+                                roles: rMap.get(m.id) ?? [] }))
+  }, [miembros, saldos, negocios, roles])
 
   const filas: Fila[] = useMemo(() => {
     const txt = fTexto.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
     return todas
-      .filter(m => (pestana === 'equipo' ? m.tipo === 'equipo' : m.tipo === 'referente' || m.tipo === 'concierge_pm'))
+      .filter(m => (pestana === 'socios' ? m.roles.some(r => r.rol === 'socio')
+                    : pestana === 'equipo' ? m.tipo === 'equipo' : m.tipo === 'referente' || m.tipo === 'concierge_pm'))
       .filter(f => !fTipo || f.tipo === fTipo)
       .filter(f => !fNegocio || f.negocio_id === fNegocio)
       .filter(f => !fEstado || f.estado === fEstado)
@@ -98,6 +104,7 @@ export default function Miembros() {
       <div style={{ display: 'flex', gap: 6 }}>
         <Btn variant={pestana === 'referentes' ? 'primary' : 'secondary'} onClick={() => setPestana('referentes')} style={{ flex: 1 }}>Referentes y concierges</Btn>
         <Btn variant={pestana === 'equipo' ? 'primary' : 'secondary'} onClick={() => setPestana('equipo')} style={{ flex: 1 }}>Equipo</Btn>
+        <Btn variant={pestana === 'socios' ? 'primary' : 'secondary'} onClick={() => setPestana('socios')} style={{ flex: 1 }}>Socios</Btn>
       </div>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
 
@@ -144,6 +151,8 @@ export default function Miembros() {
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: '0.78rem', color: C.muted, marginTop: 2 }}>
                 <span>{f.negocio ?? 'Sin negocio'}</span>
                 <Chip>{TIPO_MIEMBRO_LABEL[f.tipo]}</Chip>
+                {f.tipo !== 'socio' && f.roles.some(r => r.rol === 'socio') && <Chip>Socio</Chip>}
+                {f.roles.some(r => r.rol === 'socio' && r.estado === 'pendiente') && <Chip color={C.gold}>pendiente</Chip>}
                 {f.estado !== 'activo' && <Chip color={C.red}>baja</Chip>}
                 <span style={{ marginLeft: 'auto' }}>últ. actividad {fmtFecha(f.saldo?.ultima_actividad)}</span>
               </div>
@@ -226,15 +235,23 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
         </div>
       </Card>
 
-      <Card style={{ textAlign: 'center' }}>
-        {qr && <img src={qr} alt={`QR de ${f.nombre}`} style={{ width: 'min(220px, 60vw)', height: 'auto' }} />}
-        <div style={{ letterSpacing: '0.15em', fontWeight: 800, marginTop: 4 }}>{codigo}</div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {qr && <a href={qr} download={`club-${codigo}.png`} style={{ textDecoration: 'none' }}><Btn variant="secondary">⬇ QR</Btn></a>}
-          <Btn variant="secondary" onClick={copiarPortal} disabled={ocupado}>⎘ Link del portal</Btn>
-          <Btn variant="danger" onClick={regenerar} disabled={ocupado}>Regenerar QR</Btn>
-        </div>
-      </Card>
+      {/* LC-A1: el QR de cupones es del anfitrión; un socio que no es anfitrión no lo comparte. */}
+      {f.tipo !== 'socio' && (
+        <Card style={{ textAlign: 'center' }}>
+          {qr && <img src={qr} alt={`QR de ${f.nombre}`} style={{ width: 'min(220px, 60vw)', height: 'auto' }} />}
+          <div style={{ letterSpacing: '0.15em', fontWeight: 800, marginTop: 4 }}>{codigo}</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {qr && <a href={qr} download={`club-${codigo}.png`} style={{ textDecoration: 'none' }}><Btn variant="secondary">⬇ QR</Btn></a>}
+            <Btn variant="secondary" onClick={copiarPortal} disabled={ocupado}>⎘ Link del portal</Btn>
+            <Btn variant="danger" onClick={regenerar} disabled={ocupado}>Regenerar QR</Btn>
+          </div>
+        </Card>
+      )}
+
+      {(profile?.role === 'owner' || profile?.role === 'manager') && f.estado === 'activo'
+        && f.roles.some(r => r.rol === 'socio') && !f.roles.some(r => r.rol !== 'socio') && (
+        <ActivarAnfitrion f={f} onHecho={async t => { await onCambio(); setRecarga(n => n + 1); setAviso({ tono: 'ok', t }) }} />
+      )}
 
       {profile?.role === 'owner' && (
         <AjusteOwner f={f} onHecho={async t => { await onCambio(); setRecarga(n => n + 1); setAviso({ tono: 'ok', t }) }} />
@@ -310,6 +327,43 @@ function AjusteOwner({ f, onHecho }: { f: Fila; onHecho: (texto: string) => Prom
         <input value={nota} onChange={e => setNota(e.target.value)} maxLength={300} placeholder="Por qué" style={inputStyle} />
       </label>
       <Btn onClick={guardar} disabled={!ok || enviando} style={{ marginTop: 8, width: '100%' }}>{enviando ? 'Guardando…' : 'Guardar'}</Btn>
+    </Card>
+  )
+}
+
+/** LC-A1: activar a un socio como anfitrión (owner o manager, con nota; queda en la auditoría). */
+function ActivarAnfitrion({ f, onHecho }: { f: Fila; onHecho: (texto: string) => Promise<void> }) {
+  const [rol, setRol] = useState<'referente' | 'concierge_pm' | 'equipo'>('referente')
+  const [nota, setNota] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function activar() {
+    if (!window.confirm(`¿Activar a ${f.nombre} como anfitrión (${TIPO_MIEMBRO_LABEL[rol]})? Va a poder compartir cupones y ganar créditos.`)) return
+    setEnviando(true); setError(null)
+    try { await activarAnfitrion(f.id, rol, nota.trim()); setNota(''); await onHecho(`${f.nombre} ahora también es anfitrión.`) }
+    catch (e) { setError(aClubError(e).message) }
+    finally { setEnviando(false) }
+  }
+  return (
+    <Card>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Activar como anfitrión</div>
+      <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
+        El socio pasa a compartir su QR de cupones y a ganar créditos. Sigue siendo socio. Solo owner o manager.
+      </div>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      <label><span style={labelStyle}>Como</span>
+        <select value={rol} onChange={e => setRol(e.target.value as 'referente' | 'concierge_pm' | 'equipo')} style={inputStyle}>
+          <option value="referente">Referente</option>
+          <option value="concierge_pm">Concierge PM</option>
+          <option value="equipo">Equipo Satori</option>
+        </select>
+      </label>
+      <label><span style={labelStyle}>Por qué (obligatorio)</span>
+        <input value={nota} onChange={e => setNota(e.target.value)} maxLength={300} placeholder="Ej.: trae amigos turistas" style={inputStyle} />
+      </label>
+      <Btn onClick={activar} disabled={enviando || nota.trim().length < 5} style={{ marginTop: 8, width: '100%' }}>
+        {enviando ? 'Activando…' : 'Activar como anfitrión'}
+      </Btn>
     </Card>
   )
 }

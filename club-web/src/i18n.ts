@@ -53,6 +53,8 @@ const ES = {
   tope_canje: 'Generaste muchos códigos seguidos. Probá de nuevo en un rato.',
   sin_saldo_canje: 'Todavía no te alcanza para canjear.',
   k_txt: 'Este código lo lee la caja de Satori. Para canjear, abrí tu portal en caja y tocá «Canjear».',
+  s_titulo: 'Local Club Satori',
+  s_txt: 'Este es tu QR de socio. Mostralo en caja para tu beneficio del Local Club.',
 }
 type Textos = typeof ES
 
@@ -109,6 +111,8 @@ const EN: Textos = {
   tope_canje: 'You created many codes in a row. Please try again in a while.',
   sin_saldo_canje: 'You do not have enough credits to redeem yet.',
   k_txt: 'This code is read at the Satori register. To redeem, open your portal at the register and tap “Redeem”.',
+  s_titulo: 'Satori Local Club',
+  s_txt: 'This is your member QR. Show it at the register for your Local Club benefit.',
 }
 
 export const TEXTOS: Record<Idioma, Textos> = { es: ES, en: EN }

@@ -15,7 +15,7 @@ import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
   opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
   describirPos, describirPedido, describirFactura,
-  type ResolverCupon, type ResolverReferente, type ResolverCanje, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
+  type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente,
 } from '../../shared/api/club'
 import { parsearQR } from './qrFormato'
@@ -29,6 +29,7 @@ type Actual =
   | { kind: 'cupon'; r: ResolverCupon; codigo: string }
   | { kind: 'referente'; r: ResolverReferente; codigo: string }
   | { kind: 'canje'; r: ResolverCanje; codigo: string }
+  | { kind: 'socio'; r: ResolverSocio; codigo: string }
 type Accion = 'usar' | 'canje' | 'tarjeta' | 'aprobado'
 type ModoRef = 'tarjeta' | 'aprobado'
 type Mensaje = { tono: 'ok' | 'error' | 'info'; texto: string; link?: { href: string; texto: string } }
@@ -77,6 +78,8 @@ export default function Escanear() {
         setActual({ kind: 'referente', r, codigo: p.codigo })
       } else if (r.tipo === 'canje') {
         setActual({ kind: 'canje', r, codigo: p.codigo })
+      } else if (r.tipo === 'socio') {
+        setActual({ kind: 'socio', r, codigo: p.codigo })
       } else {
         setActual(null); setMsg({ tono: 'error', texto: 'Código no reconocido: no es un cupón, un código de canje ni un pase vigente. Probá de nuevo, escribilo a mano o buscá al referente por nombre.' })
       }
@@ -188,7 +191,7 @@ export default function Escanear() {
               style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
               <label style={{ flex: 1 }}>
                 <span style={labelStyle}>Código a mano</span>
-                <input value={manual} onChange={e => setManual(e.target.value)} placeholder="Cupón, canje o pase" aria-label="Código a mano: cupón (10), canje (6) o pase (8)"
+                <input value={manual} onChange={e => setManual(e.target.value)} placeholder="Cupón, canje, socio o pase" aria-label="Código a mano: cupón (10), canje (6), socio (9) o pase (8)"
                   autoCapitalize="characters" autoComplete="off" style={{ ...inputStyle, textTransform: 'uppercase', letterSpacing: '0.12em' }} />
               </label>
               <Btn type="submit" disabled={cargando || !manual.trim()}>Ver</Btn>
@@ -232,6 +235,8 @@ export default function Escanear() {
           personasOk={personasOk} facturaOk={facturaOk} confirmando={confirmando} setConfirmando={setConfirmando}
           enviando={enviando} err={errAccion} onConfirmar={confirmar} onCerrar={cerrarCuenta} />
       )}
+
+      {actual?.kind === 'socio' && <PanelSocio d={actual.r.datos} onCerrar={cerrarCuenta} />}
 
       {(actual?.kind === 'referente' || actual?.kind === 'canje') && (
         <PanelReferente a={actual} gestiona={gestiona} nota={nota} setNota={setNota}
@@ -558,6 +563,40 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
           </div>
         </>
       )}
+    </Card>
+  )
+}
+
+/**
+ * LC-A1: QR fijo del socio del Local Club. Solo identifica (10 % y cortesía); NUNCA da créditos.
+ * «Qué aplicar» (10 % + cortesía, visita por factura con el 856) llega en la etapa A4.
+ */
+function PanelSocio({ d, onCerrar }: { d: ResolverSocio['datos']; onCerrar: () => void }) {
+  const linea =
+    d.persona_estado !== 'activo' || d.estado === 'baja' ? 'Socio dado de baja: seguí con la cuenta normal, sin beneficio.'
+    : d.estado === 'pendiente' ? 'Socio pendiente: todavía no tiene beneficio. Validalo cuando confirmes que es local.'
+    : null
+  return (
+    <Card>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+        <div>
+          <div style={{ fontSize: '0.7rem', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Socio del Local Club{d.es_anfitrion ? ' · también anfitrión' : ''}
+          </div>
+          <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{d.nombre}</div>
+          <div style={{ fontSize: '0.85rem', color: C.muted }}>Socio desde {fmtFechaHora(d.desde)}</div>
+        </div>
+        <Btn variant="ghost" onClick={onCerrar} aria-label="Cerrar">✕</Btn>
+      </div>
+      {linea ? <div style={{ marginTop: 10 }}><Aviso tono="error">{linea}</Aviso></div> : (
+        <div style={{ marginTop: 10 }}>
+          <Aviso tono="info">
+            Este QR identifica al socio (10 % y cortesía). No sirve para créditos: para canjear, el anfitrión muestra el código
+            de «Canjear».
+          </Aviso>
+        </div>
+      )}
+      <Btn variant="secondary" onClick={onCerrar} style={{ marginTop: 10, width: '100%' }}>Escanear otro</Btn>
     </Card>
   )
 }

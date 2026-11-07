@@ -2295,6 +2295,146 @@ begin
   perform pg_temp.r('52', 'todo rechazo de las funciones de la caja dice qué hacer (elegí, revisá, pedile al manager…)', v_mal is null, coalesce(v_mal, ''));
 end $$;
 
+-- ═══ 53. LC-A1: roles (una persona, un pase); tipo queda como espejo del rol de anfitrión ═══
+do $$
+declare v_m uuid; v_n int;
+begin
+  perform pg_temp.r('53', 'cada miembro tiene el rol de su tipo (los que ya existían)',
+    not exists (select 1 from club_miembros m where m.tipo in ('referente','concierge_pm','equipo','socio')
+                 and not exists (select 1 from club_miembro_roles r where r.miembro_id = m.id and r.rol = m.tipo)), '');
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Roles', 'app') returning id into v_m;
+  perform pg_temp.r('53', 'alta de un referente → rol referente activo', public.club_tiene_rol(v_m, array['referente']), '');
+  update club_miembros set tipo = 'equipo' where id = v_m;
+  perform pg_temp.r('53', 'cambiar el tipo de anfitrión cambia el rol (uno solo)',
+    (select array_agg(rol) from club_miembro_roles where miembro_id = v_m) = array['equipo'], '');
+  update club_miembros set estado = 'baja' where id = v_m;
+  perform pg_temp.r('53', 'la baja de la persona alcanza a sus roles', (select estado from club_miembro_roles where miembro_id = v_m) = 'baja', '');
+  begin
+    insert into club_miembro_roles (miembro_id, rol) values (v_m, 'referente');
+    perform pg_temp.r('53', 'dos roles de anfitrión', false, 'aceptó');
+  exception when unique_violation then
+    perform pg_temp.r('53', 'un solo rol de anfitrión por persona', true, sqlerrm);
+  end;
+  begin
+    insert into club_miembro_roles (miembro_id, rol, estado) values (v_m, 'equipo', 'pendiente');
+    perform pg_temp.r('53', 'anfitrión pendiente', false, 'aceptó');
+  exception when others then
+    perform pg_temp.r('53', 'solo el socio puede estar pendiente', true, sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select count(*) into v_n from public.club_miembro_roles;
+  perform pg_temp.yo();
+  perform pg_temp.r('53', 'la caja lee los roles (sin datos sensibles)', v_n > 0, format('%s', v_n));
+end $$;
+
+-- ═══ 54. LC-A1: QR fijo del socio (/s/): identifica, nunca da créditos ═══
+do $$
+declare v_s uuid; v_cod text; j jsonb; j2 jsonb; v_err text;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Socio Prueba', 'app') returning id, codigo_socio into v_s, v_cod;
+  select codigo_socio into v_cod from club_miembros where id = v_s;
+  perform pg_temp.r('54', 'un socio recibe su QR fijo de 9 caracteres', v_cod ~ '^[A-HJ-NP-Z2-9]{9}$' and public.club_tiene_rol(v_s, array['socio']), coalesce(v_cod, 'null'));
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
+  values (v_s, 'ajuste', 18, 6, 18000, now() - interval '1 day', 'migracion');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_resolver('https://club.satoricostarica.com/s/' || v_cod);
+  j2 := public.club_resolver(lower(v_cod));
+  select c.error into v_err from public.club_canje(v_s, v_cod, 1, 'FS-1', gen_random_uuid()) c;
+  perform pg_temp.yo();
+  perform pg_temp.r('54', 'Escanear reconoce /s/ y los 9 caracteres a mano → «socio», con su estado',
+    j->>'tipo' = 'socio' and j->'datos'->>'estado' = 'activo' and (j->'datos'->>'id')::uuid = v_s and j2->>'tipo' = 'socio', j::text);
+  perform pg_temp.r('54', 'el QR del socio NO sirve para canjear créditos', v_err like 'Falta el código de canje%', v_err);
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform (select codigo_socio from public.club_miembros limit 1);
+    perform pg_temp.yo(); perform pg_temp.r('54', 'cajero lee codigo_socio', false, 'leyó');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('54', 'el staff no lee el código del socio (como el del QR de cupones)', true, sqlerrm);
+  end;
+end $$;
+
+-- ═══ 55. LC-A1: activar a un socio como anfitrión (owner o manager, con nota y auditoría) ═══
+do $$
+declare v_s uuid; v_ev bigint;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Socio Anfitrion', 'app') returning id into v_s;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_rol_activar_anfitrion(v_s, 'referente', 'quiere compartir cupones');
+    perform pg_temp.yo(); perform pg_temp.r('55', 'cajero activa anfitrión', false, 'activó');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('55', 'el cajero no activa anfitriones', true, sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    perform public.club_rol_activar_anfitrion(v_s, 'referente', ' ');
+    perform pg_temp.yo(); perform pg_temp.r('55', 'sin nota', false, 'activó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('55', 'sin nota → error que dice qué hacer', sqlerrm like 'La nota es obligatoria%escribí%', sqlerrm);
+  end;
+  select coalesce(max(id), 0) into v_ev from club_pase_eventos;
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  perform public.club_rol_activar_anfitrion(v_s, 'referente', 'Trae amigos turistas: activo como anfitrión');
+  perform pg_temp.yo();
+  perform pg_temp.r('55', 'manager: queda socio Y anfitrión; tipo pasa a referente; auditoría con quién y la nota',
+    public.club_tiene_rol(v_s, array['socio']) and public.club_tiene_rol(v_s, array['referente'])
+      and (select tipo from club_miembros where id = v_s) = 'referente'
+      and exists (select 1 from club_auditoria where objeto_id = v_s and accion = 'activar_anfitrion'
+                   and actor = '<MANAGER_UUID>'::uuid and despues->>'nota' like 'Trae amigos%'), '');
+  perform pg_temp.r('55', 'el cambio de rol avisa al pase (evento «rol»)',
+    exists (select 1 from club_pase_eventos where id > v_ev and miembro_id = v_s and motivo = 'rol'), '');
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    perform public.club_rol_activar_anfitrion(v_s, 'equipo', 'de nuevo, para probar');
+    perform pg_temp.yo(); perform pg_temp.r('55', 'activar dos veces', false, 'activó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('55', 'ya es anfitrión → error que dice qué hacer', sqlerrm like 'Ya es anfitrión:%', sqlerrm);
+  end;
+end $$;
+
+-- ═══ 56. LC-A1: contrato del pase (solo service_role) ═══
+do $$
+declare v_r uuid; v_s uuid; v_tok text; j jsonb; j2 jsonb; v_v1 bigint; v_v2 bigint; v_n int; v_ok boolean := true; f text;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ana Pase Ficticia', 'app') returning id, token_portal into v_r, v_tok;
+  insert into club_miembros_contacto (miembro_id, telefono, email) values (v_r, '+50660000077', 'ana.pase@ejemplo.com');
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Beto Pase Ficticio', 'app') returning id into v_s;
+  update club_miembros set tipo = 'referente' where id = v_s;   -- socio y anfitrión
+  insert into club_miembro_roles (miembro_id, rol) values (v_s, 'referente') on conflict do nothing;
+  foreach f in array array['public.club_pase_datos(uuid)', 'public.club_pase_eventos_leer(bigint, int)', 'public.club_pase_por_token(text)', 'public.club_alertas_pendientes(int)'] loop
+    v_ok := v_ok and not has_function_privilege('anon', f, 'EXECUTE') and not has_function_privilege('authenticated', f, 'EXECUTE')
+                 and has_function_privilege('service_role', f, 'EXECUTE');
+  end loop;
+  perform pg_temp.r('56', 'las funciones del pase: solo service_role (ni anon ni la app)', v_ok, '');
+  set local role service_role;
+  j := public.club_pase_datos(v_r);
+  j2 := public.club_pase_datos(v_s);
+  reset role;
+  perform pg_temp.r('56', 'solo anfitrión: una pestaña y código de barras = QR de cupones; botón Canjear',
+    j->'pestanas' = '["anfitrion"]'::jsonb and j->'codigo_barras'->>'tipo' = 'cupones'
+      and j->'codigo_barras'->>'valor' like 'https://club.satoricostarica.com/r/%' and j->>'canjear_url' like '%?accion=canjear'
+      and j->'socio' = 'null'::jsonb and j->>'nombre_pila' = 'Ana', j::text);
+  perform pg_temp.r('56', 'socio y anfitrión: dos pestañas; código de barras = QR del socio; cupones en la pestaña Anfitrión',
+    j2->'pestanas' = '["mi_club", "anfitrion"]'::jsonb and j2->'codigo_barras'->>'tipo' = 'socio'
+      and j2->'codigo_barras'->>'valor' like 'https://club.satoricostarica.com/s/%'
+      and j2->'anfitrion'->>'qr_url' like 'https://club.satoricostarica.com/r/%', j2::text);
+  perform pg_temp.r('56', 'el pase no lleva contactos', j::text not like '%@%' and j::text not like '%+506%', '');
+  v_v1 := (j->>'version')::bigint;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (v_r, 'tarjeta', 3, 6, 18000, 'FP-1', now(), 'app', 'manual');
+  set local role service_role;
+  v_v2 := (public.club_pase_datos(v_r)->>'version')::bigint;
+  select count(*) into v_n from public.club_pase_eventos_leer(v_v1) e where e.miembro_id = v_r and e.motivo = 'movimiento';
+  perform public.club_pase_cursor_guardar('google', v_v2);
+  perform public.club_pase_cursor_guardar('google', v_v1);   -- nunca retrocede
+  v_ok := public.club_pase_cursor_leer('google') = v_v2;
+  f := public.club_pase_por_token(v_tok)::text;
+  reset role;
+  perform pg_temp.r('56', 'un movimiento sube la versión, deja el evento y el cursor no retrocede',
+    v_v2 > v_v1 and v_n = 1 and v_ok, format('%s → %s', v_v1, v_v2));
+  perform pg_temp.r('56', 'el token del portal resuelve al miembro (para «Agregar a Google Wallet»)', f = v_r::text, '');
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

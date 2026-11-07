@@ -2071,12 +2071,24 @@ begin
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
 
-  mm := regexp_match(v_t, '^https?://club\.satoricostarica\.com/([rckRCK])/([A-Za-z0-9]+)/?$', 'i');
+  mm := regexp_match(v_t, '^https?://club\.satoricostarica\.com/([rcksRCKS])/([A-Za-z0-9]+)/?$', 'i');
   if mm is not null then
     v_kind := lower(mm[1]); v_cod := upper(mm[2]);
   else
     v_cod := upper(regexp_replace(v_t, '\s', '', 'g'));
-    v_kind := case length(v_cod) when 8 then 'r' when 10 then 'c' when 6 then 'k' else null end;
+    v_kind := case length(v_cod) when 8 then 'r' when 10 then 'c' when 6 then 'k' when 9 then 's' else null end;
+  end if;
+
+  -- LC-A1: QR fijo del socio (/s/, 9 caracteres). Solo identifica (10 % y cortesía); nunca da créditos.
+  if v_kind = 's' and v_cod ~ '^[A-HJ-NP-Z2-9]{9}$' then
+    select * into v_m from public.club_miembros m where m.codigo_socio = v_cod;
+    if found then
+      return jsonb_build_object('tipo', 'socio', 'datos', (
+        select jsonb_build_object('id', v_m.id, 'nombre', v_m.nombre, 'persona_estado', v_m.estado,
+                                  'estado', r.estado, 'desde', r.desde, 'alta_por', r.alta_por,
+                                  'es_anfitrion', public.club_tiene_rol(v_m.id, array['referente','concierge_pm','equipo']))
+          from public.club_miembro_roles r where r.miembro_id = v_m.id and r.rol = 'socio'));
+    end if;
   end if;
 
   if v_kind = 'c' and v_cod ~ '^[A-HJ-NP-Z2-9]{10}$' then
@@ -3394,6 +3406,403 @@ begin
 end;
 $$;
 
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+-- LOCAL CLUB · A1 (07-nov, plan PLAN-LC-lanzamiento.md): una persona, un pase, roles «anfitrión» y/o «socio».
+--   · club_miembro_roles es la fuente de verdad de los roles. «Anfitrión» = referente, concierge PM o equipo
+--     (comparte cupones y gana créditos); «socio» = cliente del Local Club (pendiente, activo o baja).
+--   · club_miembros.tipo queda como ESPEJO del rol de anfitrión ('socio' si no tiene ninguno): todo lo que ya
+--     andaba (cupones, canje, reportes, migrador) sigue preguntando por tipo sin cambios.
+--   · QR fijo del socio: /s/{codigo_socio} (9 caracteres). Solo identifica en caja (10 % y cortesía); NUNCA da
+--     créditos (los créditos siguen con el código de un solo uso de R-01).
+--   · Contrato del pase (CONTRATO-pase.md): funciones solo para service_role (el Edge del pase), eventos de cambio.
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+alter table public.club_miembros add column if not exists codigo_socio text unique
+  check (codigo_socio is null or codigo_socio ~ '^[A-HJ-NP-Z2-9]{9}$');
+
+create table if not exists public.club_miembro_roles (
+  miembro_id           uuid not null references public.club_miembros(id),
+  rol                  text not null check (rol in ('referente','concierge_pm','equipo','socio')),
+  estado               text not null default 'activo' check (estado in ('pendiente','activo','baja')),
+  desde                timestamptz not null default now(),
+  alta_por             text not null default 'app' check (alta_por in ('caja','autoalta','gerencia','migracion','app')),
+  validado_por         uuid,
+  validado_en          timestamptz,
+  referido_por         uuid references public.club_miembros(id),
+  verifico_residencia  boolean,             -- el cajero marca «verifiqué residencia»; NUNCA se guarda el documento
+  actualizado_en       timestamptz not null default now(),
+  primary key (miembro_id, rol),
+  check (rol = 'socio' or estado <> 'pendiente')   -- solo el socio puede estar pendiente
+);
+-- Un solo rol de anfitrión por persona.
+create unique index if not exists club_roles_un_anfitrion on public.club_miembro_roles (miembro_id) where rol <> 'socio';
+create index if not exists club_roles_rol_estado_idx on public.club_miembro_roles (rol, estado);
+alter table public.club_miembro_roles enable row level security;
+revoke all on public.club_miembro_roles from public, anon, authenticated;
+grant select on public.club_miembro_roles to authenticated;
+drop policy if exists club_roles_staff on public.club_miembro_roles;
+create policy club_roles_staff on public.club_miembro_roles for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager','cajero','contador'));
+
+-- Roles de los miembros que ya existen (idempotente).
+insert into public.club_miembro_roles (miembro_id, rol, estado, desde, alta_por)
+select m.id, m.tipo, case when m.estado = 'baja' then 'baja' else 'activo' end, m.created_at,
+       case when m.origen = 'migracion' then 'migracion' else 'app' end
+  from public.club_miembros m
+ where m.tipo in ('referente','concierge_pm','equipo','socio')
+on conflict (miembro_id, rol) do nothing;
+
+-- Código del QR fijo del socio (9 caracteres; el del QR de cupones tiene 8 y el de canje 6).
+create or replace function public.club_codigo_socio_nuevo()
+returns text
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v text; i int;
+begin
+  for i in 1 .. 10 loop
+    v := public.club_gen_codigo(9);
+    if not exists (select 1 from public.club_miembros where codigo_socio = v) then return v; end if;
+  end loop;
+  raise exception 'No se pudo generar el código del socio' using errcode = 'P0001';
+end;
+$$;
+
+-- club_miembros → roles: el alta crea el rol; cambiar el tipo o el estado de la persona lo acompaña.
+create or replace function public.club_roles_desde_miembro()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_anf_viejo text := case when tg_op = 'UPDATE' and old.tipo in ('referente','concierge_pm','equipo') then old.tipo end;
+  v_anf_nuevo text := case when new.tipo in ('referente','concierge_pm','equipo') then new.tipo end;
+begin
+  if tg_op = 'INSERT' then
+    if new.tipo in ('referente','concierge_pm','equipo','socio') then
+      insert into public.club_miembro_roles (miembro_id, rol, estado, alta_por)
+      values (new.id, new.tipo, case when new.estado = 'baja' then 'baja' else 'activo' end,
+              case when new.origen = 'migracion' then 'migracion' else 'app' end)
+      on conflict (miembro_id, rol) do nothing;
+    end if;
+    return null;
+  end if;
+  -- cambio de tipo de anfitrión (referente → equipo, etc.)
+  if v_anf_viejo is distinct from v_anf_nuevo then
+    if v_anf_viejo is not null then
+      delete from public.club_miembro_roles where miembro_id = new.id and rol = v_anf_viejo;
+    end if;
+    if v_anf_nuevo is not null then
+      insert into public.club_miembro_roles (miembro_id, rol, estado, alta_por)
+      values (new.id, v_anf_nuevo, case when new.estado = 'baja' then 'baja' else 'activo' end, 'app')
+      on conflict (miembro_id, rol) do nothing;
+    end if;
+  end if;
+  -- baja o reactivación de la persona: alcanza a todos sus roles (un socio sin validar vuelve a pendiente)
+  if old.estado is distinct from new.estado then
+    update public.club_miembro_roles r
+       set estado = case when new.estado = 'baja' then 'baja'
+                         when r.rol = 'socio' and r.validado_en is null and r.alta_por = 'autoalta' then 'pendiente'
+                         else 'activo' end,
+           actualizado_en = now()
+     where r.miembro_id = new.id;
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists club_roles_desde_miembro_trg on public.club_miembros;
+create trigger club_roles_desde_miembro_trg after insert or update of tipo, estado on public.club_miembros
+  for each row execute function public.club_roles_desde_miembro();
+
+-- Rol de socio → el miembro recibe su QR fijo (/s/).
+create or replace function public.club_roles_codigo_socio()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if new.rol = 'socio' then
+    update public.club_miembros set codigo_socio = public.club_codigo_socio_nuevo()
+     where id = new.miembro_id and codigo_socio is null;
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists club_roles_codigo_socio_trg on public.club_miembro_roles;
+create trigger club_roles_codigo_socio_trg after insert on public.club_miembro_roles
+  for each row execute function public.club_roles_codigo_socio();
+update public.club_miembros m set codigo_socio = public.club_codigo_socio_nuevo()
+ where m.codigo_socio is null and exists (select 1 from public.club_miembro_roles r where r.miembro_id = m.id and r.rol = 'socio');
+
+-- ¿Tiene este rol activo? (interno)
+create or replace function public.club_tiene_rol(p_miembro uuid, p_roles text[], p_estados text[] default array['activo'])
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (select 1 from public.club_miembro_roles r
+                  where r.miembro_id = p_miembro and r.rol = any(p_roles) and r.estado = any(p_estados))
+$$;
+
+-- Activar a un socio como anfitrión (solo owner o manager, con nota y auditoría). Fase 2: «Quiero ser anfitrión».
+create or replace function public.club_rol_activar_anfitrion(p_miembro uuid, p_rol text, p_nota text)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_nota text := btrim(coalesce(p_nota, ''));
+  v_m    public.club_miembros%rowtype;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_rol is null or p_rol not in ('referente','concierge_pm','equipo') then
+    raise exception 'Rol de anfitrión no válido (referente, concierge_pm o equipo)' using errcode = 'P0001';
+  end if;
+  if length(v_nota) not between 5 and 300 then
+    raise exception 'La nota es obligatoria (de 5 a 300 caracteres): escribí por qué se activa como anfitrión' using errcode = 'P0001';
+  end if;
+  select * into v_m from public.club_miembros where id = p_miembro for update;
+  if not found or v_m.estado <> 'activo' then
+    raise exception 'No se encontró la cuenta activa: buscala de nuevo' using errcode = 'P0001';
+  end if;
+  if public.club_tiene_rol(p_miembro, array['referente','concierge_pm','equipo'], array['activo','baja']) then
+    raise exception 'Ya es anfitrión: si estaba de baja, reactivalo desde su ficha' using errcode = 'P0001';
+  end if;
+  insert into public.club_miembro_roles (miembro_id, rol, estado, alta_por, validado_por, validado_en)
+  values (p_miembro, p_rol, 'activo', 'gerencia', auth.uid(), now());
+  update public.club_miembros set tipo = p_rol, updated_at = now() where id = p_miembro;
+  perform public.club_auditar('activar_anfitrion', 'club_miembro_roles', p_miembro, null,
+                              jsonb_build_object('rol', p_rol, 'nota', v_nota));
+  return true;
+end;
+$$;
+
+-- ── Contrato del pase (CONTRATO-pase.md): eventos de cambio, cursor, pases emitidos ──────────────────────
+alter table public.club_config add column if not exists wallet_apple_activo boolean not null default false;
+
+create table if not exists public.club_pase_eventos (
+  id          bigint generated always as identity primary key,
+  miembro_id  uuid,                    -- null = afecta a todos los pases (promociones)
+  motivo      text not null check (motivo in ('movimiento','rol','datos','cortesia','promociones')),
+  creado_en   timestamptz not null default now()
+);
+create index if not exists club_pase_eventos_miembro_idx on public.club_pase_eventos (miembro_id, id);
+alter table public.club_pase_eventos enable row level security;
+revoke all on public.club_pase_eventos from public, anon, authenticated;
+
+create table if not exists public.club_pase_cursor (
+  nombre    text primary key check (nombre in ('google','apple')),
+  ultimo_id bigint not null default 0,
+  guardado_en timestamptz not null default now()
+);
+alter table public.club_pase_cursor enable row level security;
+revoke all on public.club_pase_cursor from public, anon, authenticated;
+
+create table if not exists public.club_pases (
+  miembro_id     uuid not null references public.club_miembros(id),
+  plataforma     text not null check (plataforma in ('google','apple')),
+  object_id      text not null,
+  emitido_en     timestamptz not null default now(),
+  actualizado_en timestamptz not null default now(),
+  primary key (miembro_id, plataforma)
+);
+alter table public.club_pases enable row level security;
+revoke all on public.club_pases from public, anon, authenticated;
+grant select on public.club_pases to authenticated;
+drop policy if exists club_pases_gerencia on public.club_pases;
+create policy club_pases_gerencia on public.club_pases for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
+
+create or replace function public.club_pase_evento_trg()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if tg_table_name = 'club_movimientos' then
+    insert into public.club_pase_eventos (miembro_id, motivo) values (new.miembro_id, 'movimiento');
+  elsif tg_table_name = 'club_miembro_roles' then
+    insert into public.club_pase_eventos (miembro_id, motivo) values (coalesce(new.miembro_id, old.miembro_id), 'rol');
+  elsif tg_table_name = 'club_miembros' then
+    if tg_op = 'UPDATE' and (old.nombre, old.estado, old.codigo, old.token_portal, old.codigo_socio)
+                            is distinct from (new.nombre, new.estado, new.codigo, new.token_portal, new.codigo_socio) then
+      insert into public.club_pase_eventos (miembro_id, motivo) values (new.id, 'datos');
+    end if;
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists club_pase_evento_mov_trg on public.club_movimientos;
+create trigger club_pase_evento_mov_trg after insert on public.club_movimientos
+  for each row execute function public.club_pase_evento_trg();
+drop trigger if exists club_pase_evento_rol_trg on public.club_miembro_roles;
+create trigger club_pase_evento_rol_trg after insert or update or delete on public.club_miembro_roles
+  for each row execute function public.club_pase_evento_trg();
+drop trigger if exists club_pase_evento_mi_trg on public.club_miembros;
+create trigger club_pase_evento_mi_trg after update on public.club_miembros
+  for each row execute function public.club_pase_evento_trg();
+
+-- Datos del pase (contrato v1). Solo service_role.
+create or replace function public.club_pase_datos(p_miembro uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_m     public.club_miembros%rowtype;
+  v_cfg   public.club_config%rowtype;
+  v_anf   public.club_miembro_roles%rowtype;
+  v_soc   public.club_miembro_roles%rowtype;
+  v_saldo int;
+  v_ver   bigint;
+  v_mes   timestamptz := date_trunc('month', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica';
+  v_base  text := 'https://club.satoricostarica.com';
+  j_anf   jsonb;
+  j_soc   jsonb;
+  v_pest  text[] := '{}';
+begin
+  select * into v_m from public.club_miembros where id = p_miembro;
+  if not found then return null; end if;
+  select * into v_cfg from public.club_config where location_id = v_m.location_id;
+  select * into v_anf from public.club_miembro_roles where miembro_id = p_miembro and rol <> 'socio';
+  select * into v_soc from public.club_miembro_roles where miembro_id = p_miembro and rol = 'socio';
+  select coalesce(max(e.id), 0) into v_ver from public.club_pase_eventos e where e.miembro_id = p_miembro or e.miembro_id is null;
+
+  if v_soc.miembro_id is not null and v_soc.estado in ('pendiente','activo') then
+    v_pest := v_pest || 'mi_club'::text;
+    j_soc := jsonb_build_object(
+      'estado', v_soc.estado, 'desde', (v_soc.desde at time zone 'America/Costa_Rica')::date,
+      'qr_url', v_base || '/s/' || v_m.codigo_socio,
+      'beneficio', null,          -- A3/A4: promoción vigente del socio
+      'visitas_mes', 0,           -- A4: visitas del socio
+      'cortesias', '[]'::jsonb);  -- A3/A4: cortesías y premios por referido
+  end if;
+  if v_anf.miembro_id is not null and v_anf.estado = 'activo' then
+    v_pest := v_pest || 'anfitrion'::text;
+    v_saldo := public.club_saldo_personas(v_m.id);
+    j_anf := jsonb_build_object(
+      'activo', true, 'tipo', v_anf.rol, 'codigo_publico', v_m.codigo,
+      'qr_url', v_base || '/r/' || v_m.codigo,
+      'personas', v_saldo,
+      'creditos', public.club_creditos(v_saldo, v_cfg.personas_por_credito),
+      'personas_proximo_medio', public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
+      'valor_credito_crc', v_cfg.valor_credito_crc,
+      'referidos_mes', (select coalesce(sum(mv.personas), 0) from public.club_movimientos mv
+                         where mv.miembro_id = v_m.id and mv.tipo = 'tarjeta' and mv.fecha_visita >= v_mes),
+      'creditos_ganados_mes', public.club_creditos((select coalesce(sum(mv.personas), 0) from public.club_movimientos mv
+                         where mv.miembro_id = v_m.id and mv.tipo = 'tarjeta' and mv.fecha_visita >= v_mes), v_cfg.personas_por_credito));
+  end if;
+
+  return jsonb_build_object(
+    'contrato', 1,
+    'miembro_id', v_m.id,
+    'version', v_ver,
+    'actualizado_en', now(),
+    'nombre_pila', public.club_nombre_pila(v_m.nombre),
+    'estado', v_m.estado,
+    'local', jsonb_build_object('id', v_m.location_id, 'nombre', 'Satori Sushi Bar · Santa Teresa'),
+    'pestanas', to_jsonb(v_pest),
+    'codigo_barras', case when j_soc is not null then jsonb_build_object('tipo', 'socio', 'valor', j_soc->>'qr_url')
+                          when j_anf is not null then jsonb_build_object('tipo', 'cupones', 'valor', j_anf->>'qr_url') end,
+    'socio', j_soc,
+    'anfitrion', j_anf,
+    'promociones', '[]'::jsonb,   -- A3
+    'canjear_url', case when j_anf is not null then v_base || '/p/' || v_m.token_portal || '?accion=canjear' end,
+    'portal_url', v_base || '/p/' || v_m.token_portal);
+end;
+$$;
+
+create or replace function public.club_pase_por_token(p_token text)
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select m.id from public.club_miembros m
+   where m.token_portal = lower(btrim(coalesce(p_token, ''))) and m.estado = 'activo'
+     and exists (select 1 from public.club_miembro_roles r where r.miembro_id = m.id and r.estado in ('pendiente','activo'))
+$$;
+
+create or replace function public.club_pase_emitido(p_miembro uuid, p_plataforma text, p_object_id text)
+returns void
+language sql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+  insert into public.club_pases (miembro_id, plataforma, object_id) values (p_miembro, p_plataforma, p_object_id)
+  on conflict (miembro_id, plataforma) do update set object_id = excluded.object_id, actualizado_en = now();
+$$;
+
+create or replace function public.club_pase_eventos_leer(p_despues bigint, p_limite int default 500)
+returns table (id bigint, miembro_id uuid, motivo text, creado_en timestamptz)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select e.id, e.miembro_id, e.motivo, e.creado_en from public.club_pase_eventos e
+   where e.id > coalesce(p_despues, 0) order by e.id limit least(greatest(coalesce(p_limite, 500), 1), 2000)
+$$;
+
+create or replace function public.club_pase_cursor_leer(p_nombre text)
+returns bigint
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$ select coalesce((select c.ultimo_id from public.club_pase_cursor c where c.nombre = p_nombre), 0) $$;
+
+create or replace function public.club_pase_cursor_guardar(p_nombre text, p_id bigint)
+returns void
+language sql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+  insert into public.club_pase_cursor (nombre, ultimo_id) values (p_nombre, p_id)
+  on conflict (nombre) do update set ultimo_id = greatest(public.club_pase_cursor.ultimo_id, excluded.ultimo_id), guardado_en = now();
+$$;
+
+create or replace function public.club_alertas_pendientes(p_limite int default 100)
+returns table (id bigint, miembro_id uuid, tipo text, creditos numeric, saldo_creditos numeric, fecha timestamptz)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select a.id, a.miembro_id, a.tipo, mv.creditos,
+         public.club_creditos(public.club_saldo_personas(a.miembro_id), c.personas_por_credito), mv.fecha_visita
+    from public.club_alertas a
+    join public.club_movimientos mv on mv.id = a.movimiento_id
+    join public.club_config c on c.location_id = a.location_id
+   where a.enviado_en is null
+   order by a.id limit least(greatest(coalesce(p_limite, 100), 1), 1000)
+$$;
+
+create or replace function public.club_alerta_enviada(p_id bigint, p_canal text)
+returns void
+language sql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$ update public.club_alertas set enviado_en = now(), canal = p_canal where id = p_id and enviado_en is null $$;
+
+
 -- ── 5. EXECUTE: nada por defecto, grant explícito ───────────────────────────
 
 revoke all on function public.club_gen_codigo(int)                       from public, anon, authenticated;
@@ -3428,6 +3837,26 @@ grant execute on function public.club_resolver_miembro(uuid)        to authentic
 grant execute on function public.club_miembro_codigo(uuid)          to authenticated;
 grant execute on function public.club_comparacion_cargar(jsonb, text) to authenticated;
 grant execute on function public.club_comparacion(date, date, text) to authenticated;
+-- LC-A1
+revoke all on function public.club_codigo_socio_nuevo()                          from public, anon, authenticated;
+revoke all on function public.club_roles_desde_miembro()                         from public, anon, authenticated;
+revoke all on function public.club_roles_codigo_socio()                          from public, anon, authenticated;
+revoke all on function public.club_tiene_rol(uuid, text[], text[])               from public, anon, authenticated;
+revoke all on function public.club_rol_activar_anfitrion(uuid, text, text)       from public, anon, authenticated;
+grant execute on function public.club_rol_activar_anfitrion(uuid, text, text)    to authenticated;
+revoke all on function public.club_pase_evento_trg()                             from public, anon, authenticated;
+-- Contrato del pase: SOLO service_role (el Edge del pase).
+do $$
+declare f text;
+begin
+  foreach f in array array['public.club_pase_datos(uuid)', 'public.club_pase_por_token(text)',
+                           'public.club_pase_emitido(uuid, text, text)', 'public.club_pase_eventos_leer(bigint, int)',
+                           'public.club_pase_cursor_leer(text)', 'public.club_pase_cursor_guardar(text, bigint)',
+                           'public.club_alertas_pendientes(int)', 'public.club_alerta_enviada(bigint, text)'] loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+    execute format('grant execute on function %s to service_role', f);
+  end loop;
+end $$;
 revoke all on function public.club_ajuste(uuid, int, text, text, uuid)   from public, anon, authenticated;
 revoke all on function public.club_portal(text)                          from public, anon, authenticated;
 revoke all on function public.club_vencer(date, int)                     from public, anon, authenticated;

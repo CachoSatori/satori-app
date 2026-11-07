@@ -4,6 +4,7 @@
  *   /c/{codigo10} cupón: vigente → lo muestra; usado o vencido → aviso
  *   /p/{token}    portal del referente: saldo, QR para compartir, «Canjear» (código de 10 min) e historial
  *   /k/{codigo6}  código de canje: lo lee la caja; abierto en un navegador, solo un aviso
+ *   /s/{codigo9}  QR fijo del socio del Local Club: lo lee la caja; abierto en un navegador, solo un aviso
  * Todo pasa por /api/* (Pages Function con tope por IP). El DOM se arma sin innerHTML.
  */
 import './styles.css'
@@ -264,12 +265,13 @@ function ruta() {
   pararReloj()
   document.documentElement.lang = idioma
   document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === idioma)))
-  const m = location.pathname.match(/^\/([rcpk])\/([^/]+)\/?$/)
+  const m = location.pathname.match(/^\/([rcpks])\/([^/]+)\/?$/)
   if (!m) return pintar(h('h1', {}, t.inicio), h('p', { class: 'sub' }, t.inicio_txt))
   const [, tipo, cod] = m
   if (tipo === 'r') return paginaReferente(cod.toUpperCase())
   if (tipo === 'c') return paginaCupon(cod.toUpperCase())
   if (tipo === 'k') return pintar(h('h1', {}, t.canje_qr), h('p', { class: 'sub' }, t.k_txt))
+  if (tipo === 's') return pintar(h('h1', {}, t.s_titulo), h('p', { class: 'sub' }, t.s_txt))
   return paginaPortal(cod.toLowerCase())
 }
 

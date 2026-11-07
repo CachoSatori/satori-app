@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parsearQR, urlCupon, urlReferente, urlPortal, urlCanje } from './qrFormato'
+import { parsearQR, urlCupon, urlReferente, urlPortal, urlCanje, urlSocio } from './qrFormato'
 import { aClubError, opcionesCanje, MSG_REFERENTE_INACTIVO } from '../../shared/api/club'
 
 describe('parsearQR', () => {
@@ -23,6 +23,12 @@ describe('parsearQR', () => {
     expect(parsearQR(urlCanje('ABC234'))).toEqual({ tipo: 'canje', codigo: 'ABC234' })
     expect(parsearQR(' abc 234 ')).toEqual({ tipo: 'canje', codigo: 'ABC234' })
     expect(parsearQR('ABC012').tipo).toBe('desconocido')
+  })
+  it('LC-A1: reconoce el QR fijo del socio (/s/ o 9 a mano), distinto del de cupones (/r/, 8)', () => {
+    expect(parsearQR(urlSocio('ABCD2345K'))).toEqual({ tipo: 'socio', codigo: 'ABCD2345K' })
+    expect(parsearQR(' abcd 2345 k ')).toEqual({ tipo: 'socio', codigo: 'ABCD2345K' })
+    expect(parsearQR(urlReferente('ABCD2345'))).toEqual({ tipo: 'referente', codigo: 'ABCD2345' })
+    expect(parsearQR('https://club.satoricostarica.com/s/ABCD2345').tipo).toBe('desconocido')   // /s/ con 8 no es socio
   })
   it('arma la URL del portal', () => {
     expect(urlPortal('ab'.repeat(32))).toBe('https://club.satoricostarica.com/p/' + 'ab'.repeat(32))

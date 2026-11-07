@@ -62,7 +62,13 @@ export interface ResolverCanje {
   datos: ResolverReferente['datos'] & { codigo_canje: string; codigo_estado: 'vigente' | 'vencido' | 'usado' | 'reemplazado'
                                          codigo_vence_en: string }
 }
-export type ResolverResultado = ResolverCupon | ResolverReferente | ResolverCanje | { tipo: 'desconocido'; datos: Record<string, never> }
+/** LC-A1: QR fijo del socio (/s/). Solo identifica (10 % y cortesía); nunca da créditos. */
+export interface ResolverSocio {
+  tipo: 'socio'
+  datos: { id: string; nombre: string; persona_estado: 'activo' | 'baja'; estado: 'pendiente' | 'activo' | 'baja'
+           desde: string; alta_por: string; es_anfitrion: boolean }
+}
+export type ResolverResultado = ResolverCupon | ResolverReferente | ResolverCanje | ResolverSocio | { tipo: 'desconocido'; datos: Record<string, never> }
 
 export interface BusquedaFila {
   id: string; nombre: string; negocio: string | null; tipo: TipoMiembro; estado: 'activo' | 'baja'
@@ -331,3 +337,11 @@ export const getComparacion = (desde: string, hasta: string, local = 'santa-tere
 export const cargarComparacion = (filas: Array<{ referente: string; semana: string; personas: number }>, local = 'santa-teresa') =>
   llamar<{ cargadas: number; no_encontrados: Array<{ referente: string | null; motivo: string }> }>('club_comparacion_cargar',
     { p_filas: filas, p_location: local })
+
+// ── Local Club · A1: roles (una persona, un pase) ────────────────────────────
+export type RolMiembro = 'referente' | 'concierge_pm' | 'equipo' | 'socio'
+export interface ClubRol { miembro_id: string; rol: RolMiembro; estado: 'pendiente' | 'activo' | 'baja'; desde: string; alta_por: string }
+export const getRoles = () => leer(from<ClubRol>('club_miembro_roles').select('miembro_id,rol,estado,desde,alta_por'))
+/** Activar a un socio como anfitrión (solo owner o manager, con nota; queda en la auditoría). */
+export const activarAnfitrion = (miembro: string, rol: 'referente' | 'concierge_pm' | 'equipo', nota: string) =>
+  llamar<boolean>('club_rol_activar_anfitrion', { p_miembro: miembro, p_rol: rol, p_nota: nota })

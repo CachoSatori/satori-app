@@ -114,10 +114,10 @@ Claude Code corre `scripts/sql/club_verificar_backfill.sql`, que es solo lectura
 
 ## Pase a prod — anotado, NO se hace ahora (lleva firma de Ismael)
 Orden obligatorio, sin saltos:
-1. **Migración 081** en prod, a mano, con el ritual del ref y registrada en el ledger.
+1. **Migración 081** en prod, a mano, con el ritual del ref y registrada en el ledger. Hay que aplicar la versión **final**, la del PR #59, que suma dos índices (CLUB-AUD-13). La copia que viaja en `claude/puente-item11` y en `claude/puente-item11-prod` es la primera versión; el agente no la usa.
 2. **Edge `ingest-ndf` v11** en prod, a mano. Con el Edge nuevo y sin la 081, el upsert falla y no
    entra ninguna venta: **la migración va siempre primero**.
-3. **Agente de prod** en `C:\satori\satori-app-prod`. **Ojo con la base:** prod corre `4d3513a`, que viene de la línea `staging`, y no `feat/pos-desglose`. Para que prod cambie **solo** el ítem 11, su rama es **`4d3513a` + el commit del ítem 11** (`cherry-pick e84c388`; entra limpio, con 459/459 pruebas), **no** `claude/puente-item11`.
+3. **Agente de prod** en `C:\satori\satori-app-prod`. **Ojo con la base:** prod corre `4d3513a`, que viene de la línea `staging`, y no `feat/pos-desglose`. Para que prod cambie **solo** el ítem 11, su rama es **`claude/puente-item11-prod`** (`4d3513a` + el commit del ítem 11, `1ee268b`; subida el 07-nov) (`cherry-pick e84c388`; entra limpio, con 459/459 pruebas), **no** `claude/puente-item11`.
    - Pasar prod a `claude/puente-item11` cambiaría además `mapTicket.ts`: la lista de nombres de saloneros que se usa solo para mostrar en el dry-run, y el nombre de la constante de la familia 29, que vale lo mismo. Ninguno de los dos llega a la base, pero no es lo que se firma.
    - Las facturas en curso (R) y las anuladas (X) se releen igual en las dos versiones: en ese comportamiento no cambia nada. Mismo procedimiento que este plan, con la
    tarea «Satori PoS Bridge PROD» y su log `C:\satori\logs\pos-agente-prod.log`. Después, el backfill.

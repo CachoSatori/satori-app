@@ -22,7 +22,7 @@ par() {   # par <n>: s1 arranca, a los 1,5 s arranca s2; espera a las dos
   sql "$DIR/${1}_s1.sql" > "$TMP/${1}_s1.json" & sleep 1.5; sql "$DIR/${1}_s2.sql" > "$TMP/${1}_s2.json" & wait
 }
 
-limpiar() { sql "$DIR/limpiar.sql" > /dev/null; }
+limpiar() { local r; r=$(sql "$DIR/limpiar.sql"); case "$r" in *message*) echo "LIMPIEZA FALLÓ: $r" >&2; return 1;; esac; }
 trap 'limpiar; rm -rf "$TMP"' EXIT
 limpiar
 sql "$DIR/prep.sql" > /dev/null

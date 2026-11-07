@@ -2,9 +2,10 @@ begin; create function pg_temp.como(p_rol text, p_uid text) returns void languag
 select pg_temp.como('authenticated', '<CAJERO_UUID>');
 -- otra operación (otro p_op), otra factura, el MISMO código: espera a s1 y falla
 create function pg_temp.intento() returns text language plpgsql as $f$
+declare v_err text;
 begin
-  perform public.club_canje('00000000-0000-4000-8000-0000000c0016', 'CARRZG', 1, 'FCARRERA16B', gen_random_uuid());
-  return 'aceptó';
+  select c.error into v_err from public.club_canje('00000000-0000-4000-8000-0000000c0016', 'CARRZG', 1, 'FCARRERA16B', gen_random_uuid()) c;
+  return coalesce(v_err, 'aceptó');
 exception when others then return sqlerrm;
 end $f$;
 select pg_temp.intento() as resultado;

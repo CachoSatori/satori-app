@@ -126,6 +126,22 @@ de hoy, `e84c388`, sigue entrando bien con este Edge: se verificó un ciclo a la
 2. Repetir el backfill desde el 1-sep. Así se llena `area_factura` en el histórico. Re-correrlo no duplica nada.
 3. Mientras tanto el cruce usa `area`, que en las facturas sin pedido ya es la de la factura. El cruce queda bien también antes del backfill.
 
+## Tercera actualización del agente de staging: ronda 3 de la auditoría (07-nov)
+Cambios del agente (rama `claude/puente-item11` @ **`0cf4d87`**):
+- **CLUB-AUD-31:** la clave del pedido abierto lleva la fecha: `pedido:AAAA-MM-DD:N`. Un pedido de ayer que quedó
+  abierto y uno de hoy con el mismo número ya no se pisan en la lista de la caja.
+- **CLUB-AUD-32:** el candado de prod mira `INGEST_URL`, no la etiqueta `ENV`. En la PC de staging no cambia nada,
+  siempre que el `.env` tenga la URL de staging y `ENV` vacío o `staging`. Si no coinciden, el agente **no arranca** y lo
+  dice en el log.
+
+**Falta, en la PC, con los mismos pasos 1 a 5 de arriba (no hace falta backfill):**
+1. En `C:\satori\satori-app` (verificar con `cd`): `git pull` → `git log --oneline -1` tiene que mostrar `0cf4d87`.
+2. Prueba en seco (paso 4). Si dice «ABORTADO: … no coincide con INGEST_URL», parar y avisar: el `.env` está mezclado.
+3. Reiniciar «Satori PoS Bridge» y mirar `C:\satori\logs\pos-agente.log` durante 2 o 3 ciclos.
+4. Avisarle a Claude Code: él confirma en staging que `pos_ndf_open.clave` llega como `pedido:AAAA-MM-DD:N`.
+
+La base ya acepta las dos claves, la vieja y la nueva: el orden entre la PC y la base no importa.
+
 ## Pase a prod — anotado, NO se hace ahora (lleva firma de Ismael)
 Orden obligatorio, sin saltos:
 1. **Migración 081** en prod, a mano, con el ritual del ref y registrada en el ledger. Hay **una sola versión**, la final, en el PR #59 (con el área de la mesa y los índices del CLUB-AUD-13). Las ramas del agente ya no la traen, así que no hay ninguna 081 vieja para aplicar por error. El agente no la usa.

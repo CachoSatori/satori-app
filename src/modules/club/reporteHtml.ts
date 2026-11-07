@@ -17,7 +17,7 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const TIPO_EXC: Record<string, string> = {
   REGISTRO_SIN_FACTURA: 'Registro sin factura', SIN_CRUCE: 'Sin cruce (posible cuenta dividida)', VISITA_REPETIDA: 'Visita repetida', AMBIGUA: 'Factura ambigua (dos pedidos de la mesa)', PERSONAS_SOBRE_PAX: 'Personas sobre el pax', CREDITOS_SIN_CANJE: 'Créditos sin canje (probable)',
-  CANJE_MONTO_DISTINTO: 'Canje con monto distinto (probable)', PROMO_SIN_CUPON: 'Promo sin cupón', CUPON_SIN_PROMO: 'Cupón sin promo',
+  CANJE_MONTO_DISTINTO: 'Canje con monto distinto (probable)', PROMO_SIN_CUPON: 'Promo sin cupón', CUPON_SIN_PROMO: 'Cupón sin promo', TARJETA_MANUAL: 'Tarjeta física (piloto)', CANJE_SIN_CODIGO: 'Canje sin código',
 }
 
 // ── Formatos (ESTANDAR §7): punto de miles, coma decimal, ₡ pegado, % con espacio ──
@@ -182,7 +182,13 @@ export function reporteHtml(r: ReporteMes): string {
 
 /** Anexo CSV: todas las filas de cada sección (sin contactos). */
 export function reporteCsv(r: ReporteMes): string {
-  const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
+  // CLUB-AUD-34: una celda de texto que empieza con = + - @ (o tab/CR) se abriría como fórmula en Excel o
+  // Sheets: se le antepone un apóstrofo. Los números no se tocan (un −3 sigue siendo número).
+  const q = (v: unknown) => {
+    let t = String(v ?? '')
+    if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(t)) t = `'${t}`
+    return `"${t.replace(/"/g, '""')}"`
+  }
   const L: string[] = ['seccion;nombre;negocio;tipo;personas;promedio_3m;creditos;fecha']
   const add = (sec: string, fs: FilaReporte[]) => fs.forEach(f =>
     L.push([sec, f.nombre, f.negocio ?? '', f.tipo, f.personas ?? '', f.prom_3m ?? '', f.creditos ?? '', f.vence_en ?? f.ultima_actividad ?? ''].map(q).join(';')))

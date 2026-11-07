@@ -24,7 +24,11 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 | `POST /api/cupon/{codigo}/contacto` `{contacto}` | `club_cupon_contacto` | 5 cada 10 min |
 | `GET /api/portal/{token}` | `club_portal` | 60 por minuto |
 
-- **Cómo cuenta el tope (CLUB-AUD-14):** solo con el binding de Rate Limiting `RATE_LIMITER`. **Si no está, la API responde 503**: falla cerrada. Ya no hay respaldo en KV, que no es atómico, ni en memoria. La memoria queda solo para `dev-server.mjs` (`CLUB_DEV=1`).
+- **Cómo cuenta el tope (CLUB-AUD-14 y 24):** un binding de Rate Limiting por endpoint, por IP:
+  - `RL_CREAR`: crear cupón, opt-in y código de canje, **5 por 60 s**;
+  - `RL_LEER`: ver cupón y portal, **60 por 60 s**.
+
+  **Si falta alguno, ese endpoint responde 503**: falla cerrada. Al turista le aparece «Demasiados intentos seguidos. Esperá unos minutos…». Cada tope que salta deja una línea `{"alerta":"club-web-tope",…}` en los logs de la función, y sobre ese texto se puede armar una notificación. No hay respaldo en KV ni en memoria; la memoria queda solo para `dev-server.mjs` (`CLUB_DEV=1`).
 - **Una sola puerta (CLUB-AUD-06):** cada llamada lleva el header `x-club-web` con el secreto `CLUB_WEB_KEY`. La base solo responde a las 4 funciones públicas si el sha256 de ese header es el de la clave vigente. Llamar directo con la anon key ya no funciona. **Sin `CLUB_WEB_KEY`, la API responde 503.**
 - **Red de seguridad en SQL:** el tope por referente y por día, y el tope global de cupones por local y por minuto (`club_config.cupones_max_minuto_local`, 20 por defecto).
 - **Errores:** la función nunca devuelve el mensaje crudo de la base. Lo traduce a un código fijo (`referente_invalido`, `cupon_invalido`, `tope_referente`, `demasiados_pedidos` y otros).
@@ -56,7 +60,17 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
    3. Calcular su sha256 en la misma computadora: `printf %s '<la clave>' | shasum -a 256`, o `sha256sum` en Linux.
    4. En Supabase (staging; prod con su firma) → SQL Editor: `select public.club_web_clave_cargar('<el sha256>');`. **Va el sha256, nunca la clave.**
    5. Para rotarla, repetir los pasos 1 a 4 con una clave nueva. La anterior deja de valer cuando se carga el sha256 nuevo, así que conviene cargar primero el secreto en Pages y redesplegar.
-4. **Tope por IP** (`RATE_LIMITER`): está declarado en `wrangler.toml` como binding de Rate Limiting. Hay que confirmar en el panel, en Settings → Bindings, que el proyecto de Pages lo tome. Si Pages no lo acepta, la API responde 503 hasta resolverlo; la alternativa es servir `/api/*` desde un Worker con ese binding.
+4. **Topes por IP** (`RL_CREAR` y `RL_LEER`): están declarados en `wrangler.toml`. **Verificación, después de cada deploy:**
+   - abrir `https://club.satoricostarica.com/api/salud` (o la URL del deploy de prueba);
+   - tiene que decir `"rl_crear": true, "rl_leer": true, "club_web_key": true, "supabase": true`. No muestra ningún valor;
+   - si `rl_crear` o `rl_leer` sale en `false`, Pages no tomó el binding. Esos endpoints responden 503: fallan cerrados, el sitio no queda abierto;
+   - prueba de fuego: 6 «Obtener mi cupón» seguidos desde un mismo teléfono. El sexto tiene que mostrar «Demasiados intentos seguidos».
+
+   **Plan B, si Pages no admite los bindings: `/api` en un Worker.**
+   1. Crear un Worker `satori-club-api` con el mismo `functions/_lib/api.js`. Su `fetch(request, env)` llama a `manejar(request, env, path)`.
+   2. Declarar en el `wrangler.toml` del Worker los dos `[[unsafe.bindings]]` de arriba, más `SUPABASE_URL`, `SUPABASE_ANON_KEY` y el secreto `CLUB_WEB_KEY`.
+   3. Agregar la ruta `club.satoricostarica.com/api/*` → Worker `satori-club-api` (Workers Routes), y sacar `functions/api` de Pages.
+   4. Repetir la verificación con `/api/salud`.
 5. Las ramas que no son la de producción se publican como *preview* (`<rama>.satori-club.pages.dev`).
 
 ## DNS: apuntar `club.satoricostarica.com` (lo hace Ismael)

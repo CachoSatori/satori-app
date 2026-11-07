@@ -57,3 +57,13 @@ describe('saldo del reporte: al cierre o a hoy', () => {
     expect(enCurso).toContain('parcial al 5 nov 26')
   })
 })
+
+describe('CSV (CLUB-AUD-34)', () => {
+  it('neutraliza las celdas que empiezan con = + - @: no se abren como fórmula', () => {
+    const csv = reporteCsv({ ...rep, ranking: [fila(0, { nombre: '=HYPERLINK("http://x.test","clic")', negocio: '+cmd', personas: -3 })] })
+    const linea = csv.split('\r\n').find(l => l.startsWith('"ranking"'))!
+    expect(linea).toContain(`"'=HYPERLINK(""http://x.test"",""clic"")"`)
+    expect(linea).toContain(`"'+cmd"`)
+    expect(linea).toContain('"-3"')   // los números no se tocan
+  })
+})

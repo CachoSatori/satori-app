@@ -57,6 +57,15 @@ drop function if exists public.club_visita_canonica(text, jsonb, text);
 drop function if exists public.club_cupon_crear(text, jsonb);
 drop function if exists public.club_saldo_personas(uuid);
 
+-- Ronda 3: cualquier función club_* que quede (las nuevas y las que dependen del tipo de una tabla).
+do $$
+declare r record;
+begin
+  for r in select p.oid::regprocedure as fn from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.proname like 'club\_%' and p.proname <> 'club_saldos' loop
+    execute format('drop function if exists %s cascade', r.fn);
+  end loop;
+end $$;
 drop view if exists public.club_saldos;
 
 drop table if exists public.club_excepciones_resueltas;
@@ -66,6 +75,11 @@ drop function if exists public.club_web_ok();
 drop function if exists public.club_web_clave_cargar(text);
 drop function if exists public.club_reportes_cerrados_inmutable();
 drop table if exists public.club_codigos_canje;   -- R-01 (antes que club_movimientos)
+drop table if exists public.club_canje_intentos;
+drop table if exists public.club_alertas;
+drop table if exists public.club_auditoria;
+drop table if exists public.club_cruces_manuales_historial;
+drop table if exists public.club_comparacion_vieja;
 drop table if exists public.club_cupones_contactos;
 drop table if exists public.club_cruces_manuales;
 drop table if exists public.club_config_historial;

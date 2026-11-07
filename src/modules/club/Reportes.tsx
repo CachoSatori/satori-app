@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import { getReporteMes, getLocalesClub, cerrarMes, aClubError, fmtCreditos, type ReporteMes, type FilaReporte } from '../../shared/api/club'
 import { useAuth } from '../../shared/hooks/useAuth'
+import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
 import { Aviso, Btn, Card } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
@@ -85,6 +86,7 @@ export default function Reportes() {
       </Card>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
       {esOwner && <Vencimiento />}
+      <Comparacion />
       {rep && !cargando && rep.cerrado && (
         <Aviso tono="info">
           Mes cerrado (versión {rep.version}) el {fmtFecha(rep.cerrado_en ?? '')}: el reporte no cambia aunque después se paguen

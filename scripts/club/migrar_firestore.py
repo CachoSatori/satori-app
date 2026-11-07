@@ -494,6 +494,8 @@ end $$;""")
     L += [
         "delete from public.club_pm_cargos where origen = 'migracion';",
         "delete from public.club_pm_pagos where origen = 'migracion';",
+        # el libro es de solo inserción: el migrador declara que borra SOLO sus filas (origen = 'migracion')
+        "set local club.libro_mantenimiento = 'migracion';",
         "delete from public.club_movimientos where origen = 'migracion';",
         "delete from public.club_miembros_contacto c using public.club_miembros m where m.id = c.miembro_id and m.origen = 'migracion';",
         "delete from public.club_miembros where origen = 'migracion';",

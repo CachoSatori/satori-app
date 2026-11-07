@@ -12,7 +12,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
-  resolverQR, usarCupon, canjear, canjeAprobado, tarjetaManual, buscar, getMiembro, aClubError, nuevoOp,
+  resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
   opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
   describirPos, describirPedido, describirFactura,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
@@ -31,7 +31,7 @@ type Actual =
   | { kind: 'canje'; r: ResolverCanje; codigo: string }
 type Accion = 'usar' | 'canje' | 'tarjeta' | 'aprobado'
 type ModoRef = 'tarjeta' | 'aprobado'
-type Mensaje = { tono: 'ok' | 'error' | 'info'; texto: string }
+type Mensaje = { tono: 'ok' | 'error' | 'info'; texto: string; link?: { href: string; texto: string } }
 
 export default function Escanear() {
   const { profile } = useAuth()
@@ -100,11 +100,14 @@ export default function Escanear() {
     if (f.estado !== 'activo') { setActual(null); setMsg({ tono: 'error', texto: MSG_REFERENTE_INACTIVO }); return }
     setCargando(true)
     try {
-      const m = await getMiembro(f.id)
-      if (!m) throw new Error('No se encontró la cuenta')
-      await resolver(m.codigo)
+      // CLUB-AUD-30: la caja no lee el código del QR; la ficha llega por función (saldo, sin canje: R-01).
+      const r = await resolverMiembro(f.id)
+      if (r.tipo !== 'referente') throw new Error('No se encontró la cuenta')
+      setActual({ kind: 'referente', r, codigo: '' }); ops.current = {}; limpiarFormularios()
     } catch (e) {
-      setMsg({ tono: 'error', texto: aClubError(e).message }); setCargando(false)
+      setMsg({ tono: 'error', texto: aClubError(e).message })
+    } finally {
+      setCargando(false)
     }
   }
 
@@ -122,8 +125,15 @@ export default function Escanear() {
       } else if (actual.kind === 'canje' && creditos != null) {
         // El código queda usado: se cierra la cuenta (volver a escanearlo diría «ya se usó»).
         const s = await canjear(actual.r.datos.id, actual.codigo, creditos, pos!, opDe('canje'))
-        setMsg({ tono: 'ok', texto: `Canje de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditos(s.creditos)} ${Number(s.creditos) === 1 ? 'crédito' : 'créditos'}.` })
+        const texto = `Canje de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditos(s.creditos)} ${Number(s.creditos) === 1 ? 'crédito' : 'créditos'}.`
+        setMsg({ tono: 'ok', texto })
         cerrarCuenta()
+        // Aviso al referente (hasta que lo mande el pase de Wallet): link de WhatsApp con el canje y el saldo.
+        if (s.movimiento) {
+          avisoCanje(s.movimiento)
+            .then(href => { if (href) setMsg({ tono: 'ok', texto, link: { href, texto: 'Avisarle por WhatsApp' } }) })
+            .catch(() => { /* sin aviso: el canje ya quedó */ })
+        }
       } else if (modoRef === 'aprobado' && creditos != null) {
         const s = await canjeAprobado(actual.r.datos.id, creditos, pos!, opDe('aprobado'), nota.trim())
         setMsg({ tono: 'ok', texto: `Canje sin celular de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditos(s.creditos)} ${Number(s.creditos) === 1 ? 'crédito' : 'créditos'}.` })
@@ -150,7 +160,16 @@ export default function Escanear() {
 
   return (
     <div className="tips-body" style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {msg && <Aviso tono={msg.tono} onClose={() => setMsg(null)}>{msg.texto}</Aviso>}
+      {msg && (
+        <Aviso tono={msg.tono} onClose={() => setMsg(null)}>
+          {msg.texto}
+          {msg.link && (
+            <div style={{ marginTop: 8 }}>
+              <a href={msg.link.href} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 700, color: 'inherit' }}>{msg.link.texto} ↗</a>
+            </div>
+          )}
+        </Aviso>
+      )}
 
       {!actual && (
         <>
@@ -251,13 +270,17 @@ function CampoPersonas({ v, set }: { v: string; set: (s: string) => void }) {
 function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) => void }) {
   const [pedidos, setPedidos] = useState<PedidoAbierto[] | null>(null)
   const [facturas, setFacturas] = useState<FacturaReciente[] | null>(null)
-  const [err, setErr] = useState(false)
+  const [err, setErr] = useState<string | false>(false)
   const [errB, setErrB] = useState(false)
   const [planB, setPlanB] = useState(v?.modo === 'factura')
   const cargar = useCallback(() => {
     setErr(false); setPedidos(null)
     getPedidosAbiertos().then(p => { setPedidos(p); if (p.length === 0) setPlanB(true) })
-      .catch(() => { setErr(true); setPedidos([]); setPlanB(true) })
+      .catch(e => {
+        // CLUB-AUD-27: sin puente al día, la lista no es confiable → plan B con el motivo.
+        const m = aClubError(e).message
+        setErr(/puente sin datos/i.test(m) ? 'Puente sin datos.' : 'No se pudo cargar la lista de pedidos.'); setPedidos([]); setPlanB(true)
+      })
   }, [])
   const cargarB = useCallback(() => {
     setErrB(false); setFacturas(null)
@@ -298,7 +321,7 @@ function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) 
       {planB && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: '0.85rem', color: C.muted }}>
-            {err ? 'No se pudo cargar la lista de pedidos. Elegí' : pedidos?.length === 0 ? 'No hay pedidos abiertos en el PoS. Elegí' : 'Pedido ya cerrado: elegí'}{' '}
+            {err ? `${err} Elegí` : pedidos?.length === 0 ? 'No hay pedidos abiertos en el PoS. Elegí' : 'Pedido ya cerrado: elegí'}{' '}
             la factura de la lista (cerradas en las últimas 2 horas).
           </div>
           {facturas === null && <div style={{ color: C.muted }}>Cargando facturas…</div>}
@@ -466,7 +489,9 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
                 «Canjear» y vale 10 minutos. Escanealo o escribí los 6 caracteres en «Código a mano».
               </Aviso>
               <div style={{ display: 'flex', gap: 6, margin: '12px 0' }}>
-                <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta física</Btn>
+                {d.tarjeta_manual_activa && (
+                  <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta física</Btn>
+                )}
                 {gestiona && (
                   <Btn variant={modo === 'aprobado' ? 'primary' : 'secondary'} onClick={() => setModo('aprobado')} style={{ flex: 1 }}>Canje sin celular</Btn>
                 )}
@@ -513,9 +538,12 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
                   <Btn big disabled={creditos == null || !p.facturaOk || (!conCodigo && !notaOk)} onClick={() => p.setConfirmando(true)}>Continuar</Btn>
                 )}
               </>
-            ) : (
+            ) : d.tarjeta_manual_activa ? (
               <>
-                <div style={{ fontSize: '0.85rem', color: C.muted }}>Para tarjetas impresas que ya están repartidas. Queda marcada «manual».</div>
+                <div style={{ fontSize: '0.85rem', color: C.muted }}>
+                  Piloto en paralelo: la tarjeta impresa del comercio se carga acá además del proceso de siempre. Queda como
+                  excepción «Tarjeta física» para que la revise otra persona.
+                </div>
                 <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
                 <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
@@ -526,7 +554,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
                   <Btn big disabled={!p.personasOk || !p.facturaOk} onClick={() => p.setConfirmando(true)}>Continuar</Btn>
                 )}
               </>
-            )}
+            ) : null}
           </div>
         </>
       )}

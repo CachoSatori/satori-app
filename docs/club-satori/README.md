@@ -114,3 +114,29 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
   - Batería: 225/225 (nuevas: 43, código de canje; 44, CUPON_SIN_PROMO).
   - Carrera 16 (el mismo código en dos canjes a la vez): 1 solo canje.
   - API de club-web: 8 pruebas.
+
+**Ronda 3 de auditoría (07-nov, sobre `f004cc5`): gates de la §8.**
+- **R-01, según la §3:**
+  - solo el hash del código, TTL de 10 minutos (con CHECK) y consumo atómico (op → código → miembro);
+  - 5 intentos fallidos en 15 minutos por usuario y por miembro, también al escanear;
+  - «buscar» no habilita el canje (`club_resolver_miembro`);
+  - `CANJE_SIN_CODIGO` siempre visible;
+  - aviso al referente: `club_alertas`, más «Avisarle por WhatsApp» en caja.
+- **R-02:** el puente no trae el descuento (`descuento_crc` vale 0 en todas las facturas desde agosto; las líneas no tienen
+  columna de descuento). Por eso `CUPON_SIN_PROMO` sigue con el artículo marcador, después de la latencia del puente.
+  **Falta que Ismael cree «PROMO CLUB 10%» en el PoS** y lo cargue en `club_config.promo_articulo_codigo`.
+- **26:** `tarjeta_manual_activa` (prod false; staging true), tope diario por miembro y `TARJETA_MANUAL`.
+- **30:** el staff no lee `codigo`; el contador, sin cupones.
+- **25:** `club_auditoria` de solo inserción, resoluciones como historial y segregación.
+- **Libro:** de solo inserción también para el dueño (`club.libro_mantenimiento`).
+- **27:** puente fresco (5 minutos y sin error).
+- **31:** clave del pedido con fecha.
+- **24 y 14:** un binding por endpoint (`RL_CREAR` 5/60 s, `RL_LEER` 60/60 s) y `/api/salud`.
+- **33 y 34:** contacto que no se pisa; CSV sin fórmulas.
+- **Piloto en paralelo:** «Comparación con la página vieja», en Reportes.
+- **Pase a prod:** [RUNBOOK-piloto.md](RUNBOOK-piloto.md).
+- **Pruebas:**
+  - batería 271/271;
+  - carreras 6/6;
+  - paridad 528 = 528;
+  - migrador 15/15 con el libro de solo inserción.

@@ -23,7 +23,7 @@ export type TipoNegocio = 'hotel' | 'tienda' | 'host' | 'delivery' | 'concierge'
 
 export interface ClubMiembro {
   id: string; tipo: TipoMiembro; nombre: string; negocio_id: string | null
-  codigo: string; estado: 'activo' | 'baja'; origen: string; created_at: string
+  estado: 'activo' | 'baja'; origen: string; created_at: string
 }
 export interface ClubSaldo {
   miembro_id: string; personas: number; creditos: number
@@ -52,7 +52,9 @@ export interface ResolverReferente {
   tipo: 'referente'
   datos: { id: string; nombre: string; tipo_miembro: TipoMiembro; negocio: string | null; estado: 'activo' | 'baja'
            personas: number; creditos: number; personas_proximo: number; personas_por_credito: number
-           canjeado_hoy: number; canje_min: number; canje_paso: number; max_creditos_por_visita: number }
+           canjeado_hoy: number; canje_min: number; canje_paso: number; max_creditos_por_visita: number
+           /** CLUB-AUD-26: tarjeta física habilitada en este local (staging sí, prod no). */
+           tarjeta_manual_activa?: boolean }
 }
 /** R-01: el código de canje (/k/) del portal. Los mismos datos del referente, más el estado del código. */
 export interface ResolverCanje {
@@ -121,11 +123,12 @@ export const resolverQR = (texto: string) => llamar<ResolverResultado>('club_res
  * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto).
  */
 export type PosRef =
-  | { modo: 'pedido'; pedido: string; area?: string | null; mesa: string | null; total: number | null }
+  | { modo: 'pedido'; pedido: string; clave?: string | null; area?: string | null; mesa: string | null; total: number | null }
   | { modo: 'factura'; numero_factura: string; area?: string | null; mesa: string | null; total: number; hora: string }
 /** La mesa es (área, mesa): la mesa 3 del área '3' no es la mesa 3 del área 'M'. */
 export interface PedidoAbierto {
-  pedido: string; area?: string | null; mesa: string | null; salonero: string | null; total_crc: number | null; pax: number | null
+  /** CLUB-AUD-31: `pedido:<fecha>:<n>` (el número se reinicia cada día). */
+  pedido: string; clave?: string | null; area?: string | null; mesa: string | null; salonero: string | null; total_crc: number | null; pax: number | null
   actualizado: string
 }
 export interface FacturaReciente {
@@ -140,7 +143,7 @@ const colones = (n: number | null | undefined) => `₡${Math.round(Number(n ?? 0
 const horaCR = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })
 
 export const posDePedido = (p: PedidoAbierto): PosRef =>
-  ({ modo: 'pedido', pedido: p.pedido, area: p.area ?? null, mesa: p.mesa, total: p.total_crc == null ? null : Number(p.total_crc) })
+  ({ modo: 'pedido', pedido: p.pedido, clave: p.clave ?? null, area: p.area ?? null, mesa: p.mesa, total: p.total_crc == null ? null : Number(p.total_crc) })
 export const posDeFactura = (f: FacturaReciente): PosRef =>
   ({ modo: 'factura', numero_factura: f.numero_factura, area: f.area ?? null, mesa: f.mesa, total: Number(f.total_crc), hora: f.hora })
 /** «Área 3 · Mesa 4» (o «Mesa 4» si no hay área; null si no hay mesa). */
@@ -148,7 +151,7 @@ export const describirMesa = (area: string | null | undefined, mesa: string | nu
   mesa ? [area ? `Área ${area}` : null, `Mesa ${mesa}`].filter(Boolean).join(' · ') : null
 /** Lo que se manda al servidor: solo la clave. Mesa, total y hora los pone el servidor desde el puente. */
 export const posParaServidor = (p: PosRef) =>
-  p.modo === 'pedido' ? { modo: 'pedido', pedido: p.pedido } : { modo: 'factura', numero_factura: p.numero_factura }
+  p.modo === 'pedido' ? { modo: 'pedido', pedido: p.pedido, ...(p.clave ? { clave: p.clave } : {}) } : { modo: 'factura', numero_factura: p.numero_factura }
 /** «Pedido 14 · Área 3 · Mesa 4 · ₡48.500» */
 export const describirPedido = (p: Pick<PedidoAbierto, 'pedido' | 'mesa' | 'total_crc'> & { area?: string | null }) =>
   [`Pedido ${p.pedido}`, describirMesa(p.area, p.mesa), p.total_crc == null ? 'sin total' : colones(p.total_crc)]
@@ -166,15 +169,30 @@ export const usarCupon = async (codigo: string, personas: number, pos: PosRef, o
   primero(await llamar<Array<Saldo & { miembro_id: string }>>('club_cupon_usar',
     { p_codigo: codigo, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 
+/** Resultado del canje. Un código equivocado no es un error de red: vuelve en `error` (queda anotado el intento). */
+export interface ResultadoCanje extends Saldo { movimiento: string | null; error: string | null }
+const sinError = (r: ResultadoCanje) => { if (r?.error) throw new ClubError(r.error, false); return r }
+
 /** R-01: el canje exige el código de canje que el referente genera en su portal (10 min, un uso). */
 export const canjear = async (miembro: string, codigoCanje: string, creditos: number, pos: PosRef, op: string) =>
-  primero(await llamar<Saldo[]>('club_canje', { p_miembro: miembro, p_codigo_canje: codigoCanje, p_creditos: creditos,
-                                                p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
+  sinError(primero(await llamar<ResultadoCanje[]>('club_canje', { p_miembro: miembro, p_codigo_canje: codigoCanje, p_creditos: creditos,
+                                                                  p_factura: null, p_op: op, p_pos: posParaServidor(pos) })))
 
 /** Respaldo sin celular (solo owner o manager), con nota obligatoria. */
 export const canjeAprobado = async (miembro: string, creditos: number, pos: PosRef, op: string, nota: string) =>
-  primero(await llamar<Saldo[]>('club_canje_aprobado', { p_miembro: miembro, p_creditos: creditos, p_factura: null,
-                                                         p_op: op, p_pos: posParaServidor(pos), p_nota: nota }))
+  sinError(primero(await llamar<ResultadoCanje[]>('club_canje_aprobado', { p_miembro: miembro, p_creditos: creditos, p_factura: null,
+                                                                           p_op: op, p_pos: posParaServidor(pos), p_nota: nota })))
+
+/** Aviso al referente del canje recién hecho: link de WhatsApp (null si no tiene teléfono). */
+export const avisoCanje = async (movimiento: string): Promise<string | null> => {
+  const r = await llamar<{ tel: string; texto: string } | null>('club_canje_aviso', { p_movimiento: movimiento })
+  return r?.tel ? `https://wa.me/${r.tel}?text=${encodeURIComponent(r.texto)}` : null
+}
+
+/** «Buscar» → la ficha del referente (sin canje, igual que el /r/). La caja no lee el código (CLUB-AUD-30). */
+export const resolverMiembro = (id: string) => llamar<ResolverResultado>('club_resolver_miembro', { p_id: id })
+/** Código del QR público: solo owner y manager. */
+export const codigoMiembro = (id: string) => llamar<string>('club_miembro_codigo', { p_id: id })
 
 /** Ajuste o restitución (solo owner, nota obligatoria). Idempotente con `op`. */
 export const ajustarSaldo = (miembro: string, personas: number, tipo: 'ajuste' | 'restitucion', nota: string, op: string) =>
@@ -202,7 +220,7 @@ export const regenerarCodigo = async (id: string) =>
 export const tokenPortal = (id: string) => llamar<string>('club_miembro_token', { p_id: id })
 
 // ── Lecturas ─────────────────────────────────────────────────────────────────
-const COLS_MIEMBRO = 'id,tipo,nombre,negocio_id,codigo,estado,origen,created_at'
+const COLS_MIEMBRO = 'id,tipo,nombre,negocio_id,estado,origen,created_at'
 
 export const getMiembros = () => leer(from<ClubMiembro>('club_miembros').select(COLS_MIEMBRO).order('nombre'))
 export const getMiembro = async (id: string) =>
@@ -239,7 +257,7 @@ export const fmtCreditos = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
 
 // ── F1f: excepciones del puente y reporte mensual (owner, manager) ───────────
-export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CUPON_SIN_PROMO' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA' | 'SIN_CRUCE'
+export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CUPON_SIN_PROMO' | 'TARJETA_MANUAL' | 'CANJE_SIN_CODIGO' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA' | 'SIN_CRUCE'
   | 'VISITA_REPETIDA' | 'PERSONAS_SOBRE_PAX' | 'AMBIGUA'
 export interface Excepcion {
   tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable' | 'manual'
@@ -302,3 +320,14 @@ export const cerrarMes = (mes: string, motivo: string, local = 'santa-teresa') =
   llamar<ReporteMes>('club_reporte_cerrar', { p_mes: mes, p_motivo: motivo.trim() || null, p_location: local })
 export const getLocalesClub = async () =>
   (await leer(from<{ location_id: string }>('club_config').select('location_id').order('location_id'))).map(r => r.location_id)
+
+// ── Piloto en paralelo: comparación con la página vieja ──────────────────────
+export interface FilaComparacion {
+  semana: string; miembro_id: string; referente: string; negocio: string | null
+  personas_staging: number; personas_vieja: number | null; diferencia: number
+}
+export const getComparacion = (desde: string, hasta: string, local = 'santa-teresa') =>
+  llamar<FilaComparacion[]>('club_comparacion', { p_desde: desde, p_hasta: hasta, p_location: local })
+export const cargarComparacion = (filas: Array<{ referente: string; semana: string; personas: number }>, local = 'santa-teresa') =>
+  llamar<{ cargadas: number; no_encontrados: Array<{ referente: string | null; motivo: string }> }>('club_comparacion_cargar',
+    { p_filas: filas, p_location: local })

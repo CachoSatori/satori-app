@@ -302,6 +302,149 @@ create table if not exists public.club_visitas (
   created_at      timestamptz not null default now()
 );
 
+-- Libro de solo inserción (auditoría ronda 3, §5.5): ni UPDATE ni DELETE ni TRUNCATE, tampoco para el dueño
+-- de la tabla. Única excepción, solo para el rol `postgres` y declarada en la transacción:
+--   · `set local club.libro_mantenimiento = 'migracion'` → borrar filas origen='migracion' (el migrador, al
+--     volver a migrar);
+--   · `= 'pruebas'` → las pruebas de staging (siempre en una transacción con ROLLBACK) y la limpieza de
+--     datos sintéticos.
+create or replace function public.club_mov_solo_insercion()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare v_modo text := coalesce(current_setting('club.libro_mantenimiento', true), '');
+begin
+  if current_user = 'postgres' and (v_modo = 'pruebas'
+       or (v_modo = 'migracion' and tg_op = 'DELETE' and old.origen = 'migracion')) then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  raise exception 'club_movimientos es de solo inserción: para corregir, un ajuste o una restitución' using errcode = 'P0001';
+end;
+$$;
+drop trigger if exists club_mov_solo_insercion_trg on public.club_movimientos;
+create trigger club_mov_solo_insercion_trg before update or delete on public.club_movimientos
+  for each row execute function public.club_mov_solo_insercion();
+create or replace function public.club_mov_sin_truncate()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if current_user = 'postgres' and coalesce(current_setting('club.libro_mantenimiento', true), '') = 'pruebas' then
+    return null;
+  end if;
+  raise exception 'club_movimientos es de solo inserción' using errcode = 'P0001';
+end;
+$$;
+drop trigger if exists club_mov_sin_truncate_trg on public.club_movimientos;
+create trigger club_mov_sin_truncate_trg before truncate on public.club_movimientos
+  for each statement execute function public.club_mov_sin_truncate();
+
+-- CLUB-AUD-25: auditoría de solo inserción. Quién (auth.uid() y su rol), qué y el antes y el después.
+-- Sin secretos ni datos de contacto: del miembro se omiten `codigo` y `token_portal` (solo se anota si
+-- cambiaron); de los contactos, solo qué campos cambiaron.
+create table if not exists public.club_auditoria (
+  id         bigint generated always as identity primary key,
+  en         timestamptz not null default now(),
+  actor      uuid,
+  rol        text,
+  accion     text not null,
+  tabla      text not null,
+  objeto_id  uuid,
+  antes      jsonb,
+  despues    jsonb
+);
+create index if not exists club_auditoria_objeto_idx on public.club_auditoria (objeto_id, en);
+alter table public.club_auditoria enable row level security;
+revoke all on public.club_auditoria from public, anon, authenticated;
+grant select on public.club_auditoria to authenticated;
+drop policy if exists club_auditoria_owner on public.club_auditoria;
+create policy club_auditoria_owner on public.club_auditoria for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() = 'owner');
+create or replace function public.club_auditoria_inmutable()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if current_user = 'postgres' and coalesce(current_setting('club.libro_mantenimiento', true), '') = 'pruebas' then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  raise exception 'club_auditoria es de solo inserción' using errcode = 'P0001';
+end;
+$$;
+drop trigger if exists club_auditoria_inmutable_trg on public.club_auditoria;
+create trigger club_auditoria_inmutable_trg before update or delete on public.club_auditoria
+  for each row execute function public.club_auditoria_inmutable();
+
+create or replace function public.club_auditar(p_accion text, p_tabla text, p_objeto uuid, p_antes jsonb, p_despues jsonb)
+returns void
+language sql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+  insert into public.club_auditoria (actor, rol, accion, tabla, objeto_id, antes, despues)
+  values (auth.uid(), (select p.role::text from public.profiles p where p.id = auth.uid()), p_accion, p_tabla, p_objeto, p_antes, p_despues);
+$$;
+
+create or replace function public.club_auditar_trg()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_antes   jsonb := case when tg_op in ('UPDATE','DELETE') then to_jsonb(old) end;
+  v_despues jsonb := case when tg_op in ('INSERT','UPDATE') then to_jsonb(new) end;
+  v_accion  text := lower(tg_op);
+  v_id      uuid;
+begin
+  if tg_table_name = 'club_miembros' then
+    v_id := coalesce(new.id, old.id);
+    if tg_op = 'UPDATE' then
+      v_accion := case
+        when old.estado = 'baja' and new.estado = 'activo' then 'reactivacion'
+        when old.estado = 'activo' and new.estado = 'baja' then 'baja'
+        when old.codigo is distinct from new.codigo or old.token_portal is distinct from new.token_portal then 'regenerar_codigo'
+        else 'edicion' end;
+      if v_antes = v_despues then return null; end if;
+    elsif tg_op = 'INSERT' then
+      v_accion := 'alta';
+    end if;
+    v_antes   := v_antes - 'codigo' - 'token_portal';
+    v_despues := v_despues - 'codigo' - 'token_portal'
+                 || case when tg_op = 'UPDATE' then jsonb_build_object('codigo_cambiado', old.codigo is distinct from new.codigo,
+                                                                         'token_cambiado', old.token_portal is distinct from new.token_portal)
+                         else '{}'::jsonb end;
+  elsif tg_table_name = 'club_miembros_contacto' then
+    v_id := coalesce(new.miembro_id, old.miembro_id);
+    v_accion := 'contacto_' || lower(tg_op);
+    -- sin valores: solo qué cambió
+    v_antes := case when tg_op <> 'INSERT' then jsonb_build_object('telefono', old.telefono is not null, 'email', old.email is not null,
+                                                                    'optin_whatsapp', old.optin_whatsapp, 'optin_email', old.optin_email) end;
+    v_despues := case when tg_op <> 'DELETE' then jsonb_build_object('telefono', new.telefono is not null, 'email', new.email is not null,
+                                                                      'optin_whatsapp', new.optin_whatsapp, 'optin_email', new.optin_email,
+                                                                      'telefono_cambiado', tg_op = 'UPDATE' and old.telefono is distinct from new.telefono,
+                                                                      'email_cambiado', tg_op = 'UPDATE' and old.email is distinct from new.email) end;
+  elsif tg_table_name = 'club_negocios' then
+    v_id := coalesce(new.id, old.id);
+  end if;
+  perform public.club_auditar(v_accion, tg_table_name, v_id, v_antes, v_despues);
+  return null;
+end;
+$$;
+drop trigger if exists club_auditar_miembros_trg on public.club_miembros;
+create trigger club_auditar_miembros_trg after insert or update on public.club_miembros
+  for each row execute function public.club_auditar_trg();
+drop trigger if exists club_auditar_contacto_trg on public.club_miembros_contacto;
+create trigger club_auditar_contacto_trg after insert or update or delete on public.club_miembros_contacto
+  for each row execute function public.club_auditar_trg();
+drop trigger if exists club_auditar_negocios_trg on public.club_negocios;
+create trigger club_auditar_negocios_trg after insert or update on public.club_negocios
+  for each row execute function public.club_auditar_trg();
+
 -- ── 2. Vista de saldos (security_invoker: aplica el RLS de quien consulta) ──
 
 create or replace view public.club_saldos
@@ -464,6 +607,12 @@ begin
   return (select count(*)::int from public.club_web_clave where revocada_en is null);
 end;
 $$;
+
+-- Tarjeta física (CLUB-AUD-26, decisión de Ismael 07-nov): flag por entorno. PROD = false (el piloto oficial
+-- es solo con pases de Wallet); STAGING = true para el piloto interno en paralelo (se activa a mano, no acá).
+alter table public.club_config add column if not exists tarjeta_manual_activa boolean not null default false;
+alter table public.club_config add column if not exists tarjeta_manual_tope_dia int not null default 30
+  check (tarjeta_manual_tope_dia between 1 and 300);
 
 -- Tope global por local y por minuto en club_cupon_crear (además del tope por referente y por día).
 alter table public.club_config add column if not exists cupones_max_minuto_local int not null default 20
@@ -650,6 +799,19 @@ end;
 $$;
 
 drop function if exists public.club_pos_ref(jsonb);
+-- CLUB-AUD-27: ¿el puente está al día? Último ciclo hace menos de 5 minutos Y sin error (el latido de error
+-- también actualiza last_poll_at). Sin puente fresco, la lista de pedidos abiertos no es confiable.
+create or replace function public.club_puente_fresco(p_location text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select exists (select 1 from public.pos_ndf_cursor c
+                  where c.local = p_location and c.last_poll_at > now() - interval '5 minutes' and c.last_error is null)
+$$;
+
 create or replace function public.club_pos_ref(p jsonb, p_location text)
 returns jsonb
 language plpgsql
@@ -661,6 +823,7 @@ declare
   v_modo  text;
   v_local text;
   v_ped   text;
+  v_clave text;
   v_nf    text;
   o       public.pos_ndf_open%rowtype;
   t       public.pos_ndf_tickets%rowtype;
@@ -679,11 +842,23 @@ begin
   end if;
   if v_modo = 'pedido' then
     v_ped := btrim(coalesce(p->>'pedido', ''));
-    if v_ped !~ '^[0-9A-Za-z]{1,20}$' then
+    v_clave := nullif(btrim(coalesce(p->>'clave', '')), '');
+    if v_ped !~ '^[0-9A-Za-z]{1,20}$' or (v_clave is not null and v_clave !~ '^pedido:[0-9A-Za-z:_-]{1,60}$') then
       raise exception 'Pedido no válido' using errcode = 'P0001';
     end if;
-    select * into o from public.pos_ndf_open x where x.local = v_local and x.id_pedido = v_ped
-     order by x.updated_at desc limit 1;
+    if not public.club_puente_fresco(v_local) then   -- CLUB-AUD-27
+      raise exception 'Puente sin datos: elegí la factura' using errcode = 'P0001';
+    end if;
+    -- CLUB-AUD-31: la clave trae la fecha del pedido (pedido:<fecha>:<n>); el número solo se reinicia cada día.
+    -- Sin clave (app vieja), el número tiene que ser único entre los abiertos.
+    if v_clave is not null then
+      select * into o from public.pos_ndf_open x where x.local = v_local and x.clave = v_clave and x.id_pedido = v_ped;
+    else
+      if (select count(*) from public.pos_ndf_open x where x.local = v_local and x.id_pedido = v_ped) > 1 then
+        raise exception 'Hay más de un pedido abierto con el número %: elegilo de la lista', v_ped using errcode = 'P0001';
+      end if;
+      select * into o from public.pos_ndf_open x where x.local = v_local and x.id_pedido = v_ped;
+    end if;
     if not found then
       raise exception 'El pedido % ya no está abierto: elegí la factura de la lista', v_ped using errcode = 'P0001';
     end if;
@@ -860,18 +1035,29 @@ end;
 $$;
 
 -- 4.3 Canje de créditos (1 / 1,5 / 2 por visita, de a 0,5).
--- R-01 (revisión integral 07-nov): el QR público del referente (/r/) NO alcanza para canjear: cualquiera con
--- una foto del QR de la recepción podía hacerlo. El canje exige un CÓDIGO DE CANJE de un solo uso que el
--- referente genera en su portal privado (/p/{token}) y que vence a los 10 minutos:
---   · club_canje_codigo_generar(token)  (pública, solo por club-web): código + QR /k/{codigo}.
---   · club_canje(miembro, codigo, …)    (caja): exige el código vigente, del mismo miembro y sin usar; lo
---                                        marca usado en la misma transacción que el movimiento.
---   · club_canje_aprobado(…, nota)      (solo owner o manager): respaldo sin celular, con nota obligatoria.
+-- R-01 (revisión integral 07-nov; requisitos de la ronda 3 de auditoría, §3): el QR público del referente
+-- (/r/) NO alcanza para canjear. El canje exige un CÓDIGO DE CANJE que el referente genera en su portal
+-- privado (/p/{token}):
+--   · 6 caracteres del alfabeto sin ambigüedad (30 bits), un solo uso, vence a los 10 minutos.
+--   · En la base se guarda SOLO su sha256: el código se muestra una vez, en el portal.
+--   · Tope de intentos fallidos: 5 en 15 minutos por usuario de la caja y por miembro (club_canje_intentos).
+--   · club_canje lo consume atómicamente, en la misma transacción que el movimiento, con el orden de locks
+--     op → código → miembro. Mismo p_op = mismo canje; otro p_op con el mismo código = rechazado.
+--   · «buscar» (plan B) no habilita el canje: lleva al mismo panel que el /r/ (saldo, sin canje).
+--   · Respaldo sin celular: club_canje_aprobado (solo owner o manager, nota obligatoria). Queda como la
+--     excepción CANJE_SIN_CODIGO, siempre visible, que no resuelve quien lo aprobó.
+-- La tabla vieja (con el código en claro, solo en staging) se reemplaza.
+do $$ begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'club_codigos_canje' and column_name = 'codigo') then
+    drop table public.club_codigos_canje;
+  end if;
+end $$;
 create table if not exists public.club_codigos_canje (
   id             uuid primary key default gen_random_uuid(),
   location_id    text not null default 'santa-teresa',
   miembro_id     uuid not null references public.club_miembros(id),
-  codigo         text not null unique check (codigo ~ '^[A-HJ-NP-Z2-9]{6}$'),
+  codigo_hash    text not null unique check (codigo_hash ~ '^[0-9a-f]{64}$'),
   creado_en      timestamptz not null default now(),
   vence_en       timestamptz not null,
   usado_en       timestamptz,
@@ -880,16 +1066,70 @@ create table if not exists public.club_codigos_canje (
   invalidado_en  timestamptz,          -- generar uno nuevo invalida el anterior
   check ((usado_en is null) = (movimiento_id is null)),
   check (usado_en is null or invalidado_en is null),
-  check (vence_en > creado_en)
+  check (vence_en > creado_en and vence_en <= creado_en + interval '10 minutes')
 );
--- Un solo código vigente (sin usar ni reemplazar) por miembro.
 create unique index if not exists club_codigos_canje_vigente_uq on public.club_codigos_canje (miembro_id)
   where usado_en is null and invalidado_en is null;
 create index if not exists club_codigos_canje_miembro_idx on public.club_codigos_canje (miembro_id, creado_en);
 alter table public.club_codigos_canje enable row level security;
 revoke all on public.club_codigos_canje from public, anon, authenticated;   -- nadie lo lee directo
 
+-- Intentos fallidos (código equivocado, vencido, usado o de otro miembro). Solo inserción, nadie lo lee directo.
+create table if not exists public.club_canje_intentos (
+  id          bigint generated always as identity primary key,
+  actor       uuid,
+  miembro_id  uuid,
+  motivo      text not null,
+  en          timestamptz not null default now()
+);
+create index if not exists club_canje_intentos_actor_idx on public.club_canje_intentos (actor, en);
+create index if not exists club_canje_intentos_miembro_idx on public.club_canje_intentos (miembro_id, en);
+alter table public.club_canje_intentos enable row level security;
+revoke all on public.club_canje_intentos from public, anon, authenticated;
+
+-- Hash del código (normalizado: sin espacios, en mayúscula).
+create or replace function public.club_codigo_hash(p text)
+returns text
+language sql
+immutable
+set search_path = public, pg_temp
+as $$ select encode(extensions.digest('club-canje:' || upper(regexp_replace(coalesce(p, ''), '\s', '', 'g')), 'sha256'), 'hex') $$;
+
+-- ¿Este usuario de caja o este miembro llegaron al tope de intentos fallidos? (5 en 15 minutos)
+create or replace function public.club_canje_bloqueado(p_actor uuid, p_miembro uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select (select count(*) from public.club_canje_intentos i where i.actor = p_actor and i.en > now() - interval '15 minutes') >= 5
+      or (p_miembro is not null and
+          (select count(*) from public.club_canje_intentos i where i.miembro_id = p_miembro and i.en > now() - interval '15 minutes') >= 5)
+$$;
+
+-- Aviso al referente en cada canje (evento para el pase de Wallet, F1e). Mientras tanto, la caja muestra un
+-- link wa.me (club_canje_aviso). Solo owner y manager lo leen.
+create table if not exists public.club_alertas (
+  id             bigint generated always as identity primary key,
+  location_id    text not null default 'santa-teresa',
+  tipo           text not null check (tipo in ('canje')),
+  miembro_id     uuid not null references public.club_miembros(id),
+  movimiento_id  uuid unique references public.club_movimientos(id),
+  creado_en      timestamptz not null default now(),
+  enviado_en     timestamptz,
+  canal          text
+);
+alter table public.club_alertas enable row level security;
+revoke all on public.club_alertas from public, anon, authenticated;
+grant select on public.club_alertas to authenticated;
+drop policy if exists club_alertas_gerencia on public.club_alertas;
+create policy club_alertas_gerencia on public.club_alertas for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
+
 -- Generar el código desde el portal (PÚBLICA, solo con el header de club-web). Tope: 5 por hora por miembro.
+-- Orden de locks igual que el canje: códigos vigentes del miembro → miembro.
+drop function if exists public.club_canje_codigo_generar(text);
 create or replace function public.club_canje_codigo_generar(p_token text)
 returns table (codigo text, vence_en timestamptz, url text)
 language plpgsql
@@ -899,6 +1139,7 @@ set search_path = public, pg_temp
 as $$
 declare
   v_tok   text := lower(btrim(coalesce(p_token, '')));
+  v_id    uuid;
   v_m     public.club_miembros%rowtype;
   v_cfg   public.club_config%rowtype;
   v_cod   text;
@@ -911,10 +1152,14 @@ begin
   if v_tok !~ '^[0-9a-f]{64}$' then
     raise exception 'Enlace no válido' using errcode = 'P0001';
   end if;
-  -- Mismo bloqueo que el canje: serializa generar y canjear del mismo miembro.
-  select * into v_m from public.club_miembros m
-   where m.token_portal = v_tok and m.estado = 'activo' and m.tipo in ('referente','concierge_pm','equipo')
-   for update;
+  select m.id into v_id from public.club_miembros m
+   where m.token_portal = v_tok and m.estado = 'activo' and m.tipo in ('referente','concierge_pm','equipo');
+  if v_id is null then
+    raise exception 'Enlace no válido' using errcode = 'P0001';
+  end if;
+  perform 1 from public.club_codigos_canje k
+    where k.miembro_id = v_id and k.usado_en is null and k.invalidado_en is null for update;
+  select * into v_m from public.club_miembros m where m.id = v_id and m.estado = 'activo' for update;
   if not found then
     raise exception 'Enlace no válido' using errcode = 'P0001';
   end if;
@@ -932,12 +1177,12 @@ begin
   for i in 1 .. 5 loop
     v_cod := public.club_gen_codigo(6);
     begin
-      insert into public.club_codigos_canje (location_id, miembro_id, codigo, vence_en)
-      values (v_m.location_id, v_m.id, v_cod, v_vence);
+      insert into public.club_codigos_canje (location_id, miembro_id, codigo_hash, vence_en)
+      values (v_m.location_id, v_m.id, public.club_codigo_hash(v_cod), v_vence);
       codigo := v_cod; vence_en := v_vence; url := 'https://club.satoricostarica.com/k/' || v_cod;
       return next; return;
     exception when unique_violation then
-      null;   -- choque de código (muy raro): otro intento
+      null;   -- choque de hash (muy raro): otro intento
     end;
   end loop;
   raise exception 'No se pudo generar el código' using errcode = 'P0001';
@@ -946,11 +1191,15 @@ $$;
 
 -- Núcleo del canje (interno: no se le da EXECUTE a nadie). p_codigo = código de canje (caja) o null con
 -- p_nota (respaldo aprobado por owner o manager). Las guardas de rol están en las dos puertas.
+-- Un código equivocado NO lanza error: devuelve `error` (así queda guardado el intento fallido).
 drop function if exists public.club_canje(uuid, numeric, text, uuid);
-drop function if exists public.club_canje(uuid, numeric, text, uuid, jsonb);   -- R-01: la firma sin código se borra
+drop function if exists public.club_canje(uuid, numeric, text, uuid, jsonb);
+drop function if exists public.club_canje(uuid, text, numeric, text, uuid, jsonb);
+drop function if exists public.club_canje_aprobado(uuid, numeric, text, uuid, jsonb, text);
+drop function if exists public.club_canje_aplicar(uuid, text, numeric, text, uuid, jsonb, text);
 create or replace function public.club_canje_aplicar(p_miembro uuid, p_codigo text, p_creditos numeric, p_factura text,
                                                      p_op uuid, p_pos jsonb, p_nota text)
-returns table (personas int, creditos numeric)
+returns table (personas int, creditos numeric, movimiento uuid, error text)
 language plpgsql
 volatile
 security definer
@@ -958,7 +1207,7 @@ set search_path = public, pg_temp
 as $$
 declare
   v_fac      text := public.club_norm_factura(p_factura);
-  v_cod      text := upper(regexp_replace(coalesce(p_codigo, ''), '\s', '', 'g'));
+  v_hash     text;
   v_pos      jsonb;
   v_sin_pos  boolean := p_pos is null or p_pos = '{}'::jsonb or jsonb_typeof(p_pos) = 'null';
   v_visita   text;
@@ -972,11 +1221,13 @@ declare
   v_ya_fac   numeric;
   v_ya_dia   numeric;
   v_hoy      timestamptz;
+  v_motivo   text;
 begin
   if p_op is null then
     raise exception 'Falta el id de operación' using errcode = 'P0001';
   end if;
 
+  -- 1. op
   perform pg_advisory_xact_lock(hashtextextended('club_op:' || p_op::text, 0));   -- CLUB-AUD-08
   select * into v_prev from public.club_movimientos where client_op_id = p_op;
   if found then
@@ -985,11 +1236,36 @@ begin
     end if;
     select * into v_cfg from public.club_config where location_id = v_prev.location_id;
     v_saldo := public.club_saldo_personas(p_miembro);
-    personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+    personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito); movimiento := v_prev.id;
     return next; return;
   end if;
 
-  -- Bloquea al miembro: serializa canjes simultáneos (y la generación de códigos).
+  -- 2. código (R-01): vigente, del mismo miembro, sin usar. Se bloquea la fila hasta el commit.
+  if p_nota is null then
+    if public.club_canje_bloqueado(auth.uid(), p_miembro) then
+      raise exception 'Demasiados códigos equivocados: esperá 15 minutos o pedile al manager un canje sin celular'
+        using errcode = 'P0001';
+    end if;
+    v_hash := public.club_codigo_hash(p_codigo);
+    if upper(regexp_replace(coalesce(p_codigo, ''), '\s', '', 'g')) !~ '^[A-HJ-NP-Z2-9]{6}$' then
+      v_motivo := 'Falta el código de canje: pedile al referente que lo genere en su portal';
+    else
+      select * into v_k from public.club_codigos_canje k where k.codigo_hash = v_hash for update;
+      v_motivo := case
+        when not found or v_k.miembro_id <> p_miembro then 'Código de canje no válido'
+        when v_k.usado_en is not null then 'Este código de canje ya se usó: pedile uno nuevo'
+        when v_k.invalidado_en is not null then 'Este código de canje fue reemplazado por uno más nuevo'
+        when v_k.vence_en <= now() then 'El código de canje venció: pedile uno nuevo'
+      end;
+    end if;
+    if v_motivo is not null then
+      insert into public.club_canje_intentos (actor, miembro_id, motivo) values (auth.uid(), p_miembro, v_motivo);
+      error := v_motivo;
+      return next; return;
+    end if;
+  end if;
+
+  -- 3. miembro: serializa canjes simultáneos del mismo miembro.
   select * into v_m from public.club_miembros m where m.id = p_miembro for update;
   if not found then
     raise exception 'Miembro no encontrado' using errcode = 'P0001';
@@ -997,24 +1273,6 @@ begin
   if v_m.estado <> 'activo' then
     raise exception 'El miembro está dado de baja' using errcode = 'P0001';
   end if;
-
-  if p_nota is null then
-    -- R-01: código de canje vigente, del mismo miembro y sin usar.
-    if v_cod !~ '^[A-HJ-NP-Z2-9]{6}$' then
-      raise exception 'Falta el código de canje: pedile al referente que lo genere en su portal' using errcode = 'P0001';
-    end if;
-    select * into v_k from public.club_codigos_canje k where k.codigo = v_cod for update;
-    if not found or v_k.miembro_id <> p_miembro then
-      raise exception 'Código de canje no válido' using errcode = 'P0001';
-    elsif v_k.usado_en is not null then
-      raise exception 'Este código de canje ya se usó: pedile uno nuevo' using errcode = 'P0001';
-    elsif v_k.invalidado_en is not null then
-      raise exception 'Este código de canje fue reemplazado por uno más nuevo' using errcode = 'P0001';
-    elsif v_k.vence_en <= now() then
-      raise exception 'El código de canje venció: pedile uno nuevo' using errcode = 'P0001';
-    end if;
-  end if;
-
   select * into v_cfg from public.club_config where location_id = v_m.location_id;
 
   if p_creditos is null
@@ -1035,7 +1293,7 @@ begin
     raise exception 'Créditos no válidos para esta configuración' using errcode = 'P0001';
   end if;
 
-  -- Máximo por visita: suma de canjes del miembro con la misma factura.
+  -- Máximo por visita: suma de canjes del miembro con la misma visita.
   select coalesce(sum(mv.creditos), 0) into v_ya_fac from public.club_movimientos mv
    where mv.miembro_id = p_miembro and mv.tipo = 'canje' and coalesce(mv.visita_clave, mv.factura_pos) = v_visita;
   if v_ya_fac + p_creditos > v_cfg.max_creditos_por_visita then
@@ -1070,9 +1328,10 @@ begin
     update public.club_codigos_canje set usado_en = now(), usado_por = auth.uid(), movimiento_id = v_mov
      where id = v_k.id;
   end if;
+  insert into public.club_alertas (location_id, tipo, miembro_id, movimiento_id) values (v_m.location_id, 'canje', p_miembro, v_mov);
 
   v_saldo := v_saldo - v_necesita::int;
-  personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+  personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito); movimiento := v_mov;
   return next;
 end;
 $$;
@@ -1080,7 +1339,7 @@ $$;
 -- Caja (owner, manager, cajero): con el código de canje del referente.
 create or replace function public.club_canje(p_miembro uuid, p_codigo_canje text, p_creditos numeric, p_factura text,
                                              p_op uuid, p_pos jsonb default null)
-returns table (personas int, creditos numeric)
+returns table (personas int, creditos numeric, movimiento uuid, error text)
 language plpgsql
 volatile
 security definer
@@ -1091,17 +1350,14 @@ begin
   if v_rol is null or v_rol not in ('owner','manager','cajero') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
-  if p_codigo_canje is null then
-    raise exception 'Falta el código de canje: pedile al referente que lo genere en su portal' using errcode = 'P0001';
-  end if;
-  return query select * from public.club_canje_aplicar(p_miembro, p_codigo_canje, p_creditos, p_factura, p_op, p_pos, null);
+  return query select * from public.club_canje_aplicar(p_miembro, coalesce(p_codigo_canje, ''), p_creditos, p_factura, p_op, p_pos, null);
 end;
 $$;
 
 -- Respaldo sin celular (solo owner o manager): nota obligatoria; registrado_por = quien lo aprueba.
 create or replace function public.club_canje_aprobado(p_miembro uuid, p_creditos numeric, p_factura text, p_op uuid,
                                                       p_pos jsonb, p_nota text)
-returns table (personas int, creditos numeric)
+returns table (personas int, creditos numeric, movimiento uuid, error text)
 language plpgsql
 volatile
 security definer
@@ -1118,6 +1374,45 @@ begin
     raise exception 'La nota es obligatoria (de 5 a 300 caracteres): por qué se canjea sin código' using errcode = 'P0001';
   end if;
   return query select * from public.club_canje_aplicar(p_miembro, null, p_creditos, p_factura, p_op, p_pos, v_nota);
+end;
+$$;
+
+-- Link de WhatsApp para avisarle al referente del canje que se acaba de hacer (mientras no exista el pase).
+-- Solo quien registró el canje, en los 15 minutos siguientes, o owner y manager. Sin teléfono → null.
+-- Devuelve {tel, texto}; el teléfono lo ve la caja solo para ese canje recién hecho.
+drop function if exists public.club_canje_aviso(uuid);
+create or replace function public.club_canje_aviso(p_movimiento uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_mv  public.club_movimientos%rowtype;
+  v_tel text;
+  v_nom text;
+  v_cfg public.club_config%rowtype;
+  v_txt text;
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  select * into v_mv from public.club_movimientos where id = p_movimiento and tipo = 'canje';
+  if not found or (v_rol = 'cajero' and (v_mv.registrado_por is distinct from auth.uid() or v_mv.registrado_en < now() - interval '15 minutes')) then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  select c.telefono into v_tel from public.club_miembros_contacto c where c.miembro_id = v_mv.miembro_id;
+  if v_tel is null then return null; end if;
+  select public.club_nombre_pila(m.nombre) into v_nom from public.club_miembros m where m.id = v_mv.miembro_id;
+  select * into v_cfg from public.club_config where location_id = v_mv.location_id;
+  v_txt := format('Hola %s: en Satori se canjearon %s %s de tu cuenta el %s. Te quedan %s. Si no fuiste vos, avisanos por acá.',
+                  coalesce(v_nom, ''), public.club_num(v_mv.creditos), case when v_mv.creditos = 1 then 'crédito' else 'créditos' end,
+                  to_char(v_mv.fecha_visita at time zone 'America/Costa_Rica', 'DD/MM HH24:MI'),
+                  public.club_num(public.club_creditos(public.club_saldo_personas(v_mv.miembro_id), v_cfg.personas_por_credito)));
+  update public.club_alertas set canal = 'wa.me (link mostrado en caja)' where movimiento_id = p_movimiento and canal is null;
+  return jsonb_build_object('tel', ltrim(v_tel, '+'), 'texto', v_txt);   -- la app arma https://wa.me/<tel>?text=…
 end;
 $$;
 
@@ -1558,7 +1853,7 @@ $$;
 create or replace function public.club_miembro_token(p_id uuid)
 returns text
 language plpgsql
-stable
+volatile
 security definer
 set search_path = public, pg_temp
 as $$
@@ -1571,6 +1866,7 @@ begin
   if v is null then
     raise exception 'Miembro no encontrado' using errcode = 'P0001';
   end if;
+  perform public.club_auditar('ver_link_portal', 'club_miembros', p_id, null, null);   -- CLUB-AUD-25
   return v;
 end;
 $$;
@@ -1659,6 +1955,12 @@ begin
   if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
     raise exception 'Falta el número de factura' using errcode = 'P0001';
   end if;
+  -- CLUB-AUD-26: apagada (prod) → nadie; prendida (staging, piloto en paralelo) → tope diario por miembro.
+  select c.* into v_cfg from public.club_config c
+   where c.location_id = coalesce((select m.location_id from public.club_miembros m where m.id = p_miembro), 'santa-teresa');
+  if not coalesce(v_cfg.tarjeta_manual_activa, false) then
+    raise exception 'La tarjeta física está desactivada en este local' using errcode = 'P0001';
+  end if;
 
   -- CLUB-AUD-18: el local es el del miembro. CLUB-AUD-02: control de la visita ANTES del lock del
   -- miembro (orden visita → miembro).
@@ -1675,6 +1977,13 @@ begin
       hint = 'Referente dado de baja: seguí con la cuenta sin crédito';
   end if;
   select * into v_cfg from public.club_config where location_id = v_m.location_id;
+  if (select coalesce(sum(mv.personas), 0) from public.club_movimientos mv
+       where mv.miembro_id = p_miembro and mv.tipo = 'tarjeta' and mv.cupon_id is null and mv.origen = 'app'
+         and mv.fecha_visita >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
+     + p_personas > v_cfg.tarjeta_manual_tope_dia then
+    raise exception 'Supera el tope diario de tarjeta física (% personas por miembro)', v_cfg.tarjeta_manual_tope_dia
+      using errcode = 'P0001';
+  end if;
 
   insert into public.club_movimientos
     (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
@@ -1692,10 +2001,59 @@ $$;
 
 -- Resolver lo leído en un QR (URL completa o solo el código). owner, manager, cajero.
 -- {tipo: 'cupon'|'referente'|'desconocido', datos: {...}}
-create or replace function public.club_resolver(p_texto text)
+-- Datos del referente para la caja (interno). p_k = el código de canje leído (R-01), o null (/r/ o «buscar»).
+create or replace function public.club_referente_json(p_miembro uuid, p_k public.club_codigos_canje, p_codigo text, p_tipo text)
 returns jsonb
 language plpgsql
 stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_m     public.club_miembros%rowtype;
+  v_cfg   public.club_config%rowtype;
+  v_saldo int;
+  v_dia   numeric;
+  v_neg   text;
+begin
+  select * into v_m from public.club_miembros m where m.id = p_miembro;
+  if not found then return null; end if;
+  select * into v_cfg from public.club_config where location_id = v_m.location_id;
+  select n.nombre into v_neg from public.club_negocios n where n.id = v_m.negocio_id;
+  v_saldo := public.club_saldo_personas(v_m.id);
+  select coalesce(sum(mv.creditos), 0) into v_dia from public.club_movimientos mv
+   where mv.miembro_id = v_m.id and mv.tipo = 'canje'
+     and mv.fecha_visita >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica';
+  return jsonb_build_object('tipo', p_tipo, 'datos', jsonb_build_object(
+    'codigo_canje',             case when p_k.id is not null then p_codigo end,
+    'codigo_estado',            case when p_k.id is null then null
+                                     when p_k.usado_en is not null then 'usado'
+                                     when p_k.invalidado_en is not null then 'reemplazado'
+                                     when p_k.vence_en <= now() then 'vencido' else 'vigente' end,
+    'codigo_vence_en',          p_k.vence_en,
+    'id',                       v_m.id,
+    'nombre',                   v_m.nombre,
+    'tipo_miembro',             v_m.tipo,
+    'negocio',                  v_neg,
+    'estado',                   v_m.estado,
+    'personas',                 v_saldo,
+    'creditos',                 public.club_creditos(v_saldo, v_cfg.personas_por_credito),
+    'personas_proximo',         public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
+    'personas_por_credito',     v_cfg.personas_por_credito,
+    'canjeado_hoy',             v_dia,
+    'canje_min',                v_cfg.canje_min,
+    'canje_paso',               v_cfg.canje_paso,
+    'max_creditos_por_visita',  v_cfg.max_creditos_por_visita,
+    'tarjeta_manual_activa',    v_cfg.tarjeta_manual_activa));
+end;
+$$;
+
+-- Resolver lo que lee la caja: cupón (/c/), QR público del referente (/r/, saldo SIN canje) o código de canje
+-- (/k/ o 6 caracteres, R-01). Volátil: un código de canje que no existe cuenta como intento fallido.
+create or replace function public.club_resolver(p_texto text)
+returns jsonb
+language plpgsql
+volatile
 security definer
 set search_path = public, pg_temp
 as $$
@@ -1706,11 +2064,6 @@ declare
   v_cod   text;
   v_c     public.club_cupones%rowtype;
   v_m     public.club_miembros%rowtype;
-  v_cfg   public.club_config%rowtype;
-  v_saldo int;
-  v_hoy   timestamptz;
-  v_dia   numeric;
-  v_neg   text;
   v_k     public.club_codigos_canje%rowtype;
   mm      text[];
 begin
@@ -1739,56 +2092,30 @@ begin
         'referente',        v_m.nombre,
         'referente_estado', v_m.estado));
     end if;
-  elsif (v_kind = 'r' and v_cod ~ '^[A-HJ-NP-Z2-9]{8}$') or (v_kind = 'k' and v_cod ~ '^[A-HJ-NP-Z2-9]{6}$') then
-    -- R-01: /r/ (QR público) muestra el saldo pero NO habilita el canje; /k/ (código de canje del portal) sí.
-    if v_kind = 'k' then
-      select * into v_k from public.club_codigos_canje k where k.codigo = v_cod;
-      if found then
-        select * into v_m from public.club_miembros m where m.id = v_k.miembro_id;
-      end if;
-    else
-      select * into v_m from public.club_miembros m
-       where m.codigo = v_cod and m.tipo in ('referente','concierge_pm','equipo');
+  elsif v_kind = 'r' and v_cod ~ '^[A-HJ-NP-Z2-9]{8}$' then
+    select * into v_m from public.club_miembros m
+     where m.codigo = v_cod and m.tipo in ('referente','concierge_pm','equipo');
+    if found then
+      return public.club_referente_json(v_m.id, null, null, 'referente');
     end if;
-    if v_m.id is not null then
-      select * into v_cfg from public.club_config where location_id = v_m.location_id;
-      select n.nombre into v_neg from public.club_negocios n where n.id = v_m.negocio_id;
-      v_saldo := public.club_saldo_personas(v_m.id);
-      v_hoy := date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica';
-      select coalesce(sum(mv.creditos), 0) into v_dia from public.club_movimientos mv
-       where mv.miembro_id = v_m.id and mv.tipo = 'canje' and mv.fecha_visita >= v_hoy;
-      return jsonb_build_object('tipo', case v_kind when 'k' then 'canje' else 'referente' end, 'datos', jsonb_build_object(
-        'codigo_canje',             v_k.codigo,
-        'codigo_estado',            case when v_k.id is null then null
-                                         when v_k.usado_en is not null then 'usado'
-                                         when v_k.invalidado_en is not null then 'reemplazado'
-                                         when v_k.vence_en <= now() then 'vencido' else 'vigente' end,
-        'codigo_vence_en',          v_k.vence_en,
-        'id',                       v_m.id,
-        'nombre',                   v_m.nombre,
-        'tipo_miembro',             v_m.tipo,
-        'negocio',                  v_neg,
-        'estado',                   v_m.estado,
-        'personas',                 v_saldo,
-        'creditos',                 public.club_creditos(v_saldo, v_cfg.personas_por_credito),
-        'personas_proximo',         public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
-        'personas_por_credito',     v_cfg.personas_por_credito,
-        'canjeado_hoy',             v_dia,
-        'canje_min',                v_cfg.canje_min,
-        'canje_paso',               v_cfg.canje_paso,
-        'max_creditos_por_visita',  v_cfg.max_creditos_por_visita));
+  elsif v_kind = 'k' and v_cod ~ '^[A-HJ-NP-Z2-9]{6}$' then
+    if public.club_canje_bloqueado(auth.uid(), null) then
+      raise exception 'Demasiados códigos equivocados: esperá 15 minutos o pedile al manager un canje sin celular'
+        using errcode = 'P0001';
     end if;
+    select * into v_k from public.club_codigos_canje k where k.codigo_hash = public.club_codigo_hash(v_cod);
+    if found then
+      return public.club_referente_json(v_k.miembro_id, v_k, v_cod, 'canje');
+    end if;
+    insert into public.club_canje_intentos (actor, miembro_id, motivo) values (auth.uid(), null, 'Código de canje no reconocido');
   end if;
   return jsonb_build_object('tipo', 'desconocido', 'datos', '{}'::jsonb);
 end;
 $$;
 
--- Pedidos abiertos del local según el puente (pos_ndf_open, refresco ~75 s). owner, manager, cajero.
--- Lo que la caja ve después del QR: «Pedido 14 · Mesa 20 · ₡48.500 · salonero». Un toque elige.
-drop function if exists public.club_mesas_abiertas(text);
-drop function if exists public.club_pedidos_abiertos(text);
-create or replace function public.club_pedidos_abiertos(p_location text default 'santa-teresa')
-returns table (pedido text, area text, mesa text, salonero text, total_crc numeric, pax int, actualizado timestamptz)
+-- «Buscar» (plan B) → la misma ficha que el /r/: saldo, sin canje (R-01). La caja no lee el `codigo` (30).
+create or replace function public.club_resolver_miembro(p_id uuid)
+returns jsonb
 language plpgsql
 stable
 security definer
@@ -1799,8 +2126,55 @@ begin
   if v_rol is null or v_rol not in ('owner','manager','cajero') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
+  if not exists (select 1 from public.club_miembros m where m.id = p_id and m.tipo in ('referente','concierge_pm','equipo')) then
+    return jsonb_build_object('tipo', 'desconocido', 'datos', '{}'::jsonb);
+  end if;
+  return public.club_referente_json(p_id, null, null, 'referente');
+end;
+$$;
+
+-- CLUB-AUD-30: el código del QR público solo lo ven owner y manager, por función (para la ficha y el QR).
+create or replace function public.club_miembro_codigo(p_id uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role(); v text;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  select m.codigo into v from public.club_miembros m where m.id = p_id;
+  if v is null then
+    raise exception 'Miembro no encontrado' using errcode = 'P0001';
+  end if;
+  return v;
+end;
+$$;
+
+-- Pedidos abiertos del local según el puente (pos_ndf_open, refresco ~75 s). owner, manager, cajero.
+-- Lo que la caja ve después del QR: «Pedido 14 · Mesa 20 · ₡48.500 · salonero». Un toque elige.
+drop function if exists public.club_mesas_abiertas(text);
+drop function if exists public.club_pedidos_abiertos(text);
+create or replace function public.club_pedidos_abiertos(p_location text default 'santa-teresa')
+returns table (pedido text, clave text, area text, mesa text, salonero text, total_crc numeric, pax int, actualizado timestamptz)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if not public.club_puente_fresco(p_location) then   -- CLUB-AUD-27: la caja pasa al plan B
+    raise exception 'Puente sin datos: elegí la factura' using errcode = 'P0001';
+  end if;
   return query
-    select o.id_pedido, nullif(upper(btrim(coalesce(o.area, ''))), ''), nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
+    select o.id_pedido, o.clave, nullif(upper(btrim(coalesce(o.area, ''))), ''), nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
            coalesce((select e.full_name from public.employees e where e.pos_login = o.salonero_login and e.is_active limit 1), o.salonero_login),
            o.monto_estimado_crc, o.pax, o.updated_at
       from public.pos_ndf_open o
@@ -1880,10 +2254,20 @@ drop trigger if exists club_config_auditar_trg on public.club_config;
 create trigger club_config_auditar_trg after update on public.club_config
   for each row execute function public.club_config_auditar();
 
--- club_miembros: la caja lee todo MENOS el token del portal (privilegio por columna).
+-- club_miembros: el staff lee todo MENOS el token del portal y el código del QR público (privilegio por
+-- columna; CLUB-AUD-30). La caja resuelve por función (club_resolver, club_resolver_miembro); owner y manager
+-- ven el código con club_miembro_codigo.
 revoke select on public.club_miembros from authenticated;
-grant select (id, location_id, tipo, nombre, negocio_id, codigo, estado, origen, legacy_id, created_at, updated_at)
+grant select (id, location_id, tipo, nombre, negocio_id, estado, origen, legacy_id, created_at, updated_at)
   on public.club_miembros to authenticated;
+-- club_cupones (CLUB-AUD-30): solo owner y manager, y sin el código (la caja y el contador no lo necesitan).
+revoke select on public.club_cupones from authenticated;
+grant select (id, location_id, referente_id, estado, creado_en, vence_en, usado_en, usado_por, factura_pos, personas, created_at)
+  on public.club_cupones to authenticated;
+drop policy if exists club_staff_select on public.club_cupones;
+drop policy if exists club_cupones_gerencia on public.club_cupones;
+create policy club_cupones_gerencia on public.club_cupones for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
 
 -- ── 4c. F1d: páginas públicas (cupón del turista y portal) ─────────────────
 
@@ -2146,6 +2530,22 @@ create table if not exists public.club_cruces_manuales (
   elegido_en      timestamptz not null default now(),
   nota            text check (nota is null or length(nota) <= 500)
 );
+-- CLUB-AUD-25: cada elección queda en el historial (club_cruces_manuales guarda la vigente).
+create table if not exists public.club_cruces_manuales_historial (
+  id              bigint generated always as identity primary key,
+  movimiento_id   uuid not null references public.club_movimientos(id),
+  location_id     text not null default 'santa-teresa',
+  numero_factura  text not null,
+  elegido_por     uuid,
+  elegido_en      timestamptz not null default now(),
+  nota            text
+);
+alter table public.club_cruces_manuales_historial enable row level security;
+revoke all on public.club_cruces_manuales_historial from anon, public, authenticated;
+grant select on public.club_cruces_manuales_historial to authenticated;
+drop policy if exists club_cruces_hist_gerencia on public.club_cruces_manuales_historial;
+create policy club_cruces_hist_gerencia on public.club_cruces_manuales_historial for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
 alter table public.club_cruces_manuales enable row level security;
 revoke all on public.club_cruces_manuales from anon, public, authenticated;
 grant select on public.club_cruces_manuales to authenticated;
@@ -2167,7 +2567,10 @@ create table if not exists public.club_excepciones_resueltas (
 alter table public.club_excepciones_resueltas drop constraint if exists club_excepciones_resueltas_tipo_check;
 alter table public.club_excepciones_resueltas add constraint club_excepciones_resueltas_tipo_check
   check (tipo in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE',
-                  'VISITA_REPETIDA','PERSONAS_SOBRE_PAX','AMBIGUA','CUPON_SIN_PROMO'));
+                  'VISITA_REPETIDA','PERSONAS_SOBRE_PAX','AMBIGUA','CUPON_SIN_PROMO','TARJETA_MANUAL','CANJE_SIN_CODIGO'));
+-- CLUB-AUD-25: historial de resoluciones (cada una es una fila nueva; vale la última). Ya no se pisa.
+alter table public.club_excepciones_resueltas drop constraint if exists club_excepciones_resueltas_location_id_tipo_ref_key;
+create index if not exists club_exc_res_ref_idx on public.club_excepciones_resueltas (location_id, tipo, ref, resuelto_en desc);
 alter table public.club_excepciones_resueltas enable row level security;
 revoke all on public.club_excepciones_resueltas from anon, public, authenticated;
 grant select on public.club_excepciones_resueltas to authenticated;
@@ -2254,7 +2657,8 @@ begin
            m.cert as certeza,
            jsonb_build_object('movimiento', case when m.cupon_id is not null then 'cupon' when m.tipo = 'canje' then 'canje' else 'tarjeta_manual' end,
                               'personas', m.personas, 'creditos', m.creditos,
-                              'miembro', public.club_nombre_limpio(mi.nombre)) as detalle
+                              'miembro', public.club_nombre_limpio(mi.nombre),
+                              'registradores', jsonb_build_array(m.registrado_por)) as detalle
       from mv m join public.club_miembros mi on mi.id = m.miembro_id
      where m.fecha_visita >= v_ini and m.fecha_visita < v_fin
        and m.registrado_en < now() - make_interval(mins => v_cfg.puente_latencia_min)
@@ -2270,6 +2674,7 @@ begin
                               'miembro', public.club_nombre_limpio(mi.nombre),
                               'pedido', m.pos_ref->>'pedido', 'area', m.pos_ref->>'area', 'mesa', m.pos_ref->>'mesa',
                               'total_crc', (m.pos_ref->>'total')::numeric, 'hora_escaneo', m.pos_ref->>'hora',
+                              'registradores', jsonb_build_array(m.registrado_por),
                               'factura_elegida', cm.numero_factura, 'elegida_en', cm.elegido_en,
                               'elegida_por', (select p.full_name from public.profiles p where p.id = cm.elegido_por))
       from mv m
@@ -2286,6 +2691,7 @@ begin
     select 'AMBIGUA', 'ambigua:' || ltrim(t.numero_factura, '0'), min(m.fecha_visita), t.numero_factura, 'probable',
            jsonb_build_object('mesa', t.mesa_factura, 'total_crc', t.total_crc, 'hora', t.fecha_registra,
                               'pedidos', jsonb_agg(distinct m.pos_ref->>'pedido'),
+                              'registradores', jsonb_agg(distinct m.registrado_por),
                               'miembro', string_agg(distinct public.club_nombre_limpio(mi.nombre), ', '))
       from mv m
       join public.club_miembros mi on mi.id = m.miembro_id
@@ -2297,8 +2703,10 @@ begin
     -- VISITA_REPETIDA (CLUB-AUD-02): mismo miembro, misma factura principal, más de una tarjeta
     select 'VISITA_REPETIDA', 'visita:' || v.miembro_id || ':' || ltrim(t.numero_factura, '0'), v.f, t.numero_factura, 'exacta',
            jsonb_build_object('tarjetas', v.n, 'personas', v.personas, 'miembro', public.club_nombre_limpio(mi.nombre),
+                              'registradores', v.registradores,
                               'mesa', coalesce(t.mesa_factura, t.mesa), 'pax', t.pax)
-      from (select m.miembro_id, m.ticket_ids[1] as principal, count(*) as n, sum(m.personas) as personas, min(m.fecha_visita) as f
+      from (select m.miembro_id, m.ticket_ids[1] as principal, count(*) as n, sum(m.personas) as personas, min(m.fecha_visita) as f,
+                   jsonb_agg(distinct m.registrado_por) as registradores
               from mv m
              where m.tipo = 'tarjeta' and cardinality(m.ticket_ids) > 0 and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
              group by 1, 2 having count(*) > 1) v
@@ -2312,10 +2720,12 @@ begin
     -- (principal + divididas). Pax 0 = desconocido: no se compara.
     select 'PERSONAS_SOBRE_PAX', 'pax:' || ltrim(t.numero_factura, '0'), v.f, t.numero_factura, 'probable',
            jsonb_build_object('personas', v.personas, 'pax', x.pax, 'pax_personas_pedido', t.pax_nativo, 'pax_facturas', x.pax_facturas,
-                              'tarjetas', v.n, 'referentes', v.miembros, 'mesa', coalesce(t.mesa_factura, t.mesa))
+                              'tarjetas', v.n, 'referentes', v.miembros, 'mesa', coalesce(t.mesa_factura, t.mesa),
+                              'registradores', v.registradores)
       from (select m.ticket_ids[1] as principal,
                    count(*) as n, sum(m.personas) as personas, min(m.fecha_visita) as f,
-                   string_agg(distinct public.club_nombre_limpio(mi.nombre), ', ') as miembros
+                   string_agg(distinct public.club_nombre_limpio(mi.nombre), ', ') as miembros,
+                   jsonb_agg(distinct m.registrado_por) as registradores
               from mv m join public.club_miembros mi on mi.id = m.miembro_id
              where m.tipo = 'tarjeta' and cardinality(m.ticket_ids) > 0 and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
              group by 1) v
@@ -2337,10 +2747,11 @@ begin
     select 'CANJE_MONTO_DISTINTO', 'factura:' || ltrim(t.numero_factura, '0'), c.f, t.numero_factura, 'probable',
            jsonb_build_object('canje_crc', c.valor, 'cxc_crc', x.cxc, 'diferencia_crc', c.valor - x.cxc,
                               'creditos', c.creditos, 'miembro', c.miembro, 'mesa', coalesce(t.mesa_factura, t.mesa), 'total_crc', x.total,
-                              'facturas', x.n)
+                              'facturas', x.n, 'registradores', c.registradores)
       from (select m.ticket_ids, min(m.fecha_visita) as f,
                    sum(m.creditos * m.valor_credito_crc) as valor, sum(m.creditos) as creditos,
-                   string_agg(distinct public.club_nombre_limpio(mi.nombre), ', ') as miembro
+                   string_agg(distinct public.club_nombre_limpio(mi.nombre), ', ') as miembro,
+                   jsonb_agg(distinct m.registrado_por) as registradores
               from mv m join public.club_miembros mi on mi.id = m.miembro_id
              where m.tipo = 'canje' and cardinality(m.ticket_ids) > 0 and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
              group by m.ticket_ids) c
@@ -2362,24 +2773,49 @@ begin
     select 'CUPON_SIN_PROMO', 'cupon:' || m.cupon_id, m.fecha_visita, t.numero_factura, 'exacta',
            jsonb_build_object('articulo', v_cfg.promo_articulo_codigo, 'cupon', c.codigo, 'personas', m.personas,
                               'miembro', public.club_nombre_limpio(mi.nombre), 'facturas', cardinality(m.ticket_ids),
-                              'mesa', coalesce(t.mesa_factura, t.mesa), 'total_crc', t.total_crc)
+                              'mesa', coalesce(t.mesa_factura, t.mesa), 'total_crc', t.total_crc,
+                              'registradores', jsonb_build_array(m.registrado_por))
       from mv m
       join public.club_miembros mi on mi.id = m.miembro_id
       join public.club_cupones c on c.id = m.cupon_id
       join public.pos_ndf_tickets t on t.id = m.ticket_ids[1]
      where v_cfg.promo_articulo_codigo is not null
        and m.cupon_id is not null and cardinality(m.ticket_ids) > 0
+       and m.registrado_en < now() - make_interval(mins => v_cfg.puente_latencia_min)
        and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
        and not exists (select 1 from public.pos_ndf_ticket_lines l
                         where l.ticket_id = any(m.ticket_ids) and l.codigo_producto = v_cfg.promo_articulo_codigo)
+    union all
+    -- TARJETA_MANUAL (CLUB-AUD-26): toda tarjeta física cargada a mano. Siempre visible; no la resuelve quien la cargó.
+    select 'TARJETA_MANUAL', m.id::text, m.fecha_visita, rf.ref_factura, 'exacta',
+           jsonb_build_object('movimiento', 'tarjeta_manual', 'personas', m.personas, 'miembro', public.club_nombre_limpio(mi.nombre),
+                              'cargada_por', (select p.full_name from public.profiles p where p.id = m.registrado_por),
+                              'registradores', jsonb_build_array(m.registrado_por))
+      from mv0 m join public.club_miembros mi on mi.id = m.miembro_id
+      left join lateral (select coalesce(m.factura_pos,
+                    case m.pos_ref->>'modo'
+                      when 'pedido'  then concat('pedido ', m.pos_ref->>'pedido', coalesce(' · área ' || (m.pos_ref->>'area'), ''),
+                                                 coalesce(' · mesa ' || (m.pos_ref->>'mesa'), ''))
+                      when 'factura' then m.pos_ref->>'numero_factura' end) as ref_factura) rf on true
+     where m.tipo = 'tarjeta' and m.cupon_id is null and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
+    union all
+    -- CANJE_SIN_CODIGO (R-01): canje sin celular aprobado por owner o manager. Siempre visible; no lo resuelve quien lo aprobó.
+    select 'CANJE_SIN_CODIGO', m.id::text, m.fecha_visita, coalesce(m.factura_pos, m.pos_ref->>'numero_factura', 'pedido ' || (m.pos_ref->>'pedido')), 'exacta',
+           jsonb_build_object('movimiento', 'canje', 'creditos', m.creditos, 'miembro', public.club_nombre_limpio(mi.nombre),
+                              'motivo', substr(m.nota, length('Canje aprobado sin código: ') + 1),
+                              'aprobado_por', (select p.full_name from public.profiles p where p.id = m.registrado_por),
+                              'registradores', jsonb_build_array(m.registrado_por))
+      from mv0 m join public.club_miembros mi on mi.id = m.miembro_id
+     where m.tipo = 'canje' and m.nota like 'Canje aprobado sin código:%' and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
   )
   select ex.tipo, ex.ref, ex.fecha, ex.factura, ex.certeza,
          ex.detalle || case when r.id is null then '{}'::jsonb
                             else jsonb_build_object('resuelta_por', (select p.full_name from public.profiles p where p.id = r.resuelto_por)) end,
          r.id is not null, r.nota, r.resuelto_en
     from ex
-    left join public.club_excepciones_resueltas r
-      on r.location_id = p_location and r.tipo = ex.tipo and r.ref = ex.ref
+    left join lateral (select x.* from public.club_excepciones_resueltas x
+                        where x.location_id = p_location and x.tipo = ex.tipo and x.ref = ex.ref
+                        order by x.resuelto_en desc, x.id desc limit 1) r on true
    order by ex.fecha desc;
 end;
 $$;
@@ -2396,6 +2832,34 @@ as $$
     from public.club_excepciones(((now() at time zone 'America/Costa_Rica')::date - least(greatest(coalesce(p_dias, 30), 1), 400)),
                                  (now() at time zone 'America/Costa_Rica')::date, p_location) e
    where not e.resuelta;
+$$;
+
+-- Segregación (CLUB-AUD-25): quien registró el movimiento no resuelve su excepción; la resuelve el owner.
+-- TARJETA_MANUAL y CANJE_SIN_CODIGO: no las resuelve quien las cargó o aprobó, ni siquiera si es el owner.
+create or replace function public.club_excepcion_segregacion(p_tipo text, p_ref text, p_location text, p_rol public.user_role)
+returns void
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_reg jsonb;
+begin
+  select e.detalle->'registradores' into v_reg
+    from public.club_excepciones((now() at time zone 'America/Costa_Rica')::date - 120,
+                                 (now() at time zone 'America/Costa_Rica')::date, p_location) e
+   where e.tipo = p_tipo and e.ref = p_ref
+   limit 1;
+  if v_reg is null or auth.uid() is null or not (v_reg ? auth.uid()::text) then
+    return;
+  end if;
+  if p_tipo in ('TARJETA_MANUAL', 'CANJE_SIN_CODIGO') then
+    raise exception 'No podés resolver una excepción de un registro tuyo: la resuelve otra persona' using errcode = 'P0001';
+  end if;
+  if p_rol <> 'owner' then
+    raise exception 'Esta excepción es de un registro tuyo: la resuelve el owner' using errcode = 'P0001';
+  end if;
+end;
 $$;
 
 -- Resolver una excepción con nota (owner, manager). No modifica el libro.
@@ -2415,7 +2879,7 @@ begin
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
   if p_tipo is null or p_tipo not in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE',
-                                      'VISITA_REPETIDA','PERSONAS_SOBRE_PAX','AMBIGUA','CUPON_SIN_PROMO') then
+                                      'VISITA_REPETIDA','PERSONAS_SOBRE_PAX','AMBIGUA','CUPON_SIN_PROMO','TARJETA_MANUAL','CANJE_SIN_CODIGO') then
     raise exception 'Tipo de excepción no válido' using errcode = 'P0001';
   end if;
   if length(v_ref) not between 1 and 100 then
@@ -2424,10 +2888,10 @@ begin
   if length(v_nota) not between 1 and 500 then
     raise exception 'La nota es obligatoria (hasta 500 caracteres)' using errcode = 'P0001';
   end if;
+  perform public.club_excepcion_segregacion(p_tipo, v_ref, p_location, v_rol);
+  -- CLUB-AUD-25: cada resolución es una fila nueva (historial); la vigente es la última.
   insert into public.club_excepciones_resueltas (location_id, tipo, ref, nota, resuelto_por)
-  values (p_location, p_tipo, v_ref, v_nota, auth.uid())
-  on conflict (location_id, tipo, ref) do update
-    set nota = excluded.nota, resuelto_por = excluded.resuelto_por, resuelto_en = now();
+  values (p_location, p_tipo, v_ref, v_nota, auth.uid());
   return true;
 end;
 $$;
@@ -2531,16 +2995,21 @@ begin
     raise exception 'Esa factura no está en la lista (fuera de la fecha del registro o no está cerrada)' using errcode = 'P0001';
   end if;
 
+  -- CLUB-AUD-25: quien registró el movimiento no elige su factura (lo hace el owner).
+  if m.registrado_por = auth.uid() and v_rol <> 'owner' then
+    raise exception 'Esta excepción es de un registro tuyo: la resuelve el owner' using errcode = 'P0001';
+  end if;
+
   insert into public.club_cruces_manuales (movimiento_id, location_id, numero_factura, elegido_por, elegido_en, nota)
   values (m.id, m.location_id, v_nf, auth.uid(), now(), v_nota)
   on conflict (movimiento_id) do update
     set numero_factura = excluded.numero_factura, elegido_por = excluded.elegido_por,
         elegido_en = excluded.elegido_en, nota = excluded.nota;
+  insert into public.club_cruces_manuales_historial (movimiento_id, location_id, numero_factura, elegido_por, nota)
+  values (m.id, m.location_id, v_nf, auth.uid(), v_nota);
 
   insert into public.club_excepciones_resueltas (location_id, tipo, ref, nota, resuelto_por)
-  values (m.location_id, 'SIN_CRUCE', m.id::text, concat('Factura ', v_nf, ' elegida', ' · ' || v_nota), auth.uid())
-  on conflict (location_id, tipo, ref) do update
-    set nota = excluded.nota, resuelto_por = excluded.resuelto_por, resuelto_en = now();
+  values (m.location_id, 'SIN_CRUCE', m.id::text, concat('Factura ', v_nf, ' elegida', ' · ' || v_nota), auth.uid());
   return v_nf;
 end;
 $$;
@@ -2811,6 +3280,120 @@ drop trigger if exists club_config_tasa_guardia_trg on public.club_config;
 create trigger club_config_tasa_guardia_trg before update on public.club_config
   for each row execute function public.club_config_tasa_guardia();
 
+
+-- Piloto interno en paralelo (decisión de Ismael 07-nov): «Comparación con la página vieja». Por referente y
+-- por semana (lunes, hora CR): personas cargadas en staging (tarjetas de la app: cupones y tarjeta física) al
+-- lado de las de la página vieja, que carga Ismael (o un export). Sin datos de contacto. owner y manager.
+create table if not exists public.club_comparacion_vieja (
+  id           bigint generated always as identity primary key,
+  location_id  text not null default 'santa-teresa',
+  semana       date not null check (extract(isodow from semana) = 1),
+  miembro_id   uuid not null references public.club_miembros(id),
+  personas     int not null check (personas between 0 and 10000),
+  cargado_por  uuid,
+  cargado_en   timestamptz not null default now(),
+  unique (location_id, semana, miembro_id)
+);
+alter table public.club_comparacion_vieja enable row level security;
+revoke all on public.club_comparacion_vieja from public, anon, authenticated;
+grant select on public.club_comparacion_vieja to authenticated;
+drop policy if exists club_comparacion_gerencia on public.club_comparacion_vieja;
+create policy club_comparacion_gerencia on public.club_comparacion_vieja for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
+
+-- Cargar las personas de la página vieja: [{referente | miembro_id, semana (AAAA-MM-DD, cualquier día), personas}].
+-- El referente se busca por nombre exacto (sin tildes ni mayúsculas); si no hay uno solo, vuelve en `no_encontrados`.
+create or replace function public.club_comparacion_cargar(p_filas jsonb, p_location text default 'santa-teresa')
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  f      jsonb;
+  v_id   uuid;
+  v_sem  date;
+  v_n    int := 0;
+  v_no   jsonb := '[]'::jsonb;
+  v_cand int;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if jsonb_typeof(p_filas) <> 'array' or jsonb_array_length(p_filas) > 2000 then
+    raise exception 'Filas no válidas (hasta 2000)' using errcode = 'P0001';
+  end if;
+  for f in select * from jsonb_array_elements(p_filas) loop
+    begin
+      v_sem := (f->>'semana')::date;
+      v_sem := v_sem - (extract(isodow from v_sem)::int - 1);
+    exception when others then
+      v_no := v_no || jsonb_build_object('referente', f->>'referente', 'motivo', 'semana no válida'); continue;
+    end;
+    if (f->>'personas') !~ '^[0-9]{1,5}$' then
+      v_no := v_no || jsonb_build_object('referente', f->>'referente', 'motivo', 'personas no válidas'); continue;
+    end if;
+    if f ? 'miembro_id' then
+      select m.id into v_id from public.club_miembros m where m.id = (f->>'miembro_id')::uuid and m.location_id = p_location;
+      v_cand := case when v_id is null then 0 else 1 end;
+    else
+      select count(*), min(m.id::text)::uuid into v_cand, v_id from public.club_miembros m
+       where m.location_id = p_location and m.tipo in ('referente','concierge_pm','equipo')
+         and public.club_norm_texto(m.nombre) = public.club_norm_texto(f->>'referente');
+    end if;
+    if v_cand <> 1 then
+      v_no := v_no || jsonb_build_object('referente', f->>'referente', 'motivo', case when v_cand = 0 then 'no existe' else 'nombre repetido' end);
+      continue;
+    end if;
+    insert into public.club_comparacion_vieja (location_id, semana, miembro_id, personas, cargado_por)
+    values (p_location, v_sem, v_id, (f->>'personas')::int, auth.uid())
+    on conflict (location_id, semana, miembro_id) do update
+      set personas = excluded.personas, cargado_por = excluded.cargado_por, cargado_en = now();
+    v_n := v_n + 1;
+  end loop;
+  perform public.club_auditar('comparacion_cargar', 'club_comparacion_vieja', null, null,
+                              jsonb_build_object('cargadas', v_n, 'no_encontradas', jsonb_array_length(v_no)));
+  return jsonb_build_object('cargadas', v_n, 'no_encontrados', v_no);
+end;
+$$;
+
+create or replace function public.club_comparacion(p_desde date, p_hasta date, p_location text default 'santa-teresa')
+returns table (semana date, miembro_id uuid, referente text, negocio text, personas_staging int, personas_vieja int, diferencia int)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_desde is null or p_hasta is null or p_hasta < p_desde or p_hasta - p_desde > 120 then
+    raise exception 'Rango no válido (hasta 120 días)' using errcode = 'P0001';
+  end if;
+  return query
+  with st as (
+    select (date_trunc('week', mv.fecha_visita at time zone 'America/Costa_Rica'))::date as sem, mv.miembro_id as mid, sum(mv.personas)::int as p
+      from public.club_movimientos mv
+     where mv.location_id = p_location and mv.origen = 'app' and mv.tipo = 'tarjeta'
+       and mv.fecha_visita >= (p_desde - (extract(isodow from p_desde)::int - 1))::timestamp at time zone 'America/Costa_Rica'
+       and mv.fecha_visita < (p_hasta + 1)::timestamp at time zone 'America/Costa_Rica'
+     group by 1, 2),
+  vi as (
+    select c.semana as sem, c.miembro_id as mid, c.personas as p from public.club_comparacion_vieja c
+     where c.location_id = p_location and c.semana >= p_desde - (extract(isodow from p_desde)::int - 1) and c.semana <= p_hasta)
+  select coalesce(st.sem, vi.sem), coalesce(st.mid, vi.mid), m.nombre, n.nombre,
+         coalesce(st.p, 0), vi.p, coalesce(st.p, 0) - coalesce(vi.p, 0)
+    from st full join vi on vi.sem = st.sem and vi.mid = st.mid
+    join public.club_miembros m on m.id = coalesce(st.mid, vi.mid)
+    left join public.club_negocios n on n.id = m.negocio_id
+   order by 1 desc, abs(coalesce(st.p, 0) - coalesce(vi.p, 0)) desc, 3;
+end;
+$$;
+
 -- ── 5. EXECUTE: nada por defecto, grant explícito ───────────────────────────
 
 revoke all on function public.club_gen_codigo(int)                       from public, anon, authenticated;
@@ -2825,6 +3408,26 @@ revoke all on function public.club_canje(uuid, text, numeric, text, uuid, jsonb)
 revoke all on function public.club_canje_aplicar(uuid, text, numeric, text, uuid, jsonb, text) from public, anon, authenticated;
 revoke all on function public.club_canje_aprobado(uuid, numeric, text, uuid, jsonb, text) from public, anon, authenticated;
 revoke all on function public.club_canje_codigo_generar(text)       from public, anon, authenticated;
+revoke all on function public.club_canje_aviso(uuid)                from public, anon, authenticated;
+revoke all on function public.club_codigo_hash(text)                from public, anon, authenticated;
+revoke all on function public.club_canje_bloqueado(uuid, uuid)      from public, anon, authenticated;
+revoke all on function public.club_referente_json(uuid, public.club_codigos_canje, text, text) from public, anon, authenticated;
+revoke all on function public.club_resolver_miembro(uuid)           from public, anon, authenticated;
+revoke all on function public.club_miembro_codigo(uuid)             from public, anon, authenticated;
+revoke all on function public.club_puente_fresco(text)              from public, anon, authenticated;
+revoke all on function public.club_mov_solo_insercion()             from public, anon, authenticated;
+revoke all on function public.club_mov_sin_truncate()               from public, anon, authenticated;
+revoke all on function public.club_auditoria_inmutable()            from public, anon, authenticated;
+revoke all on function public.club_auditar(text, text, uuid, jsonb, jsonb) from public, anon, authenticated;
+revoke all on function public.club_auditar_trg()                    from public, anon, authenticated;
+revoke all on function public.club_excepcion_segregacion(text, text, text, public.user_role) from public, anon, authenticated;
+revoke all on function public.club_comparacion_cargar(jsonb, text)  from public, anon, authenticated;
+revoke all on function public.club_comparacion(date, date, text)    from public, anon, authenticated;
+grant execute on function public.club_canje_aviso(uuid)             to authenticated;
+grant execute on function public.club_resolver_miembro(uuid)        to authenticated;
+grant execute on function public.club_miembro_codigo(uuid)          to authenticated;
+grant execute on function public.club_comparacion_cargar(jsonb, text) to authenticated;
+grant execute on function public.club_comparacion(date, date, text) to authenticated;
 revoke all on function public.club_ajuste(uuid, int, text, text, uuid)   from public, anon, authenticated;
 revoke all on function public.club_portal(text)                          from public, anon, authenticated;
 revoke all on function public.club_vencer(date, int)                     from public, anon, authenticated;

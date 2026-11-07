@@ -6,7 +6,8 @@ import { manejar, limitar } from './api.js'
 
 const URL_SB = 'https://abcdefghijklmnopqrst.supabase.co'
 const base = { SUPABASE_URL: URL_SB, SUPABASE_ANON_KEY: 'anon-de-prueba', CLUB_WEB_KEY: 'clave-de-prueba' }
-const conLimite = (exito = true) => ({ ...base, RATE_LIMITER: { limit: async () => ({ success: exito }) } })
+const lim = exito => ({ limit: async () => ({ success: exito }) })
+const conLimite = (exito = true) => ({ ...base, RL_CREAR: lim(exito), RL_LEER: lim(exito) })
 const pedido = (ruta, metodo = 'GET', cuerpo) =>
   new Request(`https://club.ejemplo/api/${ruta}`, { method: metodo, headers: { 'CF-Connecting-IP': '203.0.113.7' }, body: cuerpo })
 
@@ -22,7 +23,7 @@ test('14: sin binding RATE_LIMITER (fuera de dev) → 503, falla cerrada, y no l
   assert.equal(r.status, 503)
   assert.equal((await r.json()).error, 'servicio_no_disponible')
   assert.equal(llamadas.length, 0)
-  assert.equal(await limitar(base, 'x', 5, 60), null)
+  assert.equal(await limitar(base, 'crear', 'x', 5, 60), null)
 })
 
 test('14: con el binding, respeta el tope (429) y deja pasar (200)', async () => {
@@ -32,8 +33,8 @@ test('14: con el binding, respeta el tope (429) y deja pasar (200)', async () =>
 
 test('14: el contador en memoria solo existe con CLUB_DEV=1 (servidor local)', async () => {
   const dev = { ...base, CLUB_DEV: '1' }
-  for (let i = 0; i < 2; i++) assert.equal(await limitar(dev, 'k-dev', 2, 600), true)
-  assert.equal(await limitar(dev, 'k-dev', 2, 600), false)
+  for (let i = 0; i < 2; i++) assert.equal(await limitar(dev, 'crear', 'k-dev', 2, 600), true)
+  assert.equal(await limitar(dev, 'crear', 'k-dev', 2, 600), false)
 })
 
 test('06: cada llamada a la base lleva el header x-club-web con CLUB_WEB_KEY', async () => {
@@ -85,4 +86,25 @@ test('R-01: tope de códigos y sin saldo se traducen a códigos fijos', async ()
   globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Todavía no te alcanza para canjear' }), { status: 400 })
   r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
   assert.equal(r.status, 409); assert.equal((await r.json()).error, 'sin_saldo_canje')
+})
+
+test('14/24: un binding por endpoint: crear usa RL_CREAR (5/60 s) y leer usa RL_LEER (60/60 s); falta uno → 503 solo ahí', async () => {
+  const usados = []
+  const env = { ...base, RL_CREAR: { limit: async ({ key }) => { usados.push(['crear', key]); return { success: false } } },
+                         RL_LEER: { limit: async ({ key }) => { usados.push(['leer', key]); return { success: true } } } }
+  globalThis.fetch = async () => new Response(JSON.stringify({ estado: 'vigente' }), { status: 200 })
+  const r1 = await manejar(pedido('cupon', 'POST', JSON.stringify({ referente: 'ABCDEFGH' })), env, 'cupon')
+  assert.equal(r1.status, 429)
+  assert.equal((await r1.json()).error, 'demasiados_pedidos')   // el sitio lo muestra amable («Esperá unos minutos…»)
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23'), env, 'cupon/ABCDEFGH23')).status, 200)
+  assert.deepEqual(usados.map(u => u[0]), ['crear', 'leer'])
+  const { RL_LEER, ...sinLeer } = env; void RL_LEER
+  assert.equal((await manejar(pedido('cupon/ABCDEFGH23'), sinLeer, 'cupon/ABCDEFGH23')).status, 503)
+})
+
+test('salud: dice qué está configurado, sin valores', async () => {
+  const r = await manejar(pedido('salud'), conLimite(), 'salud')
+  const j = await r.json()
+  assert.deepEqual(j, { rl_crear: true, rl_leer: true, club_web_key: true, supabase: true })
+  assert.ok(!JSON.stringify(j).includes('clave-de-prueba'))
 })

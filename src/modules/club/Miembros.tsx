@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import {
   getMiembros, getSaldos, getNegocios, getMovimientos, getContacto, guardarMiembro, guardarNegocio,
-  regenerarCodigo, tokenPortal, aClubError, fmtCreditos, ajustarSaldo, nuevoOp,
+  regenerarCodigo, tokenPortal, codigoMiembro, aClubError, fmtCreditos, ajustarSaldo, nuevoOp,
   type ClubMiembro, type ClubSaldo, type ClubNegocio, type ClubMovimiento, type TipoMiembro, type TipoNegocio,
 } from '../../shared/api/club'
 import { urlPortal, urlReferente } from './qrFormato'
@@ -67,7 +67,7 @@ export default function Miembros() {
       .filter(f => !fEstado || f.estado === fEstado)
       .filter(f => !fSaldo || (f.saldo?.personas ?? 0) > 0)
       .filter(f => !fDormido || !f.saldo?.ultima_actividad || ahora - new Date(f.saldo.ultima_actividad).getTime() > SEIS_MESES_MS)
-      .filter(f => !txt || `${f.nombre} ${f.negocio ?? ''} ${f.codigo}`.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').includes(txt))
+      .filter(f => !txt || `${f.nombre} ${f.negocio ?? ''}`.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').includes(txt))
   }, [todas, pestana, fTipo, fNegocio, fEstado, fSaldo, fDormido, fTexto, ahora])
 
   const seleccionado = todas.find(f => f.id === sel) ?? null
@@ -103,7 +103,7 @@ export default function Miembros() {
 
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', gap: 8 }}>
-          <input value={fTexto} onChange={e => setFTexto(e.target.value)} placeholder="Filtrar por nombre, negocio o código" aria-label="Filtrar miembros por nombre, negocio o código" style={{ ...inputStyle, flex: 1 }} />
+          <input value={fTexto} onChange={e => setFTexto(e.target.value)} placeholder="Filtrar por nombre o negocio" aria-label="Filtrar miembros por nombre o negocio" style={{ ...inputStyle, flex: 1 }} />
           <Btn onClick={() => setEditando('nuevo')}>+ Nuevo</Btn>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
@@ -160,6 +160,7 @@ export default function Miembros() {
 function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () => void; onEditar: () => void; onCambio: () => Promise<void> }) {
   const { profile } = useAuth()
   const [recarga, setRecarga] = useState(0)
+  const [codigo, setCodigo] = useState('')
   const [movs, setMovs] = useState<ClubMovimiento[] | null>(null)
   const [contacto, setContacto] = useState<{ telefono: string | null; email: string | null } | null>(null)
   const [qr, setQr] = useState('')
@@ -168,13 +169,17 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
 
   useEffect(() => {
     let vivo = true
-    Promise.all([getMovimientos(f.id), getContacto(f.id)])
-      .then(([m, c]) => { if (vivo) { setMovs(m); setContacto(c) } })
+    Promise.all([getMovimientos(f.id), getContacto(f.id), codigoMiembro(f.id)])
+      .then(([m, c, cod]) => {
+        if (!vivo) return
+        setMovs(m); setContacto(c); setCodigo(cod)
+        // CLUB-AUD-30: el código del QR público ya no viene en la lista; lo trae club_miembro_codigo.
+        QRCode.toDataURL(urlReferente(cod), { width: 480, margin: 2, errorCorrectionLevel: 'M' })
+          .then(u => { if (vivo) setQr(u) }).catch(() => {})
+      })
       .catch(e => { if (vivo) setAviso({ tono: 'error', t: aClubError(e).message }) })
-    QRCode.toDataURL(urlReferente(f.codigo), { width: 480, margin: 2, errorCorrectionLevel: 'M' })
-      .then(u => { if (vivo) setQr(u) }).catch(() => {})
     return () => { vivo = false }
-  }, [f.id, f.codigo, recarga])
+  }, [f.id, recarga])
 
   async function copiarPortal() {
     setOcupado(true)
@@ -191,7 +196,7 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
     setOcupado(true)
     try {
       const r = await regenerarCodigo(f.id)
-      await onCambio()
+      await onCambio(); setRecarga(n => n + 1)
       setAviso({ tono: 'ok', t: `QR regenerado. Código nuevo: ${r.codigo}` })
     } catch (e) { setAviso({ tono: 'error', t: aClubError(e).message }) }
     finally { setOcupado(false) }
@@ -223,9 +228,9 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
 
       <Card style={{ textAlign: 'center' }}>
         {qr && <img src={qr} alt={`QR de ${f.nombre}`} style={{ width: 'min(220px, 60vw)', height: 'auto' }} />}
-        <div style={{ letterSpacing: '0.15em', fontWeight: 800, marginTop: 4 }}>{f.codigo}</div>
+        <div style={{ letterSpacing: '0.15em', fontWeight: 800, marginTop: 4 }}>{codigo}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
-          {qr && <a href={qr} download={`club-${f.codigo}.png`} style={{ textDecoration: 'none' }}><Btn variant="secondary">⬇ QR</Btn></a>}
+          {qr && <a href={qr} download={`club-${codigo}.png`} style={{ textDecoration: 'none' }}><Btn variant="secondary">⬇ QR</Btn></a>}
           <Btn variant="secondary" onClick={copiarPortal} disabled={ocupado}>⎘ Link del portal</Btn>
           <Btn variant="danger" onClick={regenerar} disabled={ocupado}>Regenerar QR</Btn>
         </div>
@@ -322,6 +327,7 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
   const [tel, setTel] = useState(''); const [email, setEmail] = useState('')
   const [optWa, setOptWa] = useState(false); const [optEm, setOptEm] = useState(false)
   const [contactoCargado, setContactoCargado] = useState(!inicial)
+  const [errContacto, setErrContacto] = useState(false)
   const [nuevoNeg, setNuevoNeg] = useState<{ nombre: string; tipo: TipoNegocio } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -333,7 +339,10 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
       if (!vivo) return
       setTel(c?.telefono ?? ''); setEmail(c?.email ?? ''); setOptWa(!!c?.optin_whatsapp); setOptEm(!!c?.optin_email)
       setContactoCargado(true)
-    }).catch(() => { if (vivo) setContactoCargado(true) })
+    }).catch(() => {
+      // CLUB-AUD-33: sin contacto cargado no se manda (contacto: null) y la base no lo toca.
+      if (vivo) { setContactoCargado(false); setErrContacto(true) }
+    })
     return () => { vivo = false }
   }, [inicial])
 
@@ -407,6 +416,9 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
       </label>
       <div style={{ borderTop: `1px solid ${C.panel}`, paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ fontSize: '0.78rem', color: C.muted }}>Contacto (solo lo ven owner y manager)</div>
+        {errContacto && (
+          <Aviso tono="error">No se pudo cargar el contacto: queda como está (no se borra). Cerrá y volvé a abrir para editarlo.</Aviso>
+        )}
         <label><span style={labelStyle}>Teléfono / WhatsApp</span>
           <input value={tel} onChange={e => setTel(e.target.value)} inputMode="tel" placeholder="8888 8888 o +1…" style={inputStyle} disabled={!contactoCargado} />
         </label>

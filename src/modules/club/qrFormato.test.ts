@@ -70,3 +70,14 @@ describe('pedido del PoS (piloto)', () => {
       .toEqual({ modo: 'pedido', pedido: '7' })
   })
 })
+
+import { parsearPegado } from './comparacionPegado'
+describe('comparación con la página vieja: pegado', () => {
+  it('acepta ; tab o coma, y descarta lo que no entiende', () => {
+    expect(parsearPegado('Ana Ficticia;2026-11-02;7\nBeto Ficticio\t2026-11-09\t3\nCaro, Ficticia,2026-11-02,4\nbasura')).toEqual([
+      { referente: 'Ana Ficticia', semana: '2026-11-02', personas: 7 },
+      { referente: 'Beto Ficticio', semana: '2026-11-09', personas: 3 },
+      { referente: 'Caro, Ficticia', semana: '2026-11-02', personas: 4 },
+    ])
+  })
+})

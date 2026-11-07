@@ -7,17 +7,26 @@ compatibility_date = "2025-10-01"
 # Se cargan en el panel de Cloudflare → Pages → satori-club → Settings → Variables:
 #   SUPABASE_URL       = https://<ref>.supabase.co   (staging para la prueba)
 #   SUPABASE_ANON_KEY  = anon key del mismo proyecto
-# Opcionales: RL_CREAR_MAX (5), RL_CREAR_VENTANA_S (600), RL_LECTURA_MAX (60), RL_LECTURA_VENTANA_S (60)
+# (RL_CREAR_MAX, RL_LECTURA_MAX y sus ventanas solo afectan al servidor local, dev-server.mjs.)
 
 # SECRETO (CLUB-AUD-06): CLUB_WEB_KEY. Lo carga Ismael en el panel, como «Secret» (cifrado), nunca acá:
 #   Pages → satori-club → Settings → Variables and Secrets → Add → Type: Secret → CLUB_WEB_KEY.
 #   En Supabase se guarda solo su sha256: select public.club_web_clave_cargar('<sha256 de la clave>');
 #   Sin CLUB_WEB_KEY la API responde 503.
 
-# Tope por IP (CLUB-AUD-14): binding de Rate Limiting OBLIGATORIO. Sin él la API responde 503
-# (falla cerrada). Ya no hay respaldo en KV ni en memoria (la memoria queda solo para dev-server.mjs).
+# Topes por IP, uno por endpoint (CLUB-AUD-14 y 24, ronda 3). Los dos bindings son OBLIGATORIOS: sin ellos la
+# API responde 503 (falla cerrada). Verificación después de cada deploy: GET /api/salud → rl_crear y rl_leer en
+# true. Si Pages no los toma, ver «Plan B: /api en un Worker» en README.md.
+#   RL_CREAR: crear cupón, opt-in y código de canje (5 por 60 s por IP)
+#   RL_LEER:  ver cupón y portal (60 por 60 s por IP)
 [[unsafe.bindings]]
-name = "RATE_LIMITER"
+name = "RL_CREAR"
 type = "ratelimit"
 namespace_id = "1001"
+simple = { limit = 5, period = 60 }
+
+[[unsafe.bindings]]
+name = "RL_LEER"
+type = "ratelimit"
+namespace_id = "1002"
 simple = { limit = 60, period = 60 }

@@ -11,6 +11,7 @@ import {
 } from '../../shared/api/club'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora } from './estilos'
+import { useAuth } from '../../shared/hooks/useAuth'
 
 const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   SIN_CRUCE:            { titulo: 'Sin cruce: posible cuenta dividida', que: 'Registro con pedido que no encontró la factura de su pedido (anulada, refacturada o cobrada solo en facturas sin pedido). Elegí la factura de la lista o buscala por los últimos dígitos del tiquete.' },
@@ -21,6 +22,8 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   CREDITOS_SIN_CANJE:   { titulo: 'Créditos sin canje',   que: 'Factura pagada «a crédito» por un múltiplo de medio crédito, sin canje en el Club.' },
   CANJE_MONTO_DISTINTO: { titulo: 'Canje con monto distinto', que: 'El valor del canje no coincide con lo cobrado «a crédito» en la factura.' },
   PROMO_SIN_CUPON:      { titulo: 'Promo sin cupón',      que: 'Factura con el artículo de la promo 10 % y sin cupón ni tarjeta registrada.' },
+  TARJETA_MANUAL:       { titulo: 'Tarjeta física',       que: 'Tarjeta impresa cargada a mano (piloto en paralelo). Siempre se revisa; no la resuelve quien la cargó.' },
+  CANJE_SIN_CODIGO:     { titulo: 'Canje sin código',     que: 'Canje sin celular aprobado por owner o manager. Siempre se revisa; no lo resuelve quien lo aprobó.' },
   CUPON_SIN_PROMO:      { titulo: 'Cupón sin promo',      que: 'Cupón usado en una visita cuyas facturas no tienen el artículo de la promo 10 %: sumó personas sin descuento aplicado.' },
 }
 const crc = (n: unknown) => (typeof n === 'number' || typeof n === 'string') && n !== '' ? `₡${Number(n).toLocaleString('de-DE', { maximumFractionDigits: 0 })}` : '—'
@@ -103,15 +106,25 @@ export default function Excepciones() {
 }
 
 function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<void> }) {
+  const { profile } = useAuth()
   const [nota, setNota] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const d = e.detalle
+  // CLUB-AUD-25: quien registró el movimiento no resuelve su excepción (la resuelve el owner); TARJETA_MANUAL y
+  // CANJE_SIN_CODIGO no las resuelve quien las cargó o aprobó, ni siendo owner. La base lo controla igual.
+  const mia = Array.isArray(d.registradores) && !!profile?.id && (d.registradores as unknown[]).includes(profile.id)
+  const bloqueo = !mia ? null
+    : e.tipo === 'TARJETA_MANUAL' || e.tipo === 'CANJE_SIN_CODIGO' ? 'Es un registro tuyo: la resuelve otra persona.'
+    : profile?.role !== 'owner' ? 'Es un registro tuyo: la resuelve el owner.' : null
   const filas: Array<[string, string]> = [
     ['Qué es', TIPO_EXC[e.tipo].que],
     [e.tipo === 'SIN_CRUCE' ? 'Pedido (PoS)' : 'Factura (PoS)', e.factura ?? '—'],
     ...(d.hora_escaneo ? [['Hora del escaneo', fmtFechaHora(String(d.hora_escaneo))] as [string, string]] : []),
     ...(d.cupon ? [['Cupón', String(d.cupon)] as [string, string]] : []),
+    ...(d.cargada_por ? [['Cargada por', String(d.cargada_por)] as [string, string]] : []),
+    ...(d.aprobado_por ? [['Aprobado por', String(d.aprobado_por)] as [string, string]] : []),
+    ...(d.motivo && e.tipo === 'CANJE_SIN_CODIGO' ? [['Motivo', String(d.motivo)] as [string, string]] : []),
     ...(d.movimiento ? [['Registro en el Club', String(d.movimiento).replace('_', ' ')] as [string, string]] : []),
     ...(d.personas != null ? [['Personas', String(d.personas)] as [string, string]] : []),
     ...(d.creditos != null ? [['Créditos', fmtCreditos(Number(d.creditos))] as [string, string]] : []),
@@ -136,6 +149,8 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
         <Aviso tono="ok">
           Resuelta el {fmtFechaHora(e.resuelta_en)}{typeof d.resuelta_por === 'string' ? ` por ${d.resuelta_por}` : ''}: {e.nota}
         </Aviso>
+      ) : bloqueo ? (
+        <Aviso tono="info">{bloqueo}</Aviso>
       ) : (
         <>
           {e.tipo === 'SIN_CRUCE' && (

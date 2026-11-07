@@ -140,3 +140,5 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
   - carreras 6/6;
   - paridad 528 = 528;
   - migrador 15/15 con el libro de solo inserción.
+
+**UX de caja (14, 07-nov):** todo rechazo que puede ver Escanear dice qué hacer. Ejemplo: «Supera las personas de la mesa (4 pax; ya registradas 3). Revisá cuántas personas vinieron con el referente o pedile al manager». La prueba 52 lo controla en la base: cada `raise` de las funciones de la caja tiene que llevar una acción.

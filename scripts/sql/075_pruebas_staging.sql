@@ -197,14 +197,14 @@ begin
     perform public.club_cupon_usar((select v from _ids where k='cupon1'), 4, 'FAC-002', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('3', 'segundo uso (otro p_op)', false, 'lo usó dos veces');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('3', 'segundo uso (otro p_op) → falla', sqlstate = 'P0001' and sqlerrm = 'El cupón ya se usó o fue anulado', sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('3', 'segundo uso (otro p_op) → falla', sqlstate = 'P0001' and sqlerrm like 'El cupón ya se usó o fue anulado: no suma personas%', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     perform public.club_cupon_usar('AAAAAAAAAA', 31, 'FAC-003', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('3', 'personas = 31', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('3', 'personas = 31 → falla', sqlstate = 'P0001' and sqlerrm = 'Personas fuera de rango (1 a 30)', sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('3', 'personas = 31 → falla', sqlstate = 'P0001' and sqlerrm like 'Personas fuera de rango (1 a 30): corregí%', sqlerrm);
   end;
   -- salonero no puede usar cupones
   begin
@@ -239,7 +239,7 @@ begin
     perform public.club_canje((select v::uuid from _ids where k='m3'), pg_temp.k((select v::uuid from _ids where k='m3')), 1, 'FAC-011', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('4', 'saldo insuficiente (2 personas, 1 crédito)', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('4', 'saldo insuficiente (2 personas) → error', sqlerrm = 'Saldo insuficiente', sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('4', 'saldo insuficiente (2 personas) → error', sqlerrm like 'Saldo insuficiente: elegí menos créditos%', sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   select c.personas, c.creditos into v_p, v_cr from public.club_canje((select v::uuid from _ids where k='m2'), pg_temp.k((select v::uuid from _ids where k='m2')), 1.5, 'FAC-012', gen_random_uuid()) c;
@@ -259,14 +259,14 @@ begin
     perform public.club_canje((select v::uuid from _ids where k='m4'), pg_temp.k((select v::uuid from _ids where k='m4')), 1, '   ', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('10', 'canje con factura vacía', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('10', 'canje con factura vacía → error', sqlerrm = 'Falta el número de factura', sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('10', 'canje con factura vacía → error', sqlerrm like 'Falta el pedido o la factura%', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     perform public.club_cupon_usar('AAAAAAAAAA', 2, '', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('10', 'cupón con factura vacía', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('10', 'cupón con factura vacía → error', sqlerrm = 'Falta el número de factura', sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('10', 'cupón con factura vacía → error', sqlerrm like 'Falta el pedido o la factura%', sqlerrm);
   end;
   -- «fe-123» y « FE-123 » son la misma visita: 1 + 1,5 supera el máximo por visita
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
@@ -576,7 +576,7 @@ begin
     perform public.club_tarjeta_manual((select v::uuid from _ids where k='manu'), 0, 'FX10', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('15', 'tarjeta manual 0 personas', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('15', 'tarjeta manual 0 personas → error', sqlstate = 'P0001' and sqlerrm = 'Personas fuera de rango (1 a 30)', sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('15', 'tarjeta manual 0 personas → error', sqlstate = 'P0001' and sqlerrm like 'Personas fuera de rango (1 a 30): corregí%', sqlerrm);
   end;
 end $$;
 
@@ -1158,7 +1158,7 @@ begin
     perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"manual","mesa":"43","ultimos4":"6012"}'::jsonb);
     perform pg_temp.yo(); perform pg_temp.r('27', 'tipear los 4 dígitos', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('27', 'tipear mesa + 4 dígitos ya no se acepta', sqlstate = 'P0001' and sqlerrm = 'Pedido no válido', sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('27', 'tipear mesa + 4 dígitos ya no se acepta', sqlstate = 'P0001' and sqlerrm = 'Pedido no válido: elegilo de la lista', sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"990950"}'::jsonb);
@@ -1246,7 +1246,7 @@ begin
     perform pg_temp.yo(); perform pg_temp.r('29', 'mismo referente, misma visita', false, 'acreditó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('29', 'mismo referente, misma visita, otro p_op → «ya tiene una tarjeta en esta visita»',
-      sqlstate = 'P0001' and sqlerrm = 'Este referente ya tiene una tarjeta en esta visita', sqlerrm);
+      sqlstate = 'P0001' and sqlerrm like 'Este referente ya tiene una tarjeta en esta visita: vale una por mesa%', sqlerrm);
   end;
   -- un tercero que pasa el pax → error
   insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD02 C', 'app') returning id into v_a;
@@ -1256,7 +1256,7 @@ begin
     perform pg_temp.yo(); perform pg_temp.r('29', 'Σ personas > pax', false, 'acreditó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('29', 'tercer referente: 5 + 1 > 5 pax → «Supera las personas del pedido»',
-      sqlstate = 'P0001' and sqlerrm like 'Supera las personas del pedido (5 pax; ya registradas 5)%', sqlerrm);
+      sqlstate = 'P0001' and sqlerrm = 'Supera las personas de la mesa (5 pax; ya registradas 5). Revisá cuántas personas vinieron con el referente o pedile al manager', sqlerrm);
   end;
   -- la reproducción de la auditoría (§9.02): misma factura real tipeada tres veces → la 2ª ya falla
   begin
@@ -1266,7 +1266,7 @@ begin
     perform pg_temp.yo(); perform pg_temp.r('29', 'factura real repetida (§9.02)', false, 'acreditó dos veces');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('29', '§9.02: la misma factura tipeada dos veces para el mismo referente → error',
-      sqlstate = 'P0001' and sqlerrm = 'Este referente ya tiene una tarjeta en esta visita', sqlerrm);
+      sqlstate = 'P0001' and sqlerrm like 'Este referente ya tiene una tarjeta en esta visita: vale una por mesa%', sqlerrm);
   end;
   -- el índice único es la red de seguridad aunque se saltee la función
   begin
@@ -1540,7 +1540,7 @@ begin
     perform pg_temp.yo(); perform pg_temp.r('38', 'mismo referente por otro camino', false, 'acreditó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('38', 'el mismo referente por el plan B (factura del mismo pedido) → «ya tiene una tarjeta en esta visita»',
-      sqlstate = 'P0001' and sqlerrm = 'Este referente ya tiene una tarjeta en esta visita', sqlerrm);
+      sqlstate = 'P0001' and sqlerrm like 'Este referente ya tiene una tarjeta en esta visita: vale una por mesa%', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
@@ -1548,7 +1548,7 @@ begin
     perform pg_temp.yo(); perform pg_temp.r('38', 'mismo referente con la factura tipeada', false, 'acreditó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('38', 'el mismo referente con la factura tipeada → rechazado',
-      sqlstate = 'P0001' and sqlerrm = 'Este referente ya tiene una tarjeta en esta visita', sqlerrm);
+      sqlstate = 'P0001' and sqlerrm like 'Este referente ya tiene una tarjeta en esta visita: vale una por mesa%', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
@@ -1556,7 +1556,7 @@ begin
     perform pg_temp.yo(); perform pg_temp.r('38', 'Σ personas entre caminos', false, 'acreditó 3 + 2 > 4');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('38', 'otro referente por el plan B: Σ personas se suma entre caminos (3 + 2 > 4 pax) → rechazado',
-      sqlstate = 'P0001' and sqlerrm like 'Supera las personas del pedido (4 pax; ya registradas 3)%', sqlerrm);
+      sqlstate = 'P0001' and sqlerrm like 'Supera las personas de la mesa (4 pax; ya registradas 3). Revisá cuántas personas%', sqlerrm);
   end;
 end $$;
 
@@ -1571,7 +1571,7 @@ begin
     perform pg_temp.yo(); perform pg_temp.r('39', 'pos_ref con el local de otro', false, 'aceptó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('39', 'pos_ref que dice otro local que el del miembro → «Pedido no válido»',
-      sqlstate = 'P0001' and sqlerrm = 'Pedido no válido', sqlerrm);
+      sqlstate = 'P0001' and sqlerrm = 'Pedido no válido: elegilo de la lista', sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_tarjeta_manual(v_m, 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9401","local":"santa-teresa"}'::jsonb);
@@ -1814,7 +1814,7 @@ begin
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   select c.error into v_err from public.club_canje(v_a, kb, 1, 'FK-002', gen_random_uuid()) c;
   perform pg_temp.yo();
-  perform pg_temp.r('43', 'código de otro miembro → «Código de canje no válido»', v_err = 'Código de canje no válido', v_err);
+  perform pg_temp.r('43', 'código de otro miembro → «Código de canje no válido»', v_err like 'Código de canje no válido: pedile%', v_err);
   perform pg_temp.r('43', 'los intentos fallidos quedan anotados (actor y miembro)',
     (select count(*) from club_canje_intentos where actor = '<CAJERO_UUID>'::uuid and miembro_id = v_a) = 3, '');
 
@@ -2016,7 +2016,7 @@ begin
       perform public.club_tarjeta_manual(v_m, 2, 'FT-001', gen_random_uuid());
       perform pg_temp.yo(); perform pg_temp.r('45', 'tarjeta física apagada', false, 'aceptó');
     exception when others then
-      perform pg_temp.yo(); perform pg_temp.r('45', 'apagada (prod): rechaza a todos los roles', sqlerrm = 'La tarjeta física está desactivada en este local', sqlerrm);
+      perform pg_temp.yo(); perform pg_temp.r('45', 'apagada (prod): rechaza a todos los roles', sqlerrm like 'La tarjeta física está desactivada en este local: registrá%', sqlerrm);
     end;
   end loop;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
@@ -2272,6 +2272,27 @@ begin
   exception when insufficient_privilege then
     perform pg_temp.yo(); perform pg_temp.r('51', 'la comparación es de owner y manager', true, sqlerrm);
   end;
+end $$;
+
+-- ═══ 52. UX de caja: todo rechazo que puede ver Escanear dice qué hacer ═══
+do $$
+declare v_mal text;
+begin
+  with fns as (
+    select p.proname, pg_get_functiondef(p.oid) d from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname in ('club_cupon_usar','club_canje_aplicar','club_canje','club_canje_aprobado',
+           'club_tarjeta_manual','club_pos_ref','club_visita_control','club_resolver','club_resolver_miembro',
+           'club_pedidos_abiertos','club_facturas_recientes','club_buscar')),
+  msgs as (
+    select f.proname, m[1] as msg from fns f, regexp_matches(f.d, 'raise exception ''([^'']*)''', 'g') m
+    union all
+    select f.proname, m[1] from fns f, regexp_matches(f.d, 'then ''([^'']*)''', 'g') m   -- motivos devueltos (canje)
+     where f.proname = 'club_canje_aplicar' and m[1] not like 'Canje aprobado sin código:%')
+  select string_agg(distinct proname || ': ' || msg, ' | ') into v_mal from msgs
+   where msg not in ('Sin permiso', 'REFERENTE_INACTIVO')   -- la app los traduce a un mensaje con acción
+     and msg !~* '[:.] .*(elegí|elegilo|elegila|revisá|pedile|seguí|escaneá|corregí|cobrá|cargá|registrá|avisale|esperá|tocá|buscalo|cerrá|el resto|la resuelve|vale una|escribí)'
+     and msg !~* '^(escribí)';
+  perform pg_temp.r('52', 'todo rechazo de las funciones de la caja dice qué hacer (elegí, revisá, pedile al manager…)', v_mal is null, coalesce(v_mal, ''));
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

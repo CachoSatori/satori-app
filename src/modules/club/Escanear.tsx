@@ -78,7 +78,7 @@ export default function Escanear() {
       } else if (r.tipo === 'canje') {
         setActual({ kind: 'canje', r, codigo: p.codigo })
       } else {
-        setActual(null); setMsg({ tono: 'error', texto: 'Código no reconocido: no es un cupón ni un pase vigente.' })
+        setActual(null); setMsg({ tono: 'error', texto: 'Código no reconocido: no es un cupón, un código de canje ni un pase vigente. Probá de nuevo, escribilo a mano o buscá al referente por nombre.' })
       }
       if (!silencioso) { ops.current = {}; limpiarFormularios() }
     } catch (e) {
@@ -102,7 +102,7 @@ export default function Escanear() {
     try {
       // CLUB-AUD-30: la caja no lee el código del QR; la ficha llega por función (saldo, sin canje: R-01).
       const r = await resolverMiembro(f.id)
-      if (r.tipo !== 'referente') throw new Error('No se encontró la cuenta')
+      if (r.tipo !== 'referente') throw new Error('No se encontró la cuenta del referente: buscalo de nuevo o escaneá su QR')
       setActual({ kind: 'referente', r, codigo: '' }); ops.current = {}; limpiarFormularios()
     } catch (e) {
       setMsg({ tono: 'error', texto: aClubError(e).message })
@@ -326,7 +326,7 @@ function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) 
           </div>
           {facturas === null && <div style={{ color: C.muted }}>Cargando facturas…</div>}
           {errB && <div style={{ color: C.red, fontSize: '0.85rem' }}>No se pudo cargar la lista de facturas. Probá «Actualizar».</div>}
-          {facturas?.length === 0 && !errB && <div style={{ color: C.muted, fontSize: '0.85rem' }}>No hay facturas cerradas en las últimas 2 horas.</div>}
+          {facturas?.length === 0 && !errB && <div style={{ color: C.muted, fontSize: '0.85rem' }}>No hay facturas cerradas en las últimas 2 horas. Cobrá la cuenta en el PoS y tocá «Actualizar».</div>}
           {facturas?.map(f => {
             const sel = v?.modo === 'factura' && v.numero_factura === f.numero_factura
             return (
@@ -376,9 +376,9 @@ function PanelCupon({ a, ...p }: PanelBase & { a: Extract<Actual, { kind: 'cupon
   const d = a.r.datos
   const linea =
     d.referente_estado !== 'activo' ? MSG_REFERENTE_INACTIVO
-    : d.estado === 'usado'   ? `Este cupón ya se usó (${fmtFechaHora(d.usado_en)}).`
-    : d.estado === 'vencido' ? `Cupón vencido el ${fmtFechaHora(d.vence_en)}.`
-    : d.estado === 'anulado' ? 'Cupón anulado.'
+    : d.estado === 'usado'   ? `Este cupón ya se usó (${fmtFechaHora(d.usado_en)}): no suma personas; seguí con la cuenta normal.`
+    : d.estado === 'vencido' ? `Cupón vencido el ${fmtFechaHora(d.vence_en)}: no suma personas; seguí con la cuenta normal.`
+    : d.estado === 'anulado' ? 'Cupón anulado: no suma personas; seguí con la cuenta normal.'
     : null
   return (
     <Card>
@@ -525,7 +525,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
                   </div>
                   {!opciones.some(v => alcanza(v) && dentroTope(v)) && (
                     <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 6 }}>
-                      {opciones.some(alcanza) ? 'Ya llegó al máximo de créditos de hoy.' : 'Todavía no le alcanza para canjear.'}
+                      {opciones.some(alcanza) ? 'Ya llegó al máximo de créditos de hoy: el resto lo puede canjear mañana. Cobrá la cuenta sin canje.' : 'Todavía no le alcanza para canjear: cobrá la cuenta sin canje.'}
                     </div>
                   )}
                 </div>

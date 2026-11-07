@@ -833,18 +833,18 @@ begin
     return null;
   end if;
   if jsonb_typeof(p) <> 'object' then
-    raise exception 'Pedido no válido' using errcode = 'P0001';
+    raise exception 'Pedido no válido: elegilo de la lista' using errcode = 'P0001';
   end if;
   v_modo  := p->>'modo';
   v_local := p_location;
   if v_local is null or (nullif(btrim(p->>'local'), '') is not null and btrim(p->>'local') <> v_local) then
-    raise exception 'Pedido no válido' using errcode = 'P0001';   -- CLUB-AUD-18
+    raise exception 'Pedido no válido: elegilo de la lista' using errcode = 'P0001';   -- CLUB-AUD-18
   end if;
   if v_modo = 'pedido' then
     v_ped := btrim(coalesce(p->>'pedido', ''));
     v_clave := nullif(btrim(coalesce(p->>'clave', '')), '');
     if v_ped !~ '^[0-9A-Za-z]{1,20}$' or (v_clave is not null and v_clave !~ '^pedido:[0-9A-Za-z:_-]{1,60}$') then
-      raise exception 'Pedido no válido' using errcode = 'P0001';
+      raise exception 'Pedido no válido: elegilo de la lista' using errcode = 'P0001';
     end if;
     if not public.club_puente_fresco(v_local) then   -- CLUB-AUD-27
       raise exception 'Puente sin datos: elegí la factura' using errcode = 'P0001';
@@ -874,11 +874,11 @@ begin
   elsif v_modo = 'factura' then
     v_nf := btrim(coalesce(p->>'numero_factura', ''));
     if v_nf !~ '^[0-9]{1,30}$' then
-      raise exception 'Factura no válida' using errcode = 'P0001';
+      raise exception 'Factura no válida: elegila de la lista' using errcode = 'P0001';
     end if;
     select * into t from public.pos_ndf_tickets x where x.local = v_local and x.numero_factura = v_nf and x.estado = 'C';
     if not found then
-      raise exception 'Esa factura no está en el PoS' using errcode = 'P0001';
+      raise exception 'Esa factura no está en el PoS: tocá «Actualizar» o, si se cobró hace más de 2 horas, avisale al manager' using errcode = 'P0001';
     end if;
     -- La lista muestra las últimas 2 h; 15 min de margen para lo que tarda la caja en confirmar.
     if t.fecha_registra < now() - interval '2 hours 15 minutes' then
@@ -891,7 +891,7 @@ begin
                             'hora_factura', t.fecha_registra, 'hora', now());
     return r || jsonb_build_object('visita', public.club_visita_canonica(v_local, r, null));
   end if;
-  raise exception 'Pedido no válido' using errcode = 'P0001';
+  raise exception 'Pedido no válido: elegilo de la lista' using errcode = 'P0001';
 end;
 $$;
 
@@ -922,7 +922,7 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('club_visita:' || p_location || ':' || p_visita, 0));
   if exists (select 1 from public.club_movimientos mv
               where mv.miembro_id = p_miembro and mv.tipo = 'tarjeta' and mv.origen = 'app' and mv.visita_clave = p_visita) then
-    raise exception 'Este referente ya tiene una tarjeta en esta visita' using errcode = 'P0001';
+    raise exception 'Este referente ya tiene una tarjeta en esta visita: vale una por mesa. Si faltaron personas, pedile al manager que lo corrija' using errcode = 'P0001';
   end if;
   v_pax := nullif((p_pos->>'pax')::int, 0);
   if v_pax is null and p_pos is null and public.club_factura_clave(p_factura) is not null then
@@ -933,7 +933,7 @@ begin
     select coalesce(sum(mv.personas), 0) into v_ya from public.club_movimientos mv
      where mv.location_id = p_location and mv.tipo = 'tarjeta' and mv.origen = 'app' and mv.visita_clave = p_visita;
     if v_ya + p_personas > v_pax then
-      raise exception 'Supera las personas del pedido (% pax; ya registradas %)', v_pax, v_ya using errcode = 'P0001';
+      raise exception 'Supera las personas de la mesa (% pax; ya registradas %). Revisá cuántas personas vinieron con el referente o pedile al manager', v_pax, v_ya using errcode = 'P0001';
     end if;
   end if;
 end;
@@ -964,7 +964,7 @@ begin
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
   if p_op is null then
-    raise exception 'Falta el id de operación' using errcode = 'P0001';
+    raise exception 'Falta el id de la operación: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
   end if;
 
   -- CLUB-AUD-08: el mismo p_op en paralelo espera y devuelve el replay (no un error).
@@ -974,7 +974,7 @@ begin
   if found then
     if v_prev.tipo <> 'tarjeta' or v_prev.cupon_id is distinct from
        (select c.id from public.club_cupones c where c.codigo = v_cod) then
-      raise exception 'El id de operación ya se usó para otra cosa' using errcode = 'P0001';
+      raise exception 'Esta operación ya se usó para otro registro: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
     end if;
     select * into v_cfg from public.club_config where location_id = v_prev.location_id;
     v_saldo := public.club_saldo_personas(v_prev.miembro_id);
@@ -984,21 +984,21 @@ begin
   end if;
 
   if p_personas is null or p_personas < 1 or p_personas > 30 then
-    raise exception 'Personas fuera de rango (1 a 30)' using errcode = 'P0001';
+    raise exception 'Personas fuera de rango (1 a 30): corregí el número' using errcode = 'P0001';
   end if;
   if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
-    raise exception 'Falta el número de factura' using errcode = 'P0001';
+    raise exception 'Falta el pedido o la factura: elegí el pedido de la lista' using errcode = 'P0001';
   end if;
 
   select * into v_cupon from public.club_cupones c where c.codigo = v_cod for update;
   if not found then
-    raise exception 'Cupón no encontrado' using errcode = 'P0001';
+    raise exception 'Cupón no encontrado: escaneá de nuevo o escribí los 10 caracteres' using errcode = 'P0001';
   end if;
   if v_cupon.estado <> 'vigente' or v_cupon.usado_en is not null then
-    raise exception 'El cupón ya se usó o fue anulado' using errcode = 'P0001';
+    raise exception 'El cupón ya se usó o fue anulado: no suma personas; seguí con la cuenta normal' using errcode = 'P0001';
   end if;
   if v_cupon.vence_en <= now() then
-    raise exception 'El cupón está vencido' using errcode = 'P0001';
+    raise exception 'El cupón está vencido: no suma personas; seguí con la cuenta normal' using errcode = 'P0001';
   end if;
 
   -- CLUB-AUD-02: control de la visita (lock, una tarjeta por referente, Σ personas ≤ pax).
@@ -1224,7 +1224,7 @@ declare
   v_motivo   text;
 begin
   if p_op is null then
-    raise exception 'Falta el id de operación' using errcode = 'P0001';
+    raise exception 'Falta el id de la operación: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
   end if;
 
   -- 1. op
@@ -1232,7 +1232,7 @@ begin
   select * into v_prev from public.club_movimientos where client_op_id = p_op;
   if found then
     if v_prev.tipo <> 'canje' or v_prev.miembro_id is distinct from p_miembro then
-      raise exception 'El id de operación ya se usó para otra cosa' using errcode = 'P0001';
+      raise exception 'Esta operación ya se usó para otro registro: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
     end if;
     select * into v_cfg from public.club_config where location_id = v_prev.location_id;
     v_saldo := public.club_saldo_personas(p_miembro);
@@ -1252,9 +1252,9 @@ begin
     else
       select * into v_k from public.club_codigos_canje k where k.codigo_hash = v_hash for update;
       v_motivo := case
-        when not found or v_k.miembro_id <> p_miembro then 'Código de canje no válido'
+        when not found or v_k.miembro_id <> p_miembro then 'Código de canje no válido: pedile al referente el código de su portal'
         when v_k.usado_en is not null then 'Este código de canje ya se usó: pedile uno nuevo'
-        when v_k.invalidado_en is not null then 'Este código de canje fue reemplazado por uno más nuevo'
+        when v_k.invalidado_en is not null then 'Este código de canje fue reemplazado por uno más nuevo: escaneá el último que generó'
         when v_k.vence_en <= now() then 'El código de canje venció: pedile uno nuevo'
       end;
     end if;
@@ -1268,10 +1268,10 @@ begin
   -- 3. miembro: serializa canjes simultáneos del mismo miembro.
   select * into v_m from public.club_miembros m where m.id = p_miembro for update;
   if not found then
-    raise exception 'Miembro no encontrado' using errcode = 'P0001';
+    raise exception 'No se encontró la cuenta del referente: escaneá de nuevo o buscalo por nombre' using errcode = 'P0001';
   end if;
   if v_m.estado <> 'activo' then
-    raise exception 'El miembro está dado de baja' using errcode = 'P0001';
+    raise exception 'El referente está dado de baja: seguí con la cuenta sin canje' using errcode = 'P0001';
   end if;
   select * into v_cfg from public.club_config where location_id = v_m.location_id;
 
@@ -1279,25 +1279,25 @@ begin
      or p_creditos < v_cfg.canje_min
      or p_creditos > v_cfg.max_creditos_por_visita
      or mod(p_creditos, v_cfg.canje_paso) <> 0 then
-    raise exception 'Créditos no válidos: de % a %, de a %',
+    raise exception 'Créditos no válidos: de % a %, de a %. Elegí uno de los botones',
       public.club_num(v_cfg.canje_min), public.club_num(v_cfg.max_creditos_por_visita), public.club_num(v_cfg.canje_paso) using errcode = 'P0001';
   end if;
   if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
-    raise exception 'Falta el número de factura' using errcode = 'P0001';
+    raise exception 'Falta el pedido o la factura: elegí el pedido de la lista' using errcode = 'P0001';
   end if;
   v_pos := public.club_pos_ref(p_pos, v_m.location_id);   -- CLUB-AUD-18: local del miembro
   v_visita := coalesce(v_pos->>'visita', public.club_visita_canonica(v_m.location_id, null, v_fac));
 
   v_necesita := p_creditos * v_cfg.personas_por_credito;
   if v_necesita <> trunc(v_necesita) then
-    raise exception 'Créditos no válidos para esta configuración' using errcode = 'P0001';
+    raise exception 'Créditos no válidos para esta configuración: elegí uno de los botones' using errcode = 'P0001';
   end if;
 
   -- Máximo por visita: suma de canjes del miembro con la misma visita.
   select coalesce(sum(mv.creditos), 0) into v_ya_fac from public.club_movimientos mv
    where mv.miembro_id = p_miembro and mv.tipo = 'canje' and coalesce(mv.visita_clave, mv.factura_pos) = v_visita;
   if v_ya_fac + p_creditos > v_cfg.max_creditos_por_visita then
-    raise exception 'Supera el máximo de % créditos por visita', public.club_num(v_cfg.max_creditos_por_visita)
+    raise exception 'Supera el máximo de % créditos por visita: elegí menos créditos (el resto, en otra visita)', public.club_num(v_cfg.max_creditos_por_visita)
       using errcode = 'P0001';
   end if;
 
@@ -1306,13 +1306,13 @@ begin
   select coalesce(sum(mv.creditos), 0) into v_ya_dia from public.club_movimientos mv
    where mv.miembro_id = p_miembro and mv.tipo = 'canje' and mv.fecha_visita >= v_hoy;
   if v_ya_dia + p_creditos > v_cfg.max_creditos_por_visita then
-    raise exception 'Supera el máximo de % créditos por día', public.club_num(v_cfg.max_creditos_por_visita)
+    raise exception 'Supera el máximo de % créditos por día: el resto lo puede canjear mañana', public.club_num(v_cfg.max_creditos_por_visita)
       using errcode = 'P0001';
   end if;
 
   v_saldo := public.club_saldo_personas(p_miembro);
   if v_saldo < v_necesita then
-    raise exception 'Saldo insuficiente' using errcode = 'P0001';
+    raise exception 'Saldo insuficiente: elegí menos créditos o cobrá la cuenta sin canje' using errcode = 'P0001';
   end if;
 
   insert into public.club_movimientos
@@ -1371,7 +1371,7 @@ begin
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
   if length(v_nota) not between 5 and 300 then
-    raise exception 'La nota es obligatoria (de 5 a 300 caracteres): por qué se canjea sin código' using errcode = 'P0001';
+    raise exception 'La nota es obligatoria (de 5 a 300 caracteres): escribí por qué se canjea sin código' using errcode = 'P0001';
   end if;
   return query select * from public.club_canje_aplicar(p_miembro, null, p_creditos, p_factura, p_op, p_pos, v_nota);
 end;
@@ -1934,14 +1934,14 @@ begin
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
   if p_op is null then
-    raise exception 'Falta el id de operación' using errcode = 'P0001';
+    raise exception 'Falta el id de la operación: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended('club_op:' || p_op::text, 0));   -- CLUB-AUD-08
   select * into v_prev from public.club_movimientos where client_op_id = p_op;
   if found then
     if v_prev.tipo <> 'tarjeta' or v_prev.miembro_id is distinct from p_miembro or v_prev.cupon_id is not null then
-      raise exception 'El id de operación ya se usó para otra cosa' using errcode = 'P0001';
+      raise exception 'Esta operación ya se usó para otro registro: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
     end if;
     select * into v_cfg from public.club_config where location_id = v_prev.location_id;
     v_saldo := public.club_saldo_personas(p_miembro);
@@ -1950,16 +1950,16 @@ begin
   end if;
 
   if p_personas is null or p_personas < 1 or p_personas > 30 then
-    raise exception 'Personas fuera de rango (1 a 30)' using errcode = 'P0001';
+    raise exception 'Personas fuera de rango (1 a 30): corregí el número' using errcode = 'P0001';
   end if;
   if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
-    raise exception 'Falta el número de factura' using errcode = 'P0001';
+    raise exception 'Falta el pedido o la factura: elegí el pedido de la lista' using errcode = 'P0001';
   end if;
   -- CLUB-AUD-26: apagada (prod) → nadie; prendida (staging, piloto en paralelo) → tope diario por miembro.
   select c.* into v_cfg from public.club_config c
    where c.location_id = coalesce((select m.location_id from public.club_miembros m where m.id = p_miembro), 'santa-teresa');
   if not coalesce(v_cfg.tarjeta_manual_activa, false) then
-    raise exception 'La tarjeta física está desactivada en este local' using errcode = 'P0001';
+    raise exception 'La tarjeta física está desactivada en este local: registrá la visita con el cupón del turista' using errcode = 'P0001';
   end if;
 
   -- CLUB-AUD-18: el local es el del miembro. CLUB-AUD-02: control de la visita ANTES del lock del
@@ -1970,7 +1970,7 @@ begin
                                      v_pos, v_fac, p_miembro, p_personas);
   select * into v_m from public.club_miembros m where m.id = p_miembro for update;
   if not found or v_m.tipo not in ('referente','concierge_pm','equipo') then
-    raise exception 'Miembro no encontrado' using errcode = 'P0001';
+    raise exception 'No se encontró la cuenta del referente: escaneá de nuevo o buscalo por nombre' using errcode = 'P0001';
   end if;
   if v_m.estado <> 'activo' then
     raise exception 'REFERENTE_INACTIVO' using errcode = 'P0001',
@@ -1981,7 +1981,7 @@ begin
        where mv.miembro_id = p_miembro and mv.tipo = 'tarjeta' and mv.cupon_id is null and mv.origen = 'app'
          and mv.fecha_visita >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
      + p_personas > v_cfg.tarjeta_manual_tope_dia then
-    raise exception 'Supera el tope diario de tarjeta física (% personas por miembro)', v_cfg.tarjeta_manual_tope_dia
+    raise exception 'Supera el tope diario de tarjeta física (% personas por miembro): cargá el resto mañana o avisale al manager', v_cfg.tarjeta_manual_tope_dia
       using errcode = 'P0001';
   end if;
 

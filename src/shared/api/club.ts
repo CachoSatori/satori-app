@@ -89,7 +89,7 @@ export function aClubError(e: unknown): ClubError {
   const msg = e instanceof Error ? e.message : (e as { message?: string } | null)?.message ?? String(e)
   if (msg === 'REFERENTE_INACTIVO') return new ClubError(MSG_REFERENTE_INACTIVO, false, 'REFERENTE_INACTIVO')
   if (RE_RED.test(msg)) return new ClubError('Sin conexión. Reintentá: no se va a duplicar.', true)
-  if (/permission denied|sin permiso/i.test(msg)) return new ClubError('Tu usuario no tiene permiso para esto.', false)
+  if (/permission denied|sin permiso/i.test(msg)) return new ClubError('Tu usuario no tiene permiso para esto: pedile a un manager.', false)
   return new ClubError(msg, false)
 }
 

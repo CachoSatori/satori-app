@@ -8,7 +8,7 @@
 ## Sesión A · Local Club (075, caja, excepciones, pantallas)
 | Etapa | Qué | Días | Estado | SHA | Pruebas |
 |---|---|---|---|---|---|
-| A1 | Roles, QR fijo del socio, activar como anfitrión, stub del contrato del pase | 2 | en curso | — | — |
+| A1 | Roles, QR fijo del socio, activar como anfitrión, stub del contrato del pase | 2 | **hecha** | `a1e93db` | batería 294/294 (nuevas 53–56) · carreras 6/6 · paridad 602 = 602 · migrador 15/15 · vitest 1.487 |
 | A2 | Socios: alta en caja, autoalta, validación, premio por referir | 1,5 | pendiente | — | — |
 | A3 | Promociones mínimas + productos para cortesías | 1,5 | pendiente | — | — |
 | A4 | «Qué aplicar», visita por factura (856), topes, antiautocanje, portal con dos pestañas | 3 | pendiente | — | — |
@@ -26,3 +26,12 @@
 
 ## Bitácora
 - 07-nov · Plan aprobado (6c1a5fb) con ajustes. Arranca A1.
+- 07-nov · **A1 hecha** (`a1e93db`).
+  - **Roles:** `club_miembro_roles` es la fuente de verdad; `club_miembros.tipo` queda como espejo del rol de anfitrión
+    ('socio' si no tiene). Las funciones que preguntan por `tipo` siguen igual.
+  - **QR del socio:** `/s/` + 9 caracteres, solo identifica. «Activar como anfitrión»: owner o manager, con nota.
+  - **Contrato del pase:** stub listo para B. `club_pase_datos` da datos reales de anfitriones; para socios, `beneficio`
+    null, `cortesias` [] y `visitas_mes` 0 hasta A3/A4.
+  - **Ojo, sesiones siguientes:** al borrar miembros sintéticos, borrar antes `club_miembro_roles` y `club_pase_eventos`
+    (ver `scripts/sql/club_carreras/limpiar.sql`).
+  - **Próximo:** A2 (alta en caja, autoalta, validación, premio por referir).

@@ -32,6 +32,16 @@ alter table public.pos_ndf_tickets
 alter table public.pos_ndf_open
   add column if not exists pedido_abierto_en timestamptz;
 
+-- La mesa es (área, mesa): la mesa 3 del área '3' no es la mesa 3 del área 'M' (decisión de Ismael, 07-nov:
+-- el área '3' es una zona con clientes sentados, mesas 1–8, y cuenta para el Club). pos_ndf_tickets.area
+-- es la del pedido o, sin pedido, la de la factura; estas dos la guardan con nombre propio.
+alter table public.pos_ndf_tickets add column if not exists area_factura text;
+alter table public.pos_ndf_open    add column if not exists area         text;
+comment on column public.pos_ndf_tickets.area_factura is
+  'FAC_Facturas.Area (mig 081): el área de la mesa de la factura. La mesa es (area_factura, mesa_factura). null = agente viejo o sin backfill: usar area.';
+comment on column public.pos_ndf_open.area is
+  'FAC_Pedidos.Area (mig 081): el área de la mesa del pedido abierto. La mesa es (area, mesa).';
+
 comment on column public.pos_ndf_tickets.mesa_factura is
   'FAC_Facturas.NumeroMesa (mig 081). La mesa de la factura: las cuentas divididas no tienen pedido pero si mesa. null = agente viejo o sin dato.';
 comment on column public.pos_ndf_tickets.consecutivo_fe is

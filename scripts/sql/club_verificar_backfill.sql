@@ -4,12 +4,24 @@
 begin;
 select json_build_object(
   -- cobertura en salón desde el 1-sep (Ismael contó 1.363 facturas; 5 sin mesa ni pedido)
-  'area_M_desde_sep', (select json_build_object('facturas', count(*), 'con_mesa_factura', count(mesa_factura),
-                         'con_consecutivo', count(consecutivo_fe), 'con_clave_fe', count(clave_fe), 'con_apertura', count(pedido_abierto_en),
-                         'con_pedido', count(numero_pedido),
+  -- cerradas desde el 1-sep, de TODAS las áreas (decisión de Ismael 07-nov: el área '3' cuenta para el Club;
+  -- la mesa es (área, mesa)). Esperado: 1.414 = M 1.363 + área 3 49 + B 2.
+  'cerradas_desde_sep', (select json_build_object('total', count(*),
+                         'por_area', (select json_object_agg(coalesce(a, '(sin área)'), n order by a)
+                                        from (select area a, count(*) n from pos_ndf_tickets
+                                               where local = 'santa-teresa' and estado = 'C' and fecha_registra >= '2026-09-01 00:00-06'
+                                               group by area) x),
+                         'con_mesa_factura', count(mesa_factura), 'con_area_factura', count(area_factura),
+                         'con_consecutivo', count(consecutivo_fe), 'con_clave_fe', count(clave_fe),
+                         'con_pedido', count(numero_pedido), 'con_apertura', count(pedido_abierto_en),
                          'sin_mesa_ni_pedido', count(*) filter (where numero_pedido is null and mesa_factura is null))
-                        from pos_ndf_tickets where local = 'santa-teresa' and area = 'M' and estado = 'C'
+                        from pos_ndf_tickets where local = 'santa-teresa' and estado = 'C'
                           and fecha_registra >= '2026-09-01 00:00-06'),
+  -- mesas por área (área 3: mesas 1–8)
+  'mesas_por_area', (select json_object_agg(area, mesas) from (
+                       select area, string_agg(distinct mesa_factura, ',' order by mesa_factura) mesas from pos_ndf_tickets
+                        where local = 'santa-teresa' and estado = 'C' and fecha_registra >= '2026-09-01 00:00-06' and area in ('3', 'B')
+                        group by area) x),
   -- los ejemplos de Ismael
   'ejemplos', (select json_agg(json_build_object('factura', numero_factura, 'mesa_factura', mesa_factura, 'pedido', numero_pedido,
                          'consecutivo_ult5', right(consecutivo_fe, 5), 'clave_fe_largo', length(clave_fe), 'apertura', pedido_abierto_en at time zone 'America/Costa_Rica') order by numero_factura)

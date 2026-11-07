@@ -1671,6 +1671,46 @@ begin
       and (j->1->'detalle'->>'pax')::int = 5 and (j->1->'detalle'->>'personas')::int = 6, j::text);
 end $$;
 
+
+-- ═══ 42. La mesa es (área, mesa): la mesa 3 del área 'M' no es la mesa 3 del área '3' (Ismael, 07-nov) ═══
+-- Dos pedidos abiertos con la misma mesa 3, uno por área; cada uno cobra su factura principal y, a la misma
+-- hora, cada mesa tiene una factura sin pedido. Cada pedido cruza SOLO con la de su área.
+do $$
+declare v_m uuid; v_n uuid; j jsonb; t0 timestamptz := now() - interval '15 minutes'; v_k uuid; v_l uuid;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Area M', 'app') returning id into v_m;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Area 3', 'app') returning id into v_n;
+  insert into pos_ndf_open (local, clave, id_pedido, area, mesa, canal, pax, updated_at, pedido_abierto_en) values
+    ('santa-teresa', 'pedido:9421', '9421', 'M', '3', 'salon', 2, t0 - interval '40 minutes', t0 - interval '40 minutes'),
+    ('santa-teresa', 'pedido:9422', '9422', '3', '3', 'salon', 2, t0 - interval '40 minutes', t0 - interval '40 minutes');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select jsonb_agg(to_jsonb(x) order by x.pedido) into j from public.club_pedidos_abiertos() x where x.pedido in ('9421', '9422');
+  perform pg_temp.yo();
+  perform pg_temp.r('42', 'la lista de pedidos abiertos trae el área («Área 3 · Mesa 3»)',
+    j->0->>'area' = 'M' and j->1->>'area' = '3' and j->0->>'mesa' = '3' and j->1->>'mesa' = '3', coalesce(j::text, 'null'));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9421"}'::jsonb);
+  perform public.club_tarjeta_manual(v_n, 2, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9422"}'::jsonb);
+  perform pg_temp.yo();
+  select id into v_k from club_movimientos where miembro_id = v_m and pos_ref->>'pedido' = '9421';
+  select id into v_l from club_movimientos where miembro_id = v_n and pos_ref->>'pedido' = '9422';
+  perform pg_temp.r('42', 'el escaneo guarda el área del pedido', (select pos_ref->>'area' from club_movimientos where id = v_k) = 'M'
+      and (select pos_ref->>'area' from club_movimientos where id = v_l) = '3', '');
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, area, area_factura, mesa, mesa_factura, numero_pedido, pedido_abierto_en, total_crc) values
+    ('990971', t0 + interval '10 minutes', 'C', 'salon', 'cajero',     true, 'ok', 'M', 'M', '3', '3', '9421', t0 - interval '40 minutes', 20000),
+    ('990972', t0 + interval '11 minutes', 'C', 'salon', 'cajero',     true, 'ok', '3', '3', '3', '3', '9422', t0 - interval '40 minutes', 20000),
+    ('990973', t0 + interval '5 minutes',  'C', 'salon', 'sin_pedido', true, 'ok', 'M', 'M', null, '3', null, null, 8000),
+    ('990974', t0 + interval '5 minutes',  'C', 'salon', 'sin_pedido', true, 'ok', '3', '3', null, '3', null, null, 9000);
+  perform pg_temp.r('42', 'misma hora, mesa 3 en dos áreas: cada pedido cruza solo con la sin pedido de su área (y no hay AMBIGUA)',
+    pg_temp.cruce(v_k) = '990971+990973' and pg_temp.cruce(v_l) = '990972+990974'
+      and not exists (select 1 from public.club_cruce_detalle('santa-teresa', (select pos_ref from club_movimientos where id = v_k), null) d where d.rol = 'ambigua')
+      and not exists (select 1 from public.club_cruce_detalle('santa-teresa', (select pos_ref from club_movimientos where id = v_l), null) d where d.rol = 'ambigua'),
+    pg_temp.cruce(v_k) || ' / ' || pg_temp.cruce(v_l));
+  -- sin el área en el escaneo (agente viejo): se toma la de la factura del pedido
+  perform pg_temp.r('42', 'sin área en el escaneo, se usa la de la factura del pedido',
+    pg_temp.fac(public.club_cruce_facturas('santa-teresa', (select pos_ref - 'area' from club_movimientos where id = v_l), null)) = '990972+990974', '');
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

@@ -115,14 +115,15 @@ export const resolverQR = (texto: string) => llamar<ResolverResultado>('club_res
  * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto).
  */
 export type PosRef =
-  | { modo: 'pedido'; pedido: string; mesa: string | null; total: number | null }
-  | { modo: 'factura'; numero_factura: string; mesa: string | null; total: number; hora: string }
+  | { modo: 'pedido'; pedido: string; area?: string | null; mesa: string | null; total: number | null }
+  | { modo: 'factura'; numero_factura: string; area?: string | null; mesa: string | null; total: number; hora: string }
+/** La mesa es (área, mesa): la mesa 3 del área '3' no es la mesa 3 del área 'M'. */
 export interface PedidoAbierto {
-  pedido: string; mesa: string | null; salonero: string | null; total_crc: number | null; pax: number | null
+  pedido: string; area?: string | null; mesa: string | null; salonero: string | null; total_crc: number | null; pax: number | null
   actualizado: string
 }
 export interface FacturaReciente {
-  numero_factura: string; hora: string; total_crc: number; mesa: string | null; pedido: string | null
+  numero_factura: string; hora: string; total_crc: number; area?: string | null; mesa: string | null; pedido: string | null
   /** Consecutivo de la factura electrónica (20 dígitos, mig 081): el número del tiquete. */
   consecutivo_fe?: string | null
 }
@@ -133,24 +134,27 @@ const colones = (n: number | null | undefined) => `₡${Math.round(Number(n ?? 0
 const horaCR = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })
 
 export const posDePedido = (p: PedidoAbierto): PosRef =>
-  ({ modo: 'pedido', pedido: p.pedido, mesa: p.mesa, total: p.total_crc == null ? null : Number(p.total_crc) })
+  ({ modo: 'pedido', pedido: p.pedido, area: p.area ?? null, mesa: p.mesa, total: p.total_crc == null ? null : Number(p.total_crc) })
 export const posDeFactura = (f: FacturaReciente): PosRef =>
-  ({ modo: 'factura', numero_factura: f.numero_factura, mesa: f.mesa, total: Number(f.total_crc), hora: f.hora })
+  ({ modo: 'factura', numero_factura: f.numero_factura, area: f.area ?? null, mesa: f.mesa, total: Number(f.total_crc), hora: f.hora })
+/** «Área 3 · Mesa 4» (o «Mesa 4» si no hay área; null si no hay mesa). */
+export const describirMesa = (area: string | null | undefined, mesa: string | null | undefined) =>
+  mesa ? [area ? `Área ${area}` : null, `Mesa ${mesa}`].filter(Boolean).join(' · ') : null
 /** Lo que se manda al servidor: solo la clave. Mesa, total y hora los pone el servidor desde el puente. */
 export const posParaServidor = (p: PosRef) =>
   p.modo === 'pedido' ? { modo: 'pedido', pedido: p.pedido } : { modo: 'factura', numero_factura: p.numero_factura }
-/** «Pedido 14 · Mesa 20 · ₡48.500» */
-export const describirPedido = (p: Pick<PedidoAbierto, 'pedido' | 'mesa' | 'total_crc'>) =>
-  [`Pedido ${p.pedido}`, p.mesa ? `Mesa ${p.mesa}` : null, p.total_crc == null ? 'sin total' : colones(p.total_crc)]
+/** «Pedido 14 · Área 3 · Mesa 4 · ₡48.500» */
+export const describirPedido = (p: Pick<PedidoAbierto, 'pedido' | 'mesa' | 'total_crc'> & { area?: string | null }) =>
+  [`Pedido ${p.pedido}`, describirMesa(p.area, p.mesa), p.total_crc == null ? 'sin total' : colones(p.total_crc)]
     .filter(Boolean).join(' · ')
 /** «19:21 · ₡48.500 · Mesa 20 · tiquete …6197» (los últimos 4 del consecutivo, si llegó) */
-export const describirFactura = (f: Pick<FacturaReciente, 'hora' | 'total_crc' | 'mesa'> & { consecutivo_fe?: string | null }) =>
-  [horaCR(f.hora), colones(f.total_crc), f.mesa ? `Mesa ${f.mesa}` : null,
+export const describirFactura = (f: Pick<FacturaReciente, 'hora' | 'total_crc' | 'mesa'> & { area?: string | null; consecutivo_fe?: string | null }) =>
+  [horaCR(f.hora), colones(f.total_crc), describirMesa(f.area, f.mesa),
    f.consecutivo_fe ? `tiquete …${f.consecutivo_fe.slice(-4)}` : null].filter(Boolean).join(' · ')
 export const describirPos = (p: PosRef) =>
   p.modo === 'pedido'
-    ? describirPedido({ pedido: p.pedido, mesa: p.mesa, total_crc: p.total })
-    : `factura de las ${describirFactura({ hora: p.hora, total_crc: p.total, mesa: p.mesa })}`
+    ? describirPedido({ pedido: p.pedido, area: p.area, mesa: p.mesa, total_crc: p.total })
+    : `factura de las ${describirFactura({ hora: p.hora, total_crc: p.total, area: p.area, mesa: p.mesa })}`
 
 export const usarCupon = async (codigo: string, personas: number, pos: PosRef, op: string) =>
   primero(await llamar<Array<Saldo & { miembro_id: string }>>('club_cupon_usar',
@@ -231,7 +235,7 @@ export const getExcepcionesAbiertas = (dias = 30, local = 'santa-teresa') =>
   llamar<number>('club_excepciones_abiertas', { p_dias: dias, p_location: local })
 /** SIN_CRUCE: facturas sin pedido del día del escaneo, para que el manager elija. */
 export interface FacturaCandidata {
-  numero_factura: string; hora: string; total_crc: number; mesa: string | null; consecutivo_fe: string | null
+  numero_factura: string; hora: string; total_crc: number; area: string | null; mesa: string | null; consecutivo_fe: string | null
   misma_mesa: boolean; asignada_a_otro: boolean
 }
 /** Sin `buscar`: las sin pedido de ese día. Con `buscar`: por los últimos dígitos del consecutivo (3 a 20). */

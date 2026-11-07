@@ -83,3 +83,12 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **13:** EXPLAIN en [EXPLAIN-AUD-13.md](EXPLAIN-AUD-13.md).
 - **Pruebas:** 194/194 en staging.
 - **Pendiente de Ismael:** cargar `CLUB_WEB_KEY` en Cloudflare y su sha256 en Supabase (pasos en `club-web/README.md`). Hasta entonces, las funciones públicas fallan cerradas.
+
+**Área de la mesa** (07-nov, decisión de Ismael). El área '3' es una zona con clientes sentados (mesas 1–8) y **cuenta para el Club**. La 'B' también, si la factura trae mesa. Nada filtra por área. La mesa es **(área, mesa)**:
+- el cruce de cuentas divididas y el control de AMBIGUA comparan área y mesa;
+- Escanear muestra «Pedido 7 · Área 3 · Mesa 4 · ₡…»;
+- la lista del plan B y la de Excepciones también muestran el área.
+
+**Columnas nuevas en la 081:** `pos_ndf_tickets.area_factura` y `pos_ndf_open.area`. El agente las manda desde `c7d206e`, con el Edge v12. Hasta el nuevo backfill, el cruce usa `area`, que en las facturas sin pedido ya es la de la factura.
+
+**Verificación:** 1.414 cerradas desde el 1-sep (M 1.363, área 3 49, B 2). Prueba 42: misma hora, mesa 3 en dos áreas, cada pedido cruza solo con la suya. La batería da 200/200.

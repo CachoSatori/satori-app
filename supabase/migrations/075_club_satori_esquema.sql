@@ -682,6 +682,7 @@ begin
     -- `abierto_en` = FAC_Pedidos.FechaRegistra (mig 081). Antes de la 081 el agente ya mandaba esa
     -- misma hora en `updated_at`, por eso es el respaldo.
     r := jsonb_build_object('modo', 'pedido', 'local', v_local, 'pedido', v_ped,
+                            'area', nullif(upper(btrim(coalesce(o.area, ''))), ''),
                             'mesa', nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
                             'total', o.monto_estimado_crc, 'visto', o.updated_at,
                             'pax', coalesce(nullif(o.pax, 0), nullif(o.pax_pedido, 0)),
@@ -701,6 +702,7 @@ begin
       raise exception 'Esa factura tiene más de 2 horas: la resuelve el manager en Excepciones' using errcode = 'P0001';
     end if;
     r := jsonb_build_object('modo', 'factura', 'local', v_local, 'numero_factura', v_nf,
+                            'area', nullif(upper(btrim(coalesce(t.area_factura, t.area, ''))), ''),
                             'mesa', nullif(upper(btrim(coalesce(t.mesa_factura, t.mesa, ''))), ''), 'total', t.total_crc,
                             'pax', nullif(t.pax, 0),
                             'hora_factura', t.fecha_registra, 'hora', now());
@@ -1605,8 +1607,9 @@ $$;
 -- Pedidos abiertos del local según el puente (pos_ndf_open, refresco ~75 s). owner, manager, cajero.
 -- Lo que la caja ve después del QR: «Pedido 14 · Mesa 20 · ₡48.500 · salonero». Un toque elige.
 drop function if exists public.club_mesas_abiertas(text);
+drop function if exists public.club_pedidos_abiertos(text);
 create or replace function public.club_pedidos_abiertos(p_location text default 'santa-teresa')
-returns table (pedido text, mesa text, salonero text, total_crc numeric, pax int, actualizado timestamptz)
+returns table (pedido text, area text, mesa text, salonero text, total_crc numeric, pax int, actualizado timestamptz)
 language plpgsql
 stable
 security definer
@@ -1618,7 +1621,7 @@ begin
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
   return query
-    select o.id_pedido, nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
+    select o.id_pedido, nullif(upper(btrim(coalesce(o.area, ''))), ''), nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
            coalesce((select e.full_name from public.employees e where e.pos_login = o.salonero_login and e.is_active limit 1), o.salonero_login),
            o.monto_estimado_crc, o.pax, o.updated_at
       from public.pos_ndf_open o
@@ -1631,7 +1634,7 @@ $$;
 -- con el tiquete). owner, manager, cajero.
 drop function if exists public.club_facturas_recientes(text);
 create or replace function public.club_facturas_recientes(p_location text default 'santa-teresa')
-returns table (numero_factura text, hora timestamptz, total_crc numeric, mesa text, pedido text, consecutivo_fe text)
+returns table (numero_factura text, hora timestamptz, total_crc numeric, area text, mesa text, pedido text, consecutivo_fe text)
 language plpgsql
 stable
 security definer
@@ -1644,6 +1647,7 @@ begin
   end if;
   return query
     select t.numero_factura, t.fecha_registra, t.total_crc,
+           nullif(upper(btrim(coalesce(t.area_factura, t.area, ''))), ''),
            (select case when btrim(coalesce(x, '')) in ('', '0') then null else upper(btrim(x)) end
               from (select coalesce(t.mesa_factura, t.mesa) as x) m),
            t.numero_pedido, t.consecutivo_fe
@@ -1869,6 +1873,7 @@ declare
   v_hora   timestamptz;
   v_abre   timestamptz;
   v_mesa   text;
+  v_area   text;
   v_id     uuid;
   v_fr     timestamptz;
 begin
@@ -1891,7 +1896,8 @@ begin
   v_mesa := nullif(ltrim(upper(btrim(coalesce(p_pos->>'mesa', ''))), '0'), '');
 
   -- 1. principal: exacta por número + apertura; si la factura no trae la apertura, la primera.
-  select t.id, t.fecha_registra into v_id, v_fr from public.pos_ndf_tickets t
+  select t.id, t.fecha_registra, nullif(upper(btrim(coalesce(t.area_factura, t.area, ''))), '')
+    into v_id, v_fr, v_area from public.pos_ndf_tickets t
    where t.local = p_location and t.estado = 'C' and t.numero_pedido = p_pos->>'pedido'
      -- CLUB-AUD-13 (EXPLAIN 07-nov): el número de pedido se repite cada día; el rango de fecha usa el índice
      -- (local, numero_pedido, fecha_registra) y no cambia el resultado (la factura es posterior a la apertura).
@@ -1909,6 +1915,8 @@ begin
   if v_mesa is null then
     return;
   end if;
+  -- La mesa es (área, mesa) (decisión de Ismael, 07-nov): la del escaneo o, si no vino, la de la factura del pedido.
+  v_area := coalesce(nullif(upper(btrim(coalesce(p_pos->>'area', ''))), ''), v_area, '');
 
   -- 2. sin pedido, misma mesa de la factura, de la apertura a principal + 30 min; ambigua si también
   --    cae en la ventana de otro pedido de esa mesa.
@@ -1921,12 +1929,14 @@ begin
                 and o.fecha_registra >= t.fecha_registra - interval '30 minutes'
                 and o.fecha_registra <= t.fecha_registra + interval '18 hours'
                 and nullif(ltrim(upper(btrim(coalesce(o.mesa_factura, o.mesa, ''))), '0'), '') = v_mesa
+                and upper(btrim(coalesce(o.area_factura, o.area, ''))) = v_area
                 and t.fecha_registra >= coalesce(o.pedido_abierto_en, o.fecha_registra) - interval '2 minutes'
                 and t.fecha_registra <= o.fecha_registra + interval '30 minutes')
            then 'ambigua' else 'dividida' end
       from public.pos_ndf_tickets t
      where t.local = p_location and t.estado = 'C' and t.numero_pedido is null
        and nullif(ltrim(upper(btrim(coalesce(t.mesa_factura, ''))), '0'), '') = v_mesa
+       and upper(btrim(coalesce(t.area_factura, t.area, ''))) = v_area
        and t.fecha_registra >= v_abre - interval '2 minutes'
        and t.fecha_registra <= v_fr + interval '30 minutes'
      order by t.fecha_registra, t.numero_factura;
@@ -2050,7 +2060,8 @@ begin
            case when cm.movimiento_id is not null then 'manual' else 'exacta' end as cert,
            coalesce(m.factura_pos,
                     case m.pos_ref->>'modo'
-                      when 'pedido'  then concat('pedido ', m.pos_ref->>'pedido', coalesce(' · mesa ' || (m.pos_ref->>'mesa'), ''))
+                      when 'pedido'  then concat('pedido ', m.pos_ref->>'pedido', coalesce(' · área ' || (m.pos_ref->>'area'), ''),
+                                                 coalesce(' · mesa ' || (m.pos_ref->>'mesa'), ''))
                       when 'factura' then m.pos_ref->>'numero_factura' end) as ref_factura
       from mv0 m
       cross join lateral (select public.club_cruce_facturas(p_location, m.pos_ref, m.factura_pos) as auto_ids) a
@@ -2076,7 +2087,7 @@ begin
                               'movimiento', case when m.cupon_id is not null then 'cupon' when m.tipo = 'canje' then 'canje' else 'tarjeta_manual' end,
                               'personas', m.personas, 'creditos', m.creditos,
                               'miembro', public.club_nombre_limpio(mi.nombre),
-                              'pedido', m.pos_ref->>'pedido', 'mesa', m.pos_ref->>'mesa',
+                              'pedido', m.pos_ref->>'pedido', 'area', m.pos_ref->>'area', 'mesa', m.pos_ref->>'mesa',
                               'total_crc', (m.pos_ref->>'total')::numeric, 'hora_escaneo', m.pos_ref->>'hora',
                               'factura_elegida', cm.numero_factura, 'elegida_en', cm.elegido_en,
                               'elegida_por', (select p.full_name from public.profiles p where p.id = cm.elegido_por))
@@ -2232,8 +2243,9 @@ $$;
 --     cerrada cuyo consecutivo termine así, desde el día anterior al escaneo hasta 18 h después.
 -- `asignada_a_otro`: ya la eligieron para otro registro (puede pasar: cupón y canje de la misma mesa).
 drop function if exists public.club_sin_cruce_candidatas(uuid);
+drop function if exists public.club_sin_cruce_candidatas(uuid, text);   -- cambió el tipo de retorno (área)
 create or replace function public.club_sin_cruce_candidatas(p_movimiento uuid, p_buscar text default null)
-returns table (numero_factura text, hora timestamptz, total_crc numeric, mesa text, consecutivo_fe text,
+returns table (numero_factura text, hora timestamptz, total_crc numeric, area text, mesa text, consecutivo_fe text,
                misma_mesa boolean, asignada_a_otro boolean)
 language plpgsql
 stable
@@ -2246,6 +2258,7 @@ declare
   v_hora timestamptz;
   v_dia  timestamptz;
   v_mesa text;
+  v_area text;
   v_bus  text := nullif(regexp_replace(coalesce(p_buscar, ''), '\D', '', 'g'), '');
 begin
   if v_rol is null or v_rol not in ('owner','manager') then
@@ -2261,11 +2274,14 @@ begin
   v_hora := (m.pos_ref->>'hora')::timestamptz;
   v_dia  := date_trunc('day', v_hora at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica';
   v_mesa := nullif(ltrim(upper(btrim(coalesce(m.pos_ref->>'mesa', ''))), '0'), '');
+  v_area := upper(btrim(coalesce(m.pos_ref->>'area', '')));
   return query
     select t.numero_factura, t.fecha_registra, t.total_crc,
+           nullif(upper(btrim(coalesce(t.area_factura, t.area, ''))), ''),
            nullif(nullif(upper(btrim(coalesce(t.mesa_factura, t.mesa, ''))), ''), '0'),
            t.consecutivo_fe,
-           v_mesa is not null and nullif(ltrim(upper(btrim(coalesce(t.mesa_factura, t.mesa, ''))), '0'), '') = v_mesa,
+           v_mesa is not null and nullif(ltrim(upper(btrim(coalesce(t.mesa_factura, t.mesa, ''))), '0'), '') = v_mesa
+             and (v_area = '' or upper(btrim(coalesce(t.area_factura, t.area, ''))) = v_area),
            exists (select 1 from public.club_cruces_manuales c
                     where c.numero_factura = t.numero_factura and c.location_id = m.location_id and c.movimiento_id <> m.id)
       from public.pos_ndf_tickets t
@@ -2274,7 +2290,7 @@ begin
        and case when v_bus is null
                 then t.numero_pedido is null and t.fecha_registra >= v_dia
                 else t.consecutivo_fe like '%' || v_bus and t.fecha_registra >= v_dia - interval '1 day' end
-     order by 6 desc, t.fecha_registra, t.numero_factura
+     order by 7 desc, t.fecha_registra, t.numero_factura
      limit 200;
 end;
 $$;

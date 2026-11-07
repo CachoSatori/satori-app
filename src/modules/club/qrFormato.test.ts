@@ -45,6 +45,8 @@ describe('pedido del PoS (piloto)', () => {
   it('describe el pedido como lo ve la caja: «Pedido 14 · Mesa 20 · ₡48.500»', () => {
     expect(describirPedido({ pedido: '14', mesa: '20', total_crc: 48500 })).toBe('Pedido 14 · Mesa 20 · ₡48.500')
     expect(describirPedido({ pedido: '3', mesa: null, total_crc: null })).toBe('Pedido 3 · sin total')
+    // la mesa es (área, mesa): la mesa 4 del área '3' se muestra con su área
+    expect(describirPedido({ pedido: '7', area: '3', mesa: '4', total_crc: 30000 })).toBe('Pedido 7 · Área 3 · Mesa 4 · ₡30.000')
   })
   it('al servidor solo va la clave (pedido o factura); mesa, total y hora los pone el servidor', () => {
     const p = posDePedido({ pedido: '14', mesa: '20', salonero: 'X', total_crc: 48500, pax: 4, actualizado: '2026-11-06T01:00:00Z' })
@@ -58,5 +60,8 @@ describe('pedido del PoS (piloto)', () => {
     expect(describirFactura({ hora: '2026-11-06T01:21:30Z', total_crc: 9000, mesa: null })).toBe('19:21 · ₡9.000')
     expect(describirFactura({ hora: '2026-11-06T01:21:30Z', total_crc: 9000, mesa: '20', consecutivo_fe: '00200001040000016012' }))
       .toBe('19:21 · ₡9.000 · Mesa 20 · tiquete …6012')
+    expect(describirFactura({ hora: '2026-11-06T01:21:30Z', total_crc: 9000, area: '3', mesa: '4' })).toBe('19:21 · ₡9.000 · Área 3 · Mesa 4')
+    expect(posParaServidor(posDePedido({ pedido: '7', area: '3', mesa: '4', salonero: null, total_crc: 1, pax: null, actualizado: '2026-11-06T01:00:00Z' })))
+      .toEqual({ modo: 'pedido', pedido: '7' })
   })
 })

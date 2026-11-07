@@ -21,9 +21,11 @@ import argparse
 import collections
 import csv
 import difflib
+import hashlib
 import json
 import os
 import re
+import secrets
 import ssl
 import sys
 import urllib.error
@@ -44,6 +46,10 @@ NOTA_VENC_136 = 'cancelación inactividad 05-nov-2026'
 NOTA_D1 = 'cuenta borrada en el sistema viejo'
 NOTA_RESTO = 'resto del sistema viejo'   # decisión de Ismael 07-nov
 CORTE_D1 = '2026-11-01T06:00:00'   # 1-nov-2026 00:00 hora CR, en UTC
+# CLUB-AUD-21: el export tiene que ser del negocio de Satori, y la cancelación del 05-nov cae ese día (hora CR).
+SATORI_BIZ_ID = 'uPberDoE9w19ydF6bZSA'
+VENTANA_VENC = ('2026-11-05T06:00:00', '2026-11-06T06:00:00')   # 05-nov-2026 00:00 → 24:00 hora CR, en UTC
+ARCHIVOS = ('businesses.json', 'referrers.json', 'referrals.json', 'referrals_club.json', 'vencimientos_*.json')
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ACENTOS = str.maketrans('áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunaeiouun')
@@ -92,25 +98,62 @@ def creditos(personas: int, ppc: int = 6) -> Decimal:
 
 
 # ── Carga del export ─────────────────────────────────────────────────────────
+class ExportInvalido(SystemExit):
+    """El export no pasa los controles: se aborta antes de armar nada (código de salida 3)."""
+    def __init__(self, msg: str):
+        super().__init__(f'EXPORT RECHAZADO: {msg}')
+        self.code = 3
+
+
+def _leer_crudo(export: Path, patron: str) -> tuple[str, bytes] | None:
+    if export.is_dir():
+        cand = sorted(export.glob(patron))
+        return (cand[0].name, cand[0].read_bytes()) if cand else None
+    with zipfile.ZipFile(export) as z:
+        nombres = sorted(n for n in z.namelist() if Path(n).match(patron))
+        return (Path(nombres[0]).name, z.read(nombres[0])) if nombres else None
+
+
+def leer_manifiesto(export: Path) -> dict:
+    """CLUB-AUD-21. `MANIFEST.json` ({"provisional": bool, "archivos": {nombre: sha256}}) o, si no hay,
+    el `MANIFEST.md` que genera el bot de Grok: cada línea con un nombre de archivo y un sha256 de 64
+    hex. Un manifiesto que diga «provisional» (en el JSON o en el texto) se rechaza."""
+    j = _leer_crudo(export, 'MANIFEST.json')
+    if j:
+        m = json.loads(j[1])
+        if not isinstance(m, dict) or not isinstance(m.get('archivos'), dict):
+            raise ExportInvalido('MANIFEST.json sin el mapa «archivos»')
+        return {'provisional': bool(m.get('provisional', False)),
+                'archivos': {Path(k).name: str(v).lower() for k, v in m['archivos'].items()}}
+    md = _leer_crudo(export, 'MANIFEST.md')
+    if not md:
+        raise ExportInvalido('no hay MANIFEST.json ni MANIFEST.md')
+    texto = md[1].decode('utf-8', 'replace')
+    archivos = {}
+    for linea in texto.splitlines():
+        h = re.search(r'\b([0-9a-fA-F]{64})\b', linea)
+        n = re.search(r'([A-Za-z0-9_.\-]+\.(?:json|csv))', linea)
+        if h and n:
+            archivos[n.group(1)] = h.group(1).lower()
+    return {'provisional': bool(re.search(r'provisional', texto, re.I)), 'archivos': archivos}
+
+
 def cargar(export: Path) -> dict:
-    def leer(nombre_o_patron: str):
-        if export.is_dir():
-            cand = sorted(export.glob(nombre_o_patron))
-            if not cand:
-                sys.exit(f'Falta {nombre_o_patron} en el export')
-            return json.loads(cand[0].read_text(encoding='utf-8'))
-        with zipfile.ZipFile(export) as z:
-            nombres = [n for n in z.namelist() if Path(n).match(nombre_o_patron)]
-            if not nombres:
-                sys.exit(f'Falta {nombre_o_patron} en el export')
-            return json.loads(z.read(sorted(nombres)[0]))
-    return {
-        'businesses': leer('businesses.json'),
-        'referrers': leer('referrers.json'),
-        'referrals': leer('referrals.json'),
-        'referrals_club': leer('referrals_club.json'),
-        'vencimientos': leer('vencimientos_*.json'),
-    }
+    man = leer_manifiesto(export)
+    if man['provisional']:
+        raise ExportInvalido('el manifiesto está marcado como provisional')
+    d = {'_sha256': {}}
+    for patron in ARCHIVOS:
+        r = _leer_crudo(export, patron)
+        if r is None:
+            raise ExportInvalido(f'falta {patron}')
+        nombre, crudo = r
+        sha = hashlib.sha256(crudo).hexdigest()
+        if man['archivos'].get(nombre) != sha:
+            raise ExportInvalido(f'{nombre}: el sha256 no coincide con el manifiesto (o no está listado)')
+        d['_sha256'][nombre] = sha
+        d[patron.replace('_*.json', '').replace('.json', '')] = json.loads(crudo)
+    return d
 
 
 # ── Plan de migración (puro, sin red) ────────────────────────────────────────
@@ -133,16 +176,21 @@ def armar_plan(d: dict) -> Plan:
     p = Plan()
     biz = d['businesses']
     if len(biz) != 1:
-        sys.exit(f'Se esperaba 1 negocio (Satori) en businesses.json y hay {len(biz)}')
+        raise ExportInvalido(f'se esperaba 1 negocio (Satori) en businesses.json y hay {len(biz)}')
+    biz_id = biz[0].get('_id')
+    if biz_id != SATORI_BIZ_ID:
+        raise ExportInvalido('el negocio del export no es Satori')
     p.rate = int(biz[0]['peoplePointsRate'])
-    biz_id = biz[0]['_id']
 
     referrers = [r for r in d['referrers'] if r.get('businessId') == biz_id]
     p.avisos['referrers_otro_negocio_excluidos'] = len(d['referrers']) - len(referrers)
     ids = {r['_id'] for r in referrers}
     referrals = [x for x in d['referrals'] if x['referrerId'] in ids]
     club = [x for x in d['referrals_club'] if x['referrerId'] in ids]
-    venc_ids = set(d['vencimientos'])
+    venc_lista = list(d['vencimientos'])
+    venc_ids = set(venc_lista)
+    if len(venc_ids) != len(venc_lista):
+        raise ExportInvalido('hay ids repetidos en vencimientos_*.json')
     if any(int(x['peoplePointsRateSnapshot']) != p.rate for x in referrals):
         sys.exit('Hay referrals con peoplePointsRateSnapshot distinto de la tasa del negocio: revisar antes de migrar')
 
@@ -227,9 +275,17 @@ def armar_plan(d: dict) -> Plan:
     # Débitos: los 136 de la cancelación → vencimiento por referente; el resto → canjes por minuto UTC.
     debitos = [x for x in referrals if x['referralType'] == 'debit']
     p.avisos['debitos_total'] = len(debitos)
-    faltan = venc_ids - {x['_id'] for x in debitos}
+    por_id = {x['_id']: x for x in referrals}
+    faltan = venc_ids - set(por_id)
     if faltan:
-        sys.exit(f'{len(faltan)} ids de vencimientos no están entre los débitos del export')
+        raise ExportInvalido(f'{len(faltan)} ids de vencimientos no están entre los movimientos de Satori')
+    no_debit = [i for i in venc_ids if por_id[i]['referralType'] != 'debit']
+    if no_debit:
+        raise ExportInvalido(f'{len(no_debit)} vencimientos no son débitos')
+    fuera = [i for i in venc_ids if not (VENTANA_VENC[0] <= por_id[i]['createdAt'][:19] < VENTANA_VENC[1])]
+    if fuera:
+        raise ExportInvalido(f'{len(fuera)} vencimientos fuera del 05-nov-2026 (hora CR)')
+    p.avisos['vencimientos_docs'] = len(venc_ids)
     grupos_v = collections.defaultdict(list)
     grupos_c = collections.defaultdict(list)
     for x in debitos:
@@ -284,6 +340,22 @@ def armar_plan(d: dict) -> Plan:
 
 
 # ── Validación local del plan (sin red) ──────────────────────────────────────
+def pm_pendiente_plan(p: Plan) -> Decimal:
+    """CLUB-AUD-22: UNA definición de PM pendiente, la de club_reporte_mes al día de hoy: todos los
+    cargos del local salvo los anulados, menos todos los pagos. Sin mirar el estado actual de la cuenta."""
+    return sum((c['monto'] for c in p.pm_cargos if not c['anulado_en']), Decimal(0)) - sum((c['monto'] for c in p.pm_pagos), Decimal(0))
+
+
+def problemas_plan(p: Plan, res: dict) -> list[str]:
+    """Lo que tiene que dar 0 ya en el plan: si no, ni el dry-run pasa."""
+    out = []
+    if res['diferencias_saldo_vs_firestore'] != 0:
+        out.append(f"diferencias_saldo_vs_firestore = {res['diferencias_saldo_vs_firestore']}")
+    if res['personas_baja_final'] != 0:
+        out.append(f"personas_baja_final = {res['personas_baja_final']}")
+    return out
+
+
 def resumen_plan(p: Plan) -> dict:
     saldo = collections.Counter()
     for mv in p.movimientos:
@@ -297,11 +369,7 @@ def resumen_plan(p: Plan) -> dict:
     cr_eq = sum(creditos(saldo[m['id']], p.rate) for m in act if m['tipo'] == 'equipo')
     cr_ext = sum(creditos(saldo[m['id']], p.rate) for m in act if m['tipo'] != 'equipo')
     cuentas = sum(1 for m in act if creditos(saldo[m['id']], p.rate) > 0)
-    cargos = collections.Counter(); pagos = collections.Counter()
-    for c in p.pm_cargos: cargos[c['miembro_id']] += c['monto']
-    for c in p.pm_pagos: pagos[c['miembro_id']] += c['monto']
-    pm_suf = sum(cargos[m['id']] - pagos[m['id']] for m in act if m['sufijo_pm'])
-    pm_sin = sum(cargos[m['id']] - pagos[m['id']] for m in act if not m['sufijo_pm'])
+    pm = pm_pendiente_plan(p)
     tipos = collections.Counter(mv['tipo'] for mv in p.movimientos)
     return {
         'miembros': len(p.miembros), 'miembros_por_tipo': dict(collections.Counter(m['tipo'] for m in p.miembros)),
@@ -315,7 +383,7 @@ def resumen_plan(p: Plan) -> dict:
         'creditos_activos': str(cr_eq + cr_ext), 'creditos_activos_externos': str(cr_ext),
         'creditos_activos_equipo': str(cr_eq), 'cuentas_activas_con_creditos': cuentas,
         'personas_baja_final': sum(saldo[m['id']] for m in p.miembros if m['estado'] == 'baja'),
-        'pm_neto_no_borrados': str(pm_suf + pm_sin), 'pm_neto_con_sufijo': str(pm_suf), 'pm_neto_sin_sufijo': str(pm_sin),
+        'pm_pendiente': str(pm),
         'avisos': dict(p.avisos),
     }
 
@@ -361,11 +429,52 @@ def arr(xs) -> str:
     return 'null' if not xs else 'array[' + ','.join(q(x) for x in xs) + ']::text[]'
 
 
-def sql_apply(p: Plan) -> str:
+def _jsonable(v):
+    if isinstance(v, Decimal):
+        return str(v)
+    raise TypeError(type(v))
+
+
+def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False) -> str:
+    """Todo en UNA transacción: precheck → limpieza de lo migrado → carga → restos → VALIDACIÓN → commit.
+    · CLUB-AUD-19: la validación corre ANTES del commit y hace `raise` si algo no cuadra (nada queda cargado).
+    · CLUB-AUD-20: los datos (con nombres, teléfonos y emails) viajan en UN solo literal jsonb y se
+      expanden con jsonb_to_recordset; los errores nunca se imprimen con el cuerpo (ver ejecutar).
+    · CLUB-AUD-23: al re-ejecutar se conservan id, código y token de cada miembro por legacy_id; y se
+      aborta si ya hay cierres de mes congelados (club_reportes_cerrados).
+    · ensayo=True termina en ROLLBACK: valida contra la base sin dejar nada."""
+    datos = {
+        'negocios': list(p.negocios.values()),
+        'miembros': [{k: m[k] for k in ('id', 'legacy_id', 'tipo', 'nombre', 'negocio_norm', 'estado', 'created_at', 'updated_at')}
+                     for m in p.miembros],
+        'contactos': p.contactos,
+        'movimientos': [{**{k: mv[k] for k in ('miembro_id', 'tipo', 'personas', 'creditos', 'fecha', 'nota')},
+                         'legacy_ids': mv['legacy_ids']} for mv in p.movimientos],
+        'pm_cargos': [{'miembro_id': c['miembro_id'], 'monto': c['monto'], 'fecha': c['fecha'], 'anulado_en': c['anulado_en'],
+                       'legacy_ids': c['legacy_ids']} for c in p.pm_cargos],
+        'pm_pagos': [{'miembro_id': c['miembro_id'], 'monto': c['monto'], 'fecha': c['fecha'], 'legacy_ids': c['legacy_ids']}
+                     for c in p.pm_pagos],
+        'neto_firestore': p.neto_firestore,
+    }
+    cuerpo = json.dumps(datos, ensure_ascii=False, default=_jsonable)
+    tag = '$d' + secrets.token_hex(8) + '$'
+    while tag in cuerpo:
+        tag = '$d' + secrets.token_hex(8) + '$'
+    res = resumen_plan(p)
+    plan_ctrl = {
+        'miembros': res['miembros'], 'tarjetas': res['tarjetas'], 'canjes': res['canjes'],
+        'pm_cargos': res['pm_cargos'], 'pm_pagos': res['pm_pagos'], 'pm_pendiente': res['pm_pendiente'],
+        'vencimientos_136': res['vencimientos_136'], 'vencimientos_d1': res['vencimientos_d1'],
+    }
+    esp = json.dumps(esperados or {}, ensure_ascii=False)
+    ctl = json.dumps(plan_ctrl, ensure_ascii=False)
+    hoy = "(now() at time zone 'America/Costa_Rica')::date"
+    neg = SQL_NORM.format(c='n.nombre')
+
     L = ["begin;", "set local statement_timeout = '300s';"]
     L.append(f"""do $$ begin
   if (select personas_por_credito from public.club_config where location_id = {q(LOCATION)}) is distinct from {p.rate} then
-    raise exception 'club_config.personas_por_credito no coincide con la tasa del export ({p.rate})';
+    raise exception 'CLUB: club_config.personas_por_credito no coincide con la tasa del export ({p.rate})';
   end if;
   if exists (select 1 from public.club_movimientos mv join public.club_miembros m on m.id = mv.miembro_id
               where m.origen = 'migracion' and mv.origen <> 'migracion')
@@ -373,81 +482,109 @@ def sql_apply(p: Plan) -> str:
      or exists (select 1 from public.club_pm_cargos c join public.club_miembros m on m.id = c.miembro_id where m.origen = 'migracion' and c.origen <> 'migracion')
      or exists (select 1 from public.club_pm_pagos c join public.club_miembros m on m.id = c.miembro_id where m.origen = 'migracion' and c.origen <> 'migracion')
      or exists (select 1 from public.club_visitas v join public.club_miembros m on m.id = v.miembro_id where m.origen = 'migracion') then
-    raise exception 'Hay datos cargados en la app sobre miembros migrados: no se borra nada';
+    raise exception 'CLUB: hay datos cargados en la app sobre miembros migrados: no se borra nada';
+  end if;
+  if exists (select 1 from public.club_reportes_cerrados) then
+    raise exception 'CLUB: ya hay meses cerrados (club_reportes_cerrados): re-migrar cambiaría reportes congelados';
   end if;
 end $$;""")
-    # Limpieza de una corrida anterior (solo origen = migracion; nunca config).
+    L.append(f"create temp table _datos on commit drop as select {tag}{cuerpo}{tag}::jsonb as d;")
+    # 23: identidad de cada miembro migrado antes de borrar
+    L.append("create temp table _prev on commit drop as select legacy_id, id, codigo, token_portal from public.club_miembros where origen = 'migracion';")
     L += [
         "delete from public.club_pm_cargos where origen = 'migracion';",
         "delete from public.club_pm_pagos where origen = 'migracion';",
         "delete from public.club_movimientos where origen = 'migracion';",
+        "delete from public.club_miembros_contacto c using public.club_miembros m where m.id = c.miembro_id and m.origen = 'migracion';",
         "delete from public.club_miembros where origen = 'migracion';",
         "delete from public.club_negocios n where n.origen = 'migracion' and not exists (select 1 from public.club_miembros m where m.negocio_id = n.id);",
     ]
-    if p.negocios:
-        vals = ','.join(f"({q(LOCATION)},{q(nombre)},'otro',true,'migracion')" for nombre in p.negocios.values())
-        L.append(f"insert into public.club_negocios (location_id, nombre, tipo, activo, origen) values {vals} on conflict do nothing;")
-    neg = SQL_NORM.format(c='n.nombre')
-    filas = []
-    for m in p.miembros:
-        nsel = 'null' if not m['negocio_norm'] else f"(select n.id from public.club_negocios n where n.location_id = {q(LOCATION)} and {neg} = {q(m['negocio_norm'])})"
-        filas.append(f"({q(m['id'])}::uuid,{q(LOCATION)},{q(m['tipo'])},{q(m['nombre'])},{nsel},{q(m['estado'])},'migracion',{q(m['legacy_id'])},{q(m['created_at'])}::timestamptz,{q(m['updated_at'])}::timestamptz)")
-    for i in range(0, len(filas), 200):
-        L.append("insert into public.club_miembros (id, location_id, tipo, nombre, negocio_id, estado, origen, legacy_id, created_at, updated_at) values " + ','.join(filas[i:i + 200]) + ';')
-    if p.contactos:
-        vals = ','.join(f"({q(c['miembro_id'])}::uuid,{q(LOCATION)},{q(c['telefono'])},{q(c['email'])},false,false)" for c in p.contactos)
-        L.append("insert into public.club_miembros_contacto (miembro_id, location_id, telefono, email, optin_whatsapp, optin_email) values " + vals + ';')
-    filas = []
-    for mv in p.movimientos:
-        fecha = 'now()' if mv['fecha'] is None else f"{q(mv['fecha'])}::timestamptz"
-        filas.append(f"({q(LOCATION)},{q(mv['miembro_id'])}::uuid,{q(mv['tipo'])},{mv['personas']},{q(mv['creditos'])},{p.rate},{VALOR_CREDITO_CRC},{fecha},{fecha},'migracion',{q(mv['nota'])},{arr(mv['legacy_ids'])})")
-    for i in range(0, len(filas), 500):
-        L.append("insert into public.club_movimientos (location_id, miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, nota, legacy_ids) values " + ','.join(filas[i:i + 500]) + ';')
-    if p.pm_cargos:
-        vals = ','.join(f"({q(LOCATION)},{q(c['miembro_id'])}::uuid,{q(c['monto'])},{q('anulado' if c['anulado_en'] else 'pendiente')},'migracion',{arr(c['legacy_ids'])},{q(c['fecha'])}::timestamptz,{q(c['anulado_en'])}::timestamptz)" for c in p.pm_cargos)
-        L.append("insert into public.club_pm_cargos (location_id, miembro_id, monto_crc, estado, origen, legacy_ids, created_at, anulado_en) values " + vals + ';')
-    if p.pm_pagos:
-        vals = ','.join(f"({q(LOCATION)},{q(c['miembro_id'])}::uuid,{q(c['monto'])},{q(c['fecha'])}::timestamptz,'migracion',{arr(c['legacy_ids'])},{q(c['fecha'])}::timestamptz)" for c in p.pm_pagos)
-        L.append("insert into public.club_pm_pagos (location_id, miembro_id, monto_crc, pagado_en, origen, legacy_ids, created_at) values " + vals + ';')
+    L.append(f"""insert into public.club_negocios (location_id, nombre, tipo, activo, origen)
+select {q(LOCATION)}, x.nombre, 'otro', true, 'migracion' from _datos, jsonb_array_elements_text(d->'negocios') as x(nombre)
+on conflict do nothing;""")
+    L.append(f"""insert into public.club_miembros (id, location_id, tipo, nombre, negocio_id, estado, origen, legacy_id, created_at, updated_at, codigo, token_portal)
+select coalesce(pv.id, j.id), {q(LOCATION)}, j.tipo, j.nombre,
+       (select n.id from public.club_negocios n where n.location_id = {q(LOCATION)} and {neg} = j.negocio_norm),
+       j.estado, 'migracion', j.legacy_id, j.created_at, j.updated_at,
+       coalesce(pv.codigo, public.club_gen_codigo(8)), coalesce(pv.token_portal, encode(extensions.gen_random_bytes(32), 'hex'))
+  from _datos, jsonb_to_recordset(d->'miembros') as j(id uuid, legacy_id text, tipo text, nombre text, negocio_norm text,
+                                                       estado text, created_at timestamptz, updated_at timestamptz)
+  left join _prev pv on pv.legacy_id = j.legacy_id;""")
+    L.append("""create temp table _map on commit drop as
+select j.id as plan_id, m.id from _datos, jsonb_to_recordset(d->'miembros') as j(id uuid, legacy_id text)
+  join public.club_miembros m on m.legacy_id = j.legacy_id;""")
+    L.append(f"""insert into public.club_miembros_contacto (miembro_id, location_id, telefono, email, optin_whatsapp, optin_email)
+select mp.id, {q(LOCATION)}, j.telefono, j.email, false, false
+  from _datos, jsonb_to_recordset(d->'contactos') as j(miembro_id uuid, telefono text, email text)
+  join _map mp on mp.plan_id = j.miembro_id;""")
+    L.append(f"""insert into public.club_movimientos (location_id, miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc,
+                                     fecha_visita, registrado_en, origen, nota, legacy_ids)
+select {q(LOCATION)}, mp.id, j.tipo, j.personas, j.creditos, {p.rate}, {VALOR_CREDITO_CRC},
+       coalesce(j.fecha, now()), coalesce(j.fecha, now()), 'migracion', j.nota, j.legacy_ids
+  from _datos, jsonb_to_recordset(d->'movimientos') as j(miembro_id uuid, tipo text, personas int, creditos numeric,
+                                                          fecha timestamptz, nota text, legacy_ids text[])
+  join _map mp on mp.plan_id = j.miembro_id;""")
+    L.append(f"""insert into public.club_pm_cargos (location_id, miembro_id, monto_crc, estado, origen, legacy_ids, created_at, anulado_en)
+select {q(LOCATION)}, mp.id, j.monto, case when j.anulado_en is null then 'pendiente' else 'anulado' end, 'migracion', j.legacy_ids, j.fecha, j.anulado_en
+  from _datos, jsonb_to_recordset(d->'pm_cargos') as j(miembro_id uuid, monto numeric, fecha timestamptz, anulado_en timestamptz, legacy_ids text[])
+  join _map mp on mp.plan_id = j.miembro_id;""")
+    L.append(f"""insert into public.club_pm_pagos (location_id, miembro_id, monto_crc, pagado_en, origen, legacy_ids, created_at)
+select {q(LOCATION)}, mp.id, j.monto, j.fecha, 'migracion', j.legacy_ids, j.fecha
+  from _datos, jsonb_to_recordset(d->'pm_pagos') as j(miembro_id uuid, monto numeric, fecha timestamptz, legacy_ids text[])
+  join _map mp on mp.plan_id = j.miembro_id;""")
     # [Restos, decisión de Ismael 07-nov] Las cuentas sin actividad en el plazo de vencimiento que solo
     # tienen un resto de menos de medio crédito (1 o 2 personas con la tasa 6) se vencen acá, con la
-    # fecha de la migración. Mismo criterio que club_vencer_candidatos. Después, la simulación de hoy
-    # tiene que dar 0 cuentas: si queda alguna (medio crédito o más), la migración FRENA y no se guarda nada.
-    hoy = "(now() at time zone 'America/Costa_Rica')::date"
+    # fecha de la migración (mismo criterio que club_vencer_candidatos). La validación exige después
+    # que la simulación de hoy dé 0 cuentas.
     L.append(f"""insert into public.club_movimientos (location_id, miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, nota)
 select k.location_id, k.miembro_id, 'vencimiento', -k.personas, null, k.personas_por_credito, k.valor_credito_crc, now(), now(), 'migracion', {q(NOTA_RESTO)}
   from public.club_vencer_candidatos({hoy}) k
   join public.club_miembros m on m.id = k.miembro_id and m.origen = 'migracion'
  where k.personas * 2 < k.personas_por_credito;""")
-    L.append(f"""do $$ declare n int; begin
-  select count(*) into n from public.club_vencer_candidatos({hoy});
-  if n > 0 then
-    raise exception 'FRENADO: después de vencer los restos, la simulación de hoy da % cuentas (con medio crédito o más): decidir con Ismael', n;
+    # 19: validación DENTRO de la transacción
+    L.append(f"create temp table _val on commit drop as {sql_validar()};")
+    L.append(f"""do $$
+declare v jsonb := (select r from _val); e jsonb := {q(esp)}::jsonb; c jsonb := {q(ctl)}::jsonb; f text[] := '{{}}'; k text;
+begin
+  if (v->>'diferencias_saldo_vs_firestore')::int <> 0 then f := f || ('diferencias_saldo_vs_firestore=' || (v->>'diferencias_saldo_vs_firestore')); end if;
+  if (v->>'cuentas_baja_con_saldo')::int <> 0 then f := f || ('cuentas_baja_con_saldo=' || (v->>'cuentas_baja_con_saldo')); end if;
+  if (v->>'vencer_simular_hoy')::int <> 0 then f := f || ('vencer_simular_hoy=' || (v->>'vencer_simular_hoy')); end if;
+  if (v->>'barrido_anon_abiertas')::int <> 0 then f := f || ('barrido_anon_abiertas=' || (v->>'barrido_anon_abiertas')); end if;
+  -- lo que dice el plan (Python) tiene que ser lo que quedó en la base
+  for k in select jsonb_object_keys(c) loop
+    if (v->>k)::numeric is distinct from (c->>k)::numeric then f := f || (k || ': base=' || coalesce(v->>k, 'null') || ' plan=' || (c->>k)); end if;
+  end loop;
+  -- y los esperados firmados por Ismael (--esperados)
+  for k in select jsonb_object_keys(e) loop
+    if not (v ? k) then
+      f := f || (k || ': no existe en la validación');
+    elsif jsonb_typeof(e->k) = 'number' then
+      if (v->>k)::numeric is distinct from (e->>k)::numeric then f := f || (k || ': base=' || (v->>k) || ' esperado=' || (e->>k)); end if;
+    elsif (v->k) is distinct from (e->k) then
+      f := f || (k || ': base=' || (v->>k) || ' esperado=' || (e->>k));
+    end if;
+  end loop;
+  if cardinality(f) > 0 then
+    raise exception 'CLUB: validación fallida, no se guarda nada: %', array_to_string(f, '; ');
   end if;
 end $$;""")
-    L.append('commit;')
+    L.append("select r from _val;")
+    L.append('rollback;' if ensayo else 'commit;')
     return '\n'.join(L)
 
 
-def sql_validar(p: Plan) -> str:
-    esperado = ','.join(f"({q(k)},{v})" for k, v in p.neto_firestore.items())
+def sql_validar() -> str:
+    """Solo agregados (sin nombres, teléfonos ni emails). Corre dentro de la transacción del apply."""
     return f"""
-with esperado(legacy_id, neto) as (values {esperado}),
+with esperado as (select key as legacy_id, value::int as neto from _datos, jsonb_each_text(d->'neto_firestore')),
 mig as (select m.* from public.club_miembros m where m.origen = 'migracion'),
 real as (
   select m.legacy_id, coalesce(sum(mv.personas) filter (where not coalesce(mv.nota in ({q(NOTA_D1)}, {q(NOTA_RESTO)}), false)), 0) as neto
   from mig m left join public.club_movimientos mv on mv.miembro_id = m.id group by m.legacy_id),
 sal as (select s.*, m.tipo as tipo_m, m.estado as estado_m from public.club_saldos s join mig m on m.id = s.miembro_id),
-pm as (
-  select m.id, m.estado, m.nombre ~* '\\mPM\\s*$' as sufijo,
-         coalesce((select sum(c.monto_crc) from public.club_pm_cargos c where c.miembro_id = m.id and c.origen = 'migracion'), 0)
-       - coalesce((select sum(c.monto_crc) from public.club_pm_pagos c where c.miembro_id = m.id and c.origen = 'migracion'), 0) as neto
-  from mig m),
 mov as (select mv.* from public.club_movimientos mv join mig m on m.id = mv.miembro_id where mv.origen = 'migracion'),
 mes as (
-  select tipo,
-         to_char(fecha_visita at time zone 'UTC', 'YYYY-MM') as mes_utc,
-         to_char(fecha_visita at time zone 'America/Costa_Rica', 'YYYY-MM') as mes_cr,
+  select tipo, to_char(fecha_visita at time zone 'America/Costa_Rica', 'YYYY-MM') as mes_cr,
          personas, coalesce(creditos, 0) as creditos
   from mov where tipo in ('tarjeta','canje'))
 select json_build_object(
@@ -461,8 +598,8 @@ select json_build_object(
   'vencimientos_136', (select count(*) from mov where tipo = 'vencimiento' and nota = {q(NOTA_VENC_136)}),
   'vencimientos_136_docs', (select coalesce(sum(cardinality(legacy_ids)), 0) from mov where tipo = 'vencimiento' and nota = {q(NOTA_VENC_136)}),
   'vencimientos_d1', (select count(*) from mov where tipo = 'vencimiento' and nota = {q(NOTA_D1)}),
-  'vencimientos_restos', (select json_build_object('cuentas', count(*), 'personas', coalesce(-sum(personas), 0))
-                            from mov where tipo = 'vencimiento' and nota = {q(NOTA_RESTO)}),
+  'vencimientos_restos', (select count(*) from mov where tipo = 'vencimiento' and nota = {q(NOTA_RESTO)}),
+  'vencimientos_restos_personas', (select coalesce(-sum(personas), 0) from mov where tipo = 'vencimiento' and nota = {q(NOTA_RESTO)}),
   'vencer_simular_hoy', (select count(*) from public.club_vencer_candidatos((now() at time zone 'America/Costa_Rica')::date)),
   'docs_legacy_en_canjes', (select coalesce(sum(cardinality(legacy_ids)), 0) from mov where tipo = 'canje'),
   'pm_cargos', (select count(*) from public.club_pm_cargos where origen = 'migracion'),
@@ -474,23 +611,19 @@ select json_build_object(
   'cuentas_activas_con_creditos', (select count(*) from sal where estado_m = 'activo' and creditos > 0),
   'personas_baja_final', (select coalesce(sum(personas), 0) from sal where estado_m = 'baja'),
   'cuentas_baja_con_saldo', (select count(*) from sal where estado_m = 'baja' and personas <> 0),
-  'pm_neto_no_borrados', (select sum(neto) from pm where estado = 'activo'),
-  'pm_neto_con_sufijo', (select sum(neto) from pm where estado = 'activo' and sufijo),
-  'pm_neto_sin_sufijo', (select sum(neto) from pm where estado = 'activo' and not sufijo),
-  'pm_neto_borrados', (select sum(neto) from pm where estado = 'baja'),
-  'pm_pendiente_total', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c where c.origen = 'migracion' and c.estado in ('pendiente','aprobado'))
-                      - (select coalesce(sum(p.monto_crc), 0) from public.club_pm_pagos p where p.origen = 'migracion'),
+  -- CLUB-AUD-22: UNA definición, la de club_reporte_mes al día de hoy (cargos no anulados − pagos)
+  'pm_pendiente', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c where c.origen = 'migracion' and c.estado <> 'anulado')
+                - (select coalesce(sum(p.monto_crc), 0) from public.club_pm_pagos p where p.origen = 'migracion'),
   'pm_anulados', (select json_build_object('cargos', count(*), 'monto', coalesce(sum(monto_crc), 0), 'ultima_fecha', max(anulado_en))
                     from public.club_pm_cargos where origen = 'migracion' and estado = 'anulado'),
   'd1_rango_fechas', (select json_build_object('desde', min(fecha_visita), 'hasta', max(fecha_visita)) from mov where tipo = 'vencimiento' and nota = {q(NOTA_D1)}),
-  'por_mes_utc', (select json_object_agg(mes, v order by mes) from (select mes_utc as mes, json_build_object('tarjetas_personas', sum(personas) filter (where tipo='tarjeta'), 'canjes_creditos', sum(creditos) filter (where tipo='canje')) v from mes group by mes_utc) a),
   'por_mes_cr', (select json_object_agg(mes, v order by mes) from (select mes_cr as mes, json_build_object('tarjetas_personas', sum(personas) filter (where tipo='tarjeta'), 'canjes_creditos', sum(creditos) filter (where tipo='canje')) v from mes group by mes_cr) a),
-  'movimientos_que_cambian_de_mes', (select count(*) from mes where mes_utc <> mes_cr)
-) as r;"""
+  'barrido_anon_abiertas', ({SQL_BARRIDO_ANON_CUERPO})
+)::jsonb as r"""
 
 
-SQL_BARRIDO_ANON = """
-select count(*) as abiertas from pg_class c join pg_namespace n on n.oid = c.relnamespace
+SQL_BARRIDO_ANON_CUERPO = """
+select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relkind in ('r','p','v','m')
   and (has_table_privilege('anon', c.oid, 'SELECT') or has_table_privilege('anon', c.oid, 'INSERT')
        or has_table_privilege('anon', c.oid, 'UPDATE') or has_table_privilege('anon', c.oid, 'DELETE'))
@@ -503,11 +636,21 @@ where n.nspname = 'public' and c.relkind in ('r','p','v','m')
 
 
 # ── Ejecución contra STAGING ────────────────────────────────────────────────
-def limpiar_error(msg: str) -> str:
-    """Postgres incluye la fila que falló (con datos personales): se corta."""
-    msg = msg.split('\nDETAIL')[0].split('DETAIL:')[0]
-    msg = re.sub(r'Failing row contains .*', 'Failing row contains (oculto)', msg, flags=re.S)
-    return msg[:500]
+RE_SQLSTATE = re.compile(r'ERROR:\s+([0-9A-Z]{5}):')
+RE_PII = re.compile(r'@|\+\d|\d{8,}')
+
+
+def mensaje_error(cuerpo: str) -> str:
+    """CLUB-AUD-20: nunca se imprime el cuerpo del error (Postgres repite el SQL con `LINE n:` y el SQL
+    lleva los datos personales). Sale solo el SQLSTATE y un texto genérico; los mensajes propios del
+    script (prefijo «CLUB:», solo conteos y nombres de controles) se muestran si no tienen nada que
+    parezca un teléfono o un email."""
+    m = RE_SQLSTATE.search(cuerpo or '')
+    estado = m.group(1) if m else 'desconocido'
+    propio = re.search(r'CLUB: ([^\n]*)', cuerpo or '')
+    if propio and not RE_PII.search(propio.group(1)):
+        return f'SQLSTATE {estado}: {propio.group(1)[:500]}'
+    return f'SQLSTATE {estado} (detalle oculto: puede contener datos personales)'
 
 
 def ejecutar(ref: str, sql: str, read_only: bool = False):
@@ -525,11 +668,7 @@ def ejecutar(ref: str, sql: str, read_only: bool = False):
             return json.loads(r.read() or b'null')
     except urllib.error.HTTPError as e:
         cuerpo = e.read().decode('utf-8', 'replace')
-        try:
-            cuerpo = json.loads(cuerpo).get('message', cuerpo)
-        except ValueError:
-            pass
-        sys.exit(f'Error de la base ({e.code}): {limpiar_error(cuerpo)}')
+        sys.exit(f'Error de la base ({e.code}): {mensaje_error(cuerpo)}')
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
@@ -538,8 +677,10 @@ def main() -> None:
     ap.add_argument('--export', required=True, type=Path, help='zip o carpeta del export (fuera del repo)')
     ap.add_argument('--out', type=Path, default=Path.home() / 'club-export' / 'salida', help='carpeta de salida (fuera del repo)')
     ap.add_argument('--ref', default=STAGING_REF, help='ref de Supabase; solo se acepta staging')
+    ap.add_argument('--esperados', type=Path, help='JSON con los totales esperados, firmado por Ismael (obligatorio con --apply)')
     modo = ap.add_mutually_exclusive_group(required=True)
     modo.add_argument('--dry-run', action='store_true', help='arma el plan y los CSV; no toca la base')
+    modo.add_argument('--ensayo', action='store_true', help='corre todo contra staging y valida, pero termina en ROLLBACK')
     modo.add_argument('--apply', action='store_true', help='borra lo migrado antes y vuelve a insertar (staging)')
     a = ap.parse_args()
 
@@ -547,29 +688,38 @@ def main() -> None:
         sys.exit('NEGADO: este script solo corre contra STAGING.')
     if os.environ.get('SUPABASE_URL') and STAGING_REF not in os.environ['SUPABASE_URL']:
         sys.exit('NEGADO: SUPABASE_URL no es la de staging.')
+    if a.apply and not a.esperados:
+        sys.exit('NEGADO: --apply exige --esperados (los totales firmados por Ismael).')
     export = a.export.expanduser().resolve()
     out = a.out.expanduser().resolve()
     for pth, nombre in ((export, '--export'), (out, '--out')):
         if pth == REPO_ROOT or REPO_ROOT in pth.parents:
             sys.exit(f'NEGADO: {nombre} está dentro del repo. El export y los CSV van fuera.')
+    esperados = None
+    if a.esperados:
+        esperados = json.loads(a.esperados.expanduser().read_text(encoding='utf-8'))
+        if not isinstance(esperados, dict) or not esperados:
+            sys.exit('NEGADO: --esperados tiene que ser un objeto JSON con al menos un total.')
     out.mkdir(parents=True, exist_ok=True)
     os.chmod(out, 0o700)
 
     plan = armar_plan(cargar(export))
     res = resumen_plan(plan)
     eq, dup = escribir_csv(plan, out)
-    print(json.dumps({'modo': 'dry-run' if a.dry_run else 'apply', 'plan': res,
+    print(json.dumps({'modo': 'dry-run' if a.dry_run else 'ensayo' if a.ensayo else 'apply', 'plan': res,
                       'csv': {'equivalencias_negocios': str(eq), 'duplicados': str(dup), 'grupos_duplicados': len(plan.duplicados)}},
                      ensure_ascii=False, indent=1))
+    malos = problemas_plan(plan, res)
+    if malos:
+        sys.exit('PLAN RECHAZADO: ' + '; '.join(malos))
     if a.dry_run:
         return
 
-    ejecutar(a.ref, sql_apply(plan))
-    val = ejecutar(a.ref, sql_validar(plan))[0]['r']   # select puro; el rol read-only no ejecuta club_creditos
-    val['barrido_anon_abiertas'] = ejecutar(a.ref, SQL_BARRIDO_ANON, read_only=True)[0]['abiertas']
+    filas = ejecutar(a.ref, sql_apply(plan, esperados, ensayo=a.ensayo))
+    val = filas[0]['r'] if filas else None
     (out / 'validacion.json').write_text(json.dumps(val, ensure_ascii=False, indent=1), encoding='utf-8')
     os.chmod(out / 'validacion.json', 0o600)
-    print(json.dumps({'validacion': val}, ensure_ascii=False, indent=1))
+    print(json.dumps({'validacion': val, 'guardado': not a.ensayo}, ensure_ascii=False, indent=1))
 
 
 if __name__ == '__main__':

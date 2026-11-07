@@ -8,13 +8,36 @@
 - Los dos CSV de revisión (`equivalencias_negocios.csv` y `duplicados.csv`) sí tienen nombres. Se escriben en `--out`, fuera del repo, con permisos 600.
 - Cuando Ismael apruebe la prueba, se borran el export y la carpeta de salida.
 
+## Controles (revisión de Grok del 07-nov, CLUB-AUD-19..23)
+- **El export se verifica antes de armar nada** (21). Si falla, el script sale con código 3 y no toca la base:
+  - tiene que traer un manifiesto, `MANIFEST.json` (`{"provisional": false, "archivos": {nombre: sha256}}`) o el `MANIFEST.md` del bot de Grok, con un sha256 por archivo;
+  - el sha256 de cada archivo que se lee tiene que coincidir con el del manifiesto;
+  - si el manifiesto dice «provisional», se rechaza;
+  - el negocio tiene que ser el de Satori (`uPberDoE9w19ydF6bZSA`);
+  - los vencimientos tienen que ser ids únicos, todos débitos de Satori y todos del 05-nov-2026 (hora CR).
+- **Validación dentro de la transacción** (19). Si algo falla, `raise` y no queda nada cargado:
+  - `diferencias_saldo_vs_firestore`, `cuentas_baja_con_saldo`, `vencer_simular_hoy` y el barrido de anon tienen que dar 0;
+  - los conteos del plan tienen que ser iguales a los de la base;
+  - cada total de `--esperados` tiene que coincidir.
+- **`--apply` exige `--esperados archivo.json`**: los totales firmados por Ismael, por ejemplo `{"miembros": 338, "creditos_activos": 66.0, "pm_pendiente": 0}`. No se hardcodean en el script.
+- **`--ensayo`**: hace la carga completa y la validación contra staging, pero termina en ROLLBACK. Sirve para probar el export real sin guardar nada.
+- **Datos personales** (20): viajan en un único literal jsonb (`jsonb_to_recordset`). Si la base devuelve un error, se imprime solo el SQLSTATE; nunca el cuerpo ni `LINE`.
+- **PM pendiente** (22): una sola definición, la de `club_reporte_mes`: cargos no anulados menos pagos.
+- **Re-ejecución** (23):
+  - conserva el `id`, el `codigo` y el `token_portal` de cada miembro por `legacy_id`, así que los QR y portales ya repartidos siguen valiendo;
+  - aborta si ya hay meses cerrados en `club_reportes_cerrados`.
+- **Pruebas:** `python3 -I scripts/club/test_migrar_firestore.py`, con un export sintético armado en una carpeta temporal. Con `CLUB_ENSAYO_STAGING=1` corre además los ensayos contra staging, siempre con ROLLBACK.
+
 ## Uso
 ```bash
 # 1) Plan, sin tocar la base: conteos, controles y CSV de revisión
 python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --dry-run
 
+# 2) Ensayo en STAGING: todo + validación, termina en ROLLBACK
+python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --ensayo
+
 # 2) Carga en STAGING: borra lo migrado antes (origen='migracion') y vuelve a insertar, en una transacción
-python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --apply
+python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --apply --esperados ~/club-export/esperados.json
 ```
 - `--export`: el zip o la carpeta con `businesses.json`, `referrers.json`, `referrals.json`, `referrals_club.json` y `vencimientos_*.json`.
 - `--out`: la carpeta de salida (por defecto `~/club-export/salida`). Ahí quedan los CSV y `validacion.json`.

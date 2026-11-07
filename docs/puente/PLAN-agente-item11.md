@@ -117,7 +117,9 @@ Orden obligatorio, sin saltos:
 1. **Migración 081** en prod, a mano, con el ritual del ref y registrada en el ledger.
 2. **Edge `ingest-ndf` v11** en prod, a mano. Con el Edge nuevo y sin la 081, el upsert falla y no
    entra ninguna venta: **la migración va siempre primero**.
-3. **Agente de prod** en `C:\satori\satori-app-prod`. Mismo procedimiento que este plan, con la
+3. **Agente de prod** en `C:\satori\satori-app-prod`. **Ojo con la base:** prod corre `4d3513a`, que viene de la línea `staging`, y no `feat/pos-desglose`. Para que prod cambie **solo** el ítem 11, su rama es **`4d3513a` + el commit del ítem 11** (`cherry-pick e84c388`; entra limpio, con 459/459 pruebas), **no** `claude/puente-item11`.
+   - Pasar prod a `claude/puente-item11` cambiaría además `mapTicket.ts`: la lista de nombres de saloneros que se usa solo para mostrar en el dry-run, y el nombre de la constante de la familia 29, que vale lo mismo. Ninguno de los dos llega a la base, pero no es lo que se firma.
+   - Las facturas en curso (R) y las anuladas (X) se releen igual en las dos versiones: en ese comportamiento no cambia nada. Mismo procedimiento que este plan, con la
    tarea «Satori PoS Bridge PROD» y su log `logs\pos-agente-prod.log`. Después, el backfill.
 
 Regla vigente: los archivos de `supabase/functions` (el Edge) **no van en PRs a `main`** hasta que exista

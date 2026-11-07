@@ -48,3 +48,8 @@ create index if not exists pos_ndf_tickets_consecutivo_fe_idx on public.pos_ndf_
   where consecutivo_fe is not null;
 create index if not exists pos_ndf_tickets_pedido_idx on public.pos_ndf_tickets (local, numero_pedido, fecha_registra)
   where numero_pedido is not null;
+-- CLUB-AUD-13: el cruce del Club busca por número de factura sin ceros a la izquierda y las cuentas
+-- divididas por mesa de la factura (sin pedido) en un rango de horas.
+create index if not exists pos_ndf_tickets_factura_clave_idx on public.pos_ndf_tickets (local, (ltrim(numero_factura, '0')));
+create index if not exists pos_ndf_tickets_mesa_sin_pedido_idx on public.pos_ndf_tickets (local, mesa_factura, fecha_registra)
+  where numero_pedido is null;

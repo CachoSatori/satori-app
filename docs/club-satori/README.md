@@ -37,3 +37,18 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **Excepciones:** `CANJE_MONTO_DISTINTO` compara contra la suma del `cxc` de todas las facturas de la visita.
 - **Plan B:** la lista de 2 h muestra los últimos 4 dígitos del tiquete cuando llega el consecutivo.
 - **Pruebas:** 135/135 en staging. Incluyen los casos reales: el pedido 14 del 05-nov → 112430, y la mesa 19 del 31-oct → 112313 (pedido 33) + 112310 + 112311 (la mesa de la factura se simula hasta que llegue el backfill). También la medianoche y el mismo número al día siguiente.
+
+**Auditoría técnica (Grok, CLUB-AUD-01..13) — correcciones en la 075, en staging** (07/11). Decisiones de Ismael: las correcciones van en la 075; un referente tiene una tarjeta por visita; la restitución reinicia el plazo; la tasa se protege con una guarda (opción a); el cierre de mes se congela con snapshot (opción A).
+- **01:** los contactos de los turistas están en `club_cupones_contactos` (solo owner y manager).
+- **02:** `club_visita_control` (advisory lock por visita, una tarjeta por referente, Σ personas ≤ pax) más el índice único (miembro, visita) y las excepciones `VISITA_REPETIDA` y `PERSONAS_SOBRE_PAX`.
+- **03:** `club_vencer` recalcula el saldo después del lock.
+- **04:** `club_reportes_cerrados` + `club_reporte_cerrar` (sha256), y el PM se calcula al cierre por eventos.
+- **05:** guarda de la tasa.
+- **07 y 08:** locks del miembro y del `p_op`.
+- **09:** `club_ajuste` con `p_op`.
+- **10:** la restitución cuenta como actividad.
+- **11 y 12:** barrido de privilegios y precheck de la 069.
+- **13:** las excepciones se acotan por rango, con índices.
+- **06:** propuesta en [PROPUESTA-AUD-06.md](PROPUESTA-AUD-06.md).
+- **Pruebas:** 167/167 en staging. Las carreras 03, 07 y 08 se verificaron con dos sesiones reales.
+- **Ojo antes de correr `club_vencer` en prod:** hoy vencería **115 cuentas migradas** (saldo > 0 sin actividad en 12 meses).

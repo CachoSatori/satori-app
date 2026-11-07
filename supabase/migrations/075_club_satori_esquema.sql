@@ -242,6 +242,7 @@ create table if not exists public.club_movimientos (
            else true end)
 );
 create index if not exists club_mov_miembro_idx on public.club_movimientos (miembro_id, fecha_visita);
+create index if not exists club_mov_app_fecha_idx on public.club_movimientos (location_id, fecha_visita) where origen = 'app';  -- AUD-13
 
 create table if not exists public.club_pm_pagos (
   id                uuid primary key default gen_random_uuid(),
@@ -311,7 +312,8 @@ from public.club_miembros m
 left join public.club_config c on c.location_id = m.location_id
 left join lateral (
   select sum(mv.personas)                                                   as personas,
-         max(mv.fecha_visita) filter (where mv.tipo in ('tarjeta','canje')) as ultima_actividad
+         -- CLUB-AUD-10 (decisión de Ismael, 07-nov): la restitución también reinicia el plazo.
+         max(mv.fecha_visita) filter (where mv.tipo in ('tarjeta','canje','restitucion')) as ultima_actividad
   from public.club_movimientos mv
   where mv.miembro_id = m.id
 ) s on true;
@@ -837,7 +839,9 @@ end;
 $$;
 
 -- 4.4 Ajuste manual (solo owner): ajuste, restitución o vencimiento. Nota obligatoria.
-create or replace function public.club_ajuste(p_miembro uuid, p_personas int, p_tipo text, p_nota text)
+-- CLUB-AUD-09: idempotente con p_op (mismo patrón que canje y tarjeta). La firma vieja se borra.
+drop function if exists public.club_ajuste(uuid, int, text, text);
+create or replace function public.club_ajuste(p_miembro uuid, p_personas int, p_tipo text, p_nota text, p_op uuid)
 returns table (personas int, creditos numeric)
 language plpgsql
 volatile
@@ -849,10 +853,25 @@ declare
   v_nota  text := btrim(coalesce(p_nota, ''));
   v_m     public.club_miembros%rowtype;
   v_cfg   public.club_config%rowtype;
+  v_prev  public.club_movimientos%rowtype;
   v_saldo int;
 begin
   if v_rol is null or v_rol <> 'owner' then
     raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_op is null then
+    raise exception 'Falta el id de operación' using errcode = 'P0001';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('club_op:' || p_op::text, 0));
+  select * into v_prev from public.club_movimientos where client_op_id = p_op;
+  if found then
+    if v_prev.tipo is distinct from p_tipo or v_prev.miembro_id is distinct from p_miembro or v_prev.personas is distinct from p_personas then
+      raise exception 'El id de operación ya se usó para otra cosa' using errcode = 'P0001';
+    end if;
+    select * into v_cfg from public.club_config where location_id = v_prev.location_id;
+    v_saldo := public.club_saldo_personas(p_miembro);
+    personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+    return next; return;
   end if;
   if p_tipo is null or p_tipo not in ('ajuste','restitucion','vencimiento') then
     raise exception 'Tipo no válido (ajuste, restitucion o vencimiento)' using errcode = 'P0001';
@@ -879,10 +898,10 @@ begin
 
   insert into public.club_movimientos
     (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
-     fecha_visita, registrado_por, origen, nota)
+     fecha_visita, registrado_por, origen, nota, client_op_id)
   values
     (v_m.location_id, p_miembro, p_tipo, p_personas, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
-     now(), auth.uid(), 'app', v_nota);
+     now(), auth.uid(), 'app', v_nota, p_op);
 
   v_saldo := v_saldo + p_personas;
   personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
@@ -944,9 +963,12 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_rol  public.user_role := public.get_my_role();
-  v_n    int := 0;
-  r      record;
+  v_rol    public.user_role := public.get_my_role();
+  v_n      int := 0;
+  r        record;
+  v_p      int;
+  v_ult    timestamptz;
+  v_creado timestamptz;
 begin
   if v_rol is null or v_rol <> 'owner' then
     raise exception 'Sin permiso' using errcode = '42501';
@@ -955,21 +977,31 @@ begin
     raise exception 'Fecha de corte no válida' using errcode = 'P0001';
   end if;
 
+  -- CLUB-AUD-03: los candidatos se eligen SIN lock y en orden estable; por cada uno se bloquea al
+  -- miembro y recién ahí se recalculan el saldo y la última actividad (snapshot nuevo). Así un canje o
+  -- una tarjeta simultáneos no dejan el saldo negativo ni se vence lo que acaba de tener actividad.
   for r in
-    select s.miembro_id, s.location_id, s.personas, c.personas_por_credito, c.valor_credito_crc, c.vencimiento_meses
+    select s.miembro_id, s.location_id, c.personas_por_credito, c.valor_credito_crc, c.vencimiento_meses,
+           ((p_corte - make_interval(months => c.vencimiento_meses))::timestamp at time zone 'America/Costa_Rica') as limite
     from public.club_saldos s
     join public.club_config c on c.location_id = s.location_id
     join public.club_miembros m on m.id = s.miembro_id
     where s.personas > 0
       and coalesce(s.ultima_actividad, m.created_at)
           < ((p_corte - make_interval(months => c.vencimiento_meses))::timestamp at time zone 'America/Costa_Rica')
-    for update of m
+    order by s.miembro_id
   loop
+    select m.created_at into v_creado from public.club_miembros m where m.id = r.miembro_id for update;
+    select coalesce(sum(mv.personas), 0),
+           max(mv.fecha_visita) filter (where mv.tipo in ('tarjeta','canje','restitucion'))   -- AUD-10
+      into v_p, v_ult
+      from public.club_movimientos mv where mv.miembro_id = r.miembro_id;
+    continue when v_p <= 0 or coalesce(v_ult, v_creado) >= r.limite;
     insert into public.club_movimientos
       (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
        fecha_visita, registrado_por, origen, nota)
     values
-      (r.location_id, r.miembro_id, 'vencimiento', -r.personas, r.personas_por_credito, r.valor_credito_crc,
+      (r.location_id, r.miembro_id, 'vencimiento', -v_p, r.personas_por_credito, r.valor_credito_crc,
        now(), auth.uid(), 'app',
        format('Vencimiento automático: %s meses sin actividad al %s', r.vencimiento_meses, p_corte));
     v_n := v_n + 1;
@@ -1787,7 +1819,10 @@ begin
     select m.*, public.club_factura_clave(m.factura_pos) as clave
       from public.club_movimientos m
      where m.location_id = p_location and m.origen = 'app' and m.tipo in ('tarjeta','canje')
-       and (m.factura_pos is not null or m.pos_ref is not null)),
+       and (m.factura_pos is not null or m.pos_ref is not null)
+       -- CLUB-AUD-13: solo el rango pedido (más un día de margen para los canjes de facturas del borde),
+       -- no todo el historial: cada registro dispara su cruce con pos_ndf_tickets.
+       and m.fecha_visita >= v_ini - interval '1 day' and m.fecha_visita < v_fin + interval '1 day'),
   -- Facturas del puente de cada registro: la elegida a mano por el manager (si hay) o el cruce
   -- automático (club_cruce_facturas: la del pedido + las divididas de la misma mesa). La primera es
   -- la principal.
@@ -2063,8 +2098,32 @@ begin
 end;
 $$;
 
--- Reporte mensual (owner, manager). JSON sin teléfonos ni emails.
-create or replace function public.club_reporte_mes(p_mes date, p_location text default 'santa-teresa')
+-- CLUB-AUD-04 (opción A, decisión de Ismael): el reporte de un mes CERRADO se congela. Tabla de solo
+-- inserción con el JSON y su sha256; un recierre es una versión nueva con motivo. club_reporte_mes
+-- devuelve la última versión si existe. Nadie la edita ni la borra desde la app.
+create table if not exists public.club_reportes_cerrados (
+  id           bigint generated always as identity primary key,
+  location_id  text not null,
+  mes          date not null check (mes = date_trunc('month', mes)::date),
+  version      int not null check (version >= 1),
+  datos        jsonb not null,
+  sha256       text not null check (sha256 ~ '^[0-9a-f]{64}$'),
+  motivo       text check (motivo is null or length(motivo) <= 500),
+  cerrado_por  uuid,
+  cerrado_en   timestamptz not null default now(),
+  unique (location_id, mes, version)
+);
+alter table public.club_reportes_cerrados enable row level security;
+revoke all on public.club_reportes_cerrados from public, anon, authenticated;
+grant select on public.club_reportes_cerrados to authenticated;
+drop policy if exists club_rep_cerr_sel on public.club_reportes_cerrados;
+create policy club_rep_cerr_sel on public.club_reportes_cerrados for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
+
+-- Reporte mensual (owner, manager). JSON sin teléfonos ni emails. `p_vivo` = recalcular aunque el mes
+-- esté cerrado (lo usa club_reporte_cerrar; la pantalla muestra el congelado).
+drop function if exists public.club_reporte_mes(date, text);
+create or replace function public.club_reporte_mes(p_mes date, p_location text default 'santa-teresa', p_vivo boolean default false)
 returns jsonb
 language plpgsql
 stable
@@ -2089,6 +2148,16 @@ begin
     raise exception 'Local no válido' using errcode = 'P0001';
   end if;
   v_mes  := date_trunc('month', coalesce(p_mes, now()::date))::date;
+  -- Mes cerrado → la última versión congelada (CLUB-AUD-04).
+  select rc.datos || jsonb_build_object('cerrado', true, 'version', rc.version, 'sha256', rc.sha256,
+                                        'cerrado_en', rc.cerrado_en, 'motivo', rc.motivo)
+    into r
+    from public.club_reportes_cerrados rc
+   where rc.location_id = p_location and rc.mes = v_mes and not coalesce(p_vivo, false)
+   order by rc.version desc limit 1;
+  if r is not null then
+    return r;
+  end if;
   v_ini  := v_mes::timestamp at time zone 'America/Costa_Rica';
   v_fin  := (v_mes + interval '1 month')::timestamp at time zone 'America/Costa_Rica';
   v_pini := (v_mes - interval '1 month')::timestamp at time zone 'America/Costa_Rica';
@@ -2105,7 +2174,7 @@ begin
            coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini), 0)::int as pers_mes,
            count(*) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini)::int as t_mes,
            coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_3ini and v.fecha_visita < v_ini), 0) / 3.0 as prom3,
-           max(v.fecha_visita) filter (where v.tipo in ('tarjeta','canje')) as ult,
+           max(v.fecha_visita) filter (where v.tipo in ('tarjeta','canje','restitucion')) as ult,
            min(v.fecha_visita) filter (where v.tipo = 'tarjeta') as primera
       from mi left join mv v on v.miembro_id = mi.id
      group by 1,2,3,4,5),
@@ -2180,9 +2249,12 @@ begin
     'pm', jsonb_build_object(
         'pausado', v_cfg.pm_pausado,
         'nota', case when v_cfg.pm_pausado then 'Programa PM en pausa por temas contables: los montos son informativos.' else null end,
+        -- CLUB-AUD-04: pendiente AL CIERRE por eventos, no por el estado de hoy: todo cargo creado antes
+        -- del cierre cuenta, salvo el anulado antes del cierre; se restan los pagos hechos antes del cierre.
+        -- Un cargo pagado después ya no le baja el pendiente a un mes cerrado.
         'pendiente_crc', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c join mi on mi.id = c.miembro_id
                            where c.created_at < v_fin
-                             and (c.estado in ('pendiente','aprobado') or (c.estado = 'anulado' and c.anulado_en >= v_fin)))
+                             and not (c.estado = 'anulado' and coalesce(c.anulado_en, '-infinity') < v_fin))
                        - (select coalesce(sum(p.monto_crc), 0) from public.club_pm_pagos p join mi on mi.id = p.miembro_id
                            where p.pagado_en < v_fin),
         'cargos_mes_crc', (select coalesce(sum(c.monto_crc), 0) from public.club_pm_cargos c join mi on mi.id = c.miembro_id
@@ -2196,9 +2268,73 @@ begin
                           from public.club_excepciones(v_mes, (v_mes + interval '1 month' - interval '1 day')::date, p_location) x
                          group by x.tipo) e)
   ) into r;
-  return r;
+  return r || jsonb_build_object('cerrado', false);
 end;
 $$;
+
+-- Cerrar un mes (solo owner): congela el reporte con su sha256. Solo meses ya terminados (hora CR).
+-- Recerrar = versión nueva, con motivo obligatorio. Devuelve lo congelado.
+create or replace function public.club_reporte_cerrar(p_mes date, p_motivo text default null, p_location text default 'santa-teresa')
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol    public.user_role := public.get_my_role();
+  v_mes    date := date_trunc('month', p_mes)::date;
+  v_motivo text := nullif(btrim(coalesce(p_motivo, '')), '');
+  v_ver    int;
+  v_datos  jsonb;
+  v_hash   text;
+begin
+  if v_rol is null or v_rol <> 'owner' then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if v_mes is null or v_mes >= date_trunc('month', (now() at time zone 'America/Costa_Rica'))::date then
+    raise exception 'Solo se cierran meses terminados' using errcode = 'P0001';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('club_cierre:' || p_location || ':' || v_mes, 0));
+  select coalesce(max(rc.version), 0) + 1 into v_ver from public.club_reportes_cerrados rc
+   where rc.location_id = p_location and rc.mes = v_mes;
+  if v_ver > 1 and v_motivo is null then
+    raise exception 'El mes ya está cerrado: para recerrarlo hace falta el motivo' using errcode = 'P0001';
+  end if;
+  if v_motivo is not null and length(v_motivo) > 500 then
+    raise exception 'El motivo es de hasta 500 caracteres' using errcode = 'P0001';
+  end if;
+  v_datos := public.club_reporte_mes(v_mes, p_location, true) - 'cerrado';
+  v_hash  := encode(extensions.digest(v_datos::text, 'sha256'), 'hex');
+  insert into public.club_reportes_cerrados (location_id, mes, version, datos, sha256, motivo, cerrado_por)
+  values (p_location, v_mes, v_ver, v_datos, v_hash, v_motivo, auth.uid());
+  return v_datos || jsonb_build_object('cerrado', true, 'version', v_ver, 'sha256', v_hash, 'motivo', v_motivo);
+end;
+$$;
+
+-- CLUB-AUD-05 (opción a, decisión de Ismael): no se cambia personas_por_credito mientras haya saldos
+-- vivos en el local. Los créditos se derivan de las personas con la tasa de hoy: cambiarla reescribiría
+-- los créditos históricos. Para cambiarla hace falta una conversión explícita (fuera de alcance).
+create or replace function public.club_config_tasa_guardia()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if new.personas_por_credito is distinct from old.personas_por_credito
+     and exists (select 1 from public.club_movimientos mv join public.club_miembros m on m.id = mv.miembro_id
+                  where m.location_id = new.location_id
+                  group by mv.miembro_id having sum(mv.personas) > 0) then
+    raise exception 'No se puede cambiar la tasa (personas por crédito) con saldos vivos: requiere una conversión'
+      using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists club_config_tasa_guardia_trg on public.club_config;
+create trigger club_config_tasa_guardia_trg before update on public.club_config
+  for each row execute function public.club_config_tasa_guardia();
 
 -- ── 5. EXECUTE: nada por defecto, grant explícito ───────────────────────────
 
@@ -2210,7 +2346,7 @@ revoke all on function public.club_saldo_personas(uuid)                  from pu
 revoke all on function public.club_cupon_crear(text, jsonb)              from public, anon, authenticated;
 revoke all on function public.club_cupon_usar(text, int, text, uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.club_canje(uuid, numeric, text, uuid, jsonb) from public, anon, authenticated;
-revoke all on function public.club_ajuste(uuid, int, text, text)         from public, anon, authenticated;
+revoke all on function public.club_ajuste(uuid, int, text, text, uuid)   from public, anon, authenticated;
 revoke all on function public.club_portal(text)                          from public, anon, authenticated;
 revoke all on function public.club_vencer(date)                          from public, anon, authenticated;
 
@@ -2256,11 +2392,14 @@ revoke all on function public.club_nombre_limpio(text)                from publi
 revoke all on function public.club_excepciones(date, date, text)      from public, anon, authenticated;
 revoke all on function public.club_excepciones_abiertas(int, text)    from public, anon, authenticated;
 revoke all on function public.club_excepcion_resolver(text, text, text, text) from public, anon, authenticated;
-revoke all on function public.club_reporte_mes(date, text)            from public, anon, authenticated;
+revoke all on function public.club_reporte_mes(date, text, boolean)   from public, anon, authenticated;
+revoke all on function public.club_reporte_cerrar(date, text, text)   from public, anon, authenticated;
+revoke all on function public.club_config_tasa_guardia()               from public, anon, authenticated;
 grant execute on function public.club_excepciones(date, date, text)   to authenticated;
 grant execute on function public.club_excepciones_abiertas(int, text) to authenticated;
 grant execute on function public.club_excepcion_resolver(text, text, text, text) to authenticated;
-grant execute on function public.club_reporte_mes(date, text)         to authenticated;
+grant execute on function public.club_reporte_mes(date, text, boolean) to authenticated;
+grant execute on function public.club_reporte_cerrar(date, text, text) to authenticated;
 revoke all on function public.club_sin_cruce_candidatas(uuid, text)    from public, anon, authenticated;
 revoke all on function public.club_sin_cruce_elegir(uuid, text, text)  from public, anon, authenticated;
 grant execute on function public.club_sin_cruce_candidatas(uuid, text) to authenticated;
@@ -2268,7 +2407,7 @@ grant execute on function public.club_sin_cruce_elegir(uuid, text, text) to auth
 -- Staff (la guarda de rol está adentro)
 grant execute on function public.club_cupon_usar(text, int, text, uuid, jsonb) to authenticated;
 grant execute on function public.club_canje(uuid, numeric, text, uuid, jsonb) to authenticated;
-grant execute on function public.club_ajuste(uuid, int, text, text)      to authenticated;
+grant execute on function public.club_ajuste(uuid, int, text, text, uuid) to authenticated;
 grant execute on function public.club_vencer(date)                       to authenticated;
 
 

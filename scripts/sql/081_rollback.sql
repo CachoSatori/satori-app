@@ -5,6 +5,8 @@
 begin;
 drop index if exists public.pos_ndf_tickets_consecutivo_fe_idx;
 drop index if exists public.pos_ndf_tickets_pedido_idx;
+drop index if exists public.pos_ndf_tickets_factura_clave_idx;
+drop index if exists public.pos_ndf_tickets_mesa_sin_pedido_idx;
 alter table public.pos_ndf_tickets
   drop column if exists mesa_factura,
   drop column if exists consecutivo_fe,

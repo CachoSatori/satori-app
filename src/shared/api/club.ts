@@ -263,8 +263,13 @@ export interface ReporteMes {
   antiguedad: Array<{ tramo: string; cuentas: number; creditos: number; valor_crc: number }>
   pm: { pausado: boolean; nota: string | null; pendiente_crc: number; cargos_mes_crc: number; pagos_mes_crc: number }
   calidad: { abiertas: number; resueltas: number; por_tipo: Record<string, number>; promo_activa: boolean }
+  /** CLUB-AUD-04: mes cerrado = reporte congelado (versión y sha256). */
+  cerrado?: boolean; version?: number; sha256?: string; cerrado_en?: string; motivo?: string | null
 }
 export const getReporteMes = (mes: string, local = 'santa-teresa') =>
   llamar<ReporteMes>('club_reporte_mes', { p_mes: mes, p_location: local })
+/** Solo owner. Recerrar (versión nueva) exige motivo. */
+export const cerrarMes = (mes: string, motivo: string, local = 'santa-teresa') =>
+  llamar<ReporteMes>('club_reporte_cerrar', { p_mes: mes, p_motivo: motivo.trim() || null, p_location: local })
 export const getLocalesClub = async () =>
   (await leer(from<{ location_id: string }>('club_config').select('location_id').order('location_id'))).map(r => r.location_id)

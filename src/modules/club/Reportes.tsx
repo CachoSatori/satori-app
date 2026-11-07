@@ -4,7 +4,8 @@
  * del navegador → «Guardar como PDF». «Exportar CSV» baja el anexo con todas las filas.
  */
 import { useEffect, useState } from 'react'
-import { getReporteMes, getLocalesClub, aClubError, fmtCreditos, type ReporteMes, type FilaReporte } from '../../shared/api/club'
+import { getReporteMes, getLocalesClub, cerrarMes, aClubError, fmtCreditos, type ReporteMes, type FilaReporte } from '../../shared/api/club'
+import { useAuth } from '../../shared/hooks/useAuth'
 import { Aviso, Btn, Card } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
 import { esParcial } from './reporteSaldo'
@@ -24,6 +25,10 @@ export default function Reportes() {
   const [rep, setRep] = useState<ReporteMes | null>(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [motivo, setMotivo] = useState('')
+  const [cerrando, setCerrando] = useState(false)
+  const { profile } = useAuth()
+  const esOwner = profile?.role === 'owner'
 
   useEffect(() => { getLocalesClub().then(l => { if (l.length) setLocales(l) }).catch(() => {}) }, [])
   useEffect(() => {
@@ -36,6 +41,16 @@ export default function Reportes() {
       .finally(() => { if (vivo) setCargando(false) })
     return () => { vivo = false }
   }, [mes, local])
+
+  // CLUB-AUD-04: cerrar el mes congela el reporte (sha256). Recerrar crea una versión nueva con motivo.
+  async function cerrar() {
+    if (!rep) return
+    if (!window.confirm(rep.cerrado ? `¿Recerrar ${rep.mes}? Queda como versión ${(rep.version ?? 1) + 1}.` : `¿Cerrar ${rep.mes}? El reporte queda congelado.`)) return
+    setCerrando(true); setError(null)
+    try { setRep(await cerrarMes(`${mes}-01`, motivo, local)); setMotivo('') }
+    catch (e) { setError(aClubError(e).message) }
+    finally { setCerrando(false) }
+  }
 
   async function exportarPdf() {
     if (!rep) return
@@ -68,6 +83,22 @@ export default function Reportes() {
         <Btn variant="secondary" onClick={exportarCsv} disabled={!rep}>Exportar CSV</Btn>
       </Card>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      {rep && !cargando && rep.cerrado && (
+        <Aviso tono="info">
+          Mes cerrado (versión {rep.version}) el {fmtFecha(rep.cerrado_en ?? '')}: el reporte no cambia aunque después se paguen
+          cargos o se resuelvan excepciones. Huella {rep.sha256?.slice(0, 12)}…{rep.motivo ? ` · Motivo: ${rep.motivo}` : ''}
+        </Aviso>
+      )}
+      {rep && !cargando && esOwner && !esParcial(rep) && (
+        <Card style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <label style={{ flex: 1, minWidth: 200 }}><span style={labelStyle}>{rep.cerrado ? 'Motivo del recierre (obligatorio)' : 'Cerrar el mes (opcional: motivo)'}</span>
+            <input value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={500} style={inputStyle} />
+          </label>
+          <Btn variant="secondary" onClick={cerrar} disabled={cerrando || (rep.cerrado && !motivo.trim())}>
+            {cerrando ? 'Cerrando…' : rep.cerrado ? 'Recerrar el mes' : 'Cerrar el mes'}
+          </Btn>
+        </Card>
+      )}
       {cargando && <div style={{ textAlign: 'center', color: C.muted, padding: '2rem' }}>Armando el reporte…</div>}
       {rep && k && !cargando && (
         <>

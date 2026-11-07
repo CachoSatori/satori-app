@@ -361,14 +361,14 @@ begin
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    perform public.club_ajuste((select v::uuid from _ids where k='m3'), 3, 'ajuste', 'prueba');
+    perform public.club_ajuste((select v::uuid from _ids where k='m3'), 3, 'ajuste', 'prueba', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('extra', 'cajero hace ajuste', false, 'pudo');
   exception when insufficient_privilege then
     perform pg_temp.yo(); perform pg_temp.r('extra', 'cajero hace ajuste → sin permiso', true, sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<OWNER_UUID>');
-    perform public.club_ajuste((select v::uuid from _ids where k='m3'), 3, 'ajuste', '   ');
+    perform public.club_ajuste((select v::uuid from _ids where k='m3'), 3, 'ajuste', '   ', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('extra', 'owner ajuste sin nota', false, 'pudo');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('extra', 'owner ajuste sin nota → error', sqlstate = 'P0001' and sqlerrm = 'La nota es obligatoria', sqlerrm);
@@ -873,7 +873,7 @@ begin
     (select count(*) from club_movimientos where miembro_id = v_m and tipo = 'vencimiento') = 1, '');
   -- la restitución es solo del owner (club_ajuste)
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
-  perform public.club_ajuste(v_m, 10, 'restitucion', 'prueba: restituir lo vencido por la baja');
+  perform public.club_ajuste(v_m, 10, 'restitucion', 'prueba: restituir lo vencido por la baja', gen_random_uuid());
   perform pg_temp.yo();
   perform pg_temp.r('26', 'owner restituye con club_ajuste (restitucion)', public.club_saldo_personas(v_m) = 10, '');
 end $$;
@@ -1052,9 +1052,9 @@ begin
   perform pg_temp.r('27', 'pedido todavía abierto en el puente → todavía no es excepción', jsonb_array_length(j) = 0, j::text);
   delete from pos_ndf_open where id_pedido = '9030';
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc, cxc_crc, consecutivo_fe) values
-    ('990910', now() - interval '20 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, '51', null,   25000, 18000, '00200001040000990910'),
-    ('990911', now() - interval '19 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, '52', null,   15000, 0,     '00200001040000990911'),
-    ('990912', now() - interval '18 minutes', 'X', 'salon', 'cajero',     true, 'ok', '51', '51', '9030', 0,     0,     null);
+    ('990910', now() + interval '5 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, '51', null,   25000, 18000, '00200001040000990910'),
+    ('990911', now() + interval '6 minutes', 'C', 'salon', 'sin_pedido', true, 'ok', null, '52', null,   15000, 0,     '00200001040000990911'),
+    ('990912', now() + interval '7 minutes', 'X', 'salon', 'cajero',     true, 'ok', '51', '51', '9030', 0,     0,     null);
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(v_dia_ini, v_dia_fin) e where e.ref = v_mv::text;
   perform pg_temp.yo();
@@ -1280,6 +1280,115 @@ do $$ begin
     position('is_active' in pg_get_functiondef('public.get_my_role()'::regprocedure)) > 0, '');
 end $$;
 
+
+-- ═══ 31. CLUB-AUD-09 (S-13 en el ajuste): mismo p_op → replay, una fila ═══
+do $$
+declare v_m uuid; v_op uuid := gen_random_uuid(); v_p1 int; v_p2 int;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ajuste AUD09', 'app') returning id into v_m;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select t.personas into v_p1 from public.club_ajuste(v_m, 3, 'ajuste', 'x', v_op) t;
+  select t.personas into v_p2 from public.club_ajuste(v_m, 3, 'ajuste', 'x', v_op) t;
+  perform pg_temp.yo();
+  perform pg_temp.r('31', 'ajuste con el mismo p_op dos veces → mismo saldo y una sola fila',
+    v_p1 = 3 and v_p2 = 3 and (select count(*) from club_movimientos where miembro_id = v_m) = 1, format('%s / %s', v_p1, v_p2));
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    perform public.club_ajuste(v_m, 5, 'ajuste', 'x', v_op);
+    perform pg_temp.yo(); perform pg_temp.r('31', 'mismo p_op con otros datos', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('31', 'mismo p_op con otros datos → error', sqlstate = 'P0001' and sqlerrm = 'El id de operación ya se usó para otra cosa', sqlerrm);
+  end;
+end $$;
+
+-- ═══ 32. CLUB-AUD-10: la restitución reinicia el plazo de vencimiento ═══
+do $$
+declare v_m uuid; v_n int;
+begin
+  insert into club_miembros (tipo, nombre, origen, created_at) values ('referente', 'Restit AUD10', 'app', now() - interval '2 years') returning id into v_m;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen) values
+    (v_m, 'tarjeta', 6, 6, 18000, now() - interval '13 months', 'migracion'),
+    (v_m, 'vencimiento', -6, 6, 18000, now() - interval '1 month', 'migracion');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_ajuste(v_m, 6, 'restitucion', 'restitución de prueba', gen_random_uuid());
+  perform public.club_vencer((now() at time zone 'America/Costa_Rica')::date);
+  perform pg_temp.yo();
+  perform pg_temp.r('32', 'restitución hoy en una cuenta vieja → la próxima corrida de vencer NO la vence',
+    public.club_saldo_personas(v_m) = 6, format('saldo %s', public.club_saldo_personas(v_m)));
+end $$;
+
+-- ═══ 33. CLUB-AUD-05 (S-21): la tasa no se cambia con saldos vivos ═══
+do $$
+begin
+  begin
+    update club_config set personas_por_credito = personas_por_credito + 2 where location_id = 'santa-teresa';
+    perform pg_temp.r('33', 'cambiar la tasa con saldos vivos', false, 'cambió');
+  exception when others then
+    perform pg_temp.r('33', 'cambiar personas_por_credito con saldos vivos → error', sqlstate = 'P0001' and sqlerrm like 'No se puede cambiar la tasa%', sqlerrm);
+  end;
+  update club_config set cupon_dias = cupon_dias where location_id = 'santa-teresa';
+  perform pg_temp.r('33', 'los otros campos de la config se siguen pudiendo cambiar', true, '');
+end $$;
+
+-- ═══ 34. CLUB-AUD-04 (S-20): el reporte de un mes cerrado no cambia ═══
+do $$
+declare v_m uuid; v_a jsonb; v_b jsonb; v_c jsonb; v_mes date := (date_trunc('month', now() at time zone 'America/Costa_Rica') - interval '1 month')::date;
+        v_pago uuid;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('concierge_pm', 'PM AUD04', 'app') returning id into v_m;
+  insert into club_pm_cargos (miembro_id, monto_crc, estado, created_at) values (v_m, 10000, 'pendiente', v_mes + interval '9 days 12 hours');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  v_a := public.club_reporte_cerrar(v_mes, null);
+  perform pg_temp.yo();
+  -- después del cierre: se paga el cargo, el miembro cambia de tipo, se resuelve una excepción
+  insert into club_pm_pagos (miembro_id, monto_crc, pagado_en) values (v_m, 10000, now()) returning id into v_pago;
+  update club_pm_cargos set estado = 'pagado', pagado_en = now(), pago_id = v_pago where miembro_id = v_m;
+  update club_miembros set tipo = 'referente' where id = v_m;
+  insert into club_excepciones_resueltas (tipo, ref, nota) values ('CREDITOS_SIN_CANJE', 'factura:aud04', 'prueba');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  v_b := public.club_reporte_mes(v_mes);
+  v_c := public.club_reporte_mes(v_mes, 'santa-teresa', true);
+  perform pg_temp.yo();
+  perform pg_temp.r('34', 'mes cerrado: el reporte devuelve lo congelado (mismo sha256 y mismo pendiente PM) aunque después se pague, cambie el tipo y se resuelva una excepción',
+    (v_b->>'cerrado')::boolean and v_b->>'sha256' = v_a->>'sha256' and v_b->'pm' = v_a->'pm'
+      and v_b->>'sha256' = encode(extensions.digest((v_b - 'cerrado' - 'version' - 'sha256' - 'cerrado_en' - 'motivo')::text, 'sha256'), 'hex'),
+    format('hash %s', left(v_b->>'sha256', 12)));
+  perform pg_temp.r('34', 'PM as-of: aun recalculado en vivo, el cargo pagado DESPUÉS del cierre sigue pendiente al cierre',
+    (v_c->'pm'->>'pendiente_crc')::numeric = (v_a->'pm'->>'pendiente_crc')::numeric, format('%s vs %s', v_c->'pm'->>'pendiente_crc', v_a->'pm'->>'pendiente_crc'));
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    perform public.club_reporte_cerrar(v_mes, null);
+    perform pg_temp.yo(); perform pg_temp.r('34', 'recerrar sin motivo', false, 'cerró');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('34', 'recerrar sin motivo → error', sqlstate = 'P0001' and sqlerrm like 'El mes ya está cerrado%', sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  v_b := public.club_reporte_cerrar(v_mes, 'corrección de prueba');
+  perform pg_temp.yo();
+  perform pg_temp.r('34', 'recerrar con motivo → versión 2', (v_b->>'version')::int = 2, '');
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    perform public.club_reporte_cerrar(date_trunc('month', now() at time zone 'America/Costa_Rica')::date, null);
+    perform pg_temp.yo(); perform pg_temp.r('34', 'cerrar el mes en curso', false, 'cerró');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('34', 'el mes en curso no se puede cerrar', sqlerrm = 'Solo se cierran meses terminados', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    perform public.club_reporte_cerrar(v_mes, 'x');
+    perform pg_temp.yo(); perform pg_temp.r('34', 'manager cierra', false, 'cerró');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('34', 'solo el owner cierra meses (manager → sin permiso)', true, sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    update public.club_reportes_cerrados set sha256 = repeat('0', 64);
+    perform pg_temp.yo(); perform pg_temp.r('34', 'editar un cierre', false, 'editó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('34', 'nadie edita un cierre desde la app', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
+  end;
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$
@@ -1288,7 +1397,7 @@ begin
   foreach f in array array[
     'select public.club_cupon_usar(''AAAAAAAAAA'', 2, ''F'', gen_random_uuid())',
     'select public.club_canje(''00000000-0000-0000-0000-000000000000'', 1, ''F'', gen_random_uuid())',
-    'select public.club_ajuste(''00000000-0000-0000-0000-000000000000'', 1, ''ajuste'', ''x'')',
+    'select public.club_ajuste(''00000000-0000-0000-0000-000000000000'', 1, ''ajuste'', ''x'', gen_random_uuid())',
     'select public.club_vencer(current_date)'] loop
     begin
       if f ~ 'cupon_usar|canje' then

@@ -4,6 +4,11 @@
 begin;
 
 drop trigger if exists club_config_auditar_trg on public.club_config;
+drop trigger if exists club_config_tasa_guardia_trg on public.club_config;
+drop function if exists public.club_config_tasa_guardia();
+drop function if exists public.club_reporte_cerrar(date, text, text);
+drop function if exists public.club_reporte_mes(date, text, boolean);
+drop function if exists public.club_visita_control(text, text, jsonb, text, uuid, int);
 drop function if exists public.club_config_auditar();
 drop function if exists public.club_resolver(text);
 drop function if exists public.club_tarjeta_manual(uuid, int, text, uuid, jsonb);
@@ -32,6 +37,7 @@ drop function if exists public.club_cupon_ver(text);
 drop function if exists public.club_nombre_pila(text);
 drop function if exists public.club_vencer(date);
 drop function if exists public.club_portal(text);
+drop function if exists public.club_ajuste(uuid, int, text, text, uuid);
 drop function if exists public.club_ajuste(uuid, int, text, text);
 drop function if exists public.club_canje(uuid, numeric, text, uuid, jsonb);
 drop function if exists public.club_canje(uuid, numeric, text, uuid);
@@ -44,6 +50,8 @@ drop function if exists public.club_saldo_personas(uuid);
 drop view if exists public.club_saldos;
 
 drop table if exists public.club_excepciones_resueltas;
+drop table if exists public.club_reportes_cerrados;
+drop table if exists public.club_cupones_contactos;
 drop table if exists public.club_cruces_manuales;
 drop table if exists public.club_config_historial;
 drop table if exists public.club_visitas;

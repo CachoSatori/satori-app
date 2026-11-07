@@ -9,7 +9,7 @@
 | | Carpeta | Arranque | Log | Tarea programada | Hoy |
 |---|---|---|---|---|---|
 | **Staging (este plan)** | `C:\satori\satori-app` | `pos-agente.cmd` | `C:\satori\logs\pos-agente.log` | «Satori PoS Bridge» | `claude/puente-item11` @ `e84c388` (desde el 07-nov 13:44Z) |
-| Prod (no se toca) | `C:\satori\satori-app-prod` | `pos-agente-prod.cmd` | `C:\satori\logs\pos-agente-prod.log` (a confirmar: la ruta se corrigió solo para staging) | «Satori PoS Bridge PROD» | `4d3513a` |
+| Prod (no se toca) | `C:\satori\satori-app-prod` | `pos-agente-prod.cmd` | `C:\satori\logs\pos-agente-prod.log` | «Satori PoS Bridge PROD» | `4d3513a` |
 
 **Antes de cada comando, mirar que la consola esté en `C:\satori\satori-app`.** Si dice
 `satori-app-prod`, parar.
@@ -120,7 +120,7 @@ Orden obligatorio, sin saltos:
 3. **Agente de prod** en `C:\satori\satori-app-prod`. **Ojo con la base:** prod corre `4d3513a`, que viene de la línea `staging`, y no `feat/pos-desglose`. Para que prod cambie **solo** el ítem 11, su rama es **`4d3513a` + el commit del ítem 11** (`cherry-pick e84c388`; entra limpio, con 459/459 pruebas), **no** `claude/puente-item11`.
    - Pasar prod a `claude/puente-item11` cambiaría además `mapTicket.ts`: la lista de nombres de saloneros que se usa solo para mostrar en el dry-run, y el nombre de la constante de la familia 29, que vale lo mismo. Ninguno de los dos llega a la base, pero no es lo que se firma.
    - Las facturas en curso (R) y las anuladas (X) se releen igual en las dos versiones: en ese comportamiento no cambia nada. Mismo procedimiento que este plan, con la
-   tarea «Satori PoS Bridge PROD» y su log (probablemente `C:\satori\logs\pos-agente-prod.log`: confirmar en la PC). Después, el backfill.
+   tarea «Satori PoS Bridge PROD» y su log `C:\satori\logs\pos-agente-prod.log`. Después, el backfill.
 
 Regla vigente: los archivos de `supabase/functions` (el Edge) **no van en PRs a `main`** hasta que exista
 `supabase/config.toml` (ítem 11 del backlog de seguridad).

@@ -1023,18 +1023,17 @@ begin
   perform pg_temp.r('27', 'real (backfill): la 112430 trae la apertura 18:39:48 y la mesa 20 del PoS',
     (select pedido_abierto_en = timestamptz '2026-11-05 18:39:48-06' and mesa_factura = '20' from pos_ndf_tickets where local = 'santa-teresa' and numero_factura = '112430'), '');
   --  · mesa 19 del 31-oct, con los datos REALES del backfill del ítem 11 (07-nov): pedido 33, apertura y
-  --    mesa tomadas de su factura 112313. Ismael identificó 112310 y 112311 como la cuenta dividida; el
-  --    cruce además suma 112306 y 112308 (mesa 19, sin pedido, 22:10 y 22:13, dentro de la ventana):
-  --    pendientes de confirmar en el PoS. No entra la 112293 (pedido 21 de esa mesa, a las 20:06).
+  --    mesa tomadas de su factura 112313. Aceptado por Ismael (07-nov): es una cuenta partida en CINCO
+  --    (mismo cajero, 10 minutos, consecutivos 16109–16115, pax 1+0+1+1+1 = 4). No entra la 112293
+  --    (pedido 21 de esa mesa, cobrado a las 20:06).
   insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
   select v_m, 'tarjeta', 2, 6, 18000, t.pedido_abierto_en + interval '10 minutes', t.pedido_abierto_en + interval '10 minutes', 'app',
          jsonb_build_object('modo','pedido','pedido','33','mesa', t.mesa_factura, 'abierto_en', t.pedido_abierto_en,
                             'hora', t.pedido_abierto_en + interval '10 minutes'), 'pedido:2026-10-31:33'
     from pos_ndf_tickets t where t.local = 'santa-teresa' and t.numero_factura = '112313'
   returning id into v_m19;
-  perform pg_temp.r('27', 'real (backfill): mesa 19 del 31-oct → principal 112313 y, entre las divididas, 112310 y 112311; no la 112293 (pedido 21)',
-    split_part(pg_temp.cruce(v_m19), '+', 1) = '112313' and pg_temp.cruce(v_m19) like '%112310%' and pg_temp.cruce(v_m19) like '%112311%'
-      and pg_temp.cruce(v_m19) not like '%112293%', pg_temp.cruce(v_m19));
+  perform pg_temp.r('27', 'real (backfill): mesa 19 del 31-oct → exactamente 112313 (principal) + 112306 + 112308 + 112310 + 112311',
+    pg_temp.cruce(v_m19) = '112313+112306+112308+112310+112311', pg_temp.cruce(v_m19));
 end $$;
 do $$
 declare j jsonb; v_c uuid := (select i.v::uuid from _ids i where i.k = 'ped_c'); v_mv uuid;

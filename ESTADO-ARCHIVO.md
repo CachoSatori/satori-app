@@ -833,8 +833,8 @@ Se llevó a producción **toda la ola 2026-07 + Bandeja + unificación Bandeja�
 
 ---
 
-## 🆕 2026-07-03 — OLA GRANDE a STAGING (10 pases FF, todos validados físicamente por Ismael) · `staging` `c200bec → ddb1c08` · `main` intacta `a14da50`
-> Histórico archivado del header de `ESTADO.md`. Sesión de **features + un cálculo paralelo de plata + una migración firmada — SIN tocar prod, SIN datos.** Cada pase entró a staging por **FF-only** (rama feature → rebase sobre staging actual → FF → push → Cloudflare verde → validación física de Ismael). Ninguna de estas 10 cosas está en `main`/PROD.
+## 🆕 2026-07-03 — OLA GRANDE a STAGING (10 pases FF, todos validados físicamente por el dueño) · `staging` `c200bec → ddb1c08` · `main` intacta `a14da50`
+> Histórico archivado del header de `ESTADO.md`. Sesión de **features + un cálculo paralelo de plata + una migración firmada — SIN tocar prod, SIN datos.** Cada pase entró a staging por **FF-only** (rama feature → rebase sobre staging actual → FF → push → Cloudflare verde → validación física del dueño). Ninguna de estas 10 cosas está en `main`/PROD.
 
 **La cadena (orden de aplicación a staging):**
 1. **`a4b1be3` — Cierre del Día: resumen en filas** (rediseño visual patrón Caja Diaria; cero lógica).
@@ -848,9 +848,9 @@ Se llevó a producción **toda la ola 2026-07 + Bandeja + unificación Bandeja�
 9. **`380cb9a` — PROPINAS POR LA VÍA REAL (FIRMADO): el campo tipeado de propinas del cierre MURIÓ.** Ahora el encargado ve los turnos de propinas pendientes y paga con **"💵 Pagar ahora"** vía el `pagarPropina` existente (helper compartido `propinaPago.ts`, misma vía que Caja Diaria). La matemática del cierre resta propinas **EFECTIVAMENTE PAGADAS** (movimientos del libro), no un tipeo. **El FALTANTE FANTASMA quedó enterrado** (el gap venía de que 'Ventas cierre' ingresaba el BRUTO a CF mientras el "debería" restaba propinas tipeadas). **El test del gap se DIO VUELTA:** antes documentaba `ledger = contado + propinas`, ahora **AFIRMA `ledger = contado` exacto**. Deshacer el cierre NO borra pagos de propinas (plata entregada); al re-cerrar se recalcula neto e idempotente. Sin migración (`propinas_m/n_crc` reutilizados por compat con históricos/KPIs).
 10. **`ddb1c08` — Rediseño de las KPI cards de Caja al tema claro cálido** (`.cd-saldo-*`, clase compartida → afecta las 4 pestañas: Movimientos, Pendientes, Proveedores, Resumen) + card "Ajustes de cierre" muestra **₡ y US$** + diferencias discriminadas por moneda en el bloque rojo del cierre y en la tarjeta de "Día cerrado".
 
-**FUERA DEL REPO (cambio de infra, esta sesión):** el secret **`ANTHROPIC_MODEL`** de la Edge Function `extract-document` se cambió en **staging** de `claude-haiku-4-5` a **`claude-sonnet-4-5`** (`supabase secrets set --project-ref hwiatgicyyqyezqwldia`). Ismael verificó con facturas difíciles: **mejora notoria en lectura y confianza.** Es una env var — sin código, reversible al instante. **Pendiente replicar en prod.**
+**FUERA DEL REPO (cambio de infra, esta sesión):** el secret **`ANTHROPIC_MODEL`** de la Edge Function `extract-document` se cambió en **staging** de `claude-haiku-4-5` a **`claude-sonnet-4-5`** (`supabase secrets set --project-ref hwiatgicyyqyezqwldia`). El dueño verificó con facturas difíciles: **mejora notoria en lectura y confianza.** Es una env var — sin código, reversible al instante. **Pendiente replicar en prod.**
 
-**SINCERAMIENTO USD DE CAJA FUERTE (hecho en staging, pendiente prod):** la fórmula USD firmada (pase 2) destapó −$2678 histórico en el ledger de CF de staging (espejo de prod). Ismael cargó el ajuste inicial en staging (Movimientos → Ingreso · Otro CF, USD = físico + 2678, ₡ = 0). En prod hay que repetir con el conteo físico del día del pase.
+**SINCERAMIENTO USD DE CAJA FUERTE (hecho en staging, pendiente prod):** la fórmula USD firmada (pase 2) destapó −$2678 histórico en el ledger de CF de staging (espejo de prod). El dueño cargó el ajuste inicial en staging (Movimientos → Ingreso · Otro CF, USD = físico + 2678, ₡ = 0). En prod hay que repetir con el conteo físico del día del pase.
 
 **Cambio de ritual (guardrail pre-comando-de-base):** el chequeo pasa a `supabase/.temp/project-ref` (ya **no existe** `linked-project.json` en el CLI v2.105). Debe decir `hwiatgicyyqyezqwldia` para staging antes de cualquier comando de base.
 
@@ -1413,7 +1413,7 @@ Auditoría nocturna autónoma (Pase 1 + Pase 2), sin tocar la base (excepto gene
 - **Ledger real importado**: 1234 movimientos (ene–jun 2026) verificados contra Excel (₡54.884.640 / $70.614). Sesiones placeholder "Importado histórico" por fecha para que el Resumen mensual los agrupe.
 - **Ajuste de apertura Caja Fuerte**: saldo real al 04/06 = **₡534.750 / $1.054** (egreso de ajuste por el histórico pre-2022 no capturado).
 - **Proveedores**: 39 activos de la planilla (upsert sin duplicar) + 14 deudas pendientes reales (₡641.904). Pendientes anteriores saldados por transferencia.
-- **Propinas mayo**: empleados duplicados fusionados (12 vacíos borrados); turnos faltantes pendientes de cargar (ver archivo `filas_faltantes_mayo`). MAXI reactivado (barman).
+- **Propinas mayo**: empleados duplicados fusionados (12 vacíos borrados); turnos faltantes pendientes de cargar (ver archivo `filas_faltantes_mayo`). un barman reactivado.
 
 ### Propinas
 - **Estadísticas**: promedio de pool separado por turno (Prom. general / Prom. AM / Prom. PM) — los pools AM/PM son muy distintos y el promedio general distorsionaba.
@@ -1454,7 +1454,7 @@ Auditoría nocturna autónoma (Pase 1 + Pase 2), sin tocar la base (excepto gene
 - Supabase project ref PROD: `yiczgdtirrkdvohdquzf`
 - **STAGING**: rama `staging` → Cloudflare Pages (base `/`, pendiente de crear) · Supabase ref `hwiatgicyyqyezqwldia` · `npm run build:staging` · ver `STAGING.md`
 - Management token (para queries SQL directas): guardado en sesiones previas
-- Owner profile id: 48ef8af5-25d9-4990-a0b0-5140026da2ba (Cacho)
+- Owner profile id: 48ef8af5-25d9-4990-a0b0-5140026da2ba (el dueño)
 - Build/verificar: `cd /Users/ismaelgutierrezpechemiel/Downloads/satori-app && npm run build`
 
 ## ⚠️ SISTEMA DE DISEÑO (NO romper — costó iteraciones)
@@ -1516,7 +1516,7 @@ Cajeros, Contabilidad, Metas, Competencias, XLS (batch + drag-drop), Config (bul
 - Registrar propinas atrasadas: al abrir turno se elige **fecha + turno (AM/PM)**, no solo el día actual. **Bloqueo de duplicados**: nunca crea sesión si ya existe registro (abierto o cerrado) para esa fecha+turno → aviso + "Ir a Historial"
 - Historial: monto visible sin click + botón Ver → modal con desglose. **Edición dentro del mismo modal** (mini-formulario tipo creación: pools efectivo ₡/$, pool barra, por empleado check+horas+datáfono **+ selector "Cubrió como"**, reparto recalculado en vivo) — sin salir de Historial ni reabrir el turno. Acciones: editar/eliminar/copiar. Sesiones pre-mayo sin datáfono se manejan sin romper (generado ₡0)
 - Quincenal, Stats (desglose AM/PM por empleado + top earners + **datáfono Generó vs Recibió** del mes). Ambos **cargan sus propios cálculos** del mes (fetch entradas + calcHistory) — ya NO dependen de visitar Historial primero (antes Stats salía vacío)
-- Cocina (admin): pool semanal de cocina, reparto por semana ISO, Selena entra al pool pero no recibe (TipCocina.tsx)
+- Cocina (admin): pool semanal de cocina, reparto por semana ISO, una persona de cocina entra al pool pero no recibe (TipCocina.tsx)
 - **Permisos**: `canOperate` (owner/manager/**cajero**) abre/edita/cierra el turno y carga coberturas — la cuenta de caja diaria opera propinas. `isManager` (owner/manager) queda para gestión: borrar sesiones, tabs Quincenal/Stats/Cocina, editar/eliminar en Historial. El cajero ve Historial en solo lectura.
 
 ### Caja / Cash (金) — ✅ AUDITADO CONTRA FLUJO OPERATIVO REAL — listo para reemplazar Excel
@@ -1637,7 +1637,7 @@ Lo que sigue necesita acción del dueño (trámites externos o decisión estrat�
 2. ✅ EmployeeHours — fetch 24 meses, selector de año, fila de totales (src/modules/admin/EmployeeHours.tsx)
 3. ✅ Registro de turno propinas — verificación ₡500 con tipo+motivo que bloquea cierre + persiste en notas
 4. ✅ Email propinas día 1/15 — Edge fn ya tenía template; migration 003 programa el cron (APLICAR en Supabase)
-5. ✅ Pool semanal cocina — TipCocina.tsx (pestaña Cocina admin, exclusión Selena)
+5. ✅ Pool semanal cocina — TipCocina.tsx (pestaña Cocina admin, exclusión de una persona de cocina)
 6. ✅ UI carga costos — VentasConfig: import CSV + tabla paginada 50/pág + filtro clasificación; food cost se activa solo
 
 (Previo: ✅ VentasICP extendido — Horas, Prop/turno, Prop/hora)

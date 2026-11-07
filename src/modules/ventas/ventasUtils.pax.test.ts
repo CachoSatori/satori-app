@@ -36,7 +36,7 @@ const dia = (saloneros: Record<string, SaloneroDay | CajeroDay>): DiaData =>
 
 /** Un día del PoS: 20 comensales del mesero + 4 de un ticket de salón cobrado por la caja. */
 const DIA_POS = dia({
-  MAXO:         sal({ pax: 20, total: 200_000, iva: 26_000, serv: 20_000, iCom: 40, iBeb: 10 }),
+  TITO:         sal({ pax: 20, total: 200_000, iva: 26_000, serv: 20_000, iCom: 40, iBeb: 10 }),
   'Caja (222)': caj({ pax: 4, total: 50_000, salon: 40_000, delivery: 10_000, iva: 6_500, serv: 4_000, ordenes: 3 }),
 })
 
@@ -63,7 +63,7 @@ describe('getDayStats — el pax de los buckets de caja cuenta', () => {
   })
 
   it('la caja sigue fuera del ranking: no aparece en `saloneroNames`', () => {
-    expect(getDayStats(DIA_POS).saloneroNames).toEqual(['MAXO'])
+    expect(getDayStats(DIA_POS).saloneroNames).toEqual(['TITO'])
   })
 
   it('un día del xls (bucket de caja SIN `pax`) queda exactamente igual', () => {

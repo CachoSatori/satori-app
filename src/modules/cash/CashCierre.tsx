@@ -231,7 +231,7 @@ export default function CashCierre({ onRefresh, openSession, fechaInicial }: Pro
   // select manual que podría contradecir a la plata. La plata ya se deriva del mismo signo en recordCierreAjuste.
   const ajusteTipoDerivado = ajusteTipoPorSigno(diferencia, difUSD)
   const [ajusteMotivo, setAjusteMotivo] = useState('')
-  // ── «Recontar» UNA vez (decisión de Ismael, 05/11 · columnas de la mig 074) ──
+  // ── «Recontar» UNA vez (decisión del dueño, 05/11 · columnas de la mig 074) ──
   // El esperado y la verificación se ven EN VIVO como siempre. Al pedir el cierre FUERA de
   // tolerancia (₡500 / US$1) se ofrece recontar una vez: el primer conteo se guarda en
   // cash_cierres_dia.primer_conteo_crc/usd y el conteo queda en blanco. Si después sigue fuera (o

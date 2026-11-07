@@ -107,7 +107,7 @@ export const ORDEN_CARGA = [
 
 /**
  * OPCIÓN 2 (firmada por la dueña): los ids de perfil de prod que no existen en staging se
- * remapean a este perfil. Es `Caja Satori · satorisushibar@gmail.com`, owner de staging.
+ * remapean a este perfil. Es `Caja Satori · <correo del owner de staging>`, owner de staging.
  * No se toca auth ni el esquema; lo único que cambia es de quién fue la mano.
  */
 export const OWNER_STAGING = 'cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888'

@@ -8,7 +8,7 @@ import { MemoryRouter } from 'react-router-dom'
 
 const H = vi.hoisted(() => ({ estado: 'sin_acceso' as string | null }))
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
-vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'p1', full_name: 'Francisco', role: 'salonero' }, loading: false }) }))
+vi.mock('../../shared/hooks/useAuth', () => ({ useAuth: () => ({ profile: { id: 'p1', full_name: 'Sebastian', role: 'salonero' }, loading: false }) }))
 vi.mock('../../shared/api/ventas', () => ({
   getProductMap: vi.fn(async () => ({})),
   getMetas: vi.fn(async () => ({ restaurante: {}, margen: {}, global: { promPax: 15000, bebPax: 1.2, ratioCB: 3, ticketItem: 7500, ventas: 800000 }, salMetas: {} })),

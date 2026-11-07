@@ -126,7 +126,7 @@ describe('Fix B · el delivery del Mix son las cajas de TURNO, no la marca', () 
 
   it('«Sistema y otros» y los meseros tampoco', () => {
     expect(esCajaDeTurno(CLAVE_SISTEMA_OTROS)).toBe(false)
-    expect(esCajaDeTurno('MAXO')).toBe(false)
+    expect(esCajaDeTurno('TITO')).toBe(false)
   })
 })
 
@@ -203,7 +203,7 @@ describe('iBebAdj · el multiplicador NO se activa por la fusión', () => {
     '2026-09-07': {
       fileName: 'ndf', uploadedAt: '2026-09-08',
       saloneros: {
-        MAXO: sal({
+        TITO: sal({
           pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 10,
           prods: [['ROLL SATORI', 40, 150_000], ['BOTELLA SAKE', 10, 50_000]],
         }),
@@ -217,7 +217,7 @@ describe('iBebAdj · el multiplicador NO se activa por la fusión', () => {
     // ANTES: el curado tiene el producto con la CATEGORÍA del CSV, que ninguna pantalla lee,
     // así que el multiplicador nunca se aplicaba y la cuenta caía al `iBeb` crudo (10).
     const curado = { 'BOTELLA SAKE': info({ tipo: 'BEBIDAS', multiplicador: 6 }) }
-    const antes = aggSalonero('MAXO', FECHA, DIAS, curado)
+    const antes = aggSalonero('TITO', FECHA, DIAS, curado)
     expect(antes.iBeb).toBe(10)
     expect(antes.bebPax).toBe(0.5)                       // 10 ÷ 20
 
@@ -227,7 +227,7 @@ describe('iBebAdj · el multiplicador NO se activa por la fusión', () => {
     expect(fusionado['BOTELLA SAKE'].tipoDeFamilia).toBe(true)
     expect(fusionado['BOTELLA SAKE'].multiplicador).toBe(6)   // el curado se conserva…
 
-    const despues = aggSalonero('MAXO', FECHA, DIAS, fusionado)
+    const despues = aggSalonero('TITO', FECHA, DIAS, fusionado)
     expect(despues.iBeb).toBe(10)                        // …pero NO se activa
     expect(despues.bebPax).toBe(antes.bebPax)
     expect(despues.promBebida).toBe(antes.promBebida)
@@ -237,11 +237,11 @@ describe('iBebAdj · el multiplicador NO se activa por la fusión', () => {
 
   it('sin la marca se habría disparado a 60 — el test de que el freeze hace algo', () => {
     const sinMarca = { 'BOTELLA SAKE': info({ tipo: 'bebida', multiplicador: 6 }) }
-    expect(aggSalonero('MAXO', FECHA, DIAS, sinMarca).iBeb).toBe(60)   // 10 × 6
+    expect(aggSalonero('TITO', FECHA, DIAS, sinMarca).iBeb).toBe(60)   // 10 × 6
   })
 
   it('un producto sin curar tampoco lo activa: entra solo por familia', () => {
-    const despues = aggSalonero('MAXO', FECHA, DIAS, fusionarProductMap({}, FAMILIA))
+    const despues = aggSalonero('TITO', FECHA, DIAS, fusionarProductMap({}, FAMILIA))
     expect(despues.iBeb).toBe(10)
     expect(despues.bebPax).toBe(0.5)
   })
@@ -252,8 +252,8 @@ describe('iBebAdj · el multiplicador NO se activa por la fusión', () => {
     const curado = { 'BOTELLA SAKE': info({ tipo: 'bebida', multiplicador: 6 }) }
     const fusionado = fusionarProductMap(curado, FAMILIA)
     expect(fusionado['BOTELLA SAKE'].tipoDeFamilia).toBe(false)
-    expect(aggSalonero('MAXO', FECHA, DIAS, fusionado).iBeb).toBe(60)
-    expect(aggSalonero('MAXO', FECHA, DIAS, fusionado).iBeb)
-      .toBe(aggSalonero('MAXO', FECHA, DIAS, curado).iBeb)   // idéntico a antes de la fusión
+    expect(aggSalonero('TITO', FECHA, DIAS, fusionado).iBeb).toBe(60)
+    expect(aggSalonero('TITO', FECHA, DIAS, fusionado).iBeb)
+      .toBe(aggSalonero('TITO', FECHA, DIAS, curado).iBeb)   // idéntico a antes de la fusión
   })
 })

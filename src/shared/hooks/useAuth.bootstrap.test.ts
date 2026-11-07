@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // Por eso NO se renderiza el AuthProvider: se ejercita el PIPELINE EXACTO del bootstrap
 // (useAuth.tsx:36-58: withTimeout(getSession).then(setUser; await loadProfile).finally(loading=false),
 // con loadProfile = withTimeout(SELECT)+1 reintento) con el mismo patrón de mock + fake timers.
-// El caso físico (loading→/login en la app real) lo valida Cacho.
+// El caso físico (loading→/login en la app real) lo valida el dueño.
 
 type SessionLike = { access_token: string; expires_at: number; user: { id: string } }
 type GetSessionResult =

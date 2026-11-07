@@ -1,0 +1,134 @@
+# Contrato · pase de Wallet ↔ base del Club (v1, 07-nov-2026)
+
+> Para la **sesión B** (pase de Wallet) y la **sesión A** (Local Club en la 075). Este documento es la frontera
+> entre las dos: B arranca con el JSON de ejemplo de abajo, sin esperar a A. **Cualquier cambio de este contrato
+> se acuerda acá primero** (y sube `contrato` a 2).
+>
+> Alcance: **solo staging** hasta la firma del pase a prod (RUNBOOK, paso 7). Google primero; Apple con el código
+> listo y **apagado** hasta el D-U-N-S.
+
+## 1. Principios
+- **Un pase por persona** = un `club_miembros.id`. La misma persona puede ser referente y socio: un solo pase.
+- **B no lee tablas del Club.** Todo pasa por las funciones de este contrato: SECURITY DEFINER y ejecutables **solo
+  por `service_role`** (el Edge de B). Ni `anon` ni `authenticated` las ven.
+- **El pase no lleva datos de contacto** (ni teléfono, ni email) ni secretos. El token del portal **solo** va en el
+  link del botón «Canjear», que es privado del dueño del pase (igual que el link de WhatsApp de hoy).
+- **QR del pase:** el **público** `/r/{codigo8}` (cupones de turistas), **solo si es referente**. Un socio que no es
+  referente no lleva QR. **El canje y la identificación del socio en caja salen del botón «Canjear»** (código de un
+  solo uso de R-01), nunca del QR.
+- La base da **datos**; los textos los arma B en ES y EN. Las únicas cadenas libres son los nombres de promociones y
+  cortesías (en español; `nombre_en` opcional).
+
+## 2. Datos del pase: `club_pase_datos(p_miembro uuid) → jsonb`
+Ejecutable solo por `service_role`. Devuelve `null` si el miembro no existe. Ejemplo (datos ficticios):
+
+```json
+{
+  "contrato": 1,
+  "miembro_id": "00000000-0000-4000-8000-00000000c0de",
+  "version": 418,
+  "actualizado_en": "2026-11-07T19:30:00Z",
+  "nombre_pila": "Ana",
+  "estado": "activo",
+  "local": { "id": "santa-teresa", "nombre": "Satori Sushi Bar · Santa Teresa" },
+  "referente": {
+    "activo": true,
+    "tipo": "referente",
+    "codigo_publico": "ABCD2345",
+    "qr_url": "https://club.satoricostarica.com/r/ABCD2345",
+    "personas": 14,
+    "creditos": 2.0,
+    "personas_proximo_medio": 1,
+    "valor_credito_crc": 18000
+  },
+  "socio": {
+    "estado": "activo",
+    "desde": "2026-11-10",
+    "beneficio": "10 % en tu factura",
+    "cortesias": [
+      { "codigo_producto": "1234", "nombre": "Postre de la casa", "cantidad": 1, "motivo": "promo", "vence_en": null },
+      { "codigo_producto": "5678", "nombre": "Bebida de cortesía", "cantidad": 1, "motivo": "premio_referido", "vence_en": "2026-12-31" }
+    ]
+  },
+  "promociones": [
+    { "id": "8f0e…", "nombre": "Local Club", "nombre_en": null, "beneficio": "10 % + 1 postre", "para": ["socio"],
+      "vigente_hasta": null, "dias": [1,2,3,4,5,6,7], "horario": null }
+  ],
+  "canjear_url": "https://club.satoricostarica.com/p/<token64>?accion=canjear",
+  "portal_url": "https://club.satoricostarica.com/p/<token64>"
+}
+```
+
+Reglas de los campos:
+| Campo | Regla |
+|---|---|
+| `version` | Sube con cualquier cambio que afecte al pase (ver §3). B solo actualiza el objeto si `version` subió. |
+| `estado` | `activo` o `baja` de la persona. Con `baja`: B **expira** el pase (estado `EXPIRED` en Google). |
+| `referente` | `null` si no es referente. `creditos` con un decimal (0,5 de paso). `codigo_publico` cambia si se regenera el QR. |
+| `socio` | `null` si no es socio. `estado`: `pendiente` (mostrar «Validá tu alta en tu próxima visita»), `activo` o `baja`. Con `pendiente` el beneficio **no** aplica y `cortesias` va vacío. |
+| `socio.cortesias` | Lo que le corresponde **en su próxima visita** (promo vigente + premios por referido pendientes). |
+| `promociones` | Solo las vigentes hoy para los roles que tiene. |
+| `canjear_url` | Abre el portal y genera el código de un solo uso (R-01). Si se regenera el token, cambia. Con `referente` null y `socio` activo, sirve para identificarse en caja. |
+
+## 3. Cómo se avisa un cambio: eventos (cola de solo inserción)
+`club_pase_eventos(id bigint identity, miembro_id uuid null, motivo text, creado_en timestamptz)`.
+La llenan **triggers de la base**; `miembro_id` null = afecta a **todos** los pases (una promoción nueva o terminada).
+
+| `motivo` | Cuándo |
+|---|---|
+| `movimiento` | tarjeta, canje, vencimiento, ajuste o restitución del miembro |
+| `rol` | alta o cambio de estado de referente o de socio (incluye pendiente → activo) |
+| `datos` | nombre, baja/reactivación, código del QR o token regenerados |
+| `cortesia` | premio por referido creado o usado; cortesía entregada |
+| `promociones` | promoción creada, editada, vigente o terminada (`miembro_id` null) |
+
+Funciones para B (solo `service_role`):
+- `club_pase_eventos_leer(p_despues bigint, p_limite int default 500) → table(id, miembro_id, motivo, creado_en)`
+- `club_pase_cursor(p_nombre text) → bigint` y `club_pase_cursor_guardar(p_nombre text, p_id bigint)`: B guarda
+  hasta dónde procesó (`p_nombre` = `'google'` o `'apple'`), así un reinicio no reprocesa ni pierde.
+
+**Entrega:** B corre su sincronización **cada 2 minutos** (programada en el Edge de B) y también **a pedido** desde el
+portal («Actualizar mi pase»). Para cada `miembro_id` distinto del lote: `club_pase_datos` → si `version` subió,
+PATCH del objeto. Si `miembro_id` es null: recorrer los pases emitidos. Los eventos **no** llevan datos: siempre se
+releen con `club_pase_datos` (así un evento perdido o repetido no rompe nada).
+
+## 4. Mensajes al dueño del pase: `club_alertas`
+Ya existe (R-01): una fila por canje (`tipo = 'canje'`, `miembro_id`, `movimiento_id`, `creado_en`, `enviado_en`, `canal`).
+- `club_alertas_pendientes(p_limite int) → table(id, miembro_id, tipo, creditos, saldo_creditos, fecha)`
+- `club_alerta_enviada(p_id bigint, p_canal text)`: marca `enviado_en = now()` y `canal` (`google`, `apple`).
+
+B manda el mensaje del pase («Se canjearon 1,5 créditos de tu cuenta. Te quedan 2. ¿No fuiste vos? Avisanos.») y lo
+marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
+
+## 5. Emisión: quién crea el pase
+- En el portal (`/p/{token}`) aparece «Agregar a Google Wallet». club-web llama a la Edge de B
+  (`POST /club-pase/google` con el token) — **mismo patrón que las funciones públicas: header `x-club-web` + tope por IP**.
+- B resuelve el token con `club_pase_por_token(p_token text) → uuid` (solo `service_role`), arma el objeto con
+  `club_pase_datos` y devuelve el link «Save to Google Wallet» (JWT firmado). El objectId es
+  `<issuerId>.club-<miembro_id>` (estable: regenerar el QR o el token **no** cambia el pase).
+- `club_pase_emitido(p_miembro uuid, p_plataforma text, p_object_id text)`: B registra el pase emitido
+  (tabla `club_pases`), para saber a quién actualizar y para la baja.
+- **Autoalta de socio:** el formulario de club-web, al terminar, ofrece el mismo botón (pase en estado pendiente).
+
+## 6. Apple (apagado)
+Mismo contrato. Flag `club_config.wallet_apple_activo = false` (lo agrega A). B deja listo el `.pkpass` y el web
+service de actualización de Apple, y no se ofrece el botón mientras el flag esté apagado.
+
+## 7. Secretos y configuración (los carga Ismael, nunca por chat ni en el repo)
+- Google: `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SA_KEY` (JSON de la cuenta de servicio) como secretos del Edge de B.
+- Apple (más adelante): certificado del Pass Type ID y su clave.
+- Diseño: logo, colores e imagen del local (B propone; Ismael aprueba).
+
+## 8. Qué entrega A y cuándo (para que B no espere)
+| Entrega de A | Día de A | B mientras tanto |
+|---|---|---|
+| **Stub** de `club_pase_datos`, `club_pase_por_token`, `club_pase_emitido`, eventos y cursor, con datos REALES de referentes y `socio: null` | **día 1** | trabaja con el JSON de ejemplo de §2 |
+| `socio`, `cortesias` y `promociones` reales; eventos de `rol`, `cortesia` y `promociones` | día 5 | prueba el pendiente → activo con datos sintéticos |
+| Contrato congelado (v1) + datos de prueba sintéticos en staging para B | día 6 | integración de punta a punta |
+
+## 9. Pruebas que comparten A y B
+- Los `service_role`-only: `anon` y `authenticated` no ejecutan ninguna función de este contrato.
+- `club_pase_datos` nunca contiene `@`, `+506` ni el token fuera de `canjear_url` y `portal_url`.
+- Un canje genera un evento `movimiento` y una alerta; la versión sube; el pase muestra el saldo nuevo en ≤ 2 min.
+- Socio pendiente → validado en caja → evento `rol` → el pase pasa a activo y muestra la cortesía.
+- Baja → el pase queda expirado.

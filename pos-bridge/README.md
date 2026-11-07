@@ -432,7 +432,12 @@ entero) y va **sin `open` y sin `cursor`**: no le toca nada al agente en vivo.
 # Ítem 11 · campos de la factura para el Club (mig 081)
 
 Firma de Ismael para **staging** (07-nov); prod va aparte y con firma. Hallazgos de Ismael en el PoS
-(solo lectura, 06-nov) en la cabecera de `supabase/migrations/081_pos_ndf_campos_factura.sql`.
+(solo lectura, 06-nov) en la cabecera de la mig 081.
+
+> ⚠️ **La mig 081 NO está en esta rama.** Hay una sola versión: la del PR #59 («Club Satori», rama
+> `claude/epic-tesla-pyo77m`), con `supabase/migrations/081_pos_ndf_campos_factura.sql` y
+> `scripts/sql/081_rollback.sql`. Es la final: con el área de la mesa y los índices del CLUB-AUD-13. El
+> agente no usa la migración. En prod se aplica esa, a mano y con firma, **antes** del Edge nuevo.
 
 | Columna nueva | De dónde sale | Para qué |
 |---|---|---|

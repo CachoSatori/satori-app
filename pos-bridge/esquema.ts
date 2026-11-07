@@ -56,6 +56,13 @@ export const CATALOGO: Record<TablaKey, DefTabla> = {
       login:            opt('cajero que cobró (informativo)', 'Login'),
       tipo:             opt('canal, si el pedido no lo trae', 'Tipo', 'TipoFactura'),
       area:             opt('área cruda', 'Area'),
+      // Ítem 11 (mig 081, firma de Ismael 07-nov). OPCIONALES: sin ellas, el campo viaja en
+      // null y la venta entra igual. La mesa de la FACTURA es la que tienen las cuentas divididas,
+      // que no tienen pedido. El consecutivo (20 dígitos) es el número que ve el cliente en el
+      // tiquete. `FAC_Facturas.NumeroPedido` NO se usa: viene vacío siempre.
+      numeromesa:       opt('mesa de la factura (las cuentas divididas no tienen pedido)', 'NumeroMesa'),
+      consecutivofe:    opt('consecutivo de la factura electrónica (20 dígitos)', 'ConsecutivoElectronico'),
+      clavefe:          opt('clave de la factura electrónica (50 dígitos)', 'ClaveElectronica'),
     },
   },
   pedidos: {

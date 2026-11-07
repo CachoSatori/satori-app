@@ -141,10 +141,18 @@ export function sqlFacturas(
     const real = colOpt(esq, 'facturas', campo)
     return real ? `CONVERT(varchar(19), f.${q(real)}, 120)` : 'NULL'
   }
+  // Un texto opcional de la factura (mesa, consecutivo, clave): como varchar, por lo mismo
+  // que el número de factura (si alguna fuera decimal, un Number la truncaría).
+  const ofTexto = (campo: string) => {
+    const real = colOpt(esq, 'facturas', campo)
+    return real ? `CAST(f.${q(real)} AS varchar(60))` : 'NULL'
+  }
   const op = (campo: string) => {
     const real = colOpt(esq, 'pedidos', campo)
     return real ? `MIN(p.${q(real)})` : 'NULL'
   }
+  // Ítem 11: la apertura del pedido (FAC_Pedidos.FechaRegistra), como texto estilo 120.
+  const pedidoAbierto = colOpt(esq, 'pedidos', 'fecha') ? 'CONVERT(varchar(19), ped.pedido_abierto, 120)' : 'NULL'
   // El número de pedido también es decimal: sale como varchar por la misma razón que
   // `NumeroFactura` (un Number lo trunca arriba de 2^53).
   const opTexto = (campo: string) => {
@@ -164,6 +172,10 @@ export function sqlFacturas(
   CAST(f.${cf('numero')} AS varchar(40))            AS numero_factura,
   CONVERT(varchar(19), f.${cf('fecha')}, 120)       AS fecha_hora,
   ${ofFecha('fechacierra')}                         AS fecha_cierra,
+  ${ofTexto('numeromesa')}                          AS mesa_factura,
+  ${ofTexto('consecutivofe')}                       AS consecutivo_fe,
+  ${ofTexto('clavefe')}                             AS clave_fe,
+  ${pedidoAbierto}                                  AS pedido_abierto_en,
   f.${cf('estado')}                                 AS estado,
   ${of_('login')}                                   AS login_cajero,
   ${of_('tipo')}                                    AS tipo_factura,
@@ -197,7 +209,8 @@ LEFT JOIN (
     ${op('tipo')}                                   AS tipo,
     ${op('area')}                                   AS area,
     ${op('mesa')}                                   AS mesa,
-    ${opTexto('numeropedido')}                      AS numero_pedido_txt
+    ${opTexto('numeropedido')}                      AS numero_pedido_txt,
+    ${op('fecha')}                                  AS pedido_abierto
   FROM ${P} p
   INNER JOIN ${F} fp ON fp.${cf('numero')} = p.${cp('numerofactura')}
   WHERE ${filtroEstado(`fp.${cf('estado')}`, estados)}
@@ -261,6 +274,12 @@ export interface FilaFactura {
   fecha_hora:        string
   /** `FechaCierra` CRUDA (naive = hora CR). Opcional: la columna puede no existir. */
   fecha_cierra?:     unknown
+  /** Ítem 11 (mig 081). Opcionales: null si la instalación no tiene la columna. */
+  mesa_factura?:      unknown
+  consecutivo_fe?:    unknown
+  clave_fe?:          unknown
+  /** `FAC_Pedidos.FechaRegistra` del pedido de la factura (naive = hora CR). */
+  pedido_abierto_en?: unknown
   estado:            string | null
   login_cajero:      unknown
   tipo_factura:      unknown

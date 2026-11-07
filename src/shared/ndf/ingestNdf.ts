@@ -117,6 +117,15 @@ export interface TicketIngest extends TicketMapeado {
   tipo?:           string | null
   mesa?:           string | null
   numero_pedido?:  string | null
+  // ── Ítem 11 (mig 081). Opcionales: un agente viejo no los manda y quedan en null. ─────────
+  /** `FAC_Facturas.NumeroMesa`: la mesa de la factura (las cuentas divididas no tienen pedido). */
+  mesa_factura?:      string | null
+  /** Consecutivo de la factura electrónica, 20 dígitos. */
+  consecutivo_fe?:    string | null
+  /** Clave de la factura electrónica, 50 dígitos. */
+  clave_fe?:          string | null
+  /** `FAC_Pedidos.FechaRegistra` del pedido de la factura, con zona explícita. */
+  pedido_abierto_en?: string | null
 }
 
 /** Una línea = el `ItemMapeado` de la Fase 1a más el precio unitario. */
@@ -145,6 +154,8 @@ export interface OpenIngest {
   pax?:            number | null
   pax_alerta?:     PaxAlerta | null
   updated_at?:     string | null
+  /** Ítem 11 (mig 081): `FAC_Pedidos.FechaRegistra`, con zona explícita. */
+  pedido_abierto_en?: string | null
   // ── Frente C v1: PROVISIONALES. Nunca entran en neta / cuadre / pos_ndf_tickets. ──────
   /** Estimado por catálogo, bruto. `null` = no se pudo calcular; `0` = cero real (cortesía). */
   monto_estimado_crc?: number | null
@@ -214,6 +225,11 @@ export interface TicketRow {
   pax_alerta:       PaxAlerta
   total_crc:        number
   total_fuente:     string
+  /** Ítem 11 (mig 081). */
+  mesa_factura:      string | null
+  consecutivo_fe:    string | null
+  clave_fe:          string | null
+  pedido_abierto_en: string | null
 }
 
 export interface LineaRow {
@@ -245,6 +261,8 @@ export interface OpenRow {
   pax_pedido:         number | null
   items_valor:        number | null
   detalle_productos:  ProductoComandado[] | null
+  /** Ítem 11 (mig 081). */
+  pedido_abierto_en:  string | null
 }
 
 export interface CursorRow {
@@ -434,6 +452,11 @@ export function normalizarTicket(local: string, t: unknown): Resultado<TicketNor
         pax_alerta,
         total_crc:        recalculado,
         total_fuente:     texto(x.total_fuente) ?? 'provisorio',
+        // Ítem 11 (mig 081). Nunca tumban el ticket: lo que no tiene la forma esperada va null.
+        mesa_factura:      textoCorto(x.mesa_factura, 20),
+        consecutivo_fe:    digitos(x.consecutivo_fe, 20),
+        clave_fe:          digitos(x.clave_fe, 50),
+        pedido_abierto_en: instanteOpcionalONull(x.pedido_abierto_en),
       },
       lineas,
       totalRecalculado,
@@ -473,8 +496,28 @@ export function normalizarOpen(local: string, o: unknown, ahora: string): Result
       // Informativo (mig 065). Fail-closed: cualquier entrada malformada tira el array ENTERO
       // a null, no se guarda una lista a medias que se leería como «la mesa solo tiene esto».
       detalle_productos:  productosComandados(x.detalle_productos),
+      // Ítem 11 (mig 081). Sin zona o ilegible → null (no tumba la mesa).
+      pedido_abierto_en:  instanteOpcionalONull(x.pedido_abierto_en),
     },
   }
+}
+
+/** Texto recortado, o null si falta o es más largo que `max`. */
+const textoCorto = (v: unknown, max: number): string | null => {
+  const s = texto(v)
+  return s !== null && s.length <= max ? s : null
+}
+
+/** Exactamente `largo` dígitos, o null. */
+const digitos = (v: unknown, largo: number): string | null => {
+  const s = texto(v)
+  return s !== null && s.length === largo && /^[0-9]+$/.test(s) ? s : null
+}
+
+/** Un instante con zona explícita, o null (ausente, sin zona o ilegible: nunca rechaza). */
+const instanteOpcionalONull = (v: unknown): string | null => {
+  const r = instanteOpcional(v)
+  return r.ok ? r.valor : null
 }
 
 /**

@@ -80,6 +80,25 @@ describe('VentasPromPaxExplicado — caso sintético', () => {
 
 const ARCHIVO = process.env.PROMPAX_PANTALLA_FILE
 
+/**
+ * Cada frase de causa («Por …: GRUPO: …») tiene que tener todos sus números (₡, % y pax) en la fila
+ * de GRUPO de una tabla visible, tal cual se imprimen.
+ */
+function numerosDeLaFraseEnSuFila() {
+  const frases = [...screen.getByTestId('pp-explicacion').querySelectorAll('p')].map(p => p.textContent!).slice(1)
+  expect(frases.length).toBeGreaterThan(0)
+  const filas = [...document.querySelectorAll('[data-testid^="pp-tabla-"] tbody tr')]
+  for (const frase of frases) {
+    const grupo = frase.replace(/^Por [^:]+: /, '').split(':')[0]
+    const fila = filas.find(tr => tr.querySelector('td')?.textContent === grupo)
+    expect(fila, frase).toBeTruthy()
+    const nums = frase.match(/[+−]?₡[\d.]+|\d+,\d%|[\d.]+(?= pax)/g) ?? []
+    expect(nums.length, frase).toBeGreaterThanOrEqual(2)
+    const celdas = [...fila!.querySelectorAll('td')].map(td => td.textContent)
+    for (const n of nums) expect(celdas, `${n} en «${frase}»`).toContain(n)
+  }
+}
+
 describe.skipIf(!ARCHIVO)('VentasPromPaxExplicado — §9 v2.3 en pantalla, con filas reales del RPC de staging', () => {
   it('oct 1–29 y su noche por salonero y por día', async () => {
     H.filas = (JSON.parse(readFileSync(ARCHIVO!, 'utf8')) as FilaPromPaxRpc[]).map(x => ({ ...x, neta: Number(x.neta), neta_sin_pax: Number(x.neta_sin_pax) }))
@@ -96,11 +115,14 @@ describe.skipIf(!ARCHIVO)('VentasPromPaxExplicado — §9 v2.3 en pantalla, con 
     expect(turno).toContain('₡13.299')
     expect(turno).toContain('₡17.390')
 
+    numerosDeLaFraseEnSuFila()
+
     fireEvent.click(screen.getByRole('button', { name: 'Noche' }))
     await waitFor(() => expect(screen.queryByTestId('pp-tabla-turno')).toBeNull())
     const sal = screen.getByTestId('pp-tabla-salonero').textContent!
     for (const v of ['₡17.934', '₡18.105', '₡16.954', '₡15.080']) expect(sal).toContain(v)
     const dia = screen.getByTestId('pp-tabla-dia').textContent!
     for (const v of ['₡19.421', '₡18.547', '₡15.529']) expect(dia).toContain(v)
+    numerosDeLaFraseEnSuFila()
   })
 })

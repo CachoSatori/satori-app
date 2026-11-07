@@ -15,7 +15,7 @@ import {
 import { resolverPersonas } from './promPaxSaloneros'
 import { diaLegible, etiquetaTramo, rangoDeTramo, TRAMOS, tramoDe, type TramoId } from './temporadas'
 import {
-  aCsv, analizar, crc, tablaCorte, tablaSaloneros, type Analisis, type Corte, type FilaAgregada,
+  aCsv, analizar, crc, entero, pctPax, signoCrc, tablaCorte, tablaSaloneros, type Analisis, type Corte, type FilaAgregada,
   type FilaTabla, type FiltroTurno,
 } from './ventasPromPaxExplicado'
 
@@ -24,8 +24,6 @@ const NOMBRE_TRAMO: Record<TramoId, string> = {
 }
 
 const pctTxt = (x: number | null, dec = 1) => x === null ? '—' : `${x >= 0 ? '+' : '−'}${Math.abs(x * 100).toFixed(dec).replace('.', ',')}%`
-const signoCrc = (x: number | null) => x === null ? '—' : `${x >= 0 ? '+' : '−'}${crc(x)}`
-const entero = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 const color = (x: number | null) => x === null || Math.abs(x) < 1e-9 ? '#888' : x > 0 ? 'var(--vt-green)' : 'var(--vt-red)'
 const rangoTxt = (p: Periodo) => p.tramo ? etiquetaTramo(rangoDeTramo(p.tramo.id, p.tramo.anio)) : `${diaLegible(p.desde)} – ${diaLegible(p.hasta)}`
 
@@ -292,7 +290,7 @@ function TablaCorte({ titulo, corte, a, detalle, vsTurno }: {
                 <tr key={f.clave}>
                   <td style={{ fontWeight: 600 }}>{f.etiqueta}</td>
                   <td className="r">{entero(f.pax)}</td>
-                  <td className="r">{f.pctPax === null ? '—' : `${(f.pctPax * 100).toFixed(1).replace('.', ',')}%`}</td>
+                  <td className="r">{pctPax(f.pctPax)}</td>
                   <td className="r vt-bold">{f.promPax === null ? 'sin pax' : crc(f.promPax)}</td>
                   <td className="r">{f.promPaxComp === null ? 'sin pax' : crc(f.promPaxComp)}</td>
                   <td className="r" style={{ color: color(f.delta) }}>{signoCrc(f.delta)}</td>

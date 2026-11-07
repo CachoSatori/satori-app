@@ -130,7 +130,7 @@ export type Corte = 'turno' | 'dia' | 'salonero' | 'semana' | 'saloneroTurno'
 export const CORTES: readonly Corte[] = ['turno', 'dia', 'salonero', 'semana', 'saloneroTurno']
 
 export const NOMBRE_CORTE: Record<Corte, string> = {
-  turno: 'turno', dia: 'día', salonero: 'salonero', semana: 'semana', saloneroTurno: 'salonero y turno',
+  turno: 'turno', dia: 'día', salonero: 'salonero', semana: 'semana', saloneroTurno: 'salonero',
 }
 
 /** Un grupo de un corte en UN período: solo salón. `neta` = la parte CON pax (N_i). */
@@ -306,8 +306,12 @@ export function puedeSerCausa(g: Pick<AporteGrupo, 'pax_v' | 'pax_n'>): boolean 
   return Math.min(g.pax_v, g.pax_n) >= PAX_MIN_CAUSA
 }
 
-/** Los cortes que compiten por el texto, en el orden de desempate (§6.3). La semana no entra. */
-export const CORTES_TEXTO: readonly Corte[] = ['turno', 'dia', 'salonero']
+/**
+ * Los cortes que compiten por el texto, en el orden de desempate (§6.3). La semana no entra.
+ * Del salonero compite el corte de la tabla VISIBLE: `saloneroTurno` con turno = «ambos», si no
+ * `salonero` (`analizar` pasa uno solo de los dos).
+ */
+export const CORTES_TEXTO: readonly Corte[] = ['turno', 'dia', 'salonero', 'saloneroTurno']
 
 export interface CausasCorte {
   corte:  Corte
@@ -340,7 +344,12 @@ export function crc(n: number): string {
   return `₡${String(r).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`
 }
 
-const pct = (x: number) => `${(x * 100).toFixed(1).replace('.', ',')}%`
+/** «+₡1.719» / «−₡425». Lo usan la tabla y las frases: así cada número de la frase está tal cual en la tabla. */
+export const signoCrc = (x: number | null): string => x === null ? '—' : `${x >= 0 ? '+' : '−'}${crc(x)}`
+/** «1.234» (pax). */
+export const entero = (n: number): string => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+/** «33,0%» (% de pax de la tabla). */
+export const pctPax = (x: number | null): string => x === null ? '—' : `${(x * 100).toFixed(1).replace('.', ',')}%`
 
 /** Las líneas que no son salón y «pesan»: ≥ 15 % del total de los movimientos por línea. */
 export const PESO_LINEA = 0.15
@@ -364,15 +373,19 @@ export function fraseVentas(c: CuadreVentas): string {
   return partes.join(' ')
 }
 
-/** Una causa, en lenguaje descriptivo (nunca califica a la persona). */
-export function fraseCausa(g: AporteGrupo): string {
-  const efecto = `${g.aporte >= 0 ? 'sumó' : 'restó'} ${crc(g.aporte)} al prom/pax`
-  if (Math.abs(g.rendimiento) >= Math.abs(g.mezcla) && g.p_v !== null && g.p_n !== null) {
-    return `${g.etiqueta}: ${g.p_n >= g.p_v ? 'subió' : 'bajó'} el gasto por persona`
-      + ` (${crc(g.p_v)} → ${crc(g.p_n)}); ${efecto}.`
+/**
+ * Una causa, en lenguaje descriptivo (nunca califica a la persona). Usa SOLO números que la tabla
+ * visible del corte muestra por defecto (`fila` = su fila en `tablaCorte`), con los mismos
+ * formatos: prom/pax de la comparación → actual y Δ ₡, o pax y % de pax. El aporte en ₡ al
+ * prom/pax ordena las causas pero no se escribe: está en «Ver detalle» (rendimiento + mezcla).
+ */
+export function fraseCausa(g: AporteGrupo, fila: FilaTabla): string {
+  if (Math.abs(g.rendimiento) >= Math.abs(g.mezcla) && fila.promPax !== null && fila.promPaxComp !== null && fila.delta !== null) {
+    return `${fila.etiqueta}: ${fila.delta >= 0 ? 'subió' : 'bajó'} el gasto por persona`
+      + ` (${crc(fila.promPaxComp)} → ${crc(fila.promPax)}, ${signoCrc(fila.delta)}).`
   }
-  return `${g.etiqueta}: atendió ${g.s_n >= g.s_v ? 'más' : 'menos'} parte de la gente`
-    + ` (${pct(g.s_v)} → ${pct(g.s_n)} de los pax); ${efecto}.`
+  return `${fila.etiqueta}: atendió ${g.s_n >= g.s_v ? 'más' : 'menos'} parte de la gente`
+    + ` (${entero(fila.pax)} pax, ${pctPax(fila.pctPax)} del total).`
 }
 
 export interface Explicacion {
@@ -385,6 +398,7 @@ export interface Explicacion {
 
 export function explicar(
   c: CuadreVentas, v: Totales, n: Totales, porCorte: Partial<Record<Corte, Descomposicion | null>>,
+  tablas: Partial<Record<Corte, readonly FilaTabla[]>> = {},
 ): Explicacion {
   const calidad = calidadDatos(v.paxSalon, n.paxSalon)
   const frases = [fraseVentas(c)]
@@ -394,8 +408,14 @@ export function explicar(
   }
   const elegido = elegirCorte(porCorte)
   if (elegido) {
-    frases.push(`Por ${NOMBRE_CORTE[elegido.corte]}: ${fraseCausa(elegido.causas[0])}`)
-    if (elegido.causas[1]) frases.push(fraseCausa(elegido.causas[1]))
+    const filas = new Map((tablas[elegido.corte] ?? []).map(f => [f.clave, f]))
+    const frase = (g: AporteGrupo) => {
+      const f = filas.get(g.clave)
+      if (!f) throw new Error(`La causa ${g.clave} no está en la tabla de ${elegido.corte}`)
+      return fraseCausa(g, f)
+    }
+    frases.push(`Por ${NOMBRE_CORTE[elegido.corte]}: ${frase(elegido.causas[0])}`)
+    if (elegido.causas[1]) frases.push(frase(elegido.causas[1]))
   }
   return {
     calidad, frases, corte: elegido?.corte ?? null,
@@ -516,9 +536,17 @@ export function analizar(
     const gn = agrupar(fn, corte, actual, resolver)
     cortes[corte] = { gv, gn, d: descomponerPromPax(gv, gn, totSalon(v), totSalon(n)) }
   }
-  const explicacion = explicar(cuadre, v, n, {
-    turno: turno === 'ambos' ? cortes.turno.d : null, dia: cortes.dia.d, salonero: cortes.salonero.d,
-  })
+  // Compiten los cortes de las tablas VISIBLES (§7): turno solo con «ambos»; el salonero, con
+  // «ambos», es salonero × turno (una fila por salonero y turno, como la tabla).
+  const corteSal: Corte = turno === 'ambos' ? 'saloneroTurno' : 'salonero'
+  const enTexto: Corte[] = [...(turno === 'ambos' ? ['turno' as Corte] : []), 'dia', corteSal]
+  const porCorte: Partial<Record<Corte, Descomposicion | null>> = {}
+  const tablas: Partial<Record<Corte, FilaTabla[]>> = {}
+  for (const c of enTexto) {
+    porCorte[c] = cortes[c].d
+    tablas[c] = tablaCorte(cortes[c].gv, cortes[c].gn, cortes[c].d)
+  }
+  const explicacion = explicar(cuadre, v, n, porCorte, tablas)
   return { v, n, cuadre, cortes, explicacion, saloneros: tablaSaloneros(fn, resolver) }
 }
 

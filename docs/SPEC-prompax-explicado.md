@@ -86,6 +86,10 @@ Para cada grupo *i* con pax > 0: s_i = pax_i / PAX, p_i = neta_i / pax_i, P* = N
 - Frase 1: ventas — cuánto vino de más/menos gente y cuánto de más/menos gasto por persona (y delivery/barra si pesan).
 - Frases 2–3: las 2 mayores contribuciones de **un solo corte**: el que más explica del Δ prom/pax con sus 2 mayores
   aportes (valor absoluto). Empate: turno → día → salonero. Se dice el corte («Por día: …»).
+- **Los números de las frases 2–3 son los de la tabla visible de ese corte, con el mismo formato** (v2.3, Ismael
+  06/11): prom/pax de la comparación → actual y Δ ₡, o pax y % de pax. Con turno = «ambos», el corte del salonero
+  es salonero × turno, como su tabla. El aporte en ₡ al prom/pax ordena las causas pero no se escribe (está en
+  «Ver detalle»). Test: cada número de la frase está tal cual en la fila de su grupo.
 - Solo cuentan como causa grupos con ≥ 15 pax en el período en que el grupo tiene **menos** pax (un grupo que
   entra o sale tiene 0 en uno de los dos: nunca es causa, pero queda en la tabla).
 - «El que más explica» = mayor Σ |aporte| de sus 2 mayores causas. Compiten turno (solo con «ambos»), día y
@@ -146,3 +150,8 @@ Santa Teresa, salón, `estado='C'`. Entre paréntesis, pax. En la columna v2.2, 
 ## 10. Fuera de alcance (v1)
 Mix de productos en el «por qué» · acceso de saloneros · Nosara hasta tener PoS · datos anteriores al PoS ·
 tabla editable de temporadas.
+
+**Requisito para cuando entre Nosara (antes de habilitar un segundo local):** hoy el RPC 080 acepta cualquier
+`p_local` y solo valida el rol. Con más de un local, el RPC tiene que **restringir `p_local` al local del usuario**
+(el owner puede ver todos; manager y contador, solo el suyo), validado en la base, no en la pantalla. Hace falta
+que el perfil tenga el local asignado; va en una migración propia, con firma, junto con el selector de local (§3).

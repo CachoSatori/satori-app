@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  agrupar, analizar, aCsv, calidadDatos, crc, cuadreVentas, descomponerPromPax, elegirCorte, explicar,
-  filtrar, puedeSerCausa, tablaCorte, tablaSaloneros, totales, totSalon, turnoDeFranja,
+  agrupar, analizar, aCsv, calidadDatos, crc, cuadreVentas, descomponerPromPax, elegirCorte, entero, explicar,
+  filtrar, pctPax, puedeSerCausa, signoCrc, tablaCorte, tablaSaloneros, totales, totSalon, turnoDeFranja,
+  type FiltroTurno,
   type Corte, type FilaAgregada, type Franja, type Grupo,
 } from './ventasPromPaxExplicado'
 import { periodoDeComparacion, periodoMes, periodoSemana, periodoTemporada, periodoRango } from './periodosPromPax'
@@ -273,5 +274,39 @@ describe('períodos y comparaciones', () => {
     expect(periodoDeComparacion(periodoTemporada('baja-may', 2026), 'tramo-anio-anterior'))
       .toMatchObject({ desde: '2025-05-01', hasta: '2025-05-31' })
     expect(() => periodoDeComparacion(periodoMes(2026, 1), 'tramo-anio-anterior')).toThrow()
+  })
+})
+
+/** Los números de una frase: ₡ con o sin signo, % y «N pax». */
+const NUMEROS = /[+−]?₡[\d.]+|\d+,\d%|[\d.]+(?= pax)/g
+
+describe('§6.3 — cada número de una frase de causa está tal cual en la tabla visible', () => {
+  it('2.000 análisis aleatorios, con turno ambos / noche / mañana', () => {
+    const r = prng(1107)
+    let frasesProbadas = 0
+    for (let k = 0; k < 2000; k++) {
+      const filas = [...filasAleatorias(r, '09', 40 + Math.floor(r() * 120)), ...filasAleatorias(r, '10', 40 + Math.floor(r() * 120))]
+      const turno = (['ambos', 'noche', 'mañana'] as FiltroTurno[])[k % 3]
+      const a = analizar(filas, OCT, SEP, turno)
+      const corte = a.explicacion.corte
+      if (!corte) continue
+      if (turno === 'ambos') expect(corte).not.toBe('salonero')
+      else expect(['turno', 'saloneroTurno']).not.toContain(corte)
+      const { gv, gn, d } = a.cortes[corte]
+      // La fila como la imprime la tabla (VentasPromPaxExplicado.tsx), columnas por defecto.
+      const filasTabla = tablaCorte(gv, gn, d).map(f => [
+        f.etiqueta, entero(f.pax), pctPax(f.pctPax), f.promPax === null ? 'sin pax' : crc(f.promPax),
+        f.promPaxComp === null ? 'sin pax' : crc(f.promPaxComp), signoCrc(f.delta),
+      ])
+      for (const frase of a.explicacion.frases.slice(1)) {
+        const fila = filasTabla.find(c => frase.replace(/^Por [^:]+: /, '').startsWith(`${c[0]}:`))
+        expect(fila, frase).toBeTruthy()
+        const nums = frase.match(NUMEROS) ?? []
+        expect(nums.length, frase).toBeGreaterThanOrEqual(2)
+        for (const num of nums) expect(fila!.slice(1), `${num} en «${frase}»`).toContain(num)
+        frasesProbadas++
+      }
+    }
+    expect(frasesProbadas).toBeGreaterThan(1000)
   })
 })

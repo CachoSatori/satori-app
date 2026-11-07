@@ -11,7 +11,18 @@
 #   transacción que termina en rollback. Hace falta OWNER_ID (uuid de un owner activo).
 # · PROD (la función NO existe hasta la firma): se corre el MISMO cuerpo de la migración como un
 #   SELECT de solo lectura (se extrae del .sql, no se reescribe), así el contrato vale para prod.
+#
+# Credencial: SUPABASE_ACCESS_TOKEN (token personal de la Management API). El script no lo imprime
+# ni lo escribe en ningún archivo; solo lo pasa en el header de cada pedido.
 set -euo pipefail
+if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+  echo "Falta SUPABASE_ACCESS_TOKEN (token de la Management API de Supabase). Exportalo en la terminal y volvé a correr." >&2
+  exit 2
+fi
+if [ $# -lt 2 ]; then
+  echo "Uso: $0 <REF> <DIR> [desde] [hasta]" >&2
+  exit 2
+fi
 REF=$1; DIR=$2; DESDE=${3:-2026-10-01}; HASTA=${4:-2026-10-31}
 case $REF in
   yiczgdtirrkdvohdquzf) echo "REF=$REF (PROD, solo lectura)" >&2;;
@@ -25,7 +36,7 @@ MIG="$RAIZ/supabase/migrations/080_pos_prompax_agregado.sql"
 q() { # $1 = sql, $2 = read_only (true|false)
   jq -n --arg q "$1" --argjson ro "$2" '{query:$q, read_only:$ro}' \
   | curl -sS -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
-      -H "Authorization: Bearer dummy" -H "Content-Type: application/json" -d @-
+      -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @-
 }
 
 RANGO="tk.local = 'santa-teresa' and tk.estado = 'C'

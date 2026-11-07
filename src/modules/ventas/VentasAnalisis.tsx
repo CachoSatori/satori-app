@@ -1,9 +1,12 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, lazy, Suspense } from 'react'
 import type { DiasMap, HistMap, Meta } from '../../shared/types/ventas'
 import {
   getContabilidadDays, availableYears, yearlyTotals,
   fi, todayISO, daysInMonth, metaProgress,
 } from './ventasUtils'
+
+// «Prom/PAX explicado» (SPEC v2.3): carga sus propios datos (RPC 078), no usa dias/hist.
+const VentasPromPaxExplicado = lazy(() => import('./VentasPromPaxExplicado'))
 
 const MN_FULL = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -24,7 +27,7 @@ interface Props {
 
 export default function VentasAnalisis({ dias, hist, metas }: Props) {
   const years = useMemo(() => availableYears(dias, hist), [dias, hist])
-  const [mode, setMode] = useState<'compare'|'year'|'proyeccion'>('compare')
+  const [mode, setMode] = useState<'compare'|'year'|'proyeccion'|'prompax'>('compare')
   const [selYear, setSelYear] = useState(years[0] ?? new Date().getFullYear())
 
   const MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12]
@@ -63,12 +66,39 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
 
   const mNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
+  const selector = (
+    <div className="vt-tab-group" style={{ marginBottom: '1.25rem' }}>
+      <button className={`vt-tab-btn ${mode === 'compare' ? 'active' : ''}`}
+        onClick={() => setMode('compare')}>Año vs Año</button>
+      <button className={`vt-tab-btn ${mode === 'year' ? 'active' : ''}`}
+        onClick={() => setMode('year')}>Detalle anual</button>
+      <button className={`vt-tab-btn ${mode === 'proyeccion' ? 'active' : ''}`}
+        onClick={() => setMode('proyeccion')}>Proyección</button>
+      <button className={`vt-tab-btn ${mode === 'prompax' ? 'active' : ''}`}
+        onClick={() => setMode('prompax')}>Prom/PAX explicado</button>
+    </div>
+  )
+
+  if (mode === 'prompax') {
+    return (
+      <div className="vt-section">
+        {selector}
+        <Suspense fallback={<div className="vt-empty"><div className="vt-empty-sub">Cargando…</div></div>}>
+          <VentasPromPaxExplicado />
+        </Suspense>
+      </div>
+    )
+  }
+
   if (!years.length) {
     return (
-      <div className="vt-empty">
-        <div className="vt-empty-icon">分</div>
-        <div className="vt-empty-title">Sin datos suficientes</div>
-        <div className="vt-empty-sub">Cargá datos históricos para ver el análisis</div>
+      <div className="vt-section">
+        {selector}
+        <div className="vt-empty">
+          <div className="vt-empty-icon">分</div>
+          <div className="vt-empty-title">Sin datos suficientes</div>
+          <div className="vt-empty-sub">Cargá datos históricos para ver el análisis</div>
+        </div>
       </div>
     )
   }
@@ -76,14 +106,7 @@ export default function VentasAnalisis({ dias, hist, metas }: Props) {
   return (
     <div className="vt-section">
       {/* Mode selector */}
-      <div className="vt-tab-group" style={{ marginBottom: '1.25rem' }}>
-        <button className={`vt-tab-btn ${mode === 'compare' ? 'active' : ''}`}
-          onClick={() => setMode('compare')}>Año vs Año</button>
-        <button className={`vt-tab-btn ${mode === 'year' ? 'active' : ''}`}
-          onClick={() => setMode('year')}>Detalle anual</button>
-        <button className={`vt-tab-btn ${mode === 'proyeccion' ? 'active' : ''}`}
-          onClick={() => setMode('proyeccion')}>Proyección</button>
-      </div>
+      {selector}
 
       {mode === 'compare' && (
         <>

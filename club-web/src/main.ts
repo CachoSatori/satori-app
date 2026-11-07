@@ -2,11 +2,12 @@
  * Club Satori — páginas públicas (sin login, sin el bundle de la app):
  *   /r/{codigo8}  turista: obtiene su cupón 10 % (o ve el que ya tiene en este teléfono)
  *   /c/{codigo10} cupón: vigente → lo muestra; usado o vencido → aviso
- *   /p/{token}    portal del referente: saldo, QR para compartir e historial
+ *   /p/{token}    portal del referente: saldo, QR para compartir, «Canjear» (código de 10 min) e historial
+ *   /k/{codigo6}  código de canje: lo lee la caja; abierto en un navegador, solo un aviso
  * Todo pasa por /api/* (Pages Function con tope por IP). El DOM se arma sin innerHTML.
  */
 import './styles.css'
-import { urlCupon, urlReferente } from './qrFormato'
+import { urlCanje, urlCupon, urlReferente } from './qrFormato'
 import { LOCAL } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
 
@@ -47,7 +48,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<Res<T>> {
 }
 const msgError = (e: string) =>
   ({ referente_invalido: t.ref_invalido, cupon_invalido: t.cupon_invalido, portal_invalido: t.portal_invalido,
-     tope_referente: t.tope_ref, demasiados_pedidos: t.demasiados, red: t.red } as Record<string, string>)[e] ?? t.servicio
+     tope_referente: t.tope_ref, demasiados_pedidos: t.demasiados, red: t.red, tope_canje: t.tope_canje,
+     sin_saldo_canje: t.sin_saldo_canje } as Record<string, string>)[e] ?? t.servicio
 
 // ── Formatos ─────────────────────────────────────────────────────────────────
 const fecha = (iso: string, conHora = true) =>
@@ -170,6 +172,50 @@ interface Portal {
   movimientos: Array<{ tipo: string; personas: number; creditos: number | null; fecha: string }>
 }
 
+// R-01: código de canje de un solo uso (10 min). El QR del portal (/r/) ya no sirve para canjear.
+let reloj: ReturnType<typeof setInterval> | null = null
+function pararReloj() { if (reloj) { clearInterval(reloj); reloj = null } }
+
+function seccionCanje(token: string): HTMLElement {
+  const sec = h('section', { class: 'tarjeta canje', 'aria-label': t.canje_titulo })
+  const inicial = () => {
+    pararReloj()
+    const err = h('div')
+    const boton = h('button', { type: 'button', class: 'btn' }, t.canje_boton) as HTMLButtonElement
+    boton.addEventListener('click', async () => {
+      boton.disabled = true; boton.textContent = t.canje_generando; err.replaceChildren()
+      const r = await api<Array<{ codigo: string; vence_en: string }>>(`portal/${token}/canje`, { method: 'POST' })
+      if (r.ok && r.data?.[0]) return mostrar(r.data[0].codigo, r.data[0].vence_en)
+      boton.disabled = false; boton.textContent = t.canje_boton
+      err.append(avisoEl('err', msgError(r.ok ? 'servicio' : r.error)))
+    })
+    sec.replaceChildren(h('h2', {}, t.canje_titulo), h('p', {}, t.canje_txt), err, boton)
+  }
+  const mostrar = async (codigo: string, venceEn: string) => {
+    const canvas = await qr(urlCanje(codigo), `QR ${codigo}`)
+    const cuenta = h('p', { class: 'cuenta', role: 'timer', 'aria-live': 'off' })
+    const otro = h('button', { type: 'button', class: 'btn sec' }, t.canje_otro)
+    otro.addEventListener('click', () => { inicial(); (sec.querySelector('button') as HTMLButtonElement | null)?.click() })
+    const fin = new Date(venceEn).getTime()
+    const tic = () => {
+      const s = Math.max(0, Math.round((fin - Date.now()) / 1000))
+      if (s === 0) {
+        pararReloj()
+        canvas.remove(); codigoEl.remove()
+        cuenta.replaceWith(avisoEl('err', t.canje_vencido)); anunciar(t.canje_vencido)
+        return
+      }
+      cuenta.textContent = t.canje_vence(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`)
+    }
+    const codigoEl = h('p', { class: 'codigo', style: 'text-align:center' }, codigo)
+    sec.replaceChildren(h('h2', {}, t.canje_qr), canvas, codigoEl, cuenta, h('p', { class: 'sub' }, t.canje_privado), otro)
+    pararReloj(); tic(); reloj = setInterval(tic, 1000)
+    anunciar(t.canje_qr)
+  }
+  inicial()
+  return sec
+}
+
 async function paginaPortal(token: string) {
   const r = await api<Portal>(`portal/${token}`)
   if (!r.ok) return pintar(h('h1', {}, t.inicio), avisoEl('err', msgError(r.error)))
@@ -199,6 +245,7 @@ async function paginaPortal(token: string) {
       h('div', { class: 'fila' }, compartir, descargar),
       // F1e: botón «Agregar a Wallet» (oculto hasta tener la clase del pase).
     ),
+    p.creditos >= 1 && seccionCanje(token),
     h('section', { class: 'tarjeta' },
       h('h2', {}, t.historial),
       p.movimientos.length === 0 ? h('p', { class: 'sub' }, t.sin_movimientos) :
@@ -212,13 +259,15 @@ async function paginaPortal(token: string) {
 
 // ── Router ───────────────────────────────────────────────────────────────────
 function ruta() {
+  pararReloj()
   document.documentElement.lang = idioma
   document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === idioma)))
-  const m = location.pathname.match(/^\/([rcp])\/([^/]+)\/?$/)
+  const m = location.pathname.match(/^\/([rcpk])\/([^/]+)\/?$/)
   if (!m) return pintar(h('h1', {}, t.inicio), h('p', { class: 'sub' }, t.inicio_txt))
   const [, tipo, cod] = m
   if (tipo === 'r') return paginaReferente(cod.toUpperCase())
   if (tipo === 'c') return paginaCupon(cod.toUpperCase())
+  if (tipo === 'k') return pintar(h('h1', {}, t.canje_qr), h('p', { class: 'sub' }, t.k_txt))
   return paginaPortal(cod.toLowerCase())
 }
 

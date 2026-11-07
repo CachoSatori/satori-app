@@ -59,3 +59,30 @@ test('06: el tope global por minuto de la base se traduce a 429', async () => {
   assert.equal(r.status, 429)
   assert.equal((await r.json()).error, 'demasiados_pedidos')
 })
+
+test('R-01: POST /api/portal/:token/canje llama a club_canje_codigo_generar con el header; GET → 405; token malo → 404', async () => {
+  llamadas = []
+  globalThis.fetch = async (url, init) => {
+    llamadas.push({ url, init })
+    return new Response(JSON.stringify([{ codigo: 'ABCDEF', vence_en: '2026-11-07T18:00:00Z', url: 'https://club.satoricostarica.com/k/ABCDEF' }]), { status: 200 })
+  }
+  const tok = 'a'.repeat(64)
+  const r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
+  assert.equal(r.status, 200)
+  assert.equal(llamadas.length, 1)
+  assert.match(llamadas[0].url, /\/rest\/v1\/rpc\/club_canje_codigo_generar$/)
+  assert.equal(llamadas[0].init.headers['x-club-web'], 'clave-de-prueba')
+  assert.deepEqual(JSON.parse(llamadas[0].init.body), { p_token: tok })
+  assert.equal((await manejar(pedido(`portal/${tok}/canje`), conLimite(), `portal/${tok}/canje`)).status, 405)
+  assert.equal((await manejar(pedido('portal/xyz/canje', 'POST'), conLimite(), 'portal/xyz/canje')).status, 404)
+})
+
+test('R-01: tope de códigos y sin saldo se traducen a códigos fijos', async () => {
+  const tok = 'b'.repeat(64)
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Demasiados códigos de canje' }), { status: 400 })
+  let r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
+  assert.equal(r.status, 429); assert.equal((await r.json()).error, 'tope_canje')
+  globalThis.fetch = async () => new Response(JSON.stringify({ message: 'Todavía no te alcanza para canjear' }), { status: 400 })
+  r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)
+  assert.equal(r.status, 409); assert.equal((await r.json()).error, 'sin_saldo_canje')
+})

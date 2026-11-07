@@ -31,6 +31,16 @@ create function pg_temp.r(p text, c text, ok boolean, d text) returns void langu
   insert into pg_temp._res(prueba, caso, ok, detalle) values (p, c, ok, d);
 $f$;
 
+-- R-01: el canje exige un código de canje del miembro. Para las pruebas de la regla del canje (no del código)
+-- se genera uno directo en la tabla, como lo haría club_canje_codigo_generar desde el portal.
+create function pg_temp.k(p_m uuid) returns text language plpgsql security definer set search_path = public, pg_temp as $f$
+declare c text := public.club_gen_codigo(6);
+begin
+  update public.club_codigos_canje set invalidado_en = now() where miembro_id = p_m and usado_en is null and invalidado_en is null;
+  insert into public.club_codigos_canje (miembro_id, codigo, vence_en) values (p_m, c, now() + interval '10 minutes');
+  return c;
+end $f$;
+
 -- ── Datos de prueba (como postgres; todo se deshace al final) ──
 do $$
 declare v_neg uuid; v_ref uuid; v_m2 uuid; v_m3 uuid; v_old uuid; v_m4 uuid; v_m5 uuid;
@@ -90,7 +100,7 @@ begin
   -- anon no puede ejecutar funciones de staff
   begin
     perform pg_temp.como('anon', null);
-    perform public.club_canje((select v::uuid from _ids where k='m2'), 1, 'F1', gen_random_uuid());
+    perform public.club_canje((select v::uuid from _ids where k='m2'), 'AAAAAA', 1, 'F1', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('1', 'anon EXECUTE club_canje', false, 'ejecutó');
   exception when insufficient_privilege then
     perform pg_temp.yo(); perform pg_temp.r('1', 'anon EXECUTE club_canje', true, sqlerrm);
@@ -206,27 +216,27 @@ declare v_p int; v_cr numeric;
 begin
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    perform public.club_canje((select v::uuid from _ids where k='m2'), 2.5, 'FAC-010', gen_random_uuid());
+    perform public.club_canje((select v::uuid from _ids where k='m2'), pg_temp.k((select v::uuid from _ids where k='m2')), 2.5, 'FAC-010', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('4', '2,5 créditos', false, 'aceptó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('4', '2,5 créditos → error', sqlstate = 'P0001' and sqlerrm like 'Créditos no válidos: de %', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    perform public.club_canje((select v::uuid from _ids where k='m2'), 1.25, 'FAC-010', gen_random_uuid());
+    perform public.club_canje((select v::uuid from _ids where k='m2'), pg_temp.k((select v::uuid from _ids where k='m2')), 1.25, 'FAC-010', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('4', '1,25 créditos', false, 'aceptó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('4', '1,25 créditos → error', sqlstate = 'P0001' and sqlerrm like 'Créditos no válidos: de %', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    perform public.club_canje((select v::uuid from _ids where k='m3'), 1, 'FAC-011', gen_random_uuid());
+    perform public.club_canje((select v::uuid from _ids where k='m3'), pg_temp.k((select v::uuid from _ids where k='m3')), 1, 'FAC-011', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('4', 'saldo insuficiente (2 personas, 1 crédito)', false, 'aceptó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('4', 'saldo insuficiente (2 personas) → error', sqlerrm = 'Saldo insuficiente', sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  select c.personas, c.creditos into v_p, v_cr from public.club_canje((select v::uuid from _ids where k='m2'), 1.5, 'FAC-012', gen_random_uuid()) c;
+  select c.personas, c.creditos into v_p, v_cr from public.club_canje((select v::uuid from _ids where k='m2'), pg_temp.k((select v::uuid from _ids where k='m2')), 1.5, 'FAC-012', gen_random_uuid()) c;
   perform pg_temp.yo();
   perform pg_temp.r('4', '1,5 con saldo 9 → saldo 0', v_p = 0 and v_cr = 0,
     format('saldo=%s personas, %s créditos; movimiento=%s', v_p, v_cr,
@@ -240,7 +250,7 @@ declare v_cnt int;
 begin
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    perform public.club_canje((select v::uuid from _ids where k='m4'), 1, '   ', gen_random_uuid());
+    perform public.club_canje((select v::uuid from _ids where k='m4'), pg_temp.k((select v::uuid from _ids where k='m4')), 1, '   ', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('10', 'canje con factura vacía', false, 'aceptó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('10', 'canje con factura vacía → error', sqlerrm = 'Falta el número de factura', sqlerrm);
@@ -254,11 +264,11 @@ begin
   end;
   -- «fe-123» y « FE-123 » son la misma visita: 1 + 1,5 supera el máximo por visita
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  perform public.club_canje((select v::uuid from _ids where k='m4'), 1, 'fe-123', gen_random_uuid());
+  perform public.club_canje((select v::uuid from _ids where k='m4'), pg_temp.k((select v::uuid from _ids where k='m4')), 1, 'fe-123', gen_random_uuid());
   perform pg_temp.yo();
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    perform public.club_canje((select v::uuid from _ids where k='m4'), 1.5, ' FE-123 ', gen_random_uuid());
+    perform public.club_canje((select v::uuid from _ids where k='m4'), pg_temp.k((select v::uuid from _ids where k='m4')), 1.5, ' FE-123 ', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('10', '«fe-123» + « FE-123 » = misma visita', false, 'aceptó 2,5 en la misma factura');
   exception when others then
     perform pg_temp.yo();
@@ -270,11 +280,11 @@ begin
   end;
   -- dos canjes de 1,5 el mismo día con facturas distintas → el segundo falla por día
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  perform public.club_canje((select v::uuid from _ids where k='m5'), 1.5, 'FE-200', gen_random_uuid());
+  perform public.club_canje((select v::uuid from _ids where k='m5'), pg_temp.k((select v::uuid from _ids where k='m5')), 1.5, 'FE-200', gen_random_uuid());
   perform pg_temp.yo();
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    perform public.club_canje((select v::uuid from _ids where k='m5'), 1.5, 'FE-201', gen_random_uuid());
+    perform public.club_canje((select v::uuid from _ids where k='m5'), pg_temp.k((select v::uuid from _ids where k='m5')), 1.5, 'FE-201', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('10', 'dos canjes de 1,5 el mismo día', false, 'aceptó el segundo');
   exception when others then
     perform pg_temp.yo();
@@ -706,8 +716,8 @@ begin
   select string_agg(p.proname, ',' order by p.proname) into v
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname like 'club\_%' and has_function_privilege('anon', p.oid, 'EXECUTE');
-  perform pg_temp.r('21', 'anon solo ejecuta club_cupon_contacto, club_cupon_crear, club_cupon_ver y club_portal',
-    v = 'club_cupon_contacto,club_cupon_crear,club_cupon_ver,club_portal', v);
+  perform pg_temp.r('21', 'anon solo ejecuta club_canje_codigo_generar, club_cupon_contacto, club_cupon_crear, club_cupon_ver y club_portal',
+    v = 'club_canje_codigo_generar,club_cupon_contacto,club_cupon_crear,club_cupon_ver,club_portal', v);
   -- CLUB-AUD-11 (S-12): barrido completo sobre anon y PUBLIC (grantee 0), con los ACL efectivos
   -- (acldefault cuando el objeto no tiene ACL propio: una función sin ACL la ejecuta PUBLIC).
   select string_agg(c.relname || '/' || c.relkind::text || ':' || a.privilege_type || '→' || coalesce(nullif(a.grantee::regrole::text, '-'), 'PUBLIC'), ', ')
@@ -1042,9 +1052,9 @@ declare j jsonb; v_c uuid := (select i.v::uuid from _ids i where i.k = 'ped_c');
 begin
   -- 27f. sin la factura del pedido: canje con el pedido 9030; el PoS anula la del pedido y cobra en 2 sin pedido
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  perform public.club_canje(v_c, 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9030"}'::jsonb);
+  perform public.club_canje(v_c, pg_temp.k(v_c), 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9030"}'::jsonb);
   begin
-    perform public.club_canje(v_c, 1.5, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9030"}'::jsonb);
+    perform public.club_canje(v_c, pg_temp.k(v_c), 1.5, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9030"}'::jsonb);
     perform pg_temp.yo(); perform pg_temp.r('27', 'segundo canje en el mismo pedido supera 2', false, 'aceptó');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('27', 'mismo pedido = misma visita: 1 + 1,5 → falla por visita', sqlerrm like '%por visita%', sqlerrm);
@@ -1572,13 +1582,14 @@ begin
   insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD06', 'app') returning codigo into v_cod;
   -- sin header (llamada directa con la anon key): el mismo error de siempre, en las 4
   perform set_config('request.headers', '{}', true);
-  foreach v_ok in array array['crear','ver','contacto','portal'] loop
+  foreach v_ok in array array['crear','ver','contacto','portal','canje'] loop
     begin
       perform pg_temp.como('anon', null);
       case v_ok
         when 'crear' then perform public.club_cupon_crear(v_cod, null);
         when 'ver' then perform public.club_cupon_ver('AAAAAAAAAA');
         when 'contacto' then perform public.club_cupon_contacto('AAAAAAAAAA', '{"whatsapp":"60000001","optin":true}'::jsonb);
+        when 'canje' then perform public.club_canje_codigo_generar(repeat('a', 64));
         else perform public.club_portal(repeat('a', 64));
       end case;
       perform pg_temp.yo(); perform pg_temp.r('40', v_ok || ' sin header', false, 'respondió');
@@ -1711,6 +1722,236 @@ begin
     pg_temp.fac(public.club_cruce_facturas('santa-teresa', (select pos_ref - 'area' from club_movimientos where id = v_l), null)) = '990972+990974', '');
 end $$;
 
+-- ═══ 43. R-01: el QR público (/r/) no alcanza para canjear; código de canje de un solo uso (10 min) ═══
+do $$
+declare v_a uuid; v_b uuid; v_c uuid; v_baja uuid; v_ta text; v_tb text; v_tc text; v_tbaja text; v_ra text;
+        k1 text; k2 text; k3 text; kb text; j jsonb; j0 jsonb; j1 jsonb; v_op uuid := gen_random_uuid(); v_p int; v_n int; v_err text; i int;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Canje A', 'app') returning id, token_portal, codigo into v_a, v_ta, v_ra;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Canje B', 'app') returning id, token_portal into v_b, v_tb;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Canje Sin Saldo', 'app') returning id, token_portal into v_c, v_tc;
+  insert into club_miembros (tipo, nombre, origen, estado) values ('referente', 'Ref Canje Baja', 'app', 'baja') returning id, token_portal into v_baja, v_tbaja;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen) values
+    (v_a, 'tarjeta', 30, 6, 18000, now() - interval '3 days', 'migracion'),
+    (v_b, 'tarjeta', 18, 6, 18000, now() - interval '3 days', 'migracion'),
+    (v_c, 'tarjeta', 2, 6, 18000, now() - interval '3 days', 'migracion'),
+    (v_baja, 'tarjeta', 18, 6, 18000, now() - interval '3 days', 'migracion');
+
+  -- sin el header de club-web: el mismo error de siempre
+  perform set_config('request.headers', '{}', true);
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_canje_codigo_generar(v_ta);
+    perform pg_temp.yo(); perform pg_temp.r('43', 'generar sin header', false, 'generó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'generar sin el header de club-web → «Enlace no válido»', sqlerrm = 'Enlace no válido', sqlerrm);
+  end;
+  -- la prueba 40 rotó la clave: club-web manda la vigente
+  perform set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+
+  -- generar desde el portal (anon con header)
+  perform pg_temp.como('anon', null);
+  select to_jsonb(g) into j from public.club_canje_codigo_generar(v_ta) g;
+  perform pg_temp.yo();
+  k1 := j->>'codigo';
+  perform pg_temp.r('43', 'el portal genera un código de 6, vence en 10 min, con el QR /k/{codigo}',
+    k1 ~ '^[A-HJ-NP-Z2-9]{6}$' and j->>'url' = 'https://club.satoricostarica.com/k/' || k1
+      and (j->>'vence_en')::timestamptz between now() + interval '9 minutes' and now() + interval '11 minutes', j::text);
+
+  -- token de una cuenta dada de baja, o sin saldo
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_canje_codigo_generar(v_tbaja);
+    perform pg_temp.yo(); perform pg_temp.r('43', 'baja genera código', false, 'generó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'cuenta dada de baja → «Enlace no válido»', sqlerrm = 'Enlace no válido', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_canje_codigo_generar(v_tc);
+    perform pg_temp.yo(); perform pg_temp.r('43', 'sin saldo genera código', false, 'generó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'sin saldo para el mínimo → «Todavía no te alcanza para canjear»', sqlerrm = 'Todavía no te alcanza para canjear', sqlerrm);
+  end;
+
+  -- la caja: /r/ muestra el saldo sin código; /k/ y el código a mano dan el canje
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_resolver('https://club.satoricostarica.com/r/' || v_ra);
+  j0 := public.club_resolver('https://club.satoricostarica.com/k/' || k1);
+  j1 := public.club_resolver(lower(k1));
+  perform pg_temp.yo();
+  perform pg_temp.r('43', '/r/ → tipo referente, con saldo y sin código de canje',
+    j->>'tipo' = 'referente' and (j->'datos'->>'personas')::int = 30 and j->'datos'->>'codigo_canje' is null, j::text);
+  perform pg_temp.r('43', '/k/{codigo} → tipo canje, vigente, del referente A',
+    j0->>'tipo' = 'canje' and j0->'datos'->>'codigo_estado' = 'vigente' and (j0->'datos'->>'id')::uuid = v_a, j0::text);
+  perform pg_temp.r('43', 'el código a mano (6, en minúscula) también', j1->>'tipo' = 'canje' and (j1->'datos'->>'id')::uuid = v_a, j1->>'tipo');
+
+  -- canje con el código del /r/ (o sin código) → rechazado
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje(v_a, v_ra, 1, 'FK-001', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('43', 'canje con el /r/', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'canje con el código del QR público (/r/) → rechazado', sqlerrm like 'Falta el código de canje%', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje(v_a, null, 1, 'FK-001', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('43', 'canje sin código', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'canje sin código → rechazado', sqlerrm like 'Falta el código de canje%', sqlerrm);
+  end;
+
+  -- código de OTRO miembro → rechazado
+  perform pg_temp.como('anon', null);
+  select g.codigo into kb from public.club_canje_codigo_generar(v_tb) g;
+  perform pg_temp.yo();
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje(v_a, kb, 1, 'FK-002', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('43', 'código de otro miembro', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'código de otro miembro → «Código de canje no válido»', sqlerrm = 'Código de canje no válido', sqlerrm);
+  end;
+
+  -- generar uno nuevo invalida el anterior
+  perform pg_temp.como('anon', null);
+  select g.codigo into k2 from public.club_canje_codigo_generar(v_ta) g;
+  perform pg_temp.yo();
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje(v_a, k1, 1, 'FK-003', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('43', 'código reemplazado', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'generar otro invalida el anterior → «reemplazado»', sqlerrm like '%reemplazado%'
+      and (select count(*) from club_codigos_canje where miembro_id = v_a and usado_en is null and invalidado_en is null) = 1, sqlerrm);
+  end;
+
+  -- vencido
+  update club_codigos_canje set creado_en = now() - interval '20 minutes', vence_en = now() - interval '10 minutes' where codigo = k2;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje(v_a, k2, 1, 'FK-004', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('43', 'código vencido', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'código vencido (10 min) → «venció»', sqlerrm like 'El código de canje venció%', sqlerrm);
+  end;
+
+  -- bien: canje de 1 con un código vigente; queda marcado usado en la misma transacción
+  perform pg_temp.como('anon', null);
+  select g.codigo into k3 from public.club_canje_codigo_generar(v_ta) g;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select c.personas into v_p from public.club_canje(v_a, k3, 1, 'FK-005', v_op) c;
+  perform pg_temp.yo();
+  perform pg_temp.r('43', 'canje de 1 con el código vigente → saldo 24; el código queda usado, con el movimiento y quién',
+    v_p = 24 and exists (select 1 from club_codigos_canje k join club_movimientos m on m.id = k.movimiento_id
+                          where k.codigo = k3 and k.usado_en is not null and k.usado_por = '<CAJERO_UUID>'::uuid and m.client_op_id = v_op),
+    format('saldo=%s', v_p));
+  -- reintento de la red (mismo p_op): no duplica
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select c.personas into v_p from public.club_canje(v_a, k3, 1, 'FK-005', v_op) c;
+  perform pg_temp.yo();
+  perform pg_temp.r('43', 'reintento con el mismo p_op → mismo resultado, un solo canje',
+    v_p = 24 and (select count(*) from club_movimientos where miembro_id = v_a and tipo = 'canje') = 1, format('saldo=%s', v_p));
+  -- segundo canje con el mismo código (otra operación) → falla
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje(v_a, k3, 1, 'FK-006', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('43', 'dos canjes con el mismo código', false, 'aceptó el segundo');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'dos canjes con el mismo código → el segundo falla («ya se usó»)',
+      sqlerrm like 'Este código de canje ya se usó%' and (select count(*) from club_movimientos where miembro_id = v_a and tipo = 'canje') = 1, sqlerrm);
+  end;
+
+  -- tope: 5 códigos por hora por miembro (ya generó 3 en esta prueba; el vencido se creó «hace 20 min»: cuenta)
+  v_n := 0; v_err := null;
+  for i in 1 .. 4 loop
+    begin
+      perform pg_temp.como('anon', null);
+      perform public.club_canje_codigo_generar(v_ta);
+      perform pg_temp.yo(); v_n := v_n + 1;
+    exception when others then
+      perform pg_temp.yo(); v_err := sqlerrm; exit;
+    end;
+  end loop;
+  perform pg_temp.r('43', 'tope de 5 códigos por hora por miembro → «Demasiados códigos de canje»',
+    v_n = 2 and v_err = 'Demasiados códigos de canje', format('generó %s más · %s', v_n, v_err));
+
+  -- respaldo sin celular: el cajero no puede; el manager sí, con nota
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_canje_aprobado(v_b, 1, 'FK-007', gen_random_uuid(), null, 'Sin celular, lo conozco');
+    perform pg_temp.yo(); perform pg_temp.r('43', 'cajero usa el respaldo', false, 'aceptó');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'el cajero no puede usar el respaldo sin código → sin permiso', true, sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    perform public.club_canje_aprobado(v_b, 1, 'FK-007', gen_random_uuid(), null, '  ');
+    perform pg_temp.yo(); perform pg_temp.r('43', 'respaldo sin nota', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'respaldo sin nota → error', sqlerrm like 'La nota es obligatoria%', sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  select c.personas into v_p from public.club_canje_aprobado(v_b, 1.5, 'FK-008', gen_random_uuid(), null, 'Se le murió el celular') c;
+  perform pg_temp.yo();
+  perform pg_temp.r('43', 'manager: canje aprobado sin código, con nota y registrado por el manager',
+    v_p = 9 and exists (select 1 from club_movimientos where miembro_id = v_b and tipo = 'canje'
+                         and registrado_por = '<MANAGER_UUID>'::uuid and nota = 'Canje aprobado sin código: Se le murió el celular'),
+    format('saldo=%s', v_p));
+  -- el código de B que quedó vigente sigue sin usar (el respaldo no lo toca)
+  perform pg_temp.r('43', 'el respaldo no consume el código vigente', (select usado_en is null from club_codigos_canje where codigo = kb), '');
+
+  -- nadie lee la tabla de códigos directo
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    perform count(*) from public.club_codigos_canje;
+    perform pg_temp.yo(); perform pg_temp.r('43', 'owner lee club_codigos_canje', false, 'leyó');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('43', 'club_codigos_canje: nadie la lee directo (ni el owner)', true, sqlerrm);
+  end;
+end $$;
+
+-- ═══ 44. R-02: CUPON_SIN_PROMO — cupón usado sin el artículo de la promo en las facturas de la visita ═══
+do $$
+declare v_r uuid; c1 text; c2 text; t2 uuid; j jsonb; j0 jsonb; t0 timestamptz := now() - interval '30 minutes';
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Promo', 'app') returning id into v_r;
+  insert into club_cupones (referente_id, vence_en) values (v_r, now() + interval '1 day') returning codigo into c1;
+  insert into club_cupones (referente_id, vence_en) values (v_r, now() + interval '1 day') returning codigo into c2;
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+  values ('990981', t0, 'C', 'salon', 'cajero', true, 'ok', 30000);
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+  values ('990982', t0, 'C', 'salon', 'cajero', true, 'ok', 30000) returning id into t2;
+  insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values (t2, 'PRUEBA-PROMO', 'PROMO CLUB 10% (prueba)', 1, 0);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_cupon_usar(c1, 2, '990981', gen_random_uuid());
+  perform public.club_cupon_usar(c2, 2, '990982', gen_random_uuid());
+  perform pg_temp.yo();
+
+  update club_config set promo_articulo_codigo = null where location_id = 'santa-teresa';
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select jsonb_agg(to_jsonb(e)) into j0 from public.club_excepciones(current_date - 1, current_date) e where e.tipo = 'CUPON_SIN_PROMO';
+  perform pg_temp.yo();
+  perform pg_temp.r('44', 'sin artículo marcador: CUPON_SIN_PROMO apagada', j0 is null, coalesce(j0::text, ''));
+
+  update club_config set promo_articulo_codigo = 'PRUEBA-PROMO' where location_id = 'santa-teresa';
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select jsonb_agg(to_jsonb(e)) into j from public.club_excepciones(current_date - 1, current_date) e
+   where e.tipo = 'CUPON_SIN_PROMO' and e.factura in ('990981', '990982');
+  perform pg_temp.yo();
+  perform pg_temp.r('44', 'con el artículo: el cupón de 990981 (sin la promo) sí, exacta; el de 990982 (con la promo) no',
+    jsonb_array_length(j) = 1 and j->0->>'factura' = '990981' and j->0->>'certeza' = 'exacta' and j->0->'detalle'->>'cupon' = c1,
+    coalesce(j::text, 'null'));
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  perform public.club_excepcion_resolver('CUPON_SIN_PROMO', j->0->>'ref', 'Se olvidó marcar la promo; descuento hecho a mano');
+  select jsonb_agg(to_jsonb(e)) into j from public.club_excepciones(current_date - 1, current_date) e
+   where e.tipo = 'CUPON_SIN_PROMO' and e.factura = '990981';
+  perform pg_temp.yo();
+  perform pg_temp.r('44', 'el manager la resuelve con nota', (j->0->>'resuelta')::boolean, coalesce(j->0->>'nota', ''));
+  update club_config set promo_articulo_codigo = null where location_id = 'santa-teresa';
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$
@@ -1718,7 +1959,7 @@ declare f text; v_cnt int;
 begin
   foreach f in array array[
     'select public.club_cupon_usar(''AAAAAAAAAA'', 2, ''F'', gen_random_uuid())',
-    'select public.club_canje(''00000000-0000-0000-0000-000000000000'', 1, ''F'', gen_random_uuid())',
+    'select public.club_canje(''00000000-0000-0000-0000-000000000000'', ''AAAAAA'', 1, ''F'', gen_random_uuid())',
     'select public.club_ajuste(''00000000-0000-0000-0000-000000000000'', 1, ''ajuste'', ''x'', gen_random_uuid())',
     'select public.club_vencer(current_date, 0)',
     'select public.club_vencer_simular(current_date)'] loop

@@ -40,6 +40,18 @@ const ES = {
   mov: { tarjeta: 'Visita', canje: 'Canje', vencimiento: 'Vencimiento', ajuste: 'Ajuste', restitucion: 'Restitución' } as Record<string, string>,
   inicio: 'Club Satori',
   inicio_txt: 'Escaneá el QR que te compartieron para obtener tu cupón.',
+  canje_titulo: 'Canjear créditos',
+  canje_txt: 'En la caja, tocá «Canjear»: te damos un código que vale 10 minutos. Mostralo al cajero.',
+  canje_boton: 'Canjear',
+  canje_generando: 'Generando…',
+  canje_qr: 'Tu código de canje',
+  canje_vence: (s: string) => `Vence en ${s}`,
+  canje_vencido: 'El código venció. Generá otro.',
+  canje_otro: 'Generar otro código',
+  canje_privado: 'Es solo para vos: no lo compartas. Sirve una sola vez.',
+  tope_canje: 'Generaste muchos códigos seguidos. Probá de nuevo en un rato.',
+  sin_saldo_canje: 'Todavía no te alcanza para canjear.',
+  k_txt: 'Este código lo lee la caja de Satori. Para canjear, abrí tu portal en caja y tocá «Canjear».',
 }
 type Textos = typeof ES
 
@@ -83,6 +95,18 @@ const EN: Textos = {
   mov: { tarjeta: 'Visit', canje: 'Redeemed', vencimiento: 'Expired', ajuste: 'Adjustment', restitucion: 'Restored' },
   inicio: 'Club Satori',
   inicio_txt: 'Scan the QR you were given to get your coupon.',
+  canje_titulo: 'Redeem credits',
+  canje_txt: 'At the register, tap “Redeem”: you get a code that is valid for 10 minutes. Show it to the cashier.',
+  canje_boton: 'Redeem',
+  canje_generando: 'Creating…',
+  canje_qr: 'Your redemption code',
+  canje_vence: s => `Expires in ${s}`,
+  canje_vencido: 'The code has expired. Create a new one.',
+  canje_otro: 'Create a new code',
+  canje_privado: 'It is only for you: do not share it. One use only.',
+  tope_canje: 'You created many codes in a row. Please try again in a while.',
+  sin_saldo_canje: 'You do not have enough credits to redeem yet.',
+  k_txt: 'This code is read at the Satori register. To redeem, open your portal at the register and tap “Redeem”.',
 }
 
 export const TEXTOS: Record<Idioma, Textos> = { es: ES, en: EN }

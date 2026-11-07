@@ -17,7 +17,7 @@ const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', '
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const TIPO_EXC: Record<string, string> = {
   REGISTRO_SIN_FACTURA: 'Registro sin factura', SIN_CRUCE: 'Sin cruce (posible cuenta dividida)', VISITA_REPETIDA: 'Visita repetida', AMBIGUA: 'Factura ambigua (dos pedidos de la mesa)', PERSONAS_SOBRE_PAX: 'Personas sobre el pax', CREDITOS_SIN_CANJE: 'Créditos sin canje (probable)',
-  CANJE_MONTO_DISTINTO: 'Canje con monto distinto (probable)', PROMO_SIN_CUPON: 'Promo sin cupón',
+  CANJE_MONTO_DISTINTO: 'Canje con monto distinto (probable)', PROMO_SIN_CUPON: 'Promo sin cupón', CUPON_SIN_PROMO: 'Cupón sin promo',
 }
 
 // ── Formatos (ESTANDAR §7): punto de miles, coma decimal, ₡ pegado, % con espacio ──
@@ -158,7 +158,7 @@ export function reporteHtml(r: ReporteMes): string {
   const viejos = r.antiguedad.find(b => b.tramo === 'más de 12 meses')
   const cal = Object.entries(TIPO_EXC).map(([cod, desc]) => {
     const n = r.calidad.por_tipo[cod] ?? 0
-    const apagada = cod === 'PROMO_SIN_CUPON' && !r.calidad.promo_activa
+    const apagada = (cod === 'PROMO_SIN_CUPON' || cod === 'CUPON_SIN_PROMO') && !r.calidad.promo_activa
     return `<div class="calidad"><span class="cod">${esc(desc)}</span><span class="${apagada ? '' : n > 0 ? 'ab' : 'ce'}">${apagada ? 'apagada' : n > 0 ? `${num(n)} abiertas` : 'al día'}</span><span class="neg">${apagada ? 'Se enciende cuando exista el artículo «PROMO CLUB 10%» en el PoS.' : n > 0 ? 'Revisar en Club → Excepciones.' : 'Sin pendientes en el mes.'}</span></div>`
   }).join('')
   const p3 = `<section class="pagina">${cab}

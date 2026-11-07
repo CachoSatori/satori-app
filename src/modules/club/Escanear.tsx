@@ -2,32 +2,40 @@
  * Escanear — un solo botón en caja (SPEC §2.4).
  *  · Cupón vigente → personas + PEDIDO (de los abiertos en el PoS) → confirmar → «+N personas a {referente}».
  *    Plan B si el pedido ya se cerró o la lista no carga: elegir la factura de las últimas 2 h.
- *  · Pase de referente → saldo + canje (1 / 1,5 / 2) o «Tarjeta física».
+ *  · Pase de referente (/r/) → saldo y «Tarjeta física». NO habilita el canje (R-01): cualquiera puede
+ *    tener una foto del QR de la recepción.
+ *  · Código de canje (/k/, 6 caracteres, lo genera el referente en su portal y vence a los 10 min) →
+ *    canje (1 / 1,5 / 2). Respaldo sin celular: «Canje sin celular», solo owner o manager, con nota.
  *  · Usado, vencido, dado de baja o desconocido → una línea clara.
  *  Plan B: código a mano y búsqueda (nombre, negocio o últimos 4 del teléfono).
  * Idempotencia: un `p_op` por intento; si falla la red, el reintento usa el mismo.
  */
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
-  resolverQR, usarCupon, canjear, tarjetaManual, buscar, getMiembro, aClubError, nuevoOp,
+  resolverQR, usarCupon, canjear, canjeAprobado, tarjetaManual, buscar, getMiembro, aClubError, nuevoOp,
   opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
   describirPos, describirPedido, describirFactura,
-  type ResolverCupon, type ResolverReferente, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
+  type ResolverCupon, type ResolverReferente, type ResolverCanje, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente,
 } from '../../shared/api/club'
 import { parsearQR } from './qrFormato'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora, TIPO_MIEMBRO_LABEL } from './estilos'
+import { useAuth } from '../../shared/hooks/useAuth'
 
 const LectorQR = lazy(() => import('./LectorQR'))
 
 type Actual =
   | { kind: 'cupon'; r: ResolverCupon; codigo: string }
   | { kind: 'referente'; r: ResolverReferente; codigo: string }
-type Accion = 'usar' | 'canje' | 'tarjeta'
+  | { kind: 'canje'; r: ResolverCanje; codigo: string }
+type Accion = 'usar' | 'canje' | 'tarjeta' | 'aprobado'
+type ModoRef = 'tarjeta' | 'aprobado'
 type Mensaje = { tono: 'ok' | 'error' | 'info'; texto: string }
 
 export default function Escanear() {
+  const { profile } = useAuth()
+  const gestiona = profile?.role === 'owner' || profile?.role === 'manager'
   const [camara, setCamara]       = useState(false)
   const [manual, setManual]       = useState('')
   const [q, setQ]                 = useState('')
@@ -40,7 +48,8 @@ export default function Escanear() {
   const [personas, setPersonas]   = useState('')
   const [pos, setPos]             = useState<PosRef | null>(null)
   const [creditos, setCreditos]   = useState<number | null>(null)
-  const [modoRef, setModoRef]     = useState<'canje' | 'tarjeta'>('canje')
+  const [modoRef, setModoRef]     = useState<ModoRef>('tarjeta')
+  const [nota, setNota]           = useState('')
   const [confirmando, setConfirmando] = useState(false)
   const [enviando, setEnviando]   = useState(false)
   const [errAccion, setErrAccion] = useState<ClubError | null>(null)
@@ -50,7 +59,7 @@ export default function Escanear() {
   const opDe = (a: Accion) => (ops.current[a] ??= nuevoOp())
 
   function limpiarFormularios() {
-    setPersonas(''); setPos(null); setCreditos(null); setConfirmando(false); setErrAccion(null); setModoRef('canje')
+    setPersonas(''); setPos(null); setCreditos(null); setConfirmando(false); setErrAccion(null); setModoRef('tarjeta'); setNota('')
   }
 
   async function resolver(texto: string, silencioso = false) {
@@ -66,6 +75,8 @@ export default function Escanear() {
         setActual({ kind: 'cupon', r, codigo: p.codigo })
       } else if (r.tipo === 'referente') {
         setActual({ kind: 'referente', r, codigo: p.codigo })
+      } else if (r.tipo === 'canje') {
+        setActual({ kind: 'canje', r, codigo: p.codigo })
       } else {
         setActual(null); setMsg({ tono: 'error', texto: 'Código no reconocido: no es un cupón ni un pase vigente.' })
       }
@@ -108,10 +119,15 @@ export default function Escanear() {
         await usarCupon(actual.codigo, n, pos!, opDe('usar'))
         setMsg({ tono: 'ok', texto: `+${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.referente}` })
         cerrarCuenta()
-      } else if (modoRef === 'canje' && creditos != null) {
-        const s = await canjear(actual.r.datos.id, creditos, pos!, opDe('canje'))
+      } else if (actual.kind === 'canje' && creditos != null) {
+        // El código queda usado: se cierra la cuenta (volver a escanearlo diría «ya se usó»).
+        const s = await canjear(actual.r.datos.id, actual.codigo, creditos, pos!, opDe('canje'))
         setMsg({ tono: 'ok', texto: `Canje de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le quedan ${fmtCreditos(s.creditos)}.` })
-        delete ops.current.canje; limpiarFormularios()
+        cerrarCuenta()
+      } else if (modoRef === 'aprobado' && creditos != null) {
+        const s = await canjeAprobado(actual.r.datos.id, creditos, pos!, opDe('aprobado'), nota.trim())
+        setMsg({ tono: 'ok', texto: `Canje sin celular de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le quedan ${fmtCreditos(s.creditos)}.` })
+        delete ops.current.aprobado; limpiarFormularios()
         await resolver(actual.codigo, true)
       } else if (modoRef === 'tarjeta') {
         const n = Number(personas)
@@ -153,7 +169,7 @@ export default function Escanear() {
               style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
               <label style={{ flex: 1 }}>
                 <span style={labelStyle}>Código a mano</span>
-                <input value={manual} onChange={e => setManual(e.target.value)} placeholder="Cupón (10) o pase (8)"
+                <input value={manual} onChange={e => setManual(e.target.value)} placeholder="Cupón (10), canje (6) o pase (8)"
                   autoCapitalize="characters" autoComplete="off" style={{ ...inputStyle, textTransform: 'uppercase', letterSpacing: '0.12em' }} />
               </label>
               <Btn type="submit" disabled={cargando || !manual.trim()}>Ver</Btn>
@@ -198,8 +214,9 @@ export default function Escanear() {
           enviando={enviando} err={errAccion} onConfirmar={confirmar} onCerrar={cerrarCuenta} />
       )}
 
-      {actual?.kind === 'referente' && (
-        <PanelReferente a={actual} modo={modoRef} setModo={m => { setModoRef(m); setConfirmando(false); setErrAccion(null) }}
+      {(actual?.kind === 'referente' || actual?.kind === 'canje') && (
+        <PanelReferente a={actual} gestiona={gestiona} nota={nota} setNota={setNota}
+          modo={modoRef} setModo={m => { setModoRef(m); setCreditos(null); setConfirmando(false); setErrAccion(null) }}
           creditos={creditos} setCreditos={setCreditos} personas={personas} setPersonas={setPersonas}
           pos={pos} setPos={setPos} personasOk={personasOk} facturaOk={facturaOk}
           confirmando={confirmando} setConfirmando={setConfirmando} enviando={enviando} err={errAccion}
@@ -347,7 +364,7 @@ function PanelCupon({ a, ...p }: PanelBase & { a: Extract<Actual, { kind: 'cupon
           <div style={{ fontSize: '0.7rem', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Cupón 10 %</div>
           <div style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '0.1em' }}>{d.codigo}</div>
         </div>
-        <Btn variant="ghost" onClick={p.onCerrar}>✕</Btn>
+        <Btn variant="ghost" onClick={p.onCerrar} aria-label="Cerrar">✕</Btn>
       </div>
       <div style={{ margin: '0.5rem 0 1rem', color: C.muted }}>Referente: <strong style={{ color: C.ink }}>{d.referente}</strong>
         {!linea && <> · vence {fmtFechaHora(d.vence_en)}</>}</div>
@@ -374,11 +391,31 @@ function PanelCupon({ a, ...p }: PanelBase & { a: Extract<Actual, { kind: 'cupon
   )
 }
 
-function PanelReferente({ a, modo, setModo, creditos, setCreditos, ...p }: PanelBase & {
-  a: Extract<Actual, { kind: 'referente' }>; modo: 'canje' | 'tarjeta'; setModo: (m: 'canje' | 'tarjeta') => void
+/** Cuenta regresiva del código de canje (vence a los 10 min). */
+function CuentaRegresiva({ hasta }: { hasta: string }) {
+  const [ahora, setAhora] = useState(() => Date.now())
+  useEffect(() => { const id = setInterval(() => setAhora(Date.now()), 1000); return () => clearInterval(id) }, [])
+  const s = Math.max(0, Math.round((new Date(hasta).getTime() - ahora) / 1000))
+  if (s === 0) return <Aviso tono="error">El código de canje venció: pedile que genere otro en su portal.</Aviso>
+  return <span>vence en {Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')}</span>
+}
+
+const MSG_CODIGO: Record<string, string> = {
+  vencido: 'El código de canje venció: pedile que genere otro en su portal.',
+  usado: 'Este código de canje ya se usó: pedile uno nuevo.',
+  reemplazado: 'Este código fue reemplazado por uno más nuevo: escaneá el último que generó.',
+}
+
+function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, nota, setNota, ...p }: PanelBase & {
+  a: Extract<Actual, { kind: 'referente' | 'canje' }>; modo: ModoRef; setModo: (m: ModoRef) => void
   creditos: number | null; setCreditos: (n: number | null) => void
+  gestiona: boolean; nota: string; setNota: (s: string) => void
 }) {
   const d = a.r.datos
+  const conCodigo = a.kind === 'canje'
+  const codigoMal = a.kind === 'canje' && a.r.datos.codigo_estado !== 'vigente' ? MSG_CODIGO[a.r.datos.codigo_estado] : null
+  const canjea = conCodigo || modo === 'aprobado'
+  const notaOk = nota.trim().length >= 5
   const opciones = opcionesCanje(d)
   const alcanza = (v: number) => d.personas >= v * d.personas_por_credito
   const dentroTope = (v: number) => Number(d.canjeado_hoy) + v <= Number(d.max_creditos_por_visita) + 1e-9
@@ -387,16 +424,21 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, ...p }: Panel
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
         <div>
           <div style={{ fontSize: '0.7rem', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            {TIPO_MIEMBRO_LABEL[d.tipo_miembro] ?? 'Referente'}{d.negocio ? ` · ${d.negocio}` : ''}
+            {conCodigo ? 'Código de canje · ' : ''}{TIPO_MIEMBRO_LABEL[d.tipo_miembro] ?? 'Referente'}{d.negocio ? ` · ${d.negocio}` : ''}
           </div>
           <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{d.nombre}</div>
+          {a.kind === 'canje' && !codigoMal && (
+            <div style={{ fontSize: '0.85rem', color: C.muted }}>
+              Código <strong style={{ color: C.ink, letterSpacing: '0.1em' }}>{a.r.datos.codigo_canje}</strong> · <CuentaRegresiva hasta={a.r.datos.codigo_vence_en} />
+            </div>
+          )}
         </div>
-        <Btn variant="ghost" onClick={p.onCerrar}>✕</Btn>
+        <Btn variant="ghost" onClick={p.onCerrar} aria-label="Cerrar">✕</Btn>
       </div>
 
-      {d.estado !== 'activo' ? (
+      {d.estado !== 'activo' || codigoMal ? (
         <div style={{ marginTop: 10 }}>
-          <Aviso tono="error">{MSG_REFERENTE_INACTIVO}</Aviso>
+          <Aviso tono="error">{d.estado !== 'activo' ? MSG_REFERENTE_INACTIVO : codigoMal}</Aviso>
           <Btn variant="secondary" onClick={p.onCerrar} style={{ marginTop: 10, width: '100%' }}>Escanear otro</Btn>
         </div>
       ) : (
@@ -417,14 +459,31 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, ...p }: Panel
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-            <Btn variant={modo === 'canje' ? 'primary' : 'secondary'} onClick={() => setModo('canje')} style={{ flex: 1 }}>Canjear</Btn>
-            <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta física</Btn>
-          </div>
+          {!conCodigo && (
+            <>
+              <Aviso tono="info">
+                Para canjear, pedile al referente su <strong>código de canje</strong>: lo genera en su portal con el botón
+                «Canjear» y vale 10 minutos. Escanealo o escribí los 6 caracteres en «Código a mano».
+              </Aviso>
+              <div style={{ display: 'flex', gap: 6, margin: '12px 0' }}>
+                <Btn variant={modo === 'tarjeta' ? 'primary' : 'secondary'} onClick={() => setModo('tarjeta')} style={{ flex: 1 }}>Tarjeta física</Btn>
+                {gestiona && (
+                  <Btn variant={modo === 'aprobado' ? 'primary' : 'secondary'} onClick={() => setModo('aprobado')} style={{ flex: 1 }}>Canje sin celular</Btn>
+                )}
+              </div>
+            </>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {modo === 'canje' ? (
+            {canjea ? (
               <>
+                {modo === 'aprobado' && !conCodigo && (
+                  <label>
+                    <span style={labelStyle}>Por qué se canjea sin código (obligatorio)</span>
+                    <input value={nota} onChange={e => { setNota(e.target.value); p.setConfirmando(false) }} maxLength={300}
+                      placeholder="Ej.: no tiene el celular; lo conozco" style={inputStyle} />
+                  </label>
+                )}
                 <div>
                   <span style={labelStyle}>Créditos a canjear</span>
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -448,10 +507,10 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, ...p }: Panel
                 <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando && creditos != null ? (
-                  <Confirmacion texto={`Canjear ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
+                  <Confirmacion texto={`${conCodigo ? 'Canjear' : 'Canje sin celular:'} ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
                     enviando={p.enviando} onConfirmar={p.onConfirmar} onVolver={() => p.setConfirmando(false)} />
                 ) : (
-                  <Btn big disabled={creditos == null || !p.facturaOk} onClick={() => p.setConfirmando(true)}>Continuar</Btn>
+                  <Btn big disabled={creditos == null || !p.facturaOk || (!conCodigo && !notaOk)} onClick={() => p.setConfirmando(true)}>Continuar</Btn>
                 )}
               </>
             ) : (

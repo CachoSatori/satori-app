@@ -6,6 +6,7 @@
  *   referente: https://club.satoricostarica.com/r/{codigo8}
  *   cupón:     https://club.satoricostarica.com/c/{codigo10}
  *   portal:    https://club.satoricostarica.com/p/{token64}   (link del referente, solo lectura)
+ *   canje:     https://club.satoricostarica.com/k/{codigo6}   (R-01: código de canje del portal, 10 min, un uso)
  */
 export const CLUB_BASE_URL = 'https://club.satoricostarica.com'
 
@@ -13,14 +14,16 @@ export const CLUB_BASE_URL = 'https://club.satoricostarica.com'
 export const CLUB_ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 export const LARGO_CODIGO_REFERENTE = 8
 export const LARGO_CODIGO_CUPON = 10
+export const LARGO_CODIGO_CANJE = 6
 
 export const urlReferente = (codigo: string) => `${CLUB_BASE_URL}/r/${codigo}`
 export const urlCupon     = (codigo: string) => `${CLUB_BASE_URL}/c/${codigo}`
 export const urlPortal    = (token: string)  => `${CLUB_BASE_URL}/p/${token}`
+export const urlCanje     = (codigo: string) => `${CLUB_BASE_URL}/k/${codigo}`
 
-export type TipoQR = 'referente' | 'cupon' | 'desconocido'
+export type TipoQR = 'referente' | 'cupon' | 'canje' | 'desconocido'
 
-const RE_URL = /^https?:\/\/club\.satoricostarica\.com\/([rc])\/([A-Za-z0-9]+)\/?$/i
+const RE_URL = /^https?:\/\/club\.satoricostarica\.com\/([rck])\/([A-Za-z0-9]+)\/?$/i
 const RE_COD = /^[A-HJ-NP-Z2-9]+$/
 
 /**
@@ -30,16 +33,18 @@ const RE_COD = /^[A-HJ-NP-Z2-9]+$/
 export function parsearQR(texto: string): { tipo: TipoQR; codigo: string | null } {
   const t = (texto ?? '').trim()
   const m = t.match(RE_URL)
-  let kind: 'r' | 'c' | null
+  let kind: 'r' | 'c' | 'k' | null
   let cod: string
   if (m) {
-    kind = m[1].toLowerCase() as 'r' | 'c'
+    kind = m[1].toLowerCase() as 'r' | 'c' | 'k'
     cod = m[2].toUpperCase()
   } else {
     cod = t.replace(/\s/g, '').toUpperCase()
-    kind = cod.length === LARGO_CODIGO_REFERENTE ? 'r' : cod.length === LARGO_CODIGO_CUPON ? 'c' : null
+    kind = cod.length === LARGO_CODIGO_REFERENTE ? 'r' : cod.length === LARGO_CODIGO_CUPON ? 'c'
+         : cod.length === LARGO_CODIGO_CANJE ? 'k' : null
   }
   if (kind === 'r' && cod.length === LARGO_CODIGO_REFERENTE && RE_COD.test(cod)) return { tipo: 'referente', codigo: cod }
   if (kind === 'c' && cod.length === LARGO_CODIGO_CUPON && RE_COD.test(cod)) return { tipo: 'cupon', codigo: cod }
+  if (kind === 'k' && cod.length === LARGO_CODIGO_CANJE && RE_COD.test(cod)) return { tipo: 'canje', codigo: cod }
   return { tipo: 'desconocido', codigo: null }
 }

@@ -46,7 +46,7 @@ p { margin: 0.4rem 0; }
 .tarjeta { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 1.25rem; margin-top: 1rem; }
 .cupon { border: 3px dashed var(--ink); text-align: center; }
 .cupon .etq { font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-text); }
-.cupon canvas, .portal-qr canvas { width: min(280px, 78vw); height: auto; image-rendering: pixelated; display: block; margin: 0.75rem auto; }
+.cupon canvas, .portal-qr canvas, .canje canvas { width: min(280px, 78vw); height: auto; image-rendering: pixelated; display: block; margin: 0.75rem auto; }
 .codigo { font: 800 1.6rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.18em; }
 .local { color: var(--muted); font-size: 0.95rem; margin-top: 0.75rem; }
 .local a { color: var(--ink); font-weight: 700; }
@@ -72,3 +72,6 @@ details summary { cursor: pointer; font-weight: 700; min-height: 44px; display: 
 .movs .mas { color: var(--ok); font-weight: 700; }
 .movs .menos { color: var(--err); font-weight: 700; }
 .movs .f { color: var(--muted); font-size: 0.9rem; }
+
+.canje { border: 3px solid var(--ink); }
+.cuenta { text-align: center; font: 700 1.3rem var(--sans); }

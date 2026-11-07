@@ -48,6 +48,8 @@ function traducirError(msg) {
   if (m === 'Demasiados cupones en este momento') return [429, 'demasiados_pedidos']
   if (m === 'Cupón no válido') return [404, 'cupon_invalido']
   if (m === 'Enlace no válido') return [404, 'portal_invalido']
+  if (m === 'Demasiados códigos de canje') return [429, 'tope_canje']
+  if (m === 'Todavía no te alcanza para canjear') return [409, 'sin_saldo_canje']
   if (/consentimiento|no válidos/i.test(m)) return [400, 'datos_invalidos']
   return [502, 'servicio']
 }
@@ -128,6 +130,15 @@ export async function manejar(request, env, path) {
       if (!c || !c.optin) return json(400, { error: 'datos_invalidos' })
       return rpc(env, 'club_cupon_contacto', { p_codigo: cod, p_contacto: c })
     }
+  }
+
+  // POST /api/portal/:token/canje  → código de canje de un solo uso (R-01), 10 minutos
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'canje') {
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, `canje:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    return rpc(env, 'club_canje_codigo_generar', { p_token: tok })
   }
 
   // GET /api/portal/:token

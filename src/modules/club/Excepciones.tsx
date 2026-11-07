@@ -21,6 +21,7 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   CREDITOS_SIN_CANJE:   { titulo: 'Créditos sin canje',   que: 'Factura pagada «a crédito» por un múltiplo de medio crédito, sin canje en el Club.' },
   CANJE_MONTO_DISTINTO: { titulo: 'Canje con monto distinto', que: 'El valor del canje no coincide con lo cobrado «a crédito» en la factura.' },
   PROMO_SIN_CUPON:      { titulo: 'Promo sin cupón',      que: 'Factura con el artículo de la promo 10 % y sin cupón ni tarjeta registrada.' },
+  CUPON_SIN_PROMO:      { titulo: 'Cupón sin promo',      que: 'Cupón usado en una visita cuyas facturas no tienen el artículo de la promo 10 %: sumó personas sin descuento aplicado.' },
 }
 const crc = (n: unknown) => (typeof n === 'number' || typeof n === 'string') && n !== '' ? `₡${Number(n).toLocaleString('de-DE', { maximumFractionDigits: 0 })}` : '—'
 const hoyCR = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' })
@@ -110,6 +111,7 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
     ['Qué es', TIPO_EXC[e.tipo].que],
     [e.tipo === 'SIN_CRUCE' ? 'Pedido (PoS)' : 'Factura (PoS)', e.factura ?? '—'],
     ...(d.hora_escaneo ? [['Hora del escaneo', fmtFechaHora(String(d.hora_escaneo))] as [string, string]] : []),
+    ...(d.cupon ? [['Cupón', String(d.cupon)] as [string, string]] : []),
     ...(d.movimiento ? [['Registro en el Club', String(d.movimiento).replace('_', ' ')] as [string, string]] : []),
     ...(d.personas != null ? [['Personas', String(d.personas)] as [string, string]] : []),
     ...(d.creditos != null ? [['Créditos', fmtCreditos(Number(d.creditos))] as [string, string]] : []),

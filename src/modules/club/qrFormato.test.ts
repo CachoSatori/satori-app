@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parsearQR, urlCupon, urlReferente, urlPortal } from './qrFormato'
+import { parsearQR, urlCupon, urlReferente, urlPortal, urlCanje } from './qrFormato'
 import { aClubError, opcionesCanje, MSG_REFERENTE_INACTIVO } from '../../shared/api/club'
 
 describe('parsearQR', () => {
@@ -18,6 +18,11 @@ describe('parsearQR', () => {
     expect(parsearQR('https://otro.com/c/ABCD2345XY').tipo).toBe('desconocido')
     expect(parsearQR('ABCD0123').tipo).toBe('desconocido')
     expect(parsearQR('ABCDEFGHI').tipo).toBe('desconocido')
+  })
+  it('R-01: reconoce el código de canje (/k/ o 6 a mano)', () => {
+    expect(parsearQR(urlCanje('ABC234'))).toEqual({ tipo: 'canje', codigo: 'ABC234' })
+    expect(parsearQR(' abc 234 ')).toEqual({ tipo: 'canje', codigo: 'ABC234' })
+    expect(parsearQR('ABC012').tipo).toBe('desconocido')
   })
   it('arma la URL del portal', () => {
     expect(urlPortal('ab'.repeat(32))).toBe('https://club.satoricostarica.com/p/' + 'ab'.repeat(32))

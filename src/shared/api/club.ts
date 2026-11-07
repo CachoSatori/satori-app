@@ -54,7 +54,13 @@ export interface ResolverReferente {
            personas: number; creditos: number; personas_proximo: number; personas_por_credito: number
            canjeado_hoy: number; canje_min: number; canje_paso: number; max_creditos_por_visita: number }
 }
-export type ResolverResultado = ResolverCupon | ResolverReferente | { tipo: 'desconocido'; datos: Record<string, never> }
+/** R-01: el código de canje (/k/) del portal. Los mismos datos del referente, más el estado del código. */
+export interface ResolverCanje {
+  tipo: 'canje'
+  datos: ResolverReferente['datos'] & { codigo_canje: string; codigo_estado: 'vigente' | 'vencido' | 'usado' | 'reemplazado'
+                                         codigo_vence_en: string }
+}
+export type ResolverResultado = ResolverCupon | ResolverReferente | ResolverCanje | { tipo: 'desconocido'; datos: Record<string, never> }
 
 export interface BusquedaFila {
   id: string; nombre: string; negocio: string | null; tipo: TipoMiembro; estado: 'activo' | 'baja'
@@ -160,8 +166,15 @@ export const usarCupon = async (codigo: string, personas: number, pos: PosRef, o
   primero(await llamar<Array<Saldo & { miembro_id: string }>>('club_cupon_usar',
     { p_codigo: codigo, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 
-export const canjear = async (miembro: string, creditos: number, pos: PosRef, op: string) =>
-  primero(await llamar<Saldo[]>('club_canje', { p_miembro: miembro, p_creditos: creditos, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
+/** R-01: el canje exige el código de canje que el referente genera en su portal (10 min, un uso). */
+export const canjear = async (miembro: string, codigoCanje: string, creditos: number, pos: PosRef, op: string) =>
+  primero(await llamar<Saldo[]>('club_canje', { p_miembro: miembro, p_codigo_canje: codigoCanje, p_creditos: creditos,
+                                                p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
+
+/** Respaldo sin celular (solo owner o manager), con nota obligatoria. */
+export const canjeAprobado = async (miembro: string, creditos: number, pos: PosRef, op: string, nota: string) =>
+  primero(await llamar<Saldo[]>('club_canje_aprobado', { p_miembro: miembro, p_creditos: creditos, p_factura: null,
+                                                         p_op: op, p_pos: posParaServidor(pos), p_nota: nota }))
 
 export const tarjetaManual = async (miembro: string, personas: number, pos: PosRef, op: string) =>
   primero(await llamar<Saldo[]>('club_tarjeta_manual', { p_miembro: miembro, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
@@ -222,7 +235,7 @@ export const fmtCreditos = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
 
 // ── F1f: excepciones del puente y reporte mensual (owner, manager) ───────────
-export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA' | 'SIN_CRUCE'
+export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CUPON_SIN_PROMO' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA' | 'SIN_CRUCE'
   | 'VISITA_REPETIDA' | 'PERSONAS_SOBRE_PAX' | 'AMBIGUA'
 export interface Excepcion {
   tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable' | 'manual'

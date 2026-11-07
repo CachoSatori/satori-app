@@ -11,9 +11,9 @@ export function Card({ children, style }: { children: ReactNode; style?: CSSProp
 }
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
-export function Btn({ children, onClick, disabled, variant = 'primary', big, style, type = 'button', title }: {
+export function Btn({ children, onClick, disabled, variant = 'primary', big, style, type = 'button', title, 'aria-label': ariaLabel }: {
   children: ReactNode; onClick?: () => void; disabled?: boolean; variant?: Variant; big?: boolean
-  style?: CSSProperties; type?: 'button' | 'submit'; title?: string
+  style?: CSSProperties; type?: 'button' | 'submit'; title?: string; 'aria-label'?: string
 }) {
   const v: Record<Variant, CSSProperties> = {
     primary:   { background: C.ink, color: '#c8a96e', border: `1px solid ${C.ink}` },
@@ -22,7 +22,7 @@ export function Btn({ children, onClick, disabled, variant = 'primary', big, sty
     ghost:     { background: 'transparent', color: C.muted, border: '1px solid transparent' },
   }
   return (
-    <button type={type} onClick={onClick} disabled={disabled} title={title}
+    <button type={type} onClick={onClick} disabled={disabled} title={title} aria-label={ariaLabel}
       style={{
         ...v[variant], borderRadius: 8, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
         padding: big ? '1.1rem 1rem' : '0.65rem 0.9rem', fontSize: big ? '1.15rem' : '0.9rem',

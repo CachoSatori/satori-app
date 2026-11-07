@@ -1,5 +1,6 @@
 -- Borra todo lo sintético de las carreras (nombres «Carrera …», facturas 99095x). Como postgres.
 begin;
+delete from club_codigos_canje where miembro_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_movimientos where miembro_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_cupones where referente_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_miembros where nombre like 'Carrera %';

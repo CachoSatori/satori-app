@@ -7,3 +7,4 @@ export const CLUB_BASE_URL = 'https://club.satoricostarica.com'
 export const urlReferente = (codigo: string) => `${CLUB_BASE_URL}/r/${codigo}`
 export const urlCupon     = (codigo: string) => `${CLUB_BASE_URL}/c/${codigo}`
 export const urlPortal    = (token: string)  => `${CLUB_BASE_URL}/p/${token}`
+export const urlCanje     = (codigo: string) => `${CLUB_BASE_URL}/k/${codigo}`   // R-01: código de canje (10 min)

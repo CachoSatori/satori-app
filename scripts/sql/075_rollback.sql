@@ -43,6 +43,10 @@ drop function if exists public.club_vencer(date);
 drop function if exists public.club_portal(text);
 drop function if exists public.club_ajuste(uuid, int, text, text, uuid);
 drop function if exists public.club_ajuste(uuid, int, text, text);
+drop function if exists public.club_canje(uuid, text, numeric, text, uuid, jsonb);   -- R-01
+drop function if exists public.club_canje_aprobado(uuid, numeric, text, uuid, jsonb, text);
+drop function if exists public.club_canje_aplicar(uuid, text, numeric, text, uuid, jsonb, text);
+drop function if exists public.club_canje_codigo_generar(text);
 drop function if exists public.club_canje(uuid, numeric, text, uuid, jsonb);
 drop function if exists public.club_canje(uuid, numeric, text, uuid);
 drop function if exists public.club_cupon_usar(text, int, text, uuid, jsonb);
@@ -61,6 +65,7 @@ drop table if exists public.club_web_clave;
 drop function if exists public.club_web_ok();
 drop function if exists public.club_web_clave_cargar(text);
 drop function if exists public.club_reportes_cerrados_inmutable();
+drop table if exists public.club_codigos_canje;   -- R-01 (antes que club_movimientos)
 drop table if exists public.club_cupones_contactos;
 drop table if exists public.club_cruces_manuales;
 drop table if exists public.club_config_historial;

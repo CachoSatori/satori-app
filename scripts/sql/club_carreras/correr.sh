@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Carreras de dos sesiones del Club (CLUB-AUD-03, 04, 07, 08 y 15). SOLO STAGING (ref fijo).
+# Carreras de dos sesiones del Club (CLUB-AUD-03, 04, 07, 08 y 15; R-01: 16). SOLO STAGING (ref fijo).
 #
 #   CAJERO_UUID=<perfil cajero activo> OWNER_UUID=<perfil owner activo> scripts/sql/club_carreras/correr.sh
 #
@@ -27,13 +27,14 @@ trap 'limpiar; rm -rf "$TMP"' EXIT
 limpiar
 sql "$DIR/prep.sql" > /dev/null
 
-for n in 03 07 08 15; do
+for n in 03 07 08 15 16; do
   par "$n"
   sql "$DIR/${n}_chk.sql" | jq -c '.[0].json_build_object'
 done
 echo "  07 · lo que vio la caja: $(jq -r '.[0].resultado' "$TMP/07_s2.json")"
 echo "  08 · s1: $(jq -c '.[0].r' "$TMP/08_s1.json") · s2 (replay): $(jq -c '.[0].r' "$TMP/08_s2.json")"
 echo "  15 · lo que vio la caja en s2: $(jq -r '.[0].resultado' "$TMP/15_s2.json")"
+echo "  16 · s1: $(jq -c '.[0].r' "$TMP/16_s1.json") · s2 (mismo código): $(jq -r '.[0].resultado' "$TMP/16_s2.json")"
 
 par 04   # cierre concurrente: s2 tiene que esperar a que termine s1
 t1=$(jq -r '.[0].fin_tx // empty' "$TMP/04_s1.json"); t2=$(jq -r '.[0].fin_tx // empty' "$TMP/04_s2.json")

@@ -53,16 +53,15 @@
    - **Activar a un socio como anfitrión:** solo manager u owner, desde la app, con auditoría.
    - **Antiautocanje:** un cupón no aplica en una factura donde el mismo anfitrión registró visita de socio (prueba
      negativa en la batería). Si el cruce lo detecta después, `CUPON_AUTOREFERIDO`.
-   - **Tope mensual de créditos para anfitrión nuevo:** configurable, por defecto ₡25.000 (provisorio). Se aplica al
-     **canje**: valor canjeado por mes calendario, durante los primeros 90 días como anfitrión. Si Ismael lo quiere sobre
-     lo **ganado**, se cambia.
+   - **Tope mensual de créditos para anfitrión nuevo:** ver la segunda tanda (abajo). **No bloquea:** sobre lo ganado,
+     con alerta y créditos pendientes de aprobación.
    - **Fase 2** (no ahora): botón «Quiero ser anfitrión» y topes por desempeño.
 4. **Decisiones (configurables):**
    - **Vigencia LC:** todos los días, mañana y mediodía incluidos (CONFIRMADO).
    - **Alta de local:** el cajero marca «verifiqué residencia». Obligatorios nombre y WhatsApp. **Nunca** se guardan números
      de cédula, DIMEX ni pasaporte (provisorio).
    - **Premio por referir socios:** 1 cortesía, máximo 3 por mes, vence a los 60 días (provisorio).
-   - **Cortesía LC:** configurable y **vacía** hasta que Ismael elija el producto.
+   - **Cortesía LC:** por sorteo entre las activas (ver la segunda tanda). Vacía hasta que Ismael cargue las cortesías.
 5. **Avance:** [AVANCE-LC.md](AVANCE-LC.md), por etapa, con estado, SHA y pruebas en números (para las sesiones nocturnas).
 
 ### Dónde caen los puntos 2 y 3, y cuánto suman
@@ -75,16 +74,64 @@
 
 **Total A: 9 → 11 días** (camino crítico). **Total B: 6 → 6,5 días.**
 
+## Más decisiones del 07-nov (segunda tanda)
+1. **Cortesías del LC = SORTEO.**
+   - **Admin del Club → «Cortesías»:** hasta **10** cortesías cargadas, cada una activable o desactivable. Se eligen de los
+     productos que llegan en las facturas del puente, igual que en A3.
+   - **Al escanear al socio** se sortea **una** entre las activas. El resultado queda registrado en la visita y **no se
+     vuelve a sortear**: un segundo escaneo devuelve la misma (prueba negativa en la batería).
+   - **Frecuencia configurable:** por defecto, 1 cortesía por visita y 1 visita por día.
+   - **`CORTESIA_DISTINTA`:** el producto cobrado como cortesía en la factura no coincide con el sorteado.
+   - **Cómo se cobra hoy una cortesía en Nube de Fuego** (facturas reales desde el 1-sep):
+     - es un **artículo aparte, a precio 0, de la familia 17 «Cortesías»**: «CREPE CORTESIA» (397, 30 veces) y «BANANA
+       FLAMBE CORTESIA» (398, 7 veces);
+     - el puente lo marca `es_cortesia` por la familia 17 y la factura queda con `clase_ingreso = 'cortesia'` (37
+       facturas). 14 de esas 37 son Local Club (856);
+     - no hay cortesías hechas con «línea al 100 %» sobre el producto del menú. Hay líneas sueltas a ₡0 fuera de la
+       familia 17 (1 o 2 por producto), que son ajustes;
+     - además, **el 857 «INVITADO» (₡0) aparece en 104 facturas, 90 de ellas junto al 856**: hay que preguntarle a Ismael
+       qué marca.
+   - **Diseño del cruce:** cada cortesía del admin es **un artículo de cortesía del PoS (familia 17)**, con su nombre y su
+     producto del menú de referencia. `CORTESIA_DISTINTA` compara las líneas de la familia 17 de la factura de la visita
+     contra el código sorteado:
+     - salta si hay otra cortesía, o si hay una de más;
+     - si no hay ninguna, no es excepción: el socio puede no pedirla;
+     - como respaldo, una línea a ₡0 fuera de la familia 17 también cuenta como cortesía cobrada.
+   - **Para Ismael:** si quiere otras cortesías (por ejemplo un postre del día), tiene que crear en el PoS su artículo
+     «… CORTESIA» en la familia 17. Hoy solo hay 2.
+2. **Tope del anfitrión nuevo: NO bloquea.**
+   - A ₡25.000 por mes (configurable) salta la alerta `ANFITRION_SOBRE_TOPE`.
+   - Los créditos **ganados** que pasen ese monto quedan **«pendientes de aprobación»**: no suman al saldo hasta que un
+     manager u owner los aprueba, con auditoría. **Quien aprueba no puede ser el anfitrión.**
+   - Reemplaza la lectura anterior (sobre lo canjeado).
+3. **Wallet:** Google arranca **ya** (no depende del D-U-N-S). Apple queda programado y apagado; se enciende cuando llegue
+   el D-U-N-S.
+4. **«PROMO CLUB 10%» ya está creado en el PoS.**
+   - El código llegó como `<PEGAR CÓDIGO>`: **falta el número**.
+   - En las facturas del puente todavía no aparece ninguna línea «PROMO CLUB…» (no se usó todavía, o el nombre es otro).
+   - Con el código, se carga en `club_config.promo_articulo_codigo` (staging ahora; prod en el RUNBOOK) y se enciende
+     `CUPON_SIN_PROMO`.
+
+### Dónde caen y cuánto suman
+| Etapa | Suma | Días |
+|---|---|---|
+| A3 | Admin «Cortesías» (hasta 10, activables, del listado de productos de las facturas) y la frecuencia en `club_config` | 1,5 → **2** |
+| A4 | Sorteo al escanear (uno por visita, registrado, mismo resultado si se reescanea). Créditos pendientes de aprobación del anfitrión nuevo: tabla aparte, aprobación de owner o manager que no sea el anfitrión, auditoría, pantalla en la ficha | 3 → **4** |
+| A5 | `CORTESIA_DISTINTA` y `ANFITRION_SOBRE_TOPE` | 1,5 → **2** |
+| B | El pase muestra «1 cortesía sorpresa» (no el producto: se sortea en caja). Google arranca ya | sin cambio (**6,5**) |
+
+**Total A: 11 → 12,5 días** (camino crítico). **Total B: 6,5.**
+
 ## Sesión A (esta) · Local Club en la 075, caja, excepciones y pantallas
 | Etapa | Qué | Días |
 |---|---|---|
 | A1 | **Roles** en la 075 (`club_miembro_roles`; `tipo` queda como espejo del rol de anfitrión, para no romper lo que ya anda). QR fijo del socio. «Activar como anfitrión». **Stub del contrato del pase** (`club_pase_datos` con referentes reales, eventos, cursor, emisión). Batería y carreras sin regresiones. | 2 |
 | A2 | **Socios:** alta en caja, autoalta (función pública + club-web `/s`, ES y EN), validación en caja, premio por referir (config + tope mensual), auditoría y eventos del pase. Pruebas. | 1,5 |
-| A3 | **Promociones mínimas + productos:** tablas, vista de productos desde las líneas, pantalla «Promociones», cortesías, la promo inicial «Local Club 10 % + cortesía» (en borrador). Pruebas. | 1,5 |
-| A4 | **Motor «qué aplicar» + visita por factura:** el socio se identifica con su QR fijo (`/s/`), regla fija de créditos, pantalla única en Escanear, visita y cruce por el 856, tope de 1 visita por día, antiautocanje, tope mensual del anfitrión nuevo, portal con dos pestañas. `club_pase_datos` completo. Pruebas. | 3 |
-| A5 | **Excepciones** `CANJE_CON_DESCUENTO`, `LC_SIN_REGISTRO`, `REGISTRO_LC_SIN_856`, `DESCUENTO_SIN_RESPALDO`, `SOCIO_USO_ANOMALO` y `CUPON_AUTOREFERIDO`. Pruebas con facturas sintéticas y con las 142 facturas LC reales (solo lectura). | 1,5 |
+| A3 | **Promociones mínimas + productos + cortesías del sorteo:** tablas, vista de productos desde las líneas, pantalla «Promociones», admin «Cortesías» (hasta 10, activables), la promo inicial «Local Club 10 % + cortesía» (en borrador). Pruebas. | 2 |
+| A4 | **Motor «qué aplicar» + visita por factura:** el socio se identifica con su QR fijo (`/s/`), sorteo de la cortesía (uno por visita), regla fija de créditos, pantalla única en Escanear, visita y cruce por el 856, tope de 1 visita por día, antiautocanje, créditos pendientes de aprobación del anfitrión nuevo, portal con dos pestañas. `club_pase_datos` completo. Pruebas. | 4 |
+| A5 | **Excepciones** `CANJE_CON_DESCUENTO`, `LC_SIN_REGISTRO`, `REGISTRO_LC_SIN_856`, `DESCUENTO_SIN_RESPALDO`, `SOCIO_USO_ANOMALO`, `CUPON_AUTOREFERIDO`, `CORTESIA_DISTINTA` y `ANFITRION_SOBRE_TOPE`. Pruebas con facturas sintéticas y con las 142 facturas LC reales (solo lectura). | 2 |
 | A6 | **Cierre:** recorrido integral con capturas (alta en caja, autoalta → validación → premio, visita con el 856, canje + LC → alarma), paridad, carreras, guía de uso (`docs/sop-app/`) y RUNBOOK actualizado. | 1,5 |
-| | **Total A** | **11** |
+| | **Total A** | **12,5** |
 
 ## Sesión B (otra sesión de Claude Code) · pase de Wallet
 | Etapa | Qué | Días |
@@ -102,7 +149,7 @@
 - **A2 y A4 necesitan A1** (roles). **A4 necesita A3** (promociones y productos). **A5 necesita A4** (visitas).
 - **El lanzamiento necesita A6 y B5**, más el RUNBOOK (que suma: cambio del PoS de 15 % a 10 % y el artículo
   «PROMO CLUB 10%» cargado en `promo_articulo_codigo`).
-- **Camino crítico:** A1 → A3 → A4 → A5 → A6 ≈ **11 días**. B termina antes (≈ 6,5 días + espera de A4 para B5).
+- **Camino crítico:** A1 → A3 → A4 → A5 → A6 ≈ **12,5 días** (A1 ya hecha: quedan ≈ 10,5). B termina antes (≈ 6,5 días + espera de A4 para B5). **Google arranca ya.**
 
 ## Qué necesito de Ismael y cuándo
 | Cuándo | Qué | Para |

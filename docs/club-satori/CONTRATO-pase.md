@@ -4,8 +4,8 @@
 > entre las dos: B arranca con el JSON de ejemplo de abajo, sin esperar a A. **Cualquier cambio de este contrato
 > se acuerda acá primero** (y sube `contrato` a 2).
 >
-> Alcance: **solo staging** hasta la firma del pase a prod (RUNBOOK, paso 7). Google primero; Apple con el código
-> listo y **apagado** hasta el D-U-N-S.
+> Alcance: **solo staging** hasta la firma del pase a prod (RUNBOOK, paso 7). **Google arranca ya** (no depende del
+> D-U-N-S); Apple con el código listo y **apagado** hasta el D-U-N-S.
 
 ## 1. Principios
 - **Un pase por persona** = un `club_miembros.id`. La misma persona puede ser referente y socio: un solo pase.
@@ -46,8 +46,8 @@ Ejecutable solo por `service_role`. Devuelve `null` si el miembro no existe. Eje
     "beneficio": "10 % en tu factura",
     "visitas_mes": 3,
     "cortesias": [
-      { "codigo_producto": "1234", "nombre": "Postre de la casa", "cantidad": 1, "motivo": "promo", "vence_en": null },
-      { "codigo_producto": "5678", "nombre": "Bebida de cortesía", "cantidad": 1, "motivo": "premio_referido", "vence_en": "2026-12-31" }
+      { "sorpresa": true, "cantidad": 1, "motivo": "promo", "vence_en": null },
+      { "sorpresa": true, "cantidad": 1, "motivo": "premio_referido", "vence_en": "2026-12-31" }
     ]
   },
   "anfitrion": {
@@ -80,7 +80,7 @@ Reglas de los campos:
 | `codigo_barras` | `{tipo: "socio" \| "cupones", valor: url}`. Es el código de barras del pase (ver §1). `null` si no tiene ningún rol activo o pendiente. |
 | `anfitrion` | `null` si no es anfitrión (referente, concierge PM o equipo). `creditos` con un decimal (0,5 de paso). `codigo_publico` cambia si se regenera el QR. |
 | `socio` | `null` si no es socio. `estado`: `pendiente` (mostrar «Validá tu alta en tu próxima visita»), `activo` o `baja`. Con `pendiente` el beneficio **no** aplica y `cortesias` va vacío. `qr_url` es el QR fijo del socio (solo identifica). |
-| `socio.cortesias` | Lo que le corresponde **en su próxima visita** (promo vigente + premios por referido pendientes). |
+| `socio.cortesias` | Lo que le corresponde **en su próxima visita** (promo vigente + premios por referido pendientes). **Es un sorteo:** el producto se decide en caja al escanear; el pase muestra «1 cortesía sorpresa» (`sorpresa: true`, sin producto). |
 | `promociones` | Solo las vigentes hoy para los roles que tiene. |
 | `canjear_url` | Solo si es anfitrión. Abre el portal y genera el código de un solo uso (R-01). Si se regenera el token, cambia. |
 

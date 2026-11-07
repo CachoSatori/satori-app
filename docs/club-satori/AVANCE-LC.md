@@ -10,9 +10,9 @@
 |---|---|---|---|---|---|
 | A1 | Roles, QR fijo del socio, activar como anfitrión, stub del contrato del pase | 2 | **hecha** | `a1e93db` | batería 294/294 (nuevas 53–56) · carreras 6/6 · paridad 602 = 602 · migrador 15/15 · vitest 1.487 |
 | A2 | Socios: alta en caja, autoalta, validación, premio por referir | 1,5 | pendiente | — | — |
-| A3 | Promociones mínimas + productos para cortesías | 1,5 | pendiente | — | — |
-| A4 | «Qué aplicar», visita por factura (856), topes, antiautocanje, portal con dos pestañas | 3 | pendiente | — | — |
-| A5 | Excepciones LC (6) | 1,5 | pendiente | — | — |
+| A3 | Promociones mínimas + productos + admin de cortesías del sorteo | 2 | pendiente | — | — |
+| A4 | «Qué aplicar», sorteo de cortesía, visita por factura (856), topes, antiautocanje, créditos pendientes de aprobación, portal con dos pestañas | 4 | pendiente | — | — |
+| A5 | Excepciones LC (8) | 2 | pendiente | — | — |
 | A6 | Recorrido, guía de uso, RUNBOOK | 1,5 | pendiente | — | — |
 
 ## Sesión B · pase de Wallet (Google; Apple apagado)
@@ -35,3 +35,9 @@
   - **Ojo, sesiones siguientes:** al borrar miembros sintéticos, borrar antes `club_miembro_roles` y `club_pase_eventos`
     (ver `scripts/sql/club_carreras/limpiar.sql`).
   - **Próximo:** A2 (alta en caja, autoalta, validación, premio por referir).
+- 07-nov · Segunda tanda de decisiones.
+  - **Cortesías:** sorteo; hoy se cobran como artículo de la familia 17 a ₡0.
+  - **Tope del anfitrión nuevo:** no bloquea; los créditos ganados que pasan el tope quedan pendientes de aprobación.
+  - **Wallet:** Google arranca ya.
+  - **Total A: 12,5 días.**
+  - **Falta el código de «PROMO CLUB 10%».**

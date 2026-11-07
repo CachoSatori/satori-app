@@ -16,7 +16,7 @@ import { calcularLentes, type LineaLente, type TicketLente } from './saloneroLen
 // fino): el test mira el cableado del DOM, no cómo se escribe un número.
 import { fi } from './ventasUtils'
 
-// La factura 110607: 5 líneas de GONZA (032) + 4 de MAXO (026), los dos 677 en MAXO.
+// La factura 110607: 5 líneas de DIEGO (032) + 4 de TITO (026), los dos 677 en TITO.
 const TICKETS: TicketLente[] = [{
   id: 'f110607', cajero_login: '222', valor_servido_crc: 20_000, iva_crc: 2_600,
   servicio_crc: 2_000, pax: 2, mesa: '7',
@@ -33,7 +33,7 @@ const LINEAS: LineaLente[] = [
   linea('026', 0, { codigo_producto: '677', familia: 19, cantidad: 2 }),
 ]
 
-const NOMBRES = { '032': 'Gonzalo Pérez', '026': 'Maximiliano Soto' }
+const NOMBRES = { '032': 'Domingo Pérez', '026': 'Tiburcio Soto' }
 
 const pintar = () =>
   render(<BloquesLentes lentes={calcularLentes(TICKETS, LINEAS)} nombres={NOMBRES} />)
@@ -55,23 +55,23 @@ describe('las dos lentes, en pantalla', () => {
     const { container } = pintar()
     const filas = [...container.querySelectorAll('table')[0].querySelectorAll('tbody tr')]
     const texto = filas.map(f => f.textContent ?? '')
-    expect(texto.some(t => t.includes('Gonzalo Pérez') && t.includes(fi(10_000)))).toBe(true)
-    expect(texto.some(t => t.includes('Maximiliano Soto') && t.includes(fi(10_000)))).toBe(true)
+    expect(texto.some(t => t.includes('Domingo Pérez') && t.includes(fi(10_000)))).toBe(true)
+    expect(texto.some(t => t.includes('Tiburcio Soto') && t.includes(fi(10_000)))).toBe(true)
   })
 
   it('LENTE B: la mesa entera es de quien registró el 677 — una sola fila de ₡20.000', () => {
     const { container } = pintar()
     const cuerpo = container.querySelectorAll('table')[1]
     const filas = [...cuerpo.querySelectorAll('tbody tr')]
-    // Una fila de persona + la del total. Gonzalo NO aparece: la mesa no es suya.
-    expect(filas.filter(f => (f.textContent ?? '').includes('Gonzalo'))).toHaveLength(0)
-    expect(within(cuerpo).getByText('Maximiliano Soto')).toBeTruthy()
+    // Una fila de persona + la del total. Domingo NO aparece: la mesa no es suya.
+    expect(filas.filter(f => (f.textContent ?? '').includes('Domingo'))).toHaveLength(0)
+    expect(within(cuerpo).getByText('Tiburcio Soto')).toBeTruthy()
     expect(filas.some(f => (f.textContent ?? '').includes(fi(20_000)))).toBe(true)
   })
 
   it('usa los nombres de `employees`, no los códigos', () => {
     const { container, queryByText } = pintar()
-    expect(container.textContent).toContain('Gonzalo Pérez')
+    expect(container.textContent).toContain('Domingo Pérez')
     expect(queryByText('032')).toBeNull()
   })
 

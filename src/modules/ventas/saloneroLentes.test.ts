@@ -1,5 +1,5 @@
 // Las dos lentes. El caso testigo es la factura REAL 110607 del PoS, la que destapó todo:
-// 5 líneas comandadas por GONZA (`032`) + 4 por MAXO (`026`), y los DOS pax (677) son de MAXO.
+// 5 líneas comandadas por DIEGO (`032`) + 4 por TITO (`026`), y los DOS pax (677) son de TITO.
 // Con el modelo viejo (un mesero por ticket) esa factura entera se le acreditaba a uno solo.
 import { describe, it, expect } from 'vitest'
 
@@ -45,23 +45,23 @@ const filaB = (r: LentesSaloneros, id: string): FilaMesaPropia | undefined =>
 // ── El caso testigo ────────────────────────────────────────────────────────────────────────
 
 describe('factura 110607 — dos meseros en la MISMA factura', () => {
-  // 5 líneas de GONZA por ₡2.000 c/u = 10.000 · 4 de MAXO por ₡2.500 c/u = 10.000. Neta 20.000.
+  // 5 líneas de DIEGO por ₡2.000 c/u = 10.000 · 4 de TITO por ₡2.500 c/u = 10.000. Neta 20.000.
   const t = ticket({ id: 'f110607', valor_servido_crc: 20_000, iva_crc: 2_600, pax: 2, mesa: '7' })
   const ls: LineaLente[] = [
     ...Array.from({ length: 5 }, () => linea('f110607', '032', 2_000)),
     ...Array.from({ length: 4 }, () => linea('f110607', '026', 2_500)),
-    pax('f110607', '026', 2),   // los dos PAX son de MAXO
+    pax('f110607', '026', 2),   // los dos PAX son de TITO
   ]
 
   it('LENTE A: la plata se parte por quién comandó, no se acredita entera a uno', () => {
     const r = calcularLentes([t], ls)
-    expect(fila(r, '032')?.netaCrc).toBe(10_000)   // GONZA
-    expect(fila(r, '026')?.netaCrc).toBe(10_000)   // MAXO
+    expect(fila(r, '032')?.netaCrc).toBe(10_000)   // DIEGO
+    expect(fila(r, '026')?.netaCrc).toBe(10_000)   // TITO
     expect(fila(r, '032')?.lineas).toBe(5)
     expect(fila(r, '026')?.lineas).toBe(4)
   })
 
-  it('LENTE A: el PAX propio es de quien registró el 677 — MAXO', () => {
+  it('LENTE A: el PAX propio es de quien registró el 677 — TITO', () => {
     const r = calcularLentes([t], ls)
     expect(fila(r, '026')?.paxPropio).toBe(2)
     expect(fila(r, '032')?.paxPropio).toBe(0)
@@ -69,10 +69,10 @@ describe('factura 110607 — dos meseros en la MISMA factura', () => {
     expect(fila(r, '026')?.promPorPax).toBe(5_000)  // 10.000 / 2
   })
 
-  it('LENTE B: la mesa entera es de MAXO, que registró el 677', () => {
+  it('LENTE B: la mesa entera es de TITO, que registró el 677', () => {
     const r = calcularLentes([t], ls)
     expect(r.mesaPropia).toHaveLength(1)
-    expect(filaB(r, '026')?.netaMesasCrc).toBe(20_000)  // la neta ENTERA, incluida la de GONZA
+    expect(filaB(r, '026')?.netaMesasCrc).toBe(20_000)  // la neta ENTERA, incluida la de DIEGO
     expect(filaB(r, '026')?.tickets).toBe(1)
     expect(filaB(r, '026')?.mesas).toBe(1)
     expect(filaB(r, '026')?.ticketPromedio).toBe(20_000)
@@ -109,8 +109,8 @@ describe('Σ(meseros) + caja + genérico + otro = neta del día', () => {
     linea('t1', '032', 6_000),   // mesero
     linea('t1', '111', 3_000),   // caja
     linea('t1', '02',  1_000),   // genérico
-    linea('t2', '023', 4_000),   // mesero (ESTEBAN, código activo)
-    linea('t2', '555', 2_000),   // el MISMO ESTEBAN, código viejo
+    linea('t2', '023', 4_000),   // mesero (ROBERTO, código activo)
+    linea('t2', '555', 2_000),   // el MISMO ROBERTO, código viejo
     linea('t2', null,  1_000),   // sin código
   ]
 
@@ -133,7 +133,7 @@ describe('Σ(meseros) + caja + genérico + otro = neta del día', () => {
     expect(fila(r, '02')?.netaCrc).toBe(1_000)
   })
 
-  it('ESTEBAN sale en UNA fila con sus dos códigos sumados', () => {
+  it('ROBERTO sale en UNA fila con sus dos códigos sumados', () => {
     const r = calcularLentes(tickets, lineas)
     expect(r.ventaPropia.filter(f => f.personaId === '023')).toHaveLength(1)
     expect(fila(r, '023')?.netaCrc).toBe(6_000)   // 4.000 (023) + 2.000 (555)

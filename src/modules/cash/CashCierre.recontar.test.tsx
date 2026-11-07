@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// «Recontar» UNA vez en el cierre del día (decisión de Ismael, 05/11 · columnas de la mig 074):
+// «Recontar» UNA vez en el cierre del día (decisión del dueño, 05/11 · columnas de la mig 074):
 //   · el esperado y la verificación se ven EN VIVO (sin conteo ciego);
 //   · dentro de tolerancia (₡500 / US$1): sin pasos extra, primer_conteo null;
 //   · fuera: al pedir el cierre se ofrece recontar una vez (se guarda el primer conteo y el conteo

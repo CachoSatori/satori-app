@@ -17,7 +17,7 @@ Qué hace:
   4. Copia todas las tablas public en orden topológico de FKs, con triggers
      desactivados por sesión (session_replication_role=replica) para no duplicar
      stock (trg_update_stock) ni crear perfiles fantasma (on_auth_user_created)
-  5. Restaura el owner de staging (satorisushibar@gmail.com) y cualquier
+  5. Restaura el owner de staging (<correo del owner de staging>) y cualquier
      auth.user de staging sin perfil
   6. Re-sincroniza secuencias de public (setval) — hoy no hay (PKs uuid)
   7. VERIFICA: conteos por tabla prod vs staging + 3 spot-checks financieros

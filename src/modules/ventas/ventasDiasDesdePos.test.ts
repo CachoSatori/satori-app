@@ -9,7 +9,7 @@ import { ventanaRangoJornadas } from '../../shared/api/posNdf'
 import type { LineaNdfRow, TicketNdfConId } from '../../shared/api/posNdf'
 import type { DiaData, HistDay } from '../../shared/types/ventas'
 
-const NOMBRES = { '026': 'MAXO', '027': 'GUILLE' }
+const NOMBRES = { '026': 'TITO', '027': 'JULIAN' }
 const SELLO = '2026-09-05'
 
 const ticket = (over: Partial<TicketNdfConId> & { id: string }): TicketNdfConId => ({

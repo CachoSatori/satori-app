@@ -48,7 +48,7 @@ const DIA_1 = `${HOY.getFullYear()}-${String(HOY.getMonth() + 1).padStart(2, '0'
 // Los baldes que produce `claveNoMesero`: dos turnos + los tres que NO suman al total.
 const DIAS_POS: DiasMap = {
   [DIA_1]: dia({
-    MAXO: sal({ pax: 20, total: 200_000 }),
+    TITO: sal({ pax: 20, total: 200_000 }),
     'Cajero turno mañana': caj({ total: 60_000, salon: 0, delivery: 60_000, ordenes: 4 }),
     'Cajero turno tarde':  caj({ total: 30_000, salon: 0, delivery: 30_000, ordenes: 2 }),
     'Cajero-salón':        caj({ total: 17_000, salon: 17_000, delivery: 0, ordenes: 2 }),
@@ -99,7 +99,7 @@ describe('VentasCajeros · render', () => {
           { ticket_id: 'f1', usuario_registra: '032', monto: 4_000, codigo_producto: 'B', cantidad: 1, familia: 2 },
         ],
       ),
-      nombres: { '026': 'Maximiliano', '032': 'Gonzalo' },
+      nombres: { '026': 'Tiburcio', '032': 'Domingo' },
       tickets: 1,
     })
     render(<VentasCajeros dias={DIAS_POS} />)
@@ -116,8 +116,8 @@ describe('VentasCajeros · render', () => {
     expect(rango.desde).toBe(DIA_1)
     expect(rango.hasta).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     // Y las dos personas de la factura partida aparecen, cada una con lo suyo.
-    expect(texto()).toContain('Maximiliano')
-    expect(texto()).toContain('Gonzalo')
+    expect(texto()).toContain('Tiburcio')
+    expect(texto()).toContain('Domingo')
     expect(texto()).toContain(plano(fi(5_000)))
     expect(texto()).toContain(plano(fi(4_000)))
     // El aviso de que las lentes no se suman con las tarjetas sigue en pantalla.
@@ -132,7 +132,7 @@ describe('VentasCajeros · render', () => {
   })
 
   it('sin ningún día con caja: vacío honesto y SIN mención al XLS', () => {
-    render(<VentasCajeros dias={{ [DIA_1]: dia({ MAXO: sal({ total: 200_000 }) }) }} />)
+    render(<VentasCajeros dias={{ [DIA_1]: dia({ TITO: sal({ total: 200_000 }) }) }} />)
     expect(screen.getByText('Sin datos de cajeros')).toBeTruthy()
     expect(texto()).not.toMatch(/XLS/i)
   })
@@ -152,7 +152,7 @@ describe('VentasCajeros · render', () => {
 describe("VentasCajeros · modo 'xls' con los nombres REALES del Excel de prod", () => {
   const DIAS_XLS: DiasMap = {
     [DIA_1]: dia({
-      GONZA: sal({ pax: 4, total: 95_451 }),
+      DIEGO: sal({ pax: 4, total: 95_451 }),
       'Cajero Turno Mañana': caj({ total: 90_756, salon: 20_000, delivery: 70_756, ordenes: 10 }),
       'cajero turno tarde':  caj({ total: 56_345, salon: 0, delivery: 56_345, ordenes: 6 }),
     }),

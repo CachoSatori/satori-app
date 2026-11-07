@@ -1,4 +1,4 @@
-// Admin → Usuarios → «+ Nuevo empleado» (firmado por Ismael, 05/11).
+// Admin → Usuarios → «+ Nuevo empleado» (firmado por el dueño, 05/11).
 // El owner carga nombre, correo y rol (y opcionalmente el empleado del módulo Empleados a vincular);
 // la Edge Function `alta-empleado` crea la cuenta con una contraseña temporal que se muestra UNA vez.
 import { useState } from 'react'

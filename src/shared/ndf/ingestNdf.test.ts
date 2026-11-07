@@ -28,7 +28,7 @@ const crudo = (over: Partial<TicketCrudo> = {}): TicketCrudo => ({
   area:             'SALON 1',
   login_cajero:     '222',
   usuario_registra: '026',
-  salonero_nombre:  'MAXO',
+  salonero_nombre:  'TITO',
   personas:         0,
   imp_servicio:     1200,
   medios:           { efectivo: 15000, vuelto: 3000, dolaresEfectivo: 20 },

@@ -29,7 +29,7 @@ const dia = (o: {
       ...(o.beb ? [['CERVEZA', 1, o.beb] as [string, number, number]] : []),
     ],
   }
-  return { fileName: 'x', uploadedAt: 'x', saloneros: { MAXO: sal } }
+  return { fileName: 'x', uploadedAt: 'x', saloneros: { TITO: sal } }
 }
 
 // ── Las cifras de un día ───────────────────────────────────────────────────────────────────

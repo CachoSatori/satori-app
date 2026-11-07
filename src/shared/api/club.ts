@@ -219,6 +219,7 @@ export const fmtCreditos = (n: number | null | undefined) =>
 
 // ── F1f: excepciones del puente y reporte mensual (owner, manager) ───────────
 export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA' | 'SIN_CRUCE'
+  | 'VISITA_REPETIDA' | 'PERSONAS_SOBRE_PAX'
 export interface Excepcion {
   tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable' | 'manual'
   detalle: Record<string, unknown>; resuelta: boolean; nota: string | null; resuelta_en: string | null

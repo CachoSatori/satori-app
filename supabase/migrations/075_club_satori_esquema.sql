@@ -22,6 +22,15 @@
 
 begin;
 
+-- CLUB-AUD-12: la 075 asume la 069 (get_my_role mira profiles.is_active). Sin ella, una cuenta
+-- inactiva conserva permisos: se aborta antes de crear nada.
+do $$ begin
+  if to_regprocedure('public.get_my_role()') is null
+     or position('is_active' in pg_get_functiondef('public.get_my_role()'::regprocedure)) = 0 then
+    raise exception 'La 075 requiere la 069 (get_my_role con is_active)' using errcode = 'P0001';
+  end if;
+end $$;
+
 -- ── 0. Helpers ──────────────────────────────────────────────────────────────
 
 -- Código sin caracteres ambiguos (sin 0/O ni 1/I). 32 símbolos → byte mod 32 sin sesgo.
@@ -172,14 +181,35 @@ create table if not exists public.club_cupones (
   usado_por          uuid,
   factura_pos        text,
   personas           int check (personas between 1 and 30),
-  contacto_nombre    text check (length(contacto_nombre) <= 80),
-  contacto_whatsapp  text check (contacto_whatsapp ~ '^\+[1-9][0-9]{6,14}$'),
-  contacto_email     text check (length(contacto_email) <= 254),
-  contacto_optin     boolean not null default false,
   created_at         timestamptz not null default now(),
   check ((estado = 'usado') = (usado_en is not null))
 );
 create index if not exists club_cupones_ref_dia_idx on public.club_cupones (referente_id, creado_en);
+
+-- CLUB-AUD-01: el contacto del turista (opt-in) va en una tabla aparte que solo ven owner y manager.
+-- En club_cupones el cajero y el contador veían WhatsApp y email (grant de tabla + RLS de staff).
+create table if not exists public.club_cupones_contactos (
+  cupon_id   uuid primary key references public.club_cupones(id),
+  nombre     text check (length(nombre) <= 80),
+  whatsapp   text check (whatsapp ~ '^\+[1-9][0-9]{6,14}$'),
+  email      text check (length(email) <= 254),
+  optin      boolean not null default false,
+  created_at timestamptz not null default now(),
+  check (whatsapp is not null or email is not null)
+);
+-- Bases donde club_cupones todavía tiene las columnas de contacto: se mueven y se borran.
+do $$ begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'club_cupones' and column_name = 'contacto_whatsapp') then
+    execute $m$insert into public.club_cupones_contactos (cupon_id, nombre, whatsapp, email, optin, created_at)
+               select c.id, c.contacto_nombre, c.contacto_whatsapp, c.contacto_email, c.contacto_optin, c.creado_en
+                 from public.club_cupones c
+                where c.contacto_whatsapp is not null or c.contacto_email is not null
+               on conflict (cupon_id) do nothing$m$;
+    alter table public.club_cupones drop column if exists contacto_nombre, drop column if exists contacto_whatsapp,
+                                    drop column if exists contacto_email, drop column if exists contacto_optin;
+  end if;
+end $$;
 
 create table if not exists public.club_movimientos (
   id                    uuid primary key default gen_random_uuid(),
@@ -292,7 +322,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['club_config','club_negocios','club_miembros','club_miembros_contacto',
-                           'club_cupones','club_movimientos','club_pm_pagos','club_pm_cargos','club_visitas']
+                           'club_cupones','club_cupones_contactos','club_movimientos','club_pm_pagos','club_pm_cargos','club_visitas']
   loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on public.%I from anon, public', t);
@@ -337,6 +367,11 @@ drop policy if exists club_contacto_gerencia on public.club_miembros_contacto;
 create policy club_contacto_gerencia on public.club_miembros_contacto for all to authenticated
   using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'))
   with check (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
+
+-- Contactos de turistas (cupones): solo owner y manager, solo lectura (escriben las funciones públicas).
+drop policy if exists club_cupones_contactos_gerencia on public.club_cupones_contactos;
+create policy club_cupones_contactos_gerencia on public.club_cupones_contactos for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
 
 -- PM: owner y contador (lectura; las escrituras llegan por funciones en F1c)
 do $$
@@ -441,17 +476,19 @@ begin
   -- Inserción con reintento si choca el código (muy improbable).
   for i in 1 .. 5 loop
     begin
-      insert into public.club_cupones
-        (location_id, referente_id, vence_en, contacto_nombre, contacto_whatsapp, contacto_email, contacto_optin)
-      values
-        (v_ref.location_id, v_ref.id, now() + make_interval(days => v_cfg.cupon_dias),
-         v_nombre, v_wa, v_email, v_optin and (v_wa is not null or v_email is not null))
+      insert into public.club_cupones (location_id, referente_id, vence_en)
+      values (v_ref.location_id, v_ref.id, now() + make_interval(days => v_cfg.cupon_dias))
       returning * into v_cupon;
       exit;
     exception when unique_violation then
       if i = 5 then raise exception 'No se pudo generar el cupón' using errcode = 'P0001'; end if;
     end;
   end loop;
+
+  if v_wa is not null or v_email is not null then
+    insert into public.club_cupones_contactos (cupon_id, nombre, whatsapp, email, optin)
+    values (v_cupon.id, v_nombre, v_wa, v_email, v_optin);
+  end if;
 
   codigo := v_cupon.codigo;
   vence_en := v_cupon.vence_en;
@@ -465,6 +502,27 @@ $$;
 alter table public.club_movimientos add column if not exists pos_ref jsonb;
 alter table public.club_movimientos add column if not exists visita_clave text;
 alter table public.club_cupones     add column if not exists pos_ref jsonb;
+
+-- CLUB-AUD-02: una tarjeta por referente y visita (solo las de la app). Antes se listan los duplicados
+-- que ya existan y, si hay, la migración FRENA sin borrar nada (hay que resolverlos a mano).
+do $$
+declare v_n int; v_lista text;
+begin
+  select count(*), string_agg(format('%s · %s (%s)', miembro_id, visita_clave, n), '; ')
+    into v_n, v_lista
+    from (select miembro_id, visita_clave, count(*) as n from public.club_movimientos
+           where tipo = 'tarjeta' and origen = 'app' and visita_clave is not null
+           group by 1, 2 having count(*) > 1) d;
+  if v_n > 0 then
+    raise exception 'Hay % visitas con más de una tarjeta del mismo referente: %', v_n, left(v_lista, 2000)
+      using errcode = 'P0001';
+  end if;
+end $$;
+create unique index if not exists club_mov_tarjeta_miembro_visita_uq
+  on public.club_movimientos (miembro_id, visita_clave)
+  where tipo = 'tarjeta' and origen = 'app' and visita_clave is not null;
+create index if not exists club_mov_visita_tarjeta_idx on public.club_movimientos (location_id, visita_clave)
+  where tipo = 'tarjeta' and origen = 'app';
 
 -- Normaliza la referencia al PoS que manda la caja. NULL si no vino; error si es inválida.
 --   {modo:'pedido',  pedido[, local]}           → pedido abierto elegido de la lista. Tiene que estar
@@ -513,6 +571,7 @@ begin
     return jsonb_build_object('modo', 'pedido', 'local', v_local, 'pedido', v_ped,
                               'mesa', nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
                               'total', o.monto_estimado_crc, 'visto', o.updated_at,
+                              'pax', coalesce(nullif(o.pax, 0), nullif(o.pax_pedido, 0)),
                               'abierto_en', coalesce(o.pedido_abierto_en, o.updated_at), 'hora', now(),
                               'visita', format('pedido:%s:%s', v_hoy, v_ped));
   elsif v_modo = 'factura' then
@@ -529,11 +588,56 @@ begin
       raise exception 'Esa factura tiene más de 2 horas: la resuelve el manager en Excepciones' using errcode = 'P0001';
     end if;
     return jsonb_build_object('modo', 'factura', 'local', v_local, 'numero_factura', v_nf,
-                              'mesa', nullif(upper(btrim(coalesce(t.mesa, ''))), ''), 'total', t.total_crc,
+                              'mesa', nullif(upper(btrim(coalesce(t.mesa_factura, t.mesa, ''))), ''), 'total', t.total_crc,
+                              'pax', nullif(t.pax, 0),
                               'hora_factura', t.fecha_registra, 'hora', now(),
                               'visita', format('factura:%s', v_nf));
   end if;
   raise exception 'Pedido no válido' using errcode = 'P0001';
+end;
+$$;
+
+-- CLUB-AUD-02 (decisión de Ismael, 07-nov): un referente tiene UNA tarjeta por visita; dos referentes
+-- en la misma visita sí, con Σ personas ≤ pax del pedido. Interna: la llaman club_cupon_usar y
+-- club_tarjeta_manual ANTES de bloquear al miembro. Orden global de locks: operación (p_op) → cupón →
+-- visita (advisory) → miembro.
+--   · Lock por visita: dos tarjetas de la misma mesa no se cuelan a la vez.
+--   · Mismo miembro y misma visita → error (y el índice único es la red de seguridad).
+--   · Pax: el que trajo el escaneo (pedido abierto o factura del plan B) o, con factura tipeada, el de la
+--     factura del puente. Pax desconocido (0 o null) → no se puede controlar acá: queda la excepción
+--     PERSONAS_SOBRE_PAX cuando la factura llega con pax.
+create or replace function public.club_visita_control(p_location text, p_visita text, p_pos jsonb, p_factura text,
+                                                      p_miembro uuid, p_personas int)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_pax int;
+  v_ya  int;
+begin
+  if p_visita is null or p_visita = '' then
+    return;
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('club_visita:' || p_location || ':' || p_visita, 0));
+  if exists (select 1 from public.club_movimientos mv
+              where mv.miembro_id = p_miembro and mv.tipo = 'tarjeta' and mv.origen = 'app' and mv.visita_clave = p_visita) then
+    raise exception 'Este referente ya tiene una tarjeta en esta visita' using errcode = 'P0001';
+  end if;
+  v_pax := nullif((p_pos->>'pax')::int, 0);
+  if v_pax is null and p_pos is null and public.club_factura_clave(p_factura) is not null then
+    select nullif(t.pax, 0) into v_pax from public.pos_ndf_tickets t
+     where t.local = p_location and ltrim(t.numero_factura, '0') = public.club_factura_clave(p_factura) limit 1;
+  end if;
+  if v_pax is not null then
+    select coalesce(sum(mv.personas), 0) into v_ya from public.club_movimientos mv
+     where mv.location_id = p_location and mv.tipo = 'tarjeta' and mv.origen = 'app' and mv.visita_clave = p_visita;
+    if v_ya + p_personas > v_pax then
+      raise exception 'Supera las personas del pedido (% pax; ya registradas %)', v_pax, v_ya using errcode = 'P0001';
+    end if;
+  end if;
 end;
 $$;
 
@@ -564,6 +668,8 @@ begin
     raise exception 'Falta el id de operación' using errcode = 'P0001';
   end if;
 
+  -- CLUB-AUD-08: el mismo p_op en paralelo espera y devuelve el replay (no un error).
+  perform pg_advisory_xact_lock(hashtextextended('club_op:' || p_op::text, 0));
   -- Idempotencia: la misma operación devuelve el mismo resultado.
   select * into v_prev from public.club_movimientos where client_op_id = p_op;
   if found then
@@ -596,7 +702,12 @@ begin
     raise exception 'El cupón está vencido' using errcode = 'P0001';
   end if;
 
-  select * into v_ref from public.club_miembros m where m.id = v_cupon.referente_id;
+  -- CLUB-AUD-02: control de la visita (lock, una tarjeta por referente, Σ personas ≤ pax).
+  perform public.club_visita_control(v_cupon.location_id, coalesce(v_pos->>'visita', v_fac), v_pos, v_fac,
+                                     v_cupon.referente_id, p_personas);
+  -- CLUB-AUD-07: el miembro se bloquea (cupón → visita → miembro) y recién ahí se mira si sigue activo:
+  -- una baja simultánea ya no deja un miembro de baja con saldo.
+  select * into v_ref from public.club_miembros m where m.id = v_cupon.referente_id for update;
   if v_ref.estado <> 'activo' then
     raise exception 'REFERENTE_INACTIVO' using errcode = 'P0001',
       hint = 'Referente dado de baja: seguí con la cuenta sin crédito';
@@ -651,6 +762,7 @@ begin
     raise exception 'Falta el id de operación' using errcode = 'P0001';
   end if;
 
+  perform pg_advisory_xact_lock(hashtextextended('club_op:' || p_op::text, 0));   -- CLUB-AUD-08
   select * into v_prev from public.club_movimientos where client_op_id = p_op;
   if found then
     if v_prev.tipo <> 'canje' or v_prev.miembro_id is distinct from p_miembro then
@@ -1160,6 +1272,7 @@ begin
     raise exception 'Falta el id de operación' using errcode = 'P0001';
   end if;
 
+  perform pg_advisory_xact_lock(hashtextextended('club_op:' || p_op::text, 0));   -- CLUB-AUD-08
   select * into v_prev from public.club_movimientos where client_op_id = p_op;
   if found then
     if v_prev.tipo <> 'tarjeta' or v_prev.miembro_id is distinct from p_miembro or v_prev.cupon_id is not null then
@@ -1178,6 +1291,9 @@ begin
     raise exception 'Falta el número de factura' using errcode = 'P0001';
   end if;
 
+  -- CLUB-AUD-02: control de la visita ANTES del lock del miembro (orden visita → miembro).
+  perform public.club_visita_control(coalesce((select m.location_id from public.club_miembros m where m.id = p_miembro), 'santa-teresa'),
+                                     coalesce(v_pos->>'visita', v_fac), v_pos, v_fac, p_miembro, p_personas);
   select * into v_m from public.club_miembros m where m.id = p_miembro for update;
   if not found or v_m.tipo not in ('referente','concierge_pm','equipo') then
     raise exception 'Miembro no encontrado' using errcode = 'P0001';
@@ -1449,7 +1565,7 @@ begin
   if not found or v_c.estado <> 'vigente' or v_c.vence_en <= now() then
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
-  if v_c.contacto_whatsapp is not null or v_c.contacto_email is not null then
+  if exists (select 1 from public.club_cupones_contactos k where k.cupon_id = v_c.id) then
     return true;   -- ya cargado: no se pisa ni se informa nada más
   end if;
   v_nombre := nullif(btrim(regexp_replace(coalesce(p_contacto->>'nombre', ''), '[[:cntrl:]]', '', 'g')), '');
@@ -1468,9 +1584,9 @@ begin
   if v_wa is null and v_email is null then
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
-  update public.club_cupones
-     set contacto_nombre = v_nombre, contacto_whatsapp = v_wa, contacto_email = v_email, contacto_optin = true
-   where id = v_c.id;
+  insert into public.club_cupones_contactos (cupon_id, nombre, whatsapp, email, optin)
+  values (v_c.id, v_nombre, v_wa, v_email, true)
+  on conflict (cupon_id) do nothing;
   return true;
 end;
 $$;
@@ -1613,7 +1729,8 @@ create table if not exists public.club_excepciones_resueltas (
 -- El check de tipos va aparte para poder sumar tipos sin recrear la tabla (re-ejecutable).
 alter table public.club_excepciones_resueltas drop constraint if exists club_excepciones_resueltas_tipo_check;
 alter table public.club_excepciones_resueltas add constraint club_excepciones_resueltas_tipo_check
-  check (tipo in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE'));
+  check (tipo in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE',
+                  'VISITA_REPETIDA','PERSONAS_SOBRE_PAX'));
 alter table public.club_excepciones_resueltas enable row level security;
 revoke all on public.club_excepciones_resueltas from anon, public, authenticated;
 grant select on public.club_excepciones_resueltas to authenticated;
@@ -1623,6 +1740,9 @@ create policy club_exc_gerencia on public.club_excepciones_resueltas for select 
 
 -- Excepciones del puente en un rango de fechas (hora CR). owner, manager.
 --   REGISTRO_SIN_FACTURA (exacta)  · cupón/tarjeta/canje de la app con factura que no está en el puente
+--   VISITA_REPETIDA      (exacta)  · el mismo referente con más de una tarjeta en la misma visita (misma
+--                                    factura principal), aunque se haya registrado por caminos distintos
+--   PERSONAS_SOBRE_PAX   (probable)· Σ personas de las tarjetas de una visita > pax de sus facturas
 --   SIN_CRUCE            (probable)· registro con pedido que no encontró su factura (primera con ese pedido
 --                                    después del escaneo, tope 18 h): posible cuenta dividida o refactura
 --                                    (el PoS las cobra en facturas sin pedido). El manager elige la factura.
@@ -1717,6 +1837,34 @@ begin
        and (now() >= (m.pos_ref->>'hora')::timestamptz + interval '18 hours'
             or not exists (select 1 from public.pos_ndf_open o where o.local = p_location and o.id_pedido = m.pos_ref->>'pedido'))
     union all
+    -- VISITA_REPETIDA (CLUB-AUD-02): mismo miembro, misma factura principal, más de una tarjeta
+    select 'VISITA_REPETIDA', 'visita:' || v.miembro_id || ':' || ltrim(t.numero_factura, '0'), v.f, t.numero_factura, 'exacta',
+           jsonb_build_object('tarjetas', v.n, 'personas', v.personas, 'miembro', public.club_nombre_limpio(mi.nombre),
+                              'mesa', coalesce(t.mesa_factura, t.mesa), 'pax', t.pax)
+      from (select m.miembro_id, m.ticket_ids[1] as principal, count(*) as n, sum(m.personas) as personas, min(m.fecha_visita) as f
+              from mv m
+             where m.tipo = 'tarjeta' and cardinality(m.ticket_ids) > 0 and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
+             group by 1, 2 having count(*) > 1) v
+      join public.pos_ndf_tickets t on t.id = v.principal
+      join public.club_miembros mi on mi.id = v.miembro_id
+    union all
+    -- PERSONAS_SOBRE_PAX (CLUB-AUD-02): Σ personas de todas las tarjetas de la visita (todos los referentes)
+    -- contra el pax de sus facturas (principal + divididas). Pax 0 = desconocido: no se compara.
+    select 'PERSONAS_SOBRE_PAX', 'pax:' || ltrim(t.numero_factura, '0'), v.f, t.numero_factura, 'probable',
+           jsonb_build_object('personas', v.personas, 'pax', x.pax, 'tarjetas', v.n, 'referentes', v.miembros,
+                              'mesa', coalesce(t.mesa_factura, t.mesa))
+      from (select m.ticket_ids[1] as principal,
+                   count(*) as n, sum(m.personas) as personas, min(m.fecha_visita) as f,
+                   string_agg(distinct public.club_nombre_limpio(mi.nombre), ', ') as miembros
+              from mv m join public.club_miembros mi on mi.id = m.miembro_id
+             where m.tipo = 'tarjeta' and cardinality(m.ticket_ids) > 0 and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
+             group by 1) v
+      join public.pos_ndf_tickets t on t.id = v.principal
+      cross join lateral (select coalesce(sum(z.pax), 0) as pax from public.pos_ndf_tickets z
+                           where z.id in (select unnest(m2.ticket_ids) from mv m2
+                                           where m2.tipo = 'tarjeta' and m2.ticket_ids[1] = v.principal)) x
+     where x.pax > 0 and v.personas > x.pax
+    union all
     -- CREDITOS_SIN_CANJE (heurística: cxc múltiplo de medio crédito)
     select 'CREDITOS_SIN_CANJE', 'factura:' || t.clave, t.f, t.numero_factura, 'probable',
            jsonb_build_object('cxc_crc', t.cxc, 'creditos_estimados', round(t.cxc / v_cfg.valor_credito_crc, 1), 'total_crc', t.total_crc)
@@ -1789,7 +1937,8 @@ begin
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
-  if p_tipo is null or p_tipo not in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE') then
+  if p_tipo is null or p_tipo not in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE',
+                                      'VISITA_REPETIDA','PERSONAS_SOBRE_PAX') then
     raise exception 'Tipo de excepción no válido' using errcode = 'P0001';
   end if;
   if length(v_ref) not between 1 and 100 then
@@ -2074,6 +2223,7 @@ revoke all on function public.club_miembro_token(uuid)                    from p
 revoke all on function public.club_buscar(text)                           from public, anon, authenticated;
 revoke all on function public.club_tarjeta_manual(uuid, int, text, uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.club_pos_ref(jsonb) from public, anon, authenticated;
+revoke all on function public.club_visita_control(text, text, jsonb, text, uuid, int) from public, anon, authenticated;
 revoke all on function public.club_pedidos_abiertos(text) from public, anon, authenticated;
 grant execute on function public.club_pedidos_abiertos(text) to authenticated;
 revoke all on function public.club_facturas_recientes(text) from public, anon, authenticated;
@@ -2121,4 +2271,23 @@ grant execute on function public.club_canje(uuid, numeric, text, uuid, jsonb) to
 grant execute on function public.club_ajuste(uuid, int, text, text)      to authenticated;
 grant execute on function public.club_vencer(date)                       to authenticated;
 
+
+-- CLUB-AUD-11: red de seguridad al final, después de todos los grants de arriba.
+--   · Secuencias club_% (identity): nadie de la app las usa directo.
+--   · Funciones club_%: ninguna para PUBLIC; para anon solo las 4 páginas públicas.
+do $$
+declare r record;
+begin
+  for r in select c.oid::regclass as obj from pg_class c join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'public' and c.relkind = 'S' and c.relname like 'club\_%' loop
+    execute format('revoke all on sequence %s from public, anon, authenticated', r.obj);
+  end loop;
+  for r in select p.oid::regprocedure as fn, p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.proname like 'club\_%' loop
+    execute format('revoke all on function %s from public', r.fn);
+    if r.proname not in ('club_cupon_crear', 'club_portal', 'club_cupon_ver', 'club_cupon_contacto') then
+      execute format('revoke all on function %s from anon', r.fn);
+    end if;
+  end loop;
+end $$;
 commit;

@@ -103,7 +103,7 @@ begin
                                  '{"nombre":"Ana","whatsapp":"8888 1234","optin":true}'::jsonb) c;
   perform pg_temp.yo();
   insert into _ids values ('cupon1', v_cod);
-  select contacto_whatsapp into v_wa from club_cupones where codigo = v_cod;
+  select k.whatsapp into v_wa from club_cupones c join club_cupones_contactos k on k.cupon_id = c.id where c.codigo = v_cod;
   perform pg_temp.r('2', 'código válido → cupón', v_cod ~ '^[A-HJ-NP-Z2-9]{10}$'
       and v_vence between now() + interval '4 days 23 hours' and now() + interval '5 days 1 hour',
       format('codigo=%s vence_en=+%s whatsapp normalizado=%s', v_cod, v_vence - now(), v_wa));
@@ -148,7 +148,7 @@ begin
     perform public.club_cupon_crear((select v from _ids where k='ref_cod'), null);
     perform pg_temp.yo(); perform pg_temp.r('2', 'pasado el tope diario', false, 'creó el 4º');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('2', 'pasado el tope diario (3) → error', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('2', 'pasado el tope diario (3) → error', sqlstate = 'P0001' and sqlerrm = 'No se pueden generar más cupones hoy', sqlerrm);
   end;
   update club_config set cupones_max_dia_referente = 30 where location_id = 'santa-teresa';
 end $$;
@@ -177,14 +177,14 @@ begin
     perform public.club_cupon_usar((select v from _ids where k='cupon1'), 4, 'FAC-002', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('3', 'segundo uso (otro p_op)', false, 'lo usó dos veces');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('3', 'segundo uso (otro p_op) → falla', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('3', 'segundo uso (otro p_op) → falla', sqlstate = 'P0001' and sqlerrm = 'El cupón ya se usó o fue anulado', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     perform public.club_cupon_usar('AAAAAAAAAA', 31, 'FAC-003', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('3', 'personas = 31', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('3', 'personas = 31 → falla', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('3', 'personas = 31 → falla', sqlstate = 'P0001' and sqlerrm = 'Personas fuera de rango (1 a 30)', sqlerrm);
   end;
   -- salonero no puede usar cupones
   begin
@@ -205,14 +205,14 @@ begin
     perform public.club_canje((select v::uuid from _ids where k='m2'), 2.5, 'FAC-010', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('4', '2,5 créditos', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('4', '2,5 créditos → error', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('4', '2,5 créditos → error', sqlstate = 'P0001' and sqlerrm like 'Créditos no válidos: de %', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     perform public.club_canje((select v::uuid from _ids where k='m2'), 1.25, 'FAC-010', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('4', '1,25 créditos', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('4', '1,25 créditos → error', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('4', '1,25 créditos → error', sqlstate = 'P0001' and sqlerrm like 'Créditos no válidos: de %', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
@@ -293,14 +293,14 @@ begin
     perform pg_temp.yo();
     perform pg_temp.r('5', 'cajero lee contactos → 0 filas (owner ve el de la prueba)', v_n = 0 and v_o = 1, format('cajero=%s, owner=%s', v_n, v_o));
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('5', 'cajero lee contactos → error', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('5', 'cajero lee contactos → sin permiso', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     insert into public.club_miembros_contacto(miembro_id, telefono) values ((select v::uuid from _ids where k='m2'), '+50611112222');
     perform pg_temp.yo(); perform pg_temp.r('5', 'cajero escribe contacto', false, 'escribió');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('5', 'cajero escribe contacto → rechazado', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('5', 'cajero escribe contacto → rechazado por RLS', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
   end;
 end $$;
 
@@ -371,7 +371,7 @@ begin
     perform public.club_ajuste((select v::uuid from _ids where k='m3'), 3, 'ajuste', '   ');
     perform pg_temp.yo(); perform pg_temp.r('extra', 'owner ajuste sin nota', false, 'pudo');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('extra', 'owner ajuste sin nota → error', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('extra', 'owner ajuste sin nota → error', sqlstate = 'P0001' and sqlerrm = 'La nota es obligatoria', sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   v_n := public.club_vencer((now() at time zone 'America/Costa_Rica')::date);
@@ -399,7 +399,7 @@ begin
     perform public.club_buscar('ab');
     perform pg_temp.yo(); perform pg_temp.r('11', 'búsqueda de 2 letras', false, 'buscó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('11', 'búsqueda de 2 letras → error', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('11', 'búsqueda de 2 letras → error', sqlstate = 'P0001' and sqlerrm like 'Escribí al menos 3 letras%', sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<SALONERO_UUID>');
@@ -556,7 +556,7 @@ begin
     perform public.club_tarjeta_manual((select v::uuid from _ids where k='manu'), 0, 'FX10', gen_random_uuid());
     perform pg_temp.yo(); perform pg_temp.r('15', 'tarjeta manual 0 personas', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('15', 'tarjeta manual 0 personas → error', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('15', 'tarjeta manual 0 personas → error', sqlstate = 'P0001' and sqlerrm = 'Personas fuera de rango (1 a 30)', sqlerrm);
   end;
 end $$;
 
@@ -683,9 +683,9 @@ begin
   v_ok := public.club_cupon_contacto(v_cup, '{"nombre":"Tina","whatsapp":"8888 2222","optin":true}'::jsonb);
   perform public.club_cupon_contacto(v_cup, '{"whatsapp":"8888 3333","optin":true}'::jsonb);
   perform pg_temp.yo();
-  select contacto_whatsapp into v_wa from club_cupones where codigo = v_cup;
+  select k.whatsapp into v_wa from club_cupones c join club_cupones_contactos k on k.cupon_id = c.id where c.codigo = v_cup;
   perform pg_temp.r('20', 'opt-in con consentimiento → guardado normalizado; el segundo no lo pisa',
-    v_ok and v_wa = '+50688882222' and (select contacto_optin from club_cupones where codigo = v_cup), v_wa);
+    v_ok and v_wa = '+50688882222' and (select k.optin from club_cupones c join club_cupones_contactos k on k.cupon_id = c.id where c.codigo = v_cup), v_wa);
   begin
     perform pg_temp.como('anon', null);
     perform public.club_cupon_contacto((select v from _ids where k='cupon1'), '{"whatsapp":"8888 4444","optin":true}'::jsonb);
@@ -704,6 +704,33 @@ begin
    where n.nspname = 'public' and p.proname like 'club\_%' and has_function_privilege('anon', p.oid, 'EXECUTE');
   perform pg_temp.r('21', 'anon solo ejecuta club_cupon_contacto, club_cupon_crear, club_cupon_ver y club_portal',
     v = 'club_cupon_contacto,club_cupon_crear,club_cupon_ver,club_portal', v);
+  -- CLUB-AUD-11 (S-12): barrido completo sobre anon y PUBLIC (grantee 0), con los ACL efectivos
+  -- (acldefault cuando el objeto no tiene ACL propio: una función sin ACL la ejecuta PUBLIC).
+  select string_agg(c.relname || '/' || c.relkind::text || ':' || a.privilege_type || '→' || coalesce(nullif(a.grantee::regrole::text, '-'), 'PUBLIC'), ', ')
+    into v
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault(case when c.relkind = 'S' then 's'::"char" else 'r'::"char" end, c.relowner))) a
+   where n.nspname = 'public' and c.relname like 'club\_%' and c.relkind in ('r','v','m','S','p')
+     and (a.grantee = 0 or a.grantee = 'anon'::regrole);
+  perform pg_temp.r('21', 'tablas, vistas y secuencias club_%: nada para anon ni PUBLIC', v is null, coalesce(v, ''));
+  select string_agg(c.relname || ':' || a.privilege_type, ', ') into v
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('s'::"char", c.relowner))) a
+   where n.nspname = 'public' and c.relname like 'club\_%' and c.relkind = 'S' and a.grantee = 'authenticated'::regrole;
+  perform pg_temp.r('21', 'secuencias club_%: nada para authenticated', v is null, coalesce(v, ''));
+  select string_agg(c.relname || '.' || t.attname, ', ') into v
+    from pg_attribute t join pg_class c on c.oid = t.attrelid join pg_namespace n on n.oid = c.relnamespace
+    cross join lateral aclexplode(t.attacl) a
+   where n.nspname = 'public' and c.relname like 'club\_%' and t.attacl is not null
+     and (a.grantee = 0 or a.grantee = 'anon'::regrole);
+  perform pg_temp.r('21', 'columnas club_%: ningún grant por columna para anon ni PUBLIC', v is null, coalesce(v, ''));
+  perform pg_temp.r('21', 'token_portal no se puede leer como authenticated (grant por columna)',
+    not has_column_privilege('authenticated', 'public.club_miembros', 'token_portal', 'SELECT'), '');
+  select string_agg(distinct p.proname, ',') into v
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    cross join lateral aclexplode(coalesce(p.proacl, acldefault('f'::"char", p.proowner))) a
+   where n.nspname = 'public' and p.proname like 'club\_%' and a.grantee = 0;
+  perform pg_temp.r('21', 'funciones club_%: ninguna ejecutable por PUBLIC', v is null, coalesce(v, ''));
 end $$;
 
 -- ═══ F1f · 22. Excepciones del puente (facturas sembradas; todo se deshace) ═══
@@ -760,7 +787,7 @@ begin
     perform public.club_excepcion_resolver('CREDITOS_SIN_CANJE', 'factura:990001', '   ');
     perform pg_temp.yo(); perform pg_temp.r('23', 'resolver sin nota', false, 'resolvió');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('23', 'resolver sin nota → error', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('23', 'resolver sin nota → error', sqlstate = 'P0001' and sqlerrm like 'La nota es obligatoria%', sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_excepcion_resolver('CREDITOS_SIN_CANJE', 'factura:990001', 'Era una cuenta de hotel, no créditos');
@@ -1109,7 +1136,7 @@ begin
     perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"manual","mesa":"43","ultimos4":"6012"}'::jsonb);
     perform pg_temp.yo(); perform pg_temp.r('27', 'tipear los 4 dígitos', false, 'aceptó');
   exception when others then
-    perform pg_temp.yo(); perform pg_temp.r('27', 'tipear mesa + 4 dígitos ya no se acepta', true, sqlerrm);
+    perform pg_temp.yo(); perform pg_temp.r('27', 'tipear mesa + 4 dígitos ya no se acepta', sqlstate = 'P0001' and sqlerrm = 'Pedido no válido', sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"990950"}'::jsonb);
@@ -1122,6 +1149,135 @@ begin
   perform pg_temp.yo();
   perform pg_temp.r('27', 'plan B: cruce exacto con la factura elegida (sin excepción)',
     pg_temp.cruce(v_mv) = '990950' and jsonb_array_length(j) = 0 and (select visita_clave from club_movimientos where id = v_mv) = 'factura:990950', j::text);
+end $$;
+
+
+-- ═══ 28. CLUB-AUD-01 (S-01, S-02): contactos de turistas solo para gerencia ═══
+-- Perfiles sintéticos dentro de la transacción: un contador y un manager activos (perfiles inactivos
+-- reutilizados; el rollback los deja como estaban).
+update profiles set role = 'contador', is_active = true where id = '<CONTADOR_UUID>';
+update profiles set role = 'manager',  is_active = true where id = '<MANAGER_UUID>';
+do $$
+declare v_n int; v_cod text; r text; v_uid text;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD01', 'app') returning codigo into v_cod;
+  perform pg_temp.como('anon', null);
+  perform public.club_cupon_crear(v_cod, '{"whatsapp":"88880001","email":"ficticio@ejemplo.com","optin":true}'::jsonb);
+  perform pg_temp.yo();
+  perform pg_temp.r('28', 'club_cupones ya no tiene columnas de contacto',
+    not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'club_cupones'
+                 and column_name like 'contacto\_%'), '');
+  foreach r in array array['cajero', 'contador'] loop
+    v_uid := case r when 'cajero' then '<CAJERO_UUID>' else '<CONTADOR_UUID>' end;
+    perform pg_temp.como('authenticated', v_uid);
+    select count(*) into v_n from public.club_cupones_contactos;
+    perform pg_temp.yo();
+    perform pg_temp.r('28', r || ' no ve ningún contacto de turista (club_cupones_contactos → 0 filas)', v_n = 0, format('%s filas', v_n));
+    begin
+      perform pg_temp.como('authenticated', v_uid);
+      execute 'select count(contacto_whatsapp) from public.club_cupones';
+      perform pg_temp.yo(); perform pg_temp.r('28', r || ' lee contacto_whatsapp de club_cupones', false, 'leyó');
+    exception when others then
+      perform pg_temp.yo(); perform pg_temp.r('28', r || ' pide contacto_* en club_cupones → la columna no existe', sqlstate = '42703', sqlstate || ' ' || sqlerrm);
+    end;
+  end loop;
+  foreach r in array array['owner', 'manager'] loop
+    perform pg_temp.como('authenticated', case r when 'owner' then '<OWNER_UUID>' else '<MANAGER_UUID>' end);
+    select count(*) into v_n from public.club_cupones_contactos k join public.club_cupones c on c.id = k.cupon_id
+      join public.club_miembros m on m.id = c.referente_id where m.nombre = 'Ref AUD01';
+    perform pg_temp.yo();
+    perform pg_temp.r('28', r || ' ve el contacto del cupón', v_n = 1, format('%s filas', v_n));
+  end loop;
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    insert into public.club_cupones_contactos (cupon_id, whatsapp) select id, '+50688880002' from public.club_cupones limit 1;
+    perform pg_temp.yo(); perform pg_temp.r('28', 'escritura directa en club_cupones_contactos', false, 'escribió');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('28', 'nadie escribe directo en club_cupones_contactos (solo las funciones públicas)', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
+  end;
+end $$;
+
+-- ═══ 29. CLUB-AUD-02 (S-15, S-16): una tarjeta por referente y visita; Σ personas ≤ pax ═══
+do $$
+declare v_a uuid; v_b uuid; v_cupa text; v_cupb text; v_cod text; v_ok boolean; j jsonb; v_e text;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD02 A', 'app') returning id, codigo into v_a, v_cod;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD02 B', 'app') returning id into v_b;
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en) values
+    ('santa-teresa', 'pedido:9201', '9201', '8', 'salon', 5, now(), now() - interval '20 minutes'),
+    ('santa-teresa', 'pedido:9202', '9202', '9', 'salon', 0, now(), now() - interval '20 minutes');   -- pax desconocido
+  perform pg_temp.como('anon', null);
+  select c.codigo into v_cupa from public.club_cupon_crear(v_cod, null) c;
+  select c.codigo into v_cupb from public.club_cupon_crear(v_cod, null) c;
+  perform pg_temp.yo();
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  -- dos referentes en la misma visita: 3 + 2 = 5 = pax → OK
+  perform public.club_cupon_usar(v_cupa, 3, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9201"}'::jsonb);
+  perform public.club_tarjeta_manual(v_b, 2, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9201"}'::jsonb);
+  perform pg_temp.yo();
+  perform pg_temp.r('29', 'dos referentes en la misma visita con Σ personas = pax (3 + 2 = 5) → OK',
+    (select count(*) from club_movimientos where miembro_id in (v_a, v_b) and pos_ref->>'pedido' = '9201') = 2, '');
+  -- el mismo referente, otra tarjeta en la misma visita → error
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual(v_a, 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9201"}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('29', 'mismo referente, misma visita', false, 'acreditó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('29', 'mismo referente, misma visita, otro p_op → «ya tiene una tarjeta en esta visita»',
+      sqlstate = 'P0001' and sqlerrm = 'Este referente ya tiene una tarjeta en esta visita', sqlerrm);
+  end;
+  -- un tercero que pasa el pax → error
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD02 C', 'app') returning id into v_a;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual(v_a, 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9201"}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('29', 'Σ personas > pax', false, 'acreditó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('29', 'tercer referente: 5 + 1 > 5 pax → «Supera las personas del pedido»',
+      sqlstate = 'P0001' and sqlerrm like 'Supera las personas del pedido (5 pax; ya registradas 5)%', sqlerrm);
+  end;
+  -- la reproducción de la auditoría (§9.02): misma factura real tipeada tres veces → la 2ª ya falla
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual(v_b, 1, '112430', gen_random_uuid());
+    perform public.club_tarjeta_manual(v_b, 1, '112430', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('29', 'factura real repetida (§9.02)', false, 'acreditó dos veces');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('29', '§9.02: la misma factura tipeada dos veces para el mismo referente → error',
+      sqlstate = 'P0001' and sqlerrm = 'Este referente ya tiene una tarjeta en esta visita', sqlerrm);
+  end;
+  -- el índice único es la red de seguridad aunque se saltee la función
+  begin
+    insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, origen, visita_clave)
+    values (v_b, 'tarjeta', 1, 6, 18000, 'app', (select visita_clave from club_movimientos where miembro_id = v_b and pos_ref->>'pedido' = '9201'));
+    perform pg_temp.r('29', 'índice único (miembro, visita)', false, 'insertó');
+  exception when unique_violation then
+    perform pg_temp.r('29', 'índice único (miembro, visita) para origen app → unique_violation', true, sqlerrm);
+  end;
+  -- pax desconocido al escanear (0): se registra; después la factura llega con pax 2 y 3 personas → PERSONAS_SOBRE_PAX
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_tarjeta_manual(v_b, 3, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9202"}'::jsonb);
+  perform pg_temp.yo();
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc, pax)
+  values ('990920', now() + interval '20 minutes', 'C', 'salon', 'cajero', true, 'ok', '9', '9', '9202', 30000, 2);
+  -- y el mismo referente vuelve a entrar a esa visita por el plan B (otra clave de visita) → VISITA_REPETIDA
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  values (v_b, 'tarjeta', 1, 6, 18000, now(), now(), 'app', '{"modo":"factura","numero_factura":"990920"}'::jsonb, 'factura:990920');
+  update club_movimientos set registrado_en = now() - interval '2 hours' where miembro_id = v_b;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j
+    from public.club_excepciones((now() at time zone 'America/Costa_Rica')::date - 1, (now() at time zone 'America/Costa_Rica')::date + 1) e
+   where e.factura = '990920';
+  perform pg_temp.yo();
+  perform pg_temp.r('29', 'detectivas: PERSONAS_SOBRE_PAX (4 personas, pax 2) y VISITA_REPETIDA (mismo referente por pedido y por factura)',
+    exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'PERSONAS_SOBRE_PAX' and (x->'detalle'->>'personas')::int = 4 and (x->'detalle'->>'pax')::int = 2)
+    and exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'VISITA_REPETIDA' and (x->'detalle'->>'tarjetas')::int = 2), j::text);
+end $$;
+
+-- ═══ 30. CLUB-AUD-12: precondición de la 069 ═══
+do $$ begin
+  perform pg_temp.r('30', 'get_my_role mira is_active (la 075 frena si no)',
+    position('is_active' in pg_get_functiondef('public.get_my_role()'::regprocedure)) > 0, '');
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

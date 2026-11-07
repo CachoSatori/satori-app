@@ -14,6 +14,8 @@ import { C, inputStyle, labelStyle, fmtFechaHora } from './estilos'
 
 const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   SIN_CRUCE:            { titulo: 'Sin cruce: posible cuenta dividida', que: 'Registro con pedido que no encontró la factura de su pedido (anulada, refacturada o cobrada solo en facturas sin pedido). Elegí la factura de la lista o buscala por los últimos dígitos del tiquete.' },
+  VISITA_REPETIDA:      { titulo: 'Visita repetida', que: 'El mismo referente tiene más de una tarjeta en la misma visita (misma factura). Solo vale una por visita.' },
+  PERSONAS_SOBRE_PAX:   { titulo: 'Personas sobre el pax', que: 'Las personas registradas en el Club para esa visita (todos los referentes) superan el pax de sus facturas.' },
   REGISTRO_SIN_FACTURA: { titulo: 'Registro sin factura', que: 'Cupón, tarjeta o canje con un número de factura que no está en el PoS.' },
   CREDITOS_SIN_CANJE:   { titulo: 'Créditos sin canje',   que: 'Factura pagada «a crédito» por un múltiplo de medio crédito, sin canje en el Club.' },
   CANJE_MONTO_DISTINTO: { titulo: 'Canje con monto distinto', que: 'El valor del canje no coincide con lo cobrado «a crédito» en la factura.' },

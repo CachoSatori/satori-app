@@ -9,7 +9,7 @@
 -- NO toca el ledger: si se corre, borrar a mano la fila 068 de supabase_migrations.schema_migrations
 -- del entorno correspondiente (o dejarla y documentarlo).
 -- Rollback del Paso A (fuera de SQL): Management API PATCH config/auth {"disable_signup": false} y
--- `banned_until = null` en las 2 cuentas baneadas (Rosaura f54e3eff…, LE - Consultorias e317ac97…).
+-- `banned_until = null` en las 2 cuentas baneadas (una manager f54e3eff…, una cuenta externa e317ac97…).
 
 begin;
 

@@ -4395,6 +4395,15 @@ html, body, #root {
 }
 .sop-card:hover { border-color: var(--t-teal); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .sop-card-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.4rem; color: var(--t-ink); }
+/* Código del documento (mig 076): badge chico antes del título y en el detalle. */
+.sop-code {
+  display: inline-block; margin-right: 0.45rem; padding: 1px 6px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--t-teal, #2a7a6a); border: 1px solid var(--t-teal, #2a7a6a); border-radius: 3px;
+  vertical-align: 1px;
+}
+.sop-code-detail { margin-left: 0.6rem; margin-right: 0; letter-spacing: 0.04em; }
 .sop-card-preview { font-size: 0.75rem; color: #5a5040; line-height: 1.5; }
 .sop-card-actions {
   display: flex;
@@ -5068,4 +5077,201 @@ html, body, #root {
 @media (max-width: 560px) {
   .mr-icp { grid-template-columns: 1fr; }
   .mr-bar-track { height: 80px; }
+}
+
+/* Admin → Usuarios → «Nuevo empleado» */
+.nuevo-emp-field { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.6rem 0; font-size: 0.78rem; }
+.nuevo-emp-field > span { font-weight: 600; }
+.nuevo-emp-field input, .nuevo-emp-field select {
+  padding: 0.4rem 0.55rem; font-size: 0.85rem; border: 1px solid var(--t-border); border-radius: 2px;
+  background: var(--t-paper); color: var(--t-ink);
+}
+.nuevo-emp-field small { font-size: 0.68rem; color: var(--t-muted); }
+
+/* ══ Lector de SoP — Estándar de SOP Satori (v1, nov-2026) ═══════════════════════
+   Solo el detalle/modal del módulo SoP y su impresión. Cormorant Garamond en títulos,
+   DM Sans en texto. Oro solo en líneas (y en texto de acento con su tono oscuro),
+   laca solo en alertas. Títulos de sección en minúscula normal: sin mayúsculas ni
+   letras espaciadas. Tablas sin bordes ni fondos, filete de oro bajo el encabezado. */
+.sop-lector,
+.sopl-print {
+  --sopl-tinta: #1f2120;
+  --sopl-gris: #6e706c;
+  --sopl-linea: #e6e4de;
+  --sopl-panel: #f6f5f2;
+  --sopl-oro: #b48e50;
+  --sopl-oro-texto: #8a6a33;
+  --sopl-laca: #a3392d;
+  --sopl-serif: 'Cormorant Garamond', 'Cormorant', Georgia, 'Times New Roman', serif;
+  --sopl-sans: 'DM Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--sopl-sans);
+  color: var(--sopl-tinta);
+}
+.sop-lector {
+  background: #fff; width: 100%; max-width: 720px; max-height: 92vh;
+  display: flex; flex-direction: column; border-radius: 4px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.28);
+  padding-bottom: max(0px, env(safe-area-inset-bottom));
+}
+.sopl-head {
+  display: flex; align-items: flex-start; gap: 1rem;
+  padding: 1.25rem 1.5rem 0.9rem; border-bottom: 1px solid var(--sopl-oro);
+}
+.sopl-head-txt { flex: 1; min-width: 0; }
+.sopl-kicker { font-size: 0.78rem; color: var(--sopl-gris); }
+.sopl-titulo {
+  font-family: var(--sopl-serif); font-weight: 500; font-size: 1.9rem; line-height: 1.12;
+  color: var(--sopl-tinta); margin: 0.15rem 0 0; letter-spacing: 0;
+}
+.sopl-cerrar {
+  background: none; border: none; color: var(--sopl-gris); font-size: 1.05rem;
+  cursor: pointer; padding: 0.2rem 0.3rem; line-height: 1;
+}
+.sopl-cerrar:hover { color: var(--sopl-tinta); }
+.sopl-acciones {
+  display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--sopl-linea); background: var(--sopl-panel);
+}
+.sopl-btn {
+  font-family: var(--sopl-sans); font-size: 0.82rem; font-weight: 500;
+  color: var(--sopl-tinta); background: #fff; border: 1px solid var(--sopl-linea);
+  border-radius: 3px; padding: 0.42rem 0.85rem; cursor: pointer; min-height: 36px;
+}
+.sopl-btn:hover:not(:disabled) { border-color: var(--sopl-oro); }
+.sopl-btn:disabled { opacity: 0.6; cursor: default; }
+.sopl-btn-principal { background: var(--sopl-tinta); border-color: var(--sopl-tinta); color: #fff; }
+.sopl-btn-principal:hover:not(:disabled) { background: #000; border-color: #000; }
+.sopl-btn-suave { color: var(--sopl-gris); }
+.sopl-aviso { margin: 0.6rem 1.5rem 0; font-size: 0.8rem; color: var(--sopl-gris); }
+.sopl-aviso a { color: var(--sopl-oro-texto); }
+.sopl-aviso-alerta { color: var(--sopl-laca); }
+.sopl-cuerpo { overflow-y: auto; padding: 0.4rem 1.5rem 1.6rem; -webkit-overflow-scrolling: touch; }
+.sopl-doc-nota {
+  margin: 0.9rem 0 0.4rem; padding: 0.75rem 0.9rem; background: var(--sopl-panel);
+  font-size: 0.85rem; line-height: 1.5; color: var(--sopl-tinta);
+}
+.sopl-link {
+  display: block; margin-top: 0.35rem; padding: 0; background: none; border: none;
+  font: inherit; font-size: 0.82rem; color: var(--sopl-oro-texto); cursor: pointer; text-decoration: underline;
+}
+
+/* Contenido (markdown renderizado) */
+.sopl-contenido { font-size: 0.9rem; line-height: 1.55; }
+.sopl-contenido .sop-h2 {
+  font-family: var(--sopl-serif); font-weight: 500; font-size: 1.6rem; line-height: 1.15;
+  color: var(--sopl-tinta); margin: 1.6rem 0 0.35rem; text-transform: none; letter-spacing: 0;
+  border: none; padding: 0;
+}
+.sopl-contenido .sop-h3 {
+  font-family: var(--sopl-serif); font-weight: 600; font-size: 1.22rem; line-height: 1.2;
+  color: var(--sopl-tinta); margin: 1.25rem 0 0.3rem; text-transform: none; letter-spacing: 0;
+}
+.sopl-contenido .sop-h4 {
+  font-family: var(--sopl-sans); font-weight: 600; font-size: 0.9rem;
+  color: var(--sopl-tinta); margin: 0.9rem 0 0.25rem; text-transform: none; letter-spacing: 0;
+}
+.sopl-contenido .sop-p { margin: 0.25rem 0 0.6rem; }
+.sopl-contenido .sop-hr { border: none; border-top: 1px solid var(--sopl-linea); margin: 1.4rem 0; }
+.sopl-contenido .sop-meta { color: var(--sopl-gris); font-size: 0.82rem; margin-bottom: 0.8rem; }
+.sopl-contenido strong { font-weight: 600; }
+.sopl-contenido em { font-family: var(--sopl-serif); font-style: italic; font-size: 1.06em; }
+.sopl-contenido a { color: var(--sopl-oro-texto); }
+.sopl-contenido code { background: var(--sopl-panel); padding: 0.05rem 0.3rem; border-radius: 2px; font-size: 0.85em; }
+
+/* Pasos: número en gris, líneas finas entre pasos, sin negrita */
+.sopl-contenido .sop-ol {
+  list-style: none; margin: 0.35rem 0 0.9rem; padding: 0;
+}
+.sopl-contenido .sop-ol > li {
+  position: relative;
+  padding: 0.45rem 0 0.45rem 2rem; border-bottom: 1px solid var(--sopl-linea);
+}
+.sopl-contenido .sop-ol > li:last-child { border-bottom: none; }
+.sopl-contenido .sop-ol > li::before {
+  content: attr(data-n); position: absolute; left: 0; top: 0.45rem;
+  color: var(--sopl-gris); font-size: 0.85em; font-variant-numeric: tabular-nums;
+}
+.sopl-contenido .sop-ul { margin: 0.3rem 0 0.8rem; padding-left: 1.1rem; }
+.sopl-contenido .sop-ul > li { margin-bottom: 0.3rem; }
+.sopl-contenido .sop-ul > li::marker { color: var(--sopl-oro); }
+
+/* Notas: Cormorant itálica con hilo de oro; alertas en laca */
+.sopl-contenido .sop-note {
+  font-family: var(--sopl-serif); font-style: italic; font-size: 1.08rem; line-height: 1.45;
+  color: var(--sopl-tinta); background: none; border: none; border-left: 1.5px solid var(--sopl-oro);
+  padding: 0.15rem 0 0.15rem 0.9rem; margin: 0.7rem 0 0.9rem;
+}
+.sopl-contenido .sop-note-alerta { color: var(--sopl-laca); border-left-color: var(--sopl-laca); }
+
+/* Tablas: sin bordes ni fondos, filete de oro bajo el encabezado */
+.sopl-contenido .sop-table-wrap { overflow-x: auto; margin: 0.4rem 0 1rem; -webkit-overflow-scrolling: touch; }
+.sopl-contenido .sop-table { border-collapse: collapse; width: 100%; font-size: 0.84rem; }
+.sopl-contenido .sop-table th,
+.sopl-contenido .sop-table td {
+  border: none; background: none; text-align: left; vertical-align: top; padding: 0.42rem 0.7rem 0.42rem 0;
+}
+.sopl-contenido .sop-table th {
+  font-weight: 400; color: var(--sopl-gris); font-size: 0.8rem; text-transform: none; letter-spacing: 0;
+  border-bottom: 1px solid var(--sopl-oro);
+}
+.sopl-contenido .sop-table td { border-bottom: 1px solid var(--sopl-linea); }
+.sopl-contenido .sop-table tr:last-child td { border-bottom: none; }
+
+@media (max-width: 600px) {
+  .sop-overlay:has(.sop-lector) { padding: 0; align-items: stretch; }
+  .sop-lector { max-width: none; max-height: none; height: 100%; border-radius: 0; }
+  .sopl-head { padding: 1rem 1rem 0.75rem; }
+  .sopl-titulo { font-size: 1.6rem; }
+  .sopl-acciones { padding: 0.6rem 1rem; }
+  .sopl-cuerpo { padding: 0.3rem 1rem 1.4rem; }
+  .sopl-aviso { margin: 0.5rem 1rem 0; }
+}
+
+/* Tarjeta: marca de PDF con fotos (documentos de menú, plano…) */
+.sop-card-pdf { margin-top: 0.45rem; font-size: 0.7rem; color: #8a6a33; }
+
+/* Sección «Libros» */
+.sop-libros { margin: 0 0 1.25rem; }
+.sop-libros-tit {
+  font-family: 'Cormorant Garamond', Georgia, serif; font-size: 1.15rem; font-weight: 600;
+  color: var(--t-ink); margin-bottom: 0.45rem;
+}
+.sop-libros-lista { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.sop-libro {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem;
+  min-width: 200px; flex: 1 1 200px; max-width: 320px; text-align: left; cursor: pointer;
+  padding: 0.7rem 0.9rem; background: #fff; border: 1px solid #e6e4de; border-left: 2px solid #b48e50;
+  border-radius: 3px; font-family: 'DM Sans', -apple-system, sans-serif;
+}
+.sop-libro:hover:not(:disabled) { border-color: #b48e50; }
+.sop-libro:disabled { opacity: 0.6; cursor: default; }
+.sop-libro-nombre { font-size: 0.9rem; font-weight: 500; color: #1f2120; }
+.sop-libro-accion { font-size: 0.75rem; color: #8a6a33; }
+.sop-libros-error { margin-top: 0.4rem; font-size: 0.8rem; color: #a3392d; }
+.sop-libros-aviso { margin-top: 0.4rem; font-size: 0.8rem; color: #6e706c; }
+.sop-libros-aviso a { color: #8a6a33; }
+
+/* Impresión del lector: copia montada en <body>; el resto de la app se oculta.
+   La página A4 con estos márgenes es una página CON NOMBRE (sop-a4) y solo la usa
+   .sopl-print: un @page sin nombre acá cambiaría los márgenes de todas las demás
+   impresiones de la app (Propinas quincenal, Ventas evaluación, reportes mensuales). */
+#sop-print-root { display: none; }
+@page sop-a4 { size: A4; margin: 16mm 16mm 18mm; }
+@media print {
+  body.sop-imprimiendo > *:not(#sop-print-root) { display: none !important; }
+  body.sop-imprimiendo { background: #fff !important; }
+  body.sop-imprimiendo #sop-print-root { display: block; }
+  .sopl-print { page: sop-a4; font-size: 10pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sopl-print-cab {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 6pt; border-bottom: 0.75pt solid var(--sopl-oro); margin-bottom: 14pt;
+  }
+  .sopl-print-marca { font-family: var(--sopl-serif); font-weight: 600; font-size: 17pt; }
+  .sopl-print-ref { text-align: right; color: var(--sopl-gris); font-size: 7.5pt; line-height: 1.35; }
+  .sopl-print-titulo { font-size: 26pt; margin: 0 0 6pt; }
+  .sopl-print .sopl-contenido { font-size: 9.5pt; }
+  .sopl-print .sop-h2 { break-after: avoid; }
+  .sopl-print .sop-h3, .sopl-print .sop-h4 { break-after: avoid; }
+  .sopl-print .sop-ol > li, .sopl-print .sop-table tr, .sopl-print .sop-note { break-inside: avoid; }
+  .sopl-print-pie { margin-top: 18pt; padding-top: 5pt; border-top: 0.5pt solid var(--sopl-linea); color: var(--sopl-gris); font-size: 7.5pt; }
 }

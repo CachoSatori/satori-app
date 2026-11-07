@@ -32,7 +32,7 @@ import { shiftLabel } from '../../shared/utils'
 
 const fi2 = (n: number | undefined) => fi(n ?? 0)
 
-interface Props { onRefresh: () => void; openSession?: CashSession | null }
+interface Props { onRefresh: () => void; openSession?: CashSession | null; fechaInicial?: string }
 
 function N(v: number | ''): number { return Number(v) || 0 }
 
@@ -69,7 +69,7 @@ export function puedeCerrarVentas(crc: number | '', usd: number | '', confirmado
   return estado === 'ok' || (estado === 'cero' && confirmadoCero)
 }
 
-export default function CashCierre({ onRefresh, openSession }: Props) {
+export default function CashCierre({ onRefresh, openSession, fechaInicial }: Props) {
   const { profile } = useAuth()
   const requireManager = useManagerOverride()
   const today       = todayStr()
@@ -82,7 +82,8 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   const [saving,   setSaving]   = useState(false)
   const [error,    setError]    = useState<string | null>(null)
   const [msg,      setMsg]      = useState<string | null>(null)
-  const [fecha,    setFecha]    = useState(today)
+  // Fecha inicial: hoy, o el día que se eligió en la alerta de días sin cierre.
+  const [fecha,    setFecha]    = useState(fechaInicial && fechaInicial <= today ? fechaInicial : today)
   // Id del intento de cierre (Fase 2) en curso: se reusa en los reintentos del MISMO cierre y se
   // descarta al confirmar bien o al cambiar de fecha (mig 071, idempotencia en la base).
   const cierreOpId = useRef<string | null>(null)
@@ -230,6 +231,18 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
   // select manual que podría contradecir a la plata. La plata ya se deriva del mismo signo en recordCierreAjuste.
   const ajusteTipoDerivado = ajusteTipoPorSigno(diferencia, difUSD)
   const [ajusteMotivo, setAjusteMotivo] = useState('')
+  // ── «Recontar» UNA vez (decisión del dueño, 05/11 · columnas de la mig 074) ──
+  // El esperado y la verificación se ven EN VIVO como siempre. Al pedir el cierre FUERA de
+  // tolerancia (₡500 / US$1) se ofrece recontar una vez: el primer conteo se guarda en
+  // cash_cierres_dia.primer_conteo_crc/usd y el conteo queda en blanco. Si después sigue fuera (o
+  // se elige no recontar), el motivo es obligatorio como siempre. Dentro de tolerancia: sin pasos
+  // extra. La tolerancia, requiresAjuste y cuadra/cuadraUSD NO cambian.
+  const [primerConteo, setPrimerConteo] = useState<{ crc: number; usd: number } | null>(null)
+  const [sinRecontar,  setSinRecontar]  = useState(false)
+  const [ofertaRecuento, setOfertaRecuento] = useState(false)
+  // Al cambiar de fecha se resetea (estado derivado de la fecha, sin efecto).
+  const [recuentoFecha, setRecuentoFecha] = useState(fecha)
+  if (recuentoFecha !== fecha) { setRecuentoFecha(fecha); setPrimerConteo(null); setSinRecontar(false); setOfertaRecuento(false) }
   const [notas,        setNotas]        = useState('')
 
   // CAMBIO A — cerrar con ventas en ₡0: confirmación explícita por fase (checkbox).
@@ -249,6 +262,20 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
 
   // Opción B (firmada): el gate cubre AMBAS monedas — antes un faltante solo-USD cerraba sin motivo.
   const requiresAjuste = cierreNecesitaAjuste(diferencia, difUSD)
+  // Fuera de tolerancia el motivo se pide recién cuando ya se ofreció el reconteo (recontó o eligió no).
+  const recuentoResuelto = primerConteo !== null || sinRecontar
+  const pedirCierre = () => {
+    if (requiresAjuste && !recuentoResuelto) { setOfertaRecuento(true); return }
+    setShowResumen(true)
+  }
+  const recontar = () => {
+    // Guarda el primer conteo (mig 074) y deja el conteo físico en blanco. Ventas, retiro y
+    // notas quedan como estaban; el esperado y la verificación siguen en vivo.
+    setPrimerConteo({ crc: totalContadoCRC, usd: totalContadoUSD })
+    setSepDiariaCRC(''); setSepDiariaUSD(''); setSepRegCRC(''); setSepRegUSD(''); setRemCRC(''); setRemUSD('')
+    setAjusteMotivo(''); setOfertaRecuento(false); setError(null)
+  }
+  const resetRecuento = () => { setPrimerConteo(null); setSinRecontar(false); setOfertaRecuento(false) }
 
   // ── Confirmar cierre parcial (Fase 1) ─────────────────────────
   // El turno abierto NO bloquea el sellado del Mediodía: al mediodía la caja sigue operando
@@ -325,6 +352,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       if (pendientes.length) { setError(mensajeDiasPendientes(pendientes, fi2)); return }
     }
     if (totalContadoCRC === 0) { setError('Completá el conteo físico (separaciones)'); return }
+    if (requiresAjuste && !recuentoResuelto) {
+      setError('⚠ Hay diferencia — elegí si recontás antes de cerrar'); return
+    }
     if (requiresAjuste && !ajusteMotivo.trim()) {
       setError('⚠ Hay diferencia — el motivo es obligatorio antes de cerrar'); return
     }
@@ -362,6 +392,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
           ajuste_motivo:        requiresAjuste ? ajusteMotivo : '',
           notas,
           tipo_cambio:          tc,
+          // Mig 074: el primer conteo si hubo reconteo; null si no hubo.
+          primer_conteo_crc:    primerConteo ? primerConteo.crc : null,
+          primer_conteo_usd:    primerConteo ? primerConteo.usd : null,
         },
         // IDENTIDAD (FIRMADA): post-corte entra la venta BRUTA (las propinas ya restan como
         // movimientos); pre-corte el NETO de siempre. Igual que antes en recordCierreSales.
@@ -378,6 +411,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
         },
       })
       cierreOpId.current = null
+      resetRecuento()
       setMsg('✓ Día cerrado completamente')
       // C3 — email de cortesía al owner con el resumen (fire-and-forget). La plata ya
       // quedó sellada arriba; si el email falla no rompe ni bloquea el cierre.
@@ -406,6 +440,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
       // ATÓMICO (mig 071): ventas + retiro + ajuste + fila del cierre en una transacción. La
       // contraseña de gerencia (cajero) se verifica EN EL SERVIDOR (verify_manager).
       await deshacerCierreDia(fecha, auth.managerEmail, auth.managerPassword)
+      resetRecuento()
       setMsg('✓ Cierre deshecho — los movimientos del día se mantienen.')
       await loadCierres(); onRefresh()
     } catch (e) {
@@ -802,6 +837,12 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                   </tbody>
                 </table>
 
+                {primerConteo && (
+                  <div style={{ fontSize:'0.72rem', color:'#8a5040', margin:'0.5rem 0' }}>
+                    ↺ Reconteo — el primer conteo ({fi2(primerConteo.crc)}{primerConteo.usd ? ` · $${primerConteo.usd.toFixed(2)}` : ''}) quedó guardado.
+                  </div>
+                )}
+
                 {/* Verificación */}
                 {totalContadoCRC > 0 && (
                   <>
@@ -895,7 +936,9 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 {requiresAjuste && (
                   <div style={{ background:'#fdf0ee', border:'2px solid #c23b22', borderRadius:2, padding:'0.875rem', marginBottom:'0.75rem' }}>
                     <div style={{ fontSize:'0.82rem', fontWeight:700, color:'#c23b22', marginBottom:'0.4rem' }}>
-                      ⚠ Diferencia detectada — registrá el motivo para cerrar
+                      {recuentoResuelto
+                        ? '⚠ Diferencia detectada — registrá el motivo para cerrar'
+                        : '⚠ Diferencia detectada — al cerrar vas a poder recontar una vez'}
                     </div>
                     {/* Ambas monedas con la MISMA jerarquía (columnas moneda | monto), cada una con
                         signo — solo las que superan su tolerancia (misma condición de siempre). */}
@@ -920,6 +963,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                     <div style={{ fontSize:'0.68rem', color:'#8a5040', marginBottom:'0.75rem' }}>
                       Al confirmar, la diferencia queda registrada como movimiento de <strong>Ajuste de cierre</strong> en Caja Fuerte (faltante resta · sobrante suma) — el saldo del sistema arranca mañana del físico contado.
                     </div>
+                    {recuentoResuelto && (
                     <div style={{ display:'grid', gridTemplateColumns:'160px 1fr', gap:'0.5rem', alignItems:'end' }}>
                       <Field label="Tipo">
                         {/* Ítem 3: derivado del signo de la diferencia — solo lectura (no un select que contradiga la plata). */}
@@ -936,6 +980,7 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                           style={{ width:'100%', padding:'6px 10px', fontSize:'0.82rem', ...(ajusteMotivo ? {} : { border:'1px solid #c23b22' }) }} />
                       </Field>
                     </div>
+                    )}
                   </div>
                 )}
               </Section>
@@ -950,16 +995,41 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
               </div>
 
               <button
-                onClick={() => setShowResumen(true)}
+                onClick={pedirCierre}
                 disabled={saving || turnoAbierto || ventasNVacias || (ventasNCeroReal && !confirmVentasCeroN)
                   || (postCorte && ventaSospechosaDeSerNeta(N(vnCRC), propinasPagadasDia) && !confirmVentaBrutaN)
-                  || totalContadoCRC === 0 || (requiresAjuste && !ajusteMotivo.trim())}
+                  || totalContadoCRC === 0 || (requiresAjuste && recuentoResuelto && !ajusteMotivo.trim())}
                 className="cierre-btn green">
                 👁 Revisar resumen y cerrar el día →
               </button>
             </>
           )}
         </>
+      )}
+
+      {/* ── «Recontar» una vez: se ofrece al pedir el cierre fuera de tolerancia ── */}
+      {ofertaRecuento && parcial && !completo && (
+        <div className="cd-modal-overlay" onClick={() => setOfertaRecuento(false)}>
+          <div className="cd-modal" onClick={e => e.stopPropagation()}>
+            <div className="cd-modal-title">El conteo no cuadra</div>
+            <div className="cd-modal-meta">Tolerancia ₡500 / US$1 · podés recontar UNA vez</div>
+            <div className="cd-cierre-resultado fail" style={{ marginBottom:'1rem', flexDirection:'column', alignItems:'flex-start', gap:'0.25rem' }}>
+              <span>
+                Diferencia: {diferencia !== null && !cuadra ? `${diferencia >= 0 ? '+' : ''}${fi2(diferencia)}` : ''}
+                {difUSD !== null && !cuadraUSD ? `${diferencia !== null && !cuadra ? ' · ' : ''}US$ ${difUSD >= 0 ? '+' : ''}${difUSD.toFixed(2)}` : ''}
+              </span>
+            </div>
+            <div style={{ fontSize:'0.75rem', color:'#6a6250', marginBottom:'1rem' }}>
+              Si recontás, este primer conteo queda guardado y las separaciones quedan en blanco para contar de nuevo. Si después sigue fuera, se pide el motivo.
+            </div>
+            <div className="cd-modal-actions">
+              <button className="tips-btn-ghost" onClick={() => { setSinRecontar(true); setOfertaRecuento(false) }}>
+                No recontar — registrar el motivo
+              </button>
+              <button className="cd-btn-green" onClick={recontar}>↺ Recontar</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── CAMBIO B: resumen del cierre ANTES de confirmar (solo lectura; nada se recalcula) ── */}
@@ -1005,6 +1075,12 @@ export default function CashCierre({ onRefresh, openSession }: Props) {
                 <span>Total contado</span>
                 <strong>{fi2(totalContadoCRC)}{totalContadoUSD > 0 ? ` · $${totalContadoUSD.toFixed(2)}` : ''}</strong>
               </div>
+              {primerConteo && (
+                <div className="cd-resumen-row">
+                  <span>Primer conteo (antes del reconteo)</span>
+                  <strong>{fi2(primerConteo.crc)}{primerConteo.usd > 0 ? ` · $${primerConteo.usd.toFixed(2)}` : ''}</strong>
+                </div>
+              )}
             </div>
 
             {/* Diferencia / ajuste (ya calculado) */}

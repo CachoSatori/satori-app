@@ -144,7 +144,7 @@ describe('cash.ts — discardDiaCompleto enruta por delete_movement_cascade (no 
     DB.movPorCreacion = [
       fila({ id: 'v1910', subcategory: 'Ventas cierre', description: 'Ventas efectivo Noche 2026-10-19', amount_crc: 15600, amount_usd: 100, created_at: '2026-10-20T06:31:38Z' }),
       fila({ id: 'a1910', subcategory: 'Ajuste de cierre', description: 'Ajuste de cierre 2026-10-19 · Sobrante · x', amount_crc: 54106.7, created_at: '2026-10-20T06:31:39Z' }),
-      fila({ id: 'manual', description: 'DUEÑO TOMI', amount_crc: 5000, created_at: '2026-10-20T15:00:00Z' }),
+      fila({ id: 'manual', description: 'DUEÑO PEPE', amount_crc: 5000, created_at: '2026-10-20T15:00:00Z' }),
     ]
     const { discardDiaCompleto, previewDiaCompleto } = await import('./cash')
     const plan = await previewDiaCompleto('2026-10-20')

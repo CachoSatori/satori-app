@@ -33,7 +33,7 @@ const {
 /** Un `DiaData` mínimo, con una marca para saber de qué fuente salió. */
 const dia = (marca: string, total = 100_000): DiaData => ({
   fileName: marca, uploadedAt: '2026-09-08',
-  saloneros: { MAXO: {
+  saloneros: { TITO: {
     pax: 10, total, com: 0, beb: 0, iCom: 0, iBeb: 0, iva: 0, serv: 0,
     promPax: 0, promPlato: 0, promBebida: 0, ratioCB: 0, ratioU: 0, bebPax: 0, prods: [],
   } },

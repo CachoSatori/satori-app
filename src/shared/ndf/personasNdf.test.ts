@@ -103,12 +103,12 @@ describe('nombreDePersona — manda `employees`, la etiqueta es respaldo', () =>
   const rosaura = clasificarCodigo('235')
 
   it('usa el nombre de la tabla del dueño', () => {
-    expect(nombreDePersona(rosaura, { '01': 'Rosaura Jiménez' })).toBe('Rosaura Jiménez')
+    expect(nombreDePersona(rosaura, { '01': 'Rosaura Quesada' })).toBe('Rosaura Quesada')
   })
 
   it('busca por el canónico PRIMERO: Rosaura no se llama como su login de manager', () => {
-    const nombres = { '01': 'Rosaura Jiménez', '235': 'Manager' }
-    expect(nombreDePersona(rosaura, nombres)).toBe('Rosaura Jiménez')
+    const nombres = { '01': 'Rosaura Quesada', '235': 'Manager' }
+    expect(nombreDePersona(rosaura, nombres)).toBe('Rosaura Quesada')
   })
 
   it('si el canónico no está en `employees`, cae al alias antes que a la etiqueta', () => {

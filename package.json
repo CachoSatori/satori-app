@@ -12,8 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fontsource/cormorant-garamond": "5.2.8",
-    "@fontsource/dm-sans": "5.2.8",
+    "@fontsource/cormorant-garamond": "5.3.0",
+    "@fontsource/dm-sans": "5.3.0",
     "@supabase/supabase-js": "^2.106.2",
     "dompurify": "^3.4.7",
     "jsqr": "1.4.0",

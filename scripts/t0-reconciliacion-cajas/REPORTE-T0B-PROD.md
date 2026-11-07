@@ -107,7 +107,7 @@ contra el ledger de Caja Fuerte (Opción B).
 | `session_date` | `2026-06-29` |
 | `diferencia_crc` (sellada) | **₡ 5.734,53** |
 | `ajuste_tipo` / `ajuste_motivo` | Faltante / error |
-| `manager` | Cacho |
+| `manager` | *(el dueño)* |
 | Cierre creado | `2026-07-06 19:17:00.032029+00` |
 | Egresos Caja Proveedores efectivo del día | ₡ 0,00 (0 mov.) |
 | Residuo si fuera hueco 2 (`dif + egresos`) | ₡ 5.734,53 |
@@ -397,7 +397,7 @@ cajas viejas, cualquier cosa que alguien afirme que quedó de una manera.
 
 | id | shift_type | status | cajero | `initial_suppliers_crc` | creado | último cambio | `closed_by` |
 |---|---|---|---|---|---|---|---|
-| `d707c7e6` | Día | **closed** | AMPI | ₡ 100.000,00 | `2026-07-22 03:53:27` | `2026-07-22 05:16:47` | `c10f2ddf` |
+| `d707c7e6` | Día | **closed** | *(persona de caja)* | ₡ 100.000,00 | `2026-07-22 03:53:27` | `2026-07-22 05:16:47` | `c10f2ddf` |
 
 > ✅ **Ninguna caja de esta fecha quedó abierta.** Está en `closed`; el último cambio quedó registrado el `2026-07-22 05:16:47`. La tabla no guarda el estado anterior: esto dice cómo está HOY, no si alguna vez estuvo abierta.
 
@@ -433,7 +433,7 @@ el valor anterior, así que esto prueba **que** se editaron y cuándo, no **qué
 
 | id | shift_type | status | cajero | `initial_suppliers_crc` | creado | último cambio | `closed_by` |
 |---|---|---|---|---|---|---|---|
-| `51c71ff2` | Día | **closed** | AMPI | ₡ 100.000,00 | `2026-07-21 14:29:00` | `2026-07-21 21:20:45` | `48ef8af5` |
+| `51c71ff2` | Día | **closed** | *(persona de caja)* | ₡ 100.000,00 | `2026-07-21 14:29:00` | `2026-07-21 21:20:45` | `48ef8af5` |
 
 > ✅ **Ninguna caja de esta fecha quedó abierta.** Está en `closed`; el último cambio quedó registrado el `2026-07-21 21:20:45`. La tabla no guarda el estado anterior: esto dice cómo está HOY, no si alguna vez estuvo abierta.
 

@@ -1,9 +1,9 @@
-// Un empleado = UNA fila en todas las vistas de ventas (firmado por Ismael, 2026-10-29).
+// Un empleado = UNA fila en todas las vistas de ventas (firmado por el dueño, 2026-10-29).
 //
-// Los casos reales con dos códigos: NACHO (`266` histórico + `038` nuevo), ROSAURA (`01` salonera
-// + `235` manager) y ESTEBAN (`023` + `555`). Se recorren las vistas que agrupan por persona:
-// el ranking por factura (`armarDia` → clave por nombre, y `aggSalonero`/`allSaloneros` entre
-// días), la calidad de pax, las mesas abiertas y las dos lentes por línea.
+// Los casos con dos códigos (nombres ficticios): CHEMA (`266` histórico + `038` nuevo), MARISOL
+// (`01` salonera + `235` manager) y ROBERTO (`023` + `555`). Se recorren las vistas que agrupan
+// por persona: el ranking por factura (`armarDia` → clave por nombre, y `aggSalonero`/
+// `allSaloneros` entre días), la calidad de pax, las mesas abiertas y las dos lentes por línea.
 import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
@@ -29,13 +29,13 @@ const linea = (ticketId: string, login: string, monto = 1000): LineaNdfRow => ({
 /** Las dos situaciones reales: staging (sin `pos_login`) y prod (con el mapeo del 2026-10-29). */
 const ENTORNOS: Record<string, Record<string, string>> = {
   staging: {},
-  prod: { '038': 'NACHO', '235': 'ROSAURA M', '035': 'RODRI', '036': 'FRANCO', '037': 'VALENTINO' },
+  prod: { '038': 'CHEMA', '235': 'MARISOL M', '035': 'NICO', '036': 'MARCOS', '037': 'FLORENCIO' },
 }
 
 const PARES: [string, string, string][] = [
-  ['NACHO', '266', '038'],
-  ['ROSAURA', '01', '235'],
-  ['ESTEBAN', '023', '555'],
+  ['CHEMA', '266', '038'],
+  ['MARISOL', '01', '235'],
+  ['ROBERTO', '023', '555'],
 ]
 
 describe.each(Object.entries(ENTORNOS))('entorno %s', (_entorno, nombres) => {
@@ -103,6 +103,6 @@ describe('barmen 035, 036 y 037', () => {
   it('tienen nombre propio en staging (roster) y en prod (employees)', () => {
     expect(nombreSalonero('036', {})).toBe('FRANCO')
     expect(nombreSalonero('037', {})).toBe('VALENTINO')
-    expect(nombreSalonero('036', ENTORNOS.prod)).toBe('FRANCO')
+    expect(nombreSalonero('036', ENTORNOS.prod)).toBe('MARCOS')
   })
 })

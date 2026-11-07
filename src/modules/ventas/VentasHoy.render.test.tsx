@@ -40,7 +40,7 @@ const DIAS: DiasMap = {
   '2026-09-07': {
     fileName: 'ndf 2026-09-07', uploadedAt: '2026-09-08',
     saloneros: {
-      MAXO: sal({
+      TITO: sal({
         pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25,
         iva: 26_000, serv: 20_000,
         prods: [['ROLL SATORI', 40, 150_000], ['IMPERIAL', 25, 50_000]],
@@ -126,7 +126,7 @@ describe('VentasHoy · el bloque «Restaurante» no se esconde', () => {
       '2026-09-07': {
         fileName: 'ndf', uploadedAt: '2026-09-08',
         saloneros: {
-          MAXO: sal({ pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25 }),
+          TITO: sal({ pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25 }),
           'Salón sin mesero': caj({ pax: 4, total: 20_000, salon: 20_000, delivery: 0, ordenes: 1 }),
         },
       },
@@ -139,7 +139,7 @@ describe('VentasHoy · el bloque «Restaurante» no se esconde', () => {
     const soloMeseros: DiasMap = {
       '2026-09-07': {
         fileName: 'ndf', uploadedAt: '2026-09-08',
-        saloneros: { MAXO: sal({ pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25 }) },
+        saloneros: { TITO: sal({ pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25 }) },
       },
     }
     render(<VentasHoy dias={soloMeseros} pm={{}} metas={METAS} />)
@@ -152,7 +152,7 @@ describe('VentasHoy · el ranking no lista buckets de caja', () => {
     render(<VentasHoy dias={DIAS} pm={{}} metas={METAS} />)
     const t = texto()
     const ranking = t.slice(t.indexOf('Ranking del día'), t.indexOf('Top Productos'))
-    expect(ranking).toContain('MAXO')
+    expect(ranking).toContain('TITO')
     expect(ranking).not.toContain('Caja · 388')
     expect(ranking).not.toContain(plano(fi(0)))
   })
@@ -171,7 +171,7 @@ describe("VentasHoy · modo 'xls' con los nombres REALES del Excel de prod", () 
       fileName: 'ventas 05-10.xls', uploadedAt: '2026-10-06',
       saloneros: {
         // Las columnas del Excel (com/beb) dicen otra cosa que el ProductMap: manda el ProductMap.
-        GONZA: sal({
+        DIEGO: sal({
           pax: 4, total: 95_000, com: 1_000, beb: 1_000, iCom: 6, iBeb: 4,
           prods: [['ROLL SATORI', 6, 75_000], ['IMPERIAL', 4, 20_000]],
         }),

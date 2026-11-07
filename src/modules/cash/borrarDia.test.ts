@@ -42,7 +42,7 @@ describe('borrarDia — el «Borrar TODO» elige por día operativo, no por crea
   })
 
   it('movimiento manual sin turno → día de created_at (CR) y marcado como manual', () => {
-    const traspaso = mov({ id: 't1', subcategory: 'Banco → Caja Fuerte', movement_type: 'traspaso', description: 'INE ingreso bco a CF', amount_crc: 200000, created_at: '2026-10-20T07:15:00Z' }) // 01:15 CR del 20/10
+    const traspaso = mov({ id: 't1', subcategory: 'Banco → Caja Fuerte', movement_type: 'traspaso', description: 'OLI ingreso bco a CF', amount_crc: 200000, created_at: '2026-10-20T07:15:00Z' }) // 01:15 CR del 20/10
     const plan = planBorradoDia('2026-10-20', [], [traspaso], sinTurnos)
     expect(plan.borrar).toHaveLength(1)
     expect(plan.borrar[0]).toMatchObject({ id: 't1', manual: true, diaOperativo: '2026-10-20' })
@@ -72,7 +72,7 @@ describe('borrarDia — el «Borrar TODO» elige por día operativo, no por crea
   })
 
   it('resumen y texto de confirmación: montos ₡/US$ por día, aviso de ajenas y propinas bien explicadas', () => {
-    const plan = planBorradoDia('2026-10-20', [], [ventas1910, ajuste1910, propinas2007, mov({ id: 'm', description: 'DUEÑO TOMI', amount_crc: 5000, created_at: '2026-10-20T15:00:00Z' })], sinTurnos)
+    const plan = planBorradoDia('2026-10-20', [], [ventas1910, ajuste1910, propinas2007, mov({ id: 'm', description: 'DUEÑO PEPE', amount_crc: 5000, created_at: '2026-10-20T15:00:00Z' })], sinTurnos)
     expect(resumenPorDia(plan.borrar)).toEqual([{ dia: '2026-10-20', filas: 1, crc: 5000, usd: 0 }])
     const txt = textoConfirmacionBorrado(plan, n => `₡${n}`)
     expect(txt).toContain('2026-10-20: 1 mov. · ₡5000 · US$ 0.00')

@@ -106,7 +106,7 @@ contra el ledger de Caja Fuerte (Opción B).
 | `session_date` | `2026-06-29` |
 | `diferencia_crc` (sellada) | **₡ 5.734,53** |
 | `ajuste_tipo` / `ajuste_motivo` | Faltante / error |
-| `manager` | Cacho |
+| `manager` | *(el dueño)* |
 | Cierre creado | `2026-07-06 19:17:00.032029+00` |
 | Egresos Caja Proveedores efectivo del día | ₡ 0,00 (0 mov.) |
 | Residuo si fuera hueco 2 (`dif + egresos`) | ₡ 5.734,53 |

@@ -501,7 +501,7 @@ describe('nombreSalonero', () => {
   })
 
   it('Empleados le gana al roster: es el mapeo que mantiene el negocio', () => {
-    expect(nombreSalonero('026', { '026': 'Máximo R.' })).toBe('Máximo R.')
+    expect(nombreSalonero('026', { '026': 'Tiburcio R.' })).toBe('Tiburcio R.')
     expect(SALONEROS_CONOCIDOS['026']).toBe('MAXO')                // el roster dice otra cosa
   })
 

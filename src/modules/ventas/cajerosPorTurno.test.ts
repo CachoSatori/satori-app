@@ -43,7 +43,7 @@ const ticket = (over: Partial<TicketNdfConId> = {}): TicketNdfConId => ({
 
 
 const armar = (tickets: TicketNdfConId[]) =>
-  armarDia('2026-09-01', tickets, [], '2026-09-01', { '026': 'MAXO' })
+  armarDia('2026-09-01', tickets, [], '2026-09-01', { '026': 'TITO' })
 
 const caj = (dia: { saloneros: Record<string, unknown> }, clave: string) =>
   dia.saloneros[clave] as CajeroDay | undefined
@@ -118,7 +118,7 @@ describe('armarDia · los cinco baldes en un día completo', () => {
 
   it('hay exactamente los cinco baldes esperados, más el mesero', () => {
     expect(Object.keys(a.dia.saloneros).sort()).toEqual(
-      ['MAXO', CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_CAJERO_SALON, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS].sort(),
+      ['TITO', CLAVE_CAJERO_MANANA, CLAVE_CAJERO_TARDE, CLAVE_CAJERO_SALON, CLAVE_SALON_SIN_MESERO, CLAVE_SISTEMA_OTROS].sort(),
     )
   })
 
@@ -164,7 +164,7 @@ describe('armarDia · los cinco baldes en un día completo', () => {
 
   it('ni «Cajero-salón» ni «Salón sin mesero» son un empleado: fuera de la lista de meseros', () => {
     // Es lo que los mantiene fuera de Competencias y de Empleados, que leen `allSaloneros`.
-    expect(allSaloneros({ '2026-09-01': a.dia })).toEqual(['MAXO'])
+    expect(allSaloneros({ '2026-09-01': a.dia })).toEqual(['TITO'])
   })
 })
 

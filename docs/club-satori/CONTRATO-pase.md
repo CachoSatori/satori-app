@@ -1,4 +1,4 @@
-# Contrato · pase de Wallet ↔ base del Club (v1, 07-nov-2026)
+# Contrato · pase de Wallet ↔ base del Club (v1, 07-nov-2026; revisado con «anfitrión y cliente»)
 
 > Para la **sesión B** (pase de Wallet) y la **sesión A** (Local Club en la 075). Este documento es la frontera
 > entre las dos: B arranca con el JSON de ejemplo de abajo, sin esperar a A. **Cualquier cambio de este contrato
@@ -13,9 +13,15 @@
   por `service_role`** (el Edge de B). Ni `anon` ni `authenticated` las ven.
 - **El pase no lleva datos de contacto** (ni teléfono, ni email) ni secretos. El token del portal **solo** va en el
   link del botón «Canjear», que es privado del dueño del pase (igual que el link de WhatsApp de hoy).
-- **QR del pase:** el **público** `/r/{codigo8}` (cupones de turistas), **solo si es referente**. Un socio que no es
-  referente no lleva QR. **El canje y la identificación del socio en caja salen del botón «Canjear»** (código de un
-  solo uso de R-01), nunca del QR.
+- **Una persona, dos roles posibles:** **socio** (cliente del Local Club) y **anfitrión** (= referente: comparte
+  cupones y gana créditos). Son las pestañas «Mi Club» y «Anfitrión» del pase y del portal; con un solo rol, una sola.
+- **Código de barras del pase** (lo dice `codigo_barras`, B no lo deduce):
+  - **si es socio** (pendiente o activo): el **QR fijo del socio** `/s/{codigo9}`. Solo identifica en caja (10 % y
+    cortesía), **nunca da créditos**. Si además es anfitrión, el QR de cupones va en la pestaña «Anfitrión» y como link
+    en el reverso (`anfitrion.qr_url`);
+  - **si es solo anfitrión:** el QR de cupones `/r/{codigo8}`, como hoy.
+- **Créditos:** solo con el código de un solo uso del botón «Canjear» (R-01). Ni el QR del socio ni el de cupones
+  sirven para canjear.
 - La base da **datos**; los textos los arma B en ES y EN. Las únicas cadenas libres son los nombres de promociones y
   cortesías (en español; `nombre_en` opcional).
 
@@ -31,7 +37,20 @@ Ejecutable solo por `service_role`. Devuelve `null` si el miembro no existe. Eje
   "nombre_pila": "Ana",
   "estado": "activo",
   "local": { "id": "santa-teresa", "nombre": "Satori Sushi Bar · Santa Teresa" },
-  "referente": {
+  "pestanas": ["mi_club", "anfitrion"],
+  "codigo_barras": { "tipo": "socio", "valor": "https://club.satoricostarica.com/s/ABCD2345K" },
+  "socio": {
+    "estado": "activo",
+    "desde": "2026-11-10",
+    "qr_url": "https://club.satoricostarica.com/s/ABCD2345K",
+    "beneficio": "10 % en tu factura",
+    "visitas_mes": 3,
+    "cortesias": [
+      { "codigo_producto": "1234", "nombre": "Postre de la casa", "cantidad": 1, "motivo": "promo", "vence_en": null },
+      { "codigo_producto": "5678", "nombre": "Bebida de cortesía", "cantidad": 1, "motivo": "premio_referido", "vence_en": "2026-12-31" }
+    ]
+  },
+  "anfitrion": {
     "activo": true,
     "tipo": "referente",
     "codigo_publico": "ABCD2345",
@@ -39,16 +58,9 @@ Ejecutable solo por `service_role`. Devuelve `null` si el miembro no existe. Eje
     "personas": 14,
     "creditos": 2.0,
     "personas_proximo_medio": 1,
-    "valor_credito_crc": 18000
-  },
-  "socio": {
-    "estado": "activo",
-    "desde": "2026-11-10",
-    "beneficio": "10 % en tu factura",
-    "cortesias": [
-      { "codigo_producto": "1234", "nombre": "Postre de la casa", "cantidad": 1, "motivo": "promo", "vence_en": null },
-      { "codigo_producto": "5678", "nombre": "Bebida de cortesía", "cantidad": 1, "motivo": "premio_referido", "vence_en": "2026-12-31" }
-    ]
+    "valor_credito_crc": 18000,
+    "referidos_mes": 9,
+    "creditos_ganados_mes": 1.5
   },
   "promociones": [
     { "id": "8f0e…", "nombre": "Local Club", "nombre_en": null, "beneficio": "10 % + 1 postre", "para": ["socio"],
@@ -64,11 +76,13 @@ Reglas de los campos:
 |---|---|
 | `version` | Sube con cualquier cambio que afecte al pase (ver §3). B solo actualiza el objeto si `version` subió. |
 | `estado` | `activo` o `baja` de la persona. Con `baja`: B **expira** el pase (estado `EXPIRED` en Google). |
-| `referente` | `null` si no es referente. `creditos` con un decimal (0,5 de paso). `codigo_publico` cambia si se regenera el QR. |
-| `socio` | `null` si no es socio. `estado`: `pendiente` (mostrar «Validá tu alta en tu próxima visita»), `activo` o `baja`. Con `pendiente` el beneficio **no** aplica y `cortesias` va vacío. |
+| `pestanas` | `["mi_club"]`, `["anfitrion"]` o las dos, en ese orden. |
+| `codigo_barras` | `{tipo: "socio" \| "cupones", valor: url}`. Es el código de barras del pase (ver §1). `null` si no tiene ningún rol activo o pendiente. |
+| `anfitrion` | `null` si no es anfitrión (referente, concierge PM o equipo). `creditos` con un decimal (0,5 de paso). `codigo_publico` cambia si se regenera el QR. |
+| `socio` | `null` si no es socio. `estado`: `pendiente` (mostrar «Validá tu alta en tu próxima visita»), `activo` o `baja`. Con `pendiente` el beneficio **no** aplica y `cortesias` va vacío. `qr_url` es el QR fijo del socio (solo identifica). |
 | `socio.cortesias` | Lo que le corresponde **en su próxima visita** (promo vigente + premios por referido pendientes). |
 | `promociones` | Solo las vigentes hoy para los roles que tiene. |
-| `canjear_url` | Abre el portal y genera el código de un solo uso (R-01). Si se regenera el token, cambia. Con `referente` null y `socio` activo, sirve para identificarse en caja. |
+| `canjear_url` | Solo si es anfitrión. Abre el portal y genera el código de un solo uso (R-01). Si se regenera el token, cambia. |
 
 ## 3. Cómo se avisa un cambio: eventos (cola de solo inserción)
 `club_pase_eventos(id bigint identity, miembro_id uuid null, motivo text, creado_en timestamptz)`.
@@ -77,7 +91,7 @@ La llenan **triggers de la base**; `miembro_id` null = afecta a **todos** los pa
 | `motivo` | Cuándo |
 |---|---|
 | `movimiento` | tarjeta, canje, vencimiento, ajuste o restitución del miembro |
-| `rol` | alta o cambio de estado de referente o de socio (incluye pendiente → activo) |
+| `rol` | alta o cambio de estado de anfitrión o de socio (incluye pendiente → activo y «activar como anfitrión») |
 | `datos` | nombre, baja/reactivación, código del QR o token regenerados |
 | `cortesia` | premio por referido creado o usado; cortesía entregada |
 | `promociones` | promoción creada, editada, vigente o terminada (`miembro_id` null) |

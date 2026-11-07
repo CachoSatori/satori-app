@@ -26,16 +26,65 @@
 | Pantalla de promociones | Club → «Promociones» (owner): lista de vigentes, crear, editar, vigencia y para quién, porcentaje y cortesías del listado. Sin el armador completo. |
 | Escanear | Una sola pantalla «Qué aplicar», según lo que se escaneó (código del pase o del portal, cupón de turista): «10 % LC + 1 postre de cortesía», «Paga con créditos: NO aplicar descuento», «Socio pendiente: validalo primero». |
 
+## Ajustes y decisiones del 07-nov (OK al plan 6c1a5fb)
+1. **Control del 10 % (A5): `DESCUENTO_SIN_RESPALDO`.**
+   - **Precio de referencia por artículo:** el precio unitario **modal** de los últimos 30 días, sin las facturas con el 856
+     ni con «PROMO CLUB 10%».
+   - **Cuándo salta:** una línea por debajo de su referencia, en una factura sin cupón ni 856.
+   - **Sin tocar** el agente ni el catálogo.
+   - **Para que un cambio de lista no dispare una avalancha:**
+     - el precio de referencia se calcula **por día**, con la moda de los 30 días anteriores a esa factura;
+     - una baja que se repite en ≥ 60 % de las ventas del artículo en el día **es el precio nuevo**, no una excepción;
+     - además, una sola excepción por factura, no por línea.
+
+     Se documenta junto a la función.
+   - **Pruebas:** una factura LC legítima no salta; un descuento suelto sí; un cambio de lista no genera una avalancha.
+2. **QR fijo del socio (CONFIRMADO).**
+   - Sirve solo para identificarse (10 % y cortesía), **nunca para créditos**. Los créditos siguen con el código de un solo uso.
+   - Tope: 1 visita por día por socio.
+   - `SOCIO_USO_ANOMALO`: el mismo QR en dos mesas el mismo día, o más de **N** visitas por semana (N configurable, 5 por
+     defecto).
+3. **Anfitrión y cliente** (una persona, un pase, roles socio y/o referente; «anfitrión» = referente):
+   - **Portal `/p/` con dos pestañas:** «Mi Club» (10 %, cortesías, visitas, créditos) y «Anfitrión» (QR y link de cupones,
+     referidos, créditos ganados, «Canjear»). Con un solo rol, una sola pestaña.
+   - **Pase:** si es socio, el código de barras es el QR del socio, y el QR de cupones va en la pestaña Anfitrión y como
+     link en el reverso. Si es solo referente, el código de barras es el QR de cupones, como hoy.
+   - **Caja:** Escanear reconoce los dos QR por prefijo (`/s/` socio, `/r/` cupones) y muestra qué es cada uno.
+   - **Activar a un socio como anfitrión:** solo manager u owner, desde la app, con auditoría.
+   - **Antiautocanje:** un cupón no aplica en una factura donde el mismo anfitrión registró visita de socio (prueba
+     negativa en la batería). Si el cruce lo detecta después, `CUPON_AUTOREFERIDO`.
+   - **Tope mensual de créditos para anfitrión nuevo:** configurable, por defecto ₡25.000 (provisorio). Se aplica al
+     **canje**: valor canjeado por mes calendario, durante los primeros 90 días como anfitrión. Si Ismael lo quiere sobre
+     lo **ganado**, se cambia.
+   - **Fase 2** (no ahora): botón «Quiero ser anfitrión» y topes por desempeño.
+4. **Decisiones (configurables):**
+   - **Vigencia LC:** todos los días, mañana y mediodía incluidos (CONFIRMADO).
+   - **Alta de local:** el cajero marca «verifiqué residencia». Obligatorios nombre y WhatsApp. **Nunca** se guardan números
+     de cédula, DIMEX ni pasaporte (provisorio).
+   - **Premio por referir socios:** 1 cortesía, máximo 3 por mes, vence a los 60 días (provisorio).
+   - **Cortesía LC:** configurable y **vacía** hasta que Ismael elija el producto.
+5. **Avance:** [AVANCE-LC.md](AVANCE-LC.md), por etapa, con estado, SHA y pruebas en números (para las sesiones nocturnas).
+
+### Dónde caen los puntos 2 y 3, y cuánto suman
+| Etapa | Suma | Días antes → ahora |
+|---|---|---|
+| A1 | QR fijo del socio (`codigo_socio`, prefijo `/s/`, 9 caracteres a mano). Escanear reconoce `/s/` y `/r/`. «Activar como anfitrión» (owner y manager, con auditoría). Contrato del pase con la regla del código de barras | 1,5 → **2** |
+| A4 | Tope de 1 visita por día. Antiautocanje en el cupón. Tope mensual del anfitrión nuevo. Portal con las dos pestañas | 2 → **3** |
+| A5 | `DESCUENTO_SIN_RESPALDO` (punto 1), `SOCIO_USO_ANOMALO`, `CUPON_AUTOREFERIDO` | 1 → **1,5** |
+| B5 | Código de barras según el rol, link de cupones en el reverso, «Mi Club» y «Anfitrión» en el pase | 1 → **1,5** |
+
+**Total A: 9 → 11 días** (camino crítico). **Total B: 6 → 6,5 días.**
+
 ## Sesión A (esta) · Local Club en la 075, caja, excepciones y pantallas
 | Etapa | Qué | Días |
 |---|---|---|
-| A1 | **Roles** en la 075: tabla, migración de `tipo` → roles, ajuste de `resolver`, `canje`, `cupón`, `buscar`, reportes y migrador. **Stub del contrato del pase** (`club_pase_datos` con referentes reales, eventos, cursor, emisión). Batería y carreras sin regresiones. | 1,5 |
+| A1 | **Roles** en la 075 (`club_miembro_roles`; `tipo` queda como espejo del rol de anfitrión, para no romper lo que ya anda). QR fijo del socio. «Activar como anfitrión». **Stub del contrato del pase** (`club_pase_datos` con referentes reales, eventos, cursor, emisión). Batería y carreras sin regresiones. | 2 |
 | A2 | **Socios:** alta en caja, autoalta (función pública + club-web `/s`, ES y EN), validación en caja, premio por referir (config + tope mensual), auditoría y eventos del pase. Pruebas. | 1,5 |
 | A3 | **Promociones mínimas + productos:** tablas, vista de productos desde las líneas, pantalla «Promociones», cortesías, la promo inicial «Local Club 10 % + cortesía» (en borrador). Pruebas. | 1,5 |
-| A4 | **Motor «qué aplicar» + visita por factura:** identificar al socio con el código de un solo uso, regla fija de créditos, la pantalla única en Escanear, visita y cruce por el 856. `club_pase_datos` completo (socio, cortesías, promociones). Pruebas. | 2 |
-| A5 | **Excepciones** `CANJE_CON_DESCUENTO`, `LC_SIN_REGISTRO` y `REGISTRO_LC_SIN_856` en Excepciones, en el reporte y en la calidad del mes. Pruebas con facturas sintéticas y con las 142 facturas LC reales (solo lectura). | 1 |
+| A4 | **Motor «qué aplicar» + visita por factura:** el socio se identifica con su QR fijo (`/s/`), regla fija de créditos, pantalla única en Escanear, visita y cruce por el 856, tope de 1 visita por día, antiautocanje, tope mensual del anfitrión nuevo, portal con dos pestañas. `club_pase_datos` completo. Pruebas. | 3 |
+| A5 | **Excepciones** `CANJE_CON_DESCUENTO`, `LC_SIN_REGISTRO`, `REGISTRO_LC_SIN_856`, `DESCUENTO_SIN_RESPALDO`, `SOCIO_USO_ANOMALO` y `CUPON_AUTOREFERIDO`. Pruebas con facturas sintéticas y con las 142 facturas LC reales (solo lectura). | 1,5 |
 | A6 | **Cierre:** recorrido integral con capturas (alta en caja, autoalta → validación → premio, visita con el 856, canje + LC → alarma), paridad, carreras, guía de uso (`docs/sop-app/`) y RUNBOOK actualizado. | 1,5 |
-| | **Total A** | **9** |
+| | **Total A** | **11** |
 
 ## Sesión B (otra sesión de Claude Code) · pase de Wallet
 | Etapa | Qué | Días |
@@ -44,8 +93,8 @@
 | B2 | club-web: «Agregar a Google Wallet» en el portal y al final de la autoalta (ES y EN), con `x-club-web` y tope. | 0,5 |
 | B3 | Sincronización: lector de eventos cada 2 min + «Actualizar mi pase»; mensajes del pase desde `club_alertas`; baja → pase expirado. | 1,5 |
 | B4 | Apple: `.pkpass` y web service de actualización, **apagado** por flag. | 1,5 |
-| B5 | Integración con los datos reales de A (stub del día 1, completo desde el día 5) y prueba en un teléfono real con Google Wallet. | 1 |
-| | **Total B** | **6** |
+| B5 | Integración con los datos reales de A, código de barras según el rol (socio → QR del socio; solo referente → QR de cupones), link de cupones en el reverso, y prueba en un teléfono real. | 1,5 |
+| | **Total B** | **6,5** |
 
 ## Qué depende de qué
 - **B1 a B4 no esperan a A:** usan el JSON de ejemplo del contrato.
@@ -53,7 +102,7 @@
 - **A2 y A4 necesitan A1** (roles). **A4 necesita A3** (promociones y productos). **A5 necesita A4** (visitas).
 - **El lanzamiento necesita A6 y B5**, más el RUNBOOK (que suma: cambio del PoS de 15 % a 10 % y el artículo
   «PROMO CLUB 10%» cargado en `promo_articulo_codigo`).
-- **Camino crítico:** A1 → A3 → A4 → A5 → A6 ≈ **9 días**. B termina antes (≈ 6 días + espera de A4 para B5).
+- **Camino crítico:** A1 → A3 → A4 → A5 → A6 ≈ **11 días**. B termina antes (≈ 6,5 días + espera de A4 para B5).
 
 ## Qué necesito de Ismael y cuándo
 | Cuándo | Qué | Para |

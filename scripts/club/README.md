@@ -31,10 +31,12 @@ python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --
 | `referrals` debit (sin los de `vencimientos_*.json`) | `club_movimientos` `canje` | Se agrupan por referente y minuto UTC: un canje por grupo, con `personas = −Σ`, `creditos = Σ/6` y los ids viejos en `legacy_ids`. Los canjes de más de 2 créditos se migran como están (D3). |
 | ids de `vencimientos_*.json` | `club_movimientos` `vencimiento` | Uno por referente, con nota «cancelación inactividad 05-nov-2026». |
 | cuentas `deleted` con saldo > 0 | `club_movimientos` `vencimiento` | D1 (corregida el 05-nov): por el saldo, fechado en la baja = la más tardía entre `updatedAt` y el último movimiento de la cuenta, con la nota «cuenta borrada en el sistema viejo». Si alguna fecha cae desde el 1-nov-2026, el script frena. Así un mes cerrado da siempre lo mismo. |
+| restos sin actividad | `club_movimientos` `vencimiento` | Decisión de Ismael (07-nov): las cuentas sin tarjeta, canje ni restitución en el plazo de vencimiento que solo tienen un **resto de menos de medio crédito** (1 o 2 personas con la tasa 6) se vencen con la **fecha de la migración** y la nota «resto del sistema viejo». Mismo criterio que `club_vencer_candidatos`. Después, la simulación de hoy tiene que dar **0 cuentas**; si queda alguna, la migración frena sin guardar nada. |
 | `referrals_club` credit / debit | `club_pm_cargos` (`pendiente`) / `club_pm_pagos` | `amount / 100` = colones. Los cargos de cuentas borradas pasan a `anulado`, con `anulado_en` = la fecha de la baja (D2). |
 
 ## Validación (`validacion.json`, solo agregados)
-- **Saldo por miembro:** la suma del libro, sin el vencimiento D1, tiene que ser igual al credit − debit de Firestore, con **0 diferencias**.
+- **Restos y vencimiento:** `vencimientos_restos` (cuentas y personas) y `vencer_simular_hoy`, que tiene que ser **0**.
+- **Saldo por miembro:** la suma del libro, sin los vencimientos D1 y de restos, tiene que ser igual al credit − debit de Firestore, con **0 diferencias**.
 - **Créditos activos:** el total, separado en externos y equipo, y la cantidad de cuentas con créditos. Las cuentas en baja tienen que terminar en 0.
 - **PM:** el neto de las cuentas no borradas, separado en con sufijo «PM» y sin sufijo.
 - **Totales por mes,** en UTC y en hora de Costa Rica.

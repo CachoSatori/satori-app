@@ -42,6 +42,7 @@ VALOR_CREDITO_CRC = 18000
 NOTA_TARJETA = 'fecha aproximada (carga)'
 NOTA_VENC_136 = 'cancelación inactividad 05-nov-2026'
 NOTA_D1 = 'cuenta borrada en el sistema viejo'
+NOTA_RESTO = 'resto del sistema viejo'   # decisión de Ismael 07-nov
 CORTE_D1 = '2026-11-01T06:00:00'   # 1-nov-2026 00:00 hora CR, en UTC
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -408,6 +409,22 @@ end $$;""")
     if p.pm_pagos:
         vals = ','.join(f"({q(LOCATION)},{q(c['miembro_id'])}::uuid,{q(c['monto'])},{q(c['fecha'])}::timestamptz,'migracion',{arr(c['legacy_ids'])},{q(c['fecha'])}::timestamptz)" for c in p.pm_pagos)
         L.append("insert into public.club_pm_pagos (location_id, miembro_id, monto_crc, pagado_en, origen, legacy_ids, created_at) values " + vals + ';')
+    # [Restos, decisión de Ismael 07-nov] Las cuentas sin actividad en el plazo de vencimiento que solo
+    # tienen un resto de menos de medio crédito (1 o 2 personas con la tasa 6) se vencen acá, con la
+    # fecha de la migración. Mismo criterio que club_vencer_candidatos. Después, la simulación de hoy
+    # tiene que dar 0 cuentas: si queda alguna (medio crédito o más), la migración FRENA y no se guarda nada.
+    hoy = "(now() at time zone 'America/Costa_Rica')::date"
+    L.append(f"""insert into public.club_movimientos (location_id, miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, nota)
+select k.location_id, k.miembro_id, 'vencimiento', -k.personas, null, k.personas_por_credito, k.valor_credito_crc, now(), now(), 'migracion', {q(NOTA_RESTO)}
+  from public.club_vencer_candidatos({hoy}) k
+  join public.club_miembros m on m.id = k.miembro_id and m.origen = 'migracion'
+ where k.personas * 2 < k.personas_por_credito;""")
+    L.append(f"""do $$ declare n int; begin
+  select count(*) into n from public.club_vencer_candidatos({hoy});
+  if n > 0 then
+    raise exception 'FRENADO: después de vencer los restos, la simulación de hoy da % cuentas (con medio crédito o más): decidir con Ismael', n;
+  end if;
+end $$;""")
     L.append('commit;')
     return '\n'.join(L)
 
@@ -418,7 +435,7 @@ def sql_validar(p: Plan) -> str:
 with esperado(legacy_id, neto) as (values {esperado}),
 mig as (select m.* from public.club_miembros m where m.origen = 'migracion'),
 real as (
-  select m.legacy_id, coalesce(sum(mv.personas) filter (where mv.nota is distinct from {q(NOTA_D1)}), 0) as neto
+  select m.legacy_id, coalesce(sum(mv.personas) filter (where not coalesce(mv.nota in ({q(NOTA_D1)}, {q(NOTA_RESTO)}), false)), 0) as neto
   from mig m left join public.club_movimientos mv on mv.miembro_id = m.id group by m.legacy_id),
 sal as (select s.*, m.tipo as tipo_m, m.estado as estado_m from public.club_saldos s join mig m on m.id = s.miembro_id),
 pm as (
@@ -444,6 +461,9 @@ select json_build_object(
   'vencimientos_136', (select count(*) from mov where tipo = 'vencimiento' and nota = {q(NOTA_VENC_136)}),
   'vencimientos_136_docs', (select coalesce(sum(cardinality(legacy_ids)), 0) from mov where tipo = 'vencimiento' and nota = {q(NOTA_VENC_136)}),
   'vencimientos_d1', (select count(*) from mov where tipo = 'vencimiento' and nota = {q(NOTA_D1)}),
+  'vencimientos_restos', (select json_build_object('cuentas', count(*), 'personas', coalesce(-sum(personas), 0))
+                            from mov where tipo = 'vencimiento' and nota = {q(NOTA_RESTO)}),
+  'vencer_simular_hoy', (select count(*) from public.club_vencer_candidatos((now() at time zone 'America/Costa_Rica')::date)),
   'docs_legacy_en_canjes', (select coalesce(sum(cardinality(legacy_ids)), 0) from mov where tipo = 'canje'),
   'pm_cargos', (select count(*) from public.club_pm_cargos where origen = 'migracion'),
   'pm_pagos', (select count(*) from public.club_pm_pagos where origen = 'migracion'),

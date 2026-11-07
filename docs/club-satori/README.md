@@ -11,6 +11,8 @@ Módulo propio de la app que reemplaza la página externa de créditos (Firebase
 
 Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Después») · Fases → [ROADMAP.md](../../ROADMAP.md).
 
+**F1d ✅ en staging** (05/11): las páginas públicas `/r/`, `/c/` y `/p/` viven en [`club-web/`](../../club-web/README.md). Es un mini-sitio aparte, con una Pages Function propia y tope por IP, en español e inglés. En la 075 se sumaron `club_cupon_ver` y `club_cupon_contacto` (anon). Pruebas: 85/85. Lighthouse en móvil: 100/100. **Pendiente de Ismael:** crear el proyecto `satori-club` en Cloudflare Pages, cargar las variables y el KV, y apuntar `club.satoricostarica.com`. Los pasos están en el README de `club-web`.
+
 **F1f ✅ en staging** (05/11): en `/club` se sumaron **Excepciones** y **Reportes** (owner y manager), con un contador de excepciones abiertas en la tarjeta Club del inicio.
 - **SQL, en la 075:**
   - `club_excepciones`: `REGISTRO_SIN_FACTURA` es exacta; `CREDITOS_SIN_CANJE` y `CANJE_MONTO_DISTINTO` son probables, porque se infieren del `cxc` en múltiplos de medio crédito; `PROMO_SIN_CUPON` se enciende sola cuando se carga `club_config.promo_articulo_codigo`.

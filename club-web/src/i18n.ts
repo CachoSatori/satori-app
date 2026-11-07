@@ -1,0 +1,100 @@
+export type Idioma = 'es' | 'en'
+
+const ES = {
+  titulo_r: 'Tu descuento en Satori',
+  sub_r: (n: string | null) => (n ? `${n} te recomienda Satori Sushi Bar.` : 'Te recomendaron Satori Sushi Bar.'),
+  obtener: 'Obtener mi cupón 10 %',
+  obteniendo: 'Generando…',
+  cupon_titulo: 'Cupón 10 %',
+  vale_hasta: (f: string) => `Vale hasta el ${f}${f.endsWith('.') ? '' : '.'}`,
+  un_uso: 'Un solo uso. Mostralo en caja al pagar.',
+  ver_mapa: 'Cómo llegar',
+  optin_titulo: '¿Querés recibir ofertas de Satori? (opcional)',
+  optin_nombre: 'Nombre',
+  optin_whatsapp: 'WhatsApp',
+  optin_email: 'Email',
+  optin_acepto: 'Acepto que Satori me contacte con ofertas. Puedo darme de baja cuando quiera.',
+  optin_enviar: 'Enviar',
+  optin_gracias: '¡Gracias! Te vamos a avisar de las próximas ofertas.',
+  optin_falta: 'Escribí un WhatsApp o un email y marcá la casilla.',
+  cupon_usado: 'Este cupón ya se usó. ¡Gracias por visitarnos!',
+  cupon_vencido: 'Este cupón ya no es válido.',
+  cupon_invalido: 'No encontramos este cupón.',
+  ref_invalido: 'Este código no está activo. Pedile uno nuevo a quien te lo compartió.',
+  tope_ref: 'Por hoy no se pueden generar más cupones con este código. Probá mañana.',
+  demasiados: 'Demasiados intentos seguidos. Esperá unos minutos y probá de nuevo.',
+  red: 'Sin conexión. Revisá la señal y probá de nuevo.',
+  reintentar: 'Probar de nuevo',
+  servicio: 'Algo falló de nuestro lado. Probá en un rato.',
+  portal_hola: (n: string) => `Hola, ${n}`,
+  portal_creditos: 'créditos',
+  portal_personas: (p: number) => `${p} ${p === 1 ? 'persona acumulada' : 'personas acumuladas'}`,
+  portal_faltan: (n: number) => `Te ${n === 1 ? 'falta 1 persona' : `faltan ${n} personas`} para sumar medio crédito.`,
+  portal_qr: 'Tu QR para los turistas',
+  portal_indicaciones: 'Mostrá este QR o compartilo. Quien lo escanea recibe un cupón del 10 %, y cuando lo usa en Satori sumás personas: cada 6, un crédito.',
+  compartir: 'Compartir',
+  descargar: 'Descargar imagen',
+  historial: 'Últimos movimientos',
+  sin_movimientos: 'Todavía no hay movimientos.',
+  portal_invalido: 'Este enlace no es válido. Pedile uno nuevo a Satori.',
+  mov: { tarjeta: 'Visita', canje: 'Canje', vencimiento: 'Vencimiento', ajuste: 'Ajuste', restitucion: 'Restitución' } as Record<string, string>,
+  inicio: 'Club Satori',
+  inicio_txt: 'Escaneá el QR que te compartieron para obtener tu cupón.',
+}
+type Textos = typeof ES
+
+const EN: Textos = {
+  titulo_r: 'Your discount at Satori',
+  sub_r: n => (n ? `${n} recommends Satori Sushi Bar.` : 'Satori Sushi Bar was recommended to you.'),
+  obtener: 'Get my 10% coupon',
+  obteniendo: 'Creating…',
+  cupon_titulo: '10% coupon',
+  vale_hasta: f => `Valid until ${f}${f.endsWith('.') ? '' : '.'}`,
+  un_uso: 'One use only. Show it at the register when you pay.',
+  ver_mapa: 'Directions',
+  optin_titulo: 'Want Satori offers? (optional)',
+  optin_nombre: 'Name',
+  optin_whatsapp: 'WhatsApp',
+  optin_email: 'Email',
+  optin_acepto: 'I agree that Satori may contact me with offers. I can opt out at any time.',
+  optin_enviar: 'Send',
+  optin_gracias: 'Thanks! We will let you know about upcoming offers.',
+  optin_falta: 'Enter a WhatsApp number or an email and tick the box.',
+  cupon_usado: 'This coupon has already been used. Thanks for visiting!',
+  cupon_vencido: 'This coupon is no longer valid.',
+  cupon_invalido: 'We could not find this coupon.',
+  ref_invalido: 'This code is not active. Ask the person who shared it for a new one.',
+  tope_ref: 'No more coupons can be created with this code today. Please try tomorrow.',
+  demasiados: 'Too many attempts in a row. Please wait a few minutes and try again.',
+  red: 'No connection. Check your signal and try again.',
+  reintentar: 'Try again',
+  servicio: 'Something went wrong on our side. Please try again later.',
+  portal_hola: n => `Hi, ${n}`,
+  portal_creditos: 'credits',
+  portal_personas: p => `${p} ${p === 1 ? 'guest' : 'guests'} so far`,
+  portal_faltan: n => `${n} more ${n === 1 ? 'guest' : 'guests'} to earn half a credit.`,
+  portal_qr: 'Your QR for guests',
+  portal_indicaciones: 'Show or share this QR. Whoever scans it gets a 10% coupon, and when they use it at Satori you earn guests: every 6 make one credit.',
+  compartir: 'Share',
+  descargar: 'Download image',
+  historial: 'Recent activity',
+  sin_movimientos: 'No activity yet.',
+  portal_invalido: 'This link is not valid. Ask Satori for a new one.',
+  mov: { tarjeta: 'Visit', canje: 'Redeemed', vencimiento: 'Expired', ajuste: 'Adjustment', restitucion: 'Restored' },
+  inicio: 'Club Satori',
+  inicio_txt: 'Scan the QR you were given to get your coupon.',
+}
+
+export const TEXTOS: Record<Idioma, Textos> = { es: ES, en: EN }
+
+export function idiomaInicial(): Idioma {
+  try {
+    const g = localStorage.getItem('club.lang')
+    if (g === 'es' || g === 'en') return g
+  } catch { /* sin storage */ }
+  return (navigator.language || 'en').toLowerCase().startsWith('es') ? 'es' : 'en'
+}
+
+export function guardarIdioma(l: Idioma) {
+  try { localStorage.setItem('club.lang', l) } catch { /* sin storage */ }
+}

@@ -118,6 +118,8 @@ export interface TicketIngest extends TicketMapeado {
   mesa?:           string | null
   numero_pedido?:  string | null
   // ── Ítem 11 (mig 081). Opcionales: un agente viejo no los manda y quedan en null. ─────────
+  /** `FAC_Facturas.Area`: el área de la mesa de la factura (la mesa es (área, mesa)). */
+  area_factura?:      string | null
   /** `FAC_Facturas.NumeroMesa`: la mesa de la factura (las cuentas divididas no tienen pedido). */
   mesa_factura?:      string | null
   /** Consecutivo de la factura electrónica, 20 dígitos. */
@@ -156,6 +158,8 @@ export interface OpenIngest {
   updated_at?:     string | null
   /** Ítem 11 (mig 081): `FAC_Pedidos.FechaRegistra`, con zona explícita. */
   pedido_abierto_en?: string | null
+  /** Mig 081: `FAC_Pedidos.Area` (la mesa es (área, mesa)). */
+  area?:              string | null
   // ── Frente C v1: PROVISIONALES. Nunca entran en neta / cuadre / pos_ndf_tickets. ──────
   /** Estimado por catálogo, bruto. `null` = no se pudo calcular; `0` = cero real (cortesía). */
   monto_estimado_crc?: number | null
@@ -226,6 +230,7 @@ export interface TicketRow {
   total_crc:        number
   total_fuente:     string
   /** Ítem 11 (mig 081). */
+  area_factura:      string | null
   mesa_factura:      string | null
   consecutivo_fe:    string | null
   clave_fe:          string | null
@@ -263,6 +268,7 @@ export interface OpenRow {
   detalle_productos:  ProductoComandado[] | null
   /** Ítem 11 (mig 081). */
   pedido_abierto_en:  string | null
+  area:               string | null
 }
 
 export interface CursorRow {
@@ -453,6 +459,7 @@ export function normalizarTicket(local: string, t: unknown): Resultado<TicketNor
         total_crc:        recalculado,
         total_fuente:     texto(x.total_fuente) ?? 'provisorio',
         // Ítem 11 (mig 081). Nunca tumban el ticket: lo que no tiene la forma esperada va null.
+        area_factura:      textoCorto(x.area_factura, 20),
         mesa_factura:      textoCorto(x.mesa_factura, 20),
         consecutivo_fe:    digitos(x.consecutivo_fe, 20),
         clave_fe:          digitos(x.clave_fe, 50),
@@ -498,6 +505,7 @@ export function normalizarOpen(local: string, o: unknown, ahora: string): Result
       detalle_productos:  productosComandados(x.detalle_productos),
       // Ítem 11 (mig 081). Sin zona o ilegible → null (no tumba la mesa).
       pedido_abierto_en:  instanteOpcionalONull(x.pedido_abierto_en),
+      area:               textoCorto(x.area, 20),
     },
   }
 }

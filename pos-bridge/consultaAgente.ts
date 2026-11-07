@@ -86,6 +86,7 @@ export interface ExtrasFactura {
   numero_pedido?: unknown
   fecha_cierra?:  unknown
   // Ítem 11 (mig 081)
+  area_factura?:      unknown
   mesa_factura?:      unknown
   consecutivo_fe?:    unknown
   clave_fe?:          unknown
@@ -107,6 +108,7 @@ export function extrasPorFactura(filas: FilaFactura[]): Map<string, ExtrasFactur
       mesa:          f.mesa,
       numero_pedido: f.numero_pedido,
       fecha_cierra:  f.fecha_cierra,
+      area_factura:      f.area_factura,
       mesa_factura:      f.mesa_factura,
       consecutivo_fe:    f.consecutivo_fe,
       clave_fe:          f.clave_fe,
@@ -134,6 +136,8 @@ export function aTicketIngest(
     // Ítem 11 (mig 081). Informativos para la venta: nunca tumban el ticket. Un consecutivo o
     // una clave con otra forma viajan en null (el Edge vuelve a validar). La apertura del pedido
     // pasa por el mismo control que FechaCierra: naive completo o null.
+    // La mesa es (área, mesa): la mesa 3 del área '3' no es la mesa 3 del área 'M' (07-nov).
+    area_factura:      texto(extra.area_factura),
     mesa_factura:      texto(extra.mesa_factura),
     consecutivo_fe:    soloDigitos(extra.consecutivo_fe, 20),
     clave_fe:          soloDigitos(extra.clave_fe, 50),
@@ -555,6 +559,8 @@ export function mapAbierta(f: FilaAbierta, lineas: readonly FilaLineaAbierta[] =
     // Ítem 11 (mig 081): la misma FechaRegistra del pedido, con nombre propio. `updated_at`
     // queda como está para no cambiarle el sentido a «En vivo».
     pedido_abierto_en: cierreConZona(f.fecha_hora),
+    // Área del pedido (FAC_Pedidos.Area): la mesa es (área, mesa). Mig 081.
+    area:              texto(f.area),
     // Provisionales. Sin líneas (o sin poder leerlas) van en null: «sin total», nunca ₡0.
     monto_estimado_crc: est.monto_estimado_crc,
     pax_pedido:         est.pax_pedido,

@@ -211,7 +211,7 @@ describe('mapAbierta', () => {
   it('arma la mesa abierta con clave estable y canal mapeado', () => {
     expect(mapAbierta(fila())).toEqual({
       detalle_productos: null,
-      clave: 'pedido:4477', numero_factura: null, id_pedido: '4477', mesa: '12',
+      clave: 'pedido:2026-09-01:4477', numero_factura: null, id_pedido: '4477', mesa: '12',
       salonero_login: '026', canal: 'salon', pax: 4, pax_alerta: 'falta_articulo',
       updated_at: '2026-09-01T20:05:00-06:00',
       pedido_abierto_en: '2026-09-01T20:05:00-06:00',
@@ -227,6 +227,15 @@ describe('mapAbierta', () => {
 
   it('la mesa que abrió un cajero de turno no se le acredita a ningún mesero', () => {
     expect(mapAbierta(fila({ usuario_registra: '222' }))?.salonero_login).toBeNull()
+  })
+
+  it('CLUB-AUD-31: la clave lleva la fecha del pedido (el número se reinicia cada día)', () => {
+    expect(mapAbierta(fila({ periodo: 2026, mes: 11, dia: 6 }))?.clave).toBe('pedido:2026-11-06:4477')       // clave real del PoS
+    expect(mapAbierta(fila({ periodo: '2026.0', mes: '9.0', dia: '1' }))?.clave).toBe('pedido:2026-09-01:4477')
+    expect(mapAbierta(fila({ fecha_hora: '2026-11-07 12:30:00' }))?.clave).toBe('pedido:2026-11-07:4477')   // sin Periodo/Mes/Dia
+    expect(mapAbierta(fila({ fecha_hora: null }))?.clave).toBe('pedido:4477')                                 // sin nada: como antes
+    // ayer y hoy, mismo número: dos claves
+    expect(mapAbierta(fila({ periodo: 2026, mes: 11, dia: 6 }))?.clave).not.toBe(mapAbierta(fila({ periodo: 2026, mes: 11, dia: 7 }))?.clave)
   })
 
   it('sin id de pedido no hay clave: se descarta', () => {
@@ -399,7 +408,7 @@ describe('leerAbiertas', () => {
     })
     const r = await leerAbiertas(qy, ESQUEMA, { desde: 'a', hasta: 'b' })
     expect(r).toHaveLength(1)
-    expect(r[0].clave).toBe('pedido:4477')
+    expect(r[0].clave).toBe('pedido:2026-09-01:4477')
   })
 
   it('la consulta que SALE lleva la whitelist de Estado', async () => {

@@ -33,6 +33,8 @@ export interface AgenteConfig {
  */
 export const ENTORNO_POR_DEFECTO = 'staging'
 export const FIRMA_PROD = 'POS_AGENTE_PROD_FIRMADO'
+/** El único destino sin firma (CLUB-AUD-32): el Edge de STAGING. Cualquier otro (prod) exige la firma. */
+export const HOST_STAGING = 'hwiatgicyyqyezqwldia.supabase.co'
 
 function requerido(env: Env, clave: string): string {
   const v = (env[clave] ?? '').trim()
@@ -81,6 +83,20 @@ export function loadAgenteConfig(env: Env): AgenteConfig {
   if (!/^https:\/\//i.test(ingestUrl)) {
     // El secreto compartido viaja en un header: sin TLS iría en claro por la red.
     throw new Error(`INGEST_URL tiene que ser https:// (llegó "${ingestUrl}").`)
+  }
+  // CLUB-AUD-32: el candado mira el DESTINO real, no la etiqueta ENV. Un .env con la URL de prod y ENV=staging
+  // no escribe en prod sin la firma.
+  let host = ''
+  try { host = new URL(ingestUrl).hostname.toLowerCase() } catch { throw new Error(`INGEST_URL no es una URL válida.`) }
+  const destinoStaging = host === HOST_STAGING
+  if (!destinoStaging && !(env[FIRMA_PROD] ?? '').trim()) {
+    throw new Error(
+      `ABORTADO: INGEST_URL apunta a ${host}, que no es STAGING. Para escribir ahí hace falta la firma ` +
+      `explícita ${FIRMA_PROD}=<fecha> en el .env (la etiqueta ENV no alcanza).`,
+    )
+  }
+  if (destinoStaging !== (entorno === ENTORNO_POR_DEFECTO)) {
+    throw new Error(`ABORTADO: ENV="${entorno}" no coincide con INGEST_URL (${host}). Revisá el .env.`)
   }
 
   const ventana: Ventana = {

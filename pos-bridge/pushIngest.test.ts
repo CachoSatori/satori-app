@@ -108,10 +108,21 @@ describe('loadAgenteConfig', () => {
     expect(cfg.pos.user).toBe('ClienteConsulta')
   })
 
+  const URL_PROD = 'https://yiczgdtirrkdvohdquzf.supabase.co/functions/v1/ingest-ndf'
   it('SOLO staging: producción necesita firma explícita', () => {
-    expect(() => loadAgenteConfig({ ...ENV_OK, ENV: 'production' })).toThrow(/STAGING/)
-    expect(loadAgenteConfig({ ...ENV_OK, ENV: 'production', [FIRMA_PROD]: '2026-09-05' }).entorno)
+    expect(() => loadAgenteConfig({ ...ENV_OK, ENV: 'production', INGEST_URL: URL_PROD })).toThrow(/STAGING/)
+    expect(loadAgenteConfig({ ...ENV_OK, ENV: 'production', INGEST_URL: URL_PROD, [FIRMA_PROD]: '2026-09-05' }).entorno)
       .toBe('production')
+  })
+
+  it('CLUB-AUD-32: el candado mira INGEST_URL, no la etiqueta ENV', () => {
+    // la URL de prod con ENV=staging y sin firma: NO arranca
+    expect(() => loadAgenteConfig({ ...ENV_OK, ENV: 'staging', INGEST_URL: URL_PROD })).toThrow(/no es STAGING/)
+    // con la firma pero la etiqueta mal: tampoco (el .env está mezclado)
+    expect(() => loadAgenteConfig({ ...ENV_OK, ENV: 'staging', INGEST_URL: URL_PROD, [FIRMA_PROD]: 'x' })).toThrow(/no coincide/)
+    expect(() => loadAgenteConfig({ ...ENV_OK, ENV: 'production', [FIRMA_PROD]: 'x' })).toThrow(/no coincide/)
+    // cualquier otro host (no solo prod) exige la firma
+    expect(() => loadAgenteConfig({ ...ENV_OK, INGEST_URL: 'https://otro.example.com/ingest' })).toThrow(/no es STAGING/)
   })
 
   it('el secreto viaja en un header: sin https no arranca', () => {

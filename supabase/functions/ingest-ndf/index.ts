@@ -26,9 +26,12 @@
 // los inyecta Supabase sola. Si `POS_INGEST_SECRET` NO está cargado, la función responde 401 a TODO
 // (fail-closed): nunca queda abierta por un secret faltante.
 //
-// ⛔ NO DESPLEGADA. Se entrega en rama (`feat/pos-bridge-a1a2`) junto con la mig 062, que tampoco
-//    está aplicada. El deploy va DESPUÉS de aplicar la migración (si no, la función escribe contra
-//    tablas que no existen). Ver el README de esta carpeta.
+// ── ESTADO DEL DESPLIEGUE (CLUB-AUD-28, verificado el 07-nov-2026 por la Management API) ───────────────
+//   · STAGING (hwiatgicyyqyezqwldia): v12, desplegada el 07-nov 14:41 UTC desde `claude/puente-item11` @ c7d206e
+//     (ítem 11 + área de la mesa; el Edge de 283e3c4 es idéntico). verify_jwt = false.
+//   · PROD: la versión anterior al ítem 11. El pase va con firma y en el orden del RUNBOOK del Club
+//     (docs/club-satori/RUNBOOK-piloto.md): la mig 081 SIEMPRE antes que este Edge.
+//   · El secreto por local (POS_INGEST_SECRETS, ronda 3) está en esta rama y NO desplegado todavía.
 //
 // ── CONTRATO CON EL AGENTE (A3) ────────────────────────────────────────────────────────────
 // POST /ingest-ndf
@@ -43,6 +46,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 import {
   fusionarCursor,
+  localDelSecreto,
   normalizarLote,
   validarPayload,
   type CursorRow,
@@ -53,6 +57,8 @@ import {
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const POS_INGEST_SECRET = Deno.env.get('POS_INGEST_SECRET') ?? ''
+// CLUB-AUD-32: un secreto por local, JSON {"santa-teresa": "…", "nosara": "…"}. Si está, manda sobre el de arriba.
+const POS_INGEST_SECRETS = Deno.env.get('POS_INGEST_SECRETS') ?? ''
 
 /** Tamaño de tanda para los INSERT. Un día grande son miles de líneas. */
 const CHUNK = 500
@@ -107,11 +113,14 @@ Deno.serve(async (req) => {
     // ── 2. Portón: secreto compartido ────────────────────────────────────────────────────
     // FAIL-CLOSED: si el secret no está cargado, 401 a todo. Sin este guard, un secret vacío +
     // header ausente daría `safeEqual('', '')` = true y la función quedaría ABIERTA a internet.
-    if (!POS_INGEST_SECRET) {
-      console.error('ingest-ndf: POS_INGEST_SECRET no está cargado — rechazando todo (fail-closed)')
+    if (!POS_INGEST_SECRET && !POS_INGEST_SECRETS) {
+      console.error('ingest-ndf: no hay secreto cargado — rechazando todo (fail-closed)')
       return json({ ok: false, error: 'No autorizado' }, 401)
     }
-    if (!safeEqual(req.headers.get('x-ingest-secret') ?? '', POS_INGEST_SECRET)) {
+    // CLUB-AUD-32: el secreto decide el local (mapa por local; el secreto único vale solo para santa-teresa).
+    const localAutorizado = localDelSecreto(req.headers.get('x-ingest-secret') ?? '',
+      { mapa: POS_INGEST_SECRETS, legado: POS_INGEST_SECRET, localLegado: 'santa-teresa' }, safeEqual)
+    if (!localAutorizado) {
       // Mismo mensaje para "falta" y "no coincide": no se le confirma nada al que prueba.
       return json({ ok: false, error: 'No autorizado' }, 401)
     }
@@ -126,6 +135,10 @@ Deno.serve(async (req) => {
     const sobre = validarPayload(body)
     if (!sobre.ok) return json({ ok: false, error: sobre.error }, 400)
     local = sobre.valor.local
+    if (local !== localAutorizado) {
+      // un secreto de un local no escribe en otro
+      return json({ ok: false, error: 'No autorizado' }, 401)
+    }
 
     // ── 4. Normalizar (todo el trabajo lo hace el módulo puro) ───────────────────────────
     // Un ticket corrupto NO tumba el lote: se descarta, se cuenta y se loguea. Si un solo registro

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import {
+  localDelSecreto,
   CR_OFFSET,
   MAX_TICKETS,
   conOffsetCR,
@@ -541,5 +542,26 @@ describe('ítem 11 · mesa de la factura, consecutivo, clave y apertura del pedi
     expect(r.ok && r.valor.area).toBe('3')
     const s = normalizarOpen('santa-teresa', { clave: 'pedido:14', pedido_abierto_en: '18:39' }, '2026-11-06T01:00:00.000Z')
     expect(s.ok && s.valor.pedido_abierto_en).toBeNull()
+  })
+})
+
+describe('CLUB-AUD-32: un secreto por local', () => {
+  const igual = (a: string, b: string) => a === b
+  const S = 'a'.repeat(40), N = 'b'.repeat(40)
+  const mapa = JSON.stringify({ 'santa-teresa': S, nosara: N })
+  it('el secreto decide el local', () => {
+    expect(localDelSecreto(S, { mapa }, igual)).toBe('santa-teresa')
+    expect(localDelSecreto(N, { mapa }, igual)).toBe('nosara')
+    expect(localDelSecreto('c'.repeat(40), { mapa }, igual)).toBeNull()
+    expect(localDelSecreto('', { mapa }, igual)).toBeNull()
+  })
+  it('sin mapa, el secreto viejo vale solo para santa-teresa; sin nada, nada (fail-closed)', () => {
+    expect(localDelSecreto(S, { legado: S }, igual)).toBe('santa-teresa')
+    expect(localDelSecreto(S, {}, igual)).toBeNull()
+    expect(localDelSecreto('', { legado: '' }, igual)).toBeNull()
+  })
+  it('un mapa roto o con secretos cortos no autoriza', () => {
+    expect(localDelSecreto(S, { mapa: '{roto', legado: S }, igual)).toBeNull()
+    expect(localDelSecreto('corto', { mapa: JSON.stringify({ 'santa-teresa': 'corto' }) }, igual)).toBeNull()
   })
 })

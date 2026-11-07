@@ -724,3 +724,31 @@ export function normalizarLote(p: PayloadValidado, ahora: string): LoteNormaliza
     problemas,
   }
 }
+
+/**
+ * CLUB-AUD-32: un secreto por local. `POS_INGEST_SECRETS` es un JSON `{"santa-teresa": "…", "nosara": "…"}`; el
+ * secreto que llega en el header decide el local, y el sobre tiene que ser de ESE local. Si no está el mapa,
+ * vale el secreto único de antes (`POS_INGEST_SECRET`), pero solo para `localLegado` (hoy, santa-teresa).
+ * Devuelve el local autorizado o `null` (401). Sin nada configurado: `null` siempre (fail-closed).
+ */
+export function localDelSecreto(
+  header: string,
+  cfg: { mapa?: string | null; legado?: string | null; localLegado?: string },
+  igual: (a: string, b: string) => boolean,
+): string | null {
+  if (!header) return null
+  const mapaTxt = (cfg.mapa ?? '').trim()
+  if (mapaTxt) {
+    let mapa: Record<string, unknown>
+    try { mapa = JSON.parse(mapaTxt) } catch { return null }
+    let elegido: string | null = null
+    for (const [local, sec] of Object.entries(mapa)) {
+      // se comparan todos (tiempo parejo); secretos cortos no valen
+      if (typeof sec === 'string' && sec.length >= 32 && LOCALES.has(local) && igual(header, sec)) elegido = local
+    }
+    return elegido
+  }
+  const legado = (cfg.legado ?? '').trim()
+  if (legado && igual(header, legado)) return cfg.localLegado ?? 'santa-teresa'
+  return null
+}

@@ -64,3 +64,22 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **Pantalla:** en Reportes, «Simular vencimiento» → lista → «Confirmar», solo para el owner.
 - **Pruebas:** 36. La batería da 174/174.
 - **⚠️ Regla para todas las sesiones de Claude Code:** nunca correr `club_vencer` fuera de una transacción que termine en ROLLBACK. Vence todas las cuentas del local, no una (el 07-nov venció por error 115 cuentas de staging; se revirtió).
+
+**Revisión técnica del 07-nov (Grok, CLUB-AUD-14..23): corregida en staging**
+- **Migrador (19 a 23):**
+  - valida dentro de la transacción y aborta si algo no cuadra (`--apply` exige `--esperados`; `--ensayo` = todo + ROLLBACK);
+  - los errores muestran solo el SQLSTATE;
+  - verifica el manifiesto, el negocio y los vencimientos;
+  - usa una sola definición de PM;
+  - conserva id, código y token al volver a migrar.
+  - Pruebas: `scripts/club/test_migrar_firestore.py`, con un export sintético.
+- **15:** visita canónica. Pedido, factura del plan B y factura tipeada dan la misma clave (`pedido:N@apertura`, o `factura:N`).
+- **16:** cierres inmutables (trigger contra UPDATE, DELETE y TRUNCATE), hash sin `generado_en` y encadenado (`sha256_prev`).
+- **18:** el local sale del miembro o del cupón, no del cliente.
+- **17:** paridad de esquema. La 075 final aplicada desde cero es igual a staging: `scripts/sql/club_paridad.sh` da 0 diferencias en 392 objetos.
+- **Carreras de dos sesiones, versionadas:** `scripts/sql/club_carreras/`.
+- **06 (opción A):** clave compartida en el header `x-club-web`; en la base se guarda solo su sha256 (`club_web_clave`). Además, un tope global de cupones por local y por minuto.
+- **14:** `club-web` exige el binding `RATE_LIMITER` y `CLUB_WEB_KEY`; si falta alguno, responde 503.
+- **13:** EXPLAIN en [EXPLAIN-AUD-13.md](EXPLAIN-AUD-13.md).
+- **Pruebas:** 194/194 en staging.
+- **Pendiente de Ismael:** cargar `CLUB_WEB_KEY` en Cloudflare y su sha256 en Supabase (pasos en `club-web/README.md`). Hasta entonces, las funciones públicas fallan cerradas.

@@ -47,7 +47,9 @@ drop function if exists public.club_canje(uuid, numeric, text, uuid, jsonb);
 drop function if exists public.club_canje(uuid, numeric, text, uuid);
 drop function if exists public.club_cupon_usar(text, int, text, uuid, jsonb);
 drop function if exists public.club_cupon_usar(text, int, text, uuid);
+drop function if exists public.club_pos_ref(jsonb, text);
 drop function if exists public.club_pos_ref(jsonb);
+drop function if exists public.club_visita_canonica(text, jsonb, text);
 drop function if exists public.club_cupon_crear(text, jsonb);
 drop function if exists public.club_saldo_personas(uuid);
 
@@ -55,6 +57,10 @@ drop view if exists public.club_saldos;
 
 drop table if exists public.club_excepciones_resueltas;
 drop table if exists public.club_reportes_cerrados;
+drop table if exists public.club_web_clave;
+drop function if exists public.club_web_ok();
+drop function if exists public.club_web_clave_cargar(text);
+drop function if exists public.club_reportes_cerrados_inmutable();
 drop table if exists public.club_cupones_contactos;
 drop table if exists public.club_cruces_manuales;
 drop table if exists public.club_config_historial;

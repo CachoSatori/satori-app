@@ -400,6 +400,68 @@ as $$
   select coalesce(sum(personas), 0)::int from public.club_movimientos where miembro_id = p_miembro;
 $$;
 
+
+-- ── CLUB-AUD-06 (opción A, revisión del 07-nov): una sola puerta pública ───────────────────────────
+-- Las 4 funciones públicas exigen el header `x-club-web` con la clave que solo tiene club-web (secreto
+-- CLUB_WEB_KEY en Cloudflare). Acá se guarda solo su sha256. Sin el header correcto, responden el MISMO
+-- error de siempre (no se distingue). La anon key sola ya no alcanza para llamarlas directo.
+create table if not exists public.club_web_clave (
+  id          bigint generated always as identity primary key,
+  sha256      text not null unique check (sha256 ~ '^[0-9a-f]{64}$'),
+  creada_en   timestamptz not null default now(),
+  revocada_en timestamptz
+);
+alter table public.club_web_clave enable row level security;
+revoke all on public.club_web_clave from public, anon, authenticated;
+
+-- ¿El pedido trae la clave vigente? Fail-closed: sin clave cargada, sin header o sin coincidencia → false.
+create or replace function public.club_web_ok()
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_h text;
+begin
+  begin
+    v_h := nullif(current_setting('request.headers', true), '')::json->>'x-club-web';
+  exception when others then
+    return false;
+  end;
+  if v_h is null or length(v_h) not between 32 and 256 then
+    return false;
+  end if;
+  return exists (select 1 from public.club_web_clave k
+                  where k.revocada_en is null and k.sha256 = encode(extensions.digest(v_h, 'sha256'), 'hex'));
+end;
+$$;
+
+-- Cargar o rotar la clave: SOLO desde el editor SQL de Supabase (postgres), con el sha256 de la clave
+-- (nunca la clave). Revoca las anteriores: la vieja deja de valer en ese momento.
+create or replace function public.club_web_clave_cargar(p_sha256 text)
+returns int
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_h text := lower(btrim(coalesce(p_sha256, '')));
+begin
+  if v_h !~ '^[0-9a-f]{64}$' then
+    raise exception 'Tiene que ser el sha256 de la clave (64 hex), no la clave' using errcode = 'P0001';
+  end if;
+  update public.club_web_clave set revocada_en = now() where revocada_en is null and sha256 <> v_h;
+  insert into public.club_web_clave (sha256) values (v_h) on conflict (sha256) do update set revocada_en = null;
+  return (select count(*)::int from public.club_web_clave where revocada_en is null);
+end;
+$$;
+
+-- Tope global por local y por minuto en club_cupon_crear (además del tope por referente y por día).
+alter table public.club_config add column if not exists cupones_max_minuto_local int not null default 20
+  check (cupones_max_minuto_local between 1 and 1000);
+create index if not exists club_cupones_local_creado_idx on public.club_cupones (location_id, creado_en);
+
 -- 4.1 Cupón del turista (PÚBLICA: anon y authenticated).
 create or replace function public.club_cupon_crear(p_codigo_referente text, p_contacto jsonb default null)
 returns table (codigo text, vence_en timestamptz)
@@ -421,6 +483,9 @@ declare
   v_cupon   public.club_cupones%rowtype;
   i int;
 begin
+  if not public.club_web_ok() then   -- CLUB-AUD-06: solo por club-web
+    raise exception 'Código no válido' using errcode = 'P0001';
+  end if;
   -- Código del referente: formato y existencia con el MISMO error (no se distingue).
   if v_cod !~ '^[A-HJ-NP-Z2-9]{8}$' then
     raise exception 'Código no válido' using errcode = 'P0001';
@@ -436,6 +501,12 @@ begin
     raise exception 'Código no válido' using errcode = 'P0001';
   end if;
 
+  -- CLUB-AUD-06: tope global por local y por minuto (red de seguridad aunque se filtre la clave).
+  perform pg_advisory_xact_lock(hashtextextended('club_cupon_local:' || v_ref.location_id, 0));
+  if (select count(*) from public.club_cupones c
+       where c.location_id = v_ref.location_id and c.creado_en >= now() - interval '1 minute') >= v_cfg.cupones_max_minuto_local then
+    raise exception 'Demasiados cupones en este momento' using errcode = 'P0001';
+  end if;
   -- Tope por referente por día (día de Costa Rica). Lock por referente contra carreras.
   perform pg_advisory_xact_lock(hashtextextended('club_cupon:' || v_ref.id::text, 0));
   v_hoy := date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica';
@@ -532,9 +603,46 @@ create index if not exists club_mov_visita_tarjeta_idx on public.club_movimiento
 --                                                  total, `abierto_en` (apertura del pedido) y `hora` =
 --                                                  hora del escaneo (la del servidor, no la del cliente).
 --   {modo:'factura', numero_factura[, local]}   → plan B: factura cerrada de las últimas 2 h (cruce exacto).
--- Devuelve además `visita`: la clave de la visita (máximo de créditos por visita).
--- `local` por defecto 'santa-teresa' (el piloto es de un solo local).
-create or replace function public.club_pos_ref(p jsonb)
+-- Devuelve además `visita`: la clave CANÓNICA de la visita (club_visita_canonica, CLUB-AUD-15).
+-- CLUB-AUD-18: el local es el del miembro o del cupón (p_location), no el que mande el cliente; si el
+-- cliente manda otro, se rechaza.
+-- CLUB-AUD-15: la clave de una visita es la misma por cualquier camino (pedido abierto, factura del
+-- plan B o factura tipeada): el pedido con su apertura cuando se conoce; si no, la factura.
+create or replace function public.club_visita_canonica(p_location text, p_pos jsonb, p_factura text)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  t      public.pos_ndf_tickets%rowtype;
+  v_cl   text;
+begin
+  if p_pos is not null and p_pos->>'modo' = 'pedido' then
+    return format('pedido:%s@%s', p_pos->>'pedido',
+                  to_char((p_pos->>'abierto_en')::timestamptz at time zone 'UTC', 'YYYYMMDD"T"HH24MISS'));
+  end if;
+  if p_pos is not null and p_pos->>'modo' = 'factura' then
+    v_cl := ltrim(p_pos->>'numero_factura', '0');
+  else
+    v_cl := public.club_factura_clave(p_factura);
+  end if;
+  if v_cl is null then
+    return null;
+  end if;
+  select * into t from public.pos_ndf_tickets x
+   where x.local = p_location and ltrim(x.numero_factura, '0') = v_cl
+   order by (x.estado = 'C') desc limit 1;
+  if found and t.numero_pedido is not null and t.pedido_abierto_en is not null then
+    return format('pedido:%s@%s', t.numero_pedido, to_char(t.pedido_abierto_en at time zone 'UTC', 'YYYYMMDD"T"HH24MISS'));
+  end if;
+  return 'factura:' || v_cl;
+end;
+$$;
+
+drop function if exists public.club_pos_ref(jsonb);
+create or replace function public.club_pos_ref(p jsonb, p_location text)
 returns jsonb
 language plpgsql
 stable
@@ -548,7 +656,7 @@ declare
   v_nf    text;
   o       public.pos_ndf_open%rowtype;
   t       public.pos_ndf_tickets%rowtype;
-  v_hoy   date := (now() at time zone 'America/Costa_Rica')::date;
+  r       jsonb;
 begin
   if p is null or p = '{}'::jsonb or jsonb_typeof(p) = 'null' then
     return null;
@@ -557,7 +665,10 @@ begin
     raise exception 'Pedido no válido' using errcode = 'P0001';
   end if;
   v_modo  := p->>'modo';
-  v_local := coalesce(nullif(btrim(p->>'local'), ''), 'santa-teresa');
+  v_local := p_location;
+  if v_local is null or (nullif(btrim(p->>'local'), '') is not null and btrim(p->>'local') <> v_local) then
+    raise exception 'Pedido no válido' using errcode = 'P0001';   -- CLUB-AUD-18
+  end if;
   if v_modo = 'pedido' then
     v_ped := btrim(coalesce(p->>'pedido', ''));
     if v_ped !~ '^[0-9A-Za-z]{1,20}$' then
@@ -570,12 +681,12 @@ begin
     end if;
     -- `abierto_en` = FAC_Pedidos.FechaRegistra (mig 081). Antes de la 081 el agente ya mandaba esa
     -- misma hora en `updated_at`, por eso es el respaldo.
-    return jsonb_build_object('modo', 'pedido', 'local', v_local, 'pedido', v_ped,
-                              'mesa', nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
-                              'total', o.monto_estimado_crc, 'visto', o.updated_at,
-                              'pax', coalesce(nullif(o.pax, 0), nullif(o.pax_pedido, 0)),
-                              'abierto_en', coalesce(o.pedido_abierto_en, o.updated_at), 'hora', now(),
-                              'visita', format('pedido:%s:%s', v_hoy, v_ped));
+    r := jsonb_build_object('modo', 'pedido', 'local', v_local, 'pedido', v_ped,
+                            'mesa', nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
+                            'total', o.monto_estimado_crc, 'visto', o.updated_at,
+                            'pax', coalesce(nullif(o.pax, 0), nullif(o.pax_pedido, 0)),
+                            'abierto_en', coalesce(o.pedido_abierto_en, o.updated_at), 'hora', now());
+    return r || jsonb_build_object('visita', public.club_visita_canonica(v_local, r, null));
   elsif v_modo = 'factura' then
     v_nf := btrim(coalesce(p->>'numero_factura', ''));
     if v_nf !~ '^[0-9]{1,30}$' then
@@ -589,11 +700,11 @@ begin
     if t.fecha_registra < now() - interval '2 hours 15 minutes' then
       raise exception 'Esa factura tiene más de 2 horas: la resuelve el manager en Excepciones' using errcode = 'P0001';
     end if;
-    return jsonb_build_object('modo', 'factura', 'local', v_local, 'numero_factura', v_nf,
-                              'mesa', nullif(upper(btrim(coalesce(t.mesa_factura, t.mesa, ''))), ''), 'total', t.total_crc,
-                              'pax', nullif(t.pax, 0),
-                              'hora_factura', t.fecha_registra, 'hora', now(),
-                              'visita', format('factura:%s', v_nf));
+    r := jsonb_build_object('modo', 'factura', 'local', v_local, 'numero_factura', v_nf,
+                            'mesa', nullif(upper(btrim(coalesce(t.mesa_factura, t.mesa, ''))), ''), 'total', t.total_crc,
+                            'pax', nullif(t.pax, 0),
+                            'hora_factura', t.fecha_registra, 'hora', now());
+    return r || jsonb_build_object('visita', public.club_visita_canonica(v_local, r, null));
   end if;
   raise exception 'Pedido no válido' using errcode = 'P0001';
 end;
@@ -656,7 +767,8 @@ declare
   v_rol     public.user_role := public.get_my_role();
   v_cod     text := upper(btrim(coalesce(p_codigo, '')));
   v_fac     text := public.club_norm_factura(p_factura);
-  v_pos     jsonb := public.club_pos_ref(p_pos);
+  v_pos     jsonb;
+  v_sin_pos boolean := p_pos is null or p_pos = '{}'::jsonb or jsonb_typeof(p_pos) = 'null';
   v_cupon   public.club_cupones%rowtype;
   v_ref     public.club_miembros%rowtype;
   v_cfg     public.club_config%rowtype;
@@ -689,7 +801,7 @@ begin
   if p_personas is null or p_personas < 1 or p_personas > 30 then
     raise exception 'Personas fuera de rango (1 a 30)' using errcode = 'P0001';
   end if;
-  if v_pos is null and (v_fac = '' or length(v_fac) > 40) then
+  if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
     raise exception 'Falta el número de factura' using errcode = 'P0001';
   end if;
 
@@ -705,8 +817,10 @@ begin
   end if;
 
   -- CLUB-AUD-02: control de la visita (lock, una tarjeta por referente, Σ personas ≤ pax).
-  perform public.club_visita_control(v_cupon.location_id, coalesce(v_pos->>'visita', v_fac), v_pos, v_fac,
-                                     v_cupon.referente_id, p_personas);
+  v_pos := public.club_pos_ref(p_pos, v_cupon.location_id);   -- CLUB-AUD-18: local del cupón
+  perform public.club_visita_control(v_cupon.location_id,
+                                     coalesce(v_pos->>'visita', public.club_visita_canonica(v_cupon.location_id, null, v_fac)),
+                                     v_pos, v_fac, v_cupon.referente_id, p_personas);
   -- CLUB-AUD-07: el miembro se bloquea (cupón → visita → miembro) y recién ahí se mira si sigue activo:
   -- una baja simultánea ya no deja un miembro de baja con saldo.
   select * into v_ref from public.club_miembros m where m.id = v_cupon.referente_id for update;
@@ -725,7 +839,8 @@ begin
      factura_pos, cupon_id, fecha_visita, registrado_por, origen, client_op_id, pos_ref, visita_clave)
   values
     (v_cupon.location_id, v_ref.id, 'tarjeta', p_personas, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
-     nullif(v_fac, ''), v_cupon.id, now(), auth.uid(), 'app', p_op, v_pos, coalesce(v_pos->>'visita', v_fac));
+     nullif(v_fac, ''), v_cupon.id, now(), auth.uid(), 'app', p_op, v_pos,
+     coalesce(v_pos->>'visita', public.club_visita_canonica(v_cupon.location_id, null, v_fac)));
 
   v_saldo := public.club_saldo_personas(v_ref.id);
   miembro_id := v_ref.id; personas := v_saldo;
@@ -746,7 +861,8 @@ as $$
 declare
   v_rol      public.user_role := public.get_my_role();
   v_fac      text := public.club_norm_factura(p_factura);
-  v_pos      jsonb := public.club_pos_ref(p_pos);
+  v_pos      jsonb;
+  v_sin_pos  boolean := p_pos is null or p_pos = '{}'::jsonb or jsonb_typeof(p_pos) = 'null';
   v_visita   text;
   v_m        public.club_miembros%rowtype;
   v_cfg      public.club_config%rowtype;
@@ -793,10 +909,11 @@ begin
     raise exception 'Créditos no válidos: de % a %, de a %',
       v_cfg.canje_min, v_cfg.max_creditos_por_visita, v_cfg.canje_paso using errcode = 'P0001';
   end if;
-  if v_pos is null and (v_fac = '' or length(v_fac) > 40) then
+  if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
     raise exception 'Falta el número de factura' using errcode = 'P0001';
   end if;
-  v_visita := coalesce(v_pos->>'visita', v_fac);
+  v_pos := public.club_pos_ref(p_pos, v_m.location_id);   -- CLUB-AUD-18: local del miembro
+  v_visita := coalesce(v_pos->>'visita', public.club_visita_canonica(v_m.location_id, null, v_fac));
 
   v_necesita := p_creditos * v_cfg.personas_por_credito;
   if v_necesita <> trunc(v_necesita) then
@@ -924,6 +1041,9 @@ declare
   v_saldo int;
   v_movs  jsonb;
 begin
+  if not public.club_web_ok() then   -- CLUB-AUD-06: solo por club-web
+    raise exception 'Enlace no válido' using errcode = 'P0001';
+  end if;
   if v_tok !~ '^[0-9a-f]{64}$' then
     raise exception 'Enlace no válido' using errcode = 'P0001';
   end if;
@@ -1340,7 +1460,9 @@ as $$
 declare
   v_rol   public.user_role := public.get_my_role();
   v_fac   text := public.club_norm_factura(p_factura);
-  v_pos   jsonb := public.club_pos_ref(p_pos);
+  v_pos   jsonb;
+  v_loc   text;
+  v_sin_pos boolean := p_pos is null or p_pos = '{}'::jsonb or jsonb_typeof(p_pos) = 'null';
   v_m     public.club_miembros%rowtype;
   v_cfg   public.club_config%rowtype;
   v_prev  public.club_movimientos%rowtype;
@@ -1368,13 +1490,16 @@ begin
   if p_personas is null or p_personas < 1 or p_personas > 30 then
     raise exception 'Personas fuera de rango (1 a 30)' using errcode = 'P0001';
   end if;
-  if v_pos is null and (v_fac = '' or length(v_fac) > 40) then
+  if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
     raise exception 'Falta el número de factura' using errcode = 'P0001';
   end if;
 
-  -- CLUB-AUD-02: control de la visita ANTES del lock del miembro (orden visita → miembro).
-  perform public.club_visita_control(coalesce((select m.location_id from public.club_miembros m where m.id = p_miembro), 'santa-teresa'),
-                                     coalesce(v_pos->>'visita', v_fac), v_pos, v_fac, p_miembro, p_personas);
+  -- CLUB-AUD-18: el local es el del miembro. CLUB-AUD-02: control de la visita ANTES del lock del
+  -- miembro (orden visita → miembro).
+  v_loc := coalesce((select m.location_id from public.club_miembros m where m.id = p_miembro), 'santa-teresa');
+  v_pos := public.club_pos_ref(p_pos, v_loc);
+  perform public.club_visita_control(v_loc, coalesce(v_pos->>'visita', public.club_visita_canonica(v_loc, null, v_fac)),
+                                     v_pos, v_fac, p_miembro, p_personas);
   select * into v_m from public.club_miembros m where m.id = p_miembro for update;
   if not found or v_m.tipo not in ('referente','concierge_pm','equipo') then
     raise exception 'Miembro no encontrado' using errcode = 'P0001';
@@ -1390,7 +1515,8 @@ begin
      factura_pos, fecha_visita, registrado_por, origen, client_op_id, nota, pos_ref, visita_clave)
   values
     (v_m.location_id, p_miembro, 'tarjeta', p_personas, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
-     nullif(v_fac, ''), now(), auth.uid(), 'app', p_op, 'manual', v_pos, coalesce(v_pos->>'visita', v_fac));
+     nullif(v_fac, ''), now(), auth.uid(), 'app', p_op, 'manual', v_pos,
+     coalesce(v_pos->>'visita', public.club_visita_canonica(v_loc, null, v_fac)));
 
   v_saldo := public.club_saldo_personas(p_miembro);
   personas := v_saldo; creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
@@ -1602,6 +1728,9 @@ declare
   v_c   public.club_cupones%rowtype;
   v_m   public.club_miembros%rowtype;
 begin
+  if not public.club_web_ok() then   -- CLUB-AUD-06: solo por club-web
+    raise exception 'Cupón no válido' using errcode = 'P0001';
+  end if;
   if v_cod !~ '^[A-HJ-NP-Z2-9]{10}$' then
     raise exception 'Cupón no válido' using errcode = 'P0001';
   end if;
@@ -1636,6 +1765,9 @@ declare
   v_wa     text;
   v_email  text;
 begin
+  if not public.club_web_ok() then   -- CLUB-AUD-06: solo por club-web
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
   if v_cod !~ '^[A-HJ-NP-Z2-9]{10}$' or p_contacto is null or jsonb_typeof(p_contacto) <> 'object' then
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
@@ -1761,6 +1893,9 @@ begin
   -- 1. principal: exacta por número + apertura; si la factura no trae la apertura, la primera.
   select t.id, t.fecha_registra into v_id, v_fr from public.pos_ndf_tickets t
    where t.local = p_location and t.estado = 'C' and t.numero_pedido = p_pos->>'pedido'
+     -- CLUB-AUD-13 (EXPLAIN 07-nov): el número de pedido se repite cada día; el rango de fecha usa el índice
+     -- (local, numero_pedido, fecha_registra) y no cambia el resultado (la factura es posterior a la apertura).
+     and t.fecha_registra >= least(v_abre, v_hora) - interval '2 minutes' and t.fecha_registra < v_hora + interval '18 hours'
      and (case when t.pedido_abierto_en is not null
                then abs(extract(epoch from t.pedido_abierto_en - v_abre)) < 2
                else t.fecha_registra >= least(v_abre, v_hora) - interval '2 minutes'
@@ -1782,6 +1917,9 @@ begin
            case when exists (
              select 1 from public.pos_ndf_tickets o
               where o.local = p_location and o.estado = 'C' and o.numero_pedido is not null and o.id <> v_id
+                -- CLUB-AUD-13: acotado por fecha (índice (local, fecha_registra)); un pedido dura menos de 18 h
+                and o.fecha_registra >= t.fecha_registra - interval '30 minutes'
+                and o.fecha_registra <= t.fecha_registra + interval '18 hours'
                 and nullif(ltrim(upper(btrim(coalesce(o.mesa_factura, o.mesa, ''))), '0'), '') = v_mesa
                 and t.fecha_registra >= coalesce(o.pedido_abierto_en, o.fecha_registra) - interval '2 minutes'
                 and t.fecha_registra <= o.fecha_registra + interval '30 minutes')
@@ -2205,6 +2343,27 @@ create table if not exists public.club_reportes_cerrados (
   cerrado_en   timestamptz not null default now(),
   unique (location_id, mes, version)
 );
+-- CLUB-AUD-16: encadenado (el hash de cada cierre incluye el del anterior del local) e inmutable: ni
+-- UPDATE, ni DELETE, ni TRUNCATE, tampoco para el dueño de la tabla. Para corregir hay que borrar el
+-- trigger, y eso queda en el log de DDL.
+alter table public.club_reportes_cerrados add column if not exists sha256_prev text
+  check (sha256_prev is null or sha256_prev ~ '^[0-9a-f]{64}$');
+create or replace function public.club_reportes_cerrados_inmutable()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  raise exception 'Los cierres de mes son inmutables: para corregir se recierra (versión nueva con motivo)'
+    using errcode = 'P0001';
+end;
+$$;
+drop trigger if exists club_reportes_cerrados_inmutable_trg on public.club_reportes_cerrados;
+create trigger club_reportes_cerrados_inmutable_trg before update or delete on public.club_reportes_cerrados
+  for each row execute function public.club_reportes_cerrados_inmutable();
+drop trigger if exists club_reportes_cerrados_truncate_trg on public.club_reportes_cerrados;
+create trigger club_reportes_cerrados_truncate_trg before truncate on public.club_reportes_cerrados
+  for each statement execute function public.club_reportes_cerrados_inmutable();
 alter table public.club_reportes_cerrados enable row level security;
 revoke all on public.club_reportes_cerrados from public, anon, authenticated;
 grant select on public.club_reportes_cerrados to authenticated;
@@ -2242,7 +2401,8 @@ begin
   v_mes  := date_trunc('month', coalesce(p_mes, now()::date))::date;
   -- Mes cerrado → la última versión congelada (CLUB-AUD-04).
   select rc.datos || jsonb_build_object('cerrado', true, 'version', rc.version, 'sha256', rc.sha256,
-                                        'cerrado_en', rc.cerrado_en, 'motivo', rc.motivo)
+                                        'sha256_prev', rc.sha256_prev, 'cerrado_en', rc.cerrado_en, 'motivo', rc.motivo,
+                                        'generado_en', rc.cerrado_en)   -- fuera del hash (CLUB-AUD-16)
     into r
     from public.club_reportes_cerrados rc
    where rc.location_id = p_location and rc.mes = v_mes and not coalesce(p_vivo, false)
@@ -2380,6 +2540,7 @@ declare
   v_ver    int;
   v_datos  jsonb;
   v_hash   text;
+  v_prev   text;
 begin
   if v_rol is null or v_rol <> 'owner' then
     raise exception 'Sin permiso' using errcode = '42501';
@@ -2396,11 +2557,15 @@ begin
   if v_motivo is not null and length(v_motivo) > 500 then
     raise exception 'El motivo es de hasta 500 caracteres' using errcode = 'P0001';
   end if;
-  v_datos := public.club_reporte_mes(v_mes, p_location, true) - 'cerrado';
-  v_hash  := encode(extensions.digest(v_datos::text, 'sha256'), 'hex');
-  insert into public.club_reportes_cerrados (location_id, mes, version, datos, sha256, motivo, cerrado_por)
-  values (p_location, v_mes, v_ver, v_datos, v_hash, v_motivo, auth.uid());
-  return v_datos || jsonb_build_object('cerrado', true, 'version', v_ver, 'sha256', v_hash, 'motivo', v_motivo);
+  -- CLUB-AUD-16: sin `generado_en` (así el hash se puede recomputar desde la fila) y encadenado con el
+  -- último cierre del local (cualquier mes): sha256 = sha256(sha256_prev || datos).
+  v_datos := public.club_reporte_mes(v_mes, p_location, true) - 'cerrado' - 'generado_en';
+  perform pg_advisory_xact_lock(hashtextextended('club_cierre_cadena:' || p_location, 0));
+  select rc.sha256 into v_prev from public.club_reportes_cerrados rc where rc.location_id = p_location order by rc.id desc limit 1;
+  v_hash  := encode(extensions.digest(coalesce(v_prev, '') || v_datos::text, 'sha256'), 'hex');
+  insert into public.club_reportes_cerrados (location_id, mes, version, datos, sha256, sha256_prev, motivo, cerrado_por)
+  values (p_location, v_mes, v_ver, v_datos, v_hash, v_prev, v_motivo, auth.uid());
+  return v_datos || jsonb_build_object('cerrado', true, 'version', v_ver, 'sha256', v_hash, 'sha256_prev', v_prev, 'motivo', v_motivo);
 end;
 $$;
 
@@ -2452,8 +2617,11 @@ revoke all on function public.club_miembro_regenerar_codigo(uuid)         from p
 revoke all on function public.club_miembro_token(uuid)                    from public, anon, authenticated;
 revoke all on function public.club_buscar(text)                           from public, anon, authenticated;
 revoke all on function public.club_tarjeta_manual(uuid, int, text, uuid, jsonb) from public, anon, authenticated;
-revoke all on function public.club_pos_ref(jsonb) from public, anon, authenticated;
+revoke all on function public.club_pos_ref(jsonb, text) from public, anon, authenticated;
+revoke all on function public.club_visita_canonica(text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.club_visita_control(text, text, jsonb, text, uuid, int) from public, anon, authenticated;
+revoke all on function public.club_web_ok() from public, anon, authenticated;
+revoke all on function public.club_web_clave_cargar(text) from public, anon, authenticated;
 revoke all on function public.club_pedidos_abiertos(text) from public, anon, authenticated;
 grant execute on function public.club_pedidos_abiertos(text) to authenticated;
 revoke all on function public.club_facturas_recientes(text) from public, anon, authenticated;
@@ -2490,6 +2658,7 @@ revoke all on function public.club_excepcion_resolver(text, text, text, text) fr
 revoke all on function public.club_reporte_mes(date, text, boolean)   from public, anon, authenticated;
 revoke all on function public.club_reporte_cerrar(date, text, text)   from public, anon, authenticated;
 revoke all on function public.club_config_tasa_guardia()               from public, anon, authenticated;
+revoke all on function public.club_reportes_cerrados_inmutable()        from public, anon, authenticated;
 grant execute on function public.club_excepciones(date, date, text)   to authenticated;
 grant execute on function public.club_excepciones_abiertas(int, text) to authenticated;
 grant execute on function public.club_excepcion_resolver(text, text, text, text) to authenticated;

@@ -5,6 +5,10 @@
 begin;
 
 create temp table _res (n serial, prueba text, caso text, ok boolean, detalle text);
+-- CLUB-AUD-06: las funciones públicas exigen el header x-club-web. Clave de PRUEBA cargada dentro de esta
+-- transacción (el ROLLBACK la descarta) y enviada en el header, como lo hace club-web.
+select public.club_web_clave_cargar(encode(extensions.digest('clave-de-prueba-del-club-0123456789abcdef', 'sha256'), 'hex'));
+select set_config('request.headers', '{"x-club-web":"clave-de-prueba-del-club-0123456789abcdef"}', true);
 create temp table _ids (k text primary key, v text);
 grant select on _ids to anon, authenticated;
 
@@ -932,7 +936,7 @@ begin
   perform pg_temp.r('27', 'escaneo: guarda pedido, mesa, total, apertura del pedido y hora del escaneo (del servidor); sin factura tipeada',
     (select factura_pos is null and pos_ref->>'mesa' = '20' and (pos_ref->>'total')::numeric = 48500
             and (pos_ref->>'hora')::timestamptz = now() and (pos_ref->>'abierto_en')::timestamptz = now() - interval '50 minutes'
-            and visita_clave = format('pedido:%s:9014', v_hoy)
+            and visita_clave = 'pedido:9014@' || to_char((now() - interval '50 minutes') at time zone 'UTC', 'YYYYMMDD"T"HH24MISS')
        from club_movimientos where id = v_mv), (select pos_ref::text from club_movimientos where id = v_mv));
   perform pg_temp.r('27', 'pedido normal: sin factura todavía → no cruza', pg_temp.cruce(v_mv) = '', '');
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc) values
@@ -1015,19 +1019,22 @@ begin
   values (v_m, 'tarjeta', 2, 6, 18000, timestamptz '2026-11-05 19:00:00-06', timestamptz '2026-11-05 19:00:00-06', 'app',
           jsonb_build_object('modo','pedido','pedido','14','mesa','20','abierto_en','2026-11-05T18:39:48-06:00','hora','2026-11-05T19:00:00-06:00'), 'pedido:2026-11-05:14')
   returning id into v_m14;
-  perform pg_temp.r('27', 'real: pedido 14 del 05-nov → 112430 (sin la apertura en la factura, antes del backfill)', pg_temp.cruce(v_m14) = '112430', pg_temp.cruce(v_m14));
-  update pos_ndf_tickets set pedido_abierto_en = timestamptz '2026-11-05 18:39:48-06', mesa_factura = '20' where local = 'santa-teresa' and numero_factura = '112430';
-  perform pg_temp.r('27', 'real: pedido 14 del 05-nov → 112430 (con la apertura, como queda después del backfill)', pg_temp.cruce(v_m14) = '112430', pg_temp.cruce(v_m14));
-  --  · mesa 19 del 31-oct: pedido 33 (factura 112313, 22:20:44) cobrado con dos facturas sin pedido de la
-  --    mesa 19 (112310 22:17:35 y 112311 22:18:36). La mesa de la factura llega con el backfill: acá se
-  --    simula dentro de la transacción. Apertura del pedido 33: 21:30 (supuesta; el backfill trae la real).
-  update pos_ndf_tickets set mesa_factura = '19' where local = 'santa-teresa' and numero_factura in ('112310', '112311', '112313', '112293');
+  perform pg_temp.r('27', 'real: pedido 14 del 05-nov → 112430 (número + apertura exacta)', pg_temp.cruce(v_m14) = '112430', pg_temp.cruce(v_m14));
+  perform pg_temp.r('27', 'real (backfill): la 112430 trae la apertura 18:39:48 y la mesa 20 del PoS',
+    (select pedido_abierto_en = timestamptz '2026-11-05 18:39:48-06' and mesa_factura = '20' from pos_ndf_tickets where local = 'santa-teresa' and numero_factura = '112430'), '');
+  --  · mesa 19 del 31-oct, con los datos REALES del backfill del ítem 11 (07-nov): pedido 33, apertura y
+  --    mesa tomadas de su factura 112313. Ismael identificó 112310 y 112311 como la cuenta dividida; el
+  --    cruce además suma 112306 y 112308 (mesa 19, sin pedido, 22:10 y 22:13, dentro de la ventana):
+  --    pendientes de confirmar en el PoS. No entra la 112293 (pedido 21 de esa mesa, a las 20:06).
   insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
-  values (v_m, 'tarjeta', 2, 6, 18000, timestamptz '2026-10-31 21:45:00-06', timestamptz '2026-10-31 21:45:00-06', 'app',
-          jsonb_build_object('modo','pedido','pedido','33','mesa','19','abierto_en','2026-10-31T21:30:00-06:00','hora','2026-10-31T21:45:00-06:00'), 'pedido:2026-10-31:33')
+  select v_m, 'tarjeta', 2, 6, 18000, t.pedido_abierto_en + interval '10 minutes', t.pedido_abierto_en + interval '10 minutes', 'app',
+         jsonb_build_object('modo','pedido','pedido','33','mesa', t.mesa_factura, 'abierto_en', t.pedido_abierto_en,
+                            'hora', t.pedido_abierto_en + interval '10 minutes'), 'pedido:2026-10-31:33'
+    from pos_ndf_tickets t where t.local = 'santa-teresa' and t.numero_factura = '112313'
   returning id into v_m19;
-  perform pg_temp.r('27', 'real: mesa 19 del 31-oct → 112313 (pedido 33) + 112310 + 112311 (cuenta dividida); no la 112293 (pedido 21 de esa mesa)',
-    pg_temp.cruce(v_m19) = '112313+112310+112311', pg_temp.cruce(v_m19));
+  perform pg_temp.r('27', 'real (backfill): mesa 19 del 31-oct → principal 112313 y, entre las divididas, 112310 y 112311; no la 112293 (pedido 21)',
+    split_part(pg_temp.cruce(v_m19), '+', 1) = '112313' and pg_temp.cruce(v_m19) like '%112310%' and pg_temp.cruce(v_m19) like '%112311%'
+      and pg_temp.cruce(v_m19) not like '%112293%', pg_temp.cruce(v_m19));
 end $$;
 do $$
 declare j jsonb; v_c uuid := (select i.v::uuid from _ids i where i.k = 'ped_c'); v_mv uuid;
@@ -1351,7 +1358,8 @@ begin
   perform pg_temp.yo();
   perform pg_temp.r('34', 'mes cerrado: el reporte devuelve lo congelado (mismo sha256 y mismo pendiente PM) aunque después se pague, cambie el tipo y se resuelva una excepción',
     (v_b->>'cerrado')::boolean and v_b->>'sha256' = v_a->>'sha256' and v_b->'pm' = v_a->'pm'
-      and v_b->>'sha256' = encode(extensions.digest((v_b - 'cerrado' - 'version' - 'sha256' - 'cerrado_en' - 'motivo')::text, 'sha256'), 'hex'),
+      and v_b->>'sha256' = encode(extensions.digest(coalesce(v_b->>'sha256_prev', '')
+            || (v_b - 'cerrado' - 'version' - 'sha256' - 'sha256_prev' - 'cerrado_en' - 'motivo' - 'generado_en')::text, 'sha256'), 'hex'),
     format('hash %s', left(v_b->>'sha256', 12)));
   perform pg_temp.r('34', 'PM as-of: aun recalculado en vivo, el cargo pagado DESPUÉS del cierre sigue pendiente al cierre',
     (v_c->'pm'->>'pendiente_crc')::numeric = (v_a->'pm'->>'pendiente_crc')::numeric, format('%s vs %s', v_c->'pm'->>'pendiente_crc', v_a->'pm'->>'pendiente_crc'));
@@ -1460,6 +1468,167 @@ begin
   perform pg_temp.yo();
   perform pg_temp.r('36', 'confirmar con el número de la simulación → vence (y el miembro queda en 0)',
     v_venc = v_sim and public.club_saldo_personas(v_m) = 0, format('vencidas %s de %s', v_venc, v_sim));
+end $$;
+
+
+-- ═══ 37. CLUB-AUD-16: cierres inmutables y encadenados ═══
+do $$
+declare v_mes date := (date_trunc('month', now() at time zone 'America/Costa_Rica') - interval '2 months')::date; v1 jsonb; v2 jsonb; n int;
+begin
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  v1 := public.club_reporte_cerrar(v_mes, null);
+  v2 := public.club_reporte_cerrar(v_mes, 'recierre de prueba');
+  perform pg_temp.yo();
+  perform pg_temp.r('37', 'encadenado: el cierre nuevo guarda el sha256 del anterior y el hash se recomputa desde la fila (sin generado_en)',
+    v2->>'sha256_prev' = v1->>'sha256' and not (v1 ? 'generado_en')
+      and (select bool_and(sha256 = encode(extensions.digest(coalesce(sha256_prev, '') || datos::text, 'sha256'), 'hex')) from club_reportes_cerrados), '');
+  begin
+    update club_reportes_cerrados set datos = datos || '{"x":1}'::jsonb;   -- como postgres, dueño de la tabla
+    perform pg_temp.r('37', 'UPDATE de un cierre como dueño', false, 'editó');
+  exception when others then
+    perform pg_temp.r('37', 'UPDATE de un cierre, aun como dueño de la tabla → rechazado', sqlstate = 'P0001' and sqlerrm like 'Los cierres de mes son inmutables%', sqlerrm);
+  end;
+  begin
+    delete from club_reportes_cerrados;
+    perform pg_temp.r('37', 'DELETE de un cierre como dueño', false, 'borró');
+  exception when others then
+    perform pg_temp.r('37', 'DELETE de un cierre → rechazado', sqlstate = 'P0001' and sqlerrm like 'Los cierres de mes son inmutables%', sqlerrm);
+  end;
+  begin
+    truncate club_reportes_cerrados;
+    perform pg_temp.r('37', 'TRUNCATE de los cierres', false, 'vació');
+  exception when others then
+    perform pg_temp.r('37', 'TRUNCATE de los cierres → rechazado', sqlstate = 'P0001' and sqlerrm like 'Los cierres de mes son inmutables%', sqlerrm);
+  end;
+end $$;
+
+-- ═══ 38. CLUB-AUD-15: la misma visita tiene una sola clave por cualquier camino ═══
+-- Pedido 9401 (mesa 7, abierto hace 30 min) con su factura cerrada que ya trae la apertura.
+do $$
+declare v_a uuid; v_b uuid; v_ab timestamptz := now() - interval '30 minutes'; v_k1 text; v_k2 text; v_k3 text;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD15 A', 'app') returning id into v_a;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD15 B', 'app') returning id into v_b;
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en)
+  values ('santa-teresa', 'pedido:9401', '9401', '7', 'salon', 4, v_ab, v_ab);
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, pedido_abierto_en, total_crc, pax)
+  values ('990941', now() - interval '5 minutes', 'C', 'salon', 'cajero', true, 'ok', '7', '7', '9401', v_ab, 40000, 4);
+  v_k1 := public.club_visita_canonica('santa-teresa', public.club_pos_ref('{"modo":"pedido","pedido":"9401"}'::jsonb, 'santa-teresa'), null);
+  v_k2 := public.club_visita_canonica('santa-teresa', '{"modo":"factura","numero_factura":"990941"}'::jsonb, null);
+  v_k3 := public.club_visita_canonica('santa-teresa', null, ' FE-0990941 ');
+  perform pg_temp.r('38', 'pedido, factura del plan B y factura tipeada dan la MISMA clave de visita',
+    v_k1 = v_k2 and v_k2 = v_k3 and v_k1 like 'pedido:9401@%', format('%s | %s | %s', v_k1, v_k2, v_k3));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_tarjeta_manual(v_a, 3, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9401"}'::jsonb);
+  begin
+    perform public.club_tarjeta_manual(v_a, 1, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"990941"}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('38', 'mismo referente por otro camino', false, 'acreditó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('38', 'el mismo referente por el plan B (factura del mismo pedido) → «ya tiene una tarjeta en esta visita»',
+      sqlstate = 'P0001' and sqlerrm = 'Este referente ya tiene una tarjeta en esta visita', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual(v_a, 1, '0990941', gen_random_uuid());
+    perform pg_temp.yo(); perform pg_temp.r('38', 'mismo referente con la factura tipeada', false, 'acreditó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('38', 'el mismo referente con la factura tipeada → rechazado',
+      sqlstate = 'P0001' and sqlerrm = 'Este referente ya tiene una tarjeta en esta visita', sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual(v_b, 2, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"990941"}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('38', 'Σ personas entre caminos', false, 'acreditó 3 + 2 > 4');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('38', 'otro referente por el plan B: Σ personas se suma entre caminos (3 + 2 > 4 pax) → rechazado',
+      sqlstate = 'P0001' and sqlerrm like 'Supera las personas del pedido (4 pax; ya registradas 3)%', sqlerrm);
+  end;
+end $$;
+
+-- ═══ 39. CLUB-AUD-18: el local lo pone el miembro, no el cliente ═══
+do $$
+declare v_m uuid;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD18', 'app') returning id into v_m;
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9401","local":"nosara"}'::jsonb);
+    perform pg_temp.yo(); perform pg_temp.r('39', 'pos_ref con el local de otro', false, 'aceptó');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('39', 'pos_ref que dice otro local que el del miembro → «Pedido no válido»',
+      sqlstate = 'P0001' and sqlerrm = 'Pedido no válido', sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_tarjeta_manual(v_m, 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9401","local":"santa-teresa"}'::jsonb);
+  perform pg_temp.yo();
+  perform pg_temp.r('39', 'con el local del miembro (o sin local) se acepta y guarda el local del miembro',
+    (select pos_ref->>'local' from club_movimientos where miembro_id = v_m) = 'santa-teresa', '');
+end $$;
+
+
+-- ═══ 40. CLUB-AUD-06: una sola puerta pública (header x-club-web) + tope global por minuto ═══
+do $$
+declare v_cod text; v_cup text; v_ok text; i int;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD06', 'app') returning codigo into v_cod;
+  -- sin header (llamada directa con la anon key): el mismo error de siempre, en las 4
+  perform set_config('request.headers', '{}', true);
+  foreach v_ok in array array['crear','ver','contacto','portal'] loop
+    begin
+      perform pg_temp.como('anon', null);
+      case v_ok
+        when 'crear' then perform public.club_cupon_crear(v_cod, null);
+        when 'ver' then perform public.club_cupon_ver('AAAAAAAAAA');
+        when 'contacto' then perform public.club_cupon_contacto('AAAAAAAAAA', '{"whatsapp":"60000001","optin":true}'::jsonb);
+        else perform public.club_portal(repeat('a', 64));
+      end case;
+      perform pg_temp.yo(); perform pg_temp.r('40', v_ok || ' sin header', false, 'respondió');
+    exception when others then
+      perform pg_temp.yo(); perform pg_temp.r('40', v_ok || ' sin el header de club-web → el mismo error de siempre',
+        sqlstate = 'P0001' and sqlerrm in ('Código no válido', 'Cupón no válido', 'Datos no válidos', 'Enlace no válido'), sqlerrm);
+    end;
+  end loop;
+  -- con el header correcto: funciona
+  perform set_config('request.headers', '{"x-club-web":"clave-de-prueba-del-club-0123456789abcdef"}', true);
+  perform pg_temp.como('anon', null);
+  select c.codigo into v_cup from public.club_cupon_crear(v_cod, null) c;
+  perform pg_temp.yo();
+  perform pg_temp.r('40', 'con el header correcto → crea el cupón', v_cup ~ '^[A-HJ-NP-Z2-9]{10}$', coalesce(v_cup, ''));
+  -- rotación: la clave vieja deja de valer
+  perform public.club_web_clave_cargar(encode(extensions.digest('clave-nueva-del-club-rotada-fedcba9876543210', 'sha256'), 'hex'));
+  begin
+    perform pg_temp.como('anon', null);
+    perform public.club_cupon_crear(v_cod, null);
+    perform pg_temp.yo(); perform pg_temp.r('40', 'clave rotada', false, 'creó con la vieja');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('40', 'después de rotar, la clave vieja → «Código no válido»', sqlerrm = 'Código no válido', sqlerrm);
+  end;
+  perform set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+  perform pg_temp.como('anon', null);
+  select c.codigo into v_cup from public.club_cupon_crear(v_cod, null) c;
+  perform pg_temp.yo();
+  perform pg_temp.r('40', 'con la clave nueva → funciona', v_cup is not null, '');
+  begin
+    perform public.club_web_clave_cargar('la-clave-en-texto');
+    perform pg_temp.r('40', 'cargar la clave en texto', false, 'aceptó');
+  exception when others then
+    perform pg_temp.r('40', 'club_web_clave_cargar solo acepta el sha256, nunca la clave', sqlerrm like 'Tiene que ser el sha256%', sqlerrm);
+  end;
+  perform pg_temp.r('40', 'club_web_clave: nadie de la app la lee ni la escribe',
+    not has_table_privilege('anon', 'public.club_web_clave', 'SELECT') and not has_table_privilege('authenticated', 'public.club_web_clave', 'SELECT')
+      and not has_function_privilege('anon', 'public.club_web_clave_cargar(text)', 'EXECUTE')
+      and not has_function_privilege('authenticated', 'public.club_web_clave_cargar(text)', 'EXECUTE'), '');
+  -- tope global por local y por minuto
+  update club_config set cupones_max_minuto_local = 3, cupones_max_dia_referente = 100 where location_id = 'santa-teresa';
+  begin
+    perform pg_temp.como('anon', null);
+    for i in 1 .. 5 loop perform public.club_cupon_crear(v_cod, null); end loop;
+    perform pg_temp.yo(); perform pg_temp.r('40', 'tope global por minuto', false, 'creó 5 más');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('40', 'tope global por local y por minuto → «Demasiados cupones en este momento»',
+      sqlerrm = 'Demasiados cupones en este momento', sqlerrm);
+  end;
+  perform set_config('request.headers', '{"x-club-web":"clave-de-prueba-del-club-0123456789abcdef"}', true);
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

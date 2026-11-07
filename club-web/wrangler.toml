@@ -9,7 +9,15 @@ compatibility_date = "2025-10-01"
 #   SUPABASE_ANON_KEY  = anon key del mismo proyecto
 # Opcionales: RL_CREAR_MAX (5), RL_CREAR_VENTANA_S (600), RL_LECTURA_MAX (60), RL_LECTURA_VENTANA_S (60)
 
-# Tope por IP: KV con contador por ventana (lo crea Ismael y pega el id).
-# [[kv_namespaces]]
-# binding = "CLUB_RL"
-# id = "<id del namespace>"
+# SECRETO (CLUB-AUD-06): CLUB_WEB_KEY. Lo carga Ismael en el panel, como «Secret» (cifrado), nunca acá:
+#   Pages → satori-club → Settings → Variables and Secrets → Add → Type: Secret → CLUB_WEB_KEY.
+#   En Supabase se guarda solo su sha256: select public.club_web_clave_cargar('<sha256 de la clave>');
+#   Sin CLUB_WEB_KEY la API responde 503.
+
+# Tope por IP (CLUB-AUD-14): binding de Rate Limiting OBLIGATORIO. Sin él la API responde 503
+# (falla cerrada). Ya no hay respaldo en KV ni en memoria (la memoria queda solo para dev-server.mjs).
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }

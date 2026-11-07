@@ -24,19 +24,20 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 | `POST /api/cupon/{codigo}/contacto` `{contacto}` | `club_cupon_contacto` | 5 cada 10 min |
 | `GET /api/portal/{token}` | `club_portal` | 60 por minuto |
 
-- **Cómo cuenta el tope:** usa el binding de Rate Limiting de Workers (`RATE_LIMITER`) si existe; si no, un KV (`CLUB_RL`) con un contador por ventana; y si tampoco hay KV, la memoria de la instancia, que es el respaldo más débil.
-- **Red de seguridad:** el tope por referente y por día en SQL sigue valiendo aunque falle este.
+- **Cómo cuenta el tope (CLUB-AUD-14):** solo con el binding de Rate Limiting `RATE_LIMITER`. **Si no está, la API responde 503**: falla cerrada. Ya no hay respaldo en KV, que no es atómico, ni en memoria. La memoria queda solo para `dev-server.mjs` (`CLUB_DEV=1`).
+- **Una sola puerta (CLUB-AUD-06):** cada llamada lleva el header `x-club-web` con el secreto `CLUB_WEB_KEY`. La base solo responde a las 4 funciones públicas si el sha256 de ese header es el de la clave vigente. Llamar directo con la anon key ya no funciona. **Sin `CLUB_WEB_KEY`, la API responde 503.**
+- **Red de seguridad en SQL:** el tope por referente y por día, y el tope global de cupones por local y por minuto (`club_config.cupones_max_minuto_local`, 20 por defecto).
 - **Errores:** la función nunca devuelve el mensaje crudo de la base. Lo traduce a un código fijo (`referente_invalido`, `cupon_invalido`, `tope_referente`, `demasiados_pedidos` y otros).
 
 ## Desarrollo local
 ```bash
 cd club-web && npm ci && npm run build
-SUPABASE_URL=https://<ref-staging>.supabase.co SUPABASE_ANON_KEY=<anon> node dev-server.mjs 8788
+SUPABASE_URL=https://<ref-staging>.supabase.co SUPABASE_ANON_KEY=<anon> CLUB_WEB_KEY=<clave de staging> node dev-server.mjs 8788
 ```
 `dev-server.mjs` sirve `dist/` con las mismas reglas de `_redirects` y monta `/api/*` con el mismo código de la función. Para probar en el runtime real de Cloudflare:
 
 ```bash
-npx wrangler pages dev dist --kv CLUB_RL --binding SUPABASE_URL=… --binding SUPABASE_ANON_KEY=…
+npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_KEY=… --binding CLUB_WEB_KEY=…
 ```
 
 ## Despliegue en Cloudflare Pages (lo hace Ismael)
@@ -45,14 +46,18 @@ npx wrangler pages dev dist --kv CLUB_RL --binding SUPABASE_URL=… --binding SU
    - **Root directory:** `club-web`.
    - **Build command:** `npm ci && npm run build`.
    - **Output directory:** `dist`.
-2. En Settings → Variables and Secrets, cargar las variables. Ninguna es secreta: la anon key es pública, igual que en la app.
+2. En Settings → Variables and Secrets, cargar las variables. Todas son públicas (la anon key también lo es, igual que en la app) **menos `CLUB_WEB_KEY`, que va como Secret** (ver el paso 3).
    - `SUPABASE_URL` = la URL del proyecto de **staging** (para la prueba).
    - `SUPABASE_ANON_KEY` = la anon key de ese mismo proyecto.
    - Opcionales: `RL_CREAR_MAX`, `RL_CREAR_VENTANA_S`, `RL_LECTURA_MAX`, `RL_LECTURA_VENTANA_S`.
-3. Tope por IP:
-   - en Workers & Pages → KV, crear el namespace `satori-club-rl`;
-   - en el proyecto, ir a Settings → Bindings → KV namespace y agregar el binding `CLUB_RL` apuntando a ese namespace.
-4. Las ramas que no son la de producción se publican como *preview* (`<rama>.satori-club.pages.dev`).
+3. **Clave de club-web** (`CLUB_WEB_KEY`). La carga Ismael; nunca va por chat, ni al repo, ni a un mensaje:
+   1. Generar una clave larga al azar en la propia computadora, por ejemplo `openssl rand -hex 32`.
+   2. En Pages → `satori-club` → Settings → Variables and Secrets → **Add** → Type: **Secret** → nombre **`CLUB_WEB_KEY`** → pegar la clave. Va en Production; para probar en preview, también en Preview.
+   3. Calcular su sha256 en la misma computadora: `printf %s '<la clave>' | shasum -a 256`, o `sha256sum` en Linux.
+   4. En Supabase (staging; prod con su firma) → SQL Editor: `select public.club_web_clave_cargar('<el sha256>');`. **Va el sha256, nunca la clave.**
+   5. Para rotarla, repetir los pasos 1 a 4 con una clave nueva. La anterior deja de valer cuando se carga el sha256 nuevo, así que conviene cargar primero el secreto en Pages y redesplegar.
+4. **Tope por IP** (`RATE_LIMITER`): está declarado en `wrangler.toml` como binding de Rate Limiting. Hay que confirmar en el panel, en Settings → Bindings, que el proyecto de Pages lo tome. Si Pages no lo acepta, la API responde 503 hasta resolverlo; la alternativa es servir `/api/*` desde un Worker con ese binding.
+5. Las ramas que no son la de producción se publican como *preview* (`<rama>.satori-club.pages.dev`).
 
 ## DNS: apuntar `club.satoricostarica.com` (lo hace Ismael)
 1. En el proyecto de Pages, ir a **Custom domains → Set up a custom domain** y escribir `club.satoricostarica.com`.

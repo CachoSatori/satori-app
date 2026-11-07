@@ -10,7 +10,9 @@ import { manejar } from './functions/_lib/api.js'
 const DIST = fileURLToPath(new URL('./dist/', import.meta.url))
 const PORT = Number(process.argv[2] || 8788)
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.txt': 'text/plain' }
+// CLUB_DEV=1 habilita el contador en memoria (solo local). CLUB_WEB_KEY: la clave de staging, por entorno.
 const env = { SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+  CLUB_WEB_KEY: process.env.CLUB_WEB_KEY, CLUB_DEV: '1',
   RL_CREAR_MAX: process.env.RL_CREAR_MAX, RL_CREAR_VENTANA_S: process.env.RL_CREAR_VENTANA_S }
 
 createServer(async (req, res) => {

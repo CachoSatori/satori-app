@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import { getReporteMes, getLocalesClub, cerrarMes, aClubError, fmtCreditos, type ReporteMes, type FilaReporte } from '../../shared/api/club'
 import { useAuth } from '../../shared/hooks/useAuth'
+import Vencimiento from './Vencimiento'
 import { Aviso, Btn, Card } from './ui'
 import { C, inputStyle, labelStyle, fmtFecha } from './estilos'
 import { esParcial } from './reporteSaldo'
@@ -83,6 +84,7 @@ export default function Reportes() {
         <Btn variant="secondary" onClick={exportarCsv} disabled={!rep}>Exportar CSV</Btn>
       </Card>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      {esOwner && <Vencimiento />}
       {rep && !cargando && rep.cerrado && (
         <Aviso tono="info">
           Mes cerrado (versión {rep.version}) el {fmtFecha(rep.cerrado_en ?? '')}: el reporte no cambia aunque después se paguen

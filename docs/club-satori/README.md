@@ -51,6 +51,14 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **13:** las excepciones se acotan por rango, con índices.
 - **06:** propuesta en [PROPUESTA-AUD-06.md](PROPUESTA-AUD-06.md).
 - **Pruebas:** 167/167 en staging. Las carreras 03, 07 y 08 se verificaron con dos sesiones reales.
-- **Ojo antes de correr `club_vencer` en prod:** hoy vencería **115 cuentas migradas** (saldo > 0 sin actividad en 12 meses).
+- **Las 115 cuentas que vencería `club_vencer` hoy** (simulación de solo lectura, 07/11): suman **174 personas y 0 créditos**. Son 56 cuentas con 1 persona y 59 con 2: restos de menos de medio crédito. **Ninguna** está entre las 37 con saldo activo (66 créditos). Todas son migradas (110 referentes, 3 de equipo y 2 PM), con la última actividad entre oct-2022 y el 03-nov-2025; 62 ya tenían un vencimiento del sistema viejo.
+  - **Cómo se calcula `ultima_actividad`:** es la `fecha_visita` más tardía entre tarjetas, canjes y restituciones; los vencimientos no cuentan. En los datos migrados, la tarjeta lleva el `createdAt` de Firestore, que es la fecha de carga y por eso aproximada, y el canje lleva el `createdAt` de su grupo (un canje por referente y minuto UTC). Los vencimientos de la D1 y los del 05-nov no cuentan como actividad.
 
 **Cuenta dividida AMBIGUA** (07/11, decisión de Ismael). Una factura sin pedido que cae en la ventana de **dos** pedidos de la misma mesa (de la apertura a 30 min después de la factura de cada uno) no se asigna a ninguno: va a Excepciones como `AMBIGUA`, con los pedidos que la tocan (`club_cruce_detalle` devuelve el rol: principal, dividida o ambigua). Prueba 35. **Pruebas:** 169/169. Después del backfill del puente, `scripts/sql/club_verificar_backfill.sql` vuelve a correr la mesa 19 del 31-oct con los datos reales.
+
+**Vencimiento seguro** (07/11, decisión de Ismael):
+- `club_vencer_simular(p_corte)`: solo owner. Devuelve la lista (miembro, personas, créditos, última actividad) y no escribe nada.
+- `club_vencer(p_corte, p_confirmo_total)`: solo vence si el total confirmado coincide con lo que da la simulación en ese momento; si no, error «volvé a simular». Además toma un lock para que haya una sola corrida a la vez.
+- **Pantalla:** en Reportes, «Simular vencimiento» → lista → «Confirmar», solo para el owner.
+- **Pruebas:** 36. La batería da 174/174.
+- **⚠️ Regla para todas las sesiones de Claude Code:** nunca correr `club_vencer` fuera de una transacción que termine en ROLLBACK. Vence todas las cuentas del local, no una (el 07-nov venció por error 115 cuentas de staging; se revirtió).

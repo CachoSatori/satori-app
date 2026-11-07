@@ -268,6 +268,14 @@ export interface ReporteMes {
 }
 export const getReporteMes = (mes: string, local = 'santa-teresa') =>
   llamar<ReporteMes>('club_reporte_mes', { p_mes: mes, p_location: local })
+/** Vencimiento por inactividad (solo owner): primero simular, después confirmar con el total exacto. */
+export interface CandidatoVencer {
+  miembro_id: string; nombre: string; tipo: TipoMiembro; personas: number; creditos: number; ultima_actividad: string | null
+}
+export const simularVencimiento = (corte: string) => llamar<CandidatoVencer[]>('club_vencer_simular', { p_corte: corte })
+export const confirmarVencimiento = (corte: string, total: number) =>
+  llamar<number>('club_vencer', { p_corte: corte, p_confirmo_total: total })
+
 /** Solo owner. Recerrar (versión nueva) exige motivo. */
 export const cerrarMes = (mes: string, motivo: string, local = 'santa-teresa') =>
   llamar<ReporteMes>('club_reporte_cerrar', { p_mes: mes, p_motivo: motivo.trim() || null, p_location: local })

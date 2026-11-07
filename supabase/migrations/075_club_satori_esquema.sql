@@ -955,7 +955,58 @@ end;
 $$;
 
 -- 4.6 Vencimiento por inactividad (solo owner; el cron se programa más adelante).
-create or replace function public.club_vencer(p_corte date)
+-- ⚠️ REGLA para las sesiones de Claude Code: nunca correr club_vencer fuera de una transacción con ROLLBACK
+--    (vence TODAS las cuentas candidatas del local, no una).
+-- Vencimiento por inactividad (decisión de Ismael 07-nov: nunca a ciegas). Tres piezas:
+--   · club_vencer_candidatos (interna): la lista, con la misma regla de siempre (saldo > 0 y sin
+--     tarjeta, canje ni restitución desde hace vencimiento_meses al corte).
+--   · club_vencer_simular (owner): esa lista con nombre, personas, créditos y última actividad. No escribe.
+--   · club_vencer(p_corte, p_confirmo_total) (owner): solo vence si p_confirmo_total es igual a la
+--     cantidad de cuentas que da la simulación en ese momento. Si no coincide, error: hay que volver a simular.
+drop function if exists public.club_vencer(date);
+create or replace function public.club_vencer_candidatos(p_corte date)
+returns table (miembro_id uuid, location_id text, personas int, creditos numeric, ultima_actividad timestamptz,
+               personas_por_credito int, valor_credito_crc int, vencimiento_meses int, limite timestamptz)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select s.miembro_id, s.location_id, s.personas, s.creditos, s.ultima_actividad,
+         c.personas_por_credito, c.valor_credito_crc, c.vencimiento_meses,
+         ((p_corte - make_interval(months => c.vencimiento_meses))::timestamp at time zone 'America/Costa_Rica')
+    from public.club_saldos s
+    join public.club_config c on c.location_id = s.location_id
+    join public.club_miembros m on m.id = s.miembro_id
+   where s.personas > 0
+     and coalesce(s.ultima_actividad, m.created_at)
+         < ((p_corte - make_interval(months => c.vencimiento_meses))::timestamp at time zone 'America/Costa_Rica')
+   order by s.miembro_id;
+$$;
+
+create or replace function public.club_vencer_simular(p_corte date)
+returns table (miembro_id uuid, nombre text, tipo text, personas int, creditos numeric, ultima_actividad timestamptz)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol <> 'owner' then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_corte is null or p_corte > (now() at time zone 'America/Costa_Rica')::date then
+    raise exception 'Fecha de corte no válida' using errcode = 'P0001';
+  end if;
+  return query
+    select k.miembro_id, public.club_nombre_limpio(m.nombre), m.tipo, k.personas, k.creditos, k.ultima_actividad
+      from public.club_vencer_candidatos(p_corte) k join public.club_miembros m on m.id = k.miembro_id
+     order by k.creditos desc, k.personas desc, k.ultima_actividad;
+end;
+$$;
+
+create or replace function public.club_vencer(p_corte date, p_confirmo_total int)
 returns int
 language plpgsql
 volatile
@@ -965,6 +1016,7 @@ as $$
 declare
   v_rol    public.user_role := public.get_my_role();
   v_n      int := 0;
+  v_total  int;
   r        record;
   v_p      int;
   v_ult    timestamptz;
@@ -976,21 +1028,18 @@ begin
   if p_corte is null or p_corte > (now() at time zone 'America/Costa_Rica')::date then
     raise exception 'Fecha de corte no válida' using errcode = 'P0001';
   end if;
+  -- Una sola corrida a la vez (dos owners confirmando a la par).
+  perform pg_advisory_xact_lock(hashtextextended('club_vencer', 0));
+  select count(*) into v_total from public.club_vencer_candidatos(p_corte);
+  if p_confirmo_total is null or p_confirmo_total <> v_total then
+    raise exception 'La simulación da % cuentas y confirmaste %: volvé a simular', v_total, coalesce(p_confirmo_total::text, 'ninguna')
+      using errcode = 'P0001';
+  end if;
 
-  -- CLUB-AUD-03: los candidatos se eligen SIN lock y en orden estable; por cada uno se bloquea al
-  -- miembro y recién ahí se recalculan el saldo y la última actividad (snapshot nuevo). Así un canje o
-  -- una tarjeta simultáneos no dejan el saldo negativo ni se vence lo que acaba de tener actividad.
-  for r in
-    select s.miembro_id, s.location_id, c.personas_por_credito, c.valor_credito_crc, c.vencimiento_meses,
-           ((p_corte - make_interval(months => c.vencimiento_meses))::timestamp at time zone 'America/Costa_Rica') as limite
-    from public.club_saldos s
-    join public.club_config c on c.location_id = s.location_id
-    join public.club_miembros m on m.id = s.miembro_id
-    where s.personas > 0
-      and coalesce(s.ultima_actividad, m.created_at)
-          < ((p_corte - make_interval(months => c.vencimiento_meses))::timestamp at time zone 'America/Costa_Rica')
-    order by s.miembro_id
-  loop
+  -- CLUB-AUD-03: por cada candidato se bloquea al miembro y recién ahí se recalculan el saldo y la
+  -- última actividad (snapshot nuevo). Así un canje o una tarjeta simultáneos no dejan el saldo
+  -- negativo ni se vence lo que acaba de tener actividad.
+  for r in select * from public.club_vencer_candidatos(p_corte) loop
     select m.created_at into v_creado from public.club_miembros m where m.id = r.miembro_id for update;
     select coalesce(sum(mv.personas), 0),
            max(mv.fecha_visita) filter (where mv.tipo in ('tarjeta','canje','restitucion'))   -- AUD-10
@@ -2391,7 +2440,9 @@ revoke all on function public.club_cupon_usar(text, int, text, uuid, jsonb) from
 revoke all on function public.club_canje(uuid, numeric, text, uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.club_ajuste(uuid, int, text, text, uuid)   from public, anon, authenticated;
 revoke all on function public.club_portal(text)                          from public, anon, authenticated;
-revoke all on function public.club_vencer(date)                          from public, anon, authenticated;
+revoke all on function public.club_vencer(date, int)                     from public, anon, authenticated;
+revoke all on function public.club_vencer_simular(date)                  from public, anon, authenticated;
+revoke all on function public.club_vencer_candidatos(date)               from public, anon, authenticated;
 
 revoke all on function public.club_norm_telefono(text)                    from public, anon, authenticated;
 revoke all on function public.club_norm_texto(text)                       from public, anon, authenticated;
@@ -2452,7 +2503,8 @@ grant execute on function public.club_sin_cruce_elegir(uuid, text, text) to auth
 grant execute on function public.club_cupon_usar(text, int, text, uuid, jsonb) to authenticated;
 grant execute on function public.club_canje(uuid, numeric, text, uuid, jsonb) to authenticated;
 grant execute on function public.club_ajuste(uuid, int, text, text, uuid) to authenticated;
-grant execute on function public.club_vencer(date)                       to authenticated;
+grant execute on function public.club_vencer(date, int)                  to authenticated;
+grant execute on function public.club_vencer_simular(date)               to authenticated;
 
 
 -- CLUB-AUD-11: red de seguridad al final, después de todos los grants de arriba.

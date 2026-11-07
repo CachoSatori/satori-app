@@ -374,7 +374,7 @@ begin
     perform pg_temp.yo(); perform pg_temp.r('extra', 'owner ajuste sin nota → error', sqlstate = 'P0001' and sqlerrm = 'La nota es obligatoria', sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
-  v_n := public.club_vencer((now() at time zone 'America/Costa_Rica')::date);
+  v_n := public.club_vencer((now() at time zone 'America/Costa_Rica')::date, (select count(*)::int from public.club_vencer_simular((now() at time zone 'America/Costa_Rica')::date)));
   perform pg_temp.yo();
   select personas into v_s from club_saldos where miembro_id = (select v::uuid from _ids where k='old');
   perform pg_temp.r('extra', 'owner club_vencer: «Viejo» (13 personas, 13 meses) → 0', v_s = 0 and v_n >= 1,
@@ -1311,7 +1311,7 @@ begin
     (v_m, 'vencimiento', -6, 6, 18000, now() - interval '1 month', 'migracion');
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_ajuste(v_m, 6, 'restitucion', 'restitución de prueba', gen_random_uuid());
-  perform public.club_vencer((now() at time zone 'America/Costa_Rica')::date);
+  perform public.club_vencer((now() at time zone 'America/Costa_Rica')::date, (select count(*)::int from public.club_vencer_simular((now() at time zone 'America/Costa_Rica')::date)));
   perform pg_temp.yo();
   perform pg_temp.r('32', 'restitución hoy en una cuenta vieja → la próxima corrida de vencer NO la vence',
     public.club_saldo_personas(v_m) = 6, format('saldo %s', public.club_saldo_personas(v_m)));
@@ -1422,6 +1422,46 @@ begin
     jsonb_array_length(j) = 1 and j->0->>'factura' = '990933' and (j->0->'detalle'->'pedidos') @> '["9301","9302"]'::jsonb, j::text);
 end $$;
 
+
+-- ═══ 36. club_vencer seguro: simular no escribe; confirmar con otro número falla ═══
+-- (Todo dentro de la transacción de la batería, que termina en ROLLBACK: club_vencer nunca se corre fuera.)
+do $$
+declare v_m uuid; v_n0 bigint; v_n1 bigint; v_sim int; v_lista jsonb; v_hoy date := (now() at time zone 'America/Costa_Rica')::date; v_venc int;
+begin
+  insert into club_miembros (tipo, nombre, origen, created_at) values ('referente', 'Vencer Simular', 'app', now() - interval '2 years') returning id into v_m;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
+  values (v_m, 'tarjeta', 9, 6, 18000, now() - interval '14 months', 'migracion');
+  select count(*) into v_n0 from club_movimientos;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select count(*)::int, jsonb_agg(to_jsonb(x)) filter (where x.miembro_id = v_m) into v_sim, v_lista from public.club_vencer_simular(v_hoy) x;
+  perform pg_temp.yo();
+  select count(*) into v_n1 from club_movimientos;
+  perform pg_temp.r('36', 'simular devuelve la lista (miembro, personas, créditos, última actividad) y no escribe nada',
+    v_n1 = v_n0 and jsonb_array_length(v_lista) = 1 and (v_lista->0->>'personas')::int = 9 and (v_lista->0->>'creditos')::numeric = 1.5
+      and (v_lista->0) ?& array['nombre','ultima_actividad'], format('%s cuentas; movimientos %s → %s', v_sim, v_n0, v_n1));
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    perform public.club_vencer(v_hoy, v_sim + 1);
+    perform pg_temp.yo(); perform pg_temp.r('36', 'confirmar con un número equivocado', false, 'venció');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('36', 'confirmar con un número equivocado → error y no vence nada',
+      sqlstate = 'P0001' and sqlerrm = format('La simulación da %s cuentas y confirmaste %s: volvé a simular', v_sim, v_sim + 1)
+        and (select count(*) from club_movimientos) = v_n0, sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    perform public.club_vencer_simular(v_hoy);
+    perform pg_temp.yo(); perform pg_temp.r('36', 'manager simula', false, 'pudo');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('36', 'simular es solo del owner (manager → sin permiso)', true, sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  v_venc := public.club_vencer(v_hoy, v_sim);
+  perform pg_temp.yo();
+  perform pg_temp.r('36', 'confirmar con el número de la simulación → vence (y el miembro queda en 0)',
+    v_venc = v_sim and public.club_saldo_personas(v_m) = 0, format('vencidas %s de %s', v_venc, v_sim));
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$
@@ -1431,7 +1471,8 @@ begin
     'select public.club_cupon_usar(''AAAAAAAAAA'', 2, ''F'', gen_random_uuid())',
     'select public.club_canje(''00000000-0000-0000-0000-000000000000'', 1, ''F'', gen_random_uuid())',
     'select public.club_ajuste(''00000000-0000-0000-0000-000000000000'', 1, ''ajuste'', ''x'', gen_random_uuid())',
-    'select public.club_vencer(current_date)'] loop
+    'select public.club_vencer(current_date, 0)',
+    'select public.club_vencer_simular(current_date)'] loop
     begin
       if f ~ 'cupon_usar|canje' then
         perform pg_temp.como('authenticated', '<CAJERO_UUID>');   -- cajero inactivo

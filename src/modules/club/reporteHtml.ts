@@ -16,7 +16,7 @@ import { esParcial } from './reporteSaldo'
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
 const MES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const TIPO_EXC: Record<string, string> = {
-  REGISTRO_SIN_FACTURA: 'Registro sin factura', CREDITOS_SIN_CANJE: 'Créditos sin canje (probable)',
+  REGISTRO_SIN_FACTURA: 'Registro sin factura', SIN_CRUCE: 'Sin cruce (posible cuenta dividida)', CREDITOS_SIN_CANJE: 'Créditos sin canje (probable)',
   CANJE_MONTO_DISTINTO: 'Canje con monto distinto (probable)', PROMO_SIN_CUPON: 'Promo sin cupón',
 }
 

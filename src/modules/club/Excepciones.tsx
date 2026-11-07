@@ -1,13 +1,19 @@
 /**
  * Excepciones del puente (manager, owner). Lista por tipo y fecha, detalle con la factura del
  * puente y «resolver con nota». Resolver no toca el libro: para corregir saldos se usa un ajuste.
+ * SIN_CRUCE (registro con pedido que no encontró su factura: posible cuenta dividida o refactura):
+ * el manager elige la factura de la lista de facturas sin pedido de ese día; queda anotado quién.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getExcepciones, resolverExcepcion, aClubError, fmtCreditos, type Excepcion, type TipoExcepcion } from '../../shared/api/club'
+import {
+  getExcepciones, resolverExcepcion, aClubError, fmtCreditos, getCandidatasSinCruce, elegirFacturaSinCruce, describirFactura,
+  type Excepcion, type TipoExcepcion, type FacturaCandidata,
+} from '../../shared/api/club'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle, fmtFechaHora } from './estilos'
 
 const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
+  SIN_CRUCE:            { titulo: 'Sin cruce: posible cuenta dividida', que: 'Registro con pedido que no encontró su factura. Suele ser una cuenta dividida o refacturada: el PoS la cobra en facturas sin pedido. Elegí la factura de la lista.' },
   REGISTRO_SIN_FACTURA: { titulo: 'Registro sin factura', que: 'Cupón, tarjeta o canje con un número de factura que no está en el PoS.' },
   CREDITOS_SIN_CANJE:   { titulo: 'Créditos sin canje',   que: 'Factura pagada «a crédito» por un múltiplo de medio crédito, sin canje en el Club.' },
   CANJE_MONTO_DISTINTO: { titulo: 'Canje con monto distinto', que: 'El valor del canje no coincide con lo cobrado «a crédito» en la factura.' },
@@ -74,12 +80,12 @@ export default function Excepciones() {
                     style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '0.7rem 0.8rem', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <strong>{TIPO_EXC[e.tipo].titulo}</strong>
-                      <Chip color={e.certeza === 'probable' ? C.gold : C.ink}>{e.certeza}</Chip>
+                      <Chip color={e.certeza === 'probable' ? C.gold : e.certeza === 'manual' ? C.teal : C.ink}>{e.certeza}</Chip>
                       {e.resuelta && <Chip color={C.teal}>resuelta</Chip>}
                       <span style={{ marginLeft: 'auto', color: C.muted, fontSize: '0.85rem' }}>{fmtFechaHora(e.fecha)}</span>
                     </div>
                     <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 2 }}>
-                      Factura {e.factura ?? '—'}{typeof e.detalle.miembro === 'string' ? ` · ${e.detalle.miembro}` : ''}
+                      {e.tipo === 'SIN_CRUCE' ? '' : 'Factura '}{e.factura ?? '—'}{typeof e.detalle.miembro === 'string' ? ` · ${e.detalle.miembro}` : ''}
                     </div>
                   </button>
                   {abierta === id && <Detalle e={e} onResuelta={cargar} />}
@@ -99,7 +105,8 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
   const d = e.detalle
   const filas: Array<[string, string]> = [
     ['Qué es', TIPO_EXC[e.tipo].que],
-    ['Factura (PoS)', e.factura ?? '—'],
+    [e.tipo === 'SIN_CRUCE' ? 'Pedido (PoS)' : 'Factura (PoS)', e.factura ?? '—'],
+    ...(d.hora_escaneo ? [['Hora del escaneo', fmtFechaHora(String(d.hora_escaneo))] as [string, string]] : []),
     ...(d.movimiento ? [['Registro en el Club', String(d.movimiento).replace('_', ' ')] as [string, string]] : []),
     ...(d.personas != null ? [['Personas', String(d.personas)] as [string, string]] : []),
     ...(d.creditos != null ? [['Créditos', fmtCreditos(Number(d.creditos))] as [string, string]] : []),
@@ -121,7 +128,11 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
         {filas.map(([k, v]) => <div key={k} style={{ display: 'contents' }}><dt style={{ color: C.muted }}>{k}</dt><dd style={{ margin: 0 }}>{v}</dd></div>)}
       </dl>
       {e.resuelta ? (
-        <Aviso tono="ok">Resuelta el {fmtFechaHora(e.resuelta_en)}: {e.nota}</Aviso>
+        <Aviso tono="ok">
+          Resuelta el {fmtFechaHora(e.resuelta_en)}{typeof d.resuelta_por === 'string' ? ` por ${d.resuelta_por}` : ''}: {e.nota}
+        </Aviso>
+      ) : e.tipo === 'SIN_CRUCE' ? (
+        <ElegirFactura e={e} onElegida={onResuelta} />
       ) : (
         <>
           {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
@@ -130,6 +141,52 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
               placeholder="Qué pasó y qué se hizo (si hay que corregir saldo, se hace con un ajuste)" style={{ ...inputStyle, resize: 'vertical' }} />
           </label>
           <Btn onClick={resolver} disabled={enviando || !nota.trim()}>{enviando ? 'Guardando…' : 'Resolver con nota'}</Btn>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** SIN_CRUCE: lista de facturas sin pedido de ese día; un toque elige, después «Elegir esta factura». */
+function ElegirFactura({ e, onElegida }: { e: Excepcion; onElegida: () => Promise<void> }) {
+  const [lista, setLista] = useState<FacturaCandidata[] | null>(null)
+  const [elegida, setElegida] = useState<string | null>(null)
+  const [nota, setNota] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    getCandidatasSinCruce(e.ref).then(setLista).catch(err => { setError(aClubError(err).message); setLista([]) })
+  }, [e.ref])
+  async function elegir() {
+    if (!elegida) return
+    setEnviando(true); setError(null)
+    try { await elegirFacturaSinCruce(e.ref, elegida, nota); await onElegida() }
+    catch (err) { setError(aClubError(err).message) }
+    finally { setEnviando(false) }
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      <span style={labelStyle}>Facturas sin pedido de ese día</span>
+      {lista === null && <div style={{ color: C.muted }}>Cargando…</div>}
+      {lista?.length === 0 && <div style={{ color: C.muted, fontSize: '0.88rem' }}>No hay facturas sin pedido ese día. Resolvelo con un ajuste si hace falta.</div>}
+      {lista?.map(f => {
+        const sel = elegida === f.numero_factura
+        return (
+          <button key={f.numero_factura} onClick={() => setElegida(f.numero_factura)} aria-pressed={sel}
+            style={{ textAlign: 'left', minHeight: 44, borderRadius: 8, cursor: 'pointer', padding: '0.5rem 0.8rem',
+                     border: `2px solid ${sel ? C.ink : C.border}`, background: sel ? C.paper : '#fff' }}>
+            <strong>{describirFactura(f)}</strong>
+            <span style={{ color: C.muted, fontSize: '0.8rem' }}> · factura {f.numero_factura}{f.asignada_a_otro ? ' · ya elegida para otro registro' : ''}</span>
+          </button>
+        )
+      })}
+      {(lista?.length ?? 0) > 0 && (
+        <>
+          <label><span style={labelStyle}>Nota (opcional)</span>
+            <input value={nota} onChange={ev => setNota(ev.target.value)} maxLength={400} placeholder="Ej. cuenta dividida en 2" style={inputStyle} />
+          </label>
+          <Btn onClick={elegir} disabled={enviando || !elegida}>{enviando ? 'Guardando…' : 'Elegir esta factura'}</Btn>
         </>
       )}
     </div>

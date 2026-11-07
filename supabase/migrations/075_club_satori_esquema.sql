@@ -459,69 +459,78 @@ begin
 end;
 $$;
 
--- Piloto (decisión de Ismael, 06-nov): la caja elige la MESA ABIERTA del puente en lugar de tipear la
--- factura (el ticket muestra el consecutivo electrónico, que el puente todavía no trae: ítem 11).
+-- Piloto (decisiones de Ismael, 06 y 07-nov): la clave de cruce con el PoS es el PEDIDO, no la mesa
+-- (con la mesa se confunde cuando se divide la cuenta). La caja elige el pedido abierto del puente;
+-- si ya se cerró, elige la factura de la lista de las últimas 2 h. Ya no se tipean dígitos del tiquete.
 alter table public.club_movimientos add column if not exists pos_ref jsonb;
 alter table public.club_movimientos add column if not exists visita_clave text;
 alter table public.club_cupones     add column if not exists pos_ref jsonb;
 
 -- Normaliza la referencia al PoS que manda la caja. NULL si no vino; error si es inválida.
---   {modo:'mesa',   dia, pedido, mesa, total, hora}  → mesa abierta elegida de la lista
---   {modo:'manual', mesa, ultimos4[, dia]}           → plan B (mesa ya cerrada o la lista no carga)
+--   {modo:'pedido',  pedido[, local]}           → pedido abierto elegido de la lista. Tiene que estar
+--                                                  abierto en el puente: se guardan el pedido, la mesa, el
+--                                                  total, `visto` (cuándo lo vio abierto el puente) y
+--                                                  `hora` = hora del escaneo (la del servidor, no la del cliente).
+--   {modo:'factura', numero_factura[, local]}   → plan B: factura cerrada de las últimas 2 h (cruce exacto).
 -- Devuelve además `visita`: la clave de la visita (máximo de créditos por visita).
+-- `local` por defecto 'santa-teresa' (el piloto es de un solo local).
 create or replace function public.club_pos_ref(p jsonb)
 returns jsonb
 language plpgsql
 stable
+security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_modo text; v_mesa text; v_dia date; v_ped text; v_tot numeric; v_hora timestamptz; v_u4 text;
+  v_modo  text;
+  v_local text;
+  v_ped   text;
+  v_nf    text;
+  o       public.pos_ndf_open%rowtype;
+  t       public.pos_ndf_tickets%rowtype;
+  v_hoy   date := (now() at time zone 'America/Costa_Rica')::date;
 begin
   if p is null or p = '{}'::jsonb or jsonb_typeof(p) = 'null' then
     return null;
   end if;
   if jsonb_typeof(p) <> 'object' then
-    raise exception 'Mesa no válida' using errcode = 'P0001';
+    raise exception 'Pedido no válido' using errcode = 'P0001';
   end if;
-  v_modo := p->>'modo';
-  v_mesa := upper(btrim(coalesce(p->>'mesa', '')));
-  if v_mesa !~ '^[0-9A-Z]{1,10}$' then
-    raise exception 'Mesa no válida' using errcode = 'P0001';
-  end if;
-  begin
-    v_dia := coalesce((p->>'dia')::date, (now() at time zone 'America/Costa_Rica')::date);
-  exception when others then
-    raise exception 'Mesa no válida' using errcode = 'P0001';
-  end;
-  if v_dia < (now() at time zone 'America/Costa_Rica')::date - 1 or v_dia > (now() at time zone 'America/Costa_Rica')::date then
-    raise exception 'La mesa tiene que ser de hoy' using errcode = 'P0001';
-  end if;
-  if v_modo = 'mesa' then
+  v_modo  := p->>'modo';
+  v_local := coalesce(nullif(btrim(p->>'local'), ''), 'santa-teresa');
+  if v_modo = 'pedido' then
     v_ped := btrim(coalesce(p->>'pedido', ''));
     if v_ped !~ '^[0-9A-Za-z]{1,20}$' then
-      raise exception 'Mesa no válida' using errcode = 'P0001';
+      raise exception 'Pedido no válido' using errcode = 'P0001';
     end if;
-    begin
-      v_tot := (p->>'total')::numeric;
-      v_hora := coalesce((p->>'hora')::timestamptz, now());
-    exception when others then
-      raise exception 'Mesa no válida' using errcode = 'P0001';
-    end;
-    if v_tot is null or v_tot < 0 or v_tot > 100000000 then
-      raise exception 'Mesa no válida' using errcode = 'P0001';
+    select * into o from public.pos_ndf_open x where x.local = v_local and x.id_pedido = v_ped
+     order by x.updated_at desc limit 1;
+    if not found then
+      raise exception 'El pedido % ya no está abierto: elegí la factura de la lista', v_ped using errcode = 'P0001';
     end if;
-    return jsonb_build_object('modo', 'mesa', 'dia', v_dia, 'pedido', v_ped, 'mesa', v_mesa, 'total', round(v_tot, 2),
-                              'hora', v_hora, 'visita', format('mesa:%s:%s:%s', v_dia, v_mesa, v_ped));
-  elsif v_modo = 'manual' then
-    v_u4 := btrim(coalesce(p->>'ultimos4', ''));
-    if v_u4 !~ '^[0-9]{4}$' then
-      raise exception 'Los últimos 4 dígitos del tiquete tienen que ser exactamente 4 números' using errcode = 'P0001';
+    return jsonb_build_object('modo', 'pedido', 'local', v_local, 'pedido', v_ped,
+                              'mesa', nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
+                              'total', o.monto_estimado_crc, 'visto', o.updated_at, 'hora', now(),
+                              'visita', format('pedido:%s:%s', v_hoy, v_ped));
+  elsif v_modo = 'factura' then
+    v_nf := btrim(coalesce(p->>'numero_factura', ''));
+    if v_nf !~ '^[0-9]{1,30}$' then
+      raise exception 'Factura no válida' using errcode = 'P0001';
     end if;
-    return jsonb_build_object('modo', 'manual', 'dia', v_dia, 'mesa', v_mesa, 'ultimos4', v_u4, 'hora', now(),
-                              'visita', format('m4:%s:%s:%s', v_dia, v_mesa, v_u4));
+    select * into t from public.pos_ndf_tickets x where x.local = v_local and x.numero_factura = v_nf and x.estado = 'C';
+    if not found then
+      raise exception 'Esa factura no está en el PoS' using errcode = 'P0001';
+    end if;
+    -- La lista muestra las últimas 2 h; 15 min de margen para lo que tarda la caja en confirmar.
+    if t.fecha_registra < now() - interval '2 hours 15 minutes' then
+      raise exception 'Esa factura tiene más de 2 horas: la resuelve el manager en Excepciones' using errcode = 'P0001';
+    end if;
+    return jsonb_build_object('modo', 'factura', 'local', v_local, 'numero_factura', v_nf,
+                              'mesa', nullif(upper(btrim(coalesce(t.mesa, ''))), ''), 'total', t.total_crc,
+                              'hora_factura', t.fecha_registra, 'hora', now(),
+                              'visita', format('factura:%s', v_nf));
   end if;
-  raise exception 'Mesa no válida' using errcode = 'P0001';
+  raise exception 'Pedido no válido' using errcode = 'P0001';
 end;
 $$;
 
@@ -1267,10 +1276,11 @@ begin
 end;
 $$;
 
--- Mesas abiertas del local según el puente (pos_ndf_open, refresco ~75 s). owner, manager, cajero.
--- Lo que la caja ve para elegir la mesa del cupón, el canje o la tarjeta física.
-create or replace function public.club_mesas_abiertas(p_location text default 'santa-teresa')
-returns table (pedido text, mesa text, salonero text, total_crc numeric, pax int, actualizado timestamptz, dia date)
+-- Pedidos abiertos del local según el puente (pos_ndf_open, refresco ~75 s). owner, manager, cajero.
+-- Lo que la caja ve después del QR: «Pedido 14 · Mesa 20 · ₡48.500 · salonero». Un toque elige.
+drop function if exists public.club_mesas_abiertas(text);
+create or replace function public.club_pedidos_abiertos(p_location text default 'santa-teresa')
+returns table (pedido text, mesa text, salonero text, total_crc numeric, pax int, actualizado timestamptz)
 language plpgsql
 stable
 security definer
@@ -1282,12 +1292,37 @@ begin
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
   return query
-    select o.id_pedido, upper(btrim(o.mesa)),
+    select o.id_pedido, nullif(upper(btrim(coalesce(o.mesa, ''))), ''),
            coalesce((select e.full_name from public.employees e where e.pos_login = o.salonero_login and e.is_active limit 1), o.salonero_login),
-           o.monto_estimado_crc, o.pax, o.updated_at, (o.updated_at at time zone 'America/Costa_Rica')::date
+           o.monto_estimado_crc, o.pax, o.updated_at
       from public.pos_ndf_open o
-     where o.local = p_location and o.id_pedido is not null and o.mesa is not null
-     order by case when o.mesa ~ '^[0-9]+$' then lpad(o.mesa, 6, '0') else o.mesa end, o.id_pedido;
+     where o.local = p_location and o.id_pedido is not null
+     order by case when o.id_pedido ~ '^[0-9]+$' then lpad(o.id_pedido, 10, '0') else o.id_pedido end;
+end;
+$$;
+
+-- Plan B: facturas cerradas de las últimas 2 h (hora, total, mesa si tiene). owner, manager, cajero.
+create or replace function public.club_facturas_recientes(p_location text default 'santa-teresa')
+returns table (numero_factura text, hora timestamptz, total_crc numeric, mesa text, pedido text)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  return query
+    select t.numero_factura, t.fecha_registra, t.total_crc,
+           case when btrim(coalesce(t.mesa, '')) in ('', '0') then null else upper(btrim(t.mesa)) end,
+           t.numero_pedido
+      from public.pos_ndf_tickets t
+     where t.local = p_location and t.estado = 'C' and t.fecha_registra >= now() - interval '2 hours'
+       and t.fecha_registra <= now() + interval '5 minutes'   -- margen por el reloj de la PC del PoS
+     order by t.fecha_registra desc, t.numero_factura desc
+     limit 100;
 end;
 $$;
 
@@ -1467,16 +1502,79 @@ as $$
            '\s+', ' ', 'g'));
 $$;
 
+-- Cruce automático de un registro del Club con su factura del puente. Interna (sin EXECUTE para nadie).
+--   · sin pos_ref (factura tipeada): por número, solo dígitos y sin ceros a la izquierda.
+--   · modo 'factura' (plan B): por número.
+--   · modo 'pedido': la PRIMERA factura cerrada con ese numero_pedido después de que el puente vio el
+--     pedido abierto (`visto`, que es ≤ la hora del escaneo), con tope de 18 h desde el escaneo. NO se usa
+--     el día de la factura (así se esquiva la medianoche) ni fecha_cierra (viene agrupada al cierre).
+--     2 min de margen por la diferencia de reloj entre la PC del PoS y el servidor. El mismo número de
+--     pedido al día siguiente queda fuera: su factura es de antes del escaneo o pasa las 18 h.
+create or replace function public.club_cruce_auto(p_location text, p_pos jsonb, p_factura text)
+returns uuid
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_clave text;
+  v_hora  timestamptz;
+  v_desde timestamptz;
+  v_id    uuid;
+begin
+  if p_pos is null then
+    v_clave := public.club_factura_clave(p_factura);   -- una vez, no por fila
+    if v_clave is null then return null; end if;
+    select t.id into v_id from public.pos_ndf_tickets t
+     where t.local = p_location and ltrim(t.numero_factura, '0') = v_clave limit 1;
+  elsif p_pos->>'modo' = 'factura' then
+    select t.id into v_id from public.pos_ndf_tickets t
+     where t.local = p_location and t.numero_factura = p_pos->>'numero_factura' and t.estado = 'C';
+  elsif p_pos->>'modo' = 'pedido' then
+    v_hora  := (p_pos->>'hora')::timestamptz;
+    v_desde := least(coalesce((p_pos->>'visto')::timestamptz, v_hora), v_hora) - interval '2 minutes';
+    select t.id into v_id from public.pos_ndf_tickets t
+     where t.local = p_location and t.estado = 'C' and t.numero_pedido = p_pos->>'pedido'
+       and t.fecha_registra >= v_desde and t.fecha_registra < v_hora + interval '18 hours'
+     order by t.fecha_registra, t.numero_factura
+     limit 1;
+  end if;
+  return v_id;
+end;
+$$;
+
+-- Factura elegida a mano por el manager para un registro que no cruzó solo (cuenta dividida o
+-- refactura: el PoS cobra en facturas sin pedido). Queda anotado quién y cuándo. No toca el libro.
+create table if not exists public.club_cruces_manuales (
+  movimiento_id   uuid primary key references public.club_movimientos(id),
+  location_id     text not null default 'santa-teresa',
+  numero_factura  text not null check (numero_factura ~ '^[0-9]{1,30}$'),
+  elegido_por     uuid,
+  elegido_en      timestamptz not null default now(),
+  nota            text check (nota is null or length(nota) <= 500)
+);
+alter table public.club_cruces_manuales enable row level security;
+revoke all on public.club_cruces_manuales from anon, public, authenticated;
+grant select on public.club_cruces_manuales to authenticated;
+drop policy if exists club_cruces_gerencia on public.club_cruces_manuales;
+create policy club_cruces_gerencia on public.club_cruces_manuales for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
+
 create table if not exists public.club_excepciones_resueltas (
   id            bigint generated always as identity primary key,
   location_id   text not null default 'santa-teresa',
-  tipo          text not null check (tipo in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA')),
+  tipo          text not null,
   ref           text not null check (length(ref) between 1 and 100),
   nota          text not null check (length(btrim(nota)) between 1 and 500),
   resuelto_por  uuid,
   resuelto_en   timestamptz not null default now(),
   unique (location_id, tipo, ref)
 );
+-- El check de tipos va aparte para poder sumar tipos sin recrear la tabla (re-ejecutable).
+alter table public.club_excepciones_resueltas drop constraint if exists club_excepciones_resueltas_tipo_check;
+alter table public.club_excepciones_resueltas add constraint club_excepciones_resueltas_tipo_check
+  check (tipo in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE'));
 alter table public.club_excepciones_resueltas enable row level security;
 revoke all on public.club_excepciones_resueltas from anon, public, authenticated;
 grant select on public.club_excepciones_resueltas to authenticated;
@@ -1486,6 +1584,9 @@ create policy club_exc_gerencia on public.club_excepciones_resueltas for select 
 
 -- Excepciones del puente en un rango de fechas (hora CR). owner, manager.
 --   REGISTRO_SIN_FACTURA (exacta)  · cupón/tarjeta/canje de la app con factura que no está en el puente
+--   SIN_CRUCE            (probable)· registro con pedido que no encontró su factura (primera con ese pedido
+--                                    después del escaneo, tope 18 h): posible cuenta dividida o refactura
+--                                    (el PoS las cobra en facturas sin pedido). El manager elige la factura.
 --   CREDITOS_SIN_CANJE   (probable)· factura con cxc múltiplo de medio crédito y sin canje
 --   CANJE_MONTO_DISTINTO (probable)· canjes de una factura cuyo valor ≠ cxc de la factura (±₡1)
 --   PROMO_SIN_CUPON      (exacta)  · solo si club_config.promo_articulo_codigo está cargado
@@ -1528,27 +1629,19 @@ begin
       from public.club_movimientos m
      where m.location_id = p_location and m.origen = 'app' and m.tipo in ('tarjeta','canje')
        and (m.factura_pos is not null or m.pos_ref is not null)),
-  -- Factura del puente de cada registro: por número (exacta) o, si la caja eligió la mesa,
-  -- por día + mesa + total (±₡1) + hora más cercana (probable). Plan B (mesa + últimos 4): día + mesa + hora.
+  -- Factura del puente de cada registro: la elegida a mano por el manager (si hay) o el cruce automático
+  -- (club_cruce_auto: por número, o por pedido = primera factura con ese pedido después del escaneo).
   mv as (
-    select m.*,
-           case when m.pos_ref is null then
-             (select t.id from public.pos_ndf_tickets t
-               where t.local = p_location and m.clave is not null and ltrim(t.numero_factura, '0') = m.clave limit 1)
-           else
-             (select t.id from public.pos_ndf_tickets t
-               where t.local = p_location
-                 and (coalesce(t.fecha_registra, t.fecha_cierra) at time zone 'America/Costa_Rica')::date = (m.pos_ref->>'dia')::date
-                 and upper(btrim(t.mesa)) = m.pos_ref->>'mesa'
-                 and (m.pos_ref->>'modo' <> 'mesa' or abs(t.total_crc - (m.pos_ref->>'total')::numeric) <= 1)
-               order by abs(extract(epoch from coalesce(t.fecha_registra, t.fecha_cierra) - (m.pos_ref->>'hora')::timestamptz))
-               limit 1)
-           end as ticket_id,
-           case when m.pos_ref is null then 'exacta' else 'probable' end as cert,
+    select m.*, a.auto_id, coalesce(cm_t.id, a.auto_id) as ticket_id,
+           case when cm.movimiento_id is not null then 'manual' else 'exacta' end as cert,
            coalesce(m.factura_pos,
-                    case m.pos_ref->>'modo' when 'mesa' then format('mesa %s · pedido %s', m.pos_ref->>'mesa', m.pos_ref->>'pedido')
-                                           else format('mesa %s · tiquete …%s', m.pos_ref->>'mesa', m.pos_ref->>'ultimos4') end) as ref_factura
-      from mv0 m),
+                    case m.pos_ref->>'modo'
+                      when 'pedido'  then concat('pedido ', m.pos_ref->>'pedido', coalesce(' · mesa ' || (m.pos_ref->>'mesa'), ''))
+                      when 'factura' then m.pos_ref->>'numero_factura' end) as ref_factura
+      from mv0 m
+      cross join lateral (select public.club_cruce_auto(p_location, m.pos_ref, m.factura_pos) as auto_id) a
+      left join public.club_cruces_manuales cm on cm.movimiento_id = m.id
+      left join public.pos_ndf_tickets cm_t on cm_t.local = p_location and cm_t.numero_factura = cm.numero_factura),
   ex as (
     -- REGISTRO_SIN_FACTURA
     select 'REGISTRO_SIN_FACTURA'::text as tipo, m.id::text as ref, m.fecha_visita as fecha, m.ref_factura as factura,
@@ -1560,6 +1653,28 @@ begin
      where m.fecha_visita >= v_ini and m.fecha_visita < v_fin
        and m.registrado_en < now() - make_interval(mins => v_cfg.puente_latencia_min)
        and m.ticket_id is null
+       and coalesce(m.pos_ref->>'modo', '') <> 'pedido'
+    union all
+    -- SIN_CRUCE: pedido sin su factura. Se marca cuando ya pasó la latencia del puente y el pedido no
+    -- sigue abierto (o pasaron las 18 h). Sigue listada (resuelta) aunque el manager elija la factura.
+    select 'SIN_CRUCE', m.id::text, m.fecha_visita, m.ref_factura, 'probable',
+           jsonb_build_object('motivo', 'posible cuenta dividida',
+                              'movimiento', case when m.cupon_id is not null then 'cupon' when m.tipo = 'canje' then 'canje' else 'tarjeta_manual' end,
+                              'personas', m.personas, 'creditos', m.creditos,
+                              'miembro', public.club_nombre_limpio(mi.nombre),
+                              'pedido', m.pos_ref->>'pedido', 'mesa', m.pos_ref->>'mesa',
+                              'total_crc', (m.pos_ref->>'total')::numeric, 'hora_escaneo', m.pos_ref->>'hora',
+                              'factura_elegida', cm.numero_factura, 'elegida_en', cm.elegido_en,
+                              'elegida_por', (select p.full_name from public.profiles p where p.id = cm.elegido_por))
+      from mv m
+      join public.club_miembros mi on mi.id = m.miembro_id
+      left join public.club_cruces_manuales cm on cm.movimiento_id = m.id
+     where m.fecha_visita >= v_ini and m.fecha_visita < v_fin
+       and m.pos_ref->>'modo' = 'pedido'
+       and m.auto_id is null
+       and m.registrado_en < now() - make_interval(mins => v_cfg.puente_latencia_min)
+       and (now() >= (m.pos_ref->>'hora')::timestamptz + interval '18 hours'
+            or not exists (select 1 from public.pos_ndf_open o where o.local = p_location and o.id_pedido = m.pos_ref->>'pedido'))
     union all
     -- CREDITOS_SIN_CANJE (heurística: cxc múltiplo de medio crédito)
     select 'CREDITOS_SIN_CANJE', 'factura:' || t.clave, t.f, t.numero_factura, 'probable',
@@ -1589,7 +1704,9 @@ begin
        and exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = t.id and l.codigo_producto = v_cfg.promo_articulo_codigo)
        and not exists (select 1 from mv m where m.tipo = 'tarjeta' and m.ticket_id = t.id)
   )
-  select ex.tipo, ex.ref, ex.fecha, ex.factura, ex.certeza, ex.detalle,
+  select ex.tipo, ex.ref, ex.fecha, ex.factura, ex.certeza,
+         ex.detalle || case when r.id is null then '{}'::jsonb
+                            else jsonb_build_object('resuelta_por', (select p.full_name from public.profiles p where p.id = r.resuelto_por)) end,
          r.id is not null, r.nota, r.resuelto_en
     from ex
     left join public.club_excepciones_resueltas r
@@ -1628,7 +1745,7 @@ begin
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
-  if p_tipo is null or p_tipo not in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA') then
+  if p_tipo is null or p_tipo not in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE') then
     raise exception 'Tipo de excepción no válido' using errcode = 'P0001';
   end if;
   if length(v_ref) not between 1 and 100 then
@@ -1642,6 +1759,90 @@ begin
   on conflict (location_id, tipo, ref) do update
     set nota = excluded.nota, resuelto_por = excluded.resuelto_por, resuelto_en = now();
   return true;
+end;
+$$;
+
+-- SIN_CRUCE: facturas candidatas para un registro con pedido que no cruzó solo. owner, manager.
+-- Las facturas SIN PEDIDO del día del escaneo (desde las 00:00 CR de ese día hasta 18 h después del
+-- escaneo, así entra una cuenta cobrada después de medianoche), con hora, total y mesa si tiene.
+-- `asignada_a_otro`: ya la eligieron para otro registro (puede pasar: cupón y canje de la misma mesa).
+create or replace function public.club_sin_cruce_candidatas(p_movimiento uuid)
+returns table (numero_factura text, hora timestamptz, total_crc numeric, mesa text, asignada_a_otro boolean)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  m      public.club_movimientos%rowtype;
+  v_hora timestamptz;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  select * into m from public.club_movimientos x where x.id = p_movimiento;
+  if not found or coalesce(m.pos_ref->>'modo', '') <> 'pedido' then
+    raise exception 'Registro no encontrado o sin pedido' using errcode = 'P0001';
+  end if;
+  v_hora := (m.pos_ref->>'hora')::timestamptz;
+  return query
+    select t.numero_factura, t.fecha_registra, t.total_crc,
+           case when btrim(coalesce(t.mesa, '')) in ('', '0') then null else upper(btrim(t.mesa)) end,
+           exists (select 1 from public.club_cruces_manuales c
+                    where c.numero_factura = t.numero_factura and c.location_id = m.location_id and c.movimiento_id <> m.id)
+      from public.pos_ndf_tickets t
+     where t.local = m.location_id and t.estado = 'C' and t.numero_pedido is null
+       and t.fecha_registra >= date_trunc('day', v_hora at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica'
+       and t.fecha_registra <  v_hora + interval '18 hours'
+     order by t.fecha_registra, t.numero_factura;
+end;
+$$;
+
+-- SIN_CRUCE: el manager elige la factura. Queda anotado quién y cuándo (club_cruces_manuales) y la
+-- excepción queda resuelta con la nota «Factura N elegida». Se puede corregir eligiendo otra.
+-- No toca el libro ni el saldo.
+create or replace function public.club_sin_cruce_elegir(p_movimiento uuid, p_numero_factura text, p_nota text default null)
+returns text
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  m      public.club_movimientos%rowtype;
+  v_nf   text := btrim(coalesce(p_numero_factura, ''));
+  v_nota text := nullif(btrim(coalesce(p_nota, '')), '');
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if v_nota is not null and length(v_nota) > 400 then
+    raise exception 'La nota es de hasta 400 caracteres' using errcode = 'P0001';
+  end if;
+  select * into m from public.club_movimientos x where x.id = p_movimiento;
+  if not found or coalesce(m.pos_ref->>'modo', '') <> 'pedido' then
+    raise exception 'Registro no encontrado o sin pedido' using errcode = 'P0001';
+  end if;
+  if public.club_cruce_auto(m.location_id, m.pos_ref, m.factura_pos) is not null then
+    raise exception 'Este registro ya cruzó con su factura' using errcode = 'P0001';
+  end if;
+  if not exists (select 1 from public.club_sin_cruce_candidatas(p_movimiento) c where c.numero_factura = v_nf) then
+    raise exception 'Esa factura no está en la lista (facturas sin pedido de ese día)' using errcode = 'P0001';
+  end if;
+
+  insert into public.club_cruces_manuales (movimiento_id, location_id, numero_factura, elegido_por, elegido_en, nota)
+  values (m.id, m.location_id, v_nf, auth.uid(), now(), v_nota)
+  on conflict (movimiento_id) do update
+    set numero_factura = excluded.numero_factura, elegido_por = excluded.elegido_por,
+        elegido_en = excluded.elegido_en, nota = excluded.nota;
+
+  insert into public.club_excepciones_resueltas (location_id, tipo, ref, nota, resuelto_por)
+  values (m.location_id, 'SIN_CRUCE', m.id::text, concat('Factura ', v_nf, ' elegida', ' · ' || v_nota), auth.uid())
+  on conflict (location_id, tipo, ref) do update
+    set nota = excluded.nota, resuelto_por = excluded.resuelto_por, resuelto_en = now();
+  return v_nf;
 end;
 $$;
 
@@ -1805,8 +2006,11 @@ revoke all on function public.club_miembro_token(uuid)                    from p
 revoke all on function public.club_buscar(text)                           from public, anon, authenticated;
 revoke all on function public.club_tarjeta_manual(uuid, int, text, uuid, jsonb) from public, anon, authenticated;
 revoke all on function public.club_pos_ref(jsonb) from public, anon, authenticated;
-revoke all on function public.club_mesas_abiertas(text) from public, anon, authenticated;
-grant execute on function public.club_mesas_abiertas(text) to authenticated;
+revoke all on function public.club_pedidos_abiertos(text) from public, anon, authenticated;
+grant execute on function public.club_pedidos_abiertos(text) to authenticated;
+revoke all on function public.club_facturas_recientes(text) from public, anon, authenticated;
+grant execute on function public.club_facturas_recientes(text) to authenticated;
+revoke all on function public.club_cruce_auto(text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.club_resolver(text)                         from public, anon, authenticated;
 revoke all on function public.club_config_auditar()                       from public, anon, authenticated;
 
@@ -1839,6 +2043,10 @@ grant execute on function public.club_excepciones(date, date, text)   to authent
 grant execute on function public.club_excepciones_abiertas(int, text) to authenticated;
 grant execute on function public.club_excepcion_resolver(text, text, text, text) to authenticated;
 grant execute on function public.club_reporte_mes(date, text)         to authenticated;
+revoke all on function public.club_sin_cruce_candidatas(uuid)          from public, anon, authenticated;
+revoke all on function public.club_sin_cruce_elegir(uuid, text, text)  from public, anon, authenticated;
+grant execute on function public.club_sin_cruce_candidatas(uuid)       to authenticated;
+grant execute on function public.club_sin_cruce_elegir(uuid, text, text) to authenticated;
 -- Staff (la guarda de rol está adentro)
 grant execute on function public.club_cupon_usar(text, int, text, uuid, jsonb) to authenticated;
 grant execute on function public.club_canje(uuid, numeric, text, uuid, jsonb) to authenticated;

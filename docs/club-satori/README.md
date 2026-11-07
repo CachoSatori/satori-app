@@ -19,3 +19,11 @@ Backlog → [PROMPT-CONTINUACION.md](../../PROMPT-CONTINUACION.md) («🟧 Despu
 - **PDF:** sigue el [estándar de reportes](ESTANDAR-reportes.md), con 3 páginas A4, fuentes incrustadas y un anexo CSV.
 - **Factura:** se compara solo por dígitos y sin ceros a la izquierda. Falta confirmar qué número ve el cajero.
 
+
+**Cruce por PEDIDO ✅ en staging** (07/11, decisión de Ismael: con la mesa se confunde cuando se divide la cuenta). En la 075 y en Escanear/Excepciones:
+- **Escanear:** después del QR, la lista de pedidos abiertos del local (`club_pedidos_abiertos`): «Pedido 14 · Mesa 20 · ₡48.500 · salonero». Un toque elige. El servidor guarda el pedido, la mesa, el total, cuándo lo vio abierto el puente (`visto`) y la **hora del escaneo** (la del servidor). Si el pedido ya no está abierto, la función lo rechaza y la caja pasa al plan B.
+- **Cruce** (`club_cruce_auto`): la **primera factura cerrada con ese `numero_pedido` después de que el puente vio el pedido abierto, con tope de 18 h**. No usa el día de la factura (así se esquiva la medianoche) ni `fecha_cierra` (viene agrupada al cierre). Margen de 2 min por el reloj de la PC del PoS. El mismo número de pedido al día siguiente no cruza con el viejo.
+- **`SIN_CRUCE`** (Excepciones, «posible cuenta dividida»): un registro con pedido que no encontró su factura, una vez que el pedido ya no está abierto (o pasaron las 18 h). El PoS cobra las cuentas divididas y las refacturas en facturas **sin pedido**. El manager elige la factura de la lista de facturas sin pedido de ese día (`club_sin_cruce_candidatas`, `club_sin_cruce_elegir`). Queda anotado quién y cuándo (`club_cruces_manuales`) y la excepción queda resuelta con «Factura N elegida». No toca el libro.
+- **Plan B:** si el pedido ya se cerró o la lista no carga, la caja elige la factura de la lista de cerradas en las últimas 2 h (`club_facturas_recientes`: hora, total y mesa si tiene). El cruce es exacto. **Ya no se tipean los 4 dígitos del tiquete.**
+- **Pruebas:** `075_pruebas_staging.sql`, 128/128 (pedido normal, medianoche, mismo número al día siguiente, tope de 18 h, cuenta dividida → Excepciones → elegir, plan B). vitest en verde.
+- **Falta (ítem 11 del puente, en el backlog):** el campo que une las facturas sin pedido con su pedido, la fecha de apertura del pedido y el consecutivo fiscal.

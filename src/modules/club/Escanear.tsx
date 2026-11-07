@@ -1,7 +1,7 @@
 /**
  * Escanear — un solo botón en caja (SPEC §2.4).
- *  · Cupón vigente → personas + MESA (de las abiertas en el PoS) → confirmar → «+N personas a {referente}».
- *    Plan B si la mesa ya se cerró o la lista no carga: mesa + últimos 4 dígitos del tiquete.
+ *  · Cupón vigente → personas + PEDIDO (de los abiertos en el PoS) → confirmar → «+N personas a {referente}».
+ *    Plan B si el pedido ya se cerró o la lista no carga: elegir la factura de las últimas 2 h.
  *  · Pase de referente → saldo + canje (1 / 1,5 / 2) o «Tarjeta física».
  *  · Usado, vencido, dado de baja o desconocido → una línea clara.
  *  Plan B: código a mano y búsqueda (nombre, negocio o últimos 4 del teléfono).
@@ -10,8 +10,10 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, usarCupon, canjear, tarjetaManual, buscar, getMiembro, aClubError, nuevoOp,
-  opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO, getMesasAbiertas, posDeMesa, describirPos, planBValido,
-  type ResolverCupon, type ResolverReferente, type BusquedaFila, type ClubError, type PosRef, type MesaAbierta,
+  opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
+  describirPos, describirPedido, describirFactura,
+  type ResolverCupon, type ResolverReferente, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
+  type FacturaReciente,
 } from '../../shared/api/club'
 import { parsearQR } from './qrFormato'
 import { Aviso, Btn, Card, Chip } from './ui'
@@ -225,69 +227,78 @@ function CampoPersonas({ v, set }: { v: string; set: (s: string) => void }) {
 }
 
 /**
- * Mesa del PoS: lista de mesas abiertas (puente, ~75 s). Un toque elige. Plan B a mano:
- * mesa + últimos 4 dígitos del tiquete electrónico.
+ * Pedido del PoS: lista de pedidos abiertos del local (puente, ~75 s). Un toque elige; el servidor guarda
+ * el pedido y la hora del escaneo. Plan B si el pedido ya se cerró o la lista no carga: la lista de
+ * facturas cerradas de las últimas 2 h (hora, total, mesa si tiene). No se tipea nada.
  */
-function SelectorMesa({ v, set }: { v: PosRef | null; set: (p: PosRef | null) => void }) {
-  const [mesas, setMesas] = useState<MesaAbierta[] | null>(null)
+function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) => void }) {
+  const [pedidos, setPedidos] = useState<PedidoAbierto[] | null>(null)
+  const [facturas, setFacturas] = useState<FacturaReciente[] | null>(null)
   const [err, setErr] = useState(false)
-  const [planB, setPlanB] = useState(v?.modo === 'manual')
-  const [mesaB, setMesaB] = useState(v?.modo === 'manual' ? v.mesa : '')
-  const [u4, setU4] = useState(v?.modo === 'manual' ? v.ultimos4 : '')
+  const [errB, setErrB] = useState(false)
+  const [planB, setPlanB] = useState(v?.modo === 'factura')
   const cargar = useCallback(() => {
-    setErr(false)
-    getMesasAbiertas().then(m => { setMesas(m); if (m.length === 0) setPlanB(true) })
-      .catch(() => { setErr(true); setMesas([]); setPlanB(true) })
+    setErr(false); setPedidos(null)
+    getPedidosAbiertos().then(p => { setPedidos(p); if (p.length === 0) setPlanB(true) })
+      .catch(() => { setErr(true); setPedidos([]); setPlanB(true) })
+  }, [])
+  const cargarB = useCallback(() => {
+    setErrB(false); setFacturas(null)
+    getFacturasRecientes().then(setFacturas).catch(() => { setErrB(true); setFacturas([]) })
   }, [])
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { cargar() }, [cargar])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (planB) cargarB() }, [planB, cargarB])
   const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Costa_Rica' })
-  const elegidaPedido = v?.modo === 'mesa' ? `${v.mesa}|${v.pedido}` : null
+  const opcion = (sel: boolean) => ({ textAlign: 'left' as const, minHeight: 52, borderRadius: 8, cursor: 'pointer', padding: '0.6rem 0.8rem',
+                                      border: `2px solid ${sel ? C.ink : C.border}`, background: sel ? C.paper : '#fff' })
   return (
     <div>
-      <span style={labelStyle}>Mesa</span>
+      <span style={labelStyle}>{planB ? 'Factura (plan B)' : 'Pedido'}</span>
       {!planB && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {mesas === null && <div style={{ color: C.muted }}>Cargando mesas abiertas…</div>}
-          {mesas?.map(m => {
-            const sel = elegidaPedido === `${m.mesa}|${m.pedido}`
+          {pedidos === null && <div style={{ color: C.muted }}>Cargando pedidos abiertos…</div>}
+          {pedidos?.map(p => {
+            const sel = v?.modo === 'pedido' && v.pedido === p.pedido
             return (
-              <button key={`${m.mesa}|${m.pedido}`} onClick={() => set(posDeMesa(m))} aria-pressed={sel}
-                style={{ textAlign: 'left', minHeight: 52, borderRadius: 8, cursor: 'pointer', padding: '0.6rem 0.8rem',
-                         border: `2px solid ${sel ? C.ink : C.border}`, background: sel ? C.paper : '#fff' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <strong style={{ fontSize: '1.1rem' }}>Mesa {m.mesa}</strong>
-                  <strong>₡{Math.round(Number(m.total_crc ?? 0)).toLocaleString('de-DE')}</strong>
+              <button key={p.pedido} onClick={() => set(posDePedido(p))} aria-pressed={sel} style={opcion(sel)}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>
+                  {describirPedido(p)} · <span style={{ fontWeight: 500 }}>{p.salonero ?? 'sin salonero'}</span>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: C.muted }}>
-                  {m.salonero ?? 'sin salonero'}{m.pax ? ` · ${m.pax} pax` : ''} · act. {hora(m.actualizado)}
+                  {p.pax ? `${p.pax} pax · ` : ''}act. {hora(p.actualizado)}
                 </div>
               </button>
             )
           })}
           <div style={{ display: 'flex', gap: 6 }}>
             <Btn variant="secondary" onClick={cargar} style={{ flex: 1 }}>Actualizar</Btn>
-            <Btn variant="ghost" onClick={() => { setPlanB(true); set(null) }} style={{ flex: 2 }}>La mesa no está</Btn>
+            <Btn variant="ghost" onClick={() => { setPlanB(true); set(null) }} style={{ flex: 2 }}>El pedido no está</Btn>
           </div>
         </div>
       )}
       {planB && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: '0.85rem', color: C.muted }}>
-            {err ? 'No se pudo cargar la lista de mesas.' : mesas?.length === 0 ? 'No hay mesas abiertas en el PoS.' : 'Mesa ya cerrada:'} Escribí la mesa y los
-            últimos 4 dígitos del tiquete electrónico.
+            {err ? 'No se pudo cargar la lista de pedidos.' : pedidos?.length === 0 ? 'No hay pedidos abiertos en el PoS.' : 'Pedido ya cerrado:'}{' '}
+            elegí la factura de la lista (cerradas en las últimas 2 horas).
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <label style={{ flex: 1 }}><span style={labelStyle}>Mesa</span>
-              <input value={mesaB} inputMode="numeric" maxLength={10} placeholder="Ej. 10" style={inputStyle}
-                onChange={e => { const x = e.target.value.toUpperCase().replace(/[^0-9A-Z]/g, ''); setMesaB(x); set(planBValido(x, u4) ? { modo: 'manual', mesa: x, ultimos4: u4 } : null) }} />
-            </label>
-            <label style={{ flex: 1 }}><span style={labelStyle}>Últimos 4 del tiquete</span>
-              <input value={u4} inputMode="numeric" maxLength={4} placeholder="6012" style={{ ...inputStyle, letterSpacing: '0.2em' }}
-                onChange={e => { const x = e.target.value.replace(/\D/g, '').slice(0, 4); setU4(x); set(planBValido(mesaB, x) ? { modo: 'manual', mesa: mesaB, ultimos4: x } : null) }} />
-            </label>
+          {facturas === null && <div style={{ color: C.muted }}>Cargando facturas…</div>}
+          {errB && <div style={{ color: C.red, fontSize: '0.85rem' }}>No se pudo cargar la lista de facturas. Probá «Actualizar».</div>}
+          {facturas?.length === 0 && !errB && <div style={{ color: C.muted, fontSize: '0.85rem' }}>No hay facturas cerradas en las últimas 2 horas.</div>}
+          {facturas?.map(f => {
+            const sel = v?.modo === 'factura' && v.numero_factura === f.numero_factura
+            return (
+              <button key={f.numero_factura} onClick={() => set(posDeFactura(f))} aria-pressed={sel} style={opcion(sel)}>
+                <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{describirFactura(f)}</div>
+              </button>
+            )
+          })}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn variant="secondary" onClick={cargarB} style={{ flex: 1 }}>Actualizar</Btn>
+            {!err && <Btn variant="ghost" onClick={() => { setPlanB(false); set(null); cargar() }} style={{ flex: 2 }}>Volver a los pedidos abiertos</Btn>}
           </div>
-          {(mesas?.length ?? 0) > 0 && <Btn variant="ghost" onClick={() => { setPlanB(false); set(null) }}>Volver a la lista de mesas</Btn>}
         </div>
       )}
     </div>
@@ -349,7 +360,7 @@ function PanelCupon({ a, ...p }: PanelBase & { a: Extract<Actual, { kind: 'cupon
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
-          <SelectorMesa v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
+          <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
           {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
           {p.confirmando ? (
             <Confirmacion texto={`+${p.personas} personas a ${d.referente} · ${p.pos ? describirPos(p.pos) : ''}`}
@@ -434,7 +445,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, ...p }: Panel
                     </div>
                   )}
                 </div>
-                <SelectorMesa v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
+                <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando && creditos != null ? (
                   <Confirmacion texto={`Canjear ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
@@ -447,7 +458,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, ...p }: Panel
               <>
                 <div style={{ fontSize: '0.85rem', color: C.muted }}>Para tarjetas impresas que ya están repartidas. Queda marcada «manual».</div>
                 <CampoPersonas v={p.personas} set={s => { p.setPersonas(s); p.setConfirmando(false) }} />
-                <SelectorMesa v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
+                <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando ? (
                   <Confirmacion texto={`Tarjeta física: +${p.personas} personas a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}

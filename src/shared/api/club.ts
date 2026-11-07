@@ -109,36 +109,55 @@ const primero = <T>(d: T | T[]): T => (Array.isArray(d) ? d[0] : d)
 export const resolverQR = (texto: string) => llamar<ResolverResultado>('club_resolver', { p_texto: texto })
 
 /**
- * Referencia al PoS para el piloto (decisión de Ismael, 06-nov): la caja elige la MESA ABIERTA del
- * puente; si la mesa ya se cerró o la lista no carga, plan B: mesa + últimos 4 dígitos del tiquete.
- * El cruce con la factura cerrada es «probable» hasta que el puente traiga el consecutivo (ítem 11).
+ * Referencia al PoS para el piloto (decisiones de Ismael, 06 y 07-nov): la clave de cruce es el PEDIDO.
+ * La caja elige el pedido abierto del puente; el servidor guarda el pedido y la hora del escaneo, y el
+ * cruce es la primera factura con ese pedido cerrada después del escaneo (tope 18 h).
+ * Plan B, si el pedido ya se cerró: elegir la factura de la lista de las últimas 2 h (cruce exacto).
  */
 export type PosRef =
-  | { modo: 'mesa'; dia: string; pedido: string; mesa: string; total: number; hora: string }
-  | { modo: 'manual'; mesa: string; ultimos4: string }
-export interface MesaAbierta {
-  pedido: string; mesa: string; salonero: string | null; total_crc: number | null; pax: number | null
-  actualizado: string; dia: string
+  | { modo: 'pedido'; pedido: string; mesa: string | null; total: number | null }
+  | { modo: 'factura'; numero_factura: string; mesa: string | null; total: number; hora: string }
+export interface PedidoAbierto {
+  pedido: string; mesa: string | null; salonero: string | null; total_crc: number | null; pax: number | null
+  actualizado: string
 }
-export const getMesasAbiertas = (local = 'santa-teresa') => llamar<MesaAbierta[]>('club_mesas_abiertas', { p_location: local })
-export const posDeMesa = (m: MesaAbierta): PosRef =>
-  ({ modo: 'mesa', dia: m.dia, pedido: m.pedido, mesa: m.mesa, total: Number(m.total_crc ?? 0), hora: new Date().toISOString() })
+export interface FacturaReciente {
+  numero_factura: string; hora: string; total_crc: number; mesa: string | null; pedido: string | null
+}
+export const getPedidosAbiertos = (local = 'santa-teresa') => llamar<PedidoAbierto[]>('club_pedidos_abiertos', { p_location: local })
+export const getFacturasRecientes = (local = 'santa-teresa') => llamar<FacturaReciente[]>('club_facturas_recientes', { p_location: local })
+
+const colones = (n: number | null | undefined) => `₡${Math.round(Number(n ?? 0)).toLocaleString('de-DE')}`
+const horaCR = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })
+
+export const posDePedido = (p: PedidoAbierto): PosRef =>
+  ({ modo: 'pedido', pedido: p.pedido, mesa: p.mesa, total: p.total_crc == null ? null : Number(p.total_crc) })
+export const posDeFactura = (f: FacturaReciente): PosRef =>
+  ({ modo: 'factura', numero_factura: f.numero_factura, mesa: f.mesa, total: Number(f.total_crc), hora: f.hora })
+/** Lo que se manda al servidor: solo la clave. Mesa, total y hora los pone el servidor desde el puente. */
+export const posParaServidor = (p: PosRef) =>
+  p.modo === 'pedido' ? { modo: 'pedido', pedido: p.pedido } : { modo: 'factura', numero_factura: p.numero_factura }
+/** «Pedido 14 · Mesa 20 · ₡48.500» */
+export const describirPedido = (p: Pick<PedidoAbierto, 'pedido' | 'mesa' | 'total_crc'>) =>
+  [`Pedido ${p.pedido}`, p.mesa ? `Mesa ${p.mesa}` : null, p.total_crc == null ? 'sin total' : colones(p.total_crc)]
+    .filter(Boolean).join(' · ')
+/** «19:21 · ₡48.500 · Mesa 20» */
+export const describirFactura = (f: Pick<FacturaReciente, 'hora' | 'total_crc' | 'mesa'>) =>
+  [horaCR(f.hora), colones(f.total_crc), f.mesa ? `Mesa ${f.mesa}` : null].filter(Boolean).join(' · ')
 export const describirPos = (p: PosRef) =>
-  p.modo === 'mesa'
-    ? `mesa ${p.mesa} · ₡${Math.round(p.total).toLocaleString('de-DE')}`
-    : `mesa ${p.mesa} · tiquete …${p.ultimos4}`
-/** Plan B válido: mesa (1–10 letras o números) y exactamente 4 números. */
-export const planBValido = (mesa: string, ultimos4: string) => /^[0-9A-Za-z]{1,10}$/.test(mesa.trim()) && /^[0-9]{4}$/.test(ultimos4)
+  p.modo === 'pedido'
+    ? describirPedido({ pedido: p.pedido, mesa: p.mesa, total_crc: p.total })
+    : `factura de las ${describirFactura({ hora: p.hora, total_crc: p.total, mesa: p.mesa })}`
 
 export const usarCupon = async (codigo: string, personas: number, pos: PosRef, op: string) =>
   primero(await llamar<Array<Saldo & { miembro_id: string }>>('club_cupon_usar',
-    { p_codigo: codigo, p_personas: personas, p_factura: null, p_op: op, p_pos: pos }))
+    { p_codigo: codigo, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 
 export const canjear = async (miembro: string, creditos: number, pos: PosRef, op: string) =>
-  primero(await llamar<Saldo[]>('club_canje', { p_miembro: miembro, p_creditos: creditos, p_factura: null, p_op: op, p_pos: pos }))
+  primero(await llamar<Saldo[]>('club_canje', { p_miembro: miembro, p_creditos: creditos, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 
 export const tarjetaManual = async (miembro: string, personas: number, pos: PosRef, op: string) =>
-  primero(await llamar<Saldo[]>('club_tarjeta_manual', { p_miembro: miembro, p_personas: personas, p_factura: null, p_op: op, p_pos: pos }))
+  primero(await llamar<Saldo[]>('club_tarjeta_manual', { p_miembro: miembro, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 
 export const buscar = (q: string) => llamar<BusquedaFila[]>('club_buscar', { p_q: q })
 
@@ -196,9 +215,9 @@ export const fmtCreditos = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
 
 // ── F1f: excepciones del puente y reporte mensual (owner, manager) ───────────
-export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA'
+export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA' | 'SIN_CRUCE'
 export interface Excepcion {
-  tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable'
+  tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable' | 'manual'
   detalle: Record<string, unknown>; resuelta: boolean; nota: string | null; resuelta_en: string | null
 }
 
@@ -206,6 +225,12 @@ export const getExcepciones = (desde: string, hasta: string, local = 'santa-tere
   llamar<Excepcion[]>('club_excepciones', { p_desde: desde, p_hasta: hasta, p_location: local })
 export const getExcepcionesAbiertas = (dias = 30, local = 'santa-teresa') =>
   llamar<number>('club_excepciones_abiertas', { p_dias: dias, p_location: local })
+/** SIN_CRUCE: facturas sin pedido del día del escaneo, para que el manager elija. */
+export interface FacturaCandidata { numero_factura: string; hora: string; total_crc: number; mesa: string | null; asignada_a_otro: boolean }
+export const getCandidatasSinCruce = (movimiento: string) =>
+  llamar<FacturaCandidata[]>('club_sin_cruce_candidatas', { p_movimiento: movimiento })
+export const elegirFacturaSinCruce = (movimiento: string, numeroFactura: string, nota: string) =>
+  llamar<string>('club_sin_cruce_elegir', { p_movimiento: movimiento, p_numero_factura: numeroFactura, p_nota: nota.trim() || null })
 export const resolverExcepcion = (tipo: TipoExcepcion, ref: string, nota: string, local = 'santa-teresa') =>
   llamar<boolean>('club_excepcion_resolver', { p_tipo: tipo, p_ref: ref, p_nota: nota, p_location: local })
 

@@ -40,18 +40,21 @@ describe('errores y opciones de canje', () => {
   })
 })
 
-import { planBValido, describirPos, posDeMesa } from '../../shared/api/club'
-describe('mesa del PoS (piloto)', () => {
-  it('plan B: mesa + exactamente 4 números', () => {
-    expect(planBValido('10', '6012')).toBe(true)
-    expect(planBValido('10', '601')).toBe(false)
-    expect(planBValido('10', '60a2')).toBe(false)
-    expect(planBValido('', '6012')).toBe(false)
+import { describirPos, describirPedido, describirFactura, posDePedido, posDeFactura, posParaServidor } from '../../shared/api/club'
+describe('pedido del PoS (piloto)', () => {
+  it('describe el pedido como lo ve la caja: «Pedido 14 · Mesa 20 · ₡48.500»', () => {
+    expect(describirPedido({ pedido: '14', mesa: '20', total_crc: 48500 })).toBe('Pedido 14 · Mesa 20 · ₡48.500')
+    expect(describirPedido({ pedido: '3', mesa: null, total_crc: null })).toBe('Pedido 3 · sin total')
   })
-  it('describe la mesa elegida para la confirmación', () => {
-    const p = posDeMesa({ pedido: '91', mesa: '41', salonero: 'X', total_crc: 25000, pax: 2, actualizado: '2026-11-06T01:00:00Z', dia: '2026-11-05' })
-    expect(p).toMatchObject({ modo: 'mesa', mesa: '41', pedido: '91', total: 25000, dia: '2026-11-05' })
-    expect(describirPos(p)).toBe('mesa 41 · ₡25.000')
-    expect(describirPos({ modo: 'manual', mesa: '43', ultimos4: '6012' })).toBe('mesa 43 · tiquete …6012')
+  it('al servidor solo va la clave (pedido o factura); mesa, total y hora los pone el servidor', () => {
+    const p = posDePedido({ pedido: '14', mesa: '20', salonero: 'X', total_crc: 48500, pax: 4, actualizado: '2026-11-06T01:00:00Z' })
+    expect(posParaServidor(p)).toEqual({ modo: 'pedido', pedido: '14' })
+    expect(describirPos(p)).toBe('Pedido 14 · Mesa 20 · ₡48.500')
+    const f = posDeFactura({ numero_factura: '900001', hora: '2026-11-06T01:21:30Z', total_crc: 48500, mesa: null, pedido: null })
+    expect(posParaServidor(f)).toEqual({ modo: 'factura', numero_factura: '900001' })
+  })
+  it('plan B: la factura se describe con hora CR, total y mesa si tiene', () => {
+    expect(describirFactura({ hora: '2026-11-06T01:21:30Z', total_crc: 48500, mesa: '20' })).toBe('19:21 · ₡48.500 · Mesa 20')
+    expect(describirFactura({ hora: '2026-11-06T01:21:30Z', total_crc: 9000, mesa: null })).toBe('19:21 · ₡9.000')
   })
 })

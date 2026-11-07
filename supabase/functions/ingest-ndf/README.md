@@ -4,9 +4,15 @@ Recibe el día ya mapeado por el extractor de la Fase 1a (`pos-bridge/`) y lo pe
 tablas `pos_ndf_*` de la **migración 062**. No calcula ventas, no reparte propinas, no toca la
 caja: valida, normaliza y guarda.
 
-> ⛔ **No desplegada** y la migración 062 **no está aplicada**. El orden es: aplicar la 062 →
-> cargar el secreto → recién ahí `functions deploy`. Al revés, la función escribe contra tablas
-> que no existen.
+> **Estado (CLUB-AUD-28, verificado el 07-nov-2026):** en **staging** corre la **v12**, desplegada el 07-nov a las
+> 14:41 UTC desde `claude/puente-item11` @ `c7d206e` (ítem 11 + área de la mesa). En **prod** corre la versión
+> anterior al ítem 11. El pase a prod sigue el RUNBOOK del Club (`docs/club-satori/RUNBOOK-piloto.md`, en el PR
+> #59): **la mig 081 siempre antes que este Edge**. El secreto por local (`POS_INGEST_SECRETS`, ronda 3) está en
+> la rama y todavía no se desplegó.
+>
+> **Secreto por local (CLUB-AUD-32):** `POS_INGEST_SECRETS` = JSON `{"santa-teresa":"<largo>","nosara":"<largo>"}`.
+> El secreto que llega decide el local y el sobre tiene que ser de ese local. Sin el mapa, el `POS_INGEST_SECRET`
+> de siempre sigue valiendo, pero solo para santa-teresa.
 
 ## Quién la llama
 

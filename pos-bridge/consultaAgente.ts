@@ -398,6 +398,16 @@ WHERE p.${cp('numerofactura')} IS NULL
 ORDER BY d.${cd('numeropedido')}`
 }
 
+/** Clave del pedido abierto en el snapshot: `pedido:<fecha>:<n>` (CLUB-AUD-31). Ver `mapAbierta`. */
+export function clavePedido(f: { periodo?: unknown; mes?: unknown; dia?: unknown }, id: string, fechaHora: string | null): string {
+  const n = (v: unknown) => { const t = texto(v); return t === null ? null : t.replace(/\.0*$/, '') }
+  const [p, m, d] = [n(f.periodo), n(f.mes), n(f.dia)]
+  let fecha: string | null = null
+  if (p && m && d && /^\d{4}$/.test(p) && /^\d{1,2}$/.test(m) && /^\d{1,2}$/.test(d)) fecha = `${p}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+  else if (fechaHora && /^\d{4}-\d{2}-\d{2}/.test(fechaHora)) fecha = fechaHora.slice(0, 10)
+  return fecha ? `pedido:${fecha}:${id}` : `pedido:${id}`
+}
+
 /** La clave real del pedido como string, para atar cabecera y líneas. `null` si falta algo. */
 export function claveLineas(f: { periodo: unknown; mes: unknown; dia: unknown; numero: unknown }): string | null {
   const partes = [f.periodo, f.mes, f.dia, f.numero].map((v) => {
@@ -532,7 +542,10 @@ export function agruparProductos(lineas: readonly FilaLineaAbierta[]): ProductoC
 /**
  * Fila de pedido abierto → entrada del snapshot.
  *
- * `clave` = `pedido:<NumeroPedido>`, la identidad estable dentro del local. El pax sale
+ * `clave` = `pedido:<AAAA-MM-DD>:<NumeroPedido>` (CLUB-AUD-31): el número se reinicia cada día y el agente lee
+ * 36 h, así que un pedido de ayer que quedó abierto y uno de hoy con el mismo número tienen claves distintas. La
+ * fecha sale de la clave real del PoS (Periodo, Mes, Dia) o, si la instalación no la tiene, de la hora de apertura.
+ * Sin ninguna de las dos, `pedido:<n>` (como antes). El pax sale
  * SOLO de `Personas`: el artículo 677/678 vive en el detalle de la FACTURA, que todavía
  * no existe — por eso la alerta casi siempre va a decir `sin_pax` mientras la mesa esté
  * abierta, y eso es la verdad, no un bug.
@@ -547,7 +560,7 @@ export function mapAbierta(f: FilaAbierta, lineas: readonly FilaLineaAbierta[] =
   const pax = mapPax({ personas: f.personas, qty677: est.qty677, qty678: est.qty678 })
 
   return {
-    clave:          `pedido:${id}`,
+    clave:          clavePedido(f, id, naive),
     numero_factura: null,
     id_pedido:      id,
     mesa:           texto(f.mesa),

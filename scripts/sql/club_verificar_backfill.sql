@@ -4,14 +4,15 @@
 begin;
 select json_build_object(
   -- cobertura en salón desde el 1-sep (Ismael contó 1.363 facturas; 5 sin mesa ni pedido)
-  'salon_desde_sep', (select json_build_object('facturas', count(*), 'con_mesa_factura', count(mesa_factura),
-                         'con_consecutivo', count(consecutivo_fe), 'con_apertura', count(pedido_abierto_en),
+  'area_M_desde_sep', (select json_build_object('facturas', count(*), 'con_mesa_factura', count(mesa_factura),
+                         'con_consecutivo', count(consecutivo_fe), 'con_clave_fe', count(clave_fe), 'con_apertura', count(pedido_abierto_en),
+                         'con_pedido', count(numero_pedido),
                          'sin_mesa_ni_pedido', count(*) filter (where numero_pedido is null and mesa_factura is null))
-                        from pos_ndf_tickets where local = 'santa-teresa' and canal = 'salon' and estado = 'C'
+                        from pos_ndf_tickets where local = 'santa-teresa' and area = 'M' and estado = 'C'
                           and fecha_registra >= '2026-09-01 00:00-06'),
   -- los ejemplos de Ismael
   'ejemplos', (select json_agg(json_build_object('factura', numero_factura, 'mesa_factura', mesa_factura, 'pedido', numero_pedido,
-                         'consecutivo', consecutivo_fe, 'apertura', pedido_abierto_en at time zone 'America/Costa_Rica') order by numero_factura)
+                         'consecutivo_ult5', right(consecutivo_fe, 5), 'clave_fe_largo', length(clave_fe), 'apertura', pedido_abierto_en at time zone 'America/Costa_Rica') order by numero_factura)
                  from pos_ndf_tickets where local = 'santa-teresa' and numero_factura in ('112430', '112310', '112311', '112313', '112293')),
   -- pedido 14 del 05-nov: el escaneo con la apertura real
   'pedido_14', (select coalesce(string_agg(t.numero_factura, '+' order by o.n), '(ninguna)')

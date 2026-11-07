@@ -1631,6 +1631,47 @@ begin
   perform set_config('request.headers', '{"x-club-web":"clave-de-prueba-del-club-0123456789abcdef"}', true);
 end $$;
 
+
+-- ═══ 41. PERSONAS_SOBRE_PAX usa el pax DEL PEDIDO, no el de cada factura (cuentas divididas con pax 0) ═══
+-- Pedido 9411 (mesa 8): principal con pax 1 por artículo; 3 divididas sin pedido: pax 0, 2 y 1 → pax del pedido 4.
+-- Pedido 9412 (mesa 9): Personas del pedido = 5 (pax_nativo) y ningún artículo de pax → pax del pedido 5.
+do $$
+declare v_m uuid; v_n uuid; j jsonb; t0 timestamptz := now() - interval '20 minutes';
+        d0 date := (now() at time zone 'America/Costa_Rica')::date - 1; d1 date := (now() at time zone 'America/Costa_Rica')::date + 1;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Pax A', 'app') returning id into v_m;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Pax B', 'app') returning id into v_n;
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, pedido_abierto_en, total_crc, pax, pax_nativo) values
+    ('990961', t0,                         'C', 'salon', 'cajero',     true, 'ok', '8', '8', '9411', t0 - interval '60 minutes', 10000, 1, 0),
+    ('990962', t0 - interval '3 minutes',  'C', 'salon', 'sin_pedido', true, 'ok', null, '8', null, null, 10000, 0, 0),
+    ('990963', t0 - interval '2 minutes',  'C', 'salon', 'sin_pedido', true, 'ok', null, '8', null, null, 10000, 2, 0),
+    ('990964', t0 - interval '1 minutes',  'C', 'salon', 'sin_pedido', true, 'ok', null, '8', null, null, 10000, 1, 0),
+    ('990965', t0,                         'C', 'salon', 'cajero',     true, 'ok', '9', '9', '9412', t0 - interval '60 minutes', 50000, 0, 5);
+  -- 4 personas en un pedido de pax 4 repartido en 4 facturas (una con pax 0): NO es excepción
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave) values
+    (v_m, 'tarjeta', 4, 6, 18000, t0 - interval '30 minutes', now() - interval '2 hours', 'app',
+     jsonb_build_object('modo','pedido','pedido','9411','mesa','8','abierto_en', t0 - interval '60 minutes','hora', t0 - interval '30 minutes'), 'pax:a'),
+    (v_n, 'tarjeta', 5, 6, 18000, t0 - interval '30 minutes', now() - interval '2 hours', 'app',
+     jsonb_build_object('modo','pedido','pedido','9412','mesa','9','abierto_en', t0 - interval '60 minutes','hora', t0 - interval '30 minutes'), 'pax:b');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(d0, d1) e where e.tipo = 'PERSONAS_SOBRE_PAX' and e.factura in ('990961', '990965');
+  perform pg_temp.yo();
+  perform pg_temp.r('41', 'cuenta dividida con facturas de pax 0: 4 personas con pax del pedido 4 → sin excepción; Personas del pedido 5 → sin excepción',
+    jsonb_array_length(j) = 0, j::text);
+  -- una persona más en cada pedido → sí es excepción, con el pax del pedido (no el de la factura principal)
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Pax 9411', 'app'), ('referente', 'Ref Pax 9412', 'app');
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  select m.id, 'tarjeta', 1, 6, 18000, t0 - interval '25 minutes', now() - interval '2 hours', 'app',
+         jsonb_build_object('modo','pedido','pedido', x.p,'mesa', x.me,'abierto_en', t0 - interval '60 minutes','hora', t0 - interval '25 minutes'), 'pax:c' || x.p
+    from (values ('9411', '8'), ('9412', '9')) x(p, me) join club_miembros m on m.nombre = 'Ref Pax ' || x.p;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(e) order by e.factura), '[]') into j from public.club_excepciones(d0, d1) e where e.tipo = 'PERSONAS_SOBRE_PAX' and e.factura in ('990961', '990965');
+  perform pg_temp.yo();
+  perform pg_temp.r('41', 'con una persona más: PERSONAS_SOBRE_PAX con pax del pedido 4 (Σ facturas) y 5 (Personas del pedido)',
+    jsonb_array_length(j) = 2 and (j->0->'detalle'->>'pax')::int = 4 and (j->0->'detalle'->>'personas')::int = 5
+      and (j->1->'detalle'->>'pax')::int = 5 and (j->1->'detalle'->>'personas')::int = 6, j::text);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

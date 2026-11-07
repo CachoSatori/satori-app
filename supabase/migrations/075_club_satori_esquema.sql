@@ -2114,10 +2114,13 @@ begin
       join public.club_miembros mi on mi.id = v.miembro_id
     union all
     -- PERSONAS_SOBRE_PAX (CLUB-AUD-02): Σ personas de todas las tarjetas de la visita (todos los referentes)
-    -- contra el pax de sus facturas (principal + divididas). Pax 0 = desconocido: no se compara.
+    -- contra el pax DEL PEDIDO, nunca el de cada factura: en una cuenta dividida las facturas sin pedido llegan
+    -- con pax 0 o con parte de los artículos de pax (677/678). Pax del pedido = el mayor entre las Personas
+    -- del pedido (pax_nativo de la factura principal) y la suma del pax de todas las facturas de la visita
+    -- (principal + divididas). Pax 0 = desconocido: no se compara.
     select 'PERSONAS_SOBRE_PAX', 'pax:' || ltrim(t.numero_factura, '0'), v.f, t.numero_factura, 'probable',
-           jsonb_build_object('personas', v.personas, 'pax', x.pax, 'tarjetas', v.n, 'referentes', v.miembros,
-                              'mesa', coalesce(t.mesa_factura, t.mesa))
+           jsonb_build_object('personas', v.personas, 'pax', x.pax, 'pax_personas_pedido', t.pax_nativo, 'pax_facturas', x.pax_facturas,
+                              'tarjetas', v.n, 'referentes', v.miembros, 'mesa', coalesce(t.mesa_factura, t.mesa))
       from (select m.ticket_ids[1] as principal,
                    count(*) as n, sum(m.personas) as personas, min(m.fecha_visita) as f,
                    string_agg(distinct public.club_nombre_limpio(mi.nombre), ', ') as miembros
@@ -2125,7 +2128,8 @@ begin
              where m.tipo = 'tarjeta' and cardinality(m.ticket_ids) > 0 and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
              group by 1) v
       join public.pos_ndf_tickets t on t.id = v.principal
-      cross join lateral (select coalesce(sum(z.pax), 0) as pax from public.pos_ndf_tickets z
+      cross join lateral (select greatest(coalesce(t.pax_nativo, 0), coalesce(sum(z.pax), 0)) as pax, coalesce(sum(z.pax), 0) as pax_facturas
+                            from public.pos_ndf_tickets z
                            where z.id in (select unnest(m2.ticket_ids) from mv m2
                                            where m2.tipo = 'tarjeta' and m2.ticket_ids[1] = v.principal)) x
      where x.pax > 0 and v.personas > x.pax

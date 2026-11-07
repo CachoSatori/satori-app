@@ -85,6 +85,11 @@ export interface ExtrasFactura {
   mesa?:          unknown
   numero_pedido?: unknown
   fecha_cierra?:  unknown
+  // Ítem 11 (mig 081)
+  mesa_factura?:      unknown
+  consecutivo_fe?:    unknown
+  clave_fe?:          unknown
+  pedido_abierto_en?: unknown
 }
 
 /**
@@ -102,6 +107,10 @@ export function extrasPorFactura(filas: FilaFactura[]): Map<string, ExtrasFactur
       mesa:          f.mesa,
       numero_pedido: f.numero_pedido,
       fecha_cierra:  f.fecha_cierra,
+      mesa_factura:      f.mesa_factura,
+      consecutivo_fe:    f.consecutivo_fe,
+      clave_fe:          f.clave_fe,
+      pedido_abierto_en: f.pedido_abierto_en,
     })
   }
   return out
@@ -122,7 +131,20 @@ export function aTicketIngest(
     fecha_cierra:   cierreConZona(extra.fecha_cierra),
     mesa:           texto(extra.mesa),
     numero_pedido:  texto(extra.numero_pedido),
+    // Ítem 11 (mig 081). Informativos para la venta: nunca tumban el ticket. Un consecutivo o
+    // una clave con otra forma viajan en null (el Edge vuelve a validar). La apertura del pedido
+    // pasa por el mismo control que FechaCierra: naive completo o null.
+    mesa_factura:      texto(extra.mesa_factura),
+    consecutivo_fe:    soloDigitos(extra.consecutivo_fe, 20),
+    clave_fe:          soloDigitos(extra.clave_fe, 50),
+    pedido_abierto_en: cierreConZona(extra.pedido_abierto_en),
   }
+}
+
+/** El texto si son exactamente `largo` dígitos (sin espacios alrededor); si no, null. */
+export function soloDigitos(v: unknown, largo: number): string | null {
+  const s = texto(v)
+  return s !== null && s.length === largo && /^[0-9]+$/.test(s) ? s : null
 }
 
 /**
@@ -530,6 +552,9 @@ export function mapAbierta(f: FilaAbierta, lineas: readonly FilaLineaAbierta[] =
     pax:            pax.pax,
     pax_alerta:     pax.pax_alerta,
     updated_at:     naive === null ? null : conOffsetCR(naive),
+    // Ítem 11 (mig 081): la misma FechaRegistra del pedido, con nombre propio. `updated_at`
+    // queda como está para no cambiarle el sentido a «En vivo».
+    pedido_abierto_en: cierreConZona(f.fecha_hora),
     // Provisionales. Sin líneas (o sin poder leerlas) van en null: «sin total», nunca ₡0.
     monto_estimado_crc: est.monto_estimado_crc,
     pax_pedido:         est.pax_pedido,

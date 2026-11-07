@@ -426,3 +426,31 @@ npm run pos:backfill -- --todo
 
 El re-backfill es **idempotente** (upsert por `(local, numero_factura)`, el detalle se reemplaza
 entero) y va **sin `open` y sin `cursor`**: no le toca nada al agente en vivo.
+
+---
+
+# Ítem 11 · campos de la factura para el Club (mig 081)
+
+Firma de Ismael para **staging** (07-nov); prod va aparte y con firma. Hallazgos de Ismael en el PoS
+(solo lectura, 06-nov) en la cabecera de `supabase/migrations/081_pos_ndf_campos_factura.sql`.
+
+| Columna nueva | De dónde sale | Para qué |
+|---|---|---|
+| `pos_ndf_tickets.mesa_factura` | `FAC_Facturas.NumeroMesa` | Las cuentas divididas no tienen pedido, pero sí mesa en la factura. |
+| `pos_ndf_tickets.consecutivo_fe` | `FAC_Facturas.ConsecutivoElectronico` (20 dígitos) | El número del tiquete que ve el cliente. |
+| `pos_ndf_tickets.clave_fe` | `FAC_Facturas.ClaveElectronica` (50 dígitos) | Clave de Hacienda. |
+| `pos_ndf_tickets.pedido_abierto_en` | `FAC_Pedidos.FechaRegistra` del pedido de la factura | Con el número de pedido, la clave completa (el número se reinicia cada día). |
+| `pos_ndf_open.pedido_abierto_en` | `FAC_Pedidos.FechaRegistra` | La apertura del pedido abierto. |
+
+- `fecha_registra` **ya era** `FAC_Facturas.FechaRegistra` (la hora real de cobro): no se duplica.
+- `FAC_Facturas.NumeroPedido` y `FAC_Pedidos.IDPedido` vienen vacíos: **no se usan**. La unión
+  pedido → factura sigue siendo `FAC_Pedidos.NumeroFactura`.
+- Todo opcional: si la instalación no tiene la columna, viaja `null` y la venta entra igual. Un
+  consecutivo o una clave con otra forma, o una apertura ilegible, van `null` (nunca tumban el ticket).
+- Sin nombres ni teléfonos.
+
+**Orden (no se puede invertir):** 1) mig 081 → 2) Edge `ingest-ndf` nuevo → 3) agente nuevo →
+4) backfill `npm run pos:backfill -- --desde 2026-09-01 --hasta <ayer>`. Con el Edge nuevo y sin la
+081, el upsert del lote falla y no entra ninguna venta. Un agente viejo contra el Edge nuevo
+funciona (los campos quedan en `null`). Plan paso a paso para la PC del PoS:
+`docs/puente/PLAN-agente-item11.md` (rama del Club).

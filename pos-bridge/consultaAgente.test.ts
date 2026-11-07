@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 
 import {
   agruparProductos,
+  extrasPorFactura,
+  soloDigitos,
   aTicketIngest,
   leerAbiertas,
   leerCerradas,
@@ -212,6 +214,7 @@ describe('mapAbierta', () => {
       clave: 'pedido:4477', numero_factura: null, id_pedido: '4477', mesa: '12',
       salonero_login: '026', canal: 'salon', pax: 4, pax_alerta: 'falta_articulo',
       updated_at: '2026-09-01T20:05:00-06:00',
+      pedido_abierto_en: '2026-09-01T20:05:00-06:00',
       // Frente C: sin líneas, los tres provisionales van en null («sin total»), nunca en 0.
       monto_estimado_crc: null, pax_pedido: null, items_valor: null,
     })
@@ -760,5 +763,68 @@ describe('leerAbiertas con líneas (Frente C)', () => {
     const { qy, visto } = espiar([], [lin()])
     expect(await leerAbiertas(qy, ESQUEMA_C, { desde: 'a', hasta: 'b' })).toEqual([])
     expect(visto).toHaveLength(1)
+  })
+})
+
+// ── Ítem 11 (mig 081): mesa de la factura, consecutivo, clave y apertura del pedido ───────────
+describe('ítem 11 · campos nuevos de la factura', () => {
+  const CON = {
+    ...COLUMNAS,
+    fac_facturas: [...COLUMNAS.fac_facturas, 'NumeroMesa', 'ConsecutivoElectronico', 'ClaveElectronica', 'NumeroPedido'],
+  }
+  const esq = resolverEsquema(new Map(Object.entries(CON)))
+  const sql = sqlFacturas(esq, true)
+
+  it('el SELECT trae NumeroMesa, el consecutivo, la clave y la apertura del pedido (y sigue read-only)', () => {
+    expect(sql).toContain('CAST(f.[NumeroMesa] AS varchar(60))')
+    expect(sql).toContain('CAST(f.[ConsecutivoElectronico] AS varchar(60))')
+    expect(sql).toContain('CAST(f.[ClaveElectronica] AS varchar(60))')
+    expect(sql).toContain('MIN(p.[FechaRegistra])')
+    expect(sql).toContain('CONVERT(varchar(19), ped.pedido_abierto, 120)')
+    expect(() => assertSoloSelect(sql)).not.toThrow()
+  })
+
+  it('FAC_Facturas.NumeroPedido NO se usa (viene vacío): el pedido sale de FAC_Pedidos.NumeroFactura', () => {
+    expect(sql).not.toContain('f.[NumeroPedido]')
+  })
+
+  it('sin esas columnas, el SELECT las manda en NULL y no aborta', () => {
+    const viejo = sqlFacturas(ESQUEMA, true)
+    expect(viejo).toMatch(/NULL\s+AS mesa_factura/)
+    expect(viejo).toMatch(/NULL\s+AS consecutivo_fe/)
+    expect(viejo).toMatch(/NULL\s+AS clave_fe/)
+  })
+
+  const t = mapTicket({
+    numero_factura: '5001', fecha_hora: '2026-11-05 19:21:30', estado: 'C', tipo: 'M',
+    area: 'SALON 1', login_cajero: '222', usuario_registra: '026', salonero_nombre: 'X',
+    personas: 0, imp_servicio: 1200, medios: { efectivo: 15000, vuelto: 3000 }, items: [],
+  })
+
+  it('pega la mesa de la factura, el consecutivo, la clave y la apertura (con zona)', () => {
+    const i = aTicketIngest(t, {
+      mesa_factura: ' 19 ', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
+      pedido_abierto_en: '2026-11-05 18:39:48',
+    })
+    expect(i).toMatchObject({
+      mesa_factura: '19', consecutivo_fe: '00200001040000016012', clave_fe: '5'.repeat(50),
+      pedido_abierto_en: '2026-11-05T18:39:48-06:00',
+    })
+  })
+
+  it('un consecutivo o una clave con otra forma viajan en null; la venta entra igual', () => {
+    const i = aTicketIngest(t, { consecutivo_fe: '2001040000016012', clave_fe: 'abc', pedido_abierto_en: '2026-02-31 10:00:00' })
+    expect(i).toMatchObject({ consecutivo_fe: null, clave_fe: null, pedido_abierto_en: null, total: 12000 })
+    expect(soloDigitos(' 00200001040000016012 ', 20)).toBe('00200001040000016012')
+  })
+
+  it('sin las columnas, los cuatro quedan en null', () => {
+    expect(aTicketIngest(t)).toMatchObject({ mesa_factura: null, consecutivo_fe: null, clave_fe: null, pedido_abierto_en: null })
+  })
+
+  it('el backfill arma los mismos extras que el agente (un solo camino)', () => {
+    const m = extrasPorFactura([{ numero_factura: '5001', mesa_factura: '19', consecutivo_fe: '00200001040000016012',
+      clave_fe: null, pedido_abierto_en: '2026-11-05 18:39:48' } as unknown as FilaFactura])
+    expect(m.get('5001')).toMatchObject({ mesa_factura: '19', consecutivo_fe: '00200001040000016012', pedido_abierto_en: '2026-11-05 18:39:48' })
   })
 })

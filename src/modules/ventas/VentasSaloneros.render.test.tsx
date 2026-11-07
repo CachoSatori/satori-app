@@ -46,11 +46,11 @@ const DIAS: DiasMap = {
   [FECHA]: {
     fileName: `ndf ${FECHA}`, uploadedAt: '2026-09-08',
     saloneros: {
-      MAXO: sal({
+      TITO: sal({
         pax: 20, total: 200_000, com: 150_000, beb: 50_000, iCom: 40, iBeb: 25,
         prods: [['ROLL SATORI', 40, 150_000], ['IMPERIAL', 25, 50_000]],
       }),
-      GUILLE: sal({
+      JULIAN: sal({
         pax: 10, total: 100_000, com: 75_000, beb: 25_000, iCom: 20, iBeb: 12,
         prods: [['ROLL SATORI', 20, 75_000], ['IMPERIAL', 12, 25_000]],
       }),
@@ -67,8 +67,8 @@ describe('VentasSaloneros · Ratio C/B general por familia', () => {
     // (150.000 + 75.000) ÷ (50.000 + 25.000) = 3
     expect(mix.com / mix.beb).toBe(3)
     // …y es exactamente el de cada fila, que ya salía por familia.
-    expect(aggSalonero('MAXO',   [FECHA], DIAS, {}).ratioCB).toBe(3)
-    expect(aggSalonero('GUILLE', [FECHA], DIAS, {}).ratioCB).toBe(3)
+    expect(aggSalonero('TITO',   [FECHA], DIAS, {}).ratioCB).toBe(3)
+    expect(aggSalonero('JULIAN', [FECHA], DIAS, {}).ratioCB).toBe(3)
   })
 
   it('`aggGeneral.ratioCB` sigue dando 0 — no se tocó; la pantalla ya no lo pinta', () => {
@@ -91,7 +91,7 @@ describe('VentasSaloneros · Ratio C/B general por familia', () => {
     const sinBebida: DiasMap = {
       [FECHA]: {
         fileName: `ndf ${FECHA}`, uploadedAt: '2026-09-08',
-        saloneros: { MAXO: sal({ pax: 5, total: 50_000, com: 50_000, beb: 0, iCom: 10, iBeb: 0 }) },
+        saloneros: { TITO: sal({ pax: 5, total: 50_000, com: 50_000, beb: 0, iCom: 10, iBeb: 0 }) },
       },
     }
     render(<VentasSaloneros dias={sinBebida} pm={{}} metas={METAS} />)

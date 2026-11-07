@@ -49,7 +49,7 @@ Backup previo: `_backups-staging/2026-07-22-pre-refresh-2/` (gitignoreado, con s
 | `employees.profile_id` | 2 | **NULL** |
 | **total** | **49** | |
 
-Owner destino: `cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888` — *Caja Satori · satorisushibar@gmail.com*.
+Owner destino: `cb2b00f2-b1eb-4f27-9bf1-f23cebcd1888` — *Caja Satori · <correo del owner de staging>*.
 
 **Los 2 de `employees.profile_id` van a NULL, no al owner.** Esa columna no es un sello de
 auditoría: es el vínculo entre un empleado y su cuenta. Apuntarla al owner diría que esos dos

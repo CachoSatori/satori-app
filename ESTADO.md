@@ -11,8 +11,8 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 
 | Puntero | Hash | Qué es |
 |---|---|---|
-| `main` | **`44da704`** + el merge de este PR | **PROD.** GitHub Pages (base `/satori-app/`). Último merge antes de este PR: #48 (handoff del 06/11). |
-| `staging` | **`314cd20`** | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. Le faltan **10 commits** de `main` (06/11). |
+| `main` | **`e7de76e`** + el merge de este PR | **PROD.** GitHub Pages (base `/satori-app/`). Último merge antes de este PR: #49 (SoP noviembre 2026). |
+| `staging` | **`4793cf3`** | Desarrollo: PoS propio + Salarios/BioTime + FE SIM + inventario COGS. Proyecto Supabase de staging. **Al día con `main`** (merge de `main` el 06/11 ~20:10 UTC, sin conflictos; trae #51, #52 y #49). |
 | `integracion/analitica-staging` | **`850a22f`** | ⚠️ **123 commits atrás de `staging`** (0 adelante, FF posible). Según el ESTADO de septiembre, Cloudflare Pages publica `satori-staging.pages.dev` desde esta rama. Alinear con OK. |
 | `feat/pos-desglose` | **`14bd278`** | Rama del **agente** del PoS (`pos-bridge/`). No se mergea a `main`. |
 
@@ -33,7 +33,10 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 | #42 · #46 | `3b95890` · `39995e1` | 06/11 | SEC-02: botón de reportes con el JWT del owner; docs. |
 | #43 | `8c992fc` | 06/11 | Alerta de días sin cierre (owner/manager, solo lectura). |
 | #48 | `44da704` | 06/11 | Handoff del 06/11. |
-| este PR | — | 06/11 | Vuelve el `.sql` de la 074 y su rollback (byte a byte desde `d4012ec`) + docs. |
+| #51 | `4babdc5` | 06/11 | Vuelve el `.sql` de la 074 y su rollback (byte a byte desde `d4012ec`) + docs. |
+| #52 | `d1e7902` | 06/11 | `.sql` de la 076 y la 077 (byte a byte = ledger de prod) + sus rollbacks + docs. Solo versiona: ya estaban aplicadas. |
+| #49 | `e7de76e` | 06/11 | **SoP noviembre 2026 en prod**: módulo por área y código, lector con el Estándar SOP, «Ver PDF» y «Libros». Solo SoP (cherry-pick de #45/#47 + fix del `@page`). |
+| este PR | — | 06/11 | Docs: SoP en prod, nota de rollbacks y Branching, pendiente de la 079 y handoff de SoP. |
 
 - **⚠️ Supabase Branching falló en cada push a `main` desde el revert del #31 hasta este PR** (10 runs, del 05/11
   20:32 UTC al 06/11 16:55 UTC: `migrate` → `ERROR Remote migration versions not found in local migrations
@@ -41,7 +44,12 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
   ni se rompió nada en la base; solo que Branching no corría `migrate` ni `deploy`. Este PR devuelve el archivo
   (idéntico al statement del ledger de prod y a la función viva) y Branching vuelve a «All migrations are up to date».
   - **Esperado:** entre que una migración se aplica a mano en prod y su PR se mergea, cualquier push a `main` hace
-    fallar a Branching con ese mismo error (pasó el 05/11 a las 15:26 y 17:53 UTC con la 069 y la 071). Se corrige solo con el merge.
+    fallar a Branching con ese mismo error (pasó el 05/11 a las 15:26 y 17:53 UTC con la 069 y la 071, y el 06/11 a las 18:05 UTC con la 076 y la 077 hasta el #52). Se corrige solo con el merge.
+- **📚 SoP noviembre 2026 en prod (06/11, firmado por Ismael, PR #49, merge `e7de76e`):** el módulo SoP muestra **27 documentos** con código (1.1 … 5.4, incluidos 2.10, 2.11 y 4.4) agrupados en **5 áreas** (Cultura y servicio · Salón y recepción · Menú y producto · Administración y caja · Equipo), con el lector del Estándar SOP (Cormorant Garamond + DM Sans), «Ver PDF» con URL firmada (10 min) y la sección «Libros» (empleado para todos; franquicia solo owner y manager).
+  - **Orden en prod (06/11, UTC):** respaldo de `public.sops` (18:01) → migs **076** y **077** a mano (18:03–18:05) → merge del #52 (`.sql` en `main`, 19:45) → merge del #49 (19:53; deploy de Pages 19:55, run 274 OK; Branching «All migrations are up to date») → `sync_sops` (19:56: **27 insertadas, 20 viejas → `is_active=false`, nada borrado**, una transacción) → PDF y libros subidos por Ismael con `subir_pdfs.ts --entorno prod`.
+  - **Verificado en prod (solo lectura):** 27 activas con código, 0 viejas activas, 20 inactivas con su contenido intacto, todas con `area`; **29 objetos** bajo `documents/sops/` (27 PDF + 2 libros) y `pdf_path` en los 27. Por rol, con usuarios reales: owner y manager ven el libro de franquicia; cajero, contador y salonero no; los cinco ven el libro del empleado y los 27 PDF.
+  - **Respaldos en Drive** (carpeta `respaldo` del paquete): `sops_prod_2026-11-06T18-01-15.json` (antes de las migs), `storage_policies_prod_antes_077.json` y `sops_prod_2026-11-06T19-56-10.json` (antes del sync).
+  - **Rollback:** app = revert de `e7de76e`; datos = `update public.sops set is_active=false where code is not null` + `set is_active=true where code is null` (sin borrar); PDF = `pdf_path = null`; base = `077_rollback.sql` y después `076_rollback.sql` (ver Migraciones).
 - **`FUENTE_VENTAS = 'pos'` en prod desde el 30/10, validado físicamente por Ismael.** Ventas y Mi Rendimiento
   leen el PoS fusionado con el Excel de respaldo (`{...xls, ...pos}`). Volver atrás = revert del merge de #16.
 - **🧯 Fix «Borrar TODO el día» (05/11, rama `claude/fix-borrar-dia`):** elige por día operativo, no por `created_at`; vista previa antes de confirmar; ningún delete sin chequear el error. Validado por Ismael en la preview de staging; **en prod desde el 05/11** (PR #25, merge `781eb72`). Rollback = revert del merge. Ver [HALLAZGOS.md](HALLAZGOS.md).
@@ -53,7 +61,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 - **🔐 SEC-03 y SEC-04 (05/11, rama `claude/brave-brown-m45jd7`, PR #28, migs 072 y 073):** escritura anónima en el CRM y lectura anónima de propinas y empleados. Aplicadas en staging (ledger 72) y **en prod el 05/11 ~20:05 UTC** (ledger 48 → 50), a mano antes del merge. `/registro` y el QR del CRM quedan apagados hasta la F1 del Club Satori. Rollback: `scripts/sql/072_rollback.sql` y `073_rollback.sql`. Ver [HALLAZGOS.md](HALLAZGOS.md).
 - **Sagrados (hash de blob):** `tipCalculations.ts` **`7603ba5a`** · `cashUtils.ts` **`b597c697`** (iguales en
   `main` y `staging`) · `posFiscal.ts` **`a3fd445f`** (solo existe en `staging`).
-- **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1393 tests** (con env dummy, 06/11) · lint de lo tocado.
+- **Gate de `main`:** `tsc -b` 0 · `vite build` (production) OK · **1425 tests** (con env dummy, 06/11, con los de SoP) · lint 86 (sin nuevos).
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 - **🔐 SEC-01 (04/11, rama `claude/sec-01-perfiles`):**
   - **Paso A hecho en prod y staging:** `disable_signup=true` (antes `false`). El signup con anon da `422`.
@@ -166,10 +174,13 @@ solas tras un reinicio (validado el 29/10).
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|
-| **PROD** | **51 filas** | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074` (068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego — ver abajo). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
-| **STAGING** | 76 filas | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP, solo staging)**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
+| **PROD** | **53 filas** | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077` (068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
+| **STAGING** | 78 filas | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 078 (Prom/PAX, rama `claude/busy-brown-ssjq4e-prompax`, solo staging) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC)**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
-- **Próximo número libre: `078`.** La **`075` está reservada — Club Satori F1a (PR sin mergear hasta el piloto)**: esquema `club_*`, solo en staging. No usarla para otra cosa. La **`076`** (`sops_code_area`) y la **`077`** (`sops_pdf_storage`) son de la sesión de los SoP, **solo en staging** (06/11). La **`078`** queda para el RPC de Prom/PAX.
+- **Próximo número libre: `080`.** La **`075` está reservada — Club Satori F1a (PR sin mergear hasta el piloto)**: esquema `club_*`, solo en staging. No usarla para otra cosa. La **`078`** (`pos_prompax_agregado`, RPC de Prom/PAX) está **solo en staging** (rama `claude/busy-brown-ssjq4e-prompax`) hasta la firma.
+  - La **076** (`sops_code_area`: columnas `code`, `area`, `doc_type`, `version`, `employee_book`, `pdf_path` en `public.sops` + índice único parcial `sops_code_key` + check `sops_doc_type_check`) y la **077** (`sops_pdf_storage`: policies `sops_storage_read` y `sops_franquicia_solo_gerencia` en `storage.objects`, bucket privado `documents`) están **en staging y en prod**. Prod: 06/11 entre 18:03:48 y 18:05:14 UTC, aplicadas a mano por la Management API (sesión de Claude Code de los SoP, con OK del dueño), verificando el ref antes de cada escritura y **antes** del merge del código (PR #49). Sus `.sql` son **idénticos byte a byte** a los statements del ledger de prod y de staging (md5 `fc26bfea…` y `ef17f371…`). Rollback: `scripts/sql/077_rollback.sql` y, solo después de revertir el sync de SoP, `scripts/sql/076_rollback.sql`.
+  - **⚠️ Si se corre un rollback de la 076 o la 077, en el mismo momento hay que quitar su `.sql` de `supabase/migrations/` en `main`** (PR propio). Los rollbacks borran la fila del ledger; si el archivo sigue en `main`, Branching intentaría volver a aplicarla en el próximo push, y si el archivo sale de `main` sin el rollback, falla con «Remote migration versions not found in local migrations directory» (regla 10: nunca sacar de `main` el `.sql` de algo que está en el ledger).
+  - La **079** (`sops_lectura_activos`, PR de `claude/mig-079-sops-activos`) cierra el hueco de lectura de SoP para usuarios **inactivos** con sesión vigente: `sops_read` (010) pasa de `USING (true)` a `USING (public.get_my_role() is not null)`, y `sops_storage_read` (077) suma `and public.get_my_role() is not null`. Nada más cambia (`sops_write`, `sops_franquicia_solo_gerencia`, `documents_storage_rw` y el resto quedan igual; usa `ALTER POLICY`). **Staging: aplicada el 06/11 ~21:08 UTC** y probada en solo lectura: owner, cajero y salonero reales (y los 5 roles simulados) leen igual que antes —47 filas de `sops` (27 activas), 27 PDF y el libro del empleado; la franquicia solo owner y manager—, un manager inactivo real ve **0 filas y 0 objetos** de `sops/*`, y `anon` 0. **Prod: la aplica Supabase Branching con el merge del PR** (Branching ON auto-aplica las migraciones de `main`), con OK de Ismael y respaldo previo de las dos policies. Rollback: `scripts/sql/079_rollback.sql` (y quitar el `.sql` de `main` en el mismo momento).
   - La **074** (`cash_cierres_dia.primer_conteo_crc/usd` + `cerrar_dia_completo` las escribe; null si no vienen) está en staging y en prod (prod: 05/11 20:20 UTC). Su primer cliente, el conteo ciego (#31), se revirtió (#32). Desde el 06/11 la usa el «Recontar» del cierre del día (`claude/recontar-cierre`). El `.sql` y su rollback volvieron a `main` el 06/11 (`supabase/migrations/074_cierre_primer_conteo.sql` y `scripts/sql/074_rollback.sql`, byte a byte desde `d4012ec`).
   - La **072** (SEC-03, cierre de la escritura anónima del CRM) y la **073** (SEC-04, lecturas sin sesión → `authenticated`) están en staging y en prod (prod: 05/11 ~20:05 UTC, a mano antes del merge del PR #28).
   - La **071** (cierre del día atómico, `claude/cierre-atomico`, PR #29) está en staging y en prod (prod: 05/11 19:20 UTC, a mano antes del merge).
@@ -208,6 +219,22 @@ Leyenda: ✅ en prod y validado en piso · 🟢 en prod, falta validar en piso �
 | Salarios F0 (055) · U0a/U0b (056/058) · BioTime F1 (057, `ingest-punches`) | 🧪 staging · BioTime parado desde el 14/09 |
 | PoS propio (comandero, KDS, cobro + splits, ticket/FE SIM, inventario COGS; migs 022–037, `posFiscal.ts`) | 🧪 staging · bloqueado por el PILAR de auth |
 | PILAR de auth multi-tenant · FE-CR real | 🔲 |
+
+### Pendientes de estabilización
+
+- **Propinas · reparto semanal de cocina:** mover la exclusión del reparto de cocina de un nombre fijo en el código a una marca en la base (requiere spec y firma: toca propinas).
+- **Privacidad · datos reales que siguen en el repo público** (tras #56 y #57, que limpiaron comentarios, tests y docs).
+  No se sacaron porque hacerlo cambia el comportamiento o porque la zona está bloqueada:
+  - **Listas de personal que usa la app** (`src/shared/ndf/personasNdf.ts`, `src/modules/ventas/ventasEnVivoDatos.ts`
+    y los tests que dependen de ellas): la app las usa para mapear los tickets del PoS a personas. Moverlas a la base
+    pide spec y firma.
+  - **Correo y filtro por correo en `scripts/`** (`scripts/clone_prod_to_staging.py` y 4 scripts `.ts` de
+    `refresh-staging/` y `t0-reconciliacion-cajas/`): sacarlos cambia cómo se ubica la cuenta. Pasar a una variable
+    de entorno o a una búsqueda por rol.
+  - **Nombres de proveedores** en los docs de `scripts/refresh-staging/` (corte e informes T0) y en
+    `ESTADO-ARCHIVO.md`: son registros históricos. Anonimizarlos en un PR de docs.
+  - **Alias de correo** en la pantalla de alta (`NuevoEmpleado` / `UserApprovals`) y en la función `cierre-email`:
+    bloqueado hasta el ítem 11 (`supabase/functions/` no se toca).
 
 ### Seguridad que sigue abierta en prod (medido 30/10; SEC-01 al 04/11)
 

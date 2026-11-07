@@ -91,7 +91,7 @@ describe('Borrar TODO el día — vista previa y confirmación', () => {
   const plan: PlanBorradoDia = {
     fecha: HOY,
     borrar: [
-      { id: 'man', session_id: null, created_at: `${HOY}T15:00:00Z`, subcategory: '', description: 'DUEÑO TOMI', amount_crc: 5000, amount_usd: 0, movement_type: 'egreso_operativo', diaOperativo: HOY, origen: 'dia', manual: true },
+      { id: 'man', session_id: null, created_at: `${HOY}T15:00:00Z`, subcategory: '', description: 'DUEÑO PEPE', amount_crc: 5000, amount_usd: 0, movement_type: 'egreso_operativo', diaOperativo: HOY, origen: 'dia', manual: true },
       { id: 'tur', session_id: 'sHoy', created_at: `${HOY}T16:00:00Z`, subcategory: 'Proveedor mercadería', description: 'pago', amount_crc: 1000, amount_usd: 0, movement_type: 'egreso_mercaderia', diaOperativo: HOY, origen: 'turno', manual: false },
     ],
     ajenas: [

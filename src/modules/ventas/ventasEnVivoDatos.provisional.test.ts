@@ -14,7 +14,7 @@ vi.mock('../../shared/api/posNdf', async (importOriginal) => {
     ...real,
     getTicketsJornada:         vi.fn(async () => CRUDOS),
     getLineasDeTickets:        vi.fn(async () => []),
-    getSaloneroNombres:        vi.fn(async () => ({ '026': 'MAXO' })),
+    getSaloneroNombres:        vi.fn(async () => ({ '026': 'TITO' })),
     getTicketsDeJornadas:      vi.fn(async () => []),
     getMesasAbiertas:          vi.fn(async () => []),
     getPedidosCerradosJornada: vi.fn(async () => new Set<string>()),

@@ -83,10 +83,10 @@ Cuatro perfiles existen en prod y **no** en staging:
 
 | id | rol | nombre |
 |---|---|---|
-| `c10f2ddf-535a-4c2d-99db-30d5084629c6` | manager | Ignacio aristiaran |
-| `f54e3eff-7751-4b3c-a94e-c9d26c98a80e` | manager | Rosaura |
-| `973fb3c5-26b9-4c96-a816-e951967d5b45` | barman | NACHO |
-| `98a300a3-a16a-4d97-b8b9-e549a2510e81` | contador | Kiumarz Tavakoly |
+| `c10f2ddf-535a-4c2d-99db-30d5084629c6` | manager | *(un manager)* |
+| `f54e3eff-7751-4b3c-a94e-c9d26c98a80e` | manager | *(una manager)* |
+| `973fb3c5-26b9-4c96-a816-e951967d5b45` | barman | *(un barman)* |
+| `98a300a3-a16a-4d97-b8b9-e549a2510e81` | contador | *(el contador)* |
 
 Filas de prod que los referencian y que **la FK va a rechazar**:
 

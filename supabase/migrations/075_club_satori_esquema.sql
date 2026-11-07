@@ -1671,8 +1671,13 @@ $$;
 --     Sin principal no hay ventana para las divididas: va a Excepciones (SIN_CRUCE).
 --     Margen de 2 min por la diferencia de reloj entre la PC del PoS y el servidor.
 drop function if exists public.club_cruce_auto(text, jsonb, text);
-create or replace function public.club_cruce_facturas(p_location text, p_pos jsonb, p_factura text)
-returns uuid[]
+-- Detalle del cruce: cada factura con su rol. 'principal' (la del pedido), 'dividida' (sin pedido, misma
+-- mesa, solo en la ventana de ESTE pedido) o 'ambigua' (sin pedido, misma mesa, pero también cae en la
+-- ventana de OTRO pedido de esa mesa: no se asigna a ninguno y va a Excepciones como AMBIGUA; decisión
+-- de Ismael 07-nov). Ventana de un pedido = de su apertura a 30 min después de su factura; si la
+-- factura no trae la apertura (antes del backfill), la ventana del otro pedido arranca en su factura.
+create or replace function public.club_cruce_detalle(p_location text, p_pos jsonb, p_factura text)
+returns table (ticket_id uuid, rol text)
 language plpgsql
 stable
 security definer
@@ -1685,20 +1690,19 @@ declare
   v_mesa   text;
   v_id     uuid;
   v_fr     timestamptz;
-  v_divs   uuid[];
 begin
   if p_pos is null then
     v_clave := public.club_factura_clave(p_factura);   -- una vez, no por fila
-    if v_clave is null then return '{}'; end if;
-    select t.id into v_id from public.pos_ndf_tickets t
+    if v_clave is null then return; end if;
+    return query select t.id, 'principal'::text from public.pos_ndf_tickets t
      where t.local = p_location and ltrim(t.numero_factura, '0') = v_clave limit 1;
-    return case when v_id is null then '{}'::uuid[] else array[v_id] end;
+    return;
   elsif p_pos->>'modo' = 'factura' then
-    select t.id into v_id from public.pos_ndf_tickets t
+    return query select t.id, 'principal'::text from public.pos_ndf_tickets t
      where t.local = p_location and t.numero_factura = p_pos->>'numero_factura' and t.estado = 'C';
-    return case when v_id is null then '{}'::uuid[] else array[v_id] end;
+    return;
   elsif p_pos->>'modo' <> 'pedido' or p_pos->>'modo' is null then
-    return '{}';
+    return;
   end if;
 
   v_hora := (p_pos->>'hora')::timestamptz;
@@ -1715,20 +1719,45 @@ begin
    order by (t.pedido_abierto_en is null), t.fecha_registra, t.numero_factura
    limit 1;
   if v_id is null then
-    return '{}';
+    return;
+  end if;
+  ticket_id := v_id; rol := 'principal'; return next;
+  if v_mesa is null then
+    return;
   end if;
 
-  -- 2. cuenta dividida: sin pedido, misma mesa de la factura, de la apertura a principal + 30 min.
-  if v_mesa is not null then
-    select coalesce(array_agg(t.id order by t.fecha_registra, t.numero_factura), '{}') into v_divs
+  -- 2. sin pedido, misma mesa de la factura, de la apertura a principal + 30 min; ambigua si también
+  --    cae en la ventana de otro pedido de esa mesa.
+  return query
+    select t.id,
+           case when exists (
+             select 1 from public.pos_ndf_tickets o
+              where o.local = p_location and o.estado = 'C' and o.numero_pedido is not null and o.id <> v_id
+                and nullif(ltrim(upper(btrim(coalesce(o.mesa_factura, o.mesa, ''))), '0'), '') = v_mesa
+                and t.fecha_registra >= coalesce(o.pedido_abierto_en, o.fecha_registra) - interval '2 minutes'
+                and t.fecha_registra <= o.fecha_registra + interval '30 minutes')
+           then 'ambigua' else 'dividida' end
       from public.pos_ndf_tickets t
      where t.local = p_location and t.estado = 'C' and t.numero_pedido is null
        and nullif(ltrim(upper(btrim(coalesce(t.mesa_factura, ''))), '0'), '') = v_mesa
        and t.fecha_registra >= v_abre - interval '2 minutes'
-       and t.fecha_registra <= v_fr + interval '30 minutes';
-  end if;
-  return array[v_id] || coalesce(v_divs, '{}');
+       and t.fecha_registra <= v_fr + interval '30 minutes'
+     order by t.fecha_registra, t.numero_factura;
 end;
+$$;
+
+-- Las facturas de la visita (principal primero + divididas no ambiguas). Interna.
+create or replace function public.club_cruce_facturas(p_location text, p_pos jsonb, p_factura text)
+returns uuid[]
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select coalesce(array_agg(d.ticket_id order by (d.rol <> 'principal'), t.fecha_registra, t.numero_factura), '{}')
+    from public.club_cruce_detalle(p_location, p_pos, p_factura) d
+    join public.pos_ndf_tickets t on t.id = d.ticket_id
+   where d.rol in ('principal', 'dividida');
 $$;
 
 -- Factura elegida a mano por el manager para un registro que no cruzó solo (cuenta dividida o
@@ -1762,7 +1791,7 @@ create table if not exists public.club_excepciones_resueltas (
 alter table public.club_excepciones_resueltas drop constraint if exists club_excepciones_resueltas_tipo_check;
 alter table public.club_excepciones_resueltas add constraint club_excepciones_resueltas_tipo_check
   check (tipo in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE',
-                  'VISITA_REPETIDA','PERSONAS_SOBRE_PAX'));
+                  'VISITA_REPETIDA','PERSONAS_SOBRE_PAX','AMBIGUA'));
 alter table public.club_excepciones_resueltas enable row level security;
 revoke all on public.club_excepciones_resueltas from anon, public, authenticated;
 grant select on public.club_excepciones_resueltas to authenticated;
@@ -1775,6 +1804,8 @@ create policy club_exc_gerencia on public.club_excepciones_resueltas for select 
 --   VISITA_REPETIDA      (exacta)  · el mismo referente con más de una tarjeta en la misma visita (misma
 --                                    factura principal), aunque se haya registrado por caminos distintos
 --   PERSONAS_SOBRE_PAX   (probable)· Σ personas de las tarjetas de una visita > pax de sus facturas
+--   AMBIGUA              (probable)· factura sin pedido de la mesa de un registro que cae también en la
+--                                    ventana de otro pedido de esa mesa: no se asigna a ninguno
 --   SIN_CRUCE            (probable)· registro con pedido que no encontró su factura (primera con ese pedido
 --                                    después del escaneo, tope 18 h): posible cuenta dividida o refactura
 --                                    (el PoS las cobra en facturas sin pedido). El manager elige la factura.
@@ -1871,6 +1902,18 @@ begin
        and m.registrado_en < now() - make_interval(mins => v_cfg.puente_latencia_min)
        and (now() >= (m.pos_ref->>'hora')::timestamptz + interval '18 hours'
             or not exists (select 1 from public.pos_ndf_open o where o.local = p_location and o.id_pedido = m.pos_ref->>'pedido'))
+    union all
+    -- AMBIGUA: una por factura (aunque la vean varios registros), con los pedidos del Club que la tocan
+    select 'AMBIGUA', 'ambigua:' || ltrim(t.numero_factura, '0'), min(m.fecha_visita), t.numero_factura, 'probable',
+           jsonb_build_object('mesa', t.mesa_factura, 'total_crc', t.total_crc, 'hora', t.fecha_registra,
+                              'pedidos', jsonb_agg(distinct m.pos_ref->>'pedido'),
+                              'miembro', string_agg(distinct public.club_nombre_limpio(mi.nombre), ', '))
+      from mv m
+      join public.club_miembros mi on mi.id = m.miembro_id
+      cross join lateral public.club_cruce_detalle(p_location, m.pos_ref, m.factura_pos) d
+      join public.pos_ndf_tickets t on t.id = d.ticket_id
+     where m.pos_ref->>'modo' = 'pedido' and d.rol = 'ambigua' and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
+     group by t.id, t.numero_factura, t.mesa_factura, t.total_crc, t.fecha_registra
     union all
     -- VISITA_REPETIDA (CLUB-AUD-02): mismo miembro, misma factura principal, más de una tarjeta
     select 'VISITA_REPETIDA', 'visita:' || v.miembro_id || ':' || ltrim(t.numero_factura, '0'), v.f, t.numero_factura, 'exacta',
@@ -1973,7 +2016,7 @@ begin
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
   if p_tipo is null or p_tipo not in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE',
-                                      'VISITA_REPETIDA','PERSONAS_SOBRE_PAX') then
+                                      'VISITA_REPETIDA','PERSONAS_SOBRE_PAX','AMBIGUA') then
     raise exception 'Tipo de excepción no válido' using errcode = 'P0001';
   end if;
   if length(v_ref) not between 1 and 100 then
@@ -2365,6 +2408,7 @@ grant execute on function public.club_pedidos_abiertos(text) to authenticated;
 revoke all on function public.club_facturas_recientes(text) from public, anon, authenticated;
 grant execute on function public.club_facturas_recientes(text) to authenticated;
 revoke all on function public.club_cruce_facturas(text, jsonb, text) from public, anon, authenticated;
+revoke all on function public.club_cruce_detalle(text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.club_resolver(text)                         from public, anon, authenticated;
 revoke all on function public.club_config_auditar()                       from public, anon, authenticated;
 

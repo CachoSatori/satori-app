@@ -1389,6 +1389,39 @@ begin
   end;
 end $$;
 
+
+-- ═══ 35. Cuenta dividida AMBIGUA (decisión de Ismael 07-nov): dos pedidos de la misma mesa ═══
+-- P1 (9301, mesa 4): abierto −60 min, factura +0. P2 (9302, mesa 4): abierto −30 min, factura +20 min.
+-- Sin pedido de la mesa 4: +10 min (cae en las dos ventanas → AMBIGUA) y +40 min (solo en la de P2).
+do $$
+declare v_m uuid; v_m2 uuid; v_1 uuid; v_2 uuid; j jsonb; t0 timestamptz := now() + interval '5 minutes';
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Ambigua 1', 'app') returning id into v_m;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Ambigua 2', 'app') returning id into v_m2;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave) values
+    (v_m, 'tarjeta', 2, 6, 18000, now() - interval '50 minutes', now() - interval '2 hours', 'app',
+     jsonb_build_object('modo','pedido','pedido','9301','mesa','4','abierto_en', t0 - interval '60 minutes','hora', now() - interval '50 minutes'), 'pedido:z:9301')
+    returning id into v_1;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave) values
+    (v_m2, 'tarjeta', 2, 6, 18000, now() - interval '20 minutes', now() - interval '2 hours', 'app',
+     jsonb_build_object('modo','pedido','pedido','9302','mesa','4','abierto_en', t0 - interval '30 minutes','hora', now() - interval '20 minutes'), 'pedido:z:9302')
+    returning id into v_2;
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, pedido_abierto_en, total_crc) values
+    ('990931', t0,                          'C', 'salon', 'cajero',     true, 'ok', '4', '4', '9301', t0 - interval '60 minutes', 20000),
+    ('990932', t0 + interval '20 minutes',  'C', 'salon', 'cajero',     true, 'ok', '4', '4', '9302', t0 - interval '30 minutes', 22000),
+    ('990933', t0 + interval '10 minutes',  'C', 'salon', 'sin_pedido', true, 'ok', null, '4', null, null, 9000),
+    ('990934', t0 + interval '40 minutes',  'C', 'salon', 'sin_pedido', true, 'ok', null, '4', null, null, 7000);
+  perform pg_temp.r('35', 'la sin pedido que cae en las ventanas de los dos pedidos no se asigna a ninguno',
+    pg_temp.cruce(v_1) = '990931' and pg_temp.cruce(v_2) = '990932+990934', pg_temp.cruce(v_1) || ' / ' || pg_temp.cruce(v_2));
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j
+    from public.club_excepciones((now() at time zone 'America/Costa_Rica')::date - 1, (now() at time zone 'America/Costa_Rica')::date + 1) e
+   where e.tipo = 'AMBIGUA' and e.factura like '9909%';
+  perform pg_temp.yo();
+  perform pg_temp.r('35', 'AMBIGUA en Excepciones: una sola fila para la 990933, con los dos pedidos',
+    jsonb_array_length(j) = 1 and j->0->>'factura' = '990933' and (j->0->'detalle'->'pedidos') @> '["9301","9302"]'::jsonb, j::text);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

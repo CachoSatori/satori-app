@@ -139,6 +139,15 @@ export default function Reportes() {
             <div>Pendiente {crc(rep.pm.pendiente_crc)} · cargado en el mes {crc(rep.pm.cargos_mes_crc)} · pagado {crc(rep.pm.pagos_mes_crc)}</div>
             {rep.pm.nota && <div style={{ color: C.muted, fontSize: '0.85rem', marginTop: 4 }}>{rep.pm.nota}</div>}
           </Card>
+          {rep.socios && (
+            <Card>
+              <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Socios del Local Club en este local</h3>
+              <div>{n0(rep.socios.visitas)} visitas de {n0(rep.socios.socios)} socios ({n0(rep.socios.con_beneficio)} con beneficio) · {n0(rep.socios.altas)} altas hechas acá.</div>
+              <div style={{ color: C.muted, fontSize: '0.85rem', marginTop: 4 }}>
+                Visitas de socios de otro local: {n0(rep.socios.de_otro_local)} ({n0(rep.socios.socios_de_otro_local)} socios). El socio vale en todos los locales encendidos.
+              </div>
+            </Card>
+          )}
           <AltasSocios mes={mes} local={local} />
           <VisitasSocios mes={mes} local={local} />
           <Card>

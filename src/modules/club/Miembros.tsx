@@ -9,7 +9,7 @@ import {
   getMiembros, getSaldos, getNegocios, getMovimientos, getContacto, guardarMiembro, guardarNegocio,
   regenerarCodigo, tokenPortal, codigoMiembro, aClubError, fmtCreditos, ajustarSaldo, nuevoOp, getRoles, activarAnfitrion,
   getSociosPorConfirmar, socioConfirmar, paseToken, getSolicitudesSocio, type SocioPorConfirmar, type SolicitudSocio,
-  getPendientesAprobacion, resolverPendiente, type PendienteAprobacion,
+  getPendientesAprobacion, resolverPendiente, type PendienteAprobacion, getLocalesClub,
   type ClubRol,
   type ClubMiembro, type ClubSaldo, type ClubNegocio, type ClubMovimiento, type TipoMiembro, type TipoNegocio,
 } from '../../shared/api/club'
@@ -181,6 +181,13 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
   const [qr, setQr] = useState('')
   const [aviso, setAviso] = useState<{ tono: 'ok' | 'error'; t: string } | null>(null)
   const [ocupado, setOcupado] = useState(false)
+  const [localAlta, setLocalAlta] = useState<string | null>(null)
+  // Club compartido: el local donde se dio de alta (dato de club_config); con un solo local no hace falta mostrarlo
+  useEffect(() => {
+    let vivo = true
+    getLocalesClub().then(l => { if (vivo && l.length > 1) setLocalAlta(l.find(x => x.id === f.location_id)?.nombre ?? f.location_id ?? null) }).catch(() => {})
+    return () => { vivo = false }
+  }, [f.location_id])
 
   useEffect(() => {
     let vivo = true
@@ -239,6 +246,11 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
         <div style={{ fontSize: '0.88rem', color: C.muted }}>
           Tel.: {contacto?.telefono ?? '—'} · Email: {contacto?.email ?? '—'}
         </div>
+        {localAlta && (
+          <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 4 }}>
+            Alta en {localAlta}{f.tipo === 'socio' || (f.roles ?? []).some(r => r.rol === 'socio') ? ' · como socio vale en todos los locales encendidos' : ''}
+          </div>
+        )}
       </Card>
 
       {/* LC-A1: el QR de cupones es del anfitrión; un socio que no es anfitrión no lo comparte. */}

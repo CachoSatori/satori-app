@@ -2836,7 +2836,7 @@ begin
   reset role;
   perform pg_temp.r('60', 'pase del socio activo: promociones vigentes y beneficio; el pendiente no tiene ninguna',
     exists (select 1 from jsonb_array_elements(j->'promociones') x where x->>'id' = v_p::text and x->>'beneficio' = '15 %')
-      and j->'socio'->>'beneficio' = '15 %' and v_ok, (j->'promociones')::text);
+      and j->'socio'->>'beneficio' = 'Vale en todos los Satori' and v_ok, (j->'promociones')::text);   -- Club compartido: texto genérico
   -- cortesías: owner carga; código vendido toma nombre y familia; código nuevo exige nombre; máximo 10
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   begin perform public.club_cortesia_guardar(null, 'ZZ-NUEVO-1', null, true); e := 'ok'; exception when others then e := sqlerrm; end;
@@ -3225,7 +3225,7 @@ begin
   j := public.club_pase_datos(v_q);
   reset role;
   perform pg_temp.r('66', 'pase del socio: visitas del mes, cortesía sorpresa de la promo y el premio con su vencimiento',
-    (j->'socio'->>'visitas_mes')::int = 1 and j->'socio'->>'beneficio' = '10 % + 1 cortesía'
+    (j->'socio'->>'visitas_mes')::int = 1 and j->'socio'->>'beneficio' = 'Vale en todos los Satori'
       and (j->'socio'->'cortesias')::text like '%"motivo": "promo"%' and (j->'socio'->'cortesias')::text like '%"motivo": "premio_referido"%'
       and jsonb_array_length(j->'socio'->'cortesias') = 2, (j->'socio')::text);
   perform set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
@@ -3233,7 +3233,7 @@ begin
   p := public.club_portal(v_tok);
   reset role;
   perform pg_temp.r('66', 'portal (pestaña Mi Club): estado, QR del socio, beneficio, visitas, cortesías y promociones; sin contactos',
-    p->'socio'->>'estado' = 'activo' and p->'socio'->>'codigo_socio' ~ '^[A-HJ-NP-Z2-9]{9}$' and p->'socio'->>'beneficio' = '10 % + 1 cortesía'
+    p->'socio'->>'estado' = 'activo' and p->'socio'->>'codigo_socio' ~ '^[A-HJ-NP-Z2-9]{9}$' and p->'socio'->>'beneficio' = 'Vale en todos los Satori'
       and (p->'socio'->>'visitas_mes')::int = 1 and jsonb_array_length(p->'socio'->'cortesias') = 2
       and p::text not like '%+506%' and p::text not like '%@%', (p->'socio')::text);
 end $$;
@@ -3574,9 +3574,9 @@ begin
   insert into club_miembros (location_id, tipo, nombre, origen) values ('prueba-ml', 'socio', 'Lia Socia', 'app') returning id into v_s;
   insert into club_miembros_contacto (miembro_id, location_id, telefono) values (v_s, 'prueba-ml', public.club_norm_telefono('60007003'));
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  begin perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"1"}'::jsonb, gen_random_uuid()); e := 'ok'; exception when others then e := sqlerrm; end;
+  begin perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"1"}'::jsonb, gen_random_uuid(), 'prueba-ml'); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
-  perform pg_temp.r('70', 'apagado: visita de socio rechazada (negativa)', e like 'El Club no está activo%', e);
+  perform pg_temp.r('70', 'apagado: una visita en la caja de ese local se rechaza (negativa)', e like 'El Club no está activo%', e);
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select count(*) into v_n from public.club_excepciones(current_date - 30, current_date, 'prueba-ml');
   begin perform public.club_cortesias_listar('prueba-ml'); perform public.club_promociones_listar('prueba-ml'); e := 'ok';
@@ -3723,7 +3723,7 @@ begin
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   j := public.club_socio_alta_caja('Gea Genérica', '60007201', null, true, 'prueba-gen');
   v_s := (j->>'miembro_id')::uuid;
-  j := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"7201","clave":"pedido:7201"}', gen_random_uuid());
+  j := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"7201","clave":"pedido:7201"}', gen_random_uuid(), 'prueba-gen');
   perform pg_temp.yo();
   perform pg_temp.r('72', 'encendido: alta en caja y visita de socio en el local nuevo, con su promo (10 %)',
     j->>'visita_id' is not null and (j->>'porcentaje')::numeric = 10
@@ -3734,7 +3734,7 @@ begin
   perform pg_temp.yo();
   delete from club_visitas_socio where miembro_id = v_s;   -- para que no sea «ya usó su beneficio hoy»
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  begin perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"7202","clave":"pedido:7202"}', gen_random_uuid()); e := 'ok';
+  begin perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"7202","clave":"pedido:7202"}', gen_random_uuid(), 'prueba-gen'); e := 'ok';
   exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
   perform pg_temp.r('72', 'apagado: la visita en el local nuevo se rechaza (negativa)', e = 'El Club no está activo en Local Genérico', e);
@@ -3859,6 +3859,97 @@ begin
   begin perform public.club_descuentos_tipo_listar(); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
   perform pg_temp.r('75', 'el cajero no ve los tipos (negativa)', e = 'Sin permiso', e);
+end $$;
+
+-- ═══ 76. CLUB COMPARTIDO: el socio vale en todos los locales encendidos; tope diario global; premio en cualquier local ═══
+do $$
+declare v_a text := pg_temp.loc(); j jsonb; e text; v_s uuid; v_r uuid; v_off uuid; v_p uuid; v_t uuid; v_v uuid; j2 jsonb;
+begin
+  -- local B encendido con su promo (20 % + 1) y su cortesía; el local A (el de staging) con 10 % + 1 y su cortesía
+  insert into club_config (location_id, nombre, club_activo) values ('prueba-cc', 'Local B', true);
+  update club_config c set aviso_privacidad_version = a.aviso_privacidad_version from club_config a where a.location_id = v_a and c.location_id = 'prueba-cc';
+  update club_promociones set estado = 'vigente', porcentaje = 20 where location_id = 'prueba-cc' and lower(nombre) = 'local club';
+  update club_promociones set estado = 'terminada' where location_id = v_a and lower(nombre) <> 'local club';
+  update club_promociones set estado = 'vigente', porcentaje = 10, cortesias = 1 where location_id = v_a and lower(nombre) = 'local club';
+  delete from club_cortesias where location_id in (v_a, 'prueba-cc');
+  insert into club_cortesias (location_id, codigo_producto, nombre) values (v_a, 'ZCA1', 'Cortesía A'), ('prueba-cc', 'ZCB1', 'Cortesía B');
+  insert into pos_ndf_cursor (local, last_poll_at) values ('prueba-cc', now()) on conflict (local) do update set last_poll_at = now();
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en) values
+    ('prueba-cc', 'pedido:7601', '7601', '1', 'salon', 2, now(), now() - interval '30 minutes'),
+    (v_a, 'pedido:7602', '7602', '2', 'salon', 2, now(), now() - interval '30 minutes'),
+    (v_a, 'pedido:7603', '7603', '3', 'salon', 2, now(), now() - interval '30 minutes'),
+    ('prueba-cc', 'pedido:7604', '7604', '4', 'salon', 2, now(), now() - interval '30 minutes');
+  -- socio dado de alta en A (en la caja de A)
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_alta_caja('Sol Compartida', '60007601', null, true, v_a);
+  v_s := (j->>'miembro_id')::uuid;
+  -- visita en la caja de B: vale, con la promo, la cortesía y el pedido de B; queda con el local B
+  j := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"7601","clave":"pedido:7601"}', gen_random_uuid(), 'prueba-cc');
+  perform pg_temp.yo();
+  perform pg_temp.r('76', 'socio de A en la caja de B: vale, con la promo y la cortesía de B; la visita queda con el local B',
+    (j->>'porcentaje')::numeric = 20 and j->'cortesias' @> '[{"codigo":"ZCB1"}]'
+      and (select location_id from club_visitas_socio where id = (j->>'visita_id')::uuid) = 'prueba-cc'
+      and (select location_id from club_miembros where id = v_s) = v_a, j::text);
+  -- el mismo día, en la caja de A (otro pedido): ya usó su beneficio (tope GLOBAL)
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"7602","clave":"pedido:7602"}', gen_random_uuid(), v_a);
+  perform pg_temp.yo();
+  perform pg_temp.r('76', 'tope de 1 visita con beneficio por día EN TOTAL: en A, el mismo día → «ya_uso_hoy» (negativa)', j->>'estado' = 'ya_uso_hoy', j::text);
+  -- el local donde se anotó un socio se apaga: el socio sigue valiendo en los demás
+  insert into club_config (location_id, nombre, club_activo) values ('prueba-off', 'Local C', false);
+  insert into club_miembros (location_id, tipo, nombre, origen) values ('prueba-off', 'socio', 'Teo Local Apagado', 'app') returning id into v_off;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_off, '{"modo":"pedido","pedido":"7603","clave":"pedido:7603"}', gen_random_uuid(), v_a);
+  begin perform public.club_socio_visita(v_off, '{"modo":"pedido","pedido":"1","clave":"pedido:1"}', gen_random_uuid(), 'prueba-off'); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('76', 'socio de un local APAGADO: vale en uno encendido (A); en la caja del apagado no',
+    (j->>'porcentaje')::numeric = 10 and e like 'El Club no está activo%', j::text || ' / ' || e);
+  -- alta en caja de un socio que refiere, validación DESDE B de un pendiente anotado en A
+  insert into club_miembros (location_id, tipo, nombre, origen) values (v_a, 'socio', 'Rui Referido', 'app') returning id into v_r;
+  update club_miembro_roles set estado = 'pendiente', referido_por = v_s, alta_por = 'autoalta' where miembro_id = v_r and rol = 'socio';
+  insert into club_miembros_contacto (miembro_id, location_id, telefono) values (v_r, v_a, public.club_norm_telefono('60007602'));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_validar(v_r, true, 'prueba-cc');
+  perform pg_temp.yo();
+  perform pg_temp.r('76', 'un pendiente anotado en A se valida desde la caja de B (el alta sigue en A)',
+    (select estado from club_miembro_roles where miembro_id = v_r and rol = 'socio') = 'activo'
+      and (select location_id from club_miembros where id = v_r) = v_a, j::text);
+  -- premio: la 1.ª factura C con el 856 del referido es en B → premio para Sol, con el local B; se cobra en A
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_r, '{"modo":"pedido","pedido":"7604","clave":"pedido:7604"}', gen_random_uuid(), 'prueba-cc');
+  perform pg_temp.yo();
+  insert into pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc, numero_pedido, pedido_abierto_en, mesa_factura)
+  values ('prueba-cc', '880764', now() - interval '5 minutes', 'C', 'salon', 'cajero', true, 'ok', 9000, '7604',
+          (select pedido_abierto_en from pos_ndf_open where local = 'prueba-cc' and id_pedido = '7604'), '4') returning id into v_t;
+  insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values (v_t, 'P1', 'Plato', 1, 9000), (v_t, '856', 'LOCAL CLUB', 1, 0);
+  perform public.club_premios_generar(null);
+  perform pg_temp.r('76', 'premio por referir generado con la factura de OTRO local (queda con ese local)',
+    exists (select 1 from club_premios where referido = v_r and beneficiario = v_s and estado = 'disponible' and location_id = 'prueba-cc'), '');
+  delete from club_visitas_socio where miembro_id = v_s;   -- otro día para Sol (el tope diario ya se probó)
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"7602","clave":"pedido:7602"}', gen_random_uuid(), v_a);
+  perform pg_temp.yo();
+  perform pg_temp.r('76', 'el premio se cobra en A: cortesía de premio de A y el premio queda usado',
+    j->'cortesias' @> '[{"motivo":"premio_referido","codigo":"ZCA1"}]'
+      and (select estado from club_premios where referido = v_r) = 'usado', j::text);
+  -- SOCIO_USO_ANOMALO entre locales: el mismo socio con visitas en A y B el mismo día (una registrada a mano)
+  insert into club_visitas_socio (location_id, miembro_id, fecha, registrada_en, registrado_por, client_op_id, pos_ref, visita_clave, estado_beneficio, aplicar)
+  values ('prueba-cc', v_s, (now() at time zone 'America/Costa_Rica')::date, now(), '<CAJERO_UUID>'::uuid, gen_random_uuid(),
+          '{"modo":"pedido","pedido":"7609","mesa":"9"}', 'pedido:7609', 'como_invitado', '{}');
+  perform pg_temp.r('76', 'SOCIO_USO_ANOMALO entre locales: dos mesas el mismo día en A y en B, y dice en qué locales',
+    exists (select 1 from jsonb_array_elements(pg_temp.exc('SOCIO_USO_ANOMALO')) x
+             where x->>'ref' like 'socio-dia:' || v_s || ':%' and x->'detalle'->'locales' @> '["prueba-cc"]'), '');
+  -- reporte del mes en B: visitas de socios de otro local
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  j := public.club_reporte_mes(date_trunc('month', now())::date, 'prueba-cc', true);
+  perform pg_temp.yo();
+  perform pg_temp.r('76', 'reporte del mes por local donde ocurrió: B cuenta las visitas de socios de otro local',
+    (j->'socios'->>'de_otro_local')::int >= 2 and (j->'socios'->>'visitas')::int >= 2, (j->'socios')::text);
+  -- el pase y el portal: texto genérico
+  perform pg_temp.r('76', 'pase/portal: el beneficio del socio es genérico («Vale en todos los Satori»)',
+    public.club_pase_datos(v_s)->'socio'->>'beneficio' = 'Vale en todos los Satori', '');
+  update club_config set club_activo = false where location_id in ('prueba-cc', 'prueba-off');
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

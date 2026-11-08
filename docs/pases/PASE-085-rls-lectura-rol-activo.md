@@ -36,6 +36,11 @@ null si la cuenta está inactiva.
 - [ ] **Firma de Ismael** sobre este paquete, después de la auditoría.
 - [ ] **Ledger de prod:** la 085 libre y **último < 085**. Con el orden del §2, el último tiene que ser la **082**
   (el puente ya pasó). Si el puente no pasó, la 085 **no** entra.
+- [ ] **PR de sincronía en `main` y Branching en verde** (auditoría del 08/11): el #71 (solo `081_….sql` y `082_….sql`,
+  md5 `d4acf8da…` y `5db915c8…`) mergeado después del §7 del pase del puente, y su run de Branching con
+  **«All migrations are up to date»**. Sin eso, el ledger de prod tiene la 081 y la 082 sin su `.sql` en `main`, y el merge
+  de la 085 termina en `MIGRATIONS_FAILED` («Remote migration versions not found…», mismo caso que la 074): la 085 no se
+  aplica. La rama de la 085 se rebasa sobre ese `main` antes de mergear.
 - [ ] **Catálogo de prod igual al respaldo:**
   - las 7 policies del §1 existen, con las condiciones de la columna «Antes»;
   - RLS activa en las 6 tablas (`employees`, `tip_entries`, `tip_sessions`, `role_tip_points`, `exchange_rates`, `profiles`).

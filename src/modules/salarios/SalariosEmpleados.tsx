@@ -70,6 +70,25 @@ function payloadOf(d: Draft) {
   }
 }
 
+// Solo los campos que cambiaron. Así un rol que puede tocar la tarifa pero no el resto (el
+// contador: employee_payroll sí, employees no) guarda la tarifa sin chocar con lo que no tocó; y si
+// cambió algo que la base no le deja, el aviso es «no tenés permiso para cambiar este dato».
+function cambiosDe(emp: Employee, d: Draft): Partial<ReturnType<typeof payloadOf>> {
+  const nuevo = payloadOf(d)
+  const actual = {
+    hourly_rate_crc:    Number(emp.hourly_rate_crc) || 0,
+    fixed_salary_crc:   Number(emp.fixed_salary_crc) || 0,
+    participa_servicio: emp.participa_servicio ?? true,
+    biotime_emp_code:   emp.biotime_emp_code ?? null,
+    fecha_ingreso:      emp.fecha_ingreso ?? null,
+  }
+  const out: Record<string, unknown> = {}
+  for (const k of Object.keys(nuevo) as (keyof typeof nuevo)[]) {
+    if (nuevo[k] !== actual[k]) out[k] = nuevo[k]
+  }
+  return out as Partial<ReturnType<typeof payloadOf>>
+}
+
 // ¿Se tocó alguna de las dos patas de la tarifa? Es lo único que un período cerrado
 // congela: el resto de los campos de nómina no cambia un colón de lo ya calculado.
 function tarifaCambio(emp: Employee, d: Draft): boolean {
@@ -179,7 +198,8 @@ export default function SalariosEmpleados({ employees, onRefresh, vista = 'perso
       // exactamente lo que "cerrado" promete que no pasa. Se chequea solo si la tarifa
       // cambió: el código de BioTime, la fecha de ingreso o el alias del banco no son plata.
       if (tarifaCambio(emp, draft)) await exigirTarifasEditables()
-      await updateEmployeePayroll(emp.id, payloadOf(draft))
+      const cambios = cambiosDe(emp, draft)
+      if (Object.keys(cambios).length > 0) await updateEmployeePayroll(emp.id, cambios)
       // El alias del homebanking va por su propia función: el payload de
       // updateEmployeePayroll es un contrato cerrado (mig 055) y no se ensancha.
       if ((emp.nombre_homebanking ?? '') !== draft.banco.trim()) {

@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { getAllEmployees, upsertPlanilla } from './admin'
+import { actualizarEmpleado, getAllEmployees, upsertPlanilla } from './admin'
 import type {
   Employee,
   EmployeePayment,
@@ -1098,11 +1098,7 @@ export async function asignarCodigoBiotime(
     )
   }
 
-  const { error } = await supabase
-    .from('employees')
-    .update({ biotime_emp_code: limpio })
-    .eq('id', employeeId)
-  if (error) throw new Error(error.message)
+  await actualizarEmpleado(employeeId, { biotime_emp_code: limpio })
 }
 
 export function codigosSinMapear(excs: PunchException[]): CodigoSinMapear[] {
@@ -2006,12 +2002,8 @@ export async function updateEmployeeHorasHabituales(
   entrada: string | null,
   salida: string | null,
 ): Promise<void> {
-  const { error } = await supabase
-    .from('employees')
-    .update({
-      hora_entrada_habitual: horaHabitualHHMM(entrada),
-      hora_salida_habitual:  horaHabitualHHMM(salida),
-    })
-    .eq('id', id)
-  if (error) throw new Error(error.message)
+  await actualizarEmpleado(id, {
+    hora_entrada_habitual: horaHabitualHHMM(entrada),
+    hora_salida_habitual:  horaHabitualHHMM(salida),
+  })
 }

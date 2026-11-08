@@ -42,6 +42,28 @@ function payrollError(error: { code?: string; message: string }, code?: string |
   return new Error(error.message)
 }
 
+/** Lo que ve el usuario cuando la base no le dejó cambiar una fila de employees (RLS → 0 filas). */
+export const SIN_PERMISO_DATO = 'No tenés permiso para cambiar este dato.'
+
+/**
+ * UPDATE de una fila de employees que AVISA si no cambió nada. La RLS de employees no tira error
+ * cuando el rol no puede escribir (p. ej. el contador): el UPDATE afecta 0 filas en silencio. Acá se
+ * pide la fila de vuelta y, si no vuelve ninguna, se tira SIN_PERMISO_DATO. No toca permisos.
+ */
+export async function actualizarEmpleado(
+  id: string,
+  patch: Record<string, unknown>,
+  traducir: (error: { code?: string; message: string }) => Error = (e) => new Error(e.message),
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('employees')
+    .update(patch as never)
+    .eq('id', id)
+    .select('id')
+  if (error) throw traducir(error)
+  if (!Array.isArray(data) || data.length === 0) throw new Error(SIN_PERMISO_DATO)
+}
+
 /** Parte un payload: lo de planilla (→ employee_payroll) y lo demás (→ employees). */
 export function separarPlanilla<T extends Record<string, unknown>>(payload: T): {
   planilla: Partial<Pick<EmployeePayroll, 'hourly_rate_crc' | 'fixed_salary_crc'>>
@@ -90,14 +112,12 @@ export async function updateEmployeePayroll(
   payload: Partial<EmployeePayroll>,
 ): Promise<void> {
   const { planilla, resto } = separarPlanilla(payload)
-  if (Object.keys(resto).length > 0) {
-    const { error } = await supabase
-      .from('employees')
-      .update(resto)
-      .eq('id', id)
-    if (error) throw payrollError(error, payload.biotime_emp_code)
-  }
+  // Primero la planilla (owner/contador): si después employees rechaza otro campo, lo que el rol SÍ
+  // podía guardar ya quedó guardado y el aviso dice exactamente qué no.
   await upsertPlanilla(id, planilla)
+  if (Object.keys(resto).length > 0) {
+    await actualizarEmpleado(id, resto, (e) => payrollError(e, payload.biotime_emp_code))
+  }
 }
 
 export async function createEmployee(
@@ -122,11 +142,7 @@ export async function updateEmployee(
   id: string,
   payload: Partial<Pick<Employee, 'full_name' | 'role' | 'is_active' | 'pos_name'>>
 ): Promise<void> {
-  const { error } = await supabase
-    .from('employees')
-    .update(payload)
-    .eq('id', id)
-  if (error) throw new Error(error.message)
+  await actualizarEmpleado(id, payload)
 }
 
 export async function toggleEmployeeActive(id: string, is_active: boolean): Promise<void> {
@@ -186,11 +202,7 @@ export async function setProfileActive(id: string, is_active: boolean): Promise<
 
 // ── Vincular perfil a empleado ──────────────────────────────
 export async function linkProfileToEmployee(employeeId: string, profileId: string | null): Promise<void> {
-  const { error } = await supabase
-    .from('employees')
-    .update({ profile_id: profileId })
-    .eq('id', employeeId)
-  if (error) throw new Error(error.message)
+  await actualizarEmpleado(employeeId, { profile_id: profileId })
 }
 
 export async function getEmployeeByProfileId(profileId: string): Promise<Employee | null> {

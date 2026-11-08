@@ -5,8 +5,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // (servicio, BioTime, ingreso) sigue en employees. Mock mínimo del cliente: capturamos cada
 // escritura con su tabla y controlamos el error que devuelve la base por tabla.
 type Escritura = { tabla: string; op: string; payload: unknown; opts?: unknown }
-const state: { error: Record<string, { code?: string; message: string } | null>; escrituras: Escritura[] } = {
+const state: {
+  error: Record<string, { code?: string; message: string } | null>
+  sinFilas: Record<string, boolean>
+  escrituras: Escritura[]
+} = {
   error: {},
+  sinFilas: {},
   escrituras: [],
 }
 const de = (tabla: string) => state.escrituras.find(e => e.tabla === tabla)?.payload
@@ -16,7 +21,11 @@ vi.mock('./supabase', () => ({
     from: (tabla: string) => ({
       update: (payload: unknown) => {
         state.escrituras.push({ tabla, op: 'update', payload })
-        return { eq: async () => ({ error: state.error[tabla] ?? null }) }
+        // update(...).eq(...).select('id'): filas actualizadas (0 = la RLS no dejó, sin error).
+        return { eq: () => ({ select: async () => ({
+          data: state.error[tabla] ? null : (state.sinFilas[tabla] ? [] : [{ id: 'x' }]),
+          error: state.error[tabla] ?? null,
+        }) }) }
       },
       insert: (payload: Record<string, unknown>) => {
         state.escrituras.push({ tabla, op: 'insert', payload })
@@ -41,6 +50,7 @@ import { updateEmployeePayroll, createEmployee } from './admin'
 
 beforeEach(() => {
   state.error = {}
+  state.sinFilas = {}
   state.escrituras = []
 })
 
@@ -83,6 +93,21 @@ describe('updateEmployeePayroll · guardado de los campos de nómina', () => {
       ['employee_payroll', { employee_id: 'emp-7', hourly_rate_crc: 1000 }],
       ['employee_bank_info', { employee_id: 'emp-7', nombre_homebanking: 'BENEFICIARIO' }],
     ])
+  })
+
+  it('contador: la tarifa se guarda y employees (0 filas, sin error) → «no tenés permiso para cambiar este dato»', async () => {
+    state.sinFilas.employees = true
+    await expect(
+      updateEmployeePayroll('emp-5', { hourly_rate_crc: 3000, participa_servicio: false }),
+    ).rejects.toThrow('No tenés permiso para cambiar este dato.')
+    // la planilla va PRIMERO: lo que el contador sí puede cambiar quedó guardado
+    expect(state.escrituras.map(e => e.tabla)).toEqual(['employee_payroll', 'employees'])
+  })
+
+  it('solo tarifa (sin campos de employees) → no toca employees', async () => {
+    state.sinFilas.employees = true
+    await updateEmployeePayroll('emp-6', { hourly_rate_crc: 3000 })
+    expect(state.escrituras.map(e => e.tabla)).toEqual(['employee_payroll'])
   })
 
   it('la RLS de employee_payroll (manager) → «solo el dueño o el contador»', async () => {

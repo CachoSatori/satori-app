@@ -11,7 +11,7 @@
 | A1 | Roles, QR fijo del socio, activar como anfitrión, stub del contrato del pase | 2 | **hecha** | `a1e93db` | batería 294/294 (nuevas 53–56) · carreras 6/6 · paridad 602 = 602 · migrador 15/15 · vitest 1.487 |
 | A2 | Socios: alta provisional + confirmación, autoalta (Turnstile, topes, purga, privacidad), validación, token de pase, cursor | 2,5 | **hecha** | `838b892` | batería 318/318 (nueva 57, 24 casos) · carreras 7/7 (nueva 17) · paridad 633 = 633 · migrador 15 OK · vitest 1.490 · club-web 13/13 |
 | A3 | Promociones mínimas + productos + admin de cortesías del sorteo | 2 | **hecha** | `fc53012` + `600b868` | batería 351/351 (nueva 60, 18 casos) · carreras 8/8 · paridad 717 = 717 · vitest 1.491 · build OK · migrador 15 OK · captura de la pantalla |
-| A4 | «Qué aplicar», sorteo de cortesía, visita por factura (856), premio por referir (1.ª factura C con 856), topes, antiautocanje, créditos pendientes, portal con dos pestañas | 4,5 | pendiente | — | — |
+| A4 | «Qué aplicar», sorteo de cortesía, visita por factura (856), premio por referir (1.ª factura C con 856), topes, antiautocanje, créditos pendientes, portal con dos pestañas | 4,5 | **hecha** | `ea6c34f` · `9372d33` · `2c8b324` · `95391be` · `60c0be7` | batería 385/385 (nuevas 63–66) · carreras 8/8 · paridad OK · vitest 1.491 · portal verificado en el navegador |
 | A5 | Excepciones LC (11) + «pendiente de configuración» de R02 + reporte de altas por cajero | 2,5 | pendiente | — | — |
 | A6 | Recorrido, guía de uso, RUNBOOK | 1,5 | pendiente | — | — |
 
@@ -97,3 +97,23 @@
 - 08-nov 04:30 · **Integración** en `claude/club-integracion` (= epic-tesla + club-wallet, sin conflictos). Corte para la
   auditoría: **`5fd7ab1`**. Batería 354/354, carreras 8/8, paridad 724 = 724, vitest 1.521, builds OK, migrador 15 OK.
   Staging en base. Resumen y «necesita a Ismael»: [NOCHE-2026-11-08-RESUMEN.md](NOCHE-2026-11-08-RESUMEN.md).
+- 08-nov (día) ·
+  - **Anotaciones de B traídas a epic-tesla** (`901026b`).
+  - **`club_pases_emitidos()`** (`490451d`, prueba 62); B3 ya la usa para los eventos de promociones (`5f759ad`, club-wallet).
+  - **Puente CLUB-AUD-44/45** (`9461731`, sin desplegar): mig 082 `pos_ndf_ingestar` (una transacción + lock por local);
+    carrera de dos POST de la misma factura: antes 6 líneas, ahora 3. **44 a 48 están juntos** en `claude/puente-item11`.
+  - **Diseño del pase** propuesto (`b5d6a33`, club-wallet; lo aprueba Ismael).
+  - **A4 hecha**:
+    - A4.1 visita del socio y «qué aplicar» (sorteo fijo, tope por día, regla de créditos, antiautocanje);
+    - A4.2 Escanear;
+    - A4.3 premio por referir;
+    - A4.4 créditos pendientes de aprobación del anfitrión nuevo;
+    - A4.5 portal con dos pestañas y pase completo.
+  - Lo que depende de los códigos de CORTESÍA CLUB o de PROMO CLUB 10 % sale «pendiente de configuración».
+  - **DECISIONES PROVISORIAS:**
+    1. A4.4: el cupón que pasa el tope va entero a pendientes (no se parte la visita).
+    2. La aprobación la hace alguien distinto de quien registró el cupón (no hay vínculo miembro ↔ usuario para
+       chequear «distinto del anfitrión» cuando el anfitrión es del equipo).
+    3. Premio: un referido da a lo sumo un premio; lo que no lo da queda anotado con el motivo y no se reevalúa.
+    4. Visita: la caja elige el pedido como con el cupón; el cruce con el 856 se hace después (A5).
+  - **Próximo:** A5 (excepciones).

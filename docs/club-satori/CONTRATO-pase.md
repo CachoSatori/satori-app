@@ -157,7 +157,7 @@ service de actualización de Apple, y no se ofrece el botón mientras el flag es
 | Entrega de A | Día de A | B mientras tanto |
 |---|---|---|
 | **Stub** de `club_pase_datos`, `club_pase_por_token`, `club_pase_emitido`, eventos y cursor, con datos REALES de referentes y `socio: null` | **día 1** | trabaja con el JSON de ejemplo de §2 |
-| `socio`, `cortesias` y `promociones` reales; eventos de `rol`, `cortesia` y `promociones` | día 5 (**A3, 08-nov: `promociones`, `socio.beneficio`, la «cortesía sorpresa» de la promo y el evento `promociones` ya son reales**; faltan visitas y premios: A4) | prueba el pendiente → activo con datos sintéticos |
+| `socio`, `cortesias` y `promociones` reales; eventos de `rol`, `cortesia` y `promociones` | día 5 (**A3, 08-nov: `promociones`, `socio.beneficio`, la «cortesía sorpresa» de la promo y el evento `promociones` ya son reales; A4, 08-nov: `visitas_mes` y los premios por referir en `socio.cortesias` también** — el contrato v1 de A está completo) | prueba el pendiente → activo con datos sintéticos |
 | Contrato congelado (v1) + datos de prueba sintéticos en staging para B | día 6 | integración de punta a punta |
 
 ## 9. Pruebas que comparten A y B

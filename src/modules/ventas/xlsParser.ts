@@ -12,7 +12,7 @@ import { isCajeroName, todayCR } from '../../shared/utils'
 
 // ── Date from filename ─────────────────────────────────────────
 export function extractDateFromFilename(name: string): string | null {
-  const n = name.replace(/[_\-]/g, ' ')
+  const n = name.replace(/[_-]/g, ' ')
 
   // DD MM YYYY  (e.g. "salon 28 05 2026.xls")
   let m = n.match(/\b(\d{1,2})\s+(\d{1,2})\s+(\d{4})\b/)

@@ -48,6 +48,7 @@ export default function TipCocina({ employees }: Props) {
   const [month, setMonth] = useState<string>('all')
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
     setLoading(true)
     getAttendanceHistory(FETCH_MONTHS)
       .then(setRows)
@@ -77,6 +78,7 @@ export default function TipCocina({ employees }: Props) {
 
   // Default al mes más reciente con datos
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
     if (month === 'all' && availableMonths.length) setMonth(availableMonths[0])
   }, [availableMonths]) // eslint-disable-line react-hooks/exhaustive-deps
 

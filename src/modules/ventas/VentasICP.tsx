@@ -71,7 +71,6 @@ export default function VentasICP({ dias, pm }: Props) {
   const [employees, setEmployees]   = useState<Employee[]>([])
   const [loading, setLoading]       = useState(true)
 
-  const dates   = useMemo(() => allDates(dias), [dias])
   const months  = useMemo(() => availableMonths(dias, {}), [dias])
   const [month, setMonth] = useState(months[0] ?? '')
 
@@ -121,7 +120,7 @@ export default function VentasICP({ dias, pm }: Props) {
     const all = allDates(dias)
     if (!month) return all
     return all.filter(d => d.startsWith(month))
-  }, [dates, month, dias])
+  }, [month, dias])
 
   // Build ICP per salonero
   const icpData = useMemo(() => {

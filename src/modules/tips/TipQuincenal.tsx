@@ -48,6 +48,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
   useEffect(() => {
     const missing = monthSessions.filter(s => !mergedCache[s.id])
     if (!missing.length) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
     setLoading(true)
     Promise.all(missing.map(async s => {
       const entries = await getTipEntriesBySession(s.id)

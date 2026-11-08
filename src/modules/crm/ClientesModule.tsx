@@ -84,12 +84,14 @@ export default function ClientesModule() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { load() }, [load])
 
   const selected = useMemo(() => customers.find(c => c.id === selId) ?? null, [customers, selId])
 
   // Cargar interacciones al seleccionar
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
     if (!selId) { setInteractions([]); return }
     setLoadingInter(true)
     getInteractions(selId).then(setInteractions).catch(() => {}).finally(() => setLoadingInter(false))

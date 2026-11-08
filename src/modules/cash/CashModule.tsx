@@ -72,6 +72,7 @@ export default function CashModule() {
   // Fecha con la que se abre «Cierre del día» al tocar un día de la alerta (remonta CashCierre).
   const [fechaCierre, setFechaCierre] = useState<string | null>(null)
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- se mantiene el useCallback/useMemo manual; el compilador solo omite optimizar, sin impacto funcional
   const loadAll = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
     setError(null)
@@ -99,6 +100,7 @@ export default function CashModule() {
     }
   }, [veAlerta])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { loadAll() }, [loadAll])
 
   // Ventas del PoS por jornada (ventana de 60 días o desde el corte): carga aparte, sin bloquear.

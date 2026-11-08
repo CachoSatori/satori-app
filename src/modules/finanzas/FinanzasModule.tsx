@@ -64,6 +64,7 @@ export default function FinanzasModule() {
       else setError(msg)
     } finally { setLoading(false) }
   }, [year])
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { load() }, [load])
 
   // Gastos con factura cargada (linked_movement_id) → para que el contador/owner

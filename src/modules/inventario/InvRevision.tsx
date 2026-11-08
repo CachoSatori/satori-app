@@ -115,6 +115,7 @@ export default function InvRevision({ ingredients, onRefresh }: {
     } finally { setLoading(false) }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { load() }, [load])
 
   const supName = useCallback((id: string | null) => suppliers.find(s => s.id === id)?.name ?? '— sin proveedor', [suppliers])

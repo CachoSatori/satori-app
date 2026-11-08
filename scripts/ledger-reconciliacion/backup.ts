@@ -24,5 +24,5 @@ writeFileSync(salida, JSON.stringify({
   total: filas.length, filas,
 }, null, 2) + '\n')
 
-console.log(`📒 ${filas.length} filas: ${filas.map((f: any) => f.version).join(', ')}`)
+console.log(`📒 ${filas.length} filas: ${filas.map(f => f.version).join(', ')}`)
 console.log(`💾 → ${salida}`)

@@ -21,12 +21,12 @@ interface Props {
 // ── Share helper ──────────────────────────────────────────────
 async function shareText(text: string, setCopied: (v: boolean) => void) {
   if (navigator.share) {
-    try { await navigator.share({ text }); return } catch (_) { /* fallback */ }
+    try { await navigator.share({ text }); return } catch { /* fallback */ }
   }
   try {
     await navigator.clipboard.writeText(text)
     setCopied(true); setTimeout(() => setCopied(false), 2500)
-  } catch (_) { window.prompt('Copiá el texto:', text) }
+  } catch { window.prompt('Copiá el texto:', text) }
 }
 
 export default function VentasHoy({ dias, pm, metas }: Props) {

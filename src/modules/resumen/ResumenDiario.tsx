@@ -182,14 +182,14 @@ function buildShareText(date: string, snap: DaySnapshot): string {
 async function shareResumen(text: string, setCopied: (v: boolean) => void) {
   // Try Web Share API (mobile)
   if (navigator.share) {
-    try { await navigator.share({ text }); return } catch (_) { /* fallback */ }
+    try { await navigator.share({ text }); return } catch { /* fallback */ }
   }
   // Fallback: clipboard
   try {
     await navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
-  } catch (_) {
+  } catch {
     // Last resort: prompt
     window.prompt('Copiá el texto:', text)
   }
@@ -221,6 +221,7 @@ export default function ResumenDiario() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
     setLoading(true)
     fetchSnapshot(date)
       .then(setSnap)

@@ -311,6 +311,7 @@ export async function createCashMovement(movement: {
           .select()
           .abortSignal(signal)
           .single())
+        // eslint-disable-next-line preserve-caught-error -- falso positivo: este error sale del reintento, no es síntoma del error capturado
         if (error) throw new Error(error.message)
         return data as CashMovement
       } catch (e2) {
@@ -399,6 +400,7 @@ export async function updateCashMovement(
           .update(clean as unknown as Tables['cash_movements']['Update'])
           .eq('id', id)
           .abortSignal(signal))
+        // eslint-disable-next-line preserve-caught-error -- falso positivo: este error sale del reintento, no es síntoma del error capturado
         if (error) throw new Error(error.message)
         return
       } catch (e2) {
@@ -497,6 +499,7 @@ export async function createDayMovement(m: {
           .from('cash_movements')
           .insert(row as unknown as Tables['cash_movements']['Insert'])
           .abortSignal(signal))
+        // eslint-disable-next-line preserve-caught-error -- falso positivo: este error sale del reintento, no es síntoma del error capturado
         if (error) throw new Error(error.message)
         return id
       } catch (e2) {
@@ -548,6 +551,7 @@ export async function deleteCashMovement(id: string, note: string, managerEmail?
     if (timedOut) {
       // Reintento único (socket zombi tras suspensión). La RPC es idempotente.
       const { error } = await withWriteTimeout(runCascade)
+      // eslint-disable-next-line preserve-caught-error -- falso positivo: este error sale del reintento, no es síntoma del error capturado
       if (error) throw new Error(error.message)
       return
     }
@@ -573,7 +577,7 @@ export async function discardCashSession(sessionId: string, managerEmail?: strin
     try { await deleteCashMovement(m.id, note, managerEmail, managerPassword); deleted++ }
     catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
-      throw new Error(`Descarte parcial: se borraron ${deleted} movimiento(s) antes de fallar (${msg}). Volvé a descartar el turno para terminar.`)
+      throw new Error(`Descarte parcial: se borraron ${deleted} movimiento(s) antes de fallar (${msg}). Volvé a descartar el turno para terminar.`, { cause: e })
     }
   }
   const { error } = await supabase.from('cash_sessions').delete().eq('id', sessionId)

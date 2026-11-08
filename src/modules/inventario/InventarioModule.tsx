@@ -46,6 +46,7 @@ export default function InventarioModule() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- se mantiene el useCallback/useMemo manual; el compilador solo omite optimizar, sin impacto funcional
   const reload = useCallback(async () => {
     setLoading(true); setError(null)
     try {
@@ -59,6 +60,7 @@ export default function InventarioModule() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { reload() }, [reload])
 
   return (

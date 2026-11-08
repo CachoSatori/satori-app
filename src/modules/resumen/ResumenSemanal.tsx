@@ -129,6 +129,7 @@ export default function ResumenSemanal() {
     const lw_from = weekStarts.previous
     const lw_to   = addDays(lw_from, 6)
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
     setLoading(true)
     Promise.all([fetchWeek(tw_from, tw_to), fetchWeek(lw_from, lw_to)])
       .then(([tw, lw]) => { setThisWeek(tw); setLastWeek(lw) })
@@ -164,9 +165,9 @@ export default function ResumenSemanal() {
 
   async function doShare() {
     const text = buildWeekShare()
-    if (navigator.share) { try { await navigator.share({ text }); return } catch (_) {} }
+    if (navigator.share) { try { await navigator.share({ text }); return } catch { /* fallback al portapapeles */ } }
     try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2500) }
-    catch (_) { window.prompt('Copiá:', text) }
+    catch { window.prompt('Copiá:', text) }
   }
 
   return (

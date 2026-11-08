@@ -203,7 +203,7 @@ export default function ReporteMensual() {
   // Load heavy ventas source + employees once
   useEffect(() => {
     Promise.all([getVentasDias(400), getVentasHist(), getProductMap(), getActiveEmployees()])
-      .then(([d, h, _pm, e]: [DiasMap, HistMap, ProductMap, Employee[]]) => {
+      .then(([d, h, , e]: [DiasMap, HistMap, ProductMap, Employee[]]) => {
         setDias(d); setHist(h); setEmps(e); setSourceReady(true)
       })
       .catch(console.error)
@@ -236,6 +236,7 @@ export default function ReporteMensual() {
     }
   }, [ym, dias, hist, emps, sourceReady])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { reload() }, [reload])
 
   const shareText = useMemo(

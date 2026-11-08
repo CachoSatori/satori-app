@@ -58,7 +58,9 @@ export function abrir(argv: string[]): { entorno: Entorno; ref: string; token: s
 }
 
 /** SELECT read-only por Management API. Rechaza cualquier cosa que no sea un SELECT. */
-export async function q(ref: string, token: string, sql: string): Promise<any[]> {
+export type Fila = Record<string, unknown>
+
+export async function q(ref: string, token: string, sql: string): Promise<Fila[]> {
   assertSoloSelect(sql)
   const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
     method: 'POST',
@@ -66,7 +68,7 @@ export async function q(ref: string, token: string, sql: string): Promise<any[]>
     body: JSON.stringify({ query: sql, read_only: true }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`)
-  return (await res.json()) as any[]
+  return (await res.json()) as Fila[]
 }
 
 /** Prueba que el canal RECHAZA escrituras antes de leer nada. Devuelve el error del servidor. */

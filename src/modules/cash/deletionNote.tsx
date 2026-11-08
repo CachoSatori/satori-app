@@ -20,6 +20,7 @@ type AskNote = (context?: string) => Promise<string | null>
 const Ctx = createContext<AskNote>(() => Promise.resolve(null))
 
 /** Devuelve `askNote(context?)` que resuelve la nota saneada, o null si se cancela/vacía. */
+// eslint-disable-next-line react-refresh/only-export-components -- hook/re-export junto al componente a propósito; solo afecta el HMR en dev
 export const useDeletionNote = () => useContext(Ctx)
 
 type Pending = { context?: string; resolve: (note: string | null) => void }

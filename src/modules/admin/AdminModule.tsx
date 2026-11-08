@@ -45,6 +45,7 @@ export default function AdminModule() {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- patrón existente (carga/reset dentro del effect); refactor aparte, sin cambio de comportamiento
   useEffect(() => { loadData() }, [loadData])
 
   // Refresco liviano (sin `loading`): no desmonta la pestaña, así el modal de «Nuevo empleado» sigue

@@ -3680,7 +3680,7 @@ drop function if exists public.club_reporte_mes(date, text);
 create or replace function public.club_reporte_mes(p_mes date, p_location text default null, p_vivo boolean default false)
 returns jsonb
 language plpgsql
-stable
+volatile
 security definer
 set search_path = public, pg_temp
 as $$
@@ -3703,6 +3703,10 @@ begin
     raise exception 'Local no válido' using errcode = 'P0001';
   end if;
   v_mes  := date_trunc('month', coalesce(p_mes, now()::date))::date;
+  -- LC-PRIV (Grok 41, 08-nov noche): ver el reporte del mes (nombres de anfitriones y sus saldos) deja rastro, como los
+  -- exportes: quién, cuándo, mes, local y si es en vivo; sin datos. Un exporte deja esta fila y la suya.
+  perform public.club_auditar('ver_reporte_mes', 'club_reporte_mes', null, null,
+    jsonb_build_object('mes', to_char(v_mes, 'YYYY-MM'), 'local', p_location, 'vivo', coalesce(p_vivo, false)));
   -- Mes cerrado → la última versión congelada (CLUB-AUD-04).
   select rc.datos || jsonb_build_object('cerrado', true, 'version', rc.version, 'sha256', rc.sha256,
                                         'sha256_prev', rc.sha256_prev, 'cerrado_en', rc.cerrado_en, 'motivo', rc.motivo,

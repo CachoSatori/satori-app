@@ -337,12 +337,23 @@ en prod tiene que poder revisarse antes, sin exponer datos personales.
    en la misma corrida en que arma el plan.
 2. **Emitir, no ejecutar:** `--prod --emitir <carpeta fuera del repo>` escribe tres archivos:
    - `migracion.sql`: **una transacción** con, en orden:
-     a) precondiciones que abortan: la migración del Club está en el ledger con el md5 esperado; `club_entorno` vacío
-        (no es staging); el local `--local` existe; **cero** filas `origen = 'migracion'` (en prod no se re-ejecuta: no
-        hay `delete`);
-     b) las inserciones;
-     c) la validación contra `--esperados` dentro de la transacción (si no da, `raise` y no queda nada);
-     d) `commit` solo al final.
+     a) `set local lock_timeout = '5s'` y `set local statement_timeout = '5min'` (si algo espera un lock o se cuelga,
+        aborta entero en vez de trabar la base);
+     b) precondiciones que abortan: la migración del Club está en el ledger con el md5 esperado; `club_entorno` vacío
+        (no es staging); el local `--local` existe; **línea de base «cero socios en `club_*`»**: `club_miembros`,
+        `club_miembro_roles`, `club_movimientos`, `club_cupones` y `club_visitas_socio` en **0 filas** (si hay algo, ya hubo
+        actividad o una carga previa: se frena y se replanifica con firma; en prod no se re-ejecuta y no hay `delete`);
+     c) las inserciones (solo `insert into public.club_…`);
+     d) la validación contra `--esperados` dentro de la transacción (si no da, `raise` y no queda nada);
+     e) `commit` solo al final.
+   - **Filtro de sentencias (mecánico, al emitir y otra vez al aplicar):** el script recorre `migracion.sql` sacando los
+     literales de texto y **rechaza** el archivo si aparece cualquiera de `delete`, `truncate`, `drop`, `update`,
+     `alter`, `grant` o `revoke` (también dentro de bloques `do`), o cualquier sentencia que no sea `begin`, `set local`,
+     `do` (precondiciones y validación), `insert into public.club_…` o `commit`. Prueba con un archivo trucado de cada
+     tipo → niega.
+   - **`migracion.sql` tiene datos personales** (nombres, teléfonos, emails del export): nunca al repo, ni por chat, ni
+     adjunto al paquete; 0600, fuera del repo y se borra después de aplicar. **Lo único que viaja es su sha256** (en
+     `resumen.json` y en el paquete del pase, para la firma).
    - `resumen.json`: conteos y totales (miembros por tipo, Σ personas, Σ créditos, vencimientos del 05-nov, duplicados),
      el sha256 de `migracion.sql` y la versión del script. **Sin nombres, teléfonos ni emails** (una prueba lo verifica
      con expresiones regulares).
@@ -351,13 +362,17 @@ en prod tiene que poder revisarse antes, sin exponer datos personales.
 3. **Revisión:** Ismael (y Grok, si quiere) revisan `resumen.json` y el **código** que genera el SQL, no los datos. El
    mismo export corrido con `--ensayo` en staging tiene que dar el mismo `resumen.json` (salvo los ids).
 4. **Ensayo en prod:** el mismo `migracion.sql` con `rollback` en vez de `commit` (lo genera `--emitir` como
-   `migracion-ensayo.sql`), con la firma del día del pase.
+   `migracion-ensayo.sql`, con su propio sha256), con la firma del día del pase y **fuera de horario**: antes de abrir o
+   después del cierre de caja, nunca durante el servicio ni en una ventana de otra sesión (toma locks de `club_*` aunque
+   termine en `rollback`).
 5. **Aplicar:** `--prod --aplicar-archivo migracion.sql --sha256 <el firmado>`: el script recalcula el sha256 y se niega si
    no coincide. Una sola transacción. Rollback: no hay re-ejecución; antes de que haya actividad, el rollback de la
    migración del Club (paso 4); después, a mano y con firma.
 6. **Pruebas a sumar al implementarlo** (`scripts/club/test_migrar_firestore.py`): prod sin `--prod` → niega;
-   `migracion.sql` sin `delete`; precondiciones presentes y en orden; sha256 distinto → niega; `resumen.json` sin
-   datos personales; `--prod` con `--apply` de staging → niega.
+   el filtro rechaza un archivo con `delete`, `truncate`, `drop`, `update`, `alter`, `grant` (uno por prueba, también
+   escondido en un `do`) y deja pasar uno con esas palabras solo dentro de un literal; `lock_timeout` y
+   `statement_timeout` presentes antes de todo; precondiciones (con la línea de base de cero socios) presentes y en
+   orden; sha256 distinto → niega; `resumen.json` sin datos personales; `--prod` con `--apply` de staging → niega.
 
 ### G-61 · Diff exacto del catálogo staging ↔ prod (bloquea el cierre del paso 4)
 **Problema.** `scripts/sql/club_catalogo.sql` (la paridad del CLUB-AUD-17) compara columnas, constraints, índices,

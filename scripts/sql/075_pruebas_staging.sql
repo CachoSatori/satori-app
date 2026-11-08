@@ -4065,6 +4065,15 @@ begin
   perform pg_temp.r('78', 'exportes CSV y HTML → club_auditoria (formato, mes y local)', v_n = 2, format('%s filas', v_n));
   perform pg_temp.r('78', 'el exporte lo entrega la base: club_reporte_exportar devuelve el reporte del mes',
     v_rep ? 'kpis' and v_rep->>'mes' is not null, left(coalesce(v_rep::text, 'null'), 120));
+  select count(*) into v_n from club_auditoria where actor = '<OWNER_UUID>'::uuid and accion = 'ver_reporte_mes'
+     and despues->>'mes' = to_char(current_date, 'YYYY-MM') and despues ? 'local' and despues ? 'vivo' and antes is null;
+  perform pg_temp.r('78', 'ver el reporte del mes deja rastro como los exportes (cada exporte también lo lee)', v_n >= 2, format('%s filas', v_n));
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_reporte_mes(current_date, pg_temp.loc());
+  perform pg_temp.yo();
+  perform pg_temp.r('78', 'club_reporte_mes directo (lo que abre la pantalla Reportes) → una fila más «ver_reporte_mes»',
+    (select count(*) from club_auditoria where actor = '<OWNER_UUID>'::uuid and accion = 'ver_reporte_mes'
+        and despues->>'mes' = to_char(current_date, 'YYYY-MM') and despues ? 'local' and despues ? 'vivo' and antes is null) = v_n + 1, '');
   perform pg_temp.r('78', 'ya no existe la puerta para «registrar» un exporte desde la app',
     to_regprocedure('public.club_registrar_exporte(text, date, text)') is null, '');
   select count(*) into v_n from club_auditoria where en >= now() - interval '1 minute'

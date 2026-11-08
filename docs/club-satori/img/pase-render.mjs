@@ -6,15 +6,15 @@ const logo = `<!doctype html><html><head>${FUENTE}<style>${base}
 .l{width:660px;height:660px;border-radius:50%;background:#0d0d0d;display:flex;align-items:center;justify-content:center;position:relative}
 .l::after{content:'';position:absolute;inset:34px;border:5px solid #c8a96e;border-radius:50%;opacity:.85}
 .k{font:600 360px/1 'Noto Serif JP',serif;color:#c8a96e;margin-top:-18px}
-</style></head><body><div class="l"><span class="k">里</span></div></body></html>`
+</style></head><body><div class="l"><span class="k">悟</span></div></body></html>`
 const hero = `<!doctype html><html><head>${FUENTE}<style>${base}
-.h{width:1032px;height:336px;background:#0d0d0d;display:flex;align-items:center;justify-content:center;gap:44px;color:#c8a96e}
-.k{font:600 168px/1 'Noto Serif JP',serif}
+.h{width:1032px;height:336px;background:#0d0d0d;display:flex;align-items:center;justify-content:center;gap:48px;color:#c8a96e}
+.k{font:600 140px/1 'Noto Serif JP',serif}
 .t{display:flex;flex-direction:column;gap:14px}
-.n{font:600 92px/1 'Noto Serif JP',serif;letter-spacing:.22em}
+.n{font:600 60px/1 'Noto Serif JP',serif;letter-spacing:.18em;white-space:nowrap}
 .s{font:400 30px/1 'Noto Sans JP',sans-serif;letter-spacing:.42em;color:#c8a96e;opacity:.85}
 .r{height:2px;background:#c8a96e;opacity:.6;width:100%}
-</style></head><body><div class="h"><span class="k">里</span><div class="t"><span class="n">SATORI</span><span class="r"></span><span class="s">CLUB · SANTA TERESA</span></div></div></body></html>`
+</style></head><body><div class="h"><span class="k">悟</span><div class="t"><span class="n">SATORI · CLUB</span><span class="r"></span></div></div></body></html>`
 const b = await chromium.launch()
 const p = await b.newPage({ deviceScaleFactor: 1 })
 for (const [n, html, w, h] of [['logo', logo, 660, 660], ['hero', hero, 1032, 336]]) {

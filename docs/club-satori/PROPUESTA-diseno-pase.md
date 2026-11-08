@@ -1,14 +1,18 @@
 # Propuesta · diseño del pase de Google Wallet (08-nov-2026) — **la aprueba Ismael**
 
-> **EN ESPERA (Ismael, 08-nov): el kanji 里 («pueblo») NO va.** Ismael confirma cuál (悟 o el del logo real) y si la franja
-> lleva Nosara. Hasta entonces `WALLET_DISENO` no se carga y el pase sale solo con el fondo `#0d0d0d`.
+> **MAQUETA v2 (08-nov), APAGADA hasta el OK de Ismael.** Ismael pidió el daruma de la página web de Satori; **no está
+> en el repo ni en club-web** (solo el ícono 祭 de la app y esta propuesta). Por eso, como indicó, va el kanji **悟**
+> («satori») en el mismo estilo. Franja: **«SATORI · CLUB»** (sin local). Si aparece el archivo del daruma, se cambia
+> solo el logo y la franja, con este mismo script. Hasta el OK, `WALLET_DISENO` no se carga y el pase sale solo con el
+> fondo `#0d0d0d`.
 
 Sale de la identidad que ya usan la app y club-web:
 - **Color de fondo:** tinta `#0d0d0d`, el negro del encabezado de club-web y de la app.
 - **Oro:** `#c8a96e` (`--gold` de club-web), solo sobre la tinta, como en la web.
-- **Logo:** el kanji **里** de club-web, en Noto Serif JP (la serif de la app), oro sobre un círculo negro con un filete
-  dorado. 660×660, como pide Google.
-- **Franja superior** (`heroImage`, 1032×336): 里 + «SATORI», con «CLUB · SANTA TERESA» debajo.
+- **Logo:** el kanji **悟** en Noto Serif JP (la serif de la app), oro sobre un círculo negro con un filete dorado.
+  660×660, como pide Google.
+- **Franja** (`heroImage`, 1032×336): 悟 + «SATORI · CLUB» con un filete dorado debajo, con margen a los lados por si
+  Google recorta.
 
 ![Maqueta del pase (datos ficticios)](img/pase-propuesta.png)
 

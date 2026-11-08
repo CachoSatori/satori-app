@@ -90,6 +90,7 @@ drop table if exists public.club_visitas_socio;       -- LC-A4
 drop table if exists public.club_entorno;              -- CLUB-AUD-42 (marca de staging)
 drop table if exists public.club_promociones;          -- LC-A3
 drop table if exists public.club_descuentos_tipo;        -- LC-DT
+drop table if exists public.club_config_global;         -- (08-nov) tope diario único del Club
 drop table if exists public.club_marcadores_descuento;   -- LC-MD
 drop table if exists public.club_cortesias;
 drop table if exists public.club_socio_solicitudes;   -- CLUB-AUD-72

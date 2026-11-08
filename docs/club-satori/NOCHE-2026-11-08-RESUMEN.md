@@ -68,7 +68,9 @@ Arreglos en la integración: **ninguno** (no hubo nada roto).
    - pasar el PoS de 15 % a 10 %.
 5. **Logo y color** del pase de Wallet.
 6. La **lista W1–W14** de la auditoría de Grok, para cerrar CLUB-AUD-43.
-7. Qué marca el artículo **857 «INVITADO»** (aparece junto al 856 en 90 facturas). Viene de antes; sigue abierto.
+7. ~~Qué marca el artículo **857 «INVITADO»** (aparece junto al 856 en 90 facturas). Viene de antes; sigue abierto.~~
+   **REEMPLAZADO** (08-nov): el 857 es el beneficio para quien viene con un socio, sin límite de acompañantes (decisión de
+   Ismael; `bd6786e`).
 
 **Cuentas y secretos (nunca por chat ni en el repo)**
 

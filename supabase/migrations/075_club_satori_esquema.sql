@@ -205,6 +205,10 @@ create table if not exists public.club_cupones_contactos (
   created_at timestamptz not null default now(),
   check (whatsapp is not null or email is not null)
 );
+-- LC-PRIV (Grok 63, 08-nov): el turista que deja contacto acepta el aviso de privacidad; queda la versión y cuándo.
+alter table public.club_cupones_contactos add column if not exists aviso_version text
+  check (aviso_version ~ '^v[0-9A-Za-z.-]{1,30}$');
+alter table public.club_cupones_contactos add column if not exists aviso_aceptado_en timestamptz;
 -- Bases donde club_cupones todavía tiene las columnas de contacto: se mueven y se borran.
 do $$ begin
   if exists (select 1 from information_schema.columns
@@ -722,6 +726,11 @@ begin
       end if;
       v_optin := (p_contacto->>'optin')::boolean;
     end if;
+    -- LC-PRIV (Grok 63): quien deja contacto acepta el aviso vigente del local (la versión exacta)
+    if (v_wa is not null or v_email is not null)
+       and coalesce(p_contacto->>'acepto', '') is distinct from v_cfg.aviso_privacidad_version then
+      raise exception 'Datos de contacto no válidos' using errcode = 'P0001';
+    end if;
   end if;
 
   -- Inserción con reintento si choca el código (muy improbable).
@@ -737,8 +746,8 @@ begin
   end loop;
 
   if v_wa is not null or v_email is not null then
-    insert into public.club_cupones_contactos (cupon_id, nombre, whatsapp, email, optin)
-    values (v_cupon.id, v_nombre, v_wa, v_email, v_optin);
+    insert into public.club_cupones_contactos (cupon_id, nombre, whatsapp, email, optin, aviso_version, aviso_aceptado_en)
+    values (v_cupon.id, v_nombre, v_wa, v_email, v_optin, v_cfg.aviso_privacidad_version, now());
   end if;
 
   codigo := v_cupon.codigo;
@@ -1621,10 +1630,13 @@ begin
   if v_tel is null then return null; end if;
   select public.club_nombre_pila(m.nombre) into v_nom from public.club_miembros m where m.id = v_mv.miembro_id;
   select * into v_cfg from public.club_config where location_id = v_mv.location_id;
-  v_txt := format('Hola %s: en Satori se canjearon %s %s de tu cuenta el %s. Te quedan %s. Si no fuiste vos, avisanos por acá.',
+  -- (Ismael, 08-nov noche) el vencimiento, con el mismo texto que los mensajes, el portal y las guías: se cuenta desde la
+  -- última actividad (SPEC §5.1 y club_vencer).
+  v_txt := format('Hola %s: en Satori se canjearon %s %s de tu cuenta el %s. Te quedan %s. Los créditos vencen a los %s meses sin actividad: cada persona que llega con tu cupón o cada canje vuelve a contar los %s meses. Si no fuiste vos, avisanos por acá.',
                   coalesce(v_nom, ''), public.club_num(v_mv.creditos), case when v_mv.creditos = 1 then 'crédito' else 'créditos' end,
                   to_char(v_mv.fecha_visita at time zone 'America/Costa_Rica', 'DD/MM HH24:MI'),
-                  public.club_num(public.club_creditos(public.club_saldo_personas(v_mv.miembro_id), v_cfg.personas_por_credito)));
+                  public.club_num(public.club_creditos(public.club_saldo_personas(v_mv.miembro_id), v_cfg.personas_por_credito)),
+                  v_cfg.vencimiento_meses, v_cfg.vencimiento_meses);
   update public.club_alertas set canal = 'wa.me (link mostrado en caja)' where movimiento_id = p_movimiento and canal is null;
   return jsonb_build_object('tel', ltrim(v_tel, '+'), 'texto', v_txt);   -- la app arma https://wa.me/<tel>?text=…
 end;
@@ -1743,7 +1755,9 @@ begin
     'codigo',                   v_m.codigo,
     'personas',                 v_saldo,
     'creditos',                 public.club_creditos(v_saldo, v_cfg.personas_por_credito),
+    'valor_credito_crc',        v_cfg.valor_credito_crc,   -- (08-nov) el portal muestra créditos y colones juntos, como el pase
     'personas_proximo_credito', public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
+    'vencimiento_meses',        v_cfg.vencimiento_meses,   -- (08-nov noche) «vencen a los N meses sin actividad»
     'movimientos',              v_movs,
     -- LC-A2: el portal sirve también al socio (estado y link de baja del aviso de privacidad)
     'anfitrion',                exists (select 1 from public.club_miembro_roles r where r.miembro_id = v_m.id and r.rol <> 'socio' and r.estado = 'activo'),
@@ -2101,17 +2115,22 @@ $$;
 
 -- Búsqueda (plan B de caja): nombre, negocio o últimos 4 dígitos del teléfono.
 -- NUNCA devuelve teléfono ni email. Máximo 20.
+-- LC-PRIV (Grok 39 y 41, 08-nov): cada búsqueda queda en club_auditoria (quién, cuándo, si fue por dígitos o por
+-- texto y cuántas filas; NUNCA el texto buscado) y hay un tope por usuario y por minuto (club_config.
+-- buscar_tope_minuto; con varios locales encendidos, el menor), para que no se pueda barrer el mapa de teléfonos.
 create or replace function public.club_buscar(p_q text)
 returns table (id uuid, nombre text, negocio text, tipo text, estado text, personas int, creditos numeric)
 language plpgsql
-stable
+volatile
 security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_rol public.user_role := public.get_my_role();
-  v_q   text := public.club_norm_texto(p_q);
-  v_dig boolean;
+  v_rol  public.user_role := public.get_my_role();
+  v_q    text := public.club_norm_texto(p_q);
+  v_dig  boolean;
+  v_tope int;
+  v_n    int;
 begin
   if v_rol is null or v_rol not in ('owner','manager','cajero') then
     raise exception 'Sin permiso' using errcode = '42501';
@@ -2119,6 +2138,12 @@ begin
   v_dig := v_q ~ '^[0-9]{4}$';
   if not v_dig and length(v_q) < 3 then
     raise exception 'Escribí al menos 3 letras o los últimos 4 dígitos del teléfono' using errcode = 'P0001';
+  end if;
+  select coalesce(min(c.buscar_tope_minuto), 30) into v_tope from public.club_config c where c.club_activo;
+  perform pg_advisory_xact_lock(hashtextextended('club_buscar:' || auth.uid()::text, 0));
+  if (select count(*) from public.club_auditoria a
+       where a.actor = auth.uid() and a.accion = 'buscar' and a.en > now() - interval '1 minute') >= v_tope then
+    raise exception 'Demasiadas búsquedas seguidas: esperá un minuto' using errcode = 'P0001';
   end if;
   return query
     select m.id, m.nombre, n.nombre, m.tipo, m.estado, s.personas, s.creditos
@@ -2135,6 +2160,9 @@ begin
            end
      order by (m.estado = 'activo') desc, m.nombre
      limit 20;
+  get diagnostics v_n = row_count;   -- las filas que devolvió el RETURN QUERY
+  perform public.club_auditar('buscar', 'club_miembros', null, null,
+    jsonb_build_object('por', case when v_dig then 'digitos_telefono' else 'texto' end, 'filas', v_n));
 end;
 $$;
 
@@ -2270,6 +2298,7 @@ begin
     'creditos',                 public.club_creditos(v_saldo, v_cfg.personas_por_credito),
     'personas_proximo',         public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
     'personas_por_credito',     v_cfg.personas_por_credito,
+    'valor_credito_crc',        v_cfg.valor_credito_crc,   -- (08-nov) la caja muestra créditos y colones juntos, como el pase
     'canjeado_hoy',             v_dia,
     'canje_min',                v_cfg.canje_min,
     'canje_paso',               v_cfg.canje_paso,
@@ -2381,7 +2410,7 @@ $$;
 create or replace function public.club_miembro_codigo(p_id uuid)
 returns text
 language plpgsql
-stable
+volatile
 security definer
 set search_path = public, pg_temp
 as $$
@@ -2394,6 +2423,7 @@ begin
   if v is null then
     raise exception 'Miembro no encontrado' using errcode = 'P0001';
   end if;
+  perform public.club_auditar('ver_codigo', 'club_miembros', p_id, null, null);   -- LC-PRIV (Grok 41): sin el código
   return v;
 end;
 $$;
@@ -2580,6 +2610,7 @@ declare
   v_nombre text;
   v_wa     text;
   v_email  text;
+  v_aviso  text;
 begin
   if not public.club_web_ok() then   -- CLUB-AUD-06: solo por club-web
     raise exception 'Datos no válidos' using errcode = 'P0001';
@@ -2592,6 +2623,11 @@ begin
   end if;
   select * into v_c from public.club_cupones c where c.codigo = v_cod for update;
   if not found or v_c.estado <> 'vigente' or v_c.vence_en <= now() then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  -- LC-PRIV (Grok 63): el aviso de privacidad vigente del local del cupón, versión exacta (club-web la manda)
+  select c.aviso_privacidad_version into v_aviso from public.club_config c where c.location_id = v_c.location_id;
+  if v_aviso is null or coalesce(p_contacto->>'acepto', '') <> v_aviso then
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
   if exists (select 1 from public.club_cupones_contactos k where k.cupon_id = v_c.id) then
@@ -2613,8 +2649,8 @@ begin
   if v_wa is null and v_email is null then
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
-  insert into public.club_cupones_contactos (cupon_id, nombre, whatsapp, email, optin)
-  values (v_c.id, v_nombre, v_wa, v_email, true)
+  insert into public.club_cupones_contactos (cupon_id, nombre, whatsapp, email, optin, aviso_version, aviso_aceptado_en)
+  values (v_c.id, v_nombre, v_wa, v_email, true, v_aviso, now())
   on conflict (cupon_id) do nothing;
   return true;
 end;
@@ -3648,7 +3684,7 @@ drop function if exists public.club_reporte_mes(date, text);
 create or replace function public.club_reporte_mes(p_mes date, p_location text default null, p_vivo boolean default false)
 returns jsonb
 language plpgsql
-stable
+volatile
 security definer
 set search_path = public, pg_temp
 as $$
@@ -3671,6 +3707,10 @@ begin
     raise exception 'Local no válido' using errcode = 'P0001';
   end if;
   v_mes  := date_trunc('month', coalesce(p_mes, now()::date))::date;
+  -- LC-PRIV (Grok 41, 08-nov noche): ver el reporte del mes (nombres de anfitriones y sus saldos) deja rastro, como los
+  -- exportes: quién, cuándo, mes, local y si es en vivo; sin datos. Un exporte deja esta fila y la suya.
+  perform public.club_auditar('ver_reporte_mes', 'club_reporte_mes', null, null,
+    jsonb_build_object('mes', to_char(v_mes, 'YYYY-MM'), 'local', p_location, 'vivo', coalesce(p_vivo, false)));
   -- Mes cerrado → la última versión congelada (CLUB-AUD-04).
   select rc.datos || jsonb_build_object('cerrado', true, 'version', rc.version, 'sha256', rc.sha256,
                                         'sha256_prev', rc.sha256_prev, 'cerrado_en', rc.cerrado_en, 'motivo', rc.motivo,
@@ -4183,10 +4223,14 @@ alter table public.club_config add column if not exists wallet_apple_activo bool
 create table if not exists public.club_pase_eventos (
   id          bigint generated always as identity primary key,
   miembro_id  uuid,                    -- null = afecta a todos los pases (promociones)
-  motivo      text not null check (motivo in ('movimiento','rol','datos','cortesia','promociones')),
+  motivo      text not null check (motivo in ('movimiento','rol','datos','cortesia','promociones','config')),
   creado_en   timestamptz not null default now()
 );
 create index if not exists club_pase_eventos_miembro_idx on public.club_pase_eventos (miembro_id, id);
+-- (08-nov noche) motivo 'config': cambio del valor del crédito (evento global). Bases con la tabla ya creada.
+alter table public.club_pase_eventos drop constraint if exists club_pase_eventos_motivo_check;
+alter table public.club_pase_eventos add constraint club_pase_eventos_motivo_check
+  check (motivo in ('movimiento','rol','datos','cortesia','promociones','config'));
 alter table public.club_pase_eventos enable row level security;
 revoke all on public.club_pase_eventos from public, anon, authenticated;
 
@@ -4453,13 +4497,17 @@ alter table public.club_config add column if not exists socio_autoalta_max_dia i
   check (socio_autoalta_max_dia between 1 and 10000);
 alter table public.club_config add column if not exists socio_autoalta_purga_dias int not null default 30
   check (socio_autoalta_purga_dias between 7 and 365);
-alter table public.club_config add column if not exists aviso_privacidad_version text not null default 'v1'
+alter table public.club_config add column if not exists aviso_privacidad_version text not null default 'v1.1'
   check (aviso_privacidad_version ~ '^v[0-9A-Za-z.-]{1,30}$');
 -- v1 (Ismael, 08-nov): el texto final del aviso de club-web/src/i18n.ts. Las versiones de prueba anteriores
 -- (v0-provisorio, v1-borrador) pasan a v1; una versión cargada a mano distinta no se pisa. Cada alta guarda la versión
 -- que aceptó (club_miembro_roles.aviso_version).
-alter table public.club_config alter column aviso_privacidad_version set default 'v1';
-update public.club_config set aviso_privacidad_version = 'v1' where aviso_privacidad_version in ('v0-provisorio', 'v1-borrador');
+-- v1.1 (Ismael, 08-nov noche): «Qué datos guardamos» suma «y tu email, si lo das» (el cupón y el alta en caja lo
+-- piden). Cambia lo que la persona acepta (una categoría de datos más), así que es una versión nueva y no una
+-- aclaración de v1: quien aceptó v1 queda con v1 en su fila. v0-provisorio, v1-borrador y v1 pasan a v1.1 (todavía no
+-- hay nadie en prod); una versión cargada a mano distinta no se pisa.
+alter table public.club_config alter column aviso_privacidad_version set default 'v1.1';
+update public.club_config set aviso_privacidad_version = 'v1.1' where aviso_privacidad_version in ('v0-provisorio', 'v1-borrador', 'v1');
 
 alter table public.club_miembro_roles add column if not exists registrado_por uuid;          -- quién lo cargó en caja
 alter table public.club_miembro_roles add column if not exists provisional_hasta timestamptz; -- activo provisional
@@ -5044,7 +5092,30 @@ alter table public.club_config add column if not exists turno_corte time not nul
 alter table public.club_config add column if not exists pos_logins_caja text[] not null default '{}'
   check (array_position(pos_logins_caja, null) is null);
 alter table public.club_config add column if not exists cortesias_por_visita int not null default 1 check (cortesias_por_visita between 0 and 3);
-alter table public.club_config add column if not exists socio_visitas_por_dia int not null default 1 check (socio_visitas_por_dia between 1 and 5);
+-- (Ismael, 08-nov noche) Club compartido: el tope de visitas con beneficio por día es ÚNICO para todo el Club (una sola
+-- configuración, no por local). Regla visible: «una visita con beneficio por día, en cualquier Satori». Si Ismael decide
+-- otra cosa, se revierte. La columna por local de antes (club_config.socio_visitas_por_dia) se borra.
+create table if not exists public.club_config_global (
+  id                     boolean primary key default true check (id),   -- una sola fila
+  socio_visitas_por_dia  int not null default 1 check (socio_visitas_por_dia between 1 and 5),
+  actualizado_en         timestamptz not null default now()
+);
+insert into public.club_config_global (id) values (true) on conflict (id) do nothing;
+alter table public.club_config drop column if exists socio_visitas_por_dia;
+alter table public.club_config_global enable row level security;
+revoke all on public.club_config_global from public, anon, authenticated;
+grant select on public.club_config_global to authenticated;
+grant update (socio_visitas_por_dia) on public.club_config_global to authenticated;   -- solo owner (policy)
+drop policy if exists club_config_global_ver on public.club_config_global;
+create policy club_config_global_ver on public.club_config_global for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager','cajero'));
+drop policy if exists club_config_global_owner on public.club_config_global;
+create policy club_config_global_owner on public.club_config_global for update to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() = 'owner')
+  with check (public.get_my_role() is not null and public.get_my_role() = 'owner');
+drop trigger if exists club_config_global_auditar_trg on public.club_config_global;
+create trigger club_config_global_auditar_trg after update on public.club_config_global
+  for each row execute function public.club_auditar_trg();   -- quién cambió el tope y de cuánto a cuánto
 
 create table if not exists public.club_promociones (
   id             uuid primary key default gen_random_uuid(),
@@ -5386,7 +5457,7 @@ $$;
 --   · La caja escanea el QR fijo del socio (/s/), elige el pedido (como el cupón) y registra la visita. La base
 --     responde QUÉ APLICAR: el % de la promo vigente para socios y la cortesía SORTEADA entre las activas.
 --   · Sorteo fijo: la visita del día se registra una vez; reescanear devuelve la MISMA (no se re-sortea).
---   · Tope: `club_config.socio_visitas_por_dia` (1) visitas por día por socio.
+--   · Tope: `club_config_global.socio_visitas_por_dia` (1) visitas con beneficio por día por socio, en cualquier local.
 --   · Regla fija: una factura pagada con créditos no lleva descuento ni cortesía (si ya hay un canje en ese pedido,
 --     la visita sale «NO aplicar»; si el canje viene después, la visita queda marcada `con_canje`).
 --   · Antiautocanje: un cupón no suma en un pedido donde su anfitrión registró visita de socio.
@@ -5485,6 +5556,7 @@ declare
   v_prem  public.club_premios%rowtype;
   v_extra jsonb;
   v_loc   text;
+  v_tope  int;
   r       jsonb;
 begin
   if v_rol is null or v_rol not in ('owner','manager','cajero') then raise exception 'Sin permiso' using errcode = '42501'; end if;
@@ -5520,7 +5592,9 @@ begin
   -- Tope por día. En el MISMO pedido: la caja ve la visita que ya está (misma cortesía, sin re-sorteo).
   -- Grok 90: en OTRO pedido → «ya_uso_hoy», NO aplicar beneficio (no se registra nada).
   select count(*) into v_n from public.club_visitas_socio where miembro_id = p_miembro and fecha = v_hoy;
-  if v_n >= v_cfg.socio_visitas_por_dia then
+  select g.socio_visitas_por_dia into v_tope from public.club_config_global g;   -- tope ÚNICO del Club (08-nov noche)
+  v_tope := coalesce(v_tope, 1);
+  if v_n >= v_tope then
     select * into v_prev from public.club_visitas_socio
      where miembro_id = p_miembro and fecha = v_hoy and location_id = v_loc and visita_clave is not distinct from v_clave
      order by registrada_en desc limit 1;
@@ -5530,7 +5604,9 @@ begin
     end if;
     return jsonb_build_object('visita_id', null, 'socio', public.club_nombre_limpio(v_m.nombre), 'estado', 'ya_uso_hoy',
       'porcentaje', 0, 'cortesias', '[]'::jsonb, 'texto', 'Ya usó su beneficio hoy en otro pedido: NO aplicar beneficio',
-      'avisos', jsonb_build_array('El tope es de ' || v_cfg.socio_visitas_por_dia || ' visita(s) con beneficio por día. Si viene con otro socio, puede ir como su invitado (857).'),
+      'avisos', jsonb_build_array(case when v_tope = 1 then 'Una visita con beneficio por día, en cualquier Satori.'
+                                       else 'Hasta ' || v_tope || ' visitas con beneficio por día, en cualquier Satori.' end
+                                  || ' Si viene con otro socio, puede ir como su invitado (857).'),
       'articulo_lc', v_cfg.lc_articulo_codigo, 'repetida', false, 'promo', null);
   end if;
 
@@ -6310,10 +6386,157 @@ revoke all on function public.club_local(text, boolean)                  from pu
 revoke all on function public.club_local_activo(text)                    from public, anon, authenticated;
 
 
+-- ── LC-PRIV (08-nov tarde): aviso del turista, lecturas de datos personales con rastro, tope de búsqueda ──
+-- Grok 39: tope de búsquedas por usuario y por minuto, por local (club_buscar usa el menor de los encendidos).
+alter table public.club_config add column if not exists buscar_tope_minuto int not null default 30
+  check (buscar_tope_minuto between 5 and 300);
+-- El tope cuenta las búsquedas del último minuto en club_auditoria: índice por actor y acción.
+create index if not exists club_auditoria_actor_accion_idx on public.club_auditoria (actor, accion, en);
+
+-- Grok 41: el detalle de contacto de un miembro se lee SOLO por esta función, que deja rastro (quién y cuándo, sin
+-- el dato). Las tablas de contacto ya no se leen directo (se revoca el SELECT de authenticated más abajo).
+create or replace function public.club_miembro_contacto_ver(p_miembro uuid)
+returns table (miembro_id uuid, telefono text, email text, optin_whatsapp boolean, optin_email boolean)
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.club_miembros m where m.id = p_miembro) then
+    raise exception 'Miembro no encontrado' using errcode = 'P0001';
+  end if;
+  return query
+    select c.miembro_id, c.telefono, c.email, c.optin_whatsapp, c.optin_email
+      from public.club_miembros_contacto c where c.miembro_id = p_miembro;
+  perform public.club_auditar('ver_contacto', 'club_miembros_contacto', p_miembro, null, null);
+end;
+$$;
+
+-- Grok 41 (08-nov noche): el exporte lo ENTREGA la base. Una sola función audita y devuelve los datos del reporte del
+-- mes (la app solo les da formato CSV o HTML); sin pasar por acá no hay exporte. La fila: formato, mes y local, sin datos.
+drop function if exists public.club_registrar_exporte(text, date, text);
+create or replace function public.club_reporte_exportar(p_mes date, p_location text default null, p_formato text default 'csv')
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role(); v jsonb;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if p_formato is null or p_formato not in ('csv','html') or p_mes is null then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  v := public.club_reporte_mes(p_mes, p_location);
+  perform public.club_auditar('exporte_' || p_formato, 'club_reporte_mes', null, null,
+    jsonb_build_object('mes', to_char(date_trunc('month', p_mes), 'YYYY-MM'),
+                       'local', case when p_location ~ '^[a-z0-9-]{2,40}$' then p_location end));
+  return v;
+end;
+$$;
+
+-- Grok 41 (08-nov noche): contactos de turistas para ofertas. SOLO owner, con rastro (cuántas filas, sin datos), solo
+-- los que aceptaron (optin) y con el link de baja de cada uno (/b/<código del cupón>), que va en cada mensaje.
+create or replace function public.club_contactos_ofertas_exportar(p_location text default null)
+returns table (nombre text, whatsapp text, email text, local text, aviso_version text, aceptado_en timestamptz, baja_url text)
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role(); v_n int;
+begin
+  if v_rol is null or v_rol <> 'owner' then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  return query
+    select k.nombre, k.whatsapp, k.email, c.location_id, k.aviso_version, coalesce(k.aviso_aceptado_en, k.created_at),
+           'https://club.satoricostarica.com/b/' || c.codigo
+      from public.club_cupones_contactos k join public.club_cupones c on c.id = k.cupon_id
+     where k.optin and (p_location is null or c.location_id = p_location)
+     order by coalesce(k.aviso_aceptado_en, k.created_at);
+  get diagnostics v_n = row_count;
+  perform public.club_auditar('exporte_contactos_turistas', 'club_cupones_contactos', null, null,
+    jsonb_build_object('local', case when p_location ~ '^[a-z0-9-]{2,40}$' then p_location end, 'filas', v_n));
+end;
+$$;
+
+-- Grok 75/76 (08-nov noche): si cambia el valor del crédito o cuántas personas hacen uno, cambia lo que muestra CADA
+-- pase (₡ disponibles, créditos): un evento global para que se actualicen todos, sin esperar al próximo movimiento.
+create or replace function public.club_config_pase_evento()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if new.valor_credito_crc is distinct from old.valor_credito_crc
+     or new.personas_por_credito is distinct from old.personas_por_credito then
+    insert into public.club_pase_eventos (miembro_id, motivo) values (null, 'config');
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists club_config_pase_evento_trg on public.club_config;
+create trigger club_config_pase_evento_trg after update of valor_credito_crc, personas_por_credito on public.club_config
+  for each row execute function public.club_config_pase_evento();
+
+-- Grok 63: baja del turista (link del aviso corto del cupón). Con el código del cupón (secreto, 10 caracteres) se
+-- borra su contacto. Siempre responde true (no revela si el cupón existe o tenía contacto). Queda rastro sin datos.
+create or replace function public.club_cupon_contacto_baja(p_codigo text)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_cod text := upper(btrim(coalesce(p_codigo, '')));
+  v_id  uuid;
+begin
+  if not public.club_web_ok() then   -- CLUB-AUD-06: solo por club-web
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  if v_cod !~ '^[A-HJ-NP-Z2-9]{10}$' then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  delete from public.club_cupones_contactos k using public.club_cupones c
+   where c.codigo = v_cod and k.cupon_id = c.id
+  returning k.cupon_id into v_id;
+  if v_id is not null then
+    perform public.club_auditar('baja_contacto_turista', 'club_cupones_contactos', v_id, null, null);
+  end if;
+  return true;
+end;
+$$;
+
+-- Grok 41: las tablas de contacto ya no se leen directo desde la app (la RLS queda como segunda barrera).
+revoke select on public.club_miembros_contacto from authenticated;
+revoke select on public.club_cupones_contactos from authenticated;
+
+revoke all on function public.club_miembro_contacto_ver(uuid)               from public, anon, authenticated;
+revoke all on function public.club_reporte_exportar(date, text, text)        from public, anon, authenticated;
+revoke all on function public.club_contactos_ofertas_exportar(text)         from public, anon, authenticated;
+revoke all on function public.club_config_pase_evento()                     from public, anon, authenticated;
+revoke all on function public.club_cupon_contacto_baja(text)                 from public, anon, authenticated;
+grant execute on function public.club_miembro_contacto_ver(uuid)            to authenticated;
+grant execute on function public.club_reporte_exportar(date, text, text)     to authenticated;
+grant execute on function public.club_contactos_ofertas_exportar(text)      to authenticated;
+grant execute on function public.club_cupon_contacto_baja(text)              to anon, authenticated;
+
+
 -- CLUB-AUD-11: red de seguridad al final, después de todos los grants de arriba.
 --   · Secuencias club_% (identity): nadie de la app las usa directo.
---   · Funciones club_%: ninguna para PUBLIC; para anon solo las 9 puertas públicas (R-01: código de canje; LC-A2:
---     autoalta, baja del socio y código de canje desde el pase; LC-ML: locales activos).
+--   · Funciones club_%: ninguna para PUBLIC; para anon solo las 10 puertas públicas (R-01: código de canje; LC-A2:
+--     autoalta, baja del socio y código de canje desde el pase; LC-ML: locales activos; LC-PRIV: baja del turista).
 do $$
 declare r record;
 begin
@@ -6326,7 +6549,7 @@ begin
     execute format('revoke all on function %s from public', r.fn);
     if r.proname not in ('club_cupon_crear', 'club_portal', 'club_cupon_ver', 'club_cupon_contacto', 'club_canje_codigo_generar',
                          'club_socio_autoalta', 'club_socio_baja_portal', 'club_canje_codigo_generar_pase',
-                         'club_locales_activos') then
+                         'club_locales_activos', 'club_cupon_contacto_baja') then
       execute format('revoke all on function %s from anon', r.fn);
     end if;
   end loop;

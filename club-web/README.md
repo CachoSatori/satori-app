@@ -45,6 +45,11 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
   `VITE_TURNSTILE_SITEKEY` (variable de build) y `TURNSTILE_SECRET` las carga Ismael.
 - **Google Wallet (B2):** el botón «Agregar a Google Wallet» (portal y final de la autoalta) aparece solo si el build
   tiene `VITE_WALLET_GOOGLE=1`. Va **apagado** hasta que el Edge `club-pase` esté desplegado con sus secretos.
+- **Dominio (08-nov noche):** sale de la variable de build **`VITE_CLUB_URL`** (`https://<dominio>`, sin barra final);
+  no está escrito en el código ni en los textos de club-web. Sin la variable, el sitio usa el origen donde corre. Para
+  cambiar de dominio: cambiar la variable y redesplegar. **Ojo:** la base (los links del pase, el portal, el código de
+  canje y la baja) y la app de caja (`src/modules/club/qrFormato.ts`, que reconoce los QR) todavía tienen el dominio
+  escrito: ver AVANCE-LC.md.
 - **Aviso de privacidad:** su versión (`AVISO_PRIVACIDAD_VERSION` en `src/config.ts`) tiene que ser igual a
   `club_config.aviso_privacidad_version`; si no, la base rechaza el alta. Al cambiar el texto se suben las dos.
 - **Errores:** la función nunca devuelve el mensaje crudo de la base. Lo traduce a un código fijo (`referente_invalido`, `cupon_invalido`, `tope_referente`, `demasiados_pedidos` y otros).
@@ -77,7 +82,7 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
    4. En Supabase (staging; prod con su firma) → SQL Editor: `select public.club_web_clave_cargar('<el sha256>');`. **Va el sha256, nunca la clave.**
    5. Para rotarla, repetir los pasos 1 a 4 con una clave nueva. La anterior deja de valer cuando se carga el sha256 nuevo, así que conviene cargar primero el secreto en Pages y redesplegar.
 4. **Topes por IP** (`RL_CREAR` y `RL_LEER`): están declarados en `wrangler.toml`. **Verificación, después de cada deploy:**
-   - abrir `https://club.satoricostarica.com/api/salud` (o la URL del deploy de prueba);
+   - abrir `https://<dominio>/api/salud` (o la URL del deploy de prueba);
    - tiene que decir `"rl_crear": true, "rl_leer": true, "club_web_key": true, "turnstile": true, "supabase": true`. No muestra ningún valor;
    - si `rl_crear` o `rl_leer` sale en `false`, Pages no tomó el binding. Esos endpoints responden 503: fallan cerrados, el sitio no queda abierto;
    - prueba de fuego: 6 «Obtener mi cupón» seguidos desde un mismo teléfono. El sexto tiene que mostrar «Demasiados intentos seguidos».
@@ -85,13 +90,13 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
    **Plan B, si Pages no admite los bindings: `/api` en un Worker.**
    1. Crear un Worker `satori-club-api` con el mismo `functions/_lib/api.js`. Su `fetch(request, env)` llama a `manejar(request, env, path)`.
    2. Declarar en el `wrangler.toml` del Worker los dos `[[unsafe.bindings]]` de arriba, más `SUPABASE_URL`, `SUPABASE_ANON_KEY` y el secreto `CLUB_WEB_KEY`.
-   3. Agregar la ruta `club.satoricostarica.com/api/*` → Worker `satori-club-api` (Workers Routes), y sacar `functions/api` de Pages.
+   3. Agregar la ruta `<dominio>/api/*` → Worker `satori-club-api` (Workers Routes), y sacar `functions/api` de Pages.
    4. Repetir la verificación con `/api/salud`.
 5. Las ramas que no son la de producción se publican como *preview* (`<rama>.satori-club.pages.dev`).
 
-## DNS: apuntar `club.satoricostarica.com` (lo hace Ismael)
-1. En el proyecto de Pages, ir a **Custom domains → Set up a custom domain** y escribir `club.satoricostarica.com`.
-2. **Si el DNS de `satoricostarica.com` está en Cloudflare**, Cloudflare crea solo el registro CNAME. Hay que confirmar.
-3. **Si el DNS está en otro proveedor**, crear allá el registro: tipo **CNAME**, nombre **`club`**, destino **`satori-club.pages.dev`**. Después, volver a Pages y verificar.
-4. Esperar a que el certificado SSL quede en «Active» (suele tardar unos minutos). Probar `https://club.satoricostarica.com/r/<código de prueba>`.
+## DNS: apuntar el dominio del Club (lo hace Ismael)
+1. En el proyecto de Pages, ir a **Custom domains → Set up a custom domain** y escribir el dominio del Club (`<dominio>`, el mismo de `VITE_CLUB_URL`).
+2. **Si el DNS del dominio está en Cloudflare**, Cloudflare crea solo el registro CNAME. Hay que confirmar.
+3. **Si el DNS está en otro proveedor**, crear allá el registro: tipo **CNAME**, nombre **el subdominio del Club**, destino **`satori-club.pages.dev`**. Después, volver a Pages y verificar.
+4. Esperar a que el certificado SSL quede en «Active» (suele tardar unos minutos). Probar `https://<dominio>/r/<código de prueba>`.
 5. **Recién para el piloto:** cambiar `SUPABASE_URL` y `SUPABASE_ANON_KEY` a los de prod, con la 075 ya aplicada en prod y la firma de Ismael.

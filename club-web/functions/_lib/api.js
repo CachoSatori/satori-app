@@ -17,7 +17,8 @@ const memoria = new Map() // SOLO para el servidor local (CLUB_DEV=1)
 
 /**
  * Tope por endpoint y por IP (CLUB-AUD-14 y 24, ronda 3). Un binding de Rate Limiting por tipo de pedido:
- *   · RL_CREAR: crear cupón, opt-in y código de canje → 5 por 60 s por IP.
+ *   · RL_CREAR: crear cupón, opt-in, baja del turista, alta y código de canje → 5 por 60 s por IP (cupón y alta, también
+ *     por prefijo de red /24 o /64).
  *   · RL_LEER:  ver cupón y portal → 60 por 60 s por IP.
  * Si el binding no está, devuelve `null` y la API responde 503 (falla cerrada). El contador en memoria existe
  * solo en el servidor local (`CLUB_DEV=1`). `RATE_LIMITER` (un solo binding de antes) ya no se usa.
@@ -103,11 +104,12 @@ async function leerCuerpo(request) {
 function limpiarContacto(c) {
   if (!c || typeof c !== 'object') return null
   const s = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '')
-  return { nombre: s(c.nombre, 80), whatsapp: s(c.whatsapp, 32), email: s(c.email, 254), optin: c.optin === true }
+  // LC-PRIV (Grok 63): la versión del aviso que vio el turista; la base exige que sea la vigente del local
+  return { nombre: s(c.nombre, 80), whatsapp: s(c.whatsapp, 32), email: s(c.email, 254), optin: c.optin === true, acepto: s(c.acepto, 32).trim() }
 }
 
 /**
- * LC-DES-07: Turnstile (Cloudflare) en la autoalta. TURNSTILE_SECRET es secreto de Pages (en staging, la clave de
+ * LC-DES-07: Turnstile (Cloudflare) en la autoalta y, desde Grok 24, en la creación del cupón. TURNSTILE_SECRET es secreto de Pages (en staging, la clave de
  * prueba de Cloudflare). Sin el secreto la autoalta responde 503 (falla cerrada). En el servidor local
  * (CLUB_DEV=1) se acepta el token «dev».
  * @returns {Promise<boolean|null>} true = humano · false = no · null = sin configurar
@@ -193,13 +195,19 @@ export async function manejar(request, env, path) {
                        supabase: RE_SUPABASE.test(String(env.SUPABASE_URL || '').replace(/\/+$/, '')) && !!env.SUPABASE_ANON_KEY })
   }
 
-  // POST /api/cupon  {referente, contacto?}
+  // POST /api/cupon  {referente, turnstile}
   if (partes.length === 1 && partes[0] === 'cupon') {
     if (metodo !== 'POST') return json(405, { error: 'metodo' })
     { const ok = await limitar(env, 'crear', `crear:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    // Grok 24: además, por prefijo de red (/24 o /64), como en el alta (rotar IPs dentro de la misma red no lo esquiva).
+    { const ok = await limitar(env, 'crear', `crear-red:${prefijoRed(ip)}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
     const b = await leerCuerpo(request)
     const ref = typeof b?.referente === 'string' ? b.referente.trim().toUpperCase() : ''
     if (!RE_REF.test(ref)) return json(404, { error: 'referente_invalido' })
+    // Grok 24: Turnstile también al crear el cupón (sin el secreto, 503: falla cerrada, como el alta).
+    const humano = await verificarTurnstile(env, b?.turnstile, ip)
+    if (humano === null) return json(503, { error: 'servicio_no_disponible' })
+    if (!humano) return json(403, { error: 'verificacion' })
     return rpc(env, 'club_cupon_crear', { p_codigo_referente: ref, p_contacto: null })
   }
 
@@ -224,8 +232,14 @@ export async function manejar(request, env, path) {
       { const ok = await limitar(env, 'crear', `contacto:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
       const b = await leerCuerpo(request)
       const c = limpiarContacto(b?.contacto)
-      if (!c || !c.optin) return json(400, { error: 'datos_invalidos' })
+      if (!c || !c.optin || !RE_AVISO.test(c.acepto)) return json(400, { error: 'datos_invalidos' })
       return rpc(env, 'club_cupon_contacto', { p_codigo: cod, p_contacto: c })
+    }
+    // POST /api/cupon/:codigo/baja  → LC-PRIV (Grok 63): el turista borra el contacto que dejó con ese cupón
+    if (partes.length === 3 && partes[2] === 'baja') {
+      if (metodo !== 'POST') return json(405, { error: 'metodo' })
+      { const ok = await limitar(env, 'crear', `baja-t:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+      return rpc(env, 'club_cupon_contacto_baja', { p_codigo: cod })
     }
   }
 

@@ -19,11 +19,11 @@
 | 2b | Mig **082** (`pos_ndf_ingestar`: ingesta en una transacción por local, CLUB-AUD-44/45; entra con su número si va primero) | 2 | `drop function public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb);` (solo si el paso 3 no se hizo) |
 | 3 | Edge `ingest-ndf` desde `claude/puente-item11-prod`, y después el agente de prod | 2b | volver al Edge anterior **antes** de tocar la 082 y la 081 |
 | 3b | **Renumerar** lo que quede ≤ al último de prod (hoy: la 075 → 150) por la regla de numeración, en el **mismo PR del pase** | 0 | volver archivos, registro y filas del ledger de staging a sus números (ver 3b) |
-| 4 | Mig **del Club** (hoy 075, con su número nuevo) | 1 y 3b | `scripts/sql/<N>_rollback.sql` (no hay datos del Club todavía) |
+| 4 | Mig **del Club** (hoy 075, con su número nuevo) | 1, 3b y el gate **G-61** (§12) | `scripts/sql/<N>_rollback.sql` (no hay datos del Club todavía) |
 | 5 | Clave de club-web (`CLUB_WEB_KEY` + su sha256) | 4 | `club_web_clave_cargar` con una clave nueva |
 | 6 | Cloudflare (Pages `satori-club`: variables, bindings y dominio) | 5 | sacar el dominio; la base sigue cerrada |
 | 7 | Pase de Wallet (F1e) | 6 | apagar la emisión; el portal sigue funcionando |
-| 8 | Migración F1b con `--esperados` | 4 | volver a correrla (es re-ejecutable) o el rollback de la migración del Club |
+| 8 | Migración F1b con `--esperados` | 4 y el gate **G-56** (§12: modo prod del migrador) | en prod no se re-ejecuta (G-56); antes de que haya actividad, el rollback de la migración del Club |
 | 9 | `tarjeta_manual_activa = false` | 4 | — |
 | 10 | Merge del PR #59 | todo lo anterior | revertir el código, **nunca** borrar los `.sql` del ledger |
 | 4b | **Alta de los locales** (un INSERT; Santa Teresa encendido, Nosara apagado) | 4 | borrar las filas si no hay datos |
@@ -152,14 +152,19 @@ commit anotado en el paso 0. **Recién después**, si hiciera falta, la 081.
 staging) y registrar la fila `<N>` en el ledger de prod (texto idéntico al archivo; verificar el md5).
 **Verificar (solo lectura):**
 - Catálogo `club_*` igual al de staging: correr `scripts/sql/club_catalogo.sql` en las dos bases y comparar (en staging
-  da 528 objetos). Es la paridad del CLUB-AUD-17, hecha a mano contra prod.
-- `anon` ejecuta solo las 8 puertas públicas: `club_canje_codigo_generar`, `club_canje_codigo_generar_pase`,
-  `club_cupon_contacto`, `club_cupon_crear`, `club_cupon_ver`, `club_portal`, `club_socio_autoalta` y
-  `club_socio_baja_portal` (todas exigen `x-club-web`).
+  da 898 objetos al 08-nov). Es la paridad del CLUB-AUD-17, hecha a mano contra prod. **Más el catálogo extendido del
+  gate G-61 (§12):** `bash scripts/sql/gate61.sh --prod-firmado` tiene que salir 0.
+- `anon` ejecuta solo las 10 puertas públicas: `club_canje_codigo_generar`, `club_canje_codigo_generar_pase`,
+  `club_cupon_contacto`, `club_cupon_contacto_baja`, `club_cupon_crear`, `club_cupon_ver`, `club_locales_activos`,
+  `club_portal`, `club_socio_autoalta` y `club_socio_baja_portal` (todas exigen `x-club-web`).
+- **LC-PRIV (08-nov):** `authenticated` no tiene SELECT en `club_miembros_contacto` ni en `club_cupones_contactos`
+  (`select has_table_privilege('authenticated', 'public.club_miembros_contacto', 'SELECT');` → `false`); el contacto se
+  lee solo con `club_miembro_contacto_ver`, que deja rastro. `select buscar_tope_minuto from club_config;` → 30.
 - Tarea diaria de socios (LC-A2): `select jobname, schedule from cron.job where jobname = 'club_socios_mantenimiento';`
   → `15 9 * * *` (03:15 en Costa Rica). Si prod no tiene `pg_cron`, la migración del Club no la programa: anotarlo y decidir con
   Ismael (sin ella, las altas provisionales no vuelven a pendiente y las autoaltas no se purgan).
-- `select aviso_privacidad_version from club_config;` igual a `AVISO_PRIVACIDAD_VERSION` de `club-web/src/config.ts`.
+- `select aviso_privacidad_version from club_config;` igual a `AVISO_PRIVACIDAD_VERSION` de `club-web/src/config.ts` (hoy
+  **v1.1**: v1 + el email en «Qué datos guardamos»; una prueba de club-web verifica que coincidan).
 - `select tarjeta_manual_activa from club_config;` → `false`.
 - **CLUB-AUD-42:** `select count(*) from club_entorno;` → **0**. En prod no se corre `scripts/sql/club_marcar_staging.sql`
   nunca: sin esa marca no existe el modo `pruebas` (el libro y la auditoría no tienen otra puerta que la del migrador).
@@ -194,7 +199,8 @@ key y sin el header responde «Código no válido».
 **Hacer:** en Pages `satori-club` (producción): `SUPABASE_URL` y `SUPABASE_ANON_KEY` de PROD, y los bindings `RL_CREAR`
 (5 por 60 s) y `RL_LEER` (60 por 60 s) de `wrangler.toml`. **Turnstile (LC-DES-07):** crear el widget en Cloudflare
 para `club.satoricostarica.com`; la clave del sitio va en `VITE_TURNSTILE_SITEKEY` (variable de build) y la secreta en el
-**Secret** `TURNSTILE_SECRET` (las carga Ismael; sin ella la autoalta responde 503). Después, el deploy y el dominio.
+**Secret** `TURNSTILE_SECRET` (las carga Ismael; **sin ella la autoalta Y la creación de cupones responden 503**: desde
+Grok 24 el cupón también pide Turnstile). Después, el deploy y el dominio.
 **Verificar:**
 - `/api/salud` → todo en `true` (incluido `turnstile`).
 - **CLUB-AUD-74: Turnstile de prod NO es el de prueba.** La clave del sitio del build (`VITE_TURNSTILE_SITEKEY`) no
@@ -206,7 +212,11 @@ para `club.satoricostarica.com`; la clave del sitio va en `VITE_TURNSTILE_SITEKE
   wifi → la sexta dice «Demasiados intentos seguidos».
 - Alerta de cupo: al 80 % de `socio_autoalta_max_dia` queda una fila `tipo = 'autoalta_cupo'` en `club_alertas`.
 - `/alta`: el widget aparece; un alta de prueba queda **pendiente** y se borra a mano después.
-- 6 «Obtener mi cupón» seguidos desde un teléfono: el sexto dice «Demasiados intentos seguidos».
+- 6 «Obtener mi cupón» seguidos desde un teléfono: el sexto dice «Demasiados intentos seguidos». Grok 24: lo mismo desde
+  dos teléfonos en el mismo wifi (tope por prefijo de red), y `/r/…` muestra el widget de Turnstile antes del botón.
+- Grok 63: en el cupón, «¿Querés recibir ofertas?» muestra el aviso resumido con «Aviso completo (v1)» (abre
+  `/privacidad`) y «Darme de baja» (abre `/b/<código>`); un opt-in de prueba queda en `club_cupones_contactos` con
+  `aviso_version` = la vigente, y `/b/<código>` lo borra (fila `baja_contacto_turista` en `club_auditoria`).
 - Las cabeceras de `_headers`: CSP `script-src 'self'` y no-store en `/api`.
 - Si Pages no toma los bindings: el «Plan B» de `club-web/README.md` (`/api` en un Worker).
 
@@ -219,11 +229,14 @@ público (`/r/`, cupones); el canje sale del botón «Canjear» del pase o del p
 **Rollback:** apagar la emisión. El portal y la caja siguen funcionando.
 
 ## 8. Migración F1b
+> **Gate abierto G-56 (§12):** hoy el migrador **se niega a correr contra prod** (el ref está fijo en staging), así que
+> los puntos 3 y 4 de abajo no se pueden hacer todavía. Primero se implementa y se revisa el «modo prod» propuesto en §12.
+
 **Hacer:**
 1. Export de Firestore con `MANIFEST` **no provisional**.
 2. `python3 scripts/club/migrar_firestore.py --local <id> --dry-run …` (el local de la página vieja, ya dado de alta en el paso 4b) → anotar los conteos.
-3. `--ensayo` contra PROD: corre todo dentro de una transacción que termina en ROLLBACK.
-4. `--apply --esperados '<json con los conteos del dry-run>'`.
+3. `--ensayo` contra PROD: corre todo dentro de una transacción que termina en ROLLBACK (con el modo prod de G-56).
+4. `--apply --esperados '<json con los conteos del dry-run>'` (con el modo prod de G-56).
 
 **Verificar:** la validación dentro de la transacción da OK (si no, no se guarda nada). Ismael controla miembros, saldos y
 los 136 vencimientos del 05-nov. El libro es de solo inserción: el migrador solo puede borrar sus propias filas
@@ -288,7 +301,8 @@ borrador, y queda en la auditoría (la app) o en `club_config_historial` (los ca
 | 3 | **Marcadores de descuento** (tarjetas de hoteles o tiendas, descuento de personal…) | Club → **Descuentos** | los sembrados (856, 857) más los propios del local |
 | 4 | **Sección CORTESÍA CLUB:** `cortesia_familia` y las cortesías del sorteo | `club_config` + Club → Promociones | cortesías activas |
 | 5 | **Promoción del Local Club** (sembrada en borrador) | Club → Promociones | pasarla a vigente el día del lanzamiento |
-| 6 | **Topes:** `socio_visitas_por_dia`, `socios_por_factura`, `socio_visitas_semana_max`, `cupones_max_dia_referente`, `cupones_max_minuto_local`, `anfitrion_tope_mes_crc`, `socio_autoalta_max_dia`, valores del crédito | `club_config` | los que decida Ismael |
+| 6 | **Topes:** `socios_por_factura`, `socio_visitas_semana_max`, `cupones_max_dia_referente`, `cupones_max_minuto_local`, `anfitrion_tope_mes_crc`, `socio_autoalta_max_dia`, valores del crédito | `club_config` | los que decida Ismael |
+| 6b | **Tope diario del socio (ÚNICO para todo el Club, 08-nov noche):** `socio_visitas_por_dia` | `club_config_global` (una fila; no es por local) | 1 = «una visita con beneficio por día, en cualquier Satori» |
 | 7 | `aviso_privacidad_version` = la de club-web (`v1`) | `club_config` | si no coincide, la autoalta del local rechaza todo |
 | 8 | **`lc_excepciones_desde` = el día del lanzamiento** (vacío = las excepciones LC miran todo su historial) | `club_config` | — |
 | 9 | **Empleados del local con su `pos_login`** (segregación de las excepciones del PoS) | Admin → Empleados | sin login, esas excepciones las resuelve solo el owner |
@@ -308,3 +322,90 @@ local de la caja (su pedido, promo, cortesías y códigos) y queda con ese local
 local se apaga, el socio sigue valiendo en los demás); el premio por referir nace y se cobra en cualquier local. Los
 **anfitriones, cupones, marcadores, cortesías, promociones y el interruptor siguen por local**. Encender un local nuevo no
 pide migrar socios.
+
+## 12. Gates de prod abiertos (Grok 56 y 61) — PROPUESTA, nada de esto corre en prod sin la firma de Ismael
+
+Estos dos gates tienen que estar cerrados antes de los pasos 4 y 8 en prod. Hoy son **diseño**: lo que se hizo es
+documentación y una consulta de solo lectura probada en staging. Ninguno toca prod.
+
+### G-56 · Modo prod del migrador, revisable (bloquea el paso 8)
+**Problema.** El migrador solo corre contra staging (`--ref` fijo), y su `--apply` de staging **borra y vuelve a cargar**
+todo lo `origen = 'migracion'`: en prod, después de abrir, eso podría borrar movimientos de verdad. Además, lo que corre
+en prod tiene que poder revisarse antes, sin exponer datos personales.
+
+**Propuesta (a implementar y revisar; nada hecho todavía):**
+1. **Dos llaves para prod:** `--ref <prod> --prod`. Sin las dos, el script se niega igual que hoy. `--prod` nunca conecta
+   en la misma corrida en que arma el plan.
+2. **Emitir, no ejecutar:** `--prod --emitir <carpeta fuera del repo>` escribe tres archivos:
+   - `migracion.sql`: **una transacción** con, en orden:
+     a) `set local lock_timeout = '5s'` y `set local statement_timeout = '5min'` (si algo espera un lock o se cuelga,
+        aborta entero en vez de trabar la base);
+     b) precondiciones que abortan: la migración del Club está en el ledger con el md5 esperado; `club_entorno` vacío
+        (no es staging); el local `--local` existe; **línea de base «cero socios en `club_*`»**: `club_miembros`,
+        `club_miembro_roles`, `club_movimientos`, `club_cupones` y `club_visitas_socio` en **0 filas** (si hay algo, ya hubo
+        actividad o una carga previa: se frena y se replanifica con firma; en prod no se re-ejecuta y no hay `delete`);
+     c) las inserciones (solo `insert into public.club_…`);
+     d) la validación contra `--esperados` dentro de la transacción (si no da, `raise` y no queda nada);
+     e) `commit` solo al final.
+   - **Filtro de sentencias (mecánico, al emitir y otra vez al aplicar):** el script recorre `migracion.sql` sacando los
+     literales de texto y **rechaza** el archivo si aparece cualquiera de `delete`, `truncate`, `drop`, `update`,
+     `alter`, `grant` o `revoke` (también dentro de bloques `do`), o cualquier sentencia que no sea `begin`, `set local`,
+     `do` (precondiciones y validación), `insert into public.club_…` o `commit`. Prueba con un archivo trucado de cada
+     tipo → niega.
+   - **`migracion.sql` tiene datos personales** (nombres, teléfonos, emails del export): nunca al repo, ni por chat, ni
+     adjunto al paquete; 0600, fuera del repo y se borra después de aplicar. **Lo único que viaja es su sha256** (en
+     `resumen.json` y en el paquete del pase, para la firma).
+   - `resumen.json`: conteos y totales (miembros por tipo, Σ personas, Σ créditos, vencimientos del 05-nov, duplicados),
+     el sha256 de `migracion.sql` y la versión del script. **Sin nombres, teléfonos ni emails** (una prueba lo verifica
+     con expresiones regulares).
+   - `revision.md`: lo que hay que mirar y los conteos para firmar.
+   Permisos 0600 y la carpeta fuera del repo, como hoy.
+3. **Revisión:** Ismael (y Grok, si quiere) revisan `resumen.json` y el **código** que genera el SQL, no los datos. El
+   mismo export corrido con `--ensayo` en staging tiene que dar el mismo `resumen.json` (salvo los ids).
+4. **Ensayo en prod:** el mismo `migracion.sql` con `rollback` en vez de `commit` (lo genera `--emitir` como
+   `migracion-ensayo.sql`, con su propio sha256), con la firma del día del pase y **fuera de horario**: antes de abrir o
+   después del cierre de caja, nunca durante el servicio ni en una ventana de otra sesión (toma locks de `club_*` aunque
+   termine en `rollback`).
+5. **Aplicar:** `--prod --aplicar-archivo migracion.sql --sha256 <el firmado>`: el script recalcula el sha256 y se niega si
+   no coincide. Una sola transacción. Rollback: no hay re-ejecución; antes de que haya actividad, el rollback de la
+   migración del Club (paso 4); después, a mano y con firma.
+6. **Pruebas a sumar al implementarlo** (`scripts/club/test_migrar_firestore.py`): prod sin `--prod` → niega;
+   el filtro rechaza un archivo con `delete`, `truncate`, `drop`, `update`, `alter`, `grant` (uno por prueba, también
+   escondido en un `do`) y deja pasar uno con esas palabras solo dentro de un literal; `lock_timeout` y
+   `statement_timeout` presentes antes de todo; precondiciones (con la línea de base de cero socios) presentes y en
+   orden; sha256 distinto → niega; `resumen.json` sin datos personales; `--prod` con `--apply` de staging → niega.
+
+### G-61 · Diff exacto del catálogo staging ↔ prod (bloquea el cierre del paso 4)
+**Problema.** `scripts/sql/club_catalogo.sql` (la paridad del CLUB-AUD-17) compara columnas, constraints, índices,
+funciones (md5 con SECURITY DEFINER y search_path) y su ACL, policies, triggers, ACL de tablas y columnas y vistas, pero
+**no** dueños, reloptions, FORCE RLS, privilegios por defecto ni lo que la 075 usa fuera de `club_*`. Una diferencia
+ahí cambia permisos sin que el diff la vea. Ejemplo real de staging: los privilegios por defecto de `postgres` y
+`supabase_admin` en `public` dan **todo** a `anon` en cada tabla nueva; la 075 lo revoca a mano, y si prod tuviera otros
+privilegios por defecto el resultado podría ser distinto.
+
+**Mecanismo (08-nov noche; probado solo en staging):** `scripts/sql/gate61.sh` + `scripts/sql/gate61_catalogo.sql` +
+`scripts/sql/gate61_esperadas.txt`. Reemplaza a `club_catalogo_ext.sql` (borrado: una sola versión).
+1. **Qué compara** (`gate61_catalogo.sql`, normalizado: `collate "C"`, ACL con `aclexplode` sin grantor, cuerpos en md5,
+   espacios colapsados, sin OIDs): columnas, constraints, índices; relaciones con dueño, RLS, FORCE y `reloptions`; ACL de
+   tablas, vistas, secuencias y columnas; **funciones en columnas** (dueño, lenguaje, SECURITY DEFINER, volatilidad,
+   estricta, leakproof, paralelismo, retorno, `proconfig`, md5) y su ACL; **dueños de las SECURITY DEFINER con
+   `rolsuper`/`rolbypassrls`**; policies con **PERMISSIVE/RESTRICTIVE**; triggers con **`tgenabled`**; **triggers sobre
+   `auth.users`**; vistas; **secuencias con su OWNED BY**; **`pg_depend`** de todo lo que toca `club_*`; **publicaciones**;
+   **jobs de `pg_cron`**; **extensiones por existencia, esquema y versión mínima** (`pgcrypto` ≥ 1.3, `pg_cron` ≥ 1.4);
+   privilegios por defecto y esquema `public`; roles de la API; el enum `user_role`; columnas y RLS de `profiles`,
+   `employees` y `pos_ndf_*`. En staging: 3.439 hechos, determinista (dos corridas iguales).
+2. **Cómo decide** (`gate61.sh`): lee las dos bases en `begin; set transaction read only; …; rollback;` y compara los
+   multiconjuntos (un hecho repetido en una sola base también es diferencia). **Sale 0 solo** si no hay diferencias fuera
+   de `gate61_esperadas.txt` **y** no sobra ninguna esperada. 1 = diferencia sin esperar · 2 = esperada sobrante ·
+   3 = salida vacía, `null` o con menos de 898 hechos · 4 = firma ausente o inválida · 5 = uso incorrecto o **prod sin
+   `--prod-firmado`** (no conecta).
+3. **Esperadas con firma** (`gate61_esperadas.txt`, versionado): `- <hecho>` / `+ <hecho>` copiados de la salida, con su
+   motivo en un comentario, y la línea `firma: <quién> <fecha> sha256=<hex>` con el sha256 de las entradas. Editar una
+   entrada sin volver a firmar → 4. Hoy: sin entradas.
+4. **Pruebas:** `bash scripts/sql/gate61_test.sh` (sin base): 13 casos, uno por código de salida y por tipo de firma
+   mala. En vivo, solo staging: `gate61.sh --ref-a <staging> --ref-b <staging>` → 0; con un hecho de más o repetido → 1.
+5. **D-1 (paso 0) y después del paso 4, con la firma de Ismael para leer prod:**
+   `bash scripts/sql/gate61.sh --prod-firmado --salida <carpeta>` (A = staging, B = prod). La carpeta (catálogos y
+   diferencias, sin datos de personas) se adjunta al paquete del pase. Cada diferencia: se corrige o se anota en
+   `gate61_esperadas.txt` con su motivo y la firma; se vuelve a correr hasta que dé 0.
+

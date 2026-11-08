@@ -94,6 +94,7 @@ La llenan **triggers de la base**; `miembro_id` null = afecta a **todos** los pa
 | `datos` | nombre, baja/reactivación, código del QR o token regenerados |
 | `cortesia` | premio por referido creado o usado; cortesía entregada |
 | `promociones` | promoción creada, editada, vigente o terminada (`miembro_id` null) |
+| `config` | (08-nov) cambió el valor del crédito o las personas por crédito del local (`miembro_id` null): cambia el ₡ y los créditos de todos los pases |
 
 Funciones para B (solo `service_role`):
 - `club_pase_eventos_leer(p_despues bigint, p_limite int default 500) → table(id, miembro_id, motivo, creado_en)`

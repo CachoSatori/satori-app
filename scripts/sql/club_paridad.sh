@@ -13,4 +13,12 @@ cuerpo() { grep -v -x -e 'begin;' -e 'commit;' "$1"; }
   cat "$RAIZ/scripts/sql/club_catalogo.sql"; echo '; rollback;'; } > "$TMP/b.sql"
 q "$TMP/a.sql" > "$TMP/staging.txt"; q "$TMP/b.sql" > "$TMP/limpia.txt"
 echo "staging: $(wc -l < "$TMP/staging.txt") objetos · 075 desde cero: $(wc -l < "$TMP/limpia.txt") objetos"
+# (08-nov) una salida vacía, «null» (la API devolvió un error) o corta NO es paridad: dos salidas vacías son iguales.
+MIN_OBJETOS=${MIN_OBJETOS:-898}
+for f in staging limpia; do
+  n=$(grep -c . "$TMP/$f.txt" || true)
+  if [ "$n" -lt "$MIN_OBJETOS" ] || grep -qx 'null' "$TMP/$f.txt"; then
+    echo "SALIDA VACÍA O CORTA ($f: $n líneas; mínimo $MIN_OBJETOS): no hay paridad que comparar"; exit 2
+  fi
+done
 if diff "$TMP/staging.txt" "$TMP/limpia.txt"; then echo 'PARIDAD: sin diferencias'; else echo 'HAY DIFERENCIAS (arriba)'; exit 1; fi

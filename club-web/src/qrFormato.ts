@@ -3,7 +3,10 @@
  * tiene que coincidir con esa y con `club_resolver` (mig 075). Al juntar las ramas,
  * importar desde allá y borrar esta copia.
  */
-export const CLUB_BASE_URL = 'https://club.satoricostarica.com'
+import { CLUB_URL } from './config'
+
+/** (08-nov noche) el dominio sale de VITE_CLUB_URL (config.ts), no del código. */
+export const CLUB_BASE_URL = CLUB_URL
 export const urlReferente = (codigo: string) => `${CLUB_BASE_URL}/r/${codigo}`
 export const urlCupon     = (codigo: string) => `${CLUB_BASE_URL}/c/${codigo}`
 export const urlPortal    = (token: string)  => `${CLUB_BASE_URL}/p/${token}`

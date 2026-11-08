@@ -10,7 +10,7 @@ import cg500i from '@fontsource/cormorant-garamond/files/cormorant-garamond-lati
 import dm400 from '@fontsource/dm-sans/files/dm-sans-latin-400-normal.woff2?inline'
 import dm500 from '@fontsource/dm-sans/files/dm-sans-latin-500-normal.woff2?inline'
 import dm600 from '@fontsource/dm-sans/files/dm-sans-latin-600-normal.woff2?inline'
-import type { ReporteMes, FilaReporte } from '../../shared/api/club'
+import type { ReporteMes, FilaReporte, ContactoOferta } from '../../shared/api/club'
 import { esParcial } from './reporteSaldo'
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -181,14 +181,23 @@ export function reporteHtml(r: ReporteMes): string {
 }
 
 /** Anexo CSV: todas las filas de cada sección (sin contactos). */
+// CLUB-AUD-34: una celda de texto que empieza con = + - @ (o tab/CR) se abriría como fórmula en Excel o
+// Sheets: se le antepone un apóstrofo. Los números no se tocan (un −3 sigue siendo número).
+const q = (v: unknown) => {
+  let t = String(v ?? '')
+  if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(t)) t = `'${t}`
+  return `"${t.replace(/"/g, '""')}"`
+}
+
+/** Contactos de turistas para ofertas (solo owner; los entrega la base con rastro). Cada fila lleva su link de baja,
+ *  que va en cada mensaje. El WhatsApp empieza con «+»: se escapa como texto (CLUB-AUD-34). */
+export function contactosCsv(filas: ContactoOferta[]): string {
+  const L = ['nombre;whatsapp;email;local;aviso;aceptado_en;link_baja']
+  for (const f of filas) L.push([f.nombre ?? '', f.whatsapp ?? '', f.email ?? '', f.local, f.aviso_version ?? '', f.aceptado_en, f.baja_url].map(q).join(';'))
+  return '\ufeff' + L.join('\r\n')
+}
+
 export function reporteCsv(r: ReporteMes): string {
-  // CLUB-AUD-34: una celda de texto que empieza con = + - @ (o tab/CR) se abriría como fórmula en Excel o
-  // Sheets: se le antepone un apóstrofo. Los números no se tocan (un −3 sigue siendo número).
-  const q = (v: unknown) => {
-    let t = String(v ?? '')
-    if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(t)) t = `'${t}`
-    return `"${t.replace(/"/g, '""')}"`
-  }
   const L: string[] = ['seccion;nombre;negocio;tipo;personas;promedio_3m;creditos;fecha']
   const add = (sec: string, fs: FilaReporte[]) => fs.forEach(f =>
     L.push([sec, f.nombre, f.negocio ?? '', f.tipo, f.personas ?? '', f.prom_3m ?? '', f.creditos ?? '', f.vence_en ?? f.ultima_actividad ?? ''].map(q).join(';')))

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { reporteHtml, reporteCsv, nombreMes } from './reporteHtml'
+import { reporteHtml, reporteCsv, contactosCsv, nombreMes } from './reporteHtml'
 import type { ReporteMes, FilaReporte } from '../../shared/api/club'
 
 const fila = (i: number, extra: Partial<FilaReporte> = {}): FilaReporte =>
@@ -65,5 +65,27 @@ describe('CSV (CLUB-AUD-34)', () => {
     expect(linea).toContain(`"'=HYPERLINK(""http://x.test"",""clic"")"`)
     expect(linea).toContain(`"'+cmd"`)
     expect(linea).toContain('"-3"')   // los números no se tocan
+  })
+})
+
+describe('contactosCsv (Grok 41, 08-nov noche)', () => {
+  it('cada fila lleva su link de baja; el WhatsApp con «+» se escapa como texto (CLUB-AUD-34)', () => {
+    const csv = contactosCsv([{ nombre: 'Ana', whatsapp: '+50660000000', email: null, local: 'local-uno', aviso_version: 'v1.1',
+      aceptado_en: '2026-11-08T12:00:00Z', baja_url: 'https://club.satoricostarica.com/b/ABCDEFGH23' }])
+    const [cab, fila] = csv.replace('﻿', '').split('\r\n')
+    expect(cab).toBe('nombre;whatsapp;email;local;aviso;aceptado_en;link_baja')
+    expect(fila).toContain(`"'+50660000000"`)
+    expect(fila).toContain('"https://club.satoricostarica.com/b/ABCDEFGH23"')
+    expect(fila).toContain('"v1.1"')
+  })
+})
+
+describe('fmtCreditosCrc (08-nov noche): créditos y colones juntos, como el pase', () => {
+  it('«1 crédito · ₡12.000», plural, medio crédito y sin valor', async () => {
+    const { fmtCreditosCrc } = await import('../../shared/api/club')
+    expect(fmtCreditosCrc(1, 10000)).toBe('1 crédito · ₡10.000')
+    expect(fmtCreditosCrc(1.5, 10000)).toBe('1,5 créditos · ₡15.000')
+    expect(fmtCreditosCrc(2, 10000)).toBe('2 créditos · ₡20.000')
+    expect(fmtCreditosCrc(2, undefined)).toBe('2 créditos')
   })
 })

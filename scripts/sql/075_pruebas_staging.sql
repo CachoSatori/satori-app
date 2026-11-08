@@ -549,9 +549,9 @@ begin
   select x.codigo into v_cup from public.club_cupon_crear((select v from _ids where k='manu_cod'), null) x;
   perform pg_temp.yo();
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  a := public.club_resolver('https://club.satoricostarica.com/c/' || v_cup);
+  a := public.club_resolver(public.club_url() || '/c/' || v_cup);
   b := public.club_resolver('  ' || lower(v_cup) || ' ');
-  c := public.club_resolver('https://club.satoricostarica.com/r/' || (select v from _ids where k='manu_cod'));
+  c := public.club_resolver(public.club_url() || '/r/' || (select v from _ids where k='manu_cod'));
   d := public.club_resolver((select v from _ids where k='manu_cod'));
   e := public.club_resolver('<script>alert(1)</script>');
   f := public.club_resolver('https://otro-sitio.com/c/' || v_cup);
@@ -1804,7 +1804,7 @@ begin
   perform pg_temp.yo();
   k1 := j->>'codigo';
   perform pg_temp.r('43', 'el portal genera un código de 6 que vence en 10 min, con el QR /k/{codigo}',
-    k1 ~ '^[A-HJ-NP-Z2-9]{6}$' and j->>'url' = 'https://club.satoricostarica.com/k/' || k1
+    k1 ~ '^[A-HJ-NP-Z2-9]{6}$' and j->>'url' = public.club_url() || '/k/' || k1
       and (j->>'vence_en')::timestamptz between now() + interval '9 minutes' and now() + interval '10 minutes', j::text);
   perform pg_temp.r('43', 'en la base queda SOLO el hash (sha256), nunca el código',
     exists (select 1 from club_codigos_canje where miembro_id = v_a and codigo_hash = public.club_codigo_hash(k1))
@@ -1833,8 +1833,8 @@ begin
   end;
 
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  j := public.club_resolver('https://club.satoricostarica.com/r/' || v_ra);
-  j0 := public.club_resolver('https://club.satoricostarica.com/k/' || k1);
+  j := public.club_resolver(public.club_url() || '/r/' || v_ra);
+  j0 := public.club_resolver(public.club_url() || '/k/' || k1);
   j1 := public.club_resolver_miembro(v_a);
   perform pg_temp.yo();
   perform pg_temp.r('43', '/r/ → tipo referente, con saldo y sin código de canje',
@@ -2396,7 +2396,7 @@ begin
   insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
   values (pg_temp.loc(), v_s, 'ajuste', 18, 6, 18000, now() - interval '1 day', 'migracion');
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-  j := public.club_resolver('https://club.satoricostarica.com/s/' || v_cod);
+  j := public.club_resolver(public.club_url() || '/s/' || v_cod);
   j2 := public.club_resolver(lower(v_cod));
   select c.error into v_err from public.club_canje(v_s, v_cod, 1, 'FS-1', gen_random_uuid()) c;
   perform pg_temp.yo();
@@ -2471,13 +2471,13 @@ begin
   reset role;
   perform pg_temp.r('56', 'solo anfitrión: una pestaña, código de barras = QR de cupones, Canjear con token de pase (no el del portal)',
     j->'pestanas' = '["anfitrion"]'::jsonb and j->'codigo_barras'->>'tipo' = 'cupones'
-      and j->'codigo_barras'->>'valor' like 'https://club.satoricostarica.com/r/%' and j->>'canjear_url' like 'https://club.satoricostarica.com/w/%'
+      and j->'codigo_barras'->>'valor' like public.club_url() || '/r/%' and j->>'canjear_url' like public.club_url() || '/w/%'
       and j->>'canjear_url' not like '%' || v_tok || '%' and not (j ? 'portal_url')
       and j->'socio' = 'null'::jsonb and j->>'nombre_pila' = 'Ana', j::text);
   perform pg_temp.r('56', 'socio y anfitrión: dos pestañas; código de barras = QR del socio; cupones en la pestaña Anfitrión',
     j2->'pestanas' = '["mi_club", "anfitrion"]'::jsonb and j2->'codigo_barras'->>'tipo' = 'socio'
-      and j2->'codigo_barras'->>'valor' like 'https://club.satoricostarica.com/s/%'
-      and j2->'anfitrion'->>'qr_url' like 'https://club.satoricostarica.com/r/%', j2::text);
+      and j2->'codigo_barras'->>'valor' like public.club_url() || '/s/%'
+      and j2->'anfitrion'->>'qr_url' like public.club_url() || '/r/%', j2::text);
   perform pg_temp.r('56', 'el pase no lleva contactos', j::text not like '%@%' and j::text not like '%+506%', '');
   v_v1 := (j->>'version')::bigint;
   insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
@@ -2585,7 +2585,7 @@ begin
    where c.telefono = '+50660001236' and r.rol = 'socio';
   perform pg_temp.r('57', 'autoalta → socio pendiente, con aviso versionado, link del portal y referido',
     (select estado = 'pendiente' and alta_por = 'autoalta' and aviso_version = v_ver and referido_por = v_id
-       from club_miembro_roles where miembro_id = v_a and rol = 'socio') and j->>'portal' like 'https://club.satoricostarica.com/p/%', j::text);
+       from club_miembro_roles where miembro_id = v_a and rol = 'socio') and j->>'portal' like public.club_url() || '/p/%', j::text);
   set local role anon;
   j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Otra', 'whatsapp', '60001234', 'acepto', v_ver));
   reset role;
@@ -4181,7 +4181,7 @@ begin
   select count(*) into v_fil from public.club_contactos_ofertas_exportar(null) e;
   perform pg_temp.yo();
   perform pg_temp.r('80', 'owner exporta solo los que aceptaron, con el link de baja de su cupón',
-    v_n = 1 and v_url = 'https://club.satoricostarica.com/b/' || v_c1, format('%s filas · %s', v_n, v_url));
+    v_n = 1 and v_url = public.club_url() || '/b/' || v_c1, format('%s filas · %s', v_n, v_url));
   select * into a from club_auditoria where accion = 'exporte_contactos_turistas' and actor = '<OWNER_UUID>'::uuid order by id desc limit 1;
   perform pg_temp.r('80', 'el exporte de contactos queda en club_auditoria (owner, filas), sin datos',
     a.despues->>'filas' = v_fil::text and a.antes is null and not (a.despues::text ~ '6000800|Ochenta'), coalesce(to_jsonb(a)::text, 'sin fila'));
@@ -4313,6 +4313,73 @@ begin
     perform pg_temp.r('83', 'tope 0 aceptado', false, 'guardó');
   exception when check_violation then
     perform pg_temp.r('83', 'tope fuera de rango (0) → rechazado', true, sqlerrm);
+  end;
+end $$;
+
+-- ═══ 84. (08-nov noche) Dominio en la configuración y retención de los contactos de ofertas ═══
+do $$
+declare v_url text := public.club_url(); v_ref uuid; v_c1 uuid; v_c2 uuid; v_c3 uuid; v_n int; j jsonb; v_e text;
+begin
+  perform pg_temp.r('84', 'el dominio sale de club_config_global.club_url (https, sin barra final)',
+    v_url ~ '^https://[a-z0-9.-]+$' and v_url = (select club_url from club_config_global), '');
+  -- formato: sin https, con barra o con ruta → rechazado
+  foreach v_e in array array['http://club.ejemplo.test', 'https://club.ejemplo.test/', 'https://club.ejemplo.test/p', 'club.ejemplo.test'] loop
+    begin
+      update club_config_global set club_url = v_e;
+      perform pg_temp.r('84', 'dominio mal formado aceptado: ' || v_e, false, 'guardó');
+    exception when check_violation then
+      perform pg_temp.r('84', 'dominio mal formado → rechazado: ' || v_e, true, '');
+    end;
+  end loop;
+  -- otro dominio: los links lo siguen y la caja reconoce SOLO el configurado
+  update club_config_global set club_url = 'https://club.ejemplo.test';
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_resolver('https://club.ejemplo.test/r/' || (select v from _ids where k = 'ref_cod'));
+  begin
+    v_e := coalesce(public.club_resolver(v_url || '/r/' || (select v from _ids where k = 'ref_cod'))->>'tipo', 'null');
+  exception when others then v_e := 'error: ' || sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('84', 'con otro dominio configurado, la caja lee ese y no el anterior (el viejo no es un referente)',
+    j->>'tipo' = 'referente' and v_e <> 'referente', coalesce(j->>'tipo', 'null') || ' / ' || v_e);
+  -- sin dominio: los links fallan cerrados con un aviso claro
+  update club_config_global set club_url = null;
+  begin
+    perform public.club_url(); v_e := 'devolvió algo';
+  exception when others then v_e := sqlerrm; end;
+  perform pg_temp.r('84', 'sin dominio cargado → «Falta el dominio del Club…» (no inventa uno)', v_e like 'Falta el dominio del Club%', v_e);
+  update club_config_global set club_url = v_url;
+
+  -- retención de contactos de ofertas: N meses sin contacto (24, provisorio)
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref PRIV84', 'app') returning id into v_ref;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_ref, now() + interval '5 days') returning id into v_c1;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_ref, now() + interval '5 days') returning id into v_c2;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_ref, now() + interval '5 days') returning id into v_c3;
+  insert into club_cupones_contactos (cupon_id, whatsapp, optin, aviso_version, aviso_aceptado_en) values
+    (v_c1, '+50660008401', true, pg_temp.aviso(), now() - interval '25 months'),                         -- viejo, sin contacto
+    (v_c2, '+50660008402', true, pg_temp.aviso(), now() - interval '2 months'),                          -- reciente
+    (v_c3, '+50660008403', true, pg_temp.aviso(), now() - interval '30 months');                         -- viejo, pero…
+  update club_cupones_contactos set ultimo_contacto_en = now() - interval '1 month' where cupon_id = v_c3;  -- …contactado hace 1 mes
+  update club_config_global set contactos_ofertas_meses = 24;
+  v_n := public.club_contactos_ofertas_purgar();
+  perform pg_temp.r('84', 'retención 24 meses: se borra el de 25 meses sin contacto; quedan el reciente y el contactado hace 1 mes',
+    not exists (select 1 from club_cupones_contactos where cupon_id = v_c1)
+      and exists (select 1 from club_cupones_contactos where cupon_id = v_c2)
+      and exists (select 1 from club_cupones_contactos where cupon_id = v_c3) and v_n >= 1, format('%s borrados', v_n));
+  perform pg_temp.r('84', 'la purga deja rastro sin datos (cuántos y los meses)',
+    exists (select 1 from club_auditoria where accion = 'purga_contactos_turistas' and (despues->>'meses')::int = 24
+              and antes is null and not (despues::text ~ '6000840')), '');
+  update club_config_global set contactos_ofertas_meses = 1;
+  j := public.club_socios_mantenimiento();
+  perform pg_temp.r('84', 'configurable (1 mes) y automático: el mantenimiento diario borra también el de 2 meses',
+    not exists (select 1 from club_cupones_contactos where cupon_id = v_c2)
+      and exists (select 1 from club_cupones_contactos where cupon_id = v_c3)
+      and (j->>'contactos_ofertas_borrados')::int >= 1, j::text);
+  update club_config_global set contactos_ofertas_meses = 24;
+  begin
+    update club_config_global set contactos_ofertas_meses = 0;
+    perform pg_temp.r('84', 'retención 0 aceptada', false, 'guardó');
+  exception when check_violation then
+    perform pg_temp.r('84', 'retención fuera de rango (0) → rechazada', true, '');
   end;
 end $$;
 

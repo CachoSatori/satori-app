@@ -268,6 +268,10 @@ export interface ContactoOferta {
   nombre: string | null; whatsapp: string | null; email: string | null; local: string
   aviso_version: string | null; aceptado_en: string; baja_url: string
 }
+/** (08-nov noche) El dominio del Club es configuración (club_config_global.club_url). */
+export const getClubUrl = async (): Promise<string | null> =>
+  (await leer(from<{ club_url: string | null }>('club_config_global').select('club_url').limit(1)))[0]?.club_url ?? null
+
 /** Contactos de turistas para ofertas (solo owner): la base audita y devuelve solo los que aceptaron, con su link de baja. */
 export const exportarContactosOfertas = (location: string | null) =>
   llamar<ContactoOferta[]>('club_contactos_ofertas_exportar', { p_location: location })

@@ -3,30 +3,45 @@
  * página pública del cupón y el portal (F1d). El SQL de `club_resolver` (mig 075)
  * reconoce exactamente estos formatos, o el código solo.
  *
- *   referente: https://club.satoricostarica.com/r/{codigo8}
- *   cupón:     https://club.satoricostarica.com/c/{codigo10}
- *   portal:    https://club.satoricostarica.com/p/{token64}   (link del referente, solo lectura)
- *   canje:     https://club.satoricostarica.com/k/{codigo6}   (R-01: código de canje del portal, 10 min, un uso)
- *   socio:     https://club.satoricostarica.com/s/{codigo9}   (Local Club: QR fijo del socio; solo identifica)
+ *   referente: <club_url>/r/{codigo8}
+ *   cupón:     <club_url>/c/{codigo10}
+ *   portal:    <club_url>/p/{token64}   (link del referente, solo lectura)
+ *   canje:     <club_url>/k/{codigo6}   (R-01: código de canje del portal, 10 min, un uso)
+ *   socio:     <club_url>/s/{codigo9}   (Local Club: QR fijo del socio; solo identifica)
+ *
+ * (08-nov noche) `club_url` es CONFIGURACIÓN (`club_config_global.club_url`), no código: el módulo del Club la carga al
+ * abrir (`configurarClubUrl`). Sin cargar, los links fallan con un aviso claro y la caja solo acepta códigos sueltos.
  */
-export const CLUB_BASE_URL = 'https://club.satoricostarica.com'
+const RE_CLUB_URL = /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{2,5})?$/i
+let clubBase: string | null = null
+let reUrl: RegExp | null = null
+export function configurarClubUrl(url: string | null | undefined): void {
+  const v = (url ?? '').trim().replace(/\/+$/, '')
+  clubBase = RE_CLUB_URL.test(v) ? v.toLowerCase() : null
+  reUrl = clubBase
+    ? new RegExp(`^https?://${clubBase.replace(/^https:\/\//, '').replace(/[.]/g, '\\.')}/([rcks])/([A-Za-z0-9]+)/?$`, 'i')
+    : null
+}
+export const MSG_SIN_DOMINIO = 'Falta el dominio del Club: el owner lo carga en la configuración (club_config_global.club_url).'
+export function clubUrl(): string {
+  if (!clubBase) throw new Error(MSG_SIN_DOMINIO)
+  return clubBase
+}
 
-/** Alfabeto sin ambigüedad (sin 0/O ni 1/I), igual que `club_gen_codigo`. */
 export const CLUB_ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 export const LARGO_CODIGO_REFERENTE = 8
 export const LARGO_CODIGO_CUPON = 10
 export const LARGO_CODIGO_CANJE = 6
 export const LARGO_CODIGO_SOCIO = 9
 
-export const urlReferente = (codigo: string) => `${CLUB_BASE_URL}/r/${codigo}`
-export const urlCupon     = (codigo: string) => `${CLUB_BASE_URL}/c/${codigo}`
-export const urlPortal    = (token: string)  => `${CLUB_BASE_URL}/p/${token}`
-export const urlCanje     = (codigo: string) => `${CLUB_BASE_URL}/k/${codigo}`
-export const urlSocio     = (codigo: string) => `${CLUB_BASE_URL}/s/${codigo}`
+export const urlReferente = (codigo: string) => `${clubUrl()}/r/${codigo}`
+export const urlCupon     = (codigo: string) => `${clubUrl()}/c/${codigo}`
+export const urlPortal    = (token: string)  => `${clubUrl()}/p/${token}`
+export const urlCanje     = (codigo: string) => `${clubUrl()}/k/${codigo}`
+export const urlSocio     = (codigo: string) => `${clubUrl()}/s/${codigo}`
 
 export type TipoQR = 'referente' | 'cupon' | 'canje' | 'socio' | 'desconocido'
 
-const RE_URL = /^https?:\/\/club\.satoricostarica\.com\/([rcks])\/([A-Za-z0-9]+)\/?$/i
 const RE_COD = /^[A-HJ-NP-Z2-9]+$/
 
 /**
@@ -35,7 +50,7 @@ const RE_COD = /^[A-HJ-NP-Z2-9]+$/
  */
 export function parsearQR(texto: string): { tipo: TipoQR; codigo: string | null } {
   const t = (texto ?? '').trim()
-  const m = t.match(RE_URL)
+  const m = reUrl ? t.match(reUrl) : null
   let kind: 'r' | 'c' | 'k' | 's' | null
   let cod: string
   if (m) {

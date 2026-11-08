@@ -692,6 +692,8 @@ def main_saldos_papel(argv: list[str]) -> None:
     fuente = ap.add_mutually_exclusive_group(required=True)
     fuente.add_argument('--csv', type=Path, help='el CSV (fuera del repo)')
     fuente.add_argument('--ficticios', type=int, help='N anfitriones y tarjetas FICTICIOS (solo con --ensayo)')
+    ap.add_argument('--fecha-movimiento', choices=sp.FECHAS, default='carga',
+                    help="fecha del movimiento: 'carga' (por defecto, [CONFIRMAR ISMAEL]: no vence el día del lanzamiento) o 'tarjeta'")
     modo = ap.add_mutually_exclusive_group(required=True)
     modo.add_argument('--validar', action='store_true', help='solo valida el CSV (no conecta)')
     modo.add_argument('--emitir', type=Path, help='escribe carga.sql, ensayo.sql y resumen.json en esta carpeta (fuera del repo); no conecta')
@@ -720,24 +722,64 @@ def main_saldos_papel(argv: list[str]) -> None:
         if out == REPO_ROOT or REPO_ROOT in out.parents:
             sys.exit('NEGADO: --emitir está dentro del repo.')
         out.mkdir(parents=True, exist_ok=True); os.chmod(out, 0o700)
-        carga = sp.sql_carga(filas, a.local, 'prod'); ensayo = sp.sql_ensayo(filas, a.local, 'prod')
+        carga = sp.sql_carga(filas, a.local, 'prod', a.fecha_movimiento); ensayo = sp.sql_ensayo(filas, a.local, 'prod', '', a.fecha_movimiento)
         for sql in (carga, ensayo):
             malos = sp.filtrar(sql)
             if malos:
                 sys.exit('FILTRO G-56: ' + '; '.join(malos))
         for nombre, txt in (('carga.sql', carga), ('ensayo.sql', ensayo)):
             (out / nombre).write_text(txt, encoding='utf-8'); os.chmod(out / nombre, 0o600)
-        r = sp.resumen(filas, carga, a.local) | {'sha256_ensayo': __import__('hashlib').sha256(ensayo.encode()).hexdigest()}
+        r = sp.resumen(filas, carga, a.local, a.fecha_movimiento) | {'sha256_ensayo': __import__('hashlib').sha256(ensayo.encode()).hexdigest()}
         (out / 'resumen.json').write_text(sp.json_resumen(r), encoding='utf-8')
         print(sp.json_resumen(r)); return
     # --ensayo: staging, el mismo cuerpo con ROLLBACK; el filtro se corre otra vez antes de mandar
-    sql = sp.sql_ensayo(filas, a.local, 'staging', previo)
+    sql = sp.sql_ensayo(filas, a.local, 'staging', previo, a.fecha_movimiento)
     malos = sp.filtrar(sql)
     if malos:
         sys.exit('FILTRO G-56: ' + '; '.join(malos))
     ejecutar(a.ref, sql)
-    print(json.dumps({'ensayo': 'ok (validación dentro de la transacción; terminó en ROLLBACK)', **sp.resumen(filas, sql, a.local)},
+    print(json.dumps({'ensayo': 'ok (validación dentro de la transacción; terminó en ROLLBACK)', **sp.resumen(filas, sql, a.local, a.fecha_movimiento)},
                      ensure_ascii=False, indent=1))
+
+
+# ── Doble carga: tarjetas de papel que ya están en Firestore (SOLO LECTURA) ────
+def main_doble_carga(argv: list[str]) -> None:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import datetime as _dt
+    import saldos_papel as sp
+    ap = argparse.ArgumentParser(prog='migrar_firestore.py doble-carga-papel',
+                                 description='Lista las tarjetas del CSV de saldos de papel que ya están en el export de Firestore. No escribe nada.')
+    ap.add_argument('--export', required=True, type=Path, help='zip o carpeta del export de Firestore (fuera del repo)')
+    ap.add_argument('--csv', required=True, type=Path, help='CSV de saldos de papel (fuera del repo)')
+    mapa = ap.add_mutually_exclusive_group(required=True)
+    mapa.add_argument('--mapa', type=Path, help='CSV codigo_anfitrion,legacy_id (fuera del repo)')
+    mapa.add_argument('--mapa-staging', action='store_true', help='lee el mapa de STAGING en solo lectura (club_miembros migrados)')
+    ap.add_argument('--tolerancia-dias', type=int, default=3)
+    a = ap.parse_args(argv)
+    for pth, nombre in ((a.export, '--export'), (a.csv, '--csv'), (a.mapa, '--mapa')):
+        if pth is None:
+            continue
+        r = pth.expanduser().resolve()
+        if r == REPO_ROOT or REPO_ROOT in r.parents:
+            sys.exit(f'NEGADO: {nombre} está dentro del repo. Los datos van fuera.')
+    filas, errores = sp.validar(a.csv.expanduser().read_text(encoding='utf-8'), _dt.date.today())
+    if errores:
+        print('CSV RECHAZADO:'); print('\n'.join('  ' + e for e in errores[:200])); sys.exit(1)
+    d = cargar(a.export.expanduser().resolve())
+    biz = d['businesses'][0].get('_id') if len(d['businesses']) == 1 else None
+    if biz != SATORI_BIZ_ID:
+        sys.exit('NEGADO: el export no es de Satori.')
+    ids = {r['_id'] for r in d['referrers'] if r.get('businessId') == biz}
+    referrals = [x for x in d['referrals'] if x['referrerId'] in ids]
+    if a.mapa_staging:
+        filas_m = ejecutar(STAGING_REF, "select codigo, legacy_id from public.club_miembros where legacy_id is not null", read_only=True) or []
+        m = {x['codigo']: x['legacy_id'] for x in filas_m}
+    else:
+        m = sp.leer_mapa(a.mapa.expanduser().read_text(encoding='utf-8'))
+    out = sp.cruzar(filas, referrals, m, a.tolerancia_dias)
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+    if out['en_los_dos'] or out['sin_mapa']:
+        sys.exit(2)   # hay que decidir antes de cargar
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
@@ -799,5 +841,7 @@ def main() -> None:
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] == 'saldos-papel':
         main_saldos_papel(sys.argv[2:])
+    elif len(sys.argv) > 1 and sys.argv[1] == 'doble-carga-papel':
+        main_doble_carga(sys.argv[2:])
     else:
         main()

@@ -71,11 +71,11 @@ describe('CSV (CLUB-AUD-34)', () => {
 describe('contactosCsv (Grok 41, 08-nov noche)', () => {
   it('cada fila lleva su link de baja; el WhatsApp con «+» se escapa como texto (CLUB-AUD-34)', () => {
     const csv = contactosCsv([{ nombre: 'Ana', whatsapp: '+50660000000', email: null, local: 'local-uno', aviso_version: 'v1.1',
-      aceptado_en: '2026-11-08T12:00:00Z', baja_url: 'https://club.satoricostarica.com/b/ABCDEFGH23' }])
+      aceptado_en: '2026-11-08T12:00:00Z', baja_url: 'https://club.ejemplo.test/b/ABCDEFGH23' }])
     const [cab, fila] = csv.replace('﻿', '').split('\r\n')
     expect(cab).toBe('nombre;whatsapp;email;local;aviso;aceptado_en;link_baja')
     expect(fila).toContain(`"'+50660000000"`)
-    expect(fila).toContain('"https://club.satoricostarica.com/b/ABCDEFGH23"')
+    expect(fila).toContain('"https://club.ejemplo.test/b/ABCDEFGH23"')
     expect(fila).toContain('"v1.1"')
   })
 })

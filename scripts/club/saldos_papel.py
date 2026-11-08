@@ -88,7 +88,7 @@ def validar(texto: str, hoy: dt.date | None = None) -> tuple[list[dict], list[st
             errores.append(f'línea {n}: la misma tarjeta (anfitrión + referencia) ya está en la línea {vistos_ref[clave_ref]}'); continue
         vistos_fila[clave_fila] = n
         vistos_ref[clave_ref] = n
-        filas.append({'codigo': cod, 'personas': int(per), 'fecha': fec, 'referencia': ref})
+        filas.append({'codigo': cod, 'personas': int(per), 'fecha': fec, 'referencia': ref, 'linea': n})
     if not filas and not errores:
         errores.append('el archivo no tiene filas')
     return filas, errores
@@ -133,9 +133,18 @@ def _q(v) -> str:
     return "'" + str(v).replace("'", "''") + "'"
 
 
-def cuerpo_sql(filas: list[dict], local: str, entorno: str) -> str:
-    """Todo lo que va ENTRE begin/set local y commit: precondiciones, inserción y validación."""
+FECHAS = ('carga', 'tarjeta')
+
+
+def cuerpo_sql(filas: list[dict], local: str, entorno: str, fecha: str = 'carga') -> str:
+    """Todo lo que va ENTRE begin/set local y commit: precondiciones, inserción y validación.
+    `fecha` = de qué fecha es el movimiento (cuenta para el vencimiento de 12 meses sin actividad):
+      · 'carga' (POR DEFECTO, [CONFIRMAR ISMAEL]): la del día de la carga. Hoy los saldos de papel no vencen; con la fecha
+        vieja, una tarjeta de hace más de 12 meses vencería el día del lanzamiento.
+      · 'tarjeta': la fecha de la tarjeta (la de la última marca).
+    La fecha de la tarjeta queda siempre en la nota."""
     assert entorno in ('staging', 'prod')
+    assert fecha in FECHAS
     valores = ',\n  '.join(f"({_q(f['codigo'])}, {f['personas']}, {_q(f['fecha'])}::date, {_q(f['referencia'])})" for f in filas)
     n, total = len(filas), sum(f['personas'] for f in filas)
     cond_entorno = ("exists (select 1 from public.club_entorno)" if entorno == 'staging'
@@ -168,8 +177,8 @@ end $$;
 insert into public.club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
                                      fecha_visita, registrado_en, origen, nota)
 select m.location_id, m.id, 'tarjeta', p.personas, c.personas_por_credito, c.valor_credito_crc,
-       (p.fecha::timestamp + time '12:00') at time zone 'America/Costa_Rica', now(), 'migracion',
-       {_q(NOTA + ' · ')} || p.referencia
+       {"now()" if fecha == 'carga' else "(p.fecha::timestamp + time '12:00') at time zone 'America/Costa_Rica'"}, now(), 'migracion',
+       {_q(NOTA + ' · ')} || p.referencia || ' · tarjeta ' || to_char(p.fecha, 'YYYY-MM-DD')
   from (values
   {valores}) p(codigo, personas, fecha, referencia)
   join public.club_miembros m on m.codigo = p.codigo and m.location_id = {_q(local)}
@@ -189,19 +198,19 @@ end $$;
 CABECERA = "begin;\nset local lock_timeout = '5s';\nset local statement_timeout = '5min';\n"
 
 
-def sql_carga(filas: list[dict], local: str, entorno: str) -> str:
-    return CABECERA + cuerpo_sql(filas, local, entorno) + 'commit;\n'
+def sql_carga(filas: list[dict], local: str, entorno: str, fecha: str = 'carga') -> str:
+    return CABECERA + cuerpo_sql(filas, local, entorno, fecha) + 'commit;\n'
 
 
-def sql_ensayo(filas: list[dict], local: str, entorno: str, previo: str = '') -> str:
+def sql_ensayo(filas: list[dict], local: str, entorno: str, previo: str = '', fecha: str = 'carga') -> str:
     """El mismo cuerpo, con ROLLBACK al final (y, en staging, el armado de anfitriones ficticios antes)."""
-    return CABECERA + previo + cuerpo_sql(filas, local, entorno) + 'rollback;\n'
+    return CABECERA + previo + cuerpo_sql(filas, local, entorno, fecha) + 'rollback;\n'
 
 
-def resumen(filas: list[dict], sql: str, local: str) -> dict:
+def resumen(filas: list[dict], sql: str, local: str, fecha: str = 'carga') -> dict:
     """Lo único que viaja: conteos, totales y el sha256 del SQL. Sin códigos, referencias ni nombres."""
     total = sum(f['personas'] for f in filas)
-    return {'local': local, 'filas': len(filas), 'anfitriones': len({f['codigo'] for f in filas}),
+    return {'local': local, 'fecha_movimiento': fecha, 'filas': len(filas), 'anfitriones': len({f['codigo'] for f in filas}),
             'personas': total, 'creditos_aprox': round(total / 6, 1), 'sha256_sql': hashlib.sha256(sql.encode()).hexdigest()}
 
 
@@ -235,3 +244,49 @@ def a_csv(filas: list[dict]) -> str:
 
 def json_resumen(r: dict) -> str:
     return json.dumps(r, ensure_ascii=False, indent=1)
+
+
+# ── Doble carga con Firestore (solo lectura) ─────────────────────────────────
+def leer_mapa(texto: str) -> dict[str, str]:
+    """Mapa código del Club → id del anfitrión en Firestore (club_miembros.codigo ↔ legacy_id). CSV con encabezado
+    codigo_anfitrion,legacy_id. El export de Firestore no tiene el código del Club (nace en la migración)."""
+    lector = csv.reader(io.StringIO(texto.lstrip('\ufeff')))
+    cab = [c.strip().lower() for c in (next(lector, None) or [])]
+    if cab != ['codigo_anfitrion', 'legacy_id']:
+        raise ValueError('el mapa tiene que tener el encabezado codigo_anfitrion,legacy_id')
+    out = {}
+    for f in lector:
+        if len(f) == 2 and RE_CODIGO.match(f[0].strip().upper()) and f[1].strip():
+            out[f[0].strip().upper()] = f[1].strip()
+    return out
+
+
+def _fecha_cr(iso: str) -> dt.date:
+    """createdAt de Firestore (UTC) → fecha de Costa Rica (UTC−6)."""
+    t = dt.datetime.fromisoformat(iso.replace('Z', '+00:00'))
+    return (t - dt.timedelta(hours=6)).date()
+
+
+def cruzar(filas: list[dict], referrals: list[dict], mapa: dict[str, str], tolerancia_dias: int = 3) -> dict:
+    """Tarjetas del CSV que YA están en Firestore: mismo anfitrión, un crédito con las mismas personas y la fecha a
+    ≤ tolerancia días. Devuelve solo líneas, referencias, ids de Firestore y días (sin nombres ni teléfonos).
+    No escribe nada."""
+    creditos: dict[str, list[dict]] = {}
+    for x in referrals:
+        if x.get('referralType') == 'credit':
+            creditos.setdefault(x['referrerId'], []).append(x)
+    en_los_dos, sin_mapa, usados = [], [], set()
+    for f in filas:
+        legacy = mapa.get(f['codigo'])
+        if not legacy:
+            sin_mapa.append({'linea': f['linea'], 'referencia': f['referencia']}); continue
+        fecha = dt.date.fromisoformat(f['fecha'])
+        cands = sorted(((abs((_fecha_cr(x['createdAt']) - fecha).days), x['_id']) for x in creditos.get(legacy, [])
+                        if int(x.get('peopleCount', 0)) == f['personas'] and x['_id'] not in usados),
+                       key=lambda t: (t[0], t[1]))
+        if cands and cands[0][0] <= tolerancia_dias:
+            dias, fid = cands[0]
+            usados.add(fid)   # un crédito de Firestore explica una sola tarjeta
+            en_los_dos.append({'linea': f['linea'], 'referencia': f['referencia'], 'firestore_id': fid, 'dias': dias,
+                               'certeza': 'exacta' if dias == 0 else 'cercana'})
+    return {'filas_csv': len(filas), 'en_los_dos': en_los_dos, 'sin_mapa': sin_mapa, 'tolerancia_dias': tolerancia_dias}

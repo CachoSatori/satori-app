@@ -266,6 +266,10 @@ export const fmtCreditos = (n: number | null | undefined) =>
 // ── F1f: excepciones del puente y reporte mensual (owner, manager) ───────────
 export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CUPON_SIN_PROMO' | 'TARJETA_MANUAL' | 'CANJE_SIN_CODIGO' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA' | 'SIN_CRUCE'
   | 'VISITA_REPETIDA' | 'PERSONAS_SOBRE_PAX' | 'AMBIGUA'
+  // LC-A5
+  | 'LC_SIN_REGISTRO' | 'REGISTRO_LC_SIN_856' | 'CANJE_CON_DESCUENTO' | 'DESCUENTO_SIN_RESPALDO' | 'SOCIO_USO_ANOMALO'
+  | 'CUPON_AUTOREFERIDO' | 'CORTESIA_DISTINTA' | 'CORTESIA_SIN_SOCIO' | 'CORTESIA_NO_CONFIGURADA' | 'ANFITRION_SOBRE_TOPE'
+  | 'SOCIO_ALTA_SIN_CONFIRMAR'
 export interface Excepcion {
   tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable' | 'manual' | 'pendiente_configuracion'
   detalle: Record<string, unknown>; resuelta: boolean; nota: string | null; resuelta_en: string | null
@@ -417,3 +421,8 @@ export interface PendienteAprobacion {
 export const getPendientesAprobacion = () => llamar<PendienteAprobacion[]>('club_pendientes_listar', {})
 export const resolverPendiente = (id: string, aprobar: boolean, nota: string) =>
   llamar<boolean>('club_pendiente_resolver', { p_id: id, p_aprobar: aprobar, p_nota: nota })
+
+// ── LC-A5: altas de socios por cajero ─────────────────────────────────────────
+export interface AltasPorCajero { usuario: string; altas_caja: number; validaciones: number; confirmo: number; sin_confirmar: number; vencidas: number }
+export const getReporteAltas = (desde: string, hasta: string, local = 'santa-teresa') =>
+  llamar<AltasPorCajero[]>('club_reporte_altas', { p_desde: desde, p_hasta: hasta, p_location: local })

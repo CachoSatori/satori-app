@@ -31,6 +31,7 @@ drop function if exists public.club_reporte_mes(date, text);
 drop function if exists public.club_excepcion_resolver(text, text, text, text);
 drop function if exists public.club_excepciones_abiertas(int, text);
 drop function if exists public.club_excepciones(date, date, text);
+drop function if exists public.club_excepciones(date, date, text, text);
 drop function if exists public.club_nombre_limpio(text);
 drop function if exists public.club_factura_clave(text);
 drop function if exists public.club_cupon_contacto(text, jsonb);

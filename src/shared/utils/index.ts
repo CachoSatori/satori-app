@@ -19,14 +19,24 @@ export function dateCR(d: Date | string | number | null | undefined): string {
 }
 
 // ── Currency formatters ────────────────────────────────────────
+/**
+ * Redondeo simétrico (medio para afuera): −1234,5 → −1235, igual que 1234,5 → 1235. `Math.round` redondea
+ * los negativos hacia arriba (−1234,5 → −1234) y deja «−0» en (−0,5, 0). Solo pantalla: no cambia ninguna cuenta.
+ */
+function redondearSimetrico(n: number, decimales = 0): number {
+  const f = 10 ** decimales
+  const r = Math.sign(n) * Math.round(Math.abs(n) * f) / f
+  return r === 0 ? 0 : r   // nunca «−0»
+}
+
 export function fi(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return '—'
-  return '₡ ' + Math.round(n).toLocaleString('es-CR')
+  return '₡ ' + redondearSimetrico(n).toLocaleString('es-CR')
 }
 
 export function fd(n: number | null | undefined): string {
   if (n == null || isNaN(n)) return '—'
-  return '$ ' + Number(n).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return '$ ' + redondearSimetrico(Number(n), 2).toLocaleString('es-CR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export function fip(n: number): string {

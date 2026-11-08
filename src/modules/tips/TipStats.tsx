@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect } from 'react'
 import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/database'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 import { formatCRC, calcHistory } from '../../shared/utils/tipCalculations'
+import { conPayoutsGuardados } from './historialGuardado'
 import { getTipEntriesBySession, getAttendanceHistory } from '../../shared/api/tips'
 import type { AttendanceRow } from '../../shared/api/tips'
 import { ROLE_LABELS } from '../../shared/constants'
@@ -102,7 +103,8 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
       for (const s of missing) {
         try {
           const entries = await getTipEntriesBySession(s.id)
-          out[s.id] = calcHistory(
+          // «Recibió» = lo GUARDADO (lo que se pagó), igual que Historial y Quincenal.
+          out[s.id] = conPayoutsGuardados(calcHistory(
             entries.map(e => ({
               employee_id: e.employee_id, hours_worked: e.hours_worked,
               tip_amount_crc: e.tip_amount_crc, tip_amount_usd: e.tip_amount_usd,
@@ -112,7 +114,7 @@ export default function TipStats({ sessions, calcCache, employees, rolePoints }:
             rolePoints,
             // Barra = efectivo + electrónico → el reparto recomputado coincide con el payout guardado.
             { pool_efectivo_crc: s.pool_efectivo_crc, pool_efectivo_usd: s.pool_efectivo_usd, pool_barra_crc: (s.pool_barra_crc || 0) + (s.pool_barra_electronico_crc || 0), exchange_rate: s.exchange_rate },
-          )
+          ), entries, employees, s.pool_total_crc)
         } catch { /* ignorar sesión con error y seguir */ }
       }
       if (!cancelled) { setLocalCache(prev => ({ ...prev, ...out })); setLoading(false) }

@@ -8,6 +8,7 @@ import type { TipSession, Employee, RoleTipPoints } from '../../shared/types/dat
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 import { calcHistory, formatCRC } from '../../shared/utils/tipCalculations'
 import { getTipEntriesBySession } from '../../shared/api/tips'
+import { avisoFaltantes, conPayoutsGuardados, esCalcGuardado } from './historialGuardado'
 
 interface Props {
   sessions:   TipSession[]
@@ -51,7 +52,8 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
     setLoading(true)
     Promise.all(missing.map(async s => {
       const entries = await getTipEntriesBySession(s.id)
-      const calc = calcHistory(
+      // Montos = lo GUARDADO (lo que se pagó) y pozo = pool_total_crc; calcHistory solo arma roles y horas.
+      const calc = conPayoutsGuardados(calcHistory(
         entries.map(e => ({
           employee_id:    e.employee_id,
           hours_worked:   e.hours_worked,
@@ -70,7 +72,7 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
           pool_barra_crc:    (s.pool_barra_crc || 0) + (s.pool_barra_electronico_crc || 0),
           exchange_rate:     s.exchange_rate,
         },
-      )
+      ), entries, employees, s.pool_total_crc)
       return [s.id, calc] as [string, HistoryCalc]
     }))
     .then(results => {
@@ -122,6 +124,13 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
   const q1Total    = q1Sessions.reduce((s, ss) => s + (mergedCache[ss.id]?.totalPool ?? 0), 0)
   const q2Total    = q2Sessions.reduce((s, ss) => s + (mergedCache[ss.id]?.totalPool ?? 0), 0)
   const grandTotal = empData.reduce((s, e) => s + e.total, 0)
+  // Personas que no aparecen en esta vista (hoy inactivas y sin permiso para verlas): se avisa cuánto.
+  const faltanMes = monthSessions.reduce((acc, ss) => {
+    const c = mergedCache[ss.id]
+    if (esCalcGuardado(c)) { acc.entradas += c.faltan.entradas; acc.payout += c.faltan.payout }
+    return acc
+  }, { entradas: 0, payout: 0 })
+  const avisoMes = avisoFaltantes(faltanMes, formatCRC)
 
   if (!months.length) {
     return (
@@ -153,6 +162,12 @@ export default function TipQuincenal({ sessions, calcCache, employees, rolePoint
       {loading && (
         <div style={{ padding: '1rem', color: '#888', fontSize: '0.82rem' }}>
           ⟳ Cargando datos del mes…
+        </div>
+      )}
+
+      {avisoMes && (
+        <div role="note" data-testid="quincenal-faltan" style={{ margin: '0 0 0.75rem', padding: '0.45rem 0.6rem', fontSize: '0.74rem', background: 'rgba(160,120,48,0.08)', borderLeft: '2px solid #a07830', color: '#5a5040' }}>
+          ⚠ {avisoMes}
         </div>
       )}
 

@@ -35,6 +35,7 @@ const TipStats     = lazy(() => import('./TipStats'))
 const TipCocina    = lazy(() => import('./TipCocina'))
 import { todayCR, shiftLabel } from '../../shared/utils'
 import { getCurrentRate } from '../../shared/api/exchangeRate'
+import { validarTurno } from './validarTurno'
 import type { HistoryCalc } from '../../shared/utils/tipCalculations'
 
 type View = 'turno' | 'historial' | 'quincenal' | 'stats' | 'cocina'
@@ -334,6 +335,8 @@ export default function TipsModule() {
 
   // ── Cambiar horas ─────────────────────────────────────────
   const handleHoursChange = (employeeId: string, val: string) => {
+    // Se guarda lo que se tipeó (también un negativo) para que validarTurno lo frene con un mensaje
+    // claro al cerrar, en vez de corregirlo en silencio.
     setLines(prev => prev.map(l =>
       l.employeeId === employeeId ? { ...l, hours: val === '' ? '' : parseFloat(val) || '' } : l
     ))
@@ -420,6 +423,14 @@ export default function TipsModule() {
     if (!openSession || !profile || !totals) return
     const workedLines = displayLines.filter(l => l.active)
     if (!workedLines.length) { setError('Marcá quién trabajó primero'); return }
+    // Validación de entrada (fuera de sagrados): horas ≥ 0, montos finitos y ≥ 0, tipo de cambio > 0 si hay
+    // dólares, y no cerrar con plata en el pozo y 0 puntos en total (nadie cobraría).
+    const problema = validarTurno({
+      lineas: displayLines.map(l => ({ nombre: l.employeeName, activa: l.active, hours: l.hours, propina_crc: l.propina_crc, propina_usd: l.propina_usd })),
+      efectivoCRC, efectivoUSD, barraCRC, barraElecCRC, exchangeRate,
+      totalPool: totals.totalPool, totalPoints: totals.totalPoints,
+    })
+    if (problema) { setError(problema); return }
     // 3 números que reconcilian: Total asignado = Efectivo ya en mano + Electrónico a entregar.
     const totalAsignado = Math.round(workedLines.reduce((s, l) => s + l.take_home, 0))
     const efectivoEquipo = Math.round(

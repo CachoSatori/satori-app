@@ -8,6 +8,7 @@ import { PAGO_META, formasPago, type Pago } from '../../shared/utils/pagoMatrix'
 import { norm } from '../../shared/api/inventoryIngest'
 import { tipShiftToCaja } from '../../shared/utils'
 import { fi, fd } from './cashUtils'
+import { errorMontos } from './validarMovimiento'
 import { useManagerOverride } from '../../shared/ManagerOverride'
 import type { CashSession, CashMovement, Supplier, UserRole } from '../../shared/types/database'
 
@@ -160,7 +161,8 @@ export default function AgregarAsistente({ openSession, suppliers, role, created
   const amountCRC = Number(montoCRC) || 0
   const amountUSD = Number(montoUSD) || 0
   const montoOk = amountCRC > 0 || amountUSD > 0
-  const montoNegativo = amountCRC < 0 || amountUSD < 0   // Ítem 2: entrada manual no admite montos < 0
+  // Ítem 2 + 08-nov: entrada manual no admite montos < 0, salvo colones negativos en un INGRESO con dólares (vuelto).
+  const montoNegativo = errorMontos({ tipo: clase === 'ingreso' ? 'ingreso' : 'egreso', crc: amountCRC, usd: amountUSD }) !== null
 
   // Ingreso adicional: categoría + motivo completos (sino no se puede crear) y si el equivalente en
   // colones (crc + usd·tc) supera el umbral → hay que pedir autorización de gerencia antes de crear.

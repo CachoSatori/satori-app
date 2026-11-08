@@ -213,3 +213,35 @@
 | Manager | Encender un local | RLS de `club_config`: solo el owner (prueba 70) | — |
 | Owner | Encender Nosara sin preparar códigos ni topes | Confirmación con el aviso del checklist | Es una decisión suya; el checklist del RUNBOOK es la guía |
 | Cualquiera | Una pantalla que llame sin local con dos encendidos | La base pide elegir; nunca supone uno | Un acceso del inicio (alertas del Club) usa el último local elegido en ese navegador |
+
+- 08-nov (tarde 3, Ismael: genérico, aviso v1, marcadores) ·
+  - **Aviso de privacidad v1** (`30b1de5`): texto final, sin ubicación, con el correo de contacto; versión `v1` en
+    club-web, en la 075 y en staging; cada alta guarda la versión aceptada.
+  - **Marcadores de descuento** (`190ab94`): lista configurable por local (código del PoS, nombre, % esperado, activo);
+    DESCUENTO_SIN_RESPALDO y CANJE_CON_DESCUENTO la usan. Pestaña **Descuentos** (owner edita; manager y contador ven).
+    Prueba 71.
+  - **Multilocal GENÉRICO** (`37deeee`): ningún local escrito en la 075, la app del Club, club-web, el pase ni el
+    migrador. Alta de un local con un INSERT o desde la app (sembrada sola: marcadores y promo en borrador), encender
+    con un click. RUNBOOK pasos 4b (alta de los locales en prod) y 11 (genérico). Prueba 72: local nuevo → encender →
+    visita real con su 10 % → apagar. Puente: `claude/puente-locales-genericos` (`37ffcfb`), para después del lunes.
+  - Pruebas: batería 456/456 · paridad 863 = 863 · vitest 1.497 · club-web 14/14 · wallet + club 51/51 · puente
+    genérico 471/471 · migrador 15 OK.
+
+### Autorrevisión adversarial (genérico, aviso v1, marcadores)
+| Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
+|---|---|---|---|
+| Owner | Cargar como marcador un artículo cualquiera para tapar descuentos | Es su decisión; queda auditado (`marcador_alta`/`marcador_edicion`) y CANJE_CON_DESCUENTO sigue saltando con créditos | Un marcador sin % respalda cualquier descuento: preferir cargarlo con su % |
+| Manager | Cargar o apagar un marcador para que no le salga una excepción | Solo el owner (prueba 71) | — |
+| Cajero | Usar un marcador de % en una factura con más descuento | Con % esperado, el descuento distinto (±1,5 puntos) sigue saliendo (prueba 71) | — |
+| Cajero | Marcar el artículo de otro local | Los marcadores son por local (prueba 71) | — |
+| Manager | Dar de alta un local o encenderlo | Solo el owner (pruebas 70 y 72) | — |
+| Cualquiera | Insertar datos del Club sin local con dos locales encendidos | El default de `location_id` exige un único local encendido; si no, falla | — |
+| Anónimo | Aceptar un aviso viejo | La autoalta exige la versión vigente (`v1`) | — |
+
+- 08-nov (tarde 4) · **location_id sin default** (Ismael): NOT NULL y SIN default en todas las tablas del Club; nunca se
+  asume un local en silencio. El migrador pasa `--local`; la batería declara su local UNA vez (`pg_temp.loc()`, el único
+  encendido en staging; si no hay exactamente uno, no arranca) y sus 134 inserciones lo pasan explícito (las carreras,
+  sus 4). Prueba 72: ninguna tabla tiene default ni acepta nulo, y una inserción sin local falla (23502).
+  Batería 457/457 · paridad 863 = 863 · carreras 8/8 · migrador 15 OK.
+  Autorrevisión: el riesgo era un dato del Club cargado en otro local sin que nadie lo note; ahora falla. Un script
+  nuevo que inserte sin local se entera en la primera corrida.

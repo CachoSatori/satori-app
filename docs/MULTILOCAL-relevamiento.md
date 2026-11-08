@@ -4,13 +4,13 @@
 > no requiere código. **Este documento solo lista; no se cambió nada fuera del Club.** Referencias contra `main` @
 > `1e28444` (y la rama del puente donde se indica). Lo arregla cada frente cuando toque ese código.
 
-## 0. El Club (hecho, rama `claude/epic-tesla-pyo77m`)
-- Cumple la regla: los locales salen de `club_config` (`club_activo`, `nombre`, `direccion`, `mapa_url`). Encender
-  Nosara es un dato (RUNBOOK del Club, paso 11). La prueba 70 de la batería verifica que **ninguna función `club_*`** tenga
-  un local escrito.
-- **Queda:** el `default 'santa-teresa'` de `location_id` en las tablas `club_*`. Ninguna función lo usa (todas pasan el
-  local); solo lo usan las inserciones directas del migrador de Firestore (historia de Santa Teresa) y de la batería.
-  Sacarlo es una limpieza aparte.
+## 0. El Club (hecho, rama `claude/epic-tesla-pyo77m`) — multilocal GENÉRICO
+- Ningún local escrito en la 075, la app del Club, club-web, el pase ni el migrador. Los locales son filas de
+  `club_config`: alta con un INSERT o desde la app (sembrada sola), configuración por datos y encender con un click
+  (RUNBOOK del Club, pasos 4b y 11). Las pruebas 70 y 72 lo verifican (ninguna función ni default nombra un local).
+- **Corregido (08-nov):** los 21 `default 'santa-teresa'` de las tablas `club_*` (ahora: el único local encendido), la
+  fila del local y la promo sembradas por nombre en la 075, el local fijo del migrador (`--local`), el nombre del local en
+  el pase y en el cupón, y la autoalta.
 
 ## 1. Estructural: los datos no tienen local (abrir Nosara acá SÍ requiere migración)
 | Dónde | Qué | Efecto |
@@ -32,11 +32,13 @@
 | Dónde | Qué |
 |---|---|
 | `src/modules/ventas/ventasEnVivoTypes.ts:32-36` | `type LocalId = 'santa-teresa' \| 'nosara'` y la lista con sus etiquetas |
-| `src/shared/ndf/ingestNdf.ts:31` (Edge `ingest-ndf`) | `LOCALES = new Set(['santa-teresa', 'nosara'])` |
-| `pos-bridge/configAgente.ts:11` (rama `claude/puente-item11-prod`) | `LOCALES = ['santa-teresa', 'nosara']` |
-| `supabase/functions/ingest-ndf/index.ts:117` (rama del puente) | `localLegado: 'santa-teresa'` para el secreto único de antes (desaparece cuando se borre `POS_INGEST_SECRET`, 7 días después del pase) |
+| `src/shared/ndf/ingestNdf.ts:31` (Edge `ingest-ndf`) | `LOCALES = new Set(['santa-teresa', 'nosara'])` → **corregido** en `claude/puente-locales-genericos` |
+| `pos-bridge/configAgente.ts:11` (rama `claude/puente-item11-prod`) | `LOCALES = ['santa-teresa', 'nosara']` → **corregido** en `claude/puente-locales-genericos` |
+| `supabase/functions/ingest-ndf/index.ts:117` (rama del puente) | `localLegado: 'santa-teresa'` → **corregido** (variable `POS_INGEST_LOCAL_LEGADO`) en `claude/puente-locales-genericos` |
+| `supabase/functions/ingest-punches/index.ts:41` (BioTime) | `LOCALES = new Set(['santa-teresa', 'nosara'])` (sin cambios) |
 
-**No se toca antes del pase del lunes:** el Edge del puente se despliega en el SHA fijo `e4678b3`.
+**El pase del lunes no cambia:** despliega el SHA fijo `e4678b3`. La corrección del puente
+(`claude/puente-locales-genericos`, `docs/puente/LOCALES-GENERICOS.md`) se despliega después, con su firma.
 
 ## 4. Reglas de negocio de un local escritas en el código
 | Dónde | Qué |

@@ -6,9 +6,9 @@
 --    Branching aplicaría esta migración en prod.
 --
 -- Principios:
---  · Multi-local GENÉRICO (LC-ML): `location_id text not null` SIN FK; los locales son filas de `club_config`
---    (alta con un INSERT o desde la app). Ningún local escrito en esta migración: el default de `location_id`
---    es el único local con el Club encendido (`club_local(null, false)`), ver la sección LC-ML.
+--  · Multi-local GENÉRICO (LC-ML): `location_id text not null` SIN FK y SIN default; los locales son filas de
+--    `club_config` (alta con un INSERT o desde la app). Ningún local escrito en esta migración; ninguna inserción
+--    asume un local (ver la sección LC-ML).
 --  · Libro mayor de solo inserción (`club_movimientos`): el saldo se calcula,
 --    nunca se edita. Unidad del saldo = PERSONAS; los créditos se derivan.
 --  · Nada abierto a `anon`: revoke all en todas las tablas. Las únicas puertas
@@ -5788,9 +5788,8 @@ end;
 $$;
 
 
--- El default de `location_id` en las tablas del Club: el ÚNICO local con el Club encendido (nunca un nombre). Lo usan
--- solo las inserciones directas (migrador, pruebas); las funciones siempre pasan el local. Con dos o más encendidos,
--- una inserción sin local falla (hay que decir cuál). club_config no tiene default: el id de un local es un dato.
+-- `location_id` en las tablas del Club: NOT NULL y SIN default (Ismael, 08-nov). Nunca se asume un local en silencio:
+-- las funciones, el migrador (`--local`) y las pruebas lo pasan explícito; una inserción sin local falla.
 do $$
 declare r record;
 begin
@@ -5799,7 +5798,8 @@ begin
               and c.table_name <> 'club_config'
               and exists (select 1 from information_schema.tables t where t.table_schema = 'public' and t.table_name = c.table_name
                             and t.table_type = 'BASE TABLE') loop
-    execute format('alter table public.%I alter column location_id set default public.club_local(null, false)', r.table_name);
+    execute format('alter table public.%I alter column location_id drop default', r.table_name);
+    execute format('alter table public.%I alter column location_id set not null', r.table_name);
   end loop;
 end $$;
 alter table public.club_config alter column location_id drop default;

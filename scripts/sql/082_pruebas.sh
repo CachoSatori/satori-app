@@ -1,7 +1,7 @@
 #!/bin/bash
-# Pruebas de la 081 (SEC-01c): matriz rol × activo/inactivo × tabla, con sesiones simuladas.
+# Pruebas de la 082 (SEC-01c): matriz rol × activo/inactivo × tabla, con sesiones simuladas.
 #
-#   SUPABASE_ACCESS_TOKEN=… scripts/sql/081_pruebas.sh <REF>
+#   SUPABASE_ACCESS_TOKEN=… scripts/sql/082_pruebas.sh <REF>
 #
 # Cada caso es UNA transacción que termina en ROLLBACK: no escribe nada. Las cuentas se eligen por
 # rol y estado (la más antigua de cada grupo); el script no imprime nombres ni correos, solo el
@@ -9,10 +9,10 @@
 # El «owner inactivo» se simula: dentro de la transacción se marca inactivo a un owner (con
 # session_replication_role = replica para saltar los triggers de la 068) y se vuelve atrás.
 #
-# Resultado esperado DESPUÉS de la 081:
+# Resultado esperado DESPUÉS de la 082:
 #   · cuentas inactivas: 0 filas en employees, tip_entries, tip_sessions, role_tip_points y
 #     exchange_rates; 1 fila en profiles (la propia); update de otro perfil = 0 filas.
-#   · activos: los mismos conteos que ANTES de la 081 (correr el script antes y después y comparar).
+#   · activos: los mismos conteos que ANTES de la 082 (correr el script antes y después y comparar).
 #   · owner activo: update de otro perfil = 1 fila.
 set -euo pipefail
 if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then

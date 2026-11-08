@@ -1,32 +1,32 @@
-# Propuesta · diseño del pase de Google Wallet (08-nov-2026) — **la aprueba Ismael**
+# Propuesta · diseño del pase de Google Wallet — **maqueta v3 (08-nov), APAGADA hasta el OK de Ismael**
 
-> **MAQUETA v2 (08-nov), APAGADA hasta el OK de Ismael.** Ismael pidió el daruma de la página web de Satori; **no está
-> en el repo ni en club-web** (solo el ícono 祭 de la app y esta propuesta). Por eso, como indicó, va el kanji **悟**
-> («satori») en el mismo estilo. Franja: **«SATORI · CLUB»** (sin local). Si aparece el archivo del daruma, se cambia
-> solo el logo y la franja, con este mismo script. Hasta el OK, `WALLET_DISENO` no se carga y el pase sale solo con el
-> fondo `#0d0d0d`.
+> **v3 (08-nov):** el **daruma** de Ismael (PDF + captura), dibujado como imagen propia (`img/daruma.mjs` → PNG sin
+> fondo): cuerpo rojo vivo, cara blanca, ojos con aro dorado, cejas y barba negras, **悟り** a los costados y **縁** dorado
+> al centro. Franja «SATORI · CLUB». El 里 sale de todos lados (también del encabezado y el favicon de club-web).
+> Hasta el OK, `WALLET_DISENO` no se carga y el pase sale solo con el fondo `#0d0d0d`.
 
-Sale de la identidad que ya usan la app y club-web:
-- **Color de fondo:** tinta `#0d0d0d`, el negro del encabezado de club-web y de la app.
-- **Oro:** `#c8a96e` (`--gold` de club-web), solo sobre la tinta, como en la web.
-- **Logo:** el kanji **悟** en Noto Serif JP (la serif de la app), oro sobre un círculo negro con un filete dorado.
-  660×660, como pide Google.
-- **Franja** (`heroImage`, 1032×336): 悟 + «SATORI · CLUB» con un filete dorado debajo, con margen a los lados por si
-  Google recorta.
+**Fondo: recomiendo que siga TINTA `#0d0d0d`.** El daruma es rojo: sobre fondo rojo el cuerpo se funde con el fondo y se
+pierde la silueta (ver la maqueta roja); sobre tinta, el rojo, el blanco de la cara y el oro resaltan, y queda igual que
+el encabezado de club-web y de la app.
 
-![Maqueta del pase (datos ficticios)](img/pase-propuesta.png)
+| Tinta (recomendado) | Rojo |
+|---|---|
+| ![Maqueta v3, fondo tinta](img/pase-propuesta.png) | ![Maqueta v3, fondo rojo](img/pase-propuesta-rojo.png) |
+
+- **Logo** (660×660, `club-web/public/pase/logo.png`): el daruma sin los kanji de los costados (se lee chico), sobre un
+  círculo tinta con filete dorado.
+- **Franja** (`heroImage`, 1032×336, `club-web/public/pase/hero.png`; la variante roja en `hero-rojo.png`): el daruma
+  completo + «SATORI · CLUB».
+- **Texto del socio:** «Vale en todos los Satori» (Club compartido), sin lista de promociones.
+- Se regeneran con `docs/club-satori/img/pase-render.mjs` (Playwright + Google Fonts).
 
 | Pieza | Archivo | URL pública cuando se publique club-web |
 |---|---|---|
 | Logo | `club-web/public/pase/logo.png` | `https://club.satoricostarica.com/pase/logo.png` |
 | Franja | `club-web/public/pase/hero.png` | `https://club.satoricostarica.com/pase/hero.png` |
 
-- La maqueta es una **aproximación**: Google arma el diseño final del pase genérico con estos datos (el color de fondo,
-  el logo y la franja son nuestros; la tipografía y la disposición son de Google).
-- Las imágenes se regeneran con `docs/club-satori/img/pase-render.mjs` (Playwright + Google Fonts).
-
 ## Cómo se enciende (después de aprobar)
 - En el Edge `club-pase`, secreto/variable
-  `WALLET_DISENO = {"colorFondo":"#0d0d0d","logoUrl":"https://club.satoricostarica.com/pase/logo.png","heroUrl":"https://club.satoricostarica.com/pase/hero.png"}`.
+  `WALLET_DISENO = {"colorFondo":"#0d0d0d","logoUrl":"https://club.satoricostarica.com/pase/logo.png","heroUrl":"https://club.satoricostarica.com/pase/hero.png"}`
+  (con fondo rojo: `"colorFondo":"#d42a1f"` y `hero-rojo.png`).
 - Es la constante `DISENO_PROPUESTO` de `src/shared/wallet/googlePase.ts`.
-- Hasta entonces el pase sale solo con el fondo `#0d0d0d`, sin logo ni franja.

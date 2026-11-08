@@ -1,5 +1,5 @@
 -- ============================================================================
--- 082_my_turno_stats_higiene.sql — auditoría r5, higiene de my_turno_stats (026)
+-- 083_my_turno_stats_higiene.sql — auditoría r5, higiene de my_turno_stats (026)
 -- ----------------------------------------------------------------------------
 -- my_turno_stats solo existe en STAGING (PoS propio; no está en prod): esta migración va con el
 -- pase del PoS propio. Texto = la definición VIVA de staging (catálogo del 07/11, igual a la 026)
@@ -8,7 +8,7 @@
 --   2. Si la cuenta no tiene rol ACTIVO → 42501 (antes una cuenta inactiva veía sus números).
 --   3. EXECUTE: se le quita a PUBLIC y a anon (la 026 solo lo revocó de anon, pero el EXECUTE por
 --      defecto de PUBLIC seguía vigente, ACL «=X/postgres»). Queda para authenticated.
--- Lo que devuelve a un usuario activo no cambia. Rollback: scripts/sql/082_rollback.sql.
+-- Lo que devuelve a un usuario activo no cambia. Rollback: scripts/sql/083_rollback.sql.
 -- ============================================================================
 
 begin;

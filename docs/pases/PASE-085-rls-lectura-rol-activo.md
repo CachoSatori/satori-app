@@ -28,13 +28,15 @@ null si la cuenta está inactiva.
 1. **Primero el puente, con sus números:** la **081** (`pos_ndf_campos_factura`) y la **082**
    (`pos_ndf_ingesta_transaccional`). Al 08/11, prod termina en la **080**.
 2. **Después la 085**, con su número: queda arriba de la 082.
-3. **Si la 085 tuviera que pasar antes que el puente**, lo decide Ismael. Las dos salidas posibles:
-   - la 085 espera al puente;
-   - la 085 entra primero, y entonces la 081 y la 082 quedan ≤ 085 y toman el bloque de pase (150+).
+3. **Decisión de Ismael (08/11): la 085 ESPERA al puente.** El puente (081 → 082) va a prod el **lunes 09/11
+   a la mañana** (su paquete: `docs/puente/PASE-PROD-2026-11-09.md`, rama `claude/puente-item11-prod`).
+   La 085 entra **después**, con su número. Esto llegó reenviado por la sesión del Club; queda pendiente
+   que Ismael lo confirme acá.
 
 ## 3. Precondiciones (todas antes de mergear)
 - [ ] **Firma de Ismael** sobre este paquete, después de la auditoría.
-- [ ] **Ledger de prod:** la 085 libre y **último < 085**. Con el orden del §2, el último tiene que ser la 082.
+- [ ] **Ledger de prod:** la 085 libre y **último < 085**. Con el orden del §2, el último tiene que ser la **082**
+  (el puente ya pasó). Si el puente no pasó, la 085 **no** entra.
 - [ ] **Catálogo de prod igual al respaldo:**
   - las 7 policies del §1 existen, con las condiciones de la columna «Antes»;
   - RLS activa en las 6 tablas (`employees`, `tip_entries`, `tip_sessions`, `role_tip_points`, `exchange_rates`, `profiles`).
@@ -121,6 +123,9 @@ En staging no había cuentas activas de manager, contador, barman ni cocina. Los
 le cambió nada al owner activo.
 
 ## 8. Pendiente antes de la firma
+Ventana pedida por Ismael: **23:35–00:45 CR**. A esa hora la sesión del Club ya cortó y todavía no arrancó la
+noche (la sesión A del Club empieza a la 01:00). Antes de correr nada, confirmar que no haya consultas activas
+en staging.
 - **Volver a correr `085_pruebas.sh` en staging** con el cambio de este paquete (en prod solo lee), cuando staging esté libre.
 - **Probar `085_rollback.sql` en staging** dentro de una transacción con rollback: aplicar el rollback, comparar las
   16 policies con el respaldo y descartar. Mismo criterio: staging libre.

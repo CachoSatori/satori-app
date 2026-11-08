@@ -32,6 +32,9 @@
 //   · PROD: la versión anterior al ítem 11. El pase va con firma y en el orden del RUNBOOK del Club
 //     (docs/club-satori/RUNBOOK-piloto.md): la mig 081 SIEMPRE antes que este Edge.
 //   · El secreto por local (POS_INGEST_SECRETS, ronda 3) está en esta rama y NO desplegado todavía.
+//   · CLUB-AUD-46/47/48 (08-nov, en `src/shared/ndf/ingestNdf.ts`): latido con la hora del servidor y cursor que
+//     solo avanza; secretos de ≥ 32 sin repetir; topes de largo. En esta rama, NO desplegados (los despliega el
+//     RUNBOOK, con firma). Falta pasarlos a `claude/puente-item11-prod` antes del paso 3.
 //
 // ── CONTRATO CON EL AGENTE (A3) ────────────────────────────────────────────────────────────
 // POST /ingest-ndf

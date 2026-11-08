@@ -1,0 +1,8 @@
+# G-61 · diferencias ESPERADAS del catálogo entre A (staging) y B (prod). Versionado: cada cambio va en un commit.
+# Formato: una entrada por línea, «- <hecho>» (está en A y no en B) o «+ <hecho>» (está en B y no en A), copiada tal cual
+# de la salida de gate61.sh, con una línea de comentario arriba que diga por qué es esperada.
+# Firma: con al menos una entrada, la línea «firma: <quién> <fecha> sha256=<hex>» lleva el sha256 de las entradas (en el
+# orden del archivo, unidas con \n y con \n final):  grep -E '^[-+] ' gate61_esperadas.txt | sha256sum
+# La pone Ismael después de revisar cada entrada. Sin entradas, no hace falta firma.
+#
+# Hoy (08-nov): sin entradas. La primera lectura de prod (con firma) dirá cuáles hay; cada una se corrige o se anota acá.

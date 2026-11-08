@@ -153,7 +153,7 @@ staging) y registrar la fila `<N>` en el ledger de prod (texto idéntico al arch
 **Verificar (solo lectura):**
 - Catálogo `club_*` igual al de staging: correr `scripts/sql/club_catalogo.sql` en las dos bases y comparar (en staging
   da 898 objetos al 08-nov). Es la paridad del CLUB-AUD-17, hecha a mano contra prod. **Más el catálogo extendido del
-  gate G-61 (§12):** dueños, reloptions, privilegios por defecto y dependencias.
+  gate G-61 (§12):** `bash scripts/sql/gate61.sh --prod-firmado` tiene que salir 0.
 - `anon` ejecuta solo las 10 puertas públicas: `club_canje_codigo_generar`, `club_canje_codigo_generar_pase`,
   `club_cupon_contacto`, `club_cupon_contacto_baja`, `club_cupon_crear`, `club_cupon_ver`, `club_locales_activos`,
   `club_portal`, `club_socio_autoalta` y `club_socio_baja_portal` (todas exigen `x-club-web`).
@@ -382,21 +382,29 @@ ahí cambia permisos sin que el diff la vea. Ejemplo real de staging: los privil
 `supabase_admin` en `public` dan **todo** a `anon` en cada tabla nueva; la 075 lo revoca a mano, y si prod tuviera otros
 privilegios por defecto el resultado podría ser distinto.
 
-**Propuesta:**
-1. `scripts/sql/club_catalogo_ext.sql` (agregado el 08-nov; **probado solo en staging, en una transacción de solo
-   lectura**: 351 líneas): dueños de tablas, vistas, secuencias, índices y funciones `club_*`; `reloptions`; FORCE RLS;
-   `pg_default_acl` de `public`; dueño y ACL del esquema `public`; dependencias (`get_my_role` con md5, dueño y ACL; el
-   enum `user_role`; las columnas de `profiles` y `pos_ndf_*`); extensiones (`pgcrypto`, `pg_cron`, `pg_net`);
-   publicaciones que incluyan tablas `club_*`; event triggers.
-2. **D-1 (paso 0, solo lectura, con la firma de Ismael para leer prod):** correr la parte de dependencias, privilegios
-   por defecto y extensiones en las dos bases y comparar. Cada diferencia se anota en el paquete del pase con su motivo
-   y Ismael la firma (o se corrige antes).
-3. **Después del paso 4:** `club_catalogo.sql` + `club_catalogo_ext.sql` en las dos bases → **diff vacío**. Las líneas
-   que dependen del proyecto (el md5 de una dependencia cuyo cuerpo cambió por otra migración de prod) se anotan una por
-   una; no hay excepciones genéricas.
-4. **Cómo se corre (solo lectura):** igual que `scripts/sql/club_paridad.sh`, pero contra los dos refs y sin aplicar
-   nada: `begin; set transaction read only; <consulta>; rollback;` y `diff` de las dos salidas. El archivo del diff
-   (sin datos, solo catálogo) se adjunta al paquete del pase.
-5. Una vez probado en prod (con firma), sumar `club_catalogo_ext.sql` a `club_paridad.sh` para que la paridad de
-   staging también lo cubra.
+**Mecanismo (08-nov noche; probado solo en staging):** `scripts/sql/gate61.sh` + `scripts/sql/gate61_catalogo.sql` +
+`scripts/sql/gate61_esperadas.txt`. Reemplaza a `club_catalogo_ext.sql` (borrado: una sola versión).
+1. **Qué compara** (`gate61_catalogo.sql`, normalizado: `collate "C"`, ACL con `aclexplode` sin grantor, cuerpos en md5,
+   espacios colapsados, sin OIDs): columnas, constraints, índices; relaciones con dueño, RLS, FORCE y `reloptions`; ACL de
+   tablas, vistas, secuencias y columnas; **funciones en columnas** (dueño, lenguaje, SECURITY DEFINER, volatilidad,
+   estricta, leakproof, paralelismo, retorno, `proconfig`, md5) y su ACL; **dueños de las SECURITY DEFINER con
+   `rolsuper`/`rolbypassrls`**; policies con **PERMISSIVE/RESTRICTIVE**; triggers con **`tgenabled`**; **triggers sobre
+   `auth.users`**; vistas; **secuencias con su OWNED BY**; **`pg_depend`** de todo lo que toca `club_*`; **publicaciones**;
+   **jobs de `pg_cron`**; **extensiones por existencia, esquema y versión mínima** (`pgcrypto` ≥ 1.3, `pg_cron` ≥ 1.4);
+   privilegios por defecto y esquema `public`; roles de la API; el enum `user_role`; columnas y RLS de `profiles`,
+   `employees` y `pos_ndf_*`. En staging: 3.439 hechos, determinista (dos corridas iguales).
+2. **Cómo decide** (`gate61.sh`): lee las dos bases en `begin; set transaction read only; …; rollback;` y compara los
+   multiconjuntos (un hecho repetido en una sola base también es diferencia). **Sale 0 solo** si no hay diferencias fuera
+   de `gate61_esperadas.txt` **y** no sobra ninguna esperada. 1 = diferencia sin esperar · 2 = esperada sobrante ·
+   3 = salida vacía, `null` o con menos de 898 hechos · 4 = firma ausente o inválida · 5 = uso incorrecto o **prod sin
+   `--prod-firmado`** (no conecta).
+3. **Esperadas con firma** (`gate61_esperadas.txt`, versionado): `- <hecho>` / `+ <hecho>` copiados de la salida, con su
+   motivo en un comentario, y la línea `firma: <quién> <fecha> sha256=<hex>` con el sha256 de las entradas. Editar una
+   entrada sin volver a firmar → 4. Hoy: sin entradas.
+4. **Pruebas:** `bash scripts/sql/gate61_test.sh` (sin base): 13 casos, uno por código de salida y por tipo de firma
+   mala. En vivo, solo staging: `gate61.sh --ref-a <staging> --ref-b <staging>` → 0; con un hecho de más o repetido → 1.
+5. **D-1 (paso 0) y después del paso 4, con la firma de Ismael para leer prod:**
+   `bash scripts/sql/gate61.sh --prod-firmado --salida <carpeta>` (A = staging, B = prod). La carpeta (catálogos y
+   diferencias, sin datos de personas) se adjunta al paquete del pase. Cada diferencia: se corrige o se anota en
+   `gate61_esperadas.txt` con su motivo y la firma; se vuelve a correr hasta que dé 0.
 

@@ -1,6 +1,6 @@
--- 082_rollback · deshace supabase/migrations/082_my_turno_stats_higiene.sql
+-- 083_rollback · deshace supabase/migrations/083_my_turno_stats_higiene.sql
 -- Vuelve a la definición VIVA de staging del 07/11 (= 026) y a su EXECUTE (PUBLIC incluido).
--- NO toca el ledger: borrar la fila 082 en la misma transacción si se corre.
+-- NO toca el ledger: borrar la fila 083 en la misma transacción si se corre.
 begin;
 
 CREATE OR REPLACE FUNCTION public.my_turno_stats(p_date date DEFAULT NULL::date)

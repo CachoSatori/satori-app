@@ -1,9 +1,9 @@
 #!/bin/bash
-# Pruebas de la 082 (my_turno_stats): una transacción por caso, siempre ROLLBACK, sin nombres.
-#   SUPABASE_ACCESS_TOKEN=… scripts/sql/082_pruebas.sh hwiatgicyyqyezqwldia   (solo staging: en prod
+# Pruebas de la 083 (my_turno_stats): una transacción por caso, siempre ROLLBACK, sin nombres.
+#   SUPABASE_ACCESS_TOKEN=… scripts/sql/083_pruebas.sh hwiatgicyyqyezqwldia   (solo staging: en prod
 #   la función no existe)
-# Esperado DESPUÉS de la 082: anon → permission denied · salonero/barman inactivo → 42501 ·
-# salonero activo → jsonb con sus números (igual que antes de la 082).
+# Esperado DESPUÉS de la 083: anon → permission denied · salonero/barman inactivo → 42501 ·
+# salonero activo → jsonb con sus números (igual que antes de la 083).
 set -euo pipefail
 [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || { echo "Falta SUPABASE_ACCESS_TOKEN." >&2; exit 2; }
 REF=${1:?Uso: $0 <REF>}

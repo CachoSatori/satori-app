@@ -132,3 +132,26 @@
     3. `REGISTRO_LC_SIN_856` y `CORTESIA_DISTINTA` solo miran visitas ya cruzadas con su factura (la que no cruzó
        todavía no salta).
   - **Próximo:** A6 (recorrido, guía de uso y RUNBOOK).
+- 08-nov (día, 857 y autorrevisión) ·
+  - **857 «INVITADO»** (`56b1d6d`): cuenta igual que el 856 en todas las reglas. Máximo de invitados por visita
+    configurable (`lc_invitados_max`, 3) y excepción `LC_INVITADOS_EXCEDIDOS` cuando se pasa. Prueba 68.
+  - **main en las ramas:** traído a `claude/epic-tesla-pyo77m` y a `claude/club-wallet` (test de numeración 5/5).
+    **`claude/puente-item11` NO:** arrastra 403 commits de otros frentes desde su base con main (PoS F1–F3, salarios,
+    propinas…), con 17 conflictos en código ajeno al puente. Se abortó el merge (la rama quedó como estaba). Lo propio del
+    puente son unos 46 archivos (`supabase/functions/ingest-ndf`, `src/shared/ndf`, la 082, `scripts/sql/puente_carreras`).
+    Propuesta para Ismael: armar `claude/puente-item11-v2` desde main con solo esos archivos.
+
+### Autorrevisión adversarial (A4, A5 y el 857) — qué puede hacer de más cada actor
+| Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
+|---|---|---|---|
+| Anónimo | Leer visitas, premios, excepciones, pendientes | Tablas sin grants; funciones solo `authenticated` con rol; club-web solo las puertas públicas | — |
+| Socio | Prestar su QR a otro en otra mesa el mismo día | 1 visita por día (la caja ve «ya registró su visita de hoy»); la otra factura con el 856 sale `LC_SIN_REGISTRO`; `SOCIO_USO_ANOMALO` si se registran dos mesas | La caja igual podría cobrar el 10 %: la detección es posterior |
+| Socio | Autorreferirse con otro teléfono | Premio solo con la 1.ª factura C con el 856; tope por referente y por validador | Un segundo teléfono real no se detecta (límite del diseño) |
+| Anfitrión | Usar su cupón en su propia mesa de socio | Bloqueo en `club_cupon_usar` + `CUPON_AUTOREFERIDO` si se cuela | — |
+| Anfitrión nuevo | Ganar mucho en el mes | Retención sobre ₡25.000 (primeros 90 días) + `ANFITRION_SOBRE_TOPE` | Partir en varios cupones no lo esquiva (cuenta el acumulado del mes) |
+| Invitado | Más acompañantes que lo permitido | `LC_INVITADOS_EXCEDIDOS` (posterior) | La caja no lo bloquea (la app no toca el PoS) |
+| Cajero | Registrar visitas falsas para justificar un 856 | `SOCIO_USO_ANOMALO`, reporte de altas por usuario, auditoría | **Falta un reporte de visitas por usuario** (propuesta para A6) |
+| Cajero | Alta en caja de un «socio» inventado | Provisional 7 días; `SOCIO_ALTA_SIN_CONFIRMAR`; lo confirma otro; reporte de altas | — |
+| Manager | Resolver la excepción de un descuento que dio él en el PoS | **Hueco cerrado hoy:** las que salen solo del PoS (sin registrante en la app) las resuelve el owner (prueba 68) | DECISIÓN PROVISORIA: más trabajo para el owner |
+| Manager | Aprobar personas pendientes de un cupón que registró él | Lo bloquea la base («lo registraste vos») | No se puede chequear «distinto del anfitrión» si el anfitrión es del equipo (no hay vínculo miembro ↔ usuario) |
+| Manager | Editar promociones o cortesías | Solo el owner | — |

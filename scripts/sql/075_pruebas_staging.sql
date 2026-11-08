@@ -3440,6 +3440,13 @@ begin
     pg_temp.hay(j, 'invitados:' || (v_vis->>'visita_id')) and not pg_temp.hay(j, 'invitados:' || (v_vis2->>'visita_id')), '');
   perform pg_temp.r('68', 'visita cuya factura tiene el 857 (sin el 856): no es REGISTRO_LC_SIN_856, y la factura no es LC_SIN_REGISTRO',
     not pg_temp.hay(pg_temp.exc('REGISTRO_LC_SIN_856'), 'visita:' || (v_vis2->>'visita_id')) and not pg_temp.hay(pg_temp.exc('LC_SIN_REGISTRO'), 'lc:990832'), '');
+  -- autorrevisión: las que salen solo del PoS las resuelve el owner (el manager no)
+  declare e text; begin
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    begin perform public.club_excepcion_resolver('LC_SIN_REGISTRO', 'lc:990801', 'la reviso yo'); e := 'ok'; exception when others then e := sqlerrm; end;
+    perform pg_temp.yo();
+    perform pg_temp.r('68', 'excepción que sale solo del PoS: el manager no la resuelve, el owner sí (negativa)', e like 'Esta excepción sale del PoS%', e);
+  end;
   perform pg_temp.r('68', '«qué aplicar» dice cómo marcar a los acompañantes (857, hasta 3)', (v_vis->'avisos')::text like '%857 (INVITADO)%hasta 3%', (v_vis->'avisos')::text);
 end $$;
 

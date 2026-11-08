@@ -3319,6 +3319,12 @@ begin
   if v_hay is null then
     raise exception 'Esa excepción no figura hoy en la lista: actualizá la pantalla' using errcode = 'P0001';
   end if;
+  -- LC-A5 (autorrevisión): las que salen solo del PoS no tienen registrante en la app (el login del PoS no está ligado a un
+  -- usuario): el manager que dio el beneficio en el PoS podría resolver la suya. DECISIÓN PROVISORIA: las resuelve el owner.
+  if p_tipo in ('LC_SIN_REGISTRO','DESCUENTO_SIN_RESPALDO','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA','SOCIO_USO_ANOMALO','ANFITRION_SOBRE_TOPE')
+     and p_rol <> 'owner' then
+    raise exception 'Esta excepción sale del PoS (no se sabe quién cargó la factura): la resuelve el owner' using errcode = 'P0001';
+  end if;
   -- La segregación es por el REGISTRANTE del movimiento (registradores = registrado_por de los movimientos).
   if v_reg is null or jsonb_typeof(v_reg) <> 'array' or auth.uid() is null or not (v_reg ? auth.uid()::text) then
     return;

@@ -78,6 +78,7 @@ drop table if exists public.club_codigos_canje;   -- R-01 (antes que club_movimi
 drop table if exists public.club_pase_eventos;      -- LC-A1
 drop table if exists public.club_pase_cursor;
 drop table if exists public.club_pases;
+drop table if exists public.club_visitas_socio;       -- LC-A4
 drop table if exists public.club_entorno;              -- CLUB-AUD-42 (marca de staging)
 drop table if exists public.club_promociones;          -- LC-A3
 drop table if exists public.club_cortesias;

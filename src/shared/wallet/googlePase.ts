@@ -201,7 +201,7 @@ export function armarObjeto(issuerId: string, d: PaseDatos, diseno: DisenoPase =
     objeto.logo = { sourceUri: { uri: diseno.logoUrl }, contentDescription: loc({ es: 'Logo de Satori', en: 'Satori logo' }) }
   }
   if (diseno.heroUrl && diseno.heroUrl.startsWith('https://')) {
-    objeto.heroImage = { sourceUri: { uri: diseno.heroUrl }, contentDescription: loc({ es: 'Satori · Club · Santa Teresa', en: 'Satori · Club · Santa Teresa' }) }
+    objeto.heroImage = { sourceUri: { uri: diseno.heroUrl }, contentDescription: loc({ es: 'Satori · Club', en: 'Satori · Club' })   // LC-ML: el pase no depende del local }
   }
   if (d.codigo_barras && d.estado !== 'baja') {
     objeto.barcode = {

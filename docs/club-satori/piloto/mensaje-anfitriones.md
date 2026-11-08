@@ -1,9 +1,10 @@
 # Mensaje para anfitriones (hoteles y concierges) · BORRADOR
 
 > **Borrador (08-nov) para que lo revise Ismael antes de usarlo.** Sin datos personales: lo que va entre `<…>` se
-> completa con los datos de cada anfitrión al mandarlo (su nombre y su link del portal). El valor del crédito en colones
-> sale de la configuración del local, no de este texto. Las partes **[con el pase]** van solo cuando el pase de Google
-> Wallet esté encendido (hoy está apagado hasta la prueba en un teléfono).
+> completa al mandarlo (su nombre, su link del portal y `<valor del crédito>`, el valor vigente en colones de la
+> configuración del local). Las partes **[con el pase]** van solo cuando el pase de Google Wallet esté encendido (hoy está
+> apagado hasta la prueba en un teléfono). Lo marcado **[CONFIRMAR ISMAEL]** sigue abierto: no se manda hasta que Ismael
+> lo confirme (y se borra la marca).
 
 ## Español
 
@@ -14,8 +15,14 @@ Te escribimos de **Satori Sushi Bar** con una novedad del **Club Satori**, el pr
 **Qué cambia**
 - Ya no hay tarjetas de papel. Tenés un **portal propio** con tu QR, tu saldo y el botón «Canjear»: <link del portal>.
   Guardalo; es solo tuyo.
-- Cada persona que llega con tu cupón suma: **cada 6 personas, 1 crédito** (se suma de a medio crédito).
+- Cada persona que llega con tu cupón suma: **cada 6 personas, 1 crédito** (se suma de a medio crédito). **Cada crédito
+  vale <valor del crédito>** en tu cuenta en Satori.
 - Tus huéspedes reciben un **cupón del 10 %** (un solo uso) al escanear tu QR.
+
+**[CONFIRMAR ISMAEL] Tu saldo de la tarjeta de papel:** <qué pasa con el saldo que tenías en las tarjetas de papel: si se
+pasa al portal, cuándo y cómo lo ves>.
+
+**[CONFIRMAR ISMAEL] Vencimiento:** <si los créditos vencen y cuándo (por ejemplo, por inactividad), o que no vencen>.
 
 **[con el pase] Cómo guardás el pase**
 1. Abrí tu portal y tocá «Agregar a Google Wallet».
@@ -45,8 +52,14 @@ This is **Satori Sushi Bar** with news about **Club Satori**, our program for th
 **What changes**
 - No more paper cards. You have your **own portal** with your QR, your balance and the “Redeem” button: <portal link>.
   Keep it; it is just for you.
-- Every guest who comes with your coupon counts: **every 6 guests, 1 credit** (you earn half a credit at a time).
+- Every guest who comes with your coupon counts: **every 6 guests, 1 credit** (you earn half a credit at a time). **Each
+  credit is worth <credit value>** on your bill at Satori.
 - Your guests get a **10% coupon** (one use) when they scan your QR.
+
+**[CONFIRMAR ISMAEL] Your paper card balance:** <what happens to the balance on your paper cards: whether it moves to the
+portal, when and how you see it>.
+
+**[CONFIRMAR ISMAEL] Expiry:** <whether credits expire and when (for example, after inactivity), or that they do not>.
 
 **[with the pass] How to save your pass**
 1. Open your portal and tap “Add to Google Wallet”.
@@ -67,7 +80,11 @@ We take care of your data under our privacy notice: https://club.satoricostarica
 Thank you for recommending us!
 Satori Sushi Bar
 
-## Para revisar (Ismael)
-- ¿Ponemos el valor del crédito en colones? (Sale de la configuración; si se pone, que sea el vigente al mandarlo.)
+## Abierto para Ismael
+- **[CONFIRMAR ISMAEL] Saldo de la tarjeta de papel:** qué se le dice al anfitrión (la migración F1b pasa los saldos de
+  la página vieja; falta cuándo y cómo se lo contamos).
+- **[CONFIRMAR ISMAEL] Vencimiento de los créditos:** si vencen y con qué regla (la app tiene vencimiento por inactividad
+  configurable por local).
 - El texto para iPhone depende de cuándo se encienda Apple Wallet.
 - El dominio `club.satoricostarica.com` es el previsto en el RUNBOOK; confirmar antes de mandar.
+- Resuelto (08-nov): el valor del crédito va como variable `<valor del crédito>` (el vigente al mandarlo).

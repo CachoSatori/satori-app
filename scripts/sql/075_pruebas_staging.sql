@@ -2899,6 +2899,27 @@ begin
       and not has_function_privilege('authenticated', 'public.club_modo_pruebas()', 'EXECUTE'), '');
 end $$;
 
+-- ═══ 62. B3: club_pases_emitidos (para los eventos globales de promociones) ═══
+do $$
+declare v_a uuid; v_b uuid; n1 int; n2 int; v_prim uuid;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Pase Emitido A Ficticio', 'app') returning id into v_a;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Pase Emitido B Ficticio', 'app') returning id into v_b;
+  set local role service_role;
+  perform public.club_pase_emitido(v_a, 'google', '3388000000012345678.club-' || v_a);
+  perform public.club_pase_emitido(v_b, 'google', '3388000000012345678.club-' || v_b);
+  perform public.club_pase_emitido(v_b, 'apple', 'pass.ficticio.' || v_b);
+  select count(*) into n1 from public.club_pases_emitidos('google') x where x.miembro_id in (v_a, v_b);
+  select x.miembro_id into v_prim from public.club_pases_emitidos('google') x where x.miembro_id in (v_a, v_b) order by x.miembro_id limit 1;
+  select count(*) into n2 from public.club_pases_emitidos('google', v_prim) x where x.miembro_id in (v_a, v_b);
+  reset role;
+  perform pg_temp.r('62', 'club_pases_emitidos: los de la plataforma pedida, paginados por miembro (keyset)', n1 = 2 and n2 = 1, format('%s / %s', n1, n2));
+  perform pg_temp.r('62', 'club_pases_emitidos: solo service_role',
+    not has_function_privilege('anon', 'public.club_pases_emitidos(text, uuid, int)', 'EXECUTE')
+      and not has_function_privilege('authenticated', 'public.club_pases_emitidos(text, uuid, int)', 'EXECUTE')
+      and has_function_privilege('service_role', 'public.club_pases_emitidos(text, uuid, int)', 'EXECUTE'), '');
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

@@ -3825,6 +3825,21 @@ as $$
   on conflict (miembro_id, plataforma) do update set object_id = excluded.object_id, actualizado_en = now();
 $$;
 
+-- B3 (08-nov): los pases emitidos de una plataforma, para los eventos globales (`miembro_id` null = promociones): B
+-- recorre esta lista y actualiza cada objeto. Paginada por miembro_id (keyset). Solo service_role.
+create or replace function public.club_pases_emitidos(p_plataforma text, p_despues uuid default null, p_limite int default 500)
+returns table (miembro_id uuid, object_id text, emitido_en timestamptz)
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select p.miembro_id, p.object_id, p.emitido_en from public.club_pases p
+   where p.plataforma = p_plataforma and (p_despues is null or p.miembro_id > p_despues)
+   order by p.miembro_id
+   limit least(greatest(coalesce(p_limite, 500), 1), 2000)
+$$;
+
 create or replace function public.club_pase_eventos_leer(p_despues bigint, p_limite int default 500)
 returns table (id bigint, miembro_id uuid, motivo text, creado_en timestamptz)
 language sql
@@ -4794,7 +4809,8 @@ begin
   foreach f in array array['public.club_pase_datos(uuid)', 'public.club_pase_por_token(text)',
                            'public.club_pase_emitido(uuid, text, text)', 'public.club_pase_eventos_leer(bigint, int)',
                            'public.club_pase_cursor_leer(text)', 'public.club_pase_cursor_guardar(text, bigint)',
-                           'public.club_alertas_pendientes(int)', 'public.club_alerta_enviada(bigint, text)'] loop
+                           'public.club_alertas_pendientes(int)', 'public.club_alerta_enviada(bigint, text)',
+                           'public.club_pases_emitidos(text, uuid, int)'] loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
     execute format('grant execute on function %s to service_role', f);
   end loop;

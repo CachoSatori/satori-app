@@ -80,8 +80,8 @@ const loc = (t: Txt): LocalizedString => ({
   defaultValue: { language: 'es', value: t.es },
   translatedValues: [{ language: 'en', value: t.en }],
 })
-const num = (n: number) => (Math.round(n * 10) / 10).toString().replace('.', ',')
-const numEn = (n: number) => (Math.round(n * 10) / 10).toString()
+/** ₡ con separador de miles fijo (no depende del locale del Edge): «₡36.000» en español, «₡36,000» en inglés. */
+export const colones = (n: number, sep: '.' | ',') => '₡' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, sep)
 
 /** El beneficio viene de la base en español («10 % + 1 cortesía»): el inglés se arma con los mismos números. */
 export function beneficioEn(es: string): string {
@@ -162,9 +162,15 @@ export function armarObjeto(issuerId: string, d: PaseDatos, diseno: DisenoPase =
   }
 
   if (anf && anf.activo) {
+    // (Ismael, 08-nov) «2 · 14 personas» no se entendía: el saldo en colones y, si suma, las personas del mes aparte
     textos.push(modulo('creditos', { es: 'Créditos', en: 'Credits' },
-      { es: `${num(anf.creditos)} · ${anf.personas} ${anf.personas === 1 ? 'persona' : 'personas'}`,
-        en: `${numEn(anf.creditos)} · ${anf.personas} ${anf.personas === 1 ? 'guest' : 'guests'}` }))
+      { es: `${colones(anf.creditos * anf.valor_credito_crc, '.')} disponibles`,
+        en: `${colones(anf.creditos * anf.valor_credito_crc, ',')} available` }))
+    if (anf.referidos_mes > 0) {
+      textos.push(modulo('referidos', { es: 'Referidos', en: 'Referrals' },
+        { es: `${anf.referidos_mes} ${anf.referidos_mes === 1 ? 'persona referida' : 'personas referidas'} este mes`,
+          en: `${anf.referidos_mes} ${anf.referidos_mes === 1 ? 'guest' : 'guests'} referred this month` }))
+    }
     textos.push(modulo('proximo', { es: 'Para el próximo medio crédito', en: 'To your next half credit' },
       { es: `${anf.personas_proximo_medio} ${anf.personas_proximo_medio === 1 ? 'persona' : 'personas'}`,
         en: `${anf.personas_proximo_medio} ${anf.personas_proximo_medio === 1 ? 'guest' : 'guests'}` }))

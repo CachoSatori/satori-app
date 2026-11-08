@@ -11,6 +11,8 @@
   logo en círculo); fuera del círculo, transparente.
 - **Franja** (`heroImage`, 1032×336, `club-web/public/pase/hero.png`): la cara del daruma sobre tinta.
 - **Texto del socio:** «Vale en todos los Satori» (Club compartido), sin lista de promociones.
+- **Créditos del anfitrión** (Ismael, 08-nov): el saldo en colones, «₡36.000 disponibles» / «₡36,000 available», y
+  si suma, en otra línea, «9 personas referidas este mes» / «9 guests referred this month». Ya no «2 · 14 personas».
 - **De dónde salen:** `docs/club-satori/img/daruma/` guarda el original sin tocar y los scripts (`daruma_assets.py`: solo
   recorta el fondo blanco, escala y compone sobre tinta). La maqueta se regenera con
   `node docs/club-satori/img/pase-render.mjs` desde la raíz del repo.

@@ -23,13 +23,15 @@ body{background:#e8e6e1;font-family:'Noto Sans JP',system-ui,sans-serif;padding:
 .logo img{width:96px;height:96px;border-radius:50%}.logo span{font-size:12px;color:#333}</style></head><body>
 <div class="c"><div class="top"><img src="${img('logo.png')}"><b>Club Satori</b></div><div class="body"><div class="sub">Socio y anfitrión</div><div class="nom">Ana</div>
 <div class="row"><div class="f"><div class="lb">Local Club</div><div class="v">Vale en todos los Satori</div></div></div>
-<div class="row"><div class="f"><div class="lb">Créditos</div><div class="v">2 · 14 personas</div></div><div class="f"><div class="lb">Próxima visita</div><div class="v">1 cortesía sorpresa</div></div></div>
+<div class="row"><div class="f"><div class="lb">Tu próxima visita</div><div class="v">1 cortesía sorpresa</div></div></div>
+<div class="row"><div class="f"><div class="lb">Créditos</div><div class="v">₡36.000 disponibles</div></div></div>
+<div class="row"><div class="f"><div class="lb">Referidos</div><div class="v">9 personas referidas este mes</div></div></div>
 <div class="qr"><div class="m"></div><div class="a">ABCD2345K</div></div></div><img class="hero" src="${img('hero.png')}"></div>
-<div class="cap">v4 · daruma real · fondo tinta ${TINTA} (aprobado; apagado hasta la prueba en un teléfono)</div>
+<div class="cap">v4 · daruma real · fondo tinta ${TINTA} · créditos en colones (aprobado; apagado hasta la prueba en un teléfono)</div>
 <div class="logo"><img src="${img('logo.png')}"><span>Logo 990×990 tal como lo recorta Google (círculo)</span></div>
 </body></html>`
 const b = await chromium.launch()
-const pg = await b.newPage({ deviceScaleFactor: 2 }); await pg.setViewportSize({ width: 410, height: 740 })
+const pg = await b.newPage({ deviceScaleFactor: 2 }); await pg.setViewportSize({ width: 410, height: 860 })
 await pg.setContent(html, { waitUntil: 'networkidle' }); await pg.evaluate(() => document.fonts.ready); await pg.waitForTimeout(300)
 await pg.screenshot({ path: 'docs/club-satori/img/pase-propuesta.png', fullPage: true })
 await b.close()

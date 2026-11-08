@@ -2,7 +2,7 @@
 // (nunca hay una clave escrita en el repo, ni de prueba).
 import { describe, it, expect, beforeAll } from 'vitest'
 import {
-  armarClase, armarObjeto, DISENO_PROPUESTO, firmarJwt, firmarJwtFlaco, LARGO_JWT_RECOMENDADO, urlGuardar, validarDatos, leerCuentaServicio, beneficioEn, idObjeto,
+  armarClase, armarObjeto, colones, DISENO_PROPUESTO, firmarJwt, firmarJwtFlaco, LARGO_JWT_RECOMENDADO, urlGuardar, validarDatos, leerCuentaServicio, beneficioEn, idObjeto,
   type PaseDatos, type CuentaServicio,
 } from './googlePase'
 
@@ -84,6 +84,31 @@ describe('armarObjeto', () => {
     expect(cort?.body).toBe('1 cortesía sorpresa')
     expect(cort?.localizedBody.translatedValues[0]).toEqual({ language: 'en', value: '1 surprise treat' })
     expect(o.subheader.defaultValue.value).toBe('Socio y anfitrión')
+  })
+
+  it('créditos claros (Ismael, 08-nov): el saldo en colones y las personas del mes en otra línea, ES/EN', () => {
+    const o = obj(armarObjeto(ISSUER, base()))
+    const cred = o.textModulesData.find((t) => t.id === 'creditos')
+    expect(cred?.body).toBe('₡36.000 disponibles')
+    expect(cred?.localizedBody.translatedValues[0]).toEqual({ language: 'en', value: '₡36,000 available' })
+    const ref = o.textModulesData.find((t) => t.id === 'referidos')
+    expect(ref?.body).toBe('9 personas referidas este mes')
+    expect(ref?.localizedBody.translatedValues[0]).toEqual({ language: 'en', value: '9 guests referred this month' })
+    expect(o.textModulesData.some((t) => / · \d+ personas/.test(t.body))).toBe(false)
+    // medio crédito y una sola persona; sin referidos en el mes no hay línea
+    const b = base()
+    const uno = obj(armarObjeto(ISSUER, { ...b, anfitrion: { ...b.anfitrion!, creditos: 0.5, referidos_mes: 1 } }))
+    expect(uno.textModulesData.find((t) => t.id === 'creditos')?.body).toBe('₡9.000 disponibles')
+    expect(uno.textModulesData.find((t) => t.id === 'referidos')?.body).toBe('1 persona referida este mes')
+    const cero = obj(armarObjeto(ISSUER, { ...b, anfitrion: { ...b.anfitrion!, creditos: 0, referidos_mes: 0 } }))
+    expect(cero.textModulesData.find((t) => t.id === 'creditos')?.body).toBe('₡0 disponibles')
+    expect(cero.textModulesData.some((t) => t.id === 'referidos')).toBe(false)
+  })
+
+  it('colones: miles con separador fijo', () => {
+    expect(colones(1234567, '.')).toBe('₡1.234.567')
+    expect(colones(999, ',')).toBe('₡999')
+    expect(colones(18000.4, ',')).toBe('₡18,000')
   })
 
   it('Club compartido: el socio ve «Vale en todos los Satori» (ES/EN) y el pase no lista promociones', () => {

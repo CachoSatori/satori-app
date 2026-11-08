@@ -2,7 +2,7 @@
 
 > **No se ejecuta nada de este documento sin la firma de Ismael, paso por paso.** Es el orden obligatorio que pide la
 > auditoría (ronda 3, CLUB-AUD-35): mergear el PR #59 equivale a migrar prod, porque Branching aplica la migración del Club
-> (hoy `075`, **en prod va como `086`**: ver el paso 3b). Por eso
+> (hoy `075`; **en prod va con otro número**, ver «Regla de numeración» y el paso 3b). Por eso
 > el merge va **al final**, cuando todo ya está aplicado y verificado a mano.
 >
 > Refs: **PROD = `yiczgdtirrkdvohdquzf`**, staging = `hwiatgicyyqyezqwldia`.
@@ -15,15 +15,15 @@
 |---|---|---|---|
 | 0 | Preparación y lecturas (solo lectura) | — | no se sigue |
 | 1 | Mig **069** (`get_my_role` con `is_active`) | 0 | `scripts/sql/069_rollback.sql` |
-| 2 | Mig **081** (campos de la factura del puente) | 1 | `scripts/sql/081_rollback.sql` (solo si el paso 3 no se hizo) |
-| 2b | Mig **082** (`pos_ndf_ingestar`: ingesta en una transacción por local, CLUB-AUD-44/45) | 2 | `drop function public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb);` (solo si el paso 3 no se hizo) |
+| 2 | Mig **081** (campos de la factura del puente; **renumerada**, ver 3b) | 1 y 3b | `scripts/sql/081_rollback.sql` (solo si el paso 3 no se hizo) |
+| 2b | Mig **082** (`pos_ndf_ingestar`: ingesta en una transacción por local, CLUB-AUD-44/45; **renumerada**, ver 3b) | 2 | `drop function public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb);` (solo si el paso 3 no se hizo) |
 | 3 | Edge `ingest-ndf` desde `claude/puente-item11-prod`, y después el agente de prod | 2b | volver al Edge anterior **antes** de tocar la 082 y la 081 |
-| 3b | **Renombrar la 075 → 086** en la rama del Club y en el ledger de **staging** (numeración oficial: `ESTADO.md`, PR #62) | 0 | volver el archivo y la fila a `075` (ver 3b) |
-| 4 | Mig **086** (Club; antes 075) | 1 y 3b | `scripts/sql/086_rollback.sql` (no hay datos del Club todavía) |
+| 3b | **Renumerar** las migraciones del pase (075, 081, 082) por la regla de numeración, en el **mismo PR del pase** | 0 | volver archivos, registro y filas del ledger de staging a sus números (ver 3b) |
+| 4 | Mig **del Club** (hoy 075, con su número nuevo) | 1 y 3b | `scripts/sql/<N>_rollback.sql` (no hay datos del Club todavía) |
 | 5 | Clave de club-web (`CLUB_WEB_KEY` + su sha256) | 4 | `club_web_clave_cargar` con una clave nueva |
 | 6 | Cloudflare (Pages `satori-club`: variables, bindings y dominio) | 5 | sacar el dominio; la base sigue cerrada |
 | 7 | Pase de Wallet (F1e) | 6 | apagar la emisión; el portal sigue funcionando |
-| 8 | Migración F1b con `--esperados` | 4 | volver a correrla (es re-ejecutable) o el rollback de la 086 |
+| 8 | Migración F1b con `--esperados` | 4 | volver a correrla (es re-ejecutable) o el rollback de la migración del Club |
 | 9 | `tarjeta_manual_activa = false` | 4 | — |
 | 10 | Merge del PR #59 | todo lo anterior | revertir el código, **nunca** borrar los `.sql` del ledger |
 
@@ -36,7 +36,8 @@
 - Lecturas en PROD (no escriben):
   ```sql
   -- ¿qué migraciones tiene el ledger?
-  select version from supabase_migrations.schema_migrations where version in ('069','075','081','082','086') order by 1;
+  select version from supabase_migrations.schema_migrations order by version desc limit 5;   -- el último de prod manda (regla de numeración)
+  select version from supabase_migrations.schema_migrations where version in ('069','075','081','082') or name in ('club_satori_esquema','pos_ndf_campos_factura','pos_ndf_ingesta_transaccional') order by 1;
   -- ¿get_my_role ya mira is_active? (si es true, la 069 ya está)
   select position('is_active' in pg_get_functiondef('public.get_my_role()'::regprocedure)) > 0 as tiene_069;
   -- CLUB-AUD-29: respaldos *_pre_migracion_2026_07 (en staging existen, con RLS y sin grants)
@@ -49,9 +50,9 @@
 - CLUB-AUD-28: versión del Edge en prod: panel de Supabase → Edge Functions → `ingest-ndf` (versión y fecha). Anotarla:
   es el punto de vuelta del paso 3.
 
-**LC-DES-10: si el ledger de prod ya tiene la `075` o la `086`, se frena todo** y se avisa a Ismael: la migración del
-Club se sigue corrigiendo en el mismo archivo mientras no esté en prod, y una versión vieja aplicada no coincidiría con la
-final. La 086 está **reservada** para el Club en la tabla de `ESTADO.md` (PR #62): confirmar que nadie la usó.
+**LC-DES-10: si el ledger de prod ya tiene la migración del Club (`075` o cualquier fila `club_satori_esquema`), se
+frena todo** y se avisa a Ismael: se sigue corrigiendo en el mismo archivo mientras no esté en prod, y una versión vieja
+aplicada no coincidiría con la final.
 
 **Verificar:** el export se abre; las lecturas están anotadas. Si los respaldos `*_pre_migracion_2026_07` existen con
 `anon_select` o `authenticated_select` en `true`, se cierran **antes** de seguir (`enable row level security` +
@@ -105,34 +106,44 @@ y con su fila (08-nov, texto idéntico: md5 `5db915c8a422519ce77050f1fb1b916a`).
 **Rollback:** volver al agente anterior (`git checkout 4d3513a` en la carpeta de prod) y redesplegar el Edge desde el
 commit anotado en el paso 0. **Recién después**, si hiciera falta, la 081.
 
-## 3b. Renombrar la 075 → 086 (antes de prod; en la rama del Club y en STAGING)
-> Por qué: PROD ya tiene la `080`; una versión menor (`075`) puede ser rechazada por Branching al mergear. La 086 está
-> reservada para el Club (`ESTADO.md`, «Números de migración reservados por rama», PR #62). **No se hace hasta la firma.**
+## Regla de numeración (Ismael, 08-nov; `supabase/migraciones-reservadas.json` y `ESTADO.md`)
+- El Club y el puente usan el **bloque 100–149**. Cada migración nueva se registra en
+  `supabase/migraciones-reservadas.json` («asignadas») **y** en la tabla de `ESTADO.md` **en el mismo commit**: el test
+  `supabase/migraciones.test.ts` (corre en el gate) falla si no.
+- **Pase a prod: ninguna migración entra a prod con un número ≤ al último del ledger de prod.** Si pasa —y va a pasar con
+  la `075` (Club), la `081` y la `082` (puente)—, **se renombra al siguiente libre arriba del último de prod**, dentro del
+  bloque del Club, **en el mismo PR del pase**, con rollback, pruebas, paridad y la fila del ledger de staging (paso 3b).
+- **No se renombra nada antes del PR del pase.**
 
-**Hacer** (en la rama del Club, un commit propio):
-1. `git mv supabase/migrations/075_club_satori_esquema.sql supabase/migrations/086_club_satori_esquema.sql`.
-2. `git mv scripts/sql/075_rollback.sql scripts/sql/086_rollback.sql` y `075_pruebas_staging.sql → 086_pruebas_staging.sql`.
-   Dentro del rollback, el `delete from supabase_migrations.schema_migrations where version = '075'` pasa a `'086'`.
+## 3b. Renumerar las migraciones del pase (en el PR del pase; antes, nada)
+> Ejemplo con el ledger de prod de hoy (último: `080`): los siguientes libres del bloque del Club son `100`, `101` y
+> `102`. **Se recalcula el día del pase** con el ledger de prod de ese día y el registro de `main`.
+
+**Hacer** (en la rama del pase, un commit propio por migración, en el orden de aplicación: 081 → 082 → 075):
+1. `git mv supabase/migrations/<viejo>_<nombre>.sql supabase/migrations/<N>_<nombre>.sql` (y su `scripts/sql/<viejo>_rollback.sql`;
+   para el Club, también `075_pruebas_staging.sql`). Dentro del rollback, el `delete … where version = '<viejo>'` pasa a `'<N>'`.
+2. **Registro:** en `supabase/migraciones-reservadas.json`, `<N>` en «asignadas» (bloque `club`, mismo nombre) y el número
+   viejo fuera de `usadas_antes_de_los_bloques` si corresponde; en `ESTADO.md`, la fila de `<N>` y la nota del viejo
+   («renumerada a <N>»). Correr `npx vitest run supabase/migraciones.test.ts`.
 3. Actualizar las referencias: `scripts/sql/club_paridad.sh`, `scripts/sql/club_carreras/*`, `scripts/club/migrar_firestore.py`,
-   los docs del Club y este RUNBOOK. Buscar con `grep -rn "075_\|'075'" scripts docs supabase`.
-4. **Ledger de staging** (la función y las tablas no cambian; solo la fila):
+   los docs del Club, el Edge (comentarios) y este RUNBOOK (`grep -rn "075_\|'075'\|081_\|082_" scripts docs supabase`).
+4. **Ledger de staging** (las tablas y funciones no cambian; solo la fila):
    ```sql
    -- leer el ref de STAGING en pantalla antes de escribir
    update supabase_migrations.schema_migrations
-      set version = '086', name = 'club_satori_esquema', statements = array[$club$<texto exacto del 086_…sql>$club$]
-    where version = '075';
+      set version = '<N>', statements = array[$m$<texto exacto del <N>_….sql>$m$]
+    where version = '<viejo>';
    ```
-   **Verificar:** `md5(statements[1])` = md5 del archivo `086_club_satori_esquema.sql`; no queda fila `075`.
-5. **Pruebas en staging, con el archivo renombrado:** batería (todas en verde), carreras, `club_paridad.sh` (sin
-   diferencias) y vitest. Paridad compara el catálogo, que no cambia con el nombre: si da diferencias, se frena.
-6. Actualizar la fila de la tabla de `ESTADO.md` (075 → «renombrada a 086», 086 → «Club Satori, staging»).
+   **Verificar:** `md5(statements[1])` = md5 del archivo renombrado; no queda la fila vieja.
+5. **Pruebas en staging con los archivos renombrados:** batería (todas en verde), carreras del Club y del puente
+   (`scripts/sql/puente_carreras/correr.sh`), `club_paridad.sh` (sin diferencias), vitest. Si algo da distinto, se frena.
 
-**Rollback** (si algo de 3b falla, antes del paso 4): volver el archivo a `075_…` (`git revert` del commit del renombre) y la
-fila: `update supabase_migrations.schema_migrations set version = '075' where version = '086';`. Verificar el md5 otra vez.
+**Rollback de 3b** (si algo falla, antes del paso 4): `git revert` de los commits del renombre y, en staging,
+`update supabase_migrations.schema_migrations set version = '<viejo>' where version = '<N>';` por cada una. Verificar el md5.
 
-## 4. Mig 086 (Club; antes 075)
-**Hacer:** aplicar `supabase/migrations/086_club_satori_esquema.sql` (la del PR #59, ya renombrada en el paso 3b, el mismo
-blob que se verificó en staging) y registrar la fila `086` en el ledger (texto idéntico al archivo; verificar el md5).
+## 4. Mig del Club (hoy 075, con su número nuevo de 3b)
+**Hacer:** aplicar `supabase/migrations/<N>_club_satori_esquema.sql` (ya renumerada en 3b, el mismo blob que se verificó en
+staging) y registrar la fila `<N>` en el ledger de prod (texto idéntico al archivo; verificar el md5).
 **Verificar (solo lectura):**
 - Catálogo `club_*` igual al de staging: correr `scripts/sql/club_catalogo.sql` en las dos bases y comparar (en staging
   da 528 objetos). Es la paridad del CLUB-AUD-17, hecha a mano contra prod.
@@ -140,7 +151,7 @@ blob que se verificó en staging) y registrar la fila `086` en el ledger (texto 
   `club_cupon_contacto`, `club_cupon_crear`, `club_cupon_ver`, `club_portal`, `club_socio_autoalta` y
   `club_socio_baja_portal` (todas exigen `x-club-web`).
 - Tarea diaria de socios (LC-A2): `select jobname, schedule from cron.job where jobname = 'club_socios_mantenimiento';`
-  → `15 9 * * *` (03:15 en Costa Rica). Si prod no tiene `pg_cron`, la 086 no la programa: anotarlo y decidir con
+  → `15 9 * * *` (03:15 en Costa Rica). Si prod no tiene `pg_cron`, la migración del Club no la programa: anotarlo y decidir con
   Ismael (sin ella, las altas provisionales no vuelven a pendiente y las autoaltas no se purgan).
 - `select aviso_privacidad_version from club_config;` igual a `AVISO_PRIVACIDAD_VERSION` de `club-web/src/config.ts`.
 - `select tarjeta_manual_activa from club_config;` → `false`.
@@ -148,7 +159,7 @@ blob que se verificó en staging) y registrar la fila `086` en el ledger (texto 
   nunca: sin esa marca no existe el modo `pruebas` (el libro y la auditoría no tienen otra puerta que la del migrador).
 - `club_web_clave` vacía: las puertas públicas fallan cerradas.
 
-**Rollback:** `scripts/sql/086_rollback.sql`. Antes de la migración del paso 8 no hay datos del Club; después, solo con
+**Rollback:** `scripts/sql/<N>_rollback.sql`. Antes de la migración del paso 8 no hay datos del Club; después, solo con
 el export de Firestore a mano.
 
 ## 5. Clave de club-web
@@ -198,7 +209,7 @@ público (`/r/`, cupones); el canje sale del botón «Canjear» del pase o del p
 **Verificar:** la validación dentro de la transacción da OK (si no, no se guarda nada). Ismael controla miembros, saldos y
 los 136 vencimientos del 05-nov. El libro es de solo inserción: el migrador solo puede borrar sus propias filas
 (`origen = 'migracion'`).
-**Rollback:** volver a correr (es re-ejecutable por `legacy_id`) o, si todavía no hubo actividad, el rollback de la 086.
+**Rollback:** volver a correr (es re-ejecutable por `legacy_id`) o, si todavía no hubo actividad, el rollback de la migración del Club.
 
 ## 8b. Arranque de las excepciones del Local Club (el día del lanzamiento)
 **Hacer:** `update club_config set lc_excepciones_desde = '<fecha del lanzamiento>';` Antes de esa fecha el Local Club se
@@ -213,7 +224,7 @@ salen «pendiente de configuración».
 **Verificar:** en caja no aparece «Tarjeta física» y `club_tarjeta_manual` rechaza a todos los roles.
 
 ## 10. Merge del PR #59 (último)
-**Antes:** el ledger de PROD tiene `069`, `081`, `082` y `086` (y **no** la `075`), y los `.sql` del PR son los mismos blobs que se aplicaron.
+**Antes:** el ledger de PROD tiene la `069` y las tres renumeradas en 3b (y **ninguna** con número ≤ al último de prod de ese día), y los `.sql` del PR son los mismos blobs que se aplicaron.
 Branching ve las versiones ya registradas y no las vuelve a aplicar.
 **Hacer:** sacar el PR de borrador y mergear.
 **Verificar:** el log de Branching sin errores; la app publicada tiene `/club`; humo: Escanear, Miembros y Reportes con

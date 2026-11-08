@@ -119,7 +119,7 @@
   - **Próximo:** A5 (excepciones).
 - 08-nov (día, tarde) ·
   - **Ledger de staging:** la 082 tiene su fila, con texto idéntico al archivo (md5 `5db915c8…`).
-  - **RUNBOOK:** la migración del Club va a prod como **086** (paso 3b: renombre, ledger de staging, pruebas y
+  - **RUNBOOK:** (reemplazado el mismo día por la regla de numeración del 08-nov: ver abajo) la migración del Club iba como **086** (paso 3b: renombre, ledger de staging, pruebas y
     rollback; **no ejecutado**).
   - **A5 hecha** (`6b037fa`): 11 excepciones del Local Club y reporte de altas por usuario. Con datos reales de staging
     (120 días): 275 `LC_SIN_REGISTRO` (el LC se cobra sin la app) y 310 `DESCUENTO_SIN_RESPALDO`. Por eso existe

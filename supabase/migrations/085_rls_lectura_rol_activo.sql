@@ -1,5 +1,5 @@
 -- ============================================================================
--- 082_rls_lectura_rol_activo.sql — SEC-01c: las lecturas «para todos» exigen rol ACTIVO
+-- 085_rls_lectura_rol_activo.sql — SEC-01c: las lecturas «para todos» exigen rol ACTIVO
 -- ----------------------------------------------------------------------------
 -- Auditoría r5 (SEC-01c). Desde la 069, `get_my_role()` devuelve null si la cuenta está inactiva,
 -- y todas las policies que lo usan ya cortan a las cuentas inactivas. Pero las policies de
@@ -23,7 +23,7 @@
 --
 -- Lo que ven los usuarios ACTIVOS no cambia. anon no cambia (no tiene SELECT en estas tablas
 -- salvo profiles, donde ninguna policy le devuelve filas).
--- Re-ejecutable. Rollback: scripts/sql/082_rollback.sql (vuelve a las condiciones de antes).
+-- Re-ejecutable. Rollback: scripts/sql/085_rollback.sql (vuelve a las condiciones de antes).
 -- ============================================================================
 
 begin;

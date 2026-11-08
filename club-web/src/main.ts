@@ -53,7 +53,7 @@ const msgError = (e: string) =>
   ({ referente_invalido: t.ref_invalido, cupon_invalido: t.cupon_invalido, portal_invalido: t.portal_invalido,
      tope_referente: t.tope_ref, demasiados_pedidos: t.demasiados, red: t.red, tope_canje: t.tope_canje,
      sin_saldo_canje: t.sin_saldo_canje, tope_altas: t.tope_altas, verificacion: t.alta_verificacion,
-     datos_invalidos: t.alta_falta } as Record<string, string>)[e] ?? t.servicio
+     datos_invalidos: t.alta_falta, elegir_local: t.alta_local_falta, local_no_disponible: t.local_no_disponible } as Record<string, string>)[e] ?? t.servicio
 
 // ── Formatos ─────────────────────────────────────────────────────────────────
 const fecha = (iso: string, conHora = true) =>
@@ -88,9 +88,10 @@ const optinHecho = (c: string) => { try { return localStorage.getItem(`club.opti
 const marcarOptin = (c: string) => { try { localStorage.setItem(`club.optin.${c}`, '1') } catch { /* nada */ } }
 
 // ── Vistas ───────────────────────────────────────────────────────────────────
-interface CuponVer { estado: 'vigente' | 'usado' | 'vencido'; vence_en: string; referente: string | null }
+interface LocalPub { id: string; nombre: string; direccion: string | null; mapa: string | null }
+interface CuponVer { estado: 'vigente' | 'usado' | 'vencido'; vence_en: string; referente: string | null; local?: LocalPub | null }
 
-async function vistaCupon(codigo: string, venceEn: string, referente: string | null, titulo = true) {
+async function vistaCupon(codigo: string, venceEn: string, referente: string | null, titulo = true, local: LocalPub | null = null) {
   const canvas = await qr(urlCupon(codigo), `QR ${codigo}`)
   pintar(
     titulo && h('h1', {}, t.titulo_r),
@@ -101,8 +102,10 @@ async function vistaCupon(codigo: string, venceEn: string, referente: string | n
       h('p', { class: 'codigo' }, codigo.replace(/(.{5})/, '$1 ')),
       h('p', {}, h('strong', {}, t.vale_hasta(fecha(venceEn)))),
       h('p', {}, t.un_uso),
-      h('p', { class: 'local' }, `${LOCAL.nombre} · ${LOCAL.direccion} · `,
-        h('a', { href: LOCAL.mapa, target: '_blank', rel: 'noopener' }, t.ver_mapa))),
+      // LC-ML: el local del cupón viene de la base; sin señal, solo la marca
+      h('p', { class: 'local' }, [local?.nombre ? `${LOCAL.nombre} · ${local.nombre}` : LOCAL.nombre, local?.direccion].filter(Boolean).join(' · '),
+        local?.mapa?.startsWith('https://') ? ' · ' : '',
+        local?.mapa?.startsWith('https://') ? h('a', { href: local.mapa, target: '_blank', rel: 'noopener' }, t.ver_mapa) : '')),
     optinHecho(codigo) ? avisoEl('ok', t.optin_gracias) : formOptin(codigo),
   )
 }
@@ -139,7 +142,7 @@ async function paginaReferente(ref: string) {
   const guardado = leerCupon(ref)
   if (guardado && new Date(guardado.vence_en) > new Date()) {
     const r = await api<CuponVer>(`cupon/${guardado.codigo}`)
-    if (r.ok && r.data.estado === 'vigente') return vistaCupon(guardado.codigo, r.data.vence_en, r.data.referente)
+    if (r.ok && r.data.estado === 'vigente') return vistaCupon(guardado.codigo, r.data.vence_en, r.data.referente, true, r.data.local ?? null)
     if (!r.ok && r.error === 'red') return vistaCupon(guardado.codigo, guardado.vence_en, null)   // sin señal: el guardado sirve igual
     borrarCupon(ref)
   }
@@ -152,7 +155,7 @@ async function paginaReferente(ref: string) {
       const c = r.data[0]
       guardarCupon(ref, c)
       const v = await api<CuponVer>(`cupon/${c.codigo}`)
-      await vistaCupon(c.codigo, c.vence_en, v.ok ? v.data.referente : null)
+      await vistaCupon(c.codigo, c.vence_en, v.ok ? v.data.referente : null, true, v.ok ? v.data.local ?? null : null)
       anunciar(t.cupon_titulo)
       return
     }
@@ -167,7 +170,7 @@ async function paginaReferente(ref: string) {
 async function paginaCupon(codigo: string) {
   const r = await api<CuponVer>(`cupon/${codigo}`)
   if (!r.ok) return pintar(h('h1', {}, t.cupon_titulo), avisoEl('err', msgError(r.error)))
-  if (r.data.estado === 'vigente') return vistaCupon(codigo, r.data.vence_en, r.data.referente, false)
+  if (r.data.estado === 'vigente') return vistaCupon(codigo, r.data.vence_en, r.data.referente, false, r.data.local ?? null)
   pintar(h('h1', {}, t.cupon_titulo), avisoEl('err', r.data.estado === 'usado' ? t.cupon_usado : t.cupon_vencido))
 }
 
@@ -353,6 +356,11 @@ function cargarTurnstile(): Promise<TurnstileApi | null> {
 
 async function paginaAlta() {
   const ref = (new URLSearchParams(location.search).get('ref') || '').toUpperCase()
+  // LC-ML: el local viene en el enlace o el QR del local (`?local=<id>`); si hay más de uno encendido y no vino, se elige
+  const localUrl = (new URLSearchParams(location.search).get('local') || '').toLowerCase()
+  let localElegido = /^[a-z0-9-]{2,40}$/.test(localUrl) ? localUrl : ''
+  const selLocal = h('select', { id: 'a-local' }) as HTMLSelectElement
+  const filaLocal = h('div')
   const err = h('div')
   const nombre = h('input', { type: 'text', id: 'a-nombre', autocomplete: 'name', maxlength: '80' }) as HTMLInputElement
   const wa = h('input', { type: 'tel', id: 'a-wa', autocomplete: 'tel', inputmode: 'tel', maxlength: '32' }) as HTMLInputElement
@@ -365,9 +373,12 @@ async function paginaAlta() {
     onsubmit: async (e: Event) => {
       e.preventDefault(); err.replaceChildren()
       if (nombre.value.trim().length < 2 || !wa.value.trim() || !ok.checked || !token) { err.append(avisoEl('err', t.alta_falta)); return }
+      if (filaLocal.childElementCount > 0) localElegido = selLocal.value
+      if (filaLocal.childElementCount > 0 && !localElegido) { err.append(avisoEl('err', t.alta_local_falta)); return }
       enviar.disabled = true; enviar.textContent = t.alta_enviando
       const r = await api<{ ok: boolean; portal?: string }>('alta', { method: 'POST', body: JSON.stringify({
-        nombre: nombre.value, whatsapp: wa.value, acepto: AVISO_PRIVACIDAD_VERSION, ref: /^[A-HJ-NP-Z2-9]{8}$/.test(ref) ? ref : '', turnstile: token }) })
+        nombre: nombre.value, whatsapp: wa.value, acepto: AVISO_PRIVACIDAD_VERSION, ref: /^[A-HJ-NP-Z2-9]{8}$/.test(ref) ? ref : '', turnstile: token,
+        ...(localElegido ? { local: localElegido } : {}) }) })
       if (r.ok) {
         const portal = r.data?.portal
         pintar(h('h1', {}, t.alta_titulo), avisoEl('ok', portal ? t.alta_listo : t.alta_listo_sin_link),
@@ -385,11 +396,19 @@ async function paginaAlta() {
   },
     h('label', { for: 'a-nombre' }, t.alta_nombre), nombre,
     h('label', { for: 'a-wa' }, t.alta_whatsapp), wa,
+    filaLocal,
     h('details', { class: 'aviso-priv', open: true }, h('summary', {}, t.alta_aviso_titulo), ...t.alta_aviso.split('\n').map((p) => h('p', {}, p)),
       h('p', { class: 'sub' }, `(${AVISO_PRIVACIDAD_VERSION})`)),
     h('label', { class: 'check', for: 'a-ok' }, ok, h('span', {}, t.alta_acepto)),
     caja, err, enviar)
   pintar(h('h1', {}, t.alta_titulo), h('p', { class: 'sub' }, t.alta_sub), h('section', { class: 'tarjeta' }, form))
+  // LC-ML: con más de un local encendido (y sin uno válido en el enlace), la persona elige
+  void api<LocalPub[]>('locales').then(r => {
+    if (!r.ok || !Array.isArray(r.data) || r.data.length < 2 || r.data.some(l => l.id === localElegido)) return
+    localElegido = ''
+    selLocal.append(h('option', { value: '' }, t.alta_local_elegir), ...r.data.map(l => h('option', { value: l.id }, l.nombre)))
+    filaLocal.append(h('label', { for: 'a-local' }, t.alta_local), selLocal)
+  })
   const ts = await cargarTurnstile()
   if (!ts) { err.append(avisoEl('err', t.alta_verificacion)); return }
   widget.id = ts.render(caja, { sitekey: TURNSTILE_SITEKEY, language: idioma,

@@ -657,8 +657,9 @@ begin
   j2 := public.club_cupon_ver(lower(v_cup));
   perform pg_temp.yo();
   insert into _ids values ('cup_pm', v_cup);
-  perform pg_temp.r('19', 'anon ve el cupón: solo {estado, vence_en, referente} y el referente es el nombre de pila',
-    (select array_agg(x order by x) from jsonb_object_keys(j) x) = array['estado','referente','vence_en']
+  perform pg_temp.r('19', 'anon ve el cupón: solo {estado, vence_en, referente, local} (local = datos públicos del local) y el referente es el nombre de pila',
+    (select array_agg(x order by x) from jsonb_object_keys(j) x) = array['estado','local','referente','vence_en']
+      and (select array_agg(x order by x) from jsonb_object_keys(j->'local') x) = array['direccion','id','mapa','nombre']
       and j->>'estado' = 'vigente' and j->>'referente' = 'Lola' and j2->>'estado' = 'vigente'
       and (j->>'referente') !~ 'Pruebita|Apellido|PM|07', j::text);
   begin
@@ -724,8 +725,8 @@ begin
   select string_agg(p.proname, ',' order by p.proname) into v
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname like 'club\_%' and has_function_privilege('anon', p.oid, 'EXECUTE');
-  perform pg_temp.r('21', 'anon solo ejecuta las 8 puertas públicas (cupón, portal, canje, canje desde el pase, autoalta y baja del socio)',
-    v = 'club_canje_codigo_generar,club_canje_codigo_generar_pase,club_cupon_contacto,club_cupon_crear,club_cupon_ver,club_portal,club_socio_autoalta,club_socio_baja_portal', v);
+  perform pg_temp.r('21', 'anon solo ejecuta las 9 puertas públicas (cupón, portal, canje, canje desde el pase, autoalta, baja del socio y locales activos)',
+    v = 'club_canje_codigo_generar,club_canje_codigo_generar_pase,club_cupon_contacto,club_cupon_crear,club_cupon_ver,club_locales_activos,club_portal,club_socio_autoalta,club_socio_baja_portal', v);
   -- CLUB-AUD-11 (S-12): barrido completo sobre anon y PUBLIC (grantee 0), con los ACL efectivos
   -- (acldefault cuando el objeto no tiene ACL propio: una función sin ACL la ejecuta PUBLIC).
   select string_agg(c.relname || '/' || c.relkind::text || ':' || a.privilege_type || '→' || coalesce(nullif(a.grantee::regrole::text, '-'), 'PUBLIC'), ', ')
@@ -3538,6 +3539,78 @@ begin
   perform public.club_pendiente_resolver(v_id, true, 'todo en orden');
   perform pg_temp.yo();
   perform pg_temp.r('69', 'Grok 93: con todo en orden, se aprueba', exists (select 1 from club_movimientos where client_op_id = op), '');
+end $$;
+
+-- ═══ 70. LC-ML: multilocal — encender y apagar un local sintético con UN dato (club_config.club_activo) ═══
+do $$
+declare v_ver text; e text; j jsonb; v_s uuid; v_n int; v_loc text;
+begin
+  insert into club_config (location_id, nombre, club_activo) values ('prueba-ml', 'Local Prueba', false);
+  select aviso_privacidad_version into v_ver from club_config where location_id = 'santa-teresa';
+  update club_config set aviso_privacidad_version = v_ver where location_id = 'prueba-ml';
+  perform pg_temp.r('70', 'Nosara está cargado y APAGADO; santa-teresa encendido',
+    (select not club_activo from club_config where location_id = 'nosara') and public.club_local_activo('santa-teresa'), '');
+  perform pg_temp.r('70', 'sin dato de local, con un solo local encendido, la base lo elige', public.club_local(null) = 'santa-teresa', '');
+  -- APAGADO
+  begin perform public.club_local('prueba-ml', true); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.r('70', 'apagado: club_local exige Club activo (negativa)', e = 'El Club no está activo en Local Prueba', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_socio_alta_caja('Lia Prueba', '60007001', null, true, 'prueba-ml'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('70', 'apagado: alta en caja rechazada (negativa)', e like 'El Club no está activo%', e);
+  begin perform public.club_socio_autoalta(jsonb_build_object('nombre', 'Lia Prueba', 'whatsapp', '60007002', 'acepto', v_ver, 'local', 'prueba-ml')); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.r('70', 'apagado: autoalta rechazada (negativa)', e like 'El Club no está activo%', e);
+  insert into club_miembros (location_id, tipo, nombre, origen) values ('prueba-ml', 'socio', 'Lia Socia', 'app') returning id into v_s;
+  insert into club_miembros_contacto (miembro_id, location_id, telefono) values (v_s, 'prueba-ml', public.club_norm_telefono('60007003'));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"1"}'::jsonb, gen_random_uuid()); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('70', 'apagado: visita de socio rechazada (negativa)', e like 'El Club no está activo%', e);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select count(*) into v_n from public.club_excepciones(current_date - 30, current_date, 'prueba-ml');
+  begin perform public.club_cortesias_listar('prueba-ml'); perform public.club_promociones_listar('prueba-ml'); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('70', 'apagado: sin excepciones LC y sin premios', v_n = 0 and public.club_premios_generar('prueba-ml') = 0, v_n::text);
+  perform pg_temp.r('70', 'apagado: el owner puede preparar promociones y cortesías del local', e = 'ok', e);
+  -- el interruptor: solo el owner (RLS de club_config)
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  update club_config set club_activo = true where location_id = 'prueba-ml';
+  get diagnostics v_n = row_count;
+  perform pg_temp.yo();
+  perform pg_temp.r('70', 'el manager NO puede encender un local (negativa)', v_n = 0 and not public.club_local_activo('prueba-ml'), v_n::text);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  update club_config set club_activo = true where location_id = 'prueba-ml';
+  get diagnostics v_n = row_count;
+  perform pg_temp.yo();
+  perform pg_temp.r('70', 'ENCENDER = un dato, lo cambia el owner (auditado)', v_n = 1 and public.club_local_activo('prueba-ml')
+    and exists (select 1 from club_config_historial h where h.location_id = 'prueba-ml'), v_n::text);
+  -- ENCENDIDO
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_alta_caja('Lia Prueba', '60007001', null, true, 'prueba-ml');
+  perform pg_temp.yo();
+  perform pg_temp.r('70', 'encendido: alta en caja en el local nuevo', (select location_id from club_miembros where id = (j->>'miembro_id')::uuid) = 'prueba-ml', j::text);
+  j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Leo Prueba', 'whatsapp', '60007004', 'acepto', v_ver, 'local', 'prueba-ml'));
+  perform pg_temp.r('70', 'encendido: autoalta en el local nuevo',
+    exists (select 1 from club_miembros m join club_miembros_contacto c on c.miembro_id = m.id where c.telefono like '%60007004' and m.location_id = 'prueba-ml'), j::text);
+  begin perform public.club_socio_autoalta(jsonb_build_object('nombre', 'Ana Prueba', 'whatsapp', '60007005', 'acepto', v_ver)); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.r('70', 'con dos locales encendidos, sin local hay que elegir (nunca se supone uno)', e like 'Hay más de un local%', e);
+  j := public.club_locales_activos();
+  perform pg_temp.r('70', 'club_locales_activos (club-web) lista los dos, con nombre', jsonb_array_length(j) = 2 and j @> '[{"id":"prueba-ml","nombre":"Local Prueba"}]', j::text);
+  begin perform public.club_local('no-existe', false); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.r('70', 'un local que no está en club_config no vale (negativa)', e = 'Local no válido', e);
+  -- APAGAR de nuevo
+  update club_config set club_activo = false where location_id = 'prueba-ml';
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_socio_alta_caja('Lu Prueba', '60007006', null, true, 'prueba-ml'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('70', 'apagado otra vez: vuelve a rechazar (negativa)', e like 'El Club no está activo%' and public.club_local(null) = 'santa-teresa', e);
+  -- ninguna función del Club nombra un local
+  select string_agg(p.proname, ',') into v_loc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public' and p.proname like 'club\_%' and (p.prosrc ~ '''(santa-teresa|nosara)''' or pg_get_function_arguments(p.oid) ~ '''(santa-teresa|nosara)''');
+  perform pg_temp.r('70', 'ninguna función club_* tiene un local escrito (cuerpo ni default)', v_loc is null, coalesce(v_loc, ''));
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

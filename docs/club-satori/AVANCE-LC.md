@@ -156,3 +156,35 @@
 | Manager | Resolver la excepción de un descuento que dio él en el PoS | **Hueco cerrado hoy:** las que salen solo del PoS (sin registrante en la app) las resuelve el owner (prueba 68) | DECISIÓN PROVISORIA: más trabajo para el owner |
 | Manager | Aprobar personas pendientes de un cupón que registró él | Lo bloquea la base («lo registraste vos») | No se puede chequear «distinto del anfitrión» si el anfitrión es del equipo (no hay vínculo miembro ↔ usuario) |
 | Manager | Editar promociones o cortesías | Solo el owner | — |
+
+- 08-nov (tarde, ajustes de Ismael) ·
+  - **857 sin límite** (`bd6786e`): sale `lc_invitados_max` y la excepción `LC_INVITADOS_EXCEDIDOS`; el resto del 857
+    queda igual. Reemplaza lo de arriba.
+  - **Grok 90/91/93** (`bd6786e`, prueba 69): socio que ya usó su beneficio hoy en otro pedido → «ya_uso_hoy», «NO
+    aplicar beneficio», tarjeta en rojo; un socio con beneficio por factura (`socios_por_factura`, 1) → el segundo va
+    como invitado (857) y el % se aplica una sola vez; `club_pendiente_resolver` revalida anfitrión activo, factura no
+    anulada (X) y cupón vigente antes de aprobar.
+  - **Segregación por login del PoS** (`985991e`, prueba 68): las excepciones que salen del PoS miran el login de quien
+    cobró (cajero/salonero) mapeado en Empleados (`pos_login`); ese empleado no la resuelve; si el login no está mapeado,
+    solo el owner. Reemplaza la DECISIÓN PROVISORIA de arriba.
+  - **Numeración** (`bacb200`): el renombre del pase va al bloque de PASE 150–199, nunca a 100–149. Hoy la 081 y la
+    082 entran con su número si van primero y la 075 tomaría la 150. No se renombró nada.
+  - **Puente** (`claude/puente-item11-prod` @ `e4678b3`): cherry-pick de `831b3ee` y `9461731` (sin conflictos;
+    `mapTicket.ts` idéntico, roster y GreenSeason intactos) + Grok 99 en `puente_carreras/pruebas.sql` (11/11). Sin deploy.
+    Se descarta `puente-item11-v2`. **PAQUETE DE PASE para firma:** `docs/club-satori/PAQUETE-PASE-puente.md` (`9c5975b`).
+  - **Aviso de privacidad `v1-borrador`** (`e38fd49`): texto de Ismael ES/EN en club-web, versión en club-web, 075 y
+    staging. Falta el correo de contacto.
+  - **Diseño del pase** (club-wallet `61dc7de`): el daruma no está en el repo; maqueta v2 con 悟 y franja «SATORI · CLUB».
+    Sigue apagado hasta el OK.
+  - Pruebas: batería 421/421 · paridad 829 = 829 · carreras 8/8 · club-web 14/14 · ndf 203/203 · wallet+club 51/51.
+
+### Autorrevisión adversarial (ajustes del 08-nov tarde)
+| Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
+|---|---|---|---|
+| Socio | Usar el beneficio en dos pedidos el mismo día | La segunda llamada devuelve «ya_uso_hoy» sin crear visita; la caja ve rojo | Si la caja igual cobra el %, sale `DESCUENTO_SIN_RESPALDO`/`LC_SIN_REGISTRO` (posterior) |
+| Socio | Dos socios en la misma factura para sumar % | `socios_por_factura` = 1: el segundo sale «como_invitado», sin % ni cortesía | Configurable hasta 10: si el owner lo sube, el % se sigue aplicando una vez (lo controla la caja) |
+| Invitado | Muchos 857 en una factura | Ya no hay tope (decisión de Ismael) | Sin excepción por cantidad: queda a criterio de caja |
+| Anfitrión | Que le aprueben personas de un cupón anulado o de una factura anulada | `club_pendiente_resolver` revalida cupón, factura X y anfitrión activo antes de aprobar | — |
+| Cajero | Resolver la excepción de una factura que cobró él | Su login del PoS mapeado a su usuario lo bloquea | Logins compartidos (p. ej. el de turno) sin mapear → solo el owner: más trabajo para el owner |
+| Manager | Resolver una excepción de una factura que cobró él | Igual que el cajero, por login del PoS | Si cobró con el login de otro, no se detecta (límite del PoS) |
+| Operador del pase a prod | Correr el Edge nuevo sin la 082, o soltar la 082 con el Edge nuevo arriba | Paquete con orden fijo y rollback «Edge anterior antes del drop» | Requiere la copia del Edge actual antes de empezar (paso 0) |

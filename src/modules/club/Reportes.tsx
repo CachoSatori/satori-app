@@ -4,7 +4,7 @@
  * del navegador → «Guardar como PDF». «Exportar CSV» baja el anexo con todas las filas.
  */
 import { useEffect, useState } from 'react'
-import { getReporteMes, getLocalesClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero } from '../../shared/api/club'
+import { getReporteMes, getLocalesClub, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero } from '../../shared/api/club'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
@@ -22,8 +22,8 @@ const crc = (n: number) => `₡${n0(n)}`
 
 export default function Reportes() {
   const [mes, setMes] = useState(mesAnterior())
-  const [local, setLocal] = useState('santa-teresa')
-  const [locales, setLocales] = useState<string[]>(['santa-teresa'])
+  const [local, setLocal] = useState<string | null>(localActual())
+  const [locales, setLocales] = useState<LocalClub[]>([])
   const [rep, setRep] = useState<ReporteMes | null>(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +32,12 @@ export default function Reportes() {
   const { profile } = useAuth()
   const esOwner = profile?.role === 'owner'
 
-  useEffect(() => { getLocalesClub().then(l => { if (l.length) setLocales(l) }).catch(() => {}) }, [])
+  useEffect(() => {
+    getLocalesClub().then(l => {
+      setLocales(l)
+      setLocal(act => act ?? l.find(x => x.activo)?.id ?? l[0]?.id ?? null)
+    }).catch(() => {})
+  }, [])
   useEffect(() => {
     let vivo = true
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -77,8 +82,8 @@ export default function Reportes() {
       <Card style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, alignItems: 'end' }}>
         <label><span style={labelStyle}>Mes</span><input type="month" value={mes} onChange={e => e.target.value && setMes(e.target.value)} style={inputStyle} /></label>
         <label><span style={labelStyle}>Local</span>
-          <select value={local} onChange={e => setLocal(e.target.value)} style={inputStyle}>
-            {locales.map(l => <option key={l} value={l}>{l === 'santa-teresa' ? 'Santa Teresa' : l === 'nosara' ? 'Nosara' : l}</option>)}
+          <select value={local ?? ''} onChange={e => setLocal(e.target.value)} style={inputStyle}>
+            {locales.map(l => <option key={l.id} value={l.id}>{l.nombre}{l.activo ? '' : ' (Club apagado)'}</option>)}
           </select>
         </label>
         <Btn onClick={exportarPdf} disabled={!rep}>Exportar PDF</Btn>
@@ -171,7 +176,7 @@ function Seccion({ t, filas, col, vacio }: { t: string; filas: FilaReporte[]; co
 }
 
 /** LC-A5: altas de socios del mes por usuario (sale de la auditoría). */
-function AltasSocios({ mes, local }: { mes: string; local: string }) {
+function AltasSocios({ mes, local }: { mes: string; local: string | null }) {
   const [filas, setFilas] = useState<AltasPorCajero[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {

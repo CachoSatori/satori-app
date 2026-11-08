@@ -13,7 +13,7 @@
 | A3 | Promociones mínimas + productos + admin de cortesías del sorteo | 2 | **hecha** | `fc53012` + `600b868` | batería 351/351 (nueva 60, 18 casos) · carreras 8/8 · paridad 717 = 717 · vitest 1.491 · build OK · migrador 15 OK · captura de la pantalla |
 | A4 | «Qué aplicar», sorteo de cortesía, visita por factura (856), premio por referir (1.ª factura C con 856), topes, antiautocanje, créditos pendientes, portal con dos pestañas | 4,5 | **hecha** | `ea6c34f` · `9372d33` · `2c8b324` · `95391be` · `60c0be7` | batería 385/385 (nuevas 63–66) · carreras 8/8 · paridad OK · vitest 1.491 · portal verificado en el navegador |
 | A5 | Excepciones LC (11) + «pendiente de configuración» de R02 + reporte de altas por cajero | 2,5 | **hecha** (en el día, 08-nov) | `6b037fa` | batería 404/404 (nueva 67, 19 casos) · carreras 8/8 · paridad OK · vitest 1.491 · excepciones de 120 días en ~3 s |
-| A6 | Recorrido, guía de uso, RUNBOOK | 1,5 | pendiente | — | — |
+| A6 | Recorrido, guía de uso, RUNBOOK | 1,5 | **hecha** (en el día, 08-nov) | `a1d19b6` · `1701776` + guía | batería 460/460 (nueva 73) · paridad OK · recorrido p12 4/4 (owner) · guía `docs/sop-app/6.13 Club Satori.md` |
 
 ## Sesión B · pase de Wallet (Google; Apple apagado)
 | Etapa | Qué | Días | Estado | SHA | Pruebas |
@@ -245,3 +245,33 @@
   Batería 457/457 · paridad 863 = 863 · carreras 8/8 · migrador 15 OK.
   Autorrevisión: el riesgo era un dato del Club cargado en otro local sin que nadie lo note; ahora falla. Un script
   nuevo que inserte sin local se entera en la primera corrida.
+
+- 08-nov (tarde 5) · **A6 hecha** (Ismael: «seguí con A6 hasta el corte»):
+  - **Reporte «Visitas de socios por usuario»** (`a1d19b6`): por quien registró la visita: visitas, socios, con
+    beneficio, como invitado, con créditos, **sin factura** y máximo de un mismo socio. Cierra el hueco de la autorrevisión
+    A4/A5 («falta un reporte de visitas por usuario»). Prueba 73.
+  - **Guía de uso** `docs/sop-app/6.13 Club Satori.md` (plantilla de `docs/sop-app/`; escrita contra la rama, el Club no
+    está en `main`) e INVENTARIO actualizado. Sin nombres de personas ni locales salvo como dato.
+  - **Recorrido p12** (owner, solo lectura): selector de local, Locales con «Nuevo local», Descuentos y el reporte nuevo,
+    4/4. Ajuste visual de Locales y del selector a la paleta del módulo (`1701776`). Un texto de la UI nombraba a una
+    persona: cambiado a genérico.
+  - **Nota para Ismael:** las cuentas de prueba `club-prueba-manager` y `club-prueba-cajero` están **desactivadas** en
+    staging desde el 07-nov 18:05 UTC (no las reactivé; el permiso del manager lo cubren las pruebas).
+  - **Estimación «Club compartido»:** pasada por chat (≈ 14,5 h; decide Ismael). No se cambió nada.
+
+### Autorrevisión adversarial (A6)
+| Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
+|---|---|---|---|
+| Cajero | Registrar visitas falsas a un socio amigo | «Visitas de socios por usuario»: «Sin factura» y «Máx. un socio» por usuario; LC_SIN_REGISTRO / REGISTRO_LC_SIN_856 | La revisión es posterior (semanal) |
+| Cajero | Ver el reporte para saber qué se mira | Solo owner y manager (prueba 73) | — |
+| Manager | Ocultar sus propias visitas | El reporte agrupa por quien registró, sin filtro por usuario | — |
+| Owner | — | — | La guía es borrador: validarla en el local antes de publicarla |
+  - **Recorrido integral A6 (paso 13, staging, datos sintéticos, 12/12):** alta en caja (cajero) → autoalta en club-web
+    con el código de la socia (aviso v1) → validación en caja → visita con el pedido: «Qué aplicar» 10 % + cortesía →
+    el PoS cierra la factura con el 856 → premio para la socia que refirió → su visita aplica la cortesía de premio →
+    canje de 1 crédito + factura con el 856 → **«Canje con descuento»** en Excepciones → el owner (otra persona) confirma el
+    alta → reportes del mes. Limpieza: staging en 2538 / 338 / 338, sin claves ni datos sintéticos. Capturas en el
+    scratchpad de la sesión (no van al repo: muestran datos de staging).
+  - Arreglo de texto: «…hasta el {fecha} p. m..» (punto doble) en la validación de socio.
+  - **Para Ismael:** el encabezado de club-web usa el kanji 里 (el que dijo que no va en el pase); no se tocó: va con la
+    decisión del diseño.

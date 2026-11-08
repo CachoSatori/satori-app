@@ -246,7 +246,7 @@ function NuevaCortesia({ onHecha }: { onHecha: (texto: string) => void }) {
       </form>
       {res && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
-          {res.length === 0 && <div style={{ color: C.muted, fontSize: '0.85rem' }}>Nada en los últimos 120 días. Si Ismael recién creó el artículo, escribí el código y el nombre abajo.</div>}
+          {res.length === 0 && <div style={{ color: C.muted, fontSize: '0.85rem' }}>Nada en los últimos 120 días. Si el artículo es nuevo en el PoS, escribí el código y el nombre abajo.</div>}
           {res.map(p => (
             <button key={p.codigo} type="button" onClick={() => { setCodigo(p.codigo); setNombre(p.nombre) }}
               style={{ textAlign: 'left', background: codigo === p.codigo ? C.panel : '#fff', border: `1px solid ${C.border}`, borderRadius: 6, padding: '0.4rem 0.6rem', cursor: 'pointer', minHeight: 40 }}>

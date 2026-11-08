@@ -431,7 +431,7 @@ export interface MarcadorDescuento {
   id: string; codigo_producto: string; nombre: string; pct_esperado: number | null; activo: boolean
   visto_en_facturas: boolean; actualizado_en: string
 }
-/** Owner, manager y contador. */
+/** Owner y manager (en la base también el contador, pero no entra a /club). */
 export const getMarcadores = () => llamar<MarcadorDescuento[]>('club_marcadores_listar', { p_location: localClub })
 /** Solo owner. Alta: `id` null + código del PoS. Edición: nombre, % esperado (null = cualquier descuento) y activo. */
 export const guardarMarcador = (id: string | null, codigo: string | null, nombre: string | null, pct: number | null, activo: boolean | null) =>
@@ -458,6 +458,13 @@ export const resolverPendiente = (id: string, aprobar: boolean, nota: string) =>
   llamar<boolean>('club_pendiente_resolver', { p_id: id, p_aprobar: aprobar, p_nota: nota })
 
 // ── LC-A5: altas de socios por cajero ─────────────────────────────────────────
+export interface VisitasPorUsuario {
+  usuario: string; visitas: number; socios: number; con_beneficio: number; como_invitado: number; con_creditos: number
+  sin_factura: number; max_mismo_socio: number
+}
+/** LC-A6: visitas de socio por usuario que las registró (owner y manager). */
+export const getReporteVisitas = (desde: string, hasta: string, local: string | null = localClub) =>
+  llamar<VisitasPorUsuario[]>('club_reporte_visitas', { p_desde: desde, p_hasta: hasta, p_location: local })
 export interface AltasPorCajero { usuario: string; altas_caja: number; validaciones: number; confirmo: number; sin_confirmar: number; vencidas: number }
 export const getReporteAltas = (desde: string, hasta: string, local: string | null = localClub) =>
   llamar<AltasPorCajero[]>('club_reporte_altas', { p_desde: desde, p_hasta: hasta, p_location: local })

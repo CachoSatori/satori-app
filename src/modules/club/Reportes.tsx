@@ -4,7 +4,7 @@
  * del navegador → «Guardar como PDF». «Exportar CSV» baja el anexo con todas las filas.
  */
 import { useEffect, useState } from 'react'
-import { getReporteMes, getLocalesClub, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero } from '../../shared/api/club'
+import { getReporteMes, getLocalesClub, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero, getReporteVisitas, type VisitasPorUsuario } from '../../shared/api/club'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
@@ -140,6 +140,7 @@ export default function Reportes() {
             {rep.pm.nota && <div style={{ color: C.muted, fontSize: '0.85rem', marginTop: 4 }}>{rep.pm.nota}</div>}
           </Card>
           <AltasSocios mes={mes} local={local} />
+          <VisitasSocios mes={mes} local={local} />
           <Card>
             <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Calidad de datos</h3>
             <div>{n0(rep.calidad.abiertas)} excepciones abiertas y {n0(rep.calidad.resueltas)} resueltas en el mes.
@@ -203,6 +204,48 @@ function AltasSocios({ mes, local }: { mes: string; local: string | null }) {
                 <tr key={f.usuario} style={{ borderTop: `1px solid ${C.panel}` }}>
                   <td>{f.usuario}</td><td>{n0(f.altas_caja)}</td><td>{n0(f.validaciones)}</td><td>{n0(f.confirmo)}</td>
                   <td>{n0(f.sin_confirmar)}</td><td style={{ color: f.vencidas > 0 ? C.red : undefined }}>{n0(f.vencidas)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/** LC-A6: visitas de socio por usuario que las registró. «Sin factura» y un mismo socio muchas veces son lo que hay que mirar. */
+function VisitasSocios({ mes, local }: { mes: string; local: string | null }) {
+  const [filas, setFilas] = useState<VisitasPorUsuario[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let vivo = true
+    const [a, m] = mes.split('-').map(Number)
+    const fin = new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10)
+    getReporteVisitas(`${mes}-01`, fin, local)
+      .then(f => { if (vivo) { setFilas(f); setError(null) } })
+      .catch(e => { if (vivo) setError(aClubError(e).message) })
+    return () => { vivo = false }
+  }, [mes, local])
+  return (
+    <Card>
+      <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Visitas de socios por usuario</h3>
+      <div style={{ fontSize: '0.8rem', color: C.muted, marginBottom: 6 }}>
+        Quién registró cada visita de socio en la app. Mirá «Sin factura» (la visita no cruzó con ninguna factura del PoS) y
+        «Máx. un socio» (el mismo socio registrado muchas veces por la misma persona).
+      </div>
+      {error && <Aviso tono="error">{error}</Aviso>}
+      {filas === null ? <div style={{ color: C.muted }}>Cargando…</div> : filas.length === 0 ? <div style={{ color: C.muted }}>Sin visitas de socios en el mes.</div> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+            <thead><tr style={{ textAlign: 'left', color: C.muted }}>
+              <th>Usuario</th><th>Visitas</th><th>Socios</th><th>Con beneficio</th><th>Como invitado</th><th>Con créditos</th><th>Sin factura</th><th>Máx. un socio</th>
+            </tr></thead>
+            <tbody>
+              {filas.map(f => (
+                <tr key={f.usuario} style={{ borderTop: `1px solid ${C.panel}` }}>
+                  <td>{f.usuario}</td><td>{n0(f.visitas)}</td><td>{n0(f.socios)}</td><td>{n0(f.con_beneficio)}</td><td>{n0(f.como_invitado)}</td>
+                  <td>{n0(f.con_creditos)}</td><td style={{ color: f.sin_factura > 0 ? C.red : undefined }}>{n0(f.sin_factura)}</td><td>{n0(f.max_mismo_socio)}</td>
                 </tr>
               ))}
             </tbody>

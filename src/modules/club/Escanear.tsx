@@ -590,7 +590,7 @@ function PanelSocio({ d, onCerrar, onValidado }: {
     setEnviando(true); setErr(null)
     try {
       const r = await socioValidar(d.id, verifico)
-      await onValidado(`${d.nombre} quedó activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}. Ya tiene el beneficio; un manager confirma el alta.`)
+      await onValidado(`${d.nombre} quedó activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}: ya tiene el beneficio; un manager confirma el alta.`)
     } catch (e) { setErr(aClubError(e).message) }
     finally { setEnviando(false) }
   }

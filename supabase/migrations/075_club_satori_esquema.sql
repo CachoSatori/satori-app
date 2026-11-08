@@ -4007,6 +4007,21 @@ begin
   if v_r.estado <> 'pendiente' then
     raise exception 'El socio no está pendiente: no hace falta validarlo' using errcode = 'P0001';
   end if;
+  -- CLUB-AUD-71: si ya tuvo un alta provisional que nadie confirmó (venció y volvió a pendiente), la caja no la
+  -- renueva otros 7 días: la valida un manager u owner DISTINTO de quien la cargó, y esa validación ya la confirma.
+  if v_r.registrado_por is not null and v_r.confirmado_en is null then
+    if v_rol not in ('owner','manager') or v_r.registrado_por = auth.uid() then
+      raise exception 'Este socio ya tuvo un alta provisional que nadie confirmó: la valida un manager u owner distinto de quien la cargó'
+        using errcode = 'P0001';
+    end if;
+    update public.club_miembro_roles
+       set estado = 'activo', verifico_residencia = true, validado_por = auth.uid(), validado_en = now(), provisional_hasta = null,
+           confirmado_por = auth.uid(), confirmado_en = now(), actualizado_en = now()
+     where miembro_id = p_miembro and rol = 'socio';
+    perform public.club_auditar('socio_validar', 'club_miembro_roles', p_miembro, jsonb_build_object('estado', 'pendiente'),
+                                jsonb_build_object('estado', 'activo', 'confirmado', true, 'registrado_por', v_r.registrado_por));
+    return jsonb_build_object('miembro_id', p_miembro, 'estado', 'activo', 'provisional_hasta', null);
+  end if;
   select c.* into v_cfg from public.club_config c join public.club_miembros m on m.location_id = c.location_id where m.id = p_miembro;
   perform public.club_socio_provisional(p_miembro, v_cfg.socio_provisional_dias);
   perform public.club_auditar('socio_validar', 'club_miembro_roles', p_miembro, jsonb_build_object('estado', 'pendiente'),

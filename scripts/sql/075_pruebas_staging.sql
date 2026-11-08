@@ -2454,7 +2454,7 @@ end $$;
 
 -- ═══ 57. LC-A2: socios (alta en caja provisional, confirmación por otra persona, autoalta, purga), token de pase, cursor ═══
 do $$
-declare v_id uuid; v_id2 uuid; v_a uuid; v_ok boolean; e text; j jsonb; v_tp text; v_cod text; v_n int; v_cur bigint; v_ver text; v_x text;
+declare v_id uuid; v_id2 uuid; v_a uuid; v_ok boolean; e text; j jsonb; v_tp text; v_cod text; v_n int; v_cur bigint; v_ver text; v_x text; v_g uuid;
 begin
   -- alta en caja: faltan datos → rechaza diciendo qué falta
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
@@ -2501,13 +2501,24 @@ begin
   perform pg_temp.r('57', 'provisional sin confirmar a los 7 días → vuelve a pendiente',
     (select estado from club_miembro_roles where miembro_id = v_id2 and rol = 'socio') = 'pendiente'
       and (j->>'provisionales_vencidas')::int >= 1, j::text);
-  -- validación en caja de un pendiente → activo provisional otra vez
+  -- CLUB-AUD-71: vencido → mantenimiento → la caja NO lo renueva otros 7 días (negativa)
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_socio_validar(v_id2, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('57', 'AUD-71: provisional vencido sin confirmar → el cajero no lo revalida (negativa)',
+    e like 'Este socio ya tuvo un alta provisional%'
+      and (select estado from club_miembro_roles where miembro_id = v_id2 and rol = 'socio') = 'pendiente', e);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');   -- el manager que lo cargó tampoco
+  begin perform public.club_socio_validar(v_id2, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('57', 'AUD-71: quien lo cargó tampoco lo revalida, aunque sea manager (negativa)', e like 'Este socio ya tuvo un alta provisional%', e);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
   j := public.club_socio_validar(v_id2, true);
   begin perform public.club_socio_validar(v_id2, true); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
-  perform pg_temp.r('57', 'validar un pendiente → activo provisional; validar de nuevo → «no está pendiente»',
-    (select estado = 'activo' and provisional_hasta is not null from club_miembro_roles where miembro_id = v_id2 and rol = 'socio')
+  perform pg_temp.r('57', 'AUD-71: gerencia distinta lo valida y queda confirmado (no provisional); validar de nuevo → «no está pendiente»',
+    (select estado = 'activo' and provisional_hasta is null and confirmado_por = '<OWNER_UUID>'
+       from club_miembro_roles where miembro_id = v_id2 and rol = 'socio')
       and e like 'El socio no está pendiente%', e);
 
   -- autoalta pública: sin header → no; con aviso viejo → no; bien → pendiente, pareja si repite
@@ -2546,8 +2557,10 @@ begin
     j = '{"ok": true}'::jsonb and (select estado from club_miembro_roles where miembro_id = v_id and rol = 'socio') = 'pendiente', j::text);
   update club_miembro_roles set estado = 'activo', alta_por = 'caja' where miembro_id = v_id and rol = 'socio';
   -- altas por confirmar: solo gerencia
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  v_g := (public.club_socio_alta_caja('Gabi Ficticia', '60001238', null, true)->>'miembro_id')::uuid;
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');
-  select count(*) into v_n from public.club_socios_por_confirmar() x where x.miembro_id = v_id2;
+  select count(*) into v_n from public.club_socios_por_confirmar() x where x.miembro_id = v_g and x.puedo_confirmar;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   begin perform public.club_socios_por_confirmar(); e := 'ok'; exception when insufficient_privilege then e := 'sin permiso'; end;
   perform pg_temp.yo();

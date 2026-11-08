@@ -396,3 +396,14 @@ export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('cl
 /** Solo owner. Alta: `id` null + código del artículo «CORTESÍA CLUB». Edición: nombre y activa. */
 export const guardarCortesia = (id: string | null, codigo: string | null, nombre: string | null, activa: boolean | null) =>
   llamar<string>('club_cortesia_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_activa: activa })
+
+// ── LC-A4: visita del socio y «qué aplicar» ──────────────────────────────────
+export interface QueAplicar {
+  visita_id: string; socio: string
+  estado: 'aplica' | 'paga_con_creditos' | 'sin_promocion' | 'pendiente_configuracion'
+  porcentaje: number; cortesias: Array<{ id: string; codigo: string; nombre: string; motivo: string }>
+  texto: string; avisos: string[]; articulo_lc: string; repetida: boolean; promo: string | null
+}
+/** Registra la visita del día del socio (con el pedido) y devuelve qué aplicar. Idempotente con `op`. */
+export const registrarVisitaSocio = (miembro: string, pos: PosRef, op: string) =>
+  llamar<QueAplicar>('club_socio_visita', { p_miembro: miembro, p_pos: posParaServidor(pos), p_op: op })

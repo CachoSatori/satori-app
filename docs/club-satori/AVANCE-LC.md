@@ -297,6 +297,11 @@
     re-corrido: 12/12 (el arnés re-siembra los pedidos: el agente real de staging reemplaza la foto de mesas abiertas).
   - Pruebas: batería 483/483 · paridad OK · carreras 8/8 · vitest 1.497 · club-web 14/14 · wallet + club 52/52.
   - **No se tocaron** las cuentas `club-prueba-*` (las revisa la sesión de caja).
+  - **Daruma real (v4, decisión de Ismael):** la imagen final de Ismael (foto del daruma real) reemplaza al daruma
+    dibujado, que se borró de club-web y del pase. Original sin tocar y scripts en `docs/club-satori/img/daruma/`; solo
+    se recorta el fondo blanco, sin filtros. club-web: encabezado y favicons de 32 y 64 px. Pase (rama `claude/club-wallet`):
+    logo en círculo tinta 990×990, hero 1032×336 con la cara, fondo tinta = diseño aprobado; maqueta v4. **El pase sigue
+    apagado** hasta la cuenta de Google Wallet y la prueba en un teléfono.
 
 ### Autorrevisión adversarial (turno, descuentos tipificados, Club compartido)
 | Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |

@@ -305,10 +305,23 @@ export type Resultado<T> = { ok: true; valor: T } | { ok: false; error: string }
 
 // ── Normalización ──────────────────────────────────────────────────────────────
 
+/**
+ * CLUB-AUD-48: tope de largo para todo texto que llega del agente (nombres, logins, mesas…): se recorta a
+ * `MAX_TEXTO`. Las claves (`numero_factura`, `clave` de la mesa) no se recortan: si pasan `MAX_CLAVE`, el registro
+ * se descarta (recortar una clave podría pisar otra factura).
+ */
+export const MAX_TEXTO = 200
+export const MAX_CLAVE = 60
 const texto = (v: unknown): string | null => {
   if (v === null || v === undefined) return null
   const s = String(v).trim()
-  return s === '' ? null : s
+  return s === '' ? null : s.slice(0, MAX_TEXTO)
+}
+const clave = (v: unknown): string | null | 'larga' => {
+  if (v === null || v === undefined) return null
+  const s = String(v).trim()
+  if (s === '') return null
+  return s.length > MAX_CLAVE ? 'larga' : s
 }
 
 const entero = (v: unknown): number => {
@@ -350,8 +363,10 @@ export function normalizarTicket(local: string, t: unknown): Resultado<TicketNor
   if (!t || typeof t !== 'object') return { ok: false, error: 'ticket no es un objeto' }
   const x = t as Partial<TicketIngest> & { medios?: Record<string, unknown> }
 
-  const numero_factura = texto(x.numero_factura)
-  if (numero_factura === null) return { ok: false, error: 'falta numero_factura' }
+  const nf = clave(x.numero_factura)
+  if (nf === null) return { ok: false, error: 'falta numero_factura' }
+  if (nf === 'larga') return { ok: false, error: `numero_factura de más de ${MAX_CLAVE} caracteres` }
+  const numero_factura = nf
 
   const fecha_registra = instanteConZona(x.fecha_registra)
   if (fecha_registra === null) {
@@ -475,17 +490,19 @@ export function normalizarOpen(local: string, o: unknown, ahora: string): Result
   if (!o || typeof o !== 'object') return { ok: false, error: 'mesa abierta no es un objeto' }
   const x = o as Partial<OpenIngest>
 
-  const clave = texto(x.clave)
-  if (clave === null) return { ok: false, error: 'mesa abierta sin clave' }
+  const cl = clave(x.clave)
+  if (cl === null) return { ok: false, error: 'mesa abierta sin clave' }
+  if (cl === 'larga') return { ok: false, error: `mesa abierta con clave de más de ${MAX_CLAVE} caracteres` }
+  const claveMesa = cl
 
   const upd = instanteOpcional(x.updated_at)
-  if (!upd.ok) return { ok: false, error: `mesa ${clave}: updated_at sin zona horaria explícita` }
+  if (!upd.ok) return { ok: false, error: `mesa ${claveMesa}: updated_at sin zona horaria explícita` }
 
   return {
     ok: true,
     valor: {
       local,
-      clave,
+      clave: claveMesa,
       numero_factura: texto(x.numero_factura),
       id_pedido:      texto(x.id_pedido),
       mesa:           texto(x.mesa),
@@ -570,7 +587,10 @@ export function normalizarCursor(local: string, c: unknown, ahora: string): Curs
   const poll = instanteOpcional(x.last_poll_at)
 
   // El cursor se fecha con el lote aunque el agente no mande nada: es el latido.
-  const out: CursorParcial = { local, last_poll_at: (poll.ok ? poll.valor : null) ?? ahora }
+  // CLUB-AUD-46: el latido es la hora del SERVIDOR; el `last_poll_at` que manda el agente se ignora (un reloj
+  // corrido en la PC no puede hacer parecer vivo a un agente caído).
+  void poll
+  const out: CursorParcial = { local, last_poll_at: ahora }
 
   if (tiene(x, 'last_factura')) out.last_factura = texto(x.last_factura)
   if (tiene(x, 'last_fecha_registra')) {
@@ -589,19 +609,44 @@ export function normalizarCursor(local: string, c: unknown, ahora: string): Curs
  * agente volvería a leer el día desde el principio en cada reinicio.
  */
 export function fusionarCursor(actual: CursorRow | null, entrante: CursorParcial): CursorRow {
+  // CLUB-AUD-46: `last_factura` y `last_fecha_registra` solo AVANZAN. Un lote viejo (o un agente con el estado
+  // perdido) no puede rebobinar el corte: para reprocesar, se edita la fila a mano, a propósito.
   return {
     local:               entrante.local,
     last_poll_at:        entrante.last_poll_at,
     last_factura:        tiene(entrante, 'last_factura')
-      ? entrante.last_factura ?? null
+      ? masNuevaFactura(actual?.last_factura ?? null, entrante.last_factura ?? null)
       : actual?.last_factura ?? null,
     last_fecha_registra: tiene(entrante, 'last_fecha_registra')
-      ? entrante.last_fecha_registra ?? null
+      ? masNuevoInstante(actual?.last_fecha_registra ?? null, entrante.last_fecha_registra ?? null)
       : actual?.last_fecha_registra ?? null,
     last_error:          tiene(entrante, 'last_error')
       ? entrante.last_error ?? null
       : actual?.last_error ?? null,
   }
+}
+
+/**
+ * La factura más nueva de las dos. Números del PoS (solo dígitos): se comparan como números, sin los ceros de
+ * adelante. Si alguna no es numérica no hay orden confiable: se queda la nueva (como antes). `null` nunca pisa.
+ */
+export function masNuevaFactura(actual: string | null, nueva: string | null): string | null {
+  if (nueva === null) return actual
+  if (actual === null) return nueva
+  if (/^\d+$/.test(actual) && /^\d+$/.test(nueva)) {
+    const a = BigInt(actual), n = BigInt(nueva)
+    return n >= a ? nueva : actual
+  }
+  return nueva
+}
+
+/** El instante más nuevo (ISO). `null` nunca pisa; si alguno no se puede leer, se queda la nueva. */
+export function masNuevoInstante(actual: string | null, nueva: string | null): string | null {
+  if (nueva === null) return actual
+  if (actual === null) return nueva
+  const a = Date.parse(actual), n = Date.parse(nueva)
+  if (Number.isNaN(a) || Number.isNaN(n)) return nueva
+  return n >= a ? nueva : actual
 }
 
 // ── Validación del sobre ───────────────────────────────────────────────────────
@@ -741,6 +786,9 @@ export function localDelSecreto(
   if (mapaTxt) {
     let mapa: Record<string, unknown>
     try { mapa = JSON.parse(mapaTxt) } catch { return null }
+    // CLUB-AUD-47: un mismo secreto en dos locales es un error de configuración → nadie entra (fail-closed).
+    const valores = Object.values(mapa).filter((v): v is string => typeof v === 'string')
+    if (new Set(valores).size !== valores.length) return null
     let elegido: string | null = null
     for (const [local, sec] of Object.entries(mapa)) {
       // se comparan todos (tiempo parejo); secretos cortos no valen
@@ -749,6 +797,7 @@ export function localDelSecreto(
     return elegido
   }
   const legado = (cfg.legado ?? '').trim()
-  if (legado && igual(header, legado)) return cfg.localLegado ?? 'santa-teresa'
+  // CLUB-AUD-47: el secreto único también tiene que tener al menos 32 caracteres.
+  if (legado.length >= 32 && igual(header, legado)) return cfg.localLegado ?? 'santa-teresa'
   return null
 }

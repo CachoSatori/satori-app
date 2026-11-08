@@ -4,6 +4,8 @@ import {
   localDelSecreto,
   CR_OFFSET,
   MAX_TICKETS,
+  MAX_TEXTO,
+  MAX_CLAVE,
   conOffsetCR,
   instanteConZona,
   fusionarCursor,
@@ -563,5 +565,46 @@ describe('CLUB-AUD-32: un secreto por local', () => {
   it('un mapa roto o con secretos cortos no autoriza', () => {
     expect(localDelSecreto(S, { mapa: '{roto', legado: S }, igual)).toBeNull()
     expect(localDelSecreto('corto', { mapa: JSON.stringify({ 'santa-teresa': 'corto' }) }, igual)).toBeNull()
+  })
+})
+
+describe('CLUB-AUD-46: el cursor solo avanza y el latido es la hora del servidor', () => {
+  const guardado = {
+    local: 'nosara', last_factura: '5001', last_fecha_registra: '2026-09-02T01:42:07.000Z',
+    last_poll_at: '2026-09-02T01:45:00.000Z', last_error: null,
+  }
+  it('el last_poll_at que manda el agente se ignora', () => {
+    expect(normalizarCursor('nosara', { last_poll_at: '2030-01-01T00:00:00Z' }, AHORA).last_poll_at).toBe(AHORA)
+  })
+  it('una factura o una fecha más vieja no rebobina el corte; null tampoco lo borra', () => {
+    const r = fusionarCursor(guardado, normalizarCursor('nosara', {
+      last_factura: '4999', last_fecha_registra: '2026-09-01T00:00:00-06:00' }, AHORA))
+    expect(r.last_factura).toBe('5001')
+    expect(r.last_fecha_registra).toBe(guardado.last_fecha_registra)
+    expect(fusionarCursor(guardado, normalizarCursor('nosara', { last_factura: null }, AHORA)).last_factura).toBe('5001')
+  })
+  it('compara como número, sin los ceros de adelante; avanza si es más nueva', () => {
+    expect(fusionarCursor(guardado, normalizarCursor('nosara', { last_factura: '0005002' }, AHORA)).last_factura).toBe('0005002')
+    expect(fusionarCursor({ ...guardado, last_factura: '0990001' }, normalizarCursor('nosara', { last_factura: '990000' }, AHORA)).last_factura).toBe('0990001')
+  })
+})
+
+describe('CLUB-AUD-47: secretos de 32 o más, sin repetir', () => {
+  const igual = (a: string, b: string) => a === b
+  it('el mismo secreto en dos locales es un error de configuración: nadie entra', () => {
+    const S = 'a'.repeat(40)
+    expect(localDelSecreto(S, { mapa: JSON.stringify({ 'santa-teresa': S, nosara: S }) }, igual)).toBeNull()
+  })
+  it('el secreto único corto tampoco vale', () => {
+    expect(localDelSecreto('corto-de-prueba', { legado: 'corto-de-prueba' }, igual)).toBeNull()
+  })
+})
+
+describe('CLUB-AUD-48: topes de largo', () => {
+  it('un texto largo se recorta; una clave larga descarta el registro', () => {
+    const t = normalizarTicket('santa-teresa', ticket({ area: 'x'.repeat(5000) }))
+    expect(t.ok && t.valor.fila.area?.length).toBe(MAX_TEXTO)
+    expect(normalizarTicket('santa-teresa', ticket({ numero_factura: '9'.repeat(MAX_CLAVE + 1) })).ok).toBe(false)
+    expect(normalizarOpen('santa-teresa', { clave: 'p'.repeat(MAX_CLAVE + 1) }, AHORA).ok).toBe(false)
   })
 })

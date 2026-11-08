@@ -47,6 +47,7 @@ export interface Employee {
   profile_id: string | null
   is_active: boolean
   pos_name: string | null   // nombre exacto en el XLS de ventas/POS (clave de dias.saloneros); null = sin vincular
+  pos_login?: string | null // login del PoS (Nube de Fuego, «026»); único entre empleados (mig 062); null = sin asignar
   created_at: string
   updated_at: string
 }

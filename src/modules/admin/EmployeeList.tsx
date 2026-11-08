@@ -7,6 +7,9 @@ import { allSaloneros } from '../ventas/ventasUtils'
 // Se elige desde un dropdown de nombres reales para evitar typos; ata Mi Rendimiento y VentasICP al empleado.
 
 import { ROLE_LABELS } from '../../shared/constants'
+import { useAuth } from '../../shared/hooks/useAuth'
+import { getLoginsDeFacturasRecientes } from '../../shared/api/posNdf'
+import { esDuplicadoDeLogin, loginsSinEmpleado, mensajeDuplicado, validarPosLogin, type LoginSinEmpleado } from './posLogin'
 
 const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
@@ -16,6 +19,9 @@ interface Props {
 }
 
 export default function EmployeeList({ employees, onRefresh }: Props) {
+  // «Login del PoS»: lo edita SOLO el owner (Admin ya es solo del owner; esto es la segunda línea).
+  const { profile } = useAuth()
+  const esOwner = profile?.role === 'owner'
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [salNames, setSalNames] = useState<string[]>([])   // nombres reales de ventas (claves de dias.saloneros)
   const [linkingId, setLinkingId] = useState<string | null>(null)
@@ -71,15 +77,21 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
   }
 
   const [editPosName, setEditPosName] = useState('')
+  const [editPosLogin, setEditPosLogin] = useState('')
 
   const handleEdit = (emp: Employee) => {
     setEditId(emp.id)
     setEditName(emp.full_name)
     setEditRole(emp.role)
     setEditPosName(emp.pos_name ?? '')
+    setEditPosLogin(emp.pos_login ?? '')
+    setError(null)
   }
 
   const handleSaveEdit = async (id: string) => {
+    // El login se valida antes de guardar (formato, caja/compartido, duplicado con la lista cargada).
+    const login = esOwner ? validarPosLogin(editPosLogin, id, employees) : null
+    if (login && !login.ok) { setError(login.error); return }
     setSaving(true)
     setError(null)
     try {
@@ -88,11 +100,19 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
         role: editRole,
         // pos_name: valor exacto de dias.saloneros (del dropdown) → match exacto en Mi Rendimiento. null = sin vincular.
         pos_name: editPosName.trim() ? editPosName.trim() : null,
+        ...(login?.ok ? { pos_login: login.valor } : {}),
       })
       setEditId(null)
       await onRefresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error')
+      const msg = err instanceof Error ? err.message : 'Error'
+      // Red de la base (índice único employees_pos_login_key): alguien lo asignó mientras tanto.
+      if (esDuplicadoDeLogin({ message: msg })) {
+        const otro = employees.find(e => e.id !== id && (e.pos_login ?? '').trim() === editPosLogin.trim())
+        setError(mensajeDuplicado(otro?.full_name))
+      } else {
+        setError(msg)
+      }
     } finally {
       setSaving(false)
     }
@@ -160,6 +180,10 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
         />
       )}
 
+      {esOwner && <LoginsSinEmpleadoPanel employees={employees} />}
+
+      {error && !showForm && <p className="field-error" role="alert">{error}</p>}
+
       <table className="admin-table">
         <thead>
           <tr>
@@ -198,6 +222,23 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                         {salNames.map(n => <option key={n} value={n}>{n}</option>)}
                       </select>
                     </div>
+                    {esOwner ? (
+                      <div>
+                        <input
+                          className="tip-input"
+                          aria-label={`Login del PoS: ${emp.full_name}`}
+                          inputMode="numeric"
+                          placeholder="Login del PoS (ej. 026)"
+                          value={editPosLogin}
+                          onChange={e => setEditPosLogin(e.target.value)}
+                          disabled={saving}
+                          title="Login del PoS (Nube de Fuego). Vacío = sin asignar."
+                          style={{ width: '130px', fontSize: '0.72rem', marginTop: '2px' }}
+                        />
+                      </div>
+                    ) : (
+                      emp.pos_login && <div style={{ fontSize: '0.65rem', color: '#888' }}>Login del PoS: {emp.pos_login}</div>
+                    )}
                   </td>
                   <td>
                     <select
@@ -227,6 +268,11 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                     {emp.pos_name && (
                       <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '1px' }}>
                         Ventas: {emp.pos_name}
+                      </div>
+                    )}
+                    {emp.pos_login && (
+                      <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '1px' }}>
+                        Login del PoS: {emp.pos_login}
                       </div>
                     )}
                   </td>
@@ -283,6 +329,38 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
 
       {/* ── Importar en masa ── */}
       <BulkImport employees={employees} onRefresh={onRefresh} />
+    </div>
+  )
+}
+
+/**
+ * Solo owner: los logins que vendieron en los últimos 90 días y que ningún empleado tiene asignado,
+ * para saber cuáles completar en «Login del PoS» (Editar). Sin los de caja ni el compartido.
+ */
+function LoginsSinEmpleadoPanel({ employees }: { employees: Employee[] }) {
+  const [filas, setFilas] = useState<{ salonero_login: string | null; dia: string }[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    getLoginsDeFacturasRecientes(90).then(setFilas).catch(e => setError(e instanceof Error ? e.message : String(e)))
+  }, [])
+  if (error) return <p className="field-error" style={{ fontSize: '0.75rem' }}>No se pudieron leer los logins del PoS: {error}</p>
+  if (!filas) return null
+  const lista: LoginSinEmpleado[] = loginsSinEmpleado(filas, employees)
+  return (
+    <div data-testid="logins-sin-empleado" style={{ margin: '0.5rem 0 1rem', fontSize: '0.78rem' }}>
+      <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Logins del PoS que vendieron en los últimos 90 días sin empleado asignado</div>
+      {lista.length === 0 ? (
+        <div style={{ color: '#888' }}>Todos tienen empleado asignado.</div>
+      ) : (
+        <>
+          <div style={{ color: '#888', marginBottom: '0.25rem' }}>Asignalos con «Editar» → «Login del PoS» en el empleado que corresponda.</div>
+          <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+            {lista.map(l => (
+              <li key={l.login}><strong>{l.login}</strong> · {l.facturas} facturas · última: {l.ultima}</li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   )
 }

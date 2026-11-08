@@ -520,3 +520,27 @@ export async function getPromPaxAgregado(local: string, desde: string, hasta: st
     neta_sin_pax: Number(f.neta_sin_pax), tickets_sin_pax: Number(f.tickets_sin_pax),
   }))
 }
+
+// ── Logins del PoS que vendieron (Admin → Empleados, «Login del PoS») ─────────────────────
+
+/**
+ * `salonero_login` y día CR de las facturas CERRADAS de los últimos `dias` días, de todos los
+ * locales. Lo lee solo el owner (Admin): las tablas pos_ndf_* son de gerencia. Paginado, porque el
+ * tope de filas de PostgREST cambia entre bases.
+ */
+export async function getLoginsDeFacturasRecientes(dias = 90): Promise<{ salonero_login: string | null; dia: string }[]> {
+  const desde = new Date(Date.now() - dias * 86_400_000).toISOString()
+  const filas = await leerTodo<{ salonero_login: string | null; fecha_registra: string }>((d, h) => sb
+    .from('pos_ndf_tickets')
+    .select('salonero_login, fecha_registra')
+    .eq('estado', 'C')
+    .not('salonero_login', 'is', null)
+    .gte('fecha_registra', desde)
+    .order('fecha_registra', { ascending: true })
+    .range(d, h))
+  // Día CR (UTC−6, sin horario de verano), el mismo corte que Ventas.
+  return filas.map(f => ({
+    salonero_login: f.salonero_login,
+    dia: new Date(Date.parse(f.fecha_registra) - 6 * 3_600_000).toISOString().slice(0, 10),
+  }))
+}

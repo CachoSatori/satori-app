@@ -1108,7 +1108,7 @@ export default function VentasEnVivo({ metas }: Props) {
                       {/* Un login sin empleado cargado NO desaparece del ranking: se muestra con
                           su número y marcado, para que se vea que falta el mapeo. */}
                       {esSinAsignar(s.nombre) && (
-                        <em className="apos-barra-cat" title="Cargá el pos_login del empleado en Empleados">
+                        <em className="apos-barra-cat" title="Asignalo en Admin → Empleados → Editar → «Login del PoS»">
                           sin asignar
                         </em>
                       )}

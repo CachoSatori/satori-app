@@ -431,13 +431,17 @@ export async function updateEmployeeHomebankingName(
   nombre: string | null,
 ): Promise<void> {
   const limpio = nombre?.trim()
-  // Desde la mig 084 (SAL-AUD-01) vive en employee_payroll (solo owner/contador activos).
+  // Desde la mig 084 (SAL-AUD-01) vive en employee_bank_info (solo owner/contador activos).
   await upsertPlanilla(id, { nombre_homebanking: limpio ? limpio : null })   // '' no: null = "sin cargar"
 }
 
 // ── Planilla (mig 084, SAL-AUD-01) ──────────────────────────────────────────────
 
-/** Una fila de employee_payroll. Solo la ven owner y contador activos (RLS). */
+/**
+ * La planilla de un empleado, armada de las dos tablas de la 084: las TARIFAS (`employee_payroll`, las
+ * ven owner, manager y contador activos) y el nombre del homebanking (`employee_bank_info`, solo owner y
+ * contador).
+ */
 export interface PlanillaRow {
   employee_id:        string
   hourly_rate_crc:    number
@@ -447,8 +451,8 @@ export interface PlanillaRow {
 
 /**
  * Los empleados con su planilla pegada (la forma que ya consume todo Salarios: `emp.hourly_rate_crc`,
- * `emp.fixed_salary_crc`, `emp.nombre_homebanking`). La planilla sale de employee_payroll; para un
- * rol sin acceso (manager) la RLS devuelve 0 filas y los empleados quedan con tarifa 0 / sin banco.
+ * `emp.fixed_salary_crc`, `emp.nombre_homebanking`). Lo que la RLS no le devuelve a un rol queda en
+ * 0 / null: el manager ve las tarifas pero no el banco; un rol sin acceso no ve ninguna de las dos.
  */
 export async function getEmployeesConPlanilla(): Promise<Employee[]> {
   const [emps, planilla] = await Promise.all([getAllEmployees(), getPlanilla()])
@@ -456,10 +460,28 @@ export async function getEmployeesConPlanilla(): Promise<Employee[]> {
 }
 
 export async function getPlanilla(): Promise<PlanillaRow[]> {
-  const { data, error } = await fromAny('employee_payroll')
-    .select('employee_id, hourly_rate_crc, fixed_salary_crc, nombre_homebanking')
-  if (error) throw new Error(error.message)
-  return (data as PlanillaRow[] | null) ?? []
+  const [tarifas, bancos] = await Promise.all([
+    fromAny('employee_payroll').select('employee_id, hourly_rate_crc, fixed_salary_crc'),
+    fromAny('employee_bank_info').select('employee_id, nombre_homebanking'),
+  ])
+  if (tarifas.error) throw new Error(tarifas.error.message)
+  if (bancos.error) throw new Error(bancos.error.message)
+  return unirPlanilla(
+    (tarifas.data as { employee_id: string; hourly_rate_crc: number; fixed_salary_crc: number }[] | null) ?? [],
+    (bancos.data as { employee_id: string; nombre_homebanking: string | null }[] | null) ?? [],
+  )
+}
+
+/** Puro: une tarifas y banco por empleado (lo que falta de un lado queda en 0 / null). */
+export function unirPlanilla(
+  tarifas: readonly { employee_id: string; hourly_rate_crc: number; fixed_salary_crc: number }[],
+  bancos: readonly { employee_id: string; nombre_homebanking: string | null }[],
+): PlanillaRow[] {
+  const m = new Map<string, PlanillaRow>()
+  const fila = (id: string) => m.get(id) ?? { employee_id: id, hourly_rate_crc: 0, fixed_salary_crc: 0, nombre_homebanking: null }
+  for (const t of tarifas) m.set(t.employee_id, { ...fila(t.employee_id), hourly_rate_crc: Number(t.hourly_rate_crc) || 0, fixed_salary_crc: Number(t.fixed_salary_crc) || 0 })
+  for (const b of bancos) m.set(b.employee_id, { ...fila(b.employee_id), nombre_homebanking: b.nombre_homebanking ?? null })
+  return [...m.values()]
 }
 
 /** Puro: pega la planilla a cada empleado (sin fila → 0 / 0 / null). */

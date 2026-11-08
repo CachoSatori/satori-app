@@ -5,8 +5,9 @@
 # aplicarla también corre, pero el paso «antes» ya no es el estado previo real: la prueba que vale
 # después es 084_pruebas.sh.
 # Empleado SINTÉTICO con planilla 12.345 / 50.000 / «BENEFICIARIO SINTETICO» / banco y cuenta de prueba.
-# Esperado: después de la 084 → employee_payroll tiene sus datos y employees los tiene vacíos, con el
-# CHECK; después del rollback → employees tiene OTRA VEZ sus datos, no hay CHECK y no hay tabla.
+# Esperado: después de la 084 → employee_payroll tiene sus TARIFAS, employee_bank_info sus DATOS
+# BANCARIOS, y employees los tiene vacíos, con el CHECK; después del rollback → employees tiene OTRA VEZ
+# los 5 datos, no hay CHECK y no hay tablas.
 set -euo pipefail
 [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || { echo "Falta SUPABASE_ACCESS_TOKEN." >&2; exit 2; }
 REF=${1:?Uso: $0 <REF>}
@@ -21,7 +22,9 @@ EMP="'en_employees', (select json_build_object('hora', hourly_rate_crc, 'fijo', 
   'tabla', to_regclass('public.employee_payroll') is not null"
 ESTADO_SIN="select json_build_object($EMP)"
 ESTADO_CON="select json_build_object($EMP,
-  'en_payroll', (select to_json(p) from (select hourly_rate_crc as hora, fixed_salary_crc as fijo, nombre_homebanking as homebanking, banco, cuenta_iban_alias as cuenta from public.employee_payroll where employee_id = '$ID') p))"
+  'en_tarifas', (select to_json(p) from (select hourly_rate_crc as hora, fixed_salary_crc as fijo from public.employee_payroll where employee_id = '$ID') p),
+  'en_banco',   (select to_json(b) from (select nombre_homebanking as homebanking, banco, cuenta_iban_alias as cuenta from public.employee_bank_info where employee_id = '$ID') b),
+  'tabla_banco', to_regclass('public.employee_bank_info') is not null)"
 SQL="begin;
 -- Estado de antes: el sintético con su planilla en employees (si la 084 ya está aplicada, se suelta
 -- el CHECK solo dentro de esta transacción para poder sembrarlo como estaba antes).

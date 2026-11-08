@@ -215,19 +215,19 @@ describe('upsertWorkDay', () => {
 })
 
 describe('updateEmployeeHomebankingName', () => {
-  // Desde la mig 084 (SAL-AUD-01) el alias vive en employee_payroll (upsert 1 a 1), no en employees.
-  it('guarda el alias recortado en employee_payroll', async () => {
-    enqueue('employee_payroll', {})
+  // Desde la mig 084 (SAL-AUD-01) el alias vive en employee_bank_info (upsert 1 a 1), no en employees.
+  it('guarda el alias recortado en employee_bank_info (datos bancarios: solo owner/contador)', async () => {
+    enqueue('employee_bank_info', {})
     await updateEmployeeHomebankingName('e1', '  BENEFICIARIO PRUEBA ')
-    expect(opArgs(lastCall('employee_payroll'), 'upsert')).toEqual([
+    expect(opArgs(lastCall('employee_bank_info'), 'upsert')).toEqual([
       { employee_id: 'e1', nombre_homebanking: 'BENEFICIARIO PRUEBA' }, { onConflict: 'employee_id' },
     ])
-    expect(calls.some(c => c.table === 'employees')).toBe(false)
+    expect(calls.some(c => c.table === 'employees' || c.table === 'employee_payroll')).toBe(false)
   })
   it('vacío se guarda como null, no como cadena vacía', async () => {
-    enqueue('employee_payroll', {})
+    enqueue('employee_bank_info', {})
     await updateEmployeeHomebankingName('e1', '   ')
-    expect(opArgs(lastCall('employee_payroll'), 'upsert')).toEqual([
+    expect(opArgs(lastCall('employee_bank_info'), 'upsert')).toEqual([
       { employee_id: 'e1', nombre_homebanking: null }, { onConflict: 'employee_id' },
     ])
   })

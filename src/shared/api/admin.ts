@@ -17,8 +17,9 @@ export async function getAllEmployees(): Promise<Employee[]> {
 
 // ── Salarios · Fase 0 (mig 055) ─────────────────────────────
 // Datos maestros de nómina que vivían en el Excel. Desde la mig 084 (SAL-AUD-01) la tarifa y el
-// salario fijo van a `employee_payroll` (RLS: owner/contador activos); el resto (servicio,
-// BioTime, ingreso) sigue en employees (RLS: owner/manager gestionan empleados).
+// salario fijo van a `employee_payroll` (leen owner/manager/contador activos; escriben owner/contador)
+// y los datos bancarios a `employee_bank_info` (solo owner/contador); el resto (servicio, BioTime,
+// ingreso) sigue en employees (RLS: owner/manager gestionan empleados).
 export interface EmployeePayroll {
   hourly_rate_crc:    number
   fixed_salary_crc:   number
@@ -56,25 +57,32 @@ export function separarPlanilla<T extends Record<string, unknown>>(payload: T): 
   return { planilla, resto } as never
 }
 
-/** Upsert de la planilla de un empleado (employee_payroll, 1 a 1). Solo owner/contador. */
+/**
+ * Upsert de la planilla de un empleado (1 a 1). Las TARIFAS van a `employee_payroll` y el nombre del
+ * homebanking a `employee_bank_info`. Escriben solo owner y contador (el manager ve las tarifas pero
+ * no las guarda: la RLS le devuelve 42501 y acá se traduce).
+ */
 export async function upsertPlanilla(
   employeeId: string,
   campos: Partial<Pick<EmployeePayroll, 'hourly_rate_crc' | 'fixed_salary_crc'>> & { nombre_homebanking?: string | null },
 ): Promise<void> {
-  if (Object.keys(campos).length === 0) return
-  // employee_payroll no está en supabase.gen.ts (mismo criterio que las tablas de la 056 en
+  const { nombre_homebanking, ...tarifas } = campos
+  // Las tablas de la 084 no están en supabase.gen.ts (mismo criterio que las de la 056 en
   // salarios.ts): cast acotado del builder, con .bind para no perder `this`.
   const tabla = supabase.from?.bind(supabase) as unknown as (t: string) => {
     upsert(row: unknown, opts: { onConflict: string }): PromiseLike<{ error: { message: string; code?: string } | null }>
   }
-  const { error } = await tabla('employee_payroll')
-    .upsert({ employee_id: employeeId, ...campos }, { onConflict: 'employee_id' })
-  if (error) {
-    if (error.code === '42501' || /row-level security/i.test(error.message)) {
-      throw new Error('La tarifa y los datos bancarios los cargan solo el dueño o el contador.')
+  const escribir = async (nombreTabla: string, fila: Record<string, unknown>) => {
+    const { error } = await tabla(nombreTabla).upsert({ employee_id: employeeId, ...fila }, { onConflict: 'employee_id' })
+    if (error) {
+      if (error.code === '42501' || /row-level security/i.test(error.message)) {
+        throw new Error('La tarifa y los datos bancarios los cargan solo el dueño o el contador.')
+      }
+      throw new Error(error.message)
     }
-    throw new Error(error.message)
   }
+  if (Object.keys(tarifas).length > 0) await escribir('employee_payroll', tarifas)
+  if (nombre_homebanking !== undefined) await escribir('employee_bank_info', { nombre_homebanking })
 }
 
 export async function updateEmployeePayroll(

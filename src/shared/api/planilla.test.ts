@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('./supabase', () => ({ supabase: {} }))
 import { separarPlanilla } from './admin'
-import { pegarPlanilla } from './salarios'
+import { pegarPlanilla, unirPlanilla } from './salarios'
 import type { Employee } from '../types/database'
 
 const emp = (id: string): Employee => ({
@@ -30,5 +30,22 @@ describe('pegarPlanilla', () => {
     ])
     expect(r[0]).toMatchObject({ id: 'a', hourly_rate_crc: 12345, fixed_salary_crc: 50000, nombre_homebanking: 'BENEFICIARIO A' })
     expect(r[1]).toMatchObject({ id: 'b', hourly_rate_crc: 0, fixed_salary_crc: 0, nombre_homebanking: null })
+  })
+})
+
+describe('unirPlanilla (tarifas y banco vienen de tablas distintas)', () => {
+  it('une por empleado; lo que falta de un lado queda en 0 / null', () => {
+    const r = unirPlanilla(
+      [{ employee_id: 'a', hourly_rate_crc: 12345, fixed_salary_crc: 0 }],
+      [{ employee_id: 'a', nombre_homebanking: 'BENEFICIARIO A' }, { employee_id: 'b', nombre_homebanking: 'BENEFICIARIO B' }],
+    )
+    expect(r).toEqual([
+      { employee_id: 'a', hourly_rate_crc: 12345, fixed_salary_crc: 0, nombre_homebanking: 'BENEFICIARIO A' },
+      { employee_id: 'b', hourly_rate_crc: 0, fixed_salary_crc: 0, nombre_homebanking: 'BENEFICIARIO B' },
+    ])
+  })
+  it('manager: ve tarifas y la RLS no le devuelve banco → homebanking null', () => {
+    const r = unirPlanilla([{ employee_id: 'a', hourly_rate_crc: 12345, fixed_salary_crc: 50000 }], [])
+    expect(r).toEqual([{ employee_id: 'a', hourly_rate_crc: 12345, fixed_salary_crc: 50000, nombre_homebanking: null }])
   })
 })

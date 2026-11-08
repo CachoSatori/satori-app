@@ -76,6 +76,15 @@ describe('updateEmployeePayroll · guardado de los campos de nómina', () => {
     ).rejects.toThrow('permission denied for table employees')
   })
 
+  it('upsertPlanilla: tarifas a employee_payroll y homebanking a employee_bank_info', async () => {
+    const { upsertPlanilla } = await import('./admin')
+    await upsertPlanilla('emp-7', { hourly_rate_crc: 1000, nombre_homebanking: 'BENEFICIARIO' })
+    expect(state.escrituras.map(e => [e.tabla, e.payload])).toEqual([
+      ['employee_payroll', { employee_id: 'emp-7', hourly_rate_crc: 1000 }],
+      ['employee_bank_info', { employee_id: 'emp-7', nombre_homebanking: 'BENEFICIARIO' }],
+    ])
+  })
+
   it('la RLS de employee_payroll (manager) → «solo el dueño o el contador»', async () => {
     state.error.employee_payroll = { code: '42501', message: 'new row violates row-level security policy' }
     await expect(

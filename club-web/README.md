@@ -28,6 +28,7 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 | `GET /api/portal/{token}` | `club_portal` | 60 por minuto |
 | `POST /api/portal/{token}/canje` | `club_canje_codigo_generar` | 5 por minuto |
 | `POST /api/portal/{token}/baja` | `club_socio_baja_portal` | 5 por minuto |
+| `POST /api/portal/{token}/wallet` | Edge `club-pase` (B1) → link «Save to Google Wallet» | 5 por minuto |
 | `POST /api/pase/{token_pase}/canje` | `club_canje_codigo_generar_pase` | 5 por minuto |
 | `POST /api/alta` `{nombre, whatsapp, acepto, ref?, turnstile}` | `club_socio_autoalta` (después de Turnstile) | 5 por minuto · tope global por día en SQL (`socio_autoalta_max_dia`, 60) |
 
@@ -42,6 +43,8 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
   llamar a la base. **Sin el secreto, responde 503.** En staging se usan las claves de prueba de Cloudflare (siempre
   pasan): la del sitio por defecto en `src/config.ts` y la secreta `1x0000000000000000000000000000000AA`. En prod,
   `VITE_TURNSTILE_SITEKEY` (variable de build) y `TURNSTILE_SECRET` las carga Ismael.
+- **Google Wallet (B2):** el botón «Agregar a Google Wallet» (portal y final de la autoalta) aparece solo si el build
+  tiene `VITE_WALLET_GOOGLE=1`. Va **apagado** hasta que el Edge `club-pase` esté desplegado con sus secretos.
 - **Aviso de privacidad:** su versión (`AVISO_PRIVACIDAD_VERSION` en `src/config.ts`) tiene que ser igual a
   `club_config.aviso_privacidad_version`; si no, la base rechaza el alta. Al cambiar el texto se suben las dos.
 - **Errores:** la función nunca devuelve el mensaje crudo de la base. Lo traduce a un código fijo (`referente_invalido`, `cupon_invalido`, `tope_referente`, `demasiados_pedidos` y otros).

@@ -11,7 +11,7 @@
  */
 import './styles.css'
 import { urlCanje, urlCupon, urlReferente } from './qrFormato'
-import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY } from './config'
+import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY, WALLET_GOOGLE_ACTIVO } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
 
 let idioma: Idioma = idiomaInicial()
@@ -241,6 +241,7 @@ async function paginaPortal(token: string) {
   const esAnfitrion = p.anfitrion !== false
   pintar(
     h('h1', {}, t.portal_hola(p.nombre)),
+    botonWallet(token),   // B2: un pase por persona (socio y/o anfitrión)
     p.socio && seccionSocio(token, p.socio.estado),
     esAnfitrion && h('section', { class: 'tarjeta' },
       h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)), h('span', {}, t.portal_creditos)),
@@ -251,7 +252,6 @@ async function paginaPortal(token: string) {
       h('h2', {}, t.portal_qr), canvas, h('p', { class: 'codigo', style: 'text-align:center' }, p.codigo),
       h('p', {}, t.portal_indicaciones),
       h('div', { class: 'fila' }, compartir, descargar),
-      // F1e: botón «Agregar a Wallet» (oculto hasta tener la clase del pase).
     ),
     h('section', { class: 'tarjeta' },
       h('h2', {}, t.historial),
@@ -264,6 +264,21 @@ async function paginaPortal(token: string) {
               : `${m.personas > 0 ? '+' : '−'}${Math.abs(m.personas)}`)))),
     ),
   )
+}
+
+// ── B2: «Agregar a Google Wallet» (apagado por flag hasta desplegar el Edge) ──
+function botonWallet(token: string): HTMLElement | null {
+  if (!WALLET_GOOGLE_ACTIVO || !/^[0-9a-f]{64}$/.test(token)) return null
+  const err = h('div')
+  const b = h('button', { type: 'button', class: 'btn sec' }, t.wallet_boton) as HTMLButtonElement
+  b.addEventListener('click', async () => {
+    b.disabled = true; b.textContent = t.wallet_generando; err.replaceChildren()
+    const r = await api<{ url: string }>(`portal/${token}/wallet`, { method: 'POST' })
+    if (r.ok && r.data?.url?.startsWith('https://pay.google.com/gp/v/save/')) { location.href = r.data.url; return }
+    b.disabled = false; b.textContent = t.wallet_boton
+    err.append(avisoEl('err', r.ok ? t.wallet_error : r.error === 'servicio' || r.error === 'servicio_no_disponible' ? t.wallet_error : msgError(r.error)))
+  })
+  return h('div', { class: 'wallet' }, b, err)
 }
 
 // ── LC-A2: socio del Local Club ──────────────────────────────────────────────
@@ -320,7 +335,9 @@ async function paginaAlta() {
         const portal = r.data?.portal
         pintar(h('h1', {}, t.alta_titulo), avisoEl('ok', portal ? t.alta_listo : t.alta_listo_sin_link),
           portal && portal.startsWith('https://club.satoricostarica.com/p/')
-            ? h('a', { class: 'btn', href: new URL(portal).pathname }, t.alta_portal) : null)
+            ? h('a', { class: 'btn', href: new URL(portal).pathname }, t.alta_portal) : null,
+          // B2: el pase en estado pendiente, al final de la autoalta (solo con el link del portal de una persona nueva)
+          portal && portal.startsWith('https://club.satoricostarica.com/p/') ? botonWallet(new URL(portal).pathname.split('/').pop() ?? '') : null)
         anunciar(portal ? t.alta_listo : t.alta_listo_sin_link)
         return
       }

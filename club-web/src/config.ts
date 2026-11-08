@@ -14,3 +14,9 @@ export const AVISO_PRIVACIDAD_VERSION = 'v0-provisorio'
 
 /** Turnstile: clave pública del sitio. Sin VITE_TURNSTILE_SITEKEY, la clave de PRUEBA de Cloudflare (siempre pasa). */
 export const TURNSTILE_SITEKEY: string = import.meta.env.VITE_TURNSTILE_SITEKEY || '1x00000000000000000000AA'
+
+/**
+ * B2: muestra «Agregar a Google Wallet» solo con VITE_WALLET_GOOGLE=1 en el build (apagado hasta que el Edge
+ * `club-pase` esté desplegado con sus secretos).
+ */
+export const WALLET_GOOGLE_ACTIVO: boolean = import.meta.env.VITE_WALLET_GOOGLE === '1'

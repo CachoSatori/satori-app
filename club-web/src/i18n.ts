@@ -77,6 +77,9 @@ const ES = {
   socio_baja_boton: 'Darme de baja del Local Club',
   socio_baja_confirmar: '¿Seguro? Dejás de tener el beneficio y no te vamos a escribir más.',
   socio_baja_listo: 'Listo: te diste de baja del Local Club.',
+  wallet_boton: 'Agregar a Google Wallet',
+  wallet_generando: 'Preparando tu pase…',
+  wallet_error: 'No pudimos preparar el pase. Probá de nuevo en un rato.',
   w_titulo: 'Canjear créditos',
   w_txt: 'Este botón es del pase de tu Wallet. Genera un código que vale 10 minutos: mostralo en caja.',
 }
@@ -158,6 +161,9 @@ const EN: Textos = {
   socio_baja_boton: 'Leave the Local Club',
   socio_baja_confirmar: 'Are you sure? You lose the benefit and we will not message you again.',
   socio_baja_listo: 'Done: you left the Local Club.',
+  wallet_boton: 'Add to Google Wallet',
+  wallet_generando: 'Preparing your pass…',
+  wallet_error: 'We could not prepare your pass. Please try again later.',
   w_titulo: 'Redeem credits',
   w_txt: 'This button comes from your Wallet pass. It creates a code valid for 10 minutes: show it at the register.',
 }

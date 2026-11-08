@@ -176,3 +176,31 @@ test('AUD-74: prefijo de red /24 (IPv4) y /64 (IPv6); /api/alta pide el tope por
   assert.equal(r.status, 429)
   assert.deepEqual(claves, ['alta:203.0.113.7', 'alta-red:203.0.113.0/24'])
 })
+
+test('B2: /api/portal/:token/wallet llama al Edge club-pase con x-club-web y devuelve solo el link de Google', async () => {
+  const tok = 'e'.repeat(64)
+  const fetchViejo = globalThis.fetch
+  let respuesta = { status: 200, body: { url: 'https://pay.google.com/gp/v/save/aaa.bbb.ccc', object_id: 'x' } }
+  llamadas = []
+  globalThis.fetch = async (url, init) => { llamadas.push({ url, init }); return new Response(JSON.stringify(respuesta.body), { status: respuesta.status }) }
+  try {
+    const r = await manejar(pedido(`portal/${tok}/wallet`, 'POST'), conLimite(), `portal/${tok}/wallet`)
+    assert.equal(r.status, 200)
+    assert.deepEqual(await r.json(), { data: { url: 'https://pay.google.com/gp/v/save/aaa.bbb.ccc' } })
+    assert.equal(String(llamadas[0].url), `${URL_SB}/functions/v1/club-pase/google`)
+    assert.equal(llamadas[0].init.headers['x-club-web'], 'clave-de-prueba')
+    assert.deepEqual(JSON.parse(llamadas[0].init.body), { token: tok })
+    // un link que no es de Google Wallet no se reenvía
+    respuesta = { status: 200, body: { url: 'https://malo.ejemplo/x' } }
+    assert.equal((await manejar(pedido(`portal/${tok}/wallet`, 'POST'), conLimite(), `portal/${tok}/wallet`)).status, 502)
+    // el 404 del Edge (token desconocido) se traduce; el 503 (sin secretos) también, sin mensaje crudo
+    respuesta = { status: 404, body: { error: 'portal_invalido' } }
+    assert.equal((await (await manejar(pedido(`portal/${tok}/wallet`, 'POST'), conLimite(), `portal/${tok}/wallet`)).json()).error, 'portal_invalido')
+    respuesta = { status: 503, body: { error: 'detalle' } }
+    assert.deepEqual(await (await manejar(pedido(`portal/${tok}/wallet`, 'POST'), conLimite(), `portal/${tok}/wallet`)).json(), { error: 'servicio_no_disponible' })
+    // tope por IP, token malo y método
+    assert.equal((await manejar(pedido(`portal/${tok}/wallet`, 'POST'), conLimite(false), `portal/${tok}/wallet`)).status, 429)
+    assert.equal((await manejar(pedido('portal/xyz/wallet', 'POST'), conLimite(), 'portal/xyz/wallet')).status, 404)
+    assert.equal((await manejar(pedido(`portal/${tok}/wallet`), conLimite(), `portal/${tok}/wallet`)).status, 405)
+  } finally { globalThis.fetch = fetchViejo }
+})

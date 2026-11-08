@@ -45,5 +45,31 @@
   "libres_fuera_de_bloque": [
     "086"
   ],
-  "asignadas": {}
+  "asignadas": {
+    "087": {
+      "nombre": "employee_edits_audit",
+      "bloque": "caja",
+      "rama": "claude/employees-audit"
+    },
+    "088": {
+      "nombre": "employees_recibe_reparto_cocina",
+      "bloque": "caja",
+      "rama": "claude/prop-aud-01"
+    },
+    "089": {
+      "nombre": "anon_sin_politica",
+      "bloque": "caja",
+      "rama": "claude/anon-revoke"
+    },
+    "090": {
+      "nombre": "anon_privilegios_por_defecto",
+      "bloque": "caja",
+      "rama": "claude/anon-default-privs"
+    },
+    "091": {
+      "nombre": "multilocal_fase0",
+      "bloque": "caja",
+      "rama": "claude/multilocal-fase0"
+    }
+  }
 }

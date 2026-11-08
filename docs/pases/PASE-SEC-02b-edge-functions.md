@@ -10,7 +10,7 @@ El merge del #61 a `main` hace que **Supabase Branching despliegue Edge Function
 (`yiczgdtirrkdvohdquzf`). Hasta hoy las funciones de prod se subieron a mano; con este PR su código y su
 `verify_jwt` quedan versionados en `main`.
 
-**Qué trae el PR (5 archivos, sin migraciones):**
+**Qué trae el PR (sin migraciones):**
 
 | Archivo | Cambio |
 |---|---|
@@ -19,6 +19,8 @@ El merge del #61 a `main` hace que **Supabase Branching despliegue Edge Function
 | `supabase/functions/monthly-report/acceso.ts` | **Nuevo.** Guarda pura: service_role u owner activo; valida `month`, `tipo`, `dry_run`; respuesta sin montos ni nombres; CORS con allowlist. |
 | `supabase/functions/monthly-report/acceso.test.ts` | **Nuevo.** Pruebas vitest de la guarda. No se despliega (nadie lo importa). |
 | `supabase/functions/alta-empleado/index.ts` | **Nuevo en `main`.** Idéntico a `claude/alta-empleado-fn` (la v1 de prod, desplegada a mano el 06/11). |
+| `monthly-report/index.ts` y `cierre-email/index.ts` (08/11) | **Sin correo real por defecto.** El destinatario sale solo del secreto `REPORT_TO_EMAIL` (`destinatarioReporte` en `acceso.ts`). Sin secreto o inválido: `monthly-report` responde **500 «Falta configurar el destinatario del reporte»** en un envío real (el modo seco sigue igual) y `cierre-email` responde `ok:false` «REPORT_TO_EMAIL no configurada», como ya hacía sin `RESEND_API_KEY`. **`cierre-email` cambia: Branching la redespliega.** |
+| `supabase/config.test.ts` (08/11) | **Nuevo.** Gate: toda función del repo tiene `verify_jwt` explícito, e `ingest-ndf`, si está en el repo, con `verify_jwt = false`. No se despliega. |
 
 **`verify_jwt` esperado (el del `config.toml` del PR, igual al de prod según ESTADO.md, leído el 07/11):**
 
@@ -66,7 +68,8 @@ empleados, el escaneo de documentos, el correo de cierre y el aviso de pagos se 
   que hay en prod.
 - [ ] **Secretos (solo nombres):** `supabase secrets list --project-ref yiczgdtirrkdvohdquzf` muestra
   `REPORT_TO_EMAIL`, `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY` y `SUPABASE_ANON_KEY`. Sin `REPORT_TO_EMAIL`,
-  los correos irían al destinatario por defecto que todavía está en el código (§8).
+  **no sale ningún correo**: el cron del día 1/15 respondería 500 y el cierre no mandaría su correo. Si falta,
+  **frenar** y cargarlo antes (no se escribe su valor en ningún lado del repo).
 - [ ] **Horario:** fuera del servicio (**19–22 h CR**) y lejos de las **02:00 CR del día 1 y del 15** (hora del cron).
 - [ ] **Una sola sesión mergeando a `main`**, y nadie más pushea hasta terminar el §6.
 
@@ -117,8 +120,8 @@ select jobid, status, start_time, end_time, left(return_message, 120)
 1. **Merge del #61 a `main`** (con la firma, en la ventana, con el respaldo hecho). Anotar la hora (`<HORA_MERGE>`).
 2. **Esperar el run de Branching** y leer su log:
    - migraciones: «All migrations are up to date» (el PR no trae ninguna);
-   - funciones: anotar **cuáles** desplegó. Seguro `monthly-report` y `alta-empleado` (cambian). Puede que también
-     `extract-document`, `cierre-email` y `pago-notificar` (no cambian, pero `config.toml` es nuevo): a confirmar en el log.
+   - funciones: anotar **cuáles** desplegó. Seguro `monthly-report`, `alta-empleado` y `cierre-email` (cambian). Puede
+     que también `extract-document` y `pago-notificar` (no cambian, pero `config.toml` es nuevo): a confirmar en el log.
    - `ingest-ndf` **no** tiene que aparecer.
 3. Si el run falla, **frenar** y ir al §7 según lo que haya quedado desplegado.
 4. Nadie toca el cron ni los secretos en este pase.
@@ -130,7 +133,8 @@ select jobid, status, start_time, end_time, left(return_message, 120)
 |---|---|---|
 | `monthly-report` | v11 (una más que la del respaldo) | **true** |
 | `alta-empleado` | v2 (una más) | **true** |
-| `extract-document`, `cierre-email`, `pago-notificar` | igual al respaldo, o +1 si Branching las redesplegó | **true** |
+| `cierre-email` | v3 (una más) | **true** |
+| `extract-document`, `pago-notificar` | igual al respaldo, o +1 si Branching las redesplegó | **true** |
 | `ingest-ndf` | **igual al respaldo** | **false** |
 
 Si alguna quedó con `verify_jwt` distinto al de la tabla, **§7 enseguida**.
@@ -230,16 +234,24 @@ igual al descargado en el §4.2, cron igual al §4.3, y las pruebas del §7.1 y 
   claves nuevas (`sb_secret_…`, que **no** son JWT) o se apagan las JWT viejas, la puerta de entrada rechaza al
   cron con 401. En ese mismo cambio, `monthly-report` pasa a `verify_jwt = false` en `config.toml` (la guarda de
   `acceso.ts` ya acepta los dos formatos), y se vuelve a probar el cron con el §6.2.3. No es parte de este pase.
-- **`REPORT_TO_EMAIL` con un valor por defecto en el código** (`monthly-report` y `cierre-email`). Confirmar que el
-  secreto existe en prod (§3) y sacar el default del código en un PR aparte (repo público).
+- **`REPORT_TO_EMAIL` ya sin valor por defecto en el código** (08/11, en el #61). Por eso el §3 exige que el secreto
+  exista en prod **antes** del merge: sin él no sale ningún correo (falla visible, no un envío a una dirección fija).
+  Prueba extra después del merge: el envío real del cierre del día siguiente llega (o un `dry_run` de
+  `monthly-report` responde 200, que no depende del destinatario).
 - **Cuándo despliega Branching las funciones que no cambian** (`extract-document`, `cierre-email`,
   `pago-notificar`): no está confirmado. El §5.2 lo deja anotado y el §3 exige que su código en prod sea igual al de `main`.
 - **Después del merge:** actualizar ESTADO.md (regla operativa 2 cumplida para estas funciones; tabla de Edge
   Functions con las versiones nuevas) y el comentario de cabecera de `monthly-report/index.ts`, que todavía dice
   «Deploy A MANO».
-- **Puente e ítem 11:** si algún día `supabase/functions/ingest-ndf/` (o `ingest-punches/`) llega a `main`, en el
-  mismo PR tiene que entrar su sección en `config.toml` con `verify_jwt = false`. Si no, Branching la despliega con
-  `verify_jwt = true` y el agente del PoS da 401 en cada ciclo.
+- **⛔ GATE de `ingest-ndf` (Ismael, 08/11):** el día que `supabase/functions/ingest-ndf/` llegue a `main`, el
+  **mismo PR** agrega a `config.toml`:
+  ```toml
+  [functions.ingest-ndf]
+  verify_jwt = false
+  ```
+  Si no, Branching la despliega con `verify_jwt = true` y el agente del PoS recibe **401 en cada ciclo** (manda
+  `x-ingest-secret`, no un JWT). Lo exige `supabase/config.test.ts` en el gate (falla si la carpeta está y la
+  sección no, o si dice `true`). Lo mismo para `ingest-punches/`: necesita su sección con `verify_jwt` explícito.
 - **Guías de uso (`docs/sop-app/`):** este pase no cambia pantallas, botones ni roles; no hace falta tocarlas.
 
 **Registro del día del pase** (completar):

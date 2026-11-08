@@ -176,27 +176,48 @@ solas tras un reinicio (validado el 29/10).
 
 ## 🗃️ Migraciones
 
-### Números de migración reservados por rama (08/11)
+### Numeración de migraciones (regla de Ismael, 08/11)
 
-> **Regla: antes de crear una migración, leé esta tabla en `main` y reservá tu número en el mismo PR**
-> (una fila nueva acá, con el siguiente libre). Un número reservado no se reutiliza aunque la rama se abandone.
-> Revisada el 08/11 contra el ledger de prod y de staging y contra **todas** las ramas de origin.
-> ⚠️ Un número **menor** que la última versión aplicada en prod puede ser rechazado por Branching al mergear a
-> `main` (por eso la 078 de Prom/PAX pasó a 080). Las migraciones que hoy son solo de staging y van a prod más
-> tarde (083, 084, la 075 del Club) se renumeran al siguiente libre en ese momento, y se anota acá.
+> **Fuente de verdad:** `supabase/migraciones-reservadas.json`, que lee el test del gate
+> `supabase/migraciones.test.ts`. Esta tabla lo repite para leerlo rápido; el test exige que coincidan.
 
-| Número | Nombre | Rama | Dónde está aplicada |
+**Reglas**
+1. **Bloques por rama:**
+   - **CAJA / operación: 087–99** (caja, Salarios, PoS propio, seguridad de la app);
+   - **CLUB SATORI + puente: 100–149**.
+
+   La **086** queda libre, fuera de bloque. Si un bloque se acaba, se le asigna uno nuevo **en esta tabla y
+   en el registro antes de usarlo**.
+2. **Cada PR que agrega una migración actualiza esta tabla y el registro** (`asignadas`, con el siguiente
+   número libre de su bloque). El gate falla si una migración nueva no está registrada, si queda fuera del
+   bloque de su rama o si repite un número.
+3. **Pase a prod:** ninguna migración entra a prod con número **≤ al último del ledger de prod**. Si pasa,
+   se renombra al siguiente libre **arriba** del último de prod, en el mismo PR del pase: archivo, rollback,
+   pruebas, scripts y la fila del ledger de staging. (Branching rechaza una versión menor que la última
+   aplicada: por eso la 078 de Prom/PAX pasó a 080.)
+4. Un número usado no se reutiliza aunque la rama se abandone. Las versiones son **texto**, como en el
+   ledger: `0090` y `0095` son históricas y distintas de una futura `090` / `095`.
+
+**Ya usados (antes de los bloques)**
+
+| Número | Nombre | De | Rama | Dónde está aplicada |
+|---|---|---|---|---|
+| 075 | `club_satori_esquema` | Club | `claude/brave-brown-m45jd7` y ramas del Club | staging. Al pasar a prod se renombra por la regla 3 |
+| 078 | — | — | — | **No usar** (fue Prom/PAX, renumerada a 080) |
+| 080 | `pos_prompax_agregado` | Prom/PAX | `main` (#58) | staging y prod (último de prod al 08/11) |
+| 081 | `pos_ndf_campos_factura` | puente (Club) | `claude/epic-tesla-pyo77m`, `claude/club-integracion`, `claude/club-wallet` (PR #59) | staging |
+| 082 | `pos_ndf_ingesta_transaccional` | puente (Club) | `claude/puente-item11` | staging, **sin su fila en el ledger** (08/11): falta registrarla |
+| 083 | `my_turno_stats_higiene` | caja | `claude/higiene-r5` | staging (08/11). Va a prod con el PoS propio |
+| 084 | `employee_payroll` (SAL-AUD-01, paso 1) | caja | `claude/salarios-rls` | staging (08/11). Va a prod con Salarios |
+| 085 | `rls_lectura_rol_activo` (SEC-01c) | caja | `claude/rls-is-active` | staging (08/11) |
+
+**Bloques**
+
+| Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
-| 075 | `club_satori_esquema` | `claude/brave-brown-m45jd7` y ramas del Club | staging. **Se renombra a 086 antes de ir a prod** |
-| 078 | — | — | **No usar** (fue Prom/PAX, renumerada a 080) |
-| 080 | `pos_prompax_agregado` (Prom/PAX) | `main` (#58) | staging y prod |
-| 081 | `pos_ndf_campos_factura` (puente: campos de la factura) | puente / Club (`claude/epic-tesla-pyo77m`, `claude/club-integracion`, `claude/club-wallet`; PR #59) | staging |
-| 082 | `pos_ndf_ingesta_transaccional` (puente: ingesta en una transacción) | `claude/puente-item11` | staging, **sin su fila en el ledger** (08/11 ~06:20 CR): falta registrarla |
-| 083 | `my_turno_stats_higiene` (auditoría r5) | `claude/higiene-r5` | staging (08/11 07:18 CR). Va a prod con el PoS propio |
-| 084 | `employee_payroll` (SAL-AUD-01, paso 1) | `claude/salarios-rls` | staging (08/11 07:19 CR). Va a prod con Salarios |
-| 085 | `rls_lectura_rol_activo` (SEC-01c) | `claude/rls-is-active` | staging (08/11 07:17 CR) |
-| 086 | **RESERVADO: Club Satori** (su 075 renombrada) | ramas del Club | — |
-| **087** | — | — | **próximo libre** |
+| CAJA / operación | 087–99 | — | **087** |
+| CLUB SATORI + puente | 100–149 | — | **100** |
+| (fuera de bloque) | 086 | — | libre |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
@@ -204,7 +225,7 @@ solas tras un reinicio (validado el 29/10).
 | **PROD** | **55 filas** | `001–008 · 0090 · 0095 · 010–021 · 038–054 · 062–069 · 071–074 · 076–077 · 079–080` (068 el 05/11 05:30 UTC, SEC-01; 069 el 05/11 15:22 UTC, SEC-01b; 071 el 05/11 19:20 UTC, cierre atómico; 072 y 073 el 05/11 ~20:05 UTC, SEC-03 y SEC-04; 074 el 05/11 20:20 UTC, conteo ciego; **076 y 077 el 06/11 entre 18:03:48 y 18:05:14 UTC**, SoP, una después de la otra — ver abajo; **079 el 06/11 21:22 UTC** y **080 el 07/11**, las dos aplicadas por Branching al mergear). **055–061 NO están en prod** (Salarios/BioTime, solo staging). La 067 se aplicó a mano el 30/10 antes del merge de #15. |
 | **STAGING** | **82 filas** (08/11) | Hasta la 064 + la 067 + **la 068 (04/11, SEC-01) + la 070 y la 069 (05/11, SEC-01b; la 070 se aplicó primero) + la 071 (cierre atómico) + la 072 y la 073 (05/11, SEC-03 y SEC-04) + la 074 (05/11, conteo ciego) + la 075 (Club Satori F1a, reservada, solo staging) + la 076 y la 077 (SoP; 076 el 06/11 ~06:00–06:07 UTC, 077 el 06/11 ~16:36–16:40 UTC) + la 079 (SoP solo para usuarios activos, 06/11 ~21:08 UTC) + la 080 (Prom/PAX; aplicada el 06/11 como 078 y renumerada el 07/11, antes de ir a prod)**. Además, desde el 08/11: la 081 (puente), la 083, la 084 y la 085 (auditoría r5); la 082 del puente está aplicada **sin su fila**. ⚠️ **Le faltan las filas 065 y 066** aunque sus columnas existen (deuda de ledger, en el backlog). |
 
-- **Próximo número libre: `087`** (08/11; la 086 está reservada para el Club). Antes de crear una migración, tomar el número de la tabla «Números de migración reservados por rama» de abajo y agregar la fila **en el mismo push**. La **`075` está reservada — Club Satori F1a (PR sin mergear hasta el piloto)**: esquema `club_*`, solo en staging. No usarla para otra cosa. La **`080`** (`pos_prompax_agregado`, RPC de Prom/PAX) está **en staging y en prod** (prod: la aplicó el merge del PR de Prom/PAX el 07/11). Se aplicó en staging como `078` y el 07/11 se renumeró a `080` (archivo y fila del ledger de staging; la función no cambió) porque PROD ya tenía la `079`: una versión menor que la última aplicada en PROD puede ser rechazada por Branching. **La `078` no existe en ningún lado: no reutilizarla.** ⚠️ La `075` de Club Satori quedó por debajo de la última de prod (080): antes de llevarla a prod hay que renumerarla.
+- **Próximo número libre: por bloque** (08/11): **CAJA / operación 087**, **CLUB SATORI + puente 100**. Ver «Numeración de migraciones» abajo. Antes de crear una migración, leer esa sección **en `main`** y registrar el número en el mismo PR.
   - La **076** (`sops_code_area`: columnas `code`, `area`, `doc_type`, `version`, `employee_book`, `pdf_path` en `public.sops` + índice único parcial `sops_code_key` + check `sops_doc_type_check`) y la **077** (`sops_pdf_storage`: policies `sops_storage_read` y `sops_franquicia_solo_gerencia` en `storage.objects`, bucket privado `documents`) están **en staging y en prod**. Prod: 06/11 entre 18:03:48 y 18:05:14 UTC, aplicadas a mano por la Management API (sesión de Claude Code de los SoP, con OK del dueño), verificando el ref antes de cada escritura y **antes** del merge del código (PR #49). Sus `.sql` son **idénticos byte a byte** a los statements del ledger de prod y de staging (md5 `fc26bfea…` y `ef17f371…`). Rollback: `scripts/sql/077_rollback.sql` y, solo después de revertir el sync de SoP, `scripts/sql/076_rollback.sql`.
   - **⚠️ Si se corre un rollback de la 076 o la 077, en el mismo momento hay que quitar su `.sql` de `supabase/migrations/` en `main`** (PR propio). Los rollbacks borran la fila del ledger; si el archivo sigue en `main`, Branching intentaría volver a aplicarla en el próximo push, y si el archivo sale de `main` sin el rollback, falla con «Remote migration versions not found in local migrations directory» (regla 10: nunca sacar de `main` el `.sql` de algo que está en el ledger).
   - La **079** (`sops_lectura_activos`, PR de `claude/mig-079-sops-activos`) cierra el hueco de lectura de SoP para usuarios **inactivos** con sesión vigente: `sops_read` (010) pasa de `USING (true)` a `USING (public.get_my_role() is not null)`, y `sops_storage_read` (077) suma `and public.get_my_role() is not null`. Nada más cambia (`sops_write`, `sops_franquicia_solo_gerencia`, `documents_storage_rw` y el resto quedan igual; usa `ALTER POLICY`). **Staging: aplicada el 06/11 ~21:08 UTC** y probada en solo lectura: owner, cajero y salonero reales (y los 5 roles simulados) leen igual que antes —47 filas de `sops` (27 activas), 27 PDF y el libro del empleado; la franquicia solo owner y manager—, un manager inactivo real ve **0 filas y 0 objetos** de `sops/*`, y `anon` 0. **Prod: la aplica Supabase Branching con el merge del PR** (Branching ON auto-aplica las migraciones de `main`), con OK de Ismael y respaldo previo de las dos policies. Rollback: `scripts/sql/079_rollback.sql` (y quitar el `.sql` de `main` en el mismo momento).

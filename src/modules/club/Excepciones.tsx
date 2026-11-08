@@ -159,6 +159,8 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
     [e.tipo === 'SIN_CRUCE' ? 'Pedido (PoS)' : 'Factura (PoS)', e.factura ?? '—'],
     // (08-nov) las que salen del PoS: turno (corte del local) y login; los fijos de caja se identifican por fecha y turno
     ...(d.turno ? [['Turno', String(d.turno)] as [string, string]] : []),
+    // Club compartido: SOCIO_USO_ANOMALO dice en qué locales estuvo el socio
+    ...(Array.isArray(d.locales) && d.locales.length > 0 ? [['Locales', (d.locales as string[]).join(' · ')] as [string, string]] : []),
     ...(e.tipo === 'DESCUENTO_SIN_RESPALDO' ? [['Clasificación', d.clasificacion ? String(d.clasificacion) : 'sin clasificar (ningún tipo ni marcador)'] as [string, string]] : []),
     ...(d.descuento_pct != null ? [['Descuento', `${String(d.descuento_pct).replace('.', ',')} % (precio ${crc(d.precio)} · habitual ${crc(d.referencia)})`] as [string, string]] : []),
     ...(d.descuento_crc != null ? [['Monto estimado', crc(d.descuento_crc)] as [string, string]] : []),

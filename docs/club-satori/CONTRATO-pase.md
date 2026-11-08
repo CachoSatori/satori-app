@@ -97,6 +97,9 @@ La llenan **triggers de la base**; `miembro_id` null = afecta a **todos** los pa
 
 Funciones para B (solo `service_role`):
 - `club_pase_eventos_leer(p_despues bigint, p_limite int default 500) → table(id, miembro_id, motivo, creado_en)`
+- `club_pases_emitidos(p_plataforma text, p_despues uuid default null, p_limite int default 500) → table(miembro_id,
+  object_id, emitido_en)`: los pases emitidos, paginados por `miembro_id`. Para los eventos con `miembro_id` null
+  (promociones): B recorre esta lista y actualiza cada objeto (08-nov).
 - `club_pase_cursor_leer(p_nombre text) → bigint` y `club_pase_cursor_guardar(p_nombre text, p_id bigint)`: B guarda
   hasta dónde procesó (`p_nombre` = `'google'` o `'apple'`), así un reinicio no reprocesa ni pierde.
   **CLUB-AUD-70:** `guardar` **solo avanza** (dos sincronizaciones simultáneas dejan el máximo). Para reprocesar hay

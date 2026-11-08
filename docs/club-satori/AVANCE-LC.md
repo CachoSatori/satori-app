@@ -344,3 +344,28 @@
 | Manager | Leer contactos o exportar sin rastro | La tabla no se lee directo; la función y el exporte dejan fila; la auditoría es de solo inserción | El exporte lo registra la app: una app modificada podría saltearlo, pero el dato del reporte sale de `club_reporte_mes` (owner/manager). **Hueco anotado:** auditar también `club_reporte_mes` si Ismael lo quiere |
 | Owner | Borrar su propio rastro | `club_auditoria` sin DELETE para la app y con trigger de solo inserción (prueba 78) | — |
 | Anfitrión | Ver un saldo en ₡ que no es el real | El ₡ = créditos × `valor_credito_crc` vigente | Si el owner cambia el valor del crédito, el pase no se actualiza hasta el próximo evento del miembro (no hay evento por cambio de config). Anotado para B |
+
+## 08-nov · noche (correcciones de Ismael) · `96ed1bd`
+- **Guía rápida:** cupón = aplicar el 10 % en el PoS **y** marcar «PROMO CLUB 10 %» (vale ₡0: es la marca).
+- **Créditos con colones** («1 crédito · ₡10.000») en el saldo y en «Créditos a canjear» de la caja, la confirmación, el
+  aviso del canje, el portal y las guías: coincide con el pase.
+- **Aviso v1.1** (ES/EN): «Qué datos guardamos» suma «y tu email, si lo das». **DECISIÓN:** versión nueva y no aclaración,
+  porque agrega una categoría de datos a lo que la persona acepta; quien aceptó v1 queda con v1 en su fila. Costo cero:
+  todavía nadie aceptó en prod. Config de staging: v1.1 en los dos locales; una prueba de club-web verifica que la
+  versión de club-web sea la que la migración carga por defecto.
+- **Exportes entregados por la base:** `club_reporte_exportar` (owner/manager) audita y devuelve el reporte; la app solo
+  le da formato. `club_registrar_exporte` se borró. **Contactos para ofertas:** `club_contactos_ofertas_exportar`, solo
+  owner, solo opt-in, con rastro (filas, sin datos) y el link de baja `/b/<cupón>` en cada fila; botón en «Reportes».
+- **Evento global `config`** al cambiar `valor_credito_crc` o `personas_por_credito`: la versión de todos los pases sube.
+- **Prueba 82 (RLS de public):** falla si una tabla no tiene RLS, si una vista no es `security_invoker`, si anon tiene
+  algún permiso sin política sobre una tabla `club_*`, o si aparece una tabla **nueva** fuera del Club en esa situación.
+  Los privilegios por defecto no se tocaron. **Marcadas hoy (fuera del Club, solo listadas; RLS activo en todas, así que
+  anon igual no lee ni escribe):** accounting_entries, cash_movements, cash_sessions, credit_applications,
+  movement_deletions, movement_edits, pos_ndf_cursor, pos_ndf_open, pos_ndf_ticket_lines, pos_ndf_tickets, product_map,
+  punch_exceptions, sops, supplier_credits, suppliers, time_punches, tip_entries, tip_sessions, ventas_comps, ventas_dias,
+  ventas_hist, ventas_metas (22). Ninguna tabla sin RLS ni vista sin `security_invoker`.
+- Pruebas: batería **526/526** · paridad **901 = 901** · vitest **1.505** · club-web **20/20**. Staging en su base.
+- Autorrevisión: el exporte ya no depende de la app (sin pasar por la base no hay datos). El de contactos es solo owner y
+  cada fila lleva su baja. Hueco que queda: quien tenga el CSV puede reenviarlo; el rastro dice quién lo bajó y cuándo.
+  Los botones de «Créditos a canjear» ahora son más largos («1,5 créditos · ₡15.000»): pasan las pruebas, pero no los
+  revisé en pantalla de teléfono (pendiente del recorrido).

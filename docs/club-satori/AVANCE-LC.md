@@ -18,7 +18,7 @@
 ## Sesión B · pase de Wallet (Google; Apple apagado)
 | Etapa | Qué | Días | Estado | SHA | Pruebas |
 |---|---|---|---|---|---|
-| B1 | Edge `club-pase`: JWT «Save to Google Wallet», clase y objeto | 1,5 | pendiente | — | — |
+| B1 | Edge `club-pase`: JWT «Save to Google Wallet», clase y objeto | 1,5 | **hecha** (rama `claude/club-wallet`, sin desplegar) | `adfa208` | 20 pruebas nuevas (vitest 1.511) · build OK · eslint y tsc limpios · humo con datos reales de staging (solo lectura) |
 | B2 | Botón en el portal y en la autoalta | 0,5 | pendiente | — | — |
 | B3 | Sincronización por eventos, mensajes de canje, baja | 1,5 | pendiente | — | — |
 | B4 | Apple apagado | 1,5 | pendiente | — | — |
@@ -86,3 +86,5 @@
   falta la lista W1–W14 de Grok). Batería 354/354, carreras 8/8, paridad 724 = 724.
 - 08-nov 01:00 (cont.) · Puente, sin desplegar: **CLUB-AUD-46/47/48** (`831b3ee` en `claude/puente-item11`). 44/45 no
   arrancada (necesita migración nueva). Cola del PLAN al día.
+- 08-nov 02:30 · **B1 hecha** en `claude/club-wallet` (`adfa208`), **sin desplegar**. Detalle:
+  [NOCHE-2026-11-08-B.md](NOCHE-2026-11-08-B.md). Próximo de B: B2 (botón en el portal y en la autoalta).

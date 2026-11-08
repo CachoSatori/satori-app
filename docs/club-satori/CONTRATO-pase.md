@@ -131,6 +131,16 @@ marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
   `club_canje_codigo_generar_pase` (pública por club-web, como el portal). Owner o manager lo revocan o regeneran en
   Miembros (`club_pase_token`).
 
+### Notas de B1 (08-nov)
+- **Tipo de pase:** genérico (`genericClass` `<issuerId>.club-satori`, `genericObject` `<issuerId>.club-<miembro_id>`).
+  Código en `src/shared/wallet/` y el Edge en `supabase/functions/club-pase/` (rama `claude/club-wallet`).
+- **Largo del JWT:** el completo (clase + objeto) ronda los **3 KB**; Google recomienda ≤ ~1.800 caracteres. Para eso
+  está el **JWT flaco** (solo `id` y `classId`), que sirve cuando el objeto ya existe en Google: lo crea o actualiza
+  la sincronización por API REST (B3). Hasta B3 se usa el completo (DECISIÓN PROVISORIA; se prueba en B5 con un
+  teléfono real).
+- **`club_pase_emitido` se registra al generar el link**, no cuando la persona toca «Guardar» (Google no avisa). B3 tiene
+  que tolerar un objeto que no existe en Google (404 al actualizar → no es error).
+
 ## 6. Apple (apagado)
 Mismo contrato. Flag `club_config.wallet_apple_activo = false` (lo agrega A). B deja listo el `.pkpass` y el web
 service de actualización de Apple, y no se ofrece el botón mientras el flag esté apagado.

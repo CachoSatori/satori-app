@@ -177,8 +177,9 @@
    - ~~**CLUB-AUD-72** (autoalta con teléfono existente → solicitud, no cambia nada)~~ **HECHO** `208cdc2`
    - ~~**CLUB-AUD-73** (purga borra el contacto sin otro rol activo; aviso fiel; aviso_version en caja)~~ **HECHO** `b6ab9b3`
    - ~~**CLUB-AUD-74** (tope por prefijo de red, alerta al 80 %, RUNBOOK Turnstile de prod)~~ **HECHO** `80cbfa3` (sin desplegar)
-   - **42:** que la rama `pruebas` no exista en prod;
-   - **43:** asserts fuertes en la batería (W1–W14);
+   - ~~**42:** que la rama `pruebas` no exista en prod;~~ **HECHO** `5b441c9` (marca `club_entorno` solo en staging)
+   - **43:** asserts fuertes en la batería (W1–W14); **PARCIAL** (ver NOCHE-2026-11-08-A): 4 débiles reforzados (33, 43,
+     45 y 53); falta contrastar con la lista W1–W14 de Grok, que no está en el repo;
    - **en la rama del puente, sin desplegar:**
      - 44/45: ingesta transaccional por local;
      - 46: ignorar el `last_poll_at` que llega y que `last_factura` solo avance;

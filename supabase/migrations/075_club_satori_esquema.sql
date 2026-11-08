@@ -673,6 +673,7 @@ begin
     raise exception 'Código no válido' using errcode = 'P0001';
   end if;
 
+  perform public.club_local(v_ref.location_id, true);   -- LC-ML: Club activo en el local del anfitrión
   select * into v_cfg from public.club_config where location_id = v_ref.location_id;
   if not found then
     raise exception 'Código no válido' using errcode = 'P0001';
@@ -1083,6 +1084,7 @@ begin
   end if;
 
   -- CLUB-AUD-02: control de la visita (lock, una tarjeta por referente, Σ personas ≤ pax).
+  perform public.club_local(v_cupon.location_id, true);   -- LC-ML: Club activo en el local del cupón
   v_pos := public.club_pos_ref(p_pos, v_cupon.location_id);   -- CLUB-AUD-18: local del cupón
   perform public.club_visita_control(v_cupon.location_id,
                                      coalesce(v_pos->>'visita', public.club_visita_canonica(v_cupon.location_id, null, v_fac)),
@@ -1147,7 +1149,7 @@ end;
 $$;
 
 -- LC-A4.4: lista y resolución de las personas pendientes (owner, manager).
-create or replace function public.club_pendientes_listar(p_location text default 'santa-teresa')
+create or replace function public.club_pendientes_listar(p_location text default null)
 returns table (id uuid, miembro_id uuid, nombre text, personas int, creditos numeric, ganado_mes_crc numeric, fecha_visita timestamptz,
                registrado_por text, puedo_resolver boolean)
 language plpgsql
@@ -1157,6 +1159,7 @@ set search_path = public, pg_temp
 as $$
 declare v_rol public.user_role := public.get_my_role();
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
   return query
     select pp.id, pp.miembro_id, m.nombre, pp.personas, public.club_creditos(pp.personas, pp.personas_por_credito), pp.ganado_mes_crc,
@@ -1366,6 +1369,7 @@ begin
   if not found then
     raise exception 'Enlace no válido' using errcode = 'P0001';
   end if;
+  if found then perform public.club_local(v_m.location_id, true); end if;   -- LC-ML
   select * into v_cfg from public.club_config c where c.location_id = v_m.location_id;
   if public.club_saldo_personas(v_m.id) < v_cfg.canje_min * v_cfg.personas_por_credito then
     raise exception 'Todavía no te alcanza para canjear' using errcode = 'P0001';
@@ -1492,6 +1496,7 @@ begin
   if v_sin_pos and (v_fac = '' or length(v_fac) > 40) then
     raise exception 'Falta el pedido o la factura: elegí el pedido de la lista' using errcode = 'P0001';
   end if;
+  perform public.club_local(v_m.location_id, true);   -- LC-ML: Club activo en el local del miembro
   v_pos := public.club_pos_ref(p_pos, v_m.location_id);   -- CLUB-AUD-18: local del miembro
   v_visita := coalesce(v_pos->>'visita', public.club_visita_canonica(v_m.location_id, null, v_fac));
 
@@ -1896,7 +1901,9 @@ as $$
 $$;
 
 -- Negocios: alta y edición (owner, manager).
-create or replace function public.club_negocio_guardar(p_id uuid, p_nombre text, p_tipo text, p_activo boolean)
+drop function if exists public.club_negocio_guardar(uuid, text, text, boolean);   -- LC-ML: suma p_location
+create or replace function public.club_negocio_guardar(p_id uuid, p_nombre text, p_tipo text, p_activo boolean,
+                                                      p_location text default null)
 returns uuid
 language plpgsql
 volatile
@@ -1919,8 +1926,8 @@ begin
   end if;
   begin
     if p_id is null then
-      insert into public.club_negocios (nombre, tipo, activo)
-      values (v_nombre, p_tipo, coalesce(p_activo, true))
+      insert into public.club_negocios (location_id, nombre, tipo, activo)
+      values (public.club_local(p_location, false), v_nombre, p_tipo, coalesce(p_activo, true))
       returning id into v_id;
     else
       update public.club_negocios
@@ -1941,8 +1948,9 @@ $$;
 -- Miembros: alta y edición (owner, manager). El contacto va a club_miembros_contacto.
 -- p_contacto NULL = no tocar el contacto; un objeto = reemplazarlo
 -- ({telefono, email, optin_whatsapp, optin_email}; claves ausentes o vacías = sin dato).
+drop function if exists public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb);   -- LC-ML: suma p_location
 create or replace function public.club_miembro_guardar(
-  p_id uuid, p_tipo text, p_nombre text, p_negocio_id uuid, p_estado text, p_contacto jsonb)
+  p_id uuid, p_tipo text, p_nombre text, p_negocio_id uuid, p_estado text, p_contacto jsonb, p_location text default null)
 returns uuid
 language plpgsql
 volatile
@@ -1987,8 +1995,10 @@ begin
   end if;
 
   if p_id is null then
-    insert into public.club_miembros (tipo, nombre, negocio_id, estado, origen)
-    values (p_tipo, v_nombre, p_negocio_id, coalesce(p_estado, 'activo'), 'app')
+    -- LC-ML: el local se elige (o sale del negocio); sin dato, el único local con el Club activo
+    insert into public.club_miembros (location_id, tipo, nombre, negocio_id, estado, origen)
+    values (public.club_local(coalesce(p_location, (select n.location_id from public.club_negocios n where n.id = p_negocio_id)), false),
+            p_tipo, v_nombre, p_negocio_id, coalesce(p_estado, 'activo'), 'app')
     returning id into v_id;
   else
     select m.estado into v_antes from public.club_miembros m where m.id = p_id for update;
@@ -2175,14 +2185,16 @@ begin
   end if;
   -- CLUB-AUD-26: apagada (prod) → nadie; prendida (staging, piloto en paralelo) → tope diario por miembro.
   select c.* into v_cfg from public.club_config c
-   where c.location_id = coalesce((select m.location_id from public.club_miembros m where m.id = p_miembro), 'santa-teresa');
+   where c.location_id = (select m.location_id from public.club_miembros m where m.id = p_miembro);
   if not coalesce(v_cfg.tarjeta_manual_activa, false) then
     raise exception 'La tarjeta física está desactivada en este local: registrá la visita con el cupón del turista' using errcode = 'P0001';
   end if;
 
   -- CLUB-AUD-18: el local es el del miembro. CLUB-AUD-02: control de la visita ANTES del lock del
   -- miembro (orden visita → miembro).
-  v_loc := coalesce((select m.location_id from public.club_miembros m where m.id = p_miembro), 'santa-teresa');
+  v_loc := (select m.location_id from public.club_miembros m where m.id = p_miembro);
+  if v_loc is null then raise exception 'No se encontró al miembro: escaneá su QR o buscalo de nuevo' using errcode = 'P0001'; end if;
+  perform public.club_local(v_loc, true);   -- LC-ML: Club activo en el local del miembro
   v_pos := public.club_pos_ref(p_pos, v_loc);
   perform public.club_visita_control(v_loc, coalesce(v_pos->>'visita', public.club_visita_canonica(v_loc, null, v_fac)),
                                      v_pos, v_fac, p_miembro, p_personas);
@@ -2390,7 +2402,7 @@ $$;
 -- Lo que la caja ve después del QR: «Pedido 14 · Mesa 20 · ₡48.500 · salonero». Un toque elige.
 drop function if exists public.club_mesas_abiertas(text);
 drop function if exists public.club_pedidos_abiertos(text);
-create or replace function public.club_pedidos_abiertos(p_location text default 'santa-teresa')
+create or replace function public.club_pedidos_abiertos(p_location text default null)
 returns table (pedido text, clave text, area text, mesa text, salonero text, total_crc numeric, pax int, actualizado timestamptz)
 language plpgsql
 stable
@@ -2399,6 +2411,7 @@ set search_path = public, pg_temp
 as $$
 declare v_rol public.user_role := public.get_my_role();
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager','cajero') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
@@ -2418,7 +2431,7 @@ $$;
 -- Plan B: facturas cerradas de las últimas 2 h (hora, total, mesa si tiene, consecutivo para comparar
 -- con el tiquete). owner, manager, cajero.
 drop function if exists public.club_facturas_recientes(text);
-create or replace function public.club_facturas_recientes(p_location text default 'santa-teresa')
+create or replace function public.club_facturas_recientes(p_location text default null)
 returns table (numero_factura text, hora timestamptz, total_crc numeric, area text, mesa text, pedido text, consecutivo_fe text)
 language plpgsql
 stable
@@ -2427,6 +2440,7 @@ set search_path = public, pg_temp
 as $$
 declare v_rol public.user_role := public.get_my_role();
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager','cajero') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
@@ -2544,7 +2558,10 @@ begin
                 when v_c.estado = 'anulado' or v_m.estado <> 'activo' or v_c.vence_en <= now() then 'vencido'
                 else 'vigente' end,
     'vence_en', v_c.vence_en,
-    'referente', public.club_nombre_pila(v_m.nombre));
+    'referente', public.club_nombre_pila(v_m.nombre),
+    -- LC-ML: el local del cupón sale de club_config (nombre, dirección y mapa), no de club-web
+    'local', (select jsonb_build_object('id', c.location_id, 'nombre', coalesce(c.nombre, c.location_id), 'direccion', c.direccion,
+                                       'mapa', c.mapa_url) from public.club_config c where c.location_id = v_c.location_id));
 end;
 $$;
 
@@ -2858,7 +2875,7 @@ alter table public.club_config add column if not exists lc_excepciones_desde dat
 --   SOCIO_ALTA_SIN_CONFIRMAR (exacta)· alta provisional (caja o validación) que nadie distinto confirmó todavía
 --   Las tres de cortesía salen «pendiente de configuración» mientras no estén ni cortesia_familia ni las cortesías.
 drop function if exists public.club_excepciones(date, date, text);   -- LC-A5: se suma p_tipo
-create or replace function public.club_excepciones(p_desde date, p_hasta date, p_location text default 'santa-teresa', p_tipo text default null)
+create or replace function public.club_excepciones(p_desde date, p_hasta date, p_location text default null, p_tipo text default null)
 returns table (tipo text, ref text, fecha timestamptz, factura text, certeza text, detalle jsonb,
                resuelta boolean, nota text, resuelta_en timestamptz)
 language plpgsql
@@ -2872,6 +2889,8 @@ declare
   v_ini timestamptz;
   v_fin timestamptz;
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML
+  if not public.club_local_activo(p_location) then return; end if;   -- Club apagado en el local: sin excepciones LC
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
@@ -3302,7 +3321,7 @@ end;
 $$;
 
 -- Cantidad de excepciones abiertas de los últimos N días (contador de la tarjeta Club). owner, manager.
-create or replace function public.club_excepciones_abiertas(p_dias int default 30, p_location text default 'santa-teresa')
+create or replace function public.club_excepciones_abiertas(p_dias int default 30, p_location text default null)
 returns int
 language sql
 stable
@@ -3367,7 +3386,7 @@ end;
 $$;
 
 -- Resolver una excepción con nota (owner, manager). No modifica el libro.
-create or replace function public.club_excepcion_resolver(p_tipo text, p_ref text, p_nota text, p_location text default 'santa-teresa')
+create or replace function public.club_excepcion_resolver(p_tipo text, p_ref text, p_nota text, p_location text default null)
 returns boolean
 language plpgsql
 volatile
@@ -3379,6 +3398,7 @@ declare
   v_nota text := btrim(coalesce(p_nota, ''));
   v_ref  text := btrim(coalesce(p_ref, ''));
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
@@ -3568,7 +3588,7 @@ create policy club_rep_cerr_sel on public.club_reportes_cerrados for select to a
 -- Reporte mensual (owner, manager). JSON sin teléfonos ni emails. `p_vivo` = recalcular aunque el mes
 -- esté cerrado (lo usa club_reporte_cerrar; la pantalla muestra el congelado).
 drop function if exists public.club_reporte_mes(date, text);
-create or replace function public.club_reporte_mes(p_mes date, p_location text default 'santa-teresa', p_vivo boolean default false)
+create or replace function public.club_reporte_mes(p_mes date, p_location text default null, p_vivo boolean default false)
 returns jsonb
 language plpgsql
 stable
@@ -3585,6 +3605,7 @@ declare
   v_3ini timestamptz;   -- 3 meses previos
   r      jsonb;
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
@@ -3640,7 +3661,9 @@ begin
     from mv v),
   fila as (select p.*, jsonb_build_object('nombre', p.nombre, 'negocio', p.negocio, 'tipo', p.tipo) as base from pm p)
   select jsonb_build_object(
-    'mes', to_char(v_mes, 'YYYY-MM'), 'local', p_location, 'generado_en', now(),
+    'mes', to_char(v_mes, 'YYYY-MM'), 'local', p_location,
+    'local_nombre', (select coalesce(c.nombre, c.location_id) from public.club_config c where c.location_id = p_location),   -- LC-ML
+    'generado_en', now(),
     'config', jsonb_build_object('valor_credito_crc', v_cfg.valor_credito_crc, 'personas_por_credito', v_cfg.personas_por_credito,
                                  'vencimiento_meses', v_cfg.vencimiento_meses, 'pm_pausado', v_cfg.pm_pausado),
     'kpis', (select jsonb_build_object(
@@ -3720,7 +3743,7 @@ $$;
 
 -- Cerrar un mes (solo owner): congela el reporte con su sha256. Solo meses ya terminados (hora CR).
 -- Recerrar = versión nueva, con motivo obligatorio. Devuelve lo congelado.
-create or replace function public.club_reporte_cerrar(p_mes date, p_motivo text default null, p_location text default 'santa-teresa')
+create or replace function public.club_reporte_cerrar(p_mes date, p_motivo text default null, p_location text default null)
 returns jsonb
 language plpgsql
 volatile
@@ -3736,6 +3759,7 @@ declare
   v_hash   text;
   v_prev   text;
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol <> 'owner' then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
@@ -3811,7 +3835,7 @@ create policy club_comparacion_gerencia on public.club_comparacion_vieja for sel
 
 -- Cargar las personas de la página vieja: [{referente | miembro_id, semana (AAAA-MM-DD, cualquier día), personas}].
 -- El referente se busca por nombre exacto (sin tildes ni mayúsculas); si no hay uno solo, vuelve en `no_encontrados`.
-create or replace function public.club_comparacion_cargar(p_filas jsonb, p_location text default 'santa-teresa')
+create or replace function public.club_comparacion_cargar(p_filas jsonb, p_location text default null)
 returns jsonb
 language plpgsql
 volatile
@@ -3827,6 +3851,7 @@ declare
   v_no   jsonb := '[]'::jsonb;
   v_cand int;
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
@@ -3867,7 +3892,7 @@ begin
 end;
 $$;
 
-create or replace function public.club_comparacion(p_desde date, p_hasta date, p_location text default 'santa-teresa')
+create or replace function public.club_comparacion(p_desde date, p_hasta date, p_location text default null)
 returns table (semana date, miembro_id uuid, referente text, negocio text, personas_staging int, personas_vieja int, diferencia int)
 language plpgsql
 stable
@@ -3876,6 +3901,7 @@ set search_path = public, pg_temp
 as $$
 declare v_rol public.user_role := public.get_my_role();
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
@@ -4237,7 +4263,7 @@ begin
     'actualizado_en', now(),
     'nombre_pila', public.club_nombre_pila(v_m.nombre),
     'estado', v_m.estado,
-    'local', jsonb_build_object('id', v_m.location_id, 'nombre', 'Satori Sushi Bar · Santa Teresa'),
+    'local', jsonb_build_object('id', v_m.location_id, 'nombre', coalesce(v_cfg.nombre, v_m.location_id)),   -- LC-ML: dato, no texto fijo
     'pestanas', to_jsonb(v_pest),
     'codigo_barras', case when j_soc is not null then jsonb_build_object('tipo', 'socio', 'valor', j_soc->>'qr_url')
                           when j_anf is not null then jsonb_build_object('tipo', 'cupones', 'valor', j_anf->>'qr_url') end,
@@ -4465,7 +4491,7 @@ $$;
 
 -- Alta en caja (owner, manager, cajero). Obligatorios: nombre, WhatsApp y «verifiqué residencia».
 create or replace function public.club_socio_alta_caja(p_nombre text, p_whatsapp text, p_email text, p_verifico_residencia boolean,
-                                                       p_location text default 'santa-teresa')
+                                                       p_location text default null)
 returns jsonb
 language plpgsql
 volatile
@@ -4479,6 +4505,7 @@ declare
   v_em  text := nullif(lower(btrim(coalesce(p_email, ''))), '');
   v_id  uuid;
 begin
+  p_location := public.club_local(p_location, true);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager','cajero') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
@@ -4560,6 +4587,7 @@ begin
     return jsonb_build_object('miembro_id', p_miembro, 'estado', 'activo', 'provisional_hasta', null);
   end if;
   select c.* into v_cfg from public.club_config c join public.club_miembros m on m.location_id = c.location_id where m.id = p_miembro;
+  if found then perform public.club_local(v_cfg.location_id, true); end if;   -- LC-ML
   perform public.club_socio_provisional(p_miembro, v_cfg.socio_provisional_dias);
   perform public.club_auditar('socio_validar', 'club_miembro_roles', p_miembro, jsonb_build_object('estado', 'pendiente'),
                               jsonb_build_object('estado', 'activo', 'provisional', true));
@@ -4609,7 +4637,7 @@ security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_loc  text := 'santa-teresa';
+  v_loc  text;
   v_cfg  public.club_config%rowtype;
   v_nom  text := btrim(coalesce(p_datos->>'nombre', ''));
   v_tel  text;
@@ -4621,6 +4649,8 @@ begin
   if not public.club_web_ok() then
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
+  -- LC-ML: el local lo manda club-web (`local`); sin él, el único local con el Club activo
+  v_loc := public.club_local(nullif(btrim(coalesce(p_datos->>'local', '')), ''), true);
   select * into v_cfg from public.club_config where location_id = v_loc;
   if jsonb_typeof(p_datos) <> 'object' or length(v_nom) not between 2 and 80
      or coalesce(p_datos->>'acepto', '') <> v_cfg.aviso_privacidad_version then
@@ -4722,7 +4752,7 @@ begin
     v_purg := v_purg + 1;
   end loop;
   return jsonb_build_object('provisionales_vencidas', v_venc, 'autoaltas_purgadas', v_purg,
-                            'premios', (select coalesce(sum(public.club_premios_generar(c.location_id)), 0) from public.club_config c));
+                            'premios', (select coalesce(sum(public.club_premios_generar(c.location_id)), 0) from public.club_config c where c.club_activo));
 end;
 $$;
 do $$ begin
@@ -4775,7 +4805,7 @@ $$;
 -- LC-A5: altas de socios por cajero en un rango (owner, manager). Sale de la auditoría (solo inserción): altas en caja,
 -- validaciones de autoaltas y confirmaciones hechas por cada usuario; y, de las altas que cargó, cuántas siguen sin
 -- confirmar y cuántas volvieron a pendiente.
-create or replace function public.club_reporte_altas(p_desde date, p_hasta date, p_location text default 'santa-teresa')
+create or replace function public.club_reporte_altas(p_desde date, p_hasta date, p_location text default null)
 returns table (usuario text, altas_caja int, validaciones int, confirmo int, sin_confirmar int, vencidas int)
 language plpgsql
 stable
@@ -4787,6 +4817,7 @@ declare
   v_ini timestamptz;
   v_fin timestamptz;
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
   if p_desde is null or p_hasta is null or p_hasta < p_desde or p_hasta - p_desde > 400 then
     raise exception 'Rango de fechas no válido (máximo 400 días)' using errcode = 'P0001';
@@ -5007,7 +5038,7 @@ as $$
 $$;
 
 -- Lista (owner y manager leen; solo el owner edita).
-create or replace function public.club_promociones_listar(p_location text default 'santa-teresa')
+create or replace function public.club_promociones_listar(p_location text default null)
 returns table (id uuid, nombre text, nombre_en text, para text[], estado text, desde date, hasta date, dias int[],
                hora_desde time, hora_hasta time, porcentaje numeric, cortesias int, beneficio text, vigente_ahora boolean,
                actualizada_en timestamptz)
@@ -5018,6 +5049,7 @@ set search_path = public, pg_temp
 as $$
 declare v_rol public.user_role := public.get_my_role();
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
   return query
     select p.id, p.nombre, p.nombre_en, p.para, p.estado, p.desde, p.hasta, p.dias, p.hora_desde, p.hora_hasta,
@@ -5028,7 +5060,7 @@ end;
 $$;
 
 -- Crear o editar (solo owner). Una terminada no se edita (se crea otra). Queda en la auditoría.
-create or replace function public.club_promocion_guardar(p_id uuid, p_datos jsonb, p_location text default 'santa-teresa')
+create or replace function public.club_promocion_guardar(p_id uuid, p_datos jsonb, p_location text default null)
 returns uuid
 language plpgsql
 volatile
@@ -5044,6 +5076,7 @@ declare
   v_nom  text := btrim(coalesce(p_datos->>'nombre', ''));
   v_est  text := coalesce(p_datos->>'estado', 'borrador');
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol <> 'owner' then raise exception 'Sin permiso' using errcode = '42501'; end if;
   if p_datos is null or jsonb_typeof(p_datos) <> 'object' then raise exception 'Faltan los datos de la promoción' using errcode = 'P0001'; end if;
   if length(v_nom) not between 2 and 80 then raise exception 'Falta el nombre (de 2 a 80 caracteres)' using errcode = 'P0001'; end if;
@@ -5099,7 +5132,7 @@ end;
 $$;
 
 -- Productos que llegan en las facturas (120 días). owner y manager. Para elegir las cortesías.
-create or replace function public.club_productos(p_buscar text default null, p_location text default 'santa-teresa')
+create or replace function public.club_productos(p_buscar text default null, p_location text default null)
 returns table (codigo text, nombre text, familia int, veces bigint, ultima timestamptz, es_cortesia boolean)
 language plpgsql
 stable
@@ -5110,6 +5143,7 @@ declare
   v_rol public.user_role := public.get_my_role();
   v_q   text := nullif(btrim(coalesce(p_buscar, '')), '');
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
   if v_q is not null and length(v_q) > 40 then v_q := left(v_q, 40); end if;
   return query
@@ -5128,7 +5162,7 @@ end;
 $$;
 
 -- Cortesías del sorteo (owner y manager leen).
-create or replace function public.club_cortesias_listar(p_location text default 'santa-teresa')
+create or replace function public.club_cortesias_listar(p_location text default null)
 returns table (id uuid, codigo_producto text, nombre text, familia int, activa boolean, en_seccion boolean,
                visto_en_facturas boolean, actualizada_en timestamptz)
 language plpgsql
@@ -5138,6 +5172,7 @@ set search_path = public, pg_temp
 as $$
 declare v_rol public.user_role := public.get_my_role(); v_fam int;
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
   select cortesia_familia into v_fam from public.club_config where location_id = p_location;
   return query
@@ -5155,7 +5190,7 @@ $$;
 -- nombre y la familia salen de las facturas; si es nuevo (Ismael recién lo creó), el nombre es obligatorio.
 -- Con `cortesia_familia` cargada, un artículo de otra familia se rechaza. Edición: nombre y activa (el código no cambia).
 create or replace function public.club_cortesia_guardar(p_id uuid, p_codigo text, p_nombre text, p_activa boolean,
-                                                        p_location text default 'santa-teresa')
+                                                        p_location text default null)
 returns uuid
 language plpgsql
 volatile
@@ -5172,6 +5207,7 @@ declare
   v_ant  public.club_cortesias%rowtype;
   v_id   uuid;
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol <> 'owner' then raise exception 'Sin permiso' using errcode = '42501'; end if;
   if p_id is not null then
     select * into v_ant from public.club_cortesias where id = p_id and location_id = p_location for update;
@@ -5329,6 +5365,7 @@ begin
 
   select * into v_m from public.club_miembros where id = p_miembro;
   if not found then raise exception 'No se encontró al socio: escaneá su QR de nuevo' using errcode = 'P0001'; end if;
+  perform public.club_local(v_m.location_id, true);   -- LC-ML: Club activo en el local del socio
   perform pg_advisory_xact_lock(hashtextextended('club_socio_visita:' || p_miembro::text, 0));
   select * into v_r from public.club_miembro_roles where miembro_id = p_miembro and rol = 'socio';
   if not found or v_m.estado <> 'activo' or v_r.estado = 'baja' then
@@ -5464,7 +5501,7 @@ $$;
 --     cortesías activas, el premio sigue disponible («pendiente de configuración»).
 -- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
 -- Genera los premios que correspondan (interna; la llama el mantenimiento diario). Devuelve cuántos dio.
-create or replace function public.club_premios_generar(p_location text default 'santa-teresa')
+create or replace function public.club_premios_generar(p_location text default null)
 returns int
 language plpgsql
 volatile
@@ -5478,6 +5515,8 @@ declare
   v_n    int := 0;
   v_mot  text;
 begin
+  p_location := public.club_local(p_location, false);   -- LC-ML
+  if not public.club_local_activo(p_location) then return 0; end if;   -- Club apagado: no genera premios
   select * into v_cfg from public.club_config where location_id = p_location;
   perform pg_advisory_xact_lock(hashtextextended('club_premios:' || p_location, 0));
   for r in
@@ -5526,6 +5565,100 @@ begin
 end;
 $$;
 
+
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+-- LC-ML · MULTILOCAL (Ismael, 08-nov). El Club corre POR LOCAL y los locales salen de datos (`club_config`): ninguna
+-- función ni pantalla nombra un local. Encender o apagar el Club en un local es UN dato, sin código ni migración:
+--   update public.club_config set club_activo = true where location_id = '<local>';   (o el interruptor del owner)
+-- Apagado = en ese local no hay altas (caja ni autoalta), visitas de socio, cupones, canjes, tarjeta manual, premios ni
+-- excepciones LC. Sí se puede preparar su configuración (promociones, cortesías, códigos del PoS, anfitriones, negocios)
+-- y leer sus reportes. Checklist «Encender un local» en el RUNBOOK. Nosara queda cargado y APAGADO.
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+do $$
+begin
+  if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'club_config'
+                  and column_name = 'club_activo') then
+    alter table public.club_config add column club_activo boolean not null default false;
+    -- Una sola vez, al crear la columna: el Club ya corría en el único local que tenía config. Si después se apaga, no se pisa.
+    update public.club_config set club_activo = true where location_id = 'santa-teresa';
+  end if;
+end $$;
+alter table public.club_config add column if not exists nombre    text check (nombre is null or length(btrim(nombre)) between 1 and 60);
+alter table public.club_config add column if not exists direccion text check (direccion is null or length(direccion) <= 160);
+alter table public.club_config add column if not exists mapa_url  text check (mapa_url is null or mapa_url ~ '^https://');
+alter table public.club_config drop constraint if exists club_config_location_id_formato;
+alter table public.club_config add constraint club_config_location_id_formato check (location_id ~ '^[a-z0-9-]{2,40}$');
+-- Datos iniciales (se cargan una vez; después se editan como cualquier dato)
+update public.club_config
+   set nombre = 'Santa Teresa',
+       direccion = coalesce(direccion, 'Santa Teresa, Puntarenas, Costa Rica'),
+       mapa_url = coalesce(mapa_url, 'https://maps.google.com/?q=Satori+Sushi+Bar+Santa+Teresa+Costa+Rica')
+ where location_id = 'santa-teresa' and nombre is null;
+insert into public.club_config (location_id, nombre, club_activo) values ('nosara', 'Nosara', false)
+on conflict (location_id) do nothing;
+
+-- ¿El Club está encendido en el local?
+create or replace function public.club_local_activo(p_location text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select coalesce((select c.club_activo from public.club_config c where c.location_id = p_location), false);
+$$;
+
+-- El local de una operación. Con dato: tiene que existir en club_config (y, si p_exigir_activo, con el Club encendido).
+-- Sin dato: el único local con el Club encendido; con dos o más, hay que elegir (nunca se supone uno por nombre).
+create or replace function public.club_local(p_location text, p_exigir_activo boolean default true)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_c public.club_config%rowtype;
+  v_n int;
+begin
+  if p_location is null then
+    select count(*) into v_n from public.club_config c where c.club_activo;
+    if v_n = 0 then
+      raise exception 'El Club no está activo en ningún local' using errcode = 'P0001';
+    elsif v_n > 1 then
+      raise exception 'Hay más de un local con el Club activo: elegí el local' using errcode = 'P0001';
+    end if;
+    select c.* into v_c from public.club_config c where c.club_activo;
+    return v_c.location_id;
+  end if;
+  select c.* into v_c from public.club_config c where c.location_id = p_location;
+  if not found then
+    raise exception 'Local no válido' using errcode = 'P0001';
+  end if;
+  if p_exigir_activo and not v_c.club_activo then
+    raise exception 'El Club no está activo en %', coalesce(v_c.nombre, v_c.location_id) using errcode = 'P0001';
+  end if;
+  return v_c.location_id;
+end;
+$$;
+
+-- Locales con el Club encendido (PÚBLICA, solo por club-web): la autoalta ofrece elegir cuando hay más de uno.
+create or replace function public.club_locales_activos()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if not public.club_web_ok() then
+    raise exception 'No disponible' using errcode = 'P0001';
+  end if;
+  return coalesce((select jsonb_agg(jsonb_build_object('id', c.location_id, 'nombre', coalesce(c.nombre, c.location_id),
+                                                       'direccion', c.direccion, 'mapa', c.mapa_url) order by c.location_id)
+                     from public.club_config c where c.club_activo), '[]'::jsonb);
+end;
+$$;
 
 -- ── 5. EXECUTE: nada por defecto, grant explícito ───────────────────────────
 
@@ -5643,8 +5776,8 @@ revoke all on function public.club_vencer_candidatos(date)               from pu
 
 revoke all on function public.club_norm_telefono(text)                    from public, anon, authenticated;
 revoke all on function public.club_norm_texto(text)                       from public, anon, authenticated;
-revoke all on function public.club_negocio_guardar(uuid, text, text, boolean)            from public, anon, authenticated;
-revoke all on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb)  from public, anon, authenticated;
+revoke all on function public.club_negocio_guardar(uuid, text, text, boolean, text)      from public, anon, authenticated;
+revoke all on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.club_miembro_regenerar_codigo(uuid)         from public, anon, authenticated;
 revoke all on function public.club_miembro_token(uuid)                    from public, anon, authenticated;
 revoke all on function public.club_buscar(text)                           from public, anon, authenticated;
@@ -5663,8 +5796,8 @@ revoke all on function public.club_cruce_detalle(text, jsonb, text) from public,
 revoke all on function public.club_resolver(text)                         from public, anon, authenticated;
 revoke all on function public.club_config_auditar()                       from public, anon, authenticated;
 
-grant execute on function public.club_negocio_guardar(uuid, text, text, boolean)           to authenticated;
-grant execute on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb) to authenticated;
+grant execute on function public.club_negocio_guardar(uuid, text, text, boolean, text)     to authenticated;
+grant execute on function public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text) to authenticated;
 grant execute on function public.club_miembro_regenerar_codigo(uuid)        to authenticated;
 grant execute on function public.club_miembro_token(uuid)                   to authenticated;
 grant execute on function public.club_buscar(text)                          to authenticated;
@@ -5708,12 +5841,16 @@ grant execute on function public.club_canje_aprobado(uuid, numeric, text, uuid, 
 grant execute on function public.club_ajuste(uuid, int, text, text, uuid) to authenticated;
 grant execute on function public.club_vencer(date, int)                  to authenticated;
 grant execute on function public.club_vencer_simular(date)               to authenticated;
+-- LC-ML: puerta pública (club-web) y helpers internos sin grant
+grant execute on function public.club_locales_activos()                  to anon, authenticated;
+revoke all on function public.club_local(text, boolean)                  from public, anon, authenticated;
+revoke all on function public.club_local_activo(text)                    from public, anon, authenticated;
 
 
 -- CLUB-AUD-11: red de seguridad al final, después de todos los grants de arriba.
 --   · Secuencias club_% (identity): nadie de la app las usa directo.
---   · Funciones club_%: ninguna para PUBLIC; para anon solo las 8 puertas públicas (R-01: código de canje; LC-A2:
---     autoalta, baja del socio y código de canje desde el pase).
+--   · Funciones club_%: ninguna para PUBLIC; para anon solo las 9 puertas públicas (R-01: código de canje; LC-A2:
+--     autoalta, baja del socio y código de canje desde el pase; LC-ML: locales activos).
 do $$
 declare r record;
 begin
@@ -5725,7 +5862,8 @@ begin
             where n.nspname = 'public' and p.proname like 'club\_%' loop
     execute format('revoke all on function %s from public', r.fn);
     if r.proname not in ('club_cupon_crear', 'club_portal', 'club_cupon_ver', 'club_cupon_contacto', 'club_canje_codigo_generar',
-                         'club_socio_autoalta', 'club_socio_baja_portal', 'club_canje_codigo_generar_pase') then
+                         'club_socio_autoalta', 'club_socio_baja_portal', 'club_canje_codigo_generar_pase',
+                         'club_locales_activos') then
       execute format('revoke all on function %s from anon', r.fn);
     end if;
   end loop;

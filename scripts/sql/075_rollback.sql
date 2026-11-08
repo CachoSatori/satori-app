@@ -27,6 +27,11 @@ drop function if exists public.club_miembro_token(uuid);
 drop function if exists public.club_miembro_regenerar_codigo(uuid);
 drop function if exists public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb);
 drop function if exists public.club_negocio_guardar(uuid, text, text, boolean);
+drop function if exists public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text);   -- LC-ML
+drop function if exists public.club_negocio_guardar(uuid, text, text, boolean, text);           -- LC-ML
+drop function if exists public.club_locales_activos();                                          -- LC-ML
+drop function if exists public.club_local(text, boolean);                                       -- LC-ML
+drop function if exists public.club_local_activo(text);                                         -- LC-ML
 drop function if exists public.club_reporte_mes(date, text);
 drop function if exists public.club_excepcion_resolver(text, text, text, text);
 drop function if exists public.club_excepciones_abiertas(int, text);

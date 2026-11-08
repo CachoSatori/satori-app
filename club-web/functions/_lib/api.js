@@ -8,6 +8,7 @@
 // · Nunca devuelve el mensaje crudo de la base: lo traduce a un código fijo.
 
 const RE_REF = /^[A-HJ-NP-Z2-9]{8}$/
+const RE_LOCAL = /^[a-z0-9-]{2,40}$/   // LC-ML: id de local de club_config
 const RE_CUPON = /^[A-HJ-NP-Z2-9]{10}$/
 const RE_TOKEN = /^[0-9a-f]{64}$/
 const RE_SUPABASE = /^https:\/\/[a-z0-9]{20}\.supabase\.co$/
@@ -58,6 +59,9 @@ function traducirError(msg) {
   if (m === 'Demasiados códigos de canje') return [429, 'tope_canje']
   if (m === 'Todavía no te alcanza para canjear') return [409, 'sin_saldo_canje']
   if (m === 'Demasiadas altas hoy') return [429, 'tope_altas']
+  // LC-ML: el local sale de datos; con dos o más encendidos, la persona elige
+  if (/^Hay más de un local/.test(m)) return [400, 'elegir_local']
+  if (/^El Club no está activo/.test(m) || m === 'Local no válido') return [409, 'local_no_disponible']
   if (/consentimiento|no válidos/i.test(m)) return [400, 'datos_invalidos']
   return [502, 'servicio']
 }
@@ -173,6 +177,13 @@ export async function manejar(request, env, path) {
     return rpc(env, 'club_cupon_crear', { p_codigo_referente: ref, p_contacto: null })
   }
 
+  // GET /api/locales  → locales con el Club encendido (LC-ML: la autoalta deja elegir si hay más de uno)
+  if (partes.length === 1 && partes[0] === 'locales') {
+    if (metodo !== 'GET') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'leer', `leer:${ip}`, leerMax, leerVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    return rpc(env, 'club_locales_activos', {})
+  }
+
   // GET /api/cupon/:codigo  ·  POST /api/cupon/:codigo/contacto
   if (partes[0] === 'cupon' && partes.length >= 2) {
     const cod = String(partes[1]).toUpperCase()
@@ -214,6 +225,8 @@ export async function manejar(request, env, path) {
     if (!humano) return json(403, { error: 'verificacion' })
     const s = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
     const datos = { nombre: s(b.nombre, 80), whatsapp: s(b.whatsapp, 32), acepto: s(b.acepto, 32), ref: s(b.ref, 8).toUpperCase() }
+    const local = s(b.local, 40)
+    if (RE_LOCAL.test(local)) datos.local = local   // LC-ML: sin local válido, la base usa el único encendido
     if (datos.nombre.length < 2 || !datos.whatsapp || !RE_AVISO.test(datos.acepto)) return json(400, { error: 'datos_invalidos' })
     if (datos.ref && !RE_REF.test(datos.ref)) datos.ref = ''
     return rpc(env, 'club_socio_autoalta', { p_datos: datos })

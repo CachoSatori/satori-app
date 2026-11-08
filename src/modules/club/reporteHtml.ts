@@ -100,7 +100,7 @@ th:last-child,td:last-child{padding-right:0}
 export function reporteHtml(r: ReporteMes): string {
   const k = r.kpis
   const mes = nombreMes(r.mes)
-  const loc = r.local === 'santa-teresa' ? 'Santa Teresa' : r.local === 'nosara' ? 'Nosara' : r.local
+  const loc = r.local_nombre || r.local   // LC-ML: el nombre sale de club_config, no del código
   const pie = (n: number) => `<div class="pie"><span>Satori, Club Satori, ${esc(mes)}</span><span>${n} de 3</span></div>`
   const parcial = esParcial(r)
   const cab = `<div class="cab"><div class="marca">Satori</div><div class="cab-der">Club Satori · ${esc(loc)}<br>Reporte de ${esc(mes)}${parcial ? ` (parcial al ${esc(fechaCorta(r.generado_en))})` : ''}</div></div>`

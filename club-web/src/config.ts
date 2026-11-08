@@ -1,9 +1,8 @@
-/** Datos del local que se muestran en el cupón. ⚠️ Ismael: completar la dirección exacta. */
-export const LOCAL = {
-  nombre: 'Satori Sushi Bar',
-  direccion: 'Santa Teresa, Puntarenas, Costa Rica',
-  mapa: 'https://maps.google.com/?q=Satori+Sushi+Bar+Santa+Teresa+Costa+Rica',
-}
+/**
+ * LC-ML: el local del cupón (nombre, dirección y mapa) sale de `club_config` vía la API; acá solo queda la marca, para
+ * cuando no hay señal. Ningún local escrito en el código.
+ */
+export const LOCAL = { nombre: 'Satori Sushi Bar' }
 
 /**
  * LC-DES-07: versión del aviso de privacidad que acepta el socio en la autoalta. TIENE que ser igual a

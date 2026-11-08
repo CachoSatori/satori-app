@@ -12,10 +12,21 @@ interface Q<T> extends PromiseLike<{ data: T[] | null; error: PgError }> {
   eq(col: string, v: unknown): Q<T>
   order(col: string, o?: { ascending?: boolean }): Q<T>
   limit(n: number): Q<T>
+  update(v: Record<string, unknown>): Q<T>
 }
 // `.bind(supabase)`: sin `this` supabase-js revienta (ver cash.ts). `?.`: tests que mockean parcial.
 const rpc = supabase.rpc?.bind(supabase) as unknown as RpcInvoke
 const from = supabase.from?.bind(supabase) as unknown as <T>(table: string) => Q<T>
+
+// ── LC-ML: local con el que trabaja la pantalla del Club ────────────────────
+// null = la base usa el único local con el Club activo (con dos o más, pide elegir). Se recuerda por navegador.
+const CLAVE_LOCAL = 'club.local'
+let localClub: string | null = (() => { try { return localStorage.getItem(CLAVE_LOCAL) } catch { return null } })()
+export const localActual = (): string | null => localClub
+export function elegirLocal(id: string | null): void {
+  localClub = id
+  try { if (id) localStorage.setItem(CLAVE_LOCAL, id); else localStorage.removeItem(CLAVE_LOCAL) } catch { /* sin storage */ }
+}
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 export type TipoMiembro = 'referente' | 'concierge_pm' | 'equipo' | 'socio' | 'turista'
@@ -142,8 +153,8 @@ export interface FacturaReciente {
   /** Consecutivo de la factura electrónica (20 dígitos, mig 081): el número del tiquete. */
   consecutivo_fe?: string | null
 }
-export const getPedidosAbiertos = (local = 'santa-teresa') => llamar<PedidoAbierto[]>('club_pedidos_abiertos', { p_location: local })
-export const getFacturasRecientes = (local = 'santa-teresa') => llamar<FacturaReciente[]>('club_facturas_recientes', { p_location: local })
+export const getPedidosAbiertos = (local: string | null = localClub) => llamar<PedidoAbierto[]>('club_pedidos_abiertos', { p_location: local })
+export const getFacturasRecientes = (local: string | null = localClub) => llamar<FacturaReciente[]>('club_facturas_recientes', { p_location: local })
 
 const colones = (n: number | null | undefined) => `₡${Math.round(Number(n ?? 0)).toLocaleString('de-DE')}`
 const horaCR = (iso: string) => new Date(iso).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Costa_Rica' })
@@ -212,13 +223,14 @@ export const buscar = (q: string) => llamar<BusquedaFila[]>('club_buscar', { p_q
 
 // ── Gestión (owner, manager) ─────────────────────────────────────────────────
 export const guardarNegocio = (p: { id: string | null; nombre: string; tipo: TipoNegocio; activo: boolean }) =>
-  llamar<string>('club_negocio_guardar', { p_id: p.id, p_nombre: p.nombre, p_tipo: p.tipo, p_activo: p.activo })
+  llamar<string>('club_negocio_guardar', { p_id: p.id, p_nombre: p.nombre, p_tipo: p.tipo, p_activo: p.activo, p_location: localClub })
 
 export const guardarMiembro = (p: {
   id: string | null; tipo: TipoMiembro; nombre: string; negocio_id: string | null; estado: 'activo' | 'baja'
   contacto: { telefono: string; email: string; optin_whatsapp: boolean; optin_email: boolean } | null
 }) => llamar<string>('club_miembro_guardar', {
   p_id: p.id, p_tipo: p.tipo, p_nombre: p.nombre, p_negocio_id: p.negocio_id, p_estado: p.estado, p_contacto: p.contacto,
+  p_location: localClub,
 })
 
 export const regenerarCodigo = async (id: string) =>
@@ -275,9 +287,9 @@ export interface Excepcion {
   detalle: Record<string, unknown>; resuelta: boolean; nota: string | null; resuelta_en: string | null
 }
 
-export const getExcepciones = (desde: string, hasta: string, local = 'santa-teresa') =>
+export const getExcepciones = (desde: string, hasta: string, local: string | null = localClub) =>
   llamar<Excepcion[]>('club_excepciones', { p_desde: desde, p_hasta: hasta, p_location: local })
-export const getExcepcionesAbiertas = (dias = 30, local = 'santa-teresa') =>
+export const getExcepcionesAbiertas = (dias = 30, local: string | null = localClub) =>
   llamar<number>('club_excepciones_abiertas', { p_dias: dias, p_location: local })
 /** SIN_CRUCE: facturas sin pedido del día del escaneo, para que el manager elija. */
 export interface FacturaCandidata {
@@ -289,7 +301,7 @@ export const getCandidatasSinCruce = (movimiento: string, buscar?: string) =>
   llamar<FacturaCandidata[]>('club_sin_cruce_candidatas', { p_movimiento: movimiento, p_buscar: buscar?.trim() || null })
 export const elegirFacturaSinCruce = (movimiento: string, numeroFactura: string, nota: string) =>
   llamar<string>('club_sin_cruce_elegir', { p_movimiento: movimiento, p_numero_factura: numeroFactura, p_nota: nota.trim() || null })
-export const resolverExcepcion = (tipo: TipoExcepcion, ref: string, nota: string, local = 'santa-teresa') =>
+export const resolverExcepcion = (tipo: TipoExcepcion, ref: string, nota: string, local: string | null = localClub) =>
   llamar<boolean>('club_excepcion_resolver', { p_tipo: tipo, p_ref: ref, p_nota: nota, p_location: local })
 
 export interface FilaReporte {
@@ -298,7 +310,7 @@ export interface FilaReporte {
   creditos?: number; ultima_actividad?: string | null; vence_en?: string
 }
 export interface ReporteMes {
-  mes: string; local: string; generado_en: string
+  mes: string; local: string; local_nombre?: string | null; generado_en: string
   config: { valor_credito_crc: number; personas_por_credito: number; vencimiento_meses: number; pm_pausado: boolean }
   kpis: {
     tarjetas: number; personas: number; creditos_generados: number; canjes: number; creditos_canjeados: number
@@ -316,7 +328,7 @@ export interface ReporteMes {
   /** CLUB-AUD-04: mes cerrado = reporte congelado (versión y sha256). */
   cerrado?: boolean; version?: number; sha256?: string; cerrado_en?: string; motivo?: string | null
 }
-export const getReporteMes = (mes: string, local = 'santa-teresa') =>
+export const getReporteMes = (mes: string, local: string | null = localClub) =>
   llamar<ReporteMes>('club_reporte_mes', { p_mes: mes, p_location: local })
 /** Vencimiento por inactividad (solo owner): primero simular, después confirmar con el total exacto. */
 export interface CandidatoVencer {
@@ -327,19 +339,28 @@ export const confirmarVencimiento = (corte: string, total: number) =>
   llamar<number>('club_vencer', { p_corte: corte, p_confirmo_total: total })
 
 /** Solo owner. Recerrar (versión nueva) exige motivo. */
-export const cerrarMes = (mes: string, motivo: string, local = 'santa-teresa') =>
+export const cerrarMes = (mes: string, motivo: string, local: string | null = localClub) =>
   llamar<ReporteMes>('club_reporte_cerrar', { p_mes: mes, p_motivo: motivo.trim() || null, p_location: local })
-export const getLocalesClub = async () =>
-  (await leer(from<{ location_id: string }>('club_config').select('location_id').order('location_id'))).map(r => r.location_id)
+// ── LC-ML: multilocal. Los locales salen de club_config; ninguna pantalla nombra un local. ──────────
+export interface LocalClub { id: string; nombre: string; activo: boolean }
+export const getLocalesClub = async (): Promise<LocalClub[]> =>
+  (await leer(from<{ location_id: string; nombre: string | null; club_activo: boolean }>('club_config')
+    .select('location_id,nombre,club_activo').order('location_id')))
+    .map(r => ({ id: r.location_id, nombre: r.nombre ?? r.location_id, activo: r.club_activo === true }))
+/** Solo owner (RLS de club_config). Encender o apagar el Club en un local: un dato, auditado en club_config_historial. */
+export async function setClubActivo(id: string, activo: boolean): Promise<void> {
+  const filas = await leer(from<{ location_id: string }>('club_config').update({ club_activo: activo }).eq('location_id', id).select('location_id'))
+  if (filas.length !== 1) throw new ClubError('Solo el owner enciende o apaga el Club en un local', false)
+}
 
 // ── Piloto en paralelo: comparación con la página vieja ──────────────────────
 export interface FilaComparacion {
   semana: string; miembro_id: string; referente: string; negocio: string | null
   personas_staging: number; personas_vieja: number | null; diferencia: number
 }
-export const getComparacion = (desde: string, hasta: string, local = 'santa-teresa') =>
+export const getComparacion = (desde: string, hasta: string, local: string | null = localClub) =>
   llamar<FilaComparacion[]>('club_comparacion', { p_desde: desde, p_hasta: hasta, p_location: local })
-export const cargarComparacion = (filas: Array<{ referente: string; semana: string; personas: number }>, local = 'santa-teresa') =>
+export const cargarComparacion = (filas: Array<{ referente: string; semana: string; personas: number }>, local: string | null = localClub) =>
   llamar<{ cargadas: number; no_encontrados: Array<{ referente: string | null; motivo: string }> }>('club_comparacion_cargar',
     { p_filas: filas, p_location: local })
 
@@ -355,7 +376,7 @@ export const activarAnfitrion = (miembro: string, rol: 'referente' | 'concierge_
 export interface AltaSocio { miembro_id: string; estado: 'activo'; provisional_hasta: string }
 /** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme. */
 export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean) =>
-  llamar<AltaSocio>('club_socio_alta_caja', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia })
+  llamar<AltaSocio>('club_socio_alta_caja', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_location: localClub })
 /** Validar en caja una autoalta pendiente: pasa a activo provisional. */
 export const socioValidar = (miembro: string, verificoResidencia: boolean) =>
   llamar<AltaSocio>('club_socio_validar', { p_miembro: miembro, p_verifico_residencia: verificoResidencia })
@@ -386,21 +407,21 @@ export interface PromocionDatos {
   desde?: string | null; hasta?: string | null; dias: number[]; hora_desde?: string | null; hora_hasta?: string | null
   porcentaje: number; cortesias: number
 }
-export const getPromociones = () => llamar<Promocion[]>('club_promociones_listar', {})
+export const getPromociones = () => llamar<Promocion[]>('club_promociones_listar', { p_location: localClub })
 /** Solo owner. `id` null = nueva. Una terminada no se edita. */
 export const guardarPromocion = (id: string | null, datos: PromocionDatos) =>
-  llamar<string>('club_promocion_guardar', { p_id: id, p_datos: datos })
+  llamar<string>('club_promocion_guardar', { p_id: id, p_datos: datos, p_location: localClub })
 
 export interface Cortesia {
   id: string; codigo_producto: string; nombre: string; familia: number | null; activa: boolean
   en_seccion: boolean | null; visto_en_facturas: boolean; actualizada_en: string
 }
 export interface ProductoPos { codigo: string; nombre: string; familia: number | null; veces: number; ultima: string; es_cortesia: boolean }
-export const getCortesias = () => llamar<Cortesia[]>('club_cortesias_listar', {})
-export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('club_productos', { p_buscar: buscar })
+export const getCortesias = () => llamar<Cortesia[]>('club_cortesias_listar', { p_location: localClub })
+export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('club_productos', { p_buscar: buscar, p_location: localClub })
 /** Solo owner. Alta: `id` null + código del artículo «CORTESÍA CLUB». Edición: nombre y activa. */
 export const guardarCortesia = (id: string | null, codigo: string | null, nombre: string | null, activa: boolean | null) =>
-  llamar<string>('club_cortesia_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_activa: activa })
+  llamar<string>('club_cortesia_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_activa: activa, p_location: localClub })
 
 // ── LC-A4: visita del socio y «qué aplicar» ──────────────────────────────────
 export interface QueAplicar {
@@ -418,11 +439,11 @@ export interface PendienteAprobacion {
   id: string; miembro_id: string; nombre: string; personas: number; creditos: number; ganado_mes_crc: number
   fecha_visita: string; registrado_por: string; puedo_resolver: boolean
 }
-export const getPendientesAprobacion = () => llamar<PendienteAprobacion[]>('club_pendientes_listar', {})
+export const getPendientesAprobacion = () => llamar<PendienteAprobacion[]>('club_pendientes_listar', { p_location: localClub })
 export const resolverPendiente = (id: string, aprobar: boolean, nota: string) =>
   llamar<boolean>('club_pendiente_resolver', { p_id: id, p_aprobar: aprobar, p_nota: nota })
 
 // ── LC-A5: altas de socios por cajero ─────────────────────────────────────────
 export interface AltasPorCajero { usuario: string; altas_caja: number; validaciones: number; confirmo: number; sin_confirmar: number; vencidas: number }
-export const getReporteAltas = (desde: string, hasta: string, local = 'santa-teresa') =>
+export const getReporteAltas = (desde: string, hasta: string, local: string | null = localClub) =>
   llamar<AltasPorCajero[]>('club_reporte_altas', { p_desde: desde, p_hasta: hasta, p_location: local })

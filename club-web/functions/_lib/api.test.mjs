@@ -146,6 +146,17 @@ test('LC-DES-07: /api/alta con Turnstile OK llama a club_socio_autoalta con dato
     assert.ok(base)
     assert.equal(base.init.headers['x-club-web'], 'clave-de-prueba')
     assert.deepEqual(JSON.parse(base.init.body), { p_datos: { nombre: 'Ana', whatsapp: '60000000', acepto: 'v1', ref: 'ABCDEFGH' } })
+    // LC-ML: el local viaja solo si es un id válido; con dos encendidos y sin local, la base pide elegir
+    llamadas = []
+    await manejar(pedido('alta', 'POST', JSON.stringify({ ...JSON.parse(cuerpo), local: 'nosara' })), env, 'alta')
+    assert.equal(JSON.parse(llamadas.find(l => String(l.url).endsWith('/rest/v1/rpc/club_socio_autoalta')).init.body).p_datos.local, 'nosara')
+    llamadas = []
+    await manejar(pedido('alta', 'POST', JSON.stringify({ ...JSON.parse(cuerpo), local: 'Nosara; drop' })), env, 'alta')
+    assert.equal(JSON.parse(llamadas.find(l => String(l.url).endsWith('/rest/v1/rpc/club_socio_autoalta')).init.body).p_datos.local, undefined)
+    respuestaBase = { status: 400, body: { message: 'Hay más de un local con el Club activo: elegí el local' } }
+    assert.equal((await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')).status, 400)
+    respuestaBase = { status: 400, body: { message: 'El Club no está activo en Nosara' } }
+    assert.equal((await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')).status, 409)
     respuestaBase = { status: 400, body: { message: 'Demasiadas altas hoy' } }
     assert.equal((await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')).status, 429)
   } finally { globalThis.fetch = fetchViejo }

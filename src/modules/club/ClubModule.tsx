@@ -1,10 +1,13 @@
 /**
  * ClubModule — Club Satori F1c (SPEC §2 y §4): Escanear (caja), Miembros y Negocios.
  * F1f: Excepciones del puente y Reportes (owner, manager). LC-A3: Promociones y cortesías (owner edita, manager lee).
+ * LC-ML: multilocal. Los locales salen de club_config; el selector aparece solo si hay más de uno, y el owner enciende o
+ * apaga el Club por local (pestaña Locales). Ninguna pantalla nombra un local.
  */
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { getLocalesClub, localActual, elegirLocal, setClubActivo, aClubError, type LocalClub } from '../../shared/api/club'
 
 const Escanear = lazy(() => import('./Escanear'))
 const Miembros = lazy(() => import('./Miembros'))
@@ -13,13 +16,30 @@ const Excepciones = lazy(() => import('./Excepciones'))
 const Reportes = lazy(() => import('./Reportes'))
 const Promociones = lazy(() => import('./Promociones'))
 
-type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'promociones'
+type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'promociones' | 'locales'
 
 export default function ClubModule() {
   const { profile } = useAuth()
   const navigate = useNavigate()
   const gestiona = profile?.role === 'owner' || profile?.role === 'manager'
+  const esOwner = profile?.role === 'owner'
   const [vista, setVista] = useState<Vista>('escanear')
+  const [locales, setLocales] = useState<LocalClub[] | null>(null)
+  const [local, setLocal] = useState<string | null>(localActual())
+
+  // El owner ve también los locales apagados (para preparar su configuración); el resto, solo los encendidos.
+  const visibles = (locales ?? []).filter(l => l.activo || esOwner)
+  const cargarLocales = useCallback(async () => {
+    try {
+      const l = await getLocalesClub()
+      setLocales(l)
+      const vis = l.filter(x => x.activo || esOwner)
+      const elegido = vis.find(x => x.id === localActual()) ?? vis.find(x => x.activo) ?? vis[0] ?? null
+      elegirLocal(elegido?.id ?? null); setLocal(elegido?.id ?? null)
+    } catch { setLocales([]) }
+  }, [esOwner])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void cargarLocales() }, [cargarLocales])
 
   return (
     <div className="tips-module">
@@ -36,6 +56,19 @@ export default function ClubModule() {
           onClick={() => navigate('/')}>← Inicio</button>
       </div>
 
+      {visibles.length > 1 && (
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '0 0 10px', color: '#aaa', fontSize: 13 }}>
+          Local
+          <select value={local ?? ''} onChange={e => { elegirLocal(e.target.value); setLocal(e.target.value) }}
+            style={{ background: '#111', color: '#eee', border: '1px solid #333', borderRadius: 6, padding: '4px 8px' }}>
+            {visibles.map(l => <option key={l.id} value={l.id}>{l.nombre}{l.activo ? '' : ' (Club apagado)'}</option>)}
+          </select>
+        </label>
+      )}
+      {locales !== null && visibles.length === 0 && (
+        <p style={{ color: '#c9a', margin: '12px 0' }}>El Club no está activo en ningún local. Lo enciende el owner.</p>
+      )}
+
       {gestiona && (
         <div className="vt-nav-tabs">
           <div className={`vt-nav-tab ${vista === 'escanear' ? 'active' : ''}`} onClick={() => setVista('escanear')}>Escanear</div>
@@ -44,10 +77,12 @@ export default function ClubModule() {
           <div className={`vt-nav-tab ${vista === 'excepciones' ? 'active' : ''}`} onClick={() => setVista('excepciones')}>Excepciones</div>
           <div className={`vt-nav-tab ${vista === 'reportes' ? 'active' : ''}`} onClick={() => setVista('reportes')}>Reportes</div>
           <div className={`vt-nav-tab ${vista === 'promociones' ? 'active' : ''}`} onClick={() => setVista('promociones')}>Promociones</div>
+          {esOwner && <div className={`vt-nav-tab ${vista === 'locales' ? 'active' : ''}`} onClick={() => setVista('locales')}>Locales</div>}
         </div>
       )}
 
-      <Suspense fallback={<div className="module-loading"><span className="loading-mark">縁</span></div>}>
+      <Suspense key={local ?? 'sin-local'} fallback={<div className="module-loading"><span className="loading-mark">縁</span></div>}>
+        {vista === 'locales' && esOwner && <Locales locales={locales ?? []} onCambio={cargarLocales} />}
         {vista === 'escanear' && <Escanear />}
         {vista === 'miembros' && gestiona && <Miembros />}
         {vista === 'negocios' && gestiona && <Negocios />}
@@ -55,6 +90,35 @@ export default function ClubModule() {
         {vista === 'reportes' && gestiona && <Reportes />}
         {vista === 'promociones' && gestiona && <Promociones />}
       </Suspense>
+    </div>
+  )
+}
+
+/** LC-ML: el interruptor del Club por local (solo owner; queda en club_config_historial). */
+function Locales({ locales, onCambio }: { locales: LocalClub[]; onCambio: () => Promise<void> }) {
+  const [msg, setMsg] = useState<string | null>(null)
+  const [ocupado, setOcupado] = useState<string | null>(null)
+  async function cambiar(l: LocalClub) {
+    const accion = l.activo ? 'APAGAR' : 'ENCENDER'
+    if (!window.confirm(`¿${accion} el Club en ${l.nombre}? ${l.activo
+      ? 'Se cortan altas, visitas, cupones y canjes en ese local.'
+      : 'Antes, completá el checklist «Encender un local» del RUNBOOK (códigos del PoS, cortesías, promoción, secreto del puente).'}`)) return
+    setOcupado(l.id); setMsg(null)
+    try { await setClubActivo(l.id, !l.activo); await onCambio(); setMsg(`${l.nombre}: Club ${l.activo ? 'apagado' : 'encendido'}.`) }
+    catch (e) { setMsg(aClubError(e).message) }
+    finally { setOcupado(null) }
+  }
+  return (
+    <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+      {locales.map(l => (
+        <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #2a2a2a', borderRadius: 8, padding: '10px 12px' }}>
+          <span>{l.nombre} <span style={{ color: l.activo ? '#7c9' : '#a88', fontSize: 12 }}>· Club {l.activo ? 'encendido' : 'apagado'}</span></span>
+          <button className="cash-back-btn" disabled={ocupado !== null} onClick={() => void cambiar(l)}>
+            {l.activo ? 'Apagar' : 'Encender'}
+          </button>
+        </div>
+      ))}
+      {msg && <p style={{ color: '#aaa', fontSize: 13 }}>{msg}</p>}
     </div>
   )
 }

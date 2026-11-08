@@ -26,6 +26,7 @@
 | 8 | Migración F1b con `--esperados` | 4 | volver a correrla (es re-ejecutable) o el rollback de la migración del Club |
 | 9 | `tarjeta_manual_activa = false` | 4 | — |
 | 10 | Merge del PR #59 | todo lo anterior | revertir el código, **nunca** borrar los `.sql` del ledger |
+| 11 | **Encender un local** (Nosara): checklist de datos + interruptor del owner | 1–3 (puente de ese local), 4 | **Apagar** (mismo interruptor) |
 
 ---
 
@@ -236,3 +237,38 @@ Branching ve las versiones ya registradas y no las vuelve a aplicar.
 usuarios reales de gerencia.
 **Rollback:** revertir el código del PR. **Los `.sql` de migraciones que ya están en el ledger de prod no se borran
 nunca** (regla 10 de `ESTADO.md`).
+
+## 11. Encender un local (multilocal, LC-ML) — checklist «Encender Nosara»
+> **Regla (Ismael, 08-nov):** el Club corre por local y los locales salen de datos (`club_config`). Encender o apagar un
+> local es **un dato** (`club_config.club_activo`): **sin código ni migración**. Hoy: **santa-teresa encendido, nosara
+> cargado y APAGADO**. Mientras está apagado no hay altas (caja ni autoalta), visitas de socio, cupones, canjes, tarjeta
+> manual, premios ni excepciones LC en ese local, pero **sí** se prepara su configuración y se leen sus reportes.
+> La prueba 70 de la batería enciende y apaga un local sintético y comprueba que ninguna función `club_*` nombra un local.
+
+**Antes de encender (todo es dato; se carga con el local apagado):**
+
+| # | Qué | Dónde | Verificar |
+|---|---|---|---|
+| 1 | **Puente de Nosara** corriendo con **su propio secreto** (`POS_INGEST_SECRETS` con `"nosara"`, 32+ caracteres, distinto del de santa-teresa; `docs/puente/PASE-PROD-2026-11-09.md` §4) | PC del PoS de Nosara + panel | `select local, now() - last_poll_at, last_error from pos_ndf_cursor where local = 'nosara';` late y sin error; entran ventas con `local = 'nosara'` |
+| 2 | **Datos del local:** `nombre`, `direccion`, `mapa_url` (https) | `club_config` (fila `nosara`) | el cupón de club-web muestra el local correcto |
+| 3 | **Códigos del PoS de Nosara:** `lc_articulo_codigo` (856, «LOCAL CLUB»), `lc_invitado_codigo` (857, «INVITADO»), `promo_articulo_codigo` (PROMO CLUB 10 %), `articulos_cero_permitidos` | `club_config` (fila `nosara`) | los códigos existen en el catálogo del PoS de Nosara (Club → Promociones → buscar producto, con el local Nosara elegido) |
+| 4 | **Sección CORTESÍA CLUB** de Nosara: `cortesia_familia` y/o las cortesías del sorteo | Club → Promociones (local Nosara) | `club_cortesias_listar('nosara')` con las cortesías activas |
+| 5 | **Promoción del Local Club** de Nosara (10 % + 1 cortesía), primero en borrador | Club → Promociones (local Nosara) | vigente el día del lanzamiento |
+| 6 | **Topes** de Nosara: `socio_visitas_por_dia`, `socios_por_factura`, `socio_visitas_semana_max`, `cupones_max_dia_referente`, `cupones_max_minuto_local`, `anfitrion_tope_mes_crc`, `socio_autoalta_max_dia` y valores del crédito | `club_config` (fila `nosara`) | iguales a santa-teresa salvo decisión de Ismael |
+| 7 | `aviso_privacidad_version` = la de club-web | `club_config` (fila `nosara`) | si no coincide, la autoalta de Nosara rechaza todo |
+| 8 | **`lc_excepciones_desde` = el día del lanzamiento** (si queda vacío, las excepciones LC miran todo el historial de Nosara) | `club_config` (fila `nosara`) | — |
+| 9 | **Empleados de Nosara con su `pos_login`** cargado (segregación de las excepciones del PoS) | Admin → Empleados | sin login, esas excepciones las resuelve solo el owner |
+| 10 | **Anfitriones y negocios de Nosara** creados con el local Nosara elegido | Club → Miembros / Negocios | `club_miembros.location_id = 'nosara'` |
+| 11 | **QR y enlace de alta de Nosara** con `?local=nosara` (con dos locales encendidos, sin el parámetro el formulario pide elegir) | carteles / club-web | el formulario no muestra selector con ese enlace |
+| 12 | **El pase de Wallet** no cambia: es el mismo para los dos locales (franja «SATORI · CLUB») | — | — |
+
+**Encender:** owner → Club → **Locales** → Nosara → **Encender** (pide confirmación; queda en `club_config_historial`).
+Equivalente en SQL (owner): `update public.club_config set club_activo = true where location_id = 'nosara';`
+**Verificar:** en la app aparece el selector de local (arriba del Club); con Nosara elegido, Escanear muestra los pedidos
+abiertos de Nosara; un alta en caja de prueba queda con `location_id = 'nosara'`; la tarea diaria
+(`club_socios_mantenimiento`) ya incluye a Nosara en premios.
+**Apagar (rollback):** el mismo botón (**Apagar**) o `club_activo = false`. No borra nada: corta las operaciones nuevas.
+
+**DECISIÓN PROVISORIA (la revisa Ismael):** un socio o anfitrión pertenece a **un** local (`club_miembros.location_id`).
+Un socio de Santa Teresa que va a Nosara no tiene el beneficio allá (la caja de Nosara no lo encuentra en sus pedidos).
+Si el Club tiene que ser uno solo para los dos locales, es un cambio de diseño aparte.

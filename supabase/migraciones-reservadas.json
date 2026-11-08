@@ -45,5 +45,16 @@
   "libres_fuera_de_bloque": [
     "086"
   ],
-  "asignadas": {}
+  "asignadas": {
+    "087": {
+      "nombre": "employee_edits_audit",
+      "bloque": "caja",
+      "rama": "claude/employees-audit"
+    },
+    "088": {
+      "nombre": "employees_recibe_reparto_cocina",
+      "bloque": "caja",
+      "rama": "claude/prop-aud-01"
+    }
+  }
 }

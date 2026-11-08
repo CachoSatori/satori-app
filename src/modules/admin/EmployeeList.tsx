@@ -78,6 +78,7 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
 
   const [editPosName, setEditPosName] = useState('')
   const [editPosLogin, setEditPosLogin] = useState('')
+  const [editRecibeCocina, setEditRecibeCocina] = useState(true)
 
   const handleEdit = (emp: Employee) => {
     setEditId(emp.id)
@@ -85,6 +86,7 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
     setEditRole(emp.role)
     setEditPosName(emp.pos_name ?? '')
     setEditPosLogin(emp.pos_login ?? '')
+    setEditRecibeCocina(emp.recibe_reparto_cocina !== false)
     setError(null)
   }
 
@@ -101,6 +103,8 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
         // pos_name: valor exacto de dias.saloneros (del dropdown) → match exacto en Mi Rendimiento. null = sin vincular.
         pos_name: editPosName.trim() ? editPosName.trim() : null,
         ...(login?.ok ? { pos_login: login.valor } : {}),
+        // PROP-AUD-01: la marca del reparto de cocina la manda solo el owner, y solo para cocina.
+        ...(esOwner && editRole === 'cocina' ? { recibe_reparto_cocina: editRecibeCocina } : {}),
       })
       setEditId(null)
       await onRefresh()
@@ -239,6 +243,17 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                     ) : (
                       emp.pos_login && <div style={{ fontSize: '0.65rem', color: '#888' }}>Login del PoS: {emp.pos_login}</div>
                     )}
+                    {esOwner && editRole === 'cocina' && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem', marginTop: '3px' }}>
+                        <input
+                          type="checkbox"
+                          checked={editRecibeCocina}
+                          onChange={e => setEditRecibeCocina(e.target.checked)}
+                          disabled={saving}
+                        />
+                        Recibe reparto de cocina
+                      </label>
+                    )}
                   </td>
                   <td>
                     <select
@@ -273,6 +288,11 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                     {emp.pos_login && (
                       <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '1px' }}>
                         Login del PoS: {emp.pos_login}
+                      </div>
+                    )}
+                    {esOwner && emp.role === 'cocina' && emp.recibe_reparto_cocina === false && (
+                      <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '1px' }}>
+                        No recibe reparto de cocina
                       </div>
                     )}
                   </td>

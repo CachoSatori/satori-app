@@ -93,3 +93,35 @@ describe('EmployeeList · Login del PoS', () => {
     expect(cajas).toContain('222 login de caja, turno tarde (1 factura, última: 2026-11-02)')
   })
 })
+
+describe('EmployeeList · reparto de cocina (PROP-AUD-01)', () => {
+  const COCINA = [{ ...emp('k', 'EMPLEADO COCINA', null), role: 'cocina' as const, recibe_reparto_cocina: false }]
+
+  it('owner: ve «No recibe reparto de cocina» y la marca se edita y se guarda', async () => {
+    render(<EmployeeList employees={COCINA} onRefresh={vi.fn(async () => {})} />)
+    expect(screen.getByText('No recibe reparto de cocina')).toBeTruthy()
+    fireEvent.click(screen.getByText('Editar'))
+    const caja = screen.getByLabelText('Recibe reparto de cocina') as HTMLInputElement
+    expect(caja.checked).toBe(false)
+    fireEvent.click(caja)
+    fireEvent.click(screen.getByText('Guardar'))
+    await waitFor(() => expect(H.update).toHaveBeenCalledWith('k', expect.objectContaining({ recibe_reparto_cocina: true })))
+  })
+
+  it('manager: no la ve ni la manda', async () => {
+    H.role = 'manager'
+    render(<EmployeeList employees={COCINA} onRefresh={vi.fn(async () => {})} />)
+    expect(screen.queryByText('No recibe reparto de cocina')).toBeNull()
+    fireEvent.click(screen.getByText('Editar'))
+    expect(screen.queryByLabelText('Recibe reparto de cocina')).toBeNull()
+    fireEvent.click(screen.getByText('Guardar'))
+    await waitFor(() => expect(H.update).toHaveBeenCalled())
+    expect(H.update.mock.calls[0][1]).not.toHaveProperty('recibe_reparto_cocina')
+  })
+
+  it('owner, empleado que no es de cocina: no aparece la marca', () => {
+    render(<EmployeeList employees={EMPS} onRefresh={vi.fn(async () => {})} />)
+    fireEvent.click(screen.getAllByText('Editar')[0])
+    expect(screen.queryByLabelText('Recibe reparto de cocina')).toBeNull()
+  })
+})

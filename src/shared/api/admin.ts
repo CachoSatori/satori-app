@@ -27,7 +27,7 @@ export async function createEmployee(payload: {
 
 export async function updateEmployee(
   id: string,
-  payload: Partial<Pick<Employee, 'full_name' | 'role' | 'is_active' | 'pos_name' | 'pos_login'>>
+  payload: Partial<Pick<Employee, 'full_name' | 'role' | 'is_active' | 'pos_name' | 'pos_login' | 'recibe_reparto_cocina'>>
 ): Promise<void> {
   // `pos_login` existe en la base (mig 062) pero no en supabase.gen.ts (desactualizado): cast acotado.
   const { error } = await supabase

@@ -7,7 +7,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
-import { getLocalesClub, localActual, elegirLocal, setClubActivo, aClubError, type LocalClub } from '../../shared/api/club'
+import { getLocalesClub, localActual, elegirLocal, setClubActivo, crearLocal, aClubError, type LocalClub } from '../../shared/api/club'
 
 const Escanear = lazy(() => import('./Escanear'))
 const Miembros = lazy(() => import('./Miembros'))
@@ -122,6 +122,43 @@ function Locales({ locales, onCambio }: { locales: LocalClub[]; onCambio: () => 
         </div>
       ))}
       {msg && <p style={{ color: '#aaa', fontSize: 13 }}>{msg}</p>}
+      <NuevoLocal locales={locales} onCreado={async (t) => { await onCambio(); setMsg(t) }} />
+    </div>
+  )
+}
+
+/** LC-ML: alta de un local (queda apagado). Después: su configuración y el checklist «Encender un local» del RUNBOOK. */
+function NuevoLocal({ locales, onCreado }: { locales: LocalClub[]; onCreado: (texto: string) => Promise<void> }) {
+  const [id, setId] = useState('')
+  const [nombre, setNombre] = useState('')
+  const [direccion, setDireccion] = useState('')
+  const [mapa, setMapa] = useState('')
+  const [copiarDe, setCopiarDe] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [enviando, setEnviando] = useState(false)
+  const campo = { background: '#111', color: '#eee', border: '1px solid #333', borderRadius: 6, padding: '6px 8px', width: '100%', boxSizing: 'border-box' as const }
+  async function crear() {
+    setEnviando(true); setError(null)
+    try {
+      const nuevo = await crearLocal({ id: id.trim().toLowerCase(), nombre: nombre.trim(), direccion: direccion.trim() || null,
+                                       mapa: mapa.trim() || null, copiarDe: copiarDe || null })
+      setId(''); setNombre(''); setDireccion(''); setMapa(''); setCopiarDe('')
+      await onCreado(`Local «${nuevo}» creado y APAGADO. Cargá su configuración (Promociones y Descuentos con ese local elegido) y seguí el checklist «Encender un local» antes de encenderlo.`)
+    } catch (e) { setError(aClubError(e).message) } finally { setEnviando(false) }
+  }
+  return (
+    <div style={{ border: '1px dashed #333', borderRadius: 8, padding: '10px 12px', display: 'grid', gap: 6 }}>
+      <strong style={{ fontSize: 13 }}>Nuevo local</strong>
+      <input aria-label="Id del local" placeholder="id (minúsculas y guiones, ej. playa-nueva)" value={id} onChange={e => setId(e.target.value)} maxLength={40} style={campo} />
+      <input aria-label="Nombre del local" placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} maxLength={60} style={campo} />
+      <input aria-label="Dirección" placeholder="Dirección (opcional)" value={direccion} onChange={e => setDireccion(e.target.value)} maxLength={160} style={campo} />
+      <input aria-label="Mapa" placeholder="Enlace del mapa https://… (opcional)" value={mapa} onChange={e => setMapa(e.target.value)} style={campo} />
+      <select aria-label="Copiar la configuración de" value={copiarDe} onChange={e => setCopiarDe(e.target.value)} style={campo}>
+        <option value="">Sin copiar configuración (valores por defecto)</option>
+        {locales.map(l => <option key={l.id} value={l.id}>Copiar la configuración de {l.nombre}</option>)}
+      </select>
+      {error && <p style={{ color: '#d88', fontSize: 13, margin: 0 }}>{error}</p>}
+      <button className="cash-back-btn" disabled={enviando || !id.trim() || !nombre.trim()} onClick={() => void crear()}>Crear local (apagado)</button>
     </div>
   )
 }

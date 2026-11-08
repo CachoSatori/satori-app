@@ -6,8 +6,9 @@
 --    Branching aplicaría esta migración en prod.
 --
 -- Principios:
---  · Multi-local: `location_id text not null default 'santa-teresa'` SIN FK
---    (prod no tiene `public.locations`; mismo patrón que `pos_ndf_*`).
+--  · Multi-local GENÉRICO (LC-ML): `location_id text not null` SIN FK; los locales son filas de `club_config`
+--    (alta con un INSERT o desde la app). Ningún local escrito en esta migración: el default de `location_id`
+--    es el único local con el Club encendido (`club_local(null, false)`), ver la sección LC-ML.
 --  · Libro mayor de solo inserción (`club_movimientos`): el saldo se calcula,
 --    nunca se edita. Unidad del saldo = PERSONAS; los créditos se derivan.
 --  · Nada abierto a `anon`: revoke all en todas las tablas. Las únicas puertas
@@ -102,7 +103,7 @@ $$;
 -- ── 1. Tablas ───────────────────────────────────────────────────────────────
 
 create table if not exists public.club_config (
-  location_id                text primary key default 'santa-teresa',
+  location_id                text primary key,
   valor_credito_crc          int          not null default 18000 check (valor_credito_crc > 0),
   personas_por_credito       int          not null default 6     check (personas_por_credito > 0),
   canje_min                  numeric(4,1) not null default 1     check (canje_min > 0),
@@ -119,12 +120,11 @@ create table if not exists public.club_config (
   updated_at                 timestamptz  not null default now()
 );
 
-insert into public.club_config (location_id) values ('santa-teresa')
-on conflict (location_id) do nothing;
+-- (LC-ML) Los locales NO se cargan acá: alta de cada local con el INSERT documentado en el RUNBOOK (paso 4b).
 
 create table if not exists public.club_negocios (
   id          uuid primary key default gen_random_uuid(),
-  location_id text not null default 'santa-teresa',
+  location_id text not null,
   nombre      text not null check (length(btrim(nombre)) between 1 and 120),
   tipo        text not null default 'otro'
               check (tipo in ('hotel','tienda','host','delivery','concierge','otro')),
@@ -147,7 +147,7 @@ create unique index if not exists club_negocios_nombre_norm_uq
 
 create table if not exists public.club_miembros (
   id           uuid primary key default gen_random_uuid(),
-  location_id  text not null default 'santa-teresa',
+  location_id  text not null,
   tipo         text not null
                check (tipo in ('referente','concierge_pm','equipo','socio','turista')),
   nombre       text not null check (length(btrim(nombre)) between 1 and 120),
@@ -167,7 +167,7 @@ create index if not exists club_miembros_loc_idx on public.club_miembros (locati
 -- Contactos separados: la caja no los ve. Solo owner y manager.
 create table if not exists public.club_miembros_contacto (
   miembro_id      uuid primary key references public.club_miembros(id) on delete cascade,
-  location_id     text not null default 'santa-teresa',
+  location_id     text not null,
   telefono        text check (telefono ~ '^\+[1-9][0-9]{6,14}$'),
   email           text check (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' and length(email) <= 254),
   optin_whatsapp  boolean not null default false,
@@ -178,7 +178,7 @@ create table if not exists public.club_miembros_contacto (
 
 create table if not exists public.club_cupones (
   id                 uuid primary key default gen_random_uuid(),
-  location_id        text not null default 'santa-teresa',
+  location_id        text not null,
   referente_id       uuid not null references public.club_miembros(id),
   codigo             text not null unique default public.club_gen_codigo(10)
                      check (codigo ~ '^[A-HJ-NP-Z2-9]{10}$'),
@@ -221,7 +221,7 @@ end $$;
 
 create table if not exists public.club_movimientos (
   id                    uuid primary key default gen_random_uuid(),
-  location_id           text not null default 'santa-teresa',
+  location_id           text not null,
   miembro_id            uuid not null references public.club_miembros(id),
   tipo                  text not null
                         check (tipo in ('tarjeta','canje','vencimiento','ajuste','restitucion')),
@@ -254,7 +254,7 @@ create index if not exists club_mov_app_fecha_idx on public.club_movimientos (lo
 
 create table if not exists public.club_pm_pagos (
   id                uuid primary key default gen_random_uuid(),
-  location_id       text not null default 'santa-teresa',
+  location_id       text not null,
   miembro_id        uuid not null references public.club_miembros(id),
   monto_crc         numeric(12,2) not null check (monto_crc > 0),
   pagado_en         timestamptz not null default now(),
@@ -268,7 +268,7 @@ create table if not exists public.club_pm_pagos (
 
 create table if not exists public.club_pm_cargos (
   id                uuid primary key default gen_random_uuid(),
-  location_id       text not null default 'santa-teresa',
+  location_id       text not null,
   miembro_id        uuid not null references public.club_miembros(id),
   factura_pos       text,
   subtotal_crc      numeric(12,2) check (subtotal_crc >= 0),
@@ -290,7 +290,7 @@ alter table public.club_pm_cargos add column if not exists anulado_en timestampt
 -- F3: se crea vacía.
 create table if not exists public.club_visitas (
   id              uuid primary key default gen_random_uuid(),
-  location_id     text not null default 'santa-teresa',
+  location_id     text not null,
   miembro_id      uuid not null references public.club_miembros(id),
   factura_pos     text,
   monto_neto      numeric(12,2),
@@ -925,7 +925,7 @@ alter table public.club_config add column if not exists anfitrion_tope_mes_crc n
 alter table public.club_config add column if not exists anfitrion_nuevo_dias int not null default 90 check (anfitrion_nuevo_dias between 0 and 730);
 create table if not exists public.club_personas_pendientes (
   id                    uuid primary key default gen_random_uuid(),
-  location_id           text not null default 'santa-teresa',
+  location_id           text not null,
   miembro_id            uuid not null references public.club_miembros(id),
   cupon_id              uuid references public.club_cupones(id),
   personas              int not null check (personas between 1 and 30),
@@ -1254,7 +1254,7 @@ do $$ begin
 end $$;
 create table if not exists public.club_codigos_canje (
   id             uuid primary key default gen_random_uuid(),
-  location_id    text not null default 'santa-teresa',
+  location_id    text not null,
   miembro_id     uuid not null references public.club_miembros(id),
   codigo_hash    text not null unique check (codigo_hash ~ '^[0-9a-f]{64}$'),
   creado_en      timestamptz not null default now(),
@@ -1311,7 +1311,7 @@ $$;
 -- link wa.me (club_canje_aviso). Solo owner y manager lo leen.
 create table if not exists public.club_alertas (
   id             bigint generated always as identity primary key,
-  location_id    text not null default 'santa-teresa',
+  location_id    text not null,
   tipo           text not null check (tipo in ('canje')),
   miembro_id     uuid not null references public.club_miembros(id),
   movimiento_id  uuid unique references public.club_movimientos(id),
@@ -2774,7 +2774,7 @@ $$;
 -- refactura: el PoS cobra en facturas sin pedido). Queda anotado quién y cuándo. No toca el libro.
 create table if not exists public.club_cruces_manuales (
   movimiento_id   uuid primary key references public.club_movimientos(id),
-  location_id     text not null default 'santa-teresa',
+  location_id     text not null,
   numero_factura  text not null check (numero_factura ~ '^[0-9]{1,30}$'),
   elegido_por     uuid,
   elegido_en      timestamptz not null default now(),
@@ -2784,7 +2784,7 @@ create table if not exists public.club_cruces_manuales (
 create table if not exists public.club_cruces_manuales_historial (
   id              bigint generated always as identity primary key,
   movimiento_id   uuid not null references public.club_movimientos(id),
-  location_id     text not null default 'santa-teresa',
+  location_id     text not null,
   numero_factura  text not null,
   elegido_por     uuid,
   elegido_en      timestamptz not null default now(),
@@ -2805,7 +2805,7 @@ create policy club_cruces_gerencia on public.club_cruces_manuales for select to 
 
 create table if not exists public.club_excepciones_resueltas (
   id            bigint generated always as identity primary key,
-  location_id   text not null default 'santa-teresa',
+  location_id   text not null,
   tipo          text not null,
   ref           text not null check (length(ref) between 1 and 100),
   nota          text not null check (length(btrim(nota)) between 1 and 500),
@@ -3841,7 +3841,7 @@ create trigger club_config_tasa_guardia_trg before update on public.club_config
 -- lado de las de la página vieja, que carga Ismael (o un export). Sin datos de contacto. owner y manager.
 create table if not exists public.club_comparacion_vieja (
   id           bigint generated always as identity primary key,
-  location_id  text not null default 'santa-teresa',
+  location_id  text not null,
   semana       date not null check (extract(isodow from semana) = 1),
   miembro_id   uuid not null references public.club_miembros(id),
   personas     int not null check (personas between 0 and 10000),
@@ -4432,7 +4432,7 @@ alter table public.club_miembros alter column token_pase set default encode(exte
 -- («Validar socio» si está pendiente, «Nuevo socio» si estaba de baja); al validarse queda atendida.
 create table if not exists public.club_socio_solicitudes (
   id            bigint generated always as identity primary key,
-  location_id   text not null default 'santa-teresa',
+  location_id   text not null,
   miembro_id    uuid not null references public.club_miembros(id),
   creada_en     timestamptz not null default now(),
   aviso_version text,
@@ -4944,7 +4944,7 @@ alter table public.club_config add column if not exists socio_visitas_por_dia in
 
 create table if not exists public.club_promociones (
   id             uuid primary key default gen_random_uuid(),
-  location_id    text not null default 'santa-teresa',
+  location_id    text not null,
   nombre         text not null check (length(btrim(nombre)) between 2 and 80),
   nombre_en      text check (nombre_en is null or length(btrim(nombre_en)) between 2 and 80),
   para           text[] not null check (para <@ array['socio','referente','turista_cupon','todos'] and cardinality(para) between 1 and 4),
@@ -4970,7 +4970,7 @@ revoke all on public.club_promociones from public, anon, authenticated;
 
 create table if not exists public.club_cortesias (
   id              uuid primary key default gen_random_uuid(),
-  location_id     text not null default 'santa-teresa',
+  location_id     text not null,
   codigo_producto text not null check (codigo_producto ~ '^[0-9A-Za-z._-]{1,30}$'),
   nombre          text not null check (length(btrim(nombre)) between 2 and 80),
   familia         int,
@@ -5270,9 +5270,7 @@ end;
 $$;
 
 -- Promoción inicial (decisión de Ismael): «Local Club: 10 % + 1 cortesía», para socios, todos los días, en BORRADOR.
-insert into public.club_promociones (location_id, nombre, para, estado, porcentaje, cortesias)
-select 'santa-teresa', 'Local Club', array['socio'], 'borrador', 10, 1
- where not exists (select 1 from public.club_promociones where location_id = 'santa-teresa' and lower(nombre) = 'local club');
+-- LC-ML: se siembra por local al darlo de alta (trigger club_config_alta, sección LC-ML), sin nombres de local.
 
 
 -- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -5300,7 +5298,7 @@ alter table public.club_config add column if not exists socios_por_factura int n
 
 create table if not exists public.club_visitas_socio (
   id               uuid primary key default gen_random_uuid(),
-  location_id      text not null default 'santa-teresa',
+  location_id      text not null,
   miembro_id       uuid not null references public.club_miembros(id),
   fecha            date not null,                      -- día de Costa Rica
   registrada_en    timestamptz not null default now(),
@@ -5331,7 +5329,7 @@ alter table public.club_config add column if not exists premio_vence_dias int no
 
 create table if not exists public.club_premios (
   id              uuid primary key default gen_random_uuid(),
-  location_id     text not null default 'santa-teresa',
+  location_id     text not null,
   beneficiario    uuid not null references public.club_miembros(id),
   referido        uuid not null unique references public.club_miembros(id),   -- un referido da a lo sumo un premio
   ticket_id       uuid,                                                        -- la primera factura C con el 856
@@ -5707,15 +5705,16 @@ $$;
 --   update public.club_config set club_activo = true where location_id = '<local>';   (o el interruptor del owner)
 -- Apagado = en ese local no hay altas (caja ni autoalta), visitas de socio, cupones, canjes, tarjeta manual, premios ni
 -- excepciones LC. Sí se puede preparar su configuración (promociones, cortesías, códigos del PoS, anfitriones, negocios)
--- y leer sus reportes. Checklist «Encender un local» en el RUNBOOK. Nosara queda cargado y APAGADO.
+-- y leer sus reportes. Checklist «Encender un local» en el RUNBOOK. Alta de un local: un INSERT en club_config (o
+-- club_local_crear desde la app); el trigger club_config_alta siembra sus marcadores y su promoción en borrador.
 -- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
 do $$
 begin
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'club_config'
                   and column_name = 'club_activo') then
     alter table public.club_config add column club_activo boolean not null default false;
-    -- Una sola vez, al crear la columna: el Club ya corría en el único local que tenía config. Si después se apaga, no se pisa.
-    update public.club_config set club_activo = true where location_id = 'santa-teresa';
+    -- Una sola vez, al crear la columna: el Club ya corría en los locales que tenían config. Si después se apaga, no se pisa.
+    update public.club_config set club_activo = true;
   end if;
 end $$;
 alter table public.club_config add column if not exists nombre    text check (nombre is null or length(btrim(nombre)) between 1 and 60);
@@ -5723,14 +5722,7 @@ alter table public.club_config add column if not exists direccion text check (di
 alter table public.club_config add column if not exists mapa_url  text check (mapa_url is null or mapa_url ~ '^https://');
 alter table public.club_config drop constraint if exists club_config_location_id_formato;
 alter table public.club_config add constraint club_config_location_id_formato check (location_id ~ '^[a-z0-9-]{2,40}$');
--- Datos iniciales (se cargan una vez; después se editan como cualquier dato)
-update public.club_config
-   set nombre = 'Santa Teresa',
-       direccion = coalesce(direccion, 'Santa Teresa, Puntarenas, Costa Rica'),
-       mapa_url = coalesce(mapa_url, 'https://maps.google.com/?q=Satori+Sushi+Bar+Santa+Teresa+Costa+Rica')
- where location_id = 'santa-teresa' and nombre is null;
-insert into public.club_config (location_id, nombre, club_activo) values ('nosara', 'Nosara', false)
-on conflict (location_id) do nothing;
+-- Los datos de cada local (nombre, dirección, mapa, encendido) son filas: RUNBOOK paso 4b, sin nombres en esta migración.
 
 -- ¿El Club está encendido en el local?
 create or replace function public.club_local_activo(p_location text)
@@ -5792,6 +5784,97 @@ begin
   return coalesce((select jsonb_agg(jsonb_build_object('id', c.location_id, 'nombre', coalesce(c.nombre, c.location_id),
                                                        'direccion', c.direccion, 'mapa', c.mapa_url) order by c.location_id)
                      from public.club_config c where c.club_activo), '[]'::jsonb);
+end;
+$$;
+
+
+-- El default de `location_id` en las tablas del Club: el ÚNICO local con el Club encendido (nunca un nombre). Lo usan
+-- solo las inserciones directas (migrador, pruebas); las funciones siempre pasan el local. Con dos o más encendidos,
+-- una inserción sin local falla (hay que decir cuál). club_config no tiene default: el id de un local es un dato.
+do $$
+declare r record;
+begin
+  for r in select c.table_name from information_schema.columns c
+            where c.table_schema = 'public' and c.table_name like 'club\_%' and c.column_name = 'location_id'
+              and c.table_name <> 'club_config'
+              and exists (select 1 from information_schema.tables t where t.table_schema = 'public' and t.table_name = c.table_name
+                            and t.table_type = 'BASE TABLE') loop
+    execute format('alter table public.%I alter column location_id set default public.club_local(null, false)', r.table_name);
+  end loop;
+end $$;
+alter table public.club_config alter column location_id drop default;
+
+-- Alta de un local (INSERT en club_config o club_local_crear): siembra sus marcadores de descuento (los códigos del
+-- PoS de su fila) y la promoción «Local Club» en BORRADOR. Nada más: cortesías, anfitriones y demás se cargan por app.
+create or replace function public.club_config_alta()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  insert into public.club_marcadores_descuento (location_id, codigo_producto, nombre)
+  select new.location_id, x.cod, x.nom
+    from (values (new.lc_articulo_codigo, 'LOCAL CLUB (socio)'), (new.lc_invitado_codigo, 'INVITADO (Local Club)'),
+                 (new.promo_articulo_codigo, 'PROMO CLUB')) x(cod, nom)
+   where x.cod is not null
+  on conflict (location_id, codigo_producto) do nothing;
+  insert into public.club_promociones (location_id, nombre, para, estado, porcentaje, cortesias)
+  select new.location_id, 'Local Club', array['socio'], 'borrador', 10, 1
+   where not exists (select 1 from public.club_promociones p where p.location_id = new.location_id and lower(p.nombre) = 'local club');
+  return new;
+end;
+$$;
+drop trigger if exists club_config_alta_trg on public.club_config;
+create trigger club_config_alta_trg after insert on public.club_config for each row execute function public.club_config_alta();
+
+-- Locales que ya existían: la misma siembra (idempotente, genérica).
+insert into public.club_promociones (location_id, nombre, para, estado, porcentaje, cortesias)
+select c.location_id, 'Local Club', array['socio'], 'borrador', 10, 1
+  from public.club_config c
+ where not exists (select 1 from public.club_promociones p where p.location_id = c.location_id and lower(p.nombre) = 'local club');
+
+-- Alta de un local desde la app (solo owner). Queda APAGADO. Con p_copiar_de, arranca con la configuración de ese
+-- local (códigos del PoS, topes, valores del crédito) para revisar; sin él, con los valores por defecto.
+create or replace function public.club_local_crear(p_id text, p_nombre text, p_direccion text default null,
+                                                   p_mapa text default null, p_copiar_de text default null)
+returns text
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_id  text := lower(btrim(coalesce(p_id, '')));
+  v_nom text := nullif(regexp_replace(btrim(coalesce(p_nombre, '')), '\s+', ' ', 'g'), '');
+  v_dir text := nullif(btrim(coalesce(p_direccion, '')), '');
+  v_map text := nullif(btrim(coalesce(p_mapa, '')), '');
+  v_base public.club_config%rowtype;
+  v_nuevo public.club_config%rowtype;
+begin
+  if v_rol is null or v_rol <> 'owner' then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  if v_id !~ '^[a-z0-9-]{2,40}$' then
+    raise exception 'El id del local va en minúsculas, números y guiones (2 a 40), por ejemplo «playa-nueva»' using errcode = 'P0001';
+  end if;
+  if v_nom is null or length(v_nom) > 60 then raise exception 'Falta el nombre del local (hasta 60 caracteres)' using errcode = 'P0001'; end if;
+  if v_map is not null and v_map !~ '^https://' then raise exception 'El enlace del mapa tiene que empezar con https://' using errcode = 'P0001'; end if;
+  if exists (select 1 from public.club_config where location_id = v_id) then
+    raise exception 'Ya existe un local con ese id' using errcode = 'P0001';
+  end if;
+  if p_copiar_de is not null then
+    select * into v_base from public.club_config where location_id = p_copiar_de;
+    if not found then raise exception 'No existe el local a copiar' using errcode = 'P0001'; end if;
+    v_nuevo := jsonb_populate_record(v_base, jsonb_build_object('location_id', v_id, 'nombre', v_nom, 'direccion', v_dir,
+                 'mapa_url', v_map, 'club_activo', false, 'lc_excepciones_desde', null, 'created_at', now(), 'updated_at', now()));
+    insert into public.club_config select v_nuevo.*;
+  else
+    insert into public.club_config (location_id, nombre, direccion, mapa_url, club_activo)
+    values (v_id, v_nom, v_dir, v_map, false);
+  end if;
+  perform public.club_auditar('local_alta', 'club_config', null, null,
+                              (select to_jsonb(c) from public.club_config c where c.location_id = v_id));
+  return v_id;
 end;
 $$;
 
@@ -5982,6 +6065,9 @@ revoke all on function public.club_marcador_guardar(uuid, text, text, numeric, b
 grant execute on function public.club_marcadores_listar(text)                    to authenticated;
 grant execute on function public.club_marcador_guardar(uuid, text, text, numeric, boolean, text) to authenticated;
 -- LC-ML: puerta pública (club-web) y helpers internos sin grant
+revoke all on function public.club_local_crear(text, text, text, text, text)  from public, anon, authenticated;
+grant execute on function public.club_local_crear(text, text, text, text, text) to authenticated;
+revoke all on function public.club_config_alta()                          from public, anon, authenticated;
 grant execute on function public.club_locales_activos()                  to anon, authenticated;
 revoke all on function public.club_local(text, boolean)                  from public, anon, authenticated;
 revoke all on function public.club_local_activo(text)                    from public, anon, authenticated;

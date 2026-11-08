@@ -2,7 +2,7 @@
 // (nunca hay una clave escrita en el repo, ni de prueba).
 import { describe, it, expect, beforeAll } from 'vitest'
 import {
-  armarClase, armarObjeto, firmarJwt, firmarJwtFlaco, LARGO_JWT_RECOMENDADO, urlGuardar, validarDatos, leerCuentaServicio, beneficioEn, idObjeto,
+  armarClase, armarObjeto, DISENO_PROPUESTO, firmarJwt, firmarJwtFlaco, LARGO_JWT_RECOMENDADO, urlGuardar, validarDatos, leerCuentaServicio, beneficioEn, idObjeto,
   type PaseDatos, type CuentaServicio,
 } from './googlePase'
 
@@ -122,6 +122,15 @@ describe('armarObjeto', () => {
     expect(txt).not.toMatch(/@|\+506|\/p\/[0-9a-f]{64}/)
     expect(() => armarObjeto('abc', base())).toThrow(/issuerId/)
     expect(() => armarClase('abc')).toThrow(/issuerId/)
+  })
+
+  it('diseño: sin aprobar no lleva logo ni franja; con la propuesta, sí (https del Club)', () => {
+    const sin = armarObjeto(ISSUER, base()) as Record<string, unknown>
+    expect(sin.logo).toBeUndefined(); expect(sin.heroImage).toBeUndefined()
+    const con = armarObjeto(ISSUER, base(), DISENO_PROPUESTO) as { logo: { sourceUri: { uri: string } }; heroImage: { sourceUri: { uri: string } }; hexBackgroundColor: string }
+    expect(con.logo.sourceUri.uri).toBe('https://club.satoricostarica.com/pase/logo.png')
+    expect(con.heroImage.sourceUri.uri).toBe('https://club.satoricostarica.com/pase/hero.png')
+    expect(con.hexBackgroundColor).toBe('#0d0d0d')
   })
 
   it('el beneficio se traduce con los mismos números', () => {

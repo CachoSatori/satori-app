@@ -97,6 +97,14 @@ export interface DisenoPase {
   colorFondo: string
   /** URL pública del logo (https). Opcional mientras no esté el diseño. */
   logoUrl?: string | null
+  /** URL pública de la franja superior (heroImage, 1032×336). Opcional. */
+  heroUrl?: string | null
+}
+/** Propuesta del 08-nov (docs/club-satori/PROPUESTA-diseno-pase.md). Se usa recién cuando Ismael la aprueba, vía WALLET_DISENO. */
+export const DISENO_PROPUESTO: DisenoPase = {
+  colorFondo: '#0d0d0d',
+  logoUrl: 'https://club.satoricostarica.com/pase/logo.png',
+  heroUrl: 'https://club.satoricostarica.com/pase/hero.png',
 }
 export const DISENO_POR_DEFECTO: DisenoPase = { colorFondo: '#0d0d0d', logoUrl: null }
 
@@ -190,7 +198,10 @@ export function armarObjeto(issuerId: string, d: PaseDatos, diseno: DisenoPase =
     linksModuleData: { uris: links },
   }
   if (diseno.logoUrl && diseno.logoUrl.startsWith('https://')) {
-    objeto.logo = { sourceUri: { uri: diseno.logoUrl } }
+    objeto.logo = { sourceUri: { uri: diseno.logoUrl }, contentDescription: loc({ es: 'Logo de Satori', en: 'Satori logo' }) }
+  }
+  if (diseno.heroUrl && diseno.heroUrl.startsWith('https://')) {
+    objeto.heroImage = { sourceUri: { uri: diseno.heroUrl }, contentDescription: loc({ es: 'Satori · Club · Santa Teresa', en: 'Satori · Club · Santa Teresa' }) }
   }
   if (d.codigo_barras && d.estado !== 'baja') {
     objeto.barcode = {

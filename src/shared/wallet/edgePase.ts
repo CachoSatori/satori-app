@@ -49,6 +49,7 @@ function diseno(env: EnvPase): DisenoPase {
     return {
       colorFondo: typeof x.colorFondo === 'string' && /^#[0-9a-fA-F]{6}$/.test(x.colorFondo) ? x.colorFondo : DISENO_POR_DEFECTO.colorFondo,
       logoUrl: typeof x.logoUrl === 'string' && x.logoUrl.startsWith('https://') ? x.logoUrl : null,
+      heroUrl: typeof x.heroUrl === 'string' && x.heroUrl.startsWith('https://') ? x.heroUrl : null,
     }
   } catch { return DISENO_POR_DEFECTO }
 }

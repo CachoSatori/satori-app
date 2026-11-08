@@ -653,7 +653,8 @@ function VisitaSocio({ miembro }: { miembro: string }) {
     finally { setEnviando(false) }
   }
   if (res) {
-    const noAplica = res.estado === 'paga_con_creditos' || res.estado === 'sin_promocion'
+    // en rojo todo lo que NO lleva el beneficio del socio (Grok 90: ya lo usó hoy en otro pedido; Grok 91: va como invitado)
+    const noAplica = res.estado === 'paga_con_creditos' || res.estado === 'sin_promocion' || res.estado === 'ya_uso_hoy' || res.estado === 'como_invitado'
     return (
       <div style={{ border: `2px solid ${noAplica ? C.red : C.teal}`, borderRadius: 10, padding: '0.8rem', background: '#fff' }}>
         <div style={{ fontSize: '0.7rem', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>

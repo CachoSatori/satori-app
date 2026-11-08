@@ -36,7 +36,6 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   CORTESIA_SIN_SOCIO:       { titulo: 'Cortesía sin socio', que: 'Un artículo de «CORTESÍA CLUB» en una factura sin visita de socio.' },
   CORTESIA_NO_CONFIGURADA:  { titulo: 'Línea a ₡0 fuera de cortesías', que: 'Una línea a ₡0 que no es de «CORTESÍA CLUB», ni PAX, ni el Local Club, ni la promo.' },
   ANFITRION_SOBRE_TOPE:     { titulo: 'Anfitrión sobre el tope', que: 'Un anfitrión ganó en el mes más que el tope configurado (₡25.000). Si es nuevo, lo que pasó quedó pendiente de aprobación.' },
-  LC_INVITADOS_EXCEDIDOS:   { titulo: 'Invitados de más', que: 'La visita del socio tiene más artículos 857 (INVITADO) que el máximo por visita (3 por defecto).' },
   SOCIO_ALTA_SIN_CONFIRMAR: { titulo: 'Alta de socio sin confirmar', que: 'Alta provisional (en caja o validación) que todavía no confirmó un manager u owner distinto de quien la cargó.' },
 }
 // Excepciones que salen solo del PoS: sin registrante en la app → las resuelve el owner (la base lo controla igual).

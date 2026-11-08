@@ -10,7 +10,7 @@
  * Todo pasa por /api/* (Pages Function con tope por IP). El DOM se arma sin innerHTML.
  */
 import './styles.css'
-import { urlCanje, urlCupon, urlReferente } from './qrFormato'
+import { urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
 
@@ -173,7 +173,11 @@ async function paginaCupon(codigo: string) {
 
 interface Portal {
   nombre: string; codigo: string; personas: number; creditos: number; personas_proximo_credito: number
-  anfitrion?: boolean; socio?: { estado: 'pendiente' | 'activo'; desde: string } | null
+  anfitrion?: boolean
+  socio?: {
+    estado: 'pendiente' | 'activo'; desde: string; codigo_socio: string | null; beneficio: string | null; visitas_mes: number | null
+    cortesias: Array<{ sorpresa: boolean; cantidad: number; motivo: string; vence_en: string | null }> | null
+  } | null
   movimientos: Array<{ tipo: string; personas: number; creditos: number | null; fecha: string }>
 }
 
@@ -239,19 +243,16 @@ async function paginaPortal(token: string) {
   }, 'image/png'))
   const descargar = h('a', { class: 'btn sec', href: canvas.toDataURL('image/png'), download: `satori-${p.codigo}.png` }, t.descargar)
   const esAnfitrion = p.anfitrion !== false
-  pintar(
-    h('h1', {}, t.portal_hola(p.nombre)),
-    p.socio && seccionSocio(token, p.socio.estado),
-    esAnfitrion && h('section', { class: 'tarjeta' },
+  const anfitrion: HTMLElement[] = !esAnfitrion ? [] : [
+    h('section', { class: 'tarjeta' },
       h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)), h('span', {}, t.portal_creditos)),
       h('p', { class: 'sub' }, t.portal_personas(p.personas)),
       h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito)))),
-    esAnfitrion && p.creditos >= 1 && seccionCanje(token),
-    esAnfitrion && h('section', { class: 'tarjeta portal-qr' },
+    ...(p.creditos >= 1 ? [seccionCanje(token)] : []),
+    h('section', { class: 'tarjeta portal-qr' },
       h('h2', {}, t.portal_qr), canvas, h('p', { class: 'codigo', style: 'text-align:center' }, p.codigo),
       h('p', {}, t.portal_indicaciones),
       h('div', { class: 'fila' }, compartir, descargar),
-      // F1e: botón «Agregar a Wallet» (oculto hasta tener la clase del pase).
     ),
     h('section', { class: 'tarjeta' },
       h('h2', {}, t.historial),
@@ -263,16 +264,35 @@ async function paginaPortal(token: string) {
             m.tipo === 'canje' && m.creditos != null ? t.canje_creditos(num(Number(m.creditos)), Number(m.creditos))
               : `${m.personas > 0 ? '+' : '−'}${Math.abs(m.personas)}`)))),
     ),
+  ]
+  pintar(
+    h('h1', {}, t.portal_hola(p.nombre)),
+    ...pestanas(p.socio ? [seccionSocio(token, p.socio)] : [], anfitrion),
   )
 }
 
 // ── LC-A2: socio del Local Club ──────────────────────────────────────────────
-function seccionSocio(token: string, estado: 'pendiente' | 'activo'): HTMLElement {
+function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLElement {
   const err = h('div')
   const baja = h('button', { type: 'button', class: 'btn sec' }, t.socio_baja_boton) as HTMLButtonElement
+  const activo = socio.estado === 'activo'
+  const cort = socio.cortesias ?? []
+  const sorpresas = cort.filter(c => c.motivo === 'promo').reduce((n, c) => n + c.cantidad, 0)
+  const premios = cort.filter(c => c.motivo === 'premio_referido')
+  const qrBox = h('div', { class: 'socio-qr' })
+  if (socio.codigo_socio) {
+    const cod = socio.codigo_socio
+    void qr(urlSocio(cod), `QR ${cod}`).then(c => qrBox.replaceChildren(
+      h('h2', {}, t.socio_qr), c, h('p', { class: 'codigo', style: 'text-align:center' }, cod), h('p', { class: 'sub' }, t.socio_qr_txt)))
+  }
   const sec = h('section', { class: 'tarjeta', 'aria-label': t.socio_titulo },
     h('h2', {}, t.socio_titulo),
-    h('p', {}, estado === 'pendiente' ? t.socio_pendiente : t.socio_activo),
+    h('p', {}, activo ? t.socio_activo : t.socio_pendiente),
+    activo && h('p', {}, h('strong', {}, socio.beneficio ? t.socio_beneficio(socio.beneficio) : t.socio_sin_beneficio)),
+    activo && sorpresas > 0 && h('p', {}, t.socio_sorpresa(sorpresas)),
+    ...premios.map(p => h('p', {}, t.socio_premio(p.vence_en ? fecha(p.vence_en + 'T12:00:00-06:00', false) : '—'))),
+    activo && socio.visitas_mes != null && h('p', { class: 'sub' }, t.socio_visitas(socio.visitas_mes)),
+    qrBox,
     err, baja)
   baja.addEventListener('click', async () => {
     if (!window.confirm(t.socio_baja_confirmar)) return
@@ -282,6 +302,22 @@ function seccionSocio(token: string, estado: 'pendiente' | 'activo'): HTMLElemen
     baja.disabled = false; err.append(avisoEl('err', msgError(r.error)))
   })
   return sec
+}
+
+/** A4.5: con los dos roles, dos pestañas («Mi Club» y «Anfitrión»); con uno, una sola sección. */
+function pestanas(miClub: HTMLElement[], anfitrion: HTMLElement[]): HTMLElement[] {
+  if (miClub.length === 0) return anfitrion
+  if (anfitrion.length === 0) return miClub
+  const panelA = h('div', { role: 'tabpanel', id: 'panel-mi-club', 'aria-labelledby': 'tab-mi-club' }, ...miClub)
+  const panelB = h('div', { role: 'tabpanel', id: 'panel-anfitrion', 'aria-labelledby': 'tab-anfitrion', hidden: true }, ...anfitrion)
+  const bA = h('button', { type: 'button', role: 'tab', id: 'tab-mi-club', 'aria-controls': 'panel-mi-club', 'aria-selected': 'true', class: 'tab' }, t.pestana_mi_club) as HTMLButtonElement
+  const bB = h('button', { type: 'button', role: 'tab', id: 'tab-anfitrion', 'aria-controls': 'panel-anfitrion', 'aria-selected': 'false', class: 'tab' }, t.pestana_anfitrion) as HTMLButtonElement
+  const elegir = (a: boolean) => {
+    bA.setAttribute('aria-selected', String(a)); bB.setAttribute('aria-selected', String(!a))
+    panelA.hidden = !a; panelB.hidden = a
+  }
+  bA.addEventListener('click', () => elegir(true)); bB.addEventListener('click', () => elegir(false))
+  return [h('div', { class: 'tabs', role: 'tablist' }, bA, bB), panelA, panelB]
 }
 
 // Turnstile (Cloudflare): el script se carga solo en /alta.

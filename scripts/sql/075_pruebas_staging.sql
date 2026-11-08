@@ -3199,6 +3199,38 @@ begin
     not has_table_privilege('authenticated', 'public.club_personas_pendientes', 'SELECT'), '');
 end $$;
 
+-- ═══ 66. LC-A4.5: pase y portal del socio (visitas del mes, cortesía sorpresa y premios; pestaña «Mi Club») ═══
+do $$
+declare v_q uuid; v_x uuid; v_tok text; j jsonb; p jsonb;
+begin
+  update club_promociones set estado = 'terminada' where nombre <> 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  update club_cortesias set activa = true where codigo_producto in ('CC-1','CC-2');
+  v_q := pg_temp.socio('Quela Pase Ficticia', '+50661110021', null);
+  v_x := pg_temp.socio('Xime Referida Ficticia', '+50661110022', v_q);
+  select token_portal into v_tok from club_miembros where id = v_q;
+  perform pg_temp.pedido_lc('9081', 'C', true);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_q, '{"modo":"pedido","pedido":"9081","clave":"pedido:9081"}', gen_random_uuid());
+  perform pg_temp.yo();
+  insert into club_premios (beneficiario, referido, estado, vence_en) values (v_q, v_x, 'disponible', now() + interval '30 days');
+  set local role service_role;
+  j := public.club_pase_datos(v_q);
+  reset role;
+  perform pg_temp.r('66', 'pase del socio: visitas del mes, cortesía sorpresa de la promo y el premio con su vencimiento',
+    (j->'socio'->>'visitas_mes')::int = 1 and j->'socio'->>'beneficio' = '10 % + 1 cortesía'
+      and (j->'socio'->'cortesias')::text like '%"motivo": "promo"%' and (j->'socio'->'cortesias')::text like '%"motivo": "premio_referido"%'
+      and jsonb_array_length(j->'socio'->'cortesias') = 2, (j->'socio')::text);
+  perform set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+  set local role anon;
+  p := public.club_portal(v_tok);
+  reset role;
+  perform pg_temp.r('66', 'portal (pestaña Mi Club): estado, QR del socio, beneficio, visitas, cortesías y promociones; sin contactos',
+    p->'socio'->>'estado' = 'activo' and p->'socio'->>'codigo_socio' ~ '^[A-HJ-NP-Z2-9]{9}$' and p->'socio'->>'beneficio' = '10 % + 1 cortesía'
+      and (p->'socio'->>'visitas_mes')::int = 1 and jsonb_array_length(p->'socio'->'cortesias') = 2
+      and p::text not like '%+506%' and p::text not like '%@%', (p->'socio')::text);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

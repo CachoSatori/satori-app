@@ -1722,8 +1722,13 @@ begin
     'movimientos',              v_movs,
     -- LC-A2: el portal sirve también al socio (estado y link de baja del aviso de privacidad)
     'anfitrion',                exists (select 1 from public.club_miembro_roles r where r.miembro_id = v_m.id and r.rol <> 'socio' and r.estado = 'activo'),
-    'socio',                    (select jsonb_build_object('estado', r.estado, 'desde', r.desde)
-                                   from public.club_miembro_roles r where r.miembro_id = v_m.id and r.rol = 'socio' and r.estado <> 'baja')
+    -- A4.5: la pestaña «Mi Club» del portal (los mismos datos del pase, sin contactos)
+    'socio',                    (select jsonb_build_object('estado', r.estado, 'desde', r.desde, 'codigo_socio', v_m.codigo_socio,
+                                          'beneficio', ps->'socio'->'beneficio', 'visitas_mes', ps->'socio'->'visitas_mes',
+                                          'cortesias', ps->'socio'->'cortesias', 'promociones', ps->'promociones')
+                                   from public.club_miembro_roles r
+                                   cross join lateral (select public.club_pase_datos(v_m.id) as ps) x
+                                  where r.miembro_id = v_m.id and r.rol = 'socio' and r.estado <> 'baja')
   );
 end;
 $$;
@@ -3918,12 +3923,19 @@ begin
       'estado', v_soc.estado, 'desde', (v_soc.desde at time zone 'America/Costa_Rica')::date,
       'qr_url', v_base || '/s/' || v_m.codigo_socio,
       'beneficio', case when v_soc.estado = 'activo' then v_pben end,
-      'visitas_mes', 0,           -- A4: visitas del socio
-      -- Cortesía SORPRESA (se sortea en caja): solo si es activo, la promo la da y hay cortesías activas. Premios: A4.
-      'cortesias', case when v_soc.estado = 'activo' and coalesce(v_pcor, 0) > 0
-                         and exists (select 1 from public.club_cortesias c where c.location_id = v_m.location_id and c.activa)
-                        then jsonb_build_array(jsonb_build_object('sorpresa', true, 'cantidad', v_pcor, 'motivo', 'promo', 'vence_en', null))
-                        else '[]'::jsonb end);
+      'visitas_mes', (select count(*) from public.club_visitas_socio vs where vs.miembro_id = v_m.id
+                        and vs.fecha >= date_trunc('month', now() at time zone 'America/Costa_Rica')::date),
+      -- Cortesía SORPRESA (se sortea en caja): solo si es activo, la promo la da y hay cortesías activas; más los premios
+      -- por referir disponibles (A4.3), cada uno con su vencimiento.
+      'cortesias', case when v_soc.estado = 'activo' then
+                     (case when coalesce(v_pcor, 0) > 0
+                            and exists (select 1 from public.club_cortesias c where c.location_id = v_m.location_id and c.activa)
+                           then jsonb_build_array(jsonb_build_object('sorpresa', true, 'cantidad', v_pcor, 'motivo', 'promo', 'vence_en', null))
+                           else '[]'::jsonb end)
+                     || coalesce((select jsonb_agg(jsonb_build_object('sorpresa', true, 'cantidad', 1, 'motivo', 'premio_referido',
+                                                                     'vence_en', (p.vence_en at time zone 'America/Costa_Rica')::date) order by p.vence_en)
+                                    from public.club_premios p where p.beneficiario = v_m.id and p.estado = 'disponible' and p.vence_en > now()), '[]'::jsonb)
+                   else '[]'::jsonb end);
   end if;
   if v_anf.miembro_id is not null and v_anf.estado = 'activo' then
     v_pest := v_pest || 'anfitrion'::text;

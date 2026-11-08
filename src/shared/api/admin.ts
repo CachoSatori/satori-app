@@ -1,21 +1,24 @@
 import { supabase } from './supabase'
 import type { Employee, Profile, UserRole } from '../types/database'
+import { EMPLOYEE_COLUMNS, PLANILLA_KEYS } from './employeeColumns'
+
+export { EMPLOYEE_COLUMNS, PLANILLA_KEYS }
 
 // ── Empleados ───────────────────────────────────────────────
 
 export async function getAllEmployees(): Promise<Employee[]> {
   const { data, error } = await supabase
     .from('employees')
-    .select('*')
+    .select(EMPLOYEE_COLUMNS)
     .order('full_name')
   if (error) throw new Error(error.message)
-  return data as Employee[]
+  return data as unknown as Employee[]
 }
 
 // ── Salarios · Fase 0 (mig 055) ─────────────────────────────
-// Datos maestros de nómina que vivían en el Excel. Se escriben con un update normal
-// sobre employees (RLS: owner/manager gestionan empleados); no hay RPC nueva porque
-// acá todavía no se mueve plata — son solo los datos que Fase 1+ va a consumir.
+// Datos maestros de nómina que vivían en el Excel. Desde la mig 083 (SAL-AUD-01) la tarifa y el
+// salario fijo van a `employee_payroll` (RLS: owner/contador activos); el resto (servicio,
+// BioTime, ingreso) sigue en employees (RLS: owner/manager gestionan empleados).
 export interface EmployeePayroll {
   hourly_rate_crc:    number
   fixed_salary_crc:   number
@@ -38,15 +41,55 @@ function payrollError(error: { code?: string; message: string }, code?: string |
   return new Error(error.message)
 }
 
+/** Parte un payload: lo de planilla (→ employee_payroll) y lo demás (→ employees). */
+export function separarPlanilla<T extends Record<string, unknown>>(payload: T): {
+  planilla: Partial<Pick<EmployeePayroll, 'hourly_rate_crc' | 'fixed_salary_crc'>>
+  resto: Omit<T, 'hourly_rate_crc' | 'fixed_salary_crc'>
+} {
+  const planilla: Record<string, unknown> = {}
+  const resto: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(payload)) {
+    if (v === undefined) continue
+    if ((PLANILLA_KEYS as readonly string[]).includes(k)) planilla[k] = v
+    else resto[k] = v
+  }
+  return { planilla, resto } as never
+}
+
+/** Upsert de la planilla de un empleado (employee_payroll, 1 a 1). Solo owner/contador. */
+export async function upsertPlanilla(
+  employeeId: string,
+  campos: Partial<Pick<EmployeePayroll, 'hourly_rate_crc' | 'fixed_salary_crc'>> & { nombre_homebanking?: string | null },
+): Promise<void> {
+  if (Object.keys(campos).length === 0) return
+  // employee_payroll no está en supabase.gen.ts (mismo criterio que las tablas de la 056 en
+  // salarios.ts): cast acotado del builder, con .bind para no perder `this`.
+  const tabla = supabase.from?.bind(supabase) as unknown as (t: string) => {
+    upsert(row: unknown, opts: { onConflict: string }): PromiseLike<{ error: { message: string; code?: string } | null }>
+  }
+  const { error } = await tabla('employee_payroll')
+    .upsert({ employee_id: employeeId, ...campos }, { onConflict: 'employee_id' })
+  if (error) {
+    if (error.code === '42501' || /row-level security/i.test(error.message)) {
+      throw new Error('La tarifa y los datos bancarios los cargan solo el dueño o el contador.')
+    }
+    throw new Error(error.message)
+  }
+}
+
 export async function updateEmployeePayroll(
   id: string,
   payload: Partial<EmployeePayroll>,
 ): Promise<void> {
-  const { error } = await supabase
-    .from('employees')
-    .update(payload)
-    .eq('id', id)
-  if (error) throw payrollError(error, payload.biotime_emp_code)
+  const { planilla, resto } = separarPlanilla(payload)
+  if (Object.keys(resto).length > 0) {
+    const { error } = await supabase
+      .from('employees')
+      .update(resto)
+      .eq('id', id)
+    if (error) throw payrollError(error, payload.biotime_emp_code)
+  }
+  await upsertPlanilla(id, planilla)
 }
 
 export async function createEmployee(
@@ -54,13 +97,17 @@ export async function createEmployee(
 ): Promise<Employee> {
   // profile_id queda null: el empleado existe sin cuenta de login (cocina/back).
   // La FK a profiles es nullable, así que es una fila válida y completa.
+  // La planilla NO va a employees (mig 083): se inserta el empleado y después su planilla.
+  const { planilla, resto } = separarPlanilla(payload)
   const { data, error } = await supabase
     .from('employees')
-    .insert(payload)
-    .select()
+    .insert(resto)
+    .select(EMPLOYEE_COLUMNS)
     .single()
   if (error) throw payrollError(error, payload.biotime_emp_code)
-  return data as Employee
+  const creado = data as unknown as Employee
+  await upsertPlanilla(creado.id, planilla)
+  return { ...creado, ...planilla }
 }
 
 export async function updateEmployee(
@@ -144,12 +191,12 @@ export async function getEmployeeByProfileId(profileId: string): Promise<Employe
   // mostraba como «sin vínculo». Se toma la ACTIVA primero (y la más nueva si empatan).
   const { data, error } = await supabase
     .from('employees')
-    .select('*')
+    .select(EMPLOYEE_COLUMNS)
     .eq('profile_id', profileId)
     .order('is_active', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  return data as Employee | null
+  return data as unknown as Employee | null
 }

@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import type { TipSession, TipEntry, Employee, RoleTipPoints } from '../types/database'
 import { cachedFetch } from '../offline/cache'
 import { enqueue } from '../offline/outbox'
+import { EMPLOYEE_COLUMNS } from './employeeColumns'
 
 // ── Offline (FASE A/B — ver OFFLINE.md) ─────────────────────
 const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false
@@ -325,11 +326,11 @@ export async function getActiveEmployees(): Promise<Employee[]> {
   return cachedFetch('tips:employees-active', async () => {
     const { data, error } = await supabase
       .from('employees')
-      .select('*')
+      .select(EMPLOYEE_COLUMNS)
       .eq('is_active', true)
       .order('full_name')
     if (error) throw new Error(error.message)
-    return data as Employee[]
+    return data as unknown as Employee[]
   })
 }
 
@@ -339,10 +340,10 @@ export async function getActiveEmployees(): Promise<Employee[]> {
 export async function getAllEmployees(): Promise<Employee[]> {
   const { data, error } = await supabase
     .from('employees')
-    .select('*')
+    .select(EMPLOYEE_COLUMNS)
     .order('full_name')
   if (error) throw new Error(error.message)
-  return data as Employee[]
+  return data as unknown as Employee[]
 }
 
 // ── Puntos por rol ──────────────────────────────────────────

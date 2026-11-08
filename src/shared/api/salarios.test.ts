@@ -215,15 +215,21 @@ describe('upsertWorkDay', () => {
 })
 
 describe('updateEmployeeHomebankingName', () => {
-  it('guarda el alias recortado', async () => {
-    enqueue('employees', {})
-    await updateEmployeeHomebankingName('e1', '  ANA MARIA SOTO ')
-    expect(opArgs(lastCall('employees'), 'update')).toEqual([{ nombre_homebanking: 'ANA MARIA SOTO' }])
+  // Desde la mig 083 (SAL-AUD-01) el alias vive en employee_payroll (upsert 1 a 1), no en employees.
+  it('guarda el alias recortado en employee_payroll', async () => {
+    enqueue('employee_payroll', {})
+    await updateEmployeeHomebankingName('e1', '  BENEFICIARIO PRUEBA ')
+    expect(opArgs(lastCall('employee_payroll'), 'upsert')).toEqual([
+      { employee_id: 'e1', nombre_homebanking: 'BENEFICIARIO PRUEBA' }, { onConflict: 'employee_id' },
+    ])
+    expect(calls.some(c => c.table === 'employees')).toBe(false)
   })
   it('vacío se guarda como null, no como cadena vacía', async () => {
-    enqueue('employees', {})
+    enqueue('employee_payroll', {})
     await updateEmployeeHomebankingName('e1', '   ')
-    expect(opArgs(lastCall('employees'), 'update')).toEqual([{ nombre_homebanking: null }])
+    expect(opArgs(lastCall('employee_payroll'), 'upsert')).toEqual([
+      { employee_id: 'e1', nombre_homebanking: null }, { onConflict: 'employee_id' },
+    ])
   })
 })
 

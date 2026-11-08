@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, Suspense, lazy } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
-import { getAllEmployees } from '../../shared/api/admin'
+import { getEmployeesConPlanilla } from '../../shared/api/salarios'
 import type { Employee } from '../../shared/types/database'
 import { ROLE_LABELS } from '../../shared/constants'
 // Piel v3 (SPEC-UI Empleados v3). El archivo es SCOPED: todo cuelga de `.sal-v3` y no
@@ -55,7 +55,8 @@ export default function SalariosModule() {
     try {
       // Trae activos e inactivos: la RLS deja a owner/manager ver ambos y el filtro
       // de la pestaña decide qué se muestra.
-      const emps = await getAllEmployees()
+      // Planilla desde employee_payroll (mig 083): solo owner/contador la reciben.
+      const emps = await getEmployeesConPlanilla()
       setEmployees(emps)
       setError(null)
     } catch (e) {

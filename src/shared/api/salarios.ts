@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getAllEmployees, upsertPlanilla } from './admin'
 import type {
   Employee,
   EmployeePayment,
@@ -430,11 +431,49 @@ export async function updateEmployeeHomebankingName(
   nombre: string | null,
 ): Promise<void> {
   const limpio = nombre?.trim()
-  const { error } = await supabase
-    .from('employees')
-    .update({ nombre_homebanking: limpio ? limpio : null })   // '' no: null = "sin cargar"
-    .eq('id', id)
+  // Desde la mig 083 (SAL-AUD-01) vive en employee_payroll (solo owner/contador activos).
+  await upsertPlanilla(id, { nombre_homebanking: limpio ? limpio : null })   // '' no: null = "sin cargar"
+}
+
+// ── Planilla (mig 083, SAL-AUD-01) ──────────────────────────────────────────────
+
+/** Una fila de employee_payroll. Solo la ven owner y contador activos (RLS). */
+export interface PlanillaRow {
+  employee_id:        string
+  hourly_rate_crc:    number
+  fixed_salary_crc:   number
+  nombre_homebanking: string | null
+}
+
+/**
+ * Los empleados con su planilla pegada (la forma que ya consume todo Salarios: `emp.hourly_rate_crc`,
+ * `emp.fixed_salary_crc`, `emp.nombre_homebanking`). La planilla sale de employee_payroll; para un
+ * rol sin acceso (manager) la RLS devuelve 0 filas y los empleados quedan con tarifa 0 / sin banco.
+ */
+export async function getEmployeesConPlanilla(): Promise<Employee[]> {
+  const [emps, planilla] = await Promise.all([getAllEmployees(), getPlanilla()])
+  return pegarPlanilla(emps, planilla)
+}
+
+export async function getPlanilla(): Promise<PlanillaRow[]> {
+  const { data, error } = await fromAny('employee_payroll')
+    .select('employee_id, hourly_rate_crc, fixed_salary_crc, nombre_homebanking')
   if (error) throw new Error(error.message)
+  return (data as PlanillaRow[] | null) ?? []
+}
+
+/** Puro: pega la planilla a cada empleado (sin fila → 0 / 0 / null). */
+export function pegarPlanilla(emps: readonly Employee[], planilla: readonly PlanillaRow[]): Employee[] {
+  const porId = new Map(planilla.map(p => [p.employee_id, p]))
+  return emps.map(e => {
+    const p = porId.get(e.id)
+    return {
+      ...e,
+      hourly_rate_crc:    Number(p?.hourly_rate_crc ?? 0),
+      fixed_salary_crc:   Number(p?.fixed_salary_crc ?? 0),
+      nombre_homebanking: p?.nombre_homebanking ?? null,
+    }
+  })
 }
 
 // ── Pago ────────────────────────────────────────────────────────────────────────

@@ -275,7 +275,7 @@ borrador, y queda en la auditoría (la app) o en `club_config_historial` (los ca
 
 | # | Qué | Dónde | Verificar |
 |---|---|---|---|
-| 1 | **Puente del local** corriendo con **su propio secreto**: entrada `"<id>"` en `POS_INGEST_SECRETS` (32+ caracteres, distinto de los demás) y el agente de su PC con `LOCAL=<id>` | panel de Supabase + PC del PoS | `select now() - last_poll_at, last_error from pos_ndf_cursor where local = '<id>';` late y sin error. ⚠ Hoy el puente acepta solo una lista fija de locales (ver `docs/MULTILOCAL-relevamiento.md` §3): un local que no está en esa lista necesita el cambio del puente pendiente |
+| 1 | **Puente del local** corriendo con **su propio secreto**: entrada `"<id>"` en `POS_INGEST_SECRETS` (32+ caracteres, distinto de los demás) y el agente de su PC con `LOCAL=<id>` | panel de Supabase + PC del PoS | `select now() - last_poll_at, last_error from pos_ndf_cursor where local = '<id>';` late y sin error. ⚠ El puente del pase del lunes acepta solo santa-teresa y nosara; un tercer local necesita desplegar antes `claude/puente-locales-genericos` (`docs/puente/LOCALES-GENERICOS.md`), que toma los locales del mapa de secretos |
 | 2 | **Códigos del PoS:** `lc_articulo_codigo` (856, LOCAL CLUB), `lc_invitado_codigo` (857, INVITADO), `promo_articulo_codigo` (PROMO CLUB 10 %), `articulos_cero_permitidos` | `club_config` (fila del local) | existen en el catálogo de su PoS (Club → Promociones → buscar producto) |
 | 3 | **Marcadores de descuento** (tarjetas de hoteles o tiendas, descuento de personal…) | Club → **Descuentos** | los sembrados (856, 857) más los propios del local |
 | 4 | **Sección CORTESÍA CLUB:** `cortesia_familia` y las cortesías del sorteo | `club_config` + Club → Promociones | cortesías activas |

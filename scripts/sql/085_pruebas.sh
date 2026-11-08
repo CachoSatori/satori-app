@@ -6,7 +6,7 @@
 # Cada caso es UNA transacción que termina en ROLLBACK: no escribe nada. Las cuentas se eligen por
 # rol y estado (la más antigua de cada grupo); el script no imprime nombres ni correos, solo el
 # rol del caso y los conteos. Un caso sin cuenta en esa base sale como «sin cuenta».
-# El «owner inactivo» se simula: dentro de la transacción se marca inactivo a un owner (con
+# El «owner inactivo» se simula (solo en staging; en prod se omite porque escribe): dentro de la transacción se marca inactivo a un owner (con
 # session_replication_role = replica para saltar los triggers de la 068) y se vuelve atrás.
 #
 # Resultado esperado DESPUÉS de la 085:
@@ -42,25 +42,38 @@ LECTURA="select
   (select count(*) from public.exchange_rates)  as exchange_rates,
   (select count(*) from public.profiles)        as profiles"
 
+# En PROD el script SOLO LEE: no prueba «editar otro perfil» (sería un UPDATE, aunque termine en
+# rollback). En staging sí, con un UPDATE que deja el valor igual y se descarta.
 caso() { # $1 = etiqueta, $2 = uid, $3 = sql previo como postgres (opcional)
   local etiqueta=$1 id=$2 previo=${3:-}
   if [ -z "$id" ]; then printf '%-24s sin cuenta\n' "$etiqueta"; return; fi
   local otro
   otro=$(q "select id from public.profiles where id <> '$id' order by created_at limit 1" | jq -r '.[0].id')
+  local EDITA
+  if [ "$REF" = yiczgdtirrkdvohdquzf ]; then
+    EDITA="select l.*, null::int as update_otro_perfil from ($LECTURA) l;"
+  else
+    EDITA="with u as (update public.profiles set full_name = full_name where id = '$otro' returning 1)
+    select l.*, (select count(*) from u) as update_otro_perfil from ($LECTURA) l;"
+  fi
   local r
   r=$(q "begin;
     $previo
     set local role authenticated;
     select set_config('request.jwt.claims', '{\"sub\":\"$id\",\"role\":\"authenticated\"}', true);
-    with u as (update public.profiles set full_name = full_name where id = '$otro' returning 1)
-    select l.*, (select count(*) from u) as update_otro_perfil from ($LECTURA) l;
+    $EDITA
     rollback;")
   printf '%-24s %s\n' "$etiqueta" "$(echo "$r" | jq -c 'if type=="array" then .[0] else . end')"
 }
 
 caso "owner activo"       "$(uid owner true)"
 OWNER=$(uid owner true)
-caso "owner inactivo (sim)" "$OWNER" "set local session_replication_role = replica; update public.profiles set is_active = false where id = '$OWNER'; set local session_replication_role = origin;"
+if [ "$REF" = yiczgdtirrkdvohdquzf ]; then
+  # En PROD no se simula: ese caso hace un UPDATE (aunque termine en rollback). Solo lecturas.
+  printf '%-24s %s\n' "owner inactivo (sim)" "omitido en prod (escribe)"
+else
+  caso "owner inactivo (sim)" "$OWNER" "set local session_replication_role = replica; update public.profiles set is_active = false where id = '$OWNER'; set local session_replication_role = origin;"
+fi
 for rol in manager contador cajero salonero barman cocina; do
   caso "$rol activo"   "$(uid $rol true)"
   caso "$rol inactivo" "$(uid $rol false)"

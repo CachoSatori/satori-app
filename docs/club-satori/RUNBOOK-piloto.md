@@ -15,10 +15,10 @@
 |---|---|---|---|
 | 0 | Preparación y lecturas (solo lectura) | — | no se sigue |
 | 1 | Mig **069** (`get_my_role` con `is_active`) | 0 | `scripts/sql/069_rollback.sql` |
-| 2 | Mig **081** (campos de la factura del puente; **renumerada**, ver 3b) | 1 y 3b | `scripts/sql/081_rollback.sql` (solo si el paso 3 no se hizo) |
-| 2b | Mig **082** (`pos_ndf_ingestar`: ingesta en una transacción por local, CLUB-AUD-44/45; **renumerada**, ver 3b) | 2 | `drop function public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb);` (solo si el paso 3 no se hizo) |
+| 2 | Mig **081** (campos de la factura del puente; entra con su número si va primero, ver la regla) | 1 | `scripts/sql/081_rollback.sql` (solo si el paso 3 no se hizo) |
+| 2b | Mig **082** (`pos_ndf_ingestar`: ingesta en una transacción por local, CLUB-AUD-44/45; entra con su número si va primero) | 2 | `drop function public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb);` (solo si el paso 3 no se hizo) |
 | 3 | Edge `ingest-ndf` desde `claude/puente-item11-prod`, y después el agente de prod | 2b | volver al Edge anterior **antes** de tocar la 082 y la 081 |
-| 3b | **Renumerar** las migraciones del pase (075, 081, 082) por la regla de numeración, en el **mismo PR del pase** | 0 | volver archivos, registro y filas del ledger de staging a sus números (ver 3b) |
+| 3b | **Renumerar** lo que quede ≤ al último de prod (hoy: la 075 → 150) por la regla de numeración, en el **mismo PR del pase** | 0 | volver archivos, registro y filas del ledger de staging a sus números (ver 3b) |
 | 4 | Mig **del Club** (hoy 075, con su número nuevo) | 1 y 3b | `scripts/sql/<N>_rollback.sql` (no hay datos del Club todavía) |
 | 5 | Clave de club-web (`CLUB_WEB_KEY` + su sha256) | 4 | `club_web_clave_cargar` con una clave nueva |
 | 6 | Cloudflare (Pages `satori-club`: variables, bindings y dominio) | 5 | sacar el dominio; la base sigue cerrada |
@@ -85,7 +85,8 @@ y con su fila (08-nov, texto idéntico: md5 `5db915c8a422519ce77050f1fb1b916a`).
 
 ## 3. Edge `ingest-ndf` y agente de prod
 **Hacer:**
-1. Desde un checkout de `claude/puente-item11-prod` (hoy `d531809`):
+1. Desde un checkout de `claude/puente-item11-prod` (hoy `e4678b3`; el detalle, con smoke test y rollback, está en
+   `docs/club-satori/PAQUETE-PASE-puente.md`):
    `supabase functions deploy ingest-ndf --no-verify-jwt --project-ref yiczgdtirrkdvohdquzf`.
 2. Secreto por local (CLUB-AUD-32), en el panel de Supabase → Edge Functions → Secrets:
    `POS_INGEST_SECRETS = {"santa-teresa":"<secreto largo>"}`. Si no se carga, el `POS_INGEST_SECRET` de siempre sigue
@@ -107,22 +108,25 @@ y con su fila (08-nov, texto idéntico: md5 `5db915c8a422519ce77050f1fb1b916a`).
 commit anotado en el paso 0. **Recién después**, si hiciera falta, la 081.
 
 ## Regla de numeración (Ismael, 08-nov; `supabase/migraciones-reservadas.json` y `ESTADO.md`)
-- El Club y el puente usan el **bloque 100–149**. Cada migración nueva se registra en
+- El Club y el puente **crean** sus migraciones en el **bloque 100–149**. Cada migración nueva se registra en
   `supabase/migraciones-reservadas.json` («asignadas») **y** en la tabla de `ESTADO.md` **en el mismo commit**: el test
   `supabase/migraciones.test.ts` (corre en el gate) falla si no.
-- **Pase a prod: ninguna migración entra a prod con un número ≤ al último del ledger de prod.** Si pasa —y va a pasar con
-  la `075` (Club), la `081` y la `082` (puente)—, **se renombra al siguiente libre arriba del último de prod**, dentro del
-  bloque del Club, **en el mismo PR del pase**, con rollback, pruebas, paridad y la fila del ledger de staging (paso 3b).
+- **Pase a prod: ninguna migración entra a prod con un número ≤ al último del ledger de prod.** Si pasa, **se renombra al
+  siguiente libre del bloque de PASE 150–199** (caja lo agrega a `main`), **nunca** a 100–149 (que es de creación), **en
+  el mismo PR del pase**, con rollback, pruebas, paridad y la fila del ledger de staging (paso 3b).
+- **Con el ledger de prod de hoy (último: `080`):** la `081` y la `082` son mayores que `080`, así que **entran con su
+  número si van primero** (pasos 2 y 2b). La `075` queda por debajo: **tomaría la `150`**. Se recalcula el día del pase.
 - **No se renombra nada antes del PR del pase.**
 
 ## 3b. Renumerar las migraciones del pase (en el PR del pase; antes, nada)
-> Ejemplo con el ledger de prod de hoy (último: `080`): los siguientes libres del bloque del Club son `100`, `101` y
-> `102`. **Se recalcula el día del pase** con el ledger de prod de ese día y el registro de `main`.
+> Ejemplo con el ledger de prod de hoy (último: `080`): la `081` y la `082` no se renombran si van primero; la `075` pasa a
+> `150` (el primero libre del bloque de PASE). **Se recalcula el día del pase** con el ledger de prod de ese día y el
+> registro de `main`: lo que tenga número ≤ al último de prod va al siguiente libre de 150–199.
 
-**Hacer** (en la rama del pase, un commit propio por migración, en el orden de aplicación: 081 → 082 → 075):
+**Hacer** (en la rama del pase, un commit propio por migración que haya que renombrar, en el orden de aplicación):
 1. `git mv supabase/migrations/<viejo>_<nombre>.sql supabase/migrations/<N>_<nombre>.sql` (y su `scripts/sql/<viejo>_rollback.sql`;
    para el Club, también `075_pruebas_staging.sql`). Dentro del rollback, el `delete … where version = '<viejo>'` pasa a `'<N>'`.
-2. **Registro:** en `supabase/migraciones-reservadas.json`, `<N>` en «asignadas» (bloque `club`, mismo nombre) y el número
+2. **Registro:** en `supabase/migraciones-reservadas.json`, `<N>` en «asignadas» (bloque de **pase**, mismo nombre) y el número
    viejo fuera de `usadas_antes_de_los_bloques` si corresponde; en `ESTADO.md`, la fila de `<N>` y la nota del viejo
    («renumerada a <N>»). Correr `npx vitest run supabase/migraciones.test.ts`.
 3. Actualizar las referencias: `scripts/sql/club_paridad.sh`, `scripts/sql/club_carreras/*`, `scripts/club/migrar_firestore.py`,
@@ -224,7 +228,8 @@ salen «pendiente de configuración».
 **Verificar:** en caja no aparece «Tarjeta física» y `club_tarjeta_manual` rechaza a todos los roles.
 
 ## 10. Merge del PR #59 (último)
-**Antes:** el ledger de PROD tiene la `069` y las tres renumeradas en 3b (y **ninguna** con número ≤ al último de prod de ese día), y los `.sql` del PR son los mismos blobs que se aplicaron.
+**Antes:** el ledger de PROD tiene la `069`, la `081`, la `082` y la del Club con su número de 3b (hoy, `150`), sin ninguna
+aplicada con número ≤ al último de prod de ese momento, y los `.sql` del PR son los mismos blobs que se aplicaron.
 Branching ve las versiones ya registradas y no las vuelve a aplicar.
 **Hacer:** sacar el PR de borrador y mergear.
 **Verificar:** el log de Branching sin errores; la app publicada tiene `/club`; humo: Escanear, Miembros y Reportes con

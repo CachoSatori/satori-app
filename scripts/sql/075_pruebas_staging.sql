@@ -3404,11 +3404,11 @@ begin
       and e like 'Pendiente de configuración%', e);
 end $$;
 
--- ═══ 68. 857 «INVITADO»: igual que el 856 en todas las reglas; máximo de invitados por visita ═══
+-- ═══ 68. 857 «INVITADO»: igual que el 856 en todas las reglas (sin límite de invitados) ═══
 do $$
 declare v_s uuid; v_vis jsonb; v_vis2 jsonb; j jsonb; i int;
 begin
-  update club_config set puente_latencia_min = 1, cortesia_familia = 17, lc_excepciones_desde = null, lc_invitados_max = 3,
+  update club_config set puente_latencia_min = 1, cortesia_familia = 17, lc_excepciones_desde = null,
                          articulos_cero_permitidos = '{}' where location_id = 'santa-teresa';
   update club_promociones set estado = 'vigente' where nombre = 'Local Club';
   -- un 857 sin visita de socio → LC_SIN_REGISTRO
@@ -3424,7 +3424,7 @@ begin
   perform pg_temp.r('68', 'factura con el 857: su rebaja no es DESCUENTO_SIN_RESPALDO (negativa)', not pg_temp.hay(pg_temp.exc('DESCUENTO_SIN_RESPALDO'), 'desc:990821'), '');
   -- ₡0 del 857 no es CORTESIA_NO_CONFIGURADA
   perform pg_temp.r('68', 'el 857 a ₡0 no es «línea a ₡0 fuera de cortesías» (negativa)', not pg_temp.hay(pg_temp.exc('CORTESIA_NO_CONFIGURADA'), 'cort-nc:990801'), '');
-  -- visita con 856 + 4 invitados → LC_INVITADOS_EXCEDIDOS; con 3, no
+  -- visita con 856 + 4 invitados: sin límite (Ismael), no hay excepción de invitados
   v_s := pg_temp.socio('Yago Invita Ficticio', '+50661110041', null);
   perform pg_temp.factura('990831', 2, 0, '[{"c":"856","m":0},{"c":"857","m":0,"q":4}]', '9831');
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
@@ -3435,19 +3435,109 @@ begin
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   v_vis2 := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"9832","clave":"pedido:9832"}', gen_random_uuid());
   perform pg_temp.yo();
-  j := pg_temp.exc('LC_INVITADOS_EXCEDIDOS');
-  perform pg_temp.r('68', 'más de 3 invitados (857) en la visita → LC_INVITADOS_EXCEDIDOS; 3 no salta',
-    pg_temp.hay(j, 'invitados:' || (v_vis->>'visita_id')) and not pg_temp.hay(j, 'invitados:' || (v_vis2->>'visita_id')), '');
+  perform pg_temp.r('68', 'sin límite de invitados: una visita con 4 (857) no sale en ninguna excepción LC (negativa)',
+    not pg_temp.hay(pg_temp.exc('LC_SIN_REGISTRO'), 'lc:990831') and not pg_temp.hay(pg_temp.exc('REGISTRO_LC_SIN_856'), 'visita:' || (v_vis->>'visita_id')), '');
   perform pg_temp.r('68', 'visita cuya factura tiene el 857 (sin el 856): no es REGISTRO_LC_SIN_856, y la factura no es LC_SIN_REGISTRO',
     not pg_temp.hay(pg_temp.exc('REGISTRO_LC_SIN_856'), 'visita:' || (v_vis2->>'visita_id')) and not pg_temp.hay(pg_temp.exc('LC_SIN_REGISTRO'), 'lc:990832'), '');
-  -- autorrevisión: las que salen solo del PoS las resuelve el owner (el manager no)
-  declare e text; begin
+  -- las que salen solo del PoS: segregación por quien cobró la factura (login del PoS → empleado)
+  declare e text; e2 text; e3 text; begin
     perform pg_temp.como('authenticated', '<MANAGER_UUID>');
     begin perform public.club_excepcion_resolver('LC_SIN_REGISTRO', 'lc:990801', 'la reviso yo'); e := 'ok'; exception when others then e := sqlerrm; end;
     perform pg_temp.yo();
-    perform pg_temp.r('68', 'excepción que sale solo del PoS: el manager no la resuelve, el owner sí (negativa)', e like 'Esta excepción sale del PoS%', e);
+    perform pg_temp.r('68', 'PoS sin login mapeado: el manager no la resuelve, solo el owner (negativa)', e like '%no tiene su login del PoS cargado%', e);
+    insert into employees (full_name, role, pos_login, profile_id) values ('Empleado Manager Ficticio', 'manager', 'TM68', '<MANAGER_UUID>'::uuid),
+                                                                          ('Empleado Cajero Ficticio', 'cajero', 'TC68', '<CAJERO_UUID>'::uuid);
+    perform pg_temp.factura('880681', 2, 0, '[{"c":"856","m":0}]');
+    perform pg_temp.factura('880682', 2, 0, '[{"c":"856","m":0}]');
+    update pos_ndf_tickets set cajero_login = 'TM68' where numero_factura = '880681';
+    update pos_ndf_tickets set cajero_login = 'TC68', salonero_login = 'TC68' where numero_factura = '880682';
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    begin perform public.club_excepcion_resolver('LC_SIN_REGISTRO', 'lc:880681', 'la cobré yo'); e2 := 'ok'; exception when others then e2 := sqlerrm; end;
+    begin perform public.club_excepcion_resolver('LC_SIN_REGISTRO', 'lc:880682', 'Revisada con el cajero'); e3 := 'ok'; exception when others then e3 := sqlerrm; end;
+    perform pg_temp.yo();
+    perform pg_temp.r('68', 'PoS con login mapeado: el manager que cobró la factura no la resuelve (negativa); la de otro cajero sí',
+      e2 like 'Esta factura la cobraste vos en el PoS%' and e3 = 'ok', e2 || ' / ' || e3);
   end;
-  perform pg_temp.r('68', '«qué aplicar» dice cómo marcar a los acompañantes (857, hasta 3)', (v_vis->'avisos')::text like '%857 (INVITADO)%hasta 3%', (v_vis->'avisos')::text);
+  perform pg_temp.r('68', '«qué aplicar» dice cómo marcar a los acompañantes (857), sin tope', (v_vis->'avisos')::text like '%857 (INVITADO) por cada uno%'
+      and (v_vis->'avisos')::text not like '%hasta%', (v_vis->'avisos')::text);
+end $$;
+
+-- ═══ 69. Grok 90 (ya usó hoy en otro pedido), 91 (un socio con beneficio por factura) y 93 (aprobar revalida) ═══
+do $$
+declare v_a uuid; v_b uuid; j jsonb; j2 jsonb; n int; v_n uuid; c1 text; op uuid := gen_random_uuid(); e text; v_id uuid; c2 text; op2 uuid := gen_random_uuid();
+begin
+  update club_config set socio_visitas_por_dia = 1, socios_por_factura = 1, anfitrion_tope_mes_crc = 25000, valor_credito_crc = 18000, personas_por_credito = 6
+   where location_id = 'santa-teresa';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  v_a := pg_temp.socio('Abril Noventa Ficticia', '+50661110051', null);
+  v_b := pg_temp.socio('Bruno Noventa Ficticio', '+50661110052', null);
+  perform pg_temp.factura('880691', 1, 0, '[{"c":"856","m":0}]', '9901');
+  perform pg_temp.factura('880692', 1, 0, '[{"c":"856","m":0}]', '9902');
+  -- Grok 90: ya registró hoy en el pedido 9901; en OTRO pedido → ya_uso_hoy, NO aplicar, y no se registra nada
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_a, '{"modo":"pedido","pedido":"9901","clave":"pedido:9901"}', gen_random_uuid());
+  j2 := public.club_socio_visita(v_a, '{"modo":"pedido","pedido":"9902","clave":"pedido:9902"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('69', 'Grok 90: ya usó el beneficio hoy y elige OTRO pedido → «ya_uso_hoy», NO aplicar, sin registrar (negativa)',
+    j2->>'estado' = 'ya_uso_hoy' and j2->>'texto' like '%NO aplicar beneficio%' and (j2->>'porcentaje')::numeric = 0
+      and (select count(*) from club_visitas_socio where miembro_id = v_a) = 1, j2::text);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j2 := public.club_socio_visita(v_a, '{"modo":"pedido","pedido":"9901","clave":"pedido:9901"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('69', 'Grok 90: en el MISMO pedido, reescanear devuelve la misma visita', j2->>'visita_id' = j->>'visita_id' and (j2->>'repetida')::boolean, '');
+  -- Grok 91: otro socio en la misma factura → va como invitado (857); el % una sola vez
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j2 := public.club_socio_visita(v_b, '{"modo":"pedido","pedido":"9901","clave":"pedido:9901"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('69', 'Grok 91: segundo socio en la misma factura → «como_invitado» (857), sin % ni cortesía (negativa)',
+    j2->>'estado' = 'como_invitado' and (j2->>'porcentaje')::numeric = 0 and j2->'cortesias' = '[]'::jsonb and j2->>'texto' like '%va como invitado (marcá el 857)%'
+      and (select estado_beneficio from club_visitas_socio where miembro_id = v_b) = 'como_invitado', j2::text);
+  update club_config set socios_por_factura = 2 where location_id = 'santa-teresa';
+  delete from club_visitas_socio where miembro_id = v_b;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j2 := public.club_socio_visita(v_b, '{"modo":"pedido","pedido":"9901","clave":"pedido:9901"}', gen_random_uuid());
+  perform pg_temp.yo();
+  update club_config set socios_por_factura = 1 where location_id = 'santa-teresa';
+  perform pg_temp.r('69', 'Grok 91: configurable — con 2 socios por factura, el segundo sí tiene beneficio', j2->>'estado' in ('aplica','pendiente_configuracion'), j2::text);
+
+  -- Grok 93: aprobar revalida (anfitrión activo, factura no anulada, cupón no anulado)
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Nuevo Noventa Ficticio', 'app') returning id into v_n;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c1;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c2;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (v_n, 'tarjeta', 9, 6, 18000, '880693', now() - interval '1 hour', 'app', 'manual');      -- ya ganó ₡27.000 en el mes
+  perform pg_temp.factura('880694', 1, 0, '[{"c":"P1","m":9000,"f":5}]');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_cupon_usar(c1, 2, '880694', op);
+  perform public.club_cupon_usar(c2, 2, '880695', op2);
+  perform pg_temp.yo();
+  select id into v_id from club_personas_pendientes where client_op_id = op;
+  -- factura anulada después
+  update pos_ndf_tickets set estado = 'X' where numero_factura = '880694';
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_pendiente_resolver(v_id, true, 'ok'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('69', 'Grok 93: factura anulada (X) → no se aprueba (negativa)', e like 'La factura de esa visita está anulada%', e);
+  update pos_ndf_tickets set estado = 'C' where numero_factura = '880694';
+  -- cupón anulado
+  update club_cupones set estado = 'anulado', usado_en = null where codigo = c1;
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_pendiente_resolver(v_id, true, 'ok'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('69', 'Grok 93: cupón anulado → no se aprueba (negativa)', e like 'El cupón ya no está vigente%', e);
+  update club_cupones set estado = 'usado', usado_en = now() where codigo = c1;
+  -- anfitrión de baja
+  update club_miembros set estado = 'baja' where id = v_n;
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_pendiente_resolver(v_id, true, 'ok'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('69', 'Grok 93: anfitrión de baja → no se aprueba (negativa)', e like 'El anfitrión ya no está activo%', e);
+  update club_miembros set estado = 'activo' where id = v_n;
+  update club_miembro_roles set estado = 'activo' where miembro_id = v_n;
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  perform public.club_pendiente_resolver(v_id, true, 'todo en orden');
+  perform pg_temp.yo();
+  perform pg_temp.r('69', 'Grok 93: con todo en orden, se aprueba', exists (select 1 from club_movimientos where client_op_id = op), '');
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

@@ -385,7 +385,7 @@ async function paginaAlta() {
   },
     h('label', { for: 'a-nombre' }, t.alta_nombre), nombre,
     h('label', { for: 'a-wa' }, t.alta_whatsapp), wa,
-    h('details', { class: 'aviso-priv', open: true }, h('summary', {}, t.alta_aviso_titulo), h('p', {}, t.alta_aviso),
+    h('details', { class: 'aviso-priv', open: true }, h('summary', {}, t.alta_aviso_titulo), ...t.alta_aviso.split('\n').map((p) => h('p', {}, p)),
       h('p', { class: 'sub' }, `(${AVISO_PRIVACIDAD_VERSION})`)),
     h('label', { class: 'check', for: 'a-ok' }, ok, h('span', {}, t.alta_acepto)),
     caja, err, enviar)

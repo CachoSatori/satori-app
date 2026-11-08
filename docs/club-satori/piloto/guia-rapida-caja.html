@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Club Satori · Guía rápida de caja</title>
+<!-- BORRADOR (08-nov) para que lo revise Ismael. Sale de docs/sop-app/6.13 Club Satori.md; si la guía cambia, esto
+     también. Una página A4 al imprimir. Sin datos personales. -->
+<style>
+  @page { size: A4; margin: 11mm 12mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 10.2pt/1.33 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #111; background: #fff; }
+  h1 { font: 700 17pt/1.1 Georgia, 'Times New Roman', serif; margin: 0; }
+  .sub { color: #444; margin: 2px 0 8px; font-size: 9.5pt; }
+  h2 { font: 700 11.2pt/1.2 system-ui, sans-serif; margin: 9px 0 4px; padding: 3px 7px; background: #0d0d0d; color: #f5f0e8; border-radius: 4px; }
+  ol, ul { margin: 2px 0 2px 18px; padding: 0; }
+  li { margin: 1px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 3px 0; }
+  th, td { border: 1px solid #999; padding: 3px 5px; vertical-align: top; text-align: left; }
+  th { background: #eee; font-size: 9.4pt; }
+  .rojo { border: 2px solid #a8321c; border-radius: 4px; padding: 4px 7px; margin: 4px 0; }
+  .nunca { font-weight: 700; }
+  .pie { margin-top: 8px; font-size: 8.6pt; color: #444; border-top: 1px solid #999; padding-top: 4px; }
+  .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  b.btn { white-space: nowrap; }
+</style>
+</head>
+<body>
+  <h1>Club Satori · Guía rápida de caja</h1>
+  <p class="sub">Para pegar al lado de la caja. Inicio → tarjeta «Club» → «Escanear». La app <b>no toca el PoS</b>: vos marcás en
+    el PoS lo que dice la pantalla, y el PoS lo confirma después.</p>
+
+  <h2>1 · Escanear</h2>
+  <ol>
+    <li>«📷 Escanear» y apuntá al QR. Sin cámara: escribí el código en «Código a mano» y tocá «Ver».</li>
+    <li>Elegí siempre el <b>pedido</b> de la mesa («Pedido N · Mesa · ₡total · salonero»). Si la cuenta ya se cerró:
+      «El pedido no está» → «Factura (plan B)».</li>
+    <li>Sin código y es un anfitrión: «Buscar referente (plan B)» por nombre, negocio o los últimos 4 del teléfono.</li>
+  </ol>
+
+  <h2>2 · Qué sale y qué marcar en el PoS</h2>
+  <table>
+    <tr><th style="width:21%">Sale en pantalla</th><th style="width:38%">En la app</th><th>En el PoS</th></tr>
+    <tr><td><b>Cupón 10 %</b> (turista)</td><td>Personas de la mesa (− / +) → pedido → «Continuar» → «Confirmar».</td>
+      <td>El artículo <b>«PROMO CLUB 10 %»</b>. Un cupón, un solo uso.</td></tr>
+    <tr><td><b>Socio del Local Club</b></td><td>Pedido → «Registrar visita y ver qué aplicar».</td>
+      <td><b>Exactamente</b> lo del recuadro «Qué aplicar»: el %, el <b>856</b> (LOCAL CLUB), un <b>857</b> (INVITADO) por
+        cada acompañante y, si sale, la <b>cortesía sorteada</b> (de la sección CORTESÍAS).</td></tr>
+    <tr><td><b>Canje de créditos</b> (anfitrión)</td><td>Código de 6 → «Créditos a canjear» → pedido → «Continuar» →
+      «Confirmar».</td><td>El canje <b>solo</b>: no se suma al 856, la promo, otro descuento ni cortesías.</td></tr>
+    <tr><td><b>Anfitrión</b> (su QR o pase)</td><td>Solo muestra su saldo.</td><td>Nada. Para canjear necesita su código.</td></tr>
+  </table>
+
+  <h2>3 · Si sale rojo o algo no anda</h2>
+  <div class="rojo"><b>Recuadro con borde rojo = hoy no hay beneficio.</b> Ya lo usó hoy, va como invitado (857) porque ya
+    hay un socio con beneficio en la cuenta, paga con créditos o no hay promoción vigente. <b>Cobrá normal, sin el
+    beneficio.</b></div>
+  <ul>
+    <li>«Código no reconocido…»: escribilo a mano o buscá al anfitrión por nombre.</li>
+    <li>«Este cupón ya se usó» / «Cupón vencido»: seguí con la cuenta normal, sin descuento.</li>
+    <li>«Sin conexión. Reintentá…»: tocá «Reintentar» (no se duplica).</li>
+    <li>«Tu usuario no tiene permiso…»: llamá al manager.</li>
+    <li class="nunca">Lo que no está en la pantalla no se marca en el PoS. Todo lo que no coincide sale en «Excepciones».</li>
+  </ul>
+
+  <div class="dos">
+    <div>
+      <h2>4 · Canje con código</h2>
+      <ol>
+        <li>El anfitrión toca «Canjear» en su portal o su pase y te muestra un código de <b>6 caracteres</b>.</li>
+        <li>Escanealo o escribilo. <b>Vale 10 minutos y una sola vez.</b></li>
+        <li>Elegí 1, 1,5 o 2 créditos (los que no alcanzan salen grises).</li>
+        <li>Sin código no hay canje. Si no tiene celular: el manager, con «Canje sin celular».</li>
+      </ol>
+    </div>
+    <div>
+      <h2>5 · Alta de socio en caja</h2>
+      <ol>
+        <li>«＋ Nuevo socio del Local Club»: nombre y apellido, WhatsApp (email opcional).</li>
+        <li>Marcá «Verifiqué que es local». <span class="nunca">Nunca anotes el número de cédula, DIMEX ni pasaporte.</span></li>
+        <li>Contale el aviso de privacidad y tocá «Dar de alta». Tiene el beneficio <b>hoy</b>.</li>
+        <li>Si se anotó por la web, sale «Socio pendiente»: verificá y «Validar socio».</li>
+      </ol>
+    </div>
+  </div>
+
+  <p class="pie">Borrador para revisar · sale de la guía 6.13 del Club · el beneficio del socio vale en todos los Satori
+    con el Club encendido, una visita con beneficio por día.</p>
+</body>
+</html>

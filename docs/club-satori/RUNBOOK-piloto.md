@@ -15,7 +15,8 @@
 | 0 | Preparación y lecturas (solo lectura) | — | no se sigue |
 | 1 | Mig **069** (`get_my_role` con `is_active`) | 0 | `scripts/sql/069_rollback.sql` |
 | 2 | Mig **081** (campos de la factura del puente) | 1 | `scripts/sql/081_rollback.sql` (solo si el paso 3 no se hizo) |
-| 3 | Edge `ingest-ndf` desde `claude/puente-item11-prod`, y después el agente de prod | 2 | volver al Edge anterior **antes** de tocar la 081 |
+| 2b | Mig **082** (`pos_ndf_ingestar`: ingesta en una transacción por local, CLUB-AUD-44/45) | 2 | `drop function public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb);` (solo si el paso 3 no se hizo) |
+| 3 | Edge `ingest-ndf` desde `claude/puente-item11-prod`, y después el agente de prod | 2b | volver al Edge anterior **antes** de tocar la 082 y la 081 |
 | 4 | Mig **075** (Club) | 1 | `scripts/sql/075_rollback.sql` (no hay datos del Club todavía) |
 | 5 | Clave de club-web (`CLUB_WEB_KEY` + su sha256) | 4 | `club_web_clave_cargar` con una clave nueva |
 | 6 | Cloudflare (Pages `satori-club`: variables, bindings y dominio) | 5 | sacar el dominio; la base sigue cerrada |
@@ -69,6 +70,13 @@ registrar la fila `081` en el ledger.
 
 **Rollback:** `scripts/sql/081_rollback.sql`, **solo si todavía no se desplegó el Edge del paso 3**. Con el Edge nuevo y
 sin la 081, el upsert falla y no entra ninguna venta.
+
+## 2b. Mig 082 (ingesta transaccional)
+**Hacer:** aplicar `supabase/migrations/082_pos_ndf_ingesta_transaccional.sql` (hoy en `claude/puente-item11`; tiene que
+estar en el PR #59 antes del merge, como la 081) y registrar la fila `082` en el ledger.
+**Verificar:** `select has_function_privilege('service_role', 'public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb)', 'EXECUTE');`
+→ true; `anon` y `authenticated` → false. El agente actual sigue entrando (no usa la función).
+**Rollback:** el `drop function` de la tabla de arriba, **solo** si el Edge nuevo no se desplegó.
 
 ## 3. Edge `ingest-ndf` y agente de prod
 **Hacer:**

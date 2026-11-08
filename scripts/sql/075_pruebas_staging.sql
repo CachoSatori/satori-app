@@ -3775,6 +3775,41 @@ begin
   perform pg_temp.r('73', 'rango invertido se rechaza (negativa)', e like 'Rango de fechas no válido%', e);
 end $$;
 
+-- ═══ 74. Turno (mañana / tarde, corte por local) y logins fijos de caja en las excepciones del PoS ═══
+do $$
+declare j jsonb; e text; v_t uuid; v_ayer date := (now() at time zone 'America/Costa_Rica')::date - 1;
+begin
+  update club_config set turno_corte = '16:00', pos_logins_caja = '{T111,T222}' where location_id = pg_temp.loc();
+  insert into pos_ndf_tickets (local, numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc, cajero_login)
+  values (pg_temp.loc(), '880741', (v_ayer + time '10:30') at time zone 'America/Costa_Rica', 'C', 'salon', 'cajero', true, 'ok', 9000, 'T111'),
+         (pg_temp.loc(), '880742', (v_ayer + time '19:15') at time zone 'America/Costa_Rica', 'C', 'salon', 'cajero', true, 'ok', 9000, 'T222'),
+         (pg_temp.loc(), '880743', (v_ayer + time '12:00') at time zone 'America/Costa_Rica', 'C', 'salon', 'cajero', true, 'ok', 9000, 'L999');
+  insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia)
+  select t.id, x.c, x.c, 1, x.m, 5 from pos_ndf_tickets t, (values ('P1', 9000), ('ZT0', 0)) x(c, m)
+   where t.local = pg_temp.loc() and t.numero_factura in ('880741','880742','880743');
+  j := pg_temp.exc('CORTESIA_NO_CONFIGURADA');
+  perform pg_temp.r('74', 'turno por la hora de la factura y el corte del local: 10:30 → mañana, 19:15 → tarde',
+    (select x->'detalle'->>'turno' from jsonb_array_elements(j) x where x->>'ref' = 'cort-nc:880741') = 'mañana'
+      and (select x->'detalle'->>'turno' from jsonb_array_elements(j) x where x->>'ref' = 'cort-nc:880742') = 'tarde', '');
+  perform pg_temp.r('74', 'los logins fijos de caja se marcan como tales (un login de persona, no)',
+    (select x->'detalle'->'logins_fijos' from jsonb_array_elements(j) x where x->>'ref' = 'cort-nc:880741') = '["T111"]'::jsonb
+      and (select x->'detalle'->'logins_fijos' from jsonb_array_elements(j) x where x->>'ref' = 'cort-nc:880743') = '[]'::jsonb, '');
+  -- resolución: con login fijo, el manager no (lo dice con el turno); el owner sí
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_excepcion_resolver('CORTESIA_NO_CONFIGURADA', 'cort-nc:880741', 'revisado'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('74', 'login fijo de caja: el manager no la resuelve; el mensaje dice login y turno (negativa)',
+    e = 'Esta factura se cobró con un login fijo de caja (T111, turno mañana): la resuelve el owner', e);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_excepcion_resolver('CORTESIA_NO_CONFIGURADA', 'cort-nc:880743', 'revisado'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('74', 'un login de persona sin cargar en Empleados sigue siendo «sin empleado» (owner)', e like 'Esta excepción sale del PoS y quien cobró%', e);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_excepcion_resolver('CORTESIA_NO_CONFIGURADA', 'cort-nc:880741', 'revisado por fecha y turno'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('74', 'el owner resuelve la del login fijo', e = 'ok', e);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

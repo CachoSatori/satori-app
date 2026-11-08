@@ -2913,7 +2913,12 @@ begin
            coalesce(t.fecha_registra, t.fecha_cierra) as f, coalesce(t.cxc_crc, 0) as cxc, t.total_crc, t.estado,
            coalesce(t.mesa_factura, t.mesa) as mesa,
            -- LC-A5 (Ismael, 08-nov): quién cobró la factura en el PoS, para la segregación de las que salen solo del PoS
-           array_remove(array[nullif(btrim(t.cajero_login), ''), nullif(btrim(t.salonero_login), '')], null) as pos_logins
+           array_remove(array[nullif(btrim(t.cajero_login), ''), nullif(btrim(t.salonero_login), '')], null) as pos_logins,
+           -- (08-nov) turno de la factura (corte del local) y los logins fijos de caja que aparecen en ella
+           case when (coalesce(t.fecha_registra, t.fecha_cierra) at time zone 'America/Costa_Rica')::time < v_cfg.turno_corte
+                then 'mañana' else 'tarde' end as turno,
+           array(select x from unnest(array[nullif(btrim(t.cajero_login), ''), nullif(btrim(t.salonero_login), '')]) x
+                  where x = any(v_cfg.pos_logins_caja)) as logins_fijos
       from public.pos_ndf_tickets t
      where t.local = p_location and coalesce(t.fecha_registra, t.fecha_cierra) >= v_ini
        and coalesce(t.fecha_registra, t.fecha_cierra) < v_fin),
@@ -3180,7 +3185,7 @@ begin
     -- LC_SIN_REGISTRO: factura C con el 856 sin visita de socio que la cruce
     select 'LC_SIN_REGISTRO', 'lc:' || t.clave, t.f, t.numero_factura, 'exacta',
            jsonb_build_object('articulos', (select jsonb_agg(distinct ln.codigo_producto) from ln where ln.ticket_id = t.id and ln.es_lc),
-                              'mesa', t.mesa, 'total_crc', t.total_crc, 'pos_logins', to_jsonb(t.pos_logins))
+                              'mesa', t.mesa, 'total_crc', t.total_crc, 'pos_logins', to_jsonb(t.pos_logins), 'turno', t.turno, 'logins_fijos', to_jsonb(t.logins_fijos))
       from tk t
      where t.estado = 'C' and t.f < now() - make_interval(mins => v_cfg.puente_latencia_min)
        and (v_cfg.lc_excepciones_desde is null or t.f >= v_cfg.lc_excepciones_desde::timestamp at time zone 'America/Costa_Rica')
@@ -3200,7 +3205,7 @@ begin
     union all
     -- CANJE_CON_DESCUENTO: pagada con créditos y con 856, PROMO CLUB o una cortesía
     select 'CANJE_CON_DESCUENTO', 'canje-desc:' || t.clave, t.f, t.numero_factura, 'exacta',
-           jsonb_build_object('cxc_crc', t.cxc, 'con', (select jsonb_agg(distinct case when ln.es_lc then 'LC' when ln.es_promo then 'PROMO'
+           jsonb_build_object('cxc_crc', t.cxc, 'turno', t.turno, 'pos_logins', to_jsonb(t.pos_logins), 'logins_fijos', to_jsonb(t.logins_fijos), 'con', (select jsonb_agg(distinct case when ln.es_lc then 'LC' when ln.es_promo then 'PROMO'
                                                                                    when ln.marcador is not null then ln.marcador else 'cortesia' end)
                                                       from ln where ln.ticket_id = t.id and (ln.es_lc or ln.es_promo or ln.marcador is not null or ln.es_cortesia or ln.es_seccion)),
                               'registradores', (select coalesce(jsonb_agg(distinct m.registrado_por), '[]'::jsonb) from mv m where m.tipo = 'canje' and t.id = any(m.ticket_ids)))
@@ -3213,7 +3218,7 @@ begin
     -- DESCUENTO_SIN_RESPALDO (ver el encabezado): una por factura, la línea con más descuento
     (select distinct on (c.tid) 'DESCUENTO_SIN_RESPALDO', 'desc:' || t.clave, t.f, t.numero_factura, 'probable',
            jsonb_build_object('articulo', c.cod, 'nombre', c.nombre, 'precio', c.u, 'referencia', c.ref,
-                              'descuento_pct', round(100 * (1 - c.u / c.ref), 1), 'pos_logins', to_jsonb(t.pos_logins),
+                              'descuento_pct', round(100 * (1 - c.u / c.ref), 1), 'pos_logins', to_jsonb(t.pos_logins), 'turno', t.turno, 'logins_fijos', to_jsonb(t.logins_fijos),
                               'marcador_pct', to_jsonb(c.mk_pcts))
       from (select k.*, r.ref
               from dcand k
@@ -3270,7 +3275,7 @@ begin
     -- CORTESIA_SIN_SOCIO: artículo de la sección en una factura sin visita de socio
     select 'CORTESIA_SIN_SOCIO', 'cort-sin-socio:' || t.clave, t.f, t.numero_factura, 'exacta',
            jsonb_build_object('articulos', (select jsonb_agg(ln.codigo_producto) from ln where ln.ticket_id = t.id and ln.es_seccion), 'mesa', t.mesa,
-                              'pos_logins', to_jsonb(t.pos_logins))
+                              'pos_logins', to_jsonb(t.pos_logins), 'turno', t.turno, 'logins_fijos', to_jsonb(t.logins_fijos))
       from tk t
      where (select ok from seccion_ok) and t.estado = 'C' and t.f < now() - make_interval(mins => v_cfg.puente_latencia_min)
        -- (08-nov) la sección se usa también fuera del Club hasta el lanzamiento: cuenta SOLO desde lc_excepciones_desde
@@ -3284,7 +3289,7 @@ begin
                                               from ln where ln.ticket_id = t.id and ln.monto = 0 and ln.cantidad > 0 and not ln.es_pax
                                                and not ln.es_seccion and not ln.es_lc and not ln.es_promo
                                                and not (coalesce(ln.codigo_producto, '') = any(v_cfg.articulos_cero_permitidos))),
-                              'mesa', t.mesa, 'pos_logins', to_jsonb(t.pos_logins))
+                              'mesa', t.mesa, 'pos_logins', to_jsonb(t.pos_logins), 'turno', t.turno, 'logins_fijos', to_jsonb(t.logins_fijos))
       from tk t
      where (select ok from seccion_ok) and t.estado = 'C'
        and (v_cfg.lc_excepciones_desde is null or t.f >= v_cfg.lc_excepciones_desde::timestamp at time zone 'America/Costa_Rica')
@@ -3368,11 +3373,12 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-declare v_reg jsonb; v_hay boolean; v_logins jsonb; v_mapeados uuid[]; v_sin_mapa boolean;
+declare v_reg jsonb; v_hay boolean; v_logins jsonb; v_mapeados uuid[]; v_sin_mapa boolean; v_fijos jsonb; v_turno text;
 begin
   -- CLUB-AUD-36: la excepción tiene que figurar HOY en club_excepciones (ventana de 120 días hasta hoy). Así nadie
   -- «pre-resuelve» un (tipo, ref) que todavía no existe ni resuelve algo inventado.
-  select true, e.detalle->'registradores', e.detalle->'pos_logins' into v_hay, v_reg, v_logins
+  select true, e.detalle->'registradores', e.detalle->'pos_logins', e.detalle->'logins_fijos', e.detalle->>'turno'
+    into v_hay, v_reg, v_logins, v_fijos, v_turno
     from public.club_excepciones((now() at time zone 'America/Costa_Rica')::date - 120,
                                  (now() at time zone 'America/Costa_Rica')::date, p_location, p_tipo) e
    where e.tipo = p_tipo and e.ref = p_ref
@@ -3384,6 +3390,11 @@ begin
   -- con su login mapeado al empleado (employees.pos_login → profile_id). El manager la resuelve si NO es esa persona; si
   -- algún login de la factura no está mapeado (o no hay login), la resuelve el owner.
   if p_tipo in ('LC_SIN_REGISTRO','DESCUENTO_SIN_RESPALDO','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA') and p_rol <> 'owner' then
+    -- (08-nov) con un login FIJO de caja no hay una persona detrás: la resuelve el owner (que identifica por fecha y turno)
+    if jsonb_array_length(coalesce(v_fijos, '[]'::jsonb)) > 0 then
+      raise exception 'Esta factura se cobró con un login fijo de caja (%, turno %): la resuelve el owner',
+        (select string_agg(x, ', ') from jsonb_array_elements_text(v_fijos) x), coalesce(v_turno, '—') using errcode = 'P0001';
+    end if;
     select array_agg(e.profile_id) filter (where e.profile_id is not null),
            coalesce(bool_or(e.profile_id is null), true) or jsonb_array_length(coalesce(v_logins, '[]'::jsonb)) = 0
       into v_mapeados, v_sin_mapa
@@ -4991,6 +5002,12 @@ alter table public.club_config add column if not exists cortesia_familia int che
 -- (la «familia» de las líneas) y cortesia_subclasificacion la subclasificación. Las líneas del puente todavía no traen la
 -- subclasificación: hoy se compara la clasificación; la subclasificación queda guardada para cuando el puente la mande.
 alter table public.club_config add column if not exists cortesia_subclasificacion int check (cortesia_subclasificacion is null or cortesia_subclasificacion > 0);
+-- (08-nov) Turno de la factura del PoS para excepciones y reportes: «mañana» antes del corte, «tarde» desde el corte (hora
+-- de Costa Rica, por local). Logins FIJOS de caja: el sistema del PoS se abre con ellos (no son una persona): en las
+-- excepciones se muestran con su turno y no cuentan como «sin empleado»; esas excepciones las resuelve solo el owner.
+alter table public.club_config add column if not exists turno_corte time not null default '16:00';
+alter table public.club_config add column if not exists pos_logins_caja text[] not null default '{}'
+  check (array_position(pos_logins_caja, null) is null);
 alter table public.club_config add column if not exists cortesias_por_visita int not null default 1 check (cortesias_por_visita between 0 and 3);
 alter table public.club_config add column if not exists socio_visitas_por_dia int not null default 1 check (socio_visitas_por_dia between 1 and 5);
 

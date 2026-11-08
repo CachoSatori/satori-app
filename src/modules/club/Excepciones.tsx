@@ -134,6 +134,11 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
   const filas: Array<[string, string]> = [
     ['Qué es', TIPO_EXC[e.tipo].que],
     [e.tipo === 'SIN_CRUCE' ? 'Pedido (PoS)' : 'Factura (PoS)', e.factura ?? '—'],
+    // (08-nov) las que salen del PoS: turno (corte del local) y login; los fijos de caja se identifican por fecha y turno
+    ...(d.turno ? [['Turno', String(d.turno)] as [string, string]] : []),
+    ...(Array.isArray(d.pos_logins) && d.pos_logins.length > 0
+      ? [['Login del PoS', (d.pos_logins as string[]).map(l => Array.isArray(d.logins_fijos) && (d.logins_fijos as string[]).includes(l)
+          ? `${l} (login fijo de caja)` : l).join(' · ')] as [string, string]] : []),
     ...(d.hora_escaneo ? [['Hora del escaneo', fmtFechaHora(String(d.hora_escaneo))] as [string, string]] : []),
     ...(d.cupon ? [['Cupón', String(d.cupon)] as [string, string]] : []),
     ...(d.cargada_por ? [['Cargada por', String(d.cargada_por)] as [string, string]] : []),

@@ -86,7 +86,7 @@ y con su fila (08-nov, texto idéntico: md5 `5db915c8a422519ce77050f1fb1b916a`).
 ## 3. Edge `ingest-ndf` y agente de prod
 **Hacer:**
 1. Desde un checkout de `claude/puente-item11-prod` (hoy `e4678b3`; el detalle, con smoke test y rollback, está en
-   `docs/club-satori/PAQUETE-PASE-puente.md`):
+   `docs/puente/PASE-PROD-2026-11-09.md` en esa rama; pase previsto el lunes 09-nov, antes que la 085):
    `supabase functions deploy ingest-ndf --no-verify-jwt --project-ref yiczgdtirrkdvohdquzf`.
 2. Secreto por local (CLUB-AUD-32), en el panel de Supabase → Edge Functions → Secrets:
    `POS_INGEST_SECRETS = {"santa-teresa":"<secreto largo>"}`. Si no se carga, el `POS_INGEST_SECRET` de siempre sigue

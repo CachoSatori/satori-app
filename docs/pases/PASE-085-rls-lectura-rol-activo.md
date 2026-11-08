@@ -30,8 +30,7 @@ null si la cuenta está inactiva.
 2. **Después la 085**, con su número: queda arriba de la 082.
 3. **Decisión de Ismael (08/11): la 085 ESPERA al puente.** El puente (081 → 082) va a prod el **lunes 09/11
    a la mañana** (su paquete: `docs/puente/PASE-PROD-2026-11-09.md`, rama `claude/puente-item11-prod`).
-   La 085 entra **después**, con su número. Esto llegó reenviado por la sesión del Club; queda pendiente
-   que Ismael lo confirme acá.
+   La 085 entra **después**, con su número. **Confirmado por Ismael en persona el 08/11.**
 
 ## 3. Precondiciones (todas antes de mergear)
 - [ ] **Firma de Ismael** sobre este paquete, después de la auditoría.
@@ -123,9 +122,12 @@ En staging no había cuentas activas de manager, contador, barman ni cocina. Los
 le cambió nada al owner activo.
 
 ## 8. Pendiente antes de la firma
-Ventana pedida por Ismael: **23:35–00:45 CR**. A esa hora la sesión del Club ya cortó y todavía no arrancó la
-noche (la sesión A del Club empieza a la 01:00). Antes de correr nada, confirmar que no haya consultas activas
-en staging.
+Ventana confirmada por Ismael: **08/11, 23:35–00:45 CR, con corte duro a las 00:45**. A esa hora la sesión del
+Club ya cortó y todavía no arrancó la noche (empieza a la 01:00). Lo que no esté en verde a las 00:45 queda sin
+aplicar.
+
+Antes de correr nada, confirmar dos cosas: que no haya consultas activas en staging y que el Club no haya hecho
+commits en los últimos 5 minutos. Si los hay, esperar hasta 15 minutos; si siguen, no hacer nada y anotarlo acá.
 - **Volver a correr `085_pruebas.sh` en staging** con el cambio de este paquete (en prod solo lee), cuando staging esté libre.
 - **Probar `085_rollback.sql` en staging** dentro de una transacción con rollback: aplicar el rollback, comparar las
   16 policies con el respaldo y descartar. Mismo criterio: staging libre.

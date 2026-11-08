@@ -6,9 +6,9 @@
  *  · lee `club_pase_eventos` desde el cursor `google`; para cada miembro del lote relee `club_pase_datos` (los eventos
  *    no llevan datos) y hace PATCH del objeto. Un objeto que no existe en Google (404: la persona generó el link pero
  *    nunca tocó «Guardar») no es error.
- *  · eventos con `miembro_id` null (promociones): afectan a todos los pases emitidos. Para recorrerlos hace falta una
- *    función de la base que liste `club_pases` (todavía no existe: la agrega A). Mientras tanto se informan en
- *    `globales_pendientes` y el cursor NO pasa de ellos (los miembros del lote igual se actualizan).
+ *  · eventos con `miembro_id` null (promociones): afectan a todos los pases emitidos. Se recorren con
+ *    `club_pases_emitidos('google')` (paginada) y se actualiza cada objeto. Si esa lista falla, el cursor NO pasa del
+ *    primer evento global (los miembros del lote igual se actualizan).
  *  · mensajes: `club_alertas_pendientes` → `addMessage` en el objeto → `club_alerta_enviada(id, 'google')`. Si el pase
  *    no existe (404), la alerta queda pendiente (sigue el link wa.me en caja).
  *  · el cursor se guarda solo si todo el lote salió bien (PATCH es idempotente: reintentar no rompe nada). La base
@@ -93,13 +93,25 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
   const eventos = (ev.data ?? []) as Array<{ id: number; miembro_id: string | null }>
   res.eventos = eventos.length
 
-  // Todos los miembros del lote se actualizan (PATCH es idempotente), pero el cursor llega solo hasta justo antes del
-  // primer evento global: así un cambio de promociones no se pierde, y tampoco frena las actualizaciones de cada miembro
-  // mientras falte la función que lista los pases emitidos.
+  // Eventos globales (promociones): todos los pases emitidos. Si no se pueden listar, el cursor llega solo hasta justo
+  // antes del primer global (no se pierde el cambio) y los miembros del lote igual se actualizan (PATCH es idempotente).
   const primerGlobal = eventos.find(e => e.miembro_id === null)
-  res.globales_pendientes = eventos.filter(e => e.miembro_id === null).length
-  const procesables = primerGlobal ? eventos.filter(e => e.id < primerGlobal.id) : eventos
-  const miembros = [...new Set(eventos.map(e => e.miembro_id).filter((x): x is string => typeof x === 'string'))]
+  const set = new Set(eventos.map(e => e.miembro_id).filter((x): x is string => typeof x === 'string'))
+  let globalesOk = true
+  if (primerGlobal) {
+    let despues: string | null = null
+    for (let pagina = 0; pagina < 100; pagina++) {
+      const p = await rpc('club_pases_emitidos', { p_plataforma: 'google', p_despues: despues, p_limite: 500 })
+      if (p.error) { globalesOk = false; res.errores.push('pases emitidos'); break }
+      const filas = (p.data ?? []) as Array<{ miembro_id: string }>
+      for (const f of filas) set.add(f.miembro_id)
+      if (filas.length < 500) break
+      despues = filas[filas.length - 1].miembro_id
+    }
+  }
+  res.globales_pendientes = globalesOk ? 0 : eventos.filter(e => e.miembro_id === null).length
+  const procesables = primerGlobal && !globalesOk ? eventos.filter(e => e.id < primerGlobal.id) : eventos
+  const miembros = [...set]
   res.miembros = miembros.length
 
   let token: string | null = null
@@ -137,8 +149,9 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
     else res.errores.push(`mensaje ${a.id}: HTTP ${r.status}`)
   }
 
-  // Cursor: solo si todo salió bien, y nunca más allá del primer evento global pendiente.
-  if (res.errores.length === 0 && procesables.length > 0) {
+  // Cursor: solo si todo salió bien (si la lista de pases falló, nunca más allá del primer evento global).
+  const sinErroresDePase = res.errores.every(e => e === 'pases emitidos')
+  if (sinErroresDePase && procesables.length > 0) {
     const hasta = procesables[procesables.length - 1].id
     const g = await rpc('club_pase_cursor_guardar', { p_nombre: 'google', p_id: hasta })
     if (g.error) res.errores.push('cursor')

@@ -23,7 +23,7 @@ beforeAll(async () => {
 })
 
 function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id: string | null }>; alertas?: unknown[];
-                        google?: (url: string, metodo: string) => number }) {
+                        google?: (url: string, metodo: string) => number; emitidos?: string[] | 'error' }) {
   const rpcs: Array<{ fn: string; args: Record<string, unknown> }> = []
   const http: Array<{ url: string; metodo: string; body?: string }> = []
   const rpc: Rpc = async (fn, args) => {
@@ -32,6 +32,10 @@ function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id
     if (fn === 'club_pase_eventos_leer') return { data: o.eventos, error: null }
     if (fn === 'club_pase_datos') return { data: datos(String(args.p_miembro)), error: null }
     if (fn === 'club_alertas_pendientes') return { data: o.alertas ?? [], error: null }
+    if (fn === 'club_pases_emitidos') {
+      if (o.emitidos === 'error') return { data: null, error: { message: 'x' } }
+      return { data: (o.emitidos ?? []).filter(m => args.p_despues === null || m > String(args.p_despues)).map(m => ({ miembro_id: m })), error: null }
+    }
     return { data: null, error: null }
   }
   const fetchFn: Fetch = async (url, init) => {
@@ -67,16 +71,24 @@ describe('sincronizar (B3, núcleo)', () => {
     expect(mal.rpcs.find(x => x.fn === 'club_pase_cursor_guardar')).toBeUndefined()
   })
 
-  it('un evento global (promociones) frena el cursor justo antes, pero los miembros del lote igual se actualizan', async () => {
-    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: null }, { id: 13, miembro_id: B }] })
+  it('un evento global (promociones) actualiza todos los pases emitidos y el cursor pasa', async () => {
+    const C = '00000000-0000-4000-8000-0000000000cc'
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: null }], emitidos: [A, B, C] })
+    const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
+    expect(r).toMatchObject({ miembros: 3, actualizados: 3, globales_pendientes: 0, cursor_despues: 12, errores: [] })
+    expect(e.rpcs.find(x => x.fn === 'club_pases_emitidos')?.args).toEqual({ p_plataforma: 'google', p_despues: null, p_limite: 500 })
+  })
+
+  it('si la lista de pases falla: los del lote igual se actualizan y el cursor frena antes del global', async () => {
+    const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: null }, { id: 13, miembro_id: B }], emitidos: 'error' })
     const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
     expect(r).toMatchObject({ miembros: 2, actualizados: 2, globales_pendientes: 1, cursor_despues: 11 })
-    // si el lote EMPIEZA con un global, el cursor no se mueve, pero no se traba la actualización de los miembros
-    const g = escenario({ eventos: [{ id: 11, miembro_id: null }, { id: 12, miembro_id: A }] })
+    const g = escenario({ eventos: [{ id: 11, miembro_id: null }, { id: 12, miembro_id: A }], emitidos: 'error' })
     const r2 = await sincronizar({ rpc: g.rpc, fetch: g.fetchFn, sa, issuer: ISSUER })
     expect(r2).toMatchObject({ actualizados: 1, cursor_despues: 10 })
     expect(g.rpcs.find(x => x.fn === 'club_pase_cursor_guardar')).toBeUndefined()
   })
+
 
   it('mensajes de canje: addMessage en ES/EN y se marca enviada; sin pase (404) queda pendiente', async () => {
     const e = escenario({ eventos: [], alertas: [

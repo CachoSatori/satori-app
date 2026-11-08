@@ -1,0 +1,4 @@
+{"t":[{"numero_factura":"990961","fecha_registra":"2026-11-08T18:00:00-06:00","estado":"C","canal":"salon","registrado_por":"cajero","con_servicio":true,"pax_nativo":2,"pax_articulo":2,"pax":2,"pax_alerta":"ok","total_crc":20000,"total_fuente":"provisorio","efectivo_crc":20000,"tarjeta_crc":0,"electronico_crc":0,"deposito_crc":0,"cheque_crc":0,"cxc_crc":0,"dolares_efectivo":0,"dolares_tarjeta":0,"vuelto_crc":0,"descuento_crc":0,"servicio_crc":0,"valor_servido_crc":0,"iva_crc":0,"regalia_crc":0}],
+ "l":[{"numero_factura":"990961","codigo_producto":"P1","nombre":"Plato ficticio 1","cantidad":1,"monto":8000,"familia":5},
+      {"numero_factura":"990961","codigo_producto":"P2","nombre":"Plato ficticio 2","cantidad":1,"monto":7000,"familia":5},
+      {"numero_factura":"990961","codigo_producto":"B1","nombre":"Bebida ficticia","cantidad":1,"monto":5000,"familia":3}]}

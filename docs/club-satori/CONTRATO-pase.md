@@ -43,7 +43,7 @@ Ejecutable solo por `service_role`. Devuelve `null` si el miembro no existe. Eje
     "estado": "activo",
     "desde": "2026-11-10",
     "qr_url": "https://club.satoricostarica.com/s/ABCD2345K",
-    "beneficio": "10 % en tu factura",
+    "beneficio": "Vale en todos los Satori",   // Club compartido (08-nov): texto genérico; null si está pendiente
     "visitas_mes": 3,
     "cortesias": [
       { "sorpresa": true, "cantidad": 1, "motivo": "promo", "vence_en": null },

@@ -302,6 +302,9 @@ borrador, y queda en la auditoría (la app) o en `club_config_historial` (los ca
 alta en caja de prueba queda con su `location_id`; la tarea diaria (`club_socios_mantenimiento`) lo incluye en premios.
 **Apagar (rollback):** el mismo botón o `club_activo = false`. No borra nada: corta las operaciones nuevas.
 
-**DECISIÓN PROVISORIA (la revisa Ismael):** un socio o anfitrión pertenece a **un** local (`club_miembros.location_id`).
-Un socio de un local no tiene el beneficio en otro (la caja del otro local no lo encuentra en sus pedidos). Si el Club
-tiene que ser uno solo para todos los locales, es un cambio de diseño aparte.
+**CLUB COMPARTIDO (decisión de Ismael, 08-nov):** un **socio vale en todos los locales encendidos**. La visita es del
+local de la caja (su pedido, promo, cortesías y códigos) y queda con ese local; el tope de visitas con beneficio por día es
+**global**; el alta y la confirmación se hacen desde cualquier local (el alta queda con el local donde se hizo; si ese
+local se apaga, el socio sigue valiendo en los demás); el premio por referir nace y se cobra en cualquier local. Los
+**anfitriones, cupones, marcadores, cortesías, promociones y el interruptor siguen por local**. Encender un local nuevo no
+pide migrar socios.

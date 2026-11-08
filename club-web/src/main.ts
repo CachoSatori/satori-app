@@ -12,7 +12,7 @@
  * Todo pasa por /api/* (Pages Function con tope por IP). El DOM se arma sin innerHTML.
  */
 import './styles.css'
-import { urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
+import { CLUB_BASE_URL, urlCanje, urlCupon, urlReferente, urlSocio } from './qrFormato'
 import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
 
@@ -222,6 +222,8 @@ async function paginaCupon(codigo: string) {
 
 interface Portal {
   nombre: string; codigo: string; personas: number; creditos: number; personas_proximo_credito: number
+  /** (08-nov noche) «vencen a los N meses sin actividad» */
+  vencimiento_meses?: number
   /** (08-nov) créditos y colones juntos, como el pase y la caja */
   valor_credito_crc?: number
   anfitrion?: boolean
@@ -299,7 +301,8 @@ async function paginaPortal(token: string) {
       h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)),
         h('span', {}, (p.creditos === 1 ? t.portal_creditos_uno : t.portal_creditos) + (p.valor_credito_crc ? ` · ${colones(p.creditos * p.valor_credito_crc)}` : ''))),
       h('p', { class: 'sub' }, t.portal_personas(p.personas)),
-      h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito)))),
+      h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito))),
+      p.vencimiento_meses ? h('p', { class: 'sub' }, t.portal_vence(p.vencimiento_meses)) : null),
     ...(p.creditos >= 1 ? [seccionCanje(token)] : []),
     h('section', { class: 'tarjeta portal-qr' },
       h('h2', {}, t.portal_qr), canvas, h('p', { class: 'codigo', style: 'text-align:center' }, p.codigo),
@@ -416,7 +419,7 @@ async function paginaAlta() {
       if (r.ok) {
         const portal = r.data?.portal
         pintar(h('h1', {}, t.alta_titulo), avisoEl('ok', portal ? t.alta_listo : t.alta_listo_sin_link),
-          portal && portal.startsWith('https://club.satoricostarica.com/p/')
+          portal && portal.startsWith(`${CLUB_BASE_URL}/p/`)
             ? h('a', { class: 'btn', href: new URL(portal).pathname }, t.alta_portal) : null)
         anunciar(portal ? t.alta_listo : t.alta_listo_sin_link)
         return

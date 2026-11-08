@@ -3,8 +3,7 @@
 > **Borrador (08-nov) para que lo revise Ismael antes de usarlo.** Sin datos personales: lo que va entre `<…>` se
 > completa al mandarlo (su nombre, su link del portal y `<valor del crédito>`, el valor vigente en colones de la
 > configuración del local). Las partes **[con el pase]** van solo cuando el pase de Google Wallet esté encendido (hoy está
-> apagado hasta la prueba en un teléfono). Lo marcado **[CONFIRMAR ISMAEL]** sigue abierto: no se manda hasta que Ismael
-> lo confirme (y se borra la marca).
+> apagado hasta la prueba en un teléfono).
 
 ## Español
 
@@ -19,10 +18,9 @@ Te escribimos de **Satori Sushi Bar** con una novedad del **Club Satori**, el pr
   vale <valor del crédito>** en tu cuenta en Satori.
 - Tus huéspedes reciben un **cupón del 10 %** (un solo uso) al escanear tu QR.
 
-**[CONFIRMAR ISMAEL] Tu saldo de la tarjeta de papel:** <qué pasa con el saldo que tenías en las tarjetas de papel: si se
-pasa al portal, cuándo y cómo lo ves>.
+**Tu saldo de la tarjeta de papel pasa a tu portal.**
 
-**[CONFIRMAR ISMAEL] Vencimiento:** <si los créditos vencen y cuándo (por ejemplo, por inactividad), o que no vencen>.
+**Los créditos vencen a los 12 meses sin actividad: cada persona que llega con tu cupón o cada canje vuelve a contar los 12 meses.**
 
 **[con el pase] Cómo guardás el pase**
 1. Abrí tu portal y tocá «Agregar a Google Wallet».
@@ -38,7 +36,7 @@ pasa al portal, cuándo y cómo lo ves>.
 2. Te aparece un código de 6 caracteres que **vale 10 minutos y sirve una sola vez**: mostralo en caja.
 3. Elegís cuántos créditos usar (1, 1,5 o 2 por visita). Sin el código no se puede canjear.
 
-Tus datos los cuidamos según nuestro aviso de privacidad: https://club.satoricostarica.com/privacidad
+Tus datos los cuidamos según nuestro aviso de privacidad: <link del aviso de privacidad>
 
 ¡Gracias por recomendarnos!
 Satori Sushi Bar
@@ -56,10 +54,9 @@ This is **Satori Sushi Bar** with news about **Club Satori**, our program for th
   credit is worth <credit value>** on your bill at Satori.
 - Your guests get a **10% coupon** (one use) when they scan your QR.
 
-**[CONFIRMAR ISMAEL] Your paper card balance:** <what happens to the balance on your paper cards: whether it moves to the
-portal, when and how you see it>.
+**Your paper card balance moves to your portal.**
 
-**[CONFIRMAR ISMAEL] Expiry:** <whether credits expire and when (for example, after inactivity), or that they do not>.
+**Credits expire after 12 months without activity: every guest who comes with your coupon or every redemption restarts the 12 months.**
 
 **[with the pass] How to save your pass**
 1. Open your portal and tap “Add to Google Wallet”.
@@ -75,16 +72,17 @@ portal, when and how you see it>.
 2. You get a 6-character code that is **valid for 10 minutes and works once**: show it at the register.
 3. You choose how many credits to use (1, 1.5 or 2 per visit). Without the code, credits cannot be redeemed.
 
-We take care of your data under our privacy notice: https://club.satoricostarica.com/privacidad
+We take care of your data under our privacy notice: <link del aviso de privacidad>
 
 Thank you for recommending us!
 Satori Sushi Bar
 
-## Abierto para Ismael
-- **[CONFIRMAR ISMAEL] Saldo de la tarjeta de papel:** qué se le dice al anfitrión (la migración F1b pasa los saldos de
-  la página vieja; falta cuándo y cómo se lo contamos).
-- **[CONFIRMAR ISMAEL] Vencimiento de los créditos:** si vencen y con qué regla (la app tiene vencimiento por inactividad
-  configurable por local).
+## Decidido (Ismael, 08-nov noche)
+- El saldo de la tarjeta de papel pasa al portal (carga masiva: `docs/club-satori/piloto/saldos-papel.md`).
+- Los créditos vencen a los 12 meses **sin actividad**. Verificado: el SPEC (§5.1) y `club_vencer` cuentan desde la última
+  actividad, no desde que se gana cada crédito; el mismo texto va en el portal, el aviso del canje por WhatsApp y las guías.
+- El valor del crédito va como `<valor del crédito>` (el vigente al mandarlo).
+
+## Abierto
 - El texto para iPhone depende de cuándo se encienda Apple Wallet.
-- El dominio `club.satoricostarica.com` es el previsto en el RUNBOOK; confirmar antes de mandar.
-- Resuelto (08-nov): el valor del crédito va como variable `<valor del crédito>` (el vigente al mandarlo).
+- El dominio sale de la configuración de club-web (`VITE_CLUB_URL`); el que se use al mandar, el de esa variable.

@@ -5,6 +5,17 @@
 export const LOCAL = { nombre: 'Satori Sushi Bar' }
 
 /**
+ * (08-nov noche) Dominio público del Club: sale de la variable de build `VITE_CLUB_URL` (https://…, sin barra final) para
+ * poder cambiarlo sin tocar el código. Ningún dominio escrito acá. Sin la variable (o mal formada), el origen donde corre el
+ * sitio. Los QR y links que arma club-web usan este valor.
+ */
+export function normalizarClubUrl(env: string | undefined, origen: string): string {
+  const v = (env ?? '').trim().replace(/\/+$/, '')
+  return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(v) ? v : origen
+}
+export const CLUB_URL: string = normalizarClubUrl(import.meta.env.VITE_CLUB_URL, typeof location !== 'undefined' ? location.origin : '')
+
+/**
  * LC-DES-07: versión del aviso de privacidad que acepta el socio en la autoalta. TIENE que ser igual a
  * `club_config.aviso_privacidad_version`; si no, la base rechaza el alta (así nadie acepta un aviso viejo).
  * Al cambiar el texto del aviso (i18n: alta_aviso), se sube acá y en la base el mismo día.

@@ -680,6 +680,66 @@ def ejecutar(ref: str, sql: str, read_only: bool = False):
         sys.exit(f'Error de la base ({e.code}): {mensaje_error(cuerpo)}')
 
 
+# ── Saldos de tarjetas de papel (Ismael, 08-nov noche): validar, emitir con las reglas de G-56, ensayo en staging ──
+def main_saldos_papel(argv: list[str]) -> None:
+    import datetime as _dt
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import saldos_papel as sp
+    ap = argparse.ArgumentParser(prog='migrar_firestore.py saldos-papel',
+                                 description='Carga de saldos de tarjetas de papel (plantilla: scripts/club/plantilla_saldos_papel.csv)')
+    ap.add_argument('--local', required=True, help='id del local de club_config')
+    ap.add_argument('--ref', default=STAGING_REF, help='ref de Supabase; solo se acepta staging')
+    fuente = ap.add_mutually_exclusive_group(required=True)
+    fuente.add_argument('--csv', type=Path, help='el CSV (fuera del repo)')
+    fuente.add_argument('--ficticios', type=int, help='N anfitriones y tarjetas FICTICIOS (solo con --ensayo)')
+    modo = ap.add_mutually_exclusive_group(required=True)
+    modo.add_argument('--validar', action='store_true', help='solo valida el CSV (no conecta)')
+    modo.add_argument('--emitir', type=Path, help='escribe carga.sql, ensayo.sql y resumen.json en esta carpeta (fuera del repo); no conecta')
+    modo.add_argument('--ensayo', action='store_true', help='corre el ensayo en STAGING dentro de una transacción con ROLLBACK')
+    a = ap.parse_args(argv)
+    if a.ref != STAGING_REF:
+        sys.exit('NEGADO: la carga de saldos de papel solo se ensaya contra STAGING; prod va con el paquete firmado (G-56).')
+    if not re.fullmatch(r'[a-z0-9-]{2,40}', a.local):
+        sys.exit('NEGADO: --local mal formado.')
+    previo = ''
+    if a.ficticios is not None:
+        if not a.ensayo or not (1 <= a.ficticios <= 50):
+            sys.exit('NEGADO: --ficticios solo con --ensayo y entre 1 y 50.')
+        filas, previo = sp.ficticios(a.ficticios, a.local)
+    else:
+        archivo = a.csv.expanduser().resolve()
+        if archivo == REPO_ROOT or REPO_ROOT in archivo.parents:
+            sys.exit('NEGADO: el CSV está dentro del repo. Los datos de anfitriones van fuera.')
+        filas, errores = sp.validar(archivo.read_text(encoding='utf-8'), _dt.date.today())
+        if errores:
+            print('CSV RECHAZADO (no se carga nada):'); print('\n'.join('  ' + e for e in errores[:200])); sys.exit(1)
+    if a.validar:
+        print(json.dumps({'csv': 'ok', 'filas': len(filas), 'personas': sum(f['personas'] for f in filas)}, ensure_ascii=False)); return
+    if a.emitir:
+        out = a.emitir.expanduser().resolve()
+        if out == REPO_ROOT or REPO_ROOT in out.parents:
+            sys.exit('NEGADO: --emitir está dentro del repo.')
+        out.mkdir(parents=True, exist_ok=True); os.chmod(out, 0o700)
+        carga = sp.sql_carga(filas, a.local, 'prod'); ensayo = sp.sql_ensayo(filas, a.local, 'prod')
+        for sql in (carga, ensayo):
+            malos = sp.filtrar(sql)
+            if malos:
+                sys.exit('FILTRO G-56: ' + '; '.join(malos))
+        for nombre, txt in (('carga.sql', carga), ('ensayo.sql', ensayo)):
+            (out / nombre).write_text(txt, encoding='utf-8'); os.chmod(out / nombre, 0o600)
+        r = sp.resumen(filas, carga, a.local) | {'sha256_ensayo': __import__('hashlib').sha256(ensayo.encode()).hexdigest()}
+        (out / 'resumen.json').write_text(sp.json_resumen(r), encoding='utf-8')
+        print(sp.json_resumen(r)); return
+    # --ensayo: staging, el mismo cuerpo con ROLLBACK; el filtro se corre otra vez antes de mandar
+    sql = sp.sql_ensayo(filas, a.local, 'staging', previo)
+    malos = sp.filtrar(sql)
+    if malos:
+        sys.exit('FILTRO G-56: ' + '; '.join(malos))
+    ejecutar(a.ref, sql)
+    print(json.dumps({'ensayo': 'ok (validación dentro de la transacción; terminó en ROLLBACK)', **sp.resumen(filas, sql, a.local)},
+                     ensure_ascii=False, indent=1))
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────────
 def main() -> None:
     ap = argparse.ArgumentParser(description='Club Satori F1b: Firestore → Supabase STAGING')
@@ -737,4 +797,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == 'saldos-papel':
+        main_saldos_papel(sys.argv[2:])
+    else:
+        main()

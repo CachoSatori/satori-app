@@ -39,6 +39,8 @@ const ES = {
   portal_hola: (n: string) => `Hola, ${n}`,
   portal_creditos: 'créditos',
   portal_creditos_uno: 'crédito',
+  // (08-nov noche) el mismo texto que los mensajes, el aviso del canje y las guías (SPEC §5.1 y club_vencer)
+  portal_vence: (n: number) => `Los créditos vencen a los ${n} meses sin actividad: cada persona que llega con tu cupón o cada canje vuelve a contar los ${n} meses.`,
   portal_personas: (p: number) => `${p} ${p === 1 ? 'persona acumulada' : 'personas acumuladas'}`,
   portal_faltan: (n: number) => `Te ${n === 1 ? 'falta 1 persona' : `faltan ${n} personas`} para sumar medio crédito.`,
   portal_qr: 'Tu QR para los turistas',
@@ -155,6 +157,7 @@ const EN: Textos = {
   portal_hola: n => `Hi, ${n}`,
   portal_creditos: 'credits',
   portal_creditos_uno: 'credit',
+  portal_vence: n => `Credits expire after ${n} months without activity: every guest who comes with your coupon or every redemption restarts the ${n} months.`,
   portal_personas: p => `${p} ${p === 1 ? 'guest' : 'guests'} so far`,
   portal_faltan: n => `${n} more ${n === 1 ? 'guest' : 'guests'} to earn half a credit.`,
   portal_qr: 'Your QR for guests',

@@ -71,7 +71,7 @@ test('R-01: POST /api/portal/:token/canje llama a club_canje_codigo_generar con 
   llamadas = []
   globalThis.fetch = async (url, init) => {
     llamadas.push({ url, init })
-    return new Response(JSON.stringify([{ codigo: 'ABCDEF', vence_en: '2026-11-07T18:00:00Z', url: 'https://club.satoricostarica.com/k/ABCDEF' }]), { status: 200 })
+    return new Response(JSON.stringify([{ codigo: 'ABCDEF', vence_en: '2026-11-07T18:00:00Z', url: 'https://club.ejemplo/k/ABCDEF' }]), { status: 200 })
   }
   const tok = 'a'.repeat(64)
   const r = await manejar(pedido(`portal/${tok}/canje`, 'POST'), conLimite(), `portal/${tok}/canje`)

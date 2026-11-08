@@ -2586,13 +2586,23 @@ begin
     (select aviso_version = v_ver and aviso_aceptado_en is not null from club_miembro_roles where miembro_id = v_g and rol = 'socio'), '');
   perform pg_temp.r('57', 'altas por confirmar: el manager las ve; el cajero no', v_n = 1 and e = 'sin permiso', format('%s %s', v_n, e));
   -- tope global por día
-  update club_config set socio_autoalta_max_dia = 1 where location_id = 'santa-teresa';
+  -- cupo = las de hoy + 1: la próxima entra (y pasa el 80 % → alerta) y la siguiente se rechaza
+  update club_config set socio_autoalta_max_dia = 1
+       + (select count(*) from club_miembro_roles where rol = 'socio' and alta_por = 'autoalta'
+           and desde >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
+       + (select count(*) from club_socio_solicitudes
+           where creada_en >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
+   where location_id = 'santa-teresa';
   set local role anon;
-  begin perform public.club_socio_autoalta(jsonb_build_object('nombre', 'Fede Ficticio', 'whatsapp', '60001237', 'acepto', v_ver)); e := 'ok';
+  perform public.club_socio_autoalta(jsonb_build_object('nombre', 'Fede Ficticio', 'whatsapp', '60001237', 'acepto', v_ver));
+  begin perform public.club_socio_autoalta(jsonb_build_object('nombre', 'Gael Ficticio', 'whatsapp', '60001241', 'acepto', v_ver)); e := 'ok';
   exception when others then e := sqlerrm; end;
   reset role;
   update club_config set socio_autoalta_max_dia = 60 where location_id = 'santa-teresa';
   perform pg_temp.r('57', 'tope global de autoaltas por día', e = 'Demasiadas altas hoy', e);
+  perform pg_temp.r('57', 'AUD-74: al 80 % del cupo diario queda una alerta (una sola por día)',
+    (select count(*) from club_alertas where tipo = 'autoalta_cupo'
+      and creado_en >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica') = 1, '');
   -- purga: autoalta sin validar a los 30 días → datos borrados
   update club_miembro_roles set desde = now() - interval '31 days' where miembro_id = v_a and rol = 'socio';
   j := public.club_socios_mantenimiento();

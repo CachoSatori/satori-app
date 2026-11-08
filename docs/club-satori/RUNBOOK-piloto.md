@@ -128,6 +128,14 @@ para `club.satoricostarica.com`; la clave del sitio va en `VITE_TURNSTILE_SITEKE
 **Secret** `TURNSTILE_SECRET` (las carga Ismael; sin ella la autoalta responde 503). Después, el deploy y el dominio.
 **Verificar:**
 - `/api/salud` → todo en `true` (incluido `turnstile`).
+- **CLUB-AUD-74: Turnstile de prod NO es el de prueba.** La clave del sitio del build (`VITE_TURNSTILE_SITEKEY`) no
+  puede ser `1x00000000000000000000AA` (ni ninguna que empiece con `1x`, `2x` o `3x`, las de prueba de Cloudflare):
+  abrir `/alta`, ver el código fuente del JS y buscar `1x0000`. El Secret `TURNSTILE_SECRET` tampoco puede ser
+  `1x0000000000000000000000000000000AA` ni `2x…`/`3x…`: lo confirma Ismael en Cloudflare → Turnstile (el widget de
+  `club.satoricostarica.com` muestra su sitekey; tiene que coincidir con la del build).
+- Tope de `/alta` por IP **y por prefijo de red** (/24 IPv4, /64 IPv6): 6 altas seguidas desde dos teléfonos en el mismo
+  wifi → la sexta dice «Demasiados intentos seguidos».
+- Alerta de cupo: al 80 % de `socio_autoalta_max_dia` queda una fila `tipo = 'autoalta_cupo'` en `club_alertas`.
 - `/alta`: el widget aparece; un alta de prueba queda **pendiente** y se borra a mano después.
 - 6 «Obtener mi cupón» seguidos desde un teléfono: el sexto dice «Demasiados intentos seguidos».
 - Las cabeceras de `_headers`: CSP `script-src 'self'` y no-store en `/api`.

@@ -1126,6 +1126,13 @@ grant select on public.club_alertas to authenticated;
 drop policy if exists club_alertas_gerencia on public.club_alertas;
 create policy club_alertas_gerencia on public.club_alertas for select to authenticated
   using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
+-- CLUB-AUD-74: también alertas de cupo de la autoalta (sin miembro). El canje sigue exigiendo miembro.
+alter table public.club_alertas alter column miembro_id drop not null;
+alter table public.club_alertas add column if not exists detalle jsonb;
+alter table public.club_alertas drop constraint if exists club_alertas_tipo_check;
+alter table public.club_alertas add constraint club_alertas_tipo_check check (tipo in ('canje','autoalta_cupo'));
+alter table public.club_alertas drop constraint if exists club_alertas_canje_miembro;
+alter table public.club_alertas add constraint club_alertas_canje_miembro check (tipo <> 'canje' or miembro_id is not null);
 
 -- Generar el código desde el portal (PÚBLICA, solo con el header de club-web). Tope: 5 por hora por miembro.
 -- Orden de locks igual que el canje: códigos vigentes del miembro → miembro.
@@ -3819,7 +3826,7 @@ as $$
     from public.club_alertas a
     join public.club_movimientos mv on mv.id = a.movimiento_id
     join public.club_config c on c.location_id = a.location_id
-   where a.enviado_en is null
+   where a.enviado_en is null and a.tipo = 'canje'   -- las de cupo de autoalta no van al pase
    order by a.id limit least(greatest(coalesce(p_limite, 100), 1), 1000)
 $$;
 
@@ -4102,6 +4109,7 @@ declare
   v_ref  uuid;
   v_id   uuid;
   v_tok  text;
+  v_hoy  int;
 begin
   if not public.club_web_ok() then
     raise exception 'Datos no válidos' using errcode = 'P0001';
@@ -4114,13 +4122,20 @@ begin
   begin v_tel := public.club_norm_telefono(p_datos->>'whatsapp'); exception when others then v_tel := null; end;
   if v_tel is null then raise exception 'Datos no válidos' using errcode = 'P0001'; end if;
   perform pg_advisory_xact_lock(hashtextextended('club_socio_autoalta:' || v_loc, 0));
-  if (select count(*) from public.club_miembro_roles r join public.club_miembros m on m.id = r.miembro_id
-       where m.location_id = v_loc and r.rol = 'socio' and r.alta_por = 'autoalta'
-         and r.desde >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
-     + (select count(*) from public.club_socio_solicitudes q where q.location_id = v_loc
-         and q.creada_en >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
-     >= v_cfg.socio_autoalta_max_dia then
+  v_hoy := (select count(*) from public.club_miembro_roles r join public.club_miembros m on m.id = r.miembro_id
+             where m.location_id = v_loc and r.rol = 'socio' and r.alta_por = 'autoalta'
+               and r.desde >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
+         + (select count(*) from public.club_socio_solicitudes q where q.location_id = v_loc
+             and q.creada_en >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica');
+  if v_hoy >= v_cfg.socio_autoalta_max_dia then
     raise exception 'Demasiadas altas hoy' using errcode = 'P0001';
+  end if;
+  -- CLUB-AUD-74: al llegar al 80 % del cupo diario, una alerta (una por día) para gerencia.
+  if v_hoy + 1 >= ceil(v_cfg.socio_autoalta_max_dia * 0.8)
+     and not exists (select 1 from public.club_alertas a where a.location_id = v_loc and a.tipo = 'autoalta_cupo'
+                      and a.creado_en >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica') then
+    insert into public.club_alertas (location_id, tipo, detalle)
+    values (v_loc, 'autoalta_cupo', jsonb_build_object('altas_hoy', v_hoy + 1, 'cupo', v_cfg.socio_autoalta_max_dia));
   end if;
   select m.id into v_ref from public.club_miembros m
    where m.codigo = upper(btrim(coalesce(p_datos->>'ref', ''))) and m.estado = 'activo'

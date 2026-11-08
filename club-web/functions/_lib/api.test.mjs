@@ -2,7 +2,7 @@
 //   npx vitest run club-web/functions/_lib/api.test.mjs   (desde la raíz del repo)
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { manejar, limitar } from './api.js'
+import { manejar, limitar, prefijoRed } from './api.js'
 
 const URL_SB = 'https://abcdefghijklmnopqrst.supabase.co'
 const base = { SUPABASE_URL: URL_SB, SUPABASE_ANON_KEY: 'anon-de-prueba', CLUB_WEB_KEY: 'clave-de-prueba' }
@@ -162,4 +162,17 @@ test('AUD-69: /api/pase/:token/canje usa el token de pase; /api/portal/:token/ba
   assert.ok(String(llamadas.at(-1).url).endsWith('/rpc/club_socio_baja_portal'))
   assert.equal((await manejar(pedido('pase/xyz/canje', 'POST'), conLimite(), 'pase/xyz/canje')).status, 404)
   assert.equal((await manejar(pedido(`pase/${tok}/canje`), conLimite(), `pase/${tok}/canje`)).status, 405)
+})
+
+test('AUD-74: prefijo de red /24 (IPv4) y /64 (IPv6); /api/alta pide el tope por IP y por prefijo', async () => {
+  assert.equal(prefijoRed('203.0.113.7'), '203.0.113.0/24')
+  assert.equal(prefijoRed('2001:db8:abcd:12:1:2:3:4'), '2001:db8:abcd:12::/64')
+  assert.equal(prefijoRed('2001:db8::1'), '2001:db8:0:0::/64')
+  assert.equal(prefijoRed('2001:DB8:0:0:ffff::9'), '2001:db8:0:0::/64')
+  const claves = []
+  const env = { ...base, RL_LEER: lim(true), RL_CREAR: { limit: async ({ key }) => { claves.push(key); return { success: !key.startsWith('alta-red:') } } } }
+  const cuerpo = JSON.stringify({ nombre: 'Ana', whatsapp: '60000000', acepto: 'v1', turnstile: 'token-de-prueba-123' })
+  const r = await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')
+  assert.equal(r.status, 429)
+  assert.deepEqual(claves, ['alta:203.0.113.7', 'alta-red:203.0.113.0/24'])
 })

@@ -4253,9 +4253,11 @@ begin
   select string_agg(relname, ', ' order by relname) into v_hoy from _anon_sin_pol where relname not like 'club\_%';
   perform pg_temp.r('82', 'fuera del Club: ninguna tabla NUEVA con permisos de anon sin política (marcadas hoy, conocidas: ' ||
     (select count(*) from _anon_sin_pol where relname not like 'club\_%') || ')', v_nuevas is null, coalesce('NUEVAS: ' || v_nuevas || ' · ', '') || 'hoy: ' || coalesce(v_hoy, 'ninguna'));
-  -- negativa: una tabla nueva en public (con los privilegios por defecto: todo para anon) y sin RLS queda marcada
+  -- negativa: una tabla nueva en public sin RLS y con SELECT para anon queda marcada. El GRANT es explícito: no depende
+  -- de los privilegios por defecto (la 090 los saca para anon; la prueba tiene que seguir valiendo con y sin la 090).
   create table public.prueba_rls_82 (x int);
-  perform pg_temp.r('82', 'negativa: una tabla nueva sin RLS y con los privilegios por defecto queda marcada',
+  grant select on public.prueba_rls_82 to anon;
+  perform pg_temp.r('82', 'negativa: una tabla nueva sin RLS y con SELECT para anon queda marcada',
     not (select c.relrowsecurity from pg_class c where c.oid = 'public.prueba_rls_82'::regclass)
     and has_table_privilege('anon', 'public.prueba_rls_82', 'SELECT')
     and not exists (select 1 from pg_policies where tablename = 'prueba_rls_82'), '');

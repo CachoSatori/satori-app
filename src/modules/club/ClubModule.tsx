@@ -7,6 +7,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { C, inputStyle } from './estilos'
 import { getLocalesClub, localActual, elegirLocal, setClubActivo, crearLocal, aClubError, type LocalClub } from '../../shared/api/club'
 
 const Escanear = lazy(() => import('./Escanear'))
@@ -58,16 +59,16 @@ export default function ClubModule() {
       </div>
 
       {visibles.length > 1 && (
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '0 0 10px', color: '#aaa', fontSize: 13 }}>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 12px 10px', color: C.ink, fontSize: 14, fontWeight: 600 }}>
           Local
           <select value={local ?? ''} onChange={e => { elegirLocal(e.target.value); setLocal(e.target.value) }}
-            style={{ background: '#111', color: '#eee', border: '1px solid #333', borderRadius: 6, padding: '4px 8px' }}>
+            style={{ ...inputStyle, width: 'auto', padding: '0.4rem 0.6rem' }}>
             {visibles.map(l => <option key={l.id} value={l.id}>{l.nombre}{l.activo ? '' : ' (Club apagado)'}</option>)}
           </select>
         </label>
       )}
       {locales !== null && visibles.length === 0 && (
-        <p style={{ color: '#c9a', margin: '12px 0' }}>El Club no está activo en ningún local. Lo enciende el owner.</p>
+        <p style={{ color: C.red, margin: '12px' }}>El Club no está activo en ningún local. Lo enciende el owner.</p>
       )}
 
       {gestiona && (
@@ -112,16 +113,16 @@ function Locales({ locales, onCambio }: { locales: LocalClub[]; onCambio: () => 
     finally { setOcupado(null) }
   }
   return (
-    <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+    <div className="tips-body" style={{ display: 'grid', gap: 8, marginTop: 8 }}>
       {locales.map(l => (
-        <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #2a2a2a', borderRadius: 8, padding: '10px 12px' }}>
-          <span>{l.nombre} <span style={{ color: l.activo ? '#7c9' : '#a88', fontSize: 12 }}>· Club {l.activo ? 'encendido' : 'apagado'}</span></span>
+        <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px' }}>
+          <span>{l.nombre} <span style={{ color: l.activo ? C.teal : C.red, fontSize: 12, fontWeight: 600 }}>· Club {l.activo ? 'encendido' : 'apagado'}</span></span>
           <button className="cash-back-btn" disabled={ocupado !== null} onClick={() => void cambiar(l)}>
             {l.activo ? 'Apagar' : 'Encender'}
           </button>
         </div>
       ))}
-      {msg && <p style={{ color: '#aaa', fontSize: 13 }}>{msg}</p>}
+      {msg && <p style={{ color: C.ink, fontSize: 13 }}>{msg}</p>}
       <NuevoLocal locales={locales} onCreado={async (t) => { await onCambio(); setMsg(t) }} />
     </div>
   )
@@ -136,7 +137,7 @@ function NuevoLocal({ locales, onCreado }: { locales: LocalClub[]; onCreado: (te
   const [copiarDe, setCopiarDe] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
-  const campo = { background: '#111', color: '#eee', border: '1px solid #333', borderRadius: 6, padding: '6px 8px', width: '100%', boxSizing: 'border-box' as const }
+  const campo = { ...inputStyle, padding: '0.55rem 0.7rem' }
   async function crear() {
     setEnviando(true); setError(null)
     try {
@@ -147,7 +148,7 @@ function NuevoLocal({ locales, onCreado }: { locales: LocalClub[]; onCreado: (te
     } catch (e) { setError(aClubError(e).message) } finally { setEnviando(false) }
   }
   return (
-    <div style={{ border: '1px dashed #333', borderRadius: 8, padding: '10px 12px', display: 'grid', gap: 6 }}>
+    <div style={{ background: '#fff', border: `1px dashed ${C.border}`, borderRadius: 8, padding: '10px 12px', display: 'grid', gap: 6 }}>
       <strong style={{ fontSize: 13 }}>Nuevo local</strong>
       <input aria-label="Id del local" placeholder="id (minúsculas y guiones, ej. playa-nueva)" value={id} onChange={e => setId(e.target.value)} maxLength={40} style={campo} />
       <input aria-label="Nombre del local" placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} maxLength={60} style={campo} />
@@ -157,7 +158,7 @@ function NuevoLocal({ locales, onCreado }: { locales: LocalClub[]; onCreado: (te
         <option value="">Sin copiar configuración (valores por defecto)</option>
         {locales.map(l => <option key={l.id} value={l.id}>Copiar la configuración de {l.nombre}</option>)}
       </select>
-      {error && <p style={{ color: '#d88', fontSize: 13, margin: 0 }}>{error}</p>}
+      {error && <p style={{ color: C.red, fontSize: 13, margin: 0 }}>{error}</p>}
       <button className="cash-back-btn" disabled={enviando || !id.trim() || !nombre.trim()} onClick={() => void crear()}>Crear local (apagado)</button>
     </div>
   )

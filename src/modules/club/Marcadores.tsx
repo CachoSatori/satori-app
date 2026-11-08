@@ -2,7 +2,7 @@
  * Marcadores de descuento — LC-MD (Ismael, 08-nov). Lista CONFIGURABLE por local de los artículos del PoS que respaldan
  * un descuento en la factura (Local Club 856, invitado 857, PROMO CLUB, tarjetas de hoteles o tiendas, descuento de
  * personal…). DESCUENTO_SIN_RESPALDO y CANJE_CON_DESCUENTO la usan: cargar un marcador nuevo hace que esas facturas
- * dejen de salir como excepción, sin código. El owner edita; manager y contador ven.
+ * dejen de salir como excepción, sin código. El owner edita; el manager ve (el contador no entra a /club).
  *  · % esperado vacío = respalda cualquier descuento; con valor = solo un descuento de ese % (±1,5 puntos).
  *  · No se borran: se apagan (queda la historia).
  */

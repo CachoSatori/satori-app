@@ -266,3 +266,12 @@
 | Cajero | Ver el reporte para saber qué se mira | Solo owner y manager (prueba 73) | — |
 | Manager | Ocultar sus propias visitas | El reporte agrupa por quien registró, sin filtro por usuario | — |
 | Owner | — | — | La guía es borrador: validarla en el local antes de publicarla |
+  - **Recorrido integral A6 (paso 13, staging, datos sintéticos, 12/12):** alta en caja (cajero) → autoalta en club-web
+    con el código de la socia (aviso v1) → validación en caja → visita con el pedido: «Qué aplicar» 10 % + cortesía →
+    el PoS cierra la factura con el 856 → premio para la socia que refirió → su visita aplica la cortesía de premio →
+    canje de 1 crédito + factura con el 856 → **«Canje con descuento»** en Excepciones → el owner (otra persona) confirma el
+    alta → reportes del mes. Limpieza: staging en 2538 / 338 / 338, sin claves ni datos sintéticos. Capturas en el
+    scratchpad de la sesión (no van al repo: muestran datos de staging).
+  - Arreglo de texto: «…hasta el {fecha} p. m..» (punto doble) en la validación de socio.
+  - **Para Ismael:** el encabezado de club-web usa el kanji 里 (el que dijo que no va en el pase); no se tocó: va con la
+    decisión del diseño.

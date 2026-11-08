@@ -81,4 +81,15 @@ describe('EmployeeList · Login del PoS', () => {
     const logins = [...panel.querySelectorAll('li strong')].map(n => n.textContent)
     expect(logins).toEqual(['041'])   // el 026 ya tiene empleado
   })
+
+  it('owner: 111 y 222 no salen como «sin empleado»: van marcados login de caja con su turno', async () => {
+    H.logins = [{ salonero_login: '111', dia: '2026-11-03' }, { salonero_login: '222', dia: '2026-11-02' }]
+    render(<EmployeeList employees={EMPS} onRefresh={vi.fn(async () => {})} />)
+    const panel = await screen.findByTestId('logins-sin-empleado')
+    expect(panel.querySelectorAll('li').length).toBe(0)
+    expect(panel.textContent).toContain('Todos tienen empleado asignado')
+    const cajas = screen.getByTestId('logins-de-caja').textContent!
+    expect(cajas).toContain('111 login de caja, turno mañana (1 factura, última: 2026-11-03)')
+    expect(cajas).toContain('222 login de caja, turno tarde (1 factura, última: 2026-11-02)')
+  })
 })

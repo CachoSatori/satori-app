@@ -9,7 +9,7 @@ import { allSaloneros } from '../ventas/ventasUtils'
 import { ROLE_LABELS } from '../../shared/constants'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getLoginsDeFacturasRecientes } from '../../shared/api/posNdf'
-import { esDuplicadoDeLogin, loginsSinEmpleado, mensajeDuplicado, validarPosLogin, type LoginSinEmpleado } from './posLogin'
+import { esDuplicadoDeLogin, loginsSinEmpleado, mensajeDuplicado, usoLoginsDeCaja, validarPosLogin, type LoginSinEmpleado } from './posLogin'
 
 const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
@@ -335,7 +335,8 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
 
 /**
  * Solo owner: los logins que vendieron en los últimos 90 días y que ningún empleado tiene asignado,
- * para saber cuáles completar en «Login del PoS» (Editar). Sin los de caja ni el compartido.
+ * para saber cuáles completar en «Login del PoS» (Editar). Sin el compartido. Los logins fijos de
+ * caja por turno (111 / 222) van aparte, marcados «login de caja» con su turno: no son de nadie.
  */
 function LoginsSinEmpleadoPanel({ employees }: { employees: Employee[] }) {
   const [filas, setFilas] = useState<{ salonero_login: string | null; dia: string }[] | null>(null)
@@ -346,6 +347,7 @@ function LoginsSinEmpleadoPanel({ employees }: { employees: Employee[] }) {
   if (error) return <p className="field-error" style={{ fontSize: '0.75rem' }}>No se pudieron leer los logins del PoS: {error}</p>
   if (!filas) return null
   const lista: LoginSinEmpleado[] = loginsSinEmpleado(filas, employees)
+  const cajas = usoLoginsDeCaja(filas)
   return (
     <div data-testid="logins-sin-empleado" style={{ margin: '0.5rem 0 1rem', fontSize: '0.78rem' }}>
       <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>Logins del PoS que vendieron en los últimos 90 días sin empleado asignado</div>
@@ -360,6 +362,18 @@ function LoginsSinEmpleadoPanel({ employees }: { employees: Employee[] }) {
             ))}
           </ul>
         </>
+      )}
+      {cajas.length > 0 && (
+        <div data-testid="logins-de-caja" style={{ color: '#888', marginTop: '0.35rem' }}>
+          No necesitan empleado (se abre el sistema con ellos):{' '}
+          {cajas.map((c, i) => (
+            <span key={c.login}>
+              {i > 0 && ' · '}
+              <strong>{c.login}</strong> login de caja, turno {c.turno}
+              {c.facturas > 0 && ` (${c.facturas} factura${c.facturas === 1 ? "" : "s"}, última: ${c.ultima})`}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   )

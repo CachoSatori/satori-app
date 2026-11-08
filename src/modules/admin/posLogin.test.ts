@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('../../shared/api/supabase', () => ({ supabase: {} }))
-import { esDuplicadoDeLogin, loginsSinEmpleado, mensajeDuplicado, validarPosLogin } from './posLogin'
+import { esDuplicadoDeLogin, loginsDeCaja, loginsSinEmpleado, mensajeDuplicado, usoLoginsDeCaja, validarPosLogin } from './posLogin'
 
 const EMPS = [
   { id: 'a', full_name: 'EMPLEADO A', pos_login: '026' },
@@ -21,7 +21,9 @@ describe('validarPosLogin', () => {
     }
   })
   it('rechaza los logins de caja y el compartido', () => {
-    expect(validarPosLogin('111', 'b', EMPS)).toMatchObject({ ok: false, error: expect.stringMatching(/caja/) })
+    expect(validarPosLogin('111', 'b', EMPS)).toEqual({ ok: false, error: '111 es el login fijo de caja del turno mañana, no de una persona.' })
+    expect(validarPosLogin('222', 'b', EMPS)).toEqual({ ok: false, error: '222 es el login fijo de caja del turno tarde, no de una persona.' })
+    expect(validarPosLogin('388', 'b', EMPS)).toMatchObject({ ok: false, error: expect.stringMatching(/caja/) })
     expect(validarPosLogin('02', 'b', EMPS)).toMatchObject({ ok: false, error: expect.stringMatching(/compartido/) })
   })
   it('duplicado con otro empleado → «Ese login ya lo tiene <nombre>»', () => {
@@ -56,5 +58,26 @@ describe('loginsSinEmpleado', () => {
       { login: '041', facturas: 2, ultima: '2026-11-03' },
       { login: '039', facturas: 1, ultima: '2026-10-15' },
     ])
+  })
+})
+
+describe('logins fijos de caja', () => {
+  it('la lista sale del mapa de cajas: 111 mañana, 222 tarde', () => {
+    expect(loginsDeCaja()).toEqual([{ login: '111', turno: 'mañana' }, { login: '222', turno: 'tarde' }])
+  })
+  it('se muestran siempre, con su uso si aparecen', () => {
+    expect(usoLoginsDeCaja([
+      { salonero_login: '222', dia: '2026-10-01' }, { salonero_login: '222', dia: '2026-10-09' },
+      { salonero_login: '041', dia: '2026-10-09' },
+    ])).toEqual([
+      { login: '111', turno: 'mañana', facturas: 0, ultima: null },
+      { login: '222', turno: 'tarde', facturas: 2, ultima: '2026-10-09' },
+    ])
+  })
+  it('un alias viejo de una persona ya asignada no sale como «sin empleado»', () => {
+    // 266 es el código histórico de la misma persona que 038 (personasNdf.ts).
+    const r = loginsSinEmpleado([{ salonero_login: '266', dia: '2026-10-01' }],
+      [{ id: 'x', full_name: 'EMPLEADO X', pos_login: '038' }])
+    expect(r).toEqual([])
   })
 })

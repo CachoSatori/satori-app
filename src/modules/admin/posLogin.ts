@@ -5,7 +5,33 @@
 // tiene la columna y un índice único parcial (`employees_pos_login_key`, mig 062): dos empleados no
 // pueden tener el mismo login. Acá solo se valida antes de guardar y se traduce el rechazo.
 
-import { rolDeCodigo } from '../../shared/ndf/personasNdf'
+import { CAJAS_POR_LOGIN } from '../../shared/ndf/jornada'
+import { clasificarCodigo, rolDeCodigo } from '../../shared/ndf/personasNdf'
+
+/**
+ * Los logins FIJOS de caja por turno: el sistema se abre con ellos y el cajero llega en el pico.
+ * No son de una persona, así que nunca son «sin empleado». La lista es configurable en un solo
+ * lugar, `CAJAS_POR_LOGIN` de `jornada.ts` (la misma que define el turno): sumar una caja ahí la
+ * suma acá sola.
+ */
+export interface LoginDeCaja { login: string; turno: string }
+
+/** «manana» → «mañana»; el resto tal cual. */
+function nombreTurno(turno: string): string {
+  return turno === 'manana' ? 'mañana' : turno
+}
+
+export function loginsDeCaja(): LoginDeCaja[] {
+  return Object.entries(CAJAS_POR_LOGIN)
+    .sort(([, a], [, b]) => a.orden - b.orden)
+    .map(([login, def]) => ({ login, turno: nombreTurno(def.turno) }))
+}
+
+/** El turno de un login fijo de caja, o `null` si no es uno. */
+export function turnoDeLoginCaja(login: string | null | undefined): string | null {
+  const def = CAJAS_POR_LOGIN[(login ?? '').trim()]
+  return def ? nombreTurno(def.turno) : null
+}
 
 /** Formato del PoS: solo dígitos, de 2 a 6 (los ceros a la izquierda cuentan: «026» ≠ «26»). */
 export const RE_POS_LOGIN = /^\d{2,6}$/
@@ -32,6 +58,8 @@ export function validarPosLogin(
   const v = texto.trim()
   if (v === '') return { ok: true, valor: null }
   if (!RE_POS_LOGIN.test(v)) return { ok: false, error: 'El login del PoS son solo números, de 2 a 6 (por ejemplo 026).' }
+  const turno = turnoDeLoginCaja(v)
+  if (turno) return { ok: false, error: `${v} es el login fijo de caja del turno ${turno}, no de una persona.` }
   const rol = rolDeCodigo(v)
   if (rol === 'caja') return { ok: false, error: `${v} es un login de caja, no de una persona.` }
   if (rol === 'generico') return { ok: false, error: `${v} es el login compartido, no de una persona.` }
@@ -60,6 +88,9 @@ export interface LoginSinEmpleado {
 /**
  * Los logins que vendieron (facturas cerradas) y que ningún empleado tiene asignado. Sin los de caja
  * ni el compartido. Ordenados por facturas, de más a menos.
+ *
+ * Un código viejo de una persona que ya tiene asignado OTRO de sus códigos (los alias de
+ * `personasNdf.ts`, p. ej. un login histórico borrado del PoS) tampoco sale: esa persona ya está.
  */
 export function loginsSinEmpleado(
   facturas: readonly { salonero_login: string | null; dia: string }[],
@@ -70,6 +101,7 @@ export function loginsSinEmpleado(
   for (const f of facturas) {
     const login = (f.salonero_login ?? '').trim()
     if (!login || asignados.has(login)) continue
+    if (clasificarCodigo(login).codigos.some(c => asignados.has(c))) continue
     const rol = rolDeCodigo(login)
     if (rol === 'caja' || rol === 'generico') continue
     const e = m.get(login) ?? { login, facturas: 0, ultima: f.dia }
@@ -78,4 +110,26 @@ export function loginsSinEmpleado(
     m.set(login, e)
   }
   return [...m.values()].sort((a, b) => b.facturas - a.facturas || a.login.localeCompare(b.login))
+}
+
+export interface UsoLoginDeCaja extends LoginDeCaja {
+  facturas: number
+  /** Último día CR con una factura de ese login, o `null` si no aparece en el período. */
+  ultima:   string | null
+}
+
+/** Los logins fijos de caja, siempre todos (aparezcan o no en las facturas), con su turno y uso. */
+export function usoLoginsDeCaja(
+  facturas: readonly { salonero_login: string | null; dia: string }[],
+): UsoLoginDeCaja[] {
+  return loginsDeCaja().map(c => {
+    let n = 0
+    let ultima: string | null = null
+    for (const f of facturas) {
+      if ((f.salonero_login ?? '').trim() !== c.login) continue
+      n += 1
+      if (ultima === null || f.dia > ultima) ultima = f.dia
+    }
+    return { ...c, facturas: n, ultima }
+  })
 }

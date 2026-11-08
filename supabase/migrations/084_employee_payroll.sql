@@ -1,5 +1,5 @@
 -- ============================================================================
--- 083_employee_payroll.sql — SAL-AUD-01 (auditoría r5), PASO 1: la planilla sale de employees
+-- 084_employee_payroll.sql — SAL-AUD-01 (auditoría r5), PASO 1: la planilla sale de employees
 -- ----------------------------------------------------------------------------
 -- Problema: `employees` tiene una policy de lectura para todo usuario con sesión (filas activas,
 -- TODAS las columnas), y desde la 055/056/058 guarda ahí la tarifa por hora, el salario fijo, el
@@ -23,7 +23,7 @@
 -- también tienen montos y hoy los ve el manager (y employee_payments la escribe owner/manager).
 --
 -- Solo staging (Salarios 055–061 no está en prod): va a prod con el pase de Salarios.
--- Re-ejecutable. Rollback: scripts/sql/083_rollback.sql (devuelve los datos a employees).
+-- Re-ejecutable. Rollback: scripts/sql/084_rollback.sql (devuelve los datos a employees).
 -- ============================================================================
 
 begin;

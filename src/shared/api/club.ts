@@ -367,3 +367,32 @@ export const paseToken = (miembro: string, accion: 'regenerar' | 'revocar') =>
 /** CLUB-AUD-72: autoaltas con un WhatsApp que ya existía: no cambiaron nada; la caja las atiende en persona. */
 export interface SolicitudSocio { miembro_id: string; nombre: string; estado_socio: string; creada_en: string }
 export const getSolicitudesSocio = () => llamar<SolicitudSocio[]>('club_socio_solicitudes_abiertas', {})
+
+// ── LC-A3: promociones mínimas y cortesías del sorteo ────────────────────────
+export type ParaPromo = 'socio' | 'referente' | 'turista_cupon' | 'todos'
+export type EstadoPromo = 'borrador' | 'vigente' | 'terminada'
+export interface Promocion {
+  id: string; nombre: string; nombre_en: string | null; para: ParaPromo[]; estado: EstadoPromo
+  desde: string | null; hasta: string | null; dias: number[]; hora_desde: string | null; hora_hasta: string | null
+  porcentaje: number; cortesias: number; beneficio: string; vigente_ahora: boolean; actualizada_en: string
+}
+export interface PromocionDatos {
+  nombre: string; nombre_en?: string | null; para: ParaPromo[]; estado: EstadoPromo
+  desde?: string | null; hasta?: string | null; dias: number[]; hora_desde?: string | null; hora_hasta?: string | null
+  porcentaje: number; cortesias: number
+}
+export const getPromociones = () => llamar<Promocion[]>('club_promociones_listar', {})
+/** Solo owner. `id` null = nueva. Una terminada no se edita. */
+export const guardarPromocion = (id: string | null, datos: PromocionDatos) =>
+  llamar<string>('club_promocion_guardar', { p_id: id, p_datos: datos })
+
+export interface Cortesia {
+  id: string; codigo_producto: string; nombre: string; familia: number | null; activa: boolean
+  en_seccion: boolean | null; visto_en_facturas: boolean; actualizada_en: string
+}
+export interface ProductoPos { codigo: string; nombre: string; familia: number | null; veces: number; ultima: string; es_cortesia: boolean }
+export const getCortesias = () => llamar<Cortesia[]>('club_cortesias_listar', {})
+export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('club_productos', { p_buscar: buscar })
+/** Solo owner. Alta: `id` null + código del artículo «CORTESÍA CLUB». Edición: nombre y activa. */
+export const guardarCortesia = (id: string | null, codigo: string | null, nombre: string | null, activa: boolean | null) =>
+  llamar<string>('club_cortesia_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_activa: activa })

@@ -1,6 +1,6 @@
 /**
  * ClubModule — Club Satori F1c (SPEC §2 y §4): Escanear (caja), Miembros y Negocios.
- * F1f: Excepciones del puente y Reportes (owner, manager). Fuera: PM (en pausa), socio de Local Club (F3).
+ * F1f: Excepciones del puente y Reportes (owner, manager). LC-A3: Promociones y cortesías (owner edita, manager lee).
  */
 import { lazy, Suspense, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -11,8 +11,9 @@ const Miembros = lazy(() => import('./Miembros'))
 const Negocios = lazy(() => import('./Negocios'))
 const Excepciones = lazy(() => import('./Excepciones'))
 const Reportes = lazy(() => import('./Reportes'))
+const Promociones = lazy(() => import('./Promociones'))
 
-type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes'
+type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'promociones'
 
 export default function ClubModule() {
   const { profile } = useAuth()
@@ -42,6 +43,7 @@ export default function ClubModule() {
           <div className={`vt-nav-tab ${vista === 'negocios' ? 'active' : ''}`} onClick={() => setVista('negocios')}>Negocios</div>
           <div className={`vt-nav-tab ${vista === 'excepciones' ? 'active' : ''}`} onClick={() => setVista('excepciones')}>Excepciones</div>
           <div className={`vt-nav-tab ${vista === 'reportes' ? 'active' : ''}`} onClick={() => setVista('reportes')}>Reportes</div>
+          <div className={`vt-nav-tab ${vista === 'promociones' ? 'active' : ''}`} onClick={() => setVista('promociones')}>Promociones</div>
         </div>
       )}
 
@@ -51,6 +53,7 @@ export default function ClubModule() {
         {vista === 'negocios' && gestiona && <Negocios />}
         {vista === 'excepciones' && gestiona && <Excepciones />}
         {vista === 'reportes' && gestiona && <Reportes />}
+        {vista === 'promociones' && gestiona && <Promociones />}
       </Suspense>
     </div>
   )

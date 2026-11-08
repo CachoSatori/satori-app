@@ -3023,6 +3023,109 @@ begin
     not has_table_privilege('authenticated', 'public.club_visitas_socio', 'SELECT') and not has_table_privilege('anon', 'public.club_visitas_socio', 'SELECT'), '');
 end $$;
 
+-- ═══ 64. LC-A4.3: premio por referir (primera factura C con el 856, sin autorreferido ni ciclos, topes, consumo) ═══
+create function pg_temp.pedido_lc(p_ped text, p_estado text, p_856 boolean) returns void language plpgsql as $f$
+declare v_t uuid; v_abre timestamptz := now() - interval '40 minutes';
+begin
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en)
+  values ('santa-teresa', 'pedido:' || p_ped, p_ped, 'M' || p_ped, 'salon', 2, v_abre, v_abre);
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc,
+                               numero_pedido, pedido_abierto_en, mesa_factura)
+  values ('99' || p_ped, now() - interval '10 minutes', p_estado, 'salon', 'cajero', true, 'ok', 10000, p_ped, v_abre, 'M' || p_ped)
+  returning id into v_t;
+  if p_856 then insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values (v_t, '856', 'LOCAL CLUB', 1, 0); end if;
+end $f$;
+create function pg_temp.socio(p_nombre text, p_tel text, p_ref uuid) returns uuid language plpgsql as $f$
+declare v uuid;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('socio', p_nombre, 'app') returning id into v;
+  insert into club_miembros_contacto (miembro_id, telefono) values (v, p_tel);
+  update club_miembro_roles set referido_por = p_ref, validado_por = '<MANAGER_UUID>'::uuid where miembro_id = v and rol = 'socio';
+  return v;
+end $f$;
+do $$
+declare v_a uuid; v_b uuid; v_c uuid; v_e uuid; v_f uuid; v_g uuid; n int; j jsonb; v_p uuid;
+begin
+  update club_promociones set estado = 'terminada' where nombre <> 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  update club_cortesias set activa = true where codigo_producto in ('CC-1','CC-2');
+  update club_config set premios_referente_mes = 3 where location_id = 'santa-teresa';
+  delete from club_premios;
+  v_a := pg_temp.socio('Ana Refiere Ficticia', '+50661110001', null);
+  v_b := pg_temp.socio('Beto Referido Ficticio', '+50661110002', v_a);
+  v_c := pg_temp.socio('Ceci Mismo Telefono Ficticia', '+50661110001', v_a);       -- mismo teléfono que A
+  v_e := pg_temp.socio('Eli Ciclo Ficticio', '+50661110005', null);
+  v_f := pg_temp.socio('Fer Ciclo Ficticio', '+50661110006', v_e);
+  update club_miembro_roles set referido_por = v_f where miembro_id = v_e and rol = 'socio';   -- E ↔ F
+  perform pg_temp.pedido_lc('9070', 'X', true);    -- B: primero una factura anulada
+  perform pg_temp.pedido_lc('9072', 'C', true);    -- C
+  perform pg_temp.pedido_lc('9075', 'C', true);    -- E
+  perform pg_temp.pedido_lc('9076', 'C', true);    -- F
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_b, '{"modo":"pedido","pedido":"9070","clave":"pedido:9070"}', gen_random_uuid());
+  perform public.club_socio_visita(v_c, '{"modo":"pedido","pedido":"9072","clave":"pedido:9072"}', gen_random_uuid());
+  perform public.club_socio_visita(v_e, '{"modo":"pedido","pedido":"9075","clave":"pedido:9075"}', gen_random_uuid());
+  perform public.club_socio_visita(v_f, '{"modo":"pedido","pedido":"9076","clave":"pedido:9076"}', gen_random_uuid());
+  perform pg_temp.yo();
+  n := public.club_premios_generar('santa-teresa');
+  perform pg_temp.r('64', 'factura anulada (X) no da premio; autorreferido y ciclo quedan anotados sin premio',
+    not exists (select 1 from club_premios where referido = v_b)
+      and (select motivo from club_premios where referido = v_c) = 'autorreferido'
+      and (select count(*) from club_premios where referido in (v_e, v_f) and motivo = 'ciclo') = 2 and n = 0, format('%s', n));
+  -- B vuelve otro día con una factura C con el 856 → premio para A
+  delete from club_visitas_socio where miembro_id = v_b;
+  perform pg_temp.pedido_lc('9071', 'C', true);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_b, '{"modo":"pedido","pedido":"9071","clave":"pedido:9071"}', gen_random_uuid());
+  perform pg_temp.yo();
+  n := public.club_premios_generar('santa-teresa');
+  perform pg_temp.r('64', 'primera factura C con el 856 del referido → premio disponible para quien refirió (vence a los 60 días)',
+    n = 1 and (select estado = 'disponible' and beneficiario = v_a and vence_en > now() + interval '59 days' from club_premios where referido = v_b)
+      and public.club_premios_generar('santa-teresa') = 0, format('%s', n));
+  -- sin el 856 no hay premio
+  v_g := pg_temp.socio('Gus Sin 856 Ficticio', '+50661110007', v_a);
+  perform pg_temp.pedido_lc('9077', 'C', false);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_g, '{"modo":"pedido","pedido":"9077","clave":"pedido:9077"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('64', 'factura C sin el artículo LC → no hay premio', public.club_premios_generar('santa-teresa') = 0
+    and not exists (select 1 from club_premios where referido = v_g), '');
+  -- tope por referente (1 por mes): otro referido de A con 856 → «tope_referente»
+  update club_config set premios_referente_mes = 1 where location_id = 'santa-teresa';
+  insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto)
+  select id, '856', 'LOCAL CLUB', 1, 0 from pos_ndf_tickets where numero_factura = '999077';
+  perform public.club_premios_generar('santa-teresa');
+  update club_config set premios_referente_mes = 3 where location_id = 'santa-teresa';
+  perform pg_temp.r('64', 'tope de premios por referente en el mes → el siguiente queda «tope_referente»',
+    (select motivo from club_premios where referido = v_g) = 'tope_referente', '');
+  -- consumo: A va al local → cortesía extra de premio; el premio queda usado
+  perform pg_temp.pedido_lc('9078', 'C', true);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_a, '{"modo":"pedido","pedido":"9078","clave":"pedido:9078"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('64', 'en su visita, quien refirió recibe la cortesía de premio (sorteada) y el premio queda usado',
+    jsonb_array_length(j->'cortesias') = 2 and (j->'cortesias')::text like '%premio_referido%' and j->>'texto' like '%1 cortesía de premio: %'
+      and (select estado = 'usado' and visita_id = (j->>'visita_id')::uuid from club_premios where referido = v_b), j::text);
+  -- vencimiento
+  update club_premios set estado = 'disponible', usado_en = null, visita_id = null, vence_en = now() - interval '1 minute' where referido = v_b;
+  perform public.club_premios_generar('santa-teresa');
+  perform pg_temp.r('64', 'premio no usado a tiempo → vencido', (select estado from club_premios where referido = v_b) = 'vencido', '');
+  -- tope por quien validó: el manager ya validó un referido con premio este mes; con tope 1, el siguiente no da premio
+  v_e := pg_temp.socio('Kai Refiere Ficticio', '+50661110011', null);
+  v_f := pg_temp.socio('Hugo Referido Ficticio', '+50661110012', v_e);
+  perform pg_temp.pedido_lc('9079', 'C', true);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_f, '{"modo":"pedido","pedido":"9079","clave":"pedido:9079"}', gen_random_uuid());
+  perform pg_temp.yo();
+  update club_config set premios_validador_mes = 1 where location_id = 'santa-teresa';
+  perform public.club_premios_generar('santa-teresa');
+  update club_config set premios_validador_mes = 10 where location_id = 'santa-teresa';
+  perform pg_temp.r('64', 'tope por validador en el mes → «tope_validador» (negativa)', (select motivo from club_premios where referido = v_f) = 'tope_validador', '');
+  perform pg_temp.r('64', 'club_premios: nadie de la app la lee directo; generar es interna',
+    not has_table_privilege('authenticated', 'public.club_premios', 'SELECT')
+      and not has_function_privilege('authenticated', 'public.club_premios_generar(text)', 'EXECUTE'), '');
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

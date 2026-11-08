@@ -8,8 +8,11 @@
 # verify_jwt = true  → la puerta de entrada de Supabase exige un JWT válido del proyecto (anon,
 #                      usuario o la service_role en formato JWT) antes de correr el código; después
 #                      el código hace su propia guarda.
-# verify_jwt = false → solo la guarda del código (ingest-ndf: el agente del PoS manda
-#                      x-ingest-secret, no un JWT).
+# verify_jwt = false → solo la guarda del código.
+#
+# ingest-ndf (verify_jwt = false en prod: el agente del PoS manda x-ingest-secret, no un JWT) NO está
+# acá ni en supabase/functions/ de este PR: va con el ítem 11 del puente, aparte (decisión de Ismael
+# 08/11). La v1 de prod se armó con un mapTicket.ts distinto del de main.
 #
 # ⚠️ monthly-report y la rotación de claves: el cron manda la service_role del Vault, que hoy es un
 # JWT. Si se pasa a las claves nuevas (sb_secret_…, no son JWT) o se apagan las claves JWT viejas,
@@ -32,5 +35,3 @@ verify_jwt = true
 [functions.alta-empleado]
 verify_jwt = true
 
-[functions.ingest-ndf]
-verify_jwt = false

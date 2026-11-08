@@ -408,3 +408,22 @@
 - `claude/club-wallet` mergeada con epic (`1f42737`): conflictos de club-web resueltos (botón de Wallet + dominio por
   variable); club-web 23/23, wallet + club 56/56.
 - Pruebas: batería **536/536** · paridad OK · vitest 1.507 · club-web 22 · migrador 15 OK · saldos 19 OK. Staging en base.
+
+## 08-nov · noche (tanda 5) · `796951e` (epic) · `b818404` (club-wallet)
+- **Aviso v1.1 corregido** sin subir versión (nadie lo aceptó en prod), ES y EN: «Para qué» suma las ofertas solo si las
+  aceptó (y ya no contradice «no los usamos para nada más»); «Quién los ve» suma los servicios tecnológicos con
+  servidores fuera de Costa Rica; «Cuánto tiempo» suma los contactos de ofertas (hasta la baja o 24 meses sin contacto)
+  **[CONFIRMAR ISMAEL]**; «Responsable» con `<dirección del responsable>` **[CONFIRMAR ISMAEL]**. El RUNBOOK §6 exige 0
+  marcas antes del deploy de club-web.
+- **Retención de contactos de ofertas:** `club_config_global.contactos_ofertas_meses` (24, provisorio) y borrado diario en
+  `club_socios_mantenimiento` (rastro sin datos). «Último contacto» = `ultimo_contacto_en` (lo marca quien manda la oferta)
+  o la fecha en que aceptó. Prueba 84. Una prueba de club-web compara el texto del aviso con el valor por defecto.
+- **Dominio en la configuración:** `club_config_global.club_url` + `club_url()` (falla cerrada sin dominio) en los links
+  del pase, el portal de la autoalta, el canje, la baja y la lectura de QR; la app de caja lo lee al abrir el Club; el
+  Edge del pase usa `CLUB_WEB_ORIGIN` (sin él, 503). `src/dominioRepo.test.ts` falla si el dominio vuelve a estar escrito
+  fuera de los docs (probado con un archivo trucado). En staging el dominio está cargado como dato.
+- **Saldos de papel:** fecha del movimiento = la de la carga por defecto **[CONFIRMAR ISMAEL]** (la de la tarjeta, en la
+  nota y como opción). `doble-carga-papel` (solo lectura) cruza el CSV con el export de Firestore: hace falta el mapa
+  código ↔ id viejo, porque el export no tiene el código del Club. 25 pruebas (con un export ficticio).
+- **SPEC §5.1:** la restitución cuenta como actividad (decisión de Ismael).
+- Pruebas: batería **547/547** · paridad OK · vitest 1.511 · club-web 23 · wallet + club 60 · saldos 25 · gate61 13/13.

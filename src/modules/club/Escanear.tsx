@@ -667,6 +667,10 @@ function NuevoSocio({ onHecho }: { onHecho: (texto: string) => void }) {
           <input type="checkbox" checked={verifico} onChange={e => setVerifico(e.target.checked)} />
           <span>Verifiqué que es local (no anotes ningún número de documento)</span>
         </label>
+        <div style={{ fontSize: '0.8rem', color: C.muted }}>
+          Contale el aviso de privacidad: guardamos nombre y WhatsApp solo para el Local Club y se puede dar de baja desde su portal.
+          Queda registrada la versión vigente del aviso.
+        </div>
         {err && <Aviso tono="error">{err}</Aviso>}
         <div style={{ display: 'flex', gap: 8 }}>
           <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>

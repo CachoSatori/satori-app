@@ -2582,6 +2582,8 @@ begin
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   begin perform public.club_socios_por_confirmar(); e := 'ok'; exception when insufficient_privilege then e := 'sin permiso'; end;
   perform pg_temp.yo();
+  perform pg_temp.r('57', 'AUD-73: el alta en caja registra la versión del aviso',
+    (select aviso_version = v_ver and aviso_aceptado_en is not null from club_miembro_roles where miembro_id = v_g and rol = 'socio'), '');
   perform pg_temp.r('57', 'altas por confirmar: el manager las ve; el cajero no', v_n = 1 and e = 'sin permiso', format('%s %s', v_n, e));
   -- tope global por día
   update club_config set socio_autoalta_max_dia = 1 where location_id = 'santa-teresa';
@@ -2597,6 +2599,25 @@ begin
   perform pg_temp.r('57', 'autoalta sin validar a los 30 días → purga (sin contacto, sin rol, nombre borrado)',
     not exists (select 1 from club_miembros_contacto where miembro_id = v_a) and not exists (select 1 from club_miembro_roles where miembro_id = v_a)
       and (select estado = 'baja' and nombre not like '%Eva%' from club_miembros where id = v_a), j::text);
+  -- AUD-73: anfitrión activo con una autoalta de socio vieja → solo se borra lo del Local Club; el contacto sigue
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Hugo Anfitrion Ficticio', 'app') returning id into v_g;
+  insert into club_miembros_contacto (miembro_id, telefono) values (v_g, '+50660001239');
+  insert into club_miembro_roles (miembro_id, rol, estado, alta_por, desde) values (v_g, 'socio', 'pendiente', 'autoalta', now() - interval '31 days');
+  -- sin otro rol pero con movimientos → igual se borra el contacto
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Ines Socia Ficticia', 'app') returning id into v_a;
+  insert into club_miembros_contacto (miembro_id, telefono) values (v_a, '+50660001240');
+  update club_miembro_roles set estado = 'pendiente', alta_por = 'autoalta', desde = now() - interval '31 days' where miembro_id = v_a and rol = 'socio';
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (v_a, 'tarjeta', 1, 6, 18000, 'FP-73', now(), 'app', 'manual');
+  j := public.club_socios_mantenimiento();
+  perform pg_temp.r('57', 'AUD-73: purga de un anfitrión → solo el rol de socio; contacto, nombre y rol de anfitrión siguen',
+    exists (select 1 from club_miembros_contacto where miembro_id = v_g)
+      and not exists (select 1 from club_miembro_roles where miembro_id = v_g and rol = 'socio')
+      and exists (select 1 from club_miembro_roles where miembro_id = v_g and rol = 'referente' and estado = 'activo')
+      and (select estado = 'activo' and nombre like 'Hugo%' from club_miembros where id = v_g), j::text);
+  perform pg_temp.r('57', 'AUD-73: purga sin otro rol activo, aunque tenga movimientos → sin contacto y nombre borrado',
+    not exists (select 1 from club_miembros_contacto where miembro_id = v_a)
+      and (select estado = 'baja' and nombre not like '%Ines%' from club_miembros where id = v_a), j::text);
   -- baja desde el portal (link del aviso)
   select token_portal into v_x from club_miembros where id = v_id2;
   set local role anon;

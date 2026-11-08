@@ -3995,6 +3995,9 @@ begin
     raise;
   end;
   perform public.club_socio_provisional(v_id, v_cfg.socio_provisional_dias);
+  -- CLUB-AUD-73: el alta en caja también registra la versión del aviso que la caja le muestra al socio.
+  update public.club_miembro_roles set aviso_version = v_cfg.aviso_privacidad_version, aviso_aceptado_en = now()
+   where miembro_id = v_id and rol = 'socio';
   perform public.club_auditar('socio_alta_caja', 'club_miembro_roles', v_id, null,
                               jsonb_build_object('verifico_residencia', true, 'provisional_dias', v_cfg.socio_provisional_dias));
   return jsonb_build_object('miembro_id', v_id, 'estado', 'activo', 'provisional_hasta', now() + make_interval(days => v_cfg.socio_provisional_dias));
@@ -4175,20 +4178,24 @@ begin
      where rol = 'socio' and estado = 'activo' and provisional_hasta is not null and provisional_hasta < now()
     returning miembro_id)
   select count(*) into v_venc from v;
-  for r in select x.miembro_id, (select count(*) from public.club_miembro_roles y where y.miembro_id = x.miembro_id) n_roles
+  -- CLUB-AUD-73: purga de autoaltas sin validar.
+  --   · sin otro rol ACTIVO (anfitrión): se borran el contacto, el pase, la solicitud y el rol de socio, y el nombre;
+  --     la fila del miembro queda en baja (la referencian la auditoría y los eventos; los movimientos, si los hubiera).
+  --   · con otro rol activo: solo los datos del Local Club (rol de socio y solicitudes); el contacto sigue, porque es
+  --     del anfitrión.
+  for r in select x.miembro_id,
+                  exists (select 1 from public.club_miembro_roles y where y.miembro_id = x.miembro_id and y.rol <> 'socio' and y.estado = 'activo') otro_rol
              from public.club_miembro_roles x
              join public.club_miembros m on m.id = x.miembro_id
              join public.club_config c on c.location_id = m.location_id
             where x.rol = 'socio' and x.estado = 'pendiente' and x.alta_por = 'autoalta' and x.validado_en is null
               and x.desde < now() - make_interval(days => c.socio_autoalta_purga_dias) loop
-    if r.n_roles = 1 and not exists (select 1 from public.club_movimientos mv where mv.miembro_id = r.miembro_id) then
-      -- solo socio, sin movimientos: se borran sus datos personales (purga)
+    delete from public.club_socio_solicitudes where miembro_id = r.miembro_id;
+    delete from public.club_miembro_roles where miembro_id = r.miembro_id and rol = 'socio';
+    if not r.otro_rol then
       delete from public.club_miembros_contacto where miembro_id = r.miembro_id;
       delete from public.club_pases where miembro_id = r.miembro_id;
-      delete from public.club_miembro_roles where miembro_id = r.miembro_id;
       update public.club_miembros set estado = 'baja', nombre = 'Purgado (autoalta sin validar)', updated_at = now() where id = r.miembro_id;
-    else
-      update public.club_miembro_roles set estado = 'baja', actualizado_en = now() where miembro_id = r.miembro_id and rol = 'socio';
     end if;
     v_purg := v_purg + 1;
   end loop;

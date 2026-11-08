@@ -3292,7 +3292,8 @@ $f$;
 do $$
 declare v_s uuid; v_sr uuid; v_a uuid; j jsonb; v_vis jsonb; i int; e text; v_mov uuid; v_clave text;
 begin
-  update club_config set puente_latencia_min = 1, cortesia_familia = null, lc_excepciones_desde = null, socio_visitas_por_dia = 1,
+  update club_config_global set socio_visitas_por_dia = 1;
+  update club_config set puente_latencia_min = 1, cortesia_familia = null, lc_excepciones_desde = null,
                          articulos_cero_permitidos = '{}', anfitrion_tope_mes_crc = 25000, valor_credito_crc = 18000, personas_por_credito = 6
    where location_id = 'santa-teresa';
   update club_promociones set estado = 'terminada' where nombre <> 'Local Club';
@@ -3366,7 +3367,7 @@ begin
     not pg_temp.hay(j, 'desc:990401') and not pg_temp.hay(j, 'desc:990302'), '');
 
   -- SOCIO_USO_ANOMALO: dos mesas el mismo día (con el tope en 2)
-  update club_config set socio_visitas_por_dia = 2 where location_id = 'santa-teresa';
+  update club_config_global set socio_visitas_por_dia = 2;
   v_s := pg_temp.socio('Tea Anomala Ficticia', '+50661110033', null);
   perform pg_temp.factura('990501', 1, 0, '[{"c":"856","m":0}]', '9501');
   perform pg_temp.factura('990502', 1, 0, '[{"c":"856","m":0}]', '9502');
@@ -3374,7 +3375,7 @@ begin
   perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"9501","clave":"pedido:9501"}', gen_random_uuid());
   perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"9502","clave":"pedido:9502"}', gen_random_uuid());
   perform pg_temp.yo();
-  update club_config set socio_visitas_por_dia = 1 where location_id = 'santa-teresa';
+  update club_config_global set socio_visitas_por_dia = 1;
   perform pg_temp.r('67', 'SOCIO_USO_ANOMALO: el mismo socio en dos mesas el mismo día',
     pg_temp.hay(pg_temp.exc('SOCIO_USO_ANOMALO'), 'socio-dia:' || v_s || ':' || (now() at time zone 'America/Costa_Rica')::date), '');
 
@@ -3499,7 +3500,8 @@ end $$;
 do $$
 declare v_a uuid; v_b uuid; j jsonb; j2 jsonb; n int; v_n uuid; c1 text; op uuid := gen_random_uuid(); e text; v_id uuid; c2 text; op2 uuid := gen_random_uuid();
 begin
-  update club_config set socio_visitas_por_dia = 1, socios_por_factura = 1, anfitrion_tope_mes_crc = 25000, valor_credito_crc = 18000, personas_por_credito = 6
+  update club_config_global set socio_visitas_por_dia = 1;
+  update club_config set socios_por_factura = 1, anfitrion_tope_mes_crc = 25000, valor_credito_crc = 18000, personas_por_credito = 6
    where location_id = 'santa-teresa';
   update club_promociones set estado = 'vigente' where nombre = 'Local Club' and location_id = public.club_local(null);
   v_a := pg_temp.socio('Abril Noventa Ficticia', '+50661110051', null);
@@ -4258,6 +4260,60 @@ begin
     and has_table_privilege('anon', 'public.prueba_rls_82', 'SELECT')
     and not exists (select 1 from pg_policies where tablename = 'prueba_rls_82'), '');
   drop table public.prueba_rls_82;
+end $$;
+
+-- ═══ 83. Tope diario ÚNICO del Club (Ismael, 08-nov noche): una sola configuración global, no por local ═══
+do $$
+declare v_a text := pg_temp.loc(); v_s uuid; j jsonb; j2 jsonb; j3 jsonb; v_n int; v_e text;
+begin
+  perform pg_temp.r('83', 'la columna por local socio_visitas_por_dia ya no existe en club_config',
+    not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'club_config' and column_name = 'socio_visitas_por_dia'), '');
+  perform pg_temp.r('83', 'club_config_global tiene exactamente una fila', (select count(*) from club_config_global) = 1, '');
+  begin
+    insert into club_config_global (id) values (false);
+    perform pg_temp.r('83', 'una segunda fila de configuración global', false, 'insertó');
+  exception when check_violation then
+    perform pg_temp.r('83', 'no se puede crear una segunda configuración global (check)', true, sqlerrm);
+  end;
+  -- el cajero no la cambia; el owner sí, y queda auditado
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  update public.club_config_global set socio_visitas_por_dia = 5;
+  get diagnostics v_n = row_count;
+  perform pg_temp.yo();
+  perform pg_temp.r('83', 'el cajero no cambia el tope global (RLS: 0 filas)', v_n = 0 and (select socio_visitas_por_dia from club_config_global) = 1, format('%s filas', v_n));
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  update public.club_config_global set socio_visitas_por_dia = 2;
+  perform pg_temp.yo();
+  perform pg_temp.r('83', 'el owner cambia el tope global y queda en club_auditoria',
+    exists (select 1 from club_auditoria where tabla = 'club_config_global' and actor = '<OWNER_UUID>'::uuid
+              and (antes->>'socio_visitas_por_dia')::int = 1 and (despues->>'socio_visitas_por_dia')::int = 2), '');
+  -- con el tope en 2: dos visitas en pedidos distintos valen, la tercera no («Hasta 2 … en cualquier Satori»)
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en) values
+    (v_a, 'pedido:8301', '8301', '31', 'salon', 2, now(), now() - interval '20 minutes'),
+    (v_a, 'pedido:8302', '8302', '32', 'salon', 2, now(), now() - interval '20 minutes'),
+    (v_a, 'pedido:8303', '8303', '33', 'salon', 2, now(), now() - interval '20 minutes')
+  on conflict do nothing;
+  v_s := pg_temp.socio('Ada Tope Global', '+50660008301', null);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j  := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"8301","clave":"pedido:8301"}', gen_random_uuid(), v_a);
+  j2 := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"8302","clave":"pedido:8302"}', gen_random_uuid(), v_a);
+  j3 := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"8303","clave":"pedido:8303"}', gen_random_uuid(), v_a);
+  perform pg_temp.yo();
+  perform pg_temp.r('83', 'tope global 2: la 1.ª y la 2.ª visita valen; la 3.ª → «ya_uso_hoy» con «Hasta 2 … en cualquier Satori»',
+    coalesce(j->>'estado', '') <> 'ya_uso_hoy' and coalesce(j2->>'estado', '') <> 'ya_uso_hoy' and j3->>'estado' = 'ya_uso_hoy'
+      and j3->'avisos'->>0 like 'Hasta 2 visitas con beneficio por día, en cualquier Satori.%', j3::text);
+  update club_config_global set socio_visitas_por_dia = 1;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j3 := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"8303","clave":"pedido:8303"}', gen_random_uuid(), v_a);
+  perform pg_temp.yo();
+  perform pg_temp.r('83', 'tope 1: la regla visible es «Una visita con beneficio por día, en cualquier Satori.»',
+    j3->>'estado' = 'ya_uso_hoy' and j3->'avisos'->>0 like 'Una visita con beneficio por día, en cualquier Satori.%', j3::text);
+  begin
+    update club_config_global set socio_visitas_por_dia = 0;
+    perform pg_temp.r('83', 'tope 0 aceptado', false, 'guardó');
+  exception when check_violation then
+    perform pg_temp.r('83', 'tope fuera de rango (0) → rechazado', true, sqlerrm);
+  end;
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

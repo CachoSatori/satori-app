@@ -301,7 +301,8 @@ borrador, y queda en la auditoría (la app) o en `club_config_historial` (los ca
 | 3 | **Marcadores de descuento** (tarjetas de hoteles o tiendas, descuento de personal…) | Club → **Descuentos** | los sembrados (856, 857) más los propios del local |
 | 4 | **Sección CORTESÍA CLUB:** `cortesia_familia` y las cortesías del sorteo | `club_config` + Club → Promociones | cortesías activas |
 | 5 | **Promoción del Local Club** (sembrada en borrador) | Club → Promociones | pasarla a vigente el día del lanzamiento |
-| 6 | **Topes:** `socio_visitas_por_dia`, `socios_por_factura`, `socio_visitas_semana_max`, `cupones_max_dia_referente`, `cupones_max_minuto_local`, `anfitrion_tope_mes_crc`, `socio_autoalta_max_dia`, valores del crédito | `club_config` | los que decida Ismael |
+| 6 | **Topes:** `socios_por_factura`, `socio_visitas_semana_max`, `cupones_max_dia_referente`, `cupones_max_minuto_local`, `anfitrion_tope_mes_crc`, `socio_autoalta_max_dia`, valores del crédito | `club_config` | los que decida Ismael |
+| 6b | **Tope diario del socio (ÚNICO para todo el Club, 08-nov noche):** `socio_visitas_por_dia` | `club_config_global` (una fila; no es por local) | 1 = «una visita con beneficio por día, en cualquier Satori» |
 | 7 | `aviso_privacidad_version` = la de club-web (`v1`) | `club_config` | si no coincide, la autoalta del local rechaza todo |
 | 8 | **`lc_excepciones_desde` = el día del lanzamiento** (vacío = las excepciones LC miran todo su historial) | `club_config` | — |
 | 9 | **Empleados del local con su `pos_login`** (segregación de las excepciones del PoS) | Admin → Empleados | sin login, esas excepciones las resuelve solo el owner |

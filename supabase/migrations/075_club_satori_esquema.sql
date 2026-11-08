@@ -1630,10 +1630,13 @@ begin
   if v_tel is null then return null; end if;
   select public.club_nombre_pila(m.nombre) into v_nom from public.club_miembros m where m.id = v_mv.miembro_id;
   select * into v_cfg from public.club_config where location_id = v_mv.location_id;
-  v_txt := format('Hola %s: en Satori se canjearon %s %s de tu cuenta el %s. Te quedan %s. Si no fuiste vos, avisanos por acá.',
+  -- (Ismael, 08-nov noche) el vencimiento, con el mismo texto que los mensajes, el portal y las guías: se cuenta desde la
+  -- última actividad (SPEC §5.1 y club_vencer).
+  v_txt := format('Hola %s: en Satori se canjearon %s %s de tu cuenta el %s. Te quedan %s. Los créditos vencen a los %s meses sin actividad: cada persona que llega con tu cupón o cada canje vuelve a contar los %s meses. Si no fuiste vos, avisanos por acá.',
                   coalesce(v_nom, ''), public.club_num(v_mv.creditos), case when v_mv.creditos = 1 then 'crédito' else 'créditos' end,
                   to_char(v_mv.fecha_visita at time zone 'America/Costa_Rica', 'DD/MM HH24:MI'),
-                  public.club_num(public.club_creditos(public.club_saldo_personas(v_mv.miembro_id), v_cfg.personas_por_credito)));
+                  public.club_num(public.club_creditos(public.club_saldo_personas(v_mv.miembro_id), v_cfg.personas_por_credito)),
+                  v_cfg.vencimiento_meses, v_cfg.vencimiento_meses);
   update public.club_alertas set canal = 'wa.me (link mostrado en caja)' where movimiento_id = p_movimiento and canal is null;
   return jsonb_build_object('tel', ltrim(v_tel, '+'), 'texto', v_txt);   -- la app arma https://wa.me/<tel>?text=…
 end;
@@ -1754,6 +1757,7 @@ begin
     'creditos',                 public.club_creditos(v_saldo, v_cfg.personas_por_credito),
     'valor_credito_crc',        v_cfg.valor_credito_crc,   -- (08-nov) el portal muestra créditos y colones juntos, como el pase
     'personas_proximo_credito', public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
+    'vencimiento_meses',        v_cfg.vencimiento_meses,   -- (08-nov noche) «vencen a los N meses sin actividad»
     'movimientos',              v_movs,
     -- LC-A2: el portal sirve también al socio (estado y link de baja del aviso de privacidad)
     'anfitrion',                exists (select 1 from public.club_miembro_roles r where r.miembro_id = v_m.id and r.rol <> 'socio' and r.estado = 'activo'),
@@ -5088,7 +5092,30 @@ alter table public.club_config add column if not exists turno_corte time not nul
 alter table public.club_config add column if not exists pos_logins_caja text[] not null default '{}'
   check (array_position(pos_logins_caja, null) is null);
 alter table public.club_config add column if not exists cortesias_por_visita int not null default 1 check (cortesias_por_visita between 0 and 3);
-alter table public.club_config add column if not exists socio_visitas_por_dia int not null default 1 check (socio_visitas_por_dia between 1 and 5);
+-- (Ismael, 08-nov noche) Club compartido: el tope de visitas con beneficio por día es ÚNICO para todo el Club (una sola
+-- configuración, no por local). Regla visible: «una visita con beneficio por día, en cualquier Satori». Si Ismael decide
+-- otra cosa, se revierte. La columna por local de antes (club_config.socio_visitas_por_dia) se borra.
+create table if not exists public.club_config_global (
+  id                     boolean primary key default true check (id),   -- una sola fila
+  socio_visitas_por_dia  int not null default 1 check (socio_visitas_por_dia between 1 and 5),
+  actualizado_en         timestamptz not null default now()
+);
+insert into public.club_config_global (id) values (true) on conflict (id) do nothing;
+alter table public.club_config drop column if exists socio_visitas_por_dia;
+alter table public.club_config_global enable row level security;
+revoke all on public.club_config_global from public, anon, authenticated;
+grant select on public.club_config_global to authenticated;
+grant update (socio_visitas_por_dia) on public.club_config_global to authenticated;   -- solo owner (policy)
+drop policy if exists club_config_global_ver on public.club_config_global;
+create policy club_config_global_ver on public.club_config_global for select to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager','cajero'));
+drop policy if exists club_config_global_owner on public.club_config_global;
+create policy club_config_global_owner on public.club_config_global for update to authenticated
+  using (public.get_my_role() is not null and public.get_my_role() = 'owner')
+  with check (public.get_my_role() is not null and public.get_my_role() = 'owner');
+drop trigger if exists club_config_global_auditar_trg on public.club_config_global;
+create trigger club_config_global_auditar_trg after update on public.club_config_global
+  for each row execute function public.club_auditar_trg();   -- quién cambió el tope y de cuánto a cuánto
 
 create table if not exists public.club_promociones (
   id             uuid primary key default gen_random_uuid(),
@@ -5430,7 +5457,7 @@ $$;
 --   · La caja escanea el QR fijo del socio (/s/), elige el pedido (como el cupón) y registra la visita. La base
 --     responde QUÉ APLICAR: el % de la promo vigente para socios y la cortesía SORTEADA entre las activas.
 --   · Sorteo fijo: la visita del día se registra una vez; reescanear devuelve la MISMA (no se re-sortea).
---   · Tope: `club_config.socio_visitas_por_dia` (1) visitas por día por socio.
+--   · Tope: `club_config_global.socio_visitas_por_dia` (1) visitas con beneficio por día por socio, en cualquier local.
 --   · Regla fija: una factura pagada con créditos no lleva descuento ni cortesía (si ya hay un canje en ese pedido,
 --     la visita sale «NO aplicar»; si el canje viene después, la visita queda marcada `con_canje`).
 --   · Antiautocanje: un cupón no suma en un pedido donde su anfitrión registró visita de socio.
@@ -5529,6 +5556,7 @@ declare
   v_prem  public.club_premios%rowtype;
   v_extra jsonb;
   v_loc   text;
+  v_tope  int;
   r       jsonb;
 begin
   if v_rol is null or v_rol not in ('owner','manager','cajero') then raise exception 'Sin permiso' using errcode = '42501'; end if;
@@ -5564,7 +5592,9 @@ begin
   -- Tope por día. En el MISMO pedido: la caja ve la visita que ya está (misma cortesía, sin re-sorteo).
   -- Grok 90: en OTRO pedido → «ya_uso_hoy», NO aplicar beneficio (no se registra nada).
   select count(*) into v_n from public.club_visitas_socio where miembro_id = p_miembro and fecha = v_hoy;
-  if v_n >= v_cfg.socio_visitas_por_dia then
+  select g.socio_visitas_por_dia into v_tope from public.club_config_global g;   -- tope ÚNICO del Club (08-nov noche)
+  v_tope := coalesce(v_tope, 1);
+  if v_n >= v_tope then
     select * into v_prev from public.club_visitas_socio
      where miembro_id = p_miembro and fecha = v_hoy and location_id = v_loc and visita_clave is not distinct from v_clave
      order by registrada_en desc limit 1;
@@ -5574,7 +5604,9 @@ begin
     end if;
     return jsonb_build_object('visita_id', null, 'socio', public.club_nombre_limpio(v_m.nombre), 'estado', 'ya_uso_hoy',
       'porcentaje', 0, 'cortesias', '[]'::jsonb, 'texto', 'Ya usó su beneficio hoy en otro pedido: NO aplicar beneficio',
-      'avisos', jsonb_build_array('El tope es de ' || v_cfg.socio_visitas_por_dia || ' visita(s) con beneficio por día. Si viene con otro socio, puede ir como su invitado (857).'),
+      'avisos', jsonb_build_array(case when v_tope = 1 then 'Una visita con beneficio por día, en cualquier Satori.'
+                                       else 'Hasta ' || v_tope || ' visitas con beneficio por día, en cualquier Satori.' end
+                                  || ' Si viene con otro socio, puede ir como su invitado (857).'),
       'articulo_lc', v_cfg.lc_articulo_codigo, 'repetida', false, 'promo', null);
   end if;
 

@@ -14,7 +14,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
   opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
-  describirPos, describirPedido, describirFactura, socioAltaCaja, socioValidar,
+  describirPos, describirPedido, describirFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente,
 } from '../../shared/api/club'
@@ -122,8 +122,10 @@ export default function Escanear() {
     try {
       if (actual.kind === 'cupon') {
         const n = Number(personas)
-        await usarCupon(actual.codigo, n, pos!, opDe('usar'))
-        setMsg({ tono: 'ok', texto: `+${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.referente}` })
+        const s = await usarCupon(actual.codigo, n, pos!, opDe('usar'))
+        setMsg(s?.pendientes > 0
+          ? { tono: 'info', texto: `Cupón registrado. Las ${n} ${n === 1 ? 'persona queda' : 'personas quedan'} pendientes de aprobación: ${actual.r.datos.referente} es anfitrión nuevo y pasó el tope del mes. Lo aprueba un manager en Miembros.` }
+          : { tono: 'ok', texto: `+${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.referente}` })
         cerrarCuenta()
       } else if (actual.kind === 'canje' && creditos != null) {
         // El código queda usado: se cierra la cuenta (volver a escanearlo diría «ya se usó»).
@@ -621,14 +623,57 @@ function PanelSocio({ d, onCerrar, onValidado }: {
           {d.provisional_hasta && (
             <Aviso tono="info">Alta provisional hasta el {fmtFechaHora(d.provisional_hasta)}: tiene el beneficio; falta que la confirme un manager.</Aviso>
           )}
-          <Aviso tono="info">
-            Este QR identifica al socio (10 % y cortesía). No sirve para créditos: para canjear, el anfitrión muestra el código
-            de «Canjear».
-          </Aviso>
+          <VisitaSocio miembro={d.id} />
+          <div style={{ fontSize: '0.8rem', color: C.muted }}>
+            Este QR identifica al socio (descuento y cortesía). No sirve para créditos: para canjear, el anfitrión muestra el
+            código de «Canjear».
+          </div>
         </div>
       )}
       <Btn variant="secondary" onClick={onCerrar} style={{ marginTop: 10, width: '100%' }}>Escanear otro</Btn>
     </Card>
+  )
+}
+
+/**
+ * LC-A4: visita del socio. La caja elige el pedido y registra la visita; la base dice QUÉ APLICAR (descuento de la promo
+ * vigente y la cortesía sorteada). Reescanear el mismo día devuelve la misma (no se re-sortea). La app no toca el PoS.
+ */
+function VisitaSocio({ miembro }: { miembro: string }) {
+  const [pos, setPos] = useState<PosRef | null>(null)
+  const [enviando, setEnviando] = useState(false)
+  const [res, setRes] = useState<QueAplicar | null>(null)
+  const [err, setErr] = useState<ClubError | null>(null)
+  const op = useRef(nuevoOp())
+  async function registrar() {
+    if (!pos) return
+    setEnviando(true); setErr(null)
+    try { setRes(await registrarVisitaSocio(miembro, pos, op.current)) }
+    catch (e) { const ce = aClubError(e); if (!ce.esRed) op.current = nuevoOp(); setErr(ce) }   // red: mismo op en el reintento
+    finally { setEnviando(false) }
+  }
+  if (res) {
+    const noAplica = res.estado === 'paga_con_creditos' || res.estado === 'sin_promocion'
+    return (
+      <div style={{ border: `2px solid ${noAplica ? C.red : C.teal}`, borderRadius: 10, padding: '0.8rem', background: '#fff' }}>
+        <div style={{ fontSize: '0.7rem', color: C.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Qué aplicar{res.repetida ? ' · visita ya registrada hoy' : ''}
+        </div>
+        <div style={{ fontSize: '1.3rem', fontWeight: 800, marginTop: 2 }}>{res.texto}</div>
+        {res.avisos.length > 0 && (
+          <ul style={{ margin: '6px 0 0', paddingLeft: '1.1rem', fontSize: '0.88rem' }}>
+            {res.avisos.map(a => <li key={a}>{a}</li>)}
+          </ul>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <SelectorPedido v={pos} set={setPos} />
+      {err && <ErrorAccion err={err} onReintentar={registrar} />}
+      <Btn onClick={registrar} disabled={!pos || enviando}>{enviando ? 'Registrando…' : 'Registrar visita y ver qué aplicar'}</Btn>
+    </div>
   )
 }
 

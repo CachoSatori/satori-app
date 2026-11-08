@@ -171,8 +171,9 @@ export const describirPos = (p: PosRef) =>
     ? describirPedido({ pedido: p.pedido, area: p.area, mesa: p.mesa, total_crc: p.total })
     : `factura de las ${describirFactura({ hora: p.hora, total_crc: p.total, area: p.area, mesa: p.mesa })}`
 
+/** `pendientes` > 0: anfitrión nuevo sobre el tope del mes → esas personas esperan la aprobación de gerencia (LC-A4.4). */
 export const usarCupon = async (codigo: string, personas: number, pos: PosRef, op: string) =>
-  primero(await llamar<Array<Saldo & { miembro_id: string }>>('club_cupon_usar',
+  primero(await llamar<Array<Saldo & { miembro_id: string; pendientes: number }>>('club_cupon_usar',
     { p_codigo: codigo, p_personas: personas, p_factura: null, p_op: op, p_pos: posParaServidor(pos) }))
 
 /** Resultado del canje. Un código equivocado no es un error de red: vuelve en `error` (queda anotado el intento). */
@@ -396,3 +397,23 @@ export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('cl
 /** Solo owner. Alta: `id` null + código del artículo «CORTESÍA CLUB». Edición: nombre y activa. */
 export const guardarCortesia = (id: string | null, codigo: string | null, nombre: string | null, activa: boolean | null) =>
   llamar<string>('club_cortesia_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_activa: activa })
+
+// ── LC-A4: visita del socio y «qué aplicar» ──────────────────────────────────
+export interface QueAplicar {
+  visita_id: string; socio: string
+  estado: 'aplica' | 'paga_con_creditos' | 'sin_promocion' | 'pendiente_configuracion'
+  porcentaje: number; cortesias: Array<{ id: string; codigo: string; nombre: string; motivo: string }>
+  texto: string; avisos: string[]; articulo_lc: string; repetida: boolean; promo: string | null
+}
+/** Registra la visita del día del socio (con el pedido) y devuelve qué aplicar. Idempotente con `op`. */
+export const registrarVisitaSocio = (miembro: string, pos: PosRef, op: string) =>
+  llamar<QueAplicar>('club_socio_visita', { p_miembro: miembro, p_pos: posParaServidor(pos), p_op: op })
+
+// ── LC-A4.4: personas pendientes de aprobación (anfitrión nuevo sobre el tope del mes) ──
+export interface PendienteAprobacion {
+  id: string; miembro_id: string; nombre: string; personas: number; creditos: number; ganado_mes_crc: number
+  fecha_visita: string; registrado_por: string; puedo_resolver: boolean
+}
+export const getPendientesAprobacion = () => llamar<PendienteAprobacion[]>('club_pendientes_listar', {})
+export const resolverPendiente = (id: string, aprobar: boolean, nota: string) =>
+  llamar<boolean>('club_pendiente_resolver', { p_id: id, p_aprobar: aprobar, p_nota: nota })

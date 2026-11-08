@@ -181,7 +181,7 @@
    - **43:** asserts fuertes en la batería (W1–W14); **PARCIAL** (ver NOCHE-2026-11-08-A): 4 débiles reforzados (33, 43,
      45 y 53); falta contrastar con la lista W1–W14 de Grok, que no está en el repo;
    - **en la rama del puente, sin desplegar:**
-     - 44/45: ingesta transaccional por local;
+     - ~~44/45: ingesta transaccional por local;~~ **HECHO** `9461731` (mig 082 + Edge; carrera: viejo 6 líneas, nuevo 3)
      - ~~46: ignorar el `last_poll_at` que llega y que `last_factura` solo avance;~~ **HECHO** `831b3ee` (puente-item11)
      - ~~47: secreto ≥ 32 caracteres, sin duplicados;~~ **HECHO** `831b3ee`
      - ~~48: topes de largo.~~ **HECHO** `831b3ee` (los tres sin desplegar; falta pasarlos a `puente-item11-prod`)

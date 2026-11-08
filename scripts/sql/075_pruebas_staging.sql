@@ -2920,6 +2920,317 @@ begin
       and has_function_privilege('service_role', 'public.club_pases_emitidos(text, uuid, int)', 'EXECUTE'), '');
 end $$;
 
+-- ═══ 63. LC-A4.1: visita del socio, qué aplicar, sorteo fijo, tope por día, regla de créditos, antiautocanje ═══
+do $$
+declare v_s uuid; v_s2 uuid; v_s3 uuid; v_s4 uuid; v_sr uuid; v_p uuid; j jsonb; j2 jsonb; e text; v_op uuid := gen_random_uuid();
+        v_c1 uuid; v_c2 uuid; v_cup text; v_cod text; v_clave text;
+        pos jsonb := '{"modo":"pedido","pedido":"9063","clave":"pedido:9063"}';
+begin
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en) values
+    ('santa-teresa', 'pedido:9063', '9063', '63', 'salon', 2, now() - interval '30 minutes', now() - interval '30 minutes'),
+    ('santa-teresa', 'pedido:9064', '9064', '64', 'salon', 2, now() - interval '30 minutes', now() - interval '30 minutes'),
+    ('santa-teresa', 'pedido:9065', '9065', '65', 'salon', 2, now() - interval '30 minutes', now() - interval '30 minutes'),
+    ('santa-teresa', 'pedido:9066', '9066', '66', 'salon', 4, now() - interval '30 minutes', now() - interval '30 minutes');
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Lu Visita Ficticia', 'app') returning id into v_s;
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Mo Visita Ficticio', 'app') returning id into v_s2;
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Nia Visita Ficticia', 'app') returning id into v_s3;
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Oto Visita Ficticio', 'app') returning id into v_s4;
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Pia Anfitriona Socia Ficticia', 'app') returning id, codigo into v_sr, v_cod;
+  insert into club_miembro_roles (miembro_id, rol) values (v_sr, 'socio');
+  select id into v_p from club_promociones where nombre = 'Local Club';
+  update club_promociones set estado = 'terminada' where id <> v_p;   -- las de la prueba 60
+  update club_promociones set estado = 'vigente' where id = v_p;
+  delete from club_cortesias;
+
+  -- sin cortesías activas: 10 % y la cortesía «pendiente de configuración»
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_s, pos, v_op);
+  perform pg_temp.yo();
+  perform pg_temp.r('63', 'sin cortesías cargadas: 10 % y cortesía «pendiente de configuración» (sin inventar un producto)',
+    j->>'estado' = 'pendiente_configuracion' and (j->>'porcentaje')::numeric = 10 and j->'cortesias' = '[]'::jsonb
+      and j->>'texto' = '10 % LC' and (j->'avisos')::text like '%pendiente de configuración%' and (j->'avisos')::text like '%856%', j::text);
+  -- reescanear el mismo día (otra operación): la misma visita, no se registra otra
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j2 := public.club_socio_visita(v_s, pos, gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('63', 'tope de 1 visita por día: reescanear devuelve la misma visita (repetida)',
+    j2->>'visita_id' = j->>'visita_id' and (j2->>'repetida')::boolean
+      and (select count(*) from club_visitas_socio where miembro_id = v_s) = 1, j2::text);
+
+  -- con cortesías: sorteo, y el replay de la misma operación da la misma
+  insert into club_cortesias (codigo_producto, nombre) values ('CC-1', 'Crepe ficticio') returning id into v_c1;
+  insert into club_cortesias (codigo_producto, nombre) values ('CC-2', 'Flan ficticio') returning id into v_c2;
+  insert into club_cortesias (codigo_producto, nombre, activa) values ('CC-3', 'Apagada ficticia', false);
+  v_op := gen_random_uuid();
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_s2, '{"modo":"pedido","pedido":"9064","clave":"pedido:9064"}', v_op);
+  j2 := public.club_socio_visita(v_s2, '{"modo":"pedido","pedido":"9064","clave":"pedido:9064"}', v_op);
+  perform pg_temp.yo();
+  perform pg_temp.r('63', 'con cortesías activas: sorteo de 1 entre las activas (nunca una apagada); el replay da la misma',
+    j->>'estado' = 'aplica' and jsonb_array_length(j->'cortesias') = 1 and j->'cortesias'->0->>'codigo' in ('CC-1','CC-2')
+      and j2->'cortesias' = j->'cortesias' and j->>'texto' like '10 % LC + 1 cortesía: %', j::text);
+  perform pg_temp.r('63', 'la visita deja un evento para el pase', exists (select 1 from club_pase_eventos where miembro_id = v_s2 and motivo = 'cortesia'), '');
+
+  -- regla fija: canje después de la visita → la visita queda marcada con_canje
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (v_sr, 'tarjeta', 12, 6, 18000, 'FP-63', now() - interval '1 day', 'app', 'manual');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_canje_aprobado(v_sr, 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9064","clave":"pedido:9064"}', 'prueba de la regla fija');
+  perform pg_temp.yo();
+  perform pg_temp.r('63', 'regla fija: un canje en el pedido de la visita la marca «con canje»',
+    (select con_canje from club_visitas_socio where miembro_id = v_s2), '');
+  -- y al revés: con un canje ya hecho en el pedido, la visita sale «NO aplicar»
+  select visita_clave into v_clave from club_movimientos where miembro_id = v_sr and tipo = 'canje' order by fecha_visita desc limit 1;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_s4, '{"modo":"pedido","pedido":"9064","clave":"pedido:9064"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('63', 'regla fija: pedido pagado con créditos → «NO aplicar descuento ni cortesía»',
+    j->>'estado' = 'paga_con_creditos' and (j->>'porcentaje')::numeric = 0 and j->'cortesias' = '[]'::jsonb
+      and j->>'texto' like 'Paga con créditos%', j::text);
+
+  -- sin promoción vigente (borrador): «pendiente de configuración», NO aplicar
+  update club_promociones set estado = 'borrador' where id = v_p;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_s3, '{"modo":"pedido","pedido":"9065","clave":"pedido:9065"}', gen_random_uuid());
+  perform pg_temp.yo();
+  update club_promociones set estado = 'vigente' where id = v_p;
+  perform pg_temp.r('63', 'promo en borrador: «pendiente de configuración: NO aplicar beneficio»',
+    j->>'estado' = 'sin_promocion' and j->>'texto' like '%borrador (pendiente de configuración)%' and (j->>'porcentaje')::numeric = 0, j::text);
+
+  -- antiautocanje: la anfitriona registra su visita de socia; su cupón en ese pedido no suma
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_sr, '{"modo":"pedido","pedido":"9066","clave":"pedido:9066"}', gen_random_uuid());
+  perform pg_temp.yo();
+  insert into club_cupones (referente_id, vence_en) values (v_sr, now() + interval '1 day') returning codigo into v_cup;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_cupon_usar(v_cup, 2, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9066","clave":"pedido:9066"}'); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('63', 'antiautocanje: el cupón de la anfitriona no suma en el pedido donde ella es socia (negativa)',
+    e like 'El anfitrión de este cupón es socio en esta misma mesa%', e);
+
+  -- permisos y estados
+  update club_miembro_roles set estado = 'pendiente' where miembro_id = v_s4 and rol = 'socio';
+  delete from club_visitas_socio where miembro_id = v_s4;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_socio_visita(v_s4, pos, gen_random_uuid()); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.como('authenticated', '<SALONERO_UUID>');
+  begin perform public.club_socio_visita(v_s, pos, gen_random_uuid()); e := e || '/ok'; exception when insufficient_privilege then e := e || '/sin permiso'; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('63', 'socio pendiente → «validalo primero»; el salonero no registra visitas',
+    e like 'Socio pendiente: validalo primero%/sin permiso', e);
+  perform pg_temp.r('63', 'club_visitas_socio: nadie de la app la lee directo',
+    not has_table_privilege('authenticated', 'public.club_visitas_socio', 'SELECT') and not has_table_privilege('anon', 'public.club_visitas_socio', 'SELECT'), '');
+end $$;
+
+-- ═══ 64. LC-A4.3: premio por referir (primera factura C con el 856, sin autorreferido ni ciclos, topes, consumo) ═══
+create function pg_temp.pedido_lc(p_ped text, p_estado text, p_856 boolean) returns void language plpgsql as $f$
+declare v_t uuid; v_abre timestamptz := now() - interval '40 minutes';
+begin
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en)
+  values ('santa-teresa', 'pedido:' || p_ped, p_ped, 'M' || p_ped, 'salon', 2, v_abre, v_abre);
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc,
+                               numero_pedido, pedido_abierto_en, mesa_factura)
+  values ('99' || p_ped, now() - interval '10 minutes', p_estado, 'salon', 'cajero', true, 'ok', 10000, p_ped, v_abre, 'M' || p_ped)
+  returning id into v_t;
+  if p_856 then insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values (v_t, '856', 'LOCAL CLUB', 1, 0); end if;
+end $f$;
+create function pg_temp.socio(p_nombre text, p_tel text, p_ref uuid) returns uuid language plpgsql as $f$
+declare v uuid;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('socio', p_nombre, 'app') returning id into v;
+  insert into club_miembros_contacto (miembro_id, telefono) values (v, p_tel);
+  update club_miembro_roles set referido_por = p_ref, validado_por = '<MANAGER_UUID>'::uuid where miembro_id = v and rol = 'socio';
+  return v;
+end $f$;
+do $$
+declare v_a uuid; v_b uuid; v_c uuid; v_e uuid; v_f uuid; v_g uuid; n int; j jsonb; v_p uuid;
+begin
+  update club_promociones set estado = 'terminada' where nombre <> 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  update club_cortesias set activa = true where codigo_producto in ('CC-1','CC-2');
+  update club_config set premios_referente_mes = 3 where location_id = 'santa-teresa';
+  delete from club_premios;
+  v_a := pg_temp.socio('Ana Refiere Ficticia', '+50661110001', null);
+  v_b := pg_temp.socio('Beto Referido Ficticio', '+50661110002', v_a);
+  v_c := pg_temp.socio('Ceci Mismo Telefono Ficticia', '+50661110001', v_a);       -- mismo teléfono que A
+  v_e := pg_temp.socio('Eli Ciclo Ficticio', '+50661110005', null);
+  v_f := pg_temp.socio('Fer Ciclo Ficticio', '+50661110006', v_e);
+  update club_miembro_roles set referido_por = v_f where miembro_id = v_e and rol = 'socio';   -- E ↔ F
+  perform pg_temp.pedido_lc('9070', 'X', true);    -- B: primero una factura anulada
+  perform pg_temp.pedido_lc('9072', 'C', true);    -- C
+  perform pg_temp.pedido_lc('9075', 'C', true);    -- E
+  perform pg_temp.pedido_lc('9076', 'C', true);    -- F
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_b, '{"modo":"pedido","pedido":"9070","clave":"pedido:9070"}', gen_random_uuid());
+  perform public.club_socio_visita(v_c, '{"modo":"pedido","pedido":"9072","clave":"pedido:9072"}', gen_random_uuid());
+  perform public.club_socio_visita(v_e, '{"modo":"pedido","pedido":"9075","clave":"pedido:9075"}', gen_random_uuid());
+  perform public.club_socio_visita(v_f, '{"modo":"pedido","pedido":"9076","clave":"pedido:9076"}', gen_random_uuid());
+  perform pg_temp.yo();
+  n := public.club_premios_generar('santa-teresa');
+  perform pg_temp.r('64', 'factura anulada (X) no da premio; autorreferido y ciclo quedan anotados sin premio',
+    not exists (select 1 from club_premios where referido = v_b)
+      and (select motivo from club_premios where referido = v_c) = 'autorreferido'
+      and (select count(*) from club_premios where referido in (v_e, v_f) and motivo = 'ciclo') = 2 and n = 0, format('%s', n));
+  -- B vuelve otro día con una factura C con el 856 → premio para A
+  delete from club_visitas_socio where miembro_id = v_b;
+  perform pg_temp.pedido_lc('9071', 'C', true);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_b, '{"modo":"pedido","pedido":"9071","clave":"pedido:9071"}', gen_random_uuid());
+  perform pg_temp.yo();
+  n := public.club_premios_generar('santa-teresa');
+  perform pg_temp.r('64', 'primera factura C con el 856 del referido → premio disponible para quien refirió (vence a los 60 días)',
+    n = 1 and (select estado = 'disponible' and beneficiario = v_a and vence_en > now() + interval '59 days' from club_premios where referido = v_b)
+      and public.club_premios_generar('santa-teresa') = 0, format('%s', n));
+  -- sin el 856 no hay premio
+  v_g := pg_temp.socio('Gus Sin 856 Ficticio', '+50661110007', v_a);
+  perform pg_temp.pedido_lc('9077', 'C', false);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_g, '{"modo":"pedido","pedido":"9077","clave":"pedido:9077"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('64', 'factura C sin el artículo LC → no hay premio', public.club_premios_generar('santa-teresa') = 0
+    and not exists (select 1 from club_premios where referido = v_g), '');
+  -- tope por referente (1 por mes): otro referido de A con 856 → «tope_referente»
+  update club_config set premios_referente_mes = 1 where location_id = 'santa-teresa';
+  insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto)
+  select id, '856', 'LOCAL CLUB', 1, 0 from pos_ndf_tickets where numero_factura = '999077';
+  perform public.club_premios_generar('santa-teresa');
+  update club_config set premios_referente_mes = 3 where location_id = 'santa-teresa';
+  perform pg_temp.r('64', 'tope de premios por referente en el mes → el siguiente queda «tope_referente»',
+    (select motivo from club_premios where referido = v_g) = 'tope_referente', '');
+  -- consumo: A va al local → cortesía extra de premio; el premio queda usado
+  perform pg_temp.pedido_lc('9078', 'C', true);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_a, '{"modo":"pedido","pedido":"9078","clave":"pedido:9078"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('64', 'en su visita, quien refirió recibe la cortesía de premio (sorteada) y el premio queda usado',
+    jsonb_array_length(j->'cortesias') = 2 and (j->'cortesias')::text like '%premio_referido%' and j->>'texto' like '%1 cortesía de premio: %'
+      and (select estado = 'usado' and visita_id = (j->>'visita_id')::uuid from club_premios where referido = v_b), j::text);
+  -- vencimiento
+  update club_premios set estado = 'disponible', usado_en = null, visita_id = null, vence_en = now() - interval '1 minute' where referido = v_b;
+  perform public.club_premios_generar('santa-teresa');
+  perform pg_temp.r('64', 'premio no usado a tiempo → vencido', (select estado from club_premios where referido = v_b) = 'vencido', '');
+  -- tope por quien validó: el manager ya validó un referido con premio este mes; con tope 1, el siguiente no da premio
+  v_e := pg_temp.socio('Kai Refiere Ficticio', '+50661110011', null);
+  v_f := pg_temp.socio('Hugo Referido Ficticio', '+50661110012', v_e);
+  perform pg_temp.pedido_lc('9079', 'C', true);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_f, '{"modo":"pedido","pedido":"9079","clave":"pedido:9079"}', gen_random_uuid());
+  perform pg_temp.yo();
+  update club_config set premios_validador_mes = 1 where location_id = 'santa-teresa';
+  perform public.club_premios_generar('santa-teresa');
+  update club_config set premios_validador_mes = 10 where location_id = 'santa-teresa';
+  perform pg_temp.r('64', 'tope por validador en el mes → «tope_validador» (negativa)', (select motivo from club_premios where referido = v_f) = 'tope_validador', '');
+  perform pg_temp.r('64', 'club_premios: nadie de la app la lee directo; generar es interna',
+    not has_table_privilege('authenticated', 'public.club_premios', 'SELECT')
+      and not has_function_privilege('authenticated', 'public.club_premios_generar(text)', 'EXECUTE'), '');
+end $$;
+
+-- ═══ 65. LC-A4.4: créditos ganados pendientes de aprobación del anfitrión nuevo ═══
+do $$
+declare v_n uuid; v_v uuid; c1 text; c2 text; c3 text; c4 text; c5 text; c6 text; op2 uuid := gen_random_uuid(); op5 uuid := gen_random_uuid();
+        r record; e text; v_id uuid; v_s0 int; n int;
+begin
+  update club_config set valor_credito_crc = 18000, personas_por_credito = 6, anfitrion_tope_mes_crc = 25000, anfitrion_nuevo_dias = 90
+   where location_id = 'santa-teresa';
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Nuevo Anfitrion Ficticio', 'app') returning id into v_n;
+  insert into club_miembros (tipo, nombre, origen, created_at) values ('referente', 'Viejo Anfitrion Ficticio', 'app', now() - interval '1 year') returning id into v_v;
+  update club_miembro_roles set desde = now() - interval '1 year' where miembro_id = v_v;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c1;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c2;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c3;
+  insert into club_cupones (referente_id, vence_en) values (v_v, now() + interval '1 day') returning codigo into c4;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c5;
+  insert into club_cupones (referente_id, vence_en) values (v_v, now() + interval '1 day') returning codigo into c6;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c1, 6, '990651', gen_random_uuid());      -- ₡18.000: suma
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'anfitrión nuevo por debajo del tope: suma normal (pendientes 0)', r.pendientes = 0 and r.personas = 6, format('%s', r));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c2, 3, '990652', op2);                     -- +₡9.000 → ₡27.000 > ₡25.000
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'el cupón que pasa el tope del mes queda pendiente: no suma al saldo',
+    r.pendientes = 3 and r.personas = 6 and public.club_saldo_personas(v_n) = 6
+      and exists (select 1 from club_personas_pendientes where client_op_id = op2 and estado = 'pendiente' and ganado_mes_crc = 18000), format('%s', r));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c2, 3, '990652', op2);                     -- replay
+  begin perform public.club_cupon_usar(c3, 1, '990652', gen_random_uuid()); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'replay del pendiente: mismo resultado, sin duplicar; y lo pendiente cuenta como su tarjeta de esa visita',
+    r.pendientes = 3 and (select count(*) from club_personas_pendientes where miembro_id = v_n) = 1 and e like 'Este referente ya tiene una tarjeta en esta visita%', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c4, 12, '990653', gen_random_uuid());     -- viejo: ₡36.000, suma
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'anfitrión con más de 90 días: aunque pase el tope, suma (la retención es solo para el nuevo)', r.pendientes = 0 and r.personas = 12, format('%s', r));
+  -- listar y resolver
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  select count(*) into n from public.club_pendientes_listar() x where x.miembro_id = v_n and x.puedo_resolver and x.creditos = 0.5;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_pendientes_listar(); e := 'ok'; exception when insufficient_privilege then e := 'sin permiso'; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'gerencia ve los pendientes (con los créditos); el cajero no', n = 1 and e = 'sin permiso', format('%s %s', n, e));
+  -- el owner registra otro pendiente y no puede aprobarlo él mismo
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select * into r from public.club_cupon_usar(c5, 2, '990654', op5);
+  perform pg_temp.yo();
+  select id into v_id from club_personas_pendientes where client_op_id = op5;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_pendiente_resolver(v_id, true, 'lo apruebo yo'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'quien registró el cupón no aprueba su pendiente (negativa)', r.pendientes = 2 and e like 'Lo registraste vos%', e);
+  -- el manager aprueba el de op2 → movimiento con la misma operación; rechaza el de op5 → no suma
+  v_s0 := public.club_saldo_personas(v_n);
+  select id into v_v from club_personas_pendientes where client_op_id = op2;   -- (reuso la variable)
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  perform public.club_pendiente_resolver(v_v, true, 'Revisado con el anfitrión');
+  perform public.club_pendiente_resolver(v_id, false, 'No corresponde');
+  begin perform public.club_pendiente_resolver(v_id, true, 'otra vez'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'aprobar → suma (movimiento con la misma operación); rechazar → no suma; no se resuelve dos veces',
+    public.club_saldo_personas(v_n) = v_s0 + 3
+      and exists (select 1 from club_movimientos where client_op_id = op2 and personas = 3 and nota like 'Aprobado por gerencia%')
+      and not exists (select 1 from club_movimientos where client_op_id = op5)
+      and (select estado from club_personas_pendientes where id = v_id) = 'rechazada' and e like 'Ya no está pendiente%', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c2, 3, '990652', op2);
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'después de aprobar, el replay de la operación ve el movimiento (pendientes 0)', r.pendientes = 0, format('%s', r));
+  perform pg_temp.r('65', 'club_personas_pendientes: nadie de la app la lee directo',
+    not has_table_privilege('authenticated', 'public.club_personas_pendientes', 'SELECT'), '');
+end $$;
+
+-- ═══ 66. LC-A4.5: pase y portal del socio (visitas del mes, cortesía sorpresa y premios; pestaña «Mi Club») ═══
+do $$
+declare v_q uuid; v_x uuid; v_tok text; j jsonb; p jsonb;
+begin
+  update club_promociones set estado = 'terminada' where nombre <> 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  update club_cortesias set activa = true where codigo_producto in ('CC-1','CC-2');
+  v_q := pg_temp.socio('Quela Pase Ficticia', '+50661110021', null);
+  v_x := pg_temp.socio('Xime Referida Ficticia', '+50661110022', v_q);
+  select token_portal into v_tok from club_miembros where id = v_q;
+  perform pg_temp.pedido_lc('9081', 'C', true);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_q, '{"modo":"pedido","pedido":"9081","clave":"pedido:9081"}', gen_random_uuid());
+  perform pg_temp.yo();
+  insert into club_premios (beneficiario, referido, estado, vence_en) values (v_q, v_x, 'disponible', now() + interval '30 days');
+  set local role service_role;
+  j := public.club_pase_datos(v_q);
+  reset role;
+  perform pg_temp.r('66', 'pase del socio: visitas del mes, cortesía sorpresa de la promo y el premio con su vencimiento',
+    (j->'socio'->>'visitas_mes')::int = 1 and j->'socio'->>'beneficio' = '10 % + 1 cortesía'
+      and (j->'socio'->'cortesias')::text like '%"motivo": "promo"%' and (j->'socio'->'cortesias')::text like '%"motivo": "premio_referido"%'
+      and jsonb_array_length(j->'socio'->'cortesias') = 2, (j->'socio')::text);
+  perform set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+  set local role anon;
+  p := public.club_portal(v_tok);
+  reset role;
+  perform pg_temp.r('66', 'portal (pestaña Mi Club): estado, QR del socio, beneficio, visitas, cortesías y promociones; sin contactos',
+    p->'socio'->>'estado' = 'activo' and p->'socio'->>'codigo_socio' ~ '^[A-HJ-NP-Z2-9]{9}$' and p->'socio'->>'beneficio' = '10 % + 1 cortesía'
+      and (p->'socio'->>'visitas_mes')::int = 1 and jsonb_array_length(p->'socio'->'cortesias') = 2
+      and p::text not like '%+506%' and p::text not like '%@%', (p->'socio')::text);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

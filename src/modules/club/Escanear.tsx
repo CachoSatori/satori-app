@@ -14,7 +14,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
   opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
-  describirPos, describirPedido, describirFactura,
+  describirPos, describirPedido, describirFactura, socioAltaCaja, socioValidar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente,
 } from '../../shared/api/club'
@@ -226,6 +226,7 @@ export default function Escanear() {
               </div>
             )}
           </Card>
+          <NuevoSocio onHecho={t => setMsg({ tono: 'ok', texto: t })} />
           {cargando && <div style={{ textAlign: 'center', color: C.muted }}>Buscando…</div>}
         </>
       )}
@@ -236,7 +237,10 @@ export default function Escanear() {
           enviando={enviando} err={errAccion} onConfirmar={confirmar} onCerrar={cerrarCuenta} />
       )}
 
-      {actual?.kind === 'socio' && <PanelSocio d={actual.r.datos} onCerrar={cerrarCuenta} />}
+      {actual?.kind === 'socio' && (
+        <PanelSocio d={actual.r.datos} onCerrar={cerrarCuenta}
+          onValidado={async t => { await resolver(actual.codigo, true); setMsg({ tono: 'ok', texto: t }) }} />
+      )}
 
       {(actual?.kind === 'referente' || actual?.kind === 'canje') && (
         <PanelReferente a={actual} gestiona={gestiona} nota={nota} setNota={setNota}
@@ -568,14 +572,26 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
 }
 
 /**
- * LC-A1: QR fijo del socio del Local Club. Solo identifica (10 % y cortesía); NUNCA da créditos.
+ * LC-A1/A2: QR fijo del socio del Local Club. Solo identifica (10 % y cortesía); NUNCA da créditos.
+ * Pendiente (autoalta) → «Validar socio» con «verifiqué residencia» → activo provisional (LC-DES-01).
  * «Qué aplicar» (10 % + cortesía, visita por factura con el 856) llega en la etapa A4.
  */
-function PanelSocio({ d, onCerrar }: { d: ResolverSocio['datos']; onCerrar: () => void }) {
-  const linea =
-    d.persona_estado !== 'activo' || d.estado === 'baja' ? 'Socio dado de baja: seguí con la cuenta normal, sin beneficio.'
-    : d.estado === 'pendiente' ? 'Socio pendiente: todavía no tiene beneficio. Validalo cuando confirmes que es local.'
-    : null
+function PanelSocio({ d, onCerrar, onValidado }: {
+  d: ResolverSocio['datos']; onCerrar: () => void; onValidado: (texto: string) => Promise<void>
+}) {
+  const [verifico, setVerifico] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const baja = d.persona_estado !== 'activo' || d.estado === 'baja'
+  const pendiente = !baja && d.estado === 'pendiente'
+  async function validar() {
+    setEnviando(true); setErr(null)
+    try {
+      const r = await socioValidar(d.id, verifico)
+      await onValidado(`${d.nombre} quedó activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}. Ya tiene el beneficio; un manager confirma el alta.`)
+    } catch (e) { setErr(aClubError(e).message) }
+    finally { setEnviando(false) }
+  }
   return (
     <Card>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -588,8 +604,23 @@ function PanelSocio({ d, onCerrar }: { d: ResolverSocio['datos']; onCerrar: () =
         </div>
         <Btn variant="ghost" onClick={onCerrar} aria-label="Cerrar">✕</Btn>
       </div>
-      {linea ? <div style={{ marginTop: 10 }}><Aviso tono="error">{linea}</Aviso></div> : (
-        <div style={{ marginTop: 10 }}>
+      {baja && <div style={{ marginTop: 10 }}><Aviso tono="error">Socio dado de baja: seguí con la cuenta normal, sin beneficio.</Aviso></div>}
+      {pendiente && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Aviso tono="error">Socio pendiente: todavía no tiene beneficio. Validalo si confirmás que es local.</Aviso>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
+            <input type="checkbox" checked={verifico} onChange={e => setVerifico(e.target.checked)} />
+            <span>Verifiqué que es local (no anotes ningún número de documento)</span>
+          </label>
+          {err && <Aviso tono="error">{err}</Aviso>}
+          <Btn onClick={validar} disabled={!verifico || enviando}>{enviando ? 'Validando…' : 'Validar socio'}</Btn>
+        </div>
+      )}
+      {!baja && !pendiente && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {d.provisional_hasta && (
+            <Aviso tono="info">Alta provisional hasta el {fmtFechaHora(d.provisional_hasta)}: tiene el beneficio; falta que la confirme un manager.</Aviso>
+          )}
           <Aviso tono="info">
             Este QR identifica al socio (10 % y cortesía). No sirve para créditos: para canjear, el anfitrión muestra el código
             de «Canjear».
@@ -597,6 +628,51 @@ function PanelSocio({ d, onCerrar }: { d: ResolverSocio['datos']; onCerrar: () =
         </div>
       )}
       <Btn variant="secondary" onClick={onCerrar} style={{ marginTop: 10, width: '100%' }}>Escanear otro</Btn>
+    </Card>
+  )
+}
+
+/** LC-A2: alta de socio en caja. Nombre y WhatsApp obligatorios; «verifiqué residencia»; NUNCA un número de documento. */
+function NuevoSocio({ onHecho }: { onHecho: (texto: string) => void }) {
+  const [abierto, setAbierto] = useState(false)
+  const [nombre, setNombre] = useState('')
+  const [tel, setTel] = useState('')
+  const [email, setEmail] = useState('')
+  const [verifico, setVerifico] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  if (!abierto) {
+    return <Btn variant="secondary" onClick={() => setAbierto(true)}>＋ Nuevo socio del Local Club</Btn>
+  }
+  async function guardar() {
+    setEnviando(true); setErr(null)
+    try {
+      const r = await socioAltaCaja(nombre.trim(), tel.trim(), email.trim() || null, verifico)
+      onHecho(`${nombre.trim()} es socio (activo provisional hasta el ${fmtFechaHora(r.provisional_hasta)}). Ya tiene el beneficio hoy; un manager confirma el alta.`)
+      setAbierto(false); setNombre(''); setTel(''); setEmail(''); setVerifico(false)
+    } catch (e) { setErr(aClubError(e).message) }
+    finally { setEnviando(false) }
+  }
+  return (
+    <Card>
+      <form onSubmit={e => { e.preventDefault(); guardar() }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <strong>Nuevo socio del Local Club</strong>
+        <label><span style={labelStyle}>Nombre y apellido</span>
+          <input value={nombre} onChange={e => setNombre(e.target.value)} autoComplete="off" style={inputStyle} /></label>
+        <label><span style={labelStyle}>WhatsApp</span>
+          <input value={tel} onChange={e => setTel(e.target.value)} inputMode="tel" autoComplete="off" placeholder="8 dígitos o con código de país" style={inputStyle} /></label>
+        <label><span style={labelStyle}>Email (opcional)</span>
+          <input value={email} onChange={e => setEmail(e.target.value)} inputMode="email" autoComplete="off" style={inputStyle} /></label>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', minHeight: 44 }}>
+          <input type="checkbox" checked={verifico} onChange={e => setVerifico(e.target.checked)} />
+          <span>Verifiqué que es local (no anotes ningún número de documento)</span>
+        </label>
+        {err && <Aviso tono="error">{err}</Aviso>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn type="submit" disabled={enviando || nombre.trim().length < 2 || !tel.trim() || !verifico}>{enviando ? 'Guardando…' : 'Dar de alta'}</Btn>
+          <Btn type="button" variant="ghost" onClick={() => { setAbierto(false); setErr(null) }}>Cancelar</Btn>
+        </div>
+      </form>
     </Card>
   )
 }

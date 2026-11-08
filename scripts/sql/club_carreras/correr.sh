@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Carreras de dos sesiones del Club (CLUB-AUD-03, 04, 07, 08 y 15; R-01: 16). SOLO STAGING (ref fijo).
+# Carreras de dos sesiones del Club (CLUB-AUD-03, 04, 07, 08 y 15; R-01: 16; CLUB-AUD-70: 17). SOLO STAGING (ref fijo).
 #
 #   CAJERO_UUID=<perfil cajero activo> OWNER_UUID=<perfil owner activo> scripts/sql/club_carreras/correr.sh
 #
@@ -27,7 +27,7 @@ trap 'limpiar; rm -rf "$TMP"' EXIT
 limpiar
 sql "$DIR/prep.sql" > /dev/null
 
-for n in 03 07 08 15 16; do
+for n in 03 07 08 15 16 17; do
   par "$n"
   sql "$DIR/${n}_chk.sql" | jq -c '.[0].json_build_object'
 done

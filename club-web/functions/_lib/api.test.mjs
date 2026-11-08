@@ -105,6 +105,61 @@ test('14/24: un binding por endpoint: crear usa RL_CREAR (5/60 s) y leer usa RL_
 test('salud: dice qué está configurado, sin valores', async () => {
   const r = await manejar(pedido('salud'), conLimite(), 'salud')
   const j = await r.json()
-  assert.deepEqual(j, { rl_crear: true, rl_leer: true, club_web_key: true, supabase: true })
+  assert.deepEqual(j, { rl_crear: true, rl_leer: true, club_web_key: true, turnstile: false, supabase: true })
   assert.ok(!JSON.stringify(j).includes('clave-de-prueba'))
+})
+
+test('LC-DES-07: /api/alta sin TURNSTILE_SECRET → 503 y no llama a la base; Turnstile falla → 403', async () => {
+  llamadas = []
+  const cuerpo = JSON.stringify({ nombre: 'Ana Ficticia', whatsapp: '60000000', acepto: 'v1', turnstile: 'token-de-prueba-123' })
+  assert.equal((await manejar(pedido('alta', 'POST', cuerpo), conLimite(), 'alta')).status, 503)
+  assert.equal(llamadas.length, 0)
+  const fetchViejo = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    llamadas.push({ url, init })
+    if (String(url).includes('turnstile')) return new Response(JSON.stringify({ success: false }), { status: 200 })
+    return new Response('{}', { status: 200 })
+  }
+  try {
+    const r = await manejar(pedido('alta', 'POST', cuerpo), { ...conLimite(), TURNSTILE_SECRET: 's' }, 'alta')
+    assert.equal(r.status, 403)
+    assert.equal((await r.json()).error, 'verificacion')
+    assert.ok(!llamadas.some(l => String(l.url).includes('/rest/v1/')))
+  } finally { globalThis.fetch = fetchViejo }
+})
+
+test('LC-DES-07: /api/alta con Turnstile OK llama a club_socio_autoalta con datos mínimos; tope diario → 429', async () => {
+  const fetchViejo = globalThis.fetch
+  let respuestaBase = { status: 200, body: { ok: true } }
+  llamadas = []
+  globalThis.fetch = async (url, init) => {
+    llamadas.push({ url, init })
+    if (String(url).includes('turnstile')) return new Response(JSON.stringify({ success: true }), { status: 200 })
+    return new Response(JSON.stringify(respuestaBase.body), { status: respuestaBase.status })
+  }
+  try {
+    const env = { ...conLimite(), TURNSTILE_SECRET: 's' }
+    const cuerpo = JSON.stringify({ nombre: ' Ana ', whatsapp: '60000000', acepto: 'v1', ref: 'abcdefgh', turnstile: 'token-de-prueba-123', cedula: '1' })
+    const r = await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')
+    assert.equal(r.status, 200)
+    const base = llamadas.find(l => String(l.url).endsWith('/rest/v1/rpc/club_socio_autoalta'))
+    assert.ok(base)
+    assert.equal(base.init.headers['x-club-web'], 'clave-de-prueba')
+    assert.deepEqual(JSON.parse(base.init.body), { p_datos: { nombre: 'Ana', whatsapp: '60000000', acepto: 'v1', ref: 'ABCDEFGH' } })
+    respuestaBase = { status: 400, body: { message: 'Demasiadas altas hoy' } }
+    assert.equal((await manejar(pedido('alta', 'POST', cuerpo), env, 'alta')).status, 429)
+  } finally { globalThis.fetch = fetchViejo }
+})
+
+test('AUD-69: /api/pase/:token/canje usa el token de pase; /api/portal/:token/baja; tokens malos → 404', async () => {
+  const tok = 'a'.repeat(64)
+  llamadas = []
+  globalThis.fetch = async (url, init) => { llamadas.push({ url, init }); return new Response('true', { status: 200 }) }
+  assert.equal((await manejar(pedido(`pase/${tok}/canje`, 'POST'), conLimite(), `pase/${tok}/canje`)).status, 200)
+  assert.ok(String(llamadas.at(-1).url).endsWith('/rpc/club_canje_codigo_generar_pase'))
+  assert.deepEqual(JSON.parse(llamadas.at(-1).init.body), { p_token_pase: tok })
+  assert.equal((await manejar(pedido(`portal/${tok}/baja`, 'POST'), conLimite(), `portal/${tok}/baja`)).status, 200)
+  assert.ok(String(llamadas.at(-1).url).endsWith('/rpc/club_socio_baja_portal'))
+  assert.equal((await manejar(pedido('pase/xyz/canje', 'POST'), conLimite(), 'pase/xyz/canje')).status, 404)
+  assert.equal((await manejar(pedido(`pase/${tok}/canje`), conLimite(), `pase/${tok}/canje`)).status, 405)
 })

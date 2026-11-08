@@ -107,3 +107,10 @@ drop function if exists public.club_gen_codigo(int);
 delete from supabase_migrations.schema_migrations where version = '075';
 
 commit;
+
+-- LC-A2: tarea diaria de socios (si pg_cron está)
+do $$ begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') and exists (select 1 from cron.job where jobname = 'club_socios_mantenimiento') then
+    perform cron.unschedule('club_socios_mantenimiento');
+  end if;
+end $$;

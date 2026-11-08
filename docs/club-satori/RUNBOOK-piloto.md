@@ -99,8 +99,13 @@ staging) y registrar la fila `075` en el ledger.
 **Verificar (solo lectura):**
 - Catálogo `club_*` igual al de staging: correr `scripts/sql/club_catalogo.sql` en las dos bases y comparar (en staging
   da 528 objetos). Es la paridad del CLUB-AUD-17, hecha a mano contra prod.
-- `anon` ejecuta solo `club_canje_codigo_generar`, `club_cupon_contacto`, `club_cupon_crear`, `club_cupon_ver` y
-  `club_portal`.
+- `anon` ejecuta solo las 8 puertas públicas: `club_canje_codigo_generar`, `club_canje_codigo_generar_pase`,
+  `club_cupon_contacto`, `club_cupon_crear`, `club_cupon_ver`, `club_portal`, `club_socio_autoalta` y
+  `club_socio_baja_portal` (todas exigen `x-club-web`).
+- Tarea diaria de socios (LC-A2): `select jobname, schedule from cron.job where jobname = 'club_socios_mantenimiento';`
+  → `15 9 * * *` (03:15 en Costa Rica). Si prod no tiene `pg_cron`, la 075 no la programa: anotarlo y decidir con
+  Ismael (sin ella, las altas provisionales no vuelven a pendiente y las autoaltas no se purgan).
+- `select aviso_privacidad_version from club_config;` igual a `AVISO_PRIVACIDAD_VERSION` de `club-web/src/config.ts`.
 - `select tarjeta_manual_activa from club_config;` → `false`.
 - `club_web_clave` vacía: las puertas públicas fallan cerradas.
 
@@ -118,9 +123,12 @@ key y sin el header responde «Código no válido».
 
 ## 6. Cloudflare
 **Hacer:** en Pages `satori-club` (producción): `SUPABASE_URL` y `SUPABASE_ANON_KEY` de PROD, y los bindings `RL_CREAR`
-(5 por 60 s) y `RL_LEER` (60 por 60 s) de `wrangler.toml`. Después, el deploy y el dominio `club.satoricostarica.com`.
+(5 por 60 s) y `RL_LEER` (60 por 60 s) de `wrangler.toml`. **Turnstile (LC-DES-07):** crear el widget en Cloudflare
+para `club.satoricostarica.com`; la clave del sitio va en `VITE_TURNSTILE_SITEKEY` (variable de build) y la secreta en el
+**Secret** `TURNSTILE_SECRET` (las carga Ismael; sin ella la autoalta responde 503). Después, el deploy y el dominio.
 **Verificar:**
-- `/api/salud` → todo en `true`.
+- `/api/salud` → todo en `true` (incluido `turnstile`).
+- `/alta`: el widget aparece; un alta de prueba queda **pendiente** y se borra a mano después.
 - 6 «Obtener mi cupón» seguidos desde un teléfono: el sexto dice «Demasiados intentos seguidos».
 - Las cabeceras de `_headers`: CSP `script-src 'self'` y no-store en `/api`.
 - Si Pages no toma los bindings: el «Plan B» de `club-web/README.md` (`/api` en un Worker).

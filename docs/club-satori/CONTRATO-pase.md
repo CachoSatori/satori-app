@@ -100,7 +100,8 @@ Funciones para B (solo `service_role`):
 - `club_pase_cursor_leer(p_nombre text) → bigint` y `club_pase_cursor_guardar(p_nombre text, p_id bigint)`: B guarda
   hasta dónde procesó (`p_nombre` = `'google'` o `'apple'`), así un reinicio no reprocesa ni pierde.
   **CLUB-AUD-70:** `guardar` **solo avanza** (dos sincronizaciones simultáneas dejan el máximo). Para reprocesar hay
-  una función aparte y explícita: `club_pase_cursor_rebobinar(p_nombre, p_id, p_motivo)`, que queda en la auditoría.
+  una función aparte y explícita: `club_pase_cursor_rebobinar(p_nombre, p_id, p_motivo)` (motivo obligatorio), que
+  queda en la auditoría. Hecho en A2: prueba 57 y carrera 17 (dos `guardar` a la vez → queda el máximo).
 
 **Entrega:** B corre su sincronización **cada 2 minutos** (programada en el Edge de B) y también **a pedido** desde el
 portal («Actualizar mi pase»). Para cada `miembro_id` distinto del lote: `club_pase_datos` → si `version` subió,
@@ -124,7 +125,11 @@ marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
   `<issuerId>.club-<miembro_id>` (estable: regenerar el QR o el token **no** cambia el pase).
 - `club_pase_emitido(p_miembro uuid, p_plataforma text, p_object_id text)`: B registra el pase emitido
   (tabla `club_pases`), para saber a quién actualizar y para la baja.
-- **Autoalta de socio:** el formulario de club-web, al terminar, ofrece el mismo botón (pase en estado pendiente).
+- **Autoalta de socio:** el formulario de club-web (`/alta`), al terminar, ofrece el mismo botón (pase en estado
+  pendiente). Solo a una persona **nueva**: si el WhatsApp ya existía, la respuesta no trae el portal (A2).
+- **Botón «Canjear» del pase:** `canjear_url` = `https://club.satoricostarica.com/w/{token_pase}`. club-web llama a
+  `club_canje_codigo_generar_pase` (pública por club-web, como el portal). Owner o manager lo revocan o regeneran en
+  Miembros (`club_pase_token`).
 
 ## 6. Apple (apagado)
 Mismo contrato. Flag `club_config.wallet_apple_activo = false` (lo agrega A). B deja listo el `.pkpass` y el web
@@ -144,7 +149,8 @@ service de actualización de Apple, y no se ofrece el botón mientras el flag es
 
 ## 9. Pruebas que comparten A y B
 - Los `service_role`-only: `anon` y `authenticated` no ejecutan ninguna función de este contrato.
-- `club_pase_datos` nunca contiene `@`, `+506` ni el token fuera de `canjear_url` y `portal_url`.
+- `club_pase_datos` nunca contiene `@`, `+506` ni el token del portal (`canjear_url` lleva el token de pase).
+- Token de pase revocado → `/w/` no genera código y `canjear_url` vuelve `null` (A2, prueba 57).
 - Un canje genera un evento `movimiento` y una alerta; la versión sube; el pase muestra el saldo nuevo en ≤ 2 min.
 - Socio pendiente → validado en caja → evento `rol` → el pase pasa a activo y muestra la cortesía.
 - Baja → el pase queda expirado.

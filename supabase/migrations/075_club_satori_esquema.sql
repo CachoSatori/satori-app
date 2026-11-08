@@ -413,8 +413,8 @@ begin
     elsif tg_op = 'INSERT' then
       v_accion := 'alta';
     end if;
-    v_antes   := v_antes - 'codigo' - 'token_portal';
-    v_despues := v_despues - 'codigo' - 'token_portal'
+    v_antes   := v_antes - 'codigo' - 'token_portal' - 'token_pase' - 'codigo_socio';
+    v_despues := v_despues - 'codigo' - 'token_portal' - 'token_pase' - 'codigo_socio'
                  || case when tg_op = 'UPDATE' then jsonb_build_object('codigo_cambiado', old.codigo is distinct from new.codigo,
                                                                          'token_cambiado', old.token_portal is distinct from new.token_portal)
                          else '{}'::jsonb end;
@@ -1530,7 +1530,11 @@ begin
     'personas',                 v_saldo,
     'creditos',                 public.club_creditos(v_saldo, v_cfg.personas_por_credito),
     'personas_proximo_credito', public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
-    'movimientos',              v_movs
+    'movimientos',              v_movs,
+    -- LC-A2: el portal sirve también al socio (estado y link de baja del aviso de privacidad)
+    'anfitrion',                exists (select 1 from public.club_miembro_roles r where r.miembro_id = v_m.id and r.rol <> 'socio' and r.estado = 'activo'),
+    'socio',                    (select jsonb_build_object('estado', r.estado, 'desde', r.desde)
+                                   from public.club_miembro_roles r where r.miembro_id = v_m.id and r.rol = 'socio' and r.estado <> 'baja')
   );
 end;
 $$;
@@ -2086,6 +2090,7 @@ begin
       return jsonb_build_object('tipo', 'socio', 'datos', (
         select jsonb_build_object('id', v_m.id, 'nombre', v_m.nombre, 'persona_estado', v_m.estado,
                                   'estado', r.estado, 'desde', r.desde, 'alta_por', r.alta_por,
+                                  'provisional_hasta', r.provisional_hasta,
                                   'es_anfitrion', public.club_tiene_rol(v_m.id, array['referente','concierge_pm','equipo']))
           from public.club_miembro_roles r where r.miembro_id = v_m.id and r.rol = 'socio'));
     end if;
@@ -3635,8 +3640,8 @@ begin
   elsif tg_table_name = 'club_miembro_roles' then
     insert into public.club_pase_eventos (miembro_id, motivo) values (coalesce(new.miembro_id, old.miembro_id), 'rol');
   elsif tg_table_name = 'club_miembros' then
-    if tg_op = 'UPDATE' and (old.nombre, old.estado, old.codigo, old.token_portal, old.codigo_socio)
-                            is distinct from (new.nombre, new.estado, new.codigo, new.token_portal, new.codigo_socio) then
+    if tg_op = 'UPDATE' and (old.nombre, old.estado, old.codigo, old.token_portal, old.codigo_socio, old.token_pase)
+                            is distinct from (new.nombre, new.estado, new.codigo, new.token_portal, new.codigo_socio, new.token_pase) then
       insert into public.club_pase_eventos (miembro_id, motivo) values (new.id, 'datos');
     end if;
   end if;
@@ -3720,8 +3725,8 @@ begin
     'socio', j_soc,
     'anfitrion', j_anf,
     'promociones', '[]'::jsonb,   -- A3
-    'canjear_url', case when j_anf is not null then v_base || '/p/' || v_m.token_portal || '?accion=canjear' end,
-    'portal_url', v_base || '/p/' || v_m.token_portal);
+    -- CLUB-AUD-69: el pase lleva el token de PASE (propio, revocable), nunca el del portal
+    'canjear_url', case when j_anf is not null and v_m.token_pase is not null then v_base || '/w/' || v_m.token_pase end);
 end;
 $$;
 
@@ -3803,6 +3808,423 @@ set search_path = public, pg_temp
 as $$ update public.club_alertas set enviado_en = now(), canal = p_canal where id = p_id and enviado_en is null $$;
 
 
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+-- LOCAL CLUB · A2 (08-nov): socios — alta en caja (activo provisional), confirmación por otra persona,
+-- autoalta (pendiente), validación en caja, token de pase propio (CLUB-AUD-69), cursor con rebobinado (70).
+--   · LC-DES-01: el alta en caja (o la validación de una autoalta) deja al socio ACTIVO PROVISIONAL: usa el 10 %
+--     ese día. Un manager u owner DISTINTO de quien lo cargó lo confirma dentro de 7 días; si no, vuelve a
+--     pendiente (club_socios_mantenimiento, todos los días).
+--   · LC-DES-07: autoalta pública (club-web, x-club-web + Turnstile + tope por IP en club-web; tope global por día
+--     acá), datos mínimos (nombre y WhatsApp), aviso de privacidad versionado y baja desde el portal. Las autoaltas
+--     sin validar se purgan a los 30 días. NUNCA se guarda un número de cédula, DIMEX ni pasaporte.
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+alter table public.club_config add column if not exists socio_provisional_dias int not null default 7
+  check (socio_provisional_dias between 1 and 60);
+alter table public.club_config add column if not exists socio_autoalta_max_dia int not null default 60
+  check (socio_autoalta_max_dia between 1 and 10000);
+alter table public.club_config add column if not exists socio_autoalta_purga_dias int not null default 30
+  check (socio_autoalta_purga_dias between 7 and 365);
+alter table public.club_config add column if not exists aviso_privacidad_version text not null default 'v0-provisorio'
+  check (aviso_privacidad_version ~ '^v[0-9A-Za-z.-]{1,30}$');
+
+alter table public.club_miembro_roles add column if not exists registrado_por uuid;          -- quién lo cargó en caja
+alter table public.club_miembro_roles add column if not exists provisional_hasta timestamptz; -- activo provisional
+alter table public.club_miembro_roles add column if not exists confirmado_por uuid;
+alter table public.club_miembro_roles add column if not exists confirmado_en timestamptz;
+alter table public.club_miembro_roles add column if not exists aviso_version text;
+alter table public.club_miembro_roles add column if not exists aviso_aceptado_en timestamptz;
+
+-- CLUB-AUD-69: token de pase propio (no el del portal). Revocable (null) y regenerable.
+alter table public.club_miembros add column if not exists token_pase text unique
+  check (token_pase is null or token_pase ~ '^[0-9a-f]{64}$');
+update public.club_miembros set token_pase = encode(extensions.gen_random_bytes(32), 'hex') where token_pase is null;
+alter table public.club_miembros alter column token_pase set default encode(extensions.gen_random_bytes(32), 'hex');
+
+-- Interno: busca a la persona por teléfono normalizado (una persona, un pase).
+create or replace function public.club_miembro_por_telefono(p_tel text)
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select c.miembro_id from public.club_miembros_contacto c join public.club_miembros m on m.id = c.miembro_id
+   where c.telefono = p_tel order by (m.estado = 'activo') desc, m.created_at limit 1
+$$;
+
+-- Interno: crea (o reusa) la persona y le pone el rol de socio con el estado y el origen pedidos.
+create or replace function public.club_socio_crear(p_nombre text, p_tel text, p_email text, p_estado text, p_alta_por text,
+                                                   p_referido uuid, p_aviso text, p_location text)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_id uuid; v_r public.club_miembro_roles%rowtype;
+begin
+  v_id := public.club_miembro_por_telefono(p_tel);
+  if v_id is not null then
+    select * into v_r from public.club_miembro_roles where miembro_id = v_id and rol = 'socio';
+    if found and v_r.estado <> 'baja' then
+      raise exception 'YA_ES_SOCIO' using errcode = 'P0001';
+    end if;
+    if found then
+      update public.club_miembro_roles set estado = p_estado, alta_por = p_alta_por, desde = now(), actualizado_en = now(),
+             validado_por = null, validado_en = null, confirmado_por = null, confirmado_en = null, provisional_hasta = null,
+             referido_por = coalesce(p_referido, referido_por), aviso_version = p_aviso, aviso_aceptado_en = case when p_aviso is not null then now() end
+       where miembro_id = v_id and rol = 'socio';
+    else
+      insert into public.club_miembro_roles (miembro_id, rol, estado, alta_por, referido_por, aviso_version, aviso_aceptado_en)
+      values (v_id, 'socio', p_estado, p_alta_por, p_referido, p_aviso, case when p_aviso is not null then now() end);
+    end if;
+    update public.club_miembros set estado = 'activo', updated_at = now() where id = v_id and estado = 'baja'
+      and not exists (select 1 from public.club_miembro_roles r where r.miembro_id = v_id and r.rol <> 'socio');
+    return v_id;
+  end if;
+  insert into public.club_miembros (location_id, tipo, nombre) values (p_location, 'socio', btrim(p_nombre)) returning id into v_id;
+  -- el alta del miembro creó el rol 'socio' activo: se le pone el estado y el origen reales
+  update public.club_miembro_roles set estado = p_estado, alta_por = p_alta_por, referido_por = p_referido,
+         aviso_version = p_aviso, aviso_aceptado_en = case when p_aviso is not null then now() end, actualizado_en = now()
+   where miembro_id = v_id and rol = 'socio';
+  insert into public.club_miembros_contacto (miembro_id, location_id, telefono, email, optin_whatsapp)
+  values (v_id, p_location, p_tel, p_email, p_aviso is not null);
+  return v_id;
+end;
+$$;
+
+-- Activo provisional (alta o validación en caja): «verifiqué residencia», quién lo cargó y hasta cuándo.
+create or replace function public.club_socio_provisional(p_miembro uuid, p_dias int)
+returns void
+language sql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+  update public.club_miembro_roles
+     set estado = 'activo', verifico_residencia = true, registrado_por = auth.uid(), validado_por = auth.uid(), validado_en = now(),
+         provisional_hasta = now() + make_interval(days => p_dias), confirmado_por = null, confirmado_en = null, actualizado_en = now()
+   where miembro_id = p_miembro and rol = 'socio';
+$$;
+
+-- Alta en caja (owner, manager, cajero). Obligatorios: nombre, WhatsApp y «verifiqué residencia».
+create or replace function public.club_socio_alta_caja(p_nombre text, p_whatsapp text, p_email text, p_verifico_residencia boolean,
+                                                       p_location text default 'santa-teresa')
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_cfg public.club_config%rowtype;
+  v_tel text;
+  v_em  text := nullif(lower(btrim(coalesce(p_email, ''))), '');
+  v_id  uuid;
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  select * into v_cfg from public.club_config where location_id = p_location;
+  if not found then raise exception 'Local no válido: elegí el local de la lista' using errcode = 'P0001'; end if;
+  if length(btrim(coalesce(p_nombre, ''))) not between 2 and 120 then
+    raise exception 'Falta el nombre: escribí nombre y apellido' using errcode = 'P0001';
+  end if;
+  if coalesce(p_verifico_residencia, false) is not true then
+    raise exception 'Falta «verifiqué residencia»: confirmá que es local antes del alta' using errcode = 'P0001';
+  end if;
+  begin
+    v_tel := public.club_norm_telefono(p_whatsapp);
+  exception when others then
+    raise exception 'WhatsApp no válido: revisá el número (8 dígitos o con código de país)' using errcode = 'P0001';
+  end;
+  if v_tel is null then raise exception 'Falta el WhatsApp: es obligatorio para el alta' using errcode = 'P0001'; end if;
+  if v_em is not null and (v_em !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' or length(v_em) > 254) then
+    raise exception 'Email no válido: corregilo o dejalo vacío' using errcode = 'P0001';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('club_socio_tel:' || v_tel, 0));
+  begin
+    v_id := public.club_socio_crear(p_nombre, v_tel, v_em, 'activo', 'caja', null, null, p_location);
+  exception when others then
+    if sqlerrm = 'YA_ES_SOCIO' then
+      raise exception 'Ya es socio (o tiene el alta pendiente): escaneá su QR o validalo desde ahí' using errcode = 'P0001';
+    end if;
+    raise;
+  end;
+  perform public.club_socio_provisional(v_id, v_cfg.socio_provisional_dias);
+  perform public.club_auditar('socio_alta_caja', 'club_miembro_roles', v_id, null,
+                              jsonb_build_object('verifico_residencia', true, 'provisional_dias', v_cfg.socio_provisional_dias));
+  return jsonb_build_object('miembro_id', v_id, 'estado', 'activo', 'provisional_hasta', now() + make_interval(days => v_cfg.socio_provisional_dias));
+end;
+$$;
+
+-- Validar en caja una autoalta pendiente (owner, manager, cajero): pasa a activo provisional, igual que el alta.
+create or replace function public.club_socio_validar(p_miembro uuid, p_verifico_residencia boolean)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_r   public.club_miembro_roles%rowtype;
+  v_cfg public.club_config%rowtype;
+begin
+  if v_rol is null or v_rol not in ('owner','manager','cajero') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  if coalesce(p_verifico_residencia, false) is not true then
+    raise exception 'Falta «verifiqué residencia»: confirmá que es local antes de validar' using errcode = 'P0001';
+  end if;
+  select * into v_r from public.club_miembro_roles where miembro_id = p_miembro and rol = 'socio' for update;
+  if not found then raise exception 'No es socio: hacé el alta desde «Nuevo socio»' using errcode = 'P0001'; end if;
+  if v_r.estado <> 'pendiente' then
+    raise exception 'El socio no está pendiente: no hace falta validarlo' using errcode = 'P0001';
+  end if;
+  select c.* into v_cfg from public.club_config c join public.club_miembros m on m.location_id = c.location_id where m.id = p_miembro;
+  perform public.club_socio_provisional(p_miembro, v_cfg.socio_provisional_dias);
+  perform public.club_auditar('socio_validar', 'club_miembro_roles', p_miembro, jsonb_build_object('estado', 'pendiente'),
+                              jsonb_build_object('estado', 'activo', 'provisional', true));
+  return jsonb_build_object('miembro_id', p_miembro, 'estado', 'activo', 'provisional_hasta', now() + make_interval(days => v_cfg.socio_provisional_dias));
+end;
+$$;
+
+-- Confirmar el alta (owner o manager DISTINTO de quien la cargó).
+create or replace function public.club_socio_confirmar(p_miembro uuid, p_nota text)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_r    public.club_miembro_roles%rowtype;
+  v_nota text := btrim(coalesce(p_nota, ''));
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  select * into v_r from public.club_miembro_roles where miembro_id = p_miembro and rol = 'socio' for update;
+  if not found or v_r.estado <> 'activo' or v_r.provisional_hasta is null then
+    raise exception 'No hay un alta provisional para confirmar' using errcode = 'P0001';
+  end if;
+  if v_r.registrado_por = auth.uid() then
+    raise exception 'La cargaste vos: la confirma otro manager u owner' using errcode = 'P0001';
+  end if;
+  update public.club_miembro_roles set provisional_hasta = null, confirmado_por = auth.uid(), confirmado_en = now(), actualizado_en = now()
+   where miembro_id = p_miembro and rol = 'socio';
+  perform public.club_auditar('socio_confirmar', 'club_miembro_roles', p_miembro, null,
+                              jsonb_build_object('registrado_por', v_r.registrado_por, 'nota', nullif(v_nota, '')));
+  return true;
+end;
+$$;
+
+-- Autoalta (PÚBLICA, solo por club-web: x-club-web; Turnstile y tope por IP los controla club-web).
+-- Datos mínimos: nombre, WhatsApp, consentimiento del aviso vigente. `ref` = código público del socio que refiere.
+-- Respuesta pareja (no dice si el teléfono ya existía). Devuelve el link del portal de esa persona.
+create or replace function public.club_socio_autoalta(p_datos jsonb)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_loc  text := 'santa-teresa';
+  v_cfg  public.club_config%rowtype;
+  v_nom  text := btrim(coalesce(p_datos->>'nombre', ''));
+  v_tel  text;
+  v_ref  uuid;
+  v_id   uuid;
+  v_tok  text;
+  v_existia boolean;
+begin
+  if not public.club_web_ok() then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  select * into v_cfg from public.club_config where location_id = v_loc;
+  if jsonb_typeof(p_datos) <> 'object' or length(v_nom) not between 2 and 80
+     or coalesce(p_datos->>'acepto', '') <> v_cfg.aviso_privacidad_version then
+    raise exception 'Datos no válidos' using errcode = 'P0001';
+  end if;
+  begin v_tel := public.club_norm_telefono(p_datos->>'whatsapp'); exception when others then v_tel := null; end;
+  if v_tel is null then raise exception 'Datos no válidos' using errcode = 'P0001'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('club_socio_autoalta:' || v_loc, 0));
+  if (select count(*) from public.club_miembro_roles r join public.club_miembros m on m.id = r.miembro_id
+       where m.location_id = v_loc and r.rol = 'socio' and r.alta_por = 'autoalta'
+         and r.desde >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
+     >= v_cfg.socio_autoalta_max_dia then
+    raise exception 'Demasiadas altas hoy' using errcode = 'P0001';
+  end if;
+  select m.id into v_ref from public.club_miembros m
+   where m.codigo = upper(btrim(coalesce(p_datos->>'ref', ''))) and m.estado = 'activo'
+     and exists (select 1 from public.club_miembro_roles r where r.miembro_id = m.id and r.rol = 'socio' and r.estado = 'activo');
+  perform pg_advisory_xact_lock(hashtextextended('club_socio_tel:' || v_tel, 0));
+  v_existia := public.club_miembro_por_telefono(v_tel) is not null;
+  begin
+    v_id := public.club_socio_crear(v_nom, v_tel, null, 'pendiente', 'autoalta', v_ref, v_cfg.aviso_privacidad_version, v_loc);
+  exception when others then
+    if sqlerrm = 'YA_ES_SOCIO' then
+      return jsonb_build_object('ok', true);   -- respuesta pareja: no confirma que el teléfono exista
+    end if;
+    raise;
+  end;
+  if v_ref = v_id then
+    update public.club_miembro_roles set referido_por = null where miembro_id = v_id and rol = 'socio';   -- autorreferido
+  end if;
+  if v_existia then
+    -- la persona ya existía (p. ej. un socio en baja que vuelve): NUNCA se devuelve su portal a quien llenó el
+    -- formulario (sabiendo un teléfono se vería su saldo). Queda pendiente y se valida en caja.
+    return jsonb_build_object('ok', true);
+  end if;
+  select token_portal into v_tok from public.club_miembros where id = v_id;
+  return jsonb_build_object('ok', true, 'portal', 'https://club.satoricostarica.com/p/' || v_tok);
+end;
+$$;
+
+-- Baja del Local Club desde el portal (PÚBLICA, solo por club-web): el link de baja del aviso de privacidad.
+create or replace function public.club_socio_baja_portal(p_token text)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_id uuid;
+begin
+  if not public.club_web_ok() then raise exception 'Enlace no válido' using errcode = 'P0001'; end if;
+  select m.id into v_id from public.club_miembros m where m.token_portal = lower(btrim(coalesce(p_token, '')));
+  if v_id is null or not exists (select 1 from public.club_miembro_roles where miembro_id = v_id and rol = 'socio' and estado <> 'baja') then
+    raise exception 'Enlace no válido' using errcode = 'P0001';
+  end if;
+  update public.club_miembro_roles set estado = 'baja', actualizado_en = now() where miembro_id = v_id and rol = 'socio';
+  update public.club_miembros_contacto set optin_whatsapp = false, optin_email = false, updated_at = now() where miembro_id = v_id;
+  perform public.club_auditar('socio_baja_portal', 'club_miembro_roles', v_id, null, null);
+  return true;
+end;
+$$;
+
+-- Mantenimiento diario: altas provisionales vencidas → pendiente; autoaltas sin validar → purga (30 días).
+create or replace function public.club_socios_mantenimiento()
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_venc int; v_purg int := 0; r record;
+begin
+  with v as (
+    update public.club_miembro_roles set estado = 'pendiente', actualizado_en = now()
+     where rol = 'socio' and estado = 'activo' and provisional_hasta is not null and provisional_hasta < now()
+    returning miembro_id)
+  select count(*) into v_venc from v;
+  for r in select x.miembro_id, (select count(*) from public.club_miembro_roles y where y.miembro_id = x.miembro_id) n_roles
+             from public.club_miembro_roles x
+             join public.club_miembros m on m.id = x.miembro_id
+             join public.club_config c on c.location_id = m.location_id
+            where x.rol = 'socio' and x.estado = 'pendiente' and x.alta_por = 'autoalta' and x.validado_en is null
+              and x.desde < now() - make_interval(days => c.socio_autoalta_purga_dias) loop
+    if r.n_roles = 1 and not exists (select 1 from public.club_movimientos mv where mv.miembro_id = r.miembro_id) then
+      -- solo socio, sin movimientos: se borran sus datos personales (purga)
+      delete from public.club_miembros_contacto where miembro_id = r.miembro_id;
+      delete from public.club_pases where miembro_id = r.miembro_id;
+      delete from public.club_miembro_roles where miembro_id = r.miembro_id;
+      update public.club_miembros set estado = 'baja', nombre = 'Purgado (autoalta sin validar)', updated_at = now() where id = r.miembro_id;
+    else
+      update public.club_miembro_roles set estado = 'baja', actualizado_en = now() where miembro_id = r.miembro_id and rol = 'socio';
+    end if;
+    v_purg := v_purg + 1;
+  end loop;
+  return jsonb_build_object('provisionales_vencidas', v_venc, 'autoaltas_purgadas', v_purg);
+end;
+$$;
+do $$ begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.schedule('club_socios_mantenimiento', '15 9 * * *', 'select public.club_socios_mantenimiento()');   -- 03:15 CR
+  end if;
+end $$;
+
+-- Altas provisionales para confirmar (owner, manager). `puedo_confirmar` = false si la cargó quien pregunta.
+create or replace function public.club_socios_por_confirmar()
+returns table (miembro_id uuid, nombre text, alta_por text, registrado_por text, provisional_hasta timestamptz, puedo_confirmar boolean)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  return query
+    select r.miembro_id, m.nombre, r.alta_por, coalesce(p.full_name, 'Sin perfil'), r.provisional_hasta,
+           r.registrado_por is distinct from auth.uid()
+      from public.club_miembro_roles r join public.club_miembros m on m.id = r.miembro_id
+      left join public.profiles p on p.id = r.registrado_por
+     where r.rol = 'socio' and r.estado = 'activo' and r.provisional_hasta is not null
+     order by r.provisional_hasta;
+end;
+$$;
+
+-- CLUB-AUD-69: código de canje desde el PASE (token de pase propio). Solo abre «Canjear».
+create or replace function public.club_canje_codigo_generar_pase(p_token_pase text)
+returns table (codigo text, vence_en timestamptz, url text)
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_tok text;
+begin
+  if not public.club_web_ok() then raise exception 'Enlace no válido' using errcode = 'P0001'; end if;
+  select m.token_portal into v_tok from public.club_miembros m
+   where m.token_pase is not null and m.token_pase = lower(btrim(coalesce(p_token_pase, '')));
+  if v_tok is null then raise exception 'Enlace no válido' using errcode = 'P0001'; end if;
+  return query select * from public.club_canje_codigo_generar(v_tok);
+end;
+$$;
+
+-- Regenerar o revocar el token de pase (owner o manager). Regenerar = el pase se actualiza (evento «datos»).
+create or replace function public.club_pase_token(p_miembro uuid, p_accion text)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  if p_accion not in ('regenerar','revocar') then raise exception 'Acción no válida (regenerar o revocar)' using errcode = 'P0001'; end if;
+  update public.club_miembros set token_pase = case when p_accion = 'regenerar' then encode(extensions.gen_random_bytes(32), 'hex') end,
+         updated_at = now() where id = p_miembro;
+  if not found then raise exception 'Miembro no encontrado: buscalo de nuevo' using errcode = 'P0001'; end if;
+  perform public.club_auditar('pase_token_' || p_accion, 'club_miembros', p_miembro, null, null);
+  return true;
+end;
+$$;
+
+-- CLUB-AUD-70: rebobinar el cursor del pase (explícito, con motivo y auditoría). Solo service_role.
+create or replace function public.club_pase_cursor_rebobinar(p_nombre text, p_id bigint, p_motivo text)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if length(btrim(coalesce(p_motivo, ''))) < 5 then raise exception 'El motivo es obligatorio' using errcode = 'P0001'; end if;
+  insert into public.club_pase_cursor (nombre, ultimo_id) values (p_nombre, greatest(coalesce(p_id, 0), 0))
+  on conflict (nombre) do update set ultimo_id = greatest(coalesce(p_id, 0), 0), guardado_en = now();
+  perform public.club_auditar('pase_cursor_rebobinar', 'club_pase_cursor', null, null,
+                              jsonb_build_object('nombre', p_nombre, 'id', p_id, 'motivo', p_motivo));
+end;
+$$;
+
+
 -- ── 5. EXECUTE: nada por defecto, grant explícito ───────────────────────────
 
 revoke all on function public.club_gen_codigo(int)                       from public, anon, authenticated;
@@ -3844,6 +4266,30 @@ revoke all on function public.club_roles_codigo_socio()                         
 revoke all on function public.club_tiene_rol(uuid, text[], text[])               from public, anon, authenticated;
 revoke all on function public.club_rol_activar_anfitrion(uuid, text, text)       from public, anon, authenticated;
 grant execute on function public.club_rol_activar_anfitrion(uuid, text, text)    to authenticated;
+-- LC-A2
+revoke all on function public.club_miembro_por_telefono(text)                    from public, anon, authenticated;
+revoke all on function public.club_socio_crear(text, text, text, text, text, uuid, text, text) from public, anon, authenticated;
+revoke all on function public.club_socio_provisional(uuid, int)                  from public, anon, authenticated;
+revoke all on function public.club_socio_alta_caja(text, text, text, boolean, text) from public, anon, authenticated;
+revoke all on function public.club_socio_validar(uuid, boolean)                  from public, anon, authenticated;
+revoke all on function public.club_socio_confirmar(uuid, text)                   from public, anon, authenticated;
+revoke all on function public.club_socio_autoalta(jsonb)                         from public, anon, authenticated;
+revoke all on function public.club_socio_baja_portal(text)                       from public, anon, authenticated;
+revoke all on function public.club_socios_mantenimiento()                        from public, anon, authenticated;
+revoke all on function public.club_canje_codigo_generar_pase(text)               from public, anon, authenticated;
+revoke all on function public.club_pase_token(uuid, text)                        from public, anon, authenticated;
+revoke all on function public.club_pase_cursor_rebobinar(text, bigint, text)     from public, anon, authenticated;
+grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated;
+grant execute on function public.club_socio_validar(uuid, boolean)               to authenticated;
+grant execute on function public.club_socio_confirmar(uuid, text)                to authenticated;
+grant execute on function public.club_pase_token(uuid, text)                     to authenticated;
+revoke all on function public.club_socios_por_confirmar()                        from public, anon, authenticated;
+grant execute on function public.club_socios_por_confirmar()                     to authenticated;
+-- públicas (club-web: x-club-web)
+grant execute on function public.club_socio_autoalta(jsonb)                      to anon, authenticated;
+grant execute on function public.club_socio_baja_portal(text)                    to anon, authenticated;
+grant execute on function public.club_canje_codigo_generar_pase(text)            to anon, authenticated;
+grant execute on function public.club_pase_cursor_rebobinar(text, bigint, text)  to service_role;
 revoke all on function public.club_pase_evento_trg()                             from public, anon, authenticated;
 -- Contrato del pase: SOLO service_role (el Edge del pase).
 do $$
@@ -3934,7 +4380,8 @@ grant execute on function public.club_vencer_simular(date)               to auth
 
 -- CLUB-AUD-11: red de seguridad al final, después de todos los grants de arriba.
 --   · Secuencias club_% (identity): nadie de la app las usa directo.
---   · Funciones club_%: ninguna para PUBLIC; para anon solo las 5 puertas públicas (R-01: + el código de canje).
+--   · Funciones club_%: ninguna para PUBLIC; para anon solo las 8 puertas públicas (R-01: código de canje; LC-A2:
+--     autoalta, baja del socio y código de canje desde el pase).
 do $$
 declare r record;
 begin
@@ -3945,7 +4392,8 @@ begin
   for r in select p.oid::regprocedure as fn, p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
             where n.nspname = 'public' and p.proname like 'club\_%' loop
     execute format('revoke all on function %s from public', r.fn);
-    if r.proname not in ('club_cupon_crear', 'club_portal', 'club_cupon_ver', 'club_cupon_contacto', 'club_canje_codigo_generar') then
+    if r.proname not in ('club_cupon_crear', 'club_portal', 'club_cupon_ver', 'club_cupon_contacto', 'club_canje_codigo_generar',
+                         'club_socio_autoalta', 'club_socio_baja_portal', 'club_canje_codigo_generar_pase') then
       execute format('revoke all on function %s from anon', r.fn);
     end if;
   end loop;

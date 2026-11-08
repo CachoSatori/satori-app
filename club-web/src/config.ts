@@ -4,3 +4,13 @@ export const LOCAL = {
   direccion: 'Santa Teresa, Puntarenas, Costa Rica',
   mapa: 'https://maps.google.com/?q=Satori+Sushi+Bar+Santa+Teresa+Costa+Rica',
 }
+
+/**
+ * LC-DES-07: versión del aviso de privacidad que acepta el socio en la autoalta. TIENE que ser igual a
+ * `club_config.aviso_privacidad_version`; si no, la base rechaza el alta (así nadie acepta un aviso viejo).
+ * Al cambiar el texto del aviso (i18n: alta_aviso), se sube acá y en la base el mismo día.
+ */
+export const AVISO_PRIVACIDAD_VERSION = 'v0-provisorio'
+
+/** Turnstile: clave pública del sitio. Sin VITE_TURNSTILE_SITEKEY, la clave de PRUEBA de Cloudflare (siempre pasa). */
+export const TURNSTILE_SITEKEY: string = import.meta.env.VITE_TURNSTILE_SITEKEY || '1x00000000000000000000AA'

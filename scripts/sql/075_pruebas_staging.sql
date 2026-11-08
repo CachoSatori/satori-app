@@ -722,8 +722,8 @@ begin
   select string_agg(p.proname, ',' order by p.proname) into v
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname like 'club\_%' and has_function_privilege('anon', p.oid, 'EXECUTE');
-  perform pg_temp.r('21', 'anon solo ejecuta club_canje_codigo_generar, club_cupon_contacto, club_cupon_crear, club_cupon_ver y club_portal',
-    v = 'club_canje_codigo_generar,club_cupon_contacto,club_cupon_crear,club_cupon_ver,club_portal', v);
+  perform pg_temp.r('21', 'anon solo ejecuta las 8 puertas públicas (cupón, portal, canje, canje desde el pase, autoalta y baja del socio)',
+    v = 'club_canje_codigo_generar,club_canje_codigo_generar_pase,club_cupon_contacto,club_cupon_crear,club_cupon_ver,club_portal,club_socio_autoalta,club_socio_baja_portal', v);
   -- CLUB-AUD-11 (S-12): barrido completo sobre anon y PUBLIC (grantee 0), con los ACL efectivos
   -- (acldefault cuando el objeto no tiene ACL propio: una función sin ACL la ejecuta PUBLIC).
   select string_agg(c.relname || '/' || c.relkind::text || ':' || a.privilege_type || '→' || coalesce(nullif(a.grantee::regrole::text, '-'), 'PUBLIC'), ', ')
@@ -2410,9 +2410,10 @@ begin
   j := public.club_pase_datos(v_r);
   j2 := public.club_pase_datos(v_s);
   reset role;
-  perform pg_temp.r('56', 'solo anfitrión: una pestaña y código de barras = QR de cupones; botón Canjear',
+  perform pg_temp.r('56', 'solo anfitrión: una pestaña, código de barras = QR de cupones, Canjear con token de pase (no el del portal)',
     j->'pestanas' = '["anfitrion"]'::jsonb and j->'codigo_barras'->>'tipo' = 'cupones'
-      and j->'codigo_barras'->>'valor' like 'https://club.satoricostarica.com/r/%' and j->>'canjear_url' like '%?accion=canjear'
+      and j->'codigo_barras'->>'valor' like 'https://club.satoricostarica.com/r/%' and j->>'canjear_url' like 'https://club.satoricostarica.com/w/%'
+      and j->>'canjear_url' not like '%' || v_tok || '%' and not (j ? 'portal_url')
       and j->'socio' = 'null'::jsonb and j->>'nombre_pila' = 'Ana', j::text);
   perform pg_temp.r('56', 'socio y anfitrión: dos pestañas; código de barras = QR del socio; cupones en la pestaña Anfitrión',
     j2->'pestanas' = '["mi_club", "anfitrion"]'::jsonb and j2->'codigo_barras'->>'tipo' = 'socio'
@@ -2433,6 +2434,180 @@ begin
   perform pg_temp.r('56', 'un movimiento sube la versión, deja el evento y el cursor no retrocede',
     v_v2 > v_v1 and v_n = 1 and v_ok, format('%s → %s', v_v1, v_v2));
   perform pg_temp.r('56', 'el token del portal resuelve al miembro (para «Agregar a Google Wallet»)', f = v_r::text, '');
+end $$;
+
+-- ═══ 57. LC-A2: socios (alta en caja provisional, confirmación por otra persona, autoalta, purga), token de pase, cursor ═══
+do $$
+declare v_id uuid; v_id2 uuid; v_a uuid; v_ok boolean; e text; j jsonb; v_tp text; v_cod text; v_n int; v_cur bigint; v_ver text; v_x text;
+begin
+  -- alta en caja: faltan datos → rechaza diciendo qué falta
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_socio_alta_caja('Carla Socia Ficticia', '60001234', null, false); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo(); perform pg_temp.r('57', 'alta en caja sin «verifiqué residencia» → rechaza', e like 'Falta «verifiqué residencia»%', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_socio_alta_caja('Carla Socia Ficticia', '12', null, true); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo(); perform pg_temp.r('57', 'alta en caja con WhatsApp inválido → rechaza', e like 'WhatsApp no válido%', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_alta_caja('Carla Socia Ficticia', '6000-1234', null, true);
+  v_id := (j->>'miembro_id')::uuid;
+  begin perform public.club_socio_alta_caja('Carla Otra', '+506 6000 1234', null, true); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo(); perform pg_temp.r('57', 'mismo WhatsApp dos veces → «Ya es socio»', e like 'Ya es socio%', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  -- LC-DES-01: el cajero que la cargó no confirma (ni puede: no es manager)
+  begin perform public.club_socio_confirmar(v_id, null); e := 'ok';
+  exception when insufficient_privilege then e := 'sin permiso'; when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  select (estado = 'activo' and provisional_hasta > now() + interval '6 days' and verifico_residencia and registrado_por = '<CAJERO_UUID>'
+          and alta_por = 'caja') into v_ok from club_miembro_roles where miembro_id = v_id and rol = 'socio';
+  perform pg_temp.r('57', 'alta en caja → socio activo provisional 7 días; el cajero no la confirma', v_ok and e = 'sin permiso', e);
+  perform pg_temp.r('57', 'no se guardan documentos: el rol solo tiene «verifiqué residencia»',
+    not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name like 'club\_%'
+                 and column_name ~* 'cedula|dimex|pasaporte|documento'), '');
+  -- manager que la cargó no puede confirmarla; otro sí
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  j := public.club_socio_alta_caja('Dani Socio Ficticio', '60001235', null, true);
+  v_id2 := (j->>'miembro_id')::uuid;
+  begin perform public.club_socio_confirmar(v_id2, null); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo(); perform pg_temp.r('57', 'quien cargó el alta no la confirma (negativa)', e like 'La cargaste vos%', e);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  v_ok := public.club_socio_confirmar(v_id, 'vista en caja');
+  perform pg_temp.yo();
+  select (provisional_hasta is null and confirmado_por = '<MANAGER_UUID>') into v_ok from club_miembro_roles where miembro_id = v_id and rol = 'socio';
+  perform pg_temp.r('57', 'otro manager confirma: deja de ser provisional', v_ok, '');
+  -- vencimiento del provisional → pendiente
+  perform pg_temp.yo();
+  update club_miembro_roles set provisional_hasta = now() - interval '1 minute' where miembro_id = v_id2 and rol = 'socio';
+  j := public.club_socios_mantenimiento();
+  perform pg_temp.r('57', 'provisional sin confirmar a los 7 días → vuelve a pendiente',
+    (select estado from club_miembro_roles where miembro_id = v_id2 and rol = 'socio') = 'pendiente'
+      and (j->>'provisionales_vencidas')::int >= 1, j::text);
+  -- validación en caja de un pendiente → activo provisional otra vez
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_validar(v_id2, true);
+  begin perform public.club_socio_validar(v_id2, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('57', 'validar un pendiente → activo provisional; validar de nuevo → «no está pendiente»',
+    (select estado = 'activo' and provisional_hasta is not null from club_miembro_roles where miembro_id = v_id2 and rol = 'socio')
+      and e like 'El socio no está pendiente%', e);
+
+  -- autoalta pública: sin header → no; con aviso viejo → no; bien → pendiente, pareja si repite
+  select aviso_privacidad_version into v_ver from club_config where location_id = 'santa-teresa';
+  perform set_config('request.headers', '{}', true);
+  set local role anon;
+  begin perform public.club_socio_autoalta(jsonb_build_object('nombre', 'Eva Ficticia', 'whatsapp', '60001236', 'acepto', v_ver)); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  reset role;
+  perform set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+  perform pg_temp.r('57', 'autoalta sin x-club-web → rechaza', e = 'Datos no válidos', e);
+  select codigo into v_x from club_miembros where id = v_id;
+  set local role anon;
+  begin perform public.club_socio_autoalta(jsonb_build_object('nombre', 'Eva Ficticia', 'whatsapp', '60001236', 'acepto', 'v-viejo')); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Eva Ficticia', 'whatsapp', '60001236', 'acepto', v_ver,
+                                                     'ref', v_x));
+  reset role;
+  perform pg_temp.r('57', 'autoalta sin aceptar el aviso vigente → rechaza', e = 'Datos no válidos', e);
+  select r.miembro_id into v_a from club_miembro_roles r join club_miembros_contacto c on c.miembro_id = r.miembro_id
+   where c.telefono = '+50660001236' and r.rol = 'socio';
+  perform pg_temp.r('57', 'autoalta → socio pendiente, con aviso versionado, link del portal y referido',
+    (select estado = 'pendiente' and alta_por = 'autoalta' and aviso_version = v_ver and referido_por = v_id
+       from club_miembro_roles where miembro_id = v_a and rol = 'socio') and j->>'portal' like 'https://club.satoricostarica.com/p/%', j::text);
+  set local role anon;
+  j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Otra', 'whatsapp', '60001234', 'acepto', v_ver));
+  reset role;
+  perform pg_temp.r('57', 'autoalta con un WhatsApp que ya es socio → respuesta pareja, sin link ni cambios',
+    j = '{"ok": true}'::jsonb and (select alta_por from club_miembro_roles where miembro_id = v_id and rol = 'socio') = 'caja', j::text);
+  -- un socio en baja que vuelve por autoalta: queda pendiente, pero NO se devuelve su portal (negativa)
+  update club_miembro_roles set estado = 'baja' where miembro_id = v_id and rol = 'socio';
+  set local role anon;
+  j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Carla', 'whatsapp', '60001234', 'acepto', v_ver));
+  reset role;
+  perform pg_temp.r('57', 'autoalta con el WhatsApp de alguien que ya existía → pendiente y SIN link de su portal',
+    j = '{"ok": true}'::jsonb and (select estado from club_miembro_roles where miembro_id = v_id and rol = 'socio') = 'pendiente', j::text);
+  update club_miembro_roles set estado = 'activo', alta_por = 'caja' where miembro_id = v_id and rol = 'socio';
+  -- altas por confirmar: solo gerencia
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  select count(*) into v_n from public.club_socios_por_confirmar() x where x.miembro_id = v_id2;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_socios_por_confirmar(); e := 'ok'; exception when insufficient_privilege then e := 'sin permiso'; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('57', 'altas por confirmar: el manager las ve; el cajero no', v_n = 1 and e = 'sin permiso', format('%s %s', v_n, e));
+  -- tope global por día
+  update club_config set socio_autoalta_max_dia = 1 where location_id = 'santa-teresa';
+  set local role anon;
+  begin perform public.club_socio_autoalta(jsonb_build_object('nombre', 'Fede Ficticio', 'whatsapp', '60001237', 'acepto', v_ver)); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  reset role;
+  update club_config set socio_autoalta_max_dia = 60 where location_id = 'santa-teresa';
+  perform pg_temp.r('57', 'tope global de autoaltas por día', e = 'Demasiadas altas hoy', e);
+  -- purga: autoalta sin validar a los 30 días → datos borrados
+  update club_miembro_roles set desde = now() - interval '31 days' where miembro_id = v_a and rol = 'socio';
+  j := public.club_socios_mantenimiento();
+  perform pg_temp.r('57', 'autoalta sin validar a los 30 días → purga (sin contacto, sin rol, nombre borrado)',
+    not exists (select 1 from club_miembros_contacto where miembro_id = v_a) and not exists (select 1 from club_miembro_roles where miembro_id = v_a)
+      and (select estado = 'baja' and nombre not like '%Eva%' from club_miembros where id = v_a), j::text);
+  -- baja desde el portal (link del aviso)
+  select token_portal into v_x from club_miembros where id = v_id2;
+  set local role anon;
+  v_ok := public.club_socio_baja_portal(v_x);
+  reset role;
+  perform pg_temp.r('57', 'baja desde el portal → rol de socio en baja y sin opt-in',
+    (select estado from club_miembro_roles where miembro_id = v_id2 and rol = 'socio') = 'baja'
+      and not (select optin_whatsapp from club_miembros_contacto where miembro_id = v_id2), '');
+
+  -- CLUB-AUD-69: token de pase propio; revocado no genera código
+  update club_miembros set tipo = 'referente' where id = v_id;
+  insert into club_miembro_roles (miembro_id, rol) values (v_id, 'referente') on conflict do nothing;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (v_id, 'tarjeta', 12, 6, 18000, 'FP-57', now(), 'app', 'manual');
+  select token_pase, token_portal into v_tp, v_x from club_miembros where id = v_id;
+  set local role anon;
+  select codigo into v_cod from public.club_canje_codigo_generar_pase(v_tp);
+  begin perform public.club_canje_codigo_generar_pase(v_x); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  reset role;
+  perform pg_temp.r('57', 'el token de pase genera código de canje; el del portal no sirve en /w/', v_cod ~ '^[0-9A-Z]{6}$' and e = 'Enlace no válido', e);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  perform public.club_pase_token(v_id, 'revocar');
+  perform pg_temp.yo();
+  set local role anon;
+  begin perform public.club_canje_codigo_generar_pase(v_tp); e := 'ok'; exception when others then e := sqlerrm; end;
+  reset role;
+  set local role service_role;
+  j := public.club_pase_datos(v_id);
+  reset role;
+  perform pg_temp.r('57', 'token de pase revocado → no genera código y el pase pierde el botón Canjear (negativa)',
+    e = 'Enlace no válido' and j->>'canjear_url' is null, e);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  perform public.club_pase_token(v_id, 'regenerar');
+  perform pg_temp.yo();
+  perform pg_temp.r('57', 'regenerar → token nuevo, distinto del revocado',
+    (select token_pase is not null and token_pase <> v_tp from club_miembros where id = v_id), '');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_pase_token(v_id, 'revocar'); e := 'ok';
+  exception when insufficient_privilege then e := 'sin permiso'; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('57', 'el cajero no revoca ni regenera el token de pase', e = 'sin permiso', e);
+
+  -- CLUB-AUD-70: guardar solo avanza; rebobinar es aparte, con motivo y auditoría
+  set local role service_role;
+  perform public.club_pase_cursor_guardar('apple', 500);
+  perform public.club_pase_cursor_guardar('apple', 100);
+  v_cur := public.club_pase_cursor_leer('apple');
+  begin perform public.club_pase_cursor_rebobinar('apple', 50, ''); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform public.club_pase_cursor_rebobinar('apple', 50, 'reprocesar prueba');
+  v_ok := public.club_pase_cursor_leer('apple') = 50;
+  reset role;
+  perform pg_temp.r('57', 'cursor: guardar no retrocede; rebobinar exige motivo, retrocede y queda auditado',
+    v_cur = 500 and e = 'El motivo es obligatorio' and v_ok
+      and exists (select 1 from club_auditoria where accion = 'pase_cursor_rebobinar' and despues->>'motivo' = 'reprocesar prueba'), e);
+  perform pg_temp.r('57', 'rebobinar: solo service_role',
+    not has_function_privilege('authenticated', 'public.club_pase_cursor_rebobinar(text, bigint, text)', 'EXECUTE')
+      and not has_function_privilege('anon', 'public.club_pase_cursor_rebobinar(text, bigint, text)', 'EXECUTE'), '');
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

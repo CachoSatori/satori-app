@@ -5,11 +5,13 @@
  *   /p/{token}    portal del referente: saldo, QR para compartir, «Canjear» (código de 10 min) e historial
  *   /k/{codigo6}  código de canje: lo lee la caja; abierto en un navegador, solo un aviso
  *   /s/{codigo9}  QR fijo del socio del Local Club: lo lee la caja; abierto en un navegador, solo un aviso
+ *   /alta         autoalta del socio (LC-DES-07): nombre + WhatsApp + aviso de privacidad + Turnstile → pendiente
+ *   /w/{token}    botón «Canjear» del pase de Wallet (token de pase, CLUB-AUD-69): solo genera el código de canje
  * Todo pasa por /api/* (Pages Function con tope por IP). El DOM se arma sin innerHTML.
  */
 import './styles.css'
 import { urlCanje, urlCupon, urlReferente } from './qrFormato'
-import { LOCAL } from './config'
+import { LOCAL, AVISO_PRIVACIDAD_VERSION, TURNSTILE_SITEKEY } from './config'
 import { TEXTOS, idiomaInicial, guardarIdioma, type Idioma } from './i18n'
 
 let idioma: Idioma = idiomaInicial()
@@ -50,7 +52,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<Res<T>> {
 const msgError = (e: string) =>
   ({ referente_invalido: t.ref_invalido, cupon_invalido: t.cupon_invalido, portal_invalido: t.portal_invalido,
      tope_referente: t.tope_ref, demasiados_pedidos: t.demasiados, red: t.red, tope_canje: t.tope_canje,
-     sin_saldo_canje: t.sin_saldo_canje } as Record<string, string>)[e] ?? t.servicio
+     sin_saldo_canje: t.sin_saldo_canje, tope_altas: t.tope_altas, verificacion: t.alta_verificacion,
+     datos_invalidos: t.alta_falta } as Record<string, string>)[e] ?? t.servicio
 
 // ── Formatos ─────────────────────────────────────────────────────────────────
 const fecha = (iso: string, conHora = true) =>
@@ -170,6 +173,7 @@ async function paginaCupon(codigo: string) {
 
 interface Portal {
   nombre: string; codigo: string; personas: number; creditos: number; personas_proximo_credito: number
+  anfitrion?: boolean; socio?: { estado: 'pendiente' | 'activo'; desde: string } | null
   movimientos: Array<{ tipo: string; personas: number; creditos: number | null; fecha: string }>
 }
 
@@ -177,7 +181,7 @@ interface Portal {
 let reloj: ReturnType<typeof setInterval> | null = null
 function pararReloj() { if (reloj) { clearInterval(reloj); reloj = null } }
 
-function seccionCanje(token: string): HTMLElement {
+function seccionCanje(token: string, via: 'portal' | 'pase' = 'portal'): HTMLElement {
   const sec = h('section', { class: 'tarjeta canje', 'aria-label': t.canje_titulo })
   const inicial = () => {
     pararReloj()
@@ -185,7 +189,7 @@ function seccionCanje(token: string): HTMLElement {
     const boton = h('button', { type: 'button', class: 'btn' }, t.canje_boton) as HTMLButtonElement
     boton.addEventListener('click', async () => {
       boton.disabled = true; boton.textContent = t.canje_generando; err.replaceChildren()
-      const r = await api<Array<{ codigo: string; vence_en: string }>>(`portal/${token}/canje`, { method: 'POST' })
+      const r = await api<Array<{ codigo: string; vence_en: string }>>(`${via}/${token}/canje`, { method: 'POST' })
       if (r.ok && r.data?.[0]) return mostrar(r.data[0].codigo, r.data[0].vence_en)
       boton.disabled = false; boton.textContent = t.canje_boton
       err.append(avisoEl('err', msgError(r.ok ? 'servicio' : r.error)))
@@ -234,14 +238,16 @@ async function paginaPortal(token: string) {
     } catch { /* cancelado */ }
   }, 'image/png'))
   const descargar = h('a', { class: 'btn sec', href: canvas.toDataURL('image/png'), download: `satori-${p.codigo}.png` }, t.descargar)
+  const esAnfitrion = p.anfitrion !== false
   pintar(
     h('h1', {}, t.portal_hola(p.nombre)),
-    h('section', { class: 'tarjeta' },
+    p.socio && seccionSocio(token, p.socio.estado),
+    esAnfitrion && h('section', { class: 'tarjeta' },
       h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)), h('span', {}, t.portal_creditos)),
       h('p', { class: 'sub' }, t.portal_personas(p.personas)),
       h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito)))),
-    p.creditos >= 1 && seccionCanje(token),
-    h('section', { class: 'tarjeta portal-qr' },
+    esAnfitrion && p.creditos >= 1 && seccionCanje(token),
+    esAnfitrion && h('section', { class: 'tarjeta portal-qr' },
       h('h2', {}, t.portal_qr), canvas, h('p', { class: 'codigo', style: 'text-align:center' }, p.codigo),
       h('p', {}, t.portal_indicaciones),
       h('div', { class: 'fila' }, compartir, descargar),
@@ -260,18 +266,101 @@ async function paginaPortal(token: string) {
   )
 }
 
+// ── LC-A2: socio del Local Club ──────────────────────────────────────────────
+function seccionSocio(token: string, estado: 'pendiente' | 'activo'): HTMLElement {
+  const err = h('div')
+  const baja = h('button', { type: 'button', class: 'btn sec' }, t.socio_baja_boton) as HTMLButtonElement
+  const sec = h('section', { class: 'tarjeta', 'aria-label': t.socio_titulo },
+    h('h2', {}, t.socio_titulo),
+    h('p', {}, estado === 'pendiente' ? t.socio_pendiente : t.socio_activo),
+    err, baja)
+  baja.addEventListener('click', async () => {
+    if (!window.confirm(t.socio_baja_confirmar)) return
+    baja.disabled = true; err.replaceChildren()
+    const r = await api<boolean>(`portal/${token}/baja`, { method: 'POST' })
+    if (r.ok) { sec.replaceChildren(h('h2', {}, t.socio_titulo), avisoEl('ok', t.socio_baja_listo)); anunciar(t.socio_baja_listo); return }
+    baja.disabled = false; err.append(avisoEl('err', msgError(r.error)))
+  })
+  return sec
+}
+
+// Turnstile (Cloudflare): el script se carga solo en /alta.
+type TurnstileApi = { render: (el: HTMLElement, o: Record<string, unknown>) => string; reset: (id?: string) => void }
+function cargarTurnstile(): Promise<TurnstileApi | null> {
+  const w = window as unknown as { turnstile?: TurnstileApi }
+  if (w.turnstile) return Promise.resolve(w.turnstile)
+  return new Promise(res => {
+    const sc = document.createElement('script')
+    sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+    sc.async = true
+    sc.onload = () => res(w.turnstile ?? null)
+    sc.onerror = () => res(null)
+    document.head.append(sc)
+  })
+}
+
+async function paginaAlta() {
+  const ref = (new URLSearchParams(location.search).get('ref') || '').toUpperCase()
+  const err = h('div')
+  const nombre = h('input', { type: 'text', id: 'a-nombre', autocomplete: 'name', maxlength: '80' }) as HTMLInputElement
+  const wa = h('input', { type: 'tel', id: 'a-wa', autocomplete: 'tel', inputmode: 'tel', maxlength: '32' }) as HTMLInputElement
+  const ok = h('input', { type: 'checkbox', id: 'a-ok' }) as HTMLInputElement
+  const caja = h('div', { class: 'turnstile' })
+  const enviar = h('button', { type: 'submit', class: 'btn' }, t.alta_enviar) as HTMLButtonElement
+  let token = ''
+  const widget: { id?: string } = {}
+  const form = h('form', {
+    onsubmit: async (e: Event) => {
+      e.preventDefault(); err.replaceChildren()
+      if (nombre.value.trim().length < 2 || !wa.value.trim() || !ok.checked || !token) { err.append(avisoEl('err', t.alta_falta)); return }
+      enviar.disabled = true; enviar.textContent = t.alta_enviando
+      const r = await api<{ ok: boolean; portal?: string }>('alta', { method: 'POST', body: JSON.stringify({
+        nombre: nombre.value, whatsapp: wa.value, acepto: AVISO_PRIVACIDAD_VERSION, ref: /^[A-HJ-NP-Z2-9]{8}$/.test(ref) ? ref : '', turnstile: token }) })
+      if (r.ok) {
+        const portal = r.data?.portal
+        pintar(h('h1', {}, t.alta_titulo), avisoEl('ok', portal ? t.alta_listo : t.alta_listo_sin_link),
+          portal && portal.startsWith('https://club.satoricostarica.com/p/')
+            ? h('a', { class: 'btn', href: new URL(portal).pathname }, t.alta_portal) : null)
+        anunciar(portal ? t.alta_listo : t.alta_listo_sin_link)
+        return
+      }
+      enviar.disabled = false; enviar.textContent = t.alta_enviar
+      token = ''; ts?.reset(widget.id)
+      err.append(avisoEl('err', msgError(r.error)))
+    },
+  },
+    h('label', { for: 'a-nombre' }, t.alta_nombre), nombre,
+    h('label', { for: 'a-wa' }, t.alta_whatsapp), wa,
+    h('details', { class: 'aviso-priv', open: true }, h('summary', {}, t.alta_aviso_titulo), h('p', {}, t.alta_aviso),
+      h('p', { class: 'sub' }, `(${AVISO_PRIVACIDAD_VERSION})`)),
+    h('label', { class: 'check', for: 'a-ok' }, ok, h('span', {}, t.alta_acepto)),
+    caja, err, enviar)
+  pintar(h('h1', {}, t.alta_titulo), h('p', { class: 'sub' }, t.alta_sub), h('section', { class: 'tarjeta' }, form))
+  const ts = await cargarTurnstile()
+  if (!ts) { err.append(avisoEl('err', t.alta_verificacion)); return }
+  widget.id = ts.render(caja, { sitekey: TURNSTILE_SITEKEY, language: idioma,
+    callback: (v: string) => { token = v }, 'expired-callback': () => { token = '' }, 'error-callback': () => { token = '' } })
+}
+
+function paginaPase(token: string) {
+  if (!/^[0-9a-f]{64}$/.test(token)) return pintar(h('h1', {}, t.w_titulo), avisoEl('err', t.portal_invalido))
+  pintar(h('h1', {}, t.w_titulo), h('p', { class: 'sub' }, t.w_txt), seccionCanje(token, 'pase'))
+}
+
 // ── Router ───────────────────────────────────────────────────────────────────
 function ruta() {
   pararReloj()
   document.documentElement.lang = idioma
   document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === idioma)))
-  const m = location.pathname.match(/^\/([rcpks])\/([^/]+)\/?$/)
+  if (/^\/alta\/?$/.test(location.pathname)) return paginaAlta()
+  const m = location.pathname.match(/^\/([rcpksw])\/([^/]+)\/?$/)
   if (!m) return pintar(h('h1', {}, t.inicio), h('p', { class: 'sub' }, t.inicio_txt))
   const [, tipo, cod] = m
   if (tipo === 'r') return paginaReferente(cod.toUpperCase())
   if (tipo === 'c') return paginaCupon(cod.toUpperCase())
   if (tipo === 'k') return pintar(h('h1', {}, t.canje_qr), h('p', { class: 'sub' }, t.k_txt))
   if (tipo === 's') return pintar(h('h1', {}, t.s_titulo), h('p', { class: 'sub' }, t.s_txt))
+  if (tipo === 'w') return paginaPase(cod.toLowerCase())
   return paginaPortal(cod.toLowerCase())
 }
 

@@ -10,5 +10,6 @@ delete from club_pase_eventos where miembro_id in (select id from club_miembros 
 delete from club_movimientos where miembro_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_cupones where referente_id in (select id from club_miembros where nombre like 'Carrera %');
 delete from club_miembros where nombre like 'Carrera %';
+delete from club_pase_cursor where nombre = 'apple' and ultimo_id in (400, 900);   -- carrera 17 (B todavía no usa «apple»)
 delete from pos_ndf_tickets where local = 'santa-teresa' and numero_factura like '99095_' and length(numero_factura) = 6;
 commit;

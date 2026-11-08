@@ -66,7 +66,7 @@ export interface ResolverCanje {
 export interface ResolverSocio {
   tipo: 'socio'
   datos: { id: string; nombre: string; persona_estado: 'activo' | 'baja'; estado: 'pendiente' | 'activo' | 'baja'
-           desde: string; alta_por: string; es_anfitrion: boolean }
+           desde: string; alta_por: string; provisional_hasta: string | null; es_anfitrion: boolean }
 }
 export type ResolverResultado = ResolverCupon | ResolverReferente | ResolverCanje | ResolverSocio | { tipo: 'desconocido'; datos: Record<string, never> }
 
@@ -345,3 +345,22 @@ export const getRoles = () => leer(from<ClubRol>('club_miembro_roles').select('m
 /** Activar a un socio como anfitrión (solo owner o manager, con nota; queda en la auditoría). */
 export const activarAnfitrion = (miembro: string, rol: 'referente' | 'concierge_pm' | 'equipo', nota: string) =>
   llamar<boolean>('club_rol_activar_anfitrion', { p_miembro: miembro, p_rol: rol, p_nota: nota })
+
+// ── LC-A2: socios del Local Club ──────────────────────────────────────────────
+export interface AltaSocio { miembro_id: string; estado: 'activo'; provisional_hasta: string }
+/** Alta en caja (owner, manager, cajero): queda ACTIVO PROVISIONAL hasta que otro manager u owner la confirme. */
+export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | null, verificoResidencia: boolean) =>
+  llamar<AltaSocio>('club_socio_alta_caja', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia })
+/** Validar en caja una autoalta pendiente: pasa a activo provisional. */
+export const socioValidar = (miembro: string, verificoResidencia: boolean) =>
+  llamar<AltaSocio>('club_socio_validar', { p_miembro: miembro, p_verifico_residencia: verificoResidencia })
+/** Confirmar un alta provisional (owner o manager distinto de quien la cargó). */
+export const socioConfirmar = (miembro: string, nota: string) =>
+  llamar<boolean>('club_socio_confirmar', { p_miembro: miembro, p_nota: nota })
+export interface SocioPorConfirmar {
+  miembro_id: string; nombre: string; alta_por: string; registrado_por: string; provisional_hasta: string; puedo_confirmar: boolean
+}
+export const getSociosPorConfirmar = () => llamar<SocioPorConfirmar[]>('club_socios_por_confirmar', {})
+/** Token del botón «Canjear» del pase (CLUB-AUD-69): owner o manager. */
+export const paseToken = (miembro: string, accion: 'regenerar' | 'revocar') =>
+  llamar<boolean>('club_pase_token', { p_miembro: miembro, p_accion: accion })

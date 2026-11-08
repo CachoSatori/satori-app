@@ -8,6 +8,7 @@ import QRCode from 'qrcode'
 import {
   getMiembros, getSaldos, getNegocios, getMovimientos, getContacto, guardarMiembro, guardarNegocio,
   regenerarCodigo, tokenPortal, codigoMiembro, aClubError, fmtCreditos, ajustarSaldo, nuevoOp, getRoles, activarAnfitrion,
+  getSociosPorConfirmar, socioConfirmar, paseToken, type SocioPorConfirmar,
   type ClubRol,
   type ClubMiembro, type ClubSaldo, type ClubNegocio, type ClubMovimiento, type TipoMiembro, type TipoNegocio,
 } from '../../shared/api/club'
@@ -107,6 +108,8 @@ export default function Miembros() {
         <Btn variant={pestana === 'socios' ? 'primary' : 'secondary'} onClick={() => setPestana('socios')} style={{ flex: 1 }}>Socios</Btn>
       </div>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+
+      {pestana === 'socios' && <PorConfirmar onCambio={cargar} />}
 
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -251,6 +254,10 @@ function Detalle({ f, onVolver, onEditar, onCambio }: { f: Fila; onVolver: () =>
       {(profile?.role === 'owner' || profile?.role === 'manager') && f.estado === 'activo'
         && f.roles.some(r => r.rol === 'socio') && !f.roles.some(r => r.rol !== 'socio') && (
         <ActivarAnfitrion f={f} onHecho={async t => { await onCambio(); setRecarga(n => n + 1); setAviso({ tono: 'ok', t }) }} />
+      )}
+
+      {(profile?.role === 'owner' || profile?.role === 'manager') && f.estado === 'activo' && f.roles.some(r => r.rol !== 'socio') && (
+        <TokenPase f={f} onHecho={t => setAviso({ tono: 'ok', t })} />
       )}
 
       {profile?.role === 'owner' && (
@@ -487,6 +494,89 @@ function FormMiembro({ inicial, tipoPorDefecto, negocios, saldoPersonas, onNegoc
       <div style={{ display: 'flex', gap: 8 }}>
         <Btn variant="secondary" onClick={onCancelar} disabled={guardando} style={{ flex: 1 }}>Cancelar</Btn>
         <Btn onClick={guardar} disabled={guardando || !nombre.trim()} style={{ flex: 2 }}>{guardando ? 'Guardando…' : 'Guardar'}</Btn>
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * LC-DES-01: altas provisionales (caja o validación de autoalta) que tiene que confirmar un manager u owner
+ * DISTINTO de quien las cargó, dentro de 7 días. Si no, vuelven a pendiente solas.
+ */
+function PorConfirmar({ onCambio }: { onCambio: () => Promise<void> }) {
+  const [filas, setFilas] = useState<SocioPorConfirmar[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [ok, setOk] = useState<string | null>(null)
+  const [enviando, setEnviando] = useState<string | null>(null)
+  const [recarga, setRecarga] = useState(0)
+  useEffect(() => {
+    let vivo = true
+    getSociosPorConfirmar()
+      .then(f => { if (vivo) setFilas(f) })
+      .catch(e => { if (vivo) setError(aClubError(e).message) })
+    return () => { vivo = false }
+  }, [recarga])
+  async function confirmar(f: SocioPorConfirmar) {
+    setEnviando(f.miembro_id); setError(null); setOk(null)
+    try { await socioConfirmar(f.miembro_id, ''); setOk(`Alta de ${f.nombre} confirmada.`); setRecarga(n => n + 1); await onCambio() }
+    catch (e) { setError(aClubError(e).message) }
+    finally { setEnviando(null) }
+  }
+  if (filas !== null && filas.length === 0 && !error) return null
+  return (
+    <Card>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Altas por confirmar</div>
+      <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
+        El socio ya tiene el beneficio. Confirmá el alta si lo conocés o lo viste en caja; la confirma alguien distinto de quien la cargó.
+        Si nadie la confirma antes de la fecha, vuelve a pendiente.
+      </div>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      {ok && <Aviso tono="ok" onClose={() => setOk(null)}>{ok}</Aviso>}
+      {filas === null ? <div style={{ color: C.muted }}>Cargando…</div> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {filas.map(f => (
+            <div key={f.miembro_id} style={{ display: 'flex', gap: 8, alignItems: 'center', borderBottom: `1px solid ${C.panel}`, padding: '4px 0' }}>
+              <div style={{ flex: 1 }}>
+                <strong>{f.nombre}</strong>
+                <div style={{ fontSize: '0.78rem', color: C.muted }}>
+                  {f.alta_por === 'autoalta' ? 'Autoalta validada' : 'Alta en caja'} por {f.registrado_por} · vence {fmtFechaHora(f.provisional_hasta)}
+                </div>
+              </div>
+              {f.puedo_confirmar
+                ? <Btn onClick={() => confirmar(f)} disabled={enviando !== null}>{enviando === f.miembro_id ? 'Confirmando…' : 'Confirmar'}</Btn>
+                : <span style={{ fontSize: '0.78rem', color: C.muted }}>La cargaste vos: la confirma otro</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/** CLUB-AUD-69: el botón «Canjear» del pase usa un token propio. Revocar (pase perdido o compartido) o regenerar. */
+function TokenPase({ f, onHecho }: { f: Fila; onHecho: (texto: string) => void }) {
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function hacer(accion: 'regenerar' | 'revocar') {
+    const q = accion === 'revocar'
+      ? `¿Revocar el botón «Canjear» del pase de ${f.nombre}? Deja de generar códigos hasta que lo regeneres.`
+      : `¿Regenerar el botón «Canjear» del pase de ${f.nombre}? El link anterior deja de servir.`
+    if (!window.confirm(q)) return
+    setEnviando(true); setError(null)
+    try { await paseToken(f.id, accion); onHecho(accion === 'revocar' ? 'Botón «Canjear» del pase revocado.' : 'Botón «Canjear» del pase regenerado: el pase se actualiza solo.') }
+    catch (e) { setError(aClubError(e).message) }
+    finally { setEnviando(false) }
+  }
+  return (
+    <Card>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Botón «Canjear» del pase</div>
+      <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
+        Si perdió el teléfono o compartió el pase, revocalo. El portal sigue funcionando.
+      </div>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn variant="danger" onClick={() => hacer('revocar')} disabled={enviando}>Revocar</Btn>
+        <Btn variant="secondary" onClick={() => hacer('regenerar')} disabled={enviando}>Regenerar</Btn>
       </div>
     </Card>
   )

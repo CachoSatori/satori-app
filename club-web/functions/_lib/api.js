@@ -57,6 +57,7 @@ function traducirError(msg) {
   if (m === 'Enlace no válido') return [404, 'portal_invalido']
   if (m === 'Demasiados códigos de canje') return [429, 'tope_canje']
   if (m === 'Todavía no te alcanza para canjear') return [409, 'sin_saldo_canje']
+  if (m === 'Demasiadas altas hoy') return [429, 'tope_altas']
   if (/consentimiento|no válidos/i.test(m)) return [400, 'datos_invalidos']
   return [502, 'servicio']
 }
@@ -101,6 +102,30 @@ function limpiarContacto(c) {
   return { nombre: s(c.nombre, 80), whatsapp: s(c.whatsapp, 32), email: s(c.email, 254), optin: c.optin === true }
 }
 
+/**
+ * LC-DES-07: Turnstile (Cloudflare) en la autoalta. TURNSTILE_SECRET es secreto de Pages (en staging, la clave de
+ * prueba de Cloudflare). Sin el secreto la autoalta responde 503 (falla cerrada). En el servidor local
+ * (CLUB_DEV=1) se acepta el token «dev».
+ * @returns {Promise<boolean|null>} true = humano · false = no · null = sin configurar
+ */
+export async function verificarTurnstile(env, token, ip) {
+  if (env.CLUB_DEV === '1' && !env.TURNSTILE_SECRET) return token === 'dev'
+  if (!env.TURNSTILE_SECRET) return null
+  if (typeof token !== 'string' || token.length < 10 || token.length > 2048) return false
+  try {
+    const f = new FormData()
+    f.append('secret', env.TURNSTILE_SECRET); f.append('response', token)
+    if (ip && ip !== 'sin-ip') f.append('remoteip', ip)
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: f })
+    const j = await r.json()
+    return j && j.success === true
+  } catch {
+    return false
+  }
+}
+
+const RE_AVISO = /^v[0-9A-Za-z.-]{1,30}$/
+
 /** Router de /api/*. `path` sin el prefijo /api/. */
 export async function manejar(request, env, path) {
   const ip = request.headers.get('CF-Connecting-IP') || 'sin-ip'
@@ -116,6 +141,7 @@ export async function manejar(request, env, path) {
     if (metodo !== 'GET') return json(405, { error: 'metodo' })
     const ok = b => !!(b && typeof b.limit === 'function')
     return json(200, { rl_crear: ok(env.RL_CREAR), rl_leer: ok(env.RL_LEER), club_web_key: !!env.CLUB_WEB_KEY,
+                       turnstile: !!env.TURNSTILE_SECRET,
                        supabase: RE_SUPABASE.test(String(env.SUPABASE_URL || '').replace(/\/+$/, '')) && !!env.SUPABASE_ANON_KEY })
   }
 
@@ -155,6 +181,40 @@ export async function manejar(request, env, path) {
     const tok = String(partes[1]).toLowerCase()
     if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
     return rpc(env, 'club_canje_codigo_generar', { p_token: tok })
+  }
+
+  // POST /api/alta  {nombre, whatsapp, acepto, ref?, turnstile}  → autoalta de socio (pendiente), LC-DES-07
+  if (partes.length === 1 && partes[0] === 'alta') {
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'crear', `alta:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const b = await leerCuerpo(request)
+    if (!b || typeof b !== 'object') return json(400, { error: 'datos_invalidos' })
+    const humano = await verificarTurnstile(env, b.turnstile, ip)
+    if (humano === null) return json(503, { error: 'servicio_no_disponible' })
+    if (!humano) return json(403, { error: 'verificacion' })
+    const s = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
+    const datos = { nombre: s(b.nombre, 80), whatsapp: s(b.whatsapp, 32), acepto: s(b.acepto, 32), ref: s(b.ref, 8).toUpperCase() }
+    if (datos.nombre.length < 2 || !datos.whatsapp || !RE_AVISO.test(datos.acepto)) return json(400, { error: 'datos_invalidos' })
+    if (datos.ref && !RE_REF.test(datos.ref)) datos.ref = ''
+    return rpc(env, 'club_socio_autoalta', { p_datos: datos })
+  }
+
+  // POST /api/pase/:token/canje  → código de canje desde el botón «Canjear» del pase (token de pase, CLUB-AUD-69)
+  if (partes.length === 3 && partes[0] === 'pase' && partes[2] === 'canje') {
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'crear', `canje:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    return rpc(env, 'club_canje_codigo_generar_pase', { p_token_pase: tok })
+  }
+
+  // POST /api/portal/:token/baja  → baja del Local Club (link del aviso de privacidad)
+  if (partes.length === 3 && partes[0] === 'portal' && partes[2] === 'baja') {
+    if (metodo !== 'POST') return json(405, { error: 'metodo' })
+    { const ok = await limitar(env, 'crear', `baja:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
+    const tok = String(partes[1]).toLowerCase()
+    if (!RE_TOKEN.test(tok)) return json(404, { error: 'portal_invalido' })
+    return rpc(env, 'club_socio_baja_portal', { p_token: tok })
   }
 
   // GET /api/portal/:token

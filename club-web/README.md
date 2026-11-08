@@ -6,7 +6,10 @@ Es un mini-sitio aparte de la app. No tiene React, ni PWA, ni service worker. Lo
 |---|---|
 | `/r/{codigo8}` | El turista obtiene su cupón 10 % (o ve el que ya tiene en ese teléfono). Debajo del cupón hay un opt-in opcional, con casilla de consentimiento. |
 | `/c/{codigo10}` | El cupón. Si está vigente, lo muestra; si está usado o vencido, muestra un aviso. |
-| `/p/{token64}` | El portal del referente: saldo, personas que le faltan para el próximo medio crédito, su QR (para compartir o descargar) e historial. El botón de Wallet queda oculto hasta la F1e. |
+| `/p/{token64}` | El portal: del anfitrión (saldo, personas que le faltan para el próximo medio crédito, su QR para compartir, «Canjear» e historial) y del socio del Local Club (estado y «Darme de baja»). El botón de Wallet queda oculto hasta la F1e. |
+| `/k/{codigo6}` · `/s/{codigo9}` | Código de canje y QR del socio: los lee la caja; en un navegador, solo un aviso. |
+| `/alta` (`?ref={codigo8}`) | Autoalta del socio del Local Club (LC-DES-07): nombre, WhatsApp, aviso de privacidad versionado y Turnstile. Queda **pendiente** hasta que la caja lo valida. |
+| `/w/{token64}` | Botón «Canjear» del pase de Wallet (CLUB-AUD-69): con el **token de pase**, solo genera el código de canje. |
 
 El formato de las URL está en `src/qrFormato.ts`. Es una copia de `src/modules/club/qrFormato.ts` de la app, y las dos tienen que coincidir.
 
@@ -23,14 +26,24 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 | `GET /api/cupon/{codigo}` | `club_cupon_ver` | 60 por minuto |
 | `POST /api/cupon/{codigo}/contacto` `{contacto}` | `club_cupon_contacto` | 5 cada 10 min |
 | `GET /api/portal/{token}` | `club_portal` | 60 por minuto |
+| `POST /api/portal/{token}/canje` | `club_canje_codigo_generar` | 5 por minuto |
+| `POST /api/portal/{token}/baja` | `club_socio_baja_portal` | 5 por minuto |
+| `POST /api/pase/{token_pase}/canje` | `club_canje_codigo_generar_pase` | 5 por minuto |
+| `POST /api/alta` `{nombre, whatsapp, acepto, ref?, turnstile}` | `club_socio_autoalta` (después de Turnstile) | 5 por minuto · tope global por día en SQL (`socio_autoalta_max_dia`, 60) |
 
 - **Cómo cuenta el tope (CLUB-AUD-14 y 24):** un binding de Rate Limiting por endpoint, por IP:
   - `RL_CREAR`: crear cupón, opt-in y código de canje, **5 por 60 s**;
   - `RL_LEER`: ver cupón y portal, **60 por 60 s**.
 
   **Si falta alguno, ese endpoint responde 503**: falla cerrada. Al turista le aparece «Demasiados intentos seguidos. Esperá unos minutos…». Cada tope que salta deja una línea `{"alerta":"club-web-tope",…}` en los logs de la función, y sobre ese texto se puede armar una notificación. No hay respaldo en KV ni en memoria; la memoria queda solo para `dev-server.mjs` (`CLUB_DEV=1`).
-- **Una sola puerta (CLUB-AUD-06):** cada llamada lleva el header `x-club-web` con el secreto `CLUB_WEB_KEY`. La base solo responde a las 4 funciones públicas si el sha256 de ese header es el de la clave vigente. Llamar directo con la anon key ya no funciona. **Sin `CLUB_WEB_KEY`, la API responde 503.**
+- **Una sola puerta (CLUB-AUD-06):** cada llamada lleva el header `x-club-web` con el secreto `CLUB_WEB_KEY`. La base solo responde a las funciones públicas si el sha256 de ese header es el de la clave vigente. Llamar directo con la anon key ya no funciona. **Sin `CLUB_WEB_KEY`, la API responde 503.**
 - **Red de seguridad en SQL:** el tope por referente y por día, y el tope global de cupones por local y por minuto (`club_config.cupones_max_minuto_local`, 20 por defecto).
+- **Turnstile (LC-DES-07):** `/api/alta` verifica el token con Cloudflare (`TURNSTILE_SECRET`, Secret de Pages) antes de
+  llamar a la base. **Sin el secreto, responde 503.** En staging se usan las claves de prueba de Cloudflare (siempre
+  pasan): la del sitio por defecto en `src/config.ts` y la secreta `1x0000000000000000000000000000000AA`. En prod,
+  `VITE_TURNSTILE_SITEKEY` (variable de build) y `TURNSTILE_SECRET` las carga Ismael.
+- **Aviso de privacidad:** su versión (`AVISO_PRIVACIDAD_VERSION` en `src/config.ts`) tiene que ser igual a
+  `club_config.aviso_privacidad_version`; si no, la base rechaza el alta. Al cambiar el texto se suben las dos.
 - **Errores:** la función nunca devuelve el mensaje crudo de la base. Lo traduce a un código fijo (`referente_invalido`, `cupon_invalido`, `tope_referente`, `demasiados_pedidos` y otros).
 
 ## Desarrollo local
@@ -62,7 +75,7 @@ npx wrangler pages dev dist --binding SUPABASE_URL=… --binding SUPABASE_ANON_K
    5. Para rotarla, repetir los pasos 1 a 4 con una clave nueva. La anterior deja de valer cuando se carga el sha256 nuevo, así que conviene cargar primero el secreto en Pages y redesplegar.
 4. **Topes por IP** (`RL_CREAR` y `RL_LEER`): están declarados en `wrangler.toml`. **Verificación, después de cada deploy:**
    - abrir `https://club.satoricostarica.com/api/salud` (o la URL del deploy de prueba);
-   - tiene que decir `"rl_crear": true, "rl_leer": true, "club_web_key": true, "supabase": true`. No muestra ningún valor;
+   - tiene que decir `"rl_crear": true, "rl_leer": true, "club_web_key": true, "turnstile": true, "supabase": true`. No muestra ningún valor;
    - si `rl_crear` o `rl_leer` sale en `false`, Pages no tomó el binding. Esos endpoints responden 503: fallan cerrados, el sitio no queda abierto;
    - prueba de fuego: 6 «Obtener mi cupón» seguidos desde un mismo teléfono. El sexto tiene que mostrar «Demasiados intentos seguidos».
 

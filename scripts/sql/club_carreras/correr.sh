@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Carreras de dos sesiones del Club (CLUB-AUD-03, 04, 07, 08 y 15; R-01: 16; CLUB-AUD-70: 17). SOLO STAGING (ref fijo).
+# Carreras de dos sesiones del Club (CLUB-AUD-03, 04, 07, 08 y 15; R-01: 16; CLUB-AUD-70: 17; CLUB-AUD-38: 18). SOLO STAGING (ref fijo).
 #
 #   CAJERO_UUID=<perfil cajero activo> OWNER_UUID=<perfil owner activo> scripts/sql/club_carreras/correr.sh
 #
@@ -35,6 +35,10 @@ echo "  07 · lo que vio la caja: $(jq -r '.[0].resultado' "$TMP/07_s2.json")"
 echo "  08 · s1: $(jq -c '.[0].r' "$TMP/08_s1.json") · s2 (replay): $(jq -c '.[0].r' "$TMP/08_s2.json")"
 echo "  15 · lo que vio la caja en s2: $(jq -r '.[0].resultado' "$TMP/15_s2.json")"
 echo "  16 · s1: $(jq -c '.[0].r' "$TMP/16_s1.json") · s2 (mismo código): $(jq -r '.[0].resultado' "$TMP/16_s2.json")"
+
+# 18 (CLUB-AUD-38): diez sesiones a la vez con un código equivocado → no más de 5 intentos anotados
+for i in 1 2 3 4 5 6 7 8 9 10; do sql "$DIR/18_s.sql" > "$TMP/18_$i.json" & done; wait
+sql "$DIR/18_chk.sql" | jq -c '.[0].json_build_object'
 
 par 04   # cierre concurrente: s2 tiene que esperar a que termine s1
 t1=$(jq -r '.[0].fin_tx // empty' "$TMP/04_s1.json"); t2=$(jq -r '.[0].fin_tx // empty' "$TMP/04_s2.json")

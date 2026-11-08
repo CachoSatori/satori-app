@@ -1242,6 +1242,10 @@ begin
 
   -- 2. código (R-01): vigente, del mismo miembro, sin usar. Se bloquea la fila hasta el commit.
   if p_nota is null then
+    -- CLUB-AUD-38: contar y anotar el intento bajo un lock por actor y por miembro; sin él, N cajas a la vez
+    -- cuentan «4» y anotan todas, y el tope de 5 se pasa. Orden: op → intentos (actor, miembro) → código → miembro.
+    perform pg_advisory_xact_lock(hashtextextended('club_intentos_actor:' || coalesce(auth.uid()::text, '-'), 0));
+    perform pg_advisory_xact_lock(hashtextextended('club_intentos_miembro:' || p_miembro::text, 0));
     if public.club_canje_bloqueado(auth.uid(), p_miembro) then
       raise exception 'Demasiados códigos equivocados: esperá 15 minutos o pedile al manager un canje sin celular'
         using errcode = 'P0001';
@@ -2116,6 +2120,7 @@ begin
       return public.club_referente_json(v_m.id, null, null, 'referente');
     end if;
   elsif v_kind = 'k' and v_cod ~ '^[A-HJ-NP-Z2-9]{6}$' then
+    perform pg_advisory_xact_lock(hashtextextended('club_intentos_actor:' || coalesce(auth.uid()::text, '-'), 0));   -- CLUB-AUD-38
     if public.club_canje_bloqueado(auth.uid(), null) then
       raise exception 'Demasiados códigos equivocados: esperá 15 minutos o pedile al manager un canje sin celular'
         using errcode = 'P0001';

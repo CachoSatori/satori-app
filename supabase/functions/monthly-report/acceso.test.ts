@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
-  corsHeaders, decidirAcceso, igualConstante, mesValido, respuestaOk, validarParametros, type DepsAcceso,
+  corsHeaders, decidirAcceso, destinatarioReporte, igualConstante, mesValido, respuestaOk, validarParametros, type DepsAcceso,
 } from './acceso'
 
 const SERVICE = 'service-role-de-prueba'
@@ -121,5 +121,28 @@ describe('index.ts usa la guarda (estático)', () => {
   it('sin CORS abierto a cualquiera y sin montos en la respuesta', () => {
     expect(src).not.toMatch(/'Access-Control-Allow-Origin':\s*'\*'/)
     expect(handler).not.toMatch(/fi\(v\.total\)|fi\(p\.pool\)|topSal/)
+  })
+})
+
+describe('destinatario del reporte (sin correo real en el código)', () => {
+  it('sale solo del secreto; sin secreto o inválido → null (no se manda)', () => {
+    expect(destinatarioReporte(' reportes@ejemplo.test ')).toBe('reportes@ejemplo.test')
+    expect(destinatarioReporte(undefined)).toBeNull()
+    expect(destinatarioReporte('')).toBeNull()
+    expect(destinatarioReporte('no-es-un-correo')).toBeNull()
+  })
+
+  it('monthly-report y cierre-email no tienen correos fijos (salvo el remitente genérico de Resend)', () => {
+    for (const f of ['../monthly-report/index.ts', '../cierre-email/index.ts']) {
+      const src = readFileSync(join(__dirname, f), 'utf8')
+      const correos = (src.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) ?? [])
+        .filter(c => c !== 'onboarding@resend.dev')
+      expect(correos, f).toEqual([])
+    }
+  })
+
+  it('monthly-report frena el envío real sin destinatario (el modo seco sigue)', () => {
+    const src = readFileSync(join(__dirname, 'index.ts'), 'utf8')
+    expect(src).toMatch(/if \(!dry && !TO_EMAIL\) return falla\(/)
   })
 })

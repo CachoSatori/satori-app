@@ -21,7 +21,9 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? ''
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY       = Deno.env.get('SUPABASE_ANON_KEY')!
 // Mismo destinatario/config que monthly-report (en prod ya existe por ese reporte).
-const TO_EMAIL       = Deno.env.get('REPORT_TO_EMAIL') ?? 'cachorrogp@gmail.com'
+// Sin correo por defecto en el código (repo público): sin el secreto REPORT_TO_EMAIL no se manda.
+const TO_EMAIL_RAW   = (Deno.env.get('REPORT_TO_EMAIL') ?? '').trim()
+const TO_EMAIL       = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(TO_EMAIL_RAW) ? TO_EMAIL_RAW : ''
 const FROM_EMAIL     = 'Satori App <onboarding@resend.dev>'
 
 const ALLOWED_ORIGINS = new Set([
@@ -149,6 +151,7 @@ Deno.serve(async (req) => {
     if (!user) return json({ ok: false, error: 'No autorizado' }, 401)
 
     if (!RESEND_API_KEY) return json({ ok: false, error: 'RESEND_API_KEY no configurada' }, 200)
+    if (!TO_EMAIL) return json({ ok: false, error: 'REPORT_TO_EMAIL no configurada' }, 200)
 
     // 4) Releer la fila del cierre CON el cliente del usuario → el RLS es el portón.
     //    Solo cierres COMPLETOS: un parcial no tiene resumen final que enviar.

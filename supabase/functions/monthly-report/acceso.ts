@@ -123,3 +123,13 @@ export function corsHeaders(origin: string | null): Record<string, string> {
   if (origin && origenPermitido(origin)) h['Access-Control-Allow-Origin'] = origin
   return h
 }
+
+/**
+ * El destinatario de los correos sale SOLO del secreto REPORT_TO_EMAIL (el repo es público: ningún
+ * correo real en el código). Sin secreto o con un valor que no parece un correo → null, y quien llama
+ * NO manda nada (fallback seguro: mejor no enviar que enviar a una dirección fija del código).
+ */
+export function destinatarioReporte(valor: string | null | undefined): string | null {
+  const v = (valor ?? '').trim()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? v : null
+}

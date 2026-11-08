@@ -19,13 +19,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { poolTotalSesion, type PoolEntry } from './pool.ts'
 import {
-  corsHeaders, decidirAcceso, respuestaOk, validarParametros, type DepsAcceso,
+  corsHeaders, decidirAcceso, destinatarioReporte, respuestaOk, validarParametros, type DepsAcceso,
 } from './acceso.ts'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')!
 const SUPABASE_URL   = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_KEY   = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const TO_EMAIL       = Deno.env.get('REPORT_TO_EMAIL') ?? 'cachorrogp@gmail.com'
+// Sin correo por defecto en el código (repo público): sin el secreto, no se manda (ver acceso.ts).
+const TO_EMAIL       = destinatarioReporte(Deno.env.get('REPORT_TO_EMAIL'))
 const FROM_EMAIL     = 'Satori App <onboarding@resend.dev>'
 
 // ── Shared helpers (ported from Apps Script) ─────────────────
@@ -498,6 +499,8 @@ Deno.serve(async (req) => {
     const par = validarParametros(body)
     if (!par.ok) return falla(par.status, par.code, par.error)
     const { ym, tipo, dry } = par   // dry: modo seco, calcula todo y NO manda correos
+    // Sin destinatario configurado no se manda nada (el modo seco sigue funcionando).
+    if (!dry && !TO_EMAIL) return falla(500, 'config', 'Falta configurar el destinatario del reporte')
 
     // 3) Reporte. La respuesta dice qué se envió, sin montos ni nombres (van solo en el correo).
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)

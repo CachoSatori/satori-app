@@ -14,6 +14,13 @@
 # acá ni en supabase/functions/ de este PR: va con el ítem 11 del puente, aparte (decisión de Ismael
 # 08/11). La v1 de prod se armó con un mapTicket.ts distinto del de main.
 #
+# ⛔ GATE (Ismael, 08/11): el PR que traiga supabase/functions/ingest-ndf a main tiene que agregar EN EL
+# MISMO PR:
+#   [functions.ingest-ndf]
+#   verify_jwt = false
+# Si no, Branching la despliega con verify_jwt = true y el agente del PoS recibe 401 en cada ciclo
+# (manda x-ingest-secret, no un JWT). Lo exige supabase/config.test.ts en el gate.
+#
 # ⚠️ monthly-report y la rotación de claves: el cron manda la service_role del Vault, que hoy es un
 # JWT. Si se pasa a las claves nuevas (sb_secret_…, no son JWT) o se apagan las claves JWT viejas,
 # la puerta de entrada rechazaría al cron con 401. En ese mismo cambio hay que poner

@@ -19,7 +19,7 @@
 | Etapa | Qué | Días | Estado | SHA | Pruebas |
 |---|---|---|---|---|---|
 | B1 | Edge `club-pase`: JWT «Save to Google Wallet», clase y objeto | 1,5 | **hecha** (rama `claude/club-wallet`, sin desplegar) | `adfa208` | 20 pruebas nuevas (vitest 1.511) · build OK · eslint y tsc limpios · humo con datos reales de staging (solo lectura) |
-| B2 | Botón en el portal y en la autoalta | 0,5 | pendiente | — | — |
+| B2 | Botón en el portal y en la autoalta | 0,5 | **hecha** (apagada por flag `VITE_WALLET_GOOGLE`) | `5bede8d` | API club-web 15/15 · build y tsc limpios |
 | B3 | Sincronización por eventos, mensajes de canje, baja | 1,5 | pendiente | — | — |
 | B4 | Apple apagado | 1,5 | pendiente | — | — |
 | B5 | Integración real, código de barras según el rol, prueba en teléfono | 1,5 | pendiente | — | — |
@@ -88,3 +88,5 @@
   arrancada (necesita migración nueva). Cola del PLAN al día.
 - 08-nov 02:30 · **B1 hecha** en `claude/club-wallet` (`adfa208`), **sin desplegar**. Detalle:
   [NOCHE-2026-11-08-B.md](NOCHE-2026-11-08-B.md). Próximo de B: B2 (botón en el portal y en la autoalta).
+- 08-nov 02:30 (cont.) · **B2 hecha** (`5bede8d`): «Agregar a Google Wallet» en el portal y al final de la autoalta,
+  **apagado por flag** hasta desplegar el Edge. Próximo de B: B3 (sincronización por eventos, mensajes, baja).

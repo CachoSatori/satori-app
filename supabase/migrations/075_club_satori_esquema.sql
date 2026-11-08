@@ -2986,7 +2986,7 @@ begin
      group by t.id),
   -- DESCUENTO_SIN_RESPALDO: precios unitarios de las facturas C, desde 30 días antes del rango (una pasada)
   dpr as materialized (
-    select l.ticket_id as tid, l.codigo_producto as cod, l.nombre, round(l.monto / l.cantidad, 2) as u,
+    select l.ticket_id as tid, l.codigo_producto as cod, l.nombre, round(l.monto / l.cantidad, 2) as u, l.cantidad as q,
            (t.fecha_registra at time zone 'America/Costa_Rica')::date as dia,
            (k.tid is not null) as mk, coalesce(k.total, false) as mk_total, k.pcts as mk_pcts
       from public.pos_ndf_ticket_lines l join public.pos_ndf_tickets t on t.id = l.ticket_id
@@ -3219,7 +3219,14 @@ begin
     (select distinct on (c.tid) 'DESCUENTO_SIN_RESPALDO', 'desc:' || t.clave, t.f, t.numero_factura, 'probable',
            jsonb_build_object('articulo', c.cod, 'nombre', c.nombre, 'precio', c.u, 'referencia', c.ref,
                               'descuento_pct', round(100 * (1 - c.u / c.ref), 1), 'pos_logins', to_jsonb(t.pos_logins), 'turno', t.turno, 'logins_fijos', to_jsonb(t.logins_fijos),
-                              'marcador_pct', to_jsonb(c.mk_pcts))
+                              'marcador_pct', to_jsonb(c.mk_pcts),
+                              -- (08-nov) monto estimado de la línea y su CLASIFICACIÓN: el tipo por porcentaje más cercano del local
+                              -- (±1,5 puntos). Sin tipo = «sin clasificar», la alarma real.
+                              'descuento_crc', round((c.ref - c.u) * c.q),
+                              'clasificacion', (select dt.nombre from public.club_descuentos_tipo dt
+                                                 where dt.location_id = p_location and dt.activo
+                                                   and abs(100 * (1 - c.u / c.ref) - dt.pct) <= 1.5
+                                                 order by abs(100 * (1 - c.u / c.ref) - dt.pct), dt.pct limit 1))
       from (select k.*, r.ref
               from dcand k
               join dref r on r.cod = k.cod and r.dia = k.dia
@@ -3361,7 +3368,9 @@ as $$
   select count(*)::int
     from public.club_excepciones(((now() at time zone 'America/Costa_Rica')::date - least(greatest(coalesce(p_dias, 30), 1), 400)),
                                  (now() at time zone 'America/Costa_Rica')::date, p_location) e
-   where not e.resuelta;
+   where not e.resuelta
+     -- (08-nov) un descuento de un tipo conocido no es alarma: solo cuentan los «sin clasificar»
+     and not (e.tipo = 'DESCUENTO_SIN_RESPALDO' and e.detalle->>'clasificacion' is not null);
 $$;
 
 -- Segregación (CLUB-AUD-25): quien registró el movimiento no resuelve su excepción; la resuelve el owner.
@@ -5773,6 +5782,108 @@ end;
 $$;
 
 -- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+-- LC-DT · DESCUENTOS TIPIFICADOS POR PORCENTAJE, por local (Ismael, 08-nov). Hay descuentos que el PoS aplica SIN artículo
+-- (p. ej. 10 %, 15 %, 30 %). Cargados acá (nombre, %, activo), DESCUENTO_SIN_RESPALDO los muestra CLASIFICADOS (±1,5 puntos)
+-- y separados de los que no encajan en ningún tipo ni marcador («sin clasificar»: la alarma real). Los edita el owner.
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+create table if not exists public.club_descuentos_tipo (
+  id              uuid primary key default gen_random_uuid(),
+  location_id     text not null,
+  nombre          text not null check (length(btrim(nombre)) between 2 and 60),
+  pct             numeric(5,2) not null check (pct > 0 and pct <= 100),
+  activo          boolean not null default true,
+  creado_por      uuid,
+  creado_en       timestamptz not null default now(),
+  actualizado_por uuid,
+  actualizado_en  timestamptz not null default now(),
+  unique (location_id, nombre)
+);
+alter table public.club_descuentos_tipo enable row level security;
+revoke all on public.club_descuentos_tipo from public, anon, authenticated;
+
+create or replace function public.club_descuentos_tipo_listar(p_location text default null)
+returns table (id uuid, nombre text, pct numeric, activo boolean, actualizado_en timestamptz)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager','contador') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  p_location := public.club_local(p_location, false);
+  return query select d.id, d.nombre, d.pct, d.activo, d.actualizado_en from public.club_descuentos_tipo d
+                where d.location_id = p_location order by d.activo desc, d.pct;
+end;
+$$;
+
+create or replace function public.club_descuento_tipo_guardar(p_id uuid, p_nombre text, p_pct numeric, p_activo boolean,
+                                                              p_location text default null)
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_nom text := nullif(regexp_replace(btrim(coalesce(p_nombre, '')), '\s+', ' ', 'g'), '');
+  v_ant public.club_descuentos_tipo%rowtype;
+  v_id  uuid;
+begin
+  if v_rol is null or v_rol <> 'owner' then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  p_location := public.club_local(p_location, false);
+  if v_nom is not null and length(v_nom) not between 2 and 60 then raise exception 'El nombre va de 2 a 60 caracteres' using errcode = 'P0001'; end if;
+  if p_pct is not null and (p_pct <= 0 or p_pct > 100) then raise exception 'El porcentaje va de 0,01 a 100' using errcode = 'P0001'; end if;
+  begin
+    if p_id is null then
+      if v_nom is null or p_pct is null then raise exception 'Falta el nombre o el porcentaje del tipo de descuento' using errcode = 'P0001'; end if;
+      insert into public.club_descuentos_tipo (location_id, nombre, pct, activo, creado_por, actualizado_por)
+      values (p_location, v_nom, p_pct, coalesce(p_activo, true), auth.uid(), auth.uid()) returning id into v_id;
+      perform public.club_auditar('descuento_tipo_alta', 'club_descuentos_tipo', v_id, null,
+                                  (select to_jsonb(d) from public.club_descuentos_tipo d where d.id = v_id));
+    else
+      select * into v_ant from public.club_descuentos_tipo where id = p_id and location_id = p_location for update;
+      if not found then raise exception 'No se encontró el tipo de descuento: recargá la lista' using errcode = 'P0001'; end if;
+      update public.club_descuentos_tipo set nombre = coalesce(v_nom, nombre), pct = coalesce(p_pct, pct), activo = coalesce(p_activo, activo),
+             actualizado_por = auth.uid(), actualizado_en = now()
+       where id = p_id returning id into v_id;
+      perform public.club_auditar('descuento_tipo_edicion', 'club_descuentos_tipo', v_id, to_jsonb(v_ant),
+                                  (select to_jsonb(d) from public.club_descuentos_tipo d where d.id = v_id));
+    end if;
+  exception when unique_violation then
+    raise exception 'Ya hay un tipo de descuento con ese nombre en este local' using errcode = 'P0001';
+  end;
+  return v_id;
+end;
+$$;
+
+-- Reporte de descuentos sin artículo: por mes, tipo (o «sin clasificar») y turno. Facturas y monto estimado. Owner y manager.
+create or replace function public.club_reporte_descuentos(p_desde date, p_hasta date, p_location text default null)
+returns table (mes text, tipo text, turno text, facturas int, descuento_crc numeric)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  p_location := public.club_local(p_location, false);
+  if p_desde is null or p_hasta is null or p_hasta < p_desde or p_hasta - p_desde > 400 then
+    raise exception 'Rango de fechas no válido (máximo 400 días)' using errcode = 'P0001';
+  end if;
+  return query
+    select to_char(e.fecha at time zone 'America/Costa_Rica', 'YYYY-MM'),
+           coalesce(e.detalle->>'clasificacion', 'sin clasificar'), coalesce(e.detalle->>'turno', '—'),
+           count(*)::int, coalesce(sum((e.detalle->>'descuento_crc')::numeric), 0)
+      from public.club_excepciones(p_desde, p_hasta, p_location, 'DESCUENTO_SIN_RESPALDO') e
+     group by 1, 2, 3
+     order by 1, (coalesce(e.detalle->>'clasificacion', 'sin clasificar') = 'sin clasificar') desc, 2, 3;
+end;
+$$;
+
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
 -- LC-ML · MULTILOCAL (Ismael, 08-nov). El Club corre POR LOCAL y los locales salen de datos (`club_config`): ninguna
 -- función ni pantalla nombra un local. Encender o apagar el Club en un local es UN dato, sin código ni migración:
 --   update public.club_config set club_activo = true where location_id = '<local>';   (o el interruptor del owner)
@@ -6139,6 +6250,13 @@ grant execute on function public.club_canje_aprobado(uuid, numeric, text, uuid, 
 grant execute on function public.club_ajuste(uuid, int, text, text, uuid) to authenticated;
 grant execute on function public.club_vencer(date, int)                  to authenticated;
 grant execute on function public.club_vencer_simular(date)               to authenticated;
+-- LC-DT: descuentos tipificados por porcentaje
+revoke all on function public.club_descuentos_tipo_listar(text)                  from public, anon, authenticated;
+revoke all on function public.club_descuento_tipo_guardar(uuid, text, numeric, boolean, text) from public, anon, authenticated;
+revoke all on function public.club_reporte_descuentos(date, date, text)          from public, anon, authenticated;
+grant execute on function public.club_descuentos_tipo_listar(text)               to authenticated;
+grant execute on function public.club_descuento_tipo_guardar(uuid, text, numeric, boolean, text) to authenticated;
+grant execute on function public.club_reporte_descuentos(date, date, text)       to authenticated;
 -- LC-MD: marcadores de descuento
 revoke all on function public.club_marcadores_listar(text)                       from public, anon, authenticated;
 revoke all on function public.club_marcador_guardar(uuid, text, text, numeric, boolean, text) from public, anon, authenticated;

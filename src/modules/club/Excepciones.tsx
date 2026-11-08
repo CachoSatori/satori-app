@@ -38,6 +38,7 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   ANFITRION_SOBRE_TOPE:     { titulo: 'Anfitrión sobre el tope', que: 'Un anfitrión ganó en el mes más que el tope configurado (₡25.000). Si es nuevo, lo que pasó quedó pendiente de aprobación.' },
   SOCIO_ALTA_SIN_CONFIRMAR: { titulo: 'Alta de socio sin confirmar', que: 'Alta provisional (en caja o validación) que todavía no confirmó un manager u owner distinto de quien la cargó.' },
 }
+const esClasificado = (e: Excepcion) => e.tipo === 'DESCUENTO_SIN_RESPALDO' && typeof e.detalle.clasificacion === 'string'
 const crc = (n: unknown) => (typeof n === 'number' || typeof n === 'string') && n !== '' ? `₡${Number(n).toLocaleString('de-DE', { maximumFractionDigits: 0 })}` : '—'
 const hoyCR = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' })
 const haceDias = (d: number) => { const t = new Date(); t.setDate(t.getDate() - d); return t.toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }) }
@@ -47,6 +48,7 @@ export default function Excepciones() {
   const [hasta, setHasta] = useState(hoyCR())
   const [tipo, setTipo] = useState<'' | TipoExcepcion>('')
   const [verResueltas, setVerResueltas] = useState(false)
+  const [verClasificados, setVerClasificados] = useState(false)
   const [lista, setLista] = useState<Excepcion[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [abierta, setAbierta] = useState<string | null>(null)
@@ -61,11 +63,19 @@ export default function Excepciones() {
 
   const filtradas = useMemo(() => (lista ?? [])
     .filter(e => !tipo || e.tipo === tipo)
-    .filter(e => verResueltas || !e.resuelta), [lista, tipo, verResueltas])
+    .filter(e => verResueltas || !e.resuelta)
+    // (08-nov) un descuento de un tipo conocido no es alarma: se ve aparte («sin clasificar» es la alarma real)
+    .filter(e => verClasificados || !esClasificado(e))
+    .sort((a, b) => Number(esClasificado(a)) - Number(esClasificado(b))), [lista, tipo, verResueltas, verClasificados])
   const conteo = useMemo(() => {
     const c: Record<string, number> = {}
-    for (const e of lista ?? []) if (!e.resuelta) c[e.tipo] = (c[e.tipo] ?? 0) + 1
+    for (const e of lista ?? []) if (!e.resuelta && !esClasificado(e)) c[e.tipo] = (c[e.tipo] ?? 0) + 1
     return c
+  }, [lista])
+  const clasificados = useMemo(() => {
+    const c: Record<string, number> = {}
+    for (const e of lista ?? []) if (!e.resuelta && esClasificado(e)) c[String(e.detalle.clasificacion)] = (c[String(e.detalle.clasificacion)] ?? 0) + 1
+    return Object.entries(c)
   }, [lista])
 
   return (
@@ -83,7 +93,16 @@ export default function Excepciones() {
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', alignSelf: 'end', minHeight: 44 }}>
           <input type="checkbox" checked={verResueltas} onChange={e => setVerResueltas(e.target.checked)} /> Ver resueltas
         </label>
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', alignSelf: 'end', minHeight: 44 }}>
+          <input type="checkbox" checked={verClasificados} onChange={e => setVerClasificados(e.target.checked)} /> Ver descuentos clasificados
+        </label>
       </Card>
+      {clasificados.length > 0 && (
+        <div style={{ fontSize: '0.85rem', color: C.muted }}>
+          Descuentos de un tipo conocido (no son alarma): {clasificados.map(([n, k]) => `${n}: ${k}`).join(' · ')}.
+          {!verClasificados && ' Marcá «Ver descuentos clasificados» para verlos.'}
+        </div>
+      )}
       <div style={{ fontSize: '0.8rem', color: C.muted }}>
         «Probable»: el PoS no trae el nombre «CREDITOS NUEVO», así que se infiere por el monto «a crédito» (múltiplo de medio crédito).
       </div>
@@ -101,10 +120,14 @@ export default function Excepciones() {
                       <strong>{TIPO_EXC[e.tipo].titulo}</strong>
                       <Chip color={e.certeza === 'probable' ? C.gold : e.certeza === 'manual' ? C.teal : e.certeza === 'pendiente_configuracion' ? C.red : C.ink}>{e.certeza === 'pendiente_configuracion' ? 'pendiente de configuración' : e.certeza}</Chip>
                       {e.resuelta && <Chip color={C.teal}>resuelta</Chip>}
+                      {e.tipo === 'DESCUENTO_SIN_RESPALDO' && (esClasificado(e)
+                        ? <Chip color={C.teal}>{String(e.detalle.clasificacion)}</Chip>
+                        : <Chip color={C.red}>sin clasificar</Chip>)}
                       <span style={{ marginLeft: 'auto', color: C.muted, fontSize: '0.85rem' }}>{fmtFechaHora(e.fecha)}</span>
                     </div>
                     <div style={{ fontSize: '0.85rem', color: C.muted, marginTop: 2 }}>
                       {e.tipo === 'SIN_CRUCE' ? '' : 'Factura '}{e.factura ?? '—'}{typeof e.detalle.miembro === 'string' ? ` · ${e.detalle.miembro}` : ''}
+                      {e.detalle.descuento_pct != null ? ` · ${String(e.detalle.descuento_pct).replace('.', ',')} %` : ''}{e.detalle.turno ? ` · turno ${String(e.detalle.turno)}` : ''}
                     </div>
                   </button>
                   {abierta === id && <Detalle e={e} onResuelta={cargar} />}
@@ -136,6 +159,9 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
     [e.tipo === 'SIN_CRUCE' ? 'Pedido (PoS)' : 'Factura (PoS)', e.factura ?? '—'],
     // (08-nov) las que salen del PoS: turno (corte del local) y login; los fijos de caja se identifican por fecha y turno
     ...(d.turno ? [['Turno', String(d.turno)] as [string, string]] : []),
+    ...(e.tipo === 'DESCUENTO_SIN_RESPALDO' ? [['Clasificación', d.clasificacion ? String(d.clasificacion) : 'sin clasificar (ningún tipo ni marcador)'] as [string, string]] : []),
+    ...(d.descuento_pct != null ? [['Descuento', `${String(d.descuento_pct).replace('.', ',')} % (precio ${crc(d.precio)} · habitual ${crc(d.referencia)})`] as [string, string]] : []),
+    ...(d.descuento_crc != null ? [['Monto estimado', crc(d.descuento_crc)] as [string, string]] : []),
     ...(Array.isArray(d.pos_logins) && d.pos_logins.length > 0
       ? [['Login del PoS', (d.pos_logins as string[]).map(l => Array.isArray(d.logins_fijos) && (d.logins_fijos as string[]).includes(l)
           ? `${l} (login fijo de caja)` : l).join(' · ')] as [string, string]] : []),

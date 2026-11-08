@@ -3810,6 +3810,57 @@ begin
   perform pg_temp.r('74', 'el owner resuelve la del login fijo', e = 'ok', e);
 end $$;
 
+-- ═══ 75. Descuentos tipificados por porcentaje (sin artículo): clasificados vs «sin clasificar» + reporte ═══
+do $$
+declare j jsonb; e text; v_t uuid; i int; v_ab0 int; v_ab1 int; r record;
+begin
+  delete from club_descuentos_tipo where location_id = pg_temp.loc();   -- la prueba arma sus propios tipos
+  for i in 1..10 loop perform pg_temp.factura('8807' || (50 + i), 24 * i, 0, '[{"c":"ZT1","m":5000,"f":5}]'); end loop;
+  for i in 1..3 loop perform pg_temp.factura('88076' || i, 1, 0, '[{"c":"ZT1","m":5000,"f":5}]'); end loop;
+  perform pg_temp.factura('880771', 1, 0, '[{"c":"ZT1","m":4500,"f":5}]');                    -- 10 %
+  perform pg_temp.factura('880772', 1, 0, '[{"c":"ZT1","m":4000,"f":5}]');                    -- 20 %
+  perform pg_temp.factura('880773', 1, 0, '[{"c":"ZT1","q":2,"m":7000,"f":5}]');              -- 30 % (2 unidades)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select public.club_excepciones_abiertas(30) into v_ab0;
+  perform pg_temp.yo();
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_descuento_tipo_guardar(null, 'Tipo X', 10, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('75', 'el manager no carga tipos de descuento (negativa)', e = 'Sin permiso', e);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  v_t := public.club_descuento_tipo_guardar(null, 'Prueba 10 %', 10, true);
+  perform public.club_descuento_tipo_guardar(null, 'Prueba 30 %', 30, true);
+  begin perform public.club_descuento_tipo_guardar(null, 'Prueba mala', 0, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  select public.club_excepciones_abiertas(30) into v_ab1;
+  perform pg_temp.yo();
+  perform pg_temp.r('75', 'un % fuera de rango se rechaza (negativa)', e = 'El porcentaje va de 0,01 a 100', e);
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('75', 'clasificados: 10 % → «Prueba 10 %», 30 % → «Prueba 30 %»; el 20 % queda «sin clasificar» (la alarma)',
+    (select x->'detalle'->>'clasificacion' from jsonb_array_elements(j) x where x->>'ref' = 'desc:880771') = 'Prueba 10 %'
+      and (select x->'detalle'->>'clasificacion' from jsonb_array_elements(j) x where x->>'ref' = 'desc:880773') = 'Prueba 30 %'
+      and (select x->'detalle'->'clasificacion' from jsonb_array_elements(j) x where x->>'ref' = 'desc:880772') = 'null'::jsonb, '');
+  perform pg_temp.r('75', 'monto estimado del descuento: (referencia − precio) × cantidad',
+    (select (x->'detalle'->>'descuento_crc')::numeric from jsonb_array_elements(j) x where x->>'ref' = 'desc:880773') = 3000, '');
+  perform pg_temp.r('75', 'el chip del Inicio cuenta solo los «sin clasificar» (con los tipos cargados baja al menos en los dos de la prueba)', v_ab1 <= v_ab0 - 2, format('%s → %s', v_ab0, v_ab1));
+  -- reporte por mes, tipo y turno
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(sum(x.facturas) filter (where x.tipo = 'Prueba 10 %'), 0) as diez, coalesce(sum(x.facturas) filter (where x.tipo = 'sin clasificar'), 0) as sin,
+         coalesce(sum(x.descuento_crc) filter (where x.tipo = 'Prueba 30 %'), 0) as monto30
+    into r from public.club_reporte_descuentos(current_date - 2, current_date) x;
+  perform pg_temp.yo();
+  perform pg_temp.r('75', 'reporte: facturas y monto por tipo (y «sin clasificar» aparte)', r.diez >= 1 and r.sin >= 1 and r.monto30 >= 3000, format('%s', to_jsonb(r)));
+  -- apagado: el tipo deja de clasificar
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_descuento_tipo_guardar(v_t, null, null, false);
+  perform pg_temp.yo();
+  perform pg_temp.r('75', 'tipo apagado: ese descuento vuelve a «sin clasificar»',
+    (select x->'detalle'->'clasificacion' from jsonb_array_elements(pg_temp.exc('DESCUENTO_SIN_RESPALDO')) x where x->>'ref' = 'desc:880771') = 'null'::jsonb, '');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_descuentos_tipo_listar(); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('75', 'el cajero no ve los tipos (negativa)', e = 'Sin permiso', e);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

@@ -2741,6 +2741,132 @@ begin
   perform pg_temp.r('59', 'la misma factura cerrada (C) → cruza', c2 = '990995', c2);
 end $$;
 
+-- ═══ 60. LC-A3: promociones mínimas, productos y cortesías del sorteo ═══
+do $$
+declare v_p uuid; v_p2 uuid; e text; j jsonb; v_n int; v_s uuid; v_r uuid; v_v1 bigint; v_v2 bigint; v_ok boolean; i int; v_c uuid;
+begin
+  -- semilla: «Local Club» 10 % + 1 cortesía, en borrador, para socios
+  perform pg_temp.r('60', 'semilla: «Local Club» 10 % + 1 cortesía en borrador, para socios',
+    exists (select 1 from club_promociones where nombre = 'Local Club' and estado = 'borrador' and porcentaje = 10 and cortesias = 1
+             and para = array['socio']), '');
+  -- permisos
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  select count(*) into v_n from public.club_promociones_listar();
+  begin perform public.club_promocion_guardar(null, '{"nombre":"Prueba M","para":["socio"],"porcentaje":5}'::jsonb); e := 'ok';
+  exception when insufficient_privilege then e := 'sin permiso'; end;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_promociones_listar(); e := e || '/ok'; exception when insufficient_privilege then e := e || '/sin permiso'; end;
+  begin perform public.club_cortesia_guardar(null, 'X1', 'Algo', true); e := e || '/ok'; exception when insufficient_privilege then e := e || '/sin permiso'; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('60', 'el manager lee y no edita; el cajero ni lee ni edita', v_n >= 1 and e = 'sin permiso/sin permiso/sin permiso', e);
+  perform pg_temp.r('60', 'anon no ejecuta nada de promociones ni cortesías',
+    not has_function_privilege('anon', 'public.club_promociones_listar(text)', 'EXECUTE')
+      and not has_function_privilege('anon', 'public.club_cortesia_guardar(uuid, text, text, boolean, text)', 'EXECUTE')
+      and not has_function_privilege('authenticated', 'public.club_promociones_vigentes(text, timestamptz, text[])', 'EXECUTE')
+      and not has_table_privilege('authenticated', 'public.club_promociones', 'SELECT'), '');
+  -- validaciones (owner)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_promocion_guardar(null, '{"nombre":"Mala","para":["socio"],"porcentaje":120}'::jsonb); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo(); perform pg_temp.r('60', 'porcentaje > 100 → rechaza con qué revisar', e like 'Revisá los datos%', e);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_promocion_guardar(null, '{"nombre":"Mala","para":["vecinos"],"porcentaje":5}'::jsonb); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo(); perform pg_temp.r('60', 'para quién inválido → rechaza', e like 'Elegí para quién%', e);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_promocion_guardar(null, '{"nombre":"Mala","para":["socio"]}'::jsonb); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo(); perform pg_temp.r('60', 'sin porcentaje ni cortesías → rechaza', e like 'Revisá los datos%', e);
+  -- vigencia: hoy sí; otro día no; horario que cruza medianoche
+  select count(*) into v_v1 from club_pase_eventos where motivo = 'promociones';
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  v_p := public.club_promocion_guardar(null, jsonb_build_object('nombre', 'Prueba Hoy', 'para', '["socio"]'::jsonb, 'porcentaje', 15,
+           'estado', 'vigente', 'dias', jsonb_build_array(extract(isodow from now() at time zone 'America/Costa_Rica')::int)));
+  v_p2 := public.club_promocion_guardar(null, jsonb_build_object('nombre', 'Prueba Otro Dia', 'para', '["todos"]'::jsonb, 'cortesias', 1,
+           'estado', 'vigente', 'dias', jsonb_build_array(1 + (extract(isodow from now() at time zone 'America/Costa_Rica')::int % 7))));
+  perform pg_temp.yo();
+  select count(*) into v_v2 from club_pase_eventos where motivo = 'promociones';
+  perform pg_temp.r('60', 'vigente hoy sí; otro día de la semana no; cada cambio deja un evento «promociones» para el pase',
+    exists (select 1 from public.club_promociones_vigentes('santa-teresa', now(), array['socio']) x where x.id = v_p)
+      and not exists (select 1 from public.club_promociones_vigentes('santa-teresa', now(), array['socio']) x where x.id = v_p2)
+      and v_v2 = v_v1 + 2, format('%s → %s', v_v1, v_v2));
+  update club_promociones set hora_desde = '22:00', hora_hasta = '02:00' where id = v_p;
+  perform pg_temp.r('60', 'horario que cruza la medianoche: 23:30 y 01:00 sí, 12:00 no',
+    public.club_promo_vigente_en((select p from club_promociones p where p.id = v_p), date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica' + interval '23 hours 30 minutes')
+      and not public.club_promo_vigente_en((select p from club_promociones p where p.id = v_p), date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica' + interval '12 hours'), '');
+  update club_promociones set hora_desde = null, hora_hasta = null where id = v_p;
+  perform pg_temp.r('60', 'beneficio en texto: «15 %», «1 cortesía», «10 % + 1 cortesía»',
+    public.club_promo_beneficio((select p from club_promociones p where p.id = v_p)) = '15 %'
+      and public.club_promo_beneficio((select p from club_promociones p where p.id = v_p2)) = '1 cortesía'
+      and public.club_promo_beneficio((select p from club_promociones p where p.nombre = 'Local Club')) = '10 % + 1 cortesía', '');
+  -- terminada no se edita; queda en la auditoría
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_promocion_guardar(v_p2, jsonb_build_object('nombre', 'Prueba Otro Dia', 'para', '["todos"]'::jsonb, 'cortesias', 1, 'estado', 'terminada'));
+  begin perform public.club_promocion_guardar(v_p2, '{"nombre":"Revive","para":["todos"],"cortesias":1,"estado":"vigente"}'::jsonb); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('60', 'una promoción terminada no se edita (negativa) y los cambios quedan auditados',
+    e like 'Está terminada%' and (select count(*) from club_auditoria where objeto_id = v_p2 and accion in ('promocion_alta','promocion_edicion')) = 2, e);
+
+  -- pase: socio activo ve la promo y su beneficio; pendiente no; sin cortesías activas no hay «sorpresa»
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Jose Pase Ficticio', 'app') returning id into v_s;
+  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Kari Pase Ficticia', 'app') returning id into v_r;
+  update club_miembro_roles set estado = 'pendiente' where miembro_id = v_r and rol = 'socio';
+  set local role service_role;
+  j := public.club_pase_datos(v_s);
+  v_ok := (public.club_pase_datos(v_r)->'promociones') = '[]'::jsonb and public.club_pase_datos(v_r)->'socio'->>'beneficio' is null;
+  reset role;
+  perform pg_temp.r('60', 'pase del socio activo: promociones vigentes y beneficio; el pendiente no tiene ninguna',
+    exists (select 1 from jsonb_array_elements(j->'promociones') x where x->>'id' = v_p::text and x->>'beneficio' = '15 %')
+      and j->'socio'->>'beneficio' = '15 %' and v_ok, (j->'promociones')::text);
+  -- cortesías: owner carga; código vendido toma nombre y familia; código nuevo exige nombre; máximo 10
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_cortesia_guardar(null, 'ZZ-NUEVO-1', null, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  v_c := public.club_cortesia_guardar(null, 'ZZ-NUEVO-1', 'Postre sorpresa', true);
+  perform pg_temp.yo();
+  perform pg_temp.r('60', 'cortesía con un código que no aparece en facturas: pide el nombre; con nombre, se carga',
+    e like 'Ese código todavía no aparece%' and exists (select 1 from club_cortesias where id = v_c and nombre = 'Postre sorpresa' and activa), e);
+  set local role service_role;
+  j := public.club_pase_datos(v_s);
+  reset role;
+  perform pg_temp.r('60', 'con una cortesía activa, el pase del socio muestra «1 cortesía sorpresa» si la promo la da (15 % no)',
+    j->'socio'->'cortesias' = '[]'::jsonb, (j->'socio'->'cortesias')::text);
+  update club_promociones set cortesias = 1 where id = v_p;
+  set local role service_role;
+  j := public.club_pase_datos(v_s);
+  reset role;
+  perform pg_temp.r('60', 'promo con cortesía + cortesía activa → «sorpresa» en el pase, sin producto',
+    j->'socio'->'cortesias' = '[{"motivo": "promo", "cantidad": 1, "sorpresa": true, "vence_en": null}]'::jsonb, (j->'socio'->'cortesias')::text);
+  -- familia de la sección: con cortesia_familia cargada, un artículo vendido de otra familia se rechaza
+  select l.codigo_producto, l.familia into e, v_n from pos_ndf_ticket_lines l join pos_ndf_tickets t on t.id = l.ticket_id
+   where t.fecha_registra >= now() - interval '120 days' and l.familia is not null and l.codigo_producto ~ '^[0-9A-Za-z._-]{1,30}$' limit 1;
+  update club_config set cortesia_familia = v_n + 1000 where location_id = 'santa-teresa';
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_cortesia_guardar(null, e, null, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  update club_config set cortesia_familia = null where location_id = 'santa-teresa';
+  perform pg_temp.r('60', 'con la sección «CORTESÍA CLUB» configurada, un artículo de otra familia se rechaza (negativa)', e like 'Ese artículo no es de la sección%', e);
+  -- máximo 10 (la 11.ª se rechaza, aunque sea por fuera de la función)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  for i in 2..10 loop perform public.club_cortesia_guardar(null, 'ZZ-NUEVO-' || i, 'Cortesia ' || i, i % 2 = 0); end loop;
+  begin perform public.club_cortesia_guardar(null, 'ZZ-NUEVO-11', 'Once', true); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  begin insert into club_cortesias (codigo_producto, nombre) values ('ZZ-NUEVO-12', 'Doce'); e := e || '/ok'; exception when others then e := e || '/' || sqlerrm; end;
+  perform pg_temp.r('60', 'máximo 10 cortesías: la 11.ª se rechaza, también por fuera de la función',
+    e like 'Ya hay 10 cortesías%/Ya hay 10 cortesías%' and (select count(*) from club_cortesias) = 10, e);
+  -- desactivar y listar; el manager lista, no edita
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_cortesia_guardar(v_c, null, null, false);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  select count(*) filter (where activa), count(*) into v_n, i from public.club_cortesias_listar();
+  begin perform public.club_cortesia_guardar(v_c, null, null, true); e := 'ok'; exception when insufficient_privilege then e := 'sin permiso'; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('60', 'desactivar funciona; el manager lista (10, 5 activas) y no edita', i = 10 and v_n = 5 and e = 'sin permiso', format('%s de %s, %s', v_n, i, e));
+  -- productos: salen de las facturas del puente (solo lectura)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select count(*) into v_n from public.club_productos(null);
+  select count(*) into i from public.club_productos('CORTESIA');
+  perform pg_temp.yo();
+  perform pg_temp.r('60', 'productos de las facturas (120 días): lista y búsqueda por nombre', v_n between 1 and 50 and i >= 1, format('%s / %s', v_n, i));
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

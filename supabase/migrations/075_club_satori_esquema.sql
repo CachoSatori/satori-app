@@ -3708,6 +3708,10 @@ declare
   v_base  text := 'https://club.satoricostarica.com';
   j_anf   jsonb;
   j_soc   jsonb;
+  j_prom  jsonb := '[]'::jsonb;
+  v_roles text[] := '{}';
+  v_pben  text;          -- beneficio de la promo vigente del socio (A3)
+  v_pcor  int;
   v_pest  text[] := '{}';
 begin
   select * into v_m from public.club_miembros where id = p_miembro;
@@ -3717,14 +3721,31 @@ begin
   select * into v_soc from public.club_miembro_roles where miembro_id = p_miembro and rol = 'socio';
   select coalesce(max(e.id), 0) into v_ver from public.club_pase_eventos e where e.miembro_id = p_miembro or e.miembro_id is null;
 
+  -- A3: roles para las promociones (el socio pendiente no tiene beneficio todavía).
+  if v_soc.miembro_id is not null and v_soc.estado = 'activo' then v_roles := v_roles || 'socio'::text; end if;
+  if v_anf.miembro_id is not null and v_anf.estado = 'activo' then v_roles := v_roles || 'referente'::text; end if;
+  if cardinality(v_roles) > 0 then
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'id', p.id, 'nombre', p.nombre, 'nombre_en', p.nombre_en, 'beneficio', public.club_promo_beneficio(p),
+             'para', to_jsonb(p.para), 'vigente_hasta', p.hasta, 'dias', to_jsonb(p.dias),
+             'horario', case when p.hora_desde is not null then jsonb_build_object('desde', to_char(p.hora_desde, 'HH24:MI'), 'hasta', to_char(p.hora_hasta, 'HH24:MI')) end)
+             order by p.porcentaje desc, p.cortesias desc, p.nombre), '[]'::jsonb)
+      into j_prom from public.club_promociones_vigentes(v_m.location_id, now(), v_roles) p;
+  end if;
   if v_soc.miembro_id is not null and v_soc.estado in ('pendiente','activo') then
     v_pest := v_pest || 'mi_club'::text;
+    select public.club_promo_beneficio(p), p.cortesias into v_pben, v_pcor
+      from public.club_promociones_vigentes(v_m.location_id, now(), array['socio']) p limit 1;
     j_soc := jsonb_build_object(
       'estado', v_soc.estado, 'desde', (v_soc.desde at time zone 'America/Costa_Rica')::date,
       'qr_url', v_base || '/s/' || v_m.codigo_socio,
-      'beneficio', null,          -- A3/A4: promoción vigente del socio
+      'beneficio', case when v_soc.estado = 'activo' then v_pben end,
       'visitas_mes', 0,           -- A4: visitas del socio
-      'cortesias', '[]'::jsonb);  -- A3/A4: cortesías y premios por referido
+      -- Cortesía SORPRESA (se sortea en caja): solo si es activo, la promo la da y hay cortesías activas. Premios: A4.
+      'cortesias', case when v_soc.estado = 'activo' and coalesce(v_pcor, 0) > 0
+                         and exists (select 1 from public.club_cortesias c where c.location_id = v_m.location_id and c.activa)
+                        then jsonb_build_array(jsonb_build_object('sorpresa', true, 'cantidad', v_pcor, 'motivo', 'promo', 'vence_en', null))
+                        else '[]'::jsonb end);
   end if;
   if v_anf.miembro_id is not null and v_anf.estado = 'activo' then
     v_pest := v_pest || 'anfitrion'::text;
@@ -3755,7 +3776,7 @@ begin
                           when j_anf is not null then jsonb_build_object('tipo', 'cupones', 'valor', j_anf->>'qr_url') end,
     'socio', j_soc,
     'anfitrion', j_anf,
-    'promociones', '[]'::jsonb,   -- A3
+    'promociones', j_prom,   -- A3: vigentes hoy para sus roles activos
     -- CLUB-AUD-69: el pase lleva el token de PASE (propio, revocable), nunca el del portal
     'canjear_url', case when j_anf is not null and v_m.token_pase is not null then v_base || '/w/' || v_m.token_pase end);
 end;
@@ -4320,6 +4341,347 @@ end;
 $$;
 
 
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+-- LOCAL CLUB · A3 (08-nov): promociones mínimas, productos (desde las líneas del puente) y cortesías del sorteo.
+--   · Promoción: nombre, para quién, vigencia (fechas, días ISO 1=lun…7=dom, horario), porcentaje y cantidad de
+--     cortesías (se sortean en caja entre las activas: A4). Estado borrador → vigente → terminada. Solo owner edita.
+--   · Cortesías (decisión «1b»): hasta 10, activables, cada una un artículo de la sección «CORTESÍA CLUB» del PoS
+--     (₡0; códigos de Ismael). La sección es la familia `club_config.cortesia_familia` (null hasta que Ismael la cree).
+--   · Productos: lo que ya llega en pos_ndf_ticket_lines (120 días). Sin tocar el agente.
+--   · Cada cambio de promociones deja un evento `promociones` (miembro null) para el pase.
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+alter table public.club_config add column if not exists cortesia_familia int check (cortesia_familia is null or cortesia_familia > 0);
+alter table public.club_config add column if not exists cortesias_por_visita int not null default 1 check (cortesias_por_visita between 0 and 3);
+alter table public.club_config add column if not exists socio_visitas_por_dia int not null default 1 check (socio_visitas_por_dia between 1 and 5);
+
+create table if not exists public.club_promociones (
+  id             uuid primary key default gen_random_uuid(),
+  location_id    text not null default 'santa-teresa',
+  nombre         text not null check (length(btrim(nombre)) between 2 and 80),
+  nombre_en      text check (nombre_en is null or length(btrim(nombre_en)) between 2 and 80),
+  para           text[] not null check (para <@ array['socio','referente','turista_cupon','todos'] and cardinality(para) between 1 and 4),
+  estado         text not null default 'borrador' check (estado in ('borrador','vigente','terminada')),
+  desde          date,
+  hasta          date,
+  dias           int[] not null default '{1,2,3,4,5,6,7}' check (dias <@ '{1,2,3,4,5,6,7}'::int[] and cardinality(dias) between 1 and 7),
+  hora_desde     time,
+  hora_hasta     time,
+  porcentaje     numeric(5,2) not null default 0 check (porcentaje between 0 and 100),
+  cortesias      int not null default 0 check (cortesias between 0 and 3),
+  creada_por     uuid,
+  creada_en      timestamptz not null default now(),
+  actualizada_por uuid,
+  actualizada_en timestamptz not null default now(),
+  check (hasta is null or desde is null or hasta >= desde),
+  check ((hora_desde is null) = (hora_hasta is null)),
+  check (porcentaje > 0 or cortesias > 0)
+);
+create unique index if not exists club_promociones_nombre_uq on public.club_promociones (location_id, lower(btrim(nombre)));
+alter table public.club_promociones enable row level security;
+revoke all on public.club_promociones from public, anon, authenticated;
+
+create table if not exists public.club_cortesias (
+  id              uuid primary key default gen_random_uuid(),
+  location_id     text not null default 'santa-teresa',
+  codigo_producto text not null check (codigo_producto ~ '^[0-9A-Za-z._-]{1,30}$'),
+  nombre          text not null check (length(btrim(nombre)) between 2 and 80),
+  familia         int,
+  activa          boolean not null default true,
+  creada_por      uuid,
+  creada_en       timestamptz not null default now(),
+  actualizada_por uuid,
+  actualizada_en  timestamptz not null default now(),
+  unique (location_id, codigo_producto)
+);
+alter table public.club_cortesias enable row level security;
+revoke all on public.club_cortesias from public, anon, authenticated;
+
+-- Tope duro de 10 cortesías por local (aunque alguien inserte por fuera de la función).
+create or replace function public.club_cortesias_tope()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  perform pg_advisory_xact_lock(hashtextextended('club_cortesias:' || new.location_id, 0));
+  if (select count(*) from public.club_cortesias c where c.location_id = new.location_id) >= 10 then
+    raise exception 'Ya hay 10 cortesías cargadas (el máximo): desactivá o reusá una' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists club_cortesias_tope_trg on public.club_cortesias;
+create trigger club_cortesias_tope_trg before insert on public.club_cortesias for each row execute function public.club_cortesias_tope();
+
+-- Evento para el pase: cualquier cambio de promociones afecta a todos los pases.
+create or replace function public.club_promociones_evento()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  insert into public.club_pase_eventos (miembro_id, motivo) values (null, 'promociones');
+  return null;
+end;
+$$;
+drop trigger if exists club_promociones_evento_trg on public.club_promociones;
+create trigger club_promociones_evento_trg after insert or update or delete on public.club_promociones
+  for each row execute function public.club_promociones_evento();   -- por fila: un INSERT que no inserta nada no avisa
+
+-- ¿La promoción está vigente en ese momento (hora de Costa Rica)? El horario puede cruzar la medianoche.
+create or replace function public.club_promo_vigente_en(p public.club_promociones, p_ts timestamptz)
+returns boolean
+language sql
+stable
+set search_path = public, pg_temp
+as $$
+  select p.estado = 'vigente'
+     and (p.desde is null or (p_ts at time zone 'America/Costa_Rica')::date >= p.desde)
+     and (p.hasta is null or (p_ts at time zone 'America/Costa_Rica')::date <= p.hasta)
+     and extract(isodow from p_ts at time zone 'America/Costa_Rica')::int = any(p.dias)
+     and (p.hora_desde is null
+          or (p.hora_desde <= p.hora_hasta and (p_ts at time zone 'America/Costa_Rica')::time >= p.hora_desde
+                                            and (p_ts at time zone 'America/Costa_Rica')::time <  p.hora_hasta)
+          or (p.hora_desde >  p.hora_hasta and ((p_ts at time zone 'America/Costa_Rica')::time >= p.hora_desde
+                                             or (p_ts at time zone 'America/Costa_Rica')::time <  p.hora_hasta)))
+$$;
+
+-- Texto del beneficio (en español; B arma el inglés con los números).
+create or replace function public.club_promo_beneficio(p public.club_promociones)
+returns text
+language sql
+immutable
+as $$
+  select concat_ws(' + ',
+           case when p.porcentaje > 0 then trim(to_char(p.porcentaje, 'FM990.##'), '.') || ' %' end,
+           case when p.cortesias = 1 then '1 cortesía' when p.cortesias > 1 then p.cortesias || ' cortesías' end)
+$$;
+
+-- Vigentes ahora para una lista de roles ('socio', 'referente', 'turista_cupon'). Interna (A4 y el pase).
+create or replace function public.club_promociones_vigentes(p_location text, p_ts timestamptz, p_roles text[])
+returns setof public.club_promociones
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select p.* from public.club_promociones p
+   where p.location_id = p_location and public.club_promo_vigente_en(p, p_ts)
+     and (p.para && p_roles or 'todos' = any(p.para))
+   order by p.porcentaje desc, p.cortesias desc, p.nombre
+$$;
+
+-- Lista (owner y manager leen; solo el owner edita).
+create or replace function public.club_promociones_listar(p_location text default 'santa-teresa')
+returns table (id uuid, nombre text, nombre_en text, para text[], estado text, desde date, hasta date, dias int[],
+               hora_desde time, hora_hasta time, porcentaje numeric, cortesias int, beneficio text, vigente_ahora boolean,
+               actualizada_en timestamptz)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  return query
+    select p.id, p.nombre, p.nombre_en, p.para, p.estado, p.desde, p.hasta, p.dias, p.hora_desde, p.hora_hasta,
+           p.porcentaje, p.cortesias, public.club_promo_beneficio(p), public.club_promo_vigente_en(p, now()), p.actualizada_en
+      from public.club_promociones p where p.location_id = p_location
+     order by case p.estado when 'vigente' then 0 when 'borrador' then 1 else 2 end, p.nombre;
+end;
+$$;
+
+-- Crear o editar (solo owner). Una terminada no se edita (se crea otra). Queda en la auditoría.
+create or replace function public.club_promocion_guardar(p_id uuid, p_datos jsonb, p_location text default 'santa-teresa')
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_ant  public.club_promociones%rowtype;
+  v_id   uuid;
+  v_para text[];
+  v_dias int[];
+  v_nom  text := btrim(coalesce(p_datos->>'nombre', ''));
+  v_est  text := coalesce(p_datos->>'estado', 'borrador');
+begin
+  if v_rol is null or v_rol <> 'owner' then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  if p_datos is null or jsonb_typeof(p_datos) <> 'object' then raise exception 'Faltan los datos de la promoción' using errcode = 'P0001'; end if;
+  if length(v_nom) not between 2 and 80 then raise exception 'Falta el nombre (de 2 a 80 caracteres)' using errcode = 'P0001'; end if;
+  if v_est not in ('borrador','vigente','terminada') then raise exception 'Estado no válido: borrador, vigente o terminada' using errcode = 'P0001'; end if;
+  begin
+    v_para := array(select jsonb_array_elements_text(coalesce(p_datos->'para', '[]')));
+    v_dias := array(select (jsonb_array_elements_text(coalesce(p_datos->'dias', '[1,2,3,4,5,6,7]')))::int);
+  exception when others then
+    raise exception 'Para quién o los días no son válidos' using errcode = 'P0001';
+  end;
+  if cardinality(v_para) = 0 or not v_para <@ array['socio','referente','turista_cupon','todos'] then
+    raise exception 'Elegí para quién: socios, referentes, turistas con cupón o todos' using errcode = 'P0001';
+  end if;
+  if cardinality(v_dias) = 0 or not v_dias <@ '{1,2,3,4,5,6,7}'::int[] then
+    raise exception 'Elegí al menos un día de la semana' using errcode = 'P0001';
+  end if;
+  if p_id is not null then
+    select * into v_ant from public.club_promociones where id = p_id and location_id = p_location for update;
+    if not found then raise exception 'No se encontró la promoción: recargá la lista' using errcode = 'P0001'; end if;
+    if v_ant.estado = 'terminada' then raise exception 'Está terminada: no se edita. Creá una nueva' using errcode = 'P0001'; end if;
+  end if;
+  begin
+    if p_id is null then
+      insert into public.club_promociones (location_id, nombre, nombre_en, para, estado, desde, hasta, dias, hora_desde, hora_hasta,
+                                           porcentaje, cortesias, creada_por, actualizada_por)
+      values (p_location, v_nom, nullif(btrim(coalesce(p_datos->>'nombre_en', '')), ''), v_para, v_est,
+              nullif(p_datos->>'desde', '')::date, nullif(p_datos->>'hasta', '')::date, v_dias,
+              nullif(p_datos->>'hora_desde', '')::time, nullif(p_datos->>'hora_hasta', '')::time,
+              coalesce(nullif(p_datos->>'porcentaje', '')::numeric, 0), coalesce(nullif(p_datos->>'cortesias', '')::int, 0),
+              auth.uid(), auth.uid())
+      returning id into v_id;
+    else
+      update public.club_promociones set
+        nombre = v_nom, nombre_en = nullif(btrim(coalesce(p_datos->>'nombre_en', '')), ''), para = v_para, estado = v_est,
+        desde = nullif(p_datos->>'desde', '')::date, hasta = nullif(p_datos->>'hasta', '')::date, dias = v_dias,
+        hora_desde = nullif(p_datos->>'hora_desde', '')::time, hora_hasta = nullif(p_datos->>'hora_hasta', '')::time,
+        porcentaje = coalesce(nullif(p_datos->>'porcentaje', '')::numeric, 0), cortesias = coalesce(nullif(p_datos->>'cortesias', '')::int, 0),
+        actualizada_por = auth.uid(), actualizada_en = now()
+      where id = p_id
+      returning id into v_id;
+    end if;
+  exception
+    when unique_violation then raise exception 'Ya hay una promoción con ese nombre' using errcode = 'P0001';
+    when check_violation then raise exception 'Revisá los datos: porcentaje de 0 a 100, cortesías de 0 a 3 (al menos uno de los dos), «hasta» después de «desde» y el horario completo' using errcode = 'P0001';
+    when invalid_datetime_format or datetime_field_overflow or invalid_text_representation then
+      raise exception 'Fecha, horario o número no válido' using errcode = 'P0001';
+  end;
+  perform public.club_auditar(case when p_id is null then 'promocion_alta' else 'promocion_edicion' end, 'club_promociones', v_id,
+                              case when p_id is null then null else to_jsonb(v_ant) end,
+                              (select to_jsonb(p) from public.club_promociones p where p.id = v_id));
+  return v_id;
+end;
+$$;
+
+-- Productos que llegan en las facturas (120 días). owner y manager. Para elegir las cortesías.
+create or replace function public.club_productos(p_buscar text default null, p_location text default 'santa-teresa')
+returns table (codigo text, nombre text, familia int, veces bigint, ultima timestamptz, es_cortesia boolean)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_q   text := nullif(btrim(coalesce(p_buscar, '')), '');
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  if v_q is not null and length(v_q) > 40 then v_q := left(v_q, 40); end if;
+  return query
+    select x.codigo, x.nombre, x.familia, x.veces, x.ultima, x.es_cortesia from (
+      select l.codigo_producto as codigo,
+             (array_agg(l.nombre order by t.fecha_registra desc))[1] as nombre,
+             (array_agg(l.familia order by t.fecha_registra desc))[1] as familia,
+             count(*) as veces, max(t.fecha_registra) as ultima, bool_or(l.es_cortesia) as es_cortesia
+        from public.pos_ndf_ticket_lines l join public.pos_ndf_tickets t on t.id = l.ticket_id
+       where t.local = p_location and t.fecha_registra >= now() - interval '120 days' and l.codigo_producto is not null
+       group by l.codigo_producto) x
+     where v_q is null or x.codigo = v_q or x.nombre ilike '%' || replace(replace(v_q, '%', ''), '_', '') || '%'
+     order by x.veces desc, x.codigo
+     limit 50;
+end;
+$$;
+
+-- Cortesías del sorteo (owner y manager leen).
+create or replace function public.club_cortesias_listar(p_location text default 'santa-teresa')
+returns table (id uuid, codigo_producto text, nombre text, familia int, activa boolean, en_seccion boolean,
+               visto_en_facturas boolean, actualizada_en timestamptz)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role(); v_fam int;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  select cortesia_familia into v_fam from public.club_config where location_id = p_location;
+  return query
+    select c.id, c.codigo_producto, c.nombre, c.familia, c.activa,
+           case when v_fam is null or c.familia is null then null else c.familia = v_fam end,
+           exists (select 1 from public.pos_ndf_ticket_lines l join public.pos_ndf_tickets t on t.id = l.ticket_id
+                    where t.local = p_location and l.codigo_producto = c.codigo_producto and t.fecha_registra >= now() - interval '120 days'),
+           c.actualizada_en
+      from public.club_cortesias c where c.location_id = p_location
+     order by c.activa desc, c.nombre;
+end;
+$$;
+
+-- Alta o edición de una cortesía (solo owner). Alta: el código del artículo «CORTESÍA CLUB»; si ya se vendió, el
+-- nombre y la familia salen de las facturas; si es nuevo (Ismael recién lo creó), el nombre es obligatorio.
+-- Con `cortesia_familia` cargada, un artículo de otra familia se rechaza. Edición: nombre y activa (el código no cambia).
+create or replace function public.club_cortesia_guardar(p_id uuid, p_codigo text, p_nombre text, p_activa boolean,
+                                                        p_location text default 'santa-teresa')
+returns uuid
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_cod  text := btrim(coalesce(p_codigo, ''));
+  v_nom  text := nullif(btrim(coalesce(p_nombre, '')), '');
+  v_fam  int;
+  v_cfam int;
+  v_lnom text;
+  v_ant  public.club_cortesias%rowtype;
+  v_id   uuid;
+begin
+  if v_rol is null or v_rol <> 'owner' then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  if p_id is not null then
+    select * into v_ant from public.club_cortesias where id = p_id and location_id = p_location for update;
+    if not found then raise exception 'No se encontró la cortesía: recargá la lista' using errcode = 'P0001'; end if;
+    if v_nom is not null and length(v_nom) not between 2 and 80 then raise exception 'El nombre va de 2 a 80 caracteres' using errcode = 'P0001'; end if;
+    update public.club_cortesias set nombre = coalesce(v_nom, nombre), activa = coalesce(p_activa, activa),
+           actualizada_por = auth.uid(), actualizada_en = now()
+     where id = p_id returning id into v_id;
+    perform public.club_auditar('cortesia_edicion', 'club_cortesias', v_id, to_jsonb(v_ant),
+                                (select to_jsonb(c) from public.club_cortesias c where c.id = v_id));
+    return v_id;
+  end if;
+  if v_cod !~ '^[0-9A-Za-z._-]{1,30}$' then raise exception 'Falta el código del artículo del PoS (sección «CORTESÍA CLUB»)' using errcode = 'P0001'; end if;
+  select cortesia_familia into v_cfam from public.club_config where location_id = p_location;
+  select (array_agg(l.nombre order by t.fecha_registra desc))[1], (array_agg(l.familia order by t.fecha_registra desc))[1]
+    into v_lnom, v_fam
+    from public.pos_ndf_ticket_lines l join public.pos_ndf_tickets t on t.id = l.ticket_id
+   where t.local = p_location and l.codigo_producto = v_cod and t.fecha_registra >= now() - interval '120 days';
+  if v_cfam is not null and v_fam is not null and v_fam <> v_cfam then
+    raise exception 'Ese artículo no es de la sección «CORTESÍA CLUB» del PoS (familia %, la sección es %)', v_fam, v_cfam using errcode = 'P0001';
+  end if;
+  v_nom := coalesce(v_nom, v_lnom);
+  if v_nom is null or length(v_nom) not between 2 and 80 then
+    raise exception 'Ese código todavía no aparece en ninguna factura: escribí el nombre de la cortesía' using errcode = 'P0001';
+  end if;
+  begin
+    insert into public.club_cortesias (location_id, codigo_producto, nombre, familia, activa, creada_por, actualizada_por)
+    values (p_location, v_cod, v_nom, coalesce(v_fam, v_cfam), coalesce(p_activa, true), auth.uid(), auth.uid())
+    returning id into v_id;
+  exception when unique_violation then
+    raise exception 'Esa cortesía ya está cargada: activala desde la lista' using errcode = 'P0001';
+  end;
+  perform public.club_auditar('cortesia_alta', 'club_cortesias', v_id, null, (select to_jsonb(c) from public.club_cortesias c where c.id = v_id));
+  return v_id;
+end;
+$$;
+
+-- Promoción inicial (decisión de Ismael): «Local Club: 10 % + 1 cortesía», para socios, todos los días, en BORRADOR.
+insert into public.club_promociones (location_id, nombre, para, estado, porcentaje, cortesias)
+select 'santa-teresa', 'Local Club', array['socio'], 'borrador', 10, 1
+ where not exists (select 1 from public.club_promociones where location_id = 'santa-teresa' and lower(nombre) = 'local club');
+
+
 -- ── 5. EXECUTE: nada por defecto, grant explícito ───────────────────────────
 
 revoke all on function public.club_gen_codigo(int)                       from public, anon, authenticated;
@@ -4378,6 +4740,22 @@ grant execute on function public.club_socio_alta_caja(text, text, text, boolean,
 grant execute on function public.club_socio_validar(uuid, boolean)               to authenticated;
 grant execute on function public.club_socio_confirmar(uuid, text)                to authenticated;
 grant execute on function public.club_pase_token(uuid, text)                     to authenticated;
+-- LC-A3
+revoke all on function public.club_cortesias_tope()                              from public, anon, authenticated;
+revoke all on function public.club_promociones_evento()                          from public, anon, authenticated;
+revoke all on function public.club_promo_vigente_en(public.club_promociones, timestamptz) from public, anon, authenticated;
+revoke all on function public.club_promo_beneficio(public.club_promociones)      from public, anon, authenticated;
+revoke all on function public.club_promociones_vigentes(text, timestamptz, text[]) from public, anon, authenticated;
+revoke all on function public.club_promociones_listar(text)                      from public, anon, authenticated;
+revoke all on function public.club_promocion_guardar(uuid, jsonb, text)          from public, anon, authenticated;
+revoke all on function public.club_productos(text, text)                         from public, anon, authenticated;
+revoke all on function public.club_cortesias_listar(text)                        from public, anon, authenticated;
+revoke all on function public.club_cortesia_guardar(uuid, text, text, boolean, text) from public, anon, authenticated;
+grant execute on function public.club_promociones_listar(text)                   to authenticated;
+grant execute on function public.club_promocion_guardar(uuid, jsonb, text)       to authenticated;
+grant execute on function public.club_productos(text, text)                      to authenticated;
+grant execute on function public.club_cortesias_listar(text)                     to authenticated;
+grant execute on function public.club_cortesia_guardar(uuid, text, text, boolean, text) to authenticated;
 revoke all on function public.club_socios_por_confirmar()                        from public, anon, authenticated;
 revoke all on function public.club_socio_solicitudes_abiertas()                  from public, anon, authenticated;
 grant execute on function public.club_socio_solicitudes_abiertas()               to authenticated;

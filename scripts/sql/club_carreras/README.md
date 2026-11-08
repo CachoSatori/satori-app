@@ -17,3 +17,6 @@ CAJERO_UUID=<perfil cajero activo> OWNER_UUID=<perfil owner activo> scripts/sql/
 
 - **Datos sintéticos:** «Carrera …», la factura `990951` y el pedido `9501`. Se borran al final, aunque algo falle.
 - **Sesiones en ROLLBACK:** `club_vencer` vence **todas** las cuentas candidatas del local, y los cierres son inmutables, así que esas sesiones terminan siempre en ROLLBACK.
+
+- **CLUB-AUD-42:** la limpieza usa el modo `pruebas`, que solo existe con la base marcada como staging
+  (`scripts/sql/club_marcar_staging.sql`). En prod no hay marca: estas carreras no se pueden correr ni limpiar allá.

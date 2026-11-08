@@ -2,6 +2,8 @@
 -- que termina en ROLLBACK: no deja datos. Reemplazar <CAJERO_UUID>, <OWNER_UUID> y <SALONERO_UUID> por
 -- perfiles activos de staging (la prueba 6 los desactiva dentro de la transacción y el rollback lo deshace).
 -- Devuelve un JSON con cada caso y ok=true/false. Correr por la Management API (un solo request).
+-- CLUB-AUD-42: necesita la base marcada como staging (scripts/sql/club_marcar_staging.sql); sin la marca, el modo
+-- `pruebas` no existe y las pruebas que backdatean el libro fallan.
 begin;
 
 create temp table _res (n serial, prueba text, caso text, ok boolean, detalle text);
@@ -2865,6 +2867,24 @@ begin
   select count(*) into i from public.club_productos('CORTESIA');
   perform pg_temp.yo();
   perform pg_temp.r('60', 'productos de las facturas (120 días): lista y búsqueda por nombre', v_n between 1 and 50 and i >= 1, format('%s / %s', v_n, i));
+end $$;
+
+-- ═══ 61. CLUB-AUD-42: el modo «pruebas» solo existe en una base marcada como staging ═══
+do $$
+declare v_mv uuid; e1 text; e2 text;
+begin
+  select id into v_mv from club_movimientos limit 1;
+  perform pg_temp.r('61', 'esta base está marcada como staging (club_entorno)', exists (select 1 from club_entorno where nombre = 'staging'), '');
+  delete from club_entorno;   -- sin la marca = como prod (se restaura al final; todo termina en ROLLBACK)
+  set local club.libro_mantenimiento = 'pruebas';
+  begin update club_movimientos set nota = nota where id = v_mv; e1 := 'ok'; exception when others then e1 := sqlerrm; end;
+  begin update club_auditoria set accion = accion where id = (select min(id) from club_auditoria); e2 := 'ok'; exception when others then e2 := sqlerrm; end;
+  insert into club_entorno (nombre) values ('staging');
+  perform pg_temp.r('61', 'sin la marca, «pruebas» no abre el libro ni la auditoría (como en prod)',
+    e1 like '%solo inserción%' and (e2 like '%solo inserción%' or e2 = 'ok' and not exists (select 1 from club_auditoria)), e1 || ' / ' || e2);
+  perform pg_temp.r('61', 'club_entorno: nadie de la app la lee ni la escribe; la marca solo admite «staging»',
+    not has_table_privilege('authenticated', 'public.club_entorno', 'SELECT') and not has_table_privilege('anon', 'public.club_entorno', 'INSERT')
+      and not has_function_privilege('authenticated', 'public.club_modo_pruebas()', 'EXECUTE'), '');
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

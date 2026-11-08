@@ -302,12 +302,32 @@ create table if not exists public.club_visitas (
   created_at      timestamptz not null default now()
 );
 
+-- CLUB-AUD-42: el modo `pruebas` (borrar o editar el libro y la auditoría) solo existe en una base MARCADA como
+-- staging. La marca es una fila en club_entorno que se inserta a mano y solo en staging
+-- (scripts/sql/club_marcar_staging.sql, con el ref escrito); la 075 no la crea, así que en prod no hay modo pruebas.
+create table if not exists public.club_entorno (
+  nombre     text primary key check (nombre = 'staging'),
+  marcado_en timestamptz not null default now()
+);
+alter table public.club_entorno enable row level security;
+revoke all on public.club_entorno from public, anon, authenticated;
+create or replace function public.club_modo_pruebas()
+returns boolean
+language sql
+stable
+set search_path = public, pg_temp
+as $$
+  select current_user = 'postgres'
+     and coalesce(current_setting('club.libro_mantenimiento', true), '') = 'pruebas'
+     and exists (select 1 from public.club_entorno where nombre = 'staging')
+$$;
+
 -- Libro de solo inserción (auditoría ronda 3, §5.5): ni UPDATE ni DELETE ni TRUNCATE, tampoco para el dueño
 -- de la tabla. Única excepción, solo para el rol `postgres` y declarada en la transacción:
 --   · `set local club.libro_mantenimiento = 'migracion'` → borrar filas origen='migracion' (el migrador, al
 --     volver a migrar);
 --   · `= 'pruebas'` → las pruebas de staging (siempre en una transacción con ROLLBACK) y la limpieza de
---     datos sintéticos.
+--     datos sintéticos. CLUB-AUD-42: solo si la base está marcada como staging (club_entorno).
 create or replace function public.club_mov_solo_insercion()
 returns trigger
 language plpgsql
@@ -315,8 +335,8 @@ set search_path = public, pg_temp
 as $$
 declare v_modo text := coalesce(current_setting('club.libro_mantenimiento', true), '');
 begin
-  if current_user = 'postgres' and (v_modo = 'pruebas'
-       or (v_modo = 'migracion' and tg_op = 'DELETE' and old.origen = 'migracion')) then
+  if public.club_modo_pruebas()
+     or (current_user = 'postgres' and v_modo = 'migracion' and tg_op = 'DELETE' and old.origen = 'migracion') then
     return case when tg_op = 'DELETE' then old else new end;
   end if;
   raise exception 'club_movimientos es de solo inserción: para corregir, un ajuste o una restitución' using errcode = 'P0001';
@@ -331,7 +351,7 @@ language plpgsql
 set search_path = public, pg_temp
 as $$
 begin
-  if current_user = 'postgres' and coalesce(current_setting('club.libro_mantenimiento', true), '') = 'pruebas' then
+  if public.club_modo_pruebas() then   -- CLUB-AUD-42: solo en una base marcada como staging
     return null;
   end if;
   raise exception 'club_movimientos es de solo inserción' using errcode = 'P0001';
@@ -368,7 +388,7 @@ language plpgsql
 set search_path = public, pg_temp
 as $$
 begin
-  if current_user = 'postgres' and coalesce(current_setting('club.libro_mantenimiento', true), '') = 'pruebas' then
+  if public.club_modo_pruebas() then   -- CLUB-AUD-42: solo en una base marcada como staging
     return case when tg_op = 'DELETE' then old else new end;
   end if;
   raise exception 'club_auditoria es de solo inserción' using errcode = 'P0001';
@@ -4741,6 +4761,7 @@ grant execute on function public.club_socio_validar(uuid, boolean)              
 grant execute on function public.club_socio_confirmar(uuid, text)                to authenticated;
 grant execute on function public.club_pase_token(uuid, text)                     to authenticated;
 -- LC-A3
+revoke all on function public.club_modo_pruebas()                              from public, anon, authenticated;
 revoke all on function public.club_cortesias_tope()                              from public, anon, authenticated;
 revoke all on function public.club_promociones_evento()                          from public, anon, authenticated;
 revoke all on function public.club_promo_vigente_en(public.club_promociones, timestamptz) from public, anon, authenticated;

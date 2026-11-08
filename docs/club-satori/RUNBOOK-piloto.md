@@ -107,6 +107,8 @@ staging) y registrar la fila `075` en el ledger.
   Ismael (sin ella, las altas provisionales no vuelven a pendiente y las autoaltas no se purgan).
 - `select aviso_privacidad_version from club_config;` igual a `AVISO_PRIVACIDAD_VERSION` de `club-web/src/config.ts`.
 - `select tarjeta_manual_activa from club_config;` → `false`.
+- **CLUB-AUD-42:** `select count(*) from club_entorno;` → **0**. En prod no se corre `scripts/sql/club_marcar_staging.sql`
+  nunca: sin esa marca no existe el modo `pruebas` (el libro y la auditoría no tienen otra puerta que la del migrador).
 - `club_web_clave` vacía: las puertas públicas fallan cerradas.
 
 **Rollback:** `scripts/sql/075_rollback.sql`. Antes de la migración del paso 8 no hay datos del Club; después, solo con

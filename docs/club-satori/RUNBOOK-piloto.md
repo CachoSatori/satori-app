@@ -163,6 +163,13 @@ staging) y registrar la fila `<N>` en el ledger de prod (texto idéntico al arch
 - Tarea diaria de socios (LC-A2): `select jobname, schedule from cron.job where jobname = 'club_socios_mantenimiento';`
   → `15 9 * * *` (03:15 en Costa Rica). Si prod no tiene `pg_cron`, la migración del Club no la programa: anotarlo y decidir con
   Ismael (sin ella, las altas provisionales no vuelven a pendiente y las autoaltas no se purgan).
+- **Dominio del Club (08-nov noche):** `update club_config_global set club_url = 'https://<dominio>';` (el mismo de
+  `VITE_CLUB_URL` de club-web; no está escrito en el código). Verificar: `select club_url from club_config_global;` y que
+  un QR de anfitrión de prueba se lea en caja. Sin dominio, los links del pase, el portal, el canje y la baja fallan
+  cerrados con «Falta el dominio del Club».
+- **Retención de contactos de ofertas:** `select contactos_ofertas_meses from club_config_global;` → el valor que firme
+  Ismael (24 provisorio, [CONFIRMAR ISMAEL]); tiene que coincidir con el aviso de privacidad (una prueba de club-web
+  compara el texto con el valor por defecto de la migración). El borrado lo hace `club_socios_mantenimiento` cada día.
 - `select aviso_privacidad_version from club_config;` igual a `AVISO_PRIVACIDAD_VERSION` de `club-web/src/config.ts` (hoy
   **v1.1**: v1 + el email en «Qué datos guardamos»; una prueba de club-web verifica que coincidan).
 - `select tarjeta_manual_activa from club_config;` → `false`.
@@ -202,6 +209,8 @@ para `club.satoricostarica.com`; la clave del sitio va en `VITE_TURNSTILE_SITEKE
 **Secret** `TURNSTILE_SECRET` (las carga Ismael; **sin ella la autoalta Y la creación de cupones responden 503**: desde
 Grok 24 el cupón también pide Turnstile). Después, el deploy y el dominio.
 **Verificar:**
+- **Antes del deploy:** `grep -c 'CONFIRMAR ISMAEL' club-web/src/i18n.ts` → **0** (el aviso no sale con marcas
+  pendientes: dirección del responsable y retención de contactos de ofertas).
 - `/api/salud` → todo en `true` (incluido `turnstile`).
 - **CLUB-AUD-74: Turnstile de prod NO es el de prueba.** La clave del sitio del build (`VITE_TURNSTILE_SITEKEY`) no
   puede ser `1x00000000000000000000AA` (ni ninguna que empiece con `1x`, `2x` o `3x`, las de prueba de Cloudflare):

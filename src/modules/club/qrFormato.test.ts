@@ -1,12 +1,13 @@
-import { describe, it, expect } from 'vitest'
-import { parsearQR, urlCupon, urlReferente, urlPortal, urlCanje, urlSocio } from './qrFormato'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { parsearQR, urlCupon, urlReferente, urlPortal, urlCanje, urlSocio, configurarClubUrl, clubUrl, MSG_SIN_DOMINIO } from './qrFormato'
 import { aClubError, opcionesCanje, MSG_REFERENTE_INACTIVO } from '../../shared/api/club'
 
 describe('parsearQR', () => {
+  beforeEach(() => configurarClubUrl('https://club.ejemplo.test'))
   it('reconoce la URL de referente y la de cupón', () => {
     expect(parsearQR(urlReferente('ABCD2345'))).toEqual({ tipo: 'referente', codigo: 'ABCD2345' })
     expect(parsearQR(urlCupon('ABCD2345XY'))).toEqual({ tipo: 'cupon', codigo: 'ABCD2345XY' })
-    expect(parsearQR('http://CLUB.satoricostarica.com/C/abcd2345xy/')).toEqual({ tipo: 'cupon', codigo: 'ABCD2345XY' })
+    expect(parsearQR('http://CLUB.ejemplo.test/C/abcd2345xy/')).toEqual({ tipo: 'cupon', codigo: 'ABCD2345XY' })
   })
   it('acepta el código solo, con espacios y minúsculas', () => {
     expect(parsearQR(' abcd 2345 ')).toEqual({ tipo: 'referente', codigo: 'ABCD2345' })
@@ -28,10 +29,28 @@ describe('parsearQR', () => {
     expect(parsearQR(urlSocio('ABCD2345K'))).toEqual({ tipo: 'socio', codigo: 'ABCD2345K' })
     expect(parsearQR(' abcd 2345 k ')).toEqual({ tipo: 'socio', codigo: 'ABCD2345K' })
     expect(parsearQR(urlReferente('ABCD2345'))).toEqual({ tipo: 'referente', codigo: 'ABCD2345' })
-    expect(parsearQR('https://club.satoricostarica.com/s/ABCD2345').tipo).toBe('desconocido')   // /s/ con 8 no es socio
+    expect(parsearQR('https://club.ejemplo.test/s/ABCD2345').tipo).toBe('desconocido')   // /s/ con 8 no es socio
   })
   it('arma la URL del portal', () => {
-    expect(urlPortal('ab'.repeat(32))).toBe('https://club.satoricostarica.com/p/' + 'ab'.repeat(32))
+    expect(urlPortal('ab'.repeat(32))).toBe('https://club.ejemplo.test/p/' + 'ab'.repeat(32))
+  })
+})
+
+describe('dominio por configuración (08-nov noche)', () => {
+  it('sin dominio: los links fallan con un aviso claro y la caja solo acepta códigos sueltos', () => {
+    configurarClubUrl(null)
+    expect(() => clubUrl()).toThrow(MSG_SIN_DOMINIO)
+    expect(() => urlReferente('ABCD2345')).toThrow(MSG_SIN_DOMINIO)
+    expect(parsearQR('https://club.ejemplo.test/r/ABCD2345').tipo).toBe('desconocido')
+    expect(parsearQR('ABCD2345')).toEqual({ tipo: 'referente', codigo: 'ABCD2345' })
+  })
+  it('lee solo el dominio configurado; mal formado = sin dominio', () => {
+    configurarClubUrl('https://otro.ejemplo.test/')
+    expect(parsearQR('https://otro.ejemplo.test/r/ABCD2345').tipo).toBe('referente')
+    expect(parsearQR('https://club.ejemplo.test/r/ABCD2345').tipo).toBe('desconocido')
+    expect(parsearQR('https://otroXejemplo.test/r/ABCD2345').tipo).toBe('desconocido')   // el punto no es comodín
+    configurarClubUrl('http://club.ejemplo.test')
+    expect(() => clubUrl()).toThrow(MSG_SIN_DOMINIO)
   })
 })
 

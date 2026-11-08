@@ -8,7 +8,8 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { C, inputStyle } from './estilos'
-import { getLocalesClub, localActual, elegirLocal, setClubActivo, crearLocal, aClubError, type LocalClub } from '../../shared/api/club'
+import { getLocalesClub, localActual, elegirLocal, setClubActivo, crearLocal, aClubError, getClubUrl, type LocalClub } from '../../shared/api/club'
+import { configurarClubUrl } from './qrFormato'
 
 const Escanear = lazy(() => import('./Escanear'))
 const Miembros = lazy(() => import('./Miembros'))
@@ -42,6 +43,8 @@ export default function ClubModule() {
   }, [esOwner])
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void cargarLocales() }, [cargarLocales])
+  // (08-nov noche) el dominio de los QR y links sale de la configuración, no del código
+  useEffect(() => { getClubUrl().then(configurarClubUrl).catch(() => configurarClubUrl(null)) }, [])
 
   return (
     <div className="tips-module">

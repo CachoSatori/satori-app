@@ -110,6 +110,8 @@ Todas las tablas llevan `location_id`. Todo se hace con migraciones aditivas, co
 
 ## 5.1 Vencimiento
 - **12 meses sin actividad** (cualquier tarjeta o canje reinicia el plazo), con avisos a los 30 y a los 7 días. Configurable por local.
+  **También la restitución** (la hace el owner) cuenta como actividad y reinicia el plazo: decisión de Ismael, 08-nov
+  (es lo que hace `club_vencer`). Se cuenta desde la **última actividad**, no desde que se gana cada crédito.
 - **Por qué 12 y no 6 meses:**
   - hoy hay solo 7,5 créditos (₡135.000) con actividad de hace 6 a 12 meses, así que bajar a 6 recupera muy poco;
   - y castiga al referente estacional, que manda gente en alta y viene a consumir en baja.

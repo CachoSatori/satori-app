@@ -15,7 +15,7 @@ function archivos(dir: string): string[] {
 
 test('ningún archivo de club-web tiene el dominio escrito', () => {
   const con = archivos(RAIZ).filter(p => /\.(ts|js|mjs|html|json|toml|css|md|txt)$/.test(p) && !p.endsWith('dominio.test.ts'))
-    .filter(p => /satoricostarica/i.test(readFileSync(p, 'utf8')))
+    .filter(p => new RegExp(['satori', 'costarica'].join(''), 'i').test(readFileSync(p, 'utf8')))
   expect(con).toEqual([])
 })
 

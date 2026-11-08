@@ -22,9 +22,19 @@
    `alter`, `grant`, `revoke` y cualquier sentencia fuera de la lista.
 5. **Ensayo en staging** (datos ficticios, termina en ROLLBACK):
    `python3 scripts/club/migrar_firestore.py saldos-papel --ficticios 6 --local <id> --ensayo`. Prod: el script se niega.
-6. Pruebas: `python3 -m unittest scripts/club/test_saldos_papel.py` (19).
+6. Pruebas: `python3 -m unittest scripts/club/test_saldos_papel.py` (25: validador, filtro, SQL, fecha y doble carga).
+
+7. **Fecha del movimiento** (`--fecha-movimiento`): **`carga` por defecto [CONFIRMAR ISMAEL]**: el saldo entra con la
+   fecha del día de la carga. Hoy los saldos de papel no vencen; con la fecha vieja, una tarjeta de hace más de 12 meses
+   vencería el día del lanzamiento. Con `tarjeta`, entra con la fecha de la tarjeta. La fecha de la tarjeta queda siempre
+   en la nota («saldo tarjeta de papel · <referencia> · tarjeta AAAA-MM-DD»).
+8. **Doble carga con Firestore (solo lectura, antes de cargar):**
+   `python3 scripts/club/migrar_firestore.py doble-carga-papel --export <export> --csv <saldos> --mapa <mapa>` (los tres
+   fuera del repo). El export de Firestore no tiene el código del Club (nace en la migración), así que hace falta el mapa
+   `codigo_anfitrion,legacy_id` (o `--mapa-staging`, que lo lee de staging en solo lectura). Lista las tarjetas del CSV
+   que ya están en Firestore: mismo anfitrión, un crédito con las **mismas personas** a **≤ 3 días** (`--tolerancia-dias`),
+   «exacta» o «cercana»; y las filas sin mapa. Sale 2 si hay alguna (hay que decidir antes de cargar), 0 si no. Solo
+   líneas, referencias, ids y días: sin nombres ni teléfonos.
 
 **DECISIONES PROVISORIAS (para Ismael):** la unidad es **personas** (la del libro), no créditos; el movimiento es una
-**tarjeta** con la fecha de la tarjeta, así cuenta como actividad para el vencimiento de 12 meses (como las tarjetas de la
-página vieja en la migración F1b). Si el saldo de papel ya está dentro del export de Firestore, no se carga dos veces:
-confirmar antes de cargar.
+**tarjeta** (cuenta como actividad para el vencimiento), con la fecha de carga por defecto (punto 7).

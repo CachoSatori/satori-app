@@ -2,6 +2,7 @@
    python3 -m unittest scripts/club/test_saldos_papel.py
 """
 import datetime as dt
+import json
 import os
 import re
 import sys
@@ -30,7 +31,7 @@ class Validador(unittest.TestCase):
     def test_fila_buena_y_bom(self):
         filas, err = sp.validar('﻿' + CAB + 'abcd2345, 12 ,2026-05-20,TARJETA-1\n', HOY)
         self.assertEqual(err, [])
-        self.assertEqual(filas, [{'codigo': 'ABCD2345', 'personas': 12, 'fecha': '2026-05-20', 'referencia': 'TARJETA-1'}])
+        self.assertEqual(filas, [{'codigo': 'ABCD2345', 'personas': 12, 'fecha': '2026-05-20', 'referencia': 'TARJETA-1', 'linea': 2}])
 
     def test_malformadas(self):
         casos = {
@@ -140,6 +141,17 @@ class SqlEmitido(unittest.TestCase):
         for dato in ('ABCD2345', 'WXYZ6789', 'T1', 'T2'):
             self.assertNotIn(dato, txt)
 
+    def test_fecha_del_movimiento_por_defecto_es_la_de_carga(self):
+        # [CONFIRMAR ISMAEL] con la fecha vieja, una tarjeta de hace más de 12 meses vencería el día del lanzamiento
+        ins = self.sql[self.sql.index('insert into public.club_movimientos'):]
+        self.assertIn("'tarjeta', p.personas, c.personas_por_credito, c.valor_credito_crc,\n       now(), now(), 'migracion'", ins)
+        self.assertIn("' · tarjeta ' || to_char(p.fecha, 'YYYY-MM-DD')", ins)   # la fecha de la tarjeta queda en la nota
+        con_tarjeta = sp.sql_carga(self.f, 'local-prueba', 'prod', 'tarjeta')
+        self.assertIn("(p.fecha::timestamp + time '12:00') at time zone 'America/Costa_Rica', now(), 'migracion'", con_tarjeta)
+        self.assertEqual(sp.filtrar(con_tarjeta), [])
+        with self.assertRaises(AssertionError):
+            sp.sql_carga(self.f, 'local-prueba', 'prod', 'original')
+
     def test_comillas_en_la_referencia_no_rompen_el_sql(self):
         # la referencia no admite comillas (validador), pero el armado igual las escapa
         self.assertIn("'O''Hara'", sp._q("O'Hara"))
@@ -166,6 +178,74 @@ class CliMigrador(unittest.TestCase):
         r = subprocess.run([sys.executable, str(Path(__file__).parent / 'migrar_firestore.py'), 'saldos-papel',
                             '--local', 'x', '--csv', str(Path(__file__).parent / 'plantilla_saldos_papel.csv'), '--validar'],
                            capture_output=True, text=True)
+        self.assertIn('NEGADO', r.stderr + r.stdout)
+
+
+class DobleCarga(unittest.TestCase):
+    """Tarjetas del CSV que ya están en Firestore (datos ficticios). refA tiene un crédito de 7 el 20-oct (UTC 20:00 =
+    14:00 CR); refB uno de 12 el 21-oct; refC (borrado) uno de 5 el 15-sep."""
+    MAPA = 'codigo_anfitrion,legacy_id\nAAAA2222,refA\nBBBB3333,refB\n'
+
+    def filas(self, cuerpo):
+        f, err = sp.validar(CAB + cuerpo, HOY)
+        self.assertEqual(err, [])
+        return f
+
+    def referrals(self):
+        import importlib.util, tempfile
+        spec = importlib.util.spec_from_file_location('tmf', Path(__file__).parent / 'test_migrar_firestore.py')
+        tmf = importlib.util.module_from_spec(spec); spec.loader.exec_module(tmf)
+        self._tmp = tempfile.TemporaryDirectory(); self.addCleanup(self._tmp.cleanup)
+        exp = tmf.export_sintetico(Path(self._tmp.name) / 'export')
+        d = tmf.mf.cargar(exp)
+        return d['referrals'], exp
+
+    def test_exacta_cercana_distinta_y_sin_mapa(self):
+        refs, _ = self.referrals()
+        filas = self.filas('AAAA2222,7,2026-10-20,P-1\n'      # exacta (mismo día CR)
+                           'BBBB3333,12,2026-10-23,P-2\n'     # cercana (2 días)
+                           'BBBB3333,12,2026-10-30,P-3\n'     # mismo anfitrión y personas, 9 días: no
+                           'AAAA2222,8,2026-10-20,P-4\n'      # otras personas: no
+                           'CCCC4444,5,2026-09-15,P-5\n')     # sin mapa
+        out = sp.cruzar(filas, refs, sp.leer_mapa(self.MAPA), 3)
+        self.assertEqual([(x['linea'], x['firestore_id'], x['certeza']) for x in out['en_los_dos']],
+                         [(2, 'r1', 'exacta'), (3, 'r2', 'cercana')])
+        self.assertEqual(out['sin_mapa'], [{'linea': 6, 'referencia': 'P-5'}])
+        texto = json.dumps(out)
+        for dato in ('Referente', '6000', '@'):
+            self.assertNotIn(dato, texto)   # sin nombres, teléfonos ni emails
+
+    def test_un_credito_explica_una_sola_tarjeta(self):
+        refs, _ = self.referrals()
+        filas = self.filas('AAAA2222,7,2026-10-20,P-1\nAAAA2222,7,2026-10-21,P-2\n')
+        out = sp.cruzar(filas, refs, sp.leer_mapa(self.MAPA), 3)
+        self.assertEqual([x['referencia'] for x in out['en_los_dos']], ['P-1'])
+
+    def test_mapa_mal_formado(self):
+        with self.assertRaises(ValueError):
+            sp.leer_mapa('codigo,id\nAAAA2222,refA\n')
+
+    def test_cli_solo_lectura_sale_2_si_hay_doble_carga(self):
+        import subprocess, tempfile
+        _, exp = self.referrals()
+        with tempfile.TemporaryDirectory() as t:
+            csvp = Path(t) / 'saldos.csv'; csvp.write_text(CAB + 'AAAA2222,7,2026-10-20,P-1\nBBBB3333,1,2026-10-01,P-9\n')
+            mapp = Path(t) / 'mapa.csv'; mapp.write_text(self.MAPA)
+            r = subprocess.run([sys.executable, str(Path(__file__).parent / 'migrar_firestore.py'), 'doble-carga-papel',
+                                '--export', str(exp), '--csv', str(csvp), '--mapa', str(mapp)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2, r.stderr)
+            out = json.loads(r.stdout)
+            self.assertEqual([x['referencia'] for x in out['en_los_dos']], ['P-1'])
+            csvp.write_text(CAB + 'BBBB3333,1,2026-10-01,P-9\n')
+            r = subprocess.run([sys.executable, str(Path(__file__).parent / 'migrar_firestore.py'), 'doble-carga-papel',
+                                '--export', str(exp), '--csv', str(csvp), '--mapa', str(mapp)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+
+    def test_cli_niega_archivos_dentro_del_repo(self):
+        import subprocess
+        r = subprocess.run([sys.executable, str(Path(__file__).parent / 'migrar_firestore.py'), 'doble-carga-papel',
+                            '--export', '/tmp/x', '--csv', str(Path(__file__).parent / 'plantilla_saldos_papel.csv'),
+                            '--mapa', '/tmp/m.csv'], capture_output=True, text=True)
         self.assertIn('NEGADO', r.stderr + r.stdout)
 
 

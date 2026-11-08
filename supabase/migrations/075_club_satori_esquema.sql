@@ -1395,7 +1395,7 @@ begin
     begin
       insert into public.club_codigos_canje (location_id, miembro_id, codigo_hash, vence_en)
       values (v_m.location_id, v_m.id, public.club_codigo_hash(v_cod), v_vence);
-      codigo := v_cod; vence_en := v_vence; url := 'https://club.satoricostarica.com/k/' || v_cod;
+      codigo := v_cod; vence_en := v_vence; url := public.club_url() || '/k/' || v_cod;
       return next; return;
     exception when unique_violation then
       null;   -- choque de hash (muy raro): otro intento
@@ -1880,8 +1880,8 @@ $$;
 -- ── 4b. F1c: funciones de staff, resolución de QR e historial de config ─────
 
 -- Formato de los QR (lo usa también el front: src/modules/club/qrFormato.ts):
---   referente: https://club.satoricostarica.com/r/{codigo8}
---   cupón:     https://club.satoricostarica.com/c/{codigo10}
+--   referente: <club_url>/r/{codigo8}   (club_url = club_config_global.club_url, el dominio no está escrito en el código)
+--   cupón:     <club_url>/c/{codigo10}
 
 -- Teléfono a E.164 (+506 por defecto si vienen 8 dígitos). NULL si viene vacío; error si no es válido.
 create or replace function public.club_norm_telefono(p text)
@@ -2325,12 +2325,17 @@ declare
   v_m     public.club_miembros%rowtype;
   v_k     public.club_codigos_canje%rowtype;
   mm      text[];
+  v_host  text;
 begin
   if v_rol is null or v_rol not in ('owner','manager','cajero') then
     raise exception 'Sin permiso' using errcode = '42501';
   end if;
 
-  mm := regexp_match(v_t, '^https?://club\.satoricostarica\.com/([rcksRCKS])/([A-Za-z0-9]+)/?$', 'i');
+  -- el dominio sale de club_config_global.club_url (08-nov noche); sin dominio cargado, solo se aceptan códigos sueltos
+  select replace(regexp_replace(g.club_url, '^https://', ''), '.', '\.') into v_host from public.club_config_global g;
+  if v_host is not null then
+    mm := regexp_match(v_t, '^https?://' || v_host || '/([rcksRCKS])/([A-Za-z0-9]+)/?$', 'i');
+  end if;
   if mm is not null then
     v_kind := lower(mm[1]); v_cod := upper(mm[2]);
   else
@@ -4303,7 +4308,7 @@ declare
   v_saldo int;
   v_ver   bigint;
   v_mes   timestamptz := date_trunc('month', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica';
-  v_base  text := 'https://club.satoricostarica.com';
+  v_base  text := public.club_url();   -- (08-nov noche) el dominio sale de la configuración
   j_anf   jsonb;
   j_soc   jsonb;
   j_prom  jsonb := '[]'::jsonb;
@@ -4809,7 +4814,7 @@ begin
   end if;
   v_id := public.club_socio_crear(v_nom, v_tel, null, 'pendiente', 'autoalta', v_ref, v_cfg.aviso_privacidad_version, v_loc);
   select token_portal into v_tok from public.club_miembros where id = v_id;
-  return jsonb_build_object('ok', true, 'portal', 'https://club.satoricostarica.com/p/' || v_tok);
+  return jsonb_build_object('ok', true, 'portal', public.club_url() || '/p/' || v_tok);
 end;
 $$;
 
@@ -4872,6 +4877,7 @@ begin
     v_purg := v_purg + 1;
   end loop;
   return jsonb_build_object('provisionales_vencidas', v_venc, 'autoaltas_purgadas', v_purg,
+                            'contactos_ofertas_borrados', public.club_contactos_ofertas_purgar(),   -- (08-nov noche)
                             'premios', case when exists (select 1 from public.club_config c where c.club_activo) then public.club_premios_generar(null) else 0 end);
 end;
 $$;
@@ -5113,6 +5119,16 @@ drop policy if exists club_config_global_owner on public.club_config_global;
 create policy club_config_global_owner on public.club_config_global for update to authenticated
   using (public.get_my_role() is not null and public.get_my_role() = 'owner')
   with check (public.get_my_role() is not null and public.get_my_role() = 'owner');
+-- (08-nov noche) El DOMINIO del Club es configuración, no código: lo usan los links del pase, el portal, el código de
+-- canje, la baja del turista y la lectura de QR de la caja. Sin cargar, las funciones que arman links fallan cerradas
+-- (club_url() avisa) y la caja solo acepta códigos sueltos. Se carga como dato (RUNBOOK §4), nunca en el código.
+alter table public.club_config_global add column if not exists club_url text
+  check (club_url ~ '^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{2,5})?$');
+-- (Ismael, 08-nov noche) Contactos de ofertas de turistas: se guardan hasta que la persona se da de baja o hasta N meses
+-- sin contacto (24, PROVISORIO, [CONFIRMAR ISMAEL]); club_socios_mantenimiento los borra cada día.
+alter table public.club_config_global add column if not exists contactos_ofertas_meses int not null default 24
+  check (contactos_ofertas_meses between 1 and 120);
+grant update (club_url, contactos_ofertas_meses) on public.club_config_global to authenticated;   -- solo owner (policy)
 drop trigger if exists club_config_global_auditar_trg on public.club_config_global;
 create trigger club_config_global_auditar_trg after update on public.club_config_global
   for each row execute function public.club_auditar_trg();   -- quién cambió el tope y de cuánto a cuánto
@@ -6459,7 +6475,7 @@ begin
   end if;
   return query
     select k.nombre, k.whatsapp, k.email, c.location_id, k.aviso_version, coalesce(k.aviso_aceptado_en, k.created_at),
-           'https://club.satoricostarica.com/b/' || c.codigo
+           public.club_url() || '/b/' || c.codigo
       from public.club_cupones_contactos k join public.club_cupones c on c.id = k.cupon_id
      where k.optin and (p_location is null or c.location_id = p_location)
      order by coalesce(k.aviso_aceptado_en, k.created_at);
@@ -6488,6 +6504,50 @@ $$;
 drop trigger if exists club_config_pase_evento_trg on public.club_config;
 create trigger club_config_pase_evento_trg after update of valor_credito_crc, personas_por_credito on public.club_config
   for each row execute function public.club_config_pase_evento();
+
+-- (08-nov noche) El dominio configurado; sin él, error claro (no se arma ningún link con un dominio inventado).
+create or replace function public.club_url()
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v text;
+begin
+  select g.club_url into v from public.club_config_global g;
+  if v is null then
+    raise exception 'Falta el dominio del Club: cargar club_config_global.club_url (RUNBOOK §4)' using errcode = 'P0001';
+  end if;
+  return v;
+end;
+$$;
+
+-- (Ismael, 08-nov noche) Retención de los contactos de ofertas (turistas): «hasta que te des de baja o N meses sin
+-- contacto». «Último contacto» = ultimo_contacto_en (lo marca quien manda la oferta) o, si nunca se le escribió, la fecha
+-- en que aceptó. Borra y deja rastro sin datos (cuántos). Lo llama club_socios_mantenimiento (pg_cron, diario).
+alter table public.club_cupones_contactos add column if not exists ultimo_contacto_en timestamptz;
+create or replace function public.club_contactos_ofertas_purgar()
+returns int
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_meses int; v_n int;
+begin
+  select g.contactos_ofertas_meses into v_meses from public.club_config_global g;
+  v_meses := coalesce(v_meses, 24);
+  delete from public.club_cupones_contactos k
+   where coalesce(k.ultimo_contacto_en, k.aviso_aceptado_en, k.created_at) < now() - make_interval(months => v_meses);
+  get diagnostics v_n = row_count;
+  if v_n > 0 then
+    perform public.club_auditar('purga_contactos_turistas', 'club_cupones_contactos', null, null,
+                                jsonb_build_object('filas', v_n, 'meses', v_meses));
+  end if;
+  return v_n;
+end;
+$$;
 
 -- Grok 63: baja del turista (link del aviso corto del cupón). Con el código del cupón (secreto, 10 caracteres) se
 -- borra su contacto. Siempre responde true (no revela si el cupón existe o tenía contacto). Queda rastro sin datos.
@@ -6527,6 +6587,9 @@ revoke all on function public.club_reporte_exportar(date, text, text)        fro
 revoke all on function public.club_contactos_ofertas_exportar(text)         from public, anon, authenticated;
 revoke all on function public.club_config_pase_evento()                     from public, anon, authenticated;
 revoke all on function public.club_cupon_contacto_baja(text)                 from public, anon, authenticated;
+revoke all on function public.club_url()                                     from public, anon, authenticated;
+grant execute on function public.club_url()                                  to authenticated;   -- el dominio es público
+revoke all on function public.club_contactos_ofertas_purgar()                from public, anon, authenticated;
 grant execute on function public.club_miembro_contacto_ver(uuid)            to authenticated;
 grant execute on function public.club_reporte_exportar(date, text, text)     to authenticated;
 grant execute on function public.club_contactos_ofertas_exportar(text)      to authenticated;

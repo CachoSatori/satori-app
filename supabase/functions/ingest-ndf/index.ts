@@ -35,6 +35,8 @@
 //   · CLUB-AUD-46/47/48 (08-nov, en `src/shared/ndf/ingestNdf.ts`): latido con la hora del servidor y cursor que
 //     solo avanza; secretos de ≥ 32 sin repetir; topes de largo. En esta rama, NO desplegados (los despliega el
 //     RUNBOOK, con firma). Falta pasarlos a `claude/puente-item11-prod` antes del paso 3.
+//   · CLUB-AUD-44/45 (08-nov): todo el lote en UNA transacción por local (`pos_ndf_ingestar`, mig 082). NECESITA la
+//     082 aplicada ANTES de desplegar este Edge (en staging ya está aplicada; en prod va en el RUNBOOK).
 //
 // ── CONTRATO CON EL AGENTE (A3) ────────────────────────────────────────────────────────────
 // POST /ingest-ndf
@@ -48,7 +50,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 import {
-  fusionarCursor,
   localDelSecreto,
   normalizarLote,
   validarPayload,
@@ -62,9 +63,6 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const POS_INGEST_SECRET = Deno.env.get('POS_INGEST_SECRET') ?? ''
 // CLUB-AUD-32: un secreto por local, JSON {"santa-teresa": "…", "nosara": "…"}. Si está, manda sobre el de arriba.
 const POS_INGEST_SECRETS = Deno.env.get('POS_INGEST_SECRETS') ?? ''
-
-/** Tamaño de tanda para los INSERT. Un día grande son miles de líneas. */
-const CHUNK = 500
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -84,12 +82,6 @@ function safeEqual(a: string, b: string): boolean {
   let diff = 0
   for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i]
   return diff === 0
-}
-
-function tandas<T>(xs: T[], tam: number): T[][] {
-  const out: T[][] = []
-  for (let i = 0; i < xs.length; i += tam) out.push(xs.slice(i, i + tam))
-  return out
 }
 
 type Cliente = ReturnType<typeof createClient>
@@ -151,113 +143,41 @@ Deno.serve(async (req) => {
 
     sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
-    // ── 5. Tickets: upsert por (local, numero_factura) ───────────────────────────────────
-    // `onConflict` = reingestar el mismo día PISA la factura con lo último leído (no duplica y no
-    // la ignora: si el PoS corrigió un monto, queremos la corrección). El `.select()` devuelve el
-    // id de cada fila, que es lo que necesitan las líneas.
-    const idPorFactura = new Map<string, string>()
-    for (const tanda of tandas(lote.tickets, CHUNK)) {
-      const { data, error } = await sb
-        .from('pos_ndf_tickets')
-        .upsert(tanda.map((t) => t.fila), { onConflict: 'local,numero_factura' })
-        .select('id, numero_factura')
-      if (error) throw new Error(`no se pudieron guardar los tickets: ${error.message}`)
-      for (const r of (data ?? []) as { id: string; numero_factura: string }[]) {
-        idPorFactura.set(r.numero_factura, r.id)
-      }
-    }
-
-    // ── 6. Líneas: se REEMPLAZAN enteras ─────────────────────────────────────────────────
-    // Borrar + insertar en vez de upsert: las líneas no tienen clave natural (el mismo producto
-    // puede aparecer dos veces en la misma factura) y lo que importa es que el detalle guardado sea
-    // EXACTAMENTE el del PoS. Si una línea se anuló, tiene que desaparecer.
-    const ids = [...idPorFactura.values()]
-    for (const tanda of tandas(ids, CHUNK)) {
-      const { error } = await sb.from('pos_ndf_ticket_lines').delete().in('ticket_id', tanda)
-      if (error) throw new Error(`no se pudo limpiar el detalle: ${error.message}`)
-    }
-
-    const filasLinea: (LineaRow & { ticket_id: string })[] = []
-    for (const t of lote.tickets) {
-      const ticket_id = idPorFactura.get(t.fila.numero_factura)
-      if (!ticket_id) continue
-      for (const l of t.lineas) filasLinea.push({ ...l, ticket_id })
-    }
-    for (const tanda of tandas(filasLinea, CHUNK)) {
-      const { error } = await sb.from('pos_ndf_ticket_lines').insert(tanda)
-      if (error) throw new Error(`no se pudo guardar el detalle: ${error.message}`)
-    }
-
-    // ── 7. Mesas abiertas: SNAPSHOT del local ────────────────────────────────────────────
-    // `open` ausente = el agente no mandó snapshot y no se toca nada. `open: []` = mandó uno vacío,
-    // o sea "no hay nada abierto": se borran todas. La mesa que se cerró desaparece porque no vino
-    // en el lote, no porque alguien avise.
-    let openGuardadas = 0
-    let openBorradas = 0
-    if (lote.open !== undefined) {
-      for (const tanda of tandas(lote.open as OpenRow[], CHUNK)) {
-        const { error } = await sb.from('pos_ndf_open').upsert(tanda, { onConflict: 'local,clave' })
-        if (error) throw new Error(`no se pudo guardar el snapshot de mesas: ${error.message}`)
-        openGuardadas += tanda.length
-      }
-
-      // Las que sobran se calculan acá y se borran por clave, en vez de armar un `not in (...)`
-      // con las claves interpoladas en el filtro: son decenas de mesas, no un problema de tamaño,
-      // y así ninguna clave rara del PoS puede romper el filtro.
-      const vivas = new Set(lote.open.map((o) => o.clave))
-      const { data: actuales, error: errLeer } = await sb
-        .from('pos_ndf_open').select('clave').eq('local', local)
-      if (errLeer) throw new Error(`no se pudo leer el snapshot de mesas: ${errLeer.message}`)
-
-      const sobran = ((actuales ?? []) as { clave: string }[])
-        .map((r) => r.clave)
-        .filter((c) => !vivas.has(c))
-      for (const tanda of tandas(sobran, CHUNK)) {
-        const { error } = await sb.from('pos_ndf_open').delete().eq('local', local).in('clave', tanda)
-        if (error) throw new Error(`no se pudieron cerrar las mesas: ${error.message}`)
-        openBorradas += tanda.length
-      }
-    }
-
-    // ── 8. Cursor ────────────────────────────────────────────────────────────────────────
-    // Se escribe al final y solo si todo lo anterior salió bien: si el cursor avanzara con el lote
-    // a medio guardar, el agente daría por sincronizado algo que no está.
-    //
-    // Se lee y se FUSIONA en vez de pisar la fila entera: lo que el agente no mandó se conserva.
-    // El agente saluda al arrancar con un lote vacío para que la respuesta le diga hasta dónde
-    // llegó; si ese saludo borrara `last_factura`, cada reinicio releería el día desde el principio.
-    const { data: cursorActual, error: errLeerCursor } = await sb
-      .from('pos_ndf_cursor').select('*').eq('local', local).maybeSingle()
-    if (errLeerCursor) throw new Error(`no se pudo leer el cursor: ${errLeerCursor.message}`)
-    const guardado = (cursorActual ?? null) as CursorRow | null
-
-    // Sin la clave `cursor` en el sobre, la fila NO se escribe: se lee para devolverla y nada
-    // más — ni siquiera el latido. Es lo que deja al BACKFILL histórico correr en paralelo con
-    // el agente en vivo sin moverle el corte. El agente SIEMPRE manda `cursor`, así que a él
-    // no le cambia nada.
-    let cursor = guardado
-    if (lote.cursor !== null) {
-      cursor = fusionarCursor(guardado, lote.cursor)
-      const { error: errCursor } = await sb
-        .from('pos_ndf_cursor').upsert(cursor, { onConflict: 'local' })
-      if (errCursor) throw new Error(`no se pudo actualizar el cursor: ${errCursor.message}`)
-    }
+    // ── 5–8. Todo en UNA transacción por local (CLUB-AUD-44/45, mig 082) ──────────────────────
+    // Antes eran varias llamadas sueltas (upsert de tickets, borrar líneas, insertar líneas, snapshot de mesas,
+    // cursor): dos POST simultáneos del mismo local podían duplicar las líneas de una factura, y un fallo en el medio
+    // dejaba el lote a medias. `pos_ndf_ingestar` hace todo con un lock por local: o se guarda todo o nada.
+    //   · tickets: upsert por (local, numero_factura); las líneas de esas facturas se REEMPLAZAN enteras;
+    //   · `open` ausente = no se toca nada; `open: []` = no hay nada abierto (se borran todas);
+    //   · sin la clave `cursor` en el sobre, el cursor NO se escribe (el backfill corre en paralelo sin moverle el
+    //     corte al agente); con ella, se fusiona con las reglas de CLUB-AUD-46 (solo avanza; latido = hora del servidor).
+    const lineas: (LineaRow & { numero_factura: string })[] = []
+    for (const t of lote.tickets) for (const l of t.lineas) lineas.push({ ...l, numero_factura: t.fila.numero_factura })
+    const { data: r, error: errIngesta } = await sb.rpc('pos_ndf_ingestar', {
+      p_local:   local,
+      p_tickets: lote.tickets.map((t) => t.fila),
+      p_lineas:  lineas,
+      p_open:    lote.open === undefined ? null : (lote.open as OpenRow[]),
+      p_cursor:  lote.cursor,
+    })
+    if (errIngesta) throw new Error(`no se pudo guardar el lote: ${errIngesta.message}`)
+    const res = (r ?? {}) as { tickets?: number; lineas?: number; open_guardadas?: number; open_borradas?: number; cursor?: CursorRow | null }
 
     // Invariante: tickets_recibidos = tickets_guardados + invalid + repetidos dentro del lote.
     return json({
       ok: true,
       local,
       tickets_recibidos: sobre.valor.tickets.length,
-      tickets_guardados: idPorFactura.size,
-      lineas_guardadas:  filasLinea.length,
-      open_guardadas:    openGuardadas,
-      open_borradas:     openBorradas,
+      tickets_guardados: res.tickets ?? 0,
+      lineas_guardadas:  res.lineas ?? 0,
+      open_guardadas:    res.open_guardadas ?? 0,
+      open_borradas:     res.open_borradas ?? 0,
       invalid:           lote.invalid,
       recalculados:      lote.recalculados,
       problemas:         lote.problemas,
       // El cursor ya fusionado: es de acá de donde el agente saca por dónde seguir. Si el lote
       // no traía `cursor`, es la fila TAL CUAL está guardada (no se escribió nada).
-      cursor,
+      cursor: res.cursor ?? null,
       cursor_escrito: lote.cursor !== null,
     }, 200)
   } catch (e) {

@@ -7,7 +7,8 @@
  *  · No se borran: se apagan (queda la historia).
  */
 import { useEffect, useState } from 'react'
-import { getMarcadores, guardarMarcador, getProductos, aClubError, type MarcadorDescuento, type ProductoPos } from '../../shared/api/club'
+import { getMarcadores, guardarMarcador, getProductos, aClubError, type MarcadorDescuento, type ProductoPos,
+  getDescuentosTipo, guardarDescuentoTipo, getReporteDescuentos, type DescuentoTipo, type FilaReporteDescuentos } from '../../shared/api/club'
 import { Aviso, Btn, Card, Chip } from './ui'
 import { C, inputStyle, labelStyle } from './estilos'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -83,7 +84,109 @@ export default function Marcadores() {
         )}
         {owner && <NuevoMarcador onHecho={t => { setOk(t); setRecarga(n => n + 1) }} />}
       </Card>
+      <TiposDescuento owner={owner} />
+      <ReporteDescuentos />
     </div>
+  )
+}
+
+/** LC-DT: descuentos que el PoS aplica SIN artículo, tipificados por porcentaje (±1,5 puntos). */
+function TiposDescuento({ owner }: { owner: boolean }) {
+  const [lista, setLista] = useState<DescuentoTipo[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [ok, setOk] = useState<string | null>(null)
+  const [recarga, setRecarga] = useState(0)
+  const [nombre, setNombre] = useState('')
+  const [pct, setPct] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  useEffect(() => {
+    let vivo = true
+    getDescuentosTipo().then(l => { if (vivo) setLista(l) }).catch(e => { if (vivo) setError(aClubError(e).message) })
+    return () => { vivo = false }
+  }, [recarga])
+  async function guardar(id: string | null, n: string | null, p: number | null, activo: boolean | null, texto: string) {
+    setEnviando(true); setError(null); setOk(null)
+    try { await guardarDescuentoTipo(id, n, p, activo); setOk(texto); setNombre(''); setPct(''); setRecarga(x => x + 1) }
+    catch (e) { setError(aClubError(e).message) } finally { setEnviando(false) }
+  }
+  function agregar() {
+    const p = leerPct(pct)
+    if (p === null || p === 'mal') { setError('El porcentaje va de 0,01 a 100.'); return }
+    void guardar(null, nombre.trim(), p, true, 'Tipo de descuento agregado.')
+  }
+  return (
+    <Card>
+      <strong>Descuentos tipificados por porcentaje</strong>
+      <div style={{ fontSize: '0.82rem', color: C.muted, margin: '4px 0 8px' }}>
+        Descuentos que el PoS aplica sin artículo. Un «descuento sin respaldo» de uno de estos porcentajes (±1,5 puntos) se muestra
+        clasificado con su nombre y no cuenta como alarma; el que no encaja en ningún tipo ni marcador sale «sin clasificar».
+      </div>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      {ok && <Aviso tono="ok" onClose={() => setOk(null)}>{ok}</Aviso>}
+      {lista === null ? <div style={{ color: C.muted }}>Cargando…</div> : lista.length === 0 ? (
+        <div style={{ color: C.muted }}>Sin tipos: todo descuento sin artículo sale «sin clasificar».</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {lista.map(t => (
+            <div key={t.id} style={{ display: 'flex', gap: 8, alignItems: 'center', borderBottom: `1px solid ${C.panel}`, padding: '4px 0' }}>
+              <div style={{ flex: 1 }}><strong>{t.nombre}</strong> <span style={{ color: C.muted, fontSize: '0.8rem' }}>· {pctTexto(t.pct)}</span></div>
+              <Chip color={t.activo ? C.teal : C.muted}>{t.activo ? 'activo' : 'apagado'}</Chip>
+              {owner && <Btn variant="secondary" disabled={enviando} onClick={() => void guardar(t.id, null, null, !t.activo, `«${t.nombre}» ${t.activo ? 'apagado' : 'activado'}.`)}>{t.activo ? 'Apagar' : 'Activar'}</Btn>}
+            </div>
+          ))}
+        </div>
+      )}
+      {owner && (
+        <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, alignItems: 'end' }}>
+          <label><span style={labelStyle}>Nombre</span><input value={nombre} onChange={e => setNombre(e.target.value)} maxLength={60} placeholder="Ej. Personal" style={inputStyle} /></label>
+          <label><span style={labelStyle}>Porcentaje</span><input value={pct} onChange={e => setPct(e.target.value)} inputMode="decimal" placeholder="Ej. 15" style={inputStyle} /></label>
+          <Btn onClick={agregar} disabled={enviando || nombre.trim().length < 2 || !pct.trim()}>Agregar tipo</Btn>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/** LC-DT: descuentos sin artículo por mes, tipo y turno (facturas y monto estimado). Owner y manager. */
+function ReporteDescuentos() {
+  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' })
+  const hace = (d: number) => { const t = new Date(); t.setDate(t.getDate() - d); return t.toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }) }
+  const [desde, setDesde] = useState(hace(120))
+  const [hasta, setHasta] = useState(hoy)
+  const [filas, setFilas] = useState<FilaReporteDescuentos[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let vivo = true
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setFilas(null)
+    getReporteDescuentos(desde, hasta).then(f => { if (vivo) { setFilas(f); setError(null) } }).catch(e => { if (vivo) setError(aClubError(e).message) })
+    return () => { vivo = false }
+  }, [desde, hasta])
+  const crc = (n: number) => `₡${Number(n).toLocaleString('de-DE', { maximumFractionDigits: 0 })}`
+  return (
+    <Card>
+      <strong>Reporte de descuentos sin artículo</strong>
+      <div style={{ fontSize: '0.82rem', color: C.muted, margin: '4px 0 8px' }}>Por mes, tipo y turno. El monto es estimado (precio habitual − precio cobrado).</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 8 }}>
+        <label><span style={labelStyle}>Desde</span><input type="date" value={desde} onChange={e => setDesde(e.target.value)} style={inputStyle} /></label>
+        <label><span style={labelStyle}>Hasta</span><input type="date" value={hasta} onChange={e => setHasta(e.target.value)} style={inputStyle} /></label>
+      </div>
+      {error && <Aviso tono="error">{error}</Aviso>}
+      {filas === null ? <div style={{ color: C.muted }}>Cargando…</div> : filas.length === 0 ? <div style={{ color: C.muted }}>Sin descuentos en el período.</div> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+            <thead><tr style={{ textAlign: 'left', color: C.muted }}><th>Mes</th><th>Tipo</th><th>Turno</th><th>Facturas</th><th>Monto</th></tr></thead>
+            <tbody>
+              {filas.map(f => (
+                <tr key={`${f.mes}|${f.tipo}|${f.turno}`} style={{ borderTop: `1px solid ${C.panel}`, color: f.tipo === 'sin clasificar' ? C.red : undefined }}>
+                  <td>{f.mes}</td><td>{f.tipo}</td><td>{f.turno}</td><td>{f.facturas}</td><td>{crc(Number(f.descuento_crc))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   )
 }
 

@@ -419,7 +419,7 @@ export interface Cortesia {
   id: string; codigo_producto: string; nombre: string; familia: number | null; activa: boolean
   en_seccion: boolean | null; visto_en_facturas: boolean; actualizada_en: string
 }
-export interface ProductoPos { codigo: string; nombre: string; familia: number | null; veces: number; ultima: string; es_cortesia: boolean }
+export interface ProductoPos { codigo: string; nombre: string; familia: number | null; veces: number; ultima: string; es_cortesia: boolean; en_seccion?: boolean | null }
 export const getCortesias = () => llamar<Cortesia[]>('club_cortesias_listar', { p_location: localClub })
 export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('club_productos', { p_buscar: buscar, p_location: localClub })
 /** Solo owner. Alta: `id` null + código del artículo «CORTESÍA CLUB». Edición: nombre y activa. */
@@ -436,6 +436,16 @@ export const getMarcadores = () => llamar<MarcadorDescuento[]>('club_marcadores_
 /** Solo owner. Alta: `id` null + código del PoS. Edición: nombre, % esperado (null = cualquier descuento) y activo. */
 export const guardarMarcador = (id: string | null, codigo: string | null, nombre: string | null, pct: number | null, activo: boolean | null) =>
   llamar<string>('club_marcador_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_pct: pct, p_activo: activo, p_location: localClub })
+
+// ── LC-DT: descuentos tipificados por porcentaje (sin artículo) ──────────────
+export interface DescuentoTipo { id: string; nombre: string; pct: number; activo: boolean; actualizado_en: string }
+export const getDescuentosTipo = () => llamar<DescuentoTipo[]>('club_descuentos_tipo_listar', { p_location: localClub })
+/** Solo owner. Alta: `id` null + nombre y %. Edición: nombre, % y activo. */
+export const guardarDescuentoTipo = (id: string | null, nombre: string | null, pct: number | null, activo: boolean | null) =>
+  llamar<string>('club_descuento_tipo_guardar', { p_id: id, p_nombre: nombre, p_pct: pct, p_activo: activo, p_location: localClub })
+export interface FilaReporteDescuentos { mes: string; tipo: string; turno: string; facturas: number; descuento_crc: number }
+export const getReporteDescuentos = (desde: string, hasta: string) =>
+  llamar<FilaReporteDescuentos[]>('club_reporte_descuentos', { p_desde: desde, p_hasta: hasta, p_location: localClub })
 
 // ── LC-A4: visita del socio y «qué aplicar» ──────────────────────────────────
 export interface QueAplicar {

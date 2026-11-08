@@ -122,16 +122,74 @@
 
 **Total A: 11 → 12,5 días** (camino crítico). **Total B: 6,5.**
 
+## Tercera tanda (08-nov): respuestas, auditoría de Grok ronda 5 — van antes de A2 y B1
+1. **Tope del anfitrión, sobre lo GANADO.**
+   - `ANFITRION_SOBRE_TOPE` salta **siempre** que supere ₡25.000 en el mes (configurable).
+   - La **retención** («pendiente de aprobación») aplica **solo en sus primeros 90 días** como anfitrión.
+   - Aprueba un manager u owner que **no** sea el anfitrión, con auditoría.
+2. **`DESCUENTO_SIN_RESPALDO`:** criterio confirmado (60 % por día, una excepción por factura).
+3. **Cortesías por SECCIÓN DEL PoS.**
+   - Ismael crea en Nube de Fuego la sección «CORTESÍA CLUB», con cada producto como artículo propio a ₡0.
+   - Cada cortesía del admin (hasta 10, activable) **es un artículo de esa sección**.
+   - Cruce por código de artículo:
+     - `CORTESIA_DISTINTA`: un artículo distinto al sorteado;
+     - `CORTESIA_SIN_SOCIO`: un artículo de la sección en una factura sin visita de socio;
+     - `CORTESIA_NO_CONFIGURADA`: una línea a ₡0 o al 100 % fuera de la sección.
+   - Los códigos los pasa Ismael cuando los cree.
+4. **Correcciones de diseño:**
+   - **LC-DES-01:** el alta en caja queda **«activo provisional»**: el socio usa el 10 % ese día. Un manager u owner
+     **distinto de quien lo cargó** lo confirma dentro de **7 días**; si no, vuelve a pendiente. Se suman
+     `SOCIO_ALTA_SIN_CONFIRMAR` y el reporte de altas por cajero. Prueba negativa: quien cargó no confirma.
+   - **LC-DES-02:** el premio por referir nace **solo con la primera factura C pagada del referido con el 856**, no con la
+     validación. Sin ciclos, sin autorreferido (mismo teléfono), con tope por referente y por validador. Pruebas negativas
+     de cada caso. **Pasa de A2 a A4** (necesita el cruce de visitas).
+   - **LC-DES-07:** autoalta con Turnstile, tope por IP y tope global por día, purga de pendientes sin validar a los 30
+     días, aviso de privacidad versionado con link de baja (texto provisorio; lo firma Ismael), datos mínimos (nombre y
+     WhatsApp).
+   - **CLUB-AUD-69:** el pase **no** lleva el token del portal. Lleva un **token de pase propio**, revocable y regenerable
+     (regenerarlo actualiza el pase). Con él solo se abre «Canjear», que sigue con el código de un solo uso. Prueba: un
+     token revocado no genera código.
+   - **CLUB-AUD-70:** el cursor del pase solo avanza; el rebobinado es una función aparte y explícita. Prueba: dos
+     sincronizaciones simultáneas dejan el cursor en el máximo.
+   - **R02:** con `promo_articulo_codigo` en NULL, `CUPON_SIN_PROMO` y `PROMO_SIN_CUPON` salen **«pendiente de
+     configuración»**, nunca «ok». El código de PROMO CLUB 10% se carga cuando llegue.
+   - **LC-DES-10:** la 075 **no** está en prod y se sigue corrigiendo en el mismo archivo. RUNBOOK, paso 0: verificar el
+     ledger de prod; **si aparece la 075, se frena todo**.
+5. **Cola de endurecimiento** (para las sesiones nocturnas cuando una etapa está bloqueada), en este orden:
+   - **CLUB-AUD-36:** resolver solo excepciones que existen, con segregación por quien las registró;
+   - **38:** lock en el conteo de intentos;
+   - **68:** `estado = 'C'` en el cruce del camino viejo (factura tipeada), o retirar ese camino;
+   - **42:** que la rama `pruebas` no exista en prod;
+   - **43:** asserts fuertes en la batería (W1–W14);
+   - **en la rama del puente, sin desplegar:**
+     - 44/45: ingesta transaccional por local;
+     - 46: ignorar el `last_poll_at` que llega y que `last_factura` solo avance;
+     - 47: secreto ≥ 32 caracteres, sin duplicados;
+     - 48: topes de largo.
+6. **CRM viejo** (CLUB-AUD-64 / LC-DES-09): diagnóstico y plan en [PLAN-CRM-cierre.md](PLAN-CRM-cierre.md). **Solo el
+   plan**: toca RLS de prod y lo firma Ismael.
+
+### Dónde caen y cuánto suman
+| Etapa | Suma | Días |
+|---|---|---|
+| A2 | Alta provisional + confirmación por otra persona en 7 días + vuelta a pendiente. Autoalta con Turnstile, topes, purga a 30 días, aviso de privacidad versionado y baja. Token de pase propio (AUD-69) y cursor con rebobinado aparte (AUD-70). **Sale** el premio por referir (pasa a A4) | 1,5 → **2,5** |
+| A4 | Premio por referir con la primera factura C con el 856, sin ciclos ni autorreferido, con topes | 4 → **4,5** |
+| A5 | `SOCIO_ALTA_SIN_CONFIRMAR`, `CORTESIA_SIN_SOCIO`, `CORTESIA_NO_CONFIGURADA`, «pendiente de configuración» de R02, reporte de altas por cajero | 2 → **2,5** |
+| B | Link de «Canjear» con el token de pase (no el del portal) | 6,5 → **7** |
+
+**Total A: 12,5 → 14,5 días** (A1 hecha: quedan ≈ 12,5). **Total B: 7.** La cola de endurecimiento no suma al camino
+crítico: la usan las noches cuando una etapa está bloqueada.
+
 ## Sesión A (esta) · Local Club en la 075, caja, excepciones y pantallas
 | Etapa | Qué | Días |
 |---|---|---|
 | A1 | **Roles** en la 075 (`club_miembro_roles`; `tipo` queda como espejo del rol de anfitrión, para no romper lo que ya anda). QR fijo del socio. «Activar como anfitrión». **Stub del contrato del pase** (`club_pase_datos` con referentes reales, eventos, cursor, emisión). Batería y carreras sin regresiones. | 2 |
-| A2 | **Socios:** alta en caja, autoalta (función pública + club-web `/s`, ES y EN), validación en caja, premio por referir (config + tope mensual), auditoría y eventos del pase. Pruebas. | 1,5 |
+| A2 | **Socios:** alta en caja (activo provisional + confirmación de otra persona en 7 días), autoalta (club-web `/alta`, ES y EN, Turnstile, topes, purga a 30 días, aviso de privacidad versionado), validación en caja, token de pase propio, cursor con rebobinado aparte, auditoría y eventos del pase. Pruebas. | 2,5 |
 | A3 | **Promociones mínimas + productos + cortesías del sorteo:** tablas, vista de productos desde las líneas, pantalla «Promociones», admin «Cortesías» (hasta 10, activables), la promo inicial «Local Club 10 % + cortesía» (en borrador). Pruebas. | 2 |
 | A4 | **Motor «qué aplicar» + visita por factura:** el socio se identifica con su QR fijo (`/s/`), sorteo de la cortesía (uno por visita), regla fija de créditos, pantalla única en Escanear, visita y cruce por el 856, tope de 1 visita por día, antiautocanje, créditos pendientes de aprobación del anfitrión nuevo, portal con dos pestañas. `club_pase_datos` completo. Pruebas. | 4 |
 | A5 | **Excepciones** `CANJE_CON_DESCUENTO`, `LC_SIN_REGISTRO`, `REGISTRO_LC_SIN_856`, `DESCUENTO_SIN_RESPALDO`, `SOCIO_USO_ANOMALO`, `CUPON_AUTOREFERIDO`, `CORTESIA_DISTINTA` y `ANFITRION_SOBRE_TOPE`. Pruebas con facturas sintéticas y con las 142 facturas LC reales (solo lectura). | 2 |
 | A6 | **Cierre:** recorrido integral con capturas (alta en caja, autoalta → validación → premio, visita con el 856, canje + LC → alarma), paridad, carreras, guía de uso (`docs/sop-app/`) y RUNBOOK actualizado. | 1,5 |
-| | **Total A** | **12,5** |
+| | **Total A** | **14,5** |
 
 ## Sesión B (otra sesión de Claude Code) · pase de Wallet
 | Etapa | Qué | Días |
@@ -141,7 +199,7 @@
 | B3 | Sincronización: lector de eventos cada 2 min + «Actualizar mi pase»; mensajes del pase desde `club_alertas`; baja → pase expirado. | 1,5 |
 | B4 | Apple: `.pkpass` y web service de actualización, **apagado** por flag. | 1,5 |
 | B5 | Integración con los datos reales de A, código de barras según el rol (socio → QR del socio; solo referente → QR de cupones), link de cupones en el reverso, y prueba en un teléfono real. | 1,5 |
-| | **Total B** | **6,5** |
+| | **Total B** | **7** |
 
 ## Qué depende de qué
 - **B1 a B4 no esperan a A:** usan el JSON de ejemplo del contrato.

@@ -9,10 +9,10 @@
 | Etapa | Qué | Días | Estado | SHA | Pruebas |
 |---|---|---|---|---|---|
 | A1 | Roles, QR fijo del socio, activar como anfitrión, stub del contrato del pase | 2 | **hecha** | `a1e93db` | batería 294/294 (nuevas 53–56) · carreras 6/6 · paridad 602 = 602 · migrador 15/15 · vitest 1.487 |
-| A2 | Socios: alta en caja, autoalta, validación, premio por referir | 1,5 | pendiente | — | — |
+| A2 | Socios: alta provisional + confirmación, autoalta (Turnstile, topes, purga, privacidad), validación, token de pase, cursor | 2,5 | en curso | — | — |
 | A3 | Promociones mínimas + productos + admin de cortesías del sorteo | 2 | pendiente | — | — |
-| A4 | «Qué aplicar», sorteo de cortesía, visita por factura (856), topes, antiautocanje, créditos pendientes de aprobación, portal con dos pestañas | 4 | pendiente | — | — |
-| A5 | Excepciones LC (8) | 2 | pendiente | — | — |
+| A4 | «Qué aplicar», sorteo de cortesía, visita por factura (856), premio por referir (1.ª factura C con 856), topes, antiautocanje, créditos pendientes, portal con dos pestañas | 4,5 | pendiente | — | — |
+| A5 | Excepciones LC (11) + «pendiente de configuración» de R02 + reporte de altas por cajero | 2,5 | pendiente | — | — |
 | A6 | Recorrido, guía de uso, RUNBOOK | 1,5 | pendiente | — | — |
 
 ## Sesión B · pase de Wallet (Google; Apple apagado)
@@ -41,3 +41,8 @@
   - **Wallet:** Google arranca ya.
   - **Total A: 12,5 días.**
   - **Falta el código de «PROMO CLUB 10%».**
+- 08-nov · Tercera tanda (auditoría de Grok, ronda 5).
+  - **Total A: 14,5 · B: 7.**
+  - **Cola de endurecimiento** en el PLAN, para las noches bloqueadas.
+  - **CRM viejo:** plan en PLAN-CRM-cierre.md (lo firma Ismael).
+  - **Arranca A2.**

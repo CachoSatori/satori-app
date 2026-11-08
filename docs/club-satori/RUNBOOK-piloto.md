@@ -46,6 +46,9 @@
 - CLUB-AUD-28: versión del Edge en prod: panel de Supabase → Edge Functions → `ingest-ndf` (versión y fecha). Anotarla:
   es el punto de vuelta del paso 3.
 
+**LC-DES-10: si el ledger de prod ya tiene la `075`, se frena todo** y se avisa a Ismael: la 075 se sigue corrigiendo
+en el mismo archivo mientras no esté en prod, y una 075 vieja aplicada no coincidiría con la final.
+
 **Verificar:** el export se abre; las lecturas están anotadas. Si los respaldos `*_pre_migracion_2026_07` existen con
 `anon_select` o `authenticated_select` en `true`, se cierran **antes** de seguir (`enable row level security` +
 `revoke all … from anon, authenticated`), o se borran si Ismael lo decide.

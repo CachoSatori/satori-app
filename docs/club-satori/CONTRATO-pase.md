@@ -11,8 +11,8 @@
 - **Un pase por persona** = un `club_miembros.id`. La misma persona puede ser referente y socio: un solo pase.
 - **B no lee tablas del Club.** Todo pasa por las funciones de este contrato: SECURITY DEFINER y ejecutables **solo
   por `service_role`** (el Edge de B). Ni `anon` ni `authenticated` las ven.
-- **El pase no lleva datos de contacto** (ni teléfono, ni email) ni secretos. El token del portal **solo** va en el
-  link del botón «Canjear», que es privado del dueño del pase (igual que el link de WhatsApp de hoy).
+- **El pase no lleva datos de contacto** (ni teléfono, ni email) ni el token del portal (CLUB-AUD-69). El botón
+  «Canjear» usa un **token de pase** propio, revocable y regenerable, que solo abre «Canjear».
 - **Una persona, dos roles posibles:** **socio** (cliente del Local Club) y **anfitrión** (= referente: comparte
   cupones y gana créditos). Son las pestañas «Mi Club» y «Anfitrión» del pase y del portal; con un solo rol, una sola.
 - **Código de barras del pase** (lo dice `codigo_barras`, B no lo deduce):
@@ -66,8 +66,7 @@ Ejecutable solo por `service_role`. Devuelve `null` si el miembro no existe. Eje
     { "id": "8f0e…", "nombre": "Local Club", "nombre_en": null, "beneficio": "10 % + 1 postre", "para": ["socio"],
       "vigente_hasta": null, "dias": [1,2,3,4,5,6,7], "horario": null }
   ],
-  "canjear_url": "https://club.satoricostarica.com/p/<token64>?accion=canjear",
-  "portal_url": "https://club.satoricostarica.com/p/<token64>"
+  "canjear_url": "https://club.satoricostarica.com/w/<token_pase64>"
 }
 ```
 
@@ -82,7 +81,7 @@ Reglas de los campos:
 | `socio` | `null` si no es socio. `estado`: `pendiente` (mostrar «Validá tu alta en tu próxima visita»), `activo` o `baja`. Con `pendiente` el beneficio **no** aplica y `cortesias` va vacío. `qr_url` es el QR fijo del socio (solo identifica). |
 | `socio.cortesias` | Lo que le corresponde **en su próxima visita** (promo vigente + premios por referido pendientes). **Es un sorteo:** el producto se decide en caja al escanear; el pase muestra «1 cortesía sorpresa» (`sorpresa: true`, sin producto). |
 | `promociones` | Solo las vigentes hoy para los roles que tiene. |
-| `canjear_url` | Solo si es anfitrión. Abre el portal y genera el código de un solo uso (R-01). Si se regenera el token, cambia. |
+| `canjear_url` | Solo si es anfitrión. **CLUB-AUD-69:** usa el **token de pase** (propio, revocable y regenerable), **nunca** el del portal. Con él solo se abre «Canjear», que genera el código de un solo uso (R-01). Si se revoca o se regenera, el link viejo deja de servir y el pase se actualiza (evento `datos`). El pase **no** lleva `portal_url`. |
 
 ## 3. Cómo se avisa un cambio: eventos (cola de solo inserción)
 `club_pase_eventos(id bigint identity, miembro_id uuid null, motivo text, creado_en timestamptz)`.
@@ -98,8 +97,10 @@ La llenan **triggers de la base**; `miembro_id` null = afecta a **todos** los pa
 
 Funciones para B (solo `service_role`):
 - `club_pase_eventos_leer(p_despues bigint, p_limite int default 500) → table(id, miembro_id, motivo, creado_en)`
-- `club_pase_cursor(p_nombre text) → bigint` y `club_pase_cursor_guardar(p_nombre text, p_id bigint)`: B guarda
+- `club_pase_cursor_leer(p_nombre text) → bigint` y `club_pase_cursor_guardar(p_nombre text, p_id bigint)`: B guarda
   hasta dónde procesó (`p_nombre` = `'google'` o `'apple'`), así un reinicio no reprocesa ni pierde.
+  **CLUB-AUD-70:** `guardar` **solo avanza** (dos sincronizaciones simultáneas dejan el máximo). Para reprocesar hay
+  una función aparte y explícita: `club_pase_cursor_rebobinar(p_nombre, p_id, p_motivo)`, que queda en la auditoría.
 
 **Entrega:** B corre su sincronización **cada 2 minutos** (programada en el Edge de B) y también **a pedido** desde el
 portal («Actualizar mi pase»). Para cada `miembro_id` distinto del lote: `club_pase_datos` → si `version` subió,
@@ -117,7 +118,8 @@ marca enviado. Mientras el miembro no tenga pase, sigue el link wa.me en caja.
 ## 5. Emisión: quién crea el pase
 - En el portal (`/p/{token}`) aparece «Agregar a Google Wallet». club-web llama a la Edge de B
   (`POST /club-pase/google` con el token) — **mismo patrón que las funciones públicas: header `x-club-web` + tope por IP**.
-- B resuelve el token con `club_pase_por_token(p_token text) → uuid` (solo `service_role`), arma el objeto con
+- B resuelve el token **del portal** con `club_pase_por_token(p_token text) → uuid` (solo `service_role`; solo para
+  emitir el pase desde el portal), arma el objeto con
   `club_pase_datos` y devuelve el link «Save to Google Wallet» (JWT firmado). El objectId es
   `<issuerId>.club-<miembro_id>` (estable: regenerar el QR o el token **no** cambia el pase).
 - `club_pase_emitido(p_miembro uuid, p_plataforma text, p_object_id text)`: B registra el pase emitido

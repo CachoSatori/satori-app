@@ -45,5 +45,11 @@
   "libres_fuera_de_bloque": [
     "086"
   ],
-  "asignadas": {}
+  "asignadas": {
+    "087": {
+      "nombre": "employee_edits_audit",
+      "bloque": "caja",
+      "rama": "claude/employees-audit"
+    }
+  }
 }

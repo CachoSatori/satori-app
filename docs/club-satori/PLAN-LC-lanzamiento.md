@@ -168,9 +168,11 @@
    - **LC-DES-10:** la 075 **no** está en prod y se sigue corrigiendo en el mismo archivo. RUNBOOK, paso 0: verificar el
      ledger de prod; **si aparece la 075, se frena todo**.
 5. **Cola de endurecimiento** (para las sesiones nocturnas cuando una etapa está bloqueada), en este orden:
-   - **CLUB-AUD-36:** resolver solo excepciones que existen, con segregación por quien las registró;
-   - **38:** lock en el conteo de intentos;
-   - **68:** `estado = 'C'` en el cruce del camino viejo (factura tipeada), o retirar ese camino;
+   - ~~**CLUB-AUD-36:** resolver solo excepciones que existen, con segregación por quien las registró;~~ **HECHO** `3e294a5`
+   - ~~**38:** lock en el conteo de intentos;~~ **HECHO** `2b306ff`
+   - ~~**68:** `estado = 'C'` en el cruce del camino viejo (factura tipeada), o retirar ese camino;~~ **HECHO** `f3b65cb`
+     (se eligió `estado = 'C'`)
+   - ~~**R02 «pendiente de configuración»**~~ **HECHO** `8a76ed8` (sale de A5)
    - **42:** que la rama `pruebas` no exista en prod;
    - **43:** asserts fuertes en la batería (W1–W14);
    - **en la rama del puente, sin desplegar:**
@@ -186,7 +188,7 @@
 |---|---|---|
 | A2 | Alta provisional + confirmación por otra persona en 7 días + vuelta a pendiente. Autoalta con Turnstile, topes, purga a 30 días, aviso de privacidad versionado y baja. Token de pase propio (AUD-69) y cursor con rebobinado aparte (AUD-70). **Sale** el premio por referir (pasa a A4) | 1,5 → **2,5** |
 | A4 | Premio por referir con la primera factura C con el 856, sin ciclos ni autorreferido, con topes | 4 → **4,5** |
-| A5 | `SOCIO_ALTA_SIN_CONFIRMAR`, `CORTESIA_SIN_SOCIO`, `CORTESIA_NO_CONFIGURADA`, «pendiente de configuración» de R02, reporte de altas por cajero | 2 → **2,5** |
+| A5 | `SOCIO_ALTA_SIN_CONFIRMAR`, `CORTESIA_SIN_SOCIO`, `CORTESIA_NO_CONFIGURADA`, ~~«pendiente de configuración» de R02~~ (hecho el 08-nov, `8a76ed8`), reporte de altas por cajero | 2 → **2,5** |
 | B | Link de «Canjear» con el token de pase (no el del portal) | 6,5 → **7** |
 
 **Total A: 12,5 → 14,5 días** (A1 hecha: quedan ≈ 12,5). **Total B: 7.** La cola de endurecimiento no suma al camino

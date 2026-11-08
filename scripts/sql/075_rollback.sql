@@ -78,6 +78,7 @@ drop table if exists public.club_codigos_canje;   -- R-01 (antes que club_movimi
 drop table if exists public.club_pase_eventos;      -- LC-A1
 drop table if exists public.club_pase_cursor;
 drop table if exists public.club_pases;
+drop table if exists public.club_socio_solicitudes;   -- CLUB-AUD-72
 drop table if exists public.club_miembro_roles;
 drop table if exists public.club_canje_intentos;
 drop table if exists public.club_alertas;

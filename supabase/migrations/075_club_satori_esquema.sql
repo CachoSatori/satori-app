@@ -3864,6 +3864,22 @@ alter table public.club_miembros add column if not exists token_pase text unique
 update public.club_miembros set token_pase = encode(extensions.gen_random_bytes(32), 'hex') where token_pase is null;
 alter table public.club_miembros alter column token_pase set default encode(extensions.gen_random_bytes(32), 'hex');
 
+-- CLUB-AUD-72: autoalta con un teléfono que ya existe → solicitud (no cambia nada). La caja la atiende en persona
+-- («Validar socio» si está pendiente, «Nuevo socio» si estaba de baja); al validarse queda atendida.
+create table if not exists public.club_socio_solicitudes (
+  id            bigint generated always as identity primary key,
+  location_id   text not null default 'santa-teresa',
+  miembro_id    uuid not null references public.club_miembros(id),
+  creada_en     timestamptz not null default now(),
+  aviso_version text,
+  referido_por  uuid references public.club_miembros(id),
+  atendida_en   timestamptz,
+  atendida_por  uuid
+);
+create unique index if not exists club_socio_solicitudes_abierta on public.club_socio_solicitudes (miembro_id) where atendida_en is null;
+alter table public.club_socio_solicitudes enable row level security;
+revoke all on public.club_socio_solicitudes from public, anon, authenticated;
+
 -- Interno: busca a la persona por teléfono normalizado (una persona, un pase).
 create or replace function public.club_miembro_por_telefono(p_tel text)
 returns uuid
@@ -3925,6 +3941,8 @@ volatile
 security definer
 set search_path = public, pg_temp
 as $$
+  update public.club_socio_solicitudes set atendida_en = now(), atendida_por = auth.uid()
+   where miembro_id = p_miembro and atendida_en is null;
   update public.club_miembro_roles
      set estado = 'activo', verifico_residencia = true, registrado_por = auth.uid(), validado_por = auth.uid(), validado_en = now(),
          provisional_hasta = now() + make_interval(days => p_dias), confirmado_por = null, confirmado_en = null, actualizado_en = now()
@@ -4018,6 +4036,8 @@ begin
        set estado = 'activo', verifico_residencia = true, validado_por = auth.uid(), validado_en = now(), provisional_hasta = null,
            confirmado_por = auth.uid(), confirmado_en = now(), actualizado_en = now()
      where miembro_id = p_miembro and rol = 'socio';
+    update public.club_socio_solicitudes set atendida_en = now(), atendida_por = auth.uid()
+     where miembro_id = p_miembro and atendida_en is null;
     perform public.club_auditar('socio_validar', 'club_miembro_roles', p_miembro, jsonb_build_object('estado', 'pendiente'),
                                 jsonb_build_object('estado', 'activo', 'confirmado', true, 'registrado_por', v_r.registrado_por));
     return jsonb_build_object('miembro_id', p_miembro, 'estado', 'activo', 'provisional_hasta', null);
@@ -4079,7 +4099,6 @@ declare
   v_ref  uuid;
   v_id   uuid;
   v_tok  text;
-  v_existia boolean;
 begin
   if not public.club_web_ok() then
     raise exception 'Datos no válidos' using errcode = 'P0001';
@@ -4095,6 +4114,8 @@ begin
   if (select count(*) from public.club_miembro_roles r join public.club_miembros m on m.id = r.miembro_id
        where m.location_id = v_loc and r.rol = 'socio' and r.alta_por = 'autoalta'
          and r.desde >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
+     + (select count(*) from public.club_socio_solicitudes q where q.location_id = v_loc
+         and q.creada_en >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
      >= v_cfg.socio_autoalta_max_dia then
     raise exception 'Demasiadas altas hoy' using errcode = 'P0001';
   end if;
@@ -4102,23 +4123,16 @@ begin
    where m.codigo = upper(btrim(coalesce(p_datos->>'ref', ''))) and m.estado = 'activo'
      and exists (select 1 from public.club_miembro_roles r where r.miembro_id = m.id and r.rol = 'socio' and r.estado = 'activo');
   perform pg_advisory_xact_lock(hashtextextended('club_socio_tel:' || v_tel, 0));
-  v_existia := public.club_miembro_por_telefono(v_tel) is not null;
-  begin
-    v_id := public.club_socio_crear(v_nom, v_tel, null, 'pendiente', 'autoalta', v_ref, v_cfg.aviso_privacidad_version, v_loc);
-  exception when others then
-    if sqlerrm = 'YA_ES_SOCIO' then
-      return jsonb_build_object('ok', true);   -- respuesta pareja: no confirma que el teléfono exista
-    end if;
-    raise;
-  end;
-  if v_ref = v_id then
-    update public.club_miembro_roles set referido_por = null where miembro_id = v_id and rol = 'socio';   -- autorreferido
-  end if;
-  if v_existia then
-    -- la persona ya existía (p. ej. un socio en baja que vuelve): NUNCA se devuelve su portal a quien llenó el
-    -- formulario (sabiendo un teléfono se vería su saldo). Queda pendiente y se valida en caja.
+  -- CLUB-AUD-72: si el teléfono ya existe, la autoalta NO toca nada (ni roles, ni estado, ni baja, ni aviso):
+  -- deja una solicitud que la caja valida en persona y responde lo mismo que siempre.
+  v_id := public.club_miembro_por_telefono(v_tel);
+  if v_id is not null then
+    insert into public.club_socio_solicitudes (location_id, miembro_id, aviso_version, referido_por)
+    values (v_loc, v_id, v_cfg.aviso_privacidad_version, nullif(v_ref, v_id))
+    on conflict (miembro_id) where atendida_en is null do nothing;
     return jsonb_build_object('ok', true);
   end if;
+  v_id := public.club_socio_crear(v_nom, v_tel, null, 'pendiente', 'autoalta', v_ref, v_cfg.aviso_privacidad_version, v_loc);
   select token_portal into v_tok from public.club_miembros where id = v_id;
   return jsonb_build_object('ok', true, 'portal', 'https://club.satoricostarica.com/p/' || v_tok);
 end;
@@ -4205,6 +4219,26 @@ begin
       left join public.profiles p on p.id = r.registrado_por
      where r.rol = 'socio' and r.estado = 'activo' and r.provisional_hasta is not null
      order by r.provisional_hasta;
+end;
+$$;
+
+-- CLUB-AUD-72: solicitudes abiertas (autoalta con un teléfono que ya existía). owner, manager. Sin contacto.
+create or replace function public.club_socio_solicitudes_abiertas()
+returns table (miembro_id uuid, nombre text, estado_socio text, creada_en timestamptz)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  return query
+    select q.miembro_id, m.nombre, coalesce(r.estado, 'sin rol de socio'), q.creada_en
+      from public.club_socio_solicitudes q join public.club_miembros m on m.id = q.miembro_id
+      left join public.club_miembro_roles r on r.miembro_id = q.miembro_id and r.rol = 'socio'
+     where q.atendida_en is null
+     order by q.creada_en;
 end;
 $$;
 
@@ -4323,6 +4357,8 @@ grant execute on function public.club_socio_validar(uuid, boolean)              
 grant execute on function public.club_socio_confirmar(uuid, text)                to authenticated;
 grant execute on function public.club_pase_token(uuid, text)                     to authenticated;
 revoke all on function public.club_socios_por_confirmar()                        from public, anon, authenticated;
+revoke all on function public.club_socio_solicitudes_abiertas()                  from public, anon, authenticated;
+grant execute on function public.club_socio_solicitudes_abiertas()               to authenticated;
 grant execute on function public.club_socios_por_confirmar()                     to authenticated;
 -- públicas (club-web: x-club-web)
 grant execute on function public.club_socio_autoalta(jsonb)                      to anon, authenticated;

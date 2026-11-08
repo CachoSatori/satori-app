@@ -2549,13 +2549,31 @@ begin
   perform pg_temp.r('57', 'autoalta con un WhatsApp que ya es socio → respuesta pareja, sin link ni cambios',
     j = '{"ok": true}'::jsonb and (select alta_por from club_miembro_roles where miembro_id = v_id and rol = 'socio') = 'caja', j::text);
   -- un socio en baja que vuelve por autoalta: queda pendiente, pero NO se devuelve su portal (negativa)
-  update club_miembro_roles set estado = 'baja' where miembro_id = v_id and rol = 'socio';
+  -- CLUB-AUD-72: con un WhatsApp que ya existe, la autoalta NO cambia nada; deja una solicitud (negativa)
+  update club_miembro_roles set estado = 'baja', aviso_version = 'v-anterior' where miembro_id = v_id and rol = 'socio';
   set local role anon;
-  j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Carla', 'whatsapp', '60001234', 'acepto', v_ver));
+  j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Otro Nombre', 'whatsapp', '60001234', 'acepto', v_ver));
   reset role;
-  perform pg_temp.r('57', 'autoalta con el WhatsApp de alguien que ya existía → pendiente y SIN link de su portal',
-    j = '{"ok": true}'::jsonb and (select estado from club_miembro_roles where miembro_id = v_id and rol = 'socio') = 'pendiente', j::text);
-  update club_miembro_roles set estado = 'activo', alta_por = 'caja' where miembro_id = v_id and rol = 'socio';
+  perform pg_temp.r('57', 'AUD-72: autoalta con un WhatsApp existente → misma respuesta, no toca rol/estado/aviso/nombre, deja solicitud',
+    j = '{"ok": true}'::jsonb
+      and (select estado = 'baja' and aviso_version = 'v-anterior' and alta_por = 'caja' from club_miembro_roles where miembro_id = v_id and rol = 'socio')
+      and (select nombre from club_miembros where id = v_id) = 'Carla Socia Ficticia'
+      and (select count(*) from club_socio_solicitudes where miembro_id = v_id and atendida_en is null) = 1, j::text);
+  set local role anon;
+  j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Otro Nombre', 'whatsapp', '60001234', 'acepto', v_ver));
+  reset role;
+  perform pg_temp.r('57', 'AUD-72: repetir no duplica la solicitud abierta', (select count(*) from club_socio_solicitudes where miembro_id = v_id) = 1, '');
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  select count(*) into v_n from public.club_socio_solicitudes_abiertas() x where x.miembro_id = v_id and x.estado_socio = 'baja';
+  perform pg_temp.yo();
+  perform pg_temp.r('57', 'AUD-72: gerencia ve la solicitud abierta', v_n = 1, format('%s', v_n));
+  -- la caja la atiende en persona: alta en caja (estaba de baja) → provisional y solicitud atendida
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_alta_caja('Carla Socia Ficticia', '60001234', null, true);
+  perform pg_temp.yo();
+  perform pg_temp.r('57', 'AUD-72: la caja la valida en persona → activo provisional y solicitud atendida',
+    (select estado = 'activo' and provisional_hasta is not null from club_miembro_roles where miembro_id = v_id and rol = 'socio')
+      and not exists (select 1 from club_socio_solicitudes where miembro_id = v_id and atendida_en is null), '');
   -- altas por confirmar: solo gerencia
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   v_g := (public.club_socio_alta_caja('Gabi Ficticia', '60001238', null, true)->>'miembro_id')::uuid;

@@ -8,7 +8,7 @@ import QRCode from 'qrcode'
 import {
   getMiembros, getSaldos, getNegocios, getMovimientos, getContacto, guardarMiembro, guardarNegocio,
   regenerarCodigo, tokenPortal, codigoMiembro, aClubError, fmtCreditos, ajustarSaldo, nuevoOp, getRoles, activarAnfitrion,
-  getSociosPorConfirmar, socioConfirmar, paseToken, type SocioPorConfirmar,
+  getSociosPorConfirmar, socioConfirmar, paseToken, getSolicitudesSocio, type SocioPorConfirmar, type SolicitudSocio,
   type ClubRol,
   type ClubMiembro, type ClubSaldo, type ClubNegocio, type ClubMovimiento, type TipoMiembro, type TipoNegocio,
 } from '../../shared/api/club'
@@ -110,6 +110,7 @@ export default function Miembros() {
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
 
       {pestana === 'socios' && <PorConfirmar onCambio={cargar} />}
+      {pestana === 'socios' && <Solicitudes />}
 
       <Card style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -578,6 +579,37 @@ function TokenPase({ f, onHecho }: { f: Fila; onHecho: (texto: string) => void }
         <Btn variant="danger" onClick={() => hacer('revocar')} disabled={enviando}>Revocar</Btn>
         <Btn variant="secondary" onClick={() => hacer('regenerar')} disabled={enviando}>Regenerar</Btn>
       </div>
+    </Card>
+  )
+}
+
+/**
+ * CLUB-AUD-72: alguien llenó la autoalta con un WhatsApp que ya estaba registrado. No se cambió nada: la caja lo
+ * atiende en persona («Validar socio» si está pendiente; «Nuevo socio» si estaba de baja). Al hacerlo, sale de acá.
+ */
+function Solicitudes() {
+  const [filas, setFilas] = useState<SolicitudSocio[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let vivo = true
+    getSolicitudesSocio().then(f => { if (vivo) setFilas(f) }).catch(e => { if (vivo) setError(aClubError(e).message) })
+    return () => { vivo = false }
+  }, [])
+  if (!error && (filas === null || filas.length === 0)) return null
+  return (
+    <Card>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Solicitudes para atender en caja</div>
+      <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
+        Llenaron la autoalta con un WhatsApp que ya estaba registrado. No se cambió nada: cuando venga, validalo en persona
+        («Validar socio» si está pendiente; «Nuevo socio» si estaba de baja).
+      </div>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      {filas?.map(f => (
+        <div key={f.miembro_id} style={{ display: 'flex', gap: 8, borderBottom: `1px solid ${C.panel}`, padding: '4px 0', fontSize: '0.88rem' }}>
+          <strong style={{ flex: 1 }}>{f.nombre}</strong>
+          <span style={{ color: C.muted }}>socio: {f.estado_socio} · {fmtFechaHora(f.creada_en)}</span>
+        </div>
+      ))}
     </Card>
   )
 }

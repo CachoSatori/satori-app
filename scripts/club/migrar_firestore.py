@@ -499,6 +499,7 @@ end $$;""")
         "delete from public.club_movimientos where origen = 'migracion';",
         "delete from public.club_miembros_contacto c using public.club_miembros m where m.id = c.miembro_id and m.origen = 'migracion';",
         # LC-A1: los roles referencian al miembro (se vuelven a crear solos con el alta)
+        "delete from public.club_socio_solicitudes q using public.club_miembros m where m.id = q.miembro_id and m.origen = 'migracion';",
         "delete from public.club_miembro_roles r using public.club_miembros m where m.id = r.miembro_id and m.origen = 'migracion';",
         "delete from public.club_miembros where origen = 'migracion';",
         "delete from public.club_negocios n where n.origen = 'migracion' and not exists (select 1 from public.club_miembros m where m.negocio_id = n.id);",

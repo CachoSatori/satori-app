@@ -87,7 +87,7 @@ export default function Excepciones() {
                     style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '0.7rem 0.8rem', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <strong>{TIPO_EXC[e.tipo].titulo}</strong>
-                      <Chip color={e.certeza === 'probable' ? C.gold : e.certeza === 'manual' ? C.teal : C.ink}>{e.certeza}</Chip>
+                      <Chip color={e.certeza === 'probable' ? C.gold : e.certeza === 'manual' ? C.teal : e.certeza === 'pendiente_configuracion' ? C.red : C.ink}>{e.certeza === 'pendiente_configuracion' ? 'pendiente de configuración' : e.certeza}</Chip>
                       {e.resuelta && <Chip color={C.teal}>resuelta</Chip>}
                       <span style={{ marginLeft: 'auto', color: C.muted, fontSize: '0.85rem' }}>{fmtFechaHora(e.fecha)}</span>
                     </div>
@@ -114,7 +114,9 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
   // CLUB-AUD-25: quien registró el movimiento no resuelve su excepción (la resuelve el owner); TARJETA_MANUAL y
   // CANJE_SIN_CODIGO no las resuelve quien las cargó o aprobó, ni siendo owner. La base lo controla igual.
   const mia = Array.isArray(d.registradores) && !!profile?.id && (d.registradores as unknown[]).includes(profile.id)
-  const bloqueo = !mia ? null
+  const bloqueo = e.certeza === 'pendiente_configuracion'
+    ? 'Pendiente de configuración: se resuelve cuando Ismael pase el código de «PROMO CLUB 10%» y se cargue. No se resuelve con nota.'
+    : !mia ? null
     : e.tipo === 'TARJETA_MANUAL' || e.tipo === 'CANJE_SIN_CODIGO' ? 'Es un registro tuyo: la resuelve otra persona.'
     : profile?.role !== 'owner' ? 'Es un registro tuyo: la resuelve el owner.' : null
   const filas: Array<[string, string]> = [

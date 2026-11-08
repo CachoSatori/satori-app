@@ -266,7 +266,7 @@ export const fmtCreditos = (n: number | null | undefined) =>
 export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CUPON_SIN_PROMO' | 'TARJETA_MANUAL' | 'CANJE_SIN_CODIGO' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA' | 'SIN_CRUCE'
   | 'VISITA_REPETIDA' | 'PERSONAS_SOBRE_PAX' | 'AMBIGUA'
 export interface Excepcion {
-  tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable' | 'manual'
+  tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable' | 'manual' | 'pendiente_configuracion'
   detalle: Record<string, unknown>; resuelta: boolean; nota: string | null; resuelta_en: string | null
 }
 

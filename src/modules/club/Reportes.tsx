@@ -137,7 +137,7 @@ export default function Reportes() {
           <Card>
             <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Calidad de datos</h3>
             <div>{n0(rep.calidad.abiertas)} excepciones abiertas y {n0(rep.calidad.resueltas)} resueltas en el mes.
-              {!rep.calidad.promo_activa && ' La de «promo sin cupón» está apagada hasta que exista el artículo en el PoS.'}</div>
+              {!rep.calidad.promo_activa && ' «Promo sin cupón» y «cupón sin promo» están pendientes de configuración: falta el código de «PROMO CLUB 10%».'}</div>
           </Card>
         </>
       )}

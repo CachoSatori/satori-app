@@ -2803,6 +2803,15 @@ begin
        and not exists (select 1 from public.pos_ndf_ticket_lines l
                         where l.ticket_id = any(m.ticket_ids) and l.codigo_producto = v_cfg.promo_articulo_codigo)
     union all
+    -- R02 (ronda 5): sin el código del artículo de la promo, las dos verificaciones NO pueden correr. En vez de
+    -- desaparecer (que se lee como «ok»), sale una fila por verificación en «pendiente de configuración». No se
+    -- resuelve con nota: se resuelve cargando club_config.promo_articulo_codigo.
+    select x.tipo, 'config:promo_articulo_codigo', now(), null::text, 'pendiente_configuracion',
+           jsonb_build_object('estado', 'pendiente_configuracion', 'falta', 'promo_articulo_codigo',
+                              'texto', 'Falta el código del artículo «PROMO CLUB 10%» del PoS: esta verificación no corre hasta cargarlo')
+      from (values ('PROMO_SIN_CUPON'), ('CUPON_SIN_PROMO')) x(tipo)
+     where v_cfg.promo_articulo_codigo is null
+    union all
     -- TARJETA_MANUAL (CLUB-AUD-26): toda tarjeta física cargada a mano. Siempre visible; no la resuelve quien la cargó.
     select 'TARJETA_MANUAL', m.id::text, m.fecha_visita, rf.ref_factura, 'exacta',
            jsonb_build_object('movimiento', 'tarjeta_manual', 'personas', m.personas, 'miembro', public.club_nombre_limpio(mi.nombre),
@@ -2910,6 +2919,9 @@ begin
   end if;
   if length(v_nota) not between 1 and 500 then
     raise exception 'La nota es obligatoria (hasta 500 caracteres)' using errcode = 'P0001';
+  end if;
+  if v_ref like 'config:%' then
+    raise exception 'Pendiente de configuración: se resuelve cargando el código del artículo de la promo, no con una nota' using errcode = 'P0001';
   end if;
   perform public.club_excepcion_segregacion(p_tipo, v_ref, p_location, v_rol);
   -- CLUB-AUD-25: cada resolución es una fila nueva (historial); la vigente es la última.

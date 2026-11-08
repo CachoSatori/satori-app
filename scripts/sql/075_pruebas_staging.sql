@@ -792,8 +792,15 @@ begin
   perform pg_temp.r('22', 'REGISTRO_SIN_FACTURA (exacta): 990099 no está en el puente; «FE-0990003» sí (solo dígitos, sin ceros)',
     exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'REGISTRO_SIN_FACTURA' and x->>'ref' = (select i.v from _ids i where i.k = 'mv_sin_factura'))
       and not exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'REGISTRO_SIN_FACTURA' and x->>'factura' = 'FE-0990003'), '');
-  perform pg_temp.r('22', 'PROMO_SIN_CUPON apagada mientras no hay artículo marcador',
-    not exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'PROMO_SIN_CUPON'), '');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform set_config('club.t22', (select coalesce(jsonb_agg(to_jsonb(e)), '[]') from public.club_excepciones(current_date - 3, current_date) e
+                                   where e.tipo = 'PROMO_SIN_CUPON')::text, true);
+  perform pg_temp.yo();
+  perform pg_temp.r('22', 'R02: sin artículo marcador, PROMO_SIN_CUPON sale «pendiente de configuración» (una fila, nunca «ok»)',
+    not exists (select 1 from jsonb_array_elements(j) x where x->>'tipo' = 'PROMO_SIN_CUPON')   -- ninguna por factura
+      and jsonb_array_length(current_setting('club.t22')::jsonb) = 1
+      and current_setting('club.t22')::jsonb->0->>'ref' = 'config:promo_articulo_codigo'
+      and current_setting('club.t22')::jsonb->0->>'certeza' = 'pendiente_configuracion', current_setting('club.t22'));
   update club_config set promo_articulo_codigo = 'PRUEBA-PROMO' where location_id = 'santa-teresa';
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select jsonb_agg(to_jsonb(e)) into j from public.club_excepciones(current_date - 3, current_date) e where e.tipo = 'PROMO_SIN_CUPON' and e.factura ~ '99000';
@@ -1984,7 +1991,16 @@ begin
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select jsonb_agg(to_jsonb(e)) into j0 from public.club_excepciones(current_date - 1, current_date) e where e.tipo = 'CUPON_SIN_PROMO';
   perform pg_temp.yo();
-  perform pg_temp.r('44', 'sin artículo marcador: CUPON_SIN_PROMO apagada', j0 is null, coalesce(j0::text, ''));
+  perform pg_temp.r('44', 'R02: sin artículo marcador, CUPON_SIN_PROMO sale «pendiente de configuración» (no las de 990981/2)',
+    jsonb_array_length(j0) = 1 and j0->0->>'ref' = 'config:promo_articulo_codigo' and j0->0->>'certeza' = 'pendiente_configuracion',
+    coalesce(j0::text, ''));
+  begin
+    perform pg_temp.como('authenticated', '<OWNER_UUID>');
+    perform public.club_excepcion_resolver('CUPON_SIN_PROMO', 'config:promo_articulo_codigo', 'la doy por buena');
+    perform pg_temp.yo(); perform pg_temp.r('44', 'R02: pendiente de configuración no se resuelve con nota', false, 'resolvió');
+  exception when others then
+    perform pg_temp.yo(); perform pg_temp.r('44', 'R02: «pendiente de configuración» no se resuelve con nota (negativa)', sqlerrm like 'Pendiente de configuración%', sqlerrm);
+  end;
 
   update club_config set promo_articulo_codigo = 'PRUEBA-PROMO' where location_id = 'santa-teresa';
   perform pg_temp.como('authenticated', '<OWNER_UUID>');

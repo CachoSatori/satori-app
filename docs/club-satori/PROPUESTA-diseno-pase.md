@@ -1,5 +1,8 @@
 # Propuesta · diseño del pase de Google Wallet (08-nov-2026) — **la aprueba Ismael**
 
+> **EN ESPERA (Ismael, 08-nov): el kanji 里 («pueblo») NO va.** Ismael confirma cuál (悟 o el del logo real) y si la franja
+> lleva Nosara. Hasta entonces `WALLET_DISENO` no se carga y el pase sale solo con el fondo `#0d0d0d`.
+
 Sale de la identidad que ya usan la app y club-web:
 - **Color de fondo:** tinta `#0d0d0d`, el negro del encabezado de club-web y de la app.
 - **Oro:** `#c8a96e` (`--gold` de club-web), solo sobre la tinta, como en la web.

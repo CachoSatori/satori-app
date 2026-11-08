@@ -65,6 +65,8 @@ export interface ResolverReferente {
   tipo: 'referente'
   datos: { id: string; nombre: string; tipo_miembro: TipoMiembro; negocio: string | null; estado: 'activo' | 'baja'
            personas: number; creditos: number; personas_proximo: number; personas_por_credito: number
+           /** (08-nov) para mostrar créditos y colones juntos, como el pase. */
+           valor_credito_crc?: number
            canjeado_hoy: number; canje_min: number; canje_paso: number; max_creditos_por_visita: number
            /** CLUB-AUD-26: tarjeta física habilitada en este local (staging sí, prod no). */
            tarjeta_manual_activa?: boolean }
@@ -258,9 +260,17 @@ export const getMovimientos = (miembro: string) =>
 export const getContacto = async (miembro: string) =>
   primero(await llamar<ClubContacto[]>('club_miembro_contacto_ver', { p_miembro: miembro })) ?? null
 
-/** LC-PRIV (Grok 41): registra el exporte del reporte del mes ANTES de armarlo (si falla, no se exporta). */
-export const registrarExporte = (formato: 'csv' | 'html', mes: string, location: string | null) =>
-  llamar<null>('club_registrar_exporte', { p_formato: formato, p_mes: mes, p_location: location })
+/** LC-PRIV (Grok 41): el exporte lo ENTREGA la base (audita y devuelve el reporte); la app solo le da formato. */
+export const exportarReporte = (formato: 'csv' | 'html', mes: string, location: string | null) =>
+  llamar<ReporteMes>('club_reporte_exportar', { p_mes: mes, p_location: location, p_formato: formato })
+
+export interface ContactoOferta {
+  nombre: string | null; whatsapp: string | null; email: string | null; local: string
+  aviso_version: string | null; aceptado_en: string; baja_url: string
+}
+/** Contactos de turistas para ofertas (solo owner): la base audita y devuelve solo los que aceptaron, con su link de baja. */
+export const exportarContactosOfertas = (location: string | null) =>
+  llamar<ContactoOferta[]>('club_contactos_ofertas_exportar', { p_location: location })
 
 /** Valores de canje habilitados por la config (1, 1,5, 2 con la de hoy). */
 export function opcionesCanje(c: Pick<ClubConfig, 'canje_min' | 'canje_paso' | 'max_creditos_por_visita'>): number[] {
@@ -281,6 +291,17 @@ export const nuevoOp = (): string =>
 
 export const fmtCreditos = (n: number | null | undefined) =>
   n == null ? '—' : Number(n).toLocaleString('es-CR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
+
+/** ₡ con punto de miles, igual que el pase («₡36.000»). */
+export const fmtColones = (n: number) => '₡' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+
+/** (08-nov) Créditos y colones juntos, como el pase: «1 crédito · ₡10.000», «1,5 créditos · ₡15.000». Sin valor: solo créditos. */
+export const fmtCreditosCrc = (creditos: number | null | undefined, valorCredito: number | null | undefined) => {
+  if (creditos == null) return '—'
+  const c = Number(creditos)
+  const u = `${fmtCreditos(c)} ${c === 1 ? 'crédito' : 'créditos'}`
+  return valorCredito ? `${u} · ${fmtColones(c * Number(valorCredito))}` : u
+}
 
 // ── F1f: excepciones del puente y reporte mensual (owner, manager) ───────────
 export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CUPON_SIN_PROMO' | 'TARJETA_MANUAL' | 'CANJE_SIN_CODIGO' | 'CREDITOS_SIN_CANJE' | 'CANJE_MONTO_DISTINTO' | 'REGISTRO_SIN_FACTURA' | 'SIN_CRUCE'

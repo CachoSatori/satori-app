@@ -1752,6 +1752,7 @@ begin
     'codigo',                   v_m.codigo,
     'personas',                 v_saldo,
     'creditos',                 public.club_creditos(v_saldo, v_cfg.personas_por_credito),
+    'valor_credito_crc',        v_cfg.valor_credito_crc,   -- (08-nov) el portal muestra créditos y colones juntos, como el pase
     'personas_proximo_credito', public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
     'movimientos',              v_movs,
     -- LC-A2: el portal sirve también al socio (estado y link de baja del aviso de privacidad)
@@ -2293,6 +2294,7 @@ begin
     'creditos',                 public.club_creditos(v_saldo, v_cfg.personas_por_credito),
     'personas_proximo',         public.club_personas_proximo(v_saldo, v_cfg.personas_por_credito),
     'personas_por_credito',     v_cfg.personas_por_credito,
+    'valor_credito_crc',        v_cfg.valor_credito_crc,   -- (08-nov) la caja muestra créditos y colones juntos, como el pase
     'canjeado_hoy',             v_dia,
     'canje_min',                v_cfg.canje_min,
     'canje_paso',               v_cfg.canje_paso,
@@ -4213,10 +4215,14 @@ alter table public.club_config add column if not exists wallet_apple_activo bool
 create table if not exists public.club_pase_eventos (
   id          bigint generated always as identity primary key,
   miembro_id  uuid,                    -- null = afecta a todos los pases (promociones)
-  motivo      text not null check (motivo in ('movimiento','rol','datos','cortesia','promociones')),
+  motivo      text not null check (motivo in ('movimiento','rol','datos','cortesia','promociones','config')),
   creado_en   timestamptz not null default now()
 );
 create index if not exists club_pase_eventos_miembro_idx on public.club_pase_eventos (miembro_id, id);
+-- (08-nov noche) motivo 'config': cambio del valor del crédito (evento global). Bases con la tabla ya creada.
+alter table public.club_pase_eventos drop constraint if exists club_pase_eventos_motivo_check;
+alter table public.club_pase_eventos add constraint club_pase_eventos_motivo_check
+  check (motivo in ('movimiento','rol','datos','cortesia','promociones','config'));
 alter table public.club_pase_eventos enable row level security;
 revoke all on public.club_pase_eventos from public, anon, authenticated;
 
@@ -4483,13 +4489,17 @@ alter table public.club_config add column if not exists socio_autoalta_max_dia i
   check (socio_autoalta_max_dia between 1 and 10000);
 alter table public.club_config add column if not exists socio_autoalta_purga_dias int not null default 30
   check (socio_autoalta_purga_dias between 7 and 365);
-alter table public.club_config add column if not exists aviso_privacidad_version text not null default 'v1'
+alter table public.club_config add column if not exists aviso_privacidad_version text not null default 'v1.1'
   check (aviso_privacidad_version ~ '^v[0-9A-Za-z.-]{1,30}$');
 -- v1 (Ismael, 08-nov): el texto final del aviso de club-web/src/i18n.ts. Las versiones de prueba anteriores
 -- (v0-provisorio, v1-borrador) pasan a v1; una versión cargada a mano distinta no se pisa. Cada alta guarda la versión
 -- que aceptó (club_miembro_roles.aviso_version).
-alter table public.club_config alter column aviso_privacidad_version set default 'v1';
-update public.club_config set aviso_privacidad_version = 'v1' where aviso_privacidad_version in ('v0-provisorio', 'v1-borrador');
+-- v1.1 (Ismael, 08-nov noche): «Qué datos guardamos» suma «y tu email, si lo das» (el cupón y el alta en caja lo
+-- piden). Cambia lo que la persona acepta (una categoría de datos más), así que es una versión nueva y no una
+-- aclaración de v1: quien aceptó v1 queda con v1 en su fila. v0-provisorio, v1-borrador y v1 pasan a v1.1 (todavía no
+-- hay nadie en prod); una versión cargada a mano distinta no se pisa.
+alter table public.club_config alter column aviso_privacidad_version set default 'v1.1';
+update public.club_config set aviso_privacidad_version = 'v1.1' where aviso_privacidad_version in ('v0-provisorio', 'v1-borrador', 'v1');
 
 alter table public.club_miembro_roles add column if not exists registrado_por uuid;          -- quién lo cargó en caja
 alter table public.club_miembro_roles add column if not exists provisional_hasta timestamptz; -- activo provisional
@@ -6371,16 +6381,17 @@ begin
 end;
 $$;
 
--- Grok 41: los exportes del reporte del mes (CSV y HTML/PDF) se arman en el navegador con datos ya leídos; la app
--- registra el exporte acá ANTES de armarlo (si falla, no exporta). Sin el contenido: formato, mes y local.
-create or replace function public.club_registrar_exporte(p_formato text, p_mes date, p_location text default null)
-returns void
+-- Grok 41 (08-nov noche): el exporte lo ENTREGA la base. Una sola función audita y devuelve los datos del reporte del
+-- mes (la app solo les da formato CSV o HTML); sin pasar por acá no hay exporte. La fila: formato, mes y local, sin datos.
+drop function if exists public.club_registrar_exporte(text, date, text);
+create or replace function public.club_reporte_exportar(p_mes date, p_location text default null, p_formato text default 'csv')
+returns jsonb
 language plpgsql
 volatile
 security definer
 set search_path = public, pg_temp
 as $$
-declare v_rol public.user_role := public.get_my_role();
+declare v_rol public.user_role := public.get_my_role(); v jsonb;
 begin
   if v_rol is null or v_rol not in ('owner','manager') then
     raise exception 'Sin permiso' using errcode = '42501';
@@ -6388,11 +6399,59 @@ begin
   if p_formato is null or p_formato not in ('csv','html') or p_mes is null then
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
+  v := public.club_reporte_mes(p_mes, p_location);
   perform public.club_auditar('exporte_' || p_formato, 'club_reporte_mes', null, null,
     jsonb_build_object('mes', to_char(date_trunc('month', p_mes), 'YYYY-MM'),
                        'local', case when p_location ~ '^[a-z0-9-]{2,40}$' then p_location end));
+  return v;
 end;
 $$;
+
+-- Grok 41 (08-nov noche): contactos de turistas para ofertas. SOLO owner, con rastro (cuántas filas, sin datos), solo
+-- los que aceptaron (optin) y con el link de baja de cada uno (/b/<código del cupón>), que va en cada mensaje.
+create or replace function public.club_contactos_ofertas_exportar(p_location text default null)
+returns table (nombre text, whatsapp text, email text, local text, aviso_version text, aceptado_en timestamptz, baja_url text)
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role(); v_n int;
+begin
+  if v_rol is null or v_rol <> 'owner' then
+    raise exception 'Sin permiso' using errcode = '42501';
+  end if;
+  return query
+    select k.nombre, k.whatsapp, k.email, c.location_id, k.aviso_version, coalesce(k.aviso_aceptado_en, k.created_at),
+           'https://club.satoricostarica.com/b/' || c.codigo
+      from public.club_cupones_contactos k join public.club_cupones c on c.id = k.cupon_id
+     where k.optin and (p_location is null or c.location_id = p_location)
+     order by coalesce(k.aviso_aceptado_en, k.created_at);
+  get diagnostics v_n = row_count;
+  perform public.club_auditar('exporte_contactos_turistas', 'club_cupones_contactos', null, null,
+    jsonb_build_object('local', case when p_location ~ '^[a-z0-9-]{2,40}$' then p_location end, 'filas', v_n));
+end;
+$$;
+
+-- Grok 75/76 (08-nov noche): si cambia el valor del crédito o cuántas personas hacen uno, cambia lo que muestra CADA
+-- pase (₡ disponibles, créditos): un evento global para que se actualicen todos, sin esperar al próximo movimiento.
+create or replace function public.club_config_pase_evento()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if new.valor_credito_crc is distinct from old.valor_credito_crc
+     or new.personas_por_credito is distinct from old.personas_por_credito then
+    insert into public.club_pase_eventos (miembro_id, motivo) values (null, 'config');
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists club_config_pase_evento_trg on public.club_config;
+create trigger club_config_pase_evento_trg after update of valor_credito_crc, personas_por_credito on public.club_config
+  for each row execute function public.club_config_pase_evento();
 
 -- Grok 63: baja del turista (link del aviso corto del cupón). Con el código del cupón (secreto, 10 caracteres) se
 -- borra su contacto. Siempre responde true (no revela si el cupón existe o tenía contacto). Queda rastro sin datos.
@@ -6428,10 +6487,13 @@ revoke select on public.club_miembros_contacto from authenticated;
 revoke select on public.club_cupones_contactos from authenticated;
 
 revoke all on function public.club_miembro_contacto_ver(uuid)               from public, anon, authenticated;
-revoke all on function public.club_registrar_exporte(text, date, text)       from public, anon, authenticated;
+revoke all on function public.club_reporte_exportar(date, text, text)        from public, anon, authenticated;
+revoke all on function public.club_contactos_ofertas_exportar(text)         from public, anon, authenticated;
+revoke all on function public.club_config_pase_evento()                     from public, anon, authenticated;
 revoke all on function public.club_cupon_contacto_baja(text)                 from public, anon, authenticated;
 grant execute on function public.club_miembro_contacto_ver(uuid)            to authenticated;
-grant execute on function public.club_registrar_exporte(text, date, text)    to authenticated;
+grant execute on function public.club_reporte_exportar(date, text, text)     to authenticated;
+grant execute on function public.club_contactos_ofertas_exportar(text)      to authenticated;
 grant execute on function public.club_cupon_contacto_baja(text)              to anon, authenticated;
 
 

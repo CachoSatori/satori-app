@@ -64,6 +64,8 @@ const fecha = (iso: string, conHora = true) =>
     timeZone: 'America/Costa_Rica',
   }).format(new Date(iso))
 const num = (n: number) => new Intl.NumberFormat(idioma === 'es' ? 'es-CR' : 'en-US', { maximumFractionDigits: 1 }).format(n)
+/** ₡ con separador de miles fijo, igual que el pase: «₡36.000» (ES) / «₡36,000» (EN). */
+const colones = (n: number) => '₡' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, idioma === 'es' ? '.' : ',')
 
 async function qr(texto: string, etiqueta: string): Promise<HTMLCanvasElement> {
   const { toCanvas } = await import('qrcode')
@@ -220,6 +222,8 @@ async function paginaCupon(codigo: string) {
 
 interface Portal {
   nombre: string; codigo: string; personas: number; creditos: number; personas_proximo_credito: number
+  /** (08-nov) créditos y colones juntos, como el pase y la caja */
+  valor_credito_crc?: number
   anfitrion?: boolean
   socio?: {
     estado: 'pendiente' | 'activo'; desde: string; codigo_socio: string | null; beneficio: string | null; visitas_mes: number | null
@@ -292,7 +296,8 @@ async function paginaPortal(token: string) {
   const esAnfitrion = p.anfitrion !== false
   const anfitrion: HTMLElement[] = !esAnfitrion ? [] : [
     h('section', { class: 'tarjeta' },
-      h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)), h('span', {}, t.portal_creditos)),
+      h('p', { class: 'saldo' }, h('span', { class: 'num' }, num(p.creditos)),
+        h('span', {}, (p.creditos === 1 ? t.portal_creditos_uno : t.portal_creditos) + (p.valor_credito_crc ? ` · ${colones(p.creditos * p.valor_credito_crc)}` : ''))),
       h('p', { class: 'sub' }, t.portal_personas(p.personas)),
       h('p', {}, h('strong', {}, t.portal_faltan(p.personas_proximo_credito)))),
     ...(p.creditos >= 1 ? [seccionCanje(token)] : []),

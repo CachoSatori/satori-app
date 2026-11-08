@@ -163,7 +163,8 @@ staging) y registrar la fila `<N>` en el ledger de prod (texto idéntico al arch
 - Tarea diaria de socios (LC-A2): `select jobname, schedule from cron.job where jobname = 'club_socios_mantenimiento';`
   → `15 9 * * *` (03:15 en Costa Rica). Si prod no tiene `pg_cron`, la migración del Club no la programa: anotarlo y decidir con
   Ismael (sin ella, las altas provisionales no vuelven a pendiente y las autoaltas no se purgan).
-- `select aviso_privacidad_version from club_config;` igual a `AVISO_PRIVACIDAD_VERSION` de `club-web/src/config.ts`.
+- `select aviso_privacidad_version from club_config;` igual a `AVISO_PRIVACIDAD_VERSION` de `club-web/src/config.ts` (hoy
+  **v1.1**: v1 + el email en «Qué datos guardamos»; una prueba de club-web verifica que coincidan).
 - `select tarjeta_manual_activa from club_config;` → `false`.
 - **CLUB-AUD-42:** `select count(*) from club_entorno;` → **0**. En prod no se corre `scripts/sql/club_marcar_staging.sql`
   nunca: sin esa marca no existe el modo `pruebas` (el libro y la auditoría no tienen otra puerta que la del migrador).

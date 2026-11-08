@@ -4,7 +4,7 @@
  * del navegador → «Guardar como PDF». «Exportar CSV» baja el anexo con todas las filas.
  */
 import { useEffect, useState } from 'react'
-import { getReporteMes, getLocalesClub, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero, getReporteVisitas, type VisitasPorUsuario, registrarExporte } from '../../shared/api/club'
+import { getReporteMes, getLocalesClub, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero, getReporteVisitas, type VisitasPorUsuario, exportarReporte, exportarContactosOfertas } from '../../shared/api/club'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
@@ -59,24 +59,35 @@ export default function Reportes() {
     finally { setCerrando(false) }
   }
 
+  // LC-PRIV (Grok 41, 08-nov noche): el exporte lo entrega la base (audita y devuelve el reporte); la app solo le da formato
   async function exportarPdf() {
     if (!rep) return
-    // LC-PRIV (Grok 41): el exporte queda en club_auditoria antes de armarse; si no se puede registrar, no se exporta
-    try { await registrarExporte('html', `${mes}-01`, local) } catch (e) { setError(aClubError(e).message); return }
+    let datos: ReporteMes
+    try { datos = await exportarReporte('html', `${mes}-01`, local) } catch (e) { setError(aClubError(e).message); return }
     const { reporteHtml } = await import('./reporteHtml')
-    const url = URL.createObjectURL(new Blob([reporteHtml(rep)], { type: 'text/html' }))
+    const url = URL.createObjectURL(new Blob([reporteHtml(datos)], { type: 'text/html' }))
     const w = window.open(url, '_blank')
     if (w) w.addEventListener('load', () => setTimeout(() => w.print(), 400))
     setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
   async function exportarCsv() {
     if (!rep) return
-    // LC-PRIV (Grok 41): el exporte queda en club_auditoria antes de armarse; si no se puede registrar, no se exporta
-    try { await registrarExporte('csv', `${mes}-01`, local) } catch (e) { setError(aClubError(e).message); return }
+    let datos: ReporteMes
+    try { datos = await exportarReporte('csv', `${mes}-01`, local) } catch (e) { setError(aClubError(e).message); return }
     const { reporteCsv } = await import('./reporteHtml')
+    descargarCsv(reporteCsv(datos), `club-satori-${datos.local}-${datos.mes}.csv`)
+  }
+  // Contactos de turistas para ofertas (solo owner): solo los que aceptaron, cada uno con su link de baja
+  async function exportarContactos() {
+    let filas
+    try { filas = await exportarContactosOfertas(local) } catch (e) { setError(aClubError(e).message); return }
+    const { contactosCsv } = await import('./reporteHtml')
+    descargarCsv(contactosCsv(filas), `club-satori-contactos-ofertas-${local ?? 'todos'}-${new Date().toISOString().slice(0, 10)}.csv`)
+  }
+  function descargarCsv(txt: string, nombre: string) {
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([reporteCsv(rep)], { type: 'text/csv;charset=utf-8' }))
-    a.download = `club-satori-${rep.local}-${rep.mes}.csv`
+    a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' }))
+    a.download = nombre
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
   }
 
@@ -92,6 +103,7 @@ export default function Reportes() {
         </label>
         <Btn onClick={exportarPdf} disabled={!rep}>Exportar PDF</Btn>
         <Btn variant="secondary" onClick={exportarCsv} disabled={!rep}>Exportar CSV</Btn>
+        {esOwner && <Btn variant="secondary" onClick={exportarContactos}>Contactos para ofertas (CSV)</Btn>}
       </Card>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
       {esOwner && <Vencimiento />}

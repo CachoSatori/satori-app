@@ -4043,15 +4043,15 @@ end $$;
 
 -- ═══ 78. LC-PRIV · Grok 41: lecturas de datos personales con rastro (código, contacto, exportes), sin el dato ═══
 do $$
-declare v_m uuid; v_cod text; v_n int; v_tel text; a record;
+declare v_m uuid; v_cod text; v_n int; v_tel text; a record; v_rep jsonb;
 begin
   insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref PRIV78', 'app') returning id, codigo into v_m, v_cod;
   insert into club_miembros_contacto (location_id, miembro_id, telefono, email) values (pg_temp.loc(), v_m, '+50660007801', 'priv78@ejemplo.com');
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_miembro_codigo(v_m);
   select c.telefono into v_tel from public.club_miembro_contacto_ver(v_m) c;
-  perform public.club_registrar_exporte('csv', current_date, pg_temp.loc());
-  perform public.club_registrar_exporte('html', current_date, null);
+  v_rep := public.club_reporte_exportar(current_date, pg_temp.loc(), 'csv');
+  perform public.club_reporte_exportar(current_date, null, 'html');
   perform pg_temp.yo();
   perform pg_temp.r('78', 'club_miembro_contacto_ver devuelve el contacto al owner', v_tel = '+50660007801', coalesce(v_tel, 'null'));
   select * into a from club_auditoria where accion = 'ver_codigo' and objeto_id = v_m order by id desc limit 1;
@@ -4063,6 +4063,10 @@ begin
   select count(*) into v_n from club_auditoria where actor = '<OWNER_UUID>'::uuid and accion in ('exporte_csv', 'exporte_html')
      and despues->>'mes' = to_char(current_date, 'YYYY-MM') and (accion = 'exporte_html' or despues->>'local' = pg_temp.loc());
   perform pg_temp.r('78', 'exportes CSV y HTML → club_auditoria (formato, mes y local)', v_n = 2, format('%s filas', v_n));
+  perform pg_temp.r('78', 'el exporte lo entrega la base: club_reporte_exportar devuelve el reporte del mes',
+    v_rep ? 'kpis' and v_rep->>'mes' is not null, left(coalesce(v_rep::text, 'null'), 120));
+  perform pg_temp.r('78', 'ya no existe la puerta para «registrar» un exporte desde la app',
+    to_regprocedure('public.club_registrar_exporte(text, date, text)') is null, '');
   select count(*) into v_n from club_auditoria where en >= now() - interval '1 minute'
      and (coalesce(antes::text, '') || coalesce(despues::text, '')) ~ ('60007801|priv78@|' || v_cod);
   perform pg_temp.r('78', 'ninguna fila de auditoría guarda el teléfono, el email ni el código leídos', v_n = 0, format('%s filas', v_n));
@@ -4076,14 +4080,14 @@ begin
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    perform public.club_registrar_exporte('csv', current_date, null);
+    perform public.club_reporte_exportar(current_date, null, 'csv');
     perform pg_temp.yo(); perform pg_temp.r('78', 'cajero registra un exporte', false, 'registró');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('78', 'cajero registra un exporte → sin permiso', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
   end;
   begin
     perform pg_temp.como('authenticated', '<OWNER_UUID>');
-    perform public.club_registrar_exporte('xlsx', current_date, null);
+    perform public.club_reporte_exportar(current_date, null, 'xlsx');
     perform pg_temp.yo(); perform pg_temp.r('78', 'exporte con formato desconocido', false, 'registró');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('78', 'exporte con formato desconocido → «Datos no válidos»', sqlerrm = 'Datos no válidos', sqlerrm);
@@ -4145,6 +4149,106 @@ begin
   exception when check_violation then
     perform pg_temp.r('79', 'tope fuera de rango (1) → rechazado por la base', true, sqlerrm);
   end;
+end $$;
+
+-- ═══ 80. Grok 41 · contactos de turistas para ofertas: solo owner, con rastro y el link de baja en cada fila ═══
+do $$
+declare v_ref text; v_c1 text; v_c2 text; v_n int; v_fil int; v_url text; a record;
+begin
+  perform set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+  update club_config set cupones_max_minuto_local = 1000 where location_id = pg_temp.loc();
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref PRIV80', 'app') returning codigo into v_ref;
+  perform pg_temp.como('anon', null);
+  select x.codigo into v_c1 from public.club_cupon_crear(v_ref, null) x;
+  select x.codigo into v_c2 from public.club_cupon_crear(v_ref, null) x;
+  perform public.club_cupon_contacto(v_c1, jsonb_build_object('nombre', 'Turista Ochenta', 'whatsapp', '60008001', 'optin', true, 'acepto', pg_temp.aviso()));
+  perform pg_temp.yo();
+  insert into club_cupones_contactos (cupon_id, whatsapp, optin)            -- sin opt-in: no sale en el exporte
+    select id, '+50660008002', false from club_cupones where codigo = v_c2;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select count(*), min(e.baja_url) into v_n, v_url from public.club_contactos_ofertas_exportar(pg_temp.loc()) e where e.whatsapp in ('+50660008001', '+50660008002');
+  select count(*) into v_fil from public.club_contactos_ofertas_exportar(null) e;
+  perform pg_temp.yo();
+  perform pg_temp.r('80', 'owner exporta solo los que aceptaron, con el link de baja de su cupón',
+    v_n = 1 and v_url = 'https://club.satoricostarica.com/b/' || v_c1, format('%s filas · %s', v_n, v_url));
+  select * into a from club_auditoria where accion = 'exporte_contactos_turistas' and actor = '<OWNER_UUID>'::uuid order by id desc limit 1;
+  perform pg_temp.r('80', 'el exporte de contactos queda en club_auditoria (owner, filas), sin datos',
+    a.despues->>'filas' = v_fil::text and a.antes is null and not (a.despues::text ~ '6000800|Ochenta'), coalesce(to_jsonb(a)::text, 'sin fila'));
+  foreach v_url in array array['<MANAGER_UUID>', '<CAJERO_UUID>', '<CONTADOR_UUID>'] loop
+    begin
+      perform pg_temp.como('authenticated', v_url);
+      perform public.club_contactos_ofertas_exportar(null);
+      perform pg_temp.yo(); perform pg_temp.r('80', 'otro rol exporta contactos de turistas', false, v_url);
+    exception when others then
+      perform pg_temp.yo(); perform pg_temp.r('80', 'solo el owner exporta contactos de turistas (' || left(v_url, 8) || ' → sin permiso)', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
+    end;
+  end loop;
+end $$;
+
+-- ═══ 81. Grok 75/76 · cambiar el valor del crédito genera UN evento global: se actualizan todos los pases ═══
+do $$
+declare v_m uuid; v_ver0 bigint; v_ver1 bigint; v_e0 bigint; v_e1 bigint; v_e2 bigint;
+begin
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref PRIV81', 'app') returning id into v_m;
+  v_ver0 := (public.club_pase_datos(v_m)->>'version')::bigint;
+  select coalesce(max(id), 0) into v_e0 from club_pase_eventos;
+  update club_config set buscar_tope_minuto = buscar_tope_minuto where location_id = pg_temp.loc();   -- otra columna: sin evento
+  select coalesce(max(id), 0) into v_e1 from club_pase_eventos;
+  update club_config set valor_credito_crc = valor_credito_crc + 1000 where location_id = pg_temp.loc();
+  select count(*) into v_e2 from club_pase_eventos where id > v_e1 and miembro_id is null and motivo = 'config';
+  v_ver1 := (public.club_pase_datos(v_m)->>'version')::bigint;
+  perform pg_temp.r('81', 'otra columna de club_config no genera evento', v_e1 = v_e0, format('%s → %s', v_e0, v_e1));
+  perform pg_temp.r('81', 'valor del crédito → un evento global «config» y la versión de cada pase sube',
+    v_e2 = 1 and v_ver1 > v_ver0, format('eventos %s · versión %s → %s', v_e2, v_ver0, v_ver1));
+  update club_config set personas_por_credito = personas_por_credito where location_id = pg_temp.loc();   -- sin cambio real: sin evento
+  perform pg_temp.r('81', 'un UPDATE sin cambio real del valor no genera evento',
+    (select count(*) from club_pase_eventos where id > v_e1 and motivo = 'config') = 1, '');
+end $$;
+
+-- ═══ 82. RLS de public (Ismael, 08-nov noche): toda tabla con RLS, toda vista con security_invoker, y anon sin
+--         permisos que ninguna política justifique. Los privilegios por defecto NO se cambian (dan todo a anon en cada
+--         tabla nueva): esta prueba es la red. Fuera del Club, las tablas marcadas el 08-nov quedan listadas como
+--         conocidas (las arregla cada frente); cualquier tabla NUEVA marcada, o cualquier club_*, hace fallar. ═══
+do $$
+declare v_sin_rls text; v_club text; v_nuevas text; v_hoy text;
+  v_conocidas text[] := array['accounting_entries','cash_movements','cash_sessions','credit_applications','movement_deletions',
+    'movement_edits','pos_ndf_cursor','pos_ndf_open','pos_ndf_ticket_lines','pos_ndf_tickets','product_map','punch_exceptions',
+    'sops','supplier_credits','suppliers','time_punches','tip_entries','tip_sessions','ventas_comps','ventas_dias','ventas_hist',
+    'ventas_metas'];
+begin
+  with rel as (
+    select c.oid, c.relname, c.relkind, c.relrowsecurity,
+           coalesce(c.reloptions, '{}') && array['security_invoker=true', 'security_invoker=on'] as invoker
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind in ('r','p','v','m'))
+  select string_agg(relname || case relkind when 'v' then ' (vista sin security_invoker)' when 'm' then ' (vista materializada)' else ' (tabla sin RLS)' end, ', ' order by relname)
+    into v_sin_rls
+    from rel where (relkind in ('r','p') and not relrowsecurity) or (relkind = 'v' and not invoker)
+                   or (relkind = 'm' and has_table_privilege('anon', oid, 'SELECT'));
+  perform pg_temp.r('82', 'toda tabla de public con RLS y toda vista con security_invoker', v_sin_rls is null, coalesce(v_sin_rls, ''));
+  create temp table _anon_sin_pol on commit drop as
+    select r.relname, string_agg(p.priv, ',' order by p.priv) as privs
+      from (select c.oid, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relkind in ('r','p','v','m')) r
+     cross join unnest(array['SELECT','INSERT','UPDATE','DELETE']) p(priv)
+     where has_table_privilege('anon', r.oid, p.priv)
+       and not exists (select 1 from pg_policies pp where pp.schemaname = 'public' and pp.tablename = r.relname
+                         and pp.roles && array['anon','public']::name[] and pp.cmd in ('ALL', p.priv))
+     group by r.relname;
+  select string_agg(relname || ':' || privs, ', ' order by relname) into v_club from _anon_sin_pol where relname like 'club\_%';
+  perform pg_temp.r('82', 'club_*: anon no tiene ningún permiso sin política que lo justifique', v_club is null, coalesce(v_club, ''));
+  select string_agg(relname || ':' || privs, ', ' order by relname) into v_nuevas from _anon_sin_pol
+   where relname not like 'club\_%' and relname <> all (v_conocidas);
+  select string_agg(relname, ', ' order by relname) into v_hoy from _anon_sin_pol where relname not like 'club\_%';
+  perform pg_temp.r('82', 'fuera del Club: ninguna tabla NUEVA con permisos de anon sin política (marcadas hoy, conocidas: ' ||
+    (select count(*) from _anon_sin_pol where relname not like 'club\_%') || ')', v_nuevas is null, coalesce('NUEVAS: ' || v_nuevas || ' · ', '') || 'hoy: ' || coalesce(v_hoy, 'ninguna'));
+  -- negativa: una tabla nueva en public (con los privilegios por defecto: todo para anon) y sin RLS queda marcada
+  create table public.prueba_rls_82 (x int);
+  perform pg_temp.r('82', 'negativa: una tabla nueva sin RLS y con los privilegios por defecto queda marcada',
+    not (select c.relrowsecurity from pg_class c where c.oid = 'public.prueba_rls_82'::regclass)
+    and has_table_privilege('anon', 'public.prueba_rls_82', 'SELECT')
+    and not exists (select 1 from pg_policies where tablename = 'prueba_rls_82'), '');
+  drop table public.prueba_rls_82;
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

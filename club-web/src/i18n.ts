@@ -38,6 +38,7 @@ const ES = {
   servicio: 'Algo falló de nuestro lado. Probá en un rato.',
   portal_hola: (n: string) => `Hola, ${n}`,
   portal_creditos: 'créditos',
+  portal_creditos_uno: 'crédito',
   portal_personas: (p: number) => `${p} ${p === 1 ? 'persona acumulada' : 'personas acumuladas'}`,
   portal_faltan: (n: number) => `Te ${n === 1 ? 'falta 1 persona' : `faltan ${n} personas`} para sumar medio crédito.`,
   portal_qr: 'Tu QR para los turistas',
@@ -71,10 +72,11 @@ const ES = {
   alta_nombre: 'Nombre y apellido',
   alta_whatsapp: 'WhatsApp',
   alta_aviso_titulo: 'Aviso de privacidad · Club Satori',
-  // v1 (Ismael, 08-nov): texto exacto, sin ubicación. Un párrafo por línea.
+  // v1.1 (Ismael, 08-nov noche): el texto exacto de v1 + «y tu email, si lo das» en «Qué datos guardamos» (cambia lo que se
+  // acepta: versión nueva, ver config.ts). Sin ubicación. Un párrafo por línea.
   alta_aviso: [
     'Responsable: LCT Desarrollos (Satori Sushi Bar), Costa Rica.',
-    'Qué datos guardamos: tu nombre y tu número de WhatsApp. Si sos socio, también tus visitas y los beneficios que usás.',
+    'Qué datos guardamos: tu nombre, tu número de WhatsApp y tu email, si lo das. Si sos socio, también tus visitas y los beneficios que usás.',
     'Para qué: para identificarte en caja, aplicar tus beneficios y avisarte por WhatsApp sobre tu cuenta del Club. No vendemos tus datos ni los usamos para otra cosa.',
     'Quién los ve: solo el personal autorizado de Satori. Si agregás el pase a Google Wallet o Apple Wallet, esa plataforma guarda el pase, sin tu teléfono.',
     'Cuánto tiempo: mientras seas parte del Club. Si te anotás y no validás tu alta en caja dentro de 30 días, borramos tus datos del Local Club.',
@@ -152,6 +154,7 @@ const EN: Textos = {
   servicio: 'Something went wrong on our side. Please try again later.',
   portal_hola: n => `Hi, ${n}`,
   portal_creditos: 'credits',
+  portal_creditos_uno: 'credit',
   portal_personas: p => `${p} ${p === 1 ? 'guest' : 'guests'} so far`,
   portal_faltan: n => `${n} more ${n === 1 ? 'guest' : 'guests'} to earn half a credit.`,
   portal_qr: 'Your QR for guests',
@@ -186,7 +189,7 @@ const EN: Textos = {
   alta_aviso_titulo: 'Privacy notice · Club Satori',
   alta_aviso: [
     'Controller: LCT Desarrollos (Satori Sushi Bar), Costa Rica.',
-    'What we keep: your name and WhatsApp number. If you are a member, also your visits and the benefits you use.',
+    'What we keep: your name, your WhatsApp number and your email, if you give it. If you are a member, also your visits and the benefits you use.',
     "Why: to identify you at the register, apply your benefits and message you on WhatsApp about your Club account. We don't sell your data or use it for anything else.",
     'Who sees it: only authorized Satori staff. If you add the pass to Google Wallet or Apple Wallet, that platform stores the pass, without your phone number.',
     "How long: while you are in the Club. If you sign up and don't validate at the register within 30 days, we delete your Local Club data.",

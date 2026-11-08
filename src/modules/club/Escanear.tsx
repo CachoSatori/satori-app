@@ -13,7 +13,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
-  opcionesCanje, fmtCreditos, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
+  opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
   describirPos, describirPedido, describirFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente,
@@ -130,7 +130,8 @@ export default function Escanear() {
       } else if (actual.kind === 'canje' && creditos != null) {
         // El código queda usado: se cierra la cuenta (volver a escanearlo diría «ya se usó»).
         const s = await canjear(actual.r.datos.id, actual.codigo, creditos, pos!, opDe('canje'))
-        const texto = `Canje de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditos(s.creditos)} ${Number(s.creditos) === 1 ? 'crédito' : 'créditos'}.`
+        const vc = actual.r.datos.valor_credito_crc
+        const texto = `Canje de ${fmtCreditosCrc(creditos, vc)} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditosCrc(s.creditos, vc)}.`
         setMsg({ tono: 'ok', texto })
         cerrarCuenta()
         // Aviso al referente (hasta que lo mande el pase de Wallet): link de WhatsApp con el canje y el saldo.
@@ -141,7 +142,8 @@ export default function Escanear() {
         }
       } else if (modoRef === 'aprobado' && creditos != null) {
         const s = await canjeAprobado(actual.r.datos.id, creditos, pos!, opDe('aprobado'), nota.trim())
-        setMsg({ tono: 'ok', texto: `Canje sin celular de ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditos(s.creditos)} ${Number(s.creditos) === 1 ? 'crédito' : 'créditos'}.` })
+        const vc = 'valor_credito_crc' in actual.r.datos ? actual.r.datos.valor_credito_crc : undefined
+        setMsg({ tono: 'ok', texto: `Canje sin celular de ${fmtCreditosCrc(creditos, vc)} a ${actual.r.datos.nombre}. Le ${Number(s.creditos) === 1 ? 'queda' : 'quedan'} ${fmtCreditosCrc(s.creditos, vc)}.` })
         delete ops.current.aprobado; limpiarFormularios()
         await resolver(actual.codigo, true)
       } else if (modoRef === 'tarjeta') {
@@ -480,7 +482,9 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
           <div style={{ display: 'flex', gap: 10, margin: '0.9rem 0' }}>
             <div style={{ flex: 1, background: C.paper, borderRadius: 8, padding: '0.7rem', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', fontWeight: 800 }}>{fmtCreditos(d.creditos)}</div>
-              <div style={{ fontSize: '0.72rem', color: C.muted }}>créditos ({d.personas} personas)</div>
+              <div style={{ fontSize: '0.72rem', color: C.muted }}>
+                {Number(d.creditos) === 1 ? 'crédito' : 'créditos'}{d.valor_credito_crc ? ` · ${fmtColones(Number(d.creditos) * d.valor_credito_crc)}` : ''} ({d.personas} personas)
+              </div>
             </div>
             <div style={{ flex: 1, background: C.paper, borderRadius: 8, padding: '0.7rem', textAlign: 'center' }}>
               <div style={{ fontSize: '2rem', fontWeight: 800 }}>{d.personas_proximo}</div>
@@ -529,7 +533,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
                         <Btn key={v} big variant={creditos === v ? 'primary' : 'secondary'} disabled={!ok}
                           title={!alcanza(v) ? 'No alcanza el saldo' : !dentroTope(v) ? 'Supera el máximo del día' : ''}
                           onClick={() => { setCreditos(v); p.setConfirmando(false) }} style={{ flex: 1 }}>
-                          {fmtCreditos(v)}
+                          {fmtCreditosCrc(v, d.valor_credito_crc)}
                         </Btn>
                       )
                     })}
@@ -543,7 +547,7 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
                 <SelectorPedido v={p.pos} set={x => { p.setPos(x); p.setConfirmando(false) }} />
                 {p.err && <ErrorAccion err={p.err} onReintentar={p.onConfirmar} />}
                 {p.confirmando && creditos != null ? (
-                  <Confirmacion texto={`${conCodigo ? 'Canjear' : 'Canje sin celular:'} ${fmtCreditos(creditos)} ${creditos === 1 ? 'crédito' : 'créditos'} a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
+                  <Confirmacion texto={`${conCodigo ? 'Canjear' : 'Canje sin celular:'} ${fmtCreditosCrc(creditos, d.valor_credito_crc)} a ${d.nombre} · ${p.pos ? describirPos(p.pos) : ''}`}
                     enviando={p.enviando} onConfirmar={p.onConfirmar} onVolver={() => p.setConfirmando(false)} />
                 ) : (
                   <Btn big disabled={creditos == null || !p.facturaOk || (!conCodigo && !notaOk)} onClick={() => p.setConfirmando(true)}>Continuar</Btn>

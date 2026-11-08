@@ -39,13 +39,19 @@ create function pg_temp.r(p text, c text, ok boolean, d text) returns void langu
   insert into pg_temp._res(prueba, caso, ok, detalle) values (p, c, ok, d);
 $f$;
 
+-- LC-ML: las tablas del Club NO tienen default de location_id. El local de estas pruebas se declara UNA vez acá (el
+-- único encendido en staging; si no hay exactamente uno, la batería no arranca) y cada inserción lo pasa explícito.
+do $f$ begin
+  execute format('create function pg_temp.loc() returns text language sql immutable as %L', format('select %L::text', public.club_local(null)));
+end $f$;
+
 -- R-01: el canje exige un código de canje del miembro. Para las pruebas de la regla del canje (no del código)
 -- se genera uno directo en la tabla, como lo haría club_canje_codigo_generar desde el portal.
 create function pg_temp.k(p_m uuid) returns text language plpgsql security definer set search_path = public, pg_temp as $f$
 declare c text := public.club_gen_codigo(6);
 begin
   update public.club_codigos_canje set invalidado_en = now() where miembro_id = p_m and usado_en is null and invalidado_en is null;
-  insert into public.club_codigos_canje (miembro_id, codigo_hash, vence_en) values (p_m, public.club_codigo_hash(c), now() + interval '10 minutes');
+  insert into public.club_codigos_canje (location_id, miembro_id, codigo_hash, vence_en) values (pg_temp.loc(), p_m, public.club_codigo_hash(c), now() + interval '10 minutes');
   return c;
 end $f$;
 
@@ -53,22 +59,22 @@ end $f$;
 do $$
 declare v_neg uuid; v_ref uuid; v_m2 uuid; v_m3 uuid; v_old uuid; v_m4 uuid; v_m5 uuid;
 begin
-  insert into club_negocios(nombre, tipo) values ('Hotel Prueba F1a', 'hotel') returning id into v_neg;
-  insert into club_miembros(tipo, nombre, negocio_id) values ('referente','Ref Prueba', v_neg) returning id into v_ref;
-  insert into club_miembros(tipo, nombre) values ('referente','Canje Prueba') returning id into v_m2;
-  insert into club_miembros(tipo, nombre) values ('referente','Poco Saldo') returning id into v_m3;
-  insert into club_miembros(tipo, nombre, created_at) values ('referente','Viejo', now() - interval '2 years') returning id into v_old;
+  insert into club_negocios(location_id, nombre, tipo) values (pg_temp.loc(), 'Hotel Prueba F1a', 'hotel') returning id into v_neg;
+  insert into club_miembros(location_id, tipo, nombre, negocio_id) values (pg_temp.loc(), 'referente','Ref Prueba', v_neg) returning id into v_ref;
+  insert into club_miembros(location_id, tipo, nombre) values (pg_temp.loc(), 'referente','Canje Prueba') returning id into v_m2;
+  insert into club_miembros(location_id, tipo, nombre) values (pg_temp.loc(), 'referente','Poco Saldo') returning id into v_m3;
+  insert into club_miembros(location_id, tipo, nombre, created_at) values (pg_temp.loc(), 'referente','Viejo', now() - interval '2 years') returning id into v_old;
   -- saldo 9 personas para el canje de 1,5; 2 personas para el insuficiente
-  insert into club_movimientos(miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
-  values (v_m2, 'tarjeta', 9, 6, 18000, now(), 'migracion'),
-         (v_m3, 'tarjeta', 2, 6, 18000, now(), 'migracion'),
-         (v_old,'tarjeta', 13, 6, 18000, now() - interval '13 months', 'migracion');
-  insert into club_miembros(tipo, nombre) values ('referente','Factura Prueba') returning id into v_m4;
-  insert into club_miembros(tipo, nombre) values ('referente','Tope Dia Prueba') returning id into v_m5;
-  insert into club_movimientos(miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
-  values (v_m4, 'tarjeta', 18, 6, 18000, now(), 'migracion'), (v_m5, 'tarjeta', 18, 6, 18000, now(), 'migracion');
+  insert into club_movimientos(location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
+  values (pg_temp.loc(), v_m2, 'tarjeta', 9, 6, 18000, now(), 'migracion'),
+         (pg_temp.loc(), v_m3, 'tarjeta', 2, 6, 18000, now(), 'migracion'),
+         (pg_temp.loc(), v_old,'tarjeta', 13, 6, 18000, now() - interval '13 months', 'migracion');
+  insert into club_miembros(location_id, tipo, nombre) values (pg_temp.loc(), 'referente','Factura Prueba') returning id into v_m4;
+  insert into club_miembros(location_id, tipo, nombre) values (pg_temp.loc(), 'referente','Tope Dia Prueba') returning id into v_m5;
+  insert into club_movimientos(location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
+  values (pg_temp.loc(), v_m4, 'tarjeta', 18, 6, 18000, now(), 'migracion'), (pg_temp.loc(), v_m5, 'tarjeta', 18, 6, 18000, now(), 'migracion');
   insert into _ids values ('m4', v_m4), ('m5', v_m5);
-  insert into club_miembros_contacto(miembro_id, telefono, email) values (v_ref, '+50688887777', 'x@ejemplo.com');
+  insert into club_miembros_contacto(location_id, miembro_id, telefono, email) values (pg_temp.loc(), v_ref, '+50688887777', 'x@ejemplo.com');
   insert into _ids values ('ref', v_ref), ('m2', v_m2), ('m3', v_m3), ('old', v_old),
     ('ref_cod', (select codigo from club_miembros where id = v_ref)),
     ('ref_tok', (select token_portal from club_miembros where id = v_ref));
@@ -90,8 +96,8 @@ begin
   end loop;
   begin
     perform pg_temp.como('anon', null);
-    insert into public.club_movimientos(miembro_id, tipo, personas, personas_por_credito, valor_credito_crc)
-      values ((select v::uuid from _ids where k='ref'), 'tarjeta', 99, 6, 18000);
+    insert into public.club_movimientos(location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc)
+      values (pg_temp.loc(), (select v::uuid from _ids where k='ref'), 'tarjeta', 99, 6, 18000);
     perform pg_temp.yo(); perform pg_temp.r('1', 'anon INSERT club_movimientos', false, 'insertó');
   exception when insufficient_privilege then
     perform pg_temp.yo(); perform pg_temp.r('1', 'anon INSERT club_movimientos', true, sqlerrm);
@@ -99,8 +105,8 @@ begin
   -- staff tampoco inserta directo (cajero)
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    insert into public.club_movimientos(miembro_id, tipo, personas, personas_por_credito, valor_credito_crc)
-      values ((select v::uuid from _ids where k='ref'), 'tarjeta', 99, 6, 18000);
+    insert into public.club_movimientos(location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc)
+      values (pg_temp.loc(), (select v::uuid from _ids where k='ref'), 'tarjeta', 99, 6, 18000);
     perform pg_temp.yo(); perform pg_temp.r('1', 'cajero INSERT directo club_movimientos', false, 'insertó');
   exception when insufficient_privilege then
     perform pg_temp.yo(); perform pg_temp.r('1', 'cajero INSERT directo club_movimientos', true, sqlerrm);
@@ -319,7 +325,7 @@ begin
   end;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
-    insert into public.club_miembros_contacto(miembro_id, telefono) values ((select v::uuid from _ids where k='m2'), '+50611112222');
+    insert into public.club_miembros_contacto(location_id, miembro_id, telefono) values (pg_temp.loc(), (select v::uuid from _ids where k='m2'), '+50611112222');
     perform pg_temp.yo(); perform pg_temp.r('5', 'cajero escribe contacto', false, 'escribió');
   exception when others then
     perform pg_temp.yo(); perform pg_temp.r('5', 'cajero escribe contacto → rechazado por RLS', sqlstate = '42501', sqlstate || ' ' || sqlerrm);
@@ -350,15 +356,15 @@ end $$;
 -- ═══ 9. Unicidad de club_negocios ═══
 do $$
 begin
-  insert into club_negocios(nombre) values ('Prueba Ñandú Único');
+  insert into club_negocios(location_id, nombre) values (pg_temp.loc(), 'Prueba Ñandú Único');
   begin
-    insert into club_negocios(nombre) values (' prueba  nandu unico ');
+    insert into club_negocios(location_id, nombre) values (pg_temp.loc(), ' prueba  nandu unico ');
     perform pg_temp.r('9', '« prueba  nandu unico » después de «Prueba Ñandú Único»', false, 'insertó');
   exception when unique_violation then
     perform pg_temp.r('9', '« prueba  nandu unico » después de «Prueba Ñandú Único» → falla', true, sqlerrm);
   end;
   begin
-    insert into club_negocios(nombre) values ('PRUEBA ÑANDÚ ÚNICO DOS');
+    insert into club_negocios(location_id, nombre) values (pg_temp.loc(), 'PRUEBA ÑANDÚ ÚNICO DOS');
     perform pg_temp.r('9', 'control: «PRUEBA ÑANDÚ ÚNICO DOS» es otro nombre → entra', true, 'insertó (nombre distinto)');
   exception when unique_violation then
     perform pg_temp.r('9', 'control: «PRUEBA ÑANDÚ ÚNICO DOS»', false, sqlerrm);
@@ -650,7 +656,7 @@ end $$;
 do $$
 declare v_pm uuid; v_cod text; v_cup text; j jsonb; j2 jsonb;
 begin
-  insert into club_miembros(tipo, nombre) values ('concierge_pm', '07/ Lola Pruebita Apellido PM') returning id, codigo into v_pm, v_cod;
+  insert into club_miembros(location_id, tipo, nombre) values (pg_temp.loc(), 'concierge_pm', '07/ Lola Pruebita Apellido PM') returning id, codigo into v_pm, v_cod;
   perform pg_temp.como('anon', null);
   select x.codigo into v_cup from public.club_cupon_crear(v_cod, null) x;
   j := public.club_cupon_ver(v_cup);
@@ -771,13 +777,13 @@ begin
   insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto) values
     (v_t3, 'PRUEBA-PROMO', 'PROMO CLUB 10% (prueba)', 1, 0), (v_t5, 'PRUEBA-PROMO', 'PROMO CLUB 10% (prueba)', 1, 0);
   -- canje de 1,5 (₡27.000) sobre una factura con cxc ₡36.000
-  insert into club_movimientos (miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen)
-  values (v_ref, 'canje', -9, 1.5, 6, 18000, 'FE-990002', now() - interval '1 day', now() - interval '2 hours', 'app');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen)
+  values (pg_temp.loc(), v_ref, 'canje', -9, 1.5, 6, 18000, 'FE-990002', now() - interval '1 day', now() - interval '2 hours', 'app');
   -- tarjeta manual con factura inexistente (hace 2 h) y otra que sí existe con ceros/prefijo
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota)
-  values (v_ref, 'tarjeta', 3, 6, 18000, '990099', now() - interval '1 day', now() - interval '2 hours', 'app', 'manual') returning id into v_mv;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota)
-  values (v_ref, 'tarjeta', 2, 6, 18000, 'FE-0990003', now() - interval '1 day', now() - interval '2 hours', 'app', 'manual');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota)
+  values (pg_temp.loc(), v_ref, 'tarjeta', 3, 6, 18000, '990099', now() - interval '1 day', now() - interval '2 hours', 'app', 'manual') returning id into v_mv;
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota)
+  values (pg_temp.loc(), v_ref, 'tarjeta', 2, 6, 18000, 'FE-0990003', now() - interval '1 day', now() - interval '2 hours', 'app', 'manual');
   insert into _ids values ('mv_sin_factura', v_mv);
 end $$;
 do $$
@@ -874,9 +880,9 @@ end $$;
 do $$
 declare v_m uuid; r1 jsonb; r2 jsonb; v_s int; v_venc int;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Baja Prueba Oct', 'app') returning id into v_m;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen)
-  values (v_m, 'tarjeta', 10, 6, 18000, '990777', timestamptz '2026-10-15 20:00:00-06', timestamptz '2026-10-15 20:00:00-06', 'app');
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Baja Prueba Oct', 'app') returning id into v_m;
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen)
+  values (pg_temp.loc(), v_m, 'tarjeta', 10, 6, 18000, '990777', timestamptz '2026-10-15 20:00:00-06', timestamptz '2026-10-15 20:00:00-06', 'app');
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   r1 := public.club_reporte_mes('2026-10-01');
   perform public.club_miembro_guardar(v_m, 'referente', 'Baja Prueba Oct', null, 'baja', null);
@@ -915,10 +921,10 @@ end $$;
 do $$
 declare v_m uuid; v_c uuid; v_cod text; v_d date := (now() at time zone 'America/Costa_Rica')::date - 1;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Pedido Prueba', 'app') returning id, codigo into v_m, v_cod;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Canje Pedido Prueba', 'app') returning id into v_c;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
-  values (v_c, 'tarjeta', 24, 6, 18000, now() - interval '3 days', 'migracion');
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Pedido Prueba', 'app') returning id, codigo into v_m, v_cod;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Canje Pedido Prueba', 'app') returning id into v_c;
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
+  values (pg_temp.loc(), v_c, 'tarjeta', 24, 6, 18000, now() - interval '3 days', 'migracion');
   insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, monto_estimado_crc, updated_at, pedido_abierto_en) values
     ('santa-teresa', 'pedido:9014', '9014', '20', 'salon', 4, 48500, now() - interval '50 minutes', now() - interval '50 minutes'),
     ('santa-teresa', 'pedido:9009', '9009', '5',  'salon', 2, 21000, now() - interval '20 minutes', now() - interval '20 minutes'),
@@ -997,8 +1003,8 @@ begin
   -- 27d. pedido que cruza la medianoche: abierto 23:40, escaneo 23:50, factura 00:20 del día siguiente,
   --      dividida de la misma mesa 00:35; otra de esa mesa a la 01:30 (fuera de +30 min) y un 9007 de ayer al mediodía
   v_h := (v_d + time '23:50') at time zone 'America/Costa_Rica';
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
-  values (v_m, 'tarjeta', 2, 6, 18000, v_h, v_h, 'app',
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  values (pg_temp.loc(), v_m, 'tarjeta', 2, 6, 18000, v_h, v_h, 'app',
           jsonb_build_object('modo','pedido','pedido','9007','mesa','3','total',30000,'abierto_en',v_h - interval '10 minutes','hora',v_h), 'pedido:x:9007')
   returning id into v_mn;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc) values
@@ -1011,8 +1017,8 @@ begin
 
   -- 27e. mismo número de pedido al día siguiente: A (ayer, 9009) y B (hoy, 9009) no se mezclan
   v_h := now() - interval '1 day';
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
-  values (v_m, 'tarjeta', 2, 6, 18000, v_h, v_h, 'app',
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  values (pg_temp.loc(), v_m, 'tarjeta', 2, 6, 18000, v_h, v_h, 'app',
           jsonb_build_object('modo','pedido','pedido','9009','mesa','5','total',21000,'abierto_en',v_h - interval '10 minutes','hora',v_h), 'pedido:y:9009')
   returning id into v_ma;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
@@ -1027,8 +1033,8 @@ begin
   perform pg_temp.r('27', 'mismo pedido al día siguiente: hoy → la de hoy; ayer → la de ayer',
     pg_temp.cruce(v_mb) = '990907' and pg_temp.cruce(v_ma) = '990906', pg_temp.cruce(v_mb) || ' / ' || pg_temp.cruce(v_ma));
   -- C: escaneo ayer del 9010 sin factura; la única 9010 es de 24 h después → no cruza (tope 18 h)
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
-  values (v_m, 'tarjeta', 2, 6, 18000, v_h, v_h, 'app',
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  values (pg_temp.loc(), v_m, 'tarjeta', 2, 6, 18000, v_h, v_h, 'app',
           jsonb_build_object('modo','pedido','pedido','9010','mesa','6','total',15000,'abierto_en',v_h - interval '10 minutes','hora',v_h), 'pedido:y:9010')
   returning id into v_mc;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, numero_pedido, total_crc)
@@ -1041,8 +1047,8 @@ declare v_m uuid := (select i.v::uuid from _ids i where i.k = 'ped_m'); v_m14 uu
 begin
   -- 27h. DATOS REALES de staging.
   --  · pedido 14 del 05-nov (abierto 18:39:48, mesa 20) → factura 112430 (19:21:30).
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
-  values (v_m, 'tarjeta', 2, 6, 18000, timestamptz '2026-11-05 19:00:00-06', timestamptz '2026-11-05 19:00:00-06', 'app',
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  values (pg_temp.loc(), v_m, 'tarjeta', 2, 6, 18000, timestamptz '2026-11-05 19:00:00-06', timestamptz '2026-11-05 19:00:00-06', 'app',
           jsonb_build_object('modo','pedido','pedido','14','mesa','20','abierto_en','2026-11-05T18:39:48-06:00','hora','2026-11-05T19:00:00-06:00'), 'pedido:2026-11-05:14')
   returning id into v_m14;
   perform pg_temp.r('27', 'real: pedido 14 del 05-nov → 112430 (número + apertura exacta)', pg_temp.cruce(v_m14) = '112430', pg_temp.cruce(v_m14));
@@ -1052,8 +1058,8 @@ begin
   --    mesa tomadas de su factura 112313. Aceptado por Ismael (07-nov): es una cuenta partida en CINCO
   --    (mismo cajero, 10 minutos, consecutivos 16109–16115, pax 1+0+1+1+1 = 4). No entra la 112293
   --    (pedido 21 de esa mesa, cobrado a las 20:06).
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
-  select v_m, 'tarjeta', 2, 6, 18000, t.pedido_abierto_en + interval '10 minutes', t.pedido_abierto_en + interval '10 minutes', 'app',
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  select pg_temp.loc(), v_m, 'tarjeta', 2, 6, 18000, t.pedido_abierto_en + interval '10 minutes', t.pedido_abierto_en + interval '10 minutes', 'app',
          jsonb_build_object('modo','pedido','pedido','33','mesa', t.mesa_factura, 'abierto_en', t.pedido_abierto_en,
                             'hora', t.pedido_abierto_en + interval '10 minutes'), 'pedido:2026-10-31:33'
     from pos_ndf_tickets t where t.local = 'santa-teresa' and t.numero_factura = '112313'
@@ -1192,7 +1198,7 @@ update profiles set role = 'manager',  is_active = true where id = '<MANAGER_UUI
 do $$
 declare v_n int; v_cod text; r text; v_uid text;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD01', 'app') returning codigo into v_cod;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref AUD01', 'app') returning codigo into v_cod;
   perform pg_temp.como('anon', null);
   perform public.club_cupon_crear(v_cod, '{"whatsapp":"88880001","email":"ficticio@ejemplo.com","optin":true}'::jsonb);
   perform pg_temp.yo();
@@ -1233,8 +1239,8 @@ end $$;
 do $$
 declare v_a uuid; v_b uuid; v_cupa text; v_cupb text; v_cod text; v_ok boolean; j jsonb; v_e text;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD02 A', 'app') returning id, codigo into v_a, v_cod;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD02 B', 'app') returning id into v_b;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref AUD02 A', 'app') returning id, codigo into v_a, v_cod;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref AUD02 B', 'app') returning id into v_b;
   insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en) values
     ('santa-teresa', 'pedido:9201', '9201', '8', 'salon', 5, now(), now() - interval '20 minutes'),
     ('santa-teresa', 'pedido:9202', '9202', '9', 'salon', 0, now(), now() - interval '20 minutes');   -- pax desconocido
@@ -1259,7 +1265,7 @@ begin
       sqlstate = 'P0001' and sqlerrm like 'Este referente ya tiene una tarjeta en esta visita: vale una por mesa%', sqlerrm);
   end;
   -- un tercero que pasa el pax → error
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD02 C', 'app') returning id into v_a;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref AUD02 C', 'app') returning id into v_a;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     perform public.club_tarjeta_manual(v_a, 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9201"}'::jsonb);
@@ -1280,8 +1286,8 @@ begin
   end;
   -- el índice único es la red de seguridad aunque se saltee la función
   begin
-    insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, origen, visita_clave)
-    values (v_b, 'tarjeta', 1, 6, 18000, 'app', (select visita_clave from club_movimientos where miembro_id = v_b and pos_ref->>'pedido' = '9201'));
+    insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, origen, visita_clave)
+    values (pg_temp.loc(), v_b, 'tarjeta', 1, 6, 18000, 'app', (select visita_clave from club_movimientos where miembro_id = v_b and pos_ref->>'pedido' = '9201'));
     perform pg_temp.r('29', 'índice único (miembro, visita)', false, 'insertó');
   exception when unique_violation then
     perform pg_temp.r('29', 'índice único (miembro, visita) para origen app → unique_violation', true, sqlerrm);
@@ -1293,8 +1299,8 @@ begin
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc, pax)
   values ('990920', now() + interval '20 minutes', 'C', 'salon', 'cajero', true, 'ok', '9', '9', '9202', 30000, 2);
   -- y el mismo referente vuelve a entrar a esa visita por el plan B (otra clave de visita) → VISITA_REPETIDA
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
-  values (v_b, 'tarjeta', 1, 6, 18000, now(), now(), 'app', '{"modo":"factura","numero_factura":"990920"}'::jsonb, 'factura:990920');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  values (pg_temp.loc(), v_b, 'tarjeta', 1, 6, 18000, now(), now(), 'app', '{"modo":"factura","numero_factura":"990920"}'::jsonb, 'factura:990920');
   update club_movimientos set registrado_en = now() - interval '2 hours' where miembro_id = v_b;
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j
@@ -1317,7 +1323,7 @@ end $$;
 do $$
 declare v_m uuid; v_op uuid := gen_random_uuid(); v_p1 int; v_p2 int;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ajuste AUD09', 'app') returning id into v_m;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ajuste AUD09', 'app') returning id into v_m;
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select t.personas into v_p1 from public.club_ajuste(v_m, 3, 'ajuste', 'x', v_op) t;
   select t.personas into v_p2 from public.club_ajuste(v_m, 3, 'ajuste', 'x', v_op) t;
@@ -1337,10 +1343,10 @@ end $$;
 do $$
 declare v_m uuid; v_n int;
 begin
-  insert into club_miembros (tipo, nombre, origen, created_at) values ('referente', 'Restit AUD10', 'app', now() - interval '2 years') returning id into v_m;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen) values
-    (v_m, 'tarjeta', 6, 6, 18000, now() - interval '13 months', 'migracion'),
-    (v_m, 'vencimiento', -6, 6, 18000, now() - interval '1 month', 'migracion');
+  insert into club_miembros (location_id, tipo, nombre, origen, created_at) values (pg_temp.loc(), 'referente', 'Restit AUD10', 'app', now() - interval '2 years') returning id into v_m;
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen) values
+    (pg_temp.loc(), v_m, 'tarjeta', 6, 6, 18000, now() - interval '13 months', 'migracion'),
+    (pg_temp.loc(), v_m, 'vencimiento', -6, 6, 18000, now() - interval '1 month', 'migracion');
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_ajuste(v_m, 6, 'restitucion', 'restitución de prueba', gen_random_uuid());
   perform public.club_vencer((now() at time zone 'America/Costa_Rica')::date, (select count(*)::int from public.club_vencer_simular((now() at time zone 'America/Costa_Rica')::date)));
@@ -1373,16 +1379,16 @@ do $$
 declare v_m uuid; v_a jsonb; v_b jsonb; v_c jsonb; v_mes date := (date_trunc('month', now() at time zone 'America/Costa_Rica') - interval '1 month')::date;
         v_pago uuid;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('concierge_pm', 'PM AUD04', 'app') returning id into v_m;
-  insert into club_pm_cargos (miembro_id, monto_crc, estado, created_at) values (v_m, 10000, 'pendiente', v_mes + interval '9 days 12 hours');
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'concierge_pm', 'PM AUD04', 'app') returning id into v_m;
+  insert into club_pm_cargos (location_id, miembro_id, monto_crc, estado, created_at) values (pg_temp.loc(), v_m, 10000, 'pendiente', v_mes + interval '9 days 12 hours');
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   v_a := public.club_reporte_cerrar(v_mes, null);
   perform pg_temp.yo();
   -- después del cierre: se paga el cargo, el miembro cambia de tipo, se resuelve una excepción
-  insert into club_pm_pagos (miembro_id, monto_crc, pagado_en) values (v_m, 10000, now()) returning id into v_pago;
+  insert into club_pm_pagos (location_id, miembro_id, monto_crc, pagado_en) values (pg_temp.loc(), v_m, 10000, now()) returning id into v_pago;
   update club_pm_cargos set estado = 'pagado', pagado_en = now(), pago_id = v_pago where miembro_id = v_m;
   update club_miembros set tipo = 'referente' where id = v_m;
-  insert into club_excepciones_resueltas (tipo, ref, nota) values ('CREDITOS_SIN_CANJE', 'factura:aud04', 'prueba');
+  insert into club_excepciones_resueltas (location_id, tipo, ref, nota) values (pg_temp.loc(), 'CREDITOS_SIN_CANJE', 'factura:aud04', 'prueba');
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   v_b := public.club_reporte_mes(v_mes);
   v_c := public.club_reporte_mes(v_mes, 'santa-teresa', true);
@@ -1435,14 +1441,14 @@ end $$;
 do $$
 declare v_m uuid; v_m2 uuid; v_1 uuid; v_2 uuid; j jsonb; t0 timestamptz := now() + interval '5 minutes';
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Ambigua 1', 'app') returning id into v_m;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Ambigua 2', 'app') returning id into v_m2;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave) values
-    (v_m, 'tarjeta', 2, 6, 18000, now() - interval '50 minutes', now() - interval '2 hours', 'app',
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Ambigua 1', 'app') returning id into v_m;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Ambigua 2', 'app') returning id into v_m2;
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave) values
+    (pg_temp.loc(), v_m, 'tarjeta', 2, 6, 18000, now() - interval '50 minutes', now() - interval '2 hours', 'app',
      jsonb_build_object('modo','pedido','pedido','9301','mesa','4','abierto_en', t0 - interval '60 minutes','hora', now() - interval '50 minutes'), 'pedido:z:9301')
     returning id into v_1;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave) values
-    (v_m2, 'tarjeta', 2, 6, 18000, now() - interval '20 minutes', now() - interval '2 hours', 'app',
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave) values
+    (pg_temp.loc(), v_m2, 'tarjeta', 2, 6, 18000, now() - interval '20 minutes', now() - interval '2 hours', 'app',
      jsonb_build_object('modo','pedido','pedido','9302','mesa','4','abierto_en', t0 - interval '30 minutes','hora', now() - interval '20 minutes'), 'pedido:z:9302')
     returning id into v_2;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, pedido_abierto_en, total_crc) values
@@ -1467,9 +1473,9 @@ end $$;
 do $$
 declare v_m uuid; v_n0 bigint; v_n1 bigint; v_sim int; v_lista jsonb; v_hoy date := (now() at time zone 'America/Costa_Rica')::date; v_venc int;
 begin
-  insert into club_miembros (tipo, nombre, origen, created_at) values ('referente', 'Vencer Simular', 'app', now() - interval '2 years') returning id into v_m;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
-  values (v_m, 'tarjeta', 9, 6, 18000, now() - interval '14 months', 'migracion');
+  insert into club_miembros (location_id, tipo, nombre, origen, created_at) values (pg_temp.loc(), 'referente', 'Vencer Simular', 'app', now() - interval '2 years') returning id into v_m;
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
+  values (pg_temp.loc(), v_m, 'tarjeta', 9, 6, 18000, now() - interval '14 months', 'migracion');
   select count(*) into v_n0 from club_movimientos;
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select count(*)::int, jsonb_agg(to_jsonb(x)) filter (where x.miembro_id = v_m) into v_sim, v_lista from public.club_vencer_simular(v_hoy) x;
@@ -1538,8 +1544,8 @@ end $$;
 do $$
 declare v_a uuid; v_b uuid; v_ab timestamptz := now() - interval '30 minutes'; v_k1 text; v_k2 text; v_k3 text;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD15 A', 'app') returning id into v_a;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD15 B', 'app') returning id into v_b;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref AUD15 A', 'app') returning id into v_a;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref AUD15 B', 'app') returning id into v_b;
   insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en)
   values ('santa-teresa', 'pedido:9401', '9401', '7', 'salon', 4, v_ab, v_ab);
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, pedido_abierto_en, total_crc, pax)
@@ -1580,7 +1586,7 @@ end $$;
 do $$
 declare v_m uuid;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD18', 'app') returning id into v_m;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref AUD18', 'app') returning id into v_m;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9401","local":"nosara"}'::jsonb);
@@ -1601,7 +1607,7 @@ end $$;
 do $$
 declare v_cod text; v_cup text; v_ok text; i int;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref AUD06', 'app') returning codigo into v_cod;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref AUD06', 'app') returning codigo into v_cod;
   -- sin header (llamada directa con la anon key): el mismo error de siempre, en las 4
   perform set_config('request.headers', '{}', true);
   foreach v_ok in array array['crear','ver','contacto','portal','canje'] loop
@@ -1671,8 +1677,8 @@ do $$
 declare v_m uuid; v_n uuid; j jsonb; t0 timestamptz := now() - interval '20 minutes';
         d0 date := (now() at time zone 'America/Costa_Rica')::date - 1; d1 date := (now() at time zone 'America/Costa_Rica')::date + 1;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Pax A', 'app') returning id into v_m;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Pax B', 'app') returning id into v_n;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Pax A', 'app') returning id into v_m;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Pax B', 'app') returning id into v_n;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, pedido_abierto_en, total_crc, pax, pax_nativo) values
     ('990961', t0,                         'C', 'salon', 'cajero',     true, 'ok', '8', '8', '9411', t0 - interval '60 minutes', 10000, 1, 0),
     ('990962', t0 - interval '3 minutes',  'C', 'salon', 'sin_pedido', true, 'ok', null, '8', null, null, 10000, 0, 0),
@@ -1680,10 +1686,10 @@ begin
     ('990964', t0 - interval '1 minutes',  'C', 'salon', 'sin_pedido', true, 'ok', null, '8', null, null, 10000, 1, 0),
     ('990965', t0,                         'C', 'salon', 'cajero',     true, 'ok', '9', '9', '9412', t0 - interval '60 minutes', 50000, 0, 5);
   -- 4 personas en un pedido de pax 4 repartido en 4 facturas (una con pax 0): NO es excepción
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave) values
-    (v_m, 'tarjeta', 4, 6, 18000, t0 - interval '30 minutes', now() - interval '2 hours', 'app',
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave) values
+    (pg_temp.loc(), v_m, 'tarjeta', 4, 6, 18000, t0 - interval '30 minutes', now() - interval '2 hours', 'app',
      jsonb_build_object('modo','pedido','pedido','9411','mesa','8','abierto_en', t0 - interval '60 minutes','hora', t0 - interval '30 minutes'), 'pax:a'),
-    (v_n, 'tarjeta', 5, 6, 18000, t0 - interval '30 minutes', now() - interval '2 hours', 'app',
+    (pg_temp.loc(), v_n, 'tarjeta', 5, 6, 18000, t0 - interval '30 minutes', now() - interval '2 hours', 'app',
      jsonb_build_object('modo','pedido','pedido','9412','mesa','9','abierto_en', t0 - interval '60 minutes','hora', t0 - interval '30 minutes'), 'pax:b');
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(d0, d1) e where e.tipo = 'PERSONAS_SOBRE_PAX' and e.factura in ('990961', '990965');
@@ -1691,9 +1697,9 @@ begin
   perform pg_temp.r('41', 'cuenta dividida con facturas de pax 0: 4 personas con pax del pedido 4 → sin excepción; Personas del pedido 5 → sin excepción',
     jsonb_array_length(j) = 0, j::text);
   -- una persona más en cada pedido → sí es excepción, con el pax del pedido (no el de la factura principal)
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Pax 9411', 'app'), ('referente', 'Ref Pax 9412', 'app');
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
-  select m.id, 'tarjeta', 1, 6, 18000, t0 - interval '25 minutes', now() - interval '2 hours', 'app',
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Pax 9411', 'app'), (pg_temp.loc(), 'referente', 'Ref Pax 9412', 'app');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, registrado_en, origen, pos_ref, visita_clave)
+  select pg_temp.loc(), m.id, 'tarjeta', 1, 6, 18000, t0 - interval '25 minutes', now() - interval '2 hours', 'app',
          jsonb_build_object('modo','pedido','pedido', x.p,'mesa', x.me,'abierto_en', t0 - interval '60 minutes','hora', t0 - interval '25 minutes'), 'pax:c' || x.p
     from (values ('9411', '8'), ('9412', '9')) x(p, me) join club_miembros m on m.nombre = 'Ref Pax ' || x.p;
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
@@ -1711,8 +1717,8 @@ end $$;
 do $$
 declare v_m uuid; v_n uuid; j jsonb; t0 timestamptz := now() - interval '15 minutes'; v_k uuid; v_l uuid;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Area M', 'app') returning id into v_m;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Area 3', 'app') returning id into v_n;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Area M', 'app') returning id into v_m;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Area 3', 'app') returning id into v_n;
   insert into pos_ndf_open (local, clave, id_pedido, area, mesa, canal, pax, updated_at, pedido_abierto_en) values
     ('santa-teresa', 'pedido:9421', '9421', 'M', '3', 'salon', 2, t0 - interval '40 minutes', t0 - interval '40 minutes'),
     ('santa-teresa', 'pedido:9422', '9422', '3', '3', 'salon', 2, t0 - interval '40 minutes', t0 - interval '40 minutes');
@@ -1750,16 +1756,16 @@ declare v_a uuid; v_b uuid; v_c uuid; v_baja uuid; v_ta text; v_tb text; v_tc te
         k1 text; k2 text; k3 text; kb text; j jsonb; j0 jsonb; j1 jsonb; v_op uuid := gen_random_uuid(); v_p int; v_n int;
         v_err text; v_mov uuid; i int; r record;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Canje A', 'app') returning id, token_portal, codigo into v_a, v_ta, v_ra;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Canje B', 'app') returning id, token_portal into v_b, v_tb;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Canje Sin Saldo', 'app') returning id, token_portal into v_c, v_tc;
-  insert into club_miembros (tipo, nombre, origen, estado) values ('referente', 'Ref Canje Baja', 'app', 'baja') returning id, token_portal into v_baja, v_tbaja;
-  insert into club_miembros_contacto (miembro_id, telefono) values (v_a, '+50660000009');
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen) values
-    (v_a, 'tarjeta', 30, 6, 18000, now() - interval '3 days', 'migracion'),
-    (v_b, 'tarjeta', 18, 6, 18000, now() - interval '3 days', 'migracion'),
-    (v_c, 'tarjeta', 2, 6, 18000, now() - interval '3 days', 'migracion'),
-    (v_baja, 'tarjeta', 18, 6, 18000, now() - interval '3 days', 'migracion');
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Canje A', 'app') returning id, token_portal, codigo into v_a, v_ta, v_ra;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Canje B', 'app') returning id, token_portal into v_b, v_tb;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Canje Sin Saldo', 'app') returning id, token_portal into v_c, v_tc;
+  insert into club_miembros (location_id, tipo, nombre, origen, estado) values (pg_temp.loc(), 'referente', 'Ref Canje Baja', 'app', 'baja') returning id, token_portal into v_baja, v_tbaja;
+  insert into club_miembros_contacto (location_id, miembro_id, telefono) values (pg_temp.loc(), v_a, '+50660000009');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen) values
+    (pg_temp.loc(), v_a, 'tarjeta', 30, 6, 18000, now() - interval '3 days', 'migracion'),
+    (pg_temp.loc(), v_b, 'tarjeta', 18, 6, 18000, now() - interval '3 days', 'migracion'),
+    (pg_temp.loc(), v_c, 'tarjeta', 2, 6, 18000, now() - interval '3 days', 'migracion'),
+    (pg_temp.loc(), v_baja, 'tarjeta', 18, 6, 18000, now() - interval '3 days', 'migracion');
 
   perform set_config('request.headers', '{}', true);
   begin
@@ -1783,7 +1789,7 @@ begin
       and not exists (select 1 from information_schema.columns where table_name = 'club_codigos_canje' and column_name = 'codigo')
       and not exists (select 1 from club_codigos_canje k where to_jsonb(k)::text like '%' || k1 || '%'), '');
   begin
-    insert into club_codigos_canje (miembro_id, codigo_hash, vence_en) values (v_b, repeat('a', 64), now() + interval '30 minutes');
+    insert into club_codigos_canje (location_id, miembro_id, codigo_hash, vence_en) values (pg_temp.loc(), v_b, repeat('a', 64), now() + interval '30 minutes');
     perform pg_temp.r('43', 'TTL de 30 min', false, 'aceptó');
   exception when check_violation then
     perform pg_temp.r('43', 'la tabla no acepta un vencimiento de más de 10 minutos', true, sqlerrm);
@@ -1977,9 +1983,9 @@ end $$;
 do $$
 declare v_r uuid; c1 text; c2 text; t2 uuid; j jsonb; j0 jsonb; t0 timestamptz := now() - interval '30 minutes';
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Promo', 'app') returning id into v_r;
-  insert into club_cupones (referente_id, vence_en) values (v_r, now() + interval '1 day') returning codigo into c1;
-  insert into club_cupones (referente_id, vence_en) values (v_r, now() + interval '1 day') returning codigo into c2;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Promo', 'app') returning id into v_r;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_r, now() + interval '1 day') returning codigo into c1;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_r, now() + interval '1 day') returning codigo into c2;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
   values ('990981', t0, 'C', 'salon', 'cajero', true, 'ok', 30000);
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
@@ -2034,7 +2040,7 @@ end $$;
 do $$
 declare v_m uuid; j jsonb; v_err text;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Tarjeta Fisica', 'app') returning id into v_m;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Tarjeta Fisica', 'app') returning id into v_m;
   -- apagada (como en prod): nadie la usa
   update club_config set tarjeta_manual_activa = false where location_id = 'santa-teresa';
   foreach v_err in array array['<CAJERO_UUID>', '<MANAGER_UUID>', '<OWNER_UUID>'] loop
@@ -2161,8 +2167,8 @@ begin
   end;
 
   -- resoluciones como historial: dos resoluciones → dos filas; vale la última
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
-  values (v_id, 'tarjeta', 2, 6, 18000, '990991', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<CAJERO_UUID>'::uuid)
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
+  values (pg_temp.loc(), v_id, 'tarjeta', 2, 6, 18000, '990991', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<CAJERO_UUID>'::uuid)
   returning id into v_mv;
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');
   perform public.club_excepcion_resolver('REGISTRO_SIN_FACTURA', v_mv::text, 'nota A');
@@ -2174,8 +2180,8 @@ begin
   perform pg_temp.r('47', 're-resolver no pisa: quedan las dos (historial) y se muestra la última',
     (select count(*) from club_excepciones_resueltas where ref = v_mv::text) = 2 and j->>'nota' = 'nota B', coalesce(j->>'nota', 'null'));
   -- segregación: el movimiento lo registró el CAJERO; un manager que lo registró no puede resolverlo
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
-  values (v_id, 'tarjeta', 1, 6, 18000, '990992', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<MANAGER_UUID>'::uuid)
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
+  values (pg_temp.loc(), v_id, 'tarjeta', 1, 6, 18000, '990992', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<MANAGER_UUID>'::uuid)
   returning id into v_mv;
   begin
     perform pg_temp.como('authenticated', '<MANAGER_UUID>');
@@ -2225,7 +2231,7 @@ end $$;
 do $$
 declare v_m uuid;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Puente', 'app') returning id into v_m;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Puente', 'app') returning id into v_m;
   insert into pos_ndf_open (local, clave, id_pedido, area, mesa, canal, pax, updated_at, pedido_abierto_en)
   values ('santa-teresa', 'pedido:2026-11-07:9491', '9491', 'M', '9', 'salon', 4, now(), now() - interval '20 minutes');
   update pos_ndf_cursor set last_poll_at = now() - interval '6 minutes', last_error = null where local = 'santa-teresa';
@@ -2251,8 +2257,8 @@ end $$;
 do $$
 declare v_m uuid; v_n uuid; j jsonb;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Clave A', 'app') returning id into v_m;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Clave B', 'app') returning id into v_n;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Clave A', 'app') returning id into v_m;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Clave B', 'app') returning id into v_n;
   -- ayer quedó abierto el 9502 (en R) y hoy se abrió otro 9502
   insert into pos_ndf_open (local, clave, id_pedido, area, mesa, canal, pax, updated_at, pedido_abierto_en) values
     ('santa-teresa', 'pedido:2026-11-06:9502', '9502', 'M', '4', 'salon', 2, now() - interval '20 hours', now() - interval '20 hours'),
@@ -2279,9 +2285,9 @@ end $$;
 do $$
 declare v_m uuid; j jsonb; v_lunes date := (date_trunc('week', now() at time zone 'America/Costa_Rica'))::date;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Comparacion', 'app') returning id into v_m;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
-  values (v_m, 'tarjeta', 5, 6, 18000, 'FC-1', now(), 'app', 'manual');
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Comparacion', 'app') returning id into v_m;
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (pg_temp.loc(), v_m, 'tarjeta', 5, 6, 18000, 'FC-1', now(), 'app', 'manual');
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');
   j := public.club_comparacion_cargar(jsonb_build_array(
          jsonb_build_object('referente', 'ref comparación', 'semana', to_char(v_lunes + 2, 'YYYY-MM-DD'), 'personas', 7),
@@ -2331,7 +2337,7 @@ begin
   perform pg_temp.r('53', 'cada miembro tiene el rol de su tipo (los que ya existían)',
     not exists (select 1 from club_miembros m where m.tipo in ('referente','concierge_pm','equipo','socio')
                  and not exists (select 1 from club_miembro_roles r where r.miembro_id = m.id and r.rol = m.tipo)), '');
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Roles', 'app') returning id into v_m;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Roles', 'app') returning id into v_m;
   perform pg_temp.r('53', 'alta de un referente → rol referente activo', public.club_tiene_rol(v_m, array['referente']), '');
   update club_miembros set tipo = 'equipo' where id = v_m;
   perform pg_temp.r('53', 'cambiar el tipo de anfitrión cambia el rol (uno solo)',
@@ -2346,7 +2352,7 @@ begin
   end;
   -- CLUB-AUD-43: con una persona SIN rol de anfitrión, para que falle el check y no la clave primaria
   begin
-    insert into club_miembros (tipo, nombre, origen) values ('socio', 'Socio Check Ficticio', 'app') returning id into v_m;
+    insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Socio Check Ficticio', 'app') returning id into v_m;
     insert into club_miembro_roles (miembro_id, rol, estado) values (v_m, 'referente', 'pendiente');
     perform pg_temp.r('53', 'anfitrión pendiente', false, 'aceptó');
   exception when check_violation then
@@ -2362,11 +2368,11 @@ end $$;
 do $$
 declare v_s uuid; v_cod text; j jsonb; j2 jsonb; v_err text;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Socio Prueba', 'app') returning id, codigo_socio into v_s, v_cod;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Socio Prueba', 'app') returning id, codigo_socio into v_s, v_cod;
   select codigo_socio into v_cod from club_miembros where id = v_s;
   perform pg_temp.r('54', 'un socio recibe su QR fijo de 9 caracteres', v_cod ~ '^[A-HJ-NP-Z2-9]{9}$' and public.club_tiene_rol(v_s, array['socio']), coalesce(v_cod, 'null'));
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
-  values (v_s, 'ajuste', 18, 6, 18000, now() - interval '1 day', 'migracion');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, fecha_visita, origen)
+  values (pg_temp.loc(), v_s, 'ajuste', 18, 6, 18000, now() - interval '1 day', 'migracion');
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   j := public.club_resolver('https://club.satoricostarica.com/s/' || v_cod);
   j2 := public.club_resolver(lower(v_cod));
@@ -2388,7 +2394,7 @@ end $$;
 do $$
 declare v_s uuid; v_ev bigint;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Socio Anfitrion', 'app') returning id into v_s;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Socio Anfitrion', 'app') returning id into v_s;
   begin
     perform pg_temp.como('authenticated', '<CAJERO_UUID>');
     perform public.club_rol_activar_anfitrion(v_s, 'referente', 'quiere compartir cupones');
@@ -2427,9 +2433,9 @@ end $$;
 do $$
 declare v_r uuid; v_s uuid; v_tok text; j jsonb; j2 jsonb; v_v1 bigint; v_v2 bigint; v_n int; v_ok boolean := true; f text;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ana Pase Ficticia', 'app') returning id, token_portal into v_r, v_tok;
-  insert into club_miembros_contacto (miembro_id, telefono, email) values (v_r, '+50660000077', 'ana.pase@ejemplo.com');
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Beto Pase Ficticio', 'app') returning id into v_s;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ana Pase Ficticia', 'app') returning id, token_portal into v_r, v_tok;
+  insert into club_miembros_contacto (location_id, miembro_id, telefono, email) values (pg_temp.loc(), v_r, '+50660000077', 'ana.pase@ejemplo.com');
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Beto Pase Ficticio', 'app') returning id into v_s;
   update club_miembros set tipo = 'referente' where id = v_s;   -- socio y anfitrión
   insert into club_miembro_roles (miembro_id, rol) values (v_s, 'referente') on conflict do nothing;
   foreach f in array array['public.club_pase_datos(uuid)', 'public.club_pase_eventos_leer(bigint, int)', 'public.club_pase_por_token(text)', 'public.club_alertas_pendientes(int)'] loop
@@ -2452,8 +2458,8 @@ begin
       and j2->'anfitrion'->>'qr_url' like 'https://club.satoricostarica.com/r/%', j2::text);
   perform pg_temp.r('56', 'el pase no lleva contactos', j::text not like '%@%' and j::text not like '%+506%', '');
   v_v1 := (j->>'version')::bigint;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
-  values (v_r, 'tarjeta', 3, 6, 18000, 'FP-1', now(), 'app', 'manual');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (pg_temp.loc(), v_r, 'tarjeta', 3, 6, 18000, 'FP-1', now(), 'app', 'manual');
   set local role service_role;
   v_v2 := (public.club_pase_datos(v_r)->>'version')::bigint;
   select count(*) into v_n from public.club_pase_eventos_leer(v_v1) e where e.miembro_id = v_r and e.motivo = 'movimiento';
@@ -2625,15 +2631,15 @@ begin
     not exists (select 1 from club_miembros_contacto where miembro_id = v_a) and not exists (select 1 from club_miembro_roles where miembro_id = v_a)
       and (select estado = 'baja' and nombre not like '%Eva%' from club_miembros where id = v_a), j::text);
   -- AUD-73: anfitrión activo con una autoalta de socio vieja → solo se borra lo del Local Club; el contacto sigue
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Hugo Anfitrion Ficticio', 'app') returning id into v_g;
-  insert into club_miembros_contacto (miembro_id, telefono) values (v_g, '+50660001239');
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Hugo Anfitrion Ficticio', 'app') returning id into v_g;
+  insert into club_miembros_contacto (location_id, miembro_id, telefono) values (pg_temp.loc(), v_g, '+50660001239');
   insert into club_miembro_roles (miembro_id, rol, estado, alta_por, desde) values (v_g, 'socio', 'pendiente', 'autoalta', now() - interval '31 days');
   -- sin otro rol pero con movimientos → igual se borra el contacto
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Ines Socia Ficticia', 'app') returning id into v_a;
-  insert into club_miembros_contacto (miembro_id, telefono) values (v_a, '+50660001240');
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Ines Socia Ficticia', 'app') returning id into v_a;
+  insert into club_miembros_contacto (location_id, miembro_id, telefono) values (pg_temp.loc(), v_a, '+50660001240');
   update club_miembro_roles set estado = 'pendiente', alta_por = 'autoalta', desde = now() - interval '31 days' where miembro_id = v_a and rol = 'socio';
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
-  values (v_a, 'tarjeta', 1, 6, 18000, 'FP-73', now(), 'app', 'manual');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (pg_temp.loc(), v_a, 'tarjeta', 1, 6, 18000, 'FP-73', now(), 'app', 'manual');
   j := public.club_socios_mantenimiento();
   perform pg_temp.r('57', 'AUD-73: purga de un anfitrión → solo el rol de socio; contacto, nombre y rol de anfitrión siguen',
     exists (select 1 from club_miembros_contacto where miembro_id = v_g)
@@ -2655,8 +2661,8 @@ begin
   -- CLUB-AUD-69: token de pase propio; revocado no genera código
   update club_miembros set tipo = 'referente' where id = v_id;
   insert into club_miembro_roles (miembro_id, rol) values (v_id, 'referente') on conflict do nothing;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
-  values (v_id, 'tarjeta', 12, 6, 18000, 'FP-57', now(), 'app', 'manual');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (pg_temp.loc(), v_id, 'tarjeta', 12, 6, 18000, 'FP-57', now(), 'app', 'manual');
   select token_pase, token_portal into v_tp, v_x from club_miembros where id = v_id;
   set local role anon;
   select codigo into v_cod from public.club_canje_codigo_generar_pase(v_tp);
@@ -2707,15 +2713,15 @@ end $$;
 do $$
 declare v_id uuid; v_mv uuid := gen_random_uuid(); e1 text; e2 text; v_res boolean;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Segregacion Ficticia', 'app') returning id into v_id;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Segregacion Ficticia', 'app') returning id into v_id;
   -- pre-resolver: el (tipo, ref) todavía no existe
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');
   begin perform public.club_excepcion_resolver('REGISTRO_SIN_FACTURA', v_mv::text, 'la dejo resuelta antes'); e1 := 'ok';
   exception when others then e1 := sqlerrm; end;
   perform pg_temp.yo();
   -- ahora aparece: la registró el mismo manager
-  insert into club_movimientos (id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
-  values (v_mv, v_id, 'tarjeta', 1, 6, 18000, '990993', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<MANAGER_UUID>'::uuid);
+  insert into club_movimientos (location_id, id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
+  values (pg_temp.loc(), v_mv, v_id, 'tarjeta', 1, 6, 18000, '990993', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<MANAGER_UUID>'::uuid);
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');
   begin perform public.club_excepcion_resolver('REGISTRO_SIN_FACTURA', v_mv::text, 'la resuelvo yo'); e2 := 'ok';
   exception when others then e2 := sqlerrm; end;
@@ -2739,11 +2745,11 @@ end $$;
 do $$
 declare v_id uuid; v_mv uuid; v_t uuid; c1 text; c2 text; v_ex boolean;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Legacy Ficticia', 'app') returning id into v_id;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Legacy Ficticia', 'app') returning id into v_id;
   insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
   values ('990995', now() - interval '3 hours', 'X', 'salon', 'cajero', true, 'ok', 30000) returning id into v_t;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
-  values (v_id, 'tarjeta', 2, 6, 18000, '990995', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<CAJERO_UUID>'::uuid)
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
+  values (pg_temp.loc(), v_id, 'tarjeta', 2, 6, 18000, '990995', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<CAJERO_UUID>'::uuid)
   returning id into v_mv;
   c1 := pg_temp.cruce(v_mv);
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
@@ -2821,8 +2827,8 @@ begin
     e like 'Está terminada%' and (select count(*) from club_auditoria where objeto_id = v_p2 and accion in ('promocion_alta','promocion_edicion')) = 2, e);
 
   -- pase: socio activo ve la promo y su beneficio; pendiente no; sin cortesías activas no hay «sorpresa»
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Jose Pase Ficticio', 'app') returning id into v_s;
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Kari Pase Ficticia', 'app') returning id into v_r;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Jose Pase Ficticio', 'app') returning id into v_s;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Kari Pase Ficticia', 'app') returning id into v_r;
   update club_miembro_roles set estado = 'pendiente' where miembro_id = v_r and rol = 'socio';
   set local role service_role;
   j := public.club_pase_datos(v_s);
@@ -2863,7 +2869,7 @@ begin
   for i in 2..10 loop perform public.club_cortesia_guardar(null, 'ZZ-NUEVO-' || i, 'Cortesia ' || i, i % 2 = 0); end loop;
   begin perform public.club_cortesia_guardar(null, 'ZZ-NUEVO-11', 'Once', true); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
-  begin insert into club_cortesias (codigo_producto, nombre) values ('ZZ-NUEVO-12', 'Doce'); e := e || '/ok'; exception when others then e := e || '/' || sqlerrm; end;
+  begin insert into club_cortesias (location_id, codigo_producto, nombre) values (pg_temp.loc(), 'ZZ-NUEVO-12', 'Doce'); e := e || '/ok'; exception when others then e := e || '/' || sqlerrm; end;
   perform pg_temp.r('60', 'máximo 10 cortesías: la 11.ª se rechaza, también por fuera de la función',
     e like 'Ya hay 10 cortesías%/Ya hay 10 cortesías%' and (select count(*) from club_cortesias) = 10, e);
   -- desactivar y listar; el manager lista, no edita
@@ -2904,8 +2910,8 @@ end $$;
 do $$
 declare v_a uuid; v_b uuid; n1 int; n2 int; v_prim uuid;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Pase Emitido A Ficticio', 'app') returning id into v_a;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Pase Emitido B Ficticio', 'app') returning id into v_b;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Pase Emitido A Ficticio', 'app') returning id into v_a;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Pase Emitido B Ficticio', 'app') returning id into v_b;
   set local role service_role;
   perform public.club_pase_emitido(v_a, 'google', '3388000000012345678.club-' || v_a);
   perform public.club_pase_emitido(v_b, 'google', '3388000000012345678.club-' || v_b);
@@ -2932,11 +2938,11 @@ begin
     ('santa-teresa', 'pedido:9064', '9064', '64', 'salon', 2, now() - interval '30 minutes', now() - interval '30 minutes'),
     ('santa-teresa', 'pedido:9065', '9065', '65', 'salon', 2, now() - interval '30 minutes', now() - interval '30 minutes'),
     ('santa-teresa', 'pedido:9066', '9066', '66', 'salon', 4, now() - interval '30 minutes', now() - interval '30 minutes');
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Lu Visita Ficticia', 'app') returning id into v_s;
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Mo Visita Ficticio', 'app') returning id into v_s2;
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Nia Visita Ficticia', 'app') returning id into v_s3;
-  insert into club_miembros (tipo, nombre, origen) values ('socio', 'Oto Visita Ficticio', 'app') returning id into v_s4;
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Pia Anfitriona Socia Ficticia', 'app') returning id, codigo into v_sr, v_cod;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Lu Visita Ficticia', 'app') returning id into v_s;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Mo Visita Ficticio', 'app') returning id into v_s2;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Nia Visita Ficticia', 'app') returning id into v_s3;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Oto Visita Ficticio', 'app') returning id into v_s4;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Pia Anfitriona Socia Ficticia', 'app') returning id, codigo into v_sr, v_cod;
   insert into club_miembro_roles (miembro_id, rol) values (v_sr, 'socio');
   select id into v_p from club_promociones where nombre = 'Local Club' and location_id = public.club_local(null);
   update club_promociones set estado = 'terminada' where id <> v_p;   -- las de la prueba 60
@@ -2959,9 +2965,9 @@ begin
       and (select count(*) from club_visitas_socio where miembro_id = v_s) = 1, j2::text);
 
   -- con cortesías: sorteo, y el replay de la misma operación da la misma
-  insert into club_cortesias (codigo_producto, nombre) values ('CC-1', 'Crepe ficticio') returning id into v_c1;
-  insert into club_cortesias (codigo_producto, nombre) values ('CC-2', 'Flan ficticio') returning id into v_c2;
-  insert into club_cortesias (codigo_producto, nombre, activa) values ('CC-3', 'Apagada ficticia', false);
+  insert into club_cortesias (location_id, codigo_producto, nombre) values (pg_temp.loc(), 'CC-1', 'Crepe ficticio') returning id into v_c1;
+  insert into club_cortesias (location_id, codigo_producto, nombre) values (pg_temp.loc(), 'CC-2', 'Flan ficticio') returning id into v_c2;
+  insert into club_cortesias (location_id, codigo_producto, nombre, activa) values (pg_temp.loc(), 'CC-3', 'Apagada ficticia', false);
   v_op := gen_random_uuid();
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   j := public.club_socio_visita(v_s2, '{"modo":"pedido","pedido":"9064","clave":"pedido:9064"}', v_op);
@@ -2973,8 +2979,8 @@ begin
   perform pg_temp.r('63', 'la visita deja un evento para el pase', exists (select 1 from club_pase_eventos where miembro_id = v_s2 and motivo = 'cortesia'), '');
 
   -- regla fija: canje después de la visita → la visita queda marcada con_canje
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
-  values (v_sr, 'tarjeta', 12, 6, 18000, 'FP-63', now() - interval '1 day', 'app', 'manual');
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (pg_temp.loc(), v_sr, 'tarjeta', 12, 6, 18000, 'FP-63', now() - interval '1 day', 'app', 'manual');
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_canje_aprobado(v_sr, 1, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9064","clave":"pedido:9064"}', 'prueba de la regla fija');
   perform pg_temp.yo();
@@ -3002,7 +3008,7 @@ begin
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_socio_visita(v_sr, '{"modo":"pedido","pedido":"9066","clave":"pedido:9066"}', gen_random_uuid());
   perform pg_temp.yo();
-  insert into club_cupones (referente_id, vence_en) values (v_sr, now() + interval '1 day') returning codigo into v_cup;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_sr, now() + interval '1 day') returning codigo into v_cup;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   begin perform public.club_cupon_usar(v_cup, 2, null, gen_random_uuid(), '{"modo":"pedido","pedido":"9066","clave":"pedido:9066"}'); e := 'ok';
   exception when others then e := sqlerrm; end;
@@ -3039,8 +3045,8 @@ end $f$;
 create function pg_temp.socio(p_nombre text, p_tel text, p_ref uuid) returns uuid language plpgsql as $f$
 declare v uuid;
 begin
-  insert into club_miembros (tipo, nombre, origen) values ('socio', p_nombre, 'app') returning id into v;
-  insert into club_miembros_contacto (miembro_id, telefono) values (v, p_tel);
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', p_nombre, 'app') returning id into v;
+  insert into club_miembros_contacto (location_id, miembro_id, telefono) values (pg_temp.loc(), v, p_tel);
   update club_miembro_roles set referido_por = p_ref, validado_por = '<MANAGER_UUID>'::uuid where miembro_id = v and rol = 'socio';
   return v;
 end $f$;
@@ -3134,15 +3140,15 @@ declare v_n uuid; v_v uuid; c1 text; c2 text; c3 text; c4 text; c5 text; c6 text
 begin
   update club_config set valor_credito_crc = 18000, personas_por_credito = 6, anfitrion_tope_mes_crc = 25000, anfitrion_nuevo_dias = 90
    where location_id = 'santa-teresa';
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Nuevo Anfitrion Ficticio', 'app') returning id into v_n;
-  insert into club_miembros (tipo, nombre, origen, created_at) values ('referente', 'Viejo Anfitrion Ficticio', 'app', now() - interval '1 year') returning id into v_v;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Nuevo Anfitrion Ficticio', 'app') returning id into v_n;
+  insert into club_miembros (location_id, tipo, nombre, origen, created_at) values (pg_temp.loc(), 'referente', 'Viejo Anfitrion Ficticio', 'app', now() - interval '1 year') returning id into v_v;
   update club_miembro_roles set desde = now() - interval '1 year' where miembro_id = v_v;
-  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c1;
-  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c2;
-  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c3;
-  insert into club_cupones (referente_id, vence_en) values (v_v, now() + interval '1 day') returning codigo into c4;
-  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c5;
-  insert into club_cupones (referente_id, vence_en) values (v_v, now() + interval '1 day') returning codigo into c6;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_n, now() + interval '1 day') returning codigo into c1;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_n, now() + interval '1 day') returning codigo into c2;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_n, now() + interval '1 day') returning codigo into c3;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_v, now() + interval '1 day') returning codigo into c4;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_n, now() + interval '1 day') returning codigo into c5;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_v, now() + interval '1 day') returning codigo into c6;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   select * into r from public.club_cupon_usar(c1, 6, '990651', gen_random_uuid());      -- ₡18.000: suma
   perform pg_temp.yo();
@@ -3214,7 +3220,7 @@ begin
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_socio_visita(v_q, '{"modo":"pedido","pedido":"9081","clave":"pedido:9081"}', gen_random_uuid());
   perform pg_temp.yo();
-  insert into club_premios (beneficiario, referido, estado, vence_en) values (v_q, v_x, 'disponible', now() + interval '30 days');
+  insert into club_premios (location_id, beneficiario, referido, estado, vence_en) values (pg_temp.loc(), v_q, v_x, 'disponible', now() + interval '30 days');
   set local role service_role;
   j := public.club_pase_datos(v_q);
   reset role;
@@ -3275,7 +3281,7 @@ begin
     pg_temp.hay(pg_temp.exc('CORTESIA_DISTINTA'), 'config:cortesia_club') and pg_temp.hay(pg_temp.exc('CORTESIA_SIN_SOCIO'), 'config:cortesia_club')
       and pg_temp.hay(pg_temp.exc('CORTESIA_NO_CONFIGURADA'), 'config:cortesia_club'), '');
   update club_config set cortesia_familia = 17 where location_id = 'santa-teresa';
-  insert into club_cortesias (codigo_producto, nombre, familia) values ('CC-1', 'Crepe ficticio', 17);
+  insert into club_cortesias (location_id, codigo_producto, nombre, familia) values (pg_temp.loc(), 'CC-1', 'Crepe ficticio', 17);
 
   -- LC_SIN_REGISTRO
   perform pg_temp.factura('990101', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"856","m":0}]');
@@ -3347,24 +3353,24 @@ begin
     pg_temp.hay(pg_temp.exc('SOCIO_USO_ANOMALO'), 'socio-dia:' || v_s || ':' || (now() at time zone 'America/Costa_Rica')::date), '');
 
   -- CUPON_AUTOREFERIDO: un cupón del anfitrión cargado en la visita donde él es socio (se cuela por fuera del control)
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Uma Autoref Ficticia', 'app') returning id into v_sr;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Uma Autoref Ficticia', 'app') returning id into v_sr;
   insert into club_miembro_roles (miembro_id, rol) values (v_sr, 'socio');
   perform pg_temp.factura('990601', 1, 0, '[{"c":"856","m":0}]', '9601');
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_socio_visita(v_sr, '{"modo":"pedido","pedido":"9601","clave":"pedido:9601"}', gen_random_uuid());
   perform pg_temp.yo();
   select visita_clave into v_clave from club_visitas_socio where miembro_id = v_sr;
-  insert into club_cupones (referente_id, vence_en, estado, usado_en, personas) values (v_sr, now() + interval '1 day', 'usado', now(), 2);
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, cupon_id, fecha_visita, registrado_en, origen, visita_clave, pos_ref, registrado_por)
-  select v_sr, 'tarjeta', 2, 6, 18000, c.id, now() - interval '30 minutes', now() - interval '30 minutes', 'app', v_clave,
+  insert into club_cupones (location_id, referente_id, vence_en, estado, usado_en, personas) values (pg_temp.loc(), v_sr, now() + interval '1 day', 'usado', now(), 2);
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, cupon_id, fecha_visita, registrado_en, origen, visita_clave, pos_ref, registrado_por)
+  select pg_temp.loc(), v_sr, 'tarjeta', 2, 6, 18000, c.id, now() - interval '30 minutes', now() - interval '30 minutes', 'app', v_clave,
          '{"modo":"pedido","pedido":"9601","clave":"pedido:9601"}'::jsonb, '<CAJERO_UUID>'::uuid
     from club_cupones c where c.referente_id = v_sr returning id into v_mov;
   perform pg_temp.r('67', 'CUPON_AUTOREFERIDO: cupón del anfitrión en la visita donde él es socio', pg_temp.hay(pg_temp.exc('CUPON_AUTOREFERIDO'), 'autoref:' || v_mov), '');
 
   -- ANFITRION_SOBRE_TOPE: 12 personas en el mes (₡36.000 > ₡25.000)
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Vale Tope Ficticia', 'app') returning id into v_a;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
-  values (v_a, 'tarjeta', 12, 6, 18000, '990701', now() - interval '1 hour', 'app', 'manual');
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Vale Tope Ficticia', 'app') returning id into v_a;
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (pg_temp.loc(), v_a, 'tarjeta', 12, 6, 18000, '990701', now() - interval '1 hour', 'app', 'manual');
   perform pg_temp.r('67', 'ANFITRION_SOBRE_TOPE: ganado en el mes por encima de ₡25.000 (siempre, no solo el nuevo)',
     pg_temp.hay(pg_temp.exc('ANFITRION_SOBRE_TOPE'), 'tope:' || v_a || ':' || to_char(now() at time zone 'America/Costa_Rica', 'YYYY-MM')), '');
 
@@ -3502,11 +3508,11 @@ begin
   perform pg_temp.r('69', 'Grok 91: configurable — con 2 socios por factura, el segundo sí tiene beneficio', j2->>'estado' in ('aplica','pendiente_configuracion'), j2::text);
 
   -- Grok 93: aprobar revalida (anfitrión activo, factura no anulada, cupón no anulado)
-  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Nuevo Noventa Ficticio', 'app') returning id into v_n;
-  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c1;
-  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c2;
-  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
-  values (v_n, 'tarjeta', 9, 6, 18000, '880693', now() - interval '1 hour', 'app', 'manual');      -- ya ganó ₡27.000 en el mes
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Nuevo Noventa Ficticio', 'app') returning id into v_n;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_n, now() + interval '1 day') returning codigo into c1;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_n, now() + interval '1 day') returning codigo into c2;
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (pg_temp.loc(), v_n, 'tarjeta', 9, 6, 18000, '880693', now() - interval '1 hour', 'app', 'manual');      -- ya ganó ₡27.000 en el mes
   perform pg_temp.factura('880694', 1, 0, '[{"c":"P1","m":9000,"f":5}]');
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_cupon_usar(c1, 2, '880694', op);
@@ -3729,9 +3735,12 @@ begin
   perform pg_temp.yo();
   perform pg_temp.r('72', 'apagado: la visita en el local nuevo se rechaza (negativa)', e = 'El Club no está activo en Local Genérico', e);
   -- ninguna tabla del Club tiene un local escrito como default
-  perform pg_temp.r('72', 'ningún default de location_id nombra un local',
-    not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name like 'club\_%'
-                 and column_name = 'location_id' and column_default ~ '''[a-z0-9-]+'''), '');
+  perform pg_temp.r('72', 'location_id NOT NULL y SIN default en todas las tablas del Club (nunca se asume un local)',
+    not exists (select 1 from information_schema.columns c join information_schema.tables t using (table_schema, table_name)
+                 where c.table_schema = 'public' and c.table_name like 'club\_%' and t.table_type = 'BASE TABLE'
+                   and c.column_name = 'location_id' and (c.column_default is not null or c.is_nullable = 'YES')), '');
+  begin insert into club_miembros (tipo, nombre, origen) values ('socio', 'Sin Local', 'app'); e := 'ok'; exception when others then e := sqlstate; end;
+  perform pg_temp.r('72', 'una inserción sin local falla (negativa)', e = '23502', e);
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

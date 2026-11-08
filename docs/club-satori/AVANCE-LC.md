@@ -237,3 +237,11 @@
 | Manager | Dar de alta un local o encenderlo | Solo el owner (pruebas 70 y 72) | — |
 | Cualquiera | Insertar datos del Club sin local con dos locales encendidos | El default de `location_id` exige un único local encendido; si no, falla | — |
 | Anónimo | Aceptar un aviso viejo | La autoalta exige la versión vigente (`v1`) | — |
+
+- 08-nov (tarde 4) · **location_id sin default** (Ismael): NOT NULL y SIN default en todas las tablas del Club; nunca se
+  asume un local en silencio. El migrador pasa `--local`; la batería declara su local UNA vez (`pg_temp.loc()`, el único
+  encendido en staging; si no hay exactamente uno, no arranca) y sus 134 inserciones lo pasan explícito (las carreras,
+  sus 4). Prueba 72: ninguna tabla tiene default ni acepta nulo, y una inserción sin local falla (23502).
+  Batería 457/457 · paridad 863 = 863 · carreras 8/8 · migrador 15 OK.
+  Autorrevisión: el riesgo era un dato del Club cargado en otro local sin que nadie lo note; ahora falla. Un script
+  nuevo que inserte sin local se entera en la primera corrida.

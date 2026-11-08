@@ -10,7 +10,7 @@
  * o GOOGLE_WALLET_SA_KEY responde 503 y no llama a la base. Nunca devuelve mensajes crudos de la base ni de Google.
  */
 import {
-  armarClase, armarObjeto, firmarJwt, leerCuentaServicio, urlGuardar, validarDatos, idObjeto, DISENO_POR_DEFECTO,
+  armarClase, armarObjeto, firmarJwt, leerCuentaServicio, urlGuardar, validarDatos, idObjeto, DISENO_POR_DEFECTO, configurarBaseClub,
   type PaseDatos, type DisenoPase,
 } from './googlePase.ts'
 import { sincronizar, actualizarUno, type Fetch } from './sincronizar.ts'
@@ -61,6 +61,8 @@ function diseno(env: EnvPase): DisenoPase {
  * Fallan cerradas sin sus secretos. `fetchFn` es la red hacia Google (inyectada para las pruebas).
  */
 export async function manejarSync(req: Request, ruta: 'sync' | 'actualizar', env: EnvPase, rpc: Rpc, fetchFn: Fetch, ahora = new Date()): Promise<Response> {
+  // (08-nov noche) el dominio del Club sale de CLUB_WEB_ORIGIN (= club_config_global.club_url); sin él, falla cerrada
+  if (!configurarBaseClub(env.CLUB_WEB_ORIGIN)) return json(503, { error: 'servicio_no_disponible' })
   if (req.method !== 'POST') return json(405, { error: 'metodo' })
   if (!env.GOOGLE_WALLET_ISSUER_ID || !env.GOOGLE_WALLET_SA_KEY) return json(503, { error: 'servicio_no_disponible' })
   let sa
@@ -91,6 +93,8 @@ export async function manejarSync(req: Request, ruta: 'sync' | 'actualizar', env
 }
 
 export async function manejarPase(req: Request, ruta: string, env: EnvPase, rpc: Rpc, ahora = new Date()): Promise<Response> {
+  // (08-nov noche) el dominio del Club sale de CLUB_WEB_ORIGIN (= club_config_global.club_url); sin él, falla cerrada
+  if (!configurarBaseClub(env.CLUB_WEB_ORIGIN)) return json(503, { error: 'servicio_no_disponible' })
   if (req.method !== 'POST') return json(405, { error: 'metodo' })
   if (ruta !== 'google') return json(404, { error: 'no_encontrado' })   // Apple (B4) va apagado por flag
   // Falla cerrada: sin la configuración completa no se toca la base.
@@ -129,7 +133,7 @@ export async function manejarPase(req: Request, ruta: string, env: EnvPase, rpc:
   const issuer = env.GOOGLE_WALLET_ISSUER_ID
   try {
     jwt = await firmarJwt(sa, armarClase(issuer), armarObjeto(issuer, datos, diseno(env)),
-                          [env.CLUB_WEB_ORIGIN || 'https://club.satoricostarica.com'], ahora)
+                          [env.CLUB_WEB_ORIGIN as string], ahora)
   } catch { return json(503, { error: 'servicio_no_disponible' }) }
 
   // 4. registrar el pase emitido (para B3: a quién actualizar y la baja)

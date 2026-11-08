@@ -2,9 +2,10 @@
 // (nunca hay una clave escrita en el repo, ni de prueba).
 import { describe, it, expect, beforeAll } from 'vitest'
 import {
-  armarClase, armarObjeto, colones, DISENO_PROPUESTO, firmarJwt, firmarJwtFlaco, LARGO_JWT_RECOMENDADO, urlGuardar, validarDatos, leerCuentaServicio, beneficioEn, idObjeto,
+  armarClase, armarObjeto, colones, disenoPropuesto, configurarBaseClub, firmarJwt, firmarJwtFlaco, LARGO_JWT_RECOMENDADO, urlGuardar, validarDatos, leerCuentaServicio, beneficioEn, idObjeto,
   type PaseDatos, type CuentaServicio,
 } from './googlePase'
+configurarBaseClub('https://club.ejemplo.test')   // (08-nov noche) el dominio es configuración
 
 const ISSUER = '3388000000012345678'
 const TOKEN_PASE = 'a'.repeat(64)
@@ -19,19 +20,19 @@ const base = (over: Partial<PaseDatos> = {}): PaseDatos => ({
   estado: 'activo',
   local: { id: 'local-prueba', nombre: 'Local Prueba' },
   pestanas: ['mi_club', 'anfitrion'],
-  codigo_barras: { tipo: 'socio', valor: 'https://club.satoricostarica.com/s/ABCD2345K' },
+  codigo_barras: { tipo: 'socio', valor: 'https://club.ejemplo.test/s/ABCD2345K' },
   socio: {
-    estado: 'activo', desde: '2026-11-10', qr_url: 'https://club.satoricostarica.com/s/ABCD2345K',
+    estado: 'activo', desde: '2026-11-10', qr_url: 'https://club.ejemplo.test/s/ABCD2345K',
     beneficio: '10 % + 1 cortesía', visitas_mes: 3,
     cortesias: [{ sorpresa: true, cantidad: 1, motivo: 'promo', vence_en: null }],
   },
   anfitrion: {
-    activo: true, tipo: 'referente', codigo_publico: 'ABCD2345', qr_url: 'https://club.satoricostarica.com/r/ABCD2345',
+    activo: true, tipo: 'referente', codigo_publico: 'ABCD2345', qr_url: 'https://club.ejemplo.test/r/ABCD2345',
     personas: 14, creditos: 2, personas_proximo_medio: 1, valor_credito_crc: 18000, referidos_mes: 9, creditos_ganados_mes: 1.5,
   },
   promociones: [{ id: '8f0e0000-0000-4000-8000-000000000001', nombre: 'Local Club', nombre_en: null, beneficio: '10 % + 1 cortesía',
                   para: ['socio'], vigente_hasta: null, dias: [1, 2, 3, 4, 5, 6, 7], horario: null }],
-  canjear_url: `https://club.satoricostarica.com/w/${TOKEN_PASE}`,
+  canjear_url: `https://club.ejemplo.test/w/${TOKEN_PASE}`,
   ...over,
 })
 
@@ -64,7 +65,7 @@ describe('validarDatos (contrato v1)', () => {
     expect(validarDatos({ ...base(), contrato: 2 })).toMatch(/contrato/)
     expect(validarDatos(base({ nombre_pila: 'ana@ejemplo.com' }))).toMatch(/contacto/)
     expect(validarDatos(base({ nombre_pila: '+50688887777' }))).toMatch(/contacto/)
-    expect(validarDatos(base({ canjear_url: `https://club.satoricostarica.com/p/${'b'.repeat(64)}` }))).toMatch(/token de pase/)
+    expect(validarDatos(base({ canjear_url: `https://club.ejemplo.test/p/${'b'.repeat(64)}` }))).toMatch(/token de pase/)
     expect(validarDatos(base({ codigo_barras: { tipo: 'socio', valor: 'https://otro.ejemplo/s/X' } }))).toMatch(/dominio/)
   })
 })
@@ -75,9 +76,9 @@ describe('armarObjeto', () => {
     expect(o.id).toBe(idObjeto(ISSUER, '00000000-0000-4000-8000-00000000c0de'))
     expect(o.classId).toBe(`${ISSUER}.club-satori`)
     expect(o.state).toBe('ACTIVE')
-    expect(o.barcode).toEqual({ type: 'QR_CODE', value: 'https://club.satoricostarica.com/s/ABCD2345K', alternateText: 'ABCD2345K' })
+    expect(o.barcode).toEqual({ type: 'QR_CODE', value: 'https://club.ejemplo.test/s/ABCD2345K', alternateText: 'ABCD2345K' })
     expect(o.linksModuleData.uris.map((u) => u.id)).toEqual(['canjear', 'cupones'])
-    expect(o.linksModuleData.uris[0].uri).toBe(`https://club.satoricostarica.com/w/${TOKEN_PASE}`)
+    expect(o.linksModuleData.uris[0].uri).toBe(`https://club.ejemplo.test/w/${TOKEN_PASE}`)
     const ids = o.textModulesData.map((t) => t.id)
     expect(ids).toEqual(expect.arrayContaining(['socio', 'cortesia', 'creditos', 'proximo']))
     const cort = o.textModulesData.find((t) => t.id === 'cortesia')
@@ -122,9 +123,9 @@ describe('armarObjeto', () => {
   it('solo anfitrión: el código de barras es el QR de cupones y no se repite como link', () => {
     const o = obj(armarObjeto(ISSUER, base({
       pestanas: ['anfitrion'], socio: null,
-      codigo_barras: { tipo: 'cupones', valor: 'https://club.satoricostarica.com/r/ABCD2345' },
+      codigo_barras: { tipo: 'cupones', valor: 'https://club.ejemplo.test/r/ABCD2345' },
     })))
-    expect(o.barcode?.value).toBe('https://club.satoricostarica.com/r/ABCD2345')
+    expect(o.barcode?.value).toBe('https://club.ejemplo.test/r/ABCD2345')
     expect(o.linksModuleData.uris.map((u) => u.id)).toEqual(['canjear'])
     expect(o.subheader.defaultValue.value).toBe('Anfitrión')
   })
@@ -132,7 +133,7 @@ describe('armarObjeto', () => {
   it('socio pendiente: aviso de validar, sin beneficio ni cortesías', () => {
     const o = obj(armarObjeto(ISSUER, base({
       pestanas: ['mi_club'], anfitrion: null, canjear_url: null, promociones: [],
-      socio: { estado: 'pendiente', desde: '2026-11-10', qr_url: 'https://club.satoricostarica.com/s/ABCD2345K', beneficio: null, visitas_mes: 0, cortesias: [] },
+      socio: { estado: 'pendiente', desde: '2026-11-10', qr_url: 'https://club.ejemplo.test/s/ABCD2345K', beneficio: null, visitas_mes: 0, cortesias: [] },
     })))
     expect(o.textModulesData).toHaveLength(1)
     expect(o.textModulesData[0].body).toMatch(/^Validá tu alta/)
@@ -160,9 +161,9 @@ describe('armarObjeto', () => {
   it('diseño: sin aprobar no lleva logo ni franja; con la propuesta, sí (https del Club)', () => {
     const sin = armarObjeto(ISSUER, base()) as Record<string, unknown>
     expect(sin.logo).toBeUndefined(); expect(sin.heroImage).toBeUndefined()
-    const con = armarObjeto(ISSUER, base(), DISENO_PROPUESTO) as { logo: { sourceUri: { uri: string } }; heroImage: { sourceUri: { uri: string } }; hexBackgroundColor: string }
-    expect(con.logo.sourceUri.uri).toBe('https://club.satoricostarica.com/pase/logo.png')
-    expect(con.heroImage.sourceUri.uri).toBe('https://club.satoricostarica.com/pase/hero.png')
+    const con = armarObjeto(ISSUER, base(), disenoPropuesto('https://club.ejemplo.test')) as { logo: { sourceUri: { uri: string } }; heroImage: { sourceUri: { uri: string } }; hexBackgroundColor: string }
+    expect(con.logo.sourceUri.uri).toBe('https://club.ejemplo.test/pase/logo.png')
+    expect(con.heroImage.sourceUri.uri).toBe('https://club.ejemplo.test/pase/hero.png')
     expect(con.hexBackgroundColor).toBe('#0d0d0d')
   })
 
@@ -178,11 +179,11 @@ describe('firmarJwt («Save to Google Wallet»)', () => {
     const clase = armarClase(ISSUER)
     const objeto = armarObjeto(ISSUER, base())
     const ahora = new Date('2026-11-08T08:00:00Z')
-    const jwt = await firmarJwt(sa, clase, objeto, ['https://club.satoricostarica.com'], ahora)
+    const jwt = await firmarJwt(sa, clase, objeto, ['https://club.ejemplo.test'], ahora)
     const [h, p, f] = jwt.split('.')
     expect(decodificar(h)).toEqual({ alg: 'RS256', typ: 'JWT' })
     const claims = decodificar(p)
-    expect(claims).toMatchObject({ iss: sa.client_email, aud: 'google', typ: 'savetowallet', iat: 1794124800, origins: ['https://club.satoricostarica.com'] })
+    expect(claims).toMatchObject({ iss: sa.client_email, aud: 'google', typ: 'savetowallet', iat: 1794124800, origins: ['https://club.ejemplo.test'] })
     expect(claims.payload.genericClasses[0].id).toBe(`${ISSUER}.club-satori`)
     expect(claims.payload.genericObjects[0].id).toBe(objeto.id)
     const firma = Buffer.from(f.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
@@ -193,8 +194,8 @@ describe('firmarJwt («Save to Google Wallet»)', () => {
 
   it('el completo pasa el largo recomendado; el flaco (solo id y classId) entra y no lleva datos', async () => {
     const objeto = armarObjeto(ISSUER, base())
-    const completo = await firmarJwt(sa, armarClase(ISSUER), objeto, ['https://club.satoricostarica.com'])
-    const flaco = await firmarJwtFlaco(sa, objeto, ['https://club.satoricostarica.com'])
+    const completo = await firmarJwt(sa, armarClase(ISSUER), objeto, ['https://club.ejemplo.test'])
+    const flaco = await firmarJwtFlaco(sa, objeto, ['https://club.ejemplo.test'])
     expect(completo.length).toBeGreaterThan(LARGO_JWT_RECOMENDADO)
     expect(flaco.length).toBeLessThan(LARGO_JWT_RECOMENDADO)
     const claims = decodificar(flaco.split('.')[1])

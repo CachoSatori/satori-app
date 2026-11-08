@@ -25,6 +25,6 @@
 ## Cómo se enciende (después de la prueba en un teléfono y el OK de Ismael)
 - En el Edge `club-pase`, secreto/variable
   `WALLET_DISENO = {"colorFondo":"#0d0d0d","logoUrl":"https://club.satoricostarica.com/pase/logo.png","heroUrl":"https://club.satoricostarica.com/pase/hero.png"}`
-- Es la constante `DISENO_PROPUESTO` de `src/shared/wallet/googlePase.ts`.
+- Es `disenoPropuesto(<dominio>)` de `src/shared/wallet/googlePase.ts` (el dominio sale de la configuración).
 - Antes: publicar club-web (las imágenes tienen que estar en línea) y probar «Guardar en Google Wallet» en un teléfono
   real con la cuenta de emisor de Ismael.

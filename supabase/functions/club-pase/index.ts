@@ -15,7 +15,8 @@
 //   GOOGLE_WALLET_ISSUER_ID  número del emisor (Google Pay & Wallet Console)
 //   GOOGLE_WALLET_SA_KEY     JSON de la cuenta de servicio con acceso al emisor
 //   CLUB_PASE_SYNC_KEY       (B3) el del programador que llama a /club-pase/sync (≥ 32; distinto de CLUB_WEB_KEY)
-//   (opcionales) CLUB_WEB_ORIGIN, WALLET_DISENO = {"colorFondo":"#0d0d0d","logoUrl":"https://…"}
+//   CLUB_WEB_ORIGIN (obligatorio desde 08-nov: el dominio del Club = club_config_global.club_url; sin él, 503)
+//   (opcionales) WALLET_DISENO = {"colorFondo":"#0d0d0d","logoUrl":"https://…"}
 // Sin cualquiera de los tres primeros: 503 a todo (fail-closed), sin tocar la base.
 //
 // ── ESTADO ────────────────────────────────────────────────────────────────────────────────

@@ -2,6 +2,8 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { sincronizar, mensajeCanje, tokenGoogle, API_WALLET, URL_TOKEN, type Rpc, type Fetch } from './sincronizar'
 import type { CuentaServicio, PaseDatos } from './googlePase'
+import { configurarBaseClub } from './googlePase'
+configurarBaseClub('https://club.ejemplo.test')   // (08-nov noche) el dominio es configuración
 
 const ISSUER = '3388000000012345678'
 const A = '00000000-0000-4000-8000-0000000000aa'
@@ -9,8 +11,8 @@ const B = '00000000-0000-4000-8000-0000000000bb'
 const datos = (id: string, over: Partial<PaseDatos> = {}): PaseDatos => ({
   contrato: 1, miembro_id: id, version: 9, actualizado_en: '2026-11-08T08:00:00Z', nombre_pila: 'Cami', estado: 'activo',
   local: { id: 'local-prueba', nombre: 'Local Prueba' }, pestanas: ['anfitrion'],
-  codigo_barras: { tipo: 'cupones', valor: 'https://club.satoricostarica.com/r/ABCD2345' }, socio: null,
-  anfitrion: { activo: true, tipo: 'referente', codigo_publico: 'ABCD2345', qr_url: 'https://club.satoricostarica.com/r/ABCD2345',
+  codigo_barras: { tipo: 'cupones', valor: 'https://club.ejemplo.test/r/ABCD2345' }, socio: null,
+  anfitrion: { activo: true, tipo: 'referente', codigo_publico: 'ABCD2345', qr_url: 'https://club.ejemplo.test/r/ABCD2345',
                personas: 6, creditos: 1, personas_proximo_medio: 3, valor_credito_crc: 18000, referidos_mes: 6, creditos_ganados_mes: 1 },
   promociones: [], canjear_url: null, ...over,
 })

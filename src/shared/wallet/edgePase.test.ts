@@ -11,10 +11,10 @@ const MIEMBRO = '00000000-0000-4000-8000-00000000beef'
 const datos = (over: Partial<PaseDatos> = {}): PaseDatos => ({
   contrato: 1, miembro_id: MIEMBRO, version: 7, actualizado_en: '2026-11-08T08:00:00Z', nombre_pila: 'Beto', estado: 'activo',
   local: { id: 'local-prueba', nombre: 'Local Prueba' }, pestanas: ['anfitrion'],
-  codigo_barras: { tipo: 'cupones', valor: 'https://club.satoricostarica.com/r/ABCD2345' }, socio: null,
-  anfitrion: { activo: true, tipo: 'referente', codigo_publico: 'ABCD2345', qr_url: 'https://club.satoricostarica.com/r/ABCD2345',
+  codigo_barras: { tipo: 'cupones', valor: 'https://club.ejemplo.test/r/ABCD2345' }, socio: null,
+  anfitrion: { activo: true, tipo: 'referente', codigo_publico: 'ABCD2345', qr_url: 'https://club.ejemplo.test/r/ABCD2345',
                personas: 6, creditos: 1, personas_proximo_medio: 3, valor_credito_crc: 18000, referidos_mes: 6, creditos_ganados_mes: 1 },
-  promociones: [], canjear_url: `https://club.satoricostarica.com/w/${'d'.repeat(64)}`, ...over,
+  promociones: [], canjear_url: `https://club.ejemplo.test/w/${'d'.repeat(64)}`, ...over,
 })
 
 let env: EnvPase
@@ -23,7 +23,7 @@ beforeAll(async () => {
     { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify'])
   const der = new Uint8Array(await crypto.subtle.exportKey('pkcs8', par.privateKey))
   const pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...der))}\n-----END PRIVATE KEY-----\n`
-  env = { CLUB_WEB_KEY: CLAVE_WEB, GOOGLE_WALLET_ISSUER_ID: ISSUER,
+  env = { CLUB_WEB_KEY: CLAVE_WEB, GOOGLE_WALLET_ISSUER_ID: ISSUER, CLUB_WEB_ORIGIN: 'https://club.ejemplo.test',
           GOOGLE_WALLET_SA_KEY: JSON.stringify({ client_email: 'pase-prueba@proyecto-falso.iam.gserviceaccount.com', private_key: pem }) }
 })
 
@@ -98,6 +98,15 @@ describe('club-pase (Edge)', () => {
     expect(await r.text()).not.toMatch(/detalle interno/)
     expect((await manejarPase(pedido(null, { 'x-club-web': CLAVE_WEB }, 'GET'), 'google', env, rpc)).status).toBe(405)
     expect((await manejarPase(pedido({ token: TOKEN }), 'apple', env, rpc)).status).toBe(404)
+  })
+
+  it('(08-nov noche) sin CLUB_WEB_ORIGIN (el dominio del Club) → 503, falla cerrada, sin llamar a la base', async () => {
+    const { CLUB_WEB_ORIGIN, ...sinDominio } = env; void CLUB_WEB_ORIGIN
+    let llamadas = 0
+    const r = await manejarPase(new Request('https://x/club-pase/google', { method: 'POST', headers: { 'x-club-web': CLAVE_WEB }, body: JSON.stringify({ token: 'a'.repeat(64) }) }),
+      'google', sinDominio as EnvPase, async () => { llamadas++; return { data: null, error: null } })
+    expect(r.status).toBe(503)
+    expect(llamadas).toBe(0)
   })
 
   it('cuerpo enorme o no JSON → 400', async () => {

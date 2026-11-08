@@ -49,7 +49,14 @@ export interface PaseDatos {
   canjear_url: string | null
 }
 
-export const BASE_CLUB = 'https://club.satoricostarica.com'
+/** (08-nov noche) El dominio del Club es configuración (Edge: CLUB_WEB_ORIGIN = club_config_global.club_url), no código.
+ *  Sin configurar, validarDatos rechaza todo (falla cerrada). */
+let BASE_CLUB: string | null = null
+export function configurarBaseClub(url: string | null | undefined): boolean {
+  const v = (url ?? '').trim().replace(/\/+$/, '')
+  BASE_CLUB = /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(v) ? v : null
+  return BASE_CLUB !== null
+}
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const RE_ISSUER = /^\d{10,25}$/
 
@@ -62,6 +69,7 @@ export function validarDatos(d: unknown): string | null {
   if (typeof x.version !== 'number') return 'falta version'
   if (x.estado !== 'activo' && x.estado !== 'baja') return 'estado no válido'
   if (!Array.isArray(x.pestanas)) return 'faltan pestañas'
+  if (!BASE_CLUB) return 'falta el dominio del Club (CLUB_WEB_ORIGIN)'
   if (x.codigo_barras && !String(x.codigo_barras.valor ?? '').startsWith(BASE_CLUB + '/')) return 'código de barras fuera del dominio del Club'
   if (x.canjear_url && !x.canjear_url.startsWith(BASE_CLUB + '/w/')) return 'canjear_url no es un token de pase'
   const txt = JSON.stringify(d)
@@ -101,11 +109,11 @@ export interface DisenoPase {
   heroUrl?: string | null
 }
 /** Propuesta del 08-nov (docs/club-satori/PROPUESTA-diseno-pase.md). Se usa recién cuando Ismael la aprueba, vía WALLET_DISENO. */
-export const DISENO_PROPUESTO: DisenoPase = {
+export const disenoPropuesto = (base: string): DisenoPase => ({
   colorFondo: '#0d0d0d',
-  logoUrl: 'https://club.satoricostarica.com/pase/logo.png',
-  heroUrl: 'https://club.satoricostarica.com/pase/hero.png',
-}
+  logoUrl: `${base}/pase/logo.png`,
+  heroUrl: `${base}/pase/hero.png`,
+})
 export const DISENO_POR_DEFECTO: DisenoPase = { colorFondo: '#0d0d0d', logoUrl: null }
 
 export const idClase = (issuerId: string) => `${issuerId}.club-satori`

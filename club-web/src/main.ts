@@ -7,6 +7,8 @@
  *   /s/{codigo9}  QR fijo del socio del Local Club: lo lee la caja; abierto en un navegador, solo un aviso
  *   /alta         autoalta del socio (LC-DES-07): nombre + WhatsApp + aviso de privacidad + Turnstile → pendiente
  *   /w/{token}    botón «Canjear» del pase de Wallet (token de pase, CLUB-AUD-69): solo genera el código de canje
+ *   /b/{codigo10} baja del turista (LC-PRIV): borra el contacto que dejó con ese cupón
+ *   /privacidad   aviso de privacidad completo (la versión vigente)
  * Todo pasa por /api/* (Pages Function con tope por IP). El DOM se arma sin innerHTML.
  */
 import './styles.css'
@@ -124,7 +126,7 @@ function formOptin(codigo: string): HTMLElement {
       if (!ok.checked || (!wa.value.trim() && !em.value.trim())) { err.append(avisoEl('err', t.optin_falta)); return }
       enviar.disabled = true
       const r = await api<boolean>(`cupon/${codigo}/contacto`, { method: 'POST',
-        body: JSON.stringify({ contacto: { nombre: nombre.value, whatsapp: wa.value, email: em.value, optin: true } }) })
+        body: JSON.stringify({ contacto: { nombre: nombre.value, whatsapp: wa.value, email: em.value, optin: true, acepto: AVISO_PRIVACIDAD_VERSION } }) })
       enviar.disabled = false
       if (r.ok) { marcarOptin(codigo); form.replaceWith(avisoEl('ok', t.optin_gracias)); anunciar(t.optin_gracias) }
       else err.append(avisoEl('err', r.error === 'datos_invalidos' ? t.optin_falta : msgError(r.error)))
@@ -133,9 +135,40 @@ function formOptin(codigo: string): HTMLElement {
     h('label', { for: 'o-nombre' }, t.optin_nombre), nombre,
     h('label', { for: 'o-wa' }, t.optin_whatsapp), wa,
     h('label', { for: 'o-em' }, t.optin_email), em,
+    avisoCorto(codigo),
     h('label', { class: 'check', for: 'o-ok' }, ok, h('span', {}, t.optin_acepto)),
     err, enviar)
   return h('details', { class: 'tarjeta' }, h('summary', {}, t.optin_titulo), form)
+}
+
+/** LC-PRIV (Grok 63): el aviso corto del turista, con link al aviso v1 completo y a la baja (con el código del cupón). */
+function avisoCorto(codigo: string): HTMLElement {
+  return h('div', { class: 'aviso-priv corto' },
+    h('p', {}, t.optin_aviso),
+    h('p', { class: 'sub' },
+      h('a', { href: '/privacidad', target: '_blank', rel: 'noopener' }, `${t.optin_aviso_completo} (${AVISO_PRIVACIDAD_VERSION})`),
+      ' · ',
+      h('a', { href: `/b/${codigo}` }, t.optin_baja)))
+}
+
+function paginaPrivacidad() {
+  pintar(h('h1', {}, t.priv_titulo),
+    h('section', { class: 'tarjeta aviso-priv' }, ...t.alta_aviso.split('\n').map((p) => h('p', {}, p)),
+      h('p', { class: 'sub' }, `(${AVISO_PRIVACIDAD_VERSION})`)))
+}
+
+/** LC-PRIV (Grok 63): baja del turista. El link va en el aviso corto y en cada mensaje de ofertas: /b/{código del cupón}. */
+function paginaBajaTurista(codigo: string) {
+  if (!/^[A-HJ-NP-Z2-9]{10}$/.test(codigo)) return pintar(h('h1', {}, t.baja_t_titulo), avisoEl('err', t.cupon_invalido))
+  const err = h('div')
+  const boton = h('button', { type: 'button', class: 'btn sec' }, t.baja_t_boton) as HTMLButtonElement
+  boton.addEventListener('click', async () => {
+    boton.disabled = true; err.replaceChildren()
+    const r = await api<boolean>(`cupon/${codigo}/baja`, { method: 'POST', body: '{}' })
+    if (r.ok) { boton.replaceWith(avisoEl('ok', t.baja_t_listo)); anunciar(t.baja_t_listo); return }
+    boton.disabled = false; err.append(avisoEl('err', msgError(r.error)))
+  })
+  pintar(h('h1', {}, t.baja_t_titulo), h('p', { class: 'sub' }, t.baja_t_txt), err, boton)
 }
 
 async function paginaReferente(ref: string) {
@@ -148,9 +181,16 @@ async function paginaReferente(ref: string) {
   }
   const err = h('div')
   const boton = h('button', { type: 'button', class: 'btn' }, t.obtener) as HTMLButtonElement
+  // Grok 24: Turnstile también al crear el cupón (como en el alta). El script se carga solo si hay que pedir uno.
+  const caja = h('div', { class: 'turnstile' })
+  let token = ''
+  const widget: { id?: string; ts?: TurnstileApi | null } = {}
   boton.addEventListener('click', async () => {
-    boton.disabled = true; boton.textContent = t.obteniendo; err.replaceChildren()
-    const r = await api<Array<{ codigo: string; vence_en: string }>>('cupon', { method: 'POST', body: JSON.stringify({ referente: ref }) })
+    err.replaceChildren()
+    if (!token) { err.append(avisoEl('err', widget.ts === null ? t.alta_verificacion : t.cupon_verifica)); return }
+    boton.disabled = true; boton.textContent = t.obteniendo
+    const r = await api<Array<{ codigo: string; vence_en: string }>>('cupon', { method: 'POST', body: JSON.stringify({ referente: ref, turnstile: token }) })
+    token = ''; widget.ts?.reset(widget.id)
     if (r.ok && r.data?.[0]) {
       const c = r.data[0]
       guardarCupon(ref, c)
@@ -164,7 +204,11 @@ async function paginaReferente(ref: string) {
     err.append(avisoEl('err', msgError(e)))
     if (e === 'referente_invalido') boton.remove()
   })
-  pintar(h('h1', {}, t.titulo_r), h('p', { class: 'sub' }, t.sub_r(null)), err, boton)
+  pintar(h('h1', {}, t.titulo_r), h('p', { class: 'sub' }, t.sub_r(null)), caja, err, boton)
+  widget.ts = await cargarTurnstile()
+  if (!widget.ts) { err.append(avisoEl('err', t.alta_verificacion)); return }
+  widget.id = widget.ts.render(caja, { sitekey: TURNSTILE_SITEKEY, language: idioma,
+    callback: (v: string) => { token = v }, 'expired-callback': () => { token = '' }, 'error-callback': () => { token = '' } })
 }
 
 async function paginaCupon(codigo: string) {
@@ -324,7 +368,7 @@ function pestanas(miClub: HTMLElement[], anfitrion: HTMLElement[]): HTMLElement[
   return [h('div', { class: 'tabs', role: 'tablist' }, bA, bB), panelA, panelB]
 }
 
-// Turnstile (Cloudflare): el script se carga solo en /alta.
+// Turnstile (Cloudflare): el script se carga solo en /alta y al pedir un cupón (/r/).
 type TurnstileApi = { render: (el: HTMLElement, o: Record<string, unknown>) => string; reset: (id?: string) => void }
 function cargarTurnstile(): Promise<TurnstileApi | null> {
   const w = window as unknown as { turnstile?: TurnstileApi }
@@ -409,7 +453,8 @@ function ruta() {
   document.documentElement.lang = idioma
   document.querySelectorAll<HTMLButtonElement>('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === idioma)))
   if (/^\/alta\/?$/.test(location.pathname)) return paginaAlta()
-  const m = location.pathname.match(/^\/([rcpksw])\/([^/]+)\/?$/)
+  if (/^\/privacidad\/?$/.test(location.pathname)) return paginaPrivacidad()
+  const m = location.pathname.match(/^\/([rcpkswb])\/([^/]+)\/?$/)
   if (!m) return pintar(h('h1', {}, t.inicio), h('p', { class: 'sub' }, t.inicio_txt))
   const [, tipo, cod] = m
   if (tipo === 'r') return paginaReferente(cod.toUpperCase())
@@ -417,6 +462,7 @@ function ruta() {
   if (tipo === 'k') return pintar(h('h1', {}, t.canje_qr), h('p', { class: 'sub' }, t.k_txt))
   if (tipo === 's') return pintar(h('h1', {}, t.s_titulo), h('p', { class: 'sub' }, t.s_txt))
   if (tipo === 'w') return paginaPase(cod.toLowerCase())
+  if (tipo === 'b') return paginaBajaTurista(cod.toUpperCase())
   return paginaPortal(cod.toLowerCase())
 }
 

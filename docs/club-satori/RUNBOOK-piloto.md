@@ -194,7 +194,8 @@ key y sin el header responde «Código no válido».
 **Hacer:** en Pages `satori-club` (producción): `SUPABASE_URL` y `SUPABASE_ANON_KEY` de PROD, y los bindings `RL_CREAR`
 (5 por 60 s) y `RL_LEER` (60 por 60 s) de `wrangler.toml`. **Turnstile (LC-DES-07):** crear el widget en Cloudflare
 para `club.satoricostarica.com`; la clave del sitio va en `VITE_TURNSTILE_SITEKEY` (variable de build) y la secreta en el
-**Secret** `TURNSTILE_SECRET` (las carga Ismael; sin ella la autoalta responde 503). Después, el deploy y el dominio.
+**Secret** `TURNSTILE_SECRET` (las carga Ismael; **sin ella la autoalta Y la creación de cupones responden 503**: desde
+Grok 24 el cupón también pide Turnstile). Después, el deploy y el dominio.
 **Verificar:**
 - `/api/salud` → todo en `true` (incluido `turnstile`).
 - **CLUB-AUD-74: Turnstile de prod NO es el de prueba.** La clave del sitio del build (`VITE_TURNSTILE_SITEKEY`) no
@@ -206,7 +207,11 @@ para `club.satoricostarica.com`; la clave del sitio va en `VITE_TURNSTILE_SITEKE
   wifi → la sexta dice «Demasiados intentos seguidos».
 - Alerta de cupo: al 80 % de `socio_autoalta_max_dia` queda una fila `tipo = 'autoalta_cupo'` en `club_alertas`.
 - `/alta`: el widget aparece; un alta de prueba queda **pendiente** y se borra a mano después.
-- 6 «Obtener mi cupón» seguidos desde un teléfono: el sexto dice «Demasiados intentos seguidos».
+- 6 «Obtener mi cupón» seguidos desde un teléfono: el sexto dice «Demasiados intentos seguidos». Grok 24: lo mismo desde
+  dos teléfonos en el mismo wifi (tope por prefijo de red), y `/r/…` muestra el widget de Turnstile antes del botón.
+- Grok 63: en el cupón, «¿Querés recibir ofertas?» muestra el aviso resumido con «Aviso completo (v1)» (abre
+  `/privacidad`) y «Darme de baja» (abre `/b/<código>`); un opt-in de prueba queda en `club_cupones_contactos` con
+  `aviso_version` = la vigente, y `/b/<código>` lo borra (fila `baja_contacto_turista` en `club_auditoria`).
 - Las cabeceras de `_headers`: CSP `script-src 'self'` y no-store en `/api`.
 - Si Pages no toma los bindings: el «Plan B» de `club-web/README.md` (`/api` en un Worker).
 

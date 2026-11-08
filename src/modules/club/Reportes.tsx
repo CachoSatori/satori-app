@@ -4,7 +4,7 @@
  * del navegador → «Guardar como PDF». «Exportar CSV» baja el anexo con todas las filas.
  */
 import { useEffect, useState } from 'react'
-import { getReporteMes, getLocalesClub, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero, getReporteVisitas, type VisitasPorUsuario } from '../../shared/api/club'
+import { getReporteMes, getLocalesClub, localActual, type LocalClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero, getReporteVisitas, type VisitasPorUsuario, registrarExporte } from '../../shared/api/club'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
@@ -61,6 +61,8 @@ export default function Reportes() {
 
   async function exportarPdf() {
     if (!rep) return
+    // LC-PRIV (Grok 41): el exporte queda en club_auditoria antes de armarse; si no se puede registrar, no se exporta
+    try { await registrarExporte('html', `${mes}-01`, local) } catch (e) { setError(aClubError(e).message); return }
     const { reporteHtml } = await import('./reporteHtml')
     const url = URL.createObjectURL(new Blob([reporteHtml(rep)], { type: 'text/html' }))
     const w = window.open(url, '_blank')
@@ -69,6 +71,8 @@ export default function Reportes() {
   }
   async function exportarCsv() {
     if (!rep) return
+    // LC-PRIV (Grok 41): el exporte queda en club_auditoria antes de armarse; si no se puede registrar, no se exporta
+    try { await registrarExporte('csv', `${mes}-01`, local) } catch (e) { setError(aClubError(e).message); return }
     const { reporteCsv } = await import('./reporteHtml')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([reporteCsv(rep)], { type: 'text/csv;charset=utf-8' }))

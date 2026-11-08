@@ -253,9 +253,14 @@ export const getMovimientos = (miembro: string) =>
   leer(from<ClubMovimiento>('club_movimientos')
     .select('id,tipo,personas,creditos,factura_pos,fecha_visita,nota,origen')
     .eq('miembro_id', miembro).order('fecha_visita', { ascending: false }).limit(200))
+/** Contacto del miembro (owner, manager). LC-PRIV (Grok 41): solo por la función, que deja rastro en club_auditoria
+ *  (quién y cuándo, sin el dato); la tabla ya no se lee directo. */
 export const getContacto = async (miembro: string) =>
-  (await leer(from<ClubContacto>('club_miembros_contacto')
-    .select('miembro_id,telefono,email,optin_whatsapp,optin_email').eq('miembro_id', miembro).limit(1)))[0] ?? null
+  primero(await llamar<ClubContacto[]>('club_miembro_contacto_ver', { p_miembro: miembro })) ?? null
+
+/** LC-PRIV (Grok 41): registra el exporte del reporte del mes ANTES de armarlo (si falla, no se exporta). */
+export const registrarExporte = (formato: 'csv' | 'html', mes: string, location: string | null) =>
+  llamar<null>('club_registrar_exporte', { p_formato: formato, p_mes: mes, p_location: location })
 
 /** Valores de canje habilitados por la config (1, 1,5, 2 con la de hoy). */
 export function opcionesCanje(c: Pick<ClubConfig, 'canje_min' | 'canje_paso' | 'max_creditos_por_visita'>): number[] {

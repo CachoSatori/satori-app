@@ -51,6 +51,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 import {
   localDelSecreto,
+  resolverLocalLegado,
+  revisarCatalogo,
+  type CatalogoLocales,
   normalizarLote,
   validarPayload,
   type CursorRow,
@@ -63,8 +66,27 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const POS_INGEST_SECRET = Deno.env.get('POS_INGEST_SECRET') ?? ''
 // CLUB-AUD-32: un secreto por local, JSON {"<local>": "…"}. Si está, manda sobre el de arriba.
 const POS_INGEST_SECRETS = Deno.env.get('POS_INGEST_SECRETS') ?? ''
-// LC-ML: el local del secreto único de antes (ninguno escrito en el código). Sin esta variable, ese secreto no vale.
-const POS_INGEST_LOCAL_LEGADO = Deno.env.get('POS_INGEST_LOCAL_LEGADO') ?? ''
+// LC-ML: el local del secreto único de antes. Sin esta variable vale el histórico, CON aviso en cada pedido (no corta).
+const LEGADO = resolverLocalLegado(Deno.env.get('POS_INGEST_LOCAL_LEGADO'))
+
+// LC-ML: catálogo de locales (locations y/o club_config), leído con service_role y guardado 5 minutos por instancia.
+const CATALOGO_TTL_MS = 5 * 60_000
+let catalogoCache: { valor: CatalogoLocales; hasta: number } | null = null
+let avisoSinCatalogoDado = false
+
+async function leerCatalogo(sb: Cliente): Promise<CatalogoLocales> {
+  if (catalogoCache && catalogoCache.hasta > Date.now()) return catalogoCache.valor
+  const ids = new Set<string>()
+  let hayTabla = false
+  // Una tabla que no existe en esta base (prod hoy no tiene ninguna de las dos) devuelve error: se ignora.
+  const loc = await sb.from('locations').select('id')
+  if (!loc.error) { hayTabla = true; for (const r of (loc.data ?? []) as { id: string }[]) ids.add(r.id) }
+  const cfg = await sb.from('club_config').select('location_id')
+  if (!cfg.error) { hayTabla = true; for (const r of (cfg.data ?? []) as { location_id: string }[]) ids.add(r.location_id) }
+  const valor: CatalogoLocales = hayTabla ? ids : null
+  catalogoCache = { valor, hasta: Date.now() + CATALOGO_TTL_MS }
+  return valor
+}
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -116,7 +138,13 @@ Deno.serve(async (req) => {
     }
     // CLUB-AUD-32: el secreto decide el local (mapa por local; el secreto único, solo para POS_INGEST_LOCAL_LEGADO).
     const localAutorizado = localDelSecreto(req.headers.get('x-ingest-secret') ?? '',
-      { mapa: POS_INGEST_SECRETS, legado: POS_INGEST_SECRET, localLegado: POS_INGEST_LOCAL_LEGADO }, safeEqual)
+      { mapa: POS_INGEST_SECRETS, legado: POS_INGEST_SECRET, localLegado: LEGADO.local }, safeEqual)
+    // Entró por el secreto único (sin mapa) y la variable falta o está mal: se avisa fuerte en cada pedido.
+    const avisos: string[] = []
+    if (!POS_INGEST_SECRETS && LEGADO.aviso) {
+      console.warn(`ingest-ndf: ${LEGADO.aviso}`)
+      avisos.push(LEGADO.aviso)
+    }
     if (!localAutorizado) {
       // Mismo mensaje para "falta" y "no coincide": no se le confirma nada al que prueba.
       return json({ ok: false, error: 'No autorizado' }, 401)
@@ -137,13 +165,27 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: 'No autorizado' }, 401)
     }
 
+    // LC-ML: el local tiene que existir en el catálogo (si la base tiene catálogo). Un error de tipeo en el mapa de
+    // secretos no puede crear un local fantasma en pos_ndf_* (que no tienen FK sobre `local`).
+    sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+    const revision = revisarCatalogo(local, POS_INGEST_SECRETS, await leerCatalogo(sb))
+    for (const a of revision.avisos) {
+      // «sin catálogo» se loguea una vez por instancia (en prod hoy es lo normal); lo demás, siempre.
+      if (a.startsWith('Sin catálogo') && avisoSinCatalogoDado) continue
+      if (a.startsWith('Sin catálogo')) avisoSinCatalogoDado = true
+      console.warn(`ingest-ndf [${local}]: ${a}`)
+    }
+    avisos.push(...revision.avisos)
+    if (!revision.ok) {
+      // No se anota en el cursor: ese local no existe, no hay fila que tocar.
+      return json({ ok: false, error: 'Local no registrado', avisos }, 403)
+    }
+
     // ── 4. Normalizar (todo el trabajo lo hace el módulo puro) ───────────────────────────
     // Un ticket corrupto NO tumba el lote: se descarta, se cuenta y se loguea. Si un solo registro
     // raro devolviera 400, el agente reintentaría para siempre y el local dejaría de sincronizar.
     const lote = normalizarLote(sobre.valor, new Date().toISOString())
     if (lote.problemas.length > 0) console.warn(`ingest-ndf [${local}] descartes:`, lote.problemas)
-
-    sb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
     // ── 5–8. Todo en UNA transacción por local (CLUB-AUD-44/45, mig 082) ──────────────────────
     // Antes eran varias llamadas sueltas (upsert de tickets, borrar líneas, insertar líneas, snapshot de mesas,
@@ -181,6 +223,8 @@ Deno.serve(async (req) => {
       // no traía `cursor`, es la fila TAL CUAL está guardada (no se escribió nada).
       cursor: res.cursor ?? null,
       cursor_escrito: lote.cursor !== null,
+      // LC-ML: avisos de configuración (variable de legado, catálogo). No frenan: se ven en el log del agente y del Edge.
+      avisos,
     }, 200)
   } catch (e) {
     const mensaje = e instanceof Error ? e.message : String(e)

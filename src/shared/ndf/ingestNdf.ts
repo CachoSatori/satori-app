@@ -808,3 +808,70 @@ export function localDelSecreto(
   if (legado.length >= 32 && esLocalValido(loc) && igual(header, legado)) return loc
   return null
 }
+
+// ── LC-ML (08-nov): el local del secreto único y el catálogo de locales ─────────────────────────────────────────────
+
+/**
+ * El local que tenía el secreto único ANTES del mapa por local. Es un dato histórico (el único local con agente
+ * cuando existía un solo secreto), no una lista de locales: solo se usa si falta `POS_INGEST_LOCAL_LEGADO`, y con
+ * aviso en cada pedido, para que olvidar la variable no corte la ingesta de un local que ya andaba.
+ */
+export const LOCAL_LEGADO_HISTORICO = 'santa-teresa'
+
+export interface LegadoResuelto { local: string | null; aviso: string | null }
+
+/**
+ * `POS_INGEST_LOCAL_LEGADO` → el local del secreto único.
+ *   · bien escrita → ese local, sin aviso;
+ *   · ausente o vacía → el histórico, CON aviso (no corta);
+ *   · con un id inválido → null (nadie entra con el secreto único) y aviso: un error de tipeo no puede mandar las
+ *     ventas a un local inventado.
+ */
+export function resolverLocalLegado(variable: string | null | undefined): LegadoResuelto {
+  const v = (variable ?? '').trim()
+  if (v === '') {
+    return {
+      local: LOCAL_LEGADO_HISTORICO,
+      aviso: `Falta POS_INGEST_LOCAL_LEGADO: el secreto único se acepta para «${LOCAL_LEGADO_HISTORICO}» (el de siempre). ` +
+             'Cargá la variable o pasá el local a POS_INGEST_SECRETS.',
+    }
+  }
+  if (!esLocalValido(v)) {
+    return { local: null, aviso: `POS_INGEST_LOCAL_LEGADO inválido («${v.slice(0, 40)}»): el secreto único no autoriza a nadie.` }
+  }
+  return { local: v, aviso: null }
+}
+
+/** Los locales que existen en la base (ids de `locations` y/o `location_id` de `club_config`); null = no hay catálogo. */
+export type CatalogoLocales = ReadonlySet<string> | null
+
+export interface RevisionCatalogo {
+  /** false = el local autorizado no está en el catálogo: no se escribe nada. */
+  ok: boolean
+  avisos: string[]
+}
+
+/**
+ * Cada local del mapa de secretos tiene que existir en el catálogo. Un error de tipeo en una clave del mapa (o en la
+ * variable de legado) no puede crear un local fantasma en `pos_ndf_*`, que no tienen FK sobre `local`.
+ *   · Sin catálogo (la base no tiene `locations` ni `club_config`, como prod hoy): no se puede validar → ok, con aviso.
+ *   · El local que escribe no está → no ok.
+ *   · Otras claves del mapa que no están → aviso (no frena a los locales que sí existen).
+ */
+export function revisarCatalogo(local: string, mapaTxt: string | null | undefined, catalogo: CatalogoLocales): RevisionCatalogo {
+  if (catalogo === null) {
+    return { ok: true, avisos: ['Sin catálogo de locales en esta base (locations / club_config): no se valida el local.'] }
+  }
+  const avisos: string[] = []
+  let claves: string[] = []
+  if (mapaTxt && mapaTxt.trim()) {
+    try { claves = Object.keys(JSON.parse(mapaTxt) as Record<string, unknown>) } catch { claves = [] }
+  }
+  const faltan = claves.filter((k) => !catalogo.has(k))
+  if (faltan.length > 0) avisos.push(`POS_INGEST_SECRETS tiene locales que no existen en el catálogo: ${faltan.join(', ')}.`)
+  if (!catalogo.has(local)) {
+    avisos.push(`El local «${local}» no existe en el catálogo (locations / club_config): no se escribe nada.`)
+    return { ok: false, avisos }
+  }
+  return { ok: true, avisos }
+}

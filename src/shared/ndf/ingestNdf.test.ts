@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest'
 
 import {
   localDelSecreto,
+  LOCAL_LEGADO_HISTORICO,
+  resolverLocalLegado,
+  revisarCatalogo,
   CR_OFFSET,
   MAX_TICKETS,
   MAX_TEXTO,
@@ -615,5 +618,45 @@ describe('CLUB-AUD-48: topes de largo', () => {
     expect(t.ok && t.valor.fila.area?.length).toBe(MAX_TEXTO)
     expect(normalizarTicket('santa-teresa', ticket({ numero_factura: '9'.repeat(MAX_CLAVE + 1) })).ok).toBe(false)
     expect(normalizarOpen('santa-teresa', { clave: 'p'.repeat(MAX_CLAVE + 1) }, AHORA).ok).toBe(false)
+  })
+})
+
+describe('LC-ML: variable de legado y catálogo de locales', () => {
+  it('sin POS_INGEST_LOCAL_LEGADO: el histórico, con aviso claro (no corta)', () => {
+    const r = resolverLocalLegado(undefined)
+    expect(r.local).toBe(LOCAL_LEGADO_HISTORICO)
+    expect(r.aviso).toMatch(/Falta POS_INGEST_LOCAL_LEGADO/)
+    expect(resolverLocalLegado('   ').local).toBe(LOCAL_LEGADO_HISTORICO)
+  })
+  it('bien escrita: ese local, sin aviso; mal escrita: nadie entra, con aviso', () => {
+    expect(resolverLocalLegado('playa-nueva')).toEqual({ local: 'playa-nueva', aviso: null })
+    const mal = resolverLocalLegado('Playa Nueva')
+    expect(mal.local).toBeNull()
+    expect(mal.aviso).toMatch(/inválido/)
+  })
+  it('con el histórico resuelto, el secreto único vuelve a autorizar (como antes del mapa)', () => {
+    const S = 'a'.repeat(40)
+    expect(localDelSecreto(S, { legado: S, localLegado: resolverLocalLegado(undefined).local }, (a, b) => a === b))
+      .toBe(LOCAL_LEGADO_HISTORICO)
+  })
+  const mapa = JSON.stringify({ 'santa-teresa': 'a'.repeat(40), 'playa-nueva': 'b'.repeat(40), 'tipeo-mal': 'c'.repeat(40) })
+  const catalogo = new Set(['santa-teresa', 'playa-nueva'])
+  it('el local que escribe existe → ok; las claves del mapa que no existen → aviso', () => {
+    const r = revisarCatalogo('santa-teresa', mapa, catalogo)
+    expect(r.ok).toBe(true)
+    expect(r.avisos.join(' ')).toMatch(/tipeo-mal/)
+  })
+  it('el local que escribe no existe en el catálogo → no se escribe', () => {
+    const r = revisarCatalogo('tipeo-mal', mapa, catalogo)
+    expect(r.ok).toBe(false)
+    expect(r.avisos.join(' ')).toMatch(/no existe en el catálogo/)
+  })
+  it('sin catálogo en la base (prod hoy): no se puede validar → ok, con aviso', () => {
+    const r = revisarCatalogo('santa-teresa', mapa, null)
+    expect(r.ok).toBe(true)
+    expect(r.avisos[0]).toMatch(/Sin catálogo/)
+  })
+  it('mapa roto: no rompe la revisión (el portón ya lo rechazó antes)', () => {
+    expect(revisarCatalogo('santa-teresa', '{roto', catalogo)).toEqual({ ok: true, avisos: [] })
   })
 })

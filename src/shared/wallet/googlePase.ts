@@ -150,9 +150,9 @@ export function armarObjeto(issuerId: string, d: PaseDatos, diseno: DisenoPase =
     textos.push(modulo('socio', { es: 'Local Club', en: 'Local Club' },
       { es: 'Validá tu alta en tu próxima visita: mostrá este pase en caja.', en: 'Validate your sign-up on your next visit: show this pass at the register.' }))
   } else if (soc && soc.estado === 'activo') {
-    const ben = soc.beneficio
+    // Club compartido (Ismael, 08-nov): el beneficio del socio vale en todos los locales: texto GENÉRICO, no la promo de un local
     textos.push(modulo('socio', { es: 'Local Club', en: 'Local Club' },
-      ben ? { es: ben, en: beneficioEn(ben) } : { es: 'Socio activo', en: 'Active member' }))
+      { es: 'Vale en todos los Satori', en: 'Valid at every Satori' }))
     const sorpresas = soc.cortesias.filter(c => c.sorpresa).reduce((s, c) => s + c.cantidad, 0)
     if (sorpresas > 0) {
       textos.push(modulo('cortesia', { es: 'Tu próxima visita', en: 'Your next visit' },
@@ -176,9 +176,7 @@ export function armarObjeto(issuerId: string, d: PaseDatos, diseno: DisenoPase =
     }
   }
 
-  for (const p of d.promociones.slice(0, 3)) {
-    textos.push(modulo(`promo-${p.id.slice(0, 8)}`, { es: p.nombre, en: p.nombre_en ?? p.nombre }, { es: p.beneficio, en: beneficioEn(p.beneficio) }))
-  }
+  // (08-nov) el pase no lista promociones: el texto del socio es genérico («Vale en todos los Satori»)
 
   const subtitulo: Txt = d.pestanas.includes('mi_club') && d.pestanas.includes('anfitrion')
     ? { es: 'Socio y anfitrión', en: 'Member and host' }

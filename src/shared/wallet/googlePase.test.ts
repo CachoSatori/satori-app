@@ -86,6 +86,14 @@ describe('armarObjeto', () => {
     expect(o.subheader.defaultValue.value).toBe('Socio y anfitrión')
   })
 
+  it('Club compartido: el socio ve «Vale en todos los Satori» (ES/EN) y el pase no lista promociones', () => {
+    const o = obj(armarObjeto(ISSUER, base()))
+    const soc = o.textModulesData.find((t) => t.id === 'socio')
+    expect(soc?.body).toBe('Vale en todos los Satori')
+    expect(soc?.localizedBody.translatedValues[0]).toEqual({ language: 'en', value: 'Valid at every Satori' })
+    expect(o.textModulesData.some((t) => t.id.startsWith('promo-'))).toBe(false)
+  })
+
   it('solo anfitrión: el código de barras es el QR de cupones y no se repite como link', () => {
     const o = obj(armarObjeto(ISSUER, base({
       pestanas: ['anfitrion'], socio: null,

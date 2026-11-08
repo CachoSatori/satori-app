@@ -1357,8 +1357,14 @@ begin
   exception when others then
     perform pg_temp.r('33', 'cambiar personas_por_credito con saldos vivos → error', sqlstate = 'P0001' and sqlerrm like 'No se puede cambiar la tasa%', sqlerrm);
   end;
-  update club_config set cupon_dias = cupon_dias where location_id = 'santa-teresa';
-  perform pg_temp.r('33', 'los otros campos de la config se siguen pudiendo cambiar', true, '');
+  -- CLUB-AUD-43: verificar el cambio, no solo que no falle
+  update club_config set cupon_dias = cupon_dias + 1 where location_id = 'santa-teresa';
+  perform pg_temp.r('33', 'los otros campos de la config se siguen pudiendo cambiar (cupon_dias cambió de verdad)',
+    exists (select 1 from club_config_historial h
+             where h.campo = 'cupon_dias' and h.location_id = 'santa-teresa'
+               and h.valor_nuevo::int = (select cupon_dias from club_config where location_id = 'santa-teresa')
+               and h.valor_anterior::int = (select cupon_dias from club_config where location_id = 'santa-teresa') - 1), '');
+  update club_config set cupon_dias = cupon_dias - 1 where location_id = 'santa-teresa';
 end $$;
 
 -- ═══ 34. CLUB-AUD-04 (S-20): el reporte de un mes cerrado no cambia ═══
@@ -1953,7 +1959,9 @@ begin
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_excepcion_resolver('CANJE_SIN_CODIGO', j->>'ref', 'Revisado: el referente lo confirma');
   perform pg_temp.yo();
-  perform pg_temp.r('43', 'otra persona (el owner) sí lo resuelve', true, '');
+  perform pg_temp.r('43', 'otra persona (el owner) sí lo resuelve (queda la resolución a su nombre)',
+    exists (select 1 from club_excepciones_resueltas x where x.tipo = 'CANJE_SIN_CODIGO' and x.ref = j->>'ref'
+             and x.resuelto_por = '<OWNER_UUID>'::uuid and x.nota = 'Revisado: el referente lo confirma'), '');
 
   begin
     perform pg_temp.como('authenticated', '<OWNER_UUID>');
@@ -2071,7 +2079,9 @@ begin
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');
   perform public.club_excepcion_resolver('TARJETA_MANUAL', j->>'ref', 'Tarjeta física del comercio, revisada');
   perform pg_temp.yo();
-  perform pg_temp.r('45', 'la resuelve otra persona (el manager)', true, '');
+  perform pg_temp.r('45', 'la resuelve otra persona (el manager), a su nombre',
+    exists (select 1 from club_excepciones_resueltas x where x.tipo = 'TARJETA_MANUAL' and x.ref = j->>'ref'
+             and x.resuelto_por = '<MANAGER_UUID>'::uuid), '');
 end $$;
 
 -- ═══ 46. CLUB-AUD-30: el staff no lee los códigos (QR público ni cupones) ═══
@@ -2333,11 +2343,13 @@ begin
   exception when unique_violation then
     perform pg_temp.r('53', 'un solo rol de anfitrión por persona', true, sqlerrm);
   end;
+  -- CLUB-AUD-43: con una persona SIN rol de anfitrión, para que falle el check y no la clave primaria
   begin
-    insert into club_miembro_roles (miembro_id, rol, estado) values (v_m, 'equipo', 'pendiente');
+    insert into club_miembros (tipo, nombre, origen) values ('socio', 'Socio Check Ficticio', 'app') returning id into v_m;
+    insert into club_miembro_roles (miembro_id, rol, estado) values (v_m, 'referente', 'pendiente');
     perform pg_temp.r('53', 'anfitrión pendiente', false, 'aceptó');
-  exception when others then
-    perform pg_temp.r('53', 'solo el socio puede estar pendiente', true, sqlerrm);
+  exception when check_violation then
+    perform pg_temp.r('53', 'solo el socio puede estar pendiente (check, no otra restricción)', true, sqlerrm);
   end;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   select count(*) into v_n from public.club_miembro_roles;

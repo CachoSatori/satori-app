@@ -16,7 +16,7 @@ export async function getAllEmployees(): Promise<Employee[]> {
 }
 
 // ── Salarios · Fase 0 (mig 055) ─────────────────────────────
-// Datos maestros de nómina que vivían en el Excel. Desde la mig 083 (SAL-AUD-01) la tarifa y el
+// Datos maestros de nómina que vivían en el Excel. Desde la mig 084 (SAL-AUD-01) la tarifa y el
 // salario fijo van a `employee_payroll` (RLS: owner/contador activos); el resto (servicio,
 // BioTime, ingreso) sigue en employees (RLS: owner/manager gestionan empleados).
 export interface EmployeePayroll {
@@ -97,7 +97,7 @@ export async function createEmployee(
 ): Promise<Employee> {
   // profile_id queda null: el empleado existe sin cuenta de login (cocina/back).
   // La FK a profiles es nullable, así que es una fila válida y completa.
-  // La planilla NO va a employees (mig 083): se inserta el empleado y después su planilla.
+  // La planilla NO va a employees (mig 084): se inserta el empleado y después su planilla.
   const { planilla, resto } = separarPlanilla(payload)
   const { data, error } = await supabase
     .from('employees')

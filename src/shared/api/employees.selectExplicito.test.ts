@@ -1,4 +1,4 @@
-// SAL-AUD-01 (mig 083): nadie lee `employees` con select('*') ni pide columnas de planilla.
+// SAL-AUD-01 (mig 084): nadie lee `employees` con select('*') ni pide columnas de planilla.
 // Test ESTÁTICO sobre el código: recorre src/ y supabase/functions/ buscando cada
 // `.from('employees')` y mira la cadena hasta el siguiente `;` o línea en blanco.
 import { readdirSync, readFileSync, statSync } from 'node:fs'

@@ -1,9 +1,9 @@
-// ── Columnas de employees (SAL-AUD-01, mig 083) ───────────────────────────────────────────
+// ── Columnas de employees (SAL-AUD-01, mig 084) ───────────────────────────────────────────
 
 /**
  * Las columnas de `employees` que lee la app. NUNCA `select('*')` sobre employees (test:
  * employees.selectExplicito.test.ts): la planilla (tarifa, salario fijo, datos bancarios) vive en
- * `employee_payroll`, que solo leen owner y contador activos (mig 083, SAL-AUD-01). Esta lista no
+ * `employee_payroll`, que solo leen owner y contador activos (mig 084, SAL-AUD-01). Esta lista no
  * incluye ninguna columna de planilla; las que quedan en employees por el paso 1 están vacías.
  */
 export const EMPLOYEE_COLUMNS =

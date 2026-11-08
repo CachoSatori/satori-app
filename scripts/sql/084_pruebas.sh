@@ -1,10 +1,10 @@
 #!/bin/bash
-# Pruebas de la 083 (SAL-AUD-01): una transacción por caso, SIEMPRE rollback, sin nombres reales.
-#   SUPABASE_ACCESS_TOKEN=… scripts/sql/083_pruebas.sh hwiatgicyyqyezqwldia   (solo staging)
+# Pruebas de la 084 (SAL-AUD-01): una transacción por caso, SIEMPRE rollback, sin nombres reales.
+#   SUPABASE_ACCESS_TOKEN=… scripts/sql/084_pruebas.sh hwiatgicyyqyezqwldia   (solo staging)
 # En cada caso se crea (como postgres, dentro de la transacción) un empleado SINTÉTICO con planilla
 # 12.345 / 50.000 / «BENEFICIARIO SINTETICO» y una tarifa en employee_wage_rates; después se lee
 # con la sesión simulada del rol.
-# Esperado DESPUÉS de la 083:
+# Esperado DESPUÉS de la 084:
 #   · owner y contador activos: planilla = 1 fila (12345); wage_rates = 1 fila.
 #   · manager activo, manager inactivo, cajero, salonero: planilla = 0 filas; wage_rates = 0 filas.
 #   · TODOS: en employees, la tarifa del sintético es 0 y el banco null (la planilla ya no está ahí).
@@ -17,7 +17,7 @@ REF=${1:?Uso: $0 <REF>}
 q() { jq -n --arg q "$1" '{query:$q}' | curl -sS -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
   -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @-; }
 uid() { q "select id from public.profiles where role = '$1' and is_active = $2 order by created_at limit 1" | jq -r '.[0].id // empty'; }
-SINT="insert into public.employees (id, full_name, role, is_active) values ('00000000-0000-4000-8000-000000000083', 'EMPLEADO SINTETICO 083', 'cocina', true);
+SINT="insert into public.employees (id, full_name, role, is_active) values ('00000000-0000-4000-8000-000000000083', 'EMPLEADO SINTETICO 084', 'cocina', true);
   insert into public.employee_payroll (employee_id, hourly_rate_crc, fixed_salary_crc, nombre_homebanking)
     values ('00000000-0000-4000-8000-000000000083', 12345, 50000, 'BENEFICIARIO SINTETICO');
   insert into public.employee_wage_rates (employee_id, tipo, hourly_rate_crc, efectivo_desde)

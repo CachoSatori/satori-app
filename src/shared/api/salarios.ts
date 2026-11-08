@@ -431,11 +431,11 @@ export async function updateEmployeeHomebankingName(
   nombre: string | null,
 ): Promise<void> {
   const limpio = nombre?.trim()
-  // Desde la mig 083 (SAL-AUD-01) vive en employee_payroll (solo owner/contador activos).
+  // Desde la mig 084 (SAL-AUD-01) vive en employee_payroll (solo owner/contador activos).
   await upsertPlanilla(id, { nombre_homebanking: limpio ? limpio : null })   // '' no: null = "sin cargar"
 }
 
-// ── Planilla (mig 083, SAL-AUD-01) ──────────────────────────────────────────────
+// ── Planilla (mig 084, SAL-AUD-01) ──────────────────────────────────────────────
 
 /** Una fila de employee_payroll. Solo la ven owner y contador activos (RLS). */
 export interface PlanillaRow {

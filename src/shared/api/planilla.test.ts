@@ -1,4 +1,4 @@
-// SAL-AUD-01 (mig 083): la planilla se escribe en employee_payroll y se pega a los empleados.
+// SAL-AUD-01 (mig 084): la planilla se escribe en employee_payroll y se pega a los empleados.
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('./supabase', () => ({ supabase: {} }))
 import { separarPlanilla } from './admin'

@@ -55,7 +55,7 @@ export default function SalariosModule() {
     try {
       // Trae activos e inactivos: la RLS deja a owner/manager ver ambos y el filtro
       // de la pestaña decide qué se muestra.
-      // Planilla desde employee_payroll (mig 083): solo owner/contador la reciben.
+      // Planilla desde employee_payroll (mig 084): solo owner/contador la reciben.
       const emps = await getEmployeesConPlanilla()
       setEmployees(emps)
       setError(null)

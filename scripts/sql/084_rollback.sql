@@ -1,7 +1,7 @@
--- 083_rollback · deshace supabase/migrations/083_employee_payroll.sql (PASO 1)
+-- 084_rollback · deshace supabase/migrations/084_employee_payroll.sql (PASO 1)
 -- Devuelve la planilla a employees, saca el CHECK, vuelve employee_wage_rates a owner/manager/
 -- contador (056) y borra employee_payroll. Antes de correrlo, volver el CÓDIGO atrás (la app del
--- paso 1 lee y escribe employee_payroll). NO toca el ledger: borrar la fila 083 en la misma
+-- paso 1 lee y escribe employee_payroll). NO toca el ledger: borrar la fila 084 en la misma
 -- transacción si se corre.
 begin;
 

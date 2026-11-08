@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Salarios · Fase 0: contrato de escritura del maestro de nómina.
-// Desde la mig 083 (SAL-AUD-01) la tarifa y el salario fijo van a employee_payroll; el resto
+// Desde la mig 084 (SAL-AUD-01) la tarifa y el salario fijo van a employee_payroll; el resto
 // (servicio, BioTime, ingreso) sigue en employees. Mock mínimo del cliente: capturamos cada
 // escritura con su tabla y controlamos el error que devuelve la base por tabla.
 type Escritura = { tabla: string; op: string; payload: unknown; opts?: unknown }

@@ -215,7 +215,7 @@ describe('upsertWorkDay', () => {
 })
 
 describe('updateEmployeeHomebankingName', () => {
-  // Desde la mig 083 (SAL-AUD-01) el alias vive en employee_payroll (upsert 1 a 1), no en employees.
+  // Desde la mig 084 (SAL-AUD-01) el alias vive en employee_payroll (upsert 1 a 1), no en employees.
   it('guarda el alias recortado en employee_payroll', async () => {
     enqueue('employee_payroll', {})
     await updateEmployeeHomebankingName('e1', '  BENEFICIARIO PRUEBA ')

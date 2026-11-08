@@ -915,6 +915,40 @@ begin
 end;
 $$;
 
+-- LC-A4.4 (08-nov): créditos GANADOS pendientes de aprobación del anfitrión nuevo (decisión «1b»).
+-- En sus primeros `anfitrion_nuevo_dias` (90) como anfitrión, el cupón que lo hace pasar `anfitrion_tope_mes_crc`
+-- (₡25.000) de ganado en el mes NO suma: sus personas quedan acá, pendientes, hasta que un owner o manager distinto de
+-- quien registró el cupón las aprueba (→ movimiento `tarjeta` con la misma operación) o las rechaza. DECISIÓN
+-- PROVISORIA: va el cupón entero (no se parte la visita en dos movimientos). La alerta ANFITRION_SOBRE_TOPE es de A5.
+alter table public.club_config add column if not exists anfitrion_tope_mes_crc numeric not null default 25000 check (anfitrion_tope_mes_crc >= 0);
+alter table public.club_config add column if not exists anfitrion_nuevo_dias int not null default 90 check (anfitrion_nuevo_dias between 0 and 730);
+create table if not exists public.club_personas_pendientes (
+  id                    uuid primary key default gen_random_uuid(),
+  location_id           text not null default 'santa-teresa',
+  miembro_id            uuid not null references public.club_miembros(id),
+  cupon_id              uuid references public.club_cupones(id),
+  personas              int not null check (personas between 1 and 30),
+  personas_por_credito  int not null,
+  valor_credito_crc     numeric not null,
+  factura_pos           text,
+  pos_ref               jsonb,
+  visita_clave          text,
+  fecha_visita          timestamptz not null default now(),
+  registrado_por        uuid,
+  client_op_id          uuid not null unique,
+  ganado_mes_crc        numeric not null,          -- lo ganado en el mes ANTES de este cupón (para decidir)
+  estado                text not null default 'pendiente' check (estado in ('pendiente','aprobada','rechazada')),
+  resuelto_por          uuid,
+  resuelto_en           timestamptz,
+  nota                  text,
+  movimiento_id         uuid references public.club_movimientos(id)
+);
+create index if not exists club_personas_pend_idx on public.club_personas_pendientes (miembro_id, estado);
+create index if not exists club_personas_pend_visita_idx on public.club_personas_pendientes (visita_clave);
+alter table public.club_personas_pendientes enable row level security;
+revoke all on public.club_personas_pendientes from public, anon, authenticated;
+
+
 -- CLUB-AUD-02 (decisión de Ismael, 07-nov): un referente tiene UNA tarjeta por visita; dos referentes
 -- en la misma visita sí, con Σ personas ≤ pax del pedido. Interna: la llaman club_cupon_usar y
 -- club_tarjeta_manual ANTES de bloquear al miembro. Orden global de locks: operación (p_op) → cupón →
@@ -941,7 +975,9 @@ begin
   end if;
   perform pg_advisory_xact_lock(hashtextextended('club_visita:' || p_location || ':' || p_visita, 0));
   if exists (select 1 from public.club_movimientos mv
-              where mv.miembro_id = p_miembro and mv.tipo = 'tarjeta' and mv.origen = 'app' and mv.visita_clave = p_visita) then
+              where mv.miembro_id = p_miembro and mv.tipo = 'tarjeta' and mv.origen = 'app' and mv.visita_clave = p_visita)
+     or exists (select 1 from public.club_personas_pendientes pp   -- LC-A4.4: lo pendiente también es «su tarjeta»
+                 where pp.miembro_id = p_miembro and pp.estado = 'pendiente' and pp.visita_clave = p_visita) then
     raise exception 'Este referente ya tiene una tarjeta en esta visita: vale una por mesa. Si faltaron personas, pedile al manager que lo corrija' using errcode = 'P0001';
   end if;
   v_pax := nullif((p_pos->>'pax')::int, 0);
@@ -950,7 +986,10 @@ begin
      where t.local = p_location and ltrim(t.numero_factura, '0') = public.club_factura_clave(p_factura) and t.estado = 'C' limit 1;   -- CLUB-AUD-68
   end if;
   if v_pax is not null then
-    select coalesce(sum(mv.personas), 0) into v_ya from public.club_movimientos mv
+    select coalesce(sum(mv.personas), 0)
+           + (select coalesce(sum(pp.personas), 0) from public.club_personas_pendientes pp
+               where pp.location_id = p_location and pp.estado = 'pendiente' and pp.visita_clave = p_visita)
+      into v_ya from public.club_movimientos mv
      where mv.location_id = p_location and mv.tipo = 'tarjeta' and mv.origen = 'app' and mv.visita_clave = p_visita;
     if v_ya + p_personas > v_pax then
       raise exception 'Supera las personas de la mesa (% pax; ya registradas %). Revisá cuántas personas vinieron con el referente o pedile al manager', v_pax, v_ya using errcode = 'P0001';
@@ -961,8 +1000,16 @@ $$;
 
 -- 4.2 Usar el cupón en caja → movimiento `tarjeta` del referente.
 drop function if exists public.club_cupon_usar(text, int, text, uuid);
+-- LC-A4.4: devuelve también `pendientes` (personas retenidas para aprobación; 0 si sumaron). Cambió el tipo de retorno.
+do $$ begin
+  if exists (select 1 from pg_proc where oid = 'public.club_cupon_usar(text, int, text, uuid, jsonb)'::regprocedure
+              and pg_get_function_result(oid) not like '%pendientes%') then
+    drop function public.club_cupon_usar(text, int, text, uuid, jsonb);
+  end if;
+exception when undefined_function then null;
+end $$;
 create or replace function public.club_cupon_usar(p_codigo text, p_personas int, p_factura text, p_op uuid, p_pos jsonb default null)
-returns table (miembro_id uuid, personas int, creditos numeric)
+returns table (miembro_id uuid, personas int, creditos numeric, pendientes int)
 language plpgsql
 volatile
 security definer
@@ -978,7 +1025,11 @@ declare
   v_ref     public.club_miembros%rowtype;
   v_cfg     public.club_config%rowtype;
   v_prev    public.club_movimientos%rowtype;
+  v_pend    public.club_personas_pendientes%rowtype;
   v_saldo   int;
+  v_ganado  numeric;
+  v_nuevo   boolean;
+  v_clave   text;
 begin
   if v_rol is null or v_rol not in ('owner','manager','cajero') then
     raise exception 'Sin permiso' using errcode = '42501';
@@ -999,7 +1050,17 @@ begin
     select * into v_cfg from public.club_config where location_id = v_prev.location_id;
     v_saldo := public.club_saldo_personas(v_prev.miembro_id);
     miembro_id := v_prev.miembro_id; personas := v_saldo;
+    creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito); pendientes := 0;
+    return next; return;
+  end if;
+  -- LC-A4.4: replay de un cupón que quedó pendiente de aprobación
+  select * into v_pend from public.club_personas_pendientes pp where pp.client_op_id = p_op;
+  if found then
+    select * into v_cfg from public.club_config where location_id = v_pend.location_id;
+    v_saldo := public.club_saldo_personas(v_pend.miembro_id);
+    miembro_id := v_pend.miembro_id; personas := v_saldo;
     creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+    pendientes := case when v_pend.estado = 'pendiente' then v_pend.personas else 0 end;
     return next; return;
   end if;
 
@@ -1046,6 +1107,30 @@ begin
      set estado = 'usado', usado_en = now(), usado_por = auth.uid(), factura_pos = nullif(v_fac, ''), personas = p_personas, pos_ref = v_pos
    where id = v_cupon.id;
 
+  -- LC-A4.4: anfitrión nuevo que con este cupón pasa el tope del mes → personas pendientes de aprobación.
+  v_clave := coalesce(v_pos->>'visita', public.club_visita_canonica(v_cupon.location_id, null, v_fac));
+  v_nuevo := exists (select 1 from public.club_miembro_roles rr where rr.miembro_id = v_ref.id and rr.rol <> 'socio'
+                      and rr.desde > now() - make_interval(days => v_cfg.anfitrion_nuevo_dias));
+  if v_nuevo and v_cfg.anfitrion_tope_mes_crc > 0 then
+    v_ganado := ((select coalesce(sum(mv.personas), 0) from public.club_movimientos mv
+                   where mv.miembro_id = v_ref.id and mv.tipo = 'tarjeta' and mv.personas > 0
+                     and mv.fecha_visita >= date_trunc('month', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica')
+                + (select coalesce(sum(pp.personas), 0) from public.club_personas_pendientes pp
+                    where pp.miembro_id = v_ref.id and pp.estado = 'pendiente'
+                      and pp.fecha_visita >= date_trunc('month', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica'))
+                * v_cfg.valor_credito_crc / v_cfg.personas_por_credito;
+    if v_ganado + p_personas * v_cfg.valor_credito_crc / v_cfg.personas_por_credito > v_cfg.anfitrion_tope_mes_crc then
+      insert into public.club_personas_pendientes (location_id, miembro_id, cupon_id, personas, personas_por_credito, valor_credito_crc,
+                                                   factura_pos, pos_ref, visita_clave, registrado_por, client_op_id, ganado_mes_crc)
+      values (v_cupon.location_id, v_ref.id, v_cupon.id, p_personas, v_cfg.personas_por_credito, v_cfg.valor_credito_crc,
+              nullif(v_fac, ''), v_pos, v_clave, auth.uid(), p_op, v_ganado);
+      v_saldo := public.club_saldo_personas(v_ref.id);
+      miembro_id := v_ref.id; personas := v_saldo;
+      creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito); pendientes := p_personas;
+      return next; return;
+    end if;
+  end if;
+
   insert into public.club_movimientos
     (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
      factura_pos, cupon_id, fecha_visita, registrado_por, origen, client_op_id, pos_ref, visita_clave)
@@ -1056,8 +1141,72 @@ begin
 
   v_saldo := public.club_saldo_personas(v_ref.id);
   miembro_id := v_ref.id; personas := v_saldo;
-  creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito);
+  creditos := public.club_creditos(v_saldo, v_cfg.personas_por_credito); pendientes := 0;
   return next;
+end;
+$$;
+
+-- LC-A4.4: lista y resolución de las personas pendientes (owner, manager).
+create or replace function public.club_pendientes_listar(p_location text default 'santa-teresa')
+returns table (id uuid, miembro_id uuid, nombre text, personas int, creditos numeric, ganado_mes_crc numeric, fecha_visita timestamptz,
+               registrado_por text, puedo_resolver boolean)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol public.user_role := public.get_my_role();
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  return query
+    select pp.id, pp.miembro_id, m.nombre, pp.personas, public.club_creditos(pp.personas, pp.personas_por_credito), pp.ganado_mes_crc,
+           pp.fecha_visita, coalesce(p.full_name, 'Sin perfil'), pp.registrado_por is distinct from auth.uid()
+      from public.club_personas_pendientes pp join public.club_miembros m on m.id = pp.miembro_id
+      left join public.profiles p on p.id = pp.registrado_por
+     where pp.location_id = p_location and pp.estado = 'pendiente'
+     order by pp.fecha_visita;
+end;
+$$;
+
+create or replace function public.club_pendiente_resolver(p_id uuid, p_aprobar boolean, p_nota text)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol  public.user_role := public.get_my_role();
+  v_p    public.club_personas_pendientes%rowtype;
+  v_nota text := btrim(coalesce(p_nota, ''));
+  v_mov  uuid;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  if p_aprobar is null then raise exception 'Elegí aprobar o rechazar' using errcode = 'P0001'; end if;
+  if length(v_nota) not between 1 and 300 then raise exception 'La nota es obligatoria (hasta 300 caracteres)' using errcode = 'P0001'; end if;
+  select * into v_p from public.club_personas_pendientes where id = p_id for update;
+  if not found or v_p.estado <> 'pendiente' then raise exception 'Ya no está pendiente: recargá la lista' using errcode = 'P0001'; end if;
+  if v_p.registrado_por = auth.uid() then
+    raise exception 'Lo registraste vos: lo aprueba otro manager u owner' using errcode = 'P0001';
+  end if;
+  perform 1 from public.club_miembros where id = v_p.miembro_id for update;
+  if p_aprobar then
+    insert into public.club_movimientos
+      (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, cupon_id, fecha_visita,
+       registrado_por, origen, client_op_id, pos_ref, visita_clave, nota)
+    values
+      (v_p.location_id, v_p.miembro_id, 'tarjeta', v_p.personas, v_p.personas_por_credito, v_p.valor_credito_crc, v_p.factura_pos,
+       v_p.cupon_id, v_p.fecha_visita, v_p.registrado_por, 'app', v_p.client_op_id, v_p.pos_ref, v_p.visita_clave,
+       'Aprobado por gerencia (anfitrión nuevo sobre el tope): ' || v_nota)
+    returning id into v_mov;
+  end if;
+  update public.club_personas_pendientes
+     set estado = case when p_aprobar then 'aprobada' else 'rechazada' end, resuelto_por = auth.uid(), resuelto_en = now(),
+         nota = v_nota, movimiento_id = v_mov
+   where id = p_id;
+  perform public.club_auditar(case when p_aprobar then 'pendiente_aprobada' else 'pendiente_rechazada' end, 'club_personas_pendientes',
+                              v_p.miembro_id, null, jsonb_build_object('personas', v_p.personas, 'nota', v_nota));
+  return true;
 end;
 $$;
 
@@ -5088,6 +5237,10 @@ grant execute on function public.club_cortesia_guardar(uuid, text, text, boolean
 -- LC-A4
 revoke all on function public.club_socio_visita(uuid, jsonb, uuid)              from public, anon, authenticated;
 grant execute on function public.club_socio_visita(uuid, jsonb, uuid)           to authenticated;
+revoke all on function public.club_pendientes_listar(text)                       from public, anon, authenticated;
+revoke all on function public.club_pendiente_resolver(uuid, boolean, text)       from public, anon, authenticated;
+grant execute on function public.club_pendientes_listar(text)                    to authenticated;
+grant execute on function public.club_pendiente_resolver(uuid, boolean, text)    to authenticated;
 revoke all on function public.club_premios_generar(text)                       from public, anon, authenticated;
 revoke all on function public.club_socios_por_confirmar()                        from public, anon, authenticated;
 revoke all on function public.club_socio_solicitudes_abiertas()                  from public, anon, authenticated;

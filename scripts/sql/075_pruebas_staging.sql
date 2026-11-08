@@ -3126,6 +3126,79 @@ begin
       and not has_function_privilege('authenticated', 'public.club_premios_generar(text)', 'EXECUTE'), '');
 end $$;
 
+-- ═══ 65. LC-A4.4: créditos ganados pendientes de aprobación del anfitrión nuevo ═══
+do $$
+declare v_n uuid; v_v uuid; c1 text; c2 text; c3 text; c4 text; c5 text; c6 text; op2 uuid := gen_random_uuid(); op5 uuid := gen_random_uuid();
+        r record; e text; v_id uuid; v_s0 int; n int;
+begin
+  update club_config set valor_credito_crc = 18000, personas_por_credito = 6, anfitrion_tope_mes_crc = 25000, anfitrion_nuevo_dias = 90
+   where location_id = 'santa-teresa';
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Nuevo Anfitrion Ficticio', 'app') returning id into v_n;
+  insert into club_miembros (tipo, nombre, origen, created_at) values ('referente', 'Viejo Anfitrion Ficticio', 'app', now() - interval '1 year') returning id into v_v;
+  update club_miembro_roles set desde = now() - interval '1 year' where miembro_id = v_v;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c1;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c2;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c3;
+  insert into club_cupones (referente_id, vence_en) values (v_v, now() + interval '1 day') returning codigo into c4;
+  insert into club_cupones (referente_id, vence_en) values (v_n, now() + interval '1 day') returning codigo into c5;
+  insert into club_cupones (referente_id, vence_en) values (v_v, now() + interval '1 day') returning codigo into c6;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c1, 6, '990651', gen_random_uuid());      -- ₡18.000: suma
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'anfitrión nuevo por debajo del tope: suma normal (pendientes 0)', r.pendientes = 0 and r.personas = 6, format('%s', r));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c2, 3, '990652', op2);                     -- +₡9.000 → ₡27.000 > ₡25.000
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'el cupón que pasa el tope del mes queda pendiente: no suma al saldo',
+    r.pendientes = 3 and r.personas = 6 and public.club_saldo_personas(v_n) = 6
+      and exists (select 1 from club_personas_pendientes where client_op_id = op2 and estado = 'pendiente' and ganado_mes_crc = 18000), format('%s', r));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c2, 3, '990652', op2);                     -- replay
+  begin perform public.club_cupon_usar(c3, 1, '990652', gen_random_uuid()); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'replay del pendiente: mismo resultado, sin duplicar; y lo pendiente cuenta como su tarjeta de esa visita',
+    r.pendientes = 3 and (select count(*) from club_personas_pendientes where miembro_id = v_n) = 1 and e like 'Este referente ya tiene una tarjeta en esta visita%', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c4, 12, '990653', gen_random_uuid());     -- viejo: ₡36.000, suma
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'anfitrión con más de 90 días: aunque pase el tope, suma (la retención es solo para el nuevo)', r.pendientes = 0 and r.personas = 12, format('%s', r));
+  -- listar y resolver
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  select count(*) into n from public.club_pendientes_listar() x where x.miembro_id = v_n and x.puedo_resolver and x.creditos = 0.5;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_pendientes_listar(); e := 'ok'; exception when insufficient_privilege then e := 'sin permiso'; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'gerencia ve los pendientes (con los créditos); el cajero no', n = 1 and e = 'sin permiso', format('%s %s', n, e));
+  -- el owner registra otro pendiente y no puede aprobarlo él mismo
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select * into r from public.club_cupon_usar(c5, 2, '990654', op5);
+  perform pg_temp.yo();
+  select id into v_id from club_personas_pendientes where client_op_id = op5;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_pendiente_resolver(v_id, true, 'lo apruebo yo'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'quien registró el cupón no aprueba su pendiente (negativa)', r.pendientes = 2 and e like 'Lo registraste vos%', e);
+  -- el manager aprueba el de op2 → movimiento con la misma operación; rechaza el de op5 → no suma
+  v_s0 := public.club_saldo_personas(v_n);
+  select id into v_v from club_personas_pendientes where client_op_id = op2;   -- (reuso la variable)
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  perform public.club_pendiente_resolver(v_v, true, 'Revisado con el anfitrión');
+  perform public.club_pendiente_resolver(v_id, false, 'No corresponde');
+  begin perform public.club_pendiente_resolver(v_id, true, 'otra vez'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'aprobar → suma (movimiento con la misma operación); rechazar → no suma; no se resuelve dos veces',
+    public.club_saldo_personas(v_n) = v_s0 + 3
+      and exists (select 1 from club_movimientos where client_op_id = op2 and personas = 3 and nota like 'Aprobado por gerencia%')
+      and not exists (select 1 from club_movimientos where client_op_id = op5)
+      and (select estado from club_personas_pendientes where id = v_id) = 'rechazada' and e like 'Ya no está pendiente%', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c2, 3, '990652', op2);
+  perform pg_temp.yo();
+  perform pg_temp.r('65', 'después de aprobar, el replay de la operación ve el movimiento (pendientes 0)', r.pendientes = 0, format('%s', r));
+  perform pg_temp.r('65', 'club_personas_pendientes: nadie de la app la lee directo',
+    not has_table_privilege('authenticated', 'public.club_personas_pendientes', 'SELECT'), '');
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

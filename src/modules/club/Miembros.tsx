@@ -9,6 +9,7 @@ import {
   getMiembros, getSaldos, getNegocios, getMovimientos, getContacto, guardarMiembro, guardarNegocio,
   regenerarCodigo, tokenPortal, codigoMiembro, aClubError, fmtCreditos, ajustarSaldo, nuevoOp, getRoles, activarAnfitrion,
   getSociosPorConfirmar, socioConfirmar, paseToken, getSolicitudesSocio, type SocioPorConfirmar, type SolicitudSocio,
+  getPendientesAprobacion, resolverPendiente, type PendienteAprobacion,
   type ClubRol,
   type ClubMiembro, type ClubSaldo, type ClubNegocio, type ClubMovimiento, type TipoMiembro, type TipoNegocio,
 } from '../../shared/api/club'
@@ -109,6 +110,7 @@ export default function Miembros() {
       </div>
       {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
 
+      {pestana === 'referentes' && <PendientesAprobacion onCambio={cargar} />}
       {pestana === 'socios' && <PorConfirmar onCambio={cargar} />}
       {pestana === 'socios' && <Solicitudes />}
 
@@ -608,6 +610,63 @@ function Solicitudes() {
         <div key={f.miembro_id} style={{ display: 'flex', gap: 8, borderBottom: `1px solid ${C.panel}`, padding: '4px 0', fontSize: '0.88rem' }}>
           <strong style={{ flex: 1 }}>{f.nombre}</strong>
           <span style={{ color: C.muted }}>socio: {f.estado_socio} · {fmtFechaHora(f.creada_en)}</span>
+        </div>
+      ))}
+    </Card>
+  )
+}
+
+/**
+ * LC-A4.4: anfitrión nuevo (primeros 90 días) que pasó el tope del mes: el cupón quedó registrado pero sus personas
+ * esperan acá. Aprueba o rechaza un manager u owner distinto de quien registró el cupón, con nota.
+ */
+function PendientesAprobacion({ onCambio }: { onCambio: () => Promise<void> }) {
+  const [filas, setFilas] = useState<PendienteAprobacion[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [ok, setOk] = useState<string | null>(null)
+  const [notas, setNotas] = useState<Record<string, string>>({})
+  const [enviando, setEnviando] = useState<string | null>(null)
+  const [recarga, setRecarga] = useState(0)
+  useEffect(() => {
+    let vivo = true
+    getPendientesAprobacion().then(f => { if (vivo) setFilas(f) }).catch(e => { if (vivo) setError(aClubError(e).message) })
+    return () => { vivo = false }
+  }, [recarga])
+  async function resolver(f: PendienteAprobacion, aprobar: boolean) {
+    setEnviando(f.id); setError(null); setOk(null)
+    try {
+      await resolverPendiente(f.id, aprobar, (notas[f.id] ?? '').trim())
+      setOk(aprobar ? `+${f.personas} personas a ${f.nombre}.` : `Rechazado: ${f.nombre} no suma esas ${f.personas} personas.`)
+      setRecarga(n => n + 1); await onCambio()
+    } catch (e) { setError(aClubError(e).message) }
+    finally { setEnviando(null) }
+  }
+  if (!error && (filas === null || filas.length === 0)) return null
+  return (
+    <Card>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>Personas pendientes de aprobación</div>
+      <div style={{ fontSize: '0.82rem', color: C.muted, marginBottom: 8 }}>
+        Anfitriones nuevos que pasaron el tope del mes. No suman al saldo hasta que alguien distinto de quien registró el cupón
+        lo apruebe. La nota es obligatoria.
+      </div>
+      {error && <Aviso tono="error" onClose={() => setError(null)}>{error}</Aviso>}
+      {ok && <Aviso tono="ok" onClose={() => setOk(null)}>{ok}</Aviso>}
+      {filas?.map(f => (
+        <div key={f.id} style={{ borderBottom: `1px solid ${C.panel}`, padding: '6px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div>
+            <strong>{f.nombre}</strong> · {f.personas} {f.personas === 1 ? 'persona' : 'personas'} ({fmtCreditos(f.creditos)} cr.)
+            <div style={{ fontSize: '0.78rem', color: C.muted }}>
+              {fmtFechaHora(f.fecha_visita)} · registró {f.registrado_por} · ya ganado en el mes ₡{Math.round(f.ganado_mes_crc).toLocaleString('es-CR')}
+            </div>
+          </div>
+          {f.puedo_resolver ? (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <input value={notas[f.id] ?? ''} onChange={e => setNotas({ ...notas, [f.id]: e.target.value })} maxLength={300}
+                placeholder="Nota (obligatoria)" aria-label={`Nota para ${f.nombre}`} style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
+              <Btn onClick={() => resolver(f, true)} disabled={enviando !== null || !(notas[f.id] ?? '').trim()}>Aprobar</Btn>
+              <Btn variant="danger" onClick={() => resolver(f, false)} disabled={enviando !== null || !(notas[f.id] ?? '').trim()}>Rechazar</Btn>
+            </div>
+          ) : <span style={{ fontSize: '0.78rem', color: C.muted }}>Lo registraste vos: lo resuelve otro manager u owner.</span>}
         </div>
       ))}
     </Card>

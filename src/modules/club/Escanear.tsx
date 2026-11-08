@@ -122,8 +122,10 @@ export default function Escanear() {
     try {
       if (actual.kind === 'cupon') {
         const n = Number(personas)
-        await usarCupon(actual.codigo, n, pos!, opDe('usar'))
-        setMsg({ tono: 'ok', texto: `+${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.referente}` })
+        const s = await usarCupon(actual.codigo, n, pos!, opDe('usar'))
+        setMsg(s?.pendientes > 0
+          ? { tono: 'info', texto: `Cupón registrado. Las ${n} ${n === 1 ? 'persona queda' : 'personas quedan'} pendientes de aprobación: ${actual.r.datos.referente} es anfitrión nuevo y pasó el tope del mes. Lo aprueba un manager en Miembros.` }
+          : { tono: 'ok', texto: `+${n} ${n === 1 ? 'persona' : 'personas'} a ${actual.r.datos.referente}` })
         cerrarCuenta()
       } else if (actual.kind === 'canje' && creditos != null) {
         // El código queda usado: se cierra la cuenta (volver a escanearlo diría «ya se usó»).

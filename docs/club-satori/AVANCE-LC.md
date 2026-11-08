@@ -207,7 +207,7 @@
 | Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
 |---|---|---|---|
 | Anónimo | Darse de alta en un local apagado o inventado (`local` en la autoalta) | `club_local(..., true)`: el local tiene que existir y estar encendido; el proxy solo deja pasar ids `^[a-z0-9-]{2,40}$` | `club_locales_activos` muestra los nombres de los locales encendidos (dato público) |
-| Socio | Usar su QR en el otro local | La visita exige el Club encendido en SU local y busca el pedido en su local | DECISIÓN PROVISORIA: no hay Club compartido entre locales |
+| Socio | Usar su QR en el otro local | La visita exige el Club encendido en SU local y busca el pedido en su local | ~~DECISIÓN PROVISORIA: no hay Club compartido entre locales~~ **REEMPLAZADO** (08-nov): Club compartido, decisión de Ismael (`677d0cc`); ver `GROK-fichas-75-99.md` |
 | Anfitrión | Generar cupones con el local apagado | `club_cupon_crear` exige el Club encendido en su local | — |
 | Cajero | Operar en un local apagado eligiéndolo en un navegador viejo | El selector solo muestra locales encendidos (salvo al owner) y la base rechaza igual | — |
 | Manager | Encender un local | RLS de `club_config`: solo el owner (prueba 70) | — |
@@ -257,7 +257,8 @@
     persona: cambiado a genérico.
   - **Nota para Ismael:** las cuentas de prueba `club-prueba-manager` y `club-prueba-cajero` están **desactivadas** en
     staging desde el 07-nov 18:05 UTC (no las reactivé; el permiso del manager lo cubren las pruebas).
-  - **Estimación «Club compartido»:** pasada por chat (≈ 14,5 h; decide Ismael). No se cambió nada.
+  - **Estimación «Club compartido»:** pasada por chat (≈ 14,5 h; decide Ismael). No se cambió nada. **REEMPLAZADO:** Ismael
+    eligió el Club compartido y se hizo (`677d0cc`, `75e5cfc`).
 
 ### Autorrevisión adversarial (A6)
 | Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |

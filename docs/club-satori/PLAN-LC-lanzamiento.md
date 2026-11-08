@@ -101,8 +101,8 @@
        facturas). 14 de esas 37 son Local Club (856);
      - no hay cortesías hechas con «línea al 100 %» sobre el producto del menú. Hay líneas sueltas a ₡0 fuera de la
        familia 17 (1 o 2 por producto), que son ajustes;
-     - además, **el 857 «INVITADO» (₡0) aparece en 104 facturas, 90 de ellas junto al 856**: hay que preguntarle a Ismael
-       qué marca.
+     - además, **el 857 «INVITADO» (₡0) aparece en 104 facturas, 90 de ellas junto al 856**: ~~hay que preguntarle a Ismael
+       qué marca.~~ **REEMPLAZADO** (08-nov): es el beneficio para quien viene con un socio, sin límite (`bd6786e`).
    - **Diseño del cruce:** cada cortesía del admin es **un artículo de cortesía del PoS (familia 17)**, con su nombre y su
      producto del menú de referencia. `CORTESIA_DISTINTA` compara las líneas de la familia 17 de la factura de la visita
      contra el código sorteado:

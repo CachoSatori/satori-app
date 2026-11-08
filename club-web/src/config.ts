@@ -9,7 +9,7 @@ export const LOCAL = { nombre: 'Satori Sushi Bar' }
  * `club_config.aviso_privacidad_version`; si no, la base rechaza el alta (así nadie acepta un aviso viejo).
  * Al cambiar el texto del aviso (i18n: alta_aviso), se sube acá y en la base el mismo día.
  */
-export const AVISO_PRIVACIDAD_VERSION = 'v1-borrador'
+export const AVISO_PRIVACIDAD_VERSION = 'v1'
 
 /** Turnstile: clave pública del sitio. Sin VITE_TURNSTILE_SITEKEY, la clave de PRUEBA de Cloudflare (siempre pasa). */
 export const TURNSTILE_SITEKEY: string = import.meta.env.VITE_TURNSTILE_SITEKEY || '1x00000000000000000000AA'

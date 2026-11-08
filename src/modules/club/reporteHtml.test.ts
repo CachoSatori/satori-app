@@ -6,7 +6,7 @@ const fila = (i: number, extra: Partial<FilaReporte> = {}): FilaReporte =>
   ({ nombre: `Referente con un nombre bastante largo ${i}`, negocio: `Hotel de prueba ${i}`, tipo: 'referente', personas: 10 - i, prom_3m: 4, creditos: 3, ultima_actividad: '2025-01-10T12:00:00Z', ...extra })
 
 const rep: ReporteMes = {
-  mes: '2026-10', local: 'santa-teresa', generado_en: '2026-11-05T12:00:00Z',
+  mes: '2026-10', local: 'local-prueba', generado_en: '2026-11-05T12:00:00Z',
   config: { valor_credito_crc: 18000, personas_por_credito: 6, vencimiento_meses: 12, pm_pausado: true },
   kpis: { tarjetas: 31, personas: 84, creditos_generados: 14, canjes: 6, creditos_canjeados: 7.5, valor_canjeado_crc: 135000, personas_vencidas: 0,
           referentes_con_visitas: 12, cupones_generados: 40, cupones_usados: 25, saldo_creditos_al_cierre: 148, cuentas_con_saldo: 120,

@@ -184,7 +184,8 @@ solas tras un reinicio (validado el 29/10).
 **Reglas**
 1. **Bloques por rama:**
    - **CAJA / operación: 087–99** (caja, Salarios, PoS propio, seguridad de la app);
-   - **CLUB SATORI + puente: 100–149**.
+   - **CLUB SATORI + puente: 100–149**;
+   - **PASE A PROD: 150–199**, que no es de creación: solo recibe renumeraciones del pase (regla 3).
 
    La **086** queda libre, fuera de bloque. Si un bloque se acaba, se le asigna uno nuevo **en esta tabla y
    en el registro antes de usarlo**.
@@ -192,23 +193,31 @@ solas tras un reinicio (validado el 29/10).
    número libre de su bloque). El gate falla si una migración nueva no está registrada, si queda fuera del
    bloque de su rama o si repite un número.
 3. **Pase a prod:** ninguna migración entra a prod con número **≤ al último del ledger de prod**. Si pasa,
-   se renombra al siguiente libre **arriba** del último de prod, en el mismo PR del pase: archivo, rollback,
-   pruebas, scripts y la fila del ledger de staging. (Branching rechaza una versión menor que la última
-   aplicada: por eso la 078 de Prom/PAX pasó a 080.)
+   se renombra al **siguiente libre del bloque de PASE (150–199)**, nunca dentro de un bloque de creación
+   (ahí chocaría con números reservados que todavía no se desplegaron; ajuste de Ismael tras la auditoría,
+   hallazgo 97). Va en el mismo PR del pase: archivo, rollback, pruebas, scripts y la fila del ledger de
+   staging. En el registro se anota con bloque `pase` y su `origen` (ej. `083 → 150`); el gate lo exige.
+   (Branching rechaza una versión menor que la última aplicada: por eso la 078 de Prom/PAX pasó a 080.)
 4. Un número usado no se reutiliza aunque la rama se abandone. Las versiones son **texto**, como en el
    ledger: `0090` y `0095` son históricas y distintas de una futura `090` / `095`.
+
+**Orden previsto del pase a prod** (prod va hasta la 080):
+1. **081 → 082** (puente) primero, con su número.
+2. Después la **085** (SEC-01c), con su número: queda arriba de la 082.
+3. Las que queden atrás (≤ al último de prod en su momento: la **083** y la **084**, la **075** del Club)
+   toman **150+**, en el orden en que pasen.
 
 **Ya usados (antes de los bloques)**
 
 | Número | Nombre | De | Rama | Dónde está aplicada |
 |---|---|---|---|---|
-| 075 | `club_satori_esquema` | Club | `claude/brave-brown-m45jd7` y ramas del Club | staging. Al pasar a prod se renombra por la regla 3 |
+| 075 | `club_satori_esquema` | Club | `claude/brave-brown-m45jd7` y ramas del Club | staging. Al pasar a prod se renombra al bloque de pase (regla 3) |
 | 078 | — | — | — | **No usar** (fue Prom/PAX, renumerada a 080) |
 | 080 | `pos_prompax_agregado` | Prom/PAX | `main` (#58) | staging y prod (último de prod al 08/11) |
 | 081 | `pos_ndf_campos_factura` | puente (Club) | `claude/epic-tesla-pyo77m`, `claude/club-integracion`, `claude/club-wallet` (PR #59) | staging |
 | 082 | `pos_ndf_ingesta_transaccional` | puente (Club) | `claude/puente-item11` | staging, **sin su fila en el ledger** (08/11): falta registrarla |
-| 083 | `my_turno_stats_higiene` | caja | `claude/higiene-r5` | staging (08/11). Va a prod con el PoS propio |
-| 084 | `employee_payroll` (SAL-AUD-01, paso 1) | caja | `claude/salarios-rls` | staging (08/11). Va a prod con Salarios |
+| 083 | `my_turno_stats_higiene` | caja | `claude/higiene-r5` | staging (08/11). Va a prod con el PoS propio; ahí toma 150+ (regla 3) |
+| 084 | `employee_payroll` (SAL-AUD-01, paso 1) | caja | `claude/salarios-rls` | staging (08/11). Va a prod con Salarios; ahí toma 150+ (regla 3) |
 | 085 | `rls_lectura_rol_activo` (SEC-01c) | caja | `claude/rls-is-active` | staging (08/11) |
 
 **Bloques**
@@ -217,6 +226,7 @@ solas tras un reinicio (validado el 29/10).
 |---|---|---|---|
 | CAJA / operación | 087–99 | — | **087** |
 | CLUB SATORI + puente | 100–149 | — | **100** |
+| PASE A PROD (solo renumeraciones) | 150–199 | — | **150** |
 | (fuera de bloque) | 086 | — | libre |
 
 

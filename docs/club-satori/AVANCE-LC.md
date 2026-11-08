@@ -188,3 +188,28 @@
 | Cajero | Resolver la excepción de una factura que cobró él | Su login del PoS mapeado a su usuario lo bloquea | Logins compartidos (p. ej. el de turno) sin mapear → solo el owner: más trabajo para el owner |
 | Manager | Resolver una excepción de una factura que cobró él | Igual que el cajero, por login del PoS | Si cobró con el login de otro, no se detecta (límite del PoS) |
 | Operador del pase a prod | Correr el Edge nuevo sin la 082, o soltar la 082 con el Edge nuevo arriba | Paquete con orden fijo y rollback «Edge anterior antes del drop» | Requiere la copia del Edge actual antes de empezar (paso 0) |
+
+- 08-nov (tarde 2, Ismael: multilocal y pase del puente) ·
+  - **Multilocal** (`8e4299a`): el Club corre por local y encender uno es un dato (`club_config.club_activo`). Nosara
+    cargado y **apagado**. Selector de local en la app (solo con más de uno), pestaña **Locales** del owner con el
+    interruptor (auditado), club-web manda el local (`?local=` o elegido). Prueba 70 (17 casos): local sintético
+    apagado → encendido → apagado, y ninguna función `club_*` nombra un local. RUNBOOK paso 11: checklist «Encender un
+    local». club-wallet: la franja del pase dice «Satori · Club» (`8f5dd4f`).
+    **DECISIÓN PROVISORIA:** un socio o anfitrión pertenece a un local (el de Santa Teresa no tiene beneficio en Nosara).
+    **Queda:** el `default 'santa-teresa'` de `location_id` en las tablas (lo usan solo el migrador y la batería).
+  - **Relevamiento fuera del Club:** `docs/MULTILOCAL-relevamiento.md` (solo lista; caja y propinas no tienen local).
+  - **Puente:** `docs/puente/PASE-PROD-2026-11-09.md` en `claude/puente-item11-prod` (`40370cc`), para la firma del lunes;
+    carreras y pruebas del puente en verde con el SHA fijo `e4678b3`. La 085 espera al puente.
+  - **PR #64** mergeado (`1e28444`) con el OK de Ismael; ledger de prod en `080` antes y después.
+  - Pruebas: batería 438/438 · paridad 840 = 840 · carreras OK · vitest 1.496 · club-web 14/14 · wallet + club 51/51.
+
+### Autorrevisión adversarial (multilocal)
+| Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
+|---|---|---|---|
+| Anónimo | Darse de alta en un local apagado o inventado (`local` en la autoalta) | `club_local(..., true)`: el local tiene que existir y estar encendido; el proxy solo deja pasar ids `^[a-z0-9-]{2,40}$` | `club_locales_activos` muestra los nombres de los locales encendidos (dato público) |
+| Socio | Usar su QR en el otro local | La visita exige el Club encendido en SU local y busca el pedido en su local | DECISIÓN PROVISORIA: no hay Club compartido entre locales |
+| Anfitrión | Generar cupones con el local apagado | `club_cupon_crear` exige el Club encendido en su local | — |
+| Cajero | Operar en un local apagado eligiéndolo en un navegador viejo | El selector solo muestra locales encendidos (salvo al owner) y la base rechaza igual | — |
+| Manager | Encender un local | RLS de `club_config`: solo el owner (prueba 70) | — |
+| Owner | Encender Nosara sin preparar códigos ni topes | Confirmación con el aviso del checklist | Es una decisión suya; el checklist del RUNBOOK es la guía |
+| Cualquiera | Una pantalla que llame sin local con dos encendidos | La base pide elegir; nunca supone uno | Un acceso del inicio (alertas del Club) usa el último local elegido en ese navegador |

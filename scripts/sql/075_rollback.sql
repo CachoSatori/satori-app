@@ -30,7 +30,7 @@ drop function if exists public.club_negocio_guardar(uuid, text, text, boolean);
 drop function if exists public.club_miembro_guardar(uuid, text, text, uuid, text, jsonb, text);   -- LC-ML
 drop function if exists public.club_negocio_guardar(uuid, text, text, boolean, text);           -- LC-ML
 drop function if exists public.club_locales_activos();                                          -- LC-ML
-drop function if exists public.club_local(text, boolean);                                       -- LC-ML
+drop function if exists public.club_local(text, boolean) cascade;   -- saca los defaults de location_id que la usan                                     -- LC-ML
 drop function if exists public.club_local_activo(text);                                         -- LC-ML
 drop function if exists public.club_reporte_mes(date, text);
 drop function if exists public.club_excepcion_resolver(text, text, text, text);
@@ -89,6 +89,7 @@ drop table if exists public.club_premios;              -- LC-A4.3
 drop table if exists public.club_visitas_socio;       -- LC-A4
 drop table if exists public.club_entorno;              -- CLUB-AUD-42 (marca de staging)
 drop table if exists public.club_promociones;          -- LC-A3
+drop table if exists public.club_marcadores_descuento;   -- LC-MD
 drop table if exists public.club_cortesias;
 drop table if exists public.club_socio_solicitudes;   -- CLUB-AUD-72
 drop table if exists public.club_miembro_roles;

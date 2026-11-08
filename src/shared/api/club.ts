@@ -347,6 +347,9 @@ export const getLocalesClub = async (): Promise<LocalClub[]> =>
   (await leer(from<{ location_id: string; nombre: string | null; club_activo: boolean }>('club_config')
     .select('location_id,nombre,club_activo').order('location_id')))
     .map(r => ({ id: r.location_id, nombre: r.nombre ?? r.location_id, activo: r.club_activo === true }))
+/** Solo owner. Alta de un local: queda APAGADO; con `copiarDe`, arranca con la configuración de ese local. */
+export const crearLocal = (p: { id: string; nombre: string; direccion: string | null; mapa: string | null; copiarDe: string | null }) =>
+  llamar<string>('club_local_crear', { p_id: p.id, p_nombre: p.nombre, p_direccion: p.direccion, p_mapa: p.mapa, p_copiar_de: p.copiarDe })
 /** Solo owner (RLS de club_config). Encender o apagar el Club en un local: un dato, auditado en club_config_historial. */
 export async function setClubActivo(id: string, activo: boolean): Promise<void> {
   const filas = await leer(from<{ location_id: string }>('club_config').update({ club_activo: activo }).eq('location_id', id).select('location_id'))
@@ -422,6 +425,17 @@ export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('cl
 /** Solo owner. Alta: `id` null + código del artículo «CORTESÍA CLUB». Edición: nombre y activa. */
 export const guardarCortesia = (id: string | null, codigo: string | null, nombre: string | null, activa: boolean | null) =>
   llamar<string>('club_cortesia_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_activa: activa, p_location: localClub })
+
+// ── LC-MD: marcadores de descuento (configurables por local) ─────────────────
+export interface MarcadorDescuento {
+  id: string; codigo_producto: string; nombre: string; pct_esperado: number | null; activo: boolean
+  visto_en_facturas: boolean; actualizado_en: string
+}
+/** Owner, manager y contador. */
+export const getMarcadores = () => llamar<MarcadorDescuento[]>('club_marcadores_listar', { p_location: localClub })
+/** Solo owner. Alta: `id` null + código del PoS. Edición: nombre, % esperado (null = cualquier descuento) y activo. */
+export const guardarMarcador = (id: string | null, codigo: string | null, nombre: string | null, pct: number | null, activo: boolean | null) =>
+  llamar<string>('club_marcador_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_pct: pct, p_activo: activo, p_location: localClub })
 
 // ── LC-A4: visita del socio y «qué aplicar» ──────────────────────────────────
 export interface QueAplicar {

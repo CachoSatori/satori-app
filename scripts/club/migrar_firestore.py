@@ -39,7 +39,8 @@ from pathlib import Path
 # ── Constantes ────────────────────────────────────────────────────────────────
 STAGING_REF = 'hwiatgicyyqyezqwldia'
 PROD_REF = 'yiczgdtirrkdvohdquzf'
-LOCATION = 'santa-teresa'
+# LC-ML: el local destino de la migración se pasa con --local (id de club_config); ninguno escrito en el código.
+LOCATION = ''
 VALOR_CREDITO_CRC = 18000
 NOTA_TARJETA = 'fecha aproximada (carga)'
 NOTA_VENC_136 = 'cancelación inactividad 05-nov-2026'
@@ -473,6 +474,9 @@ def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False) -> s
 
     L = ["begin;", "set local statement_timeout = '300s';"]
     L.append(f"""do $$ begin
+  if not exists (select 1 from public.club_config where location_id = {q(LOCATION)}) then
+    raise exception 'CLUB: el local {LOCATION} no está dado de alta en club_config (RUNBOOK, alta de los locales)';
+  end if;
   if (select personas_por_credito from public.club_config where location_id = {q(LOCATION)}) is distinct from {p.rate} then
     raise exception 'CLUB: club_config.personas_por_credito no coincide con la tasa del export ({p.rate})';
   end if;
@@ -682,12 +686,17 @@ def main() -> None:
     ap.add_argument('--export', required=True, type=Path, help='zip o carpeta del export (fuera del repo)')
     ap.add_argument('--out', type=Path, default=Path.home() / 'club-export' / 'salida', help='carpeta de salida (fuera del repo)')
     ap.add_argument('--ref', default=STAGING_REF, help='ref de Supabase; solo se acepta staging')
+    ap.add_argument('--local', required=True, help='id del local destino en club_config (el de la página vieja del Club)')
     ap.add_argument('--esperados', type=Path, help='JSON con los totales esperados, firmado por Ismael (obligatorio con --apply)')
     modo = ap.add_mutually_exclusive_group(required=True)
     modo.add_argument('--dry-run', action='store_true', help='arma el plan y los CSV; no toca la base')
     modo.add_argument('--ensayo', action='store_true', help='corre todo contra staging y valida, pero termina en ROLLBACK')
     modo.add_argument('--apply', action='store_true', help='borra lo migrado antes y vuelve a insertar (staging)')
     a = ap.parse_args()
+    global LOCATION
+    if not re.fullmatch(r'[a-z0-9-]{2,40}', a.local or ''):
+        sys.exit('NEGADO: --local tiene que ser el id de un local de club_config (minúsculas, números y guiones).')
+    LOCATION = a.local
 
     if a.ref != STAGING_REF:
         sys.exit('NEGADO: este script solo corre contra STAGING.')

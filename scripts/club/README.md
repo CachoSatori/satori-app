@@ -31,14 +31,16 @@
 ## Uso
 ```bash
 # 1) Plan, sin tocar la base: conteos, controles y CSV de revisión
-python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --dry-run
+python3 -I scripts/club/migrar_firestore.py --local <id-del-local> --export ~/club-export/export.zip --dry-run
 
 # 2) Ensayo en STAGING: todo + validación, termina en ROLLBACK
-python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --ensayo
+python3 -I scripts/club/migrar_firestore.py --local <id-del-local> --export ~/club-export/export.zip --ensayo
 
 # 2) Carga en STAGING: borra lo migrado antes (origen='migracion') y vuelve a insertar, en una transacción
-python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --apply --esperados ~/club-export/esperados.json
+python3 -I scripts/club/migrar_firestore.py --local <id-del-local> --export ~/club-export/export.zip --apply --esperados ~/club-export/esperados.json
 ```
+- `--local`: id del local destino en `club_config` (LC-ML: ningún local está escrito en el script; tiene que estar dado de
+  alta antes, RUNBOOK paso 4b).
 - `--export`: el zip o la carpeta con `businesses.json`, `referrers.json`, `referrals.json`, `referrals_club.json` y `vencimientos_*.json`.
 - `--out`: la carpeta de salida (por defecto `~/club-export/salida`). Ahí quedan los CSV y `validacion.json`.
 - **Conexión:** usa la Management API de Supabase (`/v1/projects/{ref}/database/query`), porque hace falta SQL transaccional. El token va en la variable de entorno `SUPABASE_ACCESS_TOKEN` y nunca en el repo. En la sesión de Claude Code lo inyecta el proxy.
@@ -47,7 +49,7 @@ python3 -I scripts/club/migrar_firestore.py --export ~/club-export/export.zip --
 ## Mapeo
 | Origen | Destino | Regla |
 |---|---|---|
-| `businesses` | `club_config` (santa-teresa) | Se verifica que la tasa sea igual a `personas_por_credito` (6); si no, aborta. No se modifica. |
+| `businesses` | `club_config` (el local de `--local`) | Se verifica que la tasa sea igual a `personas_por_credito` (6); si no, aborta. No se modifica. |
 | `workPlace` | `club_negocios` (`origen='migracion'`, tipo `otro`) | Se normaliza con la misma regla del índice único (espacios, mayúsculas y tildes). Las variantes que coinciden se unifican. Las fusiones dudosas solo aparecen como sugerencia en el CSV. |
 | `referrers` | `club_miembros` (`legacy_id = _id`) + `club_miembros_contacto` | `deleted` pasa a `baja`. Tipo: «satori» en el nombre o el negocio → `equipo`; nombre terminado en «PM» o con montos en `referrals_club` → `concierge_pm`; el resto → `referente`. Teléfono a E.164 (+506 si tiene 8 dígitos); texto o «None» → vacío. Email inválido → vacío. Código y token nuevos. Un nombre vacío queda como «(sin nombre)». |
 | `referrals` credit | `club_movimientos` `tarjeta` | `personas = peopleCount` · `fecha_visita = createdAt` · nota «fecha aproximada (carga)». |

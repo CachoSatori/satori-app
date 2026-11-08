@@ -1,16 +1,49 @@
 {
-  "_que_es": "Registro de numeración de migraciones (decisión de Ismael, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de su rama) y en la tabla de ESTADO.md. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
+  "_que_es": "Registro de numeración de migraciones (decisión de Ismael, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de CREACIÓN de su rama) y en la tabla de ESTADO.md. El bloque de PASE solo recibe migraciones que ya existían y se renumeran al ir a prod: se registran con bloque 'pase' y su número de 'origen'. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
   "bloques": {
-    "caja":  { "desde": 87,  "hasta": 99,  "que": "Caja / operación (incluye Salarios, PoS propio, seguridad de la app)" },
-    "club":  { "desde": 100, "hasta": 149, "que": "Club Satori + puente del PoS" }
+    "caja": {
+      "tipo": "creacion",
+      "desde": 87,
+      "hasta": 99,
+      "que": "Caja / operación (incluye Salarios, PoS propio, seguridad de la app)"
+    },
+    "club": {
+      "tipo": "creacion",
+      "desde": 100,
+      "hasta": 149,
+      "que": "Club Satori + puente del PoS"
+    },
+    "pase": {
+      "tipo": "pase",
+      "desde": 150,
+      "hasta": 199,
+      "que": "PASE A PROD: solo renumeraciones de migraciones que quedaron ≤ al último del ledger de prod (con su número de origen)"
+    }
   },
   "usadas_antes_de_los_bloques": {
-    "081": { "nombre": "pos_ndf_campos_factura",        "de": "club" },
-    "082": { "nombre": "pos_ndf_ingesta_transaccional", "de": "club" },
-    "083": { "nombre": "my_turno_stats_higiene",        "de": "caja" },
-    "084": { "nombre": "employee_payroll",              "de": "caja" },
-    "085": { "nombre": "rls_lectura_rol_activo",        "de": "caja" }
+    "081": {
+      "nombre": "pos_ndf_campos_factura",
+      "de": "club"
+    },
+    "082": {
+      "nombre": "pos_ndf_ingesta_transaccional",
+      "de": "club"
+    },
+    "083": {
+      "nombre": "my_turno_stats_higiene",
+      "de": "caja"
+    },
+    "084": {
+      "nombre": "employee_payroll",
+      "de": "caja"
+    },
+    "085": {
+      "nombre": "rls_lectura_rol_activo",
+      "de": "caja"
+    }
   },
-  "libres_fuera_de_bloque": ["086"],
+  "libres_fuera_de_bloque": [
+    "086"
+  ],
   "asignadas": {}
 }

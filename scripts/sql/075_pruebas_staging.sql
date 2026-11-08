@@ -2762,7 +2762,7 @@ declare v_p uuid; v_p2 uuid; e text; j jsonb; v_n int; v_s uuid; v_r uuid; v_v1 
 begin
   -- semilla: «Local Club» 10 % + 1 cortesía, en borrador, para socios
   perform pg_temp.r('60', 'semilla: «Local Club» 10 % + 1 cortesía en borrador, para socios',
-    exists (select 1 from club_promociones where nombre = 'Local Club' and estado = 'borrador' and porcentaje = 10 and cortesias = 1
+    exists (select 1 from club_promociones where nombre = 'Local Club' and location_id = public.club_local(null) and estado = 'borrador' and porcentaje = 10 and cortesias = 1
              and para = array['socio']), '');
   -- permisos
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');
@@ -2810,7 +2810,7 @@ begin
   perform pg_temp.r('60', 'beneficio en texto: «15 %», «1 cortesía», «10 % + 1 cortesía»',
     public.club_promo_beneficio((select p from club_promociones p where p.id = v_p)) = '15 %'
       and public.club_promo_beneficio((select p from club_promociones p where p.id = v_p2)) = '1 cortesía'
-      and public.club_promo_beneficio((select p from club_promociones p where p.nombre = 'Local Club')) = '10 % + 1 cortesía', '');
+      and public.club_promo_beneficio((select p from club_promociones p where p.nombre = 'Local Club' and p.location_id = public.club_local(null))) = '10 % + 1 cortesía', '');
   -- terminada no se edita; queda en la auditoría
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_promocion_guardar(v_p2, jsonb_build_object('nombre', 'Prueba Otro Dia', 'para', '["todos"]'::jsonb, 'cortesias', 1, 'estado', 'terminada'));
@@ -2938,7 +2938,7 @@ begin
   insert into club_miembros (tipo, nombre, origen) values ('socio', 'Oto Visita Ficticio', 'app') returning id into v_s4;
   insert into club_miembros (tipo, nombre, origen) values ('referente', 'Pia Anfitriona Socia Ficticia', 'app') returning id, codigo into v_sr, v_cod;
   insert into club_miembro_roles (miembro_id, rol) values (v_sr, 'socio');
-  select id into v_p from club_promociones where nombre = 'Local Club';
+  select id into v_p from club_promociones where nombre = 'Local Club' and location_id = public.club_local(null);
   update club_promociones set estado = 'terminada' where id <> v_p;   -- las de la prueba 60
   update club_promociones set estado = 'vigente' where id = v_p;
   delete from club_cortesias;
@@ -3048,7 +3048,7 @@ do $$
 declare v_a uuid; v_b uuid; v_c uuid; v_e uuid; v_f uuid; v_g uuid; n int; j jsonb; v_p uuid;
 begin
   update club_promociones set estado = 'terminada' where nombre <> 'Local Club';
-  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club' and location_id = public.club_local(null);
   update club_cortesias set activa = true where codigo_producto in ('CC-1','CC-2');
   update club_config set premios_referente_mes = 3 where location_id = 'santa-teresa';
   delete from club_premios;
@@ -3205,7 +3205,7 @@ do $$
 declare v_q uuid; v_x uuid; v_tok text; j jsonb; p jsonb;
 begin
   update club_promociones set estado = 'terminada' where nombre <> 'Local Club';
-  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club' and location_id = public.club_local(null);
   update club_cortesias set activa = true where codigo_producto in ('CC-1','CC-2');
   v_q := pg_temp.socio('Quela Pase Ficticia', '+50661110021', null);
   v_x := pg_temp.socio('Xime Referida Ficticia', '+50661110022', v_q);
@@ -3268,7 +3268,7 @@ begin
                          articulos_cero_permitidos = '{}', anfitrion_tope_mes_crc = 25000, valor_credito_crc = 18000, personas_por_credito = 6
    where location_id = 'santa-teresa';
   update club_promociones set estado = 'terminada' where nombre <> 'Local Club';
-  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club' and location_id = public.club_local(null);
   delete from club_cortesias;
   -- sin la sección configurada: las tres de cortesía salen «pendiente de configuración»
   perform pg_temp.r('67', 'sin «CORTESÍA CLUB» configurada: las tres de cortesía salen «pendiente de configuración»',
@@ -3411,7 +3411,7 @@ declare v_s uuid; v_vis jsonb; v_vis2 jsonb; j jsonb; i int;
 begin
   update club_config set puente_latencia_min = 1, cortesia_familia = 17, lc_excepciones_desde = null,
                          articulos_cero_permitidos = '{}' where location_id = 'santa-teresa';
-  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club' and location_id = public.club_local(null);
   -- un 857 sin visita de socio → LC_SIN_REGISTRO
   perform pg_temp.factura('990801', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"857","m":0}]');
   perform pg_temp.r('68', '857 sin visita de socio en la factura → LC_SIN_REGISTRO', pg_temp.hay(pg_temp.exc('LC_SIN_REGISTRO'), 'lc:990801'), '');
@@ -3469,7 +3469,7 @@ declare v_a uuid; v_b uuid; j jsonb; j2 jsonb; n int; v_n uuid; c1 text; op uuid
 begin
   update club_config set socio_visitas_por_dia = 1, socios_por_factura = 1, anfitrion_tope_mes_crc = 25000, valor_credito_crc = 18000, personas_por_credito = 6
    where location_id = 'santa-teresa';
-  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club' and location_id = public.club_local(null);
   v_a := pg_temp.socio('Abril Noventa Ficticia', '+50661110051', null);
   v_b := pg_temp.socio('Bruno Noventa Ficticio', '+50661110052', null);
   perform pg_temp.factura('880691', 1, 0, '[{"c":"856","m":0}]', '9901');
@@ -3611,6 +3611,127 @@ begin
   select string_agg(p.proname, ',') into v_loc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.proname like 'club\_%' and (p.prosrc ~ '''(santa-teresa|nosara)''' or pg_get_function_arguments(p.oid) ~ '''(santa-teresa|nosara)''');
   perform pg_temp.r('70', 'ninguna función club_* tiene un local escrito (cuerpo ni default)', v_loc is null, coalesce(v_loc, ''));
+end $$;
+
+-- ═══ 71. LC-MD: marcadores de descuento configurables por local (DESCUENTO_SIN_RESPALDO y CANJE_CON_DESCUENTO) ═══
+do $$
+declare j jsonb; e text; v_mk uuid; i int; v_n int;
+begin
+  -- referencia de ZM1: ₡5.000 en 10 días anteriores; hoy ₡4.000 (20 %) con el artículo HTL1 («tarjeta de hotel»)
+  for i in 1..10 loop perform pg_temp.factura('8807' || lpad(i::text, 2, '0'), 24 * i, 0, '[{"c":"ZM1","m":5000,"f":5}]'); end loop;
+  for i in 1..3 loop perform pg_temp.factura('88072' || i, 1, 0, '[{"c":"ZM1","m":5000,"f":5}]'); end loop;   -- ventas normales de hoy
+  perform pg_temp.factura('880711', 1, 0, '[{"c":"ZM1","m":4000,"f":5},{"c":"HTL1","n":"TARJETA HOTEL","m":0,"f":9}]');
+  perform pg_temp.factura('880712', 1, 0, '[{"c":"ZM1","m":4500,"f":5},{"c":"HTL1","n":"TARJETA HOTEL","m":0,"f":9}]');
+  perform pg_temp.factura('880713', 1, 18000, '[{"c":"P1","m":9000,"f":5},{"c":"HTL1","n":"TARJETA HOTEL","m":0,"f":9}]');
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('71', 'sin cargar el marcador, la tarjeta de hotel no respalda: sale DESCUENTO_SIN_RESPALDO', pg_temp.hay(j, 'desc:880711'), '');
+  perform pg_temp.r('71', 'sin marcador, crédito + tarjeta de hotel no es CANJE_CON_DESCUENTO', not pg_temp.hay(pg_temp.exc('CANJE_CON_DESCUENTO'), 'canje-desc:880713'), '');
+  -- permisos
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_marcador_guardar(null, 'HTL1', 'Tarjeta hotel', null, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  select count(*) into v_n from public.club_marcadores_listar();
+  perform pg_temp.yo();
+  perform pg_temp.r('71', 'el manager ve la lista pero no carga marcadores (negativa)', e = 'Sin permiso' and v_n >= 2, e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_marcadores_listar(); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('71', 'el cajero no ve los marcadores (negativa)', e = 'Sin permiso', e);
+  -- un marcador de OTRO local no respalda acá
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_marcador_guardar(null, 'HTL1', 'Tarjeta hotel (otro local)', null, true, 'nosara');
+  perform pg_temp.yo();
+  perform pg_temp.r('71', 'el marcador de otro local no respalda en este (negativa)', pg_temp.hay(pg_temp.exc('DESCUENTO_SIN_RESPALDO'), 'desc:880711'), '');
+  -- el owner lo carga en este local: deja de salir, sin código
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  v_mk := public.club_marcador_guardar(null, 'HTL1', null, null, true);
+  perform pg_temp.yo();
+  perform pg_temp.r('71', 'alta del marcador: el nombre sale de las facturas y queda auditado',
+    (select nombre = 'TARJETA HOTEL' from club_marcadores_descuento where id = v_mk)
+      and exists (select 1 from club_auditoria a where a.objeto_id = v_mk and a.accion = 'marcador_alta'), '');
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('71', 'con el marcador cargado, el descuento respaldado ya no sale', not pg_temp.hay(j, 'desc:880711') and not pg_temp.hay(j, 'desc:880712'), '');
+  perform pg_temp.r('71', 'CANJE_CON_DESCUENTO usa la lista: crédito + marcador → sale, con su nombre',
+    pg_temp.hay(pg_temp.exc('CANJE_CON_DESCUENTO'), 'canje-desc:880713')
+      and (select x->'detalle'->'con' ? 'TARJETA HOTEL' from jsonb_array_elements(pg_temp.exc('CANJE_CON_DESCUENTO')) x where x->>'ref' = 'canje-desc:880713'), '');
+  -- % esperado 10: respalda el 10 % (880712) y NO el 20 % (880711)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_marcador_guardar(v_mk, null, null, 10, true);
+  begin perform public.club_marcador_guardar(v_mk, null, null, 150, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('71', '% esperado 10: el 20 % sale y el 10 % no; un % fuera de rango se rechaza',
+    pg_temp.hay(j, 'desc:880711') and not pg_temp.hay(j, 'desc:880712') and e like 'El % esperado%', e);
+  -- desactivado: vuelve a salir (no se borra)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_marcador_guardar(v_mk, null, null, null, false);
+  perform pg_temp.yo();
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('71', 'marcador desactivado: deja de respaldar (vuelven a salir)', pg_temp.hay(j, 'desc:880711') and pg_temp.hay(j, 'desc:880712')
+    and exists (select 1 from club_marcadores_descuento where id = v_mk and not activo), '');
+  -- el 856 sembrado sigue respaldando como antes
+  perform pg_temp.r('71', 'los marcadores sembrados (856 y 857) están en la lista de cada local',
+    (select count(*) from club_marcadores_descuento m join club_config c on c.location_id = m.location_id
+      where m.codigo_producto in (c.lc_articulo_codigo, c.lc_invitado_codigo)) = 2 * (select count(*) from club_config), '');
+end $$;
+
+-- ═══ 72. LC-ML genérico: alta de un local NUEVO (app o un INSERT), encenderlo, operar una visita y apagarlo ═══
+do $$
+declare e text; j jsonb; v_s uuid; v_base text := public.club_local(null);
+begin
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_local_crear('prueba-gen', 'Local Genérico'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('72', 'el manager no da de alta un local (negativa)', e = 'Sin permiso', e);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_local_crear('Prueba Gen!', 'X'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform public.club_local_crear('prueba-gen', 'Local Genérico', null, 'https://example.com/mapa', v_base);
+  perform pg_temp.yo();
+  perform pg_temp.r('72', 'un id de local inválido se rechaza (negativa)', e like 'El id del local%', e);
+  perform pg_temp.r('72', 'alta desde la app: APAGADO, con la configuración del local copiado, marcadores y promo en borrador, auditada',
+    not public.club_local_activo('prueba-gen')
+      and (select (n.lc_articulo_codigo, n.valor_credito_crc, n.socios_por_factura) = (b.lc_articulo_codigo, b.valor_credito_crc, b.socios_por_factura)
+             and n.lc_excepciones_desde is null
+             from club_config n, club_config b where n.location_id = 'prueba-gen' and b.location_id = v_base)
+      and (select count(*) from club_marcadores_descuento where location_id = 'prueba-gen') >= 2
+      and exists (select 1 from club_promociones where location_id = 'prueba-gen' and lower(nombre) = 'local club' and estado = 'borrador')
+      and exists (select 1 from club_auditoria where accion = 'local_alta' and despues->>'location_id' = 'prueba-gen'), '');
+  -- el único INSERT documentado en el RUNBOOK da el mismo resultado
+  insert into club_config (location_id, nombre) values ('prueba-sql', 'Local SQL');
+  perform pg_temp.r('72', 'alta con un único INSERT: apagado, con marcadores y promo sembrados',
+    not public.club_local_activo('prueba-sql') and (select count(*) from club_marcadores_descuento where location_id = 'prueba-sql') = 2
+      and exists (select 1 from club_promociones where location_id = 'prueba-sql' and lower(nombre) = 'local club'), '');
+  -- encender (owner) y operar una visita real en el local nuevo
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  update club_config set club_activo = true where location_id = 'prueba-gen';
+  perform pg_temp.yo();
+  update club_promociones set estado = 'vigente' where location_id = 'prueba-gen' and lower(nombre) = 'local club';
+  -- el puente del local nuevo late (checklist «Encender un local», ítem 1)
+  insert into pos_ndf_cursor (local, last_poll_at) values ('prueba-gen', now());
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en) values
+    ('prueba-gen', 'pedido:7201', '7201', '72', 'salon', 2, now() - interval '30 minutes', now() - interval '30 minutes'),
+    ('prueba-gen', 'pedido:7202', '7202', '73', 'salon', 2, now() - interval '30 minutes', now() - interval '30 minutes');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_alta_caja('Gea Genérica', '60007201', null, true, 'prueba-gen');
+  v_s := (j->>'miembro_id')::uuid;
+  j := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"7201","clave":"pedido:7201"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('72', 'encendido: alta en caja y visita de socio en el local nuevo, con su promo (10 %)',
+    j->>'visita_id' is not null and (j->>'porcentaje')::numeric = 10
+      and (select location_id from club_visitas_socio where id = (j->>'visita_id')::uuid) = 'prueba-gen', j::text);
+  -- apagar: la siguiente visita se rechaza
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  update club_config set club_activo = false where location_id = 'prueba-gen';
+  perform pg_temp.yo();
+  delete from club_visitas_socio where miembro_id = v_s;   -- para que no sea «ya usó su beneficio hoy»
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"7202","clave":"pedido:7202"}', gen_random_uuid()); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('72', 'apagado: la visita en el local nuevo se rechaza (negativa)', e = 'El Club no está activo en Local Genérico', e);
+  -- ninguna tabla del Club tiene un local escrito como default
+  perform pg_temp.r('72', 'ningún default de location_id nombra un local',
+    not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name like 'club\_%'
+                 and column_name = 'location_id' and column_default ~ '''[a-z0-9-]+'''), '');
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

@@ -5,21 +5,24 @@
 //   · dos archivos de supabase/migrations/ tienen la misma versión;
 //   · una migración ≥ 086 no está registrada en «asignadas» (con el mismo nombre) o queda fuera del
 //     bloque de su rama;
+//   · un número del bloque de PASE (150–199) no está registrado como «pase» con su número de origen,
+//     o el archivo de origen sigue en el repo (se renombra, no se copia);
 //   · el registro se contradice (bloques que se pisan, un número en dos lugares, una asignada fuera
 //     de su bloque);
 //   · ESTADO.md no lista los bloques o algún número registrado.
 // La regla del pase a prod («ningún número ≤ al último del ledger de prod») depende de la base y se
-// verifica en el PR del pase, no acá.
+// verifica en el PR del pase, no acá; este test solo exige que la renumeración caiga en el bloque de
+// pase y quede registrada con su origen (nunca dentro de un bloque de creación).
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-interface Bloque { desde: number; hasta: number; que: string }
+interface Bloque { tipo: 'creacion' | 'pase'; desde: number; hasta: number; que: string }
 interface Registro {
   bloques: Record<string, Bloque>
   usadas_antes_de_los_bloques: Record<string, { nombre: string; de: string }>
   libres_fuera_de_bloque: string[]
-  asignadas: Record<string, { nombre: string; bloque: string; rama?: string }>
+  asignadas: Record<string, { nombre: string; bloque: string; rama?: string; origen?: string }>
 }
 
 const RAIZ = join(__dirname, '..')
@@ -92,6 +95,37 @@ describe('numeración de migraciones', () => {
     for (const v of REG.libres_fuera_de_bloque) {
       expect(bloques.some(([, b]) => Number(v) >= b.desde && Number(v) <= b.hasta), `${v} está dentro de un bloque`).toBe(false)
     }
+  })
+
+  it('bloque de PASE: solo renumeraciones registradas con su origen; los de creación no llevan origen', () => {
+    const malas: string[] = []
+    const origenes = new Set<string>()
+    for (const [v, a] of Object.entries(REG.asignadas)) {
+      const b = REG.bloques[a.bloque]
+      if (!b) continue
+      if (b.tipo === 'creacion') {
+        if (a.origen !== undefined) malas.push(`${v}: un bloque de creación no lleva «origen»`)
+        continue
+      }
+      // tipo pase
+      if (!a.origen || !/^\d{3}$/.test(a.origen)) { malas.push(`${v}: pase sin «origen» (NNN)`); continue }
+      const o = Number(a.origen)
+      const enPase = Object.values(REG.bloques).some(x => x.tipo === 'pase' && o >= x.desde && o <= x.hasta)
+      if (enPase) malas.push(`${v}: el origen ${a.origen} no puede ser otro número de pase`)
+      if (origenes.has(a.origen)) malas.push(`${v}: el origen ${a.origen} ya se renumeró una vez`)
+      origenes.add(a.origen)
+      const conocido = REG.usadas_antes_de_los_bloques[a.origen] ?? REG.asignadas[a.origen]
+      if (conocido && conocido.nombre !== a.nombre) malas.push(`${v}: el nombre no coincide con el de su origen ${a.origen}`)
+      if (!conocido && o >= PRIMER_BLOQUE) malas.push(`${v}: el origen ${a.origen} no está registrado`)
+      // se renombra, no se copia: el archivo de origen no puede seguir al lado del de pase
+      if (migs.some(m => m.version === a.origen && m.nombre === a.nombre) && migs.some(m => m.version === v)) {
+        malas.push(`${v}: el archivo de origen ${a.origen}_${a.nombre}.sql sigue en el repo`)
+      }
+    }
+    for (const [nombre, b] of Object.entries(REG.bloques)) {
+      expect(['creacion', 'pase'], `tipo del bloque ${nombre}`).toContain(b.tipo)
+    }
+    expect(malas).toEqual([])
   })
 
   it('ESTADO.md lista los bloques y cada número registrado', () => {

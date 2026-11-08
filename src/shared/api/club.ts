@@ -35,6 +35,8 @@ export type TipoNegocio = 'hotel' | 'tienda' | 'host' | 'delivery' | 'concierge'
 export interface ClubMiembro {
   id: string; tipo: TipoMiembro; nombre: string; negocio_id: string | null
   estado: 'activo' | 'baja'; origen: string; created_at: string
+  /** Local del alta (Club compartido: el socio vale en todos los locales encendidos). */
+  location_id?: string
 }
 export interface ClubSaldo {
   miembro_id: string; personas: number; creditos: number
@@ -239,7 +241,7 @@ export const regenerarCodigo = async (id: string) =>
 export const tokenPortal = (id: string) => llamar<string>('club_miembro_token', { p_id: id })
 
 // ── Lecturas ─────────────────────────────────────────────────────────────────
-const COLS_MIEMBRO = 'id,tipo,nombre,negocio_id,estado,origen,created_at'
+const COLS_MIEMBRO = 'id,tipo,nombre,negocio_id,estado,origen,created_at,location_id'
 
 export const getMiembros = () => leer(from<ClubMiembro>('club_miembros').select(COLS_MIEMBRO).order('nombre'))
 export const getMiembro = async (id: string) =>
@@ -312,6 +314,8 @@ export interface FilaReporte {
 export interface ReporteMes {
   mes: string; local: string; local_nombre?: string | null; generado_en: string
   config: { valor_credito_crc: number; personas_por_credito: number; vencimiento_meses: number; pm_pausado: boolean }
+  /** Club compartido: visitas de socios en este local (donde ocurrieron) y cuántas de socios anotados en otro local. */
+  socios?: { visitas: number; socios: number; con_beneficio: number; de_otro_local: number; socios_de_otro_local: number; altas: number }
   kpis: {
     tarjetas: number; personas: number; creditos_generados: number; canjes: number; creditos_canjeados: number
     valor_canjeado_crc: number; personas_vencidas: number; referentes_con_visitas: number
@@ -382,7 +386,7 @@ export const socioAltaCaja = (nombre: string, whatsapp: string, email: string | 
   llamar<AltaSocio>('club_socio_alta_caja', { p_nombre: nombre, p_whatsapp: whatsapp, p_email: email, p_verifico_residencia: verificoResidencia, p_location: localClub })
 /** Validar en caja una autoalta pendiente: pasa a activo provisional. */
 export const socioValidar = (miembro: string, verificoResidencia: boolean) =>
-  llamar<AltaSocio>('club_socio_validar', { p_miembro: miembro, p_verifico_residencia: verificoResidencia })
+  llamar<AltaSocio>('club_socio_validar', { p_miembro: miembro, p_verifico_residencia: verificoResidencia, p_location: localClub })
 /** Confirmar un alta provisional (owner o manager distinto de quien la cargó). */
 export const socioConfirmar = (miembro: string, nota: string) =>
   llamar<boolean>('club_socio_confirmar', { p_miembro: miembro, p_nota: nota })
@@ -456,7 +460,7 @@ export interface QueAplicar {
 }
 /** Registra la visita del día del socio (con el pedido) y devuelve qué aplicar. Idempotente con `op`. */
 export const registrarVisitaSocio = (miembro: string, pos: PosRef, op: string) =>
-  llamar<QueAplicar>('club_socio_visita', { p_miembro: miembro, p_pos: posParaServidor(pos), p_op: op })
+  llamar<QueAplicar>('club_socio_visita', { p_miembro: miembro, p_pos: posParaServidor(pos), p_op: op, p_location: localClub })
 
 // ── LC-A4.4: personas pendientes de aprobación (anfitrión nuevo sobre el tope del mes) ──
 export interface PendienteAprobacion {

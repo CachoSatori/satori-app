@@ -2957,6 +2957,14 @@ begin
      where v.location_id = p_location and v.registrada_en >= v_ini - interval '1 day' and v.registrada_en < v_fin + interval '1 day'
        and (p_tipo is null or p_tipo in ('LC_SIN_REGISTRO','REGISTRO_LC_SIN_856','SOCIO_USO_ANOMALO','CUPON_AUTOREFERIDO',
                                          'CORTESIA_DISTINTA','CORTESIA_SIN_SOCIO'))),
+  -- Club compartido: las visitas de esos socios en TODOS los locales (para SOCIO_USO_ANOMALO entre locales)
+  vsa as (
+    select v.* from public.club_visitas_socio v
+     where v.registrada_en >= v_ini - interval '7 days' and v.registrada_en < v_fin + interval '1 day'
+       and (p_tipo is null or p_tipo = 'SOCIO_USO_ANOMALO')
+       and v.miembro_id in (select x.miembro_id from public.club_visitas_socio x
+                             where x.location_id = p_location and x.registrada_en >= v_ini - interval '7 days'
+                               and x.registrada_en < v_fin + interval '1 day')),
   -- líneas de las facturas C del rango, marcadas
   ln as (
     select l.*, t.clave, t.f, t.numero_factura, t.cxc,
@@ -3240,23 +3248,27 @@ begin
       join tk t on t.id = c.tid
      order by c.tid, c.u / c.ref)
     union all
-    -- SOCIO_USO_ANOMALO: dos mesas el mismo día
+    -- SOCIO_USO_ANOMALO: dos mesas el mismo día. CLUB COMPARTIDO (08-nov): cuenta las visitas del socio en TODOS los
+    -- locales (vsa) y sale en cada local donde tuvo una de esas visitas; dice en qué locales.
     select 'SOCIO_USO_ANOMALO', 'socio-dia:' || v.miembro_id || ':' || v.fecha, min(v.registrada_en), null, 'probable',
            jsonb_build_object('miembro', public.club_nombre_limpio(min(mi.nombre)), 'motivo', 'dos mesas el mismo día',
-                              'mesas', jsonb_agg(distinct v.pos_ref->>'mesa'), 'registradores', jsonb_agg(distinct v.registrado_por))
-      from vs v join public.club_miembros mi on mi.id = v.miembro_id
+                              'mesas', jsonb_agg(distinct v.pos_ref->>'mesa'), 'locales', jsonb_agg(distinct v.location_id),
+                              'registradores', jsonb_agg(distinct v.registrado_por))
+      from vsa v join public.club_miembros mi on mi.id = v.miembro_id
      where v.registrada_en >= v_ini and v.registrada_en < v_fin
      group by v.miembro_id, v.fecha
-    having count(distinct coalesce(v.pos_ref->>'mesa', v.visita_clave)) > 1
+    having count(distinct v.location_id || ':' || coalesce(v.pos_ref->>'mesa', v.visita_clave)) > 1
+       and bool_or(v.location_id = p_location)
     union all
-    -- SOCIO_USO_ANOMALO: más de N visitas en la semana
+    -- SOCIO_USO_ANOMALO: más de N visitas en la semana (en todos los locales)
     select 'SOCIO_USO_ANOMALO', 'socio-semana:' || v.miembro_id || ':' || to_char(v.fecha, 'IYYY-IW'), min(v.registrada_en), null, 'probable',
            jsonb_build_object('miembro', public.club_nombre_limpio(min(mi.nombre)), 'motivo', 'muchas visitas en la semana',
-                              'visitas', count(*), 'maximo', v_cfg.socio_visitas_semana_max, 'registradores', jsonb_agg(distinct v.registrado_por))
-      from vs v join public.club_miembros mi on mi.id = v.miembro_id
+                              'visitas', count(*), 'maximo', v_cfg.socio_visitas_semana_max, 'locales', jsonb_agg(distinct v.location_id),
+                              'registradores', jsonb_agg(distinct v.registrado_por))
+      from vsa v join public.club_miembros mi on mi.id = v.miembro_id
      where v.registrada_en >= v_ini and v.registrada_en < v_fin
      group by v.miembro_id, to_char(v.fecha, 'IYYY-IW')
-    having count(*) > v_cfg.socio_visitas_semana_max
+    having count(*) > v_cfg.socio_visitas_semana_max and bool_or(v.location_id = p_location)
     union all
     -- CUPON_AUTOREFERIDO: cupón usado en una visita (misma clave o misma factura) donde su anfitrión es socio
     select 'CUPON_AUTOREFERIDO', 'autoref:' || m.id, m.fecha_visita, m.ref_factura, 'exacta',
@@ -3711,6 +3723,17 @@ begin
     'generado_en', now(),
     'config', jsonb_build_object('valor_credito_crc', v_cfg.valor_credito_crc, 'personas_por_credito', v_cfg.personas_por_credito,
                                  'vencimiento_meses', v_cfg.vencimiento_meses, 'pm_pausado', v_cfg.pm_pausado),
+    -- Club compartido (08-nov): visitas de socios en ESTE local (donde ocurrieron), de cuántos socios, y cuántas de socios
+    -- que se anotaron en otro local; altas hechas en este local.
+    'socios', (select jsonb_build_object(
+        'visitas', count(*), 'socios', count(distinct vs.miembro_id),
+        'con_beneficio', count(*) filter (where vs.estado_beneficio in ('aplica','pendiente_configuracion')),
+        'de_otro_local', count(*) filter (where m.location_id <> p_location),
+        'socios_de_otro_local', count(distinct vs.miembro_id) filter (where m.location_id <> p_location),
+        'altas', (select count(*) from public.club_miembro_roles rr join public.club_miembros mm on mm.id = rr.miembro_id
+                   where rr.rol = 'socio' and mm.location_id = p_location and rr.desde >= v_ini and rr.desde < v_fin))
+      from public.club_visitas_socio vs join public.club_miembros m on m.id = vs.miembro_id
+     where vs.location_id = p_location and vs.registrada_en >= v_ini and vs.registrada_en < v_fin),
     'kpis', (select jsonb_build_object(
         'tarjetas', k.tarjetas, 'personas', k.personas,
         'creditos_generados', round(k.personas::numeric / v_cfg.personas_por_credito, 1),
@@ -4270,7 +4293,8 @@ begin
     j_soc := jsonb_build_object(
       'estado', v_soc.estado, 'desde', (v_soc.desde at time zone 'America/Costa_Rica')::date,
       'qr_url', v_base || '/s/' || v_m.codigo_socio,
-      'beneficio', case when v_soc.estado = 'activo' then v_pben end,
+      -- Club compartido (08-nov): el beneficio del socio vale en todos los locales encendidos: texto GENÉRICO, no la promo de un local
+      'beneficio', case when v_soc.estado = 'activo' then 'Vale en todos los Satori' end,
       'visitas_mes', (select count(*) from public.club_visitas_socio vs where vs.miembro_id = v_m.id
                         and vs.fecha >= date_trunc('month', now() at time zone 'America/Costa_Rica')::date),
       -- Cortesía SORPRESA (se sortea en caja): solo si es activo, la promo la da y hay cortesías activas; más los premios
@@ -4592,7 +4616,10 @@ end;
 $$;
 
 -- Validar en caja una autoalta pendiente (owner, manager, cajero): pasa a activo provisional, igual que el alta.
-create or replace function public.club_socio_validar(p_miembro uuid, p_verifico_residencia boolean)
+-- Club compartido (08-nov): se valida desde CUALQUIER local encendido (el de la caja, p_location); el alta sigue con el
+-- local donde se hizo.
+drop function if exists public.club_socio_validar(uuid, boolean);
+create or replace function public.club_socio_validar(p_miembro uuid, p_verifico_residencia boolean, p_location text default null)
 returns jsonb
 language plpgsql
 volatile
@@ -4632,8 +4659,7 @@ begin
                                 jsonb_build_object('estado', 'activo', 'confirmado', true, 'registrado_por', v_r.registrado_por));
     return jsonb_build_object('miembro_id', p_miembro, 'estado', 'activo', 'provisional_hasta', null);
   end if;
-  select c.* into v_cfg from public.club_config c join public.club_miembros m on m.location_id = c.location_id where m.id = p_miembro;
-  if found then perform public.club_local(v_cfg.location_id, true); end if;   -- LC-ML
+  select c.* into v_cfg from public.club_config c where c.location_id = public.club_local(p_location, true);   -- el local de la caja
   perform public.club_socio_provisional(p_miembro, v_cfg.socio_provisional_dias);
   perform public.club_auditar('socio_validar', 'club_miembro_roles', p_miembro, jsonb_build_object('estado', 'pendiente'),
                               jsonb_build_object('estado', 'activo', 'provisional', true));
@@ -4798,7 +4824,7 @@ begin
     v_purg := v_purg + 1;
   end loop;
   return jsonb_build_object('provisionales_vencidas', v_venc, 'autoaltas_purgadas', v_purg,
-                            'premios', (select coalesce(sum(public.club_premios_generar(c.location_id)), 0) from public.club_config c where c.club_activo));
+                            'premios', case when exists (select 1 from public.club_config c where c.club_activo) then public.club_premios_generar(null) else 0 end);
 end;
 $$;
 do $$ begin
@@ -5428,7 +5454,11 @@ alter table public.club_premios enable row level security;
 revoke all on public.club_premios from public, anon, authenticated;
 
 -- Registrar la visita del socio y decir qué aplicar. owner, manager, cajero.
-create or replace function public.club_socio_visita(p_miembro uuid, p_pos jsonb, p_op uuid)
+-- CLUB COMPARTIDO (Ismael, 08-nov): el socio vale en TODOS los locales encendidos. La visita es del local de la CAJA
+-- (p_location, encendido): su pedido, su promo, sus cortesías y sus códigos; queda guardada con ese local. El tope de
+-- visitas con beneficio por día es GLOBAL (todas las visitas del socio, en cualquier local).
+drop function if exists public.club_socio_visita(uuid, jsonb, uuid);
+create or replace function public.club_socio_visita(p_miembro uuid, p_pos jsonb, p_op uuid, p_location text default null)
 returns jsonb
 language plpgsql
 volatile
@@ -5454,6 +5484,7 @@ declare
   v_id    uuid;
   v_prem  public.club_premios%rowtype;
   v_extra jsonb;
+  v_loc   text;
   r       jsonb;
 begin
   if v_rol is null or v_rol not in ('owner','manager','cajero') then raise exception 'Sin permiso' using errcode = '42501'; end if;
@@ -5469,7 +5500,7 @@ begin
 
   select * into v_m from public.club_miembros where id = p_miembro;
   if not found then raise exception 'No se encontró al socio: escaneá su QR de nuevo' using errcode = 'P0001'; end if;
-  perform public.club_local(v_m.location_id, true);   -- LC-ML: Club activo en el local del socio
+  v_loc := public.club_local(p_location, true);   -- Club compartido: el local de la CAJA, encendido (el del socio puede estar apagado)
   perform pg_advisory_xact_lock(hashtextextended('club_socio_visita:' || p_miembro::text, 0));
   select * into v_r from public.club_miembro_roles where miembro_id = p_miembro and rol = 'socio';
   if not found or v_m.estado <> 'activo' or v_r.estado = 'baja' then
@@ -5478,20 +5509,20 @@ begin
   if v_r.estado = 'pendiente' then
     raise exception 'Socio pendiente: validalo primero (botón «Validar socio») y después registrá la visita' using errcode = 'P0001';
   end if;
-  select * into v_cfg from public.club_config where location_id = v_m.location_id;
+  select * into v_cfg from public.club_config where location_id = v_loc;
 
   if p_pos is null or p_pos = '{}'::jsonb or jsonb_typeof(p_pos) = 'null' then
     raise exception 'Falta el pedido: elegí el pedido de la lista' using errcode = 'P0001';
   end if;
-  v_pos := public.club_pos_ref(p_pos, v_m.location_id);
-  v_clave := coalesce(v_pos->>'visita', public.club_visita_canonica(v_m.location_id, v_pos, null));
+  v_pos := public.club_pos_ref(p_pos, v_loc);
+  v_clave := coalesce(v_pos->>'visita', public.club_visita_canonica(v_loc, v_pos, null));
 
   -- Tope por día. En el MISMO pedido: la caja ve la visita que ya está (misma cortesía, sin re-sorteo).
   -- Grok 90: en OTRO pedido → «ya_uso_hoy», NO aplicar beneficio (no se registra nada).
   select count(*) into v_n from public.club_visitas_socio where miembro_id = p_miembro and fecha = v_hoy;
   if v_n >= v_cfg.socio_visitas_por_dia then
     select * into v_prev from public.club_visitas_socio
-     where miembro_id = p_miembro and fecha = v_hoy and visita_clave is not distinct from v_clave
+     where miembro_id = p_miembro and fecha = v_hoy and location_id = v_loc and visita_clave is not distinct from v_clave
      order by registrada_en desc limit 1;
     if v_prev.id is not null then
       return v_prev.aplicar || jsonb_build_object('repetida', true,
@@ -5504,15 +5535,15 @@ begin
   end if;
 
   -- Regla fija: pagada con créditos → sin descuento ni cortesía.
-  if v_clave is not null and exists (select 1 from public.club_movimientos mv where mv.tipo = 'canje' and mv.visita_clave = v_clave) then
+  if v_clave is not null and exists (select 1 from public.club_movimientos mv where mv.tipo = 'canje' and mv.location_id = v_loc and mv.visita_clave = v_clave) then
     v_est := 'paga_con_creditos';
   -- Grok 91: ya hay `socios_por_factura` socio(s) con beneficio en esta factura → este va como invitado (857).
   elsif v_clave is not null and (select count(*) from public.club_visitas_socio x
-                                   where x.visita_clave = v_clave and x.miembro_id <> p_miembro
+                                   where x.location_id = v_loc and x.visita_clave = v_clave and x.miembro_id <> p_miembro
                                      and x.estado_beneficio in ('aplica','pendiente_configuracion')) >= v_cfg.socios_por_factura then
     v_est := 'como_invitado';
   else
-    select p.* into v_promo from public.club_promociones_vigentes(v_m.location_id, now(), array['socio']) p limit 1;
+    select p.* into v_promo from public.club_promociones_vigentes(v_loc, now(), array['socio']) p limit 1;
     if v_promo.id is null then
       v_est := 'sin_promocion';
     else
@@ -5521,7 +5552,7 @@ begin
       if v_promo.cortesias > 0 and v_cfg.cortesias_por_visita > 0 then
         select coalesce(jsonb_agg(jsonb_build_object('id', c.id, 'codigo', c.codigo_producto, 'nombre', c.nombre, 'motivo', 'promo')), '[]'::jsonb)
           into v_cort
-          from (select * from public.club_cortesias c where c.location_id = v_m.location_id and c.activa
+          from (select * from public.club_cortesias c where c.location_id = v_loc and c.activa
                  order by random() limit least(v_promo.cortesias, v_cfg.cortesias_por_visita)) c;
         if jsonb_array_length(v_cort) = 0 then
           v_est := 'pendiente_configuracion';
@@ -5539,12 +5570,12 @@ begin
     if v_prem.id is not null then
       select jsonb_build_object('id', c.id, 'codigo', c.codigo_producto, 'nombre', c.nombre, 'motivo', 'premio_referido') into v_extra
         from public.club_cortesias c
-       where c.location_id = v_m.location_id and c.activa
+       where c.location_id = v_loc and c.activa
          and not exists (select 1 from jsonb_array_elements(v_cort) y where y->>'id' = c.id::text)
        order by random() limit 1;
       if v_extra is null then   -- todas ya salieron en el sorteo de la promo: puede repetirse el producto
         select jsonb_build_object('id', c.id, 'codigo', c.codigo_producto, 'nombre', c.nombre, 'motivo', 'premio_referido') into v_extra
-          from public.club_cortesias c where c.location_id = v_m.location_id and c.activa order by random() limit 1;
+          from public.club_cortesias c where c.location_id = v_loc and c.activa order by random() limit 1;
       end if;
       if v_extra is null then
         v_avis := v_avis || to_jsonb('Tiene un premio por referir guardado: pendiente de configuración (no hay cortesías activas). Queda para la próxima.'::text);
@@ -5557,14 +5588,14 @@ begin
   end if;
 
   -- Antiautocanje (al revés): si este socio ya usó un cupón propio en este pedido, se avisa (A5: CUPON_AUTOREFERIDO).
-  if v_clave is not null and exists (select 1 from public.club_movimientos mv where mv.tipo = 'tarjeta' and mv.miembro_id = p_miembro and mv.visita_clave = v_clave) then
+  if v_clave is not null and exists (select 1 from public.club_movimientos mv where mv.tipo = 'tarjeta' and mv.miembro_id = p_miembro and mv.location_id = v_loc and mv.visita_clave = v_clave) then
     v_avis := v_avis || to_jsonb('Este socio ya registró un cupón propio en este pedido: queda para revisión.'::text);
   end if;
 
   v_texto := case v_est
     when 'paga_con_creditos' then 'Paga con créditos: NO aplicar descuento ni cortesía'
     when 'como_invitado' then 'Ya hay un socio con beneficio en esta factura: este socio va como invitado (marcá el ' || v_cfg.lc_invitado_codigo || '). El % se aplica una sola vez.'
-    when 'sin_promocion' then case when exists (select 1 from public.club_promociones p where p.location_id = v_m.location_id and p.estado = 'borrador' and 'socio' = any(p.para))
+    when 'sin_promocion' then case when exists (select 1 from public.club_promociones p where p.location_id = v_loc and p.estado = 'borrador' and 'socio' = any(p.para))
                                    then 'Promoción del Local Club en borrador (pendiente de configuración): NO aplicar beneficio'
                                    else 'Sin promoción vigente para socios ahora: NO aplicar beneficio' end
     else concat_ws(' + ',
@@ -5585,7 +5616,7 @@ begin
                           'promo', case when v_promo.id is not null then v_promo.nombre end);
   insert into public.club_visitas_socio (id, location_id, miembro_id, fecha, registrado_por, client_op_id, pos_ref, visita_clave,
                                          promo_id, porcentaje, cortesias, estado_beneficio, aplicar)
-  values (v_id, v_m.location_id, p_miembro, v_hoy, auth.uid(), p_op, v_pos, v_clave, v_promo.id, v_pct, v_cort, v_est, r);
+  values (v_id, v_loc, p_miembro, v_hoy, auth.uid(), p_op, v_pos, v_clave, v_promo.id, v_pct, v_cort, v_est, r);
   insert into public.club_pase_eventos (miembro_id, motivo) values (p_miembro, 'cortesia');
   if v_prem.id is not null then
     update public.club_premios set estado = 'usado', usado_en = now(), visita_id = v_id where id = v_prem.id;
@@ -5612,6 +5643,10 @@ volatile
 security definer
 set search_path = public, pg_temp
 as $$
+-- CLUB COMPARTIDO (08-nov): el premio nace con la primera factura C con el 856/857 del referido en CUALQUIER local
+-- encendido (con los códigos de ESE local) y queda con ese local; se cobra en cualquier local. Los topes por mes son
+-- por persona (globales); sus valores salen del local del premio. p_location null = todos los locales encendidos (lo
+-- que usa la tarea diaria); con un local, solo las visitas de ese local (y 0 si está apagado).
 declare
   v_cfg  public.club_config%rowtype;
   r      record;
@@ -5619,28 +5654,31 @@ declare
   v_n    int := 0;
   v_mot  text;
 begin
-  p_location := public.club_local(p_location, false);   -- LC-ML
-  if not public.club_local_activo(p_location) then return 0; end if;   -- Club apagado: no genera premios
-  select * into v_cfg from public.club_config where location_id = p_location;
-  perform pg_advisory_xact_lock(hashtextextended('club_premios:' || p_location, 0));
+  if p_location is not null then
+    p_location := public.club_local(p_location, false);
+    if not public.club_local_activo(p_location) then return 0; end if;   -- Club apagado: no genera premios
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended('club_premios', 0));    -- una pasada a la vez (los topes son por persona)
   for r in
-    select rr.miembro_id as referido, rr.referido_por as benef, rr.validado_por as validador, f.ticket_id
+    select rr.miembro_id as referido, rr.referido_por as benef, rr.validado_por as validador, f.ticket_id, f.loc
       from public.club_miembro_roles rr
-      join public.club_miembros m on m.id = rr.miembro_id and m.location_id = p_location and m.estado = 'activo'
+      join public.club_miembros m on m.id = rr.miembro_id and m.estado = 'activo'
       cross join lateral (
-        select t.id as ticket_id, t.fecha_registra
+        select t.id as ticket_id, t.fecha_registra, v.location_id as loc
           from public.club_visitas_socio v
+          join public.club_config c on c.location_id = v.location_id and c.club_activo
           cross join lateral unnest(public.club_cruce_facturas(v.location_id, v.pos_ref, null)) x(tid)
           join public.pos_ndf_tickets t on t.id = x.tid and t.estado = 'C'
-         where v.miembro_id = rr.miembro_id
+         where v.miembro_id = rr.miembro_id and (p_location is null or v.location_id = p_location)
            and exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = t.id
-                         and l.codigo_producto in (v_cfg.lc_articulo_codigo, v_cfg.lc_invitado_codigo))
+                         and l.codigo_producto in (c.lc_articulo_codigo, c.lc_invitado_codigo))
          order by t.fecha_registra limit 1) f
      where rr.rol = 'socio' and rr.estado = 'activo' and rr.referido_por is not null and rr.referido_por <> rr.miembro_id
        and not exists (select 1 from public.club_premios p where p.referido = rr.miembro_id)
        and exists (select 1 from public.club_miembro_roles b where b.miembro_id = rr.referido_por and b.rol = 'socio' and b.estado = 'activo')
      order by f.fecha_registra
   loop
+    select * into v_cfg from public.club_config where location_id = r.loc;
     v_mot := null;
     if exists (select 1 from public.club_miembros_contacto a join public.club_miembros_contacto b on b.telefono = a.telefono
                 where a.miembro_id = r.referido and b.miembro_id = r.benef and a.telefono is not null) then
@@ -5656,7 +5694,7 @@ begin
       v_mot := 'tope_validador';
     end if;
     insert into public.club_premios (location_id, beneficiario, referido, ticket_id, estado, motivo, vence_en)
-    values (p_location, r.benef, r.referido, r.ticket_id, case when v_mot is null then 'disponible' else 'sin_premio' end, v_mot,
+    values (r.loc, r.benef, r.referido, r.ticket_id, case when v_mot is null then 'disponible' else 'sin_premio' end, v_mot,
             case when v_mot is null then now() + make_interval(days => v_cfg.premio_vence_dias) end);
     if v_mot is null then
       v_n := v_n + 1;
@@ -5664,7 +5702,8 @@ begin
     end if;
   end loop;
   -- vencidos
-  update public.club_premios set estado = 'vencido' where estado = 'disponible' and vence_en < now() and location_id = p_location;
+  update public.club_premios set estado = 'vencido'
+   where estado = 'disponible' and vence_en < now() and (p_location is null or location_id = p_location);
   return v_n;
 end;
 $$;
@@ -6113,7 +6152,7 @@ revoke all on function public.club_miembro_por_telefono(text)                   
 revoke all on function public.club_socio_crear(text, text, text, text, text, uuid, text, text) from public, anon, authenticated;
 revoke all on function public.club_socio_provisional(uuid, int)                  from public, anon, authenticated;
 revoke all on function public.club_socio_alta_caja(text, text, text, boolean, text) from public, anon, authenticated;
-revoke all on function public.club_socio_validar(uuid, boolean)                  from public, anon, authenticated;
+revoke all on function public.club_socio_validar(uuid, boolean, text)            from public, anon, authenticated;
 revoke all on function public.club_socio_confirmar(uuid, text)                   from public, anon, authenticated;
 revoke all on function public.club_socio_autoalta(jsonb)                         from public, anon, authenticated;
 revoke all on function public.club_socio_baja_portal(text)                       from public, anon, authenticated;
@@ -6122,7 +6161,7 @@ revoke all on function public.club_canje_codigo_generar_pase(text)              
 revoke all on function public.club_pase_token(uuid, text)                        from public, anon, authenticated;
 revoke all on function public.club_pase_cursor_rebobinar(text, bigint, text)     from public, anon, authenticated;
 grant execute on function public.club_socio_alta_caja(text, text, text, boolean, text) to authenticated;
-grant execute on function public.club_socio_validar(uuid, boolean)               to authenticated;
+grant execute on function public.club_socio_validar(uuid, boolean, text)         to authenticated;
 grant execute on function public.club_socio_confirmar(uuid, text)                to authenticated;
 grant execute on function public.club_pase_token(uuid, text)                     to authenticated;
 -- LC-A3
@@ -6143,8 +6182,8 @@ grant execute on function public.club_productos(text, text)                     
 grant execute on function public.club_cortesias_listar(text)                     to authenticated;
 grant execute on function public.club_cortesia_guardar(uuid, text, text, boolean, text) to authenticated;
 -- LC-A4
-revoke all on function public.club_socio_visita(uuid, jsonb, uuid)              from public, anon, authenticated;
-grant execute on function public.club_socio_visita(uuid, jsonb, uuid)           to authenticated;
+revoke all on function public.club_socio_visita(uuid, jsonb, uuid, text)              from public, anon, authenticated;
+grant execute on function public.club_socio_visita(uuid, jsonb, uuid, text)           to authenticated;
 revoke all on function public.club_pendientes_listar(text)                       from public, anon, authenticated;
 revoke all on function public.club_pendiente_resolver(uuid, boolean, text)       from public, anon, authenticated;
 grant execute on function public.club_pendientes_listar(text)                    to authenticated;

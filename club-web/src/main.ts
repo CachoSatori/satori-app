@@ -307,7 +307,8 @@ function seccionSocio(token: string, socio: NonNullable<Portal['socio']>): HTMLE
   const sec = h('section', { class: 'tarjeta', 'aria-label': t.socio_titulo },
     h('h2', {}, t.socio_titulo),
     h('p', {}, activo ? t.socio_activo : t.socio_pendiente),
-    activo && h('p', {}, h('strong', {}, socio.beneficio ? t.socio_beneficio(socio.beneficio) : t.socio_sin_beneficio)),
+    // Club compartido (08-nov): texto genérico, no la promo de un local
+    activo && h('p', {}, h('strong', {}, t.socio_vale_todos)),
     activo && sorpresas > 0 && h('p', {}, t.socio_sorpresa(sorpresas)),
     ...premios.map(p => h('p', {}, t.socio_premio(p.vence_en ? fecha(p.vence_en + 'T12:00:00-06:00', false) : '—'))),
     activo && socio.visitas_mes != null && h('p', { class: 'sub' }, t.socio_visitas(socio.visitas_mes)),

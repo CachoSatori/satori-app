@@ -38,8 +38,6 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   ANFITRION_SOBRE_TOPE:     { titulo: 'Anfitrión sobre el tope', que: 'Un anfitrión ganó en el mes más que el tope configurado (₡25.000). Si es nuevo, lo que pasó quedó pendiente de aprobación.' },
   SOCIO_ALTA_SIN_CONFIRMAR: { titulo: 'Alta de socio sin confirmar', que: 'Alta provisional (en caja o validación) que todavía no confirmó un manager u owner distinto de quien la cargó.' },
 }
-// Excepciones que salen solo del PoS: sin registrante en la app → las resuelve el owner (la base lo controla igual).
-const SOLO_OWNER = new Set<TipoExcepcion>(['LC_SIN_REGISTRO', 'DESCUENTO_SIN_RESPALDO', 'CORTESIA_SIN_SOCIO', 'CORTESIA_NO_CONFIGURADA', 'SOCIO_USO_ANOMALO', 'ANFITRION_SOBRE_TOPE'])
 const crc = (n: unknown) => (typeof n === 'number' || typeof n === 'string') && n !== '' ? `₡${Number(n).toLocaleString('de-DE', { maximumFractionDigits: 0 })}` : '—'
 const hoyCR = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' })
 const haceDias = (d: number) => { const t = new Date(); t.setDate(t.getDate() - d); return t.toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }) }
@@ -130,8 +128,6 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
   const mia = Array.isArray(d.registradores) && !!profile?.id && (d.registradores as unknown[]).includes(profile.id)
   const bloqueo = e.certeza === 'pendiente_configuracion'
     ? 'Pendiente de configuración: se resuelve cuando se cargue lo que falta (código de «PROMO CLUB 10%» o la sección «CORTESÍA CLUB»). No se resuelve con nota.'
-    : SOLO_OWNER.has(e.tipo) && profile?.role !== 'owner'
-    ? 'Sale del PoS (no se sabe quién cargó la factura): la resuelve el owner.'
     : !mia ? null
     : e.tipo === 'TARJETA_MANUAL' || e.tipo === 'CANJE_SIN_CODIGO' ? 'Es un registro tuyo: la resuelve otra persona.'
     : profile?.role !== 'owner' ? 'Es un registro tuyo: la resuelve el owner.' : null

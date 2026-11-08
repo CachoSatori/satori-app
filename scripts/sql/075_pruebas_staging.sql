@@ -3439,12 +3439,24 @@ begin
     not pg_temp.hay(pg_temp.exc('LC_SIN_REGISTRO'), 'lc:990831') and not pg_temp.hay(pg_temp.exc('REGISTRO_LC_SIN_856'), 'visita:' || (v_vis->>'visita_id')), '');
   perform pg_temp.r('68', 'visita cuya factura tiene el 857 (sin el 856): no es REGISTRO_LC_SIN_856, y la factura no es LC_SIN_REGISTRO',
     not pg_temp.hay(pg_temp.exc('REGISTRO_LC_SIN_856'), 'visita:' || (v_vis2->>'visita_id')) and not pg_temp.hay(pg_temp.exc('LC_SIN_REGISTRO'), 'lc:990832'), '');
-  -- autorrevisión: las que salen solo del PoS las resuelve el owner (el manager no)
-  declare e text; begin
+  -- las que salen solo del PoS: segregación por quien cobró la factura (login del PoS → empleado)
+  declare e text; e2 text; e3 text; begin
     perform pg_temp.como('authenticated', '<MANAGER_UUID>');
     begin perform public.club_excepcion_resolver('LC_SIN_REGISTRO', 'lc:990801', 'la reviso yo'); e := 'ok'; exception when others then e := sqlerrm; end;
     perform pg_temp.yo();
-    perform pg_temp.r('68', 'excepción que sale solo del PoS: el manager no la resuelve, el owner sí (negativa)', e like 'Esta excepción sale del PoS%', e);
+    perform pg_temp.r('68', 'PoS sin login mapeado: el manager no la resuelve, solo el owner (negativa)', e like '%no tiene su login del PoS cargado%', e);
+    insert into employees (full_name, role, pos_login, profile_id) values ('Empleado Manager Ficticio', 'manager', 'TM68', '<MANAGER_UUID>'::uuid),
+                                                                          ('Empleado Cajero Ficticio', 'cajero', 'TC68', '<CAJERO_UUID>'::uuid);
+    perform pg_temp.factura('880681', 2, 0, '[{"c":"856","m":0}]');
+    perform pg_temp.factura('880682', 2, 0, '[{"c":"856","m":0}]');
+    update pos_ndf_tickets set cajero_login = 'TM68' where numero_factura = '880681';
+    update pos_ndf_tickets set cajero_login = 'TC68', salonero_login = 'TC68' where numero_factura = '880682';
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    begin perform public.club_excepcion_resolver('LC_SIN_REGISTRO', 'lc:880681', 'la cobré yo'); e2 := 'ok'; exception when others then e2 := sqlerrm; end;
+    begin perform public.club_excepcion_resolver('LC_SIN_REGISTRO', 'lc:880682', 'Revisada con el cajero'); e3 := 'ok'; exception when others then e3 := sqlerrm; end;
+    perform pg_temp.yo();
+    perform pg_temp.r('68', 'PoS con login mapeado: el manager que cobró la factura no la resuelve (negativa); la de otro cajero sí',
+      e2 like 'Esta factura la cobraste vos en el PoS%' and e3 = 'ok', e2 || ' / ' || e3);
   end;
   perform pg_temp.r('68', '«qué aplicar» dice cómo marcar a los acompañantes (857), sin tope', (v_vis->'avisos')::text like '%857 (INVITADO) por cada uno%'
       and (v_vis->'avisos')::text not like '%hasta%', (v_vis->'avisos')::text);

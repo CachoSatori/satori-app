@@ -2889,7 +2889,9 @@ begin
   with tk as (
     select t.id, t.numero_factura, ltrim(t.numero_factura, '0') as clave,
            coalesce(t.fecha_registra, t.fecha_cierra) as f, coalesce(t.cxc_crc, 0) as cxc, t.total_crc, t.estado,
-           coalesce(t.mesa_factura, t.mesa) as mesa
+           coalesce(t.mesa_factura, t.mesa) as mesa,
+           -- LC-A5 (Ismael, 08-nov): quién cobró la factura en el PoS, para la segregación de las que salen solo del PoS
+           array_remove(array[nullif(btrim(t.cajero_login), ''), nullif(btrim(t.salonero_login), '')], null) as pos_logins
       from public.pos_ndf_tickets t
      where t.local = p_location and coalesce(t.fecha_registra, t.fecha_cierra) >= v_ini
        and coalesce(t.fecha_registra, t.fecha_cierra) < v_fin),
@@ -3140,7 +3142,7 @@ begin
     -- LC_SIN_REGISTRO: factura C con el 856 sin visita de socio que la cruce
     select 'LC_SIN_REGISTRO', 'lc:' || t.clave, t.f, t.numero_factura, 'exacta',
            jsonb_build_object('articulos', (select jsonb_agg(distinct ln.codigo_producto) from ln where ln.ticket_id = t.id and ln.es_lc),
-                              'mesa', t.mesa, 'total_crc', t.total_crc)
+                              'mesa', t.mesa, 'total_crc', t.total_crc, 'pos_logins', to_jsonb(t.pos_logins))
       from tk t
      where t.estado = 'C' and t.f < now() - make_interval(mins => v_cfg.puente_latencia_min)
        and (v_cfg.lc_excepciones_desde is null or t.f >= v_cfg.lc_excepciones_desde::timestamp at time zone 'America/Costa_Rica')
@@ -3172,7 +3174,7 @@ begin
     -- DESCUENTO_SIN_RESPALDO (ver el encabezado): una por factura, la línea con más descuento
     (select distinct on (c.tid) 'DESCUENTO_SIN_RESPALDO', 'desc:' || t.clave, t.f, t.numero_factura, 'probable',
            jsonb_build_object('articulo', c.cod, 'nombre', c.nombre, 'precio', c.u, 'referencia', c.ref,
-                              'descuento_pct', round(100 * (1 - c.u / c.ref), 1))
+                              'descuento_pct', round(100 * (1 - c.u / c.ref), 1), 'pos_logins', to_jsonb(t.pos_logins))
       from (select k.*, r.ref
               from dcand k
               join dref r on r.cod = k.cod and r.dia = k.dia
@@ -3186,7 +3188,7 @@ begin
     -- SOCIO_USO_ANOMALO: dos mesas el mismo día
     select 'SOCIO_USO_ANOMALO', 'socio-dia:' || v.miembro_id || ':' || v.fecha, min(v.registrada_en), null, 'probable',
            jsonb_build_object('miembro', public.club_nombre_limpio(min(mi.nombre)), 'motivo', 'dos mesas el mismo día',
-                              'mesas', jsonb_agg(distinct v.pos_ref->>'mesa'))
+                              'mesas', jsonb_agg(distinct v.pos_ref->>'mesa'), 'registradores', jsonb_agg(distinct v.registrado_por))
       from vs v join public.club_miembros mi on mi.id = v.miembro_id
      where v.registrada_en >= v_ini and v.registrada_en < v_fin
      group by v.miembro_id, v.fecha
@@ -3195,7 +3197,7 @@ begin
     -- SOCIO_USO_ANOMALO: más de N visitas en la semana
     select 'SOCIO_USO_ANOMALO', 'socio-semana:' || v.miembro_id || ':' || to_char(v.fecha, 'IYYY-IW'), min(v.registrada_en), null, 'probable',
            jsonb_build_object('miembro', public.club_nombre_limpio(min(mi.nombre)), 'motivo', 'muchas visitas en la semana',
-                              'visitas', count(*), 'maximo', v_cfg.socio_visitas_semana_max)
+                              'visitas', count(*), 'maximo', v_cfg.socio_visitas_semana_max, 'registradores', jsonb_agg(distinct v.registrado_por))
       from vs v join public.club_miembros mi on mi.id = v.miembro_id
      where v.registrada_en >= v_ini and v.registrada_en < v_fin
      group by v.miembro_id, to_char(v.fecha, 'IYYY-IW')
@@ -3224,7 +3226,8 @@ begin
     union all
     -- CORTESIA_SIN_SOCIO: artículo de la sección en una factura sin visita de socio
     select 'CORTESIA_SIN_SOCIO', 'cort-sin-socio:' || t.clave, t.f, t.numero_factura, 'exacta',
-           jsonb_build_object('articulos', (select jsonb_agg(ln.codigo_producto) from ln where ln.ticket_id = t.id and ln.es_seccion), 'mesa', t.mesa)
+           jsonb_build_object('articulos', (select jsonb_agg(ln.codigo_producto) from ln where ln.ticket_id = t.id and ln.es_seccion), 'mesa', t.mesa,
+                              'pos_logins', to_jsonb(t.pos_logins))
       from tk t
      where (select ok from seccion_ok) and t.estado = 'C' and t.f < now() - make_interval(mins => v_cfg.puente_latencia_min)
        and (v_cfg.lc_excepciones_desde is null or t.f >= v_cfg.lc_excepciones_desde::timestamp at time zone 'America/Costa_Rica')
@@ -3237,7 +3240,7 @@ begin
                                               from ln where ln.ticket_id = t.id and ln.monto = 0 and ln.cantidad > 0 and not ln.es_pax
                                                and not ln.es_seccion and not ln.es_lc and not ln.es_promo
                                                and not (coalesce(ln.codigo_producto, '') = any(v_cfg.articulos_cero_permitidos))),
-                              'mesa', t.mesa)
+                              'mesa', t.mesa, 'pos_logins', to_jsonb(t.pos_logins))
       from tk t
      where (select ok from seccion_ok) and t.estado = 'C'
        and (v_cfg.lc_excepciones_desde is null or t.f >= v_cfg.lc_excepciones_desde::timestamp at time zone 'America/Costa_Rica')
@@ -3256,13 +3259,17 @@ begin
     select 'ANFITRION_SOBRE_TOPE', 'tope:' || g.miembro_id || ':' || to_char(g.mes, 'YYYY-MM'), g.ultimo, null, 'exacta',
            jsonb_build_object('miembro', public.club_nombre_limpio(mi.nombre), 'mes', to_char(g.mes, 'YYYY-MM'),
                               'ganado_crc', round(g.personas * v_cfg.valor_credito_crc / v_cfg.personas_por_credito),
-                              'tope_crc', v_cfg.anfitrion_tope_mes_crc, 'pendientes', g.pend)
-      from (select x.miembro_id, x.mes, sum(x.personas) as personas, sum(x.pend) as pend, max(x.f) as ultimo
-              from (select m.miembro_id, date_trunc('month', m.fecha_visita at time zone 'America/Costa_Rica') as mes, m.personas, 0 as pend, m.fecha_visita as f
+                              'tope_crc', v_cfg.anfitrion_tope_mes_crc, 'pendientes', g.pend,
+                              'registradores', coalesce(to_jsonb(g.regs), '[]'::jsonb))
+      from (select x.miembro_id, x.mes, sum(x.personas) as personas, sum(x.pend) as pend, max(x.f) as ultimo,
+                   array_remove(array_agg(distinct x.reg), null) as regs
+              from (select m.miembro_id, date_trunc('month', m.fecha_visita at time zone 'America/Costa_Rica') as mes, m.personas, 0 as pend, m.fecha_visita as f,
+                           m.registrado_por as reg
                       from public.club_movimientos m
                      where m.location_id = p_location and m.tipo = 'tarjeta' and m.personas > 0 and m.fecha_visita >= v_ini and m.fecha_visita < v_fin
                     union all
-                    select pp.miembro_id, date_trunc('month', pp.fecha_visita at time zone 'America/Costa_Rica'), pp.personas, pp.personas, pp.fecha_visita
+                    select pp.miembro_id, date_trunc('month', pp.fecha_visita at time zone 'America/Costa_Rica'), pp.personas, pp.personas, pp.fecha_visita,
+                           pp.registrado_por
                       from public.club_personas_pendientes pp
                      where pp.location_id = p_location and pp.estado = 'pendiente' and pp.fecha_visita >= v_ini and pp.fecha_visita < v_fin) x
              group by x.miembro_id, x.mes) g
@@ -3317,11 +3324,11 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-declare v_reg jsonb; v_hay boolean;
+declare v_reg jsonb; v_hay boolean; v_logins jsonb; v_mapeados uuid[]; v_sin_mapa boolean;
 begin
   -- CLUB-AUD-36: la excepción tiene que figurar HOY en club_excepciones (ventana de 120 días hasta hoy). Así nadie
   -- «pre-resuelve» un (tipo, ref) que todavía no existe ni resuelve algo inventado.
-  select true, e.detalle->'registradores' into v_hay, v_reg
+  select true, e.detalle->'registradores', e.detalle->'pos_logins' into v_hay, v_reg, v_logins
     from public.club_excepciones((now() at time zone 'America/Costa_Rica')::date - 120,
                                  (now() at time zone 'America/Costa_Rica')::date, p_location, p_tipo) e
    where e.tipo = p_tipo and e.ref = p_ref
@@ -3329,11 +3336,22 @@ begin
   if v_hay is null then
     raise exception 'Esa excepción no figura hoy en la lista: actualizá la pantalla' using errcode = 'P0001';
   end if;
-  -- LC-A5 (autorrevisión): las que salen solo del PoS no tienen registrante en la app (el login del PoS no está ligado a un
-  -- usuario): el manager que dio el beneficio en el PoS podría resolver la suya. DECISIÓN PROVISORIA: las resuelve el owner.
-  if p_tipo in ('LC_SIN_REGISTRO','DESCUENTO_SIN_RESPALDO','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA','SOCIO_USO_ANOMALO','ANFITRION_SOBRE_TOPE')
-     and p_rol <> 'owner' then
-    raise exception 'Esta excepción sale del PoS (no se sabe quién cargó la factura): la resuelve el owner' using errcode = 'P0001';
+  -- LC-A5 (Ismael, 08-nov): las que salen solo del PoS se segregan por quien COBRÓ la factura en el PoS (cajero o salonero),
+  -- con su login mapeado al empleado (employees.pos_login → profile_id). El manager la resuelve si NO es esa persona; si
+  -- algún login de la factura no está mapeado (o no hay login), la resuelve el owner.
+  if p_tipo in ('LC_SIN_REGISTRO','DESCUENTO_SIN_RESPALDO','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA') and p_rol <> 'owner' then
+    select array_agg(e.profile_id) filter (where e.profile_id is not null),
+           coalesce(bool_or(e.profile_id is null), true) or jsonb_array_length(coalesce(v_logins, '[]'::jsonb)) = 0
+      into v_mapeados, v_sin_mapa
+      from jsonb_array_elements_text(coalesce(v_logins, '[]'::jsonb)) l(login)
+      left join public.employees e on e.pos_login = l.login;
+    if v_sin_mapa then
+      raise exception 'Esta excepción sale del PoS y quien cobró la factura no tiene su login del PoS cargado en Empleados: la resuelve el owner'
+        using errcode = 'P0001';
+    end if;
+    if auth.uid() = any(v_mapeados) then
+      raise exception 'Esta factura la cobraste vos en el PoS: la resuelve otro manager o el owner' using errcode = 'P0001';
+    end if;
   end if;
   -- La segregación es por el REGISTRANTE del movimiento (registradores = registrado_por de los movimientos).
   if v_reg is null or jsonb_typeof(v_reg) <> 'array' or auth.uid() is null or not (v_reg ? auth.uid()::text) then

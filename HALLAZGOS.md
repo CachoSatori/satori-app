@@ -10,7 +10,7 @@
 ## 🔐 Noviembre 2026 — SEC-02: `monthly-report` respondía ventas y mandaba los correos a cualquiera (✅ prod, 06/11)
 
 - **Qué es SEC-02:** la Edge Function `monthly-report` (prod v9, `verify_jwt` off) usaba service_role **sin pedir nada**. Cualquiera, sin token o con la anon key (que es pública), podía:
-  - **leer** el total de ventas del mes, los días con venta, el top salonero por IRS y el pool de propinas. La respuesta del cron del 01/11 traía «ventas: ₡ 9 611 259 · 20 días · IRS top: MAXO (84)» y «propinas: ₡ 1 518 220 pool · 58 turnos»;
+  - **leer** el total de ventas del mes, los días con venta, el top salonero por IRS y el pool de propinas. La respuesta del cron del 01/11 traía «ventas: ₡ <MONTO_VENTAS> · <N> días · IRS top: <NOMBRE> (<IRS>)» y «propinas: ₡ <MONTO_POOL> pool · <N> turnos»;
   - **disparar** los dos correos del reporte, cuantas veces quisiera y para el mes que quisiera (`month`/`tipo` sin validar);
   - recibir el texto crudo de los errores (`String(err)`).
 - **Quién la llama hoy:**

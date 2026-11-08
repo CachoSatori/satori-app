@@ -1253,7 +1253,7 @@ backlog P0/P1/P2, decisiones D1-D4). Smoke E2E completo verde en staging, 63/63 
   `computeTotals` único —, cuenta de mesa, transferencia de mesas + reglas de turno, `print-bridge/`
   en modo simulación). Migraciones **022/023/024** aplicadas SOLO en staging.
 - **Offline-first** (caché + outbox idempotente) y **fix de transferencias visibles** también en staging.
-- Login de prueba: `test-manager@staging.satori` / `staging-test-2026` (rol owner en staging).
+- Login de prueba: `<CUENTA_PRUEBA_MANAGER>` / `<CONTRASEÑA_FUERA_DEL_REPO>` (rol owner en staging; la contraseña vieja se cambió el 08/11 y no se guarda en el repo).
 
 ### PROD: DDL listo, código gateado
 - **Migración 021 + housekeeping 018-021 APLICADOS en prod** (autorización única, 3 ok=true).
@@ -1289,7 +1289,7 @@ Ejecutadas con autorización única de la dueña vía Management API (`MIGRACION
 > Si se olvida, `db push` las re-intenta — son idempotentes, no rompe, pero ensucia el log.
 
 ### Staging = ESPEJO de datos reales + entorno operativo completo
-- `scripts/clone-prod-to-staging.sh --yes` re-sincroniza todo con un comando (guardrails adentro; verificación 30/30 tablas + 3 spot-checks financieros al centavo). Login en staging = credenciales de prod. Usuarios de prueba: `test-cajero@staging.satori` / `test-manager@staging.satori` (pass `staging-test-2026`).
+- `scripts/clone-prod-to-staging.sh --yes` re-sincroniza todo con un comando (guardrails adentro; verificación 30/30 tablas + 3 spot-checks financieros al centavo). Login en staging = credenciales de prod. Usuarios de prueba: `<CUENTA_PRUEBA_CAJERO>` / `<CUENTA_PRUEBA_MANAGER>` (contraseña `<CONTRASEÑA_FUERA_DEL_REPO>`; cambiada el 08/11).
 - En el camino se arregló el **drift de precisión numérica**: 40 columnas de staging redondeaban plata (`amount_crc` 12,0 vs 12,2) — corregidas en `staging-drift-sync.sql`.
 
 ### P1c y P1d — ✅ CERRADOS (2026-06-12, confirmación de la dueña)

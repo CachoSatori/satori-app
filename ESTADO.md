@@ -69,7 +69,7 @@ está archivado en [ESTADO-ARCHIVO.md](ESTADO-ARCHIVO.md), no borrado.
 - **Refs Supabase:** **PROD = `yiczgdtirrkdvohdquzf`** (`satori-app`) · **STAGING = `hwiatgicyyqyezqwldia`** (`satori-staging`).
 - **🔐 SEC-01 (04/11, rama `claude/sec-01-perfiles`):**
   - **Paso A hecho en prod y staging:** `disable_signup=true` (antes `false`). El signup con anon da `422`.
-  - **Bans firmados en prod:** Rosaura (`f54e3eff…`) y LE - Consultorias (`e317ac97…`), por `banned_until` directo (desvío aceptado), `is_active=false`, y borrado de sus 6 sesiones y 15 refresh tokens.
+  - **Bans firmados en prod:** dos cuentas de manager inactivas (`f54e3eff…` y `e317ac97…`), por `banned_until` directo (desvío aceptado), `is_active=false`, y borrado de sus 6 sesiones y 15 refresh tokens.
   - **Mig 068 en staging (04/11) y en prod (04/11 23:30 CR = 05/11 05:30 UTC, ledger 45 → 46), aplicada a mano antes del merge.** PR #22 mergeado el 05/11 (`81ac2d4`); el deploy de Pages (run #252) dio OK.
   - **Mig 069 (SEC-01b) en prod el 05/11 15:22 UTC (ledger 46 → 47).** Ismael validó en staging.
     - En prod se verificó el catálogo y se corrieron la prueba 4 (anon, por SQL y REST) y la prueba 1 (manager, con rollback). No se corrió ninguna prueba que mute datos.

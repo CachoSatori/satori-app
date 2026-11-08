@@ -275,3 +275,36 @@
   - Arreglo de texto: «…hasta el {fecha} p. m..» (punto doble) en la validación de socio.
   - **Para Ismael:** el encabezado de club-web usa el kanji 里 (el que dijo que no va en el pase); no se tocó: va con la
     decisión del diseño.
+
+- 08-nov (tarde 6, decisiones de Ismael) ·
+  - **Puente:** el pase a prod es el **lunes 09-nov a las 9:00**; `claude/puente-item11-prod` sin cambios de código
+    (`e4678b3`), paquete con la hora (`3b13c0d`).
+  - **Datos del PoS del local de Santa Teresa** (staging, `2fc5edc`): PROMO CLUB 10 % = `1123` (su marcador se siembra
+    solo con 10 % esperado; R02 deja de estar pendiente); sección de cortesías = (clasificación 17, subclasificación 40),
+    configurable por local (la subclasificación queda guardada: el puente todavía no la trae); CORTESIA_SIN_SOCIO cuenta
+    solo desde `lc_excepciones_desde`.
+  - **Turno y logins fijos** (`182c88d`): las excepciones del PoS muestran turno (mañana/tarde, corte por local) y login;
+    los logins fijos de caja (111, 222 en staging) no son «sin empleado» y esas las resuelve el owner. Prueba 74.
+  - **Descuentos tipificados por %** (`b8a4a31`): por local (nombre, %, activo); DESCUENTO_SIN_RESPALDO clasificado o
+    «sin clasificar» (la alarma real; el chip del Inicio cuenta solo esos); reporte por mes/tipo/turno con monto estimado.
+    Staging: «Tipo 10 %», «Tipo 15 %», «Tipo 30 %». Prueba 75.
+  - **Daruma** (club-web `364effc`, pase `2ef1be3`): imagen propia (SVG → PNG sin fondo); reemplaza al 里 en el encabezado
+    y el favicon de club-web; logo y franja del pase; maqueta v3 (fondo tinta recomendado; variante roja). Pase apagado.
+  - **CLUB COMPARTIDO** (`677d0cc`, `75e5cfc`, pase `3deaa7f`): el socio vale en todos los locales encendidos; la
+    visita es del local de la caja y queda con ese local; tope diario global; alta/validación desde cualquier local;
+    premio en cualquier local; SOCIO_USO_ANOMALO entre locales; reporte del mes con «visitas de socios de otro local»;
+    portal y pase «Vale en todos los Satori» (el pase no lista promociones). Prueba 76 (9 casos). Recorrido integral
+    re-corrido: 12/12 (el arnés re-siembra los pedidos: el agente real de staging reemplaza la foto de mesas abiertas).
+  - Pruebas: batería 483/483 · paridad OK · carreras 8/8 · vitest 1.497 · club-web 14/14 · wallet + club 52/52.
+  - **No se tocaron** las cuentas `club-prueba-*` (las revisa la sesión de caja).
+
+### Autorrevisión adversarial (turno, descuentos tipificados, Club compartido)
+| Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
+|---|---|---|---|
+| Socio | Usar el beneficio en dos locales el mismo día | Tope diario GLOBAL: el segundo local responde «ya_uso_hoy» (prueba 76) | — |
+| Socio | Anotarse en un local apagado para usarlo en otro | Vale en los encendidos (decisión); el alta exige un local encendido | — |
+| Cajero | Registrar la visita en otro local (elegir mal el local) | El pedido tiene que estar abierto en ESE local (puente); SOCIO_USO_ANOMALO entre locales | Si elige mal, la visita no cruza: «Sin factura» en el reporte por usuario |
+| Cajero | Dar un descuento del 10/15/30 % sin autorización | Sale clasificado (no alarma) pero queda en el reporte por mes/tipo/turno | **Un tipo cargado deja de alarmar ese %:** el owner decide qué tipos carga; el reporte los muestra |
+| Cajero con login fijo | Que su excepción la resuelva un manager amigo | Con login fijo, solo el owner (prueba 74) | El owner identifica por fecha y turno: depende del registro de turnos |
+| Manager | Cargar un tipo de descuento para ocultar los suyos | Solo el owner carga tipos (prueba 75); auditado | — |
+| Anfitrión | Cobrar el premio dos veces en locales distintos | El premio se marca usado en la visita (una sola fila) | — |

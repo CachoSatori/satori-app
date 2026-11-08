@@ -3404,6 +3404,45 @@ begin
       and e like 'Pendiente de configuración%', e);
 end $$;
 
+-- ═══ 68. 857 «INVITADO»: igual que el 856 en todas las reglas; máximo de invitados por visita ═══
+do $$
+declare v_s uuid; v_vis jsonb; v_vis2 jsonb; j jsonb; i int;
+begin
+  update club_config set puente_latencia_min = 1, cortesia_familia = 17, lc_excepciones_desde = null, lc_invitados_max = 3,
+                         articulos_cero_permitidos = '{}' where location_id = 'santa-teresa';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  -- un 857 sin visita de socio → LC_SIN_REGISTRO
+  perform pg_temp.factura('990801', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"857","m":0}]');
+  perform pg_temp.r('68', '857 sin visita de socio en la factura → LC_SIN_REGISTRO', pg_temp.hay(pg_temp.exc('LC_SIN_REGISTRO'), 'lc:990801'), '');
+  -- créditos + 857 → CANJE_CON_DESCUENTO
+  perform pg_temp.factura('990802', 2, 18000, '[{"c":"P1","m":9000,"f":5},{"c":"857","m":0}]');
+  perform pg_temp.r('68', 'pagada con créditos y con el 857 → CANJE_CON_DESCUENTO', pg_temp.hay(pg_temp.exc('CANJE_CON_DESCUENTO'), 'canje-desc:990802'), '');
+  -- un precio rebajado en una factura con el 857 no es DESCUENTO_SIN_RESPALDO (como con el 856)
+  for i in 1..10 loop perform pg_temp.factura('99081' || lpad(i::text, 2, '0'), 24 * i, 0, '[{"c":"ZD8","m":5000,"f":5}]'); end loop;
+  perform pg_temp.factura('990821', 1, 0, '[{"c":"ZD8","m":4500,"f":5},{"c":"857","m":0}]');
+  for i in 2..5 loop perform pg_temp.factura('99082' || i, 1, 0, '[{"c":"ZD8","m":5000,"f":5}]'); end loop;
+  perform pg_temp.r('68', 'factura con el 857: su rebaja no es DESCUENTO_SIN_RESPALDO (negativa)', not pg_temp.hay(pg_temp.exc('DESCUENTO_SIN_RESPALDO'), 'desc:990821'), '');
+  -- ₡0 del 857 no es CORTESIA_NO_CONFIGURADA
+  perform pg_temp.r('68', 'el 857 a ₡0 no es «línea a ₡0 fuera de cortesías» (negativa)', not pg_temp.hay(pg_temp.exc('CORTESIA_NO_CONFIGURADA'), 'cort-nc:990801'), '');
+  -- visita con 856 + 4 invitados → LC_INVITADOS_EXCEDIDOS; con 3, no
+  v_s := pg_temp.socio('Yago Invita Ficticio', '+50661110041', null);
+  perform pg_temp.factura('990831', 2, 0, '[{"c":"856","m":0},{"c":"857","m":0,"q":4}]', '9831');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  v_vis := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"9831","clave":"pedido:9831"}', gen_random_uuid());
+  perform pg_temp.yo();
+  v_s := pg_temp.socio('Zoe Invita Ficticia', '+50661110042', null);
+  perform pg_temp.factura('990832', 2, 0, '[{"c":"857","m":0,"q":3}]', '9832');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  v_vis2 := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"9832","clave":"pedido:9832"}', gen_random_uuid());
+  perform pg_temp.yo();
+  j := pg_temp.exc('LC_INVITADOS_EXCEDIDOS');
+  perform pg_temp.r('68', 'más de 3 invitados (857) en la visita → LC_INVITADOS_EXCEDIDOS; 3 no salta',
+    pg_temp.hay(j, 'invitados:' || (v_vis->>'visita_id')) and not pg_temp.hay(j, 'invitados:' || (v_vis2->>'visita_id')), '');
+  perform pg_temp.r('68', 'visita cuya factura tiene el 857 (sin el 856): no es REGISTRO_LC_SIN_856, y la factura no es LC_SIN_REGISTRO',
+    not pg_temp.hay(pg_temp.exc('REGISTRO_LC_SIN_856'), 'visita:' || (v_vis2->>'visita_id')) and not pg_temp.hay(pg_temp.exc('LC_SIN_REGISTRO'), 'lc:990832'), '');
+  perform pg_temp.r('68', '«qué aplicar» dice cómo marcar a los acompañantes (857, hasta 3)', (v_vis->'avisos')::text like '%857 (INVITADO)%hasta 3%', (v_vis->'avisos')::text);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

@@ -269,7 +269,7 @@ export type TipoExcepcion = 'PROMO_SIN_CUPON' | 'CUPON_SIN_PROMO' | 'TARJETA_MAN
   // LC-A5
   | 'LC_SIN_REGISTRO' | 'REGISTRO_LC_SIN_856' | 'CANJE_CON_DESCUENTO' | 'DESCUENTO_SIN_RESPALDO' | 'SOCIO_USO_ANOMALO'
   | 'CUPON_AUTOREFERIDO' | 'CORTESIA_DISTINTA' | 'CORTESIA_SIN_SOCIO' | 'CORTESIA_NO_CONFIGURADA' | 'ANFITRION_SOBRE_TOPE'
-  | 'SOCIO_ALTA_SIN_CONFIRMAR'
+  | 'SOCIO_ALTA_SIN_CONFIRMAR' | 'LC_INVITADOS_EXCEDIDOS'
 export interface Excepcion {
   tipo: TipoExcepcion; ref: string; fecha: string; factura: string | null; certeza: 'exacta' | 'probable' | 'manual' | 'pendiente_configuracion'
   detalle: Record<string, unknown>; resuelta: boolean; nota: string | null; resuelta_en: string | null

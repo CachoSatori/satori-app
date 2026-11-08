@@ -2782,7 +2782,7 @@ alter table public.club_excepciones_resueltas add constraint club_excepciones_re
   check (tipo in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE',
                   'VISITA_REPETIDA','PERSONAS_SOBRE_PAX','AMBIGUA','CUPON_SIN_PROMO','TARJETA_MANUAL','CANJE_SIN_CODIGO',
                   -- LC-A5
-                  'LC_SIN_REGISTRO','REGISTRO_LC_SIN_856','CANJE_CON_DESCUENTO','DESCUENTO_SIN_RESPALDO','SOCIO_USO_ANOMALO','CUPON_AUTOREFERIDO','CORTESIA_DISTINTA','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA','ANFITRION_SOBRE_TOPE','SOCIO_ALTA_SIN_CONFIRMAR'));
+                  'LC_SIN_REGISTRO','REGISTRO_LC_SIN_856','CANJE_CON_DESCUENTO','DESCUENTO_SIN_RESPALDO','SOCIO_USO_ANOMALO','CUPON_AUTOREFERIDO','CORTESIA_DISTINTA','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA','ANFITRION_SOBRE_TOPE','SOCIO_ALTA_SIN_CONFIRMAR','LC_INVITADOS_EXCEDIDOS'));
 -- CLUB-AUD-25: historial de resoluciones (cada una es una fila nueva; vale la última). Ya no se pisa.
 alter table public.club_excepciones_resueltas drop constraint if exists club_excepciones_resueltas_location_id_tipo_ref_key;
 create index if not exists club_exc_res_ref_idx on public.club_excepciones_resueltas (location_id, tipo, ref, resuelto_en desc);
@@ -2817,7 +2817,9 @@ alter table public.club_config add column if not exists lc_excepciones_desde dat
 --   CUPON_SIN_PROMO      (exacta)  · cupón usado sin el artículo de la promo en las facturas de la visita
 --                                    (R-02). Solo si promo_articulo_codigo está cargado, igual que la anterior.
 -- LC-A5 (Local Club; artículo LC = club_config.lc_articulo_codigo, «856»):
+--   (857 «INVITADO» = lc_invitado_codigo cuenta igual que el 856 en todas: «el 856» acá quiere decir «el 856 o el 857»)
 --   LC_SIN_REGISTRO       (exacta)  · factura C con el 856 que no cruza con ninguna visita de socio
+--   LC_INVITADOS_EXCEDIDOS (exacta) · visita cuyas facturas tienen más 857 que lc_invitados_max (3)
 --   REGISTRO_LC_SIN_856   (exacta)  · visita de socio (con beneficio) cuya factura cruzada no tiene el 856
 --   CANJE_CON_DESCUENTO   (exacta)  · factura pagada con créditos (cxc > 0 o canje del Club) con el 856, PROMO CLUB o
 --                                     una línea en cortesía (regla fija: créditos = sin descuento)
@@ -2899,24 +2901,26 @@ begin
      -- LC-A5: con p_tipo, el cruce de cada registro (lo caro) solo para los tipos que lo usan
      where p_tipo is null or p_tipo not in ('LC_SIN_REGISTRO','REGISTRO_LC_SIN_856','SOCIO_USO_ANOMALO','CORTESIA_DISTINTA',
                                             'CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA','ANFITRION_SOBRE_TOPE',
-                                            'SOCIO_ALTA_SIN_CONFIRMAR','TARJETA_MANUAL','CANJE_SIN_CODIGO')),
+                                            'SOCIO_ALTA_SIN_CONFIRMAR','TARJETA_MANUAL','CANJE_SIN_CODIGO','LC_INVITADOS_EXCEDIDOS')),
   -- LC-A5: visitas de socio con sus facturas (la del pedido + divididas)
   vs as (
     select v.*, public.club_cruce_facturas(v.location_id, v.pos_ref, null) as ticket_ids
       from public.club_visitas_socio v
      where v.location_id = p_location and v.registrada_en >= v_ini - interval '1 day' and v.registrada_en < v_fin + interval '1 day'
        and (p_tipo is null or p_tipo in ('LC_SIN_REGISTRO','REGISTRO_LC_SIN_856','SOCIO_USO_ANOMALO','CUPON_AUTOREFERIDO',
-                                         'CORTESIA_DISTINTA','CORTESIA_SIN_SOCIO'))),
+                                         'CORTESIA_DISTINTA','CORTESIA_SIN_SOCIO','LC_INVITADOS_EXCEDIDOS'))),
   -- líneas de las facturas C del rango, marcadas
   ln as (
     select l.*, t.clave, t.f, t.numero_factura, t.cxc,
-           (l.codigo_producto = v_cfg.lc_articulo_codigo) as es_lc,
+           (l.codigo_producto in (v_cfg.lc_articulo_codigo, v_cfg.lc_invitado_codigo)) as es_lc,   -- 856 y 857
+           (l.codigo_producto = v_cfg.lc_invitado_codigo) as es_invitado,
            (v_cfg.promo_articulo_codigo is not null and l.codigo_producto = v_cfg.promo_articulo_codigo) as es_promo,
            ((v_cfg.cortesia_familia is not null and l.familia = v_cfg.cortesia_familia)
              or exists (select 1 from public.club_cortesias c where c.location_id = p_location and c.codigo_producto = l.codigo_producto)) as es_seccion
       from public.pos_ndf_ticket_lines l join tk t on t.id = l.ticket_id
      where t.estado = 'C'
-       and (p_tipo is null or p_tipo in ('LC_SIN_REGISTRO','CANJE_CON_DESCUENTO','CORTESIA_DISTINTA','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA'))),
+       and (p_tipo is null or p_tipo in ('LC_SIN_REGISTRO','CANJE_CON_DESCUENTO','CORTESIA_DISTINTA','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA',
+                                         'LC_INVITADOS_EXCEDIDOS'))),
   seccion_ok as (
     select (v_cfg.cortesia_familia is not null or exists (select 1 from public.club_cortesias c where c.location_id = p_location)) as ok),
   -- DESCUENTO_SIN_RESPALDO: precios unitarios de las facturas C sin LC ni PROMO, desde 30 días antes del rango (una pasada)
@@ -2929,7 +2933,8 @@ begin
        and l.cantidad > 0 and l.monto > 0 and not l.es_cortesia and not l.es_pax and l.codigo_producto is not null
        and (p_tipo is null or p_tipo = 'DESCUENTO_SIN_RESPALDO')
        and not exists (select 1 from public.pos_ndf_ticket_lines z where z.ticket_id = t.id
-                         and z.codigo_producto in (v_cfg.lc_articulo_codigo, coalesce(v_cfg.promo_articulo_codigo, v_cfg.lc_articulo_codigo)))),
+                         and z.codigo_producto in (v_cfg.lc_articulo_codigo, v_cfg.lc_invitado_codigo,
+                                                   coalesce(v_cfg.promo_articulo_codigo, v_cfg.lc_articulo_codigo)))),
   -- candidatas: del rango, en facturas sin cupón, por debajo del precio más alto del artículo (filtro barato)
   dcand as materialized (
     select p.* from dpr p
@@ -3116,7 +3121,8 @@ begin
     -- ═══ LC-A5 ═══
     -- LC_SIN_REGISTRO: factura C con el 856 sin visita de socio que la cruce
     select 'LC_SIN_REGISTRO', 'lc:' || t.clave, t.f, t.numero_factura, 'exacta',
-           jsonb_build_object('articulo', v_cfg.lc_articulo_codigo, 'mesa', t.mesa, 'total_crc', t.total_crc)
+           jsonb_build_object('articulos', (select jsonb_agg(distinct ln.codigo_producto) from ln where ln.ticket_id = t.id and ln.es_lc),
+                              'mesa', t.mesa, 'total_crc', t.total_crc)
       from tk t
      where t.estado = 'C' and t.f < now() - make_interval(mins => v_cfg.puente_latencia_min)
        and (v_cfg.lc_excepciones_desde is null or t.f >= v_cfg.lc_excepciones_desde::timestamp at time zone 'America/Costa_Rica')
@@ -3131,7 +3137,8 @@ begin
       join public.pos_ndf_tickets t on t.id = v.ticket_ids[1]
      where v.registrada_en >= v_ini and v.registrada_en < v_fin and cardinality(v.ticket_ids) > 0
        and v.estado_beneficio = 'aplica' and t.estado = 'C'
-       and not exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = any(v.ticket_ids) and l.codigo_producto = v_cfg.lc_articulo_codigo)
+       and not exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = any(v.ticket_ids)
+                         and l.codigo_producto in (v_cfg.lc_articulo_codigo, v_cfg.lc_invitado_codigo))
     union all
     -- CANJE_CON_DESCUENTO: pagada con créditos y con 856, PROMO CLUB o una cortesía
     select 'CANJE_CON_DESCUENTO', 'canje-desc:' || t.clave, t.f, t.numero_factura, 'exacta',
@@ -3157,6 +3164,14 @@ begin
                       from dday q where q.cod = k.cod and q.dia = k.dia) < 0.6) c
       join tk t on t.id = c.tid
      order by c.tid, c.u / c.ref)
+    union all
+    -- LC_INVITADOS_EXCEDIDOS: más 857 (INVITADO) en las facturas de la visita que lc_invitados_max
+    select 'LC_INVITADOS_EXCEDIDOS', 'invitados:' || v.id, v.registrada_en, null, 'exacta',
+           jsonb_build_object('miembro', public.club_nombre_limpio(mi.nombre), 'invitados', x.n, 'maximo', v_cfg.lc_invitados_max,
+                              'registradores', jsonb_build_array(v.registrado_por))
+      from vs v join public.club_miembros mi on mi.id = v.miembro_id
+      cross join lateral (select coalesce(sum(ln.cantidad), 0) as n from ln where ln.ticket_id = any(v.ticket_ids) and ln.es_invitado) x
+     where v.registrada_en >= v_ini and v.registrada_en < v_fin and cardinality(v.ticket_ids) > 0 and x.n > v_cfg.lc_invitados_max
     union all
     -- SOCIO_USO_ANOMALO: dos mesas el mismo día
     select 'SOCIO_USO_ANOMALO', 'socio-dia:' || v.miembro_id || ':' || v.fecha, min(v.registrada_en), null, 'probable',
@@ -3335,7 +3350,7 @@ begin
   end if;
   if p_tipo is null or p_tipo not in ('PROMO_SIN_CUPON','CREDITOS_SIN_CANJE','CANJE_MONTO_DISTINTO','REGISTRO_SIN_FACTURA','SIN_CRUCE',
                                       'VISITA_REPETIDA','PERSONAS_SOBRE_PAX','AMBIGUA','CUPON_SIN_PROMO','TARJETA_MANUAL','CANJE_SIN_CODIGO',
-                                      'LC_SIN_REGISTRO','REGISTRO_LC_SIN_856','CANJE_CON_DESCUENTO','DESCUENTO_SIN_RESPALDO','SOCIO_USO_ANOMALO','CUPON_AUTOREFERIDO','CORTESIA_DISTINTA','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA','ANFITRION_SOBRE_TOPE','SOCIO_ALTA_SIN_CONFIRMAR') then
+                                      'LC_SIN_REGISTRO','REGISTRO_LC_SIN_856','CANJE_CON_DESCUENTO','DESCUENTO_SIN_RESPALDO','SOCIO_USO_ANOMALO','CUPON_AUTOREFERIDO','CORTESIA_DISTINTA','CORTESIA_SIN_SOCIO','CORTESIA_NO_CONFIGURADA','ANFITRION_SOBRE_TOPE','SOCIO_ALTA_SIN_CONFIRMAR','LC_INVITADOS_EXCEDIDOS') then
     raise exception 'Tipo de excepción no válido' using errcode = 'P0001';
   end if;
   if length(v_ref) not between 1 and 100 then
@@ -5176,6 +5191,12 @@ select 'santa-teresa', 'Local Club', array['socio'], 'borrador', 10, 1
 -- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
 alter table public.club_config add column if not exists lc_articulo_codigo text not null default '856'
   check (lc_articulo_codigo ~ '^[0-9A-Za-z._-]{1,30}$');
+-- 857 «INVITADO» (Ismael, 08-nov): el beneficio Local Club del acompañante de un socio. Cuenta igual que el 856 en todas
+-- las reglas (créditos = sin descuento, DESCUENTO_SIN_RESPALDO, CANJE_CON_DESCUENTO, LC_SIN_REGISTRO, visita del socio).
+-- Hasta `lc_invitados_max` (3) por visita; si se pasa, LC_INVITADOS_EXCEDIDOS.
+alter table public.club_config add column if not exists lc_invitado_codigo text not null default '857'
+  check (lc_invitado_codigo ~ '^[0-9A-Za-z._-]{1,30}$');
+alter table public.club_config add column if not exists lc_invitados_max int not null default 3 check (lc_invitados_max between 0 and 20);
 
 create table if not exists public.club_visitas_socio (
   id               uuid primary key default gen_random_uuid(),
@@ -5352,6 +5373,8 @@ begin
               from jsonb_array_elements(v_cort) x))
     end;
   if v_est in ('aplica','pendiente_configuracion') then
+    v_avis := v_avis || to_jsonb(format('Acompañantes: el artículo %s (INVITADO) por cada uno, hasta %s por visita.',
+                                        v_cfg.lc_invitado_codigo, v_cfg.lc_invitados_max));
     v_avis := v_avis || to_jsonb(format('Marcá el artículo %s (LOCAL CLUB) en la factura%s.', v_cfg.lc_articulo_codigo,
       case when jsonb_array_length(v_cort) > 0 then ' y la cortesía con su artículo de «CORTESÍA CLUB»' else '' end));
   end if;
@@ -5409,7 +5432,8 @@ begin
           cross join lateral unnest(public.club_cruce_facturas(v.location_id, v.pos_ref, null)) x(tid)
           join public.pos_ndf_tickets t on t.id = x.tid and t.estado = 'C'
          where v.miembro_id = rr.miembro_id
-           and exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = t.id and l.codigo_producto = v_cfg.lc_articulo_codigo)
+           and exists (select 1 from public.pos_ndf_ticket_lines l where l.ticket_id = t.id
+                         and l.codigo_producto in (v_cfg.lc_articulo_codigo, v_cfg.lc_invitado_codigo))
          order by t.fecha_registra limit 1) f
      where rr.rol = 'socio' and rr.estado = 'activo' and rr.referido_por is not null and rr.referido_por <> rr.miembro_id
        and not exists (select 1 from public.club_premios p where p.referido = rr.miembro_id)

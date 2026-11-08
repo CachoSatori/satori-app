@@ -26,7 +26,7 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   CANJE_SIN_CODIGO:     { titulo: 'Canje sin código',     que: 'Canje sin celular aprobado por owner o manager. Siempre se revisa; no lo resuelve quien lo aprobó.' },
   CUPON_SIN_PROMO:      { titulo: 'Cupón sin promo',      que: 'Cupón usado en una visita cuyas facturas no tienen el artículo de la promo 10 %: sumó personas sin descuento aplicado.' },
   // LC-A5 · Local Club
-  LC_SIN_REGISTRO:          { titulo: 'Local Club sin registro', que: 'Factura con el artículo LOCAL CLUB (856) y sin visita de socio en la app: se dio el beneficio sin escanear al socio.' },
+  LC_SIN_REGISTRO:          { titulo: 'Local Club sin registro', que: 'Factura con el artículo LOCAL CLUB (856) o INVITADO (857) y sin visita de socio en la app: se dio el beneficio sin escanear al socio.' },
   REGISTRO_LC_SIN_856:      { titulo: 'Visita de socio sin el 856', que: 'Se registró la visita del socio (con beneficio), pero su factura no tiene el artículo LOCAL CLUB.' },
   CANJE_CON_DESCUENTO:      { titulo: 'Canje con descuento', que: 'Factura pagada con créditos que además tiene el Local Club, la promo o una cortesía. Regla fija: con créditos, sin descuento.' },
   DESCUENTO_SIN_RESPALDO:   { titulo: 'Descuento sin respaldo', que: 'Una línea por debajo de su precio habitual (moda de los 30 días anteriores) en una factura sin cupón ni Local Club.' },
@@ -36,6 +36,7 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   CORTESIA_SIN_SOCIO:       { titulo: 'Cortesía sin socio', que: 'Un artículo de «CORTESÍA CLUB» en una factura sin visita de socio.' },
   CORTESIA_NO_CONFIGURADA:  { titulo: 'Línea a ₡0 fuera de cortesías', que: 'Una línea a ₡0 que no es de «CORTESÍA CLUB», ni PAX, ni el Local Club, ni la promo.' },
   ANFITRION_SOBRE_TOPE:     { titulo: 'Anfitrión sobre el tope', que: 'Un anfitrión ganó en el mes más que el tope configurado (₡25.000). Si es nuevo, lo que pasó quedó pendiente de aprobación.' },
+  LC_INVITADOS_EXCEDIDOS:   { titulo: 'Invitados de más', que: 'La visita del socio tiene más artículos 857 (INVITADO) que el máximo por visita (3 por defecto).' },
   SOCIO_ALTA_SIN_CONFIRMAR: { titulo: 'Alta de socio sin confirmar', que: 'Alta provisional (en caja o validación) que todavía no confirmó un manager u owner distinto de quien la cargó.' },
 }
 const crc = (n: unknown) => (typeof n === 'number' || typeof n === 'string') && n !== '' ? `₡${Number(n).toLocaleString('de-DE', { maximumFractionDigits: 0 })}` : '—'

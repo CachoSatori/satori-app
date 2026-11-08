@@ -84,3 +84,5 @@
   [NOCHE-2026-11-08-A.md](NOCHE-2026-11-08-A.md). **Próximo: A4** (motor «qué aplicar», sorteo, visita por factura).
 - 08-nov 01:00 (cont.) · Con el tiempo que sobró: **CLUB-AUD-42** hecho (`5b441c9`) y **CLUB-AUD-43 parcial** (`3439244`;
   falta la lista W1–W14 de Grok). Batería 354/354, carreras 8/8, paridad 724 = 724.
+- 08-nov 01:00 (cont.) · Puente, sin desplegar: **CLUB-AUD-46/47/48** (`831b3ee` en `claude/puente-item11`). 44/45 no
+  arrancada (necesita migración nueva). Cola del PLAN al día.

@@ -182,9 +182,9 @@
      45 y 53); falta contrastar con la lista W1–W14 de Grok, que no está en el repo;
    - **en la rama del puente, sin desplegar:**
      - 44/45: ingesta transaccional por local;
-     - 46: ignorar el `last_poll_at` que llega y que `last_factura` solo avance;
-     - 47: secreto ≥ 32 caracteres, sin duplicados;
-     - 48: topes de largo.
+     - ~~46: ignorar el `last_poll_at` que llega y que `last_factura` solo avance;~~ **HECHO** `831b3ee` (puente-item11)
+     - ~~47: secreto ≥ 32 caracteres, sin duplicados;~~ **HECHO** `831b3ee`
+     - ~~48: topes de largo.~~ **HECHO** `831b3ee` (los tres sin desplegar; falta pasarlos a `puente-item11-prod`)
 6. **CRM viejo** (CLUB-AUD-64 / LC-DES-09): diagnóstico y plan en [PLAN-CRM-cierre.md](PLAN-CRM-cierre.md). **Solo el
    plan**: toca RLS de prod y lo firma Ismael.
 

@@ -45,6 +45,12 @@
 
 ## 🟥 Pendiente — en este orden
 
+> **⏸️ Pendiente de decisión (Ismael + contador, 08/11): montos de Salarios que todavía ve el manager.** La mig 084
+> (SAL-AUD-01) saca la planilla de `employees` y deja `employee_payroll` y `employee_wage_rates` solo para owner y
+> contador activos. **Quedan como están por ahora:** `salary_lines` (pago por horas, salario fijo, total) y
+> `employee_payments` (monto neto), que el manager sigue viendo, y `employee_payments`, que el manager sigue
+> escribiendo (registra los pagos). Decidir con el contador antes del pase de Salarios a prod.
+
 1. ✅ **Alerta de días sin cierre: en prod el 06/11 (#43, merge `8c992fc`).** Owner/manager, solo lectura. (Era lo único que quedaba de la cola de caja.) Los huecos que muestra en prod: el cierre del día del 26/09 y los turnos del 18/10 y del 27/10.
 2. **⏸️ POSPUESTO por Ismael (06/11): rotar los secretos de ingesta** (los 3: `POS_INGEST_SECRET` de prod y de staging y el `INGEST_SECRET` de BioTime, con su copia en los `.env` de la PC del PoS y de la PC del reloj). El plan está en el Paso 0 de CC del 06/11; ver también el handoff. **`claude-code-prod`:** Ismael tiene que identificarlo en Supabase → Account → Access Tokens antes de tocarlo. Si es la credencial de las sesiones de CC, se **reemplaza**: nunca se revoca solo.
 3. ✅ **SEC-02**: cerrado en prod el 06/11 (`monthly-report` v10 con `verify_jwt` on; el cron con `Authorization` desde el Vault).

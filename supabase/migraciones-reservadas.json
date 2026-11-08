@@ -1,0 +1,16 @@
+{
+  "_que_es": "Registro de numeración de migraciones (decisión de Ismael, 08/11). Lo lee supabase/migraciones.test.ts en el gate. Cada PR que agrega una migración la agrega acá (en 'asignadas', dentro del bloque de su rama) y en la tabla de ESTADO.md. Versiones como TEXTO, igual que el ledger: '0090' y '0095' son históricas y distintas de '090' / '095'.",
+  "bloques": {
+    "caja":  { "desde": 87,  "hasta": 99,  "que": "Caja / operación (incluye Salarios, PoS propio, seguridad de la app)" },
+    "club":  { "desde": 100, "hasta": 149, "que": "Club Satori + puente del PoS" }
+  },
+  "usadas_antes_de_los_bloques": {
+    "081": { "nombre": "pos_ndf_campos_factura",        "de": "club" },
+    "082": { "nombre": "pos_ndf_ingesta_transaccional", "de": "club" },
+    "083": { "nombre": "my_turno_stats_higiene",        "de": "caja" },
+    "084": { "nombre": "employee_payroll",              "de": "caja" },
+    "085": { "nombre": "rls_lectura_rol_activo",        "de": "caja" }
+  },
+  "libres_fuera_de_bloque": ["086"],
+  "asignadas": {}
+}

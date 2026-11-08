@@ -60,6 +60,11 @@
       "nombre": "anon_sin_politica",
       "bloque": "caja",
       "rama": "claude/anon-revoke"
+    },
+    "090": {
+      "nombre": "anon_privilegios_por_defecto",
+      "bloque": "caja",
+      "rama": "claude/anon-default-privs"
     }
   }
 }

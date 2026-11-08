@@ -53,12 +53,25 @@ export async function sha256File(file: Blob): Promise<string> {
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
+/** La clave de la factura electrónica de Hacienda: exactamente 50 dígitos. */
+export const RE_CLAVE_FE = /^\d{50}$/
+/** El SHA-256 que calcula `sha256File`: 64 hex en minúscula. */
+const RE_SHA256 = /^[0-9a-f]{64}$/
+
 // ¿Ya se procesó un documento igual? (sha256 o clave_fe). Devuelve el doc si existe.
+// Auditoría r5: antes los dos valores se interpolaban en un filtro `.or(...)` de PostgREST; una
+// clave con comas o paréntesis podía agregar condiciones. Ahora son dos consultas con `.eq` (el
+// valor viaja como valor, nunca como sintaxis) y cada valor se valida antes: un sha que no es
+// SHA-256 o una clave que no son 50 dígitos no se buscan.
 export async function findDuplicate(sha: string, claveFe: string | null): Promise<DocumentRow | null> {
-  let q = supabase.from('documents').select('*').neq('estado', 'descartado').limit(1)
-  q = claveFe ? q.or(`sha256.eq.${sha},clave_fe.eq.${claveFe}`) : q.eq('sha256', sha)
-  const { data } = await q
-  return (data?.[0] as DocumentRow | undefined) ?? null
+  const buscar = async (columna: 'sha256' | 'clave_fe', valor: string): Promise<DocumentRow | null> => {
+    const { data } = await supabase.from('documents').select('*')
+      .neq('estado', 'descartado').eq(columna, valor).limit(1)
+    return (data?.[0] as DocumentRow | undefined) ?? null
+  }
+  const porSha = RE_SHA256.test(sha) ? await buscar('sha256', sha) : null
+  if (porSha) return porSha
+  return claveFe && RE_CLAVE_FE.test(claveFe) ? buscar('clave_fe', claveFe) : null
 }
 
 // Sube SOLO la imagen al bucket privado (sin crear fila todavía).

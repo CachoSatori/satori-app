@@ -419,7 +419,7 @@ export interface Cortesia {
   id: string; codigo_producto: string; nombre: string; familia: number | null; activa: boolean
   en_seccion: boolean | null; visto_en_facturas: boolean; actualizada_en: string
 }
-export interface ProductoPos { codigo: string; nombre: string; familia: number | null; veces: number; ultima: string; es_cortesia: boolean }
+export interface ProductoPos { codigo: string; nombre: string; familia: number | null; veces: number; ultima: string; es_cortesia: boolean; en_seccion?: boolean | null }
 export const getCortesias = () => llamar<Cortesia[]>('club_cortesias_listar', { p_location: localClub })
 export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('club_productos', { p_buscar: buscar, p_location: localClub })
 /** Solo owner. Alta: `id` null + código del artículo «CORTESÍA CLUB». Edición: nombre y activa. */

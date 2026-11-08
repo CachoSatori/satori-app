@@ -234,9 +234,17 @@ los 136 vencimientos del 05-nov. El libro es de solo inserción: el migrador sol
 **Hacer:** `update club_config set lc_excepciones_desde = '<fecha del lanzamiento>';` Antes de esa fecha el Local Club se
 cobró sin la app y todas sus facturas saldrían como `LC_SIN_REGISTRO` (en staging: 275 en 120 días).
 **Verificar:** en Excepciones no aparecen facturas LC anteriores a esa fecha.
-**Con los códigos de Ismael:** `cortesia_familia` (sección «CORTESÍA CLUB»), `promo_articulo_codigo` (PROMO CLUB 10 %) y,
-si corresponde, `articulos_cero_permitidos` (p. ej. el 857 «INVITADO»). Mientras falten, las excepciones que los usan
-salen «pendiente de configuración».
+**Códigos del PoS (Ismael, 08-nov), por local.** Los del local de Santa Teresa (ya cargados en staging):
+```sql
+update public.club_config set promo_articulo_codigo = '1123',            -- PROMO CLUB 10 % (clasificación 19, subclasif. 73 «LOCAL CLUB»)
+                              cortesia_familia = 17, cortesia_subclasificacion = 40   -- sección «CORTESIAS» (17, 40)
+ where location_id = 'santa-teresa';
+```
+Al cargar `promo_articulo_codigo` se siembra solo su marcador de descuento «PROMO CLUB 10 %» (con 10 % esperado) y R02 deja
+de estar «pendiente de configuración». La subclasificación queda guardada: hoy las líneas del puente traen solo la
+clasificación, así que se compara la clasificación (cuando el puente mande la subclasificación, se usan las dos).
+**CORTESIA_SIN_SOCIO cuenta solo desde `lc_excepciones_desde`** (antes del lanzamiento la sección se usa fuera del Club).
+Si corresponde, `articulos_cero_permitidos` (p. ej. el 857 «INVITADO»).
 
 ## 9. Tarjeta física apagada
 **Hacer:** `update club_config set tarjeta_manual_activa = false;` (ya viene `false` por defecto; se confirma).

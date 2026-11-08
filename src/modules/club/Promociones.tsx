@@ -224,10 +224,13 @@ function NuevaCortesia({ onHecha }: { onHecha: (texto: string) => void }) {
   const [nombre, setNombre] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [soloSeccion, setSoloSeccion] = useState(true)
   async function buscar() {
     setError(null)
     try { setRes(await getProductos(q.trim() || null)) } catch (e) { setError(aClubError(e).message) }
   }
+  // La sección «CORTESÍAS» del PoS (clasificación configurada por local): por defecto solo se ofrecen sus artículos.
+  const visibles = res === null ? null : res.filter(p => !soloSeccion || p.en_seccion !== false)
   async function agregar() {
     setEnviando(true); setError(null)
     try {
@@ -244,10 +247,14 @@ function NuevaCortesia({ onHecha }: { onHecha: (texto: string) => void }) {
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Ej. CORTESIA" style={inputStyle} /></label>
         <Btn type="submit" variant="secondary">Buscar</Btn>
       </form>
-      {res && (
+      <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.85rem' }}>
+        <input type="checkbox" checked={soloSeccion} onChange={e => setSoloSeccion(e.target.checked)} />
+        Solo artículos de la sección de cortesías del PoS
+      </label>
+      {visibles && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
-          {res.length === 0 && <div style={{ color: C.muted, fontSize: '0.85rem' }}>Nada en los últimos 120 días. Si el artículo es nuevo en el PoS, escribí el código y el nombre abajo.</div>}
-          {res.map(p => (
+          {visibles.length === 0 && <div style={{ color: C.muted, fontSize: '0.85rem' }}>Nada en los últimos 120 días. Si el artículo es nuevo en el PoS, escribí el código y el nombre abajo.</div>}
+          {visibles.map(p => (
             <button key={p.codigo} type="button" onClick={() => { setCodigo(p.codigo); setNombre(p.nombre) }}
               style={{ textAlign: 'left', background: codigo === p.codigo ? C.panel : '#fff', border: `1px solid ${C.border}`, borderRadius: 6, padding: '0.4rem 0.6rem', cursor: 'pointer', minHeight: 40 }}>
               <strong>{p.nombre}</strong> <span style={{ color: C.muted, fontSize: '0.8rem' }}>· {p.codigo} · familia {p.familia ?? '—'} · {p.veces} veces</span>

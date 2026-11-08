@@ -3314,7 +3314,11 @@ begin
   -- CORTESIA_SIN_SOCIO y CORTESIA_NO_CONFIGURADA
   perform pg_temp.factura('990104', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"CC-1","m":0,"f":17}]');
   perform pg_temp.factura('990105', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"ZZ0","m":0,"f":5}]');
-  perform pg_temp.r('67', 'CORTESIA_SIN_SOCIO: artículo de la sección en una factura sin visita', pg_temp.hay(pg_temp.exc('CORTESIA_SIN_SOCIO'), 'cort-sin-socio:990104'), '');
+  -- (08-nov) la sección se usa fuera del Club hasta el lanzamiento: sin lc_excepciones_desde no cuenta
+  update club_config set lc_excepciones_desde = null where location_id = pg_temp.loc();
+  perform pg_temp.r('67', 'CORTESIA_SIN_SOCIO: sin fecha de lanzamiento (lc_excepciones_desde) no sale nada (negativa)', not pg_temp.hay(pg_temp.exc('CORTESIA_SIN_SOCIO'), 'cort-sin-socio:990104'), '');
+  update club_config set lc_excepciones_desde = current_date - 7 where location_id = pg_temp.loc();
+  perform pg_temp.r('67', 'CORTESIA_SIN_SOCIO: desde el lanzamiento, artículo de la sección en una factura sin visita', pg_temp.hay(pg_temp.exc('CORTESIA_SIN_SOCIO'), 'cort-sin-socio:990104'), '');
   perform pg_temp.r('67', 'CORTESIA_NO_CONFIGURADA: línea a ₡0 fuera de la sección', pg_temp.hay(pg_temp.exc('CORTESIA_NO_CONFIGURADA'), 'cort-nc:990105'), '');
   update club_config set articulos_cero_permitidos = '{ZZ0}' where location_id = 'santa-teresa';
   perform pg_temp.r('67', 'articulos_cero_permitidos: el artículo permitido a ₡0 no salta (negativa)', not pg_temp.hay(pg_temp.exc('CORTESIA_NO_CONFIGURADA'), 'cort-nc:990105'), '');

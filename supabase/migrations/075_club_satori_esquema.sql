@@ -2869,7 +2869,8 @@ alter table public.club_config add column if not exists lc_excepciones_desde dat
 --   CUPON_AUTOREFERIDO    (exacta)  · cupón de un anfitrión que usó en una visita donde él mismo es socio
 --   CORTESIA_DISTINTA     (exacta)  · en la factura de la visita, un artículo de «CORTESÍA CLUB» distinto del sorteado,
 --                                     o más de los sorteados
---   CORTESIA_SIN_SOCIO    (exacta)  · un artículo de «CORTESÍA CLUB» en una factura sin visita de socio
+--   CORTESIA_SIN_SOCIO    (exacta)  · un artículo de «CORTESÍA CLUB» en una factura sin visita de socio (solo desde
+--                                     lc_excepciones_desde: antes del lanzamiento la sección se usa fuera del Club)
 --   CORTESIA_NO_CONFIGURADA (probable)· una línea a ₡0 fuera de la sección (ni PAX, ni el 856, ni PROMO, ni
 --                                     articulos_cero_permitidos)
 --   ANFITRION_SOBRE_TOPE  (exacta)  · anfitrión que pasó anfitrion_tope_mes_crc (₡25.000) de ganado en el mes (siempre;
@@ -3272,7 +3273,8 @@ begin
                               'pos_logins', to_jsonb(t.pos_logins))
       from tk t
      where (select ok from seccion_ok) and t.estado = 'C' and t.f < now() - make_interval(mins => v_cfg.puente_latencia_min)
-       and (v_cfg.lc_excepciones_desde is null or t.f >= v_cfg.lc_excepciones_desde::timestamp at time zone 'America/Costa_Rica')
+       -- (08-nov) la sección se usa también fuera del Club hasta el lanzamiento: cuenta SOLO desde lc_excepciones_desde
+       and v_cfg.lc_excepciones_desde is not null and t.f >= v_cfg.lc_excepciones_desde::timestamp at time zone 'America/Costa_Rica'
        and exists (select 1 from ln where ln.ticket_id = t.id and ln.es_seccion)
        and not exists (select 1 from vs where t.id = any(vs.ticket_ids))
     union all
@@ -4985,6 +4987,10 @@ $$;
 --   · Cada cambio de promociones deja un evento `promociones` (miembro null) para el pase.
 -- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
 alter table public.club_config add column if not exists cortesia_familia int check (cortesia_familia is null or cortesia_familia > 0);
+-- (08-nov) La sección «CORTESÍAS» del PoS es un par (clasificación, subclasificación): cortesia_familia es la CLASIFICACIÓN
+-- (la «familia» de las líneas) y cortesia_subclasificacion la subclasificación. Las líneas del puente todavía no traen la
+-- subclasificación: hoy se compara la clasificación; la subclasificación queda guardada para cuando el puente la mande.
+alter table public.club_config add column if not exists cortesia_subclasificacion int check (cortesia_subclasificacion is null or cortesia_subclasificacion > 0);
 alter table public.club_config add column if not exists cortesias_por_visita int not null default 1 check (cortesias_por_visita between 0 and 3);
 alter table public.club_config add column if not exists socio_visitas_por_dia int not null default 1 check (socio_visitas_por_dia between 1 and 5);
 
@@ -5202,8 +5208,9 @@ end;
 $$;
 
 -- Productos que llegan en las facturas (120 días). owner y manager. Para elegir las cortesías.
+drop function if exists public.club_productos(text, text);   -- (08-nov) suma en_seccion
 create or replace function public.club_productos(p_buscar text default null, p_location text default null)
-returns table (codigo text, nombre text, familia int, veces bigint, ultima timestamptz, es_cortesia boolean)
+returns table (codigo text, nombre text, familia int, veces bigint, ultima timestamptz, es_cortesia boolean, en_seccion boolean)
 language plpgsql
 stable
 security definer
@@ -5212,12 +5219,15 @@ as $$
 declare
   v_rol public.user_role := public.get_my_role();
   v_q   text := nullif(btrim(coalesce(p_buscar, '')), '');
+  v_fam int;
 begin
   p_location := public.club_local(p_location, false);   -- LC-ML: el local sale de datos
   if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
   if v_q is not null and length(v_q) > 40 then v_q := left(v_q, 40); end if;
+  select c.cortesia_familia into v_fam from public.club_config c where c.location_id = p_location;
   return query
-    select x.codigo, x.nombre, x.familia, x.veces, x.ultima, x.es_cortesia from (
+    select x.codigo, x.nombre, x.familia, x.veces, x.ultima, x.es_cortesia,
+           case when v_fam is null or x.familia is null then null else x.familia = v_fam end from (
       select l.codigo_producto as codigo,
              (array_agg(l.nombre order by t.fecha_registra desc))[1] as nombre,
              (array_agg(l.familia order by t.fecha_registra desc))[1] as familia,
@@ -5859,12 +5869,13 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
-  insert into public.club_marcadores_descuento (location_id, codigo_producto, nombre)
-  select new.location_id, x.cod, x.nom
-    from (values (new.lc_articulo_codigo, 'LOCAL CLUB (socio)'), (new.lc_invitado_codigo, 'INVITADO (Local Club)'),
-                 (new.promo_articulo_codigo, 'PROMO CLUB')) x(cod, nom)
+  insert into public.club_marcadores_descuento (location_id, codigo_producto, nombre, pct_esperado)
+  select new.location_id, x.cod, x.nom, x.pct
+    from (values (new.lc_articulo_codigo, 'LOCAL CLUB (socio)', null::numeric), (new.lc_invitado_codigo, 'INVITADO (Local Club)', null),
+                 (new.promo_articulo_codigo, 'PROMO CLUB 10 %', 10)) x(cod, nom, pct)
    where x.cod is not null
   on conflict (location_id, codigo_producto) do nothing;
+  if tg_op = 'UPDATE' then return new; end if;   -- al cambiar un código: solo su marcador
   insert into public.club_promociones (location_id, nombre, para, estado, porcentaje, cortesias)
   select new.location_id, 'Local Club', array['socio'], 'borrador', 10, 1
    where not exists (select 1 from public.club_promociones p where p.location_id = new.location_id and lower(p.nombre) = 'local club');
@@ -5873,6 +5884,10 @@ end;
 $$;
 drop trigger if exists club_config_alta_trg on public.club_config;
 create trigger club_config_alta_trg after insert on public.club_config for each row execute function public.club_config_alta();
+-- al cargar o cambiar un código del PoS (p. ej. PROMO CLUB), su marcador de descuento se siembra solo
+drop trigger if exists club_config_codigos_trg on public.club_config;
+create trigger club_config_codigos_trg after update of lc_articulo_codigo, lc_invitado_codigo, promo_articulo_codigo on public.club_config
+  for each row execute function public.club_config_alta();
 
 -- Locales que ya existían: la misma siembra (idempotente, genérica).
 insert into public.club_promociones (location_id, nombre, para, estado, porcentaje, cortesias)

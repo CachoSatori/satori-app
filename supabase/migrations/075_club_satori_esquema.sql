@@ -2860,14 +2860,20 @@ stable
 security definer
 set search_path = public, pg_temp
 as $$
-declare v_reg jsonb;
+declare v_reg jsonb; v_hay boolean;
 begin
-  select e.detalle->'registradores' into v_reg
+  -- CLUB-AUD-36: la excepción tiene que figurar HOY en club_excepciones (ventana de 120 días hasta hoy). Así nadie
+  -- «pre-resuelve» un (tipo, ref) que todavía no existe ni resuelve algo inventado.
+  select true, e.detalle->'registradores' into v_hay, v_reg
     from public.club_excepciones((now() at time zone 'America/Costa_Rica')::date - 120,
                                  (now() at time zone 'America/Costa_Rica')::date, p_location) e
    where e.tipo = p_tipo and e.ref = p_ref
    limit 1;
-  if v_reg is null or auth.uid() is null or not (v_reg ? auth.uid()::text) then
+  if v_hay is null then
+    raise exception 'Esa excepción no figura hoy en la lista: actualizá la pantalla' using errcode = 'P0001';
+  end if;
+  -- La segregación es por el REGISTRANTE del movimiento (registradores = registrado_por de los movimientos).
+  if v_reg is null or jsonb_typeof(v_reg) <> 'array' or auth.uid() is null or not (v_reg ? auth.uid()::text) then
     return;
   end if;
   if p_tipo in ('TARJETA_MANUAL', 'CANJE_SIN_CODIGO') then

@@ -2610,6 +2610,38 @@ begin
       and not has_function_privilege('anon', 'public.club_pase_cursor_rebobinar(text, bigint, text)', 'EXECUTE'), '');
 end $$;
 
+-- ═══ 58. CLUB-AUD-36: solo se resuelve lo que figura HOY; segregación por el registrante ═══
+do $$
+declare v_id uuid; v_mv uuid := gen_random_uuid(); e1 text; e2 text; v_res boolean;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Segregacion Ficticia', 'app') returning id into v_id;
+  -- pre-resolver: el (tipo, ref) todavía no existe
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_excepcion_resolver('REGISTRO_SIN_FACTURA', v_mv::text, 'la dejo resuelta antes'); e1 := 'ok';
+  exception when others then e1 := sqlerrm; end;
+  perform pg_temp.yo();
+  -- ahora aparece: la registró el mismo manager
+  insert into club_movimientos (id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
+  values (v_mv, v_id, 'tarjeta', 1, 6, 18000, '990993', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<MANAGER_UUID>'::uuid);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_excepcion_resolver('REGISTRO_SIN_FACTURA', v_mv::text, 'la resuelvo yo'); e2 := 'ok';
+  exception when others then e2 := sqlerrm; end;
+  select e.resuelta into v_res from public.club_excepciones(current_date - 1, current_date + 1) e
+   where e.tipo = 'REGISTRO_SIN_FACTURA' and e.ref = v_mv::text;
+  perform pg_temp.yo();
+  perform pg_temp.r('58', 'pre-resolver una excepción que no figura hoy → rechaza (negativa)', e1 like 'Esa excepción no figura hoy%', e1);
+  perform pg_temp.r('58', 'quien registró el movimiento no la resuelve después (negativa) y sigue abierta',
+    e2 like '%la resuelve el owner%' and v_res = false
+      and not exists (select 1 from club_excepciones_resueltas where ref = v_mv::text), coalesce(e2, '') || ' ' || coalesce(v_res::text, 'null'));
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_excepcion_resolver('CREDITOS_SIN_CANJE', 'factura:no-existe-0000', 'inventada'); e1 := 'ok';
+  exception when others then e1 := sqlerrm; end;
+  perform public.club_excepcion_resolver('REGISTRO_SIN_FACTURA', v_mv::text, 'Revisada por el owner');
+  perform pg_temp.yo();
+  perform pg_temp.r('58', 'ni el owner resuelve un ref inventado; la real la resuelve el owner',
+    e1 like 'Esa excepción no figura hoy%' and exists (select 1 from club_excepciones_resueltas where ref = v_mv::text), e1);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

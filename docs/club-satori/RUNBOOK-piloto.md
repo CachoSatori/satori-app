@@ -200,6 +200,14 @@ los 136 vencimientos del 05-nov. El libro es de solo inserción: el migrador sol
 (`origen = 'migracion'`).
 **Rollback:** volver a correr (es re-ejecutable por `legacy_id`) o, si todavía no hubo actividad, el rollback de la 086.
 
+## 8b. Arranque de las excepciones del Local Club (el día del lanzamiento)
+**Hacer:** `update club_config set lc_excepciones_desde = '<fecha del lanzamiento>';` Antes de esa fecha el Local Club se
+cobró sin la app y todas sus facturas saldrían como `LC_SIN_REGISTRO` (en staging: 275 en 120 días).
+**Verificar:** en Excepciones no aparecen facturas LC anteriores a esa fecha.
+**Con los códigos de Ismael:** `cortesia_familia` (sección «CORTESÍA CLUB»), `promo_articulo_codigo` (PROMO CLUB 10 %) y,
+si corresponde, `articulos_cero_permitidos` (p. ej. el 857 «INVITADO»). Mientras falten, las excepciones que los usan
+salen «pendiente de configuración».
+
 ## 9. Tarjeta física apagada
 **Hacer:** `update club_config set tarjeta_manual_activa = false;` (ya viene `false` por defecto; se confirma).
 **Verificar:** en caja no aparece «Tarjeta física» y `club_tarjeta_manual` rechaza a todos los roles.

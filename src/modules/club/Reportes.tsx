@@ -4,7 +4,7 @@
  * del navegador → «Guardar como PDF». «Exportar CSV» baja el anexo con todas las filas.
  */
 import { useEffect, useState } from 'react'
-import { getReporteMes, getLocalesClub, cerrarMes, aClubError, fmtCreditos, type ReporteMes, type FilaReporte } from '../../shared/api/club'
+import { getReporteMes, getLocalesClub, cerrarMes, aClubError, fmtCreditos, getReporteAltas, type ReporteMes, type FilaReporte, type AltasPorCajero } from '../../shared/api/club'
 import { useAuth } from '../../shared/hooks/useAuth'
 import Comparacion from './Comparacion'
 import Vencimiento from './Vencimiento'
@@ -134,6 +134,7 @@ export default function Reportes() {
             <div>Pendiente {crc(rep.pm.pendiente_crc)} · cargado en el mes {crc(rep.pm.cargos_mes_crc)} · pagado {crc(rep.pm.pagos_mes_crc)}</div>
             {rep.pm.nota && <div style={{ color: C.muted, fontSize: '0.85rem', marginTop: 4 }}>{rep.pm.nota}</div>}
           </Card>
+          <AltasSocios mes={mes} local={local} />
           <Card>
             <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Calidad de datos</h3>
             <div>{n0(rep.calidad.abiertas)} excepciones abiertas y {n0(rep.calidad.resueltas)} resueltas en el mes.
@@ -165,6 +166,44 @@ function Seccion({ t, filas, col, vacio }: { t: string; filas: FilaReporte[]; co
           <span style={{ whiteSpace: 'nowrap' }}>{col(f)}</span>
         </div>
       ))}
+    </Card>
+  )
+}
+
+/** LC-A5: altas de socios del mes por usuario (sale de la auditoría). */
+function AltasSocios({ mes, local }: { mes: string; local: string }) {
+  const [filas, setFilas] = useState<AltasPorCajero[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let vivo = true
+    const [a, m] = mes.split('-').map(Number)
+    const fin = new Date(Date.UTC(a, m, 0)).toISOString().slice(0, 10)
+    getReporteAltas(`${mes}-01`, fin, local)
+      .then(f => { if (vivo) { setFilas(f); setError(null) } })
+      .catch(e => { if (vivo) setError(aClubError(e).message) })
+    return () => { vivo = false }
+  }, [mes, local])
+  return (
+    <Card>
+      <h3 style={{ margin: '0 0 8px', fontSize: '1rem' }}>Altas de socios por usuario</h3>
+      {error && <Aviso tono="error">{error}</Aviso>}
+      {filas === null ? <div style={{ color: C.muted }}>Cargando…</div> : filas.length === 0 ? <div style={{ color: C.muted }}>Sin altas en el mes.</div> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+            <thead><tr style={{ textAlign: 'left', color: C.muted }}>
+              <th>Usuario</th><th>Altas en caja</th><th>Validó autoaltas</th><th>Confirmó</th><th>Sin confirmar</th><th>Volvieron a pendiente</th>
+            </tr></thead>
+            <tbody>
+              {filas.map(f => (
+                <tr key={f.usuario} style={{ borderTop: `1px solid ${C.panel}` }}>
+                  <td>{f.usuario}</td><td>{n0(f.altas_caja)}</td><td>{n0(f.validaciones)}</td><td>{n0(f.confirmo)}</td>
+                  <td>{n0(f.sin_confirmar)}</td><td style={{ color: f.vencidas > 0 ? C.red : undefined }}>{n0(f.vencidas)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </Card>
   )
 }

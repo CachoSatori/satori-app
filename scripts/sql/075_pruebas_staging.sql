@@ -3231,6 +3231,179 @@ begin
       and p::text not like '%+506%' and p::text not like '%@%', (p->'socio')::text);
 end $$;
 
+-- ═══ 67. LC-A5: excepciones del Local Club ═══
+create function pg_temp.factura(p_nf text, p_horas int, p_cxc numeric, p_lineas jsonb, p_pedido text default null) returns uuid language plpgsql as $f$
+declare v uuid; v_abre timestamptz := now() - make_interval(hours => p_horas) - interval '30 minutes';
+begin
+  if p_pedido is not null then
+    insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en)
+    values ('santa-teresa', 'pedido:' || p_pedido, p_pedido, 'M' || p_pedido, 'salon', 2, v_abre, v_abre);
+  end if;
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc, cxc_crc,
+                               numero_pedido, pedido_abierto_en, mesa_factura)
+  values (p_nf, now() - make_interval(hours => p_horas), 'C', 'salon', 'cajero', true, 'ok', 10000, p_cxc, p_pedido,
+          case when p_pedido is not null then v_abre end, case when p_pedido is not null then 'M' || p_pedido end)
+  returning id into v;
+  insert into pos_ndf_ticket_lines (ticket_id, codigo_producto, nombre, cantidad, monto, familia, es_cortesia)
+  select v, x->>'c', coalesce(x->>'n', x->>'c'), coalesce((x->>'q')::numeric, 1), (x->>'m')::numeric, (x->>'f')::int, coalesce((x->>'cort')::boolean, false)
+    from jsonb_array_elements(p_lineas) x;
+  return v;
+end $f$;
+create function pg_temp.exc(p_tipo text) returns jsonb language plpgsql as $f$
+declare j jsonb;
+begin
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(current_date - 60, current_date + 1, 'santa-teresa', p_tipo) e;
+  perform pg_temp.yo();
+  return j;
+end $f$;
+create function pg_temp.hay(p_j jsonb, p_ref text) returns boolean language sql as $f$
+  select exists (select 1 from jsonb_array_elements(p_j) x where x->>'ref' = p_ref)
+$f$;
+do $$
+declare v_s uuid; v_sr uuid; v_a uuid; j jsonb; v_vis jsonb; i int; e text; v_mov uuid; v_clave text;
+begin
+  update club_config set puente_latencia_min = 1, cortesia_familia = null, lc_excepciones_desde = null, socio_visitas_por_dia = 1,
+                         articulos_cero_permitidos = '{}', anfitrion_tope_mes_crc = 25000, valor_credito_crc = 18000, personas_por_credito = 6
+   where location_id = 'santa-teresa';
+  update club_promociones set estado = 'terminada' where nombre <> 'Local Club';
+  update club_promociones set estado = 'vigente' where nombre = 'Local Club';
+  delete from club_cortesias;
+  -- sin la sección configurada: las tres de cortesía salen «pendiente de configuración»
+  perform pg_temp.r('67', 'sin «CORTESÍA CLUB» configurada: las tres de cortesía salen «pendiente de configuración»',
+    pg_temp.hay(pg_temp.exc('CORTESIA_DISTINTA'), 'config:cortesia_club') and pg_temp.hay(pg_temp.exc('CORTESIA_SIN_SOCIO'), 'config:cortesia_club')
+      and pg_temp.hay(pg_temp.exc('CORTESIA_NO_CONFIGURADA'), 'config:cortesia_club'), '');
+  update club_config set cortesia_familia = 17 where location_id = 'santa-teresa';
+  insert into club_cortesias (codigo_producto, nombre, familia) values ('CC-1', 'Crepe ficticio', 17);
+
+  -- LC_SIN_REGISTRO
+  perform pg_temp.factura('990101', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"856","m":0}]');
+  j := pg_temp.exc('LC_SIN_REGISTRO');
+  perform pg_temp.r('67', 'LC_SIN_REGISTRO: factura con el 856 sin visita de socio', pg_temp.hay(j, 'lc:990101'), '');
+  update club_config set lc_excepciones_desde = current_date + 1 where location_id = 'santa-teresa';
+  j := pg_temp.exc('LC_SIN_REGISTRO');
+  update club_config set lc_excepciones_desde = null where location_id = 'santa-teresa';
+  perform pg_temp.r('67', 'lc_excepciones_desde: lo anterior al lanzamiento no sale', not pg_temp.hay(j, 'lc:990101'), '');
+
+  -- visita con beneficio cuya factura no tiene el 856 → REGISTRO_LC_SIN_856; y la factura con el 856 y su visita → no LC_SIN_REGISTRO
+  v_s := pg_temp.socio('Rita Excepcion Ficticia', '+50661110031', null);
+  perform pg_temp.factura('990102', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"CC-2","m":0,"f":17}]', '9102');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  v_vis := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"9102","clave":"pedido:9102"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('67', 'REGISTRO_LC_SIN_856: visita con beneficio y la factura sin el 856',
+    pg_temp.hay(pg_temp.exc('REGISTRO_LC_SIN_856'), 'visita:' || (v_vis->>'visita_id')), v_vis::text);
+  perform pg_temp.r('67', 'CORTESIA_DISTINTA: en la factura de la visita, otro artículo de la sección que el sorteado',
+    pg_temp.hay(pg_temp.exc('CORTESIA_DISTINTA'), 'cort-dist:' || (v_vis->>'visita_id')), '');
+  v_a := pg_temp.socio('Sol Excepcion Ficticia', '+50661110032', null);
+  perform pg_temp.factura('990103', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"856","m":0},{"c":"CC-1","m":0,"f":17}]', '9103');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_a, '{"modo":"pedido","pedido":"9103","clave":"pedido:9103"}', gen_random_uuid());
+  perform pg_temp.yo();
+  perform pg_temp.r('67', 'factura con el 856 y su visita (cortesía sorteada = cobrada): ni LC_SIN_REGISTRO ni CORTESIA_DISTINTA (negativa)',
+    not pg_temp.hay(pg_temp.exc('LC_SIN_REGISTRO'), 'lc:990103')
+      and not exists (select 1 from jsonb_array_elements(pg_temp.exc('CORTESIA_DISTINTA')) x where x->'detalle'->>'miembro' like 'Sol%'), '');
+
+  -- CORTESIA_SIN_SOCIO y CORTESIA_NO_CONFIGURADA
+  perform pg_temp.factura('990104', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"CC-1","m":0,"f":17}]');
+  perform pg_temp.factura('990105', 2, 0, '[{"c":"P1","m":9000,"f":5},{"c":"ZZ0","m":0,"f":5}]');
+  perform pg_temp.r('67', 'CORTESIA_SIN_SOCIO: artículo de la sección en una factura sin visita', pg_temp.hay(pg_temp.exc('CORTESIA_SIN_SOCIO'), 'cort-sin-socio:990104'), '');
+  perform pg_temp.r('67', 'CORTESIA_NO_CONFIGURADA: línea a ₡0 fuera de la sección', pg_temp.hay(pg_temp.exc('CORTESIA_NO_CONFIGURADA'), 'cort-nc:990105'), '');
+  update club_config set articulos_cero_permitidos = '{ZZ0}' where location_id = 'santa-teresa';
+  perform pg_temp.r('67', 'articulos_cero_permitidos: el artículo permitido a ₡0 no salta (negativa)', not pg_temp.hay(pg_temp.exc('CORTESIA_NO_CONFIGURADA'), 'cort-nc:990105'), '');
+
+  -- CANJE_CON_DESCUENTO
+  perform pg_temp.factura('990106', 2, 18000, '[{"c":"P1","m":9000,"f":5},{"c":"856","m":0}]');
+  perform pg_temp.factura('990107', 2, 18000, '[{"c":"P1","m":9000,"f":5}]');
+  j := pg_temp.exc('CANJE_CON_DESCUENTO');
+  perform pg_temp.r('67', 'CANJE_CON_DESCUENTO: pagada con créditos y con el 856; sin descuento no salta',
+    pg_temp.hay(j, 'canje-desc:990106') and not pg_temp.hay(j, 'canje-desc:990107'), '');
+
+  -- DESCUENTO_SIN_RESPALDO: referencia ₡5.000 (10 ventas en días anteriores); hoy una a ₡4.000 → salta
+  for i in 1..10 loop perform pg_temp.factura('99020' || lpad(i::text, 2, '0'), 24 * i, 0, '[{"c":"ZD1","m":5000,"f":5},{"c":"ZD2","m":5000,"f":5}]'); end loop;
+  perform pg_temp.factura('990301', 1, 0, '[{"c":"ZD1","m":4000,"f":5}]');
+  for i in 2..5 loop perform pg_temp.factura('99030' || i, 1, 0, '[{"c":"ZD1","m":5000,"f":5}]'); end loop;
+  -- cambio de lista de ZD2: hoy todas a ₡4.500 → precio nuevo, no salta
+  for i in 1..4 loop perform pg_temp.factura('99040' || i, 1, 0, '[{"c":"ZD2","m":4500,"f":5}]'); end loop;
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('67', 'DESCUENTO_SIN_RESPALDO: línea por debajo de la moda de 30 días (20 %), una por factura',
+    pg_temp.hay(j, 'desc:990301')
+      and (select (x->'detalle'->>'descuento_pct')::numeric from jsonb_array_elements(j) x where x->>'ref' = 'desc:990301') = 20, '');
+  perform pg_temp.r('67', 'DESCUENTO_SIN_RESPALDO: cambio de lista (≥ 60 % del día a ese precio) no salta; precio normal tampoco (negativa)',
+    not pg_temp.hay(j, 'desc:990401') and not pg_temp.hay(j, 'desc:990302'), '');
+
+  -- SOCIO_USO_ANOMALO: dos mesas el mismo día (con el tope en 2)
+  update club_config set socio_visitas_por_dia = 2 where location_id = 'santa-teresa';
+  v_s := pg_temp.socio('Tea Anomala Ficticia', '+50661110033', null);
+  perform pg_temp.factura('990501', 1, 0, '[{"c":"856","m":0}]', '9501');
+  perform pg_temp.factura('990502', 1, 0, '[{"c":"856","m":0}]', '9502');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"9501","clave":"pedido:9501"}', gen_random_uuid());
+  perform public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"9502","clave":"pedido:9502"}', gen_random_uuid());
+  perform pg_temp.yo();
+  update club_config set socio_visitas_por_dia = 1 where location_id = 'santa-teresa';
+  perform pg_temp.r('67', 'SOCIO_USO_ANOMALO: el mismo socio en dos mesas el mismo día',
+    pg_temp.hay(pg_temp.exc('SOCIO_USO_ANOMALO'), 'socio-dia:' || v_s || ':' || (now() at time zone 'America/Costa_Rica')::date), '');
+
+  -- CUPON_AUTOREFERIDO: un cupón del anfitrión cargado en la visita donde él es socio (se cuela por fuera del control)
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Uma Autoref Ficticia', 'app') returning id into v_sr;
+  insert into club_miembro_roles (miembro_id, rol) values (v_sr, 'socio');
+  perform pg_temp.factura('990601', 1, 0, '[{"c":"856","m":0}]', '9601');
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  perform public.club_socio_visita(v_sr, '{"modo":"pedido","pedido":"9601","clave":"pedido:9601"}', gen_random_uuid());
+  perform pg_temp.yo();
+  select visita_clave into v_clave from club_visitas_socio where miembro_id = v_sr;
+  insert into club_cupones (referente_id, vence_en, estado, usado_en, personas) values (v_sr, now() + interval '1 day', 'usado', now(), 2);
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, cupon_id, fecha_visita, registrado_en, origen, visita_clave, pos_ref, registrado_por)
+  select v_sr, 'tarjeta', 2, 6, 18000, c.id, now() - interval '30 minutes', now() - interval '30 minutes', 'app', v_clave,
+         '{"modo":"pedido","pedido":"9601","clave":"pedido:9601"}'::jsonb, '<CAJERO_UUID>'::uuid
+    from club_cupones c where c.referente_id = v_sr returning id into v_mov;
+  perform pg_temp.r('67', 'CUPON_AUTOREFERIDO: cupón del anfitrión en la visita donde él es socio', pg_temp.hay(pg_temp.exc('CUPON_AUTOREFERIDO'), 'autoref:' || v_mov), '');
+
+  -- ANFITRION_SOBRE_TOPE: 12 personas en el mes (₡36.000 > ₡25.000)
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Vale Tope Ficticia', 'app') returning id into v_a;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
+  values (v_a, 'tarjeta', 12, 6, 18000, '990701', now() - interval '1 hour', 'app', 'manual');
+  perform pg_temp.r('67', 'ANFITRION_SOBRE_TOPE: ganado en el mes por encima de ₡25.000 (siempre, no solo el nuevo)',
+    pg_temp.hay(pg_temp.exc('ANFITRION_SOBRE_TOPE'), 'tope:' || v_a || ':' || to_char(now() at time zone 'America/Costa_Rica', 'YYYY-MM')), '');
+
+  -- SOCIO_ALTA_SIN_CONFIRMAR: alta en caja sin confirmar; quien la cargó no la resuelve; confirmada → no sale
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  v_s := (public.club_socio_alta_caja('Wen Alta Ficticia', '60001299', null, true)->>'miembro_id')::uuid;
+  perform pg_temp.yo();
+  perform pg_temp.r('67', 'SOCIO_ALTA_SIN_CONFIRMAR: el alta provisional sale', pg_temp.hay(pg_temp.exc('SOCIO_ALTA_SIN_CONFIRMAR'), 'alta:' || v_s), '');
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_excepcion_resolver('SOCIO_ALTA_SIN_CONFIRMAR', 'alta:' || v_s, 'la reviso yo'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_socio_confirmar(v_s, 'vista');
+  perform pg_temp.yo();
+  perform pg_temp.r('67', 'quien cargó el alta no resuelve su excepción; confirmada, deja de salir',
+    e like '%la resuelve el owner%' and not pg_temp.hay(pg_temp.exc('SOCIO_ALTA_SIN_CONFIRMAR'), 'alta:' || v_s), e);
+
+  -- resolver una nueva y no poder resolver una «pendiente de configuración»
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_excepcion_resolver('LC_SIN_REGISTRO', 'lc:990101', 'Socio conocido, sin QR ese día');
+  perform pg_temp.yo();
+  update club_config set cortesia_familia = null where location_id = 'santa-teresa';
+  delete from club_cortesias;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  begin perform public.club_excepcion_resolver('CORTESIA_SIN_SOCIO', 'config:cortesia_club', 'ok'); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  -- reporte de altas por usuario (de la auditoría): el manager cargó la de Wen; el owner la confirmó
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(sum(x.altas_caja) filter (where x.usuario = (select full_name from profiles where id = '<MANAGER_UUID>')), 0)::int
+       + coalesce(sum(x.confirmo) filter (where x.usuario = (select full_name from profiles where id = '<OWNER_UUID>')), 0)::int
+    into i from public.club_reporte_altas(current_date - 1, current_date + 1) x;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_reporte_altas(current_date, current_date); e := e || '/ok'; exception when insufficient_privilege then e := e || '/sin permiso'; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('67', 'reporte de altas por usuario: altas del manager y confirmaciones del owner; el cajero no lo ve',
+    i >= 2 and e like '%/sin permiso', format('%s %s', i, e));
+  perform pg_temp.r('67', 'las nuevas se resuelven con nota; «pendiente de configuración» no (negativa)',
+    (select (x->>'resuelta')::boolean from jsonb_array_elements(pg_temp.exc('LC_SIN_REGISTRO')) x where x->>'ref' = 'lc:990101')
+      and e like 'Pendiente de configuración%', e);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

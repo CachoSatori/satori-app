@@ -12,7 +12,7 @@
 | A2 | Socios: alta provisional + confirmación, autoalta (Turnstile, topes, purga, privacidad), validación, token de pase, cursor | 2,5 | **hecha** | `838b892` | batería 318/318 (nueva 57, 24 casos) · carreras 7/7 (nueva 17) · paridad 633 = 633 · migrador 15 OK · vitest 1.490 · club-web 13/13 |
 | A3 | Promociones mínimas + productos + admin de cortesías del sorteo | 2 | **hecha** | `fc53012` + `600b868` | batería 351/351 (nueva 60, 18 casos) · carreras 8/8 · paridad 717 = 717 · vitest 1.491 · build OK · migrador 15 OK · captura de la pantalla |
 | A4 | «Qué aplicar», sorteo de cortesía, visita por factura (856), premio por referir (1.ª factura C con 856), topes, antiautocanje, créditos pendientes, portal con dos pestañas | 4,5 | **hecha** | `ea6c34f` · `9372d33` · `2c8b324` · `95391be` · `60c0be7` | batería 385/385 (nuevas 63–66) · carreras 8/8 · paridad OK · vitest 1.491 · portal verificado en el navegador |
-| A5 | Excepciones LC (11) + «pendiente de configuración» de R02 + reporte de altas por cajero | 2,5 | pendiente | — | — |
+| A5 | Excepciones LC (11) + «pendiente de configuración» de R02 + reporte de altas por cajero | 2,5 | **hecha** (en el día, 08-nov) | ver la bitácora | batería 404/404 (nueva 67, 19 casos) · carreras 8/8 · paridad OK · vitest 1.491 · excepciones de 120 días en ~3 s |
 | A6 | Recorrido, guía de uso, RUNBOOK | 1,5 | pendiente | — | — |
 
 ## Sesión B · pase de Wallet (Google; Apple apagado)

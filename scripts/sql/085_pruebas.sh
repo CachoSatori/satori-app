@@ -55,7 +55,7 @@ caso() { # $1 = etiqueta, $2 = uid, $3 = sql previo como postgres (opcional)
     with u as (update public.profiles set full_name = full_name where id = '$otro' returning 1)
     select l.*, (select count(*) from u) as update_otro_perfil from ($LECTURA) l;
     rollback;")
-  printf '%-24s %s\n' "$etiqueta" "$(echo "$r" | jq -c '.[0] // .')"
+  printf '%-24s %s\n' "$etiqueta" "$(echo "$r" | jq -c 'if type=="array" then .[0] else . end')"
 }
 
 caso "owner activo"       "$(uid owner true)"
@@ -66,4 +66,4 @@ for rol in manager contador cajero salonero barman cocina; do
   caso "$rol inactivo" "$(uid $rol false)"
 done
 r=$(q "begin; set local role anon; $LECTURA; rollback;")
-printf '%-24s %s\n' "anon" "$(echo "$r" | jq -c '.[0] // .')"
+printf '%-24s %s\n' "anon" "$(echo "$r" | jq -c 'if type=="array" then .[0] else . end')"

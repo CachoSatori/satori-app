@@ -2658,6 +2658,27 @@ begin
     e1 like 'Esa excepción no figura hoy%' and exists (select 1 from club_excepciones_resueltas where ref = v_mv::text), e1);
 end $$;
 
+-- ═══ 59. CLUB-AUD-68: el cruce legacy por número tipeado exige factura cerrada (estado 'C') ═══
+do $$
+declare v_id uuid; v_mv uuid; v_t uuid; c1 text; c2 text; v_ex boolean;
+begin
+  insert into club_miembros (tipo, nombre, origen) values ('referente', 'Ref Legacy Ficticia', 'app') returning id into v_id;
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, total_crc)
+  values ('990995', now() - interval '3 hours', 'X', 'salon', 'cajero', true, 'ok', 30000) returning id into v_t;
+  insert into club_movimientos (miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, registrado_en, origen, nota, registrado_por)
+  values (v_id, 'tarjeta', 2, 6, 18000, '990995', now() - interval '2 hours', now() - interval '2 hours', 'app', 'manual', '<CAJERO_UUID>'::uuid)
+  returning id into v_mv;
+  c1 := pg_temp.cruce(v_mv);
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select exists (select 1 from public.club_excepciones(current_date - 1, current_date + 1) e
+                  where e.tipo = 'REGISTRO_SIN_FACTURA' and e.ref = v_mv::text) into v_ex;
+  perform pg_temp.yo();
+  perform pg_temp.r('59', 'factura anulada (X) tipeada → no cruza y queda REGISTRO_SIN_FACTURA (negativa)', c1 = '' and v_ex, c1);
+  update pos_ndf_tickets set estado = 'C' where id = v_t;
+  c2 := pg_temp.cruce(v_mv);
+  perform pg_temp.r('59', 'la misma factura cerrada (C) → cruza', c2 = '990995', c2);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

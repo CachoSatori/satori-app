@@ -789,8 +789,8 @@ begin
     return null;
   end if;
   select * into t from public.pos_ndf_tickets x
-   where x.local = p_location and ltrim(x.numero_factura, '0') = v_cl
-   order by (x.estado = 'C') desc limit 1;
+   where x.local = p_location and ltrim(x.numero_factura, '0') = v_cl and x.estado = 'C'   -- CLUB-AUD-68
+   limit 1;
   if found and t.numero_pedido is not null and t.pedido_abierto_en is not null then
     return format('pedido:%s@%s', t.numero_pedido, to_char(t.pedido_abierto_en at time zone 'UTC', 'YYYYMMDD"T"HH24MISS'));
   end if;
@@ -927,7 +927,7 @@ begin
   v_pax := nullif((p_pos->>'pax')::int, 0);
   if v_pax is null and p_pos is null and public.club_factura_clave(p_factura) is not null then
     select nullif(t.pax, 0) into v_pax from public.pos_ndf_tickets t
-     where t.local = p_location and ltrim(t.numero_factura, '0') = public.club_factura_clave(p_factura) limit 1;
+     where t.local = p_location and ltrim(t.numero_factura, '0') = public.club_factura_clave(p_factura) and t.estado = 'C' limit 1;   -- CLUB-AUD-68
   end if;
   if v_pax is not null then
     select coalesce(sum(mv.personas), 0) into v_ya from public.club_movimientos mv
@@ -2460,8 +2460,9 @@ begin
   if p_pos is null then
     v_clave := public.club_factura_clave(p_factura);   -- una vez, no por fila
     if v_clave is null then return; end if;
+    -- CLUB-AUD-68: el camino legacy (número tipeado) cruza solo con facturas CERRADAS (estado 'C'), como los demás.
     return query select t.id, 'principal'::text from public.pos_ndf_tickets t
-     where t.local = p_location and ltrim(t.numero_factura, '0') = v_clave limit 1;
+     where t.local = p_location and ltrim(t.numero_factura, '0') = v_clave and t.estado = 'C' limit 1;
     return;
   elsif p_pos->>'modo' = 'factura' then
     return query select t.id, 'principal'::text from public.pos_ndf_tickets t

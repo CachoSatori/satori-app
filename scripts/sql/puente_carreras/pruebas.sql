@@ -1,4 +1,4 @@
--- CLUB-AUD-44/45/46: pruebas de pos_ndf_ingestar (mig 082). SOLO STAGING. Una transacción que termina en ROLLBACK.
+-- CLUB-AUD-44/45/46 y Grok 99: pruebas de pos_ndf_ingestar (mig 082). SOLO STAGING. Una transacción que termina en ROLLBACK.
 -- Local sintético «prueba-082» (no existe en el PoS) para no tocar el cursor ni las mesas de santa-teresa.
 begin;
 create temp table _r (caso text, ok boolean, detalle text);
@@ -32,6 +32,27 @@ begin
   -- una línea de una factura que no vino en el lote no se inserta
   r := public.pos_ndf_ingestar('prueba-082', '[]', '[{"numero_factura":"999","codigo_producto":"X","cantidad":1,"monto":1}]', null, null);
   insert into _r values ('línea sin su factura en el lote: se ignora', r->>'lineas' = '0', r::text);
+  -- Grok 99 · lote con la MISMA factura dos veces: se rechaza el lote entero (no queda nada a medias: ni la otra
+  -- factura del lote ni el cursor). El Edge ya deduplica antes (normalizarLote: gana la última); esto es la red de abajo.
+  begin
+    perform public.pos_ndf_ingestar('prueba-082',
+      jsonb_build_array(t->0 || '{"numero_factura":"0000200"}', t->0 || '{"numero_factura":"0000201"}', t->0 || '{"numero_factura":"0000200","total_crc":2000}'),
+      '[]', null, '{"last_factura":"0000201"}');
+    e := 'ok';
+  exception when others then e := sqlerrm; end;
+  insert into _r values ('lote con factura repetida → rechaza todo (ni la otra factura ni el cursor)', e <> 'ok'
+    and not exists (select 1 from pos_ndf_tickets where local = 'prueba-082' and numero_factura in ('0000200', '0000201'))
+    and (select last_factura from pos_ndf_cursor where local = 'prueba-082') = '0000123', e);
+  -- Grok 99 · una línea con un tipo inválido (cantidad «tres»): se rechaza el lote entero, sin ticket ni líneas a medias.
+  begin
+    perform public.pos_ndf_ingestar('prueba-082', jsonb_build_array(t->0 || '{"numero_factura":"0000202"}'),
+      '[{"numero_factura":"0000202","codigo_producto":"P1","cantidad":1,"monto":500,"familia":5},
+        {"numero_factura":"0000202","codigo_producto":"P2","cantidad":"tres","monto":500,"familia":5}]', null, '{"last_factura":"0000202"}');
+    e := 'ok';
+  exception when others then e := sqlerrm; end;
+  insert into _r values ('línea con tipo inválido → rechaza todo (ni ticket, ni líneas, ni cursor)', e <> 'ok'
+    and not exists (select 1 from pos_ndf_tickets where local = 'prueba-082' and numero_factura = '0000202')
+    and (select last_factura from pos_ndf_cursor where local = 'prueba-082') = '0000123', e);
   begin perform public.pos_ndf_ingestar('Local Raro!', '[]', '[]', null, null); e := 'ok'; exception when others then e := sqlerrm; end;
   insert into _r values ('local inválido → rechaza', e = 'local no válido', e);
   reset role;

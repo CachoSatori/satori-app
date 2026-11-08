@@ -13,6 +13,7 @@ import {
   armarClase, armarObjeto, firmarJwt, leerCuentaServicio, urlGuardar, validarDatos, idObjeto, DISENO_POR_DEFECTO,
   type PaseDatos, type DisenoPase,
 } from './googlePase.ts'
+import { sincronizar, actualizarUno, type Fetch } from './sincronizar.ts'
 
 export interface EnvPase {
   CLUB_WEB_KEY?: string
@@ -22,6 +23,8 @@ export interface EnvPase {
   CLUB_WEB_ORIGIN?: string
   /** JSON opcional { colorFondo, logoUrl } (lo aprueba Ismael). */
   WALLET_DISENO?: string
+  /** B3: secreto del programador que llama a /club-pase/sync (header x-club-pase-sync). ≥ 32 caracteres. */
+  CLUB_PASE_SYNC_KEY?: string
 }
 export type Rpc = (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>
 
@@ -48,6 +51,42 @@ function diseno(env: EnvPase): DisenoPase {
       logoUrl: typeof x.logoUrl === 'string' && x.logoUrl.startsWith('https://') ? x.logoUrl : null,
     }
   } catch { return DISENO_POR_DEFECTO }
+}
+
+/**
+ * B3: rutas de sincronización.
+ *   POST /club-pase/sync        x-club-pase-sync: <CLUB_PASE_SYNC_KEY>          → resumen del lote
+ *   POST /club-pase/actualizar  x-club-web: <CLUB_WEB_KEY>  { token del portal } → «Actualizar mi pase»
+ * Fallan cerradas sin sus secretos. `fetchFn` es la red hacia Google (inyectada para las pruebas).
+ */
+export async function manejarSync(req: Request, ruta: 'sync' | 'actualizar', env: EnvPase, rpc: Rpc, fetchFn: Fetch, ahora = new Date()): Promise<Response> {
+  if (req.method !== 'POST') return json(405, { error: 'metodo' })
+  if (!env.GOOGLE_WALLET_ISSUER_ID || !env.GOOGLE_WALLET_SA_KEY) return json(503, { error: 'servicio_no_disponible' })
+  let sa
+  try { sa = leerCuentaServicio(env.GOOGLE_WALLET_SA_KEY) } catch { return json(503, { error: 'servicio_no_disponible' }) }
+  const deps = { rpc, fetch: fetchFn, sa, issuer: env.GOOGLE_WALLET_ISSUER_ID, diseno: diseno(env), ahora }
+  if (ruta === 'sync') {
+    if (!env.CLUB_PASE_SYNC_KEY || env.CLUB_PASE_SYNC_KEY.length < 32) return json(503, { error: 'servicio_no_disponible' })
+    if (!igualSeguro(req.headers.get('x-club-pase-sync') ?? '', env.CLUB_PASE_SYNC_KEY)) return json(401, { error: 'no_autorizado' })
+    try { return json(200, await sincronizar(deps)) } catch { return json(502, { error: 'servicio' }) }
+  }
+  if (!env.CLUB_WEB_KEY || env.CLUB_WEB_KEY.length < 32) return json(503, { error: 'servicio_no_disponible' })
+  if (!igualSeguro(req.headers.get('x-club-web') ?? '', env.CLUB_WEB_KEY)) return json(401, { error: 'no_autorizado' })
+  let b: { token?: unknown }
+  try {
+    const txt = await req.text()
+    if (txt.length > 1024) return json(400, { error: 'datos_invalidos' })
+    b = JSON.parse(txt || '{}') as { token?: unknown }
+  } catch { return json(400, { error: 'datos_invalidos' }) }
+  const token = typeof b.token === 'string' ? b.token.trim().toLowerCase() : ''
+  if (!RE_TOKEN.test(token)) return json(404, { error: 'portal_invalido' })
+  const t = await rpc('club_pase_por_token', { p_token: token })
+  if (t.error) return json(502, { error: 'servicio' })
+  if (typeof t.data !== 'string') return json(404, { error: 'portal_invalido' })
+  try {
+    const r = await actualizarUno(deps, t.data)
+    return r === 'error' ? json(502, { error: 'servicio' }) : json(200, { resultado: r })
+  } catch { return json(502, { error: 'servicio' }) }
 }
 
 export async function manejarPase(req: Request, ruta: string, env: EnvPase, rpc: Rpc, ahora = new Date()): Promise<Response> {

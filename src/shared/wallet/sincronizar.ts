@@ -146,3 +146,20 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
   }
   return res
 }
+
+/**
+ * «Actualizar mi pase» (portal): PATCH del objeto de UNA persona, con sus datos de ahora. 404 = todavía no guardó el
+ * pase (no es error). No mueve el cursor.
+ */
+export async function actualizarUno(deps: Omit<DepsSync, 'limite'>, miembro: string): Promise<'actualizado' | 'sin_pase' | 'baja' | 'error'> {
+  const d = await deps.rpc('club_pase_datos', { p_miembro: miembro })
+  if (d.error || d.data === null || validarDatos(d.data) !== null) return 'error'
+  const datos = d.data as PaseDatos
+  const objeto = armarObjeto(deps.issuer, datos, deps.diseno)
+  const token = await tokenGoogle(deps.sa, deps.fetch, deps.ahora)
+  const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(deps.issuer, miembro))}`, {
+    method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
+  if (r.status === 404) return 'sin_pase'
+  if (r.status !== 200) return 'error'
+  return datos.estado === 'baja' ? 'baja' : 'actualizado'
+}

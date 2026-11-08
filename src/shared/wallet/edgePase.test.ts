@@ -1,6 +1,6 @@
 // B1: el flujo del Edge club-pase con una base simulada y una cuenta de servicio FALSA generada en memoria.
 import { describe, it, expect, beforeAll } from 'vitest'
-import { manejarPase, type EnvPase, type Rpc } from './edgePase'
+import { manejarPase, manejarSync, type EnvPase, type Rpc } from './edgePase'
 import type { PaseDatos } from './googlePase'
 
 const ISSUER = '3388000000012345678'
@@ -106,5 +106,29 @@ describe('club-pase (Edge)', () => {
     expect((await manejarPase(grande, 'google', env, rpc)).status).toBe(400)
     const roto = new Request('https://edge.ejemplo/club-pase/google', { method: 'POST', headers: { 'x-club-web': CLAVE_WEB }, body: '{roto' })
     expect((await manejarPase(roto, 'google', env, rpc)).status).toBe(400)
+  })
+})
+
+describe('club-pase: rutas de B3 (sync y actualizar)', () => {
+  const SYNC = 's'.repeat(40)
+  const googleOk = async (url: string) => ({ status: 200, json: async () => (url.includes('oauth2') ? { access_token: 't' } : {}) })
+  it('sync: sin su secreto → 503; con otro → 401; con el bueno → resumen', async () => {
+    const { rpc } = base({ club_pase_cursor_leer: { data: 5, error: null }, club_pase_eventos_leer: { data: [], error: null },
+                           club_alertas_pendientes: { data: [], error: null } })
+    const req = (h: Record<string, string>) => new Request('https://edge.ejemplo/club-pase/sync', { method: 'POST', headers: h })
+    expect((await manejarSync(req({}), 'sync', env, rpc, googleOk)).status).toBe(503)
+    expect((await manejarSync(req({ 'x-club-pase-sync': 'x'.repeat(40) }), 'sync', { ...env, CLUB_PASE_SYNC_KEY: SYNC }, rpc, googleOk)).status).toBe(401)
+    const r = await manejarSync(req({ 'x-club-pase-sync': SYNC }), 'sync', { ...env, CLUB_PASE_SYNC_KEY: SYNC }, rpc, googleOk)
+    expect(r.status).toBe(200)
+    expect(await r.json()).toMatchObject({ eventos: 0, cursor_antes: 5, cursor_despues: 5, errores: [] })
+  })
+  it('actualizar: con x-club-web y el token del portal, PATCH de esa persona; sin pase → «sin_pase»', async () => {
+    const { rpc } = base({ club_pase_por_token: { data: MIEMBRO, error: null }, club_pase_datos: { data: datos(), error: null } })
+    const r = await manejarSync(pedido({ token: TOKEN }), 'actualizar', env, rpc, googleOk)
+    expect(await r.json()).toEqual({ resultado: 'actualizado' })
+    const sinPase = async (url: string) => ({ status: url.includes('oauth2') ? 200 : 404, json: async () => ({ access_token: 't' }) })
+    expect(await (await manejarSync(pedido({ token: TOKEN }), 'actualizar', env, rpc, sinPase)).json()).toEqual({ resultado: 'sin_pase' })
+    expect((await manejarSync(pedido({ token: TOKEN }, {}), 'actualizar', env, rpc, googleOk)).status).toBe(401)
+    expect((await manejarSync(pedido({ token: 'x' }), 'actualizar', env, rpc, googleOk)).status).toBe(404)
   })
 })

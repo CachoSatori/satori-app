@@ -7,9 +7,9 @@
 import { loadPosConfig, type Env, type PosConfig } from './config.ts'
 import type { RitmoConfig, Ventana } from './ventana.ts'
 
-/** Slugs válidos = `public.locations.id` (los mismos que usan BioTime y el POS). */
-export const LOCALES = ['santa-teresa', 'nosara'] as const
-export type Local = (typeof LOCALES)[number]
+/** LC-ML: un local es un id `^[a-z0-9-]{2,40}$` (el mismo de `club_config` y de `POS_INGEST_SECRETS`); ninguno escrito acá. */
+export const RE_LOCAL = /^[a-z0-9-]{2,40}$/
+export type Local = string
 
 export interface AgenteConfig {
   pos:          PosConfig
@@ -59,7 +59,7 @@ function hora(env: Env, clave: string, porDefecto: number): number {
 }
 
 function esLocal(v: string): v is Local {
-  return (LOCALES as readonly string[]).includes(v)
+  return RE_LOCAL.test(v)
 }
 
 export function loadAgenteConfig(env: Env): AgenteConfig {
@@ -67,7 +67,7 @@ export function loadAgenteConfig(env: Env): AgenteConfig {
   // la clave de idempotencia (cada PoS tiene su propia numeración de facturas).
   const local = requerido(env, 'LOCAL')
   if (!esLocal(local)) {
-    throw new Error(`LOCAL inválido: "${local}". Tiene que ser uno de: ${LOCALES.join(' | ')}.`)
+    throw new Error(`LOCAL inválido: "${local}". Es el id del local (minúsculas, números y guiones), el mismo de su secreto en el Edge.`)
   }
 
   const entorno = (env.ENV ?? ENTORNO_POR_DEFECTO).trim() || ENTORNO_POR_DEFECTO

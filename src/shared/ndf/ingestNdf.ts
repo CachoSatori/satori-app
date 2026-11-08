@@ -28,7 +28,12 @@ import {
 // ── Vocabulario aceptado ───────────────────────────────────────────────────────
 
 /** Slugs válidos = `public.locations.id` (los mismos de BioTime y del POS). */
-export const LOCALES = new Set(['santa-teresa', 'nosara'])
+/**
+ * LC-ML (multilocal genérico): ningún local escrito. Un local es un id `^[a-z0-9-]{2,40}$`; los que pueden escribir
+ * son las claves de `POS_INGEST_SECRETS` (cada uno con su secreto). Abrir un local = sumar su clave al mapa.
+ */
+export const RE_LOCAL = /^[a-z0-9-]{2,40}$/
+export const esLocalValido = (v: string): boolean => RE_LOCAL.test(v)
 
 const CANAL_OK: Record<Canal, true> = {
   salon: true, barra: true, delivery: true, llevar: true, otro: true,
@@ -676,8 +681,8 @@ export function validarPayload(body: unknown): Resultado<PayloadValidado> {
   const b = body as { local?: unknown; tickets?: unknown; open?: unknown; cursor?: unknown }
 
   const local = typeof b.local === 'string' ? b.local.trim() : ''
-  if (!LOCALES.has(local)) {
-    return { ok: false, error: `local inválido (${[...LOCALES].join(' | ')})` }
+  if (!esLocalValido(local)) {
+    return { ok: false, error: 'local inválido (minúsculas, números y guiones)' }
   }
   if (!Array.isArray(b.tickets)) return { ok: false, error: 'tickets debe ser un array' }
   if (b.tickets.length > MAX_TICKETS) {
@@ -771,14 +776,15 @@ export function normalizarLote(p: PayloadValidado, ahora: string): LoteNormaliza
 }
 
 /**
- * CLUB-AUD-32: un secreto por local. `POS_INGEST_SECRETS` es un JSON `{"santa-teresa": "…", "nosara": "…"}`; el
+ * CLUB-AUD-32: un secreto por local. `POS_INGEST_SECRETS` es un JSON `{"<local>": "…", "<otro>": "…"}`; el
  * secreto que llega en el header decide el local, y el sobre tiene que ser de ESE local. Si no está el mapa,
- * vale el secreto único de antes (`POS_INGEST_SECRET`), pero solo para `localLegado` (hoy, santa-teresa).
+ * vale el secreto único de antes (`POS_INGEST_SECRET`), pero solo para `localLegado` (variable
+ * `POS_INGEST_LOCAL_LEGADO`; sin ella, el secreto único no autoriza a nadie).
  * Devuelve el local autorizado o `null` (401). Sin nada configurado: `null` siempre (fail-closed).
  */
 export function localDelSecreto(
   header: string,
-  cfg: { mapa?: string | null; legado?: string | null; localLegado?: string },
+  cfg: { mapa?: string | null; legado?: string | null; localLegado?: string | null },
   igual: (a: string, b: string) => boolean,
 ): string | null {
   if (!header) return null
@@ -792,12 +798,13 @@ export function localDelSecreto(
     let elegido: string | null = null
     for (const [local, sec] of Object.entries(mapa)) {
       // se comparan todos (tiempo parejo); secretos cortos no valen
-      if (typeof sec === 'string' && sec.length >= 32 && LOCALES.has(local) && igual(header, sec)) elegido = local
+      if (typeof sec === 'string' && sec.length >= 32 && esLocalValido(local) && igual(header, sec)) elegido = local
     }
     return elegido
   }
   const legado = (cfg.legado ?? '').trim()
   // CLUB-AUD-47: el secreto único también tiene que tener al menos 32 caracteres.
-  if (legado.length >= 32 && igual(header, legado)) return cfg.localLegado ?? 'santa-teresa'
+  const loc = (cfg.localLegado ?? '').trim()
+  if (legado.length >= 32 && esLocalValido(loc) && igual(header, legado)) return loc
   return null
 }

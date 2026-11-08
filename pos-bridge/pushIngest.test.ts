@@ -130,7 +130,8 @@ describe('loadAgenteConfig', () => {
   })
 
   it('exige local conocido, URL y secreto', () => {
-    expect(() => loadAgenteConfig({ ...ENV_OK, LOCAL: 'jaco' })).toThrow(/LOCAL inválido/)
+    expect(() => loadAgenteConfig({ ...ENV_OK, LOCAL: 'Jaco Centro' })).toThrow(/LOCAL inválido/)
+    expect(loadAgenteConfig({ ...ENV_OK, LOCAL: 'playa-nueva' }).local).toBe('playa-nueva')   // LC-ML: un local nuevo, sin código
     expect(() => loadAgenteConfig({ ...ENV_OK, INGEST_URL: '' })).toThrow(/INGEST_URL/)
     expect(() => loadAgenteConfig({ ...ENV_OK, INGEST_SECRET: '' })).toThrow(/INGEST_SECRET/)
   })

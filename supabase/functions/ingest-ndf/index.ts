@@ -61,8 +61,10 @@ import {
 const SUPABASE_URL     = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 const POS_INGEST_SECRET = Deno.env.get('POS_INGEST_SECRET') ?? ''
-// CLUB-AUD-32: un secreto por local, JSON {"santa-teresa": "…", "nosara": "…"}. Si está, manda sobre el de arriba.
+// CLUB-AUD-32: un secreto por local, JSON {"<local>": "…"}. Si está, manda sobre el de arriba.
 const POS_INGEST_SECRETS = Deno.env.get('POS_INGEST_SECRETS') ?? ''
+// LC-ML: el local del secreto único de antes (ninguno escrito en el código). Sin esta variable, ese secreto no vale.
+const POS_INGEST_LOCAL_LEGADO = Deno.env.get('POS_INGEST_LOCAL_LEGADO') ?? ''
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -112,9 +114,9 @@ Deno.serve(async (req) => {
       console.error('ingest-ndf: no hay secreto cargado — rechazando todo (fail-closed)')
       return json({ ok: false, error: 'No autorizado' }, 401)
     }
-    // CLUB-AUD-32: el secreto decide el local (mapa por local; el secreto único vale solo para santa-teresa).
+    // CLUB-AUD-32: el secreto decide el local (mapa por local; el secreto único, solo para POS_INGEST_LOCAL_LEGADO).
     const localAutorizado = localDelSecreto(req.headers.get('x-ingest-secret') ?? '',
-      { mapa: POS_INGEST_SECRETS, legado: POS_INGEST_SECRET, localLegado: 'santa-teresa' }, safeEqual)
+      { mapa: POS_INGEST_SECRETS, legado: POS_INGEST_SECRET, localLegado: POS_INGEST_LOCAL_LEGADO }, safeEqual)
     if (!localAutorizado) {
       // Mismo mensaje para "falta" y "no coincide": no se le confirma nada al que prueba.
       return json({ ok: false, error: 'No autorizado' }, 401)

@@ -82,7 +82,7 @@ describe('validarPayload', () => {
   })
 
   it('rechaza local desconocido, body raro y tickets que no son array', () => {
-    expect(validarPayload({ local: 'jaco', tickets: [] })).toMatchObject({ ok: false })
+    expect(validarPayload({ local: 'Jaco!', tickets: [] })).toMatchObject({ ok: false })   // LC-ML: el formato; el permiso lo da el secreto
     expect(validarPayload(null)).toMatchObject({ ok: false })
     expect(validarPayload({ local: 'nosara' })).toMatchObject({ ok: false })
     expect(validarPayload({ local: 'nosara', tickets: {} })).toMatchObject({ ok: false })
@@ -557,10 +557,19 @@ describe('CLUB-AUD-32: un secreto por local', () => {
     expect(localDelSecreto('c'.repeat(40), { mapa }, igual)).toBeNull()
     expect(localDelSecreto('', { mapa }, igual)).toBeNull()
   })
-  it('sin mapa, el secreto viejo vale solo para santa-teresa; sin nada, nada (fail-closed)', () => {
-    expect(localDelSecreto(S, { legado: S }, igual)).toBe('santa-teresa')
+  it('sin mapa, el secreto viejo vale solo para el local de POS_INGEST_LOCAL_LEGADO; sin nada, nada (fail-closed)', () => {
+    expect(localDelSecreto(S, { legado: S, localLegado: 'santa-teresa' }, igual)).toBe('santa-teresa')
+    expect(localDelSecreto(S, { legado: S }, igual)).toBeNull()   // LC-ML: sin la variable, ningún local supuesto
+    expect(localDelSecreto(S, { legado: S, localLegado: 'Mal Local' }, igual)).toBeNull()
     expect(localDelSecreto(S, {}, igual)).toBeNull()
     expect(localDelSecreto('', { legado: '' }, igual)).toBeNull()
+  })
+  it('LC-ML: un local nuevo entra sumando su clave al mapa (sin código); un id inválido no', () => {
+    const m3 = JSON.stringify({ 'santa-teresa': S, 'playa-nueva': 'd'.repeat(40), 'Mal Id': 'e'.repeat(40) })
+    expect(localDelSecreto('d'.repeat(40), { mapa: m3 }, igual)).toBe('playa-nueva')
+    expect(localDelSecreto('e'.repeat(40), { mapa: m3 }, igual)).toBeNull()
+    expect(validarPayload({ local: 'playa-nueva', tickets: [] })).toMatchObject({ ok: true })
+    expect(validarPayload({ local: 'Playa Nueva', tickets: [] })).toMatchObject({ ok: false })
   })
   it('un mapa roto o con secretos cortos no autoriza', () => {
     expect(localDelSecreto(S, { mapa: '{roto', legado: S }, igual)).toBeNull()

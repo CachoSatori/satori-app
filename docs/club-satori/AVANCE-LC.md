@@ -299,7 +299,7 @@
   - **No se tocaron** las cuentas `club-prueba-*` (las revisa la sesión de caja).
   - **Daruma real (v4, decisión de Ismael):** la imagen final de Ismael (foto del daruma real) reemplaza al daruma
     dibujado, que se borró de club-web y del pase. Original sin tocar y scripts en `docs/club-satori/img/daruma/`; solo
-    se recorta el fondo blanco, sin filtros. club-web: encabezado y favicons de 32 y 64 px. Pase (rama `claude/club-wallet`):
+    se recorta el fondo blanco, sin filtros. club-web (`375ab18`): encabezado y favicons de 32 y 64 px. Pase (`7d9ab45`):
     logo en círculo tinta 990×990, hero 1032×336 con la cara, fondo tinta = diseño aprobado; maqueta v4. **El pase sigue
     apagado** hasta la cuenta de Google Wallet y la prueba en un teléfono.
 

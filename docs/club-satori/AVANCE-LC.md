@@ -370,3 +370,17 @@
   cada fila lleva su baja. Hueco que queda: quien tenga el CSV puede reenviarlo; el rastro dice quién lo bajó y cuándo.
   Los botones de «Créditos a canjear» ahora son más largos («1,5 créditos · ₡15.000»): pasan las pruebas, pero no los
   revisé en pantalla de teléfono (pendiente del recorrido).
+
+## 08-nov · noche (tanda 3)
+- **Mensajes del piloto** (`docs/club-satori/piloto/`): socios sin «tus acompañantes van como invitados»; acompañantes y
+  cortesía sorpresa marcados **[CONFIRMAR ISMAEL]**; anfitriones con `<valor del crédito>` y dos párrafos
+  **[CONFIRMAR ISMAEL]** (saldo de la tarjeta de papel, vencimiento de los créditos).
+- **G-56** (RUNBOOK §12): filtro de sentencias, línea de base «cero socios en `club_*`», `lock_timeout` y
+  `statement_timeout`, `migracion.sql` con datos personales (viaja solo el sha256), ensayo fuera de horario. Sigue diseño.
+- **G-61** mecánico (`4fb5f28`): `gate61.sh` + `gate61_catalogo.sql` (3.439 hechos, determinista) + esperadas con firma;
+  `gate61_test.sh` 13/13; staging contra staging → 0. **Probado solo en staging**; la lectura de prod necesita la firma.
+- **Paridad:** `club_paridad.sh` sale 2 con una salida vacía, `null` o con menos de 898 objetos.
+- **`club_reporte_mes` deja rastro** (`ver_reporte_mes`: quién, cuándo, mes, local, vivo; sin datos) (`377f077`).
+- **Fichas de Grok 75–99:** `GROK-fichas-75-99.md`. Llegaron 75, 76, 90, 91, 93 y 99; **77–89, 92 y 94–98 no llegaron**
+  (necesita a Ismael). Club compartido y 857 marcados como reemplazados donde decían lo contrario.
+- Pruebas: batería **528/528** · paridad **901 = 901** · gate61 13/13 y staging → 0. Staging en su base.

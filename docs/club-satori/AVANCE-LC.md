@@ -384,3 +384,27 @@
 - **Fichas de Grok 75–99:** `GROK-fichas-75-99.md`. Llegaron 75, 76, 90, 91, 93 y 99; **77–89, 92 y 94–98 no llegaron**
   (necesita a Ismael). Club compartido y 857 marcados como reemplazados donde decían lo contrario.
 - Pruebas: batería **528/528** · paridad **901 = 901** · gate61 13/13 y staging → 0. Staging en su base.
+
+## 08-nov · noche (decisiones de Ismael) · `fd1effb`, `78b9f80`
+- **Mensajes del piloto cerrados:** invitados sin límite («el beneficio vale para toda la mesa, siempre que se sienten con
+  vos»), cortesía en cada visita (sale de la promo vigente), saldo de papel al portal y vencimiento. Lo mismo en la guía
+  rápida (una A4) y en la 6.13 (una sola factura por mesa con socio).
+- **Vencimiento verificado:** el SPEC §5.1 («12 meses sin actividad; cualquier tarjeta o canje reinicia el plazo») y
+  `club_vencer` (vence todo el saldo si la última tarjeta, canje o restitución tiene más de `vencimiento_meses`)
+  **coinciden**: se cuenta desde la **última actividad**, no desde que se gana cada crédito. Texto único en mensajes,
+  portal, aviso del canje por WhatsApp y guías. **Matiz para Ismael (no se eligió nada):** el código también cuenta la
+  **restitución** (la hace el owner) como actividad; el SPEC nombra solo tarjeta y canje.
+- **Tope diario único del Club:** `club_config_global.socio_visitas_por_dia` (una fila, solo owner, auditado); se borró la
+  columna por local. Regla visible: «Una visita con beneficio por día, en cualquier Satori.» Prueba 83. Se revierte si
+  Ismael decide otra cosa.
+- **Saldos de tarjetas de papel:** plantilla, validador y `migrar_firestore.py saldos-papel` con las reglas de G-56
+  (`docs/club-satori/piloto/saldos-papel.md`). Ensayo en staging con 6 anfitriones ficticios: OK y ROLLBACK (staging
+  intacto); negativas en vivo: código inexistente y entorno equivocado frenan. 19 pruebas. **DECISIONES PROVISORIAS:**
+  unidad = personas; movimiento `tarjeta` con la fecha de la tarjeta (cuenta para el vencimiento).
+- **club-web:** el dominio sale de `VITE_CLUB_URL` (o del origen). **Pendiente fuera de club-web:** la base (links del
+  pase, portal de la autoalta, código de canje, baja del turista y la lectura de QR de `club_resolver`) y la app de caja
+  (`src/modules/club/qrFormato.ts`) todavía tienen el dominio escrito.
+- **Descuentos tipificados** en staging: «Descuento 10 %», «Descuento 15 %», «Descuento 30 %».
+- `claude/club-wallet` mergeada con epic (`1f42737`): conflictos de club-web resueltos (botón de Wallet + dominio por
+  variable); club-web 23/23, wallet + club 56/56.
+- Pruebas: batería **536/536** · paridad OK · vitest 1.507 · club-web 22 · migrador 15 OK · saldos 19 OK. Staging en base.

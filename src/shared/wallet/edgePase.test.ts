@@ -10,7 +10,7 @@ const MIEMBRO = '00000000-0000-4000-8000-00000000beef'
 
 const datos = (over: Partial<PaseDatos> = {}): PaseDatos => ({
   contrato: 1, miembro_id: MIEMBRO, version: 7, actualizado_en: '2026-11-08T08:00:00Z', nombre_pila: 'Beto', estado: 'activo',
-  local: { id: 'santa-teresa', nombre: 'Satori Sushi Bar · Santa Teresa' }, pestanas: ['anfitrion'],
+  local: { id: 'local-prueba', nombre: 'Local Prueba' }, pestanas: ['anfitrion'],
   codigo_barras: { tipo: 'cupones', valor: 'https://club.satoricostarica.com/r/ABCD2345' }, socio: null,
   anfitrion: { activo: true, tipo: 'referente', codigo_publico: 'ABCD2345', qr_url: 'https://club.satoricostarica.com/r/ABCD2345',
                personas: 6, creditos: 1, personas_proximo_medio: 3, valor_credito_crc: 18000, referidos_mes: 6, creditos_ganados_mes: 1 },

@@ -17,7 +17,7 @@ const base = (over: Partial<PaseDatos> = {}): PaseDatos => ({
   actualizado_en: '2026-11-07T19:30:00Z',
   nombre_pila: 'Ana',
   estado: 'activo',
-  local: { id: 'santa-teresa', nombre: 'Satori Sushi Bar · Santa Teresa' },
+  local: { id: 'local-prueba', nombre: 'Local Prueba' },
   pestanas: ['mi_club', 'anfitrion'],
   codigo_barras: { tipo: 'socio', valor: 'https://club.satoricostarica.com/s/ABCD2345K' },
   socio: {

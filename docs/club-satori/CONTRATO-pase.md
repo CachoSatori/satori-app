@@ -36,7 +36,7 @@ Ejecutable solo por `service_role`. Devuelve `null` si el miembro no existe. Eje
   "actualizado_en": "2026-11-07T19:30:00Z",
   "nombre_pila": "Ana",
   "estado": "activo",
-  "local": { "id": "santa-teresa", "nombre": "Satori Sushi Bar · Santa Teresa" },
+  "local": { "id": "<id del local>", "nombre": "<nombre del local, de club_config>" },
   "pestanas": ["mi_club", "anfitrion"],
   "codigo_barras": { "tipo": "socio", "valor": "https://club.satoricostarica.com/s/ABCD2345K" },
   "socio": {

@@ -4873,6 +4873,52 @@ begin
 end;
 $$;
 
+-- LC-A6: visitas de socio por usuario (cierra el hueco de la autorrevisión de A4/A5: un cajero que registra visitas
+-- falsas para justificar el 856). Por quien registró la visita en la app, en el rango y el local: cuántas, de cuántos
+-- socios distintos, con beneficio, como invitado, pagadas con créditos, cuántas no cruzaron con ninguna factura (pasada la
+-- latencia del puente) y el máximo de visitas de un mismo socio. Owner y manager.
+create or replace function public.club_reporte_visitas(p_desde date, p_hasta date, p_location text default null)
+returns table (usuario text, visitas int, socios int, con_beneficio int, como_invitado int, con_creditos int,
+               sin_factura int, max_mismo_socio int)
+language plpgsql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_rol public.user_role := public.get_my_role();
+  v_ini timestamptz;
+  v_fin timestamptz;
+  v_lat int;
+begin
+  if v_rol is null or v_rol not in ('owner','manager') then raise exception 'Sin permiso' using errcode = '42501'; end if;
+  p_location := public.club_local(p_location, false);
+  if p_desde is null or p_hasta is null or p_hasta < p_desde or p_hasta - p_desde > 400 then
+    raise exception 'Rango de fechas no válido (máximo 400 días)' using errcode = 'P0001';
+  end if;
+  v_ini := p_desde::timestamp at time zone 'America/Costa_Rica';
+  v_fin := (p_hasta + 1)::timestamp at time zone 'America/Costa_Rica';
+  select c.puente_latencia_min into v_lat from public.club_config c where c.location_id = p_location;
+  return query
+    with v as (
+      select x.registrado_por as actor, x.miembro_id, x.estado_beneficio,
+             (x.registrada_en < now() - make_interval(mins => coalesce(v_lat, 30))
+              and cardinality(public.club_cruce_facturas(x.location_id, x.pos_ref, null)) = 0) as sin_fac
+        from public.club_visitas_socio x
+       where x.location_id = p_location and x.registrada_en >= v_ini and x.registrada_en < v_fin),
+    m as (select actor, max(n)::int as mx from (select actor, miembro_id, count(*) as n from v group by 1, 2) z group by actor)
+    select coalesce(p.full_name, 'Sin perfil'), count(*)::int, count(distinct v.miembro_id)::int,
+           count(*) filter (where v.estado_beneficio in ('aplica','pendiente_configuracion'))::int,
+           count(*) filter (where v.estado_beneficio = 'como_invitado')::int,
+           count(*) filter (where v.estado_beneficio = 'paga_con_creditos')::int,
+           count(*) filter (where v.sin_fac)::int,
+           max(m.mx)
+      from v left join public.profiles p on p.id = v.actor left join m on m.actor is not distinct from v.actor
+     group by v.actor, p.full_name
+     order by 2 desc, 1;
+end;
+$$;
+
 -- CLUB-AUD-69: código de canje desde el PASE (token de pase propio). Solo abre «Canjear».
 create or replace function public.club_canje_codigo_generar_pase(p_token_pase text)
 returns table (codigo text, vence_en timestamptz, url text)
@@ -5961,7 +6007,9 @@ revoke all on function public.club_pendiente_resolver(uuid, boolean, text)      
 grant execute on function public.club_pendientes_listar(text)                    to authenticated;
 grant execute on function public.club_pendiente_resolver(uuid, boolean, text)    to authenticated;
 revoke all on function public.club_reporte_altas(date, date, text)              from public, anon, authenticated;
+revoke all on function public.club_reporte_visitas(date, date, text)            from public, anon, authenticated;
 grant execute on function public.club_reporte_altas(date, date, text)           to authenticated;
+grant execute on function public.club_reporte_visitas(date, date, text)         to authenticated;
 revoke all on function public.club_premios_generar(text)                       from public, anon, authenticated;
 revoke all on function public.club_socios_por_confirmar()                        from public, anon, authenticated;
 revoke all on function public.club_socio_solicitudes_abiertas()                  from public, anon, authenticated;

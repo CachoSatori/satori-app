@@ -3743,6 +3743,34 @@ begin
   perform pg_temp.r('72', 'una inserción sin local falla (negativa)', e = '23502', e);
 end $$;
 
+-- ═══ 73. LC-A6: visitas de socio por usuario (quién las registró; sin factura; un mismo socio muchas veces) ═══
+do $$
+declare v_s uuid; e text; r record; v_nom text := (select full_name from profiles where id = '<CAJERO_UUID>');
+begin
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Ivo Visitas Ficticio', 'app') returning id into v_s;
+  -- tres visitas registradas por el cajero en días anteriores, con pedidos que no existen en el PoS (no cruzan)
+  insert into club_visitas_socio (location_id, miembro_id, fecha, registrada_en, registrado_por, client_op_id, pos_ref, visita_clave,
+                                  estado_beneficio, aplicar)
+  select pg_temp.loc(), v_s, (now() - make_interval(days => d))::date, now() - make_interval(days => d), '<CAJERO_UUID>'::uuid,
+         gen_random_uuid(), jsonb_build_object('modo', 'pedido', 'pedido', '73' || d, 'clave', 'pedido:73' || d), 'pedido:73' || d,
+         case when d = 3 then 'como_invitado' else 'aplica' end, '{}'::jsonb
+    from generate_series(1, 3) d;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select * into r from public.club_reporte_visitas(current_date - 5, current_date) x where x.usuario = v_nom;
+  perform pg_temp.yo();
+  perform pg_temp.r('73', 'reporte por usuario: visitas, socios, con beneficio, como invitado, sin factura y máx. de un mismo socio',
+    r.visitas >= 3 and r.socios >= 1 and r.con_beneficio >= 2 and r.como_invitado >= 1 and r.sin_factura >= 3 and r.max_mismo_socio >= 3,
+    format('%s', to_jsonb(r)));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_reporte_visitas(current_date - 5, current_date); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('73', 'el cajero no ve el reporte de visitas (negativa)', e = 'Sin permiso', e);
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_reporte_visitas(current_date, current_date - 1); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('73', 'rango invertido se rechaza (negativa)', e like 'Rango de fechas no válido%', e);
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

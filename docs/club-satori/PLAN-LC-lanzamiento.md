@@ -74,6 +74,18 @@
 
 **Total A: 9 → 11 días** (camino crítico). **Total B: 6 → 6,5 días.**
 
+## Decisiones vigentes («1b», confirmadas el 07-nov a la noche) — mandan sobre las tandas de abajo
+1. **Cortesías por sorteo:** admin del Club con **máximo 10** cortesías activables o desactivables, cada una ligada a un
+   artículo de la sección **«CORTESÍA CLUB»** del PoS (₡0; los códigos los pasa Ismael). Sorteo **fijo por visita** (no se
+   vuelve a sortear), **1 cortesía por visita, 1 visita por día**. Excepciones `CORTESIA_DISTINTA`, `CORTESIA_SIN_SOCIO` y
+   `CORTESIA_NO_CONFIGURADA`. (Reemplaza el cruce por «familia 17» de la segunda tanda.)
+2. **Tope del anfitrión sobre lo GANADO:** alerta `ANFITRION_SOBRE_TOPE` **siempre** que pase ₡25.000 en el mes; retención
+   «pendiente de aprobación» **solo en sus primeros 90 días**; aprueba un manager u owner **distinto del anfitrión**.
+3. **Wallet:** Google sigue **ya**; Apple programado y **apagado** hasta el D-U-N-S.
+4. **PROMO CLUB 10 %** existe en el PoS; el código lo pasa Ismael aparte. Mientras, R02 queda en **«pendiente de
+   configuración»**.
+5. **Turnstile en staging con las claves de prueba de Cloudflare** (las de prod las carga Ismael; RUNBOOK paso 6).
+
 ## Más decisiones del 07-nov (segunda tanda)
 1. **Cortesías del LC = SORTEO.**
    - **Admin del Club → «Cortesías»:** hasta **10** cortesías cargadas, cada una activable o desactivable. Se eligen de los

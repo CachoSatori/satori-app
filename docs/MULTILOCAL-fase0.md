@@ -61,7 +61,36 @@ escritura en un local ajeno la rechaza la RLS. **Rollback:** `scripts/sql/091_ro
 **Pantallas:**
 - Selector de local y contexto en la app; todas las lecturas de `shared/api` filtran por el local elegido.
 
+## ⛔ Gates (Ismael, 08-nov)
+1. **El día que haya selector de local, `location_id` pierde el default.** En el mismo PR que agregue el selector de
+   local en la app, las 4 columnas pasan a `NOT NULL` **sin default** (`alter column location_id drop default`), para
+   que ningún movimiento, turno, cierre o sesión de propinas caiga en Santa Teresa por omisión. Hasta ese día el
+   default existe solo para que la app de hoy (que no manda el local) siga igual.
+2. **No se abre un segundo local solo con la fase 0.** El cierre todavía mezclaría locales (único por fecha, «hay un
+   turno abierto» global, `client_op_id` del ajuste que choca, pozo y cajas físicas sin local). Abrir otro local exige
+   las fases con firma de la sección anterior, como mínimo cierre, pozo y cajas físicas.
+
+## Convivencia con la 075 del Club (`claude/epic-tesla-pyo77m` @ `743732e`) — ⚠️ CHOQUE, sin resolver
+Revisado el 08-nov, solo lectura del repo:
+- **Hay DOS catálogos de locales, no uno.** La 075 no usa `locations`: su catálogo es `club_config` (`location_id text
+  primary key`, `nombre`, `direccion`, `mapa_url`, `club_activo`, …). Sus `location_id` van **sin FK y sin default**
+  a propósito («multi-local genérico», 075 líneas 9–11). La 091 (y la 022) usan `locations` (`id`, `name`,
+  `is_active`). Ni las tablas ni las columnas coinciden (`id`/`name` contra `location_id`/`nombre`).
+- **«Nuevo local» del Club no escribe en `locations`.** `club_local_crear` (075 L6143) inserta solo en `club_config`
+  (y su trigger `club_config_alta` siembra marcadores y promociones). Un local dado de alta desde el Club **no existiría
+  para caja y propinas**: la FK de la 091 rechazaría su `location_id`, y `mis_locales()` del owner (que lee `locations`)
+  no lo listaría.
+- **En staging conviven las dos** (la 022 y la 075 aplicadas); en prod hoy no hay ninguna.
+- **La decisión 1 [PROVISORIA]** («`locations` como única fuente, con `club_config` colgando de ella») **pide cambiar la
+  075**, que es del Club. No se toca sin acordarlo con Ismael y con la sesión del Club. Opciones, para decidir:
+  - a) `club_config.location_id` con FK a `locations(id)`, y `club_local_crear` inserta primero en `locations`
+    (cambia la 075; se alinea con la decisión 1);
+  - b) la 091 usa `club_config` como catálogo (FK a `club_config(location_id)`) — pero entonces caja depende del
+    esquema del Club, que no está en prod hasta el piloto;
+  - c) dejar las dos y sincronizar con un trigger (`club_config` → `locations`): más piezas, fácil que diverjan.
+  - Recomendación (provisoria): **a**, antes de que la 075 o la 091 lleguen a prod.
+
 ## Antes de firmar la 091
-1. Que Ismael confirme (o cambie) las decisiones 1, 2 y 11.
+1. Que Ismael confirme (o cambie) las decisiones 1, 2 y 11, y **resolver el choque con la 075** (sección anterior).
 2. Correr `scripts/sql/091_pruebas.sh` en staging (en la ventana nocturna) y anotar el resultado acá.
 3. Va después de la 085, la 089 y la 090.

@@ -26,7 +26,7 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   CANJE_SIN_CODIGO:     { titulo: 'Canje sin código',     que: 'Canje sin celular aprobado por owner o manager. Siempre se revisa; no lo resuelve quien lo aprobó.' },
   CUPON_SIN_PROMO:      { titulo: 'Cupón sin promo',      que: 'Cupón usado en una visita cuyas facturas no tienen el artículo de la promo 10 %: sumó personas sin descuento aplicado.' },
   // LC-A5 · Local Club
-  LC_SIN_REGISTRO:          { titulo: 'Local Club sin registro', que: 'Factura con el artículo LOCAL CLUB (856) y sin visita de socio en la app: se dio el beneficio sin escanear al socio.' },
+  LC_SIN_REGISTRO:          { titulo: 'Local Club sin registro', que: 'Factura con el artículo LOCAL CLUB (856) o INVITADO (857) y sin visita de socio en la app: se dio el beneficio sin escanear al socio.' },
   REGISTRO_LC_SIN_856:      { titulo: 'Visita de socio sin el 856', que: 'Se registró la visita del socio (con beneficio), pero su factura no tiene el artículo LOCAL CLUB.' },
   CANJE_CON_DESCUENTO:      { titulo: 'Canje con descuento', que: 'Factura pagada con créditos que además tiene el Local Club, la promo o una cortesía. Regla fija: con créditos, sin descuento.' },
   DESCUENTO_SIN_RESPALDO:   { titulo: 'Descuento sin respaldo', que: 'Una línea por debajo de su precio habitual (moda de los 30 días anteriores) en una factura sin cupón ni Local Club.' },
@@ -36,8 +36,11 @@ const TIPO_EXC: Record<TipoExcepcion, { titulo: string; que: string }> = {
   CORTESIA_SIN_SOCIO:       { titulo: 'Cortesía sin socio', que: 'Un artículo de «CORTESÍA CLUB» en una factura sin visita de socio.' },
   CORTESIA_NO_CONFIGURADA:  { titulo: 'Línea a ₡0 fuera de cortesías', que: 'Una línea a ₡0 que no es de «CORTESÍA CLUB», ni PAX, ni el Local Club, ni la promo.' },
   ANFITRION_SOBRE_TOPE:     { titulo: 'Anfitrión sobre el tope', que: 'Un anfitrión ganó en el mes más que el tope configurado (₡25.000). Si es nuevo, lo que pasó quedó pendiente de aprobación.' },
+  LC_INVITADOS_EXCEDIDOS:   { titulo: 'Invitados de más', que: 'La visita del socio tiene más artículos 857 (INVITADO) que el máximo por visita (3 por defecto).' },
   SOCIO_ALTA_SIN_CONFIRMAR: { titulo: 'Alta de socio sin confirmar', que: 'Alta provisional (en caja o validación) que todavía no confirmó un manager u owner distinto de quien la cargó.' },
 }
+// Excepciones que salen solo del PoS: sin registrante en la app → las resuelve el owner (la base lo controla igual).
+const SOLO_OWNER = new Set<TipoExcepcion>(['LC_SIN_REGISTRO', 'DESCUENTO_SIN_RESPALDO', 'CORTESIA_SIN_SOCIO', 'CORTESIA_NO_CONFIGURADA', 'SOCIO_USO_ANOMALO', 'ANFITRION_SOBRE_TOPE'])
 const crc = (n: unknown) => (typeof n === 'number' || typeof n === 'string') && n !== '' ? `₡${Number(n).toLocaleString('de-DE', { maximumFractionDigits: 0 })}` : '—'
 const hoyCR = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' })
 const haceDias = (d: number) => { const t = new Date(); t.setDate(t.getDate() - d); return t.toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }) }
@@ -127,7 +130,9 @@ function Detalle({ e, onResuelta }: { e: Excepcion; onResuelta: () => Promise<vo
   // CANJE_SIN_CODIGO no las resuelve quien las cargó o aprobó, ni siendo owner. La base lo controla igual.
   const mia = Array.isArray(d.registradores) && !!profile?.id && (d.registradores as unknown[]).includes(profile.id)
   const bloqueo = e.certeza === 'pendiente_configuracion'
-    ? 'Pendiente de configuración: se resuelve cuando Ismael pase el código de «PROMO CLUB 10%» y se cargue. No se resuelve con nota.'
+    ? 'Pendiente de configuración: se resuelve cuando se cargue lo que falta (código de «PROMO CLUB 10%» o la sección «CORTESÍA CLUB»). No se resuelve con nota.'
+    : SOLO_OWNER.has(e.tipo) && profile?.role !== 'owner'
+    ? 'Sale del PoS (no se sabe quién cargó la factura): la resuelve el owner.'
     : !mia ? null
     : e.tipo === 'TARJETA_MANUAL' || e.tipo === 'CANJE_SIN_CODIGO' ? 'Es un registro tuyo: la resuelve otra persona.'
     : profile?.role !== 'owner' ? 'Es un registro tuyo: la resuelve el owner.' : null

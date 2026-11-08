@@ -423,6 +423,17 @@ export const getProductos = (buscar: string | null) => llamar<ProductoPos[]>('cl
 export const guardarCortesia = (id: string | null, codigo: string | null, nombre: string | null, activa: boolean | null) =>
   llamar<string>('club_cortesia_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_activa: activa, p_location: localClub })
 
+// ── LC-MD: marcadores de descuento (configurables por local) ─────────────────
+export interface MarcadorDescuento {
+  id: string; codigo_producto: string; nombre: string; pct_esperado: number | null; activo: boolean
+  visto_en_facturas: boolean; actualizado_en: string
+}
+/** Owner, manager y contador. */
+export const getMarcadores = () => llamar<MarcadorDescuento[]>('club_marcadores_listar', { p_location: localClub })
+/** Solo owner. Alta: `id` null + código del PoS. Edición: nombre, % esperado (null = cualquier descuento) y activo. */
+export const guardarMarcador = (id: string | null, codigo: string | null, nombre: string | null, pct: number | null, activo: boolean | null) =>
+  llamar<string>('club_marcador_guardar', { p_id: id, p_codigo: codigo, p_nombre: nombre, p_pct: pct, p_activo: activo, p_location: localClub })
+
 // ── LC-A4: visita del socio y «qué aplicar» ──────────────────────────────────
 export interface QueAplicar {
   visita_id: string | null; socio: string

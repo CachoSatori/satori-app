@@ -3613,6 +3613,67 @@ begin
   perform pg_temp.r('70', 'ninguna función club_* tiene un local escrito (cuerpo ni default)', v_loc is null, coalesce(v_loc, ''));
 end $$;
 
+-- ═══ 71. LC-MD: marcadores de descuento configurables por local (DESCUENTO_SIN_RESPALDO y CANJE_CON_DESCUENTO) ═══
+do $$
+declare j jsonb; e text; v_mk uuid; i int; v_n int;
+begin
+  -- referencia de ZM1: ₡5.000 en 10 días anteriores; hoy ₡4.000 (20 %) con el artículo HTL1 («tarjeta de hotel»)
+  for i in 1..10 loop perform pg_temp.factura('8807' || lpad(i::text, 2, '0'), 24 * i, 0, '[{"c":"ZM1","m":5000,"f":5}]'); end loop;
+  for i in 1..3 loop perform pg_temp.factura('88072' || i, 1, 0, '[{"c":"ZM1","m":5000,"f":5}]'); end loop;   -- ventas normales de hoy
+  perform pg_temp.factura('880711', 1, 0, '[{"c":"ZM1","m":4000,"f":5},{"c":"HTL1","n":"TARJETA HOTEL","m":0,"f":9}]');
+  perform pg_temp.factura('880712', 1, 0, '[{"c":"ZM1","m":4500,"f":5},{"c":"HTL1","n":"TARJETA HOTEL","m":0,"f":9}]');
+  perform pg_temp.factura('880713', 1, 18000, '[{"c":"P1","m":9000,"f":5},{"c":"HTL1","n":"TARJETA HOTEL","m":0,"f":9}]');
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('71', 'sin cargar el marcador, la tarjeta de hotel no respalda: sale DESCUENTO_SIN_RESPALDO', pg_temp.hay(j, 'desc:880711'), '');
+  perform pg_temp.r('71', 'sin marcador, crédito + tarjeta de hotel no es CANJE_CON_DESCUENTO', not pg_temp.hay(pg_temp.exc('CANJE_CON_DESCUENTO'), 'canje-desc:880713'), '');
+  -- permisos
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  begin perform public.club_marcador_guardar(null, 'HTL1', 'Tarjeta hotel', null, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  select count(*) into v_n from public.club_marcadores_listar();
+  perform pg_temp.yo();
+  perform pg_temp.r('71', 'el manager ve la lista pero no carga marcadores (negativa)', e = 'Sin permiso' and v_n >= 2, e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin perform public.club_marcadores_listar(); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('71', 'el cajero no ve los marcadores (negativa)', e = 'Sin permiso', e);
+  -- un marcador de OTRO local no respalda acá
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_marcador_guardar(null, 'HTL1', 'Tarjeta hotel (otro local)', null, true, 'nosara');
+  perform pg_temp.yo();
+  perform pg_temp.r('71', 'el marcador de otro local no respalda en este (negativa)', pg_temp.hay(pg_temp.exc('DESCUENTO_SIN_RESPALDO'), 'desc:880711'), '');
+  -- el owner lo carga en este local: deja de salir, sin código
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  v_mk := public.club_marcador_guardar(null, 'HTL1', null, null, true);
+  perform pg_temp.yo();
+  perform pg_temp.r('71', 'alta del marcador: el nombre sale de las facturas y queda auditado',
+    (select nombre = 'TARJETA HOTEL' from club_marcadores_descuento where id = v_mk)
+      and exists (select 1 from club_auditoria a where a.objeto_id = v_mk and a.accion = 'marcador_alta'), '');
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('71', 'con el marcador cargado, el descuento respaldado ya no sale', not pg_temp.hay(j, 'desc:880711') and not pg_temp.hay(j, 'desc:880712'), '');
+  perform pg_temp.r('71', 'CANJE_CON_DESCUENTO usa la lista: crédito + marcador → sale, con su nombre',
+    pg_temp.hay(pg_temp.exc('CANJE_CON_DESCUENTO'), 'canje-desc:880713')
+      and (select x->'detalle'->'con' ? 'TARJETA HOTEL' from jsonb_array_elements(pg_temp.exc('CANJE_CON_DESCUENTO')) x where x->>'ref' = 'canje-desc:880713'), '');
+  -- % esperado 10: respalda el 10 % (880712) y NO el 20 % (880711)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_marcador_guardar(v_mk, null, null, 10, true);
+  begin perform public.club_marcador_guardar(v_mk, null, null, 150, true); e := 'ok'; exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('71', '% esperado 10: el 20 % sale y el 10 % no; un % fuera de rango se rechaza',
+    pg_temp.hay(j, 'desc:880711') and not pg_temp.hay(j, 'desc:880712') and e like 'El % esperado%', e);
+  -- desactivado: vuelve a salir (no se borra)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_marcador_guardar(v_mk, null, null, null, false);
+  perform pg_temp.yo();
+  j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
+  perform pg_temp.r('71', 'marcador desactivado: deja de respaldar (vuelven a salir)', pg_temp.hay(j, 'desc:880711') and pg_temp.hay(j, 'desc:880712')
+    and exists (select 1 from club_marcadores_descuento where id = v_mk and not activo), '');
+  -- el 856 sembrado sigue respaldando como antes
+  perform pg_temp.r('71', 'los marcadores sembrados (856 y 857) están en la lista de cada local',
+    (select count(*) from club_marcadores_descuento m join club_config c on c.location_id = m.location_id
+      where m.codigo_producto in (c.lc_articulo_codigo, c.lc_invitado_codigo)) = 2 * (select count(*) from club_config), '');
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

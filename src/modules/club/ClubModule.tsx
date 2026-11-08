@@ -15,8 +15,9 @@ const Negocios = lazy(() => import('./Negocios'))
 const Excepciones = lazy(() => import('./Excepciones'))
 const Reportes = lazy(() => import('./Reportes'))
 const Promociones = lazy(() => import('./Promociones'))
+const Marcadores = lazy(() => import('./Marcadores'))
 
-type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'promociones' | 'locales'
+type Vista = 'escanear' | 'miembros' | 'negocios' | 'excepciones' | 'reportes' | 'promociones' | 'descuentos' | 'locales'
 
 export default function ClubModule() {
   const { profile } = useAuth()
@@ -77,6 +78,7 @@ export default function ClubModule() {
           <div className={`vt-nav-tab ${vista === 'excepciones' ? 'active' : ''}`} onClick={() => setVista('excepciones')}>Excepciones</div>
           <div className={`vt-nav-tab ${vista === 'reportes' ? 'active' : ''}`} onClick={() => setVista('reportes')}>Reportes</div>
           <div className={`vt-nav-tab ${vista === 'promociones' ? 'active' : ''}`} onClick={() => setVista('promociones')}>Promociones</div>
+          <div className={`vt-nav-tab ${vista === 'descuentos' ? 'active' : ''}`} onClick={() => setVista('descuentos')}>Descuentos</div>
           {esOwner && <div className={`vt-nav-tab ${vista === 'locales' ? 'active' : ''}`} onClick={() => setVista('locales')}>Locales</div>}
         </div>
       )}
@@ -89,6 +91,7 @@ export default function ClubModule() {
         {vista === 'excepciones' && gestiona && <Excepciones />}
         {vista === 'reportes' && gestiona && <Reportes />}
         {vista === 'promociones' && gestiona && <Promociones />}
+        {vista === 'descuentos' && gestiona && <Marcadores />}
       </Suspense>
     </div>
   )

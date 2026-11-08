@@ -313,3 +313,34 @@
 | Cajero con login fijo | Que su excepción la resuelva un manager amigo | Con login fijo, solo el owner (prueba 74) | El owner identifica por fecha y turno: depende del registro de turnos |
 | Manager | Cargar un tipo de descuento para ocultar los suyos | Solo el owner carga tipos (prueba 75); auditado | — |
 | Anfitrión | Cobrar el premio dos veces en locales distintos | El premio se marca usado en la visita (una sola fila) | — |
+
+## 08-nov · tarde (tanda 2): pase claro, privacidad, material del piloto, gates de prod
+| # | Qué | SHA | Pruebas |
+|---|---|---|---|
+| 1 | **Pase: créditos claros.** «₡36.000 disponibles» / «₡36,000 available» (créditos × valor del crédito, miles con separador fijo) y, si suma, «9 personas referidas este mes» / «9 guests referred this month» en otra línea. Maqueta v4 al día. **Sigue apagado.** | club-wallet `1b02b49` | wallet + club 54/54 |
+| 2 | **Grok 63:** aviso corto en el opt-in del cupón con «Aviso completo (v1)» (`/privacidad`) y «Darme de baja» (`/b/<cupón>`); la base exige la versión vigente del local y la guarda con la fecha (`club_cupones_contactos.aviso_version`). `club_cupon_contacto_baja` (10.ª puerta pública): borra el contacto, deja rastro sin datos, responde siempre igual. | `5f98f75` | batería 77 · api 18/18 |
+| 3 | **Grok 41:** `club_miembro_codigo`, `club_miembro_contacto_ver` (nueva) y `club_registrar_exporte` (CSV y HTML, antes de armar el archivo; si falla, no exporta) dejan fila en `club_auditoria`: quién, cuándo, rol; nunca el dato. Las tablas de contacto ya no tienen SELECT para `authenticated`. | `5f98f75` | batería 5, 28, 78 |
+| 4 | **Grok 39:** `club_buscar` audita cada búsqueda (texto o dígitos y cuántas filas; nunca lo buscado) y frena pasado `club_config.buscar_tope_minuto` (30 de fábrica, 5–300; con varios locales encendidos, el menor) por usuario y por minuto. Prueba negativa. | `5f98f75` | batería 79 |
+| 5 | **Grok 24:** `POST /api/cupon` pide Turnstile (sin `TURNSTILE_SECRET`, 503: falla cerrada) y tope por prefijo de red /24 y /64, como el alta. `/r/…` muestra el widget antes del botón. | `5f98f75` | api 18/18 |
+| 6 | **Material del piloto (borradores):** `docs/club-satori/piloto/`: guía rápida de caja (HTML + PDF, una A4), mensaje a anfitriones y a socios (ES/EN). | `766e838` | — |
+| 7 | **Gates de prod G-56 y G-61** propuestos en RUNBOOK §12 (solo diseño). `scripts/sql/club_catalogo_ext.sql` probado solo en staging (solo lectura). RUNBOOK al día: 10 puertas, 898 objetos, orden del pase con los dos gates. | `f3c034e` | — |
+
+- Pruebas al cierre: batería **512/512** · paridad **898 = 898** · carreras **8/8** · vitest **1.501** (+4 omitidas) ·
+  club-web **18/18** · migrador **15 OK** (3 omitidas) · build y lint de lo tocado limpios (los errores de lint de
+  `scripts/ledger-reconciliacion` y `AdminModule` ya estaban).
+- Staging vuelve a su base: 2538 movimientos / 338 miembros / 338 roles; sin locales de prueba ni claves de club-web.
+- **DECISIÓN PROVISORIA:** los contactos de turistas (`club_cupones_contactos`) **no se leen desde la app** (ni owner):
+  hasta que haya un exporte de ofertas auditado, se leen solo por SQL del proyecto. Si Ismael quiere verlos en la app,
+  va por una función con rastro, como el contacto del miembro.
+- **DECISIÓN PROVISORIA:** el texto del aviso **corto** del cupón es nuevo (resume el v1 para el turista): es borrador.
+
+### Autorrevisión adversarial (tanda 2)
+| Actor | Qué podría intentar | Qué lo frena hoy | Hueco / acción |
+|---|---|---|---|
+| Anónimo | Pedir cupones en masa rotando IPs | Turnstile + tope por IP y por /24 o /64 + tope por anfitrión y día + tope global por minuto en la base | Sin `TURNSTILE_SECRET` en prod **no hay cupones** (503): está en el RUNBOOK §6 |
+| Anónimo | Dar de baja a un turista ajeno | Necesita el código del cupón (10 caracteres, secreto); responde igual exista o no | Quien vea la pantalla del turista puede darlo de baja: daño bajo (solo deja de recibir ofertas) |
+| Anónimo | Dejar contacto sin aceptar el aviso | La base exige la versión vigente exacta del local | — |
+| Cajero | Armar el mapa de teléfonos con «últimos 4 dígitos» | 30 búsquedas por minuto y cada una queda con su usuario; nunca devuelve teléfono | 10.000 combinaciones = horas y queda a la vista en `club_auditoria`. **Acción sugerida:** una alerta si alguien supera N búsquedas por día |
+| Manager | Leer contactos o exportar sin rastro | La tabla no se lee directo; la función y el exporte dejan fila; la auditoría es de solo inserción | El exporte lo registra la app: una app modificada podría saltearlo, pero el dato del reporte sale de `club_reporte_mes` (owner/manager). **Hueco anotado:** auditar también `club_reporte_mes` si Ismael lo quiere |
+| Owner | Borrar su propio rastro | `club_auditoria` sin DELETE para la app y con trigger de solo inserción (prueba 78) | — |
+| Anfitrión | Ver un saldo en ₡ que no es el real | El ₡ = créditos × `valor_credito_crc` vigente | Si el owner cambia el valor del crédito, el pase no se actualiza hasta el próximo evento del miembro (no hay evento por cambio de config). Anotado para B |

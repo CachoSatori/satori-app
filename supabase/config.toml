@@ -1,0 +1,36 @@
+# Configuración de Supabase versionada (ítem 11). Branching la lee en cada push a main.
+#
+# SOLO las secciones [functions.*] (decisión de Ismael, 07/11): el verify_jwt de cada Edge Function
+# queda escrito acá, igual al que tiene hoy cada función en PROD (leído por la Management API el
+# 07/11). NO hay [auth], [api] ni [db] a propósito: esa configuración de prod se maneja en el panel
+# (disable_signup, site_url, redirects, contraseña mínima de 8) y este archivo no la toca.
+#
+# verify_jwt = true  → la puerta de entrada de Supabase exige un JWT válido del proyecto (anon,
+#                      usuario o la service_role en formato JWT) antes de correr el código; después
+#                      el código hace su propia guarda.
+# verify_jwt = false → solo la guarda del código (ingest-ndf: el agente del PoS manda
+#                      x-ingest-secret, no un JWT).
+#
+# ⚠️ monthly-report y la rotación de claves: el cron manda la service_role del Vault, que hoy es un
+# JWT. Si se pasa a las claves nuevas (sb_secret_…, no son JWT) o se apagan las claves JWT viejas,
+# la puerta de entrada rechazaría al cron con 401. En ese mismo cambio hay que poner
+# monthly-report en verify_jwt = false (la guarda de acceso.ts ya acepta los dos formatos) y
+# volver a probar el cron.
+
+[functions.monthly-report]
+verify_jwt = true
+
+[functions.extract-document]
+verify_jwt = true
+
+[functions.cierre-email]
+verify_jwt = true
+
+[functions.pago-notificar]
+verify_jwt = true
+
+[functions.alta-empleado]
+verify_jwt = true
+
+[functions.ingest-ndf]
+verify_jwt = false

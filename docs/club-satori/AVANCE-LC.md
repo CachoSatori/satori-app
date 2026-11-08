@@ -60,8 +60,9 @@
   - **Tarea diaria:** `pg_cron` `club_socios_mantenimiento` a las 03:15 CR, programada por la 075 solo si hay
     `pg_cron` (staging sí; en prod se verifica en el paso 4 del RUNBOOK).
   - **DECISIONES PROVISORIAS (las revisa Ismael):**
-    1. Texto del aviso de privacidad (`club-web/src/i18n.ts`, `alta_aviso`) y versión `v0-provisorio`. Antes de la
-       campaña: texto final y versión `v1` en `club_config` y en `club-web/src/config.ts` el mismo día.
+    1. ~~Texto del aviso de privacidad~~ → **cargado el texto de Ismael como `v1-borrador`** (08-nov; ES/EN en
+       `club-web/src/i18n.ts`, versión en `club-web/src/config.ts` y en `club_config`, staging incluido). Falta el
+       **correo de contacto** (hoy `‹correo›`/`‹email›`): cuando llegue, se reemplaza y se sube la versión el mismo día.
     2. La respuesta de la autoalta es pareja: si el WhatsApp ya es socio no se dice; si la persona ya existía (por
        ejemplo, un socio en baja que vuelve) queda pendiente **sin** devolver su portal.
     3. Topes: 60 autoaltas por día, purga a 30 días, provisional 7 días (los tres en `club_config`).

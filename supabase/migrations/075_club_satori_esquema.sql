@@ -4358,8 +4358,12 @@ alter table public.club_config add column if not exists socio_autoalta_max_dia i
   check (socio_autoalta_max_dia between 1 and 10000);
 alter table public.club_config add column if not exists socio_autoalta_purga_dias int not null default 30
   check (socio_autoalta_purga_dias between 7 and 365);
-alter table public.club_config add column if not exists aviso_privacidad_version text not null default 'v0-provisorio'
+alter table public.club_config add column if not exists aviso_privacidad_version text not null default 'v1-borrador'
   check (aviso_privacidad_version ~ '^v[0-9A-Za-z.-]{1,30}$');
+-- v1-borrador (08-nov): el texto del aviso de club-web/src/i18n.ts. Staging venía de v0-provisorio: se pasa al default
+-- nuevo solo si seguía en el viejo (no pisa una versión cargada a mano).
+alter table public.club_config alter column aviso_privacidad_version set default 'v1-borrador';
+update public.club_config set aviso_privacidad_version = 'v1-borrador' where aviso_privacidad_version = 'v0-provisorio';
 
 alter table public.club_miembro_roles add column if not exists registrado_por uuid;          -- quién lo cargó en caja
 alter table public.club_miembro_roles add column if not exists provisional_hasta timestamptz; -- activo provisional

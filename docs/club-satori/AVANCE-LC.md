@@ -9,7 +9,7 @@
 | Etapa | Qué | Días | Estado | SHA | Pruebas |
 |---|---|---|---|---|---|
 | A1 | Roles, QR fijo del socio, activar como anfitrión, stub del contrato del pase | 2 | **hecha** | `a1e93db` | batería 294/294 (nuevas 53–56) · carreras 6/6 · paridad 602 = 602 · migrador 15/15 · vitest 1.487 |
-| A2 | Socios: alta provisional + confirmación, autoalta (Turnstile, topes, purga, privacidad), validación, token de pase, cursor | 2,5 | en curso | — | — |
+| A2 | Socios: alta provisional + confirmación, autoalta (Turnstile, topes, purga, privacidad), validación, token de pase, cursor | 2,5 | **hecha** | `838b892` | batería 318/318 (nueva 57, 24 casos) · carreras 7/7 (nueva 17) · paridad 633 = 633 · migrador 15 OK · vitest 1.490 · club-web 13/13 |
 | A3 | Promociones mínimas + productos + admin de cortesías del sorteo | 2 | pendiente | — | — |
 | A4 | «Qué aplicar», sorteo de cortesía, visita por factura (856), premio por referir (1.ª factura C con 856), topes, antiautocanje, créditos pendientes, portal con dos pestañas | 4,5 | pendiente | — | — |
 | A5 | Excepciones LC (11) + «pendiente de configuración» de R02 + reporte de altas por cajero | 2,5 | pendiente | — | — |
@@ -46,3 +46,27 @@
   - **Cola de endurecimiento** en el PLAN, para las noches bloqueadas.
   - **CRM viejo:** plan en PLAN-CRM-cierre.md (lo firma Ismael).
   - **Arranca A2.**
+- 08-nov · **A2 hecha** (`838b892`).
+  - **Alta en caja** (`club_socio_alta_caja`): nombre, WhatsApp y «verifiqué residencia» obligatorios; email opcional.
+    Queda **activo provisional 7 días** (`club_config.socio_provisional_dias`). La confirma en Miembros → Socios →
+    «Altas por confirmar» un manager u owner **distinto** de quien la cargó; si no, `club_socios_mantenimiento` la vuelve
+    a pendiente.
+  - **Autoalta** (`/alta` en club-web → `club_socio_autoalta`): Turnstile + tope por IP en club-web; tope global de
+    60 por día en SQL; pendiente hasta la validación en caja («Validar socio» en Escanear, también provisional). Sin
+    validar a los 30 días, se purga (contacto y rol borrados; la fila del miembro queda en baja con el nombre borrado,
+    porque la auditoría y los eventos la referencian).
+  - **Token de pase** (`club_miembros.token_pase`, `/w/`): owner o manager lo revocan o regeneran en la ficha.
+  - **Cursor:** `club_pase_cursor_rebobinar` (solo `service_role`, motivo obligatorio, auditado).
+  - **Tarea diaria:** `pg_cron` `club_socios_mantenimiento` a las 03:15 CR, programada por la 075 solo si hay
+    `pg_cron` (staging sí; en prod se verifica en el paso 4 del RUNBOOK).
+  - **DECISIONES PROVISORIAS (las revisa Ismael):**
+    1. Texto del aviso de privacidad (`club-web/src/i18n.ts`, `alta_aviso`) y versión `v0-provisorio`. Antes de la
+       campaña: texto final y versión `v1` en `club_config` y en `club-web/src/config.ts` el mismo día.
+    2. La respuesta de la autoalta es pareja: si el WhatsApp ya es socio no se dice; si la persona ya existía (por
+       ejemplo, un socio en baja que vuelve) queda pendiente **sin** devolver su portal.
+    3. Topes: 60 autoaltas por día, purga a 30 días, provisional 7 días (los tres en `club_config`).
+    4. El referido (`?ref=`) se guarda en `referido_por`; el premio nace en A4 (primera factura C con el 856).
+  - **Necesita a Ismael:** widget de Turnstile en Cloudflare (`VITE_TURNSTILE_SITEKEY` y el Secret `TURNSTILE_SECRET`);
+    en staging alcanzan las claves de prueba de Cloudflare.
+  - **Guía de uso** (`docs/sop-app/`): el Club todavía no tiene guía; va en A6 con el recorrido.
+  - **Próximo:** A3 (promociones mínimas + productos + admin de cortesías).

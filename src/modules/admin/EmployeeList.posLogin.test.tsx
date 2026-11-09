@@ -93,3 +93,26 @@ describe('EmployeeList · Login del PoS', () => {
     expect(cajas).toContain('222 login de caja, turno tarde (1 factura, última: 2026-11-02)')
   })
 })
+
+describe('EmployeeList · regla de la base: solo el owner cambia login o perfil de un empleado con login (Grok 106)', () => {
+  it('manager: el selector de perfil de un empleado CON login está deshabilitado; sin login, habilitado', () => {
+    H.role = 'manager'
+    render(<EmployeeList employees={EMPS} onRefresh={vi.fn(async () => {})} />)
+    expect((screen.getByLabelText('Perfil vinculado: EMPLEADO A') as HTMLSelectElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Perfil vinculado: EMPLEADO B') as HTMLSelectElement).disabled).toBe(false)
+  })
+
+  it('owner: el selector está habilitado aunque el empleado tenga login', () => {
+    render(<EmployeeList employees={EMPS} onRefresh={vi.fn(async () => {})} />)
+    expect((screen.getByLabelText('Perfil vinculado: EMPLEADO A') as HTMLSelectElement).disabled).toBe(false)
+  })
+
+  it('si la base rechaza con 42501 al guardar, se muestra el mensaje claro', async () => {
+    H.update.mockRejectedValueOnce(new Error('Solo el owner cambia el login del PoS de un empleado (42501)'))
+    render(<EmployeeList employees={EMPS} onRefresh={vi.fn(async () => {})} />)
+    fireEvent.click(screen.getAllByText('Editar')[1])
+    fireEvent.change(screen.getByLabelText('Login del PoS: EMPLEADO B'), { target: { value: '041' } })
+    fireEvent.click(screen.getByText('Guardar'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Solo el owner puede cambiar el login del PoS/)
+  })
+})

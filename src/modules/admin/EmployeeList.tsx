@@ -9,7 +9,7 @@ import { allSaloneros } from '../ventas/ventasUtils'
 import { ROLE_LABELS } from '../../shared/constants'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { getLoginsDeFacturasRecientes } from '../../shared/api/posNdf'
-import { esDuplicadoDeLogin, loginsSinEmpleado, mensajeDuplicado, usoLoginsDeCaja, validarPosLogin, type LoginSinEmpleado } from './posLogin'
+import { esDuplicadoDeLogin, esRechazoSoloOwner, loginsSinEmpleado, mensajeDuplicado, MENSAJE_SOLO_OWNER, puedeCambiarPerfil, usoLoginsDeCaja, validarPosLogin, type LoginSinEmpleado } from './posLogin'
 
 const ROLES: UserRole[] = ['salonero', 'barman', 'barback', 'runner', 'cocina', 'cajero', 'manager']
 
@@ -34,8 +34,14 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
 
   const handleLink = async (empId: string, profileId: string) => {
     setLinkingId(empId)
+    setError(null)
     try {
       await linkProfileToEmployee(empId, profileId || null)
+      await onRefresh()
+    } catch (err) {
+      // La base (Grok 106) rechaza con 42501 que un no-owner cambie el perfil de un empleado con login.
+      const msg = err instanceof Error ? err.message : 'Error'
+      setError(esRechazoSoloOwner({ message: msg }) ? MENSAJE_SOLO_OWNER : msg)
       await onRefresh()
     } finally {
       setLinkingId(null)
@@ -107,7 +113,9 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error'
       // Red de la base (índice único employees_pos_login_key): alguien lo asignó mientras tanto.
-      if (esDuplicadoDeLogin({ message: msg })) {
+      if (esRechazoSoloOwner({ message: msg })) {
+        setError(MENSAJE_SOLO_OWNER)
+      } else if (esDuplicadoDeLogin({ message: msg })) {
         const otro = employees.find(e => e.id !== id && (e.pos_login ?? '').trim() === editPosLogin.trim())
         setError(mensajeDuplicado(otro?.full_name))
       } else {
@@ -283,7 +291,9 @@ export default function EmployeeList({ employees, onRefresh }: Props) {
                       style={{ fontSize: '0.72rem', background: 'var(--t-paper)', border: '1px solid var(--t-border)', borderRadius: 2, padding: '0.2rem 0.4rem', color: emp.profile_id ? 'var(--t-teal)' : '#888' }}
                       value={emp.profile_id ?? ''}
                       onChange={e => handleLink(emp.id, e.target.value)}
-                      disabled={linkingId === emp.id}
+                      disabled={linkingId === emp.id || !puedeCambiarPerfil(esOwner, emp)}
+                      aria-label={`Perfil vinculado: ${emp.full_name}`}
+                      title={puedeCambiarPerfil(esOwner, emp) ? undefined : MENSAJE_SOLO_OWNER}
                     >
                       <option value="">— Sin perfil —</option>
                       {profiles.filter(p => !['owner','contador'].includes(p.role)).map(p => (
@@ -544,7 +554,8 @@ function UnassignedRow({ name, employees, profiles, onRefresh }: {
       if (profileId) await linkProfileToEmployee(empId, profileId)
       await onRefresh()   // el nombre desaparece del panel (ya quedó vinculado)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error')
+      const msg = err instanceof Error ? err.message : 'Error'
+      setError(esRechazoSoloOwner({ message: msg }) ? MENSAJE_SOLO_OWNER : msg)   // Grok 106
       setSaving(false)
       if (changed) await onRefresh()   // sincronizar el estado para no duplicar en un reintento
     }

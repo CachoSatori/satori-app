@@ -133,3 +133,20 @@ export function usoLoginsDeCaja(
     return { ...c, facturas: n, ultima }
   })
 }
+
+/**
+ * Grok 106 (base, rama del Club): un trigger rechaza con 42501 que alguien que no es owner cambie `pos_login`, dé de
+ * alta un empleado con login, o cambie el `profile_id` de un empleado que tiene login. Esto lo reconoce.
+ */
+export function esRechazoSoloOwner(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false
+  return error.code === '42501' || /solo el owner cambia el login del pos/i.test(error.message ?? '')
+}
+
+export const MENSAJE_SOLO_OWNER =
+  'Solo el owner puede cambiar el login del PoS de un empleado, o el perfil vinculado de un empleado que tiene login.'
+
+/** ¿Este usuario puede cambiar el perfil vinculado de este empleado? (mismo criterio que la base) */
+export function puedeCambiarPerfil(esOwner: boolean, emp: { pos_login?: string | null }): boolean {
+  return esOwner || !(emp.pos_login ?? '').trim()
+}

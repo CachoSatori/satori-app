@@ -228,6 +228,14 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
       }
       if (monto !== null) value = monto
     }
+    // Tipo o monto: a la API va el movimiento COMPLETO (tipo, ₡ y $), que es lo que valida y lo que se encola.
+    const completo = (field === 'amount_crc' || field === 'amount_usd' || field === 'movement_type') && mov
+      ? {
+          movement_type: field === 'movement_type' ? value : mov.movement_type,
+          amount_crc:    field === 'amount_crc' ? value : (mov.amount_crc ?? 0),
+          amount_usd:    field === 'amount_usd' ? value : (mov.amount_usd ?? 0),
+        }
+      : null
     // Editar un movimiento GUARDADO (montos, tipo, método…) requiere autorización de gerencia,
     // igual que borrarlo. owner/manager logueado pasa al instante; cajero → modal de contraseña.
     // Si cancela o falla, onRefresh() revierte lo que muestre el input.
@@ -240,7 +248,7 @@ export default function CashMovimientos({ movements, sessions, onRefresh }: Prop
       // 3 campos, no solo el status. Pasar a 'pendiente' y las filas NO-propina, igual que antes.
       const esAprobarPropina = field === 'status' && value === 'aprobado'
         && mov?.subcategory === 'Propinas por turno'
-      const updates = esAprobarPropina ? aprobacionPropinaFields() : { [field]: value }
+      const updates = esAprobarPropina ? aprobacionPropinaFields() : (completo ?? { [field]: value })
       await updateCashMovement(id, updates as Partial<CashMovement>)
       onRefresh()
     } catch {

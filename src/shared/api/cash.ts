@@ -355,18 +355,39 @@ function assertMontosValidos(movement_type: string | null | undefined, crc: unkn
   if (err) throw new Error(err)
 }
 
-/** En un update parcial (sin el resto de la fila, también offline): cada monto que venga tiene que ser válido. */
-function assertMontosParciales(updates: Partial<CashMovement>): void {
-  for (const k of ['amount_crc', 'amount_usd'] as const) {
-    if (!(k in updates)) continue
-    const n = parsearMonto(updates[k] as unknown)
-    if (!Number.isFinite(n)) throw new Error('El monto no es un número válido.')
-    if (k === 'amount_usd' && n < 0) throw new Error('El monto en dólares no puede ser negativo.')
+/**
+ * Un update que toque el TIPO o un MONTO se valida con el movimiento COMPLETO que quedaría (Grok 107/#73):
+ *   · si trae los tres (movement_type, amount_crc, amount_usd), se valida eso;
+ *   · si trae solo una parte y HAY conexión, se lee la fila actual y se valida el candidato (fila + cambios);
+ *   · si trae solo una parte y NO hay conexión, se rechaza: offline no se puede leer la fila, y a la cola no entra
+ *     un candidato que no se pudo validar entero.
+ * Los updates de otros campos (estado, método, caja, descripción…) no pasan por acá.
+ */
+export const UPDATE_MOVIMIENTO_INCOMPLETO =
+  'Sin conexión, un cambio de tipo o de monto tiene que llevar el movimiento completo (tipo, colones y dólares).'
+async function assertUpdateCompleto(id: string, updates: Partial<CashMovement>): Promise<void> {
+  const campos = ['movement_type', 'amount_crc', 'amount_usd'] as const
+  const toca = campos.filter(k => k in updates)
+  if (toca.length === 0) return
+  let cand: { movement_type: unknown; amount_crc: unknown; amount_usd: unknown }
+  if (toca.length === 3) {
+    cand = { movement_type: updates.movement_type, amount_crc: updates.amount_crc, amount_usd: updates.amount_usd }
+  } else {
+    if (isOffline()) throw new Error(UPDATE_MOVIMIENTO_INCOMPLETO)
+    const { data, error } = await supabase
+      .from('cash_movements').select('movement_type, amount_crc, amount_usd').eq('id', id).single()
+    if (error) throw new Error(error.message)
+    const fila = (data ?? {}) as Record<string, unknown>
+    cand = {
+      movement_type: 'movement_type' in updates ? updates.movement_type : fila.movement_type,
+      amount_crc:    'amount_crc' in updates ? updates.amount_crc : fila.amount_crc,
+      amount_usd:    'amount_usd' in updates ? updates.amount_usd : fila.amount_usd,
+    }
   }
-  // Tipo y montos juntos en el mismo update: se valida el movimiento completo.
-  if ('movement_type' in updates && 'amount_crc' in updates && 'amount_usd' in updates) {
-    assertMontosValidos(updates.movement_type as string, updates.amount_crc, updates.amount_usd)
+  if (!Number.isFinite(parsearMonto(cand.amount_crc)) || !Number.isFinite(parsearMonto(cand.amount_usd))) {
+    throw new Error('El monto no es un número válido.')
   }
+  assertMontosValidos(String(cand.movement_type ?? ''), cand.amount_crc, cand.amount_usd)
 }
 
 function assertTraspasoLegible(
@@ -382,7 +403,7 @@ export async function updateCashMovement(
   id: string,
   updates: Partial<CashMovement>,
 ): Promise<void> {
-  assertMontosParciales(updates)
+  await assertUpdateCompleto(id, updates)
   // Guard de dirección (ítem 1a): si el update toca el tipo y/o la subcategoría, validar el ESTADO
   // RESULTANTE. Atajo: si el tipo final NO es traspaso, no hay nada que validar (ni se lee la fila →
   // las ediciones inline offline de otros campos no se ven afectadas). Solo si hace falta un dato del

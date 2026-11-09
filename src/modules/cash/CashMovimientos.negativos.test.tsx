@@ -81,7 +81,7 @@ describe('CashMovimientos · edición inline — monto negativo (Ítem 2)', () =
     fireEvent.change(crc, { target: { value: '7000' } })
     await act(async () => { fireEvent.blur(crc) })
     expect(window.alert).not.toHaveBeenCalled()
-    expect(updateCashMovement).toHaveBeenCalledWith('m1', { amount_crc: 7000 })
+    expect(updateCashMovement).toHaveBeenCalledWith('m1', { movement_type: 'egreso_operativo', amount_crc: 7000, amount_usd: 0 })   // el movimiento completo (Grok 107)
   })
 })
 
@@ -94,7 +94,7 @@ describe('CashMovimientos · edición inline — vuelto en colones de un ingreso
     fireEvent.change(crc, { target: { value: '-1500' } })
     await act(async () => { fireEvent.blur(crc) })
     expect(window.alert).not.toHaveBeenCalled()
-    expect(updateCashMovement).toHaveBeenCalledWith('m1', { amount_crc: -1500 })
+    expect(updateCashMovement).toHaveBeenCalledWith('m1', { movement_type: 'ingreso', amount_crc: -1500, amount_usd: 40 })
   })
 
   it('ingreso SIN dólares y ₡ negativos: avisa y NO updatea', async () => {
@@ -147,7 +147,7 @@ describe('CashMovimientos · edición inline — movimiento completo (Grok 107)'
     const fila = screen.getByDisplayValue('egreso a ingreso').closest('tr') as HTMLElement
     const tipo = (within(fila).getAllByRole('combobox') as HTMLSelectElement[]).find(sel => [...sel.options].some(o => o.value === 'egreso_operativo'))!
     await act(async () => { fireEvent.change(tipo, { target: { value: 'ingreso' } }) })
-    expect(updateCashMovement).toHaveBeenCalledWith('m1', { movement_type: 'ingreso' })
+    expect(updateCashMovement).toHaveBeenCalledWith('m1', { movement_type: 'ingreso', amount_crc: 5000, amount_usd: 0 })
   })
 
   it('dejar los ₡ en 0 sin dólares (quedaría en cero): avisa y NO updatea', async () => {
@@ -168,6 +168,6 @@ describe('CashMovimientos · edición inline — movimiento completo (Grok 107)'
     const crc = within(fila).getAllByRole('spinbutton')[0]
     fireEvent.change(crc, { target: { value: '7500' } })
     await act(async () => { fireEvent.blur(crc) })
-    expect(updateCashMovement).toHaveBeenCalledWith('m1', { amount_crc: 7500 })
+    expect(updateCashMovement).toHaveBeenCalledWith('m1', { movement_type: 'egreso_operativo', amount_crc: 7500, amount_usd: 0 })
   })
 })

@@ -93,5 +93,20 @@ if [ -n "$id" ]; then
   if echo "$r" | grep -qi "row-level security"; then echo "OK    insert en otro local rechazado por RLS"; else echo "FALLA insert en otro local: $r"; fallas=$((fallas+1)); fi
 fi
 
+echo "== Las políticas se crean con la forma correcta y el rollback deja todo como antes (descartado) =="
+POLS="select count(*) as n from pg_policies where schemaname = 'public' and policyname like '%_por_local'
+        and permissive = 'RESTRICTIVE' and qual ~ 'mis_locales' and with_check ~ 'mis_locales'"
+n=$(q "begin; $MIG; $POLS; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
+compara "las 4 políticas por local existen, restrictivas, con using y with check" "4" "$n"
+ROLLBACK=$(grep -viE '^\s*(begin|commit)\s*;\s*$' "$RAIZ/scripts/sql/091_rollback.sql")
+A=$(q "begin; $FOTO; rollback;" | uno)
+D=$(q "begin; $MIG; $ROLLBACK; $FOTO; rollback;" | uno)
+compara "rollback: filas, totales, saldo y cierres iguales a antes" "$A" "$D"
+r=$(q "begin; $MIG; $ROLLBACK; select (select count(*) from information_schema.columns where table_schema = 'public' and column_name = 'location_id'
+        and table_name in ('cash_sessions','cash_movements','cash_cierres_dia','tip_sessions')) as cols,
+        (select count(*) from pg_policies where policyname like '%_por_local') as pols,
+        to_regprocedure('public.mis_locales()') is null as sin_fn; rollback;" | jq -c 'if type=="array" then .[-1] else . end')
+compara "rollback: sin columnas, sin políticas y sin función" '{"cols":0,"pols":0,"sin_fn":true}' "$r"
+
 echo "== Resultado: $fallas falla(s) =="
 [ "$fallas" -eq 0 ]

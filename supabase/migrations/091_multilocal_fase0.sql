@@ -86,8 +86,9 @@ create policy profile_locations_write_owner on public.profile_locations for all 
   using (get_my_role() = 'owner') with check (get_my_role() = 'owner');
 
 -- Los locales que ve el usuario actual, como lista. SECURITY DEFINER: lee profile_locations y locations sin depender
--- de su RLS. En las políticas se llama como `(select public.mis_locales())`: Postgres la evalúa UNA vez por consulta
--- (no por fila).
+-- de su RLS. En las políticas va como `location_id = any ((select public.mis_locales())::text[])`: el cast deja claro
+-- que es UN arreglo (no una subconsulta `ANY (SELECT …)`, que compararía text con text[] — Grok 105) y Postgres la
+-- evalúa UNA vez por consulta (no por fila).
 create or replace function public.mis_locales()
 returns text[]
 language sql
@@ -127,7 +128,8 @@ begin
     execute format('drop policy if exists %I on public.%I', t || '_por_local', t);
     execute format(
       'create policy %I on public.%I as restrictive for all to authenticated '
-      'using (location_id = any ((select public.mis_locales()))) with check (location_id = any ((select public.mis_locales())))',
+      'using (location_id = any ((select public.mis_locales())::text[])) '
+      'with check (location_id = any ((select public.mis_locales())::text[]))',
       t || '_por_local', t);
   end loop;
 end $$;

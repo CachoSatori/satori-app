@@ -62,6 +62,19 @@ escritura en un local ajeno la rechaza la RLS. **Rollback:** `scripts/sql/091_ro
 **Pantallas:**
 - Selector de local y contexto en la app; todas las lecturas de `shared/api` filtran por el local elegido.
 
+## Lo que la fase 0 NO aísla (Grok, 09-nov)
+- **Tablas hijas sin columna de local:** `tip_entries`, `movement_deletions` y `movement_edits` (y las demás auditorías)
+  no tienen `location_id` ni política por local. Hoy cuelgan de una fila que sí la tiene, pero la RLS de la hija no mira
+  al padre: un usuario puede leer entradas o auditorías de una sesión o un movimiento de otro local si sus políticas
+  de hoy se lo permiten. Se aísla en la fase con firma (política que mire al padre, o columna propia).
+- **RPC SECURITY DEFINER:** corren como dueño y no pasan por la RLS por local. Por ejemplo `mark_factura_verified` y
+  `delete_movement_cascade`. Cada una necesita su propio chequeo de local (`puede_ver_local(...)`) en la fase con firma.
+- **Las RPC del cierre** (`cerrar_dia_completo`, `deshacer_cierre_dia`) son SECURITY INVOKER: sí pasan por la RLS por
+  local (ver el gate 2).
+- **Forma de la política (Grok 105, corregido):** `location_id = any ((select public.mis_locales())::text[])`. La forma
+  sin cast (`= any ((select …))`) se lee como subconsulta `ANY` y compara text con text[]. Probar en staging la
+  creación de las políticas y el rollback (`scripts/sql/091_pruebas.sh`, en una ventana nocturna).
+
 ## ⛔ Gates (Ismael, 08-nov)
 1. **El día que haya selector de local, `location_id` pierde el default.** En el mismo PR que agregue el selector de
    local en la app, las 4 columnas pasan a `NOT NULL` **sin default** (`alter column location_id drop default`), para

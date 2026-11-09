@@ -29,7 +29,7 @@ ningún secreto.
 up to date» después del merge del #71, que firma y hace el dueño.
 **Todo en PowerShell**, el **Windows PowerShell 5.1** de la PC del PoS (o la 7, si está, pero una sola para todo el pase).
 Antes de empezar, en cada consola, `$PSVersionTable.PSVersion` tiene que decir 5.1 (o 7.x); si dice otra cosa, se para.
-Los 15 bloques del paquete pasaron el ensayo en seco en las dos versiones. Cada consola arranca con el bloque fail-stop:
+Los 19 bloques del paquete pasaron el ensayo en seco en las dos versiones (35/35 cada una, 09-nov). Cada consola arranca con el bloque fail-stop:
 si un comando falla, se corta y **no se sigue**.
 
 | # | Paso (sección del paquete) | Qué hace el dueño | Qué hace el encargado | Qué hace Claude | Tarda |

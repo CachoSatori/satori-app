@@ -40,4 +40,6 @@ insert into pasos select 3, 'despues_rollback', ($ESTADO_SIN);
 select n, paso, estado from pasos order by n;
 rollback;"
 jq -n --arg q "$SQL" '{query:$q}' | curl -sS -X POST "https://api.supabase.com/v1/projects/$REF/database/query" \
-  -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @- | jq -c '.[]? // .'
+  -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @- \
+  | jq -c 'if type == "array" then .[] else {error: ((.message // "") | split("\n")[0] | sub("DETAIL:.*"; "") | .[0:160])} end'
+# Un error se imprime solo con su primera línea (SQLSTATE y mensaje): nunca el DETAIL, que puede traer una fila.

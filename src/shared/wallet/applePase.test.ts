@@ -50,7 +50,7 @@ describe('B4 · pass.json (mismo contrato y textos que Google)', () => {
                               backgroundColor: 'rgb(13, 13, 13)', webServiceURL: CFG.webServiceURL, authenticationToken: tok })
     expect(p.storeCard.primaryFields[0]).toMatchObject({ key: 'creditos', value: '₡36.000 disponibles' })
     expect(p.storeCard.secondaryFields).toContainEqual(expect.objectContaining({ value: '6 personas referidas este mes' }))
-    expect(p.barcodes[0]).toEqual({ format: 'PKBarcodeFormatQR', message: 'https://club.ejemplo.test/r/ABCD2345', messageEncoding: 'iso-8859-1', altText: 'ABCD2345' })
+    expect(p.barcodes?.[0]).toEqual({ format: 'PKBarcodeFormatQR', message: 'https://club.ejemplo.test/r/ABCD2345', messageEncoding: 'iso-8859-1', altText: 'ABCD2345' })
     expect(tok).toMatch(/^[0-9a-f]{64}$/)
     expect(await tokenWebService('x'.repeat(40), A)).toBe(tok)                 // estable
     expect(await tokenWebService('y'.repeat(40), A)).not.toBe(tok)              // depende del secreto

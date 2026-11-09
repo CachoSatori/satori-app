@@ -168,7 +168,7 @@ const OID = {
 export async function firmarManifest(manifest: Uint8Array, certPem: string, clavePem: string, wwdrPem: string, ahora = new Date()): Promise<Uint8Array> {
   const cert = pemADer(certPem, 'CERTIFICATE')
   const wwdr = pemADer(wwdrPem, 'CERTIFICATE')
-  const clave = await crypto.subtle.importKey('pkcs8', pemADer(clavePem, 'PRIVATE KEY'), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign'])
+  const clave = await crypto.subtle.importKey('pkcs8', new Uint8Array(pemADer(clavePem, 'PRIVATE KEY')), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign'])
   const resumen = new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(manifest)))
   const atributos = [
     seq(oid(OID.contentType), setDe(oid(OID.data))),

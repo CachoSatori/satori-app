@@ -36,6 +36,10 @@ null si la cuenta está inactiva.
 - [ ] **Firma de Ismael** sobre este paquete, después de la auditoría.
 - [ ] **Ledger de prod:** la 085 libre y **último < 085**. Con el orden del §2, el último tiene que ser la **082**
   (el puente ya pasó). Si el puente no pasó, la 085 **no** entra.
+- [ ] **Puente: §7 sin aborto y §8 en verde.** La primera hora del pase del puente (§7 de
+  `docs/puente/PASE-PROD-2026-11-09.md`) cerró **sin ningún criterio de aborto**, y el §8 de ESTE paquete (pruebas
+  de la noche en staging: `085_pruebas.sh` y el rollback en una transacción descartada) está **en verde**. Si
+  cualquiera de las dos no se cumple, la 085 no entra.
 - [ ] **PR de sincronía en `main` y Branching en verde** (auditoría del 08/11): el #71 (solo `081_….sql` y `082_….sql`,
   md5 `d4acf8da…` y `5db915c8…`) mergeado después del §7 del pase del puente, y su run de Branching con
   **«All migrations are up to date»**. Sin eso, el ledger de prod tiene la 081 y la 082 sin su `.sql` en `main`, y el merge

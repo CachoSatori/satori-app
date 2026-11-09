@@ -25,8 +25,10 @@ y la app, elige las facturas del cuadre y lee cada resultado contra el esperado.
 dicta y revisa; no ve ningún secreto.
 
 **Regla de oro:** desde que empieza el pase **nadie mergea nada a `main`** hasta que Claude diga «Branching al día».
-**Todo en PowerShell.** Cada consola arranca con el bloque fail-stop del paquete: si un comando falla, se corta y **no se
-sigue**.
+**Todo en PowerShell**, el **Windows PowerShell 5.1** de la PC del PoS (o la 7, si está, pero una sola para todo el pase).
+Antes de empezar, en cada consola, `$PSVersionTable.PSVersion` tiene que decir 5.1 (o 7.x); si dice otra cosa, se para.
+Los 15 bloques del paquete pasaron el ensayo en seco en las dos versiones. Cada consola arranca con el bloque fail-stop:
+si un comando falla, se corta y **no se sigue**.
 
 | # | Paso (sección del paquete) | Qué hace el dueño | Qué hace el encargado | Qué hace Claude | Tarda |
 |---|---|---|---|---|---|

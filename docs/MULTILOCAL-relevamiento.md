@@ -37,7 +37,7 @@
 | `supabase/functions/ingest-ndf/index.ts:117` (rama del puente) | `localLegado: 'santa-teresa'` → **corregido** (variable `POS_INGEST_LOCAL_LEGADO`) en `claude/puente-locales-genericos` |
 | `supabase/functions/ingest-punches/index.ts:41` (BioTime) | `LOCALES = new Set(['santa-teresa', 'nosara'])` (sin cambios) |
 
-**El pase del lunes no cambia:** despliega el SHA fijo `e4678b3`. La corrección del puente
+**El pase del puente no cambia por esto:** despliega el código fijo `5da233a` (v2 con la 082 v3; reprogramado, fecha a definir por el dueño tras la auditoría de la 082 v3). La corrección del puente
 (`claude/puente-locales-genericos`, `docs/puente/LOCALES-GENERICOS.md`) se despliega después, con su firma.
 
 ## 4. Reglas de negocio de un local escritas en el código

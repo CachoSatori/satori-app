@@ -87,8 +87,9 @@ y con su fila (08-nov, texto idéntico: md5 `5db915c8a422519ce77050f1fb1b916a`).
 
 ## 3. Edge `ingest-ndf` y agente de prod
 **Hacer:**
-1. Desde un checkout de `claude/puente-item11-prod` (hoy `e4678b3`; el detalle, con smoke test y rollback, está en
-   `docs/puente/PASE-PROD-2026-11-09.md` en esa rama; pase previsto el lunes 09-nov, antes que la 085):
+1. Según el paquete vigente: `docs/puente/PASE-PROD-2026-11-09.md` en `claude/puente-item11-prod-v2` (código
+   `5da233a`, con la 082 v3; smoke test y rollback ahí). El pase quedó **reprogramado, fecha a definir por el dueño tras la auditoría de la 082 v3**, y va antes que la 085.
+   Lo corre el dueño desde el clon del pase:
    `supabase functions deploy ingest-ndf --no-verify-jwt --project-ref yiczgdtirrkdvohdquzf`.
 2. Secreto por local (CLUB-AUD-32), en el panel de Supabase → Edge Functions → Secrets:
    `POS_INGEST_SECRETS = {"santa-teresa":"<secreto largo>"}`. Si no se carga, el `POS_INGEST_SECRET` de siempre sigue
@@ -317,7 +318,7 @@ borrador, y queda en la auditoría (la app) o en `club_config_historial` (los ca
 
 | # | Qué | Dónde | Verificar |
 |---|---|---|---|
-| 1 | **Puente del local** corriendo con **su propio secreto**: entrada `"<id>"` en `POS_INGEST_SECRETS` (32+ caracteres, distinto de los demás) y el agente de su PC con `LOCAL=<id>` | panel de Supabase + PC del PoS | `select now() - last_poll_at, last_error from pos_ndf_cursor where local = '<id>';` late y sin error. ⚠ El puente del pase del lunes acepta solo santa-teresa y nosara; un tercer local necesita desplegar antes `claude/puente-locales-genericos` (`docs/puente/LOCALES-GENERICOS.md`), que toma los locales del mapa de secretos |
+| 1 | **Puente del local** corriendo con **su propio secreto**: entrada `"<id>"` en `POS_INGEST_SECRETS` (32+ caracteres, distinto de los demás) y el agente de su PC con `LOCAL=<id>` | panel de Supabase + PC del PoS | `select now() - last_poll_at, last_error from pos_ndf_cursor where local = '<id>';` late y sin error. ⚠ El puente del pase (v2 con la 082 v3) acepta solo santa-teresa y nosara; un tercer local necesita desplegar antes `claude/puente-locales-genericos` (`docs/puente/LOCALES-GENERICOS.md`), que toma los locales del mapa de secretos |
 | 2 | **Códigos del PoS:** `lc_articulo_codigo` (856, LOCAL CLUB), `lc_invitado_codigo` (857, INVITADO), `promo_articulo_codigo` (PROMO CLUB 10 %), `articulos_cero_permitidos` | `club_config` (fila del local) | existen en el catálogo de su PoS (Club → Promociones → buscar producto) |
 | 3 | **Marcadores de descuento** (tarjetas de hoteles o tiendas, descuento de personal…) | Club → **Descuentos** | los sembrados (856, 857) más los propios del local |
 | 4 | **Sección CORTESÍA CLUB:** `cortesia_familia` y las cortesías del sorteo | `club_config` + Club → Promociones | cortesías activas |

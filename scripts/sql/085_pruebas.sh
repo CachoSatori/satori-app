@@ -1,53 +1,81 @@
 #!/usr/bin/env bash
-# Pruebas de la 085 (SEC-01c: las lecturas «para todos» exigen rol activo) — SIN FALSOS VERDES (Grok 87).
+# Pruebas de la 085 (SEC-01c: las lecturas «para todos» exigen rol activo) — SIN FALSOS VERDES (Grok 87 + residuales).
 #
-# Cada caso tiene un resultado ESPERADO calculado de antes (conteos como postgres + la regla de cada policy) y se
-# compara con lo que devuelve la base con la sesión simulada. Un caso que no se puede correr NO es verde: cuenta como
-# «NO PROBADO» y el script termina con error.
+# Uso: SUPABASE_ACCESS_TOKEN=… scripts/sql/085_pruebas.sh <REF> <MODO> [respaldo.json]
+#   MODO = ANTES     la base NO tiene la 085 (catálogo viejo). Espera los resultados de antes.
+#          DESPUES   la base SÍ tiene la 085. Espera los resultados nuevos.
+#          ROLLBACK  (solo staging) la base tiene la 085; cada caso aplica 085_rollback.sql dentro de su transacción
+#                    descartada y espera los resultados de ANTES; además compara las 15 policies con el respaldo.
+#   El modo se CHEQUEA contra el catálogo antes de correr nada: si no coincide (p. ej. DESPUES en una base sin la
+#   085, o ANTES en una base con la 085), se corta con error. Nunca se corre un modo con los esperados de otro.
+#   respaldo.json: obligatorio en ROLLBACK. Se valida por sha256 y por corte (ref, hora de lectura, ledger), no por
+#   «el archivo existe».
 #
-# Matriz:
-#   · los 10 roles (owner, manager, contador, cajero, salonero, barman, barback, runner, cocina, proveedor),
-#     ACTIVOS e INACTIVOS (en staging se simulan sobre un perfil de prueba, dentro de una transacción descartada);
-#   · rol NULL (la columna es NOT NULL: se espera que la base lo rechace);
-#   · perfil ausente (un JWT de alguien sin fila en profiles);
-#   · anon y service_role;
-#   · catálogo: las 7 policies con su condición nueva.
+# Cada caso tiene su resultado ESPERADO (conteos como postgres + la regla de cada policy en ese modo) y se compara
+# exacto. Los errores se clasifican por SQLSTATE y operación: solo un 42501 «permission denied for table <la tabla>»
+# del SELECT de anon cuenta como «sin permiso»; un error de SET ROLE, de red o de otra cosa es FALLA.
 #
-# STAGING (hwiatgicyyqyezqwldia): matriz completa; todo en transacciones que terminan en ROLLBACK.
-# PROD (yiczgdtirrkdvohdquzf): SOLO LECTURA. No escribe nada: los roles se prueban solo con cuentas activas que existan
-#   (las simulaciones e inactivos quedan «NO PROBADO» → salida 3, nunca verde).
+# STAGING (hwiatgicyyqyezqwldia): matriz completa (10 roles activos e inactivos simulados, rol NULL, perfil ausente,
+#   anon, service_role), todo en transacciones con ROLLBACK.
+# PROD (yiczgdtirrkdvohdquzf): SOLO LECTURA (modos ANTES y DESPUES). Lo que no se puede probar sin escribir queda
+#   «NO PROBADO» y la salida NUNCA es verde (3).
 #
-# Salida: 0 = todo verde · 1 = alguna FALLA · 3 = sin fallas pero con casos NO PROBADOS · 2 = error de uso.
-# Uso: SUPABASE_ACCESS_TOKEN=… scripts/sql/085_pruebas.sh <REF>
+# Salida: 0 = todo verde · 1 = alguna FALLA · 3 = sin fallas pero con NO PROBADOS (no es verde) · 2 = error de uso.
+# Log: la salida estándar no tiene secretos (no imprime el token ni datos de personas: solo conteos e ids técnicos).
 set -euo pipefail
 : "${SUPABASE_ACCESS_TOKEN:?Falta SUPABASE_ACCESS_TOKEN (token de la Management API)}"
-REF=${1:?Uso: $0 <REF>}
+REF=${1:?Uso: $0 <REF> <ANTES|DESPUES|ROLLBACK> [respaldo.json]}
+MODO=${2:?Falta el modo: ANTES, DESPUES o ROLLBACK}
+RESPALDO=${3:-}
 case $REF in
-  hwiatgicyyqyezqwldia) MODO=staging; echo "REF=$REF (STAGING) · matriz completa, todo descartado" >&2;;
-  yiczgdtirrkdvohdquzf) MODO=prod;    echo "REF=$REF (PROD) · solo lectura" >&2;;
+  hwiatgicyyqyezqwldia) ENTORNO=staging;;
+  yiczgdtirrkdvohdquzf) ENTORNO=prod;;
   *) echo "ref desconocido: $REF" >&2; exit 2;;
 esac
+case $MODO in ANTES|DESPUES|ROLLBACK) ;; *) echo "modo inválido: $MODO" >&2; exit 2;; esac
+[ "$MODO" = ROLLBACK ] && [ "$ENTORNO" != staging ] && { echo "ROLLBACK solo en staging" >&2; exit 2; }
 command -v jq >/dev/null || { echo "falta jq" >&2; exit 2; }
+RAIZ=$(git rev-parse --show-toplevel)
+echo "085_pruebas · $(TZ=America/Costa_Rica date '+%Y-%m-%d %H:%M CR') · REF=$REF ($ENTORNO) · MODO=$MODO · script @ $(git -C "$RAIZ" rev-parse --short HEAD)"
+
+# ── Respaldo del catálogo: hash + corte ───────────────────────────────────────────────────────
+RESPALDO_SHA=4db2c15b5847e9b73459ce0a5ef538cdf2ed3293f7d3ec4f27fc5d41bba90b58
+if [ "$MODO" = ROLLBACK ]; then
+  [ -s "$RESPALDO" ] || { echo "ROLLBACK necesita el respaldo del catálogo (json)" >&2; exit 2; }
+  sha=$(sha256sum "$RESPALDO" | cut -d' ' -f1)
+  [ "$sha" = "$RESPALDO_SHA" ] || { echo "FALLA el respaldo no es el del paquete (sha256 $sha ≠ $RESPALDO_SHA)"; exit 1; }
+  corte=$(jq -c '{ref, leido_utc, n: .ledger.n, ultimo: .ledger.ultimo, pols: (.policies|length)}' "$RESPALDO")
+  [ "$(jq -r '.ref|startswith("yiczgdtirrkdvohdquzf")' <<<"$corte")" = true ] && [ "$(jq -r .leido_utc <<<"$corte")" = "2026-11-08T15-20-24Z" ] \
+    && [ "$(jq -r .n <<<"$corte")" = 55 ] && [ "$(jq -r .ultimo <<<"$corte")" = 080 ] && [ "$(jq -r .pols <<<"$corte")" = 15 ] \
+    || { echo "FALLA el corte del respaldo no es el esperado: $corte"; exit 1; }
+  echo "Respaldo OK: sha256 ${sha:0:12}… · corte $corte"
+fi
 
 API="https://api.supabase.com/v1/projects/$REF/database/query"
-# q: la consulta tiene que responder 2xx y un arreglo JSON; si no, corta (curl --fail-with-body).
+# q: 2xx y arreglo JSON, o corta (red, HTTP o SQL inesperado = FALLA, nunca verde).
 q() {
   local body
   body=$(jq -n --arg q "$1" '{query:$q}' | curl -sS --fail-with-body -X POST "$API" \
     -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @-) || {
-    echo "ERROR de la API: $body" >&2; return 1; }
-  echo "$body" | jq -e 'type == "array"' >/dev/null || { echo "ERROR: respuesta no es un arreglo: $body" >&2; return 1; }
+    echo "ERROR de la API (red o SQL): ${body:0:300}" >&2; return 1; }
+  jq -e 'type == "array"' >/dev/null <<<"$body" || { echo "ERROR: respuesta no es un arreglo: ${body:0:300}" >&2; return 1; }
   echo "$body"
 }
-# q_crudo: para los casos donde el ERROR es el resultado esperado (no corta; devuelve el cuerpo tal cual).
+# q_crudo: para los casos donde un ERROR es el resultado esperado. Devuelve «HTTP<código> <cuerpo>».
 q_crudo() {
-  jq -n --arg q "$1" '{query:$q}' | curl -sS -X POST "$API" \
-    -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @- || true
+  jq -n --arg q "$1" '{query:$q}' | curl -sS -o /dev/stdout -w '\nHTTP%{http_code}' -X POST "$API" \
+    -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @- || echo "HTTP000"
 }
+sqlstate() { grep -oE 'ERROR:[[:space:]]+[0-9A-Z]{5}' <<<"$1" | head -1 | grep -oE '[0-9A-Z]{5}$' || true; }
 
 ROLES=(owner manager contador cajero salonero barman barback runner cocina proveedor)
-VE_TODO=(owner manager)          # «Owners y managers …»: ven todos los empleados y todos los perfiles
+VE_TODO=(owner manager)
 AUSENTE='00000000-0000-4000-8000-0000000085aa'
+TABLAS=(employees tip_entries tip_sessions role_tip_points exchange_rates profiles)
+ROLLBACK_SQL=""
+[ "$MODO" = ROLLBACK ] && ROLLBACK_SQL=$(grep -viE '^\s*(begin|commit)\s*;\s*$' "$RAIZ/scripts/sql/085_rollback.sql")
+# En ANTES y ROLLBACK se espera el comportamiento de antes de la 085; en DESPUES, el nuevo.
+REGLA=$([ "$MODO" = DESPUES ] && echo nueva || echo vieja)
 
 LECTURA="select json_build_object(
   'employees',       (select count(*) from public.employees),
@@ -55,64 +83,82 @@ LECTURA="select json_build_object(
   'tip_sessions',    (select count(*) from public.tip_sessions),
   'role_tip_points', (select count(*) from public.role_tip_points),
   'exchange_rates',  (select count(*) from public.exchange_rates),
-  'profiles',        (select count(*) from public.profiles)) as r"
+  'profiles',        (select count(*) from public.profiles))"
 
-# ── Verdad de base (como postgres) ────────────────────────────────────────────────────────────
+ok=0; fallas=0; noprob=0
+verde()     { echo "OK          $1"; ok=$((ok+1)); }
+falla()     { echo "FALLA       $1"; echo "            esperado: $2"; echo "            obtenido: ${3:0:400}"; fallas=$((fallas+1)); }
+noprobado() { echo "NO PROBADO  $1 — $2"; noprob=$((noprob+1)); }
+compara() { if [ -n "$3" ] && [ "$(jq -cS . <<<"$2" 2>/dev/null)" = "$(jq -cS . <<<"$3" 2>/dev/null)" ]; then verde "$1"; else falla "$1" "$2" "$3"; fi; }
+
+# ── 1. El catálogo está en el estado del modo (si no, no se corre nada) ──────────────────────
+LECT6="('employees','Todos ven empleados activos'), ('tip_entries','Todos ven entradas de propinas'),
+  ('tip_sessions','Todos ven sesiones de propinas'), ('role_tip_points','Todos ven puntos por rol'),
+  ('exchange_rates','Todos ven tipos de cambio'), ('exchange_rates','exchange_rates_read')"
+CAT="select json_build_object(
+  'nuevas', count(*) filter (where (tablename, policyname) in ($LECT6) and qual ~* 'get_my_role\\(\\) is not null'),
+  'viejas', count(*) filter (where (tablename, policyname) in ($LECT6) and qual !~* 'get_my_role'),
+  'profiles_check', count(*) filter (where tablename = 'profiles' and policyname = 'Solo owners crean/editan perfiles' and with_check is not null))
+  from pg_policies where schemaname = 'public'"
+cat_ahora=$(q "$CAT" | jq -c '.[0].json_build_object')
+case $MODO in
+  ANTES)    esperado_cat='{"nuevas":0,"viejas":6,"profiles_check":0}';;
+  DESPUES)  esperado_cat='{"nuevas":6,"viejas":0,"profiles_check":1}';;
+  ROLLBACK) esperado_cat='{"nuevas":6,"viejas":0,"profiles_check":1}';;
+esac
+if [ "$(jq -cS . <<<"$cat_ahora")" != "$(jq -cS . <<<"$esperado_cat")" ]; then
+  echo "FALLA el catálogo no está en el estado del modo $MODO: $cat_ahora (se esperaba $esperado_cat). No se corre nada."
+  exit 1
+fi
+verde "catálogo en el estado del modo $MODO: $cat_ahora"
+if [ "$MODO" = ROLLBACK ]; then
+  cat_rb=$(q "begin; $ROLLBACK_SQL; $CAT; rollback;" | jq -c '.[-1].json_build_object') || cat_rb=""
+  compara "con el rollback aplicado (descartado), el catálogo queda en el estado de ANTES" '{"nuevas":0,"viejas":6,"profiles_check":0}' "$cat_rb"
+  POL="select coalesce(json_agg(json_build_object('tablename', tablename, 'policyname', policyname, 'permissive', permissive,
+         'roles', roles::text, 'cmd', cmd, 'qual', qual, 'with_check', with_check) order by tablename, policyname), '[]') as p
+       from pg_policies where schemaname = 'public' and tablename in ('employees','tip_entries','tip_sessions','role_tip_points','exchange_rates','profiles')"
+  norm='map({tablename, policyname, permissive, roles, cmd, qual, with_check}) | sort_by(.tablename, .policyname)'
+  despues_rb=$(q "begin; $ROLLBACK_SQL; $POL; rollback;" | jq -c ".[-1].p | $norm") || despues_rb=""
+  compara "rollback: las 15 policies iguales al respaldo, campo por campo" "$(jq -c ".policies | $norm" "$RESPALDO")" "$despues_rb"
+fi
+
+# ── 2. Verdad de base (como postgres) ─────────────────────────────────────────────────────────
 G=$(q "select json_build_object(
-  'emp_all', (select count(*) from public.employees),
-  'emp_act', (select count(*) from public.employees where is_active),
+  'emp_all', (select count(*) from public.employees), 'emp_act', (select count(*) from public.employees where is_active),
   'te', (select count(*) from public.tip_entries), 'ts', (select count(*) from public.tip_sessions),
   'rtp', (select count(*) from public.role_tip_points), 'er', (select count(*) from public.exchange_rates),
   'prof', (select count(*) from public.profiles)) as g" | jq -c '.[0].g')
 echo "Base (postgres): $G"
-# Sin datos, un 0 = 0 no prueba nada: se exige que haya filas en cada tabla.
-if echo "$G" | jq -e 'to_entries | map(select(.value == 0)) | length > 0' >/dev/null; then
-  echo "FALLA alguna tabla está vacía: los conteos no distinguirían «ve» de «no ve» ($G)"; exit 1
-fi
-if [ "$(echo "$G" | jq '.emp_all == .emp_act')" = true ]; then
-  echo "AVISO: no hay empleados inactivos; «owner/manager ven todos» y «el resto ve activos» darán el mismo número" >&2
+if jq -e 'to_entries | map(select(.value == 0)) | length > 0' >/dev/null <<<"$G"; then
+  echo "FALLA alguna tabla está vacía: un 0 no distinguiría «ve» de «no ve» ($G)"; exit 1
 fi
 
-ok=0; fallas=0; noprob=0
-verde()   { echo "OK          $1"; ok=$((ok+1)); }
-falla()   { echo "FALLA       $1"; echo "            esperado: $2"; echo "            obtenido: $3"; fallas=$((fallas+1)); }
-noprobado() { echo "NO PROBADO  $1 — $2"; noprob=$((noprob+1)); }
-compara() { # $1 etiqueta · $2 esperado (json) · $3 obtenido (json)
-  if [ -n "$3" ] && [ "$(jq -cS . <<<"$2")" = "$(jq -cS . <<<"$3")" ]; then verde "$1"; else falla "$1" "$2" "$3"; fi
-}
-esperado() { # $1 rol · $2 activo (true|false) · $3 escribe (true|false: si el caso mide la escritura)
+esperado() { # $1 rol ('' = sin perfil) · $2 activo · $3 mide la escritura
   local todo=false; for r in "${VE_TODO[@]}"; do [ "$1" = "$r" ] && todo=true; done
-  jq -cn --argjson g "$G" --arg rol "$1" --argjson act "$2" --argjson todo "$todo" --argjson esc "$3" '
-    (if $act then {
-        employees: (if $todo then $g.emp_all else $g.emp_act end),
-        tip_entries: $g.te, tip_sessions: $g.ts, role_tip_points: $g.rtp, exchange_rates: $g.er,
-        profiles: (if $todo then $g.prof else 1 end) }
-     else { employees: 0, tip_entries: 0, tip_sessions: 0, role_tip_points: 0, exchange_rates: 0, profiles: 1 } end)
-    + (if $esc then { edita_otro_perfil: (if $act and $rol == "owner" then 1 else 0 end) } else {} end)'
+  jq -cn --argjson g "$G" --arg rol "$1" --argjson act "$2" --argjson todo "$todo" --argjson esc "$3" --arg regla "$REGLA" '
+    ($rol != "") as $perfil | ($perfil and $act) as $conrol |
+    {
+      employees: (if $conrol and $todo then $g.emp_all
+                  elif $regla == "nueva" then (if $conrol then $g.emp_act else 0 end)
+                  else $g.emp_act end),
+      tip_entries:     (if $regla == "nueva" and ($conrol | not) then 0 else $g.te end),
+      tip_sessions:    (if $regla == "nueva" and ($conrol | not) then 0 else $g.ts end),
+      role_tip_points: (if $regla == "nueva" and ($conrol | not) then 0 else $g.rtp end),
+      exchange_rates:  (if $regla == "nueva" and ($conrol | not) then 0 else $g.er end),
+      profiles:        (if $conrol and $todo then $g.prof elif $perfil then 1 else 0 end)
+    } + (if $esc then { edita_otro_perfil: (if $conrol and $rol == "owner" then 1 else 0 end) } else {} end)'
 }
 como() { echo "set local role authenticated; select set_config('request.jwt.claims', '{\"sub\":\"$1\",\"role\":\"authenticated\"}', true);"; }
 
-# ── Catálogo: las 7 policies con su condición nueva ───────────────────────────────────────────
-CAT=$(q "select count(*) filter (where (tablename, policyname) in (
-    ('employees','Todos ven empleados activos'), ('tip_entries','Todos ven entradas de propinas'),
-    ('tip_sessions','Todos ven sesiones de propinas'), ('role_tip_points','Todos ven puntos por rol'),
-    ('exchange_rates','Todos ven tipos de cambio'), ('exchange_rates','exchange_rates_read'))
-    and qual ~* 'get_my_role\\(\\) is not null') as lecturas,
-  count(*) filter (where tablename = 'profiles' and policyname = 'Solo owners crean/editan perfiles'
-    and with_check is not null and with_check ~* 'owner') as profiles_check
-  from pg_policies where schemaname = 'public'" | jq -c '.[0]')
-compara "catálogo: 6 lecturas con «get_my_role() is not null» + WITH CHECK de profiles" '{"lecturas":6,"profiles_check":1}' "$CAT"
-
-# ── Roles activos e inactivos ─────────────────────────────────────────────────────────────────
-if [ "$MODO" = staging ]; then
-  # Perfil de prueba para simular cada rol: uno que no sea owner (si se corrompe algo, la transacción se descarta igual).
+# ── 3. Roles activos e inactivos ──────────────────────────────────────────────────────────────
+if [ "$ENTORNO" = staging ]; then
   PID=$(q "select id from public.profiles where role <> 'owner' order by created_at limit 1" | jq -r '.[0].id // empty')
   OTRO=$(q "select id from public.profiles where id <> '${PID:-x}' order by created_at limit 1" | jq -r '.[0].id // empty')
   [ -n "$PID" ] && [ -n "$OTRO" ] || { echo "FALLA no hay perfiles para simular"; exit 1; }
   for rol in "${ROLES[@]}"; do
     for act in true false; do
-      etiqueta="$rol $( [ $act = true ] && echo activo || echo inactivo )"
       r=$(q "begin;
+        $ROLLBACK_SQL
         set local session_replication_role = replica;
         update public.profiles set role = '$rol', is_active = $act where id = '$PID';
         set local session_replication_role = origin;
@@ -120,50 +166,53 @@ if [ "$MODO" = staging ]; then
         with u as (update public.profiles set full_name = full_name where id = '$OTRO' returning 1)
         select (($LECTURA)::jsonb || jsonb_build_object('edita_otro_perfil', (select count(*) from u)))::json as r;
         rollback;" | jq -c '.[-1].r') || r=""
-      compara "$etiqueta" "$(esperado "$rol" "$act" true)" "$r"
+      compara "$rol $([ "$act" = true ] && echo activo || echo inactivo)" "$(esperado "$rol" "$act" true)" "$r"
     done
   done
-  # rol NULL: la columna es NOT NULL → la base tiene que rechazarlo (23502). Si lo aceptara, se prueba que no vea nada.
-  cuerpo=$(q_crudo "begin; set local session_replication_role = replica;
-    update public.profiles set role = null where id = '$PID'; rollback;")
-  if grep -qiE 'null value in column|23502|violates not-null' <<<"$cuerpo"; then
-    verde "rol NULL: la base lo rechaza (profiles.role es NOT NULL)"
+  cuerpo=$(q_crudo "begin; set local session_replication_role = replica; update public.profiles set role = null where id = '$PID'; rollback;")
+  if [ "$(sqlstate "$cuerpo")" = 23502 ] && grep -q '"role"' <<<"$cuerpo"; then
+    verde "rol NULL: la base lo rechaza (23502 en profiles.role)"
   else
-    r=$(q "begin; set local session_replication_role = replica;
-      update public.profiles set role = null where id = '$PID'; set local session_replication_role = origin;
-      $(como "$PID") select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
-    compara "rol NULL (la base lo aceptó): no ve nada salvo su perfil" "$(esperado salonero false false)" "$r"
+    falla "rol NULL" "23502 not-null en profiles.role" "$cuerpo"
   fi
 else
   for rol in "${ROLES[@]}"; do
     id=$(q "select id from public.profiles where role = '$rol' and is_active order by created_at limit 1" | jq -r '.[0].id // empty')
-    if [ -z "$id" ]; then noprobado "$rol activo" "no hay cuenta activa en prod (y en prod no se simula)"; continue; fi
+    if [ -z "$id" ]; then noprobado "$rol activo" "no hay cuenta activa en prod y en prod no se simula"; continue; fi
     r=$(q "begin; $(como "$id") select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
     compara "$rol activo" "$(esperado "$rol" true false)" "$r"
   done
   for rol in "${ROLES[@]}"; do noprobado "$rol inactivo" "en prod no se simula (escribe); se prueba en staging"; done
   noprobado "rol NULL" "en prod no se simula (escribe); se prueba en staging"
+  noprobado "editar otro perfil" "en prod no se prueba (escribe); se prueba en staging"
 fi
 
-# ── Perfil ausente, anon y service_role (solo lectura en los dos entornos) ────────────────────
-r=$(q "begin; $(como "$AUSENTE") select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
-compara "perfil ausente (JWT sin fila en profiles)" \
-  '{"employees":0,"tip_entries":0,"tip_sessions":0,"role_tip_points":0,"exchange_rates":0,"profiles":0}' "$r"
+# ── 4. Perfil ausente, anon y service_role ────────────────────────────────────────────────────
+r=$(q "begin; $ROLLBACK_SQL $(como "$AUSENTE") select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
+compara "perfil ausente (JWT sin fila en profiles)" "$(esperado '' false false)" "$r"
 
-# anon: 0 filas en cada tabla, o «permission denied» (sin grant). Cualquier otra cosa es falla.
-for t in employees tip_entries tip_sessions role_tip_points exchange_rates profiles; do
-  cuerpo=$(q_crudo "begin; set local role anon; select count(*) as n from public.$t; rollback;")
-  n=$(jq -r 'if type=="array" then (.[-1].n|tostring) else empty end' <<<"$cuerpo" 2>/dev/null || true)
-  if [ "$n" = "0" ]; then verde "anon · $t: 0 filas"
-  elif grep -qi 'permission denied' <<<"$cuerpo"; then verde "anon · $t: sin permiso"
-  else falla "anon · $t" "0 filas o permission denied" "$cuerpo"; fi
+for t in "${TABLAS[@]}"; do
+  cuerpo=$(q_crudo "begin; $ROLLBACK_SQL set local role anon; select count(*) as n from public.$t; rollback;")
+  http=${cuerpo##*HTTP}; json=${cuerpo%HTTP*}
+  if [[ "$http" == 2* ]]; then
+    n=$(jq -r 'if type=="array" then (.[-1].n|tostring) else "?" end' <<<"$json" 2>/dev/null || echo "?")
+    if [ "$n" = 0 ]; then verde "anon · $t: 0 filas"; else falla "anon · $t" "0 filas o 42501 en el SELECT" "n=$n"; fi
+  elif [ "$(sqlstate "$json")" = 42501 ] && grep -qiE "permission denied for (table|relation) $t" <<<"$json"; then
+    verde "anon · $t: sin permiso (42501 en el SELECT de $t)"
+  else
+    falla "anon · $t" "0 filas o 42501 «permission denied for table $t»" "HTTP$http $json"
+  fi
 done
 
-# service_role: ve TODO (no pasa por RLS).
-r=$(q "begin; set local role service_role; select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
+r=$(q "begin; $ROLLBACK_SQL set local role service_role; select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
 compara "service_role ve todo" "$(jq -cn --argjson g "$G" '{employees:$g.emp_all, tip_entries:$g.te, tip_sessions:$g.ts, role_tip_points:$g.rtp, exchange_rates:$g.er, profiles:$g.prof}')" "$r"
 
-echo "── Resultado: $ok OK · $fallas FALLA · $noprob NO PROBADO ──"
-[ "$fallas" -gt 0 ] && exit 1
-[ "$noprob" -gt 0 ] && exit 3
+# ── 5. Después de todo, el catálogo sigue como al empezar (nada quedó aplicado) ───────────────
+fin=$(q "$CAT" | jq -c '.[0].json_build_object') || fin=""
+compara "al terminar, el catálogo sigue igual que al empezar" "$cat_ahora" "$fin"
+
+echo "── Resultado ($MODO): $ok OK · $fallas FALLA · $noprob NO PROBADO ──"
+[ "$fallas" -gt 0 ] && { echo "NO VERDE (fallas)"; exit 1; }
+[ "$noprob" -gt 0 ] && { echo "NO VERDE (hay casos no probados)"; exit 3; }
+echo "VERDE"
 exit 0

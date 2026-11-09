@@ -138,12 +138,29 @@ aplicar.
 Antes de correr nada, confirmar dos cosas: que no haya consultas activas en staging y que el Club no haya hecho
 commits en los últimos 5 minutos. Si los hay, esperar hasta 15 minutos; si siguen, no hacer nada y anotarlo acá.
 - **Volver a correr `085_pruebas.sh` en staging** con el cambio de este paquete (en prod solo lee), cuando staging esté libre.
-  **Reescrito el 09-nov para que no dé falso verde (Grok 87):** `curl --fail-with-body`; cada caso con su resultado
-  esperado (conteos como postgres + la regla de cada policy) y comparación exacta; matriz de los 10 roles activos e
-  inactivos (simulados sobre un perfil de prueba, en transacciones descartadas), rol NULL (la columna es NOT NULL: se
-  espera el rechazo), perfil ausente, anon y service_role; las 6 lecturas y el WITH CHECK de profiles en el catálogo.
-  Un caso que no se puede correr es **NO PROBADO** y nunca verde. **Verde = salida 0** (1 = falla, 3 = no probado).
-- **Probar `085_rollback.sql` en staging** dentro de una transacción con rollback: aplicar el rollback, comparar las
-  15 policies con el respaldo y descartar. Mismo criterio: staging libre. Script: `scripts/sql/085_prueba_rollback.sh
-  hwiatgicyyqyezqwldia <respaldo.json>` (compara campo por campo y después verifica que la 085 siga puesta).
-  **Verde = salida 0.**
+  **Reescrito el 09-nov para que no dé falso verde (Grok 87 y residuales):**
+  `scripts/sql/085_pruebas.sh <REF> <ANTES|DESPUES|ROLLBACK> [respaldo.json]`.
+  - **Modo explícito, chequeado contra el catálogo antes de correr:** ANTES (la base sin la 085), DESPUES (con la 085)
+    y ROLLBACK (solo staging: cada caso aplica el rollback dentro de su transacción descartada y espera lo de ANTES).
+    Si el catálogo no está en el estado del modo, corta sin correr nada.
+  - Cada caso con su **resultado esperado** según el modo y comparación exacta; matriz de los 10 roles activos e
+    inactivos (simulados en staging), rol NULL (23502), perfil ausente, anon, service_role y editar otro perfil.
+  - **Errores por SQLSTATE y operación:** solo un 42501 «permission denied for table <la tabla>» del SELECT de anon
+    cuenta como «sin permiso». Un error de SET ROLE, de red o cualquier otro es FALLA.
+  - **El respaldo se valida por sha256 (`4db2c15b…`) y por corte** (ref de prod, leído 2026-11-08T15-20-24Z, ledger
+    55 / 080, 15 policies), no por «el archivo existe».
+  - **En prod, «NO PROBADO» nunca es verde** (salida 3). Verde = salida 0. Al terminar, verifica que el catálogo siga
+    igual que al empezar.
+- **Probar `085_rollback.sql` en staging** dentro de una transacción con rollback: `085_pruebas.sh
+  hwiatgicyyqyezqwldia ROLLBACK <respaldo.json>`. Compara las 15 policies con el respaldo campo por campo, corre la
+  matriz con los esperados de ANTES y verifica que al final la 085 siga puesta. **Verde = salida 0.**
+
+### Registro del §8 (se completa en la ventana nocturna)
+| Paso | Hora CR | Corte | Resultado |
+|---|---|---|---|
+| Chequeo previo: sin consultas activas ni commits del Club en 5 min | | | |
+| `085_pruebas.sh hwiatgicyyqyezqwldia DESPUES` | | script `<sha>` · ledger staging `<n>/<máx>` | `<OK/FALLA/NO PROBADO>` · salida `<código>` |
+| `085_pruebas.sh hwiatgicyyqyezqwldia ROLLBACK <respaldo>` | | respaldo sha256 `4db2c15b…` | `<…>` · salida `<código>` |
+
+Log de cada corrida: fuera del repo (scratchpad de la sesión), sin secretos (el script no imprime el token ni datos de
+personas). Acá queda solo el resumen.

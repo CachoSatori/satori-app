@@ -4,6 +4,7 @@ import type { Database } from '../types/supabase.gen'
 import { cachedFetch } from '../offline/cache'
 import { enqueue, pendingOps } from '../offline/outbox'
 import { parseTraspaso } from '../../modules/cash/pozo'
+import { errorMontos, parsearMonto } from '../../modules/cash/validarMovimiento'
 import { planBorradoDia, type MovimientoBorrable, type PlanBorradoDia } from '../../modules/cash/borrarDia'
 
 type Tables = Database['public']['Tables']
@@ -262,6 +263,7 @@ export async function createCashMovement(movement: {
   suggested_classification?: string
   suggested_confidence?: number
 }): Promise<CashMovement> {
+  assertMontosValidos(movement.movement_type, movement.amount_crc, movement.amount_usd)
   // id y client_op_id se generan en el CLIENTE: así el replay offline es
   // idempotente (021: client_op_id UNIQUE) y las ediciones/borrados encolados
   // después referencian un id que será el mismo en el servidor.
@@ -342,6 +344,31 @@ async function queueCashMutation(op: 'update' | 'delete', payload: Record<string
 export const TRASPASO_SIN_DIRECCION =
   'No se puede guardar un traspaso sin dirección legible. Elegí origen → destino (ej. "Caja Fuerte → Banco").'
 
+/**
+ * Guard de montos (Grok 107): corre ANTES de guardar y ANTES de encolar sin conexión, así la cola nunca recibe un
+ * movimiento inválido. Misma regla que la pantalla (validarMovimiento.ts): finitos, dólares ≥ 0, egresos y traspasos
+ * ≥ 0, y colones negativos solo en un ingreso con dólares (vuelto). No exige monto > 0: hay altas automáticas que lo
+ * deciden ellas.
+ */
+function assertMontosValidos(movement_type: string | null | undefined, crc: unknown, usd: unknown): void {
+  const err = errorMontos({ tipo: movement_type ?? '', crc, usd })
+  if (err) throw new Error(err)
+}
+
+/** En un update parcial (sin el resto de la fila, también offline): cada monto que venga tiene que ser válido. */
+function assertMontosParciales(updates: Partial<CashMovement>): void {
+  for (const k of ['amount_crc', 'amount_usd'] as const) {
+    if (!(k in updates)) continue
+    const n = parsearMonto(updates[k] as unknown)
+    if (!Number.isFinite(n)) throw new Error('El monto no es un número válido.')
+    if (k === 'amount_usd' && n < 0) throw new Error('El monto en dólares no puede ser negativo.')
+  }
+  // Tipo y montos juntos en el mismo update: se valida el movimiento completo.
+  if ('movement_type' in updates && 'amount_crc' in updates && 'amount_usd' in updates) {
+    assertMontosValidos(updates.movement_type as string, updates.amount_crc, updates.amount_usd)
+  }
+}
+
 function assertTraspasoLegible(
   movement_type: string | null | undefined,
   subcategory: string | null | undefined,
@@ -355,6 +382,7 @@ export async function updateCashMovement(
   id: string,
   updates: Partial<CashMovement>,
 ): Promise<void> {
+  assertMontosParciales(updates)
   // Guard de dirección (ítem 1a): si el update toca el tipo y/o la subcategoría, validar el ESTADO
   // RESULTANTE. Atajo: si el tipo final NO es traspaso, no hay nada que validar (ni se lee la fila →
   // las ediciones inline offline de otros campos no se ven afectadas). Solo si hace falta un dato del
@@ -453,6 +481,7 @@ export async function createDayMovement(m: {
 }): Promise<string> {
   // Guard de dirección (ítem 1a): no crear un traspaso sin dirección legible.
   assertTraspasoLegible(m.movement_type, m.subcategory)
+  assertMontosValidos(m.movement_type, m.amount_crc, m.amount_usd ?? 0)
   // ts = fecha del MOVIMIENTO (puede venir backdateada al mediodía). NO confundir con el
   // created_at del SOBRE de la cola, que debe ser el reloj real para ordenar bien el outbox.
   const ts = m.fecha ? `${m.fecha}T12:00:00Z` : new Date().toISOString()

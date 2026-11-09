@@ -129,3 +129,45 @@ describe('CashMovimientos · edición inline — vuelto en colones de un ingreso
     expect(updateCashMovement).not.toHaveBeenCalled()
   })
 })
+
+describe('CashMovimientos · edición inline — movimiento completo (Grok 107)', () => {
+  it('cambiar el TIPO de un ingreso con vuelto (₡ < 0) a egreso: avisa y NO updatea', async () => {
+    render(<CashMovimientos movements={[mkMov({ description: 'vuelto a egreso', movement_type: 'ingreso', amount_crc: -1200, amount_usd: 40 })]} sessions={[]} onRefresh={vi.fn()} />)
+    await flush()
+    const fila = screen.getByDisplayValue('vuelto a egreso').closest('tr') as HTMLElement
+    const tipo = (within(fila).getAllByRole('combobox') as HTMLSelectElement[]).find(sel => [...sel.options].some(o => o.value === 'egreso_operativo'))!
+    await act(async () => { fireEvent.change(tipo, { target: { value: 'egreso_operativo' } }) })
+    expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/negativo/))
+    expect(updateCashMovement).not.toHaveBeenCalled()
+  })
+
+  it('cambiar el tipo de un egreso común a ingreso: sí updatea', async () => {
+    render(<CashMovimientos movements={[mkMov({ description: 'egreso a ingreso' })]} sessions={[]} onRefresh={vi.fn()} />)
+    await flush()
+    const fila = screen.getByDisplayValue('egreso a ingreso').closest('tr') as HTMLElement
+    const tipo = (within(fila).getAllByRole('combobox') as HTMLSelectElement[]).find(sel => [...sel.options].some(o => o.value === 'egreso_operativo'))!
+    await act(async () => { fireEvent.change(tipo, { target: { value: 'ingreso' } }) })
+    expect(updateCashMovement).toHaveBeenCalledWith('m1', { movement_type: 'ingreso' })
+  })
+
+  it('dejar los ₡ en 0 sin dólares (quedaría en cero): avisa y NO updatea', async () => {
+    render(<CashMovimientos movements={[mkMov({ description: 'a cero' })]} sessions={[]} onRefresh={vi.fn()} />)
+    await flush()
+    const fila = screen.getByDisplayValue('a cero').closest('tr') as HTMLElement
+    const crc = within(fila).getAllByRole('spinbutton')[0]
+    fireEvent.change(crc, { target: { value: '0' } })
+    await act(async () => { fireEvent.blur(crc) })
+    expect(window.alert).toHaveBeenCalledWith(expect.stringMatching(/cero/))
+    expect(updateCashMovement).not.toHaveBeenCalled()
+  })
+
+  it('un valor válido llega como número (no como texto) a updateCashMovement', async () => {
+    render(<CashMovimientos movements={[mkMov({ description: 'número' })]} sessions={[]} onRefresh={vi.fn()} />)
+    await flush()
+    const fila = screen.getByDisplayValue('número').closest('tr') as HTMLElement
+    const crc = within(fila).getAllByRole('spinbutton')[0]
+    fireEvent.change(crc, { target: { value: '7500' } })
+    await act(async () => { fireEvent.blur(crc) })
+    expect(updateCashMovement).toHaveBeenCalledWith('m1', { amount_crc: 7500 })
+  })
+})

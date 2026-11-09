@@ -16,9 +16,29 @@ export function esDireccionValida(sub: string | null | undefined): sub is Direcc
   return (TRASPASOS as readonly string[]).includes(sub ?? '')
 }
 
+/**
+ * Monto tal como llega de un input o de la cola (número o texto) → número, SIN convertir lo inválido en 0:
+ *   · vacío / null / undefined → 0 (campo sin cargar);
+ *   · número finito → él mismo; NaN o ±Infinity → NaN;
+ *   · texto con coma decimal («1500,50») o con miles y coma («1.234,5») → se lee en formato de Costa Rica;
+ *     con punto decimal («1500.50») también; cualquier otra cosa («1,2,3», «12abc», «1.5,5») → NaN.
+ * El que llama decide qué hacer con NaN (errorMontos lo rechaza): nunca `Number(x) || 0` antes del control.
+ */
+export function parsearMonto(v: unknown): number {
+  if (v === '' || v === null || v === undefined) return 0
+  if (typeof v === 'number') return Number.isFinite(v) ? v : Number.NaN
+  if (typeof v !== 'string') return Number.NaN
+  const t = v.replace(/[\s\u00a0]/g, '')
+  if (t === '') return 0
+  if (/^-?\d+(\.\d+)?$/.test(t)) return Number(t)                                   // 1500 · 1500.50
+  if (/^-?\d+,\d+$/.test(t)) return Number(t.replace(',', '.'))                       // 1500,50
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) return Number(t.replace(/\./g, '').replace(',', '.'))  // 1.234,5
+  return Number.NaN
+}
+
 export function errorMontos(m: { tipo: string; crc: unknown; usd: unknown }): string | null {
-  const crc = m.crc === '' || m.crc == null ? 0 : Number(m.crc)
-  const usd = m.usd === '' || m.usd == null ? 0 : Number(m.usd)
+  const crc = parsearMonto(m.crc)
+  const usd = parsearMonto(m.usd)
   if (!Number.isFinite(crc) || !Number.isFinite(usd)) return 'El monto no es un número válido.'
   if (usd < 0) return 'El monto en dólares no puede ser negativo.'
   if (crc < 0) {
@@ -33,4 +53,20 @@ export function errorMontos(m: { tipo: string; crc: unknown; usd: unknown }): st
 export function errorTraspaso(m: { tipo: string; subcategory: string | null | undefined }): string | null {
   if (m.tipo !== 'traspaso') return null
   return esDireccionValida(m.subcategory) ? null : `El traspaso tiene que tener una dirección de la lista: ${TRASPASOS.join(' / ')}.`
+}
+
+/**
+ * El movimiento COMPLETO, como quedaría después de un cambio (tipo o importe): montos (errorMontos), traspaso con
+ * dirección de la lista (si se pasa la subcategoría) y, si `exigirMonto`, que no quede en cero en las dos monedas.
+ */
+export function errorMovimiento(m: {
+  tipo: string; crc: unknown; usd: unknown; subcategory?: string | null; exigirMonto?: boolean
+}): string | null {
+  const e = errorMontos(m)
+  if (e) return e
+  if (m.exigirMonto && parsearMonto(m.crc) === 0 && parsearMonto(m.usd) === 0) {
+    return 'El movimiento no puede quedar en cero: cargá colones o dólares.'
+  }
+  if (m.subcategory !== undefined) return errorTraspaso({ tipo: m.tipo, subcategory: m.subcategory })
+  return null
 }

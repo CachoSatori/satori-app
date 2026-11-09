@@ -140,7 +140,9 @@ export function usoLoginsDeCaja(
  */
 export function esRechazoSoloOwner(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false
-  return error.code === '42501' || /solo el owner cambia el login del pos/i.test(error.message ?? '')
+  // SOLO el rechazo del trigger del login del PoS (su mensaje). Un 42501 cualquiera (RLS de otra tabla, permiso de una
+  // función…) NO es «solo el owner»: se muestra tal cual, para no tapar otro problema con un mensaje equivocado.
+  return /solo el owner cambia el login del pos/i.test(error.message ?? '')
 }
 
 export const MENSAJE_SOLO_OWNER =

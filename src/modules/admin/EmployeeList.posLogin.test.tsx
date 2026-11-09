@@ -116,3 +116,14 @@ describe('EmployeeList · regla de la base: solo el owner cambia login o perfil 
     expect((await screen.findByRole('alert')).textContent).toMatch(/Solo el owner puede cambiar el login del PoS/)
   })
 })
+
+describe('EmployeeList · un 42501 que NO es del trigger del login no se disfraza de «solo el owner»', () => {
+  it('se muestra el mensaje original', async () => {
+    H.update.mockRejectedValueOnce(new Error('permission denied for table employees'))
+    render(<EmployeeList employees={EMPS} onRefresh={vi.fn(async () => {})} />)
+    fireEvent.click(screen.getAllByText('Editar')[1])
+    fireEvent.click(screen.getByText('Guardar'))
+    const alerta = await screen.findByRole('alert')
+    expect(alerta.textContent).toBe('permission denied for table employees')
+  })
+})

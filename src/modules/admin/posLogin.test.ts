@@ -85,7 +85,8 @@ describe('logins fijos de caja', () => {
 describe('Grok 106: rechazo «solo el owner» de la base', () => {
   it('reconoce el 42501 y el mensaje del trigger', async () => {
     const { esRechazoSoloOwner, puedeCambiarPerfil } = await import('./posLogin')
-    expect(esRechazoSoloOwner({ code: '42501' })).toBe(true)
+    expect(esRechazoSoloOwner({ code: '42501' })).toBe(false)   // un 42501 cualquiera no es «solo el owner»
+    expect(esRechazoSoloOwner({ code: '42501', message: 'permission denied for table employees' })).toBe(false)
     expect(esRechazoSoloOwner({ message: 'Solo el owner cambia el login del PoS de un empleado…' })).toBe(true)
     expect(esRechazoSoloOwner({ message: 'otra cosa' })).toBe(false)
     expect(puedeCambiarPerfil(false, { pos_login: '026' })).toBe(false)

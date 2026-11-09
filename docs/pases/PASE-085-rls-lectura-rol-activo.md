@@ -12,6 +12,9 @@
 >   la última aplicada: la 085 entra antes que todas esas. La 100 del Club va después, con la 075 (#81).
 > - **Re-auditoría (GO condicionado de Grok @ `ebe2d4a`):** 122–125, 127, 129 y 130 resueltos acá. Lo nuevo se probó en
 >   STAGING, en transacciones `read only` o descartadas (marcado «staging»).
+> - **122, regla definitiva (dato de prod leído por el dueño el 09-nov a las 16:04):** Branching guarda las migraciones
+>   **partidas** (la 079 tiene 4 statements y la 080 tiene 3). Por eso 5.2 **no compara md5**: verifica exactamente 1 fila
+>   085 con su `name`, más el catálogo de 5.3.
 > - **Reemplaza** el paquete anterior de la rama `claude/rls-is-active`, escrito cuando la 085 esperaba al puente.
 
 ## Qué pasa y qué no
@@ -71,9 +74,10 @@ nuevo en una transacción con precondición (el md5 viejo y exactamente una fila
 ## 1. Lecturas previas (SOLO LECTURA, en PROD)
 Editor SQL de PROD. **Leer el ref en pantalla.** Anotar cada resultado en §9.
 ```sql
--- 1.0 (Grok 122) cómo guarda Branching una migración en el ledger: ¿un statement o varios?
-select version, array_length(statements, 1), md5(statements[1]) from supabase_migrations.schema_migrations
- where version in ('079', '080');                                                          -- anotar: n de statements de cada una
+-- 1.0 (Grok 122) cómo guarda Branching una migración en el ledger. Ya leído el 09-nov (16:04): 079 → 4, 080 → 3.
+-- El día del pase se vuelve a leer solo para anotarlo; la regla de 5.2 ya no depende de este número.
+select version, array_length(statements, 1) from supabase_migrations.schema_migrations
+ where version in ('079', '080');                                                          -- 079 · 4 · 080 · 3
 -- 1.1 ledger: el último es la 082 (pase del puente) y la 085 no está
 select count(*), max(version) from supabase_migrations.schema_migrations;                 -- 57 · 082
 select version from supabase_migrations.schema_migrations where version > '082';                        -- 0 filas
@@ -84,13 +88,12 @@ select tablename, policyname, qual, with_check from pg_policies
 select relname, relrowsecurity from pg_class where relnamespace = 'public'::regnamespace
    and relname in ('employees','tip_entries','tip_sessions','role_tip_points','exchange_rates','profiles');   -- 6 · true
 ```
-**1.0 → regla para 5.2 (Grok 122):** la 079 y la 080 las aplicó Branching.
-- **Si la 079 tiene más de un statement** (Branching parte el archivo), `md5(statements[1])` no es el md5 del archivo. Entonces
-  **5.2 verifica «exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'`» más el catálogo de 5.3**, y en §6 **no
-  aplica «5.2 con otro md5»**.
-- **Si tiene uno solo**, 5.2 verifica el md5 como está escrito.
-- *El dueño corre 1.0 el 09-nov a las 16:05; con el resultado, esta regla queda definitiva.* En staging (aplicadas a mano), la
-  079, la 080 y la 085 tienen 1 statement cada una.
+**1.0 → regla de 5.2 (Grok 122), DEFINITIVA.** El dueño leyó 1.0 en prod el 09-nov a las 16:04 -06:00: **la 079 tiene 4
+statements y la 080 tiene 3**. Branching parte el archivo, así que `md5(statements[1])` no es el md5 del archivo.
+- **5.2 verifica «exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'`» más el catálogo de 5.3.** No se compara md5.
+- §6 ya no tiene «5.2 con otro md5».
+- En staging las migraciones se aplicaron a mano, por eso ahí la 079, la 080 y la 085 tienen 1 statement cada una (y el md5
+  de la fila 085 de staging sí es el del archivo). No vale como referencia para prod.
 
 **1.3 (Grok 130) qué más lee estas tablas sin pasar por las políticas** (solo lectura):
 ```sql
@@ -238,11 +241,13 @@ rollback;
 ## 5. Verificación después del merge
 1. **Branching:** el check «Supabase Preview» del merge commit en `success`. En el log del panel:
    `Applying migration 085_rls_lectura_rol_activo.sql`. El dueño lo confirma en el panel o con 5.2.
-2. **Ledger** (editor SQL de PROD, solo lectura). Si 1.0 dio más de un statement para la 079, en vez del md5: **exactamente
-   1 fila 085 con `name = 'rls_lectura_rol_activo'`**, más 5.3 (Grok 122).
+2. **Ledger** (editor SQL de PROD, solo lectura): **exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'`**, más 5.3
+   (Grok 122, regla definitiva: en prod Branching guarda las migraciones partidas; no se compara md5).
    ```sql
    select count(*), max(version) from supabase_migrations.schema_migrations;                       -- 58 · 085
-   select md5(statements[1]) from supabase_migrations.schema_migrations where version = '085';    -- 68b6384bd860dcc334919813888cae83
+   select count(*) from supabase_migrations.schema_migrations
+    where version = '085' and name = 'rls_lectura_rol_activo';                                     -- 1
+   select array_length(statements, 1) from supabase_migrations.schema_migrations where version = '085';  -- anotar (sin valor esperado)
    ```
 3. **Catálogo:** la consulta 1.2. Las 7 policies con la condición de «Después», y las otras 8 **sin cambios** contra el
    respaldo.
@@ -252,8 +257,7 @@ rollback;
 
 ## 6. Criterios de parada → vuelta atrás (§7)
 - Branching en error (`MIGRATIONS_FAILED`) o aplicando algo que no sea la 085.
-- 5.2 con otro md5 (**solo si 1.0 dio un statement**; si dio más, 5.2 es «1 fila 085 con su name»), o 5.3 con alguna policy
-  distinta de lo esperado.
+- 5.2 sin exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'`, o 5.3 con alguna policy distinta de lo esperado.
 - 4a «Después» con alguna de las cinco tablas en más de 0, o `profiles` distinto de 1.
 - 4b «Después» distinto de «Antes» en algún rol con cuenta.
 - 5.5: un usuario **activo** deja de ver algo que veía.
@@ -321,7 +325,7 @@ rollback;
 | Responsables (ejecución / control) | | |
 | 0.4 `main` sin moverse · diff solo los archivos del PR | | |
 | 1.1 ledger 57 · 082 · ninguna versión mayor que 082 | | |
-| 1.0 statements de la 079 y la 080 → regla de 5.2 (Grok 122) | | |
+| 1.0 statements de la 079 y la 080 → regla de 5.2 (Grok 122) | 079 · 4 · 080 · 3 | **079: 4 · 080: 3**, leído en prod por el dueño el 09-nov a las 16:04 -06:00. Regla de 5.2 definitiva: 1 fila 085 con su `name` + 5.3, sin md5. El día del pase: |
 | 1.2 15 policies = respaldo · RLS en las 6 | | |
 | 1.3 vistas · funciones SECURITY DEFINER sobre las 5 tablas: 0 (Grok 130) | | |
 | 4a antes (cuenta inactiva): 5 tablas con filas · profiles 1 | | |
@@ -329,7 +333,7 @@ rollback;
 | **Gate de CI en la cabeza del PR** (Grok 125): los checks del PR en verde en el SHA que se firma (enlace a la corrida), **o** la aceptación explícita del dueño de mergear sin ese verde, con el motivo | | |
 | §2 merge (SHA, hora) | | |
 | 5.1 Branching success · log con la 085 | | |
-| 5.2 ledger 58 · 085 · md5 `68b6384b…` (o «1 fila 085 con su name» según 1.0) | | |
+| 5.2 ledger 58 · 085 · exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'` (n de statements: anotar) | | |
 | 5.3 las 7 policies en «Después» · las otras 8 iguales | | |
 | 4a después: 0 · 0 · 0 · 0 · 0 · profiles 1 | | |
 | 4b después = 4b antes, en cada rol con cuenta | | |

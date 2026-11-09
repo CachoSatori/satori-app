@@ -90,6 +90,10 @@ con dobles que no se parecían lo suficiente a la PC real.
     Claude **no lo leyó**, porque leerlo es tocar prod. Lo confirma el dueño en el panel (Branches → la corrida de
     `2953994`).
 - Pages (`deploy`) y Cloudflare Pages: **success**.
+- **Ledger de prod después del merge del #71** (leído por el dueño, 09-nov; Claude no lee prod):
+  - **57 filas**, igual que antes del merge;
+  - la **081** con `d4acf8da…` y la **082** con `edb7ffc5…`: los mismos md5 del diff del #71 (arriba).
+  - **Branching no reaplicó nada.** Es la prueba que faltaba de que el merge del #71 no tocó prod.
 
 ## 6. Correcciones para el próximo pase (agente nuevo / Nosara)
 Van en `docs/puente/PASE-PROD-PLANTILLA.md` (el paquete del 09-nov, corregido) y en el kit `scripts/puente/` de esta
@@ -116,7 +120,8 @@ rama:
 
 ## 7. Pendientes después del pase
 - [ ] **R → C de la 112538** después del cierre de las 16:00 (lo controla el dueño), y conciliación (6.3) al cierre.
-- [ ] El texto de Branching en el panel («All migrations are up to date») lo confirma el dueño.
+- [x] Branching no reaplicó nada con el #71: el ledger de prod sigue en 57 filas, con la 081 y la 082 iguales (§5, leído
+  por el dueño). El texto literal del panel («All migrations are up to date») queda como confirmación opcional.
 - [ ] Qué creó la v2 del Edge (§4).
 - [ ] Conciliación de los 3 días siguientes (paquete §9).
 - [ ] Borrar `POS_INGEST_SECRET` del panel a los **7 días sin rollback** (**16-nov** o después).

@@ -146,7 +146,7 @@ try {
     $global:KIT.falla_git = $null; $global:KIT.huella_mal = $false; $global:KIT.node_falla = $false; $global:KIT.f082 = $F082
     try {
       . ([scriptblock]::Create((Preparar $bloques[0] $r2)))          # el preámbulo fail-stop
-      for ($k = 1; $k -lt $nBloque - 1; $k++) { . ([scriptblock]::Create((Preparar $bloques[$k] $r2))) }   # lo previo, bien
+      for ($kitK = 1; $kitK -lt $nBloque - 1; $kitK++) { . ([scriptblock]::Create((Preparar $bloques[$kitK] $r2))) }   # nombre propio: los bloques corren en este ámbito   # lo previo, bien
       & $preparar $r2
       . ([scriptblock]::Create((Preparar $bloques[$nBloque - 1] $r2)))
       Resultado "frena: $caso" $false 'el bloque NO cortó'

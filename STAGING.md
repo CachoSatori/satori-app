@@ -28,7 +28,7 @@ riesgoso (cirugía de auth, tiempo real, offline) sin tocar plata real.
   (aborta ante cualquier sentencia no-SELECT) y la escritura va **únicamente** a
   `hwiatgicyyqyezqwldia` (aborta si el destino no es ese ref). Hace backup corto previo en
   `.staging-backups/`, trunca public, copia todo + `auth.users`/`auth.identities`, restaura el
-  owner (`satorisushibar@gmail.com` = owner activo), re-sincroniza secuencias y **verifica**
+  owner (`<correo del dueño>` = owner activo), re-sincroniza secuencias y **verifica**
   (conteos por tabla + 3 spot-checks financieros idénticos).
 - **Logins en staging = credenciales de PROD** (los usuarios se clonan con su hash de contraseña).
 - El banner "DATOS DE PRUEBA" **sigue siendo correcto**: es una copia desechable, no el original —

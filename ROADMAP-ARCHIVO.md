@@ -639,7 +639,7 @@ de proveedores) abre la app y aterriza DIRECTO en su pantalla, viendo solo lo su
    ve únicamente lo suyo.
 4. **Gestión de usuarios desde Admin** (ya existía Admin → Usuarios: rol + habilitar/deshabilitar;
    se extiende con el rol `proveedor` y el flujo documentado): **crear cuentas** = el empleado se
-   registra (correo real o alias `satorisushibar+nombre@gmail.com`) → queda "pendiente" → el owner
+   registra (correo real o alias `<alias del correo del dueño>`) → queda "pendiente" → el owner
    le asigna rol y lo habilita desde esta pantalla. Crear cuentas server-side requeriría la
    service key en un backend (Edge Function) — innecesario por ahora.
 5. **PWA por puesto**: shortcuts del manifest (Registrar proveedor, Comandero, Caja) + guía de

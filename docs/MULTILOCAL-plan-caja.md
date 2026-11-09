@@ -320,7 +320,14 @@ quieren los reportes consolidados desde el día uno.
 
 ---
 
-## 14. Decisiones abiertas para el dueño
+## 14. Decisiones del dueño — ✅ aprobadas las 12 (08-nov)
+
+> **Aprobadas por Ismael el 08-nov**, tal como las recomienda este plan (versión en lenguaje simple: chat del 08-nov).
+> Además confirmó: **el selector de local existirá antes de abrir otra sucursal**, y para el catálogo (decisión 1) eligió
+> la **opción a**: `locations` es el único catálogo, `club_config` cuelga de él y «Nuevo local» del Club crea primero en
+> `locations` (se implementa después del pase del lunes, con la sesión del Club; detalle en `docs/MULTILOCAL-fase0.md`,
+> rama `claude/multilocal-fase0`).
+
 
 1. **Catálogo:** ¿`public.locations` (la de la `022`) como única fuente, con `club_config` colgando de ella? (propuesta: sí).
 2. **¿Quién ve qué?** ¿El manager de un local ve el otro? ¿El contador ve todos? (propuesta: manager y cajero solo los suyos; owner y contador todos).

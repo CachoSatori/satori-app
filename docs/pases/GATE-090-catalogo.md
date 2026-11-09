@@ -27,3 +27,29 @@ El ledger no guarda quién aplicó cada versión (columnas: `version`, `statemen
 cubre las tablas que crean Branching, el editor SQL y la Management API. No cubre lo que cree `supabase_admin` en
 `public` (hoy nada). **Gate cumplido para pasar a staging** (con firma), en una ventana nocturna, con
 `scripts/sql/090_pruebas.sql` en una transacción descartada.
+
+## Re-corrida del gate — 09-nov, 08:27 CR (antes de aplicar)
+Mismas consultas, solo lectura, salida guardada fuera del repo (sha256 de la salida `b12da126e2836991…`).
+Resultado igual al de las 19:15: **106** tablas/vistas y **167** funciones de `public`, todas de `postgres` (una tabla
+más que ayer, también de `postgres`); sin privilegios por defecto globales; en `public`, los de `postgres` y los de
+`supabase_admin` le dan todo a anon; PUBLIC con 0 permisos en tablas y EXECUTE en las mismas 7 funciones; `postgres`
+no es miembro de `supabase_admin` (superusuario); ledger 83 / 085.
+
+## ✅ Residual aceptado por el dueño (por escrito, 09-nov)
+Los privilegios por defecto del rol **`supabase_admin`** en `public` siguen dándole todo a anon en las tablas que ese
+rol cree. La 090 no puede cambiarlos (postgres no es miembro de supabase_admin). Hoy `supabase_admin` no crea nada en
+`public` (las 106 son de postgres). **El dueño aceptó este residual por escrito el 09-nov.** La red sigue siendo la
+prueba 82 del Club, que marca cualquier tabla nueva con permisos de anon sin política.
+
+## ✅ Aplicada en staging — 09-nov, 08:28 CR (firmada por el dueño para staging)
+- Después de la 089 (08:27, 8/8).
+- `scripts/sql/090_pruebas.sql` ANTES (transacción descartada): **8/8 OK**.
+- Aplicación: UNA transacción con la 090 y su fila del ledger (md5 `0d93a8db…` = el archivo). Ledger de staging 85 / 090.
+- DESPUÉS (transacción descartada, con una tabla nueva de prueba): el valor por defecto de `public` para tablas de
+  postgres ya no menciona a anon; la tabla nueva: anon sin permisos, authenticated y service_role sí. (Un chequeo de
+  «tablas viejas iguales» que miré sobre `customers` dio anon sin INSERT: ya era así antes —la mig 072 se lo sacó, en
+  prod y en staging—; la 090 no toca tablas existentes.)
+- Batería del Club `075_pruebas_staging.sql` (rama `claude/epic-tesla-pyo77m` @ `da3bc9a`, en su transacción
+  descartada): **580/580**. Prueba 82: **4/4** — «fuera del Club: ninguna tabla NUEVA con permisos de anon sin
+  política (marcadas hoy, conocidas: 0)» y la negativa en verde.
+- Residuos: ninguna tabla de prueba; sin consultas activas al terminar (08:30 CR). Staging libre.

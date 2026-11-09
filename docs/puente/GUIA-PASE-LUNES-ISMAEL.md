@@ -1,5 +1,14 @@
 # Guía del pase del lunes 09-nov (9:00 CR) — para el dueño, en una página
 
+> ## ⛔ REEMPLAZADO (09-nov) — NO USAR ESTE PAQUETE
+> El paquete vigente está en la rama **`claude/puente-item11-prod-v2`**, archivo `docs/puente/PASE-PROD-2026-11-09.md`.
+> Su código es `705b830f1759e39112b761bf7d77f15d6cc70368` (`e4678b3` + la 082 v2, «corte seguro»). Este paquete usa la 082
+> original (md5 `5db915c8…`), que **ya no es la del PR #71** (Grok 112) y **no se aplica**. Decisión del dueño: camino v2.
+> Las correcciones P1–P7 de acá ya están en el paquete v2. **La aceptación del cambio del cursor del 08-nov (C1)
+> quedó sin efecto**: v2 cambia el contrato del cursor, y el conteo de C1 queda ahí solo como control extra.
+> Este archivo queda por historia; su código (`e4678b3`) no se tocó.
+
+
 > Versión simple del paquete [`PASE-PROD-2026-11-09.md`](PASE-PROD-2026-11-09.md). Si algo de acá no coincide con el
 > paquete, **vale el paquete** y se para. Ningún secreto va en un chat, ni en WhatsApp, ni en este documento.
 

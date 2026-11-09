@@ -41,7 +41,13 @@ caso 'entrada editada después de firmar → 4'                4 --archivos "$T/
 caso 'salida A vacía → 3'                                   3 --archivos "$T/vacio.txt" "$T/b.txt" --esperadas "$T/esp_vacio.txt"
 caso 'salida B corta (< 3000) → 3'                          3 --archivos "$T/a.txt" "$T/corto.txt" --esperadas "$T/esp_vacio.txt"
 caso 'salida «null» (error de la API) → 3'                  3 --archivos "$T/null.txt" "$T/null.txt" --esperadas "$T/esp_vacio.txt"
-caso 'leer prod sin --prod-firmado → 5 (no conecta)'        5 --ref-a yiczgdtirrkdvohdquzf --ref-b hwiatgicyyqyezqwldia
+# (09-nov, regla del dueño) el ref de prod NO se escribe en una prueba: si hace falta, sale de SATORI_REF_PROD, que en
+# las pruebas no existe (el caso se omite).
+if [ -n "${SATORI_REF_PROD:-}" ]; then
+  caso 'leer prod sin --prod-firmado → 5 (no conecta)'      5 --ref-a "$SATORI_REF_PROD" --ref-b hwiatgicyyqyezqwldia
+else
+  echo "omitido: leer prod sin --prod-firmado (sin SATORI_REF_PROD: en las pruebas no existe)"
+fi
 # (09-nov) sin el ref de prod ni --prod-firmado: si el freno de A = B fallara (como el script de 4fb5f28), la prueba
 # leería STAGING, nunca prod. --modo-prod aplica las reglas de prod a dos refs de staging.
 caso 'modo prod: A = B (mismo ref) → 5'                    5 --ref-a hwiatgicyyqyezqwldia --ref-b hwiatgicyyqyezqwldia --modo-prod

@@ -159,11 +159,27 @@ class SqlEmitido(unittest.TestCase):
         self.assertIn("'O''Hara'", sp._q("O'Hara"))
 
 
+# (09-nov, regla del dueño tras el incidente de G-61) Ninguna prueba tiene el ref de prod escrito: si un caso lo necesita,
+# lo lee de SATORI_REF_PROD, que en las pruebas NO existe (el caso se omite). Lo que no es staging se prueba con un ref
+# INVENTADO: la herramienta tiene que negarse igual.
+REF_INVENTADO = 'zzzzzzzzzzzzzzzzzzzz'
+REF_PROD = os.environ.get('SATORI_REF_PROD', '')
+
+
 class CliMigrador(unittest.TestCase):
+    def test_ref_que_no_es_staging_negado(self):
+        import subprocess
+        r = subprocess.run([sys.executable, str(Path(__file__).parent / 'migrar_firestore.py'), 'saldos-papel',
+                            '--ref', REF_INVENTADO, '--local', 'x', '--ficticios', '2', '--ensayo'],
+                           capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('NEGADO', r.stderr + r.stdout)
+
+    @unittest.skipUnless(REF_PROD, 'sin SATORI_REF_PROD (en las pruebas no existe: el ref de prod no se escribe en una prueba)')
     def test_prod_negado(self):
         import subprocess
         r = subprocess.run([sys.executable, str(Path(__file__).parent / 'migrar_firestore.py'), 'saldos-papel',
-                            '--ref', 'yiczgdtirrkdvohdquzf', '--local', 'x', '--ficticios', '2', '--ensayo'],
+                            '--ref', REF_PROD, '--local', 'x', '--ficticios', '2', '--ensayo'],
                            capture_output=True, text=True)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn('NEGADO', r.stderr + r.stdout)
@@ -376,9 +392,9 @@ class PapelStaging(unittest.TestCase):
             mal = subprocess.run([sys.executable, '-I', mf, 'saldos-papel', '--aplicar-firmado', str(out / 'carga.sql'), '--sha256', '0' * 64],
                                  capture_output=True, text=True)
             self.assertIn('no es el firmado', mal.stdout + mal.stderr)
-            prod = subprocess.run([sys.executable, '-I', mf, 'saldos-papel', '--aplicar-firmado', str(out / 'carga.sql'), '--sha256', h,
-                                   '--ref', 'yiczgdtirrkdvohdquzf'], capture_output=True, text=True, env={**os.environ, 'CLUB_G56_PROD': ''})
-            self.assertIn('NEGADO', prod.stdout + prod.stderr)   # contra prod sin --confirmo-ref ni CLUB_G56_PROD: no sale
+            ajeno = subprocess.run([sys.executable, '-I', mf, 'saldos-papel', '--aplicar-firmado', str(out / 'carga.sql'), '--sha256', h,
+                                    '--ref', REF_INVENTADO], capture_output=True, text=True, env={**os.environ, 'CLUB_G56_PROD': ''})
+            self.assertIn('NEGADO', ajeno.stdout + ajeno.stderr)  # un ref que no es staging: no sale (el de prod no se escribe acá)
             antes = self.conteo()
             r = subprocess.run([sys.executable, '-I', mf, 'saldos-papel', '--aplicar-firmado', str(out / 'carga.sql'), '--sha256', h],
                                capture_output=True, text=True)

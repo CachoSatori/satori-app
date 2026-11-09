@@ -43,8 +43,6 @@ corre sobre una base vacía, así que no lo hace. Se corre todo (batería, migra
 cerrar.
 
 ## 3. Aparte (hallazgo propio, sin tocar): CLAUDE-HALL-05
-`authenticated` tiene el privilegio **MAINTAIN** en 75 tablas de `public`; 10 son del Club (`club_miembros`,
-`club_movimientos`, `club_config`, …). Es el default de Supabase con PostgreSQL 17. MAINTAIN permite `VACUUM`,
-`ANALYZE`, `REINDEX`, `CLUSTER`, `REFRESH` y `LOCK TABLE`. Por PostgREST no se puede usar: la app no corre SQL suelto, y
-ninguna función del Club ejecuta SQL dinámico con datos del usuario. Propuesta, aparte y con su OK:
-`revoke maintain on all tables in schema public from authenticated, anon` y una prueba que lo controle, como la 82.
+`authenticated` tiene MAINTAIN en 75 tablas de `public` (10 del Club). Diagnóstico completo y propuesta en dos bloques
+(075 del Club; el resto, para la sesión de caja después del pase del puente) en
+[`CLAUDE-HALL-05-maintain.md`](CLAUDE-HALL-05-maintain.md). Sin aplicar.

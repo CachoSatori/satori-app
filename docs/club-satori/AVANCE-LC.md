@@ -527,3 +527,67 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
   a prod: el detalle está en IDS-AUDITOR.md.
 - Pruebas: batería **580/580**, paridad **974 = 974**, carreras 8/8, gate61_test 20/20 sin red, vitest 1.515, club-web 27,
   Python 122 con staging. Staging en base.
+
+## 09-nov · mañana (pase del puente hoy; 089/090 de caja en staging) · rama del Club, nada en prod ni en main
+### INCIDENTE: una prueba mandó a prod una consulta de solo lectura (07:48 CR)
+- **Cuándo:** 09-nov, **07:48:52 y 07:49:58** (hora de Costa Rica), dos llamadas.
+- **Qué consulta:** `scripts/sql/gate61_catalogo.sql`, el catálogo normalizado de G-61. Lee solo `pg_catalog`: nombres,
+  columnas, ACL, políticas y el md5 de los cuerpos de funciones. **No lee filas de ninguna tabla**: ningún dato de
+  personas.
+  - Fue por la API de administración de Supabase (`/database/query`), envuelta en
+    `begin; set transaction read only; … ; rollback;`.
+- **Por qué:** estaba armando la evidencia de «falla sin el arreglo» de G-61.
+  - Corrí el `gate61_test.sh` de ese momento contra el `gate61.sh` viejo de `4fb5f28`, que todavía no frenaba A = B.
+  - El caso «prod: A = B» de la prueba tenía escrito el ref de prod con `--prod-firmado`.
+  - El script viejo conectó.
+  - Fue un error mío: una prueba nunca debió tener el ref de prod.
+- **Solo lectura:** transacción `read only` que termina en `rollback`, y solo catálogo. **No se escribió nada en prod.**
+- **Cómo se cerró:**
+  1. `gate61_test.sh` corre **sin red**: un `curl` falso anota cualquier intento y la prueba falla si alguien lo llama.
+     El cierre es «ningún caso salió a la red» (`da3bc9a`).
+  2. **Ningún archivo de prueba tiene el ref de prod:**
+     - `gate61_test.sh` y `scripts/club/test_saldos_papel.py` usan un ref inventado para el «NEGADO»;
+     - el único caso que necesita el ref real lo lee de `SATORI_REF_PROD`, que **en las pruebas no existe**, así que se
+       omite.
+  3. **Prueba que lo controla:** `src/refProdEnPruebas.test.ts` (vitest).
+     - Lee el ref de la herramienta donde sí va como candado (`scripts/club/migrar_firestore.py`).
+     - Falla si cualquier archivo de prueba lo tiene: nombre o carpeta con test, prueba, carrera, ensayo o spec, sin
+       contar los `.md`.
+     - **Verificado que muerde:** un archivo temporal `scripts/sql/zz_prueba_temporal.sh` con el ref hizo fallar la
+       prueba; borrado, pasa.
+  4. El ayudante de consultas de la sesión (fuera del repo) ya no tiene un atajo a prod.
+- **REGLA (del dueño, 09-nov):** ningún script de prueba puede tener el ref de prod. Si lo necesita, lo lee de una
+  variable (`SATORI_REF_PROD`) que en las pruebas no existe. El ref de prod queda solo en las **herramientas**, como
+  candado (`gate61.sh`, `migrar_firestore.py`).
+
+### Decisiones del dueño del 09-nov
+| Tema | Decisión | Fuente |
+|---|---|---|
+| **Pase del puente** | **Hoy**, con el paquete tal como está: `claude/puente-item11-prod-v2` @ `cd6d5a1`, código `5da233a`. Hasta que avise: ningún commit en las ramas del puente ni en el #71, y nada en `main` (congelado). | Mensaje del dueño, 09-nov mañana |
+| **089 y 090 en staging** | Caja las aplicó esta mañana: 089 a las 08:27 CR y 090 a las 08:28 CR, cada una con la firma del dueño para staging. El **residual de `supabase_admin`** de la 090 queda aceptado. Si algo del Club falla por eso, se avisa **antes** de cambiar nada. | `a4d1192` (089), `ed1eec8` (090) |
+| **Plazo de 24 meses** | Los contactos de ofertas se guardan hasta la baja o **24 meses desde la aceptación** (B7). Está en el aviso v1.1 (`club-web/src/i18n.ts`) y en `contactos_ofertas_meses`. | Entrada del 09-nov tarde (B7, B10) |
+| **Historial de git** | Lo único escrito: OPS-AUD-01 de `claude/docs-correos-ops` (`39847d5`) dice «la contraseña sigue en el historial de git (**no se reescribe**)». **A confirmar** que esa es la decisión. | `39847d5`, HALLAZGOS.md |
+| **G-56: excepciones de funciones** | **PENDIENTE de texto.** La decisión no llegó escrita a esta sesión. Lo que hay es el contexto del 09-nov madrugada (Grok 114: G-56 suma `now` y `to_char`, el migrador suma 8). No se cambia nada hasta tener la decisión. | — |
+| **Reintentos del pase** | **PENDIENTE de texto.** La decisión no llegó escrita. | — |
+| **`club_sin_cruce_elegir`** | **PENDIENTE de texto.** La decisión no llegó escrita. El flujo real y las propuestas S1–S8 están en [`FLUJO-SALON-cruce.md`](FLUJO-SALON-cruce.md). | — |
+
+### Lo demás de esta mañana
+- **089/090 y el Club:** con las dos aplicadas en staging, todo en verde:
+  - batería **580/580**, paridad **974 = 974** y carreras 8/8;
+  - gate61_test 0 fallas, sin red;
+  - vitest 1.517, club-web 27, Python 123 (16 omitidas; con staging, 1 omitida).
+
+  No hubo nada que cambiar.
+- **Flujo del salón** (escanear primero, aplicar en el PoS después, pagar 40 min o más después): explicación y
+  propuestas en [`FLUJO-SALON-cruce.md`](FLUJO-SALON-cruce.md).
+  - Hay dos lugares donde un cruce que falta **sí** puede hacer perder un beneficio:
+    - el premio por referido;
+    - las personas pendientes de un anfitrión nuevo, cuando la factura se anula y se rehace sin el pedido.
+  - Arreglos propuestos (S1–S8), sin aplicar.
+- **CLAUDE-HALL-05** (MAINTAIN): diagnóstico y propuesta en [`CLAUDE-HALL-05-maintain.md`](CLAUDE-HALL-05-maintain.md).
+  - **Causa en el Club:** el bucle de la 075 §3 revoca una lista sin `maintain`.
+  - **Causa en lo demás:** los privilegios por defecto de `postgres`.
+  - **Propuesta en dos bloques:** la 075 del Club, y el resto para caja después del pase. Sin aplicar.
+- **55 y 60:** abiertos; hace falta el texto del auditor. **64:** plan con fechas propuestas en
+  [`IDS-AUDITOR.md`](IDS-AUDITOR.md) §4, sin implementar.
+- **120 y 121 del puente:** quedan para después del pase. No se tocaron.

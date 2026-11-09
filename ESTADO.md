@@ -221,7 +221,7 @@ solas tras un reinicio (validado el 29/10).
 | 085 | `rls_lectura_rol_activo` (SEC-01c) | caja | `claude/rls-is-active` | staging (08/11) |
 | 087 | `employee_edits_audit` (propuesta, sin firma) | caja | `claude/employees-audit` | ninguna: propuesta |
 | 088 | `employees_recibe_reparto_cocina` (PROP-AUD-01, sin firma) | caja | `claude/prop-aud-01` | ninguna |
-| 089 | `anon_sin_politica` (prueba 82 del Club, sin firma; va después de la 085) | caja | `claude/anon-revoke` | ninguna |
+| 089 | `anon_sin_politica` (firmada para staging) | caja | `claude/anon-revoke` | **staging (09/11 08:27 CR)** |
 
 **Bloques**
 

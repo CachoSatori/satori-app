@@ -51,7 +51,7 @@ null si la cuenta está inactiva.
   - Leído el 08/11 15:20 UTC, solo lectura, y **coincide**: prod está igual a como estaba staging antes de la 085.
   - Respaldo completo **fuera del repo**: `respaldo_catalogo_prod_antes_085_2026-11-08T15-20-24Z.json`,
     sha256 `4db2c15b5847e9b73459ce0a5ef538cdf2ed3293f7d3ec4f27fc5d41bba90b58`.
-  - Contenido: ledger (55 filas, último 080), RLS de las 6 tablas, `get_my_role()` completo y las **16 policies** de esas tablas.
+  - Contenido: ledger (55 filas, último 080), RLS de las 6 tablas, `get_my_role()` completo y las **15 policies** de esas tablas (el paquete decía 16 por error: corregido el 09-nov, contando el respaldo).
   - Re-leerlo el día del pase y comparar. Si algo cambió, **frenar**: un `alter policy` sobre una policy que no
     existe hace fallar la migración, y Branching queda en `MIGRATIONS_FAILED`.
 - [ ] **Rama:** al día con `main` y gate verde, incluido `supabase/migraciones.test.ts` (la 085 está registrada).
@@ -70,7 +70,7 @@ null si la cuenta está inactiva.
 ## 5. Verificación después del merge
 1. **Branching:** el log del run tiene que decir `Applying migration... file=085_rls_lectura_rol_activo.sql`.
 2. **Ledger de prod:** `count` + 1 y `max(version) = '085'`. Los `statements` de la 085 tienen que ser iguales al archivo.
-3. **Catálogo:** las 7 policies con las condiciones de la columna «Después» del §1. Las otras 9 policies de esas
+3. **Catálogo:** las 7 policies con las condiciones de la columna «Después» del §1. Las otras 8 policies de esas
    tablas, **sin cambios** contra el respaldo.
 4. **Pruebas en prod con sesiones simuladas** (`scripts/sql/085_pruebas.sh yiczgdtirrkdvohdquzf`): **en prod solo
    lee**. No simula al owner inactivo ni prueba editar otro perfil, porque las dos cosas escriben. Esperado:
@@ -95,7 +95,7 @@ null si la cuenta está inactiva.
    la 074).
 3. **Verificar:**
    - el log de Branching del revert dice «All migrations are up to date»;
-   - las 16 policies quedan iguales al respaldo del §3;
+   - las 15 policies quedan iguales al respaldo del §3;
    - `085_pruebas.sh` en prod da los conteos de antes.
 
 ## 7. Matriz de pruebas registrada en staging (08/11, sesiones simuladas, cada caso en una transacción con rollback)
@@ -138,5 +138,12 @@ aplicar.
 Antes de correr nada, confirmar dos cosas: que no haya consultas activas en staging y que el Club no haya hecho
 commits en los últimos 5 minutos. Si los hay, esperar hasta 15 minutos; si siguen, no hacer nada y anotarlo acá.
 - **Volver a correr `085_pruebas.sh` en staging** con el cambio de este paquete (en prod solo lee), cuando staging esté libre.
+  **Reescrito el 09-nov para que no dé falso verde (Grok 87):** `curl --fail-with-body`; cada caso con su resultado
+  esperado (conteos como postgres + la regla de cada policy) y comparación exacta; matriz de los 10 roles activos e
+  inactivos (simulados sobre un perfil de prueba, en transacciones descartadas), rol NULL (la columna es NOT NULL: se
+  espera el rechazo), perfil ausente, anon y service_role; las 6 lecturas y el WITH CHECK de profiles en el catálogo.
+  Un caso que no se puede correr es **NO PROBADO** y nunca verde. **Verde = salida 0** (1 = falla, 3 = no probado).
 - **Probar `085_rollback.sql` en staging** dentro de una transacción con rollback: aplicar el rollback, comparar las
-  16 policies con el respaldo y descartar. Mismo criterio: staging libre.
+  15 policies con el respaldo y descartar. Mismo criterio: staging libre. Script: `scripts/sql/085_prueba_rollback.sh
+  hwiatgicyyqyezqwldia <respaldo.json>` (compara campo por campo y después verifica que la 085 siga puesta).
+  **Verde = salida 0.**

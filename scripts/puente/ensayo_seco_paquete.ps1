@@ -3,6 +3,9 @@
 # .ps1) está bloqueado y va `npm.cmd`; sin Docker, `functions download`/`deploy` necesitan --use-api y la descarga
 # rechaza src/shared; los scripts del pase llegan por `git show` del commit del paquete (no están en el clon).
 # Con el paquete del 09-nov (PASE-PROD-2026-11-09.md) este kit da FAIL justo en esos puntos; con la plantilla, 0 FAIL.
+# (09-nov tarde, Grok 120/121) 1.9 se prueba con tres cuentas REALES de la máquina: SYSTEM, LOCAL SERVICE y una sin perfil
+# cargado (Invitado: su NTUSER.DAT se monta y se desmonta; hace falta consola de administrador). Un secreto corto es PARADA.
+# Con -Paquete docs/puente/ROTACION-SECRETO-AGENTE.md corre el procedimiento aparte de rotación (Grok 120).
 #
 # INSTRUCCIONES (5 líneas):
 #  1. En una PC Windows que NO sea la del PoS (si solo hay esa: igual sirve, el kit trabaja en una carpeta temporal y
@@ -46,7 +49,7 @@ $F081RB = $utf8.GetBytes("-- rollback 081 FICTICIO`n")
 $FINDEX = $utf8.GetBytes("// index.ts FICTICIO del Edge v1`n")
 $FMAPA = $utf8.GetBytes("// armar_mapa_secretos.mjs FICTICIO (ensayo en seco)`n")
 $MD5_081 = Md5DeBytes $F081; $MD5_082 = Md5DeBytes $F082; $MD5_081RB = Md5DeBytes $F081RB; $MD5_MAPA = Md5DeBytes $FMAPA
-$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; fmapa = $FMAPA; cli = '2.122.0'; tarea = 'Running'; secretos = @{}; cmd = $null }
+$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; fmapa = $FMAPA; cli = '2.122.0'; tarea = 'Running'; secretos = @{}; cmd = $null; cuenta = 'SYSTEM'; corto = $false }
 
 # ── Dobles de los comandos (las funciones le ganan a los .exe en PowerShell) ─────────────────────────────────────
 function git {
@@ -98,7 +101,7 @@ function supabase {
 function node {
   $a = @($args); $global:LASTEXITCODE = 0
   if ($global:KIT.node_falla) { $global:LASTEXITCODE = 1; return }
-  if ($a -contains '--solo-medir') { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":64,"cumple_32":true}'; return }
+  if ($a -contains '--solo-medir') { if ($global:KIT.corto) { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":20,"cumple_32":false}' } else { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":64,"cumple_32":true}' }; return }
   $salida = [string]$a[[array]::IndexOf($a, '--salida') + 1]
   $r = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($r); $st = -join ($r | ForEach-Object { $_.ToString('x2') })
   [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($r); $no = -join ($r | ForEach-Object { $_.ToString('x2') })
@@ -112,7 +115,7 @@ function npm { throw 'npm.ps1 no se puede cargar: la ejecución de scripts está
 function npm.cmd { $global:LASTEXITCODE = 0; 'ok (doble de npm.cmd)' }
 function curl.exe { $global:LASTEXITCODE = 0; 'HTTP/2 401 (doble)' }
 function Get-ScheduledTask { param([string]$TaskName)   # SYSTEM: en el runner su entorno (HKU\S-1-5-18) existe y se lee de verdad
-  [pscustomobject]@{ TaskName = $TaskName; State = $global:KIT.tarea; Principal = [pscustomobject]@{ UserId = 'SYSTEM'; LogonType = 'ServiceAccount' }
+  [pscustomobject]@{ TaskName = $TaskName; State = $global:KIT.tarea; Principal = [pscustomobject]@{ UserId = $global:KIT.cuenta; GroupId = $null; LogonType = 'ServiceAccount' }
     Actions = @([pscustomobject]@{ Execute = $global:KIT.cmd; Arguments = $null; WorkingDirectory = $null }) } }   # 09-nov: la acción es un .cmd
 function Stop-ScheduledTask { param([string]$TaskName) $global:KIT.tarea = 'Ready' }
 function Start-ScheduledTask { param([string]$TaskName) $global:KIT.tarea = 'Running' }
@@ -121,7 +124,8 @@ function Get-CimInstance { @() }
 # ── Bloques del paquete ───────────────────────────────────────────────────────────────────────────────────────────
 $doc = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $Paquete).Path, $utf8)
 $bloques = @([regex]::Matches($doc, '(?s)```powershell\r?\n(.*?)```') | ForEach-Object { $_.Groups[1].Value })
-if ($bloques.Count -lt 10) { throw "el paquete tiene solo $($bloques.Count) bloques de PowerShell: ¿es el archivo correcto?" }
+$esRotacion = ([IO.Path]::GetFileName($Paquete) -like 'ROTACION*')
+if ($bloques.Count -lt $(if ($esRotacion) { 6 } else { 10 })) { throw "el paquete tiene solo $($bloques.Count) bloques de PowerShell: ¿es el archivo correcto?" }
 function Preparar([string]$t, [string]$raiz) {
   $t.Replace('C:\satori', $raiz).Replace('73c4d9d207c22c13d5c42498bb63e8ca', $MD5_MAPA).Replace('d4acf8dafc964ed23072aa49098f5b42', $MD5_081).Replace('edb7ffc58976804e55968f75df530a05', $MD5_082).Replace('5faa677d99f68c9c16dbd3a8a1c804d0', $MD5_081RB)
 }
@@ -130,6 +134,9 @@ function Preparar-Agente([string]$raiz) {   # la carpeta del agente FICTICIA (so
   New-Item -ItemType Directory -Force (Join-Path $raiz 'satori-app-prod\pos-bridge') | Out-Null
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app-prod\pos-bridge\register.mjs'), '// ficticio', $utf8)
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app-prod\pos-bridge\.env.antes-pase'), "INGEST_SECRET=ficticio`n", $utf8)   # 9.0 la borra
+  New-Item -ItemType Directory -Force (Join-Path $raiz 'satori-app\pos-bridge') | Out-Null                                        # agente de STAGING (rotación R1)
+  [IO.File]::WriteAllText((Join-Path $raiz 'satori-app\pos-bridge\register.mjs'), '// ficticio', $utf8)
+  [IO.File]::WriteAllText((Join-Path $raiz 'satori-app\pos-bridge\.env.antes-pase'), "INGEST_SECRET=ficticio`n", $utf8)        # R6 la borra
   # 09-nov: la tarea corre C:\satori\pos-agente-prod.cmd (cd /d a la carpeta del agente y node)
   $global:KIT.cmd = Join-Path $raiz 'pos-agente-prod.cmd'
   [IO.File]::WriteAllText($global:KIT.cmd, "@echo off`r`ncd /d $raiz\satori-app-prod`r`n`"C:\Program Files\nodejs\node.exe`" --import ./pos-bridge/register.mjs pos-bridge/agente.ts`r`n", $utf8)
@@ -144,20 +151,11 @@ try {
     try { . ([scriptblock]::Create((Preparar $b $RAIZ))); Resultado ("bloque {0,2}: {1}" -f $i, (Nombre $b).Substring(0, [Math]::Min(70, (Nombre $b).Length))) $true }
     catch { Resultado ("bloque {0,2}: {1}" -f $i, (Nombre $b)) $false $_.Exception.Message }
   }
-  $quedan = @(Get-ChildItem -LiteralPath $env:LOCALAPPDATA -Filter 'satori-pase*.env' -ErrorAction SilentlyContinue)
-  Resultado 'no quedó ningún archivo del mapa de secretos en LOCALAPPDATA' ($quedan.Count -eq 0) "$($quedan.Count) archivos"
-  Resultado '9.0 borró la copia .antes-pase del agente (ficticia)' (-not (Test-Path -LiteralPath (Join-Path $RAIZ 'satori-app-prod\pos-bridge\.env.antes-pase')))
-  Resultado 'los dos bloques del ledger se generaron (bloque_081.sql y bloque_082.sql)' ((Test-Path (Join-Path $RAIZ 'pase-sql\bloque_081.sql')) -and (Test-Path (Join-Path $RAIZ 'pase-sql\bloque_082.sql')))
-  $b2 = [IO.File]::ReadAllText((Join-Path $RAIZ 'pase-sql\bloque_082.sql'), $utf8)
-  Resultado 'bloque_082: un solo begin/commit, con los dos timeouts, y el archivo original en el ledger' (([regex]::Matches($b2, '(?m)^begin;$').Count -eq 2) -and $b2.StartsWith("begin;`nset local lock_timeout = '5s';") -and $b2.TrimEnd().EndsWith('commit;'))
-  $bytes = [IO.File]::ReadAllBytes((Join-Path $RAIZ 'pase-sql\bloque_082.sql'))
-  Resultado 'bloque_082 sin BOM' (-not ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF))
-
   # 2) el paquete FRENA cuando debe (cada caso en una carpeta temporal nueva)
   function Frena([string]$caso, [int]$nBloque, [string]$espera, [scriptblock]$preparar) {
     $r2 = Join-Path ([IO.Path]::GetTempPath()) ("satori-ensayo-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
     New-Item -ItemType Directory -Force $r2 | Out-Null; Preparar-Agente $r2
-    $global:KIT.falla_git = $null; $global:KIT.huella_mal = $false; $global:KIT.node_falla = $false; $global:KIT.f082 = $F082; $global:KIT.fmapa = $FMAPA; $global:KIT.cli = '2.122.0'
+    $global:KIT.falla_git = $null; $global:KIT.huella_mal = $false; $global:KIT.node_falla = $false; $global:KIT.f082 = $F082; $global:KIT.fmapa = $FMAPA; $global:KIT.cli = '2.122.0'; $global:KIT.tarea = 'Running'; $global:KIT.corto = $false; $global:KIT.cuenta = 'SYSTEM'
     try {
       . ([scriptblock]::Create((Preparar $bloques[0] $r2)))          # el preámbulo fail-stop
       for ($kitK = 1; $kitK -lt $nBloque - 1; $kitK++) { . ([scriptblock]::Create((Preparar $bloques[$kitK] $r2))) }   # nombre propio: los bloques corren en este ámbito   # lo previo, bien
@@ -167,11 +165,56 @@ try {
     } catch { Resultado "frena: $caso" ($_.Exception.Message -like "*$espera*") $_.Exception.Message }
     finally { Remove-Item -LiteralPath $r2 -Recurse -Force -ErrorAction SilentlyContinue }
   }
+  if ($esRotacion) {
+    # ── Rotación del secreto del agente (Grok 120): procedimiento aparte, con su vuelta atrás ──
+    $quedan = @(Get-ChildItem -LiteralPath $env:LOCALAPPDATA -Filter 'satori-rotacion*.env' -ErrorAction SilentlyContinue)
+    Resultado 'rotación: no quedó ningún archivo del mapa en LOCALAPPDATA' ($quedan.Count -eq 0) "$($quedan.Count) archivos"
+    Resultado 'rotación: R6 borró la copia .antes-pase del agente (ficticia)' (-not (Test-Path -LiteralPath (Join-Path $RAIZ 'satori-app\pos-bridge\.env.antes-pase')))
+    $nR4 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'secrets set --env-file' } | Select-Object -First 1))
+    Frena 'rotación: la huella del panel no coincide' $nR4 'huella del panel' { param($r) $global:KIT.huella_mal = $true }
+    Frena 'rotación: R4 con la tarea andando' $nR4 'la tarea no está detenida' { param($r) $global:KIT.tarea = 'Running' }
+    $nR1 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match '\$ENTORNO = ' } | Select-Object -First 1))
+    try { . ([scriptblock]::Create((Preparar $bloques[0] $RAIZ))); . ([scriptblock]::Create(((Preparar $bloques[$nR1 - 1] $RAIZ) -replace "\`$ENTORNO = 'staging'", "`$ENTORNO = 'otro'")))
+          Resultado 'frena: rotación con ENTORNO que no es staging ni prod' $false 'no cortó' }
+    catch { Resultado 'frena: rotación con ENTORNO que no es staging ni prod' ($_.Exception.Message -like '*tiene que ser*') $_.Exception.Message }
+  } else {
+  # ── 1.9 con tres cuentas REALES de esta máquina (Grok 121): SYSTEM, cuenta de servicio y una sin perfil cargado ──
+  $n19 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'Principal.UserId' } | Select-Object -First 1))
+  function Correr19([string]$cuenta) {
+    $global:KIT.cuenta = $cuenta
+    try { (. ([scriptblock]::Create((Preparar $bloques[$n19 - 1] $RAIZ)))) | Out-String } finally { $global:KIT.cuenta = 'SYSTEM' }
+  }
+  try { $o = Correr19 'SYSTEM'; Write-Host "  $($o.Trim())"; Resultado '1.9 (121): SYSTEM se lee de HKEY_USERS\S-1-5-18 (perfil cargado)' ($o -like '*S-1-5-18*HKEY_USERS\S-1-5-18*perfil cargado*') $o }
+  catch { Resultado '1.9 (121): SYSTEM' $false $_.Exception.Message }
+  $ls = (New-Object Security.Principal.SecurityIdentifier('S-1-5-19')).Translate([Security.Principal.NTAccount]).Value
+  try { $o = Correr19 $ls; Write-Host "  $($o.Trim())"; Resultado "1.9 (121): cuenta de servicio ($ls) se lee y dice de dónde" (($o -like '*S-1-5-19*') -and (($o -like '*perfil cargado*') -or ($o -like '*montado en HKEY_USERS*'))) $o }
+  catch { Resultado "1.9 (121): cuenta de servicio ($ls)" $false $_.Exception.Message }
+  $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  $inv = @(CimCmdlets\Get-CimInstance Win32_UserAccount -Filter 'LocalAccount=True' | Where-Object { $_.SID -like '*-501' } | Select-Object -First 1)
+  if (-not $inv.Count) { Resultado '1.9 (121): hay una cuenta local sin perfil cargado para probar (Invitado, RID 501)' $false 'no se encontró' }
+  elseif (-not $admin -and -not $env:GITHUB_ACTIONS) { Write-Host 'SKIP  1.9 (121): usuario sin perfil cargado (montar NTUSER.DAT pide consola de administrador; en el workflow corre)' -ForegroundColor Yellow }
+  else {
+    $cu = "$($inv[0].Domain)\$($inv[0].Name)"
+    try { $o = Correr19 $cu; Write-Host "  $($o.Trim())"; Resultado "1.9 (121): usuario sin perfil cargado ($cu): monta el NTUSER.DAT, lee y desmonta" ($o -like '*montado en HKEY_USERS\satori-pase-1-9 y desmontado*') $o }
+    catch { Resultado "1.9 (121): usuario sin perfil cargado ($cu)" $false $_.Exception.Message }
+    Resultado '1.9 (121): no quedó montado HKEY_USERS\satori-pase-1-9' (-not (Test-Path -LiteralPath 'Registry::HKEY_USERS\satori-pase-1-9'))
+  }
+  try { $o = Correr19 ''; Resultado 'frena: 1.9 con la tarea sin cuenta' $false 'no cortó' } catch { Resultado 'frena: 1.9 con la tarea sin cuenta' ($_.Exception.Message -like '*PARADA 1.9*no tiene una cuenta*') $_.Exception.Message }
+  try { $o = Correr19 'KITNOEXISTE\nadie-xyz'; Resultado 'frena: 1.9 con una cuenta que no se resuelve' $false 'no cortó' } catch { Resultado 'frena: 1.9 con una cuenta que no se resuelve' ($_.Exception.Message -like '*PARADA 1.9*no se puede resolver*') $_.Exception.Message }
+
+  $quedan = @(Get-ChildItem -LiteralPath $env:LOCALAPPDATA -Filter 'satori-pase*.env' -ErrorAction SilentlyContinue)
+  Resultado 'no quedó ningún archivo del mapa de secretos en LOCALAPPDATA' ($quedan.Count -eq 0) "$($quedan.Count) archivos"
+  Resultado '9.0 borró la copia .antes-pase del agente (ficticia)' (-not (Test-Path -LiteralPath (Join-Path $RAIZ 'satori-app-prod\pos-bridge\.env.antes-pase')))
+  Resultado 'los dos bloques del ledger se generaron (bloque_081.sql y bloque_082.sql)' ((Test-Path (Join-Path $RAIZ 'pase-sql\bloque_081.sql')) -and (Test-Path (Join-Path $RAIZ 'pase-sql\bloque_082.sql')))
+  $b2 = [IO.File]::ReadAllText((Join-Path $RAIZ 'pase-sql\bloque_082.sql'), $utf8)
+  Resultado 'bloque_082: un solo begin/commit, con los dos timeouts, y el archivo original en el ledger' (([regex]::Matches($b2, '(?m)^begin;$').Count -eq 2) -and $b2.StartsWith("begin;`nset local lock_timeout = '5s';") -and $b2.TrimEnd().EndsWith('commit;'))
+  $bytes = [IO.File]::ReadAllBytes((Join-Path $RAIZ 'pase-sql\bloque_082.sql'))
+  Resultado 'bloque_082 sin BOM' (-not ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF))
+
   $n04 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'git clone' } | Select-Object -First 1))
   $n05 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'Get-ChildItem -LiteralPath \$SQL -File' } | Select-Object -First 1))
   $n2  = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'function Armar-Bloque' } | Select-Object -First 1))
   $n32 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'secrets set --env-file' } | Select-Object -First 1))
-  $n19 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'Principal.UserId' } | Select-Object -First 1))
   Frena 'un comando nativo que falla (git fetch) corta con su código' $n04 'falló «fetch»' { param($r) $global:KIT.falla_git = 'fetch' }
   Frena 'la 082 con otros bytes: md5 distinto antes de seguir' $n05 '082: md5 distinto' { param($r) $global:KIT.f082 = $utf8.GetBytes("-- otra cosa`n") }
   Frena 'generar con un .sql con BOM no genera nada' $n2 'md5 distinto' { param($r) [IO.File]::WriteAllBytes((Join-Path $r 'pase-sql\082.sql'), [byte[]](@(0xEF, 0xBB, 0xBF) + $F082)) }
@@ -183,6 +226,8 @@ try {
   Frena '1.9: el .cmd de la tarea define una variable del agente' $n19 'define variables del agente' { param($r) [IO.File]::WriteAllText($global:KIT.cmd, "@echo off`r`nset INGEST_SECRET=x`r`ncd /d $r\satori-app-prod`r`nnode agente.ts`r`n", $utf8) }
   Frena '0.5b: el script del paquete con otros bytes' $n05b 'armar_mapa_secretos.mjs: md5 distinto' { param($r) $global:KIT.fmapa = $utf8.GetBytes("// otro`n") }
   Frena '0.6: Supabase CLI de otra versión' $n06 'se esperaba 2.122.0' { param($r) $global:KIT.cli = '2.99.0' }
+  $n19m = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match '--solo-medir' } | Select-Object -First 1))
+  Frena '1.9 (120): un secreto corto es PARADA limpia (no hay camino 4.3b)' $n19m 'PARADA 1.9 (Grok 120)' { param($r) $global:KIT.corto = $true }
   # el generador no deja NADA si algo falla (082 alterada en la carpeta del ensayo principal)
   $SQLD = Join-Path $RAIZ 'pase-sql'
   Get-ChildItem -LiteralPath $SQLD -Filter 'bloque_*' | Remove-Item -Force
@@ -198,6 +243,7 @@ try {
   try { Armar-Bloque $bom '082' 'x' (Md5DeBytes ([IO.File]::ReadAllBytes($bom))) | Out-Null; Resultado 'frena: BOM detectado (con su md5 correcto)' $false } catch { Resultado 'frena: BOM detectado (con su md5 correcto)' ($_.Exception.Message -like '*BOM*') }
   $mal = Join-Path $RAIZ 'utf8_malo.sql'; [IO.File]::WriteAllBytes($mal, [byte[]](0x2D, 0x2D, 0x20, 0xC3, 0x28, 0x0A))
   try { Armar-Bloque $mal '082' 'x' (Md5DeBytes ([IO.File]::ReadAllBytes($mal))) | Out-Null; Resultado 'frena: UTF-8 inválido' $false } catch { Resultado 'frena: UTF-8 inválido' $true }
+  }
 } finally {
   $env:LOCALAPPDATA = $LAD_ANTES
   Remove-Item -LiteralPath $RAIZ -Recurse -Force -ErrorAction SilentlyContinue

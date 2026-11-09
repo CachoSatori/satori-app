@@ -606,3 +606,11 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
 - **Decisiones que siguen sin texto** en esta sesión: excepciones de G-56, reintentos del pase y
   `club_sin_cruce_elegir`. «Historial de git» queda a confirmar (tabla de arriba). No se cambia nada por ellas hasta
   tener el texto.
+- **Regla nueva del dueño (09-nov tarde):** **cualquier escritura en staging fuera de una transacción descartada se pide
+  antes.** La batería, la paridad, las carreras y las pruebas de la 085 y de la 100 corren en transacciones con
+  ROLLBACK y siguen sin pedir permiso. Lo que deja algo escrito (aplicar una migración, cambiar el ledger, cargar un
+  secreto) se pide primero. La última escritura de este tipo fue la fila 085 del ledger de staging (texto sin nombre,
+  md5 `68b6384b…`, 09-nov ~14:00 CR): estuvo bien hecha, pero desde ahora se pide.
+- **Orden en prod de las migraciones pendientes** (Supabase no aplica una versión menor que la última aplicada):
+  **085 → 091 → 092 → 100**. La 100 (#81) además necesita la 075 del Club: va en el pase del Club, después de la 075, y
+  no se mergea antes que la 091 y la 092. Paquete de la 085: #80.

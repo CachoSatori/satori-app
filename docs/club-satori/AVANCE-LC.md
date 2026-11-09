@@ -489,3 +489,22 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
 - **Manager:** elegir la factura de un SIN_CRUCE ahora hace una lectura más (`club_excepcion_actor`, la lista de 120 días
   filtrada por tipo). Es el mismo costo que ya paga «Resolver» y no se midió aparte. Si en el piloto «Elegir factura» se
   siente lento, esa lectura es lo primero que hay que mirar.
+
+## 09-nov · madrugada (Grok GO condicionado; 113 → 082 v3; Club 114–116) · nada en prod ni en main
+- **Puente** (otra rama, `claude/puente-item11-prod-v2`):
+  - código `5da233a`, 082 v3 `edb7ffc5…`, aplicada en staging con el Edge v16;
+  - 119 y 118 en el paquete y la guía; el kit en seco dio 35/35 en PowerShell 5.1 y 7;
+  - #71 en `0a33df42`.
+- **114 · G-56:** `sql_g56.py` rechaza toda llamada a una función fuera de una lista blanca:
+  - la lista son los built-ins inmutables (verificados contra el catálogo de staging) más excepciones nombradas, cada
+    una con su motivo: G-56 suma `now` y `to_char`, y el migrador suma 8 más que usa su SQL hoy;
+  - **decisión del dueño:** esas excepciones no son inmutables (estables y 3 volátiles que generan códigos);
+  - hay un trucado por forma (`select … into`, `:=`, `insert … select`, `if`, `create temp table … as select`, con
+    comillas y sin esquema): el filtro anterior los dejaba pasar;
+  - límite que queda: la notación de atributo (`fila.funcion`) no se ve sin mirar el esquema.
+- **115 · carga única:** cruce papel ↔ Firestore por `legacy_id`, antes de emitir y dentro de la transacción. Aborta si
+  una fila no cruza o si la tarjeta ya está en Firestore. Doc corregida («el mapa es directo» no era cierto).
+- **116 · `pos_login_manager.sh`:**
+  - cabeceras en archivos (umask 077), `mktemp -d` + trap y nada secreto en argv;
+  - manager sintético que se crea y se borra (0 residuos verificados).
+- Pruebas: Python 122/122 con staging · API 106: 403/42501, el nombre se edita, 0 residuos. Staging en base.

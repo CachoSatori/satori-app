@@ -50,7 +50,9 @@ Token = tuple[str, str]
 
 
 # ── Tokenizador ──────────────────────────────────────────────────────────────
-def tokenizar(sql: str) -> tuple[list[Token], list[str]]:
+def tokenizar(sql: str, barra_en_literal: bool = False) -> tuple[list[Token], list[str]]:
+    """`barra_en_literal` (solo el perfil del migrador): acepta `\\` dentro de un literal '…' — con
+    standard_conforming_strings = on (el default de Postgres) es un carácter más; quien aplica lo verifica antes."""
     toks: list[Token] = []
     probs: list[str] = []
     i, n = 0, len(sql)
@@ -106,7 +108,8 @@ def tokenizar(sql: str) -> tuple[list[Token], list[str]]:
             cuerpo = sql[i + 1:k]
             if '\\' in cuerpo:
                 # Con standard_conforming_strings apagado la barra escaparía la comilla y el servidor leería otro SQL.
-                probs.append('barra invertida dentro de un literal \'…\' (el servidor lo podría leer distinto)')
+                if not barra_en_literal:
+                    probs.append('barra invertida dentro de un literal \'…\' (el servidor lo podría leer distinto)')
             toks.append(('s', cuerpo.replace("''", "'")))
             i = k + 1
             continue
@@ -193,12 +196,14 @@ def partir(toks: list[Token]) -> tuple[list[list[Token]], list[str]]:
 
 
 # ── Reglas ───────────────────────────────────────────────────────────────────
-def _prohibidas(toks: list[Token], pre: str, tambien: frozenset = frozenset()) -> list[str]:
+def _prohibidas(toks: list[Token], pre: str, tambien: frozenset = frozenset(), excepto: frozenset = frozenset()) -> list[str]:
     out = []
     for tipo, v in toks:
         if tipo not in ('w', 'q'):
             continue
         v = v.lower()
+        if v in excepto:
+            continue
         if v in PROHIBIDAS or v in tambien or v.startswith(PREFIJOS_PROHIBIDOS):
             out.append(f'{pre}: palabra prohibida «{v}»')
     return out
@@ -218,7 +223,8 @@ def _set(s: list[Token], pre: str) -> list[str]:
             + ' (solo set local lock_timeout / statement_timeout = \'…\')']
 
 
-def _insert(s: list[Token], pre: str, permitidas: set[str], extra: str | None, altas: list[int]) -> list[str]:
+def _insert(s: list[Token], pre: str, permitidas: set[str], extra: str | None, altas: list[int],
+            excepto: frozenset = frozenset()) -> list[str]:
     if len(s) < 6 or s[1] != ('w', 'into'):
         return [f'{pre}: insert mal formado']
     a = s[2]
@@ -242,7 +248,12 @@ def _insert(s: list[Token], pre: str, permitidas: set[str], extra: str | None, a
         resto = resto[j + 1:]
     if not resto or resto[0] not in (('w', 'select'), ('w', 'values')):
         return [f'{pre}: el insert tiene que seguir con select o values']
-    return _prohibidas(resto, pre, frozenset({'into'}))
+    out = _prohibidas(resto, pre, frozenset({'into'}), excepto)
+    # `on conflict` solo como `on conflict do nothing` (un `do update` ya cae por «update»)
+    for i, t in enumerate(resto):
+        if t == ('w', 'conflict') and resto[i + 1:i + 3] != [('w', 'do'), ('w', 'nothing')]:
+            out.append(f'{pre}: on conflict solo con do nothing')
+    return out
 
 
 def _hasta_then(r: list[Token]) -> int | None:
@@ -265,9 +276,10 @@ def _sin_into(r: list[Token], pre: str) -> list[str]:
     return [f'{pre}: «into» fuera de un select … into <variables>'] if ('w', 'into') in r else []
 
 
-def _plpgsql(cuerpo: str, pre: str) -> list[str]:
+def _plpgsql(cuerpo: str, pre: str, con_for: bool = False) -> list[str]:
     """Lista blanca del cuerpo de un `do`: declare de variables, begin, end, if/elsif/else … then, raise exception '…',
-    select … into <variables declaradas>, <variable> := …, null."""
+    select … into <variables declaradas>, <variable> := …, null. Con `con_for` (perfil del migrador), además
+    `for <variable declarada> in select … loop` … `end loop`."""
     toks, probs = tokenizar(cuerpo)
     if probs:
         return [f'{pre} (cuerpo del do): {p}' for p in probs]
@@ -301,8 +313,20 @@ def _plpgsql(cuerpo: str, pre: str) -> list[str]:
                 continue
             if w == ('w', 'else'):
                 r = r[1:]; continue
+            if con_for and w == ('w', 'for'):
+                if len(r) < 4 or r[1][0] != 'w' or r[1][1] not in variables or r[2] != ('w', 'in') or r[3] != ('w', 'select'):
+                    return [f'{pre}: solo for <variable declarada> in select … loop']
+                if ('w', 'loop') not in r:
+                    return [f'{pre}: for sin loop']
+                k = r.index(('w', 'loop'))
+                malos = _sin_into(r[4:k], pre)
+                if malos:
+                    return malos
+                r = r[k + 1:]
+                continue
             if w == ('w', 'end'):
-                return [] if r[1:] in ([], [('w', 'if')]) else [f'{pre}: end mal formado']
+                fines = ([], [('w', 'if')]) + (([('w', 'loop')],) if con_for else ())
+                return [] if r[1:] in fines else [f'{pre}: end mal formado']
             if w == ('w', 'raise'):
                 if len(r) < 3 or r[1] != ('w', 'exception') or r[2][0] != 's':
                     return [f'{pre}: solo se permite raise exception \'…\'']
@@ -349,7 +373,7 @@ def _plpgsql(cuerpo: str, pre: str) -> list[str]:
     return probs
 
 
-def _do(s: list[Token], pre: str) -> list[str]:
+def _do(s: list[Token], pre: str, con_for: bool = False) -> list[str]:
     resto = s[1:]
     lang = [('w', 'language'), ('w', 'plpgsql')]
     if resto[:2] == lang:
@@ -360,7 +384,7 @@ def _do(s: list[Token], pre: str) -> list[str]:
         return [f'{pre}: do mal formado (solo do $tag$ … $tag$ [language plpgsql])']
     if resto[0][0] != 'd':
         return [f'{pre}: el cuerpo del do tiene que ir entre $tag$ … $tag$']
-    return _plpgsql(resto[0][1], pre)
+    return _plpgsql(resto[0][1], pre, con_for)
 
 
 def _lock(s: list[Token], pre: str, permitidas: set[str]) -> list[str]:
@@ -403,6 +427,97 @@ def revisar(sql: str, permitir_insert_en: tuple[str, ...] = ('public.club_movimi
             probs += _insert(s, pre, permitidas, permitir_extra, altas)
         elif w == ('w', 'lock'):
             probs += _lock(s, pre, {t.lower() for t in permitir_lock})
+        else:
+            probs.append(f'{pre}: sentencia no permitida (empieza con «{_nombre(w)}»)')
+            probs += _prohibidas(s, pre)
+    if sentencias[0] != [('w', 'begin')]:
+        probs.append('el archivo no empieza con begin')
+    if sentencias[-1] not in ([('w', 'commit')], [('w', 'rollback')]):
+        probs.append('el archivo no termina con commit o rollback')
+    return probs
+
+
+# ── Perfil del MIGRADOR (09-nov, punto 4): la primera carga del lanzamiento ─────────────────────────────────────
+# Lista cerrada propia: el SQL de `migrar_firestore.sql_apply(..., primera=True)` usa tablas temporales para pasar el
+# export como UN literal jsonb y para validar adentro de la transacción. Se permite SOLO esto:
+#   begin · set local statement_timeout|lock_timeout = '…' · do $tag$…$tag$ (lo de siempre + for … in select … loop)
+#   · create temp table _<nombre> [(columnas)] on commit drop [as select|with …]   (sin esquema, empieza con «_»)
+#   · insert into public.<tabla del migrador> (…) select|values … [on conflict do nothing]
+#   · lock table public.club_cargas_papel in exclusive mode   (cuando entra el papel en la misma transacción)
+#   · select <columna> from _<temporal>   (la lectura final de la validación) · commit|rollback al final.
+# Ningún delete, truncate, update, alter, drop, execute, set de otra cosa (ni club.libro_mantenimiento), etc.
+# Excepción documentada: la validación lee TRES catálogos de solo lectura (pg_class, pg_namespace, pg_policies) para el
+# barrido de permisos de anon; el resto de pg_* sigue prohibido. El modo de STAGING del migrador (--apply, con deletes)
+# NO pasa por este filtro: no es para prod y el script se niega a usarlo fuera de staging.
+TABLAS_MIGRADOR = ('public.club_negocios', 'public.club_miembros', 'public.club_miembros_contacto', 'public.club_movimientos',
+                   'public.club_pm_cargos', 'public.club_pm_pagos', 'public.club_cargas_papel')
+CATALOGOS_LECTURA = frozenset({'pg_class', 'pg_namespace', 'pg_policies'})
+
+
+def _create_temp(s: list[Token], pre: str) -> list[str]:
+    if len(s) < 7 or s[1] not in (('w', 'temp'), ('w', 'temporary')) or s[2] != ('w', 'table'):
+        return [f'{pre}: create solo como create temp table (nada permanente)']
+    if s[3][0] != 'w' or not s[3][1].startswith('_') or s[4] == ('p', '.'):
+        return [f'{pre}: la temporal va sin esquema y con nombre que empieza con «_»']
+    resto = s[4:]
+    if resto[0] == ('p', '('):
+        prof, j = 0, 0
+        for j, t in enumerate(resto):
+            if t[0] not in ('w', 'p') or (t[0] == 'p' and t[1] not in '(),[]'):
+                return [f'{pre}: lista de columnas de la temporal mal formada']
+            if t == ('p', '('):
+                prof += 1
+            elif t == ('p', ')'):
+                prof -= 1
+                if prof == 0:
+                    break
+        out = _prohibidas(resto[:j + 1], pre)
+        if out:
+            return out
+        resto = resto[j + 1:]
+    if resto[:3] != [('w', 'on'), ('w', 'commit'), ('w', 'drop')]:
+        return [f'{pre}: la temporal tiene que ser on commit drop']
+    resto = resto[3:]
+    if not resto:
+        return []
+    if resto[0] != ('w', 'as') or len(resto) < 2 or resto[1] not in (('w', 'select'), ('w', 'with')):
+        return [f'{pre}: la temporal se llena solo con as select|with …']
+    return _prohibidas(resto[1:], pre, frozenset({'into'}), CATALOGOS_LECTURA)
+
+
+def revisar_migrador(sql: str, papel: bool = True) -> list[str]:
+    """Problemas del SQL de la PRIMERA CARGA del migrador (vacío = pasa). `papel` = admite la carga de papel en la misma
+    transacción (su lock, su registro en club_cargas_papel). Las barras invertidas en literales '…' se aceptan (las
+    regex de la normalización y del barrido): quien aplica exige standard_conforming_strings = on en el servidor."""
+    toks, probs = tokenizar(sql, barra_en_literal=True)
+    if probs:
+        return probs
+    sentencias, probs = partir(toks)
+    if not sentencias:
+        return probs + ['archivo vacío']
+    permitidas = set(TABLAS_MIGRADOR if papel else TABLAS_MIGRADOR[:-1])
+    ultima = len(sentencias)
+    for k, s in enumerate(sentencias, 1):
+        pre = f'sentencia {k}'
+        w = s[0]
+        if len(s) == 1 and w in (('w', 'begin'), ('w', 'commit'), ('w', 'rollback')):
+            if (w == ('w', 'begin')) != (k == 1) or (w != ('w', 'begin') and k != ultima):
+                probs.append(f'{pre}: {w[1]} fuera de lugar (una sola transacción: begin al principio, commit o rollback al final)')
+            continue
+        if w == ('w', 'set'):
+            probs += _set(s, pre)
+        elif w == ('w', 'do'):
+            probs += _do(s, pre, con_for=True)
+        elif w == ('w', 'insert'):
+            probs += _insert(s, pre, permitidas, None, [], CATALOGOS_LECTURA)
+        elif w == ('w', 'create'):
+            probs += _create_temp(s, pre)
+        elif w == ('w', 'lock'):
+            probs += _lock(s, pre, {'public.club_cargas_papel'} if papel else set())
+        elif w == ('w', 'select'):
+            if not (len(s) == 4 and s[1][0] == 'w' and s[2] == ('w', 'from') and s[3][0] == 'w' and s[3][1].startswith('_')):
+                probs.append(f'{pre}: el único select suelto es «select <columna> from _<temporal>»')
+            probs += _prohibidas(s, pre)
         else:
             probs.append(f'{pre}: sentencia no permitida (empieza con «{_nombre(w)}»)')
             probs += _prohibidas(s, pre)

@@ -843,6 +843,52 @@ def aplicar_firmado(a, sp) -> None:
     print(json.dumps({'aplicado': True, 'ref': a.ref, 'sha256': h}, ensure_ascii=False))
 
 
+def main_aplicar_migracion(argv: list[str]) -> None:
+    """G-56 · MODO PROD de la PRIMERA CARGA (09-nov, punto 4). Aplica un carga.sql EMITIDO por --primera-carga --emitir,
+    byte a byte, si:
+      1. su sha256 es el firmado (--sha256, el de resumen.json que firmó el dueño);
+      2. pasa la lista cerrada del migrador (sql_g56.revisar_migrador) otra vez, justo antes de mandarlo;
+      3. termina en commit (no es un ensayo) y no tiene ningún delete;
+      4. el servidor tiene standard_conforming_strings = on (el filtro lee los literales así);
+      5. contra prod: --confirmo-ref repite el ref de prod Y la variable CLUB_G56_PROD=si está puesta en la consola.
+    El SQL trae su precondición «cero socios», su validación y su commit: si algo no da, la base lo rechaza entero.
+    Se PRUEBA solo en staging: allí la base no está vacía y la precondición lo frena sin escribir nada."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import sql_g56
+    ap = argparse.ArgumentParser(prog='migrar_firestore.py aplicar-firmado',
+                                 description='G-56 modo PROD: aplica el carga.sql de la primera carga, tal cual, si su sha256 es el firmado')
+    ap.add_argument('--archivo', type=Path, required=True, help='el carga.sql emitido (fuera del repo)')
+    ap.add_argument('--sha256', required=True, help='el sha256 firmado (resumen.json)')
+    ap.add_argument('--ref', default=STAGING_REF)
+    ap.add_argument('--confirmo-ref', help='contra prod: volver a escribir el ref de prod')
+    a = ap.parse_args(argv)
+    f = a.archivo.expanduser().resolve()
+    if f == REPO_ROOT or REPO_ROOT in f.parents:
+        sys.exit('NEGADO: el carga.sql está dentro del repo. Tiene datos personales: va fuera.')
+    sql = f.read_text(encoding='utf-8')
+    h = hashlib.sha256(sql.encode()).hexdigest()
+    if h != a.sha256.strip().lower():
+        sys.exit('NEGADO: el sha256 del carga.sql no es el firmado (--sha256).')
+    malos = sql_g56.revisar_migrador(sql, papel='public.club_cargas_papel' in sql)
+    if malos:
+        sys.exit('FILTRO G-56 (migrador): ' + '; '.join(malos[:20]))
+    if not sql.rstrip().endswith('commit;'):
+        sys.exit('NEGADO: aplicar-firmado es para el carga.sql (termina en commit), no para un ensayo.')
+    if re.search(r'(?im)^\s*delete\b', sql):
+        sys.exit('NEGADO: la primera carga no puede tener deletes.')
+    prod = a.ref == PROD_REF
+    if prod and (a.confirmo_ref != PROD_REF or os.environ.get('CLUB_G56_PROD') != 'si'):
+        sys.exit('NEGADO: contra prod hace falta --confirmo-ref con el ref de prod y CLUB_G56_PROD=si (paquete firmado, G-56).')
+    if not prod and a.ref != STAGING_REF:
+        sys.exit('NEGADO: ref desconocido.')
+    scs = ejecutar(a.ref, 'show standard_conforming_strings', read_only=True, _prod_firmado=prod)
+    if not scs or scs[0].get('standard_conforming_strings') != 'on':
+        sys.exit('NEGADO: el servidor no tiene standard_conforming_strings = on (el filtro no leería los literales igual).')
+    filas = ejecutar(a.ref, sql, _prod_firmado=prod)
+    print(json.dumps({'aplicado': True, 'ref': a.ref, 'sha256': h,
+                      'validacion': (filas[0].get('r') if filas else None)}, ensure_ascii=False, default=str))
+
+
 # ── Doble carga: tarjetas de papel que ya están en Firestore (SOLO LECTURA) ────
 def main_doble_carga(argv: list[str]) -> None:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -997,6 +1043,11 @@ def main() -> None:
         sql = sql_apply(plan, esperados, ensayo=False, primera=True, fecha_carga=fecha_carga, papel=cuerpo_papel('prod'))
         if re.search(r'(?im)^\s*delete\b', sql):
             sys.exit('NEGADO: la primera carga no puede tener deletes.')
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import sql_g56
+        malos = sql_g56.revisar_migrador(sql, papel=bool(papel_filas))   # lista cerrada del migrador (09-nov)
+        if malos:
+            sys.exit('FILTRO G-56 (migrador): ' + '; '.join(malos))
         (dst / 'carga.sql').write_text(sql, encoding='utf-8'); os.chmod(dst / 'carga.sql', 0o600)
         r = {'modo': 'primera-carga', 'fecha_movimiento': 'carga' if fecha_carga else 'original', 'plan': res,
              'sha256_sql': hashlib.sha256(sql.encode()).hexdigest()}
@@ -1016,5 +1067,7 @@ if __name__ == '__main__':
         main_saldos_papel(sys.argv[2:])
     elif len(sys.argv) > 1 and sys.argv[1] == 'doble-carga-papel':
         main_doble_carga(sys.argv[2:])
+    elif len(sys.argv) > 1 and sys.argv[1] == 'aplicar-firmado':
+        main_aplicar_migracion(sys.argv[2:])
     else:
         main()

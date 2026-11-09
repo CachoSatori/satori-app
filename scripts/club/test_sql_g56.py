@@ -315,5 +315,75 @@ class Tokenizador(unittest.TestCase):
         self.assertEqual(toks, [('w', 'v'), ('p', ':='), ('s', '1'), ('p', ':'), ('p', ':'), ('w', 'int')])
 
 
+
+class Migrador(unittest.TestCase):
+    """(09-nov, punto 4) Lista cerrada propia del SQL de la PRIMERA CARGA del migrador (con tablas temporales)."""
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        import migrar_firestore as mf
+        import test_migrar_firestore as tmf
+        cls.mf = mf
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.plan = mf.armar_plan(mf.cargar(tmf.export_sintetico(Path(cls._tmp.name) / 'e')))
+        cls._loc = mf.LOCATION
+        mf.LOCATION = 'local-prueba'
+        legacy = [m['legacy_id'] for m in cls.plan.miembros if m['estado'] == 'activo'][:2]
+        filas, err = sp.validar('legacy_id,personas,fecha_tarjeta,referencia\n' + ''.join(
+            f'{l},6,2026-10-01,PAPEL-{i}\n' for i, l in enumerate(legacy)))
+        assert not err, err
+        cls.papel = sp.cuerpo_sql(filas, 'local-prueba', 'prod', 'carga')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.mf.LOCATION = cls._loc
+        cls._tmp.cleanup()
+
+    def sql(self, **kw):
+        return self.mf.sql_apply(self.plan, {'miembros': 3}, primera=True, **kw)
+
+    def test_el_sql_real_de_la_primera_carga_pasa(self):
+        from sql_g56 import revisar_migrador
+        for kw in ({'fecha_carga': True}, {'fecha_carga': False}, {'fecha_carga': True, 'papel': self.papel}):
+            sql = self.sql(**kw)
+            self.assertEqual(revisar_migrador(sql, papel='papel' in kw), [], kw)
+        # con papel pero sin habilitarlo: el lock y el registro del lote no pasan
+        self.assertTrue(revisar_migrador(self.sql(fecha_carga=True, papel=self.papel), papel=False))
+
+    def test_el_perfil_de_la_carga_de_papel_no_lo_acepta(self):
+        self.assertTrue(revisar(self.sql(fecha_carga=True)))       # temporales, select suelto y barras: otra lista
+
+    def test_el_modo_staging_con_deletes_no_pasa(self):
+        from sql_g56 import revisar_migrador
+        out = ' '.join(revisar_migrador(self.mf.sql_apply(self.plan, {'miembros': 3})))
+        self.assertIn('«delete»', out)
+
+    def test_trucados_fallan(self):
+        from sql_g56 import revisar_migrador
+        base = self.sql(fecha_carga=True)
+        cola = base[:base.rindex('commit;')]
+        trucos = {
+            'delete': 'delete from public.club_movimientos;',
+            'delete dentro de un do': 'do $$ begin delete from public.club_movimientos; end $$;',
+            'create table permanente': 'create table _x (a int);',
+            'temporal sin on commit drop': 'create temp table _x (a int);',
+            'temporal con esquema': 'create temp table public._x on commit drop as select 1;',
+            'temporal sin guion bajo': 'create temp table x on commit drop as select 1;',
+            'insert en club_entorno': "insert into public.club_entorno (nombre) values ('prod');",
+            'insert en profiles': 'insert into public.profiles (id) select gen_random_uuid();',
+            'execute en un do': "do $$ begin execute 'delete from public.club_movimientos'; end $$;",
+            'session_replication_role': "set local session_replication_role = 'replica';",
+            'libro_mantenimiento': "set local club.libro_mantenimiento = 'migracion';",
+            'truncate': 'truncate public.club_movimientos;',
+            'on conflict do update': 'insert into public.club_negocios (nombre) values (\'x\') on conflict (nombre) do update set nombre = \'y\';',
+            'select suelto de una tabla real': 'select * from public.club_miembros_contacto;',
+            'pg_ fuera de los catálogos': 'create temp table _x on commit drop as select pg_read_file(\'/etc/passwd\');',
+            'temporal llenada con delete': 'create temp table _x on commit drop as with d as (delete from public.club_movimientos returning 1) select 1;',
+            'for sobre algo que no es select': 'do $$ declare k text; begin for k in execute \'x\' loop null; end loop; end $$;',
+        }
+        for nombre, extra in trucos.items():
+            self.assertTrue(revisar_migrador(cola + extra + '\ncommit;\n', papel=False), nombre)
+
+
 if __name__ == '__main__':
     unittest.main()

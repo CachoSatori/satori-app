@@ -252,8 +252,10 @@ público (`/r/`, cupones); el canje sale del botón «Canjear» del pase o del p
    con `--acepto-inactivos N`, el número exacto).
 3. Ensayo en staging: lo mismo con `--ensayo --vaciar-para-ensayo` (vacía el Club dentro de la transacción y la deshace).
 4. `--emitir <carpeta fuera del repo>` → `carga.sql` + `resumen.json` (sha256). El dueño firma el sha256.
-5. En PROD, con la firma y fuera de servicio: el `carga.sql` en el editor de PROD, después de comparar su sha256 con el
-   firmado (`Get-FileHash -Algorithm SHA256`). Una transacción; si la base no está vacía, aborta sin tocar nada.
+5. En PROD, con la firma y fuera de servicio: `python3 -I scripts/club/migrar_firestore.py aplicar-firmado --archivo
+   <carga.sql> --sha256 <el firmado> --ref <prod> --confirmo-ref <prod>` con `CLUB_G56_PROD=si`. Recalcula el sha256,
+   vuelve a pasar la lista cerrada del migrador, exige `commit` al final y `standard_conforming_strings = on`, y lo
+   manda tal cual. Una transacción; si la base no está vacía, aborta sin tocar nada.
 
 **Verificar:** la validación dentro de la transacción da OK (si no, no se guarda nada); el dueño controla miembros,
 saldos, los 136 vencimientos del 05-nov y el lote de papel (`select * from club_cargas_papel;`). No hay ningún `delete`.
@@ -358,12 +360,15 @@ en prod tiene que poder revisarse antes, sin exponer datos personales.
   archivos trucados de la auditoría son pruebas y se rechazan. Lo usa la carga de papel al emitir y al aplicar.
 - **Modo PROD de la carga de papel:** `saldos-papel --aplicar-firmado <carga.sql> --sha256 <firmado>` (contra prod,
   además `--confirmo-ref` y `CLUB_G56_PROD=si`). Probado solo en staging: el `carga.sql` de prod se niega solo.
-- **Migrador, primera carga** (paso 8): `--primera-carga --emitir`: sin `delete`, precondición «cero socios», fecha de
-  carga, chequeo de 12 meses sobre la fuente, papel en la misma transacción. Se aplica en el editor de PROD con el
-  sha256 firmado (el `carga.sql` del migrador usa tablas temporales y `jsonb`: no pasa la lista cerrada de la carga de
-  papel; sus defensas son la precondición «cero socios», el «sin delete» al emitir y la validación de adentro).
-- **Pendiente para la revisión:** una lista cerrada propia para el SQL del migrador (si se quiere el mismo nivel que el
-  papel) y un `--aplicar-firmado` del migrador.
+- **Migrador, primera carga** (paso 8):
+  - `--primera-carga --emitir`: sin `delete`, precondición «cero socios», fecha de carga, chequeo de 12 meses sobre la
+    fuente, papel en la misma transacción.
+  - **Lista cerrada propia** (`sql_g56.revisar_migrador`, con temporales `_… on commit drop` y los inserts solo en las
+    tablas del migrador). `--emitir` se niega si no pasa.
+  - **`aplicar-firmado`**: sha256 firmado, lista cerrada otra vez, `commit` al final y `standard_conforming_strings = on`.
+    Contra prod, además `--confirmo-ref` y `CLUB_G56_PROD=si`.
+  - Probado en staging: la primera carga firmada frena por «cero socios» y staging queda igual.
+  - Detalle: `piloto/saldos-papel.md` §A.4 y §A.4b.
 
 **Propuesta original (08-nov; queda como referencia de lo que se pidió):**
 1. **Dos llaves para prod:** `--ref <prod> --prod`. Sin las dos, el script se niega igual que hoy. `--prod` nunca conecta

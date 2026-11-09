@@ -205,6 +205,71 @@ class Sql(unittest.TestCase):
         self.assertEqual(mf.inactivos_fuente(self.p, '2000-01-01', 12), [])
 
 
+class AplicarFirmado(unittest.TestCase):
+    """(09-nov, punto 4) La primera carga emitida pasa la lista cerrada del migrador y se aplica solo firmada."""
+    MF = str(Path(__file__).resolve().parent / 'migrar_firestore.py')
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.exp = export_sintetico(self.dir / 'e')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def correr(self, *args, env=None):
+        import subprocess
+        return subprocess.run([sys.executable, '-I', self.MF, *args], capture_output=True, text=True,
+                              env={**os.environ, **(env or {})})
+
+    def emitir(self):
+        r = self.correr('--export', str(self.exp), '--local', 'santa-teresa', '--primera-carga', '--acepto-inactivos',
+                        str(self._inactivos()), '--out', str(self.dir / 'out'), '--emitir', str(self.dir / 'emit'))
+        self.assertEqual(r.returncode, 0, r.stdout[-800:] + r.stderr[-800:])
+        carga = self.dir / 'emit' / 'carga.sql'
+        h = json.loads((self.dir / 'emit' / 'resumen.json').read_text())['sha256_sql']
+        self.assertEqual(hashlib.sha256(carga.read_text(encoding='utf-8').encode()).hexdigest(), h)
+        return carga, h
+
+    def _inactivos(self):
+        import datetime as _dt
+        p = mf.armar_plan(mf.cargar(self.exp))
+        return len(mf.inactivos_fuente(p, _dt.date.today().isoformat(), 12))
+
+    def test_emitir_pasa_la_lista_cerrada_y_aplicar_niega_sin_firma_o_sin_confirmar_prod(self):
+        carga, h = self.emitir()
+        import sql_g56
+        self.assertEqual(sql_g56.revisar_migrador(carga.read_text(encoding='utf-8'), papel=False), [])
+        r = self.correr('aplicar-firmado', '--archivo', str(carga), '--sha256', '0' * 64)
+        self.assertNotEqual(r.returncode, 0); self.assertIn('no es el firmado', r.stdout + r.stderr)
+        r = self.correr('aplicar-firmado', '--archivo', str(carga), '--sha256', h, '--ref', mf.PROD_REF, env={'CLUB_G56_PROD': ''})
+        self.assertNotEqual(r.returncode, 0); self.assertIn('NEGADO', r.stdout + r.stderr)
+        r = self.correr('aplicar-firmado', '--archivo', str(carga), '--sha256', h, '--ref', mf.PROD_REF,
+                        '--confirmo-ref', 'otro', env={'CLUB_G56_PROD': 'si'})
+        self.assertNotEqual(r.returncode, 0); self.assertIn('NEGADO', r.stdout + r.stderr)
+        # un ensayo (termina en rollback) no se aplica, aunque la firma sea la suya
+        ens = self.dir / 'ensayo.sql'
+        ens.write_text(carga.read_text(encoding='utf-8').rstrip()[:-len('commit;')] + 'rollback;\n', encoding='utf-8')
+        r = self.correr('aplicar-firmado', '--archivo', str(ens), '--sha256', hashlib.sha256(ens.read_bytes()).hexdigest())
+        self.assertNotEqual(r.returncode, 0); self.assertIn('termina en commit', r.stdout + r.stderr)
+        # trucado (con su propio sha256): el filtro lo frena antes de mandar nada
+        tr = self.dir / 'trucado.sql'
+        tr.write_text(carga.read_text(encoding='utf-8').replace('commit;', 'delete from public.club_movimientos;\ncommit;'), encoding='utf-8')
+        r = self.correr('aplicar-firmado', '--archivo', str(tr), '--sha256', hashlib.sha256(tr.read_bytes()).hexdigest())
+        self.assertNotEqual(r.returncode, 0); self.assertIn('FILTRO G-56 (migrador)', r.stdout + r.stderr)
+
+    @unittest.skipUnless(os.environ.get('CLUB_ENSAYO_STAGING') == '1', 'contra staging (CLUB_ENSAYO_STAGING=1)')
+    def test_staging_la_primera_carga_firmada_frena_por_cero_socios_y_no_escribe(self):
+        carga, h = self.emitir()
+        q = ("select (select count(*) from public.club_movimientos) m, (select count(*) from public.club_miembros) mi, "
+             "(select count(*) from public.club_negocios) n")
+        antes = mf.ejecutar(mf.STAGING_REF, q, read_only=True)
+        r = self.correr('aplicar-firmado', '--archivo', str(carga), '--sha256', h)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('cero socios', r.stdout + r.stderr)
+        self.assertEqual(mf.ejecutar(mf.STAGING_REF, q, read_only=True), antes)
+
+
 @unittest.skipUnless(os.environ.get('CLUB_ENSAYO_STAGING') == '1', 'ensayo contra staging (CLUB_ENSAYO_STAGING=1)')
 class EnsayoStaging(unittest.TestCase):
     """Contra STAGING, siempre con ensayo=True (ROLLBACK). Nunca --apply."""

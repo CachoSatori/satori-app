@@ -31,6 +31,37 @@
    - las tarjetas de papel (origen **`papel`**, por `legacy_id`), con su lock, su línea de base, el registro del lote y su
      validación (§B);
    - la validación de todo contra la fuente (el papel no se mezcla con el cuadre de la página vieja) y `commit` al final.
+
+   **Lista cerrada del migrador** (`scripts/club/sql_g56.py`, `revisar_migrador`; análisis real, el mismo tokenizador
+   que la carga de papel). `--emitir` se niega si el `carga.sql` no la pasa. Solo admite lo siguiente:
+   - `begin`;
+   - `set local statement_timeout|lock_timeout`;
+   - `do $tag$ … $tag$`, con lo de siempre más `for <variable> in select … loop … end loop`;
+   - `create temp table _<nombre> [(columnas)] on commit drop [as select|with …]`: temporales, sin esquema y con `_`
+     adelante;
+   - `insert into public.<tabla>` solo en las tablas que carga el migrador (`club_negocios`, `club_miembros`,
+     `club_miembros_contacto`, `club_movimientos`, `club_pm_cargos`, `club_pm_pagos` y, con papel, `club_cargas_papel`),
+     con `on conflict` solo como `do nothing`;
+   - con papel, el `lock` de `club_cargas_papel`;
+   - el `select <columna> from _<temporal>` final;
+   - `commit`.
+
+   Prohibido: `delete`, `truncate`, `update`, `alter`, `drop`, `execute`, cualquier `set` que no sea uno de los dos
+   timeouts (tampoco `club.libro_mantenimiento` ni `session_replication_role`), `pg_*` (salvo tres catálogos de solo
+   lectura que usa la validación: `pg_class`, `pg_namespace`, `pg_policies`), `dblink` y `lo_*`. Las barras invertidas
+   dentro de literales (las regex de la normalización) se aceptan porque quien aplica exige
+   `standard_conforming_strings = on`. El modo de staging del migrador (`--apply`, que borra) **no** pasa por esta lista:
+   no es para prod.
+4b. **Aplicar firmado** (G-56, modo PROD): `python3 -I scripts/club/migrar_firestore.py aplicar-firmado --archivo
+   <carga.sql> --sha256 <el firmado> --ref <prod> --confirmo-ref <prod>`, con `CLUB_G56_PROD=si` en la consola. Hace,
+   en orden:
+   1. recalcula el sha256 (si no es el firmado, se niega);
+   2. vuelve a pasar la lista cerrada;
+   3. exige que sea el `carga.sql` (termina en `commit`, sin `delete`);
+   4. verifica `standard_conforming_strings = on` en el servidor;
+   5. lo manda tal cual.
+
+   **Probado solo en staging:** allí la base no está vacía y la precondición «cero socios» lo frena sin escribir nada.
 5. **Después de la carga**, el migrador **no vuelve a correr**: frena si encuentra una carga de papel (nunca la borra), y
    en prod la precondición «cero socios» lo frena igual.
 
@@ -83,8 +114,17 @@
 - Con la fecha de carga, cuentan como actividad para el vencimiento desde el día de la carga.
 
 ## D. Pruebas
-- `python3 -m unittest scripts/club/test_saldos_papel.py` (30) y `scripts/club/test_sql_g56.py` (50);
-  `scripts/club/test_migrar_firestore.py` (15).
-- Contra staging, sin dejar nada (`CLUB_ENSAYO_STAGING=1`, desde `scripts/club`): papel +4 (ensayo, dos veces en la misma
-  transacción, **dos sesiones a la vez** y el modo PROD que se niega en staging); migrador +6 (primera carga que frena con
-  la base llena, primera carga sobre la base vaciada y la carga única con papel en la misma transacción).
+- `python3 -m unittest scripts/club/test_saldos_papel.py` (30), `scripts/club/test_sql_g56.py` (54: suma la lista
+  cerrada del migrador, con 17 trucados) y `scripts/club/test_migrar_firestore.py` (16: suma `--emitir` que pasa la
+  lista y `aplicar-firmado` que niega sin firma, sin confirmar prod, un ensayo o un trucado).
+- Contra staging, sin dejar nada (`CLUB_ENSAYO_STAGING=1`, desde `scripts/club`): 111 en total. Papel +4:
+  - ensayo;
+  - dos veces en la misma transacción;
+  - **dos sesiones a la vez**;
+  - el modo PROD, que se niega en staging.
+
+  Migrador +7:
+  - primera carga que frena con la base llena;
+  - primera carga sobre la base vaciada;
+  - la carga única con papel en la misma transacción;
+  - **la primera carga firmada aplicada con `aplicar-firmado`, que frena por «cero socios» sin escribir nada**.

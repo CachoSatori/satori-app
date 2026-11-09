@@ -228,15 +228,25 @@ select set_config('humo.salonero', json_build_object('hay_cuenta', current_setti
 reset role;
 select current_setting('humo.owner')::json as owner, current_setting('humo.manager')::json as manager,
        current_setting('humo.cajero')::json as cajero, current_setting('humo.contador')::json as contador,
-       current_setting('humo.salonero')::json as salonero;
+       current_setting('humo.salonero')::json as salonero,
+       -- base: lo que hay en cada tabla, como postgres (sin políticas), en la misma transacción
+       json_build_object('employees', (select count(*) from public.employees), 'tip_entries', (select count(*) from public.tip_entries),
+       'tip_sessions', (select count(*) from public.tip_sessions), 'role_tip_points', (select count(*) from public.role_tip_points),
+       'exchange_rates', (select count(*) from public.exchange_rates), 'profiles', (select count(*) from public.profiles)) as base;
 rollback;
 ```
+- **El «antes» de 4b se corre justo antes del merge** (no al empezar §1), para que pase el menor tiempo posible entre
+  «antes» y «después».
 - **Regla: después = antes**, para cada rol con `hay_cuenta: true`. Un rol con `hay_cuenta: false` (sin cuenta activa) no se
   compara.
+- **Si una diferencia aparece también en `base`** (el conteo como postgres), **no es parada**: se cargó algo nuevo entre
+  «antes» y «después» (una propina, una sesión, un tipo de cambio). Ejemplo: `tip_entries` sube 2 en un rol y también sube
+  2 en `base`. **Es parada** si la diferencia de un rol no está en `base`, o si es distinta de la de `base`.
 - **staging (09-nov), con la 085 y con la 085 deshecha en la misma transacción:** idéntico.
   - owner 45 · 17 · 3 · 7 · 3 · 10;
   - cajero y salonero 21 · 17 · 3 · 7 · 3 · 1;
-  - manager y contador sin cuenta activa en staging.
+  - manager y contador sin cuenta activa en staging;
+  - con la columna `base` (09-nov ~16:20 CR, `begin read only`): los mismos números, y `base` 45 · 17 · 3 · 7 · 3 · 10.
 
 ## 5. Verificación después del merge
 1. **Branching:** el check «Supabase Preview» del merge commit en `success`. En el log del panel:
@@ -251,7 +261,8 @@ rollback;
    ```
 3. **Catálogo:** la consulta 1.2. Las 7 policies con la condición de «Después», y las otras 8 **sin cambios** contra el
    respaldo.
-4. **Humo:** 4a con los números de «Después», y 4b **igual que antes** para cada rol con cuenta (Grok 129).
+4. **Humo:** 4a con los números de «Después», y 4b **igual que antes** para cada rol con cuenta (Grok 129); una diferencia
+   que también está en `base` no cuenta (§4, 4b).
 5. **Pantalla:** el owner abre Caja y Propinas, y alguien con rol de salonero abre Mi Rendimiento. Tienen que ver lo de
    siempre.
 
@@ -259,7 +270,8 @@ rollback;
 - Branching en error (`MIGRATIONS_FAILED`) o aplicando algo que no sea la 085.
 - 5.2 sin exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'`, o 5.3 con alguna policy distinta de lo esperado.
 - 4a «Después» con alguna de las cinco tablas en más de 0, o `profiles` distinto de 1.
-- 4b «Después» distinto de «Antes» en algún rol con cuenta.
+- 4b «Después» distinto de «Antes» en algún rol con cuenta, **salvo** que la misma diferencia aparezca en `base` (algo
+  nuevo cargado entre las dos lecturas: no es parada).
 - 5.5: un usuario **activo** deja de ver algo que veía.
 
 ## 7. Vuelta atrás (todo en la misma ventana; nadie más pushea a `main`)
@@ -329,13 +341,13 @@ rollback;
 | 1.2 15 policies = respaldo · RLS en las 6 | | |
 | 1.3 vistas · funciones SECURITY DEFINER sobre las 5 tablas: 0 (Grok 130) | | |
 | 4a antes (cuenta inactiva): 5 tablas con filas · profiles 1 | | |
-| 4b antes (activas): owner / manager / cajero / contador / salonero, conteos de las 6 tablas | | |
+| 4b antes (activas), **justo antes del merge**: owner / manager / cajero / contador / salonero y `base`, conteos de las 6 tablas | | |
 | **Gate de CI en la cabeza del PR** (Grok 125): los checks del PR en verde en el SHA que se firma (enlace a la corrida), **o** la aceptación explícita del dueño de mergear sin ese verde, con el motivo | | |
 | §2 merge (SHA, hora) | | |
 | 5.1 Branching success · log con la 085 | | |
 | 5.2 ledger 58 · 085 · exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'` (n de statements: anotar) | | |
 | 5.3 las 7 policies en «Después» · las otras 8 iguales | | |
 | 4a después: 0 · 0 · 0 · 0 · 0 · profiles 1 | | |
-| 4b después = 4b antes, en cada rol con cuenta | | |
+| 4b después = 4b antes, en cada rol con cuenta (una diferencia que también está en `base` no es parada) | | |
 | 5.5 pantalla OK (owner, salonero) | | |
 | Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | |

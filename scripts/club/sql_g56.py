@@ -16,6 +16,11 @@ Cómo:
      `do $tag$ … $tag$` (cuyo cuerpo se vuelve a tokenizar y se revisa con su propia lista blanca de PL/pgSQL);
      `insert into public.<tabla permitida> [(columnas)] select|values …`.
   4. LISTA NEGRA de palabras en TODO el código, incluidos los cuerpos de los `do` (execute, delete, update, set, …).
+  5. (09-nov, Grok 114) LISTA BLANCA de FUNCIONES: toda llamada `nombre(` o `esquema.nombre(` —en un `select … into`, un
+     `:=`, un `insert … select|values`, un `create temp table … as select`, un `if`, donde sea— tiene que estar en
+     `INMUTABLES` (built-ins de pg_catalog con TODAS sus versiones inmutables, verificado contra el catálogo en
+     `test_sql_g56`) o en las EXCEPCIONES nombradas de cada perfil, cada una con su motivo. Todo lo demás se rechaza,
+     aunque no esté en la lista negra (p. ej. `public.club_ajuste(…)` dentro de un `select … into`).
 
 Uso: `revisar(sql)` → lista de problemas (vacía = pasa). Los mensajes nunca vuelcan el contenido de un literal.
 """
@@ -38,6 +43,45 @@ PROHIBIDAS = frozenset({
 PREFIJOS_PROHIBIDOS = ('pg_', 'dblink', 'lo_')
 SET_PERMITIDOS = ('lock_timeout', 'statement_timeout')
 EXTRAS = (None, 'alta_ficticios')
+
+# ── (09-nov, Grok 114) Funciones que se pueden llamar ─────────────────────────────────────────────────────────────
+# Built-ins de pg_catalog con TODAS sus versiones IMMUTABLE (provolatile = 'i'); test_sql_g56 lo verifica contra el
+# catálogo de staging. Las que tienen alguna versión estable (date_trunc, length, generate_series, numeric, …) no entran.
+INMUTABLES = frozenset({
+    'abs', 'array_agg', 'array_length', 'bool_and', 'bool_or', 'btrim', 'cardinality', 'ceil', 'char_length', 'count',
+    'decode', 'encode', 'floor', 'jsonb_array_elements', 'jsonb_array_elements_text', 'jsonb_array_length', 'jsonb_each',
+    'jsonb_each_text', 'jsonb_extract_path_text', 'jsonb_object_keys', 'jsonb_set', 'jsonb_strip_nulls', 'jsonb_typeof',
+    'left', 'lower', 'lpad', 'ltrim', 'make_interval', 'max', 'md5', 'min', 'mod', 'position', 'regexp_match',
+    'regexp_matches', 'regexp_replace', 'replace', 'right', 'round', 'rpad', 'rtrim', 'sha256', 'sign', 'split_part',
+    'string_agg', 'strpos', 'substr', 'sum', 'translate', 'trunc', 'unnest', 'upper',
+})
+# Expresiones condicionales de SQL con forma de llamada (no son funciones del catálogo).
+CONSTRUCCIONES = frozenset({'coalesce', 'nullif', 'greatest', 'least'})
+# Excepciones NOMBRADAS (no inmutables), una por una, con su motivo. Las estables no pueden escribir (Postgres rechaza un
+# INSERT/UPDATE/DELETE dentro de una función que no es volatile); las volátiles solo generan códigos al azar.
+EXCEPCIONES_G56 = {
+    'now': 'estable · fecha del movimiento y de la carga',
+    'to_char': 'estable · la nota del movimiento lleva la fecha como texto',
+}
+EXCEPCIONES_MIGRADOR = {
+    **EXCEPCIONES_G56,
+    'jsonb_to_recordset': 'estable · el export viaja como UN literal jsonb',
+    'json_build_object': 'estable · el resumen de la validación',
+    'json_object_agg': 'estable · el resumen de la validación',
+    'array_to_string': 'estable · mensajes de la validación',
+    'has_table_privilege': 'estable · el barrido de permisos de anon de la validación',
+    'public.club_vencer_candidatos': 'estable (del Club) · el chequeo de 12 meses',
+    'public.club_gen_codigo': 'volátil (del Club) · el código de cada miembro migrado; solo LEE (test_sql_g56 lo verifica)',
+    'extensions.gen_random_bytes': 'volátil · el token del portal de cada miembro',
+}
+# Palabras que pueden ir antes de «(» sin ser una llamada (palabras clave y tipos con modificador).
+NO_LLAMADA = frozenset({
+    'values', 'in', 'exists', 'any', 'all', 'some', 'as', 'from', 'join', 'on', 'using', 'and', 'or', 'not', 'select',
+    'where', 'then', 'else', 'when', 'over', 'filter', 'within', 'lateral', 'with', 'row', 'array', 'by', 'partition',
+    'having', 'returning', 'distinct', 'is', 'case', 'if', 'elsif', 'between', 'like', 'ilike', 'similar', 'union',
+    'except', 'intersect', 'limit', 'offset', 'into', 'cast', 'numeric', 'decimal', 'varchar', 'char', 'character',
+    'varying', 'timestamp', 'timestamptz', 'time', 'interval', 'bit', 'loop', 'by',
+})
 
 _LETRA = r'A-Za-z_\u0080-\U0010ffff'
 RE_PALABRA = re.compile(rf'[{_LETRA}][{_LETRA}0-9$]*')
@@ -209,6 +253,27 @@ def _prohibidas(toks: list[Token], pre: str, tambien: frozenset = frozenset(), e
     return out
 
 
+def _llamadas(toks: list[Token], pre: str, permitidas: frozenset | set) -> list[str]:
+    """(Grok 114) Toda `palabra(` o `esquema.palabra(` que no sea palabra clave ni la lista de columnas de un alias
+    (`… as j(a int)` / `…) j(a int)`) es una LLAMADA y tiene que estar en `permitidas`. Un identificador entre comillas
+    nunca es palabra clave: `"values"(…)` es una llamada."""
+    out = []
+    for i, t in enumerate(toks):
+        if t[0] not in ('w', 'q') or i + 1 >= len(toks) or toks[i + 1] != ('p', '('):
+            continue
+        prev = toks[i - 1] if i else None
+        if t[0] == 'w' and t[1] in NO_LLAMADA:
+            continue
+        if prev in (('w', 'as'), ('p', ')')):              # alias con su lista de columnas
+            continue
+        nombre = t[1]
+        if prev == ('p', '.') and i >= 2 and toks[i - 2][0] in ('w', 'q'):
+            nombre = f'{toks[i - 2][1]}.{nombre}'
+        if nombre not in permitidas and nombre not in CONSTRUCCIONES:
+            out.append(f'{pre}: llamada a una función fuera de la lista blanca («{nombre}»)')
+    return out
+
+
 def _nombre(t: Token) -> str:
     return t[1] if t[0] == 'q' else '«literal»' if t[0] in ('s', 'd') else t[1]
 
@@ -224,7 +289,7 @@ def _set(s: list[Token], pre: str) -> list[str]:
 
 
 def _insert(s: list[Token], pre: str, permitidas: set[str], extra: str | None, altas: list[int],
-            excepto: frozenset = frozenset()) -> list[str]:
+            excepto: frozenset = frozenset(), funciones: frozenset | set = frozenset()) -> list[str]:
     if len(s) < 6 or s[1] != ('w', 'into'):
         return [f'{pre}: insert mal formado']
     a = s[2]
@@ -248,7 +313,7 @@ def _insert(s: list[Token], pre: str, permitidas: set[str], extra: str | None, a
         resto = resto[j + 1:]
     if not resto or resto[0] not in (('w', 'select'), ('w', 'values')):
         return [f'{pre}: el insert tiene que seguir con select o values']
-    out = _prohibidas(resto, pre, frozenset({'into'}), excepto)
+    out = _prohibidas(resto, pre, frozenset({'into'}), excepto) + _llamadas(resto, pre, funciones)
     # `on conflict` solo como `on conflict do nothing` (un `do update` ya cae por «update»)
     for i, t in enumerate(resto):
         if t == ('w', 'conflict') and resto[i + 1:i + 3] != [('w', 'do'), ('w', 'nothing')]:
@@ -276,14 +341,14 @@ def _sin_into(r: list[Token], pre: str) -> list[str]:
     return [f'{pre}: «into» fuera de un select … into <variables>'] if ('w', 'into') in r else []
 
 
-def _plpgsql(cuerpo: str, pre: str, con_for: bool = False) -> list[str]:
+def _plpgsql(cuerpo: str, pre: str, con_for: bool = False, funciones: frozenset | set = frozenset()) -> list[str]:
     """Lista blanca del cuerpo de un `do`: declare de variables, begin, end, if/elsif/else … then, raise exception '…',
     select … into <variables declaradas>, <variable> := …, null. Con `con_for` (perfil del migrador), además
     `for <variable declarada> in select … loop` … `end loop`."""
     toks, probs = tokenizar(cuerpo)
     if probs:
         return [f'{pre} (cuerpo del do): {p}' for p in probs]
-    probs = _prohibidas(toks, pre)
+    probs = _prohibidas(toks, pre) + _llamadas(toks, pre, funciones)
     trozos, p2 = partir(toks)
     probs += [f'{pre} (cuerpo del do): {p}' for p in p2]
     declarando = False
@@ -373,7 +438,7 @@ def _plpgsql(cuerpo: str, pre: str, con_for: bool = False) -> list[str]:
     return probs
 
 
-def _do(s: list[Token], pre: str, con_for: bool = False) -> list[str]:
+def _do(s: list[Token], pre: str, con_for: bool = False, funciones: frozenset | set = frozenset()) -> list[str]:
     resto = s[1:]
     lang = [('w', 'language'), ('w', 'plpgsql')]
     if resto[:2] == lang:
@@ -384,7 +449,7 @@ def _do(s: list[Token], pre: str, con_for: bool = False) -> list[str]:
         return [f'{pre}: do mal formado (solo do $tag$ … $tag$ [language plpgsql])']
     if resto[0][0] != 'd':
         return [f'{pre}: el cuerpo del do tiene que ir entre $tag$ … $tag$']
-    return _plpgsql(resto[0][1], pre, con_for)
+    return _plpgsql(resto[0][1], pre, con_for, funciones)
 
 
 def _lock(s: list[Token], pre: str, permitidas: set[str]) -> list[str]:
@@ -410,6 +475,7 @@ def revisar(sql: str, permitir_insert_en: tuple[str, ...] = ('public.club_movimi
     if not sentencias:
         return probs + ['archivo vacío']
     permitidas = {t.lower() for t in permitir_insert_en}
+    funciones = INMUTABLES | set(EXCEPCIONES_G56)
     altas: list[int] = []
     ultima = len(sentencias)
     for k, s in enumerate(sentencias, 1):
@@ -422,9 +488,9 @@ def revisar(sql: str, permitir_insert_en: tuple[str, ...] = ('public.club_movimi
         if w == ('w', 'set'):
             probs += _set(s, pre)
         elif w == ('w', 'do'):
-            probs += _do(s, pre)
+            probs += _do(s, pre, funciones=funciones)
         elif w == ('w', 'insert'):
-            probs += _insert(s, pre, permitidas, permitir_extra, altas)
+            probs += _insert(s, pre, permitidas, permitir_extra, altas, funciones=funciones)
         elif w == ('w', 'lock'):
             probs += _lock(s, pre, {t.lower() for t in permitir_lock})
         else:
@@ -454,7 +520,7 @@ TABLAS_MIGRADOR = ('public.club_negocios', 'public.club_miembros', 'public.club_
 CATALOGOS_LECTURA = frozenset({'pg_class', 'pg_namespace', 'pg_policies'})
 
 
-def _create_temp(s: list[Token], pre: str) -> list[str]:
+def _create_temp(s: list[Token], pre: str, funciones: frozenset | set = frozenset()) -> list[str]:
     if len(s) < 7 or s[1] not in (('w', 'temp'), ('w', 'temporary')) or s[2] != ('w', 'table'):
         return [f'{pre}: create solo como create temp table (nada permanente)']
     if s[3][0] != 'w' or not s[3][1].startswith('_') or s[4] == ('p', '.'):
@@ -482,7 +548,7 @@ def _create_temp(s: list[Token], pre: str) -> list[str]:
         return []
     if resto[0] != ('w', 'as') or len(resto) < 2 or resto[1] not in (('w', 'select'), ('w', 'with')):
         return [f'{pre}: la temporal se llena solo con as select|with …']
-    return _prohibidas(resto[1:], pre, frozenset({'into'}), CATALOGOS_LECTURA)
+    return _prohibidas(resto[1:], pre, frozenset({'into'}), CATALOGOS_LECTURA) + _llamadas(resto[1:], pre, funciones)
 
 
 def revisar_migrador(sql: str, papel: bool = True) -> list[str]:
@@ -496,6 +562,7 @@ def revisar_migrador(sql: str, papel: bool = True) -> list[str]:
     if not sentencias:
         return probs + ['archivo vacío']
     permitidas = set(TABLAS_MIGRADOR if papel else TABLAS_MIGRADOR[:-1])
+    funciones = INMUTABLES | set(EXCEPCIONES_MIGRADOR)
     ultima = len(sentencias)
     for k, s in enumerate(sentencias, 1):
         pre = f'sentencia {k}'
@@ -507,11 +574,11 @@ def revisar_migrador(sql: str, papel: bool = True) -> list[str]:
         if w == ('w', 'set'):
             probs += _set(s, pre)
         elif w == ('w', 'do'):
-            probs += _do(s, pre, con_for=True)
+            probs += _do(s, pre, con_for=True, funciones=funciones)
         elif w == ('w', 'insert'):
-            probs += _insert(s, pre, permitidas, None, [], CATALOGOS_LECTURA)
+            probs += _insert(s, pre, permitidas, None, [], CATALOGOS_LECTURA, funciones)
         elif w == ('w', 'create'):
-            probs += _create_temp(s, pre)
+            probs += _create_temp(s, pre, funciones)
         elif w == ('w', 'lock'):
             probs += _lock(s, pre, {'public.club_cargas_papel'} if papel else set())
         elif w == ('w', 'select'):

@@ -216,6 +216,40 @@ end $$;
 """
 
 
+def sql_cruce_firestore(filas: list[dict], local: str, tolerancia_dias: int = 3) -> str:
+    """(09-nov, Grok 115) CARGA ÚNICA: cruce papel ↔ Firestore por `legacy_id` DENTRO de la transacción del migrador
+    (usa `_datos`, el export que el migrador pasa como un literal jsonb). Aborta todo si:
+      · hay filas SIN CRUZAR: un `legacy_id` que no es un anfitrión activo del export, o que no quedó migrado en el local;
+      · hay INTERSECCIÓN: una tarjeta de papel que YA está en Firestore (el mismo anfitrión, un crédito con las mismas
+        personas y la fecha a ≤ `tolerancia_dias`, en hora de Costa Rica): sería una doble carga.
+    Va ANTES del cuerpo de la carga de papel. Los mensajes dicen cuántas, sin datos."""
+    assert {f.get('clave', 'codigo') for f in filas} == {'legacy_id'}, 'el cruce de la carga única es por legacy_id'
+    valores = ',\n  '.join(f"({_q(f['codigo'])}, {f['personas']}, {_q(f['fecha'])}::date)" for f in filas)
+    return f"""do $$
+declare v_sin int; v_inter int;
+begin
+  select count(*) into v_sin from (values
+  {valores}) p(legacy, personas, fecha)
+   where not exists (select 1 from _datos, jsonb_to_recordset(d->'miembros') as mi(legacy_id text, estado text, tipo text)
+                      where mi.legacy_id = p.legacy and mi.estado = 'activo' and mi.tipo in ('referente', 'concierge_pm', 'equipo'))
+      or not exists (select 1 from public.club_miembros m
+                      where m.legacy_id = p.legacy and m.origen = 'migracion' and m.location_id = {_q(local)});
+  if v_sin > 0 then
+    raise exception 'CLUB: % filas de papel sin cruzar con un anfitrión activo de Firestore (legacy_id): no se carga nada', v_sin;
+  end if;
+  select count(*) into v_inter from (values
+  {valores}) p(legacy, personas, fecha)
+   where exists (select 1 from _datos, jsonb_to_recordset(d->'miembros') as mi(id uuid, legacy_id text),
+                      jsonb_to_recordset(d->'movimientos') as mv(miembro_id uuid, tipo text, personas int, fecha timestamptz)
+                  where mi.legacy_id = p.legacy and mv.miembro_id = mi.id and mv.tipo = 'tarjeta' and mv.personas = p.personas
+                    and abs((mv.fecha at time zone 'America/Costa_Rica')::date - p.fecha) <= {int(tolerancia_dias)});
+  if v_inter > 0 then
+    raise exception 'CLUB: % tarjetas de papel que YA están en Firestore (mismo anfitrión, mismas personas, ≤ {int(tolerancia_dias)} días): doble carga, no se carga nada', v_inter;
+  end if;
+end $$;
+"""
+
+
 CABECERA = "begin;\nset local lock_timeout = '5s';\nset local statement_timeout = '5min';\n"
 
 

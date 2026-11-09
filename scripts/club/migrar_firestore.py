@@ -462,6 +462,18 @@ def _jsonable(v):
     raise TypeError(type(v))
 
 
+def cruce_papel_firestore(p: Plan, papel_filas: list[dict], tolerancia_dias: int = 3) -> dict:
+    """(Grok 115) El mismo cruce que hace la transacción, antes de emitir: cada tarjeta de papel (por legacy_id) contra
+    los créditos de Firestore del plan (mismo anfitrión, mismas personas, ≤ tolerancia días). Solo líneas e ids."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import saldos_papel as sp
+    legacy_de = {m['id']: m['legacy_id'] for m in p.miembros}
+    creditos = [{'_id': mv['legacy_ids'][0], 'referrerId': legacy_de[mv['miembro_id']], 'referralType': 'credit',
+                 'peopleCount': mv['personas'], 'createdAt': mv['fecha']}
+                for mv in p.movimientos if mv['tipo'] == 'tarjeta' and mv.get('legacy_ids')]
+    return sp.cruzar(papel_filas, creditos, {f['codigo']: f['codigo'] for f in papel_filas}, tolerancia_dias)
+
+
 def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False, primera: bool = False,
               fecha_carga: bool = False, vaciar_ensayo: bool = False, papel: str | None = None) -> str:
     """Todo en UNA transacción: precheck → limpieza de lo migrado → carga → restos → VALIDACIÓN → commit.
@@ -1024,6 +1036,11 @@ def main() -> None:
         faltan = [f['linea'] for f in papel_filas if f['codigo'] not in legacy]
         if faltan:
             sys.exit(f'NEGADO: {len(faltan)} filas de papel con un legacy_id que no es un anfitrión activo de la fuente (líneas {faltan[:20]}).')
+        inter = cruce_papel_firestore(plan, papel_filas)
+        if inter['en_los_dos']:
+            sys.exit(f"NEGADO (Grok 115): {len(inter['en_los_dos'])} tarjetas de papel que YA están en Firestore (mismo anfitrión, "
+                     f"mismas personas, ≤ {inter['tolerancia_dias']} días): líneas "
+                     + ', '.join(str(x['linea']) for x in inter['en_los_dos'][:30]) + '. Sacalas del CSV (doble carga).')
         if fecha_carga:
             inac_p = sp.inactivos(papel_filas, _dt.date.today(), a.vencimiento_meses)
             if inac_p and a.acepto_inactivos != len(inac_p):
@@ -1032,7 +1049,9 @@ def main() -> None:
     def cuerpo_papel(entorno: str) -> str | None:
         if not papel_filas:
             return None
-        return sp.cuerpo_sql(papel_filas, LOCATION, entorno, 'carga' if fecha_carga else 'tarjeta')
+        # Grok 115: el cruce con Firestore va en la MISMA transacción, antes de la carga (aborta si no cruza o si ya está)
+        return (sp.sql_cruce_firestore(papel_filas, LOCATION)
+                + sp.cuerpo_sql(papel_filas, LOCATION, entorno, 'carga' if fecha_carga else 'tarjeta'))
     if a.dry_run:
         return
     if a.emitir:

@@ -28,6 +28,10 @@
    - precondición **«cero socios»**: si hay **cualquier** fila en `club_miembros`, `club_movimientos`, `club_negocios` o
      `club_cargas_papel`, aborta entero. **No hay ningún `delete`** (el script se niega a emitir si apareciera uno);
    - los anfitriones y los créditos de la página vieja (origen `migracion`), **todos con la fecha de la carga**;
+   - **el cruce papel ↔ Firestore por `legacy_id`, dentro de la misma transacción** (Grok 115): aborta todo si una fila
+     de papel **no cruza** (su `legacy_id` no es un anfitrión activo del export, o no quedó migrado en el local) o si hay
+     **intersección** (la tarjeta ya está en Firestore: el mismo anfitrión, un crédito con las mismas personas y la fecha
+     a ≤ 3 días). Antes de emitir, el script hace el mismo cruce y se niega (líneas, sin datos);
    - las tarjetas de papel (origen **`papel`**, por `legacy_id`), con su lock, su línea de base, el registro del lote y su
      validación (§B);
    - la validación de todo contra la fuente (el papel no se mezcla con el cuadre de la página vieja) y `commit` al final.
@@ -105,7 +109,10 @@
    `python3 scripts/club/migrar_firestore.py saldos-papel --ficticios 6 --local <id> --ensayo`.
 8. **Doble carga con Firestore (solo lectura, antes de cargar):** `… doble-carga-papel --export <export> --csv <saldos>
    --mapa <mapa>` (o `--mapa-staging`). Lista las tarjetas que ya están en la página vieja: mismo anfitrión, las mismas
-   personas a ≤ 3 días. Sale 2 si hay alguna. En la carga única el mapa es directo (el CSV ya trae `legacy_id`).
+   personas a ≤ 3 días. Sale 2 si hay alguna. **Corrección (09-nov, Grok 115):** antes decía que en la carga única «el
+   mapa es directo»; no era cierto: este comando pide un mapa de **códigos** del Club, que en la carga única todavía no
+   existen, así que el cruce no corría. En la carga única el cruce lo hace el migrador (`--primera-carga --papel`, §A),
+   por `legacy_id`, antes de emitir y otra vez dentro de la transacción.
 
 ## C. En la app
 - La carga de papel tiene **su propio origen** (`papel`): el migrador nunca la borra.

@@ -205,6 +205,43 @@ class Sql(unittest.TestCase):
         self.assertEqual(mf.inactivos_fuente(self.p, '2000-01-01', 12), [])
 
 
+class Cruce115(unittest.TestCase):
+    """(09-nov, Grok 115) carga única: papel ↔ Firestore por legacy_id, antes de emitir y dentro de la transacción."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.p = mf.armar_plan(mf.cargar(export_sintetico(Path(self.tmp.name) / 'e')))
+        import saldos_papel as sp
+        self.sp = sp
+        legacy_de = {m['id']: m['legacy_id'] for m in self.p.miembros}
+        self.tarjeta = next(mv for mv in self.p.movimientos if mv['tipo'] == 'tarjeta')
+        self.legacy = legacy_de[self.tarjeta['miembro_id']]
+        self.fecha = self.sp._fecha_cr(self.tarjeta['fecha']).isoformat()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def filas(self, *lineas):
+        filas, err = self.sp.validar('legacy_id,personas,fecha_tarjeta,referencia\n' + ''.join(lineas), mf_date_today())
+        self.assertEqual(err, [])
+        return filas
+
+    def test_interseccion_en_python(self):
+        f = self.filas(f"{self.legacy},{self.tarjeta['personas']},{self.fecha},PAPEL-115\n")
+        self.assertEqual([x['linea'] for x in mf.cruce_papel_firestore(self.p, f)['en_los_dos']], [2])
+        f = self.filas(f"{self.legacy},{self.tarjeta['personas'] + 1},{self.fecha},PAPEL-115\n")
+        self.assertEqual(mf.cruce_papel_firestore(self.p, f)['en_los_dos'], [])
+
+    def test_el_cruce_va_en_la_transaccion_y_pasa_la_lista_cerrada(self):
+        f = self.filas(f"{self.legacy},{self.tarjeta['personas'] + 1},{self.fecha},PAPEL-115\n")
+        papel = self.sp.sql_cruce_firestore(f, mf.LOCATION) + self.sp.cuerpo_sql(f, mf.LOCATION, 'prod', 'carga')
+        sql = mf.sql_apply(self.p, primera=True, fecha_carga=True, papel=papel)
+        self.assertLess(sql.index('YA están en Firestore'), sql.index('insert into public.club_cargas_papel'))
+        self.assertGreater(sql.index('YA están en Firestore'), sql.index('create temp table _datos'))
+        import sql_g56
+        self.assertEqual(sql_g56.revisar_migrador(sql, papel=True), [])
+
+
 class AplicarFirmado(unittest.TestCase):
     """(09-nov, punto 4) La primera carga emitida pasa la lista cerrada del migrador y se aplica solo firmada."""
     MF = str(Path(__file__).resolve().parent / 'migrar_firestore.py')
@@ -337,13 +374,36 @@ class EnsayoStaging(unittest.TestCase):
             f'{l},6,2026-10-01,PAPEL-{i}\n' for i, l in enumerate(legacy)), mf_date_today())
         self.assertEqual(err, [])
         antes = self.conteo()
-        papel = sp.cuerpo_sql(filas, mf.LOCATION, 'staging', 'carga')
+        papel = sp.sql_cruce_firestore(filas, mf.LOCATION) + sp.cuerpo_sql(filas, mf.LOCATION, 'staging', 'carga')
         val = mf.ejecutar(mf.STAGING_REF, mf.sql_apply(self.p, {'miembros': 3, 'diferencias_saldo_vs_firestore': 0},
                                                       ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True,
                                                       papel=papel))[0]['r']
         self.assertEqual(val['miembros'], 3)
         self.assertEqual(val['diferencias_saldo_vs_firestore'], 0)   # el papel no se mezcla con el cuadre de la página vieja
         self.assertEqual(self.conteo(), antes)
+
+
+    def _papel_aborta(self, lineas: str, motivo: str):
+        import saldos_papel as sp
+        filas, err = sp.validar('legacy_id,personas,fecha_tarjeta,referencia\n' + lineas, mf_date_today())
+        self.assertEqual(err, [])
+        antes = self.conteo()
+        papel = sp.sql_cruce_firestore(filas, mf.LOCATION) + sp.cuerpo_sql(filas, mf.LOCATION, 'staging', 'carga')
+        with self.assertRaises((Exception, SystemExit)) as cm:
+            mf.ejecutar(mf.STAGING_REF, mf.sql_apply(self.p, {'miembros': 3}, ensayo=True, primera=True, fecha_carga=True,
+                                                    vaciar_ensayo=True, papel=papel))
+        self.assertIn(motivo, str(cm.exception))
+        self.assertEqual(self.conteo(), antes)
+
+    def test_115_interseccion_con_firestore_aborta_en_la_transaccion(self):
+        legacy_de = {m['id']: m['legacy_id'] for m in self.p.miembros}
+        t = next(mv for mv in self.p.movimientos if mv['tipo'] == 'tarjeta')
+        import saldos_papel as sp
+        self._papel_aborta(f"{legacy_de[t['miembro_id']]},{t['personas']},{sp._fecha_cr(t['fecha']).isoformat()},PAPEL-115\n",
+                           'YA están en Firestore')
+
+    def test_115_fila_sin_cruzar_aborta_en_la_transaccion(self):
+        self._papel_aborta('legacy-que-no-existe-115,6,2026-10-01,PAPEL-115\n', 'sin cruzar')
 
 
 def mf_date_today():

@@ -387,3 +387,112 @@ class Migrador(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ── (09-nov) Grok 114: lista blanca de FUNCIONES ────────────────────────────────────────────────────────────────────
+# Un trucado por forma: cada uno llama a una función del Club que ESCRIBE, en un lugar donde la lista negra no mira
+# nombres de funciones. El filtro de antes de este cambio los dejaba pasar (se comprueba con el archivo de git).
+U0 = "'00000000-0000-0000-0000-000000000000'::uuid"
+TRUCADOS_114 = {
+    'select … into': tx(f"do $x$ declare v int; begin select public.club_ajuste({U0}, 1, 'ajuste', 'x', {U0}) into v; end $x$;"),
+    ':=': tx("do $x$ declare v int; begin v := public.club_premios_generar(null); end $x$;"),
+    'insert … select': tx("insert into public.club_movimientos (location_id) select public.club_vencer(current_date, 0)::text;"),
+    'if … then': tx("do $x$ begin if public.club_socios_mantenimiento() is null then null; end if; end $x$;"),
+    'sin esquema y entre comillas': tx('insert into public.club_movimientos (location_id) values ("club_ajuste"(1)::text);'),
+}
+TRUCADO_114_CREATE_TEMP = ("begin;\ncreate temp table _t on commit drop as select public.club_socios_mantenimiento() as x;\n"
+                           "select x from _t;\ncommit;\n")
+
+
+def _sql_g56_anterior():
+    """El sql_g56.py de antes del 114, tal como está en git (a17857b), cargado como módulo aparte."""
+    import importlib.util
+    import subprocess
+    import tempfile
+    raiz = Path(__file__).resolve().parents[2]
+    src = subprocess.run(['git', '-C', str(raiz), 'show', 'a17857b:scripts/club/sql_g56.py'], capture_output=True,
+                         text=True, check=True).stdout
+    d = tempfile.mkdtemp()
+    f = Path(d) / 'sql_g56_anterior.py'
+    f.write_text(src, encoding='utf-8')
+    spec = importlib.util.spec_from_file_location('sql_g56_anterior', f)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+class Grok114(unittest.TestCase):
+    def test_el_filtro_anterior_los_dejaba_pasar(self):
+        try:
+            viejo = _sql_g56_anterior()
+        except Exception as e:      # sin git (copia suelta del script)
+            self.skipTest(f'sin el archivo anterior en git: {e}')
+        for nombre, sql in TRUCADOS_114.items():
+            with self.subTest(nombre):
+                self.assertEqual(viejo.revisar(sql), [], 'el filtro anterior ya lo rechazaba: el caso no prueba nada')
+        self.assertEqual(viejo.revisar_migrador(TRUCADO_114_CREATE_TEMP, papel=False), [])
+
+    def test_el_nuevo_los_rechaza_por_la_llamada(self):
+        for nombre, sql in TRUCADOS_114.items():
+            with self.subTest(nombre):
+                self.assertIn('fuera de la lista blanca', ' '.join(revisar(sql)))
+        from sql_g56 import revisar_migrador
+        self.assertIn('fuera de la lista blanca («public.club_socios_mantenimiento»)',
+                      ' '.join(revisar_migrador(TRUCADO_114_CREATE_TEMP, papel=False)))
+
+    def test_lo_permitido_pasa(self):
+        self.assertEqual(revisar(tx("insert into public.club_movimientos (location_id, nota) "
+                                    "select lower('X'), coalesce(nullif(btrim(' a '), ''), to_char(now(), 'YYYY')) "
+                                    "where (select count(*) from public.club_movimientos) >= 0;")), [])
+        self.assertEqual(revisar(tx("do $x$ declare v numeric(12, 2); begin v := round(1.5); "
+                                    "if greatest(1, 2) = 2 then null; end if; end $x$;")), [])
+
+    def test_alias_con_columnas_no_es_llamada(self):
+        from sql_g56 import revisar_migrador
+        sql = ("begin;\ncreate temp table _t on commit drop as select j.a from "
+               "jsonb_to_recordset('[]'::jsonb) as j(a int);\nselect a from _t;\ncommit;\n")
+        self.assertEqual(revisar_migrador(sql, papel=False), [])
+
+    def test_el_perfil_g56_no_hereda_las_excepciones_del_migrador(self):
+        self.assertIn('«public.club_gen_codigo»', ' '.join(revisar(tx(
+            "insert into public.club_movimientos (location_id) select public.club_gen_codigo();"))))
+
+
+@unittest.skipUnless(__import__('os').environ.get('CLUB_ENSAYO_STAGING') == '1', 'contra staging (CLUB_ENSAYO_STAGING=1)')
+class Grok114Catalogo(unittest.TestCase):
+    """La lista blanca contra el catálogo REAL de staging (solo lectura)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import migrar_firestore
+        cls.mf = migrar_firestore
+
+    def q(self, sql):
+        return self.mf.ejecutar(self.mf.STAGING_REF, sql, read_only=True)
+
+    def test_inmutables_son_inmutables_en_todas_sus_versiones(self):
+        from sql_g56 import INMUTABLES
+        lista = ', '.join(f"'{x}'" for x in sorted(INMUTABLES))
+        filas = self.q(f"select p.proname, string_agg(distinct p.provolatile::text, '') v from pg_proc p "
+                       f"join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'pg_catalog' and p.proname in ({lista}) "
+                       f"group by 1")
+        vistos = {f['proname']: f['v'] for f in filas}
+        self.assertEqual(set(vistos), set(INMUTABLES), 'falta alguna en pg_catalog')
+        self.assertEqual({k: v for k, v in vistos.items() if v != 'i'}, {})
+
+    def test_excepciones_con_la_volatilidad_dicha_y_sin_escrituras(self):
+        from sql_g56 import EXCEPCIONES_MIGRADOR
+        for nombre, motivo in EXCEPCIONES_MIGRADOR.items():
+            esq, _, fn = nombre.rpartition('.')
+            esq = esq or 'pg_catalog'
+            filas = self.q(f"select string_agg(distinct p.provolatile::text, '') v, "
+                           f"bool_or(p.prolang = (select oid from pg_language where lanname in ('plpgsql')) "
+                           f"and p.prosrc ~* '\\m(insert|update|delete|truncate|execute|perform)\\M') escribe "
+                           f"from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
+                           f"where n.nspname = '{esq}' and p.proname = '{fn}'")
+            with self.subTest(nombre):
+                v = filas[0]['v']
+                self.assertTrue(v, f'{nombre} no existe')
+                esperado = 'v' if motivo.startswith('volátil') else 's'
+                self.assertEqual(v, esperado, motivo)
+                self.assertFalse(filas[0]['escribe'], f'{nombre} tiene una escritura en el cuerpo')

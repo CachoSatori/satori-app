@@ -9,7 +9,7 @@
 | # | Cambio | Motivo |
 |---|---|---|
 | 1 | **Turno = hora CR de la factura** (`fecha_registra`): 06:00–16:59 mañana · 17:00–23:59 noche · 00:00–05:59 madrugada. Ya **no** se usa `pos_ndf_tickets.turno` | El turno de caja está mal anotado en los dos sentidos (r8, Q27) |
-| 2 | **Madrugada = noche del MISMO día calendario** (opción B). Vive en un solo lugar: `turnoDeFranja` de `ventasPromPaxExplicado.ts`. El día (§5) **no cambia** | Día y mes siguen idénticos a los de Ventas. Volumen chico: 12 facturas / ₡424.084 en el último año (ene y feb 2026) |
+| 2 | **Madrugada = noche del MISMO día calendario** (opción B). Vive en un solo lugar: `turnoDeFranja` de `ventasPromPaxExplicado.ts`. El día (§5) **no cambia** | Día y mes siguen idénticos a los de Ventas. Volumen chico: cerca del 0,1 % de la neta del último año (solo ene y feb 2026) |
 | 3 | §9 recalculado con datos reales de prod (06/11); es la nueva referencia de aceptación | Cambia el turno |
 | 4 | RPC = **mig 080** `pos_prompax_agregado`, devuelve `jsonb` (en staging se aplicó primero como 078 y se renumeró el 07/11: PROD ya tenía la 079 y una versión menor que la última remota puede ser rechazada por Branching) | 076/077/079 = SoP. El tope de filas de PostgREST es distinto en prod (10.000) y staging (1.000) |
 | 5 | Aclaraciones de §6.3 (ver ahí): peso del corte, causa con ≥ 15 pax en el período con menos pax del grupo, la semana no compite por el texto, «pesan» = ≥ 15 % | Hacía falta una regla exacta para el código |
@@ -124,28 +124,23 @@ Para cada grupo *i* con pax > 0: s_i = pax_i / PAX, p_i = neta_i / pax_i, P* = N
 - En staging desde el 06/11 (ledger 77). **Prod: con firma aparte**, a mano antes del merge, como siempre.
   Rollback: `scripts/sql/080_rollback.sql`. Nada en `supabase/functions/`.
 
-## 9. Aceptación v2.3 (números reales de prod, 06/11; turno por hora, madrugada = noche del mismo día)
-Santa Teresa, salón, `estado='C'`. Entre paréntesis, pax. En la columna v2.2, el turno de caja.
+## 9. Aceptación v2.3 (turno por hora, madrugada = noche del mismo día)
+El repo es público: **los números reales de aceptación no están acá.** Están en un archivo privado del Project
+(`claude/prompax-aceptacion-v2.3.json`, valores de prod del 06/11), que reemplaza la tabla de la v2.2.
 
-| Métrica | v2.3 | v2.2 |
-|---|---|---|
-| Prom/pax oct-2026 (1–29) total | **₡16.491** (805) | ₡16.491 |
-| — mañana / noche | **₡13.299** (177) / **₡17.390** (628) | ₡13.092 / ₡17.295 |
-| Ene-2026 total / mañana / noche | **₡16.237** / **₡10.541** (436) / **₡17.456** (2.037) | ₡16.237 / ₡10.753 / ₡17.391 |
-| Noche oct: MAXO · FRANCISCO · GONZA · Caja | **₡17.934** (271) · **₡18.105** (162) · **₡16.954** (115) · **₡15.080** (66) | ₡17.743 · ₡17.910 · ₡16.954 · ₡15.473 |
-| Noche oct: Mar · Mié · Sáb | **₡19.421** · **₡18.547** · **₡15.529** | ₡19.421 · ₡18.420 · ₡15.359 |
-| Neta de salón oct (1–29) | **₡13.274.984,71** = la de Ventas | igual |
-| Mañana: ene–abr · may · jun–ago · 1-sep–29-oct | **₡11.195** · **₡13.079** · **₡11.992** · **₡13.242** | ₡10.984 · ₡13.030 · ₡12.065 · ₡13.264 |
-| Noche: ene–abr · may · jun–ago · 1-sep–29-oct | **₡17.083** · **₡16.658** · **₡16.407** · **₡16.703** | ₡17.062 · ₡16.621 · ₡16.327 · ₡16.595 |
-| vs promedio del turno: MAXO mañana ene–abr | **+3,4 %** (747) | +4,4 % (731) |
-| — MAXO noche ene–abr | **−2,4 %** (688) | −2,3 % (704) |
-| — FRANCISCO noche may | **+11,1 %** (324) | +10,8 % (327) |
-| — Caja noche 1-sep–29-oct | **−19,5 %** (152) | −17,9 % (159) |
+Qué se verifica (Santa Teresa, salón, `estado='C'`, prom/pax redondeado a colones como se muestra):
+- Prom/pax total, de mañana y de noche de oct-2026 (1–29) y de ene-2026, con sus pax.
+- Neta de salón de oct (1–29) = la de Ventas (al céntimo).
+- Noche de oct por salonero (los de más pax y «Caja / sin mesero») y por día de la semana.
+- Prom/pax por turno en rangos libres: ene–abr, may, jun–ago y 1-sep–29-oct (ojo: «ene–abr» NO es la alta
+  completa, que arranca el 15-dic-2025).
+- «vs promedio del turno» de algunos saloneros en esos rangos.
+- Cuadres §6.1 y §6.2 exactos (1e-9), incluido un caso real de un salonero que sale (está en ago y no en sep).
 
-- Cuadres §6.1 y §6.2 exactos (1e-9), incluido el caso real de un grupo que sale (GUILLE: está en ago, no en sep).
-- Reproducidos por `ventasPromPaxAceptacion.test.ts` con las filas del RPC (prod y staging) y en pantalla por
-  `VentasPromPaxExplicado.render.test.tsx` (filas reales del RPC de staging).
-- Ojo: «ene–abr» NO es la alta completa, que arranca el 15-dic-2025.
+Cómo se corre: `ventasPromPaxAceptacion.test.ts` con `PROMPAX_ACEPTACION_FILE` (filas del RPC) y
+`PROMPAX_ACEPTACION_ESPERADO` (el archivo privado); en pantalla, `VentasPromPaxExplicado.render.test.tsx` con
+`PROMPAX_PANTALLA_FILE` (filas del RPC de staging) y el mismo archivo privado. Sin las variables se saltan.
+Resultado del 06/11: todos los valores reproducidos con filas de prod y del RPC real de staging.
 
 ## 10. Fuera de alcance (v1)
 Mix de productos en el «por qué» · acceso de saloneros · Nosara hasta tener PoS · datos anteriores al PoS ·

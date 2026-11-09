@@ -132,21 +132,21 @@ describe('§6.2 — propiedad: Σ rendimiento + Σ mezcla + venta sin pax = P_n 
 describe('§6.2 — casos borde', () => {
   const g = (clave: string, pax: number, neta: number): Grupo => ({ clave, etiqueta: clave, orden: 0, pax, neta, netaTotal: neta, tickets: 1 })
 
-  it('grupo que SALE (como GUILLE: está en ago y no en sep) y grupo que ENTRA', () => {
-    const gv = [g('MAXO', 100, 1_700_000), g('GUILLE', 40, 600_000)]
-    const gn = [g('MAXO', 120, 2_100_000), g('NUEVO', 30, 450_000)]
+  it('grupo que SALE (estaba en la comparación y no en el período) y grupo que ENTRA', () => {
+    const gv = [g('ALFA', 100, 1_700_000), g('BETA', 40, 600_000)]
+    const gn = [g('ALFA', 120, 2_100_000), g('NUEVO', 30, 450_000)]
     const d = descomponerPromPax(gv, gn,
       { N: 2_300_000, N0: 0, PAX: 140 }, { N: 2_550_000, N0: 50_000, PAX: 150 })!
-    const guille = d.grupos.find(x => x.clave === 'GUILLE')!
-    expect(guille.estado).toBe('sale')
-    expect(guille.rendimiento).toBe(0)
-    expect(guille.mezcla).toBeCloseTo(-(40 / 140) * (15_000 - 2_300_000 / 140), 9)
+    const sale = d.grupos.find(x => x.clave === 'BETA')!
+    expect(sale.estado).toBe('sale')
+    expect(sale.rendimiento).toBe(0)
+    expect(sale.mezcla).toBeCloseTo(-(40 / 140) * (15_000 - 2_300_000 / 140), 9)
     const nuevo = d.grupos.find(x => x.clave === 'NUEVO')!
     expect(nuevo.estado).toBe('entra')
     expect(nuevo.mezcla).toBeCloseTo((30 / 150) * (15_000 - 2_300_000 / 140), 9)
     expect(d.ventaSinPax).toBeCloseTo(50_000 / 150, 9)
     expect(Math.abs(d.residuo)).toBeLessThan(1e-9)
-    expect(puedeSerCausa(guille)).toBe(false)
+    expect(puedeSerCausa(sale)).toBe(false)
   })
 
   it('sin pax en algún período → sin descomposición', () => {
@@ -244,9 +244,9 @@ describe('tablas', () => {
       fila({ dia: '2026-10-02', franja: 'mañana', salonero_login: '026', pax: 5, neta: 50_000 }),
     ]
     const t = tablaSaloneros(f)
-    const maxoNoche = t.find(x => x.clave === '026' && x.turno === 'noche')!
-    expect(maxoNoche.promPax).toBeCloseTo(21_000, 9)
-    expect(maxoNoche.vsTurno).toBeCloseTo(21_000 / 15_500 - 1, 9)
+    const s026Noche = t.find(x => x.clave === '026' && x.turno === 'noche')!
+    expect(s026Noche.promPax).toBeCloseTo(21_000, 9)
+    expect(s026Noche.vsTurno).toBeCloseTo(21_000 / 15_500 - 1, 9)
     expect(t.find(x => x.clave === '026' && x.turno === 'mañana')!.vsTurno).toBeCloseTo(0, 9)
     expect(t.find(x => x.clave === 'caja')!.etiqueta).toBe('Caja / sin mesero')
   })

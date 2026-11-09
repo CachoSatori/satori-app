@@ -3,8 +3,9 @@
 // «Prom/PAX explicado» montado: filtros → RPC (mock con las filas que devolvería) → tarjetas,
 // «Qué explica el cambio», tablas, «Ver detalle» y CSV.
 //
-// Con `PROMPAX_PANTALLA_FILE` (filas REALES del RPC 080 de staging, bajadas como owner simulado)
-// además verifica en pantalla los números del §9 v2.3. Sin la variable, solo el caso sintético.
+// Con `PROMPAX_PANTALLA_FILE` (filas REALES del RPC 080 de staging, bajadas como owner simulado) y
+// `PROMPAX_ACEPTACION_ESPERADO` (los valores del §9 v2.3, archivo PRIVADO fuera del repo: el repo es
+// público) además verifica esos números en pantalla. Sin las variables, solo el caso sintético.
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -79,6 +80,7 @@ describe('VentasPromPaxExplicado — caso sintético', () => {
 })
 
 const ARCHIVO = process.env.PROMPAX_PANTALLA_FILE
+const ESPERADO = process.env.PROMPAX_ACEPTACION_ESPERADO
 
 /**
  * Cada frase de causa («Por …: GRUPO: …») tiene que tener todos sus números (₡, % y pax) en la fila
@@ -99,30 +101,40 @@ function numerosDeLaFraseEnSuFila() {
   }
 }
 
-describe.skipIf(!ARCHIVO)('VentasPromPaxExplicado — §9 v2.3 en pantalla, con filas reales del RPC de staging', () => {
-  it('oct 1–29 y su noche por salonero y por día', async () => {
+type Check = { tipo: string; desde: string; hasta: string; turno?: string; pp?: number; pax?: number; dia?: string; clave?: string }
+
+/** Formato de la pantalla: «₡16.491», «805». */
+const pesos = (n: number) => `₡${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`
+const miles = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+
+describe.skipIf(!ARCHIVO || !ESPERADO)('VentasPromPaxExplicado — §9 v2.3 en pantalla, con filas reales del RPC de staging', () => {
+  it('el rango del primer check: total, turnos, y su noche por salonero y por día', async () => {
     H.filas = (JSON.parse(readFileSync(ARCHIVO!, 'utf8')) as FilaPromPaxRpc[]).map(x => ({ ...x, neta: Number(x.neta), neta_sin_pax: Number(x.neta_sin_pax) }))
+    const checks: Check[] = JSON.parse(readFileSync(ESPERADO!, 'utf8')).checks
+    const base = checks.find(c => c.tipo === 'pp' && c.turno === 'ambos')!
+    const delRango = checks.filter(c => c.desde === base.desde && c.hasta === base.hasta)
     render(<VentasPromPaxExplicado />)
     await waitFor(() => expect(screen.getByTestId('pp-tarjetas')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Rango' }))
-    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-10-01' } })
-    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-10-29' } })
-    await waitFor(() => expect(screen.getByTestId('pp-periodos').textContent).toContain('1 oct 2026 – 29 oct 2026'))
-    await waitFor(() => expect(screen.getByTestId('pp-tarjetas').textContent).toContain('₡16.491'))
-    expect(screen.getByTestId('pp-tarjetas').textContent).toContain('805')
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: base.desde } })
+    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: base.hasta } })
+    await waitFor(() => expect(screen.getByTestId('pp-tarjetas').textContent).toContain(pesos(base.pp!)))
+    expect(screen.getByTestId('pp-tarjetas').textContent).toContain(miles(base.pax!))
 
     const turno = screen.getByTestId('pp-tabla-turno').textContent!
-    expect(turno).toContain('₡13.299')
-    expect(turno).toContain('₡17.390')
-
+    for (const c of delRango.filter(c => c.tipo === 'pp' && c.turno !== 'ambos')) expect(turno).toContain(pesos(c.pp!))
     numerosDeLaFraseEnSuFila()
 
     fireEvent.click(screen.getByRole('button', { name: 'Noche' }))
     await waitFor(() => expect(screen.queryByTestId('pp-tabla-turno')).toBeNull())
     const sal = screen.getByTestId('pp-tabla-salonero').textContent!
-    for (const v of ['₡17.934', '₡18.105', '₡16.954', '₡15.080']) expect(sal).toContain(v)
+    const saloneros = delRango.filter(c => c.tipo === 'salonero' && c.turno === 'noche')
+    expect(saloneros.length).toBeGreaterThan(0)
+    for (const c of saloneros) expect(sal).toContain(pesos(c.pp!))
     const dia = screen.getByTestId('pp-tabla-dia').textContent!
-    for (const v of ['₡19.421', '₡18.547', '₡15.529']) expect(dia).toContain(v)
+    const dias = delRango.filter(c => c.tipo === 'dia' && c.turno === 'noche')
+    expect(dias.length).toBeGreaterThan(0)
+    for (const c of dias) expect(dia).toContain(pesos(c.pp!))
     numerosDeLaFraseEnSuFila()
   })
 })

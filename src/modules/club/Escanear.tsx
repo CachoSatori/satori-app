@@ -526,14 +526,22 @@ function PanelReferente({ a, modo, setModo, creditos, setCreditos, gestiona, not
                 )}
                 <div>
                   <span style={labelStyle}>Créditos a canjear</span>
+                  {/* (09-nov) En un teléfono de 390 px «1 crédito · ₡18.000» se partía en 4 líneas (con el «·» suelto) y el
+                      tercer botón se salía de la tarjeta: ahora tres líneas cortas (el número, «créditos» y los colones),
+                      iguales en los tres botones, que se achican sin desbordar (minWidth 0). El nombre accesible sigue siendo el texto completo. */}
                   <div style={{ display: 'flex', gap: 8 }}>
                     {opciones.map(v => {
                       const ok = alcanza(v) && dentroTope(v)
+                      const crc = d.valor_credito_crc ? fmtColones(v * Number(d.valor_credito_crc)) : null
                       return (
                         <Btn key={v} big variant={creditos === v ? 'primary' : 'secondary'} disabled={!ok}
                           title={!alcanza(v) ? 'No alcanza el saldo' : !dentroTope(v) ? 'Supera el máximo del día' : ''}
-                          onClick={() => { setCreditos(v); p.setConfirmando(false) }} style={{ flex: 1 }}>
-                          {fmtCreditosCrc(v, d.valor_credito_crc)}
+                          aria-label={fmtCreditosCrc(v, d.valor_credito_crc)}
+                          onClick={() => { setCreditos(v); p.setConfirmando(false) }}
+                          style={{ flex: '1 1 0', minWidth: 0, paddingLeft: 6, paddingRight: 6, lineHeight: 1.2 }}>
+                          <span style={{ display: 'block', whiteSpace: 'nowrap', fontSize: '1.15em' }}>{fmtCreditos(v)}</span>
+                          <span style={{ display: 'block', whiteSpace: 'nowrap', fontSize: '0.8em' }}>{v === 1 ? 'crédito' : 'créditos'}</span>
+                          {crc && <span style={{ display: 'block', whiteSpace: 'nowrap', fontSize: '0.8em', fontWeight: 500, marginTop: 2 }}>{crc}</span>}
                         </Btn>
                       )
                     })}

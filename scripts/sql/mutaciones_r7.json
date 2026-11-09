@@ -6,5 +6,9 @@
   "R7-02": {"antes_de": "-- ═══ 86. (09-nov) R7-02",
             "funciones_de": {"commit": "ed447b2", "funciones": ["public.club_roles_desde_miembro(", "public.club_socio_baja_portal("]}},
   "CLUB-AUD-66": {"antes_de": "-- ═══ 87. (09-nov) CLUB-AUD-66",
-                  "funciones_de": {"commit": "15ac3af", "funciones": ["public.club_cupon_usar("]}}
+                  "funciones_de": {"commit": "15ac3af", "funciones": ["public.club_cupon_usar("]}},
+  "S0": {"antes_de": "-- ═══ 88. (09-nov) S0",
+         "funciones_de": {"commit": "9dcf212", "funciones": ["public.club_excepciones(", "public.club_reporte_visitas("]}},
+  "S8": {"antes_de": "-- ═══ 89. (09-nov) S8",
+         "funciones_de": {"commit": "9dcf212", "funciones": ["public.club_pendiente_resolver("]}}
 }

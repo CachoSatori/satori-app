@@ -156,7 +156,12 @@ export interface FacturaReciente {
   numero_factura: string; hora: string; total_crc: number; area?: string | null; mesa: string | null; pedido: string | null
   /** Consecutivo de la factura electrónica (20 dígitos, mig 081): el número del tiquete. */
   consecutivo_fe?: string | null
+  /** S0b: 'C' cerrada; 'R' cobrada, falta el cierre de caja (vale igual para registrar). */
+  estado?: string | null
 }
+/** S0b: la marca de una factura del plan B que todavía no pasó el cierre de caja (null si está cerrada). */
+export const marcaFactura = (f: Pick<FacturaReciente, 'estado'>) =>
+  f.estado === 'R' ? 'Cobrada, falta el cierre de caja: vale igual' : null
 export const getPedidosAbiertos = (local: string | null = localClub) => llamar<PedidoAbierto[]>('club_pedidos_abiertos', { p_location: local })
 export const getFacturasRecientes = (local: string | null = localClub) => llamar<FacturaReciente[]>('club_facturas_recientes', { p_location: local })
 

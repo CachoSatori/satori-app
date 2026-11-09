@@ -8,6 +8,7 @@ misma transacción que la batería ya descarta (termina en ROLLBACK: nada queda 
 
 Cada mutación del JSON: {"antes_de": "<línea ancla de la batería>", y una de:
   "sql": "<SQL que deshace el arreglo>"  |  "funciones_de": {"commit": "<sha>", "funciones": ["public.f(", …]}}
+  (con «funciones_de», «sql_antes» opcional corre antes: por ejemplo un drop si la versión vieja devuelve otro tipo)
 «funciones_de» vuelve a crear las funciones tal como estaban en ese commit (el de ANTES del arreglo), sacadas con git.
 Token de la Management API: el proxy (o SUPABASE_ACCESS_TOKEN). Ref fijo de staging.
 """
@@ -55,7 +56,8 @@ def main() -> None:
         else:
             src = subprocess.run(['git', '-C', str(RAIZ), 'show', f"{m['funciones_de']['commit']}:supabase/migrations/075_club_satori_esquema.sql"],
                                  capture_output=True, text=True, check=True).stdout
-            deshacer = '\n'.join(funcion(src, f) for f in m['funciones_de']['funciones'])
+            # «sql_antes»: lo que hay que correr antes (p. ej. un drop si la versión vieja devuelve otro tipo)
+            deshacer = m.get('sql_antes', '') + '\n' + '\n'.join(funcion(src, f) for f in m['funciones_de']['funciones'])
         if bat.count(m['antes_de']) != 1:
             print(nombre, 'ancla no encontrada (o repetida)'); continue
         for _ in range(4):   # la API a veces corta con «upstream request failed»: se reintenta

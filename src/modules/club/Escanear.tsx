@@ -14,7 +14,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   resolverQR, resolverMiembro, usarCupon, canjear, canjeAprobado, avisoCanje, tarjetaManual, buscar, aClubError, nuevoOp,
   opcionesCanje, fmtCreditos, fmtCreditosCrc, fmtColones, MSG_REFERENTE_INACTIVO, getPedidosAbiertos, getFacturasRecientes, posDePedido, posDeFactura,
-  describirPos, describirPedido, describirFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, type QueAplicar,
+  describirPos, describirPedido, describirFactura, marcaFactura, socioAltaCaja, socioValidar, registrarVisitaSocio, type QueAplicar,
   type ResolverCupon, type ResolverReferente, type ResolverCanje, type ResolverSocio, type BusquedaFila, type ClubError, type PosRef, type PedidoAbierto,
   type FacturaReciente,
 } from '../../shared/api/club'
@@ -278,7 +278,8 @@ function CampoPersonas({ v, set }: { v: string; set: (s: string) => void }) {
 /**
  * Pedido del PoS: lista de pedidos abiertos del local (puente, ~75 s). Un toque elige; el servidor guarda
  * el pedido y la hora del escaneo. Plan B si el pedido ya se cerró o la lista no carga: la lista de
- * facturas cerradas de las últimas 2 h (hora, total, mesa si tiene). No se tipea nada.
+ * facturas cobradas de las últimas 2 h (hora, total, mesa si tiene; S0b: también las que esperan el cierre de caja, marcadas).
+ * No se tipea nada.
  */
 function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) => void }) {
   const [pedidos, setPedidos] = useState<PedidoAbierto[] | null>(null)
@@ -335,16 +336,17 @@ function SelectorPedido({ v, set }: { v: PosRef | null; set: (p: PosRef | null) 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: '0.85rem', color: C.muted }}>
             {err ? `${err} Elegí` : pedidos?.length === 0 ? 'No hay pedidos abiertos en el PoS. Elegí' : 'Pedido ya cerrado: elegí'}{' '}
-            la factura de la lista (cerradas en las últimas 2 horas).
+            la factura de la lista (cobradas en las últimas 2 horas).
           </div>
           {facturas === null && <div style={{ color: C.muted }}>Cargando facturas…</div>}
           {errB && <div style={{ color: C.red, fontSize: '0.85rem' }}>No se pudo cargar la lista de facturas. Probá «Actualizar».</div>}
-          {facturas?.length === 0 && !errB && <div style={{ color: C.muted, fontSize: '0.85rem' }}>No hay facturas cerradas en las últimas 2 horas. Cobrá la cuenta en el PoS y tocá «Actualizar».</div>}
+          {facturas?.length === 0 && !errB && <div style={{ color: C.muted, fontSize: '0.85rem' }}>No hay facturas cobradas en las últimas 2 horas. Cobrá la cuenta en el PoS y tocá «Actualizar».</div>}
           {facturas?.map(f => {
             const sel = v?.modo === 'factura' && v.numero_factura === f.numero_factura
             return (
               <button key={f.numero_factura} onClick={() => set(posDeFactura(f))} aria-pressed={sel} style={opcion(sel)}>
                 <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{describirFactura(f)}</div>
+                {marcaFactura(f) && <div style={{ fontSize: '0.8rem', color: C.muted }}>{marcaFactura(f)}</div>}
               </button>
             )
           })}

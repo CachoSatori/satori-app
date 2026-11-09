@@ -3288,7 +3288,10 @@ create function pg_temp.exc(p_tipo text) returns jsonb language plpgsql as $f$
 declare j jsonb;
 begin
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
-  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(current_date - 60, current_date + 1, 'santa-teresa', p_tipo) e;
+  -- 09-nov: 14 días y no 60. Las facturas de prueba que mira son de las últimas 240 h (10 días) y el corte más viejo es
+  -- lc_excepciones_desde = current_date - 7. Con 60 días, los tickets reales que el puente suma a staging cada día
+  -- llevaron la batería a los 30 s, que es lo máximo que espera la Management API.
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]') into j from public.club_excepciones(current_date - 14, current_date + 1, 'santa-teresa', p_tipo) e;
   perform pg_temp.yo();
   return j;
 end $f$;
@@ -4770,6 +4773,100 @@ begin
   perform pg_temp.yo();
   perform pg_temp.r('89', 'S8 · anulada (X) sin ninguna otra factura del pedido → sigue sin aprobarse (negativa)',
     e like 'La factura de esa visita está anulada%' and not exists (select 1 from club_movimientos where client_op_id = op2), e);
+end $$;
+
+-- ═══ 90. (09-nov) S0b: plan B con R (cobrada, falta el cierre de caja) ═══
+-- Sin S0b, durante el servicio la lista del plan B estaba vacía (solo C, y no hay C hasta el cierre de caja) y la caja no
+-- podía registrar sobre una factura cobrada: con el puente caído, el Club no registraba nada.
+do $$
+declare v_m uuid; v_mv uuid; j jsonb; e text; v_k text;
+        v_ini date := (now() at time zone 'America/Costa_Rica')::date - 1; v_fin date := (now() at time zone 'America/Costa_Rica')::date;
+begin
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref S0b 90', 'app') returning id into v_m;
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura,
+                               numero_pedido, pedido_abierto_en, total_crc, cxc_crc) values
+    ('993960', now() - interval '20 minutes', 'R', 'salon', 'cajero', true, 'ok', '64', '64', '9960', now() - interval '1 hour', 25000, 0),
+    ('993961', now() - interval '20 minutes', 'X', 'salon', 'cajero', true, 'ok', '65', '65', '9961', now() - interval '1 hour', 0,     0);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select coalesce(jsonb_agg(to_jsonb(x) order by x.numero_factura), '[]') into j from public.club_facturas_recientes() x
+   where x.numero_factura in ('990950', '993960', '993961');
+  perform pg_temp.yo();
+  perform pg_temp.r('90', 'S0b · la lista del plan B trae la R de hace 20 min marcada «R» (y las C marcadas «C»); la X no aparece',
+    jsonb_array_length(j) = 2 and j->0->>'numero_factura' = '990950' and j->0->>'estado' = 'C'
+      and j->1->>'numero_factura' = '993960' and j->1->>'estado' = 'R', j::text);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin
+    perform public.club_tarjeta_manual(v_m, 2, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"993960"}'::jsonb); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  select id, visita_clave into v_mv, v_k from club_movimientos where miembro_id = v_m and pos_ref->>'numero_factura' = '993960';
+  perform pg_temp.r('90', 'S0b · la caja registra sobre la factura cobrada en R (club_pos_ref, modo factura); la visita toma la clave del pedido',
+    e = 'ok' and v_mv is not null and v_k like 'pedido:9960@%', e || ' · ' || coalesce(v_k, 'null'));
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  begin
+    perform public.club_tarjeta_manual(v_m, 1, null, gen_random_uuid(), '{"modo":"factura","numero_factura":"993961"}'::jsonb); e := 'ok';
+  exception when others then e := sqlerrm; end;
+  perform pg_temp.yo();
+  perform pg_temp.r('90', 'S0b · una factura anulada (X) no se acepta (negativa)', e like 'Esa factura no está en el PoS%', e);
+  -- pasada la latencia del puente, con la factura todavía en R: no es «registro sin factura»
+  update club_movimientos set registrado_en = now() - interval '2 hours' where id = v_mv;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(e.tipo), '[]') into j from public.club_excepciones(v_ini, v_fin) e
+   where e.ref = v_mv::text and e.tipo in ('REGISTRO_SIN_FACTURA', 'SIN_CRUCE');
+  perform pg_temp.yo();
+  perform pg_temp.r('90', 'S0b · con la factura en R no sale REGISTRO_SIN_FACTURA (falta el cierre de caja); los exactos todavía no la ven',
+    jsonb_array_length(j) = 0 and pg_temp.cruce(v_mv) = '', j::text || ' ' || pg_temp.cruce(v_mv));
+  update pos_ndf_tickets set estado = 'X' where numero_factura = '993960';
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(e.tipo), '[]') into j from public.club_excepciones(v_ini, v_fin) e
+   where e.ref = v_mv::text and e.tipo in ('REGISTRO_SIN_FACTURA', 'SIN_CRUCE');
+  perform pg_temp.yo();
+  perform pg_temp.r('90', 'S0b · la R se anula (X) → sale REGISTRO_SIN_FACTURA (negativa)', j = '["REGISTRO_SIN_FACTURA"]'::jsonb, j::text);
+  update pos_ndf_tickets set estado = 'C' where numero_factura = '993960';
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(jsonb_agg(e.tipo), '[]') into j from public.club_excepciones(v_ini, v_fin) e
+   where e.ref = v_mv::text and e.tipo in ('REGISTRO_SIN_FACTURA', 'SIN_CRUCE');
+  perform pg_temp.yo();
+  perform pg_temp.r('90', 'S0b · en el cierre de caja pasa a C → cruce exacto, sin excepción', pg_temp.cruce(v_mv) = '993960' and jsonb_array_length(j) = 0,
+    pg_temp.cruce(v_mv) || ' ' || j::text);
+end $$;
+
+-- ═══ 91. (09-nov) S2: «sin factura» del reporte de visitas con la regla de SIN_CRUCE ═══
+-- Sin S2, una visita de socio con el pedido todavía ABIERTO contaba «sin factura» apenas pasaba la latencia del puente.
+do $$
+declare v_a uuid; v_b uuid; v_c uuid; s0 int; s1 int; s2 int; v_caj text;
+        v_ini date := (now() at time zone 'America/Costa_Rica')::date - 2; v_fin date := (now() at time zone 'America/Costa_Rica')::date + 1;
+        v_pa jsonb := jsonb_build_object('modo','pedido','pedido','9970','mesa','66','abierto_en', now() - interval '1 hour','hora', now() - interval '40 minutes');
+        v_pb jsonb := jsonb_build_object('modo','pedido','pedido','9971','mesa','67','abierto_en', now() - interval '1 hour','hora', now() - interval '40 minutes');
+        v_pc jsonb := jsonb_build_object('modo','pedido','pedido','9972','mesa','68','abierto_en', now() - interval '1 hour','hora', now() - interval '40 minutes');
+begin
+  v_caj := coalesce((select p.full_name from profiles p where p.id = '<CAJERO_UUID>'), 'Sin perfil');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(sum(r.sin_factura), 0) into s0 from public.club_reporte_visitas(v_ini, v_fin) r where r.usuario = v_caj;
+  perform pg_temp.yo();
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref S2 91a', 'app') returning id into v_a;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref S2 91b', 'app') returning id into v_b;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref S2 91c', 'app') returning id into v_c;
+  -- a: el pedido sigue abierto · b: cobrado, factura en R · c: cerrado y sin factura. Las tres, hace 40 min (latencia 30).
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, monto_estimado_crc, updated_at, pedido_abierto_en)
+  values ('santa-teresa', 'pedido:9970', '9970', '66', 'salon', 2, 20000, now() - interval '5 minutes', now() - interval '1 hour');
+  insert into pos_ndf_tickets (numero_factura, fecha_registra, estado, canal, registrado_por, con_servicio, pax_alerta, mesa, mesa_factura, numero_pedido, total_crc, cxc_crc)
+  values ('993971', now() - interval '10 minutes', 'R', 'salon', 'cajero', true, 'ok', '67', '67', '9971', 30000, 0);
+  insert into club_visitas_socio (location_id, miembro_id, fecha, client_op_id, estado_beneficio, aplicar, pos_ref, registrado_por, registrada_en) values
+    (pg_temp.loc(), v_a, (now() at time zone 'America/Costa_Rica')::date, gen_random_uuid(), 'aplica', '{}'::jsonb, v_pa, '<CAJERO_UUID>', now() - interval '40 minutes'),
+    (pg_temp.loc(), v_b, (now() at time zone 'America/Costa_Rica')::date, gen_random_uuid(), 'aplica', '{}'::jsonb, v_pb, '<CAJERO_UUID>', now() - interval '40 minutes'),
+    (pg_temp.loc(), v_c, (now() at time zone 'America/Costa_Rica')::date, gen_random_uuid(), 'aplica', '{}'::jsonb, v_pc, '<CAJERO_UUID>', now() - interval '40 minutes');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(sum(r.sin_factura), 0) into s1 from public.club_reporte_visitas(v_ini, v_fin) r where r.usuario = v_caj;
+  perform pg_temp.yo();
+  perform pg_temp.r('91', 'S2 · hace 40 min: pedido abierto → 0, factura en R → 0, pedido cerrado sin factura → 1 (antes: 2)',
+    s1 = s0 + 1, format('%s → %s', s0, s1));
+  -- el pedido abierto se cierra sin factura → ahora sí cuenta
+  delete from pos_ndf_open where id_pedido = '9970';
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select coalesce(sum(r.sin_factura), 0) into s2 from public.club_reporte_visitas(v_ini, v_fin) r where r.usuario = v_caj;
+  perform pg_temp.yo();
+  perform pg_temp.r('91', 'S2 · el pedido se cierra sin factura → cuenta «sin factura» (negativa)', s2 = s0 + 2, format('%s → %s', s0, s2));
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

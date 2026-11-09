@@ -10,5 +10,12 @@
   "S0": {"antes_de": "-- ═══ 88. (09-nov) S0",
          "funciones_de": {"commit": "9dcf212", "funciones": ["public.club_excepciones(", "public.club_reporte_visitas("]}},
   "S8": {"antes_de": "-- ═══ 89. (09-nov) S8",
-         "funciones_de": {"commit": "9dcf212", "funciones": ["public.club_pendiente_resolver("]}}
+         "funciones_de": {"commit": "9dcf212", "funciones": ["public.club_pendiente_resolver("]}},
+  "S0b": {"antes_de": "-- ═══ 90. (09-nov) S0b",
+          "sql_antes": "drop function public.club_facturas_recientes(text);",
+          "funciones_de": {"commit": "c309b26", "funciones": ["public.club_facturas_recientes(", "public.club_pos_ref(",
+                                                               "public.club_visita_canonica(", "public.club_cruce_provisional(",
+                                                               "public.club_excepciones("]}},
+  "S2": {"antes_de": "-- ═══ 91. (09-nov) S2",
+         "funciones_de": {"commit": "c309b26", "funciones": ["public.club_reporte_visitas("]}}
 }

@@ -67,6 +67,9 @@ q_crudo() {
     -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @- || echo "HTTP000"
 }
 sqlstate() { grep -oE 'ERROR:[[:space:]]+[0-9A-Z]{5}' <<<"$1" | head -1 | grep -oE '[0-9A-Z]{5}$' || true; }
+# Lo que se imprime de un error: SQLSTATE + la primera línea del mensaje. NUNCA el DETAIL (Postgres pone ahí la fila
+# entera, con datos de personas) ni el HINT.
+limpio() { jq -r '.message? // .' <<<"${1%HTTP*}" 2>/dev/null | sed -E 's/\\n|\n.*//' | sed -E 's/DETAIL:.*//; s/Failing row contains \([^)]*\)/Failing row contains (…)/' | head -c 220; }
 
 ROLES=(owner manager contador cajero salonero barman barback runner cocina proveedor)
 VE_TODO=(owner manager)
@@ -87,7 +90,7 @@ LECTURA="select json_build_object(
 
 ok=0; fallas=0; noprob=0
 verde()     { echo "OK          $1"; ok=$((ok+1)); }
-falla()     { echo "FALLA       $1"; echo "            esperado: $2"; echo "            obtenido: ${3:0:400}"; fallas=$((fallas+1)); }
+falla()     { echo "FALLA       $1"; echo "            esperado: $2"; echo "            obtenido: $(limpio "$3")"; fallas=$((fallas+1)); }
 noprobado() { echo "NO PROBADO  $1 — $2"; noprob=$((noprob+1)); }
 compara() { if [ -n "$3" ] && [ "$(jq -cS . <<<"$2" 2>/dev/null)" = "$(jq -cS . <<<"$3" 2>/dev/null)" ]; then verde "$1"; else falla "$1" "$2" "$3"; fi; }
 
@@ -170,7 +173,7 @@ if [ "$ENTORNO" = staging ]; then
     done
   done
   cuerpo=$(q_crudo "begin; set local session_replication_role = replica; update public.profiles set role = null where id = '$PID'; rollback;")
-  if [ "$(sqlstate "$cuerpo")" = 23502 ] && grep -q '"role"' <<<"$cuerpo"; then
+  if [ "$(sqlstate "$cuerpo")" = 23502 ] && grep -qE 'column .{0,2}role.{0,2} of relation .{0,2}profiles' <<<"$cuerpo"; then
     verde "rol NULL: la base lo rechaza (23502 en profiles.role)"
   else
     falla "rol NULL" "23502 not-null en profiles.role" "$cuerpo"

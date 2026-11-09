@@ -563,7 +563,7 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
 ### Decisiones del dueño del 09-nov
 | Tema | Decisión | Fuente |
 |---|---|---|
-| **Pase del puente** | **Hoy**, con el paquete tal como está: `claude/puente-item11-prod-v2` @ `cd6d5a1`, código `5da233a`. Hasta que avise: ningún commit en las ramas del puente ni en el #71, y nada en `main` (congelado). | Mensaje del dueño, 09-nov mañana |
+| **Pase del puente** | Se hizo **hoy**, con el paquete tal como estaba (`claude/puente-item11-prod-v2` @ `cd6d5a1`, código `5da233a`), y **salió bien**. Lo ejecutó el dueño en la PC del PoS: 081 a las 10:57, 082 v3 a las ~12:00 y Edge `ingest-ndf` v3 a las 12:03:30 (-06:00). El agente sigue en `4d3513a`. Resultado y desvíos en [`RESULTADO-PASE-2026-11-09.md`](../puente/RESULTADO-PASE-2026-11-09.md) (en `main`, #76 `a794b61`). El #71 se mergeó con la autorización del dueño (`2953994`, 13:21) y `main` quedó descongelado. | Mensaje del dueño, 09-nov mañana y tarde |
 | **089 y 090 en staging** | Caja las aplicó esta mañana: 089 a las 08:27 CR y 090 a las 08:28 CR, cada una con la firma del dueño para staging. El **residual de `supabase_admin`** de la 090 queda aceptado. Si algo del Club falla por eso, se avisa **antes** de cambiar nada. | `a4d1192` (089), `ed1eec8` (090) |
 | **Plazo de 24 meses** | Los contactos de ofertas se guardan hasta la baja o **24 meses desde la aceptación** (B7). Está en el aviso v1.1 (`club-web/src/i18n.ts`) y en `contactos_ofertas_meses`. | Entrada del 09-nov tarde (B7, B10) |
 | **Historial de git** | Lo único escrito: OPS-AUD-01 de `claude/docs-correos-ops` (`39847d5`) dice «la contraseña sigue en el historial de git (**no se reescribe**)». **A confirmar** que esa es la decisión. | `39847d5`, HALLAZGOS.md |
@@ -591,3 +591,18 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
 - **55 y 60:** abiertos; hace falta el texto del auditor. **64:** plan con fechas propuestas en
   [`IDS-AUDITOR.md`](IDS-AUDITOR.md) §4, sin implementar.
 - **120 y 121 del puente:** quedan para después del pase. No se tocaron.
+
+### 09-nov · tarde (después del pase)
+- **Flujo del salón, v2** ([`FLUJO-SALON-cruce.md`](FLUJO-SALON-cruce.md)). Suma dos datos del dueño, confirmados con
+  staging (solo lectura): **la factura queda en `R` hasta el cierre de caja** (16:00 y ~23:00), y con el agente de
+  prod llegan en null `consecutivo_fe`, `clave_fe` y `mesa_factura`. Lo que eso implica:
+  - El cruce del Club **solo mira `C`**. Por eso **«SIN_CRUCE» sale falso todas las noches**, desde el cobro hasta
+    ~10 min después del cierre de caja.
+  - El plan B («facturas de las últimas 2 h») está vacío durante el servicio.
+  - Gerencia puede verse obligada a rechazar personas pendientes reales cuando la factura se anuló y se rehizo.
+  - Con el agente viejo, las cuentas divididas no cruzan.
+  - Propuestas S0 (una `R` del pedido cuenta como cruce provisional), S0b y S8 primero, antes del piloto. **Sin
+    aplicar.**
+- **Decisiones que siguen sin texto** en esta sesión: excepciones de G-56, reintentos del pase y
+  `club_sin_cruce_elegir`. «Historial de git» queda a confirmar (tabla de arriba). No se cambia nada por ellas hasta
+  tener el texto.

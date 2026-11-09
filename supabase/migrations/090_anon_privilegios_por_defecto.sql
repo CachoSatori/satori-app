@@ -47,6 +47,9 @@
 --      editor del panel y borrarla.
 --   3. Una migración de prueba que cree una tabla y le dé SELECT a anon con grant explícito: anon la lee.
 --
+-- Gate de catálogo (Grok, 09-nov): docs/pases/GATE-090-catalogo.md — todas las tablas de public son de postgres y
+-- Branching crea como postgres.
+--
 -- Rollback: scripts/sql/090_rollback.sql (vuelve a dar todo a anon en las tablas nuevas, como hoy).
 
 begin;

@@ -105,7 +105,7 @@ function supabase {
 function node {
   $a = @($args); $global:LASTEXITCODE = 0
   if ($global:KIT.node_falla) { $global:LASTEXITCODE = 1; return }
-  if ($a -contains '--solo-medir' -and $global:KIT.medir_distinto -and (($a -join ' ') -like '*agente-prod*')) { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":63,"cumple_32":true}'; return }
+  if ($a -contains '--solo-medir' -and $global:KIT.medir_distinto -and ([string]$a[[array]::IndexOf($a, '--agente') + 1] -like '*agente-prod-*')) { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":63,"cumple_32":true}'; return }
   if ($a -contains '--solo-medir') { if ($global:KIT.corto) { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":20,"cumple_32":false}' } else { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":64,"cumple_32":true}' }; return }
   $salida = [string]$a[[array]::IndexOf($a, '--salida') + 1]
   $r = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($r); $st = -join ($r | ForEach-Object { $_.ToString('x2') })

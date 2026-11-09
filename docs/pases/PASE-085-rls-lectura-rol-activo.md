@@ -8,7 +8,8 @@
 >
 > - **Ya no espera al puente:** el puente pasó el 09-nov (081 y 082 v3 en prod, #71 mergeado en `2953994`,
 >   [`RESULTADO-PASE-2026-11-09.md`](../puente/RESULTADO-PASE-2026-11-09.md)).
-> - **La 092 de caja va DESPUÉS de esta** (§8).
+> - **Orden en prod: 085 → 091 → 092 → 100** (§8). Supabase no aplica una migración con número menor que la última
+>   aplicada: la 085 tiene que entrar antes que la 091, la 092 y la 100.
 > - **Reemplaza** el paquete anterior de la rama `claude/rls-is-active`, escrito cuando la 085 esperaba al puente.
 
 ## Qué pasa y qué no
@@ -59,18 +60,18 @@ nuevo en una transacción con precondición (el md5 viejo y exactamente una fila
 |---|---|---|
 | 0.1 | Firma del dueño en §9 (con el SHA de la cabeza del PR) | firma |
 | 0.2 | Los dos responsables presentes | §9 |
-| 0.3 | Ventana **fuera de 19–22 h CR** (la del paquete anterior; la fija el dueño), y ninguna otra sesión mergeando a `main` | hora en §9 |
+| 0.3 | **No se mergea entre las 17:00 y las 23:00 CR** (regla del dueño), y ninguna otra sesión mergeando a `main` | hora en §9 |
 | 0.4 | `main` sin moverse desde que se armó el PR: la cabeza del PR tiene a `main` como ancestro, y el diff tiene **solo** los archivos del PR (§2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.5 | Gate del PR en verde: `supabase/migraciones.test.ts` (la 085 está registrada) y build | checks del PR |
 | 0.6 | Staging en verde con este mismo archivo (§3) | anotado |
-| 0.7 | **La 092 NO está mergeada** (va después, §8) | `main` sin `092_*.sql` |
+| 0.7 | **Ninguna migración con número mayor que 085 en `main` ni en el ledger de prod** (la 091, la 092 y la 100 van después, §8): si entrara una antes, la 085 ya no se podría aplicar | `main` sin `09[1-9]_*.sql` ni `1??_*.sql`; 1.1 |
 
 ## 1. Lecturas previas (SOLO LECTURA, en PROD)
 Editor SQL de PROD. **Leer el ref en pantalla.** Anotar cada resultado en §9.
 ```sql
 -- 1.1 ledger: el último es la 082 (pase del puente) y la 085 no está
 select count(*), max(version) from supabase_migrations.schema_migrations;                 -- 57 · 082
-select version from supabase_migrations.schema_migrations where version in ('085','089','090','092');   -- 0 filas
+select version from supabase_migrations.schema_migrations where version > '082';                        -- 0 filas
 -- 1.2 las 7 policies existen con las condiciones de «Antes» (§ Qué pasa) y RLS activa en las 6 tablas
 select tablename, policyname, qual, with_check from pg_policies
  where schemaname = 'public' and tablename in ('employees','tip_entries','tip_sessions','role_tip_points','exchange_rates','profiles')
@@ -167,11 +168,17 @@ rollback;
 **Probado en staging (09-nov):** el rollback en una transacción descartada devuelve la matriz «Antes».
 
 ## 8. Después del pase
+- **Orden en prod: 085 → 091 → 092 → 100.** Supabase no aplica una migración con número menor que la última aplicada,
+  así que el orden de los merges a `main` tiene que ser ese, sin saltos:
+  - **085** (este paquete);
+  - **091** de caja (`multilocal_fase0`, rama `claude/multilocal-fase0`), con su paquete y firma;
+  - **092** de caja (abajo);
+  - **100** del Club (`club_catalogo_locales`, PR #81). Necesita la 075 del Club en prod: ver el #81.
 - **La 092 de caja** (`092_employees_borrado_solo_owner`, rama `claude/employees-borrado-owner`) va **después** de la 085,
   con su propio paquete y firma.
   - Las dos tocan `employees`: la 085 cambia una policy de lectura, y la 092 agrega un trigger de borrado y la tabla
     `employee_bajas`. No chocan.
-  - El orden queda fijo para que el ledger de prod suba en orden: 082 → 085 → 092.
+  - El orden queda fijo para que el ledger de prod suba en orden: 082 → 085 → 091 → 092 → 100.
 - Anotar en `ESTADO.md` la 085 en prod (ledger 58), con el SHA del merge.
 - Volver a correr `085_pruebas.sh` en staging en modo DESPUES después de cualquier cambio en esas 6 tablas.
 
@@ -181,7 +188,7 @@ rollback;
 | Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | |
 | Responsables (ejecución / control) | | |
 | 0.4 `main` sin moverse · diff solo los archivos del PR | | |
-| 1.1 ledger 57 · 082 · sin 085/089/090/092 | | |
+| 1.1 ledger 57 · 082 · ninguna versión mayor que 082 | | |
 | 1.2 15 policies = respaldo · RLS en las 6 | | |
 | §4 antes: 5 tablas con filas · profiles 1 | | |
 | §2 merge (SHA, hora) | | |

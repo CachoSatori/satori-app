@@ -86,7 +86,7 @@ escritura en un local ajeno la rechaza la RLS. **Rollback:** `scripts/sql/091_ro
    el `client_op_id` del ajuste choca, y pozo y cajas físicas no tienen local. Abrir otro local exige
    las fases con firma de la sección anterior, como mínimo cierre, pozo y cajas físicas.
 
-## Convivencia con la 075 del Club (`claude/epic-tesla-pyo77m` @ `743732e`): catálogo único — opción a (decidida)
+## Convivencia con la 075 del Club (`claude/epic-tesla-pyo77m` @ `743732e`; revisado otra vez @ `da3bc9a`): catálogo único — opción a (decidida)
 Revisado el 08-nov, solo lectura del repo. **El choque:**
 - Había **dos catálogos de locales**: la 075 usa `club_config` (`location_id text primary key`, `nombre`, `direccion`,
   `mapa_url`, `club_activo`, …; sus `location_id` van sin FK y sin default a propósito), y la 091 (como la 022) usa
@@ -105,7 +105,28 @@ es suya: el cambio de la 075 y de `club_local_crear` lo hace o lo acuerda esa se
 `locations` en la base que corresponda (la 091 o una migración propia), después la FK y el cambio de
 `club_local_crear` en el Club, en el mismo pase, para que no quede un `club_config` apuntando a un local inexistente.
 
+### Propuesta lista para la sesión del Club (09-nov, después del pase)
+- **Archivo:** [`scripts/sql/091_propuesta_club_catalogo.sql`](../scripts/sql/091_propuesta_club_catalogo.sql). No es
+  una migración de caja y no se aplica desde esta rama. Si el Club está de acuerdo, la copia a una migración de su
+  bloque (100+), después de la 075.
+- **Qué hace:**
+  1. Asegura `locations` con la misma definición que la 091.
+  2. Copia al catálogo, **inactivos para caja**, los locales que hoy están solo en `club_config`.
+  3. Agrega la FK `club_config.location_id → locations(id)`.
+  4. `club_local_crear` crea primero el local en `locations` (o reutiliza uno que ya exista) y después su
+     `club_config`. Es la función de la 075 (rama del Club @ `da3bc9a`) con una sola inserción agregada; misma firma,
+     así que los grants no cambian.
+- **Orden:** funciona antes o después de la 091, porque las dos crean el catálogo con `create table if not exists`.
+- **Prueba:** `scripts/sql/091_pruebas.sh`, sección «opción a», en transacciones descartadas:
+  - los dos órdenes (091 → Club y Club → 091) dan la FK validada, 0 locales del Club fuera del catálogo y las 4 columnas;
+  - `club_local_crear` como owner deja el local en los dos lados;
+  - la prueba lista los slugs de locales del Club que entrarían nuevos, sin datos de personas. Si el Club usa otro slug
+    para Santa Teresa, ahí aparece un duplicado: es una decisión de datos y se frena.
+- **Un local nuevo creado desde el Club entra inactivo para caja.** Lo activa el owner cuando existan las fases con
+  firma (gate 2).
+
 ## Antes de firmar la 091
-1. Implementar la opción a del catálogo con la sesión del Club (sección anterior), después del pase del lunes.
-2. Correr `scripts/sql/091_pruebas.sh` en staging (en la ventana nocturna) y anotar el resultado acá.
+1. Opción a: la propuesta está lista (sección anterior). Falta que la sesión del Club la acepte y la ponga en su bloque.
+2. Correr `scripts/sql/091_pruebas.sh` en staging (en una ventana nocturna autorizada, incluida la sección «opción a»)
+   y anotar el resultado acá. Todavía no corrió.
 3. Va después de la 085, la 089 y la 090.

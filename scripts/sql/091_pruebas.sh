@@ -110,5 +110,34 @@ r=$(q "begin; $MIG; $ROLLBACK; select (select count(*) from information_schema.c
         to_regprocedure('public.mis_locales()') is null as sin_fn; rollback;" | jq -c 'if type=="array" then .[-1] else . end')
 compara "rollback: sin columnas, sin políticas y sin función" '{"cols":0,"pols":0,"sin_fn":true}' "$r"
 
+echo "== Opción a: catálogo único con el Club (propuesta para la sesión del Club; todo descartado) =="
+PROP=$(grep -viE '^\s*(begin|commit)\s*;\s*$' "$RAIZ/scripts/sql/091_propuesta_club_catalogo.sql")
+if [ "$(q "select to_regclass('public.club_config') is not null as x" | jq -r '.[0].x // empty')" != "true" ]; then
+  echo "NO PROBADO opción a: staging no tiene club_config (la 075)"; fallas=$((fallas+1))
+else
+  # Sin datos de personas: solo slugs de locales y conteos.
+  echo "      locales del Club que entrarían nuevos al catálogo: $(q "select coalesce(string_agg(c.location_id, ', ' order by c.location_id), '(ninguno)') as x
+        from public.club_config c where to_regclass('public.locations') is null
+        or not exists (select 1 from public.locations l where l.id = c.location_id)" | jq -r '.[0].x // "error"')"
+  EST="select json_build_object(
+         'fk', (select convalidated from pg_constraint where conname = 'club_config_location_fk'),
+         'club_sin_catalogo', (select count(*) from public.club_config c where not exists (select 1 from public.locations l where l.id = c.location_id)),
+         'cols_local', (select count(*) from information_schema.columns where table_schema = 'public' and column_name = 'location_id'
+                          and table_name in ('cash_sessions','cash_movements','cash_cierres_dia','tip_sessions'))) as x"
+  for orden in "MIG PROP" "PROP MIG"; do
+    set -- $orden
+    r=$(q "begin; ${!1}; ${!2}; $EST; rollback;" | jq -c 'if type=="array" then .[-1].x else . end')
+    compara "opción a ($1 → $2): FK validada, ningún local del Club fuera del catálogo, 4 columnas" '{"fk":true,"club_sin_catalogo":0,"cols_local":4}' "$r"
+  done
+  ido=$(uid owner)
+  if [ -z "$ido" ]; then echo "NO PROBADO club_local_crear: sin owner activo en staging"; fallas=$((fallas+1)); else
+    r=$(q "begin; $MIG; $PROP; $(como "$ido") select public.club_local_crear('prueba-091-opcion-a', 'Local de prueba 091'); reset role;
+          select json_build_object('en_catalogo', (select not is_active from public.locations where id = 'prueba-091-opcion-a'),
+            'en_club', exists (select 1 from public.club_config where location_id = 'prueba-091-opcion-a')) as x; rollback;" \
+        | jq -c 'if type=="array" then .[-1].x else . end')
+    compara "club_local_crear (owner): el local queda en locations (inactivo para caja) y en club_config" '{"en_catalogo":true,"en_club":true}' "$r"
+  fi
+fi
+
 echo "== Resultado: $fallas falla(s) =="
 [ "$fallas" -eq 0 ]

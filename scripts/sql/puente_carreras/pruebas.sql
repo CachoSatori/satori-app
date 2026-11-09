@@ -91,6 +91,11 @@ begin
   r := public.pos_ndf_ingestar('prueba-83', jsonb_build_array(t->0 || '{"numero_factura":"000107"}'), '[]', null, '{}');
   insert into _r values ('83 · sin R: corte = máximo, con sus ceros (000107)', r->'cursor'->>'last_factura' = '000107'
     and r->'cursor'->>'max_factura_vista' = '000107', r::text);
+  r := public.pos_ndf_ingestar('prueba-83', jsonb_build_array(t->0 || '{"numero_factura":"A-77"}', t->0 || '{"numero_factura":"B-1","estado":"R"}'),
+         '[]', null, '{"last_factura":"A-77"}');
+  insert into _r values ('83 · folios NO numéricos (una C y una R): se guardan, pero ni mueven el máximo ni retienen el corte',
+    r->'cursor'->>'last_factura' = '000107' and r->'cursor'->>'max_factura_vista' = '000107' and r->>'tickets' = '2'
+    and (select count(*) from pos_ndf_tickets where local = 'prueba-83' and numero_factura in ('A-77','B-1')) = 2, r::text);
   begin
     perform public.pos_ndf_ingestar('prueba-83', jsonb_build_array(t->0 || '{"numero_factura":"108"}', t->0 || '{"numero_factura":"108"}'),
               '[]', null, '{"last_factura":"108"}');

@@ -6,7 +6,7 @@
 # Uso: scripts/puente-compat/correr.sh [VIEJO=4d3513a] [NUEVO=HEAD] [CONTROL=e4678b3]   (desde la raíz, con node_modules)
 #      SOLO_SECO=1 → solo compat (sin red).
 set -euo pipefail
-VIEJO=${1:-4d3513a}; NUEVO=${2:-HEAD}; CONTROL=${3:-e4678b3}
+VIEJO=${1:-4d3513a6df8e838dd5c0442b05a580e06ce9db9d}; NUEVO=${2:-HEAD}; CONTROL=${3:-e4678b395647d079863f8b7975c5935fd6cadcb5}
 RAIZ=$(git rev-parse --show-toplevel)
 TMP=$(mktemp -d)
 trap 'rm -rf -- "$TMP"' EXIT
@@ -15,6 +15,7 @@ git -C "$RAIZ" archive "$VIEJO" pos-bridge src/shared | tar -x -C "$TMP/VIEJO"
 git -C "$RAIZ" archive "$NUEVO" src/shared | tar -x -C "$TMP/NUEVO"
 # Se guardan como .caso.ts para que la suite normal del repo no los levante (importan carpetas temporales).
 cp "$RAIZ/scripts/puente-compat/compat.caso.ts" "$TMP/compat.test.ts"
+cp "$RAIZ/scripts/puente-compat/posMock.caso.ts" "$TMP/posMock.ts"     # PoS simulado ESTRICTO (Grok 111)
 ARCH=compat.test.ts
 if [ -z "${SOLO_SECO:-}" ]; then
   M=supabase/migrations/082_pos_ndf_ingesta_transaccional.sql

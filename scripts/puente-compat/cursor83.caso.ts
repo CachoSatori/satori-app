@@ -18,8 +18,9 @@ import { describe, expect, it } from 'vitest'
 // @ts-nocheck — se resuelve en la carpeta temporal
 import { ESTADO_INICIAL, ejecutarCiclo, type EstadoAgente, type PuertosCiclo } from './VIEJO/pos-bridge/ciclo.ts'
 import { leerAbiertas, leerCerradas, leerProvisionales } from './VIEJO/pos-bridge/consultaAgente.ts'
-import type { FilaDetalle, FilaFactura, Queryable } from './VIEJO/pos-bridge/consulta.ts'
 import { resolverEsquema } from './VIEJO/pos-bridge/esquema.ts'
+import { rangoLectura } from './VIEJO/pos-bridge/ventana.ts'
+import { PosEstricto } from './posMock.ts'
 import { pushIngest } from './VIEJO/pos-bridge/pushIngest.ts'
 import { MAX_TICKETS, normalizarLote, validarPayload } from './NUEVO/src/shared/ndf/ingestNdf.ts'
 
@@ -39,43 +40,7 @@ const COLUMNAS = {
 }
 const ESQUEMA = resolverEsquema(new Map(Object.entries(COLUMNAS)))
 
-// ── PoS simulado ──────────────────────────────────────────────────────────────────────────────────────────────
-type Estado = 'C' | 'R' | 'X'
-const fac = (n: string, estado: Estado): FilaFactura => ({
-  numero_factura: n, fecha_hora: '2026-11-08 19:00:00', estado, login_cajero: '222', tipo_factura: null,
-  area_factura: null, usuario_registra: '026', usuario_max: '026', personas: 0, pedidos: 1, tipo_pedido: 'M',
-  area_pedido: 'SALON 1', salonero_nombre: 'SALONERO PRUEBA', mesa: '12', numero_pedido: `P${n}`,
-  fecha_cierra: estado === 'C' ? '2026-11-08 21:00:00' : null, efectivo: estado === 'C' ? 6000 : 0, tarjeta: 0,
-  monto_electronico: 0, deposito: 0, cheque: 0, cuenta_cobrar: 0, dolares_efectivo: 0, dolares_tarjeta: 0, vuelto: 0,
-})
-// Dos líneas por factura (la segunda distinta) para ver duplicados de líneas.
-const lineasDe = (n: string): FilaDetalle[] => [
-  { numero_factura: n, usuario_registra: '026', codigo: '100', nombre: 'ROLL PRUEBA', cantidad: 1, monto: 4000,
-    imp_servicio: 400, imp_venta: 0, familia: 2, familia_nombre: 'SUSHI', es_extra: 0, compuesto: null },
-  { numero_factura: n, usuario_registra: '026', codigo: '300', nombre: 'BEBIDA PRUEBA', cantidad: 1, monto: 2000,
-    imp_servicio: 200, imp_venta: 0, familia: 10, familia_nombre: 'BEBIDAS', es_extra: 0, compuesto: null },
-]
-
-class Pos {
-  facturas = new Map<string, Estado>()
-  poner(n: string, e: Estado) { this.facturas.set(n, e) }
-  private filas(estados: Estado[], ultima: string | null): FilaFactura[] {
-    return [...this.facturas].filter(([n, e]) => estados.includes(e) && (ultima === null || BigInt(n) > BigInt(ultima)))
-      .sort(([a], [b]) => (BigInt(a) < BigInt(b) ? -1 : 1)).map(([n, e]) => fac(n, e))
-  }
-  qy(): Queryable {
-    return {
-      query: async <T,>(sql: string, p?: Record<string, unknown>) => {
-        if (sql.includes('[NumeroFactura] IS NULL')) return { rows: [] as T[] }   // sin mesas abiertas
-        const estados: Estado[] = /IN \('R', 'X'\)/.test(sql) ? ['R', 'X'] : ['C']
-        const ultima = p && 'ultima' in p ? (p.ultima as string | null) : null
-        const fs = this.filas(estados, ultima)
-        if (sql.includes('FAC_FacturasDet')) return { rows: fs.flatMap((f) => lineasDe(String(f.numero_factura))) as T[] }
-        return { rows: fs as T[] }
-      },
-    }
-  }
-}
+// ── PoS simulado: el ESTRICTO de posMock.caso.ts (falla ante parámetros o lecturas inválidas; Grok 111) ───────────
 
 // ── Staging: historia que se repite en una transacción descartada ─────────────────────────────────────────────
 type Paso =
@@ -138,6 +103,8 @@ class Edge {
   /** Respuestas forzadas por número de llamada HTTP: 'rpc_falla' = la RPC lanza (lote rechazado en la base). */
   fallas = new Map<number, 'rpc_falla' | 'red'>()
   ultimoEstado: any = null
+  /** Lo que el Edge le devolvió al agente en cada 200 (el cursor que el agente tiene que adoptar). */
+  respuestas: any[] = []
   constructor(private f082: string) {}
   fetch = async (_url: string, init: { body: string }): Promise<Response> => {
     const n = ++this.llamadas
@@ -160,6 +127,7 @@ class Edge {
       return new Response(JSON.stringify({ ok: false, error: 'Error interno' }), { status: 500 })
     }
     const res = r.ultimo ?? {}
+    this.respuestas.push({ cursor: res.cursor ?? null, corte_retenido_por_r: res.corte_retenido_por_r ?? null })
     return new Response(JSON.stringify({
       ok: true, local: LOCAL, tickets_recibidos: sobre.valor.tickets.length, tickets_guardados: res.tickets ?? 0,
       lineas_guardadas: res.lineas ?? 0, open_guardadas: res.open_guardadas ?? 0, open_borradas: res.open_borradas ?? 0,
@@ -170,13 +138,16 @@ class Edge {
 }
 
 // ── El escenario ─────────────────────────────────────────────────────────────────────────────────────────────
-interface Corrida { pos: Pos; edge: Edge; cursores: (string | null)[]; resumenes: any[] }
+interface Corrida { pos: PosEstricto; edge: Edge; cursores: (string | null)[]; resumenes: any[]; respuestaDe: (number | null)[]; antesReplay: any }
 
+const T0 = Date.parse('2026-11-09T04:00:00Z')   // 08-nov 22:00 CR
 async function escenario(f082: string): Promise<Corrida> {
-  const pos = new Pos()
+  let ahora = new Date(T0)
+  const pos = new PosEstricto(() => rangoLectura(ahora, VENTANA))
   const edge = new Edge(f082)
   const puertos: PuertosCiclo = {
-    leerCerradas: (r: any) => leerCerradas(pos.qy(), ESQUEMA, r),
+    // Grok 111: el objeto del ciclo pasa TAL CUAL (como agente.ts de 4d3513a)
+    leerCerradas: (p: any) => leerCerradas(pos.qy(), ESQUEMA, p),
     leerProvisionales: (r: any) => leerProvisionales(pos.qy(), ESQUEMA, r),
     leerAbiertas: (r: any) => leerAbiertas(pos.qy(), ESQUEMA, r),
     enviar: (payload: any) => pushIngest({ ingestUrl: 'https://edge.invalid/ingest-ndf', ingestSecret: 'x'.repeat(32) },
@@ -185,13 +156,16 @@ async function escenario(f082: string): Promise<Corrida> {
   let estado: EstadoAgente = { ...ESTADO_INICIAL }
   const cursores: (string | null)[] = []
   const resumenes: any[] = []
+  const respuestaDe: (number | null)[] = []   // índice en edge.respuestas del 200 de cada ciclo (null = no hubo)
   const ciclo = async () => {
-    const r = await ejecutarCiclo(puertos, LOCAL, VENTANA, estado, new Date('2026-11-09T04:00:00Z'))
+    const antes = edge.respuestas.length
+    const r = await ejecutarCiclo(puertos, LOCAL, VENTANA, estado, ahora)
     estado = r.estado
     cursores.push(estado.ultimaFactura)
     resumenes.push(r.resumen)
+    respuestaDe.push(edge.respuestas.length > antes ? edge.respuestas.length - 1 : null)
   }
-  await ciclo()                                                       // 0 · saludo (nada guardado)
+  await ciclo()                                                       // 0 · saludo con NADA guardado (cursor null)
   for (const n of ['7001', '7002', '7004', '7005']) pos.poner(n, 'C')
   pos.poner('7003', 'R'); pos.poner('7006', 'X')
   await ciclo()                                                       // 1 · R 7003 por debajo de la mayor C (7005)
@@ -203,15 +177,29 @@ async function escenario(f082: string): Promise<Corrida> {
   await ciclo()
   estado = { ...ESTADO_INICIAL }                                      // 5 · reinicio del agente: saludo
   await ciclo()
-  pos.poner('7009', 'C'); pos.poner('7010', 'R'); pos.poner('6990', 'R')
-  await ciclo()                                                       // 6 · aparece una R MENOR al cursor (otra caja)
+  pos.poner('7008', 'R'); pos.poner('7009', 'C')                      // 6 · IGUALDAD: la factura del cursor (7008) se reabre
+  await ciclo()
+  pos.poner('7008', 'C')
+  await ciclo()                                                       // 7 · 7008 vuelve a cerrar: entra otra vez como C
+  pos.poner('7010', 'R'); pos.poner('6990', 'R')
+  pos.poner('6980', 'R', '2026-11-07 12:00:00')                       // 8 · R de otra caja por debajo del cursor (una vieja)
+  await ciclo()
   edge.fallas.set(edge.llamadas + 1, 'red'); edge.fallas.set(edge.llamadas + 2, 'red')
-  await ciclo()                                                       // 7 · red caída en los dos intentos: no avanza
+  await ciclo()                                                       // 9 · red caída en los dos intentos: no avanza
   pos.poner('6990', 'C')
-  await ciclo()                                                       // 8 · cierra 6990
-  pos.poner('7010', 'X')
-  await ciclo()                                                       // 9 · 7010 se anula
-  return { pos, edge, cursores, resumenes }
+  await ciclo()                                                       // 10 · cierra 6990 (6980 sigue en curso)
+  pos.poner('7010', 'X'); pos.poner('6980', 'C')
+  ahora = new Date(T0 + 30 * 3_600_000)                               // 11 · 30 h después: 6980 (11-07 12:00) quedó FUERA de
+  pos.poner('7011', 'C', '2026-11-09 08:00:00')                       //      la ventana de 36 h: ni retiene el corte ni se relee
+  await ciclo()
+  const antesReplay = edge.ultimoEstado
+  // 12 · REPLAY desde el PoS (el backfill del agente: lote SIN cursor ni mesas) del día de 6980: entra como C, una vez.
+  const rangoViejo = { desde: '2026-11-07 00:00:00', hasta: '2026-11-07 23:59:59' }
+  const pv = new PosEstricto(() => rangoViejo); for (const [n, f] of pos.facturas) pv.ponerFila(f.fila, f.detalle)
+  const viejas = await leerCerradas(pv.qy(), ESQUEMA, { ...rangoViejo, ultima: null })
+  await pushIngest({ ingestUrl: 'https://edge.invalid/ingest-ndf', ingestSecret: 'x'.repeat(32) },
+    { local: LOCAL, tickets: viejas.tickets } as any, edge.fetch as any)
+  return { pos, edge, cursores, resumenes, respuestaDe, antesReplay }
 }
 
 const RAIZ = new URL('.', import.meta.url).pathname
@@ -219,39 +207,47 @@ const F082_NUEVA = readFileSync(`${RAIZ}082_nueva.sql`, 'utf8')
 const F082_VIEJA = readFileSync(`${RAIZ}082_vieja.sql`, 'utf8')
 
 describe('ID 83 · agente de prod (4d3513a) → Edge nuevo → RPC real en staging (transacciones descartadas)', () => {
-  it('CONTROL con la 082 de e4678b3 («solo avanza»): reproduce el bug — 6990 queda en R', async () => {
+  it('CONTROL con la 082 de e4678b3 («solo avanza»): reproduce el bug — facturas cerradas en el PoS quedan en R', async () => {
     const c = await escenario(F082_VIEJA)
-    const t = c.edge.ultimoEstado.tickets
-    expect(t['6990']?.estado).toBe('R')         // cerró en el PoS y en la base sigue «en curso»
-  }, 180_000)
+    const t = c.antesReplay.tickets
+    expect(t['7008']?.estado).toBe('R')         // igualdad: reabierta en el cursor, cerró y no se volvió a leer
+    expect(t['6990']?.estado).toBe('R')         // R de otra caja por debajo del cursor: cerró y no se volvió a leer
+  }, 300_000)
 
-  it('NUEVA 082 («corte seguro»): cada venta entra exactamente una vez, con su estado final y sus líneas', async () => {
+  it('NUEVA 082 («corte seguro»): el agente recibe el corte, la R cierra y entra exactamente una vez', async () => {
     const c = await escenario(F082_NUEVA)
-    const e = c.edge.ultimoEstado
-    // cursores que adoptó el agente, ciclo por ciclo
     expect(c.cursores).toEqual([
-      null,    // 0 saludo
+      null,    // 0 saludo sin nada guardado: el Edge devuelve cursor null y el agente queda en null (lee todo)
       '7002',  // 1 corte seguro: R 7003 abierta debajo de 7005
-      '7002',  // 2 sin cambios
+      '7002',  // 2 sin cambios (sin last_factura en el lote)
       '7006',  // 3 7003 cerró; R 7007 abierta debajo de 7008
-      '7008',  // 4 RPC falló en el 1.er intento, el reintento entró
+      '7008',  // 4 la RPC falló en el 1.er intento, el reintento entró
       '7008',  // 5 reinicio: el saludo trae el corte guardado
-      '6989',  // 6 R 6990 apareció debajo del cursor: el servidor baja el corte
-      '6989',  // 7 red caída: el agente no avanza
-      '7009',  // 8 6990 cerró y entró como C
-      '7009',  // 9 7010 anulada (X): no retiene
+      '7007',  // 6 igualdad: la R es la factura del cursor (7008) → corte 7007
+      '7009',  // 7 7008 volvió a cerrar y se releyó
+      '6979',  // 8 R 6980 y 6990 debajo del cursor: corte = menor R − 1
+      '6979',  // 9 red caída: el agente no avanza
+      '6979',  // 10 6990 cerró; 6980 sigue en curso: el corte la espera
+      '7011',  // 11 6980 quedó fuera de la ventana: ya no retiene; el corte no se traba
     ])
+    // el agente adoptó EXACTAMENTE lo que le devolvió el servidor (cada ciclo con 200)
+    c.respuestaDe.forEach((i, k) => {
+      if (i !== null) expect(c.edge.respuestas[i].cursor?.last_factura ?? null, `ciclo ${k}`).toBe(c.cursores[k])
+    })
+    expect(c.edge.respuestas[c.respuestaDe[0]!].cursor).toBeNull()
     expect(c.resumenes[4].fase).toBe('sincronizado')
-    expect(c.resumenes[7].fase).toBe('error_envio')
-    // exactamente una vez: una fila por factura, el estado final del PoS y 2 líneas cada una
+    expect(c.resumenes[9].fase).toBe('error_envio')
+    // antes del replay: 6980 quedó en R (cerró FUERA de la ventana): lo marca el control 7.2 del paquete
+    const a = c.antesReplay
+    expect(a.tickets['6980']).toEqual({ estado: 'R', lineas: 2 })
+    // después del replay: exactamente una vez, con su estado final y sus líneas, todas
+    const e = c.edge.ultimoEstado
     expect(e.filas).toBe(c.pos.facturas.size)
-    for (const [n, est] of c.pos.facturas) {
-      expect(e.tickets[n], n).toEqual({ estado: est, lineas: 2 })
-    }
-    expect(e.cursor.last_factura).toBe('7009')
-    expect(e.cursor.max_factura_vista).toBe('7009')
+    for (const [n] of c.pos.facturas) expect(e.tickets[n], n).toEqual({ estado: c.pos.estado(n), lineas: 2 })
+    expect(e.cursor.last_factura).toBe('7011')              // el replay (sin cursor) no movió el corte
+    expect(e.cursor.max_factura_vista).toBe('7011')
     expect(e.cursor.last_error).toBeNull()
-  }, 180_000)
+  }, 300_000)
 
   it('lote en el límite del Edge: MAX_TICKETS pasa, MAX_TICKETS + 1 se rechaza entero (400) y el agente no avanza', () => {
     const t = (n: number) => ({ numero_factura: String(n), fecha_registra: '2026-11-08T19:00:00-06:00', estado: 'C', items: [] })

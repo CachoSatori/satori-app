@@ -609,8 +609,6 @@ export function normalizarCursor(local: string, c: unknown, ahora: string): Curs
  * agente volvería a leer el día desde el principio en cada reinicio.
  */
 export function fusionarCursor(actual: CursorRow | null, entrante: CursorParcial): CursorRow {
-  // OJO (Grok ID 83, 09-nov): el Edge ya NO usa esta función; el cursor lo calcula `pos_ndf_ingestar` (mig 082) con el
-  // «corte seguro». Queda para las pruebas de la fusión de claves (ausente ≠ null) y del orden numérico.
   // CLUB-AUD-46: `last_factura` y `last_fecha_registra` solo AVANZAN. Un lote viejo (o un agente con el estado
   // perdido) no puede rebobinar el corte: para reprocesar, se edita la fila a mano, a propósito.
   return {

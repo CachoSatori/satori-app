@@ -150,9 +150,7 @@ Deno.serve(async (req) => {
     //   · tickets: upsert por (local, numero_factura); las líneas de esas facturas se REEMPLAZAN enteras;
     //   · `open` ausente = no se toca nada; `open: []` = no hay nada abierto (se borran todas);
     //   · sin la clave `cursor` en el sobre, el cursor NO se escribe (el backfill corre en paralelo sin moverle el
-    //     corte al agente); con ella, el cursor lo calcula la base (Grok ID 83, mig 082): `max_factura_vista` solo
-    //     avanza y `last_factura` es el «corte seguro» (menor R del lote − 1 si hay una R por debajo del máximo), que el
-    //     agente adopta y desde donde relee; latido = hora del servidor.
+    //     corte al agente); con ella, se fusiona con las reglas de CLUB-AUD-46 (solo avanza; latido = hora del servidor).
     const lineas: (LineaRow & { numero_factura: string })[] = []
     for (const t of lote.tickets) for (const l of t.lineas) lineas.push({ ...l, numero_factura: t.fila.numero_factura })
     const { data: r, error: errIngesta } = await sb.rpc('pos_ndf_ingestar', {

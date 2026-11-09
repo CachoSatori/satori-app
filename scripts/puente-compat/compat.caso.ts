@@ -11,6 +11,8 @@ import { ejecutarCiclo, type PuertosCiclo } from './VIEJO/pos-bridge/ciclo.ts'
 import { leerAbiertas, leerCerradas, leerProvisionales } from './VIEJO/pos-bridge/consultaAgente.ts'
 import type { FilaDetalle, FilaFactura, Queryable } from './VIEJO/pos-bridge/consulta.ts'
 import { resolverEsquema } from './VIEJO/pos-bridge/esquema.ts'
+import { rangoLectura } from './VIEJO/pos-bridge/ventana.ts'
+import { PosEstricto } from './posMock.ts'
 import type { PayloadIngest } from './VIEJO/src/shared/ndf/ingestNdf.ts'
 import { normalizarLote, validarPayload } from './NUEVO/src/shared/ndf/ingestNdf.ts'
 
@@ -67,37 +69,40 @@ const ABIERTAS = [
   { id_pedido: '4491', usuario_registra: '028', personas: 2, tipo: 'M', area: 'TERRAZA', mesa: '2', fecha_hora: '2026-11-07 20:15:00' },
 ]
 
-const qy: Queryable = {
-  async query<T>(sql: string, p?: Record<string, unknown>): Promise<{ rows: T[] }> {
-    if (sql.includes('[NumeroFactura] IS NULL')) return { rows: ABIERTAS as T[] }
-    const provisional = /'R'|'X'/.test(sql) && !/ultima/.test(JSON.stringify(p ?? {}))
-    const facturas = sql.includes("'C'") ? FACTURAS : provisional ? PROVISIONALES : [...FACTURAS, ...PROVISIONALES]
-    if (sql.includes('FROM [dbo].[FAC_FacturasDet] d')) {
-      const nums = new Set(facturas.map((f) => f.numero_factura))
-      return { rows: DETALLE.filter((d) => nums.has(String(d.numero_factura))) as T[] }
-    }
-    return { rows: facturas as T[] }
-  },
+const AHORA = new Date('2026-11-08T04:00:00Z')
+const RANGO = rangoLectura(AHORA, 36)          // el mismo que calcula el agente en el ciclo
+function posA7(): PosEstricto {
+  const pos = new PosEstricto(() => RANGO, ABIERTAS)
+  for (const f of [...FACTURAS, ...PROVISIONALES]) pos.ponerFila(f, DETALLE.filter((d) => d.numero_factura === f.numero_factura))
+  return pos
+}
+// Grok 111: el puerto recibe el objeto `p` del ciclo y lo pasa TAL CUAL, como agente.ts de 4d3513a.
+function puertosDe(pos: PosEstricto, enviados: PayloadIngest[]): PuertosCiclo {
+  const qy = pos.qy()
+  return {
+    leerCerradas: (p) => leerCerradas(qy, ESQUEMA, p),
+    leerProvisionales: (r) => leerProvisionales(qy, ESQUEMA, r),
+    leerAbiertas: (r) => leerAbiertas(qy, ESQUEMA, r),
+    async enviar(payload) {
+      enviados.push(payload)
+      return { ok: true, local: LOCAL, tickets_recibidos: payload.tickets.length, tickets_guardados: payload.tickets.length,
+        lineas_guardadas: 0, open_guardadas: 0, open_borradas: 0, invalid: 0, recalculados: 0, problemas: [],
+        cursor: { local: LOCAL, last_factura: '5000', last_fecha_registra: null, last_poll_at: null, last_error: null } }
+    },
+  } as PuertosCiclo
 }
 
 describe('A7 · lote del agente de prod (4d3513a) → Edge nuevo (e4678b3)', () => {
   it('un ciclo real del agente viejo pasa validarPayload y normalizarLote del Edge nuevo sin descartes', async () => {
     const enviados: PayloadIngest[] = []
-    const rango = { desde: '2026-11-06 08:00:00', hasta: '2026-11-07 22:00:00' }
-    const puertos: PuertosCiclo = {
-      leerCerradas: (ultima) => leerCerradas(qy, ESQUEMA, { ...rango, ultima }),
-      leerProvisionales: () => leerProvisionales(qy, ESQUEMA, rango),
-      leerAbiertas: () => leerAbiertas(qy, ESQUEMA, rango),
-      async enviar(payload) {
-        enviados.push(payload)
-        return { ok: true, local: LOCAL, tickets_recibidos: payload.tickets.length, tickets_guardados: payload.tickets.length,
-          lineas_guardadas: 0, open_guardadas: 0, open_borradas: 0, invalid: 0, recalculados: 0, problemas: [],
-          cursor: { local: LOCAL, last_factura: '5000', last_fecha_registra: null, last_poll_at: null, last_error: null } }
-      },
-    } as PuertosCiclo
-    await ejecutarCiclo(puertos, LOCAL, 36, { ultimaFactura: '5000', saludado: true, ultimoError: null },
-      new Date('2026-11-08T04:00:00Z'))
-
+    const pos = posA7()
+    await ejecutarCiclo(puertosDe(pos, enviados), LOCAL, 36, { ultimaFactura: '5000', saludado: true, ultimoError: null }, AHORA)
+    // Grok 111: las tres lecturas, con el rango exacto, el cursor como TEXTO y del tipo correcto
+    expect(pos.lecturas.map((l) => l.tipo)).toEqual(['cerradas', 'provisionales', 'abiertas'])
+    for (const l of pos.lecturas) expect([l.desde, l.hasta]).toEqual([RANGO.desde, RANGO.hasta])
+    expect(pos.lecturas[0].ultima).toBe('5000')
+    expect(typeof pos.lecturas[0].ultima).toBe('string')
+    expect('ultima' in pos.lecturas[1]).toBe(false)
     expect(enviados.length).toBeGreaterThan(0)
     const lote = enviados.at(-1)!
     expect(lote.tickets.length).toBe(7)           // 5 cerradas + R + X
@@ -121,6 +126,25 @@ describe('A7 · lote del agente de prod (4d3513a) → Edge nuevo (e4678b3)', () 
       expect(t.fila.mesa_factura ?? null).toBeNull()
       expect(t.fila.consecutivo_fe ?? null).toBeNull()
     }
+  })
+
+  it('Grok 111: el mock FALLA con el cableado viejo (el objeto p pasado como si fuera el cursor)', async () => {
+    const pos = posA7(); const qy = pos.qy()
+    const mal = { ...puertosDe(pos, []), leerCerradas: (p: any) => leerCerradas(qy, ESQUEMA, { ...RANGO, ultima: p }) } as PuertosCiclo
+    const r = await ejecutarCiclo(mal, LOCAL, 36, { ultimaFactura: '5000', saludado: true, ultimoError: null }, AHORA)
+    expect(r.resumen.fase).toBe('error_pos')
+    expect(r.resumen.error).toMatch(/ultima no es texto de dígitos ni null/)
+  })
+
+  it('Grok 111: el mock FALLA ante lecturas inválidas (rango corrido, clave de más, cursor numérico, SQL desconocido)', async () => {
+    const qy = posA7().qy()
+    const sqlC = "SELECT … f.[Estado] = 'C' AND (@ultima IS NULL OR …)"
+    await expect(qy.query(sqlC, { desde: '2026-11-06 09:00:00', hasta: RANGO.hasta, ultima: null })).rejects.toThrow(/rango distinto/)
+    await expect(qy.query(sqlC, { ...RANGO, ultima: null, extra: 1 })).rejects.toThrow(/parámetro de más/)
+    await expect(qy.query(sqlC, { ...RANGO, ultima: 5000 })).rejects.toThrow(/ultima no es texto/)
+    await expect(qy.query(sqlC, { ...RANGO })).rejects.toThrow(/@ultima y no vino/)
+    await expect(qy.query('SELECT 1', { ...RANGO })).rejects.toThrow(/SQL desconocido/)
+    await expect(qy.query(sqlC, null as any)).rejects.toThrow(/objeto plano/)
   })
 
   it('el saludo de arranque del agente viejo también pasa', () => {

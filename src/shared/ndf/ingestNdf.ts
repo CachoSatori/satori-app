@@ -602,15 +602,19 @@ export function normalizarCursor(local: string, c: unknown, ahora: string): Curs
 }
 
 /**
+ * LEGADO (Grok 117): el Edge `ingest-ndf` ya NO usa esta función. El cursor lo calcula la base (`pos_ndf_ingestar`,
+ * mig 082 v3, «corte seguro»), donde el corte SÍ puede quedar por debajo del máximo mientras haya una `R` abierta.
+ * Se deja (con sus pruebas) solo como historia de CLUB-AUD-46; no usar en código nuevo.
+ *
  * El cursor guardado + lo que trajo el lote. Lo ausente se conserva; lo explícito pisa.
+ * @deprecated Legado: el cursor lo calcula `pos_ndf_ingestar` (mig 082 v3).
  *
  * Sin esto, un `upsert` con el objeto entero pondría en null lo que el agente no mandó
  * — y el saludo de arranque (lote vacío) le borraría `last_factura`, o sea que el
  * agente volvería a leer el día desde el principio en cada reinicio.
  */
 export function fusionarCursor(actual: CursorRow | null, entrante: CursorParcial): CursorRow {
-  // CLUB-AUD-46: `last_factura` y `last_fecha_registra` solo AVANZAN. Un lote viejo (o un agente con el estado
-  // perdido) no puede rebobinar el corte: para reprocesar, se edita la fila a mano, a propósito.
+  // CLUB-AUD-46 (LEGADO, reemplazado por la 082 v3): `last_factura` y `last_fecha_registra` solo avanzaban.
   return {
     local:               entrante.local,
     last_poll_at:        entrante.last_poll_at,

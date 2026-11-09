@@ -568,7 +568,7 @@ describe('CLUB-AUD-32: un secreto por local', () => {
   })
 })
 
-describe('CLUB-AUD-46: el cursor solo avanza y el latido es la hora del servidor', () => {
+describe('CLUB-AUD-46 (LEGADO: fusionarCursor, el Edge ya no la usa — Grok 117): el cursor solo avanza y el latido es la hora del servidor', () => {
   const guardado = {
     local: 'nosara', last_factura: '5001', last_fecha_registra: '2026-09-02T01:42:07.000Z',
     last_poll_at: '2026-09-02T01:45:00.000Z', last_error: null,

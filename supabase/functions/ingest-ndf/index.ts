@@ -32,9 +32,10 @@
 //   · PROD: la versión anterior al ítem 11. El pase va con firma y en el orden del RUNBOOK del Club
 //     (docs/club-satori/RUNBOOK-piloto.md): la mig 081 SIEMPRE antes que este Edge.
 //   · El secreto por local (POS_INGEST_SECRETS, ronda 3) está en esta rama y NO desplegado todavía.
-//   · CLUB-AUD-46/47/48 (08-nov, en `src/shared/ndf/ingestNdf.ts`): latido con la hora del servidor y cursor que
-//     solo avanza; secretos de ≥ 32 sin repetir; topes de largo. En esta rama, NO desplegados (los despliega el
-//     RUNBOOK, con firma). Falta pasarlos a `claude/puente-item11-prod` antes del paso 3.
+//   · CLUB-AUD-46/47/48 (08-nov, en `src/shared/ndf/ingestNdf.ts`): latido con la hora del servidor; secretos de ≥ 32
+//     sin repetir; topes de largo. El «cursor que solo avanza» de CLUB-AUD-46 QUEDÓ REEMPLAZADO por el «corte seguro»
+//     que calcula la base (Grok ID 83 y 113, mig 082 v3): el corte puede quedar por debajo del máximo mientras haya
+//     una `R` abierta. `fusionarCursor` (TS) es legado: este Edge no la usa (Grok 117).
 //   · CLUB-AUD-44/45 (08-nov): todo el lote en UNA transacción por local (`pos_ndf_ingestar`, mig 082). NECESITA la
 //     082 aplicada ANTES de desplegar este Edge (en staging ya está aplicada; en prod va en el RUNBOOK).
 //
@@ -150,7 +151,9 @@ Deno.serve(async (req) => {
     //   · tickets: upsert por (local, numero_factura); las líneas de esas facturas se REEMPLAZAN enteras;
     //   · `open` ausente = no se toca nada; `open: []` = no hay nada abierto (se borran todas);
     //   · sin la clave `cursor` en el sobre, el cursor NO se escribe (el backfill corre en paralelo sin moverle el
-    //     corte al agente); con ella, se fusiona con las reglas de CLUB-AUD-46 (solo avanza; latido = hora del servidor).
+    //     corte al agente); con ella, el corte lo calcula la base («corte seguro», mig 082 v3: el máximo de las C, o
+    //     menor R − 1 si hay una R debajo, del lote o GUARDADA en las últimas 36 h; un lote vacío sin `last_factura` solo
+    //     escribe el latido y el error). El latido es la hora del servidor.
     const lineas: (LineaRow & { numero_factura: string })[] = []
     for (const t of lote.tickets) for (const l of t.lineas) lineas.push({ ...l, numero_factura: t.fila.numero_factura })
     const { data: r, error: errIngesta } = await sb.rpc('pos_ndf_ingestar', {
@@ -161,7 +164,15 @@ Deno.serve(async (req) => {
       p_cursor:  lote.cursor,
     })
     if (errIngesta) throw new Error(`no se pudo guardar el lote: ${errIngesta.message}`)
-    const res = (r ?? {}) as { tickets?: number; lineas?: number; open_guardadas?: number; open_borradas?: number; cursor?: CursorRow | null }
+    const res = (r ?? {}) as {
+      tickets?: number; lineas?: number; open_guardadas?: number; open_borradas?: number; cursor?: CursorRow | null
+      corte_retenido_por_r?: string | null
+    }
+    // Grok 113: cuando una R retiene el corte, queda en el log (número de factura del PoS; sin datos de cliente). Es lo
+    // que se mira si el corte se queda abajo mucho tiempo (una R que el PoS nunca cerró ni anuló).
+    if (res.corte_retenido_por_r) {
+      console.info(`ingest-ndf [${local}] corte retenido por la R ${res.corte_retenido_por_r} (corte=${res.cursor?.last_factura ?? '-'})`)
+    }
 
     // Invariante: tickets_recibidos = tickets_guardados + invalid + repetidos dentro del lote.
     return json({

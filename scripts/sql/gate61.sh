@@ -2,7 +2,7 @@
 # G-61 (08-nov): diff EXACTO del catálogo entre dos bases (staging ↔ prod). Mecánico: sin criterio humano en la corrida.
 #
 #   bash scripts/sql/gate61.sh [--ref-a REF] [--ref-b REF] [--esperadas ARCHIVO] [--salida DIR] [--prod-firmado]
-#   bash scripts/sql/gate61.sh --archivos A.txt B.txt [--esperadas ARCHIVO]     # sin base (lo usan las pruebas)
+#   bash scripts/sql/gate61.sh --archivos A.txt B.txt [--esperadas ARCHIVO] [--modo-prod]   # sin base (lo usan las pruebas)
 #
 # · Corre scripts/sql/gate61_catalogo.sql en cada base dentro de «begin; set transaction read only; …; rollback;»
 #   (Management API; el token lo pone el proxy o SUPABASE_ACCESS_TOKEN). Nunca escribe nada.
@@ -11,17 +11,29 @@
 #   «- <hecho>» (está en A y no en B) o «+ <hecho>» (está en B y no en A). Si hay entradas, la línea
 #   «firma: <quién> <fecha> sha256=<hex>» tiene que tener el sha256 de las entradas (en el orden del archivo, unidas con
 #   \n y con \n final). Cambiar una entrada sin volver a firmar invalida el archivo.
+#   La línea «firma:» es solo un control de integridad (cualquiera puede recalcular el sha256): NO es la autorización.
+#   La autorización de una esperada es el PR revisado y mergeado que la agrega o la cambia: el archivo solo cambia por PR
+#   revisado (nunca en un commit directo ni en la corrida), y el gate se corre contra el archivo de la rama mergeada.
+#
+# · MODO PROD (cuando A o B es prod, o con --modo-prod en las pruebas) — auditoría del 08-nov:
+#   - A y B tienen que ser distintos: el mismo ref, o el mismo archivo con --archivos, se rechaza (sale 5). Comparar una
+#     base consigo misma siempre «pasa» y no prueba nada. (Dos bases distintas con el catálogo idéntico sí pasan: es el
+#     objetivo.)
+#   - MIN_OBJETOS no puede bajar del piso fijo PISO_PROD = 3000 (staging, 08-nov: 3.505 hechos; el piso deja ~14 % de
+#     margen para cambios legítimos y frena una salida truncada). Un MIN_OBJETOS menor por variable de entorno se rechaza
+#     (sale 5). Si el catálogo achica de verdad por debajo del piso, el piso se cambia en un PR revisado.
 #
 # Sale 0 SOLO si no hay diferencias sin esperar NI esperadas sobrantes. Códigos:
 #   1 diferencias que no están en las esperadas · 2 esperadas que ya no aparecen (sobrantes)
-#   3 una salida vacía, «null» o con menos de MIN_OBJETOS (898) líneas · 4 firma ausente o inválida
-#   5 uso incorrecto o lectura de prod sin --prod-firmado
+#   3 una salida vacía, «null» o con menos de MIN_OBJETOS (por defecto el piso, 3000) líneas · 4 firma ausente o inválida
+#   5 uso incorrecto, lectura de prod sin --prod-firmado, A = B en modo prod o MIN_OBJETOS bajo el piso en modo prod
 set -euo pipefail
 STAGING=hwiatgicyyqyezqwldia
 PROD=yiczgdtirrkdvohdquzf
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"
-MIN_OBJETOS=${MIN_OBJETOS:-898}
-REF_A=$STAGING; REF_B=$PROD; ESPERADAS="$RAIZ/scripts/sql/gate61_esperadas.txt"; SALIDA=""; FIRMADO=0; ARCH_A=""; ARCH_B=""
+PISO_PROD=3000  # fijo: en modo prod MIN_OBJETOS no puede ser menor (cambiarlo es un PR revisado)
+MIN_OBJETOS=${MIN_OBJETOS:-$PISO_PROD}
+REF_A=$STAGING; REF_B=$PROD; ESPERADAS="$RAIZ/scripts/sql/gate61_esperadas.txt"; SALIDA=""; FIRMADO=0; ARCH_A=""; ARCH_B=""; MODO_PROD=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --ref-a) REF_A=$2; shift 2 ;;
@@ -30,9 +42,19 @@ while [ $# -gt 0 ]; do
     --salida) SALIDA=$2; shift 2 ;;
     --prod-firmado) FIRMADO=1; shift ;;
     --archivos) ARCH_A=$2; ARCH_B=$3; shift 3 ;;
+    --modo-prod) MODO_PROD=1; shift ;;
     *) echo "uso: ver el encabezado de $0" >&2; exit 5 ;;
   esac
 done
+if [ -z "$ARCH_A" ] && { [ "$REF_A" = "$PROD" ] || [ "$REF_B" = "$PROD" ]; }; then MODO_PROD=1; fi
+if [ "$MODO_PROD" = 1 ]; then
+  if ! [[ "$MIN_OBJETOS" =~ ^[0-9]+$ ]] || [ "$MIN_OBJETOS" -lt "$PISO_PROD" ]; then
+    echo "NEGADO (modo prod): MIN_OBJETOS=$MIN_OBJETOS está por debajo del piso $PISO_PROD." >&2; exit 5
+  fi
+  if [ -n "$ARCH_A" ]; then
+    if [ "$(realpath -- "$ARCH_A")" = "$(realpath -- "$ARCH_B")" ]; then echo "NEGADO (modo prod): A y B son el mismo archivo." >&2; exit 5; fi
+  elif [ "$REF_A" = "$REF_B" ]; then echo "NEGADO (modo prod): A y B son la misma base ($REF_A)." >&2; exit 5; fi
+fi
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 export LC_ALL=C
 

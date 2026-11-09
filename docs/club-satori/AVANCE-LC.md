@@ -427,3 +427,32 @@
   código ↔ id viejo, porque el export no tiene el código del Club. 25 pruebas (con un export ficticio).
 - **SPEC §5.1:** la restitución cuenta como actividad (decisión de Ismael).
 - Pruebas: batería **547/547** · paridad OK · vitest 1.511 · club-web 23 · wallet + club 60 · saldos 25 · gate61 13/13.
+
+## 09-nov · tarde (Grok NO-GO del puente; Club: 106, 109 y los arreglos de la auditoría) · rama del Club, nada en prod
+- **Puente** (otra rama, `claude/puente-item11-prod-v2`): contrato del cursor con «corte seguro» en la 082 (ID 83), A7
+  contra la RPC real en staging, paquete y guía v2. Ver `docs/puente/PASE-PROD-2026-11-09.md` en esa rama.
+- **106 · login del PoS:** solo el owner carga o cambia `employees.pos_login` (y el perfil de un empleado con login);
+  trigger con historial inmutable (`club_pos_login_historial`) y `club_auditoria`. La resolución de una excepción guarda el
+  actor del PoS tal como estaba (`club_excepciones_resueltas.actor_pos`). Prueba negativa por la API REAL como manager:
+  `scripts/sql/club_api/pos_login_manager.sh` → 403 / 42501, la fila no cambia; el nombre se sigue editando. Coordinado
+  con caja (#65): solo la base.
+- **109 · carga de papel:** `club_cargas_papel` (un local, un lote = sha256 de las filas; únicos; solo inserción) y
+  `lock table … in exclusive mode` antes de la línea de base. Ensayo con dos sesiones en staging: la segunda espera.
+- **B1 · G-56:** análisis real del SQL (`scripts/club/sql_g56.py`; 50 pruebas, con los 4 trucados de la auditoría) y modo
+  PROD de la carga de papel (`--aplicar-firmado`, probado solo en staging: el SQL de prod se niega solo).
+- **B2:** la carga de papel tiene origen `papel`; el migrador frena si la encuentra (nunca la borra).
+- **B3:** `club_canje_aviso` deja rastro (`ver_telefono_canje`, sin el número); `club_reportes_cerrados` sin lectura
+  directa (solo por `club_reporte_mes`).
+- **B4:** el reporte del mes cuenta como actividad solo lo de la app; las cargas iniciales salen aparte (`carga_inicial`).
+- **B5:** el tope diario cuenta solo visitas con beneficio; un segundo escaneo del mismo pedido devuelve la misma visita
+  con cualquier tope (sin otra fila ni re-sorteo).
+- **B6:** gate61 en modo prod rechaza A = B y un `MIN_OBJETOS` bajo el piso (3000 hechos); las esperadas cambian solo por
+  PR revisado. **B9:** club-web en producción sin `VITE_CLUB_URL` no compila ni arranca.
+- **B7 (elegido):** el plazo de 24 meses de los contactos de ofertas se cuenta **desde la aceptación**; se sacó
+  `ultimo_contacto_en` (las ofertas salen por fuera de la app: no hay un contacto confiable que marcar). El aviso v1.1 lo
+  dice así. **B8:** huella sha256 del aviso por versión e idioma (`club_avisos_privacidad`, FK desde `club_config`; prueba
+  de club-web). **B10:** aviso v1.1 sin marcas: 24 meses y la dirección pública del restaurante (ES/EN).
+- **B11 · carga única:** migrador `--primera-carga` (sin `delete`, «cero socios», fecha de carga, chequeo de 12 meses
+  sobre la fuente, papel por `legacy_id` en la misma transacción, `--emitir`). Docs: `piloto/saldos-papel.md` §A y RUNBOOK §8.
+- Pruebas: batería **567/567** · paridad OK (970) · carreras OK · gate61 19/19 · club-web 26 · saldos 30 (+4 staging) ·
+  G-56 50 · migrador 15 (+6 staging).

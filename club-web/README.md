@@ -43,7 +43,8 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
   pasan): la del sitio por defecto en `src/config.ts` y la secreta `1x0000000000000000000000000000000AA`. En prod,
   `VITE_TURNSTILE_SITEKEY` (variable de build) y `TURNSTILE_SECRET` las carga Ismael.
 - **Dominio (08-nov noche):** sale de la variable de build **`VITE_CLUB_URL`** (`https://<dominio>`, sin barra final);
-  no está escrito en el código ni en los textos de club-web. Sin la variable, el sitio usa el origen donde corre. Para
+  no está escrito en el código ni en los textos de club-web. **Sin la variable (o mal formada) el build de producción
+  falla y el sitio no arranca** (09-nov; en desarrollo usa el origen donde corre). Para
   cambiar de dominio: cambiar la variable y redesplegar. **Ojo:** la base (los links del pase, el portal, el código de
   canje y la baja) y la app de caja (`src/modules/club/qrFormato.ts`, que reconoce los QR) todavía tienen el dominio
   escrito: ver AVANCE-LC.md.

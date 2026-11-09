@@ -4351,7 +4351,7 @@ begin
   perform pg_temp.r('84', 'sin dominio cargado → «Falta el dominio del Club…» (no inventa uno)', v_e like 'Falta el dominio del Club%', v_e);
   update club_config_global set club_url = v_url;
 
-  -- retención de contactos de ofertas: N meses sin contacto (24, provisorio)
+  -- retención de contactos de ofertas: N meses DESDE LA ACEPTACIÓN (09-nov, B7: 24 confirmados; ya no hay «último contacto»)
   insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref PRIV84', 'app') returning id into v_ref;
   insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_ref, now() + interval '5 days') returning id into v_c1;
   insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_ref, now() + interval '5 days') returning id into v_c2;
@@ -4359,14 +4359,15 @@ begin
   insert into club_cupones_contactos (cupon_id, whatsapp, optin, aviso_version, aviso_aceptado_en) values
     (v_c1, '+50660008401', true, pg_temp.aviso(), now() - interval '25 months'),                         -- viejo, sin contacto
     (v_c2, '+50660008402', true, pg_temp.aviso(), now() - interval '2 months'),                          -- reciente
-    (v_c3, '+50660008403', true, pg_temp.aviso(), now() - interval '30 months');                         -- viejo, pero…
-  update club_cupones_contactos set ultimo_contacto_en = now() - interval '1 month' where cupon_id = v_c3;  -- …contactado hace 1 mes
+    (v_c3, '+50660008403', true, pg_temp.aviso(), now() - interval '30 months');                         -- viejo
+  perform pg_temp.r('84', 'B7 · ya no existe ultimo_contacto_en (el plazo se cuenta desde la aceptación)',
+    not exists (select 1 from information_schema.columns where table_name = 'club_cupones_contactos' and column_name = 'ultimo_contacto_en'), '');
   update club_config_global set contactos_ofertas_meses = 24;
   v_n := public.club_contactos_ofertas_purgar();
-  perform pg_temp.r('84', 'retención 24 meses: se borra el de 25 meses sin contacto; quedan el reciente y el contactado hace 1 mes',
+  perform pg_temp.r('84', 'retención 24 meses desde la aceptación: se borran los de 25 y 30 meses; queda el reciente',
     not exists (select 1 from club_cupones_contactos where cupon_id = v_c1)
       and exists (select 1 from club_cupones_contactos where cupon_id = v_c2)
-      and exists (select 1 from club_cupones_contactos where cupon_id = v_c3) and v_n >= 1, format('%s borrados', v_n));
+      and not exists (select 1 from club_cupones_contactos where cupon_id = v_c3) and v_n >= 2, format('%s borrados', v_n));
   perform pg_temp.r('84', 'la purga deja rastro sin datos (cuántos y los meses)',
     exists (select 1 from club_auditoria where accion = 'purga_contactos_turistas' and (despues->>'meses')::int = 24
               and antes is null and not (despues::text ~ '6000840')), '');
@@ -4374,7 +4375,6 @@ begin
   j := public.club_socios_mantenimiento();
   perform pg_temp.r('84', 'configurable (1 mes) y automático: el mantenimiento diario borra también el de 2 meses',
     not exists (select 1 from club_cupones_contactos where cupon_id = v_c2)
-      and exists (select 1 from club_cupones_contactos where cupon_id = v_c3)
       and (j->>'contactos_ofertas_borrados')::int >= 1, j::text);
   update club_config_global set contactos_ofertas_meses = 24;
   begin
@@ -4383,6 +4383,152 @@ begin
   exception when check_violation then
     perform pg_temp.r('84', 'retención fuera de rango (0) → rechazada', true, '');
   end;
+end $$;
+
+-- ═══ 85. (09-nov) Grok 106 y B2–B8: login del PoS solo el owner, actor de la excepción, carga de papel, cierres,
+--         reporte, tope sin re-sorteo y huella del aviso ═══
+do $$
+declare v_a text := pg_temp.loc(); v_e uuid; v_n int; v_n2 int; j jsonb; j2 jsonb; v_r uuid; v_s uuid; v_op uuid; v_err text;
+        v_t0 int; v_t1 int;
+begin
+  -- 106 · el mapeo del PoS lo cambia SOLO el owner, con rastro inmutable
+  insert into employees (full_name, role) values ('Empleado Prueba 85', 'salonero') returning id into v_e;
+  begin
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    update public.employees set pos_login = '985' where id = v_e;
+    perform pg_temp.yo(); perform pg_temp.r('85', '106 · manager carga un login del PoS', false, 'guardó');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('85', '106 · manager NO carga ni cambia el login del PoS (42501)', true, sqlerrm);
+  end;
+  begin
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    insert into public.employees (full_name, role, pos_login) values ('Empleado Prueba 85b', 'salonero', '986');
+    perform pg_temp.yo(); perform pg_temp.r('85', '106 · manager da de alta un empleado con login del PoS', false, 'guardó');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('85', '106 · manager NO da de alta un empleado con login del PoS (42501)', true, sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  update public.employees set pos_login = '985' where id = v_e;
+  perform pg_temp.yo();
+  perform pg_temp.r('85', '106 · el owner sí; queda en el historial y en club_auditoria con su usuario',
+    (select pos_login from employees where id = v_e) = '985'
+      and exists (select 1 from club_pos_login_historial h where h.employee_id = v_e and h.pos_login_despues = '985' and h.actor = '<OWNER_UUID>'::uuid)
+      and exists (select 1 from club_auditoria a where a.accion = 'cambio_pos_login' and a.objeto_id = v_e and a.actor = '<OWNER_UUID>'::uuid), '');
+  begin
+    perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+    update public.employees set profile_id = '<MANAGER_UUID>'::uuid where id = v_e;
+    perform pg_temp.yo(); perform pg_temp.r('85', '106 · manager se ata a un login (cambia el perfil)', false, 'guardó');
+  exception when insufficient_privilege then
+    perform pg_temp.yo(); perform pg_temp.r('85', '106 · manager NO cambia el perfil de un empleado con login (42501)', true, sqlerrm);
+  end;
+  perform pg_temp.como('authenticated', '<MANAGER_UUID>');
+  update public.employees set full_name = 'Empleado Prueba 85 (editado)' where id = v_e;
+  get diagnostics v_n = row_count;
+  perform pg_temp.yo();
+  perform pg_temp.r('85', '106 · el manager sigue editando lo demás del empleado', v_n = 1, format('%s filas', v_n));
+  perform set_config('club.libro_mantenimiento', '', true);
+  begin
+    update club_pos_login_historial set pos_login_despues = 'x' where employee_id = v_e;
+    v_err := 'editó';
+  exception when others then v_err := sqlerrm; end;
+  perform set_config('club.libro_mantenimiento', 'pruebas', true);
+  perform pg_temp.r('85', '106 · el historial del login es de solo inserción (ni el dueño de la tabla lo edita)', v_err like '%solo inserción%', v_err);
+  perform pg_temp.r('85', '106 · la resolución de una excepción guarda el actor del PoS al registrarse',
+    exists (select 1 from club_excepciones_resueltas x where x.actor_pos ? 'pos_logins' and x.actor_pos ? 'mapeo'), '');
+
+  -- B3 · el teléfono del aviso de canje deja rastro (sin el teléfono)
+  perform pg_temp.r('85', 'B3 · ver el teléfono del canje queda en club_auditoria, sin el número',
+    exists (select 1 from club_auditoria a where a.accion = 'ver_telefono_canje' and not (coalesce(a.despues::text, '') ~ '6000000')), '');
+  -- B3 · los cierres no se leen directo (ni owner ni manager): solo por club_reporte_mes
+  foreach v_err in array array['<OWNER_UUID>', '<MANAGER_UUID>'] loop
+    begin
+      perform pg_temp.como('authenticated', v_err);
+      perform count(*) from public.club_reportes_cerrados;
+      perform pg_temp.yo(); perform pg_temp.r('85', 'B3 · lectura directa de club_reportes_cerrados', false, 'leyó');
+    exception when insufficient_privilege then
+      perform pg_temp.yo(); perform pg_temp.r('85', 'B3 · sin lectura directa de club_reportes_cerrados (' || left(v_err, 8) || ')', true, sqlerrm);
+    end;
+  end loop;
+
+  -- B2/B4 · la carga de papel tiene su origen y no infla el reporte del mes (sale aparte)
+  insert into club_miembros (location_id, tipo, nombre, origen) values (v_a, 'referente', 'Ref Papel 85', 'app') returning id into v_r;
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  j := public.club_reporte_mes(date_trunc('month', now())::date, v_a, true);
+  perform pg_temp.yo();
+  insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, origen, nota)
+  values (v_a, v_r, 'tarjeta', 12, 6, 18000, 'papel', 'saldo tarjeta de papel · PAPEL-85 · tarjeta 2026-01-01');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  j2 := public.club_reporte_mes(date_trunc('month', now())::date, v_a, true);
+  perform pg_temp.yo();
+  perform pg_temp.r('85', 'B4 · la carga de papel no suma tarjetas ni personas del mes; sale en carga_inicial y sí en el saldo',
+    (j2->'kpis'->>'tarjetas') = (j->'kpis'->>'tarjetas') and (j2->'kpis'->>'personas') = (j->'kpis'->>'personas')
+      and (j2->'carga_inicial'->'papel'->>'personas')::int = coalesce((j->'carga_inicial'->'papel'->>'personas')::int, 0) + 12
+      and (j2->'kpis'->>'saldo_creditos_al_cierre')::numeric = (j->'kpis'->>'saldo_creditos_al_cierre')::numeric + 2,
+    format('%s → %s', j->'kpis', j2->'carga_inicial'));
+  begin
+    insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, origen)
+    values (v_a, v_r, 'tarjeta', 1, 6, 18000, 'otro');
+    perform pg_temp.r('85', 'B2 · origen inventado aceptado', false, 'guardó');
+  exception when check_violation then
+    perform pg_temp.r('85', 'B2 · el origen es app, migracion o papel (otro → rechazado)', true, '');
+  end;
+  -- 109 · una carga de papel por local y una por lote; el registro de cargas es de solo inserción
+  insert into club_cargas_papel (location_id, lote_sha256, filas, personas, fecha_movimiento) values (v_a, repeat('a', 64), 1, 12, 'carga');
+  begin
+    insert into club_cargas_papel (location_id, lote_sha256, filas, personas, fecha_movimiento) values (v_a, repeat('b', 64), 1, 12, 'carga');
+    perform pg_temp.r('85', '109 · segunda carga de papel del mismo local', false, 'guardó');
+  exception when unique_violation then
+    perform pg_temp.r('85', '109 · una sola carga de papel por local (unique)', true, '');
+  end;
+  begin
+    insert into club_cargas_papel (location_id, lote_sha256, filas, personas, fecha_movimiento) values ('otro-local', repeat('a', 64), 1, 12, 'carga');
+    perform pg_temp.r('85', '109 · el mismo lote en otro local', false, 'guardó');
+  exception when unique_violation then
+    perform pg_temp.r('85', '109 · el mismo lote no se carga dos veces, ni en otro local (unique del sha256)', true, '');
+  end;
+
+  -- B5 · tope 2: un segundo escaneo del MISMO pedido no registra otra visita ni re-sortea
+  update club_config_global set socio_visitas_por_dia = 2;
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en) values
+    (v_a, 'pedido:8501', '8501', '51', 'salon', 2, now(), now() - interval '20 minutes') on conflict do nothing;
+  v_s := pg_temp.socio('Bea Doble Escaneo', '+50660008501', null);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j  := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"8501","clave":"pedido:8501"}', gen_random_uuid(), v_a);
+  j2 := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"8501","clave":"pedido:8501"}', gen_random_uuid(), v_a);
+  perform pg_temp.yo();
+  select count(*) into v_n from club_visitas_socio where miembro_id = v_s;
+  perform pg_temp.r('85', 'B5 · con tope 2, el segundo escaneo del mismo pedido devuelve la MISMA visita (una fila, misma cortesía)',
+    v_n = 1 and (j2->>'repetida')::boolean and j2->>'visita_id' = j->>'visita_id' and j2->'cortesias' = j->'cortesias', format('%s visitas · %s', v_n, j2));
+  -- B5 · una visita SIN beneficio no gasta el día: con tope 1, una «como_invitado/créditos/sin promoción» y después una con beneficio
+  update club_config_global set socio_visitas_por_dia = 1;
+  insert into club_visitas_socio (location_id, miembro_id, fecha, client_op_id, visita_clave, estado_beneficio, aplicar)
+  values (v_a, v_s, (now() at time zone 'America/Costa_Rica')::date - 0, gen_random_uuid(), 'pedido:otra-85', 'paga_con_creditos', '{}');
+  delete from club_visitas_socio where miembro_id = v_s and estado_beneficio <> 'paga_con_creditos';
+  insert into pos_ndf_open (local, clave, id_pedido, mesa, canal, pax, updated_at, pedido_abierto_en) values
+    (v_a, 'pedido:8502', '8502', '52', 'salon', 2, now(), now() - interval '20 minutes') on conflict do nothing;
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  j := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"8502","clave":"pedido:8502"}', gen_random_uuid(), v_a);
+  perform pg_temp.yo();
+  perform pg_temp.r('85', 'B5 · con tope 1, una visita sin beneficio previa (pagó con créditos) no gasta el día',
+    coalesce(j->>'estado', '') <> 'ya_uso_hoy', j::text);
+
+  -- B8 · la versión vigente del aviso está registrada con su huella por idioma; no se edita
+  perform pg_temp.r('85', 'B8 · la versión del aviso de cada local está registrada (FK) con su sha256 ES y EN',
+    not exists (select 1 from club_config c left join club_avisos_privacidad v on v.version = c.aviso_privacidad_version where v.version is null)
+      and exists (select 1 from club_avisos_privacidad where version = 'v1.1' and sha256_es ~ '^[0-9a-f]{64}$' and sha256_en ~ '^[0-9a-f]{64}$'), '');
+  begin
+    update club_config set aviso_privacidad_version = 'v9-sin-registrar' where location_id = v_a;
+    perform pg_temp.r('85', 'B8 · versión del aviso sin registrar', false, 'guardó');
+  exception when foreign_key_violation then
+    perform pg_temp.r('85', 'B8 · una versión del aviso sin su huella registrada no se puede poner (FK)', true, '');
+  end;
+  perform set_config('club.libro_mantenimiento', '', true);
+  begin
+    update club_avisos_privacidad set sha256_es = repeat('0', 64) where version = 'v1.1';
+    v_err := 'editó';
+  exception when others then v_err := sqlerrm; end;
+  perform set_config('club.libro_mantenimiento', 'pruebas', true);
+  perform pg_temp.r('85', 'B8 · la huella registrada de una versión no se edita', v_err like '%solo inserción%', v_err);
 end $$;
 
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══

@@ -74,16 +74,16 @@ const ES = {
   alta_nombre: 'Nombre y apellido',
   alta_whatsapp: 'WhatsApp',
   alta_aviso_titulo: 'Aviso de privacidad · Club Satori',
-  // v1.1 (Ismael, 08-nov noche): el texto de v1 + «y tu email, si lo das»; después (sin subir versión: nadie lo aceptó en
-  // prod) las ofertas en «Para qué», los servidores fuera de Costa Rica, la retención de los contactos de ofertas (24 meses,
-  // = club_config_global.contactos_ofertas_meses) y la dirección del responsable. Lo marcado [CONFIRMAR ISMAEL] NO sale a
-  // prod (RUNBOOK §6). Un párrafo por línea.
+  // v1.1 (el dueño, 08-nov noche): el texto de v1 + «y tu email, si lo das»; después (sin subir versión: nadie lo aceptó
+  // en prod) las ofertas en «Para qué», los servidores fuera de Costa Rica, la retención de los contactos de ofertas
+  // (24 meses, = club_config_global.contactos_ofertas_meses; confirmado por el dueño el 09-nov) y la dirección del
+  // responsable (la pública del restaurante, confirmada el 09-nov). Sin marcas pendientes. Un párrafo por línea.
   alta_aviso: [
-    'Responsable: LCT Desarrollos (Satori Sushi Bar), <dirección del responsable> [CONFIRMAR ISMAEL], Costa Rica.',
+    'Responsable: LCT Desarrollos (Satori Sushi Bar), Frente al Hotel Trópico Latino, Santa Teresa, Cóbano, Provincia de Puntarenas, 60111, Costa Rica.',
     'Qué datos guardamos: tu nombre, tu número de WhatsApp y tu email, si lo das. Si sos socio, también tus visitas y los beneficios que usás.',
     'Para qué: para identificarte en caja, aplicar tus beneficios, avisarte por WhatsApp sobre tu cuenta del Club y, solo si lo aceptaste, mandarte ofertas de Satori. No vendemos tus datos ni los usamos para nada más.',
     'Quién los ve: solo el personal autorizado de Satori. Los guardamos en servicios tecnológicos que contratamos, con servidores fuera de Costa Rica. Si agregás el pase a Google Wallet o Apple Wallet, esa plataforma guarda el pase, sin tu teléfono.',
-    'Cuánto tiempo: mientras seas parte del Club. Si te anotás y no validás tu alta en caja dentro de 30 días, borramos tus datos del Local Club. Si nos dejaste tu contacto para recibir ofertas, lo guardamos hasta que te des de baja o hasta 24 meses sin contacto [CONFIRMAR ISMAEL].',
+    'Cuánto tiempo: mientras seas parte del Club. Si te anotás y no validás tu alta en caja dentro de 30 días, borramos tus datos del Local Club. Si nos dejaste tu contacto para recibir ofertas, lo guardamos hasta que te des de baja o hasta 24 meses desde que nos lo dejaste.',
     'Tus derechos: podés ver, corregir o borrar tus datos, o darte de baja cuando quieras, desde tu portal o escribiendo a satorisushibar@gmail.com.',
     'Al anotarte aceptás este aviso (Ley 8968, Costa Rica).',
   ].join('\n'),
@@ -193,11 +193,11 @@ const EN: Textos = {
   alta_whatsapp: 'WhatsApp',
   alta_aviso_titulo: 'Privacy notice · Club Satori',
   alta_aviso: [
-    'Controller: LCT Desarrollos (Satori Sushi Bar), <controller address> [CONFIRMAR ISMAEL], Costa Rica.',
+    'Controller: LCT Desarrollos (Satori Sushi Bar), Across from Hotel Trópico Latino, Santa Teresa, Cóbano, Puntarenas Province, 60111, Costa Rica.',
     'What we keep: your name, your WhatsApp number and your email, if you give it. If you are a member, also your visits and the benefits you use.',
     "Why: to identify you at the register, apply your benefits, message you on WhatsApp about your Club account and, only if you agreed, send you Satori offers. We don't sell your data or use it for anything else.",
     'Who sees it: only authorized Satori staff. We store it with technology services we hire, on servers outside Costa Rica. If you add the pass to Google Wallet or Apple Wallet, that platform stores the pass, without your phone number.',
-    "How long: while you are in the Club. If you sign up and don't validate at the register within 30 days, we delete your Local Club data. If you left your contact to receive offers, we keep it until you opt out or for up to 24 months without contact [CONFIRMAR ISMAEL].",
+    "How long: while you are in the Club. If you sign up and don't validate at the register within 30 days, we delete your Local Club data. If you left your contact to receive offers, we keep it until you opt out or for up to 24 months from when you left it.",
     'Your rights: you can see, correct or delete your data, or leave the Club at any time, from your portal or by writing to satorisushibar@gmail.com.',
     'By signing up you accept this notice (Costa Rica Law 8968).',
   ].join('\n'),

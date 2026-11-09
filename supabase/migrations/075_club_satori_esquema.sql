@@ -255,6 +255,10 @@ create table if not exists public.club_movimientos (
 );
 create index if not exists club_mov_miembro_idx on public.club_movimientos (miembro_id, fecha_visita);
 create index if not exists club_mov_app_fecha_idx on public.club_movimientos (location_id, fecha_visita) where origen = 'app';  -- AUD-13
+-- (09-nov, B2) La carga de tarjetas de papel tiene su PROPIO origen: el migrador solo borra 'migracion' (nunca 'papel')
+-- y frena si encuentra una carga de papel; el reporte del mes la muestra aparte (no infla la actividad del mes).
+alter table public.club_movimientos drop constraint if exists club_movimientos_origen_check;
+alter table public.club_movimientos add constraint club_movimientos_origen_check check (origen in ('app','migracion','papel'));
 
 create table if not exists public.club_pm_pagos (
   id                uuid primary key default gen_random_uuid(),
@@ -1628,6 +1632,10 @@ begin
   end if;
   select c.telefono into v_tel from public.club_miembros_contacto c where c.miembro_id = v_mv.miembro_id;
   if v_tel is null then return null; end if;
+  -- (09-nov, B3) mostrar el teléfono deja rastro, como cualquier lectura de datos personales (LC-PRIV): quién, cuándo y
+  -- de qué canje; sin el teléfono.
+  perform public.club_auditar('ver_telefono_canje', 'club_movimientos', p_movimiento, null,
+                              jsonb_build_object('miembro', v_mv.miembro_id, 'local', v_mv.location_id));
   select public.club_nombre_pila(m.nombre) into v_nom from public.club_miembros m where m.id = v_mv.miembro_id;
   select * into v_cfg from public.club_config where location_id = v_mv.location_id;
   -- (Ismael, 08-nov noche) el vencimiento, con el mismo texto que los mensajes, el portal y las guías: se cuenta desde la
@@ -3516,8 +3524,10 @@ begin
   end if;
   perform public.club_excepcion_segregacion(p_tipo, v_ref, p_location, v_rol);
   -- CLUB-AUD-25: cada resolución es una fila nueva (historial); la vigente es la última.
-  insert into public.club_excepciones_resueltas (location_id, tipo, ref, nota, resuelto_por)
-  values (p_location, p_tipo, v_ref, v_nota, auth.uid());
+  -- (09-nov, Grok 106) la resolución guarda el ACTOR del PoS tal como estaba al registrarse: los logins de la factura y a
+  -- quién estaban mapeados en ese momento. Un cambio posterior del mapeo (solo el owner, auditado) no lo reescribe.
+  insert into public.club_excepciones_resueltas (location_id, tipo, ref, nota, resuelto_por, actor_pos)
+  values (p_location, p_tipo, v_ref, v_nota, auth.uid(), public.club_excepcion_actor(p_tipo, v_ref, p_location));
   return true;
 end;
 $$;
@@ -3678,10 +3688,9 @@ create trigger club_reportes_cerrados_truncate_trg before truncate on public.clu
   for each statement execute function public.club_reportes_cerrados_inmutable();
 alter table public.club_reportes_cerrados enable row level security;
 revoke all on public.club_reportes_cerrados from public, anon, authenticated;
-grant select on public.club_reportes_cerrados to authenticated;
+-- (09-nov, B3) sin lectura directa: un cierre (nombres de anfitriones y saldos) se lee SOLO con club_reporte_mes, que
+-- controla el rol y deja rastro (LC-PRIV). Ni SELECT ni política para authenticated.
 drop policy if exists club_rep_cerr_sel on public.club_reportes_cerrados;
-create policy club_rep_cerr_sel on public.club_reportes_cerrados for select to authenticated
-  using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
 
 -- Reporte mensual (owner, manager). JSON sin teléfonos ni emails. `p_vivo` = recalcular aunque el mes
 -- esté cerrado (lo usa club_reporte_cerrar; la pantalla muestra el congelado).
@@ -3740,24 +3749,24 @@ begin
   por_m as (
     select mi.id, mi.tipo, mi.estado, mi.nombre, mi.negocio,
            coalesce(sum(v.personas), 0)::int as saldo_p,
-           coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini), 0)::int as pers_mes,
-           count(*) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini)::int as t_mes,
-           coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_3ini and v.fecha_visita < v_ini), 0) / 3.0 as prom3,
+           coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.origen = 'app' and v.fecha_visita >= v_ini), 0)::int as pers_mes,
+           count(*) filter (where v.tipo = 'tarjeta' and v.origen = 'app' and v.fecha_visita >= v_ini)::int as t_mes,
+           coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.origen = 'app' and v.fecha_visita >= v_3ini and v.fecha_visita < v_ini), 0) / 3.0 as prom3,
            max(v.fecha_visita) filter (where v.tipo in ('tarjeta','canje','restitucion')) as ult,
-           min(v.fecha_visita) filter (where v.tipo = 'tarjeta') as primera
+           min(v.fecha_visita) filter (where v.tipo = 'tarjeta' and v.origen = 'app') as primera
       from mi left join mv v on v.miembro_id = mi.id
      group by 1,2,3,4,5),
   pm as (select p.*, public.club_creditos(greatest(p.saldo_p, 0), v_cfg.personas_por_credito) as cr from por_m p),
   k as (
     select
-      count(*) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini)                              as tarjetas,
-      coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_ini), 0)          as personas,
+      count(*) filter (where v.tipo = 'tarjeta' and v.origen = 'app' and v.fecha_visita >= v_ini)                              as tarjetas,
+      coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.origen = 'app' and v.fecha_visita >= v_ini), 0)          as personas,
       count(*) filter (where v.tipo = 'canje' and v.fecha_visita >= v_ini)                                as canjes,
       coalesce(sum(v.creditos) filter (where v.tipo = 'canje' and v.fecha_visita >= v_ini), 0)            as creditos_canjeados,
       coalesce(sum(v.creditos * v.valor_credito_crc) filter (where v.tipo = 'canje' and v.fecha_visita >= v_ini), 0) as valor_canjeado_crc,
       coalesce(-sum(v.personas) filter (where v.tipo = 'vencimiento' and v.fecha_visita >= v_ini), 0)     as personas_vencidas,
-      count(*) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini)  as tarjetas_ant,
-      coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini), 0) as personas_ant,
+      count(*) filter (where v.tipo = 'tarjeta' and v.origen = 'app' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini)  as tarjetas_ant,
+      coalesce(sum(v.personas) filter (where v.tipo = 'tarjeta' and v.origen = 'app' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini), 0) as personas_ant,
       count(*) filter (where v.tipo = 'canje' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini)    as canjes_ant,
       coalesce(sum(v.creditos) filter (where v.tipo = 'canje' and v.fecha_visita >= v_pini and v.fecha_visita < v_ini), 0) as creditos_canjeados_ant
     from mv v),
@@ -3779,6 +3788,14 @@ begin
                    where rr.rol = 'socio' and mm.location_id = p_location and rr.desde >= v_ini and rr.desde < v_fin))
       from public.club_visitas_socio vs join public.club_miembros m on m.id = vs.miembro_id
      where vs.location_id = p_location and vs.registrada_en >= v_ini and vs.registrada_en < v_fin),
+    -- (09-nov, B4) Las cargas iniciales (tarjetas de papel y página vieja) NO cuentan como actividad del mes: se muestran
+    -- aparte. Sí suman al saldo (son créditos reales). La actividad de arriba y de abajo es solo la de la app.
+    'carga_inicial', (select jsonb_build_object(
+        'papel', jsonb_build_object('tarjetas', count(*) filter (where v.origen = 'papel'),
+                                    'personas', coalesce(sum(v.personas) filter (where v.origen = 'papel'), 0)),
+        'migracion', jsonb_build_object('tarjetas', count(*) filter (where v.origen = 'migracion'),
+                                        'personas', coalesce(sum(v.personas) filter (where v.origen = 'migracion'), 0)))
+      from mv v where v.tipo = 'tarjeta' and v.origen <> 'app' and v.fecha_visita >= v_ini),
     'kpis', (select jsonb_build_object(
         'tarjetas', k.tarjetas, 'personas', k.personas,
         'creditos_generados', round(k.personas::numeric / v_cfg.personas_por_credito, 1),
@@ -5124,8 +5141,8 @@ create policy club_config_global_owner on public.club_config_global for update t
 -- (club_url() avisa) y la caja solo acepta códigos sueltos. Se carga como dato (RUNBOOK §4), nunca en el código.
 alter table public.club_config_global add column if not exists club_url text
   check (club_url ~ '^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{2,5})?$');
--- (Ismael, 08-nov noche) Contactos de ofertas de turistas: se guardan hasta que la persona se da de baja o hasta N meses
--- sin contacto (24, PROVISORIO, [CONFIRMAR ISMAEL]); club_socios_mantenimiento los borra cada día.
+-- (08-nov noche; 24 confirmado por el dueño el 09-nov) Contactos de ofertas de turistas: se guardan hasta que la persona
+-- se da de baja o hasta N meses DESDE QUE LO DEJÓ (aceptó el aviso); club_socios_mantenimiento los borra cada día.
 alter table public.club_config_global add column if not exists contactos_ofertas_meses int not null default 24
   check (contactos_ofertas_meses between 1 and 120);
 grant update (club_url, contactos_ofertas_meses) on public.club_config_global to authenticated;   -- solo owner (policy)
@@ -5605,19 +5622,24 @@ begin
   v_pos := public.club_pos_ref(p_pos, v_loc);
   v_clave := coalesce(v_pos->>'visita', public.club_visita_canonica(v_loc, v_pos, null));
 
-  -- Tope por día. En el MISMO pedido: la caja ve la visita que ya está (misma cortesía, sin re-sorteo).
-  -- Grok 90: en OTRO pedido → «ya_uso_hoy», NO aplicar beneficio (no se registra nada).
-  select count(*) into v_n from public.club_visitas_socio where miembro_id = p_miembro and fecha = v_hoy;
+  -- (09-nov, B5) MISMO pedido, el mismo día: SIEMPRE la visita que ya está (misma cortesía, sin re-sorteo y sin otra
+  -- visita), con cualquier tope. Antes solo pasaba al llegar al tope: con un tope de 2 o más, un segundo escaneo del
+  -- mismo pedido registraba otra visita y volvía a sortear.
+  select * into v_prev from public.club_visitas_socio
+   where miembro_id = p_miembro and fecha = v_hoy and location_id = v_loc and visita_clave is not distinct from v_clave
+   order by registrada_en desc limit 1;
+  if v_prev.id is not null then
+    return v_prev.aplicar || jsonb_build_object('repetida', true,
+      'avisos', coalesce(v_prev.aplicar->'avisos', '[]'::jsonb) || to_jsonb('Ya registró su visita de hoy en este pedido: es la misma de antes (la cortesía no se vuelve a sortear).'::text));
+  end if;
+  -- Tope por día: cuentan SOLO las visitas CON beneficio (B5). Una visita sin beneficio (paga con créditos, va como
+  -- invitado, sin promoción) no le gasta el día al socio.
+  -- Grok 90: en OTRO pedido, con el tope cumplido → «ya_uso_hoy», NO aplicar beneficio (no se registra nada).
+  select count(*) into v_n from public.club_visitas_socio
+   where miembro_id = p_miembro and fecha = v_hoy and estado_beneficio in ('aplica','pendiente_configuracion');
   select g.socio_visitas_por_dia into v_tope from public.club_config_global g;   -- tope ÚNICO del Club (08-nov noche)
   v_tope := coalesce(v_tope, 1);
   if v_n >= v_tope then
-    select * into v_prev from public.club_visitas_socio
-     where miembro_id = p_miembro and fecha = v_hoy and location_id = v_loc and visita_clave is not distinct from v_clave
-     order by registrada_en desc limit 1;
-    if v_prev.id is not null then
-      return v_prev.aplicar || jsonb_build_object('repetida', true,
-        'avisos', coalesce(v_prev.aplicar->'avisos', '[]'::jsonb) || to_jsonb('Ya registró su visita de hoy en este pedido: es la misma de antes (la cortesía no se vuelve a sortear).'::text));
-    end if;
     return jsonb_build_object('visita_id', null, 'socio', public.club_nombre_limpio(v_m.nombre), 'estado', 'ya_uso_hoy',
       'porcentaje', 0, 'cortesias', '[]'::jsonb, 'texto', 'Ya usó su beneficio hoy en otro pedido: NO aplicar beneficio',
       'avisos', jsonb_build_array(case when v_tope = 1 then 'Una visita con beneficio por día, en cualquier Satori.'
@@ -6523,10 +6545,13 @@ begin
 end;
 $$;
 
--- (Ismael, 08-nov noche) Retención de los contactos de ofertas (turistas): «hasta que te des de baja o N meses sin
--- contacto». «Último contacto» = ultimo_contacto_en (lo marca quien manda la oferta) o, si nunca se le escribió, la fecha
--- en que aceptó. Borra y deja rastro sin datos (cuántos). Lo llama club_socios_mantenimiento (pg_cron, diario).
-alter table public.club_cupones_contactos add column if not exists ultimo_contacto_en timestamptz;
+-- Retención de los contactos de ofertas (turistas): «hasta que te des de baja o hasta N meses desde que nos lo dejaste».
+-- (09-nov, B7) El plazo se cuenta desde la ACEPTACIÓN (aviso_aceptado_en), y el aviso v1.1 lo dice así. Se descartó
+-- «desde el último contacto»: las ofertas no salen de la app (se exportan y se mandan por fuera), así que no hay un
+-- evento confiable que marque el contacto y una marca a mano podría estirar la retención sin que la persona lo sepa.
+-- Cada cupón con contacto es una aceptación nueva, con su propio plazo. Borra y deja rastro sin datos (cuántos). Lo
+-- llama club_socios_mantenimiento (pg_cron, diario).
+alter table public.club_cupones_contactos drop column if exists ultimo_contacto_en;
 create or replace function public.club_contactos_ofertas_purgar()
 returns int
 language plpgsql
@@ -6539,7 +6564,7 @@ begin
   select g.contactos_ofertas_meses into v_meses from public.club_config_global g;
   v_meses := coalesce(v_meses, 24);
   delete from public.club_cupones_contactos k
-   where coalesce(k.ultimo_contacto_en, k.aviso_aceptado_en, k.created_at) < now() - make_interval(months => v_meses);
+   where coalesce(k.aviso_aceptado_en, k.created_at) < now() - make_interval(months => v_meses);
   get diagnostics v_n = row_count;
   if v_n > 0 then
     perform public.club_auditar('purga_contactos_turistas', 'club_cupones_contactos', null, null,
@@ -6594,6 +6619,149 @@ grant execute on function public.club_miembro_contacto_ver(uuid)            to a
 grant execute on function public.club_reporte_exportar(date, text, text)     to authenticated;
 grant execute on function public.club_contactos_ofertas_exportar(text)      to authenticated;
 grant execute on function public.club_cupon_contacto_baja(text)              to anon, authenticated;
+
+
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+-- 09-nov · Grok 106 y 109, B2/B8 (rama del Club; nada en prod)
+-- ════════════════════════════════════════════════════════════════════════════════════════════════════════════
+-- Grok 106 · El mapeo employees.pos_login → empleado decide la segregación de las excepciones del PoS (quien cobró la
+-- factura no la resuelve). Antes lo podía cambiar un manager (política owner_manager_gestionan_empleados) y así
+-- «des-mapearse» de una factura propia. Ahora: SOLO el owner cambia el login del PoS o el perfil de un empleado con
+-- login (también el alta con login), con rastro inmutable (club_auditoria + historial propio). Sin usuario
+-- (service_role, migraciones) pasa, y también deja rastro. Coordinado con caja (PR #65 es suyo): esto es la parte de la base.
+create table if not exists public.club_pos_login_historial (
+  id                bigint generated always as identity primary key,
+  employee_id       uuid not null,
+  pos_login_antes   text,
+  pos_login_despues text,
+  profile_antes     uuid,
+  profile_despues   uuid,
+  actor             uuid,
+  rol               text,
+  cambiado_en       timestamptz not null default now()
+);
+alter table public.club_pos_login_historial enable row level security;
+revoke all on public.club_pos_login_historial from public, anon, authenticated;
+create or replace function public.club_inmutable_trg()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if public.club_modo_pruebas() then   -- CLUB-AUD-42: solo en una base marcada como staging
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  raise exception '% es de solo inserción', tg_table_name using errcode = 'P0001';
+end;
+$$;
+drop trigger if exists club_pos_login_historial_inmutable_trg on public.club_pos_login_historial;
+create trigger club_pos_login_historial_inmutable_trg before update or delete on public.club_pos_login_historial
+  for each row execute function public.club_inmutable_trg();
+drop trigger if exists club_pos_login_historial_truncate_trg on public.club_pos_login_historial;
+create trigger club_pos_login_historial_truncate_trg before truncate on public.club_pos_login_historial
+  for each statement execute function public.club_inmutable_trg();
+
+create or replace function public.club_employees_pos_login_guardia()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare v_rol text := (select p.role::text from public.profiles p where p.id = auth.uid());
+begin
+  if tg_op = 'INSERT' and new.pos_login is null then
+    return new;
+  end if;
+  if tg_op = 'UPDATE' and new.pos_login is not distinct from old.pos_login
+     and (new.profile_id is not distinct from old.profile_id or new.pos_login is null) then
+    return new;   -- ni el login ni (con login) el perfil cambiaron
+  end if;
+  if auth.uid() is not null and coalesce(v_rol, '') <> 'owner' then
+    raise exception 'Solo el owner cambia el login del PoS de un empleado (decide quién resuelve las excepciones del Club)'
+      using errcode = '42501';
+  end if;
+  insert into public.club_pos_login_historial (employee_id, pos_login_antes, pos_login_despues, profile_antes, profile_despues, actor, rol)
+  values (new.id, case when tg_op = 'UPDATE' then old.pos_login end, new.pos_login,
+          case when tg_op = 'UPDATE' then old.profile_id end, new.profile_id, auth.uid(), v_rol);
+  perform public.club_auditar('cambio_pos_login', 'employees', new.id,
+                              case when tg_op = 'UPDATE' then jsonb_build_object('pos_login', old.pos_login, 'profile_id', old.profile_id) end,
+                              jsonb_build_object('pos_login', new.pos_login, 'profile_id', new.profile_id));
+  return new;
+end;
+$$;
+drop trigger if exists club_employees_pos_login_guardia_trg on public.employees;
+create trigger club_employees_pos_login_guardia_trg before insert or update of pos_login, profile_id on public.employees
+  for each row execute function public.club_employees_pos_login_guardia();
+
+-- El actor del PoS de una excepción, tal como está AHORA (lo guarda club_excepcion_resolver al registrar la resolución).
+alter table public.club_excepciones_resueltas add column if not exists actor_pos jsonb;
+create or replace function public.club_excepcion_actor(p_tipo text, p_ref text, p_location text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select jsonb_build_object(
+    'pos_logins', coalesce(e.detalle->'pos_logins', '[]'::jsonb),
+    'logins_fijos', coalesce(e.detalle->'logins_fijos', '[]'::jsonb),
+    'turno', e.detalle->>'turno',
+    'mapeo', (select coalesce(jsonb_agg(jsonb_build_object('login', l.login, 'employee_id', em.id, 'profile_id', em.profile_id)), '[]'::jsonb)
+                from jsonb_array_elements_text(coalesce(e.detalle->'pos_logins', '[]'::jsonb)) l(login)
+                left join public.employees em on em.pos_login = l.login),
+    'registradores', coalesce(e.detalle->'registradores', '[]'::jsonb),
+    'en', now())
+    from public.club_excepciones((now() at time zone 'America/Costa_Rica')::date - 120,
+                                 (now() at time zone 'America/Costa_Rica')::date, p_location, p_tipo) e
+   where e.tipo = p_tipo and e.ref = p_ref
+   limit 1
+$$;
+
+-- Grok 109 · Carga de saldos de papel: un registro por carga, con clave única del lote (sha256 de las filas canónicas)
+-- y una sola carga por local. La carga toma `lock table … in exclusive mode` ANTES de mirar la línea de base: dos
+-- sesiones a la vez se ponen en fila; la segunda ve la carga de la primera y frena (o, si la primera se deshizo, carga).
+create table if not exists public.club_cargas_papel (
+  id               bigint generated always as identity primary key,
+  location_id      text not null unique,
+  lote_sha256      text not null unique check (lote_sha256 ~ '^[0-9a-f]{64}$'),
+  filas            int not null check (filas > 0),
+  personas         int not null check (personas > 0),
+  fecha_movimiento text not null check (fecha_movimiento in ('carga','tarjeta')),
+  cargado_en       timestamptz not null default now()
+);
+alter table public.club_cargas_papel enable row level security;
+revoke all on public.club_cargas_papel from public, anon, authenticated;
+drop trigger if exists club_cargas_papel_inmutable_trg on public.club_cargas_papel;
+create trigger club_cargas_papel_inmutable_trg before update or delete on public.club_cargas_papel
+  for each row execute function public.club_inmutable_trg();
+drop trigger if exists club_cargas_papel_truncate_trg on public.club_cargas_papel;
+create trigger club_cargas_papel_truncate_trg before truncate on public.club_cargas_papel
+  for each statement execute function public.club_inmutable_trg();
+
+-- B8 · Huella sha256 del texto COMPLETO del aviso de privacidad por versión e idioma (club-web/src/i18n.ts alta_aviso,
+-- UTF-8). La versión que carga club_config tiene que estar registrada (FK); cambiar el texto sin subir la versión hace
+-- fallar club-web/src/aviso.test.ts. Una versión registrada no se edita ni se borra.
+create table if not exists public.club_avisos_privacidad (
+  version       text primary key check (version ~ '^v[0-9A-Za-z.-]{1,30}$'),
+  sha256_es     text not null check (sha256_es ~ '^[0-9a-f]{64}$'),
+  sha256_en     text not null check (sha256_en ~ '^[0-9a-f]{64}$'),
+  registrado_en timestamptz not null default now()
+);
+alter table public.club_avisos_privacidad enable row level security;
+revoke all on public.club_avisos_privacidad from public, anon, authenticated;
+drop trigger if exists club_avisos_privacidad_inmutable_trg on public.club_avisos_privacidad;
+create trigger club_avisos_privacidad_inmutable_trg before update or delete on public.club_avisos_privacidad
+  for each row execute function public.club_inmutable_trg();
+insert into public.club_avisos_privacidad (version, sha256_es, sha256_en) values
+  ('v1.1', 'ca95472eac34228dd41d49516cd1fef02f91c6dc8ad81f333928a10237a406d7', '748b783881f21370e3238517996a2a47780b0c7a18c597ecc7528a56018fddf7')
+on conflict (version) do nothing;
+alter table public.club_config drop constraint if exists club_config_aviso_registrado_fk;
+alter table public.club_config add constraint club_config_aviso_registrado_fk
+  foreign key (aviso_privacidad_version) references public.club_avisos_privacidad(version);
+
+revoke all on function public.club_employees_pos_login_guardia() from public, anon, authenticated;
+revoke all on function public.club_excepcion_actor(text, text, text) from public, anon, authenticated;
+revoke all on function public.club_inmutable_trg() from public, anon, authenticated;
 
 
 -- CLUB-AUD-11: red de seguridad al final, después de todos los grants de arriba.

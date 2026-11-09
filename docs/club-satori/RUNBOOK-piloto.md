@@ -167,9 +167,13 @@ staging) y registrar la fila `<N>` en el ledger de prod (texto idéntico al arch
   `VITE_CLUB_URL` de club-web; no está escrito en el código). Verificar: `select club_url from club_config_global;` y que
   un QR de anfitrión de prueba se lea en caja. Sin dominio, los links del pase, el portal, el canje y la baja fallan
   cerrados con «Falta el dominio del Club».
-- **Retención de contactos de ofertas:** `select contactos_ofertas_meses from club_config_global;` → el valor que firme
-  Ismael (24 provisorio, [CONFIRMAR ISMAEL]); tiene que coincidir con el aviso de privacidad (una prueba de club-web
-  compara el texto con el valor por defecto de la migración). El borrado lo hace `club_socios_mantenimiento` cada día.
+- **Retención de contactos de ofertas:** `select contactos_ofertas_meses from club_config_global;` → **24** (confirmado
+  por el dueño el 09-nov), contados **desde que la persona dejó el contacto** (aceptó el aviso; B7: las ofertas no salen
+  de la app, así que no hay un «último contacto» confiable). Tiene que coincidir con el aviso de privacidad (una prueba
+  de club-web compara el texto con el valor por defecto de la migración). El borrado lo hace `club_socios_mantenimiento`
+  cada día.
+- **Huella del aviso (B8):** `select version, sha256_es, sha256_en from club_avisos_privacidad;` → la versión de
+  `club_config` está registrada (FK) con las mismas huellas que `AVISO_PRIVACIDAD_SHA256` de `club-web/src/config.ts`.
 - `select aviso_privacidad_version from club_config;` igual a `AVISO_PRIVACIDAD_VERSION` de `club-web/src/config.ts` (hoy
   **v1.1**: v1 + el email en «Qué datos guardamos»; una prueba de club-web verifica que coincidan).
 - `select tarjeta_manual_activa from club_config;` → `false`.
@@ -237,20 +241,26 @@ público (`/r/`, cupones); el canje sale del botón «Canjear» del pase o del p
 **Verificar:** un pase de prueba de punta a punta: alta → pase → cupón de un turista → visita → canje con código → aviso.
 **Rollback:** apagar la emisión. El portal y la caja siguen funcionando.
 
-## 8. Migración F1b
-> **Gate abierto G-56 (§12):** hoy el migrador **se niega a correr contra prod** (el ref está fijo en staging), así que
-> los puntos 3 y 4 de abajo no se pueden hacer todavía. Primero se implementa y se revisa el «modo prod» propuesto en §12.
+## 8. Carga ÚNICA del lanzamiento (página vieja + tarjetas de papel), sobre la base vacía
+> (09-nov, el dueño) **Una sola carga**, desde una fuente limpia que consolida todo, **fecha de carga para todos**, base del
+> Club **vacía** («cero socios») y **sin borrar nada en prod**. Detalle completo: `docs/club-satori/piloto/saldos-papel.md` §A.
 
 **Hacer:**
-1. Export de Firestore con `MANIFEST` **no provisional**.
-2. `python3 scripts/club/migrar_firestore.py --local <id> --dry-run …` (el local de la página vieja, ya dado de alta en el paso 4b) → anotar los conteos.
-3. `--ensayo` contra PROD: corre todo dentro de una transacción que termina en ROLLBACK (con el modo prod de G-56).
-4. `--apply --esperados '<json con los conteos del dry-run>'` (con el modo prod de G-56).
+1. Export de Firestore con `MANIFEST` **no provisional** (depurado por el dueño) y el CSV de papel con `legacy_id`.
+2. `python3 -I scripts/club/migrar_firestore.py --export <export> --local <id> --primera-carga --papel <papel.csv> --dry-run`
+   → conteos, y el **chequeo de 12 meses sin actividad sobre la fuente** (frena si hay alguna; se decide en la fuente o
+   con `--acepto-inactivos N`, el número exacto).
+3. Ensayo en staging: lo mismo con `--ensayo --vaciar-para-ensayo` (vacía el Club dentro de la transacción y la deshace).
+4. `--emitir <carpeta fuera del repo>` → `carga.sql` + `resumen.json` (sha256). El dueño firma el sha256.
+5. En PROD, con la firma y fuera de servicio: el `carga.sql` en el editor de PROD, después de comparar su sha256 con el
+   firmado (`Get-FileHash -Algorithm SHA256`). Una transacción; si la base no está vacía, aborta sin tocar nada.
 
-**Verificar:** la validación dentro de la transacción da OK (si no, no se guarda nada). Ismael controla miembros, saldos y
-los 136 vencimientos del 05-nov. El libro es de solo inserción: el migrador solo puede borrar sus propias filas
-(`origen = 'migracion'`).
-**Rollback:** volver a correr (es re-ejecutable por `legacy_id`) o, si todavía no hubo actividad, el rollback de la migración del Club.
+**Verificar:** la validación dentro de la transacción da OK (si no, no se guarda nada); el dueño controla miembros,
+saldos, los 136 vencimientos del 05-nov y el lote de papel (`select * from club_cargas_papel;`). No hay ningún `delete`.
+**Rollback:** antes de que haya actividad, el rollback de la migración del Club (paso 4). **No se re-ejecuta:** la base
+ya no está vacía y el migrador frena con una carga de papel.
+**El modo de staging de siempre** (`--apply`, re-ejecutable, borra lo `origen = 'migracion'`) queda solo para staging y
+frena si hay una carga de papel (nunca la borra).
 
 ## 8b. Arranque de las excepciones del Local Club (el día del lanzamiento)
 **Hacer:** `update club_config set lc_excepciones_desde = '<fecha del lanzamiento>';` Antes de esa fecha el Local Club se
@@ -342,7 +352,20 @@ documentación y una consulta de solo lectura probada en staging. Ninguno toca p
 todo lo `origen = 'migracion'`: en prod, después de abrir, eso podría borrar movimientos de verdad. Además, lo que corre
 en prod tiene que poder revisarse antes, sin exponer datos personales.
 
-**Propuesta (a implementar y revisar; nada hecho todavía):**
+**Estado (09-nov):** hecho y probado en staging, para revisar:
+- **Análisis real del SQL** (`scripts/club/sql_g56.py`, no regex): lista cerrada de sentencias, sin `execute`, `set local`
+  solo para los dos timeouts, `insert` solo en `club_movimientos` (y el registro del lote, `club_cargas_papel`); los 4
+  archivos trucados de la auditoría son pruebas y se rechazan. Lo usa la carga de papel al emitir y al aplicar.
+- **Modo PROD de la carga de papel:** `saldos-papel --aplicar-firmado <carga.sql> --sha256 <firmado>` (contra prod,
+  además `--confirmo-ref` y `CLUB_G56_PROD=si`). Probado solo en staging: el `carga.sql` de prod se niega solo.
+- **Migrador, primera carga** (paso 8): `--primera-carga --emitir`: sin `delete`, precondición «cero socios», fecha de
+  carga, chequeo de 12 meses sobre la fuente, papel en la misma transacción. Se aplica en el editor de PROD con el
+  sha256 firmado (el `carga.sql` del migrador usa tablas temporales y `jsonb`: no pasa la lista cerrada de la carga de
+  papel; sus defensas son la precondición «cero socios», el «sin delete» al emitir y la validación de adentro).
+- **Pendiente para la revisión:** una lista cerrada propia para el SQL del migrador (si se quiere el mismo nivel que el
+  papel) y un `--aplicar-firmado` del migrador.
+
+**Propuesta original (08-nov; queda como referencia de lo que se pidió):**
 1. **Dos llaves para prod:** `--ref <prod> --prod`. Sin las dos, el script se niega igual que hoy. `--prod` nunca conecta
    en la misma corrida en que arma el plan.
 2. **Emitir, no ejecutar:** `--prod --emitir <carpeta fuera del repo>` escribe tres archivos:
@@ -406,13 +429,19 @@ privilegios por defecto el resultado podría ser distinto.
 2. **Cómo decide** (`gate61.sh`): lee las dos bases en `begin; set transaction read only; …; rollback;` y compara los
    multiconjuntos (un hecho repetido en una sola base también es diferencia). **Sale 0 solo** si no hay diferencias fuera
    de `gate61_esperadas.txt` **y** no sobra ninguna esperada. 1 = diferencia sin esperar · 2 = esperada sobrante ·
-   3 = salida vacía, `null` o con menos de 898 hechos · 4 = firma ausente o inválida · 5 = uso incorrecto o **prod sin
-   `--prod-firmado`** (no conecta).
+   3 = salida vacía, `null` o con menos de `MIN_OBJETOS` hechos (por defecto el piso, 3.000; staging tiene 3.505) ·
+   4 = firma ausente o inválida · 5 = uso incorrecto, **prod sin `--prod-firmado`** (no conecta) o, en **modo prod**
+   (A o B es prod): **A = B** (el mismo ref, o el mismo archivo con `--archivos`: comparar una base consigo misma siempre
+   pasa) o **`MIN_OBJETOS` por debajo del piso fijo** (3.000, no se baja por variable de entorno; cambiarlo es un PR
+   revisado).
 3. **Esperadas con firma** (`gate61_esperadas.txt`, versionado): `- <hecho>` / `+ <hecho>` copiados de la salida, con su
    motivo en un comentario, y la línea `firma: <quién> <fecha> sha256=<hex>` con el sha256 de las entradas. Editar una
-   entrada sin volver a firmar → 4. Hoy: sin entradas.
-4. **Pruebas:** `bash scripts/sql/gate61_test.sh` (sin base): 13 casos, uno por código de salida y por tipo de firma
-   mala. En vivo, solo staging: `gate61.sh --ref-a <staging> --ref-b <staging>` → 0; con un hecho de más o repetido → 1.
+   entrada sin volver a firmar → 4. **Esa línea es solo integridad** (el sha256 lo recalcula cualquiera): **la
+   autorización de una esperada es el PR revisado y mergeado** que la agrega o la cambia. El archivo solo cambia por PR
+   revisado por el dueño, y el gate se corre con el archivo de la rama ya mergeada. Hoy: sin entradas.
+4. **Pruebas:** `bash scripts/sql/gate61_test.sh` (sin base): 19 casos, uno por código de salida, por tipo de firma
+   mala y por regla del modo prod (A = B por ref y por archivo, `MIN_OBJETOS` bajo el piso; `--modo-prod` la fuerza sin
+   conectar). En vivo, solo staging: `gate61.sh --ref-a <staging> --ref-b <staging>` → 0; con un hecho de más o repetido → 1.
 5. **D-1 (paso 0) y después del paso 4, con la firma de Ismael para leer prod:**
    `bash scripts/sql/gate61.sh --prod-firmado --salida <carpeta>` (A = staging, B = prod). La carpeta (catálogos y
    diferencias, sin datos de personas) se adjunta al paquete del pase. Cada diferencia: se corrige o se anota en

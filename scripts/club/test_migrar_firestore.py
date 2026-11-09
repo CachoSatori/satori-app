@@ -174,6 +174,36 @@ class Sql(unittest.TestCase):
         propio = mf.mensaje_error('ERROR:  P0001: CLUB: validación fallida, no se guarda nada: miembros: base=3 esperado=4')
         self.assertIn('miembros: base=3 esperado=4', propio)
 
+    # ── 09-nov · B2 (frena con papel) y B11 (carga única: sin deletes, cero socios, fecha de carga, inactivos) ──
+    def test_b2_frena_si_hay_carga_de_papel(self):
+        for primera in (False, True):
+            sql = mf.sql_apply(self.p, primera=primera)
+            self.assertIn("where origen = 'papel') or exists (select 1 from public.club_cargas_papel)", sql)
+            self.assertIn('el migrador no corre (nunca la borra', sql)
+
+    def test_b11_primera_carga_sin_deletes_y_con_cero_socios(self):
+        sql = mf.sql_apply(self.p, primera=True, fecha_carga=True)
+        self.assertNotRegex(sql, r'(?im)^\s*delete\b')
+        self.assertNotIn('libro_mantenimiento', sql)
+        self.assertIn('precondición «cero socios»', sql)
+        self.assertLess(sql.index('cero socios'), sql.index('insert into public.club_miembros'))
+        self.assertIn("now(), now(), 'migracion', j.nota", sql)
+        self.assertTrue(sql.rstrip().endswith('commit;'))
+        # sin fecha de carga, las fechas originales
+        self.assertIn("coalesce(j.fecha, now()), coalesce(j.fecha, now()), 'migracion'", mf.sql_apply(self.p, primera=True))
+        # el vaciado de ensayo solo existe con ensayo y primera carga
+        with self.assertRaises(AssertionError):
+            mf.sql_apply(self.p, primera=True, vaciar_ensayo=True)
+        self.assertIn('truncate public.club_miembros', mf.sql_apply(self.p, ensayo=True, primera=True, vaciar_ensayo=True))
+
+    def test_b11_inactivos_sobre_la_fuente(self):
+        todos = mf.inactivos_fuente(self.p, '2099-01-01', 12)   # dentro de 70 años, toda cuenta con saldo está inactiva
+        con_saldo = [m for m in self.p.miembros if m['estado'] == 'activo'
+                     and sum(x['personas'] for x in self.p.movimientos if x['miembro_id'] == m['id']) > 0]
+        self.assertEqual(len(todos), len(con_saldo))
+        self.assertTrue(all(set(x) == {'legacy_id', 'personas', 'ultima_actividad'} for x in todos))   # sin nombres
+        self.assertEqual(mf.inactivos_fuente(self.p, '2000-01-01', 12), [])
+
 
 @unittest.skipUnless(os.environ.get('CLUB_ENSAYO_STAGING') == '1', 'ensayo contra staging (CLUB_ENSAYO_STAGING=1)')
 class EnsayoStaging(unittest.TestCase):
@@ -182,8 +212,12 @@ class EnsayoStaging(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.p = mf.armar_plan(mf.cargar(export_sintetico(Path(self.tmp.name) / 'e')))
+        # LC-ML: el local destino se pasa con --local; en staging, el del Club de prueba (CLUB_LOCAL para otro).
+        self._loc = mf.LOCATION
+        mf.LOCATION = os.environ.get('CLUB_LOCAL', 'santa-teresa')
 
     def tearDown(self):
+        mf.LOCATION = self._loc
         self.tmp.cleanup()
 
     def conteo(self):
@@ -213,6 +247,43 @@ class EnsayoStaging(unittest.TestCase):
         self.assertIn('SQLSTATE', msg)
         self.assertNotIn('@', msg)
         self.assertNotIn('+506', msg)
+
+
+    def test_b11_primera_carga_frena_si_la_base_no_esta_vacia(self):
+        antes = self.conteo()
+        with self.assertRaises(SystemExit) as cm:
+            mf.ejecutar(mf.STAGING_REF, mf.sql_apply(self.p, ensayo=True, primera=True, fecha_carga=True))
+        self.assertIn('cero socios', str(cm.exception))
+        self.assertEqual(self.conteo(), antes)
+
+    def test_b11_primera_carga_sobre_base_vacia_valida_y_no_deja_nada(self):
+        antes = self.conteo()
+        val = mf.ejecutar(mf.STAGING_REF, mf.sql_apply(self.p, {'miembros': 3, 'diferencias_saldo_vs_firestore': 0},
+                                                      ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True))[0]['r']
+        self.assertEqual(val['miembros'], 3)
+        self.assertEqual(val['diferencias_saldo_vs_firestore'], 0)
+        self.assertEqual(val['vencer_simular_hoy'], 0)
+        self.assertEqual(self.conteo(), antes)
+
+    def test_b11_carga_unica_con_papel_en_la_misma_transaccion(self):
+        import saldos_papel as sp
+        legacy = [m['legacy_id'] for m in self.p.miembros if m['estado'] == 'activo'][:2]
+        filas, err = sp.validar('legacy_id,personas,fecha_tarjeta,referencia\n' + ''.join(
+            f'{l},6,2026-10-01,PAPEL-{i}\n' for i, l in enumerate(legacy)), mf_date_today())
+        self.assertEqual(err, [])
+        antes = self.conteo()
+        papel = sp.cuerpo_sql(filas, mf.LOCATION, 'staging', 'carga')
+        val = mf.ejecutar(mf.STAGING_REF, mf.sql_apply(self.p, {'miembros': 3, 'diferencias_saldo_vs_firestore': 0},
+                                                      ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True,
+                                                      papel=papel))[0]['r']
+        self.assertEqual(val['miembros'], 3)
+        self.assertEqual(val['diferencias_saldo_vs_firestore'], 0)   # el papel no se mezcla con el cuadre de la página vieja
+        self.assertEqual(self.conteo(), antes)
+
+
+def mf_date_today():
+    import datetime as _dt
+    return _dt.date.today()
 
 
 if __name__ == '__main__':

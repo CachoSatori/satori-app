@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Club Satori — carga masiva de saldos de TARJETAS DE PAPEL (decisión de Ismael, 08-nov: «tu saldo de la tarjeta de papel
+Club Satori — carga masiva de saldos de TARJETAS DE PAPEL (decisión del dueño, 08-nov: «tu saldo de la tarjeta de papel
 pasa a tu portal»). Se usa a través del migrador:
 
   python3 scripts/club/migrar_firestore.py saldos-papel --csv <archivo fuera del repo> --local <id> --validar
@@ -8,17 +8,23 @@ pasa a tu portal»). Se usa a través del migrador:
   python3 scripts/club/migrar_firestore.py saldos-papel --ficticios 6 --local <id> --ensayo     # staging, termina en ROLLBACK
 
 Plantilla (sin datos reales): scripts/club/plantilla_saldos_papel.csv. Columnas:
-  codigo_anfitrion  el código público del anfitrión (8 caracteres, el de su QR /r/)
+  codigo_anfitrion  el código público del anfitrión (8 caracteres, el de su QR /r/) — o, en la CARGA ÚNICA del
+                    lanzamiento (base vacía, junto con el migrador), `legacy_id`: el id del anfitrión en la página vieja
   personas          personas acumuladas en la tarjeta (entero 1..600; es la unidad del libro: 6 = 1 crédito)
   fecha_tarjeta     AAAA-MM-DD (la de la última marca de la tarjeta; no futura; desde 2020-01-01)
   referencia        identificador de la tarjeta física (obligatorio; letras, números, espacio, - _ /; hasta 40)
 
 Reglas de G-56 (RUNBOOK §12) aplicadas a esta carga:
-  · el SQL emitido es UNA transacción: set local lock_timeout / statement_timeout, precondiciones que abortan (el local
-    existe; el entorno es el esperado; línea de base «cero cargas de papel previas»; todos los códigos son anfitriones
-    activos), solo `insert into public.club_movimientos`, validación de conteo y suma, y commit al final;
-  · filtro mecánico: se rechaza el archivo si aparece delete/truncate/drop/update/alter/grant/revoke fuera de un
-    literal, o una sentencia que no sea begin / set local / do / insert into public.club_… / commit / rollback;
+  · el SQL emitido es UNA transacción: set local lock_timeout / statement_timeout, `lock table public.club_cargas_papel
+    in exclusive mode` (Grok 109: dos sesiones a la vez se ponen en fila), precondiciones que abortan (el local existe;
+    el entorno es el esperado; línea de base «ninguna carga de papel de este local»; todos los anfitriones activos),
+    el registro del lote (club_cargas_papel: un local, un lote = sha256 de las filas, únicos), solo
+    `insert into public.club_movimientos` con origen 'papel', validación de conteo y suma, y commit al final;
+  · filtro (09-nov, B1): ANÁLISIS REAL del SQL (scripts/club/sql_g56.py: tokenizador con literales, $tag$, comentarios
+    anidados e identificadores; lista cerrada de sentencias; sin execute; set local solo para los dos timeouts; insert
+    solo en club_movimientos y club_cargas_papel);
+  · chequeo de 12 meses SOBRE LA FUENTE (B11): con la fecha de carga, una tarjeta sin actividad desde hace más que el
+    vencimiento volvería a contar 12 meses el día del lanzamiento: se frena antes de emitir;
   · el CSV y el SQL pueden tener datos de anfitriones: van fuera del repo (0600); viaja solo el sha256 (resumen.json);
   · nada contra prod: la ejecución solo existe para staging y siempre como ensayo (ROLLBACK).
 """
@@ -34,12 +40,13 @@ import secrets
 
 COLUMNAS = ['codigo_anfitrion', 'personas', 'fecha_tarjeta', 'referencia']
 RE_CODIGO = re.compile(r'^[A-HJ-NP-Z2-9]{8}$')
+RE_LEGACY = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+COLUMNAS_LEGACY = ['legacy_id', 'personas', 'fecha_tarjeta', 'referencia']
 RE_REF = re.compile(r'^[A-Za-z0-9][A-Za-z0-9 _/-]{0,39}$')
 PERSONAS_MAX = 600
 FECHA_MIN = dt.date(2020, 1, 1)
 NOTA = 'saldo tarjeta de papel'
-PROHIBIDAS = ('delete', 'truncate', 'drop', 'update', 'alter', 'grant', 'revoke')
-RE_SENTENCIA_OK = re.compile(r'^(begin|commit|rollback|set\s+local\s|do\s|insert\s+into\s+public\.club_[a-z_]+)', re.I)
+ORIGEN = 'papel'   # B2 (09-nov): su propio origen; el migrador nunca lo borra y frena si lo encuentra
 
 
 # ── Validador ────────────────────────────────────────────────────────────────
@@ -54,8 +61,10 @@ def validar(texto: str, hoy: dt.date | None = None) -> tuple[list[dict], list[st
         return [], ['archivo vacío']
     lector = csv.reader(io.StringIO(texto))
     cab = next(lector, None)
-    if [c.strip().lower() for c in (cab or [])] != COLUMNAS:
-        return [], [f'encabezado distinto de la plantilla (se espera: {",".join(COLUMNAS)})']
+    cab = [c.strip().lower() for c in (cab or [])]
+    if cab not in (COLUMNAS, COLUMNAS_LEGACY):
+        return [], [f'encabezado distinto de la plantilla (se espera: {",".join(COLUMNAS)}; o, en la carga única, {",".join(COLUMNAS_LEGACY)})']
+    clave = 'codigo' if cab == COLUMNAS else 'legacy_id'
     vistos_ref: dict[tuple[str, str], int] = {}
     vistos_fila: dict[tuple, int] = {}
     for n, f in enumerate(lector, start=2):
@@ -64,10 +73,13 @@ def validar(texto: str, hoy: dt.date | None = None) -> tuple[list[dict], list[st
         if len(f) != len(COLUMNAS):
             errores.append(f'línea {n}: {len(f)} columnas (se esperan {len(COLUMNAS)})'); continue
         cod, per, fec, ref = (c.strip() for c in f)
-        cod = cod.upper()
         mal = []
-        if not RE_CODIGO.match(cod):
-            mal.append('código de anfitrión mal formado')
+        if clave == 'codigo':
+            cod = cod.upper()
+            if not RE_CODIGO.match(cod):
+                mal.append('código de anfitrión mal formado')
+        elif not RE_LEGACY.match(cod):
+            mal.append('legacy_id mal formado')
         if not re.fullmatch(r'[0-9]{1,4}', per) or not (1 <= int(per) <= PERSONAS_MAX):
             mal.append(f'personas no es un entero entre 1 y {PERSONAS_MAX}')
         try:
@@ -88,44 +100,43 @@ def validar(texto: str, hoy: dt.date | None = None) -> tuple[list[dict], list[st
             errores.append(f'línea {n}: la misma tarjeta (anfitrión + referencia) ya está en la línea {vistos_ref[clave_ref]}'); continue
         vistos_fila[clave_fila] = n
         vistos_ref[clave_ref] = n
-        filas.append({'codigo': cod, 'personas': int(per), 'fecha': fec, 'referencia': ref, 'linea': n})
+        filas.append({'codigo': cod, 'personas': int(per), 'fecha': fec, 'referencia': ref, 'linea': n, 'clave': clave})
     if not filas and not errores:
         errores.append('el archivo no tiene filas')
     return filas, errores
 
 
 # ── Filtro de sentencias (G-56) ──────────────────────────────────────────────
-def _sin_literales(sql: str) -> str:
-    """Saca los literales '…' (con '' adentro) y los comentarios; deja los cuerpos $$…$$ (se revisan también)."""
-    sql = re.sub(r"'(?:[^']|'')*'", "''", sql)
-    sql = re.sub(r'--[^\n]*', '', sql)
-    return sql
+def filtrar(sql: str, ficticios: bool = False) -> list[str]:
+    """Problemas del archivo; vacío = pasa. Se corre al emitir y otra vez antes de ejecutar. (09-nov, B1) Análisis real
+    del SQL con scripts/club/sql_g56.py (ya no regex sobre el texto). `ficticios` = el ensayo de staging que crea
+    anfitriones ficticios dentro de la misma transacción (admite UN insert en club_miembros)."""
+    import sql_g56
+    return sql_g56.revisar(sql, permitir_extra='alta_ficticios' if ficticios else None)
 
 
-def _sentencias(sql: str) -> list[str]:
-    """Parte en sentencias por «;» fuera de cuerpos $$…$$."""
-    partes, actual, dentro = [], [], False
-    for trozo in re.split(r'(\$\$|;)', sql):
-        if trozo == '$$':
-            dentro = not dentro; actual.append(trozo)
-        elif trozo == ';' and not dentro:
-            partes.append(''.join(actual).strip()); actual = []
-        else:
-            actual.append(trozo)
-    if ''.join(actual).strip():
-        partes.append(''.join(actual).strip())
-    return [p for p in partes if p]
-
-
-def filtrar(sql: str) -> list[str]:
-    """Problemas del archivo; vacío = pasa. Se corre al emitir y otra vez antes de ejecutar."""
-    limpio = _sin_literales(sql)
-    malos = [w for w in PROHIBIDAS if re.search(rf'\b{w}\b', limpio, re.I)]
-    out = [f'palabra prohibida: {w}' for w in malos]
-    for s in _sentencias(limpio):
-        if not RE_SENTENCIA_OK.match(s):
-            out.append('sentencia no permitida: ' + s.split(None, 2)[0][:20])
+# ── Chequeo de inactividad sobre la fuente (B11) ─────────────────────────────
+def inactivos(filas: list[dict], hoy: dt.date, meses: int = 12) -> list[dict]:
+    """Tarjetas cuya última marca es de hace más de `meses` (el vencimiento del Club). Con la fecha de carga volverían a
+    contar el plazo el día del lanzamiento: se deciden en la fuente ANTES de cargar. Solo línea, referencia y meses."""
+    corte_y, corte_m = hoy.year, hoy.month - meses
+    while corte_m <= 0:
+        corte_m += 12; corte_y -= 1
+    import calendar
+    corte = dt.date(corte_y, corte_m, min(hoy.day, calendar.monthrange(corte_y, corte_m)[1]))
+    out = []
+    for f in filas:
+        d = dt.date.fromisoformat(f['fecha'])
+        if d < corte:
+            out.append({'linea': f['linea'], 'referencia': f['referencia'],
+                        'meses': (hoy.year - d.year) * 12 + hoy.month - d.month})
     return out
+
+
+def lote_sha256(filas: list[dict], local: str) -> str:
+    """Clave única del lote (Grok 109): sha256 de las filas canónicas (clave, personas, fecha, referencia), ordenadas."""
+    canon = '\n'.join(sorted(f"{f.get('clave', 'codigo')}|{f['codigo']}|{f['personas']}|{f['fecha']}|{f['referencia'].lower()}" for f in filas))
+    return hashlib.sha256(f'{local}\n{canon}'.encode()).hexdigest()
 
 
 # ── SQL ──────────────────────────────────────────────────────────────────────
@@ -137,29 +148,36 @@ FECHAS = ('carga', 'tarjeta')
 
 
 def cuerpo_sql(filas: list[dict], local: str, entorno: str, fecha: str = 'carga') -> str:
-    """Todo lo que va ENTRE begin/set local y commit: precondiciones, inserción y validación.
+    """Todo lo que va ENTRE begin/set local y commit: lock, precondiciones, registro del lote, inserción y validación.
     `fecha` = de qué fecha es el movimiento (cuenta para el vencimiento de 12 meses sin actividad):
-      · 'carga' (POR DEFECTO, [CONFIRMAR ISMAEL]): la del día de la carga. Hoy los saldos de papel no vencen; con la fecha
-        vieja, una tarjeta de hace más de 12 meses vencería el día del lanzamiento.
+      · 'carga' (POR DEFECTO; el dueño, 09-nov: «fecha de carga para todos»): la del día de la carga. Las tarjetas de más
+        de 12 meses sin actividad se deciden ANTES, en la fuente (`inactivos`).
       · 'tarjeta': la fecha de la tarjeta (la de la última marca).
     La fecha de la tarjeta queda siempre en la nota."""
     assert entorno in ('staging', 'prod')
     assert fecha in FECHAS
+    claves = {f.get('clave', 'codigo') for f in filas}
+    assert len(claves) == 1, 'todas las filas con la misma clave (código o legacy_id)'
+    col = 'codigo' if claves == {'codigo'} else 'legacy_id'
     valores = ',\n  '.join(f"({_q(f['codigo'])}, {f['personas']}, {_q(f['fecha'])}::date, {_q(f['referencia'])})" for f in filas)
     n, total = len(filas), sum(f['personas'] for f in filas)
+    lote = lote_sha256(filas, local)
     cond_entorno = ("exists (select 1 from public.club_entorno)" if entorno == 'staging'
                     else "not exists (select 1 from public.club_entorno)")
-    return f"""do $$
+    return f"""lock table public.club_cargas_papel in exclusive mode;
+do $$
 begin
-  -- precondiciones (abortan todo): el local, el entorno, la línea de base y los anfitriones
+  -- precondiciones (abortan todo): el local, el entorno, la línea de base y los anfitriones. Van DESPUÉS del lock
+  -- (Grok 109): una segunda sesión espera a la primera y recién ahí mira la línea de base.
   if not exists (select 1 from public.club_config where location_id = {_q(local)}) then
     raise exception 'CLUB: el local no existe';
   end if;
   if not ({cond_entorno}) then
     raise exception 'CLUB: el entorno no es {entorno}';
   end if;
-  if exists (select 1 from public.club_movimientos where nota like {_q(NOTA + '%')}) then
-    raise exception 'CLUB: línea de base: ya hay una carga de tarjetas de papel (no se carga dos veces)';
+  if exists (select 1 from public.club_cargas_papel where location_id = {_q(local)} or lote_sha256 = {_q(lote)})
+     or exists (select 1 from public.club_movimientos where origen = {_q(ORIGEN)} and location_id = {_q(local)}) then
+    raise exception 'CLUB: línea de base: ya hay una carga de tarjetas de papel de este local o de este lote (no se carga dos veces)';
   end if;
 end $$;
 do $$
@@ -168,26 +186,29 @@ begin
   select count(*) into v_falta from (values
   {valores}) p(codigo, personas, fecha, referencia)
    where not exists (select 1 from public.club_miembros m
-                      where m.codigo = p.codigo and m.location_id = {_q(local)} and m.estado = 'activo'
+                      where m.{col} = p.codigo and m.location_id = {_q(local)} and m.estado = 'activo'
                         and m.tipo in ('referente', 'concierge_pm', 'equipo'));
   if v_falta > 0 then
     raise exception 'CLUB: % filas con un código que no es un anfitrión activo del local', v_falta;
   end if;
 end $$;
+insert into public.club_cargas_papel (location_id, lote_sha256, filas, personas, fecha_movimiento)
+values ({_q(local)}, {_q(lote)}, {n}, {total}, {_q(fecha)});
 insert into public.club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc,
                                      fecha_visita, registrado_en, origen, nota)
 select m.location_id, m.id, 'tarjeta', p.personas, c.personas_por_credito, c.valor_credito_crc,
-       {"now()" if fecha == 'carga' else "(p.fecha::timestamp + time '12:00') at time zone 'America/Costa_Rica'"}, now(), 'migracion',
+       {"now()" if fecha == 'carga' else "(p.fecha::timestamp + time '12:00') at time zone 'America/Costa_Rica'"}, now(), {_q(ORIGEN)},
        {_q(NOTA + ' · ')} || p.referencia || ' · tarjeta ' || to_char(p.fecha, 'YYYY-MM-DD')
   from (values
   {valores}) p(codigo, personas, fecha, referencia)
-  join public.club_miembros m on m.codigo = p.codigo and m.location_id = {_q(local)}
+  join public.club_miembros m on m.{col} = p.codigo and m.location_id = {_q(local)}
   join public.club_config c on c.location_id = m.location_id;
 do $$
 declare v_n int; v_p int;
 begin
   -- validación dentro de la transacción: si no da, no queda nada
-  select count(*), coalesce(sum(personas), 0) into v_n, v_p from public.club_movimientos where nota like {_q(NOTA + '%')};
+  select count(*), coalesce(sum(personas), 0) into v_n, v_p from public.club_movimientos
+   where origen = {_q(ORIGEN)} and location_id = {_q(local)};
   if v_n <> {n} or v_p <> {total} then
     raise exception 'CLUB: validación: % filas y % personas (se esperaban {n} y {total})', v_n, v_p;
   end if;
@@ -208,10 +229,11 @@ def sql_ensayo(filas: list[dict], local: str, entorno: str, previo: str = '', fe
 
 
 def resumen(filas: list[dict], sql: str, local: str, fecha: str = 'carga') -> dict:
-    """Lo único que viaja: conteos, totales y el sha256 del SQL. Sin códigos, referencias ni nombres."""
+    """Lo único que viaja: conteos, totales, la clave del lote y el sha256 del SQL. Sin códigos, referencias ni nombres."""
     total = sum(f['personas'] for f in filas)
     return {'local': local, 'fecha_movimiento': fecha, 'filas': len(filas), 'anfitriones': len({f['codigo'] for f in filas}),
-            'personas': total, 'creditos_aprox': round(total / 6, 1), 'sha256_sql': hashlib.sha256(sql.encode()).hexdigest()}
+            'personas': total, 'creditos_aprox': round(total / 6, 1), 'lote_sha256': lote_sha256(filas, local),
+            'sha256_sql': hashlib.sha256(sql.encode()).hexdigest()}
 
 
 # ── Ficticios (solo para el ensayo en staging) ───────────────────────────────

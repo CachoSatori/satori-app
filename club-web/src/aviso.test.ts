@@ -2,7 +2,8 @@
 // la misma que la base carga por defecto (si no, la base rechaza el alta y el opt-in del cupón).
 import { test, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { AVISO_PRIVACIDAD_VERSION } from './config'
+import { createHash } from 'node:crypto'
+import { AVISO_PRIVACIDAD_SHA256, AVISO_PRIVACIDAD_VERSION } from './config'
 import { TEXTOS } from './i18n'
 
 test('v1.1: el aviso completo (ES/EN) dice que guardamos el email, si lo da', () => {
@@ -26,6 +27,23 @@ test('v1.1 corregido (08-nov noche): ofertas solo si las aceptó, servidores fue
   const sql = readFileSync(new URL('../../supabase/migrations/075_club_satori_esquema.sql', import.meta.url), 'utf8')
   const meses = sql.match(/contactos_ofertas_meses int not null default (\d+)/)?.[1]
   expect(meses).toBeTruthy()
-  expect(es).toContain(`hasta que te des de baja o hasta ${meses} meses sin contacto`)
-  expect(en).toContain(`until you opt out or for up to ${meses} months without contact`)
+  expect(es).toContain(`hasta que te des de baja o hasta ${meses} meses desde que nos lo dejaste`)
+  expect(en).toContain(`until you opt out or for up to ${meses} months from when you left it`)
+})
+
+test('(09-nov) v1.1 sin marcas pendientes: dirección del responsable y 24 meses confirmados por el dueño', () => {
+  for (const t of [TEXTOS.es.alta_aviso, TEXTOS.en.alta_aviso]) {
+    expect(t).not.toMatch(/CONFIRMAR|<[^>]+>/)
+  }
+  expect(TEXTOS.es.alta_aviso).toContain('Frente al Hotel Trópico Latino, Santa Teresa, Cóbano, Provincia de Puntarenas, 60111, Costa Rica.')
+  expect(TEXTOS.en.alta_aviso).toContain('Across from Hotel Trópico Latino, Santa Teresa, Cóbano, Puntarenas Province, 60111, Costa Rica.')
+})
+
+test('(09-nov, B8) la huella del texto de cada idioma es la registrada para la versión, aquí y en la base', () => {
+  const sql = readFileSync(new URL('../../supabase/migrations/075_club_satori_esquema.sql', import.meta.url), 'utf8')
+  for (const k of ['es', 'en'] as const) {
+    const h = createHash('sha256').update(TEXTOS[k].alta_aviso, 'utf8').digest('hex')
+    expect(h, `cambió el texto ${k} del aviso: subí la versión y registrá su huella`).toBe(AVISO_PRIVACIDAD_SHA256[k])
+  }
+  expect(sql).toContain(`('${AVISO_PRIVACIDAD_VERSION}', '${AVISO_PRIVACIDAD_SHA256.es}', '${AVISO_PRIVACIDAD_SHA256.en}')`)
 })

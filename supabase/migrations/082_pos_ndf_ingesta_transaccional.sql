@@ -7,13 +7,37 @@
 --
 -- Ahora todo pasa por `pos_ndf_ingestar`, en una sola transacción y con un lock por local
 -- (`pg_advisory_xact_lock`): el segundo POST espera a que termine el primero, y o se guarda todo o nada.
--- El cursor se fusiona acá, con las reglas de CLUB-AUD-46: `last_poll_at` = hora del servidor; `last_factura` y
--- `last_fecha_registra` solo avanzan; una clave ausente no se toca.
+-- El cursor se calcula acá (`last_poll_at` = hora del servidor; una clave ausente no se toca).
 --
--- ADITIVA: solo agrega una función. Va DESPUÉS de la 081 y ANTES del Edge que la usa (RUNBOOK del Club, paso 2-3).
--- Rollback: `drop function if exists public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb);` (antes de volver al
--- Edge anterior, que no la usa).
+-- ── CONTRATO DEL CURSOR (Grok ID 83, 09-nov; reemplaza el «solo avanza» de CLUB-AUD-46) ─────────────────────────
+-- El agente lee las cerradas con `NumeroFactura > cursor` y relee las provisionales (`R` en curso, `X` anulada) de
+-- toda la ventana en cada ciclo. Una `R` con número MENOR al cursor no se leería nunca cuando cierre. El agente de
+-- prod (4d3513a) lo resolvía mandando un cursor más bajo («rebobinar»); el «solo avanza» de la primera 082 se lo
+-- impedía. Ahora el cursor lo calcula el SERVIDOR con lo que trae el lote, sin cambiar el agente:
+--   · `max_factura_vista` (columna nueva, solo avanza) = la mayor CERRADA (`C`) guardada para el local: la del
+--     cursor anterior, la del máximo anterior y las `C` de este lote. Las `R`/`X` no la mueven.
+--   · `last_factura` (lo que se le devuelve al agente y lo que lee al arrancar) = el «corte seguro»:
+--     si en el lote viene una `R` con número menor o igual al máximo, `menor R − 1`; si no, el máximo.
+--   · el número que PROPONE el agente ya no manda: solo se usa para arrancar (sin nada guardado y sin `C` en el lote).
+--     Uno que no es numérico se ignora (el agente nunca lo manda: normaliza a dígitos). Si lo GUARDADO no es numérico
+--     (no pasa hoy), no hay orden confiable y vale el propuesto, como antes.
+-- El agente viejo adopta el cursor que le devuelve el servidor (ciclo.ts: «el cursor que manda es el que quedó
+-- GUARDADO»), así que en el ciclo siguiente relee desde el corte: la `R` que cierre entra como `C`, y las `C` de
+-- arriba se vuelven a leer (el upsert por factura no duplica: sus líneas se reemplazan). Cuando ya no viene ninguna
+-- `R` por debajo, el corte vuelve al máximo. Un lote viejo o un agente que perdió el estado no puede rebobinar: solo
+-- una `R` presente en el lote baja el corte. Un lote SIN la clave `cursor` (el backfill) no toca nada.
+-- Límite que queda (no lo arregla ningún cursor): una factura que abre con número menor al corte Y cierra dentro del
+-- mismo ciclo (~75 s) sin haberse visto nunca como `R`. Para eso está la conciliación contra el PoS (paquete §7).
+--
+-- ADITIVA: agrega una función y una columna que acepta vacío. Va DESPUÉS de la 081 y ANTES del Edge que la usa.
+-- Rollback: PRIMERO el Edge anterior y RECIÉN DESPUÉS
+-- `drop function if exists public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb);` (con el Edge nuevo y sin la
+-- función no entra ninguna venta). La columna `max_factura_vista` puede quedar: el Edge anterior no la mira.
 begin;
+
+alter table public.pos_ndf_cursor add column if not exists max_factura_vista text;
+comment on column public.pos_ndf_cursor.max_factura_vista is
+  'Mayor factura CERRADA guardada del local (solo avanza). last_factura puede quedar por debajo (corte seguro) mientras haya una R abierta con número menor (Grok ID 83, mig 082).';
 
 create or replace function public.pos_ndf_ingestar(p_local text, p_tickets jsonb, p_lineas jsonb, p_open jsonb, p_cursor jsonb)
 returns jsonb
@@ -31,6 +55,10 @@ declare
   v_cur        public.pos_ndf_cursor%rowtype;
   v_fac        text;
   v_fec        timestamptz;
+  v_max_c      text;
+  v_min_r      numeric;
+  v_alto       text;
+  v_corte      text;
 begin
   if p_local is null or p_local !~ '^[a-z0-9-]{2,40}$' then
     raise exception 'local no válido' using errcode = 'P0001';
@@ -114,30 +142,50 @@ begin
   end if;
 
   -- 4. Cursor (null = no se escribe; es lo que deja correr el backfill en paralelo sin mover el corte del agente).
+  --    Contrato: ver la cabecera (Grok ID 83).
   select * into v_cur from public.pos_ndf_cursor where local = p_local for update;
   if p_cursor is not null then
-    v_fac := case when p_cursor ? 'last_factura' then p_cursor ->> 'last_factura' end;
+    v_fac := case when p_cursor ? 'last_factura' then nullif(btrim(p_cursor ->> 'last_factura'), '') end;
+    if v_fac !~ '^\d+$' then v_fac := null; end if;
     v_fec := case when p_cursor ? 'last_fecha_registra' then (p_cursor ->> 'last_fecha_registra')::timestamptz end;
-    insert into public.pos_ndf_cursor (local, last_factura, last_fecha_registra, last_poll_at, last_error)
-    values (p_local,
-      -- CLUB-AUD-46: solo avanza (números del PoS sin los ceros; si alguno no es numérico, vale el nuevo); null no borra
-      case when v_fac is null then v_cur.last_factura
-           when v_cur.last_factura is null then v_fac
-           when v_fac ~ '^\d+$' and v_cur.last_factura ~ '^\d+$'
-             then case when v_fac::numeric >= v_cur.last_factura::numeric then v_fac else v_cur.last_factura end
-           else v_fac end,
+    -- la mayor C y la menor R del lote (números del PoS; los que no son numéricos no entran en el orden)
+    select x ->> 'numero_factura' into v_max_c
+      from jsonb_array_elements(coalesce(p_tickets, '[]')) x
+     where x ->> 'estado' = 'C' and x ->> 'numero_factura' ~ '^\d+$'
+     order by (x ->> 'numero_factura')::numeric desc limit 1;
+    select min((x ->> 'numero_factura')::numeric) into v_min_r
+      from jsonb_array_elements(coalesce(p_tickets, '[]')) x
+     where x ->> 'estado' = 'R' and x ->> 'numero_factura' ~ '^\d+$';
+    if coalesce(v_cur.last_factura, '0') ~ '^\d+$' and coalesce(v_cur.max_factura_vista, '0') ~ '^\d+$' then
+      -- el máximo: el mayor de lo guardado y las C del lote (el texto tal cual, con sus ceros)
+      select f into v_alto from unnest(array[v_cur.max_factura_vista, v_cur.last_factura, v_max_c]) f
+       where f is not null order by f::numeric desc limit 1;
+      v_alto := coalesce(v_alto, v_fac);   -- arranque: nada guardado y ninguna C en el lote → lo propuesto
+      v_corte := case when v_alto is not null and v_min_r is not null and v_min_r <= v_alto::numeric
+                      then greatest(v_min_r - 1, 0)::text else v_alto end;
+    else
+      -- lo guardado no es numérico: no hay orden confiable, vale lo propuesto (null no borra)
+      v_corte := coalesce(v_fac, v_cur.last_factura);
+      v_alto  := coalesce(v_fac, v_cur.max_factura_vista);
+    end if;
+    insert into public.pos_ndf_cursor (local, last_factura, max_factura_vista, last_fecha_registra, last_poll_at, last_error)
+    values (p_local, v_corte, v_alto,
       case when v_fec is null then v_cur.last_fecha_registra else greatest(v_fec, v_cur.last_fecha_registra) end,
       now(),
       case when p_cursor ? 'last_error' then p_cursor ->> 'last_error' else v_cur.last_error end)
     on conflict (local) do update set
-      last_factura = excluded.last_factura, last_fecha_registra = excluded.last_fecha_registra,
-      last_poll_at = excluded.last_poll_at, last_error = excluded.last_error;
+      last_factura = excluded.last_factura, max_factura_vista = excluded.max_factura_vista,
+      last_fecha_registra = excluded.last_fecha_registra, last_poll_at = excluded.last_poll_at,
+      last_error = excluded.last_error;
     select * into v_cur from public.pos_ndf_cursor where local = p_local;
   end if;
 
   return jsonb_build_object('tickets', v_tickets, 'lineas', v_lineas, 'open_guardadas', v_open, 'open_borradas', v_borradas,
                             'cursor', case when v_cur.local is null then null else to_jsonb(v_cur) end,
-                            'cursor_escrito', p_cursor is not null);
+                            'cursor_escrito', p_cursor is not null,
+                            -- la R que retiene el corte (null = ninguna): para el control del paquete y los logs
+                            'corte_retenido_por_r', case when p_cursor is not null and v_corte is distinct from v_alto
+                                                         then v_min_r::text end);
 end;
 $$;
 

@@ -225,7 +225,7 @@ solas tras un reinicio (validado el 29/10).
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
 | CAJA / operación | 087–99 | — | **087** |
-| CLUB SATORI + puente | 100–149 | — | **100** |
+| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`, sin aplicar; va después de la 075) | **101** |
 | PASE A PROD (solo renumeraciones) | 150–199 | — | **150** |
 | (fuera de bloque) | 086 | — | libre |
 

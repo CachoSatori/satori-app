@@ -91,7 +91,7 @@ $t = Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD'
 $acciones = @($t.Actions)
 if ($acciones.Count -ne 1) { throw "la tarea tiene $($acciones.Count) acciones: se esperaba una" }
 $CMDV = Archivo (([string]$acciones[0].Execute).Trim('"'))
-if ($CMDV -cne (Archivo C:\satori\pos-agente-prod.cmd)) { throw "la tarea no corre C:\satori\pos-agente-prod.cmd sino $CMDV: se para y se avisa" }
+if ($CMDV -cne (Archivo C:\satori\pos-agente-prod.cmd)) { throw "la tarea no corre C:\satori\pos-agente-prod.cmd sino ${CMDV}: se para y se avisa" }
 $txtV = [IO.File]::ReadAllText($CMDV)
 if ($txtV -notmatch ('(?im)^\s*cd\s+/d\s+"?' + [regex]::Escape('C:\satori\satori-app-prod') + '\\?"?\s*$')) { throw 'el .cmd de la tarea no entra a C:\satori\satori-app-prod' }
 $AGV = Carpeta C:\satori\satori-app-prod
@@ -99,7 +99,7 @@ $h = git -C $AGV rev-parse HEAD; Ok 'rev-parse agente'
 if ($h -cne '4d3513a6df8e838dd5c0442b05a580e06ce9db9d') { throw 'el agente de prod no está en 4d3513a6…' }
 $s = git -C $AGV status --porcelain --untracked-files=no; Ok 'status agente'; if ($s) { throw 'el agente de prod tiene cambios' }
 $md5CmdV = Md5Bytes $CMDV
-"1.1 ok · tarea → $CMDV (md5 $md5CmdV: anotar) · agente 4d3513a6… limpio · $($t.State)"
+"1.1 ok · tarea → $CMDV (md5 ${md5CmdV}: anotar) · agente 4d3513a6… limpio · $($t.State)"
 ```
 
 **1.2 El entorno de la cuenta de la tarea** (Grok 121, igual que la plantilla; solo lectura). Si la cuenta tuviera

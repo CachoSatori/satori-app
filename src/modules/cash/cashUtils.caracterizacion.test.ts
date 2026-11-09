@@ -240,11 +240,13 @@ describe('fi / fd (re-exportados desde shared/utils)', () => {
     expect(fi(1_000_000_000)).toBe(`₡ 1${NBSP}000${NBSP}000${NBSP}000`)
   })
 
-  it('fi con negativos: Math.round redondea -x,5 hacia arriba y -0,4 muestra "-0"', () => {
-    // RARO: −1.234,5 sale −1.234 (y +1.234,5 sale 1.235): el redondeo no es simétrico.
-    expect(fi(-1_234.5)).toBe(`₡ -1${NBSP}234`)
-    // RARO: −0,4 se muestra como "₡ -0".
-    expect(fi(-0.4)).toBe('₡ -0')
+  it('fi con negativos: lo que no depende del medio colón', () => {
+    // `fi` no es sagrado (shared/utils): el redondeo de −x,5 y el «−0» los corrige el #73 (formatos.test.ts lo fija).
+    // Acá se fija solo lo que vale antes y después de ese arreglo, para que los dos PR entren juntos sin rojo.
+    // (Medido antes del #73: fi(−1.234,5) daba «₡ −1.234» y fi(−0,4) daba «₡ −0».)
+    expect(fi(-1_234.4)).toBe(`₡ -1${NBSP}234`)
+    expect(fi(-1_234.6)).toBe(`₡ -1${NBSP}235`)
+    expect(fi(-5_000)).toBe(`₡ -5${NBSP}000`)
   })
 
   it('fi / fd con null, undefined o NaN → "—"', () => {

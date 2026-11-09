@@ -174,6 +174,138 @@ class Sql(unittest.TestCase):
         propio = mf.mensaje_error('ERROR:  P0001: CLUB: validación fallida, no se guarda nada: miembros: base=3 esperado=4')
         self.assertIn('miembros: base=3 esperado=4', propio)
 
+    # ── 09-nov · B2 (frena con papel) y B11 (carga única: sin deletes, cero socios, fecha de carga, inactivos) ──
+    def test_b2_frena_si_hay_carga_de_papel(self):
+        for primera in (False, True):
+            sql = mf.sql_apply(self.p, primera=primera)
+            self.assertIn("where origen = 'papel') or exists (select 1 from public.club_cargas_papel)", sql)
+            self.assertIn('el migrador no corre (nunca la borra', sql)
+
+    def test_b11_primera_carga_sin_deletes_y_con_cero_socios(self):
+        sql = mf.sql_apply(self.p, primera=True, fecha_carga=True)
+        self.assertNotRegex(sql, r'(?im)^\s*delete\b')
+        self.assertNotIn('libro_mantenimiento', sql)
+        self.assertIn('precondición «cero socios»', sql)
+        self.assertLess(sql.index('cero socios'), sql.index('insert into public.club_miembros'))
+        self.assertIn("now(), now(), 'migracion', j.nota", sql)
+        self.assertTrue(sql.rstrip().endswith('commit;'))
+        # sin fecha de carga, las fechas originales
+        self.assertIn("coalesce(j.fecha, now()), coalesce(j.fecha, now()), 'migracion'", mf.sql_apply(self.p, primera=True))
+        # el vaciado de ensayo solo existe con ensayo y primera carga
+        with self.assertRaises(AssertionError):
+            mf.sql_apply(self.p, primera=True, vaciar_ensayo=True)
+        self.assertIn('truncate public.club_miembros', mf.sql_apply(self.p, ensayo=True, primera=True, vaciar_ensayo=True))
+
+    def test_b11_inactivos_sobre_la_fuente(self):
+        todos = mf.inactivos_fuente(self.p, '2099-01-01', 12)   # dentro de 70 años, toda cuenta con saldo está inactiva
+        con_saldo = [m for m in self.p.miembros if m['estado'] == 'activo'
+                     and sum(x['personas'] for x in self.p.movimientos if x['miembro_id'] == m['id']) > 0]
+        self.assertEqual(len(todos), len(con_saldo))
+        self.assertTrue(all(set(x) == {'legacy_id', 'personas', 'ultima_actividad'} for x in todos))   # sin nombres
+        self.assertEqual(mf.inactivos_fuente(self.p, '2000-01-01', 12), [])
+
+
+class Cruce115(unittest.TestCase):
+    """(09-nov, Grok 115) carga única: papel ↔ Firestore por legacy_id, antes de emitir y dentro de la transacción."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.p = mf.armar_plan(mf.cargar(export_sintetico(Path(self.tmp.name) / 'e')))
+        import saldos_papel as sp
+        self.sp = sp
+        legacy_de = {m['id']: m['legacy_id'] for m in self.p.miembros}
+        self.tarjeta = next(mv for mv in self.p.movimientos if mv['tipo'] == 'tarjeta')
+        self.legacy = legacy_de[self.tarjeta['miembro_id']]
+        self.fecha = self.sp._fecha_cr(self.tarjeta['fecha']).isoformat()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def filas(self, *lineas):
+        filas, err = self.sp.validar('legacy_id,personas,fecha_tarjeta,referencia\n' + ''.join(lineas), mf_date_today())
+        self.assertEqual(err, [])
+        return filas
+
+    def test_interseccion_en_python(self):
+        f = self.filas(f"{self.legacy},{self.tarjeta['personas']},{self.fecha},PAPEL-115\n")
+        self.assertEqual([x['linea'] for x in mf.cruce_papel_firestore(self.p, f)['en_los_dos']], [2])
+        f = self.filas(f"{self.legacy},{self.tarjeta['personas'] + 1},{self.fecha},PAPEL-115\n")
+        self.assertEqual(mf.cruce_papel_firestore(self.p, f)['en_los_dos'], [])
+
+    def test_el_cruce_va_en_la_transaccion_y_pasa_la_lista_cerrada(self):
+        f = self.filas(f"{self.legacy},{self.tarjeta['personas'] + 1},{self.fecha},PAPEL-115\n")
+        papel = self.sp.sql_cruce_firestore(f, mf.LOCATION) + self.sp.cuerpo_sql(f, mf.LOCATION, 'prod', 'carga')
+        sql = mf.sql_apply(self.p, primera=True, fecha_carga=True, papel=papel)
+        self.assertLess(sql.index('YA están en Firestore'), sql.index('insert into public.club_cargas_papel'))
+        self.assertGreater(sql.index('YA están en Firestore'), sql.index('create temp table _datos'))
+        import sql_g56
+        self.assertEqual(sql_g56.revisar_migrador(sql, papel=True), [])
+
+
+class AplicarFirmado(unittest.TestCase):
+    """(09-nov, punto 4) La primera carga emitida pasa la lista cerrada del migrador y se aplica solo firmada."""
+    MF = str(Path(__file__).resolve().parent / 'migrar_firestore.py')
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.exp = export_sintetico(self.dir / 'e')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def correr(self, *args, env=None):
+        import subprocess
+        return subprocess.run([sys.executable, '-I', self.MF, *args], capture_output=True, text=True,
+                              env={**os.environ, **(env or {})})
+
+    def emitir(self):
+        r = self.correr('--export', str(self.exp), '--local', 'santa-teresa', '--primera-carga', '--acepto-inactivos',
+                        str(self._inactivos()), '--out', str(self.dir / 'out'), '--emitir', str(self.dir / 'emit'))
+        self.assertEqual(r.returncode, 0, r.stdout[-800:] + r.stderr[-800:])
+        carga = self.dir / 'emit' / 'carga.sql'
+        h = json.loads((self.dir / 'emit' / 'resumen.json').read_text())['sha256_sql']
+        self.assertEqual(hashlib.sha256(carga.read_text(encoding='utf-8').encode()).hexdigest(), h)
+        return carga, h
+
+    def _inactivos(self):
+        import datetime as _dt
+        p = mf.armar_plan(mf.cargar(self.exp))
+        return len(mf.inactivos_fuente(p, _dt.date.today().isoformat(), 12))
+
+    def test_emitir_pasa_la_lista_cerrada_y_aplicar_niega_sin_firma_o_sin_confirmar_prod(self):
+        carga, h = self.emitir()
+        import sql_g56
+        self.assertEqual(sql_g56.revisar_migrador(carga.read_text(encoding='utf-8'), papel=False), [])
+        r = self.correr('aplicar-firmado', '--archivo', str(carga), '--sha256', '0' * 64)
+        self.assertNotEqual(r.returncode, 0); self.assertIn('no es el firmado', r.stdout + r.stderr)
+        r = self.correr('aplicar-firmado', '--archivo', str(carga), '--sha256', h, '--ref', mf.PROD_REF, env={'CLUB_G56_PROD': ''})
+        self.assertNotEqual(r.returncode, 0); self.assertIn('NEGADO', r.stdout + r.stderr)
+        r = self.correr('aplicar-firmado', '--archivo', str(carga), '--sha256', h, '--ref', mf.PROD_REF,
+                        '--confirmo-ref', 'otro', env={'CLUB_G56_PROD': 'si'})
+        self.assertNotEqual(r.returncode, 0); self.assertIn('NEGADO', r.stdout + r.stderr)
+        # un ensayo (termina en rollback) no se aplica, aunque la firma sea la suya
+        ens = self.dir / 'ensayo.sql'
+        ens.write_text(carga.read_text(encoding='utf-8').rstrip()[:-len('commit;')] + 'rollback;\n', encoding='utf-8')
+        r = self.correr('aplicar-firmado', '--archivo', str(ens), '--sha256', hashlib.sha256(ens.read_bytes()).hexdigest())
+        self.assertNotEqual(r.returncode, 0); self.assertIn('termina en commit', r.stdout + r.stderr)
+        # trucado (con su propio sha256): el filtro lo frena antes de mandar nada
+        tr = self.dir / 'trucado.sql'
+        tr.write_text(carga.read_text(encoding='utf-8').replace('commit;', 'delete from public.club_movimientos;\ncommit;'), encoding='utf-8')
+        r = self.correr('aplicar-firmado', '--archivo', str(tr), '--sha256', hashlib.sha256(tr.read_bytes()).hexdigest())
+        self.assertNotEqual(r.returncode, 0); self.assertIn('FILTRO G-56 (migrador)', r.stdout + r.stderr)
+
+    @unittest.skipUnless(os.environ.get('CLUB_ENSAYO_STAGING') == '1', 'contra staging (CLUB_ENSAYO_STAGING=1)')
+    def test_staging_la_primera_carga_firmada_frena_por_cero_socios_y_no_escribe(self):
+        carga, h = self.emitir()
+        q = ("select (select count(*) from public.club_movimientos) m, (select count(*) from public.club_miembros) mi, "
+             "(select count(*) from public.club_negocios) n")
+        antes = mf.ejecutar(mf.STAGING_REF, q, read_only=True)
+        r = self.correr('aplicar-firmado', '--archivo', str(carga), '--sha256', h)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('cero socios', r.stdout + r.stderr)
+        self.assertEqual(mf.ejecutar(mf.STAGING_REF, q, read_only=True), antes)
+
 
 @unittest.skipUnless(os.environ.get('CLUB_ENSAYO_STAGING') == '1', 'ensayo contra staging (CLUB_ENSAYO_STAGING=1)')
 class EnsayoStaging(unittest.TestCase):
@@ -182,8 +314,12 @@ class EnsayoStaging(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.p = mf.armar_plan(mf.cargar(export_sintetico(Path(self.tmp.name) / 'e')))
+        # LC-ML: el local destino se pasa con --local; en staging, el del Club de prueba (CLUB_LOCAL para otro).
+        self._loc = mf.LOCATION
+        mf.LOCATION = os.environ.get('CLUB_LOCAL', 'santa-teresa')
 
     def tearDown(self):
+        mf.LOCATION = self._loc
         self.tmp.cleanup()
 
     def conteo(self):
@@ -213,6 +349,66 @@ class EnsayoStaging(unittest.TestCase):
         self.assertIn('SQLSTATE', msg)
         self.assertNotIn('@', msg)
         self.assertNotIn('+506', msg)
+
+
+    def test_b11_primera_carga_frena_si_la_base_no_esta_vacia(self):
+        antes = self.conteo()
+        with self.assertRaises(SystemExit) as cm:
+            mf.ejecutar(mf.STAGING_REF, mf.sql_apply(self.p, ensayo=True, primera=True, fecha_carga=True))
+        self.assertIn('cero socios', str(cm.exception))
+        self.assertEqual(self.conteo(), antes)
+
+    def test_b11_primera_carga_sobre_base_vacia_valida_y_no_deja_nada(self):
+        antes = self.conteo()
+        val = mf.ejecutar(mf.STAGING_REF, mf.sql_apply(self.p, {'miembros': 3, 'diferencias_saldo_vs_firestore': 0},
+                                                      ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True))[0]['r']
+        self.assertEqual(val['miembros'], 3)
+        self.assertEqual(val['diferencias_saldo_vs_firestore'], 0)
+        self.assertEqual(val['vencer_simular_hoy'], 0)
+        self.assertEqual(self.conteo(), antes)
+
+    def test_b11_carga_unica_con_papel_en_la_misma_transaccion(self):
+        import saldos_papel as sp
+        legacy = [m['legacy_id'] for m in self.p.miembros if m['estado'] == 'activo'][:2]
+        filas, err = sp.validar('legacy_id,personas,fecha_tarjeta,referencia\n' + ''.join(
+            f'{l},6,2026-10-01,PAPEL-{i}\n' for i, l in enumerate(legacy)), mf_date_today())
+        self.assertEqual(err, [])
+        antes = self.conteo()
+        papel = sp.sql_cruce_firestore(filas, mf.LOCATION) + sp.cuerpo_sql(filas, mf.LOCATION, 'staging', 'carga')
+        val = mf.ejecutar(mf.STAGING_REF, mf.sql_apply(self.p, {'miembros': 3, 'diferencias_saldo_vs_firestore': 0},
+                                                      ensayo=True, primera=True, fecha_carga=True, vaciar_ensayo=True,
+                                                      papel=papel))[0]['r']
+        self.assertEqual(val['miembros'], 3)
+        self.assertEqual(val['diferencias_saldo_vs_firestore'], 0)   # el papel no se mezcla con el cuadre de la página vieja
+        self.assertEqual(self.conteo(), antes)
+
+
+    def _papel_aborta(self, lineas: str, motivo: str):
+        import saldos_papel as sp
+        filas, err = sp.validar('legacy_id,personas,fecha_tarjeta,referencia\n' + lineas, mf_date_today())
+        self.assertEqual(err, [])
+        antes = self.conteo()
+        papel = sp.sql_cruce_firestore(filas, mf.LOCATION) + sp.cuerpo_sql(filas, mf.LOCATION, 'staging', 'carga')
+        with self.assertRaises((Exception, SystemExit)) as cm:
+            mf.ejecutar(mf.STAGING_REF, mf.sql_apply(self.p, {'miembros': 3}, ensayo=True, primera=True, fecha_carga=True,
+                                                    vaciar_ensayo=True, papel=papel))
+        self.assertIn(motivo, str(cm.exception))
+        self.assertEqual(self.conteo(), antes)
+
+    def test_115_interseccion_con_firestore_aborta_en_la_transaccion(self):
+        legacy_de = {m['id']: m['legacy_id'] for m in self.p.miembros}
+        t = next(mv for mv in self.p.movimientos if mv['tipo'] == 'tarjeta')
+        import saldos_papel as sp
+        self._papel_aborta(f"{legacy_de[t['miembro_id']]},{t['personas']},{sp._fecha_cr(t['fecha']).isoformat()},PAPEL-115\n",
+                           'YA están en Firestore')
+
+    def test_115_fila_sin_cruzar_aborta_en_la_transaccion(self):
+        self._papel_aborta('legacy-que-no-existe-115,6,2026-10-01,PAPEL-115\n', 'sin cruzar')
+
+
+def mf_date_today():
+    import datetime as _dt
+    return _dt.date.today()
 
 
 if __name__ == '__main__':

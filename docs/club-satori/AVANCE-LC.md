@@ -408,3 +408,103 @@
 - `claude/club-wallet` mergeada con epic (`1f42737`): conflictos de club-web resueltos (botón de Wallet + dominio por
   variable); club-web 23/23, wallet + club 56/56.
 - Pruebas: batería **536/536** · paridad OK · vitest 1.507 · club-web 22 · migrador 15 OK · saldos 19 OK. Staging en base.
+
+## 08-nov · noche (tanda 5) · `796951e` (epic) · `b818404` (club-wallet)
+- **Aviso v1.1 corregido** sin subir versión (nadie lo aceptó en prod), ES y EN: «Para qué» suma las ofertas solo si las
+  aceptó (y ya no contradice «no los usamos para nada más»); «Quién los ve» suma los servicios tecnológicos con
+  servidores fuera de Costa Rica; «Cuánto tiempo» suma los contactos de ofertas (hasta la baja o 24 meses sin contacto)
+  **[CONFIRMAR ISMAEL]**; «Responsable» con `<dirección del responsable>` **[CONFIRMAR ISMAEL]**. El RUNBOOK §6 exige 0
+  marcas antes del deploy de club-web.
+- **Retención de contactos de ofertas:** `club_config_global.contactos_ofertas_meses` (24, provisorio) y borrado diario en
+  `club_socios_mantenimiento` (rastro sin datos). «Último contacto» = `ultimo_contacto_en` (lo marca quien manda la oferta)
+  o la fecha en que aceptó. Prueba 84. Una prueba de club-web compara el texto del aviso con el valor por defecto.
+- **Dominio en la configuración:** `club_config_global.club_url` + `club_url()` (falla cerrada sin dominio) en los links
+  del pase, el portal de la autoalta, el canje, la baja y la lectura de QR; la app de caja lo lee al abrir el Club; el
+  Edge del pase usa `CLUB_WEB_ORIGIN` (sin él, 503). `src/dominioRepo.test.ts` falla si el dominio vuelve a estar escrito
+  fuera de los docs (probado con un archivo trucado). En staging el dominio está cargado como dato.
+- **Saldos de papel:** fecha del movimiento = la de la carga por defecto **[CONFIRMAR ISMAEL]** (la de la tarjeta, en la
+  nota y como opción). `doble-carga-papel` (solo lectura) cruza el CSV con el export de Firestore: hace falta el mapa
+  código ↔ id viejo, porque el export no tiene el código del Club. 25 pruebas (con un export ficticio).
+- **SPEC §5.1:** la restitución cuenta como actividad (decisión de Ismael).
+- Pruebas: batería **547/547** · paridad OK · vitest 1.511 · club-web 23 · wallet + club 60 · saldos 25 · gate61 13/13.
+
+## 09-nov · tarde (Grok NO-GO del puente; Club: 106, 109 y los arreglos de la auditoría) · rama del Club, nada en prod
+- **Puente** (otra rama, `claude/puente-item11-prod-v2`): contrato del cursor con «corte seguro» en la 082 (ID 83), A7
+  contra la RPC real en staging, paquete y guía v2. Ver `docs/puente/PASE-PROD-2026-11-09.md` en esa rama.
+- **106 · login del PoS:** solo el owner carga o cambia `employees.pos_login` (y el perfil de un empleado con login);
+  trigger con historial inmutable (`club_pos_login_historial`) y `club_auditoria`. La resolución de una excepción guarda el
+  actor del PoS tal como estaba (`club_excepciones_resueltas.actor_pos`). Prueba negativa por la API REAL como manager:
+  `scripts/sql/club_api/pos_login_manager.sh` → 403 / 42501, la fila no cambia; el nombre se sigue editando. Coordinado
+  con caja (#65): solo la base.
+- **109 · carga de papel:** `club_cargas_papel` (un local, un lote = sha256 de las filas; únicos; solo inserción) y
+  `lock table … in exclusive mode` antes de la línea de base. Ensayo con dos sesiones en staging: la segunda espera.
+- **B1 · G-56:** análisis real del SQL (`scripts/club/sql_g56.py`; 50 pruebas, con los 4 trucados de la auditoría) y modo
+  PROD de la carga de papel (`--aplicar-firmado`, probado solo en staging: el SQL de prod se niega solo).
+- **B2:** la carga de papel tiene origen `papel`; el migrador frena si la encuentra (nunca la borra).
+- **B3:** `club_canje_aviso` deja rastro (`ver_telefono_canje`, sin el número); `club_reportes_cerrados` sin lectura
+  directa (solo por `club_reporte_mes`).
+- **B4:** el reporte del mes cuenta como actividad solo lo de la app; las cargas iniciales salen aparte (`carga_inicial`).
+- **B5:** el tope diario cuenta solo visitas con beneficio; un segundo escaneo del mismo pedido devuelve la misma visita
+  con cualquier tope (sin otra fila ni re-sorteo).
+- **B6:** gate61 en modo prod rechaza A = B y un `MIN_OBJETOS` bajo el piso (3000 hechos); las esperadas cambian solo por
+  PR revisado. **B9:** club-web en producción sin `VITE_CLUB_URL` no compila ni arranca.
+- **B7 (elegido):** el plazo de 24 meses de los contactos de ofertas se cuenta **desde la aceptación**; se sacó
+  `ultimo_contacto_en` (las ofertas salen por fuera de la app: no hay un contacto confiable que marcar). El aviso v1.1 lo
+  dice así. **B8:** huella sha256 del aviso por versión e idioma (`club_avisos_privacidad`, FK desde `club_config`; prueba
+  de club-web). **B10:** aviso v1.1 sin marcas: 24 meses y la dirección pública del restaurante (ES/EN).
+- **B11 · carga única:** migrador `--primera-carga` (sin `delete`, «cero socios», fecha de carga, chequeo de 12 meses
+  sobre la fuente, papel por `legacy_id` en la misma transacción, `--emitir`). Docs: `piloto/saldos-papel.md` §A y RUNBOOK §8.
+- Pruebas: batería **567/567** · paridad OK (970) · carreras OK · gate61 19/19 · club-web 26 · saldos 30 (+4 staging) ·
+  G-56 50 · migrador 15 (+6 staging).
+
+## 09-nov · noche A (01:00, desatendida) · tarjeta del anfitrión a 390 px e ítem 43 · rama del Club, nada en prod
+Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
+- **Tarjeta del anfitrión** (`736414a`): en «Escanear», con un código de canje, los botones de «Créditos a canjear» se
+  partían en 4 líneas y el tercero desbordaba a 390 px. Ahora son tres líneas cortas (número / créditos / ₡), con el
+  texto completo en `aria-label`. Medido con datos sintéticos en staging, que se borraron después. Hay capturas de antes y
+  después. 6.13 y la guía rápida de caja están al día.
+- **Ítem 43 · asserts fuertes (70–85, más la 43):** 16 refuerzos. Lo que antes era «al menos» o «hay alguno» ahora es una
+  cuenta exacta contra la línea base, y además se mira el estado después de cada negativa. Cuatro mutaciones dentro de la
+  transacción descartada confirman que cada assert cae cuando debe; los asserts viejos pasaban con esas mismas mutaciones.
+  La 75 sigue con «al menos», con el motivo anotado: staging recibe facturas reales del puente.
+- **Bug real que encontró la 85 reforzada:** `club_sin_cruce_elegir` guardaba la resolución de SIN_CRUCE **sin** el actor
+  (Grok 106). Ahora llama a `club_excepcion_actor` como el resolvedor general. Cambio en la 075, aplicado en staging solo
+  en esa función. La definición anterior quedó guardada.
+- **Fragilidad del ambiente:** la 43 fallaba si había un intento de canje real en los últimos 15 minutos. Ahora lo aísla
+  dentro de la transacción.
+- Pruebas: batería **568/568** · paridad **970 = 970** · carreras 8/8 + 04 · gate61 0 fallas · vitest 1.515 · club-web 27 ·
+  Python 111 · migraciones 6/6. Staging en base (2.538 / 338, papel 0, 0 residuos; v2 del puente aplicada).
+
+### Autorrevisión adversarial (noche A)
+- **Anónimo:** esta noche no se abrió ninguna superficie nueva. `club_sin_cruce_elegir` sigue sin `execute` para anon
+  (verificado en staging) y la tarjeta es de la app con sesión.
+- **Socio:** no cambió nada de lo que ve. El tope diario ahora se prueba con las filas reales (2 con beneficio, la 3.ª no
+  suma); antes solo se miraba el estado devuelto.
+- **Anfitrión:** el ₡ de cada botón es solo pantalla, calculado con `valor_credito_crc`; el canje lo calcula la base. Si
+  falta el valor, no se muestra la línea de ₡, en vez de mostrar un ₡0 engañoso. Riesgo residual: un monto de 7 cifras con
+  tres botones a 390 px queda justo. Hoy un botón es como mucho 2 créditos, que no llega ahí.
+- **Invitado:** sin cambios.
+- **Cajero:** no puede elegir la factura de un SIN_CRUCE (owner/manager); eso no cambió. Los botones de canje mantienen el
+  tamaño de toque (`big`, mismo ancho repartido).
+- **Manager:** elegir la factura de un SIN_CRUCE ahora hace una lectura más (`club_excepcion_actor`, la lista de 120 días
+  filtrada por tipo). Es el mismo costo que ya paga «Resolver» y no se midió aparte. Si en el piloto «Elegir factura» se
+  siente lento, esa lectura es lo primero que hay que mirar.
+
+## 09-nov · madrugada (Grok GO condicionado; 113 → 082 v3; Club 114–116) · nada en prod ni en main
+- **Puente** (otra rama, `claude/puente-item11-prod-v2`):
+  - código `5da233a`, 082 v3 `edb7ffc5…`, aplicada en staging con el Edge v16;
+  - 119 y 118 en el paquete y la guía; el kit en seco dio 35/35 en PowerShell 5.1 y 7;
+  - #71 en `0a33df42`.
+- **114 · G-56:** `sql_g56.py` rechaza toda llamada a una función fuera de una lista blanca:
+  - la lista son los built-ins inmutables (verificados contra el catálogo de staging) más excepciones nombradas, cada
+    una con su motivo: G-56 suma `now` y `to_char`, y el migrador suma 8 más que usa su SQL hoy;
+  - **decisión del dueño:** esas excepciones no son inmutables (estables y 3 volátiles que generan códigos);
+  - hay un trucado por forma (`select … into`, `:=`, `insert … select`, `if`, `create temp table … as select`, con
+    comillas y sin esquema): el filtro anterior los dejaba pasar;
+  - límite que queda: la notación de atributo (`fila.funcion`) no se ve sin mirar el esquema.
+- **115 · carga única:** cruce papel ↔ Firestore por `legacy_id`, antes de emitir y dentro de la transacción. Aborta si
+  una fila no cruza o si la tarjeta ya está en Firestore. Doc corregida («el mapa es directo» no era cierto).
+- **116 · `pos_login_manager.sh`:**
+  - cabeceras en archivos (umask 077), `mktemp -d` + trap y nada secreto en argv;
+  - manager sintético que se crea y se borra (0 residuos verificados).
+- Pruebas: Python 122/122 con staging · API 106: 403/42501, el nombre se edita, 0 residuos. Staging en base.

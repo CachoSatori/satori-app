@@ -3,6 +3,9 @@
 # de la salida de gate61.sh, con una línea de comentario arriba que diga por qué es esperada.
 # Firma: con al menos una entrada, la línea «firma: <quién> <fecha> sha256=<hex>» lleva el sha256 de las entradas (en el
 # orden del archivo, unidas con \n y con \n final):  grep -E '^[-+] ' gate61_esperadas.txt | sha256sum
-# La pone Ismael después de revisar cada entrada. Sin entradas, no hace falta firma.
+# Sin entradas, no hace falta firma. La línea «firma:» es SOLO un control de integridad (cualquiera puede recalcular el
+# sha256): no autoriza nada. La AUTORIZACIÓN de una entrada es el PR revisado y mergeado que la agrega o la cambia: este
+# archivo solo cambia por PR revisado por el dueño (nunca en un commit directo a main ni durante la corrida del gate), y el
+# gate se corre contra el archivo de la rama ya mergeada.
 #
 # Hoy (08-nov): sin entradas. La primera lectura de prod (con firma) dirá cuáles hay; cada una se corrige o se anota acá.

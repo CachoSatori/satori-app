@@ -340,6 +340,32 @@ def armar_plan(d: dict) -> Plan:
     return p
 
 
+# ── Inactividad sobre la fuente (B11, sin red) ───────────────────────────────
+def inactivos_fuente(p: Plan, hoy_iso: str, meses: int = 12) -> list[dict]:
+    """Cuentas ACTIVAS con saldo cuya última actividad (tarjeta o canje) es de antes de hoy − `meses`. Con «fecha de
+    carga para todos» volverían a contar el plazo el día del lanzamiento: se deciden en la fuente antes de cargar.
+    Devuelve legacy_id (id de la página vieja, no un dato personal), saldo en personas y la fecha; sin nombres."""
+    import datetime as _dt
+    hoy = _dt.date.fromisoformat(hoy_iso[:10])
+    y, m = hoy.year, hoy.month - meses
+    while m <= 0:
+        m += 12; y -= 1
+    corte = f'{y:04d}-{m:02d}-{hoy.day:02d}'
+    saldo = collections.Counter(); ult: dict[str, str] = {}
+    for mv in p.movimientos:
+        saldo[mv['miembro_id']] += mv['personas']
+        if mv['tipo'] in ('tarjeta', 'canje') and mv['fecha']:
+            ult[mv['miembro_id']] = max(ult.get(mv['miembro_id'], ''), mv['fecha'][:10])
+    out = []
+    for mi in p.miembros:
+        if mi['estado'] != 'activo' or saldo[mi['id']] <= 0:
+            continue
+        u = ult.get(mi['id']) or (mi.get('created_at') or '')[:10]
+        if u < corte:
+            out.append({'legacy_id': mi['legacy_id'], 'personas': saldo[mi['id']], 'ultima_actividad': u})
+    return sorted(out, key=lambda x: x['ultima_actividad'])
+
+
 # ── Validación local del plan (sin red) ──────────────────────────────────────
 def pm_pendiente_plan(p: Plan) -> Decimal:
     """CLUB-AUD-22: UNA definición de PM pendiente, la de club_reporte_mes al día de hoy: todos los
@@ -436,14 +462,36 @@ def _jsonable(v):
     raise TypeError(type(v))
 
 
-def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False) -> str:
+def cruce_papel_firestore(p: Plan, papel_filas: list[dict], tolerancia_dias: int = 3) -> dict:
+    """(Grok 115) El mismo cruce que hace la transacción, antes de emitir: cada tarjeta de papel (por legacy_id) contra
+    los créditos de Firestore del plan (mismo anfitrión, mismas personas, ≤ tolerancia días). Solo líneas e ids."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import saldos_papel as sp
+    legacy_de = {m['id']: m['legacy_id'] for m in p.miembros}
+    creditos = [{'_id': mv['legacy_ids'][0], 'referrerId': legacy_de[mv['miembro_id']], 'referralType': 'credit',
+                 'peopleCount': mv['personas'], 'createdAt': mv['fecha']}
+                for mv in p.movimientos if mv['tipo'] == 'tarjeta' and mv.get('legacy_ids')]
+    return sp.cruzar(papel_filas, creditos, {f['codigo']: f['codigo'] for f in papel_filas}, tolerancia_dias)
+
+
+def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False, primera: bool = False,
+              fecha_carga: bool = False, vaciar_ensayo: bool = False, papel: str | None = None) -> str:
     """Todo en UNA transacción: precheck → limpieza de lo migrado → carga → restos → VALIDACIÓN → commit.
     · CLUB-AUD-19: la validación corre ANTES del commit y hace `raise` si algo no cuadra (nada queda cargado).
     · CLUB-AUD-20: los datos (con nombres, teléfonos y emails) viajan en UN solo literal jsonb y se
       expanden con jsonb_to_recordset; los errores nunca se imprimen con el cuerpo (ver ejecutar).
     · CLUB-AUD-23: al re-ejecutar se conservan id, código y token de cada miembro por legacy_id; y se
       aborta si ya hay cierres de mes congelados (club_reportes_cerrados).
-    · ensayo=True termina en ROLLBACK: valida contra la base sin dejar nada."""
+    · ensayo=True termina en ROLLBACK: valida contra la base sin dejar nada.
+    · (09-nov, B2) frena si hay una carga de tarjetas de papel (origen 'papel' o club_cargas_papel): nunca la borra.
+    · (09-nov, B11) primera=True: la CARGA ÚNICA del lanzamiento. No emite ningún delete; exige la base del Club vacía
+      (precondición «cero socios»). fecha_carga=True: todos los movimientos con la fecha de la carga (el dueño: «fecha
+      de carga para todos»; la inactividad de más de 12 meses se decide antes, en la fuente: inactivos_fuente).
+    · vaciar_ensayo=True (solo con ensayo y solo en una base marcada como staging): vacía el Club DENTRO de la
+      transacción para ensayar la primera carga sobre una base vacía; el ROLLBACK lo deshace."""
+    assert not vaciar_ensayo or (ensayo and primera), 'vaciar_ensayo solo con ensayo y primera carga'
+    assert papel is None or primera, 'la carga de papel dentro de la migración es solo para la primera carga'
+
     datos = {
         'negocios': list(p.negocios.values()),
         'miembros': [{k: m[k] for k in ('id', 'legacy_id', 'tipo', 'nombre', 'negocio_norm', 'estado', 'created_at', 'updated_at')}
@@ -473,6 +521,17 @@ def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False) -> s
     neg = SQL_NORM.format(c='n.nombre')
 
     L = ["begin;", "set local statement_timeout = '300s';"]
+    if vaciar_ensayo:
+        L += ["set local club.libro_mantenimiento = 'pruebas';",
+              "do $$ begin if not public.club_modo_pruebas() then raise exception 'CLUB: el vaciado de ensayo solo existe en staging'; end if; end $$;",
+              "truncate public.club_miembros, public.club_negocios, public.club_cargas_papel cascade;"]
+    if primera:
+        L.append("""do $$ begin
+  if exists (select 1 from public.club_miembros) or exists (select 1 from public.club_movimientos)
+     or exists (select 1 from public.club_negocios) or exists (select 1 from public.club_cargas_papel) then
+    raise exception 'CLUB: primera carga: la base del Club no está vacía (precondición «cero socios»): no se borra nada';
+  end if;
+end $$;""")
     L.append(f"""do $$ begin
   if not exists (select 1 from public.club_config where location_id = {q(LOCATION)}) then
     raise exception 'CLUB: el local {LOCATION} no está dado de alta en club_config (RUNBOOK, alta de los locales)';
@@ -491,11 +550,17 @@ def sql_apply(p: Plan, esperados: dict | None = None, ensayo: bool = False) -> s
   if exists (select 1 from public.club_reportes_cerrados) then
     raise exception 'CLUB: ya hay meses cerrados (club_reportes_cerrados): re-migrar cambiaría reportes congelados';
   end if;
+  if exists (select 1 from public.club_movimientos where origen = 'papel') or exists (select 1 from public.club_cargas_papel) then
+    raise exception 'CLUB: hay una carga de tarjetas de papel: el migrador no corre (nunca la borra; ver saldos-papel.md)';
+  end if;
 end $$;""")
     L.append(f"create temp table _datos on commit drop as select {tag}{cuerpo}{tag}::jsonb as d;")
     # 23: identidad de cada miembro migrado antes de borrar
-    L.append("create temp table _prev on commit drop as select legacy_id, id, codigo, token_portal from public.club_miembros where origen = 'migracion';")
-    L += [
+    if primera:
+        L.append("create temp table _prev (legacy_id text, id uuid, codigo text, token_portal text) on commit drop;")
+    else:
+        L.append("create temp table _prev on commit drop as select legacy_id, id, codigo, token_portal from public.club_miembros where origen = 'migracion';")
+    L += [] if primera else [
         "delete from public.club_pm_cargos where origen = 'migracion';",
         "delete from public.club_pm_pagos where origen = 'migracion';",
         # el libro es de solo inserción: el migrador declara que borra SOLO sus filas (origen = 'migracion')
@@ -529,7 +594,7 @@ select mp.id, {q(LOCATION)}, j.telefono, j.email, false, false
     L.append(f"""insert into public.club_movimientos (location_id, miembro_id, tipo, personas, creditos, personas_por_credito, valor_credito_crc,
                                      fecha_visita, registrado_en, origen, nota, legacy_ids)
 select {q(LOCATION)}, mp.id, j.tipo, j.personas, j.creditos, {p.rate}, {VALOR_CREDITO_CRC},
-       coalesce(j.fecha, now()), coalesce(j.fecha, now()), 'migracion', j.nota, j.legacy_ids
+       {"now(), now()" if fecha_carga else "coalesce(j.fecha, now()), coalesce(j.fecha, now())"}, 'migracion', j.nota, j.legacy_ids
   from _datos, jsonb_to_recordset(d->'movimientos') as j(miembro_id uuid, tipo text, personas int, creditos numeric,
                                                           fecha timestamptz, nota text, legacy_ids text[])
   join _map mp on mp.plan_id = j.miembro_id;""")
@@ -551,6 +616,10 @@ select k.location_id, k.miembro_id, 'vencimiento', -k.personas, null, k.personas
   join public.club_miembros m on m.id = k.miembro_id and m.origen = 'migracion'
  where k.personas * 2 < k.personas_por_credito;""")
     # 19: validación DENTRO de la transacción
+    if papel:
+        # B11 · la carga ÚNICA: las tarjetas de papel (por legacy_id) en la MISMA transacción, después de crear a los
+        # anfitriones y antes de la validación. Trae su propio lock, línea de base, registro del lote y validación.
+        L.append(papel)
     L.append(f"create temp table _val on commit drop as {sql_validar()};")
     L.append(f"""do $$
 declare v jsonb := (select r from _val); e jsonb := {q(esp)}::jsonb; c jsonb := {q(ctl)}::jsonb; f text[] := '{{}}'; k text;
@@ -588,7 +657,7 @@ def sql_validar() -> str:
 with esperado as (select key as legacy_id, value::int as neto from _datos, jsonb_each_text(d->'neto_firestore')),
 mig as (select m.* from public.club_miembros m where m.origen = 'migracion'),
 real as (
-  select m.legacy_id, coalesce(sum(mv.personas) filter (where not coalesce(mv.nota in ({q(NOTA_D1)}, {q(NOTA_RESTO)}), false)), 0) as neto
+  select m.legacy_id, coalesce(sum(mv.personas) filter (where mv.origen <> 'papel' and not coalesce(mv.nota in ({q(NOTA_D1)}, {q(NOTA_RESTO)}), false)), 0) as neto
   from mig m left join public.club_movimientos mv on mv.miembro_id = m.id group by m.legacy_id),
 sal as (select s.*, m.tipo as tipo_m, m.estado as estado_m from public.club_saldos s join mig m on m.id = s.miembro_id),
 mov as (select mv.* from public.club_movimientos mv join mig m on m.id = mv.miembro_id where mv.origen = 'migracion'),
@@ -662,10 +731,10 @@ def mensaje_error(cuerpo: str) -> str:
     return f'SQLSTATE {estado} (detalle oculto: puede contener datos personales)'
 
 
-def ejecutar(ref: str, sql: str, read_only: bool = False):
-    if ref != STAGING_REF or ref == PROD_REF:
-        sys.exit('NEGADO: este script solo corre contra STAGING.')
-    url = f'https://api.supabase.com/v1/projects/{STAGING_REF}/database/query'
+def ejecutar(ref: str, sql: str, read_only: bool = False, _prod_firmado: bool = False):
+    if not ((ref == STAGING_REF) or (_prod_firmado and ref == PROD_REF)):
+        sys.exit('NEGADO: este script solo corre contra STAGING (prod: solo --aplicar-firmado de una carga emitida).')
+    url = f'https://api.supabase.com/v1/projects/{ref}/database/query'
     headers = {'Content-Type': 'application/json'}
     if os.environ.get('SUPABASE_ACCESS_TOKEN'):
         headers['Authorization'] = 'Bearer ' + os.environ['SUPABASE_ACCESS_TOKEN']
@@ -685,6 +754,14 @@ def main_saldos_papel(argv: list[str]) -> None:
     import datetime as _dt
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import saldos_papel as sp
+    if '--aplicar-firmado' in argv:
+        af = argparse.ArgumentParser(prog='migrar_firestore.py saldos-papel --aplicar-firmado',
+                                     description='G-56 modo PROD: aplica un carga.sql emitido, tal cual, si su sha256 es el firmado')
+        af.add_argument('--aplicar-firmado', type=Path, required=True)
+        af.add_argument('--sha256', required=True, help='el sha256 firmado del carga.sql (resumen.json)')
+        af.add_argument('--ref', default=STAGING_REF)
+        af.add_argument('--confirmo-ref', help='contra prod: volver a escribir el ref de prod')
+        aplicar_firmado(af.parse_args(argv), sp); return
     ap = argparse.ArgumentParser(prog='migrar_firestore.py saldos-papel',
                                  description='Carga de saldos de tarjetas de papel (plantilla: scripts/club/plantilla_saldos_papel.csv)')
     ap.add_argument('--local', required=True, help='id del local de club_config')
@@ -693,14 +770,17 @@ def main_saldos_papel(argv: list[str]) -> None:
     fuente.add_argument('--csv', type=Path, help='el CSV (fuera del repo)')
     fuente.add_argument('--ficticios', type=int, help='N anfitriones y tarjetas FICTICIOS (solo con --ensayo)')
     ap.add_argument('--fecha-movimiento', choices=sp.FECHAS, default='carga',
-                    help="fecha del movimiento: 'carga' (por defecto, [CONFIRMAR ISMAEL]: no vence el día del lanzamiento) o 'tarjeta'")
+                    help="fecha del movimiento: 'carga' (por defecto; el dueño, 09-nov) o 'tarjeta'")
+    ap.add_argument('--vencimiento-meses', type=int, default=12)
+    ap.add_argument('--acepto-inactivos', type=int, default=None,
+                    help='(B11) cuántas tarjetas con más de N meses sin actividad se cargan igual, sabiéndolo (el número exacto)')
     modo = ap.add_mutually_exclusive_group(required=True)
     modo.add_argument('--validar', action='store_true', help='solo valida el CSV (no conecta)')
     modo.add_argument('--emitir', type=Path, help='escribe carga.sql, ensayo.sql y resumen.json en esta carpeta (fuera del repo); no conecta')
     modo.add_argument('--ensayo', action='store_true', help='corre el ensayo en STAGING dentro de una transacción con ROLLBACK')
     a = ap.parse_args(argv)
     if a.ref != STAGING_REF:
-        sys.exit('NEGADO: la carga de saldos de papel solo se ensaya contra STAGING; prod va con el paquete firmado (G-56).')
+        sys.exit('NEGADO: la carga de saldos de papel solo se ensaya contra STAGING; prod va con el paquete firmado (G-56, --aplicar-firmado).')
     if not re.fullmatch(r'[a-z0-9-]{2,40}', a.local):
         sys.exit('NEGADO: --local mal formado.')
     previo = ''
@@ -715,6 +795,12 @@ def main_saldos_papel(argv: list[str]) -> None:
         filas, errores = sp.validar(archivo.read_text(encoding='utf-8'), _dt.date.today())
         if errores:
             print('CSV RECHAZADO (no se carga nada):'); print('\n'.join('  ' + e for e in errores[:200])); sys.exit(1)
+        if a.fecha_movimiento == 'carga':
+            inac = sp.inactivos(filas, _dt.date.today(), a.vencimiento_meses)
+            if inac and a.acepto_inactivos != len(inac):
+                print(f'FRENADO (B11): {len(inac)} tarjetas con más de {a.vencimiento_meses} meses sin actividad (con la fecha de carga '
+                      'volverían a contar el plazo). Decidilas en la fuente, o --acepto-inactivos N si el dueño decidió cargarlas igual:')
+                print('\n'.join(f"  línea {x['linea']} · {x['referencia']} · {x['meses']} meses" for x in inac[:200])); sys.exit(2)
     if a.validar:
         print(json.dumps({'csv': 'ok', 'filas': len(filas), 'personas': sum(f['personas'] for f in filas)}, ensure_ascii=False)); return
     if a.emitir:
@@ -724,7 +810,7 @@ def main_saldos_papel(argv: list[str]) -> None:
         out.mkdir(parents=True, exist_ok=True); os.chmod(out, 0o700)
         carga = sp.sql_carga(filas, a.local, 'prod', a.fecha_movimiento); ensayo = sp.sql_ensayo(filas, a.local, 'prod', '', a.fecha_movimiento)
         for sql in (carga, ensayo):
-            malos = sp.filtrar(sql)
+            malos = sp.filtrar(sql)   # B1: análisis real (sql_g56)
             if malos:
                 sys.exit('FILTRO G-56: ' + '; '.join(malos))
         for nombre, txt in (('carga.sql', carga), ('ensayo.sql', ensayo)):
@@ -734,12 +820,85 @@ def main_saldos_papel(argv: list[str]) -> None:
         print(sp.json_resumen(r)); return
     # --ensayo: staging, el mismo cuerpo con ROLLBACK; el filtro se corre otra vez antes de mandar
     sql = sp.sql_ensayo(filas, a.local, 'staging', previo, a.fecha_movimiento)
-    malos = sp.filtrar(sql)
+    malos = sp.filtrar(sql, ficticios=bool(previo))
     if malos:
         sys.exit('FILTRO G-56: ' + '; '.join(malos))
     ejecutar(a.ref, sql)
     print(json.dumps({'ensayo': 'ok (validación dentro de la transacción; terminó en ROLLBACK)', **sp.resumen(filas, sql, a.local, a.fecha_movimiento)},
                      ensure_ascii=False, indent=1))
+
+
+def aplicar_firmado(a, sp) -> None:
+    """G-56 · MODO PROD (09-nov, B1). Aplica un carga.sql EMITIDO por --emitir, byte a byte, si:
+      1. su sha256 es el firmado (--sha256, el de resumen.json que firmó el dueño);
+      2. pasa el análisis real del SQL (sql_g56) otra vez, justo antes de mandarlo;
+      3. contra prod: --confirmo-ref repite el ref de prod Y la variable CLUB_G56_PROD=si está puesta en la consola.
+    El SQL trae sus propias precondiciones (entorno, línea de base, lock, validación) y su commit: si algo no da, la
+    base lo rechaza entero. Se PRUEBA solo en staging: el carga.sql de prod contra staging aborta en «el entorno no es
+    prod» sin escribir nada (scripts/club/test_saldos_papel.py y saldos-papel.md)."""
+    f = a.aplicar_firmado.expanduser().resolve()
+    sql = f.read_text(encoding='utf-8')
+    h = hashlib.sha256(sql.encode()).hexdigest()
+    if not a.sha256 or h != a.sha256.strip().lower():
+        sys.exit('NEGADO: el sha256 del carga.sql no es el firmado (--sha256).')
+    malos = sp.filtrar(sql)
+    if malos:
+        sys.exit('FILTRO G-56: ' + '; '.join(malos))
+    if not sql.rstrip().endswith('commit;'):
+        sys.exit('NEGADO: --aplicar-firmado es para el carga.sql (termina en commit), no para el ensayo.')
+    prod = a.ref == PROD_REF
+    if prod and (a.confirmo_ref != PROD_REF or os.environ.get('CLUB_G56_PROD') != 'si'):
+        sys.exit('NEGADO: contra prod hace falta --confirmo-ref con el ref de prod y CLUB_G56_PROD=si (paquete firmado, G-56).')
+    if not prod and a.ref != STAGING_REF:
+        sys.exit('NEGADO: ref desconocido.')
+    ejecutar(a.ref, sql, _prod_firmado=prod)
+    print(json.dumps({'aplicado': True, 'ref': a.ref, 'sha256': h}, ensure_ascii=False))
+
+
+def main_aplicar_migracion(argv: list[str]) -> None:
+    """G-56 · MODO PROD de la PRIMERA CARGA (09-nov, punto 4). Aplica un carga.sql EMITIDO por --primera-carga --emitir,
+    byte a byte, si:
+      1. su sha256 es el firmado (--sha256, el de resumen.json que firmó el dueño);
+      2. pasa la lista cerrada del migrador (sql_g56.revisar_migrador) otra vez, justo antes de mandarlo;
+      3. termina en commit (no es un ensayo) y no tiene ningún delete;
+      4. el servidor tiene standard_conforming_strings = on (el filtro lee los literales así);
+      5. contra prod: --confirmo-ref repite el ref de prod Y la variable CLUB_G56_PROD=si está puesta en la consola.
+    El SQL trae su precondición «cero socios», su validación y su commit: si algo no da, la base lo rechaza entero.
+    Se PRUEBA solo en staging: allí la base no está vacía y la precondición lo frena sin escribir nada."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import sql_g56
+    ap = argparse.ArgumentParser(prog='migrar_firestore.py aplicar-firmado',
+                                 description='G-56 modo PROD: aplica el carga.sql de la primera carga, tal cual, si su sha256 es el firmado')
+    ap.add_argument('--archivo', type=Path, required=True, help='el carga.sql emitido (fuera del repo)')
+    ap.add_argument('--sha256', required=True, help='el sha256 firmado (resumen.json)')
+    ap.add_argument('--ref', default=STAGING_REF)
+    ap.add_argument('--confirmo-ref', help='contra prod: volver a escribir el ref de prod')
+    a = ap.parse_args(argv)
+    f = a.archivo.expanduser().resolve()
+    if f == REPO_ROOT or REPO_ROOT in f.parents:
+        sys.exit('NEGADO: el carga.sql está dentro del repo. Tiene datos personales: va fuera.')
+    sql = f.read_text(encoding='utf-8')
+    h = hashlib.sha256(sql.encode()).hexdigest()
+    if h != a.sha256.strip().lower():
+        sys.exit('NEGADO: el sha256 del carga.sql no es el firmado (--sha256).')
+    malos = sql_g56.revisar_migrador(sql, papel='public.club_cargas_papel' in sql)
+    if malos:
+        sys.exit('FILTRO G-56 (migrador): ' + '; '.join(malos[:20]))
+    if not sql.rstrip().endswith('commit;'):
+        sys.exit('NEGADO: aplicar-firmado es para el carga.sql (termina en commit), no para un ensayo.')
+    if re.search(r'(?im)^\s*delete\b', sql):
+        sys.exit('NEGADO: la primera carga no puede tener deletes.')
+    prod = a.ref == PROD_REF
+    if prod and (a.confirmo_ref != PROD_REF or os.environ.get('CLUB_G56_PROD') != 'si'):
+        sys.exit('NEGADO: contra prod hace falta --confirmo-ref con el ref de prod y CLUB_G56_PROD=si (paquete firmado, G-56).')
+    if not prod and a.ref != STAGING_REF:
+        sys.exit('NEGADO: ref desconocido.')
+    scs = ejecutar(a.ref, 'show standard_conforming_strings', read_only=True, _prod_firmado=prod)
+    if not scs or scs[0].get('standard_conforming_strings') != 'on':
+        sys.exit('NEGADO: el servidor no tiene standard_conforming_strings = on (el filtro no leería los literales igual).')
+    filas = ejecutar(a.ref, sql, _prod_firmado=prod)
+    print(json.dumps({'aplicado': True, 'ref': a.ref, 'sha256': h,
+                      'validacion': (filas[0].get('r') if filas else None)}, ensure_ascii=False, default=str))
 
 
 # ── Doble carga: tarjetas de papel que ya están en Firestore (SOLO LECTURA) ────
@@ -794,6 +953,18 @@ def main() -> None:
     modo.add_argument('--dry-run', action='store_true', help='arma el plan y los CSV; no toca la base')
     modo.add_argument('--ensayo', action='store_true', help='corre todo contra staging y valida, pero termina en ROLLBACK')
     modo.add_argument('--apply', action='store_true', help='borra lo migrado antes y vuelve a insertar (staging)')
+    modo.add_argument('--emitir', type=Path, help='(B11) escribe carga.sql y resumen.json de la PRIMERA CARGA (fuera del repo); no conecta')
+    ap.add_argument('--primera-carga', action='store_true',
+                    help='(B11) carga única del lanzamiento: sin deletes, exige la base del Club vacía («cero socios»)')
+    ap.add_argument('--fecha-movimiento', choices=('carga', 'original'), default=None,
+                    help="fecha de los movimientos: 'carga' (por defecto en la primera carga) u 'original'")
+    ap.add_argument('--vencimiento-meses', type=int, default=12)
+    ap.add_argument('--acepto-inactivos', type=int, default=None,
+                    help='(B11) cuántas cuentas con más de N meses sin actividad se cargan igual, sabiéndolo (el número exacto)')
+    ap.add_argument('--papel', type=Path,
+                    help='(B11, con --primera-carga) CSV de saldos de papel con legacy_id (fuera del repo): entra en la MISMA transacción')
+    ap.add_argument('--vaciar-para-ensayo', action='store_true',
+                    help='(solo --ensayo --primera-carga en staging) vacía el Club dentro de la transacción; el ROLLBACK lo deshace')
     a = ap.parse_args()
     global LOCATION
     if not re.fullmatch(r'[a-z0-9-]{2,40}', a.local or ''):
@@ -805,7 +976,16 @@ def main() -> None:
     if os.environ.get('SUPABASE_URL') and STAGING_REF not in os.environ['SUPABASE_URL']:
         sys.exit('NEGADO: SUPABASE_URL no es la de staging.')
     if a.apply and not a.esperados:
-        sys.exit('NEGADO: --apply exige --esperados (los totales firmados por Ismael).')
+        sys.exit('NEGADO: --apply exige --esperados (los totales firmados por el dueño).')
+    if a.apply and a.primera_carga:
+        sys.exit('NEGADO: la primera carga no se aplica desde acá: en staging, --ensayo; para prod, --emitir y el paquete firmado (G-56).')
+    if a.emitir and not a.primera_carga:
+        sys.exit('NEGADO: --emitir es solo para la primera carga (--primera-carga).')
+    if a.vaciar_para_ensayo and not (a.ensayo and a.primera_carga):
+        sys.exit('NEGADO: --vaciar-para-ensayo solo con --ensayo --primera-carga (staging, termina en ROLLBACK).')
+    fecha_carga = (a.fecha_movimiento or ('carga' if a.primera_carga else 'original')) == 'carga'
+    if a.papel and not a.primera_carga:
+        sys.exit('NEGADO: --papel es solo para la primera carga (--primera-carga).')
     export = a.export.expanduser().resolve()
     out = a.out.expanduser().resolve()
     for pth, nombre in ((export, '--export'), (out, '--out')):
@@ -828,10 +1008,73 @@ def main() -> None:
     malos = problemas_plan(plan, res)
     if malos:
         sys.exit('PLAN RECHAZADO: ' + '; '.join(malos))
+    if fecha_carga:
+        import datetime as _dt
+        inac = inactivos_fuente(plan, _dt.date.today().isoformat(), a.vencimiento_meses)
+        (out / 'inactivos.csv').write_text('legacy_id,personas,ultima_actividad\n' + ''.join(
+            f"{x['legacy_id']},{x['personas']},{x['ultima_actividad']}\n" for x in inac), encoding='utf-8')
+        os.chmod(out / 'inactivos.csv', 0o600)
+        print(json.dumps({'inactivos_mas_de_meses': a.vencimiento_meses, 'cuentas': len(inac), 'csv': str(out / 'inactivos.csv')}, ensure_ascii=False))
+        if inac and a.acepto_inactivos != len(inac):
+            sys.exit(f'FRENADO (B11): {len(inac)} cuentas con saldo y más de {a.vencimiento_meses} meses sin actividad en la fuente. '
+                     'Con la fecha de carga volverían a contar el plazo: decidilas en la fuente, o pasá --acepto-inactivos '
+                     f'{len(inac)} si el dueño decidió cargarlas igual.')
+    papel_filas = None
+    if a.papel:
+        import datetime as _dt
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import saldos_papel as sp
+        pf = a.papel.expanduser().resolve()
+        if pf == REPO_ROOT or REPO_ROOT in pf.parents:
+            sys.exit('NEGADO: --papel está dentro del repo. Los datos de anfitriones van fuera.')
+        papel_filas, errores = sp.validar(pf.read_text(encoding='utf-8'), _dt.date.today())
+        if errores:
+            print('CSV DE PAPEL RECHAZADO (no se carga nada):'); print('\n'.join('  ' + e for e in errores[:200])); sys.exit(1)
+        if papel_filas[0]['clave'] != 'legacy_id':
+            sys.exit('NEGADO: en la carga única el CSV de papel va con legacy_id (los códigos del Club nacen en esta carga).')
+        legacy = {m['legacy_id'] for m in plan.miembros if m['estado'] == 'activo'}
+        faltan = [f['linea'] for f in papel_filas if f['codigo'] not in legacy]
+        if faltan:
+            sys.exit(f'NEGADO: {len(faltan)} filas de papel con un legacy_id que no es un anfitrión activo de la fuente (líneas {faltan[:20]}).')
+        inter = cruce_papel_firestore(plan, papel_filas)
+        if inter['en_los_dos']:
+            sys.exit(f"NEGADO (Grok 115): {len(inter['en_los_dos'])} tarjetas de papel que YA están en Firestore (mismo anfitrión, "
+                     f"mismas personas, ≤ {inter['tolerancia_dias']} días): líneas "
+                     + ', '.join(str(x['linea']) for x in inter['en_los_dos'][:30]) + '. Sacalas del CSV (doble carga).')
+        if fecha_carga:
+            inac_p = sp.inactivos(papel_filas, _dt.date.today(), a.vencimiento_meses)
+            if inac_p and a.acepto_inactivos != len(inac_p):
+                sys.exit(f'FRENADO (B11): {len(inac_p)} tarjetas de papel con más de {a.vencimiento_meses} meses sin actividad en la fuente '
+                         '(líneas ' + ', '.join(str(x['linea']) for x in inac_p[:30]) + '). Decidilas en la fuente.')
+    def cuerpo_papel(entorno: str) -> str | None:
+        if not papel_filas:
+            return None
+        # Grok 115: el cruce con Firestore va en la MISMA transacción, antes de la carga (aborta si no cruza o si ya está)
+        return (sp.sql_cruce_firestore(papel_filas, LOCATION)
+                + sp.cuerpo_sql(papel_filas, LOCATION, entorno, 'carga' if fecha_carga else 'tarjeta'))
     if a.dry_run:
         return
+    if a.emitir:
+        dst = a.emitir.expanduser().resolve()
+        if dst == REPO_ROOT or REPO_ROOT in dst.parents:
+            sys.exit('NEGADO: --emitir está dentro del repo.')
+        dst.mkdir(parents=True, exist_ok=True); os.chmod(dst, 0o700)
+        sql = sql_apply(plan, esperados, ensayo=False, primera=True, fecha_carga=fecha_carga, papel=cuerpo_papel('prod'))
+        if re.search(r'(?im)^\s*delete\b', sql):
+            sys.exit('NEGADO: la primera carga no puede tener deletes.')
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import sql_g56
+        malos = sql_g56.revisar_migrador(sql, papel=bool(papel_filas))   # lista cerrada del migrador (09-nov)
+        if malos:
+            sys.exit('FILTRO G-56 (migrador): ' + '; '.join(malos))
+        (dst / 'carga.sql').write_text(sql, encoding='utf-8'); os.chmod(dst / 'carga.sql', 0o600)
+        r = {'modo': 'primera-carga', 'fecha_movimiento': 'carga' if fecha_carga else 'original', 'plan': res,
+             'sha256_sql': hashlib.sha256(sql.encode()).hexdigest()}
+        (dst / 'resumen.json').write_text(json.dumps(r, ensure_ascii=False, indent=1, default=str), encoding='utf-8')
+        print(json.dumps(r, ensure_ascii=False, indent=1, default=str)); return
 
-    filas = ejecutar(a.ref, sql_apply(plan, esperados, ensayo=a.ensayo))
+    filas = ejecutar(a.ref, sql_apply(plan, esperados, ensayo=a.ensayo, primera=a.primera_carga, fecha_carga=fecha_carga,
+                                      vaciar_ensayo=a.vaciar_para_ensayo, papel=cuerpo_papel('staging')))
     val = filas[0]['r'] if filas else None
     (out / 'validacion.json').write_text(json.dumps(val, ensure_ascii=False, indent=1), encoding='utf-8')
     os.chmod(out / 'validacion.json', 0o600)
@@ -843,5 +1086,7 @@ if __name__ == '__main__':
         main_saldos_papel(sys.argv[2:])
     elif len(sys.argv) > 1 and sys.argv[1] == 'doble-carga-papel':
         main_doble_carga(sys.argv[2:])
+    elif len(sys.argv) > 1 and sys.argv[1] == 'aplicar-firmado':
+        main_aplicar_migracion(sys.argv[2:])
     else:
         main()

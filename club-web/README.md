@@ -46,7 +46,8 @@ El navegador solo llama a `/api/*`. La función llama a las RPC de Supabase con 
 - **Google Wallet (B2):** el botón «Agregar a Google Wallet» (portal y final de la autoalta) aparece solo si el build
   tiene `VITE_WALLET_GOOGLE=1`. Va **apagado** hasta que el Edge `club-pase` esté desplegado con sus secretos.
 - **Dominio (08-nov noche):** sale de la variable de build **`VITE_CLUB_URL`** (`https://<dominio>`, sin barra final);
-  no está escrito en el código ni en los textos de club-web. Sin la variable, el sitio usa el origen donde corre. Para
+  no está escrito en el código ni en los textos de club-web. **Sin la variable (o mal formada) el build de producción
+  falla y el sitio no arranca** (09-nov; en desarrollo usa el origen donde corre). Para
   cambiar de dominio: cambiar la variable y redesplegar. **Ojo:** la base (los links del pase, el portal, el código de
   canje y la baja) y la app de caja (`src/modules/club/qrFormato.ts`, que reconoce los QR) todavía tienen el dominio
   escrito: ver AVANCE-LC.md.

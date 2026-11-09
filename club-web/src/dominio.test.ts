@@ -26,3 +26,16 @@ test('VITE_CLUB_URL: https sin barra final; mal formada o vacía → el origen d
   expect(normalizarClubUrl('javascript:alert(1)', 'https://origen.test')).toBe('https://origen.test')
   expect(normalizarClubUrl(undefined, 'https://origen.test')).toBe('https://origen.test')
 })
+
+test('(09-nov) en producción, sin VITE_CLUB_URL o mal formada → error claro, nunca el origen', () => {
+  for (const malo of [undefined, '', 'http://club.ejemplo.com', 'https://club.ejemplo.com/ruta', 'javascript:alert(1)']) {
+    expect(() => normalizarClubUrl(malo, 'https://origen.test', true)).toThrow(/falta VITE_CLUB_URL/)
+  }
+  expect(normalizarClubUrl('https://club.ejemplo.com/', 'https://origen.test', true)).toBe('https://club.ejemplo.com')
+})
+
+test('(09-nov) el build de producción se frena sin VITE_CLUB_URL (vite.config.ts usa la misma validación)', () => {
+  const cfg = readFileSync(join(RAIZ, 'vite.config.ts'), 'utf8')
+  expect(cfg).toMatch(/command === 'build' && mode === 'production'/)
+  expect(cfg).toMatch(/if \(!clubUrlValida\(env\.VITE_CLUB_URL\)\) throw new Error\(ERROR_SIN_CLUB_URL\)/)
+})

@@ -81,6 +81,38 @@ function Ok([string]$que) { if ($LASTEXITCODE -ne 0) { throw "falló «$que» (c
 function Carpeta([string]$p) { if (-not [IO.Path]::IsPathRooted($p) -or -not (Test-Path -LiteralPath $p -PathType Container)) { throw "no es una carpeta absoluta existente: $p" }; (Resolve-Path -LiteralPath $p).Path }
 function Archivo([string]$p) { if (-not [IO.Path]::IsPathRooted($p) -or -not (Test-Path -LiteralPath $p -PathType Leaf)) { throw "no es un archivo absoluto existente: $p" }; (Resolve-Path -LiteralPath $p).Path }
 function Md5Bytes([string]$p) { (Get-FileHash -Algorithm MD5 -LiteralPath (Archivo $p)).Hash.ToLower() }   # sobre los BYTES, sin decodificar
+# Corrección 09-nov (hallazgo del pase, 4.1): en la PC del PoS corren DOS agentes, prod y staging, con la MISMA línea de
+# comando («node … pos-bridge/agente.ts», rutas relativas). Filtrar node.exe por la palabra 'agente' agarraba los dos: el
+# de prod estuvo ~40 min detenido esperando al de staging, y el «cerrar node a mano» cerró el de staging (~11:58). El
+# node de un agente se identifica por su CARPETA: la nombra su línea de comando o la de un proceso padre (el .cmd de la
+# tarea, que 1.9 verificó que entra a esa carpeta). Nunca por una palabra suelta. Ningún bloque cierra procesos.
+function Get-NodeDe([string]$Carpeta, [string]$Cmd) {
+  $todos = @(Get-CimInstance Win32_Process); $porPid = @{}; foreach ($x in $todos) { $porPid[[int]$x.ProcessId] = $x }
+  $marcas = @('(?i)' + [regex]::Escape($Carpeta.TrimEnd('\')) + '(\\|"|\s|$)')
+  if ($Cmd) { $marcas += '(?i)' + [regex]::Escape($Cmd) + '("|\s|$)' }
+  @($todos | Where-Object { $_.Name -eq 'node.exe' } | Where-Object {
+    $x = $_; $es = $false
+    for ($i = 0; $x -and $i -lt 6 -and -not $es; $i++) {
+      foreach ($m in $marcas) { if ([string]$x.CommandLine -match $m) { $es = $true } }
+      $x = if ([int]$x.ParentProcessId -ne [int]$x.ProcessId) { $porPid[[int]$x.ParentProcessId] } else { $null }
+    }
+    $es })
+}
+# Detiene la tarea y espera a que terminen SOLO los node.exe de esa carpeta (sus PID se toman ANTES de detenerla: después,
+# sin el .cmd padre, un node que tarde en cerrar ya no se podría atribuir). Los demás node.exe no se miran ni se tocan.
+function Detener-Agente([string]$Tarea, [string]$Carpeta, [string]$Cmd) {
+  $pids = @(Get-NodeDe $Carpeta $Cmd | ForEach-Object { [int]$_.ProcessId })
+  $otros = @(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $pids -notcontains [int]$_.ProcessId } | ForEach-Object { [int]$_.ProcessId })
+  if ((Get-ScheduledTask -TaskName $Tarea).State -eq 'Running' -and -not $pids.Count) { throw "PARADA: la tarea $Tarea corre y no se encuentra su node.exe por la carpeta $Carpeta (ni por $Cmd): no se adivina cuál es" }
+  "node del agente de $Carpeta : $($pids -join ', ') · otros node.exe (no se tocan): $($otros.Count)"
+  Stop-ScheduledTask -TaskName $Tarea
+  $t0 = Get-Date
+  while ((Get-ScheduledTask -TaskName $Tarea).State -eq 'Running' -or @(Get-CimInstance Win32_Process | Where-Object { $pids -contains [int]$_.ProcessId }).Count) {
+    if ((Get-Date) - $t0 -gt [TimeSpan]::FromMinutes(3)) { throw "el agente de $Carpeta (node $($pids -join ', ')) no se detuvo en 3 minutos: se avisa al dueño; si hay que cerrarlo, SOLO esos PID (Stop-Process -Id), nunca por nombre" }
+    Start-Sleep -Seconds 5
+  }
+  "agente de $Carpeta detenido $(Get-Date -Format 'HH:mm:ss') · los otros node.exe siguen: $(@(Get-CimInstance Win32_Process | Where-Object { $otros -contains [int]$_.ProcessId }).Count) de $($otros.Count)"
+}
 if (Test-Path -LiteralPath C:\satori\supabase-cli -PathType Container) { $env:Path = 'C:\satori\supabase-cli;' + $env:Path }   # corrección 09-nov: el CLI del pase (0.6)
 ```
 
@@ -252,13 +284,7 @@ $a0 = @($t.Actions)[0]
 $CMDV = Archivo C:\satori\pos-agente-prod.cmd; $CMDN = Archivo C:\satori\pos-agente-prod-5da233a.cmd
 if ((Md5Bytes $CMDV) -cne $md5CmdV) { throw 'el .cmd viejo cambió desde 1.1: se para y se avisa' }
 if ((([string]$a0.Execute).Trim('"')) -cne $CMDV) { throw 'la tarea ya no corre el .cmd viejo' }
-Stop-ScheduledTask -TaskName 'Satori PoS Bridge PROD'
-$t0 = Get-Date
-while ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -eq 'Running' -or
-       @(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $_.CommandLine -match 'satori-app-prod' }).Count) {
-  if ((Get-Date) - $t0 -gt [TimeSpan]::FromMinutes(3)) { throw 'el agente no se detuvo en 3 minutos' }
-  Start-Sleep -Seconds 5
-}
+Detener-Agente 'Satori PoS Bridge PROD' (Carpeta C:\satori\satori-app-prod) $CMDV   # por su carpeta y su .cmd, nunca por una palabra
 $detenida = Get-Date
 $p = @{ Execute = $CMDN }
 if ($a0.Arguments) { $p.Argument = $a0.Arguments }
@@ -269,8 +295,13 @@ Start-ScheduledTask -TaskName 'Satori PoS Bridge PROD'; Start-Sleep -Seconds 20
 if ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -ne 'Running') { throw 'el agente nuevo no arrancó: vuelta atrás (§6)' }
 "3 ok · tarea → $CMDN · detenida $([math]::Round(((Get-Date) - $detenida).TotalSeconds)) s · HORA_CAMBIO $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')-06:00 (anotar)"
 ```
-Ojo con el filtro: la espera mira solo los procesos de `satori-app-prod`. El agente de **staging**
-(`C:\satori\satori-app`) también es un `node` con `agente` en la línea de comando, y no se detiene.
+**Cómo se identifica el agente de prod (hallazgo del pase del 09-nov, 4.1).** El agente de **staging**
+(`C:\satori\satori-app`) corre en la misma PC con **la misma línea de comando** (rutas relativas): ni la palabra
+`agente` ni `satori-app-prod` sirven para filtrar `node.exe`. El 09-nov el filtro por `agente` dejó al de prod ~40 min
+detenido, y el «cerrar node a mano» cerró probablemente el de staging. `Detener-Agente` (preámbulo) toma los `node.exe`
+cuya línea de comando, o la de un proceso padre (el `.cmd` de la tarea, que entra a la carpeta), nombra la carpeta; anota
+sus PID **antes** de detener la tarea y espera solo esos. Si la tarea corre y no los encuentra: PARADA. **Ningún bloque
+cierra procesos**; si el de prod no se detiene en 3 minutos, se avisa y se cierra **solo por PID**.
 
 ## 4. Prueba de humo (los primeros 5 minutos)
 1. **El agente entra:** en el editor SQL de PROD, el cursor late (`hace` < 2 min) **sin error**, dos veces, con 2 minutos de
@@ -325,13 +356,7 @@ rollback;
 ## 6. Vuelta atrás (la carpeta vieja está intacta; ~2 minutos)
 ```powershell
 $CMDV = Archivo C:\satori\pos-agente-prod.cmd
-Stop-ScheduledTask -TaskName 'Satori PoS Bridge PROD'
-$t0 = Get-Date
-while ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -eq 'Running' -or
-       @(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $_.CommandLine -match 'agente-prod-5da233a' }).Count) {
-  if ((Get-Date) - $t0 -gt [TimeSpan]::FromMinutes(3)) { throw 'el agente nuevo no se detuvo en 3 minutos' }
-  Start-Sleep -Seconds 5
-}
+Detener-Agente 'Satori PoS Bridge PROD' (Carpeta C:\satori\agente-prod-5da233a) (Archivo C:\satori\pos-agente-prod-5da233a.cmd)
 Set-ScheduledTask -TaskName 'Satori PoS Bridge PROD' -Action (New-ScheduledTaskAction -Execute $CMDV) | Out-Null
 if ((([string]@((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').Actions)[0].Execute).Trim('"')) -cne $CMDV) { throw 'la acción no volvió al .cmd viejo' }
 Start-ScheduledTask -TaskName 'Satori PoS Bridge PROD'; Start-Sleep -Seconds 20

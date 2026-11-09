@@ -14,6 +14,12 @@ select 'anon sin SELECT/INSERT/UPDATE/DELETE sin política en la lista',
                       and not exists (select 1 from pg_policies pp where pp.schemaname = 'public' and pp.tablename = t
                                         and pp.roles && array['anon','public']::name[] and pp.cmd in ('ALL', p)))
 union all
+select 'PUBLIC sin ningún permiso en la lista (anon no hereda nada)',
+       not exists (select 1 from existe, lateral aclexplode(coalesce((select relacl from pg_class where oid = ('public.' || t)::regclass),
+                     acldefault('r', (select relowner from pg_class where oid = ('public.' || t)::regclass)))) a where a.grantee = 0)
+union all
+select 'son 23 tablas en la lista (22 de la prueba 82 + salary_periods)', (select count(*) from lista) = 23
+union all
 select 'authenticated conserva SELECT en todas (no se tocó)',
        not exists (select 1 from existe where not has_table_privilege('authenticated', ('public.' || t)::regclass, 'SELECT'))
 union all

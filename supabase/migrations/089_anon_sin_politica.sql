@@ -7,10 +7,10 @@
 --
 -- ── QUÉ CIERRA ─────────────────────────────────────────────────────────────────────────────
 -- Los privilegios por defecto de Supabase le dan a `anon` TODO en cada tabla nueva de `public`. La prueba 82 del
--- Club (rama claude/epic-tesla-pyo77m) marcó 22 tablas fuera del Club donde anon tiene SELECT/INSERT/UPDATE/DELETE
+-- Club (rama claude/epic-tesla-pyo77m) marcó 22 tablas fuera del Club (23 con `salary_periods`, que solo existe en staging) donde anon tiene SELECT/INSERT/UPDATE/DELETE
 -- que ninguna política para anon o public justifica, y además TRUNCATE, REFERENCES y TRIGGER en todas (las
 -- políticas no aplican a esos tres; TRUNCATE ni siquiera pasa por RLS).
--- Hoy NO hay fuga: las 22 tienen RLS prendida y ninguna política deja pasar a anon (las que van «TO public» exigen
+-- Hoy NO hay fuga: las 23 tienen RLS prendida y ninguna política deja pasar a anon (las que van «TO public» exigen
 -- get_my_role(), que para anon es null; leído en prod el 08-nov). Esto es defensa en profundidad: si mañana alguien
 -- apaga la RLS de una tabla o agrega una política floja, anon no hereda nada.
 --
@@ -21,7 +21,11 @@
 --       - de SELECT/INSERT/UPDATE/DELETE, SOLO los que ninguna política para anon/public justifica (la regla exacta
 --         de la prueba 82). Los que sí tienen política «TO public» se dejan: anon igual no pasa (get_my_role() null)
 --         y así esta migración no cambia el comportamiento de ninguna política.
---   · Al final verifica (y si no, aborta todo): en ninguna tabla de la lista anon conserva un permiso sin política.
+--   · Lo mismo a PUBLIC (el pseudo-rol que hereda todo rol, anon incluido): si PUBLIC conservara un permiso, anon lo
+--     heredaría aunque se le revoque a anon (Grok, 09-nov). En prod hoy PUBLIC no tiene ninguno (leído el 09-nov); el
+--     revoke deja la regla escrita y la verificación lo exige.
+--   · Al final verifica (y si no, aborta todo): en ninguna tabla de la lista anon conserva un permiso sin política
+--     (has_table_privilege: cuenta lo heredado de PUBLIC) y PUBLIC no tiene ningún permiso (aclexplode, grantee 0).
 --   · No toca: authenticated, service_role, políticas, RLS, funciones, vistas, el Club (`club_*` ya está limpio, prueba
 --     82) ni los privilegios por defecto (cambiarlos es otra decisión: ver «Después»).
 --
@@ -63,6 +67,7 @@ begin
   foreach v_t in array v_tablas loop
     continue when to_regclass('public.' || v_t) is null;
     execute format('revoke truncate, references, trigger on table public.%I from anon', v_t);
+    execute format('revoke all on table public.%I from public', v_t);   -- nada heredable por anon
     foreach v_p in array array['SELECT','INSERT','UPDATE','DELETE'] loop
       if has_table_privilege('anon', ('public.' || v_t)::regclass, v_p)
          and not exists (select 1 from pg_policies pp
@@ -84,6 +89,14 @@ begin
                                    and pp.roles && array['anon','public']::name[] and pp.cmd in ('ALL', p)))) r;
   if v_resto is not null then
     raise exception '089: anon conserva permisos sin política: %', v_resto;
+  end if;
+  select string_agg(c.relname || ':' || a.privilege_type, ', ') into v_resto
+    from unnest(v_tablas) t
+    join pg_class c on c.oid = to_regclass('public.' || t)
+    cross join lateral aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+   where a.grantee = 0;
+  if v_resto is not null then
+    raise exception '089: PUBLIC conserva permisos (anon los heredaría): %', v_resto;
   end if;
 end $$;
 

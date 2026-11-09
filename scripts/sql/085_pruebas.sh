@@ -18,7 +18,8 @@
 # STAGING (hwiatgicyyqyezqwldia): matriz completa (10 roles activos e inactivos simulados, rol NULL, perfil ausente,
 #   anon, service_role), todo en transacciones con ROLLBACK.
 # PROD (el ref sale de SATORI_REF_PROD: regla del dueño del 09-nov, ningún script de prueba tiene escrito el ref de
-#   prod; sin esa variable, este script no reconoce prod): SOLO LECTURA (modos ANTES y DESPUES). Lo que no se puede probar sin escribir queda
+#   prod; sin esa variable, este script no reconoce prod): SOLO LECTURA (modos ANTES y DESPUES). Grok 123: en prod CADA
+#   consulta va dentro de «begin read only; … rollback;» (la base rechaza cualquier escritura, aunque el SQL la tuviera). Lo que no se puede probar sin escribir queda
 #   «NO PROBADO» y la salida NUNCA es verde (3).
 #
 # Salida: 0 = todo verde · 1 = alguna FALLA · 3 = sin fallas pero con NO PROBADOS (no es verde) · 2 = error de uso.
@@ -68,6 +69,11 @@ q_crudo() {
   jq -n --arg q "$1" '{query:$q}' | curl -sS -o /dev/stdout -w '\nHTTP%{http_code}' -X POST "$API" \
     -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @- || echo "HTTP000"
 }
+# Grok 123: en prod, toda consulta en una transacción READ ONLY. En staging, los modos ANTES y DESPUES también leen en READ
+# ONLY donde no simulan (la simulación de roles de staging escribe dentro de su transacción descartada); ROLLBACK aplica el
+# rollback dentro de la transacción descartada, así que no puede ser read only.
+ro() { if [ "$ENTORNO" = prod ]; then echo "begin read only; $1; rollback;"; else echo "$1"; fi; }
+TX=$([ "$MODO" = ROLLBACK ] && echo "begin;" || echo "begin read only;")
 sqlstate() { grep -oE 'ERROR:[[:space:]]+[0-9A-Z]{5}' <<<"$1" | head -1 | grep -oE '[0-9A-Z]{5}$' || true; }
 # Lo que se imprime de un error: SQLSTATE + la primera línea del mensaje. NUNCA el DETAIL (Postgres pone ahí la fila
 # entera, con datos de personas) ni el HINT.
@@ -105,7 +111,7 @@ CAT="select json_build_object(
   'viejas', count(*) filter (where (tablename, policyname) in ($LECT6) and qual !~* 'get_my_role'),
   'profiles_check', count(*) filter (where tablename = 'profiles' and policyname = 'Solo owners crean/editan perfiles' and with_check is not null))
   from pg_policies where schemaname = 'public'"
-cat_ahora=$(q "$CAT" | jq -c '.[0].json_build_object')
+cat_ahora=$(q "$(ro "$CAT")" | jq -c '.[-1].json_build_object')
 case $MODO in
   ANTES)    esperado_cat='{"nuevas":0,"viejas":6,"profiles_check":0}';;
   DESPUES)  esperado_cat='{"nuevas":6,"viejas":0,"profiles_check":1}';;
@@ -128,11 +134,11 @@ if [ "$MODO" = ROLLBACK ]; then
 fi
 
 # ── 2. Verdad de base (como postgres) ─────────────────────────────────────────────────────────
-G=$(q "select json_build_object(
+G=$(q "$(ro "select json_build_object(
   'emp_all', (select count(*) from public.employees), 'emp_act', (select count(*) from public.employees where is_active),
   'te', (select count(*) from public.tip_entries), 'ts', (select count(*) from public.tip_sessions),
   'rtp', (select count(*) from public.role_tip_points), 'er', (select count(*) from public.exchange_rates),
-  'prof', (select count(*) from public.profiles)) as g" | jq -c '.[0].g')
+  'prof', (select count(*) from public.profiles)) as g")" | jq -c '.[-1].g')
 echo "Base (postgres): $G"
 if jq -e 'to_entries | map(select(.value == 0)) | length > 0' >/dev/null <<<"$G"; then
   echo "FALLA alguna tabla está vacía: un 0 no distinguiría «ve» de «no ve» ($G)"; exit 1
@@ -182,9 +188,9 @@ if [ "$ENTORNO" = staging ]; then
   fi
 else
   for rol in "${ROLES[@]}"; do
-    id=$(q "select id from public.profiles where role = '$rol' and is_active order by created_at limit 1" | jq -r '.[0].id // empty')
+    id=$(q "$(ro "select id from public.profiles where role = '$rol' and is_active order by created_at limit 1")" | jq -r '.[-1].id // empty')
     if [ -z "$id" ]; then noprobado "$rol activo" "no hay cuenta activa en prod y en prod no se simula"; continue; fi
-    r=$(q "begin; $(como "$id") select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
+    r=$(q "begin read only; $(como "$id") select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
     compara "$rol activo" "$(esperado "$rol" true false)" "$r"
   done
   for rol in "${ROLES[@]}"; do noprobado "$rol inactivo" "en prod no se simula (escribe); se prueba en staging"; done
@@ -193,11 +199,11 @@ else
 fi
 
 # ── 4. Perfil ausente, anon y service_role ────────────────────────────────────────────────────
-r=$(q "begin; $ROLLBACK_SQL $(como "$AUSENTE") select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
+r=$(q "$TX $ROLLBACK_SQL $(como "$AUSENTE") select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
 compara "perfil ausente (JWT sin fila en profiles)" "$(esperado '' false false)" "$r"
 
 for t in "${TABLAS[@]}"; do
-  cuerpo=$(q_crudo "begin; $ROLLBACK_SQL set local role anon; select count(*) as n from public.$t; rollback;")
+  cuerpo=$(q_crudo "$TX $ROLLBACK_SQL set local role anon; select count(*) as n from public.$t; rollback;")
   http=${cuerpo##*HTTP}; json=${cuerpo%HTTP*}
   if [[ "$http" == 2* ]]; then
     n=$(jq -r 'if type=="array" then (.[-1].n|tostring) else "?" end' <<<"$json" 2>/dev/null || echo "?")
@@ -209,11 +215,11 @@ for t in "${TABLAS[@]}"; do
   fi
 done
 
-r=$(q "begin; $ROLLBACK_SQL set local role service_role; select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
+r=$(q "$TX $ROLLBACK_SQL set local role service_role; select ($LECTURA) as r; rollback;" | jq -c '.[-1].r') || r=""
 compara "service_role ve todo" "$(jq -cn --argjson g "$G" '{employees:$g.emp_all, tip_entries:$g.te, tip_sessions:$g.ts, role_tip_points:$g.rtp, exchange_rates:$g.er, profiles:$g.prof}')" "$r"
 
 # ── 5. Después de todo, el catálogo sigue como al empezar (nada quedó aplicado) ───────────────
-fin=$(q "$CAT" | jq -c '.[0].json_build_object') || fin=""
+fin=$(q "$(ro "$CAT")" | jq -c '.[-1].json_build_object') || fin=""
 compara "al terminar, el catálogo sigue igual que al empezar" "$cat_ahora" "$fin"
 
 echo "── Resultado ($MODO): $ok OK · $fallas FALLA · $noprob NO PROBADO ──"

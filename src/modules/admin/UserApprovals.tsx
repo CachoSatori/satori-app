@@ -4,6 +4,7 @@ import { getAllProfiles, updateProfileRole, setProfileActive } from '../../share
 
 import { ROLE_LABELS } from '../../shared/constants'
 import NuevoEmpleado from './NuevoEmpleado'
+import { ALIAS_CORREO_EJEMPLO } from './aliasCorreo'
 
 const ROLES: UserRole[] = ['owner', 'contador', 'manager', 'cajero', 'salonero', 'barman', 'barback', 'runner', 'cocina', 'proveedor']
 
@@ -103,7 +104,7 @@ export default function UserApprovals({ employees, currentUserId, onEmployeesCha
         marginBottom: '1.25rem', fontSize: '0.74rem', lineHeight: 1.6, color: 'var(--t-muted)' }}>
         <strong style={{ color: 'var(--t-ink)' }}>¿Cómo dar de alta a alguien?</strong><br />
         1. Tocá <strong>+ Nuevo empleado</strong> y cargá nombre, correo (el suyo o un alias
-        <code> satorisushibar+nombre@gmail.com</code>) y rol. Si ya está en Empleados, vinculalo.<br />
+        <code> {ALIAS_CORREO_EJEMPLO}</code>) y rol. Si ya está en Empleados, vinculalo.<br />
         2. Copiá la <strong>contraseña temporal</strong> y entregásela en persona: no se vuelve a mostrar.<br />
         3. La persona entra con su correo y esa contraseña, elige una nueva y aterriza directo en su
         pantalla (cajero → Caja, bandeja proveedores → Registrar pago).

@@ -103,3 +103,16 @@ export function mgmtToken(env: Env): string | null {
   }
   return null
 }
+
+/**
+ * Correo del owner, por configuración (repo público: no va escrito en el código).
+ * Se lee de `SATORI_OWNER_EMAIL` (.env.local o entorno). Formato estricto, sin
+ * comillas ni espacios, así se puede interpolar en SQL sin riesgo.
+ */
+export function correoOwner(env: Env): string {
+  const v = (env.SATORI_OWNER_EMAIL ?? '').trim()
+  if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v)) {
+    throw new Error('ABORT: falta SATORI_OWNER_EMAIL (o no es un correo válido) en .env.local o el entorno.')
+  }
+  return v
+}

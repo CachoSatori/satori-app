@@ -5,6 +5,7 @@ import { useState } from 'react'
 import type { Employee, UserRole } from '../../shared/types/database'
 import { ROLE_LABELS } from '../../shared/constants'
 import { ROLES_ALTA, crearCuentaEmpleado, AltaEmpleadoError, type AltaEmpleadoResultado } from '../../shared/api/altaEmpleado'
+import { ALIAS_CORREO_EJEMPLO } from './aliasCorreo'
 
 interface Props {
   employees: Employee[]
@@ -98,7 +99,7 @@ export default function NuevoEmpleado({ employees, onClose, onCreated }: Props) 
             <label className="nuevo-emp-field">
               <span>Correo</span>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={saving} placeholder="nombre@ejemplo.com" />
-              <small>Si no tiene correo propio: <code>satorisushibar+nombre@gmail.com</code></small>
+              <small>Si no tiene correo propio: <code>{ALIAS_CORREO_EJEMPLO}</code></small>
             </label>
             <label className="nuevo-emp-field">
               <span>Rol</span>

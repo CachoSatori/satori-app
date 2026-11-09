@@ -233,7 +233,7 @@ solas tras un reinicio (validado el 29/10).
 
 | Número | Nombre | Bloque | Rama | Dónde está aplicada |
 |---|---|---|---|---|
-| 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **sin aplicar**: va después de la 075 (en el pase, toma el número siguiente al de la 075) |
+| 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **sin aplicar**. Orden en prod 085 → 091 → 092 → 100: **no se mergea antes que la 091 y la 092**. Necesita la 075: va en el pase del Club, después de la 075 (si la 075 toma 150+, la 100 se renumera al siguiente) |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |

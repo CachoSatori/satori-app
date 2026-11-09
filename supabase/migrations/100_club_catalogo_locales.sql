@@ -2,9 +2,12 @@
 -- ║ 100 — Club: el catálogo de locales es public.locations (opción a del catálogo único).   ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
--- ⚠ SIN APLICAR. Va DESPUÉS de la 075 (en el pase a prod, cuando la 075 tome su número 150+, esta toma el siguiente).
---   Sirve en cualquier orden respecto de la 091 de caja: las dos crean `locations` con la misma definición
---   (`create table if not exists`) y las mismas políticas (idempotentes).
+-- ⚠ SIN APLICAR. ORDEN EN PROD: 085 → 091 → 092 → 100. Supabase no aplica una migración con número menor que la
+--   última aplicada: la 100 NO se mergea antes que la 091 y la 092.
+--   Además necesita la 075 del Club (usa club_config): en prod va en el pase del Club, DESPUÉS de la 075. Si la 075
+--   entra renumerada al bloque de pase (150+, regla 3 de ESTADO.md), la 100 se renumera en ese mismo pase al número
+--   siguiente, y sigue quedando después de la 091 y la 092.
+--   El contenido es idempotente respecto de la 091 (las dos crean `locations` y sus políticas igual).
 --
 -- Origen: propuesta de caja `scripts/sql/091_propuesta_club_catalogo.sql` (rama claude/multilocal-fase0 @ a9b9607),
 -- decisión del dueño del 08-nov (opción a: un solo catálogo de locales). Se ACEPTA con tres cambios:

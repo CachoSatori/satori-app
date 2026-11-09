@@ -155,12 +155,19 @@ commits en los últimos 5 minutos. Si los hay, esperar hasta 15 minutos; si sigu
   hwiatgicyyqyezqwldia ROLLBACK <respaldo.json>`. Compara las 15 policies con el respaldo campo por campo, corre la
   matriz con los esperados de ANTES y verifica que al final la 085 siga puesta. **Verde = salida 0.**
 
-### Registro del §8 (se completa en la ventana nocturna)
+### Registro del §8 — ventana del domingo 08-nov, 23:35–00:45 CR (corte duro 00:45) · ✅ EN VERDE
 | Paso | Hora CR | Corte | Resultado |
 |---|---|---|---|
-| Chequeo previo: sin consultas activas ni commits del Club en 5 min | | | |
-| `085_pruebas.sh hwiatgicyyqyezqwldia DESPUES` | | script `<sha>` · ledger staging `<n>/<máx>` | `<OK/FALLA/NO PROBADO>` · salida `<código>` |
-| `085_pruebas.sh hwiatgicyyqyezqwldia ROLLBACK <respaldo>` | | respaldo sha256 `4db2c15b…` | `<…>` · salida `<código>` |
+| Chequeo previo: sin consultas activas ni commits del Club en 5 min | 23:36 | `pg_stat_activity` sin consultas ajenas; último commit del Club hace 86 min (`claude/puente-item11-prod-v2`) | ✅ se sigue |
+| `085_pruebas.sh hwiatgicyyqyezqwldia DESPUES` (1ª corrida) | 23:38 | script `80a293d` · ledger staging 83 / 085 | 30 OK · 1 FALLA (del **script**: el chequeo de «rol NULL» no leía el mensaje escapado; la base sí devolvió 23502) · salida 1 → arreglado en `ab5aad4` (además: los errores ya no imprimen el DETAIL, que trae la fila de un perfil) |
+| `085_pruebas.sh hwiatgicyyqyezqwldia DESPUES` | 23:39 | script `ab5aad4` · ledger staging 83 / 085 | **31 OK · 0 FALLA · 0 NO PROBADO · salida 0 · VERDE** |
+| `085_pruebas.sh hwiatgicyyqyezqwldia ROLLBACK <respaldo>` | 23:39 | script `ab5aad4` · respaldo sha256 `4db2c15b…`, corte prod 2026-11-08T15-20-24Z, 55 / 080, 15 policies | **33 OK · 0 FALLA · 0 NO PROBADO · salida 0 · VERDE** (las 15 policies, después del rollback descartado, iguales al respaldo campo por campo) |
+| Residuos | 23:41 | — | 0 empleados/perfiles sintéticos; las 6 lecturas de la 085 siguen puestas; roles de los perfiles sin cambios |
 
-Log de cada corrida: fuera del repo (scratchpad de la sesión), sin secretos (el script no imprime el token ni datos de
-personas). Acá queda solo el resumen.
+Base de los conteos (postgres): 45 empleados (21 activos), 17 entradas, 3 sesiones, 7 puntos por rol, 3 tipos de
+cambio, 10 perfiles. Matriz: 10 roles × activo/inactivo, rol NULL (23502), perfil ausente, anon (42501 en las 5
+tablas con lectura «para todos»; 0 filas en profiles), service_role (ve todo). Logs completos fuera del repo
+(scratchpad de la sesión), sin secretos ni datos de personas.
+
+**Con esto el §8 está en verde.** Para la 085 en prod falta lo de siempre: firma, puente pasado con su §7 sin aborto,
+el #71 en `main` con Branching «up to date» y la rama rebasada.

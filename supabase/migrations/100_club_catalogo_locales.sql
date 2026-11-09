@@ -2,11 +2,12 @@
 -- ║ 100 — Club: el catálogo de locales es public.locations (opción a del catálogo único).   ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
--- ⚠ SIN APLICAR. ORDEN EN PROD: 085 → 091 → 092 → 100. Supabase no aplica una migración con número menor que la
---   última aplicada: la 100 NO se mergea antes que la 091 y la 092.
---   Además necesita la 075 del Club (usa club_config): en prod va en el pase del Club, DESPUÉS de la 075. Si la 075
---   entra renumerada al bloque de pase (150+, regla 3 de ESTADO.md), la 100 se renumera en ese mismo pase al número
---   siguiente, y sigue quedando después de la 091 y la 092.
+-- ⚠ SIN APLICAR. ORDEN EN PROD (Grok 127): 085 → 089 → 090 → 091 → 092 → pase del Club.
+--   Supabase no aplica una migración con número menor que la última aplicada: la 100 NO se mergea antes que la 091 y
+--   la 092. Necesita la 075 del Club (usa club_config).
+--   DECISIÓN (CLUB-AUD-100, 09-nov): en el pase del Club, la 075 entra como 150 y ESTA como 151, en ese orden y en el
+--   mismo pase (regla 3 de ESTADO.md: se renombran al bloque de pase, con su «origen»: 075 → 150, 100 → 151). No se
+--   juntan en un solo archivo: cada una conserva su prueba y su vuelta atrás, y el rollback de la 100 no toca la 075.
 --   El contenido es idempotente respecto de la 091 (las dos crean `locations` y sus políticas igual).
 --
 -- Origen: propuesta de caja `scripts/sql/091_propuesta_club_catalogo.sql` (rama claude/multilocal-fase0 @ a9b9607),

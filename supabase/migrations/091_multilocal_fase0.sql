@@ -2,21 +2,20 @@
 -- ║ 091 — Multilocal fuera del Club, FASE 0: catálogo, columna de local y RLS por local.    ║
 -- ╚══════════════════════════════════════════════════════════════════════════════════════╝
 --
--- ⚠ BORRADOR. NO APLICAR NI MERGEAR SIN FIRMA DE ISMAEL. Las decisiones del plan
---   (docs/MULTILOCAL-plan-caja.md §14) que usa esta migración son [PROVISORIAS]: Ismael no las firmó.
---   Ver docs/MULTILOCAL-fase0.md.
+-- ⚠ BORRADOR. NO APLICAR NI MERGEAR SIN FIRMA DE ISMAEL. Las 12 decisiones del plan
+--   (docs/MULTILOCAL-plan-caja.md §14) las aprobó Ismael el 08-nov. Ver docs/MULTILOCAL-fase0.md.
 --
 -- ── QUÉ HACE (y nada más) ──────────────────────────────────────────────────────────────────
---   1. Catálogo ÚNICO de locales: `public.locations` [PROVISORIA, decisión 1]. Es la misma tabla de la mig 022 del
+--   1. Catálogo ÚNICO de locales: `public.locations` [decisión 1]. Es la misma tabla de la mig 022 del
 --      PoS propio (en staging ya existe, con santa-teresa y nosara); en prod no existe y se crea igual. No se renombra
 --      ninguna columna existente: lo nuevo se llama `location_id` y donde ya hay `local` (pos_ndf_*, BioTime) queda
---      `local` [PROVISORIA, decisión 11].
+--      `local` [decisión 11].
 --   2. `location_id text not null default 'santa-teresa'` (FK a locations) en las tablas de caja y propinas que lo
 --      necesitan: cash_sessions, cash_movements, cash_cierres_dia y tip_sessions. Es un DEFAULT constante: Postgres no
 --      reescribe la tabla y TODAS las filas de hoy quedan en santa-teresa. tip_entries, movement_deletions y
 --      movement_edits NO llevan columna: cuelgan de una fila que ya la tiene.
 --   3. `profile_locations` (qué locales ve un usuario), `mis_locales()` y `puede_ver_local(local)`:
---        · owner y contador ven todos [PROVISORIA, decisión 2];
+--        · owner y contador ven todos [decisión 2];
 --        · el resto (manager, cajero, …) ve los locales de su fila en profile_locations; SIN filas, ve santa-teresa
 --          (así nadie pierde acceso hoy, sin cargar nada).
 --   4. RLS por local con políticas RESTRICTIVAS nuevas (se suman con AND a las de hoy, que NO se tocan) en las 4
@@ -28,8 +27,11 @@
 --   · Nada de cajas físicas, banco, proveedores, puntos de propina ni pozo de propinas por local (decisiones 4–7).
 --   · Ningún archivo sagrado (cashUtils, tipCalculations, cierrePozo, pozo, computeTotals/posFiscal, el cierre).
 --   · Ninguna pantalla: la app no manda location_id y toma el default.
---   · Las funciones SECURITY DEFINER (el cierre, el borrado en cascada) corren como dueño de las tablas y no pasan
---     por estas políticas: no cambian.
+--   · OJO con el cierre: `cerrar_dia_completo` y `deshacer_cierre_dia` son SECURITY INVOKER (verificado en prod el
+--     08-nov): corren con los permisos del usuario y SÍ pasan por estas políticas. Con un solo local y nadie asignado
+--     a otro, ven exactamente lo mismo que hoy. Con DOS locales, un owner o contador (que ven todos) cerraría
+--     mezclando los dos: por eso el gate de no abrir un segundo local con la fase 0 (docs/MULTILOCAL-fase0.md).
+--     `delete_movement_cascade` sí es SECURITY DEFINER: corre como dueño y no pasa por estas políticas.
 --
 -- Pruebas: scripts/sql/091_pruebas.sql (staging, transacción descartada: Santa Teresa idéntica). Rollback:
 -- scripts/sql/091_rollback.sql.
@@ -95,7 +97,7 @@ set search_path = public, pg_temp
 as $$
   select case
     when get_my_role() is null then array[]::text[]                                        -- sin sesión o inactiva
-    when get_my_role() in ('owner', 'contador')                                            -- [PROVISORIA, decisión 2]
+    when get_my_role() in ('owner', 'contador')                                            -- [decisión 2]
       then coalesce((select array_agg(l.id order by l.id) from public.locations l), array[]::text[])
     when exists (select 1 from public.profile_locations pl where pl.profile_id = auth.uid())
       then (select array_agg(pl.location_id order by pl.location_id) from public.profile_locations pl

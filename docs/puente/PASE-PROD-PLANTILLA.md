@@ -183,7 +183,7 @@ if ((Md5Bytes "$SCR\armar_mapa_secretos.mjs") -cne '73c4d9d207c22c13d5c42498bb63
 **Bloque 0.6** (corrección 09-nov: el CLI fijo):
 ```powershell
 $v = supabase --version; Ok 'cli'
-if (("$v").Trim() -cne '2.122.0') { throw "Supabase CLI $v: se esperaba 2.122.0 (la ensayada)" }
+if (("$v").Trim() -cne '2.122.0') { throw "Supabase CLI ${v}: se esperaba 2.122.0 (la ensayada)" }
 "0.6 ok · Supabase CLI $v"
 ```
 

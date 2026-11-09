@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prueba en STAGING el SQL que el paquete del pase tiene para pegar en PROD, SACADO DEL MISMO DOCUMENTO (no copias):
   1. la consulta C (§6.2) en solo lectura, con la base como está (antes de la 082: sin max_factura_vista);
-  2. la consulta C con la 082 v2 de la rama aplicada y R de cada categoría (bajo, igual, no ordenable, fuera de
+  2. la consulta C con la 082 de la rama de la rama aplicada y R de cada categoría (bajo, igual, no ordenable, fuera de
      ventana), en una transacción que termina en raise (no queda nada);
   3. los Anexos A.1–A.3 con su commit cambiado por rollback: en staging las tres precondiciones tienen que frenar.
 Uso (desde la raíz): python3 -I scripts/puente/probar_sql_paquete.py   (token: el proxy)"""
@@ -49,22 +49,33 @@ do $x$ declare o jsonb; a text := to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SSOF'); v
 end $x$;"""
 m = re.search(r'RES:(\{.*?\})\\n', json.dumps(sql(prueba)))
 res = json.loads(m.group(1).replace('\\"', '"')) if m else {}
-caso('consulta C con la 082 v2 y R de cada categoría (bajo 2, igual 1, no ordenables 1, dentro 2, fuera 1, en orden numérico)',
+caso('consulta C con la 082 de la rama y R de cada categoría (bajo 2, igual 1, no ordenables 1, dentro 2, fuera 1, en orden numérico)',
      res.get('last_factura') == '102' and res.get('max_factura_vista') == '105' and res.get('r_bajo_corte') == 2
      and res.get('r_igual_corte') == 1 and res.get('r_no_ordenables') == 1 and res.get('bajo_dentro_ventana') == 2
      and res.get('bajo_fuera_ventana') == 1 and res.get('afectadas') == '99,100,102,A-1', res)
 
+# 118 · el gate de 1.11 (formato de numero_factura), tal cual el paquete, en solo lectura: corre y en staging da 0
+g = DOC[DOC.index('**1.11 Formato de `numero_factura`'):]
+g = re.findall(r"```sql\n(.*?)```", g, re.S)[0]
+partes = [x.strip() for x in g.split(';') if x.strip() and not x.strip().startswith('--')]
+r1 = sql(partes[0], read_only=True); r2 = sql(partes[1], read_only=True)
+caso('1.11 (118): el gate del formato corre en solo lectura y en staging no hay folios ni cursor no numéricos',
+     isinstance(r1, list) and r1[0]['no_numericas_36h'] == 0 and r1[0]['r_no_numericas_36h'] == 0 and r2[0]['cursor_no_numerico'] == 0,
+     (r1, r2))
+
 anexo = DOC[DOC.index('## Anexo A'):]
-# Staging puede estar con la 082 original o con la v2 aplicada (ensayo del 08-nov: queda v2). Se mira cuál hay.
-v2 = sql("select md5(statements[1]) m from supabase_migrations.schema_migrations where version = '082'", read_only=True)[0]['m'] == '292dd3aa8f7dfed676d10103870f5d21'
-esperado = ['el md5 ya está bien', None if v2 else 'se esperaba UNA fila 082 con el md5 de la v2', 'la 082 sigue puesta']
+# Staging puede estar con la 082 original o con la de la rama aplicada (ensayo del 08-nov: v2; del 09-nov 01:43: v3). Se
+# mira si la fila 082 de staging es la del archivo de la rama.
+import hashlib
+v2 = sql("select md5(statements[1]) m from supabase_migrations.schema_migrations where version = '082'", read_only=True)[0]['m'] == hashlib.md5(F082.encode()).hexdigest()
+esperado = ['el md5 ya está bien', None if v2 else 'se esperaba UNA fila 082 con el md5 de la v3', 'la 082 sigue puesta']
 for i, (b, e) in enumerate(zip(re.findall(r"```sql\n(.*?)```", anexo, re.S)[:3], esperado), 1):
     r = sql(b.replace('commit;', 'rollback;'))
-    if e is None:   # con la v2 aplicada, A.2 pasa su precondición y hace su trabajo (todo termina en ROLLBACK)
-        caso(f'Anexo A.{i}: con la v2 aplicada en staging, pasa la precondición y corre sin error (ROLLBACK)', r == [], r)
+    if e is None:   # con la 082 de la rama aplicada, A.2 pasa su precondición y hace su trabajo (todo termina en ROLLBACK)
+        caso(f'Anexo A.{i}: con la 082 de la rama aplicada en staging, pasa la precondición y corre sin error (ROLLBACK)', r == [], r)
     else:
         caso(f'Anexo A.{i}: en staging la precondición frena («{e}»)', e in json.dumps(r, ensure_ascii=False), r)
-# A.2 por el lado positivo: con la 082 v2 puesta y su fila con el md5 de la v2, saca la función y la fila (conteo 1)
+# A.2 por el lado positivo: con la 082 de la rama puesta y su fila con el md5 de la v3, saca la función y la fila (conteo 1)
 a2 = re.findall(r"```sql\n(.*?)```", anexo, re.S)[1]
 a2 = re.sub(r'(?im)^\s*(begin|commit|rollback)\s*;\s*$', '', a2)
 pos = f"""begin;
@@ -75,7 +86,7 @@ do $x$ begin raise exception 'RES:%', jsonb_build_object(
   'fn', to_regprocedure('public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb)') is not null,
   'fila', (select count(*) from supabase_migrations.schema_migrations where version = '082')); end $x$;"""
 r = json.dumps(sql(pos))
-caso('Anexo A.2 por el lado positivo (082 v2 + su fila): saca la función y la fila, y nada más', '\\"fn\\": false' in r and '\\"fila\\": 0' in r, r[:300])
+caso('Anexo A.2 por el lado positivo (082 de la rama + su fila): saca la función y la fila, y nada más', '\\"fn\\": false' in r and '\\"fila\\": 0' in r, r[:300])
 r = sql("select (select count(*) from supabase_migrations.schema_migrations where version in ('081','082')) l, "
         "to_regprocedure('public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb)') is not null fn, "
         "(select count(*) from information_schema.columns where table_name = 'pos_ndf_cursor' and column_name = 'max_factura_vista') col", read_only=True)

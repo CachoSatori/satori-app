@@ -50,3 +50,28 @@ en seco el 08-nov, dos veces, con y sin `SACAR_COLUMNA=1`):
 2. **después**, en UNA transacción con precondición (la fila 082 tiene que estar en la v2) y conteo de filas, la 082
    **original** (de `e4678b3`, md5 `5db915c8…`) y su fila del ledger; la columna `max_factura_vista` solo con
    `SACAR_COLUMNA=1` (puede quedar: el Edge viejo no la mira).
+
+## 5. 082 v3 en staging · 09-nov-2026, 01:43 (-06:00)
+Decisión del dueño: arreglar el 113 con una 082 v3. Mismo procedimiento que la v2. Fuera de la ventana de caja.
+1. **Estado anterior (guardado antes de tocar, en el scratchpad de la sesión):**
+   - fila 082 del ledger: `292dd3aa8f7dfed676d10103870f5d21` (v2);
+   - función: `md5(prosrc)` `2f963e480b975d700e5d9cfa7a7840cc`;
+   - Edge: **versión 15** (`ezbr_sha256` `43de82ec…`), con su bundle;
+   - cursor santa-teresa: `112536` = `max_factura_vista`, sin error.
+2. **082 v3 + su fila del ledger en UNA transacción** (01:43:36):
+   - precondición: la fila en la v2;
+   - el archivo de `5da233a516d1a6c4c2c95eb165be448be5416697`, la fila con el archivo entero y el control del md5;
+   - resultado: ledger **`edb7ffc58976804e55968f75df530a05`**, `md5(prosrc)` `dab8ffdf8d2f82dacf874af22eb6f55d`, anon sin
+     `execute`.
+3. **Edge desde `5da233a…`** (worktree limpio; CLI 2.122.0, `--no-verify-jwt --use-api`):
+   - **versión 16**, `verify_jwt = false`;
+   - `<HORA_DEPLOY>` = **2026-11-09 01:43:56-06:00**.
+4. **Resultados:**
+   - el portón da **401**;
+   - el agente de staging entró en el primer ciclo (01:44:49), sin error, y releyó 11 anuladas;
+   - no había `R` en las últimas 36 h;
+   - consulta C en 0 y 5.4 sin duplicados.
+5. **R → C real (pendiente del 08-nov): visto con la v2.** Las 112509…112520 que estaban en `R` entraron como `C` a las
+   22:43 del 08-nov: 23 `C` y 5 `X` entre 112509 y 112536. El corte pasó de `112508` a `112536`.
+6. **Vuelta atrás:** `staging_volver_atras.sh`. Ahora acepta la fila en la v3 o en la v2, y probado en seco desde la v3
+   (ROLLBACK, sin desplegar). **La v3 queda aplicada en staging.**

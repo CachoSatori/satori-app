@@ -40,8 +40,8 @@ $F081 = $utf8.GetBytes("-- 081 FICTICIA (ensayo en seco)`nalter table public.eje
 $F082 = $utf8.GetBytes("-- 082 FICTICIA (ensayo en seco)`nbegin;`ncreate or replace function public.ejemplo() returns int language sql as `$f`$ select 1 `$f`$;`ncommit;`n")
 $F081RB = $utf8.GetBytes("-- rollback 081 FICTICIO`n")
 $FINDEX = $utf8.GetBytes("// index.ts FICTICIO del Edge v1`n")
-$MD5_081 = Md5DeBytes $F081; $MD5_082 = Md5DeBytes $F082
-$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; tarea = 'Running'; secretos = @{} }
+$MD5_081 = Md5DeBytes $F081; $MD5_082 = Md5DeBytes $F082; $MD5_081RB = Md5DeBytes $F081RB
+$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; tarea = 'Running'; secretos = @{}; tarea_dir = 'C:\satori\satori-app-prod' }
 
 # ── Dobles de los comandos (las funciones le ganan a los .exe en PowerShell) ─────────────────────────────────────
 function git {
@@ -53,8 +53,8 @@ function git {
   }
   $dir = ''; if ($a[0] -eq '-C') { $dir = [string]$a[1]; $a = @($a[2..($a.Count - 1)]) }
   switch ($a[0]) {
-    'rev-parse' { if ($dir -like '*ingest-ndf-v1*' -or $dir -like '*satori-app-prod*') { '4d3513a6df8e838dd5c0442b05a580e06ce9db9d' } else { '705b830f1759e39112b761bf7d77f15d6cc70368' } }
-    'diff' { if ($a -contains '--name-only') { 'supabase/migrations/082_pos_ndf_ingesta_transaccional.sql' } }
+    'rev-parse' { if ($dir -like '*ingest-ndf-v1*' -or $dir -like '*satori-app-prod*') { '4d3513a6df8e838dd5c0442b05a580e06ce9db9d' } else { '5da233a516d1a6c4c2c95eb165be448be5416697' } }
+    'diff' { if ($a -contains '--name-only') { 'src/shared/ndf/ingestNdf.test.ts'; 'src/shared/ndf/ingestNdf.ts'; 'supabase/functions/ingest-ndf/README.md'; 'supabase/functions/ingest-ndf/index.ts'; 'supabase/migrations/082_pos_ndf_ingesta_transaccional.sql' } }
     'worktree' { New-Item -ItemType Directory -Force ([string]$a[2]) | Out-Null }
     default { }
   }
@@ -88,16 +88,21 @@ function supabase {
 function node {
   $a = @($args); $global:LASTEXITCODE = 0
   if ($global:KIT.node_falla) { $global:LASTEXITCODE = 1; return }
+  if ($a -contains '--solo-medir') { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":64,"cumple_32":true}'; return }
   $salida = [string]$a[[array]::IndexOf($a, '--salida') + 1]
   $r = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($r); $st = -join ($r | ForEach-Object { $_.ToString('x2') })
   [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($r); $no = -join ($r | ForEach-Object { $_.ToString('x2') })
   $json = '{"santa-teresa":"' + $st + '","nosara":"' + $no + '"}'
   [IO.File]::WriteAllText($salida, "POS_INGEST_SECRETS='$json'`n", $utf8)
-  '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":64,"santa_teresa_cambiado":false,"sha256_mapa":"' + (Sha256Texto $json) + '"}'
+  $h = Sha256Texto $json; $camb = if ($a -contains '--nuevo-santa-teresa') { 'true' } else { 'false' }
+  $completa = if ($a -contains '--huella-completa') { ',"sha256_mapa":"' + $h + '"' } else { '' }
+  '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":64,"santa_teresa_cambiado":' + $camb + ',"huella_12":"' + $h.Substring(0, 12) + '"' + $completa + '}'
 }
 function npm { $global:LASTEXITCODE = 0; 'ok (doble de npm)' }
 function curl.exe { $global:LASTEXITCODE = 0; 'HTTP/2 401 (doble)' }
-function Get-ScheduledTask { param([string]$TaskName) [pscustomobject]@{ TaskName = $TaskName; State = $global:KIT.tarea } }
+function Get-ScheduledTask { param([string]$TaskName)   # SYSTEM: en el runner su entorno (HKU\S-1-5-18) existe y se lee de verdad
+  [pscustomobject]@{ TaskName = $TaskName; State = $global:KIT.tarea; Principal = [pscustomobject]@{ UserId = 'SYSTEM'; LogonType = 'ServiceAccount' }
+    Actions = @([pscustomobject]@{ Execute = 'C:\Program Files\nodejs\node.exe'; Arguments = "$($global:KIT.tarea_dir)\pos-bridge\agente.ts"; WorkingDirectory = $global:KIT.tarea_dir }) } }
 function Stop-ScheduledTask { param([string]$TaskName) $global:KIT.tarea = 'Ready' }
 function Start-ScheduledTask { param([string]$TaskName) $global:KIT.tarea = 'Running' }
 function Get-CimInstance { @() }
@@ -107,12 +112,13 @@ $doc = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $Paquete).Path, $utf8)
 $bloques = @([regex]::Matches($doc, '(?s)```powershell\r?\n(.*?)```') | ForEach-Object { $_.Groups[1].Value })
 if ($bloques.Count -lt 10) { throw "el paquete tiene solo $($bloques.Count) bloques de PowerShell: ¿es el archivo correcto?" }
 function Preparar([string]$t, [string]$raiz) {
-  $t.Replace('C:\satori', $raiz).Replace('d4acf8dafc964ed23072aa49098f5b42', $MD5_081).Replace('292dd3aa8f7dfed676d10103870f5d21', $MD5_082)
+  $t.Replace('C:\satori', $raiz).Replace('d4acf8dafc964ed23072aa49098f5b42', $MD5_081).Replace('edb7ffc58976804e55968f75df530a05', $MD5_082).Replace('5faa677d99f68c9c16dbd3a8a1c804d0', $MD5_081RB)
 }
 function Nombre([string]$t) { ($t -split "`n" | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | Select-Object -First 1).Trim() }
 function Preparar-Agente([string]$raiz) {   # la carpeta del agente FICTICIA (solo lo que los bloques miran)
   New-Item -ItemType Directory -Force (Join-Path $raiz 'satori-app-prod\pos-bridge') | Out-Null
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app-prod\pos-bridge\register.mjs'), '// ficticio', $utf8)
+  [IO.File]::WriteAllText((Join-Path $raiz 'satori-app-prod\pos-bridge\.env.antes-pase'), "INGEST_SECRET=ficticio`n", $utf8)   # 9.0 la borra
 }
 Preparar-Agente $RAIZ
 
@@ -126,6 +132,7 @@ try {
   }
   $quedan = @(Get-ChildItem -LiteralPath $env:LOCALAPPDATA -Filter 'satori-pase*.env' -ErrorAction SilentlyContinue)
   Resultado 'no quedó ningún archivo del mapa de secretos en LOCALAPPDATA' ($quedan.Count -eq 0) "$($quedan.Count) archivos"
+  Resultado '9.0 borró la copia .antes-pase del agente (ficticia)' (-not (Test-Path -LiteralPath (Join-Path $RAIZ 'satori-app-prod\pos-bridge\.env.antes-pase')))
   Resultado 'los dos bloques del ledger se generaron (bloque_081.sql y bloque_082.sql)' ((Test-Path (Join-Path $RAIZ 'pase-sql\bloque_081.sql')) -and (Test-Path (Join-Path $RAIZ 'pase-sql\bloque_082.sql')))
   $b2 = [IO.File]::ReadAllText((Join-Path $RAIZ 'pase-sql\bloque_082.sql'), $utf8)
   Resultado 'bloque_082: un solo begin/commit, con los dos timeouts, y el archivo original en el ledger' (([regex]::Matches($b2, '(?m)^begin;$').Count -eq 2) -and $b2.StartsWith("begin;`nset local lock_timeout = '5s';") -and $b2.TrimEnd().EndsWith('commit;'))
@@ -150,11 +157,14 @@ try {
   $n05 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'Get-ChildItem -LiteralPath \$SQL -File' } | Select-Object -First 1))
   $n2  = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'function Armar-Bloque' } | Select-Object -First 1))
   $n32 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'secrets set --env-file' } | Select-Object -First 1))
+  $n19 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'Principal.UserId' } | Select-Object -First 1))
   Frena 'un comando nativo que falla (git fetch) corta con su código' $n04 'falló «fetch»' { param($r) $global:KIT.falla_git = 'fetch' }
   Frena 'la 082 con otros bytes: md5 distinto antes de seguir' $n05 '082: md5 distinto' { param($r) $global:KIT.f082 = $utf8.GetBytes("-- otra cosa`n") }
   Frena 'generar con un .sql con BOM no genera nada' $n2 'md5 distinto' { param($r) [IO.File]::WriteAllBytes((Join-Path $r 'pase-sql\082.sql'), [byte[]](@(0xEF, 0xBB, 0xBF) + $F082)) }
   Frena 'la huella del panel no coincide con la del mapa' $n32 'huella del panel' { param($r) $global:KIT.huella_mal = $true }
   Frena 'el armado del mapa falla (node con error)' $n32 'armar mapa' { param($r) $global:KIT.node_falla = $true }
+  Frena '1.9: la tarea no corre el agente de satori-app-prod' $n19 'la tarea no corre' { param($r) $global:KIT.tarea_dir = 'C:\otra\carpeta' }
+  $global:KIT.tarea_dir = 'C:\satori\satori-app-prod'
   # el generador no deja NADA si algo falla (082 alterada en la carpeta del ensayo principal)
   $SQLD = Join-Path $RAIZ 'pase-sql'
   Get-ChildItem -LiteralPath $SQLD -Filter 'bloque_*' | Remove-Item -Force

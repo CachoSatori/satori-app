@@ -55,10 +55,15 @@ caso('consulta C con la 082 v2 y R de cada categoría (bajo 2, igual 1, no orden
      and res.get('bajo_fuera_ventana') == 1 and res.get('afectadas') == '99,100,102,A-1', res)
 
 anexo = DOC[DOC.index('## Anexo A'):]
-esperado = ['el md5 ya está bien', 'se esperaba UNA fila 082 con el md5 de la v2', 'la 082 sigue puesta']
+# Staging puede estar con la 082 original o con la v2 aplicada (ensayo del 08-nov: queda v2). Se mira cuál hay.
+v2 = sql("select md5(statements[1]) m from supabase_migrations.schema_migrations where version = '082'", read_only=True)[0]['m'] == '292dd3aa8f7dfed676d10103870f5d21'
+esperado = ['el md5 ya está bien', None if v2 else 'se esperaba UNA fila 082 con el md5 de la v2', 'la 082 sigue puesta']
 for i, (b, e) in enumerate(zip(re.findall(r"```sql\n(.*?)```", anexo, re.S)[:3], esperado), 1):
     r = sql(b.replace('commit;', 'rollback;'))
-    caso(f'Anexo A.{i}: en staging la precondición frena («{e}»)', e in json.dumps(r, ensure_ascii=False), r)
+    if e is None:   # con la v2 aplicada, A.2 pasa su precondición y hace su trabajo (todo termina en ROLLBACK)
+        caso(f'Anexo A.{i}: con la v2 aplicada en staging, pasa la precondición y corre sin error (ROLLBACK)', r == [], r)
+    else:
+        caso(f'Anexo A.{i}: en staging la precondición frena («{e}»)', e in json.dumps(r, ensure_ascii=False), r)
 # A.2 por el lado positivo: con la 082 v2 puesta y su fila con el md5 de la v2, saca la función y la fila (conteo 1)
 a2 = re.findall(r"```sql\n(.*?)```", anexo, re.S)[1]
 a2 = re.sub(r'(?im)^\s*(begin|commit|rollback)\s*;\s*$', '', a2)
@@ -74,5 +79,6 @@ caso('Anexo A.2 por el lado positivo (082 v2 + su fila): saca la función y la f
 r = sql("select (select count(*) from supabase_migrations.schema_migrations where version in ('081','082')) l, "
         "to_regprocedure('public.pos_ndf_ingestar(text, jsonb, jsonb, jsonb, jsonb)') is not null fn, "
         "(select count(*) from information_schema.columns where table_name = 'pos_ndf_cursor' and column_name = 'max_factura_vista') col", read_only=True)
-caso('staging quedó igual (081/082 en el ledger, la función y sin la columna nueva)', r == [{'l': 2, 'fn': True, 'col': 0}], r)
+caso('staging quedó igual que antes de la prueba (081/082 en el ledger, la función, la columna según la 082 que haya)',
+     r == [{'l': 2, 'fn': True, 'col': 1 if v2 else 0}], r)
 print(f'pruebas: {ok} ok, {mal} mal'); sys.exit(1 if mal else 0)

@@ -1788,6 +1788,9 @@ begin
     (pg_temp.loc(), v_b, 'tarjeta', 18, 6, 18000, now() - interval '3 days', 'migracion'),
     (pg_temp.loc(), v_c, 'tarjeta', 2, 6, 18000, now() - interval '3 days', 'migracion'),
     (pg_temp.loc(), v_baja, 'tarjeta', 18, 6, 18000, now() - interval '3 days', 'migracion');
+  -- (09-nov, ítem 43) la prueba cuenta SUS intentos fallidos: un intento real reciente en staging (un recorrido, una
+  -- prueba manual) adelantaba el tope de 5 y la hacía fallar. Se aísla dentro de la transacción, que se descarta.
+  delete from club_canje_intentos where en > now() - interval '15 minutes';
 
   perform set_config('request.headers', '{}', true);
   begin
@@ -1913,6 +1916,9 @@ begin
   perform pg_temp.yo();
   perform pg_temp.r('43', 'link wa.me para quien hizo el canje: teléfono del referente y texto con créditos y saldo',
     j->>'tel' = '50660000009' and j->>'texto' like '%se canjearon 1 crédito%' and j->>'texto' like '%Te quedan 4%', j::text);
+  perform pg_temp.r('43', 'ver el teléfono de ESTE canje deja UNA fila en club_auditoria (cajero, miembro y local), sin el número',
+    (select count(*) from club_auditoria a where a.accion = 'ver_telefono_canje' and a.objeto_id = v_mov and a.actor = '<CAJERO_UUID>'::uuid
+        and a.antes is null and a.despues->>'miembro' = v_a::text and a.despues ? 'local' and a.despues::text !~ '60000009') = 1, '');
   begin
     perform pg_temp.como('authenticated', '<OWNER_UUID>'); perform pg_temp.yo();
     perform pg_temp.como('authenticated', '<CONTADOR_UUID>');
@@ -3619,7 +3625,8 @@ begin
   get diagnostics v_n = row_count;
   perform pg_temp.yo();
   perform pg_temp.r('70', 'ENCENDER = un dato, lo cambia el owner (auditado)', v_n = 1 and public.club_local_activo('prueba-ml')
-    and exists (select 1 from club_config_historial h where h.location_id = 'prueba-ml'), v_n::text);
+    and exists (select 1 from club_config_historial h where h.location_id = 'prueba-ml' and h.campo = 'club_activo'
+                  and h.valor_anterior = 'false' and h.valor_nuevo = 'true' and h.cambiado_por = '<OWNER_UUID>'::uuid), v_n::text);
   -- ENCENDIDO
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   j := public.club_socio_alta_caja('Lia Prueba', '60007001', null, true, 'prueba-ml');
@@ -3665,7 +3672,8 @@ begin
   begin perform public.club_marcador_guardar(null, 'HTL1', 'Tarjeta hotel', null, true); e := 'ok'; exception when others then e := sqlerrm; end;
   select count(*) into v_n from public.club_marcadores_listar();
   perform pg_temp.yo();
-  perform pg_temp.r('71', 'el manager ve la lista pero no carga marcadores (negativa)', e = 'Sin permiso' and v_n >= 2, e);
+  perform pg_temp.r('71', 'el manager ve la lista pero no carga marcadores (negativa; no queda ninguna fila HTL1)', e = 'Sin permiso' and v_n >= 2
+    and not exists (select 1 from club_marcadores_descuento where codigo_producto = 'HTL1'), e);
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   begin perform public.club_marcadores_listar(); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
@@ -3694,7 +3702,8 @@ begin
   perform pg_temp.yo();
   j := pg_temp.exc('DESCUENTO_SIN_RESPALDO');
   perform pg_temp.r('71', '% esperado 10: el 20 % sale y el 10 % no; un % fuera de rango se rechaza',
-    pg_temp.hay(j, 'desc:880711') and not pg_temp.hay(j, 'desc:880712') and e like 'El % esperado%', e);
+    pg_temp.hay(j, 'desc:880711') and not pg_temp.hay(j, 'desc:880712') and e like 'El % esperado%'
+      and (select pct_esperado from club_marcadores_descuento where id = v_mk) = 10, e);
   -- desactivado: vuelve a salir (no se borra)
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_marcador_guardar(v_mk, null, null, null, false);
@@ -3726,7 +3735,7 @@ begin
       and (select (n.lc_articulo_codigo, n.valor_credito_crc, n.socios_por_factura) = (b.lc_articulo_codigo, b.valor_credito_crc, b.socios_por_factura)
              and n.lc_excepciones_desde is null
              from club_config n, club_config b where n.location_id = 'prueba-gen' and b.location_id = v_base)
-      and (select count(*) from club_marcadores_descuento where location_id = 'prueba-gen') >= 2
+      and (select count(*) from club_marcadores_descuento where location_id = 'prueba-gen') = 2
       and exists (select 1 from club_promociones where location_id = 'prueba-gen' and lower(nombre) = 'local club' and estado = 'borrador')
       and exists (select 1 from club_auditoria where accion = 'local_alta' and despues->>'location_id' = 'prueba-gen'), '');
   -- el único INSERT documentado en el RUNBOOK da el mismo resultado
@@ -3773,8 +3782,12 @@ end $$;
 
 -- ═══ 73. LC-A6: visitas de socio por usuario (quién las registró; sin factura; un mismo socio muchas veces) ═══
 do $$
-declare v_s uuid; e text; r record; v_nom text := (select full_name from profiles where id = '<CAJERO_UUID>');
+declare v_s uuid; e text; r record; r0 record; v_nom text := (select full_name from profiles where id = '<CAJERO_UUID>');
 begin
+  -- (09-nov, ítem 43) el reporte suma TODO lo del cajero en el rango: se mide la diferencia exacta, no un «al menos»
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  select * into r0 from public.club_reporte_visitas(current_date - 5, current_date) x where x.usuario = v_nom;
+  perform pg_temp.yo();
   insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'socio', 'Ivo Visitas Ficticio', 'app') returning id into v_s;
   -- tres visitas registradas por el cajero en días anteriores, con pedidos que no existen en el PoS (no cruzan)
   insert into club_visitas_socio (location_id, miembro_id, fecha, registrada_en, registrado_por, client_op_id, pos_ref, visita_clave,
@@ -3787,8 +3800,10 @@ begin
   select * into r from public.club_reporte_visitas(current_date - 5, current_date) x where x.usuario = v_nom;
   perform pg_temp.yo();
   perform pg_temp.r('73', 'reporte por usuario: visitas, socios, con beneficio, como invitado, sin factura y máx. de un mismo socio',
-    r.visitas >= 3 and r.socios >= 1 and r.con_beneficio >= 2 and r.como_invitado >= 1 and r.sin_factura >= 3 and r.max_mismo_socio >= 3,
-    format('%s', to_jsonb(r)));
+    r.visitas - coalesce(r0.visitas, 0) = 3 and r.socios - coalesce(r0.socios, 0) = 1 and r.con_beneficio - coalesce(r0.con_beneficio, 0) = 2
+      and r.como_invitado - coalesce(r0.como_invitado, 0) = 1 and r.sin_factura - coalesce(r0.sin_factura, 0) = 3
+      and r.max_mismo_socio = greatest(coalesce(r0.max_mismo_socio, 0), 3),
+    format('%s → %s', coalesce(to_jsonb(r0)::text, 'sin fila'), to_jsonb(r)));
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   begin perform public.club_reporte_visitas(current_date - 5, current_date); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
@@ -3823,7 +3838,8 @@ begin
   begin perform public.club_excepcion_resolver('CORTESIA_NO_CONFIGURADA', 'cort-nc:880741', 'revisado'); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
   perform pg_temp.r('74', 'login fijo de caja: el manager no la resuelve; el mensaje dice login y turno (negativa)',
-    e = 'Esta factura se cobró con un login fijo de caja (T111, turno mañana): la resuelve el owner', e);
+    e = 'Esta factura se cobró con un login fijo de caja (T111, turno mañana): la resuelve el owner'
+      and not exists (select 1 from club_excepciones_resueltas where ref = 'cort-nc:880741'), e);
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');
   begin perform public.club_excepcion_resolver('CORTESIA_NO_CONFIGURADA', 'cort-nc:880743', 'revisado'); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
@@ -3831,7 +3847,10 @@ begin
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   begin perform public.club_excepcion_resolver('CORTESIA_NO_CONFIGURADA', 'cort-nc:880741', 'revisado por fecha y turno'); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
-  perform pg_temp.r('74', 'el owner resuelve la del login fijo', e = 'ok', e);
+  perform pg_temp.r('74', 'el owner resuelve la del login fijo: una fila con su nota, el owner y el actor del PoS (T111)',
+    e = 'ok' and (select count(*) from club_excepciones_resueltas x where x.ref = 'cort-nc:880741' and x.tipo = 'CORTESIA_NO_CONFIGURADA'
+                    and x.nota = 'revisado por fecha y turno' and x.resuelto_por = '<OWNER_UUID>'::uuid
+                    and x.actor_pos->'pos_logins' = '["T111"]'::jsonb and x.actor_pos ? 'mapeo') = 1, e);
 end $$;
 
 -- ═══ 75. Descuentos tipificados por porcentaje (sin artículo): clasificados vs «sin clasificar» + reporte ═══
@@ -3969,7 +3988,8 @@ begin
   j := public.club_reporte_mes(date_trunc('month', now())::date, 'prueba-cc', true);
   perform pg_temp.yo();
   perform pg_temp.r('76', 'reporte del mes por local donde ocurrió: B cuenta las visitas de socios de otro local',
-    (j->'socios'->>'de_otro_local')::int >= 2 and (j->'socios'->>'visitas')::int >= 2, (j->'socios')::text);
+    (j->'socios'->>'de_otro_local')::int = 2 and (j->'socios'->>'visitas')::int = 2
+      and (select count(*) from club_visitas_socio where location_id = 'prueba-cc') = 2, (j->'socios')::text);
   -- el pase y el portal: texto genérico
   perform pg_temp.r('76', 'pase/portal: el beneficio del socio es genérico («Vale en todos los Satori»)',
     public.club_pase_datos(v_s)->'socio'->>'beneficio' = 'Vale en todos los Satori', '');
@@ -4045,10 +4065,12 @@ end $$;
 
 -- ═══ 78. LC-PRIV · Grok 41: lecturas de datos personales con rastro (código, contacto, exportes), sin el dato ═══
 do $$
-declare v_m uuid; v_cod text; v_n int; v_tel text; a record; v_rep jsonb;
+declare v_m uuid; v_cod text; v_n int; v_n2 int; v_b int; v_tel text; a record; v_rep jsonb;
 begin
   insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref PRIV78', 'app') returning id, codigo into v_m, v_cod;
   insert into club_miembros_contacto (location_id, miembro_id, telefono, email) values (pg_temp.loc(), v_m, '+50660007801', 'priv78@ejemplo.com');
+  select count(*) into v_b from club_auditoria where actor = '<OWNER_UUID>'::uuid and accion = 'ver_reporte_mes'
+     and despues->>'mes' = to_char(current_date, 'YYYY-MM') and despues ? 'local' and despues ? 'vivo' and antes is null;
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_miembro_codigo(v_m);
   select c.telefono into v_tel from public.club_miembro_contacto_ver(v_m) c;
@@ -4067,9 +4089,11 @@ begin
   perform pg_temp.r('78', 'exportes CSV y HTML → club_auditoria (formato, mes y local)', v_n = 2, format('%s filas', v_n));
   perform pg_temp.r('78', 'el exporte lo entrega la base: club_reporte_exportar devuelve el reporte del mes',
     v_rep ? 'kpis' and v_rep->>'mes' is not null, left(coalesce(v_rep::text, 'null'), 120));
+  select count(*) - v_b into v_n2 from club_auditoria where actor = '<OWNER_UUID>'::uuid and accion = 'ver_reporte_mes'
+     and despues->>'mes' = to_char(current_date, 'YYYY-MM') and despues ? 'local' and despues ? 'vivo' and antes is null;
+  perform pg_temp.r('78', 'ver el reporte del mes deja rastro como los exportes (cada exporte lo lee: exactamente 2 filas nuevas)', v_n2 = 2, format('%s filas nuevas', v_n2));
   select count(*) into v_n from club_auditoria where actor = '<OWNER_UUID>'::uuid and accion = 'ver_reporte_mes'
      and despues->>'mes' = to_char(current_date, 'YYYY-MM') and despues ? 'local' and despues ? 'vivo' and antes is null;
-  perform pg_temp.r('78', 'ver el reporte del mes deja rastro como los exportes (cada exporte también lo lee)', v_n >= 2, format('%s filas', v_n));
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   perform public.club_reporte_mes(current_date, pg_temp.loc());
   perform pg_temp.yo();
@@ -4203,12 +4227,14 @@ begin
   insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref PRIV81', 'app') returning id into v_m;
   v_ver0 := (public.club_pase_datos(v_m)->>'version')::bigint;
   select coalesce(max(id), 0) into v_e0 from club_pase_eventos;
-  update club_config set buscar_tope_minuto = buscar_tope_minuto where location_id = pg_temp.loc();   -- otra columna: sin evento
+  update club_config set buscar_tope_minuto = case when buscar_tope_minuto < 300 then buscar_tope_minuto + 1 else 299 end
+   where location_id = pg_temp.loc();   -- otra columna, con cambio real: sin evento
   select coalesce(max(id), 0) into v_e1 from club_pase_eventos;
   update club_config set valor_credito_crc = valor_credito_crc + 1000 where location_id = pg_temp.loc();
   select count(*) into v_e2 from club_pase_eventos where id > v_e1 and miembro_id is null and motivo = 'config';
   v_ver1 := (public.club_pase_datos(v_m)->>'version')::bigint;
-  perform pg_temp.r('81', 'otra columna de club_config no genera evento', v_e1 = v_e0, format('%s → %s', v_e0, v_e1));
+  perform pg_temp.r('81', 'otra columna de club_config (cambiada de verdad) no genera evento', v_e1 = v_e0
+    and exists (select 1 from club_config_historial where location_id = pg_temp.loc() and campo = 'buscar_tope_minuto'), format('%s → %s', v_e0, v_e1));
   perform pg_temp.r('81', 'valor del crédito → un evento global «config» y la versión de cada pase sube',
     v_e2 = 1 and v_ver1 > v_ver0, format('eventos %s · versión %s → %s', v_e2, v_ver0, v_ver1));
   update club_config set personas_por_credito = personas_por_credito where location_id = pg_temp.loc();   -- sin cambio real: sin evento
@@ -4303,6 +4329,8 @@ begin
   perform pg_temp.yo();
   perform pg_temp.r('83', 'tope global 2: la 1.ª y la 2.ª visita valen; la 3.ª → «ya_uso_hoy» con «Hasta 2 … en cualquier Satori»',
     coalesce(j->>'estado', '') <> 'ya_uso_hoy' and coalesce(j2->>'estado', '') <> 'ya_uso_hoy' and j3->>'estado' = 'ya_uso_hoy'
+      and j->>'visita_id' is not null and j2->>'visita_id' is not null and j->>'visita_id' <> j2->>'visita_id'
+      and (select count(*) from club_visitas_socio where miembro_id = v_s and estado_beneficio in ('aplica','pendiente_configuracion')) = 2
       and j3->'avisos'->>0 like 'Hasta 2 visitas con beneficio por día, en cualquier Satori.%', j3::text);
   update club_config_global set socio_visitas_por_dia = 1;
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
@@ -4320,7 +4348,7 @@ end $$;
 
 -- ═══ 84. (08-nov noche) Dominio en la configuración y retención de los contactos de ofertas ═══
 do $$
-declare v_url text := public.club_url(); v_ref uuid; v_c1 uuid; v_c2 uuid; v_c3 uuid; v_n int; j jsonb; v_e text;
+declare v_url text := public.club_url(); v_ref uuid; v_c1 uuid; v_c2 uuid; v_c3 uuid; v_n int; j jsonb; v_e text; v_b24 int; v_b1 int;
 begin
   perform pg_temp.r('84', 'el dominio sale de club_config_global.club_url (https, sin barra final)',
     v_url ~ '^https://[a-z0-9.-]+$' and v_url = (select club_url from club_config_global), '');
@@ -4363,11 +4391,17 @@ begin
   perform pg_temp.r('84', 'B7 · ya no existe ultimo_contacto_en (el plazo se cuenta desde la aceptación)',
     not exists (select 1 from information_schema.columns where table_name = 'club_cupones_contactos' and column_name = 'ultimo_contacto_en'), '');
   update club_config_global set contactos_ofertas_meses = 24;
+  -- (09-nov, ítem 43) línea base: lo que ya estaba vencido en staging (misma regla que la purga) → la cuenta es exacta
+  select count(*) into v_b24 from club_cupones_contactos k
+   where coalesce(k.aviso_aceptado_en, k.created_at) < now() - interval '24 months' and k.cupon_id not in (v_c1, v_c3);
+  select count(*) into v_b1 from club_cupones_contactos k
+   where coalesce(k.aviso_aceptado_en, k.created_at) < now() - interval '1 month'
+     and coalesce(k.aviso_aceptado_en, k.created_at) >= now() - interval '24 months' and k.cupon_id <> v_c2;
   v_n := public.club_contactos_ofertas_purgar();
   perform pg_temp.r('84', 'retención 24 meses desde la aceptación: se borran los de 25 y 30 meses; queda el reciente',
     not exists (select 1 from club_cupones_contactos where cupon_id = v_c1)
       and exists (select 1 from club_cupones_contactos where cupon_id = v_c2)
-      and not exists (select 1 from club_cupones_contactos where cupon_id = v_c3) and v_n >= 2, format('%s borrados', v_n));
+      and not exists (select 1 from club_cupones_contactos where cupon_id = v_c3) and v_n = v_b24 + 2, format('%s borrados (base %s)', v_n, v_b24));
   perform pg_temp.r('84', 'la purga deja rastro sin datos (cuántos y los meses)',
     exists (select 1 from club_auditoria where accion = 'purga_contactos_turistas' and (despues->>'meses')::int = 24
               and antes is null and not (despues::text ~ '6000840')), '');
@@ -4375,7 +4409,7 @@ begin
   j := public.club_socios_mantenimiento();
   perform pg_temp.r('84', 'configurable (1 mes) y automático: el mantenimiento diario borra también el de 2 meses',
     not exists (select 1 from club_cupones_contactos where cupon_id = v_c2)
-      and (j->>'contactos_ofertas_borrados')::int >= 1, j::text);
+      and (j->>'contactos_ofertas_borrados')::int = v_b1 + 1, j::text);
   update club_config_global set contactos_ofertas_meses = 24;
   begin
     update club_config_global set contactos_ofertas_meses = 0;
@@ -4434,11 +4468,24 @@ begin
   perform set_config('club.libro_mantenimiento', 'pruebas', true);
   perform pg_temp.r('85', '106 · el historial del login es de solo inserción (ni el dueño de la tabla lo edita)', v_err like '%solo inserción%', v_err);
   perform pg_temp.r('85', '106 · la resolución de una excepción guarda el actor del PoS al registrarse',
-    exists (select 1 from club_excepciones_resueltas x where x.actor_pos ? 'pos_logins' and x.actor_pos ? 'mapeo'), '');
+    exists (select 1 from club_excepciones_resueltas x where x.resuelto_en = now() and x.resuelto_por is not null)
+      -- toda resolución de ESTA corrida hecha por una persona (resuelto_por; la fixture «aud04» se inserta a mano sin
+      -- usuario) guarda el actor: por club_excepcion_resolver y por club_sin_cruce_elegir (ítem 43 lo encontró sin él)
+      and not exists (select 1 from club_excepciones_resueltas x where x.resuelto_en = now() and x.resuelto_por is not null
+                        and not coalesce(x.actor_pos ? 'pos_logins' and x.actor_pos ? 'mapeo'
+                                         and jsonb_typeof(x.actor_pos->'pos_logins') = 'array', false)),   -- null = falla
+    coalesce((select string_agg(x.tipo || ' ' || x.ref || ' → ' || coalesce(x.actor_pos::text, 'null'), ' · ') from club_excepciones_resueltas x
+               where x.resuelto_en = now() and x.resuelto_por is not null and not coalesce(x.actor_pos ? 'pos_logins' and x.actor_pos ? 'mapeo'
+                                                          and jsonb_typeof(x.actor_pos->'pos_logins') = 'array', false)), ''));
 
   -- B3 · el teléfono del aviso de canje deja rastro (sin el teléfono)
   perform pg_temp.r('85', 'B3 · ver el teléfono del canje queda en club_auditoria, sin el número',
-    exists (select 1 from club_auditoria a where a.accion = 'ver_telefono_canje' and not (coalesce(a.despues::text, '') ~ '6000000')), '');
+    exists (select 1 from club_auditoria a join club_movimientos m on m.id = a.objeto_id and m.tipo = 'canje'
+             where a.accion = 'ver_telefono_canje' and a.en = now() and a.despues->>'miembro' = m.miembro_id::text)
+      and not exists (select 1 from club_auditoria a join club_movimientos m on m.id = a.objeto_id
+                        join club_miembros_contacto c on c.miembro_id = m.miembro_id
+                       where a.accion = 'ver_telefono_canje'
+                         and (a.antes is not null or position(right(regexp_replace(c.telefono, '\D', '', 'g'), 8) in coalesce(a.despues::text, '')) > 0)), '');
   -- B3 · los cierres no se leen directo (ni owner ni manager): solo por club_reporte_mes
   foreach v_err in array array['<OWNER_UUID>', '<MANAGER_UUID>'] loop
     begin
@@ -4510,7 +4557,8 @@ begin
   j := public.club_socio_visita(v_s, '{"modo":"pedido","pedido":"8502","clave":"pedido:8502"}', gen_random_uuid(), v_a);
   perform pg_temp.yo();
   perform pg_temp.r('85', 'B5 · con tope 1, una visita sin beneficio previa (pagó con créditos) no gasta el día',
-    coalesce(j->>'estado', '') <> 'ya_uso_hoy', j::text);
+    coalesce(j->>'estado', '') <> 'ya_uso_hoy' and j->>'visita_id' is not null
+      and (select estado_beneficio from club_visitas_socio where id = (j->>'visita_id')::uuid) in ('aplica','pendiente_configuracion'), j::text);
 
   -- B8 · la versión vigente del aviso está registrada con su huella por idioma; no se edita
   perform pg_temp.r('85', 'B8 · la versión del aviso de cada local está registrada (FK) con su sha256 ES y EN',

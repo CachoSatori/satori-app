@@ -456,3 +456,36 @@
   sobre la fuente, papel por `legacy_id` en la misma transacción, `--emitir`). Docs: `piloto/saldos-papel.md` §A y RUNBOOK §8.
 - Pruebas: batería **567/567** · paridad OK (970) · carreras OK · gate61 19/19 · club-web 26 · saldos 30 (+4 staging) ·
   G-56 50 · migrador 15 (+6 staging).
+
+## 09-nov · noche A (01:00, desatendida) · tarjeta del anfitrión a 390 px e ítem 43 · rama del Club, nada en prod
+Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
+- **Tarjeta del anfitrión** (`736414a`): en «Escanear», con un código de canje, los botones de «Créditos a canjear» se
+  partían en 4 líneas y el tercero desbordaba a 390 px. Ahora son tres líneas cortas (número / créditos / ₡), con el
+  texto completo en `aria-label`. Medido con datos sintéticos en staging, que se borraron después. Hay capturas de antes y
+  después. 6.13 y la guía rápida de caja están al día.
+- **Ítem 43 · asserts fuertes (70–85, más la 43):** 16 refuerzos. Lo que antes era «al menos» o «hay alguno» ahora es una
+  cuenta exacta contra la línea base, y además se mira el estado después de cada negativa. Cuatro mutaciones dentro de la
+  transacción descartada confirman que cada assert cae cuando debe; los asserts viejos pasaban con esas mismas mutaciones.
+  La 75 sigue con «al menos», con el motivo anotado: staging recibe facturas reales del puente.
+- **Bug real que encontró la 85 reforzada:** `club_sin_cruce_elegir` guardaba la resolución de SIN_CRUCE **sin** el actor
+  (Grok 106). Ahora llama a `club_excepcion_actor` como el resolvedor general. Cambio en la 075, aplicado en staging solo
+  en esa función. La definición anterior quedó guardada.
+- **Fragilidad del ambiente:** la 43 fallaba si había un intento de canje real en los últimos 15 minutos. Ahora lo aísla
+  dentro de la transacción.
+- Pruebas: batería **568/568** · paridad **970 = 970** · carreras 8/8 + 04 · gate61 0 fallas · vitest 1.515 · club-web 27 ·
+  Python 111 · migraciones 6/6. Staging en base (2.538 / 338, papel 0, 0 residuos; v2 del puente aplicada).
+
+### Autorrevisión adversarial (noche A)
+- **Anónimo:** esta noche no se abrió ninguna superficie nueva. `club_sin_cruce_elegir` sigue sin `execute` para anon
+  (verificado en staging) y la tarjeta es de la app con sesión.
+- **Socio:** no cambió nada de lo que ve. El tope diario ahora se prueba con las filas reales (2 con beneficio, la 3.ª no
+  suma); antes solo se miraba el estado devuelto.
+- **Anfitrión:** el ₡ de cada botón es solo pantalla, calculado con `valor_credito_crc`; el canje lo calcula la base. Si
+  falta el valor, no se muestra la línea de ₡, en vez de mostrar un ₡0 engañoso. Riesgo residual: un monto de 7 cifras con
+  tres botones a 390 px queda justo. Hoy un botón es como mucho 2 créditos, que no llega ahí.
+- **Invitado:** sin cambios.
+- **Cajero:** no puede elegir la factura de un SIN_CRUCE (owner/manager); eso no cambió. Los botones de canje mantienen el
+  tamaño de toque (`big`, mismo ancho repartido).
+- **Manager:** elegir la factura de un SIN_CRUCE ahora hace una lectura más (`club_excepcion_actor`, la lista de 120 días
+  filtrada por tipo). Es el mismo costo que ya paga «Resolver» y no se midió aparte. Si en el piloto «Elegir factura» se
+  siente lento, esa lectura es lo primero que hay que mirar.

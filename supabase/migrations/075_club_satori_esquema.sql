@@ -3644,8 +3644,11 @@ begin
   insert into public.club_cruces_manuales_historial (movimiento_id, location_id, numero_factura, elegido_por, nota)
   values (m.id, m.location_id, v_nf, auth.uid(), v_nota);
 
-  insert into public.club_excepciones_resueltas (location_id, tipo, ref, nota, resuelto_por)
-  values (m.location_id, 'SIN_CRUCE', m.id::text, concat('Factura ', v_nf, ' elegida', ' · ' || v_nota), auth.uid());
+  -- (09-nov, ítem 43) como club_excepcion_resolver (Grok 106): la resolución guarda el actor tal como estaba al
+  -- registrarse (quién registró el movimiento; SIN_CRUCE sigue listada aunque esté resuelta, así que se encuentra).
+  insert into public.club_excepciones_resueltas (location_id, tipo, ref, nota, resuelto_por, actor_pos)
+  values (m.location_id, 'SIN_CRUCE', m.id::text, concat('Factura ', v_nf, ' elegida', ' · ' || v_nota), auth.uid(),
+          public.club_excepcion_actor('SIN_CRUCE', m.id::text, m.location_id));
   return v_nf;
 end;
 $$;

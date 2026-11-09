@@ -651,3 +651,8 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
 
   Las tablas y los datos no cambiaron.
 
+- **La fila 075 del ledger de STAGING ya no es igual al archivo 075** (aviso del dueño, 09-nov tarde). S0 y S8 cambiaron
+  el archivo (`club_cruce_provisional` y tres funciones) y se aplicaron en staging solo las funciones, no la migración
+  entera, así que `statements` de la fila 075 sigue con el texto de antes. **No se toca ahora.** Se resuelve en el pase
+  del Club a prod, cuando la 075 se renumere (075 → 150, CLUB-AUD-100): ahí se arma la fila del ledger con el archivo
+  final. La paridad (975 = 975) compara el catálogo, no el ledger, y sigue igual.

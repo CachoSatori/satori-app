@@ -531,3 +531,17 @@ Detalle: [`NOCHE-2026-11-09-B.md`](NOCHE-2026-11-09-B.md).
 - **Cajero / manager:** sin cambios en la app.
 - **Riesgo que queda:** un miembro que falla siempre se reintenta hasta 10 veces y después queda anotado, sin
   reintentos automáticos. Hace falta que el dueño vea esa lista (pantalla o consulta) cuando se encienda el pase.
+
+## 09-nov · 04:30 · integración (corte `c29af16` en `claude/club-integracion`)
+- epic-tesla `ed447b2` + club-wallet `c76e6c4`. El remoto viejo de integración solo traía docs: quedaron los de las ramas.
+- Todo en verde:
+  - batería 568/568;
+  - paridad 970 y gate61 0 (con sus pruebas 19/19);
+  - carreras 8/8;
+  - vitest 1.568, club-web 28, builds y Python 122;
+  - ensayo de papel OK;
+  - API 106/116 3/3.
+- Lint: sin errores en lo que cambia contra `main`.
+- **Puente:** la 082 v3 en staging, con el control en verde (consulta C 0, sin duplicados, latido sin error). Todavía
+  sin una `R` real con la v3.
+- Staging en base. Resumen y «necesita al dueño»: [NOCHE-2026-11-09-RESUMEN.md](NOCHE-2026-11-09-RESUMEN.md).

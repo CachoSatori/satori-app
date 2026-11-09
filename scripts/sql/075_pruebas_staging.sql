@@ -4579,6 +4579,65 @@ begin
   perform pg_temp.r('85', 'B8 · la huella registrada de una versión no se edita', v_err like '%solo inserción%', v_err);
 end $$;
 
+-- ═══ 86. (09-nov) R7-02: quién dio la baja del rol de socio; la reactivación de la persona no revierte la baja del socio ═══
+--   Caso real: una persona que es anfitrión y socio. Se da de baja como socio por el portal; gerencia da de baja a la persona
+--   y la reactiva desde Miembros (club_miembro_guardar). Antes, la reactivación le devolvía el rol de socio.
+do $$
+declare v_s uuid; v_g uuid; v_tok text; v_ok boolean; j jsonb;
+begin
+  perform set_config('request.headers', '{"x-club-web":"clave-nueva-del-club-rotada-fedcba9876543210"}', true);
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Rita Baja Propia', 'app') returning id into v_s;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Gael Baja Gerencia', 'app') returning id into v_g;
+  insert into club_miembros_contacto (location_id, miembro_id, telefono) values
+    (pg_temp.loc(), v_s, public.club_norm_telefono('60008601')), (pg_temp.loc(), v_g, public.club_norm_telefono('60008602'));
+  insert into club_miembro_roles (miembro_id, rol, estado, alta_por, validado_en) values
+    (v_s, 'socio', 'activo', 'caja', now()), (v_g, 'socio', 'activo', 'caja', now());
+  -- el socio se da de baja por el portal
+  select token_portal into v_tok from club_miembros where id = v_s;
+  set local role anon;
+  v_ok := public.club_socio_baja_portal(v_tok);
+  reset role;
+  perform pg_temp.r('86', 'baja por el portal → el rol de socio en baja con baja_por = socio (el de anfitrión sigue activo)',
+    v_ok and (select (estado, baja_por) = ('baja', 'socio') from club_miembro_roles where miembro_id = v_s and rol = 'socio')
+      and (select estado from club_miembro_roles where miembro_id = v_s and rol = 'referente') = 'activo', '');
+  -- gerencia da de baja a las dos personas y después las reactiva (Miembros → club_miembro_guardar, owner)
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_miembro_guardar(v_s, 'referente', 'Rita Baja Propia', null, 'baja', null);
+  perform public.club_miembro_guardar(v_g, 'referente', 'Gael Baja Gerencia', null, 'baja', null);
+  perform pg_temp.yo();
+  perform pg_temp.r('86', 'baja de la persona por gerencia: los roles quedan con baja_por = gerencia, salvo el que ya dio de baja el socio',
+    (select bool_and(baja_por = 'gerencia') from club_miembro_roles where miembro_id = v_g)
+      and (select baja_por from club_miembro_roles where miembro_id = v_s and rol = 'socio') = 'socio'
+      and (select baja_por from club_miembro_roles where miembro_id = v_s and rol = 'referente') = 'gerencia', '');
+  perform pg_temp.como('authenticated', '<OWNER_UUID>');
+  perform public.club_miembro_guardar(v_s, 'referente', 'Rita Baja Propia', null, 'activo', null);
+  perform public.club_miembro_guardar(v_g, 'referente', 'Gael Baja Gerencia', null, 'activo', null);
+  perform pg_temp.yo();
+  perform pg_temp.r('86', 'R7-02 · reactivación de la persona: el rol de socio que dio de baja el propio socio SIGUE en baja',
+    (select (estado, baja_por) = ('baja', 'socio') from club_miembro_roles where miembro_id = v_s and rol = 'socio')
+      and (select estado = 'activo' and baja_por is null from club_miembro_roles where miembro_id = v_s and rol = 'referente'), '');
+  perform pg_temp.r('86', 'control: los roles que dio de baja gerencia sí vuelven (activos, sin marca)',
+    (select bool_and(estado = 'activo' and baja_por is null) from club_miembro_roles where miembro_id = v_g), '');
+  -- el propio socio vuelve en caja: ahí sí se reactiva (y sin marca)
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    j := public.club_socio_alta_caja('Rita Baja Propia', '60008601', null, true, pg_temp.loc());
+    perform pg_temp.yo();
+  exception when others then
+    perform pg_temp.yo(); j := jsonb_build_object('error', sqlerrm);
+  end;
+  perform pg_temp.r('86', 'si el socio vuelve a darse de alta en caja, el rol vuelve (no en baja) y sin marca',
+    j ? 'error' is not true and
+    (select estado <> 'baja' and baja_por is null from club_miembro_roles where miembro_id = v_s and rol = 'socio'), j::text);
+  -- la regla de la columna: una marca inventada se rechaza
+  begin
+    update club_miembro_roles set estado = 'baja', baja_por = 'otro' where miembro_id = v_g and rol = 'socio';
+    perform pg_temp.r('86', 'baja_por inventado aceptado', false, 'guardó');
+  exception when check_violation then
+    perform pg_temp.r('86', 'baja_por solo socio o gerencia (otro → rechazado)', true, '');
+  end;
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

@@ -4088,6 +4088,39 @@ create table if not exists public.club_miembro_roles (
   primary key (miembro_id, rol),
   check (rol = 'socio' or estado <> 'pendiente')   -- solo el socio puede estar pendiente
 );
+-- (09-nov, R7-02) Quién dio la baja de un rol: 'socio' (él mismo, por el portal) o 'gerencia' (la baja de la persona en la
+-- app, o cualquier otra vía). Una baja del propio socio NO se revierte al reactivar a la persona: solo vuelve si él se da
+-- de alta otra vez (en caja). Lo mantiene un trigger BEFORE (una sola regla para todas las vías): fuera de baja no hay
+-- marca; una baja sin marca es de gerencia; una fila que ya estaba en baja conserva la suya.
+alter table public.club_miembro_roles add column if not exists baja_por text;
+alter table public.club_miembro_roles drop constraint if exists club_miembro_roles_baja_por_check;
+create or replace function public.club_roles_baja_por_trg()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if new.estado <> 'baja' then
+    new.baja_por := null;
+  elsif new.baja_por is null then
+    new.baja_por := case when tg_op = 'UPDATE' and old.estado = 'baja' then coalesce(old.baja_por, 'gerencia') else 'gerencia' end;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.club_roles_baja_por_trg() from public, anon, authenticated;
+drop trigger if exists club_roles_baja_por_trg on public.club_miembro_roles;
+create trigger club_roles_baja_por_trg before insert or update on public.club_miembro_roles
+  for each row execute function public.club_roles_baja_por_trg();
+-- bases con datos: las bajas que ya había. Las del portal (rastro «socio_baja_portal») son del socio; el resto, de gerencia.
+update public.club_miembro_roles r
+   set baja_por = case when r.rol = 'socio' and exists (select 1 from public.club_auditoria a
+                                                         where a.accion = 'socio_baja_portal' and a.objeto_id = r.miembro_id)
+                       then 'socio' else 'gerencia' end
+ where r.estado = 'baja' and r.baja_por is null;
+alter table public.club_miembro_roles add constraint club_miembro_roles_baja_por_check
+  check ((estado = 'baja') = (baja_por is not null) and (baja_por is null or baja_por in ('socio','gerencia')));
+
 -- Un solo rol de anfitrión por persona.
 create unique index if not exists club_roles_un_anfitrion on public.club_miembro_roles (miembro_id) where rol <> 'socio';
 create index if not exists club_roles_rol_estado_idx on public.club_miembro_roles (rol, estado);
@@ -4155,14 +4188,16 @@ begin
       on conflict (miembro_id, rol) do nothing;
     end if;
   end if;
-  -- baja o reactivación de la persona: alcanza a todos sus roles (un socio sin validar vuelve a pendiente)
+  -- baja o reactivación de la persona: alcanza a todos sus roles (un socio sin validar vuelve a pendiente).
+  -- (09-nov, R7-02) la reactivación NO toca un rol que dio de baja el propio socio (baja_por = 'socio').
   if old.estado is distinct from new.estado then
     update public.club_miembro_roles r
        set estado = case when new.estado = 'baja' then 'baja'
                          when r.rol = 'socio' and r.validado_en is null and r.alta_por = 'autoalta' then 'pendiente'
                          else 'activo' end,
            actualizado_en = now()
-     where r.miembro_id = new.id;
+     where r.miembro_id = new.id
+       and not (new.estado <> 'baja' and r.estado = 'baja' and r.baja_por = 'socio');
   end if;
   return null;
 end;
@@ -4853,7 +4888,7 @@ begin
   if v_id is null or not exists (select 1 from public.club_miembro_roles where miembro_id = v_id and rol = 'socio' and estado <> 'baja') then
     raise exception 'Enlace no válido' using errcode = 'P0001';
   end if;
-  update public.club_miembro_roles set estado = 'baja', actualizado_en = now() where miembro_id = v_id and rol = 'socio';
+  update public.club_miembro_roles set estado = 'baja', baja_por = 'socio', actualizado_en = now() where miembro_id = v_id and rol = 'socio';
   update public.club_miembros_contacto set optin_whatsapp = false, optin_email = false, updated_at = now() where miembro_id = v_id;
   perform public.club_auditar('socio_baja_portal', 'club_miembro_roles', v_id, null, null);
   return true;

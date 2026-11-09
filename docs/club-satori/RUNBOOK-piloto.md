@@ -217,7 +217,7 @@ Grok 24 el cupón también pide Turnstile). Después, el deploy y el dominio.
 - **Antes del deploy:** `grep -c 'CONFIRMAR ISMAEL' club-web/src/i18n.ts` → **0** (el aviso no sale con marcas
   pendientes: dirección del responsable y retención de contactos de ofertas).
 - `/api/salud` → todo en `true` (incluido `turnstile`).
-- **CLUB-AUD-74: Turnstile de prod NO es el de prueba.** La clave del sitio del build (`VITE_TURNSTILE_SITEKEY`) no
+- **CLAUDE-HALL-04: Turnstile de prod NO es el de prueba.** La clave del sitio del build (`VITE_TURNSTILE_SITEKEY`) no
   puede ser `1x00000000000000000000AA` (ni ninguna que empiece con `1x`, `2x` o `3x`, las de prueba de Cloudflare):
   abrir `/alta`, ver el código fuente del JS y buscar `1x0000`. El Secret `TURNSTILE_SECRET` tampoco puede ser
   `1x0000000000000000000000000000000AA` ni `2x…`/`3x…`: lo confirma Ismael en Cloudflare → Turnstile (el widget de

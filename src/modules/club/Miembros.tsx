@@ -598,7 +598,7 @@ function TokenPase({ f, onHecho }: { f: Fila; onHecho: (texto: string) => void }
 }
 
 /**
- * CLUB-AUD-72: alguien llenó la autoalta con un WhatsApp que ya estaba registrado. No se cambió nada: la caja lo
+ * CLAUDE-HALL-02: alguien llenó la autoalta con un WhatsApp que ya estaba registrado. No se cambió nada: la caja lo
  * atiende en persona («Validar socio» si está pendiente; «Nuevo socio» si estaba de baja). Al hacerlo, sale de acá.
  */
 function Solicitudes() {

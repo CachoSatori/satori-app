@@ -427,7 +427,7 @@ export const getSociosPorConfirmar = () => llamar<SocioPorConfirmar[]>('club_soc
 /** Token del botón «Canjear» del pase (CLUB-AUD-69): owner o manager. */
 export const paseToken = (miembro: string, accion: 'regenerar' | 'revocar') =>
   llamar<boolean>('club_pase_token', { p_miembro: miembro, p_accion: accion })
-/** CLUB-AUD-72: autoaltas con un WhatsApp que ya existía: no cambiaron nada; la caja las atiende en persona. */
+/** CLAUDE-HALL-02: autoaltas con un WhatsApp que ya existía: no cambiaron nada; la caja las atiende en persona. */
 export interface SolicitudSocio { miembro_id: string; nombre: string; estado_socio: string; creada_en: string }
 export const getSolicitudesSocio = () => llamar<SolicitudSocio[]>('club_socio_solicitudes_abiertas', {})
 

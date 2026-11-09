@@ -2550,22 +2550,22 @@ begin
   perform pg_temp.r('57', 'provisional sin confirmar a los 7 días → vuelve a pendiente',
     (select estado from club_miembro_roles where miembro_id = v_id2 and rol = 'socio') = 'pendiente'
       and (j->>'provisionales_vencidas')::int >= 1, j::text);
-  -- CLUB-AUD-71: vencido → mantenimiento → la caja NO lo renueva otros 7 días (negativa)
+  -- CLAUDE-HALL-01: vencido → mantenimiento → la caja NO lo renueva otros 7 días (negativa)
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   begin perform public.club_socio_validar(v_id2, true); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
-  perform pg_temp.r('57', 'AUD-71: provisional vencido sin confirmar → el cajero no lo revalida (negativa)',
+  perform pg_temp.r('57', 'CLAUDE-HALL-01: provisional vencido sin confirmar → el cajero no lo revalida (negativa)',
     e like 'Este socio ya tuvo un alta provisional%'
       and (select estado from club_miembro_roles where miembro_id = v_id2 and rol = 'socio') = 'pendiente', e);
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');   -- el manager que lo cargó tampoco
   begin perform public.club_socio_validar(v_id2, true); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
-  perform pg_temp.r('57', 'AUD-71: quien lo cargó tampoco lo revalida, aunque sea manager (negativa)', e like 'Este socio ya tuvo un alta provisional%', e);
+  perform pg_temp.r('57', 'CLAUDE-HALL-01: quien lo cargó tampoco lo revalida, aunque sea manager (negativa)', e like 'Este socio ya tuvo un alta provisional%', e);
   perform pg_temp.como('authenticated', '<OWNER_UUID>');
   j := public.club_socio_validar(v_id2, true);
   begin perform public.club_socio_validar(v_id2, true); e := 'ok'; exception when others then e := sqlerrm; end;
   perform pg_temp.yo();
-  perform pg_temp.r('57', 'AUD-71: gerencia distinta lo valida y queda confirmado (no provisional); validar de nuevo → «no está pendiente»',
+  perform pg_temp.r('57', 'CLAUDE-HALL-01: gerencia distinta lo valida y queda confirmado (no provisional); validar de nuevo → «no está pendiente»',
     (select estado = 'activo' and provisional_hasta is null and confirmado_por = '<OWNER_UUID>'
        from club_miembro_roles where miembro_id = v_id2 and rol = 'socio')
       and e like 'El socio no está pendiente%', e);
@@ -2598,12 +2598,12 @@ begin
   perform pg_temp.r('57', 'autoalta con un WhatsApp que ya es socio → respuesta pareja, sin link ni cambios',
     j = '{"ok": true}'::jsonb and (select alta_por from club_miembro_roles where miembro_id = v_id and rol = 'socio') = 'caja', j::text);
   -- un socio en baja que vuelve por autoalta: queda pendiente, pero NO se devuelve su portal (negativa)
-  -- CLUB-AUD-72: con un WhatsApp que ya existe, la autoalta NO cambia nada; deja una solicitud (negativa)
+  -- CLAUDE-HALL-02: con un WhatsApp que ya existe, la autoalta NO cambia nada; deja una solicitud (negativa)
   update club_miembro_roles set estado = 'baja', aviso_version = 'v-anterior' where miembro_id = v_id and rol = 'socio';
   set local role anon;
   j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Otro Nombre', 'whatsapp', '60001234', 'acepto', v_ver));
   reset role;
-  perform pg_temp.r('57', 'AUD-72: autoalta con un WhatsApp existente → misma respuesta, no toca rol/estado/aviso/nombre, deja solicitud',
+  perform pg_temp.r('57', 'CLAUDE-HALL-02: autoalta con un WhatsApp existente → misma respuesta, no toca rol/estado/aviso/nombre, deja solicitud',
     j = '{"ok": true}'::jsonb
       and (select estado = 'baja' and aviso_version = 'v-anterior' and alta_por = 'caja' from club_miembro_roles where miembro_id = v_id and rol = 'socio')
       and (select nombre from club_miembros where id = v_id) = 'Carla Socia Ficticia'
@@ -2611,16 +2611,16 @@ begin
   set local role anon;
   j := public.club_socio_autoalta(jsonb_build_object('nombre', 'Otro Nombre', 'whatsapp', '60001234', 'acepto', v_ver));
   reset role;
-  perform pg_temp.r('57', 'AUD-72: repetir no duplica la solicitud abierta', (select count(*) from club_socio_solicitudes where miembro_id = v_id) = 1, '');
+  perform pg_temp.r('57', 'CLAUDE-HALL-02: repetir no duplica la solicitud abierta', (select count(*) from club_socio_solicitudes where miembro_id = v_id) = 1, '');
   perform pg_temp.como('authenticated', '<MANAGER_UUID>');
   select count(*) into v_n from public.club_socio_solicitudes_abiertas() x where x.miembro_id = v_id and x.estado_socio = 'baja';
   perform pg_temp.yo();
-  perform pg_temp.r('57', 'AUD-72: gerencia ve la solicitud abierta', v_n = 1, format('%s', v_n));
+  perform pg_temp.r('57', 'CLAUDE-HALL-02: gerencia ve la solicitud abierta', v_n = 1, format('%s', v_n));
   -- la caja la atiende en persona: alta en caja (estaba de baja) → provisional y solicitud atendida
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   perform public.club_socio_alta_caja('Carla Socia Ficticia', '60001234', null, true);
   perform pg_temp.yo();
-  perform pg_temp.r('57', 'AUD-72: la caja la valida en persona → activo provisional y solicitud atendida',
+  perform pg_temp.r('57', 'CLAUDE-HALL-02: la caja la valida en persona → activo provisional y solicitud atendida',
     (select estado = 'activo' and provisional_hasta is not null from club_miembro_roles where miembro_id = v_id and rol = 'socio')
       and not exists (select 1 from club_socio_solicitudes where miembro_id = v_id and atendida_en is null), '');
   -- altas por confirmar: solo gerencia
@@ -2631,7 +2631,7 @@ begin
   perform pg_temp.como('authenticated', '<CAJERO_UUID>');
   begin perform public.club_socios_por_confirmar(); e := 'ok'; exception when insufficient_privilege then e := 'sin permiso'; end;
   perform pg_temp.yo();
-  perform pg_temp.r('57', 'AUD-73: el alta en caja registra la versión del aviso',
+  perform pg_temp.r('57', 'CLAUDE-HALL-03: el alta en caja registra la versión del aviso',
     (select aviso_version = v_ver and aviso_aceptado_en is not null from club_miembro_roles where miembro_id = v_g and rol = 'socio'), '');
   perform pg_temp.r('57', 'altas por confirmar: el manager las ve; el cajero no', v_n = 1 and e = 'sin permiso', format('%s %s', v_n, e));
   -- tope global por día
@@ -2649,7 +2649,7 @@ begin
   reset role;
   update club_config set socio_autoalta_max_dia = 60 where location_id = 'santa-teresa';
   perform pg_temp.r('57', 'tope global de autoaltas por día', e = 'Demasiadas altas hoy', e);
-  perform pg_temp.r('57', 'AUD-74: al 80 % del cupo diario queda una alerta (una sola por día)',
+  perform pg_temp.r('57', 'CLAUDE-HALL-04: al 80 % del cupo diario queda una alerta (una sola por día)',
     (select count(*) from club_alertas where tipo = 'autoalta_cupo'
       and creado_en >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica') = 1, '');
   -- purga: autoalta sin validar a los 30 días → datos borrados
@@ -2658,7 +2658,7 @@ begin
   perform pg_temp.r('57', 'autoalta sin validar a los 30 días → purga (sin contacto, sin rol, nombre borrado)',
     not exists (select 1 from club_miembros_contacto where miembro_id = v_a) and not exists (select 1 from club_miembro_roles where miembro_id = v_a)
       and (select estado = 'baja' and nombre not like '%Eva%' from club_miembros where id = v_a), j::text);
-  -- AUD-73: anfitrión activo con una autoalta de socio vieja → solo se borra lo del Local Club; el contacto sigue
+  -- CLAUDE-HALL-03: anfitrión activo con una autoalta de socio vieja → solo se borra lo del Local Club; el contacto sigue
   insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Hugo Anfitrion Ficticio', 'app') returning id into v_g;
   insert into club_miembros_contacto (location_id, miembro_id, telefono) values (pg_temp.loc(), v_g, '+50660001239');
   insert into club_miembro_roles (miembro_id, rol, estado, alta_por, desde) values (v_g, 'socio', 'pendiente', 'autoalta', now() - interval '31 days');
@@ -2669,12 +2669,12 @@ begin
   insert into club_movimientos (location_id, miembro_id, tipo, personas, personas_por_credito, valor_credito_crc, factura_pos, fecha_visita, origen, nota)
   values (pg_temp.loc(), v_a, 'tarjeta', 1, 6, 18000, 'FP-73', now(), 'app', 'manual');
   j := public.club_socios_mantenimiento();
-  perform pg_temp.r('57', 'AUD-73: purga de un anfitrión → solo el rol de socio; contacto, nombre y rol de anfitrión siguen',
+  perform pg_temp.r('57', 'CLAUDE-HALL-03: purga de un anfitrión → solo el rol de socio; contacto, nombre y rol de anfitrión siguen',
     exists (select 1 from club_miembros_contacto where miembro_id = v_g)
       and not exists (select 1 from club_miembro_roles where miembro_id = v_g and rol = 'socio')
       and exists (select 1 from club_miembro_roles where miembro_id = v_g and rol = 'referente' and estado = 'activo')
       and (select estado = 'activo' and nombre like 'Hugo%' from club_miembros where id = v_g), j::text);
-  perform pg_temp.r('57', 'AUD-73: purga sin otro rol activo, aunque tenga movimientos → sin contacto y nombre borrado',
+  perform pg_temp.r('57', 'CLAUDE-HALL-03: purga sin otro rol activo, aunque tenga movimientos → sin contacto y nombre borrado',
     not exists (select 1 from club_miembros_contacto where miembro_id = v_a)
       and (select estado = 'baja' and nombre not like '%Ines%' from club_miembros where id = v_a), j::text);
   -- baja desde el portal (link del aviso)

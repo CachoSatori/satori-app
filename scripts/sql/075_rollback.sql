@@ -93,7 +93,7 @@ drop table if exists public.club_descuentos_tipo;        -- LC-DT
 drop table if exists public.club_config_global;         -- (08-nov) tope diario único del Club
 drop table if exists public.club_marcadores_descuento;   -- LC-MD
 drop table if exists public.club_cortesias;
-drop table if exists public.club_socio_solicitudes;   -- CLUB-AUD-72
+drop table if exists public.club_socio_solicitudes;   -- CLAUDE-HALL-02
 drop table if exists public.club_miembro_roles;
 drop table if exists public.club_canje_intentos;
 drop table if exists public.club_alertas;

@@ -508,3 +508,22 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
   - cabeceras en archivos (umask 077), `mktemp -d` + trap y nada secreto en argv;
   - manager sintético que se crea y se borra (0 residuos verificados).
 - Pruebas: Python 122/122 con staging · API 106: 403/42501, el nombre se edita, 0 residuos. Staging en base.
+
+## 09-nov · ronda r7 de Grok (07:02) · staging y ramas propias, nada en prod ni en main
+- **Puente:** pase **reprogramado, fecha a definir por el dueño tras la auditoría de la 082 v3**. Se dice así en el
+  paquete, la guía (`cd6d5a1`, sin cambios de código) y el cuerpo del #71, y los punteros de este repo apuntan al v2
+  (`c284d77`). La 082 no se tocó.
+- **R7-02** (`15ac3af`): `club_miembro_roles.baja_por` ('socio' | 'gerencia'). Reactivar a la persona no revierte la baja
+  que dio el propio socio. Prueba 86.
+- **CLUB-AUD-66** (`cc1f142`): el replay de `club_cupon_usar` exige el mismo cupón y las mismas personas, también el de un
+  pendiente. Prueba 87.
+- **DOC-AUD-02 y P-R7-F:**
+  - lo que estaba como CLUB-AUD-71…74 es mío y pasa a **CLAUDE-HALL-01…04**;
+  - [`IDS-AUDITOR.md`](IDS-AUDITOR.md): ID ↔ commit ↔ SHA ↔ prueba que falla sin el arreglo, con las mutaciones
+    reproducibles en `scripts/sql/mutar_bateria.py`;
+  - **55 y 60 no los encuentro; 64 no está arreglado.**
+- **P-R7-A:** diagnóstico y plan en [`P-R7-A-plan.md`](P-R7-A-plan.md). **Espera el OK.**
+- `gate61_test.sh` corre **sin red** desde hoy. Al probar el script viejo, una consulta de solo lectura del catálogo llegó
+  a prod: el detalle está en IDS-AUDITOR.md.
+- Pruebas: batería **580/580**, paridad **974 = 974**, carreras 8/8, gate61_test 20/20 sin red, vitest 1.515, club-web 27,
+  Python 122 con staging. Staging en base.

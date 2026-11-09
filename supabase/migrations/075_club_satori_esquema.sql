@@ -1346,7 +1346,7 @@ grant select on public.club_alertas to authenticated;
 drop policy if exists club_alertas_gerencia on public.club_alertas;
 create policy club_alertas_gerencia on public.club_alertas for select to authenticated
   using (public.get_my_role() is not null and public.get_my_role() in ('owner','manager'));
--- CLUB-AUD-74: también alertas de cupo de la autoalta (sin miembro). El canje sigue exigiendo miembro.
+-- CLAUDE-HALL-04: también alertas de cupo de la autoalta (sin miembro). El canje sigue exigiendo miembro.
 alter table public.club_alertas alter column miembro_id drop not null;
 alter table public.club_alertas add column if not exists detalle jsonb;
 alter table public.club_alertas drop constraint if exists club_alertas_tipo_check;
@@ -4590,7 +4590,7 @@ alter table public.club_miembros add column if not exists token_pase text unique
 update public.club_miembros set token_pase = encode(extensions.gen_random_bytes(32), 'hex') where token_pase is null;
 alter table public.club_miembros alter column token_pase set default encode(extensions.gen_random_bytes(32), 'hex');
 
--- CLUB-AUD-72: autoalta con un teléfono que ya existe → solicitud (no cambia nada). La caja la atiende en persona
+-- CLAUDE-HALL-02: autoalta con un teléfono que ya existe → solicitud (no cambia nada). La caja la atiende en persona
 -- («Validar socio» si está pendiente, «Nuevo socio» si estaba de baja); al validarse queda atendida.
 create table if not exists public.club_socio_solicitudes (
   id            bigint generated always as identity primary key,
@@ -4722,7 +4722,7 @@ begin
     raise;
   end;
   perform public.club_socio_provisional(v_id, v_cfg.socio_provisional_dias);
-  -- CLUB-AUD-73: el alta en caja también registra la versión del aviso que la caja le muestra al socio.
+  -- CLAUDE-HALL-03: el alta en caja también registra la versión del aviso que la caja le muestra al socio.
   update public.club_miembro_roles set aviso_version = v_cfg.aviso_privacidad_version, aviso_aceptado_en = now()
    where miembro_id = v_id and rol = 'socio';
   perform public.club_auditar('socio_alta_caja', 'club_miembro_roles', v_id, null,
@@ -4758,7 +4758,7 @@ begin
   if v_r.estado <> 'pendiente' then
     raise exception 'El socio no está pendiente: no hace falta validarlo' using errcode = 'P0001';
   end if;
-  -- CLUB-AUD-71: si ya tuvo un alta provisional que nadie confirmó (venció y volvió a pendiente), la caja no la
+  -- CLAUDE-HALL-01: si ya tuvo un alta provisional que nadie confirmó (venció y volvió a pendiente), la caja no la
   -- renueva otros 7 días: la valida un manager u owner DISTINTO de quien la cargó, y esa validación ya la confirma.
   if v_r.registrado_por is not null and v_r.confirmado_en is null then
     if v_rol not in ('owner','manager') or v_r.registrado_por = auth.uid() then
@@ -4855,7 +4855,7 @@ begin
   if v_hoy >= v_cfg.socio_autoalta_max_dia then
     raise exception 'Demasiadas altas hoy' using errcode = 'P0001';
   end if;
-  -- CLUB-AUD-74: al llegar al 80 % del cupo diario, una alerta (una por día) para gerencia.
+  -- CLAUDE-HALL-04: al llegar al 80 % del cupo diario, una alerta (una por día) para gerencia.
   if v_hoy + 1 >= ceil(v_cfg.socio_autoalta_max_dia * 0.8)
      and not exists (select 1 from public.club_alertas a where a.location_id = v_loc and a.tipo = 'autoalta_cupo'
                       and a.creado_en >= date_trunc('day', now() at time zone 'America/Costa_Rica') at time zone 'America/Costa_Rica') then
@@ -4866,7 +4866,7 @@ begin
    where m.codigo = upper(btrim(coalesce(p_datos->>'ref', ''))) and m.estado = 'activo'
      and exists (select 1 from public.club_miembro_roles r where r.miembro_id = m.id and r.rol = 'socio' and r.estado = 'activo');
   perform pg_advisory_xact_lock(hashtextextended('club_socio_tel:' || v_tel, 0));
-  -- CLUB-AUD-72: si el teléfono ya existe, la autoalta NO toca nada (ni roles, ni estado, ni baja, ni aviso):
+  -- CLAUDE-HALL-02: si el teléfono ya existe, la autoalta NO toca nada (ni roles, ni estado, ni baja, ni aviso):
   -- deja una solicitud que la caja valida en persona y responde lo mismo que siempre.
   v_id := public.club_miembro_por_telefono(v_tel);
   if v_id is not null then
@@ -4918,7 +4918,7 @@ begin
      where rol = 'socio' and estado = 'activo' and provisional_hasta is not null and provisional_hasta < now()
     returning miembro_id)
   select count(*) into v_venc from v;
-  -- CLUB-AUD-73: purga de autoaltas sin validar.
+  -- CLAUDE-HALL-03: purga de autoaltas sin validar.
   --   · sin otro rol ACTIVO (anfitrión): se borran el contacto, el pase, la solicitud y el rol de socio, y el nombre;
   --     la fila del miembro queda en baja (la referencian la auditoría y los eventos; los movimientos, si los hubiera).
   --   · con otro rol activo: solo los datos del Local Club (rol de socio y solicitudes); el contacto sigue, porque es
@@ -4971,7 +4971,7 @@ begin
 end;
 $$;
 
--- CLUB-AUD-72: solicitudes abiertas (autoalta con un teléfono que ya existía). owner, manager. Sin contacto.
+-- CLAUDE-HALL-02: solicitudes abiertas (autoalta con un teléfono que ya existía). owner, manager. Sin contacto.
 create or replace function public.club_socio_solicitudes_abiertas()
 returns table (miembro_id uuid, nombre text, estado_socio text, creada_en timestamptz)
 language plpgsql

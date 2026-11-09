@@ -1,0 +1,10 @@
+{
+  "R02": {"antes_de": "-- ═══ F1f · 22. Excepciones del puente",
+          "sql": "do $mut$ begin execute replace(pg_get_functiondef('public.club_excepciones(date,date,text,text)'::regprocedure), E'x(tipo)\\n     where v_cfg.promo_articulo_codigo is null', E'x(tipo)\\n     where false'); end $mut$;"},
+  "CLUB-AUD-43": {"antes_de": "-- ═══ 53. LC-A1: roles",
+                  "sql": "alter table club_miembro_roles drop constraint club_miembro_roles_check;"},
+  "R7-02": {"antes_de": "-- ═══ 86. (09-nov) R7-02",
+            "funciones_de": {"commit": "ed447b2", "funciones": ["public.club_roles_desde_miembro(", "public.club_socio_baja_portal("]}},
+  "CLUB-AUD-66": {"antes_de": "-- ═══ 87. (09-nov) CLUB-AUD-66",
+                  "funciones_de": {"commit": "15ac3af", "funciones": ["public.club_cupon_usar("]}}
+}

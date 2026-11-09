@@ -133,7 +133,7 @@ export async function verificarTurnstile(env, token, ip) {
 const RE_AVISO = /^v[0-9A-Za-z.-]{1,30}$/
 
 /**
- * CLUB-AUD-74: prefijo de red de la IP, para un tope además del de la IP (rotar IPs dentro de la misma red no lo
+ * CLAUDE-HALL-04: prefijo de red de la IP, para un tope además del de la IP (rotar IPs dentro de la misma red no lo
  * esquiva). IPv4 → /24 ("203.0.113.0/24"); IPv6 → /64 (los 4 primeros grupos, con «::» expandido). Otra cosa → la IP.
  */
 export function prefijoRed(ip) {
@@ -230,7 +230,7 @@ export async function manejar(request, env, path) {
   if (partes.length === 1 && partes[0] === 'alta') {
     if (metodo !== 'POST') return json(405, { error: 'metodo' })
     { const ok = await limitar(env, 'crear', `alta:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
-    // CLUB-AUD-74: además, por prefijo de red (/24 o /64), con el mismo binding.
+    // CLAUDE-HALL-04: además, por prefijo de red (/24 o /64), con el mismo binding.
     { const ok = await limitar(env, 'crear', `alta-red:${prefijoRed(ip)}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
     const b = await leerCuerpo(request)
     if (!b || typeof b !== 'object') return json(400, { error: 'datos_invalidos' })

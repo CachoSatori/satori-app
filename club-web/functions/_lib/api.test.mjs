@@ -181,7 +181,7 @@ test('AUD-69: /api/pase/:token/canje usa el token de pase; /api/portal/:token/ba
   assert.equal((await manejar(pedido(`pase/${tok}/canje`), conLimite(), `pase/${tok}/canje`)).status, 405)
 })
 
-test('AUD-74: prefijo de red /24 (IPv4) y /64 (IPv6); /api/alta pide el tope por IP y por prefijo', async () => {
+test('CLAUDE-HALL-04: prefijo de red /24 (IPv4) y /64 (IPv6); /api/alta pide el tope por IP y por prefijo', async () => {
   assert.equal(prefijoRed('203.0.113.7'), '203.0.113.0/24')
   assert.equal(prefijoRed('2001:db8:abcd:12:1:2:3:4'), '2001:db8:abcd:12::/64')
   assert.equal(prefijoRed('2001:db8::1'), '2001:db8:0:0::/64')

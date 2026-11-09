@@ -4,6 +4,11 @@
 set -uo pipefail
 RAIZ="$(cd "$(dirname "$0")/../.." && pwd)"; G="$RAIZ/scripts/sql/gate61.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+# (09-nov) SIN RED: ningún caso necesita conectarse (todos usan --archivos o se frenan antes de leer). Un curl falso
+# adelante en el PATH garantiza que una regresión del script no pueda leer ninguna base (y menos prod): si alguien lo
+# llama, queda anotado y la prueba falla.
+mkdir -p "$T/sinred"; printf '#!/bin/sh\necho "$*" >> "%s/red.log"; exit 97\n' "$T" > "$T/sinred/curl"; chmod +x "$T/sinred/curl"
+export PATH="$T/sinred:$PATH"
 export LC_ALL=C
 for i in $(seq 1 3100); do echo "col club_x.c$i text"; done > "$T/a.txt"
 cp "$T/a.txt" "$T/b.txt"
@@ -36,12 +41,15 @@ caso 'entrada editada después de firmar → 4'                4 --archivos "$T/
 caso 'salida A vacía → 3'                                   3 --archivos "$T/vacio.txt" "$T/b.txt" --esperadas "$T/esp_vacio.txt"
 caso 'salida B corta (< 3000) → 3'                          3 --archivos "$T/a.txt" "$T/corto.txt" --esperadas "$T/esp_vacio.txt"
 caso 'salida «null» (error de la API) → 3'                  3 --archivos "$T/null.txt" "$T/null.txt" --esperadas "$T/esp_vacio.txt"
-caso 'leer prod sin --prod-firmado → 5 (no conecta)'        5 --ref-a hwiatgicyyqyezqwldia --ref-b yiczgdtirrkdvohdquzf
-caso 'prod: A = B (mismo ref) → 5'                         5 --ref-a yiczgdtirrkdvohdquzf --ref-b yiczgdtirrkdvohdquzf --prod-firmado
+caso 'leer prod sin --prod-firmado → 5 (no conecta)'        5 --ref-a yiczgdtirrkdvohdquzf --ref-b hwiatgicyyqyezqwldia
+# (09-nov) sin el ref de prod ni --prod-firmado: si el freno de A = B fallara (como el script de 4fb5f28), la prueba
+# leería STAGING, nunca prod. --modo-prod aplica las reglas de prod a dos refs de staging.
+caso 'modo prod: A = B (mismo ref) → 5'                    5 --ref-a hwiatgicyyqyezqwldia --ref-b hwiatgicyyqyezqwldia --modo-prod
 caso 'prod: A = B (mismo archivo) → 5'                      5 --archivos "$T/a.txt" "$T/a.txt" --esperadas "$T/esp_vacio.txt" --modo-prod
 MIN_OBJETOS=100 caso 'prod: MIN_OBJETOS bajo el piso → 5'                   5 --archivos "$T/a.txt" "$T/b.txt" --esperadas "$T/esp_vacio.txt" --modo-prod
 caso 'prod: dos archivos idénticos, distintos → 0'          0 --archivos "$T/a.txt" "$T/b.txt" --esperadas "$T/esp_vacio.txt" --modo-prod
 caso 'prod: diferencia sin esperar → 1'                     1 --archivos "$T/a.txt" "$T/b_falta.txt" --esperadas "$T/esp_vacio.txt" --modo-prod
 MIN_OBJETOS=50 caso 'staging: MIN_OBJETOS bajo (sin prod) se respeta → 0'  0 --archivos "$T/corto.txt" "$T/corto2.txt" --esperadas "$T/esp_vacio.txt"
+if [ -s "$T/red.log" ]; then echo "FALLA alguien intentó conectarse (curl): $(wc -l < "$T/red.log") veces"; fallas=$((fallas+1)); else echo "ok   ningún caso salió a la red"; fi
 echo "fallas: $fallas"
 exit $fallas

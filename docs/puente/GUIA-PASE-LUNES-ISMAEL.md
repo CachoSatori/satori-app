@@ -1,7 +1,7 @@
 # Guía del pase del puente (v2 con la 082 v3) — para el dueño, en una página
 
 > Versión simple del paquete [`PASE-PROD-2026-11-09.md`](PASE-PROD-2026-11-09.md), el **único vigente** (el nombre de
-> los archivos queda por historia; la fecha es cuando Grok dé GO). Si algo de acá no coincide con el paquete, **vale el
+> los archivos queda por historia: el pase del lunes 09-nov 9:00 quedó **reprogramado, fecha a definir por el dueño tras la auditoría de la 082 v3**). Si algo de acá no coincide con el paquete, **vale el
 > paquete** y se para. **Ningún secreto se copia, se pega ni se muestra**: ni en un chat, ni en WhatsApp, ni en el
 > portapapeles, ni en la pantalla.
 

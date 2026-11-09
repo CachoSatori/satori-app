@@ -159,7 +159,7 @@ Cada prueba va a la batería con su mutación en `mutaciones_r7.json`: tiene que
 **S0 y S8 están APLICADAS EN STAGING** (09-nov 14:25 CR, autorizado por el dueño; rama `claude/club-s0-s8`). Detalle y
 vuelta atrás en AVANCE-LC («09-nov · tarde: S0 y S8»).
 
-**S0b y S2 están ESCRITAS Y PROBADAS, sin aplicar** (rama `claude/club-s0b-s2`): pruebas 90 y 91, que caen sin el arreglo.
+**S0b y S2 están APLICADAS EN STAGING** (09-nov 16:32 CR, autorizado por el dueño; rama `claude/club-s0b-s2`): pruebas 90 y 91, que caen sin el arreglo.
 Detalle en AVANCE-LC («09-nov · tarde: S0b y S2»). S0b también evita «REGISTRO_SIN_FACTURA» con la factura del plan B en
 `R`. El resto sigue como propuesta.
 

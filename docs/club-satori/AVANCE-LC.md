@@ -657,7 +657,7 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
   del Club a prod, cuando la 075 se renumere (075 → 150, CLUB-AUD-100): ahí se arma la fila del ledger con el archivo
   final. La paridad (975 = 975) compara el catálogo, no el ledger, y sigue igual.
 
-### 09-nov · tarde: S0b y S2 preparadas, SIN aplicar en staging (falta el permiso del dueño) · rama `claude/club-s0b-s2`, nada en prod
+### 09-nov · tarde: S0b y S2 aplicadas en STAGING (autorizado por el dueño) · rama `claude/club-s0b-s2`, nada en prod
 - **S0b · plan B con `R`.** La lista del plan B (`club_facturas_recientes`) trae también las facturas `R` de las últimas
   2 h, con la columna nueva `estado`. La caja las ve con la nota «Cobrada, falta el cierre de caja: vale igual».
   - `club_pos_ref` (modo factura) acepta `C` o `R`; una `X` no.
@@ -685,8 +685,22 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
   - md5 de `pg_get_functiondef`: `club_facturas_recientes` `594083c3…` (sin `estado`), `club_pos_ref` `6600c524…`,
     `club_visita_canonica` `544aec01…`, `club_cruce_provisional` `d09c0e6c…`, `club_excepciones` `a919ee7c…`,
     `club_reporte_visitas` `0ab994dd…`.
-- **Para aplicar (con el permiso del dueño):** en una transacción, `drop` + `create` de `club_facturas_recientes` con sus
-  permisos (`authenticated` ejecuta), y las otras 5 funciones tal cual están en la 075 de la rama. **Vuelta atrás:** las
-  6 funciones desde la 075 de `c309b26` (con el `drop` de `club_facturas_recientes` primero, y sus permisos). Las tablas
-  y los datos no cambian.
+- **Aplicado a las 16:32:39 CR**, autorizado por el dueño, en una transacción:
+  - precondición: los 6 md5 iguales a los de las 16:29 (se volvieron a leer a las 16:32: iguales);
+  - `drop` + `create` de `club_facturas_recientes` con sus permisos (`authenticated` ejecuta);
+  - las otras 5 funciones, tal cual están en la 075 de la rama (`04916fa`).
+- **Estado de staging DESPUÉS:**
+  - ledger igual (85 filas, la última 090);
+  - md5: `club_facturas_recientes` `d8a00039…` (con `estado`), `club_pos_ref` `4449eee4…`, `club_visita_canonica`
+    `a31bf7a3…`, `club_cruce_provisional` `7080f582…`, `club_excepciones` `43218a89…`, `club_reporte_visitas`
+    `fcd67503…`;
+  - permisos iguales a los de antes en las 6.
+- **Verde:**
+  - batería **595/595** (28 s);
+  - paridad **975 = 975**;
+  - mutaciones: R02 2, CLUB-AUD-43 1, R7-02 4, CLUB-AUD-66 3, S0 5 (ahora también caen la 90 y la 91), S8 1, **S0b 5**,
+    **S2 1**.
+- **Vuelta atrás en staging, si hiciera falta:** las 6 funciones desde la 075 de `c309b26`, con el `drop` de
+  `club_facturas_recientes` primero, y sus permisos. Las tablas y los datos no cambiaron.
+- **El ledger de staging (fila 075) sigue sin igualar el archivo**, como con S0/S8: se resuelve en el pase del Club.
 

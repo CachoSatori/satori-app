@@ -11,6 +11,7 @@ REF=${1:?Uso: $0 <REF de staging>}
 RAIZ=$(git rev-parse --show-toplevel)
 MIG=$(grep -viE '^\s*(begin|commit)\s*;\s*$' "$RAIZ/supabase/migrations/092_employees_borrado_solo_owner.sql")
 RB=$(grep -viE '^\s*(begin|commit)\s*;\s*$' "$RAIZ/scripts/sql/092_rollback.sql")
+VER=$(grep -v '^--' "$RAIZ/scripts/sql/092_verificacion.sql")
 API="https://api.supabase.com/v1/projects/$REF/database/query"
 q() {
   local body
@@ -56,6 +57,12 @@ caso "canal admin (sin JWT) → se borra, rastro sin autor"           ""        
 r=$(q "begin; $MIG set local role anon; do \$\$ begin perform count(*) from public.employee_bajas; raise exception 'leyó' using errcode = 'P0001';
        exception when insufficient_privilege then raise notice 'ok'; end \$\$; select 'sin_permiso' as x; rollback;" | jq -r '.[-1].x') || r=""
 compara "anon no lee employee_bajas (42501)" '"sin_permiso"' "\"$r\""
+r=$(q "begin; $MIG $VER rollback;" | jq -c '.[-1].x') || r=""
+compara "verificación (la de prod) con la 092 puesta; sin fila del ledger en la prueba" \
+  '{"ledger_092":false,"tabla":true,"rls_tabla":true,"politicas":["employee_bajas_select_owner:SELECT"],"anon_sin_permisos":true,"funcion_definer":true,"funcion_no_publica":true,"trigger_activo":true,"bajas":0}' "$r"
+r=$(q "$VER" | jq -c '.[-1].x') || r=""
+compara "verificación sin la 092 (estado de staging hoy)" \
+  '{"ledger_092":false,"tabla":false,"rls_tabla":false,"politicas":[],"anon_sin_permisos":true,"funcion_definer":false,"funcion_no_publica":true,"trigger_activo":false,"bajas":null}' "$r"
 r=$(q "begin; $MIG $RB select json_build_object('tabla', to_regclass('public.employee_bajas') is null,
        'trigger', not exists (select 1 from pg_trigger where tgname = 'trg_employees_borrado_guardia'),
        'funcion', to_regprocedure('public.employees_borrado_guardia()') is null) as x; rollback;" | jq -c '.[-1].x') || r=""

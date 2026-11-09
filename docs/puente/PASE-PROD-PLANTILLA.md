@@ -89,6 +89,38 @@ function Ok([string]$que) { if ($LASTEXITCODE -ne 0) { throw "falló «$que» (c
 function Carpeta([string]$p) { if (-not [IO.Path]::IsPathRooted($p) -or -not (Test-Path -LiteralPath $p -PathType Container)) { throw "no es una carpeta absoluta existente: $p" }; (Resolve-Path -LiteralPath $p).Path }
 function Archivo([string]$p) { if (-not [IO.Path]::IsPathRooted($p) -or -not (Test-Path -LiteralPath $p -PathType Leaf)) { throw "no es un archivo absoluto existente: $p" }; (Resolve-Path -LiteralPath $p).Path }
 function Md5Bytes([string]$p) { (Get-FileHash -Algorithm MD5 -LiteralPath (Archivo $p)).Hash.ToLower() }   # sobre los BYTES, sin decodificar
+# Corrección 09-nov (hallazgo del pase, 4.1): en la PC del PoS corren DOS agentes, prod y staging, con la MISMA línea de
+# comando («node … pos-bridge/agente.ts», rutas relativas). Filtrar node.exe por la palabra 'agente' agarraba los dos: el
+# de prod estuvo ~40 min detenido esperando al de staging, y el «cerrar node a mano» cerró el de staging (~11:58). El
+# node de un agente se identifica por su CARPETA: la nombra su línea de comando o la de un proceso padre (el .cmd de la
+# tarea, que 1.9 verificó que entra a esa carpeta). Nunca por una palabra suelta. Ningún bloque cierra procesos.
+function Get-NodeDe([string]$Carpeta, [string]$Cmd) {
+  $todos = @(Get-CimInstance Win32_Process); $porPid = @{}; foreach ($x in $todos) { $porPid[[int]$x.ProcessId] = $x }
+  $marcas = @('(?i)' + [regex]::Escape($Carpeta.TrimEnd('\')) + '(\\|"|\s|$)')
+  if ($Cmd) { $marcas += '(?i)' + [regex]::Escape($Cmd) + '("|\s|$)' }
+  @($todos | Where-Object { $_.Name -eq 'node.exe' } | Where-Object {
+    $x = $_; $es = $false
+    for ($i = 0; $x -and $i -lt 6 -and -not $es; $i++) {
+      foreach ($m in $marcas) { if ([string]$x.CommandLine -match $m) { $es = $true } }
+      $x = if ([int]$x.ParentProcessId -ne [int]$x.ProcessId) { $porPid[[int]$x.ParentProcessId] } else { $null }
+    }
+    $es })
+}
+# Detiene la tarea y espera a que terminen SOLO los node.exe de esa carpeta (sus PID se toman ANTES de detenerla: después,
+# sin el .cmd padre, un node que tarde en cerrar ya no se podría atribuir). Los demás node.exe no se miran ni se tocan.
+function Detener-Agente([string]$Tarea, [string]$Carpeta, [string]$Cmd) {
+  $pids = @(Get-NodeDe $Carpeta $Cmd | ForEach-Object { [int]$_.ProcessId })
+  $otros = @(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $pids -notcontains [int]$_.ProcessId } | ForEach-Object { [int]$_.ProcessId })
+  if ((Get-ScheduledTask -TaskName $Tarea).State -eq 'Running' -and -not $pids.Count) { throw "PARADA: la tarea $Tarea corre y no se encuentra su node.exe por la carpeta $Carpeta (ni por $Cmd): no se adivina cuál es" }
+  "node del agente de $Carpeta : $($pids -join ', ') · otros node.exe (no se tocan): $($otros.Count)"
+  Stop-ScheduledTask -TaskName $Tarea
+  $t0 = Get-Date
+  while ((Get-ScheduledTask -TaskName $Tarea).State -eq 'Running' -or @(Get-CimInstance Win32_Process | Where-Object { $pids -contains [int]$_.ProcessId }).Count) {
+    if ((Get-Date) - $t0 -gt [TimeSpan]::FromMinutes(3)) { throw "el agente de $Carpeta (node $($pids -join ', ')) no se detuvo en 3 minutos: se avisa al dueño; si hay que cerrarlo, SOLO esos PID (Stop-Process -Id), nunca por nombre" }
+    Start-Sleep -Seconds 5
+  }
+  "agente de $Carpeta detenido $(Get-Date -Format 'HH:mm:ss') · los otros node.exe siguen: $(@(Get-CimInstance Win32_Process | Where-Object { $otros -contains [int]$_.ProcessId }).Count) de $($otros.Count)"
+}
 if (Test-Path -LiteralPath C:\satori\supabase-cli -PathType Container) { $env:Path = 'C:\satori\supabase-cli;' + $env:Path }   # corrección 09-nov: el CLI del pase (0.6)
 ```
 - **Cada comando nativo** (`git`, `supabase`, `node`, `npm.cmd`, `curl.exe`, `cmd /c`) va seguido **en la misma línea** de
@@ -450,18 +482,18 @@ PROD; la consola del deploy con el preámbulo corrido y el comando de 4.4 escrit
 `ingest-ndf` abierto. Entre 4.1 y 4.5 quedan solo la 082, el deploy y el arranque. Si pasa de 15 min, **no es
 parada**: se anota el motivo en §10.
 
-**4.1 Drenar escritores:**
+**4.1 Drenar escritores.** Corrección 09-nov (hallazgo del pase): la espera filtraba `node.exe` por la palabra `agente`,
+y eso agarra también el agente de **STAGING**, que corre en la misma PC con la misma línea de comando. Por eso el de prod
+estuvo ~40 min detenido, y el «cerrar node a mano» probablemente cerró el de staging (~11:58). Ahora el agente de prod se
+identifica por **su carpeta** (`Detener-Agente`, en el preámbulo): sus PID se anotan antes de detener la tarea y la espera
+mira solo esos. **Ningún bloque cierra procesos**; si el de prod no se detiene en 3 minutos, se avisa y se cierra **solo
+por PID**.
 ```powershell
+$AGDIR = Carpeta C:\satori\satori-app-prod; $CMDT = Archivo C:\satori\pos-agente-prod.cmd   # la carpeta y el .cmd que verificó 1.9
+# un backfill (replay, 6.4) no se identifica por la carpeta si se lanzó desde una consola: cualquiera frena y se mira
 $bf = @(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $_.CommandLine -match 'backfill' })
-if ($bf.Count) { throw 'hay un backfill corriendo: esperar a que termine' }
-Stop-ScheduledTask -TaskName 'Satori PoS Bridge PROD'
-$t0 = Get-Date
-while ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -eq 'Running' -or
-       @(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $_.CommandLine -match 'agente' }).Count) {
-  if ((Get-Date) - $t0 -gt [TimeSpan]::FromMinutes(3)) { throw 'el agente no se detuvo en 3 minutos' }
-  Start-Sleep -Seconds 5
-}
-"agente detenido $(Get-Date -Format 'HH:mm:ss')"
+if ($bf.Count) { throw "hay un backfill corriendo (node $(@($bf | ForEach-Object { $_.ProcessId }) -join ', ')): esperar a que termine o ver de qué agente es. No se cierra" }
+Detener-Agente 'Satori PoS Bridge PROD' $AGDIR $CMDT
 ```
 Sin requests en vuelo: en PROD, `select last_poll_at from pos_ndf_cursor where local = 'santa-teresa';` dos veces, con
 **2 minutos** entre una y otra: **no cambia**. Y Edge → Logs: ninguna invocación en esos 2 minutos.

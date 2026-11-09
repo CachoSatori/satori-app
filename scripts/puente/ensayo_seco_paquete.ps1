@@ -6,6 +6,9 @@
 # (09-nov tarde, Grok 120/121) 1.9 se prueba con tres cuentas REALES de la máquina: SYSTEM, LOCAL SERVICE y una sin perfil
 # cargado (Invitado: su NTUSER.DAT se monta y se desmonta; hace falta consola de administrador). Un secreto corto es PARADA.
 # Con -Paquete docs/puente/ROTACION-SECRETO-AGENTE.md corre el procedimiento aparte de rotación (Grok 120).
+# (09-nov noche, hallazgo del pase en 4.1) En la PC corren DOS agentes, prod y staging, con la MISMA línea de comando: los
+# dobles de Win32_Process los imitan (cada uno con su .cmd padre). La espera tiene que mirar solo el de prod, por su
+# carpeta; con el filtro viejo por la palabra 'agente' la espera no termina nunca. Ningún bloque cierra procesos.
 #
 # INSTRUCCIONES (5 líneas):
 #  1. En una PC Windows que NO sea la del PoS (si solo hay esa: igual sirve, el kit trabaja en una carpeta temporal y
@@ -49,7 +52,8 @@ $F081RB = $utf8.GetBytes("-- rollback 081 FICTICIO`n")
 $FINDEX = $utf8.GetBytes("// index.ts FICTICIO del Edge v1`n")
 $FMAPA = $utf8.GetBytes("// armar_mapa_secretos.mjs FICTICIO (ensayo en seco)`n")
 $MD5_081 = Md5DeBytes $F081; $MD5_082 = Md5DeBytes $F082; $MD5_081RB = Md5DeBytes $F081RB; $MD5_MAPA = Md5DeBytes $FMAPA
-$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; fmapa = $FMAPA; cli = '2.122.0'; tarea = 'Running'; secretos = @{}; cmd = $null; cuenta = 'SYSTEM'; corto = $false }
+$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; fmapa = $FMAPA; cli = '2.122.0'; tarea = 'Running'; secretos = @{}; cmd = $null; cuenta = 'SYSTEM'; corto = $false
+                 raiz = $null; prod_no_para = $false; prod_huerfano = $false; dormidas = 0; cerrados = @() }
 
 # ── Dobles de los comandos (las funciones le ganan a los .exe en PowerShell) ─────────────────────────────────────
 function git {
@@ -119,7 +123,27 @@ function Get-ScheduledTask { param([string]$TaskName)   # SYSTEM: en el runner s
     Actions = @([pscustomobject]@{ Execute = $global:KIT.cmd; Arguments = $null; WorkingDirectory = $null }) } }   # 09-nov: la acción es un .cmd
 function Stop-ScheduledTask { param([string]$TaskName) $global:KIT.tarea = 'Ready' }
 function Start-ScheduledTask { param([string]$TaskName) $global:KIT.tarea = 'Running' }
-function Get-CimInstance { @() }
+# 09-nov noche: dos agentes en la misma PC (prod y staging), con la MISMA línea de comando y cada uno con su .cmd padre
+$NODE_CL = '"C:\Program Files\nodejs\node.exe" --import ./pos-bridge/register.mjs pos-bridge/agente.ts'
+function KitProcesos {
+  $p = @([pscustomobject]@{ ProcessId = 4; ParentProcessId = 0; Name = 'System'; CommandLine = $null },
+         [pscustomobject]@{ ProcessId = 5000; ParentProcessId = 700; Name = 'cmd.exe'; CommandLine = "C:\WINDOWS\system32\cmd.exe /c `"$($global:KIT.raiz)\pos-agente-staging.cmd`"" },
+         [pscustomobject]@{ ProcessId = 5001; ParentProcessId = 5000; Name = 'node.exe'; CommandLine = $NODE_CL })   # STAGING: nunca se detiene
+  if ($global:KIT.tarea -eq 'Running' -or $global:KIT.prod_no_para) {
+    if ($global:KIT.prod_huerfano) { $p += [pscustomobject]@{ ProcessId = 4001; ParentProcessId = 999; Name = 'node.exe'; CommandLine = $NODE_CL } }
+    else { $p += [pscustomobject]@{ ProcessId = 4000; ParentProcessId = 700; Name = 'cmd.exe'; CommandLine = "C:\WINDOWS\system32\cmd.exe /c `"$($global:KIT.cmd)`"" }
+           $p += [pscustomobject]@{ ProcessId = 4001; ParentProcessId = 4000; Name = 'node.exe'; CommandLine = $NODE_CL } }
+  }
+  $p
+}
+function Get-CimInstance { param([string]$ClassName, [string]$Filter)
+  if ($ClassName -ne 'Win32_Process') { return @() }
+  $p = @(KitProcesos)
+  if ($Filter -match "name='([^']+)'") { $n = $Matches[1]; $p = @($p | Where-Object { $_.Name -eq $n }) }
+  $p
+}
+function Stop-Process { param([int[]]$Id) $global:KIT.cerrados += $Id; throw 'el doble de Stop-Process: un bloque cerró un proceso (ningún bloque cierra procesos)' }
+function Start-Sleep { param([int]$Seconds) $global:KIT.dormidas++; if ($global:KIT.dormidas -gt 40) { throw 'la espera no termina (doble de Start-Sleep: 40 vueltas sin que el agente se detenga)' } }
 
 # ── Bloques del paquete ───────────────────────────────────────────────────────────────────────────────────────────
 $doc = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $Paquete).Path, $utf8)
@@ -138,6 +162,7 @@ function Preparar-Agente([string]$raiz) {   # la carpeta del agente FICTICIA (so
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app\pos-bridge\register.mjs'), '// ficticio', $utf8)
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app\pos-bridge\.env.antes-pase'), "INGEST_SECRET=ficticio`n", $utf8)        # R6 la borra
   # 09-nov: la tarea corre C:\satori\pos-agente-prod.cmd (cd /d a la carpeta del agente y node)
+  $global:KIT.raiz = $raiz
   $global:KIT.cmd = Join-Path $raiz 'pos-agente-prod.cmd'
   [IO.File]::WriteAllText($global:KIT.cmd, "@echo off`r`ncd /d $raiz\satori-app-prod`r`n`"C:\Program Files\nodejs\node.exe`" --import ./pos-bridge/register.mjs pos-bridge/agente.ts`r`n", $utf8)
 }
@@ -156,6 +181,7 @@ try {
     $r2 = Join-Path ([IO.Path]::GetTempPath()) ("satori-ensayo-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
     New-Item -ItemType Directory -Force $r2 | Out-Null; Preparar-Agente $r2
     $global:KIT.falla_git = $null; $global:KIT.huella_mal = $false; $global:KIT.node_falla = $false; $global:KIT.f082 = $F082; $global:KIT.fmapa = $FMAPA; $global:KIT.cli = '2.122.0'; $global:KIT.tarea = 'Running'; $global:KIT.corto = $false; $global:KIT.cuenta = 'SYSTEM'
+    $global:KIT.prod_no_para = $false; $global:KIT.prod_huerfano = $false; $global:KIT.dormidas = 0
     try {
       . ([scriptblock]::Create((Preparar $bloques[0] $r2)))          # el preámbulo fail-stop
       for ($kitK = 1; $kitK -lt $nBloque - 1; $kitK++) { . ([scriptblock]::Create((Preparar $bloques[$kitK] $r2))) }   # nombre propio: los bloques corren en este ámbito   # lo previo, bien
@@ -243,6 +269,19 @@ try {
   try { Armar-Bloque $bom '082' 'x' (Md5DeBytes ([IO.File]::ReadAllBytes($bom))) | Out-Null; Resultado 'frena: BOM detectado (con su md5 correcto)' $false } catch { Resultado 'frena: BOM detectado (con su md5 correcto)' ($_.Exception.Message -like '*BOM*') }
   $mal = Join-Path $RAIZ 'utf8_malo.sql'; [IO.File]::WriteAllBytes($mal, [byte[]](0x2D, 0x2D, 0x20, 0xC3, 0x28, 0x0A))
   try { Armar-Bloque $mal '082' 'x' (Md5DeBytes ([IO.File]::ReadAllBytes($mal))) | Out-Null; Resultado 'frena: UTF-8 inválido' $false } catch { Resultado 'frena: UTF-8 inválido' $true }
+  # ── 4.1 (hallazgo del pase, 09-nov): con el agente de STAGING corriendo, la espera mira solo el de prod ──
+  Resultado 'ningún bloque cerró un proceso' ($global:KIT.cerrados.Count -eq 0) "cerró: $($global:KIT.cerrados -join ', ')"
+  $n41 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match '(?m)^Detener-Agente |Stop-ScheduledTask -TaskName .Satori PoS Bridge PROD.' } | Select-Object -First 1))
+  if ($n41 -gt 0) {
+    $global:KIT.tarea = 'Running'; $global:KIT.dormidas = 0; $global:KIT.prod_no_para = $false; $global:KIT.prod_huerfano = $false
+    $global:KIT.raiz = $RAIZ; $global:KIT.cmd = Join-Path $RAIZ 'pos-agente-prod.cmd'
+    try { . ([scriptblock]::Create((Preparar $bloques[0] $RAIZ))); for ($kitK = 1; $kitK -lt $n41 - 1; $kitK++) { if ($bloques[$kitK] -match '(?m)^function Ok\(') { . ([scriptblock]::Create((Preparar $bloques[$kitK] $RAIZ))) } }
+          $o = (. ([scriptblock]::Create((Preparar $bloques[$n41 - 1] $RAIZ)))) | Out-String; Write-Host "  $($o.Trim())"
+          Resultado '4.1: con el agente de STAGING corriendo (misma línea de comando) espera solo al de prod (4001) y el otro sigue' (($o -like '*: 4001 *otros node.exe (no se tocan): 1*') -and ($o -like '*siguen: 1 de 1*')) $o }
+    catch { Resultado '4.1: con el agente de STAGING corriendo, espera solo al de prod' $false $_.Exception.Message }
+    Frena '4.1: la tarea corre y su node no se encuentra por la carpeta' $n41 'PARADA' { param($r) $global:KIT.prod_huerfano = $true }
+    Frena '4.1: el node de prod no se detiene (la espera mira su PID)' $n41 'la espera no termina' { param($r) $global:KIT.prod_no_para = $true }
+  }
   }
 } finally {
   $env:LOCALAPPDATA = $LAD_ANTES

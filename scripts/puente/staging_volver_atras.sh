@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Vuelta atrás del ensayo v2 en STAGING (ref fijo). Deja staging como estaba antes del 08-nov 20:16 (-06:00):
+# Vuelta atrás del ensayo en STAGING (ref fijo; v2 del 08-nov 20:16 y v3 del 09-nov 01:43, -06:00). Deja staging como
+# estaba antes del 08-nov 20:16:
 #   1. PRIMERO el Edge `ingest-ndf` desde 4d3513a6… (la v12 de staging era ese Edge; el mismo plan que el rollback de prod);
 #   2. DESPUÉS la 082 ORIGINAL (de e4678b3, md5 5db915c8…) y su fila del ledger, en UNA transacción, con precondición (la
-#      fila tiene que estar en la v2, 292dd3aa…) y conteo de filas; la columna max_factura_vista se saca solo con
+#      fila tiene que estar en la v3, edb7ffc5…, o en la v2, 292dd3aa…) y conteo de filas; la columna max_factura_vista se saca solo con
 #      SACAR_COLUMNA=1 (puede quedar: el Edge viejo no la mira).
 # Uso: bash scripts/puente/staging_volver_atras.sh [--seco]   (--seco: la parte SQL termina en ROLLBACK y no despliega)
 # Token: el proxy (SUPABASE_ACCESS_TOKEN). CLI de Supabase en PATH o en SUPABASE_CLI.
@@ -20,8 +21,9 @@ open(sys.argv[2], 'w').write(f"""begin;
 set local lock_timeout = '5s';
 lock table supabase_migrations.schema_migrations in share row exclusive mode;
 do $p$ begin
-  if (select count(*) from supabase_migrations.schema_migrations where version = '082' and md5(statements[1]) = '292dd3aa8f7dfed676d10103870f5d21') <> 1 then
-    raise exception 'precondición: la fila 082 de staging no está en la v2';
+  if (select count(*) from supabase_migrations.schema_migrations where version = '082'
+        and md5(statements[1]) in ('edb7ffc58976804e55968f75df530a05', '292dd3aa8f7dfed676d10103870f5d21')) <> 1 then
+    raise exception 'precondición: la fila 082 de staging no está en la v3 ni en la v2';
   end if;
 end $p$;
 {cuerpo}
@@ -32,7 +34,7 @@ do $p$ declare n int; begin
   if (select md5(statements[1]) from supabase_migrations.schema_migrations where version = '082') <> '5db915c8a422519ce77050f1fb1b916a' then
     raise exception 'el ledger no quedó con la 082 original';
   end if;
-  if (select prosrc like '%corte_retenido_por_r%' from pg_proc where proname = 'pos_ndf_ingestar') then raise exception 'la función sigue en v2'; end if;
+  if (select prosrc like '%corte_retenido_por_r%' from pg_proc where proname = 'pos_ndf_ingestar') then raise exception 'la función sigue en v2/v3'; end if;
 end $p$;
 {fin}
 """)

@@ -2,6 +2,14 @@
 //
 //   node --import file:///C:/satori/satori-app-prod/pos-bridge/register.mjs C:\satori\pase-v2\scripts\puente\armar_mapa_secretos.mjs
 //        --agente C:\satori\satori-app-prod --clon C:\satori\pase-v2 --salida <archivo .env, ruta absoluta> [--nuevo-santa-teresa]
+//        [--huella-completa]
+//   o, solo para medir (paquete 1.9; Grok 119): … --agente … --clon … --solo-medir
+//
+// · --solo-medir: NO arma el mapa, NO escribe nada y NO aborta por el largo: dice qué archivo manda, el largo del secreto
+//   efectivo y si cumple el mínimo de 32. Así un secreto corto no corta el pase en 1.9: se sigue por el camino de §4.4.
+// · Huella (Grok 119): por pantalla solo los 12 primeros caracteres del sha256 del mapa (`huella_12`). El sha256 entero
+//   sale SOLO con --huella-completa, que usa el paquete 3.2 capturando la salida en una variable (no se muestra) para
+//   compararla con la del CLI.
 //
 // · El secreto de santa-teresa sale del MISMO parser del agente de prod: `loadEnv` + `loadAgenteConfig` de su propia
 //   carpeta (pos-bridge/config.ts y configAgente.ts de 4d3513a). Es el valor que el agente manda de verdad.
@@ -28,15 +36,19 @@ function args() {
   const a = process.argv.slice(2), o = {}
   for (let i = 0; i < a.length; i++) {
     if (a[i] === '--nuevo-santa-teresa') { o.nuevo = true; continue }
+    if (a[i] === '--solo-medir') { o.medir = true; continue }
+    if (a[i] === '--huella-completa') { o.completa = true; continue }
     if (!['--agente', '--clon', '--salida'].includes(a[i]) || a[i + 1] === undefined) salir(`argumento no válido: ${a[i]}`)
     o[a[i].slice(2)] = a[++i]
   }
-  for (const k of ['agente', 'clon', 'salida']) {
+  if (o.medir && (o.salida !== undefined || o.nuevo || o.completa)) salir('--solo-medir va sin --salida, --nuevo-santa-teresa ni --huella-completa')
+  for (const k of o.medir ? ['agente', 'clon'] : ['agente', 'clon', 'salida']) {
     if (!o[k]) salir(`falta --${k}`)
     if (!isAbsolute(o[k])) salir(`--${k} tiene que ser una ruta absoluta`)
     o[k] = resolve(o[k])
   }
   for (const k of ['agente', 'clon']) if (!existsSync(o[k]) || !statSync(o[k]).isDirectory()) salir(`--${k} no es una carpeta`)
+  if (o.medir) return o
   if (!existsSync(dirname(o.salida))) salir('la carpeta de --salida no existe')
   for (const k of ['agente', 'clon']) {
     const r = relative(o[k], o.salida)
@@ -79,6 +91,11 @@ async function main() {
   const efectivo = () => agMod.loadAgenteConfig(cfgMod.loadEnv()).ingestSecret
   let st, cambiado = false
   try { st = efectivo() } catch (e) { salir(`el agente no podría arrancar con su configuración (${e.message.replace(/=.*/, '')})`) }
+  if (o.medir) {
+    console.log(JSON.stringify({ archivo_que_manda: relative(cfgMod.RAIZ_REPO, manda), largo_santa_teresa: st.length,
+      cumple_32: st.length >= 32 }))
+    return
+  }
   if (st.length < 32) {
     if (!o.nuevo) salir(`el secreto del agente mide ${st.length} (< 32): paquete §4.4 (--nuevo-santa-teresa, con la tarea detenida)`)
     const nuevo = randomBytes(32).toString('hex')
@@ -111,8 +128,9 @@ async function main() {
     writeFileSync(tmp, `POS_INGEST_SECRETS='${json}'\n`, { encoding: 'utf8', mode: 0o600 })
     renameSync(tmp, o.salida)
   } catch (e) { rmSync(tmp, { force: true }); salir(`no se pudo escribir la salida (${e.code ?? 'error'})`) }
+  const h = sha(json)
   console.log(JSON.stringify({ archivo_que_manda: relative(cfgMod.RAIZ_REPO, manda), largo_santa_teresa: st.length,
-    santa_teresa_cambiado: cambiado, sha256_mapa: sha(json) }))
+    santa_teresa_cambiado: cambiado, huella_12: h.slice(0, 12), ...(o.completa ? { sha256_mapa: h } : {}) }))
 }
 
 main().catch((e) => salir(`error inesperado (${e?.code ?? e?.name ?? 'error'})`))

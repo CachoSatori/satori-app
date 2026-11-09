@@ -1,6 +1,6 @@
 // B3 (núcleo): sincronización con una base y un Google simulados. Cuenta de servicio FALSA generada en memoria.
 import { describe, it, expect, beforeAll } from 'vitest'
-import { sincronizar, mensajeCanje, tokenGoogle, API_WALLET, URL_TOKEN, type Rpc, type Fetch } from './sincronizar'
+import { sincronizar, mensajeCanje, tokenGoogle, API_WALLET, URL_TOKEN, TOPE_REINTENTOS, type Rpc, type Fetch } from './sincronizar'
 import type { CuentaServicio, PaseDatos } from './googlePase'
 import { configurarBaseClub } from './googlePase'
 configurarBaseClub('https://club.ejemplo.test')   // (08-nov noche) el dominio es configuración
@@ -25,7 +25,8 @@ beforeAll(async () => {
 })
 
 function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id: string | null }>; alertas?: unknown[];
-                        google?: (url: string, metodo: string) => number; emitidos?: string[] | 'error' }) {
+                        google?: (url: string, metodo: string) => number; emitidos?: string[] | 'error';
+                        reintentos?: string[] | 'error'; anotar?: 'error'; red?: (url: string) => boolean }) {
   const rpcs: Array<{ fn: string; args: Record<string, unknown> }> = []
   const http: Array<{ url: string; metodo: string; body?: string }> = []
   const rpc: Rpc = async (fn, args) => {
@@ -34,6 +35,11 @@ function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id
     if (fn === 'club_pase_eventos_leer') return { data: o.eventos, error: null }
     if (fn === 'club_pase_datos') return { data: datos(String(args.p_miembro)), error: null }
     if (fn === 'club_alertas_pendientes') return { data: o.alertas ?? [], error: null }
+    if (fn === 'club_pase_reintentos_leer') {
+      if (o.reintentos === 'error') return { data: null, error: { message: 'no existe' } }
+      return { data: (o.reintentos ?? []).map(m => ({ miembro_id: m })), error: null }
+    }
+    if (fn === 'club_pase_reintento_anotar' && o.anotar === 'error') return { data: null, error: { message: 'no existe' } }
     if (fn === 'club_pases_emitidos') {
       if (o.emitidos === 'error') return { data: null, error: { message: 'x' } }
       return { data: (o.emitidos ?? []).filter(m => args.p_despues === null || m > String(args.p_despues)).map(m => ({ miembro_id: m })), error: null }
@@ -42,6 +48,7 @@ function escenario(o: { cursor?: number; eventos: Array<{ id: number; miembro_id
   }
   const fetchFn: Fetch = async (url, init) => {
     http.push({ url, metodo: init.method, body: init.body })
+    if (o.red?.(url)) throw new TypeError('fetch failed (simulado)')
     if (url === URL_TOKEN) return { status: 200, json: async () => ({ access_token: 'tok-falso', expires_in: 3600 }) }
     const st = o.google?.(url, init.method) ?? 200
     return { status: st, json: async () => ({}) }
@@ -62,15 +69,84 @@ describe('sincronizar (B3, núcleo)', () => {
     expect(e.rpcs.find(x => x.fn === 'club_pase_cursor_guardar')?.args).toEqual({ p_nombre: 'google', p_id: 13 })
   })
 
-  it('objeto inexistente en Google (404) no es error; un 500 sí: el cursor no avanza', async () => {
+  it('objeto inexistente en Google (404) no es error; un 500 sí, pero se anota y el cursor avanza (Grok 75)', async () => {
     const ok = escenario({ eventos: [{ id: 11, miembro_id: A }], google: () => 404 })
     const r1 = await sincronizar({ rpc: ok.rpc, fetch: ok.fetchFn, sa, issuer: ISSUER })
-    expect(r1).toMatchObject({ sin_pase: 1, errores: [], cursor_despues: 11 })
+    expect(r1).toMatchObject({ sin_pase: 1, errores: [], cursor_despues: 11, fallidos: 0 })
     const mal = escenario({ eventos: [{ id: 11, miembro_id: A }], google: () => 500 })
     const r2 = await sincronizar({ rpc: mal.rpc, fetch: mal.fetchFn, sa, issuer: ISSUER })
-    expect(r2.errores).toHaveLength(1)
-    expect(r2.cursor_despues).toBe(10)
-    expect(mal.rpcs.find(x => x.fn === 'club_pase_cursor_guardar')).toBeUndefined()
+    expect(r2).toMatchObject({ fallidos: 1, anotados: 1, cursor_despues: 11 })
+    expect(mal.rpcs.find(x => x.fn === 'club_pase_reintento_anotar')?.args).toEqual({ p_miembro: A, p_plataforma: 'google', p_evento: 11, p_error: 'PATCH HTTP 500' })
+  })
+
+  describe('Grok 75: un miembro con error no traba el cursor', () => {
+    const C = '00000000-0000-4000-8000-0000000000cc'
+    const fallaB = (url: string) => (url.includes(`club-${B}`) ? 500 : 200)
+
+    it('un miembro que falla entre dos que andan: los dos se actualizan, el error queda anotado y el cursor avanza', async () => {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: B }, { id: 13, miembro_id: C }], google: fallaB })
+      const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
+      expect(r).toMatchObject({ actualizados: 2, fallidos: 1, anotados: 1, cursor_despues: 13 })
+      expect(e.http.filter(h => h.metodo === 'PATCH').map(h => h.url.slice(-2))).toEqual(['aa', 'bb', 'cc'])   // siguió después del error
+      expect(e.rpcs.filter(x => x.fn === 'club_pase_reintento_anotar').map(x => x.args)).toEqual([
+        { p_miembro: B, p_plataforma: 'google', p_evento: 12, p_error: 'PATCH HTTP 500' }])
+      expect(e.rpcs.find(x => x.fn === 'club_pase_cursor_guardar')?.args).toEqual({ p_nombre: 'google', p_id: 13 })
+    })
+
+    it('la pasada siguiente reintenta al anotado (sin eventos nuevos) y, si sale bien, lo da por resuelto', async () => {
+      const e = escenario({ eventos: [], reintentos: [B] })
+      const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
+      expect(r).toMatchObject({ reintentados: 1, actualizados: 1, reintentos_resueltos: 1, fallidos: 0, cursor_despues: 10 })
+      expect(e.rpcs.find(x => x.fn === 'club_pase_reintentos_leer')?.args).toEqual({ p_plataforma: 'google', p_tope: TOPE_REINTENTOS, p_limite: 200 })
+      expect(e.rpcs.find(x => x.fn === 'club_pase_reintento_resuelto')?.args).toEqual({ p_miembro: B, p_plataforma: 'google' })
+      expect(e.rpcs.find(x => x.fn === 'club_pase_cursor_guardar')).toBeUndefined()   // sin eventos, el cursor no se toca
+    })
+
+    it('si el reintento vuelve a fallar, se anota otra vez (la base cuenta el intento) y no se da por resuelto', async () => {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }], reintentos: [B], google: fallaB })
+      const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
+      expect(r).toMatchObject({ actualizados: 1, fallidos: 1, anotados: 1, reintentos_resueltos: 0, cursor_despues: 11 })
+      expect(e.rpcs.find(x => x.fn === 'club_pase_reintento_anotar')?.args).toMatchObject({ p_miembro: B, p_evento: null })
+      expect(e.rpcs.find(x => x.fn === 'club_pase_reintento_resuelto')).toBeUndefined()
+    })
+
+    it('una caída de red con UN miembro (excepción) no corta la pasada', async () => {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: B }], red: (u) => u.includes(`club-${A}`) })
+      const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
+      expect(r).toMatchObject({ actualizados: 1, fallidos: 1, anotados: 1, cursor_despues: 12 })
+      expect(e.rpcs.find(x => x.fn === 'club_pase_reintento_anotar')?.args.p_error).toBe('excepción')
+    })
+
+    it('sin dónde anotar (la tabla de reintentos todavía no está): el cursor frena justo antes del primer evento del fallido', async () => {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: B }, { id: 13, miembro_id: C }, { id: 14, miembro_id: B }],
+                            google: fallaB, reintentos: 'error', anotar: 'error' })
+      const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
+      expect(r).toMatchObject({ actualizados: 2, fallidos: 1, anotados: 0, cursor_despues: 11 })
+      expect(r.errores).toEqual(expect.arrayContaining(['reintentos: lectura', `no se pudo anotar ${B.slice(0, 8)}`]))
+    })
+
+    it('sin dónde anotar y el fallido vino por un evento global: el cursor no pasa ese global', async () => {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: null }], emitidos: [A, B], google: fallaB, anotar: 'error' })
+      const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
+      expect(r).toMatchObject({ fallidos: 1, anotados: 0, cursor_despues: 11 })
+    })
+
+    it('lo anotado no lleva datos del pase ni teléfonos: solo id, evento y un mensaje corto', async () => {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }, { id: 12, miembro_id: B }], google: () => 503 })
+      await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
+      for (const x of e.rpcs.filter(y => y.fn === 'club_pase_reintento_anotar')) {
+        expect(Object.keys(x.args).sort()).toEqual(['p_error', 'p_evento', 'p_miembro', 'p_plataforma'])
+        expect(String(x.args.p_error)).toMatch(/^(datos|contrato|excepción|PATCH HTTP \d{3}|token de Google: HTTP \d{3})$/)
+      }
+    })
+
+    it('un mensaje de canje que falla ya no traba el cursor (la alerta queda pendiente en la base)', async () => {
+      const e = escenario({ eventos: [{ id: 11, miembro_id: A }], alertas: [{ id: 5, miembro_id: A, creditos: 1, saldo_creditos: 2 }],
+                            google: (u, m) => (m === 'POST' && u.endsWith('/addMessage') ? 500 : 200) })
+      const r = await sincronizar({ rpc: e.rpc, fetch: e.fetchFn, sa, issuer: ISSUER })
+      expect(r).toMatchObject({ actualizados: 1, mensajes_enviados: 0, cursor_despues: 11 })
+      expect(e.rpcs.find(x => x.fn === 'club_alerta_enviada')).toBeUndefined()
+    })
   })
 
   it('un evento global (promociones) actualiza todos los pases emitidos y el cursor pasa', async () => {

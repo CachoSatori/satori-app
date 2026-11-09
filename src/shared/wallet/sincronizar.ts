@@ -11,8 +11,16 @@
  *    primer evento global (los miembros del lote igual se actualizan).
  *  · mensajes: `club_alertas_pendientes` → `addMessage` en el objeto → `club_alerta_enviada(id, 'google')`. Si el pase
  *    no existe (404), la alerta queda pendiente (sigue el link wa.me en caja).
- *  · el cursor se guarda solo si todo el lote salió bien (PATCH es idempotente: reintentar no rompe nada). La base
- *    solo deja avanzarlo (CLUB-AUD-70).
+ *  · (09-nov, Grok 75) un miembro con error NO traba el cursor: se lo saltea, se ANOTA para reintentar (miembro, evento,
+ *    mensaje corto; nunca el teléfono ni datos del pase) con `club_pase_reintento_anotar`, y se sigue con el resto. El
+ *    cursor avanza por encima de todo lo procesado. Al empezar, cada pasada suma los miembros anotados
+ *    (`club_pase_reintentos_leer`, solo los que no llegaron al tope de intentos) y, si salen bien, los da por resueltos
+ *    (`club_pase_reintento_resuelto`). Un error persistente no se pierde: queda anotado con sus intentos.
+ *  · Si la anotación NO se puede guardar (la tabla de reintentos todavía no está en la base, o falla), se vuelve al modo
+ *    conservador: el cursor frena justo antes del primer evento de ese miembro en el lote, así nada se pierde.
+ *  · Los mensajes de canje que fallan no frenan el cursor: la alerta queda pendiente en la base y se reintenta sola.
+ *    Si la lista de pases emitidos falla, el cursor no pasa del primer evento global (como antes). La base solo deja
+ *    avanzar el cursor (CLUB-AUD-70); PATCH es idempotente.
  */
 import { armarObjeto, idObjeto, importarClave, validarDatos, type CuentaServicio, type DisenoPase, type PaseDatos } from './googlePase.ts'
 
@@ -22,6 +30,8 @@ export type Fetch = (url: string, init: { method: string; headers: Record<string
 export const API_WALLET = 'https://walletobjects.googleapis.com/walletobjects/v1'
 export const SCOPE_WALLET = 'https://www.googleapis.com/auth/wallet_object.issuer'
 export const URL_TOKEN = 'https://oauth2.googleapis.com/token'
+/** Grok 75: después de este número de intentos fallidos, el miembro ya no se reintenta solo (queda anotado). */
+export const TOPE_REINTENTOS = 10
 
 const b64url = (bytes: Uint8Array): string => {
   let s = ''
@@ -67,6 +77,13 @@ export interface ResultadoSync {
   mensajes_sin_pase: number
   cursor_antes: number
   cursor_despues: number
+  /** Grok 75: miembros que fallaron en esta pasada (salteados). */
+  fallidos: number
+  /** …de esos, cuántos quedaron anotados para reintentar. */
+  anotados: number
+  /** Miembros anotados de pasadas anteriores que se reintentaron, y cuántos salieron bien. */
+  reintentados: number
+  reintentos_resueltos: number
   errores: string[]
 }
 
@@ -83,7 +100,8 @@ export interface DepsSync {
 export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
   const { rpc, issuer } = deps
   const res: ResultadoSync = { eventos: 0, miembros: 0, actualizados: 0, sin_pase: 0, globales_pendientes: 0,
-                               mensajes_enviados: 0, mensajes_sin_pase: 0, cursor_antes: 0, cursor_despues: 0, errores: [] }
+                               mensajes_enviados: 0, mensajes_sin_pase: 0, cursor_antes: 0, cursor_despues: 0,
+                               fallidos: 0, anotados: 0, reintentados: 0, reintentos_resueltos: 0, errores: [] }
   const c = await rpc('club_pase_cursor_leer', { p_nombre: 'google' })
   if (c.error) throw new Error('no se pudo leer el cursor')
   res.cursor_antes = res.cursor_despues = Number(c.data ?? 0)
@@ -111,23 +129,59 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
   }
   res.globales_pendientes = globalesOk ? 0 : eventos.filter(e => e.miembro_id === null).length
   const procesables = primerGlobal && !globalesOk ? eventos.filter(e => e.id < primerGlobal.id) : eventos
+
+  // Grok 75: los anotados de pasadas anteriores (bajo el tope) se suman a este lote.
+  const reintentos = new Set<string>()
+  const rr = await rpc('club_pase_reintentos_leer', { p_plataforma: 'google', p_tope: TOPE_REINTENTOS, p_limite: 200 })
+  if (rr.error) res.errores.push('reintentos: lectura')
+  else for (const f of ((rr.data ?? []) as Array<{ miembro_id: string }>)) { reintentos.add(f.miembro_id); set.add(f.miembro_id) }
+  res.reintentados = reintentos.size
   const miembros = [...set]
   res.miembros = miembros.length
+  // primer evento de cada miembro en el lote (para anotarlo y, sin anotación, para frenar el cursor antes)
+  const primerEvento = new Map<string, number>()
+  for (const e of eventos) if (e.miembro_id && !primerEvento.has(e.miembro_id)) primerEvento.set(e.miembro_id, e.id)
+  const fallidos: Array<{ m: string; error: string }> = []
+  const fallo = (m: string, error: string) => { fallidos.push({ m, error }); res.errores.push(`${error} de ${m.slice(0, 8)}`) }
 
   let token: string | null = null
   const auth = async () => (token ??= await tokenGoogle(deps.sa, deps.fetch, deps.ahora))
 
   for (const m of miembros) {
-    const d = await rpc('club_pase_datos', { p_miembro: m })
-    if (d.error) { res.errores.push(`datos de ${m.slice(0, 8)}`); continue }
-    if (d.data === null) continue                       // el miembro ya no existe: nada que actualizar
-    if (validarDatos(d.data) !== null) { res.errores.push(`contrato de ${m.slice(0, 8)}`); continue }
-    const objeto = armarObjeto(issuer, d.data as PaseDatos, deps.diseno)
-    const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, m))}`, {
-      method: 'PATCH', headers: { Authorization: `Bearer ${await auth()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
-    if (r.status === 200) res.actualizados++
-    else if (r.status === 404) res.sin_pase++
-    else res.errores.push(`PATCH ${m.slice(0, 8)}: HTTP ${r.status}`)
+    // Grok 75: cualquier falla de UN miembro (base, contrato, red, Google) se anota y se sigue con el siguiente.
+    let st: 'ok' | 'sin_pase' | 'nada'
+    try {
+      const d = await rpc('club_pase_datos', { p_miembro: m })
+      if (d.error) { fallo(m, 'datos'); continue }
+      if (d.data === null) st = 'nada'                    // el miembro ya no existe: nada que actualizar
+      else if (validarDatos(d.data) !== null) { fallo(m, 'contrato'); continue }
+      else {
+        const objeto = armarObjeto(issuer, d.data as PaseDatos, deps.diseno)
+        const r = await deps.fetch(`${API_WALLET}/genericObject/${encodeURIComponent(idObjeto(issuer, m))}`, {
+          method: 'PATCH', headers: { Authorization: `Bearer ${await auth()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(objeto) })
+        if (r.status === 200) { res.actualizados++; st = 'ok' }
+        else if (r.status === 404) { res.sin_pase++; st = 'sin_pase' }
+        else { fallo(m, `PATCH HTTP ${r.status}`); continue }
+      }
+    } catch (e) {
+      fallo(m, e instanceof Error && /^token de Google/.test(e.message) ? e.message : 'excepción'); continue
+    }
+    if (reintentos.has(m) && st) {
+      const z = await rpc('club_pase_reintento_resuelto', { p_miembro: m, p_plataforma: 'google' })
+      if (z.error) res.errores.push(`reintento resuelto ${m.slice(0, 8)}`); else res.reintentos_resueltos++
+    }
+  }
+  res.fallidos = fallidos.length
+  // Anotar los fallidos (sin datos personales: id, evento y un mensaje corto). Los que no se pudieron anotar frenan el
+  // cursor antes de su primer evento del lote (un fallido que vino solo por la lista de reintentos ya está anotado).
+  let tope = Number.POSITIVE_INFINITY
+  for (const f of fallidos) {
+    const a = await rpc('club_pase_reintento_anotar', { p_miembro: f.m, p_plataforma: 'google',
+                                                        p_evento: primerEvento.get(f.m) ?? null, p_error: f.error.slice(0, 120) })
+    if (!a.error) { res.anotados++; continue }
+    res.errores.push(`no se pudo anotar ${f.m.slice(0, 8)}`)
+    const pe = primerEvento.get(f.m) ?? (reintentos.has(f.m) ? undefined : primerGlobal?.id)
+    if (pe !== undefined) tope = Math.min(tope, pe - 1)
   }
 
   // Mensajes de canje
@@ -149,13 +203,16 @@ export async function sincronizar(deps: DepsSync): Promise<ResultadoSync> {
     else res.errores.push(`mensaje ${a.id}: HTTP ${r.status}`)
   }
 
-  // Cursor: solo si todo salió bien (si la lista de pases falló, nunca más allá del primer evento global).
-  const sinErroresDePase = res.errores.every(e => e === 'pases emitidos')
-  if (sinErroresDePase && procesables.length > 0) {
-    const hasta = procesables[procesables.length - 1].id
-    const g = await rpc('club_pase_cursor_guardar', { p_nombre: 'google', p_id: hasta })
-    if (g.error) res.errores.push('cursor')
-    else res.cursor_despues = hasta
+  // Cursor (Grok 75): avanza por encima de lo procesado aunque algún miembro haya fallado (quedó anotado). Nunca más allá
+  // del primer evento global si la lista de pases falló, ni del primer evento de un fallido que no se pudo anotar.
+  const candidatos = procesables.filter(e => e.id <= tope)
+  if (candidatos.length > 0) {
+    const hasta = candidatos[candidatos.length - 1].id
+    if (hasta > res.cursor_antes) {
+      const g = await rpc('club_pase_cursor_guardar', { p_nombre: 'google', p_id: hasta })
+      if (g.error) res.errores.push('cursor')
+      else res.cursor_despues = hasta
+    }
   }
   return res
 }

@@ -21,6 +21,8 @@ q() {
     -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Content-Type: application/json" -d @-
 }
 uno() { jq -c 'if type=="array" then .[-1] else . end'; }
+# Lo que se imprime de un error: su primera línea. NUNCA el DETAIL (Postgres pone ahí la fila entera, con datos).
+limpio() { jq -r 'if type=="object" and has("message") then (.message | split("\n")[0] | sub("DETAIL:.*"; "")) else tostring end' <<<"$1" 2>/dev/null | head -c 220; }
 uid() { q "select id from public.profiles where role = '$1' and is_active order by created_at limit 1" | jq -r '.[0].id // empty'; }
 
 FOTO="select json_build_object(
@@ -48,7 +50,7 @@ como() { # $1 = uid → SQL para simular su sesión
 
 fallas=0
 compara() { # $1 etiqueta, $2 antes, $3 después
-  if [ "$2" = "$3" ] && [ -n "$2" ] && [ "$2" != "null" ]; then echo "OK    $1"; else echo "FALLA $1"; echo "  antes:   $2"; echo "  después: $3"; fallas=$((fallas+1)); fi
+  if [ "$2" = "$3" ] && [ -n "$2" ] && [ "$2" != "null" ]; then echo "OK    $1"; else echo "FALLA $1"; echo "  antes:   $(limpio "$2")"; echo "  después: $(limpio "$3")"; fallas=$((fallas+1)); fi
 }
 
 echo "== Santa Teresa idéntica (postgres) =="
@@ -90,7 +92,7 @@ if [ -n "$id" ]; then
   r=$(q "begin; $MIG; $OTRO; $(como "$id")
          insert into public.cash_movements (created_by, movement_type, amount_crc, amount_usd, currency, description, caja_origen, method, status, location_id)
          values ('$id', 'ingreso', 1, 0, 'CRC', 'prueba 091 b', 'Caja Fuerte', 'Efectivo', 'aprobado', 'local-prueba-091'); rollback;")
-  if echo "$r" | grep -qi "row-level security"; then echo "OK    insert en otro local rechazado por RLS"; else echo "FALLA insert en otro local: $r"; fallas=$((fallas+1)); fi
+  if echo "$r" | grep -qE 'ERROR:[[:space:]]+42501' && echo "$r" | grep -qi "row-level security"; then echo "OK    insert en otro local rechazado por RLS (42501)"; else echo "FALLA insert en otro local: $(limpio "$r")"; fallas=$((fallas+1)); fi
 fi
 
 echo "== Las políticas se crean con la forma correcta y el rollback deja todo como antes (descartado) =="

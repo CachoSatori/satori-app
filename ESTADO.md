@@ -229,6 +229,12 @@ solas tras un reinicio (validado el 29/10).
 | PASE A PROD (solo renumeraciones) | 150–199 | — | **150** |
 | (fuera de bloque) | 086 | — | libre |
 
+**Asignadas en los bloques**
+
+| Número | Nombre | Bloque | Rama | Dónde está aplicada |
+|---|---|---|---|---|
+| 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **sin aplicar**: va después de la 075 (en el pase, toma el número siguiente al de la 075) |
+
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |
 |---|---|---|

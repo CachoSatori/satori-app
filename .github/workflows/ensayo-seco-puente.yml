@@ -1,0 +1,36 @@
+# Ensayo EN SECO de los bloques de PowerShell del paquete del pase del puente (v2), en Windows 5.1 y 7.
+# SOLO en la rama claude/puente-item11-prod-v2 (nunca en main). Sin secretos ni variables del repo, permisos mínimos.
+# El kit usa solo datos FICTICIOS y dobles de git/supabase/node/npm/cmd: no sale a Supabase ni a prod. El log es público.
+name: ensayo-seco-puente
+on:
+  push:
+    branches: [claude/puente-item11-prod-v2]
+    paths:
+      - docs/puente/PASE-PROD-2026-11-09.md
+      - scripts/puente/ensayo_seco_paquete.ps1
+      - .github/workflows/ensayo-seco-puente.yml
+permissions:
+  contents: read
+concurrency:
+  group: ensayo-seco-puente
+  cancel-in-progress: true
+jobs:
+  ensayo:
+    name: PowerShell ${{ matrix.ps }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ps: '5.1'
+            exe: powershell.exe
+          - ps: '7'
+            exe: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Ensayo en seco (${{ matrix.exe }})
+        shell: cmd
+        run: ${{ matrix.exe }} -NoProfile -ExecutionPolicy Bypass -Command "$PSVersionTable.PSVersion.ToString(); $PSVersionTable.PSEdition; & '.\scripts\puente\ensayo_seco_paquete.ps1'; exit $LASTEXITCODE"

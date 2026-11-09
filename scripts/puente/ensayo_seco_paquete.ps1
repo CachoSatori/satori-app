@@ -1,4 +1,4 @@
-# Ensayo EN SECO de los bloques de PowerShell del paquete del pase (v2). PowerShell 5.1 y 7.
+﻿# Ensayo EN SECO de los bloques de PowerShell del paquete del pase (v2). PowerShell 5.1 y 7.
 #
 # INSTRUCCIONES (5 líneas):
 #  1. En una PC Windows que NO sea la del PoS (si solo hay esa: igual sirve, el kit trabaja en una carpeta temporal y
@@ -8,6 +8,7 @@
 #  4. Cada línea dice PASS o FAIL; al final «RESULTADO: N PASS, M FAIL». Tiene que dar 0 FAIL en las dos versiones.
 #  5. Mandar a Claude la salida completa (no tiene secretos: todos los datos y el mapa son ficticios). Nada toca la red.
 #
+# (Este archivo va en UTF-8 CON BOM a propósito: PowerShell 5.1 lee un .ps1 sin BOM como ANSI.)
 # Qué hace: lee los bloques ```powershell del paquete (docs/puente/PASE-PROD-2026-11-09.md) TAL CUAL, cambia C:\satori
 # por una carpeta temporal nueva y los corre en orden con «dobles» de git, supabase, node, npm, cmd, curl.exe y las
 # tareas programadas: NADA sale a la red (ni a GitHub, ni a Supabase, ni a prod) y no se toca ninguna tarea real.

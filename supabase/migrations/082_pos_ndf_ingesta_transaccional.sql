@@ -21,6 +21,16 @@
 --   · el número que PROPONE el agente ya no manda: solo se usa para arrancar (sin nada guardado y sin `C` en el lote).
 --     Uno que no es numérico se ignora (el agente nunca lo manda: normaliza a dígitos). Si lo GUARDADO no es numérico
 --     (no pasa hoy), no hay orden confiable y vale el propuesto, como antes.
+-- v3 (Grok 113, 09-nov; decisión del dueño): dos huecos de la v2 cerrados, sin tocar el agente:
+--   · LOTE VACÍO SIN `last_factura` (el aviso de error del PoS del agente: `{tickets: [], cursor: {last_error}}`, o un
+--     ciclo sin nada): NO se recalcula el corte ni el máximo, solo `last_poll_at` y `last_error`. La v2 lo recalculaba
+--     sin ver ninguna `R` y el corte retenido saltaba al máximo: la `R` de abajo no se leía nunca al cerrar.
+--   · La menor `R` sale del lote Y de lo GUARDADO: las `R` numéricas del local en `pos_ndf_tickets` con
+--     `fecha_registra >= now() - 36 h` (la ventana del agente). Cubre la `R` que cierra entre `leerCerradas` y
+--     `leerProvisionales` (no viene en ninguna de las dos lecturas) y el reinicio después de un error: la `R` sigue
+--     guardada como `R` hasta que entra como `C` o como `X`, y mientras tanto retiene el corte.
+--   Costo conocido: una `R` que el PoS borra sin cerrarla ni anularla retiene el corte hasta 36 h (se releen las `C` de
+--   arriba en cada ciclo; el upsert no duplica). Se ve en `corte_retenido_por_r` del log del Edge y en la consulta C.
 -- El agente viejo adopta el cursor que le devuelve el servidor (ciclo.ts: «el cursor que manda es el que quedó
 -- GUARDADO»), así que en el ciclo siguiente relee desde el corte: la `R` que cierre entra como `C`, y las `C` de
 -- arriba se vuelven a leer (el upsert por factura no duplica: sus líneas se reemplazan). Cuando ya no viene ninguna
@@ -59,6 +69,9 @@ declare
   v_min_r      numeric;
   v_alto       text;
   v_corte      text;
+  v_min_r_lote numeric;
+  v_min_r_bd   numeric;
+  v_recalcula  boolean := false;
 begin
   if p_local is null or p_local !~ '^[a-z0-9-]{2,40}$' then
     raise exception 'local no válido' using errcode = 'P0001';
@@ -144,7 +157,16 @@ begin
   -- 4. Cursor (null = no se escribe; es lo que deja correr el backfill en paralelo sin mover el corte del agente).
   --    Contrato: ver la cabecera (Grok ID 83).
   select * into v_cur from public.pos_ndf_cursor where local = p_local for update;
-  if p_cursor is not null then
+  if p_cursor is not null and jsonb_array_length(coalesce(p_tickets, '[]')) = 0 and not (p_cursor ? 'last_factura') then
+    -- v3 (Grok 113): lote vacío sin `last_factura` (error del PoS o ciclo sin nada): solo el latido y el error.
+    insert into public.pos_ndf_cursor (local, last_poll_at, last_error)
+    values (p_local, now(), case when p_cursor ? 'last_error' then p_cursor ->> 'last_error' end)
+    on conflict (local) do update set
+      last_poll_at = excluded.last_poll_at,
+      last_error   = case when p_cursor ? 'last_error' then excluded.last_error else public.pos_ndf_cursor.last_error end;
+    select * into v_cur from public.pos_ndf_cursor where local = p_local;
+  elsif p_cursor is not null then
+    v_recalcula := true;
     v_fac := case when p_cursor ? 'last_factura' then nullif(btrim(p_cursor ->> 'last_factura'), '') end;
     if v_fac !~ '^\d+$' then v_fac := null; end if;
     v_fec := case when p_cursor ? 'last_fecha_registra' then (p_cursor ->> 'last_fecha_registra')::timestamptz end;
@@ -153,9 +175,16 @@ begin
       from jsonb_array_elements(coalesce(p_tickets, '[]')) x
      where x ->> 'estado' = 'C' and x ->> 'numero_factura' ~ '^\d+$'
      order by (x ->> 'numero_factura')::numeric desc limit 1;
-    select min((x ->> 'numero_factura')::numeric) into v_min_r
+    select min((x ->> 'numero_factura')::numeric) into v_min_r_lote
       from jsonb_array_elements(coalesce(p_tickets, '[]')) x
      where x ->> 'estado' = 'R' and x ->> 'numero_factura' ~ '^\d+$';
+    -- v3: y las R GUARDADAS del local en la ventana del agente (36 h). El upsert del paso 1 ya corrió: una R que llegó
+    -- como C en este lote ya no cuenta, y una que sigue R, sí.
+    select min(t.numero_factura::numeric) into v_min_r_bd
+      from public.pos_ndf_tickets t
+     where t.local = p_local and t.estado = 'R' and t.numero_factura ~ '^\d+$'
+       and t.fecha_registra >= now() - interval '36 hours';
+    v_min_r := least(v_min_r_lote, v_min_r_bd);
     if coalesce(v_cur.last_factura, '0') ~ '^\d+$' and coalesce(v_cur.max_factura_vista, '0') ~ '^\d+$' then
       -- el máximo: el mayor de lo guardado y las C del lote (el texto tal cual, con sus ceros)
       select f into v_alto from unnest(array[v_cur.max_factura_vista, v_cur.last_factura, v_max_c]) f
@@ -184,7 +213,8 @@ begin
                             'cursor', case when v_cur.local is null then null else to_jsonb(v_cur) end,
                             'cursor_escrito', p_cursor is not null,
                             -- la R que retiene el corte (null = ninguna): para el control del paquete y los logs
-                            'corte_retenido_por_r', case when p_cursor is not null and v_corte is distinct from v_alto
+                            'cursor_recalculado', v_recalcula,
+                            'corte_retenido_por_r', case when v_recalcula and v_corte is distinct from v_alto
                                                          then v_min_r::text end);
 end;
 $$;

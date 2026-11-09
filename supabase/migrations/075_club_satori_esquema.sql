@@ -1057,8 +1057,11 @@ begin
   -- Idempotencia: la misma operación devuelve el mismo resultado.
   select * into v_prev from public.club_movimientos where client_op_id = p_op;
   if found then
+    -- CLUB-AUD-66: el replay tiene que ser EL MISMO registro: mismo cupón y mismas personas (si no, es otro registro
+    -- con un p_op reusado: se rechaza sin tocar nada).
     if v_prev.tipo <> 'tarjeta' or v_prev.cupon_id is distinct from
-       (select c.id from public.club_cupones c where c.codigo = v_cod) then
+       (select c.id from public.club_cupones c where c.codigo = v_cod)
+       or v_prev.personas is distinct from p_personas then
       raise exception 'Esta operación ya se usó para otro registro: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
     end if;
     select * into v_cfg from public.club_config where location_id = v_prev.location_id;
@@ -1070,6 +1073,11 @@ begin
   -- LC-A4.4: replay de un cupón que quedó pendiente de aprobación
   select * into v_pend from public.club_personas_pendientes pp where pp.client_op_id = p_op;
   if found then
+    -- CLUB-AUD-66: también acá, el mismo cupón y las mismas personas.
+    if v_pend.cupon_id is distinct from (select c.id from public.club_cupones c where c.codigo = v_cod)
+       or v_pend.personas is distinct from p_personas then
+      raise exception 'Esta operación ya se usó para otro registro: cerrá la cuenta en pantalla y escaneá de nuevo' using errcode = 'P0001';
+    end if;
     select * into v_cfg from public.club_config where location_id = v_pend.location_id;
     v_saldo := public.club_saldo_personas(v_pend.miembro_id);
     miembro_id := v_pend.miembro_id; personas := v_saldo;

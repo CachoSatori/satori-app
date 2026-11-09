@@ -4638,6 +4638,63 @@ begin
   end;
 end $$;
 
+-- ═══ 87. (09-nov) CLUB-AUD-66: el replay de club_cupon_usar exige el mismo cupón y las mismas personas ═══
+do $$
+declare v_r uuid; v_n uuid; c1 text; c2 text; c3 text; c4 text; op1 uuid := gen_random_uuid(); op2 uuid := gen_random_uuid();
+        r record; e text; n0 int;
+begin
+  update club_config set valor_credito_crc = 18000, personas_por_credito = 6, anfitrion_tope_mes_crc = 25000, anfitrion_nuevo_dias = 90
+   where location_id = pg_temp.loc();
+  insert into club_miembros (location_id, tipo, nombre, origen, created_at) values (pg_temp.loc(), 'referente', 'Ref Replay 87', 'app', now() - interval '1 year') returning id into v_r;
+  update club_miembro_roles set desde = now() - interval '1 year' where miembro_id = v_r;
+  insert into club_miembros (location_id, tipo, nombre, origen) values (pg_temp.loc(), 'referente', 'Ref Nuevo Replay 87', 'app') returning id into v_n;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_r, now() + interval '1 day') returning codigo into c1;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_n, now() + interval '1 day') returning codigo into c2;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_n, now() + interval '1 day') returning codigo into c3;
+  insert into club_cupones (location_id, referente_id, vence_en) values (pg_temp.loc(), v_n, now() + interval '1 day') returning codigo into c4;
+  -- (a) replay de un movimiento: mismas personas → el mismo resultado; otras personas → rechazado, nada cambia
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c1, 3, '990871', op1);
+  select * into r from public.club_cupon_usar(c1, 3, '990871', op1);
+  perform pg_temp.yo();
+  perform pg_temp.r('87', 'replay con las mismas personas: devuelve el mismo saldo (3) y no duplica',
+    r.personas = 3 and (select count(*) from club_movimientos where client_op_id = op1) = 1, format('%s', r));
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_cupon_usar(c1, 5, '990871', op1);
+    perform pg_temp.yo(); e := 'ok';
+  exception when others then perform pg_temp.yo(); e := sqlerrm; end;
+  perform pg_temp.r('87', 'CLUB-AUD-66 · replay del mismo p_op con OTRAS personas (5 en vez de 3) → rechazado y nada cambia',
+    e like 'Esta operación ya se usó para otro registro%' and public.club_saldo_personas(v_r) = 3
+      and (select personas from club_cupones where codigo = c1) = 3, e);
+  -- (b) replay de un PENDIENTE (anfitrión nuevo sobre el tope): con otro cupón o con otras personas → rechazado
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c2, 6, '990872', gen_random_uuid());     -- ₡18.000: suma
+  select * into r from public.club_cupon_usar(c3, 3, '990873', op2);                   -- pasa el tope: pendiente
+  perform pg_temp.yo();
+  n0 := (select count(*) from club_personas_pendientes where miembro_id = v_n);
+  perform pg_temp.r('87', 'partida: el cupón que pasa el tope queda pendiente', r.pendientes = 3 and n0 = 1, format('%s', r));
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_cupon_usar(c4, 3, '990874', op2);
+    perform pg_temp.yo(); e := 'ok';
+  exception when others then perform pg_temp.yo(); e := sqlerrm; end;
+  perform pg_temp.r('87', 'CLUB-AUD-66 · replay de un pendiente con OTRO cupón → rechazado; el otro cupón sigue sin usar',
+    e like 'Esta operación ya se usó para otro registro%' and (select estado from club_cupones where codigo = c4) = 'vigente', e);
+  begin
+    perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+    perform public.club_cupon_usar(c3, 4, '990873', op2);
+    perform pg_temp.yo(); e := 'ok';
+  exception when others then perform pg_temp.yo(); e := sqlerrm; end;
+  perform pg_temp.r('87', 'CLUB-AUD-66 · replay de un pendiente con OTRAS personas → rechazado',
+    e like 'Esta operación ya se usó para otro registro%', e);
+  perform pg_temp.como('authenticated', '<CAJERO_UUID>');
+  select * into r from public.club_cupon_usar(c3, 3, '990873', op2);
+  perform pg_temp.yo();
+  perform pg_temp.r('87', 'replay de un pendiente con el mismo cupón y las mismas personas: devuelve el pendiente, sin otra fila',
+    r.pendientes = 3 and (select count(*) from club_personas_pendientes where miembro_id = v_n) = 1, format('%s', r));
+end $$;
+
 -- ═══ 6. Cuenta inactiva → todas las funciones de staff rechazan ═══
 update profiles set is_active = false where id in ('<CAJERO_UUID>', '<OWNER_UUID>');
 do $$

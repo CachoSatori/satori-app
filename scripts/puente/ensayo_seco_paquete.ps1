@@ -6,6 +6,8 @@
 # (09-nov tarde, Grok 120/121) 1.9 se prueba con tres cuentas REALES de la máquina: SYSTEM, LOCAL SERVICE y una sin perfil
 # cargado (Invitado: su NTUSER.DAT se monta y se desmonta; hace falta consola de administrador). Un secreto corto es PARADA.
 # Con -Paquete docs/puente/ROTACION-SECRETO-AGENTE.md corre el procedimiento aparte de rotación (Grok 120).
+# Con -Paquete docs/puente/PASE-AGENTE-PROD.md corre el pase del agente nuevo (carpeta nueva, .env copiado con la
+# firma del candado, .cmd nuevo, cambio de la acción de la tarea y la vuelta atrás) y prueba que frena cuando debe.
 #
 # INSTRUCCIONES (5 líneas):
 #  1. En una PC Windows que NO sea la del PoS (si solo hay esa: igual sirve, el kit trabaja en una carpeta temporal y
@@ -49,18 +51,20 @@ $F081RB = $utf8.GetBytes("-- rollback 081 FICTICIO`n")
 $FINDEX = $utf8.GetBytes("// index.ts FICTICIO del Edge v1`n")
 $FMAPA = $utf8.GetBytes("// armar_mapa_secretos.mjs FICTICIO (ensayo en seco)`n")
 $MD5_081 = Md5DeBytes $F081; $MD5_082 = Md5DeBytes $F082; $MD5_081RB = Md5DeBytes $F081RB; $MD5_MAPA = Md5DeBytes $FMAPA
-$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; fmapa = $FMAPA; cli = '2.122.0'; tarea = 'Running'; secretos = @{}; cmd = $null; cuenta = 'SYSTEM'; corto = $false }
+$global:KIT = @{ falla_git = $null; huella_mal = $false; node_falla = $false; f082 = $F082; fmapa = $FMAPA; cli = '2.122.0'; tarea = 'Running'; secretos = @{}; cmd = $null; cuenta = 'SYSTEM'; corto = $false; arbol_mal = $false; medir_distinto = $false }
 
 # ── Dobles de los comandos (las funciones le ganan a los .exe en PowerShell) ─────────────────────────────────────
 function git {
   $a = @($args); $global:LASTEXITCODE = 0
   if ($global:KIT.falla_git -and ($a -contains $global:KIT.falla_git)) { $global:LASTEXITCODE = 1; Write-Host "  (doble de git: falla «$($global:KIT.falla_git)» a propósito)"; return }
   if ($a[0] -eq 'clone') {   # el «clon» del CÓDIGO: sin scripts/puente (09-nov: los scripts salen del commit del paquete)
-    New-Item -ItemType Directory -Force ([string]$a[-1]) | Out-Null; return
+    $c = [string]$a[-1]; New-Item -ItemType Directory -Force (Join-Path $c 'pos-bridge') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $c 'pos-bridge\register.mjs'), '// ficticio', $utf8); return   # el agente del clon
   }
   $dir = ''; if ($a[0] -eq '-C') { $dir = [string]$a[1]; $a = @($a[2..($a.Count - 1)]) }
   switch ($a[0]) {
-    'rev-parse' { if ($dir -like '*ingest-ndf-v1*' -or $dir -like '*satori-app-prod*') { '4d3513a6df8e838dd5c0442b05a580e06ce9db9d' } else { '5da233a516d1a6c4c2c95eb165be448be5416697' } }
+    'rev-parse' { if (($a -join ' ') -match ':pos-bridge') { if ($global:KIT.arbol_mal) { '0000000000000000000000000000000000000000' } else { '5600ebbd287559b23667f61c6e4c90181fa24b8e' }; return }
+                  if ($dir -like '*ingest-ndf-v1*' -or $dir -like '*satori-app-prod*') { '4d3513a6df8e838dd5c0442b05a580e06ce9db9d' } else { '5da233a516d1a6c4c2c95eb165be448be5416697' } }
     'cat-file' { }
     'diff' { if ($a -contains 'cd6d5a1ceb7adf06a0f79b780f126a4263884ca3') { return }   # código → paquete: sin cambios en supabase/src
              if ($a -contains '--name-only') { 'src/shared/ndf/ingestNdf.test.ts'; 'src/shared/ndf/ingestNdf.ts'; 'supabase/functions/ingest-ndf/README.md'; 'supabase/functions/ingest-ndf/index.ts'; 'supabase/migrations/082_pos_ndf_ingesta_transaccional.sql' } }
@@ -101,6 +105,7 @@ function supabase {
 function node {
   $a = @($args); $global:LASTEXITCODE = 0
   if ($global:KIT.node_falla) { $global:LASTEXITCODE = 1; return }
+  if ($a -contains '--solo-medir' -and $global:KIT.medir_distinto -and (($a -join ' ') -like '*agente-prod*')) { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":63,"cumple_32":true}'; return }
   if ($a -contains '--solo-medir') { if ($global:KIT.corto) { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":20,"cumple_32":false}' } else { '{"archivo_que_manda":"pos-bridge/.env","largo_santa_teresa":64,"cumple_32":true}' }; return }
   $salida = [string]$a[[array]::IndexOf($a, '--salida') + 1]
   $r = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($r); $st = -join ($r | ForEach-Object { $_.ToString('x2') })
@@ -118,6 +123,9 @@ function Get-ScheduledTask { param([string]$TaskName)   # SYSTEM: en el runner s
   [pscustomobject]@{ TaskName = $TaskName; State = $global:KIT.tarea; Principal = [pscustomobject]@{ UserId = $global:KIT.cuenta; GroupId = $null; LogonType = 'ServiceAccount' }
     Actions = @([pscustomobject]@{ Execute = $global:KIT.cmd; Arguments = $null; WorkingDirectory = $null }) } }   # 09-nov: la acción es un .cmd
 function Stop-ScheduledTask { param([string]$TaskName) $global:KIT.tarea = 'Ready' }
+function New-ScheduledTaskAction { param([string]$Execute, [string]$Argument, [string]$WorkingDirectory)
+  [pscustomobject]@{ Execute = $Execute; Arguments = $Argument; WorkingDirectory = $WorkingDirectory } }
+function Set-ScheduledTask { param([string]$TaskName, $Action) $global:KIT.cmd = [string]$Action.Execute; [pscustomobject]@{ TaskName = $TaskName } }
 function Start-ScheduledTask { param([string]$TaskName) $global:KIT.tarea = 'Running' }
 function Get-CimInstance { @() }
 
@@ -125,7 +133,8 @@ function Get-CimInstance { @() }
 $doc = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $Paquete).Path, $utf8)
 $bloques = @([regex]::Matches($doc, '(?s)```powershell\r?\n(.*?)```') | ForEach-Object { $_.Groups[1].Value })
 $esRotacion = ([IO.Path]::GetFileName($Paquete) -like 'ROTACION*')
-if ($bloques.Count -lt $(if ($esRotacion) { 6 } else { 10 })) { throw "el paquete tiene solo $($bloques.Count) bloques de PowerShell: ¿es el archivo correcto?" }
+$esAgente = ([IO.Path]::GetFileName($Paquete) -like 'PASE-AGENTE*')
+if ($bloques.Count -lt $(if ($esRotacion -or $esAgente) { 6 } else { 10 })) { throw "el paquete tiene solo $($bloques.Count) bloques de PowerShell: ¿es el archivo correcto?" }
 function Preparar([string]$t, [string]$raiz) {
   $t.Replace('C:\satori', $raiz).Replace('73c4d9d207c22c13d5c42498bb63e8ca', $MD5_MAPA).Replace('d4acf8dafc964ed23072aa49098f5b42', $MD5_081).Replace('edb7ffc58976804e55968f75df530a05', $MD5_082).Replace('5faa677d99f68c9c16dbd3a8a1c804d0', $MD5_081RB)
 }
@@ -134,6 +143,7 @@ function Preparar-Agente([string]$raiz) {   # la carpeta del agente FICTICIA (so
   New-Item -ItemType Directory -Force (Join-Path $raiz 'satori-app-prod\pos-bridge') | Out-Null
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app-prod\pos-bridge\register.mjs'), '// ficticio', $utf8)
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app-prod\pos-bridge\.env.antes-pase'), "INGEST_SECRET=ficticio`n", $utf8)   # 9.0 la borra
+  [IO.File]::WriteAllText((Join-Path $raiz 'satori-app-prod\pos-bridge\.env'), "LOCAL=santa-teresa`r`nINGEST_SECRET=ficticio-ficticio-ficticio-ficticio-0123`r`n", $utf8)   # el .env del agente (ficticio)
   New-Item -ItemType Directory -Force (Join-Path $raiz 'satori-app\pos-bridge') | Out-Null                                        # agente de STAGING (rotación R1)
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app\pos-bridge\register.mjs'), '// ficticio', $utf8)
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app\pos-bridge\.env.antes-pase'), "INGEST_SECRET=ficticio`n", $utf8)        # R6 la borra
@@ -155,7 +165,7 @@ try {
   function Frena([string]$caso, [int]$nBloque, [string]$espera, [scriptblock]$preparar) {
     $r2 = Join-Path ([IO.Path]::GetTempPath()) ("satori-ensayo-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
     New-Item -ItemType Directory -Force $r2 | Out-Null; Preparar-Agente $r2
-    $global:KIT.falla_git = $null; $global:KIT.huella_mal = $false; $global:KIT.node_falla = $false; $global:KIT.f082 = $F082; $global:KIT.fmapa = $FMAPA; $global:KIT.cli = '2.122.0'; $global:KIT.tarea = 'Running'; $global:KIT.corto = $false; $global:KIT.cuenta = 'SYSTEM'
+    $global:KIT.falla_git = $null; $global:KIT.huella_mal = $false; $global:KIT.node_falla = $false; $global:KIT.f082 = $F082; $global:KIT.fmapa = $FMAPA; $global:KIT.cli = '2.122.0'; $global:KIT.tarea = 'Running'; $global:KIT.corto = $false; $global:KIT.cuenta = 'SYSTEM'; $global:KIT.arbol_mal = $false; $global:KIT.medir_distinto = $false
     try {
       . ([scriptblock]::Create((Preparar $bloques[0] $r2)))          # el preámbulo fail-stop
       for ($kitK = 1; $kitK -lt $nBloque - 1; $kitK++) { . ([scriptblock]::Create((Preparar $bloques[$kitK] $r2))) }   # nombre propio: los bloques corren en este ámbito   # lo previo, bien
@@ -177,6 +187,24 @@ try {
     try { . ([scriptblock]::Create((Preparar $bloques[0] $RAIZ))); . ([scriptblock]::Create(((Preparar $bloques[$nR1 - 1] $RAIZ) -replace "\`$ENTORNO = 'staging'", "`$ENTORNO = 'otro'")))
           Resultado 'frena: rotación con ENTORNO que no es staging ni prod' $false 'no cortó' }
     catch { Resultado 'frena: rotación con ENTORNO que no es staging ni prod' ($_.Exception.Message -like '*tiene que ser*') $_.Exception.Message }
+  } elseif ($esAgente) {
+    # ── Pase del agente nuevo: lo que queda después de correr TODO (incluida la vuelta atrás de §6) ──
+    $nueva = Join-Path $RAIZ 'agente-prod-5da233a'
+    Resultado 'agente: después de la vuelta atrás, la tarea corre otra vez el .cmd viejo' ($global:KIT.cmd -eq (Join-Path $RAIZ 'pos-agente-prod.cmd')) $global:KIT.cmd
+    Resultado 'agente: la carpeta vieja quedó intacta (.env igual)' (([IO.File]::ReadAllText((Join-Path $RAIZ 'satori-app-prod\pos-bridge\.env'))) -ceq "LOCAL=santa-teresa`r`nINGEST_SECRET=ficticio-ficticio-ficticio-ficticio-0123`r`n")
+    $envN = [IO.File]::ReadAllText((Join-Path $nueva 'pos-bridge\.env'))
+    Resultado 'agente: el .env nuevo tiene el mismo secreto y la firma UNA vez' (($envN -match '(?m)^INGEST_SECRET=ficticio-ficticio-ficticio-ficticio-0123\r?$') -and ([regex]::Matches($envN, '(?m)^POS_AGENTE_PROD_FIRMADO=\d{4}-\d{2}-\d{2}\r?$').Count -eq 1))
+    $cmdN = [IO.File]::ReadAllText((Join-Path $RAIZ 'pos-agente-prod-5da233a.cmd'))
+    Resultado 'agente: el .cmd nuevo entra a la carpeta nueva y no a la vieja' (($cmdN -like '*agente-prod-5da233a*') -and ($cmdN -notlike '*satori-app-prod*'))
+    $nA11 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'rev-parse agente' } | Select-Object -First 1))
+    $nA21 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'npm.cmd ci' } | Select-Object -First 1))
+    $nA23 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'medir carpeta nueva' } | Select-Object -First 1))
+    $nA3  = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'New-ScheduledTaskAction @p' } | Select-Object -First 1))
+    Frena 'agente 1.1: la tarea corre otro .cmd' $nA11 'la tarea no corre' { param($r) $global:KIT.cmd = Join-Path $r 'otro.cmd'; [IO.File]::WriteAllText($global:KIT.cmd, "@echo off`r`n", $utf8) }
+    Frena 'agente 2.1: la carpeta nueva ya existe' $nA21 'ya existe' { param($r) New-Item -ItemType Directory -Force (Join-Path $r 'agente-prod-5da233a') | Out-Null }
+    Frena 'agente 2.1: el árbol de pos-bridge no es el revisado' $nA21 'no es el revisado' { param($r) $global:KIT.arbol_mal = $true }
+    Frena 'agente 2.3: la carpeta nueva manda otro secreto' $nA23 'no manda el mismo secreto' { param($r) $global:KIT.medir_distinto = $true }
+    Frena 'agente 3: el .cmd viejo cambió desde 1.1' $nA3 'cambió desde 1.1' { param($r) [IO.File]::AppendAllText((Join-Path $r 'pos-agente-prod.cmd'), "rem cambio`r`n", $utf8) }
   } else {
   # ── 1.9 con tres cuentas REALES de esta máquina (Grok 121): SYSTEM, cuenta de servicio y una sin perfil cargado ──
   $n19 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'Principal.UserId' } | Select-Object -First 1))

@@ -37,7 +37,7 @@
 ## SHA y huellas (completos; se comparan enteros)
 | Qué | Valor |
 |---|---|
-| Rama del pase | `claude/pase-085` (desde `main` @ `a794b61`, con el puente ya en `main`) |
+| Rama del pase | `claude/pase-085` (desde `main` @ `5a22478`: el puente ya en `main` y el #77, que no trae migraciones) |
 | `supabase/migrations/085_rls_lectura_rol_activo.sql` | md5 `68b6384bd860dcc334919813888cae83` · sha256 `5d6c70fa15f99995606d6207f0143ab8e35e5d1aeeff900a22a83ee7d8d1ae6e` |
 | Ledger de STAGING, fila 085 | `md5(statements[1])` = `68b6384b…` (igual al archivo, byte a byte) |
 | `scripts/sql/085_rollback.sql` | sha256 `99ffeedc155b8464253f1dfc449b20b37a99dee9853424d3c273477a3dfc312e` |

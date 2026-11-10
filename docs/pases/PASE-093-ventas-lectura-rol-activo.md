@@ -1,14 +1,13 @@
 # Pase a PROD de la mig 093 `ventas_lectura_rol_activo` (Grok 126)
 
-> **Estado: preparado, SIN ejecutar.** Formato del `PASE-085` (rama `claude/pase-085`,
-> `docs/pases/PASE-085-rls-lectura-rol-activo.md`): qué cambia, lecturas previas, prueba en staging, humo de solo
-> lectura, vuelta atrás y firma.
+> **Estado: preparado, SIN ejecutar.** Formato del `PASE-089` (`docs/pases/PASE-089-anon-sin-politica.md`): qué cambia,
+> lecturas previas, prueba en staging, humo de solo lectura, vuelta atrás y firma.
 >
 > **Nada de este documento se ejecuta en prod hasta que el dueño lo firme (§9).** Si algo no coincide con lo que dice
 > acá, **se para y se avisa**: no se improvisa en prod.
 >
-> - **Orden en prod: 085 → 089 → 090 → 091 → 092 → 093.** Supabase no aplica una migración con número menor que la
->   última aplicada: la 093 va **después** de la 092 (§8).
+> - **Orden en prod: 085 → 089 → 090 → 091 → 092 → 093.** La 093 va **después** de la 092. El 11-nov a la mañana van
+>   091 → 092 → 093 **seguidas, en la misma ventana** (§8).
 > - **Regla del ledger (Grok 122):** Branching guarda las migraciones **partidas** en varios statements. La verificación
 >   es «exactamente 1 fila 093 con su `name`» más el catálogo (5.3). **No se compara md5.**
 
@@ -36,7 +35,7 @@
 ## SHA y huellas (completos; se comparan enteros)
 | Qué | Valor |
 |---|---|
-| Rama | `claude/ventas-lectura-rol-activo` (desde `main` @ `5a22478`) |
+| Rama | `claude/ventas-lectura-rol-activo`, encima de `claude/employees-borrado-owner` (la 092 sobre la 091, la 090 y la 089). Cuando la 092 esté en prod, se trae `main` con un merge commit y se verifica 0.4 |
 | `supabase/migrations/093_ventas_lectura_rol_activo.sql` | md5 `d5b5173c595600cd4f52dfa1052e0d1e` · sha256 `faca1dc89d7ebc8694b45545228dcffbda4e2c6b4fab6c38d887a7f9238b55c3` |
 | `scripts/sql/093_rollback.sql` | sha256 `4309631ec5dcbcc014d567dfe267def67ed45c596f3e0f9d317ea4594d20df1a` |
 
@@ -50,6 +49,8 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 - **Claude no corre nada en prod.** Prepara, revisa y lee los resultados que le pasan.
 
 ## 0. Prerrequisitos
+**Base del pase: `main` con la 092 ya mergeada y en prod** (ledger **62 · 092**).
+
 | # | Qué | Cómo se verifica |
 |---|---|---|
 | 0.1 | Firma del dueño en §9 (con el SHA de la cabeza del PR) | firma |
@@ -58,13 +59,20 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 | 0.4 | La rama al día con `main` y el diff con **solo** los archivos del PR (§2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.5 | Gate del PR en verde: `supabase/migraciones.test.ts` (la 093 está registrada) y build | checks del PR |
 | 0.6 | Staging en verde con este mismo archivo (§3) | anotado |
-| 0.7 | **La 092 ya está en prod** y no hay ninguna migración con número mayor que 093 en `main` ni en el ledger de prod | 1.1 |
+| 0.7 | **La 092 ya está en prod con su pase cerrado** (puede haber sido minutos antes: ver §1) y no hay ninguna migración con número mayor que 093 en `main` ni en el ledger de prod | 1.1 |
 
 ## 1. Lecturas previas (SOLO LECTURA, en PROD)
 Editor SQL de PROD. **Leer el ref en pantalla.** Anotar cada resultado en §9.
+
+**Pase seguido: la 092 puede haber entrado minutos antes, en la misma ventana.** Estas lecturas no piden ningún
+tiempo de espera; piden que el pase de la 092 esté **cerrado**: su merge con «Supabase Preview» en `success`, su §5
+en verde y su §9 firmado («pasa»). Si el run de Branching de la 092 todavía corre, **se espera a que termine**: no se
+mergea con otro run en curso. Con eso, el ledger tiene que dar **62 filas, la última 092**, y ninguna 093 o mayor.
+Si la 092 hizo vuelta atrás, este pase **no se hace**.
+
 ```sql
 -- 1.1 ledger: el último es la 092 y la 093 no está
-select count(*), max(version) from supabase_migrations.schema_migrations;               -- anotar · 092
+select count(*), max(version) from supabase_migrations.schema_migrations;               -- 62 · 092
 select version from supabase_migrations.schema_migrations where version >= '093';       -- 0 filas
 -- 1.2 las 10 policies de las 5 tablas (5 _read con using true, 5 _write) y RLS activa
 select tablename, policyname, cmd, qual, with_check from pg_policies
@@ -97,7 +105,7 @@ Más la **prueba de humo de antes** (§4): 4a con una cuenta inactiva (las cinco
 merge**.
 
 **Para (no se sigue)** si:
-- el ledger no termina en 092 o ya tiene la 093;
+- el ledger no da 62 · 092, o ya tiene la 093;
 - alguna de las 5 policies `_read` no existe o no tiene `qual` = `true` (un `alter policy` sobre una policy que no
   existe hace fallar la migración, y Branching queda en `MIGRATIONS_FAILED`);
 - no hay ninguna cuenta inactiva para la prueba de humo;
@@ -219,7 +227,7 @@ rollback;
    `Applying migration 093_ventas_lectura_rol_activo.sql`.
 2. **Ledger** (solo lectura): **exactamente 1 fila 093 con su `name`**. No se compara md5 (Grok 122).
    ```sql
-   select count(*), max(version) from supabase_migrations.schema_migrations;                      -- anterior + 1 · 093
+   select count(*), max(version) from supabase_migrations.schema_migrations;                      -- 63 · 093
    select count(*) from supabase_migrations.schema_migrations
     where version = '093' and name = 'ventas_lectura_rol_activo';                                 -- 1
    select array_length(statements, 1) from supabase_migrations.schema_migrations where version = '093';  -- anotar
@@ -262,9 +270,10 @@ rollback;
 
 ## 8. Orden en prod
 **085 → 089 → 090 → 091 → 092 → 093.** Supabase no aplica una migración con número menor que la última aplicada, así
-que los merges a `main` van en ese orden, sin saltos. Si se decide que la 093 pase **antes** de alguna de esas, esa otra
-se renumera al bloque de pase (150+) con su «origen» (regla 3 de ESTADO.md). Después va el pase del Club (075 → 150,
-100 → 151).
+que los merges a `main` van en ese orden, sin saltos. El 11-nov, la 091, la 092 y la 093 van **seguidas en la misma
+ventana**. Cada una arranca cuando la anterior cerró su pase (§9 «pasa»). Si una hace vuelta atrás, las siguientes no
+pasan. Después va el pase del Club (075 → 150, 100 → 151). La 087 y la 088, cuando estén listas, van al bloque de pase
+(152+) con su origen.
 
 ## 9. Firma y bitácora
 | Paso | Esperado | Obtenido |
@@ -272,8 +281,8 @@ se renumera al bloque de pase (150+) con su «origen» (regla 3 de ESTADO.md). D
 | Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | |
 | Responsables (ejecución / control) | | |
 | 0.4 rama al día con `main` · diff solo los archivos del PR | | |
-| 0.7 la 092 en prod | | |
-| 1.1 ledger: último 092 · ninguna versión ≥ 093 | | |
+| 0.7 la 092 en prod con su pase cerrado | | |
+| 1.1 ledger 62 · 092 · ninguna versión ≥ 093 | 62 · 092 | |
 | 1.2 5 `_read` en `true` · 5 `_write` anotadas · RLS en las 5 | | |
 | 1.3 vistas · funciones SECURITY DEFINER: 0 | | |
 | 4a antes (cuenta inactiva): las 5 con filas | | |
@@ -281,7 +290,7 @@ se renumera al bloque de pase (150+) con su «origen» (regla 3 de ESTADO.md). D
 | Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | |
 | §2 merge (SHA, hora) | | |
 | 5.1 Branching success · log con la 093 | | |
-| 5.2 exactamente 1 fila 093 con `name = 'ventas_lectura_rol_activo'` (statements: anotar) | | |
+| 5.2 exactamente 1 fila 093 con `name = 'ventas_lectura_rol_activo'` (statements: anotar) | 63 · 093 · 1 | |
 | 5.3 las 5 `_read` en «Después» · las 5 `_write` iguales | | |
 | 4a después: 0 · 0 · 0 · 0 · 0 | | |
 | 4b después = 4b antes (una diferencia que también está en `base` no es parada) | | |

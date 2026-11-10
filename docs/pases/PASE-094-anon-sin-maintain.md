@@ -30,8 +30,8 @@
 | Qué | Valor |
 |---|---|
 | Rama | `claude/anon-sin-maintain`, encima de `claude/ventas-lectura-rol-activo` (la 093 sobre la 092, la 091, la 090 y `main` @ `fa1cbef`). Cuando la 093 esté en prod, se trae `main` con un merge commit y se verifica 0.4 |
-| Migración | `supabase/migrations/094_anon_sin_maintain.sql` (md5 en el informe y en §9) |
-| Rollback | `scripts/sql/094_rollback.sql` (devuelve MAINTAIN a `anon` en las tablas de la lista que existan) |
+| Migración | `supabase/migrations/094_anon_sin_maintain.sql`, md5 `bfa5a7866684c732493e60542b022168` |
+| Rollback | `scripts/sql/094_rollback.sql`, md5 `f0827dfb814407b356fe8c8eb8bec9c0` (devuelve MAINTAIN a `anon` en las tablas de la lista que existan) |
 | Verificación | `scripts/sql/094_verificacion.sql` (solo lectura: catálogo, sin datos de personas) |
 | Pruebas | `scripts/sql/094_pruebas.sh` (solo staging, transacciones descartadas) |
 

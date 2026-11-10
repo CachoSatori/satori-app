@@ -148,14 +148,16 @@ staging.
 |---|---|---|
 | 10-nov 10:06 CR (script @ `2eba291`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | 18 OK · **1 FALLA** (contados de la salida guardada; antes decía 23 por error): «contador ve 1 fila del otro local» dio 0. **Error de la expectativa, no de la 091:** hoy el contador no tiene ninguna policy de SELECT en `cash_movements` (las de lectura son owner, manager y cajero) y ve 0 filas también **sin** la 091 (verificado en una transacción descartada). Una policy restrictiva solo achica |
 | 10-nov 10:06 CR (script @ `7ec3567`: contador espera 0; 4 casos nuevos de `mis_locales()`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **23 OK · 0 FALLA · VERDE** (contados de la salida guardada; antes decía 24 por error) |
+| 10-nov tarde (script @ `e265da8`: guarda del rollback, Grok 137; contador según la 095; la 091 → 095 ya aplicadas en staging) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **27 OK · 0 FALLA · VERDE** (salida literal abajo) |
 | 10-nov 10:59 CR (script @ `47829f6`, Grok 138/139) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE** (salida literal abajo) |
 | 10-nov 10:07 CR | Estado de staging al terminar | sin columnas `location_id`, sin `profile_locations`, sin `mis_locales()`, sin policies por local, sin el local de prueba, sin la FK del Club; ledger 85 / 090: **la 091 no quedó aplicada** |
 
 Antes de correr: sin consultas ajenas en staging y el último commit del Club con más de 5 minutos.
 
-**Grok 138 — salida literal de la corrida del 10-nov 10:59 CR** (`scripts/sql/091_pruebas.sh hwiatgicyyqyezqwldia`, script
-@ `47829f6`: con el `compara` de Grok 139, que da FALLA si una respuesta trae error, viene vacía o no tiene la forma
-esperada, y con el control positivo del cajero). Salida 0: **24 OK · 0 FALLA**.
+**Grok 138 — salida literal de la última corrida** (10-nov, `scripts/sql/091_pruebas.sh hwiatgicyyqyezqwldia`, script @ `e265da8`,
+con la 091 → 095 ya aplicadas en staging; transacciones descartadas). Suma la guarda de la vuelta atrás (Grok 137, 3 casos)
+y el caso del contador según la 095. Salida 0: **27 OK · 0 FALLA**. La corrida de las 10:59 (24 OK, script @ `47829f6`)
+está en la tabla de arriba.
 ```text
 == Santa Teresa idéntica (postgres) ==
 OK    postgres: filas, totales, saldo CF y cierres
@@ -166,8 +168,9 @@ OK    contador ve lo mismo
 OK    cajero ve lo mismo
 OK    salonero ve lo mismo
 == Aislamiento con un segundo local (todo descartado) ==
+      la 095 está aplicada: true → el contador espera 1 fila(s) del otro local
 OK    owner ve 1 fila(s) del otro local
-OK    contador ve 0 fila(s) del otro local
+OK    contador ve 1 fila(s) del otro local
 OK    manager ve 0 fila(s) del otro local
 OK    cajero ve 0 fila(s) del otro local
 OK    control positivo: el cajero sin asignación ve todos los movimientos de santa-teresa (= postgres)
@@ -181,6 +184,9 @@ OK    manager asignado SOLO al otro local deja de ver santa-teresa
 OK    insert en otro local rechazado por RLS (42501)
 == Las políticas se crean con la forma correcta y el rollback deja todo como antes (descartado) ==
 OK    las 4 políticas por local existen, restrictivas, con using y with check
+OK    guarda: con un local de más en locations (staging tal cual) el rollback frena
+OK    guarda: con una fila de caja fuera de santa-teresa el rollback frena
+OK    guarda: con locales asignados en profile_locations el rollback frena
 OK    rollback: filas, totales, saldo y cierres iguales a antes
 OK    rollback: sin columnas, sin políticas y sin función
 == Opción a: catálogo único con el Club (propuesta para la sesión del Club; todo descartado) ==
@@ -188,7 +194,7 @@ OK    rollback: sin columnas, sin políticas y sin función
 OK    opción a (MIG → PROP): FK validada, ningún local del Club fuera del catálogo, 4 columnas
 OK    opción a (PROP → MIG): FK validada, ningún local del Club fuera del catálogo, 4 columnas
 OK    club_local_crear (owner): el local queda en locations (inactivo para caja) y en club_config
-== Resultado: 0 falla(s) ==
+== Resultado: 27 OK · 0 falla(s) ==
 ```
 
 **Lo que dejó a la vista la corrida:** el contador hoy **no lee** `cash_movements` (ni con la 091 ni sin ella). La decisión 2
@@ -295,7 +301,8 @@ aparecer como siempre (entra con `location_id = 'santa-teresa'` por el default).
        raise exception 'precondición: locations no tiene solo santa-teresa: no se toca nada';
      end if;
    end $$;
-   -- … pegar acá el cuerpo de scripts/sql/091_rollback.sql, sin su begin/commit …
+   -- … pegar acá el cuerpo de scripts/sql/091_rollback.sql, sin su begin/commit (desde el 10-nov el archivo trae la
+   --     misma guarda de Grok 137: si se pega entero, frena igual) …
    commit;
    ```
    No se pierde ningún dato de caja: la precondición exige (Grok 137) que las 4 tablas tengan **0 filas fuera de

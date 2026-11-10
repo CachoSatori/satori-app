@@ -42,6 +42,10 @@
 
 Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 122).
 
+**Verificado el 10-nov (Grok, sin número):** `employee_bajas.full_name` es `not null`, y no hace falta `coalesce`. En prod
+`employees.full_name` nace `TEXT NOT NULL` en `001_initial_schema.sql`, y ninguna migración lo relaja. En staging también
+es `NOT NULL`, con **0** empleados sin nombre (solo lectura). La 092 no cambia (md5 `03f2dfed…`).
+
 ## Responsables
 - **Ejecución:** el dueño. Firma, lee el catálogo de prod en el editor SQL, mergea (o autoriza el merge) y corre la
   prueba de humo.

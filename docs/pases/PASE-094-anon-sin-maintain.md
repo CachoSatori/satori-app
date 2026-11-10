@@ -51,7 +51,7 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 |---|---|---|
 | 0.1 | Firma del dueño en §9 (con el SHA de la cabeza del PR) | firma |
 | 0.2 | Los dos responsables presentes | §9 |
-| 0.3 | **No se mergea entre las 17:00 y las 23:00 CR** (salvo que el dueño lo autorice ese día), y ninguna otra sesión mergeando a `main` | hora en §9 |
+| 0.3 | **No se mergea entre las 17:00 y las 23:00 CR** (regla fija; cualquier excepción la escribe el dueño en su firma del §9), y ninguna otra sesión mergeando a `main` | hora en §9 |
 | 0.4 | La rama al día con `main` (con la 093 ya mergeada), y el diff con **solo** los archivos de la 094 (§2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.5 | Gate del PR: `supabase/migraciones.test.ts` (la 094 está registrada) y build | checks del PR |
 | 0.6 | Staging en verde con este mismo archivo (§3) | anotado |

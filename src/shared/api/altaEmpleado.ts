@@ -1,5 +1,5 @@
 // Alta de empleados desde Admin + cambio de contraseña inicial — Edge Function `alta-empleado`
-// (firmado por Ismael, 05/11). La función valida TODO del lado del servidor (owner activo, rol
+// (firmado por el dueño, 05/11). La función valida TODO del lado del servidor (owner activo, rol
 // permitido, email no repetido, empleado disponible); acá solo se arma el pedido y se traduce la
 // respuesta a un error con mensaje fijo, sin texto técnico.
 import type { User } from '@supabase/supabase-js'

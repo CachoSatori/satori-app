@@ -2,7 +2,7 @@
 
 > Continúa `claude/SQL-analisis-ronda6.md`. Q21 se corre en Supabase PROD (solo `SELECT`, `limit` explícito). D4–D5 se corren en DBeaver contra el PoS (`ndf`, solo lectura).
 
-## Contexto (Ismael, 03/11)
+## Contexto (el dueño, 03/11)
 - **Local Club:** 15 % de descuento desde ~2025. No aplica sobre el menú de mediodía.
 - **Tarjetas de descuento de hoteles y tiendas:** 10 %. Es otra promoción y se cuenta aparte.
 - **Hasta ahora:** el «cliente normal» de Q19/Q20 mezclaba mesas sin descuento con mesas de tarjeta 10 %, así que su margen por persona (₡12.732) está algo subestimado.
@@ -514,7 +514,7 @@ ORDER BY 1, 2, 3;
 ```
 
 ## Resultados D8 v2 y ronda 9 (03/11)
-- **Ismael confirma:** el Local Club era **10 %** antes. Se evalúa volver al 10 % y sumar otra oferta.
+- **El dueño confirma:** el Local Club era **10 %** antes. Se evalúa volver al 10 % y sumar otra oferta.
 - **D8 v2: facturas por mes según el % de descuento.** El nombre «LOCAL CLUB» se usa desde jun-2025.
 
 | Período | 10 % | 15 % sin nombre | 15 % con nombre LC | 20 % | 30 % |
@@ -529,7 +529,7 @@ ORDER BY 1, 2, 3;
   - 30 %: 15–30 facturas por mes.
   - 20 %: may-2025.
   - 100 %: cortesías.
-  - Preguntar a Ismael qué son.
+  - Preguntar al dueño qué son.
 - **Q20 + costlib, productos de noche del LC (mesas LC con carta, mar–ago 2026):**
   - **Índice** = pedidos por 100 pax LC ÷ pedidos por 100 pax normales.
 
@@ -654,7 +654,7 @@ Noche, promedio por mes de los pax:
   - **Para cubrir el riesgo:** regalo barato por persona y medir 2–3 meses.
   - **Deja de convenir** si se pierde más del 7 % de las visitas del club.
 
-## Corrección de historia (Ismael, 03/11)
+## Corrección de historia (el dueño, 03/11)
 - **Local Club:** empezó el **23-abr-2025**.
   - **Antes:** existía la **VIP card**, que tuvo 10 % un tiempo y 15 % otro tiempo.
 - **Tarjetas de hoteles y tiendas (10 %):** fue la primera promoción.
@@ -674,7 +674,7 @@ Noche, promedio por mes de los pax:
     - **Precedente:** el de la VIP sugiere poca sensibilidad al precio. Pero el club es otro programa: hay que probarlo y medirlo.
     - **Punto de pérdida:** perder más del 7 % de las visitas del club.
 
-## Otros descuentos (Ismael, 03/11)
+## Otros descuentos (el dueño, 03/11)
 - **30 %:** personal que viene a consumir fuera de servicio.
 - **Créditos de comercios:** facturas con nombre «CREDITOS» / «CREDITOS NUEVO». Se cierran como regalía o «a crédito» (ver la corrección en los resultados de D11). D9 encontró 194 facturas «CREDITOS NUEVO» desde ene-2025.
 - **Q21–Q25:** clasificaban ambos casos como «otro» (el 100 % queda con neta 0). Esto no cambia los resultados de LC y tarjetas.
@@ -735,7 +735,7 @@ ORDER BY 1, 2;
 | Personal 30 % | 17 | ₡128 mil cobrados | ₡54 mil | ₡45 mil |
 | Otras cortesías (líneas al 100 %) | 3 | ₡110 mil cobrados | ₡34 mil | ₡34 mil |
 
-- **Créditos (corrección de Ismael, 03/11):**
+- **Créditos (corrección del dueño, 03/11):**
   - **Qué son:** las facturas «CREDITO(S)» son **todas las mesas** de alguien que vino a consumir sus créditos por haber mandado gente. No pagan.
   - **Cómo se cierran:** como **regalía** o con la opción **«a crédito»** del PoS, según el período.
   - **Monto:** ~₡326 mil/mes de consumo a precio de lista, con costo real de **~₡80 mil/mes**.
@@ -819,7 +819,7 @@ limit 1000;
   - **Margen por pax con tarjeta:** ~₡11,5 mil.
 - **SPEC integrada, §6:** se agregan el #6 (ingestar `CuentaCobrar` y pasar los canjes a regalía) y el #7 (revisar `regalia_crc` en las cortesías).
 
-## Aclaración (Ismael, 03/11)
+## Aclaración (el dueño, 03/11)
 - **App y PoS dan la misma venta.** La app no se equivoca: refleja el PoS.
 - **Cómo lo trata el PoS:** las mesas «a crédito» cuentan como venta pagada con cuenta por cobrar. Contablemente es correcto, aunque esa cuenta no se cobra nunca.
 - **Para gestión:** son costo del programa de tarjetas.
@@ -839,5 +839,5 @@ limit 1000;
   - Servicio: ~₡26 mil.
   - Total: **~₡115 mil/mes** (~₡1,4 M/año). Solo se paga lo de IVA y servicio si se declaran y se reparten.
 - **Pendiente:**
-  - **Propinas:** ¿el reparto usa el servicio facturado (incluye estas mesas) o el cobrado? Lo confirma Ismael o se revisa el cálculo de propinas, sin tocarlo.
+  - **Propinas:** ¿el reparto usa el servicio facturado (incluye estas mesas) o el cobrado? Lo confirma el dueño o se revisa el cálculo de propinas, sin tocarlo.
   - **IVA de canjes y regalías:** lo define el contador.

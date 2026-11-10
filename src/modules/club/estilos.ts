@@ -27,7 +27,15 @@ export const TIPO_MOV_LABEL: Record<string, string> = {
   tarjeta: 'Tarjeta', canje: 'Canje', vencimiento: 'Vencimiento', ajuste: 'Ajuste', restitucion: 'Restitución',
 }
 
+// 10-nov: una fecha SOLA («2026-11-09», columnas `date` y el corte de vencimiento) es un día del calendario, no un instante.
+// `new Date('2026-11-09')` es la medianoche UTC, que en Costa Rica (UTC−6) cae el día ANTERIOR («08 nov»): se formatea en
+// UTC para que no se corra. Un instante (con hora) se sigue mostrando en la hora de Costa Rica.
 export const fmtFecha = (s: string | null | undefined) =>
-  s ? new Date(s).toLocaleDateString('es-CR', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'America/Costa_Rica' }) : '—'
+  !s ? '—'
+    : /^\d{4}-\d{2}-\d{2}$/.test(s)
+      ? new Date(`${s}T00:00:00Z`).toLocaleDateString('es-CR', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'UTC' })
+      : new Date(s).toLocaleDateString('es-CR', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'America/Costa_Rica' })
+/** El mes en curso en Costa Rica, «AAAA-MM» (Reportes abre ahí: el mes en curso se ve parcial y no se puede cerrar). */
+export const mesActualCR = (ahora: Date = new Date()) => ahora.toLocaleDateString('en-CA', { timeZone: 'America/Costa_Rica' }).slice(0, 7)
 export const fmtFechaHora = (s: string | null | undefined) =>
   s ? new Date(s).toLocaleString('es-CR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Costa_Rica' }) : '—'

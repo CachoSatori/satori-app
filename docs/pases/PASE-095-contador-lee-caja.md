@@ -122,6 +122,8 @@ Los 23 casos:
 - **Con la 091:** el contador ve lo mismo que el owner (todos los locales) y el cajero sin asignación no ve el otro local.
 - **Vuelta atrás:** el contador vuelve a ver 0. Staging terminó sin las policies ni la fila 095.
 
+**Aplicada en STAGING el 10-nov a las 11:03:32 CR** (autorizado por el dueño): una transacción con precondición (la anterior es la última del ledger y la 095 no está), la migración y su fila del ledger (1 statement, md5 = el archivo). Antes, sin consultas ajenas y el último commit del Club con más de 5 minutos. Verificación después: `{"pols":3,"ledger":1}`.
+
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 **4a. El contador activo** (la cuenta activa más antigua con ese rol; solo conteos):
 ```sql

@@ -23,6 +23,14 @@
 > 6. **0.6:** Supabase CLI fijo, con carpeta, versión y sha256.
 > 7. **4.4:** la versión del Edge tiene que ser **mayor** que la de 1.6, no «una más».
 > 8. **Tiempo con la tarea detenida:** todo lo preparable va antes de 4.1.
+>
+> **Correcciones de la auditoría v3 de Grok** (09-nov tarde; marcadas «Grok 120» y «Grok 121» en el texto):
+> 9. **120:** el pase **no rota secretos**. Un secreto del agente de menos de 32 es **PARADA limpia** en 1.9, y 4.3b
+>    ya no existe. La rotación es un procedimiento aparte, ensayado en staging y hecho **antes** del pase:
+>    [`ROTACION-SECRETO-AGENTE.md`](ROTACION-SECRETO-AGENTE.md).
+> 10. **121:** el control 1.9 del entorno de la cuenta de la tarea lee bien SYSTEM, las cuentas de servicio y los
+>     usuarios sin perfil cargado (monta su `NTUSER.DAT` y lo desmonta), y dice **qué leyó y de dónde**. Si no puede
+>     leer, es PARADA.
 
 ## Qué pasa y qué no
 - **Pasa:** la mig **081** (columnas nuevas, aditivas), la mig **082 v3** (función `pos_ndf_ingestar` en una transacción
@@ -36,8 +44,8 @@
     117). Sigue devolviendo al agente el cursor que le da la base.
 - **No pasa:** el **código** del agente del PoS (sigue `4d3513a6df8e838dd5c0442b05a580e06ce9db9d`), la 085, nada del Club.
 - **Del agente se toca solo esto:** su tarea «Satori PoS Bridge PROD» se **detiene** antes de cambiar la base y el Edge,
-  y se **inicia** después (§4). Y, **solo** si su secreto mide menos de 32 (1.9), la línea `INGEST_SECRET=` del `.env` que
-  manda, con la tarea detenida (§3.3). Nada de checkout, pull ni deploy en `C:\satori\satori-app-prod`.
+  y se **inicia** después (§4). **Su `.env` no se toca en el pase** (Grok 120): un secreto corto es parada (1.9) y se rota
+  antes, con el procedimiento aparte. Nada de checkout, pull ni deploy en `C:\satori\satori-app-prod`.
 
 ## SHA y huellas (completos; se comparan enteros)
 | Qué | Valor |
@@ -73,7 +81,7 @@ $PSVersionTable.PSVersion.ToString(); $PSVersionTable.PSEdition      # 5.1.x y D
 ```
 Si da otra cosa (por ejemplo 2.0 o 3.0), **se para**: esa versión no se ensayó.
 
-Dos carpetas que nunca se confunden: **`C:\satori\satori-app-prod`** (el agente: solo se lee, salvo §3.3 y su tarea) y
+Dos carpetas que nunca se confunden: **`C:\satori\satori-app-prod`** (el agente: solo se lee, salvo su tarea) y
 **`C:\satori\pase-v2`** (clon aparte para el pase). Al abrir **cada** consola, antes de cualquier otra cosa:
 ```powershell
 $ErrorActionPreference = 'Stop'; Set-StrictMode -Version Latest
@@ -81,6 +89,38 @@ function Ok([string]$que) { if ($LASTEXITCODE -ne 0) { throw "falló «$que» (c
 function Carpeta([string]$p) { if (-not [IO.Path]::IsPathRooted($p) -or -not (Test-Path -LiteralPath $p -PathType Container)) { throw "no es una carpeta absoluta existente: $p" }; (Resolve-Path -LiteralPath $p).Path }
 function Archivo([string]$p) { if (-not [IO.Path]::IsPathRooted($p) -or -not (Test-Path -LiteralPath $p -PathType Leaf)) { throw "no es un archivo absoluto existente: $p" }; (Resolve-Path -LiteralPath $p).Path }
 function Md5Bytes([string]$p) { (Get-FileHash -Algorithm MD5 -LiteralPath (Archivo $p)).Hash.ToLower() }   # sobre los BYTES, sin decodificar
+# Corrección 09-nov (hallazgo del pase, 4.1): en la PC del PoS corren DOS agentes, prod y staging, con la MISMA línea de
+# comando («node … pos-bridge/agente.ts», rutas relativas). Filtrar node.exe por la palabra 'agente' agarraba los dos: el
+# de prod estuvo ~40 min detenido esperando al de staging, y el «cerrar node a mano» cerró el de staging (~11:58). El
+# node de un agente se identifica por su CARPETA: la nombra su línea de comando o la de un proceso padre (el .cmd de la
+# tarea, que 1.9 verificó que entra a esa carpeta). Nunca por una palabra suelta. Ningún bloque cierra procesos.
+function Get-NodeDe([string]$Carpeta, [string]$Cmd) {
+  $todos = @(Get-CimInstance Win32_Process); $porPid = @{}; foreach ($x in $todos) { $porPid[[int]$x.ProcessId] = $x }
+  $marcas = @('(?i)' + [regex]::Escape($Carpeta.TrimEnd('\')) + '(\\|"|\s|$)')
+  if ($Cmd) { $marcas += '(?i)' + [regex]::Escape($Cmd) + '("|\s|$)' }
+  @($todos | Where-Object { $_.Name -eq 'node.exe' } | Where-Object {
+    $x = $_; $es = $false
+    for ($i = 0; $x -and $i -lt 6 -and -not $es; $i++) {
+      foreach ($m in $marcas) { if ([string]$x.CommandLine -match $m) { $es = $true } }
+      $x = if ([int]$x.ParentProcessId -ne [int]$x.ProcessId) { $porPid[[int]$x.ParentProcessId] } else { $null }
+    }
+    $es })
+}
+# Detiene la tarea y espera a que terminen SOLO los node.exe de esa carpeta (sus PID se toman ANTES de detenerla: después,
+# sin el .cmd padre, un node que tarde en cerrar ya no se podría atribuir). Los demás node.exe no se miran ni se tocan.
+function Detener-Agente([string]$Tarea, [string]$Carpeta, [string]$Cmd) {
+  $pids = @(Get-NodeDe $Carpeta $Cmd | ForEach-Object { [int]$_.ProcessId })
+  $otros = @(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $pids -notcontains [int]$_.ProcessId } | ForEach-Object { [int]$_.ProcessId })
+  if ((Get-ScheduledTask -TaskName $Tarea).State -eq 'Running' -and -not $pids.Count) { throw "PARADA: la tarea $Tarea corre y no se encuentra su node.exe por la carpeta $Carpeta (ni por $Cmd): no se adivina cuál es" }
+  "node del agente de $Carpeta : $($pids -join ', ') · otros node.exe (no se tocan): $($otros.Count)"
+  Stop-ScheduledTask -TaskName $Tarea
+  $t0 = Get-Date
+  while ((Get-ScheduledTask -TaskName $Tarea).State -eq 'Running' -or @(Get-CimInstance Win32_Process | Where-Object { $pids -contains [int]$_.ProcessId }).Count) {
+    if ((Get-Date) - $t0 -gt [TimeSpan]::FromMinutes(3)) { throw "el agente de $Carpeta (node $($pids -join ', ')) no se detuvo en 3 minutos: se avisa al dueño; si hay que cerrarlo, SOLO esos PID (Stop-Process -Id), nunca por nombre" }
+    Start-Sleep -Seconds 5
+  }
+  "agente de $Carpeta detenido $(Get-Date -Format 'HH:mm:ss') · los otros node.exe siguen: $(@(Get-CimInstance Win32_Process | Where-Object { $otros -contains [int]$_.ProcessId }).Count) de $($otros.Count)"
+}
 if (Test-Path -LiteralPath C:\satori\supabase-cli -PathType Container) { $env:Path = 'C:\satori\supabase-cli;' + $env:Path }   # corrección 09-nov: el CLI del pase (0.6)
 ```
 - **Cada comando nativo** (`git`, `supabase`, `node`, `npm.cmd`, `curl.exe`, `cmd /c`) va seguido **en la misma línea** de
@@ -258,29 +298,65 @@ if ($ex -match '\.(cmd|bat)$') {
 }
 if ($acc -notmatch 'satori-app-prod') { throw 'la tarea no corre el agente de C:\satori\satori-app-prod' }
 if ($acc -match 'INGEST_|POS_') { throw 'la acción de la tarea define variables del agente en la línea de comando' }
-$cuenta = [string]$t.Principal.UserId
-$sid = (New-Object Security.Principal.NTAccount($cuenta)).Translate([Security.Principal.SecurityIdentifier]).Value
+# 121 (Grok, auditoría v3): el entorno de la cuenta de la tarea, robusto. Dice QUÉ leyó y DE DÓNDE. Si no puede leer: PARADA.
+$cuenta = ([string]$t.Principal.UserId).Trim()
+if (-not $cuenta) { throw "PARADA 1.9: la tarea no tiene una cuenta (UserId vacío; grupo: $($t.Principal.GroupId))" }
+try { $sid = (New-Object Security.Principal.NTAccount($cuenta)).Translate([Security.Principal.SecurityIdentifier]).Value }
+catch { throw "PARADA 1.9: la cuenta de la tarea ($cuenta) no se puede resolver a un SID" }
 $claves = '^(INGEST_|POS_)'
 $maq = @([Environment]::GetEnvironmentVariables('Machine').Keys | Where-Object { $_ -match $claves })
-$regEnt = "Registry::HKEY_USERS\$sid\Environment"
-if (-not (Test-Path -LiteralPath $regEnt)) { throw "no se puede leer el entorno de la cuenta de la tarea ($cuenta): se para y se avisa" }
-$usr = @((Get-Item -LiteralPath $regEnt).Property | Where-Object { $_ -match $claves })
+$leido = @('máquina: HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment')
+$usr = @()
+if (Test-Path -LiteralPath "Registry::HKEY_USERS\$sid") {
+  # Perfil CARGADO: SYSTEM (S-1-5-18), LOCAL SERVICE (S-1-5-19) y NETWORK SERVICE (S-1-5-20) lo están siempre; un usuario, si tiene sesión.
+  $ent = "Registry::HKEY_USERS\$sid\Environment"
+  if (Test-Path -LiteralPath $ent) { $usr = @((Get-Item -LiteralPath $ent).Property | Where-Object { $_ -match $claves }); $leido += "cuenta: HKEY_USERS\$sid\Environment (perfil cargado)" }
+  else { $leido += "cuenta: HKEY_USERS\$sid sin clave Environment (perfil cargado; 0 variables de la cuenta)" }
+} else {
+  # Perfil NO cargado (cuenta de servicio o usuario sin sesión): se monta su NTUSER.DAT, se lee y se desmonta.
+  # Si la cuenta todavía no tiene perfil, Windows se lo crea desde el perfil Default: se lee ese.
+  $PL = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'
+  if (Test-Path -LiteralPath "$PL\$sid") { $perfil = [Environment]::ExpandEnvironmentVariables((Get-ItemProperty -LiteralPath "$PL\$sid").ProfileImagePath); $cual = 'perfil de la cuenta, no cargado' }
+  else { $perfil = [Environment]::ExpandEnvironmentVariables((Get-ItemProperty -LiteralPath $PL).Default); $cual = 'la cuenta no tiene perfil: perfil Default, del que se le crearía' }
+  $dat = Join-Path $perfil 'NTUSER.DAT'
+  if (-not (Test-Path -LiteralPath $dat -PathType Leaf)) { throw "PARADA 1.9: no se encuentra $dat ($cual) de la cuenta $cuenta" }
+  $HIVE = 'satori-pase-1-9'
+  if (Test-Path -LiteralPath "Registry::HKEY_USERS\$HIVE") { throw "PARADA 1.9: HKEY_USERS\$HIVE ya está montado (corrida anterior): desmontarlo con «reg.exe unload HKU\$HIVE» y repetir" }
+  reg.exe load "HKU\$HIVE" "$dat" | Out-Null; Ok "reg load de $dat (hace falta una consola de administrador)"
+  try {
+    $ent = "Registry::HKEY_USERS\$HIVE\Environment"
+    if (Test-Path -LiteralPath $ent) { $k = Get-Item -LiteralPath $ent; $usr = @($k.Property | Where-Object { $_ -match $claves }); $k.Close() }
+    $leido += "cuenta: $dat ($cual), montado en HKEY_USERS\$HIVE y desmontado"
+  } finally { $k = $null; [GC]::Collect(); [GC]::WaitForPendingFinalizers(); reg.exe unload "HKU\$HIVE" | Out-Null; Ok 'reg unload' }
+}
 if ($maq.Count -or $usr.Count) { throw "variables que pisan el .env del agente (solo nombres): $(@($maq + $usr) -join ', ')" }
-"1.9 entorno ok · cuenta $cuenta · sin INGEST_/POS_ en la máquina ni en la cuenta"
+"1.9 entorno ok · cuenta $cuenta ($sid) · sin INGEST_/POS_ · leído de: $($leido -join ' | ')"
 ```
-**Después, la medición**, con **el mismo parser del agente** y sin mostrar el valor. `--solo-medir` no arma el mapa, no
-escribe nada y **no corta** por el largo:
+**Qué dice la última línea** (anotarla entera en §10): la cuenta y su SID, y de dónde se leyó cada entorno:
+- **la máquina**, siempre;
+- **la cuenta:**
+  - «perfil cargado» (SYSTEM y las cuentas de servicio de Windows lo tienen siempre: el pase del 09-nov leyó
+    `HKEY_USERS\S-1-5-18\Environment`);
+  - o su `NTUSER.DAT`, montado y desmontado, si el perfil no estaba cargado;
+  - o el del perfil Default, si la cuenta todavía no tiene perfil.
+
+Montar un `NTUSER.DAT` pide **consola de administrador**; si no lo es, el bloque para con el motivo.
+
+**Después, la medición**, con **el mismo parser del agente** y sin mostrar el valor. `--solo-medir` no arma el mapa ni
+escribe nada:
 ```powershell
 $AG = Carpeta C:\satori\satori-app-prod; $CLON = Carpeta C:\satori\pase-v2; $SCR = Carpeta C:\satori\pase-scripts   # scripts del paquete (0.5b)
 $REG = 'file:///' + ((Archivo "$AG\pos-bridge\register.mjs") -replace '\\','/')
 $m = node --import $REG (Archivo "$SCR\armar_mapa_secretos.mjs") --agente $AG --clon $CLON --solo-medir; Ok 'medir secreto'
 $med = $m | ConvertFrom-Json
 "1.9 manda $($med.archivo_que_manda) · largo $($med.largo_santa_teresa) · cumple 32: $($med.cumple_32)"
+if (-not $med.cumple_32) { throw "PARADA 1.9 (Grok 120): el secreto del agente mide $($med.largo_santa_teresa), menos de 32. En el pase no se rota: se rota ANTES con docs/puente/ROTACION-SECRETO-AGENTE.md y el pase se reprograma" }
 ```
-Anotar las tres cosas. **Un secreto corto no es parada**, es un camino:
-- `cumple 32: True` → en §3 se corre 3.2.
-- `cumple 32: False` → **3.2 no se corre en §3**; el mapa se arma y se carga en **4.3b**, con la tarea detenida, con un
-  secreto nuevo para el agente (§3.3).
+Anotar las tres cosas. **Un secreto corto es PARADA limpia** (Grok 120):
+- no se toca nada y la tarea sigue andando;
+- el secreto se rota otro día con [`ROTACION-SECRETO-AGENTE.md`](ROTACION-SECRETO-AGENTE.md), ensayado antes en
+  staging;
+- después se reprograma el pase.
 
 **1.10 Corte, cursor y backlog por local** (104): la consulta **C** de §6.2, y en la PC el día según el PoS:
 ```powershell
@@ -310,7 +386,8 @@ Los ceros de adelante no molestan: el texto se guarda tal cual y se compara como
 `verify_jwt` prendido; el agente no está en `4d3513a6…` o tiene cambios; 1.9 corta (la tarea no corre el agente de
 `satori-app-prod`, hay variables `INGEST_`/`POS_` en la máquina o en la cuenta de la tarea, no se puede leer ese entorno,
 o el agente no puede leer su configuración); **1.11** da algún folio o cursor **no numérico** (con la 082 v3 se ordena
-como número: se para y se avisa). Un secreto **corto** (1.9) **no** es parada: va por 4.3b.
+como número: se para y se avisa); **un secreto corto** (1.9, Grok 120): se para, se rota antes con el procedimiento
+aparte y se reprograma.
 
 ## 2. Mig 081 + su fila del ledger (UNA transacción; el agente sigue andando)
 El bloque se **genera** (A3/A4), nunca a mano, y **solo si todo da** (102): md5 de los bytes primero, UTF-8 estricto sin
@@ -363,7 +440,7 @@ El Edge de hoy no lee `POS_INGEST_SECRETS`: cargarlo ahora no cambia nada en lo 
 - antes de escribir, el mapa se prueba **con el parser del Edge** (`localDelSecreto` del clon): cada secreto abre su local
   y uno inventado no abre nada.
 
-**3.2 Armar, cargar y verificar por huella** (**solo si 1.9 dijo `cumple 32: True`**; si no, se salta y va en 4.3b). El
+**3.2 Armar, cargar y verificar por huella** (1.9 dijo `cumple 32: True`; con `False` el pase ya paró en 1.9). El
 script devuelve el sha256 entero solo con `--huella-completa`, y queda en una variable: **por pantalla, solo los 12
 primeros** (119).
 ```powershell
@@ -373,7 +450,7 @@ $OUT = Join-Path (Carpeta $env:LOCALAPPDATA) "satori-pase-$(Get-Date -Format yyy
 try {
   $r = node --import $REG (Archivo "$SCR\armar_mapa_secretos.mjs") --agente $AG --clon $CLON --salida $OUT --huella-completa; Ok 'armar mapa'
   $res = $r | ConvertFrom-Json
-  if ($res.santa_teresa_cambiado) { throw 'el secreto del agente cambió fuera de 4.3b' }
+  if ($res.santa_teresa_cambiado) { throw 'el secreto del agente cambió: en el pase no se rota (Grok 120)' }
   supabase secrets set --env-file (Archivo $OUT) --project-ref yiczgdtirrkdvohdquzf | Out-Null; Ok 'secrets set'
 } finally { if (Test-Path -LiteralPath $OUT) { Remove-Item -LiteralPath $OUT -Force } }
 $lista = supabase secrets list --project-ref yiczgdtirrkdvohdquzf -o json; Ok 'secrets list'
@@ -389,14 +466,10 @@ con `--env-file` desde `NOMBRE='<JSON>'`, el CLI muestra en `value` (con `-o jso
 **el sha256 del JSON, sin las comillas**: exactamente lo que calcula el script. Si el día del pase el CLI no la muestra o
 no coincide, **se para**: no se verifica a ojo ni mostrando el valor.
 
-**3.3 Si el secreto de santa-teresa mide menos de 32** (1.9 dijo `cumple 32: False`): **en §3 no se hace nada**. Va en
-**4.3b**, con la tarea detenida, después de la 082 y antes del Edge. Es el comando de 3.2 con `--nuevo-santa-teresa`:
-- escribe uno nuevo en la línea `INGEST_SECRET=` del archivo que manda, con una copia `.antes-pase` al lado que se borra
-  al cerrar (9.0);
-- lo vuelve a leer con el parser del agente;
-- recién ahí arma y carga el mapa.
-
-Es el único cambio de archivo del agente; su código no se toca. El agente toma el secreto nuevo al arrancar (4.5).
+**3.3 Si el secreto de santa-teresa mide menos de 32** (Grok 120): **el pase ya paró en 1.9**. El `.env` del agente no
+se toca el día del pase. Escribir un secreto nuevo con la tarea detenida, en medio del cambio de base y Edge, suma un
+riesgo que no hace falta. La rotación es un procedimiento aparte, con su ensayo en staging, su vuelta atrás y su firma:
+[`ROTACION-SECRETO-AGENTE.md`](ROTACION-SECRETO-AGENTE.md). Se hace **otro día, antes** del pase.
 
 **3.4** `POS_INGEST_SECRET` (el de antes) **no se borra**: el Edge anterior lo necesita si hay rollback (§8).
 
@@ -409,18 +482,18 @@ PROD; la consola del deploy con el preámbulo corrido y el comando de 4.4 escrit
 `ingest-ndf` abierto. Entre 4.1 y 4.5 quedan solo la 082, el deploy y el arranque. Si pasa de 15 min, **no es
 parada**: se anota el motivo en §10.
 
-**4.1 Drenar escritores:**
+**4.1 Drenar escritores.** Corrección 09-nov (hallazgo del pase): la espera filtraba `node.exe` por la palabra `agente`,
+y eso agarra también el agente de **STAGING**, que corre en la misma PC con la misma línea de comando. Por eso el de prod
+estuvo ~40 min detenido, y el «cerrar node a mano» probablemente cerró el de staging (~11:58). Ahora el agente de prod se
+identifica por **su carpeta** (`Detener-Agente`, en el preámbulo): sus PID se anotan antes de detener la tarea y la espera
+mira solo esos. **Ningún bloque cierra procesos**; si el de prod no se detiene en 3 minutos, se avisa y se cierra **solo
+por PID**.
 ```powershell
+$AGDIR = Carpeta C:\satori\satori-app-prod; $CMDT = Archivo C:\satori\pos-agente-prod.cmd   # la carpeta y el .cmd que verificó 1.9
+# un backfill (replay, 6.4) no se identifica por la carpeta si se lanzó desde una consola: cualquiera frena y se mira
 $bf = @(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $_.CommandLine -match 'backfill' })
-if ($bf.Count) { throw 'hay un backfill corriendo: esperar a que termine' }
-Stop-ScheduledTask -TaskName 'Satori PoS Bridge PROD'
-$t0 = Get-Date
-while ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -eq 'Running' -or
-       @(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $_.CommandLine -match 'agente' }).Count) {
-  if ((Get-Date) - $t0 -gt [TimeSpan]::FromMinutes(3)) { throw 'el agente no se detuvo en 3 minutos' }
-  Start-Sleep -Seconds 5
-}
-"agente detenido $(Get-Date -Format 'HH:mm:ss')"
+if ($bf.Count) { throw "hay un backfill corriendo (node $(@($bf | ForEach-Object { $_.ProcessId }) -join ', ')): esperar a que termine o ver de qué agente es. No se cierra" }
+Detener-Agente 'Satori PoS Bridge PROD' $AGDIR $CMDT
 ```
 Sin requests en vuelo: en PROD, `select last_poll_at from pos_ndf_cursor where local = 'santa-teresa';` dos veces, con
 **2 minutos** entre una y otra: **no cambia**. Y Edge → Logs: ninguna invocación en esos 2 minutos.
@@ -445,26 +518,8 @@ select count(*) from public.pos_ndf_cursor where local = 'prueba-pase';  -- 0
 ```
 Si algo no da: **no se despliega el Edge**; se arranca el agente (4.5: con el Edge de hoy sigue igual) y §8.4.
 
-**4.3b Solo si 1.9 dijo `cumple 32: False`** (§3.3; la tarea sigue detenida desde 4.1): secreto nuevo para el agente y el
-mapa, en un solo paso. Si 1.9 dijo `True`, este bloque **no se corre**.
-```powershell
-if ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -eq 'Running') { throw 'la tarea no está detenida (4.1)' }
-$AG = Carpeta C:\satori\satori-app-prod; $CLON = Carpeta C:\satori\pase-v2; $SCR = Carpeta C:\satori\pase-scripts   # scripts del paquete (0.5b)
-$REG = 'file:///' + ((Archivo "$AG\pos-bridge\register.mjs") -replace '\\','/')
-$OUT = Join-Path (Carpeta $env:LOCALAPPDATA) "satori-pase-$(Get-Date -Format yyyyMMddHHmmss).env"
-try {
-  $r = node --import $REG (Archivo "$SCR\armar_mapa_secretos.mjs") --agente $AG --clon $CLON --salida $OUT --nuevo-santa-teresa --huella-completa; Ok 'armar mapa (secreto nuevo)'
-  $res = $r | ConvertFrom-Json
-  supabase secrets set --env-file (Archivo $OUT) --project-ref yiczgdtirrkdvohdquzf | Out-Null; Ok 'secrets set'
-} finally { if (Test-Path -LiteralPath $OUT) { Remove-Item -LiteralPath $OUT -Force } }
-$lista = supabase secrets list --project-ref yiczgdtirrkdvohdquzf -o json; Ok 'secrets list'
-$j = ($lista -join "`n") | ConvertFrom-Json
-$items = if ($j.PSObject.Properties.Name -contains 'secrets') { @($j.secrets) } else { @($j) }
-$fila = @($items | Where-Object { $_.name -ceq 'POS_INGEST_SECRETS' })
-if ($fila.Count -ne 1) { throw 'POS_INGEST_SECRETS no aparece una vez en la lista' }
-if ($fila[0].value -cne $res.sha256_mapa) { throw 'la huella del panel no es la del mapa armado: NO SE SIGUE' }
-"4.3b ok · secreto nuevo: $($res.santa_teresa_cambiado) · largo $($res.largo_santa_teresa) · huella $($res.sha256_mapa.Substring(0,12))…"
-```
+**4.3b — ya no existe** (Grok 120). Un secreto corto para el pase en 1.9; la rotación va aparte
+([`ROTACION-SECRETO-AGENTE.md`](ROTACION-SECRETO-AGENTE.md)).
 
 **4.4 Deploy del Edge** desde el clon (**nunca desde `satori-app-prod`**):
 ```powershell
@@ -614,9 +669,8 @@ Se para **sin discutir** si pasa cualquiera de estos:
    Push-Location $V1; try { supabase functions deploy ingest-ndf --no-verify-jwt --use-api --project-ref yiczgdtirrkdvohdquzf; Ok 'deploy v1' } finally { Pop-Location }
    ```
    Plan B, solo si falla: la carpeta de 1.7. **Verificar:** versión nueva, JWT apagado, 5.1 da 401 del Edge. El Edge
-   anterior usa `POS_INGEST_SECRET` (§3.4). Si en 4.3b se cambió el secreto del agente, se carga ese mismo valor en
-   `POS_INGEST_SECRET` con `supabase secrets set --env-file`, desde un archivo temporal armado sin mostrar el valor y
-   borrado enseguida, y se compara la huella.
+   anterior usa `POS_INGEST_SECRET` (§3.4). Como en el pase no se rota el secreto del agente (Grok 120), el de
+   `POS_INGEST_SECRET` sigue siendo el que el agente manda.
 3. **Arrancar el agente** (4.5) y verificar que entra (5.2).
 4. **Recién después**, y solo si hace falta, sacar la 082: Anexo A.2 (precondición, lock y conteo de filas).
    **Nunca al revés.** La columna `max_factura_vista` puede quedar (el Edge anterior no la mira).
@@ -630,8 +684,8 @@ Se para **sin discutir** si pasa cualquiera de estos:
    nada: se verifica contra el PoS, y lo que falte se recupera con el replay (o, fuera de su alcance, a mano con el dueño).
 
 ## 9. Después del pase
-**9.0 Cierre (pasó o se volvió atrás), antes de firmar:** se borra la copia `.antes-pase` que pudo dejar 4.3b (tiene el
-secreto viejo del agente; el rollback no la necesita, §8.2):
+**9.0 Cierre (pasó o se volvió atrás), antes de firmar:** se borra cualquier copia `.antes-pase` que haya quedado de una
+rotación (en el pase no se escribe ninguna, Grok 120; tiene un secreto viejo y el rollback no la necesita):
 ```powershell
 $AG = Carpeta C:\satori\satori-app-prod
 $posibles = @("$AG\.env.antes-pase", "$AG\.env.local.antes-pase", "$AG\pos-bridge\.env.antes-pase")
@@ -804,14 +858,13 @@ Los `.sql` del kit son ficticios. Los de verdad los controla el bloque 0.5 con l
 | 0.9 congelamiento de `main` avisado | | |
 | 1.1–1.4 ledger · función y columna no existen · cursor sano | | |
 | 1.6 Edge (versión, fecha, JWT) · 1.7 copia (= `4d3513a6…`: sí/no) | | |
-| 1.9 entorno de la cuenta de la tarea (cuenta, sin `INGEST_`/`POS_`) · archivo que manda · largo · cumple 32 | | |
+| 1.9 entorno: cuenta y SID, «leído de:» entero (Grok 121) · archivo que manda · largo · cumple 32 (False = PARADA, Grok 120) | | |
 | 1.10 por local: corte, R por categoría · PoS: facturas por estado, venta | | |
 | 1.11 formato: no numéricas 36 h = 0 · cursor numérico · largo mín./máx. · con ceros | | |
 | 2 · md5 081 · 7 columnas | | |
-| 3.2 mapa cargado · huella (12 primeros) — o «se salta: va en 4.3b» | | |
+| 3.2 mapa cargado · huella (12 primeros) | | |
 | 4.1 agente detenido (hora) · `last_poll_at` quieto · 4.2 corte al cambiar | | |
 | 4.3 md5 082 v3 · md5 de la función · columna · grants · llamada en vacío | | |
-| 4.3b (solo si 1.9 dio < 32) secreto nuevo · huella (12 primeros) | | |
 | 4.4 deploy (`<HORA_DEPLOY>` con `-06:00`, versión, JWT apagado) | | |
 | 4.5 agente arrancado (hora) · minutos detenido | | |
 | 5.1–5.6 humo (incluye «sin descartes») | | |

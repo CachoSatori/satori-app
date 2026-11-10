@@ -35,14 +35,14 @@
 --     SECURITY INVOKER que anon ejecute y lea una tabla NUEVA daría «permission denied» (hoy no hay ninguna: verificado
 --     en la 089).
 --   · Edge Functions: usan service_role o el JWT del usuario (authenticated): no cambian.
---   · La prueba 82 del Club tiene un caso «negativa» que crea una tabla nueva y ESPERA que anon tenga SELECT
---     (`has_table_privilege('anon', 'public.prueba_rls_82', 'SELECT')`). Con la 090 ese caso falla a propósito: hay que
---     invertirlo (esperar que anon NO tenga nada) en el mismo PR que aplique la 090.
+--   · La prueba 82 del Club NO se invierte ni se cambia con la 090 (Grok 134, decidido el 10-nov): su caso «negativa» le
+--     da un `grant select … to anon` explícito a la tabla de prueba (rama del Club @ 8b8f529), así que vale con y sin la
+--     090 (staging con la 090 puesta: batería 580/580, prueba 82 4/4). El PR de la 090 no toca la prueba 82.
 --
 -- ── CÓMO SE PRUEBA (staging, antes de firmar) ───────────────────────────────────────────────
 --   1. scripts/sql/090_pruebas.sql: en una transacción descartada, aplica la 090, crea una tabla de prueba en public y
 --      mira los permisos (anon nada; authenticated y service_role todo), y deja la base como estaba (rollback).
---   2. Con la 090 aplicada en staging: la prueba 82 del Club (con el caso negativo invertido), el recorrido de la app
+--   2. Con la 090 aplicada en staging: la prueba 82 del Club (tal como está, sin cambios), el recorrido de la app
 --      sin sesión (/login, /registro) y con sesión (cajero, manager, owner), y crear una tabla de prueba desde el
 --      editor del panel y borrarla.
 --   3. Una migración de prueba que cree una tabla y le dé SELECT a anon con grant explícito: anon la lee.

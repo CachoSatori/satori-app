@@ -33,7 +33,7 @@
 | Qué | Valor |
 |---|---|
 | Rama | `claude/anon-default-privs` (encima de `claude/anon-revoke`, al día con `main` @ `5a22478`) |
-| Migración | `supabase/migrations/090_anon_privilegios_por_defecto.sql`, md5 `0d93a8dbd693cdffa03ad67d6f42273e` (igual a la fila 090 de staging, aplicada a mano en un solo statement) |
+| Migración | `supabase/migrations/090_anon_privilegios_por_defecto.sql`, md5 `53aa0e0ab1df440057403e8b5ce15332` (10-nov, Grok 134: **solo cambió un comentario**; el SQL ejecutable es idéntico). La fila 090 del ledger de staging tiene el texto anterior (md5 `0d93a8db…`): actualizarla es una escritura en staging fuera de una transacción descartada y **se pide antes** (regla del dueño); no cambia nada de lo que hace la base. En prod no se compara md5 (Grok 122). |
 | Rollback | `scripts/sql/090_rollback.sql` (las tablas nuevas vuelven a nacer con todo para `anon`, como hoy) |
 | Pruebas | `scripts/sql/090_pruebas.sql` (8 casos, en una transacción descartada) |
 | Gate de catálogo (staging, solo lectura, 09-nov) | 106 tablas y vistas y 167 funciones de `public`, todas de `postgres`; salida sha256 `b12da126e2836991…` (fuera del repo) |
@@ -85,6 +85,7 @@ Más la **prueba de humo de antes** (§4).
   (`migraciones-reservadas.json` y `ESTADO.md`) y los documentos de `docs/pases/` de la 090.
 - **Se aplica con el merge, no a mano:** Branching corre `migrate` contra prod en cada push a `main`, como `postgres`.
 - **Merge commit**, con la firma de §9. Anotar el SHA y la hora (`-06:00`).
+- **Prueba 82 del Club (Grok 134):** La prueba 82 del Club **no se invierte ni se cambia** con la 090. Su caso «negativa» le da un `grant select … to anon` explícito a la tabla de prueba (rama del Club @ `8b8f529`, `scripts/sql/075_pruebas_staging.sql` ~4282–4290), así que vale con y sin la 090: en staging, con la 090 puesta, la batería dio 580/580 y la prueba 82 4/4. El PR de la 090 no toca la prueba 82.
 
 ## 3. Prueba en staging
 | Cuándo | Qué | Resultado |
@@ -162,8 +163,7 @@ rollback;
 **085 → 089 → 090 → 091 → 092 → 093.** Los merges a `main` van en ese orden, sin saltos. La 090 depende de la 089: la
 089 limpia lo que ya existe y la 090, lo que se cree después. Si se decide pasarla **después** de alguna de número mayor,
 se renumera al bloque de pase (150+) con su «origen» (regla 3 de ESTADO.md).
-- **Con la 090 en prod, la prueba 82 del Club** tiene que esperar que una tabla nueva **no** le dé nada a `anon` (en
-  staging ya corre así: 4/4).
+- **Prueba 82 del Club (Grok 134), lo mismo que en §2 y en el encabezado de la migración:** La prueba 82 del Club **no se invierte ni se cambia** con la 090. Su caso «negativa» le da un `grant select … to anon` explícito a la tabla de prueba (rama del Club @ `8b8f529`, `scripts/sql/075_pruebas_staging.sql` ~4282–4290), así que vale con y sin la 090: en staging, con la 090 puesta, la batería dio 580/580 y la prueba 82 4/4. El PR de la 090 no toca la prueba 82.
 
 ## 9. Firma y bitácora
 | Paso | Esperado | Obtenido |

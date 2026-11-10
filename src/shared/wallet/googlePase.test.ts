@@ -87,6 +87,12 @@ describe('armarObjeto', () => {
     expect(o.subheader.defaultValue.value).toBe('Socio y anfitrión')
   })
 
+  it('(10-nov, el dueño) el nombre visible del pase es «Satori», en los dos idiomas', () => {
+    const o = obj(armarObjeto(ISSUER, base())) as unknown as { cardTitle: { defaultValue: { value: string }; translatedValues: Array<{ value: string }> } }
+    expect(o.cardTitle.defaultValue.value).toBe('Satori')
+    expect(o.cardTitle.translatedValues[0].value).toBe('Satori')
+  })
+
   it('créditos claros (Ismael, 08-nov): el saldo en colones y las personas del mes en otra línea, ES/EN', () => {
     const o = obj(armarObjeto(ISSUER, base()))
     const cred = o.textModulesData.find((t) => t.id === 'creditos')

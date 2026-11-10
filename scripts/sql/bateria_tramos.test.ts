@@ -49,6 +49,10 @@ describe('batería del Club por tramos (10-nov)', () => {
     for (const t of tramos) expect(t.cuerpo).toMatch(/^-- ═══ /m)
   })
 
+  it('(Grok 153) cada tramo dice cuántos casos espera, justo debajo de su marca', () => {
+    for (const t of tramos) expect(t.cuerpo, `tramo ${t.n}`).toMatch(/^-- ════════ TRAMO \d+: .*? ════════\n-- casos esperados: [1-9]\d*\n/)
+  })
+
   it('cada tramo es autosuficiente: lee de _ids solo lo que crea el preámbulo o él mismo, y no crea funciones pg_temp', () => {
     expect(problemas(BATERIA)).toEqual([])
   })

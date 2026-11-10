@@ -11,9 +11,13 @@ Cada request = preámbulo + tramo + cierre: corre en una transacción que termin
 Los tramos van UNO DETRÁS DEL OTRO (en paralelo se podrían trabar en las mismas filas, por ejemplo club_config).
 
   CAJERO_UUID=… OWNER_UUID=… MANAGER_UUID=… SALONERO_UUID=… CONTADOR_UUID=… \\
-    python3 scripts/sql/bateria_club.py [--tramo N] [--esperado 597] [--json salida.json]
+    python3 scripts/sql/bateria_club.py --esperado 597 [--tramo N] [--json salida.json]
 
-Sale 0 solo si todos los tramos devolvieron resultados, todos los casos dieron ok y (con --esperado) el total es ese.
+(Grok 153, 10-nov) --esperado es OBLIGATORIO y tiene que ser la suma de los «-- casos esperados: N» de cada tramo (la
+línea que va justo debajo de su marca). Cada tramo tiene que devolver exactamente sus casos esperados: un tramo que
+perdió o ganó casos sin actualizar su línea hace fallar la corrida aunque todos den ok.
+Sale 0 solo si todos los tramos (o el pedido con --tramo) devolvieron resultados, todos los casos dieron ok y cada
+tramo dio sus casos esperados.
 Token de la Management API: el proxy (o SUPABASE_ACCESS_TOKEN). Ref fijo de staging.
 """
 from __future__ import annotations
@@ -25,6 +29,7 @@ RAIZ = Path(__file__).resolve().parents[2]
 BATERIA = RAIZ / 'scripts/sql/150_pruebas_staging.sql'
 UUIDS = ('CAJERO', 'OWNER', 'SALONERO', 'CONTADOR', 'MANAGER')
 RE_TRAMO = re.compile(r'^-- ════════ TRAMO (\d+): (.*?) ════════$', re.M)
+RE_ESPERADOS = re.compile(r'\A-- ════════ TRAMO \d+: .*? ════════\n-- casos esperados: (\d+)\n')
 CIERRE = "select json_agg(json_build_object('p', prueba, 'caso', caso, 'ok', ok, 'detalle', left(detalle, 200)) order by n) from _res;"
 
 
@@ -55,6 +60,17 @@ def partir(txt: str) -> tuple[str, list[tuple[int, str, str]], str]:
         fin = marcas[k + 1].start() if k + 1 < len(marcas) else i_cierre
         tramos.append((int(m.group(1)), m.group(2), txt[m.start():fin]))
     return pre, tramos, txt[i_cierre:]
+
+
+def esperados_por_tramo(tramos: list[tuple[int, str, str]]) -> dict[int, int]:
+    """{n: casos esperados}, de la línea «-- casos esperados: N» que va justo debajo de cada marca. Falla si falta."""
+    out = {}
+    for n, _, cuerpo in tramos:
+        m = RE_ESPERADOS.match(cuerpo)
+        if not m:
+            raise ValueError(f'el tramo {n} no tiene «-- casos esperados: N» justo debajo de su marca')
+        out[n] = int(m.group(1))
+    return out
 
 
 def armar(pre: str, cuerpo: str, cierre: str) -> str:
@@ -93,9 +109,14 @@ def correr(sql: str) -> tuple[list[dict] | None, float, str]:
 def main() -> None:
     args = sys.argv[1:]
     solo = int(args[args.index('--tramo') + 1]) if '--tramo' in args else None
-    esperado = int(args[args.index('--esperado') + 1]) if '--esperado' in args else None
+    if '--esperado' not in args:
+        sys.exit('falta --esperado TOTAL (obligatorio; Grok 153): la suma de los «-- casos esperados» de los tramos')
+    esperado = int(args[args.index('--esperado') + 1])
     salida = args[args.index('--json') + 1] if '--json' in args else None
     pre, tramos, cierre = partir(leer())
+    por_tramo = esperados_por_tramo(tramos)
+    if esperado != sum(por_tramo.values()):
+        sys.exit(f'--esperado {esperado} no es la suma de los tramos ({sum(por_tramo.values())}: {por_tramo})')
     todos, mal = [], False
     for n, titulo, cuerpo in tramos:
         if solo is not None and n != solo:
@@ -107,12 +128,14 @@ def main() -> None:
             continue
         caen = [c for c in casos if not c['ok']]
         print(f'TRAMO {n} ({titulo}): {len(casos)} casos · {len(casos) - len(caen)} ok · {seg:.1f} s')
+        if len(casos) != por_tramo[n]:
+            print(f'   el tramo {n} dio {len(casos)} casos y se esperaban {por_tramo[n]}'); mal = True
         for c in caen:
             print(f"   FALLA {c['p']} · {c['caso'][:110]} · {str(c.get('detalle'))[:120]}")
         mal = mal or bool(caen)
         todos += [dict(c, tramo=n) for c in casos]
     print(f'── TOTAL: {len(todos)} casos · {sum(1 for c in todos if c["ok"])} ok')
-    if esperado is not None and len(todos) != esperado:
+    if solo is None and len(todos) != esperado:
         print(f'── el total no es el esperado ({esperado})'); mal = True
     if salida:
         Path(salida).write_text(json.dumps(todos, ensure_ascii=False), encoding='utf-8')

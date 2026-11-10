@@ -155,6 +155,7 @@ begin
 end $$;
 
 -- ════════ TRAMO 1: cupones, canjes, miembros y roles (bloques 1–26) ════════
+-- casos esperados: 107
 -- ═══ 1. Anon: lectura o escritura directa en club_* → rechazada ═══
 do $$
 declare t text; v_ok boolean;
@@ -998,6 +999,7 @@ begin
 end $$;
 
 -- ════════ TRAMO 2: pedidos, cruce y socios (27–59) ════════
+-- casos esperados: 225
 -- Puesta a punto del tramo (lo que dejan los tramos anteriores y este tramo necesita). Da lo mismo correrla dos veces:
 -- en la batería entera (un solo request) no cambia nada.
 --   · el tramo 1 deja el artículo de la promo en PRUEBA-PROMO (y su marcador):
@@ -2867,6 +2869,7 @@ begin
 end $$;
 
 -- ════════ TRAMO 3: Local Club: promociones, visitas, premios y excepciones (60–67) ════════
+-- casos esperados: 72
 -- Puesta a punto del tramo (lo que dejan los tramos anteriores y este tramo necesita). Da lo mismo correrla dos veces:
 -- en la batería entera (un solo request) no cambia nada.
 --   · la 40 rotó la clave de club-web:
@@ -3486,6 +3489,7 @@ begin
 end $$;
 
 -- ════════ TRAMO 4: el 857 «INVITADO» y Grok 90/91/93 (68–69) ════════
+-- casos esperados: 17
 -- Puesta a punto del tramo (lo que dejan los tramos anteriores y este tramo necesita). Da lo mismo correrla dos veces:
 -- en la batería entera (un solo request) no cambia nada.
 --   · la 40 rotó la clave de club-web:
@@ -3643,6 +3647,7 @@ begin
 end $$;
 
 -- ════════ TRAMO 5: multilocal, privacidad, S0–S8 y cuentas inactivas (70–91 y 6) ════════
+-- casos esperados: 176
 -- Puesta a punto del tramo (lo que dejan los tramos anteriores y este tramo necesita). Da lo mismo correrla dos veces:
 -- en la batería entera (un solo request) no cambia nada.
 --   · la 40 rotó la clave de club-web:

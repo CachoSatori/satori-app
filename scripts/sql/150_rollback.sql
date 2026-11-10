@@ -127,12 +127,28 @@ drop table if exists public.club_pos_login_historial;   -- historial de cambios 
 drop table if exists public.club_cargas_papel;          -- carga de saldos de papel (G-56)
 drop table if exists public.club_avisos_privacidad;     -- versiones del aviso de privacidad
 
+-- LC-A2: tarea diaria de socios (si pg_cron está). (Grok 150, 10-nov) DENTRO de la transacción y antes de la guarda:
+-- si algo después aborta, tampoco se desprograma. Dinámico: sin pg_cron, el esquema cron no existe.
+do $$ declare j text; begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    for j in execute 'select jobname from cron.job where jobname like ''club\_%''' loop
+      perform cron.unschedule(j);
+    end loop;
+  end if;
+end $$;
+
 -- (10-nov) el rollback se verifica solo: si queda CUALQUIER objeto club_* en public (tabla, vista, secuencia, tipo,
--- función) o un trigger club_* sobre una tabla que no es del Club (p. ej. employees), aborta y no se borra nada.
+-- función), un trigger club_* sobre una tabla que no es del Club (p. ej. employees) o una tarea club_* de pg_cron
+-- (Grok 150), aborta y no se borra nada.
 do $$
-declare v text;
+declare v text; v_cron text;
 begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    execute 'select string_agg(''cron.job '' || jobname, '', '') from cron.job where jobname like ''club\_%''' into v_cron;
+  end if;
   select string_agg(x, ', ') into v from (
+    select v_cron as x where v_cron is not null
+    union all
     select c.relname::text || ' (' || c.relkind::text || ')' as x from pg_class c
      where c.relnamespace = 'public'::regnamespace and c.relname like 'club\_%'
     union all select p.oid::regprocedure::text from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'club\_%'
@@ -149,9 +165,3 @@ delete from supabase_migrations.schema_migrations where version in ('075', '150'
 
 commit;
 
--- LC-A2: tarea diaria de socios (si pg_cron está)
-do $$ begin
-  if exists (select 1 from pg_extension where extname = 'pg_cron') and exists (select 1 from cron.job where jobname = 'club_socios_mantenimiento') then
-    perform cron.unschedule('club_socios_mantenimiento');
-  end if;
-end $$;

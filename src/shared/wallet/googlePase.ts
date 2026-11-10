@@ -202,7 +202,7 @@ export function armarObjeto(issuerId: string, d: PaseDatos, diseno: DisenoPase =
     id: idObjeto(issuerId, d.miembro_id),
     classId: idClase(issuerId),
     state: d.estado === 'baja' ? 'EXPIRED' : 'ACTIVE',
-    cardTitle: loc({ es: 'Club Satori', en: 'Club Satori' }),
+    cardTitle: loc({ es: 'Satori', en: 'Satori' }),   // (10-nov, el dueño) nombre visible del pase: «Satori»
     header: loc({ es: d.nombre_pila, en: d.nombre_pila }),
     subheader: loc(subtitulo),
     hexBackgroundColor: diseno.colorFondo,

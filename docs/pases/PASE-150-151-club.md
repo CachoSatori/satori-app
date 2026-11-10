@@ -371,6 +371,8 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 - **085 → 089 → 090 → 091 → 092 → 093 → 150 → 151.** La 087 y la 088 (y la 093 si se atrasa) toman **152+** al armar su
   paquete.
 - Después del pase: actualizar `ESTADO.md` (ledger de prod), el «Resultado» abajo y, con el OK del dueño, staging (§3).
+- Después del pase, en un PR aparte: sacar el nombre del dueño de los comentarios de `supabase/migrations/` (decisión del
+  dueño, 10-nov; backlog 22c). En la 150 solo los comentarios de afuera de las funciones: los 4 de adentro quedan.
 - El RUNBOOK (`docs/club-satori/RUNBOOK-piloto.md`) sigue valiendo para el detalle de cada verificación, pero el **orden**
   es el de este paquete: se mergea **una vez**, y la base entra con el merge.
 

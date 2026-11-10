@@ -87,6 +87,11 @@
       "nombre": "anon_sin_maintain",
       "bloque": "caja",
       "rama": "claude/anon-sin-maintain"
+    },
+    "095": {
+      "nombre": "contador_lee_caja",
+      "bloque": "caja",
+      "rama": "claude/contador-lee-caja"
     }
   }
 }

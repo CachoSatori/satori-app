@@ -32,7 +32,7 @@
 ## SHA y huellas
 | Qué | Valor |
 |---|---|
-| Rama | `claude/anon-default-privs`, encima de `claude/anon-revoke` @ `913c2d2` (= la 089 sobre `main` @ `54293ac`). Apenas la 089 esté en prod, se trae `main` con un merge commit y se verifica 0.4 |
+| Rama | `claude/anon-default-privs`, al día con `main` @ `fa1cbef` (la 089 en prod) con un merge commit. Si `main` se mueve, se vuelve a verificar 0.4 |
 | Migración | `supabase/migrations/090_anon_privilegios_por_defecto.sql`, md5 `53aa0e0ab1df440057403e8b5ce15332` (10-nov, Grok 134: **solo cambió un comentario**; el SQL ejecutable es idéntico). **La fila 090 del ledger de staging se actualizó al texto nuevo el 10-nov a las 08:53 CR** (OK del dueño; franja de la mañana levantada por el dueño): una transacción con precondición (1 fila, 1 statement, md5 `0d93a8db…`) y postcondición, solo `statements` de esa fila; antes, sin consultas ajenas y el último commit del Club con 5 minutos. **Queda md5 `53aa0e0ab1df440057403e8b5ce15332`**, igual al archivo; ledger 85 filas, última 090; privilegios por defecto de `public` sin cambios (sin `anon`). En prod no se compara md5 (Grok 122). |
 | Rollback | `scripts/sql/090_rollback.sql` (las tablas nuevas vuelven a nacer con todo para `anon`, como hoy) |
 | Pruebas | `scripts/sql/090_pruebas.sql` (8 casos, en una transacción descartada) |
@@ -48,7 +48,7 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 - **Claude no corre nada en prod.** Prepara, revisa y lee los resultados que le pasan.
 
 ## 0. Prerrequisitos
-**Base del pase: `main` con la 089 ya mergeada y en prod** (ledger **59 · 089**). La 085 está en prod desde el 10-nov
+**Base del pase: `main` @ `fa1cbef`, con la 089 en prod** (merge del #90 el 10-nov a las 10:22:11 -06:00; ledger **59 · 089**). La 085 está en prod desde el 10-nov
 (ledger 58 · 085, `bb12652`).
 
 | # | Qué | Cómo se verifica |

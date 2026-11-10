@@ -1,0 +1,17 @@
+/* Las pestañas de Ventas son <button> (accesibles con teclado y lector de pantalla).
+   Este reset les quita el aspecto de botón del navegador para que se vean igual que
+   cuando eran <div>: el resto del estilo sigue en .vt-nav-tab (src/index.css). */
+button.vt-nav-tab {
+  background: transparent;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  font-family: inherit;
+  line-height: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+@media (max-width: 760px) {
+  button.vt-nav-tab { border-right: 1px solid rgba(0,0,0,0.06); }
+}

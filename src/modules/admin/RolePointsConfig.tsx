@@ -64,8 +64,8 @@ export default function RolePointsConfig({ rolePoints, onRefresh }: Props) {
       </div>
 
       <p style={{ fontSize: '0.75rem', color: 'var(--gray-light)', marginBottom: '1rem', lineHeight: 1.5 }}>
-        Fórmula: <span style={{ color: 'var(--accent)' }}>take-home = (horas × puntos_rol / total_puntos) × pool</span>.
-        <br />“Recibe propina” en <strong>No</strong> saca al rol del roster del turno y del pool (reversible; no afecta turnos ya cerrados).
+        Cómo se reparte: <span style={{ color: 'var(--accent)' }}>propina de cada uno = (horas × puntos de su rol ÷ puntos de todo el turno) × pozo del turno</span>.
+        <br />“Recibe propina” en <strong>No</strong> saca al rol de la lista del turno y del pozo (se puede revertir; no afecta turnos ya cerrados).
       </p>
 
       <table className="admin-table">

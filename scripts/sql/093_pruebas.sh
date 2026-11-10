@@ -27,10 +27,12 @@ q() {
 echo "093_pruebas · $(TZ=America/Costa_Rica date '+%Y-%m-%d %H:%M CR') · REF=$REF · script @ $(git -C "$RAIZ" rev-parse --short HEAD)"
 
 TABLAS="'ventas_dias','ventas_hist','ventas_metas','ventas_comps','product_map'"
+# Columnas NOT NULL sin default (catálogo de staging, 10-nov): product_map.nombre · ventas_dias.session_date, data ·
+# ventas_hist.session_date, data · ventas_metas.key, value · ventas_comps.data.
 SEMILLA="insert into public.product_map (nombre) values ('PRUEBA 093') on conflict do nothing;
-  insert into public.ventas_dias (session_date, file_name) values ('1900-01-01', 'prueba-093');
-  insert into public.ventas_hist (session_date, source) values ('1900-01-01', 'prueba-093') on conflict do nothing;
-  insert into public.ventas_metas (key) values ('prueba-093') on conflict do nothing;
+  insert into public.ventas_dias (session_date, file_name, data) values ('1900-01-01', 'prueba-093', '{}'::jsonb);
+  insert into public.ventas_hist (session_date, source, data) values ('1900-01-01', 'prueba-093', '{}'::jsonb) on conflict do nothing;
+  insert into public.ventas_metas (key, value) values ('prueba-093', '{}'::jsonb) on conflict do nothing;
   insert into public.ventas_comps (data) values ('{}'::jsonb);"
 CONT="json_build_object('ventas_dias', (select count(*) from public.ventas_dias), 'ventas_hist', (select count(*) from public.ventas_hist),
   'ventas_metas', (select count(*) from public.ventas_metas), 'ventas_comps', (select count(*) from public.ventas_comps),

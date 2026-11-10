@@ -109,6 +109,7 @@ Más la **prueba de humo de antes** (§4).
 | Cuándo | Qué | Resultado |
 |---|---|---|
 | 10-nov 10:43 CR (script @ `75ecbe9`) | `095_pruebas.sh hwiatgicyyqyezqwldia`, transacciones descartadas | **23 OK · 0 FALLA · VERDE** |
+| 10-nov tarde (script @ `e7479d2`; la 095 ya aplicada en staging desde las 11:03:32, y los casos «sin la 095» la deshacen dentro de la transacción) | `095_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE**: el caso 038 compara contra `ok` literal, sin y con la 095 (Grok 157) |
 
 Los 23 casos:
 - **Lectura:**

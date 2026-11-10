@@ -1,4 +1,5 @@
--- 075_rollback.sql — Club Satori F1a: borra TODO lo club_* y la fila 075 del ledger.
+-- 150_rollback.sql (antes 075_rollback.sql; renumerada en el pase del Club, 10-nov) — Club Satori F1a: borra TODO lo
+-- club_* y la fila del ledger (150 en prod; 075 en staging mientras su fila no se renumere).
 -- ⚠️ Destruye los datos del Club (miembros, movimientos, cupones, PM). Pensado para STAGING
 -- antes del piloto. En prod, solo con firma y después de exportar los datos.
 begin;
@@ -121,7 +122,7 @@ drop function if exists public.club_norm_telefono(text);
 drop function if exists public.club_creditos(bigint, int);
 drop function if exists public.club_gen_codigo(int);
 
-delete from supabase_migrations.schema_migrations where version = '075';
+delete from supabase_migrations.schema_migrations where version in ('075', '150');
 
 commit;
 

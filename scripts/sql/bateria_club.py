@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Batería del Club (075) POR TRAMOS, en STAGING (10-nov). La batería entera ya tardaba 21–30 s y la Management API corta
+Batería del Club (150, antes 075) POR TRAMOS, en STAGING (10-nov). La batería entera ya tardaba 21–30 s y la Management API corta
 a los 30 s: sin resultado no se sabe si está verde. Ahora cada tramo va en su propio request, con el mismo preámbulo.
 
-El archivo sigue siendo UNO (scripts/sql/075_pruebas_staging.sql), con marcas:
+El archivo sigue siendo UNO (scripts/sql/150_pruebas_staging.sql), con marcas:
   · preámbulo: desde el principio hasta la primera línea «-- ════════ TRAMO 1: …»;
   · tramo N: desde su marca hasta la siguiente (o hasta el cierre);
   · cierre: el «select json_agg(… from _res;» final y el «rollback;».
@@ -22,7 +22,7 @@ from pathlib import Path
 
 REF = 'hwiatgicyyqyezqwldia'   # SOLO staging
 RAIZ = Path(__file__).resolve().parents[2]
-BATERIA = RAIZ / 'scripts/sql/075_pruebas_staging.sql'
+BATERIA = RAIZ / 'scripts/sql/150_pruebas_staging.sql'
 UUIDS = ('CAJERO', 'OWNER', 'SALONERO', 'CONTADOR', 'MANAGER')
 RE_TRAMO = re.compile(r'^-- ════════ TRAMO (\d+): (.*?) ════════$', re.M)
 CIERRE = "select json_agg(json_build_object('p', prueba, 'caso', caso, 'ok', ok, 'detalle', left(detalle, 200)) order by n) from _res;"

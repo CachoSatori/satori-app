@@ -55,6 +55,7 @@ def main() -> None:
         if 'sql' in m:
             deshacer = m['sql']
         else:
+            # las mutaciones toman la función de un commit VIEJO: ahí el archivo todavía se llamaba 075 (hoy es la 150)
             src = subprocess.run(['git', '-C', str(RAIZ), 'show', f"{m['funciones_de']['commit']}:supabase/migrations/075_club_satori_esquema.sql"],
                                  capture_output=True, text=True, check=True).stdout
             # «sql_antes»: lo que hay que correr antes (p. ej. un drop si la versión vieja devuelve otro tipo)

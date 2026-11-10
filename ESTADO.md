@@ -231,14 +231,15 @@ solas tras un reinicio (validado el 29/10).
 **Orden previsto del pase a prod** (prod va hasta la **085** desde el 10/11):
 1. ~~**081 → 082** (puente) primero, con su número.~~ **Hecho el 09/11** (pase del puente).
 2. ~~Después la **085** (SEC-01c), con su número: queda arriba de la 082.~~ **Hecho el 10/11** (#80, `bb12652`).
-3. Las que queden atrás (≤ al último de prod en su momento: la **083** y la **084**, la **075** del Club)
-   toman **150+**, en el orden en que pasen.
+3. Las que queden atrás (≤ al último de prod en su momento) toman **150+**, en el orden en que pasen:
+   **150 ← 075 y 151 ← 100** (pase del Club, `docs/pases/PASE-150-151-club.md`); la **083**, la **084**, la 087 y la 088
+   (y la 093 si va después del Club) toman **152+** cuando se arme su paquete.
 
 **Ya usados (antes de los bloques)**
 
 | Número | Nombre | De | Rama | Dónde está aplicada |
 |---|---|---|---|---|
-| 075 | `club_satori_esquema` | Club | `claude/brave-brown-m45jd7` y ramas del Club | staging. Al pasar a prod se renombra al bloque de pase (regla 3) |
+| 075 | `club_satori_esquema` | Club | `claude/brave-brown-m45jd7` y ramas del Club | staging. **Renumerada a 150** en el pase del Club (`claude/pase-club`, 10-nov; regla 3) |
 | 078 | — | — | — | **No usar** (fue Prom/PAX, renumerada a 080) |
 | 080 | `pos_prompax_agregado` | Prom/PAX | `main` (#58) | staging y prod (último de prod al 08/11) |
 | 081 | `pos_ndf_campos_factura` | puente (Club) | `main` (#71, 09/11) | staging y **prod** (09/11 10:57 -06:00, a mano en el pase del puente) |
@@ -252,15 +253,17 @@ solas tras un reinicio (validado el 29/10).
 | Bloque | Rango | Asignadas | Próximo libre |
 |---|---|---|---|
 | CAJA / operación | 087–99 | — | **087** |
-| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`, sin aplicar; va después de la 075) | **101** |
-| PASE A PROD (solo renumeraciones) | 150–199 | — | **150** |
+| CLUB SATORI + puente | 100–149 | 100 (`club_catalogo_locales`; renumerada a 151 en el pase) | **101** |
+| PASE A PROD (solo renumeraciones) | 150–199 | 150 (← 075), 151 (← 100): pase del Club, rama `claude/pase-club` | **152** (la 087, la 088 y, si va después del Club, la 093 toman 152+ al armar su paquete) |
 | (fuera de bloque) | 086 | — | libre |
 
 **Asignadas en los bloques**
 
 | Número | Nombre | Bloque | Rama | Dónde está aplicada |
 |---|---|---|---|---|
-| 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **sin aplicar**. Orden en prod (Grok 127): 085 → 089 → 090 → 091 → 092 → pase del Club. **Decisión (CLUB-AUD-100): en el pase del Club, 075 → 150 y 100 → 151** (bloque de pase, con su «origen»). No se mergea antes que la 091 y la 092 |
+| 100 | `club_catalogo_locales` | club | `claude/club-100-catalogo` | **renumerada a 151** en el pase del Club (`claude/pase-club`, 10-nov). El número 100 no se reutiliza (regla 4) |
+| 150 | `club_satori_esquema` | pase (origen **075**) | `claude/pase-club` | staging como **075** (fila 075; se renumera con permiso). Prod: con el merge del pase del Club (Branching), después de la 091–093. Paquete: `docs/pases/PASE-150-151-club.md` |
+| 151 | `club_catalogo_locales` | pase (origen **100**) | `claude/pase-club` | **sin aplicar** en ningún lado. Prod: en el mismo merge, justo después de la 150; necesita la 091 en prod. Paquete: `docs/pases/PASE-150-151-club.md` |
 
 
 | Entorno | Ledger (`schema_migrations`) | Detalle |

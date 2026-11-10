@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const RAIZ = join(__dirname, '..', '..')
-const BATERIA = readFileSync(join(RAIZ, 'scripts/sql/075_pruebas_staging.sql'), 'utf8')
+const BATERIA = readFileSync(join(RAIZ, 'scripts/sql/150_pruebas_staging.sql'), 'utf8')
 const MUTACIONES = JSON.parse(readFileSync(join(RAIZ, 'scripts/sql/mutaciones_r7.json'), 'utf8')) as Record<string, { antes_de: string }>
 const RE_MARCA = /^-- ════════ TRAMO (\d+): .*? ════════$/gm
 

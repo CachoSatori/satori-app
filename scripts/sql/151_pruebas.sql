@@ -1,8 +1,8 @@
--- 100_pruebas · SOLO STAGING. Aplica la 100 dentro de una transacción, prueba y termina en ROLLBACK: no deja nada.
--- Reemplazar <OWNER_UUID> por un perfil owner activo de staging. Devuelve un JSON con cada caso y ok.
+-- 151_pruebas (antes 100_pruebas) · SOLO STAGING. Aplica la 151 dentro de una transacción, prueba y termina en ROLLBACK: no deja nada.
+-- Reemplazar <OWNER_UUID> y <CAJERO_UUID> por un owner y un cajero activos de staging. Devuelve un JSON con cada caso y ok.
 -- «Falla sin el arreglo» (probado el 09-nov): con el cuerpo de la 100 SIN el trigger, caen los casos 3 y 5 con 23503.
 begin;
--- @@100@@   (aquí va el cuerpo de supabase/migrations/100_club_catalogo_locales.sql sin begin/commit)
+-- @@151@@   (aquí va el cuerpo de supabase/migrations/151_club_catalogo_locales.sql sin begin/commit)
 create temp table _r100 (n serial, caso text, ok boolean, detalle text) on commit drop;
 
 -- 1. FK validada y ningún local del Club fuera del catálogo

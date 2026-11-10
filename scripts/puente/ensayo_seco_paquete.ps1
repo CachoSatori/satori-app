@@ -173,6 +173,9 @@ function Preparar-Agente([string]$raiz) {   # la carpeta del agente FICTICIA (so
   [IO.File]::WriteAllText((Join-Path $raiz 'satori-app\pos-bridge\.env.antes-pase'), "INGEST_SECRET=ficticio`n", $utf8)        # R6 la borra
   # 09-nov: la tarea corre C:\satori\pos-agente-prod.cmd (cd /d a la carpeta del agente y node)
   $global:KIT.raiz = $raiz
+  # 135: un archivo de OTRO pase en C:\satori\pase-scripts (ningún bloque del pase del agente lo puede borrar)
+  New-Item -ItemType Directory -Force (Join-Path $raiz 'pase-scripts') | Out-Null
+  [IO.File]::WriteAllText((Join-Path $raiz 'pase-scripts\del-pase-del-puente.txt'), 'testigo', $utf8)
   $global:KIT.cmd = Join-Path $raiz 'pos-agente-prod.cmd'
   [IO.File]::WriteAllText($global:KIT.cmd, "@echo off`r`ncd /d $raiz\satori-app-prod`r`n`"C:\Program Files\nodejs\node.exe`" --import ./pos-bridge/register.mjs pos-bridge/agente.ts`r`n", $utf8)
 }
@@ -221,6 +224,9 @@ try {
     $envN = [IO.File]::ReadAllText((Join-Path $nueva 'pos-bridge\.env'))
     Resultado 'agente: el .env nuevo tiene el mismo secreto y la firma UNA vez' (($envN -match '(?m)^INGEST_SECRET=ficticio-ficticio-ficticio-ficticio-0123\r?$') -and ([regex]::Matches($envN, '(?m)^POS_AGENTE_PROD_FIRMADO=\d{4}-\d{2}-\d{2}\r?$').Count -eq 1))
     $cmdN = [IO.File]::ReadAllText((Join-Path $RAIZ 'pos-agente-prod-5da233a.cmd'))
+    Resultado 'agente 2.3 (135): no borró nada de pase-scripts (el archivo del pase del puente sigue)' (Test-Path -LiteralPath (Join-Path $RAIZ 'pase-scripts\del-pase-del-puente.txt'))
+    $subs = @(Get-ChildItem -LiteralPath (Join-Path $RAIZ 'pase-scripts') -Directory | Where-Object { $_.Name -match '^agente-\d{4}-\d{2}-\d{2}_\d{6}$' })
+    Resultado 'agente 2.3 (135): los scripts quedaron en pase-scripts\agente-<fecha y hora>, con el md5 revisado' (($subs.Count -ge 1) -and (Test-Path -LiteralPath (Join-Path $subs[0].FullName 'armar_mapa_secretos.mjs'))) "$($subs.Count) carpetas"
     Resultado 'agente: el .cmd nuevo entra a la carpeta nueva y no a la vieja' (($cmdN -like '*agente-prod-5da233a*') -and ($cmdN -notlike '*satori-app-prod*'))
     $nA11 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'rev-parse agente' } | Select-Object -First 1))
     $nA21 = 1 + [array]::IndexOf($bloques, ($bloques | Where-Object { $_ -match 'npm.cmd ci' } | Select-Object -First 1))

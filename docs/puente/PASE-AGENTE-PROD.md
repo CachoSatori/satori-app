@@ -248,8 +248,11 @@ $sep = if ($prev -and -not $prev.EndsWith("`n")) { "`r`n" } else { '' }
 acá, antes de tocar la tarea. No se muestra ningún valor:
 ```powershell
 $VIEJA = Carpeta C:\satori\satori-app-prod; $NUEVA = Carpeta C:\satori\agente-prod-5da233a
-New-Item -ItemType Directory -Force C:\satori\pase-scripts | Out-Null; $SCR = Carpeta C:\satori\pase-scripts
-Get-ChildItem -LiteralPath $SCR -File | Remove-Item -Force
+# 135: los scripts de ESTE pase van a una carpeta NUEVA, C:\satori\pase-scripts\agente-<fecha y hora>. No se borra nada: en
+# C:\satori\pase-scripts quedan los del pase del puente (0.5b de la plantilla). Si la carpeta ya existiera, se para.
+$SCR = "C:\satori\pase-scripts\agente-$(Get-Date -Format 'yyyy-MM-dd_HHmmss')"
+if (Test-Path -LiteralPath $SCR) { throw "ya existe $SCR: no se pisa ni se borra nada; esperar un segundo y repetir" }
+New-Item -ItemType Directory -Path $SCR | Out-Null; $SCR = Carpeta $SCR
 cmd /c "git -C `"$NUEVA`" show cd6d5a1ceb7adf06a0f79b780f126a4263884ca3:scripts/puente/armar_mapa_secretos.mjs > `"$SCR\armar_mapa_secretos.mjs`""; Ok 'show armar_mapa'
 if ((Md5Bytes "$SCR\armar_mapa_secretos.mjs") -cne '73c4d9d207c22c13d5c42498bb63e8ca') { throw 'armar_mapa_secretos.mjs: md5 distinto' }
 $regV = 'file:///' + ((Archivo "$VIEJA\pos-bridge\register.mjs") -replace '\\','/')
@@ -389,7 +392,7 @@ if ((Get-ScheduledTask -TaskName 'Satori PoS Bridge PROD').State -ne 'Running') 
 |---|---|---|
 | Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | |
 | Responsables (ejecución / control) | | |
-| 0.3 ensayo en staging con `5da233a` (fechas, un cierre de caja, 5.1–5.4 contra staging) | | |
+| 0.3 ensayo en staging con `5da233a` (fechas, un cierre de caja, 5.1–5.4 contra staging) | latido sin error · claves con fecha · campos nuevos en las C · cierre de caja con R→C | **Hecho (staging, solo lectura).** El agente de staging corre `5da233a` desde el **09-nov 16:01**. Cierre de caja de las **16:06:11**: 9 facturas pasaron de R a C. Cierre de las **23:07:08**: **32 facturas en C (112548–112583), 0 en R**; la **112548**, que a las 16:36 estaba en R, pasó a C. **Las 41 C del día traen `mesa_factura`, `consecutivo_fe` y `clave_fe`**; las **6 X** traen `mesa_factura` sin consecutivo (esperado). Claves de los pedidos abiertos con fecha (`pedido:2026-11-09:11`, 16:36). **Latido sin error** (23:19:40, cursor 112583). Revisiones del 09-nov a las 16:36 y a las 23:20 CR |
 | 1.1 tarea → `pos-agente-prod.cmd` (md5) · agente `4d3513a6…` limpio | | |
 | 1.2 entorno de la cuenta: «leído de» entero, sin `INGEST_`/`POS_` | | |
 | 1.3 cursor sano · campos nuevos en 0 · claves viejas | | |

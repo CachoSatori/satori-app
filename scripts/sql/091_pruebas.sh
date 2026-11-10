@@ -57,8 +57,17 @@ como() { # $1 = uid → SQL para simular su sesión
 }
 
 fallas=0
-compara() { # $1 etiqueta, $2 antes, $3 después
-  if [ "$2" = "$3" ] && [ -n "$2" ] && [ "$2" != "null" ]; then echo "OK    $1"; else echo "FALLA $1"; echo "  antes:   $(limpio "$2")"; echo "  después: $(limpio "$3")"; fallas=$((fallas+1)); fi
+# Grok 139: FALLA si cualquiera de las dos respuestas trae un error, viene vacía o no tiene la forma esperada
+# (mismo tipo JSON y, si es un objeto, las mismas claves). Dos errores iguales ya no cuentan como «igual».
+es_error() { [ -z "$1" ] || [ "$1" = "null" ] || [ "$1" = "[]" ] || [ "$1" = '""' ] || grep -qiE '"message"|"error"|^error' <<<"$1"; }
+forma() { jq -c 'if type == "object" then (keys) else type end' <<<"$1" 2>/dev/null; }
+compara() { # $1 etiqueta, $2 esperado (o antes), $3 obtenido (o después)
+  local por=""
+  if es_error "$2" || es_error "$3"; then por="respuesta con error o vacía"
+  elif [ -z "$(forma "$3")" ] || [ "$(forma "$2")" != "$(forma "$3")" ]; then por="la respuesta no tiene la forma esperada"
+  elif [ "$(jq -cS . <<<"$2")" != "$(jq -cS . <<<"$3")" ]; then por="distinto"
+  fi
+  if [ -z "$por" ]; then echo "OK    $1"; else echo "FALLA $1 ($por)"; echo "  esperado: $(limpio "$2")"; echo "  obtenido: $(limpio "$3")"; fallas=$((fallas+1)); fi
 }
 
 echo "== Santa Teresa idéntica (postgres) =="
@@ -86,6 +95,11 @@ for caso in "owner:1" "contador:0" "manager:0" "cajero:0"; do
   n=$(q "begin; $MIG; $OTRO; $(como_rol $rol) $CUENTA; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
   compara "$rol ve $esperado fila(s) del otro local" "$esperado" "$n"
 done
+# Grok 139: control positivo — el cajero sin asignación sigue viendo TODO Santa Teresa (no solo «0 del otro local»).
+n=$(q "begin; $MIG; $OTRO; $(como_rol cajero) select json_build_object('ve', (select count(*) from public.cash_movements where location_id = 'santa-teresa')) as n; rollback;" | jq -c 'if type=="array" then .[-1].n else . end')
+b=$(q "begin; $MIG; $OTRO; select json_build_object('ve', (select count(*) from public.cash_movements where location_id = 'santa-teresa')) as n; rollback;" | jq -c 'if type=="array" then .[-1].n else . end')
+if es_error "$b" || [ "$(jq -r '.ve // 0' <<<"$b" 2>/dev/null)" -lt 1 ]; then echo "FALLA control positivo del cajero: la base no tiene movimientos de santa-teresa ($(limpio "$b"))"; fallas=$((fallas+1));
+else compara "control positivo: el cajero sin asignación ve todos los movimientos de santa-teresa (= postgres)" "$b" "$n"; fi
 for caso in "owner:true" "contador:true" "manager:false" "cajero:false"; do
   rol=${caso%%:*}; esperado=${caso##*:}
   n=$(q "begin; $MIG; $OTRO; $(como_rol $rol) select ('local-prueba-091' = any (public.mis_locales()))::text as n; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')

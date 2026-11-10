@@ -253,7 +253,7 @@ solas tras un reinicio (validado el 29/10).
 | 091 | `multilocal_fase0` (borrador, sin firma; va después de la 090) | caja | `claude/multilocal-fase0` | **staging (10/11 11:02 CR)** |
 | 092 | `employees_borrado_solo_owner` (R7-01, sin firma; va después de la 091) | caja | `claude/employees-borrado-owner` | **staging (10/11 11:03 CR)** |
 | 093 | `ventas_lectura_rol_activo` (Grok 126, sin firma; va después de la 092) | caja | `claude/ventas-lectura-rol-activo` | **staging (10/11 11:03 CR)** |
-| 094 | `anon_sin_maintain` (hallazgo del pase de la 089, sin firma; va después de la 093) | caja | `claude/anon-sin-maintain` | ninguna |
+| 094 | `anon_sin_maintain` (hallazgo del pase de la 089, sin firma; va después de la 093) | caja | `claude/anon-sin-maintain` | **staging (10/11 11:03 CR)** |
 
 **Bloques**
 

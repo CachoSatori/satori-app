@@ -90,7 +90,11 @@ CUENTA="select count(*) as n from public.cash_movements where location_id = 'loc
 # contador:0 — hoy el contador NO tiene ninguna policy de SELECT en cash_movements (las de lectura son owner, manager y
 # cajero): ve 0 también sin la 091. Una policy restrictiva solo achica, no da acceso. Que el contador «ve todos los
 # locales» (decisión 2) se prueba abajo, en mis_locales().
-for caso in "owner:1" "contador:0" "manager:0" "cajero:0"; do
+# Con la 095 aplicada (staging desde el 10-nov 11:03), el contador SÍ lee cash_movements y ve todos los locales (=1).
+C095=$(q "select (exists (select 1 from pg_policies where policyname = 'cash_movements_contador_select'))::text as x" | jq -r '.[0].x // empty')
+[ "$C095" = "true" ] && CONT=1 || CONT=0
+echo "      la 095 está aplicada: ${C095:-?} → el contador espera $CONT fila(s) del otro local"
+for caso in "owner:1" "contador:$CONT" "manager:0" "cajero:0"; do
   rol=${caso%%:*}; esperado=${caso##*:}
   n=$(q "begin; $MIG; $OTRO; $(como_rol $rol) $CUENTA; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
   compara "$rol ve $esperado fila(s) del otro local" "$esperado" "$n"

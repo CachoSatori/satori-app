@@ -65,7 +65,7 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 | 0.5 | El paquete (este PR) y el plan B de club-web (#98, el Worker) mergeados en el #59, y el #59 **al día con `main`** (con la 089–093 adentro): el diff del #59 contra `main` tiene solo lo del Club (§2.2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.6 | Checks del #59 en verde: `supabase/migraciones.test.ts` (150 y 151 registradas con su origen), vitest y build | checks del PR |
 | 0.7 | Staging en verde con estos mismos archivos (§3), **el día del pase** | anotado |
-| 0.8 | **Cloudflare listo antes del pase** (lo hace el dueño con Claude el mar 10-nov; pasos en §11.1): proyecto de Pages `satori-club` con la rama de producción `main` y sin previews; variables de §11.1; **Turnstile de prod** (widget del dominio del Club; nunca una clave que empiece con `1x`, `2x` o `3x`); **DNS** del dominio apuntando al proyecto. **La `CLUB_WEB_KEY` de prod NO**: se carga el día del pase (§6.3). Anotar si la **zona del dominio está en esta cuenta de Cloudflare** (el plan B de §11.2 la necesita) | §10 |
+| 0.8 | **Cloudflare listo antes del pase** (lo hace el dueño con Claude el mar 10-nov; pasos en §11.1): proyecto de Pages `satori-club` con la rama de producción `main` y sin previews; variables de §11.1; **Turnstile de prod** (widget del dominio del Club; nunca una clave que empiece con `1x`, `2x` o `3x`); **DNS** del dominio apuntando al proyecto. **La `CLUB_WEB_KEY` de prod NO**: se carga el día del pase (§6.3). El DNS queda en **SiteGround** (CNAME `club` → `satori-club.pages.dev`, §11.2). Si se usa el plan B, el Worker se crea **antes** del merge (§11.4) | §10 |
 | 0.9 | G-61 «antes» hecho y sus diferencias esperadas **firmadas en este PR** (`scripts/sql/gate61_esperadas.txt`) | §1.5 |
 | 0.10 | Si los anfitriones de hoy tienen que entrar con su saldo a la prueba interna: export de Firestore depurado, CSV de las tarjetas de papel y su sha256 firmado **antes del jueves** (la carga exige la base vacía, §6.5) | §10 |
 | 0.11 | El agente nuevo del puente (#83) en prod desde el mié 11-nov por la mañana. **Recomendado, no bloquea** | anotado |
@@ -293,7 +293,7 @@ Cada alta siembra sus marcadores de descuento (856 y 857) y la promoción «Loca
    `satori-club` (producción) → Settings → Variables and Secrets → **Secret** `CLUB_WEB_KEY`. **Nunca por chat.**
 2. En el editor SQL de prod: `select public.club_web_clave_cargar('<sha256 de la clave>');` (el sha256, nunca la clave).
 3. Volver a desplegar `satori-club` (los Secrets toman efecto en el próximo deploy).
-4. **Si se usa el plan B (§11.2):** la misma clave también como Secret `CLUB_WEB_KEY` del Worker `satori-club-api`.
+4. **Si se usa el plan B (§11.4):** la misma clave también como Secret `CLUB_WEB_KEY` del Worker `satori-club-api`.
 
 Verificar: `/api/salud` → todo en `true` (`club_web_key` y `turnstile` incluidos). Una llamada directa a
 `/rest/v1/rpc/club_cupon_crear` con la anon key y sin el header responde «Código no válido».
@@ -409,6 +409,9 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 - Después del pase: actualizar `ESTADO.md` (ledger de prod) y el «Resultado» abajo. Staging ya está alineado (§3).
 - Después del pase, en un PR aparte: sacar el nombre del dueño de los comentarios de `supabase/migrations/` (decisión del
   dueño, 10-nov; backlog 22c). En la 150 solo los comentarios de afuera de las funciones: los 4 de adentro quedan.
+- **Pendiente después del piloto** (decisión del dueño, 10-nov): la cédula jurídica de la sociedad está escrita en el
+  texto del Edge `extract-document` (`supabase/functions/extract-document/index.ts`). Es un dato público del Registro y
+  queda por ahora; después del piloto pasa a una variable del Edge. Va al backlog (`PROMPT-CONTINUACION.md`) con el #95.
 - El RUNBOOK (`docs/club-satori/RUNBOOK-piloto.md`) sigue valiendo para el detalle de cada verificación, pero el **orden**
   es el de este paquete: se mergea **una vez**, y la base entra con el merge.
 
@@ -419,7 +422,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | Responsables (ejecución / control) | | |
 | 0.4 la 091–093 en prod | ledger termina en 093 | |
 | 0.5 el #59 al día con `main` · diff solo lo del Club | | |
-| 0.8 Cloudflare: `satori-club`, Turnstile de prod, DNS (hechos el 10-nov) | | |
+| 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker creado si va B (§11.4) | | |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | | |
 | 0.10 carga única: export, CSV y sha256 firmado (o «la prueba va sin carga») | | |
 | 1.1 ledger: último 093 · nada del Club | | |
@@ -438,7 +441,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 6.1 dos locales, los dos apagados · `locations` como se espera | | |
 | 6.2 dominio | | |
 | 6.3 `CLUB_WEB_KEY` cargada, sha256 en la base, `/api/salud` en verde | | |
-| §11.2 `/api/salud`: `x-club-api` y los dos topes → plan A o B (y, con B, la ruta del Worker) | | |
+| §11.3 `/api/salud`: `x-club-api` y los dos topes → plan A o B (con B, el PR del binding y su merge) · prueba de fuego | | |
 | 6.4 valores del local (la fila de verificación) · empleados con login | | |
 | 6.5 carga única (sha256, conteos) o «replanificada» | | |
 | 6.6 Santa Teresa encendido en la prueba interna (hora) | | |
@@ -447,66 +450,94 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | Cierre: pasa / vuelta atrás (hasta qué paso de §8) | | |
 | Respaldo de 1.4 borrado (fecha) | | |
 
-## 11. Cloudflare: el proyecto de Pages (hoy) y `/api` con o sin Worker (jueves)
-> Pasos de panel. La documentación de Cloudflare no se pudo leer desde la sesión de Claude (el sitio está bloqueado ahí):
-> los nombres de los menús pueden variar un poco. Lo que sale del repo (`club-web/wrangler.toml`, `vite.config.ts`,
-> `worker/`) está verificado.
+## 11. Cloudflare: el proyecto de Pages, el dominio en SiteGround y `/api` con o sin Worker
+> Pasos de panel. La documentación oficial de Cloudflare no se pudo abrir desde la sesión de Claude: lo de abajo sale de
+> búsquedas en esa documentación y de pruebas locales con wrangler 4 (sin publicar nada). Los nombres de los menús pueden
+> variar un poco. **El DNS de `satoricostarica.com` queda en SiteGround** (decisión del dueño, 10-nov): la zona no está en
+> Cloudflare, así que **no hay Workers Routes**.
 
-### 11.1 Crear el proyecto de Pages `satori-club` (mar 10-nov, el dueño con Claude)
-1. Workers & Pages → **Create** → pestaña **Pages** → **Connect to Git** → el repo `satori-app`.
-2. Project name **`satori-club`** (igual al `name` de `club-web/wrangler.toml`). Production branch **`main`**.
-3. Build: Framework preset **None** · Build command **`npm ci && npm run build`** · Build output directory **`dist`** ·
-   Root directory (Advanced) **`club-web`**.
-4. **Save and Deploy.** El primer build **falla** porque `main` todavía no tiene `club-web/`: no se publica nada, y
-   `satori-club.pages.dev` y el dominio no muestran ningún sitio. Cada push a `main` antes del jueves falla igual (rojo en
-   la lista, sin daño). El jueves, el merge del #59 construye y publica solo.
-5. Settings → **Builds & deployments** → **Branch control** → Preview branches: **None** (ninguna rama se publica). Los
-   deploys automáticos de producción quedan **encendidos**.
-6. Settings → **Variables and Secrets**, en **Production** (en Preview, nada):
+### 11.1 El proyecto de Pages `satori-club` (✅ creado el 10-nov)
+Producción en `main`, root `club-web`, previews en **None**. En Production: `NODE_VERSION`, `VITE_CLUB_URL`,
+`VITE_TURNSTILE_SITEKEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `TURNSTILE_SECRET` (Secret). El build falla hasta que
+`club-web/` esté en `main`: es lo esperado, y no se publica nada. **Falta:** `CLUB_WEB_KEY` (Secret, el jueves, §6.3).
 
-| Nombre | Tipo | Cuándo |
-|---|---|---|
-| `NODE_VERSION` = `22` | texto | hoy |
-| `VITE_CLUB_URL` (el dominio con `https://`, sin barra final) | texto (build) | hoy. Sin ella el build falla con un mensaje claro |
-| `VITE_TURNSTILE_SITEKEY` | texto (build) | hoy, al crear el widget |
-| `SUPABASE_URL` · `SUPABASE_ANON_KEY` (prod; la anon key es pública) | texto | hoy |
-| `TURNSTILE_SECRET` | **Secret** | hoy, con el widget |
-| `CLUB_WEB_KEY` | **Secret** | **jueves** (§6.3) |
+### 11.2 El dominio `club.satoricostarica.com` con el DNS en SiteGround
+Pages acepta un **subdominio** con un CNAME en otro proveedor (el dominio raíz, no: ese necesita la zona en Cloudflare).
+El certificado lo emite Cloudflare solo, cuando ve el CNAME.
+1. **Cloudflare primero:** Pages → `satori-club` → **Custom domains** → **Set up a custom domain** → `club.satoricostarica.com`
+   → **Continue**. El panel pide un CNAME en el proveedor de DNS y deja el dominio en «verificando». (Si el CNAME existe
+   pero el dominio no está agregado en el proyecto, el sitio da error 522: por eso va primero.)
+2. **SiteGround** → **Site Tools** del sitio → **Domain** → **DNS Zone Editor** → elegir `satoricostarica.com`:
+   - en la lista de registros, **que no haya ningún A, AAAA ni CNAME llamado `club`** (si hay, borrarlo antes);
+   - pestaña **CNAME** → Name **`club`** → Resolves to **`satori-club.pages.dev`** → TTL el que viene → **Create**;
+   - **registros CAA:** si la zona **no tiene** ninguno, no hay que hacer nada. Si tiene, el certificado de Cloudflare no
+     sale hasta agregar los que autorizan a sus emisoras: CAA `0 issue "letsencrypt.org"` y CAA `0 issue "pki.goog"`
+     (si el panel de Pages muestra un error de CAA, agregar exactamente lo que diga ahí).
+3. **Volver a Pages** y esperar que el dominio pase a **Active**: el certificado puede tardar desde unos minutos hasta
+   algunas horas, según la propagación del DNS. **No borrarlo y volver a agregarlo** mientras verifica.
+4. **Verificar** (después del primer deploy que funcione, §2): `https://club.satoricostarica.com/alta` abre el formulario.
 
-   No van en prod: `CLUB_DEV` ni los `RL_*_MAX` / `RL_*_VENTANA_S` (solo el servidor local).
-7. **Custom domains → Set up a custom domain** → el dominio del Club. Esperar el certificado en **Active**. Anotar si la
-   **zona del dominio está en esta cuenta de Cloudflare** (DNS en Cloudflare): el plan B (11.3) la necesita.
+**Cuándo:** el dueño eligió el jueves. Se puede adelantar al miércoles sin publicar nada: sin un deploy que funcione, el
+dominio no sirve ningún sitio, y así el certificado ya está listo el jueves.
 
-### 11.2 A o B: cómo decidir con `/api/salud` (jueves, después del merge y de §6.3)
-Abrir `https://<dominio>/api/salud` en el navegador y mirar el JSON y el encabezado `x-club-api` de la respuesta
-(DevTools → Network → la llamada → Headers). La Pages Function contesta con `x-club-api: pages` y el Worker con
-`x-club-api: worker` (#98).
+### 11.3 A o B: cómo decidir con `/api/salud` (jueves, después del merge y de §6.3)
+Abrir `https://club.satoricostarica.com/api/salud` y mirar el JSON y el encabezado `x-club-api` (DevTools → Network → la
+llamada → Headers). La Pages Function contesta `x-club-api: pages`; el Worker, `x-club-api: worker`.
 
 | Lo que dice | Plan | Qué se hace |
 |---|---|---|
-| `x-club-api: pages` · `rl_crear` y `rl_leer` en `true` | **A** | Nada más: Pages tomó los topes. Prueba de fuego: 6 «Obtener mi cupón» seguidos desde un teléfono → el sexto dice «Demasiados intentos seguidos» |
-| `x-club-api: pages` · `rl_crear` o `rl_leer` en `false` | **B** | 11.3. Mientras tanto, crear cupones y el alta responden 503 (falla cerrada: no queda nada abierto) |
-| Sin `x-club-api`, 404 o error | — | **Se para**: el deploy no trae `/api`. Revisar el log del build de Pages |
-| Después de 11.3: `x-club-api: worker` · todo en `true` | **B** listo | Prueba de fuego como en A, y otra desde dos teléfonos en el mismo wifi |
+| `x-club-api: pages` · `rl_crear` y `rl_leer` en `true` | **A** | Nada más: Pages tomó los topes. Prueba de fuego (abajo) |
+| `x-club-api: pages` · `rl_crear` o `rl_leer` en `false` | **B** | 11.4. Mientras tanto, crear cupones y el alta responden 503 (falla cerrada) |
+| Sin `x-club-api`, 404 o error | — | **Se para**: el deploy no trae `/api`. Revisar el log del build |
+| Después de 11.4: `x-club-api: worker` · todo en `true` | **B** listo | Prueba de fuego |
 
-En los dos planes, `club_web_key`, `turnstile` y `supabase` tienen que estar en `true`. **Lo más probable es B:** en local,
-`wrangler pages dev` acepta el `wrangler.toml` de Pages pero no expone `RL_CREAR` ni `RL_LEER`; el Worker sí
-(`wrangler deploy --dry-run`).
+En los dos planes, `club_web_key`, `turnstile` y `supabase` en `true`. **Prueba de fuego:** 6 «Obtener mi cupón» seguidos
+desde un teléfono con datos móviles → el sexto dice «Demasiados intentos seguidos»; desde otro teléfono en **otra** red,
+pasa; desde dos teléfonos en el **mismo** wifi, el tope es compartido (prefijo de red). Que el tope sea por teléfono y no
+global prueba que llega la IP real.
 
-### 11.3 Plan B: el Worker `satori-club-api` (jueves, solo si 11.2 dice B)
-Requisito: la zona del dominio en esta cuenta de Cloudflare (11.1, paso 7). Si no está, **se para** y se decide con el
-dueño: sin la ruta, el Worker no puede atender `<dominio>/api/*`.
-1. Workers & Pages → **Create** → **Workers** → **Import a repository** → el repo `satori-app`.
-2. Nombre **`satori-club-api`** · rama de producción **`main`** · Root directory **`club-web/worker`** · Build command:
-   vacío · Deploy command **`npx wrangler deploy`** (usa `club-web/worker/wrangler.toml`: los dos topes, sin
-   `*.workers.dev`).
-3. En el log del deploy tienen que aparecer `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)`.
-4. Worker → Settings → **Variables and Secrets** (los mismos valores que en Pages): `SUPABASE_URL` y `SUPABASE_ANON_KEY`
-   (texto); `TURNSTILE_SECRET` y `CLUB_WEB_KEY` (**Secret**).
-5. Worker → Settings → **Domains & Routes** → **Add** → **Route** → `<dominio>/api/*`, zona del dominio. No se le pone un
-   dominio propio al Worker: el sitio lo sigue sirviendo Pages.
-6. Volver a 11.2: `/api/salud` con `x-club-api: worker` y todo en `true`.
+### 11.4 Plan B: `/api` en el Worker `satori-club-api` por un service binding (#98)
+**Cómo funciona:** la Pages Function recibe el pedido del cliente (ahí `CF-Connecting-IP` es la IP real) y, si tiene el
+binding `CLUB_API`, se lo pasa al Worker con un host interno que no existe en ningún DNS y la IP en `x-club-ip` (pisa
+cualquier `x-club-ip` que mande el cliente). El Worker no tiene URL pública (`workers_dev = false`, sin rutas): rechaza
+otro host (404) y, sin IP, responde 503. Así no depende de lo que haga Cloudflare con `CF-Connecting-IP` dentro de un
+service binding (eso no está documentado). **Si aun así faltara la IP**, el Worker falla cerrado (503) y quedan como red
+Turnstile (cupón y alta) y los topes de la base (`cupones_max_dia_referente`, `cupones_max_minuto_local`,
+`socio_autoalta_max_dia`).
 
-**Vuelta atrás de B:** borrar la ruta (paso 5). `/api` vuelve a Pages, que sin los topes responde 503 al crear: falla
-cerrada. El Worker puede quedar creado y sin ruta.
+**El Worker se crea ANTES del merge del #59** (miércoles o jueves temprano). No publica nada: sin URL pública ni rutas, el
+único que lo puede llamar es el binding, y el binding todavía está apagado.
+1. Workers & Pages → **Create** → **Workers** → **Import a repository** → `satori-app`.
+2. Nombre **`satori-club-api`** · rama de producción **`claude/epic-tesla-pyo77m`** (la del #59, con el #98 adentro) ·
+   Root directory **`club-web/worker`** · Build command: vacío · Deploy command **`npx wrangler deploy`**.
+3. En el log del deploy: `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)`.
+4. Worker → Settings → **Variables and Secrets**: `SUPABASE_URL` y `SUPABASE_ANON_KEY` (texto, prod); `TURNSTILE_SECRET` y,
+   el jueves, `CLUB_WEB_KEY` (Secret). Los mismos valores que en Pages.
+5. **Después del merge del #59:** Worker → Settings → Build → rama de producción **`main`**.
 
+**Activar B (jueves, solo si 11.3 dice B):** un PR de tres líneas a `main` que descomenta en `club-web/wrangler.toml`:
+```toml
+[[services]]
+binding = "CLUB_API"
+service = "satori-club-api"
+```
+(El `wrangler.toml` de Pages manda sobre el panel: el binding se declara ahí, no en Settings.) Merge fuera de 17:00–23:00 →
+Pages vuelve a desplegar → 11.3 tiene que decir `x-club-api: worker` y todo en `true`. Si el deploy de Pages falla por el
+binding, queda en línea el deploy anterior (plan A, que falla cerrado) y se mira el log.
+
+**Vuelta atrás de B:** volver a comentar las tres líneas (otro PR). El Worker puede quedar creado y sin uso.
+
+### 11.5 Qué se probó hoy (10-nov, sin publicar nada) y qué queda para el jueves
+**Probado hoy, en local** (wrangler 4: `wrangler dev` para el Worker y `wrangler pages dev` para Pages, con el binding):
+- `/api/salud` por Pages lo contesta el Worker (`x-club-api: worker`, todo en `true`); el Worker llamado directo → 404;
+- 6 cupones desde una IP → el sexto 429; otra IP de la misma /24 → 429; otra red → pasa; un `x-club-ip` falso del
+  cliente se pisa con la IP real;
+- con el `[[services]]` descomentado en el toml, Pages toma el binding sin flags;
+- `wrangler pages dev` también lista `RL_CREAR` y `RL_LEER` como bindings de Pages (modo remoto): **no se sabe** si el deploy
+  real los toma (lo dice 11.3);
+- **arreglo encontrado:** con `_redirects` a `/index.html`, `/alta` y `/privacidad` redirigían con 308 a «/» (el alta de
+  socios por QR mostraba la portada). En el #98 las reglas van a «/» y las 9 rutas dan 200 con la URL intacta.
+- `npx wrangler deploy --dry-run` del Worker (los dos topes) y `wrangler pages functions build` de Pages: sin errores.
+
+**Queda para el miércoles o el jueves (en Cloudflare, el dueño):** crear el Worker (11.4, pasos 1–4), el dominio y el
+CNAME (11.2), `CLUB_WEB_KEY` en Pages (y en el Worker), el deploy real, 11.3 y la prueba de fuego con teléfonos.

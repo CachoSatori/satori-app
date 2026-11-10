@@ -4048,15 +4048,23 @@ begin
       sqlerrm = 'Datos no válidos' and exists (select 1 from club_cupones_contactos where cupon_id = v_id), sqlerrm);
   end;
   -- baja del turista con su llave: borra su contacto, deja rastro SIN datos; siempre responde true
-  perform pg_temp.como('anon', null);
-  v_ok := public.club_cupon_contacto_baja(upper(v_tok));
-  perform pg_temp.yo();
+  -- (si la función todavía es la vieja, por código, rechaza la llave: el caso cae, no la batería entera)
+  begin
+    perform pg_temp.como('anon', null);
+    v_ok := public.club_cupon_contacto_baja(upper(v_tok));
+    perform pg_temp.yo();
+  exception when others then
+    perform pg_temp.yo(); v_ok := false;
+  end;
   perform pg_temp.r('77', 'baja del turista → true y el contacto se borra',
     v_ok and not exists (select 1 from club_cupones_contactos where cupon_id = v_id), '');
   select count(*) into v_n from club_auditoria where accion = 'baja_contacto_turista' and objeto_id = v_id and antes is null and despues is null;
   perform pg_temp.r('77', 'baja del turista: queda en club_auditoria, sin datos', v_n = 1, format('%s filas', v_n));
   perform pg_temp.como('anon', null);
-  v_ok := public.club_cupon_contacto_baja(v_tok) and public.club_cupon_contacto_baja('0123456789abcdef0123456789abcdef');
+  begin
+    v_ok := public.club_cupon_contacto_baja(v_tok) and public.club_cupon_contacto_baja('0123456789abcdef0123456789abcdef');
+  exception when others then v_ok := false;
+  end;
   perform pg_temp.yo();
   select count(*) into v_n from club_auditoria where accion = 'baja_contacto_turista' and objeto_id = v_id;
   perform pg_temp.r('77', 'baja repetida o con una llave que no existe → true, sin rastro nuevo (no revela nada)', v_ok and v_n = 1, format('%s filas', v_n));

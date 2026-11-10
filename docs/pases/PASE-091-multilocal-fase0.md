@@ -195,6 +195,8 @@ OK    club_local_crear (owner): el local queda en locations (inactivo para caja)
 («owner y contador ven todos los locales») queda en `mis_locales()`; para que el contador lea caja hace falta una policy
 de lectura propia, que **no** es parte de esta fase.
 
+**Aplicada en STAGING el 10-nov a las 11:02:50 CR** (autorizado por el dueño): una transacción con precondición (la anterior es la última del ledger y la 091 no está), la migración y su fila del ledger (1 statement, md5 = el archivo). Antes, sin consultas ajenas y el último commit del Club con más de 5 minutos. Verificación después: `{"cols":4,"pols":4,"fns":2,"profile_locations":true,"fuera_st":0,"ledger":1}`.
+
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge y **después** (5.4).
 

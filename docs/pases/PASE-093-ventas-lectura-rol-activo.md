@@ -147,6 +147,8 @@ Detalle de la corrida verde (todo en transacciones descartadas):
 Antes de correr: la ventana de las 23:35 había terminado (23:39), sin consultas ajenas en staging y sin commits del Club
 de menos de 5 minutos.
 
+**Aplicada en STAGING el 10-nov a las 11:03:11 CR** (autorizado por el dueño): una transacción con precondición (la anterior es la última del ledger y la 093 no está), la migración y su fila del ledger (1 statement, md5 = el archivo). Antes, sin consultas ajenas y el último commit del Club con más de 5 minutos. Verificación después: `{"lecturas_con_rol":5,"ledger":1}`.
+
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge (§1) y **después** (5.4).
 

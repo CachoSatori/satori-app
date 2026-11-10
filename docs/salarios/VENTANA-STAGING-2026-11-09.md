@@ -16,12 +16,12 @@ Antes de empezar (23:35): sin consultas ajenas activas en staging y sin commits 
   no de la RLS.
 - **Arreglo del script:** `GET DIAGNOSTICS n = ROW_COUNT` después del `EXECUTE`; 0 filas = la RLS no lo dejó.
 
-## 2. CON con el arreglo: 10 OK · 0 FALLA · VERDE
+## 2. CON con el arreglo: 10 OK · 0 FALLA · VERDE (23:37 con el cambio sin commitear; 23:38 otra vez con el script @ `3de4874`)
 owner y contador ven y guardan tarifa y banco · manager ve la tarifa, no ve el banco y no guarda ninguno (ahora el 42501
 lo pone la RLS: 0 filas) · manager inactivo, cajero y salonero nada · tarifa escrita en `employees` → 23514 (CHECK) ·
 anon 42501 en las dos tablas · al terminar, la 084 sigue puesta y no quedó el sintético.
 
-## 3. SIN (sin la 084, dentro de cada transacción): 3 OK · 0 FALLA · VERDE
+## 3. SIN (sin la 084, dentro de cada transacción): 3 OK · 0 FALLA · VERDE (23:37, y 23:38 con el script @ `3de4874`)
 - sin la 084, el manager **ve el banco** → la prueba «manager no lee banco» falla, como se espera;
 - sin la 084, el cajero **ve la tarifa** → la prueba «cajero no lee tarifas» falla, como se espera;
 - al terminar, la 084 sigue puesta y no quedó el sintético.

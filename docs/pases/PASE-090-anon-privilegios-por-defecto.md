@@ -1,6 +1,8 @@
 # Pase a PROD de la mig 090 `anon_privilegios_por_defecto`
 
-> **Estado: preparado, SIN ejecutar.** Formato del `PASE-085` (rama `claude/pase-085`,
+> **Estado: EJECUTADO y CERRADO (10-nov-2026). La 090 está en prod (PR #97, merge `7543347`, 11:33:38 -06:00; ledger 60 · 090). Resultado en §9.**
+>
+> Antes: Formato del `PASE-085` (rama `claude/pase-085`,
 > `docs/pases/PASE-085-rls-lectura-rol-activo.md`): qué cambia, lecturas previas, prueba en staging, humo de solo
 > lectura, vuelta atrás y firma.
 >
@@ -178,18 +180,18 @@ se renumera al bloque de pase (150+) con su «origen» (regla 3 de ESTADO.md).
 ## 9. Firma y bitácora
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | |
-| Responsables (ejecución / control) | | |
-| 0.4 rama al día con `main` · diff solo los archivos de la 090 | | |
-| 0.7 la 089 en prod | | |
-| 1.1 ledger: 59 · 089 · ninguna versión ≥ 090 (salvo las históricas 0090 y 0095) · pase de la 089 cerrado | 59 · 089 | |
-| 1.2 fila de postgres con `anon=` (texto entero) · fila de supabase_admin | | |
-| 1.3 todas las tablas y vistas de public son de postgres | | |
-| 4b antes: permisos de anon · authenticated · service_role | | |
-| Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | |
-| §2 merge (SHA, hora) | | |
-| 5.1 Branching success · log con la 090 | | |
-| 5.2 exactamente 1 fila 090 con `name = 'anon_privilegios_por_defecto'` (statements: anotar) | | |
-| 4a después: fila de postgres sin `anon=` · supabase_admin igual | | |
-| 4b después = antes · 4c sin rojos | | |
-| Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | |
+| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | «Firmo: autorizo el pase de la 090 (PR de claude/anon-default-privs @ b7284d23a9721d1ac106cc69416ee33274d973df)». GO de Grok: auditoría 090–093 del 10-nov (GO condicionado sobre `fe5b927`; después solo entró main con la 089 y 3 líneas de documentación; la migración no cambió) |
+| Responsables (ejecución / control) | | el dueño / el encargado del turno |
+| 0.4 rama al día con `main` · diff solo los archivos de la 090 | | `main` @ `fa1cbef` ancestro; el merge trae solo los 7 archivos de la 090 (única migración nueva: la 090, md5 `53aa0e0a…`) |
+| 0.7 la 089 en prod | | ✅ pase de la 089 cerrado (59 · 089) |
+| 1.1 ledger: 59 · 089 · ninguna versión ≥ 090 (salvo las históricas 0090 y 0095) · pase de la 089 cerrado | 59 · 089 | **59 · 089**, ninguna ≥ 090 (salvo 0090 y 0095) |
+| 1.2 fila de postgres con `anon=` (texto entero) · fila de supabase_admin | | postgres con `anon=arwdDxtm/postgres` · la fila de supabase_admin (residual aceptado) |
+| 1.3 todas las tablas y vistas de public son de postgres | una fila: postgres | **una sola fila: postgres (40)** |
+| 4b antes: permisos de anon · authenticated · service_role | | **179 · 320 · 320** |
+| Gate de CI en la cabeza del PR (enlace), o la aceptación explícita del dueño sin ese verde, con el motivo | | aceptado por el dueño sin CI de pruebas (125): el repo no corre pruebas en PRs; la 090 se probó en staging (8/8) y la auditó Grok |
+| §2 merge (SHA, hora) | | PR #97 · `75433472690bde89cd6b3e9d33cf871ade12e096`, 10-nov **11:33:38 -06:00** (padres `fa1cbef` y `b7284d2`) |
+| 5.1 Branching success · log con la 090 | | «Supabase Preview» **success** (run 130005414109, 11:34:12 -06:00). Quedaron otros con el mismo nombre en «in progress», como en la 085 y la 089 |
+| 5.2 exactamente 1 fila 090 con `name = 'anon_privilegios_por_defecto'` (statements: anotar) | 60 · 090 · 1 | **60 · 090 · 1 fila**, **4 statements** |
+| 4a después: fila de postgres sin `anon=` · supabase_admin igual | | fila de postgres **sin `anon=`** · supabase_admin igual (residual) |
+| 4b después = antes · 4c sin rojos | 179 · 320 · 320 | **179 · 320 · 320** (= antes) · 4c sin rojos |
+| Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | **PASA · pase CERRADO (10-nov)** |

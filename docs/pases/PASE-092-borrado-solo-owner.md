@@ -114,6 +114,8 @@ Los 10 casos:
 - la consulta de verificación da lo esperado con la 092 puesta y sin ella;
 - la vuelta atrás deja sin tabla, sin trigger y sin función.
 
+**Aplicada en STAGING el 10-nov a las 11:03:09 CR** (autorizado por el dueño): una transacción con precondición (la anterior es la última del ledger y la 092 no está), la migración y su fila del ledger (1 statement, md5 = el archivo). Antes, sin consultas ajenas y el último commit del Club con más de 5 minutos. Verificación después: `{"ledger_092":true,"tabla":true,"rls_tabla":true,"politicas":["employee_bajas_select_owner:SELECT"],"anon_sin_permisos":true,"funcion_definer":true,"funcion_no_publica":true,"trigger_activo":true,"bajas":0}`.
+
 ## 4. Prueba de humo en PROD (SOLO LECTURA)
 Un borrado es una escritura: en prod **no** se prueba borrar (un `begin read only` lo rechaza con 25006 antes de llegar
 al trigger). La regla ya se probó en staging (§3). En prod se mira:

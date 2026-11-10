@@ -250,7 +250,7 @@ solas tras un reinicio (validado el 29/10).
 | 088 | `employees_recibe_reparto_cocina` (PROP-AUD-01, sin firma) — **no se usa con este número: cuando esté lista va al bloque de pase (152+) con origen 088** (dueño, 10/11) | caja | `claude/prop-aud-01` | ninguna |
 | 089 | `anon_sin_politica` | caja | `main` (#90, 10/11) | staging (09/11 08:27 CR) y **prod** (10/11 10:22:11 -06:00, Branching al mergear el #90, `fa1cbef`) |
 | 090 | `anon_privilegios_por_defecto` (firmada para staging) | caja | `claude/anon-default-privs` | **staging (09/11 08:28 CR)** |
-| 091 | `multilocal_fase0` (borrador, sin firma; va después de la 090) | caja | `claude/multilocal-fase0` | ninguna |
+| 091 | `multilocal_fase0` (borrador, sin firma; va después de la 090) | caja | `claude/multilocal-fase0` | **staging (10/11 11:02 CR)** |
 | 092 | `employees_borrado_solo_owner` (R7-01, sin firma; va después de la 091) | caja | `claude/employees-borrado-owner` | ninguna |
 
 **Bloques**

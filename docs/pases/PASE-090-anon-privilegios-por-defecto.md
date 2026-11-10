@@ -33,7 +33,7 @@
 | Qué | Valor |
 |---|---|
 | Rama | `claude/anon-default-privs` (encima de `claude/anon-revoke`, al día con `main` @ `5a22478`) |
-| Migración | `supabase/migrations/090_anon_privilegios_por_defecto.sql`, md5 `53aa0e0ab1df440057403e8b5ce15332` (10-nov, Grok 134: **solo cambió un comentario**; el SQL ejecutable es idéntico). La fila 090 del ledger de staging tiene el texto anterior (md5 `0d93a8db…`): actualizarla es una escritura en staging fuera de una transacción descartada y **se pide antes** (regla del dueño); no cambia nada de lo que hace la base. En prod no se compara md5 (Grok 122). |
+| Migración | `supabase/migrations/090_anon_privilegios_por_defecto.sql`, md5 `53aa0e0ab1df440057403e8b5ce15332` (10-nov, Grok 134: **solo cambió un comentario**; el SQL ejecutable es idéntico). **La fila 090 del ledger de staging se actualizó al texto nuevo el 10-nov a las 08:53 CR** (OK del dueño; franja de la mañana levantada por el dueño): una transacción con precondición (1 fila, 1 statement, md5 `0d93a8db…`) y postcondición, solo `statements` de esa fila; antes, sin consultas ajenas y el último commit del Club con 5 minutos. **Queda md5 `53aa0e0ab1df440057403e8b5ce15332`**, igual al archivo; ledger 85 filas, última 090; privilegios por defecto de `public` sin cambios (sin `anon`). En prod no se compara md5 (Grok 122). |
 | Rollback | `scripts/sql/090_rollback.sql` (las tablas nuevas vuelven a nacer con todo para `anon`, como hoy) |
 | Pruebas | `scripts/sql/090_pruebas.sql` (8 casos, en una transacción descartada) |
 | Gate de catálogo (staging, solo lectura, 09-nov) | 106 tablas y vistas y 167 funciones de `public`, todas de `postgres`; salida sha256 `b12da126e2836991…` (fuera del repo) |

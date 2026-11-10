@@ -37,7 +37,7 @@
 | Qué | Valor |
 |---|---|
 | Rama del paquete | `claude/pase-club` (PR contra el #59, `claude/epic-tesla-pyo77m` @ `fd39819`) |
-| 150 | `supabase/migrations/150_club_satori_esquema.sql`: renombre puro de la 075 (mismo blob git `cf16b82b0893804ed3fbbca7f8b68f1404b6aa93`), md5 `5da6a357ea4f724ad47cc1a0d486aa52`, 416.138 bytes |
+| 150 | `supabase/migrations/150_club_satori_esquema.sql`: la 075 renombrada (10-nov mañana, blob `cf16b82b…`) **más los arreglos de la auditoría del 10-nov** (Grok 159, 160, 182 y la condición de MAINTAIN). Hoy: blob git `9681c1a3afc560a272f960d0eab0272b21e5d83d`, md5 `919bcd5473fb68cc84dfdb5af28e5b98`, 426.268 bytes |
 | 151 | `supabase/migrations/151_club_catalogo_locales.sql`: renombre puro de la 100 (blob `a61d7d4f2b73b0cacac5d000fa0b0323d7bfb76c`), md5 `7a27ab08ee4a292a8ac255ecfae612c9` |
 | Rollbacks | `scripts/sql/151_rollback.sql` (FK y trigger; no toca `locations`) y `scripts/sql/150_rollback.sql` (todo `club_*`; desde el 10-nov se verifica solo: aborta si queda algo) |
 | Pruebas | `scripts/sql/150_pruebas_staging.sql` (batería, 5 tramos, `bateria_club.py`) y `scripts/sql/151_pruebas.sql` (8 casos) |
@@ -212,6 +212,23 @@ Todo lo demás, en transacciones descartadas:
 
 Desde ahora el G-61 se corre con `gate61.sh` tal cual (staging ya tiene la 151; `gate61_staging_con_151.sh` se niega).
 
+**Auditoría del 10-nov (partes A y B): arreglos en la 150, probados sin escribir en staging.** Staging tiene la 150 del
+mediodía. La 150 nueva se probó **aplicada encima, dentro de la transacción descartada** de cada tramo
+(`bateria_club.py --antes`, `mutar_bateria.py --antes`, `club_paridad.sh --antes`):
+
+| Qué | Resultado |
+|---|---|
+| Batería con la 150 nueva (`--esperado 613`: 108 · 225 · 72 · 17 · 191) | **613/613** |
+| Paridad: staging + la 150 nueva encima contra la 150 + 151 desde cero | **992 = 992** |
+| Mutaciones 160 (sin el trigger), 159 (replay viejo) y 182 (contacto viejo) | caen **6**, **1** y **3** |
+| `mutar_bateria.py` con una mutación que no muerde o sin ancla | sale **1** (Grok 161) |
+| `151_pruebas.py` (Grok 180: control positivo del owner, INSERT y DELETE del cajero, RLS encendida) | **12/12** |
+
+**Pendiente con el OK del dueño (escritura en staging):** volver a alinear staging con la 150 nueva. Es una transacción
+con precondición (filas 150 y 151 únicas, md5 de la 150 = el del mediodía): la 150 entera encima (idempotente) y la fila
+150 con el texto nuevo. Hasta entonces, la paridad «tal cual» difiere (staging no tiene el trigger del 160) y la batería
+se corre con `--antes`.
+
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge y **después** (§5.5).
 
@@ -261,7 +278,11 @@ SoP: nada nuevo en rojo. **Después**, además: la app muestra el acceso al Club
           (select schedule from cron.job where jobname = 'club_socios_mantenimiento')             as tarea_diaria,     -- 15 9 * * *
           has_table_privilege('authenticated', 'public.club_miembros_contacto', 'SELECT')         as lee_contactos,    -- false
           has_table_privilege('authenticated', 'public.club_cupones_contactos', 'SELECT')         as lee_contactos_tur,-- false
-          (select is_active from public.locations where id = 'santa-teresa')                      as caja_intacta;     -- true
+          (select is_active from public.locations where id = 'santa-teresa')                      as caja_intacta,     -- true
+          (select count(*) from pg_trigger where tgname = 'club_factura_r_anulada_trg')           as trigger_160,      -- 1
+          (select count(*) from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind in ('r','p','m')
+             and (c.relname like 'club\_%' or c.relname = 'locations')
+             and has_table_privilege('authenticated', c.oid, 'MAINTAIN'))                           as con_maintain;     -- 0
    rollback;
    ```
 4. **G-61 después** (bloquea la prueba interna): el dueño vuelve a bajar el CSV del catálogo (§1.5, paso 1). Claude:
@@ -425,7 +446,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 0.8 Cloudflare: `satori-club` y Turnstile de prod (10-nov) · dominio y CNAME en SiteGround (§11.2) · Worker creado si va B (§11.4) | | |
 | 0.9 G-61 «antes»: diferencias explicadas y esperadas firmadas en el PR | | |
 | 0.10 carga única: export, CSV y sha256 firmado (o «la prueba va sin carga») | | |
-| 1.1 ledger: último 093 · nada del Club | | |
+| 1.1 ledger: la última de caja que pasó (093 o 095) · nada del Club (Grok 181) | | |
 | 1.2 0 · 0 · 0 | | |
 | 1.3 true · true · true · 2 · 2 · false · true · 3 · true · pgcrypto · pg_cron | | |
 | 1.4 respaldo de `employees`, `profiles` y `locations`: cifrado, dónde quedó (sin la contraseña), sha256 y fecha de borrado | | |
@@ -435,7 +456,7 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | §2 merge (SHA, hora) | | |
 | 5.1 Branching success · log con la 150 y la 151 | | |
 | 5.2 1 fila 150 y 1 fila 151 con su `name` (statements: anotar) | | |
-| 5.3 0 · 1 · 0 · true · 1 · 1 · `15 9 * * *` · false · false · true | | |
+| 5.3 0 · 1 · 0 · true · 1 · 1 · `15 9 * * *` · false · false · true · 1 · 0 | | |
 | 5.4 G-61 después: sale 0 | | |
 | 4a después: 10 · (las 10) · 0 · 4b = antes · 4c sin rojos | | |
 | 6.1 dos locales, los dos apagados · `locations` como se espera | | |
@@ -541,3 +562,48 @@ binding, queda en línea el deploy anterior (plan A, que falla cerrado) y se mir
 
 **Queda para el miércoles o el jueves (en Cloudflare, el dueño):** crear el Worker (11.4, pasos 1–4), el dominio y el
 CNAME (11.2), `CLUB_WEB_KEY` en Pages (y en el Worker), el deploy real, 11.3 y la prueba de fuego con teléfonos.
+
+## 12. Hallazgos de la auditoría del 10-nov (partes A y B) y decisiones del dueño
+### Grok 158 (Alta) · contraseña de las cuentas de prueba de staging expuesta en el historial
+- **Exposición:** la contraseña de las cuentas de prueba (`test-manager`, rol **owner** en staging; `test-cajero`, rol
+  salonero) estuvo en el historial del repo desde el **11-jun-2026 21:43 (-06:00)**. Se rotó dos veces el 09-nov y
+  ya no está en `main` ni en la rama del Club. Staging es un espejo de los datos de prod.
+- **Revisión de los ingresos (10-nov, solo lectura en staging):**
+  - `auth.audit_log_entries` está **vacía** (Supabase ya no escribe ahí) y la API de logs de auth respondió error: **no hay
+    registro de los ingresos del 11-jun al 09-nov**. Lo que queda: el último ingreso de cada cuenta, las sesiones vivas y
+    la actividad que cada cuenta dejó en las tablas que guardan quién hizo cada cambio (33 columnas «quién lo hizo» revisadas).
+  - `test-manager`: 3 sesiones, todas del 10-nov (22:18 y 22:51 del 09-nov y 09:02 del 10-nov, hora CR), desde **una
+    misma red** y **un mismo navegador** (Chrome en macOS). Su actividad en las tablas: 8
+    acciones del Club el **08-nov 12:24–13:12 CR** (las del recorrido con capturas de Claude, que entró con esa cuenta a esa
+    hora) y 4 «ver reporte del mes» el **09-nov 22:52–22:58 CR** (la revisión de las fechas de Reportes que hizo el dueño
+    esa noche). **Nada más** en caja, propinas, ventas ni el Club.
+  - `test-cajero`: último ingreso el **05-nov 09:03 CR**, sin sesión guardada; **ninguna** actividad en las tablas.
+  - **Conclusión:** en lo que se puede ver, **no hay uso ajeno**: toda la actividad tiene un origen conocido. El hueco de
+    junio a noviembre no se puede revisar desde la base.
+- **Queda para el dueño:** confirmar que el Mac con Chrome de las sesiones del 09/10-nov es suyo, y revisar en el panel de
+  Supabase (Logs → Auth) lo que todavía tenga guardado.
+
+### Grok 160 · un crédito sobre una factura R que después se anula
+**Decisión del dueño (10-nov): MITIGAR con una alerta, sin bloquear.** Cuando una factura R sobre la que se acreditó un
+cupón o se aprobó un pendiente (S0/S0b/S8) pasa a X y no queda otra factura C o R de ese pedido, se crea una **alerta
+prioritaria** (`club_alertas`, tipo `factura_r_anulada`) que Excepciones muestra **arriba**, para la revisión diaria
+(owner y manager, «Revisado» con nota). El crédito no se revierte. **Bloquear el canje** de esos créditos queda para
+**después del piloto** (backlog).
+
+### Los demás (bajos), hechos en este PR
+- **159:** el replay de `club_tarjeta_manual` exige las mismas personas.
+- **161:** `mutar_bateria.py` sale 1 si una mutación no muerde, da ERROR, no encuentra su ancla o un tramo da otra
+  cantidad que la esperada.
+- **180:** `151_pruebas.sql` documenta sus marcadores y suma el control positivo, las negativas de INSERT y DELETE y la RLS
+  encendida; `151_pruebas.py` lo corre.
+- **181:** §10, «la última de caja que pasó (093 o 095)».
+- **182:** el turista que deja su contacto recibe en la respuesta, **una sola vez**, su link de baja (`/b/<llave>`), y el
+  aviso corto lo dice.
+- **183:** la llave de baja viaja en el **cuerpo** del POST (`/api/baja`), no en la ruta; la página `/b/` la saca de la
+  barra de direcciones y `/b/*` va con `Referrer-Policy: no-referrer` y sin caché.
+- **184:** al backlog. Los commits de Claude salen con `noreply@anthropic.com`; los merges hechos por la API de GitHub salen
+  con el correo de la cuenta del dueño: se corrige en GitHub (Settings → Emails → «Keep my email addresses private»).
+  El historial no se reescribe.
+- **Condición de la 150 (MAINTAIN):** `authenticated` (y `anon`) sin MAINTAIN en ninguna tabla `club_*` ni en `locations`,
+  con verificación dentro de la migración y la prueba 93. Las tablas de caja, después de abrir (bloque 152+).
+

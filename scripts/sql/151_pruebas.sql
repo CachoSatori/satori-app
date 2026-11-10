@@ -1,5 +1,11 @@
 -- 151_pruebas (antes 100_pruebas) · SOLO STAGING. Aplica la 151 dentro de una transacción, prueba y termina en ROLLBACK: no deja nada.
--- Reemplazar <OWNER_UUID> y <CAJERO_UUID> por un owner y un cajero activos de staging. Devuelve un JSON con cada caso y ok.
+-- Devuelve un JSON con cada caso y ok. Se corre con scripts/sql/151_pruebas.py (sale 1 si algún caso falla).
+--
+-- (Grok 180, 10-nov) Los MARCADORES que llena el runner (este archivo no se corre tal cual):
+--   · la línea «-- @@151@@ …» → el cuerpo de supabase/migrations/151_club_catalogo_locales.sql, sin sus líneas begin; y
+--     commit; (la 151 corre DENTRO de esta transacción; la 151 es idempotente, así que también vale sobre un staging que
+--     ya la tiene);
+--   · <OWNER_UUID> y <CAJERO_UUID> → un owner y un cajero ACTIVOS de staging (variables de entorno del runner).
 -- «Falla sin el arreglo» (probado el 09-nov): con el cuerpo de la 100 SIN el trigger, caen los casos 3 y 5 con 23503.
 begin;
 -- @@151@@   (aquí va el cuerpo de supabase/migrations/151_club_catalogo_locales.sql sin begin/commit)
@@ -71,6 +77,46 @@ exception when insufficient_privilege then
 end $$;
 insert into _r100 (caso, ok, detalle)
 select '7b anon sin SELECT en locations', not has_table_privilege('anon', 'public.locations', 'SELECT'), null;
+
+-- 8 (Grok 180). La RLS de locations está ENCENDIDA (sin ella, las negativas de 7 y 9 no probarían nada)
+insert into _r100 (caso, ok, detalle)
+select '8 RLS encendida en locations', (select relrowsecurity from pg_class where oid = 'public.locations'::regclass), null;
+
+-- 9 (Grok 180). El cajero tampoco INSERTA ni BORRA en el catálogo
+do $$ begin
+  perform set_config('request.jwt.claims', json_build_object('sub', '<CAJERO_UUID>', 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  insert into public.locations (id, name, is_active) values ('prueba-180-cajero', 'Cajero', true);
+  reset role;
+  insert into _r100 (caso, ok, detalle) values ('9a cajero: INSERT en el catálogo → rechazado', false, 'insertó');
+exception when insufficient_privilege then
+  reset role;
+  insert into _r100 (caso, ok, detalle) values ('9a cajero: INSERT en el catálogo → rechazado', true, '42501');
+end $$;
+do $$ declare n int; begin
+  perform set_config('request.jwt.claims', json_build_object('sub', '<CAJERO_UUID>', 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  delete from public.locations where id = 'prueba-100-caja';
+  get diagnostics n = row_count;
+  reset role;
+  insert into _r100 (caso, ok, detalle) values ('9b cajero: DELETE en el catálogo no borra filas', n = 0, n::text);
+exception when insufficient_privilege then
+  reset role;
+  insert into _r100 (caso, ok, detalle) values ('9b cajero: DELETE en el catálogo no borra filas', true, '42501');
+end $$;
+
+-- 10 (Grok 180). Control POSITIVO: el owner sí escribe (si esto falla, las negativas no prueban la RLS sino un error)
+do $$ declare n int; begin
+  perform set_config('request.jwt.claims', json_build_object('sub', '<OWNER_UUID>', 'role', 'authenticated')::text, true);
+  set local role authenticated;
+  update public.locations set name = 'Local de caja (owner)' where id = 'prueba-100-caja';
+  get diagnostics n = row_count;
+  reset role;
+  insert into _r100 (caso, ok, detalle) values ('10 owner: update del catálogo toca 1 fila (control positivo)', n = 1, n::text);
+exception when others then
+  reset role;
+  insert into _r100 (caso, ok, detalle) values ('10 owner: update del catálogo toca 1 fila (control positivo)', false, sqlstate || ' ' || sqlerrm);
+end $$;
 
 select json_agg(json_build_object('caso', caso, 'ok', ok, 'detalle', detalle) order by n) from _r100;
 rollback;

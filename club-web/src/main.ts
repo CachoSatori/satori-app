@@ -127,10 +127,17 @@ function formOptin(codigo: string): HTMLElement {
       err.replaceChildren()
       if (!ok.checked || (!wa.value.trim() && !em.value.trim())) { err.append(avisoEl('err', t.optin_falta)); return }
       enviar.disabled = true
-      const r = await api<boolean>(`cupon/${codigo}/contacto`, { method: 'POST',
+      const r = await api<{ ok: boolean; baja?: string }>(`cupon/${codigo}/contacto`, { method: 'POST',
         body: JSON.stringify({ contacto: { nombre: nombre.value, whatsapp: wa.value, email: em.value, optin: true, acepto: AVISO_PRIVACIDAD_VERSION } }) })
       enviar.disabled = false
-      if (r.ok) { marcarOptin(codigo); form.replaceWith(avisoEl('ok', t.optin_gracias)); anunciar(t.optin_gracias) }
+      if (r.ok) {
+        marcarOptin(codigo)
+        // Grok 182: la base devuelve la llave de baja UNA sola vez; se muestra acá para que la guarde
+        const baja = typeof r.data?.baja === 'string' && /^[0-9a-f]{32}$/.test(r.data.baja) ? `${CLUB_BASE_URL}/b/${r.data.baja}` : null
+        form.replaceWith(h('div', {}, avisoEl('ok', t.optin_gracias),
+          baja ? h('p', { class: 'sub' }, t.optin_baja_link, ' ', h('a', { href: baja, rel: 'noreferrer' }, baja)) : ''))
+        anunciar(t.optin_gracias)
+      }
       else err.append(avisoEl('err', r.error === 'datos_invalidos' ? t.optin_falta : msgError(r.error)))
     },
   },
@@ -159,15 +166,17 @@ function paginaPrivacidad() {
       h('p', { class: 'sub' }, `(${AVISO_PRIVACIDAD_VERSION})`)))
 }
 
-/** LC-PRIV (Grok 63) + 136: baja del turista. El link va en cada mensaje de ofertas: /b/{llave de baja, 32 hex}. */
+/** LC-PRIV (Grok 63) + 136: baja del turista: /b/{llave de baja, 32 hex}. 183 (10-nov): la llave se manda en el CUERPO del
+ * POST y se saca de la barra de direcciones apenas carga la página (queda solo en memoria); /b/* va con no-referrer. */
 function paginaBajaTurista(llave: string) {
   const tok = llave.toLowerCase()
+  if (/^\/b\/./.test(location.pathname)) history.replaceState(null, '', '/b/')
   if (!/^[0-9a-f]{32}$/.test(tok)) return pintar(h('h1', {}, t.baja_t_titulo), avisoEl('err', t.baja_t_invalida))
   const err = h('div')
   const boton = h('button', { type: 'button', class: 'btn sec' }, t.baja_t_boton) as HTMLButtonElement
   boton.addEventListener('click', async () => {
     boton.disabled = true; err.replaceChildren()
-    const r = await api<boolean>(`baja/${tok}`, { method: 'POST', body: '{}' })
+    const r = await api<boolean>('baja', { method: 'POST', body: JSON.stringify({ llave: tok }) })
     if (r.ok) { boton.replaceWith(avisoEl('ok', t.baja_t_listo)); anunciar(t.baja_t_listo); return }
     boton.disabled = false; err.append(avisoEl('err', msgError(r.error)))
   })

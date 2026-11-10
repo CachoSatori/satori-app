@@ -2643,8 +2643,12 @@ $$;
 
 -- Opt-in del turista DESPUÉS de obtener el cupón (PÚBLICA). Solo sobre un cupón vigente y sin
 -- contacto previo (una sola vez). Mismas validaciones que club_cupon_crear. No revela nada.
+-- Grok 182 (10-nov): devuelve {ok, baja}: la llave de baja del turista va UNA SOLA VEZ, en la respuesta del pedido que
+-- guarda el contacto (club-web le muestra su link /b/<llave>). Un pedido repetido (ya cargado) devuelve solo {ok}.
+-- Cambia el tipo de retorno: por eso el drop (los grants se vuelven a dar abajo, en la lista de permisos).
+drop function if exists public.club_cupon_contacto(text, jsonb);
 create or replace function public.club_cupon_contacto(p_codigo text, p_contacto jsonb)
-returns boolean
+returns jsonb
 language plpgsql
 volatile
 security definer
@@ -2657,6 +2661,7 @@ declare
   v_wa     text;
   v_email  text;
   v_aviso  text;
+  v_tok    text;
 begin
   if not public.club_web_ok() then   -- CLUB-AUD-06: solo por club-web
     raise exception 'Datos no válidos' using errcode = 'P0001';
@@ -2677,7 +2682,7 @@ begin
     raise exception 'Datos no válidos' using errcode = 'P0001';
   end if;
   if exists (select 1 from public.club_cupones_contactos k where k.cupon_id = v_c.id) then
-    return true;   -- ya cargado: no se pisa ni se informa nada más
+    return jsonb_build_object('ok', true);   -- ya cargado: no se pisa ni se informa nada más (la llave no se repite)
   end if;
   v_nombre := nullif(btrim(regexp_replace(coalesce(p_contacto->>'nombre', ''), '[[:cntrl:]]', '', 'g')), '');
   if v_nombre is not null and length(v_nombre) > 80 then
@@ -2697,8 +2702,9 @@ begin
   end if;
   insert into public.club_cupones_contactos (cupon_id, nombre, whatsapp, email, optin, aviso_version, aviso_aceptado_en)
   values (v_c.id, v_nombre, v_wa, v_email, true, v_aviso, now())
-  on conflict (cupon_id) do nothing;
-  return true;
+  on conflict (cupon_id) do nothing
+  returning baja_token into v_tok;
+  return jsonb_build_object('ok', true) || case when v_tok is null then '{}'::jsonb else jsonb_build_object('baja', v_tok) end;
 end;
 $$;
 

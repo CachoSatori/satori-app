@@ -155,7 +155,7 @@ begin
 end $$;
 
 -- ════════ TRAMO 1: cupones, canjes, miembros y roles (bloques 1–26) ════════
--- casos esperados: 107
+-- casos esperados: 108
 -- ═══ 1. Anon: lectura o escritura directa en club_* → rechazada ═══
 do $$
 declare t text; v_ok boolean;
@@ -780,7 +780,7 @@ end $$;
 
 -- ═══ F1d · 20. club_cupon_contacto (anon): opt-in debajo del cupón ═══
 do $$
-declare v_cup text; v_wa text; v_ok boolean;
+declare v_cup text; v_wa text; v_ok boolean; v_r1 jsonb; v_r2 jsonb;
 begin
   perform pg_temp.como('anon', null);
   select x.codigo into v_cup from public.club_cupon_crear((select v from _ids where k='ref_cod'), null) x;
@@ -793,9 +793,14 @@ begin
     perform pg_temp.yo(); perform pg_temp.r('20', 'opt-in sin consentimiento → error', sqlerrm = 'Falta el consentimiento', sqlerrm);
   end;
   perform pg_temp.como('anon', null);
-  v_ok := public.club_cupon_contacto(v_cup, jsonb_build_object('nombre', 'Tina', 'whatsapp', '8888 2222', 'optin', true, 'acepto', pg_temp.aviso()));
-  perform public.club_cupon_contacto(v_cup, jsonb_build_object('whatsapp', '8888 3333', 'optin', true, 'acepto', pg_temp.aviso()));
+  v_r1 := to_jsonb(public.club_cupon_contacto(v_cup, jsonb_build_object('nombre', 'Tina', 'whatsapp', '8888 2222', 'optin', true, 'acepto', pg_temp.aviso())));
+  v_r2 := to_jsonb(public.club_cupon_contacto(v_cup, jsonb_build_object('whatsapp', '8888 3333', 'optin', true, 'acepto', pg_temp.aviso())));
+  v_ok := coalesce((v_r1->>'ok')::boolean, v_r1 = 'true'::jsonb);   -- la función vieja devolvía true
   perform pg_temp.yo();
+  -- Grok 182: la llave de baja vuelve UNA vez (la del contacto guardado) y el pedido repetido no la trae
+  perform pg_temp.r('20', '182 · la respuesta del opt-in trae su llave de baja una sola vez (el repetido, no)',
+    v_r1->>'baja' = (select k.baja_token from club_cupones c join club_cupones_contactos k on k.cupon_id = c.id where c.codigo = v_cup)
+      and coalesce((v_r2->>'ok')::boolean, false) and not (jsonb_typeof(v_r2) = 'object' and v_r2 ? 'baja'), v_r1::text || ' / ' || v_r2::text);
   select k.whatsapp into v_wa from club_cupones c join club_cupones_contactos k on k.cupon_id = c.id where c.codigo = v_cup;
   perform pg_temp.r('20', 'opt-in con consentimiento → guardado normalizado; el segundo no lo pisa',
     v_ok and v_wa = '+50688882222' and (select k.optin from club_cupones c join club_cupones_contactos k on k.cupon_id = c.id where c.codigo = v_cup), v_wa);
@@ -4100,7 +4105,7 @@ begin
     end;
   end loop;
   perform pg_temp.como('anon', null);
-  v_ok := public.club_cupon_contacto(v_cup, jsonb_build_object('whatsapp', '60007701', 'optin', true, 'acepto', pg_temp.aviso()));
+  v_ok := (to_jsonb(public.club_cupon_contacto(v_cup, jsonb_build_object('whatsapp', '60007701', 'optin', true, 'acepto', pg_temp.aviso())))->>'ok')::boolean;
   perform pg_temp.yo();
   select k.cupon_id into v_id from club_cupones_contactos k join club_cupones c on c.id = k.cupon_id
    where c.codigo = v_cup and k.aviso_version = pg_temp.aviso() and k.aviso_aceptado_en is not null;

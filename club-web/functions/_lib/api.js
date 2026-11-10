@@ -212,11 +212,13 @@ export async function manejar(request, env, path) {
     }
   }
 
-  // POST /api/baja/:token  → LC-PRIV (Grok 63) + 136: el turista borra su contacto con la llave de baja de su mensaje (128
-  // bits). Ya no con el código del cupón: ese código lo ve la caja y viajaba en cada mensaje (y servía para usar el cupón).
-  if (partes.length === 2 && partes[0] === 'baja') {
+  // POST /api/baja  {llave}  → LC-PRIV (Grok 63) + 136 + 183: el turista borra su contacto con su llave de baja (128 bits).
+  // 183 (10-nov): la llave viaja en el CUERPO, no en la ruta (no queda en los logs de acceso ni en un Referer). Ya no con
+  // el código del cupón: ese código lo ve la caja y sirve para usar el cupón.
+  if (partes.length === 1 && partes[0] === 'baja') {
     if (metodo !== 'POST') return json(405, { error: 'metodo' })
-    const tok = String(partes[1]).toLowerCase()
+    const b = await leerCuerpo(request)
+    const tok = typeof b?.llave === 'string' ? b.llave.trim().toLowerCase() : ''
     if (!RE_BAJA.test(tok)) return json(404, { error: 'baja_invalida' })
     { const ok = await limitar(env, 'crear', `baja-t:${ip}`, crearMax, crearVent); if (ok === null) return json(503, { error: 'servicio_no_disponible' }); if (!ok) return json(429, { error: 'demasiados_pedidos' }) }
     return rpc(env, 'club_cupon_contacto_baja', { p_token: tok })

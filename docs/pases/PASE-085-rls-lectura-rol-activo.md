@@ -360,21 +360,21 @@ select r as rol, t as tabla, ra, rd, ba, bd, dr, db, veredicto from v
 ## 9. Firma y bitácora
 | Paso | Esperado | Obtenido |
 |---|---|---|
-| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | |
-| Responsables (ejecución / control) | | |
-| 0.4 `main` sin moverse · diff solo los archivos del PR | | |
-| 1.1 ledger 57 · 082 · ninguna versión mayor que 082 | | |
-| 1.0 statements de la 079 y la 080 → regla de 5.2 (Grok 122) | 079 · 4 · 080 · 3 | **079: 4 · 080: 3**, leído en prod por el dueño el 09-nov a las 16:04 -06:00. Regla de 5.2 definitiva: 1 fila 085 con su `name` + 5.3, sin md5. El día del pase: |
-| 1.2 15 policies = respaldo · RLS en las 6 | | |
-| 1.3 vistas · funciones SECURITY DEFINER sobre las 5 tablas: 0 (Grok 130) | | |
-| 4a antes (cuenta inactiva): 5 tablas con filas · profiles 1 | | |
-| 4b antes (activas), **justo antes del merge**: owner / manager / cajero / contador / salonero y `base`, conteos de las 6 tablas | | |
-| **Gate de CI en la cabeza del PR** (Grok 125): los checks del PR en verde en el SHA que se firma (enlace a la corrida), **o** la aceptación explícita del dueño de mergear sin ese verde, con el motivo | | |
-| §2 merge (SHA, hora) | | |
-| 5.1 Branching success · log con la 085 | | |
-| 5.2 ledger 58 · 085 · exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'` (n de statements: anotar) | | |
-| 5.3 las 7 policies en «Después» · las otras 8 iguales | | |
-| 4a después: 0 · 0 · 0 · 0 · 0 · profiles 1 | | |
-| 4b después: comparación con el antes (Grok 131) → 0 filas con PARADA | | |
-| 5.5 pantalla OK (owner, salonero) | | |
-| Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | |
+| Firma del dueño (fecha y hora `-06:00`, SHA de la cabeza del PR) | | **Firmado el 2026-11-10 a las 08:23 -06:00**, cabeza `0e19c86775339a4b8e60962432ab2c2e78b20601` |
+| Responsables (ejecución / control) | | Ejecución en prod: el dueño. Control: el encargado. Merge: Claude, con la autorización del dueño (Claude no corrió nada en prod) |
+| 0.4 `main` sin moverse · diff solo los archivos del PR | | `main` en `5a224787af31fef75b81c44a3c0b63b3723523de` (también justo antes del merge) · diff: solo los 5 archivos de la 085, todos nuevos · md5 de la migración `68b6384bd860dcc334919813888cae83` · ninguna migración nueva mayor que 085 (`0090` y `0095` son históricas, ya en `main` y en el ledger de prod) |
+| 1.1 ledger 57 · 082 · ninguna versión mayor que 082 | | OK (leído en prod por el dueño el 10-nov, antes del merge) |
+| 1.0 statements de la 079 y la 080 → regla de 5.2 (Grok 122) | 079 · 4 · 080 · 3 | **079: 4 · 080: 3**, leído en prod por el dueño el 09-nov a las 16:04 -06:00. Regla de 5.2 definitiva: 1 fila 085 con su `name` + 5.3, sin md5. El día del pase: OK (dueño) |
+| 1.2 15 policies = respaldo · RLS en las 6 | | OK (dueño, 10-nov, antes del merge) |
+| 1.3 vistas · funciones SECURITY DEFINER sobre las 5 tablas: 0 (Grok 130) | | OK (dueño, 10-nov, antes del merge) |
+| 4a antes (cuenta inactiva): 5 tablas con filas · profiles 1 | | OK (dueño, 10-nov, antes del merge) |
+| 4b antes (activas), **justo antes del merge**: owner / manager / cajero / contador / salonero y `base`, conteos de las 6 tablas | | Foto «antes» tomada en prod por el dueño justo antes del merge (los números quedan con el dueño: no van al repo) |
+| **Gate de CI en la cabeza del PR** (Grok 125): los checks del PR en verde en el SHA que se firma (enlace a la corrida), **o** la aceptación explícita del dueño de mergear sin ese verde, con el motivo | | Checks de `0e19c86`: Cloudflare Pages **success**; Supabase Preview **skipped** (en una rama de PR no corre: aplica al mergear). El repo no tiene un workflow de pruebas en los PR. El dueño firmó y autorizó el merge con esos checks |
+| §2 merge (SHA, hora) | | **`bb12652367e2dea6b67f79d0003caa9eaedbf7f1`** (merge commit; padres `5a22478` y `0e19c86`) · **2026-11-10 08:24:48 -06:00** |
+| 5.1 Branching success · log con la 085 | | «Supabase Preview» del merge: una corrida en **success** (14:25:19 → 14:25:22Z, sin texto) y dos «en curso» («Waiting for branch action run to complete.»), el mismo patrón que el merge del 08-nov. Sin error. La 085 aplicada: ver 5.2 |
+| 5.2 ledger 58 · 085 · exactamente 1 fila 085 con `name = 'rls_lectura_rol_activo'` (n de statements: anotar) | | **58 · 085 · 1 fila 085 con su `name`**, con **9 statements** (Branching la guardó partida, como la 079 y la 080) |
+| 5.3 las 7 policies en «Después» · las otras 8 iguales | | **OK**: las 7 en «Después» y las otras 8 iguales al respaldo |
+| 4a después: 0 · 0 · 0 · 0 · 0 · profiles 1 | | **0 · 0 · 0 · 0 · 0 · profiles 1** |
+| 4b después: comparación con el antes (Grok 131) → 0 filas con PARADA | | **0 PARADA**: idéntico al «antes» en los 5 roles y en `base`, sin nulos |
+| 5.5 pantalla OK (owner, salonero) | | **OK** |
+| Cierre: pasa / vuelta atrás (hasta qué paso de §7) | | **PASA.** Pase cerrado el 10-nov **sin vuelta atrás**. La 085 está en prod |

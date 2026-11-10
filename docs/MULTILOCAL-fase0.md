@@ -127,6 +127,6 @@ es suya: el cambio de la 075 y de `club_local_crear` lo hace o lo acuerda esa se
 
 ## Antes de firmar la 091
 1. Opción a: la propuesta está lista (sección anterior). Falta que la sesión del Club la acepte y la ponga en su bloque.
-2. Correr `scripts/sql/091_pruebas.sh` en staging (en una ventana nocturna autorizada, incluida la sección «opción a»)
-   y anotar el resultado acá. Todavía no corrió.
-3. Va después de la 085, la 089 y la 090.
+2. ✅ `scripts/sql/091_pruebas.sh` en staging (10-nov 10:06 CR, transacciones descartadas): **24 OK · 0 FALLA**, con la
+   sección «opción a». Detalle en [`docs/pases/PASE-091-multilocal-fase0.md`](pases/PASE-091-multilocal-fase0.md) §3.
+3. Va después de la 085, la 089 y la 090 (orden en prod: 085 → 089 → 090 → 091 → 092 → 093).

@@ -136,6 +136,20 @@
      día de cada titular; 2024 queda como «login XXXX» a propósito, porque no se puede confirmar quién usaba los
      códigos ese año. Validado físicamente por el dueño en staging.
 
+22c. **🧹 Nombre del dueño en los comentarios de `supabase/migrations/`** (decisión del dueño, 10-nov): se limpian
+     **después del pase del Club**, en un PR aparte y con el mismo reemplazo que el #94/#95 («el dueño»). No toca la
+     base: Branching no vuelve a aplicar una versión que ya está en el ledger, y el ledger de prod conserva el texto viejo.
+     **Salvo los 4 que están dentro de funciones de la 150** (líneas 1667, 2811, 3023 y 3521 del archivo): cambiarían la
+     huella de esas funciones y romperían la paridad y el G-61. Quedan hasta que cada función se reescriba en una
+     migración nueva. *(Nuevo, 10/11.)*
+22d. **📮 Correo personal del dueño en `cierre-email` y `monthly-report`** (valor por defecto de `REPORT_TO_EMAIL`):
+     **después del piloto** (decisión del dueño, 10-nov). En este orden: (1) confirmar que `REPORT_TO_EMAIL` está cargado
+     en los secretos de las Edge Functions de prod; (2) sacar el valor por defecto, para que la función falle si falta;
+     (3) volver a desplegar las dos funciones en prod. *(Nuevo, 10/11.)*
+22e. **🧹 Al cerrar las ramas viejas** (sin apuro): sacar la contraseña de prueba (9 ramas), el nombre de la PC y el usuario
+     de SQL de `pos-bridge/config.test.ts`, y el nombre del dueño de las líneas propias de cada rama. La
+     `POS_DB_PASSWORD` de ese archivo es de mentira (confirmado por el dueño). *(Nuevo, 10/11.)*
+
 ## 🟨 P2 — Esperan decisión o firma del dueño
 
 23. **🖊️ Salarios:** pase a prod por fase (migs 055–061 solo en staging), insumos humanos (6 activos sin código

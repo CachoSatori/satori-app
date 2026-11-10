@@ -8,9 +8,9 @@
 >
 > - **Fecha prevista: jueves 12-nov, por la mañana** (nunca entre las 17:00 y las 23:00 CR). La tarde del mismo día es la
 >   prueba interna con el personal (plan: `docs/club-satori/PLAN-ACTIVACION-PILOTO.md` §3).
-> - **Orden en prod: 085 → 089 → 090 → 091 → 092 → 093 → 150 → 151.** Supabase no aplica una migración con número menor
->   que la última aplicada: el Club va **después** de toda la caja que esté en prod. La 087, la 088 (y la 093, si se
->   atrasa y queda después del Club) toman **152+** cuando se arme su paquete.
+> - **Orden en prod: 085 → 089 → 090 → 091 → 092 → 093 (→ 094 → 095, si caja las pasa antes) → 150 → 151.** Supabase no
+>   aplica una migración con número menor que la última aplicada: el Club va **después** de toda la caja que esté en prod.
+>   La 087, la 088 (y cualquier migración de caja que quede después del Club) toman **152+** cuando se arme su paquete.
 > - **Regla del ledger (Grok 122):** Branching guarda las migraciones **partidas** en varios statements. La verificación es
 >   «exactamente 1 fila con su `name`» más el catálogo (§5). **No se compara md5.**
 > - **Una sola vía: merge → Branching** (como la 085 y la 089). No se aplica nada a mano (§2.1 explica por qué no hace falta).
@@ -61,11 +61,11 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 | 0.1 | Firma del dueño en §10, con el SHA de la cabeza del #59 que se mergea | firma |
 | 0.2 | Los dos responsables presentes | §10 |
 | 0.3 | **No se mergea entre las 17:00 y las 23:00 CR**; ninguna otra sesión mergeando a `main` en la ventana | hora en §10 |
-| 0.4 | **La 091 en prod** (desde el mié 11-nov): la 151 se apoya en su `locations`. También la 092 y, si no se atrasó, la 093. Ninguna migración con número mayor que 093 en `main` ni en el ledger | 1.1 |
-| 0.5 | El paquete (este PR) mergeado en el #59, y el #59 **al día con `main`** (con la 089–093 adentro): el diff del #59 contra `main` tiene solo lo del Club (§2.2) | `git merge-base --is-ancestor`, `git diff --name-only` |
+| 0.4 | **La 091 en prod** (desde el mié 11-nov): la 151 se apoya en su `locations`. También la 092 y, si no se atrasaron, la 093, la 094 y la 095. Ninguna migración con número de 096 a 149 ni ≥ 150 en `main` ni en el ledger | 1.1 |
+| 0.5 | El paquete (este PR) y el plan B de club-web (#98, el Worker) mergeados en el #59, y el #59 **al día con `main`** (con la 089–093 adentro): el diff del #59 contra `main` tiene solo lo del Club (§2.2) | `git merge-base --is-ancestor`, `git diff --name-only` |
 | 0.6 | Checks del #59 en verde: `supabase/migraciones.test.ts` (150 y 151 registradas con su origen), vitest y build | checks del PR |
 | 0.7 | Staging en verde con estos mismos archivos (§3), **el día del pase** | anotado |
-| 0.8 | **Cloudflare listo antes del pase** (lo hace el dueño con Claude el mar 10-nov): proyecto de Pages `satori-club` con la rama de producción `main`; `SUPABASE_URL` y `SUPABASE_ANON_KEY` de prod; los topes `RL_CREAR` y `RL_LEER`; **Turnstile de prod** (widget del dominio del Club; nunca una clave que empiece con `1x`, `2x` o `3x`); **DNS** del dominio apuntando al proyecto. **La `CLUB_WEB_KEY` de prod NO**: se carga el día del pase (§6.3) | §10 |
+| 0.8 | **Cloudflare listo antes del pase** (lo hace el dueño con Claude el mar 10-nov; pasos en §11.1): proyecto de Pages `satori-club` con la rama de producción `main` y sin previews; variables de §11.1; **Turnstile de prod** (widget del dominio del Club; nunca una clave que empiece con `1x`, `2x` o `3x`); **DNS** del dominio apuntando al proyecto. **La `CLUB_WEB_KEY` de prod NO**: se carga el día del pase (§6.3). Anotar si la **zona del dominio está en esta cuenta de Cloudflare** (el plan B de §11.2 la necesita) | §10 |
 | 0.9 | G-61 «antes» hecho y sus diferencias esperadas **firmadas en este PR** (`scripts/sql/gate61_esperadas.txt`) | §1.5 |
 | 0.10 | Si los anfitriones de hoy tienen que entrar con su saldo a la prueba interna: export de Firestore depurado, CSV de las tarjetas de papel y su sha256 firmado **antes del jueves** (la carga exige la base vacía, §6.5) | §10 |
 | 0.11 | El agente nuevo del puente (#83) en prod desde el mié 11-nov por la mañana. **Recomendado, no bloquea** | anotado |
@@ -73,11 +73,12 @@ Los md5 sirven para comprobar el archivo, **no** para el ledger de prod (Grok 12
 ## 1. Lecturas previas (SOLO LECTURA, en PROD)
 Editor SQL de PROD. **Leer el ref en pantalla.** Anotar cada resultado en §10.
 ```sql
--- 1.1 ledger: el último es la 093 (o la 092 si la 093 se atrasó) y no hay nada del Club
-select count(*), max(version) from supabase_migrations.schema_migrations;                         -- anotar · 093
+-- 1.1 ledger: el último es la última de caja que pasó (093, o 095 si pasaron la 094 y la 095) y no hay nada del Club
+select count(*), max(version) from supabase_migrations.schema_migrations;                         -- anotar · 093 o 095
 select version, name from supabase_migrations.schema_migrations
- where version >= '094' or name in ('club_satori_esquema', 'club_catalogo_locales') or version in ('075', '100');  -- 0 filas
-select version from supabase_migrations.schema_migrations where version between '089' and '093' order by 1;  -- 089 … 093
+ where version between '096' and '149' or version >= '150'
+    or name in ('club_satori_esquema', 'club_catalogo_locales') or version in ('075', '100');      -- 0 filas
+select version from supabase_migrations.schema_migrations where version between '089' and '095' order by 1;  -- 089 … 093 (… 095)
 
 -- 1.2 no hay ningún objeto del Club en prod
 begin read only;
@@ -93,8 +94,16 @@ begin read only;
 select position('is_active' in pg_get_functiondef('public.get_my_role()'::regprocedure)) > 0           as get_my_role_069,
        to_regclass('public.locations') is not null                                                    as locations_091,
        (select is_active from public.locations where id = 'santa-teresa')                             as santa_teresa_activa,
-       (select count(*) from pg_policies where tablename = 'locations'
-          and policyname in ('locations_select_activos', 'locations_write_owner'))                    as politicas_locations,
+       -- (nota de Grok, 10-nov) las políticas de locations se comparan por DEFINICIÓN, no solo por nombre: las de la 091
+       (select count(*) from pg_policies where schemaname = 'public' and tablename = 'locations' and permissive = 'PERMISSIVE'
+          and roles = array['authenticated']::name[] and (
+              (policyname = 'locations_select_activos' and cmd = 'SELECT'
+                 and qual = '(get_my_role() IS NOT NULL)' and with_check is null)
+           or (policyname = 'locations_write_owner' and cmd = 'ALL'
+                 and qual = '(get_my_role() = ''owner''::user_role)'
+                 and with_check = '(get_my_role() = ''owner''::user_role)')))                         as politicas_091_iguales,
+       (select count(*) from pg_policies where schemaname = 'public' and tablename = 'locations')     as politicas_locations_total,
+       has_table_privilege('anon', 'public.locations', 'SELECT')                                      as anon_lee_locations,
        exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'employees'
                  and column_name = 'pos_login')                                                       as employees_pos_login,
        (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'pos_ndf_tickets'
@@ -103,15 +112,26 @@ select position('is_active' in pg_get_functiondef('public.get_my_role()'::regpro
        (select extversion from pg_extension where extname = 'pgcrypto')                               as pgcrypto,
        (select extversion from pg_extension where extname = 'pg_cron')                                as pg_cron;
 rollback;
--- esperado: true · true · true · 2 · true · 3 · true · ≥ 1.3 · ≥ 1.4
+-- esperado: true · true · true · 2 · 2 · false · true · 3 · true · ≥ 1.3 · ≥ 1.4
 ```
+- **`politicas_091_iguales` distinto de 2, o `politicas_locations_total` distinto de 2:** prod tiene otra RLS en
+  `locations` que la de la 091 (la 151 la reescribe con los mismos nombres, pero no borra otras). **Se para** y se anota
+  cada política (`select policyname, cmd, roles, qual, with_check from pg_policies where tablename = 'locations'`).
+  En staging hay 4: las 2 de la 091 y `pos_locations_select` / `pos_locations_write` de la 022 (PoS propio, solo staging).
 - **`pg_cron` vacío (null):** la 150 no programa la tarea diaria de socios. Se anota y **se para**: sin ella las altas
   provisionales no vuelven a pendiente y las autoaltas no se purgan. Se decide con el dueño antes de seguir.
 
-**1.4 Respaldo** (solo lectura; se guarda fuera del repo): export de `employees`, `profiles` y `locations` desde el panel
-(Table editor → Export to CSV). Son las tablas fuera del Club que el pase toca (un trigger y filas nuevas del catálogo).
+**1.4 Respaldo** (solo lectura): export de `employees`, `profiles` y `locations` desde el panel (Table editor → Export to
+CSV). Son las tablas fuera del Club que el pase toca (un trigger y filas nuevas del catálogo).
+- **(Grok 154) `employees` y `profiles` tienen datos personales** (nombres, correos, logins). Los tres CSV se guardan
+  **cifrados** apenas se bajan (un `.zip` con cifrado AES-256 o un volumen cifrado), con la contraseña en el gestor de
+  contraseñas del dueño, en una carpeta a la que **solo accede el dueño**. Nunca en el repo, el chat, un correo, una carpeta
+  compartida ni la PC del PoS. Se borra la copia sin cifrar de Descargas.
+- **Fecha de borrado:** el día 7 después del pase si no hubo vuelta atrás, o el día que se cierre la vuelta atrás. En §10
+  se anota dónde quedó (sin la contraseña), el sha256 del archivo cifrado y la fecha de borrado; el día del borrado, que
+  se borró.
 
-**1.5 G-61 «antes» (mar 10 o mié 11, después de la 091–093; se repite el día del pase):**
+**1.5 G-61 «antes» (mié 11, después de la caja que pase antes del Club; se repite el día del pase):**
 1. En el editor SQL de PROD: pegar `scripts/sql/gate61_catalogo.sql` entero entre `begin read only;` y `rollback;`, correrlo y
    **Download CSV**. Sale una fila con una columna `cat` (unos 3.000–3.700 hechos: nombres de objetos, roles y md5; **sin
    datos de personas**).
@@ -125,15 +145,16 @@ rollback;
      `fixed_salary_crc`, `hora_entrada_habitual`, `hora_salida_habitual`, `hourly_rate_crc`, `nombre_homebanking` y
      `participa_servicio`;
    - políticas de tablas que solo existen en staging (PoS propio 022–024, Salarios 055–061 y 084, la 070 y la 083), con su
-     dependencia de `get_my_role`; entre ellas `pos_locations_write` sobre `locations` (022);
-   - lo que prod tenga de la 091–093 y staging no (si la sesión de caja no las aplicó en staging antes).
+     dependencia de `get_my_role`; entre ellas `pos_locations_select` y `pos_locations_write` sobre `locations` (022);
+   - staging tiene la 089–095 (lectura del 10-nov): si en prod no pasaron la 094 o la 095, lo que cambian aparece como
+     diferencia de staging.
 4. Las diferencias que tienen explicación van a `scripts/sql/gate61_esperadas.txt` con su motivo y la firma, **en este PR**
    (lo revisa el dueño). Una diferencia **sin** explicación **para** el pase hasta entenderla.
 
 Más la **prueba de humo de antes** (§4).
 
 **Para (no se sigue)** si:
-- el ledger no termina en la 093 (o la 092), o ya tiene algo del Club;
+- el ledger no termina en la última de caja esperada (093, o 095), o ya tiene algo del Club;
 - 1.2 no da 0 · 0 · 0;
 - 1.3 da distinto (en particular, sin `locations` o sin `santa-teresa` activa: **la 091 no está**);
 - el G-61 «antes» tiene una diferencia sin explicación.
@@ -161,10 +182,17 @@ del ledger y la prueba de que el próximo push no la vuelve a aplicar.
 - Branching aplica las dos en el mismo push, cada una en su transacción. Si la 150 aborta, no queda nada a medias y la
   151 no se intenta. Si la 151 aborta, la 150 queda aplicada: §8.2.
 
-## 3. Prueba en staging (10-nov; todo en transacciones descartadas, salvo lo que ya estaba)
-Staging tiene el Club como **075** (aplicado a mano antes de este paquete). Su fila del ledger es una versión vieja del
-archivo (90.708 caracteres contra 416.138 bytes) aunque el **catálogo** coincide con el archivo de hoy (paridad). La 100
-(ahora 151) **no está** en staging.
+## 3. Prueba en staging (10-nov)
+**Staging quedó igual que va a quedar prod** (10-nov 11:40 CR, con el OK del dueño, después de que caja confirmó la 091 →
+095 en staging). Una transacción con precondición (fila 075 única, ninguna 100/150/151, la 091 con sus 2 políticas de
+`locations`, sin la FK) y verificación final (md5 de las filas = archivos, FK validada, trigger presente):
+- la fila **075** pasó a **150** con el texto exacto del archivo (antes tenía una versión vieja: 90.708 caracteres contra
+  416.138 bytes; el catálogo ya coincidía, por la paridad);
+- se aplicó la **151** y se registró su fila.
+- **Ledger de staging: 91 filas, última 151** (antes 90 · 095). Filas 150 y 151 con md5 `5da6a357…` y `7a27ab08…`, iguales
+  a los archivos.
+
+Todo lo demás, en transacciones descartadas:
 
 | Cuándo | Qué | Resultado |
 |---|---|---|
@@ -174,13 +202,15 @@ archivo (90.708 caracteres contra 416.138 bytes) aunque el **catálogo** coincid
 | 10-nov | **150 → 151 desde cero** (rollback de la 150, la 150, la 151 y sus 8 casos, en una transacción descartada) | **8/8** |
 | 10-nov | **Vuelta atrás:** 150 → 151 → un local de prueba → `151_rollback` → fila 151 → `150_rollback` | **0 objetos `club_*`**, 0 triggers del Club en otras tablas, 0 tareas de `pg_cron`; `locations` conserva sus filas |
 | 10-nov | El `150_rollback` anterior con la guarda nueva | **aborta**: dejaba 3 tablas y 2 secuencias (corregido en este PR) |
-| 10-nov | `gate61.sh` staging contra staging; `gate61_staging_con_151.sh` | 0 diferencias (3.701 hechos); con la 151: 3.714 (los 13 hechos de la 151) |
+| 10-nov | `gate61.sh` staging contra staging; `gate61_staging_con_151.sh` (antes de aplicar la 151) | 0 diferencias (3.701 hechos); con la 151: 3.714 (los 13 hechos de la 151) |
+| 10-nov, con la 150 y la 151 en staging | Batería (`bateria_club.py --esperado 597`, con un conteo por tramo, Grok 153) | **597/597** (107 · 225 · 72 · 17 · 176) |
+| ídem | Paridad: staging contra la 150 **y la 151** aplicadas desde cero | **980 = 980** |
+| ídem | Vuelta atrás contra staging: `151_rollback` → fila 151 → `150_rollback` (con el desprogramado de `pg_cron` adentro, Grok 150) | **0** objetos del Club, 0 tareas `club_*` de `pg_cron`, 0 filas 150/151; `locations` intacta |
+| ídem | Lo mismo **sin** el desprogramado (falla sin el arreglo) | **aborta**: «queda: cron.job club_socios_mantenimiento» |
+| ídem | Mutaciones S2 y 136 | caen 1 y 4, como antes |
 | 10-nov | `gate61_test.sh` (sin red) · `migraciones.test.ts` · vitest | 25/25 · 6/6 · 1526 |
 
-**Staging: alinear con prod** (autorizado por el dueño el 10-nov, **recién cuando la sesión de caja confirme que aplicó la
-091 → 093 en staging**: la 151 va sobre el `locations` de la 091). Una transacción con precondición: la fila 075 pasa a 150
-con el texto exacto del archivo, se aplica la 151 y se registra su fila. Así staging queda igual que prod y el G-61 se
-corre con `gate61.sh` tal cual. Hasta esa confirmación no se escribe nada: el G-61 usa `gate61_staging_con_151.sh`.
+Desde ahora el G-61 se corre con `gate61.sh` tal cual (staging ya tiene la 151; `gate61_staging_con_151.sh` se niega).
 
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge y **después** (§5.5).
@@ -235,8 +265,8 @@ SoP: nada nuevo en rojo. **Después**, además: la app muestra el acceso al Club
    rollback;
    ```
 4. **G-61 después** (bloquea la prueba interna): el dueño vuelve a bajar el CSV del catálogo (§1.5, paso 1). Claude:
-   `gate61_desde_csv.py`, el lado staging con `gate61_staging_con_151.sh` (o `gate61.sh` tal cual si staging ya tiene la
-   151) y `bash scripts/sql/gate61.sh --archivos staging.txt prod.txt --modo-prod` con las esperadas firmadas de §1.5.
+   `gate61_desde_csv.py`, el lado staging con `gate61.sh` (staging ya tiene la 150 y la 151) y
+   `bash scripts/sql/gate61.sh --archivos staging.txt prod.txt --modo-prod` con las esperadas firmadas de §1.5.
    **Tiene que salir 0.**
 5. **Humo:** 4a con los valores de «Después», 4b igual que antes y 4c sin rojos.
 
@@ -263,6 +293,7 @@ Cada alta siembra sus marcadores de descuento (856 y 857) y la promoción «Loca
    `satori-club` (producción) → Settings → Variables and Secrets → **Secret** `CLUB_WEB_KEY`. **Nunca por chat.**
 2. En el editor SQL de prod: `select public.club_web_clave_cargar('<sha256 de la clave>');` (el sha256, nunca la clave).
 3. Volver a desplegar `satori-club` (los Secrets toman efecto en el próximo deploy).
+4. **Si se usa el plan B (§11.2):** la misma clave también como Secret `CLUB_WEB_KEY` del Worker `satori-club-api`.
 
 Verificar: `/api/salud` → todo en `true` (`club_web_key` y `turnstile` incluidos). Una llamada directa a
 `/rest/v1/rpc/club_cupon_crear` con la anon key y sin el header responde «Código no válido».
@@ -324,17 +355,22 @@ sin ellos y la carga se replanifica con firma (el migrador frena con la base no 
 ## 8. Vuelta atrás (todo en la misma ventana; nadie más pushea a `main`)
 **Mientras no haya actividad del Club** (antes de §6.5 y de encender un local). Con actividad **no se borra nada**: §8.4.
 
-**8.1 La 150 abortó** (Branching en error, ledger sin 150): no hay nada que deshacer en la base. Revert del merge en `main` y
-avisar.
+**8.1 La 150 abortó** (Branching en error, ledger sin 150): se corre **1.2 otra vez** (Grok 151).
+- **Da `0 · 0 · 0`:** no quedó nada en la base. Revert del merge en `main` y avisar.
+- **Da otra cosa: se para.** Algo quedó a medias aunque el ledger no lo diga. No se hace el revert ni ningún rollback hasta
+  entender qué quedó: se anota la salida de 1.2 y se avisa.
 
 **8.2 La 150 entró y la 151 abortó:** en prod, UN bloque:
 ```sql
 begin;
 do $$ begin
+  -- (Grok 152) las mismas guardas de 8.3, más: de la 151 no quedó nada (ni su fila ni su trigger)
   if (select count(*) from supabase_migrations.schema_migrations where version = '150') <> 1
      or exists (select 1 from supabase_migrations.schema_migrations where version = '151')
-     or exists (select 1 from public.club_miembros) or exists (select 1 from public.club_movimientos) then
-    raise exception 'precondición: se esperaba la 150 sin la 151 y sin actividad del Club: no se toca nada';
+     or exists (select 1 from pg_trigger where tgname = 'club_config_catalogo_trg')
+     or exists (select 1 from public.club_miembros) or exists (select 1 from public.club_movimientos)
+     or exists (select 1 from public.club_cupones) or exists (select 1 from public.club_config where club_activo) then
+    raise exception 'precondición: se esperaba la 150 sin nada de la 151, sin actividad y sin locales encendidos: no se toca nada';
   end if;
 end $$;
 -- … pegar acá el cuerpo de scripts/sql/150_rollback.sql, sin su begin/commit (borra la fila 150 y se verifica solo) …
@@ -368,9 +404,9 @@ altas, visitas, cupones, canjes y premios; la caja cobra como antes) y se arregl
 Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están en el ledger de prod no se borran nunca**.
 
 ## 9. Orden en prod y después
-- **085 → 089 → 090 → 091 → 092 → 093 → 150 → 151.** La 087 y la 088 (y la 093 si se atrasa) toman **152+** al armar su
-  paquete.
-- Después del pase: actualizar `ESTADO.md` (ledger de prod), el «Resultado» abajo y, con el OK del dueño, staging (§3).
+- **085 → 089 → 090 → 091 → 092 → 093 (→ 094 → 095) → 150 → 151.** La 087 y la 088 (y cualquier migración de caja que
+  quede después del Club) toman **152+** al armar su paquete.
+- Después del pase: actualizar `ESTADO.md` (ledger de prod) y el «Resultado» abajo. Staging ya está alineado (§3).
 - Después del pase, en un PR aparte: sacar el nombre del dueño de los comentarios de `supabase/migrations/` (decisión del
   dueño, 10-nov; backlog 22c). En la 150 solo los comentarios de afuera de las funciones: los 4 de adentro quedan.
 - El RUNBOOK (`docs/club-satori/RUNBOOK-piloto.md`) sigue valiendo para el detalle de cada verificación, pero el **orden**
@@ -388,8 +424,8 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 0.10 carga única: export, CSV y sha256 firmado (o «la prueba va sin carga») | | |
 | 1.1 ledger: último 093 · nada del Club | | |
 | 1.2 0 · 0 · 0 | | |
-| 1.3 true · true · true · 2 · true · 3 · true · pgcrypto · pg_cron | | |
-| 1.4 respaldo de `employees`, `profiles` y `locations` guardado | | |
+| 1.3 true · true · true · 2 · 2 · false · true · 3 · true · pgcrypto · pg_cron | | |
+| 1.4 respaldo de `employees`, `profiles` y `locations`: cifrado, dónde quedó (sin la contraseña), sha256 y fecha de borrado | | |
 | 4a antes: 0 · null · 0 | | |
 | 4b antes (activas), justo antes del merge | | |
 | Gate de CI en la cabeza del #59 (enlace), o la aceptación del dueño sin ese verde, con el motivo | | |
@@ -402,9 +438,75 @@ Si falla solo la app (`/club`): revert del código; **los `.sql` que ya están e
 | 6.1 dos locales, los dos apagados · `locations` como se espera | | |
 | 6.2 dominio | | |
 | 6.3 `CLUB_WEB_KEY` cargada, sha256 en la base, `/api/salud` en verde | | |
+| §11.2 `/api/salud`: `x-club-api` y los dos topes → plan A o B (y, con B, la ruta del Worker) | | |
 | 6.4 valores del local (la fila de verificación) · empleados con login | | |
 | 6.5 carga única (sha256, conteos) o «replanificada» | | |
 | 6.6 Santa Teresa encendido en la prueba interna (hora) | | |
 | `lc_excepciones_desde`: `2026-11-12` en §6.4 (provisorio) | 2026-11-12 | |
 | `lc_excepciones_desde`: el día de la apertura, antes de abrir | (fecha) | |
 | Cierre: pasa / vuelta atrás (hasta qué paso de §8) | | |
+| Respaldo de 1.4 borrado (fecha) | | |
+
+## 11. Cloudflare: el proyecto de Pages (hoy) y `/api` con o sin Worker (jueves)
+> Pasos de panel. La documentación de Cloudflare no se pudo leer desde la sesión de Claude (el sitio está bloqueado ahí):
+> los nombres de los menús pueden variar un poco. Lo que sale del repo (`club-web/wrangler.toml`, `vite.config.ts`,
+> `worker/`) está verificado.
+
+### 11.1 Crear el proyecto de Pages `satori-club` (mar 10-nov, el dueño con Claude)
+1. Workers & Pages → **Create** → pestaña **Pages** → **Connect to Git** → el repo `satori-app`.
+2. Project name **`satori-club`** (igual al `name` de `club-web/wrangler.toml`). Production branch **`main`**.
+3. Build: Framework preset **None** · Build command **`npm ci && npm run build`** · Build output directory **`dist`** ·
+   Root directory (Advanced) **`club-web`**.
+4. **Save and Deploy.** El primer build **falla** porque `main` todavía no tiene `club-web/`: no se publica nada, y
+   `satori-club.pages.dev` y el dominio no muestran ningún sitio. Cada push a `main` antes del jueves falla igual (rojo en
+   la lista, sin daño). El jueves, el merge del #59 construye y publica solo.
+5. Settings → **Builds & deployments** → **Branch control** → Preview branches: **None** (ninguna rama se publica). Los
+   deploys automáticos de producción quedan **encendidos**.
+6. Settings → **Variables and Secrets**, en **Production** (en Preview, nada):
+
+| Nombre | Tipo | Cuándo |
+|---|---|---|
+| `NODE_VERSION` = `22` | texto | hoy |
+| `VITE_CLUB_URL` (el dominio con `https://`, sin barra final) | texto (build) | hoy. Sin ella el build falla con un mensaje claro |
+| `VITE_TURNSTILE_SITEKEY` | texto (build) | hoy, al crear el widget |
+| `SUPABASE_URL` · `SUPABASE_ANON_KEY` (prod; la anon key es pública) | texto | hoy |
+| `TURNSTILE_SECRET` | **Secret** | hoy, con el widget |
+| `CLUB_WEB_KEY` | **Secret** | **jueves** (§6.3) |
+
+   No van en prod: `CLUB_DEV` ni los `RL_*_MAX` / `RL_*_VENTANA_S` (solo el servidor local).
+7. **Custom domains → Set up a custom domain** → el dominio del Club. Esperar el certificado en **Active**. Anotar si la
+   **zona del dominio está en esta cuenta de Cloudflare** (DNS en Cloudflare): el plan B (11.3) la necesita.
+
+### 11.2 A o B: cómo decidir con `/api/salud` (jueves, después del merge y de §6.3)
+Abrir `https://<dominio>/api/salud` en el navegador y mirar el JSON y el encabezado `x-club-api` de la respuesta
+(DevTools → Network → la llamada → Headers). La Pages Function contesta con `x-club-api: pages` y el Worker con
+`x-club-api: worker` (#98).
+
+| Lo que dice | Plan | Qué se hace |
+|---|---|---|
+| `x-club-api: pages` · `rl_crear` y `rl_leer` en `true` | **A** | Nada más: Pages tomó los topes. Prueba de fuego: 6 «Obtener mi cupón» seguidos desde un teléfono → el sexto dice «Demasiados intentos seguidos» |
+| `x-club-api: pages` · `rl_crear` o `rl_leer` en `false` | **B** | 11.3. Mientras tanto, crear cupones y el alta responden 503 (falla cerrada: no queda nada abierto) |
+| Sin `x-club-api`, 404 o error | — | **Se para**: el deploy no trae `/api`. Revisar el log del build de Pages |
+| Después de 11.3: `x-club-api: worker` · todo en `true` | **B** listo | Prueba de fuego como en A, y otra desde dos teléfonos en el mismo wifi |
+
+En los dos planes, `club_web_key`, `turnstile` y `supabase` tienen que estar en `true`. **Lo más probable es B:** en local,
+`wrangler pages dev` acepta el `wrangler.toml` de Pages pero no expone `RL_CREAR` ni `RL_LEER`; el Worker sí
+(`wrangler deploy --dry-run`).
+
+### 11.3 Plan B: el Worker `satori-club-api` (jueves, solo si 11.2 dice B)
+Requisito: la zona del dominio en esta cuenta de Cloudflare (11.1, paso 7). Si no está, **se para** y se decide con el
+dueño: sin la ruta, el Worker no puede atender `<dominio>/api/*`.
+1. Workers & Pages → **Create** → **Workers** → **Import a repository** → el repo `satori-app`.
+2. Nombre **`satori-club-api`** · rama de producción **`main`** · Root directory **`club-web/worker`** · Build command:
+   vacío · Deploy command **`npx wrangler deploy`** (usa `club-web/worker/wrangler.toml`: los dos topes, sin
+   `*.workers.dev`).
+3. En el log del deploy tienen que aparecer `env.RL_CREAR (ratelimit)` y `env.RL_LEER (ratelimit)`.
+4. Worker → Settings → **Variables and Secrets** (los mismos valores que en Pages): `SUPABASE_URL` y `SUPABASE_ANON_KEY`
+   (texto); `TURNSTILE_SECRET` y `CLUB_WEB_KEY` (**Secret**).
+5. Worker → Settings → **Domains & Routes** → **Add** → **Route** → `<dominio>/api/*`, zona del dominio. No se le pone un
+   dominio propio al Worker: el sitio lo sigue sirviendo Pages.
+6. Volver a 11.2: `/api/salud` con `x-club-api: worker` y todo en `true`.
+
+**Vuelta atrás de B:** borrar la ruta (paso 5). `/api` vuelve a Pages, que sin los topes responde 503 al crear: falla
+cerrada. El Worker puede quedar creado y sin ruta.
+

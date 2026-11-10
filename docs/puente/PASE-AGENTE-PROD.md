@@ -251,7 +251,7 @@ $VIEJA = Carpeta C:\satori\satori-app-prod; $NUEVA = Carpeta C:\satori\agente-pr
 # 135: los scripts de ESTE pase van a una carpeta NUEVA, C:\satori\pase-scripts\agente-<fecha y hora>. No se borra nada: en
 # C:\satori\pase-scripts quedan los del pase del puente (0.5b de la plantilla). Si la carpeta ya existiera, se para.
 $SCR = "C:\satori\pase-scripts\agente-$(Get-Date -Format 'yyyy-MM-dd_HHmmss')"
-if (Test-Path -LiteralPath $SCR) { throw "ya existe $SCR: no se pisa ni se borra nada; esperar un segundo y repetir" }
+if (Test-Path -LiteralPath $SCR) { throw "ya existe ${SCR}: no se pisa ni se borra nada; esperar un segundo y repetir" }
 New-Item -ItemType Directory -Path $SCR | Out-Null; $SCR = Carpeta $SCR
 cmd /c "git -C `"$NUEVA`" show cd6d5a1ceb7adf06a0f79b780f126a4263884ca3:scripts/puente/armar_mapa_secretos.mjs > `"$SCR\armar_mapa_secretos.mjs`""; Ok 'show armar_mapa'
 if ((Md5Bytes "$SCR\armar_mapa_secretos.mjs") -cne '73c4d9d207c22c13d5c42498bb63e8ca') { throw 'armar_mapa_secretos.mjs: md5 distinto' }

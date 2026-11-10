@@ -125,7 +125,19 @@ merge**.
 
 | Cuándo | Qué | Resultado |
 |---|---|---|
-| _pendiente_ (10-nov, después de la ventana de las 23:35) | `093_pruebas.sh hwiatgicyyqyezqwldia` | _pendiente_ |
+| 10-nov 00:53 CR (script @ `2282c8a`) | `093_pruebas.sh hwiatgicyyqyezqwldia` | **NO PROBADO**: la semilla del script no llenaba `data` (NOT NULL) de `ventas_dias` → 23502. Error del script, no de la 093; no se corrió ningún caso |
+| 10-nov 00:53 CR (script @ `5666e28`, semilla con las columnas NOT NULL reales leídas del catálogo) | `093_pruebas.sh hwiatgicyyqyezqwldia` | **21 OK · 0 FALLA · VERDE** |
+
+Detalle de la corrida verde (todo en transacciones descartadas):
+- catálogo: sin la 093, las 5 lecturas en `using (true)`; con la 093, las 5 exigen rol y las 5 escrituras no cambian;
+- owner, manager, contador, cajero y salonero activos: ven lo mismo que la base, sin y con la 093 (10/10);
+- cajero y owner **inactivos**: sin la 093 leen todo (**el hueco de Grok 126 existe**); con la 093, 0 en las cinco (4/4);
+- `anon` no lee ninguna, sin y con la 093;
+- vuelta atrás: la 093 + el rollback deja a la cuenta inactiva leyendo como antes y las 5 lecturas en `using (true)`;
+- estado final: staging sin la 093, sin filas de prueba y sin fila 093 en el ledger.
+
+Antes de correr: la ventana de las 23:35 había terminado (23:39), sin consultas ajenas en staging y sin commits del Club
+de menos de 5 minutos.
 
 ## 4. Prueba de humo en PROD (SOLO LECTURA: `begin read only` … `rollback`)
 Se corre **antes** del merge (§1) y **después** (5.4).

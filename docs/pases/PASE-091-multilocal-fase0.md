@@ -148,9 +148,48 @@ staging.
 |---|---|---|
 | 10-nov 10:06 CR (script @ `2eba291`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | 23 OK · **1 FALLA**: «contador ve 1 fila del otro local» dio 0. **Error de la expectativa, no de la 091:** hoy el contador no tiene ninguna policy de SELECT en `cash_movements` (las de lectura son owner, manager y cajero) y ve 0 filas también **sin** la 091 (verificado en una transacción descartada). Una policy restrictiva solo achica |
 | 10-nov 10:06 CR (script @ `7ec3567`: contador espera 0; 4 casos nuevos de `mis_locales()`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE** |
+| 10-nov 10:59 CR (script @ `47829f6`, Grok 138/139) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **25 OK · 0 FALLA · VERDE** (salida literal abajo) |
 | 10-nov 10:07 CR | Estado de staging al terminar | sin columnas `location_id`, sin `profile_locations`, sin `mis_locales()`, sin policies por local, sin el local de prueba, sin la FK del Club; ledger 85 / 090: **la 091 no quedó aplicada** |
 
 Antes de correr: sin consultas ajenas en staging y el último commit del Club con más de 5 minutos.
+
+**Grok 138 — salida literal de la corrida del 10-nov 10:59 CR** (`scripts/sql/091_pruebas.sh hwiatgicyyqyezqwldia`, script
+@ `47829f6`: con el `compara` de Grok 139, que da FALLA si una respuesta trae error, viene vacía o no tiene la forma
+esperada, y con el control positivo del cajero). Salida 0: **25 OK · 0 FALLA**.
+```text
+== Santa Teresa idéntica (postgres) ==
+OK    postgres: filas, totales, saldo CF y cierres
+== Lo que ve cada rol, antes y después ==
+OK    owner ve lo mismo
+OK    manager ve lo mismo
+OK    contador ve lo mismo
+OK    cajero ve lo mismo
+OK    salonero ve lo mismo
+== Aislamiento con un segundo local (todo descartado) ==
+OK    owner ve 1 fila(s) del otro local
+OK    contador ve 0 fila(s) del otro local
+OK    manager ve 0 fila(s) del otro local
+OK    cajero ve 0 fila(s) del otro local
+OK    control positivo: el cajero sin asignación ve todos los movimientos de santa-teresa (= postgres)
+OK    mis_locales() de owner incluye el otro local: true
+OK    mis_locales() de contador incluye el otro local: true
+OK    mis_locales() de manager incluye el otro local: false
+OK    mis_locales() de cajero incluye el otro local: false
+OK    manager asignado al otro local lo ve
+OK    manager asignado SOLO al otro local deja de ver santa-teresa
+== Una escritura de un manager sin asignación a otro local se rechaza ==
+OK    insert en otro local rechazado por RLS (42501)
+== Las políticas se crean con la forma correcta y el rollback deja todo como antes (descartado) ==
+OK    las 4 políticas por local existen, restrictivas, con using y with check
+OK    rollback: filas, totales, saldo y cierres iguales a antes
+OK    rollback: sin columnas, sin políticas y sin función
+== Opción a: catálogo único con el Club (propuesta para la sesión del Club; todo descartado) ==
+      locales del Club que entrarían nuevos al catálogo: (ninguno)
+OK    opción a (MIG → PROP): FK validada, ningún local del Club fuera del catálogo, 4 columnas
+OK    opción a (PROP → MIG): FK validada, ningún local del Club fuera del catálogo, 4 columnas
+OK    club_local_crear (owner): el local queda en locations (inactivo para caja) y en club_config
+== Resultado: 0 falla(s) ==
+```
 
 **Lo que dejó a la vista la corrida:** el contador hoy **no lee** `cash_movements` (ni con la 091 ni sin ella). La decisión 2
 («owner y contador ven todos los locales») queda en `mis_locales()`; para que el contador lea caja hace falta una policy

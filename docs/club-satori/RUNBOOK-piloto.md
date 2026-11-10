@@ -9,6 +9,12 @@
 > **Ritual antes de cada comando de base:** leer el ref en la pantalla del editor SQL y decirlo en voz alta. Nunca
 > SQL de escritura sin haber leído el ref.
 
+> **⚠️ (10-nov) El orden del pase lo manda ahora el paquete [`docs/pases/PASE-150-151-club.md`](../pases/PASE-150-151-club.md).**
+> La base del Club entra **con el merge** (Branching aplica la 150, antes 075, y la 151, antes 100), como la 085 y la 089:
+> ya no se aplica a mano antes del merge (pasos 3b, 4 y 10 de abajo). Los locales se dan de alta **apagados** (no como dice
+> el 4b) y Santa Teresa se enciende en la prueba interna. Este RUNBOOK sigue valiendo para el detalle de cada
+> verificación (Cloudflare, clave, carga única, encender un local, gates).
+
 ## Orden (no se saltea ni se invierte)
 
 | # | Paso | Depende de | Si falla |

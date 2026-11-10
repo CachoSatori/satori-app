@@ -148,14 +148,14 @@ staging.
 |---|---|---|
 | 10-nov 10:06 CR (script @ `2eba291`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | 23 OK · **1 FALLA**: «contador ve 1 fila del otro local» dio 0. **Error de la expectativa, no de la 091:** hoy el contador no tiene ninguna policy de SELECT en `cash_movements` (las de lectura son owner, manager y cajero) y ve 0 filas también **sin** la 091 (verificado en una transacción descartada). Una policy restrictiva solo achica |
 | 10-nov 10:06 CR (script @ `7ec3567`: contador espera 0; 4 casos nuevos de `mis_locales()`) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE** |
-| 10-nov 10:59 CR (script @ `47829f6`, Grok 138/139) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **25 OK · 0 FALLA · VERDE** (salida literal abajo) |
+| 10-nov 10:59 CR (script @ `47829f6`, Grok 138/139) | `091_pruebas.sh hwiatgicyyqyezqwldia` | **24 OK · 0 FALLA · VERDE** (salida literal abajo) |
 | 10-nov 10:07 CR | Estado de staging al terminar | sin columnas `location_id`, sin `profile_locations`, sin `mis_locales()`, sin policies por local, sin el local de prueba, sin la FK del Club; ledger 85 / 090: **la 091 no quedó aplicada** |
 
 Antes de correr: sin consultas ajenas en staging y el último commit del Club con más de 5 minutos.
 
 **Grok 138 — salida literal de la corrida del 10-nov 10:59 CR** (`scripts/sql/091_pruebas.sh hwiatgicyyqyezqwldia`, script
 @ `47829f6`: con el `compara` de Grok 139, que da FALLA si una respuesta trae error, viene vacía o no tiene la forma
-esperada, y con el control positivo del cajero). Salida 0: **25 OK · 0 FALLA**.
+esperada, y con el control positivo del cajero). Salida 0: **24 OK · 0 FALLA**.
 ```text
 == Santa Teresa idéntica (postgres) ==
 OK    postgres: filas, totales, saldo CF y cierres

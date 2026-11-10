@@ -103,6 +103,8 @@ Los 8 casos:
 - la 094 + el rollback vuelve a la verificación de hoy y al ACL completo de hoy (normalizado);
 - staging terminó igual que al empezar: la 094 no quedó aplicada.
 
+**Aplicada en STAGING el 10-nov a las 11:03:30 CR** (autorizado por el dueño): una transacción con precondición (la anterior es la última del ledger y la 094 no está), la migración y su fila del ledger (1 statement, md5 = el archivo). Antes, sin consultas ajenas y el último commit del Club con más de 5 minutos. Verificación después: `{"tablas":23,"anon_maintain":0,"anon_otros":21,"anon_trt":0,"public":0,"authenticated_maintain":23,"ledger_094":true}`.
+
 ## 4. Prueba de humo en PROD (SOLO LECTURA)
 Es solo de catálogo: la 094 no cambia lo que ve nadie.
 - **4a.** 1.2: antes, el estado de «antes»; después, el de 5.3.

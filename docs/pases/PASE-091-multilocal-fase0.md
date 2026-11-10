@@ -243,11 +243,22 @@ aparecer como siempre (entra con `location_id = 'santa-teresa'` por el default).
      if exists (select 1 from public.profile_locations) then
        raise exception 'precondición: profile_locations tiene filas (alguien asignó locales): avisar antes de borrar';
      end if;
+     -- Grok 137: borrar la columna no puede perder a qué local pertenece una fila
+     if exists (select 1 from public.cash_sessions    where location_id <> 'santa-teresa')
+        or exists (select 1 from public.cash_movements   where location_id <> 'santa-teresa')
+        or exists (select 1 from public.cash_cierres_dia where location_id <> 'santa-teresa')
+        or exists (select 1 from public.tip_sessions     where location_id <> 'santa-teresa') then
+       raise exception 'precondición: hay filas fuera de santa-teresa: no se toca nada';
+     end if;
+     if (select coalesce(array_agg(id order by id), '{}') from public.locations) <> array['santa-teresa'] then
+       raise exception 'precondición: locations no tiene solo santa-teresa: no se toca nada';
+     end if;
    end $$;
    -- … pegar acá el cuerpo de scripts/sql/091_rollback.sql, sin su begin/commit …
    commit;
    ```
-   No se pierde ningún dato de caja: la columna que se borra solo tenía `santa-teresa`.
+   No se pierde ningún dato de caja: la precondición exige (Grok 137) que las 4 tablas tengan **0 filas fuera de
+   `santa-teresa`** y que `locations` tenga **solo `santa-teresa`**; si no, frena sin tocar nada.
 2. **Enseguida, revert del merge en `main`**, que saca el `.sql`:
    - si el archivo se queda en `main`, Branching la vuelve a aplicar en el próximo push;
    - si se saca el archivo sin borrar la fila, Branching falla en cada push (el caso de la 074).

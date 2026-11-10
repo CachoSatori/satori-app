@@ -156,6 +156,9 @@ Cada prueba va a la batería con su mutación en `mutaciones_r7.json`: tiene que
 | **S6** | Una factura elegida a mano no le gana a una automática que llega después, y tiene que estar `C` (si se anula, vuelve «SIN_CRUCE»). | Elegida X → llega la del pedido → vale la del pedido. X anulada → vuelve «SIN_CRUCE». |
 | **S7** | Textos de la caja: pedido que todavía no está en la lista; «Puente sin datos» con qué hacer; plan B que explica `R`. La guía de caja cambia en el mismo PR. | vitest de los textos según el estado. |
 
+**S0 y S8 están APLICADAS EN STAGING** (09-nov 14:25 CR, autorizado por el dueño; rama `claude/club-s0-s8`). Detalle y
+vuelta atrás en AVANCE-LC («09-nov · tarde: S0 y S8»). El resto sigue como propuesta.
+
 **Orden sugerido para el piloto:**
 1. **S0 y S8**, antes del piloto: sin ellos, «SIN_CRUCE» sale falso todas las noches y gerencia puede rechazar
    personas reales.

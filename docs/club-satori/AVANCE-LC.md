@@ -614,3 +614,45 @@ Detalle: [`NOCHE-2026-11-09-A.md`](NOCHE-2026-11-09-A.md).
 - **Orden en prod de las migraciones pendientes** (Supabase no aplica una versión menor que la última aplicada):
   **085 → 091 → 092 → 100**. La 100 (#81) además necesita la 075 del Club: va en el pase del Club, después de la 075, y
   no se mergea antes que la 091 y la 092. Paquete de la 085: #80.
+
+### 09-nov · tarde: S0 y S8 aplicadas en STAGING (autorizado por el dueño) · rama `claude/club-s0-s8`, nada en prod
+- **S0 · «cobrada, falta el cierre de caja».** Una factura `R` del pedido es un cruce **provisional**
+  (`club_cruce_provisional`, nueva e interna):
+  - **«SIN_CRUCE»** no sale con ella;
+  - **«sin factura»** del reporte de visitas tampoco la cuenta;
+  - los **controles exactos** (`club_cruce_facturas`: cupón sin promo, visita sin el 856, premios, elegir la factura)
+    siguen esperando la `C`.
+- **S8.** Una factura anulada (`X`) impide aprobar un pendiente solo si el pedido no tiene una `C` **ni una `R`**.
+- **Pruebas:** batería **88** (S0) y **89** (S8). Con las funciones de antes (mutaciones `S0` y `S8` de
+  `mutaciones_r7.json`, commit `9dcf212`) **caen 2 y 1**. Las mutaciones anteriores siguen cayendo igual (R02 2,
+  CLUB-AUD-43 1, R7-02 4, CLUB-AUD-66 3).
+- **Estado de staging ANTES** (14:18 CR):
+  - ledger 85 filas, la última 090;
+  - md5 de `pg_get_functiondef`: `club_excepciones` `57795c2d…`, `club_pendiente_resolver` `ddda0a12…`,
+    `club_reporte_visitas` `bde539ab…`;
+  - `club_cruce_provisional` no existía.
+- **Aplicado a las 14:25:28 CR, en una transacción:**
+  - la función nueva y las 3 funciones cambiadas, tal cual están en la 075 de la rama;
+  - `revoke` de la nueva para `public`, `anon` y `authenticated`.
+
+  Antes de aplicarlo, la batería con el cambio dentro de una transacción descartada dio 587/587.
+- **Estado de staging DESPUÉS:**
+  - ledger igual (85 filas, la última 090);
+  - md5: `club_cruce_provisional` `d09c0e6c…`, `club_excepciones` `a919ee7c…`, `club_pendiente_resolver` `054cfc17…`,
+    `club_reporte_visitas` `0ab994dd…`;
+  - nadie ejecuta la función nueva desde `anon` ni `authenticated`.
+- **Verde:**
+  - batería **587/587**;
+  - paridad **975 = 975** (un objeto más: la función nueva);
+  - carreras 8/8 y gate61_test sin fallas.
+- **Vuelta atrás en staging, si hiciera falta:**
+  1. volver a crear las 3 funciones desde la 075 de `9dcf212`;
+  2. después, `drop function public.club_cruce_provisional(text, jsonb)`.
+
+  Las tablas y los datos no cambiaron.
+
+- **La fila 075 del ledger de STAGING ya no es igual al archivo 075** (aviso del dueño, 09-nov tarde). S0 y S8 cambiaron
+  el archivo (`club_cruce_provisional` y tres funciones) y se aplicaron en staging solo las funciones, no la migración
+  entera, así que `statements` de la fila 075 sigue con el texto de antes. **No se toca ahora.** Se resuelve en el pase
+  del Club a prod, cuando la 075 se renumere (075 → 150, CLUB-AUD-100): ahí se arma la fila del ledger con el archivo
+  final. La paridad (975 = 975) compara el catálogo, no el ledger, y sigue igual.

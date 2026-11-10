@@ -1224,7 +1224,8 @@ begin
       raise exception 'El cupón ya no está vigente (anulado): rechazalo' using errcode = 'P0001';
     end if;
     -- El cruce solo mira facturas C: la anulada se busca directo (por pedido, por número elegido o por número tipeado),
-    -- y cuenta si esa visita no tiene ninguna C (si hay una C, la X fue una refactura y la visita sigue valiendo).
+    -- y cuenta si esa visita no tiene ninguna C (si hay una C, la X fue una refactura y la visita sigue valiendo) ni una
+    -- R del mismo pedido (S8: la refactura todavía no pasó el cierre de caja).
     if exists (select 1 from public.pos_ndf_tickets t
                 where t.local = v_p.location_id and t.estado = 'X'
                   and ((v_p.pos_ref->>'modo' = 'pedido' and t.numero_pedido = v_p.pos_ref->>'pedido'
@@ -1232,7 +1233,10 @@ begin
                     or (v_p.pos_ref->>'modo' = 'factura' and t.numero_factura = v_p.pos_ref->>'numero_factura')
                     or (v_p.pos_ref is null and public.club_factura_clave(v_p.factura_pos) is not null
                         and ltrim(t.numero_factura, '0') = public.club_factura_clave(v_p.factura_pos))))
-       and cardinality(public.club_cruce_facturas(v_p.location_id, v_p.pos_ref, v_p.factura_pos)) = 0 then
+       and cardinality(public.club_cruce_facturas(v_p.location_id, v_p.pos_ref, v_p.factura_pos)) = 0
+       -- S8 (09-nov): una refactura del mismo pedido en R (cobrada, falta el cierre de caja) también vale: sin esto,
+       -- gerencia que resuelve antes del cierre tenía que rechazar personas reales.
+       and not public.club_cruce_provisional(v_p.location_id, v_p.pos_ref) then
       raise exception 'La factura de esa visita está anulada (X): rechazalo' using errcode = 'P0001';
     end if;
     insert into public.club_movimientos
@@ -2827,6 +2831,30 @@ as $$
    where d.rol in ('principal', 'dividida');
 $$;
 
+-- S0 (09-nov): «cobrada, falta el cierre de caja». En este PoS la factura queda en R (provisional) hasta el CIERRE DE
+-- CAJA (16:00 y ~23:00) y recién ahí pasa a C. Una R del pedido, elegida con el mismo criterio que la principal de
+-- club_cruce_detalle (número de pedido + apertura, desde la apertura hasta 18 h después del escaneo), es un cruce
+-- PROVISIONAL: con ella NO sale SIN_CRUCE ni «sin factura» en el reporte de visitas, y una anulada (X) no impide aprobar
+-- un pendiente (S8). Los controles EXACTOS (club_cruce_facturas: CUPON_SIN_PROMO, REGISTRO_LC_SIN_856, premios, elegir
+-- la factura) siguen mirando solo C: antes del cierre una R todavía puede anularse. Interna (sin EXECUTE para nadie).
+create or replace function public.club_cruce_provisional(p_location text, p_pos jsonb)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, pg_temp
+as $$
+  select coalesce(p_pos->>'modo', '') = 'pedido' and exists (
+    select 1 from public.pos_ndf_tickets t
+     where t.local = p_location and t.estado = 'R' and t.numero_pedido = p_pos->>'pedido'
+       and t.fecha_registra >= least(coalesce((p_pos->>'abierto_en')::timestamptz, (p_pos->>'visto')::timestamptz, (p_pos->>'hora')::timestamptz),
+                                     (p_pos->>'hora')::timestamptz) - interval '2 minutes'
+       and t.fecha_registra < (p_pos->>'hora')::timestamptz + interval '18 hours'
+       and (t.pedido_abierto_en is null
+            or abs(extract(epoch from t.pedido_abierto_en
+                   - coalesce((p_pos->>'abierto_en')::timestamptz, (p_pos->>'visto')::timestamptz, (p_pos->>'hora')::timestamptz))) < 2))
+$$;
+
 -- Factura elegida a mano por el manager para un registro que no cruzó solo (cuenta dividida o
 -- refactura: el PoS cobra en facturas sin pedido). Queda anotado quién y cuándo. No toca el libro.
 create table if not exists public.club_cruces_manuales (
@@ -3096,6 +3124,7 @@ begin
     union all
     -- SIN_CRUCE: pedido sin su factura. Se marca cuando ya pasó la latencia del puente y el pedido no
     -- sigue abierto (o pasaron las 18 h). Sigue listada (resuelta) aunque el manager elija la factura.
+    -- S0 (09-nov): con una factura R del pedido (cobrada, falta el cierre de caja) NO se marca.
     select 'SIN_CRUCE', m.id::text, m.fecha_visita, m.ref_factura, 'probable',
            jsonb_build_object('motivo', 'posible cuenta dividida',
                               'movimiento', case when m.cupon_id is not null then 'cupon' when m.tipo = 'canje' then 'canje' else 'tarjeta_manual' end,
@@ -3112,6 +3141,7 @@ begin
      where m.fecha_visita >= v_ini and m.fecha_visita < v_fin
        and m.pos_ref->>'modo' = 'pedido'
        and cardinality(m.auto_ids) = 0
+       and not public.club_cruce_provisional(p_location, m.pos_ref)   -- S0: cobrada (R), falta el cierre de caja
        and m.registrado_en < now() - make_interval(mins => v_cfg.puente_latencia_min)
        and (now() >= (m.pos_ref->>'hora')::timestamptz + interval '18 hours'
             or not exists (select 1 from public.pos_ndf_open o where o.local = p_location and o.id_pedido = m.pos_ref->>'pedido'))
@@ -5068,7 +5098,8 @@ begin
     with v as (
       select x.registrado_por as actor, x.miembro_id, x.estado_beneficio,
              (x.registrada_en < now() - make_interval(mins => coalesce(v_lat, 30))
-              and cardinality(public.club_cruce_facturas(x.location_id, x.pos_ref, null)) = 0) as sin_fac
+              and cardinality(public.club_cruce_facturas(x.location_id, x.pos_ref, null)) = 0
+              and not public.club_cruce_provisional(x.location_id, x.pos_ref)) as sin_fac   -- S0: R = cobrada, falta el cierre
         from public.club_visitas_socio x
        where x.location_id = p_location and x.registrada_en >= v_ini and x.registrada_en < v_fin),
     m as (select actor, max(n)::int as mx from (select actor, miembro_id, count(*) as n from v group by 1, 2) z group by actor)
@@ -6401,6 +6432,7 @@ revoke all on function public.club_facturas_recientes(text) from public, anon, a
 grant execute on function public.club_facturas_recientes(text) to authenticated;
 revoke all on function public.club_cruce_facturas(text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.club_cruce_detalle(text, jsonb, text) from public, anon, authenticated;
+revoke all on function public.club_cruce_provisional(text, jsonb) from public, anon, authenticated;   -- S0
 revoke all on function public.club_resolver(text)                         from public, anon, authenticated;
 revoke all on function public.club_config_auditar()                       from public, anon, authenticated;
 

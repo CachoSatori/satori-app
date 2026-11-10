@@ -20,6 +20,7 @@ drop function if exists public.club_sin_cruce_elegir(uuid, text, text);
 drop function if exists public.club_sin_cruce_candidatas(uuid, text);
 drop function if exists public.club_sin_cruce_candidatas(uuid);
 drop function if exists public.club_cruce_facturas(text, jsonb, text);
+drop function if exists public.club_cruce_provisional(text, jsonb);   -- S0 (09-nov)
 drop function if exists public.club_cruce_detalle(text, jsonb, text);
 drop function if exists public.club_cruce_auto(text, jsonb, text);
 drop function if exists public.club_buscar(text);

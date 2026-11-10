@@ -352,7 +352,7 @@
      Ver [`_handoff/acl-prod-2026-07-27.md`](_handoff/acl-prod-2026-07-27.md) y el bloque `anon` de HALLAZGOS.
 4. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
    y que `extract-document` (modelo **Sonnet**) siga leyendo facturas bien. Hallazgos → HALLAZGOS.md.
-5. **⏳ Smoke real de C3** — el email del cierre nocturno (a el correo del dueño por la restricción
+5. **⏳ Smoke real de C3** — el email del cierre nocturno (al correo del dueño por la restricción
    sandbox de Resend) se manda solo al confirmarse un cierre completo.
 6. **🧹 Deuda de limpieza en `main` (barrer en el PRÓXIMO pase a prod, NO suelta).** `main` todavía
    carga archivos que `staging` ya eliminó y que no aportan nada: `src/shared/api/auth.ts` (código
@@ -890,7 +890,7 @@ riesgo sin ganancia funcional). Dos grupos:
 > L50:    (`employees.pos_name`, idempotente, ya viva out-of-band) queda en el repo esperando un push firmado.
 > L51:    ⚠️ **047 sigue RESERVADA** para proveedores — el hueco 046→048 es intencional. Detalle → [ESTADO.md](ESTADO.md) §c.
 > L52: 3. **👁️ Observar prod en uso real.** Consola/errores, Caja/Cierre/Bandeja/Propinas con datos reales,
-> L54: 4. **⏳ Smoke real de C3** — el email del cierre nocturno (a el correo del dueño por la restricción
+> L54: 4. **⏳ Smoke real de C3** — el email del cierre nocturno (al correo del dueño por la restricción
 > L59: 1. **🖊️ SPEC notificación a proveedores** — firma + **mig 047** (reservada) + tarea de **DNS**
 > L60:    (dominio propio en Resend; hoy el sender sandbox solo entrega a una dirección).
 > L69: 6. **🖊️👁️ Hora-CR en bordes de período.** Las queries de plata (P&L, `finance.ts`) acotan `created_at`

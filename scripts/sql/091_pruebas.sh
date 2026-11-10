@@ -56,7 +56,7 @@ como() { # $1 = uid → SQL para simular su sesión
   echo "set local role authenticated; select set_config('request.jwt.claims', '{\"sub\":\"$1\",\"role\":\"authenticated\"}', true);"
 }
 
-fallas=0
+fallas=0; ok=0
 # Grok 139: FALLA si cualquiera de las dos respuestas trae un error, viene vacía o no tiene la forma esperada
 # (mismo tipo JSON y, si es un objeto, las mismas claves). Dos errores iguales ya no cuentan como «igual».
 es_error() { [ -z "$1" ] || [ "$1" = "null" ] || [ "$1" = "[]" ] || [ "$1" = '""' ] || grep -qiE '"message"|"error"|^error' <<<"$1"; }
@@ -67,7 +67,7 @@ compara() { # $1 etiqueta, $2 esperado (o antes), $3 obtenido (o después)
   elif [ -z "$(forma "$3")" ] || [ "$(forma "$2")" != "$(forma "$3")" ]; then por="la respuesta no tiene la forma esperada"
   elif [ "$(jq -cS . <<<"$2")" != "$(jq -cS . <<<"$3")" ]; then por="distinto"
   fi
-  if [ -z "$por" ]; then echo "OK    $1"; else echo "FALLA $1 ($por)"; echo "  esperado: $(limpio "$2")"; echo "  obtenido: $(limpio "$3")"; fallas=$((fallas+1)); fi
+  if [ -z "$por" ]; then echo "OK    $1"; ok=$((ok+1)); else echo "FALLA $1 ($por)"; echo "  esperado: $(limpio "$2")"; echo "  obtenido: $(limpio "$3")"; fallas=$((fallas+1)); fi
 }
 
 echo "== Santa Teresa idéntica (postgres) =="
@@ -119,7 +119,7 @@ if [ -n "$id" ]; then
   r=$(q "begin; $MIG; $OTRO; $(como_rol manager)
          insert into public.cash_movements (created_by, movement_type, amount_crc, amount_usd, currency, description, caja_origen, method, status, location_id)
          values ('$id', 'ingreso', 1, 0, 'CRC', 'prueba 091 b', 'Caja Fuerte', 'Efectivo', 'aprobado', 'local-prueba-091'); rollback;")
-  if echo "$r" | grep -qE 'ERROR:[[:space:]]+42501' && echo "$r" | grep -qi "row-level security"; then echo "OK    insert en otro local rechazado por RLS (42501)"; else echo "FALLA insert en otro local: $(limpio "$r")"; fallas=$((fallas+1)); fi
+  if echo "$r" | grep -qE 'ERROR:[[:space:]]+42501' && echo "$r" | grep -qi "row-level security"; then echo "OK    insert en otro local rechazado por RLS (42501)"; ok=$((ok+1)); else echo "FALLA insert en otro local: $(limpio "$r")"; fallas=$((fallas+1)); fi
 fi
 
 echo "== Las políticas se crean con la forma correcta y el rollback deja todo como antes (descartado) =="
@@ -128,10 +128,24 @@ POLS="select count(*) as n from pg_policies where schemaname = 'public' and poli
 n=$(q "begin; $MIG; $POLS; rollback;" | jq -r 'if type=="array" then .[-1].n else "error: \(.)" end')
 compara "las 4 políticas por local existen, restrictivas, con using y with check" "4" "$n"
 ROLLBACK=$(grep -viE '^\s*(begin|commit)\s*;\s*$' "$RAIZ/scripts/sql/091_rollback.sql")
+# Staging tiene además «nosara» en locations (la 022 del PoS propio); prod tendrá solo santa-teresa. Para probar la
+# vuelta atrás hasta el final se simula el catálogo de prod DENTRO de la transacción descartada (sin chequear FKs).
+COMO_PROD="set local session_replication_role = replica; delete from public.locations where id <> 'santa-teresa'; set local session_replication_role = origin;"
+# Grok 137: la guarda frena (y no toca nada) si el catálogo o los datos no son los de un solo local
+aborta() { # $1 etiqueta · $2 SQL previo dentro de la transacción · $3 texto del error esperado
+  local r; r=$(q "begin; $MIG; $2 $ROLLBACK; rollback;")
+  if grep -q "$3" <<<"$r"; then echo "OK    $1"; ok=$((ok+1)); else echo "FALLA $1: $(limpio "$r")"; fallas=$((fallas+1)); fi
+}
+aborta "guarda: con un local de más en locations (staging tal cual) el rollback frena" "" "091 rollback: locations no tiene solo santa-teresa"
+aborta "guarda: con una fila de caja fuera de santa-teresa el rollback frena" "$COMO_PROD set local session_replication_role = replica;
+  insert into public.cash_movements (created_by, movement_type, amount_crc, amount_usd, currency, description, caja_origen, method, status, location_id)
+  values ((select id from public.profiles where role = 'owner' order by created_at limit 1), 'ingreso', 1, 0, 'CRC', 'prueba 091 guarda', 'Caja Fuerte', 'Efectivo', 'aprobado', 'otro-local');
+  set local session_replication_role = origin;" "091 rollback: hay filas fuera de santa-teresa"
+aborta "guarda: con locales asignados en profile_locations el rollback frena" "$COMO_PROD insert into public.profile_locations (profile_id, location_id) values ('$PID', 'santa-teresa');" "091 rollback: profile_locations tiene filas"
 A=$(q "begin; $FOTO; rollback;" | uno)
-D=$(q "begin; $MIG; $ROLLBACK; $FOTO; rollback;" | uno)
+D=$(q "begin; $MIG; $COMO_PROD $ROLLBACK; $FOTO; rollback;" | uno)
 compara "rollback: filas, totales, saldo y cierres iguales a antes" "$A" "$D"
-r=$(q "begin; $MIG; $ROLLBACK; select (select count(*) from information_schema.columns where table_schema = 'public' and column_name = 'location_id'
+r=$(q "begin; $MIG; $COMO_PROD $ROLLBACK; select (select count(*) from information_schema.columns where table_schema = 'public' and column_name = 'location_id'
         and table_name in ('cash_sessions','cash_movements','cash_cierres_dia','tip_sessions')) as cols,
         (select count(*) from pg_policies where policyname like '%_por_local') as pols,
         to_regprocedure('public.mis_locales()') is null as sin_fn; rollback;" | jq -c 'if type=="array" then .[-1] else . end')
@@ -166,5 +180,5 @@ else
   fi
 fi
 
-echo "== Resultado: $fallas falla(s) =="
+echo "== Resultado: $ok OK · $fallas falla(s) =="
 [ "$fallas" -eq 0 ]

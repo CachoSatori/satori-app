@@ -16,8 +16,9 @@
 --   · Trigger BEFORE DELETE en employees: si la fila tiene pos_login y quien borra es un usuario (hay auth.uid())
 --     que NO es owner activo → 42501 «Solo el owner borra un empleado con login del PoS. Para sacarlo, desactivalo.»
 --     (La baja lógica —is_active = false— sigue siendo el camino normal y no pasa por acá.)
---   · Cada borrado que SÍ pasa (owner, o el canal admin sin JWT) deja una fila en `employee_bajas`: la fila completa
---     (to_jsonb), quién (auth.uid(); NULL = canal admin) y cuándo. Solo inserción: RLS con SELECT solo para el owner,
+--   · Cada borrado que SÍ pasa (owner, o el canal admin sin JWT) deja una fila en `employee_bajas` con lo MÍNIMO
+--     (Grok 142): id, pos_login, nombre, sus fechas de alta y de última edición, quién (auth.uid(); NULL = canal admin)
+--     y cuándo. No la ficha completa. Solo inserción: RLS con SELECT solo para el owner,
 --     sin políticas de escritura; el único que escribe es el trigger (SECURITY DEFINER).
 --   · No toca la política de employees, ni sus columnas, ni la FK de tip_entries.
 --
@@ -26,12 +27,17 @@
 
 begin;
 
+-- Grok 142, decisión del dueño (10-nov): se guarda SOLO lo mínimo (id, pos_login, nombre, fechas y quién lo borró),
+-- no la ficha completa (nada de salario, banco, horarios ni otros datos de la persona).
 create table if not exists public.employee_bajas (
-  id          uuid        primary key default gen_random_uuid(),
-  employee_id uuid        not null,                              -- uuid plano: el empleado ya no existe
-  borrado_por uuid        references public.profiles(id) on delete set null,   -- auth.uid(); NULL = canal admin
-  borrado_en  timestamptz not null default now(),
-  fila        jsonb       not null                               -- to_jsonb(OLD)
+  id                     uuid        primary key default gen_random_uuid(),
+  employee_id            uuid        not null,                   -- uuid plano: el empleado ya no existe
+  pos_login              text,
+  full_name              text        not null,
+  empleado_creado_en     timestamptz,                            -- employees.created_at
+  empleado_actualizado_en timestamptz,                           -- employees.updated_at
+  borrado_por            uuid        references public.profiles(id) on delete set null,   -- auth.uid(); NULL = canal admin
+  borrado_en             timestamptz not null default now()
 );
 create index if not exists employee_bajas_employee_idx on public.employee_bajas (employee_id, borrado_en desc);
 
@@ -52,7 +58,8 @@ begin
     raise exception 'Solo el owner borra un empleado con login del PoS. Para sacarlo, desactivalo.'
       using errcode = '42501';
   end if;
-  insert into public.employee_bajas (employee_id, borrado_por, fila) values (old.id, auth.uid(), to_jsonb(old));
+  insert into public.employee_bajas (employee_id, pos_login, full_name, empleado_creado_en, empleado_actualizado_en, borrado_por)
+  values (old.id, old.pos_login, old.full_name, old.created_at, old.updated_at, auth.uid());
   return old;
 end;
 $$;
